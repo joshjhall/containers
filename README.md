@@ -1,93 +1,329 @@
-# Containers
+# Universal Container Build System
 
+A modular, extensible container build system designed to be shared across projects as a git submodule. Build everything from minimal agent containers to full-featured development environments using a single, configurable Dockerfile.
 
+## Features
 
-## Getting started
+- 🔧 **Modular Architecture**: Enable only the tools you need via build arguments
+- 🚀 **Efficient Caching**: BuildKit cache mounts for faster rebuilds
+- 🔒 **Security First**: Non-root users, proper permissions, validated installations
+- 🌍 **Multi-Purpose**: Development, CI/CD, production, and agent containers
+- 📦 **20+ Languages & Tools**: Python, Node.js, Rust, Go, Ruby, Java, R, and more
+- ☁️ **Cloud Ready**: AWS, GCP, Kubernetes, Terraform integrations
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+## Quick Start
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+### For New Projects
 
-## Add your files
-
-- [ ] [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-- [ ] [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
-
+1. Add as a git submodule:
+```bash
+git submodule add https://github.com/yourusername/containers.git containers
+git submodule update --init --recursive
 ```
-cd existing_repo
-git remote add origin https://gitlab.stoic.studio/third-thought/containers.git
-git branch -M main
-git push -uf origin main
+
+2. Build your container using the Dockerfile from the submodule:
+```bash
+# Build from project root (recommended)
+docker build -t myproject:dev \
+  -f containers/Dockerfile \
+  --build-arg PROJECT_NAME=myproject \
+  --build-arg INCLUDE_NODE_DEV=true \
+  --build-arg INCLUDE_DEV_TOOLS=true \
+  .
+
+# For testing containers standalone (without a parent project)
+cd containers
+docker build -t test:dev \
+  --build-arg PROJECT_PATH=. \
+  --build-arg PROJECT_NAME=test \
+  --build-arg INCLUDE_NODE_DEV=true \
+  .
 ```
 
-## Integrate with your tools
+### For Existing Projects
 
-- [ ] [Set up project integrations](https://gitlab.stoic.studio/third-thought/containers/-/settings/integrations)
+1. Add the submodule:
+```bash
+git submodule add https://github.com/yourusername/containers.git containers
+```
 
-## Collaborate with your team
+2. Create build scripts or update your CI/CD to use the shared Dockerfile:
+```bash
+# scripts/build-dev.sh
+docker build -t myproject:dev \
+  -f containers/Dockerfile \
+  --build-arg PROJECT_NAME=myproject \
+  --build-arg INCLUDE_PYTHON_DEV=true \
+  --build-arg INCLUDE_POSTGRES_CLIENT=true \
+  .
 
-- [ ] [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-- [ ] [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-- [ ] [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-- [ ] [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-- [ ] [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
+# scripts/build-prod.sh  
+docker build -t myproject:prod \
+  -f containers/Dockerfile \
+  --build-arg PROJECT_NAME=myproject \
+  --build-arg INCLUDE_PYTHON=true \
+  .
+```
 
-## Test and Deploy
+## VS Code Dev Container Integration
 
-Use the built-in continuous integration in GitLab.
+### Basic Setup
 
-- [ ] [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/)
-- [ ] [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-- [ ] [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-- [ ] [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-- [ ] [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
+1. Create `.devcontainer/devcontainer.json`:
+```json
+{
+  "name": "My Project Development",
+  "dockerComposeFile": "docker-compose.yml",
+  "service": "devcontainer",
+  "workspaceFolder": "/workspace/${localWorkspaceFolderBasename}",
+  
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "rust-lang.rust-analyzer",
+        "golang.go"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/usr/local/bin/python",
+        "python.linting.enabled": true,
+        "python.formatting.provider": "black",
+        "editor.formatOnSave": true
+      }
+    }
+  },
+  
+  "remoteUser": "vscode"
+}
+```
 
-***
+2. Create `.devcontainer/docker-compose.yml`:
+```yaml
+services:
+  devcontainer:
+    build:
+      context: ..  # Project root
+      dockerfile: containers/Dockerfile  # Use the shared Dockerfile
+      args:
+        BASE_IMAGE: mcr.microsoft.com/devcontainers/base:bookworm
+        PROJECT_NAME: myproject
+        USERNAME: vscode
+        WORKING_DIR: /workspace/myproject
+        INCLUDE_PYTHON_DEV: "true"
+        INCLUDE_NODE_DEV: "true"
+        INCLUDE_DEV_TOOLS: "true"
+        INCLUDE_DOCKER: "true"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ..:/workspace/myproject
+    command: sleep infinity
+```
 
-# Editing this README
+### Advanced Configuration
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
+For more complex setups with databases and services, see `examples/devcontainer/` for complete examples including:
+- PostgreSQL and Redis integration
+- Environment variable management
+- 1Password integration
+- Post-create and post-start scripts
 
-## Suggestions for a good README
+## Available Features
 
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
+### Programming Languages
+- **Python**: 3.11+ with pyenv support (`INCLUDE_PYTHON=true`)
+- **Node.js**: 22 LTS with npm, yarn, pnpm (`INCLUDE_NODE=true`)
+- **Rust**: Latest stable with cargo (`INCLUDE_RUST=true`)
+- **Go**: Latest version with module support (`INCLUDE_GOLANG=true`)
+- **Ruby**: 3.3+ with bundler (`INCLUDE_RUBY=true`)
+- **Java**: OpenJDK 21 with Maven/Gradle (`INCLUDE_JAVA=true`)
+- **R**: Statistical computing environment (`INCLUDE_R=true`)
 
-## Name
-Choose a self-explaining name for your project.
+### Development Tools
+Add `_DEV` to any language to include development tools:
+- `INCLUDE_PYTHON_DEV`: black, ruff, mypy, pytest, poetry, jupyter
+- `INCLUDE_NODE_DEV`: TypeScript, ESLint, Jest, Vite, webpack
+- `INCLUDE_RUST_DEV`: clippy, rustfmt, cargo-watch, bacon
+- And more...
 
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
+### Infrastructure Tools
+- `INCLUDE_DOCKER`: Docker CLI, compose, lazydocker
+- `INCLUDE_KUBERNETES`: kubectl, helm, k9s
+- `INCLUDE_TERRAFORM`: terraform, terragrunt, tf-docs
+- `INCLUDE_AWS`: AWS CLI v2
+- `INCLUDE_GCLOUD`: Google Cloud SDK
 
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
+### Other Tools
+- `INCLUDE_DEV_TOOLS`: git, gh CLI, fzf, ripgrep, bat, delta
+- `INCLUDE_OP`: 1Password CLI
+- `INCLUDE_OLLAMA`: Local LLM support
 
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+## Example Use Cases
 
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+### TypeScript API Project
 
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
+```bash
+# Development: Full TypeScript toolchain + debugging tools
+docker build -t myapi:dev \
+  -f containers/Dockerfile \
+  --build-arg PROJECT_NAME=myapi \
+  --build-arg INCLUDE_NODE_DEV=true \
+  --build-arg INCLUDE_POSTGRES_CLIENT=true \
+  --build-arg INCLUDE_DEV_TOOLS=true \
+  .
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+# Production: Just Node.js runtime
+docker build -t myapi:prod \
+  -f containers/Dockerfile \
+  --build-arg PROJECT_NAME=myapi \
+  --build-arg INCLUDE_NODE=true \
+  --build-arg BASE_IMAGE=node:22-slim \
+  .
+```
 
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
+### Python ML Project
+
+```bash
+# Development: Full Python stack + Jupyter
+docker build -t myml:dev \
+  -f containers/Dockerfile \
+  --build-arg PROJECT_NAME=myml \
+  --build-arg INCLUDE_PYTHON_DEV=true \
+  --build-arg PYTHON_VERSION=3.11.2 \
+  .
+
+# Training: Python + cloud tools
+docker build -t myml:train \
+  -f containers/Dockerfile \
+  --build-arg PROJECT_NAME=myml \
+  --build-arg INCLUDE_PYTHON=true \
+  --build-arg INCLUDE_AWS=true \
+  --build-arg INCLUDE_KUBERNETES=true \
+  .
+```
+
+### Multi-Language Microservice
+
+```bash
+# Development: Everything you might need
+docker build -t myservice:dev \
+  -f containers/Dockerfile \
+  --build-arg PROJECT_NAME=myservice \
+  --build-arg INCLUDE_GOLANG_DEV=true \
+  --build-arg INCLUDE_RUST_DEV=true \
+  --build-arg INCLUDE_DOCKER=true \
+  --build-arg INCLUDE_KUBERNETES=true \
+  .
+
+# CI/CD: Just build tools
+docker build -t myservice:ci \
+  -f containers/Dockerfile \
+  --build-arg PROJECT_NAME=myservice \
+  --build-arg INCLUDE_GOLANG=true \
+  --build-arg INCLUDE_RUST=true \
+  .
+```
+
+## Updating the Submodule
+
+To update to the latest version:
+```bash
+cd containers
+git pull origin main
+cd ..
+git add containers
+git commit -m "Update container build system"
+```
+
+## Version Management
+
+### Checking for Updates
+The container system includes a version checker to identify when newer versions of pinned tools are available:
+
+```bash
+# Check all pinned versions
+./containers/bin/check-versions.sh
+
+# Output in JSON format (for CI integration)
+./containers/bin/check-versions.sh json
+
+# With GitHub token (to avoid rate limits)
+GITHUB_TOKEN=ghp_your_token ./containers/bin/check-versions.sh
+
+# Or add to .env file
+cp containers/.env.example containers/.env
+# Edit .env and add your GITHUB_TOKEN
+./containers/bin/check-versions.sh
+```
+
+The script will check:
+- Language versions (Python, Node.js, Go, Rust, Ruby, Java, R)
+- Tool versions (Poetry, Terraform, kubectl, GitHub CLI, etc.)
+- Report which tools have updates available
+
+### Updating Versions
+When updates are available, edit the appropriate files:
+- Language versions: Update `ARG *_VERSION` in `Dockerfile`
+- Tool versions: Update version variables in `lib/features/*.sh`
+
+## Testing
+
+### Quick Test
+To quickly verify your container builds:
+```bash
+# From your project root (where containers/ is a subdirectory)
+./containers/bin/test-all-features.sh
+
+# Show all tools (including not installed)
+./containers/bin/test-all-features.sh --all
+```
+
+### Comprehensive Testing
+For full test suite including build tests:
+```bash
+# From within containers directory
+cd containers
+./tests/run_all.sh
+
+# Run specific test
+./tests/run_test.sh integration/builds/test_minimal.sh
+```
+
+## Best Practices
+
+1. **Choose the right base image**:
+   - `debian:bookworm-slim`: Minimal size, good compatibility
+   - `ubuntu:24.04`: More packages available, larger size
+   - `mcr.microsoft.com/devcontainers/base:bookworm`: VS Code optimized
+
+2. **Optimize build times**:
+   - Only include features you actually need
+   - Use BuildKit cache mounts (already configured)
+   - Layer expensive operations early in the Dockerfile
+
+3. **Security considerations**:
+   - Always use non-root users in production
+   - Mount secrets at runtime, don't bake them in
+   - Regularly update the submodule for security patches
+
+4. **Version pinning**:
+   - Pin the submodule to specific commits for stability
+   - Use version build arguments for reproducible builds
+   - Document version requirements in your project
+
+5. **Build context**:
+   - The build context should be your project root (where you run `docker build .`)
+   - The Dockerfile path is `-f containers/Dockerfile`
+   - Your project files are available for COPY commands during build
 
 ## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
 
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
-
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
-
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
+Contributions are welcome! Please:
+1. Fork the repository
+2. Create a feature branch
+3. Add tests for new features
+4. Submit a pull request
 
 ## License
-For open source projects, say how it is licensed.
 
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+MIT License - see LICENSE file for details
