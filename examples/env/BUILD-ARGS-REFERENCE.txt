@@ -1,0 +1,51 @@
+# BUILD ARGUMENTS REFERENCE (NOT ENVIRONMENT VARIABLES!)
+# 
+# This file shows all available build arguments for quick reference.
+# These are NOT runtime environment variables and should NOT be in .env files.
+# 
+# For full documentation, see: ../BUILD-ARGS.md
+# 
+# Set these via:
+#   docker build --build-arg INCLUDE_PYTHON=true .
+#   OR in docker-compose.yml under build: args:
+
+# Programming Languages
+# ====================
+INCLUDE_PYTHON=true          # Python 3.12 + pip + setuptools + Poetry
+INCLUDE_PYTHON_DEV=false     # Black, ruff, mypy, pytest, Sphinx, Jupyter, etc.
+INCLUDE_NODE=false           # Node.js 20 + npm, yarn, pnpm
+INCLUDE_GO=false             # Go 1.24.5
+INCLUDE_RUST=false           # Rust stable + cargo + mdBook
+INCLUDE_JAVA=false           # OpenJDK 17 + Maven + Gradle
+INCLUDE_RUBY=false           # Ruby 3.3 via rbenv
+INCLUDE_R=false              # R 4.0+ with tidyverse
+INCLUDE_MOJO=false           # Mojo (x86_64 only)
+
+# Development Tools
+# =================
+INCLUDE_DEV_TOOLS=false      # GitHub CLI, fzf, direnv, lazygit, delta, just, mkcert, act, glab, etc.
+INCLUDE_DOCKER=false         # Docker CLI + compose + lazydocker + dive
+INCLUDE_TREE_SITTER=false    # Tree-sitter CLI (requires Rust)
+
+# Cloud Tools
+# ===========
+INCLUDE_AWS=false            # AWS CLI v2 + Session Manager
+INCLUDE_GCLOUD=false         # Google Cloud SDK + kubectl
+INCLUDE_TERRAFORM=false      # Terraform + Terragrunt + tflint
+INCLUDE_KUBERNETES=false     # kubectl + k9s + krew
+INCLUDE_CLOUDFLARE=false     # Wrangler + cloudflared
+
+# Database Clients
+# ================
+INCLUDE_POSTGRES_CLIENT=false  # psql + pg_dump
+INCLUDE_REDIS_CLIENT=false     # redis-cli
+INCLUDE_SQLITE_CLIENT=false    # sqlite3
+
+# Other Tools
+# ===========
+INCLUDE_OLLAMA=false         # Ollama for local LLMs
+INCLUDE_OP=false             # 1Password CLI
+
+# Runtime Environment Variables
+# =============================
+# See individual .env files for runtime configuration options

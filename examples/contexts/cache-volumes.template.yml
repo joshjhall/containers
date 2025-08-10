@@ -1,0 +1,69 @@
+# Template for cache volume mounts using username-agnostic /cache directory
+# This can be used with any docker-compose file to add persistent caches
+# 
+# The /cache approach works with any USERNAME without modification
+#
+# Usage:
+# 1. Copy this template to your context directory
+# 2. Replace ${SERVICE_NAME} with your actual service name
+# 3. Include with: docker-compose -f docker-compose.yml -f cache-volumes.yml up
+#
+# Example:
+#   sed 's/${SERVICE_NAME}/myapp/g' cache-volumes.template.yml > production/cache-volumes.yml
+
+version: '3.8'
+
+services:
+  # Use the same service name as your main compose file
+  ${SERVICE_NAME}:
+    environment:
+      # Configure tools to use /cache paths
+      CARGO_HOME: /cache/cargo
+      RUSTUP_HOME: /cache/rustup
+      GOPATH: /cache/go
+      npm_config_cache: /cache/npm
+      YARN_CACHE_FOLDER: /cache/yarn
+      PNPM_STORE_DIR: /cache/pnpm
+      PIP_CACHE_DIR: /cache/pip
+      POETRY_CACHE_DIR: /cache/poetry
+      OLLAMA_MODELS: /cache/ollama
+      GEM_HOME: /cache/ruby/gems
+      BUNDLE_PATH: /cache/ruby/bundle
+      
+    volumes:
+      # Language-specific caches (username-agnostic)
+      - cargo-cache:/cache/cargo
+      - rustup-cache:/cache/rustup
+      - go-cache:/cache/go
+      - npm-cache:/cache/npm
+      - yarn-cache:/cache/yarn
+      - pnpm-cache:/cache/pnpm
+      - pip-cache:/cache/pip
+      - poetry-cache:/cache/poetry
+      - ruby-cache:/cache/ruby
+      
+      # Tool caches
+      - ollama-cache:/cache/ollama
+      
+      # Build caches (useful in CI/CD)
+      - apt-cache:/var/cache/apt
+      - apt-lib:/var/lib/apt
+
+volumes:
+  # Language caches
+  cargo-cache:
+  rustup-cache:
+  go-cache:
+  npm-cache:
+  yarn-cache:
+  pnpm-cache:
+  pip-cache:
+  poetry-cache:
+  ruby-cache:
+  
+  # System caches  
+  apt-cache:
+  apt-lib:
+  
+  # Tool caches
+  ollama-cache:

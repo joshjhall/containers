@@ -1,0 +1,359 @@
+# Development Container Configuration
+#
+# This is a comprehensive development environment for projects with all
+# necessary services for local development, testing, and debugging.
+#
+# Usage:
+#   docker compose up -d              # Start all services
+#   docker compose logs -f            # View logs
+#   docker compose down -v            # Stop and remove volumes
+#
+# Services included:
+# - devcontainer: Main development environment with all tools
+# - postgres: PostgreSQL 17 with vector extensions
+# - redis: Redis 8 for caching and pub/sub
+# - ollama: Local LLM inference (optional)
+# - pgadmin: PostgreSQL administration UI
+# - redis-commander: Redis administration UI
+# - mailhog: Email testing service
+# - minio: S3-compatible object storage for testing
+# - prometheus: Metrics collection
+# - grafana: Metrics visualization
+
+services:
+  # Main development container
+  devcontainer:
+    build:
+      context: ../../../
+      dockerfile: ./Dockerfile
+      args:
+        - BUILDKIT_INLINE_CACHE=1
+        - USERNAME=${USERNAME:-developer}
+        - USER_UID=${USER_UID:-1000}
+        - USER_GID=${USER_GID:-1000}
+        - VARIANT=3.12-bookworm
+      cache_from:
+        - type=registry,ref=ghcr.io/project/devcontainer:cache
+    environment:
+      # Development environment
+      - ENVIRONMENT=development
+      - LOG_LEVEL=${LOG_LEVEL:-debug}
+
+      # Database connections
+      - DATABASE_URL=postgresql://dev:dev@postgres:5432/dev_db
+      - REDIS_URL=redis://redis:6379/0
+
+      # Cache directories (username-agnostic)
+      - CARGO_HOME=/cache/cargo
+      - RUSTUP_HOME=/cache/rustup
+      - GOPATH=/cache/go
+      - npm_config_cache=/cache/npm
+      - YARN_CACHE_FOLDER=/cache/yarn
+      - PNPM_STORE_DIR=/cache/pnpm
+      - PIP_CACHE_DIR=/cache/pip
+      - POETRY_CACHE_DIR=/cache/poetry
+      - OLLAMA_MODELS=/cache/ollama
+
+      # LLM configuration
+      - OLLAMA_HOST=http://ollama:11434
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+
+      # Object storage
+      - S3_ENDPOINT=http://minio:9000
+      - S3_ACCESS_KEY=minioadmin
+      - S3_SECRET_KEY=minioadmin
+      - S3_BUCKET=dev-bucket
+
+      # Email testing
+      - SMTP_HOST=mailhog
+      - SMTP_PORT=1025
+
+      # Monitoring
+      - PROMETHEUS_PUSHGATEWAY=http://prometheus:9091
+    volumes:
+      # Source code
+      - ../../../:/workspace:cached
+
+      # Docker socket for container operations
+      - /var/run/docker.sock:/var/run/docker.sock
+
+      # SSH keys for git operations
+      - ~/.ssh:/home/${USERNAME:-developer}/.ssh:ro
+      - ~/.gitconfig:/home/${USERNAME:-developer}/.gitconfig:ro
+
+      # Persistent caches
+      - cargo-cache:/cache/cargo
+      - rustup-cache:/cache/rustup
+      - go-cache:/cache/go
+      - npm-cache:/cache/npm
+      - pip-cache:/cache/pip
+      - poetry-cache:/cache/poetry
+      - ollama-cache:/cache/ollama
+
+      # VSCode extensions
+      - vscode-extensions:/home/${USERNAME:-developer}/.vscode-server/extensions
+      - vscode-insiders:/home/${USERNAME:-developer}/.vscode-server-insiders
+    ports:
+      # Application ports
+      - "8000:8000"  # Main API
+      - "8001:8001"  # Admin API
+      - "3000:3000"  # Frontend dev server
+      - "3001:3001"  # Storybook
+      - "9229:9229"  # Node.js debugging
+      - "5678:5678"  # Python debugging
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - dev-network
+    restart: unless-stopped
+    stdin_open: true
+    tty: true
+    command: /bin/bash
+
+  # PostgreSQL with vector extensions
+  postgres:
+    image: pgvector/pgvector:pg17
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=postgres
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./scripts/postgres-init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    ports:
+      - "5432:5432"
+    networks:
+      - dev-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis for caching and pub/sub
+  redis:
+    image: redis:8-alpine
+    command: redis-server --appendonly yes --appendfsync everysec
+    volumes:
+      - redis-data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - dev-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Local LLM inference (optional)
+  ollama:
+    image: ollama/ollama:latest
+    volumes:
+      - ollama-models:/root/.ollama
+    ports:
+      - "11434:11434"
+    networks:
+      - dev-network
+    restart: unless-stopped
+    profiles:
+      - with-ollama
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 8G
+    # Uncomment for GPU support
+    # runtime: nvidia
+    # environment:
+    #   - NVIDIA_VISIBLE_DEVICES=all
+
+  # PostgreSQL administration
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=admin@example.local
+      - PGADMIN_DEFAULT_PASSWORD=admin
+      - PGADMIN_CONFIG_SERVER_MODE=False
+      - PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED=False
+    volumes:
+      - pgadmin-data:/var/lib/pgadmin
+      - ./scripts/pgadmin-servers.json:/pgadmin4/servers.json:ro
+    ports:
+      - "5050:80"
+    networks:
+      - dev-network
+    restart: unless-stopped
+    profiles:
+      - with-admin
+
+  # Redis administration
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    environment:
+      - REDIS_HOSTS=local:redis:6379
+      - HTTP_USER=admin
+      - HTTP_PASSWORD=admin
+    ports:
+      - "8081:8081"
+    networks:
+      - dev-network
+    restart: unless-stopped
+    profiles:
+      - with-admin
+    depends_on:
+      - redis
+
+  # Email testing
+  mailhog:
+    image: mailhog/mailhog:latest
+    ports:
+      - "1025:1025"  # SMTP
+      - "8025:8025"  # Web UI
+    networks:
+      - dev-network
+    restart: unless-stopped
+    profiles:
+      - with-testing
+
+  # S3-compatible object storage
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      - MINIO_ROOT_USER=minioadmin
+      - MINIO_ROOT_PASSWORD=minioadmin
+    volumes:
+      - minio-data:/data
+    ports:
+      - "9000:9000"  # API
+      - "9001:9001"  # Console
+    networks:
+      - dev-network
+    restart: unless-stopped
+    profiles:
+      - with-testing
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Metrics collection
+  prometheus:
+    image: prom/prometheus:latest
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --web.console.libraries=/usr/share/prometheus/console_libraries
+      - --web.console.templates=/usr/share/prometheus/consoles
+    volumes:
+      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "9090:9090"
+    networks:
+      - dev-network
+    restart: unless-stopped
+    profiles:
+      - with-monitoring
+
+  # Metrics visualization
+  grafana:
+    image: grafana/grafana:latest
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_INSTALL_PLUGINS=grafana-clock-panel,grafana-simple-json-datasource
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./config/grafana-datasources.yml:/etc/grafana/provisioning/datasources/prometheus.yml:ro
+      - ./config/grafana-dashboards.yml:/etc/grafana/provisioning/dashboards/default.yml:ro
+      - ./dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "3030:3000"
+    networks:
+      - dev-network
+    restart: unless-stopped
+    profiles:
+      - with-monitoring
+    depends_on:
+      - prometheus
+
+volumes:
+  # Database storage
+  postgres-data:
+    driver: local
+  redis-data:
+    driver: local
+
+  # Development caches
+  cargo-cache:
+    driver: local
+  rustup-cache:
+    driver: local
+  go-cache:
+    driver: local
+  npm-cache:
+    driver: local
+  pip-cache:
+    driver: local
+  poetry-cache:
+    driver: local
+  ollama-cache:
+    driver: local
+  ollama-models:
+    driver: local
+
+  # IDE support
+  vscode-extensions:
+    driver: local
+  vscode-insiders:
+    driver: local
+
+  # Admin tools
+  pgadmin-data:
+    driver: local
+
+  # Testing services
+  minio-data:
+    driver: local
+
+  # Monitoring
+  prometheus-data:
+    driver: local
+  grafana-data:
+    driver: local
+
+networks:
+  dev-network:
+    name: dev-network
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+# Profile activation examples:
+#
+# Basic development (default):
+#   docker compose up -d
+#
+# With admin tools:
+#   docker compose --profile with-admin up -d
+#
+# With testing services:
+#   docker compose --profile with-testing up -d
+#
+# With monitoring:
+#   docker compose --profile with-monitoring up -d
+#
+# With local LLM:
+#   docker compose --profile with-ollama up -d
+#
+# Everything:
+#   docker compose --profile with-admin --profile with-testing --profile with-monitoring --profile with-ollama up -d
