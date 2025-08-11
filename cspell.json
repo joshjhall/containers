@@ -1,0 +1,29 @@
+{
+    "version": "0.2",
+    "language": "en",
+    "ignorePaths": [
+        "**/.git/**",
+    ],
+    "dictionaryDefinitions": [
+        {
+            "name": "project-words",
+            "path": "./.cspell/project-words.txt",
+            "addWords": true
+        }
+    ],
+    "dictionaries": [
+        "project-words"
+    ],
+    "words": [
+        "rustfmt",
+        "clippy",
+        "serde",
+        "tokio",
+        "tracing",
+        "observability",
+        "gitlab",
+        "ci"
+    ],
+    "ignoreWords": [],
+    "import": []
+}
