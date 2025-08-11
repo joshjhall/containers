@@ -268,6 +268,30 @@ When updates are available, edit the appropriate files:
 
 ## Testing
 
+### Unit Tests
+
+The project includes a comprehensive unit test framework that tests bash scripts directly without requiring Docker builds:
+
+```bash
+# Run all unit tests
+./tests/run_unit_tests.sh
+
+# Run specific test suite
+./tests/unit/version_checker.sh
+./tests/unit/base/logging.sh
+./tests/unit/features/python.sh
+```
+
+**Test Coverage:**
+- ✅ Version checking and management (10 tests)
+- ✅ Release scripts (12 tests)
+- ✅ Logging framework (11 tests)
+- ✅ User management (13 tests)
+- ✅ Python features (15 tests)
+- ✅ Base system setup (15 tests)
+
+**Current Status:** 76 tests passing, 1 skipped on macOS
+
 ### Quick Test
 To quickly verify your container builds:
 ```bash
