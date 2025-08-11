@@ -1,0 +1,32 @@
+services:
+  devcontainer:
+    build:
+      context: ..  # Containers root
+      dockerfile: Dockerfile
+      args:
+        BASE_IMAGE: mcr.microsoft.com/devcontainers/base:bookworm
+        PROJECT_NAME: containers
+        USERNAME: vscode
+        WORKING_DIR: /workspace/containers
+        INCLUDE_OP: "true"
+        INCLUDE_DEV_TOOLS: "true"
+        INCLUDE_DOCKER: "true"
+      cache_from:
+        - type=local,src=/tmp/.buildx-cache
+      cache_to:
+        - type=local,dest=/tmp/.buildx-cache,mode=max
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ..:/workspace/containers
+    environment:
+      - TZ=${TZ:-America/Chicago}
+      - ENVIRONMENT=${ENVIRONMENT:-development}
+      # 1Password integration
+      - OP_CONTAINERS_ENV_VAULT=${OP_CONTAINERS_ENV_VAULT:-Development}
+    command: sleep infinity
+    networks:
+      - containers-network
+
+networks:
+  containers-network:
+    driver: bridge

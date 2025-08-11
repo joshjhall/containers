@@ -1,0 +1,46 @@
+{
+  "name": "Containers Development",
+  "dockerComposeFile": "docker-compose.yml",
+  "service": "devcontainer",
+  "workspaceFolder": "/workspace/${localWorkspaceFolderBasename}",
+
+  // Don't use features in VS Code. Rather, use the container features to be consistent across environments.
+  // "features": {},
+
+  // "initializeCommand": "bash -c 'cd \"${localWorkspaceFolder}\" && .devcontainer/initialize-environment.sh'",
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-azuretools.vscode-docker",
+        "donjayamanne.githistory",
+        "usernamehw.errorlens",
+        "streetsidesoftware.code-spell-checker",
+        "wayou.vscode-todo-highlight",
+        "esbenp.prettier-vscode",
+        "ms-vscode.makefile-tools",
+        "bierner.markdown-mermaid",
+        "Anthropic.claude-code"
+      ],
+
+      "settings": {
+        // General editor settings
+        "editor.formatOnSave": true,
+        "editor.codeActionsOnSave": {
+          "source.organizeImports": "explicit"
+        },
+
+        // Terminal settings
+        "terminal.integrated.defaultProfile.linux": "bash",
+        "terminal.integrated.profiles.linux": {
+          "bash": {
+            "path": "/bin/bash",
+            "args": ["-l"]
+          }
+        }
+      }
+    }
+  },
+
+  "remoteUser": "vscode"
+}
