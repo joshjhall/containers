@@ -35,6 +35,7 @@ docker-compose.local.yml
 *.tmp
 temp/
 tmp/
+results/
 
 # Test artifacts
 tests/results/*.txt
