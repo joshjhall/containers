@@ -1,0 +1,2 @@
+# Custom dictionary for rust-core project
+# This file will be automatically updated when you add words via VS Code
