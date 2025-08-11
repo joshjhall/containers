@@ -97,6 +97,15 @@ log_command "Creating docker group" \
 log_command "Adding user to docker group" \
     usermod -aG docker ${USERNAME}
 
+# Fix Docker socket permissions if it exists
+if [ -S /var/run/docker.sock ]; then
+    log_message "Docker socket detected, configuring permissions..."
+    log_command "Setting Docker socket group ownership" \
+        chgrp docker /var/run/docker.sock || true
+    log_command "Setting Docker socket permissions" \
+        chmod g+rw /var/run/docker.sock || true
+fi
+
 # ============================================================================
 # Lazydocker Installation
 # ============================================================================
@@ -337,12 +346,13 @@ log_command "Setting Docker bashrc script permissions" \
 # ============================================================================
 # Container Startup Scripts
 # ============================================================================
-log_message "Creating Docker startup script..."
+log_message "Creating Docker startup scripts..."
 
-# Create startup directory if it doesn't exist
-log_command "Creating container startup directory" \
-    mkdir -p /etc/container/first-startup
+# Create startup directories if they don't exist
+log_command "Creating container startup directories" \
+    mkdir -p /etc/container/first-startup /etc/container/startup
 
+# First-time startup script - runs once
 cat > /etc/container/first-startup/20-docker-setup.sh << 'DOCKER_STARTUP_EOF'
 #!/bin/bash
 # Check if Docker socket is mounted
@@ -361,8 +371,38 @@ if [ -f ${WORKING_DIR}/docker-compose.yml ] || [ -f ${WORKING_DIR}/docker-compos
     echo "Docker Compose file detected in workspace"
 fi
 DOCKER_STARTUP_EOF
-log_command "Setting Docker startup script permissions" \
+log_command "Setting Docker first-startup script permissions" \
     chmod +x /etc/container/first-startup/20-docker-setup.sh
+
+# Every-boot startup script - runs on each container start to fix socket permissions
+cat > /etc/container/startup/10-docker-socket-fix.sh << 'DOCKER_FIX_EOF'
+#!/bin/bash
+# Docker Socket Permission Fix
+# Ensures Docker socket has proper permissions at runtime
+
+# Check if Docker socket exists
+if [ -S /var/run/docker.sock ]; then
+    # Check if current user can access docker
+    if ! docker version &>/dev/null 2>&1; then
+        echo "Fixing Docker socket permissions..."
+        
+        # Try to fix permissions with sudo if available
+        if command -v sudo &>/dev/null 2>&1; then
+            sudo chgrp docker /var/run/docker.sock 2>/dev/null || true
+            sudo chmod g+rw /var/run/docker.sock 2>/dev/null || true
+        fi
+        
+        # Test if it works now
+        if docker version &>/dev/null 2>&1; then
+            echo "Docker socket is now accessible"
+        else
+            echo "Note: Docker commands may require sudo"
+        fi
+    fi
+fi
+DOCKER_FIX_EOF
+log_command "Setting Docker socket fix script permissions" \
+    chmod +x /etc/container/startup/10-docker-socket-fix.sh
 
 # ============================================================================
 # Verification Script
