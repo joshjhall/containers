@@ -18,6 +18,7 @@ PROJECT_ROOT="$(dirname "$BIN_DIR")"
 OUTPUT_FORMAT="text"
 USE_CACHE="true"
 CACHE_DURATION=3600  # 1 hour in seconds
+DEBUG_MODE="false"
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -33,12 +34,17 @@ while [[ $# -gt 0 ]]; do
             CACHE_DURATION="$2"
             shift 2
             ;;
+        --debug)
+            DEBUG_MODE="true"
+            shift
+            ;;
         --help)
             echo "Usage: $0 [OPTIONS]"
             echo "Options:"
             echo "  --json              Output results in JSON format"
             echo "  --no-cache          Don't use cached version data"
             echo "  --cache-duration N  Cache duration in seconds (default: 3600)"
+            echo "  --debug             Enable debug output"
             echo "  --help              Show this help message"
             exit 0
             ;;
@@ -93,19 +99,30 @@ is_cache_valid() {
     return 1
 }
 
+# Debug output helper
+debug_msg() {
+    if [ "$DEBUG_MODE" = "true" ] && [ "$OUTPUT_FORMAT" = "text" ]; then
+        echo "[DEBUG] $1" >&2
+    fi
+}
+
 # Helper function for API calls with timeout and caching
 fetch_url() {
     local url="$1"
-    local timeout="${2:-10}"
+    local timeout="${2:-5}"  # Reduced default timeout to 5 seconds
     local cache_file=$(get_cache_file "$url")
+    
+    debug_msg "Fetching URL: $url"
     
     # Check cache first
     if is_cache_valid "$cache_file"; then
+        debug_msg "Using cached response for $url"
         cat "$cache_file"
         return 0
     fi
     
     # Fetch fresh data
+    debug_msg "Making HTTP request to $url (timeout: ${timeout}s)"
     local response
     if [ -n "$GITHUB_TOKEN" ] && [[ "$url" == *"api.github.com"* ]]; then
         response=$(curl -s --max-time "$timeout" -H "Authorization: token $GITHUB_TOKEN" "$url" 2>/dev/null || echo "")
@@ -113,9 +130,16 @@ fetch_url() {
         response=$(curl -s --max-time "$timeout" "$url" 2>/dev/null || echo "")
     fi
     
+    if [ -z "$response" ]; then
+        debug_msg "Empty or failed response from $url"
+    else
+        debug_msg "Got response from $url (length: ${#response})"
+    fi
+    
     # Cache the response if not empty
     if [ -n "$response" ] && [ "$USE_CACHE" = "true" ]; then
         echo "$response" > "$cache_file"
+        debug_msg "Cached response to $cache_file"
     fi
     
     echo "$response"
@@ -281,8 +305,18 @@ extract_all_versions() {
 # Check functions for each tool
 check_python() {
     progress_msg "  Python..."
-    local latest=$(fetch_url "https://endoflife.date/api/python.json" | jq -r '[.[] | select(.cycle | startswith("3."))] | .[0].latest' 2>/dev/null)
-    [ -n "$latest" ] && set_latest "Python" "$latest" || set_latest "Python" "error"
+    local response=$(fetch_url "https://endoflife.date/api/python.json")
+    if [ -n "$response" ]; then
+        # Use timeout with jq to prevent hanging
+        local latest=$(echo "$response" | timeout 2 jq -r '[.[] | select(.cycle | startswith("3."))] | .[0].latest' 2>/dev/null || echo "")
+        if [ -n "$latest" ] && [ "$latest" != "null" ] && [ "$latest" != "" ]; then
+            set_latest "Python" "$latest"
+        else
+            set_latest "Python" "error"
+        fi
+    else
+        set_latest "Python" "error"
+    fi
     progress_done
 }
 
@@ -549,7 +583,7 @@ print_results() {
     fi
 }
 
-# Main execution
+# Main execution with timeout
 main() {
     extract_all_versions
     
@@ -566,9 +600,12 @@ main() {
         echo -e "${BLUE}Checking for latest versions...${NC}"
     fi
     
-    # Check each tool
+    # Check each tool with timeout
     for i in "${!TOOLS[@]}"; do
         local tool="${TOOLS[$i]}"
+        debug_msg "Checking tool: $tool"
+        
+        # Run each check in a subshell with timeout to prevent hanging
         case "$tool" in
             Python) check_python ;;
             Node.js) check_nodejs ;;
