@@ -18,13 +18,14 @@ cd "$PROJECT_ROOT"
 
 # Function to display usage
 usage() {
-    echo "Usage: $0 [major|minor|patch|VERSION]"
+    echo "Usage: $0 [--force] [major|minor|patch|VERSION]"
     echo ""
     echo "Examples:"
     echo "  $0 patch         # Bump patch version (1.0.0 -> 1.0.1)"
     echo "  $0 minor         # Bump minor version (1.0.0 -> 1.1.0)"
     echo "  $0 major         # Bump major version (1.0.0 -> 2.0.0)"
     echo "  $0 1.2.3         # Set specific version"
+    echo "  $0 --force 1.2.3 # Force set version (even if same)"
     echo ""
     echo "Current version: $(cat VERSION)"
     exit 1
@@ -78,8 +79,18 @@ CURRENT_VERSION=$(cat VERSION)
 validate_version "$CURRENT_VERSION"
 
 # Parse arguments
+FORCE_UPDATE=false
 if [ $# -eq 0 ]; then
     usage
+fi
+
+# Check for --force flag
+if [ "$1" = "--force" ]; then
+    FORCE_UPDATE=true
+    shift
+    if [ $# -eq 0 ]; then
+        usage
+    fi
 fi
 
 # Determine new version
@@ -90,9 +101,17 @@ else
     validate_version "$NEW_VERSION"
 fi
 
-# Confirm with user
+# Display version info
 echo -e "${BLUE}Current version:${NC} $CURRENT_VERSION"
 echo -e "${BLUE}New version:${NC}     $NEW_VERSION"
+
+# Check if version is the same and not forcing
+if [ "$CURRENT_VERSION" = "$NEW_VERSION" ] && [ "$FORCE_UPDATE" = "false" ]; then
+    echo -e "${YELLOW}Version is already $NEW_VERSION. Use --force to update anyway.${NC}"
+    exit 1
+fi
+
+# Confirm with user
 echo ""
 read -p "Continue with release? (y/n) " -n 1 -r
 echo
@@ -112,6 +131,7 @@ echo -e "${GREEN}✓${NC} Updated Dockerfile version"
 # Update test framework version if it exists
 if [ -f tests/framework.sh ]; then
     sed -i.bak "s/readonly TEST_FRAMEWORK_VERSION=.*/readonly TEST_FRAMEWORK_VERSION=\"$NEW_VERSION\"/" tests/framework.sh && rm tests/framework.sh.bak
+    sed -i.bak "s/# Version: .*/# Version: $NEW_VERSION/" tests/framework.sh && rm tests/framework.sh.bak
     echo -e "${GREEN}✓${NC} Updated test framework version"
 fi
 
