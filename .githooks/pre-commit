@@ -1,0 +1,92 @@
+#!/usr/bin/env bash
+# Pre-commit hook for shellcheck validation
+# To use: git config core.hooksPath .githooks
+# To skip: git commit --no-verify
+
+set -euo pipefail
+
+# Configuration
+SHELLCHECK_SEVERITY="${SHELLCHECK_SEVERITY:-error}"  # error, warning, info, style
+SHELLCHECK_ENABLED="${SHELLCHECK_ENABLED:-true}"
+
+# Colors
+RED='\033[0;31m'
+YELLOW='\033[1;33m'
+GREEN='\033[0;32m'
+NC='\033[0m'
+
+# Check if shellcheck is disabled
+if [ "$SHELLCHECK_ENABLED" = "false" ]; then
+    exit 0
+fi
+
+# Check if shellcheck is installed
+if ! command -v shellcheck &> /dev/null; then
+    echo -e "${YELLOW}⚠ Shellcheck not installed. Skipping shell script validation.${NC}"
+    echo "  Install with: apt-get install shellcheck (Debian/Ubuntu)"
+    echo "  or: brew install shellcheck (macOS)"
+    exit 0
+fi
+
+# Get list of staged shell files
+staged_files=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(sh|bash)$' || true)
+
+# Also check files with bash shebang
+for file in $(git diff --cached --name-only --diff-filter=ACM); do
+    if [ -f "$file" ] && head -n1 "$file" | grep -qE '^#!/(usr/)?bin/(env )?bash'; then
+        staged_files="$staged_files $file"
+    fi
+done
+
+# Remove duplicates and empty entries
+staged_files=$(echo "$staged_files" | tr ' ' '\n' | sort -u | grep -v '^$' || true)
+
+if [ -z "$staged_files" ]; then
+    exit 0
+fi
+
+echo -e "${GREEN}Running shellcheck on staged shell scripts...${NC}"
+
+# Track if we found any issues
+found_issues=false
+found_errors=false
+
+# Check each file
+while IFS= read -r file; do
+    if [ -z "$file" ] || [ ! -f "$file" ]; then
+        continue
+    fi
+    
+    echo -n "  Checking $file... "
+    
+    # Run shellcheck with specified severity
+    if output=$(shellcheck -S "$SHELLCHECK_SEVERITY" "$file" 2>&1); then
+        echo -e "${GREEN}✓${NC}"
+    else
+        echo -e "${RED}✗${NC}"
+        echo "$output" | sed 's/^/    /'
+        found_issues=true
+        
+        # Check if there are actual errors (not just warnings)
+        if echo "$output" | grep -q "error"; then
+            found_errors=true
+        fi
+    fi
+done <<< "$staged_files"
+
+# Decide whether to block commit
+if [ "$found_errors" = true ] && [ "$SHELLCHECK_SEVERITY" = "error" ]; then
+    echo ""
+    echo -e "${RED}✗ Commit blocked due to shellcheck errors.${NC}"
+    echo "  Fix the errors or use 'git commit --no-verify' to skip validation."
+    exit 1
+elif [ "$found_issues" = true ]; then
+    echo ""
+    echo -e "${YELLOW}⚠ Shellcheck found issues but allowing commit.${NC}"
+    echo "  Consider fixing these issues in a follow-up commit."
+    echo "  To block on warnings, set: export SHELLCHECK_SEVERITY=warning"
+    exit 0
+else
+    echo -e "${GREEN}✓ All shell scripts passed validation!${NC}"
+    exit 0
+fi
