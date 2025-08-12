@@ -1,31 +1,298 @@
-# You can override the included template(s) by including variable overrides
-# SAST customization: https://docs.gitlab.com/ee/user/application_security/sast/#customizing-the-sast-settings
-# Secret Detection customization: https://docs.gitlab.com/user/application_security/secret_detection/pipeline/configure
-# Dependency Scanning customization: https://docs.gitlab.com/ee/user/application_security/dependency_scanning/#customizing-the-dependency-scanning-settings
-# Container Scanning customization: https://docs.gitlab.com/ee/user/application_security/container_scanning/#customizing-the-container-scanning-settings
-# Note that environment variables can be set in several places
-# See https://docs.gitlab.com/ee/ci/variables/#cicd-variable-precedence
-stages:
-- build
-- test
-- deploy
-- review
-- dast
-- staging
-- canary
-- production
-- incremental rollout 10%
-- incremental rollout 25%
-- incremental rollout 50%
-- incremental rollout 100%
-- performance
-- cleanup
-- secret-detection
-sast:
-  stage: test
-include:
-- template: Auto-DevOps.gitlab-ci.yml
+# GitLab CI/CD Pipeline for Container Build System
+# This pipeline builds, tests, and publishes container images
+
 variables:
-  SECRET_DETECTION_ENABLED: 'true'
-secret_detection:
-  stage: secret-detection
+  # Docker settings
+  DOCKER_DRIVER: overlay2
+  DOCKER_TLS_CERTDIR: "/certs"
+  DOCKER_BUILDKIT: "1"
+  
+  # Registry settings
+  REGISTRY_IMAGE: $CI_REGISTRY_IMAGE
+  
+  # Build settings
+  PROJECT_NAME: "containers"
+  
+  # Cache settings
+  BUILDKIT_CACHE_MOUNT_NS: $CI_PROJECT_ID
+
+stages:
+  - test
+  - build
+  - release
+
+# Default before script for all jobs
+before_script:
+  - echo "Starting job for $CI_COMMIT_REF_NAME branch"
+
+# =====================================
+# Test Stage
+# =====================================
+
+# Run unit tests
+test:unit:
+  stage: test
+  image: debian:12-slim
+  script:
+    - echo "Running unit tests..."
+    - apt-get update && apt-get install -y bash
+    - ./tests/run_unit_tests_ci.sh
+  artifacts:
+    paths:
+      - tests/results/
+    reports:
+      junit: tests/results/junit.xml
+    expire_in: 1 week
+  only:
+    - branches
+    - merge_requests
+    - tags
+
+# Code quality checks
+test:code_quality:
+  stage: test
+  image: debian:12-slim
+  script:
+    - echo "Running code quality checks..."
+    - apt-get update && apt-get install -y shellcheck
+    - |
+      find . -type f -name "*.sh" ! -path "./tests/*" ! -path "./.git/*" | while read -r file; do
+        echo "Checking $file..."
+        shellcheck -S warning "$file" || true
+      done
+  allow_failure: true
+  only:
+    - branches
+    - merge_requests
+
+# Version check
+test:versions:
+  stage: test
+  image: debian:12-slim
+  script:
+    - echo "Checking for outdated versions..."
+    - apt-get update && apt-get install -y bash curl jq
+    - ./bin/check-versions.sh --json --no-cache || true
+  artifacts:
+    paths:
+      - version-check.json
+    expire_in: 1 week
+  allow_failure: true
+  only:
+    - schedules
+    - web
+
+# =====================================
+# Build Stage
+# =====================================
+
+# Build minimal image
+build:minimal:
+  stage: build
+  image: docker:24-cli
+  services:
+    - docker:24-dind
+  script:
+    - echo "Building minimal container..."
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+    - |
+      docker build \
+        --cache-from $REGISTRY_IMAGE:minimal-cache \
+        --build-arg BUILDKIT_INLINE_CACHE=1 \
+        --build-arg PROJECT_NAME=$PROJECT_NAME \
+        --build-arg PROJECT_PATH=. \
+        --tag $REGISTRY_IMAGE:minimal-$CI_COMMIT_SHORT_SHA \
+        --tag $REGISTRY_IMAGE:minimal-latest \
+        -f Dockerfile \
+        .
+    - docker push $REGISTRY_IMAGE:minimal-$CI_COMMIT_SHORT_SHA
+    - docker push $REGISTRY_IMAGE:minimal-latest
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+    - if: '$CI_COMMIT_TAG'
+
+# Build Python development image
+build:python-dev:
+  stage: build
+  image: docker:24-cli
+  services:
+    - docker:24-dind
+  script:
+    - echo "Building Python development container..."
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+    - |
+      docker build \
+        --cache-from $REGISTRY_IMAGE:python-dev-cache \
+        --build-arg BUILDKIT_INLINE_CACHE=1 \
+        --build-arg PROJECT_NAME=$PROJECT_NAME \
+        --build-arg PROJECT_PATH=. \
+        --build-arg INCLUDE_PYTHON_DEV=true \
+        --tag $REGISTRY_IMAGE:python-dev-$CI_COMMIT_SHORT_SHA \
+        --tag $REGISTRY_IMAGE:python-dev-latest \
+        -f Dockerfile \
+        .
+    - docker push $REGISTRY_IMAGE:python-dev-$CI_COMMIT_SHORT_SHA
+    - docker push $REGISTRY_IMAGE:python-dev-latest
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+    - if: '$CI_COMMIT_TAG'
+
+# Build Node.js development image
+build:node-dev:
+  stage: build
+  image: docker:24-cli
+  services:
+    - docker:24-dind
+  script:
+    - echo "Building Node.js development container..."
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+    - |
+      docker build \
+        --cache-from $REGISTRY_IMAGE:node-dev-cache \
+        --build-arg BUILDKIT_INLINE_CACHE=1 \
+        --build-arg PROJECT_NAME=$PROJECT_NAME \
+        --build-arg PROJECT_PATH=. \
+        --build-arg INCLUDE_NODE_DEV=true \
+        --tag $REGISTRY_IMAGE:node-dev-$CI_COMMIT_SHORT_SHA \
+        --tag $REGISTRY_IMAGE:node-dev-latest \
+        -f Dockerfile \
+        .
+    - docker push $REGISTRY_IMAGE:node-dev-$CI_COMMIT_SHORT_SHA
+    - docker push $REGISTRY_IMAGE:node-dev-latest
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+    - if: '$CI_COMMIT_TAG'
+
+# Build full development image
+build:full-dev:
+  stage: build
+  image: docker:24-cli
+  services:
+    - docker:24-dind
+  script:
+    - echo "Building full development container..."
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+    - |
+      docker build \
+        --cache-from $REGISTRY_IMAGE:full-dev-cache \
+        --build-arg BUILDKIT_INLINE_CACHE=1 \
+        --build-arg PROJECT_NAME=$PROJECT_NAME \
+        --build-arg PROJECT_PATH=. \
+        --build-arg INCLUDE_PYTHON_DEV=true \
+        --build-arg INCLUDE_NODE_DEV=true \
+        --build-arg INCLUDE_RUST_DEV=true \
+        --build-arg INCLUDE_GOLANG_DEV=true \
+        --build-arg INCLUDE_DEV_TOOLS=true \
+        --build-arg INCLUDE_DOCKER=true \
+        --tag $REGISTRY_IMAGE:full-dev-$CI_COMMIT_SHORT_SHA \
+        --tag $REGISTRY_IMAGE:full-dev-latest \
+        -f Dockerfile \
+        .
+    - docker push $REGISTRY_IMAGE:full-dev-$CI_COMMIT_SHORT_SHA
+    - docker push $REGISTRY_IMAGE:full-dev-latest
+  only:
+    - main
+    - tags
+
+# =====================================
+# Release Stage
+# =====================================
+
+# Create release tags for versioned builds
+release:tags:
+  stage: release
+  image: docker:24-cli
+  services:
+    - docker:24-dind
+  script:
+    - echo "Creating release tags for version $CI_COMMIT_TAG..."
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+    
+    # Pull the built images
+    - docker pull $REGISTRY_IMAGE:minimal-$CI_COMMIT_SHORT_SHA
+    - docker pull $REGISTRY_IMAGE:python-dev-$CI_COMMIT_SHORT_SHA
+    - docker pull $REGISTRY_IMAGE:node-dev-$CI_COMMIT_SHORT_SHA
+    - docker pull $REGISTRY_IMAGE:full-dev-$CI_COMMIT_SHORT_SHA
+    
+    # Tag with version
+    - docker tag $REGISTRY_IMAGE:minimal-$CI_COMMIT_SHORT_SHA $REGISTRY_IMAGE:minimal-$CI_COMMIT_TAG
+    - docker tag $REGISTRY_IMAGE:python-dev-$CI_COMMIT_SHORT_SHA $REGISTRY_IMAGE:python-dev-$CI_COMMIT_TAG
+    - docker tag $REGISTRY_IMAGE:node-dev-$CI_COMMIT_SHORT_SHA $REGISTRY_IMAGE:node-dev-$CI_COMMIT_TAG
+    - docker tag $REGISTRY_IMAGE:full-dev-$CI_COMMIT_SHORT_SHA $REGISTRY_IMAGE:full-dev-$CI_COMMIT_TAG
+    
+    # Push versioned tags
+    - docker push $REGISTRY_IMAGE:minimal-$CI_COMMIT_TAG
+    - docker push $REGISTRY_IMAGE:python-dev-$CI_COMMIT_TAG
+    - docker push $REGISTRY_IMAGE:node-dev-$CI_COMMIT_TAG
+    - docker push $REGISTRY_IMAGE:full-dev-$CI_COMMIT_TAG
+    
+    # Update latest tags
+    - docker tag $REGISTRY_IMAGE:minimal-$CI_COMMIT_SHORT_SHA $REGISTRY_IMAGE:minimal
+    - docker tag $REGISTRY_IMAGE:python-dev-$CI_COMMIT_SHORT_SHA $REGISTRY_IMAGE:python-dev
+    - docker tag $REGISTRY_IMAGE:node-dev-$CI_COMMIT_SHORT_SHA $REGISTRY_IMAGE:node-dev
+    - docker tag $REGISTRY_IMAGE:full-dev-$CI_COMMIT_SHORT_SHA $REGISTRY_IMAGE:full-dev
+    
+    - docker push $REGISTRY_IMAGE:minimal
+    - docker push $REGISTRY_IMAGE:python-dev
+    - docker push $REGISTRY_IMAGE:node-dev
+    - docker push $REGISTRY_IMAGE:full-dev
+  only:
+    - tags
+
+# Create GitLab release
+release:gitlab:
+  stage: release
+  image: registry.gitlab.com/gitlab-org/release-cli:latest
+  script:
+    - echo "Creating GitLab release for version $CI_COMMIT_TAG..."
+  release:
+    tag_name: $CI_COMMIT_TAG
+    name: "Release $CI_COMMIT_TAG"
+    description: |
+      ## Container Build System Release $CI_COMMIT_TAG
+      
+      ### Available Images
+      - `$CI_REGISTRY_IMAGE:minimal-$CI_COMMIT_TAG` - Minimal base container
+      - `$CI_REGISTRY_IMAGE:python-dev-$CI_COMMIT_TAG` - Python development environment
+      - `$CI_REGISTRY_IMAGE:node-dev-$CI_COMMIT_TAG` - Node.js development environment
+      - `$CI_REGISTRY_IMAGE:full-dev-$CI_COMMIT_TAG` - Full development environment
+      
+      ### Usage
+      ```bash
+      docker pull $CI_REGISTRY_IMAGE:python-dev-$CI_COMMIT_TAG
+      docker run -it --rm $CI_REGISTRY_IMAGE:python-dev-$CI_COMMIT_TAG
+      ```
+      
+      See [README.md](README.md) for detailed documentation.
+  only:
+    - tags
+
+# =====================================
+# Scheduled Jobs
+# =====================================
+
+# Weekly version check (only runs on schedules)
+scheduled:version-check:
+  stage: test
+  image: debian:12-slim
+  script:
+    - echo "Running scheduled version check..."
+    - apt-get update && apt-get install -y bash curl jq
+    - |
+      OUTPUT=$(./bin/check-versions.sh --json --no-cache)
+      echo "$OUTPUT"
+      
+      # Check if any versions are outdated
+      OUTDATED=$(echo "$OUTPUT" | jq -r '.summary.outdated')
+      if [ "$OUTDATED" -gt 0 ]; then
+        echo "Found $OUTDATED outdated versions"
+        # Here you could send notifications via webhook, email, etc.
+        # For now, just exit with error to mark the job as failed
+        exit 1
+      fi
+  only:
+    - schedules
+  allow_failure: false
