@@ -18,6 +18,10 @@ PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 # Change to project root
 cd "$PROJECT_ROOT"
 
+# Set environment to skip Docker checks in CI
+export SKIP_DOCKER_CHECK=true
+export CI=true
+
 echo -e "${BLUE}Container Build System - CI Unit Test Runner${NC}"
 echo "============================================="
 echo "Date: $(date)"
