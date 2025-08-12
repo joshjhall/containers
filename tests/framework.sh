@@ -108,19 +108,15 @@ init_test_framework() {
     # Timestamp for this test run
     export TEST_RUN_ID=$(date +%Y%m%d-%H%M%S)
 
-    # Check Docker is available (skip in CI mode or when SKIP_DOCKER_CHECK is set)
-    if [ "${CI:-false}" != "true" ] && [ "${SKIP_DOCKER_CHECK:-false}" != "true" ]; then
-        if ! command -v docker >/dev/null 2>&1; then
-            echo -e "${TEST_COLOR_FAIL}ERROR: Docker is not installed or not in PATH${TEST_COLOR_RESET}"
-            exit 1
-        fi
+    # Check Docker is available
+    if ! command -v docker >/dev/null 2>&1; then
+        echo -e "${TEST_COLOR_FAIL}ERROR: Docker is not installed or not in PATH${TEST_COLOR_RESET}"
+        exit 1
+    fi
 
-        if ! docker info >/dev/null 2>&1; then
-            echo -e "${TEST_COLOR_FAIL}ERROR: Docker daemon is not running${TEST_COLOR_RESET}"
-            exit 1
-        fi
-    else
-        echo -e "${TEST_COLOR_INFO}Skipping Docker check (CI mode or SKIP_DOCKER_CHECK set)${TEST_COLOR_RESET}"
+    if ! docker info >/dev/null 2>&1; then
+        echo -e "${TEST_COLOR_FAIL}ERROR: Docker daemon is not running${TEST_COLOR_RESET}"
+        exit 1
     fi
 
     echo -e "${TEST_COLOR_INFO}=== Test Framework Initialized ===${TEST_COLOR_RESET}"
