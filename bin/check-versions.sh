@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Comprehensive version checker for all pinned versions in the container build system
+# Supports caching and JSON output
 set -uo pipefail
 
 # Colors for output
@@ -13,8 +14,44 @@ NC='\033[0m' # No Color
 BIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$BIN_DIR")"
 
-# Output format (text or json)
-OUTPUT_FORMAT="${1:-text}"
+# Parse command line arguments
+OUTPUT_FORMAT="text"
+USE_CACHE="true"
+CACHE_DURATION=3600  # 1 hour in seconds
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --json)
+            OUTPUT_FORMAT="json"
+            shift
+            ;;
+        --no-cache)
+            USE_CACHE="false"
+            shift
+            ;;
+        --cache-duration)
+            CACHE_DURATION="$2"
+            shift 2
+            ;;
+        --help)
+            echo "Usage: $0 [OPTIONS]"
+            echo "Options:"
+            echo "  --json              Output results in JSON format"
+            echo "  --no-cache          Don't use cached version data"
+            echo "  --cache-duration N  Cache duration in seconds (default: 3600)"
+            echo "  --help              Show this help message"
+            exit 0
+            ;;
+        *)
+            echo "Unknown option: $1"
+            exit 1
+            ;;
+    esac
+done
+
+# Cache directory
+CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/container-version-checker"
+mkdir -p "$CACHE_DIR"
 
 # Load .env file if it exists
 if [ -f "$PROJECT_ROOT/.env" ]; then
@@ -31,23 +68,57 @@ fi
 
 # GitHub token for API calls
 GITHUB_TOKEN="${GITHUB_TOKEN:-}"
-if [ -n "$GITHUB_TOKEN" ]; then
-    echo -e "${GREEN}Using GitHub token for API calls${NC}" >&2
-    CURL_AUTH="-H \"Authorization: token $GITHUB_TOKEN\""
-else
-    echo -e "${YELLOW}Warning: No GITHUB_TOKEN set. API rate limits may apply.${NC}" >&2
-    CURL_AUTH=""
+if [ -n "$GITHUB_TOKEN" ] && [ "$OUTPUT_FORMAT" = "text" ]; then
+    echo -e "${GREEN}Using GitHub token for API calls${NC}"
+elif [ -z "$GITHUB_TOKEN" ] && [ "$OUTPUT_FORMAT" = "text" ]; then
+    echo -e "${YELLOW}Warning: No GITHUB_TOKEN set. API rate limits may apply.${NC}"
 fi
 
-# Helper function for API calls with timeout
+# Cache helper functions
+get_cache_file() {
+    local url="$1"
+    echo "$CACHE_DIR/$(echo "$url" | sha256sum | cut -d' ' -f1)"
+}
+
+is_cache_valid() {
+    local cache_file="$1"
+    if [ ! -f "$cache_file" ] || [ "$USE_CACHE" = "false" ]; then
+        return 1
+    fi
+    
+    local file_age=$(($(date +%s) - $(stat -c %Y "$cache_file" 2>/dev/null || stat -f %m "$cache_file" 2>/dev/null || echo 0)))
+    if [ $file_age -lt $CACHE_DURATION ]; then
+        return 0
+    fi
+    return 1
+}
+
+# Helper function for API calls with timeout and caching
 fetch_url() {
     local url="$1"
     local timeout="${2:-10}"
-    if [ -n "$GITHUB_TOKEN" ] && [[ "$url" == *"api.github.com"* ]]; then
-        curl -s --max-time "$timeout" -H "Authorization: token $GITHUB_TOKEN" "$url" 2>/dev/null || echo ""
-    else
-        curl -s --max-time "$timeout" "$url" 2>/dev/null || echo ""
+    local cache_file=$(get_cache_file "$url")
+    
+    # Check cache first
+    if is_cache_valid "$cache_file"; then
+        cat "$cache_file"
+        return 0
     fi
+    
+    # Fetch fresh data
+    local response
+    if [ -n "$GITHUB_TOKEN" ] && [[ "$url" == *"api.github.com"* ]]; then
+        response=$(curl -s --max-time "$timeout" -H "Authorization: token $GITHUB_TOKEN" "$url" 2>/dev/null || echo "")
+    else
+        response=$(curl -s --max-time "$timeout" "$url" 2>/dev/null || echo "")
+    fi
+    
+    # Cache the response if not empty
+    if [ -n "$response" ] && [ "$USE_CACHE" = "true" ]; then
+        echo "$response" > "$cache_file"
+    fi
+    
+    echo "$response"
 }
 
 # Version storage
@@ -56,6 +127,19 @@ declare -a CURRENT_VERSIONS
 declare -a LATEST_VERSIONS
 declare -a VERSION_STATUS
 declare -a VERSION_FILES
+
+# Progress message helper
+progress_msg() {
+    if [ "$OUTPUT_FORMAT" = "text" ]; then
+        progress_msg "$1"
+    fi
+}
+
+progress_done() {
+    if [ "$OUTPUT_FORMAT" = "text" ]; then
+        progress_done
+    fi
+}
 
 # Add a tool/version pair
 add_tool() {
@@ -113,7 +197,9 @@ set_latest() {
 
 # Extract all versions from files
 extract_all_versions() {
-    echo -e "${BLUE}Scanning for version pins...${NC}" >&2
+    if [ "$OUTPUT_FORMAT" = "text" ]; then
+        echo -e "${BLUE}Scanning for version pins...${NC}"
+    fi
     
     # Languages from Dockerfile
     local ver
@@ -194,14 +280,14 @@ extract_all_versions() {
 
 # Check functions for each tool
 check_python() {
-    echo -n "  Python..." >&2
+    progress_msg "  Python..."
     local latest=$(fetch_url "https://endoflife.date/api/python.json" | jq -r '[.[] | select(.cycle | startswith("3."))] | .[0].latest' 2>/dev/null)
     [ -n "$latest" ] && set_latest "Python" "$latest" || set_latest "Python" "error"
-    echo " done" >&2
+    progress_done
 }
 
 check_nodejs() {
-    echo -n "  Node.js..." >&2
+    progress_msg "  Node.js..."
     local current=""
     for i in "${!TOOLS[@]}"; do
         if [ "${TOOLS[$i]}" = "Node.js" ]; then
@@ -224,18 +310,18 @@ check_nodejs() {
     fi
     
     [ -n "$latest" ] && set_latest "Node.js" "$latest" || set_latest "Node.js" "error"
-    echo " done" >&2
+    progress_done
 }
 
 check_go() {
-    echo -n "  Go..." >&2
+    progress_msg "  Go..."
     local latest=$(fetch_url "https://go.dev/VERSION?m=text" | head -1 | sed 's/^go//')
     [ -n "$latest" ] && set_latest "Go" "$latest" || set_latest "Go" "error"
-    echo " done" >&2
+    progress_done
 }
 
 check_rust() {
-    echo -n "  Rust..." >&2
+    progress_msg "  Rust..."
     # Try the Rust API endpoint
     local latest=$(fetch_url "https://api.github.com/repos/rust-lang/rust/releases" | jq -r '[.[] | select(.tag_name | test("^[0-9]+\\.[0-9]+\\.[0-9]+$"))] | .[0].tag_name' 2>/dev/null)
     if [ -z "$latest" ]; then
@@ -243,18 +329,18 @@ check_rust() {
         latest=$(fetch_url "https://forge.rust-lang.org/infra/channel-layout.html" | grep -oE 'stable.*?[0-9]+\.[0-9]+\.[0-9]+' | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
     fi
     [ -n "$latest" ] && set_latest "Rust" "$latest" || set_latest "Rust" "error"
-    echo " done" >&2
+    progress_done
 }
 
 check_ruby() {
-    echo -n "  Ruby..." >&2
+    progress_msg "  Ruby..."
     local latest=$(fetch_url "https://api.github.com/repos/ruby/ruby/releases/latest" | jq -r '.tag_name' 2>/dev/null | sed 's/^v//' | sed 's/_/./g')
     [ -n "$latest" ] && set_latest "Ruby" "$latest" || set_latest "Ruby" "error"
-    echo " done" >&2
+    progress_done
 }
 
 check_java() {
-    echo -n "  Java..." >&2
+    progress_msg "  Java..."
     # Get the current major version
     local current_major=""
     for i in "${!TOOLS[@]}"; do
@@ -273,11 +359,11 @@ check_java() {
     fi
     
     [ -n "$latest" ] && [ "$latest" != "null" ] && set_latest "Java" "$latest" || set_latest "Java" "error"
-    echo " done" >&2
+    progress_done
 }
 
 check_r() {
-    echo -n "  R..." >&2
+    progress_msg "  R..."
     # Check R version from the R project website
     # The R project lists versions in their news page
     local latest=$(fetch_url "https://cran.r-project.org/" | grep -oE 'R-[0-9]+\.[0-9]+\.[0-9]+' | head -1 | sed 's/R-//')
@@ -293,29 +379,29 @@ check_r() {
     fi
     
     [ -n "$latest" ] && set_latest "R" "$latest" || set_latest "R" "error"
-    echo " done" >&2
+    progress_done
 }
 
 check_github_release() {
     local tool="$1"
     local repo="$2"
-    echo -n "  $tool..." >&2
+    progress_msg "  $tool..."
     local latest=$(fetch_url "https://api.github.com/repos/$repo/releases/latest" | jq -r '.tag_name' 2>/dev/null | sed 's/^v//')
     [ -n "$latest" ] && set_latest "$tool" "$latest" || set_latest "$tool" "error"
-    echo " done" >&2
+    progress_done
 }
 
 check_gitlab_release() {
     local tool="$1"
     local project_id="$2"
-    echo -n "  $tool..." >&2
+    progress_msg "  $tool..."
     local latest=$(fetch_url "https://gitlab.com/api/v4/projects/$project_id/releases" | jq -r '.[0].tag_name' 2>/dev/null | sed 's/^v//')
     [ -n "$latest" ] && set_latest "$tool" "$latest" || set_latest "$tool" "error"
-    echo " done" >&2
+    progress_done
 }
 
 check_kubectl() {
-    echo -n "  kubectl..." >&2
+    progress_msg "  kubectl..."
     local current=""
     for i in "${!TOOLS[@]}"; do
         if [ "${TOOLS[$i]}" = "kubectl" ]; then
@@ -337,11 +423,72 @@ check_kubectl() {
     fi
     
     [ -n "$latest" ] && set_latest "kubectl" "$latest" || set_latest "kubectl" "error"
-    echo " done" >&2
+    progress_done
+}
+
+# Print results in JSON format
+print_json_results() {
+    local outdated=0
+    local current=0
+    local errors=0
+    local manual=0
+    
+    # Build JSON array
+    echo "{"
+    echo "  \"timestamp\": \"$(date -Iseconds)\","
+    echo "  \"tools\": ["
+    
+    for i in "${!TOOLS[@]}"; do
+        local tool="${TOOLS[$i]}"
+        local cur_ver="${CURRENT_VERSIONS[$i]}"
+        local latest="${LATEST_VERSIONS[$i]}"
+        local status="${VERSION_STATUS[$i]}"
+        local file="${VERSION_FILES[$i]}"
+        
+        # Update counters
+        case "$status" in
+            outdated) ((outdated++)) ;;
+            current) ((current++)) ;;
+            error) ((errors++)) ;;
+            manual) ((manual++)) ;;
+        esac
+        
+        # Print JSON object for this tool
+        progress_msg "    {"
+        progress_msg "\"tool\":\"$tool\","
+        progress_msg "\"current\":\"$cur_ver\","
+        progress_msg "\"latest\":\"$latest\","
+        progress_msg "\"file\":\"$file\","
+        progress_msg "\"status\":\"$status\""
+        progress_msg "}"
+        
+        # Add comma if not last item
+        if [ $i -lt $((${#TOOLS[@]} - 1)) ]; then
+            echo ","
+        else
+            echo ""
+        fi
+    done
+    
+    echo "  ],"
+    echo "  \"summary\": {"
+    echo "    \"total\": ${#TOOLS[@]},"
+    echo "    \"current\": $current,"
+    echo "    \"outdated\": $outdated,"
+    echo "    \"errors\": $errors,"
+    echo "    \"manual_check\": $manual"
+    echo "  },"
+    echo "  \"exit_code\": $([ $outdated -gt 0 ] && echo 1 || echo 0)"
+    echo "}"
 }
 
 # Print results
 print_results() {
+    if [ "$OUTPUT_FORMAT" = "json" ]; then
+        print_json_results
+        return
+    fi
+    
     echo ""
     echo -e "${BLUE}=== Version Check Results ===${NC}"
     echo ""
@@ -407,11 +554,17 @@ main() {
     extract_all_versions
     
     if [ ${#TOOLS[@]} -eq 0 ]; then
-        echo -e "${YELLOW}No version pins found${NC}"
+        if [ "$OUTPUT_FORMAT" = "json" ]; then
+            echo '{"timestamp":"'$(date -Iseconds)'","tools":[],"summary":{"total":0},"exit_code":0}'
+        else
+            echo -e "${YELLOW}No version pins found${NC}"
+        fi
         exit 0
     fi
     
-    echo -e "${BLUE}Checking for latest versions...${NC}" >&2
+    if [ "$OUTPUT_FORMAT" = "text" ]; then
+        echo -e "${BLUE}Checking for latest versions...${NC}"
+    fi
     
     # Check each tool
     for i in "${!TOOLS[@]}"; do
@@ -438,7 +591,7 @@ main() {
             dive) check_github_release "dive" "wagoodman/dive" ;;
             mkcert) check_github_release "mkcert" "FiloSottile/mkcert" ;;
             glab) check_gitlab_release "glab" "gitlab-org%2Fcli" ;;
-            *) echo "  Skipping $tool (no checker)" >&2 ;;
+            *) [ "$OUTPUT_FORMAT" = "text" ] && echo "  Skipping $tool (no checker)" ;;
         esac
     done
     
