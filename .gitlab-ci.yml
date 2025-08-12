@@ -16,6 +16,16 @@ variables:
   # Cache settings
   BUILDKIT_CACHE_MOUNT_NS: $CI_PROJECT_ID
 
+# Common Docker-in-Docker configuration
+.dind_config: &dind_config
+  services:
+    - name: docker:24-dind
+      command: ["--tls=false"]  # Disable TLS for simplicity
+  variables:
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_TLS_CERTDIR: ""
+    DOCKER_DRIVER: overlay2
+
 stages:
   - prepare
   - test
@@ -34,13 +44,7 @@ before_script:
 prepare:test-runner:
   stage: prepare
   image: docker:24-cli
-  services:
-    - docker:24-dind
-  variables:
-    DOCKER_HOST: tcp://docker:2376
-    DOCKER_TLS_CERTDIR: "/certs"
-    DOCKER_TLS_VERIFY: 1
-    DOCKER_CERT_PATH: "$DOCKER_TLS_CERTDIR/client"
+  <<: *dind_config
   script:
     - echo "Building test runner container..."
     - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
@@ -65,13 +69,7 @@ prepare:test-runner:
 test:unit:
   stage: test
   image: $CI_REGISTRY_IMAGE:test-runner-$CI_COMMIT_SHORT_SHA
-  services:
-    - docker:24-dind
-  variables:
-    DOCKER_HOST: tcp://docker:2376
-    DOCKER_TLS_CERTDIR: "/certs"
-    DOCKER_TLS_VERIFY: 1
-    DOCKER_CERT_PATH: "$DOCKER_TLS_CERTDIR/client"
+  <<: *dind_config
   needs:
     - prepare:test-runner
   script:
@@ -131,8 +129,7 @@ test:versions:
 build:minimal:
   stage: build
   image: docker:24-cli
-  services:
-    - docker:24-dind
+  <<: *dind_config
   script:
     - echo "Building minimal container..."
     - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
@@ -157,8 +154,7 @@ build:minimal:
 build:python-dev:
   stage: build
   image: docker:24-cli
-  services:
-    - docker:24-dind
+  <<: *dind_config
   script:
     - echo "Building Python development container..."
     - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
@@ -190,8 +186,7 @@ build:python-dev:
 build:node-dev:
   stage: build
   image: docker:24-cli
-  services:
-    - docker:24-dind
+  <<: *dind_config
   script:
     - echo "Building Node.js development container..."
     - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
@@ -223,8 +218,7 @@ build:node-dev:
 build:cloud-ops:
   stage: build
   image: docker:24-cli
-  services:
-    - docker:24-dind
+  <<: *dind_config
   script:
     - echo "Building cloud operations container..."
     - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
@@ -256,8 +250,7 @@ build:cloud-ops:
 build:polyglot:
   stage: build
   image: docker:24-cli
-  services:
-    - docker:24-dind
+  <<: *dind_config
   script:
     - echo "Building polyglot development container..."
     - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
@@ -293,8 +286,7 @@ build:polyglot:
 release:tags:
   stage: release
   image: docker:24-cli
-  services:
-    - docker:24-dind
+  <<: *dind_config
   script:
     - echo "Creating release tags for version $CI_COMMIT_TAG..."
     - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
