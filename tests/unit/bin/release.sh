@@ -5,13 +5,13 @@
 set -euo pipefail
 
 # Source test framework
-source "$(dirname "${BASH_SOURCE[0]}")/../framework.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/../../framework.sh"
 
 # Initialize test framework
 init_test_framework
 
 # Test suite
-test_suite "Release Script Tests"
+test_suite "Bin Release Script Tests"
 
 # Setup function - runs before each test
 setup() {

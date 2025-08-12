@@ -21,7 +21,8 @@ if ! grep -q "/etc/bashrc.d" /etc/bash.bashrc 2>/dev/null; then
 # Source all scripts in /etc/bashrc.d
 if [ -d /etc/bashrc.d ]; then
     for f in /etc/bashrc.d/*.sh; do
-        [ -r "$f" ] && . "$f"
+        # Only source files that are both readable and executable (security best practice)
+        [ -r "$f" ] && [ -x "$f" ] && . "$f"
     done
 fi
 EOF
@@ -38,7 +39,8 @@ cat > /etc/bash_env << 'EOF'
 # These scripts should be written to work in both interactive and non-interactive contexts
 if [ -d /etc/bashrc.d ]; then
     for f in /etc/bashrc.d/*.sh; do
-        [ -r "$f" ] && . "$f" 2>/dev/null || true
+        # Only source files that are both readable and executable (security best practice)
+        [ -r "$f" ] && [ -x "$f" ] && . "$f" 2>/dev/null || true
     done
 fi
 EOF
