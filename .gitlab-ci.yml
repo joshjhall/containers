@@ -128,6 +128,12 @@ build:python-dev:
         --build-arg PROJECT_NAME=$PROJECT_NAME \
         --build-arg PROJECT_PATH=. \
         --build-arg INCLUDE_PYTHON_DEV=true \
+        --build-arg INCLUDE_OP=true \
+        --build-arg INCLUDE_DEV_TOOLS=true \
+        --build-arg INCLUDE_POSTGRES_CLIENT=true \
+        --build-arg INCLUDE_REDIS_CLIENT=true \
+        --build-arg INCLUDE_SQLITE_CLIENT=true \
+        --build-arg INCLUDE_DOCKER=true \
         --tag $REGISTRY_IMAGE:python-dev-$CI_COMMIT_SHORT_SHA \
         --tag $REGISTRY_IMAGE:python-dev-latest \
         -f Dockerfile \
@@ -155,6 +161,12 @@ build:node-dev:
         --build-arg PROJECT_NAME=$PROJECT_NAME \
         --build-arg PROJECT_PATH=. \
         --build-arg INCLUDE_NODE_DEV=true \
+        --build-arg INCLUDE_OP=true \
+        --build-arg INCLUDE_DEV_TOOLS=true \
+        --build-arg INCLUDE_POSTGRES_CLIENT=true \
+        --build-arg INCLUDE_REDIS_CLIENT=true \
+        --build-arg INCLUDE_SQLITE_CLIENT=true \
+        --build-arg INCLUDE_DOCKER=true \
         --tag $REGISTRY_IMAGE:node-dev-$CI_COMMIT_SHORT_SHA \
         --tag $REGISTRY_IMAGE:node-dev-latest \
         -f Dockerfile \
@@ -166,36 +178,71 @@ build:node-dev:
     - if: '$CI_COMMIT_BRANCH == "develop"'
     - if: '$CI_COMMIT_TAG'
 
-# Build full development image
-build:full-dev:
+# Build cloud operations image (K8s, Terraform, cloud CLIs)
+build:cloud-ops:
   stage: build
   image: docker:24-cli
   services:
     - docker:24-dind
   script:
-    - echo "Building full development container..."
+    - echo "Building cloud operations container..."
     - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
     - |
       docker build \
-        --cache-from $REGISTRY_IMAGE:full-dev-cache \
+        --cache-from $REGISTRY_IMAGE:cloud-ops-cache \
+        --build-arg BUILDKIT_INLINE_CACHE=1 \
+        --build-arg PROJECT_NAME=$PROJECT_NAME \
+        --build-arg PROJECT_PATH=. \
+        --build-arg INCLUDE_KUBERNETES=true \
+        --build-arg INCLUDE_TERRAFORM=true \
+        --build-arg INCLUDE_AWS=true \
+        --build-arg INCLUDE_GCLOUD=true \
+        --build-arg INCLUDE_CLOUDFLARE=true \
+        --build-arg INCLUDE_DEV_TOOLS=true \
+        --build-arg INCLUDE_DOCKER=true \
+        --build-arg INCLUDE_OP=true \
+        --tag $REGISTRY_IMAGE:cloud-ops-$CI_COMMIT_SHORT_SHA \
+        --tag $REGISTRY_IMAGE:cloud-ops-latest \
+        -f Dockerfile \
+        .
+    - docker push $REGISTRY_IMAGE:cloud-ops-$CI_COMMIT_SHORT_SHA
+    - docker push $REGISTRY_IMAGE:cloud-ops-latest
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_COMMIT_TAG'
+
+# Build polyglot development image (Python + Node.js)
+build:polyglot:
+  stage: build
+  image: docker:24-cli
+  services:
+    - docker:24-dind
+  script:
+    - echo "Building polyglot development container..."
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+    - |
+      docker build \
+        --cache-from $REGISTRY_IMAGE:polyglot-cache \
         --build-arg BUILDKIT_INLINE_CACHE=1 \
         --build-arg PROJECT_NAME=$PROJECT_NAME \
         --build-arg PROJECT_PATH=. \
         --build-arg INCLUDE_PYTHON_DEV=true \
         --build-arg INCLUDE_NODE_DEV=true \
-        --build-arg INCLUDE_RUST_DEV=true \
-        --build-arg INCLUDE_GOLANG_DEV=true \
         --build-arg INCLUDE_DEV_TOOLS=true \
         --build-arg INCLUDE_DOCKER=true \
-        --tag $REGISTRY_IMAGE:full-dev-$CI_COMMIT_SHORT_SHA \
-        --tag $REGISTRY_IMAGE:full-dev-latest \
+        --build-arg INCLUDE_OP=true \
+        --build-arg INCLUDE_POSTGRES_CLIENT=true \
+        --build-arg INCLUDE_REDIS_CLIENT=true \
+        --build-arg INCLUDE_SQLITE_CLIENT=true \
+        --tag $REGISTRY_IMAGE:polyglot-$CI_COMMIT_SHORT_SHA \
+        --tag $REGISTRY_IMAGE:polyglot-latest \
         -f Dockerfile \
         .
-    - docker push $REGISTRY_IMAGE:full-dev-$CI_COMMIT_SHORT_SHA
-    - docker push $REGISTRY_IMAGE:full-dev-latest
-  only:
-    - main
-    - tags
+    - docker push $REGISTRY_IMAGE:polyglot-$CI_COMMIT_SHORT_SHA
+    - docker push $REGISTRY_IMAGE:polyglot-latest
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_COMMIT_TAG'
 
 # =====================================
 # Release Stage
@@ -215,30 +262,35 @@ release:tags:
     - docker pull $REGISTRY_IMAGE:minimal-$CI_COMMIT_SHORT_SHA
     - docker pull $REGISTRY_IMAGE:python-dev-$CI_COMMIT_SHORT_SHA
     - docker pull $REGISTRY_IMAGE:node-dev-$CI_COMMIT_SHORT_SHA
-    - docker pull $REGISTRY_IMAGE:full-dev-$CI_COMMIT_SHORT_SHA
+    - docker pull $REGISTRY_IMAGE:cloud-ops-$CI_COMMIT_SHORT_SHA
+    - docker pull $REGISTRY_IMAGE:polyglot-$CI_COMMIT_SHORT_SHA
     
     # Tag with version
     - docker tag $REGISTRY_IMAGE:minimal-$CI_COMMIT_SHORT_SHA $REGISTRY_IMAGE:minimal-$CI_COMMIT_TAG
     - docker tag $REGISTRY_IMAGE:python-dev-$CI_COMMIT_SHORT_SHA $REGISTRY_IMAGE:python-dev-$CI_COMMIT_TAG
     - docker tag $REGISTRY_IMAGE:node-dev-$CI_COMMIT_SHORT_SHA $REGISTRY_IMAGE:node-dev-$CI_COMMIT_TAG
-    - docker tag $REGISTRY_IMAGE:full-dev-$CI_COMMIT_SHORT_SHA $REGISTRY_IMAGE:full-dev-$CI_COMMIT_TAG
+    - docker tag $REGISTRY_IMAGE:cloud-ops-$CI_COMMIT_SHORT_SHA $REGISTRY_IMAGE:cloud-ops-$CI_COMMIT_TAG
+    - docker tag $REGISTRY_IMAGE:polyglot-$CI_COMMIT_SHORT_SHA $REGISTRY_IMAGE:polyglot-$CI_COMMIT_TAG
     
     # Push versioned tags
     - docker push $REGISTRY_IMAGE:minimal-$CI_COMMIT_TAG
     - docker push $REGISTRY_IMAGE:python-dev-$CI_COMMIT_TAG
     - docker push $REGISTRY_IMAGE:node-dev-$CI_COMMIT_TAG
-    - docker push $REGISTRY_IMAGE:full-dev-$CI_COMMIT_TAG
+    - docker push $REGISTRY_IMAGE:cloud-ops-$CI_COMMIT_TAG
+    - docker push $REGISTRY_IMAGE:polyglot-$CI_COMMIT_TAG
     
     # Update latest tags
     - docker tag $REGISTRY_IMAGE:minimal-$CI_COMMIT_SHORT_SHA $REGISTRY_IMAGE:minimal
     - docker tag $REGISTRY_IMAGE:python-dev-$CI_COMMIT_SHORT_SHA $REGISTRY_IMAGE:python-dev
     - docker tag $REGISTRY_IMAGE:node-dev-$CI_COMMIT_SHORT_SHA $REGISTRY_IMAGE:node-dev
-    - docker tag $REGISTRY_IMAGE:full-dev-$CI_COMMIT_SHORT_SHA $REGISTRY_IMAGE:full-dev
+    - docker tag $REGISTRY_IMAGE:cloud-ops-$CI_COMMIT_SHORT_SHA $REGISTRY_IMAGE:cloud-ops
+    - docker tag $REGISTRY_IMAGE:polyglot-$CI_COMMIT_SHORT_SHA $REGISTRY_IMAGE:polyglot
     
     - docker push $REGISTRY_IMAGE:minimal
     - docker push $REGISTRY_IMAGE:python-dev
     - docker push $REGISTRY_IMAGE:node-dev
-    - docker push $REGISTRY_IMAGE:full-dev
+    - docker push $REGISTRY_IMAGE:cloud-ops
+    - docker push $REGISTRY_IMAGE:polyglot
   only:
     - tags
 
@@ -256,9 +308,10 @@ release:gitlab:
       
       ### Available Images
       - `$CI_REGISTRY_IMAGE:minimal-$CI_COMMIT_TAG` - Minimal base container
-      - `$CI_REGISTRY_IMAGE:python-dev-$CI_COMMIT_TAG` - Python development environment
-      - `$CI_REGISTRY_IMAGE:node-dev-$CI_COMMIT_TAG` - Node.js development environment
-      - `$CI_REGISTRY_IMAGE:full-dev-$CI_COMMIT_TAG` - Full development environment
+      - `$CI_REGISTRY_IMAGE:python-dev-$CI_COMMIT_TAG` - Python development environment with databases & tools
+      - `$CI_REGISTRY_IMAGE:node-dev-$CI_COMMIT_TAG` - Node.js development environment with databases & tools
+      - `$CI_REGISTRY_IMAGE:cloud-ops-$CI_COMMIT_TAG` - Cloud operations (K8s, Terraform, AWS/GCP/CF)
+      - `$CI_REGISTRY_IMAGE:polyglot-$CI_COMMIT_TAG` - Python + Node.js combined environment
       
       ### Usage
       ```bash
