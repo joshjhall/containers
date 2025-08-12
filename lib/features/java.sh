@@ -93,7 +93,7 @@ log_command "Installing Eclipse Temurin JDK ${JAVA_VERSION}" \
 # Create consistent symlink for all versions
 TEMURIN_PATH="/usr/lib/jvm/temurin-${JAVA_VERSION}-jdk-$(dpkg --print-architecture)"
 log_command "Creating Java version symlink" \
-    ln -sf ${TEMURIN_PATH} /usr/lib/jvm/java-${JAVA_VERSION}-openjdk-$(dpkg --print-architecture)
+    ln -sf "${TEMURIN_PATH}" "/usr/lib/jvm/java-${JAVA_VERSION}-openjdk-$(dpkg --print-architecture)"
 
 # Install build tools
 log_command "Installing Maven build tool" \

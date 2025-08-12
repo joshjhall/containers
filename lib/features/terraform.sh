@@ -51,7 +51,7 @@ log_feature_start "Terraform"
 
 # Version configuration
 # Terraform uses latest from HashiCorp APT repository
-TERRAFORM_VERSION="latest"  # Installed via APT, always latest
+# TERRAFORM_VERSION is not used since we install from APT (always latest)
 TERRAGRUNT_VERSION="${TERRAGRUNT_VERSION:-0.83.2}"
 TFDOCS_VERSION="${TFDOCS_VERSION:-0.20.0}"
 

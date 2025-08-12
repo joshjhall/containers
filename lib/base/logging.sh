@@ -45,7 +45,8 @@ log_feature_start() {
     local version="${2:-}"
     
     # Sanitize feature name for filename
-    local safe_name=$(echo "$feature_name" | tr '[:upper:]' '[:lower:]' | tr ' ' '-' | tr -cd '[:alnum:]-')
+    local safe_name
+    safe_name=$(echo "$feature_name" | tr '[:upper:]' '[:lower:]' | tr ' ' '-' | tr -cd '[:alnum:]-')
     
     # Set up logging paths
     CURRENT_FEATURE="$feature_name"
@@ -68,7 +69,7 @@ log_feature_start() {
     } | tee "$CURRENT_LOG_FILE"
     
     # Clear error file
-    > "$CURRENT_ERROR_FILE"
+    true > "$CURRENT_ERROR_FILE"
     
     # Show on console
     echo "=== Installing $feature_name${version:+ version $version} ==="
@@ -99,7 +100,8 @@ log_command() {
     } | tee -a "$CURRENT_LOG_FILE"
     
     # Execute command and capture output
-    local start_time=$(date +%s)
+    local start_time
+    start_time=$(date +%s)
     local exit_code=0
     
     # Run command with output capture
@@ -109,7 +111,8 @@ log_command() {
         exit_code=$?
     fi
     
-    local end_time=$(date +%s)
+    local end_time
+    end_time=$(date +%s)
     local duration=$((end_time - start_time))
     
     # Log command result
@@ -124,7 +127,8 @@ log_command() {
         tail -n +$(($(grep -n "^Executing: " "$CURRENT_LOG_FILE" | tail -1 | cut -d: -f1) + 1)) "$CURRENT_LOG_FILE" | \
         grep -E "(ERROR|Error|error|FAILED|Failed|failed|FATAL|Fatal|fatal)" >> "$CURRENT_ERROR_FILE" 2>/dev/null || true
         
-        local new_errors=$(tail -n +$(($(grep -n "^Executing: " "$CURRENT_LOG_FILE" | tail -1 | cut -d: -f1) + 1)) "$CURRENT_LOG_FILE" | \
+        local new_errors
+        new_errors=$(tail -n +$(($(grep -n "^Executing: " "$CURRENT_LOG_FILE" | tail -1 | cut -d: -f1) + 1)) "$CURRENT_LOG_FILE" | \
         grep -cE "(ERROR|Error|error|FAILED|Failed|failed|FATAL|Fatal|fatal)" 2>/dev/null || echo 0)
         new_errors=$(echo "$new_errors" | tr -d '[:space:]')
         ERROR_COUNT=$((ERROR_COUNT + ${new_errors:-0}))
@@ -132,7 +136,8 @@ log_command() {
         tail -n +$(($(grep -n "^Executing: " "$CURRENT_LOG_FILE" | tail -1 | cut -d: -f1) + 1)) "$CURRENT_LOG_FILE" | \
         grep -E "(WARNING|Warning|warning|WARN|Warn|warn)" >> "$CURRENT_ERROR_FILE" 2>/dev/null || true
         
-        local new_warnings=$(tail -n +$(($(grep -n "^Executing: " "$CURRENT_LOG_FILE" | tail -1 | cut -d: -f1) + 1)) "$CURRENT_LOG_FILE" | \
+        local new_warnings
+        new_warnings=$(tail -n +$(($(grep -n "^Executing: " "$CURRENT_LOG_FILE" | tail -1 | cut -d: -f1) + 1)) "$CURRENT_LOG_FILE" | \
         grep -cE "(WARNING|Warning|warning|WARN|Warn|warn)" 2>/dev/null || echo 0)
         new_warnings=$(echo "$new_warnings" | tr -d '[:space:]')
         WARNING_COUNT=$((WARNING_COUNT + ${new_warnings:-0}))
@@ -158,7 +163,8 @@ log_command() {
 #   log_feature_end
 # ============================================================================
 log_feature_end() {
-    local end_time=$(date +%s)
+    local end_time
+    end_time=$(date +%s)
     local total_duration=$((end_time - FEATURE_START_TIME))
     
     # Generate summary
