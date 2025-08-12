@@ -17,6 +17,7 @@ variables:
   BUILDKIT_CACHE_MOUNT_NS: $CI_PROJECT_ID
 
 stages:
+  - prepare
   - test
   - build
   - release
@@ -26,17 +27,57 @@ before_script:
   - echo "Starting job for $CI_COMMIT_REF_NAME branch"
 
 # =====================================
+# Prepare Stage - Build test runner image
+# =====================================
+
+# Build test runner image with Docker support
+prepare:test-runner:
+  stage: prepare
+  image: docker:24-cli
+  services:
+    - docker:24-dind
+  variables:
+    DOCKER_HOST: tcp://docker:2376
+    DOCKER_TLS_CERTDIR: "/certs"
+    DOCKER_TLS_VERIFY: 1
+    DOCKER_CERT_PATH: "$DOCKER_TLS_CERTDIR/client"
+  script:
+    - echo "Building test runner container..."
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+    - |
+      docker build \
+        --build-arg PROJECT_NAME=containers \
+        --build-arg PROJECT_PATH=. \
+        --build-arg INCLUDE_DOCKER=true \
+        --tag $REGISTRY_IMAGE:test-runner-$CI_COMMIT_SHORT_SHA \
+        -f Dockerfile \
+        .
+    - docker push $REGISTRY_IMAGE:test-runner-$CI_COMMIT_SHORT_SHA
+  rules:
+    - if: '$CI_COMMIT_BRANCH'
+    - if: '$CI_MERGE_REQUEST_ID'
+
+# =====================================
 # Test Stage
 # =====================================
 
 # Run unit tests
 test:unit:
   stage: test
-  image: debian:12-slim
+  image: $CI_REGISTRY_IMAGE:test-runner-$CI_COMMIT_SHORT_SHA
+  services:
+    - docker:24-dind
+  variables:
+    DOCKER_HOST: tcp://docker:2376
+    DOCKER_TLS_CERTDIR: "/certs"
+    DOCKER_TLS_VERIFY: 1
+    DOCKER_CERT_PATH: "$DOCKER_TLS_CERTDIR/client"
+  needs:
+    - prepare:test-runner
   script:
     - echo "Running unit tests..."
-    - apt-get update && apt-get install -y bash
-    - ./tests/run_unit_tests_ci.sh
+    - docker info  # Verify Docker is available
+    - ./tests/run_unit_tests.sh
   artifacts:
     paths:
       - tests/results/
