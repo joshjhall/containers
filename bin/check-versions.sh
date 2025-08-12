@@ -225,9 +225,12 @@ extract_all_versions() {
         echo -e "${BLUE}Scanning for version pins...${NC}"
     fi
     
+    debug_msg "Starting version extraction..."
+    
     # Languages from Dockerfile
     local ver
     ver=$(grep "^ARG PYTHON_VERSION=" "$PROJECT_ROOT/Dockerfile" 2>/dev/null | cut -d= -f2 | tr -d '"')
+    debug_msg "Found Python version: '$ver'"
     [ -n "$ver" ] && add_tool "Python" "$ver" "Dockerfile"
     
     ver=$(grep "^ARG NODE_VERSION=" "$PROJECT_ROOT/Dockerfile" 2>/dev/null | cut -d= -f2 | tr -d '"')
@@ -305,16 +308,24 @@ extract_all_versions() {
 # Check functions for each tool
 check_python() {
     progress_msg "  Python..."
+    debug_msg "Fetching Python versions..."
     local response=$(fetch_url "https://endoflife.date/api/python.json")
+    debug_msg "Python API response length: ${#response}"
+    
     if [ -n "$response" ]; then
+        debug_msg "Processing Python response with jq..."
         # Use timeout with jq to prevent hanging
         local latest=$(echo "$response" | timeout 2 jq -r '[.[] | select(.cycle | startswith("3."))] | .[0].latest' 2>/dev/null || echo "")
+        debug_msg "Python latest version: $latest"
+        
         if [ -n "$latest" ] && [ "$latest" != "null" ] && [ "$latest" != "" ]; then
             set_latest "Python" "$latest"
         else
+            debug_msg "Setting Python status to error"
             set_latest "Python" "error"
         fi
     else
+        debug_msg "No response for Python, setting to error"
         set_latest "Python" "error"
     fi
     progress_done
