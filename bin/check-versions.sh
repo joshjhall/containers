@@ -96,7 +96,8 @@ is_cache_valid() {
 fetch_url() {
     local url="$1"
     local timeout="${2:-10}"
-    local cache_file=$(get_cache_file "$url")
+    local cache_file
+    cache_file=$(get_cache_file "$url")
     
     # Check cache first
     if is_cache_valid "$cache_file"; then
@@ -280,7 +281,8 @@ progress_done() {
 # Check functions for each tool
 check_python() {
     progress_msg "  Python..."
-    local latest=$(fetch_url "https://endoflife.date/api/python.json" | jq -r '[.[] | select(.cycle | startswith("3."))] | .[0].latest' 2>/dev/null)
+    local latest
+    latest=$(fetch_url "https://endoflife.date/api/python.json" | jq -r '[.[] | select(.cycle | startswith("3."))] | .[0].latest' 2>/dev/null)
     [ -n "$latest" ] && set_latest "Python" "$latest" || set_latest "Python" "error"
     progress_done
 }
@@ -314,7 +316,8 @@ check_nodejs() {
 
 check_go() {
     progress_msg "  Go..."
-    local latest=$(fetch_url "https://go.dev/VERSION?m=text" | head -1 | sed 's/^go//')
+    local latest
+    latest=$(fetch_url "https://go.dev/VERSION?m=text" | head -1 | sed 's/^go//')
     [ -n "$latest" ] && set_latest "Go" "$latest" || set_latest "Go" "error"
     progress_done
 }
@@ -322,7 +325,8 @@ check_go() {
 check_rust() {
     progress_msg "  Rust..."
     # Try the Rust API endpoint
-    local latest=$(fetch_url "https://api.github.com/repos/rust-lang/rust/releases" | jq -r '[.[] | select(.tag_name | test("^[0-9]+\\.[0-9]+\\.[0-9]+$"))] | .[0].tag_name' 2>/dev/null)
+    local latest
+    latest=$(fetch_url "https://api.github.com/repos/rust-lang/rust/releases" | jq -r '[.[] | select(.tag_name | test("^[0-9]+\\.[0-9]+\\.[0-9]+$"))] | .[0].tag_name' 2>/dev/null)
     if [ -z "$latest" ]; then
         # Fallback to forge.rust-lang.org
         latest=$(fetch_url "https://forge.rust-lang.org/infra/channel-layout.html" | grep -oE 'stable.*?[0-9]+\.[0-9]+\.[0-9]+' | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
@@ -333,7 +337,8 @@ check_rust() {
 
 check_ruby() {
     progress_msg "  Ruby..."
-    local latest=$(fetch_url "https://api.github.com/repos/ruby/ruby/releases/latest" | jq -r '.tag_name' 2>/dev/null | sed 's/^v//' | sed 's/_/./g')
+    local latest
+    latest=$(fetch_url "https://api.github.com/repos/ruby/ruby/releases/latest" | jq -r '.tag_name' 2>/dev/null | sed 's/^v//' | sed 's/_/./g')
     [ -n "$latest" ] && set_latest "Ruby" "$latest" || set_latest "Ruby" "error"
     progress_done
 }
@@ -350,7 +355,8 @@ check_java() {
     done
     
     # Use Adoptium API to get latest version for this major
-    local latest=$(fetch_url "https://api.adoptium.net/v3/info/release_versions?release_type=ga&version=${current_major}" | jq -r '.versions[0].semver' 2>/dev/null | sed 's/+.*//')
+    local latest
+    latest=$(fetch_url "https://api.adoptium.net/v3/info/release_versions?release_type=ga&version=${current_major}" | jq -r '.versions[0].semver' 2>/dev/null | sed 's/+.*//')
     
     # If that fails, try the release names endpoint
     if [ -z "$latest" ] || [ "$latest" = "null" ]; then
@@ -365,7 +371,8 @@ check_r() {
     progress_msg "  R..."
     # Check R version from the R project website
     # The R project lists versions in their news page
-    local latest=$(fetch_url "https://cran.r-project.org/" | grep -oE 'R-[0-9]+\.[0-9]+\.[0-9]+' | head -1 | sed 's/R-//')
+    local latest
+    latest=$(fetch_url "https://cran.r-project.org/" | grep -oE 'R-[0-9]+\.[0-9]+\.[0-9]+' | head -1 | sed 's/R-//')
     
     # If that fails, try the SVN tags
     if [ -z "$latest" ]; then
@@ -385,7 +392,8 @@ check_github_release() {
     local tool="$1"
     local repo="$2"
     progress_msg "  $tool..."
-    local latest=$(fetch_url "https://api.github.com/repos/$repo/releases/latest" | jq -r '.tag_name' 2>/dev/null | sed 's/^v//')
+    local latest
+    latest=$(fetch_url "https://api.github.com/repos/$repo/releases/latest" | jq -r '.tag_name' 2>/dev/null | sed 's/^v//')
     [ -n "$latest" ] && set_latest "$tool" "$latest" || set_latest "$tool" "error"
     progress_done
 }
@@ -394,7 +402,8 @@ check_gitlab_release() {
     local tool="$1"
     local project_id="$2"
     progress_msg "  $tool..."
-    local latest=$(fetch_url "https://gitlab.com/api/v4/projects/$project_id/releases" | jq -r '.[0].tag_name' 2>/dev/null | sed 's/^v//')
+    local latest
+    latest=$(fetch_url "https://gitlab.com/api/v4/projects/$project_id/releases" | jq -r '.[0].tag_name' 2>/dev/null | sed 's/^v//')
     [ -n "$latest" ] && set_latest "$tool" "$latest" || set_latest "$tool" "error"
     progress_done
 }
@@ -554,7 +563,7 @@ main() {
     
     if [ ${#TOOLS[@]} -eq 0 ]; then
         if [ "$OUTPUT_FORMAT" = "json" ]; then
-            echo '{"timestamp":"'$(date -Iseconds)'","tools":[],"summary":{"total":0},"exit_code":0}'
+            echo '{"timestamp":"'"$(date -Iseconds)"'","tools":[],"summary":{"total":0},"exit_code":0}'
         else
             echo -e "${YELLOW}No version pins found${NC}"
         fi

@@ -73,7 +73,7 @@ export PATH="${GEM_HOME}/bin:$PATH"
 
 # Helper function to install gems as user
 gem_install_as_user() {
-    local gems="$@"
+    local gems="$*"
     su - ${USERNAME} -c "export GEM_HOME='${GEM_HOME}' GEM_PATH='${GEM_PATH}' && /usr/local/bin/gem install ${gems}"
 }
 
