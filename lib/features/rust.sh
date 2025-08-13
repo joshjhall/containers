@@ -19,7 +19,7 @@
 # Environment Variables:
 #   - CARGO_HOME: Cargo's home directory (default: /cache/cargo or ~/.cargo)
 #   - RUSTUP_HOME: Rustup's home directory (default: /cache/rustup or ~/.rustup)
-#   - RUST_VERSION: Toolchain version (default: 1.88.0, can be: stable, beta, nightly, or specific version like 1.88.0)
+#   - RUST_VERSION: Toolchain version (has a default; can be: stable, beta, nightly, or specific version)
 #
 # Note:
 #   The script runs as root but installs Rust as the specified user to ensure proper permissions
@@ -30,7 +30,6 @@ set -euo pipefail
 source /tmp/build-scripts/base/feature-header.sh
 
 # Get Rust version from environment or use default
-# Latest stable as of July 2025
 RUST_VERSION="${RUST_VERSION:-1.88.0}"
 
 # Start logging

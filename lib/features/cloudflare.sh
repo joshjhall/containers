@@ -37,6 +37,9 @@ log_feature_start "Cloudflare Tools"
 # ============================================================================
 log_message "Checking dependencies..."
 
+# Wrangler requires Node.js 20 specifically (not 22 or other versions)
+CLOUDFLARE_NODE_VERSION="${CLOUDFLARE_NODE_VERSION:-20}"
+
 # Check if Node.js is already installed and meets version requirements
 NODE_INSTALLED=false
 NODE_VERSION_OK=false
@@ -46,28 +49,28 @@ if command -v node &> /dev/null; then
     NODE_VERSION=$(node --version | grep -oE '[0-9]+' | head -1)
     log_message "Node.js already installed: $(node --version)"
 
-    # Check if Node.js version is 20 or higher
-    if [ "$NODE_VERSION" -ge 20 ]; then
+    # Check if Node.js version meets Cloudflare requirements
+    if [ "$NODE_VERSION" -ge "$CLOUDFLARE_NODE_VERSION" ]; then
         NODE_VERSION_OK=true
     else
-        log_warning "Wrangler requires Node.js 20 or higher. Current version: $(node --version)"
+        log_warning "Wrangler requires Node.js ${CLOUDFLARE_NODE_VERSION} or higher. Current version: $(node --version)"
     fi
 fi
 
-# Install Node.js 20 if not installed or version is too old
+# Install Node.js if not installed or version is too old
 if [ "$NODE_INSTALLED" = false ] || [ "$NODE_VERSION_OK" = false ]; then
-    log_message "Installing Node.js 20 LTS for wrangler compatibility..."
+    log_message "Installing Node.js ${CLOUDFLARE_NODE_VERSION} LTS for wrangler compatibility..."
 
     # Install prerequisites for NodeSource repository
     log_command "Installing prerequisites" \
         apt-get update && apt-get install -y --no-install-recommends ca-certificates curl gnupg
 
-    # Add NodeSource repository for Node.js 20
-    log_command "Adding NodeSource repository for Node.js 20" \
-        bash -c "curl -fsSL https://deb.nodesource.com/setup_20.x | bash -"
+    # Add NodeSource repository for Node.js
+    log_command "Adding NodeSource repository for Node.js ${CLOUDFLARE_NODE_VERSION}" \
+        bash -c "curl -fsSL https://deb.nodesource.com/setup_${CLOUDFLARE_NODE_VERSION}.x | bash -"
 
     # Install Node.js
-    log_command "Installing Node.js 20" \
+    log_command "Installing Node.js ${CLOUDFLARE_NODE_VERSION}" \
         apt-get install -y nodejs
 
     # Verify installation

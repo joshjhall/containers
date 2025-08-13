@@ -7,25 +7,16 @@
 #
 # Features:
 #   - Modern CLI replacements: exa (ls), bat (cat), duf (df), fd (find), ripgrep (grep)
-#   - Git helpers: lazygit (v0.54.1), delta (v0.18.2 - side-by-side diffs), diff-so-fancy
-#   - Development utilities: direnv (v2.37.1), just (v1.42.3 - with modules), entr
+#   - Git helpers: lazygit, delta (side-by-side diffs), diff-so-fancy
+#   - Development utilities: direnv, just (with modules), entr
 #   - Network tools: telnet, netcat, nmap, tcpdump, socat, whois
 #   - System monitoring: htop, btop, iotop, sysstat, strace
 #   - Security tools: mkcert (local HTTPS certificates)
 #   - Archive tools: unzip, zip, tar, 7zip
-#   - GitHub/GitLab CLIs: gh, act (v0.2.80 - local GitHub Actions), glab (v1.65.0)
+#   - GitHub/GitLab CLIs: gh, act (local GitHub Actions), glab
 #   - Text processing: jq
 #   - Claude Code CLI tool
 #   - And many more productivity tools
-#
-# Tool Versions (as of July 2025):
-#   - direnv: 2.37.1 (improved stdlib, better error messages)
-#   - lazygit: 0.54.1 (interactive rebase, commit graph)
-#   - delta: 0.18.2 (side-by-side view, better navigation)
-#   - just: 1.42.3 (modules support, shell completion)
-#   - mkcert: 1.4.4 (local HTTPS certificates)
-#   - act: 0.2.80 (improved GitHub Actions compatibility)
-#   - glab: 1.65.0 (GitLab CLI with merge request workflows)
 #
 set -euo pipefail
 
@@ -262,13 +253,14 @@ log_message "Installing additional development tools..."
 
 # Install duf (modern disk usage utility)
 log_message "Installing duf (modern disk usage utility)..."
+DUF_VERSION="0.8.1"
 ARCH=$(dpkg --print-architecture)
 if [ "$ARCH" = "amd64" ]; then
     log_command "Downloading duf for amd64" \
-        curl -L https://github.com/muesli/duf/releases/download/v0.8.1/duf_0.8.1_linux_amd64.deb -o /tmp/duf.deb
+        curl -L https://github.com/muesli/duf/releases/download/v${DUF_VERSION}/duf_${DUF_VERSION}_linux_amd64.deb -o /tmp/duf.deb
 elif [ "$ARCH" = "arm64" ]; then
     log_command "Downloading duf for arm64" \
-        curl -L https://github.com/muesli/duf/releases/download/v0.8.1/duf_0.8.1_linux_arm64.deb -o /tmp/duf.deb
+        curl -L https://github.com/muesli/duf/releases/download/v${DUF_VERSION}/duf_${DUF_VERSION}_linux_arm64.deb -o /tmp/duf.deb
 else
     log_warning "duf not available for architecture $ARCH, skipping..."
 fi
@@ -282,8 +274,9 @@ fi
 
 # Install entr (file watcher)
 log_message "Installing entr (file watcher)..."
+ENTR_VERSION="5.7"
 log_command "Downloading entr source" \
-    bash -c "cd /tmp && curl -L http://eradman.com/entrproject/code/entr-5.5.tar.gz | tar xz"
+    bash -c "cd /tmp && curl -L http://eradman.com/entrproject/code/entr-${ENTR_VERSION}.tar.gz | tar xz"
 
 log_command "Building entr" \
     bash -c "cd /tmp/entr-* && ./configure && make && make install"
@@ -390,7 +383,7 @@ log_command "Setting direnv permissions" \
 
 # Install lazygit
 log_message "Installing lazygit..."
-LAZYGIT_VERSION="0.54.1"
+LAZYGIT_VERSION="0.54.2"
 if [ "$ARCH" = "amd64" ]; then
     log_command "Downloading lazygit for amd64" \
         bash -c "curl -L https://github.com/jesseduffield/lazygit/releases/download/v${LAZYGIT_VERSION}/lazygit_${LAZYGIT_VERSION}_Linux_x86_64.tar.gz | tar xz -C /usr/local/bin lazygit"
@@ -447,7 +440,7 @@ fi
 
 # Install GitLab CLI (glab)
 log_message "Installing glab (GitLab CLI)..."
-GLAB_VERSION="1.65.0"
+GLAB_VERSION="1.66.0"
 log_command "Changing to temp directory" \
     cd /tmp
 

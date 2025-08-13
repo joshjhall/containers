@@ -14,7 +14,7 @@
 #   - Cache optimization for containerized environments
 #
 # Environment Variables:
-#   - PYTHON_VERSION: Python version to install (default: 3.13.5)
+#   - PYTHON_VERSION: Python version to install (has a default)
 #
 set -euo pipefail
 
