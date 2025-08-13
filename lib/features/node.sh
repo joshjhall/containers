@@ -13,12 +13,15 @@
 #   - Cache optimization for containerized environments
 #
 # Environment Variables:
-#   - NODE_VERSION: Major version number (default: 22 LTS, minimum: 18)
+#   - NODE_VERSION: Version specification (default: 22)
+#     * Major version only (e.g., "22"): Installs latest 22.x from NodeSource
+#     * Specific version (e.g., "22.10.0"): Installs exact version using n
 #
 # Supported Versions:
 #   - 22.x (current LTS)
 #   - 20.x (previous LTS)
 #   - 18.x (maintenance LTS)
+#   - Any specific version >= 18.0.0 (via n version manager)
 #
 set -euo pipefail
 
@@ -28,17 +31,31 @@ source /tmp/build-scripts/base/feature-header.sh
 # ============================================================================
 # Version Configuration
 # ============================================================================
-# Node.js version (major version only)
+# Node.js version - accept full version (e.g., 22.10.0) or major version (e.g., 22)
 NODE_VERSION="${NODE_VERSION:-22}"
+
+# Extract major version number from full version string
+# This handles both "22" and "22.10.0" formats
+NODE_MAJOR_VERSION=$(echo "${NODE_VERSION}" | cut -d. -f1)
+
+# Determine if we have a specific version or just major version
+# If NODE_VERSION contains a dot, it's a specific version
+if [[ "${NODE_VERSION}" == *"."* ]]; then
+    NODE_SPECIFIC_VERSION="${NODE_VERSION}"
+    log_message "Using specific Node.js version: ${NODE_SPECIFIC_VERSION}"
+else
+    NODE_SPECIFIC_VERSION=""
+    log_message "Using latest Node.js ${NODE_MAJOR_VERSION}.x"
+fi
 
 # Start logging
 log_feature_start "Node.js" "${NODE_VERSION}"
 
 # Ensure Node.js version is 18 or higher (16 EOL was April 2024)
-if [ "$NODE_VERSION" -lt 18 ]; then
+if [ "$NODE_MAJOR_VERSION" -lt 18 ]; then
     log_error "Node.js version must be 18 or higher"
     log_error "Node.js 16 reached end-of-life in April 2024"
-    log_error "Requested version: ${NODE_VERSION}"
+    log_error "Requested version: ${NODE_VERSION} (major: ${NODE_MAJOR_VERSION})"
     log_feature_end
     exit 1
 fi
@@ -63,12 +80,39 @@ log_command "Installing Node.js dependencies" \
 # ============================================================================
 log_message "Installing Node.js ${NODE_VERSION}..."
 
-# Install Node.js using NodeSource repository
-log_command "Adding NodeSource repository" \
-    bash -c "curl -fsSL https://deb.nodesource.com/setup_${NODE_VERSION}.x | bash -"
-
-log_command "Installing Node.js" \
-    apt-get install -y nodejs
+# NodeSource installation strategy:
+# 1. For major version only (e.g., "22"): Use setup_22.x script for latest 22.x
+# 2. For specific version (e.g., "22.10.0"): Use n version manager for exact version
+if [ -n "${NODE_SPECIFIC_VERSION}" ]; then
+    # Install specific version using n version manager
+    log_message "Installing n version manager for specific version pinning..."
+    
+    # First install Node.js from NodeSource to get npm
+    log_command "Adding NodeSource repository for npm" \
+        bash -c "curl -fsSL https://deb.nodesource.com/setup_${NODE_MAJOR_VERSION}.x | bash -"
+    
+    log_command "Installing Node.js and npm" \
+        apt-get install -y nodejs
+    
+    # Install n globally
+    log_command "Installing n version manager" \
+        npm install -g n
+    
+    # Install the specific Node.js version
+    log_command "Installing Node.js ${NODE_SPECIFIC_VERSION}" \
+        n "${NODE_SPECIFIC_VERSION}"
+    
+    # Set the installed version as default
+    log_command "Setting Node.js ${NODE_SPECIFIC_VERSION} as default" \
+        n "${NODE_SPECIFIC_VERSION}"
+else
+    # Install latest version from major version line using NodeSource
+    log_command "Adding NodeSource repository" \
+        bash -c "curl -fsSL https://deb.nodesource.com/setup_${NODE_MAJOR_VERSION}.x | bash -"
+    
+    log_command "Installing Node.js" \
+        apt-get install -y nodejs
+fi
 
 # ============================================================================
 # Package Manager Setup
