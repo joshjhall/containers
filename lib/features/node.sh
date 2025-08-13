@@ -34,6 +34,9 @@ source /tmp/build-scripts/base/feature-header.sh
 # Node.js version - accept full version (e.g., 22.10.0) or major version (e.g., 22)
 NODE_VERSION="${NODE_VERSION:-22}"
 
+# Start logging first (before any log_message calls)
+log_feature_start "Node.js" "${NODE_VERSION}"
+
 # Extract major version number from full version string
 # This handles both "22" and "22.10.0" formats
 NODE_MAJOR_VERSION=$(echo "${NODE_VERSION}" | cut -d. -f1)
@@ -47,9 +50,6 @@ else
     NODE_SPECIFIC_VERSION=""
     log_message "Using latest Node.js ${NODE_MAJOR_VERSION}.x"
 fi
-
-# Start logging
-log_feature_start "Node.js" "${NODE_VERSION}"
 
 # Ensure Node.js version is 18 or higher (16 EOL was April 2024)
 if [ "$NODE_MAJOR_VERSION" -lt 18 ]; then

@@ -11,7 +11,8 @@ Thumbs.db
 
 # Editor directories and files
 .idea/
-.vscode/
+.vscode/*
+!.vscode/settings.json
 *.swp
 *.swo
 *~
@@ -38,10 +39,7 @@ tmp/
 results/
 
 # Test artifacts
-tests/results/*.txt
-tests/results/*.json
-tests/results/*.xml
-tests/results/*.html
+tests/results/
 coverage/
 .coverage
 htmlcov/
