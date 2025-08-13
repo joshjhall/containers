@@ -289,7 +289,7 @@ check:versions:
         # Send Pushover notification if credentials are available
         if [ -n "${PUSHOVER_USER_KEY:-}" ] && [ -n "${PUSHOVER_APP_TOKEN:-}" ]; then
           echo "Sending Pushover notification..."
-          curl -s \
+          RESPONSE=$(curl -s \
             --form-string "token=${PUSHOVER_APP_TOKEN}" \
             --form-string "user=${PUSHOVER_USER_KEY}" \
             --form-string "title=${NOTIFICATION_TITLE}" \
@@ -297,7 +297,15 @@ check:versions:
             --form-string "url=${CI_PROJECT_URL}/-/pipelines/${CI_PIPELINE_ID}" \
             --form-string "url_title=View Pipeline" \
             --form-string "priority=0" \
-            https://api.pushover.net/1/messages.json
+            https://api.pushover.net/1/messages.json)
+          
+          # Check if notification was sent successfully
+          if echo "$RESPONSE" | jq -e '.status == 1' >/dev/null 2>&1; then
+            echo "✓ Pushover notification sent successfully"
+          else
+            echo "✗ Failed to send Pushover notification"
+            echo "Response: $RESPONSE"
+          fi
         else
           echo "WARNING: Pushover credentials not configured"
           echo "Set PUSHOVER_USER_KEY and PUSHOVER_APP_TOKEN in GitLab CI/CD variables"
@@ -311,6 +319,8 @@ check:versions:
         echo "$OUTPUT" > version-updates.json
       else
         echo "All versions are up to date!"
+        # Create empty artifact to avoid warning
+        echo '{"status": "up-to-date", "updates": []}' > version-updates.json
       fi
   artifacts:
     paths:
