@@ -390,7 +390,7 @@ log_command "Setting direnv permissions" \
 
 # Install lazygit
 log_message "Installing lazygit..."
-LAZYGIT_VERSION="0.54.1"
+LAZYGIT_VERSION="0.54.2"
 if [ "$ARCH" = "amd64" ]; then
     log_command "Downloading lazygit for amd64" \
         bash -c "curl -L https://github.com/jesseduffield/lazygit/releases/download/v${LAZYGIT_VERSION}/lazygit_${LAZYGIT_VERSION}_Linux_x86_64.tar.gz | tar xz -C /usr/local/bin lazygit"

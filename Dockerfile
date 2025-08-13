@@ -66,7 +66,7 @@ RUN chmod +x /tmp/build-scripts/features/*.sh /tmp/build-scripts/base/*.sh
 # Python + Python development tools
 ARG INCLUDE_PYTHON=false
 ARG INCLUDE_PYTHON_DEV=false
-ARG PYTHON_VERSION=3.13.0
+ARG PYTHON_VERSION=3.13.6
 
 # Handle optional Python project files only if Python is being installed
 # Copy to temp location first since we're running as root and user doesn't exist yet
