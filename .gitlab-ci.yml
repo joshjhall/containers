@@ -329,8 +329,9 @@ check:versions:
         echo "=== Version Updates Available ==="
         echo "$OUTDATED" | jq '.'
         
-        # Create artifact with update details
-        echo "$OUTPUT" > version-updates.json
+        # Create artifact with update details in temp location first
+        TEMP_JSON="/tmp/version-updates.json"
+        echo "$OUTPUT" > "$TEMP_JSON"
         
         # Apply automatic updates to develop branch
         if [ "${AUTO_UPDATE_VERSIONS:-true}" = "true" ]; then
@@ -344,8 +345,8 @@ check:versions:
           # Ensure we're on develop branch
           git checkout develop
           
-          # Run the update script with the JSON output
-          ./bin/update-versions.sh --input version-updates.json
+          # Run the update script with the JSON output from temp location
+          ./bin/update-versions.sh --input "$TEMP_JSON"
           
           # Push to develop branch if there were commits
           if [ "$(git rev-parse HEAD)" != "$(git rev-parse @{u})" ]; then
@@ -385,6 +386,9 @@ check:versions:
         else
           echo "Automatic updates disabled (set AUTO_UPDATE_VERSIONS=true to enable)"
         fi
+        
+        # Copy the temp JSON file to working directory for artifact
+        cp "$TEMP_JSON" version-updates.json
       else
         echo "All versions are up to date!"
         # Create empty artifact to avoid warning
