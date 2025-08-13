@@ -263,18 +263,33 @@ extract_all_versions() {
         ver=$(grep "^LAZYDOCKER_VERSION=" "$PROJECT_ROOT/lib/features/docker.sh" 2>/dev/null | cut -d= -f2 | tr -d '"')
         [ -n "$ver" ] && add_tool "lazydocker" "$ver" "docker.sh"
     fi
+    
+    # Java dev tools from java-dev.sh
+    if [ -f "$PROJECT_ROOT/lib/features/java-dev.sh" ]; then
+        ver=$(grep "^[[:space:]]*SPRING_VERSION=" "$PROJECT_ROOT/lib/features/java-dev.sh" 2>/dev/null | sed 's/.*=//' | tr -d '"')
+        [ -n "$ver" ] && add_tool "spring-boot-cli" "$ver" "java-dev.sh"
+        
+        ver=$(grep "^[[:space:]]*JBANG_VERSION=" "$PROJECT_ROOT/lib/features/java-dev.sh" 2>/dev/null | sed 's/.*=//' | tr -d '"')
+        [ -n "$ver" ] && add_tool "jbang" "$ver" "java-dev.sh"
+        
+        ver=$(grep "^[[:space:]]*MVND_VERSION=" "$PROJECT_ROOT/lib/features/java-dev.sh" 2>/dev/null | sed 's/.*=//' | tr -d '"')
+        [ -n "$ver" ] && add_tool "mvnd" "$ver" "java-dev.sh"
+        
+        ver=$(grep "^[[:space:]]*GJF_VERSION=" "$PROJECT_ROOT/lib/features/java-dev.sh" 2>/dev/null | sed 's/.*=//' | tr -d '"')
+        [ -n "$ver" ] && add_tool "google-java-format" "$ver" "java-dev.sh"
+    fi
 }
 
 # Progress helpers for quiet mode in JSON
 progress_msg() {
     if [ "$OUTPUT_FORMAT" = "text" ]; then
-        progress_msg "$1"
+        echo -n "$1"
     fi
 }
 
 progress_done() {
     if [ "$OUTPUT_FORMAT" = "text" ]; then
-        progress_done
+        echo " ✓"
     fi
 }
 
@@ -599,6 +614,10 @@ main() {
             dive) check_github_release "dive" "wagoodman/dive" ;;
             mkcert) check_github_release "mkcert" "FiloSottile/mkcert" ;;
             glab) check_gitlab_release "glab" "gitlab-org%2Fcli" ;;
+            spring-boot-cli) check_github_release "spring-boot-cli" "spring-projects/spring-boot" ;;
+            jbang) check_github_release "jbang" "jbangdev/jbang" ;;
+            mvnd) check_github_release "mvnd" "apache/maven-mvnd" ;;
+            google-java-format) check_github_release "google-java-format" "google/google-java-format" ;;
             *) [ "$OUTPUT_FORMAT" = "text" ] && echo "  Skipping $tool (no checker)" ;;
         esac
     done

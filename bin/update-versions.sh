@@ -142,6 +142,18 @@ update_version() {
                 lazydocker)
                     sed -i "s/LAZYDOCKER_VERSION=\"[^\"]*\"/LAZYDOCKER_VERSION=\"$latest\"/" "$script_path"
                     ;;
+                spring-boot-cli)
+                    sed -i "s/SPRING_VERSION=\"[^\"]*\"/SPRING_VERSION=\"$latest\"/" "$script_path"
+                    ;;
+                jbang)
+                    sed -i "s/JBANG_VERSION=\"[^\"]*\"/JBANG_VERSION=\"$latest\"/" "$script_path"
+                    ;;
+                mvnd)
+                    sed -i "s/MVND_VERSION=\"[^\"]*\"/MVND_VERSION=\"$latest\"/" "$script_path"
+                    ;;
+                google-java-format)
+                    sed -i "s/GJF_VERSION=\"[^\"]*\"/GJF_VERSION=\"$latest\"/" "$script_path"
+                    ;;
                 *)
                     echo -e "${YELLOW}    Warning: Unknown shell script tool: $tool${NC}"
                     ;;
