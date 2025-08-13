@@ -61,6 +61,60 @@ test_node_version_selection() {
     fi
 }
 
+# Test: Node major version extraction
+test_node_major_version_extraction() {
+    # Test major version only
+    NODE_VERSION="22"
+    local major_version=$(echo "${NODE_VERSION}" | cut -d. -f1)
+    assert_equals "22" "$major_version" "Major version extracted from '22'"
+    
+    # Test specific version
+    NODE_VERSION="22.10.0"
+    major_version=$(echo "${NODE_VERSION}" | cut -d. -f1)
+    assert_equals "22" "$major_version" "Major version extracted from '22.10.0'"
+    
+    # Test version with two parts
+    NODE_VERSION="20.5"
+    major_version=$(echo "${NODE_VERSION}" | cut -d. -f1)
+    assert_equals "20" "$major_version" "Major version extracted from '20.5'"
+    
+    # Test version comparison
+    NODE_VERSION="18.19.1"
+    major_version=$(echo "${NODE_VERSION}" | cut -d. -f1)
+    if [ "$major_version" -ge 18 ]; then
+        assert_true true "Version 18.19.1 meets minimum requirement"
+    else
+        assert_true false "Version 18.19.1 doesn't meet minimum requirement"
+    fi
+}
+
+# Test: Node specific version detection
+test_node_specific_version_detection() {
+    # Test major version only (no dots)
+    NODE_VERSION="22"
+    if [[ "${NODE_VERSION}" == *"."* ]]; then
+        assert_true false "Version '22' incorrectly detected as specific"
+    else
+        assert_true true "Version '22' correctly detected as major only"
+    fi
+    
+    # Test specific version (with dots)
+    NODE_VERSION="22.10.0"
+    if [[ "${NODE_VERSION}" == *"."* ]]; then
+        assert_true true "Version '22.10.0' correctly detected as specific"
+    else
+        assert_true false "Version '22.10.0' incorrectly detected as major only"
+    fi
+    
+    # Test partial version
+    NODE_VERSION="20.5"
+    if [[ "${NODE_VERSION}" == *"."* ]]; then
+        assert_true true "Version '20.5' correctly detected as specific"
+    else
+        assert_true false "Version '20.5' incorrectly detected as major only"
+    fi
+}
+
 # Test: Node installation directory structure
 test_node_installation_paths() {
     local node_dir="$TEST_TEMP_DIR/opt/node"
@@ -287,6 +341,8 @@ run_test_with_setup() {
 
 # Run all tests
 run_test_with_setup test_node_version_selection "Node version selection and override"
+run_test_with_setup test_node_major_version_extraction "Node major version extraction from various formats"
+run_test_with_setup test_node_specific_version_detection "Node specific version detection logic"
 run_test_with_setup test_node_installation_paths "Node installation directory structure"
 run_test_with_setup test_npm_cache_configuration "NPM cache configuration"
 run_test_with_setup test_node_bashrc_setup "Node bashrc configuration"
