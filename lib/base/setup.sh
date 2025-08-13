@@ -7,6 +7,7 @@
 #
 # Features:
 #   - Essential build tools and utilities
+#   - Shell script validation (shellcheck) and JSON processing (jq)
 #   - Locale and timezone configuration
 #   - Zoxide for smarter directory navigation
 #   - Base aliases and shell improvements
@@ -46,6 +47,7 @@ apt-get install -y --no-install-recommends \
     libssl-dev \
     libffi-dev \
     jq \
+    shellcheck \
     unzip \
     vim-tiny \
     less \

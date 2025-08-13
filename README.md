@@ -348,6 +348,19 @@ Contributions are welcome! Please:
 3. Add tests for new features
 4. Submit a pull request
 
+### Code Quality
+
+Optional git hooks are available for code quality checks:
+```bash
+# Enable shellcheck pre-commit hook
+git config core.hooksPath .githooks
+
+# Disable if too intrusive
+git config --unset core.hooksPath
+```
+
+See [.githooks/README.md](.githooks/README.md) for configuration options.
+
 ## License
 
 MIT License - see LICENSE file for details

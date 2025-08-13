@@ -128,12 +128,16 @@ elif [ "$ARCH" = "arm64" ]; then
         bash -c "curl -L https://github.com/kubernetes-sigs/krew/releases/download/v${KREW_VERSION}/krew-linux_arm64.tar.gz | tar xz"
 fi
 
-if [ -f ./krew-linux_* ]; then
-    log_command "Installing krew" \
-        ./krew-linux_* install krew
-    log_command "Cleaning up krew installer" \
-        rm -f ./krew-linux_*
-fi
+# Find and install krew binary
+for krew_binary in ./krew-linux_*; do
+    if [ -f "$krew_binary" ]; then
+        log_command "Installing krew" \
+            "$krew_binary" install krew
+        log_command "Cleaning up krew installer" \
+            rm -f ./krew-linux_*
+        break
+    fi
+done
 
 log_command "Returning to root directory" \
     cd /

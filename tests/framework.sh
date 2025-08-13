@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Test Framework for Container Build System
-# Version: 1.3.0
+# Version: 1.4.0
 # Test framework for container build system
 #
 # Provides comprehensive assertion-based testing for container builds.
@@ -34,7 +34,7 @@
 set -euo pipefail
 
 # Framework version
-readonly TEST_FRAMEWORK_VERSION="1.3.0"
+readonly TEST_FRAMEWORK_VERSION="1.4.0"
 
 # Initialize test directories
 TESTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -108,15 +108,19 @@ init_test_framework() {
     # Timestamp for this test run
     export TEST_RUN_ID=$(date +%Y%m%d-%H%M%S)
 
-    # Check Docker is available
-    if ! command -v docker >/dev/null 2>&1; then
-        echo -e "${TEST_COLOR_FAIL}ERROR: Docker is not installed or not in PATH${TEST_COLOR_RESET}"
-        exit 1
-    fi
+    # Check Docker is available (skip if SKIP_DOCKER_CHECK is set)
+    if [ "${SKIP_DOCKER_CHECK:-false}" != "true" ]; then
+        if ! command -v docker >/dev/null 2>&1; then
+            echo -e "${TEST_COLOR_FAIL}ERROR: Docker is not installed or not in PATH${TEST_COLOR_RESET}"
+            exit 1
+        fi
 
-    if ! docker info >/dev/null 2>&1; then
-        echo -e "${TEST_COLOR_FAIL}ERROR: Docker daemon is not running${TEST_COLOR_RESET}"
-        exit 1
+        if ! docker info >/dev/null 2>&1; then
+            echo -e "${TEST_COLOR_FAIL}ERROR: Docker daemon is not running${TEST_COLOR_RESET}"
+            exit 1
+        fi
+    else
+        echo -e "${TEST_COLOR_INFO}Skipping Docker check (SKIP_DOCKER_CHECK is set)${TEST_COLOR_RESET}"
     fi
 
     echo -e "${TEST_COLOR_INFO}=== Test Framework Initialized ===${TEST_COLOR_RESET}"

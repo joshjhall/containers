@@ -97,7 +97,8 @@ write_bashrc_content() {
     fi
 
     # Capture content to temp file
-    local tmpfile=$(mktemp)
+    local tmpfile
+    tmpfile=$(mktemp)
     $cat_cmd > "$tmpfile" || {
         echo "✗ Failed to capture content for $filepath" >&2
         rm -f "$tmpfile"
@@ -112,7 +113,8 @@ write_bashrc_content() {
     fi
 
     # Prepare content with markers
-    local marked_content=$(mktemp)
+    local marked_content
+    marked_content=$(mktemp)
     {
         echo "$start_marker"
         $cat_cmd "$tmpfile"
@@ -174,7 +176,8 @@ update_bashrc_content() {
     fi
 
     # Capture new content
-    local tmpfile=$(mktemp)
+    local tmpfile
+    tmpfile=$(mktemp)
     command cat > "$tmpfile" || {
         echo "✗ Failed to capture content for $filepath" >&2
         rm -f "$tmpfile"
@@ -182,7 +185,8 @@ update_bashrc_content() {
     }
 
     # Create new file with updated content
-    local newfile=$(mktemp)
+    local newfile
+    newfile=$(mktemp)
     awk -v start="$start_marker" -v end="$end_marker" -v tmpfile="$tmpfile" '
         BEGIN { printing = 1 }
         $0 == start {

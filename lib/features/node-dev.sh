@@ -91,7 +91,7 @@ NPM_GLOBAL_DIR="${NPM_GLOBAL_DIR:-/cache/npm-global}"
 
 # Helper function to install npm packages as user
 npm_install_as_user() {
-    local packages="$@"
+    local packages="$*"
     su - ${USERNAME} -c "export NPM_CONFIG_CACHE='${NPM_CACHE_DIR}' NPM_CONFIG_PREFIX='${NPM_GLOBAL_DIR}' && /usr/local/bin/npm install -g ${packages}"
 }
 

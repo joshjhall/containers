@@ -109,7 +109,8 @@ get_latest_ruby() {
         curl_opts="$curl_opts -H \"Authorization: token $GITHUB_TOKEN\""
     fi
     
-    local response=$(eval "curl $curl_opts https://api.github.com/repos/ruby/ruby/releases")
+    local response
+    response=$(eval "curl $curl_opts https://api.github.com/repos/ruby/ruby/releases")
     if echo "$response" | ggrep -q "rate limit exceeded"; then
         echo "rate-limited"
         return
@@ -186,7 +187,8 @@ compare_version() {
         # Try to determine if current is newer than latest
         # This is a simple comparison - works for most semantic versions
         if command -v sort &>/dev/null; then
-            local sorted=$(printf "%s\n%s" "$current" "$latest" | sort -V | tail -1)
+            local sorted
+            sorted=$(printf "%s\n%s" "$current" "$latest" | sort -V | tail -1)
             if [ "$sorted" = "$current" ] && [ "$current" != "$latest" ]; then
                 echo "newer"
             else

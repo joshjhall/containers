@@ -153,7 +153,8 @@ compare_version() {
         # Try to determine if current is newer than latest
         # This is a simple comparison - works for most semantic versions
         if command -v sort &>/dev/null; then
-            local sorted=$(printf "%s\n%s" "$current" "$latest" | sort -V | tail -1)
+            local sorted
+            sorted=$(printf "%s\n%s" "$current" "$latest" | sort -V | tail -1)
             if [ "$sorted" = "$current" ] && [ "$current" != "$latest" ]; then
                 echo "newer"
             else
@@ -448,7 +449,8 @@ check_r_package() {
         INSTALLED_VERSIONS["$name"]="$version"
         
         if [ "$version" != "not installed" ] && [ "$version" != "error" ]; then
-            local latest=$(get_cran_version "$package")
+            local latest
+            latest=$(get_cran_version "$package")
             LATEST_VERSIONS["$name"]="$latest"
             if [ "$version" = "$latest" ]; then
                 VERSION_STATUS["$name"]="up-to-date"

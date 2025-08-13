@@ -172,7 +172,8 @@ create_symlink() {
 
     # Verify the symlink works
     if [ -L "$link_name" ]; then
-        local link_target=$(readlink -f "$link_name")
+        local link_target
+        link_target=$(readlink -f "$link_name")
         if [ -e "$link_target" ]; then
             log_message "✓ Symlink verified: $link_name -> $link_target"
         else
