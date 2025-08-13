@@ -154,6 +154,12 @@ update_version() {
                 google-java-format)
                     sed -i "s/GJF_VERSION=\"[^\"]*\"/GJF_VERSION=\"$latest\"/" "$script_path"
                     ;;
+                duf)
+                    sed -i "s/DUF_VERSION=\"[^\"]*\"/DUF_VERSION=\"$latest\"/" "$script_path"
+                    ;;
+                entr)
+                    sed -i "s/ENTR_VERSION=\"[^\"]*\"/ENTR_VERSION=\"$latest\"/" "$script_path"
+                    ;;
                 *)
                     echo -e "${YELLOW}    Warning: Unknown shell script tool: $tool${NC}"
                     ;;
