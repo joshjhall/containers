@@ -262,13 +262,14 @@ log_message "Installing additional development tools..."
 
 # Install duf (modern disk usage utility)
 log_message "Installing duf (modern disk usage utility)..."
+DUF_VERSION="0.8.1"
 ARCH=$(dpkg --print-architecture)
 if [ "$ARCH" = "amd64" ]; then
     log_command "Downloading duf for amd64" \
-        curl -L https://github.com/muesli/duf/releases/download/v0.8.1/duf_0.8.1_linux_amd64.deb -o /tmp/duf.deb
+        curl -L https://github.com/muesli/duf/releases/download/v${DUF_VERSION}/duf_${DUF_VERSION}_linux_amd64.deb -o /tmp/duf.deb
 elif [ "$ARCH" = "arm64" ]; then
     log_command "Downloading duf for arm64" \
-        curl -L https://github.com/muesli/duf/releases/download/v0.8.1/duf_0.8.1_linux_arm64.deb -o /tmp/duf.deb
+        curl -L https://github.com/muesli/duf/releases/download/v${DUF_VERSION}/duf_${DUF_VERSION}_linux_arm64.deb -o /tmp/duf.deb
 else
     log_warning "duf not available for architecture $ARCH, skipping..."
 fi
@@ -282,8 +283,9 @@ fi
 
 # Install entr (file watcher)
 log_message "Installing entr (file watcher)..."
+ENTR_VERSION="5.5"
 log_command "Downloading entr source" \
-    bash -c "cd /tmp && curl -L http://eradman.com/entrproject/code/entr-5.5.tar.gz | tar xz"
+    bash -c "cd /tmp && curl -L http://eradman.com/entrproject/code/entr-${ENTR_VERSION}.tar.gz | tar xz"
 
 log_command "Building entr" \
     bash -c "cd /tmp/entr-* && ./configure && make && make install"

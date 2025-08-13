@@ -253,6 +253,12 @@ extract_all_versions() {
         
         ver=$(grep "^MKCERT_VERSION=" "$PROJECT_ROOT/lib/features/dev-tools.sh" 2>/dev/null | cut -d= -f2 | tr -d '"')
         [ -n "$ver" ] && add_tool "mkcert" "$ver" "dev-tools.sh"
+        
+        ver=$(grep "^DUF_VERSION=" "$PROJECT_ROOT/lib/features/dev-tools.sh" 2>/dev/null | cut -d= -f2 | tr -d '"')
+        [ -n "$ver" ] && add_tool "duf" "$ver" "dev-tools.sh"
+        
+        ver=$(grep "^ENTR_VERSION=" "$PROJECT_ROOT/lib/features/dev-tools.sh" 2>/dev/null | cut -d= -f2 | tr -d '"')
+        [ -n "$ver" ] && add_tool "entr" "$ver" "dev-tools.sh"
     fi
     
     # Docker tools from docker.sh
@@ -420,6 +426,17 @@ check_gitlab_release() {
     local latest
     latest=$(fetch_url "https://gitlab.com/api/v4/projects/$project_id/releases" | jq -r '.[0].tag_name' 2>/dev/null | sed 's/^v//')
     [ -n "$latest" ] && set_latest "$tool" "$latest" || set_latest "$tool" "error"
+    progress_done
+}
+
+check_entr() {
+    progress_msg "  entr..."
+    # entr uses a simple versioning on their website
+    # We'll check the latest version from the downloads page
+    local latest
+    latest=$(fetch_url "http://eradman.com/entrproject/" | grep -oE 'entr-[0-9]+\.[0-9]+\.tar\.gz' | head -1 | sed 's/entr-//;s/\.tar\.gz//')
+    
+    [ -n "$latest" ] && set_latest "entr" "$latest" || set_latest "entr" "error"
     progress_done
 }
 
@@ -618,6 +635,8 @@ main() {
             jbang) check_github_release "jbang" "jbangdev/jbang" ;;
             mvnd) check_github_release "mvnd" "apache/maven-mvnd" ;;
             google-java-format) check_github_release "google-java-format" "google/google-java-format" ;;
+            duf) check_github_release "duf" "muesli/duf" ;;
+            entr) check_entr ;;
             *) [ "$OUTPUT_FORMAT" = "text" ] && echo "  Skipping $tool (no checker)" ;;
         esac
     done
