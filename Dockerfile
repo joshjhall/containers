@@ -66,7 +66,7 @@ RUN chmod +x /tmp/build-scripts/features/*.sh /tmp/build-scripts/base/*.sh
 # Python + Python development tools
 ARG INCLUDE_PYTHON=false
 ARG INCLUDE_PYTHON_DEV=false
-ARG PYTHON_VERSION=3.13.6
+ARG PYTHON_VERSION=3.13.0
 
 # Handle optional Python project files only if Python is being installed
 # Copy to temp location first since we're running as root and user doesn't exist yet
@@ -101,7 +101,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 # Note: Installed early as it's a common dependency for other tools
 ARG INCLUDE_NODE=false
 ARG INCLUDE_NODE_DEV=false
-ARG NODE_VERSION=22
+ARG NODE_VERSION=20
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     if [ "${INCLUDE_NODE}" = "true" ] || [ "${INCLUDE_NODE_DEV}" = "true" ]; then \
