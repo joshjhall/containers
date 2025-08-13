@@ -17,8 +17,8 @@
 # Tools Installed:
 #   - docker-ce-cli: Latest Docker CLI from official repository
 #   - docker-compose-plugin: Docker Compose V2 as plugin
-#   - lazydocker: v0.24.1 - Terminal UI
-#   - dive: v0.13.1 - Image analysis
+#   - lazydocker: Terminal UI for Docker management
+#   - dive: Docker image layer analysis tool
 #
 # Requirements:
 #   - Docker socket: Mount with -v /var/run/docker.sock:/var/run/docker.sock

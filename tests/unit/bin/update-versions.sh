@@ -383,6 +383,72 @@ EOF
     fi
 }
 
+# Test: Script updates zoxide version in base setup
+test_update_zoxide_version() {
+    local test_dir="$RESULTS_DIR/test_zoxide_update"
+    rm -rf "$test_dir"
+    mkdir -p "$test_dir/lib/base"
+    
+    # Create test base setup script with old zoxide version
+    cat > "$test_dir/lib/base/setup.sh" <<'EOF'
+#!/bin/bash
+# Base system setup
+
+echo "=== Installing zoxide ==="
+ARCH=$(dpkg --print-architecture)
+ZOXIDE_VERSION="0.9.0"
+cd /tmp
+EOF
+    
+    # Create mock version check output
+    cat > "$test_dir/test.json" <<'EOF'
+{
+  "timestamp": "2024-08-13T10:00:00Z",
+  "tools": [
+    {
+      "tool": "zoxide",
+      "current": "0.9.0",
+      "latest": "0.9.8",
+      "file": "setup.sh",
+      "status": "outdated"
+    }
+  ]
+}
+EOF
+    
+    # Initialize git repo
+    cd "$test_dir"
+    git init --quiet
+    git config user.email "test@example.com"
+    git config user.name "Test User"
+    git add -A
+    git commit -m "Initial" --quiet
+    
+    # Create mock release script
+    mkdir -p bin
+    echo '#!/bin/bash' > bin/release.sh
+    echo 'echo "1.0.1" > VERSION' >> bin/release.sh
+    chmod +x bin/release.sh
+    echo "1.0.0" > VERSION
+    
+    # Run update
+    PROJECT_ROOT_OVERRIDE="$test_dir" "$PROJECT_ROOT/bin/update-versions.sh" --no-commit --no-bump --input test.json >/dev/null 2>&1
+    
+    # Check that zoxide was updated
+    local updated=false
+    if grep -q 'ZOXIDE_VERSION="0.9.8"' lib/base/setup.sh; then
+        updated=true
+    fi
+    
+    rm -rf "$test_dir"
+    
+    if [ "$updated" = true ]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
 # Run tests
 run_test test_help_output "Help output displays correctly"
 run_test test_dry_run_mode "Dry run mode doesn't modify files"
@@ -392,6 +458,7 @@ run_test test_invalid_input "Handles invalid input file"
 run_test test_shell_script_update "Updates shell script versions"
 run_test test_java_dev_tools_update "Updates Java dev tool versions"
 run_test test_duf_entr_update "Updates duf and entr versions"
+run_test test_update_zoxide_version "Updates zoxide version in base setup"
 
 # Generate report
 generate_report

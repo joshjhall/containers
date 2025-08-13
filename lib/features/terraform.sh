@@ -18,9 +18,9 @@
 #
 # Tools Installed:
 #   - Terraform (latest from HashiCorp APT repository)
-#   - Terragrunt 0.83.2
-#   - terraform-docs 0.20.0
-#   - tflint (latest)
+#   - Terragrunt (infrastructure as code wrapper)
+#   - terraform-docs (documentation generator)
+#   - tflint (linter for Terraform)
 #
 # Common Commands:
 #   terraform init              # Initialize Terraform working directory

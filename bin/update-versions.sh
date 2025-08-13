@@ -154,6 +154,9 @@ update_version() {
                 google-java-format)
                     sed -i "s/GJF_VERSION=\"[^\"]*\"/GJF_VERSION=\"$latest\"/" "$script_path"
                     ;;
+                jmh)
+                    sed -i "s/JMH_VERSION=\"[^\"]*\"/JMH_VERSION=\"$latest\"/" "$script_path"
+                    ;;
                 duf)
                     sed -i "s/DUF_VERSION=\"[^\"]*\"/DUF_VERSION=\"$latest\"/" "$script_path"
                     ;;
@@ -162,6 +165,18 @@ update_version() {
                     ;;
                 *)
                     echo -e "${YELLOW}    Warning: Unknown shell script tool: $tool${NC}"
+                    ;;
+            esac
+            ;;
+        setup.sh)
+            # Update version strings in base setup script
+            local script_path="$PROJECT_ROOT/lib/base/$file"
+            case "$tool" in
+                zoxide)
+                    sed -i "s/ZOXIDE_VERSION=\"[^\"]*\"/ZOXIDE_VERSION=\"$latest\"/" "$script_path"
+                    ;;
+                *)
+                    echo -e "${YELLOW}    Warning: Unknown base setup tool: $tool${NC}"
                     ;;
             esac
             ;;

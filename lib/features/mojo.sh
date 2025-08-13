@@ -1,9 +1,9 @@
 #!/bin/bash
-# Mojo Programming Language - Version-specific Installation (2025 Update)
+# Mojo Programming Language - Version-specific Installation
 #
 # Description:
 #   Installs Mojo programming language using pixi package manager.
-#   As of 2025, Magic CLI is deprecated and pixi is the recommended installation method.
+#   Magic CLI is deprecated and pixi is the recommended installation method.
 #   This script uses the Modular conda channel to install the modular package which includes Mojo.
 #
 # Features:
@@ -21,7 +21,7 @@
 #   - Linux (Debian/Ubuntu based)
 #
 # Note:
-#   This installation method does not require authentication as of 2025.
+#   This installation method does not require authentication.
 #   The old Modular CLI is deprecated in favor of pixi.
 #
 set -euo pipefail

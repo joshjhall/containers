@@ -14,7 +14,7 @@
 #   - Development headers for native gem compilation
 #
 # Environment Variables:
-#   RUBY_VERSION    - Ruby version to install (default: 3.3.9)
+#   RUBY_VERSION    - Ruby version to install (has a default)
 #
 set -euo pipefail
 

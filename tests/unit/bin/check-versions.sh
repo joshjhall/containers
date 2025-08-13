@@ -296,6 +296,20 @@ EOF
     rm -f "$test_script"
 }
 
+# Test: Script extracts zoxide version from base setup
+test_extract_zoxide_version() {
+    # Check if base/setup.sh has zoxide version definition
+    if [ -f "$PROJECT_ROOT/lib/base/setup.sh" ]; then
+        local zoxide_ver=$(grep '^ZOXIDE_VERSION=' "$PROJECT_ROOT/lib/base/setup.sh" 2>/dev/null | cut -d= -f2 | tr -d '"')
+        
+        assert_not_empty "$zoxide_ver" "zoxide version extracted from base/setup.sh"
+        # Current version is 0.9.8
+        assert_equals "0.9.8" "$zoxide_ver" "zoxide version is correctly extracted"
+    else
+        skip_test "base/setup.sh not found"
+    fi
+}
+
 # Run tests
 run_test test_script_exists "Version checker script exists and is executable"
 run_test test_version_matches_exact "version_matches handles exact matches"
@@ -310,6 +324,7 @@ run_test test_exit_code_outdated "Exit code is 1 when versions outdated"
 run_test test_extract_java_dev_versions "Script extracts Java dev tool versions"
 run_test test_extract_duf_entr_versions "Script extracts duf and entr versions"
 run_test test_handle_indented_versions "Script handles indented version patterns"
+run_test test_extract_zoxide_version "Script extracts zoxide version from base setup"
 
 # Generate test report
 generate_report

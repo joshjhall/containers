@@ -13,6 +13,8 @@ bers
 bindgen
 bitnami
 btop
+buildkit
+BUILDKIT
 chgrp
 cloudbuild
 CLOUDSDK
@@ -61,6 +63,7 @@ gosec
 GOSUMDB
 gotest
 govet
+gpgsign
 gradlew
 gsutil
 guardfile
@@ -151,6 +154,7 @@ Rustup
 RUSTUP
 sboot
 sccache
+signingkey
 socat
 solargraph
 Solargraph
@@ -167,6 +171,7 @@ terraformrc
 testinstance
 testpaths
 testuser
+tfst
 tfstate
 tmpl
 usermod

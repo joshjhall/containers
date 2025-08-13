@@ -7,25 +7,16 @@
 #
 # Features:
 #   - Modern CLI replacements: exa (ls), bat (cat), duf (df), fd (find), ripgrep (grep)
-#   - Git helpers: lazygit (v0.54.1), delta (v0.18.2 - side-by-side diffs), diff-so-fancy
-#   - Development utilities: direnv (v2.37.1), just (v1.42.3 - with modules), entr
+#   - Git helpers: lazygit, delta (side-by-side diffs), diff-so-fancy
+#   - Development utilities: direnv, just (with modules), entr
 #   - Network tools: telnet, netcat, nmap, tcpdump, socat, whois
 #   - System monitoring: htop, btop, iotop, sysstat, strace
 #   - Security tools: mkcert (local HTTPS certificates)
 #   - Archive tools: unzip, zip, tar, 7zip
-#   - GitHub/GitLab CLIs: gh, act (v0.2.80 - local GitHub Actions), glab (v1.65.0)
+#   - GitHub/GitLab CLIs: gh, act (local GitHub Actions), glab
 #   - Text processing: jq
 #   - Claude Code CLI tool
 #   - And many more productivity tools
-#
-# Tool Versions (as of July 2025):
-#   - direnv: 2.37.1 (improved stdlib, better error messages)
-#   - lazygit: 0.54.1 (interactive rebase, commit graph)
-#   - delta: 0.18.2 (side-by-side view, better navigation)
-#   - just: 1.42.3 (modules support, shell completion)
-#   - mkcert: 1.4.4 (local HTTPS certificates)
-#   - act: 0.2.80 (improved GitHub Actions compatibility)
-#   - glab: 1.65.0 (GitLab CLI with merge request workflows)
 #
 set -euo pipefail
 
