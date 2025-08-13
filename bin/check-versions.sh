@@ -283,6 +283,15 @@ extract_all_versions() {
         
         ver=$(grep "^[[:space:]]*GJF_VERSION=" "$PROJECT_ROOT/lib/features/java-dev.sh" 2>/dev/null | sed 's/.*=//' | tr -d '"')
         [ -n "$ver" ] && add_tool "google-java-format" "$ver" "java-dev.sh"
+        
+        ver=$(grep "^[[:space:]]*JMH_VERSION=" "$PROJECT_ROOT/lib/features/java-dev.sh" 2>/dev/null | sed 's/.*=//' | tr -d '"')
+        [ -n "$ver" ] && add_tool "jmh" "$ver" "java-dev.sh"
+    fi
+    
+    # Base system tools from setup.sh
+    if [ -f "$PROJECT_ROOT/lib/base/setup.sh" ]; then
+        ver=$(grep "^ZOXIDE_VERSION=" "$PROJECT_ROOT/lib/base/setup.sh" 2>/dev/null | cut -d= -f2 | tr -d '"')
+        [ -n "$ver" ] && add_tool "zoxide" "$ver" "setup.sh"
     fi
 }
 
@@ -437,6 +446,24 @@ check_entr() {
     latest=$(fetch_url "http://eradman.com/entrproject/" | grep -oE 'entr-[0-9]+\.[0-9]+\.tar\.gz' | head -1 | sed 's/entr-//;s/\.tar\.gz//')
     
     [ -n "$latest" ] && set_latest "entr" "$latest" || set_latest "entr" "error"
+    progress_done
+}
+
+check_maven_central() {
+    local tool="$1"
+    local group_id="$2"
+    local artifact_id="$3"
+    progress_msg "  $tool..."
+    # Check Maven Central for latest version
+    local latest
+    latest=$(fetch_url "https://search.maven.org/solrsearch/select?q=g:${group_id}+AND+a:${artifact_id}&rows=1&wt=json" | \
+        jq -r '.response.docs[0].latestVersion // "unknown"' 2>/dev/null)
+    
+    if [ -n "$latest" ] && [ "$latest" != "unknown" ] && [ "$latest" != "null" ]; then
+        set_latest "$tool" "$latest"
+    else
+        set_latest "$tool" "error"
+    fi
     progress_done
 }
 
@@ -635,8 +662,10 @@ main() {
             jbang) check_github_release "jbang" "jbangdev/jbang" ;;
             mvnd) check_github_release "mvnd" "apache/maven-mvnd" ;;
             google-java-format) check_github_release "google-java-format" "google/google-java-format" ;;
+            jmh) check_maven_central "jmh" "org.openjdk.jmh" "jmh-core" ;;
             duf) check_github_release "duf" "muesli/duf" ;;
             entr) check_entr ;;
+            zoxide) check_github_release "zoxide" "ajeetdsouza/zoxide" ;;
             *) [ "$OUTPUT_FORMAT" = "text" ] && echo "  Skipping $tool (no checker)" ;;
         esac
     done
