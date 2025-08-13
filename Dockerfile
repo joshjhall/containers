@@ -101,7 +101,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 # Note: Installed early as it's a common dependency for other tools
 ARG INCLUDE_NODE=false
 ARG INCLUDE_NODE_DEV=false
-ARG NODE_VERSION=20
+ARG NODE_VERSION=22.10.0
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     if [ "${INCLUDE_NODE}" = "true" ] || [ "${INCLUDE_NODE_DEV}" = "true" ]; then \
