@@ -13,6 +13,9 @@ NC='\033[0m' # No Color
 BIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$BIN_DIR")"
 
+# Allow override for testing
+PROJECT_ROOT="${PROJECT_ROOT_OVERRIDE:-$PROJECT_ROOT}"
+
 # Parse command line arguments
 DRY_RUN=false
 AUTO_COMMIT=true
