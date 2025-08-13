@@ -22,12 +22,14 @@ The automated version update feature requires GitLab CI to push changes back to 
    - **Masked**: Yes
    - **Expand variable reference**: No
 
-6. Update `.gitlab-ci.yml` to use this token:
+6. The `.gitlab-ci.yml` is already configured to use this token automatically:
 
 ```yaml
-# Replace line 344 in .gitlab-ci.yml:
+# Line 359 in .gitlab-ci.yml already contains:
 git push "https://oauth2:${CI_PUSH_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git" HEAD:develop
 ```
+
+**Note:** No changes needed - the CI pipeline will automatically detect and use the `CI_PUSH_TOKEN` variable.
 
 ## Option 2: Deploy Token
 
