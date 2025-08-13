@@ -251,10 +251,16 @@ test_cancellation_message() {
 # Test: Auto-confirmation with echo y
 test_auto_confirmation() {
     # Test that auto-confirmation message works
-    # We'll just test that the script accepts echo 'y' without actually modifying files
+    # Create a temporary test directory with VERSION file to avoid modifying real files
     
-    # Run release script with auto-confirmation and capture output
-    local output=$(cd /tmp && echo "y" | "$PROJECT_ROOT/bin/release.sh" patch 2>&1 || true)
+    local test_dir="$RESULTS_DIR/test-auto-confirm"
+    mkdir -p "$test_dir"
+    
+    # Create test VERSION file
+    echo "1.0.0" > "$test_dir/VERSION"
+    
+    # Run release script with auto-confirmation from test directory
+    local output=$(cd "$test_dir" && echo "y" | "$PROJECT_ROOT/bin/release.sh" patch 2>&1 || true)
     
     # Check for success indicators
     if echo "$output" | grep -q "Updated VERSION file\|Updated Dockerfile version"; then
@@ -262,6 +268,9 @@ test_auto_confirmation() {
     else
         assert_true false "Auto-confirmation did not execute"
     fi
+    
+    # Clean up test directory
+    rm -rf "$test_dir"
 }
 
 # Run tests with setup/teardown
