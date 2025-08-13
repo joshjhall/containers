@@ -38,6 +38,8 @@ Navigate to your **project's** Settings → CI/CD → Variables (not group varia
    - **Target branch**: `develop` or `main`
    - **Variables**: (optional) Add any schedule-specific variables
 
+**Note**: When triggered by a schedule, ONLY the version check job will run. Regular build and test jobs are automatically skipped to save CI resources.
+
 ### 3. Pushover Setup
 
 If you don't have Pushover:
