@@ -218,6 +218,52 @@ test_changelog_date_format() {
     fi
 }
 
+# Test: Cancellation message provides automation guidance
+test_cancellation_message() {
+    # Test that cancelling the release provides helpful automation examples
+    setup
+    
+    # Run release script with 'n' response and capture output
+    local output=$(echo "n" | "$PROJECT_ROOT/bin/release.sh" patch 2>&1 || true)
+    
+    # Check for the helpful messages
+    if echo "$output" | grep -q "Release cancelled"; then
+        assert_true true "Shows cancellation message"
+    else
+        assert_true false "Missing cancellation message"
+    fi
+    
+    if echo "$output" | grep -q "echo 'y' |"; then
+        assert_true true "Shows echo 'y' automation example"
+    else
+        assert_true false "Missing echo 'y' automation example"
+    fi
+    
+    if echo "$output" | grep -q "yes |"; then
+        assert_true true "Shows yes command automation example"
+    else
+        assert_true false "Missing yes command automation example"
+    fi
+    
+    teardown
+}
+
+# Test: Auto-confirmation with echo y
+test_auto_confirmation() {
+    # Test that auto-confirmation message works
+    # We'll just test that the script accepts echo 'y' without actually modifying files
+    
+    # Run release script with auto-confirmation and capture output
+    local output=$(cd /tmp && echo "y" | "$PROJECT_ROOT/bin/release.sh" patch 2>&1 || true)
+    
+    # Check for success indicators
+    if echo "$output" | grep -q "Updated VERSION file\|Updated Dockerfile version"; then
+        assert_true true "Auto-confirmation executed successfully"
+    else
+        assert_true false "Auto-confirmation did not execute"
+    fi
+}
+
 # Run tests with setup/teardown
 run_test_with_setup() {
     local test_function="$1"
@@ -241,6 +287,8 @@ run_test test_valid_bump_types "Script accepts valid bump types"
 run_test test_invalid_bump_types "Script rejects invalid bump types"
 run_test test_semver_parsing "Semantic version parsing"
 run_test test_changelog_date_format "Changelog date format"
+run_test_with_setup test_cancellation_message "Cancellation message provides automation guidance"
+run_test test_auto_confirmation "Auto-confirmation with echo y works"
 
 # Generate test report
 generate_report
