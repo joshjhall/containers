@@ -274,7 +274,7 @@ fi
 
 # Install entr (file watcher)
 log_message "Installing entr (file watcher)..."
-ENTR_VERSION="5.5"
+ENTR_VERSION="5.7"
 log_command "Downloading entr source" \
     bash -c "cd /tmp && curl -L http://eradman.com/entrproject/code/entr-${ENTR_VERSION}.tar.gz | tar xz"
 
@@ -440,7 +440,7 @@ fi
 
 # Install GitLab CLI (glab)
 log_message "Installing glab (GitLab CLI)..."
-GLAB_VERSION="1.65.0"
+GLAB_VERSION="1.66.0"
 log_command "Changing to temp directory" \
     cd /tmp
 

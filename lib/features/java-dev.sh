@@ -78,7 +78,7 @@ log_command "Creating tools directory" \
 # ============================================================================
 log_message "Installing Spring Boot CLI..."
 
-SPRING_VERSION="3.4.2"
+SPRING_VERSION="3.5.4"
 export SPRING_VERSION  # Export for use in shell functions
 log_command "Downloading Spring Boot CLI ${SPRING_VERSION}" \
     wget -q "https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-cli/${SPRING_VERSION}/spring-boot-cli-${SPRING_VERSION}-bin.tar.gz" \
@@ -97,7 +97,7 @@ rm -f /tmp/spring-boot-cli.tar.gz
 log_message "Installing JBang..."
 
 # Download and extract JBang directly (more reliable than installer script)
-JBANG_VERSION="0.121.0"
+JBANG_VERSION="0.129.0"
 log_command "Downloading JBang ${JBANG_VERSION}" \
     wget -q "https://github.com/jbangdev/jbang/releases/download/v${JBANG_VERSION}/jbang-${JBANG_VERSION}.tar" -O /tmp/jbang.tar
 
@@ -155,7 +155,7 @@ log_command "Creating JARs directory" \
 # ============================================================================
 log_message "Installing Google Java Format..."
 
-GJF_VERSION="1.25.2"
+GJF_VERSION="1.28.0"
 
 # JMH version for benchmarking
 JMH_VERSION="1.37"
