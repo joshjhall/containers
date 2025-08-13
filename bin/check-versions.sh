@@ -253,6 +253,12 @@ extract_all_versions() {
         
         ver=$(grep "^MKCERT_VERSION=" "$PROJECT_ROOT/lib/features/dev-tools.sh" 2>/dev/null | cut -d= -f2 | tr -d '"')
         [ -n "$ver" ] && add_tool "mkcert" "$ver" "dev-tools.sh"
+        
+        ver=$(grep "^DUF_VERSION=" "$PROJECT_ROOT/lib/features/dev-tools.sh" 2>/dev/null | cut -d= -f2 | tr -d '"')
+        [ -n "$ver" ] && add_tool "duf" "$ver" "dev-tools.sh"
+        
+        ver=$(grep "^ENTR_VERSION=" "$PROJECT_ROOT/lib/features/dev-tools.sh" 2>/dev/null | cut -d= -f2 | tr -d '"')
+        [ -n "$ver" ] && add_tool "entr" "$ver" "dev-tools.sh"
     fi
     
     # Docker tools from docker.sh
@@ -263,18 +269,42 @@ extract_all_versions() {
         ver=$(grep "^LAZYDOCKER_VERSION=" "$PROJECT_ROOT/lib/features/docker.sh" 2>/dev/null | cut -d= -f2 | tr -d '"')
         [ -n "$ver" ] && add_tool "lazydocker" "$ver" "docker.sh"
     fi
+    
+    # Java dev tools from java-dev.sh
+    if [ -f "$PROJECT_ROOT/lib/features/java-dev.sh" ]; then
+        ver=$(grep "^[[:space:]]*SPRING_VERSION=" "$PROJECT_ROOT/lib/features/java-dev.sh" 2>/dev/null | sed 's/.*=//' | tr -d '"')
+        [ -n "$ver" ] && add_tool "spring-boot-cli" "$ver" "java-dev.sh"
+        
+        ver=$(grep "^[[:space:]]*JBANG_VERSION=" "$PROJECT_ROOT/lib/features/java-dev.sh" 2>/dev/null | sed 's/.*=//' | tr -d '"')
+        [ -n "$ver" ] && add_tool "jbang" "$ver" "java-dev.sh"
+        
+        ver=$(grep "^[[:space:]]*MVND_VERSION=" "$PROJECT_ROOT/lib/features/java-dev.sh" 2>/dev/null | sed 's/.*=//' | tr -d '"')
+        [ -n "$ver" ] && add_tool "mvnd" "$ver" "java-dev.sh"
+        
+        ver=$(grep "^[[:space:]]*GJF_VERSION=" "$PROJECT_ROOT/lib/features/java-dev.sh" 2>/dev/null | sed 's/.*=//' | tr -d '"')
+        [ -n "$ver" ] && add_tool "google-java-format" "$ver" "java-dev.sh"
+        
+        ver=$(grep "^[[:space:]]*JMH_VERSION=" "$PROJECT_ROOT/lib/features/java-dev.sh" 2>/dev/null | sed 's/.*=//' | tr -d '"')
+        [ -n "$ver" ] && add_tool "jmh" "$ver" "java-dev.sh"
+    fi
+    
+    # Base system tools from setup.sh
+    if [ -f "$PROJECT_ROOT/lib/base/setup.sh" ]; then
+        ver=$(grep "^ZOXIDE_VERSION=" "$PROJECT_ROOT/lib/base/setup.sh" 2>/dev/null | cut -d= -f2 | tr -d '"')
+        [ -n "$ver" ] && add_tool "zoxide" "$ver" "setup.sh"
+    fi
 }
 
 # Progress helpers for quiet mode in JSON
 progress_msg() {
     if [ "$OUTPUT_FORMAT" = "text" ]; then
-        progress_msg "$1"
+        echo -n "$1"
     fi
 }
 
 progress_done() {
     if [ "$OUTPUT_FORMAT" = "text" ]; then
-        progress_done
+        echo " ✓"
     fi
 }
 
@@ -405,6 +435,35 @@ check_gitlab_release() {
     local latest
     latest=$(fetch_url "https://gitlab.com/api/v4/projects/$project_id/releases" | jq -r '.[0].tag_name' 2>/dev/null | sed 's/^v//')
     [ -n "$latest" ] && set_latest "$tool" "$latest" || set_latest "$tool" "error"
+    progress_done
+}
+
+check_entr() {
+    progress_msg "  entr..."
+    # entr uses a simple versioning on their website
+    # We'll check the latest version from the downloads page
+    local latest
+    latest=$(fetch_url "http://eradman.com/entrproject/" | grep -oE 'entr-[0-9]+\.[0-9]+\.tar\.gz' | head -1 | sed 's/entr-//;s/\.tar\.gz//')
+    
+    [ -n "$latest" ] && set_latest "entr" "$latest" || set_latest "entr" "error"
+    progress_done
+}
+
+check_maven_central() {
+    local tool="$1"
+    local group_id="$2"
+    local artifact_id="$3"
+    progress_msg "  $tool..."
+    # Check Maven Central for latest version
+    local latest
+    latest=$(fetch_url "https://search.maven.org/solrsearch/select?q=g:${group_id}+AND+a:${artifact_id}&rows=1&wt=json" | \
+        jq -r '.response.docs[0].latestVersion // "unknown"' 2>/dev/null)
+    
+    if [ -n "$latest" ] && [ "$latest" != "unknown" ] && [ "$latest" != "null" ]; then
+        set_latest "$tool" "$latest"
+    else
+        set_latest "$tool" "error"
+    fi
     progress_done
 }
 
@@ -599,6 +658,14 @@ main() {
             dive) check_github_release "dive" "wagoodman/dive" ;;
             mkcert) check_github_release "mkcert" "FiloSottile/mkcert" ;;
             glab) check_gitlab_release "glab" "gitlab-org%2Fcli" ;;
+            spring-boot-cli) check_github_release "spring-boot-cli" "spring-projects/spring-boot" ;;
+            jbang) check_github_release "jbang" "jbangdev/jbang" ;;
+            mvnd) check_github_release "mvnd" "apache/maven-mvnd" ;;
+            google-java-format) check_github_release "google-java-format" "google/google-java-format" ;;
+            jmh) check_maven_central "jmh" "org.openjdk.jmh" "jmh-core" ;;
+            duf) check_github_release "duf" "muesli/duf" ;;
+            entr) check_entr ;;
+            zoxide) check_github_release "zoxide" "ajeetdsouza/zoxide" ;;
             *) [ "$OUTPUT_FORMAT" = "text" ] && echo "  Skipping $tool (no checker)" ;;
         esac
     done

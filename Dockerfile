@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 # Universal Container Build System
-# Version: 1.4.0
+# Version: 3.0.0
 # Supports multiple contexts: devcontainer, agents, CI/CD, production
 
 # Build arguments for base image selection
@@ -73,16 +73,16 @@ ARG PYTHON_VERSION=3.13.6
 # The files will be properly placed with correct ownership later
 RUN --mount=type=bind,source=.,target=/build_context \
     if [ "${INCLUDE_PYTHON}" = "true" ] || [ "${INCLUDE_PYTHON_DEV}" = "true" ]; then \
-        mkdir -p /tmp/python-project-files; \
-        if [ -f "/build_context/pyproject.toml" ]; then \
-            cp /build_context/pyproject.toml /tmp/python-project-files/; \
-        fi; \
-        if [ -f "/build_context/poetry.lock" ]; then \
-            cp /build_context/poetry.lock /tmp/python-project-files/; \
-        fi; \
-        if [ -f "/build_context/requirements.txt" ]; then \
-            cp /build_context/requirements.txt /tmp/python-project-files/; \
-        fi; \
+    mkdir -p /tmp/python-project-files; \
+    if [ -f "/build_context/pyproject.toml" ]; then \
+    cp /build_context/pyproject.toml /tmp/python-project-files/; \
+    fi; \
+    if [ -f "/build_context/poetry.lock" ]; then \
+    cp /build_context/poetry.lock /tmp/python-project-files/; \
+    fi; \
+    if [ -f "/build_context/requirements.txt" ]; then \
+    cp /build_context/requirements.txt /tmp/python-project-files/; \
+    fi; \
     fi
 
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
@@ -165,7 +165,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 # Go + Go development tools
 ARG INCLUDE_GOLANG=false
 ARG INCLUDE_GOLANG_DEV=false
-ARG GO_VERSION=1.24.6
+ARG GO_VERSION=1.25.0
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     if [ "${INCLUDE_GOLANG}" = "true" ] || [ "${INCLUDE_GOLANG_DEV}" = "true" ]; then \

@@ -30,6 +30,8 @@ test:unit:
       - tests/results/
     expire_in: 1 week
   rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+      when: never
     - if: '$CI_COMMIT_BRANCH'
     - if: '$CI_MERGE_REQUEST_ID'
 
@@ -47,6 +49,8 @@ test:code_quality:
       done
   allow_failure: true
   rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+      when: never
     - if: '$CI_COMMIT_BRANCH'
     - if: '$CI_MERGE_REQUEST_ID'
 
@@ -73,6 +77,8 @@ build:minimal:
         --cache=true \
         --cache-repo=$REGISTRY_IMAGE/cache
   rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+      when: never
     - if: '$CI_COMMIT_BRANCH == "main"'
     - if: '$CI_COMMIT_BRANCH == "develop"'
     - if: '$CI_COMMIT_TAG'
@@ -103,6 +109,8 @@ build:python-dev:
         --cache=true \
         --cache-repo=$REGISTRY_IMAGE/cache
   rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+      when: never
     - if: '$CI_COMMIT_BRANCH == "main"'
     - if: '$CI_COMMIT_BRANCH == "develop"'
     - if: '$CI_COMMIT_TAG'
@@ -133,6 +141,8 @@ build:node-dev:
         --cache=true \
         --cache-repo=$REGISTRY_IMAGE/cache
   rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+      when: never
     - if: '$CI_COMMIT_BRANCH == "main"'
     - if: '$CI_COMMIT_BRANCH == "develop"'
     - if: '$CI_COMMIT_TAG'
@@ -164,6 +174,8 @@ build:cloud-ops:
         --cache=true \
         --cache-repo=$REGISTRY_IMAGE/cache
   rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+      when: never
     - if: '$CI_COMMIT_BRANCH == "main"'
     - if: '$CI_COMMIT_TAG'
 
@@ -194,6 +206,8 @@ build:polyglot:
         --cache=true \
         --cache-repo=$REGISTRY_IMAGE/cache
   rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+      when: never
     - if: '$CI_COMMIT_BRANCH == "main"'
     - if: '$CI_COMMIT_TAG'
 
@@ -227,5 +241,168 @@ release:gitlab:
       ```
       
       See [README.md](README.md) for detailed documentation.
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+      when: never
+    - if: '$CI_COMMIT_TAG'
+
+# =====================================
+# Scheduled Jobs
+# =====================================
+
+# Weekly version check with Pushover notifications and automatic updates
+# 
+# Required CI/CD Variables for notifications:
+#   - PUSHOVER_USER_KEY: Your Pushover user key
+#   - PUSHOVER_APP_TOKEN: Your Pushover application token
+#
+# Required CI/CD Variables for automatic updates (one of):
+#   - CI_PUSH_TOKEN: Project Access Token with write_repository scope
+#   - CI_DEPLOY_USER + CI_DEPLOY_PASSWORD: Deploy Token credentials
+#
+# See docs/ci-push-authentication.md for setup instructions
+#
+check:versions:
+  stage: test
+  image: debian:12-slim
+  variables:
+    # These should be set in GitLab CI/CD variables
+    # PUSHOVER_USER_KEY: set in GitLab settings (protected branch)
+    # PUSHOVER_APP_TOKEN: set in GitLab settings (protected branch)
+    # CI_PUSH_TOKEN: set in GitLab settings (for pushing updates)
+    # GITHUB_TOKEN: set in GitLab settings (optional, for rate limits)
+    NOTIFICATION_TITLE: "Container Build System - Version Updates Available"
+  before_script:
+    - apt-get update && apt-get install -y curl jq bash git
+  script:
+    - echo "Checking for version updates..."
+    - |
+      # Run version check and capture output
+      OUTPUT=$(./bin/check-versions.sh --json 2>&1 || true)
+      
+      # Parse JSON output - filter for outdated tools
+      OUTDATED=$(echo "$OUTPUT" | jq '[.tools[] | select(.status == "outdated")]')
+      
+      if echo "$OUTDATED" | jq -e 'length > 0' >/dev/null 2>&1; then
+        # There are updates available
+        UPDATE_COUNT=$(echo "$OUTDATED" | jq 'length')
+        
+        # Build notification message with proper line breaks for Pushover
+        MESSAGE="Found $UPDATE_COUNT version update(s):"$'\n'$'\n'
+        
+        # Add each update to the message
+        while IFS= read -r update; do
+          TOOL=$(echo "$update" | jq -r '.tool')
+          CURRENT=$(echo "$update" | jq -r '.current')
+          LATEST=$(echo "$update" | jq -r '.latest')
+          MESSAGE="${MESSAGE}• $TOOL: $CURRENT → $LATEST"$'\n'
+        done < <(echo "$OUTDATED" | jq -c '.[]')
+        
+        MESSAGE="${MESSAGE}"$'\n'"Repository: $CI_PROJECT_URL"
+        
+        # Send Pushover notification if credentials are available
+        if [ -n "${PUSHOVER_USER_KEY:-}" ] && [ -n "${PUSHOVER_APP_TOKEN:-}" ]; then
+          echo "Sending Pushover notification..."
+          RESPONSE=$(curl -s \
+            --form-string "token=${PUSHOVER_APP_TOKEN}" \
+            --form-string "user=${PUSHOVER_USER_KEY}" \
+            --form-string "title=${NOTIFICATION_TITLE}" \
+            --form-string "message=${MESSAGE}" \
+            --form-string "url=${CI_PROJECT_URL}/-/pipelines/${CI_PIPELINE_ID}" \
+            --form-string "url_title=View Pipeline" \
+            --form-string "priority=0" \
+            https://api.pushover.net/1/messages.json)
+          
+          # Check if notification was sent successfully
+          if echo "$RESPONSE" | jq -e '.status == 1' >/dev/null 2>&1; then
+            echo "✓ Pushover notification sent successfully"
+          else
+            echo "✗ Failed to send Pushover notification"
+            echo "Response: $RESPONSE"
+          fi
+        else
+          echo "WARNING: Pushover credentials not configured"
+          echo "Set PUSHOVER_USER_KEY and PUSHOVER_APP_TOKEN in GitLab CI/CD variables"
+        fi
+        
+        # Also output to job log
+        echo "=== Version Updates Available ==="
+        echo "$OUTDATED" | jq '.'
+        
+        # Create artifact with update details in temp location first
+        TEMP_JSON="/tmp/version-updates.json"
+        echo "$OUTPUT" > "$TEMP_JSON"
+        
+        # Apply automatic updates to develop branch
+        if [ "${AUTO_UPDATE_VERSIONS:-true}" = "true" ]; then
+          echo ""
+          echo "=== Applying Automatic Updates ==="
+          
+          # Configure git for commits
+          git config --global user.email "ci@gitlab.com"
+          git config --global user.name "GitLab CI"
+          
+          # Fetch latest changes and checkout develop branch
+          git fetch origin develop
+          git checkout -B develop origin/develop
+          
+          # Run the update script with the JSON output from temp location
+          ./bin/update-versions.sh --input "$TEMP_JSON"
+          
+          # Check if there are new commits to push
+          # Compare with the fetched origin/develop
+          if [ "$(git rev-parse HEAD)" != "$(git rev-parse origin/develop)" ]; then
+            echo ""
+            echo "=== Pushing Updates to Develop ==="
+            
+            # Try different authentication methods in order of preference
+            if [ -n "${CI_PUSH_TOKEN:-}" ]; then
+              echo "Using Project Access Token for authentication"
+              git push "https://oauth2:${CI_PUSH_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git" HEAD:develop
+            elif [ -n "${CI_DEPLOY_USER:-}" ] && [ -n "${CI_DEPLOY_PASSWORD:-}" ]; then
+              echo "Using Deploy Token for authentication"
+              git push "https://${CI_DEPLOY_USER}:${CI_DEPLOY_PASSWORD}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git" HEAD:develop
+            elif [ -n "${CI_JOB_TOKEN:-}" ]; then
+              echo "Attempting to use CI_JOB_TOKEN (may fail if not configured for push access)"
+              git push "https://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git" HEAD:develop || {
+                echo "ERROR: Push failed. CI_JOB_TOKEN doesn't have push permissions."
+                echo "Please configure authentication using one of these methods:"
+                echo "  1. Set CI_PUSH_TOKEN variable (Project Access Token)"
+                echo "  2. Set CI_DEPLOY_USER and CI_DEPLOY_PASSWORD (Deploy Token)"
+                echo "See docs/ci-push-authentication.md for setup instructions"
+                exit 1
+              }
+            else
+              echo "ERROR: No authentication method configured for pushing to repository"
+              echo "Please configure one of these CI/CD variables:"
+              echo "  - CI_PUSH_TOKEN (Project Access Token)"
+              echo "  - CI_DEPLOY_USER + CI_DEPLOY_PASSWORD (Deploy Token)"
+              echo "See docs/ci-push-authentication.md for setup instructions"
+              exit 1
+            fi
+            
+            echo "✓ Successfully updated versions and bumped to patch release"
+          else
+            echo "No new commits to push"
+          fi
+        else
+          echo "Automatic updates disabled (set AUTO_UPDATE_VERSIONS=true to enable)"
+        fi
+        
+        # Copy the temp JSON file to working directory for artifact
+        cp "$TEMP_JSON" version-updates.json
+      else
+        echo "All versions are up to date!"
+        # Create empty artifact to avoid warning
+        echo '{"status": "up-to-date", "updates": []}' > version-updates.json
+      fi
+  artifacts:
+    paths:
+      - version-updates.json
+    expire_in: 1 week
+    when: on_success
   only:
-    - tags
+    - schedules
+  except:
+    variables:
+      - $SKIP_VERSION_CHECK == "true"

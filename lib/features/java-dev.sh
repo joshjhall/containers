@@ -78,7 +78,8 @@ log_command "Creating tools directory" \
 # ============================================================================
 log_message "Installing Spring Boot CLI..."
 
-SPRING_VERSION="3.4.2"
+SPRING_VERSION="3.5.4"
+export SPRING_VERSION  # Export for use in shell functions
 log_command "Downloading Spring Boot CLI ${SPRING_VERSION}" \
     wget -q "https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-cli/${SPRING_VERSION}/spring-boot-cli-${SPRING_VERSION}-bin.tar.gz" \
     -O /tmp/spring-boot-cli.tar.gz
@@ -96,7 +97,7 @@ rm -f /tmp/spring-boot-cli.tar.gz
 log_message "Installing JBang..."
 
 # Download and extract JBang directly (more reliable than installer script)
-JBANG_VERSION="0.121.0"
+JBANG_VERSION="0.129.0"
 log_command "Downloading JBang ${JBANG_VERSION}" \
     wget -q "https://github.com/jbangdev/jbang/releases/download/v${JBANG_VERSION}/jbang-${JBANG_VERSION}.tar" -O /tmp/jbang.tar
 
@@ -154,7 +155,10 @@ log_command "Creating JARs directory" \
 # ============================================================================
 log_message "Installing Google Java Format..."
 
-GJF_VERSION="1.25.2"
+GJF_VERSION="1.28.0"
+
+# JMH version for benchmarking
+JMH_VERSION="1.37"
 GJF_URL="https://github.com/google/google-java-format/releases/download/v${GJF_VERSION}/google-java-format-${GJF_VERSION}-all-deps.jar"
 if wget -q --spider "${GJF_URL}" 2>/dev/null; then
     log_command "Downloading Google Java Format ${GJF_VERSION}" \
@@ -181,7 +185,7 @@ log_command "Creating bashrc.d directory" \
     mkdir -p /etc/bashrc.d
 
 # Add java-dev aliases and helpers
-write_bashrc_content /etc/bashrc.d/55-java-dev.sh "Java development tools" << 'JAVA_DEV_BASHRC_EOF'
+write_bashrc_content /etc/bashrc.d/55-java-dev.sh "Java development tools" << JAVA_DEV_BASHRC_EOF
 # ----------------------------------------------------------------------------
 # Java Development Tool Aliases and Functions
 # ----------------------------------------------------------------------------
@@ -293,7 +297,7 @@ spring-init-web() {
     spring init \
         --type=maven-project \
         --language=java \
-        --boot-version=3.4.2 \
+        --boot-version=${SPRING_VERSION} \
         --group="$group" \
         --artifact="$name" \
         --name="$name" \
@@ -330,7 +334,7 @@ spring-init-api() {
     spring init \
         --type=maven-project \
         --language=java \
-        --boot-version=3.4.2 \
+        --boot-version=${SPRING_VERSION} \
         --group="$group" \
         --artifact="$name" \
         --name="$name" \
@@ -474,7 +478,7 @@ BENCHMARK
     fi
 
     echo "Compiling and running benchmark..."
-    jbang --deps org.openjdk.jmh:jmh-core:1.37,org.openjdk.jmh:jmh-generator-annprocess:1.37 "$file"
+    jbang --deps org.openjdk.jmh:jmh-core:${JMH_VERSION},org.openjdk.jmh:jmh-generator-annprocess:${JMH_VERSION} "\$file"
 }
 
 # Clean up helper functions

@@ -17,7 +17,7 @@
 #   - This allows volume mounting for persistent module cache across container rebuilds
 #
 # Environment Variables:
-#   - GO_VERSION: Go version to install (default: 1.24.5)
+#   - GO_VERSION: Go version to install
 #   - GOPATH: Go workspace directory (default: /cache/go or ~/go)
 #   - GOCACHE: Go build cache (default: within GOPATH)
 #

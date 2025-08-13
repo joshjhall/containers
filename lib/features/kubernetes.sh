@@ -6,7 +6,7 @@
 #   k9s terminal UI, helm package manager, and krew plugin manager with essential plugins.
 #
 # Features:
-#   - kubectl: Official Kubernetes CLI (v1.33.x)
+#   - kubectl: Official Kubernetes CLI
 #   - k9s: Terminal-based Kubernetes cluster UI
 #   - helm: Kubernetes package manager
 #   - krew: kubectl plugin package manager
@@ -15,14 +15,14 @@
 #   - Automatic kubeconfig detection
 #
 # Tools Installed:
-#   - kubectl: v1.33.x from official Kubernetes apt repository
-#   - k9s: v0.50.9 - Terminal UI
+#   - kubectl: From official Kubernetes apt repository
+#   - k9s: Terminal UI for Kubernetes
 #   - helm: Latest version
-#   - krew: v0.4.5 - Plugin manager
+#   - krew: Plugin manager for kubectl
 #
 # Version Compatibility:
 #   kubectl version should be within one minor version of your cluster.
-#   v1.33 client works with v1.32, v1.33, and v1.34 control planes.
+#   The installed client version will work with clusters one version newer or older.
 #
 # Common Commands:
 #   - kubectl get pods: List pods in current namespace

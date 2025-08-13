@@ -116,7 +116,12 @@ echo ""
 read -p "Continue with release? (y/n) " -n 1 -r
 echo
 if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-    echo "Release cancelled"
+    echo -e "${YELLOW}Release cancelled${NC}"
+    echo ""
+    echo "To automatically confirm the release, you can use:"
+    echo -e "  ${BLUE}echo 'y' | $0 $1${NC}"
+    echo "or for non-interactive environments:"
+    echo -e "  ${BLUE}yes | $0 $1${NC}"
     exit 1
 fi
 
