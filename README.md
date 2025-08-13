@@ -261,6 +261,15 @@ The script will check:
 - Tool versions (Poetry, Terraform, kubectl, GitHub CLI, etc.)
 - Report which tools have updates available
 
+#### Automated Weekly Checks
+
+Configure GitLab CI to automatically check for updates weekly with Pushover notifications:
+1. Add `PUSHOVER_USER_KEY` and `PUSHOVER_APP_TOKEN` to CI/CD variables
+2. Create a pipeline schedule for weekly runs
+3. Receive notifications when updates are available
+
+See [docs/scheduled-version-checks.md](docs/scheduled-version-checks.md) for detailed setup instructions.
+
 ### Updating Versions
 When updates are available, edit the appropriate files:
 - Language versions: Update `ARG *_VERSION` in `Dockerfile`

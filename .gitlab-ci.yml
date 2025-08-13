@@ -229,3 +229,80 @@ release:gitlab:
       See [README.md](README.md) for detailed documentation.
   only:
     - tags
+
+# =====================================
+# Scheduled Jobs
+# =====================================
+
+# Weekly version check with Pushover notifications
+check:versions:
+  stage: test
+  image: debian:12-slim
+  variables:
+    # These should be set in GitLab CI/CD variables
+    # PUSHOVER_USER_KEY: set in GitLab settings
+    # PUSHOVER_APP_TOKEN: set in GitLab settings
+    # GITHUB_TOKEN: set in GitLab settings (optional, for rate limits)
+    NOTIFICATION_TITLE: "Container Build System - Version Updates Available"
+  before_script:
+    - apt-get update && apt-get install -y curl jq bash git
+  script:
+    - echo "Checking for version updates..."
+    - |
+      # Run version check and capture output
+      OUTPUT=$(./bin/check-versions.sh json 2>&1 || true)
+      
+      # Parse JSON output
+      if echo "$OUTPUT" | jq -e '.updates | length > 0' >/dev/null 2>&1; then
+        # There are updates available
+        UPDATE_COUNT=$(echo "$OUTPUT" | jq '.updates | length')
+        
+        # Build notification message
+        MESSAGE="Found $UPDATE_COUNT version update(s):\n\n"
+        
+        # Add each update to the message
+        while IFS= read -r update; do
+          TOOL=$(echo "$update" | jq -r '.tool')
+          CURRENT=$(echo "$update" | jq -r '.current')
+          LATEST=$(echo "$update" | jq -r '.latest')
+          MESSAGE="${MESSAGE}• $TOOL: $CURRENT → $LATEST\n"
+        done < <(echo "$OUTPUT" | jq -c '.updates[]')
+        
+        MESSAGE="${MESSAGE}\nRepository: $CI_PROJECT_URL"
+        
+        # Send Pushover notification if credentials are available
+        if [ -n "${PUSHOVER_USER_KEY:-}" ] && [ -n "${PUSHOVER_APP_TOKEN:-}" ]; then
+          echo "Sending Pushover notification..."
+          curl -s \
+            --form-string "token=${PUSHOVER_APP_TOKEN}" \
+            --form-string "user=${PUSHOVER_USER_KEY}" \
+            --form-string "title=${NOTIFICATION_TITLE}" \
+            --form-string "message=${MESSAGE}" \
+            --form-string "url=${CI_PROJECT_URL}/-/pipelines/${CI_PIPELINE_ID}" \
+            --form-string "url_title=View Pipeline" \
+            --form-string "priority=0" \
+            https://api.pushover.net/1/messages.json
+        else
+          echo "WARNING: Pushover credentials not configured"
+          echo "Set PUSHOVER_USER_KEY and PUSHOVER_APP_TOKEN in GitLab CI/CD variables"
+        fi
+        
+        # Also output to job log
+        echo "=== Version Updates Available ==="
+        echo "$OUTPUT" | jq '.updates'
+        
+        # Create artifact with update details
+        echo "$OUTPUT" > version-updates.json
+      else
+        echo "All versions are up to date!"
+      fi
+  artifacts:
+    paths:
+      - version-updates.json
+    expire_in: 1 week
+    when: on_success
+  only:
+    - schedules
+  except:
+    variables:
+      - $SKIP_VERSION_CHECK == "true"
