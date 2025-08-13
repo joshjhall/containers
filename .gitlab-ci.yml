@@ -319,6 +319,41 @@ check:versions:
         
         # Create artifact with update details
         echo "$OUTPUT" > version-updates.json
+        
+        # Apply automatic updates to develop branch
+        if [ "${AUTO_UPDATE_VERSIONS:-true}" = "true" ]; then
+          echo ""
+          echo "=== Applying Automatic Updates ==="
+          
+          # Configure git for commits
+          git config --global user.email "ci@gitlab.com"
+          git config --global user.name "GitLab CI"
+          
+          # Ensure we're on develop branch
+          git checkout develop
+          
+          # Run the update script with the JSON output
+          ./bin/update-versions.sh --input version-updates.json
+          
+          # Push to develop branch if there were commits
+          if [ "$(git rev-parse HEAD)" != "$(git rev-parse @{u})" ]; then
+            echo ""
+            echo "=== Pushing Updates to Develop ==="
+            # Need to use a token for authentication in CI
+            if [ -n "${CI_JOB_TOKEN:-}" ]; then
+              git push "https://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git" HEAD:develop
+            else
+              echo "ERROR: Cannot push - no CI_JOB_TOKEN available"
+              exit 1
+            fi
+            
+            echo "✓ Successfully updated versions and bumped to patch release"
+          else
+            echo "No new commits to push"
+          fi
+        else
+          echo "Automatic updates disabled (set AUTO_UPDATE_VERSIONS=true to enable)"
+        fi
       else
         echo "All versions are up to date!"
         # Create empty artifact to avoid warning
