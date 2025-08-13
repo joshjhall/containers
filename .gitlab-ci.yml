@@ -275,31 +275,18 @@ check:versions:
         # There are updates available
         UPDATE_COUNT=$(echo "$OUTDATED" | jq 'length')
         
-        # Build notification message
-        MESSAGE="Found $UPDATE_COUNT version update(s):\n\n"
+        # Build notification message with proper line breaks for Pushover
+        MESSAGE="Found $UPDATE_COUNT version update(s):"$'\n'$'\n'
         
         # Add each update to the message
         while IFS= read -r update; do
           TOOL=$(echo "$update" | jq -r '.tool')
           CURRENT=$(echo "$update" | jq -r '.current')
           LATEST=$(echo "$update" | jq -r '.latest')
-          MESSAGE="${MESSAGE}• $TOOL: $CURRENT → $LATEST\n"
+          MESSAGE="${MESSAGE}• $TOOL: $CURRENT → $LATEST"$'\n'
         done < <(echo "$OUTDATED" | jq -c '.[]')
         
-        MESSAGE="${MESSAGE}\nRepository: $CI_PROJECT_URL"
-        
-        # Debug: Check if variables are set (mask the actual values)
-        echo "DEBUG: Checking Pushover credentials..."
-        if [ -n "${PUSHOVER_USER_KEY:-}" ]; then
-          echo "DEBUG: PUSHOVER_USER_KEY is set (length: ${#PUSHOVER_USER_KEY})"
-        else
-          echo "DEBUG: PUSHOVER_USER_KEY is NOT set or empty"
-        fi
-        if [ -n "${PUSHOVER_APP_TOKEN:-}" ]; then
-          echo "DEBUG: PUSHOVER_APP_TOKEN is set (length: ${#PUSHOVER_APP_TOKEN})"
-        else
-          echo "DEBUG: PUSHOVER_APP_TOKEN is NOT set or empty"
-        fi
+        MESSAGE="${MESSAGE}"$'\n'"Repository: $CI_PROJECT_URL"
         
         # Send Pushover notification if credentials are available
         if [ -n "${PUSHOVER_USER_KEY:-}" ] && [ -n "${PUSHOVER_APP_TOKEN:-}" ]; then

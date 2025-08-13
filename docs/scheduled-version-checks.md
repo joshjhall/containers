@@ -24,6 +24,8 @@ Navigate to your **project's** Settings → CI/CD → Variables (not group varia
 **Important Configuration Notes:**
 - **Scope**: Add as PROJECT variables (not group variables)
 - **Protected**: Enable to restrict access to protected branches/tags only
+  - If using protected variables, ensure your target branch (develop/main) is also protected
+  - Go to Settings → Repository → Protected branches to protect the branch
 - **Masked**: Enable to hide values in job logs (values must meet masking requirements)
 - **Expanded**: Keep DISABLED - we need the literal token values, not variable expansion
 
