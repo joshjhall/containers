@@ -141,7 +141,7 @@ test_no_updates() {
 EOF
     
     cd "$test_dir"
-    output=$(PROJECT_ROOT_OVERRIDE="$test_dir" "$PROJECT_ROOT/bin/update-versions.sh" --input test.json 2>&1)
+    output=$(PROJECT_ROOT_OVERRIDE="$test_dir" "$PROJECT_ROOT/bin/update-versions.sh" --no-bump --input test.json 2>&1)
     
     if echo "$output" | grep -q "All versions are up to date"; then
         rm -rf "$test_dir"
