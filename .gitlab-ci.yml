@@ -342,14 +342,16 @@ check:versions:
           git config --global user.email "ci@gitlab.com"
           git config --global user.name "GitLab CI"
           
-          # Ensure we're on develop branch
-          git checkout develop
+          # Fetch latest changes and checkout develop branch
+          git fetch origin develop
+          git checkout -B develop origin/develop
           
           # Run the update script with the JSON output from temp location
           ./bin/update-versions.sh --input "$TEMP_JSON"
           
-          # Push to develop branch if there were commits
-          if [ "$(git rev-parse HEAD)" != "$(git rev-parse @{u})" ]; then
+          # Check if there are new commits to push
+          # Compare with the fetched origin/develop
+          if [ "$(git rev-parse HEAD)" != "$(git rev-parse origin/develop)" ]; then
             echo ""
             echo "=== Pushing Updates to Develop ==="
             
