@@ -11,7 +11,7 @@
 #   - Build Tools: webpack, vite, esbuild, rollup, parcel
 #   - TypeScript: typescript, ts-node, tsx
 #   - Process Management: pm2, nodemon, concurrently
-#   - Debugging: ndb, clinic
+#   - Profiling: clinic (use Node.js --inspect for debugging)
 #   - API Development: express-generator, fastify-cli
 #   - Documentation: jsdoc, typedoc
 #   - Utilities: npm-check-updates, npkill, serve, http-server
@@ -116,12 +116,15 @@ log_command "Installing process management tools" \
     npm_install_as_user pm2 nodemon concurrently wait-on
 
 # Debugging and profiling
-log_command "Installing debugging tools" \
-    npm_install_as_user ndb clinic
+# Note: ndb removed as it's unmaintained (last update 6 years ago)
+# Modern debugging should use Node.js built-in --inspect with Chrome DevTools
+log_command "Installing profiling tools" \
+    npm_install_as_user clinic
 
 # API development tools
+# Note: express-generator has deprecated dependencies but is still officially maintained
 log_command "Installing API development tools" \
-    npm_install_as_user express-generator @nestjs/cli fastify-cli json-server
+    npm_install_as_user @nestjs/cli fastify-cli json-server
 
 # Documentation generators
 log_command "Installing documentation tools" \
@@ -205,6 +208,12 @@ alias pm2s='pm2 status'
 alias pm2l='pm2 logs'
 alias pm2r='pm2 restart'
 alias nmon='nodemon'
+
+# Debugging aliases (using built-in Node.js inspector)
+alias node-debug='node --inspect'
+alias node-debug-brk='node --inspect-brk'
+alias node-debug-wait='node --inspect-wait'
+alias npm-debug='npm run --node-options="--inspect"'
 
 # ----------------------------------------------------------------------------
 # node-new-project - Create a new Node.js project with TypeScript
