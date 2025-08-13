@@ -288,6 +288,19 @@ check:versions:
         
         MESSAGE="${MESSAGE}\nRepository: $CI_PROJECT_URL"
         
+        # Debug: Check if variables are set (mask the actual values)
+        echo "DEBUG: Checking Pushover credentials..."
+        if [ -n "${PUSHOVER_USER_KEY:-}" ]; then
+          echo "DEBUG: PUSHOVER_USER_KEY is set (length: ${#PUSHOVER_USER_KEY})"
+        else
+          echo "DEBUG: PUSHOVER_USER_KEY is NOT set or empty"
+        fi
+        if [ -n "${PUSHOVER_APP_TOKEN:-}" ]; then
+          echo "DEBUG: PUSHOVER_APP_TOKEN is set (length: ${#PUSHOVER_APP_TOKEN})"
+        else
+          echo "DEBUG: PUSHOVER_APP_TOKEN is NOT set or empty"
+        fi
+        
         # Send Pushover notification if credentials are available
         if [ -n "${PUSHOVER_USER_KEY:-}" ] && [ -n "${PUSHOVER_APP_TOKEN:-}" ]; then
           echo "Sending Pushover notification..."
