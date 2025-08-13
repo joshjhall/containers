@@ -266,12 +266,14 @@ check:versions:
     - echo "Checking for version updates..."
     - |
       # Run version check and capture output
-      OUTPUT=$(./bin/check-versions.sh json 2>&1 || true)
+      OUTPUT=$(./bin/check-versions.sh --json 2>&1 || true)
       
-      # Parse JSON output
-      if echo "$OUTPUT" | jq -e '.updates | length > 0' >/dev/null 2>&1; then
+      # Parse JSON output - filter for outdated tools
+      OUTDATED=$(echo "$OUTPUT" | jq '[.tools[] | select(.status == "outdated")]')
+      
+      if echo "$OUTDATED" | jq -e 'length > 0' >/dev/null 2>&1; then
         # There are updates available
-        UPDATE_COUNT=$(echo "$OUTPUT" | jq '.updates | length')
+        UPDATE_COUNT=$(echo "$OUTDATED" | jq 'length')
         
         # Build notification message
         MESSAGE="Found $UPDATE_COUNT version update(s):\n\n"
@@ -282,7 +284,7 @@ check:versions:
           CURRENT=$(echo "$update" | jq -r '.current')
           LATEST=$(echo "$update" | jq -r '.latest')
           MESSAGE="${MESSAGE}• $TOOL: $CURRENT → $LATEST\n"
-        done < <(echo "$OUTPUT" | jq -c '.updates[]')
+        done < <(echo "$OUTDATED" | jq -c '.[]')
         
         MESSAGE="${MESSAGE}\nRepository: $CI_PROJECT_URL"
         
@@ -313,7 +315,7 @@ check:versions:
         
         # Also output to job log
         echo "=== Version Updates Available ==="
-        echo "$OUTPUT" | jq '.updates'
+        echo "$OUTDATED" | jq '.'
         
         # Create artifact with update details
         echo "$OUTPUT" > version-updates.json
