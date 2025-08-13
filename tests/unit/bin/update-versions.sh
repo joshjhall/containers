@@ -51,7 +51,7 @@ EOF
     
     # Run in dry run mode
     cd "$test_dir"
-    output=$("$PROJECT_ROOT/bin/update-versions.sh" --dry-run --input test.json 2>&1)
+    output=$(PROJECT_ROOT_OVERRIDE="$test_dir" "$PROJECT_ROOT/bin/update-versions.sh" --dry-run --input test.json 2>&1)
     
     # Check that file wasn't modified
     if grep -q "ARG PYTHON_VERSION=3.13.0" Dockerfile && echo "$output" | grep -q "DRY RUN"; then
@@ -108,7 +108,7 @@ EOF
     echo "1.4.0" > VERSION
     
     # Run update with --no-commit to avoid git operations
-    "$PROJECT_ROOT/bin/update-versions.sh" --no-commit --no-bump --input test.json >/dev/null 2>&1
+    PROJECT_ROOT_OVERRIDE="$test_dir" "$PROJECT_ROOT/bin/update-versions.sh" --no-commit --no-bump --input test.json >/dev/null 2>&1
     
     # Check that file was modified
     if grep -q "ARG PYTHON_VERSION=3.13.6" Dockerfile; then
@@ -141,7 +141,7 @@ test_no_updates() {
 EOF
     
     cd "$test_dir"
-    output=$("$PROJECT_ROOT/bin/update-versions.sh" --input test.json 2>&1)
+    output=$(PROJECT_ROOT_OVERRIDE="$test_dir" "$PROJECT_ROOT/bin/update-versions.sh" --input test.json 2>&1)
     
     if echo "$output" | grep -q "All versions are up to date"; then
         rm -rf "$test_dir"
@@ -207,7 +207,7 @@ EOF
     echo "1.4.0" > VERSION
     
     # Run update
-    "$PROJECT_ROOT/bin/update-versions.sh" --no-commit --no-bump --input test.json >/dev/null 2>&1
+    PROJECT_ROOT_OVERRIDE="$test_dir" "$PROJECT_ROOT/bin/update-versions.sh" --no-commit --no-bump --input test.json >/dev/null 2>&1
     
     # Check that file was modified
     if grep -q 'LAZYGIT_VERSION="0.54.2"' lib/features/dev-tools.sh; then
