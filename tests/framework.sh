@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Test Framework for Container Build System
-# Version: 1.4.0
+# Version: 2.0.0
 # Test framework for container build system
 #
 # Provides comprehensive assertion-based testing for container builds.
@@ -34,7 +34,7 @@
 set -euo pipefail
 
 # Framework version
-readonly TEST_FRAMEWORK_VERSION="1.4.0"
+readonly TEST_FRAMEWORK_VERSION="2.0.0"
 
 # Initialize test directories
 TESTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
