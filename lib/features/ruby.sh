@@ -99,7 +99,7 @@ log_command "Configuring Ruby build" \
     --with-opt-dir=/usr/local
 
 log_command "Building Ruby (this may take several minutes)" \
-    make -j$(nproc)
+    make -j"$(nproc)"
 
 log_command "Installing Ruby" \
     make install

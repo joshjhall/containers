@@ -25,7 +25,6 @@ source /tmp/build-scripts/base/feature-header.sh
 # Version Configuration
 # ============================================================================
 PYTHON_VERSION="${PYTHON_VERSION:-3.13.5}"
-PYTHON_MAJOR=$(echo $PYTHON_VERSION | cut -d. -f1,2)
 
 # Start logging
 log_feature_start "Python" "${PYTHON_VERSION}"
@@ -108,7 +107,7 @@ log_command "Configuring Python build" \
 
 # Build and install Python
 log_command "Building Python (this may take several minutes)" \
-    make -j$(nproc)
+    make -j"$(nproc)"
 
 log_command "Installing Python" \
     make install
