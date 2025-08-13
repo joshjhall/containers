@@ -239,6 +239,63 @@ test_exit_code_outdated() {
     assert_true true "Exit code test placeholder (requires full mocking)"
 }
 
+# Test: Script extracts Java dev tool versions
+test_extract_java_dev_versions() {
+    # Check if java-dev.sh exists and has version definitions
+    if [ -f "$PROJECT_ROOT/lib/features/java-dev.sh" ]; then
+        # Test both regular and indented versions
+        local spring_ver=$(grep '^SPRING_VERSION=' "$PROJECT_ROOT/lib/features/java-dev.sh" 2>/dev/null | cut -d= -f2 | tr -d '"')
+        local jbang_ver=$(grep '^JBANG_VERSION=' "$PROJECT_ROOT/lib/features/java-dev.sh" 2>/dev/null | cut -d= -f2 | tr -d '"')
+        # MVND_VERSION is indented in the actual file
+        local mvnd_ver=$(grep 'MVND_VERSION=' "$PROJECT_ROOT/lib/features/java-dev.sh" 2>/dev/null | sed 's/.*MVND_VERSION=//' | tr -d '"' | head -1)
+        local gjf_ver=$(grep '^GJF_VERSION=' "$PROJECT_ROOT/lib/features/java-dev.sh" 2>/dev/null | cut -d= -f2 | tr -d '"')
+        
+        assert_not_empty "$spring_ver" "Spring Boot CLI version extracted"
+        assert_not_empty "$jbang_ver" "JBang version extracted"
+        assert_not_empty "$mvnd_ver" "MVND version extracted (indented)"
+        assert_not_empty "$gjf_ver" "Google Java Format version extracted"
+    else
+        skip_test "java-dev.sh not found"
+    fi
+}
+
+# Test: Script extracts duf and entr versions
+test_extract_duf_entr_versions() {
+    # Check if dev-tools.sh has duf and entr version definitions
+    if [ -f "$PROJECT_ROOT/lib/features/dev-tools.sh" ]; then
+        local duf_ver=$(grep '^DUF_VERSION=' "$PROJECT_ROOT/lib/features/dev-tools.sh" 2>/dev/null | cut -d= -f2 | tr -d '"')
+        local entr_ver=$(grep '^ENTR_VERSION=' "$PROJECT_ROOT/lib/features/dev-tools.sh" 2>/dev/null | cut -d= -f2 | tr -d '"')
+        
+        assert_not_empty "$duf_ver" "duf version extracted from dev-tools.sh"
+        assert_not_empty "$entr_ver" "entr version extracted from dev-tools.sh"
+    else
+        skip_test "dev-tools.sh not found"
+    fi
+}
+
+# Test: Script handles indented version patterns
+test_handle_indented_versions() {
+    # Create a temporary test script with indented versions
+    local test_script="$RESULTS_DIR/test_indented.sh"
+    cat > "$test_script" <<'EOF'
+#!/bin/bash
+if [ condition ]; then
+    SOME_VERSION="1.2.3"
+    ANOTHER_VERSION="4.5.6"
+fi
+EOF
+    
+    # Check if indented versions can be extracted with proper pattern
+    local some_ver=$(grep '^\s*SOME_VERSION=' "$test_script" 2>/dev/null | sed 's/.*=//' | tr -d '"')
+    local another_ver=$(grep 'ANOTHER_VERSION=' "$test_script" 2>/dev/null | sed 's/.*=//' | tr -d '"')
+    
+    assert_equals "1.2.3" "$some_ver" "Indented version extracted correctly"
+    assert_equals "4.5.6" "$another_ver" "Another indented version extracted correctly"
+    
+    # Clean up
+    rm -f "$test_script"
+}
+
 # Run tests
 run_test test_script_exists "Version checker script exists and is executable"
 run_test test_version_matches_exact "version_matches handles exact matches"
@@ -250,6 +307,9 @@ run_test test_extract_feature_versions "Script extracts versions from feature sc
 run_test test_json_output_format "JSON output format is correct"
 run_test test_exit_code_current "Exit code is 0 when all versions current"
 run_test test_exit_code_outdated "Exit code is 1 when versions outdated"
+run_test test_extract_java_dev_versions "Script extracts Java dev tool versions"
+run_test test_extract_duf_entr_versions "Script extracts duf and entr versions"
+run_test test_handle_indented_versions "Script handles indented version patterns"
 
 # Generate test report
 generate_report
