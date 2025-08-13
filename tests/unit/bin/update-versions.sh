@@ -219,6 +219,170 @@ EOF
     fi
 }
 
+# Test: Java dev tools update
+test_java_dev_tools_update() {
+    # Create temporary test directory
+    local test_dir=$(mktemp -d)
+    
+    # Create lib/features directory and mock script
+    mkdir -p "$test_dir/lib/features"
+    cat > "$test_dir/lib/features/java-dev.sh" << 'EOF'
+#!/bin/bash
+SPRING_VERSION="3.4.2"
+JBANG_VERSION="0.121.0"
+    MVND_VERSION="1.0.2"
+GJF_VERSION="1.25.2"
+EOF
+    
+    # Create mock JSON with Java tool updates
+    cat > "$test_dir/test.json" << 'EOF'
+{
+  "tools": [
+    {
+      "tool": "spring-boot-cli",
+      "current": "3.4.2",
+      "latest": "3.5.4",
+      "file": "java-dev.sh",
+      "status": "outdated"
+    },
+    {
+      "tool": "jbang",
+      "current": "0.121.0",
+      "latest": "0.129.0",
+      "file": "java-dev.sh",
+      "status": "outdated"
+    },
+    {
+      "tool": "mvnd",
+      "current": "1.0.2",
+      "latest": "1.0.3",
+      "file": "java-dev.sh",
+      "status": "outdated"
+    },
+    {
+      "tool": "google-java-format",
+      "current": "1.25.2",
+      "latest": "1.28.0",
+      "file": "java-dev.sh",
+      "status": "outdated"
+    }
+  ]
+}
+EOF
+    
+    # Initialize git repo
+    cd "$test_dir"
+    git init --quiet
+    git config user.email "test@example.com"
+    git config user.name "Test User"
+    git add -A
+    git commit -m "Initial" --quiet
+    
+    # Create mock release script
+    mkdir -p bin
+    echo '#!/bin/bash' > bin/release.sh
+    echo 'echo "1.4.1" > VERSION' >> bin/release.sh
+    chmod +x bin/release.sh
+    echo "1.4.0" > VERSION
+    
+    # Run update
+    PROJECT_ROOT_OVERRIDE="$test_dir" "$PROJECT_ROOT/bin/update-versions.sh" --no-commit --no-bump --input test.json >/dev/null 2>&1
+    
+    # Check that all Java tools were updated
+    local all_updated=true
+    if ! grep -q 'SPRING_VERSION="3.5.4"' lib/features/java-dev.sh; then
+        all_updated=false
+    fi
+    if ! grep -q 'JBANG_VERSION="0.129.0"' lib/features/java-dev.sh; then
+        all_updated=false
+    fi
+    if ! grep -q 'MVND_VERSION="1.0.3"' lib/features/java-dev.sh; then
+        all_updated=false
+    fi
+    if ! grep -q 'GJF_VERSION="1.28.0"' lib/features/java-dev.sh; then
+        all_updated=false
+    fi
+    
+    rm -rf "$test_dir"
+    
+    if [ "$all_updated" = true ]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+# Test: duf and entr updates
+test_duf_entr_update() {
+    # Create temporary test directory
+    local test_dir=$(mktemp -d)
+    
+    # Create lib/features directory and mock script
+    mkdir -p "$test_dir/lib/features"
+    cat > "$test_dir/lib/features/dev-tools.sh" << 'EOF'
+#!/bin/bash
+DUF_VERSION="0.8.0"
+ENTR_VERSION="5.5"
+EOF
+    
+    # Create mock JSON with tool updates
+    cat > "$test_dir/test.json" << 'EOF'
+{
+  "tools": [
+    {
+      "tool": "duf",
+      "current": "0.8.0",
+      "latest": "0.8.1",
+      "file": "dev-tools.sh",
+      "status": "outdated"
+    },
+    {
+      "tool": "entr",
+      "current": "5.5",
+      "latest": "5.7",
+      "file": "dev-tools.sh",
+      "status": "outdated"
+    }
+  ]
+}
+EOF
+    
+    # Initialize git repo
+    cd "$test_dir"
+    git init --quiet
+    git config user.email "test@example.com"
+    git config user.name "Test User"
+    git add -A
+    git commit -m "Initial" --quiet
+    
+    # Create mock release script
+    mkdir -p bin
+    echo '#!/bin/bash' > bin/release.sh
+    echo 'echo "1.4.1" > VERSION' >> bin/release.sh
+    chmod +x bin/release.sh
+    echo "1.4.0" > VERSION
+    
+    # Run update
+    PROJECT_ROOT_OVERRIDE="$test_dir" "$PROJECT_ROOT/bin/update-versions.sh" --no-commit --no-bump --input test.json >/dev/null 2>&1
+    
+    # Check that both tools were updated
+    local all_updated=true
+    if ! grep -q 'DUF_VERSION="0.8.1"' lib/features/dev-tools.sh; then
+        all_updated=false
+    fi
+    if ! grep -q 'ENTR_VERSION="5.7"' lib/features/dev-tools.sh; then
+        all_updated=false
+    fi
+    
+    rm -rf "$test_dir"
+    
+    if [ "$all_updated" = true ]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
 # Run tests
 run_test test_help_output "Help output displays correctly"
 run_test test_dry_run_mode "Dry run mode doesn't modify files"
@@ -226,6 +390,8 @@ run_test test_version_update "Version updates are applied"
 run_test test_no_updates "Handles no updates needed"
 run_test test_invalid_input "Handles invalid input file"
 run_test test_shell_script_update "Updates shell script versions"
+run_test test_java_dev_tools_update "Updates Java dev tool versions"
+run_test test_duf_entr_update "Updates duf and entr versions"
 
 # Generate report
 generate_report
