@@ -4,7 +4,7 @@
 variables:
   # Registry settings
   REGISTRY_IMAGE: $CI_REGISTRY_IMAGE
-  PROJECT_NAME: "containers"
+  PROJECT_NAME: 'containers'
 
 stages:
   - test
@@ -24,7 +24,7 @@ test:unit:
     - apt-get update && apt-get install -y bash
     # Set flag to skip Docker checks since we're testing bash scripts
     - export SKIP_DOCKER_CHECK=true
-    - ./tests/run_unit_tests.sh || true  # Allow failure for now
+    - ./tests/run_unit_tests.sh || true # Allow failure for now
   artifacts:
     paths:
       - tests/results/
@@ -63,7 +63,7 @@ build:minimal:
   stage: build
   image:
     name: gcr.io/kaniko-project/executor:v1.23.0-debug
-    entrypoint: [""]
+    entrypoint: ['']
   script:
     - echo "Building minimal container with Kaniko..."
     - |
@@ -88,7 +88,7 @@ build:python-dev:
   stage: build
   image:
     name: gcr.io/kaniko-project/executor:v1.23.0-debug
-    entrypoint: [""]
+    entrypoint: ['']
   script:
     - echo "Building Python development container with Kaniko..."
     - |
@@ -120,7 +120,7 @@ build:node-dev:
   stage: build
   image:
     name: gcr.io/kaniko-project/executor:v1.23.0-debug
-    entrypoint: [""]
+    entrypoint: ['']
   script:
     - echo "Building Node.js development container with Kaniko..."
     - |
@@ -152,7 +152,7 @@ build:cloud-ops:
   stage: build
   image:
     name: gcr.io/kaniko-project/executor:v1.23.0-debug
-    entrypoint: [""]
+    entrypoint: ['']
   script:
     - echo "Building cloud operations container with Kaniko..."
     - |
@@ -184,7 +184,7 @@ build:polyglot:
   stage: build
   image:
     name: gcr.io/kaniko-project/executor:v1.23.0-debug
-    entrypoint: [""]
+    entrypoint: ['']
   script:
     - echo "Building polyglot development container with Kaniko..."
     - |
@@ -223,23 +223,23 @@ release:gitlab:
     - echo "Creating GitLab release for version $CI_COMMIT_TAG..."
   release:
     tag_name: $CI_COMMIT_TAG
-    name: "Release $CI_COMMIT_TAG"
+    name: 'Release $CI_COMMIT_TAG'
     description: |
       ## Container Build System Release $CI_COMMIT_TAG
-      
+
       ### Available Images
       - `$CI_REGISTRY_IMAGE:minimal-$CI_COMMIT_TAG` - Minimal base container
       - `$CI_REGISTRY_IMAGE:python-dev-$CI_COMMIT_TAG` - Python development environment with databases & tools
       - `$CI_REGISTRY_IMAGE:node-dev-$CI_COMMIT_TAG` - Node.js development environment with databases & tools
       - `$CI_REGISTRY_IMAGE:cloud-ops-$CI_COMMIT_TAG` - Cloud operations (K8s, Terraform, AWS/GCP/CF)
       - `$CI_REGISTRY_IMAGE:polyglot-$CI_COMMIT_TAG` - Python + Node.js combined environment
-      
+
       ### Usage
       ```bash
       docker pull $CI_REGISTRY_IMAGE:python-dev-$CI_COMMIT_TAG
       docker run -it --rm $CI_REGISTRY_IMAGE:python-dev-$CI_COMMIT_TAG
       ```
-      
+
       See [README.md](README.md) for detailed documentation.
   rules:
     - if: '$CI_PIPELINE_SOURCE == "schedule"'
@@ -251,7 +251,7 @@ release:gitlab:
 # =====================================
 
 # Weekly version check with Pushover notifications and automatic updates
-# 
+#
 # Required CI/CD Variables for notifications:
 #   - PUSHOVER_USER_KEY: Your Pushover user key
 #   - PUSHOVER_APP_TOKEN: Your Pushover application token
@@ -271,7 +271,7 @@ check:versions:
     # PUSHOVER_APP_TOKEN: set in GitLab settings (protected branch)
     # CI_PUSH_TOKEN: set in GitLab settings (for pushing updates)
     # GITHUB_TOKEN: set in GitLab settings (optional, for rate limits)
-    NOTIFICATION_TITLE: "Container Build System - Version Updates Available"
+    NOTIFICATION_TITLE: 'Container Build System - Version Updates Available'
   before_script:
     - apt-get update && apt-get install -y curl jq bash git
   script:
@@ -279,10 +279,10 @@ check:versions:
     - |
       # Run version check and capture output
       OUTPUT=$(./bin/check-versions.sh --json 2>&1 || true)
-      
+
       # Parse JSON output - filter for outdated tools
       OUTDATED=$(echo "$OUTPUT" | jq '[.tools[] | select(.status == "outdated")]')
-      
+
       if echo "$OUTDATED" | jq -e 'length > 0' >/dev/null 2>&1; then
         # There are updates available
         UPDATE_COUNT=$(echo "$OUTDATED" | jq 'length')

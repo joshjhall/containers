@@ -20,9 +20,9 @@ services:
     volumes:
       - redis-data:/data
     ports:
-      - "6379:6379"
+      - '6379:6379'
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ['CMD', 'redis-cli', 'ping']
       interval: 10s
       timeout: 5s
       retries: 5
@@ -44,25 +44,25 @@ services:
     environment:
       # Redis connection
       - REDIS_URL=redis://redis:6379
-      
+
       # Agent configuration
       - AGENT_ID=${HOSTNAME:-agent}-${RANDOM:-1}
       - AGENT_TYPE=${AGENT_TYPE:-worker}
       - AGENT_LOG_LEVEL=${AGENT_LOG_LEVEL:-info}
-      
+
       # Ollama configuration (if using local models)
       - OLLAMA_HOST=${OLLAMA_HOST:-http://host.docker.internal:11434}
-      
+
       # API keys (if using cloud models)
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
     volumes:
       # Shared knowledge base
       - knowledge-base:/workspace/knowledge
-      
+
       # Agent-specific workspace
       - agent-workspace:/workspace/agent
-      
+
       # Logs
       - ./logs:/workspace/logs
     deploy:
@@ -75,7 +75,7 @@ services:
           cpus: '0.5'
           memory: 1G
     healthcheck:
-      test: ["CMD", "agent", "health"]
+      test: ['CMD', 'agent', 'health']
       interval: 30s
       timeout: 10s
       retries: 3
@@ -87,7 +87,7 @@ services:
     volumes:
       - ollama-models:/root/.ollama
     ports:
-      - "11434:11434"
+      - '11434:11434'
     deploy:
       resources:
         limits:
@@ -118,7 +118,7 @@ services:
       - knowledge-base:/workspace/knowledge
       - ./logs:/workspace/logs
     ports:
-      - "8080:8080"  # API/Dashboard port
+      - '8080:8080' # API/Dashboard port
     deploy:
       # Only one coordinator
       replicas: 1

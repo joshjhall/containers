@@ -5,6 +5,7 @@ This document explains how to set up automated weekly version checks with Pushov
 ## Overview
 
 The container build system includes a scheduled job that:
+
 1. Runs weekly to check for new versions of pinned dependencies
 2. Sends Pushover notifications when updates are available
 3. Creates artifacts with update details
@@ -22,6 +23,7 @@ Navigate to your **project's** Settings → CI/CD → Variables (not group varia
 | `GITHUB_TOKEN` | Variable | ✅ | ✅ | ❌ | GitHub token (optional, for API rate limits) | `ghp_1234567890` |
 
 **Important Configuration Notes:**
+
 - **Scope**: Add as PROJECT variables (not group variables)
 - **Protected**: Enable to restrict access to protected branches/tags only
   - If using protected variables, ensure your target branch (develop/main) is also protected
@@ -45,6 +47,7 @@ Navigate to your **project's** Settings → CI/CD → Variables (not group varia
 ### 3. Pushover Setup
 
 If you don't have Pushover:
+
 1. Create an account at [pushover.net](https://pushover.net)
 2. Install the mobile app
 3. Create an application for notifications:
@@ -57,7 +60,7 @@ If you don't have Pushover:
 
 When updates are available, you'll receive a notification like:
 
-```
+```text
 Container Build System - Version Updates Available
 
 Found 3 version update(s):
@@ -82,6 +85,7 @@ To test the scheduled job manually:
 ### Notification Priority
 
 Edit `.gitlab-ci.yml` to change priority:
+
 - `-2`: Lowest (no notification)
 - `-1`: Low (no sound/vibration)
 - `0`: Normal (default)
@@ -91,6 +95,7 @@ Edit `.gitlab-ci.yml` to change priority:
 ### Check Frequency
 
 Modify the cron pattern in the schedule:
+
 - Daily: `0 9 * * *`
 - Weekly: `0 9 * * 1` (Mondays)
 - Monthly: `0 9 1 * *` (First day of month)
@@ -98,6 +103,7 @@ Modify the cron pattern in the schedule:
 ### Skip Checks
 
 To temporarily disable version checks, set a variable in the schedule:
+
 - Variable: `SKIP_VERSION_CHECK`
 - Value: `true`
 
@@ -113,6 +119,7 @@ To temporarily disable version checks, set a variable in the schedule:
 ### Rate Limiting
 
 If you see GitHub API rate limit errors:
+
 1. Add `GITHUB_TOKEN` variable with a personal access token
 2. Create token at [github.com/settings/tokens](https://github.com/settings/tokens)
 3. No special permissions needed for public repos
@@ -120,6 +127,7 @@ If you see GitHub API rate limit errors:
 ### Version Check Failures
 
 The job uses `|| true` to prevent pipeline failures. Check:
+
 1. Job artifacts for `version-updates.json`
 2. Job logs for error messages
 3. Ensure `./bin/check-versions.sh` is executable
@@ -127,6 +135,7 @@ The job uses `|| true` to prevent pipeline failures. Check:
 ## Alternative Notification Methods
 
 While this implementation uses Pushover, you can modify the job to use:
+
 - Email (using GitLab's built-in email)
 - Slack webhooks
 - Discord webhooks
@@ -134,6 +143,7 @@ While this implementation uses Pushover, you can modify the job to use:
 - Custom webhooks
 
 Example for Slack:
+
 ```yaml
 # Replace Pushover section with:
 curl -X POST -H 'Content-type: application/json' \

@@ -1,7 +1,9 @@
 # Container Architecture Review Summary
 
 ## Architecture Detection
+
 All feature scripts properly detect architecture using:
+
 ```bash
 ARCH=$(dpkg --print-architecture)
 ```
@@ -9,6 +11,7 @@ ARCH=$(dpkg --print-architecture)
 ## Architecture Support by Feature
 
 ### Full Support (amd64 & arm64)
+
 - **Python**: Universal (builds from source)
 - **Node.js**: Both architectures via official n tool
 - **Ruby**: Both architectures via rbenv
@@ -23,17 +26,20 @@ ARCH=$(dpkg --print-architecture)
 - **Development tools**: Most support both
 
 ### Limited Support
+
 - **Mojo**: amd64 only (checks and exits gracefully on arm64)
 - Some specific tools may have limited arm64 binaries
 
 ## Key Patterns Used
 
 1. **Architecture Detection**:
+
    ```bash
    ARCH=$(dpkg --print-architecture)
    ```
 
 2. **URL Selection**:
+
    ```bash
    if [ "$ARCH" = "amd64" ]; then
        URL="...x86_64..."
@@ -43,6 +49,7 @@ ARCH=$(dpkg --print-architecture)
    ```
 
 3. **Graceful Fallback**:
+
    ```bash
    if [ "$ARCH" != "amd64" ]; then
        log_warning "Tool only supports x86_64"
@@ -52,20 +59,24 @@ ARCH=$(dpkg --print-architecture)
 
 ## Build Commands
 
-### Standard Build (native architecture):
+### Standard Build (native architecture)
+
 ```bash
 ./build-all-features.sh
 ```
 
-### AMD64 Build with Mojo:
+### AMD64 Build with Mojo
+
 ```bash
 ./build-amd64-with-mojo.sh
 ```
 
-### Cross-platform Build:
+### Cross-platform Build
+
 ```bash
 docker buildx build --platform linux/amd64,linux/arm64 ...
 ```
 
 ## Testing
+
 The test script (`test-all-features.sh`) works with any architecture and properly detects installed features.

@@ -8,7 +8,7 @@ The Container Build System includes a comprehensive testing framework with 450+ 
 
 ### Test Structure
 
-```
+```text
 tests/
 ├── framework.sh           # Core testing framework with assertions
 ├── run_unit_tests.sh      # Main test runner
@@ -86,18 +86,21 @@ generate_report
 The framework provides comprehensive assertion functions:
 
 ### Basic Assertions
+
 - `assert_true <condition> [message]` - Assert condition is true
 - `assert_false <condition> [message]` - Assert condition is false
 - `assert_equals <expected> <actual> [message]` - Assert values are equal
 - `assert_not_equals <expected> <actual> [message]` - Assert values are not equal
 
 ### String Assertions
+
 - `assert_empty <value> [message]` - Assert string is empty
 - `assert_not_empty <value> [message]` - Assert string is not empty
 - `assert_contains <haystack> <needle> [message]` - Assert string contains substring
 - `assert_not_contains <haystack> <needle> [message]` - Assert string doesn't contain substring
 
 ### File Assertions
+
 - `assert_file_exists <path> [message]` - Assert file exists
 - `assert_file_not_exists <path> [message]` - Assert file doesn't exist
 - `assert_directory_exists <path> [message]` - Assert directory exists
@@ -105,6 +108,7 @@ The framework provides comprehensive assertion functions:
 - `assert_executable <path> [message]` - Assert file is executable
 
 ### Command Assertions
+
 - `assert_command_exists <command> [message]` - Assert command is available
 - `assert_command_not_exists <command> [message]` - Assert command is not available
 - `assert_exit_code <expected> <actual> [message]` - Assert exit code matches
@@ -112,16 +116,19 @@ The framework provides comprehensive assertion functions:
 ## Running Tests
 
 ### Run All Tests
+
 ```bash
 ./tests/run_unit_tests.sh
 ```
 
 ### Run Individual Test Suite
+
 ```bash
 ./tests/unit/features/python.sh
 ```
 
 ### Run with Verbose Output
+
 ```bash
 ./tests/run_unit_tests.sh --verbose
 ```
@@ -129,12 +136,15 @@ The framework provides comprehensive assertion functions:
 ## Test Output
 
 ### Console Output
+
 - Color-coded results (green for pass, red for fail, yellow for skip)
 - Progress indicators for each test suite
 - Summary statistics at the end
 
 ### Test Reports
+
 Generated in `tests/results/`:
+
 - Individual test reports: `test-report-YYYYMMDD-HHMMSS.txt`
 - Summary reports: `unit-test-summary-YYYYMMDD-HHMMSS.txt`
 - Test-specific output in subdirectories
@@ -142,12 +152,15 @@ Generated in `tests/results/`:
 ## Mocking and Test Isolation
 
 ### Environment Variables
+
 Tests run with isolated environment variables:
+
 - `TEST_TEMP_DIR` - Temporary directory for test files
 - `PROJECT_ROOT` - Path to project root
 - `RESULTS_DIR` - Path to test results
 
 ### Mocking Functions
+
 Create mock functions in setup to override real implementations:
 
 ```bash
@@ -163,6 +176,7 @@ setup() {
 ```
 
 ### Filesystem Isolation
+
 - Use `TEST_TEMP_DIR` for all file operations
 - Clean up in teardown function
 - Never modify actual system files
@@ -170,6 +184,7 @@ setup() {
 ## Special Considerations
 
 ### Filesystem Permissions
+
 Some tests check executable permissions which may not work correctly on certain filesystems (e.g., fakeowner mounts in containers). Tests should detect and skip appropriately:
 
 ```bash
@@ -189,12 +204,15 @@ test_executable_check() {
 ```
 
 ### Non-Interactive Testing
+
 Tests must run non-interactively:
+
 - No user input required
 - No interactive commands (e.g., `git rebase -i`)
 - Mock or skip interactive functionality
 
 ### Error Handling
+
 - Tests should handle errors gracefully
 - Use `|| true` to continue after expected failures
 - Capture stderr when testing error conditions
@@ -212,6 +230,7 @@ Tests must run non-interactively:
 ## Continuous Integration
 
 The test framework is designed to run in CI/CD pipelines:
+
 - Exit code 0 for all tests passing
 - Exit code 1 for any test failures
 - Machine-parseable output in results directory
@@ -220,16 +239,19 @@ The test framework is designed to run in CI/CD pipelines:
 ## Debugging Failed Tests
 
 ### Run Single Test with Debug Output
+
 ```bash
 bash -x ./tests/unit/features/python.sh
 ```
 
 ### Check Test Reports
+
 ```bash
 cat tests/results/test-report-*.txt
 ```
 
 ### Common Issues
+
 1. **Permission Errors**: Ensure test files are executable
 2. **Path Issues**: Use absolute paths or `$PROJECT_ROOT`
 3. **Environment Pollution**: Check for unset variables in teardown
@@ -238,6 +260,7 @@ cat tests/results/test-report-*.txt
 ## Contributing Tests
 
 When adding new features or fixing bugs:
+
 1. Write tests first (TDD approach)
 2. Ensure tests fail initially
 3. Implement the feature/fix

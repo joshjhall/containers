@@ -17,6 +17,7 @@ dev-init --ci          # Generate CI/CD configs
 ## Language-Specific Security Tools
 
 ### Rust
+
 - **cargo-audit** - Vulnerability database scanning
 - **cargo-deny** - Supply chain security & license checks
 - **cargo-geiger** - Unsafe code detection
@@ -25,6 +26,7 @@ dev-init --ci          # Generate CI/CD configs
 - **cargo-udeps** - Unused dependency detection
 
 ### Node.js
+
 - **npm audit** - Built-in vulnerability scanning
 - **better-npm-audit** - Enhanced npm audit
 - **snyk** - Comprehensive security platform
@@ -32,6 +34,7 @@ dev-init --ci          # Generate CI/CD configs
 - **depcheck** - Unused dependency finder
 
 ### Python
+
 - **pip-audit** - Vulnerability scanning
 - **safety** - Security database checks
 - **bandit** - Security linter
@@ -39,16 +42,19 @@ dev-init --ci          # Generate CI/CD configs
 - **vulture** - Dead code detection
 
 ### Go
+
 - **nancy** / **gosec** - Security scanning
 - **go mod audit** - Native vulnerability scanning (Go 1.21+)
 - **go-licenses** - License checking
 
 ### Ruby
+
 - **bundler-audit** - Vulnerability scanning
 - **brakeman** - Security scanner for Rails
 - **bundle-leak** - Memory leak detection
 
 ### Java
+
 - **dependency-check** - OWASP vulnerability scanner
 - **snyk** - Cross-language security
 - **find-sec-bugs** - Security bug patterns
@@ -56,15 +62,18 @@ dev-init --ci          # Generate CI/CD configs
 ## Implementation Timeline
 
 ### Current Status
+
 - ✅ Design documented
 - ⏸️ Implementation paused pending Stibbons evaluation (3-4 weeks)
 
 ### Short-term (Bash-based)
+
 - Quick implementation possible
 - Works with current infrastructure
 - No new dependencies
 
 ### Long-term (Stibbons-based)
+
 - Type-safe Rust implementation
 - Advanced multi-environment support
 - Plugin architecture
@@ -88,6 +97,7 @@ dev-init --ci          # Generate CI/CD configs
 ## Quick Implementation
 
 If needed before Stibbons:
+
 ```bash
 # Add to rust-dev.sh
 cargo install cargo-audit cargo-deny cargo-outdated

@@ -5,15 +5,19 @@ This directory contains example environment variable files for each feature avai
 ## Important Notes
 
 ### Path Variables
+
 Many examples show paths like `$HOME/.config/...`. These are DEFAULT values that work with any username. In practice:
+
 - Most tools automatically use `$HOME` at runtime
 - You typically don't need to set these unless overriding defaults
 - If you do set them, use `$HOME` instead of hardcoded paths
 
 ### Cache Mount Limitation
+
 If your base image already uses UID 1000, the build system will automatically assign a different UID (e.g., 1001) to avoid conflicts. However, Docker cache mounts still use the original UID from build arguments, which may cause permission issues. See the Dockerfile comments for workarounds.
 
 ### Build vs Runtime Variables
+
 - **Build Arguments**: Control which features are installed (`INCLUDE_*` variables)
 - **Runtime Variables**: Configure the behavior of installed tools
 - Build arguments cannot be changed after the image is built
@@ -54,6 +58,7 @@ Each `.env` file corresponds to a feature that can be enabled during container b
 - **Runtime Environment Variables**: Configured in these `.env` files
 
 Build arguments (like `INCLUDE_PYTHON`, `USERNAME`, etc.) must be set during build time via:
+
 - `docker build --build-arg`
 - `docker-compose.yml` under `build: args:`
 - NOT in `.env` files
@@ -110,6 +115,7 @@ services:
 ## Common Patterns
 
 ### Development Container
+
 ```bash
 # Typical development setup
 INCLUDE_PYTHON=true
@@ -120,6 +126,7 @@ INCLUDE_GIT=true
 ```
 
 ### CI/CD Container
+
 ```bash
 # Minimal CI build
 INCLUDE_PYTHON=true
@@ -127,6 +134,7 @@ INCLUDE_DOCKER=true
 ```
 
 ### Cloud Development
+
 ```bash
 # Cloud-focused development
 INCLUDE_PYTHON=true
@@ -145,6 +153,7 @@ INCLUDE_KUBERNETES=true
 ## Feature Dependencies
 
 Some features depend on others:
+
 - `tree-sitter` requires `rust`
 - `python-dev` requires `python`
 - `poetry` is included with `python`

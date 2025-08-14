@@ -24,6 +24,7 @@ These are defined as build arguments in the Dockerfile:
 ## Shell Script Hardcoded Versions
 
 ### lib/features/dev-tools.sh
+
 - `DIRENV_VERSION="2.37.1"`
 - `LAZYGIT_VERSION="0.54.2"`
 - `DELTA_VERSION="0.18.2"`
@@ -34,10 +35,12 @@ These are defined as build arguments in the Dockerfile:
 - **HARDCODED:** `entr` version 5.5 (line 286)
 
 ### lib/features/docker.sh
+
 - `LAZYDOCKER_VERSION="0.24.1"`
 - `DIVE_VERSION="0.13.1"`
 
 ### lib/features/java-dev.sh
+
 - `SPRING_VERSION="3.4.2"`
 - `JBANG_VERSION="0.121.0"`
 - `MVND_VERSION="1.0.2"` (indented)
@@ -48,6 +51,7 @@ These are defined as build arguments in the Dockerfile:
 These tools get the latest version at build time, which is generally fine:
 
 ### Via cargo install (in rust-dev.sh)
+
 - tree-sitter-cli
 - cargo-watch
 - cargo-edit
@@ -61,6 +65,7 @@ These tools get the latest version at build time, which is generally fine:
 - mdbook (and extensions)
 
 ### Via npm install -g (in node-dev.sh)
+
 - typescript
 - ts-node
 - tsx
@@ -72,6 +77,7 @@ These tools get the latest version at build time, which is generally fine:
 - (and many more dev tools)
 
 ### Via gem install (in ruby-dev.sh)
+
 - bundler
 - rails
 - sinatra
@@ -80,23 +86,28 @@ These tools get the latest version at build time, which is generally fine:
 - (and more)
 
 ### Via pipx install (in python.sh)
+
 - poetry (gets latest)
 
 ### Via apt-get install
+
 - Most system packages (git, curl, etc.)
 
 ## Currently Tracked in check-versions.sh
 
 ✅ **Dockerfile versions:**
+
 - Python, Node.js, Go, Rust, Ruby, Java, R
 - kubectl, k9s, Terragrunt, terraform-docs
 
 ✅ **Shell script versions:**
+
 - lazygit, direnv, act, delta, glab, mkcert (dev-tools.sh)
 - dive, lazydocker (docker.sh)
 - spring-boot-cli, jbang, mvnd, google-java-format (java-dev.sh)
 
 ❌ **NOT tracked but should be:**
+
 - duf (hardcoded as 0.8.1 in dev-tools.sh)
 - entr (hardcoded as 5.5 in dev-tools.sh)
 
