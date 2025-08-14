@@ -96,12 +96,12 @@ services:
       - vscode-insiders:/home/${USERNAME:-developer}/.vscode-server-insiders
     ports:
       # Application ports
-      - "8000:8000"  # Main API
-      - "8001:8001"  # Admin API
-      - "3000:3000"  # Frontend dev server
-      - "3001:3001"  # Storybook
-      - "9229:9229"  # Node.js debugging
-      - "5678:5678"  # Python debugging
+      - '8000:8000' # Main API
+      - '8001:8001' # Admin API
+      - '3000:3000' # Frontend dev server
+      - '3001:3001' # Storybook
+      - '9229:9229' # Node.js debugging
+      - '5678:5678' # Python debugging
     depends_on:
       - postgres
       - redis
@@ -123,12 +123,12 @@ services:
       - postgres-data:/var/lib/postgresql/data
       - ./scripts/postgres-init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
     ports:
-      - "5432:5432"
+      - '5432:5432'
     networks:
       - dev-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ['CMD-SHELL', 'pg_isready -U postgres']
       interval: 10s
       timeout: 5s
       retries: 5
@@ -140,12 +140,12 @@ services:
     volumes:
       - redis-data:/data
     ports:
-      - "6379:6379"
+      - '6379:6379'
     networks:
       - dev-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ['CMD', 'redis-cli', 'ping']
       interval: 10s
       timeout: 5s
       retries: 5
@@ -156,7 +156,7 @@ services:
     volumes:
       - ollama-models:/root/.ollama
     ports:
-      - "11434:11434"
+      - '11434:11434'
     networks:
       - dev-network
     restart: unless-stopped
@@ -184,7 +184,7 @@ services:
       - pgadmin-data:/var/lib/pgadmin
       - ./scripts/pgadmin-servers.json:/pgadmin4/servers.json:ro
     ports:
-      - "5050:80"
+      - '5050:80'
     networks:
       - dev-network
     restart: unless-stopped
@@ -199,7 +199,7 @@ services:
       - HTTP_USER=admin
       - HTTP_PASSWORD=admin
     ports:
-      - "8081:8081"
+      - '8081:8081'
     networks:
       - dev-network
     restart: unless-stopped
@@ -212,8 +212,8 @@ services:
   mailhog:
     image: mailhog/mailhog:latest
     ports:
-      - "1025:1025"  # SMTP
-      - "8025:8025"  # Web UI
+      - '1025:1025' # SMTP
+      - '8025:8025' # Web UI
     networks:
       - dev-network
     restart: unless-stopped
@@ -230,15 +230,15 @@ services:
     volumes:
       - minio-data:/data
     ports:
-      - "9000:9000"  # API
-      - "9001:9001"  # Console
+      - '9000:9000' # API
+      - '9001:9001' # Console
     networks:
       - dev-network
     restart: unless-stopped
     profiles:
       - with-testing
     healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
+      test: ['CMD', 'mc', 'ready', 'local']
       interval: 30s
       timeout: 10s
       retries: 3
@@ -255,7 +255,7 @@ services:
       - ./config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus-data:/prometheus
     ports:
-      - "9090:9090"
+      - '9090:9090'
     networks:
       - dev-network
     restart: unless-stopped
@@ -276,7 +276,7 @@ services:
       - ./config/grafana-dashboards.yml:/etc/grafana/provisioning/dashboards/default.yml:ro
       - ./dashboards:/var/lib/grafana/dashboards:ro
     ports:
-      - "3030:3000"
+      - '3030:3000'
     networks:
       - dev-network
     restart: unless-stopped
@@ -337,7 +337,6 @@ networks:
     ipam:
       config:
         - subnet: 172.20.0.0/16
-
 # Profile activation examples:
 #
 # Basic development (default):

@@ -16,12 +16,14 @@ A modular, extensible container build system designed to be shared across projec
 ### For New Projects
 
 1. Add as a git submodule:
+
 ```bash
 git submodule add https://github.com/yourusername/containers.git containers
 git submodule update --init --recursive
 ```
 
 2. Build your container using the Dockerfile from the submodule:
+
 ```bash
 # Build from project root (recommended)
 docker build -t myproject:dev \
@@ -43,11 +45,13 @@ docker build -t test:dev \
 ### For Existing Projects
 
 1. Add the submodule:
+
 ```bash
 git submodule add https://github.com/yourusername/containers.git containers
 ```
 
 2. Create build scripts or update your CI/CD to use the shared Dockerfile:
+
 ```bash
 # scripts/build-dev.sh
 docker build -t myproject:dev \
@@ -70,6 +74,7 @@ docker build -t myproject:prod \
 ### Basic Setup
 
 1. Create `.devcontainer/devcontainer.json`:
+
 ```json
 {
   "name": "My Project Development",
@@ -99,6 +104,7 @@ docker build -t myproject:prod \
 ```
 
 2. Create `.devcontainer/docker-compose.yml`:
+
 ```yaml
 services:
   devcontainer:
@@ -123,6 +129,7 @@ services:
 ### Advanced Configuration
 
 For more complex setups with databases and services, see `examples/devcontainer/` for complete examples including:
+
 - PostgreSQL and Redis integration
 - Environment variable management
 - 1Password integration
@@ -131,6 +138,7 @@ For more complex setups with databases and services, see `examples/devcontainer/
 ## Available Features
 
 ### Programming Languages
+
 - **Python**: 3.11+ with pyenv support (`INCLUDE_PYTHON=true`)
 - **Node.js**: 22 LTS with npm, yarn, pnpm (`INCLUDE_NODE=true`)
 - **Rust**: Latest stable with cargo (`INCLUDE_RUST=true`)
@@ -140,13 +148,16 @@ For more complex setups with databases and services, see `examples/devcontainer/
 - **R**: Statistical computing environment (`INCLUDE_R=true`)
 
 ### Development Tools
+
 Add `_DEV` to any language to include development tools:
+
 - `INCLUDE_PYTHON_DEV`: black, ruff, mypy, pytest, poetry, jupyter
 - `INCLUDE_NODE_DEV`: TypeScript, ESLint, Jest, Vite, webpack
 - `INCLUDE_RUST_DEV`: clippy, rustfmt, cargo-watch, bacon
 - And more...
 
 ### Infrastructure Tools
+
 - `INCLUDE_DOCKER`: Docker CLI, compose, lazydocker
 - `INCLUDE_KUBERNETES`: kubectl, helm, k9s
 - `INCLUDE_TERRAFORM`: terraform, terragrunt, tf-docs
@@ -154,6 +165,7 @@ Add `_DEV` to any language to include development tools:
 - `INCLUDE_GCLOUD`: Google Cloud SDK
 
 ### Other Tools
+
 - `INCLUDE_DEV_TOOLS`: git, gh CLI, fzf, ripgrep, bat, delta
 - `INCLUDE_OP`: 1Password CLI
 - `INCLUDE_OLLAMA`: Local LLM support
@@ -227,6 +239,7 @@ docker build -t myservice:ci \
 ## Updating the Submodule
 
 To update to the latest version:
+
 ```bash
 cd containers
 git pull origin main
@@ -238,6 +251,7 @@ git commit -m "Update container build system"
 ## Version Management
 
 ### Checking for Updates
+
 The container system includes a version checker to identify when newer versions of pinned tools are available:
 
 ```bash
@@ -257,6 +271,7 @@ cp containers/.env.example containers/.env
 ```
 
 The script will check:
+
 - Language versions (Python, Node.js, Go, Rust, Ruby, Java, R)
 - Tool versions (Poetry, Terraform, kubectl, GitHub CLI, etc.)
 - Report which tools have updates available
@@ -264,6 +279,7 @@ The script will check:
 #### Automated Weekly Checks
 
 Configure GitLab CI to automatically check for updates weekly with Pushover notifications:
+
 1. Add `PUSHOVER_USER_KEY` and `PUSHOVER_APP_TOKEN` to CI/CD variables
 2. Create a pipeline schedule for weekly runs
 3. Receive notifications when updates are available
@@ -271,7 +287,9 @@ Configure GitLab CI to automatically check for updates weekly with Pushover noti
 See [docs/scheduled-version-checks.md](docs/scheduled-version-checks.md) for detailed setup instructions.
 
 ### Updating Versions
+
 When updates are available, edit the appropriate files:
+
 - Language versions: Update `ARG *_VERSION` in `Dockerfile`
 - Tool versions: Update version variables in `lib/features/*.sh`
 
@@ -292,6 +310,7 @@ The project includes a comprehensive unit test framework that tests bash scripts
 ```
 
 **Test Coverage:**
+
 - ✅ Version checking and management (10 tests)
 - ✅ Release scripts (12 tests)
 - ✅ Logging framework (11 tests)
@@ -302,7 +321,9 @@ The project includes a comprehensive unit test framework that tests bash scripts
 **Current Status:** 76 tests passing, 1 skipped on macOS
 
 ### Quick Test
+
 To quickly verify your container builds:
+
 ```bash
 # From your project root (where containers/ is a subdirectory)
 ./containers/bin/test-all-features.sh
@@ -312,7 +333,9 @@ To quickly verify your container builds:
 ```
 
 ### Comprehensive Testing
+
 For full test suite including build tests:
+
 ```bash
 # From within containers directory
 cd containers
@@ -352,6 +375,7 @@ cd containers
 ## Contributing
 
 Contributions are welcome! Please:
+
 1. Fork the repository
 2. Create a feature branch
 3. Add tests for new features
@@ -360,6 +384,7 @@ Contributions are welcome! Please:
 ### Code Quality
 
 Optional git hooks are available for code quality checks:
+
 ```bash
 # Enable shellcheck pre-commit hook
 git config core.hooksPath .githooks

@@ -1,6 +1,6 @@
 # Template for cache volume mounts using username-agnostic /cache directory
 # This can be used with any docker-compose file to add persistent caches
-# 
+#
 # The /cache approach works with any USERNAME without modification
 #
 # Usage:
@@ -29,7 +29,7 @@ services:
       OLLAMA_MODELS: /cache/ollama
       GEM_HOME: /cache/ruby/gems
       BUNDLE_PATH: /cache/ruby/bundle
-      
+
     volumes:
       # Language-specific caches (username-agnostic)
       - cargo-cache:/cache/cargo
@@ -41,10 +41,10 @@ services:
       - pip-cache:/cache/pip
       - poetry-cache:/cache/poetry
       - ruby-cache:/cache/ruby
-      
+
       # Tool caches
       - ollama-cache:/cache/ollama
-      
+
       # Build caches (useful in CI/CD)
       - apt-cache:/var/cache/apt
       - apt-lib:/var/lib/apt
@@ -60,10 +60,10 @@ volumes:
   pip-cache:
   poetry-cache:
   ruby-cache:
-  
-  # System caches  
+
+  # System caches
   apt-cache:
   apt-lib:
-  
+
   # Tool caches
   ollama-cache:

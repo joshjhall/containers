@@ -1,16 +1,16 @@
 services:
   devcontainer:
     build:
-      context: ..  # Containers root
+      context: .. # Containers root
       dockerfile: Dockerfile
       args:
         BASE_IMAGE: mcr.microsoft.com/devcontainers/base:bookworm
         PROJECT_NAME: containers
         USERNAME: vscode
         WORKING_DIR: /workspace/containers
-        INCLUDE_OP: "true"
-        INCLUDE_DEV_TOOLS: "true"
-        INCLUDE_DOCKER: "true"
+        INCLUDE_OP: 'true'
+        INCLUDE_DEV_TOOLS: 'true'
+        INCLUDE_DOCKER: 'true'
       cache_from:
         - type=local,src=/tmp/.buildx-cache
       cache_to:

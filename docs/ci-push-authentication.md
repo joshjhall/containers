@@ -54,6 +54,7 @@ git push "https://${CI_DEPLOY_USER}:${CI_DEPLOY_PASSWORD}@${CI_SERVER_HOST}/${CI
 ## Option 3: SSH Deploy Key
 
 1. Generate an SSH key pair:
+
 ```bash
 ssh-keygen -t ed25519 -C "ci-version-updater" -f deploy_key
 ```

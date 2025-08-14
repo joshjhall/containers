@@ -16,7 +16,7 @@ This document outlines the design for a comprehensive security scanning and proj
 
 ### Directory Structure
 
-```
+```text
 lib/
 ├── features/
 │   ├── rust-dev.sh
@@ -85,6 +85,7 @@ dev-init --all         # Apply all enhancements
 ### Language-Specific Security Tools
 
 #### Rust (`rust-dev.sh`)
+
 ```bash
 # Security & Auditing
 cargo-audit          # Security vulnerabilities
@@ -110,6 +111,7 @@ cargo-bloat          # Binary size analysis
 ```
 
 #### Node.js (`node-dev.sh`)
+
 ```bash
 # Security
 npm audit            # Built-in vulnerability scanning
@@ -129,6 +131,7 @@ source-map-explorer # Analyze bundle composition
 ```
 
 #### Python (`python-dev.sh`)
+
 ```bash
 # Security
 pip-audit           # Vulnerability scanning
@@ -293,6 +296,7 @@ echo "Run 'dev-init --scan --report' to generate detailed reports"
 ### Overview
 
 Migrate core functionality to Stibbons, a Rust-based CLI environment management tool, providing:
+
 - Type safety and memory safety
 - Cross-platform binary (works on Alpine, Debian, etc.)
 - Advanced multi-environment orchestration
@@ -376,18 +380,21 @@ impl ProjectEnvironment {
 ### Migration Strategy
 
 #### Phase 1: Parallel Development (Months 1-3)
+
 - Implement bash-based system as designed above
 - Begin Stibbons development in parallel
 - Define plugin API for Stibbons
 - Create compatibility layer
 
 #### Phase 2: Hybrid Operation (Months 3-6)
+
 - Stibbons handles complex operations
 - Bash scripts detect and call Stibbons when available
 - Gradual feature migration
 - A/B testing of implementations
 
 #### Phase 3: Stibbons Primary (Months 6+)
+
 - Stibbons becomes primary interface
 - Bash scripts become thin wrappers
 - Advanced features enabled
@@ -426,24 +433,28 @@ stibbons ci run --local          # Run CI pipeline locally
 ## Implementation Priorities
 
 ### Immediate (If implementing now)
+
 1. Create template directory structure
 2. Implement `template-manager.sh`
 3. Create `dev-init` unified command
 4. Add security tools to `rust-dev.sh`
 
 ### Short-term (Next 3-4 weeks)
+
 1. Wait for Stibbons initial release
 2. Evaluate Stibbons capabilities
 3. Decide on implementation approach
 4. Begin integration if Stibbons is ready
 
 ### Medium-term (2-3 months)
+
 1. Full security scanning for all languages
 2. CI/CD template generation
 3. Git hooks automation
 4. Documentation generation
 
 ### Long-term (6+ months)
+
 1. Full Stibbons integration
 2. Multi-environment orchestration
 3. Plugin ecosystem
@@ -452,18 +463,21 @@ stibbons ci run --local          # Run CI pipeline locally
 ## Benefits
 
 ### For Developers
+
 - Immediate security feedback
 - Consistent tooling across projects
 - Best practices by default
 - Reduced setup time
 
 ### For Organizations
+
 - Security compliance automation
 - Standardized development practices
 - Reduced vulnerability exposure
 - Audit trail for security scans
 
 ### For CI/CD
+
 - Consistent commands across environments
 - Automated security gates
 - Dependency update automation
@@ -472,26 +486,32 @@ stibbons ci run --local          # Run CI pipeline locally
 ## Risks and Mitigations
 
 ### Risk: Tool Maintenance Burden
+
 **Mitigation**: Use well-maintained tools, automate updates, community contributions
 
 ### Risk: Image Size Growth
+
 **Mitigation**: Optional features, multi-stage builds, lazy loading of tools
 
 ### Risk: Complexity Creep
+
 **Mitigation**: Clear boundaries, plugin architecture, user choice
 
 ### Risk: Stibbons Delay
+
 **Mitigation**: Bash implementation works standalone, easy migration path
 
 ## Decision Points
 
 ### Why Wait for Stibbons?
+
 - Avoid duplicate effort
 - Better long-term solution
 - More maintainable
 - Advanced features
 
 ### Why Document Now?
+
 - Preserve design thinking
 - Enable parallel development
 - Community input opportunity

@@ -66,7 +66,8 @@ chown -R ${USER_UID}:${USER_GID} "${CACHE_DIR}"
 
 ## Alias and Function Documentation
 
-### For Alias Groups:
+### For Alias Groups
+
 ```bash
 # ----------------------------------------------------------------------------
 # Category Name - Brief description
@@ -74,7 +75,8 @@ chown -R ${USER_UID}:${USER_GID} "${CACHE_DIR}"
 alias example='command'
 ```
 
-### For Functions:
+### For Functions
+
 ```bash
 # ----------------------------------------------------------------------------
 # function_name - Brief description
@@ -118,7 +120,8 @@ export TOOL_CONFIG="/etc/tool.conf"
 
 ## Examples
 
-### Good:
+### Good
+
 ```bash
 # Determine cache paths based on availability
 # Priority: 1) Already set env vars, 2) /cache if available, 3) home directory
@@ -129,7 +132,8 @@ else
 fi
 ```
 
-### Avoid:
+### Avoid
+
 ```bash
 # Set cache dir
 CACHE_DIR="/cache/tool"  # cache directory
