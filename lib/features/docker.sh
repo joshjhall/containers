@@ -113,7 +113,7 @@ log_message "Installing lazydocker (terminal UI for Docker)..."
 
 # Detect architecture and set version
 ARCH=$(dpkg --print-architecture)
-LAZYDOCKER_VERSION="0.24.1"
+LAZYDOCKER_VERSION="null"
 
 # Download and install lazydocker
 log_message "Downloading lazydocker..."
@@ -147,7 +147,7 @@ cd /
 log_message "Installing dive (Docker image layer analysis tool)..."
 
 # Set dive version
-DIVE_VERSION="0.13.1"
+DIVE_VERSION="null"
 
 # Download and install dive
 log_message "Downloading dive..."

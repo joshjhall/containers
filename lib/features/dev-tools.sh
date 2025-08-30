@@ -253,7 +253,7 @@ log_message "Installing additional development tools..."
 
 # Install duf (modern disk usage utility)
 log_message "Installing duf (modern disk usage utility)..."
-DUF_VERSION="0.8.1"
+DUF_VERSION="null"
 ARCH=$(dpkg --print-architecture)
 if [ "$ARCH" = "amd64" ]; then
     log_command "Downloading duf for amd64" \
@@ -370,7 +370,7 @@ fi
 # Install direnv
 log_message "Installing direnv..."
 ARCH=$(dpkg --print-architecture)
-DIRENV_VERSION="2.37.1"
+DIRENV_VERSION="null"
 if [ "$ARCH" = "amd64" ]; then
     log_command "Downloading direnv for amd64" \
         curl -L https://github.com/direnv/direnv/releases/download/v${DIRENV_VERSION}/direnv.linux-amd64 -o /usr/local/bin/direnv
@@ -383,7 +383,7 @@ log_command "Setting direnv permissions" \
 
 # Install lazygit
 log_message "Installing lazygit..."
-LAZYGIT_VERSION="0.54.2"
+LAZYGIT_VERSION="null"
 if [ "$ARCH" = "amd64" ]; then
     log_command "Downloading lazygit for amd64" \
         bash -c "curl -L https://github.com/jesseduffield/lazygit/releases/download/v${LAZYGIT_VERSION}/lazygit_${LAZYGIT_VERSION}_Linux_x86_64.tar.gz | tar xz -C /usr/local/bin lazygit"
@@ -394,7 +394,7 @@ fi
 
 # Install delta (better git diffs)
 log_message "Installing delta (better git diffs)..."
-DELTA_VERSION="0.18.2"
+DELTA_VERSION="null"
 log_command "Changing to temp directory" \
     cd /tmp
 
@@ -415,7 +415,7 @@ log_command "Returning to root directory" \
 
 # Install mkcert (local HTTPS certificates)
 log_message "Installing mkcert (local HTTPS certificates)..."
-MKCERT_VERSION="1.4.4"
+MKCERT_VERSION="null"
 if [ "$ARCH" = "amd64" ]; then
     log_command "Downloading mkcert for amd64" \
         curl -L https://github.com/FiloSottile/mkcert/releases/download/v${MKCERT_VERSION}/mkcert-v${MKCERT_VERSION}-linux-amd64 -o /usr/local/bin/mkcert
@@ -429,7 +429,7 @@ log_command "Setting mkcert permissions" \
 # Install GitHub Actions CLI (act)
 log_message "Installing act (GitHub Actions locally)..."
 ARCH=$(dpkg --print-architecture)
-ACT_VERSION="0.2.80"
+ACT_VERSION="null"
 if [ "$ARCH" = "amd64" ]; then
     log_command "Downloading act for amd64" \
         bash -c "curl -L https://github.com/nektos/act/releases/download/v${ACT_VERSION}/act_Linux_x86_64.tar.gz | tar xz -C /usr/local/bin act"
@@ -440,7 +440,7 @@ fi
 
 # Install GitLab CLI (glab)
 log_message "Installing glab (GitLab CLI)..."
-GLAB_VERSION="1.66.0"
+GLAB_VERSION="1.67.0"
 log_command "Changing to temp directory" \
     cd /tmp
 
