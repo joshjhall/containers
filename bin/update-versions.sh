@@ -57,12 +57,53 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# Function to validate version format
+validate_version() {
+    local version="$1"
+    
+    # Check for invalid values
+    if [ -z "$version" ] || [ "$version" = "null" ] || [ "$version" = "undefined" ] || [ "$version" = "error" ]; then
+        return 1
+    fi
+    
+    # Check for basic version format (should contain numbers)
+    if ! echo "$version" | grep -qE '[0-9]'; then
+        return 1
+    fi
+    
+    # Check for common version patterns
+    if echo "$version" | grep -qE '^[0-9]+(\.([0-9]+|[xX]))*([+-].*)?$|^[0-9]{4}-[0-9]{2}-[0-9]{2}'; then
+        return 0
+    fi
+    
+    # For some specific version formats that don't match the above
+    # but are still valid (like some Java versions)
+    if echo "$version" | grep -qE '^[0-9]+[._][0-9]+'; then
+        return 0
+    fi
+    
+    return 1
+}
+
 # Function to update a version in a file
 update_version() {
     local tool="$1"
     local current="$2"
     local latest="$3"
     local file="$4"
+    
+    # Validate the new version before updating
+    if ! validate_version "$latest"; then
+        echo -e "${RED}  ERROR: Invalid version format for $tool: '$latest'${NC}"
+        echo -e "${YELLOW}  Skipping update for $tool${NC}"
+        return 1
+    fi
+    
+    # Also check that we're not downgrading (basic check)
+    if [ "$current" = "$latest" ]; then
+        echo -e "${YELLOW}  Skipping $tool: already at version $current${NC}"
+        return 0
+    fi
     
     echo -e "${BLUE}  Updating $tool: $current → $latest in $file${NC}"
     
@@ -218,6 +259,10 @@ echo ""
 # Track if any updates were applied
 UPDATES_APPLIED=false
 
+# Track successful updates
+SUCCESSFUL_UPDATES=0
+FAILED_UPDATES=0
+
 # Process each outdated tool
 while IFS= read -r update; do
     TOOL=$(echo "$update" | jq -r '.tool')
@@ -225,8 +270,12 @@ while IFS= read -r update; do
     LATEST=$(echo "$update" | jq -r '.latest')
     FILE=$(echo "$update" | jq -r '.file')
     
-    update_version "$TOOL" "$CURRENT" "$LATEST" "$FILE"
-    UPDATES_APPLIED=true
+    if update_version "$TOOL" "$CURRENT" "$LATEST" "$FILE"; then
+        SUCCESSFUL_UPDATES=$((SUCCESSFUL_UPDATES + 1))
+        UPDATES_APPLIED=true
+    else
+        FAILED_UPDATES=$((FAILED_UPDATES + 1))
+    fi
 done < <(echo "$OUTDATED" | jq -c '.[]')
 
 echo ""
@@ -274,7 +323,10 @@ Automated dependency updates applied."
     
     echo ""
     echo -e "${GREEN}=== Update Complete ===${NC}"
-    echo "Updates applied: $UPDATE_COUNT"
+    echo "Updates applied: $SUCCESSFUL_UPDATES"
+    if [ "$FAILED_UPDATES" -gt 0 ]; then
+        echo -e "${YELLOW}Updates skipped (invalid versions): $FAILED_UPDATES${NC}"
+    fi
 else
     if [ "$DRY_RUN" = true ]; then
         echo -e "${YELLOW}Dry run complete - no changes made${NC}"
