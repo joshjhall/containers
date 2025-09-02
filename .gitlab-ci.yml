@@ -279,7 +279,26 @@ check:versions:
     - |
       # Run version check and capture output
       OUTPUT=$(./bin/check-versions.sh --json 2>&1 || true)
-
+      
+      # Validate that we got valid JSON output
+      if ! echo "$OUTPUT" | jq empty 2>/dev/null; then
+        echo "ERROR: Version check did not return valid JSON"
+        echo "Output was: $OUTPUT"
+        echo '{"status": "error", "message": "Invalid version check output"}' > version-updates.json
+        exit 1
+      fi
+      
+      # Check if there are any tools with 'error' status
+      ERROR_COUNT=$(echo "$OUTPUT" | jq '[.tools[] | select(.status == "error")] | length' 2>/dev/null || echo "0")
+      if [ "$ERROR_COUNT" -gt 3 ]; then
+        echo "WARNING: $ERROR_COUNT tools failed version check - possible API token issue"
+        if [ -z "${GITHUB_TOKEN:-}" ]; then
+          echo "No GITHUB_TOKEN configured - API rate limits may be causing failures"
+        else
+          echo "GITHUB_TOKEN is configured but may be expired or invalid"
+        fi
+      fi
+      
       # Parse JSON output - filter for outdated tools
       OUTDATED=$(echo "$OUTPUT" | jq '[.tools[] | select(.status == "outdated")]')
 
@@ -401,8 +420,9 @@ check:versions:
       - version-updates.json
     expire_in: 1 week
     when: on_success
-  only:
-    - schedules
-  except:
-    variables:
-      - $SKIP_VERSION_CHECK == "true"
+  rules:
+    # Only run on scheduled pipelines
+    - if: '$CI_PIPELINE_SOURCE == "schedule" && $SKIP_VERSION_CHECK != "true"'
+      when: always
+    # Never run on other pipeline sources
+    - when: never

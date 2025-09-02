@@ -167,6 +167,12 @@ version_matches() {
 set_latest() {
     local tool="$1"
     local version="$2"
+    
+    # Validate version is not empty, null, or error-like
+    if [ -z "$version" ] || [ "$version" = "null" ] || [ "$version" = "undefined" ]; then
+        version="error"
+    fi
+    
     for i in "${!TOOLS[@]}"; do
         if [ "${TOOLS[$i]}" = "$tool" ]; then
             LATEST_VERSIONS[$i]="$version"
@@ -312,8 +318,8 @@ progress_done() {
 check_python() {
     progress_msg "  Python..."
     local latest
-    latest=$(fetch_url "https://endoflife.date/api/python.json" | jq -r '[.[] | select(.cycle | startswith("3."))] | .[0].latest' 2>/dev/null)
-    [ -n "$latest" ] && set_latest "Python" "$latest" || set_latest "Python" "error"
+    latest=$(fetch_url "https://endoflife.date/api/python.json" | jq -r '[.[] | select(.cycle | startswith("3."))] | .[0].latest // "null"' 2>/dev/null)
+    set_latest "Python" "$latest"
     progress_done
 }
 
@@ -340,7 +346,7 @@ check_nodejs() {
         latest=$(fetch_url "https://nodejs.org/dist/index.json" | jq -r '[.[] | select(.lts != false)] | .[0].version' 2>/dev/null | sed 's/^v//')
     fi
     
-    [ -n "$latest" ] && set_latest "Node.js" "$latest" || set_latest "Node.js" "error"
+    set_latest "Node.js" "$latest"
     progress_done
 }
 
@@ -348,7 +354,7 @@ check_go() {
     progress_msg "  Go..."
     local latest
     latest=$(fetch_url "https://go.dev/VERSION?m=text" | head -1 | sed 's/^go//')
-    [ -n "$latest" ] && set_latest "Go" "$latest" || set_latest "Go" "error"
+    set_latest "Go" "$latest"
     progress_done
 }
 
@@ -361,7 +367,7 @@ check_rust() {
         # Fallback to forge.rust-lang.org
         latest=$(fetch_url "https://forge.rust-lang.org/infra/channel-layout.html" | grep -oE 'stable.*?[0-9]+\.[0-9]+\.[0-9]+' | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
     fi
-    [ -n "$latest" ] && set_latest "Rust" "$latest" || set_latest "Rust" "error"
+    set_latest "Rust" "$latest"
     progress_done
 }
 
@@ -369,7 +375,7 @@ check_ruby() {
     progress_msg "  Ruby..."
     local latest
     latest=$(fetch_url "https://api.github.com/repos/ruby/ruby/releases/latest" | jq -r '.tag_name' 2>/dev/null | sed 's/^v//' | sed 's/_/./g')
-    [ -n "$latest" ] && set_latest "Ruby" "$latest" || set_latest "Ruby" "error"
+    set_latest "Ruby" "$latest"
     progress_done
 }
 
@@ -393,7 +399,7 @@ check_java() {
         latest=$(fetch_url "https://api.adoptium.net/v3/assets/latest/${current_major}/hotspot" | jq -r '.[0].release_name' 2>/dev/null | sed 's/jdk-//' | sed 's/+.*//')
     fi
     
-    [ -n "$latest" ] && [ "$latest" != "null" ] && set_latest "Java" "$latest" || set_latest "Java" "error"
+    set_latest "Java" "$latest"
     progress_done
 }
 
@@ -414,7 +420,7 @@ check_r() {
         latest=$(fetch_url "https://cran.r-project.org/doc/manuals/r-release/NEWS.html" | grep -oE 'VERSION [0-9]+\.[0-9]+\.[0-9]+' | head -1 | sed 's/VERSION //')
     fi
     
-    [ -n "$latest" ] && set_latest "R" "$latest" || set_latest "R" "error"
+    set_latest "R" "$latest"
     progress_done
 }
 
@@ -423,8 +429,8 @@ check_github_release() {
     local repo="$2"
     progress_msg "  $tool..."
     local latest
-    latest=$(fetch_url "https://api.github.com/repos/$repo/releases/latest" | jq -r '.tag_name' 2>/dev/null | sed 's/^v//')
-    [ -n "$latest" ] && set_latest "$tool" "$latest" || set_latest "$tool" "error"
+    latest=$(fetch_url "https://api.github.com/repos/$repo/releases/latest" | jq -r '.tag_name // "null"' 2>/dev/null | sed 's/^v//')
+    set_latest "$tool" "$latest"
     progress_done
 }
 
@@ -433,8 +439,8 @@ check_gitlab_release() {
     local project_id="$2"
     progress_msg "  $tool..."
     local latest
-    latest=$(fetch_url "https://gitlab.com/api/v4/projects/$project_id/releases" | jq -r '.[0].tag_name' 2>/dev/null | sed 's/^v//')
-    [ -n "$latest" ] && set_latest "$tool" "$latest" || set_latest "$tool" "error"
+    latest=$(fetch_url "https://gitlab.com/api/v4/projects/$project_id/releases" | jq -r '.[0].tag_name // "null"' 2>/dev/null | sed 's/^v//')
+    set_latest "$tool" "$latest"
     progress_done
 }
 
@@ -445,7 +451,7 @@ check_entr() {
     local latest
     latest=$(fetch_url "http://eradman.com/entrproject/" | grep -oE 'entr-[0-9]+\.[0-9]+\.tar\.gz' | head -1 | sed 's/entr-//;s/\.tar\.gz//')
     
-    [ -n "$latest" ] && set_latest "entr" "$latest" || set_latest "entr" "error"
+    set_latest "entr" "$latest"
     progress_done
 }
 
@@ -489,7 +495,7 @@ check_kubectl() {
         latest=$(fetch_url "https://storage.googleapis.com/kubernetes-release/release/stable.txt" | sed 's/^v//')
     fi
     
-    [ -n "$latest" ] && set_latest "kubectl" "$latest" || set_latest "kubectl" "error"
+    set_latest "kubectl" "$latest"
     progress_done
 }
 

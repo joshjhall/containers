@@ -383,6 +383,200 @@ EOF
     fi
 }
 
+# Test: Invalid version validation
+test_invalid_version_validation() {
+    # Create temporary test directory
+    local test_dir=$(mktemp -d)
+    
+    # Create mock Dockerfile
+    cat > "$test_dir/Dockerfile" << 'EOF'
+ARG PYTHON_VERSION=3.13.0
+ARG NODE_VERSION=22.10.0
+ARG GO_VERSION=1.22.3
+ARG RUST_VERSION=1.80.0
+EOF
+    
+    # Create mock JSON with invalid versions
+    cat > "$test_dir/test.json" << 'EOF'
+{
+  "tools": [
+    {
+      "tool": "Python",
+      "current": "3.13.0",
+      "latest": "null",
+      "file": "Dockerfile",
+      "status": "outdated"
+    },
+    {
+      "tool": "Node.js",
+      "current": "22.10.0",
+      "latest": "",
+      "file": "Dockerfile",
+      "status": "outdated"
+    },
+    {
+      "tool": "Go",
+      "current": "1.22.3",
+      "latest": "undefined",
+      "file": "Dockerfile",
+      "status": "outdated"
+    },
+    {
+      "tool": "Rust",
+      "current": "1.80.0",
+      "latest": "error",
+      "file": "Dockerfile",
+      "status": "outdated"
+    }
+  ]
+}
+EOF
+    
+    # Initialize git repo (required for commits)
+    cd "$test_dir"
+    git init --quiet
+    git config user.email "test@example.com"
+    git config user.name "Test User"
+    git add -A
+    git commit -m "Initial" --quiet
+    
+    # Create mock release script
+    mkdir -p bin
+    echo '#!/bin/bash' > bin/release.sh
+    echo 'echo "1.4.1" > VERSION' >> bin/release.sh
+    chmod +x bin/release.sh
+    echo "1.4.0" > VERSION
+    
+    # Run update with --no-commit to avoid git operations
+    output=$(PROJECT_ROOT_OVERRIDE="$test_dir" "$PROJECT_ROOT/bin/update-versions.sh" --no-commit --no-bump --input test.json 2>&1)
+    
+    # Check that invalid versions were rejected and files were not modified
+    local success=true
+    
+    # Check output contains error messages
+    if ! echo "$output" | grep -q "Invalid version format"; then
+        success=false
+    fi
+    
+    # Check that no invalid versions were written to Dockerfile
+    if grep -q "null\|undefined\|error" Dockerfile; then
+        success=false
+    fi
+    
+    # Check original versions are still there
+    if ! grep -q "ARG PYTHON_VERSION=3.13.0" Dockerfile; then
+        success=false
+    fi
+    if ! grep -q "ARG NODE_VERSION=22.10.0" Dockerfile; then
+        success=false
+    fi
+    if ! grep -q "ARG GO_VERSION=1.22.3" Dockerfile; then
+        success=false
+    fi
+    if ! grep -q "ARG RUST_VERSION=1.80.0" Dockerfile; then
+        success=false
+    fi
+    
+    rm -rf "$test_dir"
+    
+    if [ "$success" = true ]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+# Test: Mixed valid and invalid versions
+test_mixed_valid_invalid_versions() {
+    # Create temporary test directory
+    local test_dir=$(mktemp -d)
+    
+    # Create mock Dockerfile
+    cat > "$test_dir/Dockerfile" << 'EOF'
+ARG PYTHON_VERSION=3.13.0
+ARG NODE_VERSION=22.10.0
+ARG GO_VERSION=1.22.3
+EOF
+    
+    # Create mock JSON with mixed valid and invalid versions
+    cat > "$test_dir/test.json" << 'EOF'
+{
+  "tools": [
+    {
+      "tool": "Python",
+      "current": "3.13.0",
+      "latest": "3.13.6",
+      "file": "Dockerfile",
+      "status": "outdated"
+    },
+    {
+      "tool": "Node.js",
+      "current": "22.10.0",
+      "latest": "null",
+      "file": "Dockerfile",
+      "status": "outdated"
+    },
+    {
+      "tool": "Go",
+      "current": "1.22.3",
+      "latest": "1.25.0",
+      "file": "Dockerfile",
+      "status": "outdated"
+    }
+  ]
+}
+EOF
+    
+    # Initialize git repo
+    cd "$test_dir"
+    git init --quiet
+    git config user.email "test@example.com"
+    git config user.name "Test User"
+    git add -A
+    git commit -m "Initial" --quiet
+    
+    # Create mock release script
+    mkdir -p bin
+    echo '#!/bin/bash' > bin/release.sh
+    echo 'echo "1.4.1" > VERSION' >> bin/release.sh
+    chmod +x bin/release.sh
+    echo "1.4.0" > VERSION
+    
+    # Run update
+    output=$(PROJECT_ROOT_OVERRIDE="$test_dir" "$PROJECT_ROOT/bin/update-versions.sh" --no-commit --no-bump --input test.json 2>&1)
+    
+    # Check that valid versions were updated and invalid ones were rejected
+    local success=true
+    
+    # Python should be updated (valid)
+    if ! grep -q "ARG PYTHON_VERSION=3.13.6" Dockerfile; then
+        success=false
+    fi
+    
+    # Node.js should NOT be updated (invalid)
+    if ! grep -q "ARG NODE_VERSION=22.10.0" Dockerfile; then
+        success=false
+    fi
+    
+    # Go should be updated (valid)
+    if ! grep -q "ARG GO_VERSION=1.25.0" Dockerfile; then
+        success=false
+    fi
+    
+    # Check that "null" was not written
+    if grep -q "null" Dockerfile; then
+        success=false
+    fi
+    
+    rm -rf "$test_dir"
+    
+    if [ "$success" = true ]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
 # Test: Script updates zoxide version in base setup
 test_update_zoxide_version() {
     local test_dir="$RESULTS_DIR/test_zoxide_update"
@@ -459,6 +653,8 @@ run_test test_shell_script_update "Updates shell script versions"
 run_test test_java_dev_tools_update "Updates Java dev tool versions"
 run_test test_duf_entr_update "Updates duf and entr versions"
 run_test test_update_zoxide_version "Updates zoxide version in base setup"
+run_test test_invalid_version_validation "Rejects invalid version formats (null, undefined, error)"
+run_test test_mixed_valid_invalid_versions "Updates valid versions while rejecting invalid ones"
 
 # Generate report
 generate_report
