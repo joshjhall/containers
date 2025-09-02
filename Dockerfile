@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 # Universal Container Build System
-# Version: 3.0.4
+# Version: 3.1.0
 # Supports multiple contexts: devcontainer, agents, CI/CD, production
 
 # Build arguments for base image selection
