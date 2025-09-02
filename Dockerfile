@@ -133,7 +133,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 # Ruby + Ruby development tools
 ARG INCLUDE_RUBY=false
 ARG INCLUDE_RUBY_DEV=false
-ARG RUBY_VERSION=null
+ARG RUBY_VERSION=3.4.5
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     if [ "${INCLUDE_RUBY}" = "true" ] || [ "${INCLUDE_RUBY_DEV}" = "true" ]; then \
@@ -295,7 +295,7 @@ RUN if [ "${INCLUDE_OLLAMA}" = "true" ]; then \
 # Kubernetes tools
 ARG INCLUDE_KUBERNETES=false
 ARG KUBECTL_VERSION=1.31.0
-ARG K9S_VERSION=null
+ARG K9S_VERSION=0.50.9
 ARG KREW_VERSION=0.4.5
 ARG HELM_VERSION=latest
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
@@ -315,7 +315,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 
 # Terraform
 ARG INCLUDE_TERRAFORM=false
-ARG TERRAGRUNT_VERSION=null
+ARG TERRAGRUNT_VERSION=0.86.2
 ARG TFDOCS_VERSION=0.20.0
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
