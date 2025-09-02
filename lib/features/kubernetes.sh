@@ -48,10 +48,14 @@ source /tmp/build-scripts/base/feature-header.sh
 log_feature_start "Kubernetes Tools"
 
 # Version configuration
-KUBECTL_VERSION="${KUBECTL_VERSION:-1.33}"  # Major.minor version for APT repository
+KUBECTL_VERSION="${KUBECTL_VERSION:-1.33}"  # Can be major.minor or major.minor.patch
 K9S_VERSION="${K9S_VERSION:-0.50.9}"
 KREW_VERSION="${KREW_VERSION:-0.4.5}"
 HELM_VERSION="${HELM_VERSION:-latest}"  # Use "latest" or specific version like "3.16.4"
+
+# Extract major.minor version from KUBECTL_VERSION for repository URL
+# This handles both "1.31" and "1.31.0" formats
+KUBECTL_MINOR_VERSION=$(echo "$KUBECTL_VERSION" | cut -d. -f1,2)
 
 # ============================================================================
 # Repository Configuration
@@ -59,16 +63,17 @@ HELM_VERSION="${HELM_VERSION:-latest}"  # Use "latest" or specific version like 
 log_message "Configuring Kubernetes repository..."
 
 # Configure official Kubernetes apt repository
-log_message "Setting up kubectl ${KUBECTL_VERSION} repository..."
+# Note: Using the stable repository URL without version-specific path
+log_message "Setting up kubectl repository..."
 
 log_command "Adding Kubernetes GPG key" \
-    bash -c "curl -fsSL https://pkgs.k8s.io/core:/stable:/v${KUBECTL_VERSION}/deb/Release.key | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg"
+    bash -c "curl -fsSL https://pkgs.k8s.io/core:/stable:/v${KUBECTL_MINOR_VERSION}/deb/Release.key | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg"
 
 log_command "Setting GPG key permissions" \
     chmod 644 /etc/apt/keyrings/kubernetes-apt-keyring.gpg
 
 log_command "Adding Kubernetes repository" \
-    bash -c "echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v${KUBECTL_VERSION}/deb/ /' > /etc/apt/sources.list.d/kubernetes.list"
+    bash -c "echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v${KUBECTL_MINOR_VERSION}/deb/ /' > /etc/apt/sources.list.d/kubernetes.list"
 
 log_command "Updating package lists" \
     apt-get update
@@ -78,8 +83,15 @@ log_command "Updating package lists" \
 # ============================================================================
 log_message "Installing kubectl..."
 
-log_command "Installing kubectl package" \
-    apt-get install -y kubectl
+# Install specific version if full version is provided, otherwise install latest from repository
+if [[ "$KUBECTL_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    log_message "Installing specific kubectl version ${KUBECTL_VERSION}..."
+    log_command "Installing kubectl package" \
+        apt-get install -y kubectl="${KUBECTL_VERSION}-*"
+else
+    log_command "Installing kubectl package" \
+        apt-get install -y kubectl
+fi
 
 # ============================================================================
 # k9s Installation
