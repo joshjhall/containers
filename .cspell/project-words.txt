@@ -2,6 +2,7 @@
 # This file will be automatically updated when you add words via VS Code
 adoptium
 Adoptium
+AIKMS
 AKIAIOSFODNN
 annprocess
 APIINDEX
@@ -30,6 +31,7 @@ berc
 bers
 beru
 bestpractices
+bierner
 bindgen
 bitnami
 blogdown
@@ -37,10 +39,12 @@ bookdown
 btop
 buildkit
 BUILDKIT
+buildx
 busa
 byebug
 callvis
 CAROOT
+CDPATH
 cdspell
 cftcreate
 cftdelete
@@ -85,6 +89,7 @@ debsig
 Debsig
 debugme
 depcheck
+devcontainers
 Dgroup
 Dinteractive
 direnv
@@ -95,6 +100,7 @@ dirmngr
 dirspell
 DIRTRIM
 diskusage
+displayname
 distutils
 Djava
 dlog
@@ -111,7 +117,9 @@ Dskip
 Dtest
 dtplyr
 dumpall
+DYLD
 dylib
+emailaddress
 ensurepip
 entr
 Entr
@@ -119,7 +127,9 @@ ENTR
 erasedups
 errcheck
 Errorf
+errorlens
 errorprone
+esbenp
 esbuild
 eslf
 fastify
@@ -155,6 +165,7 @@ ghprv
 ghruns
 ghrunv
 gids
+githistory
 githubcli
 gitlog
 glab
@@ -238,6 +249,7 @@ hgrep
 histappend
 historyfile
 honnef
+hostnames
 httr
 ignoreboth
 ineffassign
@@ -271,6 +283,7 @@ kctx
 kdel
 kdesc
 kexec
+keygen
 keyserver
 Keyserver
 kgns
@@ -333,6 +346,7 @@ linestyle
 lintr
 lldb
 LLDB
+localdomain
 localtime
 localtunnel
 loov
@@ -341,6 +355,7 @@ matplotlib
 mdbook
 mdci
 mdcp
+metacharacters
 Metaspace
 mgechev
 Microbenchmark
@@ -352,6 +367,7 @@ mocharc
 mockgen
 mojopkg
 msrv
+MSYS
 mvnc
 mvnci
 mvncist
@@ -387,6 +403,7 @@ Ncpus
 nektos
 netcat
 nextest
+nistp
 nmap
 nmon
 nocapture
@@ -400,6 +417,7 @@ npkill
 nprocs
 nrun
 ntest
+nullglob
 nullvalue
 numpy
 ofabry
@@ -457,6 +475,7 @@ pytc
 pytest
 Pytest
 PYTHONDEVMODE
+PYTHONHOME
 pythonpath
 PYTHONPATH
 pytv
@@ -471,6 +490,7 @@ rdev
 rdoc
 readr
 readxl
+realname
 rediscli
 REDISCLI
 redisclirc
@@ -530,6 +550,7 @@ sqjson
 sqlfile
 sqliterc
 sqmem
+SSHKEY
 sslmode
 stackprof
 startswith
@@ -564,6 +585,7 @@ tidyverse
 tinytex
 tlsv
 tmpl
+TOCTOU
 tokei
 traceroute
 truecolor
@@ -571,11 +593,14 @@ typedoc
 tzdata
 uids
 uptodate
+urandom
 usermod
 Usermod
+usernamehw
 usethis
 uudashr
 venv
+vfzu
 virtualenvs
 vite
 Vite
@@ -585,7 +610,10 @@ vitejs
 vitep
 vitest
 Vitest
+wayou
 whois
+worktree
+worktrees
 wrdeploy
 wrlogin
 wrlogs
@@ -593,6 +621,7 @@ wrwhoami
 wttr
 xclip
 xdist
+yourorg
 yourpassword
 yrun
 zoneinfo
