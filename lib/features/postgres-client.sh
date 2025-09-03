@@ -37,6 +37,9 @@ set -euo pipefail
 # Source standard feature header for user handling
 source /tmp/build-scripts/base/feature-header.sh
 
+# Source apt utilities for reliable package installation
+source /tmp/build-scripts/base/apt-utils.sh
+
 # Start logging
 log_feature_start "PostgreSQL Client"
 
@@ -45,13 +48,11 @@ log_feature_start "PostgreSQL Client"
 # ============================================================================
 log_message "Installing PostgreSQL client package..."
 
-# Update package lists
-log_command "Updating package lists" \
-    apt-get update
+# Update package lists with retry logic
+apt_update
 
-# Install PostgreSQL client tools
-log_command "Installing PostgreSQL client" \
-    apt-get install -y --no-install-recommends postgresql-client
+# Install PostgreSQL client tools with retry logic
+apt_install postgresql-client
 
 # ============================================================================
 # Environment Configuration
