@@ -29,6 +29,9 @@ set -euo pipefail
 # Source standard feature header for user handling
 source /tmp/build-scripts/base/feature-header.sh
 
+# Source apt utilities for reliable package installation
+source /tmp/build-scripts/base/apt-utils.sh
+
 # Start logging
 log_feature_start "Cloudflare Tools"
 
@@ -62,16 +65,17 @@ if [ "$NODE_INSTALLED" = false ] || [ "$NODE_VERSION_OK" = false ]; then
     log_message "Installing Node.js ${CLOUDFLARE_NODE_VERSION} LTS for wrangler compatibility..."
 
     # Install prerequisites for NodeSource repository
-    log_command "Installing prerequisites" \
-        apt-get update && apt-get install -y --no-install-recommends ca-certificates curl gnupg
+    log_message "Installing prerequisites"
+    apt_update
+    apt_install ca-certificates curl gnupg
 
     # Add NodeSource repository for Node.js
     log_command "Adding NodeSource repository for Node.js ${CLOUDFLARE_NODE_VERSION}" \
         bash -c "curl -fsSL https://deb.nodesource.com/setup_${CLOUDFLARE_NODE_VERSION}.x | bash -"
 
     # Install Node.js
-    log_command "Installing Node.js ${CLOUDFLARE_NODE_VERSION}" \
-        apt-get install -y nodejs
+    log_message "Installing Node.js ${CLOUDFLARE_NODE_VERSION}"
+    apt_install nodejs
 
     # Verify installation
     if command -v node &> /dev/null; then

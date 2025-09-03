@@ -38,6 +38,9 @@ set -euo pipefail
 # Source standard feature header for user handling
 source /tmp/build-scripts/base/feature-header.sh
 
+# Source apt utilities for reliable package installation
+source /tmp/build-scripts/base/apt-utils.sh
+
 # Start logging
 log_feature_start "1Password CLI"
 
@@ -101,11 +104,11 @@ log_command "Adding 1Password debsig GPG key" \
 log_message "Installing 1Password CLI package..."
 
 # Update package lists and install CLI
-log_command "Updating package lists" \
-    apt-get update
+# Update package lists with retry logic
+apt_update
 
-log_command "Installing 1Password CLI" \
-    apt-get install -y 1password-cli
+log_message "Installing 1Password CLI"
+apt_install 1password-cli
 
 # ============================================================================
 # Cache Configuration

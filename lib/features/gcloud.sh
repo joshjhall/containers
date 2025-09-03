@@ -32,6 +32,9 @@ set -euo pipefail
 # Source standard feature header for user handling
 source /tmp/build-scripts/base/feature-header.sh
 
+# Source apt utilities for reliable package installation
+source /tmp/build-scripts/base/apt-utils.sh
+
 # Start logging
 log_feature_start "Google Cloud SDK"
 
@@ -40,18 +43,12 @@ log_feature_start "Google Cloud SDK"
 # ============================================================================
 log_message "Installing dependencies..."
 
-# Update package lists
-log_command "Updating package lists" \
-    apt-get update
+# Update package lists with retry logic
+apt_update
 
 # Install required system dependencies
-log_command "Installing required packages" \
-    apt-get install -y --no-install-recommends \
-        python3 \
-        python3-crcmod \
-        apt-transport-https \
-        ca-certificates \
-        gnupg
+log_message "Installing required packages"
+apt_install python3 python3-crcmod apt-transport-https ca-certificates gnupg
 
 # ============================================================================
 # Repository Configuration
@@ -72,11 +69,11 @@ log_command "Adding Google Cloud GPG key" \
 log_message "Installing Google Cloud CLI..."
 
 # Update package lists and install Cloud SDK
-log_command "Updating package lists" \
-    apt-get update
+# Update package lists with retry logic
+apt_update
 
-log_command "Installing Google Cloud CLI" \
-    apt-get install -y google-cloud-cli
+log_message "Installing Google Cloud CLI"
+apt_install google-cloud-cli
 
 # ============================================================================
 # Additional Components
