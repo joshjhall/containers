@@ -23,17 +23,22 @@ set -euo pipefail
 # Source standard feature header for user handling
 source /tmp/build-scripts/base/feature-header.sh
 
+# Source apt utilities for reliable package installation
+source /tmp/build-scripts/base/apt-utils.sh
+
 # Start logging
 log_feature_start "Python Development Tools"
 
 # ============================================================================
 # System Dependencies
 # ============================================================================
-log_command "Updating package lists" \
-    apt-get update
+log_message "Installing Python development dependencies..."
 
-log_command "Installing Python development dependencies" \
-    apt-get install -y --no-install-recommends \
+# Update package lists with retry logic
+apt_update
+
+# Install Python development dependencies with retry logic
+apt_install \
     python3-dev \
     python3-full \
     python3-distutils \
