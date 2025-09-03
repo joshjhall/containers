@@ -46,6 +46,9 @@ set -euo pipefail
 # Source standard feature header for user handling
 source /tmp/build-scripts/base/feature-header.sh
 
+# Source apt utilities for reliable package installation
+source /tmp/build-scripts/base/apt-utils.sh
+
 # Start logging
 log_feature_start "Terraform"
 
@@ -60,15 +63,12 @@ TFDOCS_VERSION="${TFDOCS_VERSION:-0.20.0}"
 # ============================================================================
 log_message "Installing dependencies..."
 
-# Update package lists
-log_command "Updating package lists" \
-    apt-get update
+# Update package lists with retry logic
+apt_update
 
 # Install dependencies
-log_command "Installing required packages" \
-    apt-get install -y --no-install-recommends \
-        gnupg \
-        software-properties-common
+log_message "Installing required packages"
+apt_install gnupg software-properties-common
 
 # ============================================================================
 # Terraform Installation
@@ -83,11 +83,11 @@ log_command "Adding HashiCorp repository" \
     apt-add-repository "deb [arch=$(dpkg --print-architecture)] https://apt.releases.hashicorp.com $(lsb_release -cs) main"
 
 # Install Terraform
-log_command "Updating package lists" \
-    apt-get update
+# Update package lists with retry logic
+apt_update
 
-log_command "Installing Terraform" \
-    apt-get install -y terraform
+log_message "Installing Terraform"
+apt_install terraform
 
 # ============================================================================
 # Additional Tools Installation

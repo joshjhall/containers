@@ -44,6 +44,9 @@ set -euo pipefail
 # Source standard feature header for user handling
 source /tmp/build-scripts/base/feature-header.sh
 
+# Source apt utilities for reliable package installation
+source /tmp/build-scripts/base/apt-utils.sh
+
 # Start logging
 log_feature_start "Kubernetes Tools"
 
@@ -75,8 +78,8 @@ log_command "Setting GPG key permissions" \
 log_command "Adding Kubernetes repository" \
     bash -c "echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v${KUBECTL_MINOR_VERSION}/deb/ /' > /etc/apt/sources.list.d/kubernetes.list"
 
-log_command "Updating package lists" \
-    apt-get update
+# Update package lists with retry logic
+apt_update
 
 # ============================================================================
 # kubectl Installation
@@ -86,11 +89,11 @@ log_message "Installing kubectl..."
 # Install specific version if full version is provided, otherwise install latest from repository
 if [[ "$KUBECTL_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
     log_message "Installing specific kubectl version ${KUBECTL_VERSION}..."
-    log_command "Installing kubectl package" \
-        apt-get install -y kubectl="${KUBECTL_VERSION}-*"
+    log_message "Installing kubectl package"
+    apt_install kubectl="${KUBECTL_VERSION}-*"
 else
-    log_command "Installing kubectl package" \
-        apt-get install -y kubectl
+    log_message "Installing kubectl package"
+    apt_install kubectl
 fi
 
 # ============================================================================
