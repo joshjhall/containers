@@ -100,29 +100,29 @@ log_command "Adding R repository" \
     bash -c "echo 'deb [signed-by=/usr/share/keyrings/r-project-archive-keyring.gpg] https://cloud.r-project.org/bin/linux/debian bookworm-cran${R_VERSION_SHORT}/' > /etc/apt/sources.list.d/r-cran.list"
 
 # Update and install specific R version
-log_command "Updating package lists with R repository" \
-    apt-get update
+# Update package lists with R repository
+apt_update
 
 # Install R with version pinning
 log_message "Installing R packages..."
 if apt-cache show r-base-core | grep -q "Version: ${R_VERSION}"; then
     # Install specific version if available
-    log_command "Installing R version ${R_VERSION}" \
-        apt-get install -y --no-install-recommends \
+    log_message "Installing R version ${R_VERSION}..."
+    if ! apt_install \
             r-base-core=${R_VERSION}-* \
             r-base-dev=${R_VERSION}-* \
-            r-recommended=${R_VERSION}-* || {
+            r-recommended=${R_VERSION}-*; then
         log_warning "Exact version ${R_VERSION} not found, installing latest available"
-        log_command "Installing latest R version" \
-            apt-get install -y --no-install-recommends \
+        log_message "Installing latest R version..."
+        apt_install \
                 r-base \
                 r-base-dev \
                 r-recommended
-    }
+    fi
 else
     log_warning "Version ${R_VERSION} not available, installing latest from repository"
-    log_command "Installing latest R version from repository" \
-        apt-get install -y --no-install-recommends \
+    log_message "Installing latest R version from repository..."
+    apt_install \
             r-base \
             r-base-dev \
             r-recommended
@@ -134,8 +134,8 @@ fi
 log_message "Installing build dependencies for R packages"
 
 # Install libraries commonly needed for R package compilation
-log_command "Installing R package build dependencies" \
-    apt-get install -y --no-install-recommends \
+log_message "Installing R package build dependencies..."
+apt_install \
         libcurl4-openssl-dev \
         libssl-dev \
         libxml2-dev \
