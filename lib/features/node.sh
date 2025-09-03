@@ -28,6 +28,9 @@ set -euo pipefail
 # Source standard feature header for user handling
 source /tmp/build-scripts/base/feature-header.sh
 
+# Source apt utilities for reliable package installation
+source /tmp/build-scripts/base/apt-utils.sh
+
 # ============================================================================
 # Version Configuration
 # ============================================================================
@@ -66,11 +69,13 @@ fi
 log_message "Installing system dependencies for Node.js..."
 
 # Install dependencies needed by Node.js and native modules
-log_command "Updating package lists" \
-    apt-get update
+log_message "Installing Node.js dependencies..."
 
-log_command "Installing Node.js dependencies" \
-    apt-get install -y --no-install-recommends \
+# Update package lists with retry logic
+apt_update
+
+# Install Node.js dependencies with retry logic
+apt_install \
     curl \
     ca-certificates \
     gnupg
@@ -91,8 +96,8 @@ if [ -n "${NODE_SPECIFIC_VERSION}" ]; then
     log_command "Adding NodeSource repository for npm" \
         bash -c "curl -fsSL https://deb.nodesource.com/setup_${NODE_MAJOR_VERSION}.x | bash -"
     
-    log_command "Installing Node.js and npm" \
-        apt-get install -y nodejs
+    log_message "Installing Node.js and npm..."
+    apt_install nodejs
     
     # Install n globally
     log_command "Installing n version manager" \
@@ -110,8 +115,8 @@ else
     log_command "Adding NodeSource repository" \
         bash -c "curl -fsSL https://deb.nodesource.com/setup_${NODE_MAJOR_VERSION}.x | bash -"
     
-    log_command "Installing Node.js" \
-        apt-get install -y nodejs
+    log_message "Installing Node.js..."
+    apt_install nodejs
 fi
 
 # ============================================================================
