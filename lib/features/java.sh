@@ -43,6 +43,9 @@ set -euo pipefail
 # Source standard feature header for user handling
 source /tmp/build-scripts/base/feature-header.sh
 
+# Source apt utilities for reliable package installation
+source /tmp/build-scripts/base/apt-utils.sh
+
 # ============================================================================
 # Version Configuration
 # ============================================================================
@@ -57,11 +60,13 @@ log_feature_start "Java" "${JAVA_VERSION}"
 # ============================================================================
 log_message "Installing system dependencies for Java..."
 
-log_command "Updating package lists" \
-    apt-get update
+log_message "Installing repository dependencies..."
 
-log_command "Installing repository dependencies" \
-    apt-get install -y --no-install-recommends \
+# Update package lists with retry logic
+apt_update
+
+# Install repository dependencies with retry logic
+apt_install \
     wget \
     apt-transport-https \
     gpg \
@@ -78,8 +83,8 @@ log_command "Adding Adoptium GPG key" \
 log_command "Adding Adoptium repository" \
     bash -c 'echo "deb [signed-by=/usr/share/keyrings/adoptium.gpg] https://packages.adoptium.net/artifactory/deb $(awk -F= '\''/^VERSION_CODENAME/{print$2}'\'' /etc/os-release) main" > /etc/apt/sources.list.d/adoptium.list'
 
-log_command "Updating package lists with Adoptium repository" \
-    apt-get update
+# Update package lists with Adoptium repository
+apt_update
 
 # ============================================================================
 # Java Installation
@@ -87,8 +92,8 @@ log_command "Updating package lists with Adoptium repository" \
 log_message "Installing Java ${JAVA_VERSION} and build tools..."
 
 # Install Temurin JDK
-log_command "Installing Eclipse Temurin JDK ${JAVA_VERSION}" \
-    apt-get install -y --no-install-recommends temurin-${JAVA_VERSION}-jdk
+log_message "Installing Eclipse Temurin JDK ${JAVA_VERSION}..."
+apt_install temurin-${JAVA_VERSION}-jdk
 
 # Create consistent symlink for all versions
 TEMURIN_PATH="/usr/lib/jvm/temurin-${JAVA_VERSION}-jdk-$(dpkg --print-architecture)"
@@ -96,11 +101,8 @@ log_command "Creating Java version symlink" \
     ln -sf "${TEMURIN_PATH}" "/usr/lib/jvm/java-${JAVA_VERSION}-openjdk-$(dpkg --print-architecture)"
 
 # Install build tools
-log_command "Installing Maven build tool" \
-    apt-get install -y --no-install-recommends maven
-
-log_command "Installing Gradle build tool" \
-    apt-get install -y --no-install-recommends gradle
+log_message "Installing build tools..."
+apt_install maven gradle
 
 # ============================================================================
 # Cache Configuration
