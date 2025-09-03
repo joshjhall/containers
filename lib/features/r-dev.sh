@@ -25,6 +25,9 @@ set -euo pipefail
 # Source standard feature header for user handling
 source /tmp/build-scripts/base/feature-header.sh
 
+# Source apt utilities for reliable package installation
+source /tmp/build-scripts/base/apt-utils.sh
+
 # Start logging
 log_feature_start "R Development Tools"
 
@@ -52,11 +55,11 @@ fi
 # ============================================================================
 # System Dependencies
 # ============================================================================
-log_command "Installing system dependencies for R packages" \
-    apt-get update
+# Update package lists with retry logic
+apt_update
 
-log_command "Installing R package build dependencies" \
-    apt-get install -y --no-install-recommends \
+log_message "Installing R package build dependencies"
+apt_install \
     libgit2-dev \
     libssh2-1-dev \
     libgmp-dev \

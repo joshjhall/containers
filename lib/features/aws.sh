@@ -40,6 +40,9 @@ set -euo pipefail
 # Source standard feature header for user handling
 source /tmp/build-scripts/base/feature-header.sh
 
+# Source apt utilities for reliable package installation
+source /tmp/build-scripts/base/apt-utils.sh
+
 # Start logging
 log_feature_start "AWS CLI v2"
 
@@ -48,13 +51,12 @@ log_feature_start "AWS CLI v2"
 # ============================================================================
 log_message "Installing dependencies..."
 
-# Update package lists
-log_command "Updating package lists" \
-    apt-get update
+# Update package lists with retry logic
+apt_update
 
-# Install required system packages
-log_command "Installing required packages" \
-    apt-get install -y --no-install-recommends \
+# Install required system packages with retry logic
+log_message "Installing required packages..."
+apt_install \
         unzip \
         groff \
         less

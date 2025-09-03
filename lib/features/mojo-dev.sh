@@ -20,6 +20,9 @@ set -euo pipefail
 # Source standard feature header for user handling
 source /tmp/build-scripts/base/feature-header.sh
 
+# Source apt utilities for reliable package installation
+source /tmp/build-scripts/base/apt-utils.sh
+
 # Start logging
 log_feature_start "Mojo Development Tools"
 
@@ -46,12 +49,12 @@ fi
 # ============================================================================
 log_message "Installing system dependencies for Mojo dev tools..."
 
-log_command "Updating package lists" \
-    apt-get update
+# Update package lists with retry logic
+apt_update
 
 # Install LLDB for debugging
-log_command "Installing debugging tools" \
-    apt-get install -y --no-install-recommends \
+log_message "Installing debugging tools"
+apt_install \
     lldb
 
 # ============================================================================
@@ -62,8 +65,8 @@ log_message "Setting up Python interop for Mojo..."
 # Check if Python is installed
 if ! command -v python3 &> /dev/null; then
     log_message "Python3 not found - installing Python3..."
-    log_command "Installing Python3" \
-        apt-get install -y --no-install-recommends \
+    log_message "Installing Python3"
+    apt_install \
         python3 \
         python3-venv
 fi
@@ -71,8 +74,8 @@ fi
 # Check if pip is available
 if ! python3 -m pip --version &> /dev/null; then
     log_message "pip not found - installing pip..."
-    log_command "Installing pip" \
-        apt-get install -y --no-install-recommends \
+    log_message "Installing pip"
+    apt_install \
         python3-pip
 fi
 
@@ -100,8 +103,8 @@ for py_package in numpy matplotlib jupyter notebook; do
         # First try to install from apt
         if [ -n "$apt_package" ]; then
             log_message "Installing $py_package from apt ($apt_package)..."
-            if log_command "Installing $apt_package" \
-                apt-get install -y --no-install-recommends "$apt_package"; then
+            if log_message "Installing $apt_package" && \
+                apt_install "$apt_package"; then
                 continue
             else
                 log_warning "Failed to install $apt_package from apt, trying pip..."

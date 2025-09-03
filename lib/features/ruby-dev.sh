@@ -21,6 +21,9 @@ set -euo pipefail
 # Source standard feature header for user handling
 source /tmp/build-scripts/base/feature-header.sh
 
+# Source apt utilities for reliable package installation
+source /tmp/build-scripts/base/apt-utils.sh
+
 # Start logging
 log_feature_start "Ruby Development Tools"
 
@@ -48,11 +51,11 @@ fi
 # ============================================================================
 # System Dependencies
 # ============================================================================
-log_command "Updating package lists" \
-    apt-get update
+# Update package lists with retry logic
+apt_update
 
-log_command "Installing system dependencies for Ruby dev tools" \
-    apt-get install -y --no-install-recommends \
+log_message "Installing system dependencies for Ruby dev tools"
+apt_install \
     libxml2-dev \
     libxslt1-dev \
     libcurl4-openssl-dev \
