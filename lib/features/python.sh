@@ -21,6 +21,9 @@ set -euo pipefail
 # Source standard feature header for user handling
 source /tmp/build-scripts/base/feature-header.sh
 
+# Source apt utilities for reliable package installation
+source /tmp/build-scripts/base/apt-utils.sh
+
 # ============================================================================
 # Version Configuration
 # ============================================================================
@@ -32,11 +35,13 @@ log_feature_start "Python" "${PYTHON_VERSION}"
 # ============================================================================
 # System Dependencies
 # ============================================================================
-log_command "Updating package lists" \
-    apt-get update
+log_message "Installing Python build dependencies..."
 
-log_command "Installing Python build dependencies" \
-    apt-get install -y --no-install-recommends \
+# Update package lists with retry logic
+apt_update
+
+# Install Python build dependencies with retry logic
+apt_install \
     build-essential \
     gdb \
     lcov \

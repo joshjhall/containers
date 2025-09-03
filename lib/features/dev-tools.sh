@@ -23,6 +23,9 @@ set -euo pipefail
 # Source standard feature header for user handling
 source /tmp/build-scripts/base/feature-header.sh
 
+# Source apt utilities for reliable package installation  
+source /tmp/build-scripts/base/apt-utils.sh
+
 # Start logging
 log_feature_start "Development Tools"
 
@@ -41,8 +44,8 @@ log_command "Setting GitHub CLI GPG key permissions" \
 log_command "Adding GitHub CLI repository" \
     bash -c 'echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" > /etc/apt/sources.list.d/github-cli.list'
 
-log_command "Updating package lists" \
-    apt-get update
+# Update package lists with retry logic
+apt_update
 
 # ============================================================================
 # Package Installation
@@ -52,8 +55,8 @@ log_message "Installing development tools grouped by category..."
 # ----------------------------------------------------------------------------
 # Version Control Extras
 # ----------------------------------------------------------------------------
-log_command "Installing version control tools" \
-    apt-get install -y --no-install-recommends \
+log_message "Installing version control tools..."
+apt_install \
     tig \
     colordiff \
     gh
@@ -61,8 +64,8 @@ log_command "Installing version control tools" \
 # ----------------------------------------------------------------------------
 # Search and File Tools
 # ----------------------------------------------------------------------------
-log_command "Installing search and file tools" \
-    apt-get install -y --no-install-recommends \
+log_message "Installing search and file tools..."
+apt_install \
     ripgrep \
     fd-find \
     silversearcher-ag \
@@ -72,8 +75,8 @@ log_command "Installing search and file tools" \
     zip
 
 # Terminal and monitoring tools
-log_command "Installing terminal and monitoring tools" \
-    apt-get install -y --no-install-recommends \
+log_message "Installing terminal and monitoring tools..."
+apt_install \
     htop \
     ncdu \
     bat \
@@ -81,36 +84,36 @@ log_command "Installing terminal and monitoring tools" \
     tmux
 
 # Network debugging tools
-log_command "Installing network debugging tools" \
-    apt-get install -y --no-install-recommends \
+log_message "Installing network debugging tools..."
+apt_install \
     netcat-openbsd \
     dnsutils \
     iputils-ping \
     traceroute
 
 # System monitoring and debugging
-log_command "Installing system monitoring tools" \
-    apt-get install -y --no-install-recommends \
+log_message "Installing system monitoring tools..."
+apt_install \
     lsof \
     strace \
     sysstat \
     iotop
 
 # File processing extras
-log_command "Installing file processing tools" \
-    apt-get install -y --no-install-recommends \
+log_message "Installing file processing tools..."
+apt_install \
     xxd
 
 # Development helpers
-log_command "Installing development helpers" \
-    apt-get install -y --no-install-recommends \
+log_message "Installing development helpers..."
+apt_install \
     inotify-tools \
     supervisor \
     xclip
 
 # Text editors
-log_command "Installing text editors" \
-    apt-get install -y --no-install-recommends \
+log_message "Installing text editors..."
+apt_install \
     nano \
     vim
 
