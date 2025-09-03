@@ -25,6 +25,9 @@ set -euo pipefail
 # Source standard feature header for user handling
 source /tmp/build-scripts/base/feature-header.sh
 
+# Source apt utilities for reliable package installation
+source /tmp/build-scripts/base/apt-utils.sh
+
 # Start logging
 log_feature_start "Java Development Tools"
 
@@ -54,11 +57,13 @@ fi
 # ============================================================================
 log_message "Installing system dependencies for Java dev tools..."
 
-log_command "Updating package lists" \
-    apt-get update
+log_message "Updating package lists and installing dependencies..."
 
-log_command "Installing system dependencies" \
-    apt-get install -y --no-install-recommends \
+# Update package lists with retry logic
+apt_update
+
+# Install system dependencies with retry logic
+apt_install \
     unzip \
     zip \
     jq

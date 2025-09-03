@@ -51,6 +51,9 @@ set -euo pipefail
 # Source standard feature header for user handling
 source /tmp/build-scripts/base/feature-header.sh
 
+# Source apt utilities for reliable package installation
+source /tmp/build-scripts/base/apt-utils.sh
+
 # Start logging
 log_feature_start "Golang Development Tools"
 
@@ -70,11 +73,13 @@ fi
 # ============================================================================
 # System Dependencies
 # ============================================================================
-log_command "Updating package lists" \
-    apt-get update
+log_message "Installing system dependencies for Go dev tools..."
 
-log_command "Installing system dependencies for Go dev tools" \
-    apt-get install -y --no-install-recommends \
+# Update package lists with retry logic
+apt_update
+
+# Install system dependencies with retry logic
+apt_install \
     graphviz \
     protobuf-compiler
 

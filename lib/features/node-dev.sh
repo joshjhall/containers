@@ -24,6 +24,9 @@ set -euo pipefail
 # Source standard feature header for user handling
 source /tmp/build-scripts/base/feature-header.sh
 
+# Source apt utilities for reliable package installation
+source /tmp/build-scripts/base/apt-utils.sh
+
 # Start logging
 log_feature_start "Node.js Development Tools"
 
@@ -54,11 +57,13 @@ fi
 log_message "Installing system dependencies for Node.js dev tools..."
 
 # Install dependencies needed by native Node.js modules
-log_command "Updating package lists" \
-    apt-get update
+log_message "Installing Node.js development dependencies..."
 
-log_command "Installing Node.js development dependencies" \
-    apt-get install -y --no-install-recommends \
+# Update package lists with retry logic
+apt_update
+
+# Install Node.js development dependencies with retry logic
+apt_install \
     python3 \
     python3-pip \
     g++ \
