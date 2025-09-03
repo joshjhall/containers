@@ -62,8 +62,10 @@ CLOUDSDK
 codellama
 colordiff
 COLORTERM
+confdef
 configureondemand
 conflictstyle
+confold
 containerenv
 cookiecutter
 coreutils
@@ -416,6 +418,7 @@ nowdate
 npkill
 nprocs
 nrun
+nslookup
 ntest
 nullglob
 nullvalue
