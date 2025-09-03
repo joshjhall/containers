@@ -38,6 +38,9 @@ set -euo pipefail
 # Source standard feature header for user handling
 source /tmp/build-scripts/base/feature-header.sh
 
+# Source apt utilities for reliable package installation
+source /tmp/build-scripts/base/apt-utils.sh
+
 # Start logging
 log_feature_start "SQLite Client"
 
@@ -46,13 +49,11 @@ log_feature_start "SQLite Client"
 # ============================================================================
 log_message "Installing SQLite client package..."
 
-# Update package lists
-log_command "Updating package lists" \
-    apt-get update
+# Update package lists with retry logic
+apt_update
 
-# Install SQLite3 command-line tool
-log_command "Installing SQLite3" \
-    apt-get install -y --no-install-recommends sqlite3
+# Install SQLite3 command-line tool with retry logic
+apt_install sqlite3
 
 # ============================================================================
 # Environment Configuration
