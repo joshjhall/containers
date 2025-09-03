@@ -25,6 +25,9 @@ set -euo pipefail
 # Source standard feature header for user handling
 source /tmp/build-scripts/base/feature-header.sh
 
+# Source apt utilities for reliable package installation
+source /tmp/build-scripts/base/apt-utils.sh
+
 # ============================================================================
 # Version Configuration
 # ============================================================================
@@ -43,11 +46,13 @@ log_feature_start "R" "${R_VERSION}"
 log_message "Setting up R repository..."
 
 # Install dependencies for adding repositories
-log_command "Updating package lists" \
-    apt-get update
+log_message "Installing repository dependencies..."
 
-log_command "Installing repository dependencies" \
-    apt-get install -y --no-install-recommends \
+# Update package lists with retry logic
+apt_update
+
+# Install repository dependencies with retry logic
+apt_install \
     gnupg \
     dirmngr \
     ca-certificates \

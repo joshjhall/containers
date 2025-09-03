@@ -39,6 +39,9 @@ set -euo pipefail
 # Source standard feature header for user handling
 source /tmp/build-scripts/base/feature-header.sh
 
+# Source apt utilities for reliable package installation
+source /tmp/build-scripts/base/apt-utils.sh
+
 # Start logging
 log_feature_start "Docker CLI Tools"
 
@@ -79,11 +82,13 @@ else
 fi
 
 # Update and install Docker CLI only
-log_command "Updating package lists" \
-    apt-get update
+log_message "Installing Docker CLI and Compose plugin..."
 
-log_command "Installing Docker CLI and Compose plugin" \
-    apt-get install -y docker-ce-cli docker-compose-plugin
+# Update package lists with retry logic
+apt_update
+
+# Install Docker CLI and Compose plugin with retry logic
+apt_install docker-ce-cli docker-compose-plugin
 
 # ============================================================================
 # User Configuration
