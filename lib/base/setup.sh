@@ -14,14 +14,18 @@
 #
 set -euo pipefail
 
+# Source apt utilities for reliable package installation
+source /tmp/build-scripts/base/apt-utils.sh
+
 # ============================================================================
 # System Updates
 # ============================================================================
 echo "=== Updating base system packages for security ==="
 
 # Update package lists and upgrade existing packages
-apt-get update
-apt-get upgrade -y
+apt_update
+# Note: apt_install doesn't handle upgrades, so we use apt-get with retry logic
+apt_retry apt-get upgrade -y
 
 # ============================================================================
 # Package Installation
@@ -29,7 +33,7 @@ apt-get upgrade -y
 echo "=== Installing essential system packages ==="
 
 # Install essential system packages
-apt-get install -y --no-install-recommends \
+apt_install \
     build-essential \
     make \
     sudo \
@@ -102,8 +106,6 @@ echo "=== Setting up base aliases ==="
 # Cleanup
 # ============================================================================
 echo "=== Cleaning up ==="
-apt-get autoremove -y
-apt-get clean
-rm -rf /var/lib/apt/lists/*
+apt_cleanup
 
 echo "=== Base system setup complete ==="
