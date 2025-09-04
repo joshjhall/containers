@@ -223,6 +223,7 @@ EOF
 }
 
 # Export functions for use by other scripts
+export -f apt_retry
 export -f apt_update
 export -f apt_install
 export -f apt_cleanup
