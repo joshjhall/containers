@@ -205,12 +205,18 @@ test_error_handling() {
 
 # Test: Package installation commands
 test_package_commands() {
-    # Test apt-get patterns
-    local apt_cmd="apt-get install -y --no-install-recommends"
-    if [[ "$apt_cmd" == *"--no-install-recommends"* ]]; then
-        assert_true true "Minimal package installation configured"
+    # Test that apt-utils is sourced
+    if grep -q "source /tmp/build-scripts/base/apt-utils.sh" "$PROJECT_ROOT/lib/features/python.sh"; then
+        assert_true true "apt-utils.sh is sourced for reliable package management"
     else
-        assert_true false "Package installation not optimized"
+        assert_true false "apt-utils.sh not sourced"
+    fi
+    
+    # Test that apt_install is used for package installation
+    if grep -q "apt_install" "$PROJECT_ROOT/lib/features/python.sh"; then
+        assert_true true "Using apt_install function from apt-utils"
+    else
+        assert_true false "Not using apt_install function"
     fi
 }
 

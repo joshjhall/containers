@@ -21,16 +21,25 @@ test_script_exists() {
 
 # Test: Package management commands
 test_package_commands() {
-    # Test apt-get update pattern
-    local update_cmd="apt-get update"
-    assert_equals "apt-get update" "$update_cmd" "Package update command"
-    
-    # Test minimal installation pattern
-    local install_opts="--no-install-recommends"
-    if [[ "$install_opts" == *"--no-install-recommends"* ]]; then
-        assert_true true "Minimal package installation configured"
+    # Test that apt-utils is sourced
+    if grep -q "source /tmp/build-scripts/base/apt-utils.sh" "$PROJECT_ROOT/lib/base/setup.sh"; then
+        assert_true true "apt-utils.sh is sourced for reliable package management"
     else
-        assert_true false "Package installation not optimized"
+        assert_true false "apt-utils.sh not sourced"
+    fi
+    
+    # Test that apt_update is used instead of direct apt-get update
+    if grep -q "apt_update" "$PROJECT_ROOT/lib/base/setup.sh"; then
+        assert_true true "Using apt_update function from apt-utils"
+    else
+        assert_true false "Not using apt_update function"
+    fi
+    
+    # Test that apt_install is used for package installation
+    if grep -q "apt_install" "$PROJECT_ROOT/lib/base/setup.sh"; then
+        assert_true true "Using apt_install function from apt-utils"
+    else
+        assert_true false "Not using apt_install function"
     fi
 }
 
@@ -127,24 +136,18 @@ test_sudo_setup() {
 
 # Test: Cache cleanup commands
 test_cache_cleanup() {
-    # Test apt cache cleanup
-    local cleanup_cmds=(
-        "apt-get clean"
-        "rm -rf /var/lib/apt/lists/*"
-        "rm -rf /tmp/*"
-    )
-    
-    # Test apt clean command
-    local clean_cmd="apt-get clean"
-    assert_equals "apt-get clean" "$clean_cmd" "APT clean command"
-    
-    # Test cache directory cleanup
-    local cache_cleanup="rm -rf /var/lib/apt/lists/*"
-    if [[ "$cache_cleanup" == *"/var/lib/apt/lists/*"* ]]; then
-        assert_true true "APT lists cleanup included"
+    # Test that apt_cleanup is used
+    if grep -q "apt_cleanup" "$PROJECT_ROOT/lib/base/setup.sh"; then
+        assert_true true "Using apt_cleanup function from apt-utils"
     else
-        assert_true false "APT lists cleanup missing"
+        assert_true false "Not using apt_cleanup function"
     fi
+    
+    # The apt_cleanup function handles all the cleanup operations:
+    # - apt-get autoremove
+    # - apt-get clean  
+    # - rm -rf /var/lib/apt/lists/*
+    assert_true true "Cleanup operations handled by apt_cleanup"
 }
 
 # Test: Error handling
