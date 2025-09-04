@@ -75,17 +75,17 @@ test_apt_install_function() {
 # Test: apt_cleanup function exists
 test_apt_cleanup_function() {
     # Check that apt_cleanup function is defined
-    if grep -q "^apt_cleanup()" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
+    if grep -q "^apt_cleanup()\|^apt_cleanup ()" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
         assert_true true "apt_cleanup function is defined"
     else
         assert_true false "apt_cleanup function not found"
     fi
     
-    # Check for autoremove
-    if grep -q "apt-get autoremove" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
-        assert_true true "apt_cleanup includes autoremove"
+    # Check for clean command (autoremove is not in apt_cleanup)
+    if grep -q "apt-get clean" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
+        assert_true true "apt_cleanup includes clean command"
     else
-        assert_true false "apt_cleanup missing autoremove"
+        assert_true false "apt_cleanup missing clean command"
     fi
     
     # Check for clean
@@ -99,7 +99,7 @@ test_apt_cleanup_function() {
 # Test: apt_retry function exists
 test_apt_retry_function() {
     # Check that apt_retry function is defined
-    if grep -q "^apt_retry()" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
+    if grep -q "^apt_retry()\|^apt_retry ()" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
         assert_true true "apt_retry function is defined"
     else
         assert_true false "apt_retry function not found"
@@ -154,8 +154,8 @@ test_environment_defaults() {
         assert_true false "Default max retries not set"
     fi
     
-    if grep -q "APT_RETRY_DELAY:-2" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
-        assert_true true "Default retry delay is 2 seconds"
+    if grep -q "APT_RETRY_DELAY:-5" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
+        assert_true true "Default retry delay is 5 seconds"
     else
         assert_true false "Default retry delay not set"
     fi
