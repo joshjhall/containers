@@ -31,6 +31,43 @@ APT_RETRY_DELAY="${APT_RETRY_DELAY:-5}"
 APT_TIMEOUT="${APT_TIMEOUT:-300}"  # 5 minutes timeout for apt operations
 
 # ============================================================================
+# apt_retry - Generic retry wrapper for any apt command
+# 
+# Usage:
+#   apt_retry <command>
+#
+# Example:
+#   apt_retry apt-get upgrade -y
+# ============================================================================
+apt_retry() {
+    local attempt=1
+    local delay="$APT_RETRY_DELAY"
+    local cmd="$*"
+    
+    while [ $attempt -le "$APT_MAX_RETRIES" ]; do
+        echo "Running: $cmd (attempt $attempt/$APT_MAX_RETRIES)..."
+        
+        if timeout "$APT_TIMEOUT" $cmd; then
+            echo "✓ Command succeeded: $cmd"
+            return 0
+        fi
+        
+        local exit_code=$?
+        
+        if [ $attempt -lt "$APT_MAX_RETRIES" ]; then
+            echo "⚠ Command failed (exit code: $exit_code), retrying in ${delay}s..."
+            sleep "$delay"
+            delay=$((delay * 2))  # Exponential backoff
+        else
+            echo "✗ Command failed after $APT_MAX_RETRIES attempts: $cmd"
+            return $exit_code
+        fi
+        
+        attempt=$((attempt + 1))
+    done
+}
+
+# ============================================================================
 # apt_update - Update package lists with retry logic
 # 
 # Usage:
