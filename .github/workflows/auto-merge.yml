@@ -1,0 +1,45 @@
+name: Auto-Merge Version Updates
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+jobs:
+  auto-merge:
+    name: Auto-Merge Version Update PRs
+    runs-on: ubuntu-latest
+    # Only run on PRs created by the version-check workflow
+    if: |
+      github.event.pull_request.user.login == 'github-actions[bot]' &&
+      contains(github.event.pull_request.labels.*.name, 'version-update')
+
+    permissions:
+      contents: write
+      pull-requests: write
+      checks: read
+
+    steps:
+      - name: Wait for CI checks
+        uses: lewagon/wait-on-check-action@v1.3.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          check-name: 'Run Tests'  # Name of the test job
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          wait-interval: 30
+
+      - name: Auto-merge PR
+        uses: pascalgn/merge-action@v0.15.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          # Merge method: merge, squash, or rebase
+          method: squash
+          # Delete branch after merge
+          delete_branch: true
+          # Custom commit message for squash
+          commit_message_template: |
+            chore: automated version updates (#${{ github.event.pull_request.number }})
+
+            Auto-merged by GitHub Actions after CI checks passed.
+
+            Co-authored-by: github-actions[bot] <github-actions[bot]@users.noreply.github.com>

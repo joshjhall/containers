@@ -18,7 +18,7 @@ A modular, extensible container build system designed to be shared across projec
 1. Add as a git submodule:
 
 ```bash
-git submodule add https://github.com/yourusername/containers.git containers
+git submodule add https://github.com/joshjhall/containers.git containers
 git submodule update --init --recursive
 ```
 
@@ -47,7 +47,7 @@ docker build -t test:dev \
 1. Add the submodule:
 
 ```bash
-git submodule add https://github.com/yourusername/containers.git containers
+git submodule add https://github.com/joshjhall/containers.git containers
 ```
 
 2. Create build scripts or update your CI/CD to use the shared Dockerfile:

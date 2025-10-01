@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.0.0] - 2025-10-01
+
+### Changed
+
+- **BREAKING**: Upgraded base image from Debian Bookworm to Debian Trixie (debian:trixie-slim)
+- Migrated from GitLab CI/CD to GitHub Actions
+- Simplified branch strategy - now using main branch only (removed develop branch)
+- Open sourced under MIT License
+
+### Added
+
+- GitHub Actions CI/CD workflow (.github/workflows/ci.yml)
+- Support for GitHub Container Registry (ghcr.io)
+- Automated issue creation for version updates
+
+### Improved
+
+- All features fully compatible with Debian Trixie
+- Streamlined release process for open source distribution
+
 ## [1.0.0] - 2025-01-10
 
 ### Added
