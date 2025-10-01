@@ -1,10 +1,10 @@
 # syntax=docker/dockerfile:1
 # Universal Container Build System
-# Version: 3.2.0
+# Version: 4.0.0
 # Supports multiple contexts: devcontainer, agents, CI/CD, production
 
 # Build arguments for base image selection
-ARG BASE_IMAGE=debian:bookworm-slim
+ARG BASE_IMAGE=debian:trixie-slim
 FROM ${BASE_IMAGE} AS base
 
 # Path to the project root relative to the containers directory
