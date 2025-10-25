@@ -278,13 +278,13 @@ The script will check:
 
 #### Automated Weekly Checks
 
-Configure GitLab CI to automatically check for updates weekly with Pushover notifications:
+The GitHub Actions workflow automatically checks for updates weekly:
 
-1. Add `PUSHOVER_USER_KEY` and `PUSHOVER_APP_TOKEN` to CI/CD variables
-2. Create a pipeline schedule for weekly runs
-3. Receive notifications when updates are available
+1. Runs every Sunday at 2am UTC (configured via cron schedule)
+2. Creates a pull request with version updates when available
+3. Auto-merges after CI tests pass (if configured)
 
-See [docs/scheduled-version-checks.md](docs/scheduled-version-checks.md) for detailed setup instructions.
+The workflow creates PRs with updated versions that can be reviewed before merging.
 
 ### Updating Versions
 
