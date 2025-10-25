@@ -293,52 +293,53 @@ When updates are available, edit the appropriate files:
 
 ### Unit Tests
 
-The project includes a comprehensive unit test framework that tests bash scripts directly without requiring Docker builds:
+The project includes a comprehensive unit test framework (488 tests, 99% pass rate):
 
 ```bash
-# Run all unit tests
+# Run all unit tests (no Docker required)
 ./tests/run_unit_tests.sh
 
 # Run specific test suite
-./tests/unit/version_checker.sh
-./tests/unit/base/logging.sh
 ./tests/unit/features/python.sh
+./tests/unit/base/logging.sh
 ```
 
-**Test Coverage:**
+**Unit Test Coverage:**
+- ✅ 488 unit tests covering all features and utilities
+- ✅ 99% pass rate (487 passed, 1 legitimate skip)
+- ✅ Tests bash scripts directly without Docker
+- ✅ Fast execution (~30 seconds)
 
-- ✅ Version checking and management (10 tests)
-- ✅ Release scripts (12 tests)
-- ✅ Logging framework (11 tests)
-- ✅ User management (13 tests)
-- ✅ Python features (15 tests)
-- ✅ Base system setup (15 tests)
+### Integration Tests
 
-**Current Status:** 76 tests passing, 1 skipped on macOS
-
-### Quick Test
-
-To quickly verify your container builds:
+Integration tests verify that feature combinations build and work together:
 
 ```bash
-# From your project root (where containers/ is a subdirectory)
+# Run all integration tests
+./tests/run_integration_tests.sh
+
+# Run specific integration test
+./tests/run_integration_tests.sh python_dev
+```
+
+**Integration Test Coverage:**
+- ✅ python-dev: Python + dev tools + databases + Docker
+- ✅ node-dev: Node.js + dev tools + databases + Docker
+- ✅ cloud-ops: Kubernetes + Terraform + AWS + GCloud
+- ✅ polyglot: Python + Node.js multi-language
+- ✅ rust-golang: Systems programming polyglot
+- ✅ minimal: Base container with no features
+
+### Quick Verification
+
+To quickly verify installed features in a running container:
+
+```bash
+# From your project root
 ./containers/bin/test-all-features.sh
 
 # Show all tools (including not installed)
 ./containers/bin/test-all-features.sh --all
-```
-
-### Comprehensive Testing
-
-For full test suite including build tests:
-
-```bash
-# From within containers directory
-cd containers
-./tests/run_all.sh
-
-# Run specific test
-./tests/run_test.sh integration/builds/test_minimal.sh
 ```
 
 ---
