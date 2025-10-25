@@ -1,0 +1,105 @@
+#!/usr/bin/env bash
+# Test python-dev container build
+#
+# This test verifies the python-dev configuration that includes:
+# - Python with development tools
+# - 1Password CLI
+# - Development tools (git, gh, fzf, etc.)
+# - Database clients (PostgreSQL, Redis, SQLite)
+# - Docker CLI
+
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Source the test framework
+source "$SCRIPT_DIR/../../framework.sh"
+
+# Initialize the test framework
+init_test_framework
+
+# For standalone testing, we build from containers directory
+export BUILD_CONTEXT="$CONTAINERS_DIR"
+
+# Define test suite
+test_suite "Python Dev Container Build"
+
+# Test: Python dev environment builds successfully
+test_python_dev_build() {
+    local image="test-python-dev-$$"
+
+    # Build with python-dev configuration (matches CI)
+    assert_build_succeeds "Dockerfile" \
+        --build-arg PROJECT_NAME=test-python-dev \
+        --build-arg INCLUDE_PYTHON_DEV=true \
+        --build-arg INCLUDE_OP=true \
+        --build-arg INCLUDE_DEV_TOOLS=true \
+        --build-arg INCLUDE_POSTGRES_CLIENT=true \
+        --build-arg INCLUDE_REDIS_CLIENT=true \
+        --build-arg INCLUDE_SQLITE_CLIENT=true \
+        --build-arg INCLUDE_DOCKER=true \
+        -t "$image"
+
+    # Verify Python development tools
+    assert_executable_in_path "$image" "python"
+    assert_executable_in_path "$image" "poetry"
+    assert_executable_in_path "$image" "black"
+    assert_executable_in_path "$image" "ruff"
+    assert_executable_in_path "$image" "mypy"
+    assert_executable_in_path "$image" "pytest"
+
+    # Verify dev tools
+    assert_executable_in_path "$image" "git"
+    assert_executable_in_path "$image" "gh"
+    assert_executable_in_path "$image" "fzf"
+
+    # Verify database clients
+    assert_executable_in_path "$image" "psql"
+    assert_executable_in_path "$image" "redis-cli"
+    assert_executable_in_path "$image" "sqlite3"
+
+    # Verify Docker CLI
+    assert_executable_in_path "$image" "docker"
+
+    # Verify 1Password CLI
+    assert_executable_in_path "$image" "op"
+}
+
+# Test: Python can import standard libraries
+test_python_stdlib() {
+    local image="test-python-dev-$$"
+
+    # Test common stdlib imports
+    assert_command_in_container "$image" "python -c 'import json, os, sys, sqlite3'" ""
+    assert_command_in_container "$image" "python -c 'import urllib.request'" ""
+}
+
+# Test: Poetry creates virtualenvs in project
+test_poetry_configuration() {
+    local image="test-python-dev-$$"
+
+    # Check poetry config
+    assert_command_in_container "$image" "poetry config virtualenvs.in-project" "true"
+}
+
+# Test: Database clients can show version
+test_database_clients() {
+    local image="test-python-dev-$$"
+
+    # PostgreSQL client
+    assert_command_in_container "$image" "psql --version" "psql"
+
+    # Redis client
+    assert_command_in_container "$image" "redis-cli --version" "redis-cli"
+
+    # SQLite
+    assert_command_in_container "$image" "sqlite3 --version" "3."
+}
+
+# Run all tests
+run_test test_python_dev_build "Python dev environment builds successfully"
+run_test test_python_stdlib "Python can import standard libraries"
+run_test test_poetry_configuration "Poetry is configured correctly"
+run_test test_database_clients "Database clients are functional"
+
+# Generate test report
+generate_report
