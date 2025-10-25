@@ -226,22 +226,7 @@ examples/
 - Most npm dev tools (installed globally - get latest)
 - Most gem packages (installed via bundler/gem - get latest)
 
-### 4.2 File Permission Issues
-
-**Current State**:
-```
-lib/features/ruby.sh        - rw-r--r-- (NOT executable)
-lib/features/r-dev.sh       - rw-r--r-- (NOT executable)
-lib/features/ruby-dev.sh    - rw-r--r-- (NOT executable)
-lib/base/apt-utils.sh       - rw-r--r-- (NOT executable)
-```
-
-**Impact**: These scripts are chmod +x'd during Dockerfile build (line 60), but in the repo they're not marked executable. This could cause issues with:
-- Local development/testing
-- IDE integration
-- Version control hooks
-
-### 4.3 UID/GID Cache Mount Issue
+### 4.2 UID/GID Cache Mount Issue
 
 **From Dockerfile** (lines 41-57):
 
@@ -258,7 +243,7 @@ lib/base/apt-utils.sh       - rw-r--r-- (NOT executable)
 
 **Risk Level**: Low (has workaround), but documented as known limitation.
 
-### 4.4 Missing Git Hooks Configuration
+### 4.3 Missing Git Hooks Configuration
 
 **Current State**:
 - `.githooks/` directory exists with README
@@ -527,18 +512,15 @@ No critical items outstanding. Core testing infrastructure is complete.
 
 ### Medium Effort (3-5 hours each)
 
-1. **Fix File Permission Issues**
-   - Make non-executable scripts executable (ruby.sh, r-dev.sh, ruby-dev.sh, apt-utils.sh)
-   - Ensures consistency in repository
-
-2. **Document Troubleshooting Common Issues**
+1. **Document Troubleshooting Common Issues**
    - Create comprehensive troubleshooting guide
    - Common build failures and solutions
    - Platform-specific issues
+   - Document apt-key deprecation and Debian compatibility
 
 ### Larger Efforts (8+ hours each)
 
-2. **Performance Benchmarking**
+1. **Performance Benchmarking**
    - Build time tests for each feature
    - Image size tests
    - Runtime performance tests
@@ -583,8 +565,8 @@ The Universal Container Build System is a **well-engineered, production-ready pr
 ### Recommended Next Steps
 
 **Priority 1** (This Quarter):
-- Fix file permission issues for scripts (quick fix)
-- Document troubleshooting common issues
+- Document troubleshooting common issues (including apt-key deprecation)
+- Improve documentation for advanced patterns
 
 **Priority 2** (Future):
 - Performance benchmarking
