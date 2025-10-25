@@ -13,13 +13,13 @@ The Universal Container Build System is a well-architected, modular container sy
 
 - **28 configurable features** (8 languages + 20+ tools)
 - **Comprehensive documentation** across 8 markdown files
-- **Extensive test framework** with 450+ unit tests
-- **Automated CI/CD** via GitHub Actions
+- **Extensive test framework** with 488 unit tests (99% pass rate) + 6 integration test suites
+- **Automated CI/CD** via GitHub Actions with testing, security scanning, and version management
 - **Clean separation of concerns** (base, features, runtime)
 
-**Key Strengths**: Modular architecture, security-first design, comprehensive testing, excellent documentation, automated version management.
+**Key Strengths**: Modular architecture, security-first design, excellent testing infrastructure (unit + integration), comprehensive CI/CD pipeline, good documentation, automated version management.
 
-**Areas for Improvement**: Some missing test coverage, version tracking inconsistencies, and documentation gaps around advanced patterns.
+**Areas for Improvement**: Version pinning inconsistencies for some tools, documentation gaps around advanced patterns.
 
 ---
 
@@ -108,7 +108,7 @@ The Universal Container Build System is a well-architected, modular container sy
 
 ### 2.2 Test Coverage
 
-**Unit Tests** (450+ tests):
+**Unit Tests** (488 tests):
 - **Base system**: 15 tests (setup, user management, logging)
 - **Features**: 25+ test files (Python, Node, Rust, Go, Java, etc.)
 - **Runtime**: 8 test files (entrypoint, path setup, version checks)
@@ -116,15 +116,20 @@ The Universal Container Build System is a well-architected, modular container sy
 
 **Current Test Status**:
 ```
-Total Tests: 450+
-Passed: 85%+
-Failed: <1%
-Skipped: 10-15% (platform-specific, Docker-dependent)
-Pass Rate: ~85-90%
+Total Tests: 488
+Passed: 487
+Failed: 0
+Skipped: 1 (legitimate filesystem permission check)
+Pass Rate: 99%
 ```
 
-**Integration Tests**:
-- `tests/integration/builds/test_minimal.sh` - Minimal container build test
+**Integration Tests** (6 test suites):
+- `test_minimal.sh` - Base container with no features
+- `test_python_dev.sh` - Python + dev tools + databases + Docker
+- `test_node_dev.sh` - Node.js + dev tools + databases + Docker
+- `test_cloud_ops.sh` - Kubernetes + Terraform + AWS + GCloud
+- `test_polyglot.sh` - Python + Node.js multi-language
+- `test_rust_golang.sh` - Rust + Go systems programming stack
 
 ### 2.3 Test Execution
 
@@ -132,24 +137,24 @@ Pass Rate: ~85-90%
 # Run all unit tests (no Docker required)
 ./tests/run_unit_tests.sh
 
-# Run specific test
-./tests/run_test.sh unit/features/python.sh
+# Run all integration tests
+./tests/run_integration_tests.sh
 
-# Run all tests including integration
-./tests/run_all.sh
+# Run specific integration test
+./tests/run_integration_tests.sh python_dev
 ```
 
 **Strengths**:
-- Comprehensive framework with good assertion library
-- Tests can run without Docker (SKIP_DOCKER_CHECK=true)
-- Automatic setup/teardown
-- Colored output support
+- ✅ Comprehensive framework with good assertion library
+- ✅ Tests can run without Docker (SKIP_DOCKER_CHECK=true)
+- ✅ Automatic setup/teardown
+- ✅ Colored output support
+- ✅ Integration tests cover CI matrix variants
+- ✅ Integration tests run in CI pipeline
 
-**Gaps**:
-- Limited integration test coverage (only minimal build tested)
-- No test for feature combinations (e.g., Python + Node together)
+**Remaining Gaps**:
 - No performance/size benchmarking tests
-- No test for cross-architecture builds
+- No test for cross-architecture builds (amd64 vs arm64)
 
 ---
 
@@ -313,6 +318,7 @@ lib/base/apt-utils.sh       - rw-r--r-- (NOT executable)
 1. **Test Stage** (always runs)
    - Unit tests (no Docker required)
    - Shellcheck code quality checks
+   - Secret scanning with Gitleaks
    - Artifact upload
 
 2. **Build Stage** (on push/dispatch)
@@ -325,13 +331,26 @@ lib/base/apt-utils.sh       - rw-r--r-- (NOT executable)
    - Publishes to GHCR (ghcr.io)
    - Uses GitHub Actions cache
 
-3. **Version Check** (weekly + manual)
+3. **Integration Test Stage** (on push/dispatch)
+   - Tests 6 variants in parallel:
+     - minimal, python-dev, node-dev
+     - cloud-ops, polyglot, rust-golang
+   - Each test builds and validates container
+   - Uploads test results as artifacts
+
+4. **Security Scanning Stage** (on push/dispatch)
+   - Trivy vulnerability scanning
+   - Runs on all 5 built variants
+   - Uploads SARIF to GitHub Security
+   - Generates detailed reports
+
+5. **Version Check** (weekly + manual)
    - Runs Sunday 2am UTC
    - Checks 20+ tool versions
    - Creates PR with updates
    - Uses check-versions.sh script
 
-4. **Release** (on tags)
+6. **Release** (on tags)
    - Triggered by v* tags
    - Generates release notes
    - Creates GitHub Release
@@ -446,9 +465,7 @@ docker build -f containers/Dockerfile \
 
 ### 9.1 High Priority
 
-| Issue | Impact | Effort | Status |
-|-------|--------|--------|--------|
-| Integration tests for feature combinations | Medium | Medium | ❌ Missing |
+No critical items outstanding. Core testing infrastructure is complete.
 
 ### 9.2 Medium Priority
 
@@ -511,10 +528,10 @@ docker build -f containers/Dockerfile \
 
 ### Medium Effort (3-5 hours each)
 
-1. **Add Integration Tests**
-   - Test Python + Node combination
-   - Test cloud-ops tools together
-   - Test full polyglot container
+1. **Fix Version Pinning Inconsistencies**
+   - Pin hardcoded versions (duf, entr)
+   - Pin Poetry version
+   - Pin Helm to specific version (currently "latest")
 
 ### Larger Efforts (8+ hours each)
 
@@ -551,20 +568,22 @@ The Universal Container Build System is a **well-engineered, production-ready pr
 
 ### Maturity Level
 
-**Level 4/5 - Production Ready**
+**Level 4.5/5 - Production Ready with Excellent Testing**
 
 - Core functionality: Complete and stable
-- Testing: Comprehensive unit tests, limited integration tests
+- Testing: ✅ Comprehensive unit tests (99% pass rate) + 6 integration test suites
+- CI/CD: ✅ Automated testing, building, security scanning, and version management
 - Documentation: Very good overall, some gaps in advanced usage
 - Community: Single maintainer currently
-- Maintenance: Active (weekly version checks)
+- Maintenance: Active (weekly version checks, automated updates)
 
 ### Recommended Next Steps
 
-**Priority 1** (This Month):
-- Add integration tests for feature combinations
+**Priority 1** (This Quarter):
+- Fix version pinning inconsistencies (duf, entr, Poetry, Helm)
+- Document troubleshooting common issues
 
-**Priority 2** (This Quarter):
+**Priority 2** (Future):
 - Performance benchmarking
 - Additional devcontainer examples
 - Container image signing
@@ -593,11 +612,13 @@ containers/
 │   ├── update-versions.sh (automation)
 │   └── release.sh (release automation)
 │
-├── tests/ (450+ unit tests)
+├── tests/ (488 unit tests + 6 integration test suites)
 │   ├── framework.sh (core test framework)
 │   ├── framework/assertions/ (8 assertion modules)
 │   ├── unit/ (test suites organized by directory)
-│   └── integration/ (minimal container builds)
+│   ├── integration/builds/ (6 integration test suites)
+│   ├── run_unit_tests.sh (unit test runner)
+│   └── run_integration_tests.sh (integration test runner)
 │
 ├── docs/ (9 markdown files, ~2,370 lines)
 │   ├── testing-framework.md
@@ -624,5 +645,5 @@ containers/
     └── pre-commit (shellcheck hook)
 ```
 
-**Total**: 2.3 MB, 130 files, ~450 unit tests
+**Total**: 2.3 MB, 130+ files, 488 unit tests, 6 integration test suites
 
