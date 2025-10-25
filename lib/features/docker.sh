@@ -9,6 +9,7 @@
 # Features:
 #   - Docker CLI: Complete container management interface
 #   - Docker Compose V2: Multi-container application orchestration
+#   - Docker Buildx: Advanced build capabilities with BuildKit
 #   - lazydocker: Terminal UI for Docker management
 #   - dive: Docker image layer analysis tool
 #   - Helper functions for common operations
@@ -17,6 +18,7 @@
 # Tools Installed:
 #   - docker-ce-cli: Latest Docker CLI from official repository
 #   - docker-compose-plugin: Docker Compose V2 as plugin
+#   - docker-buildx-plugin: Docker Buildx for advanced builds
 #   - lazydocker: Terminal UI for Docker management
 #   - dive: Docker image layer analysis tool
 #
@@ -82,13 +84,13 @@ else
 fi
 
 # Update and install Docker CLI only
-log_message "Installing Docker CLI and Compose plugin..."
+log_message "Installing Docker CLI, Compose, and Buildx plugins..."
 
 # Update package lists with retry logic
 apt_update
 
-# Install Docker CLI and Compose plugin with retry logic
-apt_install docker-ce-cli docker-compose-plugin
+# Install Docker CLI, Compose, and Buildx plugins with retry logic
+apt_install docker-ce-cli docker-compose-plugin docker-buildx-plugin
 
 # ============================================================================
 # User Configuration

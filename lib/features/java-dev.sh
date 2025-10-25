@@ -83,7 +83,7 @@ log_command "Creating tools directory" \
 # ============================================================================
 log_message "Installing Spring Boot CLI..."
 
-SPRING_VERSION="3.5.5"
+SPRING_VERSION="3.5.7"
 export SPRING_VERSION  # Export for use in shell functions
 log_command "Downloading Spring Boot CLI ${SPRING_VERSION}" \
     wget -q "https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-cli/${SPRING_VERSION}/spring-boot-cli-${SPRING_VERSION}-bin.tar.gz" \
@@ -102,7 +102,7 @@ rm -f /tmp/spring-boot-cli.tar.gz
 log_message "Installing JBang..."
 
 # Download and extract JBang directly (more reliable than installer script)
-JBANG_VERSION="0.129.0"
+JBANG_VERSION="0.132.1"
 log_command "Downloading JBang ${JBANG_VERSION}" \
     wget -q "https://github.com/jbangdev/jbang/releases/download/v${JBANG_VERSION}/jbang-${JBANG_VERSION}.tar" -O /tmp/jbang.tar
 
@@ -121,7 +121,7 @@ ARCH=$(dpkg --print-architecture)
 if [ "$ARCH" = "amd64" ]; then
     log_message "Installing Maven Daemon..."
 
-    MVND_VERSION="1.0.2"
+    MVND_VERSION="1.0.3"
     MVND_URL="https://github.com/apache/maven-mvnd/releases/download/${MVND_VERSION}/maven-mvnd-${MVND_VERSION}-linux-amd64.tar.gz"
 
     log_command "Downloading Maven Daemon ${MVND_VERSION}" \
@@ -160,7 +160,7 @@ log_command "Creating JARs directory" \
 # ============================================================================
 log_message "Installing Google Java Format..."
 
-GJF_VERSION="1.28.0"
+GJF_VERSION="1.30.0"
 
 # JMH version for benchmarking
 JMH_VERSION="1.37"

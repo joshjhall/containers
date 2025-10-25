@@ -256,7 +256,7 @@ log_message "Installing additional development tools..."
 
 # Install duf (modern disk usage utility)
 log_message "Installing duf (modern disk usage utility)..."
-DUF_VERSION="0.8.1"
+DUF_VERSION="0.9.1"
 ARCH=$(dpkg --print-architecture)
 if [ "$ARCH" = "amd64" ]; then
     log_command "Downloading duf for amd64" \
@@ -386,7 +386,7 @@ log_command "Setting direnv permissions" \
 
 # Install lazygit
 log_message "Installing lazygit..."
-LAZYGIT_VERSION="0.54.2"
+LAZYGIT_VERSION="0.55.1"
 if [ "$ARCH" = "amd64" ]; then
     log_command "Downloading lazygit for amd64" \
         bash -c "curl -L https://github.com/jesseduffield/lazygit/releases/download/v${LAZYGIT_VERSION}/lazygit_${LAZYGIT_VERSION}_Linux_x86_64.tar.gz | tar xz -C /usr/local/bin lazygit"
@@ -432,7 +432,7 @@ log_command "Setting mkcert permissions" \
 # Install GitHub Actions CLI (act)
 log_message "Installing act (GitHub Actions locally)..."
 ARCH=$(dpkg --print-architecture)
-ACT_VERSION="0.2.81"
+ACT_VERSION="0.2.82"
 if [ "$ARCH" = "amd64" ]; then
     log_command "Downloading act for amd64" \
         bash -c "curl -L https://github.com/nektos/act/releases/download/v${ACT_VERSION}/act_Linux_x86_64.tar.gz | tar xz -C /usr/local/bin act"
@@ -443,7 +443,7 @@ fi
 
 # Install GitLab CLI (glab)
 log_message "Installing glab (GitLab CLI)..."
-GLAB_VERSION="1.67.0"
+GLAB_VERSION="1.74.0"
 log_command "Changing to temp directory" \
     cd /tmp
 
