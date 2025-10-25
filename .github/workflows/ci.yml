@@ -25,6 +25,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch full history for Gitleaks to scan commit ranges
 
       - name: Run unit tests
         run: |
