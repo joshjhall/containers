@@ -29,6 +29,7 @@ test_python_dev_build() {
 
     # Build with python-dev configuration (matches CI)
     assert_build_succeeds "Dockerfile" \
+        --build-arg PROJECT_PATH=. \
         --build-arg PROJECT_NAME=test-python-dev \
         --build-arg INCLUDE_PYTHON_DEV=true \
         --build-arg INCLUDE_OP=true \

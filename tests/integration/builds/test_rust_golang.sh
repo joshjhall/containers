@@ -27,6 +27,7 @@ test_rust_golang_build() {
 
     # Build with Rust and Go dev tools
     assert_build_succeeds "Dockerfile" \
+        --build-arg PROJECT_PATH=. \
         --build-arg PROJECT_NAME=test-rust-go \
         --build-arg INCLUDE_RUST_DEV=true \
         --build-arg INCLUDE_GOLANG_DEV=true \
