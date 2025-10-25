@@ -1,0 +1,18 @@
+# ShellCheck configuration for container build system
+# See https://github.com/koalaman/shellcheck/wiki/Directive for details
+
+# Minimum severity level to report (error, warning, info, style)
+severity=warning
+
+# Shell dialect
+shell=bash
+
+# Only disable checks that are fundamentally incompatible with our architecture:
+
+# SC1090/SC1091: Can't follow non-constant source paths
+# We source files with dynamic paths (e.g., runtime loading of features)
+# This is by design and unavoidable in our modular architecture
+disable=SC1090,SC1091
+
+# All other checks should be fixed in the code, not disabled globally
+# Use inline '# shellcheck disable=SCxxxx' only with clear justification

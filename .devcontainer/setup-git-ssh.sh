@@ -200,10 +200,10 @@ log() {
     local level_str=""
 
     case $level in
-        $LOG_ERROR) level_str="ERROR" ;;
-        $LOG_WARN)  level_str="WARN " ;;
-        $LOG_INFO)  level_str="INFO " ;;
-        $LOG_DEBUG) level_str="DEBUG" ;;
+        "$LOG_ERROR") level_str="ERROR" ;;
+        "$LOG_WARN")  level_str="WARN " ;;
+        "$LOG_INFO")  level_str="INFO " ;;
+        "$LOG_DEBUG") level_str="DEBUG" ;;
     esac
 
     # Early logging to stderr only
@@ -257,7 +257,7 @@ get_file_size() {
 
 # Log rotation function
 rotate_log_if_needed() {
-    if [ -f "$LOG_FILE" ] && [ $(get_file_size "$LOG_FILE") -gt $MAX_LOG_SIZE ]; then
+    if [ -f "$LOG_FILE" ] && [ "$(get_file_size "$LOG_FILE")" -gt "$MAX_LOG_SIZE" ]; then
         local rotated_log="${LOG_FILE}.1"
         mv "$LOG_FILE" "$rotated_log"
         gzip "$rotated_log" 2>/dev/null || true
@@ -498,7 +498,9 @@ secure_clear_var() {
 
     # Overwrite with random data multiple times
     for i in {1..3}; do
-        printf -v "$var_name" '%*s' "$var_len" | tr ' ' 'X'
+        local random_data
+        random_data=$(printf '%*s' "$var_len" "" | tr ' ' 'X')
+        printf -v "$var_name" '%s' "$random_data"
     done
 
     # Finally unset
@@ -515,19 +517,19 @@ log() {
     local level_str_color=""
 
     case $level in
-        $LOG_ERROR)
+        "$LOG_ERROR")
             level_str_plain="ERROR"
             level_str_color="${COLOR_RED}ERROR${COLOR_RESET}"
             ;;
-        $LOG_WARN)
+        "$LOG_WARN")
             level_str_plain="WARN "
             level_str_color="${COLOR_YELLOW}WARN ${COLOR_RESET}"
             ;;
-        $LOG_INFO)
+        "$LOG_INFO")
             level_str_plain="INFO "
             level_str_color="${COLOR_GREEN}INFO ${COLOR_RESET}"
             ;;
-        $LOG_DEBUG)
+        "$LOG_DEBUG")
             level_str_plain="DEBUG"
             level_str_color="${COLOR_BLUE}DEBUG${COLOR_RESET}"
             ;;
@@ -1195,6 +1197,7 @@ load_env_file() {
         # Use nullglob to handle non-matching globs safely
         local saved_nullglob=$(shopt -p nullglob)
         shopt -s nullglob
+        # shellcheck disable=SC2206  # Word splitting intentional for glob expansion
         local expanded_paths=($possible_env)
         eval "$saved_nullglob"  # Restore original nullglob setting
 
@@ -1213,7 +1216,7 @@ load_env_file() {
                 fi
             fi
 
-            if [ -f "$abs_path" ] && [[ ! " ${env_files_loaded[@]} " =~ " ${abs_path} " ]]; then
+            if [ -f "$abs_path" ] && [[ ! " ${env_files_loaded[*]} " =~ \ ${abs_path}\  ]]; then
                 # Check file permissions and ownership
                 local file_perms=$(stat -c '%a' "$abs_path" 2>/dev/null || stat -f '%A' "$abs_path" 2>/dev/null)
                 local file_owner=$(stat -c '%U' "$abs_path" 2>/dev/null || stat -f '%Su' "$abs_path" 2>/dev/null)

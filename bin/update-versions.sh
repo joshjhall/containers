@@ -155,8 +155,20 @@ update_version() {
                     ;;
             esac
             ;;
+        setup.sh)
+            # Update version strings in base setup script
+            local script_path="$PROJECT_ROOT/lib/base/$file"
+            case "$tool" in
+                zoxide)
+                    sed -i "s/ZOXIDE_VERSION=\"[^\"]*\"/ZOXIDE_VERSION=\"$latest\"/" "$script_path"
+                    ;;
+                *)
+                    echo -e "${YELLOW}    Warning: Unknown base setup tool: $tool${NC}"
+                    ;;
+            esac
+            ;;
         *.sh)
-            # Update version strings in shell scripts
+            # Update version strings in feature shell scripts
             local script_path="$PROJECT_ROOT/lib/features/$file"
             case "$tool" in
                 lazygit)
@@ -206,18 +218,6 @@ update_version() {
                     ;;
                 *)
                     echo -e "${YELLOW}    Warning: Unknown shell script tool: $tool${NC}"
-                    ;;
-            esac
-            ;;
-        setup.sh)
-            # Update version strings in base setup script
-            local script_path="$PROJECT_ROOT/lib/base/$file"
-            case "$tool" in
-                zoxide)
-                    sed -i "s/ZOXIDE_VERSION=\"[^\"]*\"/ZOXIDE_VERSION=\"$latest\"/" "$script_path"
-                    ;;
-                *)
-                    echo -e "${YELLOW}    Warning: Unknown base setup tool: $tool${NC}"
                     ;;
             esac
             ;;
