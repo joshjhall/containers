@@ -76,11 +76,30 @@ apt_install gnupg software-properties-common
 log_message "Installing Terraform..."
 
 # Add HashiCorp GPG key and repository
-log_command "Adding HashiCorp GPG key" \
-    bash -c "curl -fsSL https://apt.releases.hashicorp.com/gpg | apt-key add -"
+# Support both old (apt-key) and new (signed-by) methods for backwards compatibility
+# - Debian 11 (Bullseye) and 12 (Bookworm): apt-key still available
+# - Debian 13 (Trixie) and later: apt-key removed, use signed-by method
 
-log_command "Adding HashiCorp repository" \
-    apt-add-repository "deb [arch=$(dpkg --print-architecture)] https://apt.releases.hashicorp.com $(lsb_release -cs) main"
+if command -v apt-key >/dev/null 2>&1; then
+    # Old method for Debian 11/12 compatibility
+    log_message "Using apt-key method (Debian 11/12)"
+    log_command "Adding HashiCorp GPG key" \
+        bash -c "curl -fsSL https://apt.releases.hashicorp.com/gpg | apt-key add -"
+
+    log_command "Adding HashiCorp repository" \
+        apt-add-repository "deb [arch=$(dpkg --print-architecture)] https://apt.releases.hashicorp.com $(lsb_release -cs) main"
+else
+    # New method for Debian 13+ (Trixie and later)
+    log_message "Using signed-by method (Debian 13+)"
+    log_command "Adding HashiCorp GPG key" \
+        bash -c "curl -fsSL https://apt.releases.hashicorp.com/gpg | gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg"
+
+    log_command "Setting GPG key permissions" \
+        chmod go+r /usr/share/keyrings/hashicorp-archive-keyring.gpg
+
+    log_command "Adding HashiCorp repository" \
+        bash -c 'echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" > /etc/apt/sources.list.d/hashicorp.list'
+fi
 
 # Install Terraform
 # Update package lists with retry logic
