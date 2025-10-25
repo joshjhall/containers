@@ -297,7 +297,7 @@ ARG INCLUDE_KUBERNETES=false
 ARG KUBECTL_VERSION=1.31.0
 ARG K9S_VERSION=0.50.16
 ARG KREW_VERSION=0.4.5
-ARG HELM_VERSION=latest
+ARG HELM_VERSION=3.19.0
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     if [ "${INCLUDE_KUBERNETES}" = "true" ]; then \
