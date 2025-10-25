@@ -2,6 +2,18 @@
 
 A modular, extensible container build system designed to be shared across projects as a git submodule. Build everything from minimal agent containers to full-featured development environments using a single, configurable Dockerfile.
 
+## Table of Contents
+
+- [Features](#features)
+- [Quick Start](#quick-start)
+- [VS Code Dev Container](#vs-code-dev-container)
+- [Available Features](#available-features)
+- [Example Use Cases](#example-use-cases)
+- [Version Management](#version-management)
+- [Testing](#testing)
+- [Best Practices](#best-practices)
+- [Contributing](#contributing)
+
 ## Features
 
 - 🔧 **Modular Architecture**: Enable only the tools you need via build arguments
@@ -11,9 +23,13 @@ A modular, extensible container build system designed to be shared across projec
 - 📦 **20+ Languages & Tools**: Python, Node.js, Rust, Go, Ruby, Java, R, and more
 - ☁️ **Cloud Ready**: AWS, GCP, Kubernetes, Terraform integrations
 
+---
+
 ## Quick Start
 
-### For New Projects
+### Installation
+
+#### For New Projects
 
 1. Add as a git submodule:
 
@@ -42,7 +58,7 @@ docker build -t test:dev \
   .
 ```
 
-### For Existing Projects
+#### For Existing Projects
 
 1. Add the submodule:
 
@@ -69,106 +85,82 @@ docker build -t myproject:prod \
   .
 ```
 
-## VS Code Dev Container Integration
+---
 
-### Basic Setup
+## VS Code Dev Container
 
-1. Create `.devcontainer/devcontainer.json`:
-
-```json
-{
-  "name": "My Project Development",
-  "dockerComposeFile": "docker-compose.yml",
-  "service": "devcontainer",
-  "workspaceFolder": "/workspace/${localWorkspaceFolderBasename}",
-  
-  "customizations": {
-    "vscode": {
-      "extensions": [
-        "ms-python.python",
-        "ms-python.vscode-pylance",
-        "rust-lang.rust-analyzer",
-        "golang.go"
-      ],
-      "settings": {
-        "python.defaultInterpreterPath": "/usr/local/bin/python",
-        "python.linting.enabled": true,
-        "python.formatting.provider": "black",
-        "editor.formatOnSave": true
-      }
-    }
-  },
-  
-  "remoteUser": "vscode"
-}
-```
-
-2. Create `.devcontainer/docker-compose.yml`:
+This system integrates seamlessly with VS Code Dev Containers. Simply reference the shared Dockerfile in your `.devcontainer/docker-compose.yml`:
 
 ```yaml
 services:
   devcontainer:
     build:
-      context: ..  # Project root
-      dockerfile: containers/Dockerfile  # Use the shared Dockerfile
+      context: ..
+      dockerfile: containers/Dockerfile
       args:
         BASE_IMAGE: mcr.microsoft.com/devcontainers/base:bookworm
         PROJECT_NAME: myproject
-        USERNAME: vscode
-        WORKING_DIR: /workspace/myproject
         INCLUDE_PYTHON_DEV: "true"
         INCLUDE_NODE_DEV: "true"
-        INCLUDE_DEV_TOOLS: "true"
-        INCLUDE_DOCKER: "true"
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
       - ..:/workspace/myproject
-    command: sleep infinity
 ```
 
-### Advanced Configuration
+For complete examples with databases, 1Password integration, and advanced configurations, see the [examples/devcontainer/](examples/devcontainer/) directory
 
-For more complex setups with databases and services, see `examples/devcontainer/` for complete examples including:
-
-- PostgreSQL and Redis integration
-- Environment variable management
-- 1Password integration
-- Post-create and post-start scripts
+---
 
 ## Available Features
 
-### Programming Languages
+All features are enabled via `INCLUDE_<FEATURE>=true` build arguments.
 
-- **Python**: 3.14+ installed from source (`INCLUDE_PYTHON=true`)
-- **Node.js**: 22 LTS with npm, yarn, pnpm (`INCLUDE_NODE=true`)
-- **Rust**: Latest stable with cargo (`INCLUDE_RUST=true`)
-- **Go**: Latest version with module support (`INCLUDE_GOLANG=true`)
-- **Ruby**: 3.3+ with bundler (`INCLUDE_RUBY=true`)
-- **Java**: OpenJDK 21 with Maven/Gradle (`INCLUDE_JAVA=true`)
-- **R**: Statistical computing environment (`INCLUDE_R=true`)
+### Languages
 
-### Development Tools
+| Feature | Build Arg | What's Included |
+|---------|-----------|-----------------|
+| **Python** | `INCLUDE_PYTHON=true` | Python 3.14+ from source, pip, pipx |
+| **Python Dev** | `INCLUDE_PYTHON_DEV=true` | + Poetry, black, ruff, mypy, pytest, jupyter |
+| **Node.js** | `INCLUDE_NODE=true` | Node 22 LTS, npm, yarn, pnpm |
+| **Node Dev** | `INCLUDE_NODE_DEV=true` | + TypeScript, ESLint, Jest, Vite, webpack |
+| **Rust** | `INCLUDE_RUST=true` | Latest stable, cargo |
+| **Rust Dev** | `INCLUDE_RUST_DEV=true` | + clippy, rustfmt, cargo-watch, bacon |
+| **Go** | `INCLUDE_GOLANG=true` | Latest with module support |
+| **Go Dev** | `INCLUDE_GOLANG_DEV=true` | + delve, gopls, staticcheck |
+| **Ruby** | `INCLUDE_RUBY=true` | Ruby 3.3+, bundler |
+| **Ruby Dev** | `INCLUDE_RUBY_DEV=true` | + rubocop, solargraph |
+| **Java** | `INCLUDE_JAVA=true` | OpenJDK 21 |
+| **Java Dev** | `INCLUDE_JAVA_DEV=true` | + Maven, Gradle |
+| **R** | `INCLUDE_R=true` | R environment |
+| **R Dev** | `INCLUDE_R_DEV=true` | + tidyverse, devtools |
 
-Add `_DEV` to any language to include development tools:
+### Infrastructure & Cloud
 
-- `INCLUDE_PYTHON_DEV`: black, ruff, mypy, pytest, poetry, jupyter
-- `INCLUDE_NODE_DEV`: TypeScript, ESLint, Jest, Vite, webpack
-- `INCLUDE_RUST_DEV`: clippy, rustfmt, cargo-watch, bacon
-- And more...
+| Feature | Build Arg | What's Included |
+|---------|-----------|-----------------|
+| **Docker** | `INCLUDE_DOCKER=true` | Docker CLI, compose, lazydocker |
+| **Kubernetes** | `INCLUDE_KUBERNETES=true` | kubectl, helm, k9s |
+| **Terraform** | `INCLUDE_TERRAFORM=true` | terraform, terragrunt, tfdocs |
+| **AWS** | `INCLUDE_AWS=true` | AWS CLI v2 |
+| **GCloud** | `INCLUDE_GCLOUD=true` | Google Cloud SDK |
+| **Cloudflare** | `INCLUDE_CLOUDFLARE=true` | Cloudflare CLI tools |
 
-### Infrastructure Tools
+### Database Clients
 
-- `INCLUDE_DOCKER`: Docker CLI, compose, lazydocker
-- `INCLUDE_KUBERNETES`: kubectl, helm, k9s
-- `INCLUDE_TERRAFORM`: terraform, terragrunt, tf-docs
-- `INCLUDE_AWS`: AWS CLI v2
-- `INCLUDE_GCLOUD`: Google Cloud SDK
+| Feature | Build Arg |
+|---------|-----------|
+| **PostgreSQL** | `INCLUDE_POSTGRES_CLIENT=true` |
+| **Redis** | `INCLUDE_REDIS_CLIENT=true` |
+| **SQLite** | `INCLUDE_SQLITE_CLIENT=true` |
 
-### Other Tools
+### Utilities
 
-- `INCLUDE_DEV_TOOLS`: git, gh CLI, fzf, ripgrep, bat, delta
-- `INCLUDE_OP`: 1Password CLI
-- `INCLUDE_OLLAMA`: Local LLM support
+| Feature | Build Arg | What's Included |
+|---------|-----------|-----------------|
+| **Dev Tools** | `INCLUDE_DEV_TOOLS=true` | git, gh CLI, fzf, ripgrep, bat, delta |
+| **1Password** | `INCLUDE_OP=true` | 1Password CLI |
+| **Ollama** | `INCLUDE_OLLAMA=true` | Local LLM support |
+
+---
 
 ## Example Use Cases
 
@@ -236,7 +228,11 @@ docker build -t myservice:ci \
   .
 ```
 
-## Updating the Submodule
+---
+
+## Version Management
+
+### Updating the Submodule
 
 To update to the latest version:
 
@@ -247,8 +243,6 @@ cd ..
 git add containers
 git commit -m "Update container build system"
 ```
-
-## Version Management
 
 ### Checking for Updates
 
@@ -292,6 +286,8 @@ When updates are available, edit the appropriate files:
 
 - Language versions: Update `ARG *_VERSION` in `Dockerfile`
 - Tool versions: Update version variables in `lib/features/*.sh`
+
+---
 
 ## Testing
 
@@ -345,6 +341,8 @@ cd containers
 ./tests/run_test.sh integration/builds/test_minimal.sh
 ```
 
+---
+
 ## Best Practices
 
 1. **Choose the right base image**:
@@ -371,6 +369,8 @@ cd containers
    - The build context should be your project root (where you run `docker build .`)
    - The Dockerfile path is `-f containers/Dockerfile`
    - Your project files are available for COPY commands during build
+
+---
 
 ## Contributing
 
