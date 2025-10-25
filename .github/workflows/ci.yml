@@ -34,12 +34,28 @@ jobs:
 
       - name: Run shellcheck
         run: |
-          echo "Running code quality checks..."
+          echo "Running shellcheck code quality checks..."
           sudo apt-get update && sudo apt-get install -y shellcheck
-          find . -type f -name "*.sh" ! -path "./tests/*" ! -path "./.git/*" | while read -r file; do
+
+          # Run shellcheck on core build system scripts (lib/, bin/)
+          # Uses .shellcheckrc for configuration (severity=warning)
+          # Excludes .devcontainer/ (VS Code specific, has own suppressions)
+          # Fails the build if any warnings or errors are found
+          # Note: --severity=warning filters to warnings and errors only (not info/style)
+          FAILED=0
+          while IFS= read -r file; do
             echo "Checking $file..."
-            shellcheck -S warning "$file" || true
-          done
+            if ! shellcheck --severity=warning "$file"; then
+              FAILED=1
+            fi
+          done < <(find . -type f -name "*.sh" ! -path "./tests/*" ! -path "./.git/*" ! -path "./.devcontainer/*")
+
+          if [ $FAILED -eq 1 ]; then
+            echo "❌ Shellcheck found issues in core build scripts."
+            exit 1
+          fi
+
+          echo "✅ All core build scripts passed shellcheck"
 
       - name: Run secret scanning
         uses: gitleaks/gitleaks-action@v2

@@ -1,4 +1,5 @@
 #!/bin/bash
+# shellcheck disable=SC2154  # Variables in helper functions assigned from parameters
 # Java Development Tools - Advanced development utilities for Java
 #
 # Description:
@@ -239,6 +240,16 @@ alias spotbugs-gui='spotbugs -gui'
 alias gjf='google-java-format'
 alias gjf-check='google-java-format --dry-run --set-exit-if-changed'
 alias gjf-fix='google-java-format --replace'
+
+# ============================================================================
+# USER-FACING HELPER FUNCTIONS
+# ============================================================================
+# The following functions are meant to be used interactively by developers
+# after sourcing this file. Variables like $name, $group, etc. are assigned
+# from function parameters ($1, $2, ...) when the functions are called.
+# SC2154 warnings about "variable referenced but not assigned" are false
+# positives - shellcheck doesn't track function parameter assignments.
+# shellcheck disable=SC2154
 
 # ----------------------------------------------------------------------------
 # java-format-all - Format all Java files in current directory
