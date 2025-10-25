@@ -29,6 +29,7 @@ test_node_dev_build() {
 
     # Build with node-dev configuration (matches CI)
     assert_build_succeeds "Dockerfile" \
+        --build-arg PROJECT_PATH=. \
         --build-arg PROJECT_NAME=test-node-dev \
         --build-arg INCLUDE_NODE_DEV=true \
         --build-arg INCLUDE_OP=true \

@@ -23,8 +23,9 @@ test_suite "Minimal Container Builds"
 test_base_container_only() {
     local image="test-minimal-base-$$"
     
-    # Build with no features enabled
+    # Build with no features enabled (standalone mode)
     assert_build_succeeds "Dockerfile" \
+        --build-arg PROJECT_PATH=. \
         --build-arg PROJECT_NAME=test-minimal \
         -t "$image"
     

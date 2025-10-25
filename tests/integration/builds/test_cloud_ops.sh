@@ -32,6 +32,7 @@ test_cloud_ops_build() {
 
     # Build with cloud-ops configuration (matches CI)
     assert_build_succeeds "Dockerfile" \
+        --build-arg PROJECT_PATH=. \
         --build-arg PROJECT_NAME=test-cloud-ops \
         --build-arg INCLUDE_KUBERNETES=true \
         --build-arg INCLUDE_TERRAFORM=true \

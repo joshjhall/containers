@@ -30,6 +30,7 @@ test_polyglot_build() {
 
     # Build with polyglot configuration (matches CI)
     assert_build_succeeds "Dockerfile" \
+        --build-arg PROJECT_PATH=. \
         --build-arg PROJECT_NAME=test-polyglot \
         --build-arg INCLUDE_PYTHON_DEV=true \
         --build-arg INCLUDE_NODE_DEV=true \
