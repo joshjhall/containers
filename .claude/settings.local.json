@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(./tests/run_unit_tests.sh:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(find:*)"
     ],
     "deny": []
   }
