@@ -17,7 +17,7 @@ These are defined as build arguments in the Dockerfile:
 - `KUBECTL_VERSION` (currently 1.33)
 - `K9S_VERSION` (currently 0.50.9)
 - `KREW_VERSION` (currently 0.4.5)
-- `HELM_VERSION` (currently latest - not pinned)
+- `HELM_VERSION` (currently 3.19.0)
 - `TERRAGRUNT_VERSION` (currently 0.84.1)
 - `TFDOCS_VERSION` (currently 0.20.0)
 
@@ -31,8 +31,8 @@ These are defined as build arguments in the Dockerfile:
 - `MKCERT_VERSION="1.4.4"`
 - `ACT_VERSION="0.2.80"`
 - `GLAB_VERSION="1.65.0"`
-- **HARDCODED:** `duf` version 0.8.1 (lines 268, 271)
-- **HARDCODED:** `entr` version 5.5 (line 286)
+- `DUF_VERSION="0.9.1"`
+- `ENTR_VERSION="5.7"`
 
 ### lib/features/docker.sh
 
@@ -85,9 +85,9 @@ These tools get the latest version at build time, which is generally fine:
 - rubocop
 - (and more)
 
-### Via pipx install (in python.sh)
+### lib/features/python.sh
 
-- poetry (gets latest)
+- `POETRY_VERSION="2.2.1"` (installed via pipx)
 
 ### Via apt-get install
 
@@ -97,25 +97,42 @@ These tools get the latest version at build time, which is generally fine:
 
 ✅ **Dockerfile versions:**
 
-- Python, Node.js, Go, Rust, Ruby, Java, R
-- kubectl, k9s, Terragrunt, terraform-docs
+- Python, Node.js, Go, Rust, Ruby, Java, R, Mojo
+- kubectl, k9s, Helm, Krew, Terragrunt, terraform-docs
 
 ✅ **Shell script versions:**
 
 - lazygit, direnv, act, delta, glab, mkcert, duf, entr (dev-tools.sh)
 - dive, lazydocker (docker.sh)
 - spring-boot-cli, jbang, mvnd, google-java-format (java-dev.sh)
+- Poetry (python.sh)
 
-## Recommendations
+## Version Tracking Status
 
-1. **Consider removing misleading comments** about `just v1.42.3` in dev-tools.sh since it's actually installed via cargo in rust-dev.sh
+✅ **All critical tools are now properly versioned and tracked:**
+- All Dockerfile ARG versions are pinned and tracked
+- All shell script tool installations use version variables
+- Poetry is pinned to a specific version (2.2.1)
+- Helm is pinned to a specific version (3.19.0)
+- duf and entr have version variables (0.9.1 and 5.7)
 
-2. **Add health checks** to verify version tracking completeness during CI/CD
+✅ **Automated version management:**
+- `check-versions.sh` monitors all pinned versions weekly
+- Automatic PRs created when updates are available
+- Version updates applied via `update-versions.sh`
 
-3. **Tools that don't need version tracking:**
-   - Package manager installed tools (cargo, npm, gem, pipx) - these handle their own updates
-   - apt packages - handled by Debian package management
+## Tools Intentionally Not Pinned
 
-4. **Special cases:**
-   - HELM_VERSION is set to "latest" which means it's not actually pinned
-   - Poetry is installed via pipx which gets the latest version
+These tools get the latest stable version by design:
+
+1. **Package manager installed tools** (cargo, npm, gem)
+   - cargo-watch, tree-sitter-cli, tokei, etc. (via cargo install)
+   - typescript, jest, vitest, etc. (via npm install -g)
+   - bundler, rails, rspec, etc. (via gem install)
+   - These package managers handle their own versioning and updates
+
+2. **System packages** (via apt-get)
+   - git, curl, build-essential, etc.
+   - Managed by Debian package management
+
+This approach balances reproducibility (pinned critical versions) with freshness (latest stable for development tools).

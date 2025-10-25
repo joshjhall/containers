@@ -215,17 +215,16 @@ examples/
 
 **From** `docs/version-tracking.md`:
 
-**Hardcoded Versions** (Not Tracked):
-- `duf` - hardcoded as 0.8.1 in dev-tools.sh (line 268, 271)
-- `entr` - hardcoded as 5.5 in dev-tools.sh (line 286)
+**Properly Versioned and Tracked**:
+- ✅ `duf` - versioned as 0.9.1 in dev-tools.sh
+- ✅ `entr` - versioned as 5.7 in dev-tools.sh
+- ✅ `Poetry` - versioned as 2.2.1 in python.sh (installed via pipx)
+- ✅ `Helm` - versioned as 3.19.0 in Dockerfile
 
-**Not Pinned** (Gets latest):
-- Poetry (installed via pipx, gets latest)
-- Tree-sitter-cli (cargo install)
-- Most npm dev tools (installed globally)
-- Most gem packages
-
-**Helm** - Set to "latest" in Dockerfile (not actually pinned)
+**Not Pinned** (Gets latest by design):
+- Tree-sitter-cli (cargo install - gets latest stable)
+- Most npm dev tools (installed globally - get latest)
+- Most gem packages (installed via bundler/gem - get latest)
 
 ### 4.2 File Permission Issues
 
@@ -528,10 +527,14 @@ No critical items outstanding. Core testing infrastructure is complete.
 
 ### Medium Effort (3-5 hours each)
 
-1. **Fix Version Pinning Inconsistencies**
-   - Pin hardcoded versions (duf, entr)
-   - Pin Poetry version
-   - Pin Helm to specific version (currently "latest")
+1. **Fix File Permission Issues**
+   - Make non-executable scripts executable (ruby.sh, r-dev.sh, ruby-dev.sh, apt-utils.sh)
+   - Ensures consistency in repository
+
+2. **Document Troubleshooting Common Issues**
+   - Create comprehensive troubleshooting guide
+   - Common build failures and solutions
+   - Platform-specific issues
 
 ### Larger Efforts (8+ hours each)
 
@@ -580,7 +583,7 @@ The Universal Container Build System is a **well-engineered, production-ready pr
 ### Recommended Next Steps
 
 **Priority 1** (This Quarter):
-- Fix version pinning inconsistencies (duf, entr, Poetry, Helm)
+- Fix file permission issues for scripts (quick fix)
 - Document troubleshooting common issues
 
 **Priority 2** (Future):

@@ -194,14 +194,15 @@ log_command "Installing pipx" \
 # Ensure pipx bin directory is in PATH
 export PATH="${PIPX_BIN_DIR}:$PATH"
 
-# Use pipx to install Poetry
-log_command "Installing Poetry via pipx" \
+# Use pipx to install Poetry with pinned version
+POETRY_VERSION="2.2.1"
+log_command "Installing Poetry ${POETRY_VERSION} via pipx" \
     su - ${USERNAME} -c "
     export PIPX_HOME='${PIPX_HOME}'
     export PIPX_BIN_DIR='${PIPX_BIN_DIR}'
     export PATH='${PIPX_BIN_DIR}:/usr/local/bin:$PATH'
 
-    /usr/local/bin/python3 -m pipx install poetry
+    /usr/local/bin/python3 -m pipx install poetry==${POETRY_VERSION}
 
     # Configure Poetry
     ${PIPX_BIN_DIR}/poetry config virtualenvs.in-project true
