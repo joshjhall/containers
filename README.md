@@ -139,7 +139,7 @@ For more complex setups with databases and services, see `examples/devcontainer/
 
 ### Programming Languages
 
-- **Python**: 3.11+ with pyenv support (`INCLUDE_PYTHON=true`)
+- **Python**: 3.14+ installed from source (`INCLUDE_PYTHON=true`)
 - **Node.js**: 22 LTS with npm, yarn, pnpm (`INCLUDE_NODE=true`)
 - **Rust**: Latest stable with cargo (`INCLUDE_RUST=true`)
 - **Go**: Latest version with module support (`INCLUDE_GOLANG=true`)
