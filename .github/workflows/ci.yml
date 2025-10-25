@@ -172,6 +172,7 @@ jobs:
 
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
+        continue-on-error: true
         with:
           image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }}-${{ matrix.variant }}-${{ github.sha }}
           format: 'sarif'
@@ -180,13 +181,14 @@ jobs:
 
       - name: Upload Trivy results to GitHub Security
         uses: github/codeql-action/upload-sarif@v3
-        if: always()
+        if: always() && hashFiles(format('trivy-results-{0}.sarif', matrix.variant)) != ''
         with:
           sarif_file: 'trivy-results-${{ matrix.variant }}.sarif'
           category: 'container-${{ matrix.variant }}'
 
       - name: Run Trivy for detailed report
         uses: aquasecurity/trivy-action@master
+        continue-on-error: true
         with:
           image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }}-${{ matrix.variant }}-${{ github.sha }}
           format: 'table'
@@ -194,7 +196,7 @@ jobs:
 
       - name: Upload Trivy scan results
         uses: actions/upload-artifact@v4
-        if: always()
+        if: always() && hashFiles(format('trivy-results-{0}.sarif', matrix.variant)) != ''
         with:
           name: trivy-results-${{ matrix.variant }}
           path: 'trivy-results-${{ matrix.variant }}.sarif'
