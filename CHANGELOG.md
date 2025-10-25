@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **CRITICAL**: Added backwards compatibility for apt-key deprecation
+  - terraform.sh, gcloud.sh, kubernetes.sh now auto-detect Debian version
+  - Debian 11/12 (Bookworm): Uses legacy apt-key method
+  - Debian 13+ (Trixie): Uses modern signed-by GPG method
+  - Fixes build failures when using Terraform, Google Cloud, or Kubernetes features
+
+### Added
+
+- Poetry version pinning (2.2.1) - now properly tracked and automated
+- Comprehensive integration test suite (6 test suites covering all CI variants)
+- Integration tests now run in CI pipeline
+- Build status badges in README
+
+### Improved
+
+- Test coverage: 488 unit tests (99% pass rate) + 6 integration test suites
+- All version pinning now complete and tracked (duf, entr, Poetry, Helm)
+- Updated documentation for version tracking and testing infrastructure
+
 ## [4.0.0] - 2025-10-01
 
 ### Changed
