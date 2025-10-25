@@ -66,7 +66,7 @@ RUN chmod +x /tmp/build-scripts/features/*.sh /tmp/build-scripts/base/*.sh
 # Python + Python development tools
 ARG INCLUDE_PYTHON=false
 ARG INCLUDE_PYTHON_DEV=false
-ARG PYTHON_VERSION=3.13.7
+ARG PYTHON_VERSION=3.14.0
 
 # Handle optional Python project files only if Python is being installed
 # Copy to temp location first since we're running as root and user doesn't exist yet
@@ -117,7 +117,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 # Rust + Rust development tools
 ARG INCLUDE_RUST=false
 ARG INCLUDE_RUST_DEV=false
-ARG RUST_VERSION=1.89.0
+ARG RUST_VERSION=1.90.0
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     if [ "${INCLUDE_RUST}" = "true" ] || [ "${INCLUDE_RUST_DEV}" = "true" ]; then \
@@ -133,7 +133,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 # Ruby + Ruby development tools
 ARG INCLUDE_RUBY=false
 ARG INCLUDE_RUBY_DEV=false
-ARG RUBY_VERSION=3.4.5
+ARG RUBY_VERSION=3.4.7
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     if [ "${INCLUDE_RUBY}" = "true" ] || [ "${INCLUDE_RUBY_DEV}" = "true" ]; then \
@@ -165,7 +165,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 # Go + Go development tools
 ARG INCLUDE_GOLANG=false
 ARG INCLUDE_GOLANG_DEV=false
-ARG GO_VERSION=1.25.0
+ARG GO_VERSION=1.25.3
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     if [ "${INCLUDE_GOLANG}" = "true" ] || [ "${INCLUDE_GOLANG_DEV}" = "true" ]; then \
@@ -295,7 +295,7 @@ RUN if [ "${INCLUDE_OLLAMA}" = "true" ]; then \
 # Kubernetes tools
 ARG INCLUDE_KUBERNETES=false
 ARG KUBECTL_VERSION=1.31.0
-ARG K9S_VERSION=0.50.9
+ARG K9S_VERSION=0.50.16
 ARG KREW_VERSION=0.4.5
 ARG HELM_VERSION=latest
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
@@ -315,7 +315,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 
 # Terraform
 ARG INCLUDE_TERRAFORM=false
-ARG TERRAGRUNT_VERSION=0.86.2
+ARG TERRAGRUNT_VERSION=0.91.5
 ARG TFDOCS_VERSION=0.20.0
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
