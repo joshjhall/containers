@@ -14,6 +14,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Debian 11/12 (Bookworm): Uses legacy apt-key method
   - Debian 13+ (Trixie): Uses modern signed-by GPG method
   - Fixes build failures when using Terraform, Google Cloud, or Kubernetes features
+- **CRITICAL**: Fixed integration tests to use PROJECT_PATH=. for standalone builds
+  - Integration tests now correctly build containers standalone
+  - All 6 tests updated with proper PROJECT_PATH argument
+  - Fixes "tools not in PATH" failures where builds succeeded but features weren't installed
 
 ### Added
 
