@@ -57,11 +57,15 @@ jobs:
 
           echo "✅ All core build scripts passed shellcheck"
 
-      - name: Run secret scanning
+      - name: Run secret scanning with Gitleaks
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
+        with:
+          # Scan all files in the repository (not just commits)
+          # This is more reliable for CI and catches secrets in any file
+          args: --verbose --no-git
 
       - name: Upload test results
         if: always()
