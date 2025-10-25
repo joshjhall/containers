@@ -386,6 +386,7 @@ mvnt
 mvnts
 mvnw
 myanalysis
+myapi
 myapp
 mybackup
 mycompany
@@ -393,6 +394,7 @@ mycontainer
 mydb
 myip
 mylang
+myml
 mypackage
 mypass
 mypassword
@@ -536,6 +538,7 @@ securego
 setuptools
 setwd
 sharkdp
+shellcheck
 shinydashboard
 signingkey
 silversearcher
