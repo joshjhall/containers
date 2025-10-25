@@ -14,7 +14,7 @@ ARCH=$(dpkg --print-architecture)
 
 - **Python**: Universal (builds from source)
 - **Node.js**: Both architectures via official n tool
-- **Ruby**: Both architectures via rbenv
+- **Ruby**: Both architectures (builds from source)
 - **Rust**: Both architectures via rustup
 - **Go**: Both architectures with proper mapping
 - **Java**: Both architectures (OpenJDK)
