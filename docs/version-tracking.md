@@ -102,29 +102,20 @@ These tools get the latest version at build time, which is generally fine:
 
 ✅ **Shell script versions:**
 
-- lazygit, direnv, act, delta, glab, mkcert (dev-tools.sh)
+- lazygit, direnv, act, delta, glab, mkcert, duf, entr (dev-tools.sh)
 - dive, lazydocker (docker.sh)
 - spring-boot-cli, jbang, mvnd, google-java-format (java-dev.sh)
 
-❌ **NOT tracked but should be:**
-
-- duf (hardcoded as 0.8.1 in dev-tools.sh)
-- entr (hardcoded as 5.5 in dev-tools.sh)
-
 ## Recommendations
 
-1. **Add version variables for duf and entr** in dev-tools.sh:
-   - Replace hardcoded `0.8.1` with `DUF_VERSION` variable
-   - Replace hardcoded `5.5` with `ENTR_VERSION` variable
+1. **Consider removing misleading comments** about `just v1.42.3` in dev-tools.sh since it's actually installed via cargo in rust-dev.sh
 
-2. **Add checks for duf and entr** in check-versions.sh
+2. **Add health checks** to verify version tracking completeness during CI/CD
 
-3. **Consider removing misleading comments** about `just v1.42.3` in dev-tools.sh since it's actually installed via cargo in rust-dev.sh
-
-4. **Tools that don't need version tracking:**
+3. **Tools that don't need version tracking:**
    - Package manager installed tools (cargo, npm, gem, pipx) - these handle their own updates
    - apt packages - handled by Debian package management
 
-5. **Special cases:**
+4. **Special cases:**
    - HELM_VERSION is set to "latest" which means it's not actually pinned
    - Poetry is installed via pipx which gets the latest version
