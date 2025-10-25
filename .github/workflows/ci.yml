@@ -41,6 +41,12 @@ jobs:
             shellcheck -S warning "$file" || true
           done
 
+      - name: Run secret scanning
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
+
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
