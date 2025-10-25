@@ -2,9 +2,12 @@
 
 This guide covers common issues and their solutions when using the container build system.
 
+> **📌 Important**: If you're experiencing build failures with Terraform, Google Cloud, or Kubernetes features, see the [Debian Version Compatibility](#debian-version-compatibility) section first. A critical fix was added in v4.0.1 for apt-key deprecation in Debian Trixie.
+
 ## Table of Contents
 
 - [Build Issues](#build-issues)
+- [Debian Version Compatibility](#debian-version-compatibility)
 - [Runtime Issues](#runtime-issues)
 - [Permission Issues](#permission-issues)
 - [Network Issues](#network-issues)
@@ -85,6 +88,85 @@ docker build --build-arg PYTHON_VERSION=3.13.7 .
 
 # Check version-tracking.md for tested versions
 cat docs/version-tracking.md
+```
+
+## Debian Version Compatibility
+
+### apt-key command not found (Terraform, Google Cloud, Kubernetes)
+
+**Symptom**: Build fails with `apt-key: command not found` when installing Terraform, Google Cloud SDK, or Kubernetes tools.
+
+```
+bash: line 1: apt-key: command not found
+✗ Adding HashiCorp GPG key failed with exit code 127
+```
+
+**Cause**: Debian 13 (Trixie) and later removed the deprecated `apt-key` command. The build system automatically detects your Debian version and uses the appropriate method.
+
+**Solution**: This is automatically handled as of v4.0.1. The system detects whether `apt-key` is available:
+- **Debian 11/12 (Bullseye/Bookworm)**: Uses legacy `apt-key` method
+- **Debian 13+ (Trixie and later)**: Uses modern `signed-by` GPG method
+
+**If you're on an older version of this container system**:
+1. Update to the latest version:
+   ```bash
+   cd containers
+   git pull origin main
+   cd ..
+   git add containers
+   git commit -m "Update container build system"
+   ```
+
+2. Or manually patch the affected files:
+   - `lib/features/terraform.sh`
+   - `lib/features/gcloud.sh`
+   - `lib/features/kubernetes.sh`
+
+   See commit `b955fc3` for the fix implementation.
+
+**Verification**:
+```bash
+# Check your Debian version
+cat /etc/debian_version
+
+# Rebuild and verify
+docker build --build-arg INCLUDE_TERRAFORM=true -t test:terraform .
+docker run --rm test:terraform terraform version
+```
+
+### Base image mismatch with Debian Trixie
+
+**Symptom**: Unexpected behavior when using older base images with Trixie features.
+
+**Solution**:
+```bash
+# For Debian Trixie, use:
+docker build --build-arg BASE_IMAGE=debian:trixie-slim .
+
+# For Debian Bookworm (12), use:
+docker build --build-arg BASE_IMAGE=debian:bookworm-slim .
+
+# For VS Code devcontainers:
+docker build --build-arg BASE_IMAGE=mcr.microsoft.com/devcontainers/base:trixie .
+```
+
+### Package not available in Trixie
+
+**Symptom**: `E: Package 'package-name' has no installation candidate`
+
+**Solution**:
+```bash
+# Check package availability
+apt-cache policy package-name
+
+# Update package lists
+apt-get update
+
+# Search for alternative package name
+apt-cache search package-name
+
+# If package was removed, check Debian migration notes
+# https://wiki.debian.org/DebianTrixie
 ```
 
 ## Runtime Issues
@@ -280,6 +362,25 @@ docker build --mount=type=cache,target=/cache/pip .
 pip3 check
 ```
 
+### Python: Poetry version mismatch
+
+**Symptom**: Poetry commands fail or behave unexpectedly.
+
+**Solution**:
+```bash
+# Check installed Poetry version
+poetry --version
+
+# The system pins Poetry to 2.2.1 (as of v4.0.1)
+# To use a different version, update POETRY_VERSION in lib/features/python.sh
+
+# Clear Poetry cache
+poetry cache clear pypi --all
+
+# Reinstall Poetry (inside container)
+python3 -m pipx reinstall poetry==2.2.1
+```
+
 ### Node.js: npm install hangs
 
 **Symptom**: npm install is extremely slow or hangs.
@@ -351,6 +452,41 @@ docker run -v ~/.kube:/home/vscode/.kube myproject:dev
 ```
 
 ## CI/CD Issues
+
+### Integration tests failing
+
+**Symptom**: Integration tests fail with build errors or tool verification failures.
+
+**Common Causes**:
+1. **apt-key deprecation** (see [Debian Version Compatibility](#debian-version-compatibility))
+2. **Network timeouts** during tool downloads
+3. **Version mismatches** between pinned versions and available versions
+
+**Solution**:
+```bash
+# Run integration tests locally to debug
+./tests/run_integration_tests.sh
+
+# Run specific test
+./tests/run_integration_tests.sh cloud_ops
+
+# Check test framework logs
+cat tests/results/*.log
+
+# Verify all tools can be installed
+docker build --build-arg INCLUDE_KUBERNETES=true \
+  --build-arg INCLUDE_TERRAFORM=true \
+  --build-arg INCLUDE_AWS=true \
+  -t test:debug .
+```
+
+**Available Integration Tests**:
+- `minimal` - Base container with no features
+- `python_dev` - Python + dev tools + databases + Docker
+- `node_dev` - Node.js + dev tools + databases + Docker
+- `cloud_ops` - Kubernetes + Terraform + AWS + GCloud
+- `polyglot` - Python + Node.js multi-language
+- `rust_golang` - Rust + Go systems programming
 
 ### GitHub Actions: Build timeout
 
@@ -505,18 +641,47 @@ docker inspect mycontainer | grep -A 10 "Memory"
 
 If you can't resolve your issue:
 
-1. **Check existing issues**: https://github.com/yourusername/containers/issues
+1. **Check existing issues**: https://github.com/joshjhall/containers/issues
 2. **Check documentation**: Browse other docs in `docs/` directory
 3. **Enable verbose logging**: Set `set -x` in scripts for detailed output
-4. **Create an issue**: Include:
-   - OS and Docker version
+4. **Run integration tests**: `./tests/run_integration_tests.sh` to verify your setup
+5. **Check CI status**: View recent builds at https://github.com/joshjhall/containers/actions
+6. **Create an issue**: Include:
+   - OS and Docker version (`docker version`)
+   - Debian version (if relevant): `cat /etc/debian_version`
    - Build command used
    - Full error output
    - Relevant logs from `/var/log/build-*.log`
+   - Output from `./bin/check-versions.sh`
+
+## Quick Diagnostic Commands
+
+```bash
+# Check system info
+docker version
+docker info
+cat /etc/debian_version  # Inside container
+
+# Check build system version
+git -C containers log -1 --oneline
+
+# Verify tool versions
+./bin/check-versions.sh
+
+# Run unit tests (no Docker required)
+./tests/run_unit_tests.sh
+
+# Run integration tests (requires Docker)
+./tests/run_integration_tests.sh
+
+# Check installed tools in running container
+docker exec mycontainer /bin/check-installed-versions.sh
+```
 
 ## Related Documentation
 
 - [Version Tracking](version-tracking.md) - Managing tool versions
-- [Testing](testing.md) - Running tests
-- [Architecture](architecture.md) - System design
+- [Testing Framework](testing-framework.md) - Testing guide
+- [Security and Init System](security-and-init-system.md) - Security model
 - [README](../README.md) - Getting started
+- [CHANGELOG](../CHANGELOG.md) - Recent changes and fixes
