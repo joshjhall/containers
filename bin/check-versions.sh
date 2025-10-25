@@ -299,6 +299,12 @@ extract_all_versions() {
         ver=$(grep "^ZOXIDE_VERSION=" "$PROJECT_ROOT/lib/base/setup.sh" 2>/dev/null | cut -d= -f2 | tr -d '"')
         [ -n "$ver" ] && add_tool "zoxide" "$ver" "setup.sh"
     fi
+
+    # GitHub Actions from workflows
+    if [ -f "$PROJECT_ROOT/.github/workflows/ci.yml" ]; then
+        ver=$(grep "uses: aquasecurity/trivy-action@" "$PROJECT_ROOT/.github/workflows/ci.yml" 2>/dev/null | head -1 | sed 's/.*@//' | tr -d ' ')
+        [ -n "$ver" ] && [ "$ver" != "master" ] && add_tool "trivy-action" "$ver" "ci.yml"
+    fi
 }
 
 # Progress helpers for quiet mode in JSON
@@ -672,6 +678,7 @@ main() {
             duf) check_github_release "duf" "muesli/duf" ;;
             entr) check_entr ;;
             zoxide) check_github_release "zoxide" "ajeetdsouza/zoxide" ;;
+            trivy-action) check_github_release "trivy-action" "aquasecurity/trivy-action" ;;
             *) [ "$OUTPUT_FORMAT" = "text" ] && echo "  Skipping $tool (no checker)" ;;
         esac
     done

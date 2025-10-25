@@ -221,6 +221,18 @@ update_version() {
                     ;;
             esac
             ;;
+        ci.yml)
+            # Update GitHub Actions versions
+            local workflow_path="$PROJECT_ROOT/.github/workflows/$file"
+            case "$tool" in
+                trivy-action)
+                    sed -i "s|uses: aquasecurity/trivy-action@[0-9.]*|uses: aquasecurity/trivy-action@$latest|g" "$workflow_path"
+                    ;;
+                *)
+                    echo -e "${YELLOW}    Warning: Unknown ci.yml tool: $tool${NC}"
+                    ;;
+            esac
+            ;;
         *)
             echo -e "${YELLOW}    Warning: Unknown file type: $file${NC}"
             ;;
