@@ -176,7 +176,7 @@ jobs:
           tags: |
             type=ref,event=branch,suffix=-${{ matrix.variant.name }}
             type=ref,event=tag,suffix=-${{ matrix.variant.name }}
-            type=sha,prefix={{branch}}-,suffix=-${{ matrix.variant.name }}
+            type=sha,prefix=sha-,suffix=-${{ matrix.variant.name }},enable=false
             type=raw,value=${{ matrix.variant.name }}-latest,enable={{is_default_branch}}
 
       - name: Build and push Docker image
