@@ -150,7 +150,7 @@ test_bashrc_integration() {
     cat > "$bashrc_file" << 'EOF'
 # Development tools aliases
 alias lg='lazygit'
-alias ll='exa -la'
+alias ll='eza -la'
 alias cat='bat'
 alias find='fd'
 alias grep='rg'
@@ -214,6 +214,7 @@ test_permissions_ownership() {
 # Test: System tools installation list
 test_system_tools_list() {
     # List of system tools that should be marked for installation
+    # Note: either exa (Debian 11/12) or eza (Debian 13+) will be installed
     local system_tools=(
         "telnet"
         "netcat"
@@ -231,6 +232,7 @@ test_system_tools_list() {
         "p7zip-full"
         "jq"
         "bat"
+        "eza"
         "exa"
         "fd-find"
         "ripgrep"

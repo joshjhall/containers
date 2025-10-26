@@ -515,12 +515,13 @@ check_version "fzf" "fzf" "--version" "\K[0-9]+\.[0-9]+\.[0-9]+" "github" "juneg
 check_version "ripgrep" "rg" "--version" "ripgrep \K[0-9]+\.[0-9]+\.[0-9]+" "github" "BurntSushi/ripgrep"
 check_version "fd" "fd" "--version" "fd \K[0-9]+\.[0-9]+\.[0-9]+" "github" "sharkdp/fd"
 check_version "bat" "bat" "--version" "bat \K[0-9]+\.[0-9]+\.[0-9]+" "github" "sharkdp/bat"
+check_version "eza" "eza" "--version" "v\K[0-9]+\.[0-9]+\.[0-9]+" "github" "eza-community/eza"
 check_version "exa" "exa" "--version" "v\K[0-9]+\.[0-9]+\.[0-9]+" "github" "ogham/exa"
 check_version "op" "op" "--version" "\K[0-9]+\.[0-9]+\.[0-9]+" "github" "1Password/op"
 
 # Print dev tools results
 if [ "$OUTPUT_FORMAT" != "json" ]; then
-    for tool in "git" "gh" "glab" "docker" "docker-compose" "direnv" "lazygit" "delta" "mkcert" "act" "fzf" "ripgrep" "fd" "bat" "exa" "op"; do
+    for tool in "git" "gh" "glab" "docker" "docker-compose" "direnv" "lazygit" "delta" "mkcert" "act" "fzf" "ripgrep" "fd" "bat" "eza" "exa" "op"; do
         if [ -n "${INSTALLED_VERSIONS[$tool]:-}" ]; then
             print_result "$tool" "${INSTALLED_VERSIONS[$tool]}" "${LATEST_VERSIONS[$tool]:-}" "${VERSION_STATUS[$tool]}"
         fi
