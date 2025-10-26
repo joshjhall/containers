@@ -3,13 +3,13 @@
 # Source this at the beginning of each feature script to get consistent user handling
 #
 # This script provides:
-# 1. Environment validation (Bash version, Debian compatibility)
+# 1. Environment validation (Bash version, Debian/Ubuntu detection)
 # 2. Consistent user UID/GID handling across all features
 # 3. Protection against incompatible environments
 #
 # How it works:
 # 1. Validates Bash version (requires 5.0+)
-# 2. Validates Debian version (requires bookworm/12+ or newer)
+# 2. Detects Debian/Ubuntu version (supports Debian 11+, Ubuntu 20.04+)
 # 3. Gets parameters with sensible defaults (developer user, UID/GID 1000)
 # 4. Checks if /tmp/build-env exists (created by user.sh if UID/GID conflicts occurred)
 # 5. If conflicts occurred, uses ACTUAL_UID/ACTUAL_GID from build-env
@@ -53,24 +53,21 @@ if [ "${ID}" != "debian" ] && [ "${ID_LIKE}" != "debian" ]; then
     exit 1
 fi
 
-# Check Debian version (require bookworm/12+ or newer)
+# Detect Debian/Ubuntu version for logging and export for feature scripts
 if [ "${ID}" = "debian" ]; then
     # Extract major version number
     DEBIAN_VERSION="${VERSION_ID%%.*}"
-    if [ "${DEBIAN_VERSION}" -lt 12 ]; then
-        echo "Error: This script requires Debian 12 (bookworm) or newer"
-        echo "Current version: Debian ${VERSION_ID} (${VERSION_CODENAME:-unknown})"
-        echo "Many features depend on packages only available in bookworm+"
-        exit 1
-    fi
+    export DEBIAN_VERSION
+    echo "Detected Debian ${VERSION_ID} (${VERSION_CODENAME:-unknown})"
+
+    # Note: This build system supports Debian 11 (Bullseye), 12 (Bookworm), and 13 (Trixie)
+    # Version-specific package handling is done in apt-utils.sh using apt_install_conditional
 elif [ "${ID}" = "ubuntu" ]; then
-    # Ubuntu 22.04+ is roughly equivalent to Debian bookworm
     UBUNTU_VERSION="${VERSION_ID%%.*}"
-    if [ "${UBUNTU_VERSION}" -lt 22 ]; then
-        echo "Error: This script requires Ubuntu 22.04 or newer"
-        echo "Current version: Ubuntu ${VERSION_ID}"
-        exit 1
-    fi
+    export UBUNTU_VERSION
+    echo "Detected Ubuntu ${VERSION_ID}"
+
+    # Note: Ubuntu 20.04+ is supported. Some features use version detection for compatibility
 fi
 
 # ============================================================================
