@@ -67,7 +67,12 @@ fi
 apt_update
 
 log_message "Installing system dependencies for Rust dev tools"
+# build-essential needed for compiling Rust crates with C dependencies
+# pkg-config needed for finding system libraries
+# libssl-dev needed for crates using OpenSSL
+# cmake needed for some complex crates
 apt_install \
+    build-essential \
     pkg-config \
     libssl-dev \
     cmake
