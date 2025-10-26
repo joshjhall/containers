@@ -80,10 +80,10 @@ for test_file in "${TEST_FILES[@]}"; do
 
     if bash "$test_file"; then
         echo -e "${GREEN}✓ PASS${NC}"
-        ((TOTAL_PASSED++))
+        TOTAL_PASSED=$((TOTAL_PASSED + 1))
     else
         echo -e "${RED}✗ FAIL${NC}"
-        ((TOTAL_FAILED++))
+        TOTAL_FAILED=$((TOTAL_FAILED + 1))
         FAILED_TESTS+=("$test_name")
     fi
     echo ""
