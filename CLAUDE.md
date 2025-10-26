@@ -128,3 +128,49 @@ The system uses `/cache` directory with subdirectories for each tool:
 - Each feature script validates its installation
 - Proper file permissions maintained throughout
 - SSH/GPG utilities included for secure operations
+
+## Debian Version Compatibility
+
+The build system supports Debian 11 (Bullseye), 12 (Bookworm), and 13 (Trixie) with automatic version detection and conditional package installation.
+
+### When Writing Feature Scripts
+
+Always use the Debian version detection system from `lib/base/apt-utils.sh`:
+
+```bash
+# Source apt utilities in your feature script
+source /tmp/build-scripts/base/apt-utils.sh
+
+# Install packages that work on all versions
+apt_install common-package-1 common-package-2
+
+# Install packages only on specific Debian versions
+# Syntax: apt_install_conditional <min_version> <max_version> <packages...>
+apt_install_conditional 11 12 old-package-name
+
+# Check version for conditional logic
+if is_debian_version 13; then
+    # Trixie-specific code
+fi
+
+# Or check command availability (preferred for apt-key, etc.)
+if command -v apt-key >/dev/null 2>&1; then
+    # Old method (Debian 11/12)
+else
+    # New method (Debian 13+)
+fi
+```
+
+### Key Differences by Version
+
+- **Debian 11/12**: Uses legacy `apt-key` for repository GPG keys
+- **Debian 13+**: Requires `signed-by` method with keyrings in `/usr/share/keyrings/`
+- **Package migrations**: Some packages removed/renamed in Trixie (e.g., `lzma-dev` merged into `liblzma-dev`)
+
+### Testing
+
+CI automatically tests builds on all three Debian versions. When modifying feature scripts:
+
+1. Test locally with different base images using `BASE_IMAGE` build arg
+2. Check the `debian-version-test` job in GitHub Actions
+3. See `docs/troubleshooting.md` for detailed examples and patterns

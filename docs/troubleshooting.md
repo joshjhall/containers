@@ -169,6 +169,105 @@ apt-cache search package-name
 # https://wiki.debian.org/DebianTrixie
 ```
 
+### Writing Debian-Compatible Feature Scripts
+
+**Pattern**: When creating or updating feature installation scripts, use the Debian version detection system to ensure compatibility across Debian 11, 12, and 13.
+
+#### Debian Version Detection Functions
+
+The build system provides three functions in `lib/base/apt-utils.sh`:
+
+1. **`get_debian_major_version()`** - Returns the major version number (11, 12, or 13)
+2. **`is_debian_version <min>`** - Checks if current version >= minimum
+3. **`apt_install_conditional <min> <max> <packages...>`** - Install packages only on specific versions
+
+#### Usage Examples
+
+**Example 1: Install packages only on specific Debian versions**
+
+```bash
+# In your feature script, source apt-utils first
+source /tmp/build-scripts/base/apt-utils.sh
+
+# Install common packages (work on all versions)
+apt_install \
+    build-essential \
+    libssl-dev \
+    ca-certificates
+
+# Install version-specific packages
+# lzma/lzma-dev were removed in Debian 13, replaced by liblzma-dev
+apt_install_conditional 11 12 lzma lzma-dev
+```
+
+**Example 2: Conditional logic for installation methods**
+
+```bash
+source /tmp/build-scripts/base/apt-utils.sh
+
+if command -v apt-key >/dev/null 2>&1; then
+    # Old method for Debian 11/12
+    log_message "Using apt-key method (Debian 11/12)"
+    curl -fsSL https://example.com/key.gpg | apt-key add -
+    apt-add-repository "deb https://example.com/apt stable main"
+else
+    # New method for Debian 13+
+    log_message "Using signed-by method (Debian 13+)"
+    curl -fsSL https://example.com/key.gpg | gpg --dearmor -o /usr/share/keyrings/example-keyring.gpg
+    echo "deb [signed-by=/usr/share/keyrings/example-keyring.gpg] https://example.com/apt stable main" > /etc/apt/sources.list.d/example.list
+fi
+```
+
+**Example 3: Check version before applying workarounds**
+
+```bash
+source /tmp/build-scripts/base/apt-utils.sh
+
+if is_debian_version 13; then
+    # Trixie-specific workaround
+    log_message "Applying Debian 13+ configuration..."
+    # Your Trixie-specific code
+fi
+```
+
+#### Package Migration Reference
+
+Common package changes between Debian versions:
+
+| Package          | Debian 11/12 | Debian 13+ | Notes |
+|------------------|--------------|------------|-------|
+| lzma, lzma-dev   | Available    | Removed    | Use liblzma-dev (works on all versions) |
+| apt-key          | Available    | Removed    | Use signed-by method instead |
+
+#### Testing Your Changes
+
+When adding version-specific logic:
+
+1. **Test locally with different base images**:
+   ```bash
+   # Test Debian 11
+   docker build --build-arg BASE_IMAGE=debian:bullseye-slim \
+                --build-arg INCLUDE_YOUR_FEATURE=true -t test:debian11 .
+
+   # Test Debian 12
+   docker build --build-arg BASE_IMAGE=debian:bookworm-slim \
+                --build-arg INCLUDE_YOUR_FEATURE=true -t test:debian12 .
+
+   # Test Debian 13
+   docker build --build-arg BASE_IMAGE=debian:trixie-slim \
+                --build-arg INCLUDE_YOUR_FEATURE=true -t test:debian13 .
+   ```
+
+2. **CI automatically tests all versions**: The GitHub Actions workflow includes a `debian-version-test` job that tests Python and cloud tools on all three Debian versions.
+
+#### Design Philosophy
+
+- **Backwards Compatible**: Always support Debian 11 and 12 unless absolutely necessary
+- **Forward Compatible**: Prefer methods that work on Debian 13+ when possible
+- **Graceful Degradation**: Use version detection, don't assume availability
+- **Explicit Detection**: Check for command/package availability, don't rely on version alone
+- **Document Changes**: Add comments explaining why version-specific code exists
+
 ## Runtime Issues
 
 ### Container starts but commands not found
