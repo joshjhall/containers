@@ -25,20 +25,22 @@ test_suite "Node Dev Container Build"
 
 # Test: Node dev environment builds successfully
 test_node_dev_build() {
-    local image="test-node-dev-$$"
-
-    # Build with node-dev configuration (matches CI)
-    assert_build_succeeds "Dockerfile" \
-        --build-arg PROJECT_PATH=. \
-        --build-arg PROJECT_NAME=test-node-dev \
-        --build-arg INCLUDE_NODE_DEV=true \
-        --build-arg INCLUDE_OP=true \
-        --build-arg INCLUDE_DEV_TOOLS=true \
-        --build-arg INCLUDE_POSTGRES_CLIENT=true \
-        --build-arg INCLUDE_REDIS_CLIENT=true \
-        --build-arg INCLUDE_SQLITE_CLIENT=true \
-        --build-arg INCLUDE_DOCKER=true \
-        -t "$image"
+    if [ -n "${IMAGE_TO_TEST:-}" ]; then
+        local image="$IMAGE_TO_TEST"
+    else
+        local image="test-node-dev-$$"
+        assert_build_succeeds "Dockerfile" \
+            --build-arg PROJECT_PATH=. \
+            --build-arg PROJECT_NAME=test-node-dev \
+            --build-arg INCLUDE_NODE_DEV=true \
+            --build-arg INCLUDE_OP=true \
+            --build-arg INCLUDE_DEV_TOOLS=true \
+            --build-arg INCLUDE_POSTGRES_CLIENT=true \
+            --build-arg INCLUDE_REDIS_CLIENT=true \
+            --build-arg INCLUDE_SQLITE_CLIENT=true \
+            --build-arg INCLUDE_DOCKER=true \
+            -t "$image"
+    fi
 
     # Verify Node.js and package managers
     assert_executable_in_path "$image" "node"

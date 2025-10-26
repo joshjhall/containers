@@ -25,20 +25,27 @@ test_suite "Python Dev Container Build"
 
 # Test: Python dev environment builds successfully
 test_python_dev_build() {
-    local image="test-python-dev-$$"
+    # Use pre-built image if provided, otherwise build locally
+    if [ -n "${IMAGE_TO_TEST:-}" ]; then
+        local image="$IMAGE_TO_TEST"
+        echo "Testing pre-built image: $image"
+    else
+        local image="test-python-dev-$$"
+        echo "Building image locally: $image"
 
-    # Build with python-dev configuration (matches CI)
-    assert_build_succeeds "Dockerfile" \
-        --build-arg PROJECT_PATH=. \
-        --build-arg PROJECT_NAME=test-python-dev \
-        --build-arg INCLUDE_PYTHON_DEV=true \
-        --build-arg INCLUDE_OP=true \
-        --build-arg INCLUDE_DEV_TOOLS=true \
-        --build-arg INCLUDE_POSTGRES_CLIENT=true \
-        --build-arg INCLUDE_REDIS_CLIENT=true \
-        --build-arg INCLUDE_SQLITE_CLIENT=true \
-        --build-arg INCLUDE_DOCKER=true \
-        -t "$image"
+        # Build with python-dev configuration (matches CI)
+        assert_build_succeeds "Dockerfile" \
+            --build-arg PROJECT_PATH=. \
+            --build-arg PROJECT_NAME=test-python-dev \
+            --build-arg INCLUDE_PYTHON_DEV=true \
+            --build-arg INCLUDE_OP=true \
+            --build-arg INCLUDE_DEV_TOOLS=true \
+            --build-arg INCLUDE_POSTGRES_CLIENT=true \
+            --build-arg INCLUDE_REDIS_CLIENT=true \
+            --build-arg INCLUDE_SQLITE_CLIENT=true \
+            --build-arg INCLUDE_DOCKER=true \
+            -t "$image"
+    fi
 
     # Verify Python development tools
     assert_executable_in_path "$image" "python"

@@ -26,21 +26,23 @@ test_suite "Polyglot Container Build"
 
 # Test: Polyglot environment builds successfully
 test_polyglot_build() {
-    local image="test-polyglot-$$"
-
-    # Build with polyglot configuration (matches CI)
-    assert_build_succeeds "Dockerfile" \
-        --build-arg PROJECT_PATH=. \
-        --build-arg PROJECT_NAME=test-polyglot \
-        --build-arg INCLUDE_PYTHON_DEV=true \
-        --build-arg INCLUDE_NODE_DEV=true \
-        --build-arg INCLUDE_DEV_TOOLS=true \
-        --build-arg INCLUDE_DOCKER=true \
-        --build-arg INCLUDE_OP=true \
-        --build-arg INCLUDE_POSTGRES_CLIENT=true \
-        --build-arg INCLUDE_REDIS_CLIENT=true \
-        --build-arg INCLUDE_SQLITE_CLIENT=true \
-        -t "$image"
+    if [ -n "${IMAGE_TO_TEST:-}" ]; then
+        local image="$IMAGE_TO_TEST"
+    else
+        local image="test-polyglot-$$"
+        assert_build_succeeds "Dockerfile" \
+            --build-arg PROJECT_PATH=. \
+            --build-arg PROJECT_NAME=test-polyglot \
+            --build-arg INCLUDE_PYTHON_DEV=true \
+            --build-arg INCLUDE_NODE_DEV=true \
+            --build-arg INCLUDE_DEV_TOOLS=true \
+            --build-arg INCLUDE_DOCKER=true \
+            --build-arg INCLUDE_OP=true \
+            --build-arg INCLUDE_POSTGRES_CLIENT=true \
+            --build-arg INCLUDE_REDIS_CLIENT=true \
+            --build-arg INCLUDE_SQLITE_CLIENT=true \
+            -t "$image"
+    fi
 
     # Verify Python tools
     assert_executable_in_path "$image" "python"
