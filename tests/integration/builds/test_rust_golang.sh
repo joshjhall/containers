@@ -72,11 +72,11 @@ test_rust_compilation() {
 test_go_compilation() {
     local image="${IMAGE_TO_TEST:-test-rust-go-$$}"
 
-    # Compile and run a Go program
+    # Compile and run a Go program with go run (works without module)
     assert_command_in_container "$image" "cd /tmp && echo 'package main; import \"fmt\"; func main() { fmt.Println(\"Hello from Go\") }' > hello.go && go run hello.go" "Hello from Go"
 
-    # Go can build a binary
-    assert_command_in_container "$image" "cd /tmp && go build hello.go && ./hello" "Hello from Go"
+    # Test creating a proper Go module and building
+    assert_command_in_container "$image" "cd /tmp && mkdir gotest && cd gotest && go mod init example.com/hello && echo 'package main; import \"fmt\"; func main() { fmt.Println(\"Hello from Go\") }' > main.go && go build && ./hello" "Hello from Go"
 }
 
 # Test: Rust development tools
