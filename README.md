@@ -295,9 +295,11 @@ When updates are available, edit the appropriate files:
 
 ## Testing
 
+The project includes comprehensive test coverage with **647 total tests** across unit and integration test suites.
+
 ### Unit Tests
 
-The project includes a comprehensive unit test framework (487 tests, 99% pass rate):
+Unit tests validate individual components and scripts (487 tests, 99% pass rate):
 
 ```bash
 # Run all unit tests (no Docker required)
@@ -316,7 +318,7 @@ The project includes a comprehensive unit test framework (487 tests, 99% pass ra
 
 ### Integration Tests
 
-Integration tests verify that feature combinations build and work together:
+Integration tests verify that feature combinations build and work together (160 tests across 6 variants):
 
 ```bash
 # Run all integration tests
