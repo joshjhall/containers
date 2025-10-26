@@ -72,6 +72,7 @@ tf_fail_assertion() {
         shift
     done
     TESTS_FAILED=$((TESTS_FAILED + 1))
+    TEST_STATUS="failed"
     return 1
 }
 
@@ -216,8 +217,8 @@ run_test() {
 
     # Run the test
     if $test_func; then
-        # Only mark as passed if not already marked as skipped
-        if [ "$TEST_STATUS" != "skipped" ]; then
+        # Only mark as passed if not already marked as skipped or failed
+        if [ "$TEST_STATUS" != "skipped" ] && [ "$TEST_STATUS" != "failed" ]; then
             pass_test
         fi
     fi
