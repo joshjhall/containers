@@ -7,7 +7,7 @@
 #
 # Features:
 #   - Modern CLI replacements: exa (ls), bat (cat), duf (df), fd (find), ripgrep (grep)
-#   - Git helpers: lazygit, delta (side-by-side diffs), diff-so-fancy
+#   - Git helpers: lazygit, delta (side-by-side diffs), git-cliff (changelog generation)
 #   - Development utilities: direnv, just (with modules), entr
 #   - Network tools: telnet, netcat, nmap, tcpdump, socat, whois
 #   - System monitoring: htop, btop, iotop, sysstat, strace
@@ -15,6 +15,7 @@
 #   - Archive tools: unzip, zip, tar, 7zip
 #   - GitHub/GitLab CLIs: gh, act (local GitHub Actions), glab
 #   - Text processing: jq
+#   - Release tools: git-cliff (automatic changelog from conventional commits)
 #   - Claude Code CLI tool
 #   - And many more productivity tools
 #
@@ -440,6 +441,27 @@ elif [ "$ARCH" = "arm64" ]; then
     log_command "Downloading act for arm64" \
         bash -c "curl -L https://github.com/nektos/act/releases/download/v${ACT_VERSION}/act_Linux_arm64.tar.gz | tar xz -C /usr/local/bin act"
 fi
+
+# Install git-cliff (automatic changelog generator)
+log_message "Installing git-cliff (changelog generator)..."
+GITCLIFF_VERSION="2.8.0"
+log_command "Changing to temp directory" \
+    cd /tmp
+
+if [ "$ARCH" = "amd64" ]; then
+    log_command "Downloading git-cliff for amd64" \
+        bash -c "curl -L https://github.com/orhun/git-cliff/releases/download/v${GITCLIFF_VERSION}/git-cliff-${GITCLIFF_VERSION}-x86_64-unknown-linux-gnu.tar.gz | tar xz"
+    log_command "Installing git-cliff binary" \
+        mv git-cliff-${GITCLIFF_VERSION}/git-cliff /usr/local/bin/
+elif [ "$ARCH" = "arm64" ]; then
+    log_command "Downloading git-cliff for arm64" \
+        bash -c "curl -L https://github.com/orhun/git-cliff/releases/download/v${GITCLIFF_VERSION}/git-cliff-${GITCLIFF_VERSION}-aarch64-unknown-linux-gnu.tar.gz | tar xz"
+    log_command "Installing git-cliff binary" \
+        mv git-cliff-${GITCLIFF_VERSION}/git-cliff /usr/local/bin/
+fi
+
+log_command "Returning to root directory" \
+    cd /
 
 # Install GitLab CLI (glab)
 log_message "Installing glab (GitLab CLI)..."
