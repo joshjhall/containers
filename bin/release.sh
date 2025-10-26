@@ -156,8 +156,10 @@ ensure_git_cliff() {
     fi
 
     # Try to download pre-built binary
-    local os_type=$(uname -s | tr '[:upper:]' '[:lower:]')
-    local arch=$(uname -m)
+    local os_type
+    os_type=$(uname -s | tr '[:upper:]' '[:lower:]')
+    local arch
+    arch=$(uname -m)
     local version="2.8.0"
 
     # Map architecture
@@ -181,7 +183,8 @@ ensure_git_cliff() {
     esac
 
     local download_url="https://github.com/orhun/git-cliff/releases/download/v${version}/git-cliff-${version}-${arch}-${os_type}.tar.gz"
-    local temp_dir=$(mktemp -d)
+    local temp_dir
+    temp_dir=$(mktemp -d)
 
     echo "Downloading git-cliff from $download_url..."
     if curl -sL "$download_url" | tar xz -C "$temp_dir"; then
