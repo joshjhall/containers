@@ -140,6 +140,12 @@ jobs:
               INCLUDE_POSTGRES_CLIENT=true
               INCLUDE_REDIS_CLIENT=true
               INCLUDE_SQLITE_CLIENT=true
+          - name: rust-golang
+            build_args: |
+              PROJECT_NAME=containers
+              PROJECT_PATH=.
+              INCLUDE_RUST_DEV=true
+              INCLUDE_GOLANG_DEV=true
 
     steps:
       - name: Checkout code
