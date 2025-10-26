@@ -112,29 +112,29 @@ jobs:
           #     INCLUDE_REDIS_CLIENT=true
           #     INCLUDE_SQLITE_CLIENT=true
           #     INCLUDE_DOCKER=true
-          - name: node-dev
-            build_args: |
-              PROJECT_NAME=containers
-              PROJECT_PATH=.
-              INCLUDE_NODE_DEV=true
-              INCLUDE_OP=true
-              INCLUDE_DEV_TOOLS=true
-              INCLUDE_POSTGRES_CLIENT=true
-              INCLUDE_REDIS_CLIENT=true
-              INCLUDE_SQLITE_CLIENT=true
-              INCLUDE_DOCKER=true
-          # - name: cloud-ops
+          # - name: node-dev
           #   build_args: |
           #     PROJECT_NAME=containers
           #     PROJECT_PATH=.
-          #     INCLUDE_KUBERNETES=true
-          #     INCLUDE_TERRAFORM=true
-          #     INCLUDE_AWS=true
-          #     INCLUDE_GCLOUD=true
-          #     INCLUDE_CLOUDFLARE=true
-          #     INCLUDE_DEV_TOOLS=true
-          #     INCLUDE_DOCKER=true
+          #     INCLUDE_NODE_DEV=true
           #     INCLUDE_OP=true
+          #     INCLUDE_DEV_TOOLS=true
+          #     INCLUDE_POSTGRES_CLIENT=true
+          #     INCLUDE_REDIS_CLIENT=true
+          #     INCLUDE_SQLITE_CLIENT=true
+          #     INCLUDE_DOCKER=true
+          - name: cloud-ops
+            build_args: |
+              PROJECT_NAME=containers
+              PROJECT_PATH=.
+              INCLUDE_KUBERNETES=true
+              INCLUDE_TERRAFORM=true
+              INCLUDE_AWS=true
+              INCLUDE_GCLOUD=true
+              INCLUDE_CLOUDFLARE=true
+              INCLUDE_DEV_TOOLS=true
+              INCLUDE_DOCKER=true
+              INCLUDE_OP=true
           # - name: polyglot
           #   build_args: |
           #     PROJECT_NAME=containers
@@ -216,10 +216,10 @@ jobs:
           #   test: minimal
           # - name: python-dev
           #   test: python_dev
-          - name: node-dev
-            test: node_dev
-          # - name: cloud-ops
-          #   test: cloud_ops
+          # - name: node-dev
+          #   test: node_dev
+          - name: cloud-ops
+            test: cloud_ops
           # - name: polyglot
           #   test: polyglot
           # - name: rust-golang
@@ -340,7 +340,7 @@ jobs:
         # Must match enabled variants in the 'build' job above.
         # Note: rust-golang is excluded from security scanning.
         # =====================================================
-        variant: [node-dev] # Full: [minimal, python-dev, node-dev, cloud-ops, polyglot]
+        variant: [cloud-ops] # Full: [minimal, python-dev, node-dev, cloud-ops, polyglot]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
