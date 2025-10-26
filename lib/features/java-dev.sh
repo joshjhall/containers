@@ -116,14 +116,14 @@ create_symlink "${TOOLS_DIR}/jbang-${JBANG_VERSION}/bin/jbang" "/usr/local/bin/j
 rm -f /tmp/jbang.tar
 
 # ============================================================================
-# Maven Daemon - Faster Maven builds (amd64 only)
+# Maven Daemon - Faster Maven builds
 # ============================================================================
 ARCH=$(dpkg --print-architecture)
-if [ "$ARCH" = "amd64" ]; then
-    log_message "Installing Maven Daemon..."
+if [ "$ARCH" = "amd64" ] || [ "$ARCH" = "arm64" ]; then
+    log_message "Installing Maven Daemon for ${ARCH}..."
 
     MVND_VERSION="1.0.3"
-    MVND_URL="https://github.com/apache/maven-mvnd/releases/download/${MVND_VERSION}/maven-mvnd-${MVND_VERSION}-linux-amd64.tar.gz"
+    MVND_URL="https://github.com/apache/maven-mvnd/releases/download/${MVND_VERSION}/maven-mvnd-${MVND_VERSION}-linux-${ARCH}.tar.gz"
 
     log_command "Downloading Maven Daemon ${MVND_VERSION}" \
         wget "${MVND_URL}" -O /tmp/mvnd.tar.gz
@@ -131,12 +131,12 @@ if [ "$ARCH" = "amd64" ]; then
     log_command "Extracting Maven Daemon" \
         tar -xzf /tmp/mvnd.tar.gz -C "${TOOLS_DIR}"
 
-    create_symlink "${TOOLS_DIR}/maven-mvnd-${MVND_VERSION}-linux-amd64/bin/mvnd" "/usr/local/bin/mvnd" "Maven Daemon"
-    create_symlink "${TOOLS_DIR}/maven-mvnd-${MVND_VERSION}-linux-amd64/bin/mvnd" "/usr/local/bin/mvndaemon" "Maven Daemon (alias)"
+    create_symlink "${TOOLS_DIR}/maven-mvnd-${MVND_VERSION}-linux-${ARCH}/bin/mvnd" "/usr/local/bin/mvnd" "Maven Daemon"
+    create_symlink "${TOOLS_DIR}/maven-mvnd-${MVND_VERSION}-linux-${ARCH}/bin/mvnd" "/usr/local/bin/mvndaemon" "Maven Daemon (alias)"
 
     rm -f /tmp/mvnd.tar.gz
 else
-    log_message "Skipping Maven Daemon installation - only available for amd64 architecture"
+    log_message "Skipping Maven Daemon installation - only available for amd64/arm64 architectures (detected: ${ARCH})"
 fi
 
 # ============================================================================
