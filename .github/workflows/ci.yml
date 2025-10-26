@@ -338,9 +338,8 @@ jobs:
         # VARIANT FEATURE TOGGLE (for debugging/development)
         # =====================================================
         # Must match enabled variants in the 'build' job above.
-        # Note: rust-golang is excluded from security scanning.
         # =====================================================
-        variant: [minimal, python-dev, node-dev, cloud-ops, polyglot]
+        variant: [minimal, python-dev, node-dev, cloud-ops, polyglot, rust-golang]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
