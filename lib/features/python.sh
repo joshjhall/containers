@@ -53,13 +53,15 @@ apt_install \
     libreadline-dev \
     libsqlite3-dev \
     libssl-dev \
-    lzma \
-    lzma-dev \
     tk-dev \
     uuid-dev \
     zlib1g-dev \
     wget \
     ca-certificates
+
+# Install version-specific packages
+# lzma and lzma-dev were removed in Debian 13 (Trixie), replaced by liblzma-dev
+apt_install_conditional 11 12 lzma lzma-dev
 
 # ============================================================================
 # Cache Configuration
