@@ -97,21 +97,21 @@ jobs:
           # cloud-ops, polyglot, and rust-golang one at a time.
           # Once all are working, uncomment all for full testing.
           # =====================================================
-          - name: minimal
-            build_args: |
-              PROJECT_NAME=containers
-              PROJECT_PATH=.
-          # - name: python-dev
+          # - name: minimal
           #   build_args: |
           #     PROJECT_NAME=containers
           #     PROJECT_PATH=.
-          #     INCLUDE_PYTHON_DEV=true
-          #     INCLUDE_OP=true
-          #     INCLUDE_DEV_TOOLS=true
-          #     INCLUDE_POSTGRES_CLIENT=true
-          #     INCLUDE_REDIS_CLIENT=true
-          #     INCLUDE_SQLITE_CLIENT=true
-          #     INCLUDE_DOCKER=true
+          - name: python-dev
+            build_args: |
+              PROJECT_NAME=containers
+              PROJECT_PATH=.
+              INCLUDE_PYTHON_DEV=true
+              INCLUDE_OP=true
+              INCLUDE_DEV_TOOLS=true
+              INCLUDE_POSTGRES_CLIENT=true
+              INCLUDE_REDIS_CLIENT=true
+              INCLUDE_SQLITE_CLIENT=true
+              INCLUDE_DOCKER=true
           # - name: node-dev
           #   build_args: |
           #     PROJECT_NAME=containers
@@ -212,10 +212,10 @@ jobs:
           # Must match enabled variants in the 'build' job above.
           # Only test variants that were successfully built.
           # =====================================================
-          - name: minimal
-            test: minimal
-          # - name: python-dev
-          #   test: python_dev
+          # - name: minimal
+          #   test: minimal
+          - name: python-dev
+            test: python_dev
           # - name: node-dev
           #   test: node_dev
           # - name: cloud-ops
@@ -340,7 +340,7 @@ jobs:
         # Must match enabled variants in the 'build' job above.
         # Note: rust-golang is excluded from security scanning.
         # =====================================================
-        variant: [minimal] # Full: [minimal, python-dev, node-dev, cloud-ops, polyglot]
+        variant: [python-dev] # Full: [minimal, python-dev, node-dev, cloud-ops, polyglot]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
