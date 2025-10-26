@@ -87,10 +87,91 @@ test_package_managers() {
     assert_command_in_container "$image" "pnpm --version" ""
 }
 
+# Test: Development tools actually work
+test_dev_tools_work() {
+    local image="${IMAGE_TO_TEST:-test-node-dev-$$}"
+
+    # ESLint can lint JavaScript
+    assert_command_in_container "$image" "echo 'console.log(\"hello\");' | eslint --stdin --stdin-filename=test.js" ""
+
+    # Prettier can format code
+    assert_command_in_container "$image" "echo 'const x=1' | prettier --parser babel" "const x = 1"
+
+    # Jest can show version (no tests scenario)
+    assert_command_in_container "$image" "jest --version" ""
+
+    # Webpack can show version
+    assert_command_in_container "$image" "webpack --version" ""
+}
+
+# Test: TypeScript compilation works
+test_typescript_compilation() {
+    local image="${IMAGE_TO_TEST:-test-node-dev-$$}"
+
+    # Create a TypeScript file and compile it
+    assert_command_in_container "$image" "cd /tmp && echo 'const greeting: string = \"hello\"; console.log(greeting);' > test.ts && tsc test.ts && node test.js" "hello"
+
+    # ts-node can execute TypeScript directly
+    assert_command_in_container "$image" "echo 'console.log(\"ts-node works\");' | ts-node" "ts-node works"
+}
+
+# Test: Package installation works
+test_npm_install() {
+    local image="${IMAGE_TO_TEST:-test-node-dev-$$}"
+
+    # npm can install a package
+    assert_command_in_container "$image" "cd /tmp && npm install lodash && node -e \"const _ = require('lodash'); console.log(_.VERSION)\"" ""
+}
+
+# Test: Build tools are functional
+test_build_tools() {
+    local image="${IMAGE_TO_TEST:-test-node-dev-$$}"
+
+    # Vite can show version
+    assert_command_in_container "$image" "vite --version" ""
+
+    # esbuild can show version
+    assert_command_in_container "$image" "esbuild --version" ""
+
+    # Rollup can show version
+    assert_command_in_container "$image" "rollup --version" ""
+}
+
+# Test: Cache directories are configured
+test_node_cache() {
+    local image="${IMAGE_TO_TEST:-test-node-dev-$$}"
+
+    # npm cache directory exists and is writable
+    assert_command_in_container "$image" "test -w /cache/npm && echo writable" "writable"
+
+    # npm global directory exists and is writable
+    assert_command_in_container "$image" "test -w /cache/npm-global && echo writable" "writable"
+}
+
+# Test: Database clients work
+test_database_clients() {
+    local image="${IMAGE_TO_TEST:-test-node-dev-$$}"
+
+    # PostgreSQL client
+    assert_command_in_container "$image" "psql --version" "psql"
+
+    # Redis client
+    assert_command_in_container "$image" "redis-cli --version" "redis-cli"
+
+    # SQLite
+    assert_command_in_container "$image" "sqlite3 --version" "3."
+}
+
 # Run all tests
 run_test test_node_dev_build "Node dev environment builds successfully"
 run_test test_typescript "TypeScript compiler is functional"
 run_test test_package_managers "Node package managers work"
+run_test test_dev_tools_work "Development tools work correctly"
+run_test test_typescript_compilation "TypeScript compilation works"
+run_test test_npm_install "npm can install packages"
+run_test test_build_tools "Build tools are functional"
+run_test test_node_cache "Node cache directories are configured"
+run_test test_database_clients "Database clients are functional"
 
 # Generate test report
 generate_report
