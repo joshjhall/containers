@@ -63,11 +63,13 @@ log_message "Installing Node.js development dependencies..."
 apt_update
 
 # Install Node.js development dependencies with retry logic
+# build-essential provides gcc, g++, make, binutils needed for native addons
+# python3 needed for node-gyp (build tool for native addons)
+# Image processing libraries needed for canvas, sharp, and similar packages
 apt_install \
+    build-essential \
     python3 \
     python3-pip \
-    g++ \
-    make \
     libcairo2-dev \
     libpango1.0-dev \
     libjpeg-dev \
