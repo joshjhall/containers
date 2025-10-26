@@ -185,6 +185,73 @@ jobs:
           retention-days: 7
 
   # =====================================
+  # Debian Version Compatibility Tests
+  # =====================================
+  debian-version-test:
+    name: Debian Version Compatibility
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    strategy:
+      matrix:
+        debian:
+          - version: "11"
+            codename: bullseye
+          - version: "12"
+            codename: bookworm
+          - version: "13"
+            codename: trixie
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Test Python build on Debian ${{ matrix.debian.version }}
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: false
+          load: true
+          tags: test-debian-${{ matrix.debian.version }}:python
+          build-args: |
+            BASE_IMAGE=debian:${{ matrix.debian.codename }}-slim
+            PROJECT_NAME=test-debian-${{ matrix.debian.version }}
+            PROJECT_PATH=.
+            INCLUDE_PYTHON_DEV=true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Verify Python installation
+        run: |
+          docker run --rm test-debian-${{ matrix.debian.version }}:python python --version
+          docker run --rm test-debian-${{ matrix.debian.version }}:python poetry --version
+
+      - name: Test cloud tools on Debian ${{ matrix.debian.version }}
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: false
+          load: true
+          tags: test-debian-${{ matrix.debian.version }}:cloud
+          build-args: |
+            BASE_IMAGE=debian:${{ matrix.debian.codename }}-slim
+            PROJECT_NAME=test-debian-${{ matrix.debian.version }}
+            PROJECT_PATH=.
+            INCLUDE_KUBERNETES=true
+            INCLUDE_TERRAFORM=true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Verify cloud tools installation
+        run: |
+          docker run --rm test-debian-${{ matrix.debian.version }}:cloud kubectl version --client
+          docker run --rm test-debian-${{ matrix.debian.version }}:cloud terraform version
+
+  # =====================================
   # Security Scanning
   # =====================================
   security-scan:
