@@ -7,8 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Automated CHANGELOG generation with git-cliff
+- Enhanced release script with non-interactive mode for CI/CD
+- Comprehensive release documentation (docs/releasing.md)
+- git-cliff configuration for consistent changelog formatting
+
 ### Fixed
 
+- **golang-dev**: Install binutils-gold for Go external linking on ARM64
+  - Go 1.24 requires gold linker for external linking (see Go issue #22040)
+  - Matches Debian's official golang-go package dependency
+  - Added detailed documentation explaining deprecation status
+- **rust-dev**: Add build-essential for Rust crates with C dependencies
+- **node-dev**: Add build-essential for Node.js native addon compilation
+- **Tests**: Update Go compilation test for Go 1.24+ module requirements
+  - Tests now create proper Go modules before building
+  - Better reflects real-world Go development practices
 - **CRITICAL**: Fixed CI build args format causing features to not install
   - Build args in CI workflow were space-separated on single line
   - Docker build-push-action requires each arg on separate line
