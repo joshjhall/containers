@@ -108,11 +108,55 @@ test_cloud_clis() {
     assert_command_in_container "$image" "gcloud version" "Google Cloud SDK"
 }
 
+# Test: Terraform can validate configurations
+test_terraform_functionality() {
+    local image="${IMAGE_TO_TEST:-test-cloud-ops-$$}"
+
+    # Create a simple Terraform config and validate it
+    assert_command_in_container "$image" "cd /tmp && echo 'terraform { required_version = \">= 1.0\" }' > main.tf && terraform init && terraform validate" "Success"
+}
+
+# Test: Helm can work with charts
+test_helm_functionality() {
+    local image="${IMAGE_TO_TEST:-test-cloud-ops-$$}"
+
+    # Helm can search repos
+    assert_command_in_container "$image" "helm version --short" "v"
+
+    # Helm can create a chart
+    assert_command_in_container "$image" "cd /tmp && helm create test-chart && test -d test-chart && echo ok" "ok"
+}
+
+# Test: kubectl can work with manifests
+test_kubectl_functionality() {
+    local image="${IMAGE_TO_TEST:-test-cloud-ops-$$}"
+
+    # kubectl can validate a manifest (dry-run without cluster)
+    assert_command_in_container "$image" "echo 'apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: test-config
+data:
+  key: value' | kubectl apply --dry-run=client -f - && echo ok" "ok"
+}
+
+# Test: Cache directories configured
+test_cloud_cache() {
+    local image="${IMAGE_TO_TEST:-test-cloud-ops-$$}"
+
+    # Verify common cache directories exist and are writable
+    assert_command_in_container "$image" "test -w /cache && echo writable" "writable"
+}
+
 # Run all tests
 run_test test_cloud_ops_build "Cloud ops environment builds successfully"
 run_test test_kubernetes_tools "Kubernetes tools are functional"
 run_test test_terraform "Terraform tools are functional"
 run_test test_cloud_clis "Cloud CLIs are functional"
+run_test test_terraform_functionality "Terraform can validate configurations"
+run_test test_helm_functionality "Helm can work with charts"
+run_test test_kubectl_functionality "kubectl can validate manifests"
+run_test test_cloud_cache "Cache directories are configured"
 
 # Generate test report
 generate_report
