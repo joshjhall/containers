@@ -23,8 +23,9 @@ A modular, extensible container build system designed to be shared across projec
 - 🚀 **Efficient Caching**: BuildKit cache mounts for faster rebuilds
 - 🔒 **Security First**: Non-root users, proper permissions, validated installations
 - 🌍 **Multi-Purpose**: Development, CI/CD, production, and agent containers
-- 📦 **20+ Languages & Tools**: Python, Node.js, Rust, Go, Ruby, Java, R, and more
+- 📦 **28 Feature Modules**: Python, Node.js, Rust, Go, Ruby, Java, R, and 100+ tools
 - ☁️ **Cloud Ready**: AWS, GCP, Kubernetes, Terraform integrations
+- 🐧 **Debian Compatible**: Supports Debian 11 (Bullseye), 12 (Bookworm), and 13 (Trixie)
 
 ---
 
@@ -159,7 +160,7 @@ All features are enabled via `INCLUDE_<FEATURE>=true` build arguments.
 
 | Feature | Build Arg | What's Included |
 |---------|-----------|-----------------|
-| **Dev Tools** | `INCLUDE_DEV_TOOLS=true` | git, gh CLI, fzf, ripgrep, bat, delta |
+| **Dev Tools** | `INCLUDE_DEV_TOOLS=true` | git, gh CLI, lazygit, fzf, ripgrep, bat, eza/exa, delta |
 | **1Password** | `INCLUDE_OP=true` | 1Password CLI |
 | **Ollama** | `INCLUDE_OLLAMA=true` | Local LLM support |
 
@@ -296,7 +297,7 @@ When updates are available, edit the appropriate files:
 
 ### Unit Tests
 
-The project includes a comprehensive unit test framework (488 tests, 99% pass rate):
+The project includes a comprehensive unit test framework (487 tests, 99% pass rate):
 
 ```bash
 # Run all unit tests (no Docker required)
@@ -308,8 +309,8 @@ The project includes a comprehensive unit test framework (488 tests, 99% pass ra
 ```
 
 **Unit Test Coverage:**
-- ✅ 488 unit tests covering all features and utilities
-- ✅ 99% pass rate (487 passed, 1 legitimate skip)
+- ✅ 487 unit tests covering all features and utilities
+- ✅ 99% pass rate (486 passed, 1 legitimate skip)
 - ✅ Tests bash scripts directly without Docker
 - ✅ Fast execution (~30 seconds)
 
@@ -350,7 +351,9 @@ To quickly verify installed features in a running container:
 ## Best Practices
 
 1. **Choose the right base image**:
-   - `debian:bookworm-slim`: Minimal size, good compatibility
+   - `debian:bookworm-slim` (Debian 12): Minimal size, good compatibility (default)
+   - `debian:bullseye-slim` (Debian 11): Older stable release
+   - `debian:trixie-slim` (Debian 13): Latest testing release
    - `ubuntu:24.04`: More packages available, larger size
    - `mcr.microsoft.com/devcontainers/base:bookworm`: VS Code optimized
 
