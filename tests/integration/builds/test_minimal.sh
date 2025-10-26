@@ -21,13 +21,20 @@ test_suite "Minimal Container Builds"
 
 # Test: Base container with no features
 test_base_container_only() {
-    local image="test-minimal-base-$$"
-    
-    # Build with no features enabled (standalone mode)
-    assert_build_succeeds "Dockerfile" \
-        --build-arg PROJECT_PATH=. \
-        --build-arg PROJECT_NAME=test-minimal \
-        -t "$image"
+    # Use pre-built image if provided, otherwise build locally
+    if [ -n "${IMAGE_TO_TEST:-}" ]; then
+        local image="$IMAGE_TO_TEST"
+        echo "Testing pre-built image: $image"
+    else
+        local image="test-minimal-base-$$"
+        echo "Building image locally: $image"
+
+        # Build with no features enabled (standalone mode)
+        assert_build_succeeds "Dockerfile" \
+            --build-arg PROJECT_PATH=. \
+            --build-arg PROJECT_NAME=test-minimal \
+            -t "$image"
+    fi
     
     # Verify basic functionality
     assert_command_in_container "$image" "echo 'Hello World'" "Hello World"

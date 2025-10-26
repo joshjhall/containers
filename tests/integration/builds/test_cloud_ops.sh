@@ -28,21 +28,28 @@ test_suite "Cloud Ops Container Build"
 
 # Test: Cloud ops environment builds successfully
 test_cloud_ops_build() {
-    local image="test-cloud-ops-$$"
+    # Use pre-built image if provided, otherwise build locally
+    if [ -n "${IMAGE_TO_TEST:-}" ]; then
+        local image="$IMAGE_TO_TEST"
+        echo "Testing pre-built image: $image"
+    else
+        local image="test-cloud-ops-$$"
+        echo "Building image locally: $image"
 
-    # Build with cloud-ops configuration (matches CI)
-    assert_build_succeeds "Dockerfile" \
-        --build-arg PROJECT_PATH=. \
-        --build-arg PROJECT_NAME=test-cloud-ops \
-        --build-arg INCLUDE_KUBERNETES=true \
-        --build-arg INCLUDE_TERRAFORM=true \
-        --build-arg INCLUDE_AWS=true \
-        --build-arg INCLUDE_GCLOUD=true \
-        --build-arg INCLUDE_CLOUDFLARE=true \
-        --build-arg INCLUDE_DEV_TOOLS=true \
-        --build-arg INCLUDE_DOCKER=true \
-        --build-arg INCLUDE_OP=true \
-        -t "$image"
+        # Build with cloud-ops configuration (matches CI)
+        assert_build_succeeds "Dockerfile" \
+            --build-arg PROJECT_PATH=. \
+            --build-arg PROJECT_NAME=test-cloud-ops \
+            --build-arg INCLUDE_KUBERNETES=true \
+            --build-arg INCLUDE_TERRAFORM=true \
+            --build-arg INCLUDE_AWS=true \
+            --build-arg INCLUDE_GCLOUD=true \
+            --build-arg INCLUDE_CLOUDFLARE=true \
+            --build-arg INCLUDE_DEV_TOOLS=true \
+            --build-arg INCLUDE_DOCKER=true \
+            --build-arg INCLUDE_OP=true \
+            -t "$image"
+    fi
 
     # Verify Kubernetes tools
     assert_executable_in_path "$image" "kubectl"
@@ -70,7 +77,7 @@ test_cloud_ops_build() {
 
 # Test: Kubernetes tools show version
 test_kubernetes_tools() {
-    local image="test-cloud-ops-$$"
+    local image="${IMAGE_TO_TEST:-test-cloud-ops-$$}"
 
     # kubectl version
     assert_command_in_container "$image" "kubectl version --client" "Client Version"
@@ -81,7 +88,7 @@ test_kubernetes_tools() {
 
 # Test: Terraform shows version
 test_terraform() {
-    local image="test-cloud-ops-$$"
+    local image="${IMAGE_TO_TEST:-test-cloud-ops-$$}"
 
     # Terraform version
     assert_command_in_container "$image" "terraform version" "Terraform"
@@ -92,7 +99,7 @@ test_terraform() {
 
 # Test: Cloud CLIs show version
 test_cloud_clis() {
-    local image="test-cloud-ops-$$"
+    local image="${IMAGE_TO_TEST:-test-cloud-ops-$$}"
 
     # AWS CLI
     assert_command_in_container "$image" "aws --version" "aws-cli"

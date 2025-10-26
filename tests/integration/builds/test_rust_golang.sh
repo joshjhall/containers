@@ -23,15 +23,17 @@ test_suite "Rust + Go Systems Programming Stack"
 
 # Test: Rust + Go environment builds
 test_rust_golang_build() {
-    local image="test-rust-go-$$"
-
-    # Build with Rust and Go dev tools
-    assert_build_succeeds "Dockerfile" \
-        --build-arg PROJECT_PATH=. \
-        --build-arg PROJECT_NAME=test-rust-go \
-        --build-arg INCLUDE_RUST_DEV=true \
-        --build-arg INCLUDE_GOLANG_DEV=true \
-        -t "$image"
+    if [ -n "${IMAGE_TO_TEST:-}" ]; then
+        local image="$IMAGE_TO_TEST"
+    else
+        local image="test-rust-go-$$"
+        assert_build_succeeds "Dockerfile" \
+            --build-arg PROJECT_PATH=. \
+            --build-arg PROJECT_NAME=test-rust-go \
+            --build-arg INCLUDE_RUST_DEV=true \
+            --build-arg INCLUDE_GOLANG_DEV=true \
+            -t "$image"
+    fi
 
     # Verify Rust toolchain
     assert_executable_in_path "$image" "rustc"
