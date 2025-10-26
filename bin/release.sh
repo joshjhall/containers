@@ -233,6 +233,13 @@ if [ "$NON_INTERACTIVE" = "false" ]; then
     echo
     if [[ ! $REPLY =~ ^[Yy]$ ]]; then
         echo -e "${YELLOW}Release cancelled${NC}"
+        echo ""
+        echo "To automate this process, you can use:"
+        echo -e "  ${BLUE}echo 'y' | $0 $*${NC}"
+        echo -e "  ${BLUE}yes | $0 $*${NC}"
+        echo ""
+        echo "Or use non-interactive mode:"
+        echo -e "  ${BLUE}$0 --non-interactive $*${NC}"
         exit 1
     fi
 fi
