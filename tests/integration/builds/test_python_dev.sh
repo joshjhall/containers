@@ -103,11 +103,50 @@ test_database_clients() {
     assert_command_in_container "$image" "sqlite3 --version" "3."
 }
 
+# Test: Python development tools actually work
+test_python_tools_work() {
+    local image="${IMAGE_TO_TEST:-test-python-dev-$$}"
+
+    # Black can format code
+    assert_command_in_container "$image" "echo 'x=1' | black -" ""
+
+    # Ruff can check code
+    assert_command_in_container "$image" "echo 'import os' | ruff check --stdin-filename=test.py -" ""
+
+    # Pytest can run (with no tests, exits 5)
+    assert_command_in_container "$image" "cd /tmp && pytest --collect-only 2>&1 || test \$? -eq 5 && echo ok" "ok"
+
+    # IPython can show version
+    assert_command_in_container "$image" "ipython --version" ""
+}
+
+# Test: Package installation works
+test_pip_install() {
+    local image="${IMAGE_TO_TEST:-test-python-dev-$$}"
+
+    # Pip can install a simple package
+    assert_command_in_container "$image" "pip install --user --no-warn-script-location requests && python -c 'import requests; print(requests.__version__)'" ""
+}
+
+# Test: Cache directories are configured
+test_python_cache() {
+    local image="${IMAGE_TO_TEST:-test-python-dev-$$}"
+
+    # Pip cache directory exists and is writable
+    assert_command_in_container "$image" "test -w /cache/pip && echo writable" "writable"
+
+    # Poetry cache is configured
+    assert_command_in_container "$image" "poetry config cache-dir" "/cache/poetry"
+}
+
 # Run all tests
 run_test test_python_dev_build "Python dev environment builds successfully"
 run_test test_python_stdlib "Python can import standard libraries"
 run_test test_poetry_configuration "Poetry is configured correctly"
 run_test test_database_clients "Database clients are functional"
+run_test test_python_tools_work "Python development tools work correctly"
+run_test test_pip_install "Pip can install packages"
+run_test test_python_cache "Python cache directories are configured"
 
 # Generate test report
 generate_report
