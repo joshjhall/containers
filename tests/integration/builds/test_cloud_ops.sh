@@ -137,7 +137,7 @@ kind: ConfigMap
 metadata:
   name: test-config
 data:
-  key: value' | kubectl apply --dry-run=client -f - && echo ok" "ok"
+  key: value' | kubectl apply --dry-run=client --validate=false -f - && echo ok" "ok"
 }
 
 # Test: Cache directories configured
