@@ -80,12 +80,17 @@ apt_update
 
 # Install system dependencies with retry logic
 # build-essential provides gcc, g++, make needed for CGO compilation
-# binutils provides ld (linker) explicitly - some Go tools use gold linker
+# binutils-gold provides gold linker (ld.gold) required by Go for external linking on ARM64
+#   Note: Gold linker is deprecated as of GNU Binutils 2.44 (Feb 2025), but:
+#   - Go 1.24 still requires it for external linking on ARM64 (see Go issue #22040)
+#   - Debian's official golang-go package installs binutils-gold as a dependency
+#   - Still maintained in Debian's security updates
+#   - Will be updated when Go officially removes the gold requirement
 # graphviz needed for go-callvis
 # protobuf-compiler needed for protobuf tools
 apt_install \
     build-essential \
-    binutils \
+    binutils-gold \
     graphviz \
     protobuf-compiler
 
