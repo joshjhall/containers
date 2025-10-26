@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **CRITICAL**: Fixed CI build args format causing features to not install
+  - Build args in CI workflow were space-separated on single line
+  - Docker build-push-action requires each arg on separate line
+  - All variants (python-dev, node-dev, cloud-ops, polyglot) now properly install features
+  - Previous builds had NO features installed except base system packages
+- **CRITICAL**: Removed Debian 12+ version requirement to support Debian 11
+  - feature-header.sh was blocking all builds on Debian 11 (Bullseye)
+  - Now supports Debian 11, 12, and 13 with version detection in apt-utils.sh
+  - Version-specific packages handled via apt_install_conditional function
 - **CRITICAL**: Added backwards compatibility for apt-key deprecation
   - terraform.sh, gcloud.sh, kubernetes.sh now auto-detect Debian version
   - Debian 11/12 (Bookworm): Uses legacy apt-key method

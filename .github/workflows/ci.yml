@@ -93,13 +93,43 @@ jobs:
           - name: minimal
             build_args: ""
           - name: python-dev
-            build_args: "INCLUDE_PYTHON_DEV=true INCLUDE_OP=true INCLUDE_DEV_TOOLS=true INCLUDE_POSTGRES_CLIENT=true INCLUDE_REDIS_CLIENT=true INCLUDE_SQLITE_CLIENT=true INCLUDE_DOCKER=true"
+            build_args: |
+              INCLUDE_PYTHON_DEV=true
+              INCLUDE_OP=true
+              INCLUDE_DEV_TOOLS=true
+              INCLUDE_POSTGRES_CLIENT=true
+              INCLUDE_REDIS_CLIENT=true
+              INCLUDE_SQLITE_CLIENT=true
+              INCLUDE_DOCKER=true
           - name: node-dev
-            build_args: "INCLUDE_NODE_DEV=true INCLUDE_OP=true INCLUDE_DEV_TOOLS=true INCLUDE_POSTGRES_CLIENT=true INCLUDE_REDIS_CLIENT=true INCLUDE_SQLITE_CLIENT=true INCLUDE_DOCKER=true"
+            build_args: |
+              INCLUDE_NODE_DEV=true
+              INCLUDE_OP=true
+              INCLUDE_DEV_TOOLS=true
+              INCLUDE_POSTGRES_CLIENT=true
+              INCLUDE_REDIS_CLIENT=true
+              INCLUDE_SQLITE_CLIENT=true
+              INCLUDE_DOCKER=true
           - name: cloud-ops
-            build_args: "INCLUDE_KUBERNETES=true INCLUDE_TERRAFORM=true INCLUDE_AWS=true INCLUDE_GCLOUD=true INCLUDE_CLOUDFLARE=true INCLUDE_DEV_TOOLS=true INCLUDE_DOCKER=true INCLUDE_OP=true"
+            build_args: |
+              INCLUDE_KUBERNETES=true
+              INCLUDE_TERRAFORM=true
+              INCLUDE_AWS=true
+              INCLUDE_GCLOUD=true
+              INCLUDE_CLOUDFLARE=true
+              INCLUDE_DEV_TOOLS=true
+              INCLUDE_DOCKER=true
+              INCLUDE_OP=true
           - name: polyglot
-            build_args: "INCLUDE_PYTHON_DEV=true INCLUDE_NODE_DEV=true INCLUDE_DEV_TOOLS=true INCLUDE_DOCKER=true INCLUDE_OP=true INCLUDE_POSTGRES_CLIENT=true INCLUDE_REDIS_CLIENT=true INCLUDE_SQLITE_CLIENT=true"
+            build_args: |
+              INCLUDE_PYTHON_DEV=true
+              INCLUDE_NODE_DEV=true
+              INCLUDE_DEV_TOOLS=true
+              INCLUDE_DOCKER=true
+              INCLUDE_OP=true
+              INCLUDE_POSTGRES_CLIENT=true
+              INCLUDE_REDIS_CLIENT=true
+              INCLUDE_SQLITE_CLIENT=true
 
     steps:
       - name: Checkout code
