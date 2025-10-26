@@ -65,7 +65,7 @@ test_polyglot_build() {
 
 # Test: Python and Node.js can coexist
 test_language_coexistence() {
-    local image="test-polyglot-$$"
+    local image="${IMAGE_TO_TEST:-test-polyglot-$$}"
 
     # Test Python
     assert_command_in_container "$image" "python --version" "Python 3."
@@ -80,7 +80,7 @@ test_language_coexistence() {
 
 # Test: Package managers work for both languages
 test_polyglot_package_managers() {
-    local image="test-polyglot-$$"
+    local image="${IMAGE_TO_TEST:-test-polyglot-$$}"
 
     # Python: poetry
     assert_command_in_container "$image" "poetry --version" "Poetry"

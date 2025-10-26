@@ -74,7 +74,7 @@ test_python_dev_build() {
 
 # Test: Python can import standard libraries
 test_python_stdlib() {
-    local image="test-python-dev-$$"
+    local image="${IMAGE_TO_TEST:-test-python-dev-$$}"
 
     # Test common stdlib imports
     assert_command_in_container "$image" "python -c 'import json, os, sys, sqlite3'" ""
@@ -83,7 +83,7 @@ test_python_stdlib() {
 
 # Test: Poetry creates virtualenvs in project
 test_poetry_configuration() {
-    local image="test-python-dev-$$"
+    local image="${IMAGE_TO_TEST:-test-python-dev-$$}"
 
     # Check poetry config
     assert_command_in_container "$image" "poetry config virtualenvs.in-project" "true"
@@ -91,7 +91,7 @@ test_poetry_configuration() {
 
 # Test: Database clients can show version
 test_database_clients() {
-    local image="test-python-dev-$$"
+    local image="${IMAGE_TO_TEST:-test-python-dev-$$}"
 
     # PostgreSQL client
     assert_command_in_container "$image" "psql --version" "psql"

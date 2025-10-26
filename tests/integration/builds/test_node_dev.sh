@@ -67,7 +67,7 @@ test_node_dev_build() {
 
 # Test: TypeScript compiler works
 test_typescript() {
-    local image="test-node-dev-$$"
+    local image="${IMAGE_TO_TEST:-test-node-dev-$$}"
 
     # Test TypeScript version
     assert_command_in_container "$image" "tsc --version" "Version"
@@ -75,7 +75,7 @@ test_typescript() {
 
 # Test: Node package managers work
 test_package_managers() {
-    local image="test-node-dev-$$"
+    local image="${IMAGE_TO_TEST:-test-node-dev-$$}"
 
     # Test npm
     assert_command_in_container "$image" "npm --version" ""
