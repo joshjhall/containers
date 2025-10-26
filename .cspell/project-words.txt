@@ -33,6 +33,7 @@ beru
 bestpractices
 bierner
 bindgen
+binutils
 bitnami
 blogdown
 bookdown
