@@ -6,7 +6,7 @@
 #   Includes modern CLI replacements, git helpers, monitoring tools, and more.
 #
 # Features:
-#   - Modern CLI replacements: exa (ls), bat (cat), duf (df), fd (find), ripgrep (grep)
+#   - Modern CLI replacements: eza/exa (ls), bat (cat), duf (df), fd (find), ripgrep (grep)
 #   - Git helpers: lazygit, delta (side-by-side diffs), git-cliff (changelog generation)
 #   - Development utilities: direnv, just (with modules), entr
 #   - Network tools: telnet, netcat, nmap, tcpdump, socat, whois
@@ -81,8 +81,18 @@ apt_install \
     htop \
     ncdu \
     bat \
-    exa \
     tmux
+
+# Modern ls replacement - Debian version dependent
+# Debian 11/12: exa (deprecated upstream but only option)
+# Debian 13+: eza (maintained fork)
+if is_debian_version 13; then
+    log_message "Installing eza (modern ls replacement)..."
+    apt_install eza
+else
+    log_message "Installing exa (modern ls replacement)..."
+    apt_install exa
+fi
 
 # Network debugging tools
 log_message "Installing network debugging tools..."
@@ -149,7 +159,14 @@ _check_command() {
 }
 
 # Override with modern tool aliases when available
-if command -v exa &> /dev/null; then
+# Prefer eza (maintained) over exa (deprecated but still in older Debian)
+if command -v eza &> /dev/null; then
+    alias ls='eza'
+    alias ll='eza -la'
+    alias la='eza -a'
+    alias l='eza -F'
+    alias tree='eza --tree'
+elif command -v exa &> /dev/null; then
     alias ls='exa'
     alias ll='exa -la'
     alias la='exa -a'
@@ -220,8 +237,10 @@ alias diff='colordiff' 2>/dev/null || true
 alias gitlog='tig' 2>/dev/null || true
 alias diskusage='ncdu' 2>/dev/null || true
 
-# Override lt alias to use exa if available
-if command -v exa &> /dev/null; then
+# Override lt alias to use eza/exa if available
+if command -v eza &> /dev/null; then
+    alias lt='eza -la --tree'
+elif command -v exa &> /dev/null; then
     alias lt='exa -la --tree'
 fi
 
@@ -735,7 +754,16 @@ done
 
 echo ""
 echo "Modern CLI Tools:"
-for tool in exa bat duf htop ncdu fzf; do
+# Check for eza (preferred) or exa (fallback for older Debian)
+if command -v eza &> /dev/null; then
+    echo "  ✓ eza is installed"
+elif command -v exa &> /dev/null; then
+    echo "  ✓ exa is installed"
+else
+    echo "  ✗ eza/exa is not found"
+fi
+
+for tool in bat duf htop ncdu fzf; do
     if command -v $tool &> /dev/null; then
         echo "  ✓ $tool is installed"
     else
