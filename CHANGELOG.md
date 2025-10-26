@@ -25,6 +25,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Comprehensive integration test suite (6 test suites covering all CI variants)
 - Integration tests now run in CI pipeline
 - Build status badges in README
+- **Debian version compatibility system**:
+  - Automatic Debian version detection (11, 12, 13) in apt-utils.sh
+  - Conditional package installation based on Debian version
+  - Python feature now installs correct packages for each Debian version
+  - CI matrix testing for Debian 11 (Bullseye), 12 (Bookworm), 13 (Trixie)
+  - Ensures backwards compatibility while supporting latest Debian releases
 
 ### Improved
 
