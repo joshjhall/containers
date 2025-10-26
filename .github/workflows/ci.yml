@@ -91,9 +91,13 @@ jobs:
       matrix:
         variant:
           - name: minimal
-            build_args: ""
+            build_args: |
+              PROJECT_NAME=containers
+              PROJECT_PATH=.
           - name: python-dev
             build_args: |
+              PROJECT_NAME=containers
+              PROJECT_PATH=.
               INCLUDE_PYTHON_DEV=true
               INCLUDE_OP=true
               INCLUDE_DEV_TOOLS=true
@@ -103,6 +107,8 @@ jobs:
               INCLUDE_DOCKER=true
           - name: node-dev
             build_args: |
+              PROJECT_NAME=containers
+              PROJECT_PATH=.
               INCLUDE_NODE_DEV=true
               INCLUDE_OP=true
               INCLUDE_DEV_TOOLS=true
@@ -112,6 +118,8 @@ jobs:
               INCLUDE_DOCKER=true
           - name: cloud-ops
             build_args: |
+              PROJECT_NAME=containers
+              PROJECT_PATH=.
               INCLUDE_KUBERNETES=true
               INCLUDE_TERRAFORM=true
               INCLUDE_AWS=true
@@ -122,6 +130,8 @@ jobs:
               INCLUDE_OP=true
           - name: polyglot
             build_args: |
+              PROJECT_NAME=containers
+              PROJECT_PATH=.
               INCLUDE_PYTHON_DEV=true
               INCLUDE_NODE_DEV=true
               INCLUDE_DEV_TOOLS=true
@@ -164,10 +174,7 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          build-args: |
-            PROJECT_NAME=containers
-            PROJECT_PATH=.
-            ${{ matrix.variant.build_args }}
+          build-args: ${{ matrix.variant.build_args }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
