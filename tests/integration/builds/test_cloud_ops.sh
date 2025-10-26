@@ -132,12 +132,13 @@ test_kubectl_functionality() {
     local image="${IMAGE_TO_TEST:-test-cloud-ops-$$}"
 
     # kubectl can validate a manifest (dry-run without cluster)
+    # Use KUBECONFIG=/dev/null to prevent kubectl from using default localhost:8080
     assert_command_in_container "$image" "echo 'apiVersion: v1
 kind: ConfigMap
 metadata:
   name: test-config
 data:
-  key: value' | kubectl apply --dry-run=client --validate=false -f - && echo ok" "ok"
+  key: value' | KUBECONFIG=/dev/null kubectl create --dry-run=client -o yaml -f - | grep -q 'kind: ConfigMap' && echo ok" "ok"
 }
 
 # Test: Cache directories configured
