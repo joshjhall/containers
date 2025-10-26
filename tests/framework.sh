@@ -78,6 +78,7 @@ tf_fail_assertion() {
 # Current test context
 declare -g CURRENT_TEST=""
 declare -g CURRENT_SUITE=""
+declare -g TEST_STATUS=""
 
 # Colors for output - check if terminal supports color
 if [ -t 1 ] && [ -n "${TERM:-}" ] && [ "${TERM}" != "dumb" ] && command -v tput >/dev/null 2>&1; then
@@ -166,6 +167,7 @@ skip_test() {
     echo -e "${TEST_COLOR_SKIP}SKIP${TEST_COLOR_RESET}"
     echo "    $reason"
     TESTS_SKIPPED=$((TESTS_SKIPPED + 1))
+    TEST_STATUS="skipped"
 }
 
 # Setup function (run before each test)
@@ -203,6 +205,9 @@ run_test() {
     local test_func="$1"
     local test_desc="${2:-$test_func}"
 
+    # Reset test status
+    TEST_STATUS=""
+
     # Show test description
     test_case "$test_desc"
 
@@ -211,7 +216,10 @@ run_test() {
 
     # Run the test
     if $test_func; then
-        pass_test
+        # Only mark as passed if not already marked as skipped
+        if [ "$TEST_STATUS" != "skipped" ]; then
+            pass_test
+        fi
     fi
 
     # Run teardown
