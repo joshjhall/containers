@@ -99,9 +99,9 @@ test_essential_utilities() {
     # Version control
     assert_executable_in_path "$image" "git"
 
-    # Text processing
+    # Text processing and utilities
     assert_executable_in_path "$image" "jq"
-    assert_executable_in_path "$image" "vim"
+    assert_executable_in_path "$image" "shellcheck"
 
     # Network tools
     assert_executable_in_path "$image" "curl"
@@ -110,6 +110,10 @@ test_essential_utilities() {
     # Build essentials
     assert_executable_in_path "$image" "make"
     assert_executable_in_path "$image" "gcc"
+
+    # System utilities
+    assert_executable_in_path "$image" "htop"
+    assert_executable_in_path "$image" "unzip"
 }
 
 # Run all tests
