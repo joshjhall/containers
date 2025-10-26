@@ -47,7 +47,8 @@ APT_TIMEOUT="${APT_TIMEOUT:-300}"  # 5 minutes timeout for apt operations
 #   fi
 get_debian_major_version() {
     if [ -f /etc/debian_version ]; then
-        local version=$(cat /etc/debian_version)
+        local version
+        version=$(cat /etc/debian_version)
         # Extract major version number (handles both "12.5" and "trixie/sid")
         if [[ "$version" =~ ^[0-9]+\. ]]; then
             echo "${version%%.*}"
@@ -80,7 +81,8 @@ get_debian_major_version() {
 #   fi
 is_debian_version() {
     local min_version="$1"
-    local current_version=$(get_debian_major_version)
+    local current_version
+    current_version=$(get_debian_major_version)
 
     if [ "$current_version" = "unknown" ]; then
         return 1
@@ -108,9 +110,10 @@ apt_install_conditional() {
     local min_version="$1"
     local max_version="$2"
     shift 2
-    local packages="$@"
+    local packages="$*"
 
-    local current_version=$(get_debian_major_version)
+    local current_version
+    current_version=$(get_debian_major_version)
 
     if [ "$current_version" = "unknown" ]; then
         echo "⚠ Warning: Could not determine Debian version, skipping conditional packages: $packages"
