@@ -22,12 +22,16 @@ test_suite "Minimal Container Builds"
 # Test: Base container with no features
 test_base_container_only() {
     # Use pre-built image if provided, otherwise build locally
+    local expected_workspace
     if [ -n "${IMAGE_TO_TEST:-}" ]; then
         local image="$IMAGE_TO_TEST"
         echo "Testing pre-built image: $image"
+        # CI builds use PROJECT_NAME=containers
+        expected_workspace="/workspace/containers"
     else
         local image="test-minimal-base-$$"
         echo "Building image locally: $image"
+        expected_workspace="/workspace/test-minimal"
 
         # Build with no features enabled (standalone mode)
         assert_build_succeeds "Dockerfile" \
@@ -35,20 +39,20 @@ test_base_container_only() {
             --build-arg PROJECT_NAME=test-minimal \
             -t "$image"
     fi
-    
+
     # Verify basic functionality
     assert_command_in_container "$image" "echo 'Hello World'" "Hello World"
     assert_command_in_container "$image" "whoami" "developer"
-    assert_command_in_container "$image" "pwd" "/workspace/test-minimal"
-    
+    assert_command_in_container "$image" "pwd" "$expected_workspace"
+
     # Verify base tools
     assert_executable_in_path "$image" "bash"
     assert_executable_in_path "$image" "curl"
     assert_executable_in_path "$image" "wget"
-    
+
     # Check user setup
     assert_dir_in_image "$image" "/home/developer"
-    assert_dir_in_image "$image" "/workspace/test-minimal"
+    assert_dir_in_image "$image" "$expected_workspace"
 }
 
 # Test: Custom username and paths
