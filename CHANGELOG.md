@@ -5,106 +5,189 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [4.1.0] - 2025-10-26
 
 ### Added
 
-- Automated CHANGELOG generation with git-cliff
-- Enhanced release script with non-interactive mode for CI/CD
-- Comprehensive release documentation (docs/releasing.md)
-- git-cliff configuration for consistent changelog formatting
+- Add Trivy container security scanning to CI/CD
+- Add Gitleaks secret scanning to CI/CD
+- Add shellcheck enforcement to CI with comprehensive fixes
+- Add Trivy GitHub Action version tracking
+- Pin Poetry version and update version tracking documentation
+- Add Debian version detection and conditional package installation
+- Add arm64 support to Maven Daemon installation
+- Automated patch release system with Pushover notifications
+- Automate CHANGELOG generation with git-cliff
+- Add git-cliff to dev-tools feature
+- Add eza support for modern ls replacement with Debian version detection
 
-### Fixed
+### CI/CD
 
-- **golang-dev**: Install binutils-gold for Go external linking on ARM64
-  - Go 1.24 requires gold linker for external linking (see Go issue #22040)
-  - Matches Debian's official golang-go package dependency
-  - Added detailed documentation explaining deprecation status
-- **rust-dev**: Add build-essential for Rust crates with C dependencies
-- **node-dev**: Add build-essential for Node.js native addon compilation
-- **Tests**: Update Go compilation test for Go 1.24+ module requirements
-  - Tests now create proper Go modules before building
-  - Better reflects real-world Go development practices
-- **CRITICAL**: Fixed CI build args format causing features to not install
-  - Build args in CI workflow were space-separated on single line
-  - Docker build-push-action requires each arg on separate line
-  - All variants (python-dev, node-dev, cloud-ops, polyglot) now properly install features
-  - Previous builds had NO features installed except base system packages
-- **CRITICAL**: Removed Debian 12+ version requirement to support Debian 11
-  - feature-header.sh was blocking all builds on Debian 11 (Bullseye)
-  - Now supports Debian 11, 12, and 13 with version detection in apt-utils.sh
-  - Version-specific packages handled via apt_install_conditional function
-- **CRITICAL**: Added backwards compatibility for apt-key deprecation
-  - terraform.sh, gcloud.sh, kubernetes.sh now auto-detect Debian version
-  - Debian 11/12 (Bookworm): Uses legacy apt-key method
-  - Debian 13+ (Trixie): Uses modern signed-by GPG method
-  - Fixes build failures when using Terraform, Google Cloud, or Kubernetes features
-- **CRITICAL**: Fixed integration tests to use PROJECT_PATH=. for standalone builds
-  - Integration tests now correctly build containers standalone
-  - All 6 tests updated with proper PROJECT_PATH argument
-  - Fixes "tools not in PATH" failures where builds succeeded but features weren't installed
-
-### Added
-
-- Poetry version pinning (2.2.1) - now properly tracked and automated
-- Comprehensive integration test suite (6 test suites covering all CI variants)
-- Integration tests now run in CI pipeline
-- Build status badges in README
-- **Debian version compatibility system**:
-  - Automatic Debian version detection (11, 12, 13) in apt-utils.sh
-  - Conditional package installation based on Debian version
-  - Python feature now installs correct packages for each Debian version
-  - CI matrix testing for Debian 11 (Bullseye), 12 (Bookworm), 13 (Trixie)
-  - Ensures backwards compatibility while supporting latest Debian releases
-
-### Improved
-
-- Test coverage: 488 unit tests (99% pass rate) + 6 integration test suites
-- All version pinning now complete and tracked (duf, entr, Poetry, Helm)
-- Updated documentation for version tracking and testing infrastructure
-
-## [4.0.0] - 2025-10-01
+- Add integration tests to workflow and status badges to README
+- Switch testing from minimal to python-dev variant
+- Switch testing from node-dev to cloud-ops variant
+- Enable all integration test variants
 
 ### Changed
 
-- **BREAKING**: Upgraded base image from Debian Bookworm to Debian Trixie (debian:trixie-slim)
-- Migrated from GitLab CI/CD to GitHub Actions
-- Simplified branch strategy - now using main branch only (removed develop branch)
-- Open sourced under MIT License
+- Replace skipped tests with meaningful minimal image validation
+
+### Documentation
+
+- Update documentation for GitHub Actions migration
+- Update version tracking documentation
+- Add comprehensive troubleshooting guide
+- Update ANALYSIS.md to reflect completed improvements
+- Restructure README for better navigation
+- Update README with improved test coverage
+- Update ANALYSIS.md to reflect completed testing work
+- Update CHANGELOG for post-4.0.0 improvements and fixes
+- Remove completed file permissions issue from ANALYSIS.md
+- Enhance troubleshooting guide with Debian compatibility and recent fixes
+- Update ANALYSIS.md to reflect completed troubleshooting documentation
+- Update CHANGELOG with integration test PROJECT_PATH fix
+- Add comprehensive Debian version compatibility guide
+- Update CHANGELOG with recent fixes and features
+
+### Fixed
+
+- Add executable permissions to feature and base scripts
+- Configure Gitleaks to scan files instead of git history
+- Remove invalid args parameter from gitleaks action
+- Fetch full git history for Gitleaks scanning
+- Only upload Trivy results if scan succeeds
+- Correct image tag format in security scan
+- Use simple branch-variant tag for security scanning
+- Add backwards compatibility for apt-key deprecation
+- Add PROJECT_PATH=. to all integration tests for standalone builds
+- Resolve shellcheck warnings in apt-utils.sh
+- Remove Debian 12+ requirement to support Debian 11
+- CRITICAL - Fix CI build args format preventing feature installation
+- Use dynamic Debian codename in R repository URL
+- CRITICAL - Integration tests now use pre-built images from registry
+- CRITICAL - Correct YAML multiline interpolation in build args
+- Add rust-golang variant to build job to match integration tests
+- CI integration tests and add incremental testing support
+- Minimal test workspace path for CI-built images
+- Skip custom build tests when testing pre-built minimal image
+- Prevent double-counting skipped tests in test framework
+- Test for actual utilities in minimal image, not vim
+- Prevent double-counting failed tests in test framework
+- Integration test runner exits with code 1 even when tests pass
+- Use valid Python code in ruff test
+- Node-dev tests - ts-node and dev tools
+- Simplify ts-node test to avoid output capture issues
+- Add --validate=false to kubectl test to work without API server
+- Use KUBECONFIG=/dev/null for kubectl test without cluster
+- Replace kubectl manifest test with output format test
+- TypeScript test uses file-based compilation instead of stdin
+- Add build-essential to golang-dev for CGO compilation
+- Add build-essential to rust-dev and node-dev for native compilation
+- Explicitly add binutils to golang-dev for ld linker
+- Install binutils-gold for Go external linking on ARM64
+- Update Go compilation test for Go 1.24+ module requirements
+- Include rust-golang variant in security scanning
+
+### Miscellaneous
+
+- Bump version correctly
+- Use correct github action version
+- Remove GitLab CI/CD configuration files
+- Update GitHub Actions to latest versions
+- Migrate base image from Debian Bookworm to Trixie
+- Update language and tool versions
+- Update tool versions in feature scripts
+- Simplify VS Code workspace settings
+- Make setup-git-ssh.sh executable
+- Fix inconsistent version pinning for Helm
+- Clean up outdated pyenv/rbenv references
+- Add example names to cSpell dictionary
+- Update Trivy action to v0.30.0
+- Update dependency versions
+
+### Testing
+
+- Add comprehensive integration test suite
+- Add Debian version compatibility matrix to CI
+- Add comprehensive python-dev integration tests
+- Add comprehensive node-dev tests and enable in CI
+- Enhance cloud-ops, polyglot, and rust-golang integration tests
+
+## [4.0.0] - 2025-10-01
 
 ### Added
 
-- GitHub Actions CI/CD workflow (.github/workflows/ci.yml)
-- Support for GitHub Container Registry (ghcr.io)
-- Automated issue creation for version updates
+- Add standalone Docker socket permission fix script
+- Add VS Code devcontainer configuration
+- Add comprehensive version tracking for all hardcoded tools
+- Migrate key feature scripts to use centralized apt-utils
+- Migrate more feature scripts to use apt-utils
+- Migrate -dev scripts to use apt-utils
+- Update remaining -dev scripts and AWS to use apt-utils
+- Complete migration of all feature scripts to apt-utils
+- Migrate to Debian Trixie and GitHub (v4.0.0)
 
-### Improved
+### Documentation
 
-- All features fully compatible with Debian Trixie
-- Streamlined release process for open source distribution
+- Add unit test documentation to README
+- Update CI push authentication to reflect current implementation
+- Add comprehensive security scanning and project initialization design
 
-## [1.0.0] - 2025-01-10
+### Fixed
 
-### Added
+- Add Docker socket permission handling in docker.sh
+- Add flexible authentication for CI push operations
+- Add complete version checking and updating for Java dev tools
+- Fix Node.js installation and add version pinning support
+- Resolve CI branch switching conflict with version-updates.json
+- Resolve CI push conflicts in version update job
+- Fix Node.js installation script logging initialization order
+- Add version validation to prevent null values and fix GitLab CI schedule
+- Handle full kubectl version format in kubernetes.sh
+- Add retry mechanism for apt operations to handle network issues
+- Complete R feature migration to apt-utils
+- Update base setup and unit tests to use apt-utils
+- Export apt_retry function for use in other scripts
+- Add missing apt_retry function definition
+- Fix apt-utils test patterns to match actual function definitions
 
-- Initial release of the Universal Container Build System
-- Modular Dockerfile with 20+ configurable features
-- Support for languages: Python, Node.js, Rust, Go, Ruby, Java, R, Mojo
-- Development tools integration (VS Code, debugging, linting)
-- Cloud platform support (AWS, GCP, Kubernetes, Terraform)
-- Database client support (PostgreSQL, Redis, SQLite)
-- Comprehensive test framework
-- BuildKit cache optimization
-- Non-root user security model
-- Git submodule integration support
-- Example configurations for various use cases
-- Documentation and environment variable templates
+### Miscellaneous
+
+- Bump version to 1.0.1
+- Add results/ directory to .gitignore
+- Fix Python feature script permissions
+- Add cspell configuration for spell checking
+- Complete version tracking and update to 2.2.8
+- Remove unused env_manager.sh and buildkit dependency
+- Update cspell dictionary with project-specific terms
+- Update dependency versions
+- Release patch version with dependency updates
+- Apply automated formatting
+- Update dependency versions
+- Release patch version with dependency updates
+- Update dependency versions
+- Release patch version with dependency updates
+- Update cspell dictionary with new project words
+- Update cspell dictionary with new project words
+- Add executable permissions to shell scripts
 
 ### Security
 
-- Non-root user by default with configurable UID/GID
-- Proper file permissions throughout build process
-- Validated installation scripts for all features
+- Remove deprecated npm packages from Node.js dev tools
 
-[Unreleased]: https://github.com/yourusername/containers/compare/v1.0.0...HEAD
-[1.0.0]: https://github.com/yourusername/containers/releases/tag/v1.0.0
+### Testing
+
+- Add comprehensive unit test framework
+- Add comprehensive tests for new version tracking features
+- Add tests for release cancellation message and auto-confirmation
+- Fix release tests to prevent modifying actual VERSION file
+- Fix release auto-confirmation test to avoid version bumps
+
+### Improve
+
+- Add helpful error message when release is cancelled
+- Add VS Code workspace settings and improve gitignore
+
+[4.1.0]: https://github.com/joshjhall/containers/compare/v4.0.0...v4.1.0
+[4.0.0]: https://github.com/joshjhall/containers/compare/eaf66b40b4bcdf36e8b6da1113b349e3509fb26c...v4.0.0
+
