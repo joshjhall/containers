@@ -110,8 +110,8 @@ test_python_tools_work() {
     # Black can format code
     assert_command_in_container "$image" "echo 'x=1' | black -" ""
 
-    # Ruff can check code
-    assert_command_in_container "$image" "echo 'import os' | ruff check --stdin-filename=test.py -" ""
+    # Ruff can check valid code (should pass with no issues)
+    assert_command_in_container "$image" "echo 'print(\"hello\")' | ruff check --stdin-filename=test.py -" ""
 
     # Pytest can run (with no tests, exits 5)
     assert_command_in_container "$image" "cd /tmp && pytest --collect-only 2>&1 || test \$? -eq 5 && echo ok" "ok"
