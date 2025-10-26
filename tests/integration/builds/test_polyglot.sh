@@ -108,7 +108,7 @@ test_node_dev_tools() {
     local image="${IMAGE_TO_TEST:-test-polyglot-$$}"
 
     # TypeScript can compile
-    assert_command_in_container "$image" "echo 'const x: number = 1; console.log(x);' | tsc --stdin --target es2020" ""
+    assert_command_in_container "$image" "cd /tmp && echo 'const x: number = 1; console.log(x);' > test.ts && tsc test.ts && test -f test.js && echo ok" "ok"
 
     # ESLint exists
     assert_command_in_container "$image" "eslint --version" ""
