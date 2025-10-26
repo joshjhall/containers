@@ -48,7 +48,7 @@ test_rust_golang_build() {
 
 # Test: Rust and Go can compile simple programs
 test_compilation() {
-    local image="test-rust-go-$$"
+    local image="${IMAGE_TO_TEST:-test-rust-go-$$}"
 
     # Test Rust version
     assert_command_in_container "$image" "rustc --version" "rustc"
