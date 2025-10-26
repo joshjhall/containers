@@ -79,7 +79,11 @@ log_message "Installing system dependencies for Go dev tools..."
 apt_update
 
 # Install system dependencies with retry logic
+# build-essential needed for CGO-enabled Go tools (gcc, g++, binutils with ld)
+# graphviz needed for go-callvis
+# protobuf-compiler needed for protobuf tools
 apt_install \
+    build-essential \
     graphviz \
     protobuf-compiler
 
