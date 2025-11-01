@@ -90,15 +90,26 @@ jobs:
 
           # Apply version updates
           echo "Applying version updates..."
-          ./bin/update-versions.sh --input /tmp/version-check-output.json --no-commit
+          ./bin/update-versions.sh --input /tmp/version-check-output.json --no-commit --no-bump
+
+          # Bump patch version
+          echo "Bumping patch version..."
+          echo "y" | ./bin/release.sh patch
+
+          # Get the new version for tagging
+          NEW_VERSION=$(cat VERSION)
+          echo "new_version=$NEW_VERSION" >> $GITHUB_ENV
+          echo "New version: $NEW_VERSION"
 
           # Commit changes
           cat > /tmp/commit-message.txt << EOF
-          chore: automated version updates
+          chore: automated version updates to v${NEW_VERSION}
 
           Version updates detected and applied:
 
           ${{ steps.check.outputs.updates_summary }}
+
+          Bumped version: ${NEW_VERSION}
 
           This is an automated patch release. CI will validate these changes
           and automatically merge if all tests pass.
@@ -165,8 +176,8 @@ jobs:
           git fetch origin "$BRANCH_NAME"
           git checkout "$BRANCH_NAME"
 
-          # Get current version from Dockerfile
-          CURRENT_VERSION=$(grep "^ARG VERSION=" Dockerfile | cut -d'=' -f2 | tr -d '"')
+          # Get current version from VERSION file
+          CURRENT_VERSION=$(cat VERSION)
           echo "version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
 
           # Get commit message for notification
@@ -264,8 +275,8 @@ jobs:
           BRANCH_NAME="${{ github.event.workflow_run.head_branch }}"
           echo "branch=$BRANCH_NAME" >> $GITHUB_OUTPUT
 
-          # Get current version from Dockerfile
-          CURRENT_VERSION=$(grep "^ARG VERSION=" Dockerfile | cut -d'=' -f2 | tr -d '"')
+          # Get current version from VERSION file
+          CURRENT_VERSION=$(cat VERSION)
           echo "version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
 
           # Get commit message
