@@ -115,6 +115,26 @@ jobs:
           # Save branch name for potential use
           echo "PATCH_BRANCH=$BRANCH_NAME" >> $GITHUB_ENV
 
+      - name: Send version-check failure notification
+        if: failure()
+        run: |
+          # Get context about what failed
+          ERROR_MSG="Version check or branch creation failed during automated patch release.
+
+          Workflow run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+          This requires manual investigation."
+
+          # Send notification
+          curl -s \
+            --form-string "token=${{ secrets.PUSHOVER_TOKEN }}" \
+            --form-string "user=${{ secrets.PUSHOVER_USER }}" \
+            --form-string "title=❌ Auto-Patch Version Check Failed" \
+            --form-string "message=$ERROR_MSG" \
+            --form-string "priority=1" \
+            --form-string "sound=persistent" \
+            https://api.pushover.net/1/messages.json
+
   # =====================================
   # Auto-Merge After CI Success
   # =====================================
