@@ -90,7 +90,7 @@ jobs:
 
           # Apply version updates
           echo "Applying version updates..."
-          ./bin/update-versions.sh --input /tmp/version-check-output.json
+          ./bin/update-versions.sh --input /tmp/version-check-output.json --no-commit
 
           # Commit changes
           cat > /tmp/commit-message.txt << EOF
