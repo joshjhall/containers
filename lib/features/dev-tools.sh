@@ -406,7 +406,7 @@ log_command "Setting direnv permissions" \
 
 # Install lazygit
 log_message "Installing lazygit..."
-LAZYGIT_VERSION="0.55.1"
+LAZYGIT_VERSION="0.56.0"
 if [ "$ARCH" = "amd64" ]; then
     log_command "Downloading lazygit for amd64" \
         bash -c "curl -L https://github.com/jesseduffield/lazygit/releases/download/v${LAZYGIT_VERSION}/lazygit_${LAZYGIT_VERSION}_Linux_x86_64.tar.gz | tar xz -C /usr/local/bin lazygit"
@@ -484,7 +484,7 @@ log_command "Returning to root directory" \
 
 # Install GitLab CLI (glab)
 log_message "Installing glab (GitLab CLI)..."
-GLAB_VERSION="1.74.0"
+GLAB_VERSION="1.75.0"
 log_command "Changing to temp directory" \
     cd /tmp
 

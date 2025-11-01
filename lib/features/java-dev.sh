@@ -161,7 +161,7 @@ log_command "Creating JARs directory" \
 # ============================================================================
 log_message "Installing Google Java Format..."
 
-GJF_VERSION="1.30.0"
+GJF_VERSION="1.32.0"
 
 # JMH version for benchmarking
 JMH_VERSION="1.37"
