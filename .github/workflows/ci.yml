@@ -238,7 +238,10 @@ jobs:
       - name: Pull and test image
         run: |
           echo "Testing ${{ matrix.variant.name }} image from registry..."
-          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }}-${{ matrix.variant.name }}"
+          # Sanitize branch name (replace / with -) to match docker/metadata-action behavior
+          TAG_NAME="${{ github.ref_name }}"
+          TAG_NAME="${TAG_NAME//\//-}"
+          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${TAG_NAME}-${{ matrix.variant.name }}"
 
           echo "Pulling image: $IMAGE"
           docker pull "$IMAGE"
@@ -351,15 +354,23 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Prepare sanitized tag
+        id: tag
+        run: |
+          # Sanitize branch name (replace / with -) to match docker/metadata-action behavior
+          TAG_NAME="${{ github.ref_name }}"
+          TAG_NAME="${TAG_NAME//\//-}"
+          echo "sanitized=$TAG_NAME" >> $GITHUB_OUTPUT
+
       - name: Pull image for scanning
         run: |
-          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }}-${{ matrix.variant }}
+          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.sanitized }}-${{ matrix.variant }}
 
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@0.33.1
         continue-on-error: true
         with:
-          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }}-${{ matrix.variant }}
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.sanitized }}-${{ matrix.variant }}
           format: 'sarif'
           output: 'trivy-results-${{ matrix.variant }}.sarif'
           severity: 'CRITICAL,HIGH'
@@ -375,7 +386,7 @@ jobs:
         uses: aquasecurity/trivy-action@0.33.1
         continue-on-error: true
         with:
-          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }}-${{ matrix.variant }}
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.sanitized }}-${{ matrix.variant }}
           format: 'table'
           severity: 'CRITICAL,HIGH,MEDIUM'
 
