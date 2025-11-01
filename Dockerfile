@@ -117,7 +117,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 # Rust + Rust development tools
 ARG INCLUDE_RUST=false
 ARG INCLUDE_RUST_DEV=false
-ARG RUST_VERSION=1.90.0
+ARG RUST_VERSION=1.91.0
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     if [ "${INCLUDE_RUST}" = "true" ] || [ "${INCLUDE_RUST_DEV}" = "true" ]; then \
@@ -149,7 +149,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 # R Statistical Computing
 ARG INCLUDE_R=false
 ARG INCLUDE_R_DEV=false
-ARG R_VERSION=4.5.1
+ARG R_VERSION=4.5.2
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     if [ "${INCLUDE_R}" = "true" ] || [ "${INCLUDE_R_DEV}" = "true" ]; then \
@@ -315,7 +315,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 
 # Terraform
 ARG INCLUDE_TERRAFORM=false
-ARG TERRAGRUNT_VERSION=0.91.5
+ARG TERRAGRUNT_VERSION=0.93.0
 ARG TFDOCS_VERSION=0.20.0
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
