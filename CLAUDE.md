@@ -20,7 +20,7 @@ Key directories:
 - `lib/base/`: System setup, user creation, logging utilities
 - `lib/features/`: Optional feature installations (languages, tools)
 - `lib/runtime/`: Container runtime initialization
-- `bin/`: User-facing scripts (test runners, etc.)
+- `bin/`: Version management scripts (check-versions.sh, update-versions.sh, release.sh)
 - `tests/`: Test framework and test suites
 - `examples/`: Docker Compose configurations and environment examples
 
@@ -57,20 +57,23 @@ docker build -t test:minimal \
 ### Testing
 
 ```bash
-# Test all installed features
-./bin/test-all-features.sh
+# Run all tests (unit + integration)
+./tests/run_all.sh
 
-# Test with verbose output
-./bin/test-all-features.sh --all
+# Run unit tests only (no Docker required)
+./tests/run_unit_tests.sh
+
+# Run integration tests (requires Docker)
+./tests/run_integration_tests.sh
+
+# Run specific integration test
+./tests/run_integration_tests.sh python_dev
 ```
 
 ### Running Containers
 
 ```bash
-# Run interactively
-./bin/run-all-features.sh
-
-# Or manually
+# Run built container interactively
 docker run -it --rm \
   -v "$(pwd):/workspace/project" \
   -v "project-cache:/cache" \
@@ -174,3 +177,88 @@ CI automatically tests builds on all three Debian versions. When modifying featu
 1. Test locally with different base images using `BASE_IMAGE` build arg
 2. Check the `debian-version-test` job in GitHub Actions
 3. See `docs/troubleshooting.md` for detailed examples and patterns
+
+## Automated Version Updates
+
+This repository has an automated patch release system that runs weekly:
+
+- **Auto-patch workflow** runs Sundays at 2am UTC
+- Creates branches like `auto-patch/YYYYMMDD-HHMMSS`
+- Automatically checks for tool version updates
+- Runs full CI pipeline and auto-merges on success
+
+**What this means for you:**
+- Expect automated commits from the `auto-patch` system
+- Don't manually edit `auto-patch/*` branches
+- The system uses `check-versions.sh` → `update-versions.sh` → `release.sh`
+
+**Manual version checking:**
+
+```bash
+# Check for outdated tool versions
+./bin/check-versions.sh
+
+# Output as JSON for automation
+./bin/check-versions.sh --json
+
+# Update versions from JSON file
+./bin/update-versions.sh versions.json
+```
+
+## Release Process
+
+When you're ready to release a new version, **ALWAYS use the release script** - never manually edit the VERSION file.
+
+### Creating a Release
+
+```bash
+# For bug fixes (4.3.2 -> 4.3.3)
+echo 'y' | ./bin/release.sh patch
+
+# For new features (4.3.2 -> 4.4.0)
+echo 'y' | ./bin/release.sh minor
+
+# For breaking changes (4.3.2 -> 5.0.0)
+echo 'y' | ./bin/release.sh major
+
+# For specific version
+echo 'y' | ./bin/release.sh 4.5.0
+```
+
+The release script automatically:
+- Updates VERSION file
+- Updates Dockerfile version comment
+- Updates test framework version
+- Generates CHANGELOG.md using git-cliff
+
+### After Running Release Script
+
+Complete the release by committing and pushing:
+
+```bash
+git add -A
+git commit -m "chore(release): Release version X.Y.Z"
+git tag -a vX.Y.Z -m "Release version X.Y.Z"
+git push origin main
+git push origin vX.Y.Z
+```
+
+The tag push triggers GitHub Actions to:
+- Build all container variants on multiple Debian versions
+- Run full test suite
+- Push images to ghcr.io/joshjhall/containers
+- Create GitHub release with automated release notes
+
+## Additional Documentation
+
+Detailed documentation is available in the `docs/` directory:
+
+- `docs/troubleshooting.md` - Common issues and solutions
+- `docs/automated-patch-releases.md` - How the auto-patch system works
+- `docs/version-tracking.md` - Which tools are pinned vs. latest
+- `docs/testing-framework.md` - Test framework details
+
+Reference examples are in the `examples/` directory:
+
+- `examples/env/*.env` - Environment variable examples for each feature
+- `examples/contexts/` - Docker Compose patterns
