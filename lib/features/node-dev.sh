@@ -522,11 +522,15 @@ node-clean() {
     npm cache clean --force
 
     if [ -f "yarn.lock" ]; then
-        yarn cache clean
+        if ! yarn cache clean 2>/dev/null; then
+            echo "yarn cache clean skipped (corepack signature issue)"
+        fi
     fi
 
     if [ -f "pnpm-lock.yaml" ]; then
-        pnpm store prune
+        if ! pnpm store prune 2>/dev/null; then
+            echo "pnpm store prune skipped (corepack signature issue)"
+        fi
     fi
 
     echo "Cleanup complete!"
