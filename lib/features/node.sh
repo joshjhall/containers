@@ -133,8 +133,12 @@ log_command "Enabling corepack" \
 log_command "Preparing yarn" \
     corepack prepare yarn@stable --activate
 
-log_command "Preparing pnpm" \
-    corepack prepare pnpm@latest --activate
+# Pin pnpm to version 9.x to avoid signature verification issues with @latest
+# If this fails, pnpm will still be available via corepack, just not pre-installed
+if ! log_command "Preparing pnpm" corepack prepare pnpm@9 --activate; then
+    log_warning "Failed to prepare pnpm@9, but pnpm is still available via corepack"
+    log_warning "You can activate it later with: corepack enable && corepack use pnpm@9"
+fi
 
 # ============================================================================
 # Cache and Path Configuration
@@ -237,9 +241,10 @@ write_bashrc_content /etc/bashrc.d/30-node.sh "Node.js aliases" << 'NODE_BASHRC_
 # Node.js Aliases
 # ----------------------------------------------------------------------------
 alias npm-clean='npm cache clean --force'
-alias yarn-clean='yarn cache clean'
-alias pnpm-clean='pnpm store prune'
-alias node-clean='npm-clean && yarn-clean && pnpm-clean'
+alias yarn-clean='yarn cache clean 2>/dev/null || echo "yarn cache clean skipped (corepack issue)"'
+alias pnpm-clean='pnpm store prune 2>/dev/null || echo "pnpm store prune skipped (corepack issue)"'
+# Use ; instead of && to continue even if yarn/pnpm fail
+alias node-clean='npm-clean ; yarn-clean ; pnpm-clean'
 
 # Package manager shortcuts
 alias ni='npm install'
@@ -343,10 +348,16 @@ node-deps-check() {
 
         if [ -f pnpm-lock.yaml ]; then
             echo "Using pnpm..."
-            pnpm outdated
+            if ! pnpm outdated 2>/dev/null; then
+                echo "pnpm failed (corepack signature issue). Falling back to npm..."
+                npm outdated
+            fi
         elif [ -f yarn.lock ]; then
             echo "Using yarn..."
-            yarn outdated
+            if ! yarn outdated 2>/dev/null; then
+                echo "yarn failed (corepack signature issue). Falling back to npm..."
+                npm outdated
+            fi
         else
             echo "Using npm..."
             npm outdated
@@ -365,10 +376,16 @@ node-deps-update() {
 
         if [ -f pnpm-lock.yaml ]; then
             echo "Using pnpm..."
-            pnpm update --interactive
+            if ! pnpm update --interactive 2>/dev/null; then
+                echo "pnpm failed (corepack signature issue). Falling back to npm..."
+                npx npm-check-updates -i
+            fi
         elif [ -f yarn.lock ]; then
             echo "Using yarn..."
-            yarn upgrade-interactive
+            if ! yarn upgrade-interactive 2>/dev/null; then
+                echo "yarn failed (corepack signature issue). Falling back to npm..."
+                npx npm-check-updates -i
+            fi
         else
             echo "Using npm..."
             npx npm-check-updates -i
@@ -385,13 +402,24 @@ node-version() {
     echo "=== Node.js Environment ==="
     echo "Node.js: $(node --version)"
     echo "npm: $(npm --version)"
-    echo "yarn: $(yarn --version)"
-    echo "pnpm: $(pnpm --version)"
+
+    # yarn and pnpm may fail due to corepack signature issues
+    local yarn_ver=$(yarn --version 2>/dev/null || echo "unavailable (corepack issue)")
+    echo "yarn: $yarn_ver"
+
+    local pnpm_ver=$(pnpm --version 2>/dev/null || echo "unavailable (corepack issue)")
+    echo "pnpm: $pnpm_ver"
+
     echo ""
     echo "=== Cache Locations ==="
     echo "npm cache: $(npm config get cache)"
-    echo "yarn cache: $(yarn config get cache-folder)"
-    echo "pnpm store: $(pnpm config get store-dir)"
+
+    # yarn and pnpm config may fail due to corepack signature issues
+    local yarn_cache=$(yarn config get cache-folder 2>/dev/null || echo "unavailable")
+    echo "yarn cache: $yarn_cache"
+
+    local pnpm_store=$(pnpm config get store-dir 2>/dev/null || echo "unavailable")
+    echo "pnpm store: $pnpm_store"
 }
 
 # Clean up helper functions
@@ -417,9 +445,17 @@ log_command "Configuring npm prefix" \
 # We'll set the environment variable instead which works for all versions
 export YARN_CACHE_FOLDER="${YARN_CACHE_DIR}"
 
-# Configure pnpm - set store directory for the system
-log_command "Configuring pnpm store" \
-    pnpm config set store-dir "${PNPM_STORE_DIR}"
+# Configure pnpm - set store directory for the system (if pnpm is available)
+# Note: If pnpm preparation failed earlier, attempting to run pnpm will trigger
+# corepack to try to install it, which may fail with signature verification errors.
+# We make this step completely optional to avoid blocking the build.
+log_message "Attempting to configure pnpm store..."
+if pnpm config set store-dir "${PNPM_STORE_DIR}" >/dev/null 2>&1; then
+    log_message "✓ pnpm configured successfully"
+else
+    log_warning "pnpm configuration skipped (pnpm may not be available due to corepack signature issues)"
+    log_warning "pnpm will still work via corepack, but you may need to configure it manually"
+fi
 
 # ============================================================================
 # Container Startup Scripts
@@ -451,9 +487,10 @@ done
 npm config set cache "${NPM_CACHE_DIR}"
 npm config set prefix "${NPM_GLOBAL_DIR}"
 # Yarn cache is set via environment variable YARN_CACHE_FOLDER
-pnpm config set store-dir "${PNPM_STORE_DIR}"
-
-# pnpm is configured system-wide, no user-specific setup needed
+# Configure pnpm if available (silently skip if corepack signature verification fails)
+if command -v pnpm >/dev/null 2>&1; then
+    pnpm config set store-dir "${PNPM_STORE_DIR}" 2>/dev/null || true
+fi
 
 # Check for Node.js projects and install dependencies
 if [ -f ${WORKING_DIR}/package.json ]; then
@@ -461,7 +498,13 @@ if [ -f ${WORKING_DIR}/package.json ]; then
     echo "Node.js $(node --version) is installed"
     echo "  npm $(npm --version)"
     echo "  yarn $(yarn --version)"
-    echo "  pnpm $(pnpm --version)"
+    # Try to show pnpm version, but silently skip if corepack signature verification fails
+    if command -v pnpm >/dev/null 2>&1; then
+        pnpm_version=$(pnpm --version 2>/dev/null || echo "not available")
+        if [ "$pnpm_version" != "not available" ]; then
+            echo "  pnpm $pnpm_version"
+        fi
+    fi
 
     cd ${WORKING_DIR}
 
