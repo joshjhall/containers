@@ -103,11 +103,12 @@ fetch_url() {
     fi
     
     # Fetch fresh data
+    # Use both --connect-timeout and --max-time to prevent hanging
     local response
     if [ -n "$GITHUB_TOKEN" ] && [[ "$url" == *"api.github.com"* ]]; then
-        response=$(curl -s --max-time "$timeout" -H "Authorization: token $GITHUB_TOKEN" "$url" 2>/dev/null || echo "")
+        response=$(curl -s --connect-timeout 5 --max-time "$timeout" -H "Authorization: token $GITHUB_TOKEN" "$url" 2>/dev/null || echo "")
     else
-        response=$(curl -s --max-time "$timeout" "$url" 2>/dev/null || echo "")
+        response=$(curl -s --connect-timeout 5 --max-time "$timeout" "$url" 2>/dev/null || echo "")
     fi
     
     # Cache the response if not empty
@@ -250,8 +251,13 @@ extract_all_versions() {
     if [ -f "$PROJECT_ROOT/lib/features/docker.sh" ]; then
         ver=$(grep "^DIVE_VERSION=" "$PROJECT_ROOT/lib/features/docker.sh" 2>/dev/null | cut -d= -f2 | tr -d '"')
         [ -n "$ver" ] && add_tool "dive" "$ver" "docker.sh"
-        
+
+        # Handle parameter expansion syntax like ${VAR:-default}
         ver=$(grep "^LAZYDOCKER_VERSION=" "$PROJECT_ROOT/lib/features/docker.sh" 2>/dev/null | cut -d= -f2 | tr -d '"')
+        # Extract default value if parameter expansion syntax is present
+        if [[ "$ver" =~ \$\{[^:]*:-([^}]+)\} ]]; then
+            ver="${BASH_REMATCH[1]}"
+        fi
         [ -n "$ver" ] && add_tool "lazydocker" "$ver" "docker.sh"
     fi
     
@@ -390,21 +396,17 @@ check_java() {
 
 check_r() {
     progress_msg "  R..."
-    # Check R version from the R project website
-    # The R project lists versions in their news page
     local latest
-    latest=$(fetch_url "https://cran.r-project.org/" | grep -oE 'R-[0-9]+\.[0-9]+\.[0-9]+' | head -1 | sed 's/R-//')
-    
-    # If that fails, try the SVN tags
+
+    # Use CRAN sources page - more reliable than homepage or SVN
+    # Parse the latest release tarball name
+    latest=$(fetch_url "https://cran.r-project.org/sources.html" 8 | grep -oE 'R-[0-9]+\.[0-9]+\.[0-9]+\.tar\.gz' | head -1 | sed 's/R-//;s/\.tar\.gz//' 2>/dev/null)
+
+    # Mark as error if fetch failed
     if [ -z "$latest" ]; then
-        latest=$(fetch_url "https://svn.r-project.org/R/tags/" | grep -oE 'R-[0-9]+-[0-9]+-[0-9]+' | tail -1 | sed 's/R-//' | sed 's/-/./g')
+        latest="error"
     fi
-    
-    # If still nothing, check the news page
-    if [ -z "$latest" ]; then
-        latest=$(fetch_url "https://cran.r-project.org/doc/manuals/r-release/NEWS.html" | grep -oE 'VERSION [0-9]+\.[0-9]+\.[0-9]+' | head -1 | sed 's/VERSION //')
-    fi
-    
+
     set_latest "R" "$latest"
     progress_done
 }
@@ -505,10 +507,10 @@ print_json_results() {
         
         # Update counters
         case "$status" in
-            outdated) ((outdated++)) ;;
-            current) ((current++)) ;;
-            error) ((errors++)) ;;
-            manual) ((manual++)) ;;
+            outdated) outdated=$((outdated + 1)) ;;
+            current) current=$((current + 1)) ;;
+            error) errors=$((errors + 1)) ;;
+            manual) manual=$((manual + 1)) ;;
         esac
         
         # Print JSON object for this tool
@@ -570,20 +572,20 @@ print_results() {
         case "$status" in
             current)
                 status_color="${GREEN}✓ current${NC}"
-                ((current++))
+                current=$((current + 1))
                 ;;
             outdated)
                 status_color="${YELLOW}⚠ outdated${NC}"
-                ((outdated++))
+                outdated=$((outdated + 1))
                 ;;
             error)
                 status_color="${RED}✗ error${NC}"
-                ((errors++))
+                errors=$((errors + 1))
                 ;;
             *)
                 if [ "$lat_ver" = "check manually" ]; then
                     status_color="${BLUE}ℹ manual${NC}"
-                    ((manual++))
+                    manual=$((manual + 1))
                 else
                     status_color="unchecked"
                 fi
