@@ -2,15 +2,12 @@
 # Automatically update outdated versions found by check-versions.sh
 set -euo pipefail
 
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
-
-# Get script directory
+# Get script directory and source shared utilities
 BIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${BIN_DIR}/lib/common.sh"
+source "${BIN_DIR}/lib/version-utils.sh"
+
+# Set project root
 PROJECT_ROOT="$(dirname "$BIN_DIR")"
 
 # Allow override for testing
@@ -57,33 +54,7 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Function to validate version format
-validate_version() {
-    local version="$1"
-    
-    # Check for invalid values
-    if [ -z "$version" ] || [ "$version" = "null" ] || [ "$version" = "undefined" ] || [ "$version" = "error" ]; then
-        return 1
-    fi
-    
-    # Check for basic version format (should contain numbers)
-    if ! echo "$version" | grep -qE '[0-9]'; then
-        return 1
-    fi
-    
-    # Check for common version patterns
-    if echo "$version" | grep -qE '^[0-9]+(\.([0-9]+|[xX]))*([+-].*)?$|^[0-9]{4}-[0-9]{2}-[0-9]{2}'; then
-        return 0
-    fi
-    
-    # For some specific version formats that don't match the above
-    # but are still valid (like some Java versions)
-    if echo "$version" | grep -qE '^[0-9]+[._][0-9]+'; then
-        return 0
-    fi
-    
-    return 1
-}
+# Note: validate_version() is now in bin/lib/version-utils.sh
 
 # Function to update a version in a file
 update_version() {
@@ -320,7 +291,7 @@ if [ "$UPDATES_APPLIED" = true ] && [ "$DRY_RUN" = false ]; then
         HELM_VER=$(grep "^ARG HELM_VERSION=" "$PROJECT_ROOT/Dockerfile" | cut -d= -f2 | tr -d '"')
 
         if [ -n "$K9S_VER" ] && [ -n "$KREW_VER" ] && [ -n "$HELM_VER" ]; then
-            if "$BIN_DIR/update-versions/kubernetes-checksums.sh" "$K9S_VER" "$KREW_VER" "$HELM_VER"; then
+            if "$BIN_DIR/lib/update-versions/kubernetes-checksums.sh" "$K9S_VER" "$KREW_VER" "$HELM_VER"; then
                 echo -e "${GREEN}✓ Kubernetes checksums updated${NC}"
             else
                 echo -e "${RED}✗ Failed to update Kubernetes checksums${NC}"
