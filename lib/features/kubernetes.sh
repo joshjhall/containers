@@ -47,14 +47,33 @@ source /tmp/build-scripts/base/feature-header.sh
 # Source apt utilities for reliable package installation
 source /tmp/build-scripts/base/apt-utils.sh
 
+# Source download verification utilities for secure binary downloads
+source /tmp/build-scripts/base/download-verify.sh
+
 # Start logging
 log_feature_start "Kubernetes Tools"
 
 # Version configuration
 KUBECTL_VERSION="${KUBECTL_VERSION:-1.33}"  # Can be major.minor or major.minor.patch
-K9S_VERSION="${K9S_VERSION:-0.50.9}"
+K9S_VERSION="${K9S_VERSION:-0.50.16}"
 KREW_VERSION="${KREW_VERSION:-0.4.5}"
-HELM_VERSION="${HELM_VERSION:-latest}"  # Use "latest" or specific version like "3.16.4"
+HELM_VERSION="${HELM_VERSION:-3.19.0}"
+
+# SHA256 checksums for binary verification
+# k9s checksums from: https://github.com/derailed/k9s/releases/tag/v0.50.16
+# Verified on: 2025-11-07
+K9S_AMD64_SHA256="bda09dc030a08987fe2b3bed678b15b52f23d6705e872d561932d4ca07db7818"
+K9S_ARM64_SHA256="7f3b414bc5e6b584fbcb97f9f4f5b2c67a51cdffcbccb95adcadbaeab904e98e"
+
+# krew checksums from: https://github.com/kubernetes-sigs/krew/releases/tag/v0.4.5
+# Verified on: 2025-11-07
+KREW_AMD64_SHA256="bacc06800bda14ec063cd0b6f377a961fdf4661c00366bf9834723cd28bfabc7"
+KREW_ARM64_SHA256="e02bdb8fe67cd6641b9ed6b45c6d084f7aa5b161fe49191caf5b1d5e83b0c0f9"
+
+# Helm checksums from: https://github.com/helm/helm/releases/tag/v3.19.0
+# Verified on: 2025-11-07
+HELM_AMD64_SHA256="a7f81ce08007091b86d8bd696eb4d86b8d0f2e1b9f6c714be62f82f96a594496"
+HELM_ARM64_SHA256="440cf7add0aee27ebc93fada965523c1dc2e0ab340d4348da2215737fc0d76ad"
 
 # Extract major.minor version from KUBECTL_VERSION for repository URL
 # This handles both "1.31" and "1.31.0" formats
@@ -122,43 +141,117 @@ log_message "Installing k9s ${K9S_VERSION}..."
 # Detect architecture
 ARCH=$(dpkg --print-architecture)
 if [ "$ARCH" = "amd64" ]; then
-    log_command "Downloading k9s for amd64" \
-        bash -c "curl -L https://github.com/derailed/k9s/releases/download/v${K9S_VERSION}/k9s_Linux_amd64.tar.gz | tar xz -C /usr/local/bin k9s"
+    log_message "Downloading and verifying k9s for amd64..."
+    download_and_extract \
+        "https://github.com/derailed/k9s/releases/download/v${K9S_VERSION}/k9s_Linux_amd64.tar.gz" \
+        "${K9S_AMD64_SHA256}" \
+        "/usr/local/bin" \
+        "k9s"
+
 elif [ "$ARCH" = "arm64" ]; then
-    log_command "Downloading k9s for arm64" \
-        bash -c "curl -L https://github.com/derailed/k9s/releases/download/v${K9S_VERSION}/k9s_Linux_arm64.tar.gz | tar xz -C /usr/local/bin k9s"
+    log_message "Downloading and verifying k9s for arm64..."
+    download_and_extract \
+        "https://github.com/derailed/k9s/releases/download/v${K9S_VERSION}/k9s_Linux_arm64.tar.gz" \
+        "${K9S_ARM64_SHA256}" \
+        "/usr/local/bin" \
+        "k9s"
 else
     log_warning "k9s not available for architecture $ARCH, skipping..."
+fi
+
+# Verify k9s installation
+if command -v k9s >/dev/null 2>&1; then
+    log_command "Verifying k9s installation" \
+        k9s version --short
+else
+    log_error "k9s installation failed"
+    exit 1
 fi
 
 # ============================================================================
 # Helm Installation
 # ============================================================================
-log_message "Installing Helm..."
+log_message "Installing Helm ${HELM_VERSION}..."
 
-# Install Helm using the official installation script
-log_command "Downloading and installing Helm" \
-    bash -c "curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash"
+# Download and install Helm binary with checksum verification
+# Helm tarballs contain linux-{arch}/helm binary structure
+cd /tmp
 
-# Verify installation
-log_command "Verifying Helm installation" \
-    helm version || log_warning "Helm installation verification failed"
+if [ "$ARCH" = "amd64" ]; then
+    log_message "Downloading and verifying Helm for amd64..."
+    download_and_extract \
+        "https://get.helm.sh/helm-v${HELM_VERSION}-linux-amd64.tar.gz" \
+        "${HELM_AMD64_SHA256}" \
+        "/tmp" \
+        ""  # Extract all files
+
+    # Move helm binary to /usr/local/bin
+    if [ -f "linux-amd64/helm" ]; then
+        log_command "Installing Helm binary" \
+            mv linux-amd64/helm /usr/local/bin/helm
+        log_command "Cleaning up Helm extraction directory" \
+            rm -rf linux-amd64
+    else
+        log_error "Helm binary not found after extraction"
+        exit 1
+    fi
+
+elif [ "$ARCH" = "arm64" ]; then
+    log_message "Downloading and verifying Helm for arm64..."
+    download_and_extract \
+        "https://get.helm.sh/helm-v${HELM_VERSION}-linux-arm64.tar.gz" \
+        "${HELM_ARM64_SHA256}" \
+        "/tmp" \
+        ""  # Extract all files
+
+    # Move helm binary to /usr/local/bin
+    if [ -f "linux-arm64/helm" ]; then
+        log_command "Installing Helm binary" \
+            mv linux-arm64/helm /usr/local/bin/helm
+        log_command "Cleaning up Helm extraction directory" \
+            rm -rf linux-arm64
+    else
+        log_error "Helm binary not found after extraction"
+        exit 1
+    fi
+else
+    log_warning "Helm not available for architecture $ARCH, skipping..."
+fi
+
+cd /
+
+# Verify Helm installation
+if command -v helm >/dev/null 2>&1; then
+    log_command "Verifying Helm installation" \
+        helm version --short
+else
+    log_error "Helm installation failed"
+    exit 1
+fi
 
 # ============================================================================
 # Krew Plugin Manager Installation
 # ============================================================================
 log_message "Installing kubectl plugin manager (krew) ${KREW_VERSION}..."
 
-# Download and install krew
-log_command "Changing to temp directory" \
-    cd /tmp
+# Download and install krew (needs to be extracted to temp for installation)
+cd /tmp
 
 if [ "$ARCH" = "amd64" ]; then
-    log_command "Downloading krew for amd64" \
-        bash -c "curl -L https://github.com/kubernetes-sigs/krew/releases/download/v${KREW_VERSION}/krew-linux_amd64.tar.gz | tar xz"
+    log_message "Downloading and verifying krew for amd64..."
+    download_and_extract \
+        "https://github.com/kubernetes-sigs/krew/releases/download/v${KREW_VERSION}/krew-linux_amd64.tar.gz" \
+        "${KREW_AMD64_SHA256}" \
+        "/tmp" \
+        ""  # Extract all files
+
 elif [ "$ARCH" = "arm64" ]; then
-    log_command "Downloading krew for arm64" \
-        bash -c "curl -L https://github.com/kubernetes-sigs/krew/releases/download/v${KREW_VERSION}/krew-linux_arm64.tar.gz | tar xz"
+    log_message "Downloading and verifying krew for arm64..."
+    download_and_extract \
+        "https://github.com/kubernetes-sigs/krew/releases/download/v${KREW_VERSION}/krew-linux_arm64.tar.gz" \
+        "${KREW_ARM64_SHA256}" \
+        "/tmp" \
+        ""  # Extract all files
 fi
 
 # Find and install krew binary
@@ -172,8 +265,7 @@ for krew_binary in ./krew-linux_*; do
     fi
 done
 
-log_command "Returning to root directory" \
-    cd /
+cd /
 
 # ============================================================================
 # Environment Configuration
