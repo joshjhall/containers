@@ -29,11 +29,19 @@ source /tmp/build-scripts/base/feature-header.sh
 # Source apt utilities for reliable package installation
 source /tmp/build-scripts/base/apt-utils.sh
 
+# Source download verification utilities
+source /tmp/build-scripts/base/download-verify.sh
+
 # ============================================================================
 # Version Configuration
 # ============================================================================
 # Go version to install
-GO_VERSION="${GO_VERSION:-1.24.5}"
+GO_VERSION="${GO_VERSION:-1.25.3}"
+
+# Go checksums from: https://go.dev/dl/
+# Verified on: 2025-11-08
+GO_AMD64_SHA256="0335f314b6e7bfe08c3d0cfaa7c19db961b7b99fb20be62b0a826c992ad14e0f"
+GO_ARM64_SHA256="1d42ebc84999b5e2069f5e31b67d6fc5d67308adad3e178d5a2ee2c9ff2001f5"
 
 # Extract major.minor version for comparison
 GO_MAJOR=$(echo $GO_VERSION | cut -d. -f1)
@@ -100,13 +108,28 @@ log_message "Downloading and installing Go ${GO_VERSION}..."
 
 cd /tmp
 
-log_command "Downloading Go ${GO_VERSION}" \
-    curl -L "https://go.dev/dl/go${GO_VERSION}.linux-${GO_ARCH}.tar.gz" -o go.tar.gz
+# Select checksum based on architecture
+case ${GO_ARCH} in
+    amd64)
+        GO_CHECKSUM="${GO_AMD64_SHA256}"
+        ;;
+    arm64)
+        GO_CHECKSUM="${GO_ARM64_SHA256}"
+        ;;
+    *)
+        log_error "Unsupported architecture for Go checksum verification: ${GO_ARCH}"
+        log_feature_end
+        exit 1
+        ;;
+esac
 
-log_command "Extracting Go to /usr/local" \
-    tar -C /usr/local -xzf go.tar.gz
-
-rm go.tar.gz
+# Download and extract Go tarball with checksum verification
+log_message "Downloading and verifying Go ${GO_VERSION} for ${GO_ARCH}..."
+download_and_extract \
+    "https://go.dev/dl/go${GO_VERSION}.linux-${GO_ARCH}.tar.gz" \
+    "${GO_CHECKSUM}" \
+    "/usr/local" \
+    ""  # Extract all files (creates /usr/local/go/)
 
 # ============================================================================
 # Cache and Path Configuration
