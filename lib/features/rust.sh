@@ -29,6 +29,15 @@ set -euo pipefail
 # Source standard feature header for user handling
 source /tmp/build-scripts/base/feature-header.sh
 
+# Source apt utilities for reliable package installation
+source /tmp/build-scripts/base/apt-utils.sh
+
+# Source checksum utilities for secure binary downloads
+source /tmp/build-scripts/features/lib/checksum-fetch.sh
+
+# Source download verification utilities
+source /tmp/build-scripts/base/download-verify.sh
+
 # Get Rust version from environment or use default
 RUST_VERSION="${RUST_VERSION:-1.88.0}"
 
@@ -58,19 +67,64 @@ log_command "Setting cache directory ownership" \
     chown -R ${USER_UID}:${USER_GID} "${CARGO_HOME}" "${RUSTUP_HOME}"
 
 # ============================================================================
-# Rust Toolchain Installation
+# Rust Toolchain Installation (Secure with Checksum Verification)
 # ============================================================================
 log_message "Installing Rust toolchain..."
 
-# Install Rust toolchain
-# Using rustup's official installer with non-interactive flags
-log_command "Installing Rust via rustup" \
+# Determine rustup target triple based on architecture
+ARCH=$(dpkg --print-architecture)
+case "$ARCH" in
+    amd64)
+        RUSTUP_TARGET="x86_64-unknown-linux-gnu"
+        ;;
+    arm64)
+        RUSTUP_TARGET="aarch64-unknown-linux-gnu"
+        ;;
+    *)
+        log_error "Unsupported architecture: $ARCH"
+        exit 1
+        ;;
+esac
+
+log_message "Installing rustup for ${RUSTUP_TARGET}..."
+
+# Define download URLs
+RUSTUP_URL="https://static.rust-lang.org/rustup/dist/${RUSTUP_TARGET}/rustup-init"
+RUSTUP_CHECKSUM_URL="${RUSTUP_URL}.sha256"
+
+# Fetch SHA256 checksum from official source
+log_message "Fetching rustup checksum from rust-lang.org..."
+if ! RUSTUP_CHECKSUM=$(curl -fsSL "$RUSTUP_CHECKSUM_URL" 2>/dev/null); then
+    log_error "Failed to fetch checksum for rustup"
+    log_error "URL: ${RUSTUP_CHECKSUM_URL}"
+    log_feature_end
+    exit 1
+fi
+
+# Extract just the checksum (rustup .sha256 files include path, format: "checksum *path/file")
+RUSTUP_CHECKSUM=$(echo "$RUSTUP_CHECKSUM" | awk '{print $1}')
+log_message "Expected SHA256: ${RUSTUP_CHECKSUM}"
+
+# Download and verify rustup-init
+cd /tmp
+log_message "Downloading and verifying rustup-init..."
+download_and_verify \
+    "$RUSTUP_URL" \
+    "$RUSTUP_CHECKSUM" \
+    "rustup-init"
+
+# Make executable
+log_command "Making rustup-init executable" \
+    chmod +x rustup-init
+
+# Run rustup-init as the target user with verified binary
+log_command "Installing Rust via verified rustup" \
     su - ${USERNAME} -c "
     export CARGO_HOME='${CARGO_HOME}'
     export RUSTUP_HOME='${RUSTUP_HOME}'
 
-    # Download and run rustup installer
-    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y \
+    # Run verified rustup installer
+    /tmp/rustup-init -y \
         --default-toolchain ${RUST_VERSION} \
         --profile default
 
@@ -84,6 +138,12 @@ log_command "Installing Rust via rustup" \
     # - rustfmt: Code formatter
     rustup component add rust-src rust-analyzer clippy rustfmt
 "
+
+# Clean up installer
+log_command "Cleaning up rustup installer" \
+    rm -f /tmp/rustup-init
+
+cd /
 
 # Install additional Cargo tools
 # These enhance the development experience but aren't required for basic Rust usage

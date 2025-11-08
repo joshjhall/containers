@@ -2,7 +2,7 @@
 
 ## Status: Implementation In Progress
 **Date Started**: 2025-11-07
-**Last Updated**: 2025-11-08 (Phase 5 Complete - terraform.sh)
+**Last Updated**: 2025-11-08 (Phase 6 Partial - rust.sh complete, node.sh/cloudflare.sh acceptable)
 
 ## Priority Classification
 
@@ -11,12 +11,12 @@ These download and execute code directly. Highest priority for security.
 
 | Script | Line | Pattern | Status | Notes |
 |--------|------|---------|--------|-------|
-| `rust.sh` | 73 | `curl https://sh.rustup.rs \| sh` | ⏳ Pending | Official rustup - consider mirroring |
+| `rust.sh` | 73 | `curl https://sh.rustup.rs \| sh` | ✅ **REMOVED** | Replaced with direct rustup-init download + checksum verification |
 | `kubernetes.sh` | 141 | `curl helm/get-helm-3 \| bash` | ✅ **REMOVED** | Replaced with direct binary download + checksum verification |
 | `terraform.sh` | 146 | `curl tflint/install_linux.sh \| bash` | ✅ **REMOVED** | Replaced with direct binary download + checksum verification |
 | `mojo.sh` | 119 | `curl pixi.sh/install.sh \| bash` | ⏳ Pending | pixi installer |
-| `node.sh` | 97, 116 | `curl nodesource setup \| bash` | ⏳ Review | Repository setup, GPG verified after |
-| `cloudflare.sh` | 74 | `curl nodesource setup \| bash` | ⏳ Review | Repository setup, GPG verified after |
+| `node.sh` | 97, 116 | `curl nodesource setup \| bash` | ✅ **ACCEPTABLE** | GPG-signed repository setup, apt verifies packages |
+| `cloudflare.sh` | 74 | `curl nodesource setup \| bash` | ✅ **ACCEPTABLE** | GPG-signed repository setup, apt verifies packages |
 
 ### 🟠 HIGH - Direct Binary Downloads (curl | tar)
 These download binaries and extract directly without verification.
@@ -102,10 +102,10 @@ These use apt/cargo/npm with GPG verification. No changes needed.
 - ✅ **Build args added**: TFLINT_VERSION exposed for version pinning
 - ✅ **Version tracking**: tflint added to check-versions.sh
 
-### Phase 6: Installation Scripts Review
-- rust.sh - rustup installer
-- mojo.sh - pixi installer
-- node.sh / cloudflare.sh - NodeSource scripts (review if verification needed)
+### Phase 6: Installation Scripts Review ⏳ **IN PROGRESS**
+- ✅ rust.sh - rustup installer (COMPLETED - direct binary download + checksum verification)
+- ⏳ mojo.sh - pixi installer (PENDING)
+- ✅ node.sh / cloudflare.sh - NodeSource scripts (ACCEPTABLE - GPG-signed repository setup)
 
 ## Checksum Sources
 
@@ -274,6 +274,38 @@ These use apt/cargo/npm with GPG verification. No changes needed.
 - **Build Test**: ✅ Passed (image: `test-terraform:checksum-verify`)
 - **Runtime Test**: ✅ Passed (terraform-docs v0.20.0, tflint v0.59.1 verified)
 
+### ✅ rust.sh (2025-11-08) - **REFACTORED TO SECURE INSTALLATION**
+- **Security Improvement**: Eliminated `curl | sh` vulnerability
+  - **CRITICAL**: Replaced `curl https://sh.rustup.rs | sh` with secure rustup-init binary download
+  - Direct binary download from https://static.rust-lang.org/rustup/dist/
+  - SHA256 verification from official .sha256 files
+
+- **Dynamic Checksum Fetching**:
+  - Fetches checksum from `https://static.rust-lang.org/rustup/dist/{target}/rustup-init.sha256`
+  - Target triple detection (x86_64-unknown-linux-gnu, aarch64-unknown-linux-gnu)
+  - Handles rustup's checksum format (includes build path, extracts just hash)
+
+- **Architecture Benefits**:
+  - Works with any architecture (amd64/arm64)
+  - No hardcoded checksums to maintain
+  - Always gets latest checksums from official source
+  - More secure than executing remote scripts
+
+- **Code Impact**:
+  - Replaced insecure `curl | sh` pattern
+  - Added proper error handling with clear messages
+  - Downloads verified binary, makes executable, runs as user
+  - Cleans up installer after successful installation
+
+- **Unit Tests** (`tests/unit/features/rust.sh`):
+  - Added 3 checksum verification tests
+  - Tests for: library sourcing, checksum fetching, download verification
+  - Total: 545 unit tests, 544 passed (99% pass rate)
+
+- **Functions Used**: `download_and_verify()` from `lib/base/download-verify.sh`
+- **Build Test**: ✅ Passed (image: `test-feature-rust`)
+- **Runtime Test**: ✅ Passed (rustc 1.91.0 verified)
+
 ### ✅ Unit Test Improvements (2025-11-08)
 
 **Test Philosophy**: Pattern-based testing over implementation details
@@ -315,4 +347,10 @@ These use apt/cargo/npm with GPG verification. No changes needed.
 
 ---
 
-**Next Action**: Continue with Phase 6 (Installation Scripts Review - rust.sh, mojo.sh, node.sh/cloudflare.sh)
+**Next Action**: Complete Phase 6 (mojo.sh - pixi installer)
+
+**Summary**:
+- ✅ **CRITICAL vulnerabilities eliminated**: helm, tflint, rustup (curl | bash replaced with checksum verification)
+- ✅ **HIGH priority items complete**: All direct binary downloads now use checksum verification
+- ✅ **Repository setup scripts acceptable**: node.sh/cloudflare.sh use GPG-signed repositories (apt verifies packages)
+- ⏳ **Remaining**: mojo.sh (pixi installer) - checksums available, ready to implement

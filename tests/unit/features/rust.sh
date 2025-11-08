@@ -345,10 +345,72 @@ EOF
 run_test_with_setup() {
     local test_function="$1"
     local test_description="$2"
-    
+
     setup
     run_test "$test_function" "$test_description"
     teardown
+}
+
+# ============================================================================
+# Checksum Verification Tests
+# ============================================================================
+
+# Test: rust.sh sources checksum libraries
+test_checksum_libraries_sourced() {
+    local rust_script="$PROJECT_ROOT/lib/features/rust.sh"
+
+    if ! [ -f "$rust_script" ]; then
+        skip_test "rust.sh not found"
+        return
+    fi
+
+    # Check for checksum-fetch.sh
+    if grep -q "source.*checksum-fetch.sh" "$rust_script"; then
+        assert_true true "checksum-fetch.sh library is sourced"
+    else
+        assert_true false "checksum-fetch.sh library not sourced"
+    fi
+
+    # Check for download-verify.sh
+    if grep -q "source.*download-verify.sh" "$rust_script"; then
+        assert_true true "download-verify.sh library is sourced"
+    else
+        assert_true false "download-verify.sh library not sourced"
+    fi
+}
+
+# Test: rust.sh fetches rustup checksum dynamically
+test_rustup_checksum_fetching() {
+    local rust_script="$PROJECT_ROOT/lib/features/rust.sh"
+
+    if ! [ -f "$rust_script" ]; then
+        skip_test "rust.sh not found"
+        return
+    fi
+
+    # Check for rustup checksum URL fetching
+    if grep -q "RUSTUP_CHECKSUM_URL" "$rust_script"; then
+        assert_true true "Uses dynamic rustup checksum fetching"
+    else
+        assert_true false "Does not use dynamic checksum fetching"
+    fi
+}
+
+# Test: rust.sh uses download verification
+test_download_verification() {
+    local rust_script="$PROJECT_ROOT/lib/features/rust.sh"
+
+    if ! [ -f "$rust_script" ]; then
+        skip_test "rust.sh not found"
+        return
+    fi
+
+    # Check for download_and_verify usage
+    if grep -q "download_and_verify" "$rust_script"; then
+        assert_true true "Uses checksum verification for downloads"
+    else
+        assert_true false "Does not use checksum verification"
+    fi
 }
 
 # Run all tests
@@ -362,6 +424,11 @@ run_test_with_setup test_rust_aliases_helpers "Rust aliases and helpers are defi
 run_test_with_setup test_cargo_toml_detection "Cargo.toml detection works"
 run_test_with_setup test_rust_permissions "Rust directories have correct permissions"
 run_test_with_setup test_rust_verification "Rust verification script works"
+
+# Checksum verification tests
+run_test test_checksum_libraries_sourced "Checksum libraries are sourced"
+run_test test_rustup_checksum_fetching "Rustup checksum fetching is used"
+run_test test_download_verification "Download verification is used"
 
 # Generate test report
 generate_report
