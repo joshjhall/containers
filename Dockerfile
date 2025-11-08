@@ -317,10 +317,11 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 ARG INCLUDE_TERRAFORM=false
 ARG TERRAGRUNT_VERSION=0.93.0
 ARG TFDOCS_VERSION=0.20.0
+ARG TFLINT_VERSION=0.59.1
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     if [ "${INCLUDE_TERRAFORM}" = "true" ]; then \
-    TERRAGRUNT_VERSION=${TERRAGRUNT_VERSION} TFDOCS_VERSION=${TFDOCS_VERSION} \
+    TERRAGRUNT_VERSION=${TERRAGRUNT_VERSION} TFDOCS_VERSION=${TFDOCS_VERSION} TFLINT_VERSION=${TFLINT_VERSION} \
     /tmp/build-scripts/features/terraform.sh; \
     fi
 

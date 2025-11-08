@@ -294,6 +294,74 @@ run_test_with_setup() {
     teardown
 }
 
+# ============================================================================
+# Checksum Verification Tests
+# ============================================================================
+
+# Test: terraform.sh sources checksum libraries
+test_checksum_libraries_sourced() {
+    local terraform_script="$PROJECT_ROOT/lib/features/terraform.sh"
+
+    if ! [ -f "$terraform_script" ]; then
+        skip_test "terraform.sh not found"
+        return
+    fi
+
+    # Check for checksum-fetch.sh
+    if grep -q "source.*checksum-fetch.sh" "$terraform_script"; then
+        assert_true true "checksum-fetch.sh library is sourced"
+    else
+        assert_true false "checksum-fetch.sh library not sourced"
+    fi
+
+    # Check for download-verify.sh
+    if grep -q "source.*download-verify.sh" "$terraform_script"; then
+        assert_true true "download-verify.sh library is sourced"
+    else
+        assert_true false "download-verify.sh library not sourced"
+    fi
+}
+
+# Test: terraform.sh uses dynamic checksum fetching
+test_dynamic_checksum_fetching() {
+    local terraform_script="$PROJECT_ROOT/lib/features/terraform.sh"
+
+    if ! [ -f "$terraform_script" ]; then
+        skip_test "terraform.sh not found"
+        return
+    fi
+
+    # Check for fetch_github_checksums_txt usage
+    if grep -q "fetch_github_checksums_txt" "$terraform_script"; then
+        assert_true true "Uses fetch_github_checksums_txt for dynamic fetching"
+    else
+        assert_true false "Does not use dynamic checksum fetching"
+    fi
+}
+
+# Test: terraform.sh uses download verification
+test_download_verification() {
+    local terraform_script="$PROJECT_ROOT/lib/features/terraform.sh"
+
+    if ! [ -f "$terraform_script" ]; then
+        skip_test "terraform.sh not found"
+        return
+    fi
+
+    # Check for download_and_extract or download_and_verify usage
+    local uses_verification=false
+    if grep -q "download_and_extract" "$terraform_script" || \
+       grep -q "download_and_verify" "$terraform_script"; then
+        uses_verification=true
+    fi
+
+    if [ "$uses_verification" = true ]; then
+        assert_true true "Uses checksum verification for downloads"
+    else
+        assert_true false "Does not use checksum verification"
+    fi
+}
+
 # Run all tests
 run_test_with_setup test_terraform_version_validation "Terraform version validation works"
 run_test_with_setup test_terraform_binary "Terraform binary installation"
@@ -305,6 +373,11 @@ run_test_with_setup test_provider_configuration "Provider configuration structur
 run_test_with_setup test_state_file_handling "State file handling"
 run_test_with_setup test_workspace_management "Workspace management"
 run_test_with_setup test_terraform_verification "Terraform verification script"
+
+# Checksum verification tests
+run_test test_checksum_libraries_sourced "Checksum libraries are sourced"
+run_test test_dynamic_checksum_fetching "Dynamic checksum fetching is used"
+run_test test_download_verification "Download verification is used"
 
 # Generate test report
 generate_report

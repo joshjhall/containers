@@ -2,7 +2,7 @@
 
 ## Status: Implementation In Progress
 **Date Started**: 2025-11-07
-**Last Updated**: 2025-11-08
+**Last Updated**: 2025-11-08 (Phase 5 Complete - terraform.sh)
 
 ## Priority Classification
 
@@ -13,7 +13,7 @@ These download and execute code directly. Highest priority for security.
 |--------|------|---------|--------|-------|
 | `rust.sh` | 73 | `curl https://sh.rustup.rs \| sh` | ⏳ Pending | Official rustup - consider mirroring |
 | `kubernetes.sh` | 141 | `curl helm/get-helm-3 \| bash` | ✅ **REMOVED** | Replaced with direct binary download + checksum verification |
-| `terraform.sh` | 146 | `curl tflint/install_linux.sh \| bash` | ⏳ Pending | tflint install script |
+| `terraform.sh` | 146 | `curl tflint/install_linux.sh \| bash` | ✅ **REMOVED** | Replaced with direct binary download + checksum verification |
 | `mojo.sh` | 119 | `curl pixi.sh/install.sh \| bash` | ⏳ Pending | pixi installer |
 | `node.sh` | 97, 116 | `curl nodesource setup \| bash` | ⏳ Review | Repository setup, GPG verified after |
 | `cloudflare.sh` | 74 | `curl nodesource setup \| bash` | ⏳ Review | Repository setup, GPG verified after |
@@ -30,9 +30,9 @@ These download binaries and extract directly without verification.
 | `dev-tools.sh` | 426, 431 | delta | ✅ **DONE** | v0.18.2 with SHA256 verification (calculated checksums) |
 | `dev-tools.sh` | 458, 461 | act | ✅ **DONE** | v0.2.82 with SHA256 verification (published checksums) |
 | `dev-tools.sh` | 472, 477 | git-cliff | ✅ **DONE** | v2.8.0 with SHA512 verification (published checksums) |
-| `docker.sh` | 131, 134 | lazydocker | ⏳ Pending | Downloads to file first (easier) |
+| `docker.sh` | 131, 134 | lazydocker | ✅ **DONE** | v0.24.1 with SHA256 verification |
 | `golang.sh` | 104 | Go tarball | ✅ **DONE** | Dynamic checksum fetching from go.dev |
-| `terraform.sh` | 137, 140 | terraform-docs | ⏳ Pending | Check for checksums |
+| `terraform.sh` | 137, 140 | terraform-docs | ✅ **DONE** | v0.20.0 with SHA256 verification |
 
 ### 🟢 LOW/OK - GPG Key Downloads
 These are GPG keys piped to verification tools. Less critical but should review.
@@ -92,9 +92,15 @@ These use apt/cargo/npm with GPG verification. No changes needed.
 - ✅ lazydocker: Dynamic from checksums.txt (SHA256)
 - ✅ Container build tested and verified
 
-### Phase 5: terraform.sh
-- terraform-docs binary
-- tflint installer script
+### Phase 5: terraform.sh ✅ **COMPLETED - DYNAMIC FETCHING**
+- ✅ Refactored to use dynamic checksum fetching from GitHub
+- ✅ Supports ANY version via build args (TFDOCS_VERSION, TFLINT_VERSION)
+- ✅ terraform-docs: Dynamic from .sha256sum file
+- ✅ tflint: Dynamic from checksums.txt (replaces CRITICAL curl | bash vulnerability)
+- ✅ Container build tested and verified
+- ✅ **Unit tests added**: 3 checksum verification tests (dynamic fetching, download verification, sources)
+- ✅ **Build args added**: TFLINT_VERSION exposed for version pinning
+- ✅ **Version tracking**: tflint added to check-versions.sh
 
 ### Phase 6: Installation Scripts Review
 - rust.sh - rustup installer
@@ -232,6 +238,42 @@ These use apt/cargo/npm with GPG verification. No changes needed.
 - **Build Test**: ✅ Passed (image: `test-feature-docker`)
 - **Runtime Test**: ✅ Passed (lazydocker v0.24.1 verified)
 
+### ✅ terraform.sh (2025-11-08) - **REFACTORED TO DYNAMIC FETCHING**
+- **Dynamic Checksum Fetching**:
+  - terraform-docs: `fetch_github_checksums_txt()` - Fetches from .sha256sum file
+  - tflint: `fetch_github_checksums_txt()` - Fetches from checksums.txt
+
+- **Security Improvements**:
+  - **CRITICAL**: Eliminated `curl install_linux.sh | bash` vulnerability in tflint
+  - Replaced with direct binary download + SHA256 verification
+  - Both tools now use secure checksum-verified installation
+
+- **Architecture Benefits**:
+  - Supports ANY version via `--build-arg TFDOCS_VERSION=X.Y.Z`, `TFLINT_VERSION=X.Y.Z`
+  - No hardcoded checksums to maintain
+  - Always gets latest checksums from official sources
+  - Consistent pattern with other features
+
+- **Code Impact**:
+  - terraform-docs: Added dynamic checksum fetching with `download_and_extract()`
+  - tflint: Complete rewrite from curl | bash to secure binary download
+  - Added proper error handling with version verification hints
+  - Architecture detection for both amd64 and arm64
+
+- **Integration**:
+  - Added `TFLINT_VERSION` build arg to Dockerfile
+  - Added tflint to version checking system (bin/check-versions.sh)
+  - terraform-docs already had `TFDOCS_VERSION` build arg
+
+- **Unit Tests** (`tests/unit/features/terraform.sh`):
+  - Added 3 checksum verification tests
+  - Tests for: library sourcing, dynamic fetching, download verification
+  - Total: 542 unit tests, 541 passed (99% pass rate)
+
+- **Functions Used**: `lib/features/lib/checksum-fetch.sh` utilities
+- **Build Test**: ✅ Passed (image: `test-terraform:checksum-verify`)
+- **Runtime Test**: ✅ Passed (terraform-docs v0.20.0, tflint v0.59.1 verified)
+
 ### ✅ Unit Test Improvements (2025-11-08)
 
 **Test Philosophy**: Pattern-based testing over implementation details
@@ -273,4 +315,4 @@ These use apt/cargo/npm with GPG verification. No changes needed.
 
 ---
 
-**Next Action**: Continue with Phase 4 (docker.sh - lazydocker)
+**Next Action**: Continue with Phase 6 (Installation Scripts Review - rust.sh, mojo.sh, node.sh/cloudflare.sh)
