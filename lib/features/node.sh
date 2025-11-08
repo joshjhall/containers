@@ -88,34 +88,57 @@ log_message "Installing Node.js ${NODE_VERSION}..."
 # NodeSource installation strategy:
 # 1. For major version only (e.g., "22"): Use setup_22.x script for latest 22.x
 # 2. For specific version (e.g., "22.10.0"): Use n version manager for exact version
+# ============================================================================
+# Add NodeSource Repository (Manual Setup - Secure Method)
+# ============================================================================
+# Instead of using NodeSource's setup script (which executes remote code),
+# we manually add the repository. This is more transparent and secure.
+log_message "Adding NodeSource repository manually..."
+
+# Download and install NodeSource GPG key
+log_command "Downloading NodeSource GPG key" \
+    curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key -o /tmp/nodesource.gpg.key
+
+# Convert GPG key to binary format for apt (required for Debian 13+)
+log_command "Converting GPG key to binary format" \
+    gpg --dearmor -o /usr/share/keyrings/nodesource.gpg < /tmp/nodesource.gpg.key
+
+# Add NodeSource repository with signed-by directive
+log_message "Adding NodeSource repository to apt sources..."
+cat > /etc/apt/sources.list.d/nodesource.list << EOF
+deb [signed-by=/usr/share/keyrings/nodesource.gpg] https://deb.nodesource.com/node_${NODE_MAJOR_VERSION}.x nodistro main
+EOF
+
+# Clean up temporary GPG key file
+rm -f /tmp/nodesource.gpg.key
+
+# Update apt package lists
+apt_update
+
+# ============================================================================
+# Install Node.js
+# ============================================================================
 if [ -n "${NODE_SPECIFIC_VERSION}" ]; then
     # Install specific version using n version manager
     log_message "Installing n version manager for specific version pinning..."
-    
-    # First install Node.js from NodeSource to get npm
-    log_command "Adding NodeSource repository for npm" \
-        bash -c "curl -fsSL https://deb.nodesource.com/setup_${NODE_MAJOR_VERSION}.x | bash -"
-    
-    log_message "Installing Node.js and npm..."
+
+    log_message "Installing Node.js and npm from NodeSource..."
     apt_install nodejs
-    
+
     # Install n globally
     log_command "Installing n version manager" \
         npm install -g n
-    
+
     # Install the specific Node.js version
     log_command "Installing Node.js ${NODE_SPECIFIC_VERSION}" \
         n "${NODE_SPECIFIC_VERSION}"
-    
+
     # Set the installed version as default
     log_command "Setting Node.js ${NODE_SPECIFIC_VERSION} as default" \
         n "${NODE_SPECIFIC_VERSION}"
 else
     # Install latest version from major version line using NodeSource
-    log_command "Adding NodeSource repository" \
-        bash -c "curl -fsSL https://deb.nodesource.com/setup_${NODE_MAJOR_VERSION}.x | bash -"
-    
-    log_message "Installing Node.js..."
+    log_message "Installing Node.js from NodeSource..."
     apt_install nodejs
 fi
 
