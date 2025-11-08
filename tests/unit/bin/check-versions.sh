@@ -326,5 +326,22 @@ run_test test_extract_duf_entr_versions "Script extracts duf and entr versions"
 run_test test_handle_indented_versions "Script handles indented version patterns"
 run_test test_extract_zoxide_version "Script extracts zoxide version from base setup"
 
+# Test: Script extracts krew version from Dockerfile
+test_extract_krew_version() {
+    # Check if krew version can be extracted from Dockerfile
+    local krew_ver=$(grep "^ARG KREW_VERSION=" "$PROJECT_ROOT/Dockerfile" 2>/dev/null | cut -d= -f2 | tr -d '"')
+
+    assert_not_empty "$krew_ver" "krew version extracted from Dockerfile"
+
+    # Verify it's a reasonable version format
+    if echo "$krew_ver" | grep -qE '^[0-9]+\.[0-9]+'; then
+        assert_true true "krew version has valid format"
+    else
+        assert_true false "krew version has invalid format: $krew_ver"
+    fi
+}
+
+run_test test_extract_krew_version "Script extracts krew version from Dockerfile"
+
 # Generate test report
 generate_report
