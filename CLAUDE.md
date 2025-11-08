@@ -68,6 +68,11 @@ docker build -t test:minimal \
 
 # Run specific integration test
 ./tests/run_integration_tests.sh python_dev
+
+# Quick feature test (for development - tests one feature in isolation)
+./tests/test_feature.sh golang
+./tests/test_feature.sh python-dev
+./tests/test_feature.sh kubernetes
 ```
 
 **IMPORTANT: Testing Docker Builds Manually**
