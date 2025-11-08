@@ -49,14 +49,21 @@ source /tmp/build-scripts/base/feature-header.sh
 # Source apt utilities for reliable package installation
 source /tmp/build-scripts/base/apt-utils.sh
 
+# Source checksum utilities for secure binary downloads
+source /tmp/build-scripts/features/lib/checksum-fetch.sh
+
+# Source download verification utilities
+source /tmp/build-scripts/base/download-verify.sh
+
 # Start logging
 log_feature_start "Terraform"
 
 # Version configuration
 # Terraform uses latest from HashiCorp APT repository
 # TERRAFORM_VERSION is not used since we install from APT (always latest)
-TERRAGRUNT_VERSION="${TERRAGRUNT_VERSION:-0.83.2}"
+TERRAGRUNT_VERSION="${TERRAGRUNT_VERSION:-0.93.0}"
 TFDOCS_VERSION="${TFDOCS_VERSION:-0.20.0}"
+TFLINT_VERSION="${TFLINT_VERSION:-0.59.1}"
 
 # ============================================================================
 # Dependencies Installation
@@ -130,20 +137,98 @@ if [ -f /usr/local/bin/terragrunt ]; then
         chmod +x /usr/local/bin/terragrunt
 fi
 
-# Install terraform-docs
+# ============================================================================
+# terraform-docs Installation
+# ============================================================================
 log_message "Installing terraform-docs ${TFDOCS_VERSION}..."
-if [ "$ARCH" = "amd64" ]; then
-    log_command "Downloading and extracting terraform-docs for amd64" \
-        bash -c "curl -L https://github.com/terraform-docs/terraform-docs/releases/download/v${TFDOCS_VERSION}/terraform-docs-v${TFDOCS_VERSION}-linux-amd64.tar.gz | tar xz -C /usr/local/bin terraform-docs"
-elif [ "$ARCH" = "arm64" ]; then
-    log_command "Downloading and extracting terraform-docs for arm64" \
-        bash -c "curl -L https://github.com/terraform-docs/terraform-docs/releases/download/v${TFDOCS_VERSION}/terraform-docs-v${TFDOCS_VERSION}-linux-arm64.tar.gz | tar xz -C /usr/local/bin terraform-docs"
+
+# Detect architecture
+ARCH=$(dpkg --print-architecture)
+
+# Determine the correct archive filename
+TFDOCS_ARCHIVE="terraform-docs-v${TFDOCS_VERSION}-linux-${ARCH}.tar.gz"
+TFDOCS_URL="https://github.com/terraform-docs/terraform-docs/releases/download/v${TFDOCS_VERSION}/${TFDOCS_ARCHIVE}"
+
+log_message "Installing terraform-docs v${TFDOCS_VERSION} for ${ARCH}..."
+
+# Fetch checksum dynamically from GitHub releases
+log_message "Fetching terraform-docs checksum from GitHub..."
+TFDOCS_CHECKSUMS_URL="https://github.com/terraform-docs/terraform-docs/releases/download/v${TFDOCS_VERSION}/terraform-docs-v${TFDOCS_VERSION}.sha256sum"
+
+if ! TFDOCS_CHECKSUM=$(fetch_github_checksums_txt "$TFDOCS_CHECKSUMS_URL" "$TFDOCS_ARCHIVE" 2>/dev/null); then
+    log_error "Failed to fetch checksum for terraform-docs ${TFDOCS_VERSION}"
+    log_error "Please verify version exists: https://github.com/terraform-docs/terraform-docs/releases/tag/v${TFDOCS_VERSION}"
+    log_feature_end
+    exit 1
 fi
 
-# Install tflint
-log_message "Installing tflint..."
-log_command "Downloading and installing tflint" \
-    bash -c "curl -s https://raw.githubusercontent.com/terraform-linters/tflint/master/install_linux.sh | bash"
+log_message "Expected SHA256: ${TFDOCS_CHECKSUM}"
+
+# Download and extract with checksum verification
+cd /tmp
+log_message "Downloading and verifying terraform-docs..."
+download_and_extract \
+    "$TFDOCS_URL" \
+    "$TFDOCS_CHECKSUM" \
+    "."
+
+# Install binary
+log_command "Installing terraform-docs binary" \
+    mv ./terraform-docs /usr/local/bin/
+
+log_command "Setting terraform-docs permissions" \
+    chmod +x /usr/local/bin/terraform-docs
+
+log_message "✓ terraform-docs v${TFDOCS_VERSION} installed successfully"
+
+cd /
+
+# ============================================================================
+# tflint Installation
+# ============================================================================
+log_message "Installing tflint ${TFLINT_VERSION}..."
+
+# Determine the correct archive filename
+TFLINT_ARCHIVE="tflint_linux_${ARCH}.zip"
+TFLINT_URL="https://github.com/terraform-linters/tflint/releases/download/v${TFLINT_VERSION}/${TFLINT_ARCHIVE}"
+
+log_message "Installing tflint v${TFLINT_VERSION} for ${ARCH}..."
+
+# Fetch checksum dynamically from GitHub releases
+log_message "Fetching tflint checksum from GitHub..."
+TFLINT_CHECKSUMS_URL="https://github.com/terraform-linters/tflint/releases/download/v${TFLINT_VERSION}/checksums.txt"
+
+if ! TFLINT_CHECKSUM=$(fetch_github_checksums_txt "$TFLINT_CHECKSUMS_URL" "$TFLINT_ARCHIVE" 2>/dev/null); then
+    log_error "Failed to fetch checksum for tflint ${TFLINT_VERSION}"
+    log_error "Please verify version exists: https://github.com/terraform-linters/tflint/releases/tag/v${TFLINT_VERSION}"
+    log_feature_end
+    exit 1
+fi
+
+log_message "Expected SHA256: ${TFLINT_CHECKSUM}"
+
+# Download and verify with checksum
+cd /tmp
+log_message "Downloading and verifying tflint..."
+download_and_verify \
+    "$TFLINT_URL" \
+    "$TFLINT_CHECKSUM" \
+    "$TFLINT_ARCHIVE"
+
+# Extract zip file
+log_command "Extracting tflint" \
+    unzip -o "$TFLINT_ARCHIVE"
+
+# Install binary
+log_command "Installing tflint binary" \
+    install -c -v ./tflint /usr/local/bin/
+
+log_command "Cleaning up tflint archive" \
+    rm -f "$TFLINT_ARCHIVE" ./tflint
+
+log_message "✓ tflint v${TFLINT_VERSION} installed successfully"
+
+cd /
 
 # ============================================================================
 # Cache Configuration
