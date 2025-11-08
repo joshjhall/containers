@@ -210,10 +210,13 @@ extract_all_versions() {
     # Terraform tools from Dockerfile
     ver=$(grep "^ARG TERRAGRUNT_VERSION=" "$PROJECT_ROOT/Dockerfile" 2>/dev/null | cut -d= -f2 | tr -d '"')
     [ -n "$ver" ] && add_tool "Terragrunt" "$ver" "Dockerfile"
-    
+
     ver=$(grep "^ARG TFDOCS_VERSION=" "$PROJECT_ROOT/Dockerfile" 2>/dev/null | cut -d= -f2 | tr -d '"')
     [ -n "$ver" ] && add_tool "terraform-docs" "$ver" "Dockerfile"
-    
+
+    ver=$(grep "^ARG TFLINT_VERSION=" "$PROJECT_ROOT/Dockerfile" 2>/dev/null | cut -d= -f2 | tr -d '"')
+    [ -n "$ver" ] && add_tool "tflint" "$ver" "Dockerfile"
+
     # Python tools
     if [ -f "$PROJECT_ROOT/lib/features/python.sh" ]; then
         ver=$(grep "POETRY_VERSION=" "$PROJECT_ROOT/lib/features/python.sh" 2>/dev/null | head -1 | cut -d= -f2 | tr -d '"')
@@ -643,6 +646,7 @@ main() {
             Helm) check_github_release "Helm" "helm/helm" ;;
             Terragrunt) check_github_release "Terragrunt" "gruntwork-io/terragrunt" ;;
             terraform-docs) check_github_release "terraform-docs" "terraform-docs/terraform-docs" ;;
+            tflint) check_github_release "tflint" "terraform-linters/tflint" ;;
             Poetry) check_github_release "Poetry" "python-poetry/poetry" ;;
             lazygit) check_github_release "lazygit" "jesseduffield/lazygit" ;;
             lazydocker) check_github_release "lazydocker" "jesseduffield/lazydocker" ;;
