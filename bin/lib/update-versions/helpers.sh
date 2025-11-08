@@ -11,6 +11,12 @@
 #   fetch_github_checksum_file "owner/repo" "v1.2.3" "checksums.txt" "pattern"
 #   update_checksum_variable "path/to/script.sh" "VARIABLE_NAME" "new_checksum"
 
+# Header guard to prevent multiple sourcing
+if [ -n "${_BIN_LIB_UPDATE_VERSIONS_HELPERS_SH_INCLUDED:-}" ]; then
+    return 0
+fi
+readonly _BIN_LIB_UPDATE_VERSIONS_HELPERS_SH_INCLUDED=1
+
 set -euo pipefail
 
 # Get script directory

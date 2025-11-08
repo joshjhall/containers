@@ -11,6 +11,12 @@
 #       echo "Valid version"
 #   fi
 
+# Header guard to prevent multiple sourcing
+if [ -n "${_BIN_LIB_VERSION_UTILS_SH_INCLUDED:-}" ]; then
+    return 0
+fi
+readonly _BIN_LIB_VERSION_UTILS_SH_INCLUDED=1
+
 set -euo pipefail
 
 # ============================================================================

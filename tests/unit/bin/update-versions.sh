@@ -674,7 +674,7 @@ test_kubernetes_checksum_integration() {
     fi
 
     # Check that it checks for k9s, krew, or Helm updates
-    if grep -q "K9S_TOOLS_UPDATED" "$PROJECT_ROOT/bin/update-versions.sh"; then
+    if grep -q "K8S_TOOLS_UPDATED" "$PROJECT_ROOT/bin/update-versions.sh"; then
         assert_true true "update-versions.sh tracks Kubernetes tool updates"
     else
         assert_true false "update-versions.sh missing Kubernetes tool update tracking"
