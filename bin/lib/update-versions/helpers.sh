@@ -49,7 +49,7 @@ fetch_github_checksum_file() {
     local checksum_file="$3"
     local url="https://github.com/${repo}/releases/download/${version}/${checksum_file}"
 
-    log_info "Fetching checksums from: $url"
+    log_info "Fetching checksums from: $url" >&2
 
     if ! curl -fsSL "$url"; then
         log_error "Failed to download checksum file from $url"
@@ -141,7 +141,7 @@ fetch_github_individual_checksum() {
 
     local checksum
     if ! checksum=$(curl -fsSL "$url"); then
-        log_error "Failed to download checksum from $url" >&2
+        log_error "Failed to download checksum from $url"
         return 1
     fi
 
@@ -175,9 +175,16 @@ update_checksum_variable() {
         return 1
     fi
 
-    # Validate checksum format (SHA256 is 64 hex characters)
-    if ! validate_sha256 "$new_checksum"; then
-        log_error "Invalid SHA256 checksum format: $new_checksum"
+    # Validate checksum format (SHA256 is 64 hex, SHA512 is 128 hex)
+    if validate_sha256 "$new_checksum"; then
+        # Valid SHA256
+        :
+    elif validate_sha512 "$new_checksum"; then
+        # Valid SHA512
+        :
+    else
+        log_error "Invalid checksum format: $new_checksum"
+        log_error "Expected SHA256 (64 hex) or SHA512 (128 hex)"
         return 1
     fi
 
@@ -195,7 +202,7 @@ update_checksum_variable() {
     fi
 }
 
-# Note: validate_sha256() is now in bin/lib/version-utils.sh
+# Note: validate_sha256() and validate_sha512() are now in bin/lib/version-utils.sh
 
 # update_version_comment - Update version verification comment
 #
