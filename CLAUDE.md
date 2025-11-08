@@ -70,6 +70,42 @@ docker build -t test:minimal \
 ./tests/run_integration_tests.sh python_dev
 ```
 
+**IMPORTANT: Testing Docker Builds Manually**
+
+When testing Docker builds manually, **DO NOT run `docker build` commands directly** because Docker may be configured with buildx as the default builder, which has different argument handling.
+
+**ALWAYS use the integration test framework** which handles Docker configuration correctly:
+
+```bash
+# Use the test framework - this is the CORRECT way
+./tests/run_integration_tests.sh
+
+# Create a new integration test if needed for your feature
+# See tests/integration/builds/test_*.sh for examples
+```
+
+**Docker Build Command Syntax** (if you MUST run manually):
+
+The build context (`.`) **MUST** come at the very end:
+
+```bash
+# ✓ CORRECT - context at the end
+docker build -f Dockerfile --build-arg PROJECT_PATH=. --build-arg PROJECT_NAME=test -t test:image .
+
+# ✗ WRONG - arguments after the context
+docker build -t test:image -f Dockerfile --build-arg PROJECT_PATH=. --build-arg PROJECT_NAME=test .
+
+# ✗ WRONG - using buildx explicitly may fail
+docker buildx build -t test:image -f Dockerfile --build-arg ARG=value .
+```
+
+**Why the test framework is preferred:**
+- Handles Docker/buildx configuration automatically
+- Provides proper assertions and error handling
+- Cleans up test containers/images
+- Works consistently across environments
+- See `tests/framework/assertions/docker.sh` for implementation
+
 ### Running Containers
 
 ```bash
