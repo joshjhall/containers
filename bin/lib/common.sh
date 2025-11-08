@@ -10,6 +10,12 @@
 #   log_info "Starting process..."
 #   log_success "Process completed!"
 
+# Header guard to prevent multiple sourcing
+if [ -n "${_BIN_LIB_COMMON_SH_INCLUDED:-}" ]; then
+    return 0
+fi
+readonly _BIN_LIB_COMMON_SH_INCLUDED=1
+
 set -euo pipefail
 
 # ============================================================================
