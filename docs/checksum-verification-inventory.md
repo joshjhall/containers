@@ -204,6 +204,12 @@ These use apt/cargo/npm with GPG verification. No changes needed.
   - More maintainable than maintaining extensive checksum lists
   - Network dependency acceptable (already required for binary downloads)
 
+- **Version Update Scripts**:
+  - ✅ No changes needed to `bin/check-versions.sh` or `bin/update-versions.sh`
+  - These only update GO_VERSION in Dockerfile (correct behavior)
+  - Checksums are fetched dynamically at build time
+  - **No golang-checksums.sh updater needed** (unlike kubernetes/dev-tools)
+
 - **Build Test**: ✅ Passed (images: `test-feature-golang`)
 - **Runtime Test**: ✅ Passed (go 1.24.5, 1.25.3 verified)
 
