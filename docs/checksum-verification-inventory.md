@@ -31,7 +31,7 @@ These download binaries and extract directly without verification.
 | `dev-tools.sh` | 458, 461 | act | ✅ **DONE** | v0.2.82 with SHA256 verification (published checksums) |
 | `dev-tools.sh` | 472, 477 | git-cliff | ✅ **DONE** | v2.8.0 with SHA512 verification (published checksums) |
 | `docker.sh` | 131, 134 | lazydocker | ⏳ Pending | Downloads to file first (easier) |
-| `golang.sh` | 104 | Go tarball | ⏳ Pending | Official Go releases have checksums |
+| `golang.sh` | 104 | Go tarball | ✅ **DONE** | Dynamic checksum fetching from go.dev |
 | `terraform.sh` | 137, 140 | terraform-docs | ⏳ Pending | Check for checksums |
 
 ### 🟢 LOW/OK - GPG Key Downloads
@@ -74,10 +74,12 @@ These use apt/cargo/npm with GPG verification. No changes needed.
 - ✅ Container build tested and verified
 - ✅ Comprehensive unit tests added (554 total tests, 99% pass rate)
 
-### Phase 3: golang.sh
-- Official Go releases
-- Well-documented checksums
-- Single tarball
+### Phase 3: golang.sh ✅ **COMPLETED**
+- ✅ Official Go releases from go.dev
+- ✅ Dynamic checksum fetching from go.dev downloads page
+- ✅ Fallback checksums for Go 1.25.3 (default version)
+- ✅ Tested with Go 1.25.3, 1.24.5, and 1.23.0
+- ✅ Container build tested and verified
 
 ### Phase 4: docker.sh
 - lazydocker (already downloads to file first - easiest)
@@ -172,8 +174,38 @@ These use apt/cargo/npm with GPG verification. No changes needed.
   - Test Results: 554 total tests, 553 passed (99% pass rate)
 
 - **Build Test**: ✅ Passed (image: `test:dev-tools`)
-- **Runtime Test**: ⏳ Pending Docker build completion
+- **Runtime Test**: ✅ Passed (all tools verified)
+
+### ✅ golang.sh (2025-11-08)
+- **Infrastructure Created**:
+  - Created `lib/features/lib/checksum-fetch.sh` - Reusable checksum fetching utilities
+  - Function: `fetch_go_checksum()` - Dynamically fetches checksums from go.dev
+
+- **Dynamic Checksum Fetching**:
+  - Parses go.dev downloads page at build time
+  - Extracts SHA256 checksums from HTML `<tt>` tags
+  - Works with any Go version published on go.dev
+  - Fallback to stored checksums if fetch fails
+
+- **Fallback Checksums Added** (for Go 1.25.3):
+  - GO_FALLBACK_CHECKSUMS["1.25.3_amd64"]="0335f314b6e7bfe08c3d0cfaa7c19db961b7b99fb20be62b0a826c992ad14e0f"
+  - GO_FALLBACK_CHECKSUMS["1.25.3_arm64"]="1d42ebc84999b5e2069f5e31b67d6fc5d67308adad3e178d5a2ee2c9ff2001f5"
+
+- **Testing**:
+  - ✅ Tested with default version (1.25.3)
+  - ✅ Tested with custom versions (1.24.5, 1.23.0)
+  - ✅ Enhanced `tests/test_feature.sh` to support custom build args
+  - ✅ Verified dynamic fetching works correctly
+
+- **Architecture Decision**:
+  - Chose dynamic fetching over version lookup tables for flexibility
+  - Allows users to specify any Go version via `--build-arg GO_VERSION=X.Y.Z`
+  - More maintainable than maintaining extensive checksum lists
+  - Network dependency acceptable (already required for binary downloads)
+
+- **Build Test**: ✅ Passed (images: `test-feature-golang`)
+- **Runtime Test**: ✅ Passed (go 1.24.5, 1.25.3 verified)
 
 ---
 
-**Next Action**: Continue with Phase 3 (golang.sh) or Phase 4 (docker.sh - lazydocker)
+**Next Action**: Continue with Phase 4 (docker.sh - lazydocker)

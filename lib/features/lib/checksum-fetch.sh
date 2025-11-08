@@ -35,10 +35,15 @@ fetch_go_checksum() {
     local filename="go${version}.linux-${arch}.tar.gz"
 
     # Fetch the page and extract the checksum
+    # The HTML has the filename and checksum on separate lines, so we need to:
+    # 1. Find the line with the filename
+    # 2. Get the next few lines (checksum is in a <tt> tag a few lines down)
+    # 3. Extract the checksum from the <tt> tag
     local checksum
     checksum=$(curl -fsSL "$url" | \
-        grep -oP "\"${filename}\">.*?<tt>[a-f0-9]{64}</tt>" | \
-        grep -oP '[a-f0-9]{64}' | \
+        grep -A 5 "${filename}" | \
+        grep -oP '<tt>[a-f0-9]{64}</tt>' | \
+        sed 's/<tt>\|<\/tt>//g' | \
         head -1)
 
     if [ -n "$checksum" ]; then

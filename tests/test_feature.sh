@@ -35,10 +35,11 @@ PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 if [ $# -eq 0 ]; then
     echo -e "${RED}Error: Feature name required${NC}"
     echo ""
-    echo "Usage: $0 <feature_name>"
+    echo "Usage: $0 <feature_name> [BUILD_ARGS...]"
     echo ""
     echo "Examples:"
     echo "  $0 golang"
+    echo "  $0 golang GO_VERSION=1.24.5"
     echo "  $0 python-dev"
     echo "  $0 kubernetes"
     echo "  $0 dev-tools"
@@ -47,6 +48,13 @@ if [ $# -eq 0 ]; then
 fi
 
 FEATURE="$1"
+shift  # Remove feature name, leaving optional build args
+
+# Collect any additional build args
+EXTRA_BUILD_ARGS=()
+for arg in "$@"; do
+    EXTRA_BUILD_ARGS+=("--build-arg" "$arg")
+done
 
 # Map feature names to build args
 declare -A FEATURE_MAP=(
@@ -122,6 +130,7 @@ if docker build \
     --build-arg PROJECT_PATH=. \
     --build-arg PROJECT_NAME=test \
     --build-arg "${BUILD_ARG}=true" \
+    "${EXTRA_BUILD_ARGS[@]}" \
     -t "$IMAGE_NAME" \
     "$PROJECT_ROOT" > "$BUILD_LOG" 2>&1; then
     echo -e "${GREEN}✓ Build successful${NC}"
