@@ -30,39 +30,20 @@ source /tmp/build-scripts/base/apt-utils.sh
 # Source download verification utilities for secure binary downloads
 source /tmp/build-scripts/base/download-verify.sh
 
+# Source checksum fetching utilities for dynamic checksum retrieval
+source /tmp/build-scripts/features/lib/checksum-fetch.sh
+
 # Start logging
 log_feature_start "Development Tools"
 
 # ============================================================================
-# Version and Checksum Configuration
+# Version Configuration
 # ============================================================================
 # Tool versions
 LAZYGIT_VERSION="0.56.0"
 DELTA_VERSION="0.18.2"
 ACT_VERSION="0.2.82"
 GITCLIFF_VERSION="2.8.0"
-
-# SHA256 checksums for binary verification
-# lazygit checksums from: https://github.com/jesseduffield/lazygit/releases/tag/v0.56.0
-# Checksums verified on: 2025-11-08
-LAZYGIT_AMD64_SHA256="ced13c2ae074bbf6c201bc700ee2971e193b811c3b2ae0ed4d00d6225c6c9ab7"
-LAZYGIT_ARM64_SHA256="57503b0074beaaeaac35da2d462d1ddf2af52d8c822766c935ea5515ba21875c"
-
-# delta checksums calculated from binaries (project doesn't provide checksums)
-# Checksums verified on: 2025-11-08
-DELTA_AMD64_SHA256="99607c43238e11a77fe90a914d8c2d64961aff84b60b8186c1b5691b39955b0f"
-DELTA_ARM64_SHA256="adf7674086daa4582f598f74ce9caa6b70c1ba8f4a57d2911499b37826b014f9"
-
-# act checksums from: https://github.com/nektos/act/releases/tag/v0.2.82
-# Checksums verified on: 2025-11-08
-ACT_AMD64_SHA256="76645c0bbe4bb69a8f0ba3caefa681b2f4c04babd4679c67861af9a276a3561f"
-ACT_ARM64_SHA256="ebf375e700f6f2c139fe3c5508af2ec85032a75e7d29f6a388a58c0fab76e951"
-
-# git-cliff checksums from: https://github.com/orhun/git-cliff/releases/tag/v2.8.0
-# Note: git-cliff uses SHA512 checksums
-# Checksums verified on: 2025-11-08
-GITCLIFF_AMD64_SHA512="42ec0d423098f28115d38af7f95c9248ed2127c7903f16ef6558dcd6e5f625417c7a9a7bbc3b297f63db966d2196d89c2cd0d44c59a298607d7eeb1d3daa0ce1"
-GITCLIFF_ARM64_SHA512="df4995a581cfb598194f36fda1cc97cffffb2478563818330a80d8c0bdba81ba236594023dacf3c39cc85b7efda19b094ec1cb8b79aa972efe36411d9fec78bd"
 
 # ============================================================================
 # Repository Configuration
@@ -440,55 +421,96 @@ log_command "Setting direnv permissions" \
 
 # Install lazygit with checksum verification
 log_message "Installing lazygit ${LAZYGIT_VERSION}..."
-if [ "$ARCH" = "amd64" ]; then
-    log_message "Downloading and verifying lazygit for amd64..."
+
+# Determine lazygit filename based on architecture
+case "$ARCH" in
+    amd64)
+        LAZYGIT_FILENAME="lazygit_${LAZYGIT_VERSION}_linux_x86_64.tar.gz"
+        ;;
+    arm64)
+        LAZYGIT_FILENAME="lazygit_${LAZYGIT_VERSION}_linux_arm64.tar.gz"
+        ;;
+    *)
+        log_warning "lazygit not available for architecture $ARCH, skipping..."
+        LAZYGIT_FILENAME=""
+        ;;
+esac
+
+if [ -n "$LAZYGIT_FILENAME" ]; then
+    log_message "Fetching checksum for lazygit ${LAZYGIT_VERSION} ${ARCH}..."
+
+    # Fetch checksum dynamically from GitHub checksums.txt file
+    LAZYGIT_CHECKSUMS_URL="https://github.com/jesseduffield/lazygit/releases/download/v${LAZYGIT_VERSION}/checksums.txt"
+    if ! LAZYGIT_CHECKSUM=$(fetch_github_checksums_txt "$LAZYGIT_CHECKSUMS_URL" "$LAZYGIT_FILENAME" 2>/dev/null); then
+        log_error "Failed to fetch checksum for lazygit ${LAZYGIT_VERSION}"
+        log_error "Please verify version exists: https://github.com/jesseduffield/lazygit/releases/tag/v${LAZYGIT_VERSION}"
+        log_feature_end
+        exit 1
+    fi
+
+    log_message "✓ Fetched checksum from GitHub"
+
+    # Download and verify lazygit
+    log_message "Downloading and verifying lazygit for ${ARCH}..."
     download_and_extract \
-        "https://github.com/jesseduffield/lazygit/releases/download/v${LAZYGIT_VERSION}/lazygit_${LAZYGIT_VERSION}_linux_x86_64.tar.gz" \
-        "${LAZYGIT_AMD64_SHA256}" \
-        "/usr/local/bin" \
-        "lazygit"
-elif [ "$ARCH" = "arm64" ]; then
-    log_message "Downloading and verifying lazygit for arm64..."
-    download_and_extract \
-        "https://github.com/jesseduffield/lazygit/releases/download/v${LAZYGIT_VERSION}/lazygit_${LAZYGIT_VERSION}_linux_arm64.tar.gz" \
-        "${LAZYGIT_ARM64_SHA256}" \
+        "https://github.com/jesseduffield/lazygit/releases/download/v${LAZYGIT_VERSION}/${LAZYGIT_FILENAME}" \
+        "${LAZYGIT_CHECKSUM}" \
         "/usr/local/bin" \
         "lazygit"
 fi
 
 # Install delta (better git diffs) with checksum verification
 log_message "Installing delta ${DELTA_VERSION}..."
-log_command "Changing to temp directory" \
+
+# Determine delta filename and directory based on architecture
+case "$ARCH" in
+    amd64)
+        DELTA_FILENAME="delta-${DELTA_VERSION}-x86_64-unknown-linux-gnu.tar.gz"
+        DELTA_DIR="delta-${DELTA_VERSION}-x86_64-unknown-linux-gnu"
+        ;;
+    arm64)
+        DELTA_FILENAME="delta-${DELTA_VERSION}-aarch64-unknown-linux-gnu.tar.gz"
+        DELTA_DIR="delta-${DELTA_VERSION}-aarch64-unknown-linux-gnu"
+        ;;
+    *)
+        log_warning "delta not available for architecture $ARCH, skipping..."
+        DELTA_FILENAME=""
+        ;;
+esac
+
+if [ -n "$DELTA_FILENAME" ]; then
     cd /tmp
 
-if [ "$ARCH" = "amd64" ]; then
-    log_message "Downloading and verifying delta for amd64..."
-    download_and_verify \
-        "https://github.com/dandavison/delta/releases/download/${DELTA_VERSION}/delta-${DELTA_VERSION}-x86_64-unknown-linux-gnu.tar.gz" \
-        "${DELTA_AMD64_SHA256}" \
-        "/tmp/delta-verified.tar.gz"
-    log_command "Extracting delta" \
-        tar -xzf /tmp/delta-verified.tar.gz
-    log_command "Installing delta binary" \
-        mv delta-${DELTA_VERSION}-x86_64-unknown-linux-gnu/delta /usr/local/bin/
-    log_command "Cleaning up delta temp files" \
-        rm -rf /tmp/delta-verified.tar.gz delta-${DELTA_VERSION}-x86_64-unknown-linux-gnu
-elif [ "$ARCH" = "arm64" ]; then
-    log_message "Downloading and verifying delta for arm64..."
-    download_and_verify \
-        "https://github.com/dandavison/delta/releases/download/${DELTA_VERSION}/delta-${DELTA_VERSION}-aarch64-unknown-linux-gnu.tar.gz" \
-        "${DELTA_ARM64_SHA256}" \
-        "/tmp/delta-verified.tar.gz"
-    log_command "Extracting delta" \
-        tar -xzf /tmp/delta-verified.tar.gz
-    log_command "Installing delta binary" \
-        mv delta-${DELTA_VERSION}-aarch64-unknown-linux-gnu/delta /usr/local/bin/
-    log_command "Cleaning up delta temp files" \
-        rm -rf /tmp/delta-verified.tar.gz delta-${DELTA_VERSION}-aarch64-unknown-linux-gnu
-fi
+    log_message "Calculating checksum for delta ${DELTA_VERSION} ${ARCH}..."
+    log_message "(Delta doesn't publish checksums, calculating on download)"
 
-log_command "Returning to root directory" \
+    # Calculate checksum from download (delta project doesn't publish checksums)
+    DELTA_URL="https://github.com/dandavison/delta/releases/download/${DELTA_VERSION}/${DELTA_FILENAME}"
+    if ! DELTA_CHECKSUM=$(calculate_checksum_sha256 "$DELTA_URL" 2>/dev/null); then
+        log_error "Failed to download and calculate checksum for delta ${DELTA_VERSION}"
+        log_error "Please verify version exists: https://github.com/dandavison/delta/releases/tag/${DELTA_VERSION}"
+        log_feature_end
+        exit 1
+    fi
+
+    log_message "✓ Calculated checksum from download"
+
+    # Download and verify delta
+    log_message "Downloading and verifying delta for ${ARCH}..."
+    download_and_verify \
+        "$DELTA_URL" \
+        "${DELTA_CHECKSUM}" \
+        "/tmp/delta-verified.tar.gz"
+
+    log_command "Extracting delta" \
+        tar -xzf /tmp/delta-verified.tar.gz
+    log_command "Installing delta binary" \
+        mv "${DELTA_DIR}/delta" /usr/local/bin/
+    log_command "Cleaning up delta temp files" \
+        rm -rf /tmp/delta-verified.tar.gz "${DELTA_DIR}"
+
     cd /
+fi
 
 # Install mkcert (local HTTPS certificates)
 log_message "Installing mkcert (local HTTPS certificates)..."
@@ -505,56 +527,88 @@ log_command "Setting mkcert permissions" \
 
 # Install GitHub Actions CLI (act) with checksum verification
 log_message "Installing act ${ACT_VERSION}..."
-ARCH=$(dpkg --print-architecture)
-if [ "$ARCH" = "amd64" ]; then
-    log_message "Downloading and verifying act for amd64..."
+
+# Determine act filename based on architecture
+case "$ARCH" in
+    amd64)
+        ACT_FILENAME="act_Linux_x86_64.tar.gz"
+        ;;
+    arm64)
+        ACT_FILENAME="act_Linux_arm64.tar.gz"
+        ;;
+    *)
+        log_warning "act not available for architecture $ARCH, skipping..."
+        ACT_FILENAME=""
+        ;;
+esac
+
+if [ -n "$ACT_FILENAME" ]; then
+    log_message "Fetching checksum for act ${ACT_VERSION} ${ARCH}..."
+
+    # Fetch checksum dynamically from GitHub checksums.txt file
+    ACT_CHECKSUMS_URL="https://github.com/nektos/act/releases/download/v${ACT_VERSION}/checksums.txt"
+    if ! ACT_CHECKSUM=$(fetch_github_checksums_txt "$ACT_CHECKSUMS_URL" "$ACT_FILENAME" 2>/dev/null); then
+        log_error "Failed to fetch checksum for act ${ACT_VERSION}"
+        log_error "Please verify version exists: https://github.com/nektos/act/releases/tag/v${ACT_VERSION}"
+        log_feature_end
+        exit 1
+    fi
+
+    log_message "✓ Fetched checksum from GitHub"
+
+    # Download and verify act
+    log_message "Downloading and verifying act for ${ARCH}..."
     download_and_extract \
-        "https://github.com/nektos/act/releases/download/v${ACT_VERSION}/act_Linux_x86_64.tar.gz" \
-        "${ACT_AMD64_SHA256}" \
-        "/usr/local/bin" \
-        "act"
-elif [ "$ARCH" = "arm64" ]; then
-    log_message "Downloading and verifying act for arm64..."
-    download_and_extract \
-        "https://github.com/nektos/act/releases/download/v${ACT_VERSION}/act_Linux_arm64.tar.gz" \
-        "${ACT_ARM64_SHA256}" \
+        "https://github.com/nektos/act/releases/download/v${ACT_VERSION}/${ACT_FILENAME}" \
+        "${ACT_CHECKSUM}" \
         "/usr/local/bin" \
         "act"
 fi
 
 # Install git-cliff (automatic changelog generator) with SHA512 checksum verification
 log_message "Installing git-cliff ${GITCLIFF_VERSION}..."
-log_command "Changing to temp directory" \
-    cd /tmp
 
-if [ "$ARCH" = "amd64" ]; then
-    log_message "Downloading and verifying git-cliff for amd64 (SHA512)..."
-    download_and_verify \
-        "https://github.com/orhun/git-cliff/releases/download/v${GITCLIFF_VERSION}/git-cliff-${GITCLIFF_VERSION}-x86_64-unknown-linux-gnu.tar.gz" \
-        "${GITCLIFF_AMD64_SHA512}" \
-        "/tmp/git-cliff-verified.tar.gz"
+# Determine git-cliff filename based on architecture
+case "$ARCH" in
+    amd64) GITCLIFF_FILENAME="git-cliff-${GITCLIFF_VERSION}-x86_64-unknown-linux-gnu.tar.gz" ;;
+    arm64) GITCLIFF_FILENAME="git-cliff-${GITCLIFF_VERSION}-aarch64-unknown-linux-gnu.tar.gz" ;;
+    *) GITCLIFF_FILENAME="" ;;
+esac
+
+if [ -n "$GITCLIFF_FILENAME" ]; then
+    log_message "Fetching checksum for git-cliff ${GITCLIFF_VERSION} ${ARCH}..."
+
+    GITCLIFF_SHA512_URL="https://github.com/orhun/git-cliff/releases/download/v${GITCLIFF_VERSION}/${GITCLIFF_FILENAME}.sha512"
+    if ! GITCLIFF_CHECKSUM=$(fetch_github_sha512_file "$GITCLIFF_SHA512_URL" 2>/dev/null); then
+        log_error "Failed to fetch checksum for git-cliff ${GITCLIFF_VERSION}"
+        log_feature_end
+        exit 1
+    fi
+
+    log_message "✓ Fetched SHA512 checksum from GitHub"
+
+    # Validate checksum format (should be 128 hex chars for SHA512)
+    if ! validate_checksum_format "$GITCLIFF_CHECKSUM" "sha512"; then
+        log_error "Invalid SHA512 checksum format for git-cliff ${GITCLIFF_VERSION}: ${GITCLIFF_CHECKSUM}"
+        log_feature_end
+        exit 1
+    fi
+
+    # Download and verify, then extract manually (binary is in subdirectory)
+    GITCLIFF_URL="https://github.com/orhun/git-cliff/releases/download/v${GITCLIFF_VERSION}/${GITCLIFF_FILENAME}"
+    download_and_verify "$GITCLIFF_URL" "${GITCLIFF_CHECKSUM}" "/tmp/git-cliff-verified.tar.gz"
+
     log_command "Extracting git-cliff" \
-        tar -xzf /tmp/git-cliff-verified.tar.gz
+        tar -xzf /tmp/git-cliff-verified.tar.gz -C /tmp
     log_command "Installing git-cliff binary" \
-        mv git-cliff-${GITCLIFF_VERSION}/git-cliff /usr/local/bin/
+        mv /tmp/git-cliff-${GITCLIFF_VERSION}/git-cliff /usr/local/bin/
     log_command "Cleaning up git-cliff temp files" \
-        rm -rf /tmp/git-cliff-verified.tar.gz git-cliff-${GITCLIFF_VERSION}
-elif [ "$ARCH" = "arm64" ]; then
-    log_message "Downloading and verifying git-cliff for arm64 (SHA512)..."
-    download_and_verify \
-        "https://github.com/orhun/git-cliff/releases/download/v${GITCLIFF_VERSION}/git-cliff-${GITCLIFF_VERSION}-aarch64-unknown-linux-gnu.tar.gz" \
-        "${GITCLIFF_ARM64_SHA512}" \
-        "/tmp/git-cliff-verified.tar.gz"
-    log_command "Extracting git-cliff" \
-        tar -xzf /tmp/git-cliff-verified.tar.gz
-    log_command "Installing git-cliff binary" \
-        mv git-cliff-${GITCLIFF_VERSION}/git-cliff /usr/local/bin/
-    log_command "Cleaning up git-cliff temp files" \
-        rm -rf /tmp/git-cliff-verified.tar.gz git-cliff-${GITCLIFF_VERSION}
+        rm -rf /tmp/git-cliff-verified.tar.gz /tmp/git-cliff-${GITCLIFF_VERSION}
+
+    log_message "✓ git-cliff ${GITCLIFF_VERSION} installed successfully"
+else
+    log_warning "Unsupported architecture for git-cliff: $ARCH"
 fi
-
-log_command "Returning to root directory" \
-    cd /
 
 # Install GitLab CLI (glab)
 log_message "Installing glab (GitLab CLI)..."
