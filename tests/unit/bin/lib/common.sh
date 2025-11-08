@@ -136,11 +136,14 @@ test_require_command_missing() {
     source "$PROJECT_ROOT/bin/lib/common.sh"
 
     # Test with a command that should not exist
-    if require_command nonexistent_command_xyz 2>/dev/null; then
-        assert_true false "require_command should fail for missing command"
+    # Run in subshell since require_command calls exit, not return
+    (require_command nonexistent_command_xyz 2>/dev/null)
+    local exit_code=$?
+
+    if [ $exit_code -eq 1 ]; then
+        assert_true true "require_command correctly exits with 1 for missing command"
     else
-        # Expect it to fail (exit)
-        assert_true true "require_command correctly fails for missing command"
+        assert_true false "require_command did not exit with 1 for missing command (got: $exit_code)"
     fi
 }
 
