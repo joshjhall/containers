@@ -350,6 +350,99 @@ To quickly verify installed features in a running container:
 
 ---
 
+## Security Considerations
+
+### Docker Socket Usage
+
+When using the `INCLUDE_DOCKER=true` feature, you may need to mount the Docker socket to manage containers from within your dev environment.
+
+#### Development Use (Recommended)
+
+**Use Case**: Local development where your main container needs to manage dependency containers (databases, Redis, message queues, etc.)
+
+```yaml
+# docker-compose.yml or .devcontainer/docker-compose.yml
+services:
+  devcontainer:
+    build:
+      context: ..
+      dockerfile: containers/Dockerfile
+      args:
+        INCLUDE_DOCKER: "true"
+        INCLUDE_PYTHON_DEV: "true"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock  # ⚠️ Development only
+      - ..:/workspace/myproject
+```
+
+**Why this is useful**:
+- Start/stop database containers for testing
+- Run integration tests that need real services
+- Manage multi-container development stacks
+- Use docker-compose from within dev container
+
+**Security Impact**:
+- ⚠️ **Grants root-equivalent access to the host system**
+- Container can start privileged containers
+- Container can mount any host directory
+- Container can read/modify all other containers
+
+#### Production Use (Not Recommended)
+
+**❌ DO NOT** mount the Docker socket in production containers:
+
+```yaml
+# ❌ INSECURE - Never do this in production
+services:
+  app:
+    image: myapp:prod
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock  # ❌ Dangerous!
+```
+
+**Alternatives for Production**:
+1. **Docker-in-Docker (DinD)**: Run Docker daemon inside container (for CI/CD)
+2. **Docker API**: Use restricted Docker API with limited permissions
+3. **Kubernetes**: Use Kubernetes API instead of Docker
+4. **External orchestration**: Let CI/CD system manage containers
+
+#### Development vs Production Builds
+
+Create separate container variants:
+
+```bash
+# Development: Include Docker CLI + mount socket
+docker-compose -f docker-compose.dev.yml up
+
+# Production: No Docker, no socket mounting
+docker build -t myapp:prod \
+  --build-arg INCLUDE_DOCKER=false \
+  -f containers/Dockerfile \
+  .
+```
+
+#### Security Best Practices
+
+1. **Only mount socket in trusted environments**
+   - ✅ Local development on your machine
+   - ✅ Isolated development containers
+   - ❌ Production deployments
+   - ❌ Multi-tenant environments
+   - ❌ Containers running untrusted code
+
+2. **Use least-privilege alternatives when possible**
+   - Consider rootless Docker
+   - Use Docker contexts with limited access
+   - Explore Docker socket proxies with ACLs
+
+3. **Monitor socket access**
+   - Audit what containers access the socket
+   - Log Docker API calls in sensitive environments
+
+For more security guidance, see [SECURITY.md](SECURITY.md).
+
+---
+
 ## Best Practices
 
 1. **Choose the right base image**:
@@ -366,8 +459,10 @@ To quickly verify installed features in a running container:
 
 3. **Security considerations**:
    - Always use non-root users in production
+   - Remove passwordless sudo in production builds
    - Mount secrets at runtime, don't bake them in
    - Regularly update the submodule for security patches
+   - See [Security Considerations](#security-considerations) section above
 
 4. **Version pinning**:
    - Pin the submodule to specific commits for stability
@@ -378,6 +473,7 @@ To quickly verify installed features in a running container:
    - The build context should be your project root (where you run `docker build .`)
    - The Dockerfile path is `-f containers/Dockerfile`
    - Your project files are available for COPY commands during build
+   - Use `.dockerignore` to exclude sensitive files from build context
 
 ---
 
