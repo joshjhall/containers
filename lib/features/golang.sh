@@ -41,15 +41,6 @@ source /tmp/build-scripts/features/lib/checksum-fetch.sh
 # Go version to install
 GO_VERSION="${GO_VERSION:-1.25.3}"
 
-# Fallback checksums for Go 1.25.3 (used if dynamic fetch fails)
-# These provide reliability when go.dev is unreachable
-# Checksums from: https://go.dev/dl/
-# Verified on: 2025-11-08
-declare -A GO_FALLBACK_CHECKSUMS=(
-    ["1.25.3_amd64"]="0335f314b6e7bfe08c3d0cfaa7c19db961b7b99fb20be62b0a826c992ad14e0f"
-    ["1.25.3_arm64"]="1d42ebc84999b5e2069f5e31b67d6fc5d67308adad3e178d5a2ee2c9ff2001f5"
-)
-
 # Extract major.minor version for comparison
 GO_MAJOR=$(echo $GO_VERSION | cut -d. -f1)
 GO_MINOR=$(echo $GO_VERSION | cut -d. -f2)
@@ -115,34 +106,25 @@ log_message "Downloading and installing Go ${GO_VERSION}..."
 
 cd /tmp
 
-# Fetch checksum dynamically for the requested version
+# Fetch checksum dynamically from go.dev
 log_message "Fetching checksum for Go ${GO_VERSION} ${GO_ARCH}..."
-GO_CHECKSUM=""
 
-# Try to fetch from go.dev (preferred - always has latest versions)
-if GO_CHECKSUM=$(fetch_go_checksum "${GO_VERSION}" "${GO_ARCH}" 2>/dev/null); then
-    log_message "✓ Fetched checksum from go.dev"
-else
-    # Fall back to stored checksums if fetch fails
-    log_warning "Could not fetch checksum from go.dev, trying fallback checksums..."
-    FALLBACK_KEY="${GO_VERSION}_${GO_ARCH}"
-    if [ -n "${GO_FALLBACK_CHECKSUMS[$FALLBACK_KEY]:-}" ]; then
-        GO_CHECKSUM="${GO_FALLBACK_CHECKSUMS[$FALLBACK_KEY]}"
-        log_message "✓ Using fallback checksum for Go ${GO_VERSION}"
-    fi
-fi
-
-# Verify we have a checksum
-if [ -z "$GO_CHECKSUM" ]; then
-    log_error "Could not obtain checksum for Go ${GO_VERSION} ${GO_ARCH}"
-    log_error "- Dynamic fetch from go.dev failed"
-    log_error "- No fallback checksum available for this version"
+if ! GO_CHECKSUM=$(fetch_go_checksum "${GO_VERSION}" "${GO_ARCH}" 2>/dev/null); then
+    log_error "Failed to fetch checksum for Go ${GO_VERSION} ${GO_ARCH} from go.dev"
     log_error ""
-    log_error "To proceed without verification (NOT RECOMMENDED):"
-    log_error "  Contact maintainers to add checksums for this version"
+    log_error "This could mean:"
+    log_error "  - go.dev is unreachable (network issue)"
+    log_error "  - Go ${GO_VERSION} does not exist or is not published yet"
+    log_error "  - The download page format has changed"
+    log_error ""
+    log_error "Please verify:"
+    log_error "  1. Network connectivity: curl -I https://go.dev/dl/"
+    log_error "  2. Version exists: https://go.dev/dl/#go${GO_VERSION}"
     log_feature_end
     exit 1
 fi
+
+log_message "✓ Fetched checksum from go.dev"
 
 # Validate checksum format
 if ! validate_checksum_format "$GO_CHECKSUM" "sha256"; then

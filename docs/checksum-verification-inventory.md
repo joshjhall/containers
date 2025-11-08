@@ -185,11 +185,12 @@ These use apt/cargo/npm with GPG verification. No changes needed.
   - Parses go.dev downloads page at build time
   - Extracts SHA256 checksums from HTML `<tt>` tags
   - Works with any Go version published on go.dev
-  - Fallback to stored checksums if fetch fails
+  - Fails fast with clear error message if fetch fails
 
-- **Fallback Checksums Added** (for Go 1.25.3):
-  - GO_FALLBACK_CHECKSUMS["1.25.3_amd64"]="0335f314b6e7bfe08c3d0cfaa7c19db961b7b99fb20be62b0a826c992ad14e0f"
-  - GO_FALLBACK_CHECKSUMS["1.25.3_arm64"]="1d42ebc84999b5e2069f5e31b67d6fc5d67308adad3e178d5a2ee2c9ff2001f5"
+- **No Fallback Checksums** - Removed as redundant:
+  - Network required to download binary anyway
+  - Simpler code without fallback logic
+  - Better error messages for troubleshooting
 
 - **Testing**:
   - ✅ Tested with default version (1.25.3)
