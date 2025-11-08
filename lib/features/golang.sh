@@ -32,16 +32,23 @@ source /tmp/build-scripts/base/apt-utils.sh
 # Source download verification utilities
 source /tmp/build-scripts/base/download-verify.sh
 
+# Source checksum fetching utilities
+source /tmp/build-scripts/features/lib/checksum-fetch.sh
+
 # ============================================================================
 # Version Configuration
 # ============================================================================
 # Go version to install
 GO_VERSION="${GO_VERSION:-1.25.3}"
 
-# Go checksums from: https://go.dev/dl/
+# Fallback checksums for Go 1.25.3 (used if dynamic fetch fails)
+# These provide reliability when go.dev is unreachable
+# Checksums from: https://go.dev/dl/
 # Verified on: 2025-11-08
-GO_AMD64_SHA256="0335f314b6e7bfe08c3d0cfaa7c19db961b7b99fb20be62b0a826c992ad14e0f"
-GO_ARM64_SHA256="1d42ebc84999b5e2069f5e31b67d6fc5d67308adad3e178d5a2ee2c9ff2001f5"
+declare -A GO_FALLBACK_CHECKSUMS=(
+    ["1.25.3_amd64"]="0335f314b6e7bfe08c3d0cfaa7c19db961b7b99fb20be62b0a826c992ad14e0f"
+    ["1.25.3_arm64"]="1d42ebc84999b5e2069f5e31b67d6fc5d67308adad3e178d5a2ee2c9ff2001f5"
+)
 
 # Extract major.minor version for comparison
 GO_MAJOR=$(echo $GO_VERSION | cut -d. -f1)
@@ -108,23 +115,45 @@ log_message "Downloading and installing Go ${GO_VERSION}..."
 
 cd /tmp
 
-# Select checksum based on architecture
-case ${GO_ARCH} in
-    amd64)
-        GO_CHECKSUM="${GO_AMD64_SHA256}"
-        ;;
-    arm64)
-        GO_CHECKSUM="${GO_ARM64_SHA256}"
-        ;;
-    *)
-        log_error "Unsupported architecture for Go checksum verification: ${GO_ARCH}"
-        log_feature_end
-        exit 1
-        ;;
-esac
+# Fetch checksum dynamically for the requested version
+log_message "Fetching checksum for Go ${GO_VERSION} ${GO_ARCH}..."
+GO_CHECKSUM=""
+
+# Try to fetch from go.dev (preferred - always has latest versions)
+if GO_CHECKSUM=$(fetch_go_checksum "${GO_VERSION}" "${GO_ARCH}" 2>/dev/null); then
+    log_message "✓ Fetched checksum from go.dev"
+else
+    # Fall back to stored checksums if fetch fails
+    log_warning "Could not fetch checksum from go.dev, trying fallback checksums..."
+    FALLBACK_KEY="${GO_VERSION}_${GO_ARCH}"
+    if [ -n "${GO_FALLBACK_CHECKSUMS[$FALLBACK_KEY]:-}" ]; then
+        GO_CHECKSUM="${GO_FALLBACK_CHECKSUMS[$FALLBACK_KEY]}"
+        log_message "✓ Using fallback checksum for Go ${GO_VERSION}"
+    fi
+fi
+
+# Verify we have a checksum
+if [ -z "$GO_CHECKSUM" ]; then
+    log_error "Could not obtain checksum for Go ${GO_VERSION} ${GO_ARCH}"
+    log_error "- Dynamic fetch from go.dev failed"
+    log_error "- No fallback checksum available for this version"
+    log_error ""
+    log_error "To proceed without verification (NOT RECOMMENDED):"
+    log_error "  Contact maintainers to add checksums for this version"
+    log_feature_end
+    exit 1
+fi
+
+# Validate checksum format
+if ! validate_checksum_format "$GO_CHECKSUM" "sha256"; then
+    log_error "Invalid checksum format for Go ${GO_VERSION}: ${GO_CHECKSUM}"
+    log_feature_end
+    exit 1
+fi
 
 # Download and extract Go tarball with checksum verification
 log_message "Downloading and verifying Go ${GO_VERSION} for ${GO_ARCH}..."
+log_message "Using checksum: ${GO_CHECKSUM}"
 download_and_extract \
     "https://go.dev/dl/go${GO_VERSION}.linux-${GO_ARCH}.tar.gz" \
     "${GO_CHECKSUM}" \
