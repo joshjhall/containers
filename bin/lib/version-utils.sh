@@ -82,6 +82,27 @@ validate_sha256() {
     fi
 }
 
+# validate_sha512 - Validate SHA512 checksum format
+#
+# Arguments:
+#   $1 - Checksum string to validate
+#
+# Returns:
+#   0 if valid SHA512 format, 1 if invalid
+#
+# Description:
+#   SHA512 checksums are exactly 128 hexadecimal characters.
+validate_sha512() {
+    local checksum="$1"
+
+    # SHA512 is exactly 128 hexadecimal characters
+    if [[ "$checksum" =~ ^[a-fA-F0-9]{128}$ ]]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
 # ============================================================================
 # Version Comparison
 # ============================================================================
