@@ -32,6 +32,12 @@ source /tmp/build-scripts/base/feature-header.sh
 # Source apt utilities for reliable package installation
 source /tmp/build-scripts/base/apt-utils.sh
 
+# Source checksum utilities for secure binary downloads
+source /tmp/build-scripts/features/lib/checksum-fetch.sh
+
+# Source download verification utilities
+source /tmp/build-scripts/base/download-verify.sh
+
 # Start logging
 log_feature_start "Mojo"
 
@@ -97,7 +103,7 @@ log_message "  Pixi cache: ${PIXI_CACHE}"
 log_message "  Mojo project: ${MOJO_PROJECT}"
 
 # ============================================================================
-# Pixi Installation
+# Pixi Installation (Secure with Checksum Verification)
 # ============================================================================
 log_message "Checking for pixi package manager..."
 
@@ -114,12 +120,63 @@ else
     export PIXI_HOME="/opt/pixi"
     log_message "Installing pixi to ${PIXI_HOME}"
 
-    # Download and install pixi
-    log_command "Downloading and installing pixi" \
-        bash -c "PIXI_HOME=${PIXI_HOME} curl -fsSL https://pixi.sh/install.sh | PIXI_NO_PATH_UPDATE=1 bash"
+    # Pixi version (default to latest if not specified)
+    PIXI_VERSION="${PIXI_VERSION:-0.59.0}"
+    log_message "Installing pixi version ${PIXI_VERSION}"
 
-    # The installer should put it in ${PIXI_HOME}/bin/pixi
-    if [ -f "${PIXI_HOME}/bin/pixi" ]; then
+    # Determine platform and architecture
+    ARCH=$(dpkg --print-architecture)
+    case "$ARCH" in
+        amd64)
+            PIXI_PLATFORM="x86_64-unknown-linux-musl"
+            ;;
+        arm64)
+            PIXI_PLATFORM="aarch64-unknown-linux-musl"
+            ;;
+        *)
+            log_error "Unsupported architecture for pixi: $ARCH"
+            exit 1
+            ;;
+    esac
+
+    log_message "Installing pixi for platform: ${PIXI_PLATFORM}"
+
+    # Define download URLs
+    PIXI_ARCHIVE="pixi-${PIXI_PLATFORM}.tar.gz"
+    PIXI_URL="https://github.com/prefix-dev/pixi/releases/download/v${PIXI_VERSION}/${PIXI_ARCHIVE}"
+    PIXI_CHECKSUM_URL="${PIXI_URL}.sha256"
+
+    # Fetch SHA256 checksum from GitHub
+    log_message "Fetching pixi checksum from GitHub..."
+    if ! PIXI_CHECKSUM=$(fetch_github_sha256_file "$PIXI_CHECKSUM_URL" 2>/dev/null); then
+        log_error "Failed to fetch checksum for pixi ${PIXI_VERSION}"
+        log_error "URL: ${PIXI_CHECKSUM_URL}"
+        log_error "Please verify version exists: https://github.com/prefix-dev/pixi/releases/tag/v${PIXI_VERSION}"
+        log_feature_end
+        exit 1
+    fi
+
+    log_message "Expected SHA256: ${PIXI_CHECKSUM}"
+
+    # Download and verify pixi
+    cd /tmp
+    log_message "Downloading and verifying pixi..."
+    download_and_extract \
+        "$PIXI_URL" \
+        "$PIXI_CHECKSUM" \
+        "${PIXI_HOME}"
+
+    # The binary should now be in ${PIXI_HOME}/pixi
+    if [ -f "${PIXI_HOME}/pixi" ]; then
+        log_message "✓ pixi binary extracted successfully"
+
+        # Create bin directory if needed
+        mkdir -p "${PIXI_HOME}/bin"
+
+        # Move pixi to bin directory
+        log_command "Moving pixi to bin directory" \
+            mv "${PIXI_HOME}/pixi" "${PIXI_HOME}/bin/pixi"
+
         # Ensure the binary is executable and has correct permissions
         log_command "Setting pixi binary permissions" \
             chmod 755 "${PIXI_HOME}/bin/pixi"
@@ -130,10 +187,14 @@ else
 
         # Create symlink using the helper function
         create_symlink "${PIXI_HOME}/bin/pixi" "/usr/local/bin/pixi" "pixi package manager"
+
+        log_message "✓ pixi v${PIXI_VERSION} installed successfully"
     else
-        log_error "pixi installation failed - binary not found at ${PIXI_HOME}/bin/pixi"
+        log_error "pixi installation failed - binary not found after extraction"
         exit 1
     fi
+
+    cd /
 fi
 
 # ============================================================================

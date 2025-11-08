@@ -217,6 +217,9 @@ extract_all_versions() {
     ver=$(grep "^ARG TFLINT_VERSION=" "$PROJECT_ROOT/Dockerfile" 2>/dev/null | cut -d= -f2 | tr -d '"')
     [ -n "$ver" ] && add_tool "tflint" "$ver" "Dockerfile"
 
+    ver=$(grep "^ARG PIXI_VERSION=" "$PROJECT_ROOT/Dockerfile" 2>/dev/null | cut -d= -f2 | tr -d '"')
+    [ -n "$ver" ] && add_tool "pixi" "$ver" "Dockerfile"
+
     # Python tools
     if [ -f "$PROJECT_ROOT/lib/features/python.sh" ]; then
         ver=$(grep "POETRY_VERSION=" "$PROJECT_ROOT/lib/features/python.sh" 2>/dev/null | head -1 | cut -d= -f2 | tr -d '"')
@@ -647,6 +650,7 @@ main() {
             Terragrunt) check_github_release "Terragrunt" "gruntwork-io/terragrunt" ;;
             terraform-docs) check_github_release "terraform-docs" "terraform-docs/terraform-docs" ;;
             tflint) check_github_release "tflint" "terraform-linters/tflint" ;;
+            pixi) check_github_release "pixi" "prefix-dev/pixi" ;;
             Poetry) check_github_release "Poetry" "python-poetry/poetry" ;;
             lazygit) check_github_release "lazygit" "jesseduffield/lazygit" ;;
             lazydocker) check_github_release "lazydocker" "jesseduffield/lazydocker" ;;

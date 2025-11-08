@@ -94,6 +94,68 @@ run_test_with_setup() {
     teardown
 }
 
+# ============================================================================
+# Checksum Verification Tests
+# ============================================================================
+
+# Test: mojo.sh sources checksum libraries
+test_checksum_libraries_sourced() {
+    local mojo_script="$PROJECT_ROOT/lib/features/mojo.sh"
+
+    if ! [ -f "$mojo_script" ]; then
+        skip_test "mojo.sh not found"
+        return
+    fi
+
+    # Check for checksum-fetch.sh
+    if grep -q "source.*checksum-fetch.sh" "$mojo_script"; then
+        assert_true true "checksum-fetch.sh library is sourced"
+    else
+        assert_true false "checksum-fetch.sh library not sourced"
+    fi
+
+    # Check for download-verify.sh
+    if grep -q "source.*download-verify.sh" "$mojo_script"; then
+        assert_true true "download-verify.sh library is sourced"
+    else
+        assert_true false "download-verify.sh library not sourced"
+    fi
+}
+
+# Test: mojo.sh uses pixi checksum fetching
+test_pixi_checksum_fetching() {
+    local mojo_script="$PROJECT_ROOT/lib/features/mojo.sh"
+
+    if ! [ -f "$mojo_script" ]; then
+        skip_test "mojo.sh not found"
+        return
+    fi
+
+    # Check for fetch_github_sha256_file usage for pixi
+    if grep -q "fetch_github_sha256_file" "$mojo_script"; then
+        assert_true true "Uses dynamic pixi checksum fetching"
+    else
+        assert_true false "Does not use dynamic checksum fetching"
+    fi
+}
+
+# Test: mojo.sh uses download verification
+test_download_verification() {
+    local mojo_script="$PROJECT_ROOT/lib/features/mojo.sh"
+
+    if ! [ -f "$mojo_script" ]; then
+        skip_test "mojo.sh not found"
+        return
+    fi
+
+    # Check for download_and_extract usage
+    if grep -q "download_and_extract" "$mojo_script"; then
+        assert_true true "Uses checksum verification for downloads"
+    else
+        assert_true false "Does not use checksum verification"
+    fi
+}
+
 run_test_with_setup test_installation "Installation test"
 run_test_with_setup test_configuration "Configuration test"
 run_test_with_setup test_environment "Environment test"
@@ -104,5 +166,10 @@ run_test_with_setup test_cache_directory "Cache directory test"
 run_test_with_setup test_user_config "User config test"
 run_test_with_setup test_startup_script "Startup script test"
 run_test_with_setup test_verification "Verification test"
+
+# Checksum verification tests
+run_test test_checksum_libraries_sourced "Checksum libraries are sourced"
+run_test test_pixi_checksum_fetching "Pixi checksum fetching is used"
+run_test test_download_verification "Download verification is used"
 
 generate_report
