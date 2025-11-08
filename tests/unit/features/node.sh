@@ -352,5 +352,93 @@ run_test_with_setup test_node_version_verification "Node version verification sc
 run_test_with_setup test_node_path_configuration "Node PATH configuration"
 run_test_with_setup test_node_helper_functions "Node helper functions"
 
+# ============================================================================
+# Security Verification Tests
+# ============================================================================
+
+# Test: node.sh does not use curl | bash
+test_no_curl_pipe_bash() {
+    local node_script="$PROJECT_ROOT/lib/features/node.sh"
+
+    if ! [ -f "$node_script" ]; then
+        skip_test "node.sh not found"
+        return
+    fi
+
+    # Check for curl | bash pattern (should NOT exist)
+    if grep -E "curl.*\|.*bash" "$node_script" >/dev/null 2>&1; then
+        assert_true false "CRITICAL: node.sh contains 'curl | bash' pattern"
+    else
+        assert_true true "node.sh does not use 'curl | bash' pattern"
+    fi
+
+    # Check for wget | bash pattern (should NOT exist)
+    if grep -E "wget.*\|.*bash" "$node_script" >/dev/null 2>&1; then
+        assert_true false "CRITICAL: node.sh contains 'wget | bash' pattern"
+    else
+        assert_true true "node.sh does not use 'wget | bash' pattern"
+    fi
+}
+
+# Test: node.sh uses manual repository setup
+test_manual_repository_setup() {
+    local node_script="$PROJECT_ROOT/lib/features/node.sh"
+
+    if ! [ -f "$node_script" ]; then
+        skip_test "node.sh not found"
+        return
+    fi
+
+    # Check for manual repository setup (should exist)
+    if grep -q "deb \[signed-by=" "$node_script"; then
+        assert_true true "node.sh uses signed-by directive for repository"
+    else
+        assert_true false "node.sh does not use signed-by directive"
+    fi
+
+    # Check for GPG key download
+    if grep -q "nodesource.*gpg.key" "$node_script"; then
+        assert_true true "node.sh downloads GPG key separately"
+    else
+        assert_true false "node.sh does not download GPG key separately"
+    fi
+
+    # Check for gpg --dearmor usage
+    if grep -q "gpg --dearmor" "$node_script"; then
+        assert_true true "node.sh converts GPG key to binary format"
+    else
+        assert_true false "node.sh does not convert GPG key"
+    fi
+}
+
+# Test: node.sh adds repository to sources.list.d
+test_repository_sources_list() {
+    local node_script="$PROJECT_ROOT/lib/features/node.sh"
+
+    if ! [ -f "$node_script" ]; then
+        skip_test "node.sh not found"
+        return
+    fi
+
+    # Check for sources.list.d usage
+    if grep -q "/etc/apt/sources.list.d/nodesource.list" "$node_script"; then
+        assert_true true "node.sh adds repository to sources.list.d"
+    else
+        assert_true false "node.sh does not add repository to sources.list.d"
+    fi
+
+    # Check for keyring path
+    if grep -q "/usr/share/keyrings/nodesource.gpg" "$node_script"; then
+        assert_true true "node.sh stores GPG key in /usr/share/keyrings"
+    else
+        assert_true false "node.sh does not use /usr/share/keyrings"
+    fi
+}
+
+# Run security tests
+run_test test_no_curl_pipe_bash "node.sh does not use curl | bash pattern"
+run_test test_manual_repository_setup "node.sh uses manual repository setup"
+run_test test_repository_sources_list "node.sh adds repository correctly"
+
 # Generate test report
 generate_report
