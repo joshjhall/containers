@@ -86,8 +86,11 @@ These use apt/cargo/npm with GPG verification. No changes needed.
 - ✅ Container build tested and verified
 - ✅ **Unit tests added**: 3 checksum verification tests (dynamic fetching, download verification, sources)
 
-### Phase 4: docker.sh
-- lazydocker (already downloads to file first - easiest)
+### Phase 4: docker.sh ✅ **COMPLETED - DYNAMIC FETCHING**
+- ✅ Refactored to use dynamic checksum fetching from GitHub
+- ✅ Supports ANY version via build arg (LAZYDOCKER_VERSION)
+- ✅ lazydocker: Dynamic from checksums.txt (SHA256)
+- ✅ Container build tested and verified
 
 ### Phase 5: terraform.sh
 - terraform-docs binary
@@ -209,6 +212,25 @@ These use apt/cargo/npm with GPG verification. No changes needed.
 
 - **Build Test**: ✅ Passed (images: `test-feature-golang`)
 - **Runtime Test**: ✅ Passed (go 1.24.5, 1.25.3 verified)
+
+### ✅ docker.sh (2025-11-08) - **REFACTORED TO DYNAMIC FETCHING**
+- **Dynamic Checksum Fetching**:
+  - lazydocker: `fetch_github_checksums_txt()` - Fetches from checksums.txt
+
+- **Architecture Benefits**:
+  - Supports ANY version via `--build-arg LAZYDOCKER_VERSION=X.Y.Z`
+  - No hardcoded checksums to maintain
+  - Always gets latest checksums from official sources
+  - Consistent pattern with other features
+
+- **Code Impact**:
+  - Replaced manual download/extract with `download_and_extract()`
+  - Added proper error handling with version verification hints
+  - Architecture mapping for arm64 support
+
+- **Functions Used**: `lib/features/lib/checksum-fetch.sh` utilities
+- **Build Test**: ✅ Passed (image: `test-feature-docker`)
+- **Runtime Test**: ✅ Passed (lazydocker v0.24.1 verified)
 
 ### ✅ Unit Test Improvements (2025-11-08)
 
