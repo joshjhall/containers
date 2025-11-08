@@ -656,30 +656,9 @@ run_test test_update_zoxide_version "Updates zoxide version in base setup"
 run_test test_invalid_version_validation "Rejects invalid version formats (null, undefined, error)"
 run_test test_mixed_valid_invalid_versions "Updates valid versions while rejecting invalid ones"
 
-# Test: Kubernetes checksum updater integration
-test_kubernetes_checksum_integration() {
-    # Check that the kubernetes-checksums.sh script exists
-    if [ -f "$PROJECT_ROOT/bin/lib/update-versions/kubernetes-checksums.sh" ]; then
-        assert_true true "kubernetes-checksums.sh exists for integration"
-    else
-        assert_true false "kubernetes-checksums.sh not found at expected path"
-        return
-    fi
-
-    # Check that update-versions.sh references the kubernetes-checksums.sh script
-    if grep -q "lib/update-versions/kubernetes-checksums.sh" "$PROJECT_ROOT/bin/update-versions.sh"; then
-        assert_true true "update-versions.sh integrates kubernetes-checksums.sh"
-    else
-        assert_true false "update-versions.sh missing kubernetes-checksums.sh integration"
-    fi
-
-    # Check that it checks for k9s, krew, or Helm updates
-    if grep -q "K8S_TOOLS_UPDATED" "$PROJECT_ROOT/bin/update-versions.sh"; then
-        assert_true true "update-versions.sh tracks Kubernetes tool updates"
-    else
-        assert_true false "update-versions.sh missing Kubernetes tool update tracking"
-    fi
-}
+# Test removed: kubernetes-checksums.sh no longer exists
+# Kubernetes, dev-tools, and golang now use dynamic checksum fetching
+# Checksums are fetched at build time from upstream sources
 
 # Test: krew update handler exists
 test_krew_update_handler() {
@@ -715,7 +694,7 @@ test_helm_update_handler() {
     fi
 }
 
-run_test test_kubernetes_checksum_integration "Kubernetes checksum integration exists"
+# Test removed - kubernetes-checksums.sh no longer needed (uses dynamic fetching)
 run_test test_krew_update_handler "krew update handler exists"
 run_test test_helm_update_handler "Helm update handler exists"
 
