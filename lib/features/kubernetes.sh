@@ -50,6 +50,9 @@ source /tmp/build-scripts/base/apt-utils.sh
 # Source download verification utilities for secure binary downloads
 source /tmp/build-scripts/base/download-verify.sh
 
+# Source checksum fetching utilities for dynamic checksum retrieval
+source /tmp/build-scripts/features/lib/checksum-fetch.sh
+
 # Start logging
 log_feature_start "Kubernetes Tools"
 
@@ -58,22 +61,6 @@ KUBECTL_VERSION="${KUBECTL_VERSION:-1.33}"  # Can be major.minor or major.minor.
 K9S_VERSION="${K9S_VERSION:-0.50.16}"
 KREW_VERSION="${KREW_VERSION:-0.4.5}"
 HELM_VERSION="${HELM_VERSION:-3.19.0}"
-
-# SHA256 checksums for binary verification
-# k9s checksums from: https://github.com/derailed/k9s/releases/tag/v0.50.16
-# Verified on: 2025-11-07
-K9S_AMD64_SHA256="bda09dc030a08987fe2b3bed678b15b52f23d6705e872d561932d4ca07db7818"
-K9S_ARM64_SHA256="7f3b414bc5e6b584fbcb97f9f4f5b2c67a51cdffcbccb95adcadbaeab904e98e"
-
-# krew checksums from: https://github.com/kubernetes-sigs/krew/releases/tag/v0.4.5
-# Verified on: 2025-11-07
-KREW_AMD64_SHA256="bacc06800bda14ec063cd0b6f377a961fdf4661c00366bf9834723cd28bfabc7"
-KREW_ARM64_SHA256="e02bdb8fe67cd6641b9ed6b45c6d084f7aa5b161fe49191caf5b1d5e83b0c0f9"
-
-# Helm checksums from: https://github.com/helm/helm/releases/tag/v3.19.0
-# Verified on: 2025-11-07
-HELM_AMD64_SHA256="a7f81ce08007091b86d8bd696eb4d86b8d0f2e1b9f6c714be62f82f96a594496"
-HELM_ARM64_SHA256="440cf7add0aee27ebc93fada965523c1dc2e0ab340d4348da2215737fc0d76ad"
 
 # Extract major.minor version from KUBECTL_VERSION for repository URL
 # This handles both "1.31" and "1.31.0" formats
@@ -140,23 +127,43 @@ log_message "Installing k9s ${K9S_VERSION}..."
 
 # Detect architecture
 ARCH=$(dpkg --print-architecture)
-if [ "$ARCH" = "amd64" ]; then
-    log_message "Downloading and verifying k9s for amd64..."
-    download_and_extract \
-        "https://github.com/derailed/k9s/releases/download/v${K9S_VERSION}/k9s_Linux_amd64.tar.gz" \
-        "${K9S_AMD64_SHA256}" \
-        "/usr/local/bin" \
-        "k9s"
 
-elif [ "$ARCH" = "arm64" ]; then
-    log_message "Downloading and verifying k9s for arm64..."
+# Determine k9s filename and URL based on architecture
+case "$ARCH" in
+    amd64)
+        K9S_FILENAME="k9s_Linux_amd64.tar.gz"
+        ;;
+    arm64)
+        K9S_FILENAME="k9s_Linux_arm64.tar.gz"
+        ;;
+    *)
+        log_warning "k9s not available for architecture $ARCH, skipping..."
+        K9S_FILENAME=""
+        ;;
+esac
+
+# Download and install k9s if supported architecture
+if [ -n "$K9S_FILENAME" ]; then
+    log_message "Fetching checksum for k9s ${K9S_VERSION} ${ARCH}..."
+
+    # Fetch checksum dynamically from GitHub checksums.sha256 file
+    K9S_CHECKSUMS_URL="https://github.com/derailed/k9s/releases/download/v${K9S_VERSION}/checksums.sha256"
+    if ! K9S_CHECKSUM=$(fetch_github_checksums_txt "$K9S_CHECKSUMS_URL" "$K9S_FILENAME" 2>/dev/null); then
+        log_error "Failed to fetch checksum for k9s ${K9S_VERSION}"
+        log_error "Please verify version exists: https://github.com/derailed/k9s/releases/tag/v${K9S_VERSION}"
+        log_feature_end
+        exit 1
+    fi
+
+    log_message "✓ Fetched checksum from GitHub"
+
+    # Download and verify k9s
+    log_message "Downloading and verifying k9s for ${ARCH}..."
     download_and_extract \
-        "https://github.com/derailed/k9s/releases/download/v${K9S_VERSION}/k9s_Linux_arm64.tar.gz" \
-        "${K9S_ARM64_SHA256}" \
+        "https://github.com/derailed/k9s/releases/download/v${K9S_VERSION}/${K9S_FILENAME}" \
+        "${K9S_CHECKSUM}" \
         "/usr/local/bin" \
         "k9s"
-else
-    log_warning "k9s not available for architecture $ARCH, skipping..."
 fi
 
 # Verify k9s installation
@@ -173,52 +180,62 @@ fi
 # ============================================================================
 log_message "Installing Helm ${HELM_VERSION}..."
 
-# Download and install Helm binary with checksum verification
-# Helm tarballs contain linux-{arch}/helm binary structure
-cd /tmp
+# Determine Helm filename based on architecture
+case "$ARCH" in
+    amd64)
+        HELM_FILENAME="helm-v${HELM_VERSION}-linux-amd64.tar.gz"
+        HELM_DIR="linux-amd64"
+        ;;
+    arm64)
+        HELM_FILENAME="helm-v${HELM_VERSION}-linux-arm64.tar.gz"
+        HELM_DIR="linux-arm64"
+        ;;
+    *)
+        log_warning "Helm not available for architecture $ARCH, skipping..."
+        HELM_FILENAME=""
+        ;;
+esac
 
-if [ "$ARCH" = "amd64" ]; then
-    log_message "Downloading and verifying Helm for amd64..."
+# Download and install Helm if supported architecture
+if [ -n "$HELM_FILENAME" ]; then
+    cd /tmp
+
+    log_message "Calculating checksum for Helm ${HELM_VERSION} ${ARCH}..."
+    log_message "(Helm doesn't publish plain checksums, calculating on download)"
+
+    # Calculate checksum from download (Helm only has GPG-signed checksum files)
+    HELM_URL="https://get.helm.sh/${HELM_FILENAME}"
+    if ! HELM_CHECKSUM=$(calculate_checksum_sha256 "$HELM_URL" 2>/dev/null); then
+        log_error "Failed to download and calculate checksum for Helm ${HELM_VERSION}"
+        log_error "Please verify version exists: https://github.com/helm/helm/releases/tag/v${HELM_VERSION}"
+        log_feature_end
+        exit 1
+    fi
+
+    log_message "✓ Calculated checksum from download"
+
+    # Download and verify Helm
+    log_message "Downloading and verifying Helm for ${ARCH}..."
     download_and_extract \
-        "https://get.helm.sh/helm-v${HELM_VERSION}-linux-amd64.tar.gz" \
-        "${HELM_AMD64_SHA256}" \
+        "$HELM_URL" \
+        "${HELM_CHECKSUM}" \
         "/tmp" \
         ""  # Extract all files
 
     # Move helm binary to /usr/local/bin
-    if [ -f "linux-amd64/helm" ]; then
+    if [ -f "${HELM_DIR}/helm" ]; then
         log_command "Installing Helm binary" \
-            mv linux-amd64/helm /usr/local/bin/helm
+            mv "${HELM_DIR}/helm" /usr/local/bin/helm
         log_command "Cleaning up Helm extraction directory" \
-            rm -rf linux-amd64
+            rm -rf "${HELM_DIR}"
     else
         log_error "Helm binary not found after extraction"
+        log_feature_end
         exit 1
     fi
 
-elif [ "$ARCH" = "arm64" ]; then
-    log_message "Downloading and verifying Helm for arm64..."
-    download_and_extract \
-        "https://get.helm.sh/helm-v${HELM_VERSION}-linux-arm64.tar.gz" \
-        "${HELM_ARM64_SHA256}" \
-        "/tmp" \
-        ""  # Extract all files
-
-    # Move helm binary to /usr/local/bin
-    if [ -f "linux-arm64/helm" ]; then
-        log_command "Installing Helm binary" \
-            mv linux-arm64/helm /usr/local/bin/helm
-        log_command "Cleaning up Helm extraction directory" \
-            rm -rf linux-arm64
-    else
-        log_error "Helm binary not found after extraction"
-        exit 1
-    fi
-else
-    log_warning "Helm not available for architecture $ARCH, skipping..."
+    cd /
 fi
-
-cd /
 
 # Verify Helm installation
 if command -v helm >/dev/null 2>&1; then
@@ -234,38 +251,58 @@ fi
 # ============================================================================
 log_message "Installing kubectl plugin manager (krew) ${KREW_VERSION}..."
 
-# Download and install krew (needs to be extracted to temp for installation)
-cd /tmp
+# Determine krew filename based on architecture
+case "$ARCH" in
+    amd64)
+        KREW_FILENAME="krew-linux_amd64.tar.gz"
+        ;;
+    arm64)
+        KREW_FILENAME="krew-linux_arm64.tar.gz"
+        ;;
+    *)
+        log_warning "krew not available for architecture $ARCH, skipping..."
+        KREW_FILENAME=""
+        ;;
+esac
 
-if [ "$ARCH" = "amd64" ]; then
-    log_message "Downloading and verifying krew for amd64..."
-    download_and_extract \
-        "https://github.com/kubernetes-sigs/krew/releases/download/v${KREW_VERSION}/krew-linux_amd64.tar.gz" \
-        "${KREW_AMD64_SHA256}" \
-        "/tmp" \
-        ""  # Extract all files
+# Download and install krew if supported architecture
+if [ -n "$KREW_FILENAME" ]; then
+    cd /tmp
 
-elif [ "$ARCH" = "arm64" ]; then
-    log_message "Downloading and verifying krew for arm64..."
-    download_and_extract \
-        "https://github.com/kubernetes-sigs/krew/releases/download/v${KREW_VERSION}/krew-linux_arm64.tar.gz" \
-        "${KREW_ARM64_SHA256}" \
-        "/tmp" \
-        ""  # Extract all files
-fi
+    log_message "Fetching checksum for krew ${KREW_VERSION} ${ARCH}..."
 
-# Find and install krew binary
-for krew_binary in ./krew-linux_*; do
-    if [ -f "$krew_binary" ]; then
-        log_command "Installing krew" \
-            "$krew_binary" install krew
-        log_command "Cleaning up krew installer" \
-            rm -f ./krew-linux_*
-        break
+    # Fetch checksum dynamically from GitHub individual .sha256 file
+    KREW_SHA256_URL="https://github.com/kubernetes-sigs/krew/releases/download/v${KREW_VERSION}/${KREW_FILENAME}.sha256"
+    if ! KREW_CHECKSUM=$(fetch_github_sha256_file "$KREW_SHA256_URL" 2>/dev/null); then
+        log_error "Failed to fetch checksum for krew ${KREW_VERSION}"
+        log_error "Please verify version exists: https://github.com/kubernetes-sigs/krew/releases/tag/v${KREW_VERSION}"
+        log_feature_end
+        exit 1
     fi
-done
 
-cd /
+    log_message "✓ Fetched checksum from GitHub"
+
+    # Download and verify krew
+    log_message "Downloading and verifying krew for ${ARCH}..."
+    download_and_extract \
+        "https://github.com/kubernetes-sigs/krew/releases/download/v${KREW_VERSION}/${KREW_FILENAME}" \
+        "${KREW_CHECKSUM}" \
+        "/tmp" \
+        ""  # Extract all files
+
+    # Find and install krew binary
+    for krew_binary in ./krew-linux_*; do
+        if [ -f "$krew_binary" ]; then
+            log_command "Installing krew" \
+                "$krew_binary" install krew
+            log_command "Cleaning up krew installer" \
+                rm -f ./krew-linux_*
+            break
+        fi
+    done
+
+    cd /
+fi
 
 # ============================================================================
 # Environment Configuration
