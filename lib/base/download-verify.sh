@@ -36,11 +36,11 @@ NC='\033[0m' # No Color
 # Core Download and Verification Functions
 # ============================================================================
 
-# download_and_verify - Download a file and verify its SHA256 checksum
+# download_and_verify - Download a file and verify its SHA256 or SHA512 checksum
 #
 # Arguments:
 #   $1 - URL to download
-#   $2 - Expected SHA256 checksum
+#   $2 - Expected checksum (SHA256 64 hex chars or SHA512 128 hex chars)
 #   $3 - Output file path
 #
 # Returns:
@@ -53,7 +53,7 @@ NC='\033[0m' # No Color
 #     "/tmp/tool.tar.gz"
 download_and_verify() {
     local url="$1"
-    local expected_sha256="$2"
+    local expected_checksum="$2"
     local output_path="$3"
     local temp_file="${output_path}.tmp"
 
@@ -70,10 +70,17 @@ download_and_verify() {
     echo "→ Verifying checksum..."
 
     # Verify checksum
-    if ! verify_checksum "$temp_file" "$expected_sha256"; then
+    if ! verify_checksum "$temp_file" "$expected_checksum"; then
         echo -e "${RED}✗ Checksum verification failed${NC}" >&2
-        echo "  Expected: $expected_sha256" >&2
-        echo "  Got:      $(sha256sum "$temp_file" | cut -d' ' -f1)" >&2
+        echo "  Expected: $expected_checksum" >&2
+
+        # Determine hash type for error message
+        local checksum_len="${#expected_checksum}"
+        if [ "$checksum_len" -eq 64 ]; then
+            echo "  Got:      $(sha256sum "$temp_file" | cut -d' ' -f1)" >&2
+        else
+            echo "  Got:      $(sha512sum "$temp_file" | cut -d' ' -f1)" >&2
+        fi
         rm -f "$temp_file"
         return 1
     fi
@@ -141,11 +148,11 @@ download_and_extract() {
     return 0
 }
 
-# verify_checksum - Verify SHA256 checksum of existing file
+# verify_checksum - Verify SHA256 or SHA512 checksum of existing file
 #
 # Arguments:
 #   $1 - File path to verify
-#   $2 - Expected SHA256 checksum
+#   $2 - Expected checksum (SHA256 64 hex chars or SHA512 128 hex chars)
 #
 # Returns:
 #   0 if checksum matches, 1 if mismatch or error
@@ -154,19 +161,31 @@ download_and_extract() {
 #   verify_checksum "/tmp/file.tar.gz" "abc123..."
 verify_checksum() {
     local file_path="$1"
-    local expected_sha256="$2"
+    local expected_checksum="$2"
 
     if [ ! -f "$file_path" ]; then
         echo -e "${RED}✗ File not found: $file_path${NC}" >&2
         return 1
     fi
 
-    # Calculate SHA256 checksum
-    local actual_sha256
-    actual_sha256=$(sha256sum "$file_path" | cut -d' ' -f1)
+    # Determine hash type based on checksum length
+    local checksum_len="${#expected_checksum}"
+    local actual_checksum
+
+    if [ "$checksum_len" -eq 64 ]; then
+        # SHA256 (64 hexadecimal characters)
+        actual_checksum=$(sha256sum "$file_path" | cut -d' ' -f1)
+    elif [ "$checksum_len" -eq 128 ]; then
+        # SHA512 (128 hexadecimal characters)
+        actual_checksum=$(sha512sum "$file_path" | cut -d' ' -f1)
+    else
+        echo -e "${RED}✗ Invalid checksum length: $checksum_len${NC}" >&2
+        echo "  Expected 64 (SHA256) or 128 (SHA512) hex characters" >&2
+        return 1
+    fi
 
     # Compare checksums (case-insensitive)
-    if [ "${actual_sha256,,}" = "${expected_sha256,,}" ]; then
+    if [ "${actual_checksum,,}" = "${expected_checksum,,}" ]; then
         echo -e "${GREEN}✓ Checksum verified${NC}"
         return 0
     else
@@ -215,9 +234,14 @@ get_github_release_checksum() {
 # Validation
 # ============================================================================
 
-# Ensure sha256sum is available
+# Ensure sha256sum and sha512sum are available
 if ! command -v sha256sum >/dev/null 2>&1; then
     echo -e "${RED}✗ sha256sum not found. Install coreutils package.${NC}" >&2
+    exit 1
+fi
+
+if ! command -v sha512sum >/dev/null 2>&1; then
+    echo -e "${RED}✗ sha512sum not found. Install coreutils package.${NC}" >&2
     exit 1
 fi
 
