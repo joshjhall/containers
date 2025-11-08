@@ -185,22 +185,40 @@ test_empty_directory_handling() {
 # Test: Script error handling
 test_script_error_handling() {
     # Create script that fails
-    echo 'exit 1' > "$STARTUP_DIR/10-fail.sh"
-    echo 'echo "after-fail" >> '$TEST_TEMP_DIR'/continue.log' > "$STARTUP_DIR/20-continue.sh"
+    cat > "$STARTUP_DIR/10-fail.sh" << 'EOF'
+#!/bin/bash
+exit 1
+EOF
+
+    # Create script that should run after failure
+    # Use cat with variable substitution to pass TEST_TEMP_DIR into the script
+    cat > "$STARTUP_DIR/20-continue.sh" << EOF
+#!/bin/bash
+echo "after-fail" > "${TEST_TEMP_DIR}/continue.log"
+EOF
+
     chmod +x "$STARTUP_DIR"/*.sh
-    
+
     # Execute with error handling (ensure both scripts run)
     for script in "$STARTUP_DIR"/*.sh; do
-        if [ -f "$script" ]; then
+        if [ -f "$script" ] && [ -x "$script" ]; then
             bash "$script" 2>/dev/null || true  # Continue on error
         fi
     done
-    
+
+    # Give filesystem a moment to sync
+    sync 2>/dev/null || true
+
     # Check that execution continued after error
     if [ -f "$TEST_TEMP_DIR/continue.log" ]; then
-        assert_true true "Execution continued after script error"
+        local content=$(cat "$TEST_TEMP_DIR/continue.log" 2>/dev/null | tr -d '\n')
+        if [ "$content" = "after-fail" ]; then
+            assert_true true "Execution continued after script error"
+        else
+            assert_true false "Script ran but produced unexpected output: $content"
+        fi
     else
-        assert_true false "Execution stopped after script error"
+        assert_true false "Execution stopped after script error (continue.log not found)"
     fi
 }
 
