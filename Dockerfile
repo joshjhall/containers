@@ -182,12 +182,13 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 ARG INCLUDE_MOJO=false
 ARG INCLUDE_MOJO_DEV=false
 ARG MOJO_VERSION=25.4
+ARG PIXI_VERSION=0.59.0
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     if [ "${INCLUDE_MOJO}" = "true" ] || [ "${INCLUDE_MOJO_DEV}" = "true" ]; then \
     ARCH=$(dpkg --print-architecture); \
     if [ "$ARCH" = "amd64" ]; then \
-    MOJO_VERSION=${MOJO_VERSION} /tmp/build-scripts/features/mojo.sh; \
+    MOJO_VERSION=${MOJO_VERSION} PIXI_VERSION=${PIXI_VERSION} /tmp/build-scripts/features/mojo.sh; \
     else \
     echo "Warning: Skipping Mojo installation - only supported on x86_64/amd64 (current: $ARCH)"; \
     fi; \

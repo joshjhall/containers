@@ -14,7 +14,7 @@ These download and execute code directly. Highest priority for security.
 | `rust.sh` | 73 | `curl https://sh.rustup.rs \| sh` | ✅ **REMOVED** | Replaced with direct rustup-init download + checksum verification |
 | `kubernetes.sh` | 141 | `curl helm/get-helm-3 \| bash` | ✅ **REMOVED** | Replaced with direct binary download + checksum verification |
 | `terraform.sh` | 146 | `curl tflint/install_linux.sh \| bash` | ✅ **REMOVED** | Replaced with direct binary download + checksum verification |
-| `mojo.sh` | 119 | `curl pixi.sh/install.sh \| bash` | ⏳ Pending | pixi installer |
+| `mojo.sh` | 119 | `curl pixi.sh/install.sh \| bash` | ✅ **REMOVED** | Replaced with direct pixi binary download + checksum verification |
 | `node.sh` | 97, 116 | `curl nodesource setup \| bash` | ✅ **ACCEPTABLE** | GPG-signed repository setup, apt verifies packages |
 | `cloudflare.sh` | 74 | `curl nodesource setup \| bash` | ✅ **ACCEPTABLE** | GPG-signed repository setup, apt verifies packages |
 
