@@ -105,4 +105,92 @@ run_test_with_setup test_user_config "User config test"
 run_test_with_setup test_startup_script "Startup script test"
 run_test_with_setup test_verification "Verification test"
 
+# ============================================================================
+# Security Verification Tests
+# ============================================================================
+
+# Test: cloudflare.sh does not use curl | bash
+test_no_curl_pipe_bash() {
+    local cloudflare_script="$PROJECT_ROOT/lib/features/cloudflare.sh"
+
+    if ! [ -f "$cloudflare_script" ]; then
+        skip_test "cloudflare.sh not found"
+        return
+    fi
+
+    # Check for curl | bash pattern (should NOT exist)
+    if grep -E "curl.*\|.*bash" "$cloudflare_script" >/dev/null 2>&1; then
+        assert_true false "CRITICAL: cloudflare.sh contains 'curl | bash' pattern"
+    else
+        assert_true true "cloudflare.sh does not use 'curl | bash' pattern"
+    fi
+
+    # Check for wget | bash pattern (should NOT exist)
+    if grep -E "wget.*\|.*bash" "$cloudflare_script" >/dev/null 2>&1; then
+        assert_true false "CRITICAL: cloudflare.sh contains 'wget | bash' pattern"
+    else
+        assert_true true "cloudflare.sh does not use 'wget | bash' pattern"
+    fi
+}
+
+# Test: cloudflare.sh uses manual repository setup
+test_manual_repository_setup() {
+    local cloudflare_script="$PROJECT_ROOT/lib/features/cloudflare.sh"
+
+    if ! [ -f "$cloudflare_script" ]; then
+        skip_test "cloudflare.sh not found"
+        return
+    fi
+
+    # Check for manual repository setup (should exist)
+    if grep -q "deb \[signed-by=" "$cloudflare_script"; then
+        assert_true true "cloudflare.sh uses signed-by directive for repository"
+    else
+        assert_true false "cloudflare.sh does not use signed-by directive"
+    fi
+
+    # Check for GPG key download
+    if grep -q "nodesource.*gpg.key" "$cloudflare_script"; then
+        assert_true true "cloudflare.sh downloads GPG key separately"
+    else
+        assert_true false "cloudflare.sh does not download GPG key separately"
+    fi
+
+    # Check for gpg --dearmor usage
+    if grep -q "gpg --dearmor" "$cloudflare_script"; then
+        assert_true true "cloudflare.sh converts GPG key to binary format"
+    else
+        assert_true false "cloudflare.sh does not convert GPG key"
+    fi
+}
+
+# Test: cloudflare.sh adds repository to sources.list.d
+test_repository_sources_list() {
+    local cloudflare_script="$PROJECT_ROOT/lib/features/cloudflare.sh"
+
+    if ! [ -f "$cloudflare_script" ]; then
+        skip_test "cloudflare.sh not found"
+        return
+    fi
+
+    # Check for sources.list.d usage
+    if grep -q "/etc/apt/sources.list.d/nodesource.list" "$cloudflare_script"; then
+        assert_true true "cloudflare.sh adds repository to sources.list.d"
+    else
+        assert_true false "cloudflare.sh does not add repository to sources.list.d"
+    fi
+
+    # Check for keyring path
+    if grep -q "/usr/share/keyrings/nodesource.gpg" "$cloudflare_script"; then
+        assert_true true "cloudflare.sh stores GPG key in /usr/share/keyrings"
+    else
+        assert_true false "cloudflare.sh does not use /usr/share/keyrings"
+    fi
+}
+
+# Run security tests
+run_test test_no_curl_pipe_bash "cloudflare.sh does not use curl | bash pattern"
+run_test test_manual_repository_setup "cloudflare.sh uses manual repository setup"
+run_test test_repository_sources_list "cloudflare.sh adds repository correctly"
+
 generate_report

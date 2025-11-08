@@ -69,9 +69,32 @@ if [ "$NODE_INSTALLED" = false ] || [ "$NODE_VERSION_OK" = false ]; then
     apt_update
     apt_install ca-certificates curl gnupg
 
-    # Add NodeSource repository for Node.js
-    log_command "Adding NodeSource repository for Node.js ${CLOUDFLARE_NODE_VERSION}" \
-        bash -c "curl -fsSL https://deb.nodesource.com/setup_${CLOUDFLARE_NODE_VERSION}.x | bash -"
+    # ========================================================================
+    # Add NodeSource Repository (Manual Setup - Secure Method)
+    # ========================================================================
+    # Instead of using NodeSource's setup script (which executes remote code),
+    # we manually add the repository. This is more transparent and secure.
+    log_message "Adding NodeSource repository manually..."
+
+    # Download and install NodeSource GPG key
+    log_command "Downloading NodeSource GPG key" \
+        curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key -o /tmp/nodesource.gpg.key
+
+    # Convert GPG key to binary format for apt (required for Debian 13+)
+    log_command "Converting GPG key to binary format" \
+        gpg --dearmor -o /usr/share/keyrings/nodesource.gpg < /tmp/nodesource.gpg.key
+
+    # Add NodeSource repository with signed-by directive
+    log_message "Adding NodeSource repository to apt sources..."
+    cat > /etc/apt/sources.list.d/nodesource.list << EOF
+deb [signed-by=/usr/share/keyrings/nodesource.gpg] https://deb.nodesource.com/node_${CLOUDFLARE_NODE_VERSION}.x nodistro main
+EOF
+
+    # Clean up temporary GPG key file
+    rm -f /tmp/nodesource.gpg.key
+
+    # Update apt package lists
+    apt_update
 
     # Install Node.js
     log_message "Installing Node.js ${CLOUDFLARE_NODE_VERSION}"
