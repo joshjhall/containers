@@ -304,6 +304,48 @@ EOF
     fi
 }
 
+# Test: Dynamic checksum fetching is used
+test_dynamic_checksum_fetching() {
+    local golang_script="$PROJECT_ROOT/lib/features/golang.sh"
+
+    # Should source checksum-fetch.sh for dynamic fetching
+    if grep -q "source.*checksum-fetch.sh" "$golang_script"; then
+        assert_true true "golang.sh sources checksum-fetch.sh for dynamic fetching"
+    else
+        assert_true false "golang.sh doesn't source checksum-fetch.sh"
+    fi
+
+    # Should use fetch_go_checksum for dynamic fetching from go.dev
+    if grep -q "fetch_go_checksum" "$golang_script"; then
+        assert_true true "Uses fetch_go_checksum for dynamic fetching from go.dev"
+    else
+        assert_true false "Doesn't use fetch_go_checksum"
+    fi
+}
+
+# Test: Download verification functions are used
+test_download_verification() {
+    local golang_script="$PROJECT_ROOT/lib/features/golang.sh"
+
+    # Check that download verification functions are used (not curl | tar)
+    if grep -q "download_and_extract" "$golang_script"; then
+        assert_true true "Uses download_and_extract for verification"
+    else
+        assert_true false "Doesn't use download_and_extract"
+    fi
+}
+
+# Test: Script sources download-verify.sh
+test_sources_download_verify() {
+    local golang_script="$PROJECT_ROOT/lib/features/golang.sh"
+
+    if grep -q "source.*download-verify.sh" "$golang_script"; then
+        assert_true true "golang.sh sources download-verify.sh"
+    else
+        assert_true false "golang.sh doesn't source download-verify.sh"
+    fi
+}
+
 # Run tests with setup/teardown
 run_test_with_setup() {
     local test_function="$1"
@@ -325,6 +367,9 @@ run_test_with_setup test_go_aliases_helpers "Go aliases and helpers are defined"
 run_test_with_setup test_architecture_download "Architecture-specific download works"
 run_test_with_setup test_go_module_proxy "Go module proxy is configured"
 run_test_with_setup test_go_verification "Go verification script works"
+run_test_with_setup test_dynamic_checksum_fetching "Dynamic checksum fetching"
+run_test_with_setup test_download_verification "Download verification functions"
+run_test_with_setup test_sources_download_verify "Sources download-verify.sh"
 
 # Generate test report
 generate_report
