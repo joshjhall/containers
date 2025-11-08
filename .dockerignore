@@ -1,0 +1,342 @@
+# Container Build System .dockerignore
+# Prevents sensitive files from being included in Docker build context
+
+# ============================================================================
+# SECRETS AND CREDENTIALS - NEVER INCLUDE IN BUILD CONTEXT
+# ============================================================================
+
+# Environment files with secrets
+.env
+.env.*
+!.env.example
+
+# SSH and GPG keys
+.ssh/
+*.key
+*.pem
+*.p12
+*.pfx
+id_rsa
+id_rsa.pub
+id_ed25519
+id_ed25519.pub
+known_hosts
+authorized_keys
+
+# Cloud provider credentials
+.aws/
+.azure/
+.config/gcloud/
+credentials.json
+*-credentials.json
+service-account*.json
+kubeconfig
+.kube/
+
+# 1Password and secret management
+.op/
+op-session-*
+
+# Git credentials
+.git-credentials
+.netrc
+
+# Other credential files
+*.credentials
+*-key.json
+*-keyfile.json
+
+# ============================================================================
+# VERSION CONTROL AND DEVELOPMENT
+# ============================================================================
+
+# Git directory (large and unnecessary for builds)
+.git/
+.gitignore
+.gitattributes
+.gitmodules
+
+# GitHub configuration
+.github/
+.git/
+
+# Editor and IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+*.sublime-project
+*.sublime-workspace
+
+# ============================================================================
+# BUILD ARTIFACTS AND CACHES
+# ============================================================================
+
+# Docker
+.dockerignore.local
+docker-compose.override.yml
+docker-compose.local.yml
+*.dockerfile.bak
+
+# Test results
+tests/results/
+coverage/
+.coverage
+htmlcov/
+.pytest_cache/
+.tox/
+test-results/
+junit.xml
+
+# Build outputs
+dist/
+build/
+*.egg-info/
+target/
+out/
+bin/
+obj/
+
+# Logs and temporary files
+*.log
+*.pid
+*.seed
+*.pid.lock
+*.tmp
+temp/
+tmp/
+logs/
+
+# Cache directories
+.cache/
+cache/
+__pycache__/
+*.py[cod]
+*$py.class
+node_modules/
+.npm
+.yarn/
+.pnpm-store/
+
+# ============================================================================
+# LANGUAGE-SPECIFIC EXCLUDES
+# ============================================================================
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+ENV/
+env/
+.venv/
+pip-log.txt
+pip-delete-this-directory.txt
+.mypy_cache/
+.dmypy.json
+.pytype/
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.npm
+.yarn-integrity
+.eslintcache
+.node_repl_history
+
+# Rust
+target/
+Cargo.lock
+**/*.rs.bk
+
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+vendor/
+go.work
+go.work.sum
+
+# Ruby
+*.gem
+*.rbc
+.bundle/
+.config
+.yardoc
+Gemfile.lock
+_yardoc/
+
+# Java
+*.class
+*.jar
+*.war
+*.ear
+*.zip
+*.tar.gz
+*.rar
+hs_err_pid*
+
+# R
+.Rhistory
+.RData
+.Ruserdata
+
+# ============================================================================
+# INFRASTRUCTURE AS CODE SENSITIVE FILES
+# ============================================================================
+
+# Terraform
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+terraform.tfvars
+*.auto.tfvars
+*.tfvars
+
+# Kubernetes
+kubeconfig
+*.kubeconfig
+*-kubeconfig.yaml
+
+# Ansible
+*.vault
+vault.yml
+*.retry
+
+# ============================================================================
+# CI/CD AND RUNTIME
+# ============================================================================
+
+# CI/CD artifacts
+artifacts/
+.circleci/
+.travis.yml
+.gitlab-ci.yml
+azure-pipelines.yml
+
+# Container runtime
+.dockerenv
+.containerenv
+
+# ============================================================================
+# DOCUMENTATION AND MEDIA (if large)
+# ============================================================================
+
+# Documentation builds
+docs/_build/
+docs/.build/
+site/
+_site/
+
+# Media files (uncomment if you have large media)
+# *.mp4
+# *.mov
+# *.avi
+# *.mkv
+# *.mp3
+# *.wav
+
+# ============================================================================
+# OS GENERATED FILES
+# ============================================================================
+
+# macOS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+*~
+.directory
+.Trash-*
+
+# ============================================================================
+# BACKUP AND ARCHIVE FILES
+# ============================================================================
+
+*.bak
+*.backup
+*.old
+*.orig
+*.swp
+*.swo
+
+# Archive files (unless intentionally needed)
+# *.tar
+# *.gz
+# *.tgz
+# *.bz2
+# *.xz
+# *.7z
+
+# ============================================================================
+# LOCAL DEVELOPMENT OVERRIDES
+# ============================================================================
+
+local/
+.local/
+*.local
+override/
+.override/
+
+# ============================================================================
+# SECURITY SCANNING RESULTS (don't include in build)
+# ============================================================================
+
+trivy-results*.json
+trivy-results*.sarif
+gitleaks-report.json
+security-scan-*.txt
+
+# ============================================================================
+# EXCEPTIONS - Files that SHOULD be included
+# ============================================================================
+
+# Allow example env files
+!.env.example
+!examples/env/
+!examples/env/**
+!examples/**/.env.example
+
+# Allow necessary config files
+!.dockerignore
+!Dockerfile
+!docker-compose.yml
+
+# Allow documentation
+!README.md
+!CHANGELOG.md
+!SECURITY.md
+!LICENSE
+!docs/
+
+# Allow source code and build scripts
+!lib/
+!bin/
+!tests/
+!examples/
