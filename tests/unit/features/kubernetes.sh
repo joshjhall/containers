@@ -283,6 +283,63 @@ EOF
     fi
 }
 
+# Test: Dynamic checksum fetching is used
+test_dynamic_checksum_fetching() {
+    local kubernetes_script="$PROJECT_ROOT/lib/features/kubernetes.sh"
+
+    # Should source checksum-fetch.sh for dynamic fetching
+    if grep -q "source.*checksum-fetch.sh" "$kubernetes_script"; then
+        assert_true true "kubernetes.sh sources checksum-fetch.sh for dynamic fetching"
+    else
+        assert_true false "kubernetes.sh doesn't source checksum-fetch.sh"
+    fi
+
+    # Should use dynamic fetching functions (not hardcoded checksums)
+    if grep -q "fetch_github_checksums_txt" "$kubernetes_script"; then
+        assert_true true "Uses fetch_github_checksums_txt for dynamic fetching"
+    else
+        assert_true false "Doesn't use fetch_github_checksums_txt"
+    fi
+
+    if grep -q "calculate_checksum_sha256" "$kubernetes_script"; then
+        assert_true true "Uses calculate_checksum_sha256 for checksum calculation"
+    else
+        assert_true false "Doesn't use calculate_checksum_sha256"
+    fi
+
+    if grep -q "fetch_github_sha256_file" "$kubernetes_script"; then
+        assert_true true "Uses fetch_github_sha256_file for individual checksum files"
+    else
+        assert_true false "Doesn't use fetch_github_sha256_file"
+    fi
+}
+
+# Test: Download verification functions are used
+test_download_verification() {
+    local kubernetes_script="$PROJECT_ROOT/lib/features/kubernetes.sh"
+
+    # Check that download verification functions are used (not curl | tar)
+    if grep -q "download_and_extract" "$kubernetes_script"; then
+        assert_true true "Uses download_and_extract for verification"
+    else
+        assert_true false "Doesn't use download_and_extract"
+    fi
+
+    # kubernetes.sh uses download_and_extract for all tools (k9s, helm, krew)
+    # It doesn't use download_and_verify since helm calculates checksum inline
+}
+
+# Test: Script sources download-verify.sh
+test_sources_download_verify() {
+    local kubernetes_script="$PROJECT_ROOT/lib/features/kubernetes.sh"
+
+    if grep -q "source.*download-verify.sh" "$kubernetes_script"; then
+        assert_true true "kubernetes.sh sources download-verify.sh"
+    else
+        assert_true false "kubernetes.sh doesn't source download-verify.sh"
+    fi
+}
+
 # Run tests with setup/teardown
 run_test_with_setup() {
     local test_function="$1"
@@ -304,6 +361,9 @@ run_test_with_setup test_k8s_environment "K8s environment variables"
 run_test_with_setup test_kubectl_completion "kubectl completion"
 run_test_with_setup test_manifest_files "Manifest files"
 run_test_with_setup test_k8s_verification "K8s verification script"
+run_test_with_setup test_dynamic_checksum_fetching "Dynamic checksum fetching"
+run_test_with_setup test_download_verification "Download verification functions"
+run_test_with_setup test_sources_download_verify "Sources download-verify.sh"
 
 # Generate test report
 generate_report
