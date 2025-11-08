@@ -44,6 +44,12 @@ source /tmp/build-scripts/base/feature-header.sh
 # Source apt utilities for reliable package installation
 source /tmp/build-scripts/base/apt-utils.sh
 
+# Source checksum utilities for secure binary downloads
+source /tmp/build-scripts/features/lib/checksum-fetch.sh
+
+# Source download verification utilities
+source /tmp/build-scripts/base/download-verify.sh
+
 # Start logging
 log_feature_start "Docker CLI Tools"
 
@@ -118,33 +124,59 @@ fi
 # ============================================================================
 log_message "Installing lazydocker (terminal UI for Docker)..."
 
-# Detect architecture and set version
+# Detect architecture
 ARCH=$(dpkg --print-architecture)
-LAZYDOCKER_VERSION="0.24.1"
 
-# Download and install lazydocker
-log_message "Downloading lazydocker..."
-cd /tmp
+# Map dpkg architecture to lazydocker naming
+case "$ARCH" in
+    amd64)
+        LAZYDOCKER_ARCH="x86_64"
+        ;;
+    arm64)
+        LAZYDOCKER_ARCH="arm64"
+        ;;
+    *)
+        log_error "Unsupported architecture for lazydocker: $ARCH"
+        exit 1
+        ;;
+esac
 
-if [ "$ARCH" = "amd64" ]; then
-    log_command "Downloading lazydocker for amd64" \
-        curl -fsSL -o lazydocker.tar.gz https://github.com/jesseduffield/lazydocker/releases/download/v${LAZYDOCKER_VERSION}/lazydocker_${LAZYDOCKER_VERSION}_Linux_x86_64.tar.gz
-elif [ "$ARCH" = "arm64" ]; then
-    log_command "Downloading lazydocker for arm64" \
-        curl -fsSL -o lazydocker.tar.gz https://github.com/jesseduffield/lazydocker/releases/download/v${LAZYDOCKER_VERSION}/lazydocker_${LAZYDOCKER_VERSION}_Linux_arm64.tar.gz
+# Version is configurable via build arg
+LAZYDOCKER_VERSION="${LAZYDOCKER_VERSION:-0.24.1}"
+LAZYDOCKER_ARCHIVE="lazydocker_${LAZYDOCKER_VERSION}_Linux_${LAZYDOCKER_ARCH}.tar.gz"
+LAZYDOCKER_URL="https://github.com/jesseduffield/lazydocker/releases/download/v${LAZYDOCKER_VERSION}/${LAZYDOCKER_ARCHIVE}"
+
+log_message "Installing lazydocker v${LAZYDOCKER_VERSION} for ${LAZYDOCKER_ARCH}..."
+
+# Fetch checksum dynamically from GitHub releases
+log_message "Fetching lazydocker checksum from GitHub..."
+LAZYDOCKER_CHECKSUMS_URL="https://github.com/jesseduffield/lazydocker/releases/download/v${LAZYDOCKER_VERSION}/checksums.txt"
+
+if ! LAZYDOCKER_CHECKSUM=$(fetch_github_checksums_txt "$LAZYDOCKER_CHECKSUMS_URL" "$LAZYDOCKER_ARCHIVE" 2>/dev/null); then
+    log_error "Failed to fetch checksum for lazydocker ${LAZYDOCKER_VERSION}"
+    log_error "Please verify version exists: https://github.com/jesseduffield/lazydocker/releases/tag/v${LAZYDOCKER_VERSION}"
+    log_feature_end
+    exit 1
 fi
 
-log_command "Extracting lazydocker" \
-    tar xzf lazydocker.tar.gz
+log_message "Expected SHA256: ${LAZYDOCKER_CHECKSUM}"
 
+# Download and extract with checksum verification
+cd /tmp
+log_message "Downloading and verifying lazydocker..."
+download_and_extract \
+    "$LAZYDOCKER_URL" \
+    "$LAZYDOCKER_CHECKSUM" \
+    "."
+
+# Install binary
 log_command "Installing lazydocker binary" \
-    mv lazydocker /usr/local/bin/
+    mv ./lazydocker /usr/local/bin/
 
 log_command "Setting lazydocker permissions" \
     chmod +x /usr/local/bin/lazydocker
 
-log_command "Cleaning up lazydocker archive" \
-    rm -f lazydocker.tar.gz
+log_message "✓ lazydocker v${LAZYDOCKER_VERSION} installed successfully"
 
 cd /
 
