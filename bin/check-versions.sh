@@ -223,7 +223,10 @@ extract_all_versions() {
     
     ver=$(grep "^ARG K9S_VERSION=" "$PROJECT_ROOT/Dockerfile" 2>/dev/null | cut -d= -f2 | tr -d '"')
     [ -n "$ver" ] && add_tool "k9s" "$ver" "Dockerfile"
-    
+
+    ver=$(grep "^ARG KREW_VERSION=" "$PROJECT_ROOT/Dockerfile" 2>/dev/null | cut -d= -f2 | tr -d '"')
+    [ -n "$ver" ] && add_tool "krew" "$ver" "Dockerfile"
+
     ver=$(grep "^ARG HELM_VERSION=" "$PROJECT_ROOT/Dockerfile" 2>/dev/null | cut -d= -f2 | tr -d '"')
     [ -n "$ver" ] && [ "$ver" != "latest" ] && add_tool "Helm" "$ver" "Dockerfile"
     
@@ -658,6 +661,7 @@ main() {
             R) check_r ;;
             kubectl) check_kubectl ;;
             k9s) check_github_release "k9s" "derailed/k9s" ;;
+            krew) check_github_release "krew" "kubernetes-sigs/krew" ;;
             Helm) check_github_release "Helm" "helm/helm" ;;
             Terragrunt) check_github_release "Terragrunt" "gruntwork-io/terragrunt" ;;
             terraform-docs) check_github_release "terraform-docs" "terraform-docs/terraform-docs" ;;

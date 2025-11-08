@@ -144,6 +144,12 @@ update_version() {
                 k9s)
                     sed -i "s/^ARG K9S_VERSION=.*/ARG K9S_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
                     ;;
+                krew)
+                    sed -i "s/^ARG KREW_VERSION=.*/ARG KREW_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
+                    ;;
+                Helm)
+                    sed -i "s/^ARG HELM_VERSION=.*/ARG HELM_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
+                    ;;
                 Terragrunt)
                     sed -i "s/^ARG TERRAGRUNT_VERSION=.*/ARG TERRAGRUNT_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
                     ;;
@@ -291,6 +297,41 @@ while IFS= read -r update; do
 done < <(echo "$OUTDATED" | jq -c '.[]')
 
 echo ""
+
+# Update checksums for tools that require it
+if [ "$UPDATES_APPLIED" = true ] && [ "$DRY_RUN" = false ]; then
+    # Check if any Kubernetes tools were updated
+    K8S_TOOLS_UPDATED=false
+    while IFS= read -r update; do
+        TOOL=$(echo "$update" | jq -r '.tool')
+        if [ "$TOOL" = "k9s" ] || [ "$TOOL" = "krew" ] || [ "$TOOL" = "Helm" ]; then
+            K8S_TOOLS_UPDATED=true
+            break
+        fi
+    done < <(echo "$OUTDATED" | jq -c '.[]')
+
+    # If Kubernetes tools were updated, update their checksums
+    if [ "$K8S_TOOLS_UPDATED" = true ]; then
+        echo -e "${BLUE}Updating Kubernetes tool checksums...${NC}"
+
+        # Get current versions from Dockerfile
+        K9S_VER=$(grep "^ARG K9S_VERSION=" "$PROJECT_ROOT/Dockerfile" | cut -d= -f2 | tr -d '"')
+        KREW_VER=$(grep "^ARG KREW_VERSION=" "$PROJECT_ROOT/Dockerfile" | cut -d= -f2 | tr -d '"')
+        HELM_VER=$(grep "^ARG HELM_VERSION=" "$PROJECT_ROOT/Dockerfile" | cut -d= -f2 | tr -d '"')
+
+        if [ -n "$K9S_VER" ] && [ -n "$KREW_VER" ] && [ -n "$HELM_VER" ]; then
+            if "$BIN_DIR/update-versions/kubernetes-checksums.sh" "$K9S_VER" "$KREW_VER" "$HELM_VER"; then
+                echo -e "${GREEN}✓ Kubernetes checksums updated${NC}"
+            else
+                echo -e "${RED}✗ Failed to update Kubernetes checksums${NC}"
+                echo -e "${YELLOW}Manual checksum update may be required${NC}"
+            fi
+        else
+            echo -e "${YELLOW}Warning: Could not determine all Kubernetes tool versions${NC}"
+        fi
+        echo ""
+    fi
+fi
 
 # Handle commits and version bump
 if [ "$UPDATES_APPLIED" = true ] && [ "$DRY_RUN" = false ]; then
