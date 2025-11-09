@@ -55,6 +55,9 @@ source /tmp/build-scripts/features/lib/checksum-fetch.sh
 # Source download verification utilities
 source /tmp/build-scripts/base/download-verify.sh
 
+# Source secure temp directory utilities
+source /tmp/build-scripts/base/secure-temp.sh
+
 # Start logging
 log_feature_start "Terraform"
 
@@ -142,7 +145,8 @@ if [ "$ARCH" = "amd64" ] || [ "$ARCH" = "arm64" ]; then
     log_message "Expected SHA256: ${TERRAGRUNT_CHECKSUM}"
 
     # Download and verify Terragrunt with checksum verification
-    cd /tmp
+    BUILD_TEMP=$(create_secure_temp_dir)
+    cd "$BUILD_TEMP"
     log_message "Downloading and verifying Terragrunt..."
     download_and_verify \
         "$TERRAGRUNT_URL" \
@@ -153,7 +157,7 @@ if [ "$ARCH" = "amd64" ] || [ "$ARCH" = "arm64" ]; then
 
     # Install the verified binary
     log_command "Installing Terragrunt binary" \
-        mv /tmp/terragrunt /usr/local/bin/terragrunt
+        mv terragrunt /usr/local/bin/terragrunt
 
     log_command "Setting Terragrunt permissions" \
         chmod +x /usr/local/bin/terragrunt
@@ -191,7 +195,8 @@ fi
 log_message "Expected SHA256: ${TFDOCS_CHECKSUM}"
 
 # Download and extract with checksum verification
-cd /tmp
+BUILD_TEMP=$(create_secure_temp_dir)
+cd "$BUILD_TEMP"
 log_message "Downloading and verifying terraform-docs..."
 download_and_extract \
     "$TFDOCS_URL" \
@@ -234,7 +239,8 @@ fi
 log_message "Expected SHA256: ${TFLINT_CHECKSUM}"
 
 # Download and verify with checksum
-cd /tmp
+BUILD_TEMP=$(create_secure_temp_dir)
+cd "$BUILD_TEMP"
 log_message "Downloading and verifying tflint..."
 download_and_verify \
     "$TFLINT_URL" \
@@ -248,9 +254,6 @@ log_command "Extracting tflint" \
 # Install binary
 log_command "Installing tflint binary" \
     install -c -v ./tflint /usr/local/bin/
-
-log_command "Cleaning up tflint archive" \
-    rm -f "$TFLINT_ARCHIVE" ./tflint
 
 log_message "✓ tflint v${TFLINT_VERSION} installed successfully"
 

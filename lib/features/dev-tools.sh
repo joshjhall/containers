@@ -33,6 +33,9 @@ source /tmp/build-scripts/base/download-verify.sh
 # Source checksum fetching utilities for dynamic checksum retrieval
 source /tmp/build-scripts/features/lib/checksum-fetch.sh
 
+# Source secure temp directory utilities
+source /tmp/build-scripts/base/secure-temp.sh
+
 # Start logging
 log_feature_start "Development Tools"
 
@@ -312,7 +315,8 @@ if [ "$ARCH" = "amd64" ] || [ "$ARCH" = "arm64" ]; then
     log_message "Expected SHA256: ${DUF_CHECKSUM}"
 
     # Download and verify duf with checksum verification
-    cd /tmp
+    BUILD_TEMP=$(create_secure_temp_dir)
+    cd "$BUILD_TEMP"
     log_message "Downloading and verifying duf..."
     download_and_verify \
         "$DUF_URL" \
@@ -323,10 +327,7 @@ if [ "$ARCH" = "amd64" ] || [ "$ARCH" = "arm64" ]; then
 
     # Install the verified package
     log_command "Installing duf package" \
-        dpkg -i /tmp/duf.deb
-
-    log_command "Cleaning up duf package" \
-        rm /tmp/duf.deb
+        dpkg -i duf.deb
 
     cd /
 else
@@ -352,7 +353,8 @@ fi
 log_message "Expected SHA256: ${ENTR_CHECKSUM}"
 
 # Download and verify entr source
-cd /tmp
+BUILD_TEMP=$(create_secure_temp_dir)
+cd "$BUILD_TEMP"
 log_message "Downloading and verifying entr ${ENTR_VERSION}..."
 download_and_verify \
     "$ENTR_URL" \
@@ -365,10 +367,9 @@ log_command "Extracting entr source" \
     tar -xzf "$ENTR_TARBALL"
 
 log_command "Building entr" \
-    bash -c "cd /tmp/entr-${ENTR_VERSION} && ./configure && make && make install"
+    bash -c "cd entr-${ENTR_VERSION} && ./configure && make && make install"
 
-log_command "Cleaning up entr build files" \
-    bash -c "cd / && rm -rf /tmp/entr-* /tmp/${ENTR_TARBALL}"
+cd /
 
 # Install fzf (fuzzy finder)
 log_message "Installing fzf (fuzzy finder)..."
@@ -482,7 +483,8 @@ if [ -n "$DIRENV_BINARY" ]; then
     log_message "✓ Calculated checksum from download"
 
     # Download and verify direnv
-    cd /tmp
+    BUILD_TEMP=$(create_secure_temp_dir)
+    cd "$BUILD_TEMP"
     log_message "Downloading and verifying direnv for ${ARCH}..."
     download_and_verify \
         "$DIRENV_URL" \
@@ -490,7 +492,7 @@ if [ -n "$DIRENV_BINARY" ]; then
         "direnv"
 
     log_command "Installing direnv binary" \
-        mv /tmp/direnv /usr/local/bin/direnv
+        mv direnv /usr/local/bin/direnv
 
     log_command "Setting direnv permissions" \
         chmod +x /usr/local/bin/direnv
@@ -558,7 +560,8 @@ case "$ARCH" in
 esac
 
 if [ -n "$DELTA_FILENAME" ]; then
-    cd /tmp
+    BUILD_TEMP=$(create_secure_temp_dir)
+    cd "$BUILD_TEMP"
 
     log_message "Calculating checksum for delta ${DELTA_VERSION} ${ARCH}..."
     log_message "(Delta doesn't publish checksums, calculating on download)"
@@ -579,14 +582,12 @@ if [ -n "$DELTA_FILENAME" ]; then
     download_and_verify \
         "$DELTA_URL" \
         "${DELTA_CHECKSUM}" \
-        "/tmp/delta-verified.tar.gz"
+        "delta-verified.tar.gz"
 
     log_command "Extracting delta" \
-        tar -xzf /tmp/delta-verified.tar.gz
+        tar -xzf delta-verified.tar.gz
     log_command "Installing delta binary" \
         mv "${DELTA_DIR}/delta" /usr/local/bin/
-    log_command "Cleaning up delta temp files" \
-        rm -rf /tmp/delta-verified.tar.gz "${DELTA_DIR}"
 
     cd /
 fi
@@ -619,7 +620,8 @@ if [ -n "$MKCERT_BINARY" ]; then
     log_message "✓ Calculated checksum from download"
 
     # Download and verify mkcert
-    cd /tmp
+    BUILD_TEMP=$(create_secure_temp_dir)
+    cd "$BUILD_TEMP"
     log_message "Downloading and verifying mkcert for ${ARCH}..."
     download_and_verify \
         "$MKCERT_URL" \
@@ -627,7 +629,7 @@ if [ -n "$MKCERT_BINARY" ]; then
         "mkcert"
 
     log_command "Installing mkcert binary" \
-        mv /tmp/mkcert /usr/local/bin/mkcert
+        mv mkcert /usr/local/bin/mkcert
 
     log_command "Setting mkcert permissions" \
         chmod +x /usr/local/bin/mkcert
@@ -705,16 +707,17 @@ if [ -n "$GITCLIFF_FILENAME" ]; then
     fi
 
     # Download and verify, then extract manually (binary is in subdirectory)
+    BUILD_TEMP=$(create_secure_temp_dir)
+    cd "$BUILD_TEMP"
     GITCLIFF_URL="https://github.com/orhun/git-cliff/releases/download/v${GITCLIFF_VERSION}/${GITCLIFF_FILENAME}"
-    download_and_verify "$GITCLIFF_URL" "${GITCLIFF_CHECKSUM}" "/tmp/git-cliff-verified.tar.gz"
+    download_and_verify "$GITCLIFF_URL" "${GITCLIFF_CHECKSUM}" "git-cliff-verified.tar.gz"
 
     log_command "Extracting git-cliff" \
-        tar -xzf /tmp/git-cliff-verified.tar.gz -C /tmp
+        tar -xzf git-cliff-verified.tar.gz
     log_command "Installing git-cliff binary" \
-        mv /tmp/git-cliff-${GITCLIFF_VERSION}/git-cliff /usr/local/bin/
-    log_command "Cleaning up git-cliff temp files" \
-        rm -rf /tmp/git-cliff-verified.tar.gz /tmp/git-cliff-${GITCLIFF_VERSION}
+        mv git-cliff-${GITCLIFF_VERSION}/git-cliff /usr/local/bin/
 
+    cd /
     log_message "✓ git-cliff ${GITCLIFF_VERSION} installed successfully"
 else
     log_warning "Unsupported architecture for git-cliff: $ARCH"
@@ -723,8 +726,6 @@ fi
 # Install GitLab CLI (glab)
 log_message "Installing glab (GitLab CLI)..."
 GLAB_VERSION="1.76.2"
-log_command "Changing to temp directory" \
-    cd /tmp
 
 # GitLab CLI provides builds for amd64 and arm64
 if [ "$ARCH" = "amd64" ]; then
@@ -747,11 +748,12 @@ if [ -n "$GLAB_ARCH" ]; then
     if ! GLAB_CHECKSUM=$(fetch_github_checksums_txt "$GLAB_CHECKSUMS_URL" "$GLAB_DEB" 2>/dev/null); then
         log_warning "Failed to fetch checksum for glab ${GLAB_VERSION}, skipping installation"
         log_warning "Please verify version exists: https://gitlab.com/gitlab-org/cli/-/releases/v${GLAB_VERSION}"
-        cd /
     else
         log_message "Expected SHA256: ${GLAB_CHECKSUM}"
 
         # Download and verify glab with checksum verification
+        BUILD_TEMP=$(create_secure_temp_dir)
+        cd "$BUILD_TEMP"
         log_message "Downloading and verifying glab..."
         if download_and_verify \
             "$GLAB_URL" \
@@ -763,20 +765,12 @@ if [ -n "$GLAB_ARCH" ]; then
             # Install the verified package
             log_command "Installing glab package" \
                 dpkg -i glab.deb || log_warning "Failed to install glab"
-
-            log_command "Cleaning up glab package" \
-                rm -f glab.deb
         else
             log_warning "glab verification failed, skipping installation"
-            rm -f glab.deb
         fi
 
-        log_command "Returning to root directory" \
-            cd /
-    fi
-else
-    log_command "Returning to root directory" \
         cd /
+    fi
 fi
 
 # Install Claude Code CLI
@@ -811,10 +805,11 @@ if [ -z "$CLAUDE_INSTALLER_CHECKSUM" ]; then
 else
     log_message "Expected SHA256: ${CLAUDE_INSTALLER_CHECKSUM}"
 
+    BUILD_TEMP=$(create_secure_temp_dir)
     if download_and_verify \
         "$CLAUDE_INSTALLER_URL" \
         "$CLAUDE_INSTALLER_CHECKSUM" \
-        "/tmp/claude-install.sh"; then
+        "${BUILD_TEMP}/claude-install.sh"; then
         log_message "✓ Claude Code installer verified successfully"
     else
         log_warning "Failed to download or verify Claude Code installer"
@@ -822,10 +817,10 @@ else
     fi
 fi
 
-if [ -f /tmp/claude-install.sh ]; then
+if [ -f "${BUILD_TEMP}/claude-install.sh" ]; then
     # Install Claude Code to the target user's home directory
     log_command "Installing Claude Code for user $TARGET_USER" \
-        su -c "cd '$USER_HOME' && bash /tmp/claude-install.sh" "$TARGET_USER" || {
+        su -c "cd '$USER_HOME' && bash ${BUILD_TEMP}/claude-install.sh" "$TARGET_USER" || {
             log_warning "Claude Code installation failed"
             log_warning "Claude Code will not be available in this container"
         }
@@ -835,8 +830,6 @@ if [ -f /tmp/claude-install.sh ]; then
         log_command "Creating system-wide Claude symlink" \
             ln -sf "$USER_HOME/.local/bin/claude" /usr/local/bin/claude
     fi
-
-    rm -f /tmp/claude-install.sh
 fi
 
 # ============================================================================

@@ -53,6 +53,9 @@ source /tmp/build-scripts/base/download-verify.sh
 # Source checksum fetching utilities for dynamic checksum retrieval
 source /tmp/build-scripts/features/lib/checksum-fetch.sh
 
+# Source secure temp directory utilities
+source /tmp/build-scripts/base/secure-temp.sh
+
 # Start logging
 log_feature_start "Kubernetes Tools"
 
@@ -198,7 +201,8 @@ esac
 
 # Download and install Helm if supported architecture
 if [ -n "$HELM_FILENAME" ]; then
-    cd /tmp
+    BUILD_TEMP=$(create_secure_temp_dir)
+    cd "$BUILD_TEMP"
 
     log_message "Calculating checksum for Helm ${HELM_VERSION} ${ARCH}..."
     log_message "(Helm doesn't publish plain checksums, calculating on download)"
@@ -219,15 +223,13 @@ if [ -n "$HELM_FILENAME" ]; then
     download_and_extract \
         "$HELM_URL" \
         "${HELM_CHECKSUM}" \
-        "/tmp" \
+        "." \
         ""  # Extract all files
 
     # Move helm binary to /usr/local/bin
     if [ -f "${HELM_DIR}/helm" ]; then
         log_command "Installing Helm binary" \
             mv "${HELM_DIR}/helm" /usr/local/bin/helm
-        log_command "Cleaning up Helm extraction directory" \
-            rm -rf "${HELM_DIR}"
     else
         log_error "Helm binary not found after extraction"
         log_feature_end
@@ -267,7 +269,8 @@ esac
 
 # Download and install krew if supported architecture
 if [ -n "$KREW_FILENAME" ]; then
-    cd /tmp
+    BUILD_TEMP=$(create_secure_temp_dir)
+    cd "$BUILD_TEMP"
 
     log_message "Fetching checksum for krew ${KREW_VERSION} ${ARCH}..."
 
@@ -287,7 +290,7 @@ if [ -n "$KREW_FILENAME" ]; then
     download_and_extract \
         "https://github.com/kubernetes-sigs/krew/releases/download/v${KREW_VERSION}/${KREW_FILENAME}" \
         "${KREW_CHECKSUM}" \
-        "/tmp" \
+        "." \
         ""  # Extract all files
 
     # Find and install krew binary
@@ -295,8 +298,6 @@ if [ -n "$KREW_FILENAME" ]; then
         if [ -f "$krew_binary" ]; then
             log_command "Installing krew" \
                 "$krew_binary" install krew
-            log_command "Cleaning up krew installer" \
-                rm -f ./krew-linux_*
             break
         fi
     done

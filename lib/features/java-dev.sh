@@ -38,6 +38,9 @@ source /tmp/build-scripts/base/download-verify.sh
 # Source checksum fetching utilities
 source /tmp/build-scripts/features/lib/checksum-fetch.sh
 
+# Source secure temp directory utilities
+source /tmp/build-scripts/base/secure-temp.sh
+
 # Start logging
 log_feature_start "Java Development Tools"
 
@@ -125,19 +128,21 @@ if ! validate_checksum_format "$SPRING_CHECKSUM" "sha1"; then
 fi
 
 # Download and verify Spring Boot CLI with checksum verification
+BUILD_TEMP=$(create_secure_temp_dir)
+cd "$BUILD_TEMP"
 log_message "Downloading and verifying Spring Boot CLI ${SPRING_VERSION}..."
 log_message "Using SHA1 checksum: ${SPRING_CHECKSUM}"
 download_and_verify \
     "${SPRING_BASE_URL}" \
     "${SPRING_CHECKSUM}" \
-    "/tmp/spring-boot-cli.tar.gz"
+    "spring-boot-cli.tar.gz"
 
 log_command "Extracting Spring Boot CLI" \
-    tar -xzf /tmp/spring-boot-cli.tar.gz -C "${TOOLS_DIR}"
+    tar -xzf spring-boot-cli.tar.gz -C "${TOOLS_DIR}"
 
 create_symlink "${TOOLS_DIR}/spring-${SPRING_VERSION}/bin/spring" "/usr/local/bin/spring" "Spring Boot CLI"
 
-rm -f /tmp/spring-boot-cli.tar.gz
+cd /
 
 # ============================================================================
 # JBang - Java Scripting
@@ -163,7 +168,8 @@ fi
 log_message "Expected SHA256: ${JBANG_CHECKSUM}"
 
 # Download and verify JBang tarball
-cd /tmp
+BUILD_TEMP=$(create_secure_temp_dir)
+cd "$BUILD_TEMP"
 log_message "Downloading and verifying JBang..."
 download_and_verify \
     "$JBANG_URL" \
@@ -174,13 +180,10 @@ log_message "✓ JBang v${JBANG_VERSION} verified successfully"
 
 # Extract JBang
 log_command "Extracting JBang" \
-    tar -xf /tmp/jbang.tar -C "${TOOLS_DIR}"
+    tar -xf jbang.tar -C "${TOOLS_DIR}"
 
 # Create symlink directly to the jbang script
 create_symlink "${TOOLS_DIR}/jbang-${JBANG_VERSION}/bin/jbang" "/usr/local/bin/jbang" "JBang Java scripting tool"
-
-log_command "Cleaning up JBang tarball" \
-    rm -f /tmp/jbang.tar
 
 cd /
 
@@ -200,20 +203,22 @@ if [ "$ARCH" = "amd64" ]; then
     # Calculated from: curl -fsSL "$MVND_URL" | sha256sum
     MVND_CHECKSUM_AMD64="3ddd4741b0e70c245ed164b45774b72a19331294b2d6147570c8c5271a977e8c"
 
+    BUILD_TEMP=$(create_secure_temp_dir)
+    cd "$BUILD_TEMP"
     log_message "Downloading and verifying Maven Daemon ${MVND_VERSION}..."
     log_message "Using calculated SHA256 checksum: ${MVND_CHECKSUM_AMD64}"
     download_and_verify \
         "${MVND_URL}" \
         "${MVND_CHECKSUM_AMD64}" \
-        "/tmp/mvnd.tar.gz"
+        "mvnd.tar.gz"
 
     log_command "Extracting Maven Daemon" \
-        tar -xzf /tmp/mvnd.tar.gz -C "${TOOLS_DIR}"
+        tar -xzf mvnd.tar.gz -C "${TOOLS_DIR}"
 
     create_symlink "${TOOLS_DIR}/maven-mvnd-${MVND_VERSION}-linux-${ARCH}/bin/mvnd" "/usr/local/bin/mvnd" "Maven Daemon"
     create_symlink "${TOOLS_DIR}/maven-mvnd-${MVND_VERSION}-linux-${ARCH}/bin/mvnd" "/usr/local/bin/mvndaemon" "Maven Daemon (alias)"
 
-    rm -f /tmp/mvnd.tar.gz
+    cd /
 else
     log_message "Skipping Maven Daemon installation - only available for amd64 architecture (detected: ${ARCH})"
 fi
