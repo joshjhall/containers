@@ -15,6 +15,8 @@ A modular, extensible container build system designed to be shared across projec
 - [Version Management](#version-management)
 - [Testing](#testing)
 - [Best Practices](#best-practices)
+  - [Security: Handling Secrets](#security-handling-secrets)
+  - [General Best Practices](#general-best-practices)
 - [Contributing](#contributing)
 
 ## Features
@@ -521,6 +523,65 @@ docker build -t myapp:prod \
 
 ## Best Practices
 
+### Security: Handling Secrets
+
+**⚠️ Critical: Never Pass Secrets as Build Arguments**
+
+Build arguments are **permanently stored** in Docker images and visible in multiple locations:
+
+- **Docker build logs** - Plain text output during build
+- **Image history** - `docker history <image>` reveals all build args
+- **Container inspection** - `docker inspect <container>` exposes build-time values
+- **Image layer metadata** - Embedded in the image filesystem
+
+**❌ DON'T DO THIS:**
+```bash
+# These secrets will be permanently embedded in the image!
+docker build --build-arg API_KEY=secret123 ...
+docker build --build-arg DATABASE_PASSWORD=pass123 ...
+docker build --build-arg AWS_SECRET_ACCESS_KEY=... ...
+```
+
+**✅ DO THIS INSTEAD:**
+
+1. **Runtime Environment Variables** (recommended for development):
+   ```bash
+   docker run -e API_KEY=secret123 my-image:latest
+
+   # Or with .env file
+   docker run --env-file .env my-image:latest
+   ```
+
+2. **Docker Secrets** (recommended for Docker Swarm/Compose):
+   ```bash
+   # Create secret
+   echo "secret123" | docker secret create api_key -
+
+   # Use in service
+   docker service create --secret api_key my-image:latest
+   ```
+
+3. **Mounted Config Files** (recommended for sensitive files):
+   ```bash
+   # Mount secrets directory read-only
+   docker run -v ./secrets:/secrets:ro my-image:latest
+   ```
+
+4. **Secret Management Tools** (recommended for production):
+   ```bash
+   # 1Password CLI (included via INCLUDE_OP=true)
+   docker run -e OP_SERVICE_ACCOUNT_TOKEN=... my-image:latest
+
+   # AWS Secrets Manager, Vault, etc.
+   docker run -e AWS_REGION=us-east-1 my-image:latest
+   ```
+
+For more information, see `/workspace/containers/SECURITY.md`.
+
+---
+
+### General Best Practices
+
 1. **Choose the right base image**:
    - `debian:bookworm-slim` (Debian 12): Minimal size, good compatibility (default)
    - `debian:bullseye-slim` (Debian 11): Older stable release
@@ -535,10 +596,11 @@ docker build -t myapp:prod \
 
 3. **Security considerations**:
    - Always use non-root users in production
-   - Remove passwordless sudo in production builds
+   - Remove passwordless sudo in production builds (`ENABLE_PASSWORDLESS_SUDO=false`)
+   - **Never pass secrets as build arguments** - they're stored permanently in the image
    - Mount secrets at runtime, don't bake them in
    - Regularly update the submodule for security patches
-   - See [Security Considerations](#security-considerations) section above
+   - See detailed security guidance below
 
 4. **Version pinning**:
    - Pin the submodule to specific commits for stability
