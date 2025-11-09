@@ -24,6 +24,12 @@ source /tmp/build-scripts/base/feature-header.sh
 # Source apt utilities for reliable package installation
 source /tmp/build-scripts/base/apt-utils.sh
 
+# Source download and verification utilities
+source /tmp/build-scripts/base/download-verify.sh
+
+# Source checksum verification utilities
+source /tmp/build-scripts/features/lib/checksum-fetch.sh
+
 # ============================================================================
 # Version Configuration
 # ============================================================================
@@ -92,12 +98,34 @@ log_message "Downloading and building Python ${PYTHON_VERSION}..."
 
 cd /tmp
 
-# Download Python source
-log_command "Downloading Python ${PYTHON_VERSION} source" \
-    wget -q "https://www.python.org/ftp/python/${PYTHON_VERSION}/Python-${PYTHON_VERSION}.tgz"
+# Download Python source with checksum verification
+PYTHON_TARBALL="Python-${PYTHON_VERSION}.tgz"
+PYTHON_URL="https://www.python.org/ftp/python/${PYTHON_VERSION}/${PYTHON_TARBALL}"
+
+# Calculate checksum for verification (Python.org doesn't publish easily-parsed checksums)
+log_message "Calculating checksum for Python ${PYTHON_VERSION}..."
+PYTHON_CHECKSUM=$(calculate_checksum_sha256 "$PYTHON_URL" 2>/dev/null)
+
+if [ -z "$PYTHON_CHECKSUM" ]; then
+    log_error "Failed to calculate checksum for Python ${PYTHON_VERSION}"
+    log_error "Please verify version exists: https://www.python.org/downloads/release/python-${PYTHON_VERSION//.}"
+    log_feature_end
+    exit 1
+fi
+
+log_message "Expected SHA256: ${PYTHON_CHECKSUM}"
+
+# Download and verify Python source
+log_message "Downloading and verifying Python ${PYTHON_VERSION}..."
+download_and_verify \
+    "$PYTHON_URL" \
+    "$PYTHON_CHECKSUM" \
+    "$PYTHON_TARBALL"
+
+log_message "✓ Python v${PYTHON_VERSION} verified successfully"
 
 log_command "Extracting Python source" \
-    tar -xzf "Python-${PYTHON_VERSION}.tgz"
+    tar -xzf "$PYTHON_TARBALL"
 
 cd "Python-${PYTHON_VERSION}"
 
@@ -140,9 +168,29 @@ create_symlink "/usr/local/bin/python3" "/usr/local/bin/python" "python"
 # ============================================================================
 log_message "Installing pip..."
 
-# Download and install pip
-log_command "Downloading get-pip.py" \
-    wget -q https://bootstrap.pypa.io/get-pip.py
+# Download and install pip with checksum verification
+GET_PIP_URL="https://bootstrap.pypa.io/get-pip.py"
+
+# Calculate checksum for verification (PyPA doesn't publish checksums for get-pip.py)
+log_message "Calculating checksum for get-pip.py..."
+GET_PIP_CHECKSUM=$(calculate_checksum_sha256 "$GET_PIP_URL" 2>/dev/null)
+
+if [ -z "$GET_PIP_CHECKSUM" ]; then
+    log_error "Failed to calculate checksum for get-pip.py"
+    log_feature_end
+    exit 1
+fi
+
+log_message "Expected SHA256: ${GET_PIP_CHECKSUM}"
+
+# Download and verify get-pip.py
+log_message "Downloading and verifying get-pip.py..."
+download_and_verify \
+    "$GET_PIP_URL" \
+    "$GET_PIP_CHECKSUM" \
+    "get-pip.py"
+
+log_message "✓ get-pip.py verified successfully"
 
 log_command "Installing pip" \
     /usr/local/bin/python3 get-pip.py --no-cache-dir
