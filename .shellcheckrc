@@ -2,7 +2,8 @@
 # See https://github.com/koalaman/shellcheck/wiki/Directive for details
 
 # Minimum severity level to report (error, warning, info, style)
-severity=warning
+# Changed to 'info' to enforce SC2086 (unquoted variable expansion)
+severity=info
 
 # Shell dialect
 shell=bash

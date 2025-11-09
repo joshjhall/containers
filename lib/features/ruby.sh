@@ -41,7 +41,7 @@ validate_ruby_version "$RUBY_VERSION" || {
     log_error "Build failed due to invalid RUBY_VERSION"
     exit 1
 }
-RUBY_MAJOR=$(echo $RUBY_VERSION | cut -d. -f1,2)
+RUBY_MAJOR=$(echo "$RUBY_VERSION" | cut -d. -f1,2)
 
 # Start logging
 log_feature_start "Ruby" "${RUBY_VERSION}"
@@ -90,7 +90,7 @@ log_command "Creating Ruby cache directories" \
 
 # Set ownership on the parent directory and all subdirectories
 log_command "Setting cache directory ownership" \
-    chown -R ${USER_UID}:${USER_GID} "/cache/ruby"
+    chown -R "${USER_UID}":"${USER_GID}" "/cache/ruby"
 
 # ============================================================================
 # Ruby Installation from Source
@@ -113,7 +113,7 @@ fi
 if [ -n "${RUBY_RESOLVED_VERSION:-}" ]; then
     log_message "Resolved Ruby ${RUBY_VERSION} to ${RUBY_RESOLVED_VERSION} (latest available patch)"
     RUBY_VERSION="$RUBY_RESOLVED_VERSION"
-    RUBY_MAJOR=$(echo $RUBY_VERSION | cut -d. -f1,2)
+    RUBY_MAJOR=$(echo "$RUBY_VERSION" | cut -d. -f1,2)
 fi
 
 log_message "Expected SHA256: ${RUBY_CHECKSUM}"
@@ -170,7 +170,7 @@ export PATH="/usr/local/bin:${GEM_HOME_DIR}/bin:$PATH"
 
 # Install bundler as the user
 log_command "Installing bundler" \
-    su - ${USERNAME} -c "export GEM_HOME='${GEM_HOME_DIR}' GEM_PATH='${GEM_PATH}' && /usr/local/bin/gem install bundler"
+    su - "${USERNAME}" -c "export GEM_HOME='${GEM_HOME_DIR}' GEM_PATH='${GEM_PATH}' && /usr/local/bin/gem install bundler"
 
 # Configure bundler to use cache
 log_command "Configuring bundler cache path" \
@@ -333,7 +333,7 @@ log_command "Checking bundler version" \
 # ============================================================================
 log_message "Ensuring correct ownership of Ruby directories..."
 log_command "Final ownership fix for Ruby cache directories" \
-    chown -R ${USER_UID}:${USER_GID} "${GEM_HOME_DIR}" "${BUNDLE_PATH_DIR}" || true
+    chown -R "${USER_UID}":"${USER_GID}" "${GEM_HOME_DIR}" "${BUNDLE_PATH_DIR}" || true
 
 # End logging
 log_feature_end
