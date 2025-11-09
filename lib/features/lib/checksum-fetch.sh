@@ -11,6 +11,11 @@
 
 set -euo pipefail
 
+# Source retry utilities for rate limiting and backoff
+if [ -f /tmp/build-scripts/base/retry-utils.sh ]; then
+    source /tmp/build-scripts/base/retry-utils.sh
+fi
+
 # ============================================================================
 # Go Checksum Fetching
 # ============================================================================
@@ -115,10 +120,17 @@ fetch_github_checksums_txt() {
 
     # Fetch the checksums file and extract the line for our file
     local checksum
-    checksum=$(curl -fsSL "$checksums_url" | \
-        grep -F "$filename" | \
-        awk '{print $1}' | \
-        head -1)
+    if command -v retry_github_api >/dev/null 2>&1; then
+        checksum=$(retry_github_api curl -fsSL "$checksums_url" | \
+            grep -F "$filename" | \
+            awk '{print $1}' | \
+            head -1)
+    else
+        checksum=$(curl -fsSL "$checksums_url" | \
+            grep -F "$filename" | \
+            awk '{print $1}' | \
+            head -1)
+    fi
 
     if [ -n "$checksum" ]; then
         echo "$checksum"
@@ -146,9 +158,15 @@ fetch_github_sha256_file() {
 
     # Fetch the .sha256 file and extract just the hash
     local checksum
-    checksum=$(curl -fsSL "$sha256_url" | \
-        awk '{print $1}' | \
-        head -1)
+    if command -v retry_github_api >/dev/null 2>&1; then
+        checksum=$(retry_github_api curl -fsSL "$sha256_url" | \
+            awk '{print $1}' | \
+            head -1)
+    else
+        checksum=$(curl -fsSL "$sha256_url" | \
+            awk '{print $1}' | \
+            head -1)
+    fi
 
     if [ -n "$checksum" ] && [[ "$checksum" =~ ^[a-fA-F0-9]{64}$ ]]; then
         echo "$checksum"
@@ -176,9 +194,15 @@ fetch_github_sha512_file() {
 
     # Fetch the .sha512 file and extract just the hash
     local checksum
-    checksum=$(curl -fsSL "$sha512_url" | \
-        awk '{print $1}' | \
-        head -1)
+    if command -v retry_github_api >/dev/null 2>&1; then
+        checksum=$(retry_github_api curl -fsSL "$sha512_url" | \
+            awk '{print $1}' | \
+            head -1)
+    else
+        checksum=$(curl -fsSL "$sha512_url" | \
+            awk '{print $1}' | \
+            head -1)
+    fi
 
     if [ -n "$checksum" ] && [[ "$checksum" =~ ^[a-fA-F0-9]{128}$ ]]; then
         echo "$checksum"
