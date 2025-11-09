@@ -29,6 +29,9 @@ source /tmp/build-scripts/base/feature-header.sh
 # Source apt utilities for reliable package installation
 source /tmp/build-scripts/base/apt-utils.sh
 
+# Source version validation utilities
+source /tmp/build-scripts/base/version-validation.sh
+
 # Source download verification utilities
 source /tmp/build-scripts/base/download-verify.sh
 
@@ -40,6 +43,11 @@ source /tmp/build-scripts/features/lib/checksum-fetch.sh
 # ============================================================================
 # Go version to install
 GO_VERSION="${GO_VERSION:-1.25.3}"
+n# Validate Go version format to prevent shell injection
+validate_go_version "$GO_VERSION" || {
+    log_error "Build failed due to invalid GO_VERSION"
+    exit 1
+}
 
 # Extract major.minor version for comparison
 GO_MAJOR=$(echo $GO_VERSION | cut -d. -f1)

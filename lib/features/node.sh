@@ -31,11 +31,20 @@ source /tmp/build-scripts/base/feature-header.sh
 # Source apt utilities for reliable package installation
 source /tmp/build-scripts/base/apt-utils.sh
 
+# Source version validation utilities
+source /tmp/build-scripts/base/version-validation.sh
+
 # ============================================================================
 # Version Configuration
 # ============================================================================
 # Node.js version - accept full version (e.g., 22.10.0) or major version (e.g., 22)
 NODE_VERSION="${NODE_VERSION:-22}"
+
+# Validate Node.js version format to prevent shell injection
+validate_node_version "$NODE_VERSION" || {
+    log_error "Build failed due to invalid NODE_VERSION"
+    exit 1
+}
 
 # Start logging first (before any log_message calls)
 log_feature_start "Node.js" "${NODE_VERSION}"

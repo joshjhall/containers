@@ -32,6 +32,9 @@ source /tmp/build-scripts/base/feature-header.sh
 # Source apt utilities for reliable package installation
 source /tmp/build-scripts/base/apt-utils.sh
 
+# Source version validation utilities
+source /tmp/build-scripts/base/version-validation.sh
+
 # Source checksum utilities for secure binary downloads
 source /tmp/build-scripts/features/lib/checksum-fetch.sh
 
@@ -40,6 +43,11 @@ source /tmp/build-scripts/base/download-verify.sh
 
 # Get Rust version from environment or use default
 RUST_VERSION="${RUST_VERSION:-1.88.0}"
+n# Validate Rust version format to prevent shell injection
+validate_rust_version "$RUST_VERSION" || {
+    log_error "Build failed due to invalid RUST_VERSION"
+    exit 1
+}
 
 # Start logging
 log_feature_start "Rust" "${RUST_VERSION}"
