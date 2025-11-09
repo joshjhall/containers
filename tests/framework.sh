@@ -206,8 +206,10 @@ run_test() {
     local test_func="$1"
     local test_desc="${2:-$test_func}"
 
-    # Reset test status
+    # Reset test status and output (prevent accumulation)
     TEST_STATUS=""
+    TEST_OUTPUT=""
+    TEST_EXIT_CODE=0
 
     # Show test description
     test_case "$test_desc"

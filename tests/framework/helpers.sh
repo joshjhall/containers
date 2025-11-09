@@ -24,9 +24,10 @@
 #   Automatically loaded by framework.sh
 #   Functions available in all test files
 
-# Export variables for capture
-export TEST_OUTPUT=""
-export TEST_EXIT_CODE=0
+# Test result variables (not exported to avoid "Argument list too long" errors)
+# These are set by capture_result() and read by assertions
+TEST_OUTPUT=""
+TEST_EXIT_CODE=0
 
 # Capture command output and exit code
 capture_result() {
