@@ -100,6 +100,13 @@ if [ -z "$RUBY_CHECKSUM" ]; then
     exit 1
 fi
 
+# If partial version was resolved, use the resolved version
+if [ -n "${RUBY_RESOLVED_VERSION:-}" ]; then
+    log_message "Resolved Ruby ${RUBY_VERSION} to ${RUBY_RESOLVED_VERSION} (latest available patch)"
+    RUBY_VERSION="$RUBY_RESOLVED_VERSION"
+    RUBY_MAJOR=$(echo $RUBY_VERSION | cut -d. -f1,2)
+fi
+
 log_message "Expected SHA256: ${RUBY_CHECKSUM}"
 
 # Download and verify Ruby source tarball
