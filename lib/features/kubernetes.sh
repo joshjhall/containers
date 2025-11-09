@@ -353,10 +353,20 @@ alias kns='kubectl config set-context --current --namespace'  # Set namespace
 alias kdesc='kubectl describe'                      # Describe resource
 alias kpf='kubectl port-forward'                    # Port forwarding
 
-# kubectl auto-completion
+# kubectl auto-completion with validation
 if command -v kubectl &> /dev/null; then
-    source <(kubectl completion bash)
-    complete -F __start_kubectl k
+    COMPLETION_FILE="/tmp/kubectl-completion.$$.bash"
+    if kubectl completion bash > "$COMPLETION_FILE" 2>/dev/null; then
+        # Validate completion output before sourcing
+        if [ -f "$COMPLETION_FILE" ] && \
+           [ "$(wc -c < "$COMPLETION_FILE")" -lt 100000 ] && \
+           ! grep -qE '(rm -rf|curl.*bash|wget.*bash|eval.*\$)' "$COMPLETION_FILE"; then
+            # shellcheck disable=SC1090  # Dynamic source is validated
+            source "$COMPLETION_FILE"
+            complete -F __start_kubectl k
+        fi
+    fi
+    rm -f "$COMPLETION_FILE"
 fi
 
 # krew PATH
