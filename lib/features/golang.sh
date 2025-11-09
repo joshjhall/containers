@@ -124,6 +124,12 @@ if ! GO_CHECKSUM=$(fetch_go_checksum "${GO_VERSION}" "${GO_ARCH}" 2>/dev/null); 
     exit 1
 fi
 
+# If partial version was resolved, use the resolved version
+if [ -n "${GO_RESOLVED_VERSION:-}" ]; then
+    log_message "Resolved Go ${GO_VERSION} to ${GO_RESOLVED_VERSION} (latest available patch)"
+    GO_VERSION="$GO_RESOLVED_VERSION"
+fi
+
 log_message "✓ Fetched checksum from go.dev"
 
 # Validate checksum format
