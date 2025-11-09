@@ -5,6 +5,86 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.5.0] - 2025-11-09
+
+### Added
+
+- Add .dockerignore to prevent secrets in build context
+- Add checksum verification utilities for supply chain security
+- Add checksum verification to kubernetes.sh
+- Add automated checksum updater system
+- Integrate krew tracking and checksum updates in version system
+- Add dev-tools checksum updater script
+- Add checksum verification to dev-tools.sh
+- Add SHA256 checksum verification to golang.sh
+- Add checksum verification to terraform.sh (Phase 5)
+- Complete terraform.sh checksum integration (Phase 5)
+- Complete rust.sh checksum integration (Phase 6 partial)
+- Complete mojo.sh checksum integration (Phase 6 complete)
+- Fix node.sh CRITICAL curl | bash vulnerability (Phase 7 - 1/2)
+- Fix cloudflare.sh CRITICAL curl | bash vulnerability (Phase 7 complete)
+- Add SHA256 verification to ruby.sh (Phase 8 - 1/4)
+- Add partial version resolution support to Ruby
+- Add partial version resolution support to Go
+- Add GPG signature verification to AWS CLI v2 installation
+- Add checksum verification to java-dev.sh tools
+- Add checksum verification for dive .deb package (Phase 9 complete)
+- Add checksum verification for terragrunt (Phase 10 started)
+- Add checksum verification for duf and glab (Phase 10 complete)
+- Secure install scripts - Ollama direct download, Claude verified safe (Phase 11 complete)
+- Add calculated checksum verification for tools without published checksums (Phase 12 complete)
+- Add checksum verification for JBang (Phase 13 - 1/4)
+- Add JBang checksum verification and fix heredoc bug in java-dev
+- Add checksum verification for all remaining downloads (Phase 13 complete)
+
+### Changed
+
+- Extract shared utilities to bin/lib/
+- Implement dynamic checksum fetching for flexible version support
+- Remove redundant fallback checksums from golang.sh
+- Migrate kubernetes.sh to dynamic checksum fetching
+- Migrate dev-tools.sh to dynamic checksum fetching
+- Migrate docker.sh to dynamic checksum fetching for lazydocker
+
+### Documentation
+
+- Add SECURITY.md with vulnerability reporting procedures
+- Add Docker socket security guidance to README
+- Update checksum verification inventory
+- Add Docker build testing guidance to CLAUDE.md
+- Update checksum verification inventory with Phase 1 & 2 completion
+- Document version update script behavior for golang
+- Update checksum verification inventory with test completion
+- Update checksum verification inventory with Phase 4 completion
+- Update inventory with comprehensive security audit findings
+- Update inventory - Phase 7 complete (node.sh + cloudflare.sh)
+- Add partial version resolution analysis
+- Update inventory for Phase 8 completion
+- Remove outdated guide and add implementation section to inventory
+- Rename checksum-verification-inventory.md to checksum-verification.md
+- Add comprehensive security hardening roadmap
+
+### Fixed
+
+- Add header guards to prevent multiple sourcing
+- Isolate require_command test in subshell
+- Fix intermittent entrypoint error handling test
+- Fix dynamic Go checksum fetching and enhance test script
+- Resolve R version checker hanging and output issues
+- Update-versions.sh now syncs ruby.sh default with Dockerfile
+- Make AWS CLI GPG fingerprint verification case-insensitive
+- Handle GPG fingerprint format with variable spaces in AWS CLI verification
+
+### Testing
+
+- Add comprehensive unit tests for refactored code
+- Add comprehensive unit tests for dev-tools checksum verification
+- Add quick feature test script for isolated feature testing
+- Simplify dev-tools checksum tests to use pattern matching
+- Remove obsolete kubernetes-checksums updater test
+- Add checksum verification tests to kubernetes feature
+- Add checksum verification tests to golang feature
+
 ## [4.4.0] - 2025-11-03
 
 ### Fixed
@@ -175,20 +255,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Migrate to Debian Trixie and GitHub (v4.0.0)
-
-## [3.2.0] - 2025-09-04
-
-### Added
-
+- Add standalone Docker socket permission fix script
+- Add VS Code devcontainer configuration
+- Add comprehensive version tracking for all hardcoded tools
 - Migrate key feature scripts to use centralized apt-utils
 - Migrate more feature scripts to use apt-utils
 - Migrate -dev scripts to use apt-utils
 - Update remaining -dev scripts and AWS to use apt-utils
 - Complete migration of all feature scripts to apt-utils
+- Migrate to Debian Trixie and GitHub (v4.0.0)
+
+### Documentation
+
+- Add unit test documentation to README
+- Update CI push authentication to reflect current implementation
+- Add comprehensive security scanning and project initialization design
 
 ### Fixed
 
+- Add Docker socket permission handling in docker.sh
+- Add flexible authentication for CI push operations
+- Add complete version checking and updating for Java dev tools
+- Fix Node.js installation and add version pinning support
+- Resolve CI branch switching conflict with version-updates.json
+- Resolve CI push conflicts in version update job
+- Fix Node.js installation script logging initialization order
+- Add version validation to prevent null values and fix GitLab CI schedule
+- Handle full kubectl version format in kubernetes.sh
 - Add retry mechanism for apt operations to handle network issues
 - Complete R feature migration to apt-utils
 - Update base setup and unit tests to use apt-utils
@@ -198,73 +291,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Miscellaneous
 
-- Update cspell dictionary with new project words
-- Add executable permissions to shell scripts
-
-## [3.1.0] - 2025-09-02
-
-### Fixed
-
-- Add version validation to prevent null values and fix GitLab CI schedule
-- Handle full kubectl version format in kubernetes.sh
-
-### Miscellaneous
-
+- Bump version to 1.0.1
+- Add results/ directory to .gitignore
+- Fix Python feature script permissions
+- Add cspell configuration for spell checking
+- Complete version tracking and update to 2.2.8
+- Remove unused env_manager.sh and buildkit dependency
+- Update cspell dictionary with project-specific terms
+- Update dependency versions
+- Release patch version with dependency updates
 - Apply automated formatting
 - Update dependency versions
 - Release patch version with dependency updates
 - Update dependency versions
 - Release patch version with dependency updates
 - Update cspell dictionary with new project words
-
-## [3.0.2] - 2025-08-13
-
-### Documentation
-
-- Add comprehensive security scanning and project initialization design
+- Update cspell dictionary with new project words
+- Add executable permissions to shell scripts
 
 ### Security
 
 - Remove deprecated npm packages from Node.js dev tools
 
-## [3.0.1] - 2025-08-13
-
-### Fixed
-
-- Fix Node.js installation script logging initialization order
-
-### Improve
-
-- Add VS Code workspace settings and improve gitignore
-
-## [3.0.0] - 2025-08-13
-
-### Added
-
-- Add comprehensive version tracking for all hardcoded tools
-
-### Documentation
-
-- Update CI push authentication to reflect current implementation
-
-### Fixed
-
-- Add flexible authentication for CI push operations
-- Add complete version checking and updating for Java dev tools
-- Fix Node.js installation and add version pinning support
-- Resolve CI branch switching conflict with version-updates.json
-- Resolve CI push conflicts in version update job
-
-### Miscellaneous
-
-- Complete version tracking and update to 2.2.8
-- Remove unused env_manager.sh and buildkit dependency
-- Update cspell dictionary with project-specific terms
-- Update dependency versions
-- Release patch version with dependency updates
-
 ### Testing
 
+- Add comprehensive unit test framework
 - Add comprehensive tests for new version tracking features
 - Add tests for release cancellation message and auto-confirmation
 - Fix release tests to prevent modifying actual VERSION file
@@ -273,47 +324,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Improve
 
 - Add helpful error message when release is cancelled
+- Add VS Code workspace settings and improve gitignore
 
-## [1.4.0] - 2025-08-13
-
-## [1.3.0] - 2025-08-12
-
-### Added
-
-- Add standalone Docker socket permission fix script
-- Add VS Code devcontainer configuration
-
-### Documentation
-
-- Add unit test documentation to README
-
-### Fixed
-
-- Add Docker socket permission handling in docker.sh
-
-### Miscellaneous
-
-- Bump version to 1.0.1
-- Add results/ directory to .gitignore
-- Fix Python feature script permissions
-- Add cspell configuration for spell checking
-
-### Testing
-
-- Add comprehensive unit test framework
-
+[4.5.0]: https://github.com/joshjhall/containers/compare/v4.4.0...v4.5.0
 [4.4.0]: https://github.com/joshjhall/containers/compare/v4.3.2...v4.4.0
 [4.3.2]: https://github.com/joshjhall/containers/compare/v4.3.1...v4.3.2
 [4.3.1]: https://github.com/joshjhall/containers/compare/v4.3.0...v4.3.1
 [4.3.0]: https://github.com/joshjhall/containers/compare/v4.2.0...v4.3.0
 [4.2.0]: https://github.com/joshjhall/containers/compare/v4.1.0...v4.2.0
 [4.1.0]: https://github.com/joshjhall/containers/compare/v4.0.0...v4.1.0
-[4.0.0]: https://github.com/joshjhall/containers/compare/v3.2.0...v4.0.0
-[3.2.0]: https://github.com/joshjhall/containers/compare/v3.1.0...v3.2.0
-[3.1.0]: https://github.com/joshjhall/containers/compare/v3.0.2...v3.1.0
-[3.0.2]: https://github.com/joshjhall/containers/compare/v3.0.1...v3.0.2
-[3.0.1]: https://github.com/joshjhall/containers/compare/v3.0.0...v3.0.1
-[3.0.0]: https://github.com/joshjhall/containers/compare/v1.4.0...v3.0.0
-[1.4.0]: https://github.com/joshjhall/containers/compare/v1.3.0...v1.4.0
-[1.3.0]: https://github.com/joshjhall/containers/compare/215cbdceda1dca4bdb9ddca9abf2eaec45f2564d...v1.3.0
+[4.0.0]: https://github.com/joshjhall/containers/compare/eaf66b40b4bcdf36e8b6da1113b349e3509fb26c...v4.0.0
 

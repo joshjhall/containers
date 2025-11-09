@@ -722,7 +722,7 @@ fi
 
 # Install GitLab CLI (glab)
 log_message "Installing glab (GitLab CLI)..."
-GLAB_VERSION="1.75.0"
+GLAB_VERSION="1.76.2"
 log_command "Changing to temp directory" \
     cd /tmp
 
