@@ -185,21 +185,22 @@ create_symlink() {
 # Secure Temporary Directory Management
 # ============================================================================
 
-# create_secure_temp_dir - Create a secure temporary directory with automatic cleanup
+# create_secure_temp_dir - Create a secure temporary directory
 #
 # Usage:
 #   TEMP_DIR=$(create_secure_temp_dir)
-#   # Use $TEMP_DIR for temporary files
-#   # Automatic cleanup happens on script exit (via trap)
+#   cd "$TEMP_DIR"
+#   # Use temporary files
+#   cd /
+#   # Cleanup happens automatically via feature-header.sh trap
 #
 # Security benefits:
 #   - Unique directory per process (prevents collisions)
 #   - Restrictive permissions (700 - owner only)
-#   - Automatic cleanup on exit (prevents leftover files)
 #   - Protection against symlink attacks
 #
-# Note: This function sets up a trap for cleanup. If your script already
-# uses EXIT traps, they will be chained together.
+# Note: Cleanup is handled by the main script's trap in feature-header.sh,
+# not by this function (to avoid subshell trap issues).
 create_secure_temp_dir() {
     local temp_dir
     temp_dir=$(mktemp -d -t build-XXXXXXXXXX)
@@ -211,10 +212,6 @@ create_secure_temp_dir() {
 
     # Set restrictive permissions (owner only)
     chmod 700 "$temp_dir"
-
-    # Set up automatic cleanup on script exit
-    # shellcheck disable=SC2064  # We want variables expanded now, not at trap time
-    trap "rm -rf '$temp_dir'" EXIT
 
     # Log to stderr so it doesn't interfere with command substitution
     log_message "Created secure temporary directory: $temp_dir" >&2
