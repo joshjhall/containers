@@ -242,6 +242,99 @@ run_test_with_setup() {
     teardown
 }
 
+# ============================================================================
+# Checksum Verification Tests
+# ============================================================================
+
+# Test: java-dev.sh uses checksum verification for Spring Boot CLI
+test_java_dev_spring_boot_checksum() {
+    local java_dev_script="$PROJECT_ROOT/lib/features/java-dev.sh"
+
+    if ! [ -f "$java_dev_script" ]; then
+        skip_test "java-dev.sh not found"
+        return
+    fi
+
+    # Check for checksum fetching
+    if grep -q "fetch_maven_sha1" "$java_dev_script"; then
+        assert_true true "java-dev.sh fetches Spring Boot CLI checksum from Maven Central"
+    else
+        assert_true false "java-dev.sh does not fetch Spring Boot CLI checksum"
+    fi
+
+    # Check for download_and_verify usage (matches "/tmp/spring-boot-cli.tar.gz")
+    if grep -A5 "download_and_verify" "$java_dev_script" | grep -q "spring-boot-cli.tar.gz"; then
+        assert_true true "java-dev.sh uses download_and_verify for Spring Boot CLI"
+    else
+        assert_true false "java-dev.sh does not use download_and_verify for Spring Boot CLI"
+    fi
+}
+
+# Test: java-dev.sh uses checksum verification for Maven Daemon
+test_java_dev_maven_daemon_checksum() {
+    local java_dev_script="$PROJECT_ROOT/lib/features/java-dev.sh"
+
+    if ! [ -f "$java_dev_script" ]; then
+        skip_test "java-dev.sh not found"
+        return
+    fi
+
+    # Check for hardcoded checksum (Maven Daemon doesn't publish checksums)
+    if grep -q "MVND_CHECKSUM_AMD64" "$java_dev_script"; then
+        assert_true true "java-dev.sh defines Maven Daemon checksum"
+    else
+        assert_true false "java-dev.sh does not define Maven Daemon checksum"
+    fi
+
+    # Check for download_and_verify usage (matches "/tmp/mvnd.tar.gz")
+    if grep -A5 "download_and_verify" "$java_dev_script" | grep -q "mvnd.tar.gz"; then
+        assert_true true "java-dev.sh uses download_and_verify for Maven Daemon"
+    else
+        assert_true false "java-dev.sh does not use download_and_verify for Maven Daemon"
+    fi
+}
+
+# Test: java-dev.sh sources required verification libraries
+test_java_dev_sources_libraries() {
+    local java_dev_script="$PROJECT_ROOT/lib/features/java-dev.sh"
+
+    if ! [ -f "$java_dev_script" ]; then
+        skip_test "java-dev.sh not found"
+        return
+    fi
+
+    # Check for download-verify.sh
+    if grep -q "source.*download-verify.sh" "$java_dev_script"; then
+        assert_true true "java-dev.sh sources download-verify.sh"
+    else
+        assert_true false "java-dev.sh does not source download-verify.sh"
+    fi
+
+    # Check for checksum-fetch.sh
+    if grep -q "source.*checksum-fetch.sh" "$java_dev_script"; then
+        assert_true true "java-dev.sh sources checksum-fetch.sh"
+    else
+        assert_true false "java-dev.sh does not source checksum-fetch.sh"
+    fi
+}
+
+# Test: Maven Daemon only installs on amd64
+test_maven_daemon_architecture_check() {
+    local java_dev_script="$PROJECT_ROOT/lib/features/java-dev.sh"
+
+    if ! [ -f "$java_dev_script" ]; then
+        skip_test "java-dev.sh not found"
+        return
+    fi
+
+    # Check that Maven Daemon only installs on amd64 (not arm64)
+    if grep -A2 "Maven Daemon" "$java_dev_script" | grep -q 'if \[ "$ARCH" = "amd64" \]'; then
+        assert_true true "java-dev.sh only installs Maven Daemon on amd64"
+    else
+        assert_true false "java-dev.sh has incorrect Maven Daemon architecture check"
+    fi
+}
+
 # Run all tests
 run_test_with_setup test_maven_installation "Maven installation"
 run_test_with_setup test_gradle_installation "Gradle installation"
@@ -253,6 +346,12 @@ run_test_with_setup test_junit_config "JUnit configuration"
 run_test_with_setup test_java_dev_aliases "Java dev aliases"
 run_test_with_setup test_lombok_support "Lombok support"
 run_test_with_setup test_java_dev_verification "Java dev verification"
+
+# Run checksum verification tests
+run_test test_java_dev_spring_boot_checksum "java-dev.sh verifies Spring Boot CLI checksum"
+run_test test_java_dev_maven_daemon_checksum "java-dev.sh verifies Maven Daemon checksum"
+run_test test_java_dev_sources_libraries "java-dev.sh sources verification libraries"
+run_test test_maven_daemon_architecture_check "Maven Daemon only installs on amd64"
 
 # Generate test report
 generate_report
