@@ -180,6 +180,14 @@ alias opi='op inject'
 # ----------------------------------------------------------------------------
 # op-env - Load environment variables from 1Password
 #
+# ⚠️  SECURITY WARNING:
+#   This function uses eval which can expose secrets in:
+#   - Command history (if histappend is enabled)
+#   - Process listings (ps aux shows full command)
+#   - Debug logs (if set -x is enabled)
+#
+#   Consider using op-env-safe() instead for better security.
+#
 # Usage:
 #   eval $(op-env <vault>/<item>)
 #
@@ -196,7 +204,60 @@ op-env() {
 }
 
 # ----------------------------------------------------------------------------
+# op-env-safe - Load environment variables from 1Password (RECOMMENDED)
+#
+# Safer alternative to op-env that exports variables directly without eval.
+# Prevents credential exposure in command history and process listings.
+#
+# Usage:
+#   op-env-safe <vault>/<item>
+#
+# Example:
+#   op-env-safe Development/API-Keys
+#   echo \$API_KEY  # Variable is now available
+# ----------------------------------------------------------------------------
+op-env-safe() {
+    # Disable command echoing to prevent exposure in logs
+    local old_x_state=\$(set +o | grep xtrace)
+    set +x
+
+    if [ -z "$1" ]; then
+        echo "Usage: op-env-safe <vault>/<item>" >&2
+        eval "\$old_x_state"
+        return 1
+    fi
+
+    local item="$1"
+    local json_output
+
+    # Fetch secrets from 1Password
+    if ! json_output=\$(op item get "\$item" --format json 2>/dev/null); then
+        echo "Failed to fetch secrets from 1Password: \$item" >&2
+        eval "\$old_x_state"
+        return 1
+    fi
+
+    # Parse and export variables without showing values in process list
+    local export_commands
+    export_commands=\$(echo "\$json_output" | jq -r '.fields[] | select(.purpose == "NOTES" or .type == "CONCEALED") | "export \(.label)=\\"\\(.value)\\""' 2>/dev/null)
+
+    if [ -z "\$export_commands" ]; then
+        echo "No environment variables found in 1Password item: \$item" >&2
+        eval "\$old_x_state"
+        return 1
+    fi
+
+    # Export variables using eval (unavoidable, but local to this function)
+    eval "\$export_commands"
+
+    # Re-enable command echoing if it was on
+    eval "\$old_x_state"
+}
+
+# ----------------------------------------------------------------------------
 # op-exec - Execute command with secrets from 1Password
+#
+# Uses op-env-safe internally to avoid credential exposure.
 #
 # Usage:
 #   op-exec <vault>/<item> <command> [args...]
@@ -213,8 +274,9 @@ op-exec() {
     local item="$1"
     shift
 
-    eval $(op-env "$item")
-    "$@"
+    # Use op-env-safe to load secrets securely
+    op-env-safe "\$item" || return 1
+    "\$@"
 }
 
 # Clean up helper functions
