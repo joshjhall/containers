@@ -123,18 +123,44 @@ log_message "Installing additional Terraform tools..."
 # Install Terragrunt (common Terraform wrapper)
 log_message "Installing Terragrunt ${TERRAGRUNT_VERSION}..."
 ARCH=$(dpkg --print-architecture)
-if [ "$ARCH" = "amd64" ]; then
-    log_command "Downloading Terragrunt for amd64" \
-        curl -L https://github.com/gruntwork-io/terragrunt/releases/download/v${TERRAGRUNT_VERSION}/terragrunt_linux_amd64 -o /usr/local/bin/terragrunt
-elif [ "$ARCH" = "arm64" ]; then
-    log_command "Downloading Terragrunt for arm64" \
-        curl -L https://github.com/gruntwork-io/terragrunt/releases/download/v${TERRAGRUNT_VERSION}/terragrunt_linux_arm64 -o /usr/local/bin/terragrunt
-else
-    log_warning "Terragrunt not available for architecture $ARCH, skipping..."
-fi
-if [ -f /usr/local/bin/terragrunt ]; then
+
+if [ "$ARCH" = "amd64" ] || [ "$ARCH" = "arm64" ]; then
+    TERRAGRUNT_BINARY="terragrunt_linux_${ARCH}"
+    TERRAGRUNT_URL="https://github.com/gruntwork-io/terragrunt/releases/download/v${TERRAGRUNT_VERSION}/${TERRAGRUNT_BINARY}"
+
+    # Fetch checksum dynamically from GitHub releases
+    log_message "Fetching Terragrunt checksum from GitHub..."
+    TERRAGRUNT_CHECKSUMS_URL="https://github.com/gruntwork-io/terragrunt/releases/download/v${TERRAGRUNT_VERSION}/SHA256SUMS"
+
+    if ! TERRAGRUNT_CHECKSUM=$(fetch_github_checksums_txt "$TERRAGRUNT_CHECKSUMS_URL" "$TERRAGRUNT_BINARY" 2>/dev/null); then
+        log_error "Failed to fetch checksum for Terragrunt ${TERRAGRUNT_VERSION}"
+        log_error "Please verify version exists: https://github.com/gruntwork-io/terragrunt/releases/tag/v${TERRAGRUNT_VERSION}"
+        log_feature_end
+        exit 1
+    fi
+
+    log_message "Expected SHA256: ${TERRAGRUNT_CHECKSUM}"
+
+    # Download and verify Terragrunt with checksum verification
+    cd /tmp
+    log_message "Downloading and verifying Terragrunt..."
+    download_and_verify \
+        "$TERRAGRUNT_URL" \
+        "$TERRAGRUNT_CHECKSUM" \
+        "terragrunt"
+
+    log_message "✓ Terragrunt v${TERRAGRUNT_VERSION} verified successfully"
+
+    # Install the verified binary
+    log_command "Installing Terragrunt binary" \
+        mv /tmp/terragrunt /usr/local/bin/terragrunt
+
     log_command "Setting Terragrunt permissions" \
         chmod +x /usr/local/bin/terragrunt
+
+    cd /
+else
+    log_warning "Terragrunt not available for architecture $ARCH, skipping..."
 fi
 
 # ============================================================================
