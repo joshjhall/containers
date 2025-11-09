@@ -26,12 +26,12 @@ These download binaries directly without verification.
 | Script | Line | Binary | Status | Notes |
 |--------|------|--------|--------|-------|
 | `terraform.sh` | 127-164 | terragrunt | ✅ **DONE** | SHA256 verification from SHA256SUMS file |
+| `dev-tools.sh` | 297-334 | duf .deb | ✅ **DONE** | SHA256 verification from checksums.txt |
+| `dev-tools.sh` | 652-693 | glab .deb | ✅ **DONE** | SHA256 verification from checksums.txt (GitLab) |
+| `cloudflare.sh` | 184, 187 | cloudflared .deb | ❌ **NO CHECKSUMS** | No checksums published |
+| `dev-tools.sh` | 414, 417 | direnv binary | ❌ **NO CHECKSUMS** | No checksums published |
+| `dev-tools.sh` | 520, 523 | mkcert binary | ❌ **NO CHECKSUMS** | No checksums published |
 | `aws.sh` | 168 | Session Manager plugin .deb | ⏳ **PENDING** | S3 hosted, may not have checksums |
-| `cloudflare.sh` | 184, 187 | cloudflared .deb | ⏳ **PENDING** | Need to verify checksum availability |
-| `dev-tools.sh` | 298, 301 | duf .deb | ⏳ **PENDING** | Need to verify checksum availability |
-| `dev-tools.sh` | 414, 417 | direnv binary | ⏳ **PENDING** | Need to verify checksum availability |
-| `dev-tools.sh` | 520, 523 | mkcert binary | ⏳ **PENDING** | Need to verify checksum availability |
-| `dev-tools.sh` | 633 | glab .deb | ⏳ **PENDING** | Optional tool, has error handling |
 
 ---
 
@@ -94,9 +94,13 @@ These download binaries directly without verification.
 
 ## Progress Tracking
 
-- [ ] Phase 10: Low-hanging fruit (terragrunt, etc.)
+- [x] Phase 10: Tools with published checksums (3/3 complete)
+  - [x] terragrunt - SHA256SUMS
+  - [x] duf - checksums.txt
+  - [x] glab - checksums.txt (GitLab)
+  - Note: cloudflared, direnv, mkcert don't publish checksums
 - [ ] Phase 11: Install scripts (ollama, claude)
-- [ ] Phase 12: Tools without checksums (Session Manager)
+- [ ] Phase 12: Tools without checksums (cloudflared, direnv, mkcert, Session Manager)
 
 ---
 

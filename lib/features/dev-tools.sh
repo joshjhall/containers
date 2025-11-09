@@ -293,21 +293,44 @@ log_message "Installing additional development tools..."
 log_message "Installing duf (modern disk usage utility)..."
 DUF_VERSION="0.9.1"
 ARCH=$(dpkg --print-architecture)
-if [ "$ARCH" = "amd64" ]; then
-    log_command "Downloading duf for amd64" \
-        curl -L https://github.com/muesli/duf/releases/download/v${DUF_VERSION}/duf_${DUF_VERSION}_linux_amd64.deb -o /tmp/duf.deb
-elif [ "$ARCH" = "arm64" ]; then
-    log_command "Downloading duf for arm64" \
-        curl -L https://github.com/muesli/duf/releases/download/v${DUF_VERSION}/duf_${DUF_VERSION}_linux_arm64.deb -o /tmp/duf.deb
-else
-    log_warning "duf not available for architecture $ARCH, skipping..."
-fi
 
-if [ -f /tmp/duf.deb ]; then
+if [ "$ARCH" = "amd64" ] || [ "$ARCH" = "arm64" ]; then
+    DUF_DEB="duf_${DUF_VERSION}_linux_${ARCH}.deb"
+    DUF_URL="https://github.com/muesli/duf/releases/download/v${DUF_VERSION}/${DUF_DEB}"
+
+    # Fetch checksum dynamically from GitHub releases
+    log_message "Fetching duf checksum from GitHub..."
+    DUF_CHECKSUMS_URL="https://github.com/muesli/duf/releases/download/v${DUF_VERSION}/checksums.txt"
+
+    if ! DUF_CHECKSUM=$(fetch_github_checksums_txt "$DUF_CHECKSUMS_URL" "$DUF_DEB" 2>/dev/null); then
+        log_error "Failed to fetch checksum for duf ${DUF_VERSION}"
+        log_error "Please verify version exists: https://github.com/muesli/duf/releases/tag/v${DUF_VERSION}"
+        log_feature_end
+        exit 1
+    fi
+
+    log_message "Expected SHA256: ${DUF_CHECKSUM}"
+
+    # Download and verify duf with checksum verification
+    cd /tmp
+    log_message "Downloading and verifying duf..."
+    download_and_verify \
+        "$DUF_URL" \
+        "$DUF_CHECKSUM" \
+        "duf.deb"
+
+    log_message "✓ duf v${DUF_VERSION} verified successfully"
+
+    # Install the verified package
     log_command "Installing duf package" \
         dpkg -i /tmp/duf.deb
+
     log_command "Cleaning up duf package" \
         rm /tmp/duf.deb
+
+    cd /
+else
+    log_warning "duf not available for architecture $ARCH, skipping..."
 fi
 
 # Install entr (file watcher)
@@ -616,8 +639,7 @@ GLAB_VERSION="1.75.0"
 log_command "Changing to temp directory" \
     cd /tmp
 
-# GitLab CLI may not provide arm64 builds for all releases
-# Try to download the appropriate architecture, fall back gracefully
+# GitLab CLI provides builds for amd64 and arm64
 if [ "$ARCH" = "amd64" ]; then
     GLAB_ARCH="amd64"
 elif [ "$ARCH" = "arm64" ]; then
@@ -628,23 +650,47 @@ else
 fi
 
 if [ -n "$GLAB_ARCH" ]; then
-    GLAB_URL="https://gitlab.com/gitlab-org/cli/-/releases/v${GLAB_VERSION}/downloads/glab_${GLAB_VERSION}_linux_${GLAB_ARCH}.deb"
-    log_command "Downloading glab for ${GLAB_ARCH}" \
-        curl -fL "$GLAB_URL" -o glab.deb || true
+    GLAB_DEB="glab_${GLAB_VERSION}_linux_${GLAB_ARCH}.deb"
+    GLAB_URL="https://gitlab.com/gitlab-org/cli/-/releases/v${GLAB_VERSION}/downloads/${GLAB_DEB}"
 
-    if [ -f glab.deb ] && [ -s glab.deb ]; then
-        log_command "Installing glab package" \
-            dpkg -i glab.deb || log_warning "Failed to install glab"
-        log_command "Cleaning up glab package" \
-            rm -f glab.deb
+    # Fetch checksum dynamically from GitLab releases
+    log_message "Fetching glab checksum from GitLab..."
+    GLAB_CHECKSUMS_URL="https://gitlab.com/gitlab-org/cli/-/releases/v${GLAB_VERSION}/downloads/checksums.txt"
+
+    if ! GLAB_CHECKSUM=$(fetch_github_checksums_txt "$GLAB_CHECKSUMS_URL" "$GLAB_DEB" 2>/dev/null); then
+        log_warning "Failed to fetch checksum for glab ${GLAB_VERSION}, skipping installation"
+        log_warning "Please verify version exists: https://gitlab.com/gitlab-org/cli/-/releases/v${GLAB_VERSION}"
+        cd /
     else
-        log_warning "GitLab CLI not available for ${GLAB_ARCH} architecture, skipping installation"
-        rm -f glab.deb
-    fi
-fi
+        log_message "Expected SHA256: ${GLAB_CHECKSUM}"
 
-log_command "Returning to root directory" \
-    cd /
+        # Download and verify glab with checksum verification
+        log_message "Downloading and verifying glab..."
+        if download_and_verify \
+            "$GLAB_URL" \
+            "$GLAB_CHECKSUM" \
+            "glab.deb"; then
+
+            log_message "✓ glab v${GLAB_VERSION} verified successfully"
+
+            # Install the verified package
+            log_command "Installing glab package" \
+                dpkg -i glab.deb || log_warning "Failed to install glab"
+
+            log_command "Cleaning up glab package" \
+                rm -f glab.deb
+        else
+            log_warning "glab verification failed, skipping installation"
+            rm -f glab.deb
+        fi
+
+        log_command "Returning to root directory" \
+            cd /
+    fi
+else
+    log_command "Returning to root directory" \
+        cd /
+fi
 
 # Install Claude Code CLI
 log_message "Installing Claude Code CLI..."
