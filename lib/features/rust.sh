@@ -43,7 +43,8 @@ source /tmp/build-scripts/base/download-verify.sh
 
 # Get Rust version from environment or use default
 RUST_VERSION="${RUST_VERSION:-1.88.0}"
-n# Validate Rust version format to prevent shell injection
+
+# Validate Rust version format to prevent shell injection
 validate_rust_version "$RUST_VERSION" || {
     log_error "Build failed due to invalid RUST_VERSION"
     exit 1
