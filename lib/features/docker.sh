@@ -188,24 +188,39 @@ log_message "Installing dive (Docker image layer analysis tool)..."
 # Set dive version
 DIVE_VERSION="0.13.1"
 
-# Download and install dive
-log_message "Downloading dive..."
+# Construct the dive package filename
+DIVE_PACKAGE="dive_${DIVE_VERSION}_linux_${ARCH}.deb"
+DIVE_URL="https://github.com/wagoodman/dive/releases/download/v${DIVE_VERSION}/${DIVE_PACKAGE}"
+
+# Fetch checksum dynamically from GitHub releases
+log_message "Fetching dive checksum from GitHub..."
+DIVE_CHECKSUMS_URL="https://github.com/wagoodman/dive/releases/download/v${DIVE_VERSION}/dive_${DIVE_VERSION}_checksums.txt"
+
+if ! DIVE_CHECKSUM=$(fetch_github_checksums_txt "$DIVE_CHECKSUMS_URL" "$DIVE_PACKAGE" 2>/dev/null); then
+    log_error "Failed to fetch checksum for dive ${DIVE_VERSION}"
+    log_error "Please verify version exists: https://github.com/wagoodman/dive/releases/tag/v${DIVE_VERSION}"
+    log_feature_end
+    exit 1
+fi
+
+log_message "Expected SHA256: ${DIVE_CHECKSUM}"
+
+# Download and verify dive with checksum verification
 cd /tmp
+log_message "Downloading and verifying dive..."
+download_and_verify \
+    "$DIVE_URL" \
+    "$DIVE_CHECKSUM" \
+    "dive.deb"
 
-if [ "$ARCH" = "amd64" ]; then
-    log_command "Downloading dive for amd64" \
-        curl -fsSL -o dive.deb https://github.com/wagoodman/dive/releases/download/v${DIVE_VERSION}/dive_${DIVE_VERSION}_linux_amd64.deb
-elif [ "$ARCH" = "arm64" ]; then
-    log_command "Downloading dive for arm64" \
-        curl -fsSL -o dive.deb https://github.com/wagoodman/dive/releases/download/v${DIVE_VERSION}/dive_${DIVE_VERSION}_linux_arm64.deb
-fi
+log_message "✓ dive v${DIVE_VERSION} verified successfully"
 
-if [ -f dive.deb ]; then
-    log_command "Installing dive package" \
-        dpkg -i dive.deb
-    log_command "Cleaning up dive package" \
-        rm -f dive.deb
-fi
+# Install the verified package
+log_command "Installing dive package" \
+    dpkg -i dive.deb
+
+log_command "Cleaning up dive package" \
+    rm -f dive.deb
 
 cd /
 

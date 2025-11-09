@@ -266,6 +266,82 @@ run_test_with_setup() {
     teardown
 }
 
+# ============================================================================
+# Checksum Verification Tests
+# ============================================================================
+
+# Test: docker.sh uses checksum verification for dive
+test_docker_dive_checksum() {
+    local docker_script="$PROJECT_ROOT/lib/features/docker.sh"
+
+    if ! [ -f "$docker_script" ]; then
+        skip_test "docker.sh not found"
+        return
+    fi
+
+    # Check for dive checksum fetching (look for DIVE_CHECKSUM variable)
+    if grep -q "DIVE_CHECKSUM.*fetch_github_checksums_txt" "$docker_script"; then
+        assert_true true "docker.sh fetches dive checksum from GitHub"
+    else
+        assert_true false "docker.sh does not fetch dive checksum"
+    fi
+
+    # Check for download_and_verify usage (matches "dive.deb")
+    if grep -A5 "download_and_verify" "$docker_script" | grep -q "dive.deb"; then
+        assert_true true "docker.sh uses download_and_verify for dive"
+    else
+        assert_true false "docker.sh does not use download_and_verify for dive"
+    fi
+}
+
+# Test: docker.sh sources required verification libraries
+test_docker_sources_libraries() {
+    local docker_script="$PROJECT_ROOT/lib/features/docker.sh"
+
+    if ! [ -f "$docker_script" ]; then
+        skip_test "docker.sh not found"
+        return
+    fi
+
+    # Check for download-verify.sh
+    if grep -q "source.*download-verify.sh" "$docker_script"; then
+        assert_true true "docker.sh sources download-verify.sh"
+    else
+        assert_true false "docker.sh does not source download-verify.sh"
+    fi
+
+    # Check for checksum-fetch.sh
+    if grep -q "source.*checksum-fetch.sh" "$docker_script"; then
+        assert_true true "docker.sh sources checksum-fetch.sh"
+    else
+        assert_true false "docker.sh does not source checksum-fetch.sh"
+    fi
+}
+
+# Test: lazydocker uses checksum verification
+test_docker_lazydocker_checksum() {
+    local docker_script="$PROJECT_ROOT/lib/features/docker.sh"
+
+    if ! [ -f "$docker_script" ]; then
+        skip_test "docker.sh not found"
+        return
+    fi
+
+    # Check for lazydocker checksum fetching (look for LAZYDOCKER_CHECKSUM variable)
+    if grep -q "LAZYDOCKER_CHECKSUM.*fetch_github_checksums_txt" "$docker_script"; then
+        assert_true true "docker.sh fetches lazydocker checksum from GitHub"
+    else
+        assert_true false "docker.sh does not fetch lazydocker checksum"
+    fi
+
+    # Check for download_and_extract usage for lazydocker
+    if grep -A5 "download_and_extract" "$docker_script" | grep -q "LAZYDOCKER_URL"; then
+        assert_true true "docker.sh uses download_and_extract for lazydocker"
+    else
+        assert_true false "docker.sh does not use download_and_extract for lazydocker"
+    fi
+}
+
 # Run all tests
 run_test_with_setup test_docker_repository_setup "Docker repository setup configuration"
 run_test_with_setup test_docker_group_creation "Docker group creation logic"
@@ -277,6 +353,11 @@ run_test_with_setup test_docker_cli_tools "Docker CLI tools configuration"
 run_test_with_setup test_lazydocker_installation "Lazydocker installation paths"
 run_test_with_setup test_dive_installation "Dive installation paths"
 run_test_with_setup test_docker_verification_script "Docker verification script"
+
+# Run checksum verification tests
+run_test test_docker_dive_checksum "docker.sh verifies dive checksum"
+run_test test_docker_sources_libraries "docker.sh sources verification libraries"
+run_test test_docker_lazydocker_checksum "docker.sh verifies lazydocker checksum"
 
 # Generate test report
 generate_report
