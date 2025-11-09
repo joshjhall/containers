@@ -13,6 +13,19 @@ mkdir -p /etc/bashrc.d
 cat > /etc/bashrc.d/10-tool-paths.sh << 'EOF'
 # Comprehensive PATH setup for all installed tools
 
+# Security: Safe eval for tool initialization
+safe_eval() {
+    local output
+    if ! output=$("$@" 2>/dev/null); then
+        return 1
+    fi
+    if echo "$output" | grep -qE '(rm -rf|curl.*bash|wget.*bash|;\s*rm|\$\(.*rm)|exec\s+[^$]|/bin/sh.*-c|bash.*-c.*http)'; then
+        echo "WARNING: Suspicious output detected, skipping initialization of: $*" >&2
+        return 1
+    fi
+    eval "$output"
+}
+
 # Base paths
 export PATH="/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin:/sbin"
 
@@ -29,7 +42,7 @@ elif [ -d "$HOME/.rbenv" ]; then
 fi
 if [ -n "${RBENV_ROOT:-}" ]; then
     export PATH="$RBENV_ROOT/bin:$PATH"
-    eval "$(rbenv init - 2>/dev/null || true)"
+    safe_eval rbenv init -
 fi
 
 # Go
