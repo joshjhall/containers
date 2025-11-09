@@ -54,7 +54,6 @@ source /tmp/build-scripts/base/download-verify.sh
 source /tmp/build-scripts/features/lib/checksum-fetch.sh
 
 # Source secure temp directory utilities
-source /tmp/build-scripts/base/secure-temp.sh
 
 # Start logging
 log_feature_start "Kubernetes Tools"
