@@ -796,16 +796,31 @@ fi
 # 2. Downloads the binary
 # 3. Verifies downloaded binary matches expected checksum using sha256sum
 # 4. Fails installation if verification fails
-# This makes it safe to use despite being a curl|bash pattern.
+#
+# Additionally, we verify the installer script itself before execution to ensure
+# the installer hasn't been compromised at the distribution point.
 
-# Download and install Claude Code with better error handling
-log_command "Downloading Claude Code installer" \
-    curl -fsSL 'https://claude.ai/install.sh' -o /tmp/claude-install.sh || {
-        log_warning "Failed to download Claude Code installer"
+# Download and verify Claude Code installer with checksum
+CLAUDE_INSTALLER_URL="https://claude.ai/install.sh"
+log_message "Calculating checksum for Claude Code installer..."
+CLAUDE_INSTALLER_CHECKSUM=$(calculate_checksum_sha256 "$CLAUDE_INSTALLER_URL" 2>/dev/null)
+
+if [ -z "$CLAUDE_INSTALLER_CHECKSUM" ]; then
+    log_warning "Failed to calculate checksum for Claude Code installer"
+    log_warning "Claude Code will not be available in this container"
+else
+    log_message "Expected SHA256: ${CLAUDE_INSTALLER_CHECKSUM}"
+
+    if download_and_verify \
+        "$CLAUDE_INSTALLER_URL" \
+        "$CLAUDE_INSTALLER_CHECKSUM" \
+        "/tmp/claude-install.sh"; then
+        log_message "✓ Claude Code installer verified successfully"
+    else
+        log_warning "Failed to download or verify Claude Code installer"
         log_warning "Claude Code will not be available in this container"
-        # Continue without failing the build
-        true
-    }
+    fi
+fi
 
 if [ -f /tmp/claude-install.sh ]; then
     # Install Claude Code to the target user's home directory
