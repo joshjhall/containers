@@ -118,9 +118,9 @@ if apt-cache show r-base-core | grep -q "Version: ${R_VERSION}"; then
     # Install specific version if available
     log_message "Installing R version ${R_VERSION}..."
     if ! apt_install \
-            r-base-core=${R_VERSION}-* \
-            r-base-dev=${R_VERSION}-* \
-            r-recommended=${R_VERSION}-*; then
+            r-base-core="${R_VERSION}"-* \
+            r-base-dev="${R_VERSION}"-* \
+            r-recommended="${R_VERSION}"-*; then
         log_warning "Exact version ${R_VERSION} not found, installing latest available"
         log_message "Installing latest R version..."
         apt_install \
@@ -176,7 +176,7 @@ log_command "Creating R temp directory" \
     mkdir -p "${R_CACHE_DIR}/tmp"
 
 log_command "Setting R cache directory ownership" \
-    chown -R ${USER_UID}:${USER_GID} "${R_CACHE_DIR}"
+    chown -R "${USER_UID}":"${USER_GID}" "${R_CACHE_DIR}"
 
 log_message "R library path: ${R_LIBS_USER}"
 log_message "R cache directory: ${R_CACHE_DIR}"
@@ -460,7 +460,7 @@ log_command "Checking Rscript version" \
 # ============================================================================
 log_message "Ensuring correct ownership of R directories..."
 log_command "Final ownership fix for R cache directories" \
-    chown -R ${USER_UID}:${USER_GID} "${R_CACHE_DIR}" || true
+    chown -R "${USER_UID}":"${USER_GID}" "${R_CACHE_DIR}" || true
 
 # End logging
 log_feature_end

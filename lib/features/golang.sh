@@ -51,8 +51,8 @@ validate_go_version "$GO_VERSION" || {
 }
 
 # Extract major.minor version for comparison
-GO_MAJOR=$(echo $GO_VERSION | cut -d. -f1)
-GO_MINOR=$(echo $GO_VERSION | cut -d. -f2)
+GO_MAJOR=$(echo "$GO_VERSION" | cut -d. -f1)
+GO_MINOR=$(echo "$GO_VERSION" | cut -d. -f2)
 
 # Start logging
 log_feature_start "Golang" "${GO_VERSION}"
@@ -173,7 +173,7 @@ log_command "Creating Go directories" \
     mkdir -p "${GOPATH}"/{bin,src,pkg} "${GOCACHE}" "${GOMODCACHE}"
 
 log_command "Setting cache directory ownership" \
-    chown -R ${USER_UID}:${USER_GID} "${GOPATH}" "${GOCACHE}" "${GOMODCACHE}"
+    chown -R "${USER_UID}":"${USER_GID}" "${GOPATH}" "${GOCACHE}" "${GOMODCACHE}"
 
 log_message "Go installation paths:"
 log_message "  GOROOT: /usr/local/go"
