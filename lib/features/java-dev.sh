@@ -267,7 +267,7 @@ log_command "Creating bashrc.d directory" \
     mkdir -p /etc/bashrc.d
 
 # Add java-dev aliases and helpers
-write_bashrc_content /etc/bashrc.d/55-java-dev.sh "Java development tools" << JAVA_DEV_BASHRC_EOF
+write_bashrc_content /etc/bashrc.d/55-java-dev.sh "Java development tools" << 'JAVA_DEV_BASHRC_EOF'
 # ----------------------------------------------------------------------------
 # Java Development Tool Aliases and Functions
 # ----------------------------------------------------------------------------
