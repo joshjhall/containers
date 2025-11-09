@@ -504,6 +504,8 @@ log_command "Setting startup script permissions" \
 # ============================================================================
 # Final ownership fix
 # ============================================================================
+# Note: rust-dev does not create cache directories itself, it relies on the base rust feature
+# This final ownership fix ensures cargo cache is owned correctly after tool installations
 log_message "Ensuring correct ownership of Rust directories..."
 log_command "Final ownership fix for cargo cache" \
     chown -R "${USER_UID}:${USER_GID}" "${CARGO_HOME}" "${RUSTUP_HOME}" || true

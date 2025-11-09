@@ -169,11 +169,13 @@ GOCACHE="/cache/go-build"
 GOMODCACHE="/cache/go-mod"
 
 # Create cache directories with correct ownership
-log_command "Creating Go directories" \
-    mkdir -p "${GOPATH}"/{bin,src,pkg} "${GOCACHE}" "${GOMODCACHE}"
-
-log_command "Setting cache directory ownership" \
-    chown -R "${USER_UID}":"${USER_GID}" "${GOPATH}" "${GOCACHE}" "${GOMODCACHE}"
+# Use install -d for atomic directory creation with ownership
+log_command "Creating Go directories with ownership" \
+    bash -c "install -d -m 0755 -o '${USER_UID}' -g '${USER_GID}' '${GOPATH}/bin' && \
+    install -d -m 0755 -o '${USER_UID}' -g '${USER_GID}' '${GOPATH}/src' && \
+    install -d -m 0755 -o '${USER_UID}' -g '${USER_GID}' '${GOPATH}/pkg' && \
+    install -d -m 0755 -o '${USER_UID}' -g '${USER_GID}' '${GOCACHE}' && \
+    install -d -m 0755 -o '${USER_UID}' -g '${USER_GID}' '${GOMODCACHE}'"
 
 log_message "Go installation paths:"
 log_message "  GOROOT: /usr/local/go"

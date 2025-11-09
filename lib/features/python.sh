@@ -94,11 +94,12 @@ log_message "  POETRY_CACHE_DIR: ${POETRY_CACHE_DIR}"
 log_message "  PIPX_HOME: ${PIPX_HOME}"
 
 # Create cache directories with correct ownership
-log_command "Creating Python cache directories" \
-    mkdir -p "${PIP_CACHE_DIR}" "${POETRY_CACHE_DIR}" "${PIPX_HOME}" "${PIPX_BIN_DIR}"
-
-log_command "Setting cache directory ownership" \
-    chown -R "${USER_UID}":"${USER_GID}" "${PIP_CACHE_DIR}" "${POETRY_CACHE_DIR}" "${PIPX_HOME}"
+# Use install -d for atomic directory creation with ownership
+log_command "Creating Python cache directories with ownership" \
+    bash -c "install -d -m 0755 -o '${USER_UID}' -g '${USER_GID}' '${PIP_CACHE_DIR}' && \
+    install -d -m 0755 -o '${USER_UID}' -g '${USER_GID}' '${POETRY_CACHE_DIR}' && \
+    install -d -m 0755 -o '${USER_UID}' -g '${USER_GID}' '${PIPX_HOME}' && \
+    install -d -m 0755 -o '${USER_UID}' -g '${USER_GID}' '${PIPX_BIN_DIR}'"
 
 # ============================================================================
 # Python Installation from Source

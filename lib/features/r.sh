@@ -170,13 +170,9 @@ export R_CACHE_DIR="/cache/r"
 
 # Create cache directories with correct ownership
 log_message "Creating R cache directories..."
-log_command "Creating R library directory" \
-    mkdir -p "${R_LIBS_USER}"
-log_command "Creating R temp directory" \
-    mkdir -p "${R_CACHE_DIR}/tmp"
-
-log_command "Setting R cache directory ownership" \
-    chown -R "${USER_UID}":"${USER_GID}" "${R_CACHE_DIR}"
+# Use install -d for atomic directory creation with ownership
+log_command "Creating R cache directories with ownership" \
+    bash -c "install -d -m 0755 -o '${USER_UID}' -g '${USER_GID}' '${R_LIBS_USER}' && install -d -m 0755 -o '${USER_UID}' -g '${USER_GID}' '${R_CACHE_DIR}/tmp'"
 
 log_message "R library path: ${R_LIBS_USER}"
 log_message "R cache directory: ${R_CACHE_DIR}"

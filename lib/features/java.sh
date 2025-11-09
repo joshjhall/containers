@@ -118,11 +118,9 @@ log_message "  Maven repository: ${MAVEN_CACHE_DIR}"
 log_message "  Gradle home: ${GRADLE_HOME_DIR}"
 
 # Create cache directories with correct ownership
-log_command "Creating Java cache directories" \
-    mkdir -p "${MAVEN_CACHE_DIR}" "${GRADLE_HOME_DIR}"
-
-log_command "Setting cache directory ownership" \
-    chown -R "${USER_UID}:${USER_GID}" "${MAVEN_CACHE_DIR}" "${GRADLE_HOME_DIR}"
+# Use install -d for atomic directory creation with ownership
+log_command "Creating Java cache directories with ownership" \
+    bash -c "install -d -m 0755 -o '${USER_UID}' -g '${USER_GID}' '${MAVEN_CACHE_DIR}' && install -d -m 0755 -o '${USER_UID}' -g '${USER_GID}' '${GRADLE_HOME_DIR}'"
 
 # ============================================================================
 # Environment Configuration
