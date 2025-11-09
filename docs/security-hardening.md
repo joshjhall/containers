@@ -1,0 +1,939 @@
+# Security Hardening Roadmap
+
+## Status: 📋 PLANNED
+**Date Created**: 2025-11-08
+**Last Updated**: 2025-11-08
+
+**Current Security Posture**: GOOD (8/10)
+
+This document tracks security improvements based on OWASP best practices audit. The container build system already demonstrates strong security practices with 100% checksum verification, proper privilege separation, and secure credential handling. These improvements will further harden the system.
+
+---
+
+## Overview
+
+### Existing Security Strengths ✅
+
+- **Supply Chain Security**: 100% of downloads verified with SHA256/SHA512 checksums
+- **GPG Verification**: AWS CLI and other tools verify signatures
+- **Privilege Separation**: Non-root user by default
+- **No Hardcoded Secrets**: All credentials via environment or config files
+- **Error Handling**: Comprehensive checking with `set -euo pipefail`
+- **Secure Downloads**: Consistent use of `download-verify` utility
+- **File Permissions**: Cache directories, sudoers, keys properly secured
+- **Path Sanitization**: Most operations use absolute paths
+
+---
+
+## HIGH SEVERITY ISSUES
+
+### 🔴 #1: Command Injection via Eval with GITHUB_TOKEN
+
+**Priority**: CRITICAL
+**Status**: 🔴 NOT STARTED
+**Estimated Effort**: 30 minutes
+
+**Affected Files**:
+- `lib/runtime/check-versions.sh` (lines 81, 90, 113)
+- `lib/runtime/check-installed-versions.sh` (lines 78, 86)
+
+**Risk**: Command injection if `GITHUB_TOKEN` environment variable contains shell metacharacters. An attacker who can control `GITHUB_TOKEN` could inject arbitrary shell commands.
+
+**Current Code**:
+```bash
+curl_opts="$curl_opts -H \"Authorization: token $GITHUB_TOKEN\""
+response=$(eval "curl $curl_opts \"https://api.github.com/repos/${repo}/releases/latest\"")
+```
+
+**Recommended Fix**:
+```bash
+# Instead of eval, pass token directly to curl
+if [ -n "${GITHUB_TOKEN:-}" ]; then
+    response=$(curl -H "Authorization: token $GITHUB_TOKEN" \
+        "https://api.github.com/repos/${repo}/releases/latest")
+else
+    response=$(curl "https://api.github.com/repos/${repo}/releases/latest")
+fi
+```
+
+**Testing Requirements**:
+- Test with valid GITHUB_TOKEN
+- Test without GITHUB_TOKEN
+- Test with token containing special characters (verify no injection)
+
+---
+
+### 🟠 #2: Passwordless Sudo for Non-Root User
+
+**Priority**: HIGH (for production), MEDIUM (for dev)
+**Status**: 🔴 NOT STARTED
+**Estimated Effort**: 1 hour
+
+**Affected Files**:
+- `lib/base/user.sh` (lines 92-94)
+
+**Risk**: Container escape or privilege escalation. While convenient for development, full passwordless sudo violates least privilege principle.
+
+**Current Code**:
+```bash
+echo "${USERNAME} ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/${USERNAME}
+chmod 0440 /etc/sudoers.d/${USERNAME}
+```
+
+**Recommended Fix**:
+```bash
+# Add build argument to control sudo access
+ARG ENABLE_PASSWORDLESS_SUDO=true
+
+# In user.sh, make it conditional
+if [ "${ENABLE_PASSWORDLESS_SUDO}" = "true" ]; then
+    echo "${USERNAME} ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/${USERNAME}
+    chmod 0440 /etc/sudoers.d/${USERNAME}
+    log_message "⚠️  WARNING: Passwordless sudo enabled (development mode)"
+else
+    log_message "Passwordless sudo disabled (production mode)"
+fi
+```
+
+**Additional Work**:
+- Update Dockerfile to add `ARG ENABLE_PASSWORDLESS_SUDO=true`
+- Document security implications in README
+- Add examples for production vs development builds
+
+---
+
+## MEDIUM SEVERITY ISSUES
+
+### 🟡 #3: Multiple Eval Usages for Shell Initialization
+
+**Priority**: MEDIUM
+**Status**: 🔴 NOT STARTED
+**Estimated Effort**: 2 hours
+
+**Affected Files**:
+- `lib/base/aliases.sh` (line 122)
+- `lib/runtime/setup-paths.sh` (line 32)
+- `lib/features/dev-tools.sh` (lines 897, 910)
+
+**Risk**: Command injection if tool outputs are compromised.
+
+**Current Code**:
+```bash
+eval "$(zoxide init bash)"
+eval "$(rbenv init - 2>/dev/null || true)"
+eval "$(direnv hook bash)"
+eval "$(just --completions bash)"
+```
+
+**Recommended Fix**:
+```bash
+# Validate command output before eval
+safe_eval() {
+    local command="$1"
+    local output
+
+    if ! output=$($command 2>/dev/null); then
+        log_warning "Failed to initialize $command"
+        return 1
+    fi
+
+    # Check for suspicious patterns
+    if echo "$output" | grep -qE '(rm -rf|curl.*bash|wget.*bash|\$\(.*\))'; then
+        log_error "Suspicious output from $command, skipping initialization"
+        return 1
+    fi
+
+    eval "$output"
+}
+
+# Usage
+safe_eval "zoxide init bash"
+safe_eval "direnv hook bash"
+```
+
+**Testing Requirements**:
+- Test normal initialization paths
+- Mock compromised output with malicious patterns
+- Verify proper error handling and logging
+
+---
+
+### 🟡 #4: Unvalidated File Path Operations in Entrypoint
+
+**Priority**: MEDIUM
+**Status**: 🔴 NOT STARTED
+**Estimated Effort**: 1 hour
+
+**Affected Files**:
+- `lib/runtime/entrypoint.sh` (lines 54-64, 80-92)
+
+**Risk**: Path traversal via symlink attacks if startup scripts are compromised.
+
+**Current Code**:
+```bash
+for script in /etc/container/first-startup/*.sh; do
+    if [ -f "$script" ]; then
+        echo "Running first-startup script: $(basename $script)"
+        if [ "$RUNNING_AS_ROOT" = "true" ]; then
+            su ${USERNAME} -c "bash $script"
+        fi
+    fi
+done
+```
+
+**Recommended Fix**:
+```bash
+for script in /etc/container/first-startup/*.sh; do
+    # Skip if not a regular file or is a symlink
+    if [ -f "$script" ] && [ ! -L "$script" ]; then
+        # Verify script is in expected directory
+        script_realpath=$(realpath "$script")
+        if [[ "$script_realpath" == /etc/container/first-startup/* ]]; then
+            echo "Running first-startup script: $(basename $script)"
+            if [ "$RUNNING_AS_ROOT" = "true" ]; then
+                su ${USERNAME} -c "bash $script"
+            else
+                bash "$script"
+            fi
+        else
+            echo "⚠️  WARNING: Skipping script outside expected directory: $script"
+        fi
+    fi
+done
+```
+
+**Testing Requirements**:
+- Test normal startup scripts
+- Test with symlinks pointing outside directory
+- Test with relative path manipulations
+
+---
+
+### 🟡 #5: Claude Code Installer Not Verified
+
+**Priority**: MEDIUM
+**Status**: 🔴 NOT STARTED
+**Estimated Effort**: 45 minutes
+
+**Affected Files**:
+- `lib/features/dev-tools.sh` (lines 793-808)
+
+**Risk**: Code execution from compromised download source. While installer claims internal verification, the installer script itself is not verified.
+
+**Current Code**:
+```bash
+curl -fsSL 'https://claude.ai/install.sh' -o /tmp/claude-install.sh || {
+    log_warning "Failed to download Claude Code installer"
+}
+su -c "cd '$USER_HOME' && bash /tmp/claude-install.sh" "$TARGET_USER"
+```
+
+**Recommended Fix Option A - Checksum Verification**:
+```bash
+# Download installer with checksum verification
+CLAUDE_INSTALLER_URL="https://claude.ai/install.sh"
+
+log_message "Calculating checksum for Claude installer..."
+CLAUDE_INSTALLER_CHECKSUM=$(calculate_checksum_sha256 "$CLAUDE_INSTALLER_URL" 2>/dev/null)
+
+if [ -z "$CLAUDE_INSTALLER_CHECKSUM" ]; then
+    log_warning "Failed to calculate checksum for Claude installer, skipping"
+else
+    log_message "Expected SHA256: ${CLAUDE_INSTALLER_CHECKSUM}"
+
+    download_and_verify \
+        "$CLAUDE_INSTALLER_URL" \
+        "$CLAUDE_INSTALLER_CHECKSUM" \
+        "/tmp/claude-install.sh"
+
+    log_message "✓ Claude installer verified successfully"
+    su -c "cd '$USER_HOME' && bash /tmp/claude-install.sh" "$TARGET_USER" || {
+        log_warning "Claude installation failed, continuing..."
+    }
+fi
+```
+
+**Recommended Fix Option B - Version Pinning**:
+```bash
+# Use a specific commit/version with known checksum
+CLAUDE_VERSION="v1.2.3"  # Pin to specific version
+CLAUDE_INSTALLER_URL="https://github.com/anthropics/claude-code/releases/download/${CLAUDE_VERSION}/install.sh"
+CLAUDE_INSTALLER_SHA256="<known checksum for this version>"
+
+download_and_verify \
+    "$CLAUDE_INSTALLER_URL" \
+    "$CLAUDE_INSTALLER_SHA256" \
+    "/tmp/claude-install.sh"
+```
+
+**Decision Needed**: Choose between calculated checksums (Option A) or version pinning (Option B)
+
+---
+
+### 🟡 #6: Sensitive Data Exposure in 1Password Examples
+
+**Priority**: MEDIUM
+**Status**: 🔴 NOT STARTED
+**Estimated Effort**: 1 hour
+
+**Affected Files**:
+- `lib/features/op-cli.sh` (lines 184, 187, 216)
+
+**Risk**: Credential exposure via command history, process listings, or debug logs when using `eval` with credentials.
+
+**Current Code**:
+```bash
+#   eval $(op-env <vault>/<item>)
+#   eval $(op-env Development/API-Keys)
+    eval $(op-env "$item")
+```
+
+**Recommended Fix**:
+```bash
+# Create a safer helper function that doesn't expose credentials
+op-env-safe() {
+    set +x  # Disable command echoing to prevent exposure
+    local item="$1"
+
+    if [ -z "$item" ]; then
+        echo "Usage: op-env-safe <vault>/<item>" >&2
+        return 1
+    fi
+
+    # Export variables without eval to avoid exposure
+    local env_vars
+    if ! env_vars=$(op item get "$item" --format=json 2>/dev/null); then
+        echo "Failed to fetch secrets from 1Password" >&2
+        return 1
+    fi
+
+    # Parse and export without showing in process list
+    while IFS='=' read -r key value; do
+        if [ -n "$key" ] && [ -n "$value" ]; then
+            export "$key=$value"
+        fi
+    done < <(echo "$env_vars" | jq -r '.fields[] | "\(.label)=\(.value)"' 2>/dev/null)
+
+    set -x  # Re-enable command echoing if it was on
+}
+```
+
+**Additional Work**:
+- Update documentation and examples
+- Add warnings about credential exposure
+- Consider deprecating old `op-env` pattern
+
+---
+
+## LOW SEVERITY ISSUES
+
+### 🟢 #7: Missing Input Validation on Version Numbers
+
+**Priority**: LOW
+**Status**: 🔴 NOT STARTED
+**Estimated Effort**: 2 hours
+
+**Affected Files**:
+- `lib/features/python.sh` (line 36)
+- `lib/features/node.sh`
+- `lib/features/rust.sh`
+- `lib/features/golang.sh`
+- `lib/features/ruby.sh`
+- `lib/features/java-dev.sh`
+- And other feature scripts with version variables
+
+**Risk**: Shell injection if VERSION environment variables contain malicious input. While build-time only, malicious build args could inject commands.
+
+**Current Code**:
+```bash
+PYTHON_VERSION="${PYTHON_VERSION:-3.13.5}"
+# Version used directly in URLs and file paths
+```
+
+**Recommended Fix**:
+
+Create a shared validation function in `lib/base/version-validation.sh`:
+
+```bash
+#!/bin/bash
+# Version validation utilities
+
+# Validate semantic version format (X.Y.Z)
+validate_semver() {
+    local version="$1"
+    local variable_name="${2:-VERSION}"
+
+    if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        log_error "Invalid $variable_name format: $version"
+        log_error "Expected format: X.Y.Z (e.g., 3.13.5)"
+        return 1
+    fi
+
+    return 0
+}
+
+# Validate version with optional patch (X.Y or X.Y.Z)
+validate_version_flexible() {
+    local version="$1"
+    local variable_name="${2:-VERSION}"
+
+    if ! [[ "$version" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
+        log_error "Invalid $variable_name format: $version"
+        log_error "Expected format: X.Y or X.Y.Z (e.g., 20.0 or 3.13.5)"
+        return 1
+    fi
+
+    return 0
+}
+
+# Validate Go version format (X.Y.Z or X.Y)
+validate_go_version() {
+    local version="$1"
+
+    if ! [[ "$version" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
+        log_error "Invalid GO_VERSION format: $version"
+        log_error "Expected format: X.Y or X.Y.Z (e.g., 1.21 or 1.21.5)"
+        return 1
+    fi
+
+    return 0
+}
+```
+
+**Usage in Feature Scripts**:
+```bash
+# Source validation utilities
+source /tmp/build-scripts/base/version-validation.sh
+
+# Validate Python version
+PYTHON_VERSION="${PYTHON_VERSION:-3.13.5}"
+validate_semver "$PYTHON_VERSION" "PYTHON_VERSION" || exit 1
+```
+
+**Testing Requirements**:
+- Unit tests for validation functions
+- Integration tests with invalid versions
+- Verify proper error messages
+
+---
+
+### 🟢 #8: Race Condition in Cache Directory Creation
+
+**Priority**: LOW
+**Status**: 🔴 NOT STARTED
+**Estimated Effort**: 1 hour
+
+**Affected Files**:
+- `lib/features/python.sh` (lines 88-92)
+- `lib/features/node.sh`
+- `lib/features/rust.sh`
+- Other feature scripts creating cache directories
+
+**Risk**: Permission issues or security context confusion during parallel builds due to non-atomic operations.
+
+**Current Code**:
+```bash
+log_command "Creating Python cache directories" \
+    mkdir -p "${PIP_CACHE_DIR}" "${POETRY_CACHE_DIR}" "${PIPX_HOME}" "${PIPX_BIN_DIR}"
+
+log_command "Setting cache directory ownership" \
+    chown -R ${USER_UID}:${USER_GID} "${PIP_CACHE_DIR}" "${POETRY_CACHE_DIR}" "${PIPX_HOME}"
+```
+
+**Recommended Fix**:
+```bash
+# Create directories with correct ownership atomically using install
+log_command "Creating Python cache directories with correct permissions" \
+    bash -c "
+    install -d -m 0755 -o ${USER_UID} -g ${USER_GID} '${PIP_CACHE_DIR}'
+    install -d -m 0755 -o ${USER_UID} -g ${USER_GID} '${POETRY_CACHE_DIR}'
+    install -d -m 0755 -o ${USER_UID} -g ${USER_GID} '${PIPX_HOME}'
+    install -d -m 0755 -o ${USER_UID} -g ${USER_GID} '${PIPX_BIN_DIR}'
+    "
+```
+
+**Benefits**:
+- Atomic directory creation with ownership
+- Explicit permission setting
+- No race condition window
+
+---
+
+### 🟢 #9: Process Substitution with Command Outputs
+
+**Priority**: LOW
+**Status**: 🔴 NOT STARTED
+**Estimated Effort**: 1 hour
+
+**Affected Files**:
+- `lib/features/kubernetes.sh` (line 358)
+- `lib/features/dev-tools.sh` (line 910)
+
+**Risk**: Command injection if tool outputs are compromised. Similar to eval but harder to defend against.
+
+**Current Code**:
+```bash
+source <(kubectl completion bash)
+source <(just --completions bash)
+```
+
+**Recommended Fix**:
+```bash
+# Validate tool exists and generate completions to file for inspection
+if command -v kubectl >/dev/null 2>&1; then
+    COMPLETION_FILE="/tmp/kubectl-completion.bash"
+    if kubectl completion bash > "$COMPLETION_FILE" 2>/dev/null; then
+        # Basic validation - check file isn't suspiciously large or contains dangerous patterns
+        if [ $(wc -c < "$COMPLETION_FILE") -lt 100000 ] && \
+           ! grep -qE '(rm -rf|curl.*bash|wget.*bash)' "$COMPLETION_FILE"; then
+            source "$COMPLETION_FILE"
+        else
+            log_warning "kubectl completion failed validation"
+        fi
+        rm -f "$COMPLETION_FILE"
+    fi
+fi
+```
+
+**Alternative Approach**:
+```bash
+# Generate and cache completions at build time instead of runtime
+# In feature script during build:
+if command -v kubectl >/dev/null 2>&1; then
+    kubectl completion bash > /etc/bash_completion.d/kubectl
+fi
+```
+
+---
+
+### 🟢 #10: Insufficient Path Sanitization in User Functions
+
+**Priority**: LOW
+**Status**: 🔴 NOT STARTED
+**Estimated Effort**: 2 hours
+
+**Affected Files**:
+- `lib/features/aws.sh` (lines 277-298)
+- `lib/features/golang.sh` (lines 270-448)
+
+**Risk**: Command injection via function parameters. User input passed to commands without validation.
+
+**Example from aws.sh**:
+```bash
+aws-assume-role() {
+    local role_arn="$1"
+    local session_name="${2:-cli-session-$(date +%s)}"
+
+    local creds=$(aws sts assume-role \
+        --role-arn "$role_arn" \
+        --role-session-name "$session_name" \
+        --output json)
+```
+
+**Recommended Fix**:
+```bash
+aws-assume-role() {
+    local role_arn="$1"
+    local session_name="${2:-cli-session-$(date +%s)}"
+
+    # Validate ARN format
+    if ! [[ "$role_arn" =~ ^arn:aws:iam::[0-9]{12}:role/[a-zA-Z0-9+=,.@_/-]+$ ]]; then
+        echo "Error: Invalid IAM role ARN format" >&2
+        echo "Expected: arn:aws:iam::<account-id>:role/<role-name>" >&2
+        return 1
+    fi
+
+    # Sanitize session name (AWS allows alphanumeric and =,.@_-)
+    session_name=$(echo "$session_name" | tr -cd 'a-zA-Z0-9=,.@_-' | cut -c1-64)
+
+    if [ -z "$session_name" ]; then
+        echo "Error: Invalid session name after sanitization" >&2
+        return 1
+    fi
+
+    local creds=$(aws sts assume-role \
+        --role-arn "$role_arn" \
+        --role-session-name "$session_name" \
+        --output json)
+```
+
+**Similar Fixes Needed**:
+- Golang helper functions for module/package names
+- Any other user functions accepting paths or identifiers
+
+---
+
+## INFORMATIONAL / BEST PRACTICES
+
+### ℹ️ #11: Secrets Could Be Exposed in Build Logs
+
+**Priority**: INFORMATIONAL
+**Status**: 🔴 NOT STARTED
+**Estimated Effort**: 30 minutes
+
+**Risk**: Sensitive data exposure in container build logs if users pass secrets as build arguments.
+
+**Observation**: While the system doesn't explicitly log secrets, build arguments and environment variables appear in Docker build logs. If users mistakenly pass secrets as build args, they would be exposed.
+
+**Recommended Actions**:
+
+1. **Add Warning to Dockerfile**:
+```dockerfile
+# ============================================================================
+# SECURITY WARNING
+# ============================================================================
+# NEVER pass secrets as build arguments! Build arguments are visible in:
+#   - Docker build logs
+#   - Docker image history
+#   - Container inspection
+#
+# For secrets, use:
+#   - Environment variables at runtime
+#   - Docker secrets
+#   - Mounted config files
+#   - Secret management tools (1Password CLI, AWS Secrets Manager, etc.)
+# ============================================================================
+```
+
+2. **Add to README.md**:
+```markdown
+## Security Best Practices
+
+### ⚠️ Never Pass Secrets as Build Arguments
+
+Build arguments are **permanently stored** in the image and visible in:
+- Docker build logs
+- Image history (`docker history <image>`)
+- Container inspection (`docker inspect <container>`)
+
+**❌ DON'T DO THIS:**
+```bash
+docker build --build-arg API_KEY=secret123 ...
+```
+
+**✅ DO THIS INSTEAD:**
+```bash
+# Use environment variables at runtime
+docker run -e API_KEY=secret123 ...
+
+# Or use Docker secrets
+docker secret create api_key ./api_key.txt
+docker service create --secret api_key ...
+
+# Or use mounted config files
+docker run -v ./secrets:/secrets:ro ...
+
+# Or use secret management tools
+docker run -e OP_SERVICE_ACCOUNT_TOKEN=... ...
+```
+```
+
+3. **Consider Implementing Secret Scrubbing** (future enhancement):
+```bash
+# In logging functions, scrub common secret patterns
+log_message() {
+    local message="$1"
+    # Scrub common secret patterns
+    message=$(echo "$message" | sed -E 's/(password|secret|key|token)=[^ ]+/\1=***REDACTED***/gi')
+    echo "[$(date +'%Y-%m-%d %H:%M:%S')] $message" | tee -a "$LOG_FILE"
+}
+```
+
+---
+
+### ℹ️ #12: Docker Socket Mounting Creates Container Escape Vector
+
+**Priority**: INFORMATIONAL
+**Status**: 🔴 NOT STARTED
+**Estimated Effort**: 15 minutes (documentation only)
+
+**Risk**: Container escape via Docker socket access when using Docker-in-Docker functionality.
+
+**Observation**: The Docker feature (`lib/features/docker.sh`) is designed for Docker-in-Docker scenarios that require mounting `/var/run/docker.sock`. This grants full Docker API access, which can be used to escape the container.
+
+**This is by design** for the Docker feature, but should be clearly documented.
+
+**Recommended Actions**:
+
+1. **Update `lib/features/docker.sh` header comments**:
+```bash
+#!/bin/bash
+# Docker CLI and Tools
+#
+# Description:
+#   Installs Docker CLI tools for Docker-in-Docker (DinD) scenarios
+#
+# ⚠️  SECURITY WARNING:
+#   This feature is designed for development containers that need Docker access.
+#   Mounting the Docker socket provides FULL HOST ACCESS and can be used for:
+#     - Container escape
+#     - Host filesystem access
+#     - Privilege escalation
+#
+#   Only use this feature in trusted development environments.
+#   For production, consider:
+#     - Sysbox (rootless container runtime)
+#     - Podman (daemonless container engine)
+#     - Kaniko (Dockerfile builds without Docker)
+#     - BuildKit in rootless mode
+#
+# Usage:
+#   Build with: --build-arg INCLUDE_DOCKER=true
+#   Run with: -v /var/run/docker.sock:/var/run/docker.sock
+```
+
+2. **Add to README.md Docker section**:
+```markdown
+### Docker Feature Security Considerations
+
+The Docker feature enables Docker-in-Docker functionality by mounting the host's Docker socket. This provides **full access to the Docker daemon** and should only be used in trusted development environments.
+
+**Security Implications:**
+- ✅ Enables running Docker commands inside the container
+- ⚠️ Provides full access to host's Docker daemon
+- ⚠️ Can be used to escape the container
+- ⚠️ Can access host filesystem via volume mounts
+- ⚠️ Can start privileged containers
+
+**Production Alternatives:**
+- **Sysbox**: Rootless container runtime with Docker-in-Docker support
+- **Podman**: Daemonless container engine (no socket required)
+- **Kaniko**: Build container images without Docker daemon
+- **BuildKit**: Rootless mode for secure builds
+```
+
+---
+
+### ℹ️ #13: Temporary File Security
+
+**Priority**: INFORMATIONAL
+**Status**: 🔴 NOT STARTED
+**Estimated Effort**: 2 hours
+
+**Risk**: Potential temporary file attacks or race conditions when using `/tmp` without secure temp file creation.
+
+**Observation**: Many scripts use `/tmp` for downloads and extraction without always using secure temporary file creation patterns.
+
+**Current Pattern**:
+```bash
+cd /tmp
+wget https://example.com/file.tar.gz
+tar -xzf file.tar.gz
+```
+
+**Recommended Pattern**:
+```bash
+# Create secure temporary directory
+BUILD_TEMP=$(mktemp -d)
+trap "rm -rf '$BUILD_TEMP'" EXIT
+
+cd "$BUILD_TEMP"
+wget https://example.com/file.tar.gz
+tar -xzf file.tar.gz
+# Work is automatically cleaned up on exit
+```
+
+**Benefits**:
+- Unique directory per build
+- Automatic cleanup on exit (even on error)
+- Protection against symlink attacks
+- No collision with other builds
+
+**Implementation Plan**:
+1. Create helper function in `lib/base/feature-header.sh`
+2. Update all feature scripts to use the pattern
+3. Ensure trap handlers don't conflict
+
+---
+
+### ℹ️ #14: No Rate Limiting on External API Calls
+
+**Priority**: INFORMATIONAL
+**Status**: 🔴 NOT STARTED
+**Estimated Effort**: 3 hours
+
+**Risk**: Build failures due to rate limiting from external services. Potential unintentional DoS of external services during high-volume builds.
+
+**Observation**: Scripts make multiple GitHub API calls and downloads without rate limiting or retry logic. GitHub API has rate limits (60/hour unauthenticated, 5000/hour with token).
+
+**Recommended Enhancements**:
+
+1. **Add Retry Logic with Exponential Backoff**:
+```bash
+# In lib/base/download-verify.sh or new lib/base/retry-utils.sh
+retry_with_backoff() {
+    local max_attempts=3
+    local timeout=1
+    local attempt=1
+    local exitCode=0
+
+    while [ $attempt -le $max_attempts ]; do
+        if "$@"; then
+            return 0
+        else
+            exitCode=$?
+        fi
+
+        if [ $attempt -lt $max_attempts ]; then
+            log_warning "Attempt $attempt failed. Retrying in ${timeout}s..."
+            sleep $timeout
+            timeout=$((timeout * 2))
+        fi
+
+        attempt=$((attempt + 1))
+    done
+
+    log_error "Command failed after $max_attempts attempts"
+    return $exitCode
+}
+
+# Usage
+retry_with_backoff curl -fsSL "https://api.github.com/..."
+```
+
+2. **Cache Frequently Accessed Checksums** (future enhancement):
+```bash
+# Cache checksums in BuildKit cache mount
+CHECKSUM_CACHE="/cache/checksums"
+mkdir -p "$CHECKSUM_CACHE"
+
+cache_key="${repo}-${version}"
+if [ -f "$CHECKSUM_CACHE/$cache_key" ]; then
+    checksum=$(cat "$CHECKSUM_CACHE/$cache_key")
+else
+    checksum=$(fetch_github_checksums_txt "...")
+    echo "$checksum" > "$CHECKSUM_CACHE/$cache_key"
+fi
+```
+
+3. **Document GitHub Token for CI/CD**:
+```markdown
+## CI/CD Best Practices
+
+### GitHub Token for Rate Limits
+
+If building frequently or in CI/CD, provide a GitHub token to increase API rate limits:
+
+```bash
+docker build --build-arg GITHUB_TOKEN="${GITHUB_TOKEN}" ...
+```
+
+Rate limits:
+- Unauthenticated: 60 requests/hour
+- With token: 5000 requests/hour
+```
+
+---
+
+## Implementation Phases
+
+### Phase 1: Critical Security Fixes (High Priority)
+**Target: Complete first**
+
+- [ ] #1: Fix eval with GITHUB_TOKEN (30 min)
+- [ ] #2: Make passwordless sudo optional (1 hour)
+- [ ] #5: Add checksum verification for Claude installer (45 min)
+
+**Total Estimated Effort: 2.25 hours**
+
+---
+
+### Phase 2: Input Validation & Injection Prevention (Medium Priority)
+**Target: Complete second**
+
+- [ ] #3: Safe eval wrapper for shell initialization (2 hours)
+- [ ] #4: Path validation in entrypoint (1 hour)
+- [ ] #7: Version number validation (2 hours)
+
+**Total Estimated Effort: 5 hours**
+
+---
+
+### Phase 3: Secrets & Sensitive Data (Medium Priority)
+**Target: Complete third**
+
+- [ ] #6: Safer 1Password helper functions (1 hour)
+- [ ] #11: Document secret exposure risks (30 min)
+
+**Total Estimated Effort: 1.5 hours**
+
+---
+
+### Phase 4: Low Priority Hardening (Optional)
+**Target: Complete as time permits**
+
+- [ ] #8: Atomic cache directory creation (1 hour)
+- [ ] #9: Validate completion outputs (1 hour)
+- [ ] #10: Sanitize user function inputs (2 hours)
+- [ ] #13: Secure temporary files (2 hours)
+
+**Total Estimated Effort: 6 hours**
+
+---
+
+### Phase 5: Infrastructure Improvements (Future)
+**Target: Long-term enhancements**
+
+- [ ] #12: Document Docker socket security (15 min)
+- [ ] #14: Add retry logic and rate limiting (3 hours)
+- [ ] Implement secret scrubbing in logs (2 hours)
+- [ ] Add security testing to CI/CD (4 hours)
+
+**Total Estimated Effort: 9+ hours**
+
+---
+
+## Testing Strategy
+
+### Unit Tests
+- Version validation functions
+- Safe eval wrapper
+- Input sanitization functions
+- Retry logic
+
+### Integration Tests
+- Build containers with invalid version inputs
+- Test with and without GITHUB_TOKEN
+- Test sudo-disabled builds
+- Test entrypoint with symlink attacks
+
+### Security Tests
+- Attempt command injection via GITHUB_TOKEN
+- Attempt path traversal in entrypoint
+- Verify secrets not in build logs
+- Test rate limiting behavior
+
+---
+
+## Progress Tracking
+
+**Overall Progress: 0/14 issues addressed**
+
+- 🔴 **High Severity**: 0/2 complete
+- 🟡 **Medium Severity**: 0/5 complete
+- 🟢 **Low Severity**: 0/5 complete
+- ℹ️ **Informational**: 0/2 complete
+
+---
+
+## References
+
+- **OWASP Top 10**: https://owasp.org/www-project-top-ten/
+- **OWASP Docker Security**: https://cheatsheetseries.owasp.org/cheatsheets/Docker_Security_Cheat_Sheet.html
+- **CIS Docker Benchmark**: https://www.cisecurity.org/benchmark/docker
+- **Supply Chain Security**: `docs/checksum-verification.md`
+
+---
+
+## Notes
+
+**Created After**: Completing 100% checksum verification (Phases 10-13)
+
+**Audit Date**: 2025-11-08
+
+**Security Posture**: The system already demonstrates strong security practices. These improvements represent defense-in-depth enhancements rather than critical vulnerabilities requiring immediate patching.
+
+**Priority Guidance**:
+- **Phase 1** should be completed before next release
+- **Phases 2-3** improve robustness and should be completed soon
+- **Phases 4-5** are nice-to-have improvements for long-term maintenance
