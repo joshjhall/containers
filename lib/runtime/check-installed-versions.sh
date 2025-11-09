@@ -67,15 +67,13 @@ get_github_release() {
     local repo="$1"
     local tag_pattern="${2:-}"
     local response
-    local curl_opts="-s"
-    
-    # Add authentication header if GitHub token is available
-    if [ -n "${GITHUB_TOKEN:-}" ]; then
-        curl_opts="$curl_opts -H \"Authorization: token $GITHUB_TOKEN\""
-    fi
-    
+
     if [ -z "$tag_pattern" ]; then
-        response=$(eval "curl $curl_opts \"https://api.github.com/repos/${repo}/releases/latest\"")
+        if [ -n "${GITHUB_TOKEN:-}" ]; then
+            response=$(curl -s -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com/repos/${repo}/releases/latest")
+        else
+            response=$(curl -s "https://api.github.com/repos/${repo}/releases/latest")
+        fi
         # Check if we got rate limited
         if echo "$response" | grep -q "rate limit exceeded"; then
             echo "rate-limited"
@@ -83,7 +81,11 @@ get_github_release() {
         fi
         echo "$response" | grep -oP '"tag_name": "\K[^"]+' || echo "unknown"
     else
-        response=$(eval "curl $curl_opts \"https://api.github.com/repos/${repo}/tags\"")
+        if [ -n "${GITHUB_TOKEN:-}" ]; then
+            response=$(curl -s -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com/repos/${repo}/tags")
+        else
+            response=$(curl -s "https://api.github.com/repos/${repo}/tags")
+        fi
         if echo "$response" | grep -q "rate limit exceeded"; then
             echo "rate-limited"
             return
