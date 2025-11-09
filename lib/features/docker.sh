@@ -6,6 +6,37 @@
 #   This installation includes only client tools - the Docker daemon must be
 #   available via socket mount or DOCKER_HOST.
 #
+# ⚠️  SECURITY WARNING: Docker Socket Access
+# ============================================================================
+#   Mounting the Docker socket provides ROOT-EQUIVALENT access to the host:
+#
+#   RISKS:
+#     - Container escape: Can break out of container isolation
+#     - Host filesystem access: Can mount any host directory
+#     - Privilege escalation: Can start privileged containers
+#     - Process manipulation: Can kill or inspect any container
+#
+#   ONLY USE IN TRUSTED DEVELOPMENT ENVIRONMENTS
+#
+#   ✅ APPROPRIATE FOR:
+#     - Local development workstations
+#     - Managing dependency containers (databases, Redis, etc.)
+#     - Testing Docker-based applications
+#     - CI/CD with isolated runners
+#
+#   ❌ NEVER USE FOR:
+#     - Production deployments
+#     - Multi-tenant environments
+#     - Untrusted code execution
+#     - Shared development servers
+#
+#   SAFER ALTERNATIVES FOR PRODUCTION:
+#     - Sysbox: Rootless container runtime with Docker-in-Docker
+#     - Podman: Daemonless container engine (no socket required)
+#     - Kaniko: Build container images without Docker daemon
+#     - BuildKit: Rootless mode for secure image builds
+# ============================================================================
+#
 # Features:
 #   - Docker CLI: Complete container management interface
 #   - Docker Compose V2: Multi-container application orchestration
@@ -108,7 +139,7 @@ log_command "Creating docker group" \
     groupadd docker || true
 
 log_command "Adding user to docker group" \
-    usermod -aG docker ${USERNAME}
+    usermod -aG docker "${USERNAME}"
 
 # Fix Docker socket permissions if it exists
 if [ -S /var/run/docker.sock ]; then
@@ -238,7 +269,7 @@ log_command "Creating Docker cache directories" \
     mkdir -p "${DOCKER_CACHE_DIR}" "${DOCKER_CLI_PLUGINS_DIR}"
 
 log_command "Setting cache directory ownership" \
-    chown -R ${USER_UID}:${USER_GID} "${DOCKER_CACHE_DIR}"
+    chown -R "${USER_UID}":"${USER_GID}" "${DOCKER_CACHE_DIR}"
 
 # ============================================================================
 # Environment Configuration
