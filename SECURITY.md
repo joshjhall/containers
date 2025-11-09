@@ -81,14 +81,28 @@ See the [Docker Socket Usage section in README](README.md#docker-socket-usage) f
 
 ### Supply Chain Security
 
-This project:
+This project implements comprehensive security hardening:
+
+**Build-Time Security:**
+- ✅ **Checksum Verification**: All downloaded binaries verified with SHA256/SHA512 checksums
+- ✅ **Atomic Operations**: Directory creation uses atomic `install -d` to prevent TOCTOU attacks
+- ✅ **Secure Temporary Files**: Restrictive permissions (700) on all temporary directories
+- ✅ **Input Validation**: Function inputs sanitized against command injection
+- ✅ **Completion Script Safety**: Shell completions validated before sourcing (size limits, pattern scanning)
+
+**Runtime Security:**
+- ✅ **Rate Limiting**: Exponential backoff for external API calls with configurable retry logic
+- ✅ **GitHub API Token Support**: Automatic detection and use of `GITHUB_TOKEN` for higher rate limits
+- ✅ **Non-Root Execution**: All containers run as non-root user by default
+
+**CI/CD Security:**
 - ✅ Runs Gitleaks secret scanning in CI
 - ✅ Runs Trivy container vulnerability scanning
 - ✅ Uses GPG verification for critical packages
 - ✅ Pins tool versions for reproducibility
 
 However, be aware:
-- Some installation scripts are downloaded from third-party sources
+- Some installation scripts are downloaded from third-party sources (all with checksum verification)
 - Review the feature scripts in `lib/features/` before building
 - Use official base images from trusted registries
 
