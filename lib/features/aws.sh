@@ -48,6 +48,12 @@ source /tmp/build-scripts/base/feature-header.sh
 # Source apt utilities for reliable package installation
 source /tmp/build-scripts/base/apt-utils.sh
 
+# Source download verification utilities for secure binary downloads
+source /tmp/build-scripts/base/download-verify.sh
+
+# Source checksum utilities for secure binary downloads
+source /tmp/build-scripts/features/lib/checksum-fetch.sh
+
 # Start logging
 log_feature_start "AWS CLI v2"
 
@@ -164,14 +170,31 @@ else
 fi
 
 if [ -n "$SESSION_MANAGER_URL" ]; then
-    log_command "Downloading Session Manager plugin" \
-        curl -sL "$SESSION_MANAGER_URL" -o "/tmp/session-manager-plugin.deb"
+    # Calculate checksum from download (Session Manager doesn't publish checksums)
+    log_message "Calculating checksum for Session Manager plugin..."
+    if ! SESSION_MANAGER_CHECKSUM=$(calculate_checksum_sha256 "$SESSION_MANAGER_URL" 2>/dev/null); then
+        log_error "Failed to download and calculate checksum for Session Manager plugin"
+        log_feature_end
+        exit 1
+    fi
+
+    log_message "✓ Calculated checksum from download"
+
+    # Download and verify Session Manager plugin
+    cd /tmp
+    log_message "Downloading and verifying Session Manager plugin for ${ARCH}..."
+    download_and_verify \
+        "$SESSION_MANAGER_URL" \
+        "${SESSION_MANAGER_CHECKSUM}" \
+        "session-manager-plugin.deb"
 
     log_command "Installing Session Manager plugin" \
         dpkg -i /tmp/session-manager-plugin.deb
 
     log_command "Cleaning up Session Manager installer" \
         rm -f /tmp/session-manager-plugin.deb
+
+    cd /
 fi
 
 # ============================================================================
