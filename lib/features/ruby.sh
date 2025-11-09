@@ -24,6 +24,10 @@ source /tmp/build-scripts/base/feature-header.sh
 # Source apt utilities for reliable package installation
 source /tmp/build-scripts/base/apt-utils.sh
 
+# Source checksum verification utilities
+source /tmp/build-scripts/base/download-verify.sh
+source /tmp/build-scripts/features/lib/checksum-fetch.sh
+
 # ============================================================================
 # Version Configuration
 # ============================================================================
@@ -86,12 +90,30 @@ log_message "Downloading and building Ruby ${RUBY_VERSION}..."
 
 cd /tmp
 
-# Download Ruby source
-log_command "Downloading Ruby ${RUBY_VERSION} source" \
-    wget -q "https://cache.ruby-lang.org/pub/ruby/${RUBY_MAJOR}/ruby-${RUBY_VERSION}.tar.gz"
+# Fetch checksum dynamically from Ruby downloads page
+log_message "Fetching Ruby ${RUBY_VERSION} checksum from ruby-lang.org..."
+RUBY_CHECKSUM=$(fetch_ruby_checksum "${RUBY_VERSION}")
+
+if [ -z "$RUBY_CHECKSUM" ]; then
+    log_error "Failed to fetch checksum for Ruby ${RUBY_VERSION}"
+    log_error "Version may not exist or network issue. Check https://www.ruby-lang.org/en/downloads/"
+    exit 1
+fi
+
+log_message "Expected SHA256: ${RUBY_CHECKSUM}"
+
+# Download and verify Ruby source tarball
+RUBY_URL="https://cache.ruby-lang.org/pub/ruby/${RUBY_MAJOR}/ruby-${RUBY_VERSION}.tar.gz"
+RUBY_TARBALL="ruby-${RUBY_VERSION}.tar.gz"
+
+log_command "Downloading and verifying Ruby ${RUBY_VERSION} source" \
+    download_and_verify \
+        "${RUBY_URL}" \
+        "${RUBY_TARBALL}" \
+        "${RUBY_CHECKSUM}"
 
 log_command "Extracting Ruby source" \
-    tar -xzf "ruby-${RUBY_VERSION}.tar.gz"
+    tar -xzf "${RUBY_TARBALL}"
 
 cd "ruby-${RUBY_VERSION}"
 

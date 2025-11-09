@@ -377,5 +377,79 @@ run_test_with_setup test_gemfile_detection "Gemfile detection works"
 run_test_with_setup test_ruby_permissions "Ruby directories have correct permissions"
 run_test_with_setup test_ruby_verification "Ruby verification script works"
 
+# ============================================================================
+# Checksum Verification Tests
+# ============================================================================
+
+# Test: ruby.sh sources checksum verification libraries
+test_checksum_libraries_sourced() {
+    local ruby_script="$PROJECT_ROOT/lib/features/ruby.sh"
+
+    if ! [ -f "$ruby_script" ]; then
+        skip_test "ruby.sh not found"
+        return
+    fi
+
+    # Check that checksum-fetch.sh is sourced
+    if grep -q "source.*checksum-fetch.sh" "$ruby_script"; then
+        assert_true true "ruby.sh sources checksum-fetch.sh library"
+    else
+        assert_true false "ruby.sh does not source checksum-fetch.sh library"
+    fi
+
+    # Check that download-verify.sh is sourced
+    if grep -q "source.*download-verify.sh" "$ruby_script"; then
+        assert_true true "ruby.sh sources download-verify.sh library"
+    else
+        assert_true false "ruby.sh does not source download-verify.sh library"
+    fi
+}
+
+# Test: ruby.sh uses fetch_ruby_checksum function
+test_fetch_ruby_checksum_usage() {
+    local ruby_script="$PROJECT_ROOT/lib/features/ruby.sh"
+
+    if ! [ -f "$ruby_script" ]; then
+        skip_test "ruby.sh not found"
+        return
+    fi
+
+    # Check for fetch_ruby_checksum usage
+    if grep -q "fetch_ruby_checksum" "$ruby_script"; then
+        assert_true true "ruby.sh uses fetch_ruby_checksum for dynamic checksum fetching"
+    else
+        assert_true false "ruby.sh does not use fetch_ruby_checksum"
+    fi
+
+    # Check for checksum variable
+    if grep -q "RUBY_CHECKSUM=" "$ruby_script"; then
+        assert_true true "ruby.sh stores checksum in RUBY_CHECKSUM variable"
+    else
+        assert_true false "ruby.sh does not store checksum"
+    fi
+}
+
+# Test: ruby.sh uses download_and_verify function
+test_download_verification() {
+    local ruby_script="$PROJECT_ROOT/lib/features/ruby.sh"
+
+    if ! [ -f "$ruby_script" ]; then
+        skip_test "ruby.sh not found"
+        return
+    fi
+
+    # Check for download_and_verify usage
+    if grep -q "download_and_verify" "$ruby_script"; then
+        assert_true true "ruby.sh uses download_and_verify for checksum verification"
+    else
+        assert_true false "ruby.sh does not use download_and_verify"
+    fi
+}
+
+# Run checksum verification tests
+run_test test_checksum_libraries_sourced "ruby.sh sources checksum verification libraries"
+run_test test_fetch_ruby_checksum_usage "ruby.sh uses fetch_ruby_checksum for dynamic checksums"
+run_test test_download_verification "ruby.sh uses download_and_verify for verification"
+
 # Generate test report
 generate_report
