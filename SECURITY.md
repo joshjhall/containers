@@ -165,5 +165,5 @@ For urgent security matters, use the vulnerability reporting process above.
 
 ---
 
-**Last Updated**: 2025-11-07
-**Security Policy Version**: 1.0
+**Last Updated**: 2025-11-09
+**Security Policy Version**: 1.1
