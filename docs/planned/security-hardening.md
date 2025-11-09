@@ -1,6 +1,6 @@
 # Security Hardening Roadmap
 
-## Status: 🚧 IN PROGRESS (6/16 Complete - Phases 1 & 2)
+## Status: 🚧 IN PROGRESS (10/16 Complete - Phases 1, 2, 3, 4)
 **Date Created**: 2025-11-08
 **Last Updated**: 2025-11-09
 
@@ -9,6 +9,8 @@
 **Completed Work**:
 - ✅ Phase 1 complete: Issues #1, #2, #3, #4 (Critical/High/Medium security fixes)
 - ✅ Phase 2 complete: Issues #15, #16 (Container image security & supply chain)
+- ✅ Phase 3 complete: Issues #3, #4, #5, #7 (Input validation & injection prevention)
+- ✅ Phase 4 complete: Issues #6, #11 (Secrets & sensitive data)
 
 This document tracks security improvements based on OWASP best practices audit. The container build system already demonstrates strong security practices with 100% checksum verification, proper privilege separation, and secure credential handling. These improvements will further harden the system.
 
@@ -213,11 +215,11 @@ done
 
 ---
 
-### 🟡 #5: Claude Code Installer Not Verified
+### ✅ #5: Claude Code Installer Not Verified
 
 **Priority**: MEDIUM
-**Status**: 🔴 NOT STARTED
-**Estimated Effort**: 45 minutes
+**Status**: ✅ COMPLETE (2025-11-09)
+**Actual Effort**: 30 minutes
 
 **Affected Files**:
 - `lib/features/dev-tools.sh` (lines 793-808)
@@ -274,11 +276,11 @@ download_and_verify \
 
 ---
 
-### 🟡 #6: Sensitive Data Exposure in 1Password Examples
+### ✅ #6: Sensitive Data Exposure in 1Password Examples
 
 **Priority**: MEDIUM
-**Status**: 🔴 NOT STARTED
-**Estimated Effort**: 1 hour
+**Status**: ✅ COMPLETE (2025-11-09)
+**Actual Effort**: 1 hour
 
 **Affected Files**:
 - `lib/features/op-cli.sh` (lines 184, 187, 216)
@@ -331,11 +333,11 @@ op-env-safe() {
 
 ## LOW SEVERITY ISSUES
 
-### 🟢 #7: Missing Input Validation on Version Numbers
+### ✅ #7: Missing Input Validation on Version Numbers
 
 **Priority**: LOW
-**Status**: 🔴 NOT STARTED
-**Estimated Effort**: 2 hours
+**Status**: ✅ COMPLETE (2025-11-09)
+**Actual Effort**: 2 hours
 
 **Affected Files**:
 - `lib/features/python.sh` (line 36)
@@ -569,11 +571,11 @@ aws-assume-role() {
 
 ## INFORMATIONAL / BEST PRACTICES
 
-### ℹ️ #11: Secrets Could Be Exposed in Build Logs
+### ✅ #11: Secrets Could Be Exposed in Build Logs
 
 **Priority**: INFORMATIONAL
-**Status**: 🔴 NOT STARTED
-**Estimated Effort**: 30 minutes
+**Status**: ✅ COMPLETE (2025-11-09)
+**Actual Effort**: 30 minutes
 
 **Risk**: Sensitive data exposure in container build logs if users pass secrets as build arguments.
 
@@ -1104,19 +1106,20 @@ permissions:
 
 - [x] #3: Safe eval wrapper for shell initialization (2 hours) ✅ **COMPLETE**
 - [x] #4: Path validation in entrypoint (45 min) ✅ **COMPLETE**
-- [ ] #7: Version number validation (2 hours)
+- [x] #5: Claude Code installer checksum verification (30 min) ✅ **COMPLETE**
+- [x] #7: Version number validation (2 hours) ✅ **COMPLETE**
 
-**Total Estimated Effort: 5 hours** | **Progress: 2/3 complete**
+**Total Actual Effort: 5.25 hours** ✅ **PHASE COMPLETE (2025-11-09)**
 
 ---
 
 ### Phase 4: Secrets & Sensitive Data (Medium Priority)
 **Target: Complete fourth**
 
-- [ ] #6: Safer 1Password helper functions (1 hour)
-- [ ] #11: Document secret exposure risks (30 min)
+- [x] #6: Safer 1Password helper functions (1 hour) ✅ **COMPLETE**
+- [x] #11: Document secret exposure risks (30 min) ✅ **COMPLETE**
 
-**Total Estimated Effort: 1.5 hours**
+**Total Actual Effort: 1.5 hours** ✅ **PHASE COMPLETE (2025-11-09)**
 
 ---
 
@@ -1168,13 +1171,13 @@ permissions:
 
 ## Progress Tracking
 
-**Overall Progress: 0/16 issues addressed**
+**Overall Progress: 10/16 issues addressed (62.5%)**
 
-- 🔴 **High Severity**: 0/2 complete
-- 🟡 **Medium Severity**: 0/5 complete
-- 🔵 **Supply Chain**: 0/2 complete (image digests, Cosign signing)
-- 🟢 **Low Severity**: 0/5 complete
-- ℹ️ **Informational**: 0/2 complete
+- ✅ **High Severity**: 2/2 complete (#1, #2)
+- ✅ **Medium Severity**: 5/5 complete (#3, #4, #5, #6, #7)
+- ✅ **Supply Chain**: 2/2 complete (#15, #16)
+- ℹ️ **Informational**: 1/2 complete (#11)
+- 🟢 **Low Severity (remaining)**: 0/5 complete (#8, #9, #10, #13, #14)
 
 ---
 
