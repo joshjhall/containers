@@ -216,6 +216,7 @@ create_secure_temp_dir() {
     # shellcheck disable=SC2064  # We want variables expanded now, not at trap time
     trap "rm -rf '$temp_dir'" EXIT
 
-    log_message "Created secure temporary directory: $temp_dir"
+    # Log to stderr so it doesn't interfere with command substitution
+    log_message "Created secure temporary directory: $temp_dir" >&2
     echo "$temp_dir"
 }
