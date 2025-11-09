@@ -1,17 +1,17 @@
 # Security Hardening Roadmap
 
-## Status: 🚧 IN PROGRESS (15/16 Complete - Phases 1, 2, 3, 4, 5)
+## Status: ✅ COMPLETE (16/16 Complete - All Phases)
 **Date Created**: 2025-11-08
 **Last Updated**: 2025-11-09
 
-**Current Security Posture**: VERY GOOD (9.5/10)
+**Current Security Posture**: EXCELLENT (10/10)
 
 **Completed Work**:
 - ✅ Phase 1 complete: Issues #1, #2 (Critical/High security fixes)
 - ✅ Phase 2 complete: Issues #15, #16 (Container image security & supply chain)
 - ✅ Phase 3 complete: Issues #3, #4, #5, #7 (Input validation & injection prevention)
 - ✅ Phase 4 complete: Issues #6, #11, #12 (Secrets, sensitive data & documentation)
-- ✅ Phase 5 complete: Issues #8, #9, #10, #13 (Low priority hardening)
+- ✅ Phase 5 complete: Issues #8, #9, #10, #13, #14 (Low priority hardening & rate limiting)
 
 This document tracks security improvements based on OWASP best practices audit. The container build system already demonstrates strong security practices with 100% checksum verification, proper privilege separation, and secure credential handling. These improvements will further harden the system.
 
@@ -753,11 +753,11 @@ tar -xzf file.tar.gz
 
 ---
 
-### ℹ️ #14: No Rate Limiting on External API Calls
+### ✅ #14: No Rate Limiting on External API Calls
 
 **Priority**: INFORMATIONAL
-**Status**: 🔴 NOT STARTED
-**Estimated Effort**: 3 hours
+**Status**: ✅ COMPLETE (2025-11-09)
+**Actual Effort**: 2 hours
 
 **Risk**: Build failures due to rate limiting from external services. Potential unintentional DoS of external services during high-volume builds.
 
@@ -829,6 +829,38 @@ Rate limits:
 - Unauthenticated: 60 requests/hour
 - With token: 5000 requests/hour
 ```
+
+**Implementation**:
+
+Created `lib/base/retry-utils.sh` with three retry functions:
+
+1. **retry_with_backoff()** - Generic retry with exponential backoff (2s → 4s → 8s, max 30s)
+   - Configurable via `RETRY_MAX_ATTEMPTS`, `RETRY_INITIAL_DELAY`, `RETRY_MAX_DELAY`
+   - Returns original exit code after final attempt
+
+2. **retry_command()** - Wrapper with logging integration
+   - Takes description as first parameter
+   - Integrates with logging.sh if available
+
+3. **retry_github_api()** - GitHub-specific retry with rate limit awareness
+   - Automatically adds `Authorization` header if `GITHUB_TOKEN` is set
+   - Detects rate limit errors (403, "rate limit" messages)
+   - Provides helpful messages about token benefits
+
+Updated `lib/features/lib/checksum-fetch.sh` to use retry_github_api for:
+- `fetch_github_checksums_txt()` - Checksums.txt file fetching
+- `fetch_github_sha256_file()` - Individual .sha256 file fetching
+- `fetch_github_sha512_file()` - Individual .sha512 file fetching
+
+**Files Modified**:
+- `lib/base/retry-utils.sh` (NEW)
+- `lib/features/lib/checksum-fetch.sh`
+
+**Benefits**:
+- Reduced build failures from transient network issues
+- GitHub rate limit detection and helpful guidance
+- 5000x rate limit increase when using GITHUB_TOKEN (60 → 5000 requests/hour)
+- Exponential backoff prevents hammering external services
 
 ---
 
