@@ -28,10 +28,18 @@ source /tmp/build-scripts/base/feature-header.sh
 # Source apt utilities for reliable package installation
 source /tmp/build-scripts/base/apt-utils.sh
 
+# Source version validation utilities
+source /tmp/build-scripts/base/version-validation.sh
+
 # ============================================================================
 # Version Configuration
 # ============================================================================
 R_VERSION="${R_VERSION:-4.5.1}"
+n# Validate R version format to prevent shell injection
+validate_r_version "$R_VERSION" || {
+    log_error "Build failed due to invalid R_VERSION"
+    exit 1
+}
 
 # Extract major version for repository (R 4.x uses cran40)
 R_VERSION_MAJOR=$(echo "${R_VERSION}" | cut -d. -f1)

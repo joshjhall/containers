@@ -30,10 +30,19 @@ source /tmp/build-scripts/base/download-verify.sh
 # Source checksum verification utilities
 source /tmp/build-scripts/features/lib/checksum-fetch.sh
 
+# Source version validation utilities
+source /tmp/build-scripts/base/version-validation.sh
+
 # ============================================================================
 # Version Configuration
 # ============================================================================
 PYTHON_VERSION="${PYTHON_VERSION:-3.13.5}"
+
+# Validate Python version format to prevent shell injection
+validate_python_version "$PYTHON_VERSION" || {
+    log_error "Build failed due to invalid PYTHON_VERSION"
+    exit 1
+}
 
 # Start logging
 log_feature_start "Python" "${PYTHON_VERSION}"

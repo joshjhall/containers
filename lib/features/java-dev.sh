@@ -29,6 +29,9 @@ source /tmp/build-scripts/base/feature-header.sh
 # Source apt utilities for reliable package installation
 source /tmp/build-scripts/base/apt-utils.sh
 
+# Source version validation utilities
+source /tmp/build-scripts/base/version-validation.sh
+
 # Source download verification utilities
 source /tmp/build-scripts/base/download-verify.sh
 

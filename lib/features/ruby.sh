@@ -24,6 +24,9 @@ source /tmp/build-scripts/base/feature-header.sh
 # Source apt utilities for reliable package installation
 source /tmp/build-scripts/base/apt-utils.sh
 
+# Source version validation utilities
+source /tmp/build-scripts/base/version-validation.sh
+
 # Source checksum verification utilities
 source /tmp/build-scripts/base/download-verify.sh
 source /tmp/build-scripts/features/lib/checksum-fetch.sh
@@ -32,6 +35,11 @@ source /tmp/build-scripts/features/lib/checksum-fetch.sh
 # Version Configuration
 # ============================================================================
 RUBY_VERSION="${RUBY_VERSION:-3.4.7}"
+n# Validate Ruby version format to prevent shell injection
+validate_ruby_version "$RUBY_VERSION" || {
+    log_error "Build failed due to invalid RUBY_VERSION"
+    exit 1
+}
 RUBY_MAJOR=$(echo $RUBY_VERSION | cut -d. -f1,2)
 
 # Start logging
