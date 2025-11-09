@@ -271,6 +271,75 @@ run_test_with_setup() {
     teardown
 }
 
+# ============================================================================
+# GPG Verification Tests
+# ============================================================================
+
+# Test: aws.sh uses GPG verification
+test_aws_gpg_verification() {
+    local aws_script="$PROJECT_ROOT/lib/features/aws.sh"
+
+    if ! [ -f "$aws_script" ]; then
+        skip_test "aws.sh not found"
+        return
+    fi
+
+    # Check for GPG signature verification
+    if grep -q "gpg --verify" "$aws_script"; then
+        assert_true true "aws.sh uses GPG signature verification"
+    else
+        assert_true false "aws.sh does not use GPG signature verification"
+    fi
+
+    # Check for .sig file download
+    if grep -q ".sig" "$aws_script"; then
+        assert_true true "aws.sh downloads GPG signature file"
+    else
+        assert_true false "aws.sh does not download GPG signature file"
+    fi
+}
+
+# Test: AWS CLI GPG key fingerprint check
+test_aws_gpg_key_fingerprint() {
+    local aws_script="$PROJECT_ROOT/lib/features/aws.sh"
+
+    if ! [ -f "$aws_script" ]; then
+        skip_test "aws.sh not found"
+        return
+    fi
+
+    # Check for AWS CLI key ID
+    if grep -q "AWS_CLI_KEY_ID" "$aws_script"; then
+        assert_true true "aws.sh defines AWS CLI GPG key ID"
+    else
+        assert_true false "aws.sh does not define AWS CLI GPG key ID"
+    fi
+
+    # Check for fingerprint verification
+    if grep -q "AWS_CLI_KEY_FINGERPRINT" "$aws_script"; then
+        assert_true true "aws.sh verifies GPG key fingerprint"
+    else
+        assert_true false "aws.sh does not verify GPG key fingerprint"
+    fi
+}
+
+# Test: GPG installation
+test_gpg_installed() {
+    local aws_script="$PROJECT_ROOT/lib/features/aws.sh"
+
+    if ! [ -f "$aws_script" ]; then
+        skip_test "aws.sh not found"
+        return
+    fi
+
+    # Check that GPG is installed via apt_install
+    if grep -q "gpg" "$aws_script"; then
+        assert_true true "aws.sh ensures GPG is installed"
+    else
+        assert_true false "aws.sh does not ensure GPG is installed"
+    fi
+}
+
 # Run all tests
 run_test_with_setup test_aws_cli_installation "AWS CLI installation"
 run_test_with_setup test_aws_config_directory "AWS config directory setup"
@@ -282,6 +351,11 @@ run_test_with_setup test_aws_sso "AWS SSO configuration"
 run_test_with_setup test_aws_completion "AWS CLI completion"
 run_test_with_setup test_sam_cli "SAM CLI availability"
 run_test_with_setup test_aws_verification "AWS verification script"
+
+# Run GPG verification tests
+run_test test_aws_gpg_verification "aws.sh uses GPG signature verification"
+run_test test_aws_gpg_key_fingerprint "aws.sh verifies AWS CLI GPG key fingerprint"
+run_test test_gpg_installed "aws.sh ensures GPG is installed"
 
 # Generate test report
 generate_report

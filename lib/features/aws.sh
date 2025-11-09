@@ -6,6 +6,11 @@
 #   AWS service management from the command line. Includes helpers for profile
 #   management, role assumption, and credential configuration.
 #
+# Security:
+#   - GPG signature verification of AWS CLI installer
+#   - AWS public key imported from keyserver and fingerprint verified
+#   - Installation fails if signature verification fails
+#
 # Features:
 #   - AWS CLI v2: Complete AWS service management
 #   - Session Manager Plugin: Secure EC2 instance access
@@ -59,7 +64,10 @@ log_message "Installing required packages..."
 apt_install \
         unzip \
         groff \
-        less
+        less \
+        gpg \
+        curl \
+        ca-certificates
 
 # ============================================================================
 # AWS CLI v2 Installation
@@ -80,8 +88,53 @@ fi
 log_command "Changing to temporary directory" \
     cd /tmp
 
+# ============================================================================
+# GPG Key Import and Verification
+# ============================================================================
+log_message "Importing AWS CLI GPG public key..."
+
+# AWS CLI v2 public key fingerprint
+# Source: https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html
+AWS_CLI_KEY_ID="A6310ACC4672475C"
+AWS_CLI_KEY_FINGERPRINT="FB5D B77F D5C1 18B8 0511  ADA8 A631 0ACC 4672 475C"
+
+# Import AWS public key from keyserver
+log_command "Importing AWS public key from keyserver" \
+    gpg --keyserver hkps://keyserver.ubuntu.com --recv-keys "${AWS_CLI_KEY_ID}" || \
+    gpg --keyserver hkps://keys.openpgp.org --recv-keys "${AWS_CLI_KEY_ID}"
+
+# Verify key fingerprint
+log_message "Verifying key fingerprint..."
+IMPORTED_FINGERPRINT=$(gpg --fingerprint "${AWS_CLI_KEY_ID}" 2>/dev/null | grep -oP '[A-F0-9]{4}( [A-F0-9]{4}){9}' | tr -d ' ')
+EXPECTED_FINGERPRINT=$(echo "${AWS_CLI_KEY_FINGERPRINT}" | tr -d ' ')
+
+if [ "$IMPORTED_FINGERPRINT" != "$EXPECTED_FINGERPRINT" ]; then
+    log_error "GPG key fingerprint mismatch!"
+    log_error "Expected: ${EXPECTED_FINGERPRINT}"
+    log_error "Got:      ${IMPORTED_FINGERPRINT}"
+    exit 1
+fi
+
+log_message "✓ AWS CLI GPG key verified"
+
+# ============================================================================
+# Download and Verify AWS CLI v2
+# ============================================================================
 log_command "Downloading AWS CLI v2" \
     curl -sL "$AWS_CLI_URL" -o "awscliv2.zip"
+
+log_command "Downloading AWS CLI v2 signature" \
+    curl -sL "${AWS_CLI_URL}.sig" -o "awscliv2.sig"
+
+log_message "Verifying GPG signature..."
+if ! gpg --verify awscliv2.sig awscliv2.zip 2>/dev/null; then
+    log_error "GPG signature verification failed!"
+    log_error "The downloaded AWS CLI package may be compromised."
+    rm -f awscliv2.zip awscliv2.sig
+    exit 1
+fi
+
+log_message "✓ AWS CLI v2 signature verified"
 
 log_command "Extracting AWS CLI v2" \
     unzip -q awscliv2.zip
@@ -90,7 +143,7 @@ log_command "Installing AWS CLI v2" \
     ./aws/install
 
 log_command "Cleaning up AWS CLI installer" \
-    rm -rf awscliv2.zip aws/
+    rm -rf awscliv2.zip awscliv2.sig aws/
 
 log_command "Returning to root directory" \
     cd /
