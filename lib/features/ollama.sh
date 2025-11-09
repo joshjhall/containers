@@ -108,24 +108,20 @@ fi
 
 log_message "Expected SHA256: ${OLLAMA_CHECKSUM}"
 
+BUILD_TEMP=$(create_secure_temp_dir)
+
 # Download and verify Ollama tarball
-cd /tmp
 log_message "Downloading and verifying Ollama..."
 download_and_verify \
     "$OLLAMA_URL" \
     "$OLLAMA_CHECKSUM" \
-    "ollama.tgz"
+    "${BUILD_TEMP}/ollama.tgz"
 
 log_message "✓ Ollama v${OLLAMA_VERSION} verified successfully"
 
 # Extract directly to /usr/local
 log_command "Extracting Ollama to /usr/local" \
-    tar -xzf /tmp/ollama.tgz -C /usr/local
-
-log_command "Cleaning up Ollama tarball" \
-    rm /tmp/ollama.tgz
-
-cd /
+    tar -xzf "${BUILD_TEMP}/ollama.tgz" -C /usr/local
 
 # Verify installation
 if ! [ -f /usr/local/bin/ollama ]; then
@@ -369,10 +365,6 @@ else
     log_warning "Ollama installation failed, but build continues..."
     log_message "This may be expected on some architectures or environments"
 fi
-
-# Clean up
-log_command "Cleaning up installer" \
-    rm -f /tmp/install-ollama.sh
 
 # ============================================================================
 # Final Messages

@@ -157,7 +157,6 @@ else
     log_message "Expected SHA256: ${PIXI_CHECKSUM}"
 
     # Download and verify pixi
-    cd /tmp
     log_message "Downloading and verifying pixi..."
     download_and_extract \
         "$PIXI_URL" \

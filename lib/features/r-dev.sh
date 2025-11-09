@@ -91,8 +91,10 @@ log_message "Preparing R package installation..."
 export R_LIBS_USER="/cache/r/library"
 export R_LIBS_SITE="/cache/r/library"
 
+BUILD_TEMP=$(create_secure_temp_dir)
+
 # Create installation script
-cat > /tmp/install_r_dev_tools.R << 'EOF'
+cat > "${BUILD_TEMP}/install_r_dev_tools.R" << 'EOF'
 # R Development Tools Installation Script
 
 # Use CRAN mirror
@@ -164,11 +166,7 @@ EOF
 
 # Run the installation script as the user
 log_command "Installing R development packages (this may take 15-20 minutes)" \
-    su - "${USERNAME}" -c "export R_LIBS_USER='${R_LIBS_USER}' R_LIBS_SITE='${R_LIBS_SITE}' && /usr/local/bin/Rscript /tmp/install_r_dev_tools.R"
-
-# Clean up
-log_command "Cleaning up installation script" \
-    rm -f /tmp/install_r_dev_tools.R
+    su - "${USERNAME}" -c "export R_LIBS_USER='${R_LIBS_USER}' R_LIBS_SITE='${R_LIBS_SITE}' && /usr/local/bin/Rscript '${BUILD_TEMP}/install_r_dev_tools.R'"
 
 # ============================================================================
 # Shell Aliases and Functions
