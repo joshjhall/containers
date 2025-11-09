@@ -894,7 +894,7 @@ fi
 
 # direnv hook
 if command -v direnv &> /dev/null; then
-    eval "$(direnv hook bash)"
+    safe_eval "direnv hook bash" direnv hook bash
 fi
 
 # lazygit alias

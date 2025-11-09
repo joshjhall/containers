@@ -270,6 +270,61 @@ log_warning() {
     WARNING_COUNT=$((WARNING_COUNT + 1))
 }
 
+# ============================================================================
+# safe_eval - Safely evaluate command output with validation
+#
+# This function mitigates command injection risks when using eval with tool
+# initialization commands (e.g., rbenv init, direnv hook, zoxide init).
+#
+# Arguments:
+#   $1 - Description of command (e.g., "zoxide init bash")
+#   $@ - The command to execute
+#
+# Returns:
+#   0 - Command executed successfully
+#   1 - Command failed or suspicious output detected
+#
+# Example:
+#   safe_eval "zoxide init bash" zoxide init bash
+#   safe_eval "direnv hook" direnv hook bash
+# ============================================================================
+safe_eval() {
+    local description="$1"
+    shift
+    local output
+    local exit_code=0
+
+    # Try to execute the command and capture output
+    if ! output=$("$@" 2>/dev/null); then
+        log_warning "Failed to initialize $description"
+        return 1
+    fi
+
+    # Check for suspicious patterns that could indicate compromise
+    # These patterns catch common command injection attempts
+    if echo "$output" | grep -qE '(rm -rf|curl.*bash|wget.*bash|;\s*rm|\$\(.*rm)'; then
+        log_error "SECURITY: Suspicious output from $description, skipping initialization"
+        log_error "This may indicate a compromised tool or supply chain attack"
+        return 1
+    fi
+
+    # Check for other dangerous command patterns
+    if echo "$output" | grep -qE '(exec\s+[^$]|/bin/sh.*-c|bash.*-c.*http)'; then
+        log_error "SECURITY: Potentially dangerous commands in $description output"
+        return 1
+    fi
+
+    # Output looks safe, evaluate it
+    eval "$output" || exit_code=$?
+
+    if [ $exit_code -ne 0 ]; then
+        log_warning "$description initialization completed with non-zero exit code: $exit_code"
+        return $exit_code
+    fi
+
+    return 0
+}
+
 # Export functions for use in feature scripts
 export -f log_feature_start
 export -f log_command
@@ -277,3 +332,4 @@ export -f log_feature_end
 export -f log_message
 export -f log_error
 export -f log_warning
+export -f safe_eval

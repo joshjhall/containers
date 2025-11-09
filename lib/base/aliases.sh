@@ -23,6 +23,23 @@ fi
 cat >> /etc/bash.bashrc << 'EOF'
 
 # ----------------------------------------------------------------------------
+# Security: Safe eval for tool initialization
+# ----------------------------------------------------------------------------
+# Validates command output before eval to prevent command injection
+safe_eval() {
+    local output
+    if ! output=$("$@" 2>/dev/null); then
+        return 1
+    fi
+    # Check for suspicious patterns
+    if echo "$output" | grep -qE '(rm -rf|curl.*bash|wget.*bash|;\s*rm|\$\(.*rm)|exec\s+[^$]|/bin/sh.*-c|bash.*-c.*http)'; then
+        echo "WARNING: Suspicious output detected, skipping initialization of: $*" >&2
+        return 1
+    fi
+    eval "$output"
+}
+
+# ----------------------------------------------------------------------------
 # File and Directory Navigation
 # ----------------------------------------------------------------------------
 alias ll='ls -alF'
@@ -119,7 +136,7 @@ fi
 # Zoxide Integration - Smarter directory navigation
 # ----------------------------------------------------------------------------
 if command -v zoxide &> /dev/null; then
-    eval "$(zoxide init bash)"
+    safe_eval zoxide init bash
     # Override cd with zoxide
     alias cd='z'
     alias cdi='zi'  # Interactive selection
