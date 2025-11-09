@@ -272,7 +272,7 @@ log_command "Creating plugin cache directory" \
     mkdir -p "${TF_PLUGIN_CACHE}"
 
 log_command "Setting cache directory ownership" \
-    chown -R ${USER_UID}:${USER_GID} "${TF_PLUGIN_CACHE}"
+    chown -R "${USER_UID}:${USER_GID}" "${TF_PLUGIN_CACHE}"
 
 # ============================================================================
 # Environment Configuration

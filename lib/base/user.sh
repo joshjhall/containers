@@ -31,44 +31,44 @@ ENABLE_PASSWORDLESS_SUDO="${6:-true}"
 echo "=== Setting up user: ${USERNAME} (${USER_UID}:${USER_GID}) ==="
 
 # Check if user already exists first
-if id -u ${USERNAME} > /dev/null 2>&1; then
+if id -u "${USERNAME}" > /dev/null 2>&1; then
     echo "User ${USERNAME} already exists, using existing user..."
-    ACTUAL_UID=$(id -u ${USERNAME})
-    ACTUAL_GID=$(id -g ${USERNAME})
+    ACTUAL_UID=$(id -u "${USERNAME}")
+    ACTUAL_GID=$(id -g "${USERNAME}")
     echo "Existing user has UID: ${ACTUAL_UID}, GID: ${ACTUAL_GID}"
     # Skip group creation for existing users
     USER_EXISTS=true
 else
     USER_EXISTS=false
     # Handle group creation with existing GID check
-    if ! getent group ${USERNAME} > /dev/null 2>&1; then
-        if getent group ${USER_GID} > /dev/null 2>&1; then
+    if ! getent group "${USERNAME}" > /dev/null 2>&1; then
+        if getent group "${USER_GID}" > /dev/null 2>&1; then
             echo "GID ${USER_GID} already exists, finding a free GID..."
             FREE_GID=$(awk -F: '$3>=1000 && $3<65534 {print $3}' /etc/group | sort -n | \
                 awk 'BEGIN{for(i=1;i<=NR;i++) gids[i]=0} {gids[$1]=1} END{for(i=1000;i<65534;i++) if(!gids[i]) {print i; exit}}')
             echo "Using GID: ${FREE_GID}"
-            groupadd --gid ${FREE_GID} ${USERNAME}
+            groupadd --gid "${FREE_GID}" "${USERNAME}"
             ACTUAL_GID=${FREE_GID}
         else
-            groupadd --gid ${USER_GID} ${USERNAME}
+            groupadd --gid "${USER_GID}" "${USERNAME}"
             ACTUAL_GID=${USER_GID}
         fi
     else
-        ACTUAL_GID=$(getent group ${USERNAME} | cut -d: -f3)
+        ACTUAL_GID=$(getent group "${USERNAME}" | cut -d: -f3)
     fi
 fi
 
 # Handle user creation only if user doesn't exist
 if [ "$USER_EXISTS" = false ]; then
-    if id ${USER_UID} > /dev/null 2>&1; then
+    if id "${USER_UID}" > /dev/null 2>&1; then
         echo "UID ${USER_UID} already exists, finding a free UID..."
         FREE_UID=$(awk -F: '$3>=1000 && $3<65534 {print $3}' /etc/passwd | sort -n | \
             awk 'BEGIN{for(i=1;i<=NR;i++) uids[i]=0} {uids[$1]=1} END{for(i=1000;i<65534;i++) if(!uids[i]) {print i; exit}}')
         echo "Using UID: ${FREE_UID}"
-        useradd --uid ${FREE_UID} --gid ${ACTUAL_GID} -m ${USERNAME} --shell /bin/bash
+        useradd --uid "${FREE_UID}" --gid "${ACTUAL_GID}" -m "${USERNAME}" --shell /bin/bash
         ACTUAL_UID=${FREE_UID}
     else
-        useradd --uid ${USER_UID} --gid ${ACTUAL_GID} -m ${USERNAME} --shell /bin/bash
+        useradd --uid "${USER_UID}" --gid "${ACTUAL_GID}" -m "${USERNAME}" --shell /bin/bash
         ACTUAL_UID=${USER_UID}
     fi
 fi
@@ -80,21 +80,21 @@ echo "export ACTUAL_GID=${ACTUAL_GID}" >> /tmp/build-env
 echo "export WORKING_DIR=${WORKING_DIR}" >> /tmp/build-env
 
 # Also export as environment variables for the current build
-export ACTUAL_UID=${ACTUAL_UID}
-export ACTUAL_GID=${ACTUAL_GID}
-export WORKING_DIR=${WORKING_DIR}
+export ACTUAL_UID="${ACTUAL_UID}"
+export ACTUAL_GID="${ACTUAL_GID}"
+export WORKING_DIR="${WORKING_DIR}"
 
 # Write to a file that can be sourced by Dockerfile
 echo "${ACTUAL_UID}" > /tmp/actual_uid
 echo "${ACTUAL_GID}" > /tmp/actual_gid
 
 # Add user to sudo group
-usermod -aG sudo ${USERNAME}
+usermod -aG sudo "${USERNAME}"
 
 # Configure sudo access based on security policy
 if [ "${ENABLE_PASSWORDLESS_SUDO}" = "true" ]; then
-    echo "${USERNAME} ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/${USERNAME}
-    chmod 0440 /etc/sudoers.d/${USERNAME}
+    echo "${USERNAME} ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/"${USERNAME}"
+    chmod 0440 /etc/sudoers.d/"${USERNAME}"
     echo "⚠️  WARNING: Passwordless sudo enabled (development mode)"
     echo "    For production, use: --build-arg ENABLE_PASSWORDLESS_SUDO=false"
 else
@@ -107,50 +107,50 @@ if [ -d "/home/${USERNAME}" ]; then
     echo "Home directory already exists for ${USERNAME}"
 else
     echo "Creating home directory for ${USERNAME}"
-    mkdir -p /home/${USERNAME}
+    mkdir -p /home/"${USERNAME}"
 fi
 
 # Create user directories
-mkdir -p /home/${USERNAME}/.local/bin
-mkdir -p /home/${USERNAME}/.cache
-mkdir -p /home/${USERNAME}/.ssh
-mkdir -p ${WORKING_DIR}
+mkdir -p /home/"${USERNAME}"/.local/bin
+mkdir -p /home/"${USERNAME}"/.cache
+mkdir -p /home/"${USERNAME}"/.ssh
+mkdir -p "${WORKING_DIR}"
 
 # Create cache directory for volume mounts (features will create subdirs as needed)
 mkdir -p /cache
-chown ${USERNAME}:${USERNAME} /cache
+chown "${USERNAME}":"${USERNAME}" /cache
 chmod 755 /cache
 
 # Set proper permissions for SSH directory
-chmod 700 /home/${USERNAME}/.ssh
+chmod 700 /home/"${USERNAME}"/.ssh
 
 # Set ownership
-chown -R ${USERNAME}:${USERNAME} /home/${USERNAME}
+chown -R "${USERNAME}":"${USERNAME}" /home/"${USERNAME}"
 
 # Set ownership on working directory and its parent
 # Extract parent directory from WORKING_DIR
 WORKSPACE_PARENT=$(dirname "${WORKING_DIR}")
 if [ -d "${WORKSPACE_PARENT}" ] && [ "${WORKSPACE_PARENT}" != "/" ]; then
     # If parent exists and isn't root, chown the parent (which includes the working dir)
-    chown -R ${USERNAME}:${USERNAME} ${WORKSPACE_PARENT}
+    chown -R "${USERNAME}":"${USERNAME}" "${WORKSPACE_PARENT}"
 else
     # Otherwise just chown the working directory itself
-    chown -R ${USERNAME}:${USERNAME} ${WORKING_DIR}
+    chown -R "${USERNAME}":"${USERNAME}" "${WORKING_DIR}"
 fi
 
 # Create user's bashrc.d directory for features to add scripts to
-mkdir -p /home/${USERNAME}/.bashrc.d
-chown ${USERNAME}:${USERNAME} /home/${USERNAME}/.bashrc.d
+mkdir -p /home/"${USERNAME}"/.bashrc.d
+chown "${USERNAME}":"${USERNAME}" /home/"${USERNAME}"/.bashrc.d
 
 # Add sourcing of bashrc.d directory to user's bashrc if not already present
-if ! grep -q "bashrc.d" /home/${USERNAME}/.bashrc; then
-    echo "" >> /home/${USERNAME}/.bashrc
-    echo "# Source additional configurations from features" >> /home/${USERNAME}/.bashrc
-    echo 'for f in ~/.bashrc.d/*; do [ -r "$f" ] && source "$f"; done' >> /home/${USERNAME}/.bashrc
+if ! grep -q "bashrc.d" /home/"${USERNAME}"/.bashrc; then
+    echo "" >> /home/"${USERNAME}"/.bashrc
+    echo "# Source additional configurations from features" >> /home/"${USERNAME}"/.bashrc
+    echo 'for f in ~/.bashrc.d/*; do [ -r "$f" ] && source "$f"; done' >> /home/"${USERNAME}"/.bashrc
 fi
 
 # Add useful helper functions to user's bashrc
-cat >> /home/${USERNAME}/.bashrc << 'EOF'
+cat >> /home/"${USERNAME}"/.bashrc << 'EOF'
 
 # Node modules in PATH helper
 add_node_modules_to_path() {

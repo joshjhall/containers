@@ -93,7 +93,7 @@ log_message "Installing Java ${JAVA_VERSION} and build tools..."
 
 # Install Temurin JDK
 log_message "Installing Eclipse Temurin JDK ${JAVA_VERSION}..."
-apt_install temurin-${JAVA_VERSION}-jdk
+apt_install "temurin-${JAVA_VERSION}-jdk"
 
 # Create consistent symlink for all versions
 TEMURIN_PATH="/usr/lib/jvm/temurin-${JAVA_VERSION}-jdk-$(dpkg --print-architecture)"
@@ -122,7 +122,7 @@ log_command "Creating Java cache directories" \
     mkdir -p "${MAVEN_CACHE_DIR}" "${GRADLE_HOME_DIR}"
 
 log_command "Setting cache directory ownership" \
-    chown -R ${USER_UID}:${USER_GID} "${MAVEN_CACHE_DIR}" "${GRADLE_HOME_DIR}"
+    chown -R "${USER_UID}:${USER_GID}" "${MAVEN_CACHE_DIR}" "${GRADLE_HOME_DIR}"
 
 # ============================================================================
 # Environment Configuration
@@ -132,7 +132,7 @@ log_message "Configuring Java environment..."
 # Set JAVA_HOME and create default symlink
 JAVA_HOME_PATH="/usr/lib/jvm/java-${JAVA_VERSION}-openjdk-$(dpkg --print-architecture)"
 log_command "Creating default Java symlink" \
-    ln -sf ${JAVA_HOME_PATH} /usr/lib/jvm/default-java
+    ln -sf "${JAVA_HOME_PATH}" /usr/lib/jvm/default-java
 
 # ============================================================================
 # Create symlinks for Java binaries
@@ -585,7 +585,7 @@ log_command "Checking Gradle version" \
 # ============================================================================
 log_message "Ensuring correct ownership of Java directories..."
 log_command "Final ownership fix for Java cache directories" \
-    chown -R ${USER_UID}:${USER_GID} "${MAVEN_CACHE_DIR}" "${GRADLE_HOME_DIR}" || true
+    chown -R "${USER_UID}:${USER_GID}" "${MAVEN_CACHE_DIR}" "${GRADLE_HOME_DIR}" || true
 
 # End logging
 log_feature_end

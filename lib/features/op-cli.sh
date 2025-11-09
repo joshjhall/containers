@@ -129,7 +129,7 @@ log_command "Setting config directory permissions" \
     chmod 700 "${OP_CONFIG_DIR}"
 
 log_command "Setting cache directory ownership" \
-    chown -R ${USER_UID}:${USER_GID} "${OP_CACHE_DIR}"
+    chown -R "${USER_UID}:${USER_GID}" "${OP_CACHE_DIR}"
 
 # ============================================================================
 # System-wide Environment Configuration

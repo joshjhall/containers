@@ -189,7 +189,7 @@ log_command "Creating Node.js cache directories" \
     mkdir -p "${NPM_CACHE_DIR}" "${YARN_CACHE_DIR}" "${PNPM_STORE_DIR}" "${NPM_GLOBAL_DIR}"
 
 log_command "Setting cache directory ownership" \
-    chown -R ${USER_UID}:${USER_GID} "${NPM_CACHE_DIR}" "${YARN_CACHE_DIR}" "${PNPM_STORE_DIR}" "${NPM_GLOBAL_DIR}"
+    chown -R "${USER_UID}:${USER_GID}" "${NPM_CACHE_DIR}" "${YARN_CACHE_DIR}" "${PNPM_STORE_DIR}" "${NPM_GLOBAL_DIR}"
 
 log_message "Node.js cache paths:"
 log_message "  NPM cache: ${NPM_CACHE_DIR}"
@@ -627,7 +627,7 @@ log_command "Checking pnpm version" \
 # ============================================================================
 log_message "Ensuring correct ownership of Node.js directories..."
 log_command "Final ownership fix for Node.js cache directories" \
-    chown -R ${USER_UID}:${USER_GID} "${NPM_CACHE_DIR}" "${YARN_CACHE_DIR}" "${PNPM_STORE_DIR}" "${NPM_GLOBAL_DIR}" || true
+    chown -R "${USER_UID}:${USER_GID}" "${NPM_CACHE_DIR}" "${YARN_CACHE_DIR}" "${PNPM_STORE_DIR}" "${NPM_GLOBAL_DIR}" || true
 
 # End logging
 log_feature_end

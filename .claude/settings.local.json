@@ -4,7 +4,8 @@
       "Bash(./tests/run_unit_tests.sh:*)",
       "Bash(git add:*)",
       "Bash(find:*)",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "Bash(shellcheck:*)"
     ],
     "deny": []
   }

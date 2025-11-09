@@ -116,7 +116,7 @@ for py_package in numpy matplotlib jupyter notebook; do
         log_message "Installing $py_package with pip..."
         PIP_CACHE_DIR="${PIP_CACHE_DIR:-/cache/pip}"
         log_command "Installing $py_package via pip" \
-            su - ${USERNAME} -c "export PIP_CACHE_DIR='${PIP_CACHE_DIR}' && python3 -m pip install --no-cache-dir --break-system-packages '$py_package'"
+            su - "${USERNAME}" -c "export PIP_CACHE_DIR='${PIP_CACHE_DIR}' && python3 -m pip install --no-cache-dir --break-system-packages '$py_package'"
     fi
 done
 
@@ -377,7 +377,7 @@ log_command "Checking LLDB installation" \
 log_message "Ensuring correct ownership of cache directories..."
 PIP_CACHE_DIR="${PIP_CACHE_DIR:-/cache/pip}"
 log_command "Final ownership fix for cache directories" \
-    chown -R ${USER_UID}:${USER_GID} "${PIP_CACHE_DIR}" || true
+    chown -R "${USER_UID}:${USER_GID}" "${PIP_CACHE_DIR}" || true
 
 # End logging
 log_feature_end

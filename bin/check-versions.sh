@@ -83,7 +83,7 @@ is_cache_valid() {
     fi
     
     local file_age=$(($(date +%s) - $(stat -c %Y "$cache_file" 2>/dev/null || stat -f %m "$cache_file" 2>/dev/null || echo 0)))
-    if [ $file_age -lt $CACHE_DURATION ]; then
+    if [ "$file_age" -lt "$CACHE_DURATION" ]; then
         return 0
     fi
     return 1
@@ -527,9 +527,9 @@ print_json_results() {
         echo -n "\"file\":\"$file\","
         echo -n "\"status\":\"$status\""
         echo -n "}"
-        
+
         # Add comma if not last item
-        if [ $i -lt $((${#TOOLS[@]} - 1)) ]; then
+        if [ "$i" -lt $((${#TOOLS[@]} - 1)) ]; then
             echo ","
         else
             echo ""

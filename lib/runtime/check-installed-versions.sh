@@ -179,9 +179,9 @@ check_version() {
     if command -v "$command" >/dev/null 2>&1; then
         local version
         if [ -n "$extract_pattern" ]; then
-            version=$($command $version_flag 2>&1 | grep -oP "$extract_pattern" | head -1 || echo "error")
+            version=$("$command" "$version_flag" 2>&1 | grep -oP "$extract_pattern" | head -1 || echo "error")
         else
-            version=$($command $version_flag 2>&1 | head -1 || echo "error")
+            version=$("$command" "$version_flag" 2>&1 | head -1 || echo "error")
         fi
         
         # Special handling for cargo subcommands that don't report version
@@ -199,7 +199,7 @@ check_version() {
             local latest
             case "$latest_getter" in
                 "github")
-                    latest=$(get_github_release $latest_args)
+                    latest=$(get_github_release "$latest_args")
                     ;;
                 "pypi")
                     latest=$(get_pypi_version "$latest_args")
