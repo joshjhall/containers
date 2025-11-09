@@ -825,6 +825,251 @@ Rate limits:
 
 ---
 
+### 🔵 #15: Missing Container Image Digests in Releases
+
+**Priority**: MEDIUM
+**Status**: 🔴 NOT STARTED
+**Estimated Effort**: 30 minutes
+
+**Risk**: Users cannot verify container image integrity. Missing standard supply chain security practice for published artifacts.
+
+**Observation**: The CI/CD pipeline builds and publishes container images to GHCR, but doesn't publish image digests (SHA256 hashes) in GitHub releases. This makes it difficult for users to verify they're pulling the correct, unmodified images.
+
+**Current Gap**:
+- Images are pushed to `ghcr.io/joshjhall/containers` with tags
+- GitHub releases are created with usage notes
+- **Missing**: No checksums.txt or image digests published
+
+**Recommended Fix**:
+
+Add a new step to the `release` job in `.github/workflows/ci.yml`:
+
+```yaml
+- name: Generate image digests
+  id: digests
+  run: |
+    cat > image-digests.txt << EOF
+    # Container Image Digests for Release ${{ steps.version.outputs.VERSION }}
+    #
+    # Verify images using:
+    #   docker pull ghcr.io/${{ github.repository }}:<variant>@sha256:<digest>
+    #
+    # Generated: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+    EOF
+
+    for variant in minimal python-dev node-dev cloud-ops polyglot rust-golang; do
+      IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.VERSION }}-${variant}"
+
+      # Get image digest from registry
+      DIGEST=$(docker buildx imagetools inspect "$IMAGE" --format '{{.Manifest.Digest}}')
+
+      echo "" >> image-digests.txt
+      echo "## ${variant}" >> image-digests.txt
+      echo "\`\`\`" >> image-digests.txt
+      echo "Image: ${IMAGE}" >> image-digests.txt
+      echo "Digest: ${DIGEST}" >> image-digests.txt
+      echo "Pull command:" >> image-digests.txt
+      echo "  docker pull ghcr.io/${{ github.repository }}:${variant}@${DIGEST}" >> image-digests.txt
+      echo "\`\`\`" >> image-digests.txt
+    done
+
+- name: Attach image digests to release
+  uses: softprops/action-gh-release@v2
+  with:
+    files: image-digests.txt
+```
+
+**Benefits**:
+- Users can verify image integrity
+- Follows Docker/OCI best practices
+- Consistent with our tool download checksum verification
+- Enables reproducible builds verification
+
+**Example Output** (`image-digests.txt`):
+```
+# Container Image Digests for Release v4.5.0
+
+## minimal
+```
+Image: ghcr.io/joshjhall/containers:v4.5.0-minimal
+Digest: sha256:abc123...
+Pull command:
+  docker pull ghcr.io/joshjhall/containers:minimal@sha256:abc123...
+```
+
+## python-dev
+```
+Image: ghcr.io/joshjhall/containers:v4.5.0-python-dev
+Digest: sha256:def456...
+Pull command:
+  docker pull ghcr.io/joshjhall/containers:python-dev@sha256:def456...
+```
+```
+
+---
+
+### 🔵 #16: Container Image Signing with Cosign
+
+**Priority**: MEDIUM
+**Status**: 🔴 NOT STARTED
+**Estimated Effort**: 45 minutes
+
+**Risk**: No cryptographic proof of image authenticity. Advanced supply chain attacks could replace images without detection.
+
+**Observation**: While we verify all build inputs with checksums and publish image digests (#15), we don't cryptographically sign the final container images. This is a supply chain security best practice supported by Sigstore/Cosign.
+
+**Benefits of Image Signing**:
+- **Cryptographic proof**: Images signed by specific identity (GitHub Actions OIDC)
+- **Tamper detection**: Any modification invalidates signature
+- **Keyless signing**: Uses Sigstore public infrastructure (no key management)
+- **SLSA compliance**: Moves toward SLSA Level 3 supply chain security
+- **Industry standard**: Used by Kubernetes, Docker, and major projects
+
+**Recommended Implementation**:
+
+1. **Add Cosign installation and signing to CI/CD**:
+
+```yaml
+# In .github/workflows/ci.yml, add after the build job
+
+- name: Install Cosign
+  uses: sigstore/cosign-installer@v3
+
+- name: Sign container images with Cosign
+  env:
+    COSIGN_EXPERIMENTAL: 1  # Enable keyless signing
+  run: |
+    for variant in minimal python-dev node-dev cloud-ops polyglot rust-golang; do
+      IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.VERSION }}-${variant}"
+
+      echo "Signing: $IMAGE"
+      cosign sign --yes "$IMAGE"
+
+      # Generate signature verification instructions
+      echo "✓ Signed: $IMAGE"
+    done
+
+- name: Generate signature verification guide
+  run: |
+    cat > VERIFY-IMAGES.md << EOF
+    # Verifying Container Image Signatures
+
+    All container images for this release are signed using Sigstore Cosign with
+    GitHub Actions OIDC (keyless signing).
+
+    ## Installation
+
+    \`\`\`bash
+    # Install Cosign
+    brew install cosign  # macOS
+    # OR
+    wget https://github.com/sigstore/cosign/releases/latest/download/cosign-linux-amd64
+    sudo mv cosign-linux-amd64 /usr/local/bin/cosign
+    sudo chmod +x /usr/local/bin/cosign
+    \`\`\`
+
+    ## Verification
+
+    Verify an image signature:
+
+    \`\`\`bash
+    # Verify python-dev image
+    cosign verify \\
+      --certificate-identity-regexp "^https://github.com/${{ github.repository }}/.github/workflows/ci.yml@" \\
+      --certificate-oidc-issuer https://token.actions.githubusercontent.com \\
+      ghcr.io/${{ github.repository }}:${{ steps.version.outputs.VERSION }}-python-dev
+    \`\`\`
+
+    ## What Gets Verified
+
+    When you run \`cosign verify\`, it checks:
+    - ✓ Image was signed by this repository's GitHub Actions
+    - ✓ Signature is valid and not tampered with
+    - ✓ Signing certificate is from Sigstore public infrastructure
+    - ✓ Image digest matches signed digest
+
+    ## All Release Images
+
+    EOF
+
+    for variant in minimal python-dev node-dev cloud-ops polyglot rust-golang; do
+      cat >> VERIFY-IMAGES.md << EOF
+    ### ${variant}
+    \`\`\`bash
+    cosign verify \\
+      --certificate-identity-regexp "^https://github.com/${{ github.repository }}/.github/workflows/ci.yml@" \\
+      --certificate-oidc-issuer https://token.actions.githubusercontent.com \\
+      ghcr.io/${{ github.repository }}:${{ steps.version.outputs.VERSION }}-${variant}
+    \`\`\`
+
+    EOF
+    done
+
+- name: Attach verification guide to release
+  uses: softprops/action-gh-release@v2
+  with:
+    files: VERIFY-IMAGES.md
+```
+
+2. **Update release notes template** to mention image signing:
+
+```yaml
+- name: Generate release notes
+  id: notes
+  run: |
+    VERSION=${{ steps.version.outputs.VERSION }}
+    cat > release-notes.md << EOF
+    ## Container Build System Release ${VERSION}
+
+    ### Security Features
+    - ✅ All build inputs verified with SHA256/SHA512 checksums
+    - ✅ Container images signed with Cosign (Sigstore)
+    - ✅ Image digests published for verification
+    - 📄 See \`image-digests.txt\` for SHA256 digests
+    - 📄 See \`VERIFY-IMAGES.md\` for signature verification
+
+    ### Available Images
+    ...
+    EOF
+```
+
+**Security Properties**:
+- **Keyless signing**: No private keys to manage or leak
+- **Transparency log**: All signatures recorded in Sigstore Rekor
+- **OIDC-based**: Identity tied to GitHub repository and workflow
+- **Verification without registry**: Can verify locally pulled images
+
+**User Workflow**:
+```bash
+# User pulls image
+docker pull ghcr.io/joshjhall/containers:v4.5.0-python-dev
+
+# User verifies signature before running
+cosign verify \
+  --certificate-identity-regexp "^https://github.com/joshjhall/containers/.github/workflows/ci.yml@" \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  ghcr.io/joshjhall/containers:v4.5.0-python-dev
+
+# Output shows verification passed
+✓ Image signature verified!
+✓ Signed by GitHub Actions (joshjhall/containers)
+✓ Certificate issued by Sigstore
+
+# Now safe to run
+docker run -it ghcr.io/joshjhall/containers:v4.5.0-python-dev
+```
+
+**Permissions Required**:
+Add to `.github/workflows/ci.yml` `release` job:
+```yaml
+permissions:
+  contents: write
+  packages: read
+  id-token: write  # Required for OIDC signing
+```
+
+---
+
 ## Implementation Phases
 
 ### Phase 1: Critical Security Fixes (High Priority)
@@ -838,8 +1083,20 @@ Rate limits:
 
 ---
 
-### Phase 2: Input Validation & Injection Prevention (Medium Priority)
+### Phase 2: Supply Chain Security - Container Images (High Priority)
 **Target: Complete second**
+
+- [ ] #15: Publish container image digests in releases (30 min)
+- [ ] #16: Sign container images with Cosign (45 min)
+
+**Total Estimated Effort: 1.25 hours**
+
+**Rationale**: After securing all build inputs with checksums (Phases 10-13), we should secure the outputs (container images). This completes the supply chain security story.
+
+---
+
+### Phase 3: Input Validation & Injection Prevention (Medium Priority)
+**Target: Complete third**
 
 - [ ] #3: Safe eval wrapper for shell initialization (2 hours)
 - [ ] #4: Path validation in entrypoint (1 hour)
@@ -849,8 +1106,8 @@ Rate limits:
 
 ---
 
-### Phase 3: Secrets & Sensitive Data (Medium Priority)
-**Target: Complete third**
+### Phase 4: Secrets & Sensitive Data (Medium Priority)
+**Target: Complete fourth**
 
 - [ ] #6: Safer 1Password helper functions (1 hour)
 - [ ] #11: Document secret exposure risks (30 min)
@@ -859,7 +1116,7 @@ Rate limits:
 
 ---
 
-### Phase 4: Low Priority Hardening (Optional)
+### Phase 5: Low Priority Hardening (Optional)
 **Target: Complete as time permits**
 
 - [ ] #8: Atomic cache directory creation (1 hour)
@@ -871,7 +1128,7 @@ Rate limits:
 
 ---
 
-### Phase 5: Infrastructure Improvements (Future)
+### Phase 6: Infrastructure Improvements (Future)
 **Target: Long-term enhancements**
 
 - [ ] #12: Document Docker socket security (15 min)
@@ -907,10 +1164,11 @@ Rate limits:
 
 ## Progress Tracking
 
-**Overall Progress: 0/14 issues addressed**
+**Overall Progress: 0/16 issues addressed**
 
 - 🔴 **High Severity**: 0/2 complete
 - 🟡 **Medium Severity**: 0/5 complete
+- 🔵 **Supply Chain**: 0/2 complete (image digests, Cosign signing)
 - 🟢 **Low Severity**: 0/5 complete
 - ℹ️ **Informational**: 0/2 complete
 
