@@ -23,7 +23,7 @@ A modular, extensible container build system designed to be shared across projec
 
 - 🔧 **Modular Architecture**: Enable only the tools you need via build arguments
 - 🚀 **Efficient Caching**: BuildKit cache mounts for faster rebuilds
-- 🔒 **Security First**: Non-root users, proper permissions, validated installations
+- 🔒 **Security Hardened**: Non-root users, input validation, checksum verification, secure temp files, rate limiting
 - 🌍 **Multi-Purpose**: Development, CI/CD, production, and agent containers
 - 📦 **28 Feature Modules**: Python, Node.js, Rust, Go, Ruby, Java, R, and 100+ tools
 - ☁️ **Cloud Ready**: AWS, GCP, Kubernetes, Terraform integrations
@@ -297,11 +297,11 @@ When updates are available, edit the appropriate files:
 
 ## Testing
 
-The project includes comprehensive test coverage with **647 total tests** across unit and integration test suites.
+The project includes comprehensive test coverage with **657 total tests** across unit and integration test suites.
 
 ### Unit Tests
 
-Unit tests validate individual components and scripts (487 tests, 99% pass rate):
+Unit tests validate individual components and scripts (497 tests, 99% pass rate):
 
 ```bash
 # Run all unit tests (no Docker required)
@@ -313,8 +313,8 @@ Unit tests validate individual components and scripts (487 tests, 99% pass rate)
 ```
 
 **Unit Test Coverage:**
-- ✅ 487 unit tests covering all features and utilities
-- ✅ 99% pass rate (486 passed, 1 legitimate skip)
+- ✅ 497 unit tests covering all features and utilities
+- ✅ 99% pass rate (496 passed, 1 legitimate skip)
 - ✅ Tests bash scripts directly without Docker
 - ✅ Fast execution (~30 seconds)
 
@@ -349,6 +349,38 @@ To quickly verify installed features in a running container:
 # Show all tools (including not installed)
 ./containers/bin/test-all-features.sh --all
 ```
+
+---
+
+## Security Features
+
+This build system includes comprehensive security hardening:
+
+### Build-Time Security
+- **Checksum Verification**: All downloaded binaries verified with SHA256/SHA512 checksums
+- **Atomic Operations**: Directory creation uses atomic `install -d` to prevent TOCTOU attacks
+- **Secure Temporary Files**: Restrictive permissions (700) on all temporary directories
+- **Input Validation**: Function inputs sanitized against command injection
+- **Completion Script Safety**: Shell completions validated before sourcing
+
+### Runtime Security
+- **Rate Limiting**: Exponential backoff for external API calls with configurable retry logic
+- **GitHub API Token Support**: Automatic detection and use of `GITHUB_TOKEN` for higher rate limits
+- **Non-Root Execution**: All containers run as non-root user by default
+- **Minimal Attack Surface**: Only install features you actually need
+
+### Configuration Options
+```bash
+# Disable passwordless sudo for production
+--build-arg ENABLE_PASSWORDLESS_SUDO=false
+
+# Configure retry behavior
+-e RETRY_MAX_ATTEMPTS=5
+-e RETRY_INITIAL_DELAY=2
+-e RETRY_MAX_DELAY=30
+```
+
+For detailed security information, see [SECURITY.md](SECURITY.md).
 
 ---
 
