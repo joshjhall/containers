@@ -441,6 +441,82 @@ docker build -t myapp:prod \
 
 For more security guidance, see [SECURITY.md](SECURITY.md).
 
+### Passwordless Sudo Access
+
+By default, containers are configured with passwordless sudo for development convenience. For production deployments, disable this feature to follow the principle of least privilege.
+
+#### Development Use (Default)
+
+```bash
+# Default behavior - passwordless sudo enabled
+docker build -t myapp:dev \
+  -f containers/Dockerfile \
+  --build-arg PROJECT_NAME=myapp \
+  --build-arg INCLUDE_PYTHON_DEV=true \
+  .
+```
+
+**Why this is useful for development**:
+- Quickly install system packages during development
+- Test installation scripts without password prompts
+- Standard development container behavior
+
+**Security Impact**:
+- ⚠️ **Non-root user can execute any command as root without password**
+- Container escape could grant full host access (if combined with other vulnerabilities)
+- Suitable for trusted development environments only
+
+#### Production Use (Recommended)
+
+```bash
+# Production: Disable passwordless sudo
+docker build -t myapp:prod \
+  -f containers/Dockerfile \
+  --build-arg PROJECT_NAME=myapp \
+  --build-arg INCLUDE_PYTHON=true \
+  --build-arg ENABLE_PASSWORDLESS_SUDO=false \
+  .
+```
+
+**Benefits**:
+- ✅ Follows least privilege principle
+- ✅ Limits damage from container escape vulnerabilities
+- ✅ User remains in sudo group but requires password
+
+**When to disable passwordless sudo**:
+- ❌ Production deployments
+- ❌ Multi-tenant environments
+- ❌ CI/CD runner containers (if they don't need sudo)
+- ❌ Containers processing untrusted input
+
+**When passwordless sudo is acceptable**:
+- ✅ Local development on your machine
+- ✅ Isolated development containers
+- ✅ VS Code Dev Containers
+- ✅ CI/CD containers that need to install dependencies (with caution)
+
+#### Security Best Practices
+
+1. **Use separate builds for dev and prod**
+   ```bash
+   # scripts/build-dev.sh
+   docker build --build-arg ENABLE_PASSWORDLESS_SUDO=true ...
+
+   # scripts/build-prod.sh
+   docker build --build-arg ENABLE_PASSWORDLESS_SUDO=false ...
+   ```
+
+2. **Review sudo requirements**
+   - If your application never needs sudo, disable it
+   - If only specific commands need sudo, configure sudoers accordingly
+   - Consider removing sudo entirely for runtime-only containers
+
+3. **Layer your security**
+   - Disable passwordless sudo
+   - Use read-only filesystems where possible
+   - Drop unnecessary capabilities
+   - Use security profiles (AppArmor, SELinux)
+
 ---
 
 ## Best Practices

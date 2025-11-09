@@ -10,9 +10,10 @@
 #   $3 - Desired GID (default: same as UID)
 #   $4 - Project name (default: project)
 #   $5 - Working directory (default: /workspace/project)
+#   $6 - Enable passwordless sudo (default: true, production: false)
 #
 # Outputs:
-#   - Creates user with home directory and sudo access
+#   - Creates user with home directory and optional sudo access
 #   - Writes actual UID/GID to /tmp/build-env for use by feature scripts
 #   - Sets up .bashrc.d for modular bash configuration
 #
@@ -25,6 +26,7 @@ USER_UID="${2:-1000}"
 USER_GID="${3:-$USER_UID}"
 PROJECT_NAME="${4:-project}"
 WORKING_DIR="${5:-/workspace/${PROJECT_NAME}}"
+ENABLE_PASSWORDLESS_SUDO="${6:-true}"
 
 echo "=== Setting up user: ${USERNAME} (${USER_UID}:${USER_GID}) ==="
 
@@ -89,9 +91,16 @@ echo "${ACTUAL_GID}" > /tmp/actual_gid
 # Add user to sudo group
 usermod -aG sudo ${USERNAME}
 
-# Configure passwordless sudo
-echo "${USERNAME} ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/${USERNAME}
-chmod 0440 /etc/sudoers.d/${USERNAME}
+# Configure sudo access based on security policy
+if [ "${ENABLE_PASSWORDLESS_SUDO}" = "true" ]; then
+    echo "${USERNAME} ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/${USERNAME}
+    chmod 0440 /etc/sudoers.d/${USERNAME}
+    echo "⚠️  WARNING: Passwordless sudo enabled (development mode)"
+    echo "    For production, use: --build-arg ENABLE_PASSWORDLESS_SUDO=false"
+else
+    echo "Passwordless sudo disabled (production mode)"
+    echo "User ${USERNAME} is in sudo group but requires password for sudo commands"
+fi
 
 # Create common directories (check if home exists first)
 if [ -d "/home/${USERNAME}" ]; then
