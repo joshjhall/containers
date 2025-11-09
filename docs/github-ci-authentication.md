@@ -155,6 +155,47 @@ For organizations, using a GitHub App provides better security:
     token: ${{ steps.generate-token.outputs.token }}
 ```
 
+## Image Signing with Cosign (OIDC)
+
+For container image signing using Sigstore/Cosign, the workflow needs OIDC token permissions:
+
+```yaml
+permissions:
+  contents: write      # For creating releases
+  packages: read       # For pulling images from GHCR
+  id-token: write      # Required for OIDC signing with Cosign
+```
+
+**Why `id-token: write` is needed:**
+- Cosign uses GitHub Actions OIDC to perform keyless signing
+- The OIDC token proves the identity of the workflow
+- Signatures are tied to the specific repository and workflow
+- No private keys need to be managed or stored
+
+**Example in `.github/workflows/ci.yml`:**
+```yaml
+release:
+  name: Create Release
+  runs-on: ubuntu-latest
+  needs: build
+  if: startsWith(github.ref, 'refs/tags/v')
+  permissions:
+    contents: write
+    packages: read
+    id-token: write  # Enable Cosign OIDC signing
+  steps:
+    - name: Install Cosign
+      uses: sigstore/cosign-installer@v3
+
+    - name: Sign container images
+      env:
+        COSIGN_EXPERIMENTAL: 1  # Enable keyless signing
+      run: |
+        cosign sign --yes "$IMAGE"
+```
+
+See `docs/security-hardening.md` issue #16 for complete implementation details.
+
 ## Security Best Practices
 
 1. **Use least privilege**: Only grant necessary permissions
@@ -162,6 +203,7 @@ For organizations, using a GitHub App provides better security:
 3. **Use repository secrets**: Never hardcode tokens
 4. **Prefer GitHub Apps** for organization repositories
 5. **Use environment protection rules** for sensitive operations
+6. **Enable OIDC for Cosign**: Use `id-token: write` for keyless image signing
 
 ## Troubleshooting
 
