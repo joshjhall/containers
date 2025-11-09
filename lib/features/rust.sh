@@ -115,7 +115,8 @@ RUSTUP_CHECKSUM=$(echo "$RUSTUP_CHECKSUM" | awk '{print $1}')
 log_message "Expected SHA256: ${RUSTUP_CHECKSUM}"
 
 # Download and verify rustup-init
-cd /tmp
+BUILD_TEMP=$(create_secure_temp_dir)
+cd "$BUILD_TEMP"
 log_message "Downloading and verifying rustup-init..."
 download_and_verify \
     "$RUSTUP_URL" \
@@ -133,7 +134,7 @@ log_command "Installing Rust via verified rustup" \
     export RUSTUP_HOME='${RUSTUP_HOME}'
 
     # Run verified rustup installer
-    /tmp/rustup-init -y \
+    ${BUILD_TEMP}/rustup-init -y \
         --default-toolchain ${RUST_VERSION} \
         --profile default
 
@@ -148,11 +149,8 @@ log_command "Installing Rust via verified rustup" \
     rustup component add rust-src rust-analyzer clippy rustfmt
 "
 
-# Clean up installer
-log_command "Cleaning up rustup installer" \
-    rm -f /tmp/rustup-init
-
 cd /
+# Cleanup happens automatically via trap
 
 # Install additional Cargo tools
 # These enhance the development experience but aren't required for basic Rust usage

@@ -91,8 +91,8 @@ else
     exit 1
 fi
 
-log_command "Changing to temporary directory" \
-    cd /tmp
+BUILD_TEMP=$(create_secure_temp_dir)
+cd "$BUILD_TEMP"
 
 # ============================================================================
 # GPG Key Import and Verification
@@ -148,11 +148,8 @@ log_command "Extracting AWS CLI v2" \
 log_command "Installing AWS CLI v2" \
     ./aws/install
 
-log_command "Cleaning up AWS CLI installer" \
-    rm -rf awscliv2.zip awscliv2.sig aws/
-
-log_command "Returning to root directory" \
-    cd /
+cd /
+# Cleanup happens automatically via trap
 
 # ============================================================================
 # Session Manager Plugin Installation
@@ -181,7 +178,8 @@ if [ -n "$SESSION_MANAGER_URL" ]; then
     log_message "✓ Calculated checksum from download"
 
     # Download and verify Session Manager plugin
-    cd /tmp
+    BUILD_TEMP=$(create_secure_temp_dir)
+    cd "$BUILD_TEMP"
     log_message "Downloading and verifying Session Manager plugin for ${ARCH}..."
     download_and_verify \
         "$SESSION_MANAGER_URL" \
@@ -189,12 +187,10 @@ if [ -n "$SESSION_MANAGER_URL" ]; then
         "session-manager-plugin.deb"
 
     log_command "Installing Session Manager plugin" \
-        dpkg -i /tmp/session-manager-plugin.deb
-
-    log_command "Cleaning up Session Manager installer" \
-        rm -f /tmp/session-manager-plugin.deb
+        dpkg -i session-manager-plugin.deb
 
     cd /
+    # Cleanup happens automatically via trap
 fi
 
 # ============================================================================

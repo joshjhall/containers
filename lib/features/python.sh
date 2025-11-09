@@ -106,7 +106,8 @@ log_command "Creating Python cache directories with ownership" \
 # ============================================================================
 log_message "Downloading and building Python ${PYTHON_VERSION}..."
 
-cd /tmp
+BUILD_TEMP=$(create_secure_temp_dir)
+cd "$BUILD_TEMP"
 
 # Download Python source with checksum verification
 PYTHON_TARBALL="Python-${PYTHON_VERSION}.tgz"
@@ -159,7 +160,7 @@ log_command "Installing Python" \
 
 # Clean up build files
 cd /
-rm -rf "/tmp/Python-${PYTHON_VERSION}" "/tmp/Python-${PYTHON_VERSION}.tgz"
+# Cleanup happens automatically via trap
 
 # Update library cache
 log_command "Updating library cache" \

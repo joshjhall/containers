@@ -113,7 +113,8 @@ apt_install \
 # ============================================================================
 log_message "Downloading and installing Go ${GO_VERSION}..."
 
-cd /tmp
+BUILD_TEMP=$(create_secure_temp_dir)
+cd "$BUILD_TEMP"
 
 # Fetch checksum dynamically from go.dev
 log_message "Fetching checksum for Go ${GO_VERSION} ${GO_ARCH}..."
