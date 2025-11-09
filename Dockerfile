@@ -3,6 +3,32 @@
 # Version: 4.5.0
 # Supports multiple contexts: devcontainer, agents, CI/CD, production
 
+# ============================================================================
+# SECURITY WARNING: Never Pass Secrets as Build Arguments
+# ============================================================================
+# Build arguments are PERMANENTLY STORED in the image and visible in:
+#   - Docker build logs (plain text output)
+#   - Image history: docker history <image>
+#   - Container inspection: docker inspect <container>
+#   - Image layer metadata
+#
+# ❌ NEVER DO THIS:
+#   docker build --build-arg API_KEY=secret123 ...
+#   docker build --build-arg DATABASE_PASSWORD=pass123 ...
+#
+# ✅ USE THESE INSTEAD:
+#   - Environment variables at runtime:
+#       docker run -e API_KEY=secret123 ...
+#   - Docker secrets (Swarm/Compose):
+#       docker secret create api_key ./api_key.txt
+#   - Mounted config files (read-only):
+#       docker run -v ./secrets:/secrets:ro ...
+#   - Secret management tools:
+#       docker run -e OP_SERVICE_ACCOUNT_TOKEN=... ...
+#
+# For more information, see the Security Best Practices section in README.md
+# ============================================================================
+
 # Build arguments for base image selection
 ARG BASE_IMAGE=debian:trixie-slim
 FROM ${BASE_IMAGE} AS base
