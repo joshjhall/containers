@@ -272,6 +272,7 @@ apt_install() {
         echo "Installing packages: $packages (attempt $attempt/$APT_MAX_RETRIES)..."
         
         # Configure apt with timeout and retry options
+        # shellcheck disable=SC2086  # Word splitting is intentional for package list
         if DEBIAN_FRONTEND=noninteractive timeout "$APT_TIMEOUT" apt-get install -y \
             --no-install-recommends \
             -o Acquire::http::Timeout=30 \
@@ -280,7 +281,7 @@ apt_install() {
             -o Acquire::Retries=3 \
             -o Dpkg::Options::="--force-confdef" \
             -o Dpkg::Options::="--force-confold" \
-            "$packages"; then
+            $packages; then
             echo "✓ Packages installed successfully: $packages"
             return 0
         fi
