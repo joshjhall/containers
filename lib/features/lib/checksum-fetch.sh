@@ -56,7 +56,8 @@ fetch_go_checksum() {
 
     # If exact match failed, try partial version resolution (e.g., "1.23" -> "1.23.0")
     # Count dots to detect partial version
-    local dot_count=$(echo "$version" | grep -o '\.' | wc -l)
+    local dot_count
+    dot_count=$(echo "$version" | grep -o '\.' | wc -l)
 
     if [ "$dot_count" -eq 1 ]; then
         # Partial version like "1.23", find all matching versions
@@ -188,6 +189,40 @@ fetch_github_sha512_file() {
 }
 
 # ============================================================================
+# Maven Central Checksum Fetching
+# ============================================================================
+
+# fetch_maven_sha1 - Fetch SHA1 checksum from Maven Central
+#
+# Maven Central publishes .sha1 files alongside artifacts.
+#
+# Arguments:
+#   $1 - Artifact base URL (without .sha1 extension)
+#
+# Returns:
+#   SHA1 checksum string on success
+#   Empty string on failure
+#
+# Example:
+#   base_url="https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-cli/3.5.7/spring-boot-cli-3.5.7-bin.tar.gz"
+#   checksum=$(fetch_maven_sha1 "$base_url")
+fetch_maven_sha1() {
+    local base_url="$1"
+    local sha1_url="${base_url}.sha1"
+
+    # Fetch the .sha1 file
+    local checksum
+    checksum=$(curl -fsSL "$sha1_url" | awk '{print $1}' | head -1)
+
+    if [ -n "$checksum" ] && [[ "$checksum" =~ ^[a-fA-F0-9]{40}$ ]]; then
+        echo "$checksum"
+        return 0
+    else
+        return 1
+    fi
+}
+
+# ============================================================================
 # Calculated Checksums (when none are published)
 # ============================================================================
 
@@ -261,7 +296,8 @@ fetch_ruby_checksum() {
 
     # If exact match failed, try partial version resolution (e.g., "3.3" -> "3.3.10")
     # Count dots to detect partial version
-    local dot_count=$(echo "$version" | grep -o '\.' | wc -l)
+    local dot_count
+    dot_count=$(echo "$version" | grep -o '\.' | wc -l)
 
     if [ "$dot_count" -eq 1 ]; then
         # Partial version like "3.3", find all matching versions
@@ -299,7 +335,7 @@ fetch_ruby_checksum() {
 #
 # Arguments:
 #   $1 - Checksum string to validate
-#   $2 - Expected type: "sha256" or "sha512"
+#   $2 - Expected type: "sha1", "sha256", or "sha512"
 #
 # Returns:
 #   0 if valid format, 1 otherwise
@@ -308,6 +344,9 @@ validate_checksum_format() {
     local type="${2:-sha256}"
 
     case "$type" in
+        sha1)
+            [[ "$checksum" =~ ^[a-fA-F0-9]{40}$ ]]
+            ;;
         sha256)
             [[ "$checksum" =~ ^[a-fA-F0-9]{64}$ ]]
             ;;
@@ -326,5 +365,6 @@ export -f fetch_github_checksums_txt
 export -f fetch_github_sha256_file
 export -f fetch_github_sha512_file
 export -f fetch_ruby_checksum
+export -f fetch_maven_sha1
 export -f calculate_checksum_sha256
 export -f validate_checksum_format

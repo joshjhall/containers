@@ -29,6 +29,12 @@ source /tmp/build-scripts/base/feature-header.sh
 # Source apt utilities for reliable package installation
 source /tmp/build-scripts/base/apt-utils.sh
 
+# Source download verification utilities
+source /tmp/build-scripts/base/download-verify.sh
+
+# Source checksum fetching utilities
+source /tmp/build-scripts/features/lib/checksum-fetch.sh
+
 # Start logging
 log_feature_start "Java Development Tools"
 
@@ -86,9 +92,42 @@ log_message "Installing Spring Boot CLI..."
 
 SPRING_VERSION="3.5.7"
 export SPRING_VERSION  # Export for use in shell functions
-log_command "Downloading Spring Boot CLI ${SPRING_VERSION}" \
-    wget -q "https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-cli/${SPRING_VERSION}/spring-boot-cli-${SPRING_VERSION}-bin.tar.gz" \
-    -O /tmp/spring-boot-cli.tar.gz
+
+# Build Maven Central URL
+SPRING_BASE_URL="https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-cli/${SPRING_VERSION}/spring-boot-cli-${SPRING_VERSION}-bin.tar.gz"
+
+# Fetch SHA1 checksum from Maven Central
+log_message "Fetching checksum for Spring Boot CLI ${SPRING_VERSION}..."
+if ! SPRING_CHECKSUM=$(fetch_maven_sha1 "${SPRING_BASE_URL}" 2>/dev/null); then
+    log_error "Failed to fetch SHA1 checksum for Spring Boot CLI ${SPRING_VERSION} from Maven Central"
+    log_error ""
+    log_error "This could mean:"
+    log_error "  - Maven Central is unreachable (network issue)"
+    log_error "  - Spring Boot CLI ${SPRING_VERSION} does not exist or is not published yet"
+    log_error ""
+    log_error "Please verify:"
+    log_error "  1. Network connectivity: curl -I https://repo.maven.apache.org"
+    log_error "  2. Version exists: ${SPRING_BASE_URL}"
+    log_feature_end
+    exit 1
+fi
+
+log_message "✓ Fetched SHA1 checksum from Maven Central"
+
+# Validate checksum format
+if ! validate_checksum_format "$SPRING_CHECKSUM" "sha1"; then
+    log_error "Invalid SHA1 checksum format for Spring Boot CLI ${SPRING_VERSION}: ${SPRING_CHECKSUM}"
+    log_feature_end
+    exit 1
+fi
+
+# Download and verify Spring Boot CLI with checksum verification
+log_message "Downloading and verifying Spring Boot CLI ${SPRING_VERSION}..."
+log_message "Using SHA1 checksum: ${SPRING_CHECKSUM}"
+download_and_verify \
+    "${SPRING_BASE_URL}" \
+    "${SPRING_CHECKSUM}" \
+    "/tmp/spring-boot-cli.tar.gz"
 
 log_command "Extracting Spring Boot CLI" \
     tar -xzf /tmp/spring-boot-cli.tar.gz -C "${TOOLS_DIR}"
@@ -118,15 +157,25 @@ rm -f /tmp/jbang.tar
 # ============================================================================
 # Maven Daemon - Faster Maven builds
 # ============================================================================
+# Note: Maven Daemon 1.0.3 only publishes amd64 builds (no arm64)
+# Note: Maven Daemon does not publish checksums, using calculated SHA256
 ARCH=$(dpkg --print-architecture)
-if [ "$ARCH" = "amd64" ] || [ "$ARCH" = "arm64" ]; then
+if [ "$ARCH" = "amd64" ]; then
     log_message "Installing Maven Daemon for ${ARCH}..."
 
     MVND_VERSION="1.0.3"
     MVND_URL="https://github.com/apache/maven-mvnd/releases/download/${MVND_VERSION}/maven-mvnd-${MVND_VERSION}-linux-${ARCH}.tar.gz"
 
-    log_command "Downloading Maven Daemon ${MVND_VERSION}" \
-        wget "${MVND_URL}" -O /tmp/mvnd.tar.gz
+    # Maven Daemon does not publish checksums, using calculated SHA256
+    # Calculated from: curl -fsSL "$MVND_URL" | sha256sum
+    MVND_CHECKSUM_AMD64="3ddd4741b0e70c245ed164b45774b72a19331294b2d6147570c8c5271a977e8c"
+
+    log_message "Downloading and verifying Maven Daemon ${MVND_VERSION}..."
+    log_message "Using calculated SHA256 checksum: ${MVND_CHECKSUM_AMD64}"
+    download_and_verify \
+        "${MVND_URL}" \
+        "${MVND_CHECKSUM_AMD64}" \
+        "/tmp/mvnd.tar.gz"
 
     log_command "Extracting Maven Daemon" \
         tar -xzf /tmp/mvnd.tar.gz -C "${TOOLS_DIR}"
@@ -136,7 +185,7 @@ if [ "$ARCH" = "amd64" ] || [ "$ARCH" = "arm64" ]; then
 
     rm -f /tmp/mvnd.tar.gz
 else
-    log_message "Skipping Maven Daemon installation - only available for amd64/arm64 architectures (detected: ${ARCH})"
+    log_message "Skipping Maven Daemon installation - only available for amd64 architecture (detected: ${ARCH})"
 fi
 
 # ============================================================================

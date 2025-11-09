@@ -2,21 +2,22 @@
 # Download and Verify - Secure file download with checksum verification
 #
 # Description:
-#   Provides secure download functions with SHA256 checksum verification.
+#   Provides secure download functions with SHA1/SHA256/SHA512 checksum verification.
 #   Prevents supply chain attacks by validating file integrity before use.
 #
 # Usage:
 #   source /tmp/build-scripts/base/download-verify.sh
-#   download_and_verify "URL" "EXPECTED_SHA256" "/output/path"
-#   download_and_extract "URL" "EXPECTED_SHA256" "/extract/dir" "file_to_extract"
+#   download_and_verify "URL" "EXPECTED_CHECKSUM" "/output/path"
+#   download_and_extract "URL" "EXPECTED_CHECKSUM" "/extract/dir" "file_to_extract"
 #
 # Functions:
-#   - download_and_verify: Download file and verify SHA256
+#   - download_and_verify: Download file and verify checksum (SHA1/SHA256/SHA512)
 #   - download_and_extract: Download tarball, verify, and extract specific file
-#   - verify_checksum: Verify existing file's SHA256 checksum
+#   - verify_checksum: Verify existing file's checksum (SHA1/SHA256/SHA512)
 #
 # Security:
-#   - All downloads must provide expected SHA256 checksum
+#   - All downloads must provide expected checksum
+#   - Supports SHA1 (40 hex), SHA256 (64 hex), and SHA512 (128 hex) checksums
 #   - Files are verified before extraction or execution
 #   - Temporary files are cleaned up on verification failure
 #
@@ -36,11 +37,11 @@ NC='\033[0m' # No Color
 # Core Download and Verification Functions
 # ============================================================================
 
-# download_and_verify - Download a file and verify its SHA256 or SHA512 checksum
+# download_and_verify - Download a file and verify its checksum
 #
 # Arguments:
 #   $1 - URL to download
-#   $2 - Expected checksum (SHA256 64 hex chars or SHA512 128 hex chars)
+#   $2 - Expected checksum (SHA1 40 hex, SHA256 64 hex, or SHA512 128 hex chars)
 #   $3 - Output file path
 #
 # Returns:
@@ -76,7 +77,9 @@ download_and_verify() {
 
         # Determine hash type for error message
         local checksum_len="${#expected_checksum}"
-        if [ "$checksum_len" -eq 64 ]; then
+        if [ "$checksum_len" -eq 40 ]; then
+            echo "  Got:      $(sha1sum "$temp_file" | cut -d' ' -f1)" >&2
+        elif [ "$checksum_len" -eq 64 ]; then
             echo "  Got:      $(sha256sum "$temp_file" | cut -d' ' -f1)" >&2
         else
             echo "  Got:      $(sha512sum "$temp_file" | cut -d' ' -f1)" >&2
@@ -148,11 +151,11 @@ download_and_extract() {
     return 0
 }
 
-# verify_checksum - Verify SHA256 or SHA512 checksum of existing file
+# verify_checksum - Verify SHA1, SHA256, or SHA512 checksum of existing file
 #
 # Arguments:
 #   $1 - File path to verify
-#   $2 - Expected checksum (SHA256 64 hex chars or SHA512 128 hex chars)
+#   $2 - Expected checksum (SHA1 40 hex, SHA256 64 hex, or SHA512 128 hex chars)
 #
 # Returns:
 #   0 if checksum matches, 1 if mismatch or error
@@ -172,7 +175,10 @@ verify_checksum() {
     local checksum_len="${#expected_checksum}"
     local actual_checksum
 
-    if [ "$checksum_len" -eq 64 ]; then
+    if [ "$checksum_len" -eq 40 ]; then
+        # SHA1 (40 hexadecimal characters)
+        actual_checksum=$(sha1sum "$file_path" | cut -d' ' -f1)
+    elif [ "$checksum_len" -eq 64 ]; then
         # SHA256 (64 hexadecimal characters)
         actual_checksum=$(sha256sum "$file_path" | cut -d' ' -f1)
     elif [ "$checksum_len" -eq 128 ]; then
@@ -180,7 +186,7 @@ verify_checksum() {
         actual_checksum=$(sha512sum "$file_path" | cut -d' ' -f1)
     else
         echo -e "${RED}✗ Invalid checksum length: $checksum_len${NC}" >&2
-        echo "  Expected 64 (SHA256) or 128 (SHA512) hex characters" >&2
+        echo "  Expected 40 (SHA1), 64 (SHA256), or 128 (SHA512) hex characters" >&2
         return 1
     fi
 
