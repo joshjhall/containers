@@ -241,6 +241,7 @@ GJF_VERSION="1.32.0"
 
 # JMH version for benchmarking
 JMH_VERSION="1.37"
+export JMH_VERSION  # Export for use in shell functions
 GJF_URL="https://github.com/google/google-java-format/releases/download/v${GJF_VERSION}/google-java-format-${GJF_VERSION}-all-deps.jar"
 if wget -q --spider "${GJF_URL}" 2>/dev/null; then
     log_command "Downloading Google Java Format ${GJF_VERSION}" \
