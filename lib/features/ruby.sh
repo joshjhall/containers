@@ -31,7 +31,7 @@ source /tmp/build-scripts/features/lib/checksum-fetch.sh
 # ============================================================================
 # Version Configuration
 # ============================================================================
-RUBY_VERSION="${RUBY_VERSION:-3.3.9}"
+RUBY_VERSION="${RUBY_VERSION:-3.4.7}"
 RUBY_MAJOR=$(echo $RUBY_VERSION | cut -d. -f1,2)
 
 # Start logging
