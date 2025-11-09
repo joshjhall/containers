@@ -73,7 +73,7 @@ log_command "Creating Rust cache directories" \
     mkdir -p "${CARGO_HOME}" "${RUSTUP_HOME}"
 
 log_command "Setting cache directory ownership" \
-    chown -R ${USER_UID}:${USER_GID} "${CARGO_HOME}" "${RUSTUP_HOME}"
+    chown -R "${USER_UID}:${USER_GID}" "${CARGO_HOME}" "${RUSTUP_HOME}"
 
 # ============================================================================
 # Rust Toolchain Installation (Secure with Checksum Verification)
@@ -128,7 +128,7 @@ log_command "Making rustup-init executable" \
 
 # Run rustup-init as the target user with verified binary
 log_command "Installing Rust via verified rustup" \
-    su - ${USERNAME} -c "
+    su - "${USERNAME}" -c "
     export CARGO_HOME='${CARGO_HOME}'
     export RUSTUP_HOME='${RUSTUP_HOME}'
 
@@ -157,7 +157,7 @@ cd /
 # Install additional Cargo tools
 # These enhance the development experience but aren't required for basic Rust usage
 log_command "Installing cargo development tools" \
-    su - ${USERNAME} -c "
+    su - "${USERNAME}" -c "
     export CARGO_HOME='${CARGO_HOME}'
     export RUSTUP_HOME='${RUSTUP_HOME}'
     source ${CARGO_HOME}/env
@@ -269,7 +269,7 @@ log_command "Writing updated PATH to /etc/environment" \
 # ============================================================================
 log_message "Ensuring correct ownership of Rust directories..."
 log_command "Final ownership fix for cargo cache" \
-    chown -R ${USER_UID}:${USER_GID} "${CARGO_HOME}" "${RUSTUP_HOME}"
+    chown -R "${USER_UID}:${USER_GID}" "${CARGO_HOME}" "${RUSTUP_HOME}"
 
 # End logging
 log_feature_end

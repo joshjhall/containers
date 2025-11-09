@@ -74,8 +74,8 @@ update-locale LANG=en_US.UTF-8 || true
 echo "=== Configuring timezone ==="
 # TZ environment variable can override this at runtime
 TZ=${TZ:-UTC}
-ln -snf /usr/share/zoneinfo/$TZ /etc/localtime
-echo $TZ > /etc/timezone
+ln -snf /usr/share/zoneinfo/"$TZ" /etc/localtime
+echo "$TZ" > /etc/timezone
 
 # ============================================================================
 # Zoxide Installation - Smarter directory navigation

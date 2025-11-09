@@ -77,7 +77,7 @@ export PATH="${GEM_HOME}/bin:$PATH"
 # Helper function to install gems as user
 gem_install_as_user() {
     local gems="$*"
-    su - ${USERNAME} -c "export GEM_HOME='${GEM_HOME}' GEM_PATH='${GEM_PATH}' && /usr/local/bin/gem install ${gems}"
+    su - "${USERNAME}" -c "export GEM_HOME='${GEM_HOME}' GEM_PATH='${GEM_PATH}' && /usr/local/bin/gem install ${gems}"
 }
 
 # Testing frameworks
@@ -325,7 +325,7 @@ log_command "Checking yard version" \
 # ============================================================================
 log_message "Ensuring correct ownership of Ruby directories..."
 log_command "Final ownership fix for Ruby cache directories" \
-    chown -R ${USER_UID}:${USER_GID} "${GEM_HOME}" "${BUNDLE_PATH:-/cache/ruby/bundle}" || true
+    chown -R "${USER_UID}":"${USER_GID}" "${GEM_HOME}" "${BUNDLE_PATH:-/cache/ruby/bundle}" || true
 
 # End logging
 log_feature_end

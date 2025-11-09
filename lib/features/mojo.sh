@@ -96,7 +96,7 @@ log_command "Creating Mojo/Pixi cache directories" \
     mkdir -p "${PIXI_CACHE}" "${MOJO_PROJECT}"
 
 log_command "Setting cache directory ownership" \
-    chown -R ${USER_UID}:${USER_GID} "${PIXI_CACHE}" "/cache/mojo"
+    chown -R "${USER_UID}:${USER_GID}" "${PIXI_CACHE}" "/cache/mojo"
 
 log_message "Mojo cache paths:"
 log_message "  Pixi cache: ${PIXI_CACHE}"
@@ -183,7 +183,7 @@ else
 
         # Set ownership to allow non-root users to use it
         log_command "Setting pixi directory ownership" \
-            chown -R ${USER_UID}:${USER_GID} "${PIXI_HOME}"
+            chown -R "${USER_UID}:${USER_GID}" "${PIXI_HOME}"
 
         # Create symlink using the helper function
         create_symlink "${PIXI_HOME}/bin/pixi" "/usr/local/bin/pixi" "pixi package manager"
@@ -210,19 +210,19 @@ cd "${MOJO_PROJECT}"
 
 # Initialize pixi project with Modular conda channel as the user
 log_command "Initializing pixi project for Mojo" \
-    su - ${USERNAME} -c "cd '${MOJO_PROJECT}' && export PIXI_CACHE_DIR='${PIXI_CACHE}' && pixi init mojo-env -c https://conda.modular.com/max-nightly/ -c conda-forge"
+    su - "${USERNAME}" -c "cd '${MOJO_PROJECT}' && export PIXI_CACHE_DIR='${PIXI_CACHE}' && pixi init mojo-env -c https://conda.modular.com/max-nightly/ -c conda-forge"
 
 # Add the modular package which includes Mojo as the user
 log_command "Adding modular package (includes Mojo)" \
-    su - ${USERNAME} -c "cd '${MOJO_PROJECT}/mojo-env' && export PIXI_CACHE_DIR='${PIXI_CACHE}' && pixi add modular"
+    su - "${USERNAME}" -c "cd '${MOJO_PROJECT}/mojo-env' && export PIXI_CACHE_DIR='${PIXI_CACHE}' && pixi add modular"
 
 # Also add Python support for interop as the user
 log_command "Adding Python support" \
-    su - ${USERNAME} -c "cd '${MOJO_PROJECT}/mojo-env' && export PIXI_CACHE_DIR='${PIXI_CACHE}' && pixi add 'python>=3.11,<3.13'"
+    su - "${USERNAME}" -c "cd '${MOJO_PROJECT}/mojo-env' && export PIXI_CACHE_DIR='${PIXI_CACHE}' && pixi add 'python>=3.11,<3.13'"
 
 # Set proper ownership on the mojo-env directory after package installation
 log_command "Setting mojo-env directory ownership" \
-    chown -R ${USER_UID}:${USER_GID} "${MOJO_PROJECT}/mojo-env"
+    chown -R "${USER_UID}:${USER_GID}" "${MOJO_PROJECT}/mojo-env"
 
 # ============================================================================
 # Create System-wide Wrapper Scripts
@@ -448,7 +448,7 @@ done
 # ============================================================================
 log_message "Ensuring correct ownership of Mojo directories..."
 log_command "Final ownership fix for Mojo cache directories" \
-    chown -R ${USER_UID}:${USER_GID} "${PIXI_CACHE}" "${MOJO_PROJECT}" || true
+    chown -R "${USER_UID}:${USER_GID}" "${PIXI_CACHE}" "${MOJO_PROJECT}" || true
 
 # End logging
 log_feature_end

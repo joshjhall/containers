@@ -428,7 +428,7 @@ else
     # Ensure proper ownership of fzf directory
     if [ -d /opt/fzf ]; then
         log_command "Setting fzf directory ownership" \
-            chown -R ${USER_UID}:${USER_GID} /opt/fzf
+            chown -R "${USER_UID}:${USER_GID}" /opt/fzf
     fi
 fi
 
@@ -989,7 +989,7 @@ log_command "Creating dev tools cache directory" \
     mkdir -p "${DEV_TOOLS_CACHE}"
 
 log_command "Setting cache directory ownership" \
-    chown -R ${USER_UID}:${USER_GID} "${DEV_TOOLS_CACHE}"
+    chown -R "${USER_UID}:${USER_GID}" "${DEV_TOOLS_CACHE}"
 
 # Configure tools to use cache where applicable
 write_bashrc_content /etc/bashrc.d/80-dev-tools.sh "cache configuration" << 'DEV_TOOLS_BASHRC_EOF'

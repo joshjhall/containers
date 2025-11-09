@@ -98,7 +98,7 @@ log_command "Creating Python cache directories" \
     mkdir -p "${PIP_CACHE_DIR}" "${POETRY_CACHE_DIR}" "${PIPX_HOME}" "${PIPX_BIN_DIR}"
 
 log_command "Setting cache directory ownership" \
-    chown -R ${USER_UID}:${USER_GID} "${PIP_CACHE_DIR}" "${POETRY_CACHE_DIR}" "${PIPX_HOME}"
+    chown -R "${USER_UID}":"${USER_GID}" "${PIP_CACHE_DIR}" "${POETRY_CACHE_DIR}" "${PIPX_HOME}"
 
 # ============================================================================
 # Python Installation from Source
@@ -208,7 +208,7 @@ rm get-pip.py
 
 # Upgrade pip, setuptools, and wheel as the user
 log_command "Upgrading pip, setuptools, and wheel" \
-    su - ${USERNAME} -c "export PIP_CACHE_DIR='${PIP_CACHE_DIR}' && /usr/local/bin/python3 -m pip install --no-cache-dir --upgrade pip setuptools wheel"
+    su - "${USERNAME}" -c "export PIP_CACHE_DIR='${PIP_CACHE_DIR}' && /usr/local/bin/python3 -m pip install --no-cache-dir --upgrade pip setuptools wheel"
 
 # ============================================================================
 # Handle Python project files if they were copied during build
@@ -221,7 +221,7 @@ if [ -d /tmp/python-project-files ] && [ -n "$(ls -A /tmp/python-project-files 2
     
     # Ensure workspace directory exists
     log_command "Creating workspace directory" \
-        mkdir -p ${WORKING_DIR}
+        mkdir -p "${WORKING_DIR}"
     
     # Copy files to workspace
     for file in /tmp/python-project-files/*; do
@@ -234,7 +234,7 @@ if [ -d /tmp/python-project-files ] && [ -n "$(ls -A /tmp/python-project-files 2
     
     # Fix ownership
     log_command "Setting correct ownership on workspace" \
-        chown -R ${USER_UID}:${USER_GID} ${WORKING_DIR}
+        chown -R "${USER_UID}":"${USER_GID}" "${WORKING_DIR}"
     
     # Clean up temp files
     log_command "Cleaning up temporary files" \
@@ -248,7 +248,7 @@ log_message "Installing pipx and Poetry..."
 
 # Install pipx as the user
 log_command "Installing pipx" \
-    su - ${USERNAME} -c "export PIP_CACHE_DIR='${PIP_CACHE_DIR}' && /usr/local/bin/python3 -m pip install --no-cache-dir pipx"
+    su - "${USERNAME}" -c "export PIP_CACHE_DIR='${PIP_CACHE_DIR}' && /usr/local/bin/python3 -m pip install --no-cache-dir pipx"
 
 # Ensure pipx bin directory is in PATH
 export PATH="${PIPX_BIN_DIR}:$PATH"
@@ -256,7 +256,7 @@ export PATH="${PIPX_BIN_DIR}:$PATH"
 # Use pipx to install Poetry with pinned version
 POETRY_VERSION="2.2.1"
 log_command "Installing Poetry ${POETRY_VERSION} via pipx" \
-    su - ${USERNAME} -c "
+    su - "${USERNAME}" -c "
     export PIPX_HOME='${PIPX_HOME}'
     export PIPX_BIN_DIR='${PIPX_BIN_DIR}'
     export PATH='${PIPX_BIN_DIR}:/usr/local/bin:$PATH'
@@ -426,7 +426,7 @@ log_command "Checking Poetry version" \
 # ============================================================================
 log_message "Ensuring correct ownership of Python directories..."
 log_command "Final ownership fix for Python cache directories" \
-    chown -R ${USER_UID}:${USER_GID} "${PIP_CACHE_DIR}" "${PIPX_HOME}" "${POETRY_CACHE_DIR}" || true
+    chown -R "${USER_UID}":"${USER_GID}" "${PIP_CACHE_DIR}" "${PIPX_HOME}" "${POETRY_CACHE_DIR}" || true
 
 # End logging
 log_feature_end

@@ -140,7 +140,7 @@ log_command "Creating npm directories" \
     mkdir -p "$NPM_CACHE_DIR" "$NPM_PREFIX"
 
 log_command "Setting npm directory ownership" \
-    chown -R ${USER_UID}:${USER_GID} "$NPM_CACHE_DIR" "$NPM_PREFIX"
+    chown -R "${USER_UID}:${USER_GID}" "$NPM_CACHE_DIR" "$NPM_PREFIX"
 
 # Also add to system-wide PATH before checking
 export PATH="${NPM_PREFIX}/bin:$PATH"
@@ -154,7 +154,7 @@ else
 
     # Install wrangler globally as the user
     log_command "Installing wrangler globally" \
-        su - ${USERNAME} -c "
+        su - "${USERNAME}" -c "
             export npm_config_cache='${NPM_CACHE_DIR}'
             export npm_config_prefix='${NPM_PREFIX}'
             export PATH='${NPM_PREFIX}/bin:\$PATH'

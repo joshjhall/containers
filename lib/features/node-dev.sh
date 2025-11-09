@@ -99,7 +99,7 @@ NPM_GLOBAL_DIR="${NPM_GLOBAL_DIR:-/cache/npm-global}"
 # Helper function to install npm packages as user
 npm_install_as_user() {
     local packages="$*"
-    su - ${USERNAME} -c "export NPM_CONFIG_CACHE='${NPM_CACHE_DIR}' NPM_CONFIG_PREFIX='${NPM_GLOBAL_DIR}' && /usr/local/bin/npm install -g ${packages}"
+    su - "${USERNAME}" -c "export NPM_CONFIG_CACHE='${NPM_CACHE_DIR}' NPM_CONFIG_PREFIX='${NPM_GLOBAL_DIR}' && /usr/local/bin/npm install -g ${packages}"
 }
 
 # TypeScript and related tools
@@ -714,7 +714,7 @@ log_command "Checking Webpack version" \
 # ============================================================================
 log_message "Ensuring correct ownership of Node.js directories..."
 log_command "Final ownership fix for Node.js cache directories" \
-    chown -R ${USER_UID}:${USER_GID} "${NPM_CACHE_DIR}" "${NPM_GLOBAL_DIR}" || true
+    chown -R "${USER_UID}:${USER_GID}" "${NPM_CACHE_DIR}" "${NPM_GLOBAL_DIR}" || true
 
 # End logging
 log_feature_end

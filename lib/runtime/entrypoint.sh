@@ -60,7 +60,7 @@ if [ ! -f "$FIRST_RUN_MARKER" ]; then
                 echo "Running first-startup script: $(basename "$script")"
                 if [ "$RUNNING_AS_ROOT" = "true" ]; then
                     # Running as root, use su to switch to non-root user
-                    su ${USERNAME} -c "bash $script"
+                    su "${USERNAME}" -c "bash $script"
                 else
                     # Already running as non-root user, execute directly
                     bash "$script"
@@ -73,7 +73,7 @@ if [ ! -f "$FIRST_RUN_MARKER" ]; then
     
     # Create marker file
     if [ "$RUNNING_AS_ROOT" = "true" ]; then
-        su ${USERNAME} -c "touch $FIRST_RUN_MARKER"
+        su "${USERNAME}" -c "touch $FIRST_RUN_MARKER"
     else
         touch "$FIRST_RUN_MARKER"
     fi
@@ -94,7 +94,7 @@ if [ -d "/etc/container/startup" ]; then
                 echo "Running startup script: $(basename "$script")"
                 if [ "$RUNNING_AS_ROOT" = "true" ]; then
                     # Running as root, use su to switch to non-root user
-                    su ${USERNAME} -c "bash $script"
+                    su "${USERNAME}" -c "bash $script"
                 else
                     # Already running as non-root user, execute directly
                     bash "$script"

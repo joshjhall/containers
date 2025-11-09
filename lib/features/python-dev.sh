@@ -75,14 +75,14 @@ PIP_CACHE_DIR="${PIP_CACHE_DIR:-/cache/pip}"
 
 # Upgrade pip first as the user
 log_command "Upgrading pip, setuptools, and wheel" \
-    su - ${USERNAME} -c "export PIP_CACHE_DIR='${PIP_CACHE_DIR}' && /usr/local/bin/python -m pip install --upgrade --no-warn-script-location pip setuptools wheel"
+    su - "${USERNAME}" -c "export PIP_CACHE_DIR='${PIP_CACHE_DIR}' && /usr/local/bin/python -m pip install --upgrade --no-warn-script-location pip setuptools wheel"
 
 # Development tools - install in one command for better dependency resolution
 log_message "Installing Python development tools..."
 # Use --only-binary :all: to prefer compiled wheels where available
 # Run as user to ensure correct ownership
 log_command "Installing Python development packages" \
-    su - ${USERNAME} -c "export PIP_CACHE_DIR='${PIP_CACHE_DIR}' && /usr/local/bin/python -m pip install --no-warn-script-location --prefer-binary \
+    su - "${USERNAME}" -c "export PIP_CACHE_DIR='${PIP_CACHE_DIR}' && /usr/local/bin/python -m pip install --no-warn-script-location --prefer-binary \
     'black[jupyter]' \
     isort \
     ruff \
@@ -290,7 +290,7 @@ log_command "Checking ruff version" \
 # ============================================================================
 log_message "Ensuring correct ownership of Python directories..."
 log_command "Final ownership fix for Python cache directories" \
-    chown -R ${USER_UID}:${USER_GID} "${PIP_CACHE_DIR}" || true
+    chown -R "${USER_UID}:${USER_GID}" "${PIP_CACHE_DIR}" || true
 
 # End logging
 log_feature_end

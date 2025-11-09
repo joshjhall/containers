@@ -164,7 +164,7 @@ EOF
 
 # Run the installation script as the user
 log_command "Installing R development packages (this may take 15-20 minutes)" \
-    su - ${USERNAME} -c "export R_LIBS_USER='${R_LIBS_USER}' R_LIBS_SITE='${R_LIBS_SITE}' && /usr/local/bin/Rscript /tmp/install_r_dev_tools.R"
+    su - "${USERNAME}" -c "export R_LIBS_USER='${R_LIBS_USER}' R_LIBS_SITE='${R_LIBS_SITE}' && /usr/local/bin/Rscript /tmp/install_r_dev_tools.R"
 
 # Clean up
 log_command "Cleaning up installation script" \
@@ -639,7 +639,7 @@ log_command "Checking rmarkdown version" \
 # ============================================================================
 log_message "Ensuring correct ownership of R directories..."
 log_command "Final ownership fix for R cache directories" \
-    chown -R ${USER_UID}:${USER_GID} "${R_LIBS_USER}" "${R_LIBS_SITE}" || true
+    chown -R "${USER_UID}":"${USER_GID}" "${R_LIBS_USER}" "${R_LIBS_SITE}" || true
 
 # End logging
 log_feature_end

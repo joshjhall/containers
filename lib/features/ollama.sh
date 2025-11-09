@@ -68,7 +68,7 @@ log_command "Creating Ollama model directory" \
     mkdir -p "${OLLAMA_MODELS_DIR}"
 
 log_command "Setting model directory ownership" \
-    chown -R ${USER_UID}:${USER_GID} "${OLLAMA_MODELS_DIR}"
+    chown -R "${USER_UID}:${USER_GID}" "${OLLAMA_MODELS_DIR}"
 
 # ============================================================================
 # Ollama Installation

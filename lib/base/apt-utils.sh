@@ -122,7 +122,7 @@ apt_install_conditional() {
 
     if [ "$current_version" -ge "$min_version" ] && [ "$current_version" -le "$max_version" ]; then
         echo "Installing version-specific packages for Debian $current_version: $packages"
-        apt_install $packages
+        apt_install "$packages"
     else
         echo "Skipping packages (not needed for Debian $current_version): $packages"
     fi
@@ -144,8 +144,8 @@ apt_retry() {
     
     while [ $attempt -le "$APT_MAX_RETRIES" ]; do
         echo "Running: $cmd (attempt $attempt/$APT_MAX_RETRIES)..."
-        
-        if timeout "$APT_TIMEOUT" $cmd; then
+
+        if timeout "$APT_TIMEOUT" "$cmd"; then
             echo "✓ Command succeeded: $cmd"
             return 0
         fi
@@ -280,7 +280,7 @@ apt_install() {
             -o Acquire::Retries=3 \
             -o Dpkg::Options::="--force-confdef" \
             -o Dpkg::Options::="--force-confold" \
-            $packages; then
+            "$packages"; then
             echo "✓ Packages installed successfully: $packages"
             return 0
         fi
