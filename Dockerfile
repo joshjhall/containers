@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 # Universal Container Build System
-# Version: 4.4.0
+# Version: 4.5.0
 # Supports multiple contexts: devcontainer, agents, CI/CD, production
 
 # Build arguments for base image selection
@@ -165,7 +165,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 # Go + Go development tools
 ARG INCLUDE_GOLANG=false
 ARG INCLUDE_GOLANG_DEV=false
-ARG GO_VERSION=1.25.3
+ARG GO_VERSION=1.25.4
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     if [ "${INCLUDE_GOLANG}" = "true" ] || [ "${INCLUDE_GOLANG_DEV}" = "true" ]; then \
@@ -316,7 +316,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 
 # Terraform
 ARG INCLUDE_TERRAFORM=false
-ARG TERRAGRUNT_VERSION=0.93.0
+ARG TERRAGRUNT_VERSION=0.93.3
 ARG TFDOCS_VERSION=0.20.0
 ARG TFLINT_VERSION=0.59.1
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
