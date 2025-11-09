@@ -43,7 +43,8 @@ source /tmp/build-scripts/features/lib/checksum-fetch.sh
 # ============================================================================
 # Go version to install
 GO_VERSION="${GO_VERSION:-1.25.3}"
-n# Validate Go version format to prevent shell injection
+
+# Validate Go version format to prevent shell injection
 validate_go_version "$GO_VERSION" || {
     log_error "Build failed due to invalid GO_VERSION"
     exit 1

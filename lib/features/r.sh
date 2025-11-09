@@ -35,7 +35,8 @@ source /tmp/build-scripts/base/version-validation.sh
 # Version Configuration
 # ============================================================================
 R_VERSION="${R_VERSION:-4.5.1}"
-n# Validate R version format to prevent shell injection
+
+# Validate R version format to prevent shell injection
 validate_r_version "$R_VERSION" || {
     log_error "Build failed due to invalid R_VERSION"
     exit 1

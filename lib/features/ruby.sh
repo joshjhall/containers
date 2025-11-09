@@ -35,7 +35,8 @@ source /tmp/build-scripts/features/lib/checksum-fetch.sh
 # Version Configuration
 # ============================================================================
 RUBY_VERSION="${RUBY_VERSION:-3.4.7}"
-n# Validate Ruby version format to prevent shell injection
+
+# Validate Ruby version format to prevent shell injection
 validate_ruby_version "$RUBY_VERSION" || {
     log_error "Build failed due to invalid RUBY_VERSION"
     exit 1
