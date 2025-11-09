@@ -187,6 +187,41 @@ calculate_checksum_sha256() {
 }
 
 # ============================================================================
+# Ruby Checksum Fetching
+# ============================================================================
+
+# fetch_ruby_checksum - Fetch SHA256 checksum for a Ruby release
+#
+# Arguments:
+#   $1 - Ruby version (e.g., "3.4.7", "3.3.10")
+#
+# Returns:
+#   SHA256 checksum string on success
+#   Empty string on failure
+#
+# Example:
+#   checksum=$(fetch_ruby_checksum "3.4.7")
+fetch_ruby_checksum() {
+    local version="$1"
+    local url="https://www.ruby-lang.org/en/downloads/"
+
+    # Fetch the page and extract the SHA256 for the given version
+    # The HTML format is: <a href="...">Ruby X.Y.Z</a><br />sha256: <checksum></li>
+    local checksum
+    checksum=$(curl -fsSL "$url" | \
+        grep -A2 ">Ruby ${version}<" | \
+        grep -oP 'sha256: \K[a-f0-9]{64}' | \
+        head -1)
+
+    if [ -n "$checksum" ] && [[ "$checksum" =~ ^[a-fA-F0-9]{64}$ ]]; then
+        echo "$checksum"
+        return 0
+    else
+        return 1
+    fi
+}
+
+# ============================================================================
 # Utility Functions
 # ============================================================================
 
@@ -220,5 +255,6 @@ export -f fetch_go_checksum
 export -f fetch_github_checksums_txt
 export -f fetch_github_sha256_file
 export -f fetch_github_sha512_file
+export -f fetch_ruby_checksum
 export -f calculate_checksum_sha256
 export -f validate_checksum_format
