@@ -424,8 +424,12 @@ log_command "Checking pixi version" \
     /usr/local/bin/pixi --version || log_warning "Pixi not installed properly"
 
 # Try to verify Mojo (may fail if environment not fully activated)
-log_command "Checking Mojo availability" \
-    cd "${MOJO_PROJECT}/mojo-env" && pixi run mojo --version || log_warning "Mojo version check failed (this is normal during build)"
+log_message "Checking Mojo availability"
+if cd "${MOJO_PROJECT}/mojo-env" && pixi run mojo --version; then
+    log_message "✓ Mojo is available"
+else
+    log_warning "Mojo version check failed (this is normal during build)"
+fi
 
 # ============================================================================
 # Final Permissions Check

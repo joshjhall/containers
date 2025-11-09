@@ -61,6 +61,7 @@ FEATURES_DIR="${SCRIPT_DIR}/../features"
 # ============================================================================
 
 # Check if command exists
+# shellcheck disable=SC2317  # Function is called dynamically
 command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
