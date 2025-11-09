@@ -287,13 +287,41 @@ go-new() {
 
     local module_name="$1"
     local project_type="${2:-lib}"
+
+    # Validate module name format (typical Go module path)
+    if ! [[ "$module_name" =~ ^[a-zA-Z0-9._/-]+$ ]]; then
+        echo "Error: Invalid module name format" >&2
+        echo "Module name should contain only alphanumeric, dots, dashes, slashes, and underscores" >&2
+        return 1
+    fi
+
+    # Validate project type
+    case "$project_type" in
+        cli|lib|api)
+            # Valid types
+            ;;
+        *)
+            echo "Error: Invalid project type '$project_type'" >&2
+            echo "Valid types: cli, lib, api" >&2
+            return 1
+            ;;
+    esac
+
     local project_dir=$(basename "$module_name")
+
+    # Sanitize project directory name (remove any path traversal attempts)
+    project_dir=$(echo "$project_dir" | tr -cd 'a-zA-Z0-9._-')
+
+    if [ -z "$project_dir" ] || [ "$project_dir" = "." ] || [ "$project_dir" = ".." ]; then
+        echo "Error: Invalid project directory name after sanitization" >&2
+        return 1
+    fi
 
     echo "Creating new Go project: $module_name (type: $project_type)"
 
     # Create project directory
     mkdir -p "$project_dir"
-    cd "$project_dir"
+    cd "$project_dir" || return 1
 
     # Initialize go module
     go mod init "$module_name"

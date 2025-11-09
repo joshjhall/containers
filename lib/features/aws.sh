@@ -283,15 +283,31 @@ aws-assume-role() {
     local role_arn="$1"
     local session_name="${2:-cli-session-$(date +%s)}"
 
+    # Validate ARN format to prevent command injection
+    if ! [[ "$role_arn" =~ ^arn:aws:iam::[0-9]{12}:role/[a-zA-Z0-9+=,.@_/-]+$ ]]; then
+        echo "Error: Invalid IAM role ARN format" >&2
+        echo "Expected: arn:aws:iam::<account-id>:role/<role-name>" >&2
+        return 1
+    fi
+
+    # Sanitize session name (AWS allows alphanumeric and =,.@_-)
+    # Remove any characters not in allowed set and limit to 64 chars
+    session_name=$(echo "$session_name" | tr -cd 'a-zA-Z0-9=,.@_-' | cut -c1-64)
+
+    if [ -z "$session_name" ]; then
+        echo "Error: Invalid session name after sanitization" >&2
+        return 1
+    fi
+
     local creds=$(aws sts assume-role \
         --role-arn "$role_arn" \
         --role-session-name "$session_name" \
         --query 'Credentials.[AccessKeyId,SecretAccessKey,SessionToken]' \
         --output text)
 
-    export AWS_ACCESS_KEY_ID=$(echo $creds | awk '{print $1}')
-    export AWS_SECRET_ACCESS_KEY=$(echo $creds | awk '{print $2}')
-    export AWS_SESSION_TOKEN=$(echo $creds | awk '{print $3}')
+    export AWS_ACCESS_KEY_ID=$(echo "$creds" | awk '{print $1}')
+    export AWS_SECRET_ACCESS_KEY=$(echo "$creds" | awk '{print $2}')
+    export AWS_SESSION_TOKEN=$(echo "$creds" | awk '{print $3}')
 
     echo "Assumed role: $role_arn"
     aws sts get-caller-identity
