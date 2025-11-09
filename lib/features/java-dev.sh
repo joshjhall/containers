@@ -143,16 +143,43 @@ log_message "Installing JBang..."
 
 # Download and extract JBang directly (more reliable than installer script)
 JBANG_VERSION="0.132.1"
-log_command "Downloading JBang ${JBANG_VERSION}" \
-    wget -q "https://github.com/jbangdev/jbang/releases/download/v${JBANG_VERSION}/jbang-${JBANG_VERSION}.tar" -O /tmp/jbang.tar
+JBANG_TAR="jbang-${JBANG_VERSION}.tar"
+JBANG_URL="https://github.com/jbangdev/jbang/releases/download/v${JBANG_VERSION}/${JBANG_TAR}"
 
+# Fetch checksum from GitHub releases
+log_message "Fetching JBang checksum from GitHub..."
+JBANG_CHECKSUMS_URL="https://github.com/jbangdev/jbang/releases/download/v${JBANG_VERSION}/checksums_sha256.txt"
+
+if ! JBANG_CHECKSUM=$(fetch_github_checksums_txt "$JBANG_CHECKSUMS_URL" "$JBANG_TAR" 2>/dev/null); then
+    log_error "Failed to fetch checksum for JBang ${JBANG_VERSION}"
+    log_error "Please verify version exists: https://github.com/jbangdev/jbang/releases/tag/v${JBANG_VERSION}"
+    log_feature_end
+    exit 1
+fi
+
+log_message "Expected SHA256: ${JBANG_CHECKSUM}"
+
+# Download and verify JBang tarball
+cd /tmp
+log_message "Downloading and verifying JBang..."
+download_and_verify \
+    "$JBANG_URL" \
+    "$JBANG_CHECKSUM" \
+    "jbang.tar"
+
+log_message "✓ JBang v${JBANG_VERSION} verified successfully"
+
+# Extract JBang
 log_command "Extracting JBang" \
     tar -xf /tmp/jbang.tar -C "${TOOLS_DIR}"
 
 # Create symlink directly to the jbang script
 create_symlink "${TOOLS_DIR}/jbang-${JBANG_VERSION}/bin/jbang" "/usr/local/bin/jbang" "JBang Java scripting tool"
 
-rm -f /tmp/jbang.tar
+log_command "Cleaning up JBang tarball" \
+    rm -f /tmp/jbang.tar
+
+cd /
 
 # ============================================================================
 # Maven Daemon - Faster Maven builds
