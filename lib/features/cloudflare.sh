@@ -29,6 +29,12 @@ set -euo pipefail
 # Source standard feature header for user handling
 source /tmp/build-scripts/base/feature-header.sh
 
+# Source download verification utilities for secure binary downloads
+source /tmp/build-scripts/base/download-verify.sh
+
+# Source checksum utilities for secure binary downloads
+source /tmp/build-scripts/features/lib/checksum-fetch.sh
+
 # Source apt utilities for reliable package installation
 source /tmp/build-scripts/base/apt-utils.sh
 
@@ -179,22 +185,46 @@ log_message "Installing cloudflared (Cloudflare Tunnel)..."
 
 # Detect architecture for correct binary
 ARCH=$(dpkg --print-architecture)
+CLOUDFLARED_VERSION="2025.11.1"  # Can be overridden with CLOUDFLARED_VERSION build arg
+
 if [ "$ARCH" = "amd64" ]; then
-    log_command "Downloading cloudflared for amd64" \
-        curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb -o /tmp/cloudflared.deb
+    CLOUDFLARED_DEB="cloudflared-linux-amd64.deb"
 elif [ "$ARCH" = "arm64" ]; then
-    log_command "Downloading cloudflared for arm64" \
-        curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-arm64.deb -o /tmp/cloudflared.deb
+    CLOUDFLARED_DEB="cloudflared-linux-arm64.deb"
 else
     log_warning "cloudflared not available for architecture $ARCH, skipping..."
+    CLOUDFLARED_DEB=""
 fi
 
-if [ -f /tmp/cloudflared.deb ]; then
+if [ -n "$CLOUDFLARED_DEB" ]; then
+    CLOUDFLARED_URL="https://github.com/cloudflare/cloudflared/releases/download/${CLOUDFLARED_VERSION}/${CLOUDFLARED_DEB}"
+
+    # Calculate checksum from download (cloudflared doesn't publish checksums)
+    log_message "Calculating checksum for cloudflared ${CLOUDFLARED_VERSION}..."
+    if ! CLOUDFLARED_CHECKSUM=$(calculate_checksum_sha256 "$CLOUDFLARED_URL" 2>/dev/null); then
+        log_error "Failed to download and calculate checksum for cloudflared ${CLOUDFLARED_VERSION}"
+        log_error "Please verify version exists: https://github.com/cloudflare/cloudflared/releases/tag/${CLOUDFLARED_VERSION}"
+        log_feature_end
+        exit 1
+    fi
+
+    log_message "✓ Calculated checksum from download"
+
+    # Download and verify cloudflared
+    cd /tmp
+    log_message "Downloading and verifying cloudflared for ${ARCH}..."
+    download_and_verify \
+        "$CLOUDFLARED_URL" \
+        "${CLOUDFLARED_CHECKSUM}" \
+        "cloudflared.deb"
+
     log_command "Installing cloudflared package" \
         dpkg -i /tmp/cloudflared.deb
 
     log_command "Cleaning up cloudflared installer" \
         rm -f /tmp/cloudflared.deb
+
+    cd /
 fi
 
 # ============================================================================

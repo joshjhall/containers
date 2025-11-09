@@ -432,15 +432,46 @@ fi
 log_message "Installing direnv..."
 ARCH=$(dpkg --print-architecture)
 DIRENV_VERSION="2.37.1"
+
 if [ "$ARCH" = "amd64" ]; then
-    log_command "Downloading direnv for amd64" \
-        curl -L https://github.com/direnv/direnv/releases/download/v${DIRENV_VERSION}/direnv.linux-amd64 -o /usr/local/bin/direnv
+    DIRENV_BINARY="direnv.linux-amd64"
 elif [ "$ARCH" = "arm64" ]; then
-    log_command "Downloading direnv for arm64" \
-        curl -L https://github.com/direnv/direnv/releases/download/v${DIRENV_VERSION}/direnv.linux-arm64 -o /usr/local/bin/direnv
+    DIRENV_BINARY="direnv.linux-arm64"
+else
+    log_warning "direnv not available for architecture $ARCH, skipping..."
+    DIRENV_BINARY=""
 fi
-log_command "Setting direnv permissions" \
-    chmod +x /usr/local/bin/direnv
+
+if [ -n "$DIRENV_BINARY" ]; then
+    DIRENV_URL="https://github.com/direnv/direnv/releases/download/v${DIRENV_VERSION}/${DIRENV_BINARY}"
+
+    # Calculate checksum from download (direnv doesn't publish checksums)
+    log_message "Calculating checksum for direnv ${DIRENV_VERSION}..."
+    if ! DIRENV_CHECKSUM=$(calculate_checksum_sha256 "$DIRENV_URL" 2>/dev/null); then
+        log_error "Failed to download and calculate checksum for direnv ${DIRENV_VERSION}"
+        log_error "Please verify version exists: https://github.com/direnv/direnv/releases/tag/v${DIRENV_VERSION}"
+        log_feature_end
+        exit 1
+    fi
+
+    log_message "✓ Calculated checksum from download"
+
+    # Download and verify direnv
+    cd /tmp
+    log_message "Downloading and verifying direnv for ${ARCH}..."
+    download_and_verify \
+        "$DIRENV_URL" \
+        "${DIRENV_CHECKSUM}" \
+        "direnv"
+
+    log_command "Installing direnv binary" \
+        mv /tmp/direnv /usr/local/bin/direnv
+
+    log_command "Setting direnv permissions" \
+        chmod +x /usr/local/bin/direnv
+
+    cd /
+fi
 
 # Install lazygit with checksum verification
 log_message "Installing lazygit ${LAZYGIT_VERSION}..."
@@ -538,15 +569,46 @@ fi
 # Install mkcert (local HTTPS certificates)
 log_message "Installing mkcert (local HTTPS certificates)..."
 MKCERT_VERSION="1.4.4"
+
 if [ "$ARCH" = "amd64" ]; then
-    log_command "Downloading mkcert for amd64" \
-        curl -L https://github.com/FiloSottile/mkcert/releases/download/v${MKCERT_VERSION}/mkcert-v${MKCERT_VERSION}-linux-amd64 -o /usr/local/bin/mkcert
+    MKCERT_BINARY="mkcert-v${MKCERT_VERSION}-linux-amd64"
 elif [ "$ARCH" = "arm64" ]; then
-    log_command "Downloading mkcert for arm64" \
-        curl -L https://github.com/FiloSottile/mkcert/releases/download/v${MKCERT_VERSION}/mkcert-v${MKCERT_VERSION}-linux-arm64 -o /usr/local/bin/mkcert
+    MKCERT_BINARY="mkcert-v${MKCERT_VERSION}-linux-arm64"
+else
+    log_warning "mkcert not available for architecture $ARCH, skipping..."
+    MKCERT_BINARY=""
 fi
-log_command "Setting mkcert permissions" \
-    chmod +x /usr/local/bin/mkcert
+
+if [ -n "$MKCERT_BINARY" ]; then
+    MKCERT_URL="https://github.com/FiloSottile/mkcert/releases/download/v${MKCERT_VERSION}/${MKCERT_BINARY}"
+
+    # Calculate checksum from download (mkcert doesn't publish checksums)
+    log_message "Calculating checksum for mkcert ${MKCERT_VERSION}..."
+    if ! MKCERT_CHECKSUM=$(calculate_checksum_sha256 "$MKCERT_URL" 2>/dev/null); then
+        log_error "Failed to download and calculate checksum for mkcert ${MKCERT_VERSION}"
+        log_error "Please verify version exists: https://github.com/FiloSottile/mkcert/releases/tag/v${MKCERT_VERSION}"
+        log_feature_end
+        exit 1
+    fi
+
+    log_message "✓ Calculated checksum from download"
+
+    # Download and verify mkcert
+    cd /tmp
+    log_message "Downloading and verifying mkcert for ${ARCH}..."
+    download_and_verify \
+        "$MKCERT_URL" \
+        "${MKCERT_CHECKSUM}" \
+        "mkcert"
+
+    log_command "Installing mkcert binary" \
+        mv /tmp/mkcert /usr/local/bin/mkcert
+
+    log_command "Setting mkcert permissions" \
+        chmod +x /usr/local/bin/mkcert
+
+    cd /
+fi
 
 # Install GitHub Actions CLI (act) with checksum verification
 log_message "Installing act ${ACT_VERSION}..."
