@@ -2,7 +2,7 @@
 
 ## Status: Implementation In Progress
 **Date Started**: 2025-11-07
-**Last Updated**: 2025-11-08 (Phase 6 Complete - All curl | bash eliminated, 6 additional issues discovered)
+**Last Updated**: 2025-11-08 (Phase 7 Complete - NodeSource manual repository setup)
 
 ## Priority Classification
 
@@ -15,8 +15,8 @@ These download and execute code directly. Highest priority for security.
 | `kubernetes.sh` | 141 | `curl helm/get-helm-3 \| bash` | ✅ **REMOVED** | Phase 1 - Replaced with direct binary download + checksum verification |
 | `terraform.sh` | 146 | `curl tflint/install_linux.sh \| bash` | ✅ **REMOVED** | Phase 5 - Replaced with direct binary download + checksum verification |
 | `mojo.sh` | 119 | `curl pixi.sh/install.sh \| bash` | ✅ **REMOVED** | Phase 6 - Replaced with direct pixi binary download + checksum verification |
-| `node.sh` | 97, 116 | `curl nodesource setup \| bash` | ⏳ **PENDING** | Phase 7 - Download script, verify with GPG, then execute |
-| `cloudflare.sh` | 74 | `curl nodesource setup \| bash` | ⏳ **PENDING** | Phase 7 - Download script, verify with GPG, then execute |
+| `node.sh` | 97, 116 | `curl nodesource setup \| bash` | ✅ **REMOVED** | Phase 7 - Replaced with manual NodeSource repository setup |
+| `cloudflare.sh` | 74 | `curl nodesource setup \| bash` | ✅ **REMOVED** | Phase 7 - Replaced with manual NodeSource repository setup |
 
 ### 🟠 HIGH - Direct Binary Downloads (curl | tar)
 These download binaries and extract directly without verification.
@@ -130,15 +130,19 @@ These use apt/cargo/npm with GPG verification. No changes needed.
 
 **Result**: ALL 4 curl | bash vulnerabilities eliminated from the codebase
 
-### Phase 7: node.sh + cloudflare.sh ⏳ **PENDING**
-- ⏳ **node.sh** - NodeSource setup script (lines 97, 116)
-  - Replace `curl | bash` with download → GPG verify → execute
-  - NodeSource provides GPG-signed releases
-  - Must handle both specific version (line 97) and major version (line 116) paths
+### Phase 7: node.sh + cloudflare.sh ✅ **COMPLETED**
+- ✅ **node.sh** - NodeSource setup script (lines 97, 116)
+  - Replaced `curl | bash` with manual repository setup
+  - Downloads GPG key separately from https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key
+  - Converts to binary format with `gpg --dearmor`
+  - Stores in `/usr/share/keyrings/nodesource.gpg`
+  - Creates repository file with `signed-by` directive
+  - Debian 13+ compatible
 
-- ⏳ **cloudflare.sh** - NodeSource setup script (line 74)
-  - Same pattern as node.sh
-  - GPG verification required
+- ✅ **cloudflare.sh** - NodeSource setup script (line 74)
+  - Same manual repository setup as node.sh
+  - Required for wrangler CLI (needs Node.js dependency)
+  - All packages verified by apt using GPG signatures
 
 ### Phase 8: High Priority Unverified Downloads ⏳ **PENDING**
 - ⏳ **ruby.sh** - Ruby source tarball (line 91)
@@ -445,12 +449,49 @@ These use apt/cargo/npm with GPG verification. No changes needed.
 
 ---
 
-**Next Action**: Phase 7 - Fix node.sh and cloudflare.sh curl | bash patterns (NodeSource setup scripts)
+### ✅ node.sh + cloudflare.sh (2025-11-08) - **MANUAL REPOSITORY SETUP**
+
+**Security Improvement**: Eliminated final 2 curl | bash vulnerabilities from codebase
+
+- **node.sh** - NodeSource repository setup (lines 72-101)
+  - **CRITICAL**: Replaced `curl setup_${VERSION}.x | bash` with manual repository setup
+  - Downloads GPG key from https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key
+  - Converts to binary format: `gpg --dearmor -o /usr/share/keyrings/nodesource.gpg`
+  - Creates repository file in `/etc/apt/sources.list.d/nodesource.list` with signed-by directive
+  - Debian 13+ compatible (uses modern keyring location)
+  - All Node.js packages verified by apt using GPG signatures
+
+- **cloudflare.sh** - NodeSource repository setup (lines 72-101)
+  - Same manual repository setup pattern as node.sh
+  - Required for installing Node.js dependency (wrangler CLI needs Node.js 20+)
+  - Identical security properties
+
+- **Architecture Benefits**:
+  - No remote code execution
+  - Fully transparent repository setup
+  - Compatible with modern Debian keyring requirements
+  - All packages still GPG-verified by apt
+  - Eliminates supply chain risk of executing remote scripts
+
+- **Unit Tests**:
+  - Added 6 security verification tests (3 per feature)
+  - Tests verify: no curl | bash patterns, manual repository setup, GPG key handling
+  - node.sh: 14 tests, 100% pass rate
+  - cloudflare.sh: 13 tests, 100% pass rate
+
+- **Build Tests**: ✅ Both features tested and verified
+  - node.sh: Node.js v22.21.0 installed successfully
+  - cloudflare.sh: Build successful, wrangler + cloudflared installed
+
+**Result**: ALL 6 CRITICAL curl | bash vulnerabilities eliminated from entire codebase
+
+---
+
+**Next Action**: Phase 8 - Fix HIGH priority unverified downloads (ruby.sh, aws.sh, java-dev.sh)
 
 **Summary**:
-- ✅ **ALL CRITICAL curl | bash vulnerabilities ELIMINATED**: helm, tflint, rustup, pixi
+- ✅ **ALL CRITICAL curl | bash vulnerabilities ELIMINATED**: helm, tflint, rustup, pixi, node.sh, cloudflare.sh (6/6 complete)
 - ✅ **HIGH priority items complete**: All known direct binary downloads use checksum verification (Phases 1-5)
-- ⏳ **NEW CRITICAL issues discovered**: node.sh, cloudflare.sh (NodeSource setup scripts)
-- ⏳ **NEW HIGH issues discovered**: ruby.sh, aws.sh, java-dev.sh (2 binaries)
-- ⏳ **NEW MEDIUM issues discovered**: docker.sh dive package
-- **Total remaining**: 7 security issues (2 CRITICAL, 4 HIGH, 1 MEDIUM)
+- ⏳ **HIGH priority unverified downloads**: ruby.sh, aws.sh, java-dev.sh (4 binaries)
+- ⏳ **MEDIUM priority package verification**: docker.sh dive package
+- **Total remaining**: 5 security issues (4 HIGH, 1 MEDIUM)
