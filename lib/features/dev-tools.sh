@@ -921,8 +921,18 @@ fi
 # just aliases
 if command -v just &> /dev/null; then
     alias j='just'
-    # just completion
-    source <(just --completions bash)
+    # just completion with validation
+    COMPLETION_FILE="/tmp/just-completion.$$.bash"
+    if just --completions bash > "$COMPLETION_FILE" 2>/dev/null; then
+        # Validate completion output before sourcing
+        if [ -f "$COMPLETION_FILE" ] && \
+           [ "$(wc -c < "$COMPLETION_FILE")" -lt 100000 ] && \
+           ! grep -qE '(rm -rf|curl.*bash|wget.*bash|eval.*\$)' "$COMPLETION_FILE"; then
+            # shellcheck disable=SC1090  # Dynamic source is validated
+            source "$COMPLETION_FILE"
+        fi
+    fi
+    rm -f "$COMPLETION_FILE"
 fi
 
 # mkcert helpers
