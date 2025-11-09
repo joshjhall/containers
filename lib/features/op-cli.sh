@@ -121,15 +121,10 @@ OP_CACHE_DIR="/cache/1password"
 OP_CONFIG_DIR="/cache/1password/config"
 
 # Create cache directories with correct ownership and permissions
-log_command "Creating 1Password cache directories" \
-    mkdir -p "${OP_CACHE_DIR}" "${OP_CONFIG_DIR}"
-
-# Set strict permissions on config directory (required by op CLI)
-log_command "Setting config directory permissions" \
-    chmod 700 "${OP_CONFIG_DIR}"
-
-log_command "Setting cache directory ownership" \
-    chown -R "${USER_UID}:${USER_GID}" "${OP_CACHE_DIR}"
+# Use install -d for atomic directory creation with ownership
+# Note: config directory needs mode 700 for security requirements
+log_command "Creating 1Password cache directories with ownership" \
+    bash -c "install -d -m 0755 -o '${USER_UID}' -g '${USER_GID}' '${OP_CACHE_DIR}' && install -d -m 0700 -o '${USER_UID}' -g '${USER_GID}' '${OP_CONFIG_DIR}'"
 
 # ============================================================================
 # System-wide Environment Configuration

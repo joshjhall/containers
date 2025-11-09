@@ -185,11 +185,12 @@ PNPM_STORE_DIR="/cache/pnpm"
 NPM_GLOBAL_DIR="/cache/npm-global"
 
 # Create cache directories with correct ownership
-log_command "Creating Node.js cache directories" \
-    mkdir -p "${NPM_CACHE_DIR}" "${YARN_CACHE_DIR}" "${PNPM_STORE_DIR}" "${NPM_GLOBAL_DIR}"
-
-log_command "Setting cache directory ownership" \
-    chown -R "${USER_UID}:${USER_GID}" "${NPM_CACHE_DIR}" "${YARN_CACHE_DIR}" "${PNPM_STORE_DIR}" "${NPM_GLOBAL_DIR}"
+# Use install -d for atomic directory creation with ownership
+log_command "Creating Node.js cache directories with ownership" \
+    bash -c "install -d -m 0755 -o '${USER_UID}' -g '${USER_GID}' '${NPM_CACHE_DIR}' && \
+    install -d -m 0755 -o '${USER_UID}' -g '${USER_GID}' '${YARN_CACHE_DIR}' && \
+    install -d -m 0755 -o '${USER_UID}' -g '${USER_GID}' '${PNPM_STORE_DIR}' && \
+    install -d -m 0755 -o '${USER_UID}' -g '${USER_GID}' '${NPM_GLOBAL_DIR}'"
 
 log_message "Node.js cache paths:"
 log_message "  NPM cache: ${NPM_CACHE_DIR}"

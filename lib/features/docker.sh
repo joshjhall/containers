@@ -265,11 +265,9 @@ DOCKER_CACHE_DIR="/cache/docker"
 DOCKER_CLI_PLUGINS_DIR="${DOCKER_CACHE_DIR}/cli-plugins"
 
 # Create cache directories
-log_command "Creating Docker cache directories" \
-    mkdir -p "${DOCKER_CACHE_DIR}" "${DOCKER_CLI_PLUGINS_DIR}"
-
-log_command "Setting cache directory ownership" \
-    chown -R "${USER_UID}":"${USER_GID}" "${DOCKER_CACHE_DIR}"
+# Use install -d for atomic directory creation with ownership
+log_command "Creating Docker cache directories with ownership" \
+    bash -c "install -d -m 0755 -o '${USER_UID}' -g '${USER_GID}' '${DOCKER_CACHE_DIR}' && install -d -m 0755 -o '${USER_UID}' -g '${USER_GID}' '${DOCKER_CLI_PLUGINS_DIR}'"
 
 # ============================================================================
 # Environment Configuration

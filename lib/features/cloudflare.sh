@@ -136,11 +136,9 @@ log_message "NPM global prefix: ${NPM_PREFIX}"
 
 # Create npm directories with correct ownership
 # This ensures they exist in the image even without cache mounts
-log_command "Creating npm directories" \
-    mkdir -p "$NPM_CACHE_DIR" "$NPM_PREFIX"
-
-log_command "Setting npm directory ownership" \
-    chown -R "${USER_UID}:${USER_GID}" "$NPM_CACHE_DIR" "$NPM_PREFIX"
+# Use install -d for atomic directory creation with ownership
+log_command "Creating npm directories with ownership" \
+    bash -c "install -d -m 0755 -o '${USER_UID}' -g '${USER_GID}' '$NPM_CACHE_DIR' && install -d -m 0755 -o '${USER_UID}' -g '${USER_GID}' '$NPM_PREFIX'"
 
 # Also add to system-wide PATH before checking
 export PATH="${NPM_PREFIX}/bin:$PATH"

@@ -268,11 +268,9 @@ log_message "Terraform plugin cache path: ${TF_PLUGIN_CACHE}"
 
 # Create plugin cache directory with correct ownership
 # This ensures it exists in the image even without cache mounts
-log_command "Creating plugin cache directory" \
-    mkdir -p "${TF_PLUGIN_CACHE}"
-
-log_command "Setting cache directory ownership" \
-    chown -R "${USER_UID}:${USER_GID}" "${TF_PLUGIN_CACHE}"
+# Use install -d for atomic directory creation with ownership
+log_command "Creating plugin cache directory with ownership" \
+    install -d -m 0755 -o "${USER_UID}" -g "${USER_GID}" "${TF_PLUGIN_CACHE}"
 
 # ============================================================================
 # Environment Configuration

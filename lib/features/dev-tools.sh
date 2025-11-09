@@ -985,11 +985,9 @@ log_message "Configuring cache directories for development tools..."
 DEV_TOOLS_CACHE="/cache/dev-tools"
 
 # Create cache directories
-log_command "Creating dev tools cache directory" \
-    mkdir -p "${DEV_TOOLS_CACHE}"
-
-log_command "Setting cache directory ownership" \
-    chown -R "${USER_UID}:${USER_GID}" "${DEV_TOOLS_CACHE}"
+# Use install -d for atomic directory creation with ownership
+log_command "Creating dev tools cache directory with ownership" \
+    install -d -m 0755 -o "${USER_UID}" -g "${USER_GID}" "${DEV_TOOLS_CACHE}"
 
 # Configure tools to use cache where applicable
 write_bashrc_content /etc/bashrc.d/80-dev-tools.sh "cache configuration" << 'DEV_TOOLS_BASHRC_EOF'
