@@ -336,14 +336,39 @@ fi
 # Install entr (file watcher)
 log_message "Installing entr (file watcher)..."
 ENTR_VERSION="5.7"
-log_command "Downloading entr source" \
-    bash -c "cd /tmp && curl -L http://eradman.com/entrproject/code/entr-${ENTR_VERSION}.tar.gz | tar xz"
+ENTR_TARBALL="entr-${ENTR_VERSION}.tar.gz"
+ENTR_URL="http://eradman.com/entrproject/code/${ENTR_TARBALL}"
+
+# Calculate checksum for verification (eradman.com doesn't publish checksums)
+log_message "Calculating checksum for entr ${ENTR_VERSION}..."
+ENTR_CHECKSUM=$(calculate_checksum_sha256 "$ENTR_URL" 2>/dev/null)
+
+if [ -z "$ENTR_CHECKSUM" ]; then
+    log_error "Failed to calculate checksum for entr ${ENTR_VERSION}"
+    log_feature_end
+    exit 1
+fi
+
+log_message "Expected SHA256: ${ENTR_CHECKSUM}"
+
+# Download and verify entr source
+cd /tmp
+log_message "Downloading and verifying entr ${ENTR_VERSION}..."
+download_and_verify \
+    "$ENTR_URL" \
+    "$ENTR_CHECKSUM" \
+    "$ENTR_TARBALL"
+
+log_message "✓ entr v${ENTR_VERSION} verified successfully"
+
+log_command "Extracting entr source" \
+    tar -xzf "$ENTR_TARBALL"
 
 log_command "Building entr" \
-    bash -c "cd /tmp/entr-* && ./configure && make && make install"
+    bash -c "cd /tmp/entr-${ENTR_VERSION} && ./configure && make && make install"
 
 log_command "Cleaning up entr build files" \
-    bash -c "cd / && rm -rf /tmp/entr-*"
+    bash -c "cd / && rm -rf /tmp/entr-* /tmp/${ENTR_TARBALL}"
 
 # Install fzf (fuzzy finder)
 log_message "Installing fzf (fuzzy finder)..."
