@@ -219,6 +219,146 @@ git push origin main
 git push origin v4.0.1
 ```
 
+## Security Releases
+
+For releases focused on security improvements, follow these guidelines:
+
+### When to Create a Security Release
+
+Create a security-focused release when:
+- Adding checksum verification to downloads
+- Implementing GPG signature verification
+- Fixing security vulnerabilities
+- Adding security scanning (Trivy, Gitleaks)
+- Hardening container configurations
+- Addressing supply chain security
+
+### Security Release Process
+
+```bash
+# For minor security improvements (patch)
+./bin/release.sh patch
+
+# For significant security features (minor)
+./bin/release.sh minor
+
+# Example: v4.5.0 added comprehensive checksum verification
+./bin/release.sh minor
+```
+
+### Document Security Work
+
+When creating a security release:
+
+1. **Reference security documentation**:
+   - Link to `docs/security-hardening.md` for roadmap items
+   - Update `docs/checksum-verification.md` if adding verification
+   - Document in CHANGELOG.md under "Security" or "Added" sections
+
+2. **Example CHANGELOG entry** (from v4.5.0):
+   ```markdown
+   ### Added
+   - Add checksum verification utilities for supply chain security
+   - Add SHA256 checksum verification to golang.sh
+   - Add GPG signature verification to AWS CLI v2 installation
+
+   ### Documentation
+   - Add SECURITY.md with vulnerability reporting procedures
+   - Update checksum verification inventory
+   ```
+
+3. **Security release commit message**:
+   ```bash
+   git commit -m "chore(release): Release version 4.5.0
+
+   Security improvements:
+   - Complete checksum verification for all downloads (Phases 10-13)
+   - Add GPG signature verification for AWS CLI
+   - Document supply chain security measures
+
+   See CHANGELOG.md for full details."
+   ```
+
+### Checklist for Security Releases
+
+Before releasing security improvements:
+
+- [ ] All security features tested in CI/CD
+- [ ] Security documentation updated (SECURITY.md, security-hardening.md)
+- [ ] CHANGELOG.md includes security improvements
+- [ ] Related issues in security-hardening.md marked complete
+- [ ] Tests cover new security features
+- [ ] No security secrets in git history
+
+### Example: v4.5.0 Security Release
+
+Version 4.5.0 demonstrates a comprehensive security release:
+
+**What was included**:
+- Phases 10-13 of checksum verification (all downloads now verified)
+- Dynamic checksum fetching for version flexibility
+- GPG signature verification for AWS CLI
+- Security documentation updates
+
+**How it was released**:
+```bash
+# After completing all security work
+./bin/release.sh minor  # 4.4.0 -> 4.5.0
+
+# Review changes
+git diff
+
+# Commit with security context
+git add -A
+git commit -m "chore(release): Release version 4.5.0"
+
+# Tag and push
+git tag -a v4.5.0 -m "Release version 4.5.0 - Complete supply chain security"
+git push origin main
+git push origin v4.5.0
+```
+
+**CHANGELOG.md automatically captured**:
+- 39 security-related commits
+- References to docs/checksum-verification.md
+- Links to security-hardening.md roadmap
+
+### Security Hotfixes
+
+For urgent security fixes:
+
+```bash
+# Create security hotfix branch
+git checkout -b hotfix/security-CVE-2024-XXXX
+
+# Make the fix
+git commit -am "fix: Address CVE-2024-XXXX in tool installation"
+
+# Patch release (highest priority)
+./bin/release.sh patch
+
+# Commit and tag
+git add -A
+git commit -m "chore(release): Security hotfix version 4.5.1
+
+Fixes CVE-2024-XXXX by updating tool verification.
+
+Security advisory: [link if public]"
+
+git tag -a v4.5.1 -m "Security hotfix version 4.5.1"
+
+# Push immediately
+git push origin main
+git push origin v4.5.1
+```
+
+### Related Security Documentation
+
+- [Security Policy](../SECURITY.md) - Vulnerability reporting
+- [Security Hardening Roadmap](./security-hardening.md) - Planned improvements
+- [Checksum Verification](./checksum-verification.md) - Implementation guide
+- [Troubleshooting: Security Issues](./troubleshooting.md#security--download-issues)
+
 ## Troubleshooting
 
 ### git-cliff Installation Fails

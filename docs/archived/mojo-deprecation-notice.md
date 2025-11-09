@@ -1,5 +1,10 @@
 # Mojo Installation Deprecation Notice
 
+> **⚠️ ARCHIVED DOCUMENT**
+> **Date Archived**: 2025-11-08
+> **Status**: UNRESOLVED
+> **Reason**: Mojo installation remains broken due to Modular CLI deprecation. This feature is currently **unsupported** until Magic CLI migration is completed. No timeline or priority has been established for this work.
+
 ## Issue
 
 The Modular CLI has been deprecated and replaced with the Magic CLI. The current Mojo installation script no longer works because:
