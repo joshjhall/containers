@@ -196,8 +196,9 @@ create_symlink() {
 #
 # Security benefits:
 #   - Unique directory per process (prevents collisions)
-#   - Restrictive permissions (700 - owner only)
+#   - Controlled permissions (755 - owner write, all read/execute)
 #   - Protection against symlink attacks
+#   - Allows non-root users to read/execute files (needed for su/sudo scenarios)
 #
 # Note: Cleanup is handled by the main script's trap in feature-header.sh,
 # not by this function (to avoid subshell trap issues).
@@ -210,8 +211,9 @@ create_secure_temp_dir() {
         return 1
     fi
 
-    # Set restrictive permissions (owner only)
-    chmod 700 "$temp_dir"
+    # Set permissions: owner rwx, group rx, others rx (755)
+    # This allows non-root users to read/execute files but not write
+    chmod 755 "$temp_dir"
 
     # Log to stderr so it doesn't interfere with command substitution
     log_message "Created secure temporary directory: $temp_dir" >&2
