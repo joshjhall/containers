@@ -703,6 +703,14 @@ else
     USER_HOME="/home/$TARGET_USER"
 fi
 
+# Security Note: The Claude install script (https://claude.ai/install.sh) performs
+# checksum verification internally:
+# 1. Downloads manifest.json with expected SHA256 checksums
+# 2. Downloads the binary
+# 3. Verifies downloaded binary matches expected checksum using sha256sum
+# 4. Fails installation if verification fails
+# This makes it safe to use despite being a curl|bash pattern.
+
 # Download and install Claude Code with better error handling
 log_command "Downloading Claude Code installer" \
     curl -fsSL 'https://claude.ai/install.sh' -o /tmp/claude-install.sh || {

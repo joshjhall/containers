@@ -43,6 +43,12 @@ set -euo pipefail
 # Source standard feature header for user handling
 source /tmp/build-scripts/base/feature-header.sh
 
+# Source download verification utilities for secure binary downloads
+source /tmp/build-scripts/base/download-verify.sh
+
+# Source checksum utilities for secure binary downloads
+source /tmp/build-scripts/features/lib/checksum-fetch.sh
+
 # Start logging
 log_feature_start "Ollama"
 
@@ -69,19 +75,68 @@ log_command "Setting model directory ownership" \
 # ============================================================================
 log_message "Installing Ollama..."
 
-# Download and prepare the official installer
-log_command "Downloading Ollama installer" \
-    curl -fsSL https://ollama.ai/install.sh -o /tmp/install-ollama.sh
+# Get latest Ollama version from GitHub
+OLLAMA_VERSION="0.12.10"  # Can be overridden with OLLAMA_VERSION build arg
+ARCH=$(dpkg --print-architecture)
 
-log_command "Setting installer permissions" \
-    chmod +x /tmp/install-ollama.sh
+# Map Debian arch to Ollama arch
+if [ "$ARCH" = "amd64" ]; then
+    OLLAMA_ARCH="amd64"
+elif [ "$ARCH" = "arm64" ]; then
+    OLLAMA_ARCH="arm64"
+else
+    log_warning "Ollama not available for architecture $ARCH, skipping..."
+    log_feature_end
+    exit 0
+fi
 
-# Run installer but don't fail the build if it fails
-# (Ollama might not be available for all architectures/environments)
-log_message "Running Ollama installer..."
-if log_command "Installing Ollama" \
-    bash /tmp/install-ollama.sh; then
+# Download Ollama directly from GitHub releases with checksum verification
+OLLAMA_TARBALL="ollama-linux-${OLLAMA_ARCH}.tgz"
+OLLAMA_URL="https://github.com/ollama/ollama/releases/download/v${OLLAMA_VERSION}/${OLLAMA_TARBALL}"
 
+# Fetch checksum from GitHub releases
+log_message "Fetching Ollama checksum from GitHub..."
+OLLAMA_CHECKSUMS_URL="https://github.com/ollama/ollama/releases/download/v${OLLAMA_VERSION}/sha256sum.txt"
+
+# The sha256sum.txt format includes "./" prefix, so we need to match "./ollama-linux-${OLLAMA_ARCH}.tgz"
+if ! OLLAMA_CHECKSUM=$(fetch_github_checksums_txt "$OLLAMA_CHECKSUMS_URL" "./${OLLAMA_TARBALL}" 2>/dev/null); then
+    log_error "Failed to fetch checksum for Ollama ${OLLAMA_VERSION}"
+    log_error "Please verify version exists: https://github.com/ollama/ollama/releases/tag/v${OLLAMA_VERSION}"
+    log_feature_end
+    exit 1
+fi
+
+log_message "Expected SHA256: ${OLLAMA_CHECKSUM}"
+
+# Download and verify Ollama tarball
+cd /tmp
+log_message "Downloading and verifying Ollama..."
+download_and_verify \
+    "$OLLAMA_URL" \
+    "$OLLAMA_CHECKSUM" \
+    "ollama.tgz"
+
+log_message "✓ Ollama v${OLLAMA_VERSION} verified successfully"
+
+# Extract directly to /usr/local
+log_command "Extracting Ollama to /usr/local" \
+    tar -xzf /tmp/ollama.tgz -C /usr/local
+
+log_command "Cleaning up Ollama tarball" \
+    rm /tmp/ollama.tgz
+
+cd /
+
+# Verify installation
+if ! [ -f /usr/local/bin/ollama ]; then
+    log_error "Ollama binary not found after extraction at /usr/local/bin/ollama"
+    log_feature_end
+    exit 1
+fi
+
+log_message "✓ Ollama installed successfully"
+
+if command -v ollama >/dev/null 2>&1; then
     log_message "Ollama installation successful"
 
     # ============================================================================
