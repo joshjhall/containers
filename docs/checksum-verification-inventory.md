@@ -17,8 +17,8 @@ These download and execute code directly. Highest priority for security.
 
 | Script | Line | Pattern | Status | Notes |
 |--------|------|---------|--------|-------|
-| `ollama.sh` | 74 | `curl https://ollama.ai/install.sh \| bash` | ⏳ **PENDING** | Official Ollama installer |
-| `dev-tools.sh` | 662 | `curl https://claude.ai/install.sh \| bash` | ⏳ **PENDING** | Claude Code installer |
+| `ollama.sh` | 74-137 | ~~curl/bash~~ → Direct download | ✅ **DONE** | Bypassed install script, downloads tarball with SHA256 verification |
+| `dev-tools.sh` | 706-712 | `curl https://claude.ai/install.sh \| bash` | ✅ **SECURE** | Install script performs SHA256 verification internally |
 
 ### 🟠 HIGH - Direct Binary Downloads
 These download binaries directly without verification.
@@ -99,7 +99,9 @@ These download binaries directly without verification.
   - [x] duf - checksums.txt
   - [x] glab - checksums.txt (GitLab)
   - Note: cloudflared, direnv, mkcert don't publish checksums
-- [ ] Phase 11: Install scripts (ollama, claude)
+- [x] Phase 11: Install scripts (2/2 complete)
+  - [x] ollama - Bypassed install script, direct tarball download with SHA256
+  - [x] claude - Install script already performs SHA256 verification (SECURE)
 - [ ] Phase 12: Tools without checksums (cloudflared, direnv, mkcert, Session Manager)
 
 ---
