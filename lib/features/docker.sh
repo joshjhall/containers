@@ -193,7 +193,8 @@ fi
 log_message "Expected SHA256: ${LAZYDOCKER_CHECKSUM}"
 
 # Download and extract with checksum verification
-cd /tmp
+BUILD_TEMP=$(create_secure_temp_dir)
+cd "$BUILD_TEMP"
 log_message "Downloading and verifying lazydocker..."
 download_and_extract \
     "$LAZYDOCKER_URL" \
@@ -210,6 +211,7 @@ log_command "Setting lazydocker permissions" \
 log_message "✓ lazydocker v${LAZYDOCKER_VERSION} installed successfully"
 
 cd /
+# Cleanup happens automatically via trap
 
 # ============================================================================
 # Dive Installation
@@ -237,7 +239,8 @@ fi
 log_message "Expected SHA256: ${DIVE_CHECKSUM}"
 
 # Download and verify dive with checksum verification
-cd /tmp
+BUILD_TEMP=$(create_secure_temp_dir)
+cd "$BUILD_TEMP"
 log_message "Downloading and verifying dive..."
 download_and_verify \
     "$DIVE_URL" \
@@ -250,10 +253,8 @@ log_message "✓ dive v${DIVE_VERSION} verified successfully"
 log_command "Installing dive package" \
     dpkg -i dive.deb
 
-log_command "Cleaning up dive package" \
-    rm -f dive.deb
-
 cd /
+# Cleanup happens automatically via trap
 
 # ============================================================================
 # Cache Configuration

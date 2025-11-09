@@ -209,7 +209,8 @@ if [ -n "$CLOUDFLARED_DEB" ]; then
     log_message "✓ Calculated checksum from download"
 
     # Download and verify cloudflared
-    cd /tmp
+    BUILD_TEMP=$(create_secure_temp_dir)
+    cd "$BUILD_TEMP"
     log_message "Downloading and verifying cloudflared for ${ARCH}..."
     download_and_verify \
         "$CLOUDFLARED_URL" \
@@ -217,12 +218,10 @@ if [ -n "$CLOUDFLARED_DEB" ]; then
         "cloudflared.deb"
 
     log_command "Installing cloudflared package" \
-        dpkg -i /tmp/cloudflared.deb
-
-    log_command "Cleaning up cloudflared installer" \
-        rm -f /tmp/cloudflared.deb
+        dpkg -i cloudflared.deb
 
     cd /
+    # Cleanup happens automatically via trap
 fi
 
 # ============================================================================

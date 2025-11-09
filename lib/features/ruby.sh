@@ -97,7 +97,8 @@ log_command "Setting cache directory ownership" \
 # ============================================================================
 log_message "Downloading and building Ruby ${RUBY_VERSION}..."
 
-cd /tmp
+BUILD_TEMP=$(create_secure_temp_dir)
+cd "$BUILD_TEMP"
 
 # Fetch checksum dynamically from Ruby downloads page
 log_message "Fetching Ruby ${RUBY_VERSION} checksum from ruby-lang.org..."
@@ -149,7 +150,7 @@ log_command "Installing Ruby" \
 
 # Clean up build files
 cd /
-rm -rf "/tmp/ruby-${RUBY_VERSION}" "/tmp/ruby-${RUBY_VERSION}.tar.gz"
+# Cleanup happens automatically via trap
 
 # ============================================================================
 # Post-installation Setup
