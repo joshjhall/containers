@@ -32,6 +32,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 ARG USERNAME=developer
 ARG USER_UID=1000
 ARG USER_GID=$USER_UID
+ARG ENABLE_PASSWORDLESS_SUDO=true
 
 # Working directory and project name
 ARG PROJECT_NAME=project
@@ -54,7 +55,7 @@ ARG WORKING_DIR=/workspace/${PROJECT_NAME}
 # 1. Use a different USER_UID/USER_GID that doesn't conflict
 # 2. Remove the cache mounts for affected features
 # 3. Clear the Docker build cache and rebuild
-RUN /tmp/build-scripts/base/user.sh ${USERNAME} ${USER_UID} ${USER_GID} ${PROJECT_NAME} ${WORKING_DIR}
+RUN /tmp/build-scripts/base/user.sh ${USERNAME} ${USER_UID} ${USER_GID} ${PROJECT_NAME} ${WORKING_DIR} ${ENABLE_PASSWORDLESS_SUDO}
 
 # Make all feature scripts executable
 RUN chmod +x /tmp/build-scripts/features/*.sh /tmp/build-scripts/base/*.sh
