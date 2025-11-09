@@ -52,14 +52,21 @@ if [ ! -f "$FIRST_RUN_MARKER" ]; then
     
     # Run all first-startup scripts
     for script in /etc/container/first-startup/*.sh; do
-        if [ -f "$script" ]; then
-            echo "Running first-startup script: $(basename $script)"
-            if [ "$RUNNING_AS_ROOT" = "true" ]; then
-                # Running as root, use su to switch to non-root user
-                su ${USERNAME} -c "bash $script"
+        # Skip if not a regular file or is a symlink
+        if [ -f "$script" ] && [ ! -L "$script" ]; then
+            # Verify script is in expected directory (realpath resolves any path traversal)
+            script_realpath=$(realpath "$script" 2>/dev/null || echo "")
+            if [ -n "$script_realpath" ] && [[ "$script_realpath" == /etc/container/first-startup/* ]]; then
+                echo "Running first-startup script: $(basename "$script")"
+                if [ "$RUNNING_AS_ROOT" = "true" ]; then
+                    # Running as root, use su to switch to non-root user
+                    su ${USERNAME} -c "bash $script"
+                else
+                    # Already running as non-root user, execute directly
+                    bash "$script"
+                fi
             else
-                # Already running as non-root user, execute directly
-                bash "$script"
+                echo "⚠️  WARNING: Skipping script outside expected directory: $script"
             fi
         fi
     done
@@ -79,14 +86,21 @@ fi
 if [ -d "/etc/container/startup" ]; then
     echo "=== Running startup scripts ==="
     for script in /etc/container/startup/*.sh; do
-        if [ -f "$script" ]; then
-            echo "Running startup script: $(basename $script)"
-            if [ "$RUNNING_AS_ROOT" = "true" ]; then
-                # Running as root, use su to switch to non-root user
-                su ${USERNAME} -c "bash $script"
+        # Skip if not a regular file or is a symlink
+        if [ -f "$script" ] && [ ! -L "$script" ]; then
+            # Verify script is in expected directory (realpath resolves any path traversal)
+            script_realpath=$(realpath "$script" 2>/dev/null || echo "")
+            if [ -n "$script_realpath" ] && [[ "$script_realpath" == /etc/container/startup/* ]]; then
+                echo "Running startup script: $(basename "$script")"
+                if [ "$RUNNING_AS_ROOT" = "true" ]; then
+                    # Running as root, use su to switch to non-root user
+                    su ${USERNAME} -c "bash $script"
+                else
+                    # Already running as non-root user, execute directly
+                    bash "$script"
+                fi
             else
-                # Already running as non-root user, execute directly
-                bash "$script"
+                echo "⚠️  WARNING: Skipping script outside expected directory: $script"
             fi
         fi
     done
