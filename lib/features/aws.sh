@@ -149,7 +149,8 @@ log_command "Installing AWS CLI v2" \
     ./aws/install
 
 cd /
-# Cleanup happens automatically via trap
+log_command "Cleaning up build directory" \
+    rm -rf "$BUILD_TEMP"
 
 # ============================================================================
 # Session Manager Plugin Installation
@@ -190,7 +191,8 @@ if [ -n "$SESSION_MANAGER_URL" ]; then
         dpkg -i session-manager-plugin.deb
 
     cd /
-    # Cleanup happens automatically via trap
+    log_command "Cleaning up build directory" \
+        rm -rf "$BUILD_TEMP"
 fi
 
 # ============================================================================

@@ -150,7 +150,8 @@ log_command "Installing Ruby" \
 
 # Clean up build files
 cd /
-# Cleanup happens automatically via trap
+log_command "Cleaning up build directory" \
+    rm -rf "$BUILD_TEMP"
 
 # ============================================================================
 # Post-installation Setup

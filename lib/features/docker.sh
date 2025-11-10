@@ -211,7 +211,8 @@ log_command "Setting lazydocker permissions" \
 log_message "✓ lazydocker v${LAZYDOCKER_VERSION} installed successfully"
 
 cd /
-# Cleanup happens automatically via trap
+log_command "Cleaning up build directory" \
+    rm -rf "$BUILD_TEMP"
 
 # ============================================================================
 # Dive Installation
@@ -254,7 +255,8 @@ log_command "Installing dive package" \
     dpkg -i dive.deb
 
 cd /
-# Cleanup happens automatically via trap
+log_command "Cleaning up build directory" \
+    rm -rf "$BUILD_TEMP"
 
 # ============================================================================
 # Cache Configuration

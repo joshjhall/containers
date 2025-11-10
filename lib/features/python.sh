@@ -160,7 +160,8 @@ log_command "Installing Python" \
 
 # Clean up build files
 cd /
-# Cleanup happens automatically via trap
+log_command "Cleaning up Python build directory" \
+    rm -rf "$BUILD_TEMP"
 
 # Update library cache
 log_command "Updating library cache" \

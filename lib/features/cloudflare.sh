@@ -221,7 +221,8 @@ if [ -n "$CLOUDFLARED_DEB" ]; then
         dpkg -i cloudflared.deb
 
     cd /
-    # Cleanup happens automatically via trap
+    log_command "Cleaning up build directory" \
+        rm -rf "$BUILD_TEMP"
 fi
 
 # ============================================================================
