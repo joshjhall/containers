@@ -51,7 +51,7 @@ test_r_version() {
     assert_command_in_container "$image" "R --version" "R version"
 
     # Rscript works
-    assert_command_in_container "$image" "Rscript --version" "R scripting"
+    assert_command_in_container "$image" "Rscript --version" "Rscript"
 }
 
 # Test: R can execute basic commands
