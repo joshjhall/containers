@@ -153,6 +153,11 @@ jobs:
               PROJECT_PATH=.
               INCLUDE_RUST_DEV=true
               INCLUDE_GOLANG_DEV=true
+          - name: r-dev
+            build_args: |
+              PROJECT_NAME=containers
+              PROJECT_PATH=.
+              INCLUDE_R_DEV=true
 
     steps:
       - name: Checkout code
@@ -224,6 +229,8 @@ jobs:
             test: polyglot
           - name: rust-golang
             test: rust_golang
+          - name: r-dev
+            test: r_dev
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -342,7 +349,7 @@ jobs:
         # =====================================================
         # Must match enabled variants in the 'build' job above.
         # =====================================================
-        variant: [minimal, python-dev, node-dev, cloud-ops, polyglot, rust-golang]
+        variant: [minimal, python-dev, node-dev, cloud-ops, polyglot, rust-golang, r-dev]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
