@@ -93,8 +93,11 @@ MOJO_PROJECT="/cache/mojo/project"
 
 # Create cache directories with correct ownership
 # Use install -d for atomic directory creation with ownership
+# Important: Create parent /cache/mojo directory first to ensure correct ownership
 log_command "Creating Mojo/Pixi cache directories with ownership" \
-    bash -c "install -d -m 0755 -o '${USER_UID}' -g '${USER_GID}' '${PIXI_CACHE}' && install -d -m 0755 -o '${USER_UID}' -g '${USER_GID}' '${MOJO_PROJECT}'"
+    bash -c "install -d -m 0755 -o '${USER_UID}' -g '${USER_GID}' '${PIXI_CACHE}' && \
+    install -d -m 0755 -o '${USER_UID}' -g '${USER_GID}' '/cache/mojo' && \
+    install -d -m 0755 -o '${USER_UID}' -g '${USER_GID}' '${MOJO_PROJECT}'"
 
 log_message "Mojo cache paths:"
 log_message "  Pixi cache: ${PIXI_CACHE}"
