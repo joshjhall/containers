@@ -150,7 +150,8 @@ log_command "Installing Rust via verified rustup" \
 "
 
 cd /
-# Cleanup happens automatically via trap
+log_command "Cleaning up build directory" \
+    rm -rf "$BUILD_TEMP"
 
 # Install additional Cargo tools
 # These enhance the development experience but aren't required for basic Rust usage
