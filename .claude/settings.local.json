@@ -5,7 +5,8 @@
       "Bash(git add:*)",
       "Bash(find:*)",
       "Bash(curl:*)",
-      "Bash(shellcheck:*)"
+      "Bash(shellcheck:*)",
+      "Bash(cat:*)"
     ],
     "deny": []
   }
