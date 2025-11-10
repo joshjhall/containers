@@ -71,7 +71,10 @@ tf_fail_assertion() {
         echo "    $1"
         shift
     done
-    TESTS_FAILED=$((TESTS_FAILED + 1))
+    # Only increment TESTS_FAILED once per test (not per assertion)
+    if [ "$TEST_STATUS" != "failed" ]; then
+        TESTS_FAILED=$((TESTS_FAILED + 1))
+    fi
     TEST_STATUS="failed"
     return 1
 }
