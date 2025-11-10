@@ -171,8 +171,10 @@ GOMODCACHE="/cache/go-mod"
 
 # Create cache directories with correct ownership
 # Use install -d for atomic directory creation with ownership
+# Important: Create parent /cache/go directory first to ensure correct ownership
 log_command "Creating Go directories with ownership" \
-    bash -c "install -d -m 0755 -o '${USER_UID}' -g '${USER_GID}' '${GOPATH}/bin' && \
+    bash -c "install -d -m 0755 -o '${USER_UID}' -g '${USER_GID}' '${GOPATH}' && \
+    install -d -m 0755 -o '${USER_UID}' -g '${USER_GID}' '${GOPATH}/bin' && \
     install -d -m 0755 -o '${USER_UID}' -g '${USER_GID}' '${GOPATH}/src' && \
     install -d -m 0755 -o '${USER_UID}' -g '${USER_GID}' '${GOPATH}/pkg' && \
     install -d -m 0755 -o '${USER_UID}' -g '${USER_GID}' '${GOCACHE}' && \

@@ -105,14 +105,15 @@ assert_command_in_container() {
     local message="${4:-Command should succeed in container}"
     
     capture_result docker run --rm "$image" bash -c "$command"
-    
+
     if [ $TEST_EXIT_CODE -ne 0 ]; then
         tf_fail_assertion "$message" \
             "Command failed: $command" \
             "Exit code: $TEST_EXIT_CODE" \
             "Output: $TEST_OUTPUT"
+        return 1
     fi
-    
+
     if [ -n "$expected" ]; then
         if [[ "$TEST_OUTPUT" == *"$expected"* ]]; then
             return 0
@@ -206,12 +207,13 @@ assert_env_var_set() {
     local message="${4:-Environment variable $var_name should be set}"
     
     capture_result docker run --rm "$image" printenv "$var_name"
-    
+
     if [ $TEST_EXIT_CODE -ne 0 ]; then
         tf_fail_assertion "$message" \
             "Variable not set: $var_name"
+        return 1
     fi
-    
+
     if [ -n "$expected_value" ]; then
         if [ "$TEST_OUTPUT" = "$expected_value" ]; then
             return 0
