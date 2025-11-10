@@ -204,6 +204,36 @@ jobs:
           git tag -a "v${VERSION}" -m "Automated patch release v${VERSION}"
           git push origin "v${VERSION}"
 
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.AUTO_PATCH_TOKEN }}
+        run: |
+          VERSION="${{ steps.branch_info.outputs.version }}"
+
+          # Generate release notes from CHANGELOG
+          RELEASE_NOTES=$(./bin/generate-release-notes.sh "${VERSION}" || cat <<EOF
+          ## Automated Patch Release v${VERSION}
+
+          This is an automated patch release with version updates.
+
+          ${{ steps.branch_info.outputs.commit_message }}
+
+          See [CHANGELOG.md](https://github.com/joshjhall/containers/blob/v${VERSION}/CHANGELOG.md) for complete details.
+
+          ### Container Images
+
+          All container variants are available at:
+          \`ghcr.io/joshjhall/containers:<variant>\`
+
+          Supported variants: minimal, python, python-dev, node, node-dev, rust, rust-dev, ruby, ruby-dev, golang, golang-dev, java, java-dev, r, r-dev, mojo, and many more.
+          EOF
+          )
+
+          # Create GitHub release
+          gh release create "v${VERSION}" \
+            --title "Release v${VERSION}" \
+            --notes "$RELEASE_NOTES"
+
       - name: Delete auto-patch branch
         run: |
           git push origin --delete "${{ steps.branch_info.outputs.branch }}"
