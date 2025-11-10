@@ -108,89 +108,89 @@ export PATH="/usr/local/go/bin:${GOPATH}/bin:${PATH}"
 # Core development tools
 log_message "Installing core development tools..."
 log_command "Installing gopls (language server)" \
-    /usr/local/bin/go install golang.org/x/tools/gopls@latest
+    /usr/local/bin/go install golang.org/x/tools/gopls@latest || true
 log_command "Installing delve debugger" \
-    /usr/local/bin/go install github.com/go-delve/delve/cmd/dlv@latest
+    /usr/local/bin/go install github.com/go-delve/delve/cmd/dlv@latest || true
 log_command "Installing golangci-lint" \
-    /usr/local/bin/go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+    /usr/local/bin/go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest || true
 log_command "Installing goimports" \
-    /usr/local/bin/go install golang.org/x/tools/cmd/goimports@latest
+    /usr/local/bin/go install golang.org/x/tools/cmd/goimports@latest || true
 log_command "Installing gomodifytags" \
-    /usr/local/bin/go install github.com/fatih/gomodifytags@latest
+    /usr/local/bin/go install github.com/fatih/gomodifytags@latest || true
 log_command "Installing impl" \
-    /usr/local/bin/go install github.com/josharian/impl@latest
+    /usr/local/bin/go install github.com/josharian/impl@latest || true
 log_command "Installing goplay" \
-    /usr/local/bin/go install github.com/haya14busa/goplay/cmd/goplay@latest
+    /usr/local/bin/go install github.com/haya14busa/goplay/cmd/goplay@latest || true
 
 # Static analysis tools
 log_message "Installing static analysis tools..."
 log_command "Installing staticcheck" \
-    /usr/local/bin/go install honnef.co/go/tools/cmd/staticcheck@latest
+    /usr/local/bin/go install honnef.co/go/tools/cmd/staticcheck@latest || true
 log_command "Installing gocyclo" \
-    /usr/local/bin/go install github.com/fzipp/gocyclo/cmd/gocyclo@latest
+    /usr/local/bin/go install github.com/fzipp/gocyclo/cmd/gocyclo@latest || true
 log_command "Installing ineffassign" \
-    /usr/local/bin/go install github.com/gordonklaus/ineffassign@latest
+    /usr/local/bin/go install github.com/gordonklaus/ineffassign@latest || true
 log_command "Installing revive" \
-    /usr/local/bin/go install github.com/mgechev/revive@latest
+    /usr/local/bin/go install github.com/mgechev/revive@latest || true
 log_command "Installing errcheck" \
-    /usr/local/bin/go install github.com/kisielk/errcheck@latest
+    /usr/local/bin/go install github.com/kisielk/errcheck@latest || true
 log_command "Installing gosec" \
-    /usr/local/bin/go install github.com/securego/gosec/v2/cmd/gosec@latest
+    /usr/local/bin/go install github.com/securego/gosec/v2/cmd/gosec@latest || true
 log_command "Installing gocritic" \
-    /usr/local/bin/go install github.com/go-critic/go-critic/cmd/gocritic@latest
+    /usr/local/bin/go install github.com/go-critic/go-critic/cmd/gocritic@latest || true
 log_command "Installing gocognit" \
-    /usr/local/bin/go install github.com/uudashr/gocognit/cmd/gocognit@latest
+    /usr/local/bin/go install github.com/uudashr/gocognit/cmd/gocognit@latest || true
 log_command "Installing goconst" \
-    /usr/local/bin/go install github.com/jgautheron/goconst/cmd/goconst@latest
+    /usr/local/bin/go install github.com/jgautheron/goconst/cmd/goconst@latest || true
 log_command "Installing godot" \
-    /usr/local/bin/go install github.com/tetafro/godot/cmd/godot@latest
+    /usr/local/bin/go install github.com/tetafro/godot/cmd/godot@latest || true
 
 # Testing and mocking tools
 log_message "Installing testing tools..."
 log_command "Installing gotests" \
-    /usr/local/bin/go install github.com/cweill/gotests/gotests@latest
+    /usr/local/bin/go install github.com/cweill/gotests/gotests@latest || true
 log_command "Installing mockgen" \
-    /usr/local/bin/go install github.com/golang/mock/mockgen@latest
+    /usr/local/bin/go install github.com/golang/mock/mockgen@latest || true
 log_command "Installing richgo" \
-    /usr/local/bin/go install github.com/kyoh86/richgo@latest
+    /usr/local/bin/go install github.com/kyoh86/richgo@latest || true
 log_command "Installing stress" \
-    /usr/local/bin/go install golang.org/x/tools/cmd/stress@latest
+    /usr/local/bin/go install golang.org/x/tools/cmd/stress@latest || true
 log_command "Installing benchstat" \
-    /usr/local/bin/go install golang.org/x/perf/cmd/benchstat@latest
+    /usr/local/bin/go install golang.org/x/perf/cmd/benchstat@latest || true
 
 # Dependency and visualization tools
 log_message "Installing dependency analysis tools..."
 log_command "Installing go-callvis" \
-    /usr/local/bin/go install github.com/ofabry/go-callvis@latest
+    /usr/local/bin/go install github.com/ofabry/go-callvis@latest || true
 log_command "Installing goda" \
-    /usr/local/bin/go install github.com/loov/goda@latest
+    /usr/local/bin/go install github.com/loov/goda@latest || true
 log_command "Installing govulncheck" \
-    /usr/local/bin/go install golang.org/x/vuln/cmd/govulncheck@latest
+    /usr/local/bin/go install golang.org/x/vuln/cmd/govulncheck@latest || true
 log_command "Installing wire" \
-    /usr/local/bin/go install github.com/google/wire/cmd/wire@latest
+    /usr/local/bin/go install github.com/google/wire/cmd/wire@latest || true
 
 # Development workflow tools
 log_message "Installing workflow tools..."
 log_command "Installing air (live reload)" \
-    /usr/local/bin/go install github.com/air-verse/air@latest
+    /usr/local/bin/go install github.com/air-verse/air@latest || true
 log_command "Installing goreleaser" \
-    /usr/local/bin/go install github.com/goreleaser/goreleaser/v2@latest
+    /usr/local/bin/go install github.com/goreleaser/goreleaser/v2@latest || true
 log_command "Installing ko (container builder)" \
-    /usr/local/bin/go install github.com/google/ko@latest
+    /usr/local/bin/go install github.com/google/ko@latest || true
 
 # Documentation tools
 log_message "Installing documentation tools..."
 log_command "Installing swag (Swagger generator)" \
-    /usr/local/bin/go install github.com/swaggo/swag/cmd/swag@latest
+    /usr/local/bin/go install github.com/swaggo/swag/cmd/swag@latest || true
 log_command "Installing godoc" \
-    /usr/local/bin/go install golang.org/x/tools/cmd/godoc@latest
+    /usr/local/bin/go install golang.org/x/tools/cmd/godoc@latest || true
 
 # Protocol buffer support
 log_message "Installing protobuf tools..."
 log_command "Installing protoc-gen-go" \
-    /usr/local/bin/go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+    /usr/local/bin/go install google.golang.org/protobuf/cmd/protoc-gen-go@latest || true
 log_command "Installing protoc-gen-go-grpc" \
-    /usr/local/bin/go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+    /usr/local/bin/go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest || true
 
 # ============================================================================
 # Create symlinks for all installed tools
