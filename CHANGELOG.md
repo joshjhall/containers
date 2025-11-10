@@ -5,6 +5,79 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.6.0] - 2025-11-10
+
+### Added
+
+- Add retry logic with exponential backoff for external API calls
+- Add tidyverse to r-dev for modern R data science workflows
+
+### Documentation
+
+- Add container image security to hardening roadmap
+- Comprehensive documentation cleanup and reorganization
+- Update security hardening progress - Phases 1 & 2 complete
+- Document secrets exposure risks in build arguments (Issue #11)
+- Update security hardening status - Phases 3 & 4 complete
+- Update SECURITY.md version and timestamp
+- Mark issue #12 (Docker socket security) as complete
+- Update security hardening status - Phase 5 complete
+- Update README with security hardening improvements
+- Update SECURITY.md with comprehensive security hardening details
+- Remove outdated ANALYSIS.md file
+- Move security-hardening.md to main docs directory
+
+### Fixed
+
+- Export JMH_VERSION for runtime shell functions
+- Remove stray 'n' characters causing shellcheck errors
+- Quote variables to resolve SC2086 shellcheck warnings
+- Remove stray 'n' character in rust.sh (SC2288)
+- Quote all variables to resolve SC2086 shellcheck warnings
+- Disable SC2016 in shellcheckrc and fix remaining info-level issues
+- Critical bug in apt_install - unquote package list for word splitting
+- Remove incorrect secure-temp.sh source references
+- Redirect log_message to stderr in create_secure_temp_dir
+- Remove EXIT trap from create_secure_temp_dir to prevent premature cleanup
+- Change secure temp directory permissions from 700 to 755
+- Prevent 'Argument list too long' error in tests by not exporting TEST_OUTPUT
+- Add explicit cleanup for build temp directories in feature scripts
+- Make Go dev tool installations non-fatal to handle transient network errors
+- Resolve test framework double-counting bug and /cache/go ownership issue
+- Add missing parent cache directory creation in R and Mojo features
+- Resolve test framework multi-assertion counting bug and R test package errors
+- Update expected Rscript version output in R integration test
+
+### Miscellaneous
+
+- Add cat to auto-approved bash commands for Claude Code
+- Fix shellcheck warnings and add R to CI test matrix
+
+### Security
+
+- Add Docker socket security warnings (Issue #12)
+
+### Testing
+
+- Add integration test for R development environment
+
+### Security
+
+- Fix CRITICAL command injection vulnerability in version checking
+- Add container image digests and Cosign signing
+- Add optional passwordless sudo control
+- Add safe_eval wrapper for tool initialization
+- Add path validation for startup scripts
+- Add checksum verification for Claude Code installer
+- Add version validation to prevent shell injection
+- Add safer 1Password credential handling (Issue #6)
+- Implement atomic cache directory creation (#8)
+- Validate completion outputs before sourcing (#9)
+- Sanitize user function inputs to prevent injection (#10)
+- Add secure temp directory pattern - Batch 1 (#13)
+- Secure temp directories - Batch 2 (#13)
+- Secure temp directories - Batch 3 Final (#13)
+
 ## [4.5.0] - 2025-11-09
 
 ### Added
@@ -326,6 +399,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add helpful error message when release is cancelled
 - Add VS Code workspace settings and improve gitignore
 
+[4.6.0]: https://github.com/joshjhall/containers/compare/v4.5.0...v4.6.0
 [4.5.0]: https://github.com/joshjhall/containers/compare/v4.4.0...v4.5.0
 [4.4.0]: https://github.com/joshjhall/containers/compare/v4.3.2...v4.4.0
 [4.3.2]: https://github.com/joshjhall/containers/compare/v4.3.1...v4.3.2
