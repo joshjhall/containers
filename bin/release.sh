@@ -9,6 +9,12 @@ BLUE='\033[0;34m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
+# Release automation flags
+AUTO_COMMIT=false
+AUTO_TAG=false
+AUTO_PUSH=false
+AUTO_GITHUB_RELEASE=false
+
 # Get the directory where this script is located
 BIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$BIN_DIR")"
@@ -21,17 +27,23 @@ usage() {
     echo "Usage: $0 [OPTIONS] [major|minor|patch|VERSION]"
     echo ""
     echo "Options:"
-    echo "  --force              Force version update even if same"
-    echo "  --skip-changelog     Skip CHANGELOG.md generation"
-    echo "  --non-interactive    Skip confirmation prompts (for CI/CD)"
+    echo "  --force                 Force version update even if same"
+    echo "  --skip-changelog        Skip CHANGELOG.md generation"
+    echo "  --non-interactive       Skip confirmation prompts (for CI/CD)"
+    echo "  --auto-commit           Automatically commit changes"
+    echo "  --auto-tag              Automatically create git tag"
+    echo "  --auto-push             Automatically push to remote"
+    echo "  --auto-github-release   Automatically create GitHub release"
+    echo "  --full-auto             Enable all auto flags (commit, tag, push, release)"
     echo ""
     echo "Examples:"
-    echo "  $0 patch                    # Bump patch version (1.0.0 -> 1.0.1)"
-    echo "  $0 minor                    # Bump minor version (1.0.0 -> 1.1.0)"
-    echo "  $0 major                    # Bump major version (1.0.0 -> 2.0.0)"
-    echo "  $0 1.2.3                    # Set specific version"
-    echo "  $0 --force 1.2.3            # Force set version (even if same)"
-    echo "  $0 --non-interactive patch  # Run without prompts (CI/CD)"
+    echo "  $0 patch                      # Bump patch version (1.0.0 -> 1.0.1)"
+    echo "  $0 minor                      # Bump minor version (1.0.0 -> 1.1.0)"
+    echo "  $0 major                      # Bump major version (1.0.0 -> 2.0.0)"
+    echo "  $0 1.2.3                      # Set specific version"
+    echo "  $0 --force 1.2.3              # Force set version (even if same)"
+    echo "  $0 --non-interactive patch    # Run without prompts (CI/CD)"
+    echo "  $0 --full-auto minor          # Complete automated release"
     echo ""
     echo "Current version: $(cat VERSION)"
     exit 1
@@ -105,6 +117,30 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         --non-interactive)
+            NON_INTERACTIVE=true
+            shift
+            ;;
+        --auto-commit)
+            AUTO_COMMIT=true
+            shift
+            ;;
+        --auto-tag)
+            AUTO_TAG=true
+            shift
+            ;;
+        --auto-push)
+            AUTO_PUSH=true
+            shift
+            ;;
+        --auto-github-release)
+            AUTO_GITHUB_RELEASE=true
+            shift
+            ;;
+        --full-auto)
+            AUTO_COMMIT=true
+            AUTO_TAG=true
+            AUTO_PUSH=true
+            AUTO_GITHUB_RELEASE=true
             NON_INTERACTIVE=true
             shift
             ;;
@@ -287,17 +323,99 @@ if [ -d .git ]; then
         echo ""
     fi
 
-    echo "To complete the release, run:"
-    echo -e "  ${BLUE}git add -A${NC}"
-    echo -e "  ${BLUE}git commit -m \"chore(release): Release version $NEW_VERSION\"${NC}"
-    echo -e "  ${BLUE}git tag -a v$NEW_VERSION -m \"Release version $NEW_VERSION\"${NC}"
-    echo -e "  ${BLUE}git push origin main${NC}"
-    echo -e "  ${BLUE}git push origin v$NEW_VERSION${NC}"
-    echo ""
-    echo "The tag push will trigger GitHub Actions to:"
-    echo "  - Build all container variants"
-    echo "  - Push images to ghcr.io/joshjhall/containers"
-    echo "  - Create GitHub release with release notes"
+    # Auto-commit if requested
+    if [ "$AUTO_COMMIT" = "true" ]; then
+        echo ""
+        echo -e "${BLUE}Auto-committing changes...${NC}"
+        git add -A
+        git commit -m "chore(release): Release version $NEW_VERSION"
+        echo -e "${GREEN}✓${NC} Changes committed"
+    fi
+
+    # Auto-tag if requested
+    if [ "$AUTO_TAG" = "true" ]; then
+        echo ""
+        echo -e "${BLUE}Creating git tag v$NEW_VERSION...${NC}"
+        git tag -a "v$NEW_VERSION" -m "Release version $NEW_VERSION"
+        echo -e "${GREEN}✓${NC} Tag created"
+    fi
+
+    # Auto-push if requested
+    if [ "$AUTO_PUSH" = "true" ]; then
+        echo ""
+        echo -e "${BLUE}Pushing to remote...${NC}"
+
+        # Get current branch
+        CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+
+        # Push branch
+        git push origin "$CURRENT_BRANCH"
+        echo -e "${GREEN}✓${NC} Pushed branch: $CURRENT_BRANCH"
+
+        # Push tag if it exists
+        if git rev-parse "v$NEW_VERSION" >/dev/null 2>&1; then
+            git push origin "v$NEW_VERSION"
+            echo -e "${GREEN}✓${NC} Pushed tag: v$NEW_VERSION"
+        fi
+    fi
+
+    # Auto-create GitHub release if requested
+    if [ "$AUTO_GITHUB_RELEASE" = "true" ]; then
+        echo ""
+        echo -e "${BLUE}Creating GitHub release...${NC}"
+
+        # Check if gh is installed
+        if ! command -v gh >/dev/null 2>&1; then
+            echo -e "${YELLOW}Warning: gh CLI not found, skipping GitHub release${NC}"
+            echo "Install gh CLI: https://cli.github.com/"
+        else
+            # Switch to config auth if GITHUB_TOKEN is set
+            if [ -n "${GITHUB_TOKEN:-}" ]; then
+                unset GITHUB_TOKEN
+                gh auth switch 2>/dev/null || true
+            fi
+
+            # Generate release notes from CHANGELOG
+            RELEASE_NOTES=$(./bin/generate-release-notes.sh "$NEW_VERSION" 2>/dev/null || echo "See [CHANGELOG.md](https://github.com/joshjhall/containers/blob/v$NEW_VERSION/CHANGELOG.md) for details.")
+
+            # Create release
+            if gh release create "v$NEW_VERSION" \
+                --title "Release v$NEW_VERSION" \
+                --notes "$RELEASE_NOTES"; then
+                echo -e "${GREEN}✓${NC} GitHub release created: https://github.com/joshjhall/containers/releases/tag/v$NEW_VERSION"
+            else
+                echo -e "${YELLOW}Warning: Failed to create GitHub release${NC}"
+                echo "You can create it manually at: https://github.com/joshjhall/containers/releases/new?tag=v$NEW_VERSION"
+            fi
+        fi
+    fi
+
+    # Show next steps if not fully automated
+    if [ "$AUTO_COMMIT" = "false" ] || [ "$AUTO_TAG" = "false" ] || [ "$AUTO_PUSH" = "false" ]; then
+        echo ""
+        echo "To complete the release, run:"
+        if [ "$AUTO_COMMIT" = "false" ]; then
+            echo -e "  ${BLUE}git add -A${NC}"
+            echo -e "  ${BLUE}git commit -m \"chore(release): Release version $NEW_VERSION\"${NC}"
+        fi
+        if [ "$AUTO_TAG" = "false" ]; then
+            echo -e "  ${BLUE}git tag -a v$NEW_VERSION -m \"Release version $NEW_VERSION\"${NC}"
+        fi
+        if [ "$AUTO_PUSH" = "false" ]; then
+            CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+            echo -e "  ${BLUE}git push origin $CURRENT_BRANCH${NC}"
+            echo -e "  ${BLUE}git push origin v$NEW_VERSION${NC}"
+        fi
+        if [ "$AUTO_GITHUB_RELEASE" = "false" ]; then
+            echo ""
+            echo "Or use automation flags:"
+            echo -e "  ${BLUE}$0 --full-auto $*${NC}  # Fully automated release"
+        fi
+        echo ""
+        echo "The tag push will trigger GitHub Actions to:"
+        echo "  - Build all container variants"
+        echo "  - Push images to ghcr.io/joshjhall/containers"
+    fi
 else
     echo -e "${YELLOW}Not a git repository - manual commit required${NC}"
 fi
