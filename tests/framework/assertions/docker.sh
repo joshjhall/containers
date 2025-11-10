@@ -73,7 +73,7 @@ assert_build_succeeds() {
     local build_context="${BUILD_CONTEXT:-.}"
     
     capture_result docker build -f "$dockerfile" "${build_args[@]}" "$build_context"
-    if [ $TEST_EXIT_CODE -eq 0 ]; then
+    if [ "$TEST_EXIT_CODE" -eq 0 ]; then
         return 0
     else
         tf_fail_assertion "Build should succeed" \
@@ -87,9 +87,9 @@ assert_build_fails() {
     local dockerfile="$1"
     shift
     local build_args=("$@")
-    
+
     capture_result docker build -f "$dockerfile" "${build_args[@]}" .
-    if [ $TEST_EXIT_CODE -ne 0 ]; then
+    if [ "$TEST_EXIT_CODE" -ne 0 ]; then
         return 0
     else
         tf_fail_assertion "Build should fail" \
@@ -106,7 +106,7 @@ assert_command_in_container() {
     
     capture_result docker run --rm "$image" bash -c "$command"
 
-    if [ $TEST_EXIT_CODE -ne 0 ]; then
+    if [ "$TEST_EXIT_CODE" -ne 0 ]; then
         tf_fail_assertion "$message" \
             "Command failed: $command" \
             "Exit code: $TEST_EXIT_CODE" \
@@ -132,8 +132,8 @@ assert_command_fails_in_container() {
     local message="${3:-Command should fail in container}"
     
     capture_result docker run --rm "$image" bash -c "$command"
-    
-    if [ $TEST_EXIT_CODE -eq 0 ]; then
+
+    if [ "$TEST_EXIT_CODE" -eq 0 ]; then
         tf_fail_assertion "$message" \
             "Command succeeded unexpectedly: $command" \
             "Output: $TEST_OUTPUT"
@@ -145,9 +145,10 @@ assert_image_size_less_than() {
     local image="$1"
     local max_size_mb="$2"
     local message="${3:-Image size should be less than ${max_size_mb}MB}"
-    
-    local actual_size=$(get_image_size_mb "$image")
-    
+
+    local actual_size
+    actual_size=$(get_image_size_mb "$image")
+
     if [ "$actual_size" -lt "$max_size_mb" ]; then
         return 0
     else
@@ -208,7 +209,7 @@ assert_env_var_set() {
     
     capture_result docker run --rm "$image" printenv "$var_name"
 
-    if [ $TEST_EXIT_CODE -ne 0 ]; then
+    if [ "$TEST_EXIT_CODE" -ne 0 ]; then
         tf_fail_assertion "$message" \
             "Variable not set: $var_name"
         return 1
