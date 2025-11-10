@@ -95,17 +95,26 @@ test_r_dev_packages() {
     assert_command_in_container "$image" "Rscript -e 'library(roxygen2); cat(\"ok\")'" "ok"
 }
 
-# Test: Data manipulation packages work
-test_r_data_packages() {
+# Test: Tidyverse packages work
+test_r_tidyverse_packages() {
     local image="${IMAGE_TO_TEST:-test-r-dev-$$}"
 
-    # data.table for data manipulation (installed by r-dev)
+    # tidyverse meta-package loads
+    assert_command_in_container "$image" "Rscript -e 'library(tidyverse); cat(\"ok\")'" "ok"
+
+    # dplyr for data manipulation
+    assert_command_in_container "$image" "Rscript -e 'library(dplyr); cat(\"ok\")'" "ok"
+
+    # Test dplyr pipe and filter functionality
+    assert_command_in_container "$image" "Rscript -e 'library(dplyr); df <- data.frame(x=1:5); result <- df %>% filter(x > 3) %>% nrow(); cat(result)'" "2"
+
+    # ggplot2 for visualization
+    assert_command_in_container "$image" "Rscript -e 'library(ggplot2); cat(\"ok\")'" "ok"
+
+    # data.table as tidyverse alternative
     assert_command_in_container "$image" "Rscript -e 'library(data.table); cat(\"ok\")'" "ok"
 
-    # Test data.table functionality
-    assert_command_in_container "$image" "Rscript -e 'library(data.table); dt <- data.table(x=1:5); result <- nrow(dt[x > 3]); cat(result)'" "2"
-
-    # jsonlite for JSON (installed by r-dev)
+    # jsonlite for JSON
     assert_command_in_container "$image" "Rscript -e 'library(jsonlite); cat(\"ok\")'" "ok"
 }
 
@@ -155,7 +164,7 @@ run_test test_r_version "R version and basic functionality work"
 run_test test_r_execution "R can execute basic commands"
 run_test test_r_base_packages "Base R packages work correctly"
 run_test test_r_dev_packages "Development packages are available"
-run_test test_r_data_packages "Data manipulation packages work"
+run_test test_r_tidyverse_packages "Tidyverse and data manipulation packages work"
 run_test test_r_package_install "R can install new packages"
 run_test test_r_cache "R cache directories are configured correctly"
 run_test test_r_dev_tools "R development tools work"

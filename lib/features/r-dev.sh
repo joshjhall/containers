@@ -7,15 +7,12 @@
 #   as R packages in the system library.
 #
 # Features:
-#   - Core tidyverse: dplyr, ggplot2, tidyr, readr, purrr, tibble, stringr, forcats
-#   - Development: devtools, usethis, roxygen2, testthat, pkgdown, covr, rcmdcheck
-#   - Data manipulation: data.table, dtplyr, dbplyr, readxl, haven
-#   - Reporting: rmarkdown, knitr, tinytex, bookdown, blogdown, flexdashboard
-#   - Debugging/Profiling: profvis, bench, microbenchmark, tictoc, debugme
-#   - Linting: lintr, styler
-#   - Database: DBI, RSQLite, RPostgreSQL, odbc, pool
-#   - Web/API: httr, httr2, plumber, shiny, shinydashboard, RestRserve
-#   - Data formats: jsonlite, xml2, rvest
+#   - Tidyverse ecosystem: dplyr, ggplot2, tidyr, readr, purrr, tibble, stringr, forcats
+#   - Development tools: devtools, usethis, roxygen2, testthat
+#   - Documentation: rmarkdown, knitr
+#   - Code quality: lintr, styler
+#   - Data manipulation: data.table (alternative to dplyr), jsonlite
+#   - Package checking: rcmdcheck, covr
 #
 # Requirements:
 #   - R must be installed (via INCLUDE_R=true)
@@ -147,10 +144,18 @@ install_if_missing(c(
   "styler"          # Code formatting
 ))
 
-# Minimal data manipulation (often needed for examples/tests)
-cat("Installing minimal data tools...\n")
+# Tidyverse - Modern R data science ecosystem
+# This is the de-facto standard for R development
+# Includes: dplyr, ggplot2, tidyr, readr, purrr, tibble, stringr, forcats
+cat("Installing tidyverse (this may take 10-15 minutes)...\n")
 install_if_missing(c(
-  "data.table",     # Fast data manipulation (lightweight)
+  "tidyverse"       # Complete modern R data science ecosystem
+))
+
+# Additional data manipulation tools
+cat("Installing additional data tools...\n")
+install_if_missing(c(
+  "data.table",     # Fast data manipulation (alternative to dplyr)
   "jsonlite"        # JSON parsing (very common need)
 ))
 
@@ -165,7 +170,7 @@ cat("R development tools installation complete!\n")
 EOF
 
 # Run the installation script as the user
-log_command "Installing R development packages (this may take 15-20 minutes)" \
+log_command "Installing R development packages (this may take 25-30 minutes due to tidyverse)" \
     su - "${USERNAME}" -c "export R_LIBS_USER='${R_LIBS_USER}' R_LIBS_SITE='${R_LIBS_SITE}' && /usr/local/bin/Rscript '${BUILD_TEMP}/install_r_dev_tools.R'"
 
 # ============================================================================
