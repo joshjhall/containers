@@ -85,37 +85,37 @@ test_r_base_packages() {
 test_r_dev_packages() {
     local image="${IMAGE_TO_TEST:-test-r-dev-$$}"
 
-    # remotes package for package installation
-    assert_command_in_container "$image" "Rscript -e 'library(remotes); cat(\"ok\")'" "ok"
-
-    # devtools for development
+    # devtools for development (includes remotes)
     assert_command_in_container "$image" "Rscript -e 'library(devtools); cat(\"ok\")'" "ok"
 
-    # pak for package management
-    assert_command_in_container "$image" "Rscript -e 'library(pak); cat(\"ok\")'" "ok"
+    # usethis for project setup
+    assert_command_in_container "$image" "Rscript -e 'library(usethis); cat(\"ok\")'" "ok"
+
+    # roxygen2 for documentation
+    assert_command_in_container "$image" "Rscript -e 'library(roxygen2); cat(\"ok\")'" "ok"
 }
 
 # Test: Data manipulation packages work
 test_r_data_packages() {
     local image="${IMAGE_TO_TEST:-test-r-dev-$$}"
 
-    # dplyr for data manipulation
-    assert_command_in_container "$image" "Rscript -e 'library(dplyr); cat(\"ok\")'" "ok"
+    # data.table for data manipulation (installed by r-dev)
+    assert_command_in_container "$image" "Rscript -e 'library(data.table); cat(\"ok\")'" "ok"
 
-    # Test dplyr functionality
-    assert_command_in_container "$image" "Rscript -e 'library(dplyr); df <- data.frame(x=1:5); result <- df %>% filter(x > 3) %>% nrow(); cat(result)'" "2"
+    # Test data.table functionality
+    assert_command_in_container "$image" "Rscript -e 'library(data.table); dt <- data.table(x=1:5); result <- nrow(dt[x > 3]); cat(result)'" "2"
 
-    # ggplot2 for visualization
-    assert_command_in_container "$image" "Rscript -e 'library(ggplot2); cat(\"ok\")'" "ok"
+    # jsonlite for JSON (installed by r-dev)
+    assert_command_in_container "$image" "Rscript -e 'library(jsonlite); cat(\"ok\")'" "ok"
 }
 
 # Test: R can install packages
 test_r_package_install() {
     local image="${IMAGE_TO_TEST:-test-r-dev-$$}"
 
-    # Install a simple package using pak (faster and more reliable)
-    # jsonlite is a lightweight package good for testing
-    assert_command_in_container "$image" "Rscript -e 'pak::pkg_install(\"jsonlite\", ask = FALSE); library(jsonlite); cat(\"ok\")'" "ok"
+    # Install a simple package using install.packages
+    # praise is a lightweight package with no dependencies, good for testing
+    assert_command_in_container "$image" "Rscript -e 'install.packages(\"praise\", repos=\"https://cloud.r-project.org\", quiet=TRUE); library(praise); cat(\"ok\")'" "ok"
 }
 
 # Test: Cache directories are configured correctly
@@ -142,11 +142,11 @@ test_r_dev_tools() {
     # testthat for testing
     assert_command_in_container "$image" "Rscript -e 'library(testthat); cat(\"ok\")'" "ok"
 
-    # roxygen2 for documentation
-    assert_command_in_container "$image" "Rscript -e 'library(roxygen2); cat(\"ok\")'" "ok"
+    # lintr for linting
+    assert_command_in_container "$image" "Rscript -e 'library(lintr); cat(\"ok\")'" "ok"
 
-    # usethis for project setup
-    assert_command_in_container "$image" "Rscript -e 'library(usethis); cat(\"ok\")'" "ok"
+    # styler for formatting
+    assert_command_in_container "$image" "Rscript -e 'library(styler); cat(\"ok\")'" "ok"
 }
 
 # Run all tests
