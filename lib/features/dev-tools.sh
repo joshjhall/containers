@@ -262,8 +262,9 @@ fi
 # Entr helper functions
 if command -v entr &> /dev/null; then
     # Watch and run tests
+    # Use 'command find' to bypass the find='fd' alias (fd has different syntax)
     watch-test() {
-        find . -name "*.py" -o -name "*.sh" | entr -c "$@"
+        command find . -name "*.py" -o -name "*.sh" | entr -c "$@"
     }
 
     # Watch and reload service
@@ -272,8 +273,9 @@ if command -v entr &> /dev/null; then
     }
 
     # Watch and run make
+    # Use 'command find' to bypass the find='fd' alias (fd has different syntax)
     watch-make() {
-        find . -name "*.c" -o -name "*.h" -o -name "Makefile" | entr -c make "$@"
+        command find . -name "*.c" -o -name "*.h" -o -name "Makefile" | entr -c make "$@"
     }
 fi
 
@@ -915,9 +917,10 @@ if command -v just &> /dev/null; then
     COMPLETION_FILE="/tmp/just-completion.$$.bash"
     if just --completions bash > "$COMPLETION_FILE" 2>/dev/null; then
         # Validate completion output before sourcing
+        # Use 'command grep' to bypass any aliases (e.g., grep='rg')
         if [ -f "$COMPLETION_FILE" ] && \
            [ "$(wc -c < "$COMPLETION_FILE")" -lt 100000 ] && \
-           ! grep -qE '(rm -rf|curl.*bash|wget.*bash|eval.*\$)' "$COMPLETION_FILE"; then
+           ! command grep -qE '(rm -rf|curl.*bash|wget.*bash|eval.*\$)' "$COMPLETION_FILE"; then
             # shellcheck disable=SC1090  # Dynamic source is validated
             source "$COMPLETION_FILE"
         fi
@@ -934,8 +937,9 @@ fi
 # Helper function for fzf git operations
 if command -v fzf &> /dev/null && command -v git &> /dev/null; then
     # Git branch selector
+    # Use 'command grep' to bypass aliases for reliable filtering
     fgb() {
-        git branch -a | grep -v HEAD | fzf --preview 'git log --oneline --graph --date=short --color=always --pretty="format:%C(auto)%cd %h%d %s" $(echo {} | sed "s/.* //")' | sed "s/.* //"
+        git branch -a | command grep -v HEAD | fzf --preview 'git log --oneline --graph --date=short --color=always --pretty="format:%C(auto)%cd %h%d %s" $(echo {} | sed "s/.* //")' | sed "s/.* //"
     }
 
     # Git checkout with fzf

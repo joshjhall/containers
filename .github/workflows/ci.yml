@@ -415,7 +415,7 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v')
     permissions:
       contents: write
-      packages: read
+      packages: write  # Required for Cosign to push signature blobs
       id-token: write  # Required for Cosign OIDC keyless signing
     steps:
       - name: Checkout code

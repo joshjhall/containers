@@ -19,7 +19,8 @@ safe_eval() {
     if ! output=$("$@" 2>/dev/null); then
         return 1
     fi
-    if echo "$output" | grep -qE '(rm -rf|curl.*bash|wget.*bash|;\s*rm|\$\(.*rm)|exec\s+[^$]|/bin/sh.*-c|bash.*-c.*http)'; then
+    # Use 'command grep' to bypass any aliases (e.g., grep='rg' from dev-tools)
+    if echo "$output" | command grep -qE '(rm -rf|curl.*bash|wget.*bash|;\s*rm|\$\(.*rm)|exec\s+[^$]|/bin/sh.*-c|bash.*-c.*http)'; then
         echo "WARNING: Suspicious output detected, skipping initialization of: $*" >&2
         return 1
     fi
