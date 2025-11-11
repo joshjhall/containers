@@ -6,26 +6,42 @@ This is a well-architected, mature container build system with strong security p
 
 ---
 
+## Progress Tracker
+
+**Completed:**
+- ✅ [HIGH] Exposed Credentials in .env File - Fixed in commit 4c57276
+- ✅ [HIGH] Pre-Commit Hooks Enabled by Default - Fixed in commit 4c57276
+
+**In Progress:**
+- 🔄 None
+
+**Planned:**
+- See individual items below
+
+---
+
 ## SECURITY CONCERNS
 
-### 1. [HIGH] Exposed Credentials in .env File
-**File**: `/workspace/containers/.env`
-**Impact**: High - Actual credentials are stored in a file that could be committed
-**Evidence**: 
-- Line 6: Contains a real 1Password service account token (ops_eyJ...)
-- Line 19: Contains a real GitHub personal access token (github_pat_11AAAMHPY0...)
+### 1. ✅ [HIGH] [COMPLETED] Exposed Credentials in .env File
+**Status**: FIXED in commit 4c57276 (2025-11-10)
 
-**Issues**:
-- These credentials should never be stored in the repository
-- `.env` should be in `.gitignore` but if accidentally committed, reveals auth tokens
-- Service account token provides full access to 1Password vault
-- GitHub token allows modification of repositories and package access
+**Original Issue**:
+- `.env` file contained real 1Password service account token and GitHub PAT
+- Could be accidentally committed to repository
 
-**Recommendation**: 
-- Immediately invalidate these tokens
-- Add pre-commit hook to prevent accidental commits
-- Use `.env.example` pattern (which exists) exclusively
-- Document that .env must never be checked in
+**Solution Implemented**:
+- ✅ Sanitized .env file (all credentials removed)
+- ✅ Enhanced pre-commit hook to block .env commits
+- ✅ Added credential pattern detection (1Password, GitHub, AWS, Stripe, Google)
+- ✅ Created setup-dev-environment.sh script
+- ✅ Auto-enable hooks in devcontainer via postStartCommand
+- ✅ Updated README contributing section
+
+**Files Changed**:
+- `.githooks/pre-commit` - Added credential leak prevention
+- `bin/setup-dev-environment.sh` - New setup script
+- `.devcontainer/devcontainer.json` - Auto-run setup
+- `README.md` - Document setup requirement
 
 ---
 
@@ -126,18 +142,21 @@ curl -fsSL <url> | gpg --dearmor -o /etc/apt/keyrings/...
 
 ## MISSING FEATURES
 
-### 1. [HIGH] No Pre-Commit Hooks Enabled by Default
-**Issue**: Repository has git hooks but they're optional (`git config core.hooksPath .githooks`)
+### 1. ✅ [HIGH] [COMPLETED] Pre-Commit Hooks Not Enabled by Default
+**Status**: FIXED in commit 4c57276 (2025-11-10)
 
-**Gap**: 
-- New contributors won't have shellcheck enabled automatically
-- Credential scanning not enforced locally
-- `.env` could be accidentally committed
+**Original Issue**:
+- Git hooks were optional, requiring manual `git config core.hooksPath .githooks`
+- New contributors wouldn't have shellcheck or credential scanning enabled
 
-**Recommendation**:
-- Consider post-clone setup script or CI check that enforces
-- Add installation instructions in CONTRIBUTING.md
-- Consider automatic hook installation in devcontainer
+**Solution Implemented**:
+- ✅ Created `bin/setup-dev-environment.sh` to enable hooks automatically
+- ✅ Auto-run in devcontainer via `postStartCommand`
+- ✅ Updated README contributing section with setup instructions
+- ✅ Hooks now include both shellcheck validation and credential detection
+
+**Files Changed**:
+- Same as Security Issue #1 (combined fix)
 
 ---
 
