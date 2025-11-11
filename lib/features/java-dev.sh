@@ -578,7 +578,7 @@ BENCHMARK
     fi
 
     echo "Compiling and running benchmark..."
-    jbang --deps org.openjdk.jmh:jmh-core:${JMH_VERSION},org.openjdk.jmh:jmh-generator-annprocess:${JMH_VERSION} "\$file"
+    jbang --deps org.openjdk.jmh:jmh-core:${JMH_VERSION},org.openjdk.jmh:jmh-generator-annprocess:${JMH_VERSION} "$file"
 }
 
 # Clean up helper functions
