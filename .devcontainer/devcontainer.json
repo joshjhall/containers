@@ -9,6 +9,9 @@
 
   // "initializeCommand": "bash -c 'cd \"${localWorkspaceFolder}\" && .devcontainer/initialize-environment.sh'",
 
+  // Auto-configure git hooks and development environment after container starts
+  "postStartCommand": "bash -c './bin/setup-dev-environment.sh'",
+
   "customizations": {
     "vscode": {
       "extensions": [

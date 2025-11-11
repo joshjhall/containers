@@ -652,9 +652,18 @@ For more information, see `/workspace/containers/SECURITY.md`.
 Contributions are welcome! Please:
 
 1. Fork the repository
-2. Create a feature branch
-3. Add tests for new features
-4. Submit a pull request
+2. **Run the development environment setup**:
+   ```bash
+   ./bin/setup-dev-environment.sh
+   ```
+   This will:
+   - Enable git hooks for shellcheck and credential leak prevention
+   - Verify your development environment
+   - Check for recommended tools
+
+3. Create a feature branch
+4. Add tests for new features
+5. Submit a pull request
 
 ### Code Quality
 
