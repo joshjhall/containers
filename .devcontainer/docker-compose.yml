@@ -24,6 +24,8 @@ services:
       # 1Password integration
       - OP_CONTAINERS_ENV_VAULT=${OP_CONTAINERS_ENV_VAULT:-Development}
     command: sleep infinity
+    # Health check configuration (inherits from Dockerfile)
+    # Override if needed: healthcheck: {test: ["CMD", "healthcheck", "--verbose"]}
     networks:
       - containers-network
 
