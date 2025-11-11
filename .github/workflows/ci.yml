@@ -455,8 +455,8 @@ jobs:
             echo "## ${variant}" >> image-digests.txt
             echo "Image: \`${IMAGE}\`" >> image-digests.txt
 
-            # Get digest
-            DIGEST=$(docker buildx imagetools inspect "${IMAGE}" --format '{{.Manifest.Digest}}')
+            # Get digest - use docker manifest inspect for proper digest extraction
+            DIGEST=$(docker manifest inspect "${IMAGE}" | jq -r '.manifests[] | select(.platform.architecture == "amd64") | .digest')
             echo "Digest: \`${DIGEST}\`" >> image-digests.txt
 
             # Sign with Cosign
