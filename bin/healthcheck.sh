@@ -300,15 +300,16 @@ auto_detect_features() {
     check_core
 
     # Only check features that are installed
-    command -v python3 >/dev/null 2>&1 && check_python
-    command -v node >/dev/null 2>&1 && check_node
-    command -v rustc >/dev/null 2>&1 && check_rust
-    command -v go >/dev/null 2>&1 && check_golang
-    command -v ruby >/dev/null 2>&1 && check_ruby
-    command -v R >/dev/null 2>&1 && check_r
-    command -v java >/dev/null 2>&1 && check_java
-    command -v docker >/dev/null 2>&1 && check_docker
-    command -v kubectl >/dev/null 2>&1 && check_kubernetes
+    # Use || true to prevent set -e from exiting if command is not found
+    command -v python3 >/dev/null 2>&1 && check_python || true
+    command -v node >/dev/null 2>&1 && check_node || true
+    command -v rustc >/dev/null 2>&1 && check_rust || true
+    command -v go >/dev/null 2>&1 && check_golang || true
+    command -v ruby >/dev/null 2>&1 && check_ruby || true
+    command -v R >/dev/null 2>&1 && check_r || true
+    command -v java >/dev/null 2>&1 && check_java || true
+    command -v docker >/dev/null 2>&1 && check_docker || true
+    command -v kubectl >/dev/null 2>&1 && check_kubernetes || true
 }
 
 # Main execution
