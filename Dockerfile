@@ -379,6 +379,10 @@ RUN /tmp/build-scripts/runtime/setup-paths.sh
 COPY lib/runtime/entrypoint.sh /usr/local/bin/entrypoint
 RUN chmod +x /usr/local/bin/entrypoint
 
+# Copy healthcheck script
+COPY bin/healthcheck.sh /usr/local/bin/healthcheck
+RUN chmod +x /usr/local/bin/healthcheck
+
 # Clean up build scripts but keep runtime scripts
 RUN cp -r /tmp/build-scripts/runtime /opt/container-runtime && \
     rm -rf /tmp/build-scripts
