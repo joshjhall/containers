@@ -302,14 +302,15 @@ safe_eval() {
 
     # Check for suspicious patterns that could indicate compromise
     # These patterns catch common command injection attempts
-    if echo "$output" | grep -qE '(rm -rf|curl.*bash|wget.*bash|;\s*rm|\$\(.*rm)'; then
+    # Use 'command grep' to bypass any aliases (e.g., grep='rg' from dev-tools)
+    if echo "$output" | command grep -qE '(rm -rf|curl.*bash|wget.*bash|;\s*rm|\$\(.*rm)'; then
         log_error "SECURITY: Suspicious output from $description, skipping initialization"
         log_error "This may indicate a compromised tool or supply chain attack"
         return 1
     fi
 
     # Check for other dangerous command patterns
-    if echo "$output" | grep -qE '(exec\s+[^$]|/bin/sh.*-c|bash.*-c.*http)'; then
+    if echo "$output" | command grep -qE '(exec\s+[^$]|/bin/sh.*-c|bash.*-c.*http)'; then
         log_error "SECURITY: Potentially dangerous commands in $description output"
         return 1
     fi
