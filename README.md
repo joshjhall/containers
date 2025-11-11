@@ -18,6 +18,7 @@ A modular, extensible container build system designed to be shared across projec
   - [Security: Handling Secrets](#security-handling-secrets)
   - [General Best Practices](#general-best-practices)
 - [Contributing](#contributing)
+- [Emergency Procedures](#emergency-procedures)
 
 ## Features
 
@@ -678,6 +679,39 @@ git config --unset core.hooksPath
 ```
 
 See [.githooks/README.md](.githooks/README.md) for configuration options.
+
+---
+
+## Emergency Procedures
+
+### Rollback/Downgrade
+
+If a release introduces critical issues, see **[docs/emergency-rollback.md](docs/emergency-rollback.md)** for:
+- Quick rollback commands
+- Auto-patch revert procedures
+- Emergency hotfix workflows
+- Post-incident procedures
+
+### Quick Rollback
+
+```bash
+# Revert problematic version
+git revert --no-commit <bad_commit>
+git commit -m "emergency: Rollback vX.Y.Z"
+
+# Delete bad release and create patch
+gh release delete vX.Y.Z --yes --cleanup-tag
+./bin/release.sh --full-auto patch
+```
+
+### Release Channels
+
+- **Stable releases** (`v4.6.0`): Manual, thoroughly tested
+- **Auto-patch releases**: Automated dependency updates, may revert more frequently
+
+**Recommendation**: Pin production to specific stable versions.
+
+---
 
 ## License
 
