@@ -5,12 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [4.6.0] - 2025-11-10
+## [4.7.0] - 2025-11-11
 
 ### Added
 
 - Add retry logic with exponential backoff for external API calls
 - Add tidyverse to r-dev for modern R data science workflows
+- Automate GitHub release creation in release script and auto-patch workflow
+- Add comprehensive container healthcheck system
 
 ### Documentation
 
@@ -26,6 +28,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Update SECURITY.md with comprehensive security hardening details
 - Remove outdated ANALYSIS.md file
 - Move security-hardening.md to main docs directory
+- Add comprehensive codebase review and improvements roadmap
+- Update roadmap with completed credential protection work
+- Add comprehensive emergency rollback procedures
 
 ### Fixed
 
@@ -47,6 +52,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add missing parent cache directory creation in R and Mojo features
 - Resolve test framework multi-assertion counting bug and R test package errors
 - Update expected Rscript version output in R integration test
+- Fix Cosign signing digest extraction in CI release job
+- Remove incorrect backslash escapes in single-quoted heredocs
+- Fix healthcheck script installation and set -e interaction
 
 ### Miscellaneous
 
@@ -77,6 +85,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add secure temp directory pattern - Batch 1 (#13)
 - Secure temp directories - Batch 2 (#13)
 - Secure temp directories - Batch 3 Final (#13)
+- Add comprehensive credential leak prevention system
 
 ## [4.5.0] - 2025-11-09
 
@@ -399,7 +408,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add helpful error message when release is cancelled
 - Add VS Code workspace settings and improve gitignore
 
-[4.6.0]: https://github.com/joshjhall/containers/compare/v4.5.0...v4.6.0
+[4.7.0]: https://github.com/joshjhall/containers/compare/v4.5.0...v4.7.0
 [4.5.0]: https://github.com/joshjhall/containers/compare/v4.4.0...v4.5.0
 [4.4.0]: https://github.com/joshjhall/containers/compare/v4.3.2...v4.4.0
 [4.3.2]: https://github.com/joshjhall/containers/compare/v4.3.1...v4.3.2
