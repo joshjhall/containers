@@ -213,12 +213,12 @@ op-env() {
 # ----------------------------------------------------------------------------
 op-env-safe() {
     # Disable command echoing to prevent exposure in logs
-    local old_x_state=\$(set +o | grep xtrace)
+    local old_x_state=$(set +o | grep xtrace)
     set +x
 
     if [ -z "$1" ]; then
         echo "Usage: op-env-safe <vault>/<item>" >&2
-        eval "\$old_x_state"
+        eval "$old_x_state"
         return 1
     fi
 
@@ -226,27 +226,27 @@ op-env-safe() {
     local json_output
 
     # Fetch secrets from 1Password
-    if ! json_output=\$(op item get "\$item" --format json 2>/dev/null); then
-        echo "Failed to fetch secrets from 1Password: \$item" >&2
-        eval "\$old_x_state"
+    if ! json_output=$(op item get "$item" --format json 2>/dev/null); then
+        echo "Failed to fetch secrets from 1Password: $item" >&2
+        eval "$old_x_state"
         return 1
     fi
 
     # Parse and export variables without showing values in process list
     local export_commands
-    export_commands=\$(echo "\$json_output" | jq -r '.fields[] | select(.purpose == "NOTES" or .type == "CONCEALED") | "export \(.label)=\\"\\(.value)\\""' 2>/dev/null)
+    export_commands=$(echo "$json_output" | jq -r '.fields[] | select(.purpose == "NOTES" or .type == "CONCEALED") | "export \(.label)=\"\(.value)\""' 2>/dev/null)
 
-    if [ -z "\$export_commands" ]; then
-        echo "No environment variables found in 1Password item: \$item" >&2
-        eval "\$old_x_state"
+    if [ -z "$export_commands" ]; then
+        echo "No environment variables found in 1Password item: $item" >&2
+        eval "$old_x_state"
         return 1
     fi
 
     # Export variables using eval (unavoidable, but local to this function)
-    eval "\$export_commands"
+    eval "$export_commands"
 
     # Re-enable command echoing if it was on
-    eval "\$old_x_state"
+    eval "$old_x_state"
 }
 
 # ----------------------------------------------------------------------------
@@ -270,8 +270,8 @@ op-exec() {
     shift
 
     # Use op-env-safe to load secrets securely
-    op-env-safe "\$item" || return 1
-    "\$@"
+    op-env-safe "$item" || return 1
+    "$@"
 }
 
 # Clean up helper functions
