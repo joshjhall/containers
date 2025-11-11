@@ -439,3 +439,9 @@ ENTRYPOINT ["/usr/local/bin/entrypoint"]
 
 # Default command
 CMD ["/bin/bash"]
+
+# Health check
+# Runs every 30 seconds, allows 3 retries before marking unhealthy
+# Uses quick mode to minimize overhead
+HEALTHCHECK --interval=30s --timeout=10s --retries=3 --start-period=60s \
+    CMD ["/usr/local/bin/healthcheck", "--quick"]

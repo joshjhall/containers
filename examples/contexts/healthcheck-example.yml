@@ -1,0 +1,112 @@
+# Docker Compose Healthcheck Example
+#
+# This example demonstrates how to use the built-in healthcheck script
+# in your docker-compose configurations.
+#
+# Usage:
+#   docker compose -f healthcheck-example.yml up
+#   docker compose -f healthcheck-example.yml ps  # See health status
+#
+# The healthcheck ensures containers are ready before dependent services start.
+
+services:
+  # Python development container with healthcheck
+  python-dev:
+    build:
+      context: ../../..  # Path to containers directory
+      dockerfile: Dockerfile
+      args:
+        PROJECT_NAME: healthcheck-example
+        PROJECT_PATH: .
+        INCLUDE_PYTHON_DEV: 'true'
+    restart: unless-stopped
+    volumes:
+      - ../../../:/workspace/containers:cached
+      - python-cache:/cache
+    # Healthcheck inherited from Dockerfile (runs every 30s)
+    # Override for verbose output during debugging:
+    # healthcheck:
+    #   test: ["CMD", "healthcheck", "--verbose"]
+    #   interval: 30s
+    #   timeout: 10s
+    #   retries: 3
+    #   start_period: 60s
+
+  # Node development container with healthcheck
+  node-dev:
+    build:
+      context: ../../..
+      dockerfile: Dockerfile
+      args:
+        PROJECT_NAME: healthcheck-example
+        PROJECT_PATH: .
+        INCLUDE_NODE_DEV: 'true'
+    restart: unless-stopped
+    volumes:
+      - ../../../:/workspace/containers:cached
+      - node-cache:/cache
+    # Example: Feature-specific healthcheck
+    healthcheck:
+      test: ["CMD", "healthcheck", "--feature", "node", "--verbose"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # Application service that depends on healthy python-dev
+  app:
+    build:
+      context: ../../..
+      dockerfile: Dockerfile
+      args:
+        PROJECT_NAME: healthcheck-example
+        PROJECT_PATH: .
+        INCLUDE_PYTHON_DEV: 'true'
+        INCLUDE_POSTGRES_CLIENT: 'true'
+    restart: unless-stopped
+    depends_on:
+      python-dev:
+        condition: service_healthy  # Wait for python-dev to be healthy
+      db:
+        condition: service_healthy  # Wait for db to be healthy
+    environment:
+      - DATABASE_URL=postgresql://user:pass@db:5432/appdb
+    volumes:
+      - ./app:/workspace/app
+    command: python /workspace/app/server.py
+    # Quick healthcheck for application readiness
+    healthcheck:
+      test: ["CMD", "healthcheck", "--quick"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  # PostgreSQL database with health check
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=user
+      - POSTGRES_PASSWORD=pass
+      - POSTGRES_DB=appdb
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  python-cache:
+    driver: local
+  node-cache:
+    driver: local
+  db-data:
+    driver: local
+
+networks:
+  default:
+    name: healthcheck-example-network
+    driver: bridge
