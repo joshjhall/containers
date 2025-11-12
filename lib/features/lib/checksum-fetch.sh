@@ -17,6 +17,58 @@ if [ -f /tmp/build-scripts/base/retry-utils.sh ]; then
 fi
 
 # ============================================================================
+# Internal Helper Functions
+# ============================================================================
+
+# _curl_with_timeout - Wrapper for curl with standard timeouts
+#
+# Arguments:
+#   $@ - All arguments passed to curl
+#
+# Returns:
+#   Curl output on success
+#   Empty on failure
+#
+# Note: Internal function, not exported
+_curl_with_timeout() {
+    curl --connect-timeout 10 --max-time 30 "$@"
+}
+
+# _is_partial_version - Check if version string is partial (e.g., "1.23" vs "1.23.0")
+#
+# Arguments:
+#   $1 - Version string to check
+#
+# Returns:
+#   0 if partial version (has exactly 1 dot)
+#   1 otherwise
+#
+# Note: Internal function, not exported
+_is_partial_version() {
+    local version="$1"
+    local dot_count
+    dot_count=$(echo "$version" | grep -o '\.' | wc -l)
+    [ "$dot_count" -eq 1 ]
+}
+
+# _curl_with_retry_wrapper - Use retry_github_api if available, else standard curl
+#
+# Arguments:
+#   $@ - All arguments to pass to curl
+#
+# Returns:
+#   Curl output
+#
+# Note: Internal function, not exported
+_curl_with_retry_wrapper() {
+    if command -v retry_github_api >/dev/null 2>&1; then
+        retry_github_api curl "$@"
+    else
+        _curl_with_timeout "$@"
+    fi
+}
+
+# ============================================================================
 # Go Checksum Fetching
 # ============================================================================
 
@@ -43,7 +95,7 @@ fetch_go_checksum() {
     local url="https://go.dev/dl/"
     local page_content
 
-    page_content=$(curl --connect-timeout 10 --max-time 30 -fsSL "$url")
+    page_content=$(_curl_with_timeout -fsSL "$url")
 
     # Try exact match first
     local filename="go${version}.linux-${arch}.tar.gz"
@@ -60,11 +112,7 @@ fetch_go_checksum() {
     fi
 
     # If exact match failed, try partial version resolution (e.g., "1.23" -> "1.23.0")
-    # Count dots to detect partial version
-    local dot_count
-    dot_count=$(echo "$version" | grep -o '\.' | wc -l)
-
-    if [ "$dot_count" -eq 1 ]; then
+    if _is_partial_version "$version"; then
         # Partial version like "1.23", find all matching versions
         local matching_versions
         matching_versions=$(echo "$page_content" | \
@@ -120,17 +168,10 @@ fetch_github_checksums_txt() {
 
     # Fetch the checksums file and extract the line for our file
     local checksum
-    if command -v retry_github_api >/dev/null 2>&1; then
-        checksum=$(retry_github_api curl -fsSL "$checksums_url" | \
-            grep -F "$filename" | \
-            awk '{print $1}' | \
-            head -1)
-    else
-        checksum=$(curl --connect-timeout 10 --max-time 30 -fsSL "$checksums_url" | \
-            grep -F "$filename" | \
-            awk '{print $1}' | \
-            head -1)
-    fi
+    checksum=$(_curl_with_retry_wrapper -fsSL "$checksums_url" | \
+        grep -F "$filename" | \
+        awk '{print $1}' | \
+        head -1)
 
     if [ -n "$checksum" ]; then
         echo "$checksum"
@@ -158,15 +199,9 @@ fetch_github_sha256_file() {
 
     # Fetch the .sha256 file and extract just the hash
     local checksum
-    if command -v retry_github_api >/dev/null 2>&1; then
-        checksum=$(retry_github_api curl -fsSL "$sha256_url" | \
-            awk '{print $1}' | \
-            head -1)
-    else
-        checksum=$(curl --connect-timeout 10 --max-time 30 -fsSL "$sha256_url" | \
-            awk '{print $1}' | \
-            head -1)
-    fi
+    checksum=$(_curl_with_retry_wrapper -fsSL "$sha256_url" | \
+        awk '{print $1}' | \
+        head -1)
 
     if [ -n "$checksum" ] && [[ "$checksum" =~ ^[a-fA-F0-9]{64}$ ]]; then
         echo "$checksum"
@@ -194,15 +229,9 @@ fetch_github_sha512_file() {
 
     # Fetch the .sha512 file and extract just the hash
     local checksum
-    if command -v retry_github_api >/dev/null 2>&1; then
-        checksum=$(retry_github_api curl -fsSL "$sha512_url" | \
-            awk '{print $1}' | \
-            head -1)
-    else
-        checksum=$(curl --connect-timeout 10 --max-time 30 -fsSL "$sha512_url" | \
-            awk '{print $1}' | \
-            head -1)
-    fi
+    checksum=$(_curl_with_retry_wrapper -fsSL "$sha512_url" | \
+        awk '{print $1}' | \
+        head -1)
 
     if [ -n "$checksum" ] && [[ "$checksum" =~ ^[a-fA-F0-9]{128}$ ]]; then
         echo "$checksum"
@@ -236,7 +265,7 @@ fetch_maven_sha1() {
 
     # Fetch the .sha1 file
     local checksum
-    checksum=$(curl --connect-timeout 10 --max-time 30 -fsSL "$sha1_url" | awk '{print $1}' | head -1)
+    checksum=$(_curl_with_timeout -fsSL "$sha1_url" | awk '{print $1}' | head -1)
 
     if [ -n "$checksum" ] && [[ "$checksum" =~ ^[a-fA-F0-9]{40}$ ]]; then
         echo "$checksum"
@@ -304,7 +333,7 @@ fetch_ruby_checksum() {
     local url="https://www.ruby-lang.org/en/downloads/"
     local page_content
 
-    page_content=$(curl --connect-timeout 10 --max-time 30 -fsSL "$url")
+    page_content=$(_curl_with_timeout -fsSL "$url")
 
     # Try exact match first
     local checksum
@@ -319,11 +348,7 @@ fetch_ruby_checksum() {
     fi
 
     # If exact match failed, try partial version resolution (e.g., "3.3" -> "3.3.10")
-    # Count dots to detect partial version
-    local dot_count
-    dot_count=$(echo "$version" | grep -o '\.' | wc -l)
-
-    if [ "$dot_count" -eq 1 ]; then
+    if _is_partial_version "$version"; then
         # Partial version like "3.3", find all matching versions
         local matching_versions
         matching_versions=$(echo "$page_content" | \
