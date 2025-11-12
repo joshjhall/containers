@@ -19,7 +19,8 @@
 #   - All downloads must provide expected checksum
 #   - Supports SHA1 (40 hex), SHA256 (64 hex), and SHA512 (128 hex) checksums
 #   - Files are verified before extraction or execution
-#   - Temporary files are cleaned up on verification failure
+#   - Temporary files are cleaned up on verification failure or interruption
+#   - Trap handlers ensure cleanup even if process is interrupted (SIGINT/SIGTERM)
 #
 # Note:
 #   This script should be sourced by feature scripts that download binaries.
@@ -58,6 +59,10 @@ download_and_verify() {
     local output_path="$3"
     local temp_file="${output_path}.tmp"
 
+    # Set up trap to clean up temp file on exit or interruption
+    # This ensures cleanup even if curl/verification is interrupted with Ctrl+C
+    trap 'rm -f "$temp_file"' EXIT INT TERM
+
     echo "→ Downloading: $(basename "$output_path")"
     echo "  URL: $url"
 
@@ -66,7 +71,7 @@ download_and_verify() {
     # -L follows redirects, -f fails silently on HTTP errors
     if ! curl -L -f --progress-bar -o "$temp_file" "$url"; then
         echo -e "${RED}✗ Download failed${NC}" >&2
-        rm -f "$temp_file"
+        # Trap will handle cleanup
         return 1
     fi
 
@@ -86,12 +91,16 @@ download_and_verify() {
         else
             echo "  Got:      $(sha512sum "$temp_file" | cut -d' ' -f1)" >&2
         fi
-        rm -f "$temp_file"
+        # Trap will handle cleanup
         return 1
     fi
 
     # Move verified file to final destination
     mv "$temp_file" "$output_path"
+
+    # Clear trap since file was successfully moved (no cleanup needed)
+    trap - EXIT INT TERM
+
     echo -e "${GREEN}✓ Download verified successfully${NC}"
     return 0
 }
@@ -120,8 +129,13 @@ download_and_extract() {
     local files_to_extract="${4:-}"
     local temp_tarball="/tmp/download-verify-$$.tar.gz"
 
+    # Set up trap to clean up temp tarball on exit or interruption
+    # Note: download_and_verify has its own trap for the .tmp file
+    trap 'rm -f "$temp_tarball"' EXIT INT TERM
+
     # Download and verify tarball
     if ! download_and_verify "$url" "$expected_sha256" "$temp_tarball"; then
+        # Trap will handle cleanup
         return 1
     fi
 
@@ -135,20 +149,24 @@ download_and_extract() {
         # Extract all files
         if ! tar -xzf "$temp_tarball" -C "$extract_dir"; then
             echo -e "${RED}✗ Extraction failed${NC}" >&2
-            rm -f "$temp_tarball"
+            # Trap will handle cleanup
             return 1
         fi
     else
         # Extract specific file(s)
         if ! tar -xzf "$temp_tarball" -C "$extract_dir" "$files_to_extract"; then
             echo -e "${RED}✗ Extraction failed${NC}" >&2
-            rm -f "$temp_tarball"
+            # Trap will handle cleanup
             return 1
         fi
     fi
 
-    # Cleanup
+    # Cleanup tarball after successful extraction
     rm -f "$temp_tarball"
+
+    # Clear trap since tarball was cleaned up
+    trap - EXIT INT TERM
+
     echo -e "${GREEN}✓ Extraction completed${NC}"
     return 0
 }
