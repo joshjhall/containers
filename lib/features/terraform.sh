@@ -486,7 +486,7 @@ fi
 log_feature_summary \
     --feature "Terraform" \
     --tools "terraform,terraform-docs,tflint,tfsec" \
-    --paths "~/.terraform.d,~/.tflint.d" \
+    --paths "$HOME/.terraform.d,$HOME/.tflint.d" \
     --env "TF_DATA_DIR,TF_LOG,TF_LOG_PATH" \
     --commands "terraform,tf,tfi,tfp,tfa,tfd,terraform-docs,tflint,tfsec,tf-workspace,tf-format-all,tf-validate-all" \
     --next-steps "Run 'test-terraform' to verify installation. Use 'tf init' to initialize, 'tf plan' to preview, 'tf apply' to deploy. Lint with 'tflint', security scan with 'tfsec'."

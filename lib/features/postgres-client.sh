@@ -283,7 +283,7 @@ log_command "Checking psql version" \
 log_feature_summary \
     --feature "PostgreSQL Client" \
     --tools "psql,pg_dump,pg_restore,pg_dumpall,createdb,dropdb,createuser,dropuser" \
-    --paths "~/.pgpass,~/.pg_service.conf" \
+    --paths "$HOME/.pgpass,~/.pg_service.conf" \
     --env "PGHOST,PGPORT,PGUSER,PGDATABASE,PGPASSWORD" \
     --commands "psql,pg_dump,pg_restore,pg-quick-connect,pg-backup,pg-restore-sql,pg-db-size,pg-kill-connections" \
     --next-steps "Run 'test-postgres' to verify installation. Connect with 'psql -h <host> -U <user> -d <db>' or use pg-quick-connect helper. Configure .pgpass for password-less auth."
