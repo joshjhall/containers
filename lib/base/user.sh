@@ -93,8 +93,10 @@ usermod -aG sudo "${USERNAME}"
 
 # Configure sudo access based on security policy
 if [ "${ENABLE_PASSWORDLESS_SUDO}" = "true" ]; then
-    echo "${USERNAME} ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/"${USERNAME}"
-    chmod 0440 /etc/sudoers.d/"${USERNAME}"
+    # Use install command for atomic file creation with correct permissions
+    # This prevents race condition where file briefly has wrong permissions
+    echo "${USERNAME} ALL=(ALL) NOPASSWD:ALL" | \
+        install -m 0440 -o root -g root /dev/stdin /etc/sudoers.d/"${USERNAME}"
     echo "⚠️  WARNING: Passwordless sudo enabled (development mode)"
     echo "    For production, use: --build-arg ENABLE_PASSWORDLESS_SUDO=false"
 else
