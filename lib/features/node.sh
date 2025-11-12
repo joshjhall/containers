@@ -629,6 +629,12 @@ log_message "Ensuring correct ownership of Node.js directories..."
 log_command "Final ownership fix for Node.js cache directories" \
     chown -R "${USER_UID}:${USER_GID}" "${NPM_CACHE_DIR}" "${YARN_CACHE_DIR}" "${PNPM_STORE_DIR}" "${NPM_GLOBAL_DIR}" || true
 
+# Export directory paths for feature summary (also defined in bashrc for runtime)
+export NPM_CACHE_DIR="/cache/npm"
+export YARN_CACHE_DIR="/cache/yarn"
+export PNPM_STORE_DIR="/cache/pnpm"
+export NPM_GLOBAL_DIR="/cache/npm-global"
+
 # Log feature summary
 log_feature_summary \
     --feature "Node.js" \

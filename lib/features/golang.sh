@@ -653,6 +653,11 @@ log_message "Verifying Go installation..."
 log_command "Checking Go version" \
     /usr/local/bin/go version || log_warning "Go not installed properly"
 
+# Export directory paths for feature summary (also defined in bashrc for runtime)
+export GOPATH="/cache/go"
+export GOCACHE="/cache/go-build"
+export GOMODCACHE="/cache/go-mod"
+
 # Log feature summary
 log_feature_summary \
     --feature "Go" \

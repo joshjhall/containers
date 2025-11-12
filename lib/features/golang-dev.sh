@@ -736,6 +736,11 @@ log_command "Checking staticcheck version" \
 log_command "Checking air version" \
     /usr/local/bin/air -v 2>/dev/null || log_warning "air not installed"
 
+# Export directory paths for feature summary (also defined in parent golang.sh)
+export GOPATH="/cache/go"
+export GOCACHE="/cache/go-build"
+export GOMODCACHE="/cache/go-mod"
+
 # Log feature summary
 log_feature_summary \
     --feature "Go Development Tools" \
