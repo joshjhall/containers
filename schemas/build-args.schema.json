@@ -88,7 +88,7 @@
       "type": "string",
       "description": "Node.js version to install (X, X.Y, or X.Y.Z format)",
       "default": "22.12.0",
-      "pattern": "^[0-9]+(\\.[ 0-9]+(\\.[ 0-9]+)?)?$"
+      "pattern": "^[0-9]+(\\.[0-9]+(\\.[0-9]+)?)?$"
     },
     "INCLUDE_RUST": {
       "type": "boolean",
@@ -152,7 +152,7 @@
       "type": "string",
       "description": "Java version to install (major version or X.Y.Z format)",
       "default": "21",
-      "pattern": "^[0-9]+(\\.[ 0-9]+(\\.[ 0-9]+)?)?$"
+      "pattern": "^[0-9]+(\\.[0-9]+(\\.[0-9]+)?)?$"
     },
     "INCLUDE_R": {
       "type": "boolean",
