@@ -1084,6 +1084,11 @@ EOF
 log_command "Setting test-dev-tools script permissions" \
     chmod +x /usr/local/bin/test-dev-tools
 
+# Export directory paths for feature summary (also defined in bashrc for runtime)
+export DEV_TOOLS_CACHE="/cache/dev-tools"
+export CAROOT="${DEV_TOOLS_CACHE}/mkcert-ca"
+export DIRENV_ALLOW_DIR="${DEV_TOOLS_CACHE}/direnv-allow"
+
 # Log feature summary
 log_feature_summary \
     --feature "Development Tools" \
