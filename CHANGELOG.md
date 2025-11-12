@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.8.3] - 2025-11-12
+
+### Fixed
+
+- Separate declaration and assignment in test-version-compatibility.sh
+
 ## [4.8.2] - 2025-11-12
 
 ### Fixed
@@ -480,6 +486,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add helpful error message when release is cancelled
 - Add VS Code workspace settings and improve gitignore
 
+[4.8.3]: https://github.com/joshjhall/containers/compare/v4.8.2...v4.8.3
 [4.8.2]: https://github.com/joshjhall/containers/compare/v4.8.1...v4.8.2
 [4.8.1]: https://github.com/joshjhall/containers/compare/v4.8.0...v4.8.1
 [4.8.0]: https://github.com/joshjhall/containers/compare/v4.7.0...v4.8.0
