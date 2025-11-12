@@ -511,6 +511,9 @@ log_command "Final ownership fix for cargo cache" \
     chown -R "${USER_UID}:${USER_GID}" "${CARGO_HOME}" "${RUSTUP_HOME}" || true
 
 # Log feature summary
+# Export directory paths for feature summary (also defined in parent rust.sh)
+export CARGO_HOME="/cache/cargo"
+export RUSTUP_HOME="/cache/rustup"
 log_feature_summary \
     --feature "Rust Development Tools" \
     --tools "rust-analyzer,clippy,rustfmt,cargo-watch,cargo-audit,cargo-outdated,cargo-edit,cargo-expand,cargo-flamegraph,cargo-nextest,cargo-deny,cargo-tarpaulin,tokio-console" \

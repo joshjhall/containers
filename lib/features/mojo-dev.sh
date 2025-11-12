@@ -380,6 +380,9 @@ log_command "Final ownership fix for cache directories" \
     chown -R "${USER_UID}:${USER_GID}" "${PIP_CACHE_DIR}" || true
 
 # Log feature summary
+# Export directory paths for feature summary (also defined in parent mojo.sh)
+export PIP_CACHE_DIR="/cache/pip"
+
 log_feature_summary \
     --feature "Mojo Development Tools" \
     --tools "lldb,numpy,matplotlib,jupyter,notebook,mojo-init" \
