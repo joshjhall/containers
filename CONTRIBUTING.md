@@ -246,6 +246,112 @@ cleanup() {
 trap cleanup EXIT
 ```
 
+### Exit Code Conventions
+
+All scripts MUST use consistent exit codes to enable proper error handling and testing.
+
+#### Standard Exit Codes
+
+| Exit Code | Meaning | When to Use |
+|-----------|---------|-------------|
+| `0` | Success | Script completed successfully |
+| `1` | General error | Any failure (file not found, command failed, etc.) |
+| `2` | Usage error | Invalid arguments or missing required parameters |
+
+**Note**: Feature scripts should typically **not** exit directly. Instead, they should `return 1` to allow the caller (Dockerfile RUN command) to handle the error.
+
+#### Feature Scripts Pattern
+
+Feature scripts are sourced during builds and should use `return` instead of `exit`:
+
+```bash
+#!/bin/bash
+# Feature script - uses return, not exit
+set -euo pipefail
+
+source /tmp/build-scripts/base/feature-header.sh
+source /tmp/build-scripts/base/logging.sh
+
+FEATURE_NAME="MyFeature"
+log_feature_start
+
+# ✅ Good: Use return for errors
+if ! download_and_verify "$url" "$checksum" "$dest"; then
+    log_error "Download failed"
+    return 1
+fi
+
+# ✅ Good: Let set -e handle command failures
+install_package some-package
+configure_feature
+
+log_feature_end
+# Script completes successfully (implicit return 0)
+```
+
+#### Standalone Scripts Pattern
+
+Standalone scripts in `bin/` can use `exit`:
+
+```bash
+#!/bin/bash
+# Standalone script - can use exit
+set -euo pipefail
+
+# Parse arguments
+if [ $# -lt 1 ]; then
+    echo "Usage: $0 <argument>" >&2
+    exit 2  # Usage error
+fi
+
+# Perform operation
+if ! perform_operation "$1"; then
+    echo "Operation failed" >&2
+    exit 1  # General error
+fi
+
+exit 0  # Explicit success (optional - implicit if reached end)
+```
+
+#### DO/DON'T
+
+**DO**:
+- ✅ Use `return 1` in feature scripts (they're sourced, not executed)
+- ✅ Use `exit 0` only when explicitly needed (e.g., early success)
+- ✅ Rely on `set -e` to automatically fail on command errors
+- ✅ Capture `$?` immediately after a command if needed: `cmd; status=$?`
+- ✅ Use exit code 2 for usage/argument errors in CLI scripts
+
+**DON'T**:
+- ❌ Don't use `exit` in feature scripts (use `return` instead)
+- ❌ Don't test exit codes indirectly: `cmd; if [ $? -eq 0 ]` (use `if cmd; then`)
+- ❌ Don't ignore exit codes: `cmd || true` (unless intentional)
+- ❌ Don't use exit codes > 2 (keep it simple and consistent)
+
+#### Testing Exit Codes
+
+When testing scripts, verify both success and failure paths:
+
+```bash
+# Test success case
+test_success_case() {
+    run_script arg1 arg2
+    assert_exit_code 0 "Should succeed with valid arguments"
+}
+
+# Test failure case
+test_failure_case() {
+    run_script invalid_arg
+    assert_exit_code 1 "Should fail with invalid argument"
+}
+
+# Test usage error
+test_missing_args() {
+    run_script
+    assert_exit_code 2 "Should return usage error when args missing"
+}
+```
+
 ---
 
 ## Testing Requirements
