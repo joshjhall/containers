@@ -33,6 +33,9 @@ This is a well-architected, mature container build system with strong security p
 - ✅ [LOW] Interrupted Build Cleanup - Added centralized trap system to feature-header.sh
 - ✅ [LOW] Entrypoint Path Traversal Validation - Improved with stricter checks
 - ✅ [MEDIUM] Version Output Not User-Friendly - Added --compare mode and fixed bugs
+- ✅ [LOW] .env.example Has Test Values - Replaced with placeholders
+- ✅ [LOW] Missing CHANGELOG Format Documentation - Created docs/CHANGELOG-FORMAT.md
+- ✅ [LOW] Feature Scripts Exit Code Conventions - Documented in CONTRIBUTING.md
 
 **In Progress:**
 - 🔄 None
@@ -910,29 +913,54 @@ Run 'check-build-logs.sh python' to review installation logs
 
 ## MINOR ISSUES
 
-### 1. [LOW] .env.example Has Test Values
-**File**: `.env.example` (lines 3-4, 11)
+### 1. ✅ [LOW] [COMPLETED] .env.example Has Test Values
+**Status**: FIXED (2025-11-12) - Commit: 7078b9b
 
-**Issue**: Should have placeholder text, not example values
+**Original Issue**: Example values looked like real values, not placeholders
 
-**Recommendation**:
+**Solution Implemented**:
+- ✅ Changed `GIT_SIGNING_KEY_ITEM` to use placeholder text
+- ✅ Changed `GIT_CONFIG_ITEM` to use placeholder text
+
+**Before**:
 ```bash
-# Instead of:
-GIT_SIGNING_KEY_ITEM="Git Authentication SSH Key"
-
-# Use:
-GIT_SIGNING_KEY_ITEM="your-git-signing-key-name"
+GIT_SIGNING_KEY_ITEM="Git Signing or Auth SSH Key"
+GIT_CONFIG_ITEM="Git Configuration"
 ```
+
+**After**:
+```bash
+GIT_SIGNING_KEY_ITEM="your-git-signing-key-item-name"
+GIT_CONFIG_ITEM="your-git-config-item-name"
+```
+
+**Files Changed**:
+- `.env.example` - Updated to use obvious placeholders
 
 ---
 
-### 2. [LOW] Missing CHANGELOG Format Documentation
-**Issue**: CHANGELOG.md auto-generated but format not documented
+### 2. ✅ [LOW] [COMPLETED] Missing CHANGELOG Format Documentation
+**Status**: FIXED (2025-11-12) - Commit: 594c12d
 
-**Recommendation**:
-- Add CHANGELOG-FORMAT.md
-- Explain cliff.toml configuration
-- Document commit message convention
+**Original Issue**: CHANGELOG.md auto-generated but format not documented
+
+**Solution Implemented**:
+- ✅ Created comprehensive `docs/CHANGELOG-FORMAT.md`
+- ✅ Documented conventional commit types and mapping
+- ✅ Explained cliff.toml configuration
+- ✅ Provided examples of good/bad commit messages
+- ✅ Documented breaking change notation
+
+**Content Includes**:
+- Commit type reference table with CHANGELOG section mapping
+- Examples for each commit type (feat, fix, docs, etc.)
+- Breaking change format (`!` and `BREAKING CHANGE:`)
+- How to generate CHANGELOG manually
+- DO/DON'T best practices
+- Links to specifications (Conventional Commits, Keep a Changelog, Semantic Versioning)
+
+**Files Changed**:
+- `docs/CHANGELOG-FORMAT.md` - New comprehensive documentation (188 lines)
 
 ---
 
@@ -959,13 +987,38 @@ previous cleanup effort. No changes needed.
 
 ---
 
-### 4. [LOW] Feature Scripts Don't Have Consistent Exit Codes
-**Issue**: Some use exit 1 directly, others use $?
+### 4. ✅ [LOW] [COMPLETED] Feature Scripts Don't Have Consistent Exit Codes
+**Status**: FIXED (2025-11-12) - Commit: 9834337
 
-**Recommendation**:
-- Document exit code conventions
-- Create wrapper for consistent handling
-- Test specific exit codes
+**Original Issue**: Inconsistent exit code usage, some use exit directly, others use $?
+
+**Solution Implemented**:
+- ✅ Documented exit code conventions in CONTRIBUTING.md
+- ✅ Defined standard exit codes (0, 1, 2)
+- ✅ Clarified return vs exit for feature scripts
+- ✅ Provided pattern examples for both feature and standalone scripts
+
+**Standard Exit Codes Defined**:
+- `0`: Success
+- `1`: General error
+- `2`: Usage error (invalid arguments)
+
+**Key Guidelines**:
+- Feature scripts use `return` (they're sourced, not executed)
+- Standalone scripts in `bin/` can use `exit`
+- Rely on `set -e` for automatic failures
+- Test exit codes directly, not with `$?`
+- Avoid exit codes > 2 (keep it simple)
+
+**Content Includes**:
+- Exit code reference table
+- Feature script pattern (return vs exit)
+- Standalone script pattern
+- DO/DON'T best practices
+- Testing exit codes examples
+
+**Files Changed**:
+- `CONTRIBUTING.md` - Added 106 lines of exit code documentation
 
 ---
 
