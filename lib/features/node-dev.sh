@@ -717,6 +717,9 @@ log_command "Final ownership fix for Node.js cache directories" \
     chown -R "${USER_UID}:${USER_GID}" "${NPM_CACHE_DIR}" "${NPM_GLOBAL_DIR}" || true
 
 # Log feature summary
+# Export cache directory paths for feature summary
+export NPM_CACHE_DIR="/cache/npm"
+
 log_feature_summary \
     --feature "Node.js Development Tools" \
     --tools "typescript,ts-node,tsx,jest,mocha,vitest,playwright,eslint,prettier,webpack,vite,esbuild,rollup,parcel,pm2,nodemon,concurrently,clinic,fastify-cli,jsdoc,typedoc,npm-check-updates" \

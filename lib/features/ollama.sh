@@ -373,6 +373,9 @@ log_message "Ollama setup complete"
 log_message "Model storage configured at: ${OLLAMA_MODELS_DIR}"
 
 # Log feature summary
+# Export models directory path for feature summary
+export OLLAMA_MODELS_DIR="/cache/ollama"
+
 log_feature_summary \
     --feature "Ollama" \
     --tools "ollama" \

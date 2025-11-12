@@ -455,6 +455,10 @@ log_command "Final ownership fix for Mojo cache directories" \
     chown -R "${USER_UID}:${USER_GID}" "${PIXI_CACHE}" "${MOJO_PROJECT}" || true
 
 # Log feature summary
+# Export cache directory paths for feature summary
+export PIXI_CACHE="/cache/pixi"
+export MOJO_PROJECT="/cache/mojo/project"
+
 log_feature_summary \
     --feature "Mojo" \
     --tools "mojo,pixi,mojo-lsp-server" \
