@@ -1,0 +1,265 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/joshjhall/containers/schemas/build-args.schema.json",
+  "title": "Container Build Arguments Schema",
+  "description": "JSON Schema for validating Docker build arguments used in the container build system",
+  "type": "object",
+  "properties": {
+    "BASE_IMAGE": {
+      "type": "string",
+      "description": "Base Docker image to use",
+      "default": "debian:trixie-slim",
+      "enum": [
+        "debian:trixie-slim",
+        "debian:bookworm-slim",
+        "debian:bullseye-slim"
+      ]
+    },
+    "PROJECT_PATH": {
+      "type": "string",
+      "description": "Path to project root relative to containers directory",
+      "default": "..",
+      "pattern": "^(\\.\\.|\\.)$"
+    },
+    "USERNAME": {
+      "type": "string",
+      "description": "Non-root username to create",
+      "default": "developer",
+      "pattern": "^[a-z][a-z0-9_-]{0,31}$"
+    },
+    "USER_UID": {
+      "type": "integer",
+      "description": "UID for the non-root user",
+      "default": 1000,
+      "minimum": 1000,
+      "maximum": 60000
+    },
+    "USER_GID": {
+      "type": "integer",
+      "description": "GID for the non-root user",
+      "default": 1000,
+      "minimum": 1000,
+      "maximum": 60000
+    },
+    "ENABLE_PASSWORDLESS_SUDO": {
+      "type": "boolean",
+      "description": "Enable passwordless sudo for the user (DISABLE IN PRODUCTION)",
+      "default": true
+    },
+    "PROJECT_NAME": {
+      "type": "string",
+      "description": "Project name for workspace directory",
+      "default": "project",
+      "pattern": "^[a-zA-Z0-9_-]+$"
+    },
+    "WORKING_DIR": {
+      "type": "string",
+      "description": "Working directory path inside container",
+      "default": "/workspace/project",
+      "pattern": "^/[a-zA-Z0-9/_-]+$"
+    },
+    "INCLUDE_PYTHON": {
+      "type": "boolean",
+      "description": "Install Python runtime",
+      "default": false
+    },
+    "INCLUDE_PYTHON_DEV": {
+      "type": "boolean",
+      "description": "Install Python development tools (requires INCLUDE_PYTHON=true)",
+      "default": false
+    },
+    "PYTHON_VERSION": {
+      "type": "string",
+      "description": "Python version to install (X.Y.Z format)",
+      "default": "3.14.0",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "INCLUDE_NODE": {
+      "type": "boolean",
+      "description": "Install Node.js runtime",
+      "default": false
+    },
+    "INCLUDE_NODE_DEV": {
+      "type": "boolean",
+      "description": "Install Node.js development tools (requires INCLUDE_NODE=true)",
+      "default": false
+    },
+    "NODE_VERSION": {
+      "type": "string",
+      "description": "Node.js version to install (X, X.Y, or X.Y.Z format)",
+      "default": "22.12.0",
+      "pattern": "^[0-9]+(\\.[ 0-9]+(\\.[ 0-9]+)?)?$"
+    },
+    "INCLUDE_RUST": {
+      "type": "boolean",
+      "description": "Install Rust toolchain",
+      "default": false
+    },
+    "INCLUDE_RUST_DEV": {
+      "type": "boolean",
+      "description": "Install Rust development tools (requires INCLUDE_RUST=true)",
+      "default": false
+    },
+    "RUST_VERSION": {
+      "type": "string",
+      "description": "Rust version to install (X.Y.Z format)",
+      "default": "1.83.0",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "INCLUDE_GOLANG": {
+      "type": "boolean",
+      "description": "Install Go toolchain",
+      "default": false
+    },
+    "INCLUDE_GOLANG_DEV": {
+      "type": "boolean",
+      "description": "Install Go development tools (requires INCLUDE_GOLANG=true)",
+      "default": false
+    },
+    "GO_VERSION": {
+      "type": "string",
+      "description": "Go version to install (X.Y or X.Y.Z format)",
+      "default": "1.23.4",
+      "pattern": "^[0-9]+\\.[0-9]+(\\.[ 0-9]+)?$"
+    },
+    "INCLUDE_RUBY": {
+      "type": "boolean",
+      "description": "Install Ruby runtime",
+      "default": false
+    },
+    "INCLUDE_RUBY_DEV": {
+      "type": "boolean",
+      "description": "Install Ruby development tools (requires INCLUDE_RUBY=true)",
+      "default": false
+    },
+    "RUBY_VERSION": {
+      "type": "string",
+      "description": "Ruby version to install (X.Y.Z format)",
+      "default": "3.4.1",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "INCLUDE_JAVA": {
+      "type": "boolean",
+      "description": "Install Java JDK",
+      "default": false
+    },
+    "INCLUDE_JAVA_DEV": {
+      "type": "boolean",
+      "description": "Install Java development tools (requires INCLUDE_JAVA=true)",
+      "default": false
+    },
+    "JAVA_VERSION": {
+      "type": "string",
+      "description": "Java version to install (major version or X.Y.Z format)",
+      "default": "21",
+      "pattern": "^[0-9]+(\\.[ 0-9]+(\\.[ 0-9]+)?)?$"
+    },
+    "INCLUDE_R": {
+      "type": "boolean",
+      "description": "Install R statistical computing environment",
+      "default": false
+    },
+    "INCLUDE_R_DEV": {
+      "type": "boolean",
+      "description": "Install R development tools (requires INCLUDE_R=true)",
+      "default": false
+    },
+    "R_VERSION": {
+      "type": "string",
+      "description": "R version to install (X.Y.Z format)",
+      "default": "4.4.2",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "INCLUDE_MOJO": {
+      "type": "boolean",
+      "description": "Install Mojo programming language",
+      "default": false
+    },
+    "INCLUDE_MOJO_DEV": {
+      "type": "boolean",
+      "description": "Install Mojo development tools (requires INCLUDE_MOJO=true)",
+      "default": false
+    },
+    "INCLUDE_DEV_TOOLS": {
+      "type": "boolean",
+      "description": "Install general development tools (git, make, etc.)",
+      "default": false
+    },
+    "INCLUDE_DOCKER": {
+      "type": "boolean",
+      "description": "Install Docker CLI tools",
+      "default": false
+    },
+    "INCLUDE_OP_CLI": {
+      "type": "boolean",
+      "description": "Install 1Password CLI",
+      "default": false
+    },
+    "INCLUDE_KUBERNETES": {
+      "type": "boolean",
+      "description": "Install Kubernetes tools (kubectl, k9s, helm)",
+      "default": false
+    },
+    "INCLUDE_TERRAFORM": {
+      "type": "boolean",
+      "description": "Install Terraform and related tools",
+      "default": false
+    },
+    "INCLUDE_AWS": {
+      "type": "boolean",
+      "description": "Install AWS CLI",
+      "default": false
+    },
+    "INCLUDE_GCLOUD": {
+      "type": "boolean",
+      "description": "Install Google Cloud SDK",
+      "default": false
+    },
+    "INCLUDE_CLOUDFLARE": {
+      "type": "boolean",
+      "description": "Install Cloudflare tools (Wrangler, requires INCLUDE_NODE=true)",
+      "default": false
+    },
+    "INCLUDE_POSTGRES_CLIENT": {
+      "type": "boolean",
+      "description": "Install PostgreSQL client tools",
+      "default": false
+    },
+    "INCLUDE_REDIS_CLIENT": {
+      "type": "boolean",
+      "description": "Install Redis client tools",
+      "default": false
+    },
+    "INCLUDE_SQLITE_CLIENT": {
+      "type": "boolean",
+      "description": "Install SQLite client tools",
+      "default": false
+    },
+    "INCLUDE_OLLAMA": {
+      "type": "boolean",
+      "description": "Install Ollama local LLM runtime",
+      "default": false
+    }
+  },
+  "additionalProperties": false,
+  "examples": [
+    {
+      "INCLUDE_PYTHON": true,
+      "INCLUDE_PYTHON_DEV": true,
+      "PYTHON_VERSION": "3.14.0",
+      "INCLUDE_NODE": true,
+      "INCLUDE_NODE_DEV": true,
+      "NODE_VERSION": "22.12.0",
+      "INCLUDE_DOCKER": true,
+      "INCLUDE_DEV_TOOLS": true
+    },
+    {
+      "INCLUDE_RUST": true,
+      "INCLUDE_RUST_DEV": true,
+      "RUST_VERSION": "1.83.0",
+      "INCLUDE_GOLANG": true,
+      "INCLUDE_GOLANG_DEV": true,
+      "GO_VERSION": "1.23.4"
+    }
+  ]
+}
