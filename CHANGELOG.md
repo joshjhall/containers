@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.8.5] - 2025-11-12
+
+### Fixed
+
+- Export DEV_TOOLS_CACHE, CAROOT, DIRENV_ALLOW_DIR variables
+- Export missing variables for log_feature_summary (batch 1)
+- Export missing variables for log_feature_summary (batch 2 - final)
+
 ## [4.8.4] - 2025-11-12
 
 ### Fixed
@@ -492,6 +500,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add helpful error message when release is cancelled
 - Add VS Code workspace settings and improve gitignore
 
+[4.8.5]: https://github.com/joshjhall/containers/compare/v4.8.4...v4.8.5
 [4.8.4]: https://github.com/joshjhall/containers/compare/v4.8.3...v4.8.4
 [4.8.3]: https://github.com/joshjhall/containers/compare/v4.8.2...v4.8.3
 [4.8.2]: https://github.com/joshjhall/containers/compare/v4.8.1...v4.8.2
