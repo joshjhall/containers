@@ -1,0 +1,141 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Version Compatibility Matrix",
+  "description": "Tracks tested version combinations and their compatibility status",
+  "type": "object",
+  "properties": {
+    "last_updated": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Last time this matrix was updated"
+    },
+    "base_images": {
+      "type": "array",
+      "description": "Tested Debian base image versions",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Base image name",
+            "examples": ["debian:11-slim", "debian:12-slim", "debian:13-slim"]
+          },
+          "status": {
+            "type": "string",
+            "enum": ["supported", "deprecated", "unsupported"],
+            "description": "Support status"
+          },
+          "tested": {
+            "type": "boolean",
+            "description": "Whether this base image is regularly tested"
+          }
+        },
+        "required": ["name", "status", "tested"]
+      }
+    },
+    "language_versions": {
+      "type": "object",
+      "description": "Tested versions for each language runtime",
+      "properties": {
+        "python": {
+          "$ref": "#/definitions/language_version_set"
+        },
+        "node": {
+          "$ref": "#/definitions/language_version_set"
+        },
+        "rust": {
+          "$ref": "#/definitions/language_version_set"
+        },
+        "go": {
+          "$ref": "#/definitions/language_version_set"
+        },
+        "ruby": {
+          "$ref": "#/definitions/language_version_set"
+        },
+        "java": {
+          "$ref": "#/definitions/language_version_set"
+        },
+        "r": {
+          "$ref": "#/definitions/language_version_set"
+        },
+        "mojo": {
+          "$ref": "#/definitions/language_version_set"
+        }
+      }
+    },
+    "tested_combinations": {
+      "type": "array",
+      "description": "Tested version combinations",
+      "items": {
+        "type": "object",
+        "properties": {
+          "variant": {
+            "type": "string",
+            "description": "Container variant tested"
+          },
+          "base_image": {
+            "type": "string",
+            "description": "Debian base image used"
+          },
+          "versions": {
+            "type": "object",
+            "description": "Version numbers for each component",
+            "properties": {
+              "python": {"type": "string"},
+              "node": {"type": "string"},
+              "rust": {"type": "string"},
+              "go": {"type": "string"},
+              "ruby": {"type": "string"},
+              "java": {"type": "string"},
+              "r": {"type": "string"},
+              "mojo": {"type": "string"}
+            }
+          },
+          "status": {
+            "type": "string",
+            "enum": ["passing", "failing", "untested"],
+            "description": "Test status for this combination"
+          },
+          "tested_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When this combination was last tested"
+          },
+          "notes": {
+            "type": "string",
+            "description": "Optional notes about compatibility issues"
+          }
+        },
+        "required": ["variant", "base_image", "versions", "status"]
+      }
+    }
+  },
+  "definitions": {
+    "language_version_set": {
+      "type": "object",
+      "properties": {
+        "current": {
+          "type": "string",
+          "description": "Current default version"
+        },
+        "supported": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "All supported versions"
+        },
+        "tested": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "Versions that have been tested"
+        },
+        "deprecated": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "Deprecated versions that still work but are not recommended"
+        }
+      },
+      "required": ["current", "supported", "tested"]
+    }
+  },
+  "required": ["last_updated", "base_images", "language_versions", "tested_combinations"]
+}

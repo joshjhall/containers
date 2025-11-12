@@ -38,6 +38,7 @@ This is a well-architected, mature container build system with strong security p
 - ✅ [LOW] Feature Scripts Exit Code Conventions - Documented in CONTRIBUTING.md
 - ✅ [LOW] Tests Don't Verify Error Messages - Added 26 error message verification tests
 - ✅ [MEDIUM] No Performance/Size Tests - Created build metrics tracking system
+- ✅ [MEDIUM] No Regression Tests for Version Updates - Created version compatibility testing system
 
 **In Progress:**
 - 🔄 None
@@ -857,18 +858,66 @@ Run 'check-build-logs.sh python' to review installation logs
 
 ## TESTING GAPS
 
-### 1. [MEDIUM] No Regression Tests for Version Updates
-**Issue**: auto-patch creates releases but no testing for compatibility
+### 1. ✅ [MEDIUM] [COMPLETED] No Regression Tests for Version Updates
+**Status**: IMPLEMENTED (2025-11-12)
 
-**Gap**:
-- Unit tests exist but don't test version changes
-- Integration tests run per-variant but not version ranges
-- No testing for "what if we update Python from X to Y"
+**Original Issue**: auto-patch creates releases but no testing for compatibility
 
-**Recommendation**:
-- Add version update compatibility matrix
-- Test feature combinations with different versions
-- Document tested version combinations
+**Solution Implemented**:
+- ✅ Created `bin/test-version-compatibility.sh` - Version compatibility testing tool
+- ✅ Created `version-compatibility-matrix.json` - Initial compatibility matrix
+- ✅ Created `schemas/version-compatibility.json` - JSON schema for matrix validation
+- ✅ 12 comprehensive unit tests (all passing)
+- ✅ Complete documentation in `docs/version-compatibility.md`
+
+**Features**:
+- Test any variant with custom language versions
+- Test version combinations (e.g., Python 3.13 + Node 20 + Rust 1.82)
+- Update compatibility matrix with test results
+- Track tested/supported/deprecated versions for each language
+- Support for all variants (minimal, python-dev, node-dev, rust-golang, cloud-ops, polyglot)
+- Dry-run mode to preview tests without building
+- CI/CD integration support
+
+**Compatibility Matrix Includes**:
+- Base image compatibility (Debian 11, 12, 13)
+- Language version tracking (Python, Node, Rust, Go, Ruby, Java, R, Mojo)
+- Tested combinations with pass/fail status
+- Timestamps and optional notes for each test
+- Current, supported, and deprecated version lists
+
+**Test Coverage**:
+- Build args generation for all variants
+- Version JSON generation (single/multiple languages)
+- Matrix entry format validation
+- Test counter functionality
+- Schema structure validation
+
+**Usage Examples**:
+```bash
+# Test specific version
+./bin/test-version-compatibility.sh --variant python-dev --python-version 3.13.0
+
+# Test combination
+./bin/test-version-compatibility.sh --variant polyglot --python-version 3.13.0 --node-version 20
+
+# Update matrix
+./bin/test-version-compatibility.sh --variant python-dev --python-version 3.14.0 --update-matrix
+```
+
+**Benefits**:
+- Prevents version update regressions
+- Documents tested version combinations
+- Enables confident version upgrades
+- Tracks compatibility across Debian versions
+- Provides data for version planning
+
+**Files Changed**:
+- `bin/test-version-compatibility.sh` - Testing tool
+- `version-compatibility-matrix.json` - Current compatibility data
+- `schemas/version-compatibility.json` - JSON schema
+- `tests/unit/bin/test-version-compatibility.sh` - Unit tests (12 tests)
+- `docs/version-compatibility.md` - Comprehensive documentation
 
 ---
 

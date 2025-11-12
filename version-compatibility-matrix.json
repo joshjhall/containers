@@ -1,0 +1,128 @@
+{
+  "last_updated": "2025-11-12T01:20:00Z",
+  "base_images": [
+    {
+      "name": "debian:11-slim",
+      "status": "supported",
+      "tested": true
+    },
+    {
+      "name": "debian:12-slim",
+      "status": "supported",
+      "tested": true
+    },
+    {
+      "name": "debian:13-slim",
+      "status": "supported",
+      "tested": true
+    }
+  ],
+  "language_versions": {
+    "python": {
+      "current": "3.14.0",
+      "supported": ["3.12.0", "3.13.0", "3.14.0"],
+      "tested": ["3.14.0"],
+      "deprecated": []
+    },
+    "node": {
+      "current": "22",
+      "supported": ["20", "22"],
+      "tested": ["22"],
+      "deprecated": []
+    },
+    "rust": {
+      "current": "1.91.0",
+      "supported": ["1.80.0", "1.81.0", "1.82.0", "1.91.0"],
+      "tested": ["1.91.0"],
+      "deprecated": []
+    },
+    "go": {
+      "current": "1.25.4",
+      "supported": ["1.23.0", "1.24.0", "1.25.4"],
+      "tested": ["1.25.4"],
+      "deprecated": []
+    },
+    "ruby": {
+      "current": "3.4.7",
+      "supported": ["3.3.0", "3.4.0", "3.4.7"],
+      "tested": ["3.4.7"],
+      "deprecated": []
+    },
+    "java": {
+      "current": "21",
+      "supported": ["17", "21"],
+      "tested": ["21"],
+      "deprecated": []
+    },
+    "r": {
+      "current": "4.5.2",
+      "supported": ["4.4.0", "4.5.0", "4.5.2"],
+      "tested": ["4.5.2"],
+      "deprecated": []
+    },
+    "mojo": {
+      "current": "25.4",
+      "supported": ["24.5.0", "25.4"],
+      "tested": ["25.4"],
+      "deprecated": []
+    }
+  },
+  "tested_combinations": [
+    {
+      "variant": "minimal",
+      "base_image": "debian:13-slim",
+      "versions": {},
+      "status": "passing",
+      "tested_at": "2025-11-12T01:00:00Z",
+      "notes": "Base system only, no language runtimes"
+    },
+    {
+      "variant": "python-dev",
+      "base_image": "debian:13-slim",
+      "versions": {
+        "python": "3.14.0"
+      },
+      "status": "passing",
+      "tested_at": "2025-11-12T01:00:00Z"
+    },
+    {
+      "variant": "node-dev",
+      "base_image": "debian:13-slim",
+      "versions": {
+        "node": "22"
+      },
+      "status": "passing",
+      "tested_at": "2025-11-12T01:00:00Z"
+    },
+    {
+      "variant": "rust-golang",
+      "base_image": "debian:13-slim",
+      "versions": {
+        "rust": "1.91.0",
+        "go": "1.25.4"
+      },
+      "status": "passing",
+      "tested_at": "2025-11-12T01:00:00Z"
+    },
+    {
+      "variant": "cloud-ops",
+      "base_image": "debian:13-slim",
+      "versions": {},
+      "status": "passing",
+      "tested_at": "2025-11-12T01:00:00Z",
+      "notes": "Docker, Kubernetes, Terraform, AWS CLI"
+    },
+    {
+      "variant": "polyglot",
+      "base_image": "debian:13-slim",
+      "versions": {
+        "python": "3.14.0",
+        "node": "22",
+        "rust": "1.91.0",
+        "go": "1.25.4"
+      },
+      "status": "passing",
+      "tested_at": "2025-11-12T01:00:00Z"
+    }
+  ]
+}
