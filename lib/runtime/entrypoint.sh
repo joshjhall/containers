@@ -47,16 +47,24 @@ fi
 # ============================================================================
 # Run first-time setup scripts if marker doesn't exist
 FIRST_RUN_MARKER="/home/${USERNAME}/.container-initialized"
+FIRST_STARTUP_DIR="/etc/container/first-startup"
 if [ ! -f "$FIRST_RUN_MARKER" ]; then
     echo "=== Running first-time setup scripts ==="
-    
+
     # Run all first-startup scripts
-    for script in /etc/container/first-startup/*.sh; do
+    for script in "${FIRST_STARTUP_DIR}"/*.sh; do
         # Skip if not a regular file or is a symlink
         if [ -f "$script" ] && [ ! -L "$script" ]; then
-            # Verify script is in expected directory (realpath resolves any path traversal)
+            # Strict path traversal validation:
+            # 1. Resolve canonical path (resolves symlinks and ..)
+            # 2. Verify resolved path is within expected directory
+            # 3. Verify no .. components remain (paranoid check)
+            # 4. Verify not the directory itself (must be file within)
             script_realpath=$(realpath "$script" 2>/dev/null || echo "")
-            if [ -n "$script_realpath" ] && [[ "$script_realpath" == /etc/container/first-startup/* ]]; then
+            if [ -n "$script_realpath" ] && \
+               [[ "$script_realpath" == "$FIRST_STARTUP_DIR"/* ]] && \
+               [[ ! "$script_realpath" =~ \.\. ]] && \
+               [ "$script_realpath" != "$FIRST_STARTUP_DIR" ]; then
                 echo "Running first-startup script: $(basename "$script")"
                 if [ "$RUNNING_AS_ROOT" = "true" ]; then
                     # Running as root, use su to switch to non-root user
@@ -70,7 +78,7 @@ if [ ! -f "$FIRST_RUN_MARKER" ]; then
             fi
         fi
     done
-    
+
     # Create marker file
     if [ "$RUNNING_AS_ROOT" = "true" ]; then
         su "${USERNAME}" -c "touch $FIRST_RUN_MARKER"
@@ -83,14 +91,22 @@ fi
 # Every-Boot Scripts
 # ============================================================================
 # Run startup scripts every time
-if [ -d "/etc/container/startup" ]; then
+STARTUP_DIR="/etc/container/startup"
+if [ -d "$STARTUP_DIR" ]; then
     echo "=== Running startup scripts ==="
-    for script in /etc/container/startup/*.sh; do
+    for script in "${STARTUP_DIR}"/*.sh; do
         # Skip if not a regular file or is a symlink
         if [ -f "$script" ] && [ ! -L "$script" ]; then
-            # Verify script is in expected directory (realpath resolves any path traversal)
+            # Strict path traversal validation:
+            # 1. Resolve canonical path (resolves symlinks and ..)
+            # 2. Verify resolved path is within expected directory
+            # 3. Verify no .. components remain (paranoid check)
+            # 4. Verify not the directory itself (must be file within)
             script_realpath=$(realpath "$script" 2>/dev/null || echo "")
-            if [ -n "$script_realpath" ] && [[ "$script_realpath" == /etc/container/startup/* ]]; then
+            if [ -n "$script_realpath" ] && \
+               [[ "$script_realpath" == "$STARTUP_DIR"/* ]] && \
+               [[ ! "$script_realpath" =~ \.\. ]] && \
+               [ "$script_realpath" != "$STARTUP_DIR" ]; then
                 echo "Running startup script: $(basename "$script")"
                 if [ "$RUNNING_AS_ROOT" = "true" ]; then
                     # Running as root, use su to switch to non-root user
