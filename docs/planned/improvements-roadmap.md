@@ -12,7 +12,14 @@ This is a well-architected, mature container build system with strong security p
 - ✅ [HIGH] Exposed Credentials in .env File - Fixed in commit 4c57276
 - ✅ [HIGH] Pre-Commit Hooks Enabled by Default - Fixed in commit 4c57276
 - ✅ [HIGH] No Rollback/Downgrade Strategy for Auto-Patch - Documented
+- ✅ [HIGH] Production Deployment Guide - Created docs/production-deployment.md
+- ✅ [HIGH] Build Failure Troubleshooting - Expanded docs/troubleshooting.md
 - ✅ [MEDIUM] Missing Health Check Scripts - Implemented
+- ✅ [MEDIUM] Environment Variables Documentation - Created docs/environment-variables.md
+- ✅ [MEDIUM] Feature Dependencies Documentation - Created docs/feature-dependencies.md
+- ✅ [MEDIUM] List Features Script - Created bin/list-features.sh
+- ✅ [MEDIUM] Feature Configuration Summaries - Added to all 28 features
+- ✅ [MEDIUM] Version Output Improvements - Added filtering to check-installed-versions.sh
 
 **In Progress:**
 - 🔄 None
@@ -215,22 +222,26 @@ curl -fsSL <url> | gpg --dearmor -o /etc/apt/keyrings/...
 
 ---
 
-### 4. [MEDIUM] No Feature Dependency Resolution
-**Issue**: Features can have implicit dependencies that aren't documented
+### 4. ✅ [MEDIUM] [COMPLETED] No Feature Dependency Resolution
+**Status**: DOCUMENTED (2025-11-11) - Commits: c5ee9ef
 
-**Example**: 
-- Node dev tools might depend on base dev tools
-- Some language features might need others
+**Original Issue**: Features can have implicit dependencies that aren't documented
 
-**Gap**:
-- No error if dependencies are missing
-- No documentation of feature prerequisites
-- Silent failures possible
+**Solution Implemented**:
+- ✅ Created comprehensive `docs/feature-dependencies.md` (378 lines)
+- ✅ Dependency graph showing all relationships
+- ✅ Reference tables for language dev tools and their requirements
+- ✅ Common build patterns and examples
+- ✅ Troubleshooting dependency errors
+- ✅ Feature compatibility matrix
+- ✅ Recommended combinations for different use cases
+- ✅ Scripting support with environment files
 
-**Recommendation**:
-- Create feature dependency graph/manifest
-- Add validation in Dockerfile or feature scripts
-- Document which features depend on others
+**Note**: Automatic resolution not yet implemented - dependencies must be manually specified.
+Future enhancement planned for automatic dependency resolution.
+
+**Files Changed**:
+- `docs/feature-dependencies.md` - New comprehensive dependency guide
 
 ---
 
@@ -349,55 +360,66 @@ sed 's/>Ruby //; s/<//'
 
 ## DOCUMENTATION GAPS
 
-### 1. [HIGH] Production Deployment Guide Missing
-**Issue**: Excellent dev documentation but limited production guidance
+### 1. ✅ [HIGH] [COMPLETED] Production Deployment Guide Missing
+**Status**: FIXED (2025-11-11) - Commits: 3eb6968
 
-**Gaps**:
-- No section on production security hardening beyond SECURITY.md
-- No deployment patterns for Kubernetes/Docker Swarm
-- No guidance on image scanning before production
-- No section on secrets management in production
+**Original Issue**: Excellent dev documentation but limited production guidance
 
-**Recommendation**:
-- Create `docs/production-deployment.md`
-- Include security checklist
-- Document best practices for each platform
-- Add image scanning integration examples
+**Solution Implemented**:
+- ✅ Created comprehensive `docs/production-deployment.md` (765 lines)
+- ✅ Security hardening section (disable sudo, non-root user, read-only filesystem, drop capabilities)
+- ✅ Image optimization guidance (minimize size, multi-stage builds, layer optimization)
+- ✅ Secrets management (Docker Secrets, Kubernetes, 1Password, Vault)
+- ✅ Health checks (Docker HEALTHCHECK, Kubernetes probes)
+- ✅ Logging and monitoring (structured logging, centralized logging, Prometheus metrics)
+- ✅ Resource limits (memory, CPU, disk I/O)
+- ✅ Platform-specific examples (Docker Compose, Kubernetes, AWS ECS/Fargate)
+- ✅ Production readiness checklist
 
----
-
-### 2. [HIGH] Troubleshooting Build Failures Not Comprehensive
-**File**: `docs/troubleshooting.md`
-
-**Issue**: Focuses on runtime but not build-time issues
-
-**Gaps**:
-- Checksum verification failures not documented
-- Network timeout handling not explained
-- Feature incompatibilities not covered
-- Cache mount permission issues (noted in Dockerfile but not docs)
-
-**Recommendation**:
-- Expand troubleshooting guide for build failures
-- Document cache mount issues clearly
-- Add step-by-step diagnosis procedure
-- Include common error messages and solutions
+**Files Changed**:
+- `docs/production-deployment.md` - New comprehensive guide
 
 ---
 
-### 3. [MEDIUM] Feature-Specific Environment Variables Not Documented
-**Issue**: Users must grep code to find env var options
+### 2. ✅ [HIGH] [COMPLETED] Troubleshooting Build Failures Not Comprehensive
+**Status**: FIXED (2025-11-11) - Commits: be41c23
 
-**Example**: 
-- RETRY_MAX_ATTEMPTS, RETRY_INITIAL_DELAY in retry-utils.sh
-- PIP_CACHE_DIR, POETRY_CACHE_DIR in python.sh
-- Not documented in one place
+**Original Issue**: Focused on runtime but not build-time issues
 
-**Recommendation**:
-- Create `docs/environment-variables.md`
-- Document all env vars by feature
-- Include default values and ranges
-- Explain impact on build and runtime
+**Solution Implemented**:
+- ✅ Expanded `docs/troubleshooting.md` with 243 new lines for build-time issues
+- ✅ Build vs Buildx differences and argument ordering
+- ✅ Script sourcing failures and debugging techniques
+- ✅ Feature script execution failures with isolation testing
+- ✅ Compilation failures for languages built from source
+- ✅ Cache invalidation issues and layer caching explanation
+- ✅ Multi-stage build failures and debugging
+- ✅ ARG vs ENV confusion with clear examples
+- ✅ Intermediate build failure analysis techniques
+- ✅ Feature testing without full builds
+
+**Files Changed**:
+- `docs/troubleshooting.md` - Expanded with comprehensive build-time section
+
+---
+
+### 3. ✅ [MEDIUM] [COMPLETED] Feature-Specific Environment Variables Not Documented
+**Status**: FIXED (2025-11-11) - Commits: c0dd71f
+
+**Original Issue**: Users must grep code to find env var options
+
+**Solution Implemented**:
+- ✅ Created comprehensive `docs/environment-variables.md` (369 lines)
+- ✅ Build arguments for all features and versions
+- ✅ User configuration variables
+- ✅ Cache directory paths for all languages (Python, Node, Rust, Go, Ruby, Java, R, Docker)
+- ✅ Feature-specific environment variables (Go, Java, Python, Ruby)
+- ✅ Runtime configuration options (GitHub token, retry config, logging)
+- ✅ Usage examples for build and runtime
+- ✅ Commands to inspect variables in containers
+
+**Files Changed**:
+- `docs/environment-variables.md` - New comprehensive reference
 
 ---
 
@@ -547,14 +569,24 @@ if [ -n "$script_realpath" ] && [[ "$script_realpath" == /etc/container/first-st
 
 ---
 
-### 2. [MEDIUM] No Way to List All Available Features
-**Issue**: Users must read Dockerfile or README to know features
+### 2. ✅ [MEDIUM] [COMPLETED] No Way to List All Available Features
+**Status**: IMPLEMENTED (2025-11-11) - Commits: ba17fea
 
-**Recommendation**:
-- Create `list-features.sh` script
-- Show feature descriptions and dependencies
-- Show which features are included in variant builds
-- Output JSON for CI/CD integration
+**Original Issue**: Users must read Dockerfile or README to know features
+
+**Solution Implemented**:
+- ✅ Created `bin/list-features.sh` script with comprehensive functionality
+- ✅ Table output (default) and JSON output (`--json` flag)
+- ✅ Filter by category (`--filter` flag): language, dev-tools, cloud, database, tool
+- ✅ Extracts descriptions and dependencies from feature scripts automatically
+- ✅ Auto-categorizes features
+- ✅ Shows build argument names and version arguments
+- ✅ 12 comprehensive unit tests, all passing
+- ✅ Shellcheck clean
+
+**Files Changed**:
+- `bin/list-features.sh` - New feature listing script
+- `tests/unit/bin/list-features.sh` - Unit tests
 
 ---
 
@@ -573,13 +605,47 @@ if [ -n "$script_realpath" ] && [[ "$script_realpath" == /etc/container/first-st
 
 ---
 
-### 4. [LOW] Feature Scripts Don't Show Configuration Summary
-**Issue**: After installation, no summary of what was configured
+### 4. ✅ [LOW] [COMPLETED] Feature Scripts Don't Show Configuration Summary
+**Status**: IMPLEMENTED (2025-11-11) - Commits: a644639, 4d001b6
 
-**Recommendation**:
-- Add feature summary output at end of each script
-- Show paths, versions, environment variables set
-- Include next steps for user
+**Original Issue**: After installation, no summary of what was configured
+
+**Solution Implemented**:
+- ✅ Created standardized `log_feature_summary()` function in `lib/base/logging.sh`
+- ✅ Updated ALL 28 feature scripts to use the new function
+- ✅ Shows: version, tools, commands, paths, environment variables, next steps
+- ✅ User-friendly output with clear formatting
+- ✅ 9 comprehensive unit tests for the summary function
+
+**Example Output**:
+```
+================================================================================
+Python Configuration Summary
+================================================================================
+
+Version:      3.14.0
+Tools:        pip, poetry, pipx
+Commands:     python3, pip, poetry, pipx
+
+Paths:
+  - /cache/pip
+  - /cache/poetry
+
+Environment Variables:
+  - PIP_CACHE_DIR=/cache/pip
+  - POETRY_CACHE_DIR=/cache/poetry
+
+Next Steps:
+  Run 'test-python' to verify installation
+
+Run 'check-build-logs.sh python' to review installation logs
+================================================================================
+```
+
+**Files Changed**:
+- `lib/base/logging.sh` - Added `log_feature_summary()` function
+- All 28 feature scripts in `lib/features/` - Updated to use summaries
+- `tests/unit/base/log-feature-summary.sh` - Unit tests
 
 ---
 
