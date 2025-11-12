@@ -567,9 +567,16 @@ DOCKER_TEST_EOF
 log_command "Setting test-docker script permissions" \
     chmod +x /usr/local/bin/test-docker
 
+# ============================================================================
+# Feature Summary
+# ============================================================================
+log_feature_summary \
+    --feature "Docker" \
+    --tools "docker,docker-compose,lazydocker,dive" \
+    --paths "${DOCKER_CONFIG},${DOCKER_CLI_PLUGINS_PATH}" \
+    --env "DOCKER_CONFIG,DOCKER_CLI_PLUGINS_PATH" \
+    --commands "docker,docker compose,lazydocker,dive" \
+    --next-steps "Run 'test-docker' to verify installation. Mount Docker socket with -v /var/run/docker.sock:/var/run/docker.sock to use Docker commands."
+
 # End logging
 log_feature_end
-
-echo ""
-echo "Run 'test-docker' to verify installation"
-echo "Run 'check-build-logs.sh docker-cli-tools' to review installation logs"

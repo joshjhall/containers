@@ -327,9 +327,129 @@ safe_eval() {
 }
 
 # Export functions for use in feature scripts
+# ============================================================================
+# log_feature_summary - Output user-friendly configuration summary
+#
+# This function should be called BEFORE log_feature_end() to provide users
+# with actionable information about what was installed and configured.
+#
+# Arguments:
+#   --feature <name>       Feature name (e.g., "Python")
+#   --version <version>    Version installed
+#   --tools <tool1,tool2>  Comma-separated list of tools
+#   --paths <path1,path2>  Comma-separated list of important paths
+#   --env <VAR1,VAR2>      Comma-separated list of environment variables
+#   --commands <cmd1,cmd2> Comma-separated list of available commands
+#   --next-steps <text>    Next steps for the user
+#
+# Example:
+#   log_feature_summary \
+#       --feature "Python" \
+#       --version "${PYTHON_VERSION}" \
+#       --tools "pip,poetry,pipx" \
+#       --paths "${PIP_CACHE_DIR},${POETRY_CACHE_DIR}" \
+#       --env "PIP_CACHE_DIR,POETRY_CACHE_DIR,PIPX_HOME" \
+#       --commands "python3,pip,poetry" \
+#       --next-steps "Run 'test-python' to verify installation"
+# ============================================================================
+log_feature_summary() {
+    local feature="" version="" tools="" paths="" env_vars="" commands="" next_steps=""
+
+    # Parse arguments
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --feature)
+                feature="$2"
+                shift 2
+                ;;
+            --version)
+                version="$2"
+                shift 2
+                ;;
+            --tools)
+                tools="$2"
+                shift 2
+                ;;
+            --paths)
+                paths="$2"
+                shift 2
+                ;;
+            --env)
+                env_vars="$2"
+                shift 2
+                ;;
+            --commands)
+                commands="$2"
+                shift 2
+                ;;
+            --next-steps)
+                next_steps="$2"
+                shift 2
+                ;;
+            *)
+                log_warning "Unknown argument to log_feature_summary: $1"
+                shift
+                ;;
+        esac
+    done
+
+    # Generate summary output
+    {
+        echo ""
+        echo "================================================================================"
+        echo "${feature} Configuration Summary"
+        echo "================================================================================"
+        echo ""
+
+        if [ -n "$version" ]; then
+            echo "Version:      $version"
+        fi
+
+        if [ -n "$tools" ]; then
+            echo "Tools:        ${tools//,/, }"
+        fi
+
+        if [ -n "$commands" ]; then
+            echo "Commands:     ${commands//,/, }"
+        fi
+
+        if [ -n "$paths" ]; then
+            echo ""
+            echo "Paths:"
+            IFS=',' read -ra PATH_ARRAY <<< "$paths"
+            for path in "${PATH_ARRAY[@]}"; do
+                echo "  - $path"
+            done
+        fi
+
+        if [ -n "$env_vars" ]; then
+            echo ""
+            echo "Environment Variables:"
+            IFS=',' read -ra ENV_ARRAY <<< "$env_vars"
+            for var in "${ENV_ARRAY[@]}"; do
+                # Try to get the value
+                value="${!var:-<not set>}"
+                echo "  - $var=$value"
+            done
+        fi
+
+        if [ -n "$next_steps" ]; then
+            echo ""
+            echo "Next Steps:"
+            echo "  $next_steps"
+        fi
+
+        echo ""
+        echo "Run 'check-build-logs.sh $(echo "$feature" | tr '[:upper:]' '[:lower:]')' to review installation logs"
+        echo "================================================================================"
+        echo ""
+    } | tee -a "$CURRENT_LOG_FILE"
+}
+
 export -f log_feature_start
 export -f log_command
 export -f log_feature_end
+export -f log_feature_summary
 export -f log_message
 export -f log_error
 export -f log_warning

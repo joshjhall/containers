@@ -431,10 +431,17 @@ log_message "Ensuring correct ownership of Python directories..."
 log_command "Final ownership fix for Python cache directories" \
     chown -R "${USER_UID}":"${USER_GID}" "${PIP_CACHE_DIR}" "${PIPX_HOME}" "${POETRY_CACHE_DIR}" || true
 
+# ============================================================================
+# Feature Summary
+# ============================================================================
+log_feature_summary \
+    --feature "Python" \
+    --version "${PYTHON_VERSION}" \
+    --tools "pip,poetry,pipx" \
+    --paths "${PIP_CACHE_DIR},${POETRY_CACHE_DIR},${PIPX_HOME},${PIPX_BIN_DIR}" \
+    --env "PIP_CACHE_DIR,POETRY_CACHE_DIR,PIPX_HOME,PIPX_BIN_DIR,PYTHON_VERSION" \
+    --commands "python3,pip,poetry,pipx" \
+    --next-steps "Run 'test-python' to verify installation"
+
 # End logging
 log_feature_end
-
-echo ""
-echo "Python is installed directly without pyenv"
-echo "Run 'test-python' to verify Python installation"
-echo "Run 'check-build-logs.sh python' to review installation logs"
