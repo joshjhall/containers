@@ -629,6 +629,16 @@ log_message "Ensuring correct ownership of Node.js directories..."
 log_command "Final ownership fix for Node.js cache directories" \
     chown -R "${USER_UID}:${USER_GID}" "${NPM_CACHE_DIR}" "${YARN_CACHE_DIR}" "${PNPM_STORE_DIR}" "${NPM_GLOBAL_DIR}" || true
 
+# Log feature summary
+log_feature_summary \
+    --feature "Node.js" \
+    --version "${NODE_VERSION}" \
+    --tools "node,npm,yarn,pnpm,corepack" \
+    --paths "${NPM_CACHE_DIR},${YARN_CACHE_DIR},${PNPM_STORE_DIR},${NPM_GLOBAL_DIR}" \
+    --env "NPM_CACHE_DIR,YARN_CACHE_DIR,PNPM_STORE_DIR,NPM_GLOBAL_DIR,npm_config_cache,npm_config_prefix" \
+    --commands "node,npm,yarn,pnpm,ni,nrun,yi,yrun,pi,prun,node-version,node-project-init,node-deps-check" \
+    --next-steps "Run 'test-node' to verify installation. Use 'node-project-init <name> [npm|yarn|pnpm]' to create projects. Dependencies auto-install on container start."
+
 # End logging
 log_feature_end
 

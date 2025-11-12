@@ -626,6 +626,15 @@ if command -v helm &> /dev/null; then
         helm version --short || log_warning "helm version check failed"
 fi
 
+# Log feature summary
+log_feature_summary \
+    --feature "Kubernetes Tools" \
+    --tools "kubectl,k9s,helm,krew" \
+    --paths "~/.kube,~/.krew" \
+    --env "KUBECONFIG,KUBECTL_EXTERNAL_DIFF" \
+    --commands "kubectl,k9s,helm,krew,k,kgp,kgs,kgd,kaf,k-logs,k-shell,k-events,k-resources" \
+    --next-steps "Run 'test-kubernetes' to verify installation. Link kubeconfig or use 'kubectl config' to set up clusters. Install plugins with 'kubectl krew install <plugin>'."
+
 # End logging
 log_feature_end
 

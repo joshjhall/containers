@@ -716,6 +716,15 @@ log_message "Ensuring correct ownership of Node.js directories..."
 log_command "Final ownership fix for Node.js cache directories" \
     chown -R "${USER_UID}:${USER_GID}" "${NPM_CACHE_DIR}" "${NPM_GLOBAL_DIR}" || true
 
+# Log feature summary
+log_feature_summary \
+    --feature "Node.js Development Tools" \
+    --tools "typescript,ts-node,tsx,jest,mocha,vitest,playwright,eslint,prettier,webpack,vite,esbuild,rollup,parcel,pm2,nodemon,concurrently,clinic,fastify-cli,jsdoc,typedoc,npm-check-updates" \
+    --paths "${NPM_CACHE_DIR},${NPM_GLOBAL_DIR}" \
+    --env "NPM_CONFIG_CACHE,NPM_CONFIG_PREFIX" \
+    --commands "tsc,ts-node,tsx,jest,mocha,vitest,eslint,prettier,webpack,vite,pm2,nodemon,node-new-project,node-test-all,node-clean" \
+    --next-steps "Run 'test-node-dev' to check installed tools. Use 'node-new-project <name> [api|cli|lib|web]' to scaffold projects with TypeScript, testing, and linting."
+
 # End logging
 log_feature_end
 

@@ -644,6 +644,15 @@ log_message "Ensuring correct ownership of R directories..."
 log_command "Final ownership fix for R cache directories" \
     chown -R "${USER_UID}":"${USER_GID}" "${R_LIBS_USER}" "${R_LIBS_SITE}" || true
 
+# Log feature summary
+log_feature_summary \
+    --feature "R Development Tools" \
+    --tools "devtools,testthat,roxygen2,pkgdown,lintr,styler,rmarkdown,knitr,tidyverse,data.table,ggplot2,shiny" \
+    --paths "${R_LIBS_USER},${R_LIBS_SITE}" \
+    --env "R_LIBS_USER,R_LIBS_SITE" \
+    --commands "R,Rscript,r-package-init,r-test,r-document,r-check,r-lint" \
+    --next-steps "Run 'test-r-dev' to check installed tools. Use 'r-package-init <name>' to create packages. Run 'r-test' for tests, 'r-document' for docs, 'r-lint' for code style."
+
 # End logging
 log_feature_end
 

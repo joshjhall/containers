@@ -353,6 +353,15 @@ log_command "Checking gcloud version" \
 log_command "Listing installed components" \
     gcloud components list --format="table(name,state.name)" || log_warning "Failed to list components"
 
+# Log feature summary
+log_feature_summary \
+    --feature "Google Cloud SDK" \
+    --tools "gcloud,kubectl,gke-gcloud-auth-plugin" \
+    --paths "~/.config/gcloud" \
+    --env "CLOUDSDK_PYTHON,GOOGLE_APPLICATION_CREDENTIALS" \
+    --commands "gcloud,kubectl,gc,gcauth,gcproj,gcloud-project,gcloud-region,gcssh-quick" \
+    --next-steps "Run 'test-gcloud' to verify installation. Authenticate with 'gcloud auth login'."
+
 # End logging
 log_feature_end
 

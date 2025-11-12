@@ -1084,6 +1084,15 @@ EOF
 log_command "Setting test-dev-tools script permissions" \
     chmod +x /usr/local/bin/test-dev-tools
 
+# Log feature summary
+log_feature_summary \
+    --feature "Development Tools" \
+    --tools "gh,lazygit,delta,act,git-cliff,glab,duf,entr,fzf,direnv,mkcert,jq,ripgrep,fd,bat,eza/exa,htop,ncdu,claude" \
+    --paths "${DEV_TOOLS_CACHE},/opt/fzf,${CAROOT}" \
+    --env "DEV_TOOLS_CACHE,CAROOT,DIRENV_ALLOW_DIR" \
+    --commands "gh,lazygit,delta,act,git-cliff,glab,duf,entr,fzf,direnv,mkcert,jq,rg,fd,bat,eza/exa,htop,ncdu,claude" \
+    --next-steps "Run 'test-dev-tools' to verify installation. Many modern CLI replacements are aliased (ls=eza, cat=bat, grep=rg, find=fd)."
+
 # End logging
 log_feature_end
 

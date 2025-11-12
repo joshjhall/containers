@@ -379,6 +379,15 @@ PIP_CACHE_DIR="${PIP_CACHE_DIR:-/cache/pip}"
 log_command "Final ownership fix for cache directories" \
     chown -R "${USER_UID}:${USER_GID}" "${PIP_CACHE_DIR}" || true
 
+# Log feature summary
+log_feature_summary \
+    --feature "Mojo Development Tools" \
+    --tools "lldb,numpy,matplotlib,jupyter,notebook,mojo-init" \
+    --paths "${PIP_CACHE_DIR}" \
+    --env "PIP_CACHE_DIR" \
+    --commands "lldb,mojo-debug,mojo-jupyter,mojo-init,mjr,mjb,mjt,mjf" \
+    --next-steps "Run 'test-mojo-dev' to check installed tools. Use 'mojo-init <project-name>' to create new projects. Use 'mojo-jupyter' to start Jupyter with Mojo kernel."
+
 # End logging
 log_feature_end
 

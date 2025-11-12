@@ -653,6 +653,16 @@ log_message "Verifying Go installation..."
 log_command "Checking Go version" \
     /usr/local/bin/go version || log_warning "Go not installed properly"
 
+# Log feature summary
+log_feature_summary \
+    --feature "Go" \
+    --version "${GO_VERSION}" \
+    --tools "go,gofmt" \
+    --paths "${GOPATH},${GOCACHE},${GOMODCACHE}" \
+    --env "GOROOT,GOPATH,GOCACHE,GOMODCACHE,GO111MODULE,GOPROXY,GOSUMDB" \
+    --commands "go,gofmt,gob,gor,got,gom,gomt,go-new,go-bench,go-cover" \
+    --next-steps "Run 'test-go' to verify installation. Use 'go-new <module-name> [cli|lib|api]' to create new projects."
+
 # End logging
 log_feature_end
 

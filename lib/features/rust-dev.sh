@@ -510,6 +510,15 @@ log_message "Ensuring correct ownership of Rust directories..."
 log_command "Final ownership fix for cargo cache" \
     chown -R "${USER_UID}:${USER_GID}" "${CARGO_HOME}" "${RUSTUP_HOME}" || true
 
+# Log feature summary
+log_feature_summary \
+    --feature "Rust Development Tools" \
+    --tools "rust-analyzer,clippy,rustfmt,cargo-watch,cargo-audit,cargo-outdated,cargo-edit,cargo-expand,cargo-flamegraph,cargo-nextest,cargo-deny,cargo-tarpaulin,tokio-console" \
+    --paths "${CARGO_HOME},${RUSTUP_HOME}" \
+    --env "CARGO_HOME,RUSTUP_HOME" \
+    --commands "rust-analyzer,cargo-clippy,cargo-fmt,cargo-watch,cargo-audit,cargo-outdated,cargo-nextest,rust-lint-all,rust-security-check,rust-watch" \
+    --next-steps "Run 'test-rust-dev' to check installed tools. Use 'cargo clippy' for linting, 'cargo fmt' for formatting, 'cargo watch' for hot reload, 'cargo nextest run' for fast tests."
+
 # End logging
 log_feature_end
 

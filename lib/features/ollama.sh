@@ -372,6 +372,15 @@ fi
 log_message "Ollama setup complete"
 log_message "Model storage configured at: ${OLLAMA_MODELS_DIR}"
 
+# Log feature summary
+log_feature_summary \
+    --feature "Ollama" \
+    --tools "ollama" \
+    --paths "${OLLAMA_MODELS_DIR}" \
+    --env "OLLAMA_MODELS,OLLAMA_HOST,OLLAMA_ORIGINS" \
+    --commands "ollama,start-ollama,stop-ollama,ollama-status,ollama-pull-defaults,ollama-chat" \
+    --next-steps "Run 'test-ollama' to verify installation. Use 'start-ollama' to start service, 'ollama-pull-defaults' for starter models, 'ollama run <model>' to interact."
+
 # End logging
 log_feature_end
 

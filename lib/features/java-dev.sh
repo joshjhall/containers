@@ -852,6 +852,15 @@ log_command "Checking Maven Daemon" \
 log_command "Checking SpotBugs" \
     /usr/local/bin/spotbugs -version || log_warning "SpotBugs not installed"
 
+# Log feature summary
+log_feature_summary \
+    --feature "Java Development Tools" \
+    --tools "spring,jbang,mvnd,google-java-format,jreleaser" \
+    --paths "${TOOLS_DIR},${JARS_DIR},${TEMPLATES_DIR}" \
+    --env "SPRING_VERSION,JMH_VERSION" \
+    --commands "spring,jbang,mvnd,google-java-format,spring-init-web,spring-init-api,jbang-init,java-format-all,java-quality-check" \
+    --next-steps "Run 'test-java-dev' to check installed tools. Run 'java-dev-help' for available commands. Use spring-init-web/api to create projects."
+
 # End logging
 log_feature_end
 

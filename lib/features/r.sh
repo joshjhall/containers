@@ -461,6 +461,16 @@ log_message "Ensuring correct ownership of R directories..."
 log_command "Final ownership fix for R cache directories" \
     chown -R "${USER_UID}":"${USER_GID}" "${R_CACHE_DIR}" || true
 
+# Log feature summary
+log_feature_summary \
+    --feature "R" \
+    --version "${R_VERSION}" \
+    --tools "R,Rscript" \
+    --paths "${R_LIBS_USER},${R_LIBS_SITE},${R_CACHE_DIR}" \
+    --env "R_LIBS_USER,R_LIBS_SITE,R_CACHE_DIR,R_VERSION" \
+    --commands "R,Rscript,r-version,r-install-packages,r-update-packages,r-clean-cache" \
+    --next-steps "Run 'test-r' to verify installation. Use 'R' for interactive console, 'Rscript' for scripts. Install packages with 'r-install-packages <pkg1> <pkg2>'."
+
 # End logging
 log_feature_end
 
