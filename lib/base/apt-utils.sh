@@ -141,11 +141,12 @@ apt_retry() {
     local attempt=1
     local delay="$APT_RETRY_DELAY"
     local cmd="$*"
-    
+
     while [ $attempt -le "$APT_MAX_RETRIES" ]; do
         echo "Running: $cmd (attempt $attempt/$APT_MAX_RETRIES)..."
 
-        if timeout "$APT_TIMEOUT" "$cmd"; then
+        # shellcheck disable=SC2086
+        if timeout "$APT_TIMEOUT" $cmd; then
             echo "✓ Command succeeded: $cmd"
             return 0
         fi
