@@ -853,6 +853,11 @@ log_command "Checking SpotBugs" \
     /usr/local/bin/spotbugs -version || log_warning "SpotBugs not installed"
 
 # Log feature summary
+# Export directory paths for feature summary
+export TOOLS_DIR="/opt/java-tools"
+export JARS_DIR="${TOOLS_DIR}/jars"
+export TEMPLATES_DIR="/etc/java-dev-templates"
+
 log_feature_summary \
     --feature "Java Development Tools" \
     --tools "spring,jbang,mvnd,google-java-format,jreleaser" \

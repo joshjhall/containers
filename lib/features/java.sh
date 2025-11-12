@@ -586,6 +586,10 @@ log_command "Final ownership fix for Java cache directories" \
     chown -R "${USER_UID}:${USER_GID}" "${MAVEN_CACHE_DIR}" "${GRADLE_HOME_DIR}" || true
 
 # Log feature summary
+# Export cache directory paths for feature summary
+export MAVEN_CACHE_DIR="/cache/maven"
+export GRADLE_HOME_DIR="/cache/gradle"
+
 log_feature_summary \
     --feature "Java" \
     --version "${JAVA_VERSION}" \

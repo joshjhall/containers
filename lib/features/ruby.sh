@@ -338,6 +338,10 @@ log_command "Final ownership fix for Ruby cache directories" \
     chown -R "${USER_UID}":"${USER_GID}" "${GEM_HOME_DIR}" "${BUNDLE_PATH_DIR}" || true
 
 # Log feature summary
+# Export cache directory paths for feature summary
+export GEM_HOME_DIR="/cache/ruby/gems"
+export BUNDLE_PATH_DIR="/cache/ruby/bundle"
+
 log_feature_summary \
     --feature "Ruby" \
     --version "${RUBY_VERSION}" \

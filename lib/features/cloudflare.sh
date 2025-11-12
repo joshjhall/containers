@@ -496,10 +496,13 @@ if command -v cloudflared &> /dev/null; then
 fi
 
 # Log feature summary
+# Set NPM_GLOBAL_DIR for paths (also set in node.sh if Node is installed)
+export NPM_GLOBAL_DIR="${NPM_GLOBAL_DIR:-/cache/npm-global}"
+
 log_feature_summary \
     --feature "Cloudflare Tools" \
     --tools "wrangler,cloudflared" \
-    --paths "${NPM_GLOBAL_DIR},~/.wrangler,~/.cloudflared" \
+    --paths "${NPM_GLOBAL_DIR},$HOME/.wrangler,$HOME/.cloudflared" \
     --env "CLOUDFLARE_ACCOUNT_ID,CLOUDFLARE_API_TOKEN,NPM_CACHE_DIR,NPM_PREFIX" \
     --commands "wrangler,cloudflared,wr,wrd,wrdeploy,cft,tunnel-quick,wrangler-init" \
     --next-steps "Run 'test-cloudflare' to verify installation. Authenticate with 'wrangler login'."

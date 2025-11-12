@@ -570,6 +570,11 @@ log_command "Setting test-docker script permissions" \
 # ============================================================================
 # Feature Summary
 # ============================================================================
+
+# Set variables for feature summary (these are also set in bashrc for runtime)
+export DOCKER_CONFIG="${DOCKER_CONFIG:-/cache/docker}"
+export DOCKER_CLI_PLUGINS_PATH="/cache/docker/cli-plugins"
+
 log_feature_summary \
     --feature "Docker" \
     --tools "docker,docker-compose,lazydocker,dive" \
