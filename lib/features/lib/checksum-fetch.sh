@@ -43,7 +43,7 @@ fetch_go_checksum() {
     local url="https://go.dev/dl/"
     local page_content
 
-    page_content=$(curl -fsSL "$url")
+    page_content=$(curl --connect-timeout 10 --max-time 30 -fsSL "$url")
 
     # Try exact match first
     local filename="go${version}.linux-${arch}.tar.gz"
@@ -126,7 +126,7 @@ fetch_github_checksums_txt() {
             awk '{print $1}' | \
             head -1)
     else
-        checksum=$(curl -fsSL "$checksums_url" | \
+        checksum=$(curl --connect-timeout 10 --max-time 30 -fsSL "$checksums_url" | \
             grep -F "$filename" | \
             awk '{print $1}' | \
             head -1)
@@ -163,7 +163,7 @@ fetch_github_sha256_file() {
             awk '{print $1}' | \
             head -1)
     else
-        checksum=$(curl -fsSL "$sha256_url" | \
+        checksum=$(curl --connect-timeout 10 --max-time 30 -fsSL "$sha256_url" | \
             awk '{print $1}' | \
             head -1)
     fi
@@ -199,7 +199,7 @@ fetch_github_sha512_file() {
             awk '{print $1}' | \
             head -1)
     else
-        checksum=$(curl -fsSL "$sha512_url" | \
+        checksum=$(curl --connect-timeout 10 --max-time 30 -fsSL "$sha512_url" | \
             awk '{print $1}' | \
             head -1)
     fi
@@ -236,7 +236,7 @@ fetch_maven_sha1() {
 
     # Fetch the .sha1 file
     local checksum
-    checksum=$(curl -fsSL "$sha1_url" | awk '{print $1}' | head -1)
+    checksum=$(curl --connect-timeout 10 --max-time 30 -fsSL "$sha1_url" | awk '{print $1}' | head -1)
 
     if [ -n "$checksum" ] && [[ "$checksum" =~ ^[a-fA-F0-9]{40}$ ]]; then
         echo "$checksum"
@@ -269,7 +269,7 @@ calculate_checksum_sha256() {
     local file_url="$1"
 
     local checksum
-    checksum=$(curl -fsSL "$file_url" | sha256sum | awk '{print $1}')
+    checksum=$(curl --connect-timeout 10 --max-time 300 -fsSL "$file_url" | sha256sum | awk '{print $1}')
 
     if [ -n "$checksum" ] && [[ "$checksum" =~ ^[a-fA-F0-9]{64}$ ]]; then
         echo "$checksum"
@@ -304,7 +304,7 @@ fetch_ruby_checksum() {
     local url="https://www.ruby-lang.org/en/downloads/"
     local page_content
 
-    page_content=$(curl -fsSL "$url")
+    page_content=$(curl --connect-timeout 10 --max-time 30 -fsSL "$url")
 
     # Try exact match first
     local checksum
