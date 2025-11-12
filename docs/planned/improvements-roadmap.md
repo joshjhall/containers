@@ -36,6 +36,7 @@ This is a well-architected, mature container build system with strong security p
 - ✅ [LOW] .env.example Has Test Values - Replaced with placeholders
 - ✅ [LOW] Missing CHANGELOG Format Documentation - Created docs/CHANGELOG-FORMAT.md
 - ✅ [LOW] Feature Scripts Exit Code Conventions - Documented in CONTRIBUTING.md
+- ✅ [LOW] Tests Don't Verify Error Messages - Added 26 error message verification tests
 
 **In Progress:**
 - 🔄 None
@@ -901,13 +902,35 @@ Run 'check-build-logs.sh python' to review installation logs
 
 ---
 
-### 4. [LOW] Tests Don't Verify Error Messages
-**Issue**: Feature scripts log errors but tests don't verify messages
+### 4. ✅ [LOW] [COMPLETED] Tests Don't Verify Error Messages
+**Status**: IMPLEMENTED (2025-11-12)
 
-**Recommendation**:
-- Add test for malformed inputs (bad versions, etc.)
-- Verify error messages are helpful
-- Test error paths in installation scripts
+**Original Issue**: Feature scripts log errors but tests don't verify messages
+
+**Solution Implemented**:
+- ✅ Created comprehensive `tests/unit/base/version-validation-errors.sh` (26 tests)
+- ✅ Tests verify error messages for malformed version inputs
+- ✅ Tests verify empty version strings produce helpful errors
+- ✅ Tests verify invalid format errors include expected format
+- ✅ Security tests verify injection attempts are blocked
+- ✅ Tests cover all validation functions: semver, flexible, node, python, java
+- ✅ All 26 tests passing (100% pass rate)
+
+**Test Coverage**:
+- Empty string validation (5 functions tested)
+- Invalid format validation (missing patch, alpha suffix, v-prefix, etc.)
+- Security injection attempts (backticks, dollar-parens, pipes)
+- Valid input acceptance verification
+- Error message content verification
+
+**Benefits**:
+- Ensures error messages are helpful and informative
+- Prevents regression in error handling
+- Validates security against injection attacks
+- Documents expected error behavior
+
+**Files Changed**:
+- `tests/unit/base/version-validation-errors.sh` - New comprehensive error message tests
 
 ---
 
