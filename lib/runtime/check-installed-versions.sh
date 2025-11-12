@@ -7,11 +7,12 @@
 #   only shows installed tools. Use --all to see all tools including missing ones.
 #
 # Usage:
-#   ./check-installed-versions.sh [--all] [--json]
+#   ./check-installed-versions.sh [OPTIONS]
 #
 # Options:
-#   --all     Show all tools including those not installed
-#   --json    Output results in JSON format
+#   --all                  Show all tools including those not installed
+#   --json                 Output results in JSON format
+#   --filter <category>    Filter by category (language, dev-tool, cloud, database, tool)
 #
 # Exit codes:
 #   0 - All checks completed
@@ -41,14 +42,30 @@ NC='\033[0m' # No Color
 # Parse command line options
 SHOW_ALL=false
 OUTPUT_FORMAT="text"
+FILTER_CATEGORY=""
 
-for arg in "$@"; do
-    case $arg in
+while [[ $# -gt 0 ]]; do
+    case "$1" in
         --all)
             SHOW_ALL=true
+            shift
             ;;
         --json)
             OUTPUT_FORMAT="json"
+            shift
+            ;;
+        --filter)
+            FILTER_CATEGORY="$2"
+            shift 2
+            ;;
+        --help|-h)
+            head -n 20 "$0" | grep "^#" | sed 's/^# \?//'
+            exit 0
+            ;;
+        *)
+            echo "Unknown option: $1" >&2
+            echo "Use --help for usage information" >&2
+            exit 1
             ;;
     esac
 done
@@ -61,6 +78,36 @@ declare -A VERSION_STATUS
 # ============================================================================
 # Helper Functions
 # ============================================================================
+
+# Check if section should be displayed based on filter
+should_display_section() {
+    local section="$1"
+
+    # If no filter, show everything
+    [ -z "$FILTER_CATEGORY" ] && return 0
+
+    # Map filter categories to sections
+    case "$FILTER_CATEGORY" in
+        language)
+            [[ "$section" == "Programming Languages" ]]
+            ;;
+        dev-tool)
+            [[ "$section" =~ "Development Tools" ]]
+            ;;
+        cloud)
+            [[ "$section" == "Cloud Tools" ]]
+            ;;
+        database)
+            [[ "$section" == "Database Tools" ]]
+            ;;
+        tool)
+            [[ "$section" == "Development Tools" || "$section" == "Cloud Tools" || "$section" == "Database Tools" ]]
+            ;;
+        *)
+            return 0
+            ;;
+    esac
+}
 
 # Get latest release from GitHub
 get_github_release() {
@@ -298,6 +345,9 @@ if [ "$OUTPUT_FORMAT" != "json" ]; then
         echo "No GitHub token found. To avoid rate limits, set GITHUB_TOKEN in .env file"
     fi
     echo
+fi
+
+if [ "$OUTPUT_FORMAT" != "json" ] && should_display_section "Programming Languages"; then
     echo "Programming Languages:"
     echo "====================="
     printf "%-25s %-20s %-20s %-12s\n" "TOOL" "INSTALLED" "LATEST" "STATUS"
