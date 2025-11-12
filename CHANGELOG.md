@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.8.1] - 2025-11-12
+
+### Added
+
+- Add comprehensive build metrics tracking system
+- Add comprehensive version compatibility testing system
+
+### Fixed
+
+- Export all variables before log_feature_summary calls
+
+### Testing
+
+- Add comprehensive error message verification tests
+
 ## [4.8.0] - 2025-11-12
 
 ### Added
@@ -459,6 +474,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add helpful error message when release is cancelled
 - Add VS Code workspace settings and improve gitignore
 
+[4.8.1]: https://github.com/joshjhall/containers/compare/v4.8.0...v4.8.1
 [4.8.0]: https://github.com/joshjhall/containers/compare/v4.7.0...v4.8.0
 [4.7.0]: https://github.com/joshjhall/containers/compare/v4.5.0...v4.7.0
 [4.5.0]: https://github.com/joshjhall/containers/compare/v4.4.0...v4.5.0
