@@ -309,7 +309,8 @@ update_matrix() {
     versions_json+="}"
 
     # Create new entry
-    local new_entry=$(cat << EOF
+    local new_entry
+    new_entry=$(cat << EOF
 {
   "variant": "$variant",
   "base_image": "${BASE_IMAGE:-debian:13-slim}",
