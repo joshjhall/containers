@@ -61,8 +61,10 @@ download_and_verify() {
     echo "→ Downloading: $(basename "$output_path")"
     echo "  URL: $url"
 
-    # Download to temporary file
-    if ! curl -fsSL -o "$temp_file" "$url"; then
+    # Download to temporary file with progress bar
+    # Use --progress-bar for better visibility during long downloads
+    # -L follows redirects, -f fails silently on HTTP errors
+    if ! curl -L -f --progress-bar -o "$temp_file" "$url"; then
         echo -e "${RED}✗ Download failed${NC}" >&2
         rm -f "$temp_file"
         return 1
