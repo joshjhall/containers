@@ -650,7 +650,9 @@ For more information, see `/workspace/containers/SECURITY.md`.
 
 ## Contributing
 
-Contributions are welcome! Please:
+Contributions are welcome! For detailed guidelines, see [CONTRIBUTING.md](CONTRIBUTING.md).
+
+### Quick Start
 
 1. Fork the repository
 2. **Run the development environment setup**:
@@ -666,17 +668,12 @@ Contributions are welcome! Please:
 4. Add tests for new features
 5. Submit a pull request
 
-### Code Quality
-
-Optional git hooks are available for code quality checks:
-
-```bash
-# Enable shellcheck pre-commit hook
-git config core.hooksPath .githooks
-
-# Disable if too intrusive
-git config --unset core.hooksPath
-```
+See [CONTRIBUTING.md](CONTRIBUTING.md) for:
+- Feature script guidelines and templates
+- Error handling best practices
+- Testing requirements
+- Code style guidelines
+- Pull request process
 
 See [.githooks/README.md](.githooks/README.md) for configuration options.
 
