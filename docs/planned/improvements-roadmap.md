@@ -32,6 +32,7 @@ This is a well-architected, mature container build system with strong security p
 - ✅ [LOW] Comment Formatting Standardization - Already consistent across all scripts
 - ✅ [LOW] Interrupted Build Cleanup - Added centralized trap system to feature-header.sh
 - ✅ [LOW] Entrypoint Path Traversal Validation - Improved with stricter checks
+- ✅ [MEDIUM] Version Output Not User-Friendly - Added --compare mode and fixed bugs
 
 **In Progress:**
 - 🔄 None
@@ -717,15 +718,43 @@ if [ -n "$script_realpath" ] && \
 
 ## USABILITY IMPROVEMENTS
 
-### 1. [MEDIUM] Version Output Not User-Friendly
-**File**: Output of `check-installed-versions.sh`
+### 1. ✅ [MEDIUM] [COMPLETED] Version Output Not User-Friendly
+**Status**: FIXED (2025-11-12) - Commits: 7950867, 500c0bf
 
-**Issue**: Table format is hard to read for large number of tools
+**Original Issue**: Table format was hard to read for large number of tools
 
-**Recommendation**:
-- Add JSON output option (like check-versions.sh has)
-- Add filtering by feature or tool type
-- Add comparison mode showing installed vs. latest
+**Solution Implemented**:
+- ✅ JSON output already existed (--json flag)
+- ✅ Filtering already existed (--filter flag with categories)
+- ✅ Added --compare mode to show only version differences
+- ✅ Fixed two bugs in output formatting
+- ✅ Fixed 4 shellcheck SC2181 warnings
+
+**New Features**:
+- `--compare` flag shows only outdated or newer tools
+- Works with both text and JSON output formats
+- Combines with --filter for targeted checks
+- Clear indication when compare mode is active
+
+**Bug Fixes**:
+- Fixed language results using undefined INSTALL_STATUS variable
+- Fixed OUTPUT_FORMAT comparison ("--json" vs "json")
+- Replaced indirect $? checks with direct command checks in 4 functions
+
+**Example Usage**:
+```bash
+# Show only tools that need updating
+./check-installed-versions.sh --compare
+
+# Show outdated Python tools only
+./check-installed-versions.sh --compare --filter language
+
+# Get JSON of outdated tools
+./check-installed-versions.sh --compare --json
+```
+
+**Files Changed**:
+- `lib/runtime/check-installed-versions.sh` - Added compare mode and fixed bugs
 
 ---
 
