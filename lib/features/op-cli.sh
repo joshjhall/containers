@@ -379,6 +379,10 @@ else
 fi
 
 # Log feature summary
+# Export directory paths for feature summary (also defined in bashrc for runtime)
+export OP_CACHE_DIR="/cache/1password"
+export OP_CONFIG_DIR="/cache/1password/config"
+
 log_feature_summary \
     --feature "1Password CLI" \
     --tools "op" \

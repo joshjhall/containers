@@ -293,6 +293,9 @@ log_command "Final ownership fix for Python cache directories" \
     chown -R "${USER_UID}:${USER_GID}" "${PIP_CACHE_DIR}" || true
 
 # Log feature summary
+# Export directory paths for feature summary (also defined in parent python.sh)
+export PIP_CACHE_DIR="/cache/pip"
+
 log_feature_summary \
     --feature "Python Development Tools" \
     --tools "ipython,pytest,black,ruff,mypy,pylint,bandit,safety" \

@@ -645,6 +645,10 @@ log_command "Final ownership fix for R cache directories" \
     chown -R "${USER_UID}":"${USER_GID}" "${R_LIBS_USER}" "${R_LIBS_SITE}" || true
 
 # Log feature summary
+# Export directory paths for feature summary (also defined in parent r.sh)
+export R_LIBS_SITE="/cache/R/library"
+export R_LIBS_USER="/cache/R/user-library"
+
 log_feature_summary \
     --feature "R Development Tools" \
     --tools "devtools,testthat,roxygen2,pkgdown,lintr,styler,rmarkdown,knitr,tidyverse,data.table,ggplot2,shiny" \

@@ -434,6 +434,12 @@ log_command "Final ownership fix for Python cache directories" \
 # ============================================================================
 # Feature Summary
 # ============================================================================
+# Export directory paths for feature summary (also defined in bashrc for runtime)
+export PIP_CACHE_DIR="/cache/pip"
+export PIPX_HOME="/cache/pipx"
+export PIPX_BIN_DIR="/cache/pipx/bin"
+export POETRY_CACHE_DIR="/cache/poetry"
+
 log_feature_summary \
     --feature "Python" \
     --version "${PYTHON_VERSION}" \

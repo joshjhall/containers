@@ -462,6 +462,11 @@ log_command "Final ownership fix for R cache directories" \
     chown -R "${USER_UID}":"${USER_GID}" "${R_CACHE_DIR}" || true
 
 # Log feature summary
+# Export directory paths for feature summary (also defined in bashrc for runtime)
+export R_CACHE_DIR="/cache/R"
+export R_LIBS_SITE="/cache/R/library"
+export R_LIBS_USER="/cache/R/user-library"
+
 log_feature_summary \
     --feature "R" \
     --version "${R_VERSION}" \
