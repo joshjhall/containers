@@ -37,6 +37,7 @@ This is a well-architected, mature container build system with strong security p
 - ✅ [LOW] Missing CHANGELOG Format Documentation - Created docs/CHANGELOG-FORMAT.md
 - ✅ [LOW] Feature Scripts Exit Code Conventions - Documented in CONTRIBUTING.md
 - ✅ [LOW] Tests Don't Verify Error Messages - Added 26 error message verification tests
+- ✅ [MEDIUM] No Performance/Size Tests - Created build metrics tracking system
 
 **In Progress:**
 - 🔄 None
@@ -886,19 +887,66 @@ Run 'check-build-logs.sh python' to review installation logs
 
 ---
 
-### 3. [MEDIUM] No Performance/Size Tests
-**Issue**: No tracking of image size or build time
+### 3. ✅ [MEDIUM] [COMPLETED] No Performance/Size Tests
+**Status**: IMPLEMENTED (2025-11-12)
 
-**Gap**:
-- Could grow unintentionally
-- No regression detection
-- Users don't know expected build times
+**Original Issue**: No tracking of image size or build time
 
-**Recommendation**:
-- Add image size assertions
-- Track build time per variant
-- Add performance regression tests
-- Generate reports showing trends
+**Solution Implemented**:
+- ✅ Created `bin/measure-build-metrics.sh` - Comprehensive metrics measurement tool
+- ✅ Image size tracking for all variants (bytes and human-readable)
+- ✅ Build time measurement and tracking
+- ✅ Baseline save/load functionality for comparisons
+- ✅ Regression detection with configurable thresholds
+- ✅ JSON and text output formats for automation
+- ✅ 11 comprehensive unit tests (all passing)
+- ✅ Complete documentation in `docs/build-metrics.md`
+
+**Features**:
+- Measure image size and build time for any variant
+- Save baselines for future comparisons
+- Compare current builds against baselines
+- Detect regressions with size (default: 100MB) and time (default: 20%) thresholds
+- Customizable threshold configuration
+- CI/CD integration support
+- Batch measurement capabilities
+
+**Test Coverage**:
+- Bytes to human-readable conversion
+- Baseline JSON format validation
+- Build arguments generation for variants
+- Size regression detection (above/below threshold)
+- Time regression detection (above/below threshold)
+- Improvement detection (decreases don't trigger regressions)
+- JSON output format validation
+- Variant validation
+
+**Usage Examples**:
+```bash
+# Measure variant
+./bin/measure-build-metrics.sh python-dev
+
+# Save baseline
+./bin/measure-build-metrics.sh --save-baseline python-dev
+
+# Detect regressions
+./bin/measure-build-metrics.sh --compare python-dev
+
+# Custom thresholds
+./bin/measure-build-metrics.sh --compare --threshold-size 200 --threshold-time 30 polyglot
+```
+
+**Benefits**:
+- Prevents unintentional image size growth
+- Tracks performance regressions in build times
+- Provides data for optimization efforts
+- Enables trend analysis over time
+- Integrates with CI/CD for automated checks
+
+**Files Changed**:
+- `bin/measure-build-metrics.sh` - Metrics measurement tool
+- `tests/unit/bin/measure-build-metrics.sh` - Unit tests (11 tests)
+- `docs/build-metrics.md` - Comprehensive documentation
 
 ---
 
