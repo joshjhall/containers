@@ -327,6 +327,15 @@ log_message "Ensuring correct ownership of Ruby directories..."
 log_command "Final ownership fix for Ruby cache directories" \
     chown -R "${USER_UID}":"${USER_GID}" "${GEM_HOME}" "${BUNDLE_PATH:-/cache/ruby/bundle}" || true
 
+# Log feature summary
+log_feature_summary \
+    --feature "Ruby Development Tools" \
+    --tools "rubocop,pry,yard,reek,brakeman,solargraph,bundler-audit" \
+    --paths "${GEM_HOME},${BUNDLE_PATH:-/cache/ruby/bundle}" \
+    --env "GEM_HOME,BUNDLE_PATH" \
+    --commands "rubocop,pry,yard,reek,brakeman,solargraph,bundle-audit,ruby-lint-all,ruby-security-check" \
+    --next-steps "Run 'test-ruby-dev' to check installed tools. Use 'rubocop' for linting, 'pry' for debugging, 'yard doc' for documentation, 'brakeman' for Rails security."
+
 # End logging
 log_feature_end
 

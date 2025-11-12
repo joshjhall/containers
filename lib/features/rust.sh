@@ -270,6 +270,16 @@ log_message "Ensuring correct ownership of Rust directories..."
 log_command "Final ownership fix for cargo cache" \
     chown -R "${USER_UID}:${USER_GID}" "${CARGO_HOME}" "${RUSTUP_HOME}"
 
+# Log feature summary
+log_feature_summary \
+    --feature "Rust" \
+    --version "${RUST_VERSION}" \
+    --tools "rustc,cargo,rustup" \
+    --paths "${CARGO_HOME},${RUSTUP_HOME}" \
+    --env "CARGO_HOME,RUSTUP_HOME,RUST_VERSION" \
+    --commands "rustc,cargo,rustup,rustc-version,cargo-new,cargo-build,cargo-test,cargo-run" \
+    --next-steps "Run 'test-rust' to verify installation. Use 'cargo new <name>' to create projects, 'cargo build' to compile, 'cargo test' to run tests, 'cargo run' to execute."
+
 # End logging
 log_feature_end
 

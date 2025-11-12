@@ -585,6 +585,16 @@ log_message "Ensuring correct ownership of Java directories..."
 log_command "Final ownership fix for Java cache directories" \
     chown -R "${USER_UID}:${USER_GID}" "${MAVEN_CACHE_DIR}" "${GRADLE_HOME_DIR}" || true
 
+# Log feature summary
+log_feature_summary \
+    --feature "Java" \
+    --version "${JAVA_VERSION}" \
+    --tools "java,javac,maven,gradle" \
+    --paths "${JAVA_HOME},${MAVEN_CACHE_DIR},${GRADLE_HOME_DIR}" \
+    --env "JAVA_HOME,M2_HOME,MAVEN_HOME,MAVEN_USER_HOME,GRADLE_HOME,GRADLE_USER_HOME,MAVEN_OPTS,GRADLE_OPTS" \
+    --commands "java,javac,jar,mvn,gradle,mvnc,mvnci,gwb,gwc,java-version,mvn-create,gradle-init" \
+    --next-steps "Run 'test-java' to verify installation. Use 'mvn-create <groupId> <artifactId>' or 'gradle-init' to create projects."
+
 # End logging
 log_feature_end
 

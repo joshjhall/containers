@@ -501,6 +501,15 @@ if command -v session-manager-plugin &> /dev/null; then
         session-manager-plugin || log_warning "Session Manager plugin verification failed"
 fi
 
+# Log feature summary
+log_feature_summary \
+    --feature "AWS CLI" \
+    --tools "aws,session-manager-plugin" \
+    --paths "~/.aws" \
+    --env "AWS_PROFILE,AWS_REGION,AWS_DEFAULT_REGION,AWS_ACCESS_KEY_ID,AWS_SECRET_ACCESS_KEY" \
+    --commands "aws,session-manager-plugin,awsprofile,awswho,aws-profile,aws-assume-role" \
+    --next-steps "Run 'test-aws' to verify installation. Configure with 'aws configure' or use aws-profile helpers."
+
 # End logging
 log_feature_end
 

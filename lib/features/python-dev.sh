@@ -292,6 +292,15 @@ log_message "Ensuring correct ownership of Python directories..."
 log_command "Final ownership fix for Python cache directories" \
     chown -R "${USER_UID}:${USER_GID}" "${PIP_CACHE_DIR}" || true
 
+# Log feature summary
+log_feature_summary \
+    --feature "Python Development Tools" \
+    --tools "ipython,pytest,black,ruff,mypy,pylint,bandit,safety" \
+    --paths "${PIP_CACHE_DIR}" \
+    --env "PIP_CACHE_DIR" \
+    --commands "ipython,pytest,black,ruff,mypy,pylint,bandit,safety,py-lint-all,py-format-all,py-security-check" \
+    --next-steps "Run 'test-python-dev' to verify installation. Use 'black .' to format code, 'pytest' to run tests, 'ruff check .' to lint, 'mypy .' for type checking."
+
 # End logging
 log_feature_end
 

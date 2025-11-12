@@ -454,6 +454,15 @@ log_message "Ensuring correct ownership of Mojo directories..."
 log_command "Final ownership fix for Mojo cache directories" \
     chown -R "${USER_UID}:${USER_GID}" "${PIXI_CACHE}" "${MOJO_PROJECT}" || true
 
+# Log feature summary
+log_feature_summary \
+    --feature "Mojo" \
+    --tools "mojo,pixi,mojo-lsp-server" \
+    --paths "${PIXI_CACHE},${MOJO_PROJECT}" \
+    --env "PIXI_CACHE_DIR,MOJO_PROJECT_DIR" \
+    --commands "mojo,mojo-repl,mojo-build,mojo-run,mojo-test,mojo-shell,mojo-exec,mojo-add,pixi" \
+    --next-steps "Run 'test-mojo' to verify installation. Use 'mojo' to start REPL, 'mojo run file.mojo' to execute code. Enter pixi shell with 'mojo-shell'."
+
 # End logging
 log_feature_end
 

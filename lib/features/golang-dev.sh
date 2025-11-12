@@ -736,6 +736,15 @@ log_command "Checking staticcheck version" \
 log_command "Checking air version" \
     /usr/local/bin/air -v 2>/dev/null || log_warning "air not installed"
 
+# Log feature summary
+log_feature_summary \
+    --feature "Go Development Tools" \
+    --tools "gopls,dlv,golangci-lint,goimports,gomodifytags,impl,staticcheck,gosec,revive,errcheck,gotests,mockgen,richgo,air,goreleaser,ko,swag,wire,govulncheck" \
+    --paths "${GOPATH},${GOCACHE},${GOMODCACHE}" \
+    --env "GOPATH,GOCACHE,GOMODCACHE,GOROOT" \
+    --commands "gopls,dlv,golangci-lint,goimports,staticcheck,gosec,gotests,mockgen,air,goreleaser,ko,go-lint-all,go-test-coverage,go-live" \
+    --next-steps "Run 'test-golang-dev' to check installed tools. Use go-lint-all for comprehensive linting, go-live for hot reload."
+
 # End logging
 log_feature_end
 

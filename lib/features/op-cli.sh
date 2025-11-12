@@ -378,6 +378,15 @@ else
     exit 1
 fi
 
+# Log feature summary
+log_feature_summary \
+    --feature "1Password CLI" \
+    --tools "op" \
+    --paths "${OP_CACHE_DIR},${OP_CONFIG_DIR}" \
+    --env "OP_CONFIG_DIR,OP_DATA_DIR" \
+    --commands "op,op-signin-quick,op-get-secret,op-list-vaults,op-session-check" \
+    --next-steps "Run 'test-1password' to verify installation. Authenticate with 'op signin' or use service accounts for automation. Use 'op inject' for secrets in configs."
+
 # End logging
 log_feature_end
 

@@ -337,6 +337,16 @@ log_message "Ensuring correct ownership of Ruby directories..."
 log_command "Final ownership fix for Ruby cache directories" \
     chown -R "${USER_UID}":"${USER_GID}" "${GEM_HOME_DIR}" "${BUNDLE_PATH_DIR}" || true
 
+# Log feature summary
+log_feature_summary \
+    --feature "Ruby" \
+    --version "${RUBY_VERSION}" \
+    --tools "ruby,gem,bundle,irb" \
+    --paths "${GEM_HOME_DIR},${BUNDLE_PATH_DIR}" \
+    --env "GEM_HOME,BUNDLE_PATH,RUBY_VERSION" \
+    --commands "ruby,gem,bundle,irb,ruby-version,ruby-gem-install,ruby-bundle-init" \
+    --next-steps "Run 'test-ruby' to verify installation. Use 'bundle init' to create Gemfile, 'bundle install' for dependencies. Install gems with 'gem install <name>'."
+
 # End logging
 log_feature_end
 

@@ -495,6 +495,15 @@ if command -v cloudflared &> /dev/null; then
         cloudflared --version || log_warning "cloudflared version check failed"
 fi
 
+# Log feature summary
+log_feature_summary \
+    --feature "Cloudflare Tools" \
+    --tools "wrangler,cloudflared" \
+    --paths "${NPM_GLOBAL_DIR},~/.wrangler,~/.cloudflared" \
+    --env "CLOUDFLARE_ACCOUNT_ID,CLOUDFLARE_API_TOKEN,NPM_CACHE_DIR,NPM_PREFIX" \
+    --commands "wrangler,cloudflared,wr,wrd,wrdeploy,cft,tunnel-quick,wrangler-init" \
+    --next-steps "Run 'test-cloudflare' to verify installation. Authenticate with 'wrangler login'."
+
 # End logging
 log_feature_end
 
