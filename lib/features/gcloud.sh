@@ -357,7 +357,7 @@ log_command "Listing installed components" \
 log_feature_summary \
     --feature "Google Cloud SDK" \
     --tools "gcloud,kubectl,gke-gcloud-auth-plugin" \
-    --paths "~/.config/gcloud" \
+    --paths "$HOME/.config/gcloud" \
     --env "CLOUDSDK_PYTHON,GOOGLE_APPLICATION_CREDENTIALS" \
     --commands "gcloud,kubectl,gc,gcauth,gcproj,gcloud-project,gcloud-region,gcssh-quick" \
     --next-steps "Run 'test-gcloud' to verify installation. Authenticate with 'gcloud auth login'."

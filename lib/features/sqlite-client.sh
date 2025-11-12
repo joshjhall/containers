@@ -405,7 +405,7 @@ log_command "Checking sqlite3 version" \
 log_feature_summary \
     --feature "SQLite Client" \
     --tools "sqlite3" \
-    --paths "~/.sqlite_history" \
+    --paths "$HOME/.sqlite_history" \
     --env "SQLITE_HISTORY" \
     --commands "sqlite3,sqlite-quick,sqlite-backup,sqlite-restore,sqlite-analyze,sqlite-dump-schema" \
     --next-steps "Run 'test-sqlite' to verify installation. Use 'sqlite3 <db-file>' to open databases. Create backups with 'sqlite-backup <db> [output]'. Analyze tables with 'sqlite-analyze <db>'."

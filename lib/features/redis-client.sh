@@ -309,7 +309,7 @@ log_command "Checking redis-cli version" \
 log_feature_summary \
     --feature "Redis Client" \
     --tools "redis-cli,redis-benchmark" \
-    --paths "~/.rediscli_history" \
+    --paths "$HOME/.rediscli_history" \
     --env "REDIS_HOST,REDIS_PORT,REDIS_PASSWORD" \
     --commands "redis-cli,redis-benchmark,redis-quick-connect,redis-monitor,redis-flush,redis-info" \
     --next-steps "Run 'test-redis' to verify installation. Connect with 'redis-cli -h <host>' or use 'redis-quick-connect <host>'. Use 'redis-monitor' for real-time monitoring."

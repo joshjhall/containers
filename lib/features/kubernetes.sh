@@ -630,7 +630,7 @@ fi
 log_feature_summary \
     --feature "Kubernetes Tools" \
     --tools "kubectl,k9s,helm,krew" \
-    --paths "~/.kube,~/.krew" \
+    --paths "$HOME/.kube,$HOME/.krew" \
     --env "KUBECONFIG,KUBECTL_EXTERNAL_DIFF" \
     --commands "kubectl,k9s,helm,krew,k,kgp,kgs,kgd,kaf,k-logs,k-shell,k-events,k-resources" \
     --next-steps "Run 'test-kubernetes' to verify installation. Link kubeconfig or use 'kubectl config' to set up clusters. Install plugins with 'kubectl krew install <plugin>'."
