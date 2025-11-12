@@ -26,8 +26,12 @@ This is a well-architected, mature container build system with strong security p
 - ✅ [MEDIUM] Checksum Code Deduplication - Refactored with helper functions
 - ✅ [MEDIUM] Feature Script Error Handling - Created CONTRIBUTING.md with standards
 - ✅ [MEDIUM] Environment Variable Validation - Created schema and validation script
+- ✅ [MEDIUM] Partial/Failed Download Cleanup - Added trap handlers to download-verify.sh
+- ✅ [MEDIUM] Race Condition in Sudo Configuration - Fixed with install command
 - ✅ [LOW] Download Progress Indicators - Added progress bar to downloads
 - ✅ [LOW] Comment Formatting Standardization - Already consistent across all scripts
+- ✅ [LOW] Interrupted Build Cleanup - Added centralized trap system to feature-header.sh
+- ✅ [LOW] Entrypoint Path Traversal Validation - Improved with stricter checks
 
 **In Progress:**
 - 🔄 None
@@ -523,26 +527,42 @@ sed 's/>Ruby //; s/<//'
 
 ## RELIABILITY & EDGE CASES
 
-### 1. [MEDIUM] No Handling for Partial/Failed Downloads
-**File**: `/workspace/containers/lib/base/download-verify.sh`
+### 1. ✅ [MEDIUM] [COMPLETED] No Handling for Partial/Failed Downloads
+**Status**: FIXED (2025-11-12) - Commit: 0f4cb65
 
-**Issue**: Downloads to temp file then moves, but:
+**Original Issue**: Downloads to temp file then moves, but:
 - Temp file (`.tmp`) persists if verification fails
 - No cleanup on script exit
 - Network timeout could leave orphan files
 
-**Current Code** (lines 65-69):
+**Solution Implemented**:
+- ✅ Added trap handlers to `download_and_verify()` function
+- ✅ Added trap handlers to `download_and_extract()` function
+- ✅ Traps fire on EXIT, INT (Ctrl+C), and TERM signals
+- ✅ Temporary files cleaned up automatically on interruption
+- ✅ Traps cleared after successful completion to avoid deleting valid files
+- ✅ Updated documentation to mention interruption handling
+
+**Implementation Details**:
 ```bash
-if ! curl -fsSL -o "$temp_file" "$url"; then
-    rm -f "$temp_file"
-    return 1
-fi
+# Set up trap at function start
+trap 'rm -f "$temp_file"' EXIT INT TERM
+
+# Download and verify
+# ... (on error, trap handles cleanup)
+
+# On success, clear trap before returning
+mv "$temp_file" "$output_path"
+trap - EXIT INT TERM
 ```
 
-**Recommendation**:
-- Use trap handler to ensure cleanup
-- Add timeout to curl command
-- Clean up on signal handlers (INT, TERM)
+**Benefits**:
+- Prevents `/tmp` pollution from interrupted downloads
+- Works even if user hits Ctrl+C during curl or checksum verification
+- No manual cleanup needed in error paths
+
+**Files Changed**:
+- `lib/base/download-verify.sh` - Added trap handlers to both functions
 
 ---
 
@@ -572,59 +592,126 @@ fi
 
 ---
 
-### 3. [MEDIUM] Race Condition in Sudo Configuration
-**File**: `/workspace/containers/lib/base/user.sh`, line 96
+### 3. ✅ [MEDIUM] [COMPLETED] Race Condition in Sudo Configuration
+**Status**: FIXED (2025-11-12) - Commit: cd5c312
 
-**Issue**:
+**Original Issue**:
 ```bash
 echo "${USERNAME} ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/"${USERNAME}"
+chmod 0440 /etc/sudoers.d/"${USERNAME}"
 ```
 
 **Potential Issue**:
-- File creation and chmod are separate operations
-- Brief window where file exists with wrong permissions (before chmod)
+- File creation and chmod were separate operations
+- Brief window where file existed with wrong permissions (before chmod)
 - Though running as root in build, could be issue if parallelized
 
-**Recommendation**:
-- Use install command with proper flags:
-  ```bash
-  install -m 0440 /dev/stdin /etc/sudoers.d/"${USERNAME}" << EOF
-  ...
-  EOF
-  ```
+**Solution Implemented**:
+- ✅ Replaced separate echo + chmod with atomic `install` command
+- ✅ File created with correct permissions (0440) and ownership (root:root) in single operation
+- ✅ No race condition window
+
+**Implementation**:
+```bash
+echo "${USERNAME} ALL=(ALL) NOPASSWD:ALL" | \
+    install -m 0440 -o root -g root /dev/stdin /etc/sudoers.d/"${USERNAME}"
+```
+
+**Benefits**:
+- Atomic file creation with correct permissions
+- No window for security issues
+- Standard Unix practice for secure file creation
+
+**Files Changed**:
+- `lib/base/user.sh` - Used install command for atomic creation
 
 ---
 
-### 4. [LOW] No Handling for Interrupted Build Cleanup
-**Issue**: Feature scripts don't clean up on build cancellation
+### 4. ✅ [LOW] [COMPLETED] No Handling for Interrupted Build Cleanup
+**Status**: FIXED (2025-11-12) - Commit: bda1b5d
+
+**Original Issue**: Feature scripts didn't clean up on build cancellation
 
 **Impact**:
 - BuildKit should handle, but not explicit
 - Cache mounts might be left in inconsistent state
 - /tmp files might not be cleaned
 
-**Recommendation**:
-- Add trap handler in each feature script
-- Document cleanup behavior in feature-header.sh
-- Test with buildx --progress=tty and Ctrl+C
+**Solution Implemented**:
+- ✅ Added centralized cleanup system to `feature-header.sh`
+- ✅ All 28 feature scripts now have automatic cleanup (they source feature-header.sh)
+- ✅ Global trap handlers for EXIT, INT, and TERM signals
+- ✅ Register/unregister functions for tracking temporary items
+- ✅ `create_secure_temp_dir()` now auto-registers created directories
+
+**New Functions Available to Feature Scripts**:
+```bash
+register_cleanup "/tmp/my-temp-dir"     # Track for cleanup
+unregister_cleanup "/tmp/my-temp-dir"   # Remove from tracking
+cleanup_on_interrupt()                  # Runs automatically on exit/interrupt
+```
+
+**Implementation Details**:
+- Uses `_FEATURE_CLEANUP_ITEMS` array to track temporary files/directories
+- Processes cleanup in LIFO order (reverse registration)
+- Safe with `set -u` using `[[ -v array ]]` check
+- Preserves original exit code after cleanup
+- Only shows cleanup messages if items are registered
+
+**Benefits**:
+- Prevents leftover temporary files from interrupted builds
+- Works for Ctrl+C (INT), kill (TERM), and normal exits (EXIT)
+- No code changes needed in individual feature scripts
+- Centralized in one location for all 28 features
+
+**Files Changed**:
+- `lib/base/feature-header.sh` - Added 97 lines of cleanup infrastructure
 
 ---
 
-### 5. [LOW] Entrypoint Path Traversal Check Could Be Stricter
-**File**: `/workspace/containers/lib/runtime/entrypoint.sh`, lines 58-59
+### 5. ✅ [LOW] [COMPLETED] Entrypoint Path Traversal Check Could Be Stricter
+**Status**: FIXED (2025-11-12) - Commit: c286305
 
-**Issue**:
+**Original Issue**:
 ```bash
 script_realpath=$(realpath "$script" 2>/dev/null || echo "")
 if [ -n "$script_realpath" ] && [[ "$script_realpath" == /etc/container/first-startup/* ]]; then
 ```
 
-**Current**: Checks with bash pattern matching
+**Current**: Checks with bash pattern matching but could be more explicit
 
-**Recommendation**:
-- Use more explicit path validation
-- Consider comparing resolved path more strictly
-- Document security considerations of startup scripts
+**Solution Implemented**:
+- ✅ Enhanced path validation with 4-step security checks
+- ✅ Added expected directory variables for clarity
+- ✅ Added paranoid check for `..` components
+- ✅ Added check that resolved path is not the directory itself
+- ✅ Detailed comments explaining each validation step
+- ✅ Applied to both first-startup and startup script directories
+
+**Implementation**:
+```bash
+FIRST_STARTUP_DIR="/etc/container/first-startup"
+script_realpath=$(realpath "$script" 2>/dev/null || echo "")
+
+# Strict path traversal validation:
+# 1. Resolve canonical path (resolves symlinks and ..)
+# 2. Verify resolved path is within expected directory
+# 3. Verify no .. components remain (paranoid check)
+# 4. Verify not the directory itself (must be file within)
+if [ -n "$script_realpath" ] && \
+   [[ "$script_realpath" == "$FIRST_STARTUP_DIR"/* ]] && \
+   [[ ! "$script_realpath" =~ \.\. ]] && \
+   [ "$script_realpath" != "$FIRST_STARTUP_DIR" ]; then
+```
+
+**Benefits**:
+- More explicit and easier to audit
+- Defense-in-depth security checks
+- Better documentation of security intent
+- No functional change, only enhanced clarity
+
+**Files Changed**:
+- `lib/runtime/entrypoint.sh` - Enhanced validation for both startup directories
 
 ---
 
