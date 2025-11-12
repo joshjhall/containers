@@ -13,6 +13,7 @@
 #   --all                  Show all tools including those not installed
 #   --json                 Output results in JSON format
 #   --filter <category>    Filter by category (language, dev-tool, cloud, database, tool)
+#   --compare              Only show tools with version differences (outdated or newer)
 #
 # Exit codes:
 #   0 - All checks completed
@@ -43,6 +44,7 @@ NC='\033[0m' # No Color
 SHOW_ALL=false
 OUTPUT_FORMAT="text"
 FILTER_CATEGORY=""
+COMPARE_MODE=false
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -57,6 +59,10 @@ while [[ $# -gt 0 ]]; do
         --filter)
             FILTER_CATEGORY="$2"
             shift 2
+            ;;
+        --compare)
+            COMPARE_MODE=true
+            shift
             ;;
         --help|-h)
             head -n 20 "$0" | grep "^#" | sed 's/^# \?//'
@@ -291,14 +297,21 @@ print_result() {
     local installed="$2"
     local latest="$3"
     local status="$4"
-    
+
     if [ "$OUTPUT_FORMAT" = "json" ]; then
         return
     fi
-    
+
     # Skip missing tools unless --all flag is set
     if [ "$status" = "missing" ] && [ "$SHOW_ALL" = false ]; then
         return
+    fi
+
+    # In compare mode, only show tools with version differences
+    if [ "$COMPARE_MODE" = true ]; then
+        if [ "$status" != "outdated" ] && [ "$status" != "newer" ]; then
+            return
+        fi
     fi
     
     local status_color
@@ -344,6 +357,9 @@ if [ "$OUTPUT_FORMAT" != "json" ]; then
     else
         echo "No GitHub token found. To avoid rate limits, set GITHUB_TOKEN in .env file"
     fi
+    if [ "$COMPARE_MODE" = true ]; then
+        echo "Compare mode: Showing only tools with version differences"
+    fi
     echo
 fi
 
@@ -365,10 +381,10 @@ check_version "R" "R" "--version" "R version \K[0-9]+\.[0-9]+\.[0-9]+"
 check_version "Mojo" "mojo" "--version" "mojo \K[0-9]+\.[0-9]+\.[0-9]+"
 
 # Print language results
-if [ "$OUTPUT_FORMAT" != "--json" ]; then
+if [ "$OUTPUT_FORMAT" != "json" ]; then
     for lang in "Python" "Ruby" "Node.js" "Go" "Rust" "Java" "R" "Mojo"; do
         if [ -n "${INSTALLED_VERSIONS[$lang]:-}" ]; then
-            print_result "$lang" "${INSTALLED_VERSIONS[$lang]}" "${INSTALL_STATUS[$lang]}"
+            print_result "$lang" "${INSTALLED_VERSIONS[$lang]}" "${LATEST_VERSIONS[$lang]:-}" "${VERSION_STATUS[$lang]}"
         fi
     done
     
@@ -639,18 +655,27 @@ if [ "$OUTPUT_FORMAT" = "json" ]; then
     echo '  "results": ['
     first=true
     for tool in "${!INSTALLED_VERSIONS[@]}"; do
+        tool_status="${VERSION_STATUS[$tool]}"
+
         # Skip missing tools unless --all flag is set
-        if [ "${VERSION_STATUS[$tool]}" = "missing" ] && [ "$SHOW_ALL" = false ]; then
+        if [ "$tool_status" = "missing" ] && [ "$SHOW_ALL" = false ]; then
             continue
         fi
-        
+
+        # In compare mode, only show tools with version differences
+        if [ "$COMPARE_MODE" = true ]; then
+            if [ "$tool_status" != "outdated" ] && [ "$tool_status" != "newer" ]; then
+                continue
+            fi
+        fi
+
         if [ "$first" = true ]; then
             first=false
         else
             echo ","
         fi
         printf '    {"tool": "%s", "installed": "%s", "latest": "%s", "status": "%s"}' \
-            "$tool" "${INSTALLED_VERSIONS[$tool]}" "${LATEST_VERSIONS[$tool]:-}" "${VERSION_STATUS[$tool]}"
+            "$tool" "${INSTALLED_VERSIONS[$tool]}" "${LATEST_VERSIONS[$tool]:-}" "$tool_status"
     done
     echo
     echo "  ]"
