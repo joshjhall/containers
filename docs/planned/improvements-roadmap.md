@@ -20,6 +20,9 @@ This is a well-architected, mature container build system with strong security p
 - ✅ [MEDIUM] List Features Script - Created bin/list-features.sh
 - ✅ [MEDIUM] Feature Configuration Summaries - Added to all 28 features
 - ✅ [MEDIUM] Version Output Improvements - Added filtering to check-installed-versions.sh
+- ✅ [MEDIUM] Migration Guide - Created docs/migration-guide.md
+- ✅ [MEDIUM] Cache Strategy Documentation - Created docs/cache-strategy.md
+- ✅ [MEDIUM] Checksum Fetching Timeouts - Added to all fetch functions
 
 **In Progress:**
 - 🔄 None
@@ -423,37 +426,47 @@ sed 's/>Ruby //; s/<//'
 
 ---
 
-### 4. [MEDIUM] No Migration Guide Between Versions
-**Issue**: Version history in CHANGELOG but no upgrade guide
+### 4. ✅ [MEDIUM] [COMPLETED] No Migration Guide Between Versions
+**Status**: DOCUMENTED (2025-11-11) - Commits: 06959cf
 
-**Gap**:
-- Users don't know what breaks between versions
-- No guidance on updating submodule references
-- No section on deprecations
+**Original Issue**: Version history in CHANGELOG but no upgrade guide
 
-**Recommendation**:
-- Create `docs/migration-guide.md` for major versions
-- Document breaking changes clearly
-- Provide upgrade paths
-- Announce deprecations early
+**Solution Implemented**:
+- ✅ Created comprehensive `docs/migration-guide.md` (585 lines)
+- ✅ Version upgrade paths and step-by-step procedures
+- ✅ Breaking changes by version (especially v4.0.0 major release)
+- ✅ Version-specific migration instructions (v3.x → v4.0+, v4.x → v4.7.0)
+- ✅ Testing procedures and verification checklists
+- ✅ Rollback procedures with emergency rollback reference
+- ✅ Common migration issues and troubleshooting
+- ✅ Best practices before/during/after migration
+- ✅ Version history reference table
+- ✅ Deprecation notices section
+
+**Files Changed**:
+- `docs/migration-guide.md` - New comprehensive migration guide
 
 ---
 
-### 5. [LOW] Cache Strategy Documentation Could Be Clearer
-**File**: Dockerfile comments (lines 73-83), CLAUDE.md
+### 5. ✅ [LOW] [COMPLETED] Cache Strategy Documentation Could Be Clearer
+**Status**: DOCUMENTED (2025-11-11) - Commits: 710eaec
 
-**Issue**: Cache behavior is complex and not clearly explained
+**Original Issue**: Cache behavior is complex and not clearly explained
 
-**Gaps**:
-- UID/GID conflict cache behavior is confusing
-- Mount options cache behavior not intuitive
-- .bashrc.d sourcing behavior not obvious
+**Solution Implemented**:
+- ✅ Created comprehensive `docs/cache-strategy.md` (872 lines)
+- ✅ Two-layer caching strategy (BuildKit + runtime caches)
+- ✅ BuildKit cache mounts for apt operations explained
+- ✅ Language-specific cache directories (`/cache` structure) documented
+- ✅ Runtime volume mount strategies with examples
+- ✅ Cache invalidation and clearing procedures
+- ✅ Best practices for development and production
+- ✅ Comprehensive troubleshooting guide (permission errors, cache not working, etc.)
+- ✅ Cache sizing recommendations and monitoring
+- ✅ Advanced topics (cache warming, multi-stage build caching)
 
-**Recommendation**:
-- Create `docs/cache-strategy.md`
-- Explain what gets cached and why
-- Document performance implications
-- Include cache invalidation strategies
+**Files Changed**:
+- `docs/cache-strategy.md` - New comprehensive cache guide
 
 ---
 
@@ -482,20 +495,29 @@ fi
 
 ---
 
-### 2. [MEDIUM] Checksum Fetching Has No Timeout
-**File**: `checksum-fetch.sh`, line 46
-```bash
-page_content=$(curl -fsSL "$url")  # No timeout specified
-```
+### 2. ✅ [MEDIUM] [COMPLETED] Checksum Fetching Has No Timeout
+**Status**: FIXED (2025-11-11) - Commits: 06d3660
 
-**Issue**:
-- Could hang indefinitely if server unresponsive
-- Blocking build process with no progress indication
+**Original Issue**: Curl commands could hang indefinitely if server unresponsive
 
-**Recommendation**:
-- Add `--max-time` to curl calls
-- Use 30-second timeout by default
-- Document timeout behavior
+**Solution Implemented**:
+- ✅ Added `--connect-timeout 10` to all curl commands (10-second connection timeout)
+- ✅ Added `--max-time 30` for checksum file downloads (30-second total timeout)
+- ✅ Added `--max-time 300` for binary downloads in `calculate_checksum_sha256` (5 minutes)
+- ✅ Prevents build hangs on slow or unresponsive upstream servers
+- ✅ Improves build reliability and faster failure detection
+
+**Functions Updated** (7 total):
+- `fetch_go_checksum` - go.dev downloads page
+- `fetch_github_checksums_txt` - GitHub release checksums
+- `fetch_github_sha256_file` - Individual .sha256 files
+- `fetch_github_sha512_file` - Individual .sha512 files
+- `fetch_maven_sha1` - Maven Central .sha1 files
+- `fetch_ruby_checksum` - ruby-lang.org downloads page
+- `calculate_checksum_sha256` - Binary file downloads
+
+**Files Changed**:
+- `lib/features/lib/checksum-fetch.sh` - Added timeouts to all curl commands
 
 ---
 
