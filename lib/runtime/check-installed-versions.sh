@@ -151,8 +151,7 @@ get_github_release() {
 get_pypi_version() {
     local package="$1"
     local response
-    response=$(curl -s "https://pypi.org/pypi/${package}/json")
-    if [ $? -eq 0 ]; then
+    if response=$(curl -s "https://pypi.org/pypi/${package}/json"); then
         echo "$response" | jq -r '.info.version' 2>/dev/null || echo "unknown"
     else
         echo "unknown"
@@ -163,8 +162,7 @@ get_pypi_version() {
 get_crates_version() {
     local package="$1"
     local response
-    response=$(curl -s "https://crates.io/api/v1/crates/${package}")
-    if [ $? -eq 0 ]; then
+    if response=$(curl -s "https://crates.io/api/v1/crates/${package}"); then
         echo "$response" | jq -r '.crate.max_version' 2>/dev/null || echo "unknown"
     else
         echo "unknown"
@@ -175,8 +173,7 @@ get_crates_version() {
 get_rubygems_version() {
     local gem="$1"
     local response
-    response=$(curl -s "https://rubygems.org/api/v1/gems/${gem}.json")
-    if [ $? -eq 0 ]; then
+    if response=$(curl -s "https://rubygems.org/api/v1/gems/${gem}.json"); then
         echo "$response" | jq -r '.version' 2>/dev/null || echo "unknown"
     else
         echo "unknown"
@@ -187,8 +184,7 @@ get_rubygems_version() {
 get_cran_version() {
     local package="$1"
     local response
-    response=$(curl -s "https://crandb.r-pkg.org/${package}")
-    if [ $? -eq 0 ]; then
+    if response=$(curl -s "https://crandb.r-pkg.org/${package}"); then
         echo "$response" | jq -r '.Version // .version // "unknown"' 2>/dev/null || echo "unknown"
     else
         echo "unknown"
