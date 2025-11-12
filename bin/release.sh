@@ -100,12 +100,13 @@ validate_version "$CURRENT_VERSION"
 FORCE_UPDATE=false
 SKIP_CHANGELOG=false
 NON_INTERACTIVE=false
+VERSION_ARG=""
 
 if [ $# -eq 0 ]; then
     usage
 fi
 
-# Parse options
+# Parse all arguments (allows flags in any position)
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --force)
@@ -149,21 +150,27 @@ while [[ $# -gt 0 ]]; do
             ;;
         *)
             # This should be the version argument
-            break
+            if [ -z "$VERSION_ARG" ]; then
+                VERSION_ARG="$1"
+                shift
+            else
+                echo -e "${RED}Error: Multiple version arguments provided: '$VERSION_ARG' and '$1'${NC}"
+                usage
+            fi
             ;;
     esac
 done
 
 # Check we have a version argument
-if [ $# -eq 0 ]; then
+if [ -z "$VERSION_ARG" ]; then
     usage
 fi
 
 # Determine new version
-if [[ "$1" =~ ^(major|minor|patch)$ ]]; then
-    NEW_VERSION=$(bump_version "$CURRENT_VERSION" "$1")
+if [[ "$VERSION_ARG" =~ ^(major|minor|patch)$ ]]; then
+    NEW_VERSION=$(bump_version "$CURRENT_VERSION" "$VERSION_ARG")
 else
-    NEW_VERSION="$1"
+    NEW_VERSION="$VERSION_ARG"
     validate_version "$NEW_VERSION"
 fi
 
