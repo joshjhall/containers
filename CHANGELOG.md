@@ -5,6 +5,57 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.8.0] - 2025-11-12
+
+### Added
+
+- Add list-features.sh script with JSON output and filtering
+- Add standardized feature configuration summaries
+- Add feature summaries to all 26 remaining feature scripts
+- Add filtering and help to check-installed-versions.sh
+- Add timeout configuration to all checksum fetch operations
+- Add environment variable validation schema and validator
+- Add download progress indicators and fix schema patterns
+- Add centralized cleanup handling for interrupted builds
+- Add comparison mode and fix bugs in check-installed-versions.sh
+
+### Changed
+
+- Deduplicate checksum fetching code
+
+### Documentation
+
+- Add comprehensive environment variables reference
+- Expand troubleshooting guide with comprehensive build-time issues
+- Add comprehensive production deployment guide
+- Add comprehensive feature dependencies documentation
+- Update roadmap with completed improvements
+- Add comprehensive version migration guide
+- Add comprehensive cache strategy documentation
+- Update roadmap with Option A Quick Wins completion
+- Add comprehensive contributing guidelines
+- Update roadmap with Option B Code Quality completion
+- Verify comment formatting already standardized
+- Update roadmap with Option C: Reliability completion
+- Update roadmap with Option D: Usability completion
+- Add CHANGELOG format documentation
+- Document exit code conventions in CONTRIBUTING.md
+- Update roadmap with Option F: Minor Issues completion
+
+### Fixed
+
+- Prevent alias invasion in scripts and fix Cosign signing permissions
+- Add trap handlers for interrupted download cleanup
+- Use install command for atomic sudo file creation
+- Improve entrypoint path traversal validation
+- Fix shellcheck SC2181 warnings in check-installed-versions.sh
+- Replace tilde with $HOME in log_feature_summary paths
+- Replace example values with placeholders in .env.example
+
+### Miscellaneous
+
+- Remove .claude directory from version control
+
 ## [4.7.0] - 2025-11-11
 
 ### Added
@@ -408,6 +459,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add helpful error message when release is cancelled
 - Add VS Code workspace settings and improve gitignore
 
+[4.8.0]: https://github.com/joshjhall/containers/compare/v4.7.0...v4.8.0
 [4.7.0]: https://github.com/joshjhall/containers/compare/v4.5.0...v4.7.0
 [4.5.0]: https://github.com/joshjhall/containers/compare/v4.4.0...v4.5.0
 [4.4.0]: https://github.com/joshjhall/containers/compare/v4.3.2...v4.4.0
