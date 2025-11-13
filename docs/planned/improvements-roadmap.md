@@ -15,7 +15,7 @@ This document tracks remaining improvements for the container build system based
 ## Progress Summary
 
 **Completed Items**: 43 items (All HIGH priority, 1 CRITICAL, most MEDIUM priority, many LOW priority)
-**Remaining Items**: 37 items (2 CRITICAL, 8 HIGH, 15 MEDIUM, 12 LOW)
+**Remaining Items**: 38 items (2 CRITICAL, 9 HIGH, 15 MEDIUM, 12 LOW)
 
 See git history and CHANGELOG.md for details on completed items.
 
@@ -1146,22 +1146,129 @@ sed 's/>Ruby //; s/<//'
 
 ---
 
+#### 31. [HIGH] Add Pre-Push Git Hook for Shellcheck Validation
+**Source**: Production examples development experience (Nov 2025)
+**Priority**: P1 (High - prevents CI failures and speeds up development)
+**Effort**: 1 day
+
+**Issue**: Shellcheck errors currently only caught in CI
+- Developers push code with shellcheck violations
+- CI catches them one at a time (slow feedback loop)
+- Requires multiple push cycles to fix all issues
+- Wastes CI resources and developer time
+- Recent example: Multiple shellcheck issues found during production examples work
+
+**Current State**:
+- ✅ Pre-commit hook exists (runs shellcheck on staged files)
+- ❌ No pre-push hook (allows pushing code that fails CI)
+- ❌ Developers can bypass pre-commit hook with `--no-verify`
+- Result: Shellcheck failures still reach CI regularly
+
+**Recommended Solution**:
+
+Create `.git/hooks/pre-push` hook that runs shellcheck on ALL shell scripts before push:
+
+```bash
+#!/usr/bin/env bash
+# Pre-push hook: Run shellcheck on all shell scripts
+set -euo pipefail
+
+echo "Running pre-push shellcheck validation..."
+
+# Find all shell scripts
+shell_files=$(find . -type f \( -name "*.sh" -o -name "*.bash" \) \
+  ! -path "./.git/*" \
+  ! -path "*/node_modules/*" \
+  ! -path "*/vendor/*")
+
+# Run shellcheck
+failed=0
+for file in $shell_files; do
+  if ! shellcheck "$file" > /dev/null 2>&1; then
+    echo "❌ Shellcheck failed: $file"
+    shellcheck "$file"
+    failed=1
+  fi
+done
+
+if [ $failed -eq 1 ]; then
+  echo ""
+  echo "❌ Pre-push validation failed!"
+  echo "Fix shellcheck errors or use 'git push --no-verify' to skip"
+  exit 1
+fi
+
+echo "✅ All shell scripts passed shellcheck!"
+```
+
+**Implementation Steps**:
+
+1. Create `bin/install-git-hooks.sh` script that:
+   - Installs pre-push hook
+   - Also ensures pre-commit hook is installed
+   - Can be run by developers: `./bin/install-git-hooks.sh`
+   - Runs automatically in CI setup
+
+2. Add to `.githooks/pre-push` template (tracked in repo)
+
+3. Update documentation:
+   - Add to CONTRIBUTING.md: "Run `./bin/install-git-hooks.sh` after clone"
+   - Add to README.md setup instructions
+   - Document `--no-verify` escape hatch for emergencies
+
+4. Add CI check that verifies hooks are installed:
+   ```bash
+   # In CI, verify hooks would have caught issues
+   ./bin/install-git-hooks.sh
+   ```
+
+**Benefits**:
+- ✅ Catches shellcheck issues before push (fast local feedback)
+- ✅ Reduces CI failures and wasted CI time
+- ✅ Fewer commit cycles to fix issues
+- ✅ Better developer experience
+- ✅ Still allows `--no-verify` for emergencies
+- ✅ Complements existing pre-commit hook
+
+**Comparison with Pre-Commit Hook**:
+
+| Hook | When It Runs | What It Checks | Can Bypass |
+|------|--------------|----------------|------------|
+| pre-commit | Before commit | Staged files only | `--no-verify` |
+| pre-push | Before push | All shell scripts | `--no-verify` |
+
+**Why Both Are Needed**:
+- Pre-commit: Fast feedback on current changes
+- Pre-push: Final validation before sharing with team/CI
+- Defense in depth: Two chances to catch issues
+
+**Files to Create/Modify**:
+- Create: `bin/install-git-hooks.sh`
+- Create: `.githooks/pre-push`
+- Modify: `README.md` (add setup step)
+- Create: `docs/development/git-hooks.md` (documentation)
+- Modify: `.github/workflows/*.yml` (run install script in CI)
+
+**Priority**: HIGH - Directly improves developer experience and reduces CI costs
+
+---
+
 ## Summary
 
-**Total Remaining**: 30 items (up from 9 after comprehensive analysis)
+**Total Remaining**: 38 items (updated November 2025)
 
 **By Priority**:
-- CRITICAL: 3 items (Production deployment blockers)
-- HIGH: 6 items (Security and enterprise features)
-- MEDIUM: 16 items (Code quality, architecture, operations)
-- LOW: 5 items (Nice-to-have enhancements)
+- CRITICAL: 2 items (Production deployment blockers)
+- HIGH: 9 items (Security, enterprise features, and developer experience)
+- MEDIUM: 15 items (Code quality, architecture, operations)
+- LOW: 12 items (Nice-to-have enhancements)
 
 **By Category**:
 - Security Concerns: 11 items (0 CRITICAL, 3 HIGH, 5 MEDIUM, 3 LOW)
-- Production Readiness: 8 items (3 CRITICAL, 4 HIGH, 1 MEDIUM)
+- Production Readiness: 7 items (2 CRITICAL, 4 HIGH, 1 MEDIUM) - Item #12 COMPLETE
 - Architecture & Code Organization: 6 items (5 MEDIUM, 1 LOW)
 - Anti-Patterns & Code Smells: 3 items (1 MEDIUM, 2 LOW)
-- Testing Gaps: 1 item (MEDIUM)
+- Testing Gaps: 2 items (1 HIGH, 1 MEDIUM)
 - Missing Features: 1 item (LOW)
 
 **Overall Assessment**:
