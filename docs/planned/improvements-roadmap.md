@@ -1146,13 +1146,13 @@ sed 's/>Ruby //; s/<//'
 
 ---
 
-#### 31. [HIGH] Add Pre-Push Git Hook for Shellcheck Validation
+#### 31. [HIGH] Add Pre-Push Git Hook for Validation (Shellcheck + Unit Tests)
 **Source**: Production examples development experience (Nov 2025)
 **Priority**: P1 (High - prevents CI failures and speeds up development)
 **Effort**: 1 day
 
-**Issue**: Shellcheck errors currently only caught in CI
-- Developers push code with shellcheck violations
+**Issue**: Validation errors currently only caught in CI
+- Developers push code with shellcheck violations and test failures
 - CI catches them one at a time (slow feedback loop)
 - Requires multiple push cycles to fix all issues
 - Wastes CI resources and developer time
@@ -1162,43 +1162,68 @@ sed 's/>Ruby //; s/<//'
 - ✅ Pre-commit hook exists (runs shellcheck on staged files)
 - ❌ No pre-push hook (allows pushing code that fails CI)
 - ❌ Developers can bypass pre-commit hook with `--no-verify`
-- Result: Shellcheck failures still reach CI regularly
+- ❌ Unit tests not run locally before push
+- Result: Shellcheck and test failures still reach CI regularly
 
 **Recommended Solution**:
 
-Create `.git/hooks/pre-push` hook that runs shellcheck on ALL shell scripts before push:
+Create `.git/hooks/pre-push` hook that runs shellcheck AND unit tests before push:
 
 ```bash
 #!/usr/bin/env bash
-# Pre-push hook: Run shellcheck on all shell scripts
+# Pre-push hook: Run validation checks before push
 set -euo pipefail
 
-echo "Running pre-push shellcheck validation..."
+echo "=== Running pre-push validation ==="
+echo ""
 
-# Find all shell scripts
+# Track overall failure status
+overall_failed=0
+
+# 1. Run shellcheck on all shell scripts
+echo "1. Running shellcheck on all shell scripts..."
 shell_files=$(find . -type f \( -name "*.sh" -o -name "*.bash" \) \
   ! -path "./.git/*" \
   ! -path "*/node_modules/*" \
   ! -path "*/vendor/*")
 
-# Run shellcheck
-failed=0
+shellcheck_failed=0
 for file in $shell_files; do
   if ! shellcheck "$file" > /dev/null 2>&1; then
-    echo "❌ Shellcheck failed: $file"
+    if [ $shellcheck_failed -eq 0 ]; then
+      echo "❌ Shellcheck failures:"
+    fi
     shellcheck "$file"
-    failed=1
+    shellcheck_failed=1
   fi
 done
 
-if [ $failed -eq 1 ]; then
-  echo ""
-  echo "❌ Pre-push validation failed!"
-  echo "Fix shellcheck errors or use 'git push --no-verify' to skip"
+if [ $shellcheck_failed -eq 0 ]; then
+  echo "✅ All shell scripts passed shellcheck"
+else
+  overall_failed=1
+fi
+echo ""
+
+# 2. Run unit tests (fast, no Docker required)
+echo "2. Running unit tests..."
+if ./tests/run_unit_tests.sh; then
+  echo "✅ All unit tests passed"
+else
+  echo "❌ Unit tests failed"
+  overall_failed=1
+fi
+echo ""
+
+# Final result
+if [ $overall_failed -eq 1 ]; then
+  echo "❌ Pre-push validation FAILED!"
+  echo "Fix issues above or use 'git push --no-verify' to skip"
   exit 1
 fi
 
-echo "✅ All shell scripts passed shellcheck!"
+echo "✅ Pre-push validation PASSED!"
+echo "All checks successful - proceeding with push"
 ```
 
 **Implementation Steps**:
@@ -1224,9 +1249,11 @@ echo "✅ All shell scripts passed shellcheck!"
 
 **Benefits**:
 - ✅ Catches shellcheck issues before push (fast local feedback)
-- ✅ Reduces CI failures and wasted CI time
+- ✅ Catches unit test failures before push (no Docker required)
+- ✅ Reduces CI failures and wasted CI time significantly
 - ✅ Fewer commit cycles to fix issues
 - ✅ Better developer experience
+- ✅ Unit tests are fast (~seconds, no build required)
 - ✅ Still allows `--no-verify` for emergencies
 - ✅ Complements existing pre-commit hook
 
@@ -1234,13 +1261,14 @@ echo "✅ All shell scripts passed shellcheck!"
 
 | Hook | When It Runs | What It Checks | Can Bypass |
 |------|--------------|----------------|------------|
-| pre-commit | Before commit | Staged files only | `--no-verify` |
-| pre-push | Before push | All shell scripts | `--no-verify` |
+| pre-commit | Before commit | Staged files only (shellcheck) | `--no-verify` |
+| pre-push | Before push | All shell scripts + unit tests | `--no-verify` |
 
 **Why Both Are Needed**:
-- Pre-commit: Fast feedback on current changes
-- Pre-push: Final validation before sharing with team/CI
+- Pre-commit: Fast feedback on current changes (shellcheck staged files only)
+- Pre-push: Comprehensive validation before sharing with team/CI (all shell scripts + unit tests)
 - Defense in depth: Two chances to catch issues
+- Unit tests in pre-push: Fast enough (~seconds) but comprehensive enough to catch regressions
 
 **Files to Create/Modify**:
 - Create: `bin/install-git-hooks.sh`
