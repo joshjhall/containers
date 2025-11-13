@@ -187,11 +187,11 @@ setup() {
 # Teardown function (run after each test)
 teardown() {
     # Clean up Docker resources
-    if [ ${#TEST_CONTAINERS[@]} -gt 0 ]; then
+    if [ -n "${TEST_CONTAINERS+x}" ] && [ ${#TEST_CONTAINERS[@]} -gt 0 ]; then
         docker rm -f "${TEST_CONTAINERS[@]}" >/dev/null 2>&1 || true
     fi
-    
-    if [ ${#TEST_IMAGES[@]} -gt 0 ]; then
+
+    if [ -n "${TEST_IMAGES+x}" ] && [ ${#TEST_IMAGES[@]} -gt 0 ]; then
         docker rmi -f "${TEST_IMAGES[@]}" >/dev/null 2>&1 || true
     fi
 

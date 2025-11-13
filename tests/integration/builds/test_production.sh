@@ -128,6 +128,68 @@ test_node_production_runtime() {
     docker rmi -f "$image" > /dev/null 2>&1 || true
 }
 
+# Test: Multi-runtime production (Python + Ruby + Node)
+test_multi_runtime_production() {
+    local image="test-prod-multi-$$"
+    echo "Building multi-runtime production: $image"
+
+    # Build production container with Python, Ruby, and Node (no dev tools)
+    # This tests:
+    # 1. Multiple runtimes work together in production
+    # 2. Ruby coverage (not tested elsewhere in integration tests)
+    # 3. All runtime-only, no dev tools
+    assert_build_succeeds "Dockerfile" \
+        --build-arg PROJECT_PATH=. \
+        --build-arg PROJECT_NAME=test-prod \
+        --build-arg BASE_IMAGE=debian:bookworm-slim \
+        --build-arg ENABLE_PASSWORDLESS_SUDO=false \
+        --build-arg INCLUDE_PYTHON=true \
+        --build-arg INCLUDE_PYTHON_DEV=false \
+        --build-arg PYTHON_VERSION=3.12.0 \
+        --build-arg INCLUDE_RUBY=true \
+        --build-arg INCLUDE_RUBY_DEV=false \
+        --build-arg RUBY_VERSION=3.3.7 \
+        --build-arg INCLUDE_NODE=true \
+        --build-arg INCLUDE_NODE_DEV=false \
+        --build-arg NODE_VERSION=20.18.0 \
+        --build-arg INCLUDE_DEV_TOOLS=false \
+        -t "$image"
+
+    # Verify Python runtime IS installed
+    assert_executable_in_path "$image" "python3"
+    assert_executable_in_path "$image" "pip3"
+    assert_command_in_container "$image" "python3 --version" "Python 3.12.0"
+
+    # Verify Ruby runtime IS installed
+    assert_executable_in_path "$image" "ruby"
+    assert_executable_in_path "$image" "gem"
+    assert_command_in_container "$image" "ruby --version" "ruby 3.3.7"
+
+    # Verify Node runtime IS installed
+    assert_executable_in_path "$image" "node"
+    assert_executable_in_path "$image" "npm"
+    assert_command_in_container "$image" "node --version" "v20"
+
+    # Verify Python dev tools are NOT installed
+    assert_executable_not_in_path "$image" "ipython"
+    assert_executable_not_in_path "$image" "black"
+
+    # Verify Ruby dev tools are NOT installed
+    assert_executable_not_in_path "$image" "rubocop"
+    assert_executable_not_in_path "$image" "solargraph"
+
+    # Verify Node dev tools are NOT installed
+    assert_executable_not_in_path "$image" "tsc"
+    assert_executable_not_in_path "$image" "eslint"
+
+    # Verify general dev tools are NOT installed
+    assert_executable_not_in_path "$image" "vim"
+    assert_executable_not_in_path "$image" "tmux"
+
+    # Clean up
+    docker rmi -f "$image" > /dev/null 2>&1 || true
+}
+
 # Test: Production security configuration
 test_production_security() {
     local image="test-prod-security-$$"
@@ -233,6 +295,7 @@ assert_command_fails_in_container() {
 run_test test_minimal_production_base "Minimal production base builds successfully"
 run_test test_python_production_runtime "Python production runtime builds with correct packages"
 run_test test_node_production_runtime "Node production runtime builds with correct packages"
+run_test test_multi_runtime_production "Multi-runtime production (Python+Ruby+Node) builds correctly"
 run_test test_production_security "Production security configuration is correct"
 run_test test_production_image_size "Production image size is reasonable"
 run_test test_production_healthcheck "Production healthcheck script is available"
