@@ -1,0 +1,105 @@
+# Production Python Runtime Container
+#
+# This uses the main Dockerfile with production-focused build arguments:
+# - Debian slim base image (lightweight)
+# - Python runtime only (no dev tools like pip-tools, ipython, black)
+# - No passwordless sudo
+# - Minimal attack surface
+#
+# Usage from project root (where containers is a submodule):
+#   docker compose -f containers/examples/production/docker-compose.python.yml up -d
+#
+# Or from containers directory (standalone):
+#   docker compose -f examples/production/docker-compose.python.yml up -d
+
+services:
+  python-prod:
+    build:
+      context: ../..  # containers directory (or project root if used as submodule)
+      dockerfile: Dockerfile
+      args:
+        # Use lightweight Debian slim as base
+        BASE_IMAGE: "debian:bookworm-slim"
+
+        # Project configuration
+        PROJECT_NAME: "myproject"
+        USERNAME: "appuser"
+        USER_UID: 1000
+        USER_GID: 1000
+        WORKING_DIR: "/workspace/myproject"
+
+        # Security: NO passwordless sudo in production
+        ENABLE_PASSWORDLESS_SUDO: "false"
+
+        # Python runtime: YES runtime, NO dev tools
+        INCLUDE_PYTHON: "true"
+        INCLUDE_PYTHON_DEV: "false"  # No pip-tools, ipython, black, etc.
+        PYTHON_VERSION: "3.13.5"  # Must be full X.Y.Z version
+
+        # No other language runtimes
+        INCLUDE_NODE: "false"
+        INCLUDE_RUST: "false"
+        INCLUDE_GOLANG: "false"
+        INCLUDE_RUBY: "false"
+        INCLUDE_R: "false"
+        INCLUDE_JAVA: "false"
+        INCLUDE_MOJO: "false"
+
+        # No development tools
+        INCLUDE_DEV_TOOLS: "false"
+
+        # No cloud/infra tools (add as needed)
+        INCLUDE_DOCKER: "false"
+        INCLUDE_KUBERNETES: "false"
+        INCLUDE_TERRAFORM: "false"
+
+      cache_from:
+        - type=local,src=/tmp/.buildx-cache
+      cache_to:
+        - type=local,dest=/tmp/.buildx-cache,mode=max
+
+    image: myproject:python-prod
+
+    container_name: python-prod
+
+    # Mount application code (read-only for security)
+    volumes:
+      - ../../:/workspace/myproject:ro
+      - python-cache:/cache
+
+    # Production environment variables
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PYTHONDONTWRITEBYTECODE=1
+      - PYTHONPATH=/workspace/myproject
+      - PIP_NO_CACHE_DIR=1
+      - PIP_DISABLE_PIP_VERSION_CHECK=1
+
+    # Security options for production
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+    # Health check (built into image)
+    healthcheck:
+      test: ["/usr/local/bin/healthcheck", "--quick"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+
+    # Restart policy
+    restart: unless-stopped
+
+    # Default command - override with your application entrypoint
+    command: sleep infinity
+
+volumes:
+  python-cache:
+    driver: local
+
+# Expected image size: ~400-500MB (vs ~600-700MB with dev tools)
+# Includes: Python 3.12, pip, essential libraries
+# Excludes: pip-tools, ipython, black, mypy, pytest, build tools
