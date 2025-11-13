@@ -1,84 +1,408 @@
-# Container Build System - Comprehensive Code Review
+# Container Build System - Remaining Improvements
 
 ## Executive Summary
 
-This is a well-architected, mature container build system with strong security practices and comprehensive testing. The codebase demonstrates excellent engineering discipline with clear documentation and thoughtful design decisions. However, several areas present opportunities for improvement around production readiness, usability, and reliability.
+This document tracks remaining improvements for the container build system based on comprehensive security (OWASP), architecture, and production readiness analysis conducted in November 2025. The system has strong fundamentals but requires production-grade enhancements for enterprise deployment.
+
+**Overall Assessment:**
+- Security Rating: 7.5/10 (MEDIUM-HIGH)
+- Architecture Rating: 8.5/10 (Excellent)
+- Developer Experience: 9/10 (Excellent)
+- Production Readiness: 6/10 (Needs Work)
 
 ---
 
-## Progress Tracker
+## Progress Summary
 
-**Completed:**
-- ✅ [HIGH] Exposed Credentials in .env File - Fixed in commit 4c57276
-- ✅ [HIGH] Pre-Commit Hooks Enabled by Default - Fixed in commit 4c57276
-- ✅ [HIGH] No Rollback/Downgrade Strategy for Auto-Patch - Documented
-- ✅ [HIGH] Production Deployment Guide - Created docs/production-deployment.md
-- ✅ [HIGH] Build Failure Troubleshooting - Expanded docs/troubleshooting.md
-- ✅ [MEDIUM] Missing Health Check Scripts - Implemented
-- ✅ [MEDIUM] Environment Variables Documentation - Created docs/environment-variables.md
-- ✅ [MEDIUM] Feature Dependencies Documentation - Created docs/feature-dependencies.md
-- ✅ [MEDIUM] List Features Script - Created bin/list-features.sh
-- ✅ [MEDIUM] Feature Configuration Summaries - Added to all 28 features
-- ✅ [MEDIUM] Version Output Improvements - Added filtering to check-installed-versions.sh
-- ✅ [MEDIUM] Migration Guide - Created docs/migration-guide.md
-- ✅ [MEDIUM] Cache Strategy Documentation - Created docs/cache-strategy.md
-- ✅ [MEDIUM] Checksum Fetching Timeouts - Added to all fetch functions
-- ✅ [MEDIUM] Checksum Code Deduplication - Refactored with helper functions
-- ✅ [MEDIUM] Feature Script Error Handling - Created CONTRIBUTING.md with standards
-- ✅ [MEDIUM] Environment Variable Validation - Created schema and validation script
-- ✅ [MEDIUM] Partial/Failed Download Cleanup - Added trap handlers to download-verify.sh
-- ✅ [MEDIUM] Race Condition in Sudo Configuration - Fixed with install command
-- ✅ [LOW] Download Progress Indicators - Added progress bar to downloads
-- ✅ [LOW] Comment Formatting Standardization - Already consistent across all scripts
-- ✅ [LOW] Interrupted Build Cleanup - Added centralized trap system to feature-header.sh
-- ✅ [LOW] Entrypoint Path Traversal Validation - Improved with stricter checks
-- ✅ [MEDIUM] Version Output Not User-Friendly - Added --compare mode and fixed bugs
-- ✅ [LOW] .env.example Has Test Values - Replaced with placeholders
-- ✅ [LOW] Missing CHANGELOG Format Documentation - Created docs/CHANGELOG-FORMAT.md
-- ✅ [LOW] Feature Scripts Exit Code Conventions - Documented in CONTRIBUTING.md
-- ✅ [LOW] Tests Don't Verify Error Messages - Added 26 error message verification tests
-- ✅ [MEDIUM] No Performance/Size Tests - Created build metrics tracking system
-- ✅ [MEDIUM] No Regression Tests for Version Updates - Created version compatibility testing system
+**Completed Items**: 43 items (All HIGH priority, 1 CRITICAL, most MEDIUM priority, many LOW priority)
+**Remaining Items**: 37 items (2 CRITICAL, 8 HIGH, 15 MEDIUM, 12 LOW)
 
-**In Progress:**
-- 🔄 None
-
-**Planned:**
-- See individual items below
+See git history and CHANGELOG.md for details on completed items.
 
 ---
 
-## SECURITY CONCERNS
+## REMAINING ITEMS
 
-### 1. ✅ [HIGH] [COMPLETED] Exposed Credentials in .env File
-**Status**: FIXED in commit 4c57276 (2025-11-10)
+### Security Concerns
 
-**Original Issue**:
-- `.env` file contained real 1Password service account token and GitHub PAT
-- Could be accidentally committed to repository
+#### 1. [HIGH] Implement GPG Verification and Automated Checksum Pinning
+**Source**: OWASP Security Analysis (Nov 2025)
+**Priority**: P1 (High - security enhancement, not blocking)
+**Effort**: 3-4 days
 
-**Solution Implemented**:
-- ✅ Sanitized .env file (all credentials removed)
-- ✅ Enhanced pre-commit hook to block .env commits
-- ✅ Added credential pattern detection (1Password, GitHub, AWS, Stripe, Google)
-- ✅ Created setup-dev-environment.sh script
-- ✅ Auto-enable hooks in devcontainer via postStartCommand
-- ✅ Updated README contributing section
+**Issue**: Currently using calculated checksums (TOFU - Trust On First Use):
+```bash
+# Currently: Downloads and calculates checksum on-the-fly
+checksum=$(curl ... "$file_url" | sha256sum | awk '{print $1}')
+```
 
-**Files Changed**:
-- `.githooks/pre-commit` - Added credential leak prevention
-- `bin/setup-dev-environment.sh` - New setup script
-- `.devcontainer/devcontainer.json` - Auto-run setup
-- `README.md` - Document setup requirement
+**Risks**:
+- Vulnerable to MITM attack on first download
+- If attacker compromises initial download, checksum matches malicious file
+- No verification against publisher-provided checksums
+
+**Affected Downloads**:
+- Python source tarballs
+- get-pip.py installer
+- Helm binary
+- AWS Session Manager plugin
+- Node.js binaries
+- Go binaries
+
+**Recommended Solution - Tiered Security Model**:
+
+**Tier 1: GPG Signature Verification** (Highest security, no maintenance)
+- Python: Verify against Python Release Signing Key
+- Go: Verify against Google signing keys
+- AWS CLI: Already implemented ✓
+- 1Password: Already implemented ✓
+
+**Tier 2: Pinned Checksums with Automation** (Good security, automated)
+- Create `lib/checksums.json` with official checksums
+- Enhance `bin/check-versions.sh` to fetch checksums from official sources
+- Weekly auto-patch workflow updates checksums.json automatically
+- Store checksums for current stable/LTS versions (~20-30 total)
+
+**Tier 3: Dynamic Checksums with Warning** (Fallback for new/old versions)
+- If version not in checksums.json, use calculated checksum
+- Log clear warning about TOFU security model
+- Allow users to specify: `ARG PYTHON_CHECKSUM=abc123...`
+
+**Implementation**:
+```bash
+# lib/features/python.sh (example)
+download_and_verify_python() {
+    local version="$1"
+    local url="$2"
+
+    # Try GPG verification first (best)
+    if verify_python_gpg "$version" "$tarball"; then
+        return 0
+    fi
+
+    # Try pinned checksum (good)
+    local pinned=$(get_pinned_checksum "python" "$version")
+    if [ -n "$pinned" ]; then
+        log_message "Using pinned checksum from checksums.json"
+        download_and_verify "$url" "$pinned"
+        return 0
+    fi
+
+    # Fall back to calculated (acceptable with warning)
+    log_message "WARNING: No pinned checksum for Python $version"
+    log_message "Using calculated checksum (TOFU risk - vulnerable to MITM)"
+    local calculated=$(calculate_checksum_sha256 "$url")
+    download_and_verify "$url" "$calculated"
+}
+```
+
+**Automation Flow**:
+1. Weekly auto-patch runs `check-versions.sh`
+2. Detects new Python 3.12.8 available
+3. Fetches official checksum from python.org/ftp/.../SHA256
+4. Updates checksums.json with new entry
+5. Commits both version + checksum updates
+6. CI tests, auto-merges on success
+
+**Benefits**:
+- ✅ Zero manual maintenance (automated with version updates)
+- ✅ Always current (within 1 week of release)
+- ✅ Never blocking (users can use new versions immediately with warning)
+- ✅ Git-tracked and auditable
+- ✅ Progressive enhancement (start with Python/Node, expand)
+
+**Files to Create/Modify**:
+- Create: `lib/checksums.json`
+- Create: `lib/base/checksum-database.sh` (get_pinned_checksum, update_checksum_database)
+- Create: `lib/base/gpg-verification.sh` (verify_python_gpg, verify_go_gpg)
+- Modify: `bin/check-versions.sh` (fetch checksums alongside versions)
+- Modify: `lib/features/python.sh` (use tiered verification)
+- Modify: `lib/features/golang.sh` (use tiered verification)
+- Modify: `lib/features/node.sh` (use tiered verification)
+- Create: `docs/security/checksum-verification.md` (document trust model)
+
+**Impact**: HIGH - Significantly improves supply chain security without operational burden
 
 ---
 
-### 2. [MEDIUM] Pipe Curl Downloads in Kubernetes and Terraform Features
-**Files**: 
-- `/workspace/containers/lib/features/kubernetes.sh` (lines with pipe to apt-key/gpg)
-- `/workspace/containers/lib/features/terraform.sh` (similar pattern)
+#### 2. [HIGH] Change Passwordless Sudo Default to False
+**Source**: OWASP Security Analysis (Nov 2025)
+**Files**:
+- `/workspace/containers/Dockerfile` (line 61)
+- `/workspace/containers/lib/base/user.sh` (lines 98-99)
 
-**Issue**: Using shell pipes with curl can be dangerous, though partially mitigated:
+**Issue**: Default configuration enables passwordless sudo:
+```dockerfile
+ARG ENABLE_PASSWORDLESS_SUDO=true
+```
+
+**Risks**:
+- Any compromised process can gain root access without password
+- Violates principle of least privilege
+- Inappropriate default for production containers
+
+**Current Mitigation**:
+- Development warning present in logs
+- Documented as development-focused feature
+
+**Recommendation**:
+- Change default: `ARG ENABLE_PASSWORDLESS_SUDO=false`
+- Require explicit opt-in for development mode
+- Add prominent security notice in README
+- Update examples to show secure production pattern
+
+**Impact**: HIGH - Privilege escalation risk
+
+---
+
+#### 3. [HIGH] Remove Docker Socket Auto-Fix Script
+**Source**: OWASP Security Analysis (Nov 2025)
+**File**: `/workspace/containers/lib/runtime/docker-socket-fix.sh` (lines 22-37)
+
+**Issue**: Automatically grants docker group write access to socket:
+```bash
+if [ "$(id -u)" = "0" ]; then
+    chgrp docker /var/run/docker.sock 2>/dev/null || true
+    chmod g+rw /var/run/docker.sock 2>/dev/null || true
+```
+
+**Risks**:
+- Any process in container can modify socket permissions
+- Grants root-equivalent host access automatically
+- Violates principle of explicit authorization
+
+**Recommendation**:
+- Remove auto-fix functionality
+- Document manual host-side configuration in README
+- Provide docker-compose example with proper socket permissions
+- Keep warning message but remove automatic permission changes
+
+**Impact**: HIGH - Unauthorized privilege escalation
+
+---
+
+#### 4. [HIGH] Support Flexible Version Resolution with Automatic Patch Resolution
+**Source**: Production build testing (Nov 2025)
+**Priority**: P1 (High - user experience and developer convenience)
+**Effort**: 2-3 days
+
+**Issue**: Currently version validation requires exact semantic version format (X.Y.Z):
+```bash
+# Currently FAILS:
+PYTHON_VERSION="3.12"  # Invalid - missing patch version
+
+# Must use:
+PYTHON_VERSION="3.12.7"  # Valid - full semantic version
+```
+
+**User Experience Problem**:
+- Users expect `PYTHON_VERSION="3.12"` to work and auto-resolve to latest patch (3.12.7)
+- Forces users to specify exact patch versions they may not care about
+- Node.js ecosystem commonly uses major.minor versioning (e.g., "20" for Node 20 LTS)
+- Go versions can be "1.23" or "1.23.5"
+- Inconsistent with common version specification patterns
+
+**Recommended Solution - Smart Version Resolution**:
+
+Implement flexible version resolution that automatically fetches the latest patch version:
+
+```bash
+# lib/base/version-resolution.sh
+resolve_python_version() {
+    local input_version="$1"
+
+    # If full X.Y.Z provided, use it
+    if [[ "$input_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        echo "$input_version"
+        return 0
+    fi
+
+    # If X.Y provided, fetch latest X.Y.Z from python.org
+    if [[ "$input_version" =~ ^[0-9]+\.[0-9]+$ ]]; then
+        log_message "Resolving Python $input_version to latest patch version..."
+        local latest_patch
+        latest_patch=$(fetch_latest_python_patch "$input_version")
+        log_message "Resolved to Python $latest_patch"
+        echo "$latest_patch"
+        return 0
+    fi
+
+    # If just major version (e.g., "3"), fetch latest 3.x.y
+    if [[ "$input_version" =~ ^[0-9]+$ ]]; then
+        log_message "Resolving Python $input_version to latest version..."
+        local latest_version
+        latest_version=$(fetch_latest_python_major "$input_version")
+        log_message "Resolved to Python $latest_version"
+        echo "$latest_version"
+        return 0
+    fi
+
+    log_error "Invalid Python version format: $input_version"
+    return 1
+}
+```
+
+**Implementation for Each Language**:
+
+| Language | Current Format | New Flexible Support | API Source |
+|----------|----------------|----------------------|------------|
+| Python | `3.13.5` only | `3`, `3.13`, `3.13.5` | python.org/ftp/python/ |
+| Node.js | `20.18.0` only | `20`, `20.18`, `20.18.0` | nodejs.org/dist/index.json |
+| Go | `1.23.5` only | `1`, `1.23`, `1.23.5` | go.dev/dl/?mode=json |
+| Rust | `1.82.0` only | `1`, `1.82`, `1.82.0` | rust-lang.org/stable |
+| Ruby | `3.3.7` only | `3`, `3.3`, `3.3.7` | ruby-lang.org/en/downloads/releases/ |
+| Java | `21.0.1` only | `21`, `21.0`, `21.0.1` | adoptium.net/api/ |
+
+**Caching Strategy**:
+- Cache resolved versions during build (store in build-time environment)
+- Log resolution for reproducibility: "Resolved Python 3.12 → 3.12.7"
+- Allow override: `PYTHON_VERSION_RESOLVED=3.12.6` to force specific patch
+
+**Benefits**:
+- ✅ Better user experience - match common expectations
+- ✅ Easier upgrades - change `3.12` to `3.13` without finding patch version
+- ✅ Automatic patch updates - weekly auto-patch gets latest patches
+- ✅ Still allows exact pinning when needed
+- ✅ Better documentation - simpler examples
+
+**Example Usage After Implementation**:
+```dockerfile
+# All of these would work:
+ARG PYTHON_VERSION="3.12"        # → Resolves to 3.12.7 (latest patch)
+ARG PYTHON_VERSION="3.12.5"      # → Uses exact version
+ARG NODE_VERSION="20"            # → Resolves to 20.18.0 (latest LTS patch)
+ARG GO_VERSION="1.23"            # → Resolves to 1.23.5 (latest patch)
+```
+
+**Files to Create/Modify**:
+- Create: `lib/base/version-resolution.sh` (resolve_<lang>_version functions)
+- Create: `lib/base/version-api.sh` (fetch_latest_<lang>_patch functions)
+- Modify: `lib/base/version-validation.sh` (accept partial versions)
+- Modify: `lib/features/python.sh` (use resolution before validation)
+- Modify: `lib/features/node.sh` (use resolution)
+- Modify: `lib/features/golang.sh` (use resolution)
+- Modify: `lib/features/rust.sh` (use resolution)
+- Modify: `lib/features/ruby.sh` (use resolution)
+- Modify: `lib/features/java.sh` (use resolution)
+- Update: `examples/production/*.yml` (can use simpler version specs)
+- Update: `README.md` and documentation (show flexible version examples)
+
+**Impact**: HIGH - Significantly improves user experience and matches ecosystem conventions
+
+---
+
+#### 5. [MEDIUM] Expand GPG Verification to Remaining Tools
+**Source**: OWASP Security Analysis (Nov 2025)
+**Priority**: P2 (Medium - enhancement after item #1 completes)
+**Files**: Multiple feature scripts
+
+**Issue**: GPG verification should be expanded beyond Python/Node/Go
+
+**Note**: Item #1 implements GPG verification for Python, Go, and Node.js. This item extends that work to remaining tools.
+
+**Tools Needing GPG Verification**:
+- Kubernetes tools (kubectl binary downloads, helm)
+- Terraform and HashiCorp tools
+- Ruby (ruby-lang.org provides GPG signatures)
+- R binaries
+- Java/OpenJDK downloads
+- Docker CLI (if not from apt repository)
+
+**Already Implemented** ✓:
+- AWS CLI: lib/features/aws.sh:98-141
+- 1Password: lib/features/op-cli.sh
+- Python, Go, Node: After item #1 completion
+
+**Recommendation**:
+- Use shared `lib/base/gpg-verification.sh` created in item #1
+- Add GPG key fingerprints for HashiCorp, Ruby, R projects
+- Document verification status for each tool in docs/security/
+- Phase this work incrementally (not all tools provide GPG signatures)
+
+**Implementation Priority**:
+1. HashiCorp tools (Terraform, etc.) - high value
+2. Ruby - signatures available
+3. R - if signatures available
+4. Java/OpenJDK - complex, many sources
+
+**Impact**: MEDIUM - Further improves supply chain security after core tools covered
+
+---
+
+#### 5. [MEDIUM] Fix Command Injection Vectors in apt-utils.sh
+**Source**: OWASP Security Analysis (Nov 2025)
+**File**: `/workspace/containers/lib/base/apt-utils.sh` (lines 149, 285)
+
+**Issue**: Using unquoted variable expansion with shellcheck disabled:
+```bash
+# shellcheck disable=SC2086
+if timeout "$APT_TIMEOUT" $cmd; then
+```
+
+**Risks**:
+- If APT_MAX_RETRIES or command parameters are manipulated, could lead to injection
+- Disabled shellcheck warning masks potential issues
+
+**Recommendation**:
+- Use array-based command execution:
+```bash
+local cmd_array=("$@")
+if timeout "$APT_TIMEOUT" "${cmd_array[@]}"; then
+```
+- Remove shellcheck disable comments
+- Add input validation for APT_* environment variables
+
+**Impact**: MEDIUM - Theoretical injection risk (low likelihood in practice)
+
+---
+
+#### 6. [MEDIUM] Validate PATH Additions Before Modification
+**Source**: OWASP Security Analysis (Nov 2025)
+**Files**: Multiple feature scripts, `/workspace/containers/lib/runtime/setup-paths.sh`
+
+**Issue**: Dynamic PATH construction without validation (16 instances in setup-paths.sh)
+
+**Risks**:
+- If /cache or home directories are compromised, malicious binaries could be added to PATH
+- No verification that directories exist and are owned by expected user
+
+**Recommendation**:
+- Create shared PATH validation function in lib/base/path-utils.sh
+- Verify directory ownership before adding to PATH
+- Check directory permissions (should be writable only by owner/trusted user)
+
+**Impact**: MEDIUM - PATH hijacking prevention
+
+---
+
+#### 7. [MEDIUM] Improve kubectl Completion Validation
+**Source**: OWASP Security Analysis (Nov 2025)
+**File**: `/workspace/containers/lib/features/kubernetes.sh` (lines 358-366)
+
+**Issue**: Regex-based validation can be bypassed:
+```bash
+! grep -qE '(rm -rf|curl.*bash|wget.*bash|eval.*\$)' "$COMPLETION_FILE"
+```
+
+**Risks**:
+- Pattern can be bypassed with obfuscation (e.g., `r``m -rf`, base64 encoding)
+- Completion scripts could contain malicious code
+
+**Recommendation**:
+- Use file size limit only (already implemented: < 100KB)
+- Consider AST-based validation for shell scripts
+- Or remove sourcing of completion entirely (trade-off with UX)
+
+**Impact**: MEDIUM - Code injection via completion scripts
+
+---
+
+#### 8. [MEDIUM] Pipe Curl Downloads in Kubernetes and Terraform Features
+**Files**:
+- `/workspace/containers/lib/features/kubernetes.sh`
+- `/workspace/containers/lib/features/terraform.sh`
+
+**Issue**: Using shell pipes with curl can be dangerous:
 ```bash
 curl -fsSL https://... | apt-key add -
 curl -fsSL https://... | gpg --dearmor -o /etc/apt/keyrings/...
@@ -89,23 +413,24 @@ curl -fsSL https://... | gpg --dearmor -o /etc/apt/keyrings/...
 - Signal handling issues if interrupted mid-pipe
 - Though wrapped in conditional bash -c, still suboptimal
 
-**Current Mitigation**: 
-- Properly detected as deprecated pattern (code checks against this)
+**Current Mitigation**:
+- Properly detected as deprecated pattern
 - Feature-header.sh notes Debian 13 properly handles new signed-by method
+- Only affects repository key installation
 
 **Recommendation**:
+- Download to temporary file first, verify, then process
 - Already being handled via feature scripts with version detection
-- Consider temporary file downloads with verification instead
+- Consider unified repository key installation function
 
 ---
 
-### 3. [MEDIUM] Dynamic Checksum Fetching Has MITM Risk
+#### 9. [MEDIUM] Dynamic Checksum Fetching Has MITM Risk
 **File**: `/workspace/containers/lib/features/lib/checksum-fetch.sh`
-**Lines**: 46-55 (fetch_go_checksum, fetch_ruby_checksum)
 
 **Issue**: Fetches checksums from upstream websites at build time:
 ```bash
-page_content=$(curl -fsSL "$url")  # Line 46, 307
+page_content=$(curl -fsSL "$url")  # Parses HTML for checksums
 checksum=$(echo "$page_content" | grep -oP '...')
 ```
 
@@ -115,35 +440,33 @@ checksum=$(echo "$page_content" | grep -oP '...')
 - Parses HTML with regex instead of proper HTML parsing
 
 **Current Mitigation**:
-- Comments indicate checksums should be hardcoded (line 209-210)
+- Comments indicate checksums should be hardcoded (lines 209-210)
 - Regex validates 64-hex format (SHA256) before accepting
 - Feature-header.sh has secure_temp_dir with 755 permissions
+- Only used for version flexibility, not primary security mechanism
 
 **Recommendation**:
 - Document that dynamic checksum fetching is transitional
 - Add warning about production deployments using dynamic checksums
 - Consider cached checksum database option
 - Add checksum source validation (TLS pinning for critical endpoints)
+- Document pinned versions for production use
 
 ---
 
-### 4. [LOW] Temp Directory Permissions May Be Too Permissive
+#### 10. [LOW] Temp Directory Permissions May Be Too Permissive
 **File**: `/workspace/containers/lib/base/feature-header.sh`
-**Lines**: 214-216
 
-**Issue**: Temporary directories use 755 permissions:
-```bash
-chmod 755 "$temp_dir"  # Allows non-owner read/execute
-```
+**Issue**: Temporary directories use 755 permissions (allows non-owner read/execute)
 
-**Context**: Changed from 700 (per recent commit f9618b0), specifically to allow non-root users to read/execute
+**Context**: Changed from 700 (per commit f9618b0), specifically to allow non-root users to read/execute
 
-**Risk**: Lower than ideal - anyone on system can read build artifacts
+**Risk**: Anyone on system can read build artifacts (low risk in containers)
 
 **Mitigation**:
-- Documented in Dockerfile comment (lines 80-83)
+- Documented in Dockerfile comments
 - Docker containers are typically isolated
-- This was a deliberate security/functionality tradeoff
+- Deliberate security/functionality tradeoff
 - Noted in CLAUDE.md and commit history
 
 **Recommendation**:
@@ -153,8 +476,8 @@ chmod 755 "$temp_dir"  # Allows non-owner read/execute
 
 ---
 
-### 5. [LOW] GPG Key Handling Could Validate Key IDs
-**File**: `/workspace/containers/lib/features/kubernetes.sh` and terraform.sh
+#### 11. [LOW] GPG Key Handling Could Validate Key IDs
+**Files**: `/workspace/containers/lib/features/kubernetes.sh`, `terraform.sh`
 
 **Issue**: Imports GPG keys without verifying key IDs:
 ```bash
@@ -168,1037 +491,721 @@ curl -fsSL <url> | gpg --dearmor -o /etc/apt/keyrings/...
 
 ---
 
-## MISSING FEATURES
+### Production Readiness
 
-### 1. ✅ [HIGH] [COMPLETED] Pre-Commit Hooks Not Enabled by Default
-**Status**: FIXED in commit 4c57276 (2025-11-10)
+#### 12. [CRITICAL] ✅ COMPLETE - Create Production-Optimized Image Variants
+**Source**: Production Readiness Analysis (Nov 2025)
+**Completed**: November 2025
+**Status**: ✅ Complete
 
-**Original Issue**:
-- Git hooks were optional, requiring manual `git config core.hooksPath .githooks`
-- New contributors wouldn't have shellcheck or credential scanning enabled
+**What Was Delivered**:
+Instead of creating separate Dockerfiles (which would violate the universal Dockerfile principle), implemented production examples using the main Dockerfile with production-focused build arguments:
 
-**Solution Implemented**:
-- ✅ Created `bin/setup-dev-environment.sh` to enable hooks automatically
-- ✅ Auto-run in devcontainer via `postStartCommand`
-- ✅ Updated README contributing section with setup instructions
-- ✅ Hooks now include both shellcheck validation and credential detection
+**Files Created**:
+- `examples/production/docker-compose.minimal.yml` - Minimal base (~163MB)
+- `examples/production/docker-compose.python.yml` - Python runtime-only
+- `examples/production/docker-compose.node.yml` - Node runtime-only
+- `examples/production/README.md` - Comprehensive production guide
+- `examples/production/COMPARISON.md` - Dev vs prod comparison tables
+- `examples/production/build-prod.sh` - CLI helper for building production images
+- `examples/production/compare-sizes.sh` - Size comparison utility
+- `tests/integration/builds/test_production.sh` - Production build tests (6/6 passing)
 
-**Files Changed**:
-- Same as Security Issue #1 (combined fix)
+**Key Features**:
+- Uses `debian:bookworm-slim` base (~100MB smaller than full Debian)
+- `ENABLE_PASSWORDLESS_SUDO=false` for security
+- `INCLUDE_DEV_TOOLS=false` removes editors, debuggers, etc.
+- Runtime-only packages: `INCLUDE_<LANG>_DEV=false`
+- Security hardening examples (read-only filesystem, cap_drop, no-new-privileges)
+- Image size reductions: 30-35% smaller than dev variants
 
----
+**Test Results**: All production tests passing (100%)
 
-### 2. ✅ [HIGH] [COMPLETED] No Rollback/Downgrade Strategy for Auto-Patch
-**Status**: DOCUMENTED (2025-11-10)
+**Bugs Fixed During Implementation**:
+- Fixed logging initialization issue in `lib/base/logging.sh` (lib/base/logging.sh:244-283)
+- Updated version validation to require semantic versions (documented need for flexible resolution in item #4)
 
-**Original Issue**:
-- Automated patch releases auto-merge on CI success with no documented rollback procedure
-- No emergency revert procedures
-- Unclear distinction between stable and auto-patch releases
-
-**Solution Implemented**:
-- ✅ Created comprehensive `docs/emergency-rollback.md` guide with:
-  - Quick reference rollback commands
-  - Step-by-step procedures for different scenarios
-  - Post-rollback actions and monitoring
-  - Prevention best practices
-  - Real-world examples
-- ✅ Updated README.md with emergency procedures section
-- ✅ Documented release channel strategy (stable vs auto-patch)
-- ✅ Provided version pinning recommendations
-
-**Files Changed**:
-- `docs/emergency-rollback.md` - New comprehensive guide
-- `README.md` - Added emergency procedures section
+**Impact**: ✅ COMPLETE - Production deployment now fully supported with examples and documentation
 
 ---
 
-### 3. ✅ [MEDIUM] [COMPLETED] Missing Health Check Scripts for Container Startups
-**Status**: IMPLEMENTED (2025-11-10)
+#### 13. [CRITICAL] Add Kubernetes Deployment Templates
+**Source**: Production Readiness Analysis (Nov 2025)
+**Priority**: P0 (Critical for enterprise deployment)
+**Effort**: 3-4 days
 
-**Original Issue**:
-- No built-in health check mechanism
-- Docker HEALTHCHECK instruction not configured
-- No way to verify container features are functional
+**Issue**: No Kubernetes deployment examples beyond basic documentation
 
-**Solution Implemented**:
-- ✅ Created comprehensive `bin/healthcheck.sh` script with:
-  - Quick mode for minimal overhead (core checks only)
-  - Full mode with auto-detection of installed features
-  - Feature-specific checks (python, node, rust, go, ruby, r, java, docker, kubernetes)
-  - Verbose mode for debugging
-- ✅ Added HEALTHCHECK instruction to Dockerfile
-- ✅ Updated devcontainer docker-compose.yml with healthcheck
-- ✅ Created example `healthcheck-example.yml` showing usage patterns
-- ✅ Comprehensive documentation in `docs/healthcheck.md`
+**Missing**:
+- Deployment manifests
+- Service definitions
+- ConfigMap/Secret examples
+- Resource limits best practices
+- Security context examples
+- Network policies
+- Helm charts
 
-**Files Changed**:
-- `bin/healthcheck.sh` - New healthcheck script
-- `Dockerfile` - Added HEALTHCHECK instruction
-- `.devcontainer/docker-compose.yml` - Added healthcheck comment
-- `examples/contexts/healthcheck-example.yml` - New example
-- `docs/healthcheck.md` - Complete documentation
-
----
-
-### 4. ✅ [MEDIUM] [COMPLETED] No Feature Dependency Resolution
-**Status**: DOCUMENTED (2025-11-11) - Commits: c5ee9ef
-
-**Original Issue**: Features can have implicit dependencies that aren't documented
-
-**Solution Implemented**:
-- ✅ Created comprehensive `docs/feature-dependencies.md` (378 lines)
-- ✅ Dependency graph showing all relationships
-- ✅ Reference tables for language dev tools and their requirements
-- ✅ Common build patterns and examples
-- ✅ Troubleshooting dependency errors
-- ✅ Feature compatibility matrix
-- ✅ Recommended combinations for different use cases
-- ✅ Scripting support with environment files
-
-**Note**: Automatic resolution not yet implemented - dependencies must be manually specified.
-Future enhancement planned for automatic dependency resolution.
-
-**Files Changed**:
-- `docs/feature-dependencies.md` - New comprehensive dependency guide
-
----
-
-### 5. ✅ [MEDIUM] [COMPLETED] No Environment Variable Validation Schema
-**Status**: IMPLEMENTED (2025-11-11) - Commits: d0844ca
-
-**Original Issue**: No validation schema for build arguments, prone to misconfiguration
-
-**Solution Implemented**:
-- ✅ Created JSON Schema (`schemas/build-args.schema.json`)
-  * Complete schema for all build arguments
-  * Type validation (boolean, string, integer)
-  * Pattern validation for version strings
-  * Enum constraints for BASE_IMAGE
-  * Default values documented
-  * Example configurations
-- ✅ Created validation script (`bin/validate-build-args.sh`)
-  * Validates all build arguments
-  * Checks feature dependencies (e.g., PYTHON_DEV requires PYTHON)
-  * Version format validation (semver patterns)
-  * Boolean value validation
-  * UID/GID range validation (1000-60000)
-  * Username format validation
-  * Special dependency checks (e.g., Cloudflare requires Node.js)
-  * Colored output with error/warning/success messages
-  * Support for environment files (--env-file)
-  * Production warnings (e.g., passwordless sudo)
-
-**Usage**:
+**Recommendation**:
 ```bash
-./bin/validate-build-args.sh [--env-file FILE]
-./bin/validate-build-args.sh --help
+# examples/kubernetes/
+├── base/
+│   ├── deployment.yaml
+│   ├── service.yaml
+│   ├── configmap.yaml
+│   └── secrets.yaml
+├── overlays/
+│   ├── development/
+│   ├── staging/
+│   └── production/
+└── README.md
 ```
 
-**Files Changed**:
-- `schemas/build-args.schema.json` - JSON Schema for validation
-- `bin/validate-build-args.sh` - Validation script
+**Deliverables**:
+- Kustomize base + overlays for multiple environments
+- Optional Helm chart
+- Resource limits guidance
+- Security context examples (non-root, read-only filesystem)
+- Network policy examples
+- Production deployment checklist
+
+**Impact**: CRITICAL - Enterprise Kubernetes deployment support
 
 ---
 
-### 6. [LOW] Missing `docker --version` and Tool Version Output in Entrypoint
+#### 14. [CRITICAL] Implement Observability Integration
+**Source**: Production Readiness Analysis (Nov 2025)
+**Priority**: P0 (Critical for production operations)
+**Effort**: 4-5 days
+**Current Score**: 2/10 (Most critical gap)
+
+**Issue**: No production observability features
+- No Prometheus metrics exporter
+- No structured JSON logging
+- No OpenTelemetry integration
+- No pre-built Grafana dashboards
+- No alerting rules
+
+**Recommendation**:
+```bash
+# Add to lib/runtime/
+├── metrics-exporter.sh      # Prometheus metrics endpoint
+├── log-formatter.sh         # JSON structured logging
+└── trace-context.sh         # OpenTelemetry propagation
+
+# Add to examples/
+└── monitoring/
+    ├── prometheus-rules.yaml
+    ├── grafana-dashboards/
+    │   ├── container-health.json
+    │   ├── resource-usage.json
+    │   └── application-metrics.json
+    └── alertmanager-config.yaml
+```
+
+**Metrics to expose**:
+- Container health status
+- Uptime
+- Resource usage (CPU, memory, disk)
+- Feature availability
+- Cache hit rates
+- Startup time
+
+**Deliverables**:
+- Metrics exporter script (Prometheus format)
+- Structured logging standard (JSON with correlation IDs)
+- Grafana dashboard templates
+- Alerting rules for common issues
+- Runbooks for alerts
+- OpenTelemetry integration guide
+
+**Impact**: CRITICAL - Production monitoring and debugging
+
+---
+
+#### 15. [HIGH] Add Configuration Validation Framework
+**Source**: Production Readiness Analysis (Nov 2025)
+**Priority**: P1 (High)
+**Effort**: 2 days
+
+**Issue**: No runtime configuration validation
+- No required environment variable checks
+- No format validation
+- No secret detection warnings
+- Configuration errors discovered at runtime failure
+
+**Recommendation**:
+```bash
+#!/usr/local/bin/validate-config.sh
+# Runtime configuration validation
+
+required_vars=(
+  DATABASE_URL
+  REDIS_URL
+  SECRET_KEY
+)
+
+for var in "${required_vars[@]}"; do
+  if [[ -z "${!var}" ]]; then
+    echo "ERROR: Required environment variable $var is not set"
+    exit 1
+  fi
+done
+
+# Validate formats
+if [[ ! "$DATABASE_URL" =~ ^postgresql:// ]]; then
+  echo "ERROR: DATABASE_URL must be PostgreSQL connection string"
+  exit 1
+fi
+```
+
+**Deliverables**:
+- Config validation script
+- Environment variable documentation generator
+- Secret detection warnings (password/key in plaintext)
+- Integration with entrypoint (validate before starting)
+- Example validation rules for common patterns
+
+**Impact**: HIGH - Prevent misconfiguration issues
+
+---
+
+#### 16. [HIGH] Enhance Secret Management Integrations
+**Source**: Production Readiness Analysis (Nov 2025)
+**Priority**: P1 (High)
+**Effort**: 3 days
+
+**Issue**: Limited secret management support
+- Only 1Password CLI with minimal examples
+- No HashiCorp Vault integration
+- No AWS Secrets Manager support
+- No Azure Key Vault integration
+- Documentation-only approach
+
+**Recommendation**:
+```bash
+# Add lib/runtime/secrets/
+├── vault-integration.sh          # HashiCorp Vault
+├── aws-secrets-manager.sh        # AWS Secrets Manager
+├── azure-keyvault.sh             # Azure Key Vault
+└── 1password-integration.sh      # Enhanced 1Password
+
+# Usage in entrypoint:
+if [[ -n "${USE_VAULT}" ]]; then
+  source /opt/container-runtime/secrets/vault-integration.sh
+  load_secrets_from_vault
+fi
+```
+
+**Deliverables**:
+- Vault integration script
+- AWS Secrets Manager support
+- Azure Key Vault support
+- Enhanced 1Password integration with examples
+- Kubernetes secret injection examples
+- Environment variable injection from secret stores
+
+**Impact**: HIGH - Enterprise secret management
+
+---
+
+#### 17. [HIGH] Create CI/CD Pipeline Templates
+**Source**: Production Readiness Analysis (Nov 2025)
+**Priority**: P1 (High)
+**Effort**: 2-3 days
+
+**Issue**: No CI/CD pipeline examples for common platforms
+- No GitHub Actions templates
+- No GitLab CI examples
+- No Jenkins pipelines
+- No deployment strategy examples (blue-green, canary)
+
+**Recommendation**:
+```bash
+# examples/cicd/
+├── github-actions/
+│   ├── build-and-test.yml
+│   ├── deploy-staging.yml
+│   ├── deploy-production.yml
+│   └── rollback.yml
+├── gitlab-ci/
+│   └── .gitlab-ci.yml
+├── jenkins/
+│   └── Jenkinsfile
+└── README.md
+```
+
+**Deliverables**:
+- GitHub Actions workflows (build, test, deploy)
+- GitLab CI templates
+- Jenkins pipeline examples
+- Deployment strategies (blue-green, canary)
+- Automated rollback procedures
+- Integration with container registry
+
+**Impact**: HIGH - Standardized deployment automation
+
+---
+
+#### 18. [MEDIUM] Add Operational Runbooks
+**Source**: Production Readiness Analysis (Nov 2025)
+**Priority**: P2 (Medium)
+**Effort**: 3 days
+
+**Issue**: No operational documentation
+- No incident response procedures
+- No common operations documented
+- No scaling procedures
+- Missing disaster recovery documentation
+
+**Recommendation**:
+```bash
+# docs/runbooks/
+├── incident-response.md
+├── scaling-procedures.md
+├── disaster-recovery.md
+├── common-operations.md
+├── troubleshooting-production.md
+└── on-call-guide.md
+```
+
+**Deliverables**:
+- Incident response procedures
+- Scaling procedures (horizontal/vertical)
+- Update and rollback procedures
+- Disaster recovery documentation
+- Common operational tasks
+- On-call guide for production issues
+
+**Impact**: MEDIUM - Operational excellence
+
+---
+
+#### 19. [MEDIUM] Performance Optimization Guide
+**Source**: Production Readiness Analysis (Nov 2025)
+**Priority**: P2 (Medium)
+**Effort**: 2 days
+
+**Issue**: No performance optimization documentation
+- No build time optimization guide
+- Missing benchmarks for different variants
+- No image size optimization guidance
+- No performance regression testing
+
+**Deliverables**:
+- Build time optimization techniques
+- Image size reduction strategies
+- Cache optimization patterns
+- Benchmarking tools and baselines
+- Performance regression testing in CI
+
+**Impact**: MEDIUM - Build efficiency and cost optimization
+
+---
+
+### Architecture & Code Organization
+
+#### 20. [MEDIUM] Extract cache-utils.sh Shared Utility
+**Source**: Architecture Analysis (Nov 2025)
+**Priority**: P1 (High value, reduces duplication)
+**Effort**: 1 day
+
+**Issue**: Cache directory creation duplicated across 8+ feature scripts
+- 50+ lines of duplicated code
+- Inconsistent error handling approaches
+- Different permission patterns
+
+**Current duplication** in:
+- python.sh:85-102
+- golang.sh:168-181
+- rust.sh:63-76
+- node.sh (similar)
+- ruby.sh (similar)
+- r.sh (similar)
+- java.sh (similar)
+- mojo.sh (similar)
+
+**Recommendation**:
+```bash
+# Create lib/base/cache-utils.sh
+create_language_cache() {
+    local cache_name="$1"
+    local cache_path="/cache/${cache_name}"
+
+    log_command "Creating ${cache_name} cache directory" \
+        bash -c "install -d -m 0755 -o '${USER_UID}' -g '${USER_GID}' '${cache_path}'"
+
+    echo "$cache_path"
+}
+
+create_multiple_caches() {
+    local -n cache_array=$1
+    for cache_name in "${cache_array[@]}"; do
+        create_language_cache "$cache_name"
+    done
+}
+```
+
+**Impact**: Reduces ~50 lines of duplication, ensures consistency
+
+---
+
+#### 21. [MEDIUM] Extract path-utils.sh Shared Utility
+**Source**: Architecture Analysis (Nov 2025)
+**Priority**: P1 (High value, reduces duplication)
+**Effort**: 1 day
+
+**Issue**: PATH manipulation duplicated across 5+ feature scripts
+- ~40 lines of duplicated code
+- Potential for bugs in path handling
+- Inconsistent error handling
+
+**Current duplication** in:
+- python.sh:315-333
+- rust.sh:246-264
+- golang.sh (similar)
+- node.sh (similar)
+- ruby.sh (similar)
+
+**Recommendation**:
+```bash
+# Create lib/base/path-utils.sh
+add_to_system_path() {
+    local new_path="$1"
+    local environment_file="/etc/environment"
+
+    # Read existing PATH
+    if [ -f "$environment_file" ] && grep -q "^PATH=" "$environment_file"; then
+        local existing_path
+        existing_path=$(grep "^PATH=" "$environment_file" | cut -d'"' -f2)
+        grep -v "^PATH=" "$environment_file" > "${environment_file}.tmp"
+        mv "${environment_file}.tmp" "$environment_file"
+    else
+        local existing_path="/usr/local/bin:/usr/bin:/bin"
+    fi
+
+    # Add new path if not present
+    if [[ ":$existing_path:" != *":$new_path:"* ]]; then
+        existing_path="${existing_path}:${new_path}"
+    fi
+
+    echo "PATH=\"$existing_path\"" >> "$environment_file"
+}
+```
+
+**Impact**: Reduces ~40 lines of duplication, standardizes PATH management
+
+---
+
+#### 22. [MEDIUM] Split dev-tools.sh into Sub-Features
+**Source**: Architecture Analysis (Nov 2025)
+**Priority**: P1 (Maintainability)
+**Effort**: 2-3 days
+
+**Issue**: dev-tools.sh is 1,106 lines (largest feature script)
+- Installs 50+ tools
+- Mix of different tool categories
+- Hard to maintain
+- All-or-nothing installation
+
+**Current categories** in dev-tools.sh:
+- Core tools (ripgrep, fd, bat, eza)
+- Git helpers (lazygit, delta, gh, glab)
+- Monitoring tools (htop, btop, iotop)
+- Network tools (netcat, nmap, tcpdump)
+- Cloud CLIs (gh, glab, act)
+- Productivity tools (direnv, mkcert)
+
+**Recommendation**:
+```bash
+lib/features/
+├── dev-tools-core.sh           # Basic tools (ripgrep, fd, bat)
+├── dev-tools-git.sh            # Git helpers (lazygit, delta, gh)
+├── dev-tools-monitoring.sh     # htop, btop, iotop
+├── dev-tools-network.sh        # netcat, nmap, tcpdump
+└── dev-tools.sh                # Meta-feature that includes all
+```
+
+**Dockerfile changes**:
+```dockerfile
+ARG INCLUDE_DEV_TOOLS_CORE=false
+ARG INCLUDE_DEV_TOOLS_GIT=false
+ARG INCLUDE_DEV_TOOLS_MONITORING=false
+ARG INCLUDE_DEV_TOOLS_NETWORK=false
+```
+
+**Impact**: Better granularity, reduces image size, easier maintenance
+
+---
+
+#### 23. [MEDIUM] Extract Project Templates from Functions
+**Source**: Architecture Analysis (Nov 2025)
+**Priority**: P1 (Code organization)
+**Effort**: 1-2 days
+
+**Issue**: Template code embedded in functions
+- `go-new` function: 207 lines (golang.sh:284-490)
+- Contains heredoc templates for CLI, API, library
+- Hard to update templates
+- Not reusable outside of function
+
+**Recommendation**:
+```bash
+lib/features/templates/
+├── go/
+│   ├── cli/main.go.tmpl
+│   ├── api/main.go.tmpl
+│   ├── lib/lib.go.tmpl
+│   └── Makefile.tmpl
+├── python/
+│   └── pyproject.toml.tmpl
+└── node/
+    └── package.json.tmpl
+```
+
+**Template loader**:
+```bash
+load_template() {
+    local language="$1"
+    local template_type="$2"
+    local template_file="$3"
+
+    cat "/tmp/build-scripts/features/templates/${language}/${template_type}/${template_file}"
+}
+```
+
+**Impact**: Reduces function size by ~150 lines, enables template versioning
+
+---
+
+#### 24. [LOW] Implement Feature Manifest System
+**Source**: Architecture Analysis (Nov 2025)
+**Priority**: P2 (Long-term architecture)
+**Effort**: 5-7 days
+
+**Issue**: Features hardcoded in Dockerfile (451 lines with repetitive patterns)
+- Adding new feature requires editing Dockerfile
+- Feature dependencies manual
+- Installation order hardcoded
+- No dynamic feature discovery
+
+**Recommendation**:
+```yaml
+# lib/features/python.yaml
+name: python
+display_name: Python
+category: language
+build_arg: INCLUDE_PYTHON
+version_arg: PYTHON_VERSION
+default_version: "3.14.0"
+install_script: lib/features/python.sh
+dependencies: []
+optional_dependencies:
+  - python-dev
+priority: 10
+tags:
+  - language
+  - scripting
+  - ai-ml
+```
+
+**Feature orchestrator** (lib/base/feature-orchestrator.sh):
+- Discover features from manifests
+- Resolve dependencies
+- Determine installation order
+- Execute feature scripts
+
+**Impact**: Automatic feature discovery, dependency resolution, simplified Dockerfile
+
+---
+
+#### 25. [LOW] Standardize Verification Scripts
+**Source**: Architecture Analysis (Nov 2025)
+**Priority**: P2 (Consistency)
+**Effort**: 2 days
+
+**Issue**: Verification scripts inconsistent
+- Some create test-{feature} script
+- Others embed verification inline
+- No standard format
+- Inconsistent UX
+
+**Recommendation**:
+```bash
+# lib/base/verification-template.sh
+generate_verification_script() {
+    local feature_name="$1"
+    local -n commands=$2    # Array of commands to verify
+    local -n env_vars=$3    # Array of env vars to display
+
+    # Generate consistent verification script
+}
+```
+
+**Impact**: Consistent verification across all features, better UX
+
+---
+
+### Missing Features
+
+#### 26. [LOW] Missing docker --version and Tool Version Output in Entrypoint
 **Issue**: Users don't get immediate feedback on installed versions
 
 **Recommendation**:
 - Add optional verbose mode to entrypoint showing installed versions
 - Create `.container-versions` file during build
-- Allow `check-installed-versions.sh` to run on startup
+- Allow `check-installed-versions.sh` to run on startup (opt-in)
+- Add `--versions` flag to entrypoint
+
+**Impact**: Nice-to-have for debugging, not critical
 
 ---
 
-## ANTI-PATTERNS & CODE SMELLS
+### Anti-Patterns & Code Smells
 
-### 1. ✅ [MEDIUM] [COMPLETED] Inconsistent Error Handling in Feature Scripts
-**Status**: DOCUMENTED (2025-11-11) - Commits: 4ab3041
-
-**Original Issue**: Error handling patterns needed standardization and documentation
-
-**Solution Implemented**:
-- ✅ Created comprehensive CONTRIBUTING.md (579 lines)
-- ✅ Documented standardized feature script header template
-- ✅ Mandated `set -euo pipefail` usage (already in all 28 feature scripts)
-- ✅ Standardized error message format using logging framework
-- ✅ Documented recovery mechanism patterns
-- ✅ Cleanup on failure with trap handlers
-- ✅ Required components checklist for all feature scripts
-- ✅ Feature script structure pattern with 9 required steps
-- ✅ Testing requirements (unit + integration tests)
-- ✅ Code style guidelines (indentation, naming, comments)
-- ✅ Pull request process and checklist
-
-**Key Guidelines**:
-- Error handling: `set -euo pipefail` mandatory
-- Error messages: Use `log_error`, `log_warning`, `log_message`
-- Explicit error handling: No silent failures
-- Trap handlers for critical cleanup
-
-**Files Changed**:
-- `CONTRIBUTING.md` - New comprehensive contributor guidelines
-- `README.md` - Updated to reference CONTRIBUTING.md
-
-**Note**: All existing feature scripts already follow the `set -euo pipefail` standard.
-This documentation formalizes existing practices.
-
----
-
-### 2. ✅ [MEDIUM] [COMPLETED] Duplicate Code in Checksum Fetching
-**Status**: FIXED (2025-11-11) - Commits: 336a86a
-
-**Original Issue**: Similar patterns repeated across fetch functions
-
-**Solution Implemented**:
-- ✅ Created internal helper functions to eliminate duplication
-- ✅ `_curl_with_timeout` - Standard curl wrapper with timeouts
-- ✅ `_is_partial_version` - Detects partial versions (e.g., "1.23" vs "1.23.0")
-- ✅ `_curl_with_retry_wrapper` - Uses retry_github_api if available, else standard curl
-- ✅ Refactored all 7 fetch functions to use helpers
-- ✅ Reduced code duplication by ~25% (38 lines reduced)
-- ✅ Consistent timeout handling across all functions
-- ✅ Consistent retry logic for GitHub API calls
-
-**Functions Refactored**:
-- fetch_go_checksum - Simplified partial version detection
-- fetch_ruby_checksum - Simplified partial version detection
-- fetch_github_checksums_txt - Unified retry logic
-- fetch_github_sha256_file - Unified retry logic
-- fetch_github_sha512_file - Unified retry logic
-- fetch_maven_sha1 - Using standard timeout helper
-
-**Files Changed**:
-- `lib/features/lib/checksum-fetch.sh` - Refactored with helper functions
-
----
-
-### 3. [MEDIUM] Sed Usage in Parsing Without Proper Escaping
+#### 27. [MEDIUM] Sed Usage in Parsing Without Proper Escaping
 **File**: `/workspace/containers/lib/features/lib/checksum-fetch.sh`
 
-**Lines**: 82, 331, etc.
+**Issue**: Parsing HTML with sed is brittle:
 ```bash
 sed 's/<tt>\|<\/tt>//g'
 sed 's/>Ruby //; s/<//'
 ```
 
-**Issue**: While these are safe for fixed strings, pattern is brittle
-
 **Recommendation**:
 - Use jq for JSON parsing where available
 - Document why sed is used when it is
 - Add comments for complex sed patterns
+- Consider switching to proper HTML parsers where critical
+
+**Current State**: Safe for fixed strings but pattern is fragile
 
 ---
 
-### 4. [LOW] Feature Scripts Use Different Logging Approaches
-**Issue**: Some log to `/var/log/container-build`, others use echo
+#### 28. [LOW] Feature Scripts Use Different Logging Approaches
+**Issue**: Some variations in logging detail level across features
 
-**Files**: All feature scripts
-
-**Impact**: 
-- Inconsistent debugging experience
-- Hard to find error logs
+**Impact**:
+- Slightly inconsistent debugging experience
+- Most scripts use logging.sh functions correctly
 
 **Recommendation**:
-- Standardize on logging.sh functions everywhere
-- Make logging output consistent
-- Provide log viewer in runtime scripts
+- Audit all feature scripts for consistent log_message/log_error usage
+- Ensure all use same verbosity level
+- Standardize format of informational messages
+
+**Status**: Minor polish issue, not breaking
 
 ---
 
-### 5. [LOW] Version Validation Spread Across Multiple Files
-**Files**: 
+#### 29. [LOW] Version Validation Spread Across Multiple Files
+**Files**:
 - `version-validation.sh`
 - `checksum-fetch.sh`
 - Individual feature scripts
 
-**Issue**: Version validation logic duplicated
+**Issue**: Version validation logic has some duplication
 
 **Recommendation**:
-- Centralize all version validation
+- Centralize all version validation functions
 - Create single validation library for all patterns
 - Use in Dockerfile ARG defaults
+- Reduce duplication between flexible/strict validators
+
+**Impact**: Code maintenance, not functional
 
 ---
 
-## DOCUMENTATION GAPS
+### Testing Gaps
 
-### 1. ✅ [HIGH] [COMPLETED] Production Deployment Guide Missing
-**Status**: FIXED (2025-11-11) - Commits: 3eb6968
-
-**Original Issue**: Excellent dev documentation but limited production guidance
-
-**Solution Implemented**:
-- ✅ Created comprehensive `docs/production-deployment.md` (765 lines)
-- ✅ Security hardening section (disable sudo, non-root user, read-only filesystem, drop capabilities)
-- ✅ Image optimization guidance (minimize size, multi-stage builds, layer optimization)
-- ✅ Secrets management (Docker Secrets, Kubernetes, 1Password, Vault)
-- ✅ Health checks (Docker HEALTHCHECK, Kubernetes probes)
-- ✅ Logging and monitoring (structured logging, centralized logging, Prometheus metrics)
-- ✅ Resource limits (memory, CPU, disk I/O)
-- ✅ Platform-specific examples (Docker Compose, Kubernetes, AWS ECS/Fargate)
-- ✅ Production readiness checklist
-
-**Files Changed**:
-- `docs/production-deployment.md` - New comprehensive guide
-
----
-
-### 2. ✅ [HIGH] [COMPLETED] Troubleshooting Build Failures Not Comprehensive
-**Status**: FIXED (2025-11-11) - Commits: be41c23
-
-**Original Issue**: Focused on runtime but not build-time issues
-
-**Solution Implemented**:
-- ✅ Expanded `docs/troubleshooting.md` with 243 new lines for build-time issues
-- ✅ Build vs Buildx differences and argument ordering
-- ✅ Script sourcing failures and debugging techniques
-- ✅ Feature script execution failures with isolation testing
-- ✅ Compilation failures for languages built from source
-- ✅ Cache invalidation issues and layer caching explanation
-- ✅ Multi-stage build failures and debugging
-- ✅ ARG vs ENV confusion with clear examples
-- ✅ Intermediate build failure analysis techniques
-- ✅ Feature testing without full builds
-
-**Files Changed**:
-- `docs/troubleshooting.md` - Expanded with comprehensive build-time section
-
----
-
-### 3. ✅ [MEDIUM] [COMPLETED] Feature-Specific Environment Variables Not Documented
-**Status**: FIXED (2025-11-11) - Commits: c0dd71f
-
-**Original Issue**: Users must grep code to find env var options
-
-**Solution Implemented**:
-- ✅ Created comprehensive `docs/environment-variables.md` (369 lines)
-- ✅ Build arguments for all features and versions
-- ✅ User configuration variables
-- ✅ Cache directory paths for all languages (Python, Node, Rust, Go, Ruby, Java, R, Docker)
-- ✅ Feature-specific environment variables (Go, Java, Python, Ruby)
-- ✅ Runtime configuration options (GitHub token, retry config, logging)
-- ✅ Usage examples for build and runtime
-- ✅ Commands to inspect variables in containers
-
-**Files Changed**:
-- `docs/environment-variables.md` - New comprehensive reference
-
----
-
-### 4. ✅ [MEDIUM] [COMPLETED] No Migration Guide Between Versions
-**Status**: DOCUMENTED (2025-11-11) - Commits: 06959cf
-
-**Original Issue**: Version history in CHANGELOG but no upgrade guide
-
-**Solution Implemented**:
-- ✅ Created comprehensive `docs/migration-guide.md` (585 lines)
-- ✅ Version upgrade paths and step-by-step procedures
-- ✅ Breaking changes by version (especially v4.0.0 major release)
-- ✅ Version-specific migration instructions (v3.x → v4.0+, v4.x → v4.7.0)
-- ✅ Testing procedures and verification checklists
-- ✅ Rollback procedures with emergency rollback reference
-- ✅ Common migration issues and troubleshooting
-- ✅ Best practices before/during/after migration
-- ✅ Version history reference table
-- ✅ Deprecation notices section
-
-**Files Changed**:
-- `docs/migration-guide.md` - New comprehensive migration guide
-
----
-
-### 5. ✅ [LOW] [COMPLETED] Cache Strategy Documentation Could Be Clearer
-**Status**: DOCUMENTED (2025-11-11) - Commits: 710eaec
-
-**Original Issue**: Cache behavior is complex and not clearly explained
-
-**Solution Implemented**:
-- ✅ Created comprehensive `docs/cache-strategy.md` (872 lines)
-- ✅ Two-layer caching strategy (BuildKit + runtime caches)
-- ✅ BuildKit cache mounts for apt operations explained
-- ✅ Language-specific cache directories (`/cache` structure) documented
-- ✅ Runtime volume mount strategies with examples
-- ✅ Cache invalidation and clearing procedures
-- ✅ Best practices for development and production
-- ✅ Comprehensive troubleshooting guide (permission errors, cache not working, etc.)
-- ✅ Cache sizing recommendations and monitoring
-- ✅ Advanced topics (cache warming, multi-stage build caching)
-
-**Files Changed**:
-- `docs/cache-strategy.md` - New comprehensive cache guide
-
----
-
-## RELIABILITY & EDGE CASES
-
-### 1. ✅ [MEDIUM] [COMPLETED] No Handling for Partial/Failed Downloads
-**Status**: FIXED (2025-11-12) - Commit: 0f4cb65
-
-**Original Issue**: Downloads to temp file then moves, but:
-- Temp file (`.tmp`) persists if verification fails
-- No cleanup on script exit
-- Network timeout could leave orphan files
-
-**Solution Implemented**:
-- ✅ Added trap handlers to `download_and_verify()` function
-- ✅ Added trap handlers to `download_and_extract()` function
-- ✅ Traps fire on EXIT, INT (Ctrl+C), and TERM signals
-- ✅ Temporary files cleaned up automatically on interruption
-- ✅ Traps cleared after successful completion to avoid deleting valid files
-- ✅ Updated documentation to mention interruption handling
-
-**Implementation Details**:
-```bash
-# Set up trap at function start
-trap 'rm -f "$temp_file"' EXIT INT TERM
-
-# Download and verify
-# ... (on error, trap handles cleanup)
-
-# On success, clear trap before returning
-mv "$temp_file" "$output_path"
-trap - EXIT INT TERM
-```
-
-**Benefits**:
-- Prevents `/tmp` pollution from interrupted downloads
-- Works even if user hits Ctrl+C during curl or checksum verification
-- No manual cleanup needed in error paths
-
-**Files Changed**:
-- `lib/base/download-verify.sh` - Added trap handlers to both functions
-
----
-
-### 2. ✅ [MEDIUM] [COMPLETED] Checksum Fetching Has No Timeout
-**Status**: FIXED (2025-11-11) - Commits: 06d3660
-
-**Original Issue**: Curl commands could hang indefinitely if server unresponsive
-
-**Solution Implemented**:
-- ✅ Added `--connect-timeout 10` to all curl commands (10-second connection timeout)
-- ✅ Added `--max-time 30` for checksum file downloads (30-second total timeout)
-- ✅ Added `--max-time 300` for binary downloads in `calculate_checksum_sha256` (5 minutes)
-- ✅ Prevents build hangs on slow or unresponsive upstream servers
-- ✅ Improves build reliability and faster failure detection
-
-**Functions Updated** (7 total):
-- `fetch_go_checksum` - go.dev downloads page
-- `fetch_github_checksums_txt` - GitHub release checksums
-- `fetch_github_sha256_file` - Individual .sha256 files
-- `fetch_github_sha512_file` - Individual .sha512 files
-- `fetch_maven_sha1` - Maven Central .sha1 files
-- `fetch_ruby_checksum` - ruby-lang.org downloads page
-- `calculate_checksum_sha256` - Binary file downloads
-
-**Files Changed**:
-- `lib/features/lib/checksum-fetch.sh` - Added timeouts to all curl commands
-
----
-
-### 3. ✅ [MEDIUM] [COMPLETED] Race Condition in Sudo Configuration
-**Status**: FIXED (2025-11-12) - Commit: cd5c312
-
-**Original Issue**:
-```bash
-echo "${USERNAME} ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/"${USERNAME}"
-chmod 0440 /etc/sudoers.d/"${USERNAME}"
-```
-
-**Potential Issue**:
-- File creation and chmod were separate operations
-- Brief window where file existed with wrong permissions (before chmod)
-- Though running as root in build, could be issue if parallelized
-
-**Solution Implemented**:
-- ✅ Replaced separate echo + chmod with atomic `install` command
-- ✅ File created with correct permissions (0440) and ownership (root:root) in single operation
-- ✅ No race condition window
-
-**Implementation**:
-```bash
-echo "${USERNAME} ALL=(ALL) NOPASSWD:ALL" | \
-    install -m 0440 -o root -g root /dev/stdin /etc/sudoers.d/"${USERNAME}"
-```
-
-**Benefits**:
-- Atomic file creation with correct permissions
-- No window for security issues
-- Standard Unix practice for secure file creation
-
-**Files Changed**:
-- `lib/base/user.sh` - Used install command for atomic creation
-
----
-
-### 4. ✅ [LOW] [COMPLETED] No Handling for Interrupted Build Cleanup
-**Status**: FIXED (2025-11-12) - Commit: bda1b5d
-
-**Original Issue**: Feature scripts didn't clean up on build cancellation
-
-**Impact**:
-- BuildKit should handle, but not explicit
-- Cache mounts might be left in inconsistent state
-- /tmp files might not be cleaned
-
-**Solution Implemented**:
-- ✅ Added centralized cleanup system to `feature-header.sh`
-- ✅ All 28 feature scripts now have automatic cleanup (they source feature-header.sh)
-- ✅ Global trap handlers for EXIT, INT, and TERM signals
-- ✅ Register/unregister functions for tracking temporary items
-- ✅ `create_secure_temp_dir()` now auto-registers created directories
-
-**New Functions Available to Feature Scripts**:
-```bash
-register_cleanup "/tmp/my-temp-dir"     # Track for cleanup
-unregister_cleanup "/tmp/my-temp-dir"   # Remove from tracking
-cleanup_on_interrupt()                  # Runs automatically on exit/interrupt
-```
-
-**Implementation Details**:
-- Uses `_FEATURE_CLEANUP_ITEMS` array to track temporary files/directories
-- Processes cleanup in LIFO order (reverse registration)
-- Safe with `set -u` using `[[ -v array ]]` check
-- Preserves original exit code after cleanup
-- Only shows cleanup messages if items are registered
-
-**Benefits**:
-- Prevents leftover temporary files from interrupted builds
-- Works for Ctrl+C (INT), kill (TERM), and normal exits (EXIT)
-- No code changes needed in individual feature scripts
-- Centralized in one location for all 28 features
-
-**Files Changed**:
-- `lib/base/feature-header.sh` - Added 97 lines of cleanup infrastructure
-
----
-
-### 5. ✅ [LOW] [COMPLETED] Entrypoint Path Traversal Check Could Be Stricter
-**Status**: FIXED (2025-11-12) - Commit: c286305
-
-**Original Issue**:
-```bash
-script_realpath=$(realpath "$script" 2>/dev/null || echo "")
-if [ -n "$script_realpath" ] && [[ "$script_realpath" == /etc/container/first-startup/* ]]; then
-```
-
-**Current**: Checks with bash pattern matching but could be more explicit
-
-**Solution Implemented**:
-- ✅ Enhanced path validation with 4-step security checks
-- ✅ Added expected directory variables for clarity
-- ✅ Added paranoid check for `..` components
-- ✅ Added check that resolved path is not the directory itself
-- ✅ Detailed comments explaining each validation step
-- ✅ Applied to both first-startup and startup script directories
-
-**Implementation**:
-```bash
-FIRST_STARTUP_DIR="/etc/container/first-startup"
-script_realpath=$(realpath "$script" 2>/dev/null || echo "")
-
-# Strict path traversal validation:
-# 1. Resolve canonical path (resolves symlinks and ..)
-# 2. Verify resolved path is within expected directory
-# 3. Verify no .. components remain (paranoid check)
-# 4. Verify not the directory itself (must be file within)
-if [ -n "$script_realpath" ] && \
-   [[ "$script_realpath" == "$FIRST_STARTUP_DIR"/* ]] && \
-   [[ ! "$script_realpath" =~ \.\. ]] && \
-   [ "$script_realpath" != "$FIRST_STARTUP_DIR" ]; then
-```
-
-**Benefits**:
-- More explicit and easier to audit
-- Defense-in-depth security checks
-- Better documentation of security intent
-- No functional change, only enhanced clarity
-
-**Files Changed**:
-- `lib/runtime/entrypoint.sh` - Enhanced validation for both startup directories
-
----
-
-## USABILITY IMPROVEMENTS
-
-### 1. ✅ [MEDIUM] [COMPLETED] Version Output Not User-Friendly
-**Status**: FIXED (2025-11-12) - Commits: 7950867, 500c0bf
-
-**Original Issue**: Table format was hard to read for large number of tools
-
-**Solution Implemented**:
-- ✅ JSON output already existed (--json flag)
-- ✅ Filtering already existed (--filter flag with categories)
-- ✅ Added --compare mode to show only version differences
-- ✅ Fixed two bugs in output formatting
-- ✅ Fixed 4 shellcheck SC2181 warnings
-
-**New Features**:
-- `--compare` flag shows only outdated or newer tools
-- Works with both text and JSON output formats
-- Combines with --filter for targeted checks
-- Clear indication when compare mode is active
-
-**Bug Fixes**:
-- Fixed language results using undefined INSTALL_STATUS variable
-- Fixed OUTPUT_FORMAT comparison ("--json" vs "json")
-- Replaced indirect $? checks with direct command checks in 4 functions
-
-**Example Usage**:
-```bash
-# Show only tools that need updating
-./check-installed-versions.sh --compare
-
-# Show outdated Python tools only
-./check-installed-versions.sh --compare --filter language
-
-# Get JSON of outdated tools
-./check-installed-versions.sh --compare --json
-```
-
-**Files Changed**:
-- `lib/runtime/check-installed-versions.sh` - Added compare mode and fixed bugs
-
----
-
-### 2. ✅ [MEDIUM] [COMPLETED] No Way to List All Available Features
-**Status**: IMPLEMENTED (2025-11-11) - Commits: ba17fea
-
-**Original Issue**: Users must read Dockerfile or README to know features
-
-**Solution Implemented**:
-- ✅ Created `bin/list-features.sh` script with comprehensive functionality
-- ✅ Table output (default) and JSON output (`--json` flag)
-- ✅ Filter by category (`--filter` flag): language, dev-tools, cloud, database, tool
-- ✅ Extracts descriptions and dependencies from feature scripts automatically
-- ✅ Auto-categorizes features
-- ✅ Shows build argument names and version arguments
-- ✅ 12 comprehensive unit tests, all passing
-- ✅ Shellcheck clean
-
-**Files Changed**:
-- `bin/list-features.sh` - New feature listing script
-- `tests/unit/bin/list-features.sh` - Unit tests
-
----
-
-### 3. ✅ [LOW] [COMPLETED] Build Output Could Be More Informative
-**Status**: IMPLEMENTED (2025-11-11) - Commits: 8174e5f
-
-**Original Issue**: Downloads showed no progress, causing confusion during long downloads
-
-**Solution Implemented**:
-- ✅ Enhanced `download-verify.sh` with curl progress indicators
-- ✅ Changed from silent mode (`-s`) to progress bar mode (`--progress-bar`)
-- ✅ Added `-L` flag to follow redirects automatically
-- ✅ Downloads now show:
-  * Progress bar with percentage complete
-  * Transfer speed (KB/s, MB/s)
-  * Time remaining estimate
-  * Total download size
-  * Bytes downloaded so far
-
-**Benefits**:
-- Better visibility during Docker builds
-- Users can see download progress instead of silent waiting
-- Especially helpful for large downloads (Go, Rust, Node.js binaries)
-- No breaking changes to existing checksum verification
-
-**Files Changed**:
-- `lib/base/download-verify.sh` - Added progress bar to curl downloads
-
----
-
-### 4. ✅ [LOW] [COMPLETED] Feature Scripts Don't Show Configuration Summary
-**Status**: IMPLEMENTED (2025-11-11) - Commits: a644639, 4d001b6
-
-**Original Issue**: After installation, no summary of what was configured
-
-**Solution Implemented**:
-- ✅ Created standardized `log_feature_summary()` function in `lib/base/logging.sh`
-- ✅ Updated ALL 28 feature scripts to use the new function
-- ✅ Shows: version, tools, commands, paths, environment variables, next steps
-- ✅ User-friendly output with clear formatting
-- ✅ 9 comprehensive unit tests for the summary function
-
-**Example Output**:
-```
-================================================================================
-Python Configuration Summary
-================================================================================
-
-Version:      3.14.0
-Tools:        pip, poetry, pipx
-Commands:     python3, pip, poetry, pipx
-
-Paths:
-  - /cache/pip
-  - /cache/poetry
-
-Environment Variables:
-  - PIP_CACHE_DIR=/cache/pip
-  - POETRY_CACHE_DIR=/cache/poetry
-
-Next Steps:
-  Run 'test-python' to verify installation
-
-Run 'check-build-logs.sh python' to review installation logs
-================================================================================
-```
-
-**Files Changed**:
-- `lib/base/logging.sh` - Added `log_feature_summary()` function
-- All 28 feature scripts in `lib/features/` - Updated to use summaries
-- `tests/unit/base/log-feature-summary.sh` - Unit tests
-
----
-
-## TESTING GAPS
-
-### 1. ✅ [MEDIUM] [COMPLETED] No Regression Tests for Version Updates
-**Status**: IMPLEMENTED (2025-11-12)
-
-**Original Issue**: auto-patch creates releases but no testing for compatibility
-
-**Solution Implemented**:
-- ✅ Created `bin/test-version-compatibility.sh` - Version compatibility testing tool
-- ✅ Created `version-compatibility-matrix.json` - Initial compatibility matrix
-- ✅ Created `schemas/version-compatibility.json` - JSON schema for matrix validation
-- ✅ 12 comprehensive unit tests (all passing)
-- ✅ Complete documentation in `docs/version-compatibility.md`
-
-**Features**:
-- Test any variant with custom language versions
-- Test version combinations (e.g., Python 3.13 + Node 20 + Rust 1.82)
-- Update compatibility matrix with test results
-- Track tested/supported/deprecated versions for each language
-- Support for all variants (minimal, python-dev, node-dev, rust-golang, cloud-ops, polyglot)
-- Dry-run mode to preview tests without building
-- CI/CD integration support
-
-**Compatibility Matrix Includes**:
-- Base image compatibility (Debian 11, 12, 13)
-- Language version tracking (Python, Node, Rust, Go, Ruby, Java, R, Mojo)
-- Tested combinations with pass/fail status
-- Timestamps and optional notes for each test
-- Current, supported, and deprecated version lists
-
-**Test Coverage**:
-- Build args generation for all variants
-- Version JSON generation (single/multiple languages)
-- Matrix entry format validation
-- Test counter functionality
-- Schema structure validation
-
-**Usage Examples**:
-```bash
-# Test specific version
-./bin/test-version-compatibility.sh --variant python-dev --python-version 3.13.0
-
-# Test combination
-./bin/test-version-compatibility.sh --variant polyglot --python-version 3.13.0 --node-version 20
-
-# Update matrix
-./bin/test-version-compatibility.sh --variant python-dev --python-version 3.14.0 --update-matrix
-```
-
-**Benefits**:
-- Prevents version update regressions
-- Documents tested version combinations
-- Enables confident version upgrades
-- Tracks compatibility across Debian versions
-- Provides data for version planning
-
-**Files Changed**:
-- `bin/test-version-compatibility.sh` - Testing tool
-- `version-compatibility-matrix.json` - Current compatibility data
-- `schemas/version-compatibility.json` - JSON schema
-- `tests/unit/bin/test-version-compatibility.sh` - Unit tests (12 tests)
-- `docs/version-compatibility.md` - Comprehensive documentation
-
----
-
-### 2. [MEDIUM] Integration Tests Don't Cover All Feature Combinations
-**Issue**: Only 6 test variants but 28+ features
+#### 30. [MEDIUM] Integration Tests Don't Cover All Feature Combinations
+**Issue**: Only 6-7 test variants but 28+ features
 
 **Gap**:
-- No combination testing
+- No combination testing (e.g., Python+Node+Rust+Go all together)
 - Some feature interactions untested
-- Users might discover incompatibilities
+- Users might discover incompatibilities in production
+- No testing of all dev-tools variants together
+
+**Current Coverage**:
+- minimal
+- python-dev
+- node-dev
+- r-dev
+- cloud-ops
+- polyglot (tests 4 languages together)
+- rust-golang
 
 **Recommendation**:
-- Create randomized test combinations
-- Add matrix for critical features
+- Add "maximum" variant testing all possible features
+- Create randomized test combinations in CI
+- Add compatibility matrix for critical features
 - Document known incompatibilities
+- Test more dev-tools combinations
+
+**Priority**: Medium - Would catch interaction bugs early
 
 ---
 
-### 3. ✅ [MEDIUM] [COMPLETED] No Performance/Size Tests
-**Status**: IMPLEMENTED (2025-11-12)
+## Summary
 
-**Original Issue**: No tracking of image size or build time
+**Total Remaining**: 30 items (up from 9 after comprehensive analysis)
 
-**Solution Implemented**:
-- ✅ Created `bin/measure-build-metrics.sh` - Comprehensive metrics measurement tool
-- ✅ Image size tracking for all variants (bytes and human-readable)
-- ✅ Build time measurement and tracking
-- ✅ Baseline save/load functionality for comparisons
-- ✅ Regression detection with configurable thresholds
-- ✅ JSON and text output formats for automation
-- ✅ 11 comprehensive unit tests (all passing)
-- ✅ Complete documentation in `docs/build-metrics.md`
+**By Priority**:
+- CRITICAL: 3 items (Production deployment blockers)
+- HIGH: 6 items (Security and enterprise features)
+- MEDIUM: 16 items (Code quality, architecture, operations)
+- LOW: 5 items (Nice-to-have enhancements)
 
-**Features**:
-- Measure image size and build time for any variant
-- Save baselines for future comparisons
-- Compare current builds against baselines
-- Detect regressions with size (default: 100MB) and time (default: 20%) thresholds
-- Customizable threshold configuration
-- CI/CD integration support
-- Batch measurement capabilities
+**By Category**:
+- Security Concerns: 11 items (0 CRITICAL, 3 HIGH, 5 MEDIUM, 3 LOW)
+- Production Readiness: 8 items (3 CRITICAL, 4 HIGH, 1 MEDIUM)
+- Architecture & Code Organization: 6 items (5 MEDIUM, 1 LOW)
+- Anti-Patterns & Code Smells: 3 items (1 MEDIUM, 2 LOW)
+- Testing Gaps: 1 item (MEDIUM)
+- Missing Features: 1 item (LOW)
 
-**Test Coverage**:
-- Bytes to human-readable conversion
-- Baseline JSON format validation
-- Build arguments generation for variants
-- Size regression detection (above/below threshold)
-- Time regression detection (above/below threshold)
-- Improvement detection (decreases don't trigger regressions)
-- JSON output format validation
-- Variant validation
+**Overall Assessment**:
+The codebase has **excellent fundamentals** (Security: 7.5/10, Architecture: 8.5/10, Developer Experience: 9/10) but needs **production-grade enhancements** for enterprise deployment (Production Readiness: 6/10).
 
-**Usage Examples**:
-```bash
-# Measure variant
-./bin/measure-build-metrics.sh python-dev
+**Critical gaps**: Production-optimized images, Kubernetes templates, and observability integration (metrics, logging, tracing).
 
-# Save baseline
-./bin/measure-build-metrics.sh --save-baseline python-dev
-
-# Detect regressions
-./bin/measure-build-metrics.sh --compare python-dev
-
-# Custom thresholds
-./bin/measure-build-metrics.sh --compare --threshold-size 200 --threshold-time 30 polyglot
-```
-
-**Benefits**:
-- Prevents unintentional image size growth
-- Tracks performance regressions in build times
-- Provides data for optimization efforts
-- Enables trend analysis over time
-- Integrates with CI/CD for automated checks
-
-**Files Changed**:
-- `bin/measure-build-metrics.sh` - Metrics measurement tool
-- `tests/unit/bin/measure-build-metrics.sh` - Unit tests (11 tests)
-- `docs/build-metrics.md` - Comprehensive documentation
+**Key strengths**: Strong security posture, well-architected codebase, comprehensive testing framework, excellent documentation.
 
 ---
 
-### 4. ✅ [LOW] [COMPLETED] Tests Don't Verify Error Messages
-**Status**: IMPLEMENTED (2025-11-12)
+## Next Steps
 
-**Original Issue**: Feature scripts log errors but tests don't verify messages
+### Immediate Actions (P0 - Critical, 1-2 weeks)
+1. **[CRITICAL]** Create production-optimized image variants (item #12)
+2. **[CRITICAL]** Add Kubernetes deployment templates (item #13)
+3. **[CRITICAL]** Implement observability integration (item #14)
 
-**Solution Implemented**:
-- ✅ Created comprehensive `tests/unit/base/version-validation-errors.sh` (26 tests)
-- ✅ Tests verify error messages for malformed version inputs
-- ✅ Tests verify empty version strings produce helpful errors
-- ✅ Tests verify invalid format errors include expected format
-- ✅ Security tests verify injection attempts are blocked
-- ✅ Tests cover all validation functions: semver, flexible, node, python, java
-- ✅ All 26 tests passing (100% pass rate)
+### Short-Term Actions (P1 - High Priority, 1 month)
+4. **[HIGH]** Implement GPG verification and automated checksum pinning (item #1)
+5. **[HIGH]** Change passwordless sudo default to false (item #2)
+6. **[HIGH]** Remove Docker socket auto-fix script (item #3)
+7. **[HIGH]** Add configuration validation framework (item #15)
+8. **[HIGH]** Enhance secret management integrations (item #16)
+9. **[HIGH]** Create CI/CD pipeline templates (item #17)
+10. **[MEDIUM]** Extract cache-utils.sh shared utility (item #20)
+11. **[MEDIUM]** Extract path-utils.sh shared utility (item #21)
 
-**Test Coverage**:
-- Empty string validation (5 functions tested)
-- Invalid format validation (missing patch, alpha suffix, v-prefix, etc.)
-- Security injection attempts (backticks, dollar-parens, pipes)
-- Valid input acceptance verification
-- Error message content verification
+### Medium-Term Actions (P2 - 2-3 months)
+12. **[MEDIUM]** Expand GPG verification to remaining tools (item #4)
+13. **[MEDIUM]** Fix command injection vectors in apt-utils.sh (item #5)
+14. **[MEDIUM]** Validate PATH additions before modification (item #6)
+15. **[MEDIUM]** Improve kubectl completion validation (item #7)
+16. **[MEDIUM]** Split dev-tools.sh into sub-features (item #22)
+17. **[MEDIUM]** Extract project templates from functions (item #23)
+18. **[MEDIUM]** Add operational runbooks (item #18)
+19. **[MEDIUM]** Performance optimization guide (item #19)
+20. **[MEDIUM]** Integration test coverage for feature combinations (item #30)
 
-**Benefits**:
-- Ensures error messages are helpful and informative
-- Prevents regression in error handling
-- Validates security against injection attacks
-- Documents expected error behavior
+### Long-Term Enhancements (P3 - Future)
+21. All remaining LOW priority items (items #10, #11, #24, #25, #26, #27, #28, #29)
 
-**Files Changed**:
-- `tests/unit/base/version-validation-errors.sh` - New comprehensive error message tests
-
----
-
-## MINOR ISSUES
-
-### 1. ✅ [LOW] [COMPLETED] .env.example Has Test Values
-**Status**: FIXED (2025-11-12) - Commit: 7078b9b
-
-**Original Issue**: Example values looked like real values, not placeholders
-
-**Solution Implemented**:
-- ✅ Changed `GIT_SIGNING_KEY_ITEM` to use placeholder text
-- ✅ Changed `GIT_CONFIG_ITEM` to use placeholder text
-
-**Before**:
-```bash
-GIT_SIGNING_KEY_ITEM="Git Signing or Auth SSH Key"
-GIT_CONFIG_ITEM="Git Configuration"
-```
-
-**After**:
-```bash
-GIT_SIGNING_KEY_ITEM="your-git-signing-key-item-name"
-GIT_CONFIG_ITEM="your-git-config-item-name"
-```
-
-**Files Changed**:
-- `.env.example` - Updated to use obvious placeholders
-
----
-
-### 2. ✅ [LOW] [COMPLETED] Missing CHANGELOG Format Documentation
-**Status**: FIXED (2025-11-12) - Commit: 594c12d
-
-**Original Issue**: CHANGELOG.md auto-generated but format not documented
-
-**Solution Implemented**:
-- ✅ Created comprehensive `docs/CHANGELOG-FORMAT.md`
-- ✅ Documented conventional commit types and mapping
-- ✅ Explained cliff.toml configuration
-- ✅ Provided examples of good/bad commit messages
-- ✅ Documented breaking change notation
-
-**Content Includes**:
-- Commit type reference table with CHANGELOG section mapping
-- Examples for each commit type (feat, fix, docs, etc.)
-- Breaking change format (`!` and `BREAKING CHANGE:`)
-- How to generate CHANGELOG manually
-- DO/DON'T best practices
-- Links to specifications (Conventional Commits, Keep a Changelog, Semantic Versioning)
-
-**Files Changed**:
-- `docs/CHANGELOG-FORMAT.md` - New comprehensive documentation (188 lines)
-
----
-
-### 3. ✅ [LOW] [ALREADY COMPLETED] Some Comments Use Inconsistent Formatting
-**Status**: VERIFIED CONSISTENT (2025-11-11)
-
-**Original Issue**: Comments might use inconsistent formatting
-
-**Verification Results**:
-- ✅ All section headers are exactly 78 characters (`# ` + 76 `=`)
-- ✅ All subsection headers are exactly 78 characters (`# ` + 76 `-`)
-- ✅ All comments have space after `#`
-- ✅ Consistent formatting across all 61 shell scripts
-- ✅ Style guide already exists at `docs/comment-style-guide.md`
-
-**Checked**:
-- lib/features/*.sh (28 files)
-- lib/base/*.sh (12 files)
-- bin/*.sh (20 files)
-- tests/framework.sh (1 file)
-
-**Note**: This formatting was already standardized, likely during initial development or a
-previous cleanup effort. No changes needed.
-
----
-
-### 4. ✅ [LOW] [COMPLETED] Feature Scripts Don't Have Consistent Exit Codes
-**Status**: FIXED (2025-11-12) - Commit: 9834337
-
-**Original Issue**: Inconsistent exit code usage, some use exit directly, others use $?
-
-**Solution Implemented**:
-- ✅ Documented exit code conventions in CONTRIBUTING.md
-- ✅ Defined standard exit codes (0, 1, 2)
-- ✅ Clarified return vs exit for feature scripts
-- ✅ Provided pattern examples for both feature and standalone scripts
-
-**Standard Exit Codes Defined**:
-- `0`: Success
-- `1`: General error
-- `2`: Usage error (invalid arguments)
-
-**Key Guidelines**:
-- Feature scripts use `return` (they're sourced, not executed)
-- Standalone scripts in `bin/` can use `exit`
-- Rely on `set -e` for automatic failures
-- Test exit codes directly, not with `$?`
-- Avoid exit codes > 2 (keep it simple)
-
-**Content Includes**:
-- Exit code reference table
-- Feature script pattern (return vs exit)
-- Standalone script pattern
-- DO/DON'T best practices
-- Testing exit codes examples
-
-**Files Changed**:
-- `CONTRIBUTING.md` - Added 106 lines of exit code documentation
-
----
-
-## SUMMARY TABLE
-
-| Category | Count | Severity |
-|----------|-------|----------|
-| Security Issues | 5 | 1 High, 2 Medium, 2 Low |
-| Missing Features | 6 | 2 High, 3 Medium, 1 Low |
-| Anti-Patterns | 5 | 5 Medium/Low |
-| Documentation Gaps | 5 | 2 High, 3 Medium |
-| Reliability Issues | 5 | 5 Medium/Low |
-| Usability Issues | 4 | 4 Medium/Low |
-| Testing Gaps | 4 | 4 Medium |
-
-**TOTAL: 34 issues across 7 categories**
-
----
-
-## POSITIVE HIGHLIGHTS
-
-✅ Excellent security hardening practices throughout
-✅ Comprehensive checksum verification for all downloads
-✅ Debian version compatibility detection and handling
-✅ Well-documented architecture in CLAUDE.md
-✅ Strong test framework with 657+ tests
-✅ Thoughtful error handling and logging
-✅ Great use of helper functions and code reuse
-✅ Clear modular architecture
-✅ Excellent README with examples
-✅ Production-ready security considerations documented
-✅ Automated version checking and patching
-✅ Cache strategy well-thought-out
-
----
-
-## RECOMMENDATIONS PRIORITY
-
-### Immediate (Critical Security)
-1. Invalidate exposed credentials in .env
-2. Add .env to pre-commit hooks
-3. Create production deployment guide
-
-### Short-term (1-2 sprints)
-4. Add feature dependency resolution
-5. Enhance build failure troubleshooting guide
-6. Add feature list script
-7. Create environment variables documentation
-8. Add health check support
-
-### Medium-term (Quality)
-9. Deduplicate checksum fetching code
-10. Standardize feature script error handling
-11. Add regression tests for version updates
-12. Add image size/build time tracking
-13. Create migration guides between versions
-
-### Long-term (Nice to have)
-14. Add feature interaction testing
-15. Improve version output formatting
-16. Add progress indicators to downloads
-17. Create feature configuration summaries
-
+**Focus Areas**:
+- **Week 1-2**: Security (pin checksums, sudo default, GPG verification)
+- **Week 3-4**: Production deployment (images, K8s templates, observability)
+- **Month 2**: Enterprise features (config validation, secrets, CI/CD)
+- **Month 3**: Code quality (extract utilities, split large scripts)

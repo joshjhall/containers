@@ -226,10 +226,16 @@ log_feature_end() {
 # ============================================================================
 log_message() {
     local message="$1"
-    
-    {
+
+    # Handle case where logging is not yet initialized
+    if [ -n "$CURRENT_LOG_FILE" ]; then
+        {
+            echo "[$(date '+%H:%M:%S')] $message"
+        } | tee -a "$CURRENT_LOG_FILE"
+    else
+        # Logging not initialized yet, just print to stdout
         echo "[$(date '+%H:%M:%S')] $message"
-    } | tee -a "$CURRENT_LOG_FILE"
+    fi
 }
 
 # ============================================================================
@@ -243,11 +249,17 @@ log_message() {
 # ============================================================================
 log_error() {
     local message="$1"
-    
-    {
-        echo "[$(date '+%H:%M:%S')] ERROR: $message"
-    } | tee -a "$CURRENT_LOG_FILE" >> "$CURRENT_ERROR_FILE"
-    
+
+    # Handle case where logging is not yet initialized
+    if [ -n "$CURRENT_LOG_FILE" ] && [ -n "$CURRENT_ERROR_FILE" ]; then
+        {
+            echo "[$(date '+%H:%M:%S')] ERROR: $message"
+        } | tee -a "$CURRENT_LOG_FILE" >> "$CURRENT_ERROR_FILE"
+    else
+        # Logging not initialized yet, just print to stderr
+        echo "[$(date '+%H:%M:%S')] ERROR: $message" >&2
+    fi
+
     ERROR_COUNT=$((ERROR_COUNT + 1))
 }
 
@@ -262,11 +274,17 @@ log_error() {
 # ============================================================================
 log_warning() {
     local message="$1"
-    
-    {
-        echo "[$(date '+%H:%M:%S')] WARNING: $message"
-    } | tee -a "$CURRENT_LOG_FILE" >> "$CURRENT_ERROR_FILE"
-    
+
+    # Handle case where logging is not yet initialized
+    if [ -n "$CURRENT_LOG_FILE" ] && [ -n "$CURRENT_ERROR_FILE" ]; then
+        {
+            echo "[$(date '+%H:%M:%S')] WARNING: $message"
+        } | tee -a "$CURRENT_LOG_FILE" >> "$CURRENT_ERROR_FILE"
+    else
+        # Logging not initialized yet, just print to stderr
+        echo "[$(date '+%H:%M:%S')] WARNING: $message" >&2
+    fi
+
     WARNING_COUNT=$((WARNING_COUNT + 1))
 }
 
