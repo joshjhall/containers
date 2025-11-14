@@ -372,8 +372,11 @@ This build system includes comprehensive security hardening:
 
 ### Configuration Options
 ```bash
-# Disable passwordless sudo for production
---build-arg ENABLE_PASSWORDLESS_SUDO=false
+# Passwordless sudo (disabled by default for security)
+# Enable for local development convenience:
+--build-arg ENABLE_PASSWORDLESS_SUDO=true   # Development only
+# Keep disabled for production (default):
+--build-arg ENABLE_PASSWORDLESS_SUDO=false  # Production (default)
 
 # Configure retry behavior
 -e RETRY_MAX_ATTEMPTS=5
@@ -456,9 +459,74 @@ docker build -t myapp:prod \
   .
 ```
 
+### Passwordless Sudo
+
+**Default**: Passwordless sudo is **DISABLED** by default (as of v4.8.7) for security.
+
+#### Development Use (Enable When Needed)
+
+**Use Case**: Local development where you need to:
+- Install additional system packages during runtime
+- Fix file permissions quickly
+- Debug system-level issues
+- Run commands that require root without password prompts
+
+```yaml
+# docker-compose.yml for development
+services:
+  devcontainer:
+    build:
+      context: ..
+      dockerfile: containers/Dockerfile
+      args:
+        INCLUDE_PYTHON_DEV: "true"
+        # Enable for local dev convenience
+        ENABLE_PASSWORDLESS_SUDO: "true"  # ⚠️ Development only
+```
+
+**Why this is useful for development**:
+- Quickly install packages: `sudo apt install <package>` (no password)
+- Fix permission issues: `sudo chown developer:developer file`
+- Test system configurations without password interruptions
+- Streamline development workflow on your local machine
+
+**Security Impact**:
+- ⚠️ **Any compromised process can gain root access**
+- No password barrier for privilege escalation
+- Acceptable risk for **local development** on your personal machine
+- **NOT acceptable** for production or shared environments
+
+#### Production Use (Keep Disabled)
+
+**✅ RECOMMENDED**: Keep passwordless sudo disabled in production (default):
+
+```dockerfile
+# Explicitly set for production (or omit - false is default)
+--build-arg ENABLE_PASSWORDLESS_SUDO=false
+```
+
+**Alternatives for Production**:
+1. **Pre-install everything at build time**: Use RUN commands in Dockerfile
+2. **Init containers**: Use Kubernetes init containers for setup
+3. **Proper IAM/RBAC**: Use cloud provider IAM instead of sudo
+4. **Configuration management**: Use proper deployment tools
+
+**Production Security Best Practices**:
+- ❌ Never enable passwordless sudo in production
+- ✅ Install all required packages during build
+- ✅ Use least-privilege principles
+- ✅ User can still sudo with password if absolutely necessary
+
 #### Security Best Practices
 
-1. **Only mount socket in trusted environments**
+1. **Only enable passwordless sudo in trusted environments**
+   - ✅ Local development on your personal machine
+   - ✅ Isolated development containers
+   - ❌ Production deployments
+   - ❌ Shared development environments
+   - ❌ CI/CD systems (should build at build time)
+
+2. **Only mount socket in trusted environments**
    - ✅ Local development on your machine
    - ✅ Isolated development containers
    - ❌ Production deployments

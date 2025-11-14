@@ -98,10 +98,14 @@ if [ "${ENABLE_PASSWORDLESS_SUDO}" = "true" ]; then
     echo "${USERNAME} ALL=(ALL) NOPASSWD:ALL" | \
         install -m 0440 -o root -g root /dev/stdin /etc/sudoers.d/"${USERNAME}"
     echo "⚠️  WARNING: Passwordless sudo enabled (development mode)"
-    echo "    For production, use: --build-arg ENABLE_PASSWORDLESS_SUDO=false"
+    echo "    This allows any process as '${USERNAME}' to gain root access without password."
+    echo "    Useful for local development where you need to install packages or fix permissions."
+    echo "    NOT RECOMMENDED for production containers - use ENABLE_PASSWORDLESS_SUDO=false"
 else
-    echo "Passwordless sudo disabled (production mode)"
-    echo "User ${USERNAME} is in sudo group but requires password for sudo commands"
+    echo "✓ Passwordless sudo disabled (production/secure mode)"
+    echo "  User ${USERNAME} is in sudo group but requires password for sudo commands"
+    echo "  For local development convenience, you can enable with:"
+    echo "  --build-arg ENABLE_PASSWORDLESS_SUDO=true"
 fi
 
 # Create common directories (check if home exists first)
