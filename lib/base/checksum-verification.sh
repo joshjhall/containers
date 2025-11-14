@@ -38,6 +38,10 @@ if [ -f /tmp/build-scripts/base/logging.sh ]; then
     source /tmp/build-scripts/base/logging.sh
 fi
 
+if [ -f /tmp/build-scripts/base/signature-verify.sh ]; then
+    source /tmp/build-scripts/base/signature-verify.sh
+fi
+
 if [ -f /tmp/build-scripts/features/lib/checksum-fetch.sh ]; then
     source /tmp/build-scripts/features/lib/checksum-fetch.sh
 fi
@@ -46,94 +50,44 @@ fi
 CHECKSUMS_DB="/tmp/build-scripts/checksums.json"
 
 # ============================================================================
-# TIER 1: GPG Signature Verification
+# TIER 1: Signature Verification (GPG + Sigstore via signature-verify.sh)
 # ============================================================================
 
-# verify_gpg_python - Verify Python tarball using GPG signature
+# verify_signature_tier - Unified signature verification for Tier 1
+#
+# Delegates to signature-verify.sh which handles:
+#   - Sigstore verification (Python 3.11.0+, if cosign available)
+#   - GPG verification (Python, Node.js, Go - if gpg available)
+#   - Graceful fallback to Tier 2 if unavailable
 #
 # Arguments:
-#   $1 - Python version (e.g., "3.12.7")
-#   $2 - Downloaded tarball path
+#   $1 - Language name (e.g., "python", "nodejs", "golang")
+#   $2 - Version (e.g., "3.12.7", "20.18.0")
+#   $3 - Downloaded file path
 #
 # Returns:
-#   0 if GPG verification succeeds
-#   1 if verification fails or not available
-verify_gpg_python() {
-    local version="$1"
-    local tarball="$2"
-    local signature_url="https://www.python.org/ftp/python/${version}/Python-${version}.tgz.asc"
-    local signature_file="${tarball}.asc"
+#   0 if signature verification succeeds
+#   1 if verification fails or not available (fallback to Tier 2)
+verify_signature_tier() {
+    local language="$1"
+    local version="$2"
+    local file="$3"
 
-    log_message "🔐 TIER 1: Attempting GPG signature verification"
-    log_message "   Fetching signature from python.org..."
+    # Normalize language name
+    case "$language" in
+        node|nodejs) language="nodejs" ;;
+        go|golang) language="golang" ;;
+    esac
 
-    # Download signature file
-    if ! curl -fsSL "$signature_url" -o "$signature_file" 2>/dev/null; then
-        log_message "   ⚠️  Signature file not available"
-        return 1
+    # Call unified verification from signature-verify.sh
+    # This handles GPG + Sigstore with proper fallback
+    if verify_signature "$file" "$language" "$version"; then
+        log_message "   ✅ TIER 1 VERIFICATION PASSED"
+        log_message "   Security: Cryptographic signature verified"
+        return 0
     fi
 
-    # Try to verify (if gpg is available)
-    if ! command -v gpg >/dev/null 2>&1; then
-        log_message "   ⚠️  GPG not available in build environment"
-        rm -f "$signature_file"
-        return 1
-    fi
-
-    # Import Python release keys if needed
-    # Note: This is a basic implementation. Production would need proper key management.
-    log_message "   ⚠️  GPG verification not yet fully implemented"
-    log_message "   Falling back to next tier..."
-    rm -f "$signature_file"
-    return 1
-}
-
-# verify_gpg_node - Verify Node.js tarball using SHASUMS256.txt.sig
-#
-# Arguments:
-#   $1 - Node version (e.g., "20.18.0")
-#   $2 - Downloaded tarball path
-#   $3 - Expected filename in SHASUMS256.txt
-#
-# Returns:
-#   0 if GPG verification succeeds
-#   1 if verification fails or not available
-verify_gpg_node() {
-    local version="$1"
-    local tarball="$2"
-    local filename="$3"
-    # shellcheck disable=SC2034  # Variables defined for future GPG implementation
-    local shasums_url="https://nodejs.org/dist/v${version}/SHASUMS256.txt"
-    # shellcheck disable=SC2034  # Variables defined for future GPG implementation
-    local sig_url="https://nodejs.org/dist/v${version}/SHASUMS256.txt.sig"
-
-    log_message "🔐 TIER 1: Attempting GPG signature verification"
-    log_message "   Fetching SHASUMS256.txt and signature from nodejs.org..."
-
-    # Note: Full implementation would verify sig and check checksums
-    log_message "   ⚠️  GPG verification not yet fully implemented"
-    log_message "   Falling back to next tier..."
-    return 1
-}
-
-# verify_gpg_go - Verify Go tarball using .asc signature
-#
-# Arguments:
-#   $1 - Go version (e.g., "1.23.5")
-#   $2 - Downloaded tarball path
-#
-# Returns:
-#   0 if GPG verification succeeds
-#   1 if verification fails or not available
-verify_gpg_go() {
-    local version="$1"
-    local tarball="$2"
-    local arch="amd64"  # TODO: detect architecture
-    local signature_url="https://go.dev/dl/go${version}.linux-${arch}.tar.gz.asc"
-
-    log_message "🔐 TIER 1: Attempting GPG signature verification"
-    log_message "   ⚠️  GPG verification not yet fully implemented"
-    log_message "   Falling back to next tier..."
+    # Signature verification unavailable or failed - fall back to Tier 2
     return 1
 }
 
@@ -374,25 +328,11 @@ verify_download() {
     log_message "═══════════════════════════════════════════════════════════════"
     log_message ""
 
-    # TIER 1: GPG Signature Verification (if supported)
+    # TIER 1: Signature Verification (GPG + Sigstore via signature-verify.sh)
     if [ "$category" = "language" ]; then
-        case "$name" in
-            python)
-                if verify_gpg_python "$version" "$file"; then
-                    return 0
-                fi
-                ;;
-            nodejs|node)
-                if verify_gpg_node "$version" "$file" "node-v${version}-linux-x64.tar.xz"; then
-                    return 0
-                fi
-                ;;
-            go|golang)
-                if verify_gpg_go "$version" "$file"; then
-                    return 0
-                fi
-                ;;
-        esac
+        if verify_signature_tier "$name" "$version" "$file"; then
+            return 0
+        fi
     fi
 
     # TIER 2: Pinned Checksums
@@ -414,6 +354,7 @@ verify_download() {
 
 # Export functions for use in feature scripts
 export -f verify_download
+export -f verify_signature_tier
 export -f verify_pinned_checksum
 export -f verify_published_checksum
 export -f verify_calculated_checksum
