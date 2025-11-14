@@ -98,6 +98,14 @@ services:
       # VSCode extensions
       - vscode-extensions:/home/${USERNAME:-developer}/.vscode-server/extensions
       - vscode-insiders:/home/${USERNAME:-developer}/.vscode-server-insiders
+
+    # Grant Docker socket access without requiring sudo or permission changes
+    # The DOCKER_GID should match the GID of /var/run/docker.sock on your host
+    # This is auto-detected by: ./bin/setup-docker-socket.sh
+    # For VS Code users, this runs automatically via initializeCommand
+    group_add:
+      - ${DOCKER_GID:-999}  # Fallback to 999 if not set
+
     ports:
       # Application ports
       - '8000:8000' # Main API

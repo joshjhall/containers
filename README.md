@@ -398,6 +398,18 @@ When using the `INCLUDE_DOCKER=true` feature, you may need to mount the Docker s
 
 **Use Case**: Local development where your main container needs to manage dependency containers (databases, Redis, message queues, etc.)
 
+**Setup** (First-time only):
+
+For **VS Code Dev Containers**: Automatically configured via `initializeCommand` in `.devcontainer/devcontainer.json`
+
+For **Docker Compose only**:
+```bash
+# Run once to detect and configure Docker socket GID
+./bin/setup-docker-socket.sh
+```
+
+**Configuration**:
+
 ```yaml
 # docker-compose.yml or .devcontainer/docker-compose.yml
 services:
@@ -411,7 +423,17 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock  # ⚠️ Development only
       - ..:/workspace/myproject
+    # Grant Docker socket access without sudo (secure method)
+    # DOCKER_GID is auto-detected by bin/setup-docker-socket.sh
+    group_add:
+      - ${DOCKER_GID:-999}
 ```
+
+**How it works**:
+- The setup script detects your Docker socket's group ID (GID)
+- Adds the container user to that group via `group_add`
+- No sudo or permission changes required
+- Works on Linux, macOS, WSL2, and Docker Desktop
 
 **Why this is useful**:
 - Start/stop database containers for testing
@@ -424,6 +446,7 @@ services:
 - Container can start privileged containers
 - Container can mount any host directory
 - Container can read/modify all other containers
+- **Only use in local development environments**
 
 #### Production Use (Not Recommended)
 

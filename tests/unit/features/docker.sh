@@ -151,25 +151,20 @@ EOF
 # Test: Docker startup scripts
 test_docker_startup_scripts() {
     local first_startup="$TEST_TEMP_DIR/etc/container/first-startup/20-docker-setup.sh"
-    local every_startup="$TEST_TEMP_DIR/etc/container/startup/10-docker-socket-fix.sh"
-    
-    # Create mock startup scripts
+
+    # Create mock startup script
     echo '#!/bin/bash' > "$first_startup"
     echo 'echo "Docker first startup"' >> "$first_startup"
-    
-    echo '#!/bin/bash' > "$every_startup"
-    echo 'if [ -S /var/run/docker.sock ]; then' >> "$every_startup"
-    echo '  echo "Fixing Docker socket"' >> "$every_startup"
-    echo 'fi' >> "$every_startup"
-    
+
     assert_file_exists "$first_startup"
-    assert_file_exists "$every_startup"
-    
-    # Check socket fix script content
-    if grep -q "docker.sock" "$every_startup"; then
-        assert_true true "Socket fix script checks for Docker socket"
+
+    # Verify the docker-socket-fix script no longer exists (removed for security)
+    # Docker socket access is now configured via group_add in docker-compose.yml
+    local socket_fix="$TEST_TEMP_DIR/etc/container/startup/10-docker-socket-fix.sh"
+    if [ -f "$socket_fix" ]; then
+        assert_true false "Docker socket fix script should not exist (use group_add instead)"
     else
-        assert_true false "Socket fix script missing socket check"
+        assert_true true "Docker socket fix correctly removed"
     fi
 }
 
