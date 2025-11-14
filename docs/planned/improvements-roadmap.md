@@ -1086,9 +1086,69 @@ generate_verification_script() {
 
 ---
 
+#### 27. [LOW] Case-Insensitive Filesystem Issues on macOS/Windows Volume Mounts
+**Source**: User feedback (Nov 2025)
+**Priority**: P3 (Low - quality of life, cross-platform compatibility)
+
+**Issue**: Case-sensitivity conflicts when mounting host volumes from macOS/Windows
+
+**Problem Description**:
+- macOS uses case-insensitive APFS by default (`file.txt` == `File.txt`)
+- Windows filesystems are case-insensitive
+- Linux containers expect case-sensitive filesystems
+- Git tracks case changes but filesystem may not reflect them
+- Example: Renaming `README.md` → `readme.md` causes confusion
+
+**Common Symptoms**:
+```bash
+# On macOS host
+git mv README.md readme.md
+git commit -m "Lowercase readme"
+
+# Inside Linux container
+ls -la
+# Shows: README.md (filesystem didn't change)
+# Git shows: readme.md (tracked change)
+```
+
+**Potential Solutions**:
+
+1. **Documentation Approach** (Easiest):
+   - Document the issue in troubleshooting guide
+   - Recommend case-sensitive APFS volumes for macOS developers
+   - Add to CLAUDE.md for awareness
+
+2. **Detection & Warning** (Medium):
+   - Create startup script to detect case-insensitive mounts
+   - Warn users when `/workspace` is case-insensitive
+   - Provide remediation steps in warning message
+
+3. **Workaround Helper** (Advanced):
+   - Create utility script to sync git index with filesystem
+   - `fix-case-sensitivity.sh` to reconcile git vs filesystem
+   - Run as part of startup scripts (opt-in)
+
+4. **Volume Configuration** (Requires Docker Desktop changes):
+   - Explore Docker Desktop volume driver options
+   - Research if osxfs/grpcfuse has case-sensitivity controls
+   - Likely not feasible without Docker changes
+
+**Recommended Approach**:
+Start with #1 (documentation) + #2 (detection/warning), defer #3 and #4
+
+**Files to Create/Modify**:
+- Create: `docs/troubleshooting/case-sensitive-filesystems.md`
+- Modify: `lib/runtime/startup.sh` (add detection)
+- Modify: `CLAUDE.md` (add cross-platform notes)
+- Optional: Create `bin/fix-case-sensitivity.sh` utility
+
+**Impact**: LOW - Affects cross-platform developers, but has workarounds
+
+---
+
 ### Anti-Patterns & Code Smells
 
-#### 27. [MEDIUM] Sed Usage in Parsing Without Proper Escaping
+#### 28. [MEDIUM] Sed Usage in Parsing Without Proper Escaping
 **File**: `/workspace/containers/lib/features/lib/checksum-fetch.sh`
 
 **Issue**: Parsing HTML with sed is brittle:
@@ -1107,7 +1167,7 @@ sed 's/>Ruby //; s/<//'
 
 ---
 
-#### 28. [LOW] Feature Scripts Use Different Logging Approaches
+#### 29. [LOW] Feature Scripts Use Different Logging Approaches
 **Issue**: Some variations in logging detail level across features
 
 **Impact**:
@@ -1123,7 +1183,7 @@ sed 's/>Ruby //; s/<//'
 
 ---
 
-#### 29. [LOW] Version Validation Spread Across Multiple Files
+#### 30. [LOW] Version Validation Spread Across Multiple Files
 **Files**:
 - `version-validation.sh`
 - `checksum-fetch.sh`
@@ -1143,7 +1203,7 @@ sed 's/>Ruby //; s/<//'
 
 ### Testing Gaps
 
-#### 30. [MEDIUM] Integration Tests Don't Cover All Feature Combinations
+#### 31. [MEDIUM] Integration Tests Don't Cover All Feature Combinations
 **Issue**: Only 6-7 test variants but 28+ features
 
 **Gap**:
@@ -1172,7 +1232,7 @@ sed 's/>Ruby //; s/<//'
 
 ---
 
-#### 31. [HIGH] Add Pre-Push Git Hook for Validation (Shellcheck + Unit Tests)
+#### 32. [HIGH] Add Pre-Push Git Hook for Validation (Shellcheck + Unit Tests)
 **Source**: Production examples development experience (Nov 2025)
 **Priority**: P1 (High - prevents CI failures and speeds up development)
 **Effort**: 1 day
