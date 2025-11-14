@@ -338,7 +338,7 @@ fetch_ruby_checksum() {
     # Try exact match first
     local checksum
     checksum=$(echo "$page_content" | \
-        grep -A2 ">Ruby ${version}<" | \
+        grep -A2 ">Ruby ${version}" | \
         grep -oP 'sha256: \K[a-f0-9]{64}' | \
         head -1)
 
@@ -352,15 +352,15 @@ fetch_ruby_checksum() {
         # Partial version like "3.3", find all matching versions
         local matching_versions
         matching_versions=$(echo "$page_content" | \
-            grep -oP ">Ruby ${version}\.\d+<" | \
-            sed 's/>Ruby //; s/<//' | \
+            grep -oP ">Ruby ${version}\.\d+" | \
+            sed 's/>Ruby //' | \
             sort -V | \
             tail -1)
 
         if [ -n "$matching_versions" ]; then
             # Fetch checksum for the resolved version
             checksum=$(echo "$page_content" | \
-                grep -A2 ">Ruby ${matching_versions}<" | \
+                grep -A2 ">Ruby ${matching_versions}" | \
                 grep -oP 'sha256: \K[a-f0-9]{64}' | \
                 head -1)
 

@@ -231,6 +231,8 @@ jobs:
             test: rust_golang
           - name: r-dev
             test: r_dev
+          - name: production
+            test: production
     steps:
       - name: Checkout code
         uses: actions/checkout@v4

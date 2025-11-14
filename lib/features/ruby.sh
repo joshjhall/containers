@@ -126,8 +126,8 @@ RUBY_TARBALL="ruby-${RUBY_VERSION}.tar.gz"
 log_command "Downloading and verifying Ruby ${RUBY_VERSION} source" \
     download_and_verify \
         "${RUBY_URL}" \
-        "${RUBY_TARBALL}" \
-        "${RUBY_CHECKSUM}"
+        "${RUBY_CHECKSUM}" \
+        "${RUBY_TARBALL}"
 
 log_command "Extracting Ruby source" \
     tar -xzf "${RUBY_TARBALL}"

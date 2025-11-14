@@ -148,7 +148,7 @@ test_multi_runtime_production() {
         --build-arg PYTHON_VERSION=3.12.0 \
         --build-arg INCLUDE_RUBY=true \
         --build-arg INCLUDE_RUBY_DEV=false \
-        --build-arg RUBY_VERSION=3.3.7 \
+        --build-arg RUBY_VERSION=3.4.7 \
         --build-arg INCLUDE_NODE=true \
         --build-arg INCLUDE_NODE_DEV=false \
         --build-arg NODE_VERSION=20.18.0 \
@@ -163,7 +163,7 @@ test_multi_runtime_production() {
     # Verify Ruby runtime IS installed
     assert_executable_in_path "$image" "ruby"
     assert_executable_in_path "$image" "gem"
-    assert_command_in_container "$image" "ruby --version" "ruby 3.3.7"
+    assert_command_in_container "$image" "ruby --version" "ruby 3.4.7"
 
     # Verify Node runtime IS installed
     assert_executable_in_path "$image" "node"
@@ -209,8 +209,10 @@ test_production_security() {
 
     # Verify user is non-root
     local uid
-    uid=$(docker run --rm "$image" id -u)
-    [ "$uid" -ne 0 ] || fail "Container should run as non-root user"
+    uid=$(docker run --rm "$image" id -u 2>/dev/null | tail -1)
+    if [ "$uid" -eq 0 ]; then
+        fail_test "Container should run as non-root user (uid: $uid)"
+    fi
 
     # Clean up
     docker rmi -f "$image" > /dev/null 2>&1 || true
@@ -241,7 +243,7 @@ test_production_image_size() {
 
     # Minimal production should be under 500MB (typically ~200-300MB)
     if [ "$size_mb" -gt 500 ]; then
-        fail "Production minimal image too large: ${size_mb}MB (expected < 500MB)"
+        fail_test "Production minimal image too large: ${size_mb}MB (expected < 500MB)"
     fi
 
     # Clean up
@@ -277,7 +279,7 @@ assert_executable_not_in_path() {
     local executable="$2"
 
     if docker run --rm "$image" which "$executable" > /dev/null 2>&1; then
-        fail "Executable '$executable' should NOT be in PATH for production image"
+        fail_test "Executable '$executable' should NOT be in PATH for production image"
     fi
 }
 
@@ -287,7 +289,7 @@ assert_command_fails_in_container() {
     local command="$2"
 
     if docker run --rm "$image" bash -c "$command" > /dev/null 2>&1; then
-        fail "Command '$command' should fail in production image"
+        fail_test "Command '$command' should fail in production image"
     fi
 }
 
