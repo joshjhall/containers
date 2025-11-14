@@ -2,11 +2,11 @@
 # Node.js - JavaScript runtime with npm, yarn, and pnpm
 #
 # Description:
-#   Installs Node.js via NodeSource repository with modern package managers.
+#   Installs Node.js directly from source with modern package managers.
 #   Configures cache directories for optimal container performance.
 #
 # Features:
-#   - Node.js runtime via NodeSource repository
+#   - Node.js runtime from nodejs.org
 #   - npm (included with Node.js)
 #   - yarn and pnpm (via corepack)
 #   - Automatic dependency detection and installation
@@ -14,14 +14,14 @@
 #
 # Environment Variables:
 #   - NODE_VERSION: Version specification (default: 22)
-#     * Major version only (e.g., "22"): Installs latest 22.x from NodeSource
-#     * Specific version (e.g., "22.10.0"): Installs exact version using n
+#     * Major version only (e.g., "22"): Resolves to latest 22.x with pinned checksum
+#     * Partial version (e.g., "22.12"): Resolves to latest 22.12.x with pinned checksum
+#     * Specific version (e.g., "22.12.0"): Uses exact version
 #
 # Supported Versions:
 #   - 22.x (current LTS)
 #   - 20.x (previous LTS)
 #   - 18.x (maintenance LTS)
-#   - Any specific version >= 18.0.0 (via n version manager)
 #
 set -euo pipefail
 
@@ -31,13 +31,24 @@ source /tmp/build-scripts/base/feature-header.sh
 # Source apt utilities for reliable package installation
 source /tmp/build-scripts/base/apt-utils.sh
 
+# Source download and verification utilities
+source /tmp/build-scripts/base/download-verify.sh
+
+# Source checksum verification utilities
+source /tmp/build-scripts/features/lib/checksum-fetch.sh
+
 # Source version validation utilities
 source /tmp/build-scripts/base/version-validation.sh
+
+# Source version resolution for partial version support
+source /tmp/build-scripts/base/version-resolution.sh
+
+# Source 4-tier checksum verification system
+source /tmp/build-scripts/base/checksum-verification.sh
 
 # ============================================================================
 # Version Configuration
 # ============================================================================
-# Node.js version - accept full version (e.g., 22.10.0) or major version (e.g., 22)
 NODE_VERSION="${NODE_VERSION:-22}"
 
 # Validate Node.js version format to prevent shell injection
@@ -46,22 +57,21 @@ validate_node_version "$NODE_VERSION" || {
     exit 1
 }
 
-# Start logging first (before any log_message calls)
+# Resolve partial versions to full versions (e.g., "22" -> "22.12.0")
+# This enables users to use partial versions and get latest patches with pinned checksums
+ORIGINAL_VERSION="$NODE_VERSION"
+NODE_VERSION=$(resolve_node_version "$NODE_VERSION" 2>/dev/null || echo "$NODE_VERSION")
+
+if [ "$ORIGINAL_VERSION" != "$NODE_VERSION" ]; then
+    log_message "📍 Version Resolution: $ORIGINAL_VERSION → $NODE_VERSION"
+    log_message "   Using latest patch version with pinned checksum verification"
+fi
+
+# Start logging
 log_feature_start "Node.js" "${NODE_VERSION}"
 
-# Extract major version number from full version string
-# This handles both "22" and "22.10.0" formats
+# Extract major version for EOL check
 NODE_MAJOR_VERSION=$(echo "${NODE_VERSION}" | cut -d. -f1)
-
-# Determine if we have a specific version or just major version
-# If NODE_VERSION contains a dot, it's a specific version
-if [[ "${NODE_VERSION}" == *"."* ]]; then
-    NODE_SPECIFIC_VERSION="${NODE_VERSION}"
-    log_message "Using specific Node.js version: ${NODE_SPECIFIC_VERSION}"
-else
-    NODE_SPECIFIC_VERSION=""
-    log_message "Using latest Node.js ${NODE_MAJOR_VERSION}.x"
-fi
 
 # Ensure Node.js version is 18 or higher (16 EOL was April 2024)
 if [ "$NODE_MAJOR_VERSION" -lt 18 ]; then
@@ -75,10 +85,7 @@ fi
 # ============================================================================
 # System Dependencies
 # ============================================================================
-log_message "Installing system dependencies for Node.js..."
-
-# Install dependencies needed by Node.js and native modules
-log_message "Installing Node.js dependencies..."
+log_message "Installing Node.js build dependencies..."
 
 # Update package lists with retry logic
 apt_update
@@ -87,68 +94,62 @@ apt_update
 apt_install \
     curl \
     ca-certificates \
-    gnupg
+    xz-utils
 
 # ============================================================================
-# Node.js Installation
+# Node.js Installation from Source
 # ============================================================================
-log_message "Installing Node.js ${NODE_VERSION}..."
+log_message "Downloading and installing Node.js ${NODE_VERSION}..."
 
-# NodeSource installation strategy:
-# 1. For major version only (e.g., "22"): Use setup_22.x script for latest 22.x
-# 2. For specific version (e.g., "22.10.0"): Use n version manager for exact version
-# ============================================================================
-# Add NodeSource Repository (Manual Setup - Secure Method)
-# ============================================================================
-# Instead of using NodeSource's setup script (which executes remote code),
-# we manually add the repository. This is more transparent and secure.
-log_message "Adding NodeSource repository manually..."
+# Determine architecture
+ARCH=$(dpkg --print-architecture)
+case "$ARCH" in
+    amd64)
+        NODE_ARCH="x64"
+        ;;
+    arm64)
+        NODE_ARCH="arm64"
+        ;;
+    *)
+        log_error "Unsupported architecture: $ARCH"
+        log_error "Node.js only supports amd64 (x64) and arm64"
+        exit 1
+        ;;
+esac
+
+log_message "Detected architecture: ${ARCH} (Node.js: ${NODE_ARCH})"
 
 BUILD_TEMP=$(create_secure_temp_dir)
+cd "$BUILD_TEMP"
 
-# Download and install NodeSource GPG key
-log_command "Downloading NodeSource GPG key" \
-    curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key -o "${BUILD_TEMP}/nodesource.gpg.key"
+# Download Node.js tarball with 4-tier checksum verification
+NODE_TARBALL="node-v${NODE_VERSION}-linux-${NODE_ARCH}.tar.xz"
+NODE_URL="https://nodejs.org/dist/v${NODE_VERSION}/${NODE_TARBALL}"
 
-# Convert GPG key to binary format for apt (required for Debian 13+)
-log_command "Converting GPG key to binary format" \
-    gpg --dearmor -o /usr/share/keyrings/nodesource.gpg < "${BUILD_TEMP}/nodesource.gpg.key"
-
-# Add NodeSource repository with signed-by directive
-log_message "Adding NodeSource repository to apt sources..."
-cat > /etc/apt/sources.list.d/nodesource.list << EOF
-deb [signed-by=/usr/share/keyrings/nodesource.gpg] https://deb.nodesource.com/node_${NODE_MAJOR_VERSION}.x nodistro main
-EOF
-
-# Update apt package lists
-apt_update
-
-# ============================================================================
-# Install Node.js
-# ============================================================================
-if [ -n "${NODE_SPECIFIC_VERSION}" ]; then
-    # Install specific version using n version manager
-    log_message "Installing n version manager for specific version pinning..."
-
-    log_message "Installing Node.js and npm from NodeSource..."
-    apt_install nodejs
-
-    # Install n globally
-    log_command "Installing n version manager" \
-        npm install -g n
-
-    # Install the specific Node.js version
-    log_command "Installing Node.js ${NODE_SPECIFIC_VERSION}" \
-        n "${NODE_SPECIFIC_VERSION}"
-
-    # Set the installed version as default
-    log_command "Setting Node.js ${NODE_SPECIFIC_VERSION} as default" \
-        n "${NODE_SPECIFIC_VERSION}"
-else
-    # Install latest version from major version line using NodeSource
-    log_message "Installing Node.js from NodeSource..."
-    apt_install nodejs
+# Download Node.js tarball
+log_message "Downloading Node.js ${NODE_VERSION}..."
+if ! curl -fsSL "$NODE_URL" -o "$NODE_TARBALL"; then
+    log_error "Failed to download Node.js ${NODE_VERSION}"
+    log_error "Please verify version exists: https://nodejs.org/dist/v${NODE_VERSION}/"
+    log_feature_end
+    exit 1
 fi
+
+# Verify using 4-tier system (GPG → Pinned → Published → Calculated)
+# This will try each tier in order and log which method succeeded
+if ! verify_download "language" "nodejs" "$NODE_VERSION" "$NODE_TARBALL" "$NODE_ARCH"; then
+    log_error "Checksum verification failed for Node.js ${NODE_VERSION}"
+    log_feature_end
+    exit 1
+fi
+
+log_command "Extracting Node.js to /usr/local" \
+    tar -xJf "$NODE_TARBALL" --strip-components=1 -C /usr/local
+
+# Clean up build files
+cd /
+log_command "Cleaning up Node.js build directory" \
+    rm -rf "$BUILD_TEMP"
 
 # ============================================================================
 # Package Manager Setup
@@ -198,19 +199,22 @@ log_message "  pnpm store: ${PNPM_STORE_DIR}"
 log_message "  NPM global: ${NPM_GLOBAL_DIR}"
 
 # ============================================================================
-# Create symlinks for Node.js binaries
+# Verify Node.js binaries
 # ============================================================================
-log_message "Creating Node.js symlinks..."
+log_message "Verifying Node.js installation..."
 
-# Node.js installs to /usr/bin via apt
-NODE_BIN_DIR="/usr/bin"
+# Node.js is extracted directly to /usr/local/bin
+NODE_BIN_DIR="/usr/local/bin"
 
-# Create /usr/local/bin symlinks for consistency with other languages
-for cmd in node npm npx yarn pnpm; do
-    if [ -f "${NODE_BIN_DIR}/${cmd}" ]; then
-        create_symlink "${NODE_BIN_DIR}/${cmd}" "/usr/local/bin/${cmd}" "${cmd} command"
+# Verify core binaries exist
+for cmd in node npm npx; do
+    if [ ! -f "${NODE_BIN_DIR}/${cmd}" ]; then
+        log_error "Missing ${cmd} binary after installation"
+        exit 1
     fi
 done
+
+log_message "✓ Node.js binaries verified in /usr/local/bin"
 
 # ============================================================================
 # System-wide Environment Configuration

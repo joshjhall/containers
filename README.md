@@ -294,6 +294,157 @@ When updates are available, edit the appropriate files:
 - Language versions: Update `ARG *_VERSION` in `Dockerfile`
 - Tool versions: Update version variables in `lib/features/*.sh`
 
+### Version Specification Strategy
+
+The build system supports **two version specification strategies** depending on whether you're installing a language runtime or a utility tool:
+
+#### Languages (Partial Version Support)
+
+**Supported Languages:** Python, Node.js, Rust, Ruby, Go, Java
+
+**Partial versions are supported** and automatically resolve to the latest patch version:
+
+```bash
+# All of these work:
+PYTHON_VERSION="3.12"        # → Resolves to 3.12.12 (latest patch)
+PYTHON_VERSION="3.12.7"      # → Uses exact version
+PYTHON_VERSION="3"           # → Resolves to 3.13.1 (latest stable)
+
+NODE_VERSION="20"            # → Resolves to 20.19.5 (latest LTS patch)
+RUST_VERSION="1.84"          # → Resolves to 1.84.1 (latest patch)
+```
+
+**Why use partial versions?**
+- ✅ **Automatic security updates** - Get latest patches without manual version bumps
+- ✅ **Pinned checksums** - Latest patches use git-tracked checksums (Tier 2 verification)
+- ✅ **Simpler configuration** - Specify major.minor, get best patch automatically
+- ✅ **Weekly auto-updates** - CI automatically updates pinned checksums for latest patches
+
+**When to use exact versions:**
+- Strict reproducibility requirements
+- Testing specific version behavior
+- Known issues with latest patch
+
+#### Tools (Exact Version Required)
+
+**Examples:** npm, gh (GitHub CLI), kubectl, helm, terraform, etc.
+
+**Exact versions are required:**
+
+```bash
+# Tools require exact versions:
+GH_VERSION="2.60.1"          # ✓ Correct
+GH_VERSION="2.60"            # ✗ Error - partial not supported
+
+KUBECTL_VERSION="1.31.4"     # ✓ Correct
+KUBECTL_VERSION="1.31"       # ✗ Error - partial not supported
+```
+
+**Why exact versions only?**
+- Reduces maintenance burden (dozens of tools vs. 6 languages)
+- Tools change less frequently than language patches
+- Most users pin exact tool versions anyway
+
+### Checksum Verification (4-Tier Security)
+
+All downloads are verified using a **4-tier progressive security system** that tries the most secure method first and falls back gracefully:
+
+#### Tier 1: GPG Signature Verification (Best)
+
+Cryptographic proof using publisher's public key.
+
+- **Available for:** Python, Node.js, Go (framework ready, full implementation in progress)
+- **Security:** ✅ Highest - proves authenticity via cryptographic signature
+- **Process:** Downloads `.asc` signature file and verifies against publisher's GPG key
+
+```
+🔐 TIER 1: Attempting GPG signature verification
+   Fetching signature from python.org...
+   ✅ TIER 1 VERIFICATION PASSED
+   Security: Cryptographically verified by publisher
+```
+
+#### Tier 2: Pinned Checksums (Good)
+
+Git-tracked checksums from `lib/checksums.json`.
+
+- **Available for:** Languages (latest patches), common tool versions
+- **Security:** ✅ High - git-tracked, auditable, reviewed
+- **Updates:** Weekly via auto-patch workflow
+
+```
+📌 TIER 2: Checking pinned checksums database
+   ✓ Found pinned checksum in git-tracked database
+   ✅ TIER 2 VERIFICATION PASSED
+   Security: Git-tracked checksum, auditable and reviewed
+```
+
+**Trigger Tier 2:** Use partial versions for languages:
+```bash
+PYTHON_VERSION="3.12"  # Uses Tier 2 for latest 3.12.x patch
+```
+
+#### Tier 3: Published Checksums (Acceptable)
+
+Download checksum from official publisher (e.g., python.org, nodejs.org).
+
+- **Available for:** Most languages when version not in checksums.json
+- **Security:** ⚠️ Medium - MITM vulnerable but better than calculating
+- **Process:** Fetches checksum from publisher's server, compares to download
+
+```
+🌐 TIER 3: Fetching published checksum from official source
+   Checking python.org FTP directory...
+   ✓ Retrieved checksum from official publisher
+   ✅ TIER 3 VERIFICATION PASSED
+   Security: Downloaded from official source (MITM risk remains)
+```
+
+**Trigger Tier 3:** Specify exact version not in checksums.json:
+```bash
+PYTHON_VERSION="3.12.7"  # If 3.12.7 not in checksums.json, uses Tier 3
+```
+
+#### Tier 4: Calculated Checksums (Fallback)
+
+Calculate checksum of downloaded file (TOFU - Trust On First Use).
+
+- **Available for:** All downloads (fallback only)
+- **Security:** ⚠️ Low - no external verification, MITM vulnerable
+- **Warning:** Prominent warning box displayed during build
+
+```
+⚠️  TIER 4: Using calculated checksum (FALLBACK)
+
+   ╔════════════════════════════════════════════════════════════╗
+   ║                    SECURITY WARNING                        ║
+   ╠════════════════════════════════════════════════════════════╣
+   ║ No trusted checksum available for verification.            ║
+   ║                                                            ║
+   ║ Using TOFU (Trust On First Use) - calculating checksum    ║
+   ║ from downloaded file without external verification.       ║
+   ║                                                            ║
+   ║ Risk: Vulnerable to man-in-the-middle attacks.            ║
+   ╚════════════════════════════════════════════════════════════╝
+```
+
+**This happens when:**
+- Using tool version not in checksums.json
+- Using older language version without published checksums
+- Publisher doesn't provide checksums
+
+#### How the System Works
+
+For every download, the system:
+
+1. **Attempts Tier 1** (GPG) if available for that tool
+2. **Falls back to Tier 2** (pinned checksums) if GPG unavailable
+3. **Falls back to Tier 3** (published checksums) if not pinned
+4. **Falls back to Tier 4** (calculated) as last resort
+5. **Logs detailed explanation** of which tier succeeded and why
+
+**Result:** You get the **best available security** for every download with **full transparency** about verification method.
+
 ---
 
 ## Testing

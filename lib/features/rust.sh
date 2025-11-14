@@ -6,23 +6,24 @@
 #   development tools. Configures cache directories for optimal container usage.
 #
 # Features:
-#   - Rust toolchain (stable by default)
+#   - Rust toolchain installed via rustup (stable by default)
 #   - Essential components: rust-src, rust-analyzer, clippy, rustfmt
 #   - Development tools: cargo-watch (auto-rebuild), cargo-edit (dependency management)
 #   - Documentation tools: mdBook and plugins for creating Rust documentation
 #
 # Cache Strategy:
-#   - If /cache directory exists and CARGO_HOME/RUSTUP_HOME aren't set, uses /cache/cargo and /cache/rustup
-#   - Otherwise uses standard home directory locations (~/.cargo, ~/.rustup)
-#   - This allows volume mounting for persistent caches across container rebuilds
+#   - Uses /cache/cargo and /cache/rustup for consistent caching
+#   - Allows volume mounting for persistent caches across container rebuilds
 #
 # Environment Variables:
-#   - CARGO_HOME: Cargo's home directory (default: /cache/cargo or ~/.cargo)
-#   - RUSTUP_HOME: Rustup's home directory (default: /cache/rustup or ~/.rustup)
-#   - RUST_VERSION: Toolchain version (has a default; can be: stable, beta, nightly, or specific version)
+#   - RUST_VERSION: Toolchain version specification (default: 1.88.0)
+#     * Major.minor only (e.g., "1.84"): Resolves to latest 1.84.x
+#     * Specific version (e.g., "1.84.1"): Uses exact version
+#     * Can also be: stable, beta, nightly
 #
 # Note:
-#   The script runs as root but installs Rust as the specified user to ensure proper permissions
+#   - rustup-init is verified using Tier 3 (published checksums from rust-lang.org)
+#   - Rust toolchains are verified by rustup's built-in verification system
 #
 set -euo pipefail
 
@@ -35,13 +36,18 @@ source /tmp/build-scripts/base/apt-utils.sh
 # Source version validation utilities
 source /tmp/build-scripts/base/version-validation.sh
 
+# Source version resolution for partial version support
+source /tmp/build-scripts/base/version-resolution.sh
+
 # Source checksum utilities for secure binary downloads
 source /tmp/build-scripts/features/lib/checksum-fetch.sh
 
 # Source download verification utilities
 source /tmp/build-scripts/base/download-verify.sh
 
-# Get Rust version from environment or use default
+# ============================================================================
+# Version Configuration
+# ============================================================================
 RUST_VERSION="${RUST_VERSION:-1.88.0}"
 
 # Validate Rust version format to prevent shell injection
@@ -49,6 +55,19 @@ validate_rust_version "$RUST_VERSION" || {
     log_error "Build failed due to invalid RUST_VERSION"
     exit 1
 }
+
+# Resolve partial versions to full versions (e.g., "1.84" -> "1.84.1")
+# This enables users to use partial versions for latest patches
+# Note: Only applies to X.Y or X.Y.Z versions, not to "stable", "beta", "nightly"
+if [[ "$RUST_VERSION" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+    ORIGINAL_VERSION="$RUST_VERSION"
+    RUST_VERSION=$(resolve_rust_version "$RUST_VERSION" 2>/dev/null || echo "$RUST_VERSION")
+
+    if [ "$ORIGINAL_VERSION" != "$RUST_VERSION" ]; then
+        log_message "📍 Version Resolution: $ORIGINAL_VERSION → $RUST_VERSION"
+        log_message "   Using latest patch version"
+    fi
+fi
 
 # Start logging
 log_feature_start "Rust" "${RUST_VERSION}"

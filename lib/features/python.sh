@@ -33,6 +33,12 @@ source /tmp/build-scripts/features/lib/checksum-fetch.sh
 # Source version validation utilities
 source /tmp/build-scripts/base/version-validation.sh
 
+# Source version resolution for partial version support
+source /tmp/build-scripts/base/version-resolution.sh
+
+# Source 4-tier checksum verification system
+source /tmp/build-scripts/base/checksum-verification.sh
+
 # ============================================================================
 # Version Configuration
 # ============================================================================
@@ -43,6 +49,16 @@ validate_python_version "$PYTHON_VERSION" || {
     log_error "Build failed due to invalid PYTHON_VERSION"
     exit 1
 }
+
+# Resolve partial versions to full versions (e.g., "3.12" -> "3.12.12")
+# This enables users to use partial versions and get latest patches with pinned checksums
+ORIGINAL_VERSION="$PYTHON_VERSION"
+PYTHON_VERSION=$(resolve_python_version "$PYTHON_VERSION" 2>/dev/null || echo "$PYTHON_VERSION")
+
+if [ "$ORIGINAL_VERSION" != "$PYTHON_VERSION" ]; then
+    log_message "📍 Version Resolution: $ORIGINAL_VERSION → $PYTHON_VERSION"
+    log_message "   Using latest patch version with pinned checksum verification"
+fi
 
 # Start logging
 log_feature_start "Python" "${PYTHON_VERSION}"
@@ -109,31 +125,26 @@ log_message "Downloading and building Python ${PYTHON_VERSION}..."
 BUILD_TEMP=$(create_secure_temp_dir)
 cd "$BUILD_TEMP"
 
-# Download Python source with checksum verification
+# Download Python source with 4-tier checksum verification
 PYTHON_TARBALL="Python-${PYTHON_VERSION}.tgz"
 PYTHON_URL="https://www.python.org/ftp/python/${PYTHON_VERSION}/${PYTHON_TARBALL}"
 
-# Calculate checksum for verification (Python.org doesn't publish easily-parsed checksums)
-log_message "Calculating checksum for Python ${PYTHON_VERSION}..."
-PYTHON_CHECKSUM=$(calculate_checksum_sha256 "$PYTHON_URL" 2>/dev/null)
-
-if [ -z "$PYTHON_CHECKSUM" ]; then
-    log_error "Failed to calculate checksum for Python ${PYTHON_VERSION}"
+# Download Python tarball
+log_message "Downloading Python ${PYTHON_VERSION}..."
+if ! curl -fsSL "$PYTHON_URL" -o "$PYTHON_TARBALL"; then
+    log_error "Failed to download Python ${PYTHON_VERSION}"
     log_error "Please verify version exists: https://www.python.org/downloads/release/python-${PYTHON_VERSION//.}"
     log_feature_end
     exit 1
 fi
 
-log_message "Expected SHA256: ${PYTHON_CHECKSUM}"
-
-# Download and verify Python source
-log_message "Downloading and verifying Python ${PYTHON_VERSION}..."
-download_and_verify \
-    "$PYTHON_URL" \
-    "$PYTHON_CHECKSUM" \
-    "$PYTHON_TARBALL"
-
-log_message "✓ Python v${PYTHON_VERSION} verified successfully"
+# Verify using 4-tier system (GPG → Pinned → Published → Calculated)
+# This will try each tier in order and log which method succeeded
+if ! verify_download "language" "python" "$PYTHON_VERSION" "$PYTHON_TARBALL"; then
+    log_error "Checksum verification failed for Python ${PYTHON_VERSION}"
+    log_feature_end
+    exit 1
+fi
 
 log_command "Extracting Python source" \
     tar -xzf "$PYTHON_TARBALL"
