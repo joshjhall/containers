@@ -15,9 +15,15 @@ This document tracks remaining improvements for the container build system based
 ## Progress Summary
 
 **Completed Items**: 43 items (All HIGH priority, 1 CRITICAL, most MEDIUM priority, many LOW priority)
-**Remaining Items**: 38 items (2 CRITICAL, 9 HIGH, 15 MEDIUM, 12 LOW)
+**Partially Complete**: 2 items (Item #4: Ruby & Go flexible version resolution, Item #12: Production examples)
+**Remaining Items**: 36 items (2 CRITICAL, 8 HIGH, 15 MEDIUM, 12 LOW)
 
 See git history and CHANGELOG.md for details on completed items.
+
+**Latest Updates (November 2025)**:
+- ✅ Ruby checksum fetching fixed (grep pattern and parameter order)
+- ✅ Production tests added to CI matrix
+- ✅ Flexible version resolution working for Ruby 3.x (e.g., "3.3" → "3.3.10")
 
 ---
 
@@ -181,10 +187,11 @@ if [ "$(id -u)" = "0" ]; then
 
 ---
 
-#### 4. [HIGH] Support Flexible Version Resolution with Automatic Patch Resolution
+#### 4. [HIGH] ✅ PARTIALLY COMPLETE - Support Flexible Version Resolution with Automatic Patch Resolution
 **Source**: Production build testing (Nov 2025)
 **Priority**: P1 (High - user experience and developer convenience)
 **Effort**: 2-3 days
+**Status**: ✅ Ruby complete (Nov 2025), Go complete (Nov 2025), Python/Node/Rust/Java pending
 
 **Issue**: Currently version validation requires exact semantic version format (X.Y.Z):
 ```bash
@@ -194,6 +201,19 @@ PYTHON_VERSION="3.12"  # Invalid - missing patch version
 # Must use:
 PYTHON_VERSION="3.12.7"  # Valid - full semantic version
 ```
+
+**Completed for Ruby & Go**:
+- ✅ Ruby: `fetch_ruby_checksum()` in `lib/features/lib/checksum-fetch.sh` supports partial versions
+  - `RUBY_VERSION="3.3"` → auto-resolves to latest 3.3.x (e.g., 3.3.10)
+  - `RUBY_VERSION="3.4.7"` → uses exact version
+  - Exports `RUBY_RESOLVED_VERSION` for logging
+  - Bug fixes (Nov 2025): Fixed grep pattern and download_and_verify parameter order
+- ✅ Go: `fetch_go_checksum()` supports partial versions
+  - `GO_VERSION="1.23"` → auto-resolves to latest 1.23.x (e.g., 1.23.0)
+  - Exports `GO_RESOLVED_VERSION` for logging
+
+**Remaining Work**:
+- Python, Node.js, Rust, Java still require exact versions
 
 **User Experience Problem**:
 - Users expect `PYTHON_VERSION="3.12"` to work and auto-resolve to latest patch (3.12.7)
@@ -1283,11 +1303,11 @@ echo "All checks successful - proceeding with push"
 
 ## Summary
 
-**Total Remaining**: 38 items (updated November 2025)
+**Total Remaining**: 36 items (updated November 2025)
 
 **By Priority**:
 - CRITICAL: 2 items (Production deployment blockers)
-- HIGH: 9 items (Security, enterprise features, and developer experience)
+- HIGH: 8 items (Security, enterprise features, and developer experience) - Item #4 moved to partially complete
 - MEDIUM: 15 items (Code quality, architecture, operations)
 - LOW: 12 items (Nice-to-have enhancements)
 
