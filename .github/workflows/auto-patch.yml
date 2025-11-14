@@ -92,6 +92,12 @@ jobs:
           echo "Applying version updates..."
           ./bin/update-versions.sh --input /tmp/version-check-output.json --no-commit --no-bump
 
+          # Update checksums for new versions
+          echo "Updating pinned checksums..."
+          ./bin/update-checksums.sh || {
+            echo "Warning: Checksum updates failed, continuing anyway"
+          }
+
           # Bump patch version
           echo "Bumping patch version..."
           echo "y" | ./bin/release.sh patch
