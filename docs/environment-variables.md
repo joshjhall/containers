@@ -243,11 +243,17 @@ These variables can be set when running containers (via `docker run -e`):
 
 ### Logging
 
-| Variable | Description |
-|----------|-------------|
-| `BUILD_LOG_DIR` | `/var/log/container-build` | Build log directory |
-| `CURRENT_FEATURE` | Name of currently installing feature |
-| `CURRENT_LOG_FILE` | Path to current feature's log file |
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `BUILD_LOG_DIR` | `/var/log/container-build` (root) or `/tmp/container-build` (non-root) | Build log directory with automatic fallback |
+| `CURRENT_FEATURE` | - | Name of currently installing feature |
+| `CURRENT_LOG_FILE` | - | Path to current feature's log file |
+
+**Note on BUILD_LOG_DIR:** The logging system automatically handles permission issues:
+- If explicitly set, that directory is used
+- If running as root or with proper permissions, uses `/var/log/container-build`
+- If permissions are restricted (e.g., rootless containers, CI), falls back to `/tmp/container-build`
+- Fails with clear error message if neither location is writable
 
 ---
 
