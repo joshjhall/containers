@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.8.6] - 2025-11-14
+
+### Added
+
+- Add production container examples and fix logging initialization
+
+### Documentation
+
+- Add HIGH priority item for pre-push git hook
+- Update pre-push hook item to include unit tests
+- Update roadmap with Ruby checksum fixes and flexible version resolution
+
+### Fixed
+
+- Fix Ruby checksum fetching and parameter order + add production tests to CI
+
+### Testing
+
+- Add production helper unit tests and multi-runtime integration test
+
 ## [4.8.5] - 2025-11-12
 
 ### Fixed
@@ -500,6 +520,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add helpful error message when release is cancelled
 - Add VS Code workspace settings and improve gitignore
 
+[4.8.6]: https://github.com/joshjhall/containers/compare/v4.8.5...v4.8.6
 [4.8.5]: https://github.com/joshjhall/containers/compare/v4.8.4...v4.8.5
 [4.8.4]: https://github.com/joshjhall/containers/compare/v4.8.3...v4.8.4
 [4.8.3]: https://github.com/joshjhall/containers/compare/v4.8.2...v4.8.3
