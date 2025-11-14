@@ -315,11 +315,11 @@ test_dynamic_checksum_fetching() {
         assert_true false "golang.sh doesn't source checksum-fetch.sh"
     fi
 
-    # Should use fetch_go_checksum for dynamic fetching from go.dev
-    if grep -q "fetch_go_checksum" "$golang_script"; then
-        assert_true true "Uses fetch_go_checksum for dynamic fetching from go.dev"
+    # Should use 4-tier verification system
+    if grep -q "checksum-verification.sh" "$golang_script"; then
+        assert_true true "Sources 4-tier checksum verification system"
     else
-        assert_true false "Doesn't use fetch_go_checksum"
+        assert_true false "Doesn't source checksum-verification.sh"
     fi
 }
 
@@ -327,11 +327,11 @@ test_dynamic_checksum_fetching() {
 test_download_verification() {
     local golang_script="$PROJECT_ROOT/lib/features/golang.sh"
 
-    # Check that download verification functions are used (not curl | tar)
-    if grep -q "download_and_extract" "$golang_script"; then
-        assert_true true "Uses download_and_extract for verification"
+    # Check that 4-tier verification is used (not curl | tar)
+    if grep -q "verify_download" "$golang_script"; then
+        assert_true true "Uses verify_download for 4-tier checksum verification"
     else
-        assert_true false "Doesn't use download_and_extract"
+        assert_true false "Doesn't use verify_download"
     fi
 }
 

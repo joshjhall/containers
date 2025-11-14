@@ -389,29 +389,22 @@ test_manual_repository_setup() {
         return
     fi
 
-    # Check for manual repository setup (should exist)
-    if grep -q "deb \[signed-by=" "$node_script"; then
-        assert_true true "node.sh uses signed-by directive for repository"
+    # Check for 4-tier verification system (replaced repository setup)
+    if grep -q "checksum-verification.sh" "$node_script"; then
+        assert_true true "node.sh sources 4-tier checksum verification system"
     else
-        assert_true false "node.sh does not use signed-by directive"
+        assert_true false "node.sh does not source checksum-verification.sh"
     fi
 
-    # Check for GPG key download
-    if grep -q "nodesource.*gpg.key" "$node_script"; then
-        assert_true true "node.sh downloads GPG key separately"
+    # Check for verify_download usage
+    if grep -q "verify_download" "$node_script"; then
+        assert_true true "node.sh uses verify_download for binary verification"
     else
-        assert_true false "node.sh does not download GPG key separately"
-    fi
-
-    # Check for gpg --dearmor usage
-    if grep -q "gpg --dearmor" "$node_script"; then
-        assert_true true "node.sh converts GPG key to binary format"
-    else
-        assert_true false "node.sh does not convert GPG key"
+        assert_true false "node.sh does not use verify_download"
     fi
 }
 
-# Test: node.sh adds repository to sources.list.d
+# Test: node.sh downloads binaries directly (no repository)
 test_repository_sources_list() {
     local node_script="$PROJECT_ROOT/lib/features/node.sh"
 
@@ -420,25 +413,25 @@ test_repository_sources_list() {
         return
     fi
 
-    # Check for sources.list.d usage
+    # Check that repository setup is NOT used (direct binary download instead)
     if grep -q "/etc/apt/sources.list.d/nodesource.list" "$node_script"; then
-        assert_true true "node.sh adds repository to sources.list.d"
+        assert_true false "node.sh should not use repository setup (uses direct download)"
     else
-        assert_true false "node.sh does not add repository to sources.list.d"
+        assert_true true "node.sh correctly uses direct binary download (no repository)"
     fi
 
-    # Check for keyring path
-    if grep -q "/usr/share/keyrings/nodesource.gpg" "$node_script"; then
-        assert_true true "node.sh stores GPG key in /usr/share/keyrings"
+    # Check that Node.js is downloaded from dist URLs
+    if grep -q "nodejs.org/dist" "$node_script"; then
+        assert_true true "node.sh downloads from nodejs.org/dist"
     else
-        assert_true false "node.sh does not use /usr/share/keyrings"
+        assert_true false "node.sh does not download from official dist URL"
     fi
 }
 
 # Run security tests
 run_test test_no_curl_pipe_bash "node.sh does not use curl | bash pattern"
-run_test test_manual_repository_setup "node.sh uses manual repository setup"
-run_test test_repository_sources_list "node.sh adds repository correctly"
+run_test test_manual_repository_setup "node.sh uses 4-tier verification system"
+run_test test_repository_sources_list "node.sh uses direct binary download (no repository)"
 
 # Generate test report
 generate_report

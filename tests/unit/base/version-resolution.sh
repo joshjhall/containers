@@ -15,6 +15,9 @@ test_suite "Version Resolution Tests"
 
 # Setup function - runs before each test
 setup() {
+    # Create temporary directory for logs (CI doesn't have /var/log access)
+    export BUILD_LOG_DIR=$(mktemp -d)
+
     # Source logging first (required by version-resolution.sh)
     source "$PROJECT_ROOT/lib/base/logging.sh"
 
@@ -34,8 +37,14 @@ setup() {
 
 # Teardown function - runs after each test
 teardown() {
+    # Clean up temporary log directory (ignore errors)
+    if [ -n "${BUILD_LOG_DIR:-}" ] && [ -d "$BUILD_LOG_DIR" ]; then
+        rm -rf "$BUILD_LOG_DIR" 2>/dev/null || true
+    fi
+
     unset RATE_LIMIT_HIT 2>/dev/null || true
     unset GITHUB_AUTH_HEADER 2>/dev/null || true
+    unset BUILD_LOG_DIR 2>/dev/null || true
 }
 
 # Wrapper to run tests with setup/teardown

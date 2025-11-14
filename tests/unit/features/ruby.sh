@@ -405,7 +405,7 @@ test_checksum_libraries_sourced() {
     fi
 }
 
-# Test: ruby.sh uses fetch_ruby_checksum function
+# Test: ruby.sh uses 4-tier verification system
 test_fetch_ruby_checksum_usage() {
     local ruby_script="$PROJECT_ROOT/lib/features/ruby.sh"
 
@@ -414,22 +414,22 @@ test_fetch_ruby_checksum_usage() {
         return
     fi
 
-    # Check for fetch_ruby_checksum usage
-    if grep -q "fetch_ruby_checksum" "$ruby_script"; then
-        assert_true true "ruby.sh uses fetch_ruby_checksum for dynamic checksum fetching"
+    # Check for 4-tier checksum verification system
+    if grep -q "checksum-verification.sh" "$ruby_script"; then
+        assert_true true "ruby.sh sources 4-tier checksum verification system"
     else
-        assert_true false "ruby.sh does not use fetch_ruby_checksum"
+        assert_true false "ruby.sh does not source checksum-verification.sh"
     fi
 
-    # Check for checksum variable
-    if grep -q "RUBY_CHECKSUM=" "$ruby_script"; then
-        assert_true true "ruby.sh stores checksum in RUBY_CHECKSUM variable"
+    # Check for version resolution (partial version support)
+    if grep -q "resolve_ruby_version" "$ruby_script"; then
+        assert_true true "ruby.sh uses version resolution for partial versions"
     else
-        assert_true false "ruby.sh does not store checksum"
+        assert_true false "ruby.sh does not use resolve_ruby_version"
     fi
 }
 
-# Test: ruby.sh uses download_and_verify function
+# Test: ruby.sh uses verify_download function
 test_download_verification() {
     local ruby_script="$PROJECT_ROOT/lib/features/ruby.sh"
 
@@ -438,18 +438,18 @@ test_download_verification() {
         return
     fi
 
-    # Check for download_and_verify usage
-    if grep -q "download_and_verify" "$ruby_script"; then
-        assert_true true "ruby.sh uses download_and_verify for checksum verification"
+    # Check for verify_download usage (4-tier verification)
+    if grep -q "verify_download" "$ruby_script"; then
+        assert_true true "ruby.sh uses verify_download for 4-tier checksum verification"
     else
-        assert_true false "ruby.sh does not use download_and_verify"
+        assert_true false "ruby.sh does not use verify_download"
     fi
 }
 
 # Run checksum verification tests
 run_test test_checksum_libraries_sourced "ruby.sh sources checksum verification libraries"
-run_test test_fetch_ruby_checksum_usage "ruby.sh uses fetch_ruby_checksum for dynamic checksums"
-run_test test_download_verification "ruby.sh uses download_and_verify for verification"
+run_test test_fetch_ruby_checksum_usage "ruby.sh uses 4-tier verification and version resolution"
+run_test test_download_verification "ruby.sh uses verify_download for 4-tier verification"
 
 # Generate test report
 generate_report
