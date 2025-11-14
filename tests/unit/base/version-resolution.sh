@@ -4,6 +4,10 @@
 
 set -euo pipefail
 
+# Set BUILD_LOG_DIR early to avoid permission issues in CI
+# This must be set BEFORE any script sources logging.sh
+export BUILD_LOG_DIR=$(mktemp -d)
+
 # Source test framework
 source "$(dirname "${BASH_SOURCE[0]}")/../../framework.sh"
 
@@ -15,9 +19,6 @@ test_suite "Version Resolution Tests"
 
 # Setup function - runs before each test
 setup() {
-    # Create temporary directory for logs (CI doesn't have /var/log access)
-    export BUILD_LOG_DIR=$(mktemp -d)
-
     # Source logging first (required by version-resolution.sh)
     source "$PROJECT_ROOT/lib/base/logging.sh"
 
