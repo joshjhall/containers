@@ -7,14 +7,16 @@
 #   one Ruby version is needed.
 #
 # Features:
-#   - Ruby installation from source
+#   - Ruby installation from source with 4-tier checksum verification
 #   - Bundler pre-installed and configured
 #   - Gem caching in /cache directory
 #   - Bundle caching for faster dependency installation
 #   - Development headers for native gem compilation
 #
 # Environment Variables:
-#   RUBY_VERSION    - Ruby version to install (has a default)
+#   RUBY_VERSION: Version specification (default: 3.4.7)
+#     * Major.minor only (e.g., "3.4"): Resolves to latest 3.4.x with pinned checksum
+#     * Specific version (e.g., "3.4.7"): Uses exact version
 #
 set -euo pipefail
 
@@ -27,9 +29,15 @@ source /tmp/build-scripts/base/apt-utils.sh
 # Source version validation utilities
 source /tmp/build-scripts/base/version-validation.sh
 
+# Source version resolution for partial version support
+source /tmp/build-scripts/base/version-resolution.sh
+
 # Source checksum verification utilities
 source /tmp/build-scripts/base/download-verify.sh
 source /tmp/build-scripts/features/lib/checksum-fetch.sh
+
+# Source 4-tier checksum verification system
+source /tmp/build-scripts/base/checksum-verification.sh
 
 # ============================================================================
 # Version Configuration
@@ -41,7 +49,18 @@ validate_ruby_version "$RUBY_VERSION" || {
     log_error "Build failed due to invalid RUBY_VERSION"
     exit 1
 }
-RUBY_MAJOR=$(echo "$RUBY_VERSION" | cut -d. -f1,2)
+
+# Resolve partial versions to full versions (e.g., "3.4" -> "3.4.7")
+# This enables users to use partial versions and get latest patches with pinned checksums
+if [[ "$RUBY_VERSION" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+    ORIGINAL_VERSION="$RUBY_VERSION"
+    RUBY_VERSION=$(resolve_ruby_version "$RUBY_VERSION" 2>/dev/null || echo "$RUBY_VERSION")
+
+    if [ "$ORIGINAL_VERSION" != "$RUBY_VERSION" ]; then
+        log_message "📍 Version Resolution: $ORIGINAL_VERSION → $RUBY_VERSION"
+        log_message "   Using latest patch version with pinned checksum verification"
+    fi
+fi
 
 # Start logging
 log_feature_start "Ruby" "${RUBY_VERSION}"
@@ -97,37 +116,32 @@ log_command "Setting cache directory ownership" \
 # ============================================================================
 log_message "Downloading and building Ruby ${RUBY_VERSION}..."
 
+# Calculate Ruby major version for URL construction
+RUBY_MAJOR=$(echo "$RUBY_VERSION" | cut -d. -f1,2)
+
 BUILD_TEMP=$(create_secure_temp_dir)
 cd "$BUILD_TEMP"
 
-# Fetch checksum dynamically from Ruby downloads page
-log_message "Fetching Ruby ${RUBY_VERSION} checksum from ruby-lang.org..."
-RUBY_CHECKSUM=$(fetch_ruby_checksum "${RUBY_VERSION}")
-
-if [ -z "$RUBY_CHECKSUM" ]; then
-    log_error "Failed to fetch checksum for Ruby ${RUBY_VERSION}"
-    log_error "Version may not exist or network issue. Check https://www.ruby-lang.org/en/downloads/"
-    exit 1
-fi
-
-# If partial version was resolved, use the resolved version
-if [ -n "${RUBY_RESOLVED_VERSION:-}" ]; then
-    log_message "Resolved Ruby ${RUBY_VERSION} to ${RUBY_RESOLVED_VERSION} (latest available patch)"
-    RUBY_VERSION="$RUBY_RESOLVED_VERSION"
-    RUBY_MAJOR=$(echo "$RUBY_VERSION" | cut -d. -f1,2)
-fi
-
-log_message "Expected SHA256: ${RUBY_CHECKSUM}"
-
-# Download and verify Ruby source tarball
+# Download Ruby tarball with 4-tier checksum verification
 RUBY_URL="https://cache.ruby-lang.org/pub/ruby/${RUBY_MAJOR}/ruby-${RUBY_VERSION}.tar.gz"
 RUBY_TARBALL="ruby-${RUBY_VERSION}.tar.gz"
 
-log_command "Downloading and verifying Ruby ${RUBY_VERSION} source" \
-    download_and_verify \
-        "${RUBY_URL}" \
-        "${RUBY_CHECKSUM}" \
-        "${RUBY_TARBALL}"
+# Download Ruby tarball
+log_message "Downloading Ruby ${RUBY_VERSION}..."
+if ! curl -fsSL "$RUBY_URL" -o "$RUBY_TARBALL"; then
+    log_error "Failed to download Ruby ${RUBY_VERSION}"
+    log_error "Please verify version exists: https://www.ruby-lang.org/en/downloads/"
+    log_feature_end
+    exit 1
+fi
+
+# Verify using 4-tier system (GPG → Pinned → Published → Calculated)
+# This will try each tier in order and log which method succeeded
+if ! verify_download "language" "ruby" "$RUBY_VERSION" "$RUBY_TARBALL"; then
+    log_error "Checksum verification failed for Ruby ${RUBY_VERSION}"
+    log_feature_end
+    exit 1
+fi
 
 log_command "Extracting Ruby source" \
     tar -xzf "${RUBY_TARBALL}"

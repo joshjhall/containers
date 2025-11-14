@@ -46,11 +46,46 @@ source /tmp/build-scripts/base/feature-header.sh
 # Source apt utilities for reliable package installation
 source /tmp/build-scripts/base/apt-utils.sh
 
+# Source version validation utilities
+source /tmp/build-scripts/base/version-validation.sh
+
+# Source version resolution for partial version support
+source /tmp/build-scripts/base/version-resolution.sh
+
 # ============================================================================
 # Version Configuration
 # ============================================================================
 # Java version to install (can be overridden)
 JAVA_VERSION="${JAVA_VERSION:-21}"
+
+# Validate Java version format to prevent shell injection
+validate_java_version "$JAVA_VERSION" || {
+    log_error "Build failed due to invalid JAVA_VERSION"
+    exit 1
+}
+
+# Resolve partial versions to full versions for informational purposes
+# Note: apt will automatically install the latest patch version for the major version
+# This resolution is primarily for logging and transparency
+if [[ "$JAVA_VERSION" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+    ORIGINAL_VERSION="$JAVA_VERSION"
+    RESOLVED_VERSION=$(resolve_java_version "$JAVA_VERSION" 2>/dev/null || echo "$JAVA_VERSION")
+
+    if [ "$ORIGINAL_VERSION" != "$RESOLVED_VERSION" ]; then
+        log_message "📍 Version Resolution: $ORIGINAL_VERSION → $RESOLVED_VERSION"
+        log_message "   Note: apt will install latest patch for Java $ORIGINAL_VERSION"
+        log_message "   Resolved version ($RESOLVED_VERSION) shown for reference"
+    fi
+fi
+
+# Extract major version for package name (apt uses major version)
+JAVA_MAJOR=$(echo "$JAVA_VERSION" | cut -d. -f1)
+
+# Note: Java is installed via Eclipse Temurin apt packages
+# Verification is handled by:
+#   - Debian package system (dpkg verification)
+#   - Adoptium repository GPG signatures
+#   - No manual checksum verification needed
 
 # Start logging
 log_feature_start "Java" "${JAVA_VERSION}"
@@ -93,12 +128,12 @@ log_message "Installing Java ${JAVA_VERSION} and build tools..."
 
 # Install Temurin JDK
 log_message "Installing Eclipse Temurin JDK ${JAVA_VERSION}..."
-apt_install "temurin-${JAVA_VERSION}-jdk"
+apt_install "temurin-${JAVA_MAJOR}-jdk"
 
 # Create consistent symlink for all versions
-TEMURIN_PATH="/usr/lib/jvm/temurin-${JAVA_VERSION}-jdk-$(dpkg --print-architecture)"
+TEMURIN_PATH="/usr/lib/jvm/temurin-${JAVA_MAJOR}-jdk-$(dpkg --print-architecture)"
 log_command "Creating Java version symlink" \
-    ln -sf "${TEMURIN_PATH}" "/usr/lib/jvm/java-${JAVA_VERSION}-openjdk-$(dpkg --print-architecture)"
+    ln -sf "${TEMURIN_PATH}" "/usr/lib/jvm/java-${JAVA_MAJOR}-openjdk-$(dpkg --print-architecture)"
 
 # Install build tools
 log_message "Installing build tools..."
@@ -128,7 +163,7 @@ log_command "Creating Java cache directories with ownership" \
 log_message "Configuring Java environment..."
 
 # Set JAVA_HOME and create default symlink
-JAVA_HOME_PATH="/usr/lib/jvm/java-${JAVA_VERSION}-openjdk-$(dpkg --print-architecture)"
+JAVA_HOME_PATH="/usr/lib/jvm/java-${JAVA_MAJOR}-openjdk-$(dpkg --print-architecture)"
 log_command "Creating default Java symlink" \
     ln -sf "${JAVA_HOME_PATH}" /usr/lib/jvm/default-java
 
@@ -423,8 +458,8 @@ cat > /etc/maven/settings-template.xml << 'EOF'
                 <activeByDefault>true</activeByDefault>
             </activation>
             <properties>
-                <maven.compiler.source>${JAVA_VERSION}</maven.compiler.source>
-                <maven.compiler.target>${JAVA_VERSION}</maven.compiler.target>
+                <maven.compiler.source>${JAVA_MAJOR}</maven.compiler.source>
+                <maven.compiler.target>${JAVA_MAJOR}</maven.compiler.target>
             </properties>
         </profile>
     </profiles>

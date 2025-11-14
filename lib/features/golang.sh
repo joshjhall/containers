@@ -6,20 +6,21 @@
 #   Configures workspace and cache directories for optimal container usage.
 #
 # Features:
-#   - Go compiler and runtime
+#   - Go compiler and runtime with 4-tier checksum verification
 #   - Basic Go tools (gofmt, go vet, etc.)
 #   - Module support
 #   - Proper cache directory configuration
 #
 # Cache Strategy:
-#   - If /cache directory exists and GOPATH isn't set, uses /cache/go
-#   - Otherwise uses standard home directory location ~/go
-#   - This allows volume mounting for persistent module cache across container rebuilds
+#   - Uses /cache/go for workspace and /cache/go-build for build cache
+#   - Allows volume mounting for persistent module cache across container rebuilds
 #
 # Environment Variables:
-#   - GO_VERSION: Go version to install
-#   - GOPATH: Go workspace directory (default: /cache/go or ~/go)
-#   - GOCACHE: Go build cache (default: within GOPATH)
+#   - GO_VERSION: Version specification (default: 1.25.3)
+#     * Major.minor only (e.g., "1.23"): Resolves to latest 1.23.x with pinned checksum
+#     * Specific version (e.g., "1.23.5"): Uses exact version
+#   - GOPATH: Go workspace directory (default: /cache/go)
+#   - GOCACHE: Go build cache (default: /cache/go-build)
 #
 set -euo pipefail
 
@@ -32,16 +33,21 @@ source /tmp/build-scripts/base/apt-utils.sh
 # Source version validation utilities
 source /tmp/build-scripts/base/version-validation.sh
 
+# Source version resolution for partial version support
+source /tmp/build-scripts/base/version-resolution.sh
+
 # Source download verification utilities
 source /tmp/build-scripts/base/download-verify.sh
 
 # Source checksum fetching utilities
 source /tmp/build-scripts/features/lib/checksum-fetch.sh
 
+# Source 4-tier checksum verification system
+source /tmp/build-scripts/base/checksum-verification.sh
+
 # ============================================================================
 # Version Configuration
 # ============================================================================
-# Go version to install
 GO_VERSION="${GO_VERSION:-1.25.3}"
 
 # Validate Go version format to prevent shell injection
@@ -49,6 +55,18 @@ validate_go_version "$GO_VERSION" || {
     log_error "Build failed due to invalid GO_VERSION"
     exit 1
 }
+
+# Resolve partial versions to full versions (e.g., "1.23" -> "1.23.5")
+# This enables users to use partial versions and get latest patches with pinned checksums
+if [[ "$GO_VERSION" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+    ORIGINAL_VERSION="$GO_VERSION"
+    GO_VERSION=$(resolve_go_version "$GO_VERSION" 2>/dev/null || echo "$GO_VERSION")
+
+    if [ "$ORIGINAL_VERSION" != "$GO_VERSION" ]; then
+        log_message "📍 Version Resolution: $ORIGINAL_VERSION → $GO_VERSION"
+        log_message "   Using latest patch version with pinned checksum verification"
+    fi
+fi
 
 # Extract major.minor version for comparison
 GO_MAJOR=$(echo "$GO_VERSION" | cut -d. -f1)
@@ -116,47 +134,35 @@ log_message "Downloading and installing Go ${GO_VERSION}..."
 BUILD_TEMP=$(create_secure_temp_dir)
 cd "$BUILD_TEMP"
 
-# Fetch checksum dynamically from go.dev
-log_message "Fetching checksum for Go ${GO_VERSION} ${GO_ARCH}..."
+# Download Go tarball with 4-tier checksum verification
+GO_TARBALL="go${GO_VERSION}.linux-${GO_ARCH}.tar.gz"
+GO_URL="https://go.dev/dl/${GO_TARBALL}"
 
-if ! GO_CHECKSUM=$(fetch_go_checksum "${GO_VERSION}" "${GO_ARCH}" 2>/dev/null); then
-    log_error "Failed to fetch checksum for Go ${GO_VERSION} ${GO_ARCH} from go.dev"
-    log_error ""
-    log_error "This could mean:"
-    log_error "  - go.dev is unreachable (network issue)"
-    log_error "  - Go ${GO_VERSION} does not exist or is not published yet"
-    log_error "  - The download page format has changed"
-    log_error ""
-    log_error "Please verify:"
-    log_error "  1. Network connectivity: curl -I https://go.dev/dl/"
-    log_error "  2. Version exists: https://go.dev/dl/#go${GO_VERSION}"
+# Download Go tarball
+log_message "Downloading Go ${GO_VERSION} for ${GO_ARCH}..."
+if ! curl -fsSL "$GO_URL" -o "$GO_TARBALL"; then
+    log_error "Failed to download Go ${GO_VERSION}"
+    log_error "Please verify version exists: https://go.dev/dl/#go${GO_VERSION}"
     log_feature_end
     exit 1
 fi
 
-# If partial version was resolved, use the resolved version
-if [ -n "${GO_RESOLVED_VERSION:-}" ]; then
-    log_message "Resolved Go ${GO_VERSION} to ${GO_RESOLVED_VERSION} (latest available patch)"
-    GO_VERSION="$GO_RESOLVED_VERSION"
-fi
-
-log_message "✓ Fetched checksum from go.dev"
-
-# Validate checksum format
-if ! validate_checksum_format "$GO_CHECKSUM" "sha256"; then
-    log_error "Invalid checksum format for Go ${GO_VERSION}: ${GO_CHECKSUM}"
+# Verify using 4-tier system (GPG → Pinned → Published → Calculated)
+# This will try each tier in order and log which method succeeded
+if ! verify_download "language" "go" "$GO_VERSION" "$GO_TARBALL" "$GO_ARCH"; then
+    log_error "Checksum verification failed for Go ${GO_VERSION}"
     log_feature_end
     exit 1
 fi
 
-# Download and extract Go tarball with checksum verification
-log_message "Downloading and verifying Go ${GO_VERSION} for ${GO_ARCH}..."
-log_message "Using checksum: ${GO_CHECKSUM}"
-download_and_extract \
-    "https://go.dev/dl/go${GO_VERSION}.linux-${GO_ARCH}.tar.gz" \
-    "${GO_CHECKSUM}" \
-    "/usr/local" \
-    ""  # Extract all files (creates /usr/local/go/)
+# Extract Go to /usr/local
+log_command "Extracting Go to /usr/local" \
+    tar -xzf "$GO_TARBALL" -C /usr/local
+
+# Clean up
+cd /
+log_command "Cleaning up Go build directory" \
+    rm -rf "$BUILD_TEMP"
 
 # ============================================================================
 # Cache and Path Configuration
