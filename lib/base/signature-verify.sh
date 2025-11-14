@@ -328,20 +328,19 @@ verify_signature() {
 
     # Python-specific logic: Try Sigstore first for 3.11.0+
     if [ "$language" = "python" ]; then
-        local major minor patch
-        IFS='.' read -r major minor patch <<< "$version"
+        local major minor
+        IFS='.' read -r major minor _ <<< "$version"
 
         # Check if version >= 3.11.0
         if [ "$major" -ge 3 ] && [ "$minor" -ge 11 ]; then
             log_message "Python ${version} supports Sigstore, trying Sigstore first..."
 
             if command -v cosign >/dev/null 2>&1; then
-                # Try to download and verify Sigstore bundle
-                local base_url="https://www.python.org/ftp/python/${version}"
-                local sigstore_url="${base_url}/$(basename "$file").sigstore"
-
-                # TODO: Need to determine cert identity and OIDC issuer based on version
-                # For now, log that Sigstore is available but needs configuration
+                # TODO: Implement Sigstore verification for Python 3.11.0+
+                # Will need to:
+                # 1. Download .sigstore bundle from https://www.python.org/ftp/python/${version}/
+                # 2. Determine cert identity and OIDC issuer based on version/release manager
+                # 3. Call download_and_verify_sigstore() with proper parameters
                 log_message "Sigstore available but requires release manager configuration"
                 log_message "Falling back to GPG verification"
             else
