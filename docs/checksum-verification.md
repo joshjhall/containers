@@ -1,17 +1,196 @@
-# Checksum Verification
+# Checksum Verification & Cryptographic Signatures
 
-> **📖 NOTE**: This document represents **COMPLETED WORK** (as of 2025-11-08).
-> All checksum verification has been implemented across the entire codebase.
-> This document serves as:
-> - **Historical reference** for the security work completed
-> - **Implementation guide** for adding checksum verification to future tools
-> - **Audit trail** showing what was secured and how
+> **📖 UPDATED**: Enhanced with **4-Tier Progressive Verification System** (2025-11-14)
+>
+> This document covers:
+> - **NEW**: 4-Tier verification system (GPG + Sigstore + Pinned Checksums + Published + Calculated)
+> - **NEW**: Automated checksum database maintenance
+> - **Original**: Tool-level checksum verification (completed 2025-11-08)
 
-## Status: ✅ COMPLETE - All Downloads Secured
-**Date Started**: 2025-11-08
+---
+
+## 🔐 4-Tier Progressive Verification System (November 2025)
+
+**Status**: ✅ COMPLETE - Infrastructure & Database Delivered
+**Date Implemented**: 2025-11-14
+
+The build system now uses a progressive, multi-tier verification approach that provides the strongest available security for each language runtime download.
+
+### Overview: How It Works
+
+When downloading language runtimes, the system tries verification methods **in order from strongest to weakest**, automatically falling back to the next tier if a stronger method isn't available:
+
+```
+TIER 1: Cryptographic Signatures (GPG + Sigstore) ← BEST
+    ↓ (if unavailable)
+TIER 2: Pinned Checksums (lib/checksums.json) ← GOOD
+    ↓ (if unavailable)
+TIER 3: Published Checksums (from official source) ← ACCEPTABLE
+    ↓ (if unavailable)
+TIER 4: Calculated Checksums (TOFU fallback) ← LAST RESORT
+```
+
+### Tier 1: Cryptographic Signatures (BEST)
+
+**What**: Verifies authenticity using the publisher's cryptographic signature
+**How**: GPG/PGP signatures or Sigstore transparency log verification
+**Security**: Highest - proves the file came from the trusted publisher
+**Available For**:
+- **Python 3.11.0+**: Sigstore (preferred) + GPG (fallback)
+- **Python < 3.11.0**: GPG only
+- **Node.js**: GPG signatures (future implementation)
+- **Go**: GPG signatures (future implementation)
+
+**Example**:
+```bash
+# Python downloads are verified with GPG signatures
+# lib/base/signature-verify.sh handles this automatically
+verify_signature "Python-3.12.7.tar.gz" "python" "3.12.7"
+# → Downloads .asc file, verifies with GPG keys from lib/gpg-keys/python/
+```
+
+**Why This is Better Than Checksums**: A checksum only tells you the file hasn't been corrupted. A cryptographic signature proves the file was created by someone with the private key (the Python/Node.js release team), making supply chain attacks much harder.
+
+### Tier 2: Pinned Checksums (GOOD)
+
+**What**: Git-tracked checksums in `lib/checksums.json`
+**How**: Compares file SHA256 against checksums committed to this repository
+**Security**: High - checksums are auditable, reviewed in PRs, version-controlled
+**Available For**:
+- **Node.js**: 4 versions initially (22.12.0, 22.11.0, 20.18.1, 20.18.0)
+- **Go**: 1 version initially (1.25.4)
+- **Ruby**: 4 versions initially (3.5.0, 3.4.7, 3.3.10, 3.2.9)
+
+**Database Structure** (`lib/checksums.json`):
+```json
+{
+  "languages": {
+    "nodejs": {
+      "versions": {
+        "22.12.0": {
+          "sha256": "22982235e1b71fa8850f82edd09cdae7e3f32df1764a9ec298c72d25ef2c164f",
+          "url": "https://nodejs.org/dist/v22.12.0/node-v22.12.0-linux-x64.tar.xz",
+          "added": "2025-11-14"
+        }
+      }
+    }
+  }
+}
+```
+
+**Database Growth Strategy**:
+- Checksums are **never deleted**, only added
+- File grows over time (estimated ~74KB for 5 years of releases)
+- Benefits:
+  - Security strengthens over time for older versions
+  - Enables reproducible builds across time
+  - No breaking changes to existing builds
+
+**Automated Maintenance**:
+```bash
+# Fill in missing checksums for existing versions
+./bin/update-checksums.sh
+
+# Test without making changes
+./bin/update-checksums.sh --dry-run
+```
+
+The `bin/update-checksums.sh` script:
+- Automatically fetches checksums from official sources
+- Validates checksum format (SHA256 = 64 hex characters)
+- Creates backups before updating
+- Can be integrated into auto-patch workflow
+
+### Tier 3: Published Checksums (ACCEPTABLE)
+
+**What**: Checksums downloaded from the official publisher's website
+**How**: Fetches SHA256SUMS, SHASUMS256.txt, or similar from official sources
+**Security**: Medium - vulnerable to MITM if downloaded over HTTP or DNS poisoning
+**Available For**: Most languages and tools with official checksum files
+
+**Example**:
+```bash
+# Node.js publishes SHASUMS256.txt for each version
+curl -fsSL "https://nodejs.org/dist/v22.12.0/SHASUMS256.txt" | \
+  grep "node-v22.12.0-linux-x64.tar.xz" | awk '{print $1}'
+```
+
+### Tier 4: Calculated Checksums (FALLBACK)
+
+**What**: Calculate SHA256 of downloaded file (Trust On First Use)
+**How**: Download file once, calculate checksum, download again and verify
+**Security**: Low - vulnerable to MITM attacks, no external verification
+**When Used**: Only when no other verification method is available
+
+**Security Warning Displayed**:
+```
+⚠️  TIER 4: Using calculated checksum (FALLBACK)
+
+   ╔════════════════════════════════════════════════════════════╗
+   ║                    SECURITY WARNING                        ║
+   ╠════════════════════════════════════════════════════════════╣
+   ║ No trusted checksum available for verification.            ║
+   ║                                                            ║
+   ║ Using TOFU (Trust On First Use) - calculating checksum    ║
+   ║ from downloaded file without external verification.       ║
+   ║                                                            ║
+   ║ Risk: Vulnerable to man-in-the-middle attacks.            ║
+   ╚════════════════════════════════════════════════════════════╝
+```
+
+### Language-by-Language Verification Matrix
+
+| Language | Tier 1 (Signatures) | Tier 2 (Pinned) | Tier 3 (Published) | Notes |
+|----------|--------------------|-----------------|--------------------|-------|
+| **Python** | ✅ GPG + Sigstore | N/A | N/A | Best security - signatures preferred over checksums |
+| **Node.js** | 🔜 GPG (future) | ✅ Yes | ✅ SHASUMS256.txt | Currently uses Tier 2 or 3 |
+| **Go** | 🔜 GPG (future) | ✅ Yes | ✅ go.dev/dl JSON | Currently uses Tier 2 or 3 |
+| **Ruby** | ❌ None | ✅ Yes | ✅ ruby-lang.org | Currently uses Tier 2 or 3 |
+| **Rust** | N/A | N/A | ✅ rustup-init | Verified by rustup's built-in system |
+| **R** | N/A | N/A | N/A | Installed via apt (GPG-verified automatically) |
+| **Java** | N/A | N/A | N/A | Installed via apt (GPG-verified automatically) |
+| **Mojo** | N/A | N/A | N/A | Installed via pixi/conda (verified by conda) |
+
+**Key Insights**:
+- Languages installed via **apt** or **conda** already get GPG verification from those package managers
+- Only languages downloaded as **raw binaries/tarballs** need our verification layers
+- **Python** is the gold standard - GPG + Sigstore is more secure than any checksum
+
+### Implementation Files
+
+**Core Verification**:
+- `lib/base/checksum-verification.sh` - Main 4-tier orchestration
+- `lib/base/signature-verify.sh` - GPG + Sigstore verification (Tier 1)
+- `lib/gpg-keys/` - GPG public keys for Python, Node.js, Go
+
+**Checksum Database**:
+- `lib/checksums.json` - Pinned checksums (Tier 2)
+- `bin/update-checksums.sh` - Automated maintenance script
+- `lib/features/lib/checksum-fetch.sh` - Checksum fetching utilities
+
+**Usage in Feature Scripts**:
+```bash
+# Source verification utilities
+source /tmp/build-scripts/base/checksum-verification.sh
+
+# Verify a language runtime download (tries all tiers automatically)
+verify_download "language" "nodejs" "22.12.0" "/tmp/node.tar.xz"
+```
+
+The system automatically:
+1. Tries GPG/Sigstore signature verification (if available)
+2. Falls back to pinned checksums from lib/checksums.json
+3. Falls back to published checksums from official source
+4. Falls back to calculated checksum (with security warning)
+
+---
+
+## ✅ Original Checksum Verification (November 2025)
+
+**Status**: COMPLETE - All Downloads Secured
 **Date Completed**: 2025-11-08
 
-**Final Status**: All checksum verification work complete. 100% of downloads now verified.
+**Final Status**: All tool-level checksum verification complete. 100% of tool downloads now verified.
 
 **Work Completed**:
 - Phases 1-9: Original audit items (all CRITICAL, HIGH, MEDIUM priority)
