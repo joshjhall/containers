@@ -158,6 +158,12 @@ jobs:
               PROJECT_NAME=containers
               PROJECT_PATH=.
               INCLUDE_R_DEV=true
+          - name: production
+            build_args: |
+              PROJECT_NAME=containers
+              PROJECT_PATH=.
+              BASE_IMAGE=debian:bookworm-slim
+              ENABLE_PASSWORDLESS_SUDO=false
 
     steps:
       - name: Checkout code
