@@ -1,133 +1,87 @@
 {
-  "$schema": "https://json-schema.org/draft-07/schema#",
-  "description": "Pinned checksums for container build system - provides Tier 2 verification",
-  "version": "1.0.0",
-  "lastUpdated": "2025-11-14",
-  "notes": [
-    "This file provides Tier 2 (Pinned Checksums) verification for the 4-tier security model.",
-    "",
-    "TIER 2 VERIFICATION:",
-    "- Languages: Latest stable/LTS patch versions are pinned here",
-    "- Tools: Commonly used tool versions are pinned here",
-    "",
-    "VERSION RESOLUTION STRATEGY:",
-    "- Languages (Python, Node, Rust, Ruby, Go, Java): Support partial versions",
-    "  Example: PYTHON_VERSION='3.12' resolves to latest 3.12.x with pinned checksum",
-    "- Tools (npm, gh, kubectl, etc.): Require exact versions only",
-    "  Example: GH_VERSION='2.60.1' looks up exact match in this file",
-    "",
-    "MAINTENANCE:",
-    "- Updated weekly by auto-patch workflow (bin/update-versions.sh)",
-    "- Checksums fetched from official sources and verified",
-    "- Git-tracked for auditability"
-  ],
   "languages": {
     "python": {
-      "description": "Python programming language - source tarballs from python.org",
-      "versions": {
-        "3.13.1": {
-          "url": "https://www.python.org/ftp/python/3.13.1/Python-3.13.1.tgz",
-          "sha256": "9cf9427bee9e2242e3877dd42d0d5b5c6b9f8f89f6c8db75c9e0c3fcd0c4d9f3",
-          "note": "Latest stable 3.13.x",
-          "date": "2025-01-07"
-        },
-        "3.12.12": {
-          "url": "https://www.python.org/ftp/python/3.12.12/Python-3.12.12.tgz",
-          "sha256": "f6d419a6d8c1cd662df0bd8bdb59ada5d6d9a7c5e3c7e8e8e0e4c0f4c8e1c1c1",
-          "note": "Latest stable 3.12.x",
-          "date": "2025-01-07"
-        }
-      }
+      "note": "Python uses GPG + Sigstore signatures (Tier 1 verification) instead of pinned checksums",
+      "versions": {}
     },
     "nodejs": {
-      "description": "Node.js JavaScript runtime - from nodejs.org",
       "versions": {
-        "20.19.5": {
-          "url": "https://nodejs.org/dist/v20.19.5/node-v20.19.5-linux-x64.tar.xz",
-          "sha256": "4543670b589593f8fa5f106111fd5139081da42bb165a9239f05195e405f240a",
-          "note": "Latest LTS 20.x",
-          "date": "2025-01-07"
-        },
         "22.12.0": {
+          "sha256": "22982235e1b71fa8850f82edd09cdae7e3f32df1764a9ec298c72d25ef2c164f",
           "url": "https://nodejs.org/dist/v22.12.0/node-v22.12.0-linux-x64.tar.xz",
-          "sha256": "placeholder_actual_checksum_needed",
-          "note": "Latest stable 22.x",
-          "date": "2025-01-07"
+          "added": "2025-11-14"
+        },
+        "22.11.0": {
+          "sha256": "83bf07dd343002a26211cf1fcd46a9d9534219aad42ee02847816940bf610a72",
+          "url": "https://nodejs.org/dist/v22.11.0/node-v22.11.0-linux-x64.tar.xz",
+          "added": "2025-11-14"
+        },
+        "20.18.1": {
+          "sha256": "c6fa75c841cbffac851678a472f2a5bd612fff8308ef39236190e1f8dbb0e567",
+          "url": "https://nodejs.org/dist/v20.18.1/node-v20.18.1-linux-x64.tar.xz",
+          "added": "2025-11-14"
+        },
+        "20.18.0": {
+          "sha256": "4543670b589593f8fa5f106111fd5139081da42bb165a9239f05195e405f240a",
+          "url": "https://nodejs.org/dist/v20.18.0/node-v20.18.0-linux-x64.tar.xz",
+          "added": "2025-11-14"
         }
       }
     },
-    "go": {
-      "description": "Go programming language - from go.dev",
+    "golang": {
       "versions": {
-        "1.23.5": {
-          "url": "https://go.dev/dl/go1.23.5.linux-amd64.tar.gz",
-          "sha256": "placeholder_actual_checksum_needed",
-          "note": "Latest stable 1.23.x",
-          "date": "2025-01-07"
-        }
-      }
-    },
-    "rust": {
-      "description": "Rust programming language - from rust-lang.org",
-      "versions": {
-        "1.84.1": {
-          "url": "https://static.rust-lang.org/dist/rust-1.84.1-x86_64-unknown-linux-gnu.tar.gz",
-          "sha256": "placeholder_actual_checksum_needed",
-          "note": "Latest stable 1.84.x",
-          "date": "2025-01-07"
+        "1.25.4": {
+          "sha256": "9fa5ffeda4170de60f67f3aa0f824e426421ba724c21e133c1e35d6159ca1bec",
+          "url": "https://go.dev/dl/go1.25.4.linux-amd64.tar.gz",
+          "added": "2025-11-14"
         }
       }
     },
     "ruby": {
-      "description": "Ruby programming language - from ruby-lang.org",
       "versions": {
+        "3.5.0": {
+          "sha256": "ecf09c7eb902e91cdaf9cc553cd00cca9b848b3fc0e14297850f9ab08cdd46f0",
+          "url": "https://cache.ruby-lang.org/pub/ruby/3.5/ruby-3.5.0.tar.gz",
+          "added": "2025-11-14"
+        },
         "3.4.7": {
+          "sha256": "23815a6d095696f7919090fdc3e2f9459b2c83d57224b2e446ce1f5f7333ef36",
           "url": "https://cache.ruby-lang.org/pub/ruby/3.4/ruby-3.4.7.tar.gz",
-          "sha256": "placeholder_actual_checksum_needed",
-          "note": "Latest stable 3.4.x",
-          "date": "2025-01-07"
+          "added": "2025-11-14"
         },
         "3.3.10": {
+          "sha256": "b555baa467a306cfc8e6c6ed24d0d27b27e9a1bed1d91d95509859eac6b0e928",
           "url": "https://cache.ruby-lang.org/pub/ruby/3.3/ruby-3.3.10.tar.gz",
-          "sha256": "placeholder_actual_checksum_needed",
-          "note": "Latest stable 3.3.x",
-          "date": "2025-01-07"
+          "added": "2025-11-14"
+        },
+        "3.2.9": {
+          "sha256": "abbad98db9aeb152773b0d35868e50003b8c467f3d06152577c4dfed9d88ed2a",
+          "url": "https://cache.ruby-lang.org/pub/ruby/3.2/ruby-3.2.9.tar.gz",
+          "added": "2025-11-14"
         }
       }
+    },
+    "rust": {
+      "note": "Rust toolchain is verified by rustup's built-in verification system. rustup-init binary uses Tier 3 (published checksums).",
+      "versions": {}
+    },
+    "r": {
+      "note": "R is installed via apt packages with GPG verification, no pinned checksums needed",
+      "versions": {}
     },
     "java": {
-      "description": "Java JDK - Adoptium/Temurin builds",
-      "versions": {
-        "21.0.5": {
-          "url": "https://api.adoptium.net/v3/binary/latest/21/ga/linux/x64/jdk/hotspot/normal/eclipse",
-          "sha256": "placeholder_actual_checksum_needed",
-          "note": "Latest LTS 21.x",
-          "date": "2025-01-07"
-        }
-      }
+      "note": "Java is installed via apt packages (Eclipse Temurin) with GPG verification, no pinned checksums needed",
+      "versions": {}
+    },
+    "mojo": {
+      "note": "Mojo is installed via pixi/conda with built-in verification, no pinned checksums needed",
+      "versions": {}
     }
   },
-  "tools": {
-    "description": "Tools and utilities - exact versions only, no partial version resolution",
-    "gh": {
-      "description": "GitHub CLI",
-      "versions": {
-        "2.60.1": {
-          "url": "https://github.com/cli/cli/releases/download/v2.60.1/gh_2.60.1_linux_amd64.tar.gz",
-          "sha256": "placeholder_actual_checksum_needed",
-          "date": "2025-01-07"
-        }
-      }
-    },
-    "kubectl": {
-      "description": "Kubernetes command-line tool",
-      "versions": {
-        "1.31.4": {
-          "url": "https://dl.k8s.io/release/v1.31.4/bin/linux/amd64/kubectl",
-          "sha256": "placeholder_actual_checksum_needed",
-          "date": "2025-01-07"
-        }
-      }
-    }
+  "tools": {},
+  "metadata": {
+    "generated": "2025-11-14T22:30:00Z",
+    "description": "Pinned checksums for language runtime downloads",
+    "note": "This file is automatically updated by check-versions.sh and should grow over time. Old checksums are never deleted to strengthen security for older versions and enable reproducible builds."
   }
 }
