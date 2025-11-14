@@ -133,7 +133,11 @@ terraform.tfvars
 # Backup files
 *.bak
 *.backup
+*.backup-*
 *.old
+
+# Checksum database backups (created by bin/update-checksums.sh)
+lib/checksums.json.backup-*
 
 # Archive files (unless intentionally added)
 *.tar
