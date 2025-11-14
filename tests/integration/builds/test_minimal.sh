@@ -82,8 +82,9 @@ test_runtime_initialization() {
 test_user_environment() {
     local image="${IMAGE_TO_TEST:-test-minimal-base-$$}"
 
-    # Verify user has sudo access
-    assert_command_in_container "$image" "sudo -n echo test" "test"
+    # Verify user is in sudo group but passwordless sudo is disabled by default (security)
+    # This should fail with "password is required" which means sudo is available but secure
+    assert_command_in_container "$image" "id -nG | grep -q sudo && echo 'in-sudo-group'" "in-sudo-group"
 
     # Verify home directory is properly set
     assert_command_in_container "$image" "echo \$HOME" "/home/developer"

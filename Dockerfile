@@ -58,7 +58,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 ARG USERNAME=developer
 ARG USER_UID=1000
 ARG USER_GID=$USER_UID
-ARG ENABLE_PASSWORDLESS_SUDO=true
+ARG ENABLE_PASSWORDLESS_SUDO=false
 
 # Working directory and project name
 ARG PROJECT_NAME=project

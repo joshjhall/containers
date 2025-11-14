@@ -32,6 +32,10 @@ services:
         - USER_UID=${USER_UID:-1000}
         - USER_GID=${USER_GID:-1000}
         - VARIANT=3.12-bookworm
+        # Enable passwordless sudo for local development convenience
+        # Allows installing packages, fixing permissions without password prompts
+        # NOT recommended for production - this is safe for local dev only
+        - ENABLE_PASSWORDLESS_SUDO=true
       cache_from:
         - type=registry,ref=ghcr.io/project/devcontainer:cache
     environment:
