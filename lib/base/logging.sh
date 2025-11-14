@@ -17,7 +17,27 @@
 set -euo pipefail
 
 # Global variables for logging
-export BUILD_LOG_DIR="/var/log/container-build"
+# Allow BUILD_LOG_DIR to be overridden (e.g., for tests)
+if [ -z "${BUILD_LOG_DIR:-}" ]; then
+    # Try /var/log/container-build first (for root or proper permissions)
+    if mkdir -p /var/log/container-build 2>/dev/null; then
+        export BUILD_LOG_DIR="/var/log/container-build"
+    else
+        # Fallback to /tmp for non-root or restricted environments
+        export BUILD_LOG_DIR="/tmp/container-build"
+        mkdir -p "$BUILD_LOG_DIR" 2>/dev/null || {
+            echo "ERROR: Cannot create log directory at /var/log/container-build or /tmp/container-build" >&2
+            exit 1
+        }
+    fi
+else
+    # BUILD_LOG_DIR was explicitly set, use it and ensure it exists
+    mkdir -p "$BUILD_LOG_DIR" 2>/dev/null || {
+        echo "ERROR: Cannot create log directory at $BUILD_LOG_DIR" >&2
+        exit 1
+    }
+fi
+
 export CURRENT_FEATURE=""
 export CURRENT_LOG_FILE=""
 export CURRENT_ERROR_FILE=""
@@ -26,9 +46,6 @@ export FEATURE_START_TIME=""
 export COMMAND_COUNT=0
 export ERROR_COUNT=0
 export WARNING_COUNT=0
-
-# Create main log directory
-mkdir -p "$BUILD_LOG_DIR"
 
 # ============================================================================
 # log_feature_start - Initialize logging for a feature installation

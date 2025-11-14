@@ -23,7 +23,18 @@
 
 set -euo pipefail
 
-LOG_DIR="/var/log/container-build"
+# Use BUILD_LOG_DIR if set, otherwise try /var/log, fallback to /tmp
+if [ -n "${BUILD_LOG_DIR:-}" ]; then
+    LOG_DIR="$BUILD_LOG_DIR"
+elif [ -d "/var/log/container-build" ]; then
+    LOG_DIR="/var/log/container-build"
+elif [ -d "/tmp/container-build" ]; then
+    LOG_DIR="/tmp/container-build"
+else
+    # Default to /var/log path (may not exist in all environments)
+    LOG_DIR="/var/log/container-build"
+fi
+
 ACTION="summary"
 FEATURE=""
 
