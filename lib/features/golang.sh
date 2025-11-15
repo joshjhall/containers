@@ -47,6 +47,38 @@ source /tmp/build-scripts/base/checksum-verification.sh
 source /tmp/build-scripts/base/cache-utils.sh
 
 # ============================================================================
+# Template Loading Helper
+# ============================================================================
+# load_go_template - Load a Go project template file and perform substitutions
+#
+# Arguments:
+#   $1 - Template path relative to templates/go/ (required)
+#   $2 - Project name for __PROJECT__ substitution (optional)
+#
+# Example:
+#   load_go_template "common/gitignore.tmpl"
+#   load_go_template "lib/lib.go.tmpl" "myproject"
+# ============================================================================
+load_go_template() {
+    local template_path="$1"
+    local project_name="${2:-}"
+    local template_file="/tmp/build-scripts/features/templates/go/${template_path}"
+
+    if [ ! -f "$template_file" ]; then
+        echo "Error: Template not found: $template_file" >&2
+        return 1
+    fi
+
+    if [ -n "$project_name" ]; then
+        # Replace __PROJECT__ placeholder with actual project name
+        sed "s/__PROJECT__/${project_name}/g" "$template_file"
+    else
+        # No substitution needed, just output the template
+        cat "$template_file"
+    fi
+}
+
+# ============================================================================
 # Version Configuration
 # ============================================================================
 GO_VERSION="${GO_VERSION:-1.25.3}"
@@ -334,153 +366,26 @@ go-new() {
     mkdir -p cmd pkg internal test docs
 
     # Create .gitignore
-    cat > .gitignore << 'GITIGNORE'
-# Binaries
-*.exe
-*.dll
-*.so
-*.dylib
-
-# Test binary, built with `go test -c`
-*.test
-
-# Output of the go coverage tool
-*.out
-
-# Dependency directories
-vendor/
-
-# Go workspace file
-go.work
-
-# IDE
-.idea/
-.vscode/
-*.swp
-*.swo
-*~
-
-# OS
-.DS_Store
-Thumbs.db
-GITIGNORE
+    load_go_template "common/gitignore.tmpl" > .gitignore
 
     # Create type-specific files
     case "$project_type" in
         cli)
             mkdir -p cmd/${project_dir}
-            cat > cmd/${project_dir}/main.go << 'CLIMAIN'
-package main
-
-import (
-    "flag"
-    "fmt"
-    "os"
-)
-
-var version = "dev"
-
-func main() {
-    var showVersion bool
-    flag.BoolVar(&showVersion, "version", false, "Show version")
-    flag.Parse()
-
-    if showVersion {
-        fmt.Printf("%s version %s\n", os.Args[0], version)
-        os.Exit(0)
-    }
-
-    fmt.Println("Hello from CLI!")
-}
-CLIMAIN
+            load_go_template "cli/main.go.tmpl" > cmd/${project_dir}/main.go
             ;;
         api)
-            cat > main.go << 'APIMAIN'
-package main
-
-import (
-    "encoding/json"
-    "log"
-    "net/http"
-    "os"
-)
-
-type Response struct {
-    Message string `json:"message"`
-    Status  string `json:"status"`
-}
-
-func healthHandler(w http.ResponseWriter, r *http.Request) {
-    w.Header().Set("Content-Type", "application/json")
-    json.NewEncoder(w).Encode(Response{
-        Message: "API is healthy",
-        Status:  "ok",
-    })
-}
-
-func main() {
-    port := os.Getenv("PORT")
-    if port == "" {
-        port = "8080"
-    }
-
-    http.HandleFunc("/health", healthHandler)
-
-    log.Printf("Server starting on port %s", port)
-    if err := http.ListenAndServe(":"+port, nil); err != nil {
-        log.Fatal(err)
-    }
-}
-APImain
+            load_go_template "api/main.go.tmpl" > main.go
             ;;
         *)
             # Default library setup
-            cat > ${project_dir}.go << LIBMAIN
-package ${project_dir}
-
-// Hello returns a greeting message
-func Hello(name string) string {
-    return "Hello, " + name + "!"
-}
-LIBMAIN
-
-            cat > ${project_dir}_test.go << LIBTEST
-package ${project_dir}
-
-import "testing"
-
-func TestHello(t *testing.T) {
-    got := Hello("World")
-    want := "Hello, World!"
-
-    if got != want {
-        t.Errorf("Hello() = %q, want %q", got, want)
-    }
-}
-LIBTEST
+            load_go_template "lib/lib.go.tmpl" "$project_dir" > ${project_dir}.go
+            load_go_template "lib/lib_test.go.tmpl" "$project_dir" > ${project_dir}_test.go
             ;;
     esac
 
     # Create Makefile
-    cat > Makefile << 'MAKEFILE'
-.PHONY: build test lint clean
-
-build:
-	go build -v ./...
-
-test:
-	go test -v -race -coverprofile=coverage.out ./...
-
-lint:
-	go vet ./...
-
-clean:
-	go clean
-	rm -f coverage.out
-
-run:
-	go run .
-MAKEFILE
+    load_go_template "common/Makefile.tmpl" > Makefile
 
     echo "Project $project_dir created successfully!"
     echo ""
