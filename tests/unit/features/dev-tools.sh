@@ -248,7 +248,8 @@ test_system_tools_list() {
 # Test: Architecture detection
 test_architecture_detection() {
     # Simulate architecture detection
-    local arch=$(dpkg --print-architecture 2>/dev/null || echo "amd64")
+    local arch
+    arch=$(dpkg --print-architecture 2>/dev/null || echo "amd64")
     
     # Check architecture-specific URLs
     case "$arch" in
@@ -408,7 +409,8 @@ test_version_checksum_consistency() {
     local dev_tools_script="$PROJECT_ROOT/lib/features/dev-tools.sh"
 
     # Extract lazygit version from both variable and comment
-    local version_var=$(grep "^LAZYGIT_VERSION=" "$dev_tools_script" | cut -d'"' -f2)
+    local version_var
+    version_var=$(grep "^LAZYGIT_VERSION=" "$dev_tools_script" | cut -d'"' -f2)
 
     if [ -n "$version_var" ]; then
         # Check that checksum comment references the same version

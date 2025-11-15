@@ -225,7 +225,8 @@ test_log_directory_structure() {
     assert_dir_exists "$BUILD_LOG_DIR"
     
     # Check that logs are in the correct directory
-    local log_dir=$(dirname "$CURRENT_LOG_FILE")
+    local log_dir
+    log_dir=$(dirname "$CURRENT_LOG_FILE")
     assert_equals "$BUILD_LOG_DIR" "$log_dir" "Log files in correct directory"
 }
 

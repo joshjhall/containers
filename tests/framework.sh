@@ -111,7 +111,8 @@ init_test_framework() {
     export LOG_LEVEL="${LOG_LEVEL:-1}"  # WARN level by default in tests
 
     # Timestamp for this test run
-    export TEST_RUN_ID=$(date +%Y%m%d-%H%M%S)
+        export TEST_RUN_ID
+    TEST_RUN_ID=$(date +%Y%m%d-%H%M%S)
 
     # Check Docker is available (skip if SKIP_DOCKER_CHECK is set)
     if [ "${SKIP_DOCKER_CHECK:-false}" != "true" ]; then

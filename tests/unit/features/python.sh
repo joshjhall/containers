@@ -23,10 +23,11 @@ test_script_exists() {
 test_version_parsing() {
     # Test Python version parsing
     local version="3.13.6"
-    local major=$(echo "$version" | cut -d. -f1,2)
-    
+    local major
+    major=$(echo "$version" | cut -d. -f1,2)
+
     assert_equals "3.13" "$major" "Python major version parsed correctly"
-    
+
     # Test different versions
     version="3.12.1"
     major=$(echo "$version" | cut -d. -f1,2)
@@ -44,6 +45,7 @@ test_download_url_construction() {
 # Test: Build dependencies list
 test_build_dependencies() {
     # These are the core build dependencies for Python
+    # shellcheck disable=SC2034  # Array used to demonstrate expected dependencies structure
     local required_deps=(
         "build-essential"
         "libffi-dev"
@@ -57,10 +59,10 @@ test_build_dependencies() {
         "uuid-dev"
         "zlib1g-dev"
     )
-    
+
     # Test that we have a reasonable list of dependencies
     assert_true true "Build dependencies list defined"
-    
+
     # Test specific critical ones
     local deps_string="build-essential libffi-dev libssl-dev"
     if [[ "$deps_string" == *"build-essential"* ]] && [[ "$deps_string" == *"libffi-dev"* ]]; then
@@ -73,13 +75,14 @@ test_build_dependencies() {
 # Test: Python configuration options
 test_configure_options() {
     # Test that configure options are reasonable
+    # shellcheck disable=SC2034  # Array used to demonstrate expected configure options structure
     local configure_opts=(
         "--enable-optimizations"
         "--with-ensurepip=install"
         "--enable-shared"
         "--enable-loadable-sqlite-extensions"
     )
-    
+
     # Test optimization option
     local opts_string="--enable-optimizations --with-ensurepip=install"
     if [[ "$opts_string" == *"--enable-optimizations"* ]]; then
@@ -87,7 +90,7 @@ test_configure_options() {
     else
         assert_true false "Optimization not enabled"
     fi
-    
+
     # Test pip installation
     if [[ "$opts_string" == *"--with-ensurepip=install"* ]]; then
         assert_true true "Pip installation enabled in configure"
@@ -153,11 +156,12 @@ test_make_commands() {
     # Test make command with parallel jobs
     local nprocs="4"
     local make_cmd="make -j${nprocs}"
-    
+
     assert_equals "make -j4" "$make_cmd" "Make command with parallel jobs"
-    
+
     # Test that we can get nproc value (mock it)
-    local mock_nproc="$(nproc 2>/dev/null || echo 4)"
+    local mock_nproc
+    mock_nproc="$(nproc 2>/dev/null || echo 4)"
     if [[ "$mock_nproc" =~ ^[0-9]+$ ]] && [ "$mock_nproc" -gt 0 ]; then
         assert_true true "nproc command returns valid number: $mock_nproc"
     else

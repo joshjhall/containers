@@ -53,7 +53,8 @@ test_argument_passing() {
     local gid="1000"
     
     # Execute the mock feature script directly
-    local output=$("$feature_script" "$username" "$uid" "$gid")
+        local output
+    output=$("$feature_script" "$username" "$uid" "$gid")
     
     # Check output
     if [[ "$output" == *"USERNAME=testuser"* ]]; then
@@ -116,7 +117,8 @@ test_fallback_without_build_env() {
     local gid="1500"
     
     # Since build-env doesn't exist, use passed values
-    local output=$("$MOCK_FEATURE" "$username" "$uid" "$gid")
+    local output
+    output=$("$MOCK_FEATURE" "$username" "$uid" "$gid")
     
     if [[ "$output" == *"UID=1500"* ]]; then
         assert_true true "Fallback UID used when build-env missing"
@@ -147,7 +149,8 @@ test_missing_arguments() {
     }
     
     # Test with missing arguments
-    local output=$(run_feature_wrapper "$feature_script")
+    local output
+    output=$(run_feature_wrapper "$feature_script")
     
     if [[ "$output" == *"USERNAME=developer"* ]]; then
         assert_true true "Default username used when missing"
@@ -175,7 +178,8 @@ EOF
     chmod +x "$MOCK_FEATURE"
     
     # Test with extra arguments
-    local output=$("$MOCK_FEATURE" "user" "1000" "1000" "extra-arg")
+    local output
+    output=$("$MOCK_FEATURE" "user" "1000" "1000" "extra-arg")
     
     if [[ "$output" == *"EXTRA=extra-arg"* ]]; then
         assert_true true "Additional arguments preserved"
@@ -194,7 +198,8 @@ EOF
     chmod +x "$MOCK_FEATURE"
     
     # Test with username containing spaces
-    local output=$("$MOCK_FEATURE" "test user" "1000" "1000")
+    local output
+    output=$("$MOCK_FEATURE" "test user" "1000" "1000")
     
     if [[ "$output" == *"USERNAME=[test user]"* ]]; then
         assert_true true "Spaces in arguments handled correctly"

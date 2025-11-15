@@ -48,9 +48,12 @@ teardown() {
 test_go_version_parsing() {
     # Test version extraction
     local version="1.24.5"
-    local major=$(echo $version | cut -d. -f1)
-    local minor=$(echo $version | cut -d. -f2)
-    local patch=$(echo $version | cut -d. -f3)
+    local major
+    major=$(echo $version | cut -d. -f1)
+    local minor
+    minor=$(echo $version | cut -d. -f2)
+    local patch
+    patch=$(echo $version | cut -d. -f3)
     
     assert_equals "1" "$major" "Major version extracted correctly"
     assert_equals "24" "$minor" "Minor version extracted correctly"
@@ -222,7 +225,8 @@ EOF
 
 # Test: Architecture-specific download
 test_architecture_download() {
-    local arch=$(dpkg --print-architecture 2>/dev/null || echo "amd64")
+    local arch
+    arch=$(dpkg --print-architecture 2>/dev/null || echo "amd64")
     local version="1.24.5"
     
     # Map architecture to Go naming

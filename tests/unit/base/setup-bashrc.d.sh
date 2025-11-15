@@ -196,7 +196,8 @@ test_script_numbering() {
     local base_paths="$MOCK_BASHRC_D/00-base-paths.sh"
     touch "$base_paths"
     
-    local filename=$(basename "$base_paths")
+    local filename
+    filename=$(basename "$base_paths")
     if [[ "$filename" =~ ^00- ]]; then
         assert_true true "Base paths uses 00- prefix for early execution"
     else
@@ -216,7 +217,8 @@ if [ -d /etc/bashrc.d ]; then
 fi
 EOF
     
-    local line_count_before=$(grep -c "/etc/bashrc.d" "$MOCK_BASHRC")
+    local line_count_before
+    line_count_before=$(grep -c "/etc/bashrc.d" "$MOCK_BASHRC")
     
     # Try to add again (should skip if already present)
     if ! grep -q "/etc/bashrc.d" "$MOCK_BASHRC" 2>/dev/null; then
@@ -230,7 +232,8 @@ fi
 EOF
     fi
     
-    local line_count_after=$(grep -c "/etc/bashrc.d" "$MOCK_BASHRC")
+    local line_count_after
+    line_count_after=$(grep -c "/etc/bashrc.d" "$MOCK_BASHRC")
     
     assert_equals "$line_count_before" "$line_count_after" "Sourcing not duplicated"
 }

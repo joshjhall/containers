@@ -46,16 +46,6 @@ test_package_commands() {
 # Test: Essential packages list
 test_essential_packages() {
     # Core packages that should be installed
-    local essential_packages=(
-        "curl"
-        "wget" 
-        "ca-certificates"
-        "gnupg"
-        "lsb-release"
-        "apt-transport-https"
-        "software-properties-common"
-    )
-    
     # Test that we have curl
     local packages_string="curl wget ca-certificates"
     if [[ "$packages_string" == *"curl"* ]]; then
@@ -74,14 +64,6 @@ test_essential_packages() {
 
 # Test: Development tools packages
 test_development_packages() {
-    local dev_packages=(
-        "build-essential"
-        "git"
-        "vim"
-        "sudo"
-        "locales"
-    )
-    
     # Test build tools
     local dev_string="build-essential git vim sudo"
     if [[ "$dev_string" == *"build-essential"* ]]; then
@@ -181,14 +163,6 @@ test_logging_integration() {
 
 # Test: Network tools installation
 test_network_tools() {
-    local network_tools=(
-        "curl"
-        "wget"
-        "netcat-openbsd"
-        "telnet"
-        "dnsutils"
-    )
-    
     # Test curl availability
     local tools_string="curl wget netcat-openbsd"
     if [[ "$tools_string" == *"curl"* ]]; then
@@ -201,12 +175,6 @@ test_network_tools() {
 # Test: Security packages
 test_security_packages() {
     # Test security-related packages
-    local security_packages=(
-        "ca-certificates"
-        "gnupg"
-        "apt-transport-https"
-    )
-    
     local security_string="ca-certificates gnupg apt-transport-https"
     if [[ "$security_string" == *"ca-certificates"* ]] && [[ "$security_string" == *"gnupg"* ]]; then
         assert_true true "Security packages included"

@@ -86,7 +86,8 @@ test_script_ordering() {
     touch "$startup/30-third.sh"
     
     # List scripts in order
-    local scripts=($(ls "$startup"/*.sh 2>/dev/null | sort))
+    local scripts
+    mapfile -t scripts < <(ls "$startup"/*.sh 2>/dev/null | sort)
     
     # Check ordering
     if [[ "${scripts[0]}" == *"10-first.sh" ]]; then
