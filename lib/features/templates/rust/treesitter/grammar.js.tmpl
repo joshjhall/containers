@@ -1,0 +1,21 @@
+module.exports = grammar({
+  name: '__LANG_NAME__',
+
+  rules: {
+    source_file: $ => repeat($._definition),
+
+    _definition: $ => choice(
+      $.comment,
+      // Add more rules here
+    ),
+
+    comment: $ => token(choice(
+      seq('//', /.*/),
+      seq(
+        '/*',
+        /[^*]*\*+([^/*][^*]*\*+)*/,
+        '/'
+      )
+    ))
+  }
+});

@@ -273,6 +273,34 @@ ts-query() {
 }
 
 # ----------------------------------------------------------------------------
+# load_rust_template - Load a Rust project template with variable substitution
+#
+# Arguments:
+#   $1 - Template path relative to templates/rust/ (required)
+#   $2 - Language/project name for substitution (optional)
+#
+# Example:
+#   load_rust_template "treesitter/grammar.js.tmpl" "mylang"
+#   load_rust_template "just/justfile.tmpl"
+# ----------------------------------------------------------------------------
+load_rust_template() {
+    local template_path="$1"
+    local lang_name="${2:-}"
+    local template_file="/tmp/build-scripts/features/templates/rust/${template_path}"
+
+    if [ ! -f "$template_file" ]; then
+        echo "Error: Template not found: $template_file" >&2
+        return 1
+    fi
+
+    if [ -n "$lang_name" ]; then
+        sed "s/__LANG_NAME__/${lang_name}/g" "$template_file"
+    else
+        cat "$template_file"
+    fi
+}
+
+# ----------------------------------------------------------------------------
 # ts-init-grammar - Initialize a new tree-sitter grammar project
 #
 # Arguments:
@@ -299,32 +327,8 @@ ts-init-grammar() {
     mkdir -p "$dir"
     cd "$dir"
 
-    # Create basic grammar.js
-    cat > grammar.js << 'GRAMMAR'
-module.exports = grammar({
-  name: 'LANG_NAME',
-
-  rules: {
-    source_file: $ => repeat($._definition),
-
-    _definition: $ => choice(
-      $.comment,
-      // Add more rules here
-    ),
-
-    comment: $ => token(choice(
-      seq('//', /.*/),
-      seq(
-        '/*',
-        /[^*]*\*+([^/*][^*]*\*+)*/,
-        '/'
-      )
-    ))
-  }
-});
-GRAMMAR
-
-    sed -i "s/LANG_NAME/$lang/g" grammar.js
+    # Create grammar.js from template
+    load_rust_template "treesitter/grammar.js.tmpl" "$lang" > grammar.js
 
     echo "Grammar initialized in $dir/"
     echo "Next steps:"
@@ -370,58 +374,8 @@ just-init() {
         return 1
     fi
 
-    cat > justfile << 'JUSTFILE'
-# Project automation with just
-# Run 'just' to see available commands
-
-# Default command (runs when you just type 'just')
-default:
-    @just --list
-
-# Build the project
-build:
-    cargo build
-
-# Run the project
-run:
-    cargo run
-
-# Run tests
-test:
-    cargo test
-
-# Run tests with output
-test-verbose:
-    cargo test -- --nocapture
-
-# Check code without building
-check:
-    cargo check
-
-# Format code
-fmt:
-    cargo fmt
-
-# Run clippy lints
-lint:
-    cargo clippy -- -D warnings
-
-# Run all checks (format, lint, test)
-ci: fmt lint test
-
-# Watch for changes and run tests
-watch:
-    cargo watch -x test
-
-# Clean build artifacts
-clean:
-    cargo clean
-
-# Update dependencies
-update:
-    cargo update
-    cargo outdated
-JUSTFILE
+    # Create justfile from template
+    load_rust_template "just/justfile.tmpl" > justfile
 
     echo "Created justfile with common Rust project commands"
     echo "Run 'just' to see available commands"
