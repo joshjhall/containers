@@ -45,6 +45,7 @@ source /tmp/build-scripts/base/version-resolution.sh
 
 # Source 4-tier checksum verification system
 source /tmp/build-scripts/base/checksum-verification.sh
+source /tmp/build-scripts/base/cache-utils.sh
 
 # ============================================================================
 # Version Configuration
@@ -184,13 +185,8 @@ YARN_CACHE_DIR="/cache/yarn"
 PNPM_STORE_DIR="/cache/pnpm"
 NPM_GLOBAL_DIR="/cache/npm-global"
 
-# Create cache directories with correct ownership
-# Use install -d for atomic directory creation with ownership
-log_command "Creating Node.js cache directories with ownership" \
-    bash -c "install -d -m 0755 -o '${USER_UID}' -g '${USER_GID}' '${NPM_CACHE_DIR}' && \
-    install -d -m 0755 -o '${USER_UID}' -g '${USER_GID}' '${YARN_CACHE_DIR}' && \
-    install -d -m 0755 -o '${USER_UID}' -g '${USER_GID}' '${PNPM_STORE_DIR}' && \
-    install -d -m 0755 -o '${USER_UID}' -g '${USER_GID}' '${NPM_GLOBAL_DIR}'"
+# Create cache directories with correct ownership using shared utility
+create_cache_directories "${NPM_CACHE_DIR}" "${YARN_CACHE_DIR}" "${PNPM_STORE_DIR}" "${NPM_GLOBAL_DIR}"
 
 log_message "Node.js cache paths:"
 log_message "  NPM cache: ${NPM_CACHE_DIR}"

@@ -30,6 +30,7 @@ source /tmp/build-scripts/base/apt-utils.sh
 
 # Source version validation utilities
 source /tmp/build-scripts/base/version-validation.sh
+source /tmp/build-scripts/base/cache-utils.sh
 
 # ============================================================================
 # Version Configuration
@@ -170,12 +171,9 @@ export R_CACHE_DIR="/cache/r"
 
 # Create cache directories with correct ownership
 log_message "Creating R cache directories..."
-# Use install -d for atomic directory creation with ownership
+# Use shared utility for atomic directory creation with correct ownership
 # Important: Create parent /cache/r directory first to ensure correct ownership
-log_command "Creating R cache directories with ownership" \
-    bash -c "install -d -m 0755 -o '${USER_UID}' -g '${USER_GID}' '${R_CACHE_DIR}' && \
-    install -d -m 0755 -o '${USER_UID}' -g '${USER_GID}' '${R_LIBS_USER}' && \
-    install -d -m 0755 -o '${USER_UID}' -g '${USER_GID}' '${R_CACHE_DIR}/tmp'"
+create_cache_directories "${R_CACHE_DIR}" "${R_LIBS_USER}" "${R_CACHE_DIR}/tmp"
 
 log_message "R library path: ${R_LIBS_USER}"
 log_message "R cache directory: ${R_CACHE_DIR}"

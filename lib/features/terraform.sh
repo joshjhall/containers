@@ -54,6 +54,7 @@ source /tmp/build-scripts/features/lib/checksum-fetch.sh
 
 # Source download verification utilities
 source /tmp/build-scripts/base/download-verify.sh
+source /tmp/build-scripts/base/cache-utils.sh
 
 # Source secure temp directory utilities
 
@@ -269,9 +270,9 @@ TF_PLUGIN_CACHE="/cache/terraform"
 log_message "Terraform plugin cache path: ${TF_PLUGIN_CACHE}"
 
 # Create plugin cache directory with correct ownership
-# This ensures it exists in the image even without cache mounts
-# Use install -d for atomic directory creation with ownership
-log_command "Creating plugin cache directory with ownership" \
+create_cache_directories "${TF_PLUGIN_CACHE}"
+create_cache_directories "${TF_PLUGIN_CACHE}"
+create_cache_directories "${TF_PLUGIN_CACHE}"
     install -d -m 0755 -o "${USER_UID}" -g "${USER_GID}" "${TF_PLUGIN_CACHE}"
 
 # ============================================================================
