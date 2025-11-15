@@ -97,7 +97,7 @@ echo ""
 # Test 6: Simulated template loading
 echo "Test: Template loading simulation"
 TEMP_DIR=$(mktemp -d)
-trap "rm -rf $TEMP_DIR" EXIT
+trap 'rm -rf "$TEMP_DIR"' EXIT
 
 # Simulate the load_java_template function
 load_java_template_test() {

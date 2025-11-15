@@ -5,6 +5,70 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.9.0] - 2025-11-15
+
+### Added
+
+- Replace Docker socket auto-fix with secure group-based access [**BREAKING**]
+- Add 4-tier checksum verification system with version resolution
+- Add unified signature verification system with GPG + Sigstore support
+- Integrate GPG/Sigstore signature verification into 4-tier checksum system
+- Add pinned checksums database (lib/checksums.json) with Tier 2 verification
+- Add automated checksum database maintenance script
+- Complete automated checksum maintenance with workflow integration and documentation
+- Add pre-push git hook with shellcheck and unit test validation
+- Extract Node.js project templates to external files
+- Extract R project templates from embedded code
+- Extract Rust project templates from embedded code
+- Extract Mojo project templates from embedded code
+- Extract Java templates from embedded code
+
+### Changed
+
+- Extract cache-utils.sh shared utility to eliminate duplication
+- Extract path-utils.sh shared utility to eliminate PATH manipulation duplication
+- Extract Go project templates from go-new function (Item #23 WIP)
+- Replace heredocs with Go template loader in golang.sh
+- Standardize project scaffolding to {lang}-init naming convention
+- Extract Ruby config templates to dedicated files
+
+### Documentation
+
+- Mark roadmap item #2 (passwordless sudo) as complete
+- Mark roadmap item #3 (Docker socket auto-fix) as complete
+- Add case-sensitive filesystem roadmap item and renumber
+- Mark roadmap Item #4 as COMPLETE - flexible version resolution for all 6 languages
+- Mark roadmap item #32 (Pre-Push Git Hook) as complete
+- Mark roadmap Items #20 and #21 as complete
+- Update roadmap to mark Item #23 complete for all languages
+
+### Fixed
+
+- Add production variant to build matrix
+- Update unit tests for 4-tier verification system
+- Set BUILD_LOG_DIR early to avoid permission errors in CI
+- Implement proper fallback strategy for BUILD_LOG_DIR in rootless environments
+- Fix shellcheck warnings in signature-verify.sh
+- Fix shellcheck warnings in update-checksums.sh
+- Align CI and pre-push hook to respect .gitignore
+- Resolve shellcheck warnings across test suite
+- Resolve remaining shellcheck warnings in test framework
+- Make setup-bashrc.d unit test executable
+- Eliminate command injection vectors in apt-utils.sh
+
+### Miscellaneous
+
+- Exclude checksum database backup files from git
+- Update cspell dictionary with new technical terms
+
+### Security
+
+- Change ENABLE_PASSWORDLESS_SUDO default to false
+
+### Testing
+
+- Add unit tests for Go template system
+
 ## [4.8.6] - 2025-11-14
 
 ### Added
@@ -520,6 +584,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add helpful error message when release is cancelled
 - Add VS Code workspace settings and improve gitignore
 
+[4.9.0]: https://github.com/joshjhall/containers/compare/v4.8.6...v4.9.0
 [4.8.6]: https://github.com/joshjhall/containers/compare/v4.8.5...v4.8.6
 [4.8.5]: https://github.com/joshjhall/containers/compare/v4.8.4...v4.8.5
 [4.8.4]: https://github.com/joshjhall/containers/compare/v4.8.3...v4.8.4
