@@ -39,6 +39,7 @@ source /tmp/build-scripts/base/version-resolution.sh
 # Source 4-tier checksum verification system
 source /tmp/build-scripts/base/checksum-verification.sh
 source /tmp/build-scripts/base/cache-utils.sh
+source /tmp/build-scripts/base/path-utils.sh
 
 # ============================================================================
 # Version Configuration
@@ -318,26 +319,8 @@ log_command "Setting Python bashrc script permissions" \
 # ============================================================================
 # Update /etc/environment with static paths
 # ============================================================================
-# First, read existing PATH if any
-if [ -f /etc/environment ] && grep -q "^PATH=" /etc/environment; then
-    # Extract existing PATH
-    EXISTING_PATH=$(grep "^PATH=" /etc/environment | cut -d'"' -f2)
-    # Remove the line
-    log_command "Removing existing PATH from /etc/environment" \
-        grep -v "^PATH=" /etc/environment > /etc/environment.tmp && mv /etc/environment.tmp /etc/environment
-else
-    EXISTING_PATH="/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin:/sbin"
-fi
-
-# Add pipx bin path if not already present
-NEW_PATH="$EXISTING_PATH"
-if [[ ":$NEW_PATH:" != *":/opt/pipx/bin:"* ]]; then
-    NEW_PATH="$NEW_PATH:/opt/pipx/bin"
-fi
-
-# Write back
-log_command "Writing updated PATH to /etc/environment" \
-    bash -c "echo 'PATH=\"$NEW_PATH\"' >> /etc/environment"
+log_message "Updating system PATH in /etc/environment..."
+add_to_system_path "/opt/pipx/bin"
 
 # ============================================================================
 # Create container startup scripts

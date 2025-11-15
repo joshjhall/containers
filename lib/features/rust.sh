@@ -44,6 +44,8 @@ source /tmp/build-scripts/features/lib/checksum-fetch.sh
 
 # Source download verification utilities
 source /tmp/build-scripts/base/download-verify.sh
+source /tmp/build-scripts/base/cache-utils.sh
+source /tmp/build-scripts/base/path-utils.sh
 
 # ============================================================================
 # Version Configuration
@@ -260,27 +262,7 @@ log_command "Setting Rust bashrc script permissions" \
 
 # Update /etc/environment with static paths
 log_message "Updating system PATH in /etc/environment..."
-
-# First, read existing PATH if any
-if [ -f /etc/environment ] && grep -q "^PATH=" /etc/environment; then
-    # Extract existing PATH
-    EXISTING_PATH=$(grep "^PATH=" /etc/environment | cut -d'"' -f2)
-    # Remove the line
-    log_command "Removing existing PATH from /etc/environment" \
-        grep -v "^PATH=" /etc/environment > /etc/environment.tmp && mv /etc/environment.tmp /etc/environment
-else
-    EXISTING_PATH="/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin:/sbin"
-fi
-
-# Add cargo bin if not already present
-NEW_PATH="$EXISTING_PATH"
-if [[ ":$NEW_PATH:" != *":/cache/cargo/bin:"* ]]; then
-    NEW_PATH="$NEW_PATH:/cache/cargo/bin"
-fi
-
-# Write back
-log_command "Writing updated PATH to /etc/environment" \
-    bash -c "echo 'PATH=\"$NEW_PATH\"' >> /etc/environment"
+add_to_system_path "/cache/cargo/bin"
 
 # ============================================================================
 # Final ownership fix
