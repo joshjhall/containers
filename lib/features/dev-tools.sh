@@ -32,6 +32,7 @@ source /tmp/build-scripts/base/download-verify.sh
 
 # Source checksum fetching utilities for dynamic checksum retrieval
 source /tmp/build-scripts/features/lib/checksum-fetch.sh
+source /tmp/build-scripts/base/cache-utils.sh
 
 # Start logging
 log_feature_start "Development Tools"
@@ -988,10 +989,8 @@ log_message "Configuring cache directories for development tools..."
 # Some tools benefit from cache directories
 DEV_TOOLS_CACHE="/cache/dev-tools"
 
-# Create cache directories
-# Use install -d for atomic directory creation with ownership
-log_command "Creating dev tools cache directory with ownership" \
-    install -d -m 0755 -o "${USER_UID}" -g "${USER_GID}" "${DEV_TOOLS_CACHE}"
+# Create cache directory using shared utility
+create_cache_directories "${DEV_TOOLS_CACHE}"
 
 # Configure tools to use cache where applicable
 write_bashrc_content /etc/bashrc.d/80-dev-tools.sh "cache configuration" << 'DEV_TOOLS_BASHRC_EOF'

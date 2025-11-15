@@ -34,6 +34,7 @@ source /tmp/build-scripts/base/download-verify.sh
 
 # Source checksum utilities for secure binary downloads
 source /tmp/build-scripts/features/lib/checksum-fetch.sh
+source /tmp/build-scripts/base/cache-utils.sh
 
 # Source apt utilities for reliable package installation
 source /tmp/build-scripts/base/apt-utils.sh
@@ -136,8 +137,8 @@ log_message "NPM global prefix: ${NPM_PREFIX}"
 
 # Create npm directories with correct ownership
 # This ensures they exist in the image even without cache mounts
-# Use install -d for atomic directory creation with ownership
-log_command "Creating npm directories with ownership" \
+create_cache_directories "$NPM_CACHE_DIR" "$NPM_PREFIX"
+create_cache_directories "$NPM_CACHE_DIR" "$NPM_PREFIX"
     bash -c "install -d -m 0755 -o '${USER_UID}' -g '${USER_GID}' '$NPM_CACHE_DIR' && install -d -m 0755 -o '${USER_UID}' -g '${USER_GID}' '$NPM_PREFIX'"
 
 # Also add to system-wide PATH before checking

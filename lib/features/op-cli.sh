@@ -121,6 +121,7 @@ OP_CACHE_DIR="/cache/1password"
 OP_CONFIG_DIR="/cache/1password/config"
 
 # Create cache directories with correct ownership and permissions
+# Note: config directory needs mode 0700 for security, so not using shared utility
 # Use install -d for atomic directory creation with ownership
 # Note: config directory needs mode 700 for security requirements
 log_command "Creating 1Password cache directories with ownership" \

@@ -37,6 +37,7 @@ source /tmp/build-scripts/features/lib/checksum-fetch.sh
 
 # Source download verification utilities
 source /tmp/build-scripts/base/download-verify.sh
+source /tmp/build-scripts/base/cache-utils.sh
 
 # Start logging
 log_feature_start "Mojo"
@@ -92,12 +93,9 @@ PIXI_CACHE="/cache/pixi"
 MOJO_PROJECT="/cache/mojo/project"
 
 # Create cache directories with correct ownership
-# Use install -d for atomic directory creation with ownership
+# Use shared utility for atomic directory creation with correct ownership
 # Important: Create parent /cache/mojo directory first to ensure correct ownership
-log_command "Creating Mojo/Pixi cache directories with ownership" \
-    bash -c "install -d -m 0755 -o '${USER_UID}' -g '${USER_GID}' '${PIXI_CACHE}' && \
-    install -d -m 0755 -o '${USER_UID}' -g '${USER_GID}' '/cache/mojo' && \
-    install -d -m 0755 -o '${USER_UID}' -g '${USER_GID}' '${MOJO_PROJECT}'"
+create_cache_directories "${PIXI_CACHE}" "/cache/mojo" "${MOJO_PROJECT}"
 
 log_message "Mojo cache paths:"
 log_message "  Pixi cache: ${PIXI_CACHE}"

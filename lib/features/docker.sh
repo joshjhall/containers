@@ -80,6 +80,7 @@ source /tmp/build-scripts/features/lib/checksum-fetch.sh
 
 # Source download verification utilities
 source /tmp/build-scripts/base/download-verify.sh
+source /tmp/build-scripts/base/cache-utils.sh
 
 # Start logging
 log_feature_start "Docker CLI Tools"
@@ -267,10 +268,8 @@ log_message "Configuring Docker cache directories..."
 DOCKER_CACHE_DIR="/cache/docker"
 DOCKER_CLI_PLUGINS_DIR="${DOCKER_CACHE_DIR}/cli-plugins"
 
-# Create cache directories
-# Use install -d for atomic directory creation with ownership
-log_command "Creating Docker cache directories with ownership" \
-    bash -c "install -d -m 0755 -o '${USER_UID}' -g '${USER_GID}' '${DOCKER_CACHE_DIR}' && install -d -m 0755 -o '${USER_UID}' -g '${USER_GID}' '${DOCKER_CLI_PLUGINS_DIR}'"
+# Create cache directories using shared utility
+create_cache_directories "${DOCKER_CACHE_DIR}" "${DOCKER_CLI_PLUGINS_DIR}"
 
 # ============================================================================
 # Environment Configuration

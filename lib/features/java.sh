@@ -51,6 +51,7 @@ source /tmp/build-scripts/base/version-validation.sh
 
 # Source version resolution for partial version support
 source /tmp/build-scripts/base/version-resolution.sh
+source /tmp/build-scripts/base/cache-utils.sh
 
 # ============================================================================
 # Version Configuration
@@ -152,10 +153,8 @@ log_message "Java cache paths:"
 log_message "  Maven repository: ${MAVEN_CACHE_DIR}"
 log_message "  Gradle home: ${GRADLE_HOME_DIR}"
 
-# Create cache directories with correct ownership
-# Use install -d for atomic directory creation with ownership
-log_command "Creating Java cache directories with ownership" \
-    bash -c "install -d -m 0755 -o '${USER_UID}' -g '${USER_GID}' '${MAVEN_CACHE_DIR}' && install -d -m 0755 -o '${USER_UID}' -g '${USER_GID}' '${GRADLE_HOME_DIR}'"
+# Create cache directories with correct ownership using shared utility
+create_cache_directories "${MAVEN_CACHE_DIR}" "${GRADLE_HOME_DIR}"
 
 # ============================================================================
 # Environment Configuration

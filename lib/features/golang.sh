@@ -44,6 +44,7 @@ source /tmp/build-scripts/features/lib/checksum-fetch.sh
 
 # Source 4-tier checksum verification system
 source /tmp/build-scripts/base/checksum-verification.sh
+source /tmp/build-scripts/base/cache-utils.sh
 
 # ============================================================================
 # Version Configuration
@@ -176,15 +177,9 @@ GOCACHE="/cache/go-build"
 GOMODCACHE="/cache/go-mod"
 
 # Create cache directories with correct ownership
-# Use install -d for atomic directory creation with ownership
+# Use shared utility for atomic directory creation with correct ownership
 # Important: Create parent /cache/go directory first to ensure correct ownership
-log_command "Creating Go directories with ownership" \
-    bash -c "install -d -m 0755 -o '${USER_UID}' -g '${USER_GID}' '${GOPATH}' && \
-    install -d -m 0755 -o '${USER_UID}' -g '${USER_GID}' '${GOPATH}/bin' && \
-    install -d -m 0755 -o '${USER_UID}' -g '${USER_GID}' '${GOPATH}/src' && \
-    install -d -m 0755 -o '${USER_UID}' -g '${USER_GID}' '${GOPATH}/pkg' && \
-    install -d -m 0755 -o '${USER_UID}' -g '${USER_GID}' '${GOCACHE}' && \
-    install -d -m 0755 -o '${USER_UID}' -g '${USER_GID}' '${GOMODCACHE}'"
+create_cache_directories "${GOPATH}" "${GOPATH}/bin" "${GOPATH}/src" "${GOPATH}/pkg" "${GOCACHE}" "${GOMODCACHE}"
 
 log_message "Go installation paths:"
 log_message "  GOROOT: /usr/local/go"

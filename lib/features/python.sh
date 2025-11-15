@@ -38,6 +38,7 @@ source /tmp/build-scripts/base/version-resolution.sh
 
 # Source 4-tier checksum verification system
 source /tmp/build-scripts/base/checksum-verification.sh
+source /tmp/build-scripts/base/cache-utils.sh
 
 # ============================================================================
 # Version Configuration
@@ -109,13 +110,8 @@ log_message "  PIP_CACHE_DIR: ${PIP_CACHE_DIR}"
 log_message "  POETRY_CACHE_DIR: ${POETRY_CACHE_DIR}"
 log_message "  PIPX_HOME: ${PIPX_HOME}"
 
-# Create cache directories with correct ownership
-# Use install -d for atomic directory creation with ownership
-log_command "Creating Python cache directories with ownership" \
-    bash -c "install -d -m 0755 -o '${USER_UID}' -g '${USER_GID}' '${PIP_CACHE_DIR}' && \
-    install -d -m 0755 -o '${USER_UID}' -g '${USER_GID}' '${POETRY_CACHE_DIR}' && \
-    install -d -m 0755 -o '${USER_UID}' -g '${USER_GID}' '${PIPX_HOME}' && \
-    install -d -m 0755 -o '${USER_UID}' -g '${USER_GID}' '${PIPX_BIN_DIR}'"
+# Create cache directories with correct ownership using shared utility
+create_cache_directories "${PIP_CACHE_DIR}" "${POETRY_CACHE_DIR}" "${PIPX_HOME}" "${PIPX_BIN_DIR}"
 
 # ============================================================================
 # Python Installation from Source
