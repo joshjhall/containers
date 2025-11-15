@@ -915,11 +915,11 @@ add_to_system_path() {
 
 ---
 
-#### 23. [MEDIUM] ✅ COMPLETE - Extract Project Templates from Functions (Go & Node.js)
+#### 23. [MEDIUM] ✅ COMPLETE - Extract Project Templates from Functions (Go, Node.js & R)
 **Source**: Architecture Analysis (Nov 2025)
 **Priority**: P1 (Code organization)
 **Effort**: 1-2 days
-**Status**: ✅ COMPLETE for Go and Node.js (November 2025)
+**Status**: ✅ COMPLETE for Go, Node.js, and R (November 2025)
 **Completed**: November 2025
 
 **What Was Delivered (November 2025)**:
@@ -1004,25 +1004,49 @@ load_{lang}_template() {
 }
 ```
 
-**Total Line Reduction**: 216 lines (95 from golang.sh + 121 from node-dev.sh)
-**Total Tests**: 62 passing (23 Go + 39 Node.js)
+✅ **Complete R Template Extraction**:
+Extracted all heredoc templates from `r-new-package` and `r-new-analysis` functions into separate template files with loader function.
+
+**Files Created (R)**:
+- `lib/features/templates/r/analysis/analysis.Rmd.tmpl` - R Markdown analysis template
+- `tests/unit/test_r_templates.sh` - Comprehensive unit tests (13 tests, 100% pass)
+
+**Integration Complete (R)**:
+- Created `load_r_template()` function in `lib/features/r-dev.sh`
+- Replaced 1 heredoc with template loader call
+- Uses `__PROJECT_NAME__` placeholder with sed substitution
+- Functions renamed for consistency:
+  - `r-new-package` → `r-init-package` (standardized naming)
+  - `r-new-analysis` → `r-init-analysis` (standardized naming)
+- All tests passing (13/13 unit tests)
+
+**Standardized Function Names (R)**:
+- `r-init-package <package-name>` - Create new R packages
+- `r-init-analysis <analysis-name>` - Create new R analysis projects
+
+**Benefits of Standardization**:
+- ✅ Consistent with other languages (`go-init`, `node-init`)
+- ✅ Clear intent: `{lang}-init-*` signals project creation
+- ✅ Better tab completion and discoverability
+
+**Total Line Reduction**: 216+ lines (95 from golang.sh + 121 from node-dev.sh + R templates extracted)
+**Total Tests**: 75 passing (23 Go + 39 Node.js + 13 R)
 
 **Benefits Achieved**:
-- ✅ Reduced code duplication (216 lines removed total)
+- ✅ Reduced code duplication (216+ lines removed total)
 - ✅ Templates separated from shell logic
 - ✅ Easier to update and maintain templates
 - ✅ Enables template versioning
 - ✅ Comprehensive test coverage
-- ✅ Consistent naming convention across languages
+- ✅ Consistent naming convention across all languages (Go, Node.js, R)
 
 **Remaining Work**:
 Apply the same pattern to other languages with project scaffolding functions:
 - Python (python-dev.sh if applicable) → `python-init`
 - Ruby (ruby-dev.sh if applicable) → `ruby-init`
 - Rust (rust-dev.sh if applicable) → `rust-init`
-- R (r-dev.sh `r-new-package()` and `r-new-analysis()` functions) → `r-init`
 
-**Impact**: ✅ COMPLETE for Go & Node.js - Significantly improved maintainability, code organization, and user experience
+**Impact**: ✅ COMPLETE for Go, Node.js & R - Significantly improved maintainability, code organization, and user experience
 
 ---
 

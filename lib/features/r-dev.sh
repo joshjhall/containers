@@ -224,17 +224,45 @@ alias rlint='Rscript -e "lintr::lint_dir()"'
 alias rstyle='Rscript -e "styler::style_dir()"'
 
 # ----------------------------------------------------------------------------
-# r-new-package - Create a new R package with best practices
+# load_r_template - Load an R template file
+#
+# This function loads template files from the R templates directory and
+# optionally performs placeholder substitution.
+#
+# Arguments:
+#   $1 - Template path (relative to templates/r/)
+#
+# Returns:
+#   The template content, with placeholders substituted if provided
+#
+# Example:
+#   load_r_template "analysis/analysis.Rmd.tmpl" > analysis.Rmd
+# ----------------------------------------------------------------------------
+load_r_template() {
+    local template_path="$1"
+    local template_file="/tmp/build-scripts/features/templates/r/${template_path}"
+
+    if [ ! -f "$template_file" ]; then
+        echo "Error: Template not found: $template_file" >&2
+        return 1
+    fi
+
+    # No substitution needed for R templates (they use R's inline evaluation)
+    cat "$template_file"
+}
+
+# ----------------------------------------------------------------------------
+# r-init-package - Create a new R package with best practices
 #
 # Arguments:
 #   $1 - Package name (required)
 #
 # Example:
-#   r-new-package mypackage
+#   r-init-package mypackage
 # ----------------------------------------------------------------------------
-r-new-package() {
+r-init-package() {
     if [ -z "$1" ]; then
-        echo "Usage: r-new-package <package-name>"
+        echo "Usage: r-init-package <package-name>"
         return 1
     fi
 
@@ -257,17 +285,17 @@ r-new-package() {
 }
 
 # ----------------------------------------------------------------------------
-# r-new-analysis - Create a new analysis project
+# r-init-analysis - Create a new analysis project
 #
 # Arguments:
 #   $1 - Project name (required)
 #
 # Example:
-#   r-new-analysis myanalysis
+#   r-init-analysis myanalysis
 # ----------------------------------------------------------------------------
-r-new-analysis() {
+r-init-analysis() {
     if [ -z "$1" ]; then
-        echo "Usage: r-new-analysis <project-name>"
+        echo "Usage: r-init-analysis <project-name>"
         return 1
     fi
 
@@ -291,32 +319,11 @@ r-new-analysis() {
     # Create README
     usethis::use_readme_rmd()
 
-    # Create initial analysis template
-    writeLines(c(
-        '---',
-        'title: \"Analysis\"',
-        'author: \"Your Name\"',
-        'date: \"`r Sys.Date()`\"',
-        'output: html_document',
-        '---',
-        '',
-        '```{r setup, include=FALSE}',
-        'knitr::opts_chunk$set(echo = TRUE)',
-        'library(tidyverse)',
-        '```',
-        '',
-        '## Introduction',
-        '',
-        '## Data Import',
-        '',
-        '## Analysis',
-        '',
-        '## Results',
-        ''
-    ), 'analysis.Rmd')
-
     cat('Analysis project $proj_name created successfully!\n')
     "
+
+    # Create initial analysis template using template loader
+    load_r_template "analysis/analysis.Rmd.tmpl" > "${proj_name}/analysis.Rmd"
 }
 
 # ----------------------------------------------------------------------------
@@ -585,8 +592,8 @@ if command -v R &> /dev/null; then
     echo "  lintr, styler, profvis, bench"
     echo ""
     echo "Create new projects:"
-    echo "  r-new-package <name>   - Create R package"
-    echo "  r-new-analysis <name>  - Create analysis project"
+    echo "  r-init-package <name>   - Create R package"
+    echo "  r-init-analysis <name>  - Create analysis project"
 fi
 EOF
 log_command "Setting R dev startup script permissions" \
