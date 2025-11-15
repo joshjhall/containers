@@ -132,6 +132,24 @@ cat > /usr/local/bin/mojo-init << 'EOF'
 
 set -euo pipefail
 
+# Template loader function
+load_mojo_template() {
+    local template_path="$1"
+    local project_name="${2:-}"
+    local template_file="/tmp/build-scripts/features/templates/mojo/${template_path}"
+
+    if [ ! -f "$template_file" ]; then
+        echo "Error: Template not found: $template_file" >&2
+        return 1
+    fi
+
+    if [ -n "$project_name" ]; then
+        sed "s/__PROJECT_NAME__/${project_name}/g" "$template_file"
+    else
+        cat "$template_file"
+    fi
+}
+
 PROJECT_NAME="${1:-mojo_project}"
 
 echo "Creating Mojo project: $PROJECT_NAME"
@@ -140,58 +158,11 @@ echo "Creating Mojo project: $PROJECT_NAME"
 mkdir -p "$PROJECT_NAME"/{src,tests}
 cd "$PROJECT_NAME"
 
-# Create README
-cat > README.md << README
-# $PROJECT_NAME
-
-A Mojo project.
-
-## Structure
-- src/    - Source code
-- tests/  - Test files
-
-## Running
-\`\`\`bash
-mojo run src/main.mojo
-\`\`\`
-
-## Testing
-\`\`\`bash
-mojo test tests/
-\`\`\`
-README
-
-# Create .gitignore
-cat > .gitignore << 'GITIGNORE'
-# Mojo
-*.mojopkg
-.mojo-cache/
-build/
-
-# Python
-__pycache__/
-*.pyc
-.ipynb_checkpoints/
-
-# IDE
-.vscode/
-.idea/
-GITIGNORE
-
-# Create main file
-cat > src/main.mojo << 'MAIN'
-fn main():
-    print("Hello from Mojo! 🔥")
-MAIN
-
-# Create test file
-cat > tests/test_main.mojo << 'TEST'
-from testing import assert_equal
-
-fn test_basic():
-    """Basic test example."""
-    assert_equal(1 + 1, 2)
-TEST
+# Create project files from templates
+load_mojo_template "project/README.md.tmpl" "$PROJECT_NAME" > README.md
+load_mojo_template "project/gitignore.tmpl" > .gitignore
+load_mojo_template "src/main.mojo.tmpl" > src/main.mojo
+load_mojo_template "tests/test_main.mojo.tmpl" > tests/test_main.mojo
 
 echo "Project '$PROJECT_NAME' created!"
 echo "cd $PROJECT_NAME && mojo run src/main.mojo"
