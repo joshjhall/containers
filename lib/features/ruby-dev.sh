@@ -214,37 +214,26 @@ echo "=== Creating Ruby development templates ==="
 log_command "Creating Ruby templates directory" \
     mkdir -p /etc/ruby-dev-templates
 
-# RSpec configuration template
-cat > /etc/ruby-dev-templates/.rspec << 'EOF'
---require spec_helper
---format documentation
---color
---order random
-EOF
+# Template loader function for build-time config generation
+load_ruby_config_template() {
+    local template_path="$1"
+    local template_file="/tmp/build-scripts/features/templates/ruby/${template_path}"
 
-# Rubocop configuration template
-cat > /etc/ruby-dev-templates/.rubocop.yml << 'EOF'
-AllCops:
-  NewCops: enable
-  TargetRubyVersion: 3.0
-  Exclude:
-    - 'db/**/*'
-    - 'config/**/*'
-    - 'script/**/*'
-    - 'bin/**/*'
-    - 'vendor/**/*'
+    if [ ! -f "$template_file" ]; then
+        log_error "Template not found: $template_file"
+        return 1
+    fi
 
-Style/Documentation:
-  Enabled: false
+    cat "$template_file"
+}
 
-Metrics/BlockLength:
-  Exclude:
-    - 'spec/**/*'
-    - 'test/**/*'
+# RSpec configuration from template
+log_message "Creating .rspec from template"
+load_ruby_config_template "config/rspec.tmpl" > /etc/ruby-dev-templates/.rspec
 
-Metrics/MethodLength:
-  Max: 20
-EOF
+# Rubocop configuration from template
+log_message "Creating .rubocop.yml from template"
+load_ruby_config_template "config/rubocop.yml.tmpl" > /etc/ruby-dev-templates/.rubocop.yml
 
 # ============================================================================
 # Container Startup Scripts
