@@ -217,7 +217,8 @@ test_matrix_entry_format() {
 
     local versions_json='{"python": "3.13.0"}'
 
-    local entry=$(cat << EOF
+    local entry
+    entry=$(cat << EOF
 {
   "variant": "$variant",
   "base_image": "$base_image",
@@ -237,6 +238,7 @@ test_matrix_entry_with_notes() {
 
     local variant="python-dev"
     local status="failing"
+    # shellcheck disable=SC2034  # notes is reserved for future use in matrix entries
     local notes="Build failed due to missing dependency"
 
     local entry_has_notes=true

@@ -56,11 +56,13 @@ test_terraform_version_validation() {
     fi
     
     # Extract major version
-    local major=$(echo "$version" | cut -d. -f1)
+    local major
+    major=$(echo "$version" | cut -d. -f1)
     assert_equals "1" "$major" "Major version extracted correctly"
-    
+
     # Extract minor version
-    local minor=$(echo "$version" | cut -d. -f2)
+    local minor
+    minor=$(echo "$version" | cut -d. -f2)
     assert_equals "10" "$minor" "Minor version extracted correctly"
 }
 
@@ -254,9 +256,10 @@ test_workspace_management() {
     echo "development" > "$workspaces_dir/current"
     
     assert_file_exists "$workspaces_dir/current"
-    
+
     # Check current workspace
-    local current_workspace=$(cat "$workspaces_dir/current")
+    local current_workspace
+    current_workspace=$(cat "$workspaces_dir/current")
     assert_equals "development" "$current_workspace" "Current workspace is development"
 }
 

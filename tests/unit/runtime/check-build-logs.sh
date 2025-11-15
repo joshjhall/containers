@@ -163,11 +163,13 @@ test_log_listing() {
     touch "$BUILD_LOG_DIR/base/setup.log"
     
     # Count logs in features
-    local feature_count=$(ls -1 "$BUILD_LOG_DIR/features" | wc -l)
+    local feature_count
+    feature_count=$(ls -1 "$BUILD_LOG_DIR/features" | wc -l)
     assert_equals "3" "$feature_count" "Three feature logs exist"
     
     # Count logs in base
-    local base_count=$(ls -1 "$BUILD_LOG_DIR/base" | wc -l)
+    local base_count
+    base_count=$(ls -1 "$BUILD_LOG_DIR/base" | wc -l)
     assert_equals "1" "$base_count" "One base log exists"
 }
 
@@ -231,7 +233,8 @@ test_log_rotation() {
     assert_file_exists "$BUILD_LOG_DIR/build.log.2"
     
     # Count rotated logs
-    local rotated_count=$(ls -1 "$BUILD_LOG_DIR" | grep -c "build.log")
+    local rotated_count
+    rotated_count=$(find "$BUILD_LOG_DIR" -maxdepth 1 -name "*build.log*" -type f | wc -l)
     assert_equals "3" "$rotated_count" "Three rotated logs exist"
 }
 

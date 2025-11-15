@@ -185,9 +185,6 @@ test_source_or_execute() {
 # Test: All presets disable dev tools
 test_all_presets_disable_dev_tools() {
     # All production presets should disable dev tools
-    local preset_section
-    preset_section=$(sed -n '/case.*preset.*in/,/esac/p' "$SCRIPT_PATH")
-
     # Check that each preset sets INCLUDE_DEV_TOOLS=false via base args
     assert_file_contains "$SCRIPT_PATH" "INCLUDE_DEV_TOOLS=false" "Dev tools disabled in base"
 }

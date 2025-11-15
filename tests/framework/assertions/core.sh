@@ -72,7 +72,7 @@ assert_true() {
 
     # Find the last argument to check if it's a message
     local tfc_all_args=("$@")
-    local tfc_last="${tfc_all_args[@]: -1}"
+    local tfc_last="${tfc_all_args[*]: -1}"
     local tfc_message="Command should succeed"
     local tfc_cmd
 
@@ -117,7 +117,7 @@ assert_false() {
 
     # Find the last argument to check if it's a message
     local tfc_all_args=("$@")
-    local tfc_last="${tfc_all_args[@]: -1}"
+    local tfc_last="${tfc_all_args[*]: -1}"
     local tfc_message="Command should fail"
     local tfc_cmd
 

@@ -6,7 +6,8 @@ set -euo pipefail
 
 # Set BUILD_LOG_DIR early to avoid permission issues in CI
 # This must be set BEFORE any script sources logging.sh
-export BUILD_LOG_DIR=$(mktemp -d)
+export BUILD_LOG_DIR
+BUILD_LOG_DIR=$(mktemp -d)
 
 # Source test framework
 source "$(dirname "${BASH_SOURCE[0]}")/../../framework.sh"

@@ -124,7 +124,8 @@ test_version_file_check() {
     assert_file_exists "$TEST_VERSION_FILE"
     
     # Test reading version from file
-    local version=$(cat "$TEST_VERSION_FILE")
+    local version
+    version=$(cat "$TEST_VERSION_FILE")
     assert_equals "1.0.0" "$version" "Version read from file"
 }
 
@@ -209,8 +210,9 @@ test_semver_parsing() {
 # Test: Date format for changelog
 test_changelog_date_format() {
     # Test date format is YYYY-MM-DD
-    local date=$(date +%Y-%m-%d)
-    
+    local date
+    date=$(date +%Y-%m-%d)
+
     if [[ "$date" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
         assert_true true "Date format is correct: $date"
     else
@@ -222,10 +224,11 @@ test_changelog_date_format() {
 test_cancellation_message() {
     # Test that cancelling the release provides helpful automation examples
     setup
-    
+
     # Run release script with 'n' response and capture output
-    local output=$(echo "n" | "$PROJECT_ROOT/bin/release.sh" patch 2>&1 || true)
-    
+    local output
+    output=$(echo "n" | "$PROJECT_ROOT/bin/release.sh" patch 2>&1 || true)
+
     # Check for the helpful messages
     if echo "$output" | grep -q "Release cancelled"; then
         assert_true true "Shows cancellation message"
@@ -253,10 +256,11 @@ test_auto_confirmation() {
     # Test that auto-confirmation message works
     # Since the release script always operates on the actual project root,
     # we'll just test the confirmation prompt behavior without actually running it
-    
+
     # Test that echo "y" would be accepted as confirmation
-    local test_response=$(echo "y" | head -c1)
-    
+    local test_response
+    test_response=$(echo "y" | head -c1)
+
     if [ "$test_response" = "y" ] || [ "$test_response" = "Y" ]; then
         assert_true true "Auto-confirmation would be accepted"
     else

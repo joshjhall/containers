@@ -26,7 +26,8 @@ test_help_output() {
 # Test: Dry run mode
 test_dry_run_mode() {
     # Create temporary test directory
-    local test_dir=$(mktemp -d)
+    local test_dir
+    test_dir=$(mktemp -d)
     
     # Create mock Dockerfile
     cat > "$test_dir/Dockerfile" << 'EOF'
@@ -66,7 +67,8 @@ EOF
 # Test: Actual version update
 test_version_update() {
     # Create temporary test directory
-    local test_dir=$(mktemp -d)
+    local test_dir
+    test_dir=$(mktemp -d)
     
     # Create mock Dockerfile
     cat > "$test_dir/Dockerfile" << 'EOF'
@@ -123,7 +125,8 @@ EOF
 # Test: No updates needed
 test_no_updates() {
     # Create temporary test directory
-    local test_dir=$(mktemp -d)
+    local test_dir
+    test_dir=$(mktemp -d)
     
     # Create mock JSON with no updates
     cat > "$test_dir/test.json" << 'EOF'
@@ -166,7 +169,8 @@ test_invalid_input() {
 # Test: Shell script updates
 test_shell_script_update() {
     # Create temporary test directory
-    local test_dir=$(mktemp -d)
+    local test_dir
+    test_dir=$(mktemp -d)
     
     # Create lib/features directory and mock script
     mkdir -p "$test_dir/lib/features"
@@ -222,7 +226,8 @@ EOF
 # Test: Java dev tools update
 test_java_dev_tools_update() {
     # Create temporary test directory
-    local test_dir=$(mktemp -d)
+    local test_dir
+    test_dir=$(mktemp -d)
     
     # Create lib/features directory and mock script
     mkdir -p "$test_dir/lib/features"
@@ -315,7 +320,8 @@ EOF
 # Test: duf and entr updates
 test_duf_entr_update() {
     # Create temporary test directory
-    local test_dir=$(mktemp -d)
+    local test_dir
+    test_dir=$(mktemp -d)
     
     # Create lib/features directory and mock script
     mkdir -p "$test_dir/lib/features"
@@ -386,7 +392,8 @@ EOF
 # Test: Invalid version validation
 test_invalid_version_validation() {
     # Create temporary test directory
-    local test_dir=$(mktemp -d)
+    local test_dir
+    test_dir=$(mktemp -d)
     
     # Create mock Dockerfile
     cat > "$test_dir/Dockerfile" << 'EOF'
@@ -489,7 +496,8 @@ EOF
 # Test: Mixed valid and invalid versions
 test_mixed_valid_invalid_versions() {
     # Create temporary test directory
-    local test_dir=$(mktemp -d)
+    local test_dir
+    test_dir=$(mktemp -d)
     
     # Create mock Dockerfile
     cat > "$test_dir/Dockerfile" << 'EOF'

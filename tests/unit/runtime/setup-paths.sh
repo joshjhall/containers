@@ -106,10 +106,12 @@ test_path_deduplication() {
     local test_path="/usr/bin:/usr/local/bin:/usr/bin:/bin:/usr/local/bin"
     
     # Remove duplicates (simplified test)
-    local unique_path=$(echo "$test_path" | tr ':' '\n' | awk '!seen[$0]++' | tr '\n' ':' | sed 's/:$//')
-    
+    local unique_path
+    unique_path=$(echo "$test_path" | tr ':' '\n' | awk '!seen[$0]++' | tr '\n' ':' | sed 's/:$//')
+
     # Count occurrences of /usr/bin
-    local count=$(echo "$unique_path" | tr ':' '\n' | grep -c "^/usr/bin$")
+    local count
+    count=$(echo "$unique_path" | tr ':' '\n' | grep -c "^/usr/bin$")
     
     assert_equals "1" "$count" "Duplicates removed from PATH"
 }

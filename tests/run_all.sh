@@ -13,7 +13,6 @@ CONTAINERS_DIR="$(dirname "$TESTS_DIR")"
 readonly COLOR_HEADER='\033[1;36m'
 readonly COLOR_SUCCESS='\033[0;32m'
 readonly COLOR_ERROR='\033[0;31m'
-readonly COLOR_WARNING='\033[0;33m'
 readonly COLOR_RESET='\033[0m'
 
 # Track overall results

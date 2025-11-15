@@ -65,7 +65,8 @@ test_node_version_selection() {
 test_node_major_version_extraction() {
     # Test major version only
     NODE_VERSION="22"
-    local major_version=$(echo "${NODE_VERSION}" | cut -d. -f1)
+    local major_version
+    major_version=$(echo "${NODE_VERSION}" | cut -d. -f1)
     assert_equals "22" "$major_version" "Major version extracted from '22'"
     
     # Test specific version
@@ -143,6 +144,7 @@ test_node_installation_paths() {
 
 # Test: NPM cache configuration
 test_npm_cache_configuration() {
+    # shellcheck disable=SC2034  # npm_cache defined for documentation purposes
     local npm_cache="/cache/npm"
     local npmrc_file="$TEST_TEMP_DIR/home/testuser/.npmrc"
     

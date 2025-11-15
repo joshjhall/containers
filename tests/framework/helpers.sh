@@ -36,8 +36,9 @@ capture_result() {
     
     # Execute command and capture output
     tfh_output=$("$@" 2>&1) || tfh_exit_code=$?
-    
-    # Export results
+
+    # Export results (used by assertion functions in tests/framework/assertions/docker.sh)
+    # shellcheck disable=SC2034  # Variable set for external use
     TEST_OUTPUT="$tfh_output"
     TEST_EXIT_CODE="${tfh_exit_code:-0}"
     

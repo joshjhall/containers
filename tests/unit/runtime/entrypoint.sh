@@ -79,7 +79,8 @@ test_first_startup_script_order() {
     
     # Check execution order
     if [ -f "$TEST_TEMP_DIR/order.txt" ]; then
-        local order=$(cat "$TEST_TEMP_DIR/order.txt" | tr '\n' ' ')
+        local order
+        order=$(cat "$TEST_TEMP_DIR/order.txt" | tr '\n' ' ')
         assert_equals "10 20 30 " "$order" "Scripts executed in correct order"
     else
         assert_true false "Order tracking file not created"
@@ -102,7 +103,8 @@ test_every_boot_scripts() {
     
     # Check that scripts ran
     if [ -f "$TEST_TEMP_DIR/startup.log" ]; then
-        local lines=$(wc -l < "$TEST_TEMP_DIR/startup.log")
+        local lines
+        lines=$(wc -l < "$TEST_TEMP_DIR/startup.log")
         assert_equals "2" "$lines" "Both startup scripts executed"
     else
         assert_true false "Startup log not created"
@@ -131,7 +133,8 @@ test_script_permissions() {
 # Test: User context switching
 test_user_context() {
     # Test UID detection
-    local uid_1000=$(getent passwd 1000 2>/dev/null | cut -d: -f1 || echo "")
+    local uid_1000
+    uid_1000=$(getent passwd 1000 2>/dev/null | cut -d: -f1 || echo "")
     
     if [ -n "$uid_1000" ]; then
         assert_not_empty "$uid_1000" "User with UID 1000 can be detected"
@@ -175,8 +178,10 @@ test_empty_directory_handling() {
     rm -f "$STARTUP_DIR"/*.sh
     
     # Test with empty directories
-    local first_count=$(find "$FIRST_STARTUP_DIR" -name "*.sh" -type f 2>/dev/null | wc -l)
-    local startup_count=$(find "$STARTUP_DIR" -name "*.sh" -type f 2>/dev/null | wc -l)
+    local first_count
+    first_count=$(find "$FIRST_STARTUP_DIR" -name "*.sh" -type f 2>/dev/null | wc -l)
+    local startup_count
+    startup_count=$(find "$STARTUP_DIR" -name "*.sh" -type f 2>/dev/null | wc -l)
     
     assert_equals "0" "$first_count" "Empty first-startup directory handled"
     assert_equals "0" "$startup_count" "Empty startup directory handled"
@@ -211,7 +216,8 @@ EOF
 
     # Check that execution continued after error
     if [ -f "$TEST_TEMP_DIR/continue.log" ]; then
-        local content=$(cat "$TEST_TEMP_DIR/continue.log" 2>/dev/null | tr -d '\n')
+        local content
+        content=$(cat "$TEST_TEMP_DIR/continue.log" 2>/dev/null | tr -d '\n')
         if [ "$content" = "after-fail" ]; then
             assert_true true "Execution continued after script error"
         else
@@ -236,7 +242,8 @@ test_environment_preservation() {
     
     # Check environment was preserved
     if [ -f "$TEST_TEMP_DIR/env.txt" ]; then
-        local value=$(cat "$TEST_TEMP_DIR/env.txt")
+        local value
+        value=$(cat "$TEST_TEMP_DIR/env.txt")
         assert_equals "preserved" "$value" "Environment variable preserved"
     else
         assert_true false "Environment check failed"
