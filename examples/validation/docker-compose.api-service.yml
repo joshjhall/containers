@@ -1,0 +1,100 @@
+version: '3.8'
+
+services:
+  # PostgreSQL primary database
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_USER=apiservice
+      - POSTGRES_PASSWORD=dev_password
+      - POSTGRES_DB=api_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U apiservice"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Redis for caching and rate limiting
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # API service with validation
+  api:
+    image: ghcr.io/joshjhall/containers:latest-node-dev
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+      - "9090:9090"  # Metrics port
+    environment:
+      # Enable strict configuration validation
+      - VALIDATE_CONFIG=true
+      - VALIDATE_CONFIG_STRICT=true
+      - VALIDATE_CONFIG_RULES=/app/config/api-service-validation.sh
+
+      # Required configuration
+      - API_PORT=8080
+      - METRICS_PORT=9090
+      - DATABASE_URL=postgresql://apiservice:dev_password@postgres:5432/api_db
+      - REDIS_URL=redis://redis:6379/0
+      - JWT_SECRET=${JWT_SECRET:-dev-jwt-secret-please-change}
+
+      # Environment
+      - ENVIRONMENT=${ENVIRONMENT:-development}
+
+      # Rate limiting
+      - RATE_LIMIT_MAX=100
+      - RATE_LIMIT_WINDOW_MS=60000
+
+      # Database connection pooling
+      - DB_POOL_SIZE=10
+
+      # Request configuration
+      - REQUEST_TIMEOUT_MS=30000
+
+      # CORS
+      - CORS_ORIGIN=${CORS_ORIGIN:-http://localhost:3000}
+
+      # Logging
+      - LOG_LEVEL=info
+
+      # Security
+      - FORCE_HTTPS=${FORCE_HTTPS:-false}
+
+      # External services (optional)
+      - ENABLE_PAYMENTS=${ENABLE_PAYMENTS:-false}
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY:-}
+      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET:-}
+
+      - ENABLE_EMAIL=${ENABLE_EMAIL:-false}
+      - SENDGRID_API_KEY=${SENDGRID_API_KEY:-}
+
+    volumes:
+      # Mount validation rules
+      - ./api-service-validation.sh:/app/config/api-service-validation.sh:ro
+
+      # Application code
+      - ./api:/workspace/api
+
+    command: node src/server.js
+
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  postgres_data:

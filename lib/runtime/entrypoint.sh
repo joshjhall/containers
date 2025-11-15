@@ -26,6 +26,19 @@
 #
 set -euo pipefail
 
+# ============================================================================
+# Configuration Validation
+# ============================================================================
+# Validate configuration before starting (opt-in via VALIDATE_CONFIG=true)
+if [ -f "/opt/container-runtime/validate-config.sh" ]; then
+    # shellcheck source=/dev/null
+    source "/opt/container-runtime/validate-config.sh"
+    validate_configuration || {
+        echo "Configuration validation failed. Container startup aborted."
+        exit 1
+    }
+fi
+
 # Detect the non-root user in the container
 # Don't rely on environment variables which might come from the host
 # The container should have a user with UID 1000 created during build

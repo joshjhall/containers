@@ -1,0 +1,107 @@
+version: '3.8'
+
+services:
+  # Redis for job queue
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # PostgreSQL database (if workers need database access)
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_USER=worker
+      - POSTGRES_PASSWORD=dev_password
+      - POSTGRES_DB=worker_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U worker"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Background worker with validation
+  worker:
+    image: ghcr.io/joshjhall/containers:latest-python-dev
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    environment:
+      # Enable configuration validation
+      - VALIDATE_CONFIG=true
+      - VALIDATE_CONFIG_RULES=/app/config/worker-validation.sh
+
+      # Required configuration
+      - REDIS_URL=redis://redis:6379/0
+      - WORKER_CONCURRENCY=4
+
+      # Database (optional for workers)
+      - DATABASE_URL=postgresql://worker:dev_password@postgres:5432/worker_db
+
+      # Job configuration
+      - JOB_TIMEOUT_SEC=300
+      - MAX_RETRIES=3
+
+      # Storage
+      - WORKER_TEMP_DIR=/tmp/worker
+      - OUTPUT_DIR=/app/output
+
+      # S3 storage (optional)
+      - USE_S3_STORAGE=${USE_S3_STORAGE:-false}
+      - AWS_S3_BUCKET=${AWS_S3_BUCKET:-}
+      - AWS_REGION=${AWS_REGION:-us-east-1}
+
+      # Resource limits
+      - WORKER_MEMORY_LIMIT_MB=512
+
+      # Monitoring
+      - METRICS_PORT=9090
+
+      # Queue configuration
+      - QUEUE_PRIORITIES=high,normal,low
+
+      # Graceful shutdown
+      - SHUTDOWN_TIMEOUT_SEC=60
+
+    volumes:
+      # Mount validation rules
+      - ./worker-validation.sh:/app/config/worker-validation.sh:ro
+
+      # Worker code
+      - ./worker:/workspace/worker
+
+      # Temporary storage
+      - worker_temp:/tmp/worker
+      - worker_output:/app/output
+
+    command: python worker.py
+
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+    # Health check
+    healthcheck:
+      test: ["CMD", "python", "-c", "import redis; r = redis.from_url('redis://redis:6379/0'); r.ping()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  postgres_data:
+  worker_temp:
+  worker_output:

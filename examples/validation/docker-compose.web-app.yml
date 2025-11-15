@@ -1,0 +1,79 @@
+version: '3.8'
+
+services:
+  # PostgreSQL database
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_USER=webapp
+      - POSTGRES_PASSWORD=dev_password
+      - POSTGRES_DB=webapp_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U webapp"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Redis cache
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # Web application with validation
+  webapp:
+    image: ghcr.io/joshjhall/containers:latest-node-dev
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    environment:
+      # Enable configuration validation
+      - VALIDATE_CONFIG=true
+      - VALIDATE_CONFIG_RULES=/app/config/web-app-validation.sh
+
+      # Required configuration
+      - DATABASE_URL=postgresql://webapp:dev_password@postgres:5432/webapp_db
+      - REDIS_URL=redis://redis:6379/0
+      - SECRET_KEY=${SECRET_KEY:-please-change-this-in-production}
+
+      # Optional configuration
+      - PORT=3000
+      - NODE_ENV=${NODE_ENV:-development}
+      - DEBUG=${DEBUG:-false}
+      - FORCE_SSL=${FORCE_SSL:-false}
+
+      # Session configuration
+      - SESSION_SECRET=${SESSION_SECRET:-dev-session-secret}
+
+      # API keys (should use secrets in production)
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+
+    volumes:
+      # Mount validation rules
+      - ./web-app-validation.sh:/app/config/web-app-validation.sh:ro
+
+      # Application code (for development)
+      - ./app:/workspace/app
+
+    command: node server.js
+
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  postgres_data:
