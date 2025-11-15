@@ -82,14 +82,14 @@ assert_file_contains "$PROJECT_ROOT/lib/features/golang.sh" "^load_go_template()
 assert_file_contains "$PROJECT_ROOT/lib/features/golang.sh" "sed \"s/__PROJECT__" "Function has placeholder substitution"
 echo ""
 
-# Test 4: go-new function uses templates
-echo "Test: go-new function uses template loader"
-assert_file_contains "$PROJECT_ROOT/lib/features/golang.sh" "load_go_template.*gitignore.tmpl" "go-new uses gitignore template"
-assert_file_contains "$PROJECT_ROOT/lib/features/golang.sh" "load_go_template.*Makefile.tmpl" "go-new uses Makefile template"
-assert_file_contains "$PROJECT_ROOT/lib/features/golang.sh" "load_go_template.*cli/main.go.tmpl" "go-new uses CLI template"
-assert_file_contains "$PROJECT_ROOT/lib/features/golang.sh" "load_go_template.*api/main.go.tmpl" "go-new uses API template"
-assert_file_contains "$PROJECT_ROOT/lib/features/golang.sh" "load_go_template.*lib/lib.go.tmpl" "go-new uses lib template"
-assert_file_contains "$PROJECT_ROOT/lib/features/golang.sh" "load_go_template.*lib/lib_test.go.tmpl" "go-new uses test template"
+# Test 4: go-init function uses templates
+echo "Test: go-init function uses template loader"
+assert_file_contains "$PROJECT_ROOT/lib/features/golang.sh" "load_go_template.*gitignore.tmpl" "go-init uses gitignore template"
+assert_file_contains "$PROJECT_ROOT/lib/features/golang.sh" "load_go_template.*Makefile.tmpl" "go-init uses Makefile template"
+assert_file_contains "$PROJECT_ROOT/lib/features/golang.sh" "load_go_template.*cli/main.go.tmpl" "go-init uses CLI template"
+assert_file_contains "$PROJECT_ROOT/lib/features/golang.sh" "load_go_template.*api/main.go.tmpl" "go-init uses API template"
+assert_file_contains "$PROJECT_ROOT/lib/features/golang.sh" "load_go_template.*lib/lib.go.tmpl" "go-init uses lib template"
+assert_file_contains "$PROJECT_ROOT/lib/features/golang.sh" "load_go_template.*lib/lib_test.go.tmpl" "go-init uses test template"
 echo ""
 
 # Test 5: Simulated template loading
