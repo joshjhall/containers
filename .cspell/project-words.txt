@@ -3,11 +3,13 @@
 adoptium
 Adoptium
 AIKMS
+ajeetdsouza
 AKIAIOSFODNN
 annprocess
 APIINDEX
 APIMAIN
 appuser
+aquasecurity
 armhf
 armv
 asyncio
@@ -70,8 +72,10 @@ confold
 containerenv
 cookiecutter
 coreutils
+covermode
 coverprofile
 covr
+CPUPROFILE
 cran
 CRAN
 crcmod
@@ -80,6 +84,7 @@ createuser
 creds
 csvfile
 cweill
+Daemonless
 dandavison
 Darchetype
 Dartifact
@@ -127,6 +132,7 @@ ensurepip
 entr
 Entr
 ENTR
+eradman
 erasedups
 errcheck
 Errorf
@@ -137,8 +143,10 @@ esbuild
 eslf
 fastify
 fatih
+Fcli
 fdfind
 fgrep
+flamegraph
 flexdashboard
 forcats
 fzipp
@@ -168,6 +176,7 @@ ghprv
 ghruns
 ghrunv
 gids
+GITCLIFF
 githistory
 githubcli
 gitlog
@@ -183,6 +192,8 @@ gobench
 gobin
 gocache
 GOCACHE
+gochecknoglobals
+gochecknoinits
 gocognit
 goconst
 gocrit
@@ -219,6 +230,9 @@ Gopls
 GOPROXY
 gops
 gordonklaus
+gorel
+gorelc
+goreld
 goreleaser
 gorev
 GOROOT
@@ -226,6 +240,7 @@ gosec
 gosl
 gostress
 GOSUMDB
+goswag
 gotc
 gotest
 gotesta
@@ -248,9 +263,12 @@ gwdep
 gwtasks
 gwts
 haya
+healthcheck
+HEALTHCHECK
 hgrep
 histappend
 historyfile
+hkps
 honnef
 hostnames
 httr
@@ -262,18 +280,21 @@ iputils
 ipynb
 ipython
 IPYTHONDIR
+Iseconds
 isort
 javac
 Javac
 javap
 jbang
 JBANG
+jbangdev
 jbedit
 jbrun
 jesseduffield
 jestconfig
 jgautheron
 josharian
+joshjhall
 jreleaser
 jshell
 jsonlite
@@ -282,6 +303,7 @@ junegunn
 jupyterlab
 justfile
 JUSTFILE
+Kaniko
 kctx
 kdel
 kdesc
@@ -403,6 +425,7 @@ mypod
 myproject
 mypy
 myuser
+nakedret
 ncdu
 Ncpus
 nektos
@@ -415,6 +438,8 @@ nocapture
 nocaseglob
 nodemon
 Nodemon
+nodesource
+nodistro
 noninteractive
 NOPASSWD
 nowdate
@@ -430,6 +455,7 @@ ofabry
 ollama
 oneline
 ONEPASSWORD
+openpgp
 packrat
 pandoc
 passwordless
@@ -458,6 +484,7 @@ pkgbuild
 pkgdown
 platformdirs
 pprof
+prealloc
 pretc
 Println
 procps
@@ -532,6 +559,7 @@ sbjar
 sboot
 sbrun
 sccache
+scopelint
 SCRIPTNAME
 SDKMAN
 secretpass
@@ -539,9 +567,11 @@ securego
 setuptools
 setwd
 sharkdp
+shasums
 shellcheck
 shinydashboard
 signingkey
+Sigstore
 silversearcher
 simplecov
 skel
@@ -564,7 +594,9 @@ startswith
 staticcheck
 stringr
 subdirs
+subshell
 swaggo
+Sysbox
 sysstat
 tcpdump
 temurin
@@ -575,6 +607,7 @@ terragrunt
 Terragrunt
 TERRAGRUNT
 testcov
+testdata
 testinstance
 testpaths
 testthat
@@ -584,6 +617,7 @@ tetafro
 texlive
 TFDOCS
 tflint
+tfsec
 tfst
 tfstate
 tibble
@@ -600,6 +634,7 @@ truecolor
 typedoc
 tzdata
 uids
+unparam
 uptodate
 urandom
 usermod
@@ -618,6 +653,7 @@ vitejs
 vitep
 vitest
 Vitest
+wagoodman
 wayou
 whois
 worktree
