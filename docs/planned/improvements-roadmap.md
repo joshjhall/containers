@@ -915,11 +915,11 @@ add_to_system_path() {
 
 ---
 
-#### 23. [MEDIUM] ✅ COMPLETE - Extract Project Templates from Functions (Go, Node.js & R)
+#### 23. [MEDIUM] ✅ COMPLETE - Extract Project Templates from Functions (Go, Node.js, R & Rust)
 **Source**: Architecture Analysis (Nov 2025)
 **Priority**: P1 (Code organization)
 **Effort**: 1-2 days
-**Status**: ✅ COMPLETE for Go, Node.js, and R (November 2025)
+**Status**: ✅ COMPLETE for Go, Node.js, R, and Rust (November 2025)
 **Completed**: November 2025
 
 **What Was Delivered (November 2025)**:
@@ -1029,8 +1029,34 @@ Extracted all heredoc templates from `r-new-package` and `r-new-analysis` functi
 - ✅ Clear intent: `{lang}-init-*` signals project creation
 - ✅ Better tab completion and discoverability
 
-**Total Line Reduction**: 216+ lines (95 from golang.sh + 121 from node-dev.sh + R templates extracted)
-**Total Tests**: 75 passing (23 Go + 39 Node.js + 13 R)
+✅ **Complete Rust Template Extraction**:
+Extracted all heredoc templates from `ts-init-grammar` and `just-init` functions into separate template files with loader function.
+
+**Files Created (Rust)**:
+- `lib/features/templates/rust/treesitter/grammar.js.tmpl` - Tree-sitter grammar template
+- `lib/features/templates/rust/just/justfile.tmpl` - Justfile template
+- `tests/unit/test_rust_templates.sh` - Comprehensive unit tests (20 tests, 100% pass)
+
+**Integration Complete (Rust)**:
+- Created `load_rust_template()` function in `lib/features/rust-dev.sh`
+- Replaced 2 heredocs with template loader calls
+- Functions refactored:
+  - `ts-init-grammar` - Tree-sitter grammar initialization
+  - `just-init` - Justfile initialization
+- Uses `__GRAMMAR_NAME__` and `__PROJECT_NAME__` placeholders with sed substitution
+- All tests passing (20/20 unit tests)
+
+**Standardized Function Names (Rust)**:
+- `ts-init-grammar <grammar-name>` - Initialize Tree-sitter grammar projects
+- `just-init <project-name>` - Initialize Just task runner configuration
+
+**Benefits of Standardization**:
+- ✅ Consistent with other languages (`go-init`, `node-init`, `r-init-*`)
+- ✅ Templates separated from shell logic
+- ✅ Better maintainability and testability
+
+**Total Line Reduction**: 216+ lines (95 from golang.sh + 121 from node-dev.sh + R templates extracted + Rust templates extracted)
+**Total Tests**: 95 passing (23 Go + 39 Node.js + 13 R + 20 Rust)
 
 **Benefits Achieved**:
 - ✅ Reduced code duplication (216+ lines removed total)
@@ -1038,15 +1064,14 @@ Extracted all heredoc templates from `r-new-package` and `r-new-analysis` functi
 - ✅ Easier to update and maintain templates
 - ✅ Enables template versioning
 - ✅ Comprehensive test coverage
-- ✅ Consistent naming convention across all languages (Go, Node.js, R)
+- ✅ Consistent naming convention across all languages (Go, Node.js, R, Rust)
 
 **Remaining Work**:
 Apply the same pattern to other languages with project scaffolding functions:
 - Python (python-dev.sh if applicable) → `python-init`
 - Ruby (ruby-dev.sh if applicable) → `ruby-init`
-- Rust (rust-dev.sh if applicable) → `rust-init`
 
-**Impact**: ✅ COMPLETE for Go, Node.js & R - Significantly improved maintainability, code organization, and user experience
+**Impact**: ✅ COMPLETE for Go, Node.js, R & Rust - Significantly improved maintainability, code organization, and user experience
 
 ---
 
