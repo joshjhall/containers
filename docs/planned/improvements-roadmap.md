@@ -915,11 +915,11 @@ add_to_system_path() {
 
 ---
 
-#### 23. [MEDIUM] ✅ COMPLETE - Extract Project Templates from Functions (Go, Node.js, R & Rust)
+#### 23. [MEDIUM] ✅ COMPLETE - Extract Project Templates from Functions (Go, Node.js, R, Rust & Mojo)
 **Source**: Architecture Analysis (Nov 2025)
 **Priority**: P1 (Code organization)
 **Effort**: 1-2 days
-**Status**: ✅ COMPLETE for Go, Node.js, R, and Rust (November 2025)
+**Status**: ✅ COMPLETE for Go, Node.js, R, Rust, and Mojo (November 2025)
 **Completed**: November 2025
 
 **What Was Delivered (November 2025)**:
@@ -1055,8 +1055,33 @@ Extracted all heredoc templates from `ts-init-grammar` and `just-init` functions
 - ✅ Templates separated from shell logic
 - ✅ Better maintainability and testability
 
-**Total Line Reduction**: 216+ lines (95 from golang.sh + 121 from node-dev.sh + R templates extracted + Rust templates extracted)
-**Total Tests**: 95 passing (23 Go + 39 Node.js + 13 R + 20 Rust)
+✅ **Complete Mojo Template Extraction**:
+Extracted all heredoc templates from `mojo-init` function into separate template files with loader function.
+
+**Files Created (Mojo)**:
+- `lib/features/templates/mojo/project/README.md.tmpl` - Mojo project README template
+- `lib/features/templates/mojo/project/gitignore.tmpl` - Mojo .gitignore template
+- `lib/features/templates/mojo/src/main.mojo.tmpl` - Mojo source file template
+- `lib/features/templates/mojo/tests/test_main.mojo.tmpl` - Mojo test file template
+- `tests/unit/test_mojo_templates.sh` - Comprehensive unit tests (26 tests, 100% pass)
+
+**Integration Complete (Mojo)**:
+- Created `load_mojo_template()` function in `lib/features/mojo.sh`
+- Replaced 4 heredocs with template loader calls
+- Function refactored: `mojo-init` - Initialize Mojo projects
+- Uses `__PROJECT_NAME__` placeholder with sed substitution
+- All tests passing (26/26 unit tests)
+
+**Standardized Function Names (Mojo)**:
+- `mojo-init <project-name>` - Initialize Mojo projects
+
+**Benefits of Standardization**:
+- ✅ Consistent with other languages (`go-init`, `node-init`, `r-init-*`, `ts-init-grammar`, `just-init`)
+- ✅ Templates separated from shell logic
+- ✅ Better maintainability and testability
+
+**Total Line Reduction**: 216+ lines (95 from golang.sh + 121 from node-dev.sh + R templates extracted + Rust templates extracted + Mojo templates extracted)
+**Total Tests**: 121 passing (23 Go + 39 Node.js + 13 R + 20 Rust + 26 Mojo)
 
 **Benefits Achieved**:
 - ✅ Reduced code duplication (216+ lines removed total)
@@ -1064,14 +1089,14 @@ Extracted all heredoc templates from `ts-init-grammar` and `just-init` functions
 - ✅ Easier to update and maintain templates
 - ✅ Enables template versioning
 - ✅ Comprehensive test coverage
-- ✅ Consistent naming convention across all languages (Go, Node.js, R, Rust)
+- ✅ Consistent naming convention across all languages (Go, Node.js, R, Rust, Mojo)
 
 **Remaining Work**:
 Apply the same pattern to other languages with project scaffolding functions:
 - Python (python-dev.sh if applicable) → `python-init`
 - Ruby (ruby-dev.sh if applicable) → `ruby-init`
 
-**Impact**: ✅ COMPLETE for Go, Node.js, R & Rust - Significantly improved maintainability, code organization, and user experience
+**Impact**: ✅ COMPLETE for Go, Node.js, R, Rust & Mojo - Significantly improved maintainability, code organization, and user experience
 
 ---
 
