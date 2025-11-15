@@ -478,15 +478,19 @@ log_command "Configuring npm prefix" \
 export YARN_CACHE_FOLDER="${YARN_CACHE_DIR}"
 
 # Configure pnpm - set store directory for the system (if pnpm is available)
-# Note: If pnpm preparation failed earlier, attempting to run pnpm will trigger
-# corepack to try to install it, which may fail with signature verification errors.
-# We make this step completely optional to avoid blocking the build.
-log_message "Attempting to configure pnpm store..."
-if pnpm config set store-dir "${PNPM_STORE_DIR}" >/dev/null 2>&1; then
-    log_message "✓ pnpm configured successfully"
+# Note: If pnpm preparation failed earlier, we skip configuration to avoid triggering
+# corepack downloads which may fail with signature verification errors.
+# Check if pnpm is actually available before attempting configuration.
+if command -v pnpm >/dev/null 2>&1 && pnpm --version >/dev/null 2>&1; then
+    log_message "Configuring pnpm store..."
+    if pnpm config set store-dir "${PNPM_STORE_DIR}" >/dev/null 2>&1; then
+        log_message "✓ pnpm configured successfully"
+    else
+        log_warning "pnpm configuration failed, but pnpm is still usable"
+    fi
 else
-    log_warning "pnpm configuration skipped (pnpm may not be available due to corepack signature issues)"
-    log_warning "pnpm will still work via corepack, but you may need to configure it manually"
+    log_message "pnpm not pre-installed - will be available via corepack on first use"
+    log_message "(You can configure it later with: pnpm config set store-dir ${PNPM_STORE_DIR})"
 fi
 
 # ============================================================================
