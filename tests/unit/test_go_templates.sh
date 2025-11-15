@@ -95,7 +95,7 @@ echo ""
 # Test 5: Simulated template loading
 echo "Test: Template loading simulation"
 TEMP_DIR=$(mktemp -d)
-trap "rm -rf $TEMP_DIR" EXIT
+trap 'rm -rf "$TEMP_DIR"' EXIT
 
 # Simulate the load_go_template function
 load_go_template_test() {
@@ -117,7 +117,7 @@ load_go_template_test() {
 
 # Test loading without substitution
 if load_go_template_test "common/gitignore.tmpl" > "$TEMP_DIR/gitignore"; then
-    if grep -q "*.exe" "$TEMP_DIR/gitignore"; then
+    if grep -q '\*.exe' "$TEMP_DIR/gitignore"; then
         echo -e "${GREEN}✓${NC} Template loads without substitution"
         TESTS_PASSED=$((TESTS_PASSED + 1))
     else

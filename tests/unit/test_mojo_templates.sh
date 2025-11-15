@@ -98,7 +98,7 @@ echo ""
 # Test 6: Simulated template loading
 echo "Test: Template loading simulation"
 TEMP_DIR=$(mktemp -d)
-trap "rm -rf $TEMP_DIR" EXIT
+trap 'rm -rf "$TEMP_DIR"' EXIT
 
 # Simulate the load_mojo_template function
 load_mojo_template_test() {
@@ -144,7 +144,7 @@ fi
 
 # Test loading gitignore without substitution
 if load_mojo_template_test "project/gitignore.tmpl" > "$TEMP_DIR/.gitignore"; then
-    if grep -q "*.mojopkg" "$TEMP_DIR/.gitignore"; then
+    if grep -q '\*.mojopkg' "$TEMP_DIR/.gitignore"; then
         echo -e "${GREEN}✓${NC} Gitignore template loads without substitution"
         TESTS_PASSED=$((TESTS_PASSED + 1))
     else
@@ -186,7 +186,7 @@ else
 fi
 
 # Verify gitignore has Python support
-if grep -q "__pycache__" "$TEMP_DIR/.gitignore" && grep -q "*.pyc" "$TEMP_DIR/.gitignore"; then
+if grep -q "__pycache__" "$TEMP_DIR/.gitignore" && grep -q '\*.pyc' "$TEMP_DIR/.gitignore"; then
     echo -e "${GREEN}✓${NC} Gitignore includes Python interop patterns"
     TESTS_PASSED=$((TESTS_PASSED + 1))
 else
