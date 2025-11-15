@@ -1,0 +1,38 @@
+import org.openjdk.jmh.annotations.*;
+import org.openjdk.jmh.runner.Runner;
+import org.openjdk.jmh.runner.options.Options;
+import org.openjdk.jmh.runner.options.OptionsBuilder;
+
+import java.util.concurrent.TimeUnit;
+
+@BenchmarkMode(Mode.AverageTime)
+@OutputTimeUnit(TimeUnit.NANOSECONDS)
+@State(Scope.Thread)
+@Fork(value = 2, jvmArgs = {"-Xms2G", "-Xmx2G"})
+@Warmup(iterations = 3)
+@Measurement(iterations = 5)
+public class __CLASS_NAME__ {
+
+    @Param({"10", "100", "1000"})
+    private int size;
+
+    private String data;
+
+    @Setup
+    public void setup() {
+        data = "x".repeat(size);
+    }
+
+    @Benchmark
+    public int baseline() {
+        return data.length();
+    }
+
+    public static void main(String[] args) throws Exception {
+        Options opt = new OptionsBuilder()
+                .include(__CLASS_NAME__.class.getSimpleName())
+                .build();
+
+        new Runner(opt).run();
+    }
+}
