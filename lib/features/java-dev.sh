@@ -523,6 +523,33 @@ gradle-wrapper() {
 # Example:
 #   java-benchmark StringBenchmark
 # ----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------
+# load_java_template - Load a Java template with variable substitution
+#
+# Arguments:
+#   $1 - Template path relative to templates/java/ (required)
+#   $2 - Class name for substitution (optional)
+#
+# Example:
+#   load_java_template "benchmark/Benchmark.java.tmpl" "MyBenchmark"
+# ----------------------------------------------------------------------------
+load_java_template() {
+    local template_path="$1"
+    local class_name="${2:-}"
+    local template_file="/tmp/build-scripts/features/templates/java/${template_path}"
+
+    if [ ! -f "$template_file" ]; then
+        echo "Error: Template not found: $template_file" >&2
+        return 1
+    fi
+
+    if [ -n "$class_name" ]; then
+        sed "s/__CLASS_NAME__/${class_name}/g" "$template_file"
+    else
+        cat "$template_file"
+    fi
+}
+
 java-benchmark() {
     if [ -z "$1" ]; then
         echo "Usage: java-benchmark <class-name>"
@@ -534,46 +561,7 @@ java-benchmark() {
 
     if [ ! -f "$file" ]; then
         echo "Creating JMH benchmark template: $file"
-        cat > "$file" << BENCHMARK
-import org.openjdk.jmh.annotations.*;
-import org.openjdk.jmh.runner.Runner;
-import org.openjdk.jmh.runner.options.Options;
-import org.openjdk.jmh.runner.options.OptionsBuilder;
-
-import java.util.concurrent.TimeUnit;
-
-@BenchmarkMode(Mode.AverageTime)
-@OutputTimeUnit(TimeUnit.NANOSECONDS)
-@State(Scope.Thread)
-@Fork(value = 2, jvmArgs = {"-Xms2G", "-Xmx2G"})
-@Warmup(iterations = 3)
-@Measurement(iterations = 5)
-public class $class {
-
-    @Param({"10", "100", "1000"})
-    private int size;
-
-    private String data;
-
-    @Setup
-    public void setup() {
-        data = "x".repeat(size);
-    }
-
-    @Benchmark
-    public int baseline() {
-        return data.length();
-    }
-
-    public static void main(String[] args) throws Exception {
-        Options opt = new OptionsBuilder()
-                .include($class.class.getSimpleName())
-                .build();
-
-        new Runner(opt).run();
-    }
-}
-BENCHMARK
+        load_java_template "benchmark/Benchmark.java.tmpl" "$class" > "$file"
         echo "Benchmark template created"
     fi
 
@@ -601,7 +589,34 @@ TEMPLATES_DIR="/etc/java-dev-templates"
 log_command "Creating templates directory" \
     mkdir -p "${TEMPLATES_DIR}"
 
-# Checkstyle configuration
+# Template loader function for build-time config generation
+load_java_config_template() {
+    local template_path="$1"
+    local template_file="/tmp/build-scripts/features/templates/java/${template_path}"
+
+    if [ ! -f "$template_file" ]; then
+        log_error "Template not found: $template_file"
+        return 1
+    fi
+
+    cat "$template_file"
+}
+
+# Checkstyle configuration from template
+log_message "Creating checkstyle.xml from template"
+load_java_config_template "config/checkstyle.xml.tmpl" > "${TEMPLATES_DIR}/checkstyle.xml"
+
+# PMD ruleset from template
+log_message "Creating pmd-ruleset.xml from template"
+load_java_config_template "config/pmd-ruleset.xml.tmpl" > "${TEMPLATES_DIR}/pmd-ruleset.xml"
+
+# SpotBugs exclude filter from template
+log_message "Creating spotbugs-exclude.xml from template"
+load_java_config_template "config/spotbugs-exclude.xml.tmpl" > "${TEMPLATES_DIR}/spotbugs-exclude.xml"
+
+# Note: Original heredoc code removed, now using templates
+# Checkstyle configuration (legacy heredoc preserved as comment for reference)
+: << 'LEGACY_CHECKSTYLE'
 cat > "${TEMPLATES_DIR}/checkstyle.xml" << 'EOF'
 <?xml version="1.0"?>
 <!DOCTYPE module PUBLIC
@@ -678,27 +693,8 @@ cat > "${TEMPLATES_DIR}/pmd-ruleset.xml" << 'EOF'
 </ruleset>
 EOF
 
-# SpotBugs exclude filter
-cat > "${TEMPLATES_DIR}/spotbugs-exclude.xml" << 'EOF'
-<?xml version="1.0" encoding="UTF-8"?>
-<FindBugsFilter>
-    <!-- Exclude test classes -->
-    <Match>
-        <Class name="~.*Test" />
-    </Match>
-
-    <!-- Exclude generated code -->
-    <Match>
-        <Package name="~.*\.generated\..*" />
-    </Match>
-
-    <!-- Common false positives -->
-    <Match>
-        <Bug pattern="EI_EXPOSE_REP,EI_EXPOSE_REP2" />
-        <Class name="~.*DTO$|~.*Entity$" />
-    </Match>
-</FindBugsFilter>
-EOF
+LEGACY_CHECKSTYLE
+# All heredocs replaced with template loader calls above
 
 # ============================================================================
 # Container Startup Scripts

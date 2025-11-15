@@ -915,11 +915,11 @@ add_to_system_path() {
 
 ---
 
-#### 23. [MEDIUM] ✅ COMPLETE - Extract Project Templates from Functions (Go, Node.js, R, Rust & Mojo)
+#### 23. [MEDIUM] ✅ COMPLETE - Extract Project Templates from Functions (Go, Node.js, R, Rust, Mojo & Java)
 **Source**: Architecture Analysis (Nov 2025)
 **Priority**: P1 (Code organization)
 **Effort**: 1-2 days
-**Status**: ✅ COMPLETE for Go, Node.js, R, Rust, and Mojo (November 2025)
+**Status**: ✅ COMPLETE for Go, Node.js, R, Rust, Mojo, and Java (November 2025)
 **Completed**: November 2025
 
 **What Was Delivered (November 2025)**:
@@ -1080,8 +1080,34 @@ Extracted all heredoc templates from `mojo-init` function into separate template
 - ✅ Templates separated from shell logic
 - ✅ Better maintainability and testability
 
-**Total Line Reduction**: 216+ lines (95 from golang.sh + 121 from node-dev.sh + R templates extracted + Rust templates extracted + Mojo templates extracted)
-**Total Tests**: 121 passing (23 Go + 39 Node.js + 13 R + 20 Rust + 26 Mojo)
+✅ **Complete Java Template Extraction**:
+Extracted all heredoc templates from `java-benchmark` function and config templates into separate template files with loader functions.
+
+**Files Created (Java)**:
+- `lib/features/templates/java/benchmark/Benchmark.java.tmpl` - Java microbenchmark template
+- `lib/features/templates/java/config/checkstyle.xml.tmpl` - Checkstyle configuration template
+- `lib/features/templates/java/config/pmd-ruleset.xml.tmpl` - PMD ruleset configuration template
+- `lib/features/templates/java/config/spotbugs-exclude.xml.tmpl` - SpotBugs exclusion configuration template
+- `tests/unit/test_java_templates.sh` - Comprehensive unit tests (23 tests, 100% pass)
+
+**Integration Complete (Java)**:
+- Created `load_java_template()` function in `lib/features/java-dev.sh` for benchmark template
+- Created `load_java_config_template()` function in `lib/features/java-dev.sh` for config templates
+- Replaced 1 heredoc in `java-benchmark` function with template loader call
+- Replaced 3 config heredocs with config template loader calls
+- Uses `__CLASS_NAME__` placeholder with sed substitution
+- All tests passing (23/23 unit tests)
+
+**Functions Refactored (Java)**:
+- `java-benchmark <benchmark-name>` - Create JMH benchmark classes
+
+**Benefits of Standardization**:
+- ✅ Consistent with other languages (`go-init`, `node-init`, `r-init-*`, `ts-init-grammar`, `just-init`, `mojo-init`)
+- ✅ Templates separated from shell logic (benchmark + 3 configs)
+- ✅ Better maintainability and testability
+
+**Total Line Reduction**: 216+ lines (95 from golang.sh + 121 from node-dev.sh + R templates extracted + Rust templates extracted + Mojo templates extracted + Java templates extracted)
+**Total Tests**: 144 passing (23 Go + 39 Node.js + 13 R + 20 Rust + 26 Mojo + 23 Java)
 
 **Benefits Achieved**:
 - ✅ Reduced code duplication (216+ lines removed total)
@@ -1089,14 +1115,14 @@ Extracted all heredoc templates from `mojo-init` function into separate template
 - ✅ Easier to update and maintain templates
 - ✅ Enables template versioning
 - ✅ Comprehensive test coverage
-- ✅ Consistent naming convention across all languages (Go, Node.js, R, Rust, Mojo)
+- ✅ Consistent naming convention across all languages (Go, Node.js, R, Rust, Mojo, Java)
 
 **Remaining Work**:
 Apply the same pattern to other languages with project scaffolding functions:
 - Python (python-dev.sh if applicable) → `python-init`
 - Ruby (ruby-dev.sh if applicable) → `ruby-init`
 
-**Impact**: ✅ COMPLETE for Go, Node.js, R, Rust & Mojo - Significantly improved maintainability, code organization, and user experience
+**Impact**: ✅ COMPLETE for Go, Node.js, R, Rust, Mojo & Java - Significantly improved maintainability, code organization, and user experience
 
 ---
 

@@ -1,0 +1,18 @@
+<FindBugsFilter>
+    <!-- Exclude test classes -->
+    <Match>
+        <Class name="~.*Test" />
+    </Match>
+
+    <!-- Exclude generated code -->
+    <Match>
+        <Package name="~.*\.generated\..*" />
+    </Match>
+
+    <!-- Common false positives -->
+    <Match>
+        <Bug pattern="EI_EXPOSE_REP,EI_EXPOSE_REP2" />
+        <Class name="~.*DTO$|~.*Entity$" />
+    </Match>
+</FindBugsFilter>
+EOF
