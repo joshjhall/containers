@@ -1,0 +1,126 @@
+#!/usr/bin/env bash
+# Pre-push hook for comprehensive validation before pushing
+# To use: git config core.hooksPath .githooks
+# To skip: git push --no-verify
+
+set -euo pipefail
+
+# Colors
+RED='\033[0;31m'
+YELLOW='\033[1;33m'
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+echo -e "${BLUE}═══════════════════════════════════════════════════${NC}"
+echo -e "${BLUE}Running pre-push validation checks...${NC}"
+echo -e "${BLUE}═══════════════════════════════════════════════════${NC}"
+echo ""
+
+# Track overall failure status
+overall_failed=0
+
+# =========================================
+# 1. SHELLCHECK VALIDATION
+# =========================================
+echo -e "${BLUE}1. Running shellcheck on all shell scripts...${NC}"
+
+# Check if shellcheck is installed
+if ! command -v shellcheck &> /dev/null; then
+    echo -e "${YELLOW}⚠ Shellcheck not installed. Skipping shell script validation.${NC}"
+    echo "  Install with: apt-get install shellcheck (Debian/Ubuntu)"
+    echo "  or: brew install shellcheck (macOS)"
+else
+    # Find all tracked shell scripts (respects .gitignore)
+    shell_files=$(git ls-files '*.sh' '*.bash' 2>/dev/null || \
+      find . -type f \( -name "*.sh" -o -name "*.bash" \) \
+        ! -path "./.git/*" \
+        ! -path "*/node_modules/*" \
+        ! -path "*/vendor/*")
+
+    shellcheck_failed=0
+    checked_count=0
+    failed_count=0
+
+    while IFS= read -r file; do
+        if [ -z "$file" ] || [ ! -f "$file" ]; then
+            continue
+        fi
+
+        checked_count=$((checked_count + 1))
+
+        # Run shellcheck with warning severity
+        if ! shellcheck -S warning "$file" > /dev/null 2>&1; then
+            if [ $shellcheck_failed -eq 0 ]; then
+                echo ""
+                echo -e "${RED}✗ Shellcheck failures detected:${NC}"
+                echo ""
+            fi
+            echo -e "  ${RED}✗${NC} $file"
+            shellcheck -S warning "$file" 2>&1 | sed 's/^/    /'
+            echo ""
+            shellcheck_failed=1
+            failed_count=$((failed_count + 1))
+        fi
+    done <<< "$shell_files"
+
+    if [ $shellcheck_failed -eq 0 ]; then
+        echo -e "  ${GREEN}✓${NC} All $checked_count shell scripts passed shellcheck"
+    else
+        echo -e "  ${RED}✗${NC} $failed_count of $checked_count shell scripts failed shellcheck"
+        overall_failed=1
+    fi
+fi
+
+echo ""
+
+# =========================================
+# 2. UNIT TESTS
+# =========================================
+echo -e "${BLUE}2. Running unit tests...${NC}"
+
+# Check if unit test script exists
+if [ ! -f "./tests/run_unit_tests.sh" ]; then
+    echo -e "${YELLOW}⚠ Unit test script not found. Skipping unit tests.${NC}"
+else
+    if ./tests/run_unit_tests.sh > /tmp/pre-push-unit-tests.log 2>&1; then
+        # Count tests from log
+        test_count=$(grep -c "✓" /tmp/pre-push-unit-tests.log 2>/dev/null || echo "0")
+        echo -e "  ${GREEN}✓${NC} All unit tests passed ($test_count tests)"
+    else
+        echo -e "  ${RED}✗${NC} Unit tests failed"
+        echo ""
+        echo -e "${YELLOW}Test output:${NC}"
+        tail -50 /tmp/pre-push-unit-tests.log | sed 's/^/  /'
+        echo ""
+        overall_failed=1
+    fi
+
+    # Clean up log file
+    rm -f /tmp/pre-push-unit-tests.log
+fi
+
+echo ""
+
+# =========================================
+# FINAL RESULT
+# =========================================
+if [ $overall_failed -eq 1 ]; then
+    echo -e "${BLUE}═══════════════════════════════════════════════════${NC}"
+    echo -e "${RED}✗ Pre-push validation FAILED!${NC}"
+    echo -e "${BLUE}═══════════════════════════════════════════════════${NC}"
+    echo ""
+    echo "Please fix the issues above before pushing."
+    echo "To skip validation (not recommended): git push --no-verify"
+    echo ""
+    exit 1
+fi
+
+echo -e "${BLUE}═══════════════════════════════════════════════════${NC}"
+echo -e "${GREEN}✓ Pre-push validation PASSED!${NC}"
+echo -e "${BLUE}═══════════════════════════════════════════════════${NC}"
+echo ""
+echo "All checks successful - proceeding with push..."
+echo ""
+
+exit 0
