@@ -909,44 +909,9 @@ add_to_system_path() {
 
 ---
 
-#### 22. [MEDIUM] Split dev-tools.sh into Sub-Features
-**Source**: Architecture Analysis (Nov 2025)
-**Priority**: P1 (Maintainability)
-**Effort**: 2-3 days
-
-**Issue**: dev-tools.sh is 1,106 lines (largest feature script)
-- Installs 50+ tools
-- Mix of different tool categories
-- Hard to maintain
-- All-or-nothing installation
-
-**Current categories** in dev-tools.sh:
-- Core tools (ripgrep, fd, bat, eza)
-- Git helpers (lazygit, delta, gh, glab)
-- Monitoring tools (htop, btop, iotop)
-- Network tools (netcat, nmap, tcpdump)
-- Cloud CLIs (gh, glab, act)
-- Productivity tools (direnv, mkcert)
-
-**Recommendation**:
-```bash
-lib/features/
-├── dev-tools-core.sh           # Basic tools (ripgrep, fd, bat)
-├── dev-tools-git.sh            # Git helpers (lazygit, delta, gh)
-├── dev-tools-monitoring.sh     # htop, btop, iotop
-├── dev-tools-network.sh        # netcat, nmap, tcpdump
-└── dev-tools.sh                # Meta-feature that includes all
-```
-
-**Dockerfile changes**:
-```dockerfile
-ARG INCLUDE_DEV_TOOLS_CORE=false
-ARG INCLUDE_DEV_TOOLS_GIT=false
-ARG INCLUDE_DEV_TOOLS_MONITORING=false
-ARG INCLUDE_DEV_TOOLS_NETWORK=false
-```
-
-**Impact**: Better granularity, reduces image size, easier maintenance
+#### 22. [REMOVED] Split dev-tools.sh into Sub-Features
+**Status**: ❌ REMOVED (November 2025)
+**Reason**: Over-engineered. No practical use case for granular dev-tools selection. The all-or-nothing approach works well - developers who want dev tools typically want the full suite. Adding 4-5 build args and splitting into multiple files creates unnecessary complexity without clear value.
 
 ---
 
