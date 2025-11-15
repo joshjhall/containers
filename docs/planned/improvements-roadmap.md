@@ -915,43 +915,114 @@ add_to_system_path() {
 
 ---
 
-#### 23. [MEDIUM] Extract Project Templates from Functions
+#### 23. [MEDIUM] ✅ COMPLETE - Extract Project Templates from Functions (Go & Node.js)
 **Source**: Architecture Analysis (Nov 2025)
 **Priority**: P1 (Code organization)
 **Effort**: 1-2 days
+**Status**: ✅ COMPLETE for Go and Node.js (November 2025)
+**Completed**: November 2025
 
-**Issue**: Template code embedded in functions
-- `go-new` function: 207 lines (golang.sh:284-490)
-- Contains heredoc templates for CLI, API, library
-- Hard to update templates
-- Not reusable outside of function
+**What Was Delivered (November 2025)**:
 
-**Recommendation**:
+✅ **Complete Go Template Extraction**:
+Extracted all heredoc templates from `go-init` function into separate template files with loader function.
+
+**Files Created (Go)**:
+- `lib/features/templates/go/common/gitignore.tmpl` - Go .gitignore template
+- `lib/features/templates/go/common/Makefile.tmpl` - Go Makefile template
+- `lib/features/templates/go/cli/main.go.tmpl` - CLI project template
+- `lib/features/templates/go/api/main.go.tmpl` - API project template
+- `lib/features/templates/go/lib/lib.go.tmpl` - Library package template
+- `lib/features/templates/go/lib/lib_test.go.tmpl` - Library test template
+- `tests/unit/test_go_templates.sh` - Comprehensive unit tests (23 tests, 100% pass)
+
+**Integration Complete (Go)**:
+- Created `load_go_template()` function in `lib/features/golang.sh` (lines 275-303)
+- Replaced 6 heredocs with template loader calls
+- Reduced `golang.sh` from 682 to 587 lines (95 line reduction)
+- Uses `__PROJECT__` placeholder with sed substitution
+- Function renamed: `go-new` → `go-init` (standardized naming)
+- All tests passing (23/23 unit tests)
+
+✅ **Complete Node.js Template Extraction**:
+Extracted all heredoc templates from `node-init` function into separate template files with loader function.
+
+**Files Created (Node.js)**:
+- `lib/features/templates/node/common/gitignore.tmpl` - Node.js .gitignore template
+- `lib/features/templates/node/config/tsconfig.json.tmpl` - TypeScript configuration
+- `lib/features/templates/node/config/jest.config.js.tmpl` - Jest test configuration
+- `lib/features/templates/node/config/eslintrc.js.tmpl` - ESLint configuration
+- `lib/features/templates/node/config/prettierrc.tmpl` - Prettier configuration
+- `lib/features/templates/node/config/vite.config.ts.tmpl` - Vite build configuration
+- `lib/features/templates/node/api/index.ts.tmpl` - Express API template
+- `lib/features/templates/node/cli/index.ts.tmpl` - CLI tool template (Commander.js)
+- `lib/features/templates/node/lib/index.ts.tmpl` - Library package template
+- `lib/features/templates/node/test/index.test.ts.tmpl` - Test file template
+- `tests/unit/test_node_templates.sh` - Comprehensive unit tests (39 tests, 100% pass)
+
+**Integration Complete (Node.js)**:
+- Created `load_node_template()` function in both `node-dev.sh` and `node.sh`
+- Replaced 9 heredocs with template loader calls in `node-dev.sh`
+- Replaced 1 heredoc with template loader call in `node.sh`
+- Reduced `node-dev.sh` from 775 to 654 lines (121 line reduction)
+- Uses `__PROJECT_NAME__` placeholder with sed substitution
+- Function renamed: `node-new-project` → `node-init` (standardized naming)
+- All tests passing (39/39 unit tests)
+
+✅ **Naming Convention Standardization**:
+Established `{lang}-init` as the standard pattern for all project scaffolding commands, aligning with industry standards (`npm init`, `cargo init`).
+
+**Standardized Function Names**:
+- `go-init <module-name> [cli|lib|api]` - Create new Go projects
+- `node-init <project-name> [api|cli|lib|web]` - Create new Node.js projects
+
+**Benefits of Standardization**:
+- ✅ Consistent, intuitive naming across all languages
+- ✅ Aligns with industry conventions (npm init, cargo init, pipenv init)
+- ✅ Better tab completion (all `go-*` commands group together)
+- ✅ Clear intent: `{lang}-init` signals project creation
+- ✅ Extensible pattern for future languages (python-init, ruby-init, rust-init)
+
+**Template Loader Implementation Pattern**:
 ```bash
-lib/features/templates/
-├── go/
-│   ├── cli/main.go.tmpl
-│   ├── api/main.go.tmpl
-│   ├── lib/lib.go.tmpl
-│   └── Makefile.tmpl
-├── python/
-│   └── pyproject.toml.tmpl
-└── node/
-    └── package.json.tmpl
-```
+# Same pattern used in both golang.sh and node-dev.sh
+load_{lang}_template() {
+    local template_path="$1"
+    local project_name="${2:-}"
+    local template_file="/tmp/build-scripts/features/templates/{lang}/${template_path}"
 
-**Template loader**:
-```bash
-load_template() {
-    local language="$1"
-    local template_type="$2"
-    local template_file="$3"
+    if [ ! -f "$template_file" ]; then
+        echo "Error: Template not found: $template_file" >&2
+        return 1
+    fi
 
-    cat "/tmp/build-scripts/features/templates/${language}/${template_type}/${template_file}"
+    if [ -n "$project_name" ]; then
+        sed "s/__PLACEHOLDER__/${project_name}/g" "$template_file"
+    else
+        cat "$template_file"
+    fi
 }
 ```
 
-**Impact**: Reduces function size by ~150 lines, enables template versioning
+**Total Line Reduction**: 216 lines (95 from golang.sh + 121 from node-dev.sh)
+**Total Tests**: 62 passing (23 Go + 39 Node.js)
+
+**Benefits Achieved**:
+- ✅ Reduced code duplication (216 lines removed total)
+- ✅ Templates separated from shell logic
+- ✅ Easier to update and maintain templates
+- ✅ Enables template versioning
+- ✅ Comprehensive test coverage
+- ✅ Consistent naming convention across languages
+
+**Remaining Work**:
+Apply the same pattern to other languages with project scaffolding functions:
+- Python (python-dev.sh if applicable) → `python-init`
+- Ruby (ruby-dev.sh if applicable) → `ruby-init`
+- Rust (rust-dev.sh if applicable) → `rust-init`
+- R (r-dev.sh `r-new-package()` and `r-new-analysis()` functions) → `r-init`
+
+**Impact**: ✅ COMPLETE for Go & Node.js - Significantly improved maintainability, code organization, and user experience
 
 ---
 

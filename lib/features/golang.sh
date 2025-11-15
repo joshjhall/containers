@@ -305,18 +305,18 @@ alias gomv='go mod vendor'
 alias gols='go list'
 
 # ----------------------------------------------------------------------------
-# go-new - Create a new Go module project
+# go-init - Create a new Go module project
 #
 # Arguments:
 #   $1 - Module name (required, e.g., github.com/user/project)
 #   $2 - Project type (optional: cli, lib, api, default: lib)
 #
 # Example:
-#   go-new github.com/myuser/myproject cli
+#   go-init github.com/myuser/myproject cli
 # ----------------------------------------------------------------------------
-go-new() {
+go-init() {
     if [ -z "$1" ]; then
-        echo "Usage: go-new <module-name> [type]"
+        echo "Usage: go-init <module-name> [type]"
         echo "Types: cli, lib, api"
         return 1
     fi
@@ -520,7 +520,7 @@ if command -v go &> /dev/null; then
     echo "  goimports, etc., enable the golang-dev feature."
     echo ""
     echo "Create new projects:"
-    echo "  go-new <module-name> [cli|lib|api]"
+    echo "  go-init <module-name> [cli|lib|api]"
 fi
 EOF
 
@@ -571,8 +571,8 @@ log_feature_summary \
     --tools "go,gofmt" \
     --paths "${GOPATH},${GOCACHE},${GOMODCACHE}" \
     --env "GOROOT,GOPATH,GOCACHE,GOMODCACHE,GO111MODULE,GOPROXY,GOSUMDB" \
-    --commands "go,gofmt,gob,gor,got,gom,gomt,go-new,go-bench,go-cover" \
-    --next-steps "Run 'test-go' to verify installation. Use 'go-new <module-name> [cli|lib|api]' to create new projects."
+    --commands "go,gofmt,gob,gor,got,gom,gomt,go-init,go-bench,go-cover" \
+    --next-steps "Run 'test-go' to verify installation. Use 'go-init <module-name> [cli|lib|api]' to create new projects."
 
 # End logging
 log_feature_end
