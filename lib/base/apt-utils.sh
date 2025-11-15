@@ -140,14 +140,13 @@ apt_install_conditional() {
 apt_retry() {
     local attempt=1
     local delay="$APT_RETRY_DELAY"
-    local cmd="$*"
+    local cmd_array=("$@")
 
     while [ $attempt -le "$APT_MAX_RETRIES" ]; do
-        echo "Running: $cmd (attempt $attempt/$APT_MAX_RETRIES)..."
+        echo "Running: ${cmd_array[*]} (attempt $attempt/$APT_MAX_RETRIES)..."
 
-        # shellcheck disable=SC2086
-        if timeout "$APT_TIMEOUT" $cmd; then
-            echo "✓ Command succeeded: $cmd"
+        if timeout "$APT_TIMEOUT" "${cmd_array[@]}"; then
+            echo "✓ Command succeeded: ${cmd_array[*]}"
             return 0
         fi
         
@@ -158,7 +157,7 @@ apt_retry() {
             sleep "$delay"
             delay=$((delay * 2))  # Exponential backoff
         else
-            echo "✗ Command failed after $APT_MAX_RETRIES attempts: $cmd"
+            echo "✗ Command failed after $APT_MAX_RETRIES attempts: ${cmd_array[*]}"
             return $exit_code
         fi
         
@@ -264,16 +263,15 @@ apt_install() {
         echo "Error: apt_install requires at least one package name"
         return 1
     fi
-    
-    local packages="$*"
+
+    local packages=("$@")
     local attempt=1
     local delay="$APT_RETRY_DELAY"
-    
+
     while [ $attempt -le "$APT_MAX_RETRIES" ]; do
-        echo "Installing packages: $packages (attempt $attempt/$APT_MAX_RETRIES)..."
-        
+        echo "Installing packages: ${packages[*]} (attempt $attempt/$APT_MAX_RETRIES)..."
+
         # Configure apt with timeout and retry options
-        # shellcheck disable=SC2086  # Word splitting is intentional for package list
         if DEBIAN_FRONTEND=noninteractive timeout "$APT_TIMEOUT" apt-get install -y \
             --no-install-recommends \
             -o Acquire::http::Timeout=30 \
@@ -282,8 +280,8 @@ apt_install() {
             -o Acquire::Retries=3 \
             -o Dpkg::Options::="--force-confdef" \
             -o Dpkg::Options::="--force-confold" \
-            $packages; then
-            echo "✓ Packages installed successfully: $packages"
+            "${packages[@]}"; then
+            echo "✓ Packages installed successfully: ${packages[*]}"
             return 0
         fi
         
@@ -304,7 +302,7 @@ apt_install() {
             delay=$((delay * 2))  # Exponential backoff
         else
             echo "✗ Package installation failed after $APT_MAX_RETRIES attempts"
-            echo "  Failed packages: $packages"
+            echo "  Failed packages: ${packages[*]}"
             return $exit_code
         fi
         
