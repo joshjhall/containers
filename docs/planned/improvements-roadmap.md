@@ -21,11 +21,13 @@ This document tracks remaining improvements for the container build system based
 See git history and CHANGELOG.md for details on completed items.
 
 **Latest Updates (November 2025)**:
+- ✅ **Item #23 COMPLETE**: Template extraction for all 7 languages (Go, Node.js, R, Rust, Mojo, Java, Ruby) - 156 tests passing
 - ✅ **Item #4 COMPLETE**: Flexible version resolution for all 6 languages (Python, Node.js, Go, Ruby, Rust, Java)
 - ✅ **Item #1 COMPLETE**: 4-tier checksum verification + pinned checksums database + automated maintenance
 - ✅ **Item #3 COMPLETE**: Docker socket auto-fix removed, replaced with secure group-based access
 - ✅ **Item #2 COMPLETE**: Passwordless sudo default changed to false (security improvement)
 - ✅ **Item #12 COMPLETE**: Production-optimized image variants with examples and documentation
+- ✅ Ruby template extraction (config templates for RSpec and Rubocop)
 - ✅ Ruby checksum fetching fixed (grep pattern and parameter order)
 - ✅ Production tests added to CI matrix
 - ✅ Created `lib/checksums.json` with Node.js, Go, Ruby checksums (9 versions)
@@ -915,11 +917,11 @@ add_to_system_path() {
 
 ---
 
-#### 23. [MEDIUM] ✅ COMPLETE - Extract Project Templates from Functions (Go, Node.js, R, Rust, Mojo & Java)
+#### 23. [MEDIUM] ✅ COMPLETE - Extract Project Templates from Functions (All Languages)
 **Source**: Architecture Analysis (Nov 2025)
 **Priority**: P1 (Code organization)
 **Effort**: 1-2 days
-**Status**: ✅ COMPLETE for Go, Node.js, R, Rust, Mojo, and Java (November 2025)
+**Status**: ✅ COMPLETE for all languages: Go, Node.js, R, Rust, Mojo, Java, and Ruby (November 2025)
 **Completed**: November 2025
 
 **What Was Delivered (November 2025)**:
@@ -1106,23 +1108,45 @@ Extracted all heredoc templates from `java-benchmark` function and config templa
 - ✅ Templates separated from shell logic (benchmark + 3 configs)
 - ✅ Better maintainability and testability
 
-**Total Line Reduction**: 216+ lines (95 from golang.sh + 121 from node-dev.sh + R templates extracted + Rust templates extracted + Mojo templates extracted + Java templates extracted)
-**Total Tests**: 144 passing (23 Go + 39 Node.js + 13 R + 20 Rust + 26 Mojo + 23 Java)
+✅ **Complete Ruby Template Extraction**:
+Extracted all heredoc templates from Ruby config generation into separate template files with loader function.
+
+**Files Created (Ruby)**:
+- `lib/features/templates/ruby/config/rspec.tmpl` - RSpec test configuration
+- `lib/features/templates/ruby/config/rubocop.yml.tmpl` - Rubocop linter configuration
+- `tests/unit/test_ruby_templates.sh` - Comprehensive unit tests (12 tests, 100% pass)
+
+**Integration Complete (Ruby)**:
+- Created `load_ruby_config_template()` function in `lib/features/ruby-dev.sh`
+- Replaced 2 config heredocs with template loader calls
+- Templates loaded during build time for project scaffolding
+- All tests passing (12/12 unit tests)
+
+**Config Templates (Ruby)**:
+- RSpec configuration (.rspec) - Test framework configuration
+- Rubocop configuration (.rubocop.yml) - Code style and linting rules
+
+**Benefits of Standardization**:
+- ✅ Consistent with other languages (Go, Node.js, R, Rust, Mojo, Java)
+- ✅ Config templates separated from shell logic
+- ✅ Better maintainability and testability
+- ✅ Fixed grep pattern matching issue (using `grep -q --` for patterns starting with `--`)
+
+**Total Line Reduction**: 246+ lines (95 from golang.sh + 121 from node-dev.sh + 30 from ruby-dev.sh + R/Rust/Mojo/Java templates extracted)
+**Total Tests**: 156 passing (23 Go + 39 Node.js + 13 R + 20 Rust + 26 Mojo + 23 Java + 12 Ruby)
 
 **Benefits Achieved**:
-- ✅ Reduced code duplication (216+ lines removed total)
-- ✅ Templates separated from shell logic
+- ✅ Reduced code duplication (246+ lines removed total)
+- ✅ Templates separated from shell logic across all 7 languages
 - ✅ Easier to update and maintain templates
 - ✅ Enables template versioning
-- ✅ Comprehensive test coverage
-- ✅ Consistent naming convention across all languages (Go, Node.js, R, Rust, Mojo, Java)
+- ✅ Comprehensive test coverage (156 tests)
+- ✅ Consistent naming convention across all languages (Go, Node.js, R, Rust, Mojo, Java, Ruby)
 
 **Remaining Work**:
-Apply the same pattern to other languages with project scaffolding functions:
-- Python (python-dev.sh if applicable) → `python-init`
-- Ruby (ruby-dev.sh if applicable) → `ruby-init`
+None - all languages with template-based scaffolding are complete. Python does not have project scaffolding functions at this time.
 
-**Impact**: ✅ COMPLETE for Go, Node.js, R, Rust, Mojo & Java - Significantly improved maintainability, code organization, and user experience
+**Impact**: ✅ COMPLETE for all 7 languages - Significantly improved maintainability, code organization, and user experience across the entire codebase
 
 ---
 
