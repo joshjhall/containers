@@ -311,6 +311,44 @@ npm-global-list() {
     npm list -g --depth=0
 }
 
+# ============================================================================
+# Template Helper Functions
+# ============================================================================
+
+# ----------------------------------------------------------------------------
+# load_node_template - Load a Node.js project template file and perform substitutions
+#
+# Arguments:
+#   $1 - Template path relative to templates/node/ (required)
+#   $2 - Project name for __PROJECT_NAME__ substitution (optional)
+#
+# Example:
+#   load_node_template "common/gitignore.tmpl"
+#   load_node_template "cli/index.ts.tmpl" "my-cli"
+# ----------------------------------------------------------------------------
+load_node_template() {
+    local template_path="$1"
+    local project_name="${2:-}"
+    local template_file="/tmp/build-scripts/features/templates/node/${template_path}"
+
+    if [ ! -f "$template_file" ]; then
+        echo "Error: Template not found: $template_file" >&2
+        return 1
+    fi
+
+    if [ -n "$project_name" ]; then
+        # Replace __PROJECT_NAME__ placeholder with actual project name
+        sed "s/__PROJECT_NAME__/${project_name}/g" "$template_file"
+    else
+        # No substitution needed, just output the template
+        cat "$template_file"
+    fi
+}
+
+# ============================================================================
+# Project Scaffolding Functions
+# ============================================================================
+
 # ----------------------------------------------------------------------------
 # node-project-init - Initialize a new Node.js project
 #
@@ -353,16 +391,7 @@ node-project-init() {
     mkdir -p src test
 
     # Create .gitignore
-    cat > .gitignore << 'GITIGNORE'
-node_modules/
-dist/
-build/
-*.log
-.env
-.DS_Store
-coverage/
-.nyc_output/
-GITIGNORE
+    load_node_template "common/gitignore.tmpl" > .gitignore
 
     echo "Project initialized successfully!"
     echo "Structure created:"

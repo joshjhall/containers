@@ -222,19 +222,57 @@ alias node-debug-brk='node --inspect-brk'
 alias node-debug-wait='node --inspect-wait'
 alias npm-debug='npm run --node-options="--inspect"'
 
+# ============================================================================
+# Template Helper Functions
+# ============================================================================
+
 # ----------------------------------------------------------------------------
-# node-new-project - Create a new Node.js project with TypeScript
+# load_node_template - Load a Node.js project template file and perform substitutions
+#
+# Arguments:
+#   $1 - Template path relative to templates/node/ (required)
+#   $2 - Project name for __PROJECT_NAME__ substitution (optional)
+#
+# Example:
+#   load_node_template "common/gitignore.tmpl"
+#   load_node_template "cli/index.ts.tmpl" "my-cli"
+# ----------------------------------------------------------------------------
+load_node_template() {
+    local template_path="$1"
+    local project_name="${2:-}"
+    local template_file="/tmp/build-scripts/features/templates/node/${template_path}"
+
+    if [ ! -f "$template_file" ]; then
+        echo "Error: Template not found: $template_file" >&2
+        return 1
+    fi
+
+    if [ -n "$project_name" ]; then
+        # Replace __PROJECT_NAME__ placeholder with actual project name
+        sed "s/__PROJECT_NAME__/${project_name}/g" "$template_file"
+    else
+        # No substitution needed, just output the template
+        cat "$template_file"
+    fi
+}
+
+# ============================================================================
+# Project Scaffolding Functions
+# ============================================================================
+
+# ----------------------------------------------------------------------------
+# node-init - Create a new Node.js project with TypeScript
 #
 # Arguments:
 #   $1 - Project name (required)
 #   $2 - Project type (optional: api, cli, lib, web, default: lib)
 #
 # Example:
-#   node-new-project my-app api
+#   node-init my-app api
 # ----------------------------------------------------------------------------
-node-new-project() {
+node-init() {
     if [ -z "$1" ]; then
-        echo "Usage: node-new-project <project-name> [type]"
+        echo "Usage: node-init <project-name> [type]"
         echo "Types: api, cli, lib, web"
         return 1
     fi
@@ -269,152 +307,37 @@ node-new-project() {
         ts-jest
 
     # Create tsconfig.json
-    cat > tsconfig.json << 'TSCONFIG'
-{
-  "compilerOptions": {
-    "target": "ES2022",
-    "module": "commonjs",
-    "lib": ["ES2022"],
-    "outDir": "./dist",
-    "rootDir": "./src",
-    "strict": true,
-    "esModuleInterop": true,
-    "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true,
-    "resolveJsonModule": true,
-    "declaration": true,
-    "declarationMap": true,
-    "sourceMap": true
-  },
-  "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "tests"]
-}
-TSCONFIG
+    load_node_template "config/tsconfig.json.tmpl" > tsconfig.json
 
     # Create jest.config.js
-    cat > jest.config.js << 'JESTCONFIG'
-module.exports = {
-  preset: 'ts-jest',
-  testEnvironment: 'node',
-  roots: ['<rootDir>/src', '<rootDir>/tests'],
-  testMatch: ['**/__tests__/**/*.ts', '**/?(*.)+(spec|test).ts'],
-  collectCoverageFrom: ['src/**/*.ts', '!src/**/*.d.ts'],
-};
-JESTCONFIG
+    load_node_template "config/jest.config.js.tmpl" > jest.config.js
 
     # Create .eslintrc.js
-    cat > .eslintrc.js << 'ESLINTRC'
-module.exports = {
-  parser: '@typescript-eslint/parser',
-  extends: [
-    'eslint:recommended',
-    'plugin:@typescript-eslint/recommended',
-  ],
-  parserOptions: {
-    ecmaVersion: 2022,
-    sourceType: 'module',
-  },
-  env: {
-    node: true,
-    jest: true,
-  },
-  rules: {
-    '@typescript-eslint/explicit-function-return-type': 'off',
-    '@typescript-eslint/no-explicit-any': 'warn',
-  },
-};
-ESLINTRC
+    load_node_template "config/eslintrc.js.tmpl" > .eslintrc.js
 
     # Create .prettierrc
-    cat > .prettierrc << 'PRETTIERRC'
-{
-  "semi": true,
-  "trailingComma": "all",
-  "singleQuote": true,
-  "printWidth": 100,
-  "tabWidth": 2
-}
-PRETTIERRC
+    load_node_template "config/prettierrc.tmpl" > .prettierrc
 
     # Create type-specific files
     case "$project_type" in
         api)
             npm install express cors helmet morgan compression
             npm install --save-dev @types/express @types/cors @types/morgan @types/compression
-            cat > src/index.ts << 'APIINDEX'
-import express from 'express';
-import cors from 'cors';
-import helmet from 'helmet';
-import morgan from 'morgan';
-import compression from 'compression';
-
-const app = express();
-const PORT = process.env.PORT || 3000;
-
-// Middleware
-app.use(helmet());
-app.use(cors());
-app.use(compression());
-app.use(morgan('combined'));
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-
-// Routes
-app.get('/', (req, res) => {
-  res.json({ message: 'API is running!' });
-});
-
-// Start server
-app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
-});
-APIINDEX
+            load_node_template "api/index.ts.tmpl" > src/index.ts
             ;;
         cli)
             npm install commander chalk ora
             npm install --save-dev @types/node
-            cat > src/index.ts << 'CLIINDEX'
-#!/usr/bin/env node
-import { Command } from 'commander';
-import chalk from 'chalk';
-
-const program = new Command();
-
-program
-  .name('${project_name}')
-  .description('CLI tool description')
-  .version('0.1.0');
-
-program
-  .command('hello <name>')
-  .description('Say hello')
-  .action((name: string) => {
-    console.log(chalk.green(`Hello, ${name}!`));
-  });
-
-program.parse();
-CLIINDEX
+            load_node_template "cli/index.ts.tmpl" "$project_name" > src/index.ts
             chmod +x src/index.ts
             ;;
         web)
             npm install --save-dev vite @vitejs/plugin-react
-            cat > vite.config.ts << 'VITECONFIG'
-import { defineConfig } from 'vite';
-
-export default defineConfig({
-  build: {
-    outDir: 'dist',
-  },
-});
-VITECONFIG
+            load_node_template "config/vite.config.ts.tmpl" > vite.config.ts
             ;;
         *)
             # Default library setup
-            cat > src/index.ts << 'LIBINDEX'
-export function hello(name: string): string {
-  return `Hello, ${name}!`;
-}
-LIBINDEX
+            load_node_template "lib/index.ts.tmpl" > src/index.ts
             ;;
     esac
 
@@ -431,13 +354,7 @@ LIBINDEX
     npm pkg set scripts.format:check="prettier --check 'src/**/*.ts'"
 
     # Create initial test
-    cat > tests/index.test.ts << 'TESTFILE'
-describe('Initial test', () => {
-  it('should pass', () => {
-    expect(true).toBe(true);
-  });
-});
-TESTFILE
+    load_node_template "test/index.test.ts.tmpl" > tests/index.test.ts
 
     echo "Project $project_name created successfully!"
     echo ""
@@ -596,7 +513,7 @@ if command -v node &> /dev/null; then
     echo "  Process: pm2, nodemon, concurrently"
     echo ""
     echo "Create new projects:"
-    echo "  node-new-project <name> [api|cli|lib|web]"
+    echo "  node-init <name> [api|cli|lib|web]"
 fi
 NODE_DEV_STARTUP_EOF
 log_command "Setting Node.js dev startup script permissions" \
@@ -726,8 +643,8 @@ log_feature_summary \
     --tools "typescript,ts-node,tsx,jest,mocha,vitest,playwright,eslint,prettier,webpack,vite,esbuild,rollup,parcel,pm2,nodemon,concurrently,clinic,fastify-cli,jsdoc,typedoc,npm-check-updates" \
     --paths "${NPM_CACHE_DIR},${NPM_GLOBAL_DIR}" \
     --env "NPM_CONFIG_CACHE,NPM_CONFIG_PREFIX" \
-    --commands "tsc,ts-node,tsx,jest,mocha,vitest,eslint,prettier,webpack,vite,pm2,nodemon,node-new-project,node-test-all,node-clean" \
-    --next-steps "Run 'test-node-dev' to check installed tools. Use 'node-new-project <name> [api|cli|lib|web]' to scaffold projects with TypeScript, testing, and linting."
+    --commands "tsc,ts-node,tsx,jest,mocha,vitest,eslint,prettier,webpack,vite,pm2,nodemon,node-init,node-test-all,node-clean" \
+    --next-steps "Run 'test-node-dev' to check installed tools. Use 'node-init <name> [api|cli|lib|web]' to scaffold projects with TypeScript, testing, and linting."
 
 # End logging
 log_feature_end
