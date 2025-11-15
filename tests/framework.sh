@@ -33,7 +33,8 @@
 
 set -euo pipefail
 
-# Framework version
+# Framework version (exported for external use)
+# shellcheck disable=SC2034  # Used by external scripts
 readonly TEST_FRAMEWORK_VERSION="4.8.6"
 
 # Initialize test directories
@@ -54,6 +55,7 @@ source "$TESTS_DIR/framework/assertions/exit_code.sh"
 source "$TESTS_DIR/framework/assertions/docker.sh"
 
 # Test framework configuration
+# shellcheck disable=SC2034  # Used by test files
 PROJECT_ROOT="$CONTAINERS_DIR"
 RESULTS_DIR="$TESTS_DIR/results"
 FIXTURES_DIR="$TESTS_DIR/fixtures"
@@ -138,6 +140,7 @@ init_test_framework() {
 # Define a test suite
 test_suite() {
     local suite_name="$1"
+    # shellcheck disable=SC2034  # Set for test consumption
     CURRENT_SUITE="$suite_name"
 
     echo -e "${TEST_COLOR_INFO}=== Test Suite: $suite_name ===${TEST_COLOR_RESET}"
@@ -146,6 +149,7 @@ test_suite() {
 # Define a test
 test_case() {
     local test_name="$1"
+    # shellcheck disable=SC2034  # Set for test consumption
     CURRENT_TEST="$test_name"
     TESTS_RUN=$((TESTS_RUN + 1))
 
@@ -178,8 +182,9 @@ skip_test() {
 # Setup function (run before each test)
 setup() {
     # Create temp directory for test
-    export TEST_TEMP_DIR=$(mktemp -d -t "container-test-XXXXXX")
-    
+    export TEST_TEMP_DIR
+    TEST_TEMP_DIR=$(mktemp -d -t "container-test-XXXXXX")
+
     # Track Docker resources created during test
     export TEST_IMAGES=()
     export TEST_CONTAINERS=()
@@ -212,7 +217,9 @@ run_test() {
 
     # Reset test status and output (prevent accumulation)
     TEST_STATUS=""
+    # shellcheck disable=SC2034  # Set by helpers.sh, read by assertions
     TEST_OUTPUT=""
+    # shellcheck disable=SC2034  # Set by helpers.sh, read by assertions
     TEST_EXIT_CODE=0
 
     # Show test description
