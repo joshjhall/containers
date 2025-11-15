@@ -781,17 +781,35 @@ fi
 
 ### Architecture & Code Organization
 
-#### 20. [MEDIUM] Extract cache-utils.sh Shared Utility
-**Source**: Architecture Analysis (Nov 2025)
-**Priority**: P1 (High value, reduces duplication)
-**Effort**: 1 day
+#### 20. [MEDIUM] ✅ COMPLETE - Extract cache-utils.sh Shared Utility (November 2025)
+**Status**: ✅ COMPLETE
+**Completed**: November 2025
 
-**Issue**: Cache directory creation duplicated across 8+ feature scripts
+**What Was Delivered (November 2025)**:
+✅ **Created lib/base/cache-utils.sh**:
+- `create_language_cache()` - Single cache directory creation
+- `create_language_caches()` - Multiple cache directories at once
+- `create_cache_directories()` - Custom paths support
+- Atomic directory creation with correct ownership (USER_UID:USER_GID)
+- Proper error handling and logging with `cu_` namespace prefix
+
+✅ **Refactored 11 feature scripts**:
+- python.sh, node.sh, golang.sh, java.sh, r.sh, mojo.sh
+- docker.sh, dev-tools.sh, terraform.sh, cloudflare.sh, op-cli.sh
+- Eliminated ~120 lines of duplicated code
+- Replaced with 1-2 line function calls
+
+✅ **Validation**:
+- All shellcheck validations passing
+- Unit tests: 676/677 passing (99% pass rate)
+- Pre-commit hook validated all changes
+
+**Original Issue**: Cache directory creation duplicated across 8+ feature scripts
 - 50+ lines of duplicated code
 - Inconsistent error handling approaches
 - Different permission patterns
 
-**Current duplication** in:
+**Original duplication** in:
 - python.sh:85-102
 - golang.sh:168-181
 - rust.sh:63-76
@@ -826,17 +844,35 @@ create_multiple_caches() {
 
 ---
 
-#### 21. [MEDIUM] Extract path-utils.sh Shared Utility
-**Source**: Architecture Analysis (Nov 2025)
-**Priority**: P1 (High value, reduces duplication)
-**Effort**: 1 day
+#### 21. [MEDIUM] ✅ COMPLETE - Extract path-utils.sh Shared Utility (November 2025)
+**Status**: ✅ COMPLETE
+**Completed**: November 2025
 
-**Issue**: PATH manipulation duplicated across 5+ feature scripts
+**What Was Delivered (November 2025)**:
+✅ **Created lib/base/path-utils.sh**:
+- `add_to_system_path()` - Safely adds paths to /etc/environment
+- Handles existing PATH reading and merging
+- Prevents duplicate path entries
+- Atomic file updates with proper error handling
+- Default system PATH fallback if /etc/environment doesn't exist
+
+✅ **Refactored 3 feature scripts**:
+- python.sh: Replaced 24 lines with 2 lines (adds /opt/pipx/bin)
+- rust.sh: Replaced 24 lines with 2 lines (adds /cache/cargo/bin)
+- ruby.sh: Replaced 24 lines with 2 lines (adds /cache/ruby/gems/bin)
+- Eliminated ~72 lines of duplicated code
+
+✅ **Validation**:
+- All shellcheck validations passing
+- Unit tests: 676/677 passing (99% pass rate)
+- Pre-commit hook validated all changes
+
+**Original Issue**: PATH manipulation duplicated across 5+ feature scripts
 - ~40 lines of duplicated code
 - Potential for bugs in path handling
 - Inconsistent error handling
 
-**Current duplication** in:
+**Original duplication** in:
 - python.sh:315-333
 - rust.sh:246-264
 - golang.sh (similar)
