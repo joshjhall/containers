@@ -31,6 +31,7 @@ VERSIONS_JSON=""
 while [[ $# -gt 0 ]]; do
     case $1 in
         --versions-json)
+            # shellcheck disable=SC2034  # Reserved for future use
             VERSIONS_JSON="$2"
             shift 2
             ;;
@@ -98,7 +99,6 @@ cp "$CHECKSUMS_FILE" "$BACKUP_FILE"
 echo -e "${BLUE}Created backup: $BACKUP_FILE${NC}"
 
 # Track changes
-ADDED_COUNT=0
 UPDATED_COUNT=0
 FAILED_COUNT=0
 
@@ -131,7 +131,8 @@ update_checksum() {
             ;;
         golang)
             local filename="go${version}.linux-amd64.tar.gz"
-            local json_data=$(curl -fsSL "https://go.dev/dl/?mode=json" 2>/dev/null)
+            local json_data
+            json_data=$(curl -fsSL "https://go.dev/dl/?mode=json" 2>/dev/null)
             checksum=$(echo "$json_data" | jq -r ".[] | select(.version == \"go${version}\") | .files[] | select(.filename == \"${filename}\") | .sha256" 2>/dev/null || echo "")
             url="https://go.dev/dl/${filename}"
             ;;
@@ -141,13 +142,15 @@ update_checksum() {
                 checksum=$(fetch_ruby_checksum "$version" 2>/dev/null || echo "")
             else
                 # Fallback: parse downloads page
-                local major_minor=$(echo "$version" | cut -d. -f1-2)
+                local major_minor
+                major_minor=$(echo "$version" | cut -d. -f1-2)
                 checksum=$(curl -fsSL "https://www.ruby-lang.org/en/downloads/" 2>/dev/null | \
                     grep -A2 ">Ruby ${version}" | \
                     grep -oP 'sha256: \K[a-f0-9]{64}' | \
                     head -1 || echo "")
             fi
-            local major_minor=$(echo "$version" | cut -d. -f1-2)
+            local major_minor
+            major_minor=$(echo "$version" | cut -d. -f1-2)
             url="https://cache.ruby-lang.org/pub/ruby/${major_minor}/ruby-${version}.tar.gz"
             ;;
         *)
@@ -178,7 +181,8 @@ update_checksum() {
     fi
     
     # Update checksums.json
-    local tmp_file=$(mktemp)
+    local tmp_file
+    tmp_file=$(mktemp)
     jq ".languages.${language}.versions.\"${version}\".sha256 = \"${checksum}\" | \
         .languages.${language}.versions.\"${version}\".url = \"${url}\" | \
         .languages.${language}.versions.\"${version}\".added = \"$(date -u +%Y-%m-%d)\" | \
