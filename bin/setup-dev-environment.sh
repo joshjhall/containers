@@ -69,9 +69,57 @@ else
     echo ".env" >> .gitignore
 fi
 
-# 3. Check recommended tools
+# 3. Install quality check tools
 echo ""
-echo -e "${BLUE}[3/4] Checking recommended development tools...${NC}"
+echo -e "${BLUE}[3/5] Installing quality check tools...${NC}"
+
+# Install yamllint (Python)
+if command -v pip3 &> /dev/null; then
+    if ! command -v yamllint &> /dev/null; then
+        echo -e "${BLUE}Installing yamllint...${NC}"
+        if pip3 install --user yamllint > /dev/null 2>&1; then
+            echo -e "${GREEN}✓${NC} yamllint installed"
+        else
+            echo -e "${YELLOW}⚠${NC}  Failed to install yamllint"
+        fi
+    else
+        echo -e "${GREEN}✓${NC} yamllint already installed"
+    fi
+else
+    echo -e "${YELLOW}⚠${NC}  pip3 not found - skipping yamllint installation"
+fi
+
+# Install prettier and markdownlint-cli (Node)
+if command -v npm &> /dev/null; then
+    # Check if global npm packages are installed
+    if ! npm list -g prettier > /dev/null 2>&1; then
+        echo -e "${BLUE}Installing prettier...${NC}"
+        if npm install -g prettier > /dev/null 2>&1; then
+            echo -e "${GREEN}✓${NC} prettier installed"
+        else
+            echo -e "${YELLOW}⚠${NC}  Failed to install prettier"
+        fi
+    else
+        echo -e "${GREEN}✓${NC} prettier already installed"
+    fi
+
+    if ! npm list -g markdownlint-cli > /dev/null 2>&1; then
+        echo -e "${BLUE}Installing markdownlint-cli...${NC}"
+        if npm install -g markdownlint-cli > /dev/null 2>&1; then
+            echo -e "${GREEN}✓${NC} markdownlint-cli installed"
+        else
+            echo -e "${YELLOW}⚠${NC}  Failed to install markdownlint-cli"
+        fi
+    else
+        echo -e "${GREEN}✓${NC} markdownlint-cli already installed"
+    fi
+else
+    echo -e "${YELLOW}⚠${NC}  npm not found - skipping prettier and markdownlint-cli installation"
+fi
+
+# 4. Check recommended tools
+echo ""
+echo -e "${BLUE}[4/5] Checking recommended development tools...${NC}"
 
 check_tool() {
     local tool=$1
@@ -91,10 +139,13 @@ check_tool "docker" "https://docs.docker.com/get-docker/"
 check_tool "gh" "https://cli.github.com/"
 check_tool "jq" "apt-get install jq (or brew install jq)"
 check_tool "git-cliff" "cargo install git-cliff (optional, for changelogs)"
+check_tool "yamllint" "pip3 install yamllint"
+check_tool "prettier" "npm install -g prettier"
+check_tool "markdownlint" "npm install -g markdownlint-cli"
 
-# 4. Check git configuration
+# 5. Check git configuration
 echo ""
-echo -e "${BLUE}[4/4] Checking git configuration...${NC}"
+echo -e "${BLUE}[5/5] Checking git configuration...${NC}"
 if git config user.name > /dev/null && git config user.email > /dev/null; then
     echo -e "${GREEN}✓${NC} Git user.name and user.email are configured"
 else
@@ -115,7 +166,9 @@ echo ""
 echo "Git hooks are now active:"
 echo ""
 echo "Pre-commit hook (runs on: git commit):"
-echo "  - Run shellcheck on staged files"
+echo "  - Run shellcheck on staged shell scripts"
+echo "  - Run prettier format check (non-blocking)"
+echo "  - Run markdownlint validation (non-blocking)"
 echo "  - Prevent .env file commits"
 echo "  - Detect common credential patterns"
 echo "  - Skip with: git commit --no-verify"
@@ -123,4 +176,6 @@ echo ""
 echo "Pre-push hook (runs on: git push):"
 echo "  - Run shellcheck on all shell scripts"
 echo "  - Run unit tests (fast, no Docker required)"
+echo "  - Run yamllint on all YAML files"
+echo "  - Run Docker Compose validation"
 echo "  - Skip with: git push --no-verify"

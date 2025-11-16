@@ -11,6 +11,9 @@ services:
         INCLUDE_OP: 'true'
         INCLUDE_DEV_TOOLS: 'true'
         INCLUDE_DOCKER: 'true'
+        # Python and Node needed for quality check tools (yamllint, prettier, markdownlint)
+        INCLUDE_PYTHON: 'true'
+        INCLUDE_NODE: 'true'
       cache_from:
         - type=local,src=/tmp/.buildx-cache
       cache_to:
