@@ -90,6 +90,7 @@ log_command "Installing Python development packages" \
     mypy \
     pylint \
     bandit \
+    pip-audit \
     pytest \
     pytest-cov \
     pytest-xdist \
@@ -259,6 +260,11 @@ fi
 alias pc='pre-commit'
 alias pcall='pre-commit run --all-files'
 alias pcinstall='pre-commit install'
+
+# Unified workflow aliases
+alias py-format-all='black . && isort .'
+alias py-lint-all='ruff check . && flake8 && mypy . && pylint **/*.py 2>/dev/null || true'
+alias py-security-check='bandit -r . && pip-audit'
 PYTHON_DEV_ALIASES_EOF
 
 # ============================================================================
@@ -285,6 +291,9 @@ log_command "Checking ipython version" \
 log_command "Checking ruff version" \
     /usr/local/bin/ruff --version || log_warning "ruff installation failed"
 
+log_command "Checking pip-audit version" \
+    /usr/local/bin/pip-audit --version || log_warning "pip-audit installation failed"
+
 # ============================================================================
 # Final ownership fix
 # ============================================================================
@@ -298,11 +307,11 @@ export PIP_CACHE_DIR="/cache/pip"
 
 log_feature_summary \
     --feature "Python Development Tools" \
-    --tools "ipython,pytest,black,ruff,mypy,pylint,bandit,safety" \
+    --tools "ipython,pytest,black,ruff,mypy,pylint,bandit,pip-audit" \
     --paths "${PIP_CACHE_DIR}" \
     --env "PIP_CACHE_DIR" \
-    --commands "ipython,pytest,black,ruff,mypy,pylint,bandit,safety,py-lint-all,py-format-all,py-security-check" \
-    --next-steps "Run 'test-python-dev' to verify installation. Use 'black .' to format code, 'pytest' to run tests, 'ruff check .' to lint, 'mypy .' for type checking."
+    --commands "ipython,pytest,black,ruff,mypy,pylint,bandit,pip-audit,py-lint-all,py-format-all,py-security-check" \
+    --next-steps "Run 'test-python-dev' to verify installation. Use 'black .' to format code, 'pytest' to run tests, 'ruff check .' to lint, 'mypy .' for type checking, 'py-security-check' for security scanning."
 
 # End logging
 log_feature_end

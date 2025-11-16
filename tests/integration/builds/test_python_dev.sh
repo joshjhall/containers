@@ -54,6 +54,7 @@ test_python_dev_build() {
     assert_executable_in_path "$image" "ruff"
     assert_executable_in_path "$image" "mypy"
     assert_executable_in_path "$image" "pytest"
+    assert_executable_in_path "$image" "pip-audit"
 
     # Verify dev tools
     assert_executable_in_path "$image" "git"
@@ -118,6 +119,9 @@ test_python_tools_work() {
 
     # IPython can show version
     assert_command_in_container "$image" "ipython --version" ""
+
+    # pip-audit can run (with no packages or vulnerabilities, exits 0)
+    assert_command_in_container "$image" "pip-audit --version" "pip-audit"
 }
 
 # Test: Package installation works
