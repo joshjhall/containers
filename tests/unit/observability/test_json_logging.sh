@@ -179,10 +179,8 @@ test_json_logging_disabled() {
     json_log_event "INFO" "test" "message" "{}"
     assert_success "Should not error when disabled"
 
-    # No files should be created
-    local json_files
-    json_files=$(find "$BUILD_LOG_DIR/json" -name "*.jsonl" 2>/dev/null | wc -l)
-    # Files might exist from previous tests, but no new ones should be created
+    # Note: No files should be created, but files might exist from previous tests
+    # so we don't assert on file count
 
     pass_test
 }
