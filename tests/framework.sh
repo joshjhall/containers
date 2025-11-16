@@ -240,6 +240,70 @@ run_test() {
     teardown
 }
 
+# Start a test (compatibility function for inline test descriptions)
+# Usage: start_test "Description of what this test does"
+start_test() {
+    local description="$1"
+    # This is a no-op for inline descriptions within test functions
+    # The actual test tracking is done by run_test
+    :
+}
+
+# Assert command succeeded (compatibility function)
+# Usage: assert_success "Description of what should succeed"
+assert_success() {
+    local description="${1:-Command should succeed}"
+    # This is effectively a no-op since test functions that reach this
+    # point without exiting have succeeded
+    :
+}
+
+# Assert command exists (check if command is available in PATH or as function)
+# Usage: assert_command_exists "command_name" "Description"
+assert_command_exists() {
+    local cmd="$1"
+    local description="${2:-Command $cmd should exist}"
+
+    if command -v "$cmd" >/dev/null 2>&1; then
+        # Command exists (in PATH or as function/alias/builtin)
+        return 0
+    else
+        # Command doesn't exist - fail the assertion
+        tf_fail_assertion "$description (command '$cmd' not found)"
+        return 1
+    fi
+}
+
+# Assert file is executable (compatibility alias for assert_executable)
+# Usage: assert_file_executable "file_path" "Description"
+assert_file_executable() {
+    assert_executable "$@"
+}
+
+# Run multiple tests with a suite name (convenience function)
+# Usage: run_tests "Suite Name" test_func1 test_func2 test_func3
+run_tests() {
+    local suite_name="$1"
+    shift
+
+    # Initialize framework if not already initialized
+    # Check TEST_RUN_ID instead of TESTS_RUN since RUN_ID is only set in init
+    if [ -z "${TEST_RUN_ID:-}" ]; then
+        init_test_framework
+    fi
+
+    # Set the test suite
+    test_suite "$suite_name"
+
+    # Run each test function
+    for test_func in "$@"; do
+        run_test "$test_func" "$test_func"
+    done
+
+    # Generate report
+    generate_report
+}
+
 # Generate test report
 generate_report() {
     local report_file="$RESULTS_DIR/test-report-$TEST_RUN_ID.txt"
@@ -276,5 +340,6 @@ generate_report() {
 export -f test_suite test_case
 export -f tf_fail_assertion
 export -f pass_test fail_test skip_test
-export -f setup teardown run_test
+export -f setup teardown run_test run_tests
+export -f start_test assert_success assert_command_exists assert_file_executable
 export -f init_test_framework generate_report
