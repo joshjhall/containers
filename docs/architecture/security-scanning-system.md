@@ -1,5 +1,17 @@
 # Security Scanning and Project Initialization System
 
+## Status
+
+**Design Phase** - Implementation paused pending evaluation of Stibbons
+(Rust-based CLI tool)
+
+**Related Issues:**
+
+- #18: Add cargo-audit and cargo-deny to rust-dev.sh
+- #19: Add pip-audit to python-dev.sh
+- #20: Add cargo-geiger to rust-dev.sh
+- #21: Add govulncheck to golang-dev.sh
+
 ## Overview
 
 This document outlines the design for a comprehensive security scanning and
@@ -17,7 +29,95 @@ that works seamlessly across all development environments.
 5. **Non-invasive**: Opt-in system that doesn't modify projects without
    permission
 
-## Short-Term Implementation (Bash + Templates)
+## Language-Specific Security Tools
+
+### Currently Installed
+
+| Language | Tool           | Purpose                  | Status       |
+| -------- | -------------- | ------------------------ | ------------ |
+| Rust     | cargo-outdated | Outdated dependencies    | ✅ Installed |
+| Python   | bandit         | Code security linting    | ✅ Installed |
+| Ruby     | brakeman       | Rails security scanner   | ✅ Installed |
+| Ruby     | bundler-audit  | Vulnerability scanning   | ✅ Installed |
+| Go       | gosec          | Security static analysis | ✅ Installed |
+
+### Planned Additions
+
+| Language | Tool         | Purpose                | Issue |
+| -------- | ------------ | ---------------------- | ----- |
+| Rust     | cargo-audit  | Vulnerability scanning | #18   |
+| Rust     | cargo-deny   | Supply chain security  | #18   |
+| Python   | pip-audit    | Vulnerability scanning | #19   |
+| Rust     | cargo-geiger | Unsafe code detection  | #20   |
+| Go       | govulncheck  | Vulnerability scanning | #21   |
+
+### Future Considerations
+
+#### Rust
+
+- **cargo-public-api**: Track public API changes
+- **cargo-semver-checks**: Verify semver compliance
+- **cargo-udeps**: Find unused dependencies
+- **cargo-tree**: Visualize dependency tree
+- **cargo-doc-coverage**: Document coverage reporting
+- **cargo-rdme**: README generation from doc comments
+
+#### Node.js
+
+- **npm audit**: Built-in vulnerability scanning
+- **better-npm-audit**: Enhanced npm audit
+- **npm-audit-resolver**: Interactive audit resolver
+- **snyk**: Comprehensive security platform
+- **npm-check-updates**: Update package.json
+- **depcheck**: Find unused dependencies
+- **npm-check**: Check for outdated, incorrect deps
+
+#### Python
+
+- **safety**: Security vulnerability checker (alternative to pip-audit)
+- **pip-review**: Check for updates
+- **pipdeptree**: Visualize dependency tree
+- **pip-autoremove**: Remove unused dependencies
+- **vulture**: Find dead code
+- **prospector**: Code analysis
+- **radon**: Code metrics
+
+#### Go
+
+- **nancy**: Alternative security scanner
+- **go-licenses**: License checking
+
+#### Ruby
+
+- **bundle-leak**: Memory leak detection
+
+#### Java
+
+- **dependency-check**: OWASP vulnerability scanner
+- **snyk**: Cross-language security
+- **find-sec-bugs**: Security bug patterns
+
+## Short-Term Implementation (Bash-based)
+
+### Unified Command System
+
+Single entry point: `/usr/local/bin/dev-init`
+
+```bash
+# Commands
+dev-init --init        # Initialize project with best practices
+dev-init --scan        # Run security scans for all detected languages
+dev-init --update      # Check for outdated dependencies
+dev-init --ci          # Generate CI/CD configurations
+dev-init --hooks       # Install git hooks
+dev-init --docs        # Generate documentation
+dev-init --all         # Apply all enhancements
+
+# Options
+--force               # Overwrite existing files
+--language <lang>     # Target specific language (auto-detect by default)
+--dry-run            # Show what would be done without doing it
+```
 
 ### Directory Structure
 
@@ -52,12 +152,8 @@ lib/
 │   │       ├── api-check.sh
 │   │       └── release.sh
 │   ├── node/
-│   │   ├── ci/
-│   │   ├── hooks/
-│   │   ├── config/
-│   │   └── scripts/
 │   ├── python/
-│   │   └── ...
+│   ├── go/
 │   └── common/
 │       ├── gitignore-patterns/
 │       ├── editorconfig/
@@ -65,93 +161,6 @@ lib/
 └── base/
     ├── feature-header.sh
     └── template-manager.sh  # NEW: Shared template functions
-```
-
-### Unified Command System
-
-Single entry point: `/usr/local/bin/dev-init`
-
-```bash
-# Commands
-dev-init --init        # Initialize project with best practices
-dev-init --scan        # Run security scans for all detected languages
-dev-init --update      # Check for outdated dependencies
-dev-init --ci          # Generate CI/CD configurations
-dev-init --hooks       # Install git hooks
-dev-init --docs        # Generate documentation
-dev-init --all         # Apply all enhancements
-
-# Options
---force               # Overwrite existing files
---language <lang>     # Target specific language (auto-detect by default)
---dry-run            # Show what would be done without doing it
-```
-
-### Language-Specific Security Tools
-
-#### Rust (`rust-dev.sh`)
-
-```bash
-# Security & Auditing
-cargo-audit          # Security vulnerabilities
-cargo-deny           # Supply chain security
-cargo-geiger         # Unsafe code detection
-
-# API & Privacy Analysis
-cargo-public-api     # Track public API changes
-cargo-semver-checks  # Verify semver compliance
-
-# Dependency Management
-cargo-outdated       # Check for outdated dependencies
-cargo-udeps          # Find unused dependencies
-cargo-tree           # Visualize dependency tree
-
-# Documentation
-cargo-doc-coverage   # Document coverage reporting
-cargo-rdme           # README generation from doc comments
-
-# Code Quality
-cargo-expand         # Macro expansion
-cargo-bloat          # Binary size analysis
-```
-
-#### Node.js (`node-dev.sh`)
-
-```bash
-# Security
-npm audit            # Built-in vulnerability scanning
-better-npm-audit     # Enhanced npm audit
-npm-audit-resolver   # Interactive audit resolver
-snyk                 # Comprehensive security platform
-
-# Dependency Management
-npm-check-updates    # Update package.json
-depcheck            # Find unused dependencies
-npm-check           # Check for outdated, incorrect deps
-
-# Code Quality
-lighthouse          # Performance auditing
-bundlesize          # Bundle size checking
-source-map-explorer # Analyze bundle composition
-```
-
-#### Python (`python-dev.sh`)
-
-```bash
-# Security
-pip-audit           # Vulnerability scanning
-safety              # Security vulnerability checker
-bandit              # Security linter for Python code
-
-# Dependency Management
-pip-review          # Check for updates
-pipdeptree          # Visualize dependency tree
-pip-autoremove      # Remove unused dependencies
-
-# Code Quality
-vulture             # Find dead code
-prospector          # Code analysis
-radon               # Code metrics
 ```
 
 ### Template Manager Functions
@@ -204,17 +213,6 @@ detect_project_type() {
     echo "${types[@]}"
 }
 
-# Merge multiple CI configs intelligently
-merge_ci_configs() {
-    local output_file="$1"
-    shift
-    local configs=("$@")
-
-    # Use yq or custom merger to combine YAML files
-    # This ensures rust + node = combined CI pipeline
-    # Implementation depends on available tools
-}
-
 # Safe file creation with backup
 safe_create_file() {
     local file="$1"
@@ -236,7 +234,7 @@ safe_create_file() {
 }
 ```
 
-### Example Security Scan Implementation
+### Example Security Scanner
 
 `/usr/local/bin/dev-scan` (unified security scanner):
 
@@ -268,6 +266,9 @@ for type in "${PROJECT_TYPES[@]}"; do
             if [ -f deny.toml ]; then
                 cargo deny check || true
             fi
+            if command -v cargo-geiger &>/dev/null; then
+                cargo geiger || true
+            fi
             ;;
 
         node)
@@ -280,13 +281,27 @@ for type in "${PROJECT_TYPES[@]}"; do
 
         python)
             echo "→ Python Security Scan"
-            pip-audit || true
+            if command -v pip-audit &>/dev/null; then
+                pip-audit || true
+            fi
             if command -v safety &>/dev/null; then
                 safety check || true
             fi
-            if command -v bandit &>/dev/null; then
-                bandit -r . || true
+            bandit -r . || true
+            ;;
+
+        go)
+            echo "→ Go Security Scan"
+            gosec ./... || true
+            if command -v govulncheck &>/dev/null; then
+                govulncheck ./... || true
             fi
+            ;;
+
+        ruby)
+            echo "→ Ruby Security Scan"
+            bundle-audit check || true
+            brakeman -q || true
             ;;
     esac
     echo ""
@@ -308,7 +323,7 @@ tool, providing:
 - Advanced multi-environment orchestration
 - Plugin architecture for extensibility
 
-### Architecture
+### Architecture Concept
 
 ```rust
 // Core trait for all development environments
@@ -330,16 +345,6 @@ pub trait DevEnvironment {
 
     /// Install development hooks
     fn install_hooks(&self, hook_type: HookType) -> Result<()>;
-}
-
-// Language-specific implementations
-pub struct RustEnvironment {
-    cargo_path: PathBuf,
-    tools: Vec<RustTool>,
-}
-
-impl DevEnvironment for RustEnvironment {
-    // Implementation details...
 }
 
 // Multi-environment orchestration
@@ -383,29 +388,6 @@ impl ProjectEnvironment {
    - Performance benchmarking
    - Release automation
 
-### Migration Strategy
-
-#### Phase 1: Parallel Development (Months 1-3)
-
-- Implement bash-based system as designed above
-- Begin Stibbons development in parallel
-- Define plugin API for Stibbons
-- Create compatibility layer
-
-#### Phase 2: Hybrid Operation (Months 3-6)
-
-- Stibbons handles complex operations
-- Bash scripts detect and call Stibbons when available
-- Gradual feature migration
-- A/B testing of implementations
-
-#### Phase 3: Stibbons Primary (Months 6+)
-
-- Stibbons becomes primary interface
-- Bash scripts become thin wrappers
-- Advanced features enabled
-- Plugin ecosystem development
-
 ### Stibbons CLI Interface
 
 ```bash
@@ -436,14 +418,37 @@ stibbons ci validate             # Validate CI config
 stibbons ci run --local          # Run CI pipeline locally
 ```
 
+### Migration Strategy
+
+#### Phase 1: Parallel Development (Months 1-3)
+
+- Implement bash-based system as designed above
+- Begin Stibbons development in parallel
+- Define plugin API for Stibbons
+- Create compatibility layer
+
+#### Phase 2: Hybrid Operation (Months 3-6)
+
+- Stibbons handles complex operations
+- Bash scripts detect and call Stibbons when available
+- Gradual feature migration
+- A/B testing of implementations
+
+#### Phase 3: Stibbons Primary (Months 6+)
+
+- Stibbons becomes primary interface
+- Bash scripts become thin wrappers
+- Advanced features enabled
+- Plugin ecosystem development
+
 ## Implementation Priorities
 
-### Immediate (If implementing now)
+### Immediate (Current sprint)
 
-1. Create template directory structure
-2. Implement `template-manager.sh`
-3. Create `dev-init` unified command
-4. Add security tools to `rust-dev.sh`
+1. Add cargo-audit and cargo-deny (#18)
+2. Add pip-audit (#19)
+3. Add cargo-geiger (#20)
+4. Add govulncheck (#21)
 
 ### Short-term (Next 3-4 weeks)
 
@@ -454,10 +459,13 @@ stibbons ci run --local          # Run CI pipeline locally
 
 ### Medium-term (2-3 months)
 
-1. Full security scanning for all languages
-2. CI/CD template generation
-3. Git hooks automation
-4. Documentation generation
+1. Create template directory structure
+2. Implement template-manager.sh
+3. Create dev-init unified command
+4. Full security scanning for all languages
+5. CI/CD template generation
+6. Git hooks automation
+7. Documentation generation
 
 ### Long-term (6+ months)
 
@@ -524,26 +532,8 @@ contributions
 - Community input opportunity
 - Clear roadmap
 
-## Next Steps
+## Related Documentation
 
-1. **Review and refine this design document**
-2. **Wait for Stibbons initial release (3-4 weeks)**
-3. **Evaluate Stibbons capabilities**
-4. **Decide on implementation approach**
-5. **Begin development based on decision**
-
-## Related Documents
-
-- [CLAUDE.md](../CLAUDE.md) - Overall project context
-- [README.md](../README.md) - Project overview
+- [Architecture Review](review.md)
+- [CLAUDE.md](../../CLAUDE.md)
 - Individual feature documentation in `lib/features/`
-
-## Contributors
-
-- Design and documentation: Claude + User collaboration
-- Implementation: TBD based on Stibbons timeline
-
----
-
-_This document represents the current design thinking for security scanning and
-project initialization. It will be updated as the implementation progresses._

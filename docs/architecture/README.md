@@ -19,6 +19,11 @@ the container build system.
 - [**Version Resolution**](version-resolution.md) - Partial version resolution
   system (e.g., `3.3` → `3.3.10`)
 
+### Future Design
+
+- [**Security Scanning System**](security-scanning-system.md) - Comprehensive
+  security scanning and project initialization (design phase)
+
 ## Purpose
 
 These documents explain **why** the system is designed the way it is, providing
