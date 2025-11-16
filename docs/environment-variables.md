@@ -255,6 +255,36 @@ These variables can be set when running containers (via `docker run -e`):
 - If permissions are restricted (e.g., rootless containers, CI), falls back to `/tmp/container-build`
 - Fails with clear error message if neither location is writable
 
+### Configuration Validation
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `VALIDATE_CONFIG` | `false` | Enable runtime configuration validation (opt-in) |
+| `VALIDATE_CONFIG_STRICT` | `false` | Treat warnings as errors (fails on warnings) |
+| `VALIDATE_CONFIG_RULES` | - | Path to custom validation rules file |
+| `VALIDATE_CONFIG_QUIET` | `false` | Suppress informational messages (show only errors/warnings) |
+
+**Example Usage**:
+```bash
+# Enable validation with default rules
+docker run -e VALIDATE_CONFIG=true myapp:prod
+
+# Enable strict mode (warnings become errors)
+docker run \
+  -e VALIDATE_CONFIG=true \
+  -e VALIDATE_CONFIG_STRICT=true \
+  myapp:prod
+
+# Use custom validation rules
+docker run \
+  -e VALIDATE_CONFIG=true \
+  -e VALIDATE_CONFIG_RULES=/app/config/validation-rules.sh \
+  -v ./my-validation.sh:/app/config/validation-rules.sh:ro \
+  myapp:prod
+```
+
+See [examples/validation/](../examples/validation/) for complete examples including web apps, API services, and background workers.
+
 ---
 
 ## Usage Examples

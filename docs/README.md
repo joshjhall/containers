@@ -47,6 +47,13 @@ Complete audit of checksum verification across all downloads. Documents the secu
 
 **Key topics**: download-verify.sh, checksum-fetch.sh, supply chain security
 
+### [Configuration Validation Examples](../examples/validation/README.md) ✅ COMPLETE
+**Status**: Production-ready validation framework
+
+Runtime configuration validation system with environment variable validation, format checking, and secret detection. Includes complete examples for web apps, API services, and background workers.
+
+**Key topics**: Runtime validation, environment variable checking, secret detection, custom validation rules
+
 ### [GitHub CI Authentication](github-ci-authentication.md)
 Authentication setup for GitHub Actions, including tokens, PATs, and OIDC for Cosign image signing.
 
@@ -125,6 +132,7 @@ Design documents and roadmaps for features not yet implemented.
 - **[examples/](../examples/)** - Docker Compose configurations and environment examples
   - `env/*.env` - Environment variable templates for each feature
   - `contexts/` - Docker Compose patterns
+  - `validation/` - Runtime configuration validation examples (web apps, API services, workers)
 
 ---
 
