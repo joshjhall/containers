@@ -193,6 +193,13 @@ test_package_name_validation() {
     else
         assert_true false "Regex validation pattern missing"
     fi
+
+    # Check that version specifications are supported (=, <, >, *)
+    if grep -q "=.*<.*>.*\*" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
+        assert_true true "Version specification characters are supported"
+    else
+        assert_true false "Version specification characters missing"
+    fi
 }
 
 # Test: Debian version detection

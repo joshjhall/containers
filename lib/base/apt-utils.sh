@@ -320,10 +320,12 @@ apt_install() {
     local pkg
     for pkg in "$@"; do
         # Package names can contain: letters, numbers, dots, hyphens, plus, tilde, colon
+        # Version specifications: equals, greater/less than, wildcards
         # See: https://www.debian.org/doc/debian-policy/ch-controlfields.html#s-f-source
-        if [[ ! "$pkg" =~ ^[a-zA-Z0-9.+~:-]+$ ]]; then
+        # Examples: package, package=1.0, package>=1.0, package=1.0-*
+        if [[ ! "$pkg" =~ ^[a-zA-Z0-9.+~:=\<\>*-]+$ ]]; then
             echo "Error: Invalid package name '$pkg'"
-            echo "  Package names must contain only: a-z A-Z 0-9 . + ~ : -"
+            echo "  Package names must contain only: a-z A-Z 0-9 . + ~ : = < > * -"
             return 1
         fi
     done
