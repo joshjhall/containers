@@ -9,7 +9,7 @@
 
 # Function to add standard safety headers to bashrc.d scripts
 add_bashrc_safety_header() {
-    cat << 'BASHRC_SAFETY_HEADER'
+    command cat << 'BASHRC_SAFETY_HEADER'
 # Error protection for interactive shells
 set +u  # Don't error on unset variables
 set +e  # Don't exit on errors
@@ -29,7 +29,7 @@ BASHRC_SAFETY_HEADER
 
 # Function to add standard safety footer to bashrc.d scripts
 add_bashrc_safety_footer() {
-    cat << 'BASHRC_SAFETY_FOOTER'
+    command cat << 'BASHRC_SAFETY_FOOTER'
 # Clean up helper functions
 unset -f _check_command 2>/dev/null || true
 
@@ -101,14 +101,14 @@ write_bashrc_content() {
     tmpfile=$(mktemp)
     $cat_cmd > "$tmpfile" || {
         echo "✗ Failed to capture content for $filepath" >&2
-        rm -f "$tmpfile"
+        command rm -f "$tmpfile"
         return 1
     }
 
     # Check if we captured anything
     if [ ! -s "$tmpfile" ]; then
         echo "⚠ Warning: No content provided for $filepath" >&2
-        rm -f "$tmpfile"
+        command rm -f "$tmpfile"
         return 0
     fi
 
@@ -123,16 +123,16 @@ write_bashrc_content() {
     } > "$marked_content"
 
     # Clean up input temp file
-    rm -f "$tmpfile"
+    command rm -f "$tmpfile"
 
     # Write to file
     if [ ! -f "$filepath" ]; then
         # Create new file with atomic write
         # Set permissions before moving
         chmod 755 "$marked_content"
-        mv -f "$marked_content" "$filepath" || {
+        command mv -f "$marked_content" "$filepath" || {
             echo "✗ Failed to create $filepath" >&2
-            rm -f "$marked_content"
+            command rm -f "$marked_content"
             return 1
         }
         echo "✓ Created $description at $filepath"
@@ -140,10 +140,10 @@ write_bashrc_content() {
         # Append to existing file
         $cat_cmd "$marked_content" >> "$filepath" || {
             echo "✗ Failed to append to $filepath" >&2
-            rm -f "$marked_content"
+            command rm -f "$marked_content"
             return 1
         }
-        rm -f "$marked_content"
+        command rm -f "$marked_content"
         echo "✓ Appended $description to $filepath"
     fi
 
@@ -180,7 +180,7 @@ update_bashrc_content() {
     tmpfile=$(mktemp)
     command cat > "$tmpfile" || {
         echo "✗ Failed to capture content for $filepath" >&2
-        rm -f "$tmpfile"
+        command rm -f "$tmpfile"
         return 1
     }
 
@@ -206,13 +206,13 @@ update_bashrc_content() {
 
     # Atomic replace
     chmod 755 "$newfile"
-    mv -f "$newfile" "$filepath" || {
+    command mv -f "$newfile" "$filepath" || {
         echo "✗ Failed to update $filepath" >&2
-        rm -f "$newfile" "$tmpfile"
+        command rm -f "$newfile" "$tmpfile"
         return 1
     }
 
-    rm -f "$tmpfile"
+    command rm -f "$tmpfile"
     echo "✓ Updated $description in $filepath"
     return 0
 }

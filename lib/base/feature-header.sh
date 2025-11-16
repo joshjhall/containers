@@ -211,11 +211,11 @@ cleanup_on_interrupt() {
             # Check if it's a directory
             if [ -d "$cleanup_item" ]; then
                 echo "Removing temporary directory: $cleanup_item" >&2
-                rm -rf "$cleanup_item" 2>/dev/null || true
+                command rm -rf "$cleanup_item" 2>/dev/null || true
             # Check if it's a file
             elif [ -f "$cleanup_item" ]; then
                 echo "Removing temporary file: $cleanup_item" >&2
-                rm -f "$cleanup_item" 2>/dev/null || true
+                command rm -f "$cleanup_item" 2>/dev/null || true
             fi
         done
 

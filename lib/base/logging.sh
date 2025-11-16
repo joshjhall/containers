@@ -212,7 +212,7 @@ log_feature_end() {
     
     # Append summary to main log
     echo "" >> "$CURRENT_LOG_FILE"
-    cat "$CURRENT_SUMMARY_FILE" >> "$CURRENT_LOG_FILE"
+    command cat "$CURRENT_SUMMARY_FILE" >> "$CURRENT_LOG_FILE"
     
     # Create a master summary file
     {
