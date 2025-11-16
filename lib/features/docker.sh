@@ -174,7 +174,7 @@ case "$ARCH" in
 esac
 
 # Version is configurable via build arg
-LAZYDOCKER_VERSION="${LAZYDOCKER_VERSION:-0.24.1}"
+LAZYDOCKER_VERSION="0.24.2"
 LAZYDOCKER_ARCHIVE="lazydocker_${LAZYDOCKER_VERSION}_Linux_${LAZYDOCKER_ARCH}.tar.gz"
 LAZYDOCKER_URL="https://github.com/jesseduffield/lazydocker/releases/download/v${LAZYDOCKER_VERSION}/${LAZYDOCKER_ARCHIVE}"
 
