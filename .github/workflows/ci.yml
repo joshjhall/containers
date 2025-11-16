@@ -61,6 +61,63 @@ jobs:
 
           echo "✅ All shell scripts passed shellcheck"
 
+      - name: Run YAML validation
+        run: |
+          echo "Running YAML validation..."
+          pip install yamllint
+
+          # Find all YAML files
+          yaml_files=$(git ls-files '*.yml' '*.yaml')
+
+          if [ -z "$yaml_files" ]; then
+            echo "No YAML files found"
+            exit 0
+          fi
+
+          FAILED=0
+          while IFS= read -r file; do
+            echo "Validating $file..."
+            if ! yamllint -c .yamllint.yml "$file"; then
+              FAILED=1
+            fi
+          done <<< "$yaml_files"
+
+          if [ $FAILED -eq 1 ]; then
+            echo "❌ YAML validation failed"
+            exit 1
+          fi
+
+          echo "✅ All YAML files passed validation"
+
+      - name: Run Docker Compose validation
+        run: |
+          echo "Running Docker Compose validation..."
+
+          # Find all docker-compose files
+          compose_files=$(git ls-files '*docker-compose*.yml' '*docker-compose*.yaml' '*compose*.yml' '*compose*.yaml' || true)
+
+          if [ -z "$compose_files" ]; then
+            echo "✅ No Docker Compose files found"
+            exit 0
+          fi
+
+          FAILED=0
+          while IFS= read -r file; do
+            echo "Validating $file..."
+            if ! docker-compose -f "$file" config > /dev/null 2>&1; then
+              echo "❌ Failed to validate $file"
+              docker-compose -f "$file" config 2>&1 || true
+              FAILED=1
+            fi
+          done <<< "$compose_files"
+
+          if [ $FAILED -eq 1 ]; then
+            echo "❌ Docker Compose validation failed"
+            exit 1
+          fi
+
+          echo "✅ All Docker Compose files passed validation"
+
       - name: Run secret scanning with Gitleaks
         uses: gitleaks/gitleaks-action@v2
         env:

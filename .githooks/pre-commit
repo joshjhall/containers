@@ -51,6 +51,102 @@ for pattern in "${CREDENTIAL_PATTERNS[@]}"; do
 done
 
 # =========================================
+# PRETTIER FORMATTING CHECK
+# =========================================
+
+PRETTIER_ENABLED="${PRETTIER_ENABLED:-true}"
+
+if [ "$PRETTIER_ENABLED" = "true" ]; then
+    # Check if prettier is installed
+    if command -v prettier &> /dev/null || command -v npx &> /dev/null; then
+        # Get staged files that prettier can format
+        staged_prettier_files=$(git diff --cached --name-only --diff-filter=ACM | \
+            grep -E '\.(md|json|ya?ml|js|ts|jsx|tsx|css|scss|html)$' || true)
+
+        if [ -n "$staged_prettier_files" ]; then
+            echo -e "${GREEN}Running prettier format check...${NC}"
+
+            prettier_issues=false
+            while IFS= read -r file; do
+                if [ -z "$file" ] || [ ! -f "$file" ]; then
+                    continue
+                fi
+
+                # Check if file is formatted
+                if command -v prettier &> /dev/null; then
+                    PRETTIER_CMD="prettier"
+                else
+                    PRETTIER_CMD="npx prettier"
+                fi
+
+                if ! $PRETTIER_CMD --check "$file" > /dev/null 2>&1; then
+                    echo -e "  ${YELLOW}✗${NC} $file needs formatting"
+                    prettier_issues=true
+                fi
+            done <<< "$staged_prettier_files"
+
+            if [ "$prettier_issues" = true ]; then
+                echo ""
+                echo -e "${YELLOW}Some files need formatting. Run:${NC}"
+                echo "  prettier --write <file>"
+                echo ""
+                echo -e "${YELLOW}Or auto-fix all:${NC}"
+                echo "  git diff --cached --name-only | xargs prettier --write"
+                echo "  git add -u"
+                echo ""
+                echo -e "${YELLOW}Note: Allowing commit, but please format files.${NC}"
+            else
+                echo -e "${GREEN}✓ All files are properly formatted${NC}"
+            fi
+        fi
+    fi
+fi
+
+# =========================================
+# MARKDOWNLINT VALIDATION
+# =========================================
+
+MARKDOWNLINT_ENABLED="${MARKDOWNLINT_ENABLED:-true}"
+
+if [ "$MARKDOWNLINT_ENABLED" = "true" ]; then
+    # Check if markdownlint is installed
+    if command -v markdownlint &> /dev/null || command -v npx &> /dev/null; then
+        # Get staged markdown files
+        staged_md_files=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.md$' || true)
+
+        if [ -n "$staged_md_files" ]; then
+            echo -e "${GREEN}Running markdownlint...${NC}"
+
+            md_issues=false
+            while IFS= read -r file; do
+                if [ -z "$file" ] || [ ! -f "$file" ]; then
+                    continue
+                fi
+
+                if command -v markdownlint &> /dev/null; then
+                    MDLINT_CMD="markdownlint"
+                else
+                    MDLINT_CMD="npx markdownlint-cli"
+                fi
+
+                if ! $MDLINT_CMD "$file" > /dev/null 2>&1; then
+                    echo -e "  ${YELLOW}✗${NC} $file has markdown issues"
+                    $MDLINT_CMD "$file" 2>&1 | sed 's/^/    /' || true
+                    md_issues=true
+                fi
+            done <<< "$staged_md_files"
+
+            if [ "$md_issues" = true ]; then
+                echo ""
+                echo -e "${YELLOW}Note: Allowing commit, but please fix markdown issues.${NC}"
+            else
+                echo -e "${GREEN}✓ All markdown files passed validation${NC}"
+            fi
+        fi
+    fi
+fi
+
+# =========================================
 # SHELLCHECK VALIDATION
 # =========================================
 

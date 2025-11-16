@@ -1,0 +1,47 @@
+# Dependencies
+node_modules/
+vendor/
+
+# Build outputs
+dist/
+build/
+*.min.js
+*.min.css
+
+# Git
+.git/
+.github/
+
+# Logs
+*.log
+tests/results/
+
+# Caches
+.cache/
+*.cache
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Generated files
+CHANGELOG.md
+package-lock.json
+yarn.lock
+
+# Binary/data files
+*.pdf
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.svg
+*.ico
+*.woff
+*.woff2
+*.ttf
+*.eot
