@@ -7,6 +7,11 @@
   // Don't use features in VS Code. Rather, use the container features to be consistent across environments.
   // "features": {},
 
+  // Container environment variables
+  // "containerEnv": {
+  //   "SKIP_CASE_CHECK": "true"  // Suppress case-sensitivity warning if you're aware of limitations
+  // },
+
   // Auto-detect and configure Docker socket GID before container starts
   // This allows Docker commands to work without sudo or permission changes
   "initializeCommand": "bash -c './bin/setup-docker-socket.sh'",
