@@ -36,7 +36,8 @@ fi
 if [ "${ENABLE_JSON_LOGGING:-false}" = "true" ]; then
     if [ -z "${BUILD_CORRELATION_ID:-}" ]; then
         # Generate correlation ID: build-<timestamp>-<random>
-        export BUILD_CORRELATION_ID="build-$(date +%s)-$(head /dev/urandom | tr -dc a-z0-9 | head -c 6)"
+        BUILD_CORRELATION_ID="build-$(date +%s)-$(head /dev/urandom | tr -dc a-z0-9 | head -c 6)"
+        export BUILD_CORRELATION_ID
     fi
 fi
 
