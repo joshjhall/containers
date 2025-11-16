@@ -132,7 +132,7 @@ verify_gpg_signature() {
                 log_message "  Signer: ${signer#*Good signature from }"
             fi
 
-            rm -f /tmp/gpg-verify-output.txt
+            command rm -f /tmp/gpg-verify-output.txt
             return 0
         fi
     fi
@@ -142,8 +142,8 @@ verify_gpg_signature() {
     # Show verification output for debugging
     if [ -f /tmp/gpg-verify-output.txt ]; then
         log_error "GPG verification output:"
-        cat /tmp/gpg-verify-output.txt >&2
-        rm -f /tmp/gpg-verify-output.txt
+        command cat /tmp/gpg-verify-output.txt >&2
+        command rm -f /tmp/gpg-verify-output.txt
     fi
 
     return 1
@@ -179,7 +179,7 @@ download_and_verify_gpg() {
     # Download signature file
     log_message "Downloading GPG signature from ${signature_url}..."
 
-    if ! curl -fsSL -o "$signature_file" "$signature_url" 2>/dev/null; then
+    if ! command curl -fsSL -o "$signature_file" "$signature_url" 2>/dev/null; then
         log_warning "Failed to download GPG signature from ${signature_url}"
         return 1
     fi
@@ -189,7 +189,7 @@ download_and_verify_gpg() {
     local result=$?
 
     # Clean up signature file
-    rm -f "$signature_file"
+    command rm -f "$signature_file"
 
     return $result
 }
@@ -277,7 +277,7 @@ download_and_verify_sigstore() {
     # Download bundle file
     log_message "Downloading Sigstore bundle from ${bundle_url}..."
 
-    if ! curl -fsSL -o "$bundle_file" "$bundle_url" 2>/dev/null; then
+    if ! command curl -fsSL -o "$bundle_file" "$bundle_url" 2>/dev/null; then
         log_warning "Failed to download Sigstore bundle from ${bundle_url}"
         return 1
     fi
@@ -287,7 +287,7 @@ download_and_verify_sigstore() {
     local result=$?
 
     # Clean up bundle file
-    rm -f "$bundle_file"
+    command rm -f "$bundle_file"
 
     return $result
 }

@@ -61,7 +61,7 @@ download_and_verify() {
 
     # Set up trap to clean up temp file on exit or interruption
     # This ensures cleanup even if curl/verification is interrupted with Ctrl+C
-    trap 'rm -f "$temp_file"' EXIT INT TERM
+    trap 'command rm -f "$temp_file"' EXIT INT TERM
 
     echo "→ Downloading: $(basename "$output_path")"
     echo "  URL: $url"
@@ -69,7 +69,7 @@ download_and_verify() {
     # Download to temporary file with progress bar
     # Use --progress-bar for better visibility during long downloads
     # -L follows redirects, -f fails silently on HTTP errors
-    if ! curl -L -f --progress-bar -o "$temp_file" "$url"; then
+    if ! command curl -L -f --progress-bar -o "$temp_file" "$url"; then
         echo -e "${RED}✗ Download failed${NC}" >&2
         # Trap will handle cleanup
         return 1
@@ -96,7 +96,7 @@ download_and_verify() {
     fi
 
     # Move verified file to final destination
-    mv "$temp_file" "$output_path"
+    command mv "$temp_file" "$output_path"
 
     # Clear trap since file was successfully moved (no cleanup needed)
     trap - EXIT INT TERM
@@ -131,7 +131,7 @@ download_and_extract() {
 
     # Set up trap to clean up temp tarball on exit or interruption
     # Note: download_and_verify has its own trap for the .tmp file
-    trap 'rm -f "$temp_tarball"' EXIT INT TERM
+    trap 'command rm -f "$temp_tarball"' EXIT INT TERM
 
     # Download and verify tarball
     if ! download_and_verify "$url" "$expected_sha256" "$temp_tarball"; then
@@ -162,7 +162,7 @@ download_and_extract() {
     fi
 
     # Cleanup tarball after successful extraction
-    rm -f "$temp_tarball"
+    command rm -f "$temp_tarball"
 
     # Clear trap since tarball was cleaned up
     trap - EXIT INT TERM
@@ -248,7 +248,7 @@ get_github_release_checksum() {
     local checksums_url="https://github.com/${repo}/releases/download/${version}/checksums.txt"
     local checksums
 
-    if checksums=$(curl -fsSL "$checksums_url" 2>/dev/null); then
+    if checksums=$(command curl -fsSL "$checksums_url" 2>/dev/null); then
         echo "$checksums" | grep "$asset_name" | cut -d' ' -f1
     else
         echo -e "${RED}✗ Could not fetch checksums from GitHub${NC}" >&2

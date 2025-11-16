@@ -48,7 +48,7 @@ APT_TIMEOUT="${APT_TIMEOUT:-300}"  # 5 minutes timeout for apt operations
 get_debian_major_version() {
     if [ -f /etc/debian_version ]; then
         local version
-        version=$(cat /etc/debian_version)
+        version=$(command cat /etc/debian_version)
         # Extract major version number (handles both "12.5" and "trixie/sid")
         if [[ "$version" =~ ^[0-9]+\. ]]; then
             echo "${version%%.*}"
@@ -209,7 +209,7 @@ apt_update() {
             
             # Try to clean apt cache before retry
             apt-get clean || true
-            rm -rf /var/lib/apt/lists/* || true
+            command rm -rf /var/lib/apt/lists/* || true
         else
             echo "✗ apt-get update failed after $APT_MAX_RETRIES attempts"
             
@@ -235,7 +235,7 @@ apt_update() {
             
             echo ""
             echo "Current apt sources:"
-            cat /etc/apt/sources.list 2>/dev/null || echo "  No sources.list found"
+            command cat /etc/apt/sources.list 2>/dev/null || echo "  No sources.list found"
             ls /etc/apt/sources.list.d/*.list 2>/dev/null || echo "  No additional sources"
             
             return $exit_code
@@ -319,7 +319,7 @@ apt_install() {
 apt_cleanup() {
     echo "Cleaning up apt cache..."
     apt-get clean
-    rm -rf /var/lib/apt/lists/*
+    command rm -rf /var/lib/apt/lists/*
     echo "✓ apt cache cleaned"
 }
 
@@ -336,11 +336,11 @@ configure_apt_mirrors() {
     
     # Create a backup of the original sources.list
     if [ -f /etc/apt/sources.list ] && [ ! -f /etc/apt/sources.list.original ]; then
-        cp /etc/apt/sources.list /etc/apt/sources.list.original
+        command cp /etc/apt/sources.list /etc/apt/sources.list.original
     fi
     
     # Add retry and timeout configurations to apt.conf.d
-    cat > /etc/apt/apt.conf.d/99-retries << 'EOF'
+    command cat > /etc/apt/apt.conf.d/99-retries << 'EOF'
 # Network timeout and retry configuration
 Acquire::http::Timeout "30";
 Acquire::https::Timeout "30";

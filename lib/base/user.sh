@@ -156,7 +156,7 @@ if ! grep -q "bashrc.d" /home/"${USERNAME}"/.bashrc; then
 fi
 
 # Add useful helper functions to user's bashrc
-cat >> /home/"${USERNAME}"/.bashrc << 'EOF'
+command cat >> /home/"${USERNAME}"/.bashrc << 'EOF'
 
 # Node modules in PATH helper
 add_node_modules_to_path() {

@@ -22,7 +22,7 @@ fi
 
 # _curl_safe - Wrapper for curl with standard timeouts
 _curl_safe() {
-    curl --connect-timeout 10 --max-time 30 -fsSL "$@"
+    command curl --connect-timeout 10 --max-time 30 -fsSL "$@"
 }
 
 # _is_full_version - Check if version is complete (X.Y.Z)
@@ -93,14 +93,14 @@ resolve_python_version() {
         # Major.minor like "3.12" -> find latest "3.12.X"
         resolved=$(echo "$versions_page" | \
             grep -oP ">${version}\.\d+/" | \
-            sed 's/>//; s/\///' | \
+            command sed 's/>//; s/\///' | \
             sort -V | \
             tail -1)
     elif _is_major_only "$version"; then
         # Major only like "3" -> find latest "3.X.Y"
         resolved=$(echo "$versions_page" | \
             grep -oP ">${version}\.\d+\.\d+/" | \
-            sed 's/>//; s/\///' | \
+            command sed 's/>//; s/\///' | \
             sort -V | \
             tail -1)
     fi
@@ -230,14 +230,14 @@ resolve_rust_version() {
         # Format in JSON: "tag_name": "1.82.0",
         resolved=$(echo "$releases_json" | \
             grep -oP '"tag_name":\s*"'"${version}"'\.\d+"' | \
-            sed 's/"tag_name":\s*"//; s/"$//' | \
+            command sed 's/"tag_name":\s*"//; s/"$//' | \
             sort -V | \
             tail -1)
     elif _is_major_only "$version"; then
         # Major only like "1" -> find latest "1.X.Y"
         resolved=$(echo "$releases_json" | \
             grep -oP '"tag_name":\s*"'"${version}"'\.\d+\.\d+"' | \
-            sed 's/"tag_name":\s*"//; s/"$//' | \
+            command sed 's/"tag_name":\s*"//; s/"$//' | \
             sort -V | \
             tail -1)
     fi
@@ -298,8 +298,8 @@ resolve_java_version() {
     # Extract version_data.semver and find latest
     resolved=$(echo "$versions_json" | \
         grep '"semver"' | \
-        sed 's/.*"semver": "//; s/".*//' | \
-        sed 's/+.*//' | \
+        command sed 's/.*"semver": "//; s/".*//' | \
+        command sed 's/+.*//' | \
         grep "^${version}" | \
         sort -V | \
         tail -1)
@@ -361,14 +361,14 @@ resolve_ruby_version() {
         # Major.minor like "3.4" -> find latest "3.4.X"
         resolved=$(echo "$releases_page" | \
             grep -oP "Ruby ${version}\.\d+" | \
-            sed 's/Ruby //' | \
+            command sed 's/Ruby //' | \
             sort -V | \
             tail -1)
     elif _is_major_only "$version"; then
         # Major only like "3" -> find latest "3.X.Y"
         resolved=$(echo "$releases_page" | \
             grep -oP "Ruby ${version}\.\d+\.\d+" | \
-            sed 's/Ruby //' | \
+            command sed 's/Ruby //' | \
             sort -V | \
             tail -1)
     fi
@@ -430,7 +430,7 @@ resolve_go_version() {
         # Major.minor like "1.23" -> find latest "1.23.X"
         resolved=$(echo "$versions_json" | \
             grep '"version"' | \
-            sed 's/.*"version": "go//; s/".*//' | \
+            command sed 's/.*"version": "go//; s/".*//' | \
             grep "^${version}\." | \
             sort -V | \
             tail -1)
@@ -438,7 +438,7 @@ resolve_go_version() {
         # Major only like "1" -> find latest "1.X.Y"
         resolved=$(echo "$versions_json" | \
             grep '"version"' | \
-            sed 's/.*"version": "go//; s/".*//' | \
+            command sed 's/.*"version": "go//; s/".*//' | \
             grep "^${version}\." | \
             sort -V | \
             tail -1)
