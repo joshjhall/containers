@@ -10,6 +10,7 @@
 #   for both first-time and subsequent container starts.
 #
 # Features:
+#   - Resource limits (file descriptors, processes, core dumps)
 #   - First-time setup script execution (run once per container)
 #   - Every-boot script execution (run on each start)
 #   - Main command execution with proper user context
@@ -25,6 +26,32 @@
 #   The first-run marker persists across restarts but not image rebuilds.
 #
 set -euo pipefail
+
+# ============================================================================
+# Resource Limits
+# ============================================================================
+# Set file descriptor limits to prevent resource exhaustion
+# - Prevents accidental fork bombs and file descriptor leaks
+# - Configurable via environment variables
+# - Fails gracefully if ulimit command is not available or restricted
+
+# File descriptors (open files)
+FILE_DESCRIPTOR_LIMIT="${FILE_DESCRIPTOR_LIMIT:-4096}"
+ulimit -n "$FILE_DESCRIPTOR_LIMIT" 2>/dev/null || {
+    echo "⚠️  Warning: Could not set file descriptor limit to $FILE_DESCRIPTOR_LIMIT"
+    echo "   Current limit: $(ulimit -n 2>/dev/null || echo 'unknown')"
+}
+
+# Max user processes (prevent fork bombs)
+MAX_USER_PROCESSES="${MAX_USER_PROCESSES:-2048}"
+ulimit -u "$MAX_USER_PROCESSES" 2>/dev/null || {
+    echo "⚠️  Warning: Could not set max user processes limit to $MAX_USER_PROCESSES"
+    echo "   Current limit: $(ulimit -u 2>/dev/null || echo 'unknown')"
+}
+
+# Core dump size (disabled by default for security)
+CORE_DUMP_SIZE="${CORE_DUMP_SIZE:-0}"
+ulimit -c "$CORE_DUMP_SIZE" 2>/dev/null || true
 
 # ============================================================================
 # Configuration Validation
