@@ -9,9 +9,11 @@ the container runtime.
 - [Supported Providers](#supported-providers)
 - [Environment Variables](#environment-variables)
 - [Examples](#examples)
+  - [Docker Secrets](#docker-secrets)
   - [HashiCorp Vault](#hashicorp-vault)
   - [AWS Secrets Manager](#aws-secrets-manager)
   - [Azure Key Vault](#azure-key-vault)
+  - [GCP Secret Manager](#gcp-secret-manager)
   - [1Password](#1password)
   - [Kubernetes Secrets](#kubernetes-secrets)
 - [Docker Compose Examples](#docker-compose-examples)
@@ -25,20 +27,23 @@ variables, making them available to your application without code changes.
 
 ### Features
 
-- **Multi-provider support**: HashiCorp Vault, AWS Secrets Manager, Azure Key Vault, 1Password
+- **Multi-provider support**: Docker Secrets, HashiCorp Vault, AWS, Azure, GCP, 1Password
 - **Automatic loading**: Secrets loaded during container startup
 - **Flexible authentication**: Multiple auth methods per provider
 - **Error handling**: Configurable fail-on-error behavior
 - **Priority-based loading**: Control which providers load first
 - **Health checks**: Verify provider connectivity
+- **Auto-detection**: Docker Secrets automatically detected when available
 
 ## Supported Providers
 
 | Provider | Authentication Methods | Use Case |
 |----------|----------------------|----------|
+| **Docker Secrets** | File-based (auto-detected) | Docker Swarm, Docker Compose |
 | **HashiCorp Vault** | Token, AppRole, Kubernetes | Enterprise, multi-cloud |
 | **AWS Secrets Manager** | IAM, Access Keys, IRSA | AWS-native applications |
 | **Azure Key Vault** | Managed Identity, Service Principal | Azure-native applications |
+| **GCP Secret Manager** | Workload Identity, Service Account, ADC | GCP-native applications |
 | **1Password** | Connect Server, Service Account, CLI | Development, SMB |
 
 ## Environment Variables
@@ -49,8 +54,8 @@ variables, making them available to your application without code changes.
 # Enable/disable secret loading (default: true)
 SECRET_LOADER_ENABLED=true
 
-# Provider priority (comma-separated, default: "1password,vault,aws,azure")
-SECRET_LOADER_PRIORITY="vault,aws,azure,1password"
+# Provider priority (comma-separated, default: "docker,1password,vault,aws,azure,gcp")
+SECRET_LOADER_PRIORITY="docker,vault,aws,azure,gcp,1password"
 
 # Fail container startup if secret loading fails (default: false)
 SECRET_LOADER_FAIL_ON_ERROR=false
@@ -61,6 +66,78 @@ SECRET_LOADER_FAIL_ON_ERROR=false
 See individual provider sections below for detailed configuration.
 
 ## Examples
+
+### Docker Secrets
+
+Docker Secrets provides a simple, file-based secret management system for Docker Swarm
+and Docker Compose. Secrets are mounted as files in `/run/secrets/` and automatically
+detected by the container runtime.
+
+#### Configuration
+
+```bash
+# Docker secrets are auto-detected by default (no configuration needed!)
+# Customize behavior with optional environment variables:
+
+# Enable/disable Docker secrets (default: auto-detect)
+DOCKER_SECRETS_ENABLED="auto"
+
+# Secret directory (default: /run/secrets)
+DOCKER_SECRETS_DIR="/run/secrets"
+
+# Prefix for exported environment variables
+DOCKER_SECRET_PREFIX="APP_"
+
+# Load only specific secrets (comma-separated, default: all)
+DOCKER_SECRET_NAMES="db_password,api_key"
+
+# Convert secret names to uppercase (default: true)
+DOCKER_SECRETS_UPPERCASE="true"
+```
+
+#### Example: Docker Compose
+
+```yaml
+version: '3.8'
+
+services:
+  app:
+    image: myapp:latest
+    secrets:
+      - db_password
+      - api_key
+    environment:
+      # Docker secrets are auto-detected - no config needed!
+      # Optionally customize:
+      # DOCKER_SECRET_PREFIX: "APP_"
+
+secrets:
+  db_password:
+    file: ./secrets/db_password.txt
+  api_key:
+    file: ./secrets/api_key.txt
+```
+
+#### Example: Docker Swarm
+
+```bash
+# Create secrets in Swarm
+echo "super-secret-password" | docker secret create db_password -
+echo "my-api-key-12345" | docker secret create api_key -
+
+# Deploy service with secrets
+docker service create \
+  --name myapp \
+  --secret db_password \
+  --secret api_key \
+  myapp:latest
+```
+
+**Key Features:**
+- **Auto-detection**: Automatically loads secrets if `/run/secrets/` exists
+- **Zero configuration**: Works out-of-the-box with Docker Compose/Swarm
+- **Simple**: Just mount secrets, they're loaded as environment variables
+- **Secure**: Secrets never stored in images or environment variables
 
 ### HashiCorp Vault
 
@@ -277,6 +354,81 @@ docker run -it --rm \
   -e AZURE_TENANT_ID="tenant-id" \
   -e AZURE_CLIENT_ID="client-id" \
   -e AZURE_CLIENT_SECRET="client-secret" \
+  myapp:latest
+```
+
+### GCP Secret Manager
+
+Google Cloud Secret Manager provides native GCP integration with automatic rotation
+support and Workload Identity for GKE.
+
+#### Configuration
+
+```bash
+# Enable GCP Secret Manager integration
+GCP_SECRETS_ENABLED=true
+
+# GCP project ID (required, or uses gcloud default)
+GCP_PROJECT_ID="my-project-id"
+
+# Comma-separated list of secret names (optional, all if not set)
+GCP_SECRET_NAMES="db-password,api-key,encryption-key"
+
+# Secret version (default: latest)
+GCP_SECRET_VERSION="latest"
+
+# Prefix for exported environment variables
+GCP_SECRET_PREFIX="APP_"
+
+# Service account key file path (optional, for non-ADC auth)
+GCP_SERVICE_ACCOUNT_KEY="/path/to/key.json"
+```
+
+#### Authentication
+
+GCP Secret Manager uses the standard GCP authentication chain:
+
+1. Service account key file (`GCP_SERVICE_ACCOUNT_KEY`)
+2. Application Default Credentials (ADC)
+3. Workload Identity (GKE)
+4. Compute Engine metadata server
+5. gcloud CLI authentication
+
+#### Example: GKE with Workload Identity
+
+```yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: myapp
+  annotations:
+    iam.gke.io/gcp-service-account: myapp-secrets@PROJECT_ID.iam.gserviceaccount.com
+---
+apiVersion: v1
+kind: Pod
+spec:
+  serviceAccountName: myapp
+  containers:
+  - name: app
+    image: myapp:latest
+    env:
+    - name: GCP_SECRETS_ENABLED
+      value: "true"
+    - name: GCP_PROJECT_ID
+      value: "my-project-id"
+    - name: GCP_SECRET_NAMES
+      value: "db-password,api-key"
+```
+
+#### Example: Local with Service Account
+
+```bash
+docker run -it --rm \
+  -e GCP_SECRETS_ENABLED=true \
+  -e GCP_PROJECT_ID="my-project-id" \
+  -e GCP_SERVICE_ACCOUNT_KEY="/secrets/gcp-key.json" \
+  -e GCP_SECRET_NAMES="db-password,api-key" \
+  -v ./gcp-key.json:/secrets/gcp-key.json:ro \
   myapp:latest
 ```
 

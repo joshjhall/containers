@@ -8,14 +8,16 @@
 # Environment Variables:
 #   SECRET_LOADER_ENABLED      - Enable secret loading (true/false, default: true)
 #   SECRET_LOADER_PRIORITY     - Comma-separated list of providers in priority order
-#                                (default: "1password,vault,aws,azure")
+#                                (default: "docker,1password,vault,aws,azure,gcp")
 #   SECRET_LOADER_FAIL_ON_ERROR - Exit if any provider fails (default: false)
 #
 # Supported Providers:
+#   - docker     : Docker Secrets (Swarm/Compose)
 #   - 1password  : 1Password Connect or CLI
 #   - vault      : HashiCorp Vault
 #   - aws        : AWS Secrets Manager
 #   - azure      : Azure Key Vault
+#   - gcp        : GCP Secret Manager
 #
 # Usage:
 #   source /opt/container-runtime/secrets/load-secrets.sh
@@ -73,6 +75,12 @@ source_provider() {
         azure|azure-keyvault)
             script_mapping="azure-keyvault.sh"
             ;;
+        gcp|gcp-secrets|google)
+            script_mapping="gcp-secret-manager.sh"
+            ;;
+        docker|docker-secrets)
+            script_mapping="docker-secrets.sh"
+            ;;
         *)
             log_warning "Unknown secret provider: $provider"
             return 1
@@ -111,6 +119,12 @@ load_provider_secrets() {
             ;;
         azure|azure-keyvault)
             function_name="load_secrets_from_azure"
+            ;;
+        gcp|gcp-secrets|google)
+            function_name="load_secrets_from_gcp"
+            ;;
+        docker|docker-secrets)
+            function_name="load_secrets_from_docker"
             ;;
         *)
             log_warning "Unknown provider: $provider"
@@ -157,7 +171,7 @@ load_all_secrets() {
     echo ""
 
     # Get provider priority list
-    local priority="${SECRET_LOADER_PRIORITY:-1password,vault,aws,azure}"
+    local priority="${SECRET_LOADER_PRIORITY:-docker,1password,vault,aws,azure,gcp}"
     local fail_on_error="${SECRET_LOADER_FAIL_ON_ERROR:-false}"
 
     IFS=',' read -ra providers <<< "$priority"
@@ -221,7 +235,7 @@ load_all_secrets() {
 check_all_providers_health() {
     log_info "Running health checks on secret providers"
 
-    local providers=("1password" "vault" "aws" "azure")
+    local providers=("docker" "1password" "vault" "aws" "azure" "gcp")
     local healthy=0
     local unhealthy=0
 
@@ -230,6 +244,9 @@ check_all_providers_health() {
 
         local health_function=""
         case "$provider" in
+            docker)
+                health_function="docker_secrets_health_check"
+                ;;
             1password)
                 health_function="op_health_check"
                 ;;
@@ -241,6 +258,9 @@ check_all_providers_health() {
                 ;;
             azure)
                 health_function="azure_keyvault_health_check"
+                ;;
+            gcp)
+                health_function="gcp_secrets_health_check"
                 ;;
         esac
 
