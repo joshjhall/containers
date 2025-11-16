@@ -339,7 +339,7 @@ go-generate-tests() {
     if [ -f "$target" ]; then
         gotests -all -w "$target"
     else
-        find "$target" -name "*.go" -not -name "*_test.go" -not -path "*/vendor/*" | while read -r file; do
+        command find "$target" -name "*.go" -not -name "*_test.go" -not -path "*/vendor/*" | while read -r file; do
             echo "Generating tests for $file"
             gotests -all -w "$file"
         done

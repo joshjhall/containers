@@ -340,7 +340,7 @@ alias gjf-fix='google-java-format --replace'
 # ----------------------------------------------------------------------------
 java-format-all() {
     echo "Formatting all Java files..."
-    find . -name "*.java" -type f | xargs google-java-format --replace
+    command find . -name "*.java" -type f | xargs google-java-format --replace
     echo "Formatting complete"
 }
 

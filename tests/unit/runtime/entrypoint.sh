@@ -179,10 +179,10 @@ test_empty_directory_handling() {
     
     # Test with empty directories
     local first_count
-    first_count=$(find "$FIRST_STARTUP_DIR" -name "*.sh" -type f 2>/dev/null | wc -l)
+    first_count=$(command find "$FIRST_STARTUP_DIR" -name "*.sh" -type f 2>/dev/null | wc -l)
     local startup_count
-    startup_count=$(find "$STARTUP_DIR" -name "*.sh" -type f 2>/dev/null | wc -l)
-    
+    startup_count=$(command find "$STARTUP_DIR" -name "*.sh" -type f 2>/dev/null | wc -l)
+
     assert_equals "0" "$first_count" "Empty first-startup directory handled"
     assert_equals "0" "$startup_count" "Empty startup directory handled"
 }
