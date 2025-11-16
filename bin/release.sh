@@ -339,30 +339,42 @@ if [ -d .git ]; then
         echo -e "${GREEN}✓${NC} Changes committed"
     fi
 
-    # Auto-tag if requested
-    if [ "$AUTO_TAG" = "true" ]; then
-        echo ""
-        echo -e "${BLUE}Creating git tag v$NEW_VERSION...${NC}"
-        git tag -a "v$NEW_VERSION" -m "Release version $NEW_VERSION"
-        echo -e "${GREEN}✓${NC} Tag created"
-    fi
-
-    # Auto-push if requested
+    # Reorder: push first, then tag (prevents tagging commits that fail validation)
     if [ "$AUTO_PUSH" = "true" ]; then
         echo ""
-        echo -e "${BLUE}Pushing to remote...${NC}"
+        echo -e "${BLUE}Pushing changes to remote...${NC}"
 
         # Get current branch
         CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
 
-        # Push branch
-        git push origin "$CURRENT_BRANCH"
+        # Push branch first (this runs pre-push validation hook)
+        if ! git push origin "$CURRENT_BRANCH"; then
+            echo -e "${RED}✗ Failed to push branch${NC}"
+            echo "Pre-push validation failed. Fix the issues and try again."
+            exit 1
+        fi
         echo -e "${GREEN}✓${NC} Pushed branch: $CURRENT_BRANCH"
 
-        # Push tag if it exists
-        if git rev-parse "v$NEW_VERSION" >/dev/null 2>&1; then
-            git push origin "v$NEW_VERSION"
+        # Only create and push tag if branch push succeeded
+        if [ "$AUTO_TAG" = "true" ]; then
+            echo ""
+            echo -e "${BLUE}Creating git tag v$NEW_VERSION...${NC}"
+            git tag -a "v$NEW_VERSION" -m "Release version $NEW_VERSION"
+            echo -e "${GREEN}✓${NC} Tag created"
+
+            if ! git push origin "v$NEW_VERSION"; then
+                echo -e "${RED}✗ Failed to push tag${NC}"
+                exit 1
+            fi
             echo -e "${GREEN}✓${NC} Pushed tag: v$NEW_VERSION"
+        fi
+    else
+        # Not auto-pushing - create tag locally if requested
+        if [ "$AUTO_TAG" = "true" ]; then
+            echo ""
+            echo -e "${BLUE}Creating git tag v$NEW_VERSION...${NC}"
+            git tag -a "v$NEW_VERSION" -m "Release version $NEW_VERSION"
+            echo -e "${GREEN}✓${NC} Tag created"
         fi
     fi
 
