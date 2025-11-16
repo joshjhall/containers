@@ -178,6 +178,87 @@ test_error_handling() {
     fi
 }
 
+# Test: Package name validation (security)
+test_package_name_validation() {
+    # Check for package name validation regex
+    if grep -q "Invalid package name" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
+        assert_true true "Package name validation is present"
+    else
+        assert_true false "Package name validation missing"
+    fi
+
+    # Check for validation regex pattern
+    if grep -q "\[\[.*=\~.*\]\]" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
+        assert_true true "Regex validation pattern present"
+    else
+        assert_true false "Regex validation pattern missing"
+    fi
+}
+
+# Test: Debian version detection
+test_debian_version_detection() {
+    # Check for get_debian_major_version function
+    if grep -q "^get_debian_major_version()" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
+        assert_true true "get_debian_major_version function is defined"
+    else
+        assert_true false "get_debian_major_version function not found"
+    fi
+
+    # Check for /etc/os-release support (method 1)
+    if grep -q "/etc/os-release" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
+        assert_true true "Supports /etc/os-release detection"
+    else
+        assert_true false "Missing /etc/os-release detection"
+    fi
+
+    # Check for /etc/debian_version support (method 2)
+    if grep -q "/etc/debian_version" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
+        assert_true true "Supports /etc/debian_version fallback"
+    else
+        assert_true false "Missing /etc/debian_version fallback"
+    fi
+
+    # Check for lsb_release support (method 3)
+    if grep -q "lsb_release" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
+        assert_true true "Supports lsb_release fallback"
+    else
+        assert_true false "Missing lsb_release fallback"
+    fi
+
+    # Check for codename mapping
+    if grep -q "trixie.*13" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
+        assert_true true "Maps trixie codename to version 13"
+    else
+        assert_true false "Missing trixie codename mapping"
+    fi
+
+    if grep -q "bookworm.*12" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
+        assert_true true "Maps bookworm codename to version 12"
+    else
+        assert_true false "Missing bookworm codename mapping"
+    fi
+}
+
+# Test: is_debian_version function
+test_is_debian_version() {
+    # Check for is_debian_version function
+    if grep -q "^is_debian_version()" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
+        assert_true true "is_debian_version function is defined"
+    else
+        assert_true false "is_debian_version function not found"
+    fi
+}
+
+# Test: apt_install_conditional function
+test_apt_install_conditional() {
+    # Check for apt_install_conditional function
+    if grep -q "^apt_install_conditional()" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
+        assert_true true "apt_install_conditional function is defined"
+    else
+        assert_true false "apt_install_conditional function not found"
+    fi
+}
+
 # Run all tests
 run_test test_script_exists "APT utilities script exists"
 run_test test_functions_exported "Functions are exported"
@@ -189,6 +270,10 @@ run_test test_timeout_configuration "Timeout configuration"
 run_test test_network_diagnostics "Network diagnostic tools"
 run_test test_environment_defaults "Environment variable defaults"
 run_test test_error_handling "Error handling configuration"
+run_test test_package_name_validation "Package name validation (security)"
+run_test test_debian_version_detection "Debian version detection with fallbacks"
+run_test test_is_debian_version "is_debian_version function"
+run_test test_apt_install_conditional "apt_install_conditional function"
 
 # Generate test report
 generate_report

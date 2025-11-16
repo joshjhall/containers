@@ -36,6 +36,11 @@ APT_TIMEOUT="${APT_TIMEOUT:-300}"  # 5 minutes timeout for apt operations
 
 # get_debian_major_version - Get the major Debian version number
 #
+# Uses multiple fallback methods for robustness:
+#   1. /etc/os-release (preferred - standard)
+#   2. /etc/debian_version (fallback)
+#   3. lsb_release command (if available)
+#
 # Returns:
 #   The major version number (e.g., "11", "12", "13")
 #   Returns "unknown" if version cannot be determined
@@ -46,24 +51,71 @@ APT_TIMEOUT="${APT_TIMEOUT:-300}"  # 5 minutes timeout for apt operations
 #       # Trixie-specific code
 #   fi
 get_debian_major_version() {
-    if [ -f /etc/debian_version ]; then
-        local version
-        version=$(command cat /etc/debian_version)
-        # Extract major version number (handles both "12.5" and "trixie/sid")
-        if [[ "$version" =~ ^[0-9]+\. ]]; then
-            echo "${version%%.*}"
-        elif [[ "$version" == *"trixie"* ]]; then
-            echo "13"
-        elif [[ "$version" == *"bookworm"* ]]; then
-            echo "12"
-        elif [[ "$version" == *"bullseye"* ]]; then
-            echo "11"
-        else
-            echo "unknown"
+    local version=""
+
+    # Method 1: Try /etc/os-release (most reliable)
+    if [ -f /etc/os-release ]; then
+        # shellcheck disable=SC1091
+        source /etc/os-release 2>/dev/null || true
+        if [ -n "${VERSION_ID:-}" ]; then
+            # Extract major version (handles "12", "12.5", etc.)
+            version="${VERSION_ID%%.*}"
+            echo "$version"
+            return 0
+        elif [ -n "${VERSION_CODENAME:-}" ]; then
+            # Map codename to version
+            case "$VERSION_CODENAME" in
+                trixie) echo "13"; return 0 ;;
+                bookworm) echo "12"; return 0 ;;
+                bullseye) echo "11"; return 0 ;;
+            esac
         fi
-    else
-        echo "unknown"
     fi
+
+    # Method 2: Try /etc/debian_version (fallback)
+    if [ -f /etc/debian_version ]; then
+        version=$(command cat /etc/debian_version 2>/dev/null || echo "")
+        if [ -n "$version" ]; then
+            # Extract major version number (handles both "12.5" and "trixie/sid")
+            if [[ "$version" =~ ^[0-9]+\. ]]; then
+                echo "${version%%.*}"
+                return 0
+            elif [[ "$version" =~ ^[0-9]+$ ]]; then
+                echo "$version"
+                return 0
+            elif [[ "$version" == *"trixie"* ]] || [[ "$version" == *"sid"* ]]; then
+                echo "13"
+                return 0
+            elif [[ "$version" == *"bookworm"* ]]; then
+                echo "12"
+                return 0
+            elif [[ "$version" == *"bullseye"* ]]; then
+                echo "11"
+                return 0
+            fi
+        fi
+    fi
+
+    # Method 3: Try lsb_release (if available)
+    if command -v lsb_release >/dev/null 2>&1; then
+        version=$(lsb_release -sr 2>/dev/null | cut -d. -f1 || echo "")
+        if [[ "$version" =~ ^[0-9]+$ ]]; then
+            echo "$version"
+            return 0
+        fi
+        # Try codename if numeric version not available
+        local codename
+        codename=$(lsb_release -sc 2>/dev/null || echo "")
+        case "$codename" in
+            trixie) echo "13"; return 0 ;;
+            bookworm) echo "12"; return 0 ;;
+            bullseye) echo "11"; return 0 ;;
+        esac
+    fi
+
+    # All methods failed
+    echo "unknown"
+    return 1
 }
 
 # is_debian_version - Check if running specific Debian version or newer
@@ -263,6 +315,18 @@ apt_install() {
         echo "Error: apt_install requires at least one package name"
         return 1
     fi
+
+    # Validate package names before installation (security: prevent command injection)
+    local pkg
+    for pkg in "$@"; do
+        # Package names can contain: letters, numbers, dots, hyphens, plus, tilde, colon
+        # See: https://www.debian.org/doc/debian-policy/ch-controlfields.html#s-f-source
+        if [[ ! "$pkg" =~ ^[a-zA-Z0-9.+~:-]+$ ]]; then
+            echo "Error: Invalid package name '$pkg'"
+            echo "  Package names must contain only: a-z A-Z 0-9 . + ~ : -"
+            return 1
+        fi
+    done
 
     local packages=("$@")
     local attempt=1
