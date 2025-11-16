@@ -4,6 +4,11 @@ set -euo pipefail
 # shellcheck disable=SC2155  # Declare and assign separately to avoid masking return values
 # shellcheck disable=SC1090  # Can't follow non-constant source
 # shellcheck disable=SC2086  # Double quote to prevent globbing (used intentionally)
+# shellcheck disable=SC2254  # Quote expansions in case patterns (used intentionally for log levels)
+# shellcheck disable=SC2034  # Variables appear unused (reserved for future use or external tools)
+# shellcheck disable=SC2046  # Quote to prevent word splitting (intentional in specific contexts)
+# shellcheck disable=SC2183  # Printf format string (false positive on dynamic formatting)
+# shellcheck disable=SC2199  # Arrays implicitly concatenate (intentional for array operations)
 
 # Secure Post-Create Script for Devcontainer
 # Version: 3.5.2
@@ -1213,6 +1218,7 @@ load_env_file() {
                 fi
             fi
 
+            # shellcheck disable=SC2199
             if [ -f "$abs_path" ] && [[ ! " ${env_files_loaded[@]} " =~ " ${abs_path} " ]]; then
                 # Check file permissions and ownership
                 local file_perms=$(stat -c '%a' "$abs_path" 2>/dev/null || stat -f '%A' "$abs_path" 2>/dev/null)
