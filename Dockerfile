@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 # Universal Container Build System
-# Version: 4.9.0
+# Version: 4.9.1
 # Supports multiple contexts: devcontainer, agents, CI/CD, production
 
 # ============================================================================
@@ -144,7 +144,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 # Rust + Rust development tools
 ARG INCLUDE_RUST=false
 ARG INCLUDE_RUST_DEV=false
-ARG RUST_VERSION=1.91.0
+ARG RUST_VERSION=1.91.1
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     if [ "${INCLUDE_RUST}" = "true" ] || [ "${INCLUDE_RUST_DEV}" = "true" ]; then \
@@ -325,7 +325,7 @@ ARG INCLUDE_KUBERNETES=false
 ARG KUBECTL_VERSION=1.31.0
 ARG K9S_VERSION=0.50.16
 ARG KREW_VERSION=0.4.5
-ARG HELM_VERSION=3.19.0
+ARG HELM_VERSION=4.0.0
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     if [ "${INCLUDE_KUBERNETES}" = "true" ]; then \
@@ -343,7 +343,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 
 # Terraform
 ARG INCLUDE_TERRAFORM=false
-ARG TERRAGRUNT_VERSION=0.93.3
+ARG TERRAGRUNT_VERSION=0.93.8
 ARG TFDOCS_VERSION=0.20.0
 ARG TFLINT_VERSION=0.59.1
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
