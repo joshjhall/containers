@@ -1,0 +1,189 @@
+# GitHub Actions Workflow: Rollback
+#
+# This workflow rolls back a deployment to a previous version.
+# Can be triggered manually in case of issues with current deployment.
+#
+# Trigger: Manual only (workflow_dispatch)
+
+name: Rollback Deployment
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to rollback'
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+      rollback_to:
+        description: 'Image tag to rollback to (e.g., v1.2.2-python-dev)'
+        required: true
+        type: string
+      reason:
+        description: 'Reason for rollback'
+        required: true
+        type: string
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  rollback:
+    name: Rollback ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ inputs.environment }}
+    permissions:
+      contents: read
+      packages: read
+      id-token: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure kubectl
+        run: |
+          mkdir -p $HOME/.kube
+          if [ "${{ inputs.environment }}" = "production" ]; then
+            echo "${{ secrets.KUBE_CONFIG_PRODUCTION }}" | base64 -d > $HOME/.kube/config
+          else
+            echo "${{ secrets.KUBE_CONFIG_STAGING }}" | base64 -d > $HOME/.kube/config
+          fi
+
+      - name: Verify rollback target exists
+        run: |
+          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ inputs.rollback_to }}"
+          echo "Verifying rollback target: $IMAGE"
+
+          docker manifest inspect "$IMAGE" > /dev/null 2>&1 || {
+            echo "❌ Rollback target image not found: $IMAGE"
+            exit 1
+          }
+
+          echo "✅ Rollback target exists"
+
+      - name: Get current deployment info
+        id: current
+        run: |
+          NAMESPACE="${{ inputs.environment }}"
+          if [ "${{ inputs.environment }}" = "staging" ]; then
+            DEPLOYMENT="staging-devcontainer"
+          else
+            DEPLOYMENT="prod-devcontainer"
+          fi
+
+          CURRENT_IMAGE=$(kubectl get deployment $DEPLOYMENT -n $NAMESPACE \
+            -o jsonpath='{.spec.template.spec.containers[0].image}')
+
+          echo "current_image=$CURRENT_IMAGE" >> $GITHUB_OUTPUT
+          echo "deployment=$DEPLOYMENT" >> $GITHUB_OUTPUT
+          echo "namespace=$NAMESPACE" >> $GITHUB_OUTPUT
+
+          echo "Current image: $CURRENT_IMAGE"
+          echo "Rolling back to: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ inputs.rollback_to }}"
+
+      - name: Create pre-rollback snapshot
+        run: |
+          kubectl get deployment ${{ steps.current.outputs.deployment }} \
+            -n ${{ steps.current.outputs.namespace }} \
+            -o yaml > pre-rollback-snapshot.yaml
+
+          echo "Pre-rollback snapshot saved"
+
+      - name: Perform rollback
+        run: |
+          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ inputs.rollback_to }}"
+
+          echo "Rolling back deployment..."
+          kubectl set image deployment/${{ steps.current.outputs.deployment }} \
+            devcontainer="$IMAGE" \
+            -n ${{ steps.current.outputs.namespace }}
+
+      - name: Wait for rollback to complete
+        run: |
+          kubectl rollout status deployment/${{ steps.current.outputs.deployment }} \
+            -n ${{ steps.current.outputs.namespace }} \
+            --timeout=10m
+
+      - name: Verify rollback success
+        run: |
+          echo "Verifying pods are running..."
+          kubectl get pods -n ${{ steps.current.outputs.namespace }} -l app=devcontainer
+
+          # Run smoke tests
+          # ./scripts/smoke-tests.sh ${{ inputs.environment }}
+
+          echo "✅ Rollback completed successfully"
+
+      - name: Upload rollback artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rollback-artifacts-${{ inputs.environment }}
+          path: |
+            pre-rollback-snapshot.yaml
+          retention-days: 90  # Keep longer for audit trail
+
+      - name: Create rollback issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issue = await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `Rollback performed: ${{ inputs.environment }}`,
+              body: `## Rollback Details
+
+            **Environment:** ${{ inputs.environment }}
+            **Rolled back from:** \`${{ steps.current.outputs.current_image }}\`
+            **Rolled back to:** \`${{ inputs.rollback_to }}\`
+            **Reason:** ${{ inputs.reason }}
+            **Performed by:** @${{ github.actor }}
+            **Date:** ${new Date().toISOString()}
+
+            ## Action Items
+            - [ ] Investigate root cause of the issue
+            - [ ] Create fix for the issue
+            - [ ] Test fix in staging
+            - [ ] Deploy fix to production
+            - [ ] Close this issue
+
+            ## Workflow Run
+            ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+            `,
+              labels: ['rollback', 'incident', inputs.environment]
+            });
+
+            console.log(`Created issue #${issue.data.number}`);
+
+      - name: Notify rollback
+        if: always()
+        run: |
+          STATUS="${{ job.status }}"
+          EMOJI="✅"
+          if [ "$STATUS" != "success" ]; then
+            EMOJI="❌"
+          fi
+
+          echo "$EMOJI Rollback $STATUS"
+          echo "Environment: ${{ inputs.environment }}"
+          echo "Rolled back to: ${{ inputs.rollback_to }}"
+          echo "Reason: ${{ inputs.reason }}"
+
+          # Send notification
+          # curl -X POST ${{ secrets.SLACK_WEBHOOK }} \
+          #   -H 'Content-Type: application/json' \
+          #   -d '{
+          #     "text": "'$EMOJI' Rollback performed: ${{ inputs.environment }}",
+          #     "blocks": [{
+          #       "type": "section",
+          #       "text": {
+          #         "type": "mrkdwn",
+          #         "text": "*Rollback Alert*\n*Environment:* ${{ inputs.environment }}\n*Status:* '$STATUS'\n*Rolled back to:* `${{ inputs.rollback_to }}`\n*Reason:* ${{ inputs.reason }}\n*By:* @${{ github.actor }}"
+          #       }
+          #     }]
+          #   }'

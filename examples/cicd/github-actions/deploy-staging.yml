@@ -1,0 +1,149 @@
+# GitHub Actions Workflow: Deploy to Staging
+#
+# This workflow deploys containers to a staging environment after successful builds.
+# Customize this template by:
+# 1. Updating the Kubernetes cluster connection (or other deployment target)
+# 2. Modifying the deployment command for your infrastructure
+# 3. Adding environment-specific configuration
+#
+# Trigger: Automatically after successful merge to main, or manually
+
+name: Deploy to Staging
+
+on:
+  workflow_run:
+    workflows: ["Build and Test"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:  # Allow manual deployment
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+  ENVIRONMENT: staging
+
+jobs:
+  deploy:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    # Only deploy if the build workflow succeeded
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
+    environment:
+      name: staging
+      url: https://staging.example.com  # Update with your staging URL
+    permissions:
+      contents: read
+      packages: read
+      id-token: write  # Required for OIDC authentication
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # =====================================
+      # Kubernetes Deployment (Example)
+      # =====================================
+      - name: Configure kubectl
+        run: |
+          # Option 1: Use OIDC/Workload Identity (recommended for cloud providers)
+          # This example shows AWS EKS - adjust for GKE, AKS, etc.
+          # aws eks update-kubeconfig --name my-cluster --region us-east-1
+
+          # Option 2: Use kubeconfig from secrets
+          mkdir -p $HOME/.kube
+          echo "${{ secrets.KUBE_CONFIG_STAGING }}" | base64 -d > $HOME/.kube/config
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Deploy to Kubernetes (staging)
+        run: |
+          # Update image tag in Kubernetes manifest
+          IMAGE_TAG="main-python-dev"  # Adjust based on your variant
+          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${IMAGE_TAG}"
+
+          # Option 1: Using Kustomize (recommended)
+          cd examples/kubernetes
+          kustomize edit set image containers="${IMAGE}"
+          kubectl apply -k overlays/staging
+
+          # Option 2: Using kubectl directly
+          # kubectl set image deployment/myapp myapp="${IMAGE}" -n staging
+
+          # Option 3: Using Helm
+          # helm upgrade --install myapp ./chart \
+          #   --namespace staging \
+          #   --set image.repository="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}" \
+          #   --set image.tag="${IMAGE_TAG}"
+
+      - name: Wait for rollout
+        run: |
+          kubectl rollout status deployment/staging-devcontainer -n staging --timeout=5m
+
+      - name: Verify deployment
+        run: |
+          # Check pods are running
+          kubectl get pods -n staging -l app=devcontainer
+
+          # Run smoke tests
+          # kubectl run smoke-test --rm -i --restart=Never --image=curlimages/curl:latest -- \
+          #   curl -f http://staging-devcontainer:8080/health
+
+      # =====================================
+      # Alternative: Docker Compose Deployment
+      # =====================================
+      # - name: Deploy with Docker Compose
+      #   run: |
+      #     # SSH to staging server
+      #     ssh deploy@staging.example.com << 'EOF'
+      #       cd /app
+      #       docker-compose pull
+      #       docker-compose up -d
+      #       docker-compose ps
+      #     EOF
+
+      # =====================================
+      # Alternative: Cloud Run Deployment
+      # =====================================
+      # - name: Deploy to Cloud Run
+      #   uses: google-github-actions/deploy-cloudrun@v2
+      #   with:
+      #     service: myservice-staging
+      #     image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:main-python-dev
+      #     region: us-central1
+
+      - name: Run smoke tests
+        run: |
+          echo "Running smoke tests against staging..."
+
+          # Example: Health check
+          # curl -f https://staging.example.com/health || exit 1
+
+          # Example: API endpoint test
+          # curl -f https://staging.example.com/api/status || exit 1
+
+          echo "Smoke tests passed!"
+
+      - name: Notify deployment
+        if: always()
+        run: |
+          # Send notification to Slack, Discord, email, etc.
+          # Example with Slack webhook:
+          # curl -X POST ${{ secrets.SLACK_WEBHOOK }} \
+          #   -H 'Content-Type: application/json' \
+          #   -d '{
+          #     "text": "Deployment to staging: ${{ job.status }}",
+          #     "blocks": [{
+          #       "type": "section",
+          #       "text": {
+          #         "type": "mrkdwn",
+          #         "text": "*Deployment Status:* ${{ job.status }}\n*Environment:* staging\n*Commit:* ${{ github.sha }}"
+          #       }
+          #     }]
+          #   }'
+
+          echo "Deployment status: ${{ job.status }}"

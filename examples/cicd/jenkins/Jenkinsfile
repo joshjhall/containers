@@ -1,0 +1,339 @@
+// Jenkins Declarative Pipeline for Container Build System
+//
+// This Jenkinsfile defines a CI/CD pipeline for building and deploying containers.
+// Features:
+// - Multi-stage pipeline (test, build, security, deploy)
+// - Parallel builds for multiple variants
+// - Manual approval for production
+// - Automatic rollback on failure
+//
+// Requirements:
+// - Jenkins with Docker plugin
+// - Kubernetes plugin (for deployments)
+// - Credentials configured in Jenkins
+
+pipeline {
+    agent any
+
+    // Environment variables
+    environment {
+        REGISTRY = 'ghcr.io'
+        IMAGE_NAME = "${REGISTRY}/${env.GIT_URL.replaceFirst(/^.*\/([^\/]+?)(\.git)?$/, '$1')}"
+        PROJECT_NAME = 'myproject'
+
+        // Credentials (configure these in Jenkins)
+        REGISTRY_CREDENTIALS = credentials('github-container-registry')
+        KUBE_CONFIG_STAGING = credentials('kube-config-staging')
+        KUBE_CONFIG_PRODUCTION = credentials('kube-config-production')
+    }
+
+    // Build parameters
+    parameters {
+        choice(
+            name: 'DEPLOYMENT_ENVIRONMENT',
+            choices: ['none', 'staging', 'production'],
+            description: 'Deploy to environment after build'
+        )
+        choice(
+            name: 'VARIANT',
+            choices: ['all', 'minimal', 'python-dev', 'node-dev'],
+            description: 'Container variant to build'
+        )
+        booleanParam(
+            name: 'RUN_SECURITY_SCAN',
+            defaultValue: true,
+            description: 'Run security vulnerability scanning'
+        )
+    }
+
+    // Build options
+    options {
+        buildDiscarder(logRotator(numToKeepStr: '10'))
+        timestamps()
+        timeout(time: 1, unit: 'HOURS')
+    }
+
+    stages {
+        // =============================
+        // Test Stage
+        // =============================
+        stage('Test') {
+            parallel {
+                stage('Unit Tests') {
+                    agent {
+                        docker {
+                            image 'debian:bookworm-slim'
+                            args '-v /var/run/docker.sock:/var/run/docker.sock'
+                        }
+                    }
+                    steps {
+                        sh '''
+                            apt-get update && apt-get install -y bash
+                            export SKIP_DOCKER_CHECK=true
+                            ./tests/run_unit_tests.sh
+                        '''
+                    }
+                    post {
+                        always {
+                            archiveArtifacts artifacts: 'tests/results/**', allowEmptyArchive: true
+                        }
+                    }
+                }
+
+                stage('Code Quality') {
+                    agent {
+                        docker {
+                            image 'koalaman/shellcheck-alpine:stable'
+                        }
+                    }
+                    steps {
+                        sh '''
+                            find . -name "*.sh" -type f ! -path "./.git/*" | while read -r file; do
+                                echo "Checking $file..."
+                                shellcheck --severity=warning "$file" || exit 1
+                            done
+                        '''
+                    }
+                }
+            }
+        }
+
+        // =============================
+        // Build Stage
+        // =============================
+        stage('Build') {
+            when {
+                anyOf {
+                    branch 'main'
+                    branch 'develop'
+                    changeRequest()
+                }
+            }
+            steps {
+                script {
+                    // Determine which variants to build
+                    def variants = []
+                    if (params.VARIANT == 'all') {
+                        variants = ['minimal', 'python-dev', 'node-dev']
+                    } else {
+                        variants = [params.VARIANT]
+                    }
+
+                    // Build variants in parallel
+                    def buildStages = [:]
+                    variants.each { variant ->
+                        buildStages["Build ${variant}"] = {
+                            buildVariant(variant)
+                        }
+                    }
+
+                    parallel buildStages
+                }
+            }
+        }
+
+        // =============================
+        // Security Scan
+        // =============================
+        stage('Security Scan') {
+            when {
+                expression { params.RUN_SECURITY_SCAN }
+                anyOf {
+                    branch 'main'
+                    branch 'develop'
+                }
+            }
+            steps {
+                script {
+                    def variants = params.VARIANT == 'all' ?
+                        ['minimal', 'python-dev', 'node-dev'] : [params.VARIANT]
+
+                    variants.each { variant ->
+                        sh """
+                            docker run --rm \
+                                -v /var/run/docker.sock:/var/run/docker.sock \
+                                aquasec/trivy:latest image \
+                                --severity CRITICAL,HIGH \
+                                ${IMAGE_NAME}:${env.BRANCH_NAME}-${variant}
+                        """
+                    }
+                }
+            }
+        }
+
+        // =============================
+        // Deploy to Staging
+        // =============================
+        stage('Deploy to Staging') {
+            when {
+                allOf {
+                    branch 'main'
+                    expression { params.DEPLOYMENT_ENVIRONMENT == 'staging' }
+                }
+            }
+            steps {
+                script {
+                    deployToEnvironment('staging', 'python-dev')
+                }
+            }
+        }
+
+        // =============================
+        // Deploy to Production
+        // =============================
+        stage('Deploy to Production') {
+            when {
+                allOf {
+                    branch 'main'
+                    expression { params.DEPLOYMENT_ENVIRONMENT == 'production' }
+                }
+            }
+            steps {
+                script {
+                    // Require manual approval
+                    input message: 'Deploy to production?',
+                          ok: 'Deploy',
+                          submitter: 'admin,devops'
+
+                    deployToEnvironment('production', 'python-dev')
+                }
+            }
+        }
+    }
+
+    // =============================
+    // Post-build Actions
+    // =============================
+    post {
+        success {
+            echo 'Pipeline completed successfully!'
+            // Send notification
+            // emailext (
+            //     subject: "SUCCESS: ${currentBuild.fullDisplayName}",
+            //     body: "Build succeeded: ${env.BUILD_URL}",
+            //     to: "team@example.com"
+            // )
+        }
+
+        failure {
+            echo 'Pipeline failed!'
+            // Send notification
+            // emailext (
+            //     subject: "FAILED: ${currentBuild.fullDisplayName}",
+            //     body: "Build failed: ${env.BUILD_URL}",
+            //     to: "team@example.com"
+            // )
+
+            // Automatic rollback if deployment failed
+            script {
+                if (currentBuild.currentResult == 'FAILURE' && params.DEPLOYMENT_ENVIRONMENT != 'none') {
+                    echo "Initiating automatic rollback..."
+                    rollback(params.DEPLOYMENT_ENVIRONMENT)
+                }
+            }
+        }
+
+        always {
+            // Clean up workspace
+            cleanWs()
+        }
+    }
+}
+
+// =============================
+// Helper Functions
+// =============================
+
+def buildVariant(String variant) {
+    def buildArgs = "--build-arg PROJECT_NAME=${PROJECT_NAME} --build-arg PROJECT_PATH=."
+
+    // Add variant-specific build args
+    switch(variant) {
+        case 'python-dev':
+            buildArgs += " --build-arg INCLUDE_PYTHON_DEV=true"
+            buildArgs += " --build-arg INCLUDE_DEV_TOOLS=true"
+            buildArgs += " --build-arg INCLUDE_DOCKER=true"
+            break
+        case 'node-dev':
+            buildArgs += " --build-arg INCLUDE_NODE_DEV=true"
+            buildArgs += " --build-arg INCLUDE_DEV_TOOLS=true"
+            buildArgs += " --build-arg INCLUDE_DOCKER=true"
+            break
+    }
+
+    // Build image
+    sh """
+        docker build ${buildArgs} \
+            -t ${IMAGE_NAME}:${env.BRANCH_NAME}-${variant} \
+            -t ${IMAGE_NAME}:${variant}-latest \
+            .
+    """
+
+    // Push to registry
+    sh """
+        echo ${REGISTRY_CREDENTIALS_PSW} | docker login ${REGISTRY} -u ${REGISTRY_CREDENTIALS_USR} --password-stdin
+        docker push ${IMAGE_NAME}:${env.BRANCH_NAME}-${variant}
+
+        if [ "${env.BRANCH_NAME}" = "main" ]; then
+            docker push ${IMAGE_NAME}:${variant}-latest
+        fi
+    """
+}
+
+def deployToEnvironment(String environment, String variant) {
+    def namespace = environment
+    def deployment = "${environment}-devcontainer"
+    def kubeConfig = environment == 'production' ? KUBE_CONFIG_PRODUCTION : KUBE_CONFIG_STAGING
+
+    sh """
+        # Configure kubectl
+        mkdir -p ~/.kube
+        echo '${kubeConfig}' > ~/.kube/config
+
+        # Backup current deployment (for potential rollback)
+        kubectl get deployment ${deployment} -n ${namespace} -o yaml > deployment-backup-${environment}.yaml || true
+
+        # Deploy new image
+        IMAGE="${IMAGE_NAME}:${env.BRANCH_NAME}-${variant}"
+        kubectl set image deployment/${deployment} devcontainer=\$IMAGE -n ${namespace}
+
+        # Wait for rollout to complete
+        kubectl rollout status deployment/${deployment} -n ${namespace} --timeout=10m
+
+        # Verify deployment
+        kubectl get pods -n ${namespace} -l app=devcontainer
+
+        # Run smoke tests
+        echo "Running smoke tests for ${environment}..."
+        # Add your smoke test commands here
+    """
+
+    // Archive backup for potential rollback
+    archiveArtifacts artifacts: "deployment-backup-${environment}.yaml", allowEmptyArchive: true
+}
+
+def rollback(String environment) {
+    def namespace = environment
+    def deployment = "${environment}-devcontainer"
+    def kubeConfig = environment == 'production' ? KUBE_CONFIG_PRODUCTION : KUBE_CONFIG_STAGING
+
+    sh """
+        # Configure kubectl
+        mkdir -p ~/.kube
+        echo '${kubeConfig}' > ~/.kube/config
+
+        # Attempt rollback using backup
+        if [ -f deployment-backup-${environment}.yaml ]; then
+            echo "Rolling back using backup..."
+            kubectl apply -f deployment-backup-${environment}.yaml
+        else
+            echo "No backup found, using kubectl rollout undo..."
+            kubectl rollout undo deployment/${deployment} -n ${namespace}
+        fi
+
+        # Wait for rollback to complete
+        kubectl rollout status deployment/${deployment} -n ${namespace} --timeout=5m
+
+        echo "Rollback completed for ${environment}"
+    """
+}

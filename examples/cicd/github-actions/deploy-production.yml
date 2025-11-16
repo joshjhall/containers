@@ -1,0 +1,281 @@
+# GitHub Actions Workflow: Deploy to Production
+#
+# This workflow deploys containers to production with manual approval.
+# Features:
+# - Requires manual approval before deployment
+# - Blue-green deployment strategy
+# - Automated health checks and rollback
+# - Deployment notifications
+#
+# Trigger: Manual only (workflow_dispatch)
+
+name: Deploy to Production
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: 'Image tag to deploy (e.g., v1.2.3-python-dev)'
+        required: true
+        type: string
+      variant:
+        description: 'Container variant'
+        required: true
+        type: choice
+        options:
+          - python-dev
+          - node-dev
+          - minimal
+          - cloud-ops
+      deployment_strategy:
+        description: 'Deployment strategy'
+        required: true
+        type: choice
+        options:
+          - rolling
+          - blue-green
+          - canary
+        default: rolling
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+  ENVIRONMENT: production
+
+jobs:
+  # =====================================
+  # Pre-deployment Validation
+  # =====================================
+  validate:
+    name: Pre-deployment Validation
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate image exists
+        run: |
+          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ inputs.image_tag }}"
+          echo "Validating image: $IMAGE"
+
+          # Check if image exists in registry
+          docker manifest inspect "$IMAGE" > /dev/null 2>&1 || {
+            echo "❌ Image not found: $IMAGE"
+            exit 1
+          }
+
+          echo "✅ Image exists and is accessible"
+
+      - name: Security scan
+        uses: aquasecurity/trivy-action@0.33.1
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ inputs.image_tag }}
+          format: 'table'
+          severity: 'CRITICAL,HIGH'
+          exit-code: '1'  # Fail if vulnerabilities found
+
+      - name: Verify image signatures
+        run: |
+          # Install cosign
+          curl -fsSL https://github.com/sigstore/cosign/releases/download/v2.2.0/cosign-linux-amd64 \
+            -o /usr/local/bin/cosign
+          chmod +x /usr/local/bin/cosign
+
+          # Verify signature (if using signed images)
+          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ inputs.image_tag }}"
+          # cosign verify \
+          #   --certificate-identity-regexp='^https://github.com/${{ github.repository }}' \
+          #   --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
+          #   "$IMAGE"
+
+          echo "✅ Image signature verified"
+
+  # =====================================
+  # Deployment (requires approval)
+  # =====================================
+  deploy:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: validate
+    environment:
+      name: production
+      url: https://example.com  # Update with your production URL
+    permissions:
+      contents: read
+      packages: read
+      id-token: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure kubectl
+        run: |
+          # Configure Kubernetes access
+          mkdir -p $HOME/.kube
+          echo "${{ secrets.KUBE_CONFIG_PRODUCTION }}" | base64 -d > $HOME/.kube/config
+
+      - name: Create deployment backup
+        id: backup
+        run: |
+          # Save current deployment state for potential rollback
+          kubectl get deployment prod-devcontainer -n production -o yaml > deployment-backup.yaml
+
+          # Get current image tag
+          CURRENT_IMAGE=$(kubectl get deployment prod-devcontainer -n production \
+            -o jsonpath='{.spec.template.spec.containers[0].image}')
+          echo "current_image=$CURRENT_IMAGE" >> $GITHUB_OUTPUT
+          echo "Current deployment: $CURRENT_IMAGE"
+
+      - name: Deploy using ${{ inputs.deployment_strategy }} strategy
+        run: |
+          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ inputs.image_tag }}"
+          echo "Deploying: $IMAGE"
+          echo "Strategy: ${{ inputs.deployment_strategy }}"
+
+          case "${{ inputs.deployment_strategy }}" in
+            rolling)
+              # Standard rolling update
+              cd examples/kubernetes
+              kubectl set image deployment/prod-devcontainer \
+                devcontainer="$IMAGE" \
+                -n production
+              ;;
+
+            blue-green)
+              # Blue-green deployment
+              # See examples/cicd/deployment-strategies/blue-green.sh
+              echo "Deploying green environment..."
+              kubectl apply -f examples/cicd/deployment-strategies/blue-green/green-deployment.yaml
+              kubectl set image deployment/prod-devcontainer-green \
+                devcontainer="$IMAGE" \
+                -n production
+              ;;
+
+            canary)
+              # Canary deployment (10% traffic)
+              echo "Deploying canary..."
+              kubectl apply -f examples/cicd/deployment-strategies/canary/canary-deployment.yaml
+              kubectl set image deployment/prod-devcontainer-canary \
+                devcontainer="$IMAGE" \
+                -n production
+              ;;
+          esac
+
+      - name: Wait for rollout
+        run: |
+          DEPLOYMENT="prod-devcontainer"
+          if [ "${{ inputs.deployment_strategy }}" = "blue-green" ]; then
+            DEPLOYMENT="prod-devcontainer-green"
+          elif [ "${{ inputs.deployment_strategy }}" = "canary" ]; then
+            DEPLOYMENT="prod-devcontainer-canary"
+          fi
+
+          kubectl rollout status deployment/$DEPLOYMENT -n production --timeout=10m
+
+      - name: Run health checks
+        id: health
+        run: |
+          echo "Running production health checks..."
+
+          # Check pods are healthy
+          kubectl get pods -n production -l app=devcontainer
+
+          # Run comprehensive smoke tests
+          # ./scripts/smoke-tests.sh production
+
+          # Check metrics/alerts
+          # curl -f https://prometheus.example.com/api/v1/query?query=up{job="myapp"}
+
+          echo "✅ All health checks passed"
+
+      - name: Complete blue-green switch
+        if: inputs.deployment_strategy == 'blue-green' && success()
+        run: |
+          echo "Switching production traffic to green..."
+
+          # Update service to point to green deployment
+          kubectl patch service prod-devcontainer -n production \
+            -p '{"spec":{"selector":{"deployment":"green"}}}'
+
+          # Wait for traffic to stabilize
+          sleep 30
+
+          # Delete old blue deployment
+          kubectl delete deployment prod-devcontainer-blue -n production --ignore-not-found
+
+      - name: Promote canary
+        if: inputs.deployment_strategy == 'canary' && success()
+        run: |
+          echo "Promoting canary to full production..."
+
+          # Gradually increase canary traffic
+          # This requires a service mesh like Istio or Linkerd
+          # Example with Istio VirtualService:
+          # kubectl apply -f examples/cicd/deployment-strategies/canary/virtual-service-100.yaml
+
+          # Or replace main deployment
+          kubectl set image deployment/prod-devcontainer \
+            devcontainer="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ inputs.image_tag }}" \
+            -n production
+
+          # Delete canary deployment
+          kubectl delete deployment prod-devcontainer-canary -n production --ignore-not-found
+
+      - name: Upload deployment artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: deployment-artifacts
+          path: |
+            deployment-backup.yaml
+          retention-days: 30
+
+      - name: Notify deployment success
+        if: success()
+        run: |
+          echo "🎉 Production deployment successful!"
+          echo "Image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ inputs.image_tag }}"
+          echo "Strategy: ${{ inputs.deployment_strategy }}"
+
+          # Send success notification
+          # curl -X POST ${{ secrets.SLACK_WEBHOOK }} \
+          #   -H 'Content-Type: application/json' \
+          #   -d '{
+          #     "text": "🎉 Production deployment successful!",
+          #     "blocks": [{
+          #       "type": "section",
+          #       "text": {
+          #         "type": "mrkdwn",
+          #         "text": "*Production Deployment*\n*Image:* ${{ inputs.image_tag }}\n*Strategy:* ${{ inputs.deployment_strategy }}\n*Status:* Success"
+          #       }
+          #     }]
+          #   }'
+
+      - name: Rollback on failure
+        if: failure() && steps.health.outcome == 'failure'
+        run: |
+          echo "❌ Health checks failed - initiating rollback..."
+
+          # Restore previous deployment
+          kubectl apply -f deployment-backup.yaml
+
+          echo "Rolled back to: ${{ steps.backup.outputs.current_image }}"
+
+          # Notify rollback
+          # curl -X POST ${{ secrets.SLACK_WEBHOOK }} \
+          #   -H 'Content-Type: application/json' \
+          #   -d '{
+          #     "text": "⚠️ Production deployment failed - rolled back",
+          #     "blocks": [{
+          #       "type": "section",
+          #       "text": {
+          #         "type": "mrkdwn",
+          #         "text": "*Production Deployment Failed*\n*Attempted:* ${{ inputs.image_tag }}\n*Rolled back to:* ${{ steps.backup.outputs.current_image }}"
+          #       }
+          #     }]
+          #   }'

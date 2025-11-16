@@ -1,0 +1,333 @@
+# GitLab CI/CD Pipeline for Container Build System
+#
+# This pipeline builds, tests, and deploys containers using GitLab CI/CD.
+# Features:
+# - Multi-stage pipeline (test, build, deploy)
+# - Docker-in-Docker for container builds
+# - Security scanning with Trivy
+# - Manual deployment gates for production
+# - Automatic rollback on failure
+#
+# Documentation: https://docs.gitlab.com/ee/ci/
+
+# =====================================
+# Variables
+# =====================================
+variables:
+  # Container registry (uses GitLab Container Registry by default)
+  REGISTRY: $CI_REGISTRY
+  IMAGE_NAME: $CI_REGISTRY_IMAGE
+
+  # Docker configuration
+  DOCKER_DRIVER: overlay2
+  DOCKER_TLS_CERTDIR: "/certs"
+
+  # Build configuration
+  PROJECT_NAME: myproject
+
+# =====================================
+# Stages
+# =====================================
+stages:
+  - test
+  - build
+  - security-scan
+  - deploy-staging
+  - deploy-production
+
+# =====================================
+# Templates (reusable job configs)
+# =====================================
+.docker_build_template:
+  image: docker:24
+  services:
+    - docker:24-dind
+  before_script:
+    - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
+
+.kubectl_template:
+  image: bitnami/kubectl:latest
+  before_script:
+    - mkdir -p $HOME/.kube
+    - echo "$KUBE_CONFIG" | base64 -d > $HOME/.kube/config
+
+# =====================================
+# Test Stage
+# =====================================
+unit-tests:
+  stage: test
+  image: debian:bookworm-slim
+  script:
+    - apt-get update && apt-get install -y bash
+    - export SKIP_DOCKER_CHECK=true
+    - ./tests/run_unit_tests.sh
+  artifacts:
+    when: always
+    paths:
+      - tests/results/
+    expire_in: 1 week
+
+code-quality:
+  stage: test
+  image: koalaman/shellcheck-alpine:stable
+  script:
+    - |
+      echo "Running shellcheck..."
+      find . -name "*.sh" -type f ! -path "./.git/*" | while read -r file; do
+        echo "Checking $file..."
+        shellcheck --severity=warning "$file"
+      done
+
+secret-scanning:
+  stage: test
+  image: zricethezav/gitleaks:latest
+  script:
+    - gitleaks detect --source . --verbose
+  allow_failure: true
+
+# =====================================
+# Build Stage
+# =====================================
+build:minimal:
+  extends: .docker_build_template
+  stage: build
+  script:
+    - |
+      docker build \
+        --build-arg PROJECT_NAME=$PROJECT_NAME \
+        --build-arg PROJECT_PATH=. \
+        -t $IMAGE_NAME:$CI_COMMIT_REF_SLUG-minimal \
+        -t $IMAGE_NAME:minimal-latest \
+        .
+      docker push $IMAGE_NAME:$CI_COMMIT_REF_SLUG-minimal
+      if [ "$CI_COMMIT_BRANCH" = "$CI_DEFAULT_BRANCH" ]; then
+        docker push $IMAGE_NAME:minimal-latest
+      fi
+  only:
+    - main
+    - develop
+    - merge_requests
+
+build:python-dev:
+  extends: .docker_build_template
+  stage: build
+  script:
+    - |
+      docker build \
+        --build-arg PROJECT_NAME=$PROJECT_NAME \
+        --build-arg PROJECT_PATH=. \
+        --build-arg INCLUDE_PYTHON_DEV=true \
+        --build-arg INCLUDE_DEV_TOOLS=true \
+        --build-arg INCLUDE_DOCKER=true \
+        -t $IMAGE_NAME:$CI_COMMIT_REF_SLUG-python-dev \
+        -t $IMAGE_NAME:python-dev-latest \
+        .
+      docker push $IMAGE_NAME:$CI_COMMIT_REF_SLUG-python-dev
+      if [ "$CI_COMMIT_BRANCH" = "$CI_DEFAULT_BRANCH" ]; then
+        docker push $IMAGE_NAME:python-dev-latest
+      fi
+  only:
+    - main
+    - develop
+    - merge_requests
+
+build:node-dev:
+  extends: .docker_build_template
+  stage: build
+  script:
+    - |
+      docker build \
+        --build-arg PROJECT_NAME=$PROJECT_NAME \
+        --build-arg PROJECT_PATH=. \
+        --build-arg INCLUDE_NODE_DEV=true \
+        --build-arg INCLUDE_DEV_TOOLS=true \
+        --build-arg INCLUDE_DOCKER=true \
+        -t $IMAGE_NAME:$CI_COMMIT_REF_SLUG-node-dev \
+        -t $IMAGE_NAME:node-dev-latest \
+        .
+      docker push $IMAGE_NAME:$CI_COMMIT_REF_SLUG-node-dev
+      if [ "$CI_COMMIT_BRANCH" = "$CI_DEFAULT_BRANCH" ]; then
+        docker push $IMAGE_NAME:node-dev-latest
+      fi
+  only:
+    - main
+    - develop
+    - merge_requests
+
+# =====================================
+# Security Scan Stage
+# =====================================
+security-scan:minimal:
+  stage: security-scan
+  image: aquasec/trivy:latest
+  script:
+    - trivy image --severity CRITICAL,HIGH $IMAGE_NAME:$CI_COMMIT_REF_SLUG-minimal
+  dependencies:
+    - build:minimal
+  allow_failure: true
+  only:
+    - main
+    - develop
+
+security-scan:python-dev:
+  stage: security-scan
+  image: aquasec/trivy:latest
+  script:
+    - trivy image --severity CRITICAL,HIGH $IMAGE_NAME:$CI_COMMIT_REF_SLUG-python-dev
+  dependencies:
+    - build:python-dev
+  allow_failure: true
+  only:
+    - main
+    - develop
+
+# =====================================
+# Deploy Staging
+# =====================================
+deploy:staging:
+  extends: .kubectl_template
+  stage: deploy-staging
+  variables:
+    KUBE_CONFIG: $KUBE_CONFIG_STAGING
+    ENVIRONMENT: staging
+  script:
+    - |
+      echo "Deploying to staging..."
+      IMAGE="$IMAGE_NAME:$CI_COMMIT_REF_SLUG-python-dev"
+
+      # Update deployment
+      kubectl set image deployment/staging-devcontainer \
+        devcontainer="$IMAGE" \
+        -n staging
+
+      # Wait for rollout
+      kubectl rollout status deployment/staging-devcontainer -n staging --timeout=5m
+
+      # Verify deployment
+      kubectl get pods -n staging -l app=devcontainer
+
+  environment:
+    name: staging
+    url: https://staging.example.com
+    on_stop: stop:staging
+
+  only:
+    - main
+
+stop:staging:
+  extends: .kubectl_template
+  stage: deploy-staging
+  variables:
+    KUBE_CONFIG: $KUBE_CONFIG_STAGING
+  script:
+    - kubectl delete deployment staging-devcontainer -n staging --ignore-not-found
+  when: manual
+  environment:
+    name: staging
+    action: stop
+
+# =====================================
+# Deploy Production
+# =====================================
+deploy:production:
+  extends: .kubectl_template
+  stage: deploy-production
+  variables:
+    KUBE_CONFIG: $KUBE_CONFIG_PRODUCTION
+    ENVIRONMENT: production
+  script:
+    - |
+      echo "Deploying to production..."
+      IMAGE="$IMAGE_NAME:$CI_COMMIT_REF_SLUG-python-dev"
+
+      # Backup current deployment
+      kubectl get deployment prod-devcontainer -n production -o yaml > deployment-backup.yaml
+
+      # Update deployment
+      kubectl set image deployment/prod-devcontainer \
+        devcontainer="$IMAGE" \
+        -n production
+
+      # Wait for rollout
+      kubectl rollout status deployment/prod-devcontainer -n production --timeout=10m
+
+      # Verify deployment
+      kubectl get pods -n production -l app=devcontainer
+
+      # Run smoke tests
+      echo "Running smoke tests..."
+      # Add your smoke test commands here
+
+  environment:
+    name: production
+    url: https://example.com
+    on_stop: rollback:production
+
+  when: manual  # Require manual approval
+  only:
+    - main
+
+  artifacts:
+    paths:
+      - deployment-backup.yaml
+    expire_in: 30 days
+
+rollback:production:
+  extends: .kubectl_template
+  stage: deploy-production
+  variables:
+    KUBE_CONFIG: $KUBE_CONFIG_PRODUCTION
+  script:
+    - |
+      echo "Rolling back production deployment..."
+      if [ -f deployment-backup.yaml ]; then
+        kubectl apply -f deployment-backup.yaml
+        kubectl rollout status deployment/prod-devcontainer -n production --timeout=5m
+      else
+        echo "No backup found, using kubectl rollout undo"
+        kubectl rollout undo deployment/prod-devcontainer -n production
+      fi
+
+  when: manual
+  environment:
+    name: production
+    action: stop
+  dependencies:
+    - deploy:production
+
+# =====================================
+# Tagged Release
+# =====================================
+release:
+  extends: .docker_build_template
+  stage: build
+  script:
+    - |
+      echo "Building release images for tag $CI_COMMIT_TAG..."
+
+      # Build all variants with version tag
+      for variant in minimal python-dev node-dev; do
+        echo "Building $variant..."
+
+        BUILD_ARGS="--build-arg PROJECT_NAME=$PROJECT_NAME --build-arg PROJECT_PATH=."
+
+        case $variant in
+          python-dev)
+            BUILD_ARGS="$BUILD_ARGS --build-arg INCLUDE_PYTHON_DEV=true --build-arg INCLUDE_DEV_TOOLS=true --build-arg INCLUDE_DOCKER=true"
+            ;;
+          node-dev)
+            BUILD_ARGS="$BUILD_ARGS --build-arg INCLUDE_NODE_DEV=true --build-arg INCLUDE_DEV_TOOLS=true --build-arg INCLUDE_DOCKER=true"
+            ;;
+        esac
+
+        docker build $BUILD_ARGS \
+          -t $IMAGE_NAME:$CI_COMMIT_TAG-$variant \
+          -t $IMAGE_NAME:$variant-latest \
+          .
+
+        docker push $IMAGE_NAME:$CI_COMMIT_TAG-$variant
+        docker push $IMAGE_NAME:$variant-latest
+      done
+
+  only:
+    - tags
