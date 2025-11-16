@@ -397,6 +397,12 @@ RUN if [ -f /opt/container-runtime/check-build-logs.sh ]; then \
     chmod +x /usr/local/bin/check-build-logs.sh; \
     fi
 
+# Install secret loading startup script
+RUN if [ -f /opt/container-runtime/secrets/50-load-secrets.sh ]; then \
+    cp /opt/container-runtime/secrets/50-load-secrets.sh /etc/container/startup/50-load-secrets.sh && \
+    chmod +x /etc/container/startup/50-load-secrets.sh; \
+    fi
+
 # Switch to user
 USER ${USERNAME}
 WORKDIR ${WORKING_DIR}
