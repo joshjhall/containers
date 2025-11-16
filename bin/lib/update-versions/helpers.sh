@@ -140,7 +140,7 @@ fetch_github_individual_checksum() {
     log_info "Fetching checksum from: $url" >&2
 
     local checksum
-    if ! checksum=$(curl -fsSL "$url"); then
+    if ! checksum=$(command curl -fsSL "$url"); then
         log_error "Failed to download checksum from $url"
         return 1
     fi

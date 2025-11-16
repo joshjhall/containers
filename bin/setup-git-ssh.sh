@@ -390,7 +390,7 @@ cleanup_on_exit() {
         if [ -f "$file" ]; then
             # Use shred if available for sensitive files
             if command -v shred >/dev/null 2>&1; then
-                shred -vfzu "$file" 2>/dev/null || rm -f "$file"
+                shred -vfzu "$file" 2>/dev/null || command rm -f "$file"
             else
                 command rm -f "$file"
             fi
@@ -698,13 +698,13 @@ acquire_lock() {
                 # Validate PID format
                 if [[ ! "$lock_pid" =~ ^[0-9]+$ ]]; then
                     log_warn "Invalid PID in lock file, removing"
-                    rm -f "$LOCK_FILE"
+                    command rm -f "$LOCK_FILE"
                     continue
                 fi
 
                 if ! kill -0 "$lock_pid" 2>/dev/null; then
                     log_warn "Removing stale lock from PID $lock_pid"
-                    rm -f "$LOCK_FILE"
+                    command rm -f "$LOCK_FILE"
                     continue
                 fi
             fi
@@ -731,7 +731,7 @@ release_lock() {
         local lock_pid
         lock_pid=$(command cat "$LOCK_FILE" 2>/dev/null || echo "0")
         if [ "$lock_pid" = "$$" ]; then
-            rm -f "$LOCK_FILE"
+            command rm -f "$LOCK_FILE"
             log_debug "Released lock"
         fi
     fi
@@ -811,14 +811,14 @@ create_secure_temp() {
 
     # Verify it's actually a directory and we own it
     if [ ! -d "$temp_dir" ] || [ ! -O "$temp_dir" ]; then
-        rm -rf "$temp_dir" 2>/dev/null || true
+        command rm -rf "$temp_dir" 2>/dev/null || true
         log_error "Temp directory creation failed security check"
         return 1
     fi
 
     # Set permissions (redundant with umask, but explicit)
     chmod 700 "$temp_dir" || {
-        rm -rf "$temp_dir"
+        command rm -rf "$temp_dir"
         log_error "Failed to set permissions on temporary directory"
         return 1
     }
@@ -1072,13 +1072,13 @@ secure_op_command() {
         if [[ "$output" =~ ^\s*[\{\[] ]]; then
             if ! validate_json "$output"; then
                 log_error "Invalid JSON response from 1Password CLI"
-                rm -f "$temp_out" "$temp_err"
+                command rm -f "$temp_out" "$temp_err"
                 return 1
             fi
         fi
 
         echo "$output"
-        rm -f "$temp_out" "$temp_err"
+        command rm -f "$temp_out" "$temp_err"
         return 0
     else
         local exit_code=$?
@@ -1102,7 +1102,7 @@ secure_op_command() {
             log_debug "Network diagnostics available in debug mode"
         fi
 
-        rm -f "$temp_out" "$temp_err"
+        command rm -f "$temp_out" "$temp_err"
         return $exit_code
     fi
 }
@@ -1562,7 +1562,7 @@ sanitize_git_name() {
     local name="$1"
 
     # Remove leading/trailing whitespace
-    name=$(echo "$name" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+    name=$(echo "$name" | command sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
 
     # Remove control characters and non-printable characters
     name=$(echo "$name" | tr -d '[:cntrl:]')
@@ -1583,7 +1583,7 @@ sanitize_git_name() {
     fi
 
     # Remove dangerous characters that could cause issues
-    name=$(echo "$name" | sed 's/[<>|;&$`\\]//g')
+    name=$(echo "$name" | command sed 's/[<>|;&$`\\]//g')
 
     echo "$name"
 }
@@ -1593,7 +1593,7 @@ sanitize_email() {
     local email="$1"
 
     # Remove leading/trailing whitespace
-    email=$(echo "$email" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+    email=$(echo "$email" | command sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
 
     # Remove mailto: prefix if present
     email="${email#mailto:}"
@@ -1605,7 +1605,7 @@ sanitize_email() {
     email=$(echo "$email" | tr -d '[:cntrl:]')
 
     # Remove dangerous characters but keep valid email chars
-    email=$(echo "$email" | sed 's/[^a-zA-Z0-9._%+-@]//g')
+    email=$(echo "$email" | command sed 's/[^a-zA-Z0-9._%+-@]//g')
 
     # Ensure single @ symbol
     local at_count
@@ -1846,12 +1846,12 @@ setup_ssh_agent() {
             env_perms=$(stat -c '%a' "$agent_env" 2>/dev/null || stat -f '%A' "$agent_env" 2>/dev/null)
             if [ "$env_perms" != "600" ]; then
                 log_warn "Warning: agent.env has insecure permissions, removing"
-                rm -f "$agent_env"
+                command rm -f "$agent_env"
             else
                 # Validate agent.env content before sourcing
                 if grep -qE '(^|\s)(rm|curl|wget|nc|exec|eval|python|perl|ruby|php)' "$agent_env"; then
                     log_error "Agent environment file contains suspicious commands"
-                    rm -f "$agent_env"
+                    command rm -f "$agent_env"
                 else
                     # shellcheck disable=SC1090
                     source "$agent_env" >/dev/null 2>&1 || true
@@ -1873,7 +1873,7 @@ setup_ssh_agent() {
                 fi
             fi
             # Clean up stale environment file
-            rm -f "$agent_env"
+            command rm -f "$agent_env"
         fi
 
         # Start new agent with specific lifetime
@@ -1904,10 +1904,10 @@ setup_ssh_agent() {
             env_perms=$(stat -c '%a' "$agent_env" 2>/dev/null || stat -f '%A' "$agent_env" 2>/dev/null)
             if [ "$env_perms" != "600" ]; then
                 log_warn "Warning: agent.env has insecure permissions, removing"
-                rm -f "$agent_env"
+                command rm -f "$agent_env"
             elif grep -qE '(^|\s)(rm|curl|wget|nc|exec|eval|python|perl|ruby|php)' "$agent_env"; then
                 log_error "Agent environment file contains suspicious commands"
-                rm -f "$agent_env"
+                command rm -f "$agent_env"
             else
                 # shellcheck disable=SC1090
                 source "$agent_env" >/dev/null 2>&1 || true
@@ -1919,7 +1919,7 @@ setup_ssh_agent() {
                 fi
             fi
             # Clean up stale environment file
-            rm -f "$agent_env"
+            command rm -f "$agent_env"
         fi
 
         # Start new agent
@@ -2001,7 +2001,7 @@ if [ -f ~/.ssh/agent.env ]; then
         export SSH_AUTH_SOCK SSH_AGENT_PID
     else
         # Remove compromised agent file
-        rm -f ~/.ssh/agent.env
+        command rm -f ~/.ssh/agent.env
     fi
 fi
 '
@@ -2023,7 +2023,7 @@ fi
 
             # Replace atomically
             command mv "$temp_rc" "$rc_file"
-            rm -f "$rc_file.backup.$$"
+            command rm -f "$rc_file.backup.$$"
 
             log_debug "Updated $rc_file"
         fi
@@ -2108,7 +2108,7 @@ process_ssh_key() {
     actual_perms=$(stat -c '%a' "$temp_key" 2>/dev/null || stat -f '%A' "$temp_key" 2>/dev/null)
     if [ "$actual_perms" != "600" ]; then
         log_error "Failed to set secure permissions on temp key file"
-        rm -f "$temp_key"
+        command rm -f "$temp_key"
         return 1
     fi
 
@@ -2122,14 +2122,14 @@ process_ssh_key() {
 
     if [ -z "$private_key" ]; then
         log_warn "No private key found for: $key_title"
-        rm -f "$temp_key"
+        command rm -f "$temp_key"
         return 1
     fi
 
     # Validate SSH key format
     if ! validate_ssh_key "$private_key"; then
         log_error "Invalid SSH key format for: $key_title"
-        rm -f "$temp_key"
+        command rm -f "$temp_key"
         unset private_key
         return 1
     fi
@@ -2143,7 +2143,7 @@ process_ssh_key() {
             # Add known bad fingerprints here
             "SHA256:RjY3K2JlKShb*"|"MD5:98:2e:d7:e0:de:9f:ac:67:28:c2:42:2d:37:16:58:4d")
                 log_error "SSH key matches known compromised key: $key_title"
-                rm -f "$temp_key"
+                command rm -f "$temp_key"
                 unset private_key
                 return 1
                 ;;
@@ -2156,7 +2156,7 @@ process_ssh_key() {
     # Verify file was written and is not empty
     if [ ! -s "$temp_key" ]; then
         log_error "Failed to write SSH key to temp file"
-        rm -f "$temp_key"
+        command rm -f "$temp_key"
         unset private_key
         return 1
     fi
@@ -2194,16 +2194,16 @@ process_ssh_key() {
             # Only check and warn if file still exists after sync
             if [ -e "$temp_key" ]; then
                 log_warn "Warning: temp key file persists after shred"
-                rm -rf "$temp_key" 2>/dev/null || true
+                command rm -rf "$temp_key" 2>/dev/null || true
             fi
         else
             # shred failed, use fallback
-            rm -f "$temp_key" 2>/dev/null || true
+            command rm -f "$temp_key" 2>/dev/null || true
         fi
     else
         # Fallback: overwrite with random data before deletion
         dd if=/dev/urandom of="$temp_key" bs=1k count=10 2>/dev/null || true
-        rm -f "$temp_key"
+        command rm -f "$temp_key"
 
         # For non-shred case, use sync to avoid race condition
         sync 2>/dev/null || true
@@ -2211,7 +2211,7 @@ process_ssh_key() {
         # Final check only if needed
         if [ -e "$temp_key" ]; then
             log_debug "Temp file removal delayed, forcing cleanup"
-            rm -rf "$temp_key" 2>/dev/null || true
+            command rm -rf "$temp_key" 2>/dev/null || true
         fi
     fi
 
@@ -2512,7 +2512,7 @@ perform_health_checks() {
         fi
     done < <(sort "$check_results_file" 2>/dev/null || true)
 
-    rm -f "$check_results_file"
+    command rm -f "$check_results_file"
 
     log_info "Health check summary: $checks_passed/$checks_total passed"
 
@@ -2634,7 +2634,7 @@ main() {
         # Try to use system username as fallback
         local fallback_name="${USER:-${USERNAME:-Developer}}"
         # Capitalize first letter if it's lowercase
-        fallback_name="$(echo "$fallback_name" | sed 's/^./\U&/')"
+        fallback_name="$(echo "$fallback_name" | command sed 's/^./\U&/')"
         git config --global user.name "$fallback_name"
         log_info "Set fallback Git user.name: $fallback_name"
     fi

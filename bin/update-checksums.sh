@@ -126,13 +126,13 @@ update_checksum() {
         nodejs)
             local filename="node-v${version}-linux-x64.tar.xz"
             local shasums_url="https://nodejs.org/dist/v${version}/SHASUMS256.txt"
-            checksum=$(curl -fsSL "$shasums_url" 2>/dev/null | grep "$filename" | awk '{print $1}' || echo "")
+            checksum=$(command curl -fsSL "$shasums_url" 2>/dev/null | grep "$filename" | awk '{print $1}' || echo "")
             url="https://nodejs.org/dist/v${version}/${filename}"
             ;;
         golang)
             local filename="go${version}.linux-amd64.tar.gz"
             local json_data
-            json_data=$(curl -fsSL "https://go.dev/dl/?mode=json" 2>/dev/null)
+            json_data=$(command curl -fsSL "https://go.dev/dl/?mode=json" 2>/dev/null)
             checksum=$(echo "$json_data" | jq -r ".[] | select(.version == \"go${version}\") | .files[] | select(.filename == \"${filename}\") | .sha256" 2>/dev/null || echo "")
             url="https://go.dev/dl/${filename}"
             ;;
@@ -144,7 +144,7 @@ update_checksum() {
                 # Fallback: parse downloads page
                 local major_minor
                 major_minor=$(echo "$version" | cut -d. -f1-2)
-                checksum=$(curl -fsSL "https://www.ruby-lang.org/en/downloads/" 2>/dev/null | \
+                checksum=$(command curl -fsSL "https://www.ruby-lang.org/en/downloads/" 2>/dev/null | \
                     grep -A2 ">Ruby ${version}" | \
                     grep -oP 'sha256: \K[a-f0-9]{64}' | \
                     head -1 || echo "")
@@ -194,7 +194,7 @@ update_checksum() {
         ((UPDATED_COUNT++))
     else
         echo -e "${RED}    ✗ Failed to update JSON (invalid output)${NC}"
-        rm "$tmp_file"
+        command rm "$tmp_file"
         ((FAILED_COUNT++))
         return 1
     fi

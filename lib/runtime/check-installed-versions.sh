@@ -184,7 +184,7 @@ get_rubygems_version() {
 get_cran_version() {
     local package="$1"
     local response
-    if response=$(curl -s "https://crandb.r-pkg.org/${package}"); then
+    if response=$(command curl -s "https://crandb.r-pkg.org/${package}"); then
         echo "$response" | jq -r '.Version // .version // "unknown"' 2>/dev/null || echo "unknown"
     else
         echo "unknown"

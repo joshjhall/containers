@@ -481,7 +481,7 @@ command cat > /etc/container/first-startup/30-java-setup.sh << 'EOF'
 # Set up Maven settings if not exists
 if [ ! -f "$HOME/.m2/settings.xml" ] && [ -f "/etc/maven/settings-template.xml" ]; then
     mkdir -p "$HOME/.m2"
-    cp /etc/maven/settings-template.xml "$HOME/.m2/settings.xml"
+    command cp /etc/maven/settings-template.xml "$HOME/.m2/settings.xml"
     echo "Created Maven settings.xml from template"
 fi
 

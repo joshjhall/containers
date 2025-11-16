@@ -65,7 +65,7 @@ add_to_system_path() {
 
         # Remove the PATH line from the file
         log_command "Removing existing PATH from /etc/environment" \
-            bash -c "(command grep -v '^PATH=' '$environment_file' || true) > '${environment_file}.tmp' && mv '${environment_file}.tmp' '$environment_file'"
+            bash -c "(command grep -v '^PATH=' '$environment_file' || true) > '${environment_file}.tmp' && command mv '${environment_file}.tmp' '$environment_file'"
     else
         # Use custom base path if provided, otherwise use default
         if [ -n "$custom_base_path" ]; then
