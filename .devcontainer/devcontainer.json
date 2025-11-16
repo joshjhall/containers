@@ -16,8 +16,8 @@
   // This allows Docker commands to work without sudo or permission changes
   "initializeCommand": "bash -c './bin/setup-docker-socket.sh'",
 
-  // Auto-configure git hooks, development environment, and SSH keys after container starts
-  "postStartCommand": "bash -c './bin/setup-dev-environment.sh && ./.devcontainer/setup-git-ssh.sh'",
+  // Auto-configure git hooks, development environment, SSH keys, and GitHub CLI after container starts
+  "postStartCommand": "bash -c './bin/setup-dev-environment.sh && ./bin/setup-git-ssh.sh && ./bin/setup-gh-cli.sh'",
 
   "customizations": {
     "vscode": {
