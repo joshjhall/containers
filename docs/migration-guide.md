@@ -388,7 +388,7 @@ docker build --no-cache -t myproject:latest .
 
 ### Emergency Rollback
 
-See [docs/emergency-rollback.md](emergency-rollback.md) for comprehensive
+See [docs/emergency-rollback.md](operations/rollback.md) for comprehensive
 rollback procedures including:
 
 - Rollback with version pinning
@@ -553,7 +553,7 @@ ERROR: failed to solve: failed to compute cache key
 - [troubleshooting.md](troubleshooting.md) - Common issues and solutions
 - [production-deployment.md](production-deployment.md) - Production best
   practices
-- [feature-dependencies.md](feature-dependencies.md) - Feature compatibility
+- [feature-dependencies.md](reference/features.md) - Feature compatibility
 
 ### Support Channels
 
@@ -571,7 +571,7 @@ ERROR: failed to solve: failed to compute cache key
      - Steps to reproduce
 
 1. **Emergency Rollback**
-   - See [emergency-rollback.md](emergency-rollback.md)
+   - See [emergency-rollback.md](operations/rollback.md)
    - Pin to last known good version
    - Report issue after recovery
 
@@ -614,7 +614,7 @@ features will:
 ## Related Documentation
 
 - [CHANGELOG.md](../CHANGELOG.md) - Complete version history
-- [emergency-rollback.md](emergency-rollback.md) - Emergency procedures
+- [emergency-rollback.md](operations/rollback.md) - Emergency procedures
 - [troubleshooting.md](troubleshooting.md) - Problem resolution
 - [production-deployment.md](production-deployment.md) - Production guidelines
 - [CLAUDE.md](../CLAUDE.md) - Build system overview

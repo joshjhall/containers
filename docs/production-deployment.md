@@ -208,7 +208,7 @@ docker build --build-arg API_KEY=secret123 .
 docker run -e API_KEY=secret123 myapp:prod
 ```
 
-See [environment-variables.md](environment-variables.md) for available
+See [environment-variables.md](reference/environment-variables.md) for available
 variables.
 
 ### Configuration Validation
@@ -842,7 +842,8 @@ spec:
 
 - [Security Best Practices](security-hardening.md) - Comprehensive security
   guide
-- [Environment Variables](environment-variables.md) - Configuration reference
+- [Environment Variables](reference/environment-variables.md) - Configuration
+  reference
 - [Troubleshooting](troubleshooting.md) - Common issues and solutions
 - [CLAUDE.md](../CLAUDE.md) - Build system overview
 

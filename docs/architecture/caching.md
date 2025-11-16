@@ -925,7 +925,7 @@ COPY --from=builder /build/dist /app/dist
 
 ## Related Documentation
 
-- [environment-variables.md](environment-variables.md) - Cache-related
+- [environment-variables.md](../reference/environment-variables.md) - Cache-related
   environment variables
 - [troubleshooting.md](troubleshooting.md) - Build and cache troubleshooting
 - [production-deployment.md](production-deployment.md) - Production caching

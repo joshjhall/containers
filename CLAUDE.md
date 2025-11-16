@@ -345,9 +345,9 @@ The tag push triggers GitHub Actions to:
 Detailed documentation is available in the `docs/` directory:
 
 - `docs/troubleshooting.md` - Common issues and solutions
-- `docs/automated-patch-releases.md` - How the auto-patch system works
-- `docs/version-tracking.md` - Which tools are pinned vs. latest
-- `docs/testing-framework.md` - Test framework details
+- `docs/operations/automated-releases.md` - How the auto-patch system works
+- `docs/reference/versions.md` - Which tools are pinned vs. latest
+- `docs/development/testing.md` - Test framework details
 
 Reference examples are in the `examples/` directory:
 

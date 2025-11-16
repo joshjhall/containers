@@ -389,7 +389,7 @@ metrics/
 
 ## Related Documentation
 
-- [Testing Framework](testing-framework.md) - Overall testing approach
+- [Testing Framework](../development/testing.md) - Overall testing approach
 - [Production Deployment](production-deployment.md) - Optimizing image sizes
 - [Troubleshooting](troubleshooting.md) - Build-time issues
 - [Contributing](../CONTRIBUTING.md) - Development guidelines

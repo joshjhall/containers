@@ -1,6 +1,7 @@
 # OpenTelemetry Integration Guide
 
-This guide explains how to integrate OpenTelemetry (OTel) for distributed tracing and advanced observability in the container build system.
+This guide explains how to integrate OpenTelemetry (OTel) for distributed
+tracing and advanced observability in the container build system.
 
 ## Overview
 
@@ -100,19 +101,19 @@ OTEL_BSP_EXPORT_TIMEOUT="30000"               # Export timeout (ms)
 ### Docker Compose Example
 
 ```yaml
-version: "3.8"
+version: '3.8'
 
 services:
   # OpenTelemetry Collector
   otel-collector:
     image: otel/opentelemetry-collector-contrib:latest
-    command: ["--config=/etc/otel-collector-config.yaml"]
+    command: ['--config=/etc/otel-collector-config.yaml']
     volumes:
       - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml:ro
     ports:
-      - "4317:4317" # OTLP gRPC
-      - "4318:4318" # OTLP HTTP
-      - "8888:8888" # Metrics
+      - '4317:4317' # OTLP gRPC
+      - '4318:4318' # OTLP HTTP
+      - '8888:8888' # Metrics
 
   # Jaeger (Trace Backend)
   jaeger:
@@ -120,8 +121,8 @@ services:
     environment:
       - COLLECTOR_OTLP_ENABLED=true
     ports:
-      - "16686:16686" # Jaeger UI
-      - "14268:14268" # Collector HTTP
+      - '16686:16686' # Jaeger UI
+      - '14268:14268' # Collector HTTP
 
   # Container with OTel enabled
   container:
@@ -362,13 +363,13 @@ curl "http://localhost:16686/api/traces?service=container-build&limit=20"
 ```yaml
 tempo:
   image: grafana/tempo:latest
-  command: ["-config.file=/etc/tempo.yaml"]
+  command: ['-config.file=/etc/tempo.yaml']
   volumes:
     - ./tempo.yaml:/etc/tempo.yaml:ro
     - tempo-data:/var/tempo
   ports:
-    - "4317:4317" # OTLP gRPC
-    - "3200:3200" # Tempo HTTP
+    - '4317:4317' # OTLP gRPC
+    - '3200:3200' # Tempo HTTP
 
 grafana:
   image: grafana/grafana:latest
@@ -411,7 +412,7 @@ docker run -d -p 9411:9411 openzipkin/zipkin:latest
 ```yaml
 exporters:
   zipkin:
-    endpoint: "http://zipkin:9411/api/v2/spans"
+    endpoint: 'http://zipkin:9411/api/v2/spans'
 ```
 
 ## Examples
@@ -421,25 +422,25 @@ exporters:
 Create `docker-compose-observability.yml`:
 
 ```yaml
-version: "3.8"
+version: '3.8'
 
 services:
   # OpenTelemetry Collector
   otel-collector:
     image: otel/opentelemetry-collector-contrib:latest
-    command: ["--config=/etc/otel-config.yaml"]
+    command: ['--config=/etc/otel-config.yaml']
     volumes:
       - ./examples/observability/otel-collector-config.yaml:/etc/otel-config.yaml:ro
     ports:
-      - "4317:4317"
-      - "4318:4318"
+      - '4317:4317'
+      - '4318:4318'
 
   # Jaeger
   jaeger:
     image: jaegertracing/all-in-one:latest
     ports:
-      - "16686:16686"
-      - "14268:14268"
+      - '16686:16686'
+      - '14268:14268'
 
   # Prometheus
   prometheus:
@@ -447,7 +448,7 @@ services:
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
     ports:
-      - "9090:9090"
+      - '9090:9090'
 
   # Grafana
   grafana:
@@ -457,7 +458,7 @@ services:
     volumes:
       - ./examples/observability/grafana:/etc/grafana/provisioning/dashboards:ro
     ports:
-      - "3000:3000"
+      - '3000:3000'
 
   # Container with full observability
   container:
@@ -480,7 +481,7 @@ services:
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
       - OTEL_RESOURCE_ATTRIBUTES=deployment.environment=dev
     ports:
-      - "9091:9090"
+      - '9091:9090'
     depends_on:
       - otel-collector
       - prometheus

@@ -384,7 +384,7 @@ list-features.sh --filter dev-tools
 - [Dockerfile](../Dockerfile) - Complete list of build arguments with defaults
 - [Troubleshooting](troubleshooting.md) - Common issues with environment
   variables
-- [Testing Framework](testing-framework.md) - Test environment configuration
+- [Testing Framework](../development/testing.md) - Test environment configuration
 
 ---
 

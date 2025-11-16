@@ -3,7 +3,7 @@
 Welcome to the Container Build System documentation. This index helps you find
 the right documentation for your needs.
 
-## Quick Navigation
+## Quick Start
 
 **New to the project?** Start with:
 
@@ -11,181 +11,148 @@ the right documentation for your needs.
 2. [CLAUDE.md](../CLAUDE.md) - Working with the codebase
 3. [Troubleshooting](troubleshooting.md) - Common issues and solutions
 
-**Building and releasing?**
+## User Documentation
 
-- [Releasing](releasing.md) - Release process and versioning
-- [Version Tracking](version-tracking.md) - Tool version management
-- [Automated Patch Releases](automated-patch-releases.md) - Weekly automation
+Essential guides for building and using containers:
 
-**Need help?**
+- **[Production Deployment](production-deployment.md)** - Production usage and
+  best practices
+- **[Migration Guide](migration-guide.md)** - Upgrading between versions
+- **[Healthcheck](healthcheck.md)** - Health monitoring and validation
+- **[Security Hardening](security-hardening.md)** - Security configuration and
+  best practices
+- **[Troubleshooting](troubleshooting.md)** - Common issues and solutions
 
-- [Troubleshooting](troubleshooting.md) - Comprehensive troubleshooting guide
+## Documentation Categories
 
----
+### [Architecture](architecture/)
 
-## Build & Release
+Design decisions and technical analysis:
 
-### [Releasing](releasing.md)
+- [Architecture Review](architecture/review.md) - System architecture and design
+  patterns
+- [Caching Strategy](architecture/caching.md) - BuildKit cache optimization
+- [Observability Design](architecture/observability.md) - Metrics, logging, and
+  monitoring
+- [Version Resolution](architecture/version-resolution.md) - Partial version
+  resolution system
 
-Complete guide to the release process, including version bumping, CHANGELOG
-generation, and CI/CD automation. Includes section on security releases.
+### [CI/CD](ci/)
 
-**Key topics**: release.sh script, semantic versioning, git-cliff, security
-releases
+Continuous integration and deployment:
 
-### [Version Tracking](version-tracking.md)
+- [GitHub CI Authentication](ci/authentication.md) - GitHub Actions
+  authentication setup
+- [Build Metrics](ci/build-metrics.md) - Image size and build time tracking
 
-Documents which tool versions are pinned vs. using latest, and how the version
-tracking system works.
+### [Development](development/)
 
-**Key topics**: version-updates.json, check-versions.sh, update-versions.sh
+Contributor and development guides:
 
-### [Automated Patch Releases](automated-patch-releases.md)
+- [Releasing](development/releasing.md) - Release process and versioning
+- [Testing](development/testing.md) - Test framework and writing tests
+- [Code Style](development/code-style.md) - Comment conventions and code
+  standards
+- [Changelog](development/changelog.md) - Commit message format and CHANGELOG
+  generation
 
-How the weekly automated patch release system works, including the auto-patch
-workflow and version update automation.
+### [Observability](observability/)
 
-**Key topics**: auto-patch branches, version checking, CI/CD automation
+Runtime monitoring and observability:
 
----
+- [OpenTelemetry Integration](observability/opentelemetry-integration.md) -
+  Complete OTel setup
+- [Testing Strategy](observability/testing-strategy.md) - Observability testing
+  approach
+- [Runbooks](observability/runbooks/) - Incident response procedures
 
-## Security
+### [Operations](operations/)
 
-### [Checksum Verification](checksum-verification.md) ✅ COMPLETE
+Deployment and operational procedures:
 
-**Status**: Historical reference and implementation guide
+- [Automated Releases](operations/automated-releases.md) - Weekly auto-patch
+  system
+- [Emergency Rollback](operations/rollback.md) - Rollback procedures
 
-Complete audit of checksum verification across all downloads. Documents the
-security work completed in v4.5.0.
+### [Reference](reference/)
 
-**Key topics**: download-verify.sh, checksum-fetch.sh, supply chain security
+Technical specifications and configuration:
 
-### [Configuration Validation Examples](../examples/validation/README.md) ✅ COMPLETE
+- [Environment Variables](reference/environment-variables.md) - Build arguments
+  and env vars
+- [Feature Dependencies](reference/features.md) - Tool dependency matrix
+- [Version Tracking](reference/versions.md) - Version pinning and update
+  policies
+- [Version Compatibility](reference/compatibility.md) - Platform compatibility
+  matrix
+- [Security Checksums](reference/security-checksums.md) - Checksum verification
+  system
 
-**Status**: Production-ready validation framework
+### [Troubleshooting](troubleshooting/)
 
-Runtime configuration validation system with environment variable validation,
-format checking, and secret detection. Includes complete examples for web apps,
-API services, and background workers.
+Platform-specific troubleshooting:
 
-**Key topics**: Runtime validation, environment variable checking, secret
-detection, custom validation rules
-
-### [GitHub CI Authentication](github-ci-authentication.md)
-
-Authentication setup for GitHub Actions, including tokens, PATs, and OIDC for
-Cosign image signing.
-
-**Key topics**: GITHUB_TOKEN, PAT setup, Cosign OIDC, id-token permissions
-
----
-
-## Testing & Development
-
-### [Testing Framework](testing-framework.md)
-
-Comprehensive testing guide covering unit tests, integration tests, and the test
-framework architecture.
-
-**Key topics**: run_all.sh, test assertions, Docker testing, feature tests
-
-### [Troubleshooting](troubleshooting.md)
-
-Extensive troubleshooting guide for build issues, runtime problems, security
-issues, and CI/CD failures.
-
-**Key topics**:
-
-- Debian version compatibility
-- Build failures
-- Security & download issues (checksum, GPG verification)
-- Feature-specific issues
-- Debugging tools
-
----
-
-## Architecture & Design
-
-### [Architecture Review](architecture-review.md)
-
-Deep dive into the modular architecture, including feature scripts, caching
-strategy, and design decisions.
-
-**Key topics**: Feature modularity, BuildKit caching, logging utilities
-
-### [Comment Style Guide](comment-style-guide.md)
-
-Guidelines for code documentation and comment formatting throughout the
-codebase.
-
-**Key topics**: Comment conventions, documentation standards
-
-### [Partial Version Resolution Analysis](partial-version-resolution-analysis.md)
-
-Technical analysis of partial version resolution support for Ruby and Go
-runtimes.
-
-**Key topics**: Version flexibility, semantic versioning, runtime installation
-
----
-
-## Subdirectories
-
-### [archived/](archived/)
-
-Completed work and historical documents preserved as reference.
-
-**Contains**:
-
-- `mojo-deprecation-notice.md` - Archived Mojo installation documentation
-  (unsupported)
-
-### [planned/](planned/)
-
-Design documents and roadmaps for features not yet implemented.
-
-**Contains**:
-
-- `security-hardening.md` - Security hardening roadmap (16 planned improvements)
-- `security-and-init-system.md` - Security scanning system design
-- `security-scan-quick-reference.md` - Quick reference for planned security
-  tools
-
----
+- [Case-Sensitive Filesystems](troubleshooting/case-sensitive-filesystems.md) -
+  Linux container filesystem issues
+- [Docker for Mac](troubleshooting/docker-mac-case-sensitivity.md) -
+  macOS-specific Docker issues
 
 ## Related Files
 
 ### Root Directory
 
-- **[README.md](../README.md)** - Main project documentation and quick start
-  guide
-- **[CLAUDE.md](../CLAUDE.md)** - Development guide for working with this
-  codebase
-- **[CHANGELOG.md](../CHANGELOG.md)** - Version history and release notes
-- **[SECURITY.md](../SECURITY.md)** - Security policy and vulnerability
-  reporting
+- **[README.md](../README.md)** - Main project documentation
+- **[CLAUDE.md](../CLAUDE.md)** - Development guide
+- **[CHANGELOG.md](../CHANGELOG.md)** - Version history
+- **[SECURITY.md](../SECURITY.md)** - Security policy
 - **[LICENSE](../LICENSE)** - Project license
 
 ### Examples
 
-- **[examples/](../examples/)** - Docker Compose configurations and environment
-  examples
-  - `env/*.env` - Environment variable templates for each feature
+- **[examples/](../examples/)** - Docker Compose configurations and examples
+  - `env/*.env` - Environment variable templates
   - `contexts/` - Docker Compose patterns
-  - `validation/` - Runtime configuration validation examples (web apps, API
-    services, workers)
+  - `validation/` - Runtime configuration validation
+  - `observability/` - Observability stack setup
 
----
+## Finding What You Need
 
-## Documentation Lifecycle
+### I want to
 
-Documents move through these states:
+#### Build a container
 
-1. **Planned** ([planned/](planned/)) - Features designed but not implemented
-2. **Active** (docs/) - Current features and processes
-3. **Archived** ([archived/](archived/)) - Completed work preserved as reference
+- Start: [Main README](../README.md)
+- Configure:
+  [Reference/Environment Variables](reference/environment-variables.md)
+- Examples: [../examples/](../examples/)
 
----
+#### Deploy to production
+
+- Guide: [Production Deployment](production-deployment.md)
+- Security: [Security Hardening](security-hardening.md)
+- Health: [Healthcheck](healthcheck.md)
+
+#### Upgrade versions
+
+- Process: [Migration Guide](migration-guide.md)
+- Compatibility: [Reference/Version Compatibility](reference/compatibility.md)
+
+#### Contribute code
+
+- Style: [Development/Code Style](development/code-style.md)
+- Testing: [Development/Testing](development/testing.md)
+- Releasing: [Development/Releasing](development/releasing.md)
+
+#### Debug an issue
+
+- Start: [Troubleshooting](troubleshooting.md)
+- macOS:
+  [Troubleshooting/Docker for Mac](troubleshooting/docker-mac-case-sensitivity.md)
+
+#### Understand design decisions
+
+- Overview: [Architecture/Review](architecture/review.md)
+- Specific: Browse [Architecture/](architecture/) directory
 
 ## Contributing to Documentation
 
@@ -194,17 +161,15 @@ When updating documentation:
 1. **Keep it current** - Update docs when code changes
 2. **Cross-reference** - Link to related docs
 3. **Use examples** - Show real commands and output
-4. **Status markers** - Use ✅ COMPLETE, 🔴 NOT STARTED, etc. for clarity
-5. **Archive when done** - Move completed work to archived/
+4. **Be concise** - Keep docs clear and focused
+5. **Follow structure** - Use appropriate category directories
 
-See [comment-style-guide.md](comment-style-guide.md) for style conventions.
-
----
+See [Development/Code Style](development/code-style.md) for style conventions.
 
 ## Getting Help
 
 1. Check [Troubleshooting](troubleshooting.md) first
-2. Search existing documentation using the navigation above
+2. Search existing documentation using categories above
 3. Check [CHANGELOG.md](../CHANGELOG.md) for recent changes
 4. Review [GitHub Actions](https://github.com/joshjhall/containers/actions) for
    CI status
@@ -212,4 +177,4 @@ See [comment-style-guide.md](comment-style-guide.md) for style conventions.
 
 ---
 
-**Last Updated**: 2025-11-09 **Documentation Structure Version**: 1.0
+**Last Updated**: 2025-11-16 **Documentation Structure Version**: 2.0

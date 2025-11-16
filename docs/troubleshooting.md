@@ -269,7 +269,7 @@ docker build --build-arg PYTHON_VERSION=3.14.0 .
 docker run --rm myimage env | grep PYTHON
 ```text
 
-**See also**: [environment-variables.md](environment-variables.md) for complete
+**See also**: [environment-variables.md](reference/environment-variables.md) for complete
 reference.
 
 ### Intermediate build failure analysis
@@ -1334,8 +1334,8 @@ docker exec mycontainer /bin/check-installed-versions.sh
 
 ## Related Documentation
 
-- [Version Tracking](version-tracking.md) - Managing tool versions
-- [Testing Framework](testing-framework.md) - Testing guide
+- [Version Tracking](reference/versions.md) - Managing tool versions
+- [Testing Framework](development/testing.md) - Testing guide
 - [Security and Init System](security-and-init-system.md) - Security model
 - [README](../README.md) - Getting started
 - [CHANGELOG](../CHANGELOG.md) - Recent changes and fixes

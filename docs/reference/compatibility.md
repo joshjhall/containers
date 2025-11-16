@@ -425,8 +425,8 @@ The version compatibility system integrates with the unit test framework:
 
 ## Related Documentation
 
-- [Build Metrics](build-metrics.md) - Track image sizes and build times
-- [Testing Framework](testing-framework.md) - Overall testing approach
-- [Version Tracking](version-tracking.md) - Which tools are pinned vs. latest
+- [Build Metrics](../ci/build-metrics.md) - Track image sizes and build times
+- [Testing Framework](../development/testing.md) - Overall testing approach
+- [Version Tracking](versions.md) - Which tools are pinned vs. latest
 - [Migration Guide](migration-guide.md) - Upgrading between versions
 - [Contributing](../CONTRIBUTING.md) - Development guidelines
