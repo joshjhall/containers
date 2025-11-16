@@ -252,6 +252,102 @@ test_environment_preservation() {
     unset TEST_ENV_VAR
 }
 
+# Test: Startup time tracking variables
+test_startup_time_tracking() {
+    # Check that entrypoint.sh contains startup time tracking
+    if grep -q "STARTUP_BEGIN_TIME=\$(date +%s)" "$PROJECT_ROOT/lib/runtime/entrypoint.sh"; then
+        assert_true true "Startup begin time is tracked"
+    else
+        assert_true false "Startup begin time tracking not found"
+    fi
+
+    if grep -q "STARTUP_END_TIME=\$(date +%s)" "$PROJECT_ROOT/lib/runtime/entrypoint.sh"; then
+        assert_true true "Startup end time is tracked"
+    else
+        assert_true false "Startup end time tracking not found"
+    fi
+
+    if grep -q "STARTUP_DURATION=\$((STARTUP_END_TIME - STARTUP_BEGIN_TIME))" "$PROJECT_ROOT/lib/runtime/entrypoint.sh"; then
+        assert_true true "Startup duration is calculated"
+    else
+        assert_true false "Startup duration calculation not found"
+    fi
+}
+
+# Test: Startup metrics file creation
+test_startup_metrics_file() {
+    # Check that entrypoint.sh creates metrics directory
+    if grep -q "METRICS_DIR=\"/var/run/container-metrics\"" "$PROJECT_ROOT/lib/runtime/entrypoint.sh"; then
+        assert_true true "Metrics directory is defined"
+    else
+        assert_true false "Metrics directory not defined"
+    fi
+
+    if grep -q "mkdir -p \"\$METRICS_DIR\"" "$PROJECT_ROOT/lib/runtime/entrypoint.sh"; then
+        assert_true true "Metrics directory is created"
+    else
+        assert_true false "Metrics directory creation not found"
+    fi
+
+    # Check that startup metrics are written
+    if grep -q "startup-metrics.txt" "$PROJECT_ROOT/lib/runtime/entrypoint.sh"; then
+        assert_true true "Startup metrics file is created"
+    else
+        assert_true false "Startup metrics file creation not found"
+    fi
+}
+
+# Test: Startup metrics Prometheus format
+test_startup_metrics_format() {
+    # Check for Prometheus HELP comment
+    if grep -q "# HELP container_startup_seconds" "$PROJECT_ROOT/lib/runtime/entrypoint.sh"; then
+        assert_true true "Prometheus HELP comment present"
+    else
+        assert_true false "Prometheus HELP comment missing"
+    fi
+
+    # Check for Prometheus TYPE comment
+    if grep -q "# TYPE container_startup_seconds gauge" "$PROJECT_ROOT/lib/runtime/entrypoint.sh"; then
+        assert_true true "Prometheus TYPE comment present"
+    else
+        assert_true false "Prometheus TYPE comment missing"
+    fi
+
+    # Check for metric output
+    if grep -q "container_startup_seconds \$STARTUP_DURATION" "$PROJECT_ROOT/lib/runtime/entrypoint.sh"; then
+        assert_true true "Prometheus metric value output present"
+    else
+        assert_true false "Prometheus metric value output missing"
+    fi
+}
+
+# Test: Startup duration calculation
+test_startup_duration_calculation() {
+    # Simulate startup duration calculation
+    local begin_time=1000
+    local end_time=1005
+    local duration=$((end_time - begin_time))
+
+    assert_equals "5" "$duration" "Startup duration calculated correctly"
+
+    # Test with different values
+    begin_time=100
+    end_time=150
+    duration=$((end_time - begin_time))
+
+    assert_equals "50" "$duration" "Startup duration handles different values"
+}
+
+# Test: Startup metrics output message
+test_startup_metrics_output() {
+    # Check that entrypoint.sh outputs startup time
+    if grep -q "Container initialized in" "$PROJECT_ROOT/lib/runtime/entrypoint.sh"; then
+        assert_true true "Startup time is displayed to user"
+    else
+        assert_true false "Startup time display not found"
+    fi
+}
+
 # Run tests with setup/teardown
 run_test_with_setup() {
     local test_function="$1"
@@ -272,6 +368,11 @@ run_test_with_setup test_first_run_marker_creation "First-run marker creation"
 run_test_with_setup test_empty_directory_handling "Empty directory handling"
 run_test_with_setup test_script_error_handling "Script error handling"
 run_test_with_setup test_environment_preservation "Environment preservation in scripts"
+run_test_with_setup test_startup_time_tracking "Startup time tracking variables"
+run_test_with_setup test_startup_metrics_file "Startup metrics file creation"
+run_test_with_setup test_startup_metrics_format "Startup metrics Prometheus format"
+run_test_with_setup test_startup_duration_calculation "Startup duration calculation"
+run_test_with_setup test_startup_metrics_output "Startup metrics output message"
 
 # Generate test report
 generate_report

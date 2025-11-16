@@ -28,6 +28,12 @@
 set -euo pipefail
 
 # ============================================================================
+# Startup Time Tracking
+# ============================================================================
+# Record startup time for observability metrics
+STARTUP_BEGIN_TIME=$(date +%s)
+
+# ============================================================================
 # Resource Limits
 # ============================================================================
 # Set file descriptor limits to prevent resource exhaustion
@@ -201,6 +207,26 @@ if [ -d "$STARTUP_DIR" ]; then
         fi
     done
 fi
+
+# ============================================================================
+# Startup Time Metrics
+# ============================================================================
+# Calculate and record startup duration for observability
+STARTUP_END_TIME=$(date +%s)
+STARTUP_DURATION=$((STARTUP_END_TIME - STARTUP_BEGIN_TIME))
+
+# Create metrics directory if it doesn't exist
+METRICS_DIR="/var/run/container-metrics"
+mkdir -p "$METRICS_DIR"
+
+# Write startup metrics (Prometheus format)
+{
+    echo "# HELP container_startup_seconds Time taken for container initialization in seconds"
+    echo "# TYPE container_startup_seconds gauge"
+    echo "container_startup_seconds $STARTUP_DURATION"
+} > "$METRICS_DIR/startup-metrics.txt"
+
+echo "✓ Container initialized in ${STARTUP_DURATION}s"
 
 # ============================================================================
 # Main Process Execution
