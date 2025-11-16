@@ -14,13 +14,14 @@ This document tracks remaining improvements for the container build system based
 
 ## Progress Summary
 
-**Completed Items**: 47 items (All HIGH priority, 2 CRITICAL, most MEDIUM priority, many LOW priority)
+**Completed Items**: 48 items (All HIGH priority, 2 CRITICAL, most MEDIUM priority, many LOW priority)
 **Partially Complete**: 0 items
-**Remaining Items**: 31 items (2 CRITICAL, 3 HIGH, 15 MEDIUM, 12 LOW)
+**Remaining Items**: 30 items (2 CRITICAL, 2 HIGH, 15 MEDIUM, 12 LOW)
 
 See git history and CHANGELOG.md for details on completed items.
 
 **Latest Updates (November 2025)**:
+- ✅ **Item #15 COMPLETE**: Configuration Validation Framework - 35 tests passing, opt-in activation, comprehensive validation
 - ✅ **Item #23 COMPLETE**: Template extraction for all 7 languages (Go, Node.js, R, Rust, Mojo, Java, Ruby) - 156 tests passing
 - ✅ **Item #4 COMPLETE**: Flexible version resolution for all 6 languages (Python, Node.js, Go, Ruby, Rust, Java)
 - ✅ **Item #1 COMPLETE**: 4-tier checksum verification + pinned checksums database + automated maintenance
@@ -601,50 +602,107 @@ Instead of creating separate Dockerfiles (which would violate the universal Dock
 
 ---
 
-#### 15. [HIGH] Add Configuration Validation Framework
+#### 15. [HIGH] ✅ COMPLETE - Add Configuration Validation Framework
 **Source**: Production Readiness Analysis (Nov 2025)
 **Priority**: P1 (High)
 **Effort**: 2 days
+**Status**: ✅ COMPLETE (Nov 2025)
+**Completed**: November 2025
 
-**Issue**: No runtime configuration validation
-- No required environment variable checks
-- No format validation
-- No secret detection warnings
-- Configuration errors discovered at runtime failure
+**What Was Delivered (November 2025)**:
 
-**Recommendation**:
-```bash
-#!/usr/local/bin/validate-config.sh
-# Runtime configuration validation
+✅ **Complete Configuration Validation Framework**:
+Created comprehensive runtime configuration validation system with opt-in activation, validation functions, secret detection, and custom validation rules support.
 
-required_vars=(
-  DATABASE_URL
-  REDIS_URL
-  SECRET_KEY
-)
+**Files Created**:
+- `lib/runtime/validate-config.sh` (447 lines) - Complete validation framework
+  * `cv_require_var()` - Validate required environment variables
+  * `cv_validate_url()` - Validate URL format with optional scheme checking (http, https, postgresql, redis, etc.)
+  * `cv_validate_port()` - Validate port numbers (1-65535)
+  * `cv_validate_email()` - Validate email format
+  * `cv_validate_boolean()` - Validate boolean values (true/false/yes/no/1/0)
+  * `cv_validate_path()` - Validate file/directory paths (with optional existence check)
+  * `cv_detect_secrets()` - Detect potential plaintext secrets in environment variables
+  * `cv_load_custom_rules()` - Load custom validation rules from external files
+  * `validate_configuration()` - Main entry point
+  * Colored output with error/warning/success indicators
+  * Error and warning counters with summary reporting
+  * Strict mode support (treat warnings as errors)
+  * Quiet mode support (suppress informational messages)
 
-for var in "${required_vars[@]}"; do
-  if [[ -z "${!var}" ]]; then
-    echo "ERROR: Required environment variable $var is not set"
-    exit 1
-  fi
-done
+**Integration Complete**:
+- `lib/runtime/entrypoint.sh` (lines 29-40) - Validation runs before startup
+  * Sources validate-config.sh if present
+  * Calls validate_configuration() and aborts on failure
+  * Only runs if VALIDATE_CONFIG=true (opt-in)
 
-# Validate formats
-if [[ ! "$DATABASE_URL" =~ ^postgresql:// ]]; then
-  echo "ERROR: DATABASE_URL must be PostgreSQL connection string"
-  exit 1
-fi
-```
+**Examples Created**:
+- `examples/validation/README.md` (334 lines) - Comprehensive documentation
+  * Usage instructions and configuration options
+  * Environment variable reference
+  * Complete examples for web apps, API services, and workers
+  * Best practices and security considerations
+- `examples/validation/web-app-validation.sh` (162 lines) - Web app validation rules
+  * Database URL validation (PostgreSQL)
+  * Redis URL validation
+  * Port validation (3000, 9090)
+  * Secret detection (SECRET_KEY, JWT_SECRET, SESSION_SECRET)
+  * Email validation (ADMIN_EMAIL)
+- `examples/validation/api-service-validation.sh` (210 lines) - API service validation rules
+  * Multiple database support (PostgreSQL + Redis)
+  * JWT secret validation
+  * Rate limiting configuration
+  * CORS origin validation
+  * External service integration (Stripe, SendGrid)
+- `examples/validation/worker-validation.sh` (169 lines) - Worker validation rules
+  * Queue configuration (Redis URL, concurrency, priorities)
+  * Job timeout and retry configuration
+  * Resource limits validation
+  * Storage configuration (local + S3 optional)
+- `examples/validation/docker-compose.web-app.yml` - Web app Docker Compose example
+- `examples/validation/docker-compose.api-service.yml` - API service Docker Compose example with strict mode
+- `examples/validation/docker-compose.worker.yml` - Background worker Docker Compose example
 
-**Deliverables**:
-- Config validation script
-- Environment variable documentation generator
-- Secret detection warnings (password/key in plaintext)
-- Integration with entrypoint (validate before starting)
-- Example validation rules for common patterns
+**Testing Complete**:
+- `tests/unit/runtime/validate-config.sh` (529 lines) - Comprehensive unit tests
+  * 35 tests covering all validation functions
+  * 100% pass rate (35/35 passing)
+  * Tests for required variables (set, empty, unset)
+  * Tests for URL validation (HTTP, HTTPS, PostgreSQL, Redis, invalid formats)
+  * Tests for port validation (valid, min, max, zero, too high, non-numeric)
+  * Tests for email validation (valid, subdomain, invalid formats)
+  * Tests for boolean validation (true/false/yes/no/1/0, invalid)
+  * Tests for path validation (absolute, relative, existence, directory)
+  * Tests for secret detection (short placeholder, long plaintext, reference, file path, non-secret)
+  * Proper setup/teardown to reset state between tests
+  * All shellcheck warnings fixed
 
-**Impact**: HIGH - Prevent misconfiguration issues
+**Configuration Options**:
+- `VALIDATE_CONFIG` - Enable validation (true/false, default: false) - opt-in activation
+- `VALIDATE_CONFIG_STRICT` - Fail on warnings (true/false, default: false)
+- `VALIDATE_CONFIG_RULES` - Path to custom validation rules file
+- `VALIDATE_CONFIG_QUIET` - Suppress informational messages (true/false, default: false)
+
+**Key Features**:
+- ✅ Required environment variable validation with clear error messages
+- ✅ Format validation (URLs, paths, ports, emails, booleans)
+- ✅ Secret detection with warnings for plaintext passwords/keys
+- ✅ Custom validation rules support via external files
+- ✅ Clear error messages with remediation hints
+- ✅ Colored output for better readability
+- ✅ Error and warning counters with summary
+- ✅ Strict mode (treat warnings as errors)
+- ✅ Opt-in activation (VALIDATE_CONFIG=true required)
+- ✅ Graceful handling of missing validation rules
+- ✅ Support for custom validation functions via cv_custom_validations()
+
+**Validation Results**:
+- ✅ All 721 unit tests passing (720 passed, 1 skipped, 0 failed)
+- ✅ All shellcheck warnings fixed (7 warnings resolved)
+- ✅ 100% pass rate on validation framework tests (35/35)
+- ✅ Pre-commit hooks passing
+
+**Impact**: ✅ COMPLETE - Prevents misconfiguration issues in production with comprehensive validation framework. Users can now validate environment variables, detect secrets, and ensure proper configuration before containers start.
 
 ---
 
@@ -1549,17 +1607,17 @@ echo "All checks successful - proceeding with push"
 
 ## Summary
 
-**Total Remaining**: 35 items (updated November 2025)
+**Total Remaining**: 30 items (updated November 2025)
 
 **By Priority**:
 - CRITICAL: 2 items (Production deployment blockers)
-- HIGH: 7 items (Security, enterprise features, and developer experience) - Item #2 complete, #4 partially complete
+- HIGH: 2 items (Enterprise features) - Items #2, #3, #4, #15 complete
 - MEDIUM: 15 items (Code quality, architecture, operations)
 - LOW: 12 items (Nice-to-have enhancements)
 
 **By Category**:
-- Security Concerns: 10 items (0 CRITICAL, 2 HIGH, 5 MEDIUM, 3 LOW) - Item #2 complete
-- Production Readiness: 7 items (2 CRITICAL, 4 HIGH, 1 MEDIUM) - Item #12 COMPLETE
+- Security Concerns: 10 items (0 CRITICAL, 2 HIGH, 5 MEDIUM, 3 LOW) - Items #2, #3 complete
+- Production Readiness: 6 items (2 CRITICAL, 3 HIGH, 1 MEDIUM) - Items #12, #15 COMPLETE
 - Architecture & Code Organization: 6 items (5 MEDIUM, 1 LOW)
 - Anti-Patterns & Code Smells: 3 items (1 MEDIUM, 2 LOW)
 - Testing Gaps: 2 items (1 HIGH, 1 MEDIUM)
@@ -1585,11 +1643,11 @@ The codebase has **excellent fundamentals** (Security: 7.5/10, Architecture: 8.5
 4. **[HIGH]** Complete GPG verification and pinned checksums (item #1 - infrastructure complete, need checksums.json population)
 5. **[HIGH]** ~~Change passwordless sudo default to false (item #2)~~ ✅ COMPLETE
 6. **[HIGH]** ~~Remove Docker socket auto-fix script (item #3)~~ ✅ COMPLETE
-7. **[HIGH]** Add configuration validation framework (item #15)
+7. **[HIGH]** ~~Add configuration validation framework (item #15)~~ ✅ COMPLETE
 8. **[HIGH]** Enhance secret management integrations (item #16)
 9. **[HIGH]** Create CI/CD pipeline templates (item #17)
-10. **[MEDIUM]** Extract cache-utils.sh shared utility (item #20)
-11. **[MEDIUM]** Extract path-utils.sh shared utility (item #21)
+10. **[MEDIUM]** ~~Extract cache-utils.sh shared utility (item #20)~~ ✅ COMPLETE
+11. **[MEDIUM]** ~~Extract path-utils.sh shared utility (item #21)~~ ✅ COMPLETE
 
 ### Medium-Term Actions (P2 - 2-3 months)
 12. **[MEDIUM]** Expand GPG verification to remaining tools (item #5)
