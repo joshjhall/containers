@@ -2,23 +2,27 @@
 
 ## Overview
 
-Linux containers expect **case-sensitive** filesystems, but macOS and Windows use **case-insensitive** filesystems by default. When you mount host directories into containers, this mismatch can cause confusion and unexpected behavior.
+Linux containers expect **case-sensitive** filesystems, but macOS and Windows
+use **case-insensitive** filesystems by default. When you mount host directories
+into containers, this mismatch can cause confusion and unexpected behavior.
 
 ## The Problem
 
 ### Filesystem Behavior Differences
 
-| Platform | Default Behavior | Example |
-|----------|-----------------|---------|
-| **Linux** | Case-sensitive | `file.txt` ≠ `File.txt` (different files) |
-| **macOS** | Case-insensitive | `file.txt` = `File.txt` (same file) |
-| **Windows** | Case-insensitive | `file.txt` = `File.txt` (same file) |
+| Platform    | Default Behavior | Example                                   |
+| ----------- | ---------------- | ----------------------------------------- |
+| **Linux**   | Case-sensitive   | `file.txt` ≠ `File.txt` (different files) |
+| **macOS**   | Case-insensitive | `file.txt` = `File.txt` (same file)       |
+| **Windows** | Case-insensitive | `file.txt` = `File.txt` (same file)       |
 
 ### Why This Matters
 
-1. **Git tracks case changes** - Git records `README.md` vs `readme.md` as different filenames
+1. **Git tracks case changes** - Git records `README.md` vs `readme.md` as
+   different filenames
 2. **Filesystem ignores case** - macOS/Windows treat them as the same file
-3. **Container sees what filesystem shows** - Linux container sees what the mounted filesystem provides
+3. **Container sees what filesystem shows** - Linux container sees what the
+   mounted filesystem provides
 4. **Confusion ensues** - Git and filesystem disagree on what exists
 
 ## Common Symptoms
@@ -55,8 +59,8 @@ class MyClass:
 from mymodule import MyClass  # Works on macOS, fails on Linux
 ```
 
-On macOS: Import succeeds (case-insensitive)
-On Linux: Import fails (can't find `mymodule`, only `MyModule`)
+On macOS: Import succeeds (case-insensitive) On Linux: Import fails (can't find
+`mymodule`, only `MyModule`)
 
 ### Symptom 3: Build Tool Confusion
 
@@ -72,7 +76,8 @@ On Linux: Import fails (can't find `mymodule`, only `MyModule`)
 
 ### Automatic Detection (Built-in)
 
-When you start a container, the runtime automatically detects case-insensitive mounts and displays a warning:
+When you start a container, the runtime automatically detects case-insensitive
+mounts and displays a warning:
 
 ```
 ⚠ Case-insensitive filesystem detected on /workspace
@@ -132,11 +137,13 @@ ln -s /Volumes/DevWorkspace/projects ~/projects
 ```
 
 **Pros**:
+
 - ✅ Perfect compatibility with Linux containers
 - ✅ No git confusion
 - ✅ Same behavior across all platforms
 
 **Cons**:
+
 - ❌ One-time setup required
 - ❌ Extra disk image to manage
 - ❌ Some macOS apps might have issues (rare)
@@ -168,11 +175,13 @@ docker run --rm \
 ```
 
 **Pros**:
+
 - ✅ Always case-sensitive
 - ✅ Better performance than host mounts
 - ✅ No host filesystem changes needed
 
 **Cons**:
+
 - ❌ Code not directly accessible on host
 - ❌ Requires sync step for IDE/tools on host
 - ❌ More complex workflow
@@ -187,6 +196,7 @@ If you can't use solutions 1 or 2, follow these guidelines:
    - ❌ Never mix: `myFile.py` and `MyFile.py`
 
 2. **Never rename just to change case**:
+
    ```bash
    # ❌ DON'T: macOS won't reflect this change
    git mv README.md readme.md
@@ -256,6 +266,7 @@ done
 ### macOS
 
 **Check your filesystem type**:
+
 ```bash
 diskutil info / | grep "File System"
 # Case-sensitive APFS: ✅ Good
@@ -263,6 +274,7 @@ diskutil info / | grep "File System"
 ```
 
 **Create case-sensitive APFS**:
+
 ```bash
 # Disk Utility > File > New Image > Blank Image
 # Name: DevWorkspace
@@ -275,6 +287,7 @@ diskutil info / | grep "File System"
 **Windows filesystems are always case-insensitive**. Solutions:
 
 1. Use WSL2 filesystem (ext4 - case-sensitive):
+
    ```powershell
    # Store code in WSL2, not Windows
    \\wsl$\Ubuntu\home\user\projects
@@ -320,6 +333,7 @@ cd -
 ### Q: Can I convert my existing macOS volume to case-sensitive?
 
 **A**: No, you cannot convert in-place. You must:
+
 1. Create a new case-sensitive APFS container or disk image
 2. Copy files to the new volume
 3. Update paths and bookmarks
@@ -327,6 +341,7 @@ cd -
 ### Q: Will case-sensitive APFS break macOS applications?
 
 **A**: Most modern apps work fine. Issues are rare and usually affect:
+
 - Very old applications (pre-2015)
 - Adobe Creative Cloud (older versions)
 - Some games
@@ -336,6 +351,7 @@ Use case-sensitive volume ONLY for development projects, not your entire system.
 ### Q: Does Docker Desktop support case-sensitive volumes automatically?
 
 **A**: No. Docker Desktop uses the host filesystem's case-sensitivity. You must:
+
 - Use case-sensitive host filesystem (APFS/ext4)
 - OR use Docker volumes (always case-sensitive)
 
@@ -362,22 +378,27 @@ done
 ## Summary
 
 **Best Practices**:
-1. ✅ Use case-sensitive storage for development (macOS: APFS volume, Windows: WSL2)
+
+1. ✅ Use case-sensitive storage for development (macOS: APFS volume, Windows:
+   WSL2)
 2. ✅ Use consistent naming conventions
 3. ✅ Test on Linux regularly
 4. ✅ Avoid case-only renames
 5. ✅ Document filesystem requirements
 
 **Quick Fix**:
+
 - macOS: Create case-sensitive APFS volume (Solution 1)
 - Windows: Use WSL2 filesystem
 - Linux: You're already good!
 
 **Prevention**:
+
 - Pre-commit hooks to detect case conflicts
 - Team conventions documented in CONTRIBUTING.md
 - CI/CD testing on Linux
 
 ---
 
-**Need help?** See [main troubleshooting guide](../troubleshooting.md) or [file an issue](https://github.com/joshjhall/containers/issues).
+**Need help?** See [main troubleshooting guide](../troubleshooting.md) or
+[file an issue](https://github.com/joshjhall/containers/issues).

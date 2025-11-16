@@ -81,14 +81,14 @@
             "type": "object",
             "description": "Version numbers for each component",
             "properties": {
-              "python": {"type": "string"},
-              "node": {"type": "string"},
-              "rust": {"type": "string"},
-              "go": {"type": "string"},
-              "ruby": {"type": "string"},
-              "java": {"type": "string"},
-              "r": {"type": "string"},
-              "mojo": {"type": "string"}
+              "python": { "type": "string" },
+              "node": { "type": "string" },
+              "rust": { "type": "string" },
+              "go": { "type": "string" },
+              "ruby": { "type": "string" },
+              "java": { "type": "string" },
+              "r": { "type": "string" },
+              "mojo": { "type": "string" }
             }
           },
           "status": {
@@ -120,17 +120,17 @@
         },
         "supported": {
           "type": "array",
-          "items": {"type": "string"},
+          "items": { "type": "string" },
           "description": "All supported versions"
         },
         "tested": {
           "type": "array",
-          "items": {"type": "string"},
+          "items": { "type": "string" },
           "description": "Versions that have been tested"
         },
         "deprecated": {
           "type": "array",
-          "items": {"type": "string"},
+          "items": { "type": "string" },
           "description": "Deprecated versions that still work but are not recommended"
         }
       },

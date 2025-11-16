@@ -1,4 +1,4 @@
-version: '3.8'
+version: "3.8"
 
 services:
   # PostgreSQL primary database
@@ -35,7 +35,7 @@ services:
         condition: service_healthy
     ports:
       - "8080:8080"
-      - "9090:9090"  # Metrics port
+      - "9090:9090" # Metrics port
     environment:
       # Enable strict configuration validation
       - VALIDATE_CONFIG=true

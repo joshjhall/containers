@@ -46,134 +46,134 @@ spec:
       # Init containers run before the main container starts
       # Useful for setup tasks like cloning repos, setting permissions, etc.
       initContainers:
-      - name: setup-workspace
-        image: ghcr.io/joshjhall/containers:minimal-4.9.2
-        command: ["/bin/sh", "-c"]
-        args:
-          - |
-            echo "Setting up workspace..."
-            mkdir -p /workspace/project
-            echo "Workspace ready"
-        volumeMounts:
-        - name: workspace
-          mountPath: /workspace
-        securityContext:
-          allowPrivilegeEscalation: false
-          capabilities:
-            drop: ["ALL"]
+        - name: setup-workspace
+          image: ghcr.io/joshjhall/containers:minimal-4.9.2
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              echo "Setting up workspace..."
+              mkdir -p /workspace/project
+              echo "Workspace ready"
+          volumeMounts:
+            - name: workspace
+              mountPath: /workspace
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
 
       # Main container
       containers:
-      - name: devcontainer
-        # Update this to match your desired container variant and version
-        # Options: minimal, python-dev, node-dev, rust-dev, golang-dev, etc.
-        image: ghcr.io/joshjhall/containers:python-dev-4.9.2
+        - name: devcontainer
+          # Update this to match your desired container variant and version
+          # Options: minimal, python-dev, node-dev, rust-dev, golang-dev, etc.
+          image: ghcr.io/joshjhall/containers:python-dev-4.9.2
 
-        # Image pull policy
-        # - Always: Pull image every time (good for 'latest' tag)
-        # - IfNotPresent: Pull only if not cached locally
-        # - Never: Never pull, use local image only
-        imagePullPolicy: IfNotPresent
+          # Image pull policy
+          # - Always: Pull image every time (good for 'latest' tag)
+          # - IfNotPresent: Pull only if not cached locally
+          # - Never: Never pull, use local image only
+          imagePullPolicy: IfNotPresent
 
-        # Command to run (overrides ENTRYPOINT in Dockerfile)
-        # This keeps the container running so you can exec into it
-        command: ["/bin/bash"]
-        args: ["-c", "trap 'exit 0' TERM; sleep infinity & wait"]
+          # Command to run (overrides ENTRYPOINT in Dockerfile)
+          # This keeps the container running so you can exec into it
+          command: ["/bin/bash"]
+          args: ["-c", "trap 'exit 0' TERM; sleep infinity & wait"]
 
-        # Environment variables for the container
-        env:
-        # Load additional env vars from ConfigMap
-        - name: ENVIRONMENT
-          valueFrom:
-            configMapKeyRef:
-              name: devcontainer-config
-              key: environment
+          # Environment variables for the container
+          env:
+            # Load additional env vars from ConfigMap
+            - name: ENVIRONMENT
+              valueFrom:
+                configMapKeyRef:
+                  name: devcontainer-config
+                  key: environment
 
-        # Example: Load secrets from Kubernetes Secret
-        # Uncomment and customize as needed
-        # - name: DATABASE_PASSWORD
-        #   valueFrom:
-        #     secretKeyRef:
-        #       name: devcontainer-secrets
-        #       key: db-password
+          # Example: Load secrets from Kubernetes Secret
+          # Uncomment and customize as needed
+          # - name: DATABASE_PASSWORD
+          #   valueFrom:
+          #     secretKeyRef:
+          #       name: devcontainer-secrets
+          #       key: db-password
 
-        # Resource requests and limits
-        # Requests: Minimum resources guaranteed
-        # Limits: Maximum resources allowed
-        resources:
-          requests:
-            # CPU in millicores (1000m = 1 CPU core)
-            cpu: "500m"
-            # Memory in bytes (Mi = Mebibytes, Gi = Gibibytes)
-            memory: "512Mi"
-          limits:
-            cpu: "2000m"
-            memory: "2Gi"
+          # Resource requests and limits
+          # Requests: Minimum resources guaranteed
+          # Limits: Maximum resources allowed
+          resources:
+            requests:
+              # CPU in millicores (1000m = 1 CPU core)
+              cpu: "500m"
+              # Memory in bytes (Mi = Mebibytes, Gi = Gibibytes)
+              memory: "512Mi"
+            limits:
+              cpu: "2000m"
+              memory: "2Gi"
 
-        # Volume mounts - attach volumes to specific paths in the container
-        volumeMounts:
-        # Workspace directory for your code
-        - name: workspace
-          mountPath: /workspace
+          # Volume mounts - attach volumes to specific paths in the container
+          volumeMounts:
+            # Workspace directory for your code
+            - name: workspace
+              mountPath: /workspace
 
-        # Cache directory for build artifacts (pip, npm, cargo, etc.)
-        - name: cache
-          mountPath: /cache
+            # Cache directory for build artifacts (pip, npm, cargo, etc.)
+            - name: cache
+              mountPath: /cache
 
-        # ConfigMap containing configuration files
-        - name: config-files
-          mountPath: /etc/devcontainer-config
-          readOnly: true
+            # ConfigMap containing configuration files
+            - name: config-files
+              mountPath: /etc/devcontainer-config
+              readOnly: true
 
-        # Liveness probe - Kubernetes restarts the container if this fails
-        # Checks if the container is still running correctly
-        livenessProbe:
-          exec:
-            command: ["/bin/sh", "-c", "ps aux | grep -v grep | grep -q sleep"]
-          initialDelaySeconds: 10
-          periodSeconds: 30
-          timeoutSeconds: 5
-          failureThreshold: 3
+          # Liveness probe - Kubernetes restarts the container if this fails
+          # Checks if the container is still running correctly
+          livenessProbe:
+            exec:
+              command: ["/bin/sh", "-c", "ps aux | grep -v grep | grep -q sleep"]
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
 
-        # Readiness probe - Kubernetes sends traffic only if this succeeds
-        # Checks if the container is ready to accept work
-        readinessProbe:
-          exec:
-            command: ["/bin/sh", "-c", "test -d /workspace"]
-          initialDelaySeconds: 5
-          periodSeconds: 10
-          timeoutSeconds: 3
-          failureThreshold: 3
+          # Readiness probe - Kubernetes sends traffic only if this succeeds
+          # Checks if the container is ready to accept work
+          readinessProbe:
+            exec:
+              command: ["/bin/sh", "-c", "test -d /workspace"]
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
 
-        # Security context for this specific container
-        securityContext:
-          # Prevent privilege escalation
-          allowPrivilegeEscalation: false
-          # Drop all capabilities (Linux kernel capabilities)
-          capabilities:
-            drop: ["ALL"]
-          # Make root filesystem read-only (except mounted volumes)
-          # Note: Some dev tools may need writable filesystem, adjust as needed
-          # readOnlyRootFilesystem: true
+          # Security context for this specific container
+          securityContext:
+            # Prevent privilege escalation
+            allowPrivilegeEscalation: false
+            # Drop all capabilities (Linux kernel capabilities)
+            capabilities:
+              drop: ["ALL"]
+            # Make root filesystem read-only (except mounted volumes)
+            # Note: Some dev tools may need writable filesystem, adjust as needed
+            # readOnlyRootFilesystem: true
 
       # Volumes used by containers in this pod
       volumes:
-      # EmptyDir: Temporary storage, lost when pod is deleted
-      # Good for cache directories
-      - name: workspace
-        emptyDir: {}
+        # EmptyDir: Temporary storage, lost when pod is deleted
+        # Good for cache directories
+        - name: workspace
+          emptyDir: {}
 
-      # PersistentVolumeClaim: Persistent storage that survives pod restarts
-      # Uncomment to use persistent storage for cache
-      - name: cache
-        emptyDir: {}
-      # persistentVolumeClaim:
-      #   claimName: devcontainer-cache-pvc
+        # PersistentVolumeClaim: Persistent storage that survives pod restarts
+        # Uncomment to use persistent storage for cache
+        - name: cache
+          emptyDir: {}
+        # persistentVolumeClaim:
+        #   claimName: devcontainer-cache-pvc
 
-      # ConfigMap: Configuration files
-      - name: config-files
-        configMap:
-          name: devcontainer-config
+        # ConfigMap: Configuration files
+        - name: config-files
+          configMap:
+            name: devcontainer-config
 
       # Restart policy
       # - Always: Restart container if it stops (default)

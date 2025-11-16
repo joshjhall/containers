@@ -1,8 +1,10 @@
 # Container Health Checks
 
-The container build system includes a comprehensive healthcheck script that verifies container initialization and feature availability.
+The container build system includes a comprehensive healthcheck script that
+verifies container initialization and feature availability.
 
 ## Table of Contents
+
 - [Overview](#overview)
 - [Usage](#usage)
 - [Docker Integration](#docker-integration)
@@ -14,7 +16,8 @@ The container build system includes a comprehensive healthcheck script that veri
 
 ## Overview
 
-The `healthcheck` script provides automated health monitoring for containers with multiple modes:
+The `healthcheck` script provides automated health monitoring for containers
+with multiple modes:
 
 - **Quick mode** (`--quick`): Core checks only (default for HEALTHCHECK)
 - **Full mode**: Auto-detects and checks all installed features
@@ -24,12 +27,14 @@ The `healthcheck` script provides automated health monitoring for containers wit
 ### What It Checks
 
 **Core (Always):**
+
 - Container user exists (UID 1000)
 - Container initialized (`~/.container-initialized`)
 - Essential directories (`/workspace`, `/cache`, `/etc/container`)
 - Basic commands (`bash`, `sh`)
 
 **Features (Auto-detected):**
+
 - **Python**: python3, pip, cache directory
 - **Node.js**: node, npm, cache directory
 - **Rust**: rustc, cargo, cache directory
@@ -104,6 +109,7 @@ HEALTHCHECK --interval=30s --timeout=10s --retries=3 --start-period=60s \
 ```
 
 **Configuration:**
+
 - **Interval**: 30 seconds between checks
 - **Timeout**: 10 seconds per check
 - **Retries**: 3 consecutive failures before unhealthy
@@ -162,7 +168,7 @@ services:
       context: .
       dockerfile: containers/Dockerfile
     healthcheck:
-      test: ["CMD", "healthcheck", "--verbose"]
+      test: ['CMD', 'healthcheck', '--verbose']
       interval: 30s
       timeout: 10s
       retries: 3
@@ -180,7 +186,7 @@ services:
       args:
         INCLUDE_PYTHON_DEV: 'true'
     healthcheck:
-      test: ["CMD", "healthcheck", "--feature", "python"]
+      test: ['CMD', 'healthcheck', '--feature', 'python']
       interval: 20s
       timeout: 5s
       retries: 3
@@ -193,7 +199,7 @@ services:
   database:
     image: postgres:17-alpine
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U user"]
+      test: ['CMD-SHELL', 'pg_isready -U user']
       interval: 10s
       timeout: 5s
       retries: 5
@@ -204,9 +210,9 @@ services:
       dockerfile: containers/Dockerfile
     depends_on:
       database:
-        condition: service_healthy  # Wait for database
+        condition: service_healthy # Wait for database
     healthcheck:
-      test: ["CMD", "healthcheck", "--quick"]
+      test: ['CMD', 'healthcheck', '--quick']
       interval: 30s
       timeout: 10s
       retries: 3
@@ -219,13 +225,13 @@ services:
   # Production: Quick checks for minimal overhead
   production:
     healthcheck:
-      test: ["CMD", "healthcheck", "--quick"]
+      test: ['CMD', 'healthcheck', '--quick']
       interval: 30s
 
   # Development: Full checks for comprehensive validation
   development:
     healthcheck:
-      test: ["CMD", "healthcheck", "--verbose"]
+      test: ['CMD', 'healthcheck', '--verbose']
       interval: 60s
 ```
 
@@ -265,14 +271,15 @@ docker events --filter 'event=health_status: unhealthy' \
 
 ### Automated Restart
 
-Docker automatically restarts unhealthy containers with `restart: unless-stopped`:
+Docker automatically restarts unhealthy containers with
+`restart: unless-stopped`:
 
 ```yaml
 services:
   app:
-    restart: unless-stopped  # Restart on failure
+    restart: unless-stopped # Restart on failure
     healthcheck:
-      test: ["CMD", "healthcheck"]
+      test: ['CMD', 'healthcheck']
       interval: 30s
       retries: 3
 ```
@@ -288,6 +295,7 @@ services:
 **Symptom**: Container shows as `unhealthy` in `docker ps`
 
 **Diagnosis**:
+
 ```bash
 # Check health logs
 docker inspect <container_id> | jq '.[0].State.Health.Log[-1]'
@@ -297,6 +305,7 @@ docker exec <container_id> healthcheck --verbose
 ```
 
 **Common Causes**:
+
 - Container not fully initialized (check `/home/<user>/.container-initialized`)
 - Missing directories or permissions
 - Feature installed but not functional
@@ -306,6 +315,7 @@ docker exec <container_id> healthcheck --verbose
 **Symptom**: Healthcheck fails with timeout
 
 **Solutions**:
+
 - Increase timeout: `--timeout=20s`
 - Use quick mode: `--quick`
 - Check for slow disk I/O or resource constraints
@@ -315,6 +325,7 @@ docker exec <container_id> healthcheck --verbose
 **Symptom**: Healthcheck passes but container not working
 
 **Diagnosis**:
+
 ```bash
 # Run full healthcheck
 docker exec <container_id> healthcheck --verbose
@@ -324,6 +335,7 @@ docker exec <container_id> healthcheck --feature python
 ```
 
 **Solutions**:
+
 - Use feature-specific checks instead of `--quick`
 - Add custom application health check
 - Verify environment variables and configuration
@@ -369,7 +381,7 @@ Then use in docker-compose:
 
 ```yaml
 healthcheck:
-  test: ["CMD", "/app/custom-healthcheck.sh"]
+  test: ['CMD', '/app/custom-healthcheck.sh']
 ```
 
 ---

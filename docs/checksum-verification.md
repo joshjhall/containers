@@ -1,9 +1,12 @@
 # Checksum Verification & Cryptographic Signatures
 
-> **📖 UPDATED**: Enhanced with **4-Tier Progressive Verification System** (2025-11-14)
+> **📖 UPDATED**: Enhanced with **4-Tier Progressive Verification System**
+> (2025-11-14)
 >
 > This document covers:
-> - **NEW**: 4-Tier verification system (GPG + Sigstore + Pinned Checksums + Published + Calculated)
+>
+> - **NEW**: 4-Tier verification system (GPG + Sigstore + Pinned Checksums +
+>   Published + Calculated)
 > - **NEW**: Automated checksum database maintenance
 > - **Original**: Tool-level checksum verification (completed 2025-11-08)
 
@@ -11,14 +14,17 @@
 
 ## 🔐 4-Tier Progressive Verification System (November 2025)
 
-**Status**: ✅ COMPLETE - Infrastructure & Database Delivered
-**Date Implemented**: 2025-11-14
+**Status**: ✅ COMPLETE - Infrastructure & Database Delivered **Date
+Implemented**: 2025-11-14
 
-The build system now uses a progressive, multi-tier verification approach that provides the strongest available security for each language runtime download.
+The build system now uses a progressive, multi-tier verification approach that
+provides the strongest available security for each language runtime download.
 
 ### Overview: How It Works
 
-When downloading language runtimes, the system tries verification methods **in order from strongest to weakest**, automatically falling back to the next tier if a stronger method isn't available:
+When downloading language runtimes, the system tries verification methods **in
+order from strongest to weakest**, automatically falling back to the next tier
+if a stronger method isn't available:
 
 ```
 TIER 1: Cryptographic Signatures (GPG + Sigstore) ← BEST
@@ -36,12 +42,14 @@ TIER 4: Calculated Checksums (TOFU fallback) ← LAST RESORT
 **How**: GPG/PGP signatures or Sigstore transparency log verification
 **Security**: Highest - proves the file came from the trusted publisher
 **Available For**:
+
 - **Python 3.11.0+**: Sigstore (preferred) + GPG (fallback)
 - **Python < 3.11.0**: GPG only
 - **Node.js**: GPG signatures (future implementation)
 - **Go**: GPG signatures (future implementation)
 
 **Example**:
+
 ```bash
 # Python downloads are verified with GPG signatures
 # lib/base/signature-verify.sh handles this automatically
@@ -49,19 +57,23 @@ verify_signature "Python-3.12.7.tar.gz" "python" "3.12.7"
 # → Downloads .asc file, verifies with GPG keys from lib/gpg-keys/python/
 ```
 
-**Why This is Better Than Checksums**: A checksum only tells you the file hasn't been corrupted. A cryptographic signature proves the file was created by someone with the private key (the Python/Node.js release team), making supply chain attacks much harder.
+**Why This is Better Than Checksums**: A checksum only tells you the file hasn't
+been corrupted. A cryptographic signature proves the file was created by someone
+with the private key (the Python/Node.js release team), making supply chain
+attacks much harder.
 
 ### Tier 2: Pinned Checksums (GOOD)
 
-**What**: Git-tracked checksums in `lib/checksums.json`
-**How**: Compares file SHA256 against checksums committed to this repository
-**Security**: High - checksums are auditable, reviewed in PRs, version-controlled
-**Available For**:
+**What**: Git-tracked checksums in `lib/checksums.json` **How**: Compares file
+SHA256 against checksums committed to this repository **Security**: High -
+checksums are auditable, reviewed in PRs, version-controlled **Available For**:
+
 - **Node.js**: 4 versions initially (22.12.0, 22.11.0, 20.18.1, 20.18.0)
 - **Go**: 1 version initially (1.25.4)
 - **Ruby**: 4 versions initially (3.5.0, 3.4.7, 3.3.10, 3.2.9)
 
 **Database Structure** (`lib/checksums.json`):
+
 ```json
 {
   "languages": {
@@ -79,6 +91,7 @@ verify_signature "Python-3.12.7.tar.gz" "python" "3.12.7"
 ```
 
 **Database Growth Strategy**:
+
 - Checksums are **never deleted**, only added
 - File grows over time (estimated ~74KB for 5 years of releases)
 - Benefits:
@@ -87,6 +100,7 @@ verify_signature "Python-3.12.7.tar.gz" "python" "3.12.7"
   - No breaking changes to existing builds
 
 **Automated Maintenance**:
+
 ```bash
 # Fill in missing checksums for existing versions
 ./bin/update-checksums.sh
@@ -96,6 +110,7 @@ verify_signature "Python-3.12.7.tar.gz" "python" "3.12.7"
 ```
 
 The `bin/update-checksums.sh` script:
+
 - Automatically fetches checksums from official sources
 - Validates checksum format (SHA256 = 64 hex characters)
 - Creates backups before updating
@@ -103,12 +118,14 @@ The `bin/update-checksums.sh` script:
 
 ### Tier 3: Published Checksums (ACCEPTABLE)
 
-**What**: Checksums downloaded from the official publisher's website
-**How**: Fetches SHA256SUMS, SHASUMS256.txt, or similar from official sources
-**Security**: Medium - vulnerable to MITM if downloaded over HTTP or DNS poisoning
-**Available For**: Most languages and tools with official checksum files
+**What**: Checksums downloaded from the official publisher's website **How**:
+Fetches SHA256SUMS, SHASUMS256.txt, or similar from official sources
+**Security**: Medium - vulnerable to MITM if downloaded over HTTP or DNS
+poisoning **Available For**: Most languages and tools with official checksum
+files
 
 **Example**:
+
 ```bash
 # Node.js publishes SHASUMS256.txt for each version
 curl -fsSL "https://nodejs.org/dist/v22.12.0/SHASUMS256.txt" | \
@@ -117,12 +134,13 @@ curl -fsSL "https://nodejs.org/dist/v22.12.0/SHASUMS256.txt" | \
 
 ### Tier 4: Calculated Checksums (FALLBACK)
 
-**What**: Calculate SHA256 of downloaded file (Trust On First Use)
-**How**: Download file once, calculate checksum, download again and verify
-**Security**: Low - vulnerable to MITM attacks, no external verification
-**When Used**: Only when no other verification method is available
+**What**: Calculate SHA256 of downloaded file (Trust On First Use) **How**:
+Download file once, calculate checksum, download again and verify **Security**:
+Low - vulnerable to MITM attacks, no external verification **When Used**: Only
+when no other verification method is available
 
 **Security Warning Displayed**:
+
 ```
 ⚠️  TIER 4: Using calculated checksum (FALLBACK)
 
@@ -140,35 +158,42 @@ curl -fsSL "https://nodejs.org/dist/v22.12.0/SHASUMS256.txt" | \
 
 ### Language-by-Language Verification Matrix
 
-| Language | Tier 1 (Signatures) | Tier 2 (Pinned) | Tier 3 (Published) | Notes |
-|----------|--------------------|-----------------|--------------------|-------|
-| **Python** | ✅ GPG + Sigstore | N/A | N/A | Best security - signatures preferred over checksums |
-| **Node.js** | 🔜 GPG (future) | ✅ Yes | ✅ SHASUMS256.txt | Currently uses Tier 2 or 3 |
-| **Go** | 🔜 GPG (future) | ✅ Yes | ✅ go.dev/dl JSON | Currently uses Tier 2 or 3 |
-| **Ruby** | ❌ None | ✅ Yes | ✅ ruby-lang.org | Currently uses Tier 2 or 3 |
-| **Rust** | N/A | N/A | ✅ rustup-init | Verified by rustup's built-in system |
-| **R** | N/A | N/A | N/A | Installed via apt (GPG-verified automatically) |
-| **Java** | N/A | N/A | N/A | Installed via apt (GPG-verified automatically) |
-| **Mojo** | N/A | N/A | N/A | Installed via pixi/conda (verified by conda) |
+| Language    | Tier 1 (Signatures) | Tier 2 (Pinned) | Tier 3 (Published) | Notes                                               |
+| ----------- | ------------------- | --------------- | ------------------ | --------------------------------------------------- |
+| **Python**  | ✅ GPG + Sigstore   | N/A             | N/A                | Best security - signatures preferred over checksums |
+| **Node.js** | 🔜 GPG (future)     | ✅ Yes          | ✅ SHASUMS256.txt  | Currently uses Tier 2 or 3                          |
+| **Go**      | 🔜 GPG (future)     | ✅ Yes          | ✅ go.dev/dl JSON  | Currently uses Tier 2 or 3                          |
+| **Ruby**    | ❌ None             | ✅ Yes          | ✅ ruby-lang.org   | Currently uses Tier 2 or 3                          |
+| **Rust**    | N/A                 | N/A             | ✅ rustup-init     | Verified by rustup's built-in system                |
+| **R**       | N/A                 | N/A             | N/A                | Installed via apt (GPG-verified automatically)      |
+| **Java**    | N/A                 | N/A             | N/A                | Installed via apt (GPG-verified automatically)      |
+| **Mojo**    | N/A                 | N/A             | N/A                | Installed via pixi/conda (verified by conda)        |
 
 **Key Insights**:
-- Languages installed via **apt** or **conda** already get GPG verification from those package managers
-- Only languages downloaded as **raw binaries/tarballs** need our verification layers
-- **Python** is the gold standard - GPG + Sigstore is more secure than any checksum
+
+- Languages installed via **apt** or **conda** already get GPG verification from
+  those package managers
+- Only languages downloaded as **raw binaries/tarballs** need our verification
+  layers
+- **Python** is the gold standard - GPG + Sigstore is more secure than any
+  checksum
 
 ### Implementation Files
 
 **Core Verification**:
+
 - `lib/base/checksum-verification.sh` - Main 4-tier orchestration
 - `lib/base/signature-verify.sh` - GPG + Sigstore verification (Tier 1)
 - `lib/gpg-keys/` - GPG public keys for Python, Node.js, Go
 
 **Checksum Database**:
+
 - `lib/checksums.json` - Pinned checksums (Tier 2)
 - `bin/update-checksums.sh` - Automated maintenance script
 - `lib/features/lib/checksum-fetch.sh` - Checksum fetching utilities
 
 **Usage in Feature Scripts**:
+
 ```bash
 # Source verification utilities
 source /tmp/build-scripts/base/checksum-verification.sh
@@ -178,6 +203,7 @@ verify_download "language" "nodejs" "22.12.0" "/tmp/node.tar.xz"
 ```
 
 The system automatically:
+
 1. Tries GPG/Sigstore signature verification (if available)
 2. Falls back to pinned checksums from lib/checksums.json
 3. Falls back to published checksums from official source
@@ -187,12 +213,13 @@ The system automatically:
 
 ## ✅ Original Checksum Verification (November 2025)
 
-**Status**: COMPLETE - All Downloads Secured
-**Date Completed**: 2025-11-08
+**Status**: COMPLETE - All Downloads Secured **Date Completed**: 2025-11-08
 
-**Final Status**: All tool-level checksum verification complete. 100% of tool downloads now verified.
+**Final Status**: All tool-level checksum verification complete. 100% of tool
+downloads now verified.
 
 **Work Completed**:
+
 - Phases 1-9: Original audit items (all CRITICAL, HIGH, MEDIUM priority)
 - Phases 10-13: Extended audit items (additional unverified downloads)
 - Bug fix: Fixed pre-existing heredoc bug in java-dev.sh
@@ -201,7 +228,8 @@ The system automatically:
 
 ## Implementation Guide for New Tools
 
-When adding a new tool to feature scripts, follow these patterns for checksum verification:
+When adding a new tool to feature scripts, follow these patterns for checksum
+verification:
 
 ### 1. Source Required Libraries
 
@@ -281,7 +309,8 @@ curl -fsSL 'https://example.com/install.sh' | bash
 
 ### 3. Common Checksum File Patterns
 
-When using `fetch_github_checksums_txt()`, look for these files on GitHub releases:
+When using `fetch_github_checksums_txt()`, look for these files on GitHub
+releases:
 
 - `checksums_sha256.txt` (JBang, JBang)
 - `SHA256SUMS` or `SHA256SUMS.txt` (terragrunt, many Go tools)
@@ -291,6 +320,7 @@ When using `fetch_github_checksums_txt()`, look for these files on GitHub releas
 ### 4. Security Best Practices
 
 ✅ **DO**:
+
 - Use published checksums when available (Option A)
 - Use calculated checksums when none published (Option B)
 - Document why verification method was chosen
@@ -298,6 +328,7 @@ When using `fetch_github_checksums_txt()`, look for these files on GitHub releas
 - Support version pinning with variables
 
 ❌ **DON'T**:
+
 - Hardcode checksums (breaks version flexibility)
 - Skip verification for "trusted" sources
 - Download and execute without verification
@@ -308,31 +339,34 @@ When using `fetch_github_checksums_txt()`, look for these files on GitHub releas
 ## Priority Classification
 
 ### 🔴 CRITICAL - Installation Scripts (curl | bash)
+
 These download and execute code directly. Highest priority for security.
 
-| Script | Line | Pattern | Status | Notes |
-|--------|------|---------|--------|-------|
-| `ollama.sh` | 74-137 | ~~curl/bash~~ → Direct download | ✅ **DONE** | Bypassed install script, downloads tarball with SHA256 verification |
-| `dev-tools.sh` | 706-712 | `curl https://claude.ai/install.sh \| bash` | ✅ **SECURE** | Install script performs SHA256 verification internally |
+| Script         | Line    | Pattern                                     | Status        | Notes                                                               |
+| -------------- | ------- | ------------------------------------------- | ------------- | ------------------------------------------------------------------- |
+| `ollama.sh`    | 74-137  | ~~curl/bash~~ → Direct download             | ✅ **DONE**   | Bypassed install script, downloads tarball with SHA256 verification |
+| `dev-tools.sh` | 706-712 | `curl https://claude.ai/install.sh \| bash` | ✅ **SECURE** | Install script performs SHA256 verification internally              |
 
 ### 🟠 HIGH - Direct Binary Downloads
+
 These download binaries directly without verification.
 
-| Script | Line | Binary | Status | Notes |
-|--------|------|--------|--------|-------|
-| `terraform.sh` | 127-164 | terragrunt | ✅ **DONE** | SHA256 verification from SHA256SUMS file |
-| `dev-tools.sh` | 297-334 | duf .deb | ✅ **DONE** | SHA256 verification from checksums.txt |
-| `dev-tools.sh` | 652-693 | glab .deb | ✅ **DONE** | SHA256 verification from checksums.txt (GitLab) |
-| `cloudflare.sh` | 200-228 | cloudflared .deb | ✅ **DONE** | Calculated checksum at build time |
-| `dev-tools.sh` | 431-474 | direnv binary | ✅ **DONE** | Calculated checksum at build time |
-| `dev-tools.sh` | 569-611 | mkcert binary | ✅ **DONE** | Calculated checksum at build time |
-| `aws.sh` | 172-198 | Session Manager plugin .deb | ✅ **DONE** | Calculated checksum at build time |
+| Script          | Line    | Binary                      | Status      | Notes                                           |
+| --------------- | ------- | --------------------------- | ----------- | ----------------------------------------------- |
+| `terraform.sh`  | 127-164 | terragrunt                  | ✅ **DONE** | SHA256 verification from SHA256SUMS file        |
+| `dev-tools.sh`  | 297-334 | duf .deb                    | ✅ **DONE** | SHA256 verification from checksums.txt          |
+| `dev-tools.sh`  | 652-693 | glab .deb                   | ✅ **DONE** | SHA256 verification from checksums.txt (GitLab) |
+| `cloudflare.sh` | 200-228 | cloudflared .deb            | ✅ **DONE** | Calculated checksum at build time               |
+| `dev-tools.sh`  | 431-474 | direnv binary               | ✅ **DONE** | Calculated checksum at build time               |
+| `dev-tools.sh`  | 569-611 | mkcert binary               | ✅ **DONE** | Calculated checksum at build time               |
+| `aws.sh`        | 172-198 | Session Manager plugin .deb | ✅ **DONE** | Calculated checksum at build time               |
 
 ---
 
 ## Implementation Strategy
 
 ### Phase 10: Low-Hanging Fruit (Tools with Published Checksums) 🎯
+
 **Priority**: Start here - quick wins
 
 1. **terragrunt** - Publishes SHA256SUMS file
@@ -347,6 +381,7 @@ These download binaries directly without verification.
    - glab
 
 ### Phase 11: Install Scripts (Complex)
+
 **Priority**: After Phase 10
 
 1. **ollama.sh** - Official installer
@@ -358,6 +393,7 @@ These download binaries directly without verification.
    - Has error handling, optional tool
 
 ### Phase 12: Tools Without Published Checksums
+
 **Priority**: Last - may need calculated checksums
 
 1. **AWS Session Manager plugin**
@@ -412,8 +448,10 @@ These download binaries directly without verification.
 ## Notes
 
 **All Phases Complete (10-13)**: 100% of downloads now verified
+
 - Phase 10: Tools with published checksums now fetch and verify dynamically
-- Phase 11: Install scripts either bypassed (Ollama) or verified as secure (Claude)
+- Phase 11: Install scripts either bypassed (Ollama) or verified as secure
+  (Claude)
 - Phase 12: Tools without checksums use calculated checksums at build time
 - Phase 13: Final cleanup - secured JBang, Python, get-pip.py, entr
 
@@ -433,10 +471,12 @@ These download binaries directly without verification.
    - Claude install script performs its own SHA256 verification
 
 **Final Security Posture**:
+
 - ✅ 100% of downloads verified with checksums
 - ✅ All verification respects version pinning
 - ✅ No hardcoded checksums
 - ✅ Dynamic checksum fetching
 - ✅ Comprehensive supply chain security
 
-**Bug Fixes**: Fixed pre-existing heredoc bug in java-dev.sh:270 that caused unbound variable error with `set -euo pipefail`.
+**Bug Fixes**: Fixed pre-existing heredoc bug in java-dev.sh:270 that caused
+unbound variable error with `set -euo pipefail`.

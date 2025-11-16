@@ -1,10 +1,13 @@
 # Feature Dependencies
 
-This document describes dependencies between features and how to resolve them when building containers.
+This document describes dependencies between features and how to resolve them
+when building containers.
 
 ## Overview
 
-Some features depend on other features being installed first. For example, `python-dev` requires `python` to be installed. The build system does not automatically enable dependent features - you must explicitly enable them.
+Some features depend on other features being installed first. For example,
+`python-dev` requires `python` to be installed. The build system does not
+automatically enable dependent features - you must explicitly enable them.
 
 ## Dependency Graph
 
@@ -26,22 +29,22 @@ cloudflare → node (wrangler requires Node.js)
 
 All `-dev` features require their base language:
 
-| Dev Feature | Requires | Build Args |
-|-------------|----------|------------|
+| Dev Feature  | Requires | Build Args                                          |
+| ------------ | -------- | --------------------------------------------------- |
 | `python-dev` | `python` | `INCLUDE_PYTHON=true`<br/>`INCLUDE_PYTHON_DEV=true` |
-| `node-dev` | `node` | `INCLUDE_NODE=true`<br/>`INCLUDE_NODE_DEV=true` |
-| `rust-dev` | `rust` | `INCLUDE_RUST=true`<br/>`INCLUDE_RUST_DEV=true` |
-| `ruby-dev` | `ruby` | `INCLUDE_RUBY=true`<br/>`INCLUDE_RUBY_DEV=true` |
-| `r-dev` | `r` | `INCLUDE_R=true`<br/>`INCLUDE_R_DEV=true` |
+| `node-dev`   | `node`   | `INCLUDE_NODE=true`<br/>`INCLUDE_NODE_DEV=true`     |
+| `rust-dev`   | `rust`   | `INCLUDE_RUST=true`<br/>`INCLUDE_RUST_DEV=true`     |
+| `ruby-dev`   | `ruby`   | `INCLUDE_RUBY=true`<br/>`INCLUDE_RUBY_DEV=true`     |
+| `r-dev`      | `r`      | `INCLUDE_R=true`<br/>`INCLUDE_R_DEV=true`           |
 | `golang-dev` | `golang` | `INCLUDE_GOLANG=true`<br/>`INCLUDE_GOLANG_DEV=true` |
-| `java-dev` | `java` | `INCLUDE_JAVA=true`<br/>`INCLUDE_JAVA_DEV=true` |
-| `mojo-dev` | `mojo` | `INCLUDE_MOJO=true`<br/>`INCLUDE_MOJO_DEV=true` |
+| `java-dev`   | `java`   | `INCLUDE_JAVA=true`<br/>`INCLUDE_JAVA_DEV=true`     |
+| `mojo-dev`   | `mojo`   | `INCLUDE_MOJO=true`<br/>`INCLUDE_MOJO_DEV=true`     |
 
 ### Cloud Tools
 
-| Feature | Requires | Notes |
-|---------|----------|-------|
-| `cloudflare` | `node` | Wrangler is an npm package |
+| Feature      | Requires | Notes                      |
+| ------------ | -------- | -------------------------- |
+| `cloudflare` | `node`   | Wrangler is an npm package |
 
 ### Standalone Features
 
@@ -123,6 +126,7 @@ docker build \
 **Cause**: Forgot to enable the base `python` feature.
 
 **Solution**:
+
 ```bash
 # Enable both features
 docker build \
@@ -166,11 +170,15 @@ bin/list-features.sh --json | jq '.features[] | select(.dependencies | length > 
 
 ## Automatic Dependency Resolution (Future Enhancement)
 
-**Current behavior**: Dependencies are NOT automatically resolved. You must explicitly enable all required features.
+**Current behavior**: Dependencies are NOT automatically resolved. You must
+explicitly enable all required features.
 
-**Future enhancement**: See [docs/planned/improvements-roadmap.md](planned/improvements-roadmap.md) for planned automatic dependency resolution.
+**Future enhancement**: See
+[docs/planned/improvements-roadmap.md](planned/improvements-roadmap.md) for
+planned automatic dependency resolution.
 
 **Example of planned behavior**:
+
 ```bash
 # Future: Automatically enables INCLUDE_PYTHON=true
 docker build --build-arg INCLUDE_PYTHON_DEV=true .
@@ -371,8 +379,10 @@ Use the test framework to verify feature combinations:
 
 ## Related Documentation
 
-- [environment-variables.md](environment-variables.md) - Complete variable reference
+- [environment-variables.md](environment-variables.md) - Complete variable
+  reference
 - [CLAUDE.md](../CLAUDE.md) - Build system overview and examples
 - [troubleshooting.md](troubleshooting.md) - Common dependency issues
 - [examples/env/](../examples/env/) - Environment file examples
-- [planned/improvements-roadmap.md](planned/improvements-roadmap.md) - Future enhancements
+- [planned/improvements-roadmap.md](planned/improvements-roadmap.md) - Future
+  enhancements

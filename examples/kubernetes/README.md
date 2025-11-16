@@ -1,6 +1,7 @@
 # Kubernetes Deployment Guide
 
-This directory contains production-ready Kubernetes manifests for deploying the container build system in Kubernetes clusters.
+This directory contains production-ready Kubernetes manifests for deploying the
+container build system in Kubernetes clusters.
 
 ## Table of Contents
 
@@ -20,10 +21,12 @@ This directory contains production-ready Kubernetes manifests for deploying the 
 These Kubernetes manifests use **Kustomize** (built into kubectl) to provide:
 
 - **Base configuration**: Common resources shared across all environments
-- **Environment overlays**: Customizations for development, staging, and production
+- **Environment overlays**: Customizations for development, staging, and
+  production
 - **Security policies**: NetworkPolicies, PodDisruptionBudgets, SecurityContexts
 - **Resource management**: ResourceQuotas, LimitRanges
-- **Production-grade configurations**: High availability, graceful shutdown, health checks
+- **Production-grade configurations**: High availability, graceful shutdown,
+  health checks
 
 ## Prerequisites
 
@@ -32,13 +35,15 @@ These Kubernetes manifests use **Kustomize** (built into kubectl) to provide:
 - **Kubernetes cluster** (v1.19+)
   - Local: Minikube, kind, k3s, Docker Desktop
   - Cloud: EKS, GKE, AKS, DigitalOcean Kubernetes
-- **kubectl** (v1.19+) - [Installation guide](https://kubernetes.io/docs/tasks/tools/)
+- **kubectl** (v1.19+) -
+  [Installation guide](https://kubernetes.io/docs/tasks/tools/)
 - **Kustomize** (built into kubectl 1.14+)
 
 ### Optional
 
 - **Helm** (v3+) - For Helm chart deployment (coming soon)
-- **Network policy controller** - Calico, Cilium, or Weave (for NetworkPolicy support)
+- **Network policy controller** - Calico, Cilium, or Weave (for NetworkPolicy
+  support)
 - **Metrics server** - For resource metrics and autoscaling
 - **Ingress controller** - NGINX, Traefik, or cloud provider ingress
 
@@ -159,6 +164,7 @@ examples/kubernetes/
 **Purpose**: Local development and testing
 
 **Characteristics**:
+
 - **1 replica** - Minimal resource usage
 - **Low resources** - 100m CPU, 256Mi memory requests
 - **NodePort service** - Easy access from host machine
@@ -166,11 +172,13 @@ examples/kubernetes/
 - **Latest image tag** - Auto-pull newest changes
 
 **Use cases**:
+
 - Local development
 - Testing configuration changes
 - Debugging issues
 
 **Access**:
+
 ```bash
 # Via NodePort (replace <node-ip> with your node's IP)
 curl http://<node-ip>:30080
@@ -188,6 +196,7 @@ kubectl exec -it -n dev deployment/dev-devcontainer -- /bin/bash
 **Purpose**: Pre-production testing
 
 **Characteristics**:
+
 - **2 replicas** - Test high availability
 - **Medium resources** - 250m CPU, 512Mi memory requests
 - **PodDisruptionBudget** - Min 1 pod available
@@ -195,6 +204,7 @@ kubectl exec -it -n dev deployment/dev-devcontainer -- /bin/bash
 - **INFO logging** - Balanced verbosity
 
 **Use cases**:
+
 - Integration testing
 - Performance testing
 - UAT (User Acceptance Testing)
@@ -205,6 +215,7 @@ kubectl exec -it -n dev deployment/dev-devcontainer -- /bin/bash
 **Purpose**: Production workloads
 
 **Characteristics**:
+
 - **3 replicas** - High availability
 - **High resources** - 500m CPU, 512Mi memory requests
 - **PodDisruptionBudget** - Min 2 pods available
@@ -216,6 +227,7 @@ kubectl exec -it -n dev deployment/dev-devcontainer -- /bin/bash
 - **Graceful shutdown** - 30s termination grace period
 
 **Use cases**:
+
 - Production applications
 - Critical workloads
 - Customer-facing services
@@ -229,10 +241,11 @@ Edit the appropriate `kustomization.yaml`:
 ```yaml
 images:
   - name: ghcr.io/joshjhall/containers
-    newTag: node-dev-4.9.2  # Change to desired variant
+    newTag: node-dev-4.9.2 # Change to desired variant
 ```
 
 Available variants:
+
 - `minimal-VERSION` - Base system only
 - `python-dev-VERSION` - Python development
 - `node-dev-VERSION` - Node.js development
@@ -261,6 +274,7 @@ patches:
 ```
 
 **Resource guidelines**:
+
 - **CPU**: 100m = 0.1 core, 1000m = 1 core
 - **Memory**: 256Mi, 512Mi, 1Gi, 2Gi, 4Gi, etc.
 - **Requests**: Guaranteed resources (scheduler uses this)
@@ -304,11 +318,13 @@ kubectl create secret generic devcontainer-secrets \
 ```
 
 Option 2: Use external secret management:
+
 - [External Secrets Operator](https://external-secrets.io/)
 - [Sealed Secrets](https://github.com/bitnami-labs/sealed-secrets)
 - [HashiCorp Vault](https://www.vaultproject.io/docs/platform/k8s)
 
 Option 3: Use cloud provider secret managers:
+
 - AWS Secrets Manager
 - Azure Key Vault
 - GCP Secret Manager
@@ -334,8 +350,8 @@ Accessible on node IP:
 spec:
   type: NodePort
   ports:
-  - port: 8080
-    nodePort: 30080  # 30000-32767 range
+    - port: 8080
+      nodePort: 30080 # 30000-32767 range
 ```
 
 Access: `http://<node-ip>:30080`
@@ -350,6 +366,7 @@ spec:
 ```
 
 Get external IP:
+
 ```bash
 kubectl get service -n production prod-devcontainer
 ```
@@ -365,16 +382,16 @@ metadata:
   name: devcontainer-ingress
 spec:
   rules:
-  - host: devcontainer.example.com
-    http:
-      paths:
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: devcontainer
-            port:
-              number: 8080
+    - host: devcontainer.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: devcontainer
+                port:
+                  number: 8080
 ```
 
 ## Security Best Practices
@@ -399,14 +416,15 @@ securityContext:
   readOnlyRootFilesystem: true
 ```
 
-**Note**: Some dev tools may need write access. Use volume mounts for writable directories.
+**Note**: Some dev tools may need write access. Use volume mounts for writable
+directories.
 
 ### 3. Drop All Capabilities
 
 ```yaml
 securityContext:
   capabilities:
-    drop: ["ALL"]
+    drop: ['ALL']
 ```
 
 ### 4. Network Policies
@@ -427,12 +445,12 @@ Always set resource limits to prevent resource exhaustion:
 
 ```yaml
 resources:
-  requests:  # Guaranteed
-    cpu: "500m"
-    memory: "512Mi"
-  limits:    # Maximum
-    cpu: "2000m"
-    memory: "2Gi"
+  requests: # Guaranteed
+    cpu: '500m'
+    memory: '512Mi'
+  limits: # Maximum
+    cpu: '2000m'
+    memory: '2Gi'
 ```
 
 ### 6. Pod Security Standards
@@ -452,6 +470,7 @@ kubectl label namespace production \
 **Never commit secrets to git!**
 
 Use:
+
 - Kubernetes secrets with encryption at rest
 - External secret managers (Vault, AWS Secrets Manager)
 - Sealed Secrets for GitOps
@@ -470,19 +489,21 @@ Use:
 Already configured in base deployment:
 
 **Liveness probe** - Restart container if unhealthy:
+
 ```yaml
 livenessProbe:
   exec:
-    command: ["/bin/sh", "-c", "ps aux | grep -v grep | grep -q sleep"]
+    command: ['/bin/sh', '-c', 'ps aux | grep -v grep | grep -q sleep']
   initialDelaySeconds: 10
   periodSeconds: 30
 ```
 
 **Readiness probe** - Remove from service if not ready:
+
 ```yaml
 readinessProbe:
   exec:
-    command: ["/bin/sh", "-c", "test -d /workspace"]
+    command: ['/bin/sh', '-c', 'test -d /workspace']
   initialDelaySeconds: 5
   periodSeconds: 10
 ```
@@ -554,6 +575,7 @@ kubectl logs -n production prod-devcontainer-xxxxx --previous
 ```
 
 Common issues:
+
 - Image pull errors: Check image tag and registry access
 - Resource limits: Check if resources exceed namespace quotas
 - Volume mount errors: Check PVC status and storage class
@@ -578,6 +600,7 @@ wget -O- http://prod-devcontainer.production.svc.cluster.local:8080
 ```
 
 Common issues:
+
 - No endpoints: Pod labels don't match service selector
 - Network policy: Traffic blocked by NetworkPolicy
 - Port mismatch: Service port ≠ container port
@@ -641,9 +664,11 @@ netstat -tuln
 
 ## Production Checklist
 
-Before deploying to production, review the [PRODUCTION-CHECKLIST.md](./PRODUCTION-CHECKLIST.md) file.
+Before deploying to production, review the
+[PRODUCTION-CHECKLIST.md](./PRODUCTION-CHECKLIST.md) file.
 
 Key items:
+
 - [ ] Secrets are managed externally (not committed to git)
 - [ ] Image tags are pinned to specific versions
 - [ ] Resource limits are set appropriately
@@ -659,7 +684,8 @@ Key items:
 
 ### Automated Integration Tests
 
-An automated integration test validates all Kubernetes manifests using **kind** (Kubernetes in Docker):
+An automated integration test validates all Kubernetes manifests using **kind**
+(Kubernetes in Docker):
 
 ```bash
 # Run the Kubernetes deployment test
@@ -670,6 +696,7 @@ An automated integration test validates all Kubernetes manifests using **kind** 
 ```
 
 **What the test does:**
+
 1. Builds a container with Docker and Kubernetes tools
 2. Creates a kind cluster inside the container (DinD)
 3. Applies manifests for all three environments (dev, staging, production)
@@ -682,11 +709,13 @@ An automated integration test validates all Kubernetes manifests using **kind** 
    - PodDisruptionBudgets are configured
 
 **Requirements:**
+
 - Docker with privileged mode support
 - At least 4GB RAM available for Docker
 - Test takes 5-10 minutes (builds image + creates cluster)
 
-**Note**: The test uses `--privileged` containers for Docker-in-Docker, which may not work in all CI environments.
+**Note**: The test uses `--privileged` containers for Docker-in-Docker, which
+may not work in all CI environments.
 
 ### Manual Testing with kind
 
@@ -742,9 +771,11 @@ kind delete cluster --name test-cluster
 ## Support
 
 For issues and questions:
+
 - [GitHub Issues](https://github.com/joshjhall/containers/issues)
 - [Documentation](https://github.com/joshjhall/containers/tree/main/docs)
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](../../LICENSE) file for details.
+This project is licensed under the MIT License - see the
+[LICENSE](../../LICENSE) file for details.

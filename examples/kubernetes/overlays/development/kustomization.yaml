@@ -28,7 +28,7 @@ namePrefix: dev-
 # Override image tag for development (e.g., latest or dev builds)
 images:
   - name: ghcr.io/joshjhall/containers
-    newTag: python-dev-latest  # Use latest for development
+    newTag: python-dev-latest # Use latest for development
 
 # Patches to customize resources for development
 patches:
@@ -78,7 +78,7 @@ patches:
 # ConfigMap generator for dev-specific configuration
 configMapGenerator:
   - name: devcontainer-config
-    behavior: merge  # Merge with base ConfigMap
+    behavior: merge # Merge with base ConfigMap
     literals:
       - environment=development
       - log_level=DEBUG

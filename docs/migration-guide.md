@@ -1,6 +1,7 @@
 # Migration Guide
 
-This guide helps you upgrade between major versions of the container build system when used as a git submodule in your projects.
+This guide helps you upgrade between major versions of the container build
+system when used as a git submodule in your projects.
 
 ## Table of Contents
 
@@ -17,6 +18,7 @@ This guide helps you upgrade between major versions of the container build syste
 ## Overview
 
 This container build system follows [Semantic Versioning](https://semver.org/):
+
 - **MAJOR version** (X.0.0): Breaking changes that require migration
 - **MINOR version** (4.X.0): New features, backward compatible
 - **PATCH version** (4.5.X): Bug fixes, backward compatible
@@ -34,6 +36,7 @@ This container build system follows [Semantic Versioning](https://semver.org/):
 **Latest Stable**: v4.7.0 (2025-11-11)
 
 Check your current version:
+
 ```bash
 # From your project root
 cat containers/VERSION
@@ -55,7 +58,8 @@ v4.1.x → v4.7.0 (direct upgrade)
 v4.5.x → v4.7.0 (direct upgrade)
 ```
 
-**Best Practice**: Always upgrade through major versions sequentially (v3 → v4 → v5), not skipping major versions.
+**Best Practice**: Always upgrade through major versions sequentially (v3 → v4 →
+v5), not skipping major versions.
 
 ---
 
@@ -73,7 +77,8 @@ v4.5.x → v4.7.0 (direct upgrade)
    - **Action Required**: None if using default base images
 
 2. **apt-key Deprecation Handling**
-   - **Impact**: Features using apt repositories (terraform, gcloud, kubernetes) changed
+   - **Impact**: Features using apt repositories (terraform, gcloud, kubernetes)
+     changed
    - **Migration**: Automatic version detection
    - **Action Required**: Rebuild images if locked to old Debian versions
 
@@ -83,12 +88,14 @@ v4.5.x → v4.7.0 (direct upgrade)
    - **Action Required**: None - environment variables remain compatible
 
 #### New Features (v4.0+)
+
 - Debian 11, 12, and 13 (Trixie) support
 - Improved cache strategy
 - Enhanced security hardening
 - Health check system
 
 #### Deprecations
+
 - ❌ pyenv for Python (removed)
 - ❌ rbenv for Ruby (removed)
 - ❌ Legacy apt-key commands (automatic fallback)
@@ -100,12 +107,14 @@ v4.5.x → v4.7.0 (direct upgrade)
 **No Breaking Changes** - Safe direct upgrade
 
 #### Notable Additions
+
 - Container healthcheck system (`bin/healthcheck.sh`)
 - Retry logic with exponential backoff
 - Comprehensive documentation improvements
 - Security hardening enhancements
 
 #### Action Required
+
 - **Optional**: Add HEALTHCHECK to your Dockerfile
 - **Optional**: Use new healthcheck features
 - **Recommended**: Review new security documentation
@@ -127,7 +136,8 @@ git describe --tags
 
 #### Step 2: Review Release Notes
 
-Before upgrading, review the [CHANGELOG.md](../CHANGELOG.md) for your target version.
+Before upgrading, review the [CHANGELOG.md](../CHANGELOG.md) for your target
+version.
 
 #### Step 3: Update Submodule
 
@@ -176,7 +186,7 @@ docker run --rm myproject:dev node --version
 - name: Checkout code
   uses: actions/checkout@v4
   with:
-    submodules: recursive  # Ensure submodules are checked out
+    submodules: recursive # Ensure submodules are checked out
 
 - name: Build container
   run: docker build -t test:latest .
@@ -240,10 +250,12 @@ docker run --rm myproject:old check-installed-versions.sh
 #### Known Issues and Solutions
 
 **Issue**: Build fails with "apt-key: command not found"
+
 - **Cause**: Using Debian Trixie without updated scripts
 - **Solution**: Ensure submodule is at v4.0.1+ (includes Trixie fix)
 
 **Issue**: Python/Ruby version mismatch
+
 - **Cause**: Version pinning from pyenv era
 - **Solution**: Specify version via build args:
   ```bash
@@ -375,7 +387,9 @@ docker build --no-cache -t myproject:latest .
 
 ### Emergency Rollback
 
-See [docs/emergency-rollback.md](emergency-rollback.md) for comprehensive rollback procedures including:
+See [docs/emergency-rollback.md](emergency-rollback.md) for comprehensive
+rollback procedures including:
+
 - Rollback with version pinning
 - Rollback with git reflog
 - Recovery from failed builds
@@ -388,11 +402,13 @@ See [docs/emergency-rollback.md](emergency-rollback.md) for comprehensive rollba
 ### Issue: Build Fails After Upgrade
 
 **Symptoms**:
+
 ```
 ERROR: failed to solve: failed to compute cache key
 ```
 
 **Solutions**:
+
 1. Clear Docker cache: `docker builder prune -af`
 2. Rebuild without cache: `docker build --no-cache .`
 3. Check Dockerfile syntax changes
@@ -403,6 +419,7 @@ ERROR: failed to solve: failed to compute cache key
 **Symptoms**: Features that worked before now fail
 
 **Solutions**:
+
 1. Check feature names haven't changed:
    ```bash
    ./containers/bin/list-features.sh
@@ -421,7 +438,9 @@ ERROR: failed to solve: failed to compute cache key
 **Symptoms**: Application can't find expected env vars
 
 **Solutions**:
+
 1. Compare environment variables:
+
    ```bash
    # Old image
    docker run --rm old-image:latest env > old-env.txt
@@ -443,12 +462,15 @@ ERROR: failed to solve: failed to compute cache key
 **Symptoms**: Builds or runtime slower after upgrade
 
 **Solutions**:
+
 1. Check image size:
+
    ```bash
    docker images myproject --format "{{.Size}}"
    ```
 
 2. Profile build time:
+
    ```bash
    time docker build --no-cache .
    ```
@@ -483,6 +505,7 @@ ERROR: failed to solve: failed to compute cache key
 ### During Migration
 
 1. **Use Version Pinning**
+
    ```bash
    # Pin to specific version in your CI/CD
    git submodule update --init --recursive
@@ -519,7 +542,8 @@ ERROR: failed to solve: failed to compute cache key
 
 - [CHANGELOG.md](../CHANGELOG.md) - Detailed change history
 - [troubleshooting.md](troubleshooting.md) - Common issues and solutions
-- [production-deployment.md](production-deployment.md) - Production best practices
+- [production-deployment.md](production-deployment.md) - Production best
+  practices
 - [feature-dependencies.md](feature-dependencies.md) - Feature compatibility
 
 ### Support Channels
@@ -546,17 +570,17 @@ ERROR: failed to solve: failed to compute cache key
 
 ## Version History Reference
 
-| Version | Release Date | Type | Notes |
-|---------|--------------|------|-------|
-| v4.7.0 | 2025-11-11 | Minor | Health checks, retry logic, documentation |
-| v4.5.0 | 2025-11-09 | Minor | Checksum verification, security improvements |
-| v4.4.0 | 2025-XX-XX | Minor | Feature additions |
-| v4.3.2 | 2025-XX-XX | Patch | Bug fixes |
-| v4.3.1 | 2025-XX-XX | Patch | Bug fixes |
-| v4.3.0 | 2025-XX-XX | Minor | Feature additions |
-| v4.2.0 | 2025-XX-XX | Minor | Feature additions |
-| v4.1.0 | 2025-XX-XX | Minor | Feature additions |
-| v4.0.0 | 2024-XX-XX | Major | **Breaking**: Debian Trixie, pyenv/rbenv removal |
+| Version | Release Date | Type  | Notes                                            |
+| ------- | ------------ | ----- | ------------------------------------------------ |
+| v4.7.0  | 2025-11-11   | Minor | Health checks, retry logic, documentation        |
+| v4.5.0  | 2025-11-09   | Minor | Checksum verification, security improvements     |
+| v4.4.0  | 2025-XX-XX   | Minor | Feature additions                                |
+| v4.3.2  | 2025-XX-XX   | Patch | Bug fixes                                        |
+| v4.3.1  | 2025-XX-XX   | Patch | Bug fixes                                        |
+| v4.3.0  | 2025-XX-XX   | Minor | Feature additions                                |
+| v4.2.0  | 2025-XX-XX   | Minor | Feature additions                                |
+| v4.1.0  | 2025-XX-XX   | Minor | Feature additions                                |
+| v4.0.0  | 2024-XX-XX   | Major | **Breaking**: Debian Trixie, pyenv/rbenv removal |
 
 ---
 
@@ -568,7 +592,9 @@ None.
 
 ### Future Deprecations
 
-Watch the [CHANGELOG.md](../CHANGELOG.md) for deprecation notices. Deprecated features will:
+Watch the [CHANGELOG.md](../CHANGELOG.md) for deprecation notices. Deprecated
+features will:
+
 1. Be marked deprecated for at least one major version
 2. Include migration path in documentation
 3. Show warnings during build

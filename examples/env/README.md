@@ -1,12 +1,15 @@
 # Container Environment Variables Reference
 
-This directory contains example environment variable files for each feature available in the container system. These files serve as documentation and templates for configuring your containers.
+This directory contains example environment variable files for each feature
+available in the container system. These files serve as documentation and
+templates for configuring your containers.
 
 ## Important Notes
 
 ### Path Variables
 
-Many examples show paths like `$HOME/.config/...`. These are DEFAULT values that work with any username. In practice:
+Many examples show paths like `$HOME/.config/...`. These are DEFAULT values that
+work with any username. In practice:
 
 - Most tools automatically use `$HOME` at runtime
 - You typically don't need to set these unless overriding defaults
@@ -14,21 +17,27 @@ Many examples show paths like `$HOME/.config/...`. These are DEFAULT values that
 
 ### Cache Mount Limitation
 
-If your base image already uses UID 1000, the build system will automatically assign a different UID (e.g., 1001) to avoid conflicts. However, Docker cache mounts still use the original UID from build arguments, which may cause permission issues. See the Dockerfile comments for workarounds.
+If your base image already uses UID 1000, the build system will automatically
+assign a different UID (e.g., 1001) to avoid conflicts. However, Docker cache
+mounts still use the original UID from build arguments, which may cause
+permission issues. See the Dockerfile comments for workarounds.
 
 ### Build vs Runtime Variables
 
-- **Build Arguments**: Control which features are installed (`INCLUDE_*` variables)
+- **Build Arguments**: Control which features are installed (`INCLUDE_*`
+  variables)
 - **Runtime Variables**: Configure the behavior of installed tools
 - Build arguments cannot be changed after the image is built
 
 ## Structure
 
-Each `.env` file corresponds to a feature that can be enabled during container build:
+Each `.env` file corresponds to a feature that can be enabled during container
+build:
 
 - `base.env` - Core container configuration (always applied)
 - `python.env` - Python and Poetry configuration
-- `python-dev.env` - Python development tools (linters, formatters, Sphinx, etc.)
+- `python-dev.env` - Python development tools (linters, formatters, Sphinx,
+  etc.)
 - `node.env` - Node.js, npm, yarn, pnpm configuration
 - `rust.env` - Rust and Cargo configuration
 - `go.env` - Go language configuration
@@ -52,12 +61,15 @@ Each `.env` file corresponds to a feature that can be enabled during container b
 
 ### 1. Build Arguments vs Runtime Variables
 
-**IMPORTANT**: The `.env` files in this directory contain ONLY runtime environment variables.
+**IMPORTANT**: The `.env` files in this directory contain ONLY runtime
+environment variables.
 
-- **Build Arguments**: See [`../BUILD-ARGS.md`](../BUILD-ARGS.md) for the complete list
+- **Build Arguments**: See [`../BUILD-ARGS.md`](../BUILD-ARGS.md) for the
+  complete list
 - **Runtime Environment Variables**: Configured in these `.env` files
 
-Build arguments (like `INCLUDE_PYTHON`, `USERNAME`, etc.) must be set during build time via:
+Build arguments (like `INCLUDE_PYTHON`, `USERNAME`, etc.) must be set during
+build time via:
 
 - `docker build --build-arg`
 - `docker-compose.yml` under `build: args:`
@@ -145,9 +157,12 @@ INCLUDE_KUBERNETES=true
 
 ## Security Notes
 
-1. **Never commit real credentials** - These files show variable names, not values
-2. **Use secrets management** - For production, use Docker secrets or vault systems
-3. **Minimize exposure** - Only include variables actually needed by your application
+1. **Never commit real credentials** - These files show variable names, not
+   values
+2. **Use secrets management** - For production, use Docker secrets or vault
+   systems
+3. **Minimize exposure** - Only include variables actually needed by your
+   application
 4. **Rotate regularly** - Especially for cloud provider credentials
 
 ## Feature Dependencies

@@ -1,8 +1,12 @@
 # Troubleshooting Guide
 
-This guide covers common issues and their solutions when using the container build system.
+This guide covers common issues and their solutions when using the container
+build system.
 
-> **📌 Important**: If you're experiencing build failures with Terraform, Google Cloud, or Kubernetes features, see the [Debian Version Compatibility](#debian-version-compatibility) section first. A critical fix was added in v4.0.1 for apt-key deprecation in Debian Trixie.
+> **📌 Important**: If you're experiencing build failures with Terraform, Google
+> Cloud, or Kubernetes features, see the
+> [Debian Version Compatibility](#debian-version-compatibility) section first. A
+> critical fix was added in v4.0.1 for apt-key deprecation in Debian Trixie.
 
 ## Table of Contents
 
@@ -19,9 +23,11 @@ This guide covers common issues and their solutions when using the container bui
 
 ### Understanding Build vs Buildx
 
-**Important**: Docker may use `buildx` by default on some systems, which has different behavior than traditional `docker build`.
+**Important**: Docker may use `buildx` by default on some systems, which has
+different behavior than traditional `docker build`.
 
 **Check which builder you're using**:
+
 ```bash
 # Check current builder
 docker buildx ls
@@ -37,11 +43,13 @@ docker buildx build .
 ```
 
 **Key differences**:
+
 - **Argument order**: Buildx requires the context (`.`) at the very end
 - **Cache behavior**: Buildx may handle cache mounts differently
 - **Output**: Different progress display formats
 
-**Solution**: For this project, prefer traditional `docker build` or use the test framework which handles both correctly.
+**Solution**: For this project, prefer traditional `docker build` or use the
+test framework which handles both correctly.
 
 ### Build argument order (Buildx)
 
@@ -64,6 +72,7 @@ docker build -t myimage --build-arg ARG=value .
 **Symptom**: Build fails when trying to execute scripts.
 
 **Solution**:
+
 ```bash
 # Ensure all scripts have executable permissions
 chmod +x lib/**/*.sh bin/*.sh
@@ -76,6 +85,7 @@ git commit -m "fix: Add executable permissions to scripts"
 **Symptom**: Errors about cache mounts or permission issues during build.
 
 **Solution**:
+
 ```bash
 # Clear BuildKit cache
 docker builder prune -af
@@ -86,18 +96,21 @@ docker build --no-cache -t myproject:dev .
 
 ### Script sourcing failures
 
-**Symptom**: Build fails with "file not found" when sourcing scripts, even though the file exists.
+**Symptom**: Build fails with "file not found" when sourcing scripts, even
+though the file exists.
 
 ```
 /bin/bash: line 1: /tmp/build-scripts/base/logging.sh: No such file or directory
 ```
 
 **Causes**:
+
 1. Scripts not copied to build context
 2. Incorrect COPY statement in Dockerfile
 3. Symlinks not resolved
 
 **Solution**:
+
 ```bash
 # Verify files are in build context
 ls -la lib/base/
@@ -119,6 +132,7 @@ DOCKER_BUILDKIT=0 docker build --progress=plain -t test .
 **Debugging steps**:
 
 1. **Check the build logs**:
+
 ```bash
 # Build with plain progress output
 DOCKER_BUILDKIT=0 docker build --progress=plain . 2>&1 | tee build.log
@@ -128,6 +142,7 @@ grep -i "error\|failed\|fatal" build.log
 ```
 
 2. **Test feature script in isolation**:
+
 ```bash
 # Use test framework
 ./tests/test_feature.sh python-dev
@@ -140,6 +155,7 @@ apt-get update && apt-get install -y curl ca-certificates
 ```
 
 3. **Check feature dependencies**:
+
 ```bash
 # Some features require others
 # Example: python-dev requires python
@@ -154,6 +170,7 @@ docker build \
 **Symptom**: Build fails when compiling language runtimes from source.
 
 **Common causes**:
+
 - Missing build dependencies
 - Insufficient memory
 - Corrupted downloads
@@ -178,9 +195,11 @@ docker build --build-arg PYTHON_VERSION=3.11.7 .
 
 ### Cache invalidation issues
 
-**Symptom**: Changes to scripts not reflected in build, or build uses old cached layers.
+**Symptom**: Changes to scripts not reflected in build, or build uses old cached
+layers.
 
 **Understanding Docker layer caching**:
+
 - Each `RUN` command creates a cached layer
 - Cache invalidates if command changes or previous layers change
 - COPY commands cache based on file content hashes
@@ -205,14 +224,17 @@ DOCKER_BUILDKIT=0 docker build --progress=plain --no-cache . 2>&1 | \
 
 ### Multi-stage build failures
 
-**Symptom**: Build fails referencing files from previous stages, or "stage not found" errors.
+**Symptom**: Build fails referencing files from previous stages, or "stage not
+found" errors.
 
 **Common issues**:
+
 1. Stage name typo
 2. Incorrect `--from` reference
 3. File paths don't match between stages
 
 **Solution**:
+
 ```bash
 # Verify stage names in Dockerfile
 grep "^FROM.*AS" Dockerfile
@@ -229,11 +251,13 @@ docker run --rm test:base ls -la /tmp/build-scripts/
 **Symptom**: Variables not available during build, or runtime values not set.
 
 **Understanding ARG vs ENV**:
+
 - `ARG`: Only available during build, not in running container
 - `ENV`: Available during build AND runtime
 - ARG can have default values: `ARG PYTHON_VERSION=3.12.0`
 
 **Check what's available**:
+
 ```bash
 # View build arguments in Dockerfile
 grep "^ARG" Dockerfile
@@ -245,7 +269,8 @@ docker build --build-arg PYTHON_VERSION=3.14.0 .
 docker run --rm myimage env | grep PYTHON
 ```
 
-**See also**: [environment-variables.md](environment-variables.md) for complete reference.
+**See also**: [environment-variables.md](environment-variables.md) for complete
+reference.
 
 ### Intermediate build failure analysis
 
@@ -290,6 +315,7 @@ docker run --rm -it debug:failed bash
 **Symptom**: Cannot pull base Debian image.
 
 **Solution**:
+
 ```bash
 # Check Docker daemon is running
 docker info
@@ -306,6 +332,7 @@ ping -c 3 mcr.microsoft.com
 **Symptom**: Build fails with "no space left on device" error.
 
 **Solution**:
+
 ```bash
 # Check disk usage
 df -h
@@ -322,6 +349,7 @@ du -sh .
 **Symptom**: Failed to download specific tool versions (e.g., Python, Node.js).
 
 **Solution**:
+
 ```bash
 # Check if version exists
 curl -I https://www.python.org/ftp/python/3.14.0/Python-3.14.0.tgz
@@ -337,21 +365,28 @@ cat docs/version-tracking.md
 
 ### apt-key command not found (Terraform, Google Cloud, Kubernetes)
 
-**Symptom**: Build fails with `apt-key: command not found` when installing Terraform, Google Cloud SDK, or Kubernetes tools.
+**Symptom**: Build fails with `apt-key: command not found` when installing
+Terraform, Google Cloud SDK, or Kubernetes tools.
 
 ```
 bash: line 1: apt-key: command not found
 ✗ Adding HashiCorp GPG key failed with exit code 127
 ```
 
-**Cause**: Debian 13 (Trixie) and later removed the deprecated `apt-key` command. The build system automatically detects your Debian version and uses the appropriate method.
+**Cause**: Debian 13 (Trixie) and later removed the deprecated `apt-key`
+command. The build system automatically detects your Debian version and uses the
+appropriate method.
 
-**Solution**: This is automatically handled as of v4.0.1. The system detects whether `apt-key` is available:
+**Solution**: This is automatically handled as of v4.0.1. The system detects
+whether `apt-key` is available:
+
 - **Debian 11/12 (Bullseye/Bookworm)**: Uses legacy `apt-key` method
 - **Debian 13+ (Trixie and later)**: Uses modern `signed-by` GPG method
 
 **If you're on an older version of this container system**:
+
 1. Update to the latest version:
+
    ```bash
    cd containers
    git pull origin main
@@ -368,6 +403,7 @@ bash: line 1: apt-key: command not found
    See commit `b955fc3` for the fix implementation.
 
 **Verification**:
+
 ```bash
 # Check your Debian version
 cat /etc/debian_version
@@ -379,9 +415,11 @@ docker run --rm test:terraform terraform version
 
 ### Base image mismatch with Debian Trixie
 
-**Symptom**: Unexpected behavior when using older base images with Trixie features.
+**Symptom**: Unexpected behavior when using older base images with Trixie
+features.
 
 **Solution**:
+
 ```bash
 # For Debian Trixie, use:
 docker build --build-arg BASE_IMAGE=debian:trixie-slim .
@@ -398,6 +436,7 @@ docker build --build-arg BASE_IMAGE=mcr.microsoft.com/devcontainers/base:trixie 
 **Symptom**: `E: Package 'package-name' has no installation candidate`
 
 **Solution**:
+
 ```bash
 # Check package availability
 apt-cache policy package-name
@@ -414,15 +453,19 @@ apt-cache search package-name
 
 ### Writing Debian-Compatible Feature Scripts
 
-**Pattern**: When creating or updating feature installation scripts, use the Debian version detection system to ensure compatibility across Debian 11, 12, and 13.
+**Pattern**: When creating or updating feature installation scripts, use the
+Debian version detection system to ensure compatibility across Debian 11, 12,
+and 13.
 
 #### Debian Version Detection Functions
 
 The build system provides three functions in `lib/base/apt-utils.sh`:
 
-1. **`get_debian_major_version()`** - Returns the major version number (11, 12, or 13)
+1. **`get_debian_major_version()`** - Returns the major version number (11, 12,
+   or 13)
 2. **`is_debian_version <min>`** - Checks if current version >= minimum
-3. **`apt_install_conditional <min> <max> <packages...>`** - Install packages only on specific versions
+3. **`apt_install_conditional <min> <max> <packages...>`** - Install packages
+   only on specific versions
 
 #### Usage Examples
 
@@ -477,16 +520,17 @@ fi
 
 Common package changes between Debian versions:
 
-| Package          | Debian 11/12 | Debian 13+ | Notes |
-|------------------|--------------|------------|-------|
-| lzma, lzma-dev   | Available    | Removed    | Use liblzma-dev (works on all versions) |
-| apt-key          | Available    | Removed    | Use signed-by method instead |
+| Package        | Debian 11/12 | Debian 13+ | Notes                                   |
+| -------------- | ------------ | ---------- | --------------------------------------- |
+| lzma, lzma-dev | Available    | Removed    | Use liblzma-dev (works on all versions) |
+| apt-key        | Available    | Removed    | Use signed-by method instead            |
 
 #### Testing Your Changes
 
 When adding version-specific logic:
 
 1. **Test locally with different base images**:
+
    ```bash
    # Test Debian 11
    docker build --build-arg BASE_IMAGE=debian:bullseye-slim \
@@ -501,14 +545,18 @@ When adding version-specific logic:
                 --build-arg INCLUDE_YOUR_FEATURE=true -t test:debian13 .
    ```
 
-2. **CI automatically tests all versions**: The GitHub Actions workflow includes a `debian-version-test` job that tests Python and cloud tools on all three Debian versions.
+2. **CI automatically tests all versions**: The GitHub Actions workflow includes
+   a `debian-version-test` job that tests Python and cloud tools on all three
+   Debian versions.
 
 #### Design Philosophy
 
-- **Backwards Compatible**: Always support Debian 11 and 12 unless absolutely necessary
+- **Backwards Compatible**: Always support Debian 11 and 12 unless absolutely
+  necessary
 - **Forward Compatible**: Prefer methods that work on Debian 13+ when possible
 - **Graceful Degradation**: Use version detection, don't assume availability
-- **Explicit Detection**: Check for command/package availability, don't rely on version alone
+- **Explicit Detection**: Check for command/package availability, don't rely on
+  version alone
 - **Document Changes**: Add comments explaining why version-specific code exists
 
 ## Runtime Issues
@@ -518,6 +566,7 @@ When adding version-specific logic:
 **Symptom**: Tools are installed but not in PATH.
 
 **Solution**:
+
 ```bash
 # Inside container, check PATH
 echo $PATH
@@ -534,6 +583,7 @@ ls -la /usr/local/bin
 **Symptom**: Permission denied when accessing mounted volumes.
 
 **Solution**:
+
 ```bash
 # Build with matching UID/GID
 docker build \
@@ -550,6 +600,7 @@ docker exec -u root mycontainer chown -R vscode:vscode /workspace
 **Symptom**: Package installations are slow, cache not working.
 
 **Solution**:
+
 ```bash
 # Create named volume for cache
 docker volume create myproject-cache
@@ -567,6 +618,7 @@ volumes:
 **Symptom**: Language runtime installed but not available.
 
 **Solution**:
+
 ```bash
 # Check installation logs
 docker history myproject:dev | grep INCLUDE_
@@ -585,6 +637,7 @@ docker build --build-arg INCLUDE_PYTHON_DEV=true .
 **Symptom**: Permission denied when creating files in workspace.
 
 **Solution**:
+
 ```bash
 # Check ownership
 ls -la /workspace
@@ -600,6 +653,7 @@ docker exec -u root mycontainer chown -R vscode:vscode /workspace
 **Symptom**: Cannot commit or push from inside container.
 
 **Solution**:
+
 ```bash
 # Fix git config
 git config --global --add safe.directory /workspace/myproject
@@ -618,6 +672,7 @@ ssh-add -l  # Verify keys are loaded
 **Symptom**: Cannot use Docker inside container (Docker-in-Docker).
 
 **Solution**:
+
 ```bash
 # Add user to docker group
 docker exec -u root mycontainer usermod -aG docker vscode
@@ -635,6 +690,7 @@ docker run -v /var/run/docker.sock:/var/run/docker.sock \
 **Symptom**: apt-get, curl, or wget failures during build.
 
 **Solution**:
+
 ```bash
 # Check DNS resolution
 docker run --rm myproject:dev nslookup github.com
@@ -653,6 +709,7 @@ docker build --network=host .
 **Symptom**: Version checks or downloads from GitHub fail.
 
 **Solution**:
+
 ```bash
 # Add GitHub token to .env
 echo "GITHUB_TOKEN=ghp_your_token_here" >> .env
@@ -670,6 +727,7 @@ curl -H "Authorization: token $GITHUB_TOKEN" \
 **Symptom**: Cannot access external resources from behind corporate proxy.
 
 **Solution**:
+
 ```bash
 # Set proxy in Dockerfile
 ENV http_proxy=http://proxy.corp.com:8080
@@ -695,7 +753,9 @@ Expected: abc123...
 Got:      def456...
 ```
 
-**Cause**: The downloaded file doesn't match the expected checksum. This could indicate:
+**Cause**: The downloaded file doesn't match the expected checksum. This could
+indicate:
+
 1. Network corruption during download
 2. Tool maintainer updated the file without updating the checksum
 3. Potential supply chain attack (rare but serious)
@@ -703,11 +763,13 @@ Got:      def456...
 **Solution**:
 
 1. **First, retry the build** (network corruption is common):
+
    ```bash
    docker build --no-cache .
    ```
 
 2. **Check if the version is correct**:
+
    ```bash
    # View the version being installed
    grep 'VERSION=' lib/features/your-feature.sh
@@ -717,6 +779,7 @@ Got:      def456...
    ```
 
 3. **Verify the checksum source**:
+
    ```bash
    # For tools using published checksums (preferred method)
    # The error message will show the URL where checksums are fetched from
@@ -727,6 +790,7 @@ Got:      def456...
    ```
 
 4. **If using calculated checksums** (fallback method):
+
    ```bash
    # The build calculates checksums at build time
    # If this fails consistently, the download source may be unstable
@@ -740,6 +804,7 @@ Got:      def456...
    - See `docs/SECURITY.md` for reporting procedures
 
 **Related Files**:
+
 - `lib/base/download-verify.sh` - Core verification logic
 - `lib/features/lib/checksum-fetch.sh` - Checksum fetching utilities
 - `docs/checksum-verification.md` - Complete implementation guide
@@ -758,6 +823,7 @@ Error: GPG verification failed
 **Solution**:
 
 1. **AWS CLI verification** (uses GPG signatures):
+
    ```bash
    # Check the GPG fingerprint being used
    grep -A 5 "AWS_CLI_GPG_FINGERPRINT" lib/features/aws.sh
@@ -767,6 +833,7 @@ Error: GPG verification failed
    ```
 
 2. **Network/proxy issues**:
+
    ```bash
    # GPG verification requires downloading the signature file
    # Network interruptions can cause failures
@@ -781,6 +848,7 @@ Error: GPG verification failed
    ```
 
 **Related Files**:
+
 - `lib/features/aws.sh:172-198` - AWS CLI GPG verification implementation
 
 ### Download-verify.sh utility errors
@@ -797,6 +865,7 @@ Error: calculate_checksum_sha256 failed
 **Common Issues**:
 
 1. **URL unreachable**:
+
    ```bash
    # Test the URL manually
    curl -I https://example.com/tool.tar.gz
@@ -806,6 +875,7 @@ Error: calculate_checksum_sha256 failed
    ```
 
 2. **Temporary file issues**:
+
    ```bash
    # Check disk space during build
    df -h
@@ -822,6 +892,7 @@ Error: calculate_checksum_sha256 failed
    ```
 
 **Debugging**:
+
 ```bash
 # Enable verbose logging in the feature script
 # Add this temporarily to see detailed output:
@@ -832,6 +903,7 @@ docker build --progress=plain . 2>&1 | grep -A 20 "download_and_verify"
 ```
 
 **Related Files**:
+
 - `lib/base/download-verify.sh` - Core download verification functions
 - `lib/features/lib/checksum-fetch.sh` - Checksum fetching from GitHub releases
 
@@ -848,6 +920,7 @@ Error: Failed to fetch checksum for tool 1.2.3
 **Solution**:
 
 1. **GitHub API rate limiting**:
+
    ```bash
    # Check your rate limit
    curl -H "Authorization: token $GITHUB_TOKEN" \
@@ -858,6 +931,7 @@ Error: Failed to fetch checksum for tool 1.2.3
    ```
 
 2. **Checksum file not found**:
+
    ```bash
    # The tool may use a different checksum file format
    # Common patterns:
@@ -870,6 +944,7 @@ Error: Failed to fetch checksum for tool 1.2.3
    ```
 
 3. **Release doesn't exist**:
+
    ```bash
    # Verify the version exists on GitHub
    curl -I https://github.com/org/tool/releases/download/v1.2.3/tool.tar.gz
@@ -879,6 +954,7 @@ Error: Failed to fetch checksum for tool 1.2.3
    ```
 
 **Related Files**:
+
 - `lib/features/lib/checksum-fetch.sh` - GitHub checksum fetching logic
 
 ### Security best practices
@@ -886,13 +962,16 @@ Error: Failed to fetch checksum for tool 1.2.3
 When encountering download or verification issues:
 
 1. ✅ **Always investigate checksum failures** - Don't disable verification
-2. ✅ **Verify the source** - Check official documentation for checksums/signatures
-3. ✅ **Use published checksums** when available (more trustworthy than calculated)
+2. ✅ **Verify the source** - Check official documentation for
+   checksums/signatures
+3. ✅ **Use published checksums** when available (more trustworthy than
+   calculated)
 4. ✅ **Report persistent failures** - May indicate upstream issues
 5. ❌ **Never skip verification** - Even for "trusted" sources
 6. ❌ **Never hardcode checksums** - Breaks version flexibility
 
 **Supply Chain Security**:
+
 - All downloads use SHA256 verification (as of v4.5.0)
 - See `docs/checksum-verification.md` for complete audit
 - See `docs/security-hardening.md` for roadmap
@@ -904,6 +983,7 @@ When encountering download or verification issues:
 **Symptom**: Python packages fail to install.
 
 **Solution**:
+
 ```bash
 # Check Python version
 python3 --version
@@ -923,6 +1003,7 @@ pip3 check
 **Symptom**: Poetry commands fail or behave unexpectedly.
 
 **Solution**:
+
 ```bash
 # Check installed Poetry version
 poetry --version
@@ -942,6 +1023,7 @@ python3 -m pipx reinstall poetry==2.2.1
 **Symptom**: npm install is extremely slow or hangs.
 
 **Solution**:
+
 ```bash
 # Clear npm cache
 npm cache clean --force
@@ -961,6 +1043,7 @@ npm config get registry
 **Symptom**: Cargo compilation errors.
 
 **Solution**:
+
 ```bash
 # Update Rust toolchain
 rustup update stable
@@ -980,6 +1063,7 @@ cargo build --verbose
 **Symptom**: docker: Cannot connect to the Docker daemon.
 
 **Solution**:
+
 ```bash
 # For Docker-in-Docker, you need privileged mode
 docker run --privileged myproject:dev
@@ -996,6 +1080,7 @@ docker --version
 **Symptom**: kubectl: command not found or not configured.
 
 **Solution**:
+
 ```bash
 # Check if kubectl is installed
 kubectl version --client
@@ -1011,14 +1096,18 @@ docker run -v ~/.kube:/home/vscode/.kube myproject:dev
 
 ### Integration tests failing
 
-**Symptom**: Integration tests fail with build errors or tool verification failures.
+**Symptom**: Integration tests fail with build errors or tool verification
+failures.
 
 **Common Causes**:
-1. **apt-key deprecation** (see [Debian Version Compatibility](#debian-version-compatibility))
+
+1. **apt-key deprecation** (see
+   [Debian Version Compatibility](#debian-version-compatibility))
 2. **Network timeouts** during tool downloads
 3. **Version mismatches** between pinned versions and available versions
 
 **Solution**:
+
 ```bash
 # Run integration tests locally to debug
 ./tests/run_integration_tests.sh
@@ -1037,6 +1126,7 @@ docker build --build-arg INCLUDE_KUBERNETES=true \
 ```
 
 **Available Integration Tests**:
+
 - `minimal` - Base container with no features
 - `python_dev` - Python + dev tools + databases + Docker
 - `node_dev` - Node.js + dev tools + databases + Docker
@@ -1049,6 +1139,7 @@ docker build --build-arg INCLUDE_KUBERNETES=true \
 **Symptom**: Build exceeds 6 hour timeout.
 
 **Solution**:
+
 ```yaml
 # Use layer caching
 - uses: docker/build-push-action@v6
@@ -1066,6 +1157,7 @@ matrix:
 **Symptom**: API calls to GitHub fail with 403.
 
 **Solution**:
+
 ```yaml
 # Ensure GITHUB_TOKEN is used
 env:
@@ -1084,11 +1176,12 @@ env:
 **Symptom**: Trivy or Gitleaks fail the build.
 
 **Solution**:
+
 ```yaml
 # For Trivy, allow high severity
 - uses: aquasecurity/trivy-action@master
   with:
-    severity: 'CRITICAL'  # Only fail on critical
+    severity: 'CRITICAL' # Only fail on critical
 
 # For Gitleaks, use baseline
 - uses: gitleaks/gitleaks-action@v2
@@ -1101,6 +1194,7 @@ env:
 **Symptom**: Cannot pull image for scanning.
 
 **Solution**:
+
 ```yaml
 # Ensure login happens first
 - name: Log in to registry
@@ -1200,8 +1294,10 @@ If you can't resolve your issue:
 1. **Check existing issues**: https://github.com/joshjhall/containers/issues
 2. **Check documentation**: Browse other docs in `docs/` directory
 3. **Enable verbose logging**: Set `set -x` in scripts for detailed output
-4. **Run integration tests**: `./tests/run_integration_tests.sh` to verify your setup
-5. **Check CI status**: View recent builds at https://github.com/joshjhall/containers/actions
+4. **Run integration tests**: `./tests/run_integration_tests.sh` to verify your
+   setup
+5. **Check CI status**: View recent builds at
+   https://github.com/joshjhall/containers/actions
 6. **Create an issue**: Include:
    - OS and Docker version (`docker version`)
    - Debian version (if relevant): `cat /etc/debian_version`

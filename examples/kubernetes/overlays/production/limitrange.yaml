@@ -8,49 +8,49 @@ metadata:
   name: production-limits
 spec:
   limits:
-  # Limits for containers
-  - type: Container
-    # Default limits (applied if not specified in pod spec)
-    default:
-      cpu: "1000m"
-      memory: "1Gi"
+    # Limits for containers
+    - type: Container
+      # Default limits (applied if not specified in pod spec)
+      default:
+        cpu: "1000m"
+        memory: "1Gi"
 
-    # Default requests (applied if not specified in pod spec)
-    defaultRequest:
-      cpu: "100m"
-      memory: "128Mi"
+      # Default requests (applied if not specified in pod spec)
+      defaultRequest:
+        cpu: "100m"
+        memory: "128Mi"
 
-    # Maximum resources a container can request
-    max:
-      cpu: "4000m"
-      memory: "8Gi"
+      # Maximum resources a container can request
+      max:
+        cpu: "4000m"
+        memory: "8Gi"
 
-    # Minimum resources a container must request
-    min:
-      cpu: "10m"
-      memory: "16Mi"
+      # Minimum resources a container must request
+      min:
+        cpu: "10m"
+        memory: "16Mi"
 
-    # Maximum ratio between limit and request
-    # Prevents setting high limits with low requests (overcommitment)
-    maxLimitRequestRatio:
-      cpu: "10"
-      memory: "4"
+      # Maximum ratio between limit and request
+      # Prevents setting high limits with low requests (overcommitment)
+      maxLimitRequestRatio:
+        cpu: "10"
+        memory: "4"
 
-  # Limits for pods (sum of all containers in pod)
-  - type: Pod
-    max:
-      cpu: "8000m"
-      memory: "16Gi"
-    min:
-      cpu: "10m"
-      memory: "16Mi"
+    # Limits for pods (sum of all containers in pod)
+    - type: Pod
+      max:
+        cpu: "8000m"
+        memory: "16Gi"
+      min:
+        cpu: "10m"
+        memory: "16Mi"
 
-  # Limits for persistent volume claims
-  - type: PersistentVolumeClaim
-    max:
-      storage: "100Gi"
-    min:
-      storage: "1Gi"
+    # Limits for persistent volume claims
+    - type: PersistentVolumeClaim
+      max:
+        storage: "100Gi"
+      min:
+        storage: "1Gi"
 
 ---
 # Example: Stricter limits for specific workload types

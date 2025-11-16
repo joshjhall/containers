@@ -1,12 +1,14 @@
 # Automated Patch Release System
 
-The automated patch release system handles version updates for dependencies with zero manual intervention when tests pass.
+The automated patch release system handles version updates for dependencies with
+zero manual intervention when tests pass.
 
 ## How It Works
 
 ### 1. Weekly Version Check (Scheduled)
 
 Every Sunday at 2am UTC, the system:
+
 - Checks for outdated versions of all tools (Python, Node, Rust, etc.)
 - If updates are found:
   - Creates a new branch: `auto-patch/YYYYMMDD-HHMMSS`
@@ -17,6 +19,7 @@ Every Sunday at 2am UTC, the system:
 ### 2. Automatic CI Validation
 
 The push to `auto-patch/*` triggers the full CI pipeline:
+
 - Unit tests
 - Shellcheck
 - Secret scanning
@@ -27,12 +30,14 @@ The push to `auto-patch/*` triggers the full CI pipeline:
 ### 3. Auto-Merge or Notify
 
 **If CI passes:**
+
 - Auto-merges the branch to `main`
 - Creates and pushes a version tag (e.g., `v1.2.3`)
 - Sends Pushover success notification
 - Deletes the auto-patch branch
 
 **If CI fails:**
+
 - Sends Pushover failure notification with details
 - Preserves the branch for manual review
 - Includes links to the failed workflow and branch
@@ -42,12 +47,14 @@ The push to `auto-patch/*` triggers the full CI pipeline:
 The system sends notifications via Pushover for:
 
 ### Success Notifications
+
 - Title: "✅ Patch Release v1.2.3 Deployed"
 - Details: Version changes, all tests passed
 - Priority: Normal
 - Sound: Default
 
 ### Failure Notifications
+
 - Title: "❌ Patch Release v1.2.3 Failed" or "⚠️ CI Failed"
 - Details: What failed, branch preserved, links to review
 - Priority: High
@@ -100,12 +107,14 @@ Actions → Automated Patch Releases → Run workflow
 ### Successful Releases
 
 Check your Pushover notifications for success messages. You can also:
+
 - View tags: `git tag -l "v*"`
 - Check releases: https://github.com/your-org/containers/releases
 
 ### Failed Releases
 
 If a release fails:
+
 1. You'll receive a Pushover notification with details
 2. The `auto-patch/*` branch is preserved
 3. Review the branch and failed workflow
@@ -131,10 +140,11 @@ Edit `.github/workflows/auto-patch.yml`:
 
 ```yaml
 schedule:
-  - cron: '0 2 * * 0'  # Sundays at 2am UTC
+  - cron: '0 2 * * 0' # Sundays at 2am UTC
 ```
 
 Common schedules:
+
 - Daily: `0 2 * * *`
 - Mondays only: `0 2 * * 1`
 - First of month: `0 2 1 * *`
@@ -142,6 +152,7 @@ Common schedules:
 ### Notification Priorities
 
 In the workflow file, adjust priority levels:
+
 - `0` = Normal priority
 - `1` = High priority (bypasses quiet hours)
 - `2` = Emergency (requires acknowledgment)

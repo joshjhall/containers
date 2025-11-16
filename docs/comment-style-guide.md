@@ -1,6 +1,7 @@
 # Comment Style Guide for Container Scripts
 
-This guide defines the consistent comment style used throughout the container scripts.
+This guide defines the consistent comment style used throughout the container
+scripts.
 
 ## File Header Template
 
@@ -80,7 +81,7 @@ alias example='command'
 ```bash
 # ----------------------------------------------------------------------------
 # function_name - Brief description
-# 
+#
 # Arguments:
 #   $1 - Description
 #   $2 - Description (optional)

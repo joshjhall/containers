@@ -5,6 +5,7 @@ This document describes the release process for the Container Build System.
 ## Overview
 
 Releases are managed through the `bin/release.sh` script, which automates:
+
 - Version bumping (semantic versioning)
 - CHANGELOG.md generation (using git-cliff)
 - Updating version references across the codebase
@@ -53,7 +54,8 @@ The release script automatically updates:
 
 ## CHANGELOG Generation
 
-The changelog is automatically generated using [git-cliff](https://git-cliff.org/), which:
+The changelog is automatically generated using
+[git-cliff](https://git-cliff.org/), which:
 
 - Parses conventional commit messages
 - Groups changes by type (Added, Fixed, Changed, etc.)
@@ -74,7 +76,9 @@ chore: Update dependencies
 
 ### Manual CHANGELOG Edits
 
-The "Unreleased" section can be manually edited. When you run the release script, git-cliff will:
+The "Unreleased" section can be manually edited. When you run the release
+script, git-cliff will:
+
 - Generate new sections from git history
 - Preserve your manual additions
 - Create proper version sections and links
@@ -153,7 +157,8 @@ We follow [Semantic Versioning 2.0.0](https://semver.org/):
 
 ## Installing git-cliff
 
-The release script will automatically install git-cliff if not found. You can also install it manually:
+The release script will automatically install git-cliff if not found. You can
+also install it manually:
 
 ```bash
 # Using cargo (recommended)
@@ -191,6 +196,7 @@ For automated releases from CI/CD:
 ```
 
 This is useful for:
+
 - Automated version bumps
 - Scheduled releases
 - Integration with other automation tools
@@ -226,6 +232,7 @@ For releases focused on security improvements, follow these guidelines:
 ### When to Create a Security Release
 
 Create a security-focused release when:
+
 - Adding checksum verification to downloads
 - Implementing GPG signature verification
 - Fixing security vulnerabilities
@@ -256,18 +263,22 @@ When creating a security release:
    - Document in CHANGELOG.md under "Security" or "Added" sections
 
 2. **Example CHANGELOG entry** (from v4.5.0):
+
    ```markdown
    ### Added
+
    - Add checksum verification utilities for supply chain security
    - Add SHA256 checksum verification to golang.sh
    - Add GPG signature verification to AWS CLI v2 installation
 
    ### Documentation
+
    - Add SECURITY.md with vulnerability reporting procedures
    - Update checksum verification inventory
    ```
 
 3. **Security release commit message**:
+
    ```bash
    git commit -m "chore(release): Release version 4.5.0
 
@@ -295,12 +306,14 @@ Before releasing security improvements:
 Version 4.5.0 demonstrates a comprehensive security release:
 
 **What was included**:
+
 - Phases 10-13 of checksum verification (all downloads now verified)
 - Dynamic checksum fetching for version flexibility
 - GPG signature verification for AWS CLI
 - Security documentation updates
 
 **How it was released**:
+
 ```bash
 # After completing all security work
 ./bin/release.sh minor  # 4.4.0 -> 4.5.0
@@ -319,6 +332,7 @@ git push origin v4.5.0
 ```
 
 **CHANGELOG.md automatically captured**:
+
 - 39 security-related commits
 - References to docs/checksum-verification.md
 - Links to security-hardening.md roadmap

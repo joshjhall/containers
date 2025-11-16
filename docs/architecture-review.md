@@ -79,4 +79,5 @@ docker buildx build --platform linux/amd64,linux/arm64 ...
 
 ## Testing
 
-The test script (`test-all-features.sh`) works with any architecture and properly detects installed features.
+The test script (`test-all-features.sh`) works with any architecture and
+properly detects installed features.

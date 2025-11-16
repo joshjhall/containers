@@ -1,6 +1,7 @@
 # Version Tracking Overview
 
-This document lists all manually pinned versions in the container build system that need tracking and updating.
+This document lists all manually pinned versions in the container build system
+that need tracking and updating.
 
 ## Dockerfile ARG Versions
 
@@ -110,6 +111,7 @@ These tools get the latest version at build time, which is generally fine:
 ## Version Tracking Status
 
 ✅ **All critical tools are now properly versioned and tracked:**
+
 - All Dockerfile ARG versions are pinned and tracked
 - All shell script tool installations use version variables
 - Poetry is pinned to a specific version (2.2.1)
@@ -117,6 +119,7 @@ These tools get the latest version at build time, which is generally fine:
 - duf and entr have version variables (0.9.1 and 5.7)
 
 ✅ **Automated version management:**
+
 - `check-versions.sh` monitors all pinned versions weekly
 - Automatic PRs created when updates are available
 - Version updates applied via `update-versions.sh`
@@ -135,4 +138,5 @@ These tools get the latest stable version by design:
    - git, curl, build-essential, etc.
    - Managed by Debian package management
 
-This approach balances reproducibility (pinned critical versions) with freshness (latest stable for development tools).
+This approach balances reproducibility (pinned critical versions) with freshness
+(latest stable for development tools).

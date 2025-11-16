@@ -15,7 +15,7 @@
 services:
   python-prod:
     build:
-      context: ../..  # containers directory (or project root if used as submodule)
+      context: ../.. # containers directory (or project root if used as submodule)
       dockerfile: Dockerfile
       args:
         # Use lightweight Debian slim as base
@@ -33,8 +33,8 @@ services:
 
         # Python runtime: YES runtime, NO dev tools
         INCLUDE_PYTHON: "true"
-        INCLUDE_PYTHON_DEV: "false"  # No pip-tools, ipython, black, etc.
-        PYTHON_VERSION: "3.13.5"  # Must be full X.Y.Z version
+        INCLUDE_PYTHON_DEV: "false" # No pip-tools, ipython, black, etc.
+        PYTHON_VERSION: "3.13.5" # Must be full X.Y.Z version
 
         # No other language runtimes
         INCLUDE_NODE: "false"
@@ -99,7 +99,6 @@ services:
 volumes:
   python-cache:
     driver: local
-
 # Expected image size: ~400-500MB (vs ~600-700MB with dev tools)
 # Includes: Python 3.12, pip, essential libraries
 # Excludes: pip-tools, ipython, black, mypy, pytest, build tools

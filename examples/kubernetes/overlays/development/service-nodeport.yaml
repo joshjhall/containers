@@ -6,19 +6,19 @@ metadata:
 spec:
   type: NodePort
   ports:
-  - name: http
-    port: 8080
-    targetPort: 8080
-    nodePort: 30080  # Fixed port for consistency in development
-  - name: api
-    port: 3000
-    targetPort: 3000
-    nodePort: 30030
-  - name: metrics
-    port: 9090
-    targetPort: 9090
-    nodePort: 30090
-  - name: debug
-    port: 5678
-    targetPort: 5678
-    nodePort: 30678
+    - name: http
+      port: 8080
+      targetPort: 8080
+      nodePort: 30080 # Fixed port for consistency in development
+    - name: api
+      port: 3000
+      targetPort: 3000
+      nodePort: 30030
+    - name: metrics
+      port: 9090
+      targetPort: 9090
+      nodePort: 30090
+    - name: debug
+      port: 5678
+      targetPort: 5678
+      nodePort: 30678

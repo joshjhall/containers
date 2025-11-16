@@ -45,11 +45,11 @@ spec:
   # Scope selectors allow different quotas for different priority classes
   scopeSelector:
     matchExpressions:
-    - operator: In
-      scopeName: PriorityClass
-      values:
-      - high
-      - medium
+      - operator: In
+        scopeName: PriorityClass
+        values:
+          - high
+          - medium
 
 ---
 # Example: Separate quota for different priority classes

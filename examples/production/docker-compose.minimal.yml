@@ -14,7 +14,7 @@
 services:
   minimal-prod:
     build:
-      context: ../..  # containers directory (or project root if used as submodule)
+      context: ../.. # containers directory (or project root if used as submodule)
       dockerfile: Dockerfile
       args:
         # Use lightweight Debian slim as base
@@ -91,5 +91,4 @@ services:
 volumes:
   minimal-cache:
     driver: local
-
 # Expected image size: ~200-300MB (vs ~400MB with dev tools)

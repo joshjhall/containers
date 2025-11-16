@@ -13,8 +13,8 @@ spec:
     matchLabels:
       app: devcontainer
   policyTypes:
-  - Ingress
-  - Egress
+    - Ingress
+    - Egress
 
 ---
 # Allow ingress from specific sources
@@ -27,42 +27,42 @@ spec:
     matchLabels:
       app: devcontainer
   policyTypes:
-  - Ingress
+    - Ingress
   ingress:
-  # Allow traffic from pods with specific labels (e.g., ingress controller)
-  - from:
-    - namespaceSelector:
-        matchLabels:
-          name: ingress-nginx
-    - podSelector:
-        matchLabels:
-          app: nginx-ingress
-    ports:
-    - protocol: TCP
-      port: 8080
-    - protocol: TCP
-      port: 3000
+    # Allow traffic from pods with specific labels (e.g., ingress controller)
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: ingress-nginx
+        - podSelector:
+            matchLabels:
+              app: nginx-ingress
+      ports:
+        - protocol: TCP
+          port: 8080
+        - protocol: TCP
+          port: 3000
 
-  # Allow traffic from same namespace (pod-to-pod communication)
-  - from:
-    - podSelector: {}
-    ports:
-    - protocol: TCP
-      port: 8080
-    - protocol: TCP
-      port: 3000
+    # Allow traffic from same namespace (pod-to-pod communication)
+    - from:
+        - podSelector: {}
+      ports:
+        - protocol: TCP
+          port: 8080
+        - protocol: TCP
+          port: 3000
 
-  # Allow Prometheus scraping from monitoring namespace
-  - from:
-    - namespaceSelector:
-        matchLabels:
-          name: monitoring
-      podSelector:
-        matchLabels:
-          app: prometheus
-    ports:
-    - protocol: TCP
-      port: 9090
+    # Allow Prometheus scraping from monitoring namespace
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: monitoring
+          podSelector:
+            matchLabels:
+              app: prometheus
+      ports:
+        - protocol: TCP
+          port: 9090
 
 ---
 # Allow egress to specific destinations
@@ -75,51 +75,51 @@ spec:
     matchLabels:
       app: devcontainer
   policyTypes:
-  - Egress
+    - Egress
   egress:
-  # Allow DNS queries
-  - to:
-    - namespaceSelector:
-        matchLabels:
-          name: kube-system
-      podSelector:
-        matchLabels:
-          k8s-app: kube-dns
-    ports:
-    - protocol: UDP
-      port: 53
-    - protocol: TCP
-      port: 53
+    # Allow DNS queries
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
 
-  # Allow HTTPS to external services (for package downloads, API calls)
-  - to:
-    - namespaceSelector: {}
-    ports:
-    - protocol: TCP
-      port: 443
+    # Allow HTTPS to external services (for package downloads, API calls)
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: 443
 
-  # Allow HTTP to external services (less secure, avoid if possible)
-  - to:
-    - namespaceSelector: {}
-    ports:
-    - protocol: TCP
-      port: 80
+    # Allow HTTP to external services (less secure, avoid if possible)
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: 80
 
-  # Allow access to Kubernetes API server
-  - to:
-    - namespaceSelector:
-        matchLabels:
-          name: default
-      podSelector:
-        matchLabels:
-          component: apiserver
-    ports:
-    - protocol: TCP
-      port: 6443
+    # Allow access to Kubernetes API server
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: default
+          podSelector:
+            matchLabels:
+              component: apiserver
+      ports:
+        - protocol: TCP
+          port: 6443
 
-  # Allow communication within the same namespace
-  - to:
-    - podSelector: {}
+    # Allow communication within the same namespace
+    - to:
+        - podSelector: {}
 
   # Allow specific external IPs (e.g., database, external APIs)
   # - to:

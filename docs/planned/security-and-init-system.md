@@ -2,15 +2,20 @@
 
 ## Overview
 
-This document outlines the design for a comprehensive security scanning and project initialization system for the container build system. The goal is to provide consistent, language-specific security tools and project scaffolding that works seamlessly across all development environments.
+This document outlines the design for a comprehensive security scanning and
+project initialization system for the container build system. The goal is to
+provide consistent, language-specific security tools and project scaffolding
+that works seamlessly across all development environments.
 
 ## Core Objectives
 
-1. **Security First**: Built-in vulnerability scanning for all supported languages
+1. **Security First**: Built-in vulnerability scanning for all supported
+   languages
 2. **Consistency**: Unified commands that work across all languages
 3. **CI/CD Ready**: Same tools work locally and in CI pipelines
 4. **Extensibility**: Easy to add new languages and tools
-5. **Non-invasive**: Opt-in system that doesn't modify projects without permission
+5. **Non-invasive**: Opt-in system that doesn't modify projects without
+   permission
 
 ## Short-Term Implementation (Bash + Templates)
 
@@ -162,12 +167,12 @@ copy_template() {
     local src_dir="$1"
     local dest="$2"
     local force="${3:-false}"
-    
+
     if [ -e "$dest" ] && [ "$force" != "true" ]; then
         echo "⚠️  $dest exists (use --force to overwrite)"
         return 1
     fi
-    
+
     cp -r "$src_dir"/* "$dest"
     echo "✓ Copied templates to $dest"
 }
@@ -177,7 +182,7 @@ install_feature_templates() {
     local feature="$1"
     local template_src="/tmp/build-scripts/templates/$feature"
     local template_dest="/usr/share/dev-templates/$feature"
-    
+
     if [ -d "$template_src" ]; then
         mkdir -p "$template_dest"
         cp -r "$template_src"/* "$template_dest/"
@@ -188,14 +193,14 @@ install_feature_templates() {
 # Detect project type based on files present
 detect_project_type() {
     local types=()
-    
+
     [ -f "Cargo.toml" ] && types+=("rust")
     [ -f "package.json" ] && types+=("node")
     [ -f "pyproject.toml" ] || [ -f "requirements.txt" ] && types+=("python")
     [ -f "go.mod" ] && types+=("go")
     [ -f "Gemfile" ] && types+=("ruby")
     [ -f "pom.xml" ] || [ -f "build.gradle" ] && types+=("java")
-    
+
     echo "${types[@]}"
 }
 
@@ -204,7 +209,7 @@ merge_ci_configs() {
     local output_file="$1"
     shift
     local configs=("$@")
-    
+
     # Use yq or custom merger to combine YAML files
     # This ensures rust + node = combined CI pipeline
     # Implementation depends on available tools
@@ -215,7 +220,7 @@ safe_create_file() {
     local file="$1"
     local content="$2"
     local force="${3:-false}"
-    
+
     if [ -f "$file" ]; then
         if [ "$force" = "true" ]; then
             cp "$file" "$file.backup"
@@ -225,7 +230,7 @@ safe_create_file() {
             return 1
         fi
     fi
-    
+
     echo "$content" > "$file"
     echo "✓ Created $file"
 }
@@ -264,7 +269,7 @@ for type in "${PROJECT_TYPES[@]}"; do
                 cargo deny check || true
             fi
             ;;
-            
+
         node)
             echo "→ Node.js Security Scan"
             npm audit || true
@@ -272,7 +277,7 @@ for type in "${PROJECT_TYPES[@]}"; do
                 better-npm-audit audit || true
             fi
             ;;
-            
+
         python)
             echo "→ Python Security Scan"
             pip-audit || true
@@ -295,7 +300,8 @@ echo "Run 'dev-init --scan --report' to generate detailed reports"
 
 ### Overview
 
-Migrate core functionality to Stibbons, a Rust-based CLI environment management tool, providing:
+Migrate core functionality to Stibbons, a Rust-based CLI environment management
+tool, providing:
 
 - Type safety and memory safety
 - Cross-platform binary (works on Alpine, Debian, etc.)
@@ -309,19 +315,19 @@ Migrate core functionality to Stibbons, a Rust-based CLI environment management 
 pub trait DevEnvironment {
     /// Detect if this environment applies to the current project
     fn detect_project(&self, path: &Path) -> bool;
-    
+
     /// Initialize project with best practices
     fn init_project(&self, config: InitConfig) -> Result<()>;
-    
+
     /// Run security scans
     fn security_scan(&self, options: ScanOptions) -> SecurityReport;
-    
+
     /// Check and update dependencies
     fn update_dependencies(&self, mode: UpdateMode) -> Result<UpdateReport>;
-    
+
     /// Generate CI/CD configurations
     fn generate_ci_config(&self, platform: CIPlatform) -> Result<String>;
-    
+
     /// Install development hooks
     fn install_hooks(&self, hook_type: HookType) -> Result<()>;
 }
@@ -345,7 +351,7 @@ impl ProjectEnvironment {
     pub fn detect_all(path: &Path) -> Self {
         // Auto-detect all applicable environments
     }
-    
+
     pub fn init_all(&self, config: InitConfig) -> Result<()> {
         // Initialize all environments with proper merging
     }
@@ -487,7 +493,8 @@ stibbons ci run --local          # Run CI pipeline locally
 
 ### Risk: Tool Maintenance Burden
 
-**Mitigation**: Use well-maintained tools, automate updates, community contributions
+**Mitigation**: Use well-maintained tools, automate updates, community
+contributions
 
 ### Risk: Image Size Growth
 
@@ -538,4 +545,5 @@ stibbons ci run --local          # Run CI pipeline locally
 
 ---
 
-*This document represents the current design thinking for security scanning and project initialization. It will be updated as the implementation progresses.*
+_This document represents the current design thinking for security scanning and
+project initialization. It will be updated as the implementation progresses._

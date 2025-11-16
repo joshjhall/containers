@@ -1,6 +1,7 @@
 # Contributing to Container Build System
 
-Thank you for your interest in contributing! This document provides guidelines and best practices for contributing to this project.
+Thank you for your interest in contributing! This document provides guidelines
+and best practices for contributing to this project.
 
 ## Table of Contents
 
@@ -27,12 +28,14 @@ Thank you for your interest in contributing! This document provides guidelines a
 ### Development Setup
 
 1. Fork and clone the repository:
+
    ```bash
    git clone https://github.com/YOUR_USERNAME/containers.git
    cd containers
    ```
 
 2. Run the development environment setup:
+
    ```bash
    ./bin/setup-dev-environment.sh
    ```
@@ -90,7 +93,8 @@ log_feature_start
 
 Every feature script MUST include:
 
-1. **Shebang and header comments**: Describe purpose, dependencies, environment variables
+1. **Shebang and header comments**: Describe purpose, dependencies, environment
+   variables
 2. **Error handling**: `set -euo pipefail` immediately after shebang/comments
 3. **Source utilities**: Import required base scripts
 4. **Logging calls**:
@@ -99,7 +103,8 @@ Every feature script MUST include:
    - `log_feature_end` at the end
 5. **Environment variable exports**: Add to `/etc/bashrc.d/` for persistence
 6. **Verification**: Test that installed tools work correctly
-7. **Configuration summary**: Use `log_feature_summary` to show what was installed
+7. **Configuration summary**: Use `log_feature_summary` to show what was
+   installed
 
 ### Feature Script Structure
 
@@ -164,6 +169,7 @@ set -euo pipefail
 ```
 
 This ensures:
+
 - `set -e`: Exit immediately if a command fails
 - `set -u`: Treat unset variables as errors
 - `set -o pipefail`: Fail on any command in a pipeline
@@ -248,21 +254,25 @@ trap cleanup EXIT
 
 ### Exit Code Conventions
 
-All scripts MUST use consistent exit codes to enable proper error handling and testing.
+All scripts MUST use consistent exit codes to enable proper error handling and
+testing.
 
 #### Standard Exit Codes
 
-| Exit Code | Meaning | When to Use |
-|-----------|---------|-------------|
-| `0` | Success | Script completed successfully |
-| `1` | General error | Any failure (file not found, command failed, etc.) |
-| `2` | Usage error | Invalid arguments or missing required parameters |
+| Exit Code | Meaning       | When to Use                                        |
+| --------- | ------------- | -------------------------------------------------- |
+| `0`       | Success       | Script completed successfully                      |
+| `1`       | General error | Any failure (file not found, command failed, etc.) |
+| `2`       | Usage error   | Invalid arguments or missing required parameters   |
 
-**Note**: Feature scripts should typically **not** exit directly. Instead, they should `return 1` to allow the caller (Dockerfile RUN command) to handle the error.
+**Note**: Feature scripts should typically **not** exit directly. Instead, they
+should `return 1` to allow the caller (Dockerfile RUN command) to handle the
+error.
 
 #### Feature Scripts Pattern
 
-Feature scripts are sourced during builds and should use `return` instead of `exit`:
+Feature scripts are sourced during builds and should use `return` instead of
+`exit`:
 
 ```bash
 #!/bin/bash
@@ -316,6 +326,7 @@ exit 0  # Explicit success (optional - implicit if reached end)
 #### DO/DON'T
 
 **DO**:
+
 - ✅ Use `return 1` in feature scripts (they're sourced, not executed)
 - ✅ Use `exit 0` only when explicitly needed (e.g., early success)
 - ✅ Rely on `set -e` to automatically fail on command errors
@@ -323,8 +334,10 @@ exit 0  # Explicit success (optional - implicit if reached end)
 - ✅ Use exit code 2 for usage/argument errors in CLI scripts
 
 **DON'T**:
+
 - ❌ Don't use `exit` in feature scripts (use `return` instead)
-- ❌ Don't test exit codes indirectly: `cmd; if [ $? -eq 0 ]` (use `if cmd; then`)
+- ❌ Don't test exit codes indirectly: `cmd; if [ $? -eq 0 ]` (use
+  `if cmd; then`)
 - ❌ Don't ignore exit codes: `cmd || true` (unless intentional)
 - ❌ Don't use exit codes > 2 (keep it simple and consistent)
 
@@ -427,7 +440,8 @@ Follow these conventions:
 3. **Variable naming**:
    - `UPPERCASE_WITH_UNDERSCORES` for constants/environment variables
    - `lowercase_with_underscores` for local variables
-4. **Function naming**: `verb_noun` pattern (e.g., `install_python`, `fetch_checksum`)
+4. **Function naming**: `verb_noun` pattern (e.g., `install_python`,
+   `fetch_checksum`)
 
 ### Example
 
@@ -532,6 +546,7 @@ Follow conventional commit format:
 ```
 
 Types:
+
 - `feat`: New feature
 - `fix`: Bug fix
 - `docs`: Documentation changes
@@ -558,11 +573,13 @@ Closes #123
 ### Before Submitting
 
 1. **Run all tests**:
+
    ```bash
    ./tests/run_all.sh
    ```
 
 2. **Run shellcheck**:
+
    ```bash
    find lib bin -name "*.sh" -exec shellcheck {} +
    ```
@@ -579,21 +596,25 @@ When creating a PR, include:
 
 ```markdown
 ## Description
+
 Brief description of changes
 
 ## Type of Change
+
 - [ ] Bug fix
 - [ ] New feature
 - [ ] Breaking change
 - [ ] Documentation update
 
 ## Testing
+
 - [ ] Unit tests pass
 - [ ] Integration tests pass
 - [ ] Shellcheck passes
 - [ ] Manual testing performed
 
 ## Checklist
+
 - [ ] Code follows style guidelines
 - [ ] Comments added for complex logic
 - [ ] Documentation updated
@@ -667,10 +688,12 @@ install -d -m 0755 -o "${USER_UID}" -g "${USER_GID}" "$CACHE_DIR"
 
 ## Code of Conduct
 
-Be respectful and constructive in all interactions. We aim to maintain a welcoming community for all contributors.
+Be respectful and constructive in all interactions. We aim to maintain a
+welcoming community for all contributors.
 
 ---
 
 ## License
 
-By contributing, you agree that your contributions will be licensed under the same license as the project.
+By contributing, you agree that your contributions will be licensed under the
+same license as the project.

@@ -18,7 +18,7 @@ on:
   pull_request:
     branches:
       - main
-  workflow_dispatch:  # Allow manual triggering
+  workflow_dispatch: # Allow manual triggering
 
 # Environment variables available to all jobs
 env:
@@ -60,7 +60,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Full history for better analysis
+          fetch-depth: 0 # Full history for better analysis
 
       - name: Run shellcheck
         run: |
@@ -96,7 +96,7 @@ jobs:
     needs: [unit-test, code-quality]
     permissions:
       contents: read
-      packages: write  # Required to push to GHCR
+      packages: write # Required to push to GHCR
     strategy:
       # Don't cancel other builds if one fails
       fail-fast: false
@@ -177,7 +177,7 @@ jobs:
     needs: build
     permissions:
       contents: read
-      packages: read  # Required to pull from GHCR
+      packages: read # Required to pull from GHCR
     strategy:
       fail-fast: false
       matrix:
@@ -228,11 +228,11 @@ jobs:
     name: Security Scan ${{ matrix.variant }}
     runs-on: ubuntu-latest
     needs: build
-    if: github.event_name == 'push'  # Only on push, not PRs
+    if: github.event_name == 'push' # Only on push, not PRs
     permissions:
       contents: read
       packages: read
-      security-events: write  # Required for SARIF upload
+      security-events: write # Required for SARIF upload
     strategy:
       matrix:
         variant: [minimal, python-dev, node-dev]
@@ -263,20 +263,20 @@ jobs:
         uses: aquasecurity/trivy-action@0.33.1
         with:
           image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.sanitized }}-${{ matrix.variant }}
-          format: 'sarif'
-          output: 'trivy-results-${{ matrix.variant }}.sarif'
-          severity: 'CRITICAL,HIGH'
+          format: "sarif"
+          output: "trivy-results-${{ matrix.variant }}.sarif"
+          severity: "CRITICAL,HIGH"
 
       - name: Upload to GitHub Security
         uses: github/codeql-action/upload-sarif@v3
         if: always()
         with:
-          sarif_file: 'trivy-results-${{ matrix.variant }}.sarif'
-          category: 'container-${{ matrix.variant }}'
+          sarif_file: "trivy-results-${{ matrix.variant }}.sarif"
+          category: "container-${{ matrix.variant }}"
 
       - name: Print vulnerability summary
         uses: aquasecurity/trivy-action@0.33.1
         with:
           image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.sanitized }}-${{ matrix.variant }}
-          format: 'table'
-          severity: 'CRITICAL,HIGH,MEDIUM'
+          format: "table"
+          severity: "CRITICAL,HIGH,MEDIUM"

@@ -22,7 +22,8 @@ Runs shellcheck on staged shell scripts to catch issues before commit.
 
 **Configuration:**
 
-- `SHELLCHECK_SEVERITY` - Set severity level (error, warning, info, style). Default: error
+- `SHELLCHECK_SEVERITY` - Set severity level (error, warning, info, style).
+  Default: error
 - `SHELLCHECK_ENABLED` - Enable/disable shellcheck. Default: true
 
 **Examples:**

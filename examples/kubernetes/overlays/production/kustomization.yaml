@@ -35,7 +35,7 @@ namePrefix: prod-
 # Override image tag for production (use specific pinned versions)
 images:
   - name: ghcr.io/joshjhall/containers
-    newTag: python-dev-4.9.2  # Always pin specific versions in production
+    newTag: python-dev-4.9.2 # Always pin specific versions in production
 
 # Patches to customize resources for production
 patches:

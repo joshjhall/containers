@@ -28,7 +28,7 @@ namePrefix: staging-
 # Override image tag for staging (use specific versions, not latest)
 images:
   - name: ghcr.io/joshjhall/containers
-    newTag: python-dev-4.9.2  # Use specific version for staging
+    newTag: python-dev-4.9.2 # Use specific version for staging
 
 # Patches to customize resources for staging
 patches:

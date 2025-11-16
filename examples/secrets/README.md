@@ -1,7 +1,7 @@
 # Secret Management Integration Examples
 
-This directory contains examples for integrating various secret management providers with
-the container runtime.
+This directory contains examples for integrating various secret management
+providers with the container runtime.
 
 ## Table of Contents
 
@@ -21,13 +21,15 @@ the container runtime.
 
 ## Overview
 
-The container runtime includes built-in support for loading secrets from multiple secret
-management providers at container startup. Secrets are automatically injected as environment
-variables, making them available to your application without code changes.
+The container runtime includes built-in support for loading secrets from
+multiple secret management providers at container startup. Secrets are
+automatically injected as environment variables, making them available to your
+application without code changes.
 
 ### Features
 
-- **Multi-provider support**: Docker Secrets, HashiCorp Vault, AWS, Azure, GCP, 1Password
+- **Multi-provider support**: Docker Secrets, HashiCorp Vault, AWS, Azure, GCP,
+  1Password
 - **Automatic loading**: Secrets loaded during container startup
 - **Flexible authentication**: Multiple auth methods per provider
 - **Error handling**: Configurable fail-on-error behavior
@@ -37,14 +39,14 @@ variables, making them available to your application without code changes.
 
 ## Supported Providers
 
-| Provider | Authentication Methods | Use Case |
-|----------|----------------------|----------|
-| **Docker Secrets** | File-based (auto-detected) | Docker Swarm, Docker Compose |
-| **HashiCorp Vault** | Token, AppRole, Kubernetes | Enterprise, multi-cloud |
-| **AWS Secrets Manager** | IAM, Access Keys, IRSA | AWS-native applications |
-| **Azure Key Vault** | Managed Identity, Service Principal | Azure-native applications |
-| **GCP Secret Manager** | Workload Identity, Service Account, ADC | GCP-native applications |
-| **1Password** | Connect Server, Service Account, CLI | Development, SMB |
+| Provider                | Authentication Methods                  | Use Case                     |
+| ----------------------- | --------------------------------------- | ---------------------------- |
+| **Docker Secrets**      | File-based (auto-detected)              | Docker Swarm, Docker Compose |
+| **HashiCorp Vault**     | Token, AppRole, Kubernetes              | Enterprise, multi-cloud      |
+| **AWS Secrets Manager** | IAM, Access Keys, IRSA                  | AWS-native applications      |
+| **Azure Key Vault**     | Managed Identity, Service Principal     | Azure-native applications    |
+| **GCP Secret Manager**  | Workload Identity, Service Account, ADC | GCP-native applications      |
+| **1Password**           | Connect Server, Service Account, CLI    | Development, SMB             |
 
 ## Environment Variables
 
@@ -69,9 +71,9 @@ See individual provider sections below for detailed configuration.
 
 ### Docker Secrets
 
-Docker Secrets provides a simple, file-based secret management system for Docker Swarm
-and Docker Compose. Secrets are mounted as files in `/run/secrets/` and automatically
-detected by the container runtime.
+Docker Secrets provides a simple, file-based secret management system for Docker
+Swarm and Docker Compose. Secrets are mounted as files in `/run/secrets/` and
+automatically detected by the container runtime.
 
 #### Configuration
 
@@ -134,6 +136,7 @@ docker service create \
 ```
 
 **Key Features:**
+
 - **Auto-detection**: Automatically loads secrets if `/run/secrets/` exists
 - **Zero configuration**: Works out-of-the-box with Docker Compose/Swarm
 - **Simple**: Just mount secrets, they're loaded as environment variables
@@ -198,24 +201,25 @@ kind: Pod
 spec:
   serviceAccountName: myapp
   containers:
-  - name: app
-    image: myapp:latest
-    env:
-    - name: VAULT_ENABLED
-      value: "true"
-    - name: VAULT_ADDR
-      value: "https://vault.default.svc.cluster.local:8200"
-    - name: VAULT_AUTH_METHOD
-      value: "kubernetes"
-    - name: VAULT_K8S_ROLE
-      value: "myapp-role"
-    - name: VAULT_SECRET_PATH
-      value: "secret/data/myapp/production"
+    - name: app
+      image: myapp:latest
+      env:
+        - name: VAULT_ENABLED
+          value: 'true'
+        - name: VAULT_ADDR
+          value: 'https://vault.default.svc.cluster.local:8200'
+        - name: VAULT_AUTH_METHOD
+          value: 'kubernetes'
+        - name: VAULT_K8S_ROLE
+          value: 'myapp-role'
+        - name: VAULT_SECRET_PATH
+          value: 'secret/data/myapp/production'
 ```
 
 ### AWS Secrets Manager
 
-AWS Secrets Manager provides native AWS integration with automatic rotation support.
+AWS Secrets Manager provides native AWS integration with automatic rotation
+support.
 
 #### Configuration
 
@@ -277,20 +281,21 @@ kind: Pod
 spec:
   serviceAccountName: myapp
   containers:
-  - name: app
-    image: myapp:latest
-    env:
-    - name: AWS_SECRETS_ENABLED
-      value: "true"
-    - name: AWS_SECRET_NAME
-      value: "myapp/production/secrets"
-    - name: AWS_REGION
-      value: "us-east-1"
+    - name: app
+      image: myapp:latest
+      env:
+        - name: AWS_SECRETS_ENABLED
+          value: 'true'
+        - name: AWS_SECRET_NAME
+          value: 'myapp/production/secrets'
+        - name: AWS_REGION
+          value: 'us-east-1'
 ```
 
 ### Azure Key Vault
 
-Azure Key Vault integrates with Azure Managed Identity for secure, credential-free access.
+Azure Key Vault integrates with Azure Managed Identity for secure,
+credential-free access.
 
 #### Configuration
 
@@ -320,7 +325,8 @@ AZURE_CLIENT_SECRET="client-secret-here"
 
 Azure Key Vault supports:
 
-1. **Managed Identity** (Recommended for Azure VMs, AKS, Azure Container Instances)
+1. **Managed Identity** (Recommended for Azure VMs, AKS, Azure Container
+   Instances)
 2. **Service Principal** (Environment variables)
 3. **Azure CLI authentication** (Development)
 
@@ -334,15 +340,15 @@ metadata:
     aadpodidbinding: myapp-identity
 spec:
   containers:
-  - name: app
-    image: myapp:latest
-    env:
-    - name: AZURE_KEYVAULT_ENABLED
-      value: "true"
-    - name: AZURE_KEYVAULT_NAME
-      value: "myapp-keyvault"
-    - name: AZURE_SECRET_NAMES
-      value: "database-password,api-key"
+    - name: app
+      image: myapp:latest
+      env:
+        - name: AZURE_KEYVAULT_ENABLED
+          value: 'true'
+        - name: AZURE_KEYVAULT_NAME
+          value: 'myapp-keyvault'
+        - name: AZURE_SECRET_NAMES
+          value: 'database-password,api-key'
 ```
 
 #### Example: Service Principal
@@ -359,8 +365,8 @@ docker run -it --rm \
 
 ### GCP Secret Manager
 
-Google Cloud Secret Manager provides native GCP integration with automatic rotation
-support and Workload Identity for GKE.
+Google Cloud Secret Manager provides native GCP integration with automatic
+rotation support and Workload Identity for GKE.
 
 #### Configuration
 
@@ -409,15 +415,15 @@ kind: Pod
 spec:
   serviceAccountName: myapp
   containers:
-  - name: app
-    image: myapp:latest
-    env:
-    - name: GCP_SECRETS_ENABLED
-      value: "true"
-    - name: GCP_PROJECT_ID
-      value: "my-project-id"
-    - name: GCP_SECRET_NAMES
-      value: "db-password,api-key"
+    - name: app
+      image: myapp:latest
+      env:
+        - name: GCP_SECRETS_ENABLED
+          value: 'true'
+        - name: GCP_PROJECT_ID
+          value: 'my-project-id'
+        - name: GCP_SECRET_NAMES
+          value: 'db-password,api-key'
 ```
 
 #### Example: Local with Service Account
@@ -434,8 +440,8 @@ docker run -it --rm \
 
 ### 1Password
 
-1Password provides both Connect Server (for production) and CLI-based (for development)
-secret management.
+1Password provides both Connect Server (for production) and CLI-based (for
+development) secret management.
 
 #### Configuration
 
@@ -490,8 +496,8 @@ docker run -it --rm \
 
 ### Kubernetes Secrets
 
-While the container supports external secret providers, you can also inject Kubernetes
-secrets directly as environment variables.
+While the container supports external secret providers, you can also inject
+Kubernetes secrets directly as environment variables.
 
 #### Example: Environment Variables from Secrets
 
@@ -502,32 +508,32 @@ metadata:
   name: myapp-secrets
 type: Opaque
 stringData:
-  database-password: "super-secret"
-  api-key: "api-key-here"
+  database-password: 'super-secret'
+  api-key: 'api-key-here'
 ---
 apiVersion: v1
 kind: Pod
 spec:
   containers:
-  - name: app
-    image: myapp:latest
-    env:
-    - name: DATABASE_PASSWORD
-      valueFrom:
-        secretKeyRef:
-          name: myapp-secrets
-          key: database-password
-    - name: API_KEY
-      valueFrom:
-        secretKeyRef:
-          name: myapp-secrets
-          key: api-key
+    - name: app
+      image: myapp:latest
+      env:
+        - name: DATABASE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: myapp-secrets
+              key: database-password
+        - name: API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: myapp-secrets
+              key: api-key
 ```
 
 #### Example: External Secrets Operator
 
-Use [External Secrets Operator](https://external-secrets.io/) to sync from external
-providers to Kubernetes secrets:
+Use [External Secrets Operator](https://external-secrets.io/) to sync from
+external providers to Kubernetes secrets:
 
 ```yaml
 apiVersion: external-secrets.io/v1beta1
@@ -537,13 +543,13 @@ metadata:
 spec:
   provider:
     vault:
-      server: "https://vault.example.com"
-      path: "secret"
-      version: "v2"
+      server: 'https://vault.example.com'
+      path: 'secret'
+      version: 'v2'
       auth:
         kubernetes:
-          mountPath: "kubernetes"
-          role: "myapp-role"
+          mountPath: 'kubernetes'
+          role: 'myapp-role'
 ---
 apiVersion: external-secrets.io/v1beta1
 kind: ExternalSecret
@@ -558,10 +564,10 @@ spec:
     name: myapp-secrets
     creationPolicy: Owner
   data:
-  - secretKey: database-password
-    remoteRef:
-      key: myapp/production
-      property: database_password
+    - secretKey: database-password
+      remoteRef:
+        key: myapp/production
+        property: database_password
 ```
 
 ## Docker Compose Examples
@@ -578,24 +584,24 @@ services:
     image: myapp:latest
     environment:
       # Universal loader configuration
-      SECRET_LOADER_ENABLED: "true"
-      SECRET_LOADER_PRIORITY: "vault,aws,1password"
-      SECRET_LOADER_FAIL_ON_ERROR: "false"
+      SECRET_LOADER_ENABLED: 'true'
+      SECRET_LOADER_PRIORITY: 'vault,aws,1password'
+      SECRET_LOADER_FAIL_ON_ERROR: 'false'
 
       # HashiCorp Vault
-      VAULT_ENABLED: "true"
-      VAULT_ADDR: "https://vault.example.com:8200"
-      VAULT_TOKEN: "${VAULT_TOKEN}"
-      VAULT_SECRET_PATH: "secret/data/myapp/production"
+      VAULT_ENABLED: 'true'
+      VAULT_ADDR: 'https://vault.example.com:8200'
+      VAULT_TOKEN: '${VAULT_TOKEN}'
+      VAULT_SECRET_PATH: 'secret/data/myapp/production'
 
       # AWS Secrets Manager
-      AWS_SECRETS_ENABLED: "true"
-      AWS_SECRET_NAME: "myapp/production/secrets"
-      AWS_REGION: "us-east-1"
+      AWS_SECRETS_ENABLED: 'true'
+      AWS_SECRET_NAME: 'myapp/production/secrets'
+      AWS_REGION: 'us-east-1'
 
       # 1Password
-      OP_ENABLED: "true"
-      OP_SERVICE_ACCOUNT_TOKEN: "${OP_SERVICE_ACCOUNT_TOKEN}"
+      OP_ENABLED: 'true'
+      OP_SERVICE_ACCOUNT_TOKEN: '${OP_SERVICE_ACCOUNT_TOKEN}'
 ```
 
 ## Testing
@@ -624,11 +630,13 @@ check_all_providers_health
 ### Secrets not loading
 
 1. Check if secret loading is enabled:
+
    ```bash
    echo $SECRET_LOADER_ENABLED
    ```
 
 2. Check container logs for error messages:
+
    ```bash
    docker logs <container-id>
    ```
@@ -636,6 +644,7 @@ check_all_providers_health
 3. Verify provider-specific environment variables are set
 
 4. Test provider health manually:
+
    ```bash
    # Vault
    vault status
@@ -654,8 +663,10 @@ check_all_providers_health
 
 - **Vault**: Verify token is valid with `vault token lookup`
 - **AWS**: Check IAM permissions include `secretsmanager:GetSecretValue`
-- **Azure**: Verify managed identity or service principal has `Secret/Get` permission
-- **1Password**: Verify Connect server is accessible or service account token is valid
+- **Azure**: Verify managed identity or service principal has `Secret/Get`
+  permission
+- **1Password**: Verify Connect server is accessible or service account token is
+  valid
 
 ### Missing dependencies
 

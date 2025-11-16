@@ -1,10 +1,14 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Claude Code (claude.ai/code) when working with
+code in this repository.
 
 ## Container Build System Overview
 
-This is a modular container build system designed to be used as a git submodule across multiple projects. It provides a universal Dockerfile that creates purpose-specific containers through build arguments, from minimal environments to full development containers.
+This is a modular container build system designed to be used as a git submodule
+across multiple projects. It provides a universal Dockerfile that creates
+purpose-specific containers through build arguments, from minimal environments
+to full development containers.
 
 ## Architecture
 
@@ -20,7 +24,8 @@ Key directories:
 - `lib/base/`: System setup, user creation, logging utilities
 - `lib/features/`: Optional feature installations (languages, tools)
 - `lib/runtime/`: Container runtime initialization
-- `bin/`: Version management scripts (check-versions.sh, update-versions.sh, release.sh)
+- `bin/`: Version management scripts (check-versions.sh, update-versions.sh,
+  release.sh)
 - `tests/`: Test framework and test suites
 - `examples/`: Docker Compose configurations and environment examples
 
@@ -77,9 +82,12 @@ docker build -t test:minimal \
 
 **IMPORTANT: Testing Docker Builds Manually**
 
-When testing Docker builds manually, **DO NOT run `docker build` commands directly** because Docker may be configured with buildx as the default builder, which has different argument handling.
+When testing Docker builds manually, **DO NOT run `docker build` commands
+directly** because Docker may be configured with buildx as the default builder,
+which has different argument handling.
 
-**ALWAYS use the integration test framework** which handles Docker configuration correctly:
+**ALWAYS use the integration test framework** which handles Docker configuration
+correctly:
 
 ```bash
 # Use the test framework - this is the CORRECT way
@@ -105,6 +113,7 @@ docker buildx build -t test:image -f Dockerfile --build-arg ARG=value .
 ```
 
 **Why the test framework is preferred:**
+
 - Handles Docker/buildx configuration automatically
 - Provides proper assertions and error handling
 - Cleans up test containers/images
@@ -137,24 +146,27 @@ check-installed-versions.sh
 All features are controlled via `INCLUDE_<FEATURE>=true/false` build arguments:
 
 **Languages**: `PYTHON`, `NODE`, `RUST`, `RUBY`, `R`, `GOLANG`, `JAVA`, `MOJO`
-**Dev Tools**: `PYTHON_DEV`, `NODE_DEV`, `RUST_DEV`, `RUBY_DEV`, `R_DEV`, `GOLANG_DEV`, `JAVA_DEV`, `MOJO_DEV`
-**Tools**: `DEV_TOOLS`, `DOCKER`, `OP` (1Password CLI)
-**Cloud**: `KUBERNETES`, `TERRAFORM`, `AWS`, `GCLOUD`, `CLOUDFLARE`
-**Database**: `POSTGRES_CLIENT`, `REDIS_CLIENT`, `SQLITE_CLIENT`
+**Dev Tools**: `PYTHON_DEV`, `NODE_DEV`, `RUST_DEV`, `RUBY_DEV`, `R_DEV`,
+`GOLANG_DEV`, `JAVA_DEV`, `MOJO_DEV` **Tools**: `DEV_TOOLS`, `DOCKER`, `OP`
+(1Password CLI) **Cloud**: `KUBERNETES`, `TERRAFORM`, `AWS`, `GCLOUD`,
+`CLOUDFLARE` **Database**: `POSTGRES_CLIENT`, `REDIS_CLIENT`, `SQLITE_CLIENT`
 **AI/ML**: `OLLAMA` (Local LLM support)
 
 Version control via build arguments:
 
-- `PYTHON_VERSION`, `NODE_VERSION`, `RUST_VERSION`, `GO_VERSION`, `RUBY_VERSION`, `JAVA_VERSION`, `R_VERSION`
+- `PYTHON_VERSION`, `NODE_VERSION`, `RUST_VERSION`, `GO_VERSION`,
+  `RUBY_VERSION`, `JAVA_VERSION`, `R_VERSION`
 
 ## Integration as Git Submodule
 
 This container system is designed to be used as a git submodule:
 
 1. Projects add this repository as a submodule (typically at `containers/`)
-2. Build commands reference the Dockerfile from the submodule: `-f containers/Dockerfile`
+2. Build commands reference the Dockerfile from the submodule:
+   `-f containers/Dockerfile`
 3. The build context is the project root (where you run `docker build .`)
-4. The Dockerfile assumes it's in `containers/` and project files are in the parent directory
+4. The Dockerfile assumes it's in `containers/` and project files are in the
+   parent directory
 5. Different environments are created by varying the build arguments
 6. For standalone testing, use `PROJECT_PATH=.` to indicate no parent project
 
@@ -177,20 +189,27 @@ The system uses `/cache` directory with subdirectories for each tool:
 
 ### Case-Sensitive Filesystem Considerations
 
-**Important**: Linux containers expect case-sensitive filesystems, but macOS and Windows use case-insensitive filesystems by default. This mismatch can cause issues when mounting host directories.
+**Important**: Linux containers expect case-sensitive filesystems, but macOS and
+Windows use case-insensitive filesystems by default. This mismatch can cause
+issues when mounting host directories.
 
 **Common Issues**:
-- Git tracks case changes (`README.md` → `readme.md`) but filesystem doesn't reflect them
+
+- Git tracks case changes (`README.md` → `readme.md`) but filesystem doesn't
+  reflect them
 - Case-sensitive imports fail (Python: `from MyModule` vs `from mymodule`)
 - Build tools expecting exact case matches may fail
 
-**Detection**: The container automatically detects case-insensitive mounts at startup and displays a warning with recommendations.
+**Detection**: The container automatically detects case-insensitive mounts at
+startup and displays a warning with recommendations.
 
 **Solutions**:
+
 1. **macOS**: Use case-sensitive APFS volume for development
 2. **Windows**: Use WSL2 filesystem (not Windows paths)
 3. **All platforms**: Use Docker volumes instead of bind mounts
-4. **Workaround**: Follow strict naming conventions (always lowercase or always PascalCase)
+4. **Workaround**: Follow strict naming conventions (always lowercase or always
+   PascalCase)
 
 **Disable check**: Set `SKIP_CASE_CHECK=true` to suppress the warning
 
@@ -198,7 +217,8 @@ The system uses `/cache` directory with subdirectories for each tool:
 
 ## Debian Version Compatibility
 
-The build system supports Debian 11 (Bullseye), 12 (Bookworm), and 13 (Trixie) with automatic version detection and conditional package installation.
+The build system supports Debian 11 (Bullseye), 12 (Bookworm), and 13 (Trixie)
+with automatic version detection and conditional package installation.
 
 ### When Writing Feature Scripts
 
@@ -231,12 +251,15 @@ fi
 ### Key Differences by Version
 
 - **Debian 11/12**: Uses legacy `apt-key` for repository GPG keys
-- **Debian 13+**: Requires `signed-by` method with keyrings in `/usr/share/keyrings/`
-- **Package migrations**: Some packages removed/renamed in Trixie (e.g., `lzma-dev` merged into `liblzma-dev`)
+- **Debian 13+**: Requires `signed-by` method with keyrings in
+  `/usr/share/keyrings/`
+- **Package migrations**: Some packages removed/renamed in Trixie (e.g.,
+  `lzma-dev` merged into `liblzma-dev`)
 
 ### Testing
 
-CI automatically tests builds on all three Debian versions. When modifying feature scripts:
+CI automatically tests builds on all three Debian versions. When modifying
+feature scripts:
 
 1. Test locally with different base images using `BASE_IMAGE` build arg
 2. Check the `debian-version-test` job in GitHub Actions
@@ -252,6 +275,7 @@ This repository has an automated patch release system that runs weekly:
 - Runs full CI pipeline and auto-merges on success
 
 **What this means for you:**
+
 - Expect automated commits from the `auto-patch` system
 - Don't manually edit `auto-patch/*` branches
 - The system uses `check-versions.sh` → `update-versions.sh` → `release.sh`
@@ -271,7 +295,8 @@ This repository has an automated patch release system that runs weekly:
 
 ## Release Process
 
-When you're ready to release a new version, **ALWAYS use the release script** - never manually edit the VERSION file.
+When you're ready to release a new version, **ALWAYS use the release script** -
+never manually edit the VERSION file.
 
 ### Creating a Release
 
@@ -290,6 +315,7 @@ echo 'y' | ./bin/release.sh 4.5.0
 ```
 
 The release script automatically:
+
 - Updates VERSION file
 - Updates Dockerfile version comment
 - Updates test framework version
@@ -308,6 +334,7 @@ git push origin vX.Y.Z
 ```
 
 The tag push triggers GitHub Actions to:
+
 - Build all container variants on multiple Debian versions
 - Run full test suite
 - Push images to ghcr.io/joshjhall/containers

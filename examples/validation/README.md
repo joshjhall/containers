@@ -1,12 +1,15 @@
 # Configuration Validation Examples
 
-This directory contains examples of how to use the configuration validation framework to validate environment variables, detect secrets, and ensure proper application configuration before container startup.
+This directory contains examples of how to use the configuration validation
+framework to validate environment variables, detect secrets, and ensure proper
+application configuration before container startup.
 
 ## Overview
 
 The configuration validation framework provides:
 
-- **Required variable validation** - Ensure critical environment variables are set
+- **Required variable validation** - Ensure critical environment variables are
+  set
 - **Format validation** - Validate URLs, paths, ports, emails, booleans
 - **Secret detection** - Warn about plaintext secrets in environment variables
 - **Custom validation rules** - Define application-specific validation logic
@@ -46,16 +49,17 @@ docker run -e VALIDATE_CONFIG=true \
 
 ## Configuration Options
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `VALIDATE_CONFIG` | `false` | Enable configuration validation |
-| `VALIDATE_CONFIG_STRICT` | `false` | Treat warnings as errors |
-| `VALIDATE_CONFIG_RULES` | - | Path to custom validation rules file |
-| `VALIDATE_CONFIG_QUIET` | `false` | Suppress informational messages |
+| Variable                 | Default | Description                          |
+| ------------------------ | ------- | ------------------------------------ |
+| `VALIDATE_CONFIG`        | `false` | Enable configuration validation      |
+| `VALIDATE_CONFIG_STRICT` | `false` | Treat warnings as errors             |
+| `VALIDATE_CONFIG_RULES`  | -       | Path to custom validation rules file |
+| `VALIDATE_CONFIG_QUIET`  | `false` | Suppress informational messages      |
 
 ## Custom Validation Rules
 
-Create a custom validation rules file to define application-specific validations:
+Create a custom validation rules file to define application-specific
+validations:
 
 ```bash
 # validation-rules.sh
@@ -238,10 +242,13 @@ Configuration validation failed. Please fix the errors above.
 
 ## Best Practices
 
-1. **Enable validation in development and staging** to catch configuration issues early
-2. **Use strict mode in production** to enforce all validation rules: `VALIDATE_CONFIG_STRICT=true`
+1. **Enable validation in development and staging** to catch configuration
+   issues early
+2. **Use strict mode in production** to enforce all validation rules:
+   `VALIDATE_CONFIG_STRICT=true`
 3. **Define custom rules** specific to your application's requirements
-4. **Use secret management** instead of plaintext secrets in environment variables
+4. **Use secret management** instead of plaintext secrets in environment
+   variables
 5. **Validate URLs with schemes** to catch incorrect connection strings early
 6. **Document validation rules** in your custom rules file for team clarity
 
@@ -250,6 +257,7 @@ Configuration validation failed. Please fix the errors above.
 Instead of plaintext secrets, use:
 
 1. **Docker secrets** (Swarm mode):
+
    ```yaml
    services:
      app:
@@ -261,6 +269,7 @@ Instead of plaintext secrets, use:
    ```
 
 2. **Kubernetes secrets**:
+
    ```yaml
    env:
      - name: API_KEY
@@ -271,16 +280,19 @@ Instead of plaintext secrets, use:
    ```
 
 3. **HashiCorp Vault**:
+
    ```bash
    export API_KEY=$(vault kv get -field=value secret/app/api-key)
    ```
 
 4. **AWS Secrets Manager**:
+
    ```bash
    export API_KEY=$(aws secretsmanager get-secret-value --secret-id app/api-key --query SecretString --output text)
    ```
 
 5. **Environment variable references**:
+
    ```bash
    # Store secret in file
    echo "secret-value" > /run/secrets/api-key
@@ -294,6 +306,7 @@ Instead of plaintext secrets, use:
 ### Validation passes but application fails
 
 The validation framework checks basic format and presence, but cannot validate:
+
 - Actual connectivity to services
 - Authentication credentials correctness
 - Service availability

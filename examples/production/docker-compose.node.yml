@@ -15,7 +15,7 @@
 services:
   node-prod:
     build:
-      context: ../..  # containers directory (or project root if used as submodule)
+      context: ../.. # containers directory (or project root if used as submodule)
       dockerfile: Dockerfile
       args:
         # Use lightweight Debian slim as base
@@ -33,7 +33,7 @@ services:
 
         # Node runtime: YES runtime, NO dev tools
         INCLUDE_NODE: "true"
-        INCLUDE_NODE_DEV: "false"  # No typescript, eslint, prettier, etc.
+        INCLUDE_NODE_DEV: "false" # No typescript, eslint, prettier, etc.
         NODE_VERSION: "20"
 
         # No other language runtimes
@@ -97,7 +97,6 @@ services:
 volumes:
   node-cache:
     driver: local
-
 # Expected image size: ~400-500MB (vs ~600-700MB with dev tools)
 # Includes: Node.js 20 LTS, npm, yarn
 # Excludes: typescript, eslint, prettier, nodemon, ts-node, build tools

@@ -1,6 +1,7 @@
 # Planned Features and Future Work
 
-This directory contains design documents and roadmaps for features that are planned but not yet implemented.
+This directory contains design documents and roadmaps for features that are
+planned but not yet implemented.
 
 ## What Belongs Here
 
@@ -13,7 +14,8 @@ This directory contains design documents and roadmaps for features that are plan
 
 ### Security Enhancements
 
-- **[security-hardening.md](security-hardening.md)** - Security hardening roadmap with 16 planned improvements
+- **[security-hardening.md](security-hardening.md)** - Security hardening
+  roadmap with 16 planned improvements
   - Command injection fixes
   - Sudo access controls
   - Container security hardening
@@ -21,13 +23,15 @@ This directory contains design documents and roadmaps for features that are plan
   - **Status**: Active roadmap - work not yet started
   - **When complete**: Will be moved to `docs/archived/` as reference
 
-- **[security-and-init-system.md](security-and-init-system.md)** - Comprehensive security scanning and project initialization system
+- **[security-and-init-system.md](security-and-init-system.md)** - Comprehensive
+  security scanning and project initialization system
   - Language-specific security tools (cargo-audit, npm audit, pip-audit, etc.)
   - Unified `dev-init` command for all languages
   - CI/CD template generation
   - **Status**: Design document - not yet prioritized
 
-- **[security-scan-quick-reference.md](security-scan-quick-reference.md)** - Quick reference for planned security scanning features
+- **[security-scan-quick-reference.md](security-scan-quick-reference.md)** -
+  Quick reference for planned security scanning features
   - Tool matrix for all supported languages
   - Command examples
   - **Status**: Quick reference for above design - not yet implemented
@@ -41,15 +45,20 @@ This directory contains design documents and roadmaps for features that are plan
 ## When to Move Documents
 
 **Move FROM planned/ TO docs/**:
+
 - When starting implementation
 - When a feature becomes active
 
 **Move FROM planned/ TO docs/archived/**:
+
 - When work is completed
-- Rename to reflect completion (e.g., `security-hardening.md` → `security-hardening-completed.md`)
+- Rename to reflect completion (e.g., `security-hardening.md` →
+  `security-hardening-completed.md`)
 
 ## Related Documentation
 
 - [docs/archived/](../archived/) - Completed work and historical reference
-- [docs/checksum-verification.md](../checksum-verification.md) - Example of completed security work
-- [CHANGELOG.md](../../CHANGELOG.md) - Track when planned features are implemented
+- [docs/checksum-verification.md](../checksum-verification.md) - Example of
+  completed security work
+- [CHANGELOG.md](../../CHANGELOG.md) - Track when planned features are
+  implemented

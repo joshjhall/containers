@@ -1,13 +1,14 @@
 # Mojo Installation Deprecation Notice
 
-> **⚠️ ARCHIVED DOCUMENT**
-> **Date Archived**: 2025-11-08
-> **Status**: UNRESOLVED
-> **Reason**: Mojo installation remains broken due to Modular CLI deprecation. This feature is currently **unsupported** until Magic CLI migration is completed. No timeline or priority has been established for this work.
+> **⚠️ ARCHIVED DOCUMENT** **Date Archived**: 2025-11-08 **Status**: UNRESOLVED
+> **Reason**: Mojo installation remains broken due to Modular CLI deprecation.
+> This feature is currently **unsupported** until Magic CLI migration is
+> completed. No timeline or priority has been established for this work.
 
 ## Issue
 
-The Modular CLI has been deprecated and replaced with the Magic CLI. The current Mojo installation script no longer works because:
+The Modular CLI has been deprecated and replaced with the Magic CLI. The current
+Mojo installation script no longer works because:
 
 1. The `modular` CLI is deprecated
 2. It requires authentication (`modular auth`) before installation
@@ -29,7 +30,8 @@ The Mojo installation script needs to be updated to:
 
 1. Use the new Magic CLI instead of Modular CLI
 2. Handle authentication requirements (likely needs user credentials)
-3. Follow the new installation process documented at <https://docs.modular.com/magic/>
+3. Follow the new installation process documented at
+   <https://docs.modular.com/magic/>
 
 ## Temporary Workaround
 
@@ -44,4 +46,5 @@ Until the script is updated, Mojo cannot be installed in the container without:
 - [ ] Research the new Magic CLI installation process
 - [ ] Update mojo.sh to use Magic CLI
 - [ ] Document authentication requirements
-- [ ] Consider if Mojo should remain as a container feature given auth requirements
+- [ ] Consider if Mojo should remain as a container feature given auth
+      requirements

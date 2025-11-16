@@ -15,11 +15,11 @@ on:
   workflow_dispatch:
     inputs:
       image_tag:
-        description: 'Image tag to deploy (e.g., v1.2.3-python-dev)'
+        description: "Image tag to deploy (e.g., v1.2.3-python-dev)"
         required: true
         type: string
       variant:
-        description: 'Container variant'
+        description: "Container variant"
         required: true
         type: choice
         options:
@@ -28,7 +28,7 @@ on:
           - minimal
           - cloud-ops
       deployment_strategy:
-        description: 'Deployment strategy'
+        description: "Deployment strategy"
         required: true
         type: choice
         options:
@@ -74,9 +74,9 @@ jobs:
         uses: aquasecurity/trivy-action@0.33.1
         with:
           image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ inputs.image_tag }}
-          format: 'table'
-          severity: 'CRITICAL,HIGH'
-          exit-code: '1'  # Fail if vulnerabilities found
+          format: "table"
+          severity: "CRITICAL,HIGH"
+          exit-code: "1" # Fail if vulnerabilities found
 
       - name: Verify image signatures
         run: |
@@ -103,7 +103,7 @@ jobs:
     needs: validate
     environment:
       name: production
-      url: https://example.com  # Update with your production URL
+      url: https://example.com # Update with your production URL
     permissions:
       contents: read
       packages: read

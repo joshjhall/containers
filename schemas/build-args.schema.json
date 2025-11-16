@@ -9,11 +9,7 @@
       "type": "string",
       "description": "Base Docker image to use",
       "default": "debian:trixie-slim",
-      "enum": [
-        "debian:trixie-slim",
-        "debian:bookworm-slim",
-        "debian:bullseye-slim"
-      ]
+      "enum": ["debian:trixie-slim", "debian:bookworm-slim", "debian:bullseye-slim"]
     },
     "PROJECT_PATH": {
       "type": "string",

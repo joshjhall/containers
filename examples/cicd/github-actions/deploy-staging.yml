@@ -15,7 +15,7 @@ on:
     workflows: ["Build and Test"]
     types: [completed]
     branches: [main]
-  workflow_dispatch:  # Allow manual deployment
+  workflow_dispatch: # Allow manual deployment
 
 env:
   REGISTRY: ghcr.io
@@ -30,11 +30,11 @@ jobs:
     if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
     environment:
       name: staging
-      url: https://staging.example.com  # Update with your staging URL
+      url: https://staging.example.com # Update with your staging URL
     permissions:
       contents: read
       packages: read
-      id-token: write  # Required for OIDC authentication
+      id-token: write # Required for OIDC authentication
 
     steps:
       - name: Checkout code

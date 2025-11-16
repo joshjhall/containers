@@ -1,4 +1,4 @@
-version: '3.8'
+version: "3.8"
 
 services:
   # Redis for job queue
@@ -87,15 +87,21 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '2'
+          cpus: "2"
           memory: 1G
         reservations:
-          cpus: '0.5'
+          cpus: "0.5"
           memory: 512M
 
     # Health check
     healthcheck:
-      test: ["CMD", "python", "-c", "import redis; r = redis.from_url('redis://redis:6379/0'); r.ping()"]
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import redis; r = redis.from_url('redis://redis:6379/0'); r.ping()",
+        ]
       interval: 30s
       timeout: 10s
       retries: 3

@@ -1,6 +1,7 @@
 # Production Deployment Checklist
 
-Use this checklist before deploying to production. Each item should be verified and checked off.
+Use this checklist before deploying to production. Each item should be verified
+and checked off.
 
 ## Pre-Deployment
 
@@ -251,6 +252,7 @@ If issues are detected, follow this rollback procedure:
    - Alert on-call team
 
 3. **Execute Rollback**
+
    ```bash
    # Rollback to previous deployment
    kubectl rollout undo deployment/prod-devcontainer -n production
@@ -299,6 +301,6 @@ Document your emergency contacts:
 
 **Sign-Off**
 
-- [ ] Deployment Engineer: __________________ Date: __________
-- [ ] DevOps Lead: __________________ Date: __________
-- [ ] Manager/Approver: __________________ Date: __________
+- [ ] Deployment Engineer: **\*\*\*\***\_\_**\*\*\*\*** Date: \***\*\_\_\*\***
+- [ ] DevOps Lead: **\*\*\*\***\_\_**\*\*\*\*** Date: \***\*\_\_\*\***
+- [ ] Manager/Approver: **\*\*\*\***\_\_**\*\*\*\*** Date: \***\*\_\_\*\***

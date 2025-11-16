@@ -1,6 +1,7 @@
 # Build Metrics Tracking
 
-This document describes the build metrics tracking system for monitoring image sizes and build times across container variants.
+This document describes the build metrics tracking system for monitoring image
+sizes and build times across container variants.
 
 ## Overview
 
@@ -85,7 +86,8 @@ The build metrics system helps you:
 
 ### Basic Options
 
-- `<variant>` - Variant to measure (minimal, python-dev, node-dev, rust-golang, cloud-ops, polyglot)
+- `<variant>` - Variant to measure (minimal, python-dev, node-dev, rust-golang,
+  cloud-ops, polyglot)
 - `--save-baseline` - Save measurements as baseline for future comparisons
 - `--compare` - Compare against baseline and fail if regression detected
 - `--json` - Output results as JSON instead of human-readable text
@@ -98,14 +100,14 @@ The build metrics system helps you:
 
 ## Supported Variants
 
-| Variant | Description | Typical Size |
-|---------|-------------|--------------|
-| minimal | Base system only | ~450MB |
-| python-dev | Python + development tools | ~1.2GB |
-| node-dev | Node.js + development tools | ~1.1GB |
-| rust-golang | Rust + Go compilers | ~2.0GB |
-| cloud-ops | Docker, Kubernetes, Terraform, AWS CLI | ~1.5GB |
-| polyglot | Python, Node, Rust, Go | ~2.5GB |
+| Variant     | Description                            | Typical Size |
+| ----------- | -------------------------------------- | ------------ |
+| minimal     | Base system only                       | ~450MB       |
+| python-dev  | Python + development tools             | ~1.2GB       |
+| node-dev    | Node.js + development tools            | ~1.1GB       |
+| rust-golang | Rust + Go compilers                    | ~2.0GB       |
+| cloud-ops   | Docker, Kubernetes, Terraform, AWS CLI | ~1.5GB       |
+| polyglot    | Python, Node, Rust, Go                 | ~2.5GB       |
 
 ## Usage Examples
 
@@ -292,6 +294,7 @@ ERROR: Build failed for variant: python-dev
 ```
 
 Check:
+
 - Docker is running
 - Dockerfile is valid
 - Build arguments are correct

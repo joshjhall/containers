@@ -39,7 +39,11 @@ CREDENTIAL_PATTERNS=(
 
 for pattern in "${CREDENTIAL_PATTERNS[@]}"; do
     # Check all staged files (excluding deletions)
-    if git diff --cached --diff-filter=d | grep -E "$pattern" | grep -v "^-" > /dev/null 2>&1; then
+    # Exclude common placeholder patterns (your_token_here, example, placeholder, xxx, etc)
+    if git diff --cached --diff-filter=d | \
+       grep -E "$pattern" | \
+       grep -v "^-" | \
+       grep -v -iE "(your_token|your_key|example|placeholder|xxx|yyy|zzz|_here|token_goes_here)" > /dev/null 2>&1; then
         echo -e "${RED}ERROR: Potential credential detected in staged changes!${NC}"
         echo -e "${YELLOW}Pattern matched: $pattern${NC}"
         echo ""

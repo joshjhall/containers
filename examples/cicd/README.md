@@ -1,6 +1,7 @@
 # CI/CD Pipeline Templates
 
-This directory contains production-ready CI/CD pipeline templates for building and deploying containers across multiple platforms.
+This directory contains production-ready CI/CD pipeline templates for building
+and deploying containers across multiple platforms.
 
 ## Table of Contents
 
@@ -59,6 +60,7 @@ These templates provide complete CI/CD pipelines with:
 ### Quick Start
 
 1. Copy workflow files to your repository:
+
    ```bash
    mkdir -p .github/workflows
    cp examples/cicd/github-actions/*.yml .github/workflows/
@@ -80,6 +82,7 @@ These templates provide complete CI/CD pipelines with:
 #### Build and Test (`build-and-test.yml`)
 
 Runs on every push and pull request:
+
 - Unit tests (no Docker required)
 - Code quality (shellcheck, gitleaks)
 - Build container variants in parallel
@@ -87,6 +90,7 @@ Runs on every push and pull request:
 - Security scanning with Trivy
 
 **Trigger:**
+
 ```yaml
 on:
   push:
@@ -96,6 +100,7 @@ on:
 ```
 
 **Matrix builds:**
+
 ```yaml
 strategy:
   matrix:
@@ -108,21 +113,24 @@ strategy:
 #### Deploy to Staging (`deploy-staging.yml`)
 
 Automatically deploys to staging after successful builds on main:
+
 - Waits for build workflow to complete
 - Deploys to Kubernetes staging namespace
 - Runs smoke tests
 - Sends notifications
 
 **Trigger:**
+
 ```yaml
 on:
   workflow_run:
-    workflows: ["Build and Test"]
+    workflows: ['Build and Test']
     types: [completed]
     branches: [main]
 ```
 
 **Environment:**
+
 ```yaml
 environment:
   name: staging
@@ -132,6 +140,7 @@ environment:
 #### Deploy to Production (`deploy-production.yml`)
 
 Manual deployment to production with multiple strategies:
+
 - Requires manual approval
 - Pre-deployment validation (image exists, security scan)
 - Supports rolling, blue-green, or canary deployment
@@ -139,6 +148,7 @@ Manual deployment to production with multiple strategies:
 - Automatic rollback on failure
 
 **Trigger:**
+
 ```yaml
 on:
   workflow_dispatch:
@@ -148,14 +158,16 @@ on:
 ```
 
 **Manual approval:**
+
 ```yaml
 environment:
-  name: production  # Requires approval in GitHub settings
+  name: production # Requires approval in GitHub settings
 ```
 
 #### Rollback (`rollback.yml`)
 
 Manual rollback workflow:
+
 - Rolls back to previous image version
 - Creates GitHub issue for tracking
 - Sends notifications
@@ -165,11 +177,11 @@ Manual rollback workflow:
 
 #### Required Secrets
 
-| Secret | Description |
-|--------|-------------|
-| `KUBE_CONFIG_STAGING` | Kubernetes config for staging (base64 encoded) |
+| Secret                   | Description                                       |
+| ------------------------ | ------------------------------------------------- |
+| `KUBE_CONFIG_STAGING`    | Kubernetes config for staging (base64 encoded)    |
 | `KUBE_CONFIG_PRODUCTION` | Kubernetes config for production (base64 encoded) |
-| `SLACK_WEBHOOK` | (Optional) Slack webhook for notifications |
+| `SLACK_WEBHOOK`          | (Optional) Slack webhook for notifications        |
 
 #### Creating Kubernetes Config Secret
 
@@ -185,6 +197,7 @@ cat ~/.kube/config | base64 -w 0
 #### Environment Protection
 
 Configure production environment protection:
+
 1. Go to Settings → Environments → production
 2. Enable "Required reviewers"
 3. Add reviewers who can approve deployments
@@ -195,6 +208,7 @@ Configure production environment protection:
 ### Quick Start
 
 1. Copy to your repository:
+
    ```bash
    cp examples/cicd/gitlab-ci/.gitlab-ci.yml .
    ```
@@ -223,15 +237,16 @@ test → build → security-scan → deploy-staging → deploy-production
 
 #### CI/CD Variables
 
-| Variable | Description | Protected | Masked |
-|----------|-------------|-----------|--------|
-| `KUBE_CONFIG_STAGING` | Staging kubeconfig | No | Yes |
-| `KUBE_CONFIG_PRODUCTION` | Production kubeconfig | Yes | Yes |
-| `PROJECT_NAME` | Project name | No | No |
+| Variable                 | Description           | Protected | Masked |
+| ------------------------ | --------------------- | --------- | ------ |
+| `KUBE_CONFIG_STAGING`    | Staging kubeconfig    | No        | Yes    |
+| `KUBE_CONFIG_PRODUCTION` | Production kubeconfig | Yes       | Yes    |
+| `PROJECT_NAME`           | Project name          | No        | No     |
 
 #### Runners
 
 Ensure runners have:
+
 - Docker executor
 - Privileged mode enabled (for Docker-in-Docker)
 - Sufficient resources (2+ CPUs, 4GB+ RAM)
@@ -241,13 +256,15 @@ Ensure runners have:
 ### Quick Start
 
 1. Copy Jenkinsfile to your repository:
+
    ```bash
    cp examples/cicd/jenkins/Jenkinsfile .
    ```
 
 2. Create Jenkins credentials:
    - Credentials → Add Credentials
-   - Add: `github-container-registry`, `kube-config-staging`, `kube-config-production`
+   - Add: `github-container-registry`, `kube-config-staging`,
+     `kube-config-production`
 
 3. Create Jenkins pipeline job:
    - New Item → Pipeline
@@ -292,28 +309,31 @@ parameters {
 
 ### Credentials
 
-| ID | Type | Description |
-|----|------|-------------|
+| ID                          | Type              | Description           |
+| --------------------------- | ----------------- | --------------------- |
 | `github-container-registry` | Username/Password | GitHub username + PAT |
-| `kube-config-staging` | Secret file | Staging kubeconfig |
-| `kube-config-production` | Secret file | Production kubeconfig |
+| `kube-config-staging`       | Secret file       | Staging kubeconfig    |
+| `kube-config-production`    | Secret file       | Production kubeconfig |
 
 ## Deployment Strategies
 
 ### Blue-Green Deployment
 
 **When to use:**
+
 - Zero-downtime deployments required
 - Instant rollback capability needed
 - Testing new version before switching traffic
 
 **How it works:**
+
 1. Deploy new version to "green" environment
 2. Test green environment thoroughly
 3. Switch all traffic from "blue" to "green"
 4. Keep blue environment for quick rollback
 
 **Usage:**
+
 ```bash
 ./deployment-strategies/blue-green-deployment.sh \
     ghcr.io/myorg/app:v1.2.3 \
@@ -321,10 +341,12 @@ parameters {
 ```
 
 **Variables:**
+
 - `AUTO_APPROVE=true` - Skip manual approval
 - `KEEP_OLD=false` - Delete old deployment after switch
 
 **Example:**
+
 ```bash
 # Automated blue-green deployment
 AUTO_APPROVE=true \
@@ -337,11 +359,13 @@ KEEP_OLD=false \
 ### Canary Deployment
 
 **When to use:**
+
 - Testing with real production traffic
 - Gradual rollout to minimize risk
 - Monitoring new version behavior
 
 **How it works:**
+
 1. Deploy canary alongside current version
 2. Route small percentage to canary (e.g., 10%)
 3. Monitor canary for issues
@@ -349,6 +373,7 @@ KEEP_OLD=false \
 5. Promote canary to replace main deployment
 
 **Usage:**
+
 ```bash
 ./deployment-strategies/canary-deployment.sh \
     ghcr.io/myorg/app:v1.2.3 \
@@ -357,11 +382,13 @@ KEEP_OLD=false \
 ```
 
 **Variables:**
+
 - `MONITORING_DURATION=300` - Monitoring period in seconds
 - `AUTO_PROMOTE=true` - Automatically promote canary
 - `AUTO_ROLLBACK=true` - Auto-rollback on issues
 
 **Example:**
+
 ```bash
 # Canary with 10% traffic, 10-minute monitoring
 MONITORING_DURATION=600 \
@@ -377,6 +404,7 @@ AUTO_ROLLBACK=true \
 ### 1. Choose Your Platform
 
 Pick the CI/CD platform you're using:
+
 - GitHub → Use GitHub Actions templates
 - GitLab → Use GitLab CI template
 - Jenkins → Use Jenkinsfile
@@ -398,6 +426,7 @@ cp examples/cicd/jenkins/Jenkinsfile .
 ### 3. Customize
 
 Edit the copied files:
+
 - Update `PROJECT_NAME` variable
 - Modify container variants
 - Adjust build arguments
@@ -406,6 +435,7 @@ Edit the copied files:
 ### 4. Configure Secrets
 
 Add credentials in your CI/CD platform:
+
 - Kubernetes configs (base64 encoded)
 - Container registry credentials
 - Notification webhooks (optional)
@@ -413,6 +443,7 @@ Add credentials in your CI/CD platform:
 ### 5. Test
 
 Start with a pull request or feature branch:
+
 - Verify builds work
 - Check tests pass
 - Review security scans
@@ -490,6 +521,7 @@ Start with a pull request or feature branch:
 **Problem**: Docker build fails with "no space left on device"
 
 **Solution**:
+
 ```bash
 # GitHub Actions: Clean up Docker
 docker system prune -af
@@ -501,6 +533,7 @@ docker system prune -af
 **Problem**: Build args not being recognized
 
 **Solution**:
+
 ```bash
 # Ensure build args are defined in Dockerfile:
 ARG PROJECT_NAME
@@ -516,6 +549,7 @@ ARG INCLUDE_PYTHON_DEV=false
 **Problem**: kubectl commands fail with "Unauthorized"
 
 **Solution**:
+
 ```bash
 # Verify kubeconfig is correct and base64 encoded:
 cat ~/.kube/config | base64 -w 0
@@ -530,6 +564,7 @@ kubectl auth can-i create deployments --namespace=production
 **Problem**: Pods stuck in "ImagePullBackOff"
 
 **Solution**:
+
 ```bash
 # Check image exists:
 docker pull ghcr.io/myorg/app:v1.2.3
@@ -546,6 +581,7 @@ kubectl describe pod <pod-name> -n production
 **Problem**: Rollback fails because backup is missing
 
 **Solution**:
+
 ```bash
 # List previous revisions:
 kubectl rollout history deployment/myapp -n production
@@ -557,6 +593,7 @@ kubectl rollout undo deployment/myapp -n production --to-revision=2
 **Problem**: Traffic not switching during blue-green
 
 **Solution**:
+
 ```bash
 # Verify service selector:
 kubectl get service myapp -n production -o yaml | grep -A 5 selector
@@ -581,9 +618,11 @@ kubectl patch service myapp -n production \
 ## Support
 
 For issues and questions:
+
 - [GitHub Issues](https://github.com/joshjhall/containers/issues)
 - [Project Documentation](../../docs/)
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](../../LICENSE) file for details.
+This project is licensed under the MIT License - see the
+[LICENSE](../../LICENSE) file for details.

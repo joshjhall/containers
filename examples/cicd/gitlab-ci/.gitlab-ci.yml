@@ -263,7 +263,7 @@ deploy:production:
     url: https://example.com
     on_stop: rollback:production
 
-  when: manual  # Require manual approval
+  when: manual # Require manual approval
   only:
     - main
 

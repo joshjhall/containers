@@ -11,7 +11,7 @@
 # Example:
 #   sed 's/${SERVICE_NAME}/myapp/g' cache-volumes.template.yml > production/cache-volumes.yml
 
-version: '3.8'
+version: "3.8"
 
 services:
   # Use the same service name as your main compose file

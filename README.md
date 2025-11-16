@@ -3,7 +3,9 @@
 [![CI/CD Pipeline](https://github.com/joshjhall/containers/actions/workflows/ci.yml/badge.svg)](https://github.com/joshjhall/containers/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-A modular, extensible container build system designed to be shared across projects as a git submodule. Build everything from minimal agent containers to full-featured development environments using a single, configurable Dockerfile.
+A modular, extensible container build system designed to be shared across
+projects as a git submodule. Build everything from minimal agent containers to
+full-featured development environments using a single, configurable Dockerfile.
 
 ## Table of Contents
 
@@ -22,13 +24,17 @@ A modular, extensible container build system designed to be shared across projec
 
 ## Features
 
-- 🔧 **Modular Architecture**: Enable only the tools you need via build arguments
+- 🔧 **Modular Architecture**: Enable only the tools you need via build
+  arguments
 - 🚀 **Efficient Caching**: BuildKit cache mounts for faster rebuilds
-- 🔒 **Security Hardened**: Non-root users, input validation, checksum verification, secure temp files, rate limiting
+- 🔒 **Security Hardened**: Non-root users, input validation, checksum
+  verification, secure temp files, rate limiting
 - 🌍 **Multi-Purpose**: Development, CI/CD, production, and agent containers
-- 📦 **28 Feature Modules**: Python, Node.js, Rust, Go, Ruby, Java, R, and 100+ tools
+- 📦 **28 Feature Modules**: Python, Node.js, Rust, Go, Ruby, Java, R, and 100+
+  tools
 - ☁️ **Cloud Ready**: AWS, GCP, Kubernetes, Terraform integrations
-- 🐧 **Debian Compatible**: Supports Debian 11 (Bullseye), 12 (Bookworm), and 13 (Trixie)
+- 🐧 **Debian Compatible**: Supports Debian 11 (Bullseye), 12 (Bookworm), and 13
+  (Trixie)
 
 ---
 
@@ -84,7 +90,7 @@ docker build -t myproject:dev \
   --build-arg INCLUDE_POSTGRES_CLIENT=true \
   .
 
-# scripts/build-prod.sh  
+# scripts/build-prod.sh
 docker build -t myproject:prod \
   -f containers/Dockerfile \
   --build-arg PROJECT_NAME=myproject \
@@ -96,7 +102,8 @@ docker build -t myproject:prod \
 
 ## VS Code Dev Container
 
-This system integrates seamlessly with VS Code Dev Containers. Simply reference the shared Dockerfile in your `.devcontainer/docker-compose.yml`:
+This system integrates seamlessly with VS Code Dev Containers. Simply reference
+the shared Dockerfile in your `.devcontainer/docker-compose.yml`:
 
 ```yaml
 services:
@@ -107,13 +114,15 @@ services:
       args:
         BASE_IMAGE: mcr.microsoft.com/devcontainers/base:bookworm
         PROJECT_NAME: myproject
-        INCLUDE_PYTHON_DEV: "true"
-        INCLUDE_NODE_DEV: "true"
+        INCLUDE_PYTHON_DEV: 'true'
+        INCLUDE_NODE_DEV: 'true'
     volumes:
       - ..:/workspace/myproject
 ```
 
-For complete examples with databases, 1Password integration, and advanced configurations, see the [examples/devcontainer/](examples/devcontainer/) directory
+For complete examples with databases, 1Password integration, and advanced
+configurations, see the [examples/devcontainer/](examples/devcontainer/)
+directory
 
 ---
 
@@ -123,49 +132,49 @@ All features are enabled via `INCLUDE_<FEATURE>=true` build arguments.
 
 ### Languages
 
-| Feature | Build Arg | What's Included |
-|---------|-----------|-----------------|
-| **Python** | `INCLUDE_PYTHON=true` | Python 3.14+ from source, pip, pipx |
+| Feature        | Build Arg                 | What's Included                              |
+| -------------- | ------------------------- | -------------------------------------------- |
+| **Python**     | `INCLUDE_PYTHON=true`     | Python 3.14+ from source, pip, pipx          |
 | **Python Dev** | `INCLUDE_PYTHON_DEV=true` | + Poetry, black, ruff, mypy, pytest, jupyter |
-| **Node.js** | `INCLUDE_NODE=true` | Node 22 LTS, npm, yarn, pnpm |
-| **Node Dev** | `INCLUDE_NODE_DEV=true` | + TypeScript, ESLint, Jest, Vite, webpack |
-| **Rust** | `INCLUDE_RUST=true` | Latest stable, cargo |
-| **Rust Dev** | `INCLUDE_RUST_DEV=true` | + clippy, rustfmt, cargo-watch, bacon |
-| **Go** | `INCLUDE_GOLANG=true` | Latest with module support |
-| **Go Dev** | `INCLUDE_GOLANG_DEV=true` | + delve, gopls, staticcheck |
-| **Ruby** | `INCLUDE_RUBY=true` | Ruby 3.3+, bundler |
-| **Ruby Dev** | `INCLUDE_RUBY_DEV=true` | + rubocop, solargraph |
-| **Java** | `INCLUDE_JAVA=true` | OpenJDK 21 |
-| **Java Dev** | `INCLUDE_JAVA_DEV=true` | + Maven, Gradle |
-| **R** | `INCLUDE_R=true` | R environment |
-| **R Dev** | `INCLUDE_R_DEV=true` | + tidyverse, devtools |
+| **Node.js**    | `INCLUDE_NODE=true`       | Node 22 LTS, npm, yarn, pnpm                 |
+| **Node Dev**   | `INCLUDE_NODE_DEV=true`   | + TypeScript, ESLint, Jest, Vite, webpack    |
+| **Rust**       | `INCLUDE_RUST=true`       | Latest stable, cargo                         |
+| **Rust Dev**   | `INCLUDE_RUST_DEV=true`   | + clippy, rustfmt, cargo-watch, bacon        |
+| **Go**         | `INCLUDE_GOLANG=true`     | Latest with module support                   |
+| **Go Dev**     | `INCLUDE_GOLANG_DEV=true` | + delve, gopls, staticcheck                  |
+| **Ruby**       | `INCLUDE_RUBY=true`       | Ruby 3.3+, bundler                           |
+| **Ruby Dev**   | `INCLUDE_RUBY_DEV=true`   | + rubocop, solargraph                        |
+| **Java**       | `INCLUDE_JAVA=true`       | OpenJDK 21                                   |
+| **Java Dev**   | `INCLUDE_JAVA_DEV=true`   | + Maven, Gradle                              |
+| **R**          | `INCLUDE_R=true`          | R environment                                |
+| **R Dev**      | `INCLUDE_R_DEV=true`      | + tidyverse, devtools                        |
 
 ### Infrastructure & Cloud
 
-| Feature | Build Arg | What's Included |
-|---------|-----------|-----------------|
-| **Docker** | `INCLUDE_DOCKER=true` | Docker CLI, compose, lazydocker |
-| **Kubernetes** | `INCLUDE_KUBERNETES=true` | kubectl, helm, k9s |
-| **Terraform** | `INCLUDE_TERRAFORM=true` | terraform, terragrunt, tfdocs |
-| **AWS** | `INCLUDE_AWS=true` | AWS CLI v2 |
-| **GCloud** | `INCLUDE_GCLOUD=true` | Google Cloud SDK |
-| **Cloudflare** | `INCLUDE_CLOUDFLARE=true` | Cloudflare CLI tools |
+| Feature        | Build Arg                 | What's Included                 |
+| -------------- | ------------------------- | ------------------------------- |
+| **Docker**     | `INCLUDE_DOCKER=true`     | Docker CLI, compose, lazydocker |
+| **Kubernetes** | `INCLUDE_KUBERNETES=true` | kubectl, helm, k9s              |
+| **Terraform**  | `INCLUDE_TERRAFORM=true`  | terraform, terragrunt, tfdocs   |
+| **AWS**        | `INCLUDE_AWS=true`        | AWS CLI v2                      |
+| **GCloud**     | `INCLUDE_GCLOUD=true`     | Google Cloud SDK                |
+| **Cloudflare** | `INCLUDE_CLOUDFLARE=true` | Cloudflare CLI tools            |
 
 ### Database Clients
 
-| Feature | Build Arg |
-|---------|-----------|
+| Feature        | Build Arg                      |
+| -------------- | ------------------------------ |
 | **PostgreSQL** | `INCLUDE_POSTGRES_CLIENT=true` |
-| **Redis** | `INCLUDE_REDIS_CLIENT=true` |
-| **SQLite** | `INCLUDE_SQLITE_CLIENT=true` |
+| **Redis**      | `INCLUDE_REDIS_CLIENT=true`    |
+| **SQLite**     | `INCLUDE_SQLITE_CLIENT=true`   |
 
 ### Utilities
 
-| Feature | Build Arg | What's Included |
-|---------|-----------|-----------------|
+| Feature       | Build Arg                | What's Included                                         |
+| ------------- | ------------------------ | ------------------------------------------------------- |
 | **Dev Tools** | `INCLUDE_DEV_TOOLS=true` | git, gh CLI, lazygit, fzf, ripgrep, bat, eza/exa, delta |
-| **1Password** | `INCLUDE_OP=true` | 1Password CLI |
-| **Ollama** | `INCLUDE_OLLAMA=true` | Local LLM support |
+| **1Password** | `INCLUDE_OP=true`        | 1Password CLI                                           |
+| **Ollama**    | `INCLUDE_OLLAMA=true`    | Local LLM support                                       |
 
 ---
 
@@ -253,7 +262,8 @@ git commit -m "Update container build system"
 
 ### Checking for Updates
 
-The container system includes a version checker to identify when newer versions of pinned tools are available:
+The container system includes a version checker to identify when newer versions
+of pinned tools are available:
 
 ```bash
 # Check all pinned versions
@@ -285,7 +295,8 @@ The GitHub Actions workflow automatically checks for updates weekly:
 2. Creates a pull request with version updates when available
 3. Auto-merges after CI tests pass (if configured)
 
-The workflow creates PRs with updated versions that can be reviewed before merging.
+The workflow creates PRs with updated versions that can be reviewed before
+merging.
 
 ### Updating Versions
 
@@ -296,13 +307,15 @@ When updates are available, edit the appropriate files:
 
 ### Version Specification Strategy
 
-The build system supports **two version specification strategies** depending on whether you're installing a language runtime or a utility tool:
+The build system supports **two version specification strategies** depending on
+whether you're installing a language runtime or a utility tool:
 
 #### Languages (Partial Version Support)
 
 **Supported Languages:** Python, Node.js, Rust, Ruby, Go, Java
 
-**Partial versions are supported** and automatically resolve to the latest patch version:
+**Partial versions are supported** and automatically resolve to the latest patch
+version:
 
 ```bash
 # All of these work:
@@ -315,12 +328,18 @@ RUST_VERSION="1.84"          # → Resolves to 1.84.1 (latest patch)
 ```
 
 **Why use partial versions?**
-- ✅ **Automatic security updates** - Get latest patches without manual version bumps
-- ✅ **Pinned checksums** - Latest patches use git-tracked checksums (Tier 2 verification)
-- ✅ **Simpler configuration** - Specify major.minor, get best patch automatically
-- ✅ **Weekly auto-updates** - CI automatically updates pinned checksums for latest patches
+
+- ✅ **Automatic security updates** - Get latest patches without manual version
+  bumps
+- ✅ **Pinned checksums** - Latest patches use git-tracked checksums (Tier 2
+  verification)
+- ✅ **Simpler configuration** - Specify major.minor, get best patch
+  automatically
+- ✅ **Weekly auto-updates** - CI automatically updates pinned checksums for
+  latest patches
 
 **When to use exact versions:**
+
 - Strict reproducibility requirements
 - Testing specific version behavior
 - Known issues with latest patch
@@ -341,21 +360,25 @@ KUBECTL_VERSION="1.31"       # ✗ Error - partial not supported
 ```
 
 **Why exact versions only?**
+
 - Reduces maintenance burden (dozens of tools vs. 6 languages)
 - Tools change less frequently than language patches
 - Most users pin exact tool versions anyway
 
 ### Checksum Verification (4-Tier Security)
 
-All downloads are verified using a **4-tier progressive security system** that tries the most secure method first and falls back gracefully:
+All downloads are verified using a **4-tier progressive security system** that
+tries the most secure method first and falls back gracefully:
 
 #### Tier 1: GPG Signature Verification (Best)
 
 Cryptographic proof using publisher's public key.
 
-- **Available for:** Python, Node.js, Go (framework ready, full implementation in progress)
+- **Available for:** Python, Node.js, Go (framework ready, full implementation
+  in progress)
 - **Security:** ✅ Highest - proves authenticity via cryptographic signature
-- **Process:** Downloads `.asc` signature file and verifies against publisher's GPG key
+- **Process:** Downloads `.asc` signature file and verifies against publisher's
+  GPG key
 
 ```
 🔐 TIER 1: Attempting GPG signature verification
@@ -380,6 +403,7 @@ Git-tracked checksums from `lib/checksums.json`.
 ```
 
 **Trigger Tier 2:** Use partial versions for languages:
+
 ```bash
 PYTHON_VERSION="3.12"  # Uses Tier 2 for latest 3.12.x patch
 ```
@@ -401,6 +425,7 @@ Download checksum from official publisher (e.g., python.org, nodejs.org).
 ```
 
 **Trigger Tier 3:** Specify exact version not in checksums.json:
+
 ```bash
 PYTHON_VERSION="3.12.7"  # If 3.12.7 not in checksums.json, uses Tier 3
 ```
@@ -429,6 +454,7 @@ Calculate checksum of downloaded file (TOFU - Trust On First Use).
 ```
 
 **This happens when:**
+
 - Using tool version not in checksums.json
 - Using older language version without published checksums
 - Publisher doesn't provide checksums
@@ -443,17 +469,20 @@ For every download, the system:
 4. **Falls back to Tier 4** (calculated) as last resort
 5. **Logs detailed explanation** of which tier succeeded and why
 
-**Result:** You get the **best available security** for every download with **full transparency** about verification method.
+**Result:** You get the **best available security** for every download with
+**full transparency** about verification method.
 
 ---
 
 ## Testing
 
-The project includes comprehensive test coverage with **657 total tests** across unit and integration test suites.
+The project includes comprehensive test coverage with **657 total tests** across
+unit and integration test suites.
 
 ### Unit Tests
 
-Unit tests validate individual components and scripts (497 tests, 99% pass rate):
+Unit tests validate individual components and scripts (497 tests, 99% pass
+rate):
 
 ```bash
 # Run all unit tests (no Docker required)
@@ -465,6 +494,7 @@ Unit tests validate individual components and scripts (497 tests, 99% pass rate)
 ```
 
 **Unit Test Coverage:**
+
 - ✅ 497 unit tests covering all features and utilities
 - ✅ 99% pass rate (496 passed, 1 legitimate skip)
 - ✅ Tests bash scripts directly without Docker
@@ -472,7 +502,8 @@ Unit tests validate individual components and scripts (497 tests, 99% pass rate)
 
 ### Integration Tests
 
-Integration tests verify that feature combinations build and work together (160 tests across 6 variants):
+Integration tests verify that feature combinations build and work together (160
+tests across 6 variants):
 
 ```bash
 # Run all integration tests
@@ -483,6 +514,7 @@ Integration tests verify that feature combinations build and work together (160 
 ```
 
 **Integration Test Coverage:**
+
 - ✅ python-dev: Python + dev tools + databases + Docker
 - ✅ node-dev: Node.js + dev tools + databases + Docker
 - ✅ cloud-ops: Kubernetes + Terraform + AWS + GCloud
@@ -509,20 +541,30 @@ To quickly verify installed features in a running container:
 This build system includes comprehensive security hardening:
 
 ### Build-Time Security
-- **Checksum Verification**: All downloaded binaries verified with SHA256/SHA512 checksums
-- **Atomic Operations**: Directory creation uses atomic `install -d` to prevent TOCTOU attacks
-- **Secure Temporary Files**: Restrictive permissions (700) on all temporary directories
+
+- **Checksum Verification**: All downloaded binaries verified with SHA256/SHA512
+  checksums
+- **Atomic Operations**: Directory creation uses atomic `install -d` to prevent
+  TOCTOU attacks
+- **Secure Temporary Files**: Restrictive permissions (700) on all temporary
+  directories
 - **Input Validation**: Function inputs sanitized against command injection
 - **Completion Script Safety**: Shell completions validated before sourcing
 
 ### Runtime Security
-- **Configuration Validation**: Optional runtime validation of environment variables, format checking, and secret detection (see [examples/validation/](examples/validation/))
-- **Rate Limiting**: Exponential backoff for external API calls with configurable retry logic
-- **GitHub API Token Support**: Automatic detection and use of `GITHUB_TOKEN` for higher rate limits
+
+- **Configuration Validation**: Optional runtime validation of environment
+  variables, format checking, and secret detection (see
+  [examples/validation/](examples/validation/))
+- **Rate Limiting**: Exponential backoff for external API calls with
+  configurable retry logic
+- **GitHub API Token Support**: Automatic detection and use of `GITHUB_TOKEN`
+  for higher rate limits
 - **Non-Root Execution**: All containers run as non-root user by default
 - **Minimal Attack Surface**: Only install features you actually need
 
 ### Configuration Options
+
 ```bash
 # Passwordless sudo (disabled by default for security)
 # Enable for local development convenience:
@@ -544,17 +586,21 @@ For detailed security information, see [SECURITY.md](SECURITY.md).
 
 ### Docker Socket Usage
 
-When using the `INCLUDE_DOCKER=true` feature, you may need to mount the Docker socket to manage containers from within your dev environment.
+When using the `INCLUDE_DOCKER=true` feature, you may need to mount the Docker
+socket to manage containers from within your dev environment.
 
 #### Development Use (Recommended)
 
-**Use Case**: Local development where your main container needs to manage dependency containers (databases, Redis, message queues, etc.)
+**Use Case**: Local development where your main container needs to manage
+dependency containers (databases, Redis, message queues, etc.)
 
 **Setup** (First-time only):
 
-For **VS Code Dev Containers**: Automatically configured via `initializeCommand` in `.devcontainer/devcontainer.json`
+For **VS Code Dev Containers**: Automatically configured via `initializeCommand`
+in `.devcontainer/devcontainer.json`
 
 For **Docker Compose only**:
+
 ```bash
 # Run once to detect and configure Docker socket GID
 ./bin/setup-docker-socket.sh
@@ -570,10 +616,10 @@ services:
       context: ..
       dockerfile: containers/Dockerfile
       args:
-        INCLUDE_DOCKER: "true"
-        INCLUDE_PYTHON_DEV: "true"
+        INCLUDE_DOCKER: 'true'
+        INCLUDE_PYTHON_DEV: 'true'
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock  # ⚠️ Development only
+      - /var/run/docker.sock:/var/run/docker.sock # ⚠️ Development only
       - ..:/workspace/myproject
     # Grant Docker socket access without sudo (secure method)
     # DOCKER_GID is auto-detected by bin/setup-docker-socket.sh
@@ -582,18 +628,21 @@ services:
 ```
 
 **How it works**:
+
 - The setup script detects your Docker socket's group ID (GID)
 - Adds the container user to that group via `group_add`
 - No sudo or permission changes required
 - Works on Linux, macOS, WSL2, and Docker Desktop
 
 **Why this is useful**:
+
 - Start/stop database containers for testing
 - Run integration tests that need real services
 - Manage multi-container development stacks
 - Use docker-compose from within dev container
 
 **Security Impact**:
+
 - ⚠️ **Grants root-equivalent access to the host system**
 - Container can start privileged containers
 - Container can mount any host directory
@@ -610,10 +659,11 @@ services:
   app:
     image: myapp:prod
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock  # ❌ Dangerous!
+      - /var/run/docker.sock:/var/run/docker.sock # ❌ Dangerous!
 ```
 
 **Alternatives for Production**:
+
 1. **Docker-in-Docker (DinD)**: Run Docker daemon inside container (for CI/CD)
 2. **Docker API**: Use restricted Docker API with limited permissions
 3. **Kubernetes**: Use Kubernetes API instead of Docker
@@ -636,11 +686,13 @@ docker build -t myapp:prod \
 
 ### Passwordless Sudo
 
-**Default**: Passwordless sudo is **DISABLED** by default (as of v4.8.7) for security.
+**Default**: Passwordless sudo is **DISABLED** by default (as of v4.8.7) for
+security.
 
 #### Development Use (Enable When Needed)
 
 **Use Case**: Local development where you need to:
+
 - Install additional system packages during runtime
 - Fix file permissions quickly
 - Debug system-level issues
@@ -654,18 +706,20 @@ services:
       context: ..
       dockerfile: containers/Dockerfile
       args:
-        INCLUDE_PYTHON_DEV: "true"
+        INCLUDE_PYTHON_DEV: 'true'
         # Enable for local dev convenience
-        ENABLE_PASSWORDLESS_SUDO: "true"  # ⚠️ Development only
+        ENABLE_PASSWORDLESS_SUDO: 'true' # ⚠️ Development only
 ```
 
 **Why this is useful for development**:
+
 - Quickly install packages: `sudo apt install <package>` (no password)
 - Fix permission issues: `sudo chown developer:developer file`
 - Test system configurations without password interruptions
 - Streamline development workflow on your local machine
 
 **Security Impact**:
+
 - ⚠️ **Any compromised process can gain root access**
 - No password barrier for privilege escalation
 - Acceptable risk for **local development** on your personal machine
@@ -681,12 +735,14 @@ services:
 ```
 
 **Alternatives for Production**:
+
 1. **Pre-install everything at build time**: Use RUN commands in Dockerfile
 2. **Init containers**: Use Kubernetes init containers for setup
 3. **Proper IAM/RBAC**: Use cloud provider IAM instead of sudo
 4. **Configuration management**: Use proper deployment tools
 
 **Production Security Best Practices**:
+
 - ❌ Never enable passwordless sudo in production
 - ✅ Install all required packages during build
 - ✅ Use least-privilege principles
@@ -708,12 +764,12 @@ services:
    - ❌ Multi-tenant environments
    - ❌ Containers running untrusted code
 
-2. **Use least-privilege alternatives when possible**
+3. **Use least-privilege alternatives when possible**
    - Consider rootless Docker
    - Use Docker contexts with limited access
    - Explore Docker socket proxies with ACLs
 
-3. **Monitor socket access**
+4. **Monitor socket access**
    - Audit what containers access the socket
    - Log Docker API calls in sensitive environments
 
@@ -721,7 +777,9 @@ For more security guidance, see [SECURITY.md](SECURITY.md).
 
 ### Passwordless Sudo Access
 
-By default, containers are configured with passwordless sudo for development convenience. For production deployments, disable this feature to follow the principle of least privilege.
+By default, containers are configured with passwordless sudo for development
+convenience. For production deployments, disable this feature to follow the
+principle of least privilege.
 
 #### Development Use (Default)
 
@@ -735,13 +793,16 @@ docker build -t myapp:dev \
 ```
 
 **Why this is useful for development**:
+
 - Quickly install system packages during development
 - Test installation scripts without password prompts
 - Standard development container behavior
 
 **Security Impact**:
+
 - ⚠️ **Non-root user can execute any command as root without password**
-- Container escape could grant full host access (if combined with other vulnerabilities)
+- Container escape could grant full host access (if combined with other
+  vulnerabilities)
 - Suitable for trusted development environments only
 
 #### Production Use (Recommended)
@@ -757,17 +818,20 @@ docker build -t myapp:prod \
 ```
 
 **Benefits**:
+
 - ✅ Follows least privilege principle
 - ✅ Limits damage from container escape vulnerabilities
 - ✅ User remains in sudo group but requires password
 
 **When to disable passwordless sudo**:
+
 - ❌ Production deployments
 - ❌ Multi-tenant environments
 - ❌ CI/CD runner containers (if they don't need sudo)
 - ❌ Containers processing untrusted input
 
 **When passwordless sudo is acceptable**:
+
 - ✅ Local development on your machine
 - ✅ Isolated development containers
 - ✅ VS Code Dev Containers
@@ -776,6 +840,7 @@ docker build -t myapp:prod \
 #### Security Best Practices
 
 1. **Use separate builds for dev and prod**
+
    ```bash
    # scripts/build-dev.sh
    docker build --build-arg ENABLE_PASSWORDLESS_SUDO=true ...
@@ -803,14 +868,17 @@ docker build -t myapp:prod \
 
 **⚠️ Critical: Never Pass Secrets as Build Arguments**
 
-Build arguments are **permanently stored** in Docker images and visible in multiple locations:
+Build arguments are **permanently stored** in Docker images and visible in
+multiple locations:
 
 - **Docker build logs** - Plain text output during build
 - **Image history** - `docker history <image>` reveals all build args
-- **Container inspection** - `docker inspect <container>` exposes build-time values
+- **Container inspection** - `docker inspect <container>` exposes build-time
+  values
 - **Image layer metadata** - Embedded in the image filesystem
 
 **❌ DON'T DO THIS:**
+
 ```bash
 # These secrets will be permanently embedded in the image!
 docker build --build-arg API_KEY=secret123 ...
@@ -821,6 +889,7 @@ docker build --build-arg AWS_SECRET_ACCESS_KEY=... ...
 **✅ DO THIS INSTEAD:**
 
 1. **Runtime Environment Variables** (recommended for development):
+
    ```bash
    docker run -e API_KEY=secret123 my-image:latest
 
@@ -829,6 +898,7 @@ docker build --build-arg AWS_SECRET_ACCESS_KEY=... ...
    ```
 
 2. **Docker Secrets** (recommended for Docker Swarm/Compose):
+
    ```bash
    # Create secret
    echo "secret123" | docker secret create api_key -
@@ -838,12 +908,14 @@ docker build --build-arg AWS_SECRET_ACCESS_KEY=... ...
    ```
 
 3. **Mounted Config Files** (recommended for sensitive files):
+
    ```bash
    # Mount secrets directory read-only
    docker run -v ./secrets:/secrets:ro my-image:latest
    ```
 
 4. **Secret Management Tools** (recommended for production):
+
    ```bash
    # 1Password CLI (included via INCLUDE_OP=true)
    docker run -e OP_SERVICE_ACCOUNT_TOKEN=... my-image:latest
@@ -859,7 +931,8 @@ For more information, see `/workspace/containers/SECURITY.md`.
 ### General Best Practices
 
 1. **Choose the right base image**:
-   - `debian:bookworm-slim` (Debian 12): Minimal size, good compatibility (default)
+   - `debian:bookworm-slim` (Debian 12): Minimal size, good compatibility
+     (default)
    - `debian:bullseye-slim` (Debian 11): Older stable release
    - `debian:trixie-slim` (Debian 13): Latest testing release
    - `ubuntu:24.04`: More packages available, larger size
@@ -872,8 +945,10 @@ For more information, see `/workspace/containers/SECURITY.md`.
 
 3. **Security considerations**:
    - Always use non-root users in production
-   - Remove passwordless sudo in production builds (`ENABLE_PASSWORDLESS_SUDO=false`)
-   - **Never pass secrets as build arguments** - they're stored permanently in the image
+   - Remove passwordless sudo in production builds
+     (`ENABLE_PASSWORDLESS_SUDO=false`)
+   - **Never pass secrets as build arguments** - they're stored permanently in
+     the image
    - Mount secrets at runtime, don't bake them in
    - Regularly update the submodule for security patches
    - See detailed security guidance below
@@ -884,7 +959,8 @@ For more information, see `/workspace/containers/SECURITY.md`.
    - Document version requirements in your project
 
 5. **Build context**:
-   - The build context should be your project root (where you run `docker build .`)
+   - The build context should be your project root (where you run
+     `docker build .`)
    - The Dockerfile path is `-f containers/Dockerfile`
    - Your project files are available for COPY commands during build
    - Use `.dockerignore` to exclude sensitive files from build context
@@ -893,15 +969,18 @@ For more information, see `/workspace/containers/SECURITY.md`.
 
 ## Contributing
 
-Contributions are welcome! For detailed guidelines, see [CONTRIBUTING.md](CONTRIBUTING.md).
+Contributions are welcome! For detailed guidelines, see
+[CONTRIBUTING.md](CONTRIBUTING.md).
 
 ### Quick Start
 
 1. Fork the repository
 2. **Run the development environment setup**:
+
    ```bash
    ./bin/setup-dev-environment.sh
    ```
+
    This will:
    - Enable git hooks for shellcheck and credential leak prevention
    - Verify your development environment
@@ -912,6 +991,7 @@ Contributions are welcome! For detailed guidelines, see [CONTRIBUTING.md](CONTRI
 5. Submit a pull request
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for:
+
 - Feature script guidelines and templates
 - Error handling best practices
 - Testing requirements
@@ -926,7 +1006,9 @@ See [.githooks/README.md](.githooks/README.md) for configuration options.
 
 ### Rollback/Downgrade
 
-If a release introduces critical issues, see **[docs/emergency-rollback.md](docs/emergency-rollback.md)** for:
+If a release introduces critical issues, see
+**[docs/emergency-rollback.md](docs/emergency-rollback.md)** for:
+
 - Quick rollback commands
 - Auto-patch revert procedures
 - Emergency hotfix workflows
@@ -947,7 +1029,8 @@ gh release delete vX.Y.Z --yes --cleanup-tag
 ### Release Channels
 
 - **Stable releases** (`v4.6.0`): Manual, thoroughly tested
-- **Auto-patch releases**: Automated dependency updates, may revert more frequently
+- **Auto-patch releases**: Automated dependency updates, may revert more
+  frequently
 
 **Recommendation**: Pin production to specific stable versions.
 

@@ -20,9 +20,9 @@ services:
     volumes:
       - redis-data:/data
     ports:
-      - '6379:6379'
+      - "6379:6379"
     healthcheck:
-      test: ['CMD', 'redis-cli', 'ping']
+      test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -69,13 +69,13 @@ services:
       # Resource limits
       resources:
         limits:
-          cpus: '2'
+          cpus: "2"
           memory: 4G
         reservations:
-          cpus: '0.5'
+          cpus: "0.5"
           memory: 1G
     healthcheck:
-      test: ['CMD', 'agent', 'health']
+      test: ["CMD", "agent", "health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -87,12 +87,12 @@ services:
     volumes:
       - ollama-models:/root/.ollama
     ports:
-      - '11434:11434'
+      - "11434:11434"
     deploy:
       resources:
         limits:
           # Adjust based on your GPU/CPU capabilities
-          cpus: '4'
+          cpus: "4"
           memory: 8G
     # Uncomment for GPU support
     # runtime: nvidia
@@ -118,13 +118,13 @@ services:
       - knowledge-base:/workspace/knowledge
       - ./logs:/workspace/logs
     ports:
-      - '8080:8080' # API/Dashboard port
+      - "8080:8080" # API/Dashboard port
     deploy:
       # Only one coordinator
       replicas: 1
       resources:
         limits:
-          cpus: '1'
+          cpus: "1"
           memory: 2G
 
 volumes:

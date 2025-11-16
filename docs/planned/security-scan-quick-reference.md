@@ -2,7 +2,8 @@
 
 ## Summary
 
-Comprehensive security scanning and project initialization system for all supported languages in the container build system.
+Comprehensive security scanning and project initialization system for all
+supported languages in the container build system.
 
 ## Core Commands (Planned)
 
@@ -120,4 +121,5 @@ chmod +x /usr/local/bin/rust-scan
 
 ---
 
-*Quick reference for security scanning system. See full design document for complete details.*
+_Quick reference for security scanning system. See full design document for
+complete details._

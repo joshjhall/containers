@@ -1,8 +1,10 @@
 # Emergency Rollback Procedures
 
-This document provides step-by-step procedures for rolling back problematic releases, including automated patch releases.
+This document provides step-by-step procedures for rolling back problematic
+releases, including automated patch releases.
 
 ## Table of Contents
+
 - [Quick Reference](#quick-reference)
 - [Identifying the Issue](#identifying-the-issue)
 - [Rollback Procedures](#rollback-procedures)
@@ -129,7 +131,8 @@ git push --delete origin hotfix/vX.Y.Z
 
 ### Option 3: Hard Reset (LAST RESORT)
 
-**⚠️ DANGER**: This rewrites history. Only use if absolutely necessary and team is coordinated.
+**⚠️ DANGER**: This rewrites history. Only use if absolutely necessary and team
+is coordinated.
 
 ```bash
 # 1. Backup current state
@@ -156,6 +159,7 @@ git push origin vX.Y.Z
 ### Immediate Actions
 
 1. **Verify rollback successful**
+
    ```bash
    # Check CI passes
    gh run watch
@@ -200,6 +204,7 @@ git push origin vX.Y.Z
 ### Pre-Release Checklist
 
 Before manual releases:
+
 - [ ] All tests passing (`./tests/run_all.sh`)
 - [ ] Shellcheck passes (`shellcheck lib/**/*.sh bin/*.sh`)
 - [ ] Integration tests pass for all variants
@@ -208,6 +213,7 @@ Before manual releases:
 - [ ] Documentation updated
 
 For auto-patch releases:
+
 - Auto-patch workflow validates:
   - All unit tests
   - Integration tests for 6+ variants
@@ -218,12 +224,14 @@ For auto-patch releases:
 ### Monitoring Best Practices
 
 1. **Watch CI After Release**
+
    ```bash
    # Monitor the release build
    gh run watch
    ```
 
 2. **Test Immediately After Release**
+
    ```bash
    # Pull and test new release
    docker pull ghcr.io/joshjhall/containers:vX.Y.Z-minimal
@@ -237,18 +245,21 @@ For auto-patch releases:
 ### Release Channel Strategy
 
 **Stable Channel** (Manual Releases):
+
 - `v4.6.0` - Major/minor releases
 - `v4.6.1` - Manual patches
 - Thoroughly tested
 - Documented changes
 
 **Auto-Patch Channel** (Automated):
+
 - `v4.6.0` with commit message containing "automated version updates"
 - Automated dependency updates
 - Full CI validation required
 - May revert more frequently
 
 **Pinning Recommendations**:
+
 - **Production**: Pin to specific stable version (e.g., `v4.6.0`)
 - **Development**: Use `:latest` or auto-patch
 - **CI/CD**: Pin to specific version, update deliberately
@@ -312,6 +323,7 @@ gh api repos/joshjhall/containers/security-advisories \
 ## Contact
 
 For emergency assistance:
+
 - Open GitHub issue with `[URGENT]` prefix
 - Check GitHub Actions logs
 - Review docs/troubleshooting.md

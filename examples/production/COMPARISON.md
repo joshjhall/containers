@@ -1,26 +1,28 @@
 # Development vs Production Configuration Comparison
 
-This document provides detailed comparison tables showing the differences between development and production container configurations.
+This document provides detailed comparison tables showing the differences
+between development and production container configurations.
 
 ## Build Arguments Comparison
 
 ### Core Configuration
 
-| Build Argument | Development | Production | Impact |
-|----------------|-------------|------------|--------|
-| `BASE_IMAGE` | `debian:bookworm` (full) | `debian:bookworm-slim` | ~100MB size reduction |
-| `ENABLE_PASSWORDLESS_SUDO` | `true` | `false` | Security: prevents privilege escalation |
-| `INCLUDE_DEV_TOOLS` | `true` | `false` | ~50-100MB size reduction |
+| Build Argument             | Development              | Production             | Impact                                  |
+| -------------------------- | ------------------------ | ---------------------- | --------------------------------------- |
+| `BASE_IMAGE`               | `debian:bookworm` (full) | `debian:bookworm-slim` | ~100MB size reduction                   |
+| `ENABLE_PASSWORDLESS_SUDO` | `true`                   | `false`                | Security: prevents privilege escalation |
+| `INCLUDE_DEV_TOOLS`        | `true`                   | `false`                | ~50-100MB size reduction                |
 
 ### Python Configuration
 
-| Build Argument | Development | Production | What's Different |
-|----------------|-------------|------------|------------------|
-| `INCLUDE_PYTHON` | `true` | `true` | Same: runtime needed |
-| `INCLUDE_PYTHON_DEV` | `true` | `false` | Dev tools excluded |
-| `PYTHON_VERSION` | `3.12` | `3.12` | Same: use specific version |
+| Build Argument       | Development | Production | What's Different           |
+| -------------------- | ----------- | ---------- | -------------------------- |
+| `INCLUDE_PYTHON`     | `true`      | `true`     | Same: runtime needed       |
+| `INCLUDE_PYTHON_DEV` | `true`      | `false`    | Dev tools excluded         |
+| `PYTHON_VERSION`     | `3.12`      | `3.12`     | Same: use specific version |
 
 **What `INCLUDE_PYTHON_DEV=true` includes (excluded in production):**
+
 - pip-tools (pip-compile, pip-sync)
 - ipython (enhanced REPL)
 - black (code formatter)
@@ -32,13 +34,14 @@ This document provides detailed comparison tables showing the differences betwee
 
 ### Node.js Configuration
 
-| Build Argument | Development | Production | What's Different |
-|----------------|-------------|------------|------------------|
-| `INCLUDE_NODE` | `true` | `true` | Same: runtime needed |
-| `INCLUDE_NODE_DEV` | `true` | `false` | Dev tools excluded |
-| `NODE_VERSION` | `20` | `20` | Same: use LTS version |
+| Build Argument     | Development | Production | What's Different      |
+| ------------------ | ----------- | ---------- | --------------------- |
+| `INCLUDE_NODE`     | `true`      | `true`     | Same: runtime needed  |
+| `INCLUDE_NODE_DEV` | `true`      | `false`    | Dev tools excluded    |
+| `NODE_VERSION`     | `20`        | `20`       | Same: use LTS version |
 
 **What `INCLUDE_NODE_DEV=true` includes (excluded in production):**
+
 - typescript (TypeScript compiler)
 - eslint (linter)
 - prettier (code formatter)
@@ -52,13 +55,13 @@ This document provides detailed comparison tables showing the differences betwee
 
 Similar patterns apply for other languages:
 
-| Language | Runtime Arg | Dev Tools Arg | Dev Tools Included |
-|----------|-------------|---------------|-------------------|
-| Rust | `INCLUDE_RUST` | `INCLUDE_RUST_DEV` | clippy, rustfmt, cargo-watch |
-| Go | `INCLUDE_GOLANG` | `INCLUDE_GOLANG_DEV` | gopls, delve, golangci-lint |
-| Ruby | `INCLUDE_RUBY` | `INCLUDE_RUBY_DEV` | bundler-audit, rubocop, solargraph |
-| Java | `INCLUDE_JAVA` | `INCLUDE_JAVA_DEV` | maven, gradle, jdtls |
-| R | `INCLUDE_R` | `INCLUDE_R_DEV` | devtools, testthat, lintr |
+| Language | Runtime Arg      | Dev Tools Arg        | Dev Tools Included                 |
+| -------- | ---------------- | -------------------- | ---------------------------------- |
+| Rust     | `INCLUDE_RUST`   | `INCLUDE_RUST_DEV`   | clippy, rustfmt, cargo-watch       |
+| Go       | `INCLUDE_GOLANG` | `INCLUDE_GOLANG_DEV` | gopls, delve, golangci-lint        |
+| Ruby     | `INCLUDE_RUBY`   | `INCLUDE_RUBY_DEV`   | bundler-audit, rubocop, solargraph |
+| Java     | `INCLUDE_JAVA`   | `INCLUDE_JAVA_DEV`   | maven, gradle, jdtls               |
+| R        | `INCLUDE_R`      | `INCLUDE_R_DEV`      | devtools, testthat, lintr          |
 
 ## Docker Compose Security Options
 
@@ -69,17 +72,17 @@ services:
   app-dev:
     build:
       args:
-        BASE_IMAGE: "debian:bookworm"
-        ENABLE_PASSWORDLESS_SUDO: "true"
-        INCLUDE_DEV_TOOLS: "true"
+        BASE_IMAGE: 'debian:bookworm'
+        ENABLE_PASSWORDLESS_SUDO: 'true'
+        INCLUDE_DEV_TOOLS: 'true'
 
     # Relaxed security for convenience
     volumes:
-      - ./:/workspace/project:rw  # Read-write
+      - ./:/workspace/project:rw # Read-write
       - dev-cache:/cache
 
     # No security restrictions
-    privileged: false  # Usually not needed even in dev
+    privileged: false # Usually not needed even in dev
     # No cap_drop (all capabilities available)
     # No security_opt restrictions
 ```
@@ -91,24 +94,24 @@ services:
   app-prod:
     build:
       args:
-        BASE_IMAGE: "debian:bookworm-slim"
-        ENABLE_PASSWORDLESS_SUDO: "false"
-        INCLUDE_DEV_TOOLS: "false"
+        BASE_IMAGE: 'debian:bookworm-slim'
+        ENABLE_PASSWORDLESS_SUDO: 'false'
+        INCLUDE_DEV_TOOLS: 'false'
 
     # Hardened security
-    read_only: true  # Read-only root filesystem
+    read_only: true # Read-only root filesystem
     volumes:
-      - ./:/workspace/project:ro  # Read-only code
-      - prod-cache:/cache  # Writable cache only
+      - ./:/workspace/project:ro # Read-only code
+      - prod-cache:/cache # Writable cache only
 
     security_opt:
-      - no-new-privileges:true  # Prevent privilege escalation
+      - no-new-privileges:true # Prevent privilege escalation
     cap_drop:
-      - ALL  # Drop all Linux capabilities
+      - ALL # Drop all Linux capabilities
 
     # Health monitoring
     healthcheck:
-      test: ["/usr/local/bin/healthcheck", "--quick"]
+      test: ['/usr/local/bin/healthcheck', '--quick']
       interval: 30s
       timeout: 10s
       retries: 3
@@ -121,13 +124,13 @@ services:
 
 Expected image sizes for different configurations:
 
-| Configuration | Development Size | Production Size | Savings |
-|---------------|------------------|-----------------|---------|
-| Minimal Base | ~300-400MB | ~200-300MB | ~100MB (25-30%) |
-| Python Runtime | ~600-700MB | ~400-500MB | ~200MB (30-35%) |
-| Node Runtime | ~600-700MB | ~400-500MB | ~200MB (30-35%) |
-| Python + Node | ~900MB-1.1GB | ~600-800MB | ~300MB (30-35%) |
-| Full Stack (Python + Node + Rust) | ~1.5-1.8GB | ~1.0-1.2GB | ~500MB (30-35%) |
+| Configuration                     | Development Size | Production Size | Savings         |
+| --------------------------------- | ---------------- | --------------- | --------------- |
+| Minimal Base                      | ~300-400MB       | ~200-300MB      | ~100MB (25-30%) |
+| Python Runtime                    | ~600-700MB       | ~400-500MB      | ~200MB (30-35%) |
+| Node Runtime                      | ~600-700MB       | ~400-500MB      | ~200MB (30-35%) |
+| Python + Node                     | ~900MB-1.1GB     | ~600-800MB      | ~300MB (30-35%) |
+| Full Stack (Python + Node + Rust) | ~1.5-1.8GB       | ~1.0-1.2GB      | ~500MB (30-35%) |
 
 **Note**: Actual sizes vary based on specific versions and dependencies.
 
@@ -147,7 +150,7 @@ environment:
   - DEBUG=*
 
   # Development tools
-  - PYTHONDONTWRITEBYTECODE=0  # Allow .pyc files
+  - PYTHONDONTWRITEBYTECODE=0 # Allow .pyc files
 ```
 
 ### Production Environment
@@ -161,7 +164,7 @@ environment:
 
   # Optimized logging
   - PYTHONUNBUFFERED=1
-  - PYTHONDONTWRITEBYTECODE=1  # No .pyc files
+  - PYTHONDONTWRITEBYTECODE=1 # No .pyc files
 
   # Security
   - PIP_NO_CACHE_DIR=1
@@ -175,22 +178,26 @@ environment:
 The following tools are installed:
 
 **Editors & IDEs:**
+
 - vim, neovim
 - emacs
 - nano
 
 **Version Control:**
+
 - git (with enhanced configuration)
 - git-lfs (Large File Storage)
 - gh (GitHub CLI)
 
 **Shell & Terminal:**
+
 - tmux (terminal multiplexer)
 - zsh (with oh-my-zsh)
 - fish (friendly shell)
 - starship (shell prompt)
 
 **Utilities:**
+
 - curl, wget
 - jq (JSON processor)
 - ripgrep (fast search)
@@ -200,6 +207,7 @@ The following tools are installed:
 - htop (process viewer)
 
 **Build Tools:**
+
 - make
 - cmake
 - build-essential (gcc, g++, make)
@@ -208,17 +216,19 @@ The following tools are installed:
 
 ## Cloud/Infrastructure Tools
 
-These are typically excluded in production runtime containers but may be included in CI/deployment containers:
+These are typically excluded in production runtime containers but may be
+included in CI/deployment containers:
 
-| Tool | Build Arg | When to Include | Size Impact |
-|------|-----------|-----------------|-------------|
-| Docker | `INCLUDE_DOCKER` | CI, orchestration | ~50-100MB |
-| Kubernetes | `INCLUDE_KUBERNETES` | Cluster management | ~50-100MB |
-| Terraform | `INCLUDE_TERRAFORM` | Infrastructure deployment | ~50-100MB |
-| AWS CLI | `INCLUDE_AWS` | AWS deployments | ~100-150MB |
-| gcloud CLI | `INCLUDE_GCLOUD` | GCP deployments | ~100-200MB |
+| Tool       | Build Arg            | When to Include           | Size Impact |
+| ---------- | -------------------- | ------------------------- | ----------- |
+| Docker     | `INCLUDE_DOCKER`     | CI, orchestration         | ~50-100MB   |
+| Kubernetes | `INCLUDE_KUBERNETES` | Cluster management        | ~50-100MB   |
+| Terraform  | `INCLUDE_TERRAFORM`  | Infrastructure deployment | ~50-100MB   |
+| AWS CLI    | `INCLUDE_AWS`        | AWS deployments           | ~100-150MB  |
+| gcloud CLI | `INCLUDE_GCLOUD`     | GCP deployments           | ~100-200MB  |
 
-**Production guidance**: Only include these if the application needs to manage infrastructure at runtime (e.g., operator patterns, auto-scaling logic).
+**Production guidance**: Only include these if the application needs to manage
+infrastructure at runtime (e.g., operator patterns, auto-scaling logic).
 
 ## Resource Requirements
 

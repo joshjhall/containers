@@ -25,32 +25,32 @@ spec:
 
   # Ports exposed by this service
   ports:
-  # Example: Web application port
-  - name: http
-    # Port exposed by the service (what other pods/users connect to)
-    port: 8080
-    # Port on the container (what your app listens on)
-    targetPort: 8080
-    # Protocol (TCP or UDP)
-    protocol: TCP
+    # Example: Web application port
+    - name: http
+      # Port exposed by the service (what other pods/users connect to)
+      port: 8080
+      # Port on the container (what your app listens on)
+      targetPort: 8080
+      # Protocol (TCP or UDP)
+      protocol: TCP
 
-  # Example: Additional application port
-  - name: api
-    port: 3000
-    targetPort: 3000
-    protocol: TCP
+    # Example: Additional application port
+    - name: api
+      port: 3000
+      targetPort: 3000
+      protocol: TCP
 
-  # Example: Metrics port for Prometheus
-  - name: metrics
-    port: 9090
-    targetPort: 9090
-    protocol: TCP
+    # Example: Metrics port for Prometheus
+    - name: metrics
+      port: 9090
+      targetPort: 9090
+      protocol: TCP
 
-  # Example: Debug port (like Python debugger, Node inspector)
-  - name: debug
-    port: 5678
-    targetPort: 5678
-    protocol: TCP
+    # Example: Debug port (like Python debugger, Node inspector)
+    - name: debug
+      port: 5678
+      targetPort: 5678
+      protocol: TCP
 
   # Session affinity (sticky sessions)
   # - None: Requests distributed to any pod (default)

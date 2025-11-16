@@ -47,7 +47,7 @@ resources:
 images:
   - name: ghcr.io/joshjhall/containers
     # newName: ghcr.io/joshjhall/containers  # Change registry/repo
-    newTag: python-dev-4.9.2  # Change tag
+    newTag: python-dev-4.9.2 # Change tag
 
 # ConfigMap generator (alternative to configmap.yaml)
 # Generates ConfigMap from files or literals

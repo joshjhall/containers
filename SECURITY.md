@@ -2,7 +2,8 @@
 
 ## Reporting a Vulnerability
 
-The security of this project is taken seriously. If you discover a security vulnerability, please follow responsible disclosure practices:
+The security of this project is taken seriously. If you discover a security
+vulnerability, please follow responsible disclosure practices:
 
 ### Reporting Process
 
@@ -11,7 +12,8 @@ The security of this project is taken seriously. If you discover a security vuln
 Instead, please report security issues via:
 
 1. **GitHub Security Advisories** (preferred)
-   - Navigate to the [Security tab](https://github.com/joshjhall/containers/security/advisories)
+   - Navigate to the
+     [Security tab](https://github.com/joshjhall/containers/security/advisories)
    - Click "Report a vulnerability"
    - Provide detailed information about the vulnerability
 
@@ -46,37 +48,47 @@ When reporting a vulnerability, please include:
 
 Security updates are provided for the following versions:
 
-| Version | Supported          |
-| ------- | ------------------ |
-| 4.x     | ✅ Yes             |
+| Version | Supported                  |
+| ------- | -------------------------- |
+| 4.x     | ✅ Yes                     |
 | 3.x     | ⚠️ Limited (critical only) |
-| < 3.0   | ❌ No longer supported |
+| < 3.0   | ❌ No longer supported     |
 
 ## Security Considerations for Users
 
 ### Container Security Context
 
-This build system is designed primarily for **development environments**. When using in production:
+This build system is designed primarily for **development environments**. When
+using in production:
 
-- **Remove passwordless sudo**: Production containers should not have sudo access
-- **Avoid Docker socket mounting**: Only mount `/var/run/docker.sock` in trusted dev environments
-- **Use read-only filesystems**: Consider `--read-only` flag for production containers
-- **Scan images regularly**: Use Trivy or similar tools to scan for vulnerabilities
+- **Remove passwordless sudo**: Production containers should not have sudo
+  access
+- **Avoid Docker socket mounting**: Only mount `/var/run/docker.sock` in trusted
+  dev environments
+- **Use read-only filesystems**: Consider `--read-only` flag for production
+  containers
+- **Scan images regularly**: Use Trivy or similar tools to scan for
+  vulnerabilities
 
 ### Docker Socket Security
 
-Mounting the Docker socket (`/var/run/docker.sock`) grants **root-equivalent access** to the host system:
+Mounting the Docker socket (`/var/run/docker.sock`) grants **root-equivalent
+access** to the host system:
 
-- ⚠️ **Development Use**: Appropriate for local dev environments where you need to manage dependency containers (databases, Redis, etc.)
+- ⚠️ **Development Use**: Appropriate for local dev environments where you need
+  to manage dependency containers (databases, Redis, etc.)
 - ❌ **Production Use**: Never mount the socket in production
 - ❌ **Untrusted Code**: Never mount the socket when running untrusted code
 
-See the [Docker Socket Usage section in README](README.md#docker-socket-usage) for detailed guidance.
+See the [Docker Socket Usage section in README](README.md#docker-socket-usage)
+for detailed guidance.
 
 ### Secret Management
 
-- **Never commit secrets**: Use `.env` files (gitignored) or 1Password CLI integration
-- **Use 1Password CLI**: Feature flag `INCLUDE_OP=true` provides secure secret management
+- **Never commit secrets**: Use `.env` files (gitignored) or 1Password CLI
+  integration
+- **Use 1Password CLI**: Feature flag `INCLUDE_OP=true` provides secure secret
+  management
 - **Rotate secrets regularly**: Especially for CI/CD tokens and service accounts
 
 ### Supply Chain Security
@@ -84,25 +96,36 @@ See the [Docker Socket Usage section in README](README.md#docker-socket-usage) f
 This project implements comprehensive security hardening:
 
 **Build-Time Security:**
-- ✅ **Checksum Verification**: All downloaded binaries verified with SHA256/SHA512 checksums
-- ✅ **Atomic Operations**: Directory creation uses atomic `install -d` to prevent TOCTOU attacks
-- ✅ **Secure Temporary Files**: Restrictive permissions (700) on all temporary directories
+
+- ✅ **Checksum Verification**: All downloaded binaries verified with
+  SHA256/SHA512 checksums
+- ✅ **Atomic Operations**: Directory creation uses atomic `install -d` to
+  prevent TOCTOU attacks
+- ✅ **Secure Temporary Files**: Restrictive permissions (700) on all temporary
+  directories
 - ✅ **Input Validation**: Function inputs sanitized against command injection
-- ✅ **Completion Script Safety**: Shell completions validated before sourcing (size limits, pattern scanning)
+- ✅ **Completion Script Safety**: Shell completions validated before sourcing
+  (size limits, pattern scanning)
 
 **Runtime Security:**
-- ✅ **Rate Limiting**: Exponential backoff for external API calls with configurable retry logic
-- ✅ **GitHub API Token Support**: Automatic detection and use of `GITHUB_TOKEN` for higher rate limits
+
+- ✅ **Rate Limiting**: Exponential backoff for external API calls with
+  configurable retry logic
+- ✅ **GitHub API Token Support**: Automatic detection and use of `GITHUB_TOKEN`
+  for higher rate limits
 - ✅ **Non-Root Execution**: All containers run as non-root user by default
 
 **CI/CD Security:**
+
 - ✅ Runs Gitleaks secret scanning in CI
 - ✅ Runs Trivy container vulnerability scanning
 - ✅ Uses GPG verification for critical packages
 - ✅ Pins tool versions for reproducibility
 
 However, be aware:
-- Some installation scripts are downloaded from third-party sources (all with checksum verification)
+
+- Some installation scripts are downloaded from third-party sources (all with
+  checksum verification)
 - Review the feature scripts in `lib/features/` before building
 - Use official base images from trusted registries
 
@@ -125,7 +148,7 @@ This project uses an automated weekly patch release system:
 
 - Checks for updated tool versions every Sunday
 - Automatically creates patch releases after CI validation
-- **Review auto-patch changes**: Check auto-patch/* branches before they merge
+- **Review auto-patch changes**: Check auto-patch/\* branches before they merge
 
 ### Build-Time Secrets
 
@@ -144,7 +167,8 @@ When using this container system:
 2. **Scan your images**: Run `trivy image yourimage:tag` regularly
 3. **Review build logs**: Check `check-build-logs.sh` for unexpected behavior
 4. **Minimal privileges**: Use least-privilege principle for container runtime
-5. **Network isolation**: Use Docker networks for container-to-container communication
+5. **Network isolation**: Use Docker networks for container-to-container
+   communication
 
 ## Security Testing
 
@@ -170,7 +194,8 @@ find lib -name "*.sh" -exec shellcheck {} \;
 
 ## Contact
 
-For security concerns that don't constitute vulnerabilities (questions, clarifications, etc.), you can:
+For security concerns that don't constitute vulnerabilities (questions,
+clarifications, etc.), you can:
 
 - Open a regular GitHub issue with the `security` label
 - Start a discussion in GitHub Discussions
@@ -179,5 +204,4 @@ For urgent security matters, use the vulnerability reporting process above.
 
 ---
 
-**Last Updated**: 2025-11-09
-**Security Policy Version**: 1.1
+**Last Updated**: 2025-11-09 **Security Policy Version**: 1.1

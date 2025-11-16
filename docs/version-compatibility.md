@@ -1,6 +1,7 @@
 # Version Compatibility Testing
 
-This document describes the version compatibility testing system for tracking and validating language version combinations.
+This document describes the version compatibility testing system for tracking
+and validating language version combinations.
 
 ## Overview
 
@@ -75,7 +76,8 @@ The version compatibility system helps you:
 
 ### Variant Selection
 
-- `--variant <name>` - Test specific variant (minimal, python-dev, node-dev, etc.)
+- `--variant <name>` - Test specific variant (minimal, python-dev, node-dev,
+  etc.)
   - If not specified, tests all default variants
 
 ### Version Overrides
@@ -227,7 +229,7 @@ name: Version Compatibility Testing
 
 on:
   schedule:
-    - cron: '0 2 * * 0'  # Weekly on Sunday at 2 AM
+    - cron: '0 2 * * 0' # Weekly on Sunday at 2 AM
   workflow_dispatch:
 
 jobs:
@@ -325,7 +327,7 @@ If a combination fails, add notes to the matrix:
 ```json
 {
   "variant": "python-dev",
-  "versions": {"python": "3.14.0"},
+  "versions": { "python": "3.14.0" },
   "status": "failing",
   "notes": "Incompatible with current version of package X"
 }

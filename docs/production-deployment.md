@@ -1,6 +1,7 @@
 # Production Deployment Guide
 
-This guide covers best practices and considerations for deploying containers built with this system to production environments.
+This guide covers best practices and considerations for deploying containers
+built with this system to production environments.
 
 ## Table of Contents
 
@@ -21,18 +22,20 @@ This guide covers best practices and considerations for deploying containers bui
 
 ## Overview
 
-**Important**: This container build system is designed primarily for **development environments**. For production deployments, additional hardening and optimization is required.
+**Important**: This container build system is designed primarily for
+**development environments**. For production deployments, additional hardening
+and optimization is required.
 
 ### Development vs Production
 
-| Aspect | Development | Production |
-|--------|-------------|------------|
-| **User** | Non-root with sudo | Non-root, NO sudo |
-| **Secrets** | Can be in env vars | Must use secrets management |
-| **Image Size** | Larger (includes dev tools) | Minimized (only runtime deps) |
-| **Updates** | Frequent | Controlled, tested |
-| **Logging** | Verbose | Structured, minimal |
-| **Health Checks** | Optional | Required |
+| Aspect            | Development                 | Production                    |
+| ----------------- | --------------------------- | ----------------------------- |
+| **User**          | Non-root with sudo          | Non-root, NO sudo             |
+| **Secrets**       | Can be in env vars          | Must use secrets management   |
+| **Image Size**    | Larger (includes dev tools) | Minimized (only runtime deps) |
+| **Updates**       | Frequent                    | Controlled, tested            |
+| **Logging**       | Verbose                     | Structured, minimal           |
+| **Health Checks** | Optional                    | Required                      |
 
 ---
 
@@ -50,13 +53,15 @@ docker build \
 ```
 
 **Verification**:
+
 ```bash
 docker run --rm myapp:prod sudo whoami 2>&1 | grep -q "sudo: a password is required"
 ```
 
 ### Run as Non-Root User
 
-Containers should run as a non-root user by default. This is handled automatically.
+Containers should run as a non-root user by default. This is handled
+automatically.
 
 ```dockerfile
 # Verify USER directive in your derived Dockerfile
@@ -64,6 +69,7 @@ USER ${USERNAME}
 ```
 
 **Runtime verification**:
+
 ```bash
 docker run --rm myapp:prod whoami
 # Should output: developer (or your USERNAME)
@@ -83,7 +89,8 @@ docker run --read-only \
   myapp:prod
 ```
 
-**Note**: Application must not write to filesystem except designated volumes/tmpfs.
+**Note**: Application must not write to filesystem except designated
+volumes/tmpfs.
 
 ### Drop Capabilities
 
@@ -97,6 +104,7 @@ docker run \
 ```
 
 **Common capabilities needed**:
+
 - `NET_BIND_SERVICE`: Bind to ports < 1024
 - `CHOWN`: Change file ownership (usually not needed)
 - `SETUID/SETGID`: Change user/group (usually not needed)
@@ -200,13 +208,16 @@ docker build --build-arg API_KEY=secret123 .
 docker run -e API_KEY=secret123 myapp:prod
 ```
 
-See [environment-variables.md](environment-variables.md) for available variables.
+See [environment-variables.md](environment-variables.md) for available
+variables.
 
 ### Configuration Validation
 
-**Production Best Practice**: Enable runtime configuration validation to catch misconfiguration issues before they cause failures.
+**Production Best Practice**: Enable runtime configuration validation to catch
+misconfiguration issues before they cause failures.
 
-The validation framework validates environment variables, checks formats (URLs, ports, emails, etc.), and detects potential plaintext secrets:
+The validation framework validates environment variables, checks formats (URLs,
+ports, emails, etc.), and detects potential plaintext secrets:
 
 ```bash
 # Enable validation in production
@@ -219,6 +230,7 @@ docker run \
 ```
 
 **Key Features**:
+
 - Required environment variable validation
 - Format validation (URLs, ports, emails, booleans, paths)
 - Secret detection with warnings for plaintext passwords/keys
@@ -254,7 +266,9 @@ docker run \
   myapp:prod
 ```
 
-**Complete Examples**: See [examples/validation/](../examples/validation/) for production-ready examples including:
+**Complete Examples**: See [examples/validation/](../examples/validation/) for
+production-ready examples including:
+
 - Web applications with databases
 - API services with multiple backends
 - Background workers with queues
@@ -273,20 +287,21 @@ docker run \
 ```
 
 **Kubernetes example**:
+
 ```yaml
 apiVersion: v1
 kind: Pod
 spec:
   containers:
-  - name: myapp
-    image: myapp:prod
-    resources:
-      requests:
-        memory: "256Mi"
-        cpu: "250m"
-      limits:
-        memory: "512Mi"
-        cpu: "500m"
+    - name: myapp
+      image: myapp:prod
+      resources:
+        requests:
+          memory: '256Mi'
+          cpu: '250m'
+        limits:
+          memory: '512Mi'
+          cpu: '500m'
 ```
 
 ---
@@ -296,6 +311,7 @@ spec:
 ### Never Store Secrets in Images
 
 **❌ Don't do this**:
+
 - Build args containing secrets
 - ENV variables with secrets in Dockerfile
 - Secrets committed to code
@@ -304,6 +320,7 @@ spec:
 ### Use Secret Management Systems
 
 **✅ Docker Secrets** (Swarm/Compose):
+
 ```bash
 # Create secret
 echo "my-db-password" | docker secret create db_password -
@@ -316,6 +333,7 @@ docker service create \
 ```
 
 **✅ Kubernetes Secrets**:
+
 ```yaml
 apiVersion: v1
 kind: Secret
@@ -323,19 +341,20 @@ metadata:
   name: app-secrets
 type: Opaque
 stringData:
-  database-url: "postgresql://..."
+  database-url: 'postgresql://...'
 ---
 apiVersion: v1
 kind: Pod
 spec:
   containers:
-  - name: myapp
-    envFrom:
-    - secretRef:
-        name: app-secrets
+    - name: myapp
+      envFrom:
+        - secretRef:
+            name: app-secrets
 ```
 
 **✅ 1Password Service Accounts**:
+
 ```bash
 # Using OP_SERVICE_ACCOUNT_TOKEN at runtime
 docker run \
@@ -345,6 +364,7 @@ docker run \
 ```
 
 **✅ HashiCorp Vault**:
+
 ```bash
 docker run \
   -e VAULT_ADDR="https://vault.example.com" \
@@ -366,6 +386,7 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
 ```
 
 **Or at runtime**:
+
 ```bash
 docker run \
   --health-cmd="curl -f http://localhost:8080/health || exit 1" \
@@ -382,19 +403,19 @@ apiVersion: v1
 kind: Pod
 spec:
   containers:
-  - name: myapp
-    livenessProbe:
-      httpGet:
-        path: /health
-        port: 8080
-      initialDelaySeconds: 5
-      periodSeconds: 10
-    readinessProbe:
-      httpGet:
-        path: /ready
-        port: 8080
-      initialDelaySeconds: 3
-      periodSeconds: 5
+    - name: myapp
+      livenessProbe:
+        httpGet:
+          path: /health
+          port: 8080
+        initialDelaySeconds: 5
+        periodSeconds: 10
+      readinessProbe:
+        httpGet:
+          path: /ready
+          port: 8080
+        initialDelaySeconds: 3
+        periodSeconds: 5
 ```
 
 ### Using Built-in Health Scripts
@@ -449,6 +470,7 @@ python app.py > /var/log/app.log 2>&1
 Forward logs to centralized system:
 
 - **Docker**: Use log drivers
+
   ```bash
   docker run \
     --log-driver=fluentd \
@@ -488,6 +510,7 @@ docker run --memory="512m" --memory-reservation="256m" myapp:prod
 ```
 
 **OOM Handling**:
+
 ```bash
 # Get notified when OOM occurs
 docker run \
@@ -591,9 +614,11 @@ docker push registry.example.com/myapp:1.0.0
 Configure automatic scanning:
 
 **Docker Hub**:
+
 - Enable automatic vulnerability scanning in repository settings
 
 **AWS ECR**:
+
 ```bash
 aws ecr put-image-scanning-configuration \
   --repository-name myapp \
@@ -601,6 +626,7 @@ aws ecr put-image-scanning-configuration \
 ```
 
 **Google Artifact Registry**:
+
 - Enable vulnerability scanning in registry settings
 
 ---
@@ -623,15 +649,15 @@ services:
     secrets:
       - db_password
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      test: ['CMD', 'curl', '-f', 'http://localhost:8080/health']
       interval: 30s
       timeout: 3s
       retries: 3
     logging:
-      driver: "json-file"
+      driver: 'json-file'
       options:
-        max-size: "10m"
-        max-file: "3"
+        max-size: '10m'
+        max-file: '3'
     deploy:
       resources:
         limits:
@@ -664,44 +690,44 @@ spec:
         app: myapp
     spec:
       containers:
-      - name: myapp
-        image: registry.example.com/myapp:1.0.0
-        imagePullPolicy: Always
-        ports:
-        - containerPort: 8080
-        env:
-        - name: NODE_ENV
-          value: "production"
-        envFrom:
-        - secretRef:
-            name: myapp-secrets
-        resources:
-          requests:
-            memory: "256Mi"
-            cpu: "250m"
-          limits:
-            memory: "512Mi"
-            cpu: "500m"
-        livenessProbe:
-          httpGet:
-            path: /health
-            port: 8080
-          initialDelaySeconds: 30
-          periodSeconds: 10
-        readinessProbe:
-          httpGet:
-            path: /ready
-            port: 8080
-          initialDelaySeconds: 5
-          periodSeconds: 5
-        securityContext:
-          runAsNonRoot: true
-          runAsUser: 1000
-          allowPrivilegeEscalation: false
-          readOnlyRootFilesystem: true
-          capabilities:
-            drop:
-            - ALL
+        - name: myapp
+          image: registry.example.com/myapp:1.0.0
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+          env:
+            - name: NODE_ENV
+              value: 'production'
+          envFrom:
+            - secretRef:
+                name: myapp-secrets
+          resources:
+            requests:
+              memory: '256Mi'
+              cpu: '250m'
+            limits:
+              memory: '512Mi'
+              cpu: '500m'
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
 ```
 
 ### AWS ECS/Fargate
@@ -727,7 +753,10 @@ spec:
         }
       ],
       "healthCheck": {
-        "command": ["CMD-SHELL", "curl -f http://localhost:8080/health || exit 1"],
+        "command": [
+          "CMD-SHELL",
+          "curl -f http://localhost:8080/health || exit 1"
+        ],
         "interval": 30,
         "timeout": 5,
         "retries": 3
@@ -756,6 +785,7 @@ spec:
 ## Production Readiness Checklist
 
 ### Security
+
 - [ ] Passwordless sudo disabled (`ENABLE_PASSWORDLESS_SUDO=false`)
 - [ ] Running as non-root user
 - [ ] No secrets in build arguments or ENV in Dockerfile
@@ -766,6 +796,7 @@ spec:
 - [ ] Capabilities dropped to minimum required
 
 ### Optimization
+
 - [ ] Only necessary features included (no dev tools)
 - [ ] Multi-stage build for minimal size
 - [ ] Layers optimized
@@ -773,6 +804,7 @@ spec:
 - [ ] Image tagged with version, not just `latest`
 
 ### Reliability
+
 - [ ] Health check endpoint implemented
 - [ ] Liveness and readiness probes configured
 - [ ] Resource limits set (memory, CPU)
@@ -782,12 +814,14 @@ spec:
 - [ ] Structured logging format
 
 ### Monitoring
+
 - [ ] Metrics exposed (Prometheus format)
 - [ ] Centralized logging configured
 - [ ] Alerts configured for critical metrics
 - [ ] APM/tracing integrated (optional)
 
 ### Deployment
+
 - [ ] CI/CD pipeline for builds
 - [ ] Automated testing before deployment
 - [ ] Blue-green or canary deployment strategy
@@ -796,6 +830,7 @@ spec:
 - [ ] Image signing enabled (optional)
 
 ### Documentation
+
 - [ ] Production configuration documented
 - [ ] Runbook for common issues
 - [ ] Secrets management documented
@@ -805,7 +840,8 @@ spec:
 
 ## Related Documentation
 
-- [Security Best Practices](security-hardening.md) - Comprehensive security guide
+- [Security Best Practices](security-hardening.md) - Comprehensive security
+  guide
 - [Environment Variables](environment-variables.md) - Configuration reference
 - [Troubleshooting](troubleshooting.md) - Common issues and solutions
 - [CLAUDE.md](../CLAUDE.md) - Build system overview

@@ -2,7 +2,9 @@
 
 ## Overview
 
-The Container Build System includes a comprehensive testing framework with 450+ unit tests covering all library files. The framework is designed to test bash scripts in isolation with proper mocking and assertion capabilities.
+The Container Build System includes a comprehensive testing framework with 450+
+unit tests covering all library files. The framework is designed to test bash
+scripts in isolation with proper mocking and assertion capabilities.
 
 ## Architecture
 
@@ -68,7 +70,7 @@ test_example_functionality() {
 run_test_with_setup() {
     local test_function="$1"
     local test_description="$2"
-    
+
     setup
     run_test "$test_function" "$test_description"
     teardown
@@ -90,27 +92,32 @@ The framework provides comprehensive assertion functions:
 - `assert_true <condition> [message]` - Assert condition is true
 - `assert_false <condition> [message]` - Assert condition is false
 - `assert_equals <expected> <actual> [message]` - Assert values are equal
-- `assert_not_equals <expected> <actual> [message]` - Assert values are not equal
+- `assert_not_equals <expected> <actual> [message]` - Assert values are not
+  equal
 
 ### String Assertions
 
 - `assert_empty <value> [message]` - Assert string is empty
 - `assert_not_empty <value> [message]` - Assert string is not empty
-- `assert_contains <haystack> <needle> [message]` - Assert string contains substring
-- `assert_not_contains <haystack> <needle> [message]` - Assert string doesn't contain substring
+- `assert_contains <haystack> <needle> [message]` - Assert string contains
+  substring
+- `assert_not_contains <haystack> <needle> [message]` - Assert string doesn't
+  contain substring
 
 ### File Assertions
 
 - `assert_file_exists <path> [message]` - Assert file exists
 - `assert_file_not_exists <path> [message]` - Assert file doesn't exist
 - `assert_directory_exists <path> [message]` - Assert directory exists
-- `assert_directory_not_exists <path> [message]` - Assert directory doesn't exist
+- `assert_directory_not_exists <path> [message]` - Assert directory doesn't
+  exist
 - `assert_executable <path> [message]` - Assert file is executable
 
 ### Command Assertions
 
 - `assert_command_exists <command> [message]` - Assert command is available
-- `assert_command_not_exists <command> [message]` - Assert command is not available
+- `assert_command_not_exists <command> [message]` - Assert command is not
+  available
 - `assert_exit_code <expected> <actual> [message]` - Assert exit code matches
 
 ## Running Tests
@@ -169,7 +176,7 @@ setup() {
     mock_fetch_url() {
         echo "mocked response"
     }
-    
+
     # Override PATH for testing
     export PATH="$TEST_TEMP_DIR/bin:$PATH"
 }
@@ -185,7 +192,9 @@ setup() {
 
 ### Filesystem Permissions
 
-Some tests check executable permissions which may not work correctly on certain filesystems (e.g., fakeowner mounts in containers). Tests should detect and skip appropriately:
+Some tests check executable permissions which may not work correctly on certain
+filesystems (e.g., fakeowner mounts in containers). Tests should detect and skip
+appropriately:
 
 ```bash
 test_executable_check() {
@@ -193,12 +202,12 @@ test_executable_check() {
     local test_file="$TEST_TEMP_DIR/test"
     touch "$test_file"
     chmod 644 "$test_file"
-    
+
     if [[ -x "$test_file" ]]; then
         skip_test "Filesystem doesn't handle executable permissions"
         return
     fi
-    
+
     # Continue with test...
 }
 ```

@@ -20,7 +20,7 @@ spec:
   # Storage class defines the type of storage
   # Examples: gp3, standard, fast-ssd, etc.
   # Leave empty to use default storage class
-  storageClassName: fast-ssd  # Adjust based on your cluster
+  storageClassName: fast-ssd # Adjust based on your cluster
 
   # Resource request
   resources:

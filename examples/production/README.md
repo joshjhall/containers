@@ -1,24 +1,28 @@
 # Production Container Examples
 
-This directory contains examples for building production-optimized containers using the main Dockerfile with production-focused build arguments.
+This directory contains examples for building production-optimized containers
+using the main Dockerfile with production-focused build arguments.
 
 ## Key Principle: One Universal Dockerfile
 
-This project uses a **single universal Dockerfile** configured via build arguments for all environments (development, staging, production, CI). You do NOT need separate Dockerfiles for production - instead, you configure the main Dockerfile with different build arguments.
+This project uses a **single universal Dockerfile** configured via build
+arguments for all environments (development, staging, production, CI). You do
+NOT need separate Dockerfiles for production - instead, you configure the main
+Dockerfile with different build arguments.
 
 ## Production vs Development Configuration
 
 The key differences between production and development builds:
 
-| Aspect | Development | Production |
-|--------|-------------|------------|
-| Base Image | `debian:bookworm` (full) | `debian:bookworm-slim` |
-| Passwordless Sudo | `true` (convenience) | `false` (security) |
-| Dev Tools | Included (editors, debuggers) | Excluded |
-| Language Runtimes | Often with `-dev` packages | Runtime-only packages |
-| Image Size | Larger (~600-800MB+) | Smaller (~200-500MB) |
-| Attack Surface | Larger (dev tools) | Minimal (runtime only) |
-| Security Options | Relaxed | Hardened (read-only, no-new-privileges) |
+| Aspect            | Development                   | Production                              |
+| ----------------- | ----------------------------- | --------------------------------------- |
+| Base Image        | `debian:bookworm` (full)      | `debian:bookworm-slim`                  |
+| Passwordless Sudo | `true` (convenience)          | `false` (security)                      |
+| Dev Tools         | Included (editors, debuggers) | Excluded                                |
+| Language Runtimes | Often with `-dev` packages    | Runtime-only packages                   |
+| Image Size        | Larger (~600-800MB+)          | Smaller (~200-500MB)                    |
+| Attack Surface    | Larger (dev tools)            | Minimal (runtime only)                  |
+| Security Options  | Relaxed                       | Hardened (read-only, no-new-privileges) |
 
 ## Build Argument Strategy
 
@@ -72,11 +76,11 @@ services:
       context: ../..
       dockerfile: Dockerfile
       args:
-        BASE_IMAGE: "debian:bookworm-slim"
-        ENABLE_PASSWORDLESS_SUDO: "false"
-        INCLUDE_PYTHON: "false"
-        INCLUDE_NODE: "false"
-        INCLUDE_DEV_TOOLS: "false"
+        BASE_IMAGE: 'debian:bookworm-slim'
+        ENABLE_PASSWORDLESS_SUDO: 'false'
+        INCLUDE_PYTHON: 'false'
+        INCLUDE_NODE: 'false'
+        INCLUDE_DEV_TOOLS: 'false'
 ```
 
 **Use case**: Base images, utility containers, sidecar containers
@@ -95,16 +99,16 @@ services:
       context: ../..
       dockerfile: Dockerfile
       args:
-        BASE_IMAGE: "debian:bookworm-slim"
-        ENABLE_PASSWORDLESS_SUDO: "false"
-        INCLUDE_PYTHON: "true"
-        INCLUDE_PYTHON_DEV: "false"
-        PYTHON_VERSION: "3.12"
-        INCLUDE_DEV_TOOLS: "false"
+        BASE_IMAGE: 'debian:bookworm-slim'
+        ENABLE_PASSWORDLESS_SUDO: 'false'
+        INCLUDE_PYTHON: 'true'
+        INCLUDE_PYTHON_DEV: 'false'
+        PYTHON_VERSION: '3.12'
+        INCLUDE_DEV_TOOLS: 'false'
 ```
 
-**Includes**: python3, pip, essential libraries
-**Excludes**: pip-tools, ipython, black, mypy, pytest
+**Includes**: python3, pip, essential libraries **Excludes**: pip-tools,
+ipython, black, mypy, pytest
 
 **Expected size**: ~400-500MB
 
@@ -120,16 +124,16 @@ services:
       context: ../..
       dockerfile: Dockerfile
       args:
-        BASE_IMAGE: "debian:bookworm-slim"
-        ENABLE_PASSWORDLESS_SUDO: "false"
-        INCLUDE_NODE: "true"
-        INCLUDE_NODE_DEV: "false"
-        NODE_VERSION: "20"
-        INCLUDE_DEV_TOOLS: "false"
+        BASE_IMAGE: 'debian:bookworm-slim'
+        ENABLE_PASSWORDLESS_SUDO: 'false'
+        INCLUDE_NODE: 'true'
+        INCLUDE_NODE_DEV: 'false'
+        NODE_VERSION: '20'
+        INCLUDE_DEV_TOOLS: 'false'
 ```
 
-**Includes**: node, npm, yarn
-**Excludes**: typescript, eslint, prettier, nodemon, ts-node
+**Includes**: node, npm, yarn **Excludes**: typescript, eslint, prettier,
+nodemon, ts-node
 
 **Expected size**: ~400-500MB
 
@@ -205,11 +209,11 @@ security_opt:
 # Mount application code as read-only
 volumes:
   - ./:/workspace/myproject:ro
-  - app-cache:/cache  # Writable cache only
+  - app-cache:/cache # Writable cache only
 
 # Built-in healthcheck
 healthcheck:
-  test: ["/usr/local/bin/healthcheck", "--quick"]
+  test: ['/usr/local/bin/healthcheck', '--quick']
   interval: 30s
   timeout: 10s
   retries: 3
@@ -229,17 +233,17 @@ services:
       context: ../..
       dockerfile: Dockerfile
       args:
-        BASE_IMAGE: "debian:bookworm-slim"
-        ENABLE_PASSWORDLESS_SUDO: "false"
+        BASE_IMAGE: 'debian:bookworm-slim'
+        ENABLE_PASSWORDLESS_SUDO: 'false'
 
         # Multiple runtimes
-        INCLUDE_PYTHON: "true"
-        INCLUDE_PYTHON_DEV: "false"
-        INCLUDE_NODE: "true"
-        INCLUDE_NODE_DEV: "false"
+        INCLUDE_PYTHON: 'true'
+        INCLUDE_PYTHON_DEV: 'false'
+        INCLUDE_NODE: 'true'
+        INCLUDE_NODE_DEV: 'false'
 
         # Still no dev tools
-        INCLUDE_DEV_TOOLS: "false"
+        INCLUDE_DEV_TOOLS: 'false'
 ```
 
 **Expected size**: ~600-800MB (vs 1GB+ with dev tools)
@@ -253,29 +257,33 @@ args:
   # ... base configuration ...
 
   # Add cloud tools as needed
-  INCLUDE_DOCKER: "true"      # For Docker-in-Docker or CI
-  INCLUDE_KUBERNETES: "true"  # For kubectl access
-  INCLUDE_TERRAFORM: "false"  # Usually not needed in runtime
+  INCLUDE_DOCKER: 'true' # For Docker-in-Docker or CI
+  INCLUDE_KUBERNETES: 'true' # For kubectl access
+  INCLUDE_TERRAFORM: 'false' # Usually not needed in runtime
 ```
 
-Note: Only include tools that are actually needed at runtime. Build/deploy tools should typically live in CI containers, not runtime containers.
+Note: Only include tools that are actually needed at runtime. Build/deploy tools
+should typically live in CI containers, not runtime containers.
 
 ## Best Practices
 
 1. **Start Minimal**: Begin with the minimal base and add only what you need
-2. **Separate Build/Runtime**: Consider multi-stage builds where build tools are in build stage only
+2. **Separate Build/Runtime**: Consider multi-stage builds where build tools are
+   in build stage only
 3. **Pin Versions**: Use specific version build args for reproducibility
 4. **Test Locally**: Build and test production images locally before deploying
 5. **Scan Images**: Run security scanners (trivy, grype) on production images
 6. **Monitor Size**: Keep track of image sizes and investigate unexpected growth
 7. **Use Cache Mounts**: BuildKit cache mounts speed up rebuilds significantly
 8. **Read-Only Filesystem**: Use `read_only: true` when possible for security
-9. **Minimal Capabilities**: Drop all capabilities and add back only what's needed
+9. **Minimal Capabilities**: Drop all capabilities and add back only what's
+   needed
 10. **Health Checks**: Always define proper health checks for runtime containers
 
 ## Environment-Specific Configurations
 
 ### Development
+
 - Full base image
 - Dev tools included
 - Passwordless sudo enabled
@@ -283,6 +291,7 @@ Note: Only include tools that are actually needed at runtime. Build/deploy tools
 - Focus on convenience
 
 ### Staging
+
 - Slim base image
 - Runtime-only packages
 - No dev tools
@@ -290,6 +299,7 @@ Note: Only include tools that are actually needed at runtime. Build/deploy tools
 - Closer to production
 
 ### Production
+
 - Slim base image
 - Runtime-only packages
 - No dev tools
@@ -315,12 +325,13 @@ du -sh /usr/* | sort -h | tail -20
 
 ### Missing Dependencies at Runtime
 
-Your application might need runtime libraries that aren't included in the slim base:
+Your application might need runtime libraries that aren't included in the slim
+base:
 
 ```yaml
 args:
   # Add common runtime libraries if needed
-  BASE_IMAGE: "debian:bookworm-slim"
+  BASE_IMAGE: 'debian:bookworm-slim'
   # Then manually install additional libs via DEBIAN_PACKAGES build arg
 ```
 
@@ -330,7 +341,7 @@ Make sure UID/GID match your deployment environment:
 
 ```yaml
 args:
-  USER_UID: 1000  # Match your deployment environment
+  USER_UID: 1000 # Match your deployment environment
   USER_GID: 1000
 ```
 
