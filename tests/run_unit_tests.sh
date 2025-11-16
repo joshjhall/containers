@@ -30,7 +30,7 @@ echo ""
 # Find all unit test files
 echo -e "${BLUE}Discovering unit tests...${NC}"
 # Look for all .sh files in unit directory except the runner itself
-UNIT_TEST_FILES=$(find "$TESTS_DIR/unit" -name "*.sh" -type f ! -name "run_*.sh" | sort)
+UNIT_TEST_FILES=$(command find "$TESTS_DIR/unit" -name "*.sh" -type f ! -name "run_*.sh" | sort)
 
 if [ -z "$UNIT_TEST_FILES" ]; then
     echo -e "${YELLOW}No unit test files found in $TESTS_DIR/unit${NC}"

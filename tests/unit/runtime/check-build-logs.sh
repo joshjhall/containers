@@ -234,7 +234,7 @@ test_log_rotation() {
     
     # Count rotated logs
     local rotated_count
-    rotated_count=$(find "$BUILD_LOG_DIR" -maxdepth 1 -name "*build.log*" -type f | wc -l)
+    rotated_count=$(command find "$BUILD_LOG_DIR" -maxdepth 1 -name "*build.log*" -type f | wc -l)
     assert_equals "3" "$rotated_count" "Three rotated logs exist"
 }
 

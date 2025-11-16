@@ -334,14 +334,14 @@ fi
 
 # Helper function to clean Terraform cache
 tf-clean() {
-    find . -type d -name ".terraform" -exec rm -rf {} + 2>/dev/null || true
-    find . -type f -name ".terraform.lock.hcl" -delete 2>/dev/null || true
+    command find . -type d -name ".terraform" -exec rm -rf {} + 2>/dev/null || true
+    command find . -type f -name ".terraform.lock.hcl" -delete 2>/dev/null || true
     echo "Cleaned Terraform cache files"
 }
 
 # Helper function to format all Terraform files
 tf-fmt-all() {
-    find . -name "*.tf" -exec terraform fmt {} \;
+    command find . -name "*.tf" -exec terraform fmt {} \;
     echo "Formatted all Terraform files"
 }
 
@@ -441,7 +441,7 @@ echo "  TF_PLUGIN_CACHE_DIR: ${TF_PLUGIN_CACHE_DIR:-/cache/terraform}"
 if [ -d "${TF_PLUGIN_CACHE_DIR:-/cache/terraform}" ]; then
     echo "  ✓ Plugin cache directory exists"
     # Count cached providers if any
-    provider_count=$(find "${TF_PLUGIN_CACHE_DIR:-/cache/terraform}" -name "terraform-provider-*" 2>/dev/null | wc -l)
+    provider_count=$(command find "${TF_PLUGIN_CACHE_DIR:-/cache/terraform}" -name "terraform-provider-*" 2>/dev/null | wc -l)
     if [ $provider_count -gt 0 ]; then
         echo "  Cached providers: $provider_count"
     fi

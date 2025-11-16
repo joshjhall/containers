@@ -52,7 +52,7 @@ if [ $# -eq 0 ]; then
     # Run all tests
     while IFS= read -r file; do
         TEST_FILES+=("$file")
-    done < <(find "$SCRIPT_DIR/integration/builds" -name "test_*.sh" -type f | sort)
+    done < <(command find "$SCRIPT_DIR/integration/builds" -name "test_*.sh" -type f | sort)
 else
     # Run specific test
     TEST_NAME="$1"

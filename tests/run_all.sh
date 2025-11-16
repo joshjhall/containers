@@ -82,7 +82,7 @@ run_all_tests() {
                 test_name=$(basename "$test_file" .sh)
                 run_test_suite "$test_file" "Unit: $test_name"
             fi
-        done < <(find "$TESTS_DIR/unit" -name "test_*.sh" -o -name "*_test.sh" | sort)
+        done < <(command find "$TESTS_DIR/unit" -name "test_*.sh" -o -name "*_test.sh" | sort)
     fi
 
     # Integration tests
@@ -93,7 +93,7 @@ run_all_tests() {
                 test_name=$(basename "$test_file" .sh)
                 run_test_suite "$test_file" "Integration: $test_name"
             fi
-        done < <(find "$TESTS_DIR/integration" -name "test_*.sh" -o -name "*_test.sh" | sort)
+        done < <(command find "$TESTS_DIR/integration" -name "test_*.sh" -o -name "*_test.sh" | sort)
     fi
 
     # Performance tests (optional)
@@ -104,7 +104,7 @@ run_all_tests() {
                 test_name=$(basename "$test_file" .sh)
                 run_test_suite "$test_file" "Performance: $test_name"
             fi
-        done < <(find "$TESTS_DIR/performance" -name "test_*.sh" -o -name "*_test.sh" | sort)
+        done < <(command find "$TESTS_DIR/performance" -name "test_*.sh" -o -name "*_test.sh" | sort)
     fi
 }
 

@@ -587,7 +587,7 @@ done
 echo ""
 echo "=== Cache Directories ==="
 echo "Maven repository: ${MAVEN_USER_HOME:-/cache/maven}"
-[ -d "${MAVEN_USER_HOME:-/cache/maven}/repository" ] && echo "  $(find ${MAVEN_USER_HOME:-/cache/maven}/repository -type f -name "*.jar" 2>/dev/null | wc -l) JARs cached"
+[ -d "${MAVEN_USER_HOME:-/cache/maven}/repository" ] && echo "  $(command find ${MAVEN_USER_HOME:-/cache/maven}/repository -type f -name "*.jar" 2>/dev/null | wc -l) JARs cached"
 echo "Gradle home: ${GRADLE_USER_HOME:-/cache/gradle}"
 [ -d "${GRADLE_USER_HOME:-/cache/gradle}/caches" ] && echo "  Cache exists"
 EOF
