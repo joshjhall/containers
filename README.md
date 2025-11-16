@@ -516,6 +516,7 @@ This build system includes comprehensive security hardening:
 - **Completion Script Safety**: Shell completions validated before sourcing
 
 ### Runtime Security
+- **Configuration Validation**: Optional runtime validation of environment variables, format checking, and secret detection (see [examples/validation/](examples/validation/))
 - **Rate Limiting**: Exponential backoff for external API calls with configurable retry logic
 - **GitHub API Token Support**: Automatic detection and use of `GITHUB_TOKEN` for higher rate limits
 - **Non-Root Execution**: All containers run as non-root user by default

@@ -202,6 +202,63 @@ docker run -e API_KEY=secret123 myapp:prod
 
 See [environment-variables.md](environment-variables.md) for available variables.
 
+### Configuration Validation
+
+**Production Best Practice**: Enable runtime configuration validation to catch misconfiguration issues before they cause failures.
+
+The validation framework validates environment variables, checks formats (URLs, ports, emails, etc.), and detects potential plaintext secrets:
+
+```bash
+# Enable validation in production
+docker run \
+  -e VALIDATE_CONFIG=true \
+  -e VALIDATE_CONFIG_STRICT=true \
+  -e DATABASE_URL=postgresql://... \
+  -e REDIS_URL=redis://... \
+  myapp:prod
+```
+
+**Key Features**:
+- Required environment variable validation
+- Format validation (URLs, ports, emails, booleans, paths)
+- Secret detection with warnings for plaintext passwords/keys
+- Custom validation rules support
+- Strict mode (treat warnings as errors)
+
+**Example custom validation rules**:
+
+```bash
+# custom-validation.sh
+cv_custom_validations() {
+    # Validate required variables
+    cv_require_var DATABASE_URL "PostgreSQL connection string" "Set DATABASE_URL"
+    cv_require_var SECRET_KEY "Application secret key" "Set SECRET_KEY"
+
+    # Validate formats
+    cv_validate_url DATABASE_URL "postgresql"
+    cv_validate_port API_PORT
+    cv_validate_email ADMIN_EMAIL
+
+    # Detect plaintext secrets
+    cv_detect_secrets SECRET_KEY
+    cv_detect_secrets JWT_SECRET
+}
+```
+
+```bash
+# Run with custom validation
+docker run \
+  -e VALIDATE_CONFIG=true \
+  -e VALIDATE_CONFIG_RULES=/app/config/validation.sh \
+  -v ./custom-validation.sh:/app/config/validation.sh:ro \
+  myapp:prod
+```
+
+**Complete Examples**: See [examples/validation/](../examples/validation/) for production-ready examples including:
+- Web applications with databases
+- API services with multiple backends
+- Background workers with queues
+
 ### Resource Limits
 
 Always set resource limits in production:
