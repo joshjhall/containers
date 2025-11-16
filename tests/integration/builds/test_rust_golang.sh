@@ -91,6 +91,12 @@ test_rust_tools() {
 
     # Rustfmt (formatter) works
     assert_command_in_container "$image" "rustfmt --version" "rustfmt"
+
+    # cargo-audit (security scanner) works
+    assert_executable_in_path "$image" "cargo-audit"
+
+    # cargo-deny (supply chain security) works
+    assert_executable_in_path "$image" "cargo-deny"
 }
 
 # Test: Go development tools
