@@ -45,7 +45,7 @@ load_env_file() {
         if [ -f "$env_file" ]; then
             # shellcheck disable=SC1090
             set -a && source "$env_file" && set +a
-            echo "✓ Loaded environment from: $env_file"
+            echo "✓ Loaded environment from: $env_file" >&2
             return 0
         fi
     done
@@ -57,12 +57,19 @@ load_env_file() {
 # Functions
 # ============================================================================
 
+# Sanitize token by stripping all whitespace (newlines, spaces, etc.)
+sanitize_token() {
+    local token="$1"
+    # Remove all whitespace characters including newlines, tabs, spaces
+    echo "$token" | tr -d '[:space:]'
+}
+
 log_info() {
-    echo "ℹ️  $*"
+    echo "ℹ️  $*" >&2
 }
 
 log_success() {
-    echo "✅ $*"
+    echo "✅ $*" >&2
 }
 
 log_error() {
@@ -70,7 +77,7 @@ log_error() {
 }
 
 log_warn() {
-    echo "⚠️  $*"
+    echo "⚠️  $*" >&2
 }
 
 # Check if gh CLI is installed
@@ -125,11 +132,11 @@ fetch_github_token_from_op() {
     log_info "  Vault: $vault"
     log_info "  Item: $item"
 
-    # Try to fetch the token
+    # Try to fetch the token (using --no-newline to avoid trailing newlines)
+    # Note: stderr passes through to terminal, only stdout is captured
     local token
-    if ! token=$(op read "op://$vault/$item/credential" 2>&1); then
+    if ! token=$(op read --no-newline "op://$vault/$item/credential"); then
         log_error "Failed to fetch GitHub token from 1Password"
-        log_error "Error: $token"
         log_info "Make sure the item exists: op://$vault/$item/credential"
         return 1
     fi
@@ -171,6 +178,9 @@ authenticate_gh() {
 export_github_token() {
     local token="$1"
 
+    # Sanitize token before exporting
+    token=$(sanitize_token "$token")
+
     # Export for current session
     export GITHUB_TOKEN="$token"
 
@@ -182,7 +192,7 @@ export_github_token() {
 # GitHub token (set by setup-gh-cli.sh)
 # Note: This will be re-exported on each container start
 if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
-    export GITHUB_TOKEN=$(gh auth token 2>/dev/null || echo "")
+    export GITHUB_TOKEN=$(gh auth token 2>/dev/null | tr -d '[:space:]')
 fi
 EOF
         log_success "Added GITHUB_TOKEN export to ~/.bashrc"
@@ -217,11 +227,11 @@ verify_gh_auth() {
 # ============================================================================
 
 main() {
-    echo ""
-    echo "========================================"
-    echo "GitHub CLI Authentication Setup"
-    echo "========================================"
-    echo ""
+    echo "" >&2
+    echo "========================================" >&2
+    echo "GitHub CLI Authentication Setup" >&2
+    echo "========================================" >&2
+    echo "" >&2
 
     # Load environment variables
     load_env_file || log_warn "No .env file found (this is optional)"
@@ -240,14 +250,16 @@ main() {
             local existing_token
             existing_token=$(gh auth token 2>/dev/null || echo "")
             if [ -n "$existing_token" ]; then
+                # Sanitize token to remove any trailing whitespace
+                existing_token=$(sanitize_token "$existing_token")
                 export GITHUB_TOKEN="$existing_token"
                 log_success "GITHUB_TOKEN exported from existing gh auth"
             fi
         fi
 
-        echo ""
+        echo "" >&2
         log_success "GitHub CLI setup complete"
-        echo ""
+        echo "" >&2
         return 0
     fi
 
@@ -270,6 +282,8 @@ main() {
         fi
     else
         log_info "Using GITHUB_TOKEN from environment"
+        # Sanitize token from environment (may have trailing whitespace)
+        token=$(sanitize_token "$token")
     fi
 
     # Authenticate gh CLI
@@ -285,16 +299,16 @@ main() {
         exit 1
     fi
 
-    echo ""
+    echo "" >&2
     log_success "GitHub CLI setup complete"
-    echo ""
+    echo "" >&2
     log_info "You can now use 'gh' commands:"
     log_info "  gh repo list"
     log_info "  gh pr list"
     log_info "  gh issue list"
-    echo ""
+    echo "" >&2
     log_info "Note: Git operations will use SSH (not gh) per your configuration"
-    echo ""
+    echo "" >&2
 }
 
 # Run main function
