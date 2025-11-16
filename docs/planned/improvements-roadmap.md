@@ -14,27 +14,23 @@ This document tracks remaining improvements for the container build system based
 
 ## Progress Summary
 
-**Completed Items**: 49 items (All HIGH priority, 2 CRITICAL, most MEDIUM priority, many LOW priority)
-**Partially Complete**: 0 items
-**Remaining Items**: 29 items (2 CRITICAL, 2 HIGH, 15 MEDIUM, 11 LOW)
+**Completed Items**: 11 items (see git history for details)
+**Remaining Items**: 21 items (2 CRITICAL, 2 HIGH, 11 MEDIUM, 6 LOW)
 
-See git history and CHANGELOG.md for details on completed items.
+**Recently Completed (November 2025)**:
+- ✅ Item #1: GPG Verification & Checksum Pinning (4-tier system)
+- ✅ Item #2: Passwordless Sudo Default Changed to False
+- ✅ Item #3: Docker Socket Auto-Fix Removed (secure group-based access)
+- ✅ Item #4: Flexible Version Resolution (all 6 languages)
+- ✅ Item #12: Production-Optimized Image Variants
+- ✅ Item #15: Configuration Validation Framework
+- ✅ Item #20: Extract cache-utils.sh Shared Utility
+- ✅ Item #21: Extract path-utils.sh Shared Utility
+- ✅ Item #23: Extract Project Templates (all 7 languages)
+- ✅ Item #27: Case-Insensitive Filesystem Detection
+- ✅ Item #32: Pre-Push Git Hook for Validation
 
-**Latest Updates (November 2025)**:
-- ✅ **Item #27 COMPLETE**: Case-Insensitive Filesystem Detection - Automatic detection and warnings for cross-platform development
-- ✅ **Item #15 COMPLETE**: Configuration Validation Framework - 35 tests passing, opt-in activation, comprehensive validation
-- ✅ **Item #23 COMPLETE**: Template extraction for all 7 languages (Go, Node.js, R, Rust, Mojo, Java, Ruby) - 156 tests passing
-- ✅ **Item #4 COMPLETE**: Flexible version resolution for all 6 languages (Python, Node.js, Go, Ruby, Rust, Java)
-- ✅ **Item #1 COMPLETE**: 4-tier checksum verification + pinned checksums database + automated maintenance
-- ✅ **Item #3 COMPLETE**: Docker socket auto-fix removed, replaced with secure group-based access
-- ✅ **Item #2 COMPLETE**: Passwordless sudo default changed to false (security improvement)
-- ✅ **Item #12 COMPLETE**: Production-optimized image variants with examples and documentation
-- ✅ Ruby template extraction (config templates for RSpec and Rubocop)
-- ✅ Ruby checksum fetching fixed (grep pattern and parameter order)
-- ✅ Production tests added to CI matrix
-- ✅ Created `lib/checksums.json` with Node.js, Go, Ruby checksums (9 versions)
-- ✅ Created `bin/update-checksums.sh` for automated checksum maintenance
-- ✅ Integrated checksum updates into auto-patch workflow
+See `git log` and `CHANGELOG.md` for complete details on all completed items.
 
 ---
 
@@ -42,233 +38,23 @@ See git history and CHANGELOG.md for details on completed items.
 
 ### Security Concerns
 
-#### 1. [HIGH] ✅ COMPLETE - Implement GPG Verification and Automated Checksum Pinning
-**Source**: OWASP Security Analysis (Nov 2025)
-**Priority**: P1 (High - security enhancement, not blocking)
-**Effort**: 3-4 days
-**Status**: ✅ COMPLETE (Nov 2025) - Full 4-tier system with automated maintenance
-
-**What Was Delivered (November 2025)**:
-
-✅ **Complete 4-Tier Verification System Architecture**:
-1. **Tier 1: Signature Verification** (GPG + Sigstore) - COMPLETE
-2. **Tier 2: Pinned Checksums** (from lib/checksums.json) - COMPLETE
-3. **Tier 3: Published Checksums** (from official sources) - COMPLETE
-4. **Tier 4: Calculated Checksums** (TOFU fallback) - COMPLETE
-
-✅ **Files Created**:
-- `lib/base/signature-verify.sh` - Unified GPG and Sigstore verification
-  * GPG verification for Python, Node.js, Go (uses keyring from lib/gpg-keys/)
-  * Sigstore verification framework (Python 3.11.0+ support ready)
-  * Auto-detection of available verification tools (cosign, gpg)
-  * Graceful fallback when verification unavailable
-- `lib/base/checksum-verification.sh` - 4-tier progressive verification
-  * `verify_signature_tier()` - Tier 1 wrapper
-  * `verify_pinned_checksum()` - Tier 2 (uses checksums.json when available)
-  * `verify_published_checksum()` - Tier 3 (downloads official checksums)
-  * `verify_calculated_checksum()` - Tier 4 (TOFU with clear warning)
-- `lib/gpg-keys/` - GPG public keys for Python, Node.js, Go
-- `lib/gpg-keys/SIGSTORE_RESEARCH.md` - Sigstore availability analysis
-- `lib/checksums.json` - Pinned checksums database (Node.js, Go, Ruby - 9 versions)
-- `bin/update-checksums.sh` - Automated checksum maintenance script
-
-✅ **Integration Complete**:
-- All language feature scripts now use `verify_download()` with 4-tier fallback
-- Verification attempts Tier 1 (signatures) → Tier 2 (pinned) → Tier 3 (published) → Tier 4 (calculated)
-- Each tier logs exactly which method was used and why
-- Never blocks installation (always falls through to calculated with warning)
-
-✅ **Security Improvements**:
-- GPG signature verification for Python, Node.js, Go (when gpg available)
-- Published checksum verification from official sources (python.org, nodejs.org, go.dev)
-- Clear security warnings when using TOFU (Tier 4)
-- All verification methods properly log security level
-
-✅ **Automation Complete**:
-- Created `bin/update-checksums.sh` for automated checksum fetching and validation
-- Integrated into `.github/workflows/auto-patch.yml` (runs weekly)
-- Auto-fetches checksums for Node.js, Go, Ruby from official sources
-- Validates checksum format (64-character SHA256)
-- Creates timestamped backups before updating
-- Non-blocking (won't fail workflow if checksums unavailable)
-
-✅ **Documentation Complete**:
-- Updated `docs/checksum-verification.md` with comprehensive 4-tier system explanation
-- Language-by-language verification matrix documented
-- Implementation examples and usage patterns included
-- Security tier explanations with examples
-
-✅ **Database Initialized**:
-- Created `lib/checksums.json` with 9 initial checksums
-- Node.js: 22.12.0, 22.11.0, 20.18.1, 20.18.0
-- Go: 1.25.4
-- Ruby: 3.5.0, 3.4.7, 3.3.10, 3.2.9
-- Database will grow over time via auto-patch workflow
-
-**Remaining Optional Work**:
-
-⏳ **Sigstore Implementation** (Optional Enhancement):
-- Python 3.11.0+ Sigstore verification needs release manager cert identities
-- TODO comment exists in lib/base/signature-verify.sh:339
-- Framework is complete, just needs configuration data
-- Currently falls back to GPG verification (already working)
-
-**Testing**:
-- ✅ Unit tests passing (666/667)
-- ✅ Shellcheck clean
-- ⏳ Integration testing with actual downloads pending
-
-**Impact**: ✅ MAJOR PROGRESS - 4-tier verification system infrastructure complete, Tier 1 (signatures) and Tier 3 (published) fully functional. Remaining work is populating Tier 2 database and completing Sigstore configuration.
+#### 1. ✅ COMPLETE - GPG Verification and Checksum Pinning
+See git history for details.
 
 ---
 
-#### 2. [HIGH] ✅ COMPLETE - Change Passwordless Sudo Default to False
-**Source**: OWASP Security Analysis (Nov 2025)
-**Completed**: November 2025
-**Status**: ✅ Complete
-
-**What Was Delivered**:
-- Changed default from `ENABLE_PASSWORDLESS_SUDO=true` to `false` in Dockerfile
-- Enhanced build-time messaging in `lib/base/user.sh`:
-  * Clear warning when enabled (development mode)
-  * Helpful guidance when disabled (production/secure mode)
-- Comprehensive security documentation added to README.md:
-  * New "Passwordless Sudo" section in Security Considerations
-  * Explains when to enable (local dev) vs keep disabled (production)
-  * Provides production alternatives (build-time install, init containers, IAM/RBAC)
-- Development examples updated with explanatory comments
-- Tests updated to verify secure default behavior
-- All tests passing (unit: 651/652, integration: 5/5)
-
-**Impact**: ✅ COMPLETE - Significantly improves security posture with secure-by-default approach.
-**Breaking Change**: Existing dev users must explicitly enable for local development convenience.
+#### 2. ✅ COMPLETE - Passwordless Sudo Default to False
+See git history for details.
 
 ---
 
-#### 3. [HIGH] ✅ COMPLETE - Remove Docker Socket Auto-Fix Script
-**Source**: OWASP Security Analysis (Nov 2025)
-**Status**: ✅ COMPLETE (Nov 2025)
-**Breaking Change**: Docker socket access requires explicit configuration
-
-**Previous Issue**: Automatically granted docker group write access to socket using sudo:
-```bash
-if [ "$(id -u)" = "0" ]; then
-    chgrp docker /var/run/docker.sock 2>/dev/null || true
-    chmod g+rw /var/run/docker.sock 2>/dev/null || true
-```
-
-**Security Risks (Resolved)**:
-- ❌ Any process in container could modify socket permissions → ✅ No automatic permission changes
-- ❌ Granted root-equivalent host access automatically → ✅ Requires explicit group configuration
-- ❌ Violated principle of explicit authorization → ✅ Uses principle of least privilege
-
-**What Was Delivered**:
-1. **NEW**: `bin/setup-docker-socket.sh` - Auto-detects Docker socket GID on host
-   - Writes DOCKER_GID to .env file for docker-compose
-   - Supports Linux, macOS, WSL2, Windows Docker Desktop
-   - Safe exit if no Docker socket present (CI/prod)
-
-2. **REMOVED**: `lib/runtime/docker-socket-fix.sh` - No more sudo permission changes
-3. **REMOVED**: Auto-fix startup script generation from `lib/features/docker.sh`
-4. **UPDATED**: `examples/contexts/devcontainer/docker-compose.yml` - Added `group_add` configuration
-5. **UPDATED**: `.devcontainer/devcontainer.json` - Enabled `initializeCommand` for auto-setup
-6. **UPDATED**: README.md - Comprehensive Docker socket security documentation
-7. **UPDATED**: Tests - Removed docker-socket-fix checks, verify secure approach
-
-**How It Works Now**:
-- **VS Code Users**: `initializeCommand` runs setup script automatically before container starts
-- **Docker Compose Users**: Run `./bin/setup-docker-socket.sh` once manually
-- **Configuration**: Uses `group_add: [${DOCKER_GID:-999}]` in docker-compose.yml
-- **Result**: Container user has Docker socket access via group membership (no sudo needed)
-
-**Migration for Existing Users**:
-```bash
-# One-time setup
-./bin/setup-docker-socket.sh
-
-# Or add to existing docker-compose.yml
-services:
-  devcontainer:
-    group_add:
-      - ${DOCKER_GID:-999}
-```
-
-**Impact**: ✅ COMPLETE - Significantly improves security by eliminating automatic sudo permission changes while maintaining ease of use for developers through automated GID detection.
-**Breaking Change**: Existing users must run setup script or configure group_add manually
+#### 3. ✅ COMPLETE - Docker Socket Auto-Fix Removal
+See git history for details.
 
 ---
 
-#### 4. [HIGH] ✅ COMPLETE - Support Flexible Version Resolution with Automatic Patch Resolution
-**Source**: Production build testing (Nov 2025)
-**Priority**: P1 (High - user experience and developer convenience)
-**Effort**: 2-3 days
-**Status**: ✅ COMPLETE (Nov 2025) - All 6 languages support flexible version resolution
-**Completed**: November 2025
-
-**What Was Delivered (November 2025)**:
-
-✅ **Complete Flexible Version Resolution System**:
-All 6 languages now support flexible version inputs with automatic resolution to latest patch versions.
-
-**Files Created**:
-- `lib/base/version-resolution.sh` - Complete version resolution system for all languages
-  * `resolve_python_version()` - Python version resolution
-  * `resolve_node_version()` - Node.js version resolution
-  * `resolve_go_version()` - Go version resolution
-  * `resolve_ruby_version()` - Ruby version resolution
-  * `resolve_rust_version()` - Rust version resolution
-  * `resolve_java_version()` - Java version resolution
-  * Helper functions: `_is_full_version()`, `_is_major_minor()`, `_is_major_only()`, `_curl_safe()`
-
-**Integration Complete**:
-All feature scripts now source `lib/base/version-resolution.sh` and call resolution before installation:
-- ✅ Python: `lib/features/python.sh:37-59` - Sources and calls `resolve_python_version()`
-- ✅ Node.js: `lib/features/node.sh:33-51` - Sources and calls `resolve_node_version()`
-- ✅ Go: `lib/features/golang.sh:41-59` - Sources and calls `resolve_go_version()`
-- ✅ Ruby: `lib/features/ruby.sh:40-58` - Sources and calls `resolve_ruby_version()`
-- ✅ Rust: `lib/features/rust.sh:40-58` - Sources and calls `resolve_rust_version()`
-- ✅ Java: `lib/features/java.sh:42-60` - Sources and calls `resolve_java_version()`
-
-**Verification Testing (Nov 2025)**:
-All 6 languages tested with partial version inputs - all passed successfully:
-- ✅ Python 3.13 → 3.13.9 (major.minor → full version)
-- ✅ Python 3.12 → 3.12.12 (major.minor → full version)
-- ✅ Node.js 22 → 22.21.1 (major → full version)
-- ✅ Node.js 20 → 20.19.5 (major → full version)
-- ✅ Go 1.23 → 1.23.12 (major.minor → full version)
-- ✅ Ruby 3.3 → 3.3.10 (major.minor → full version)
-- ✅ Rust 1.82 → 1.82.0 (major.minor → full version)
-- ✅ Java 21 → 21.0.9 (major → full version)
-
-**Supported Version Formats (All 6 Languages)**:
-
-| Language | Supported Formats | API Source Used for Resolution |
-|----------|-------------------|-------------------------------|
-| Python | `3`, `3.13`, `3.13.5` | python.org/ftp/python/ |
-| Node.js | `20`, `20.18`, `20.18.0` | nodejs.org/dist/index.json |
-| Go | `1`, `1.23`, `1.23.5` | go.dev/dl/?mode=json |
-| Rust | `1`, `1.82`, `1.82.0` | rust-lang.org/stable |
-| Ruby | `3`, `3.3`, `3.3.7` | ruby-lang.org/en/downloads/releases/ |
-| Java | `21`, `21.0`, `21.0.1` | adoptium.net/api/ |
-
-**Example Usage**:
-```dockerfile
-# All of these now work:
-ARG PYTHON_VERSION="3.12"        # → Auto-resolves to 3.12.12 (latest patch)
-ARG PYTHON_VERSION="3.12.5"      # → Uses exact version
-ARG NODE_VERSION="20"            # → Auto-resolves to 20.19.5 (latest LTS patch)
-ARG GO_VERSION="1.23"            # → Auto-resolves to 1.23.12 (latest patch)
-```
-
-**Benefits Achieved**:
-- ✅ Better user experience - matches common version specification expectations
-- ✅ Easier upgrades - users can change `3.12` to `3.13` without finding exact patch version
-- ✅ Automatic patch updates - weekly auto-patch workflow gets latest patches automatically
-- ✅ Still allows exact pinning when needed for reproducibility
-- ✅ Simpler documentation and examples
-- ✅ Consistent resolution logging: "Resolved Python 3.12 → 3.12.12"
-
-**Impact**: ✅ COMPLETE - Significantly improved user experience, matches ecosystem conventions across all 6 supported languages
+#### 4. ✅ COMPLETE - Flexible Version Resolution
+See git history for details.
 
 ---
 
@@ -310,7 +96,7 @@ ARG GO_VERSION="1.23"            # → Auto-resolves to 1.23.12 (latest patch)
 
 ---
 
-#### 5. [MEDIUM] Fix Command Injection Vectors in apt-utils.sh
+#### 6. [MEDIUM] Fix Command Injection Vectors in apt-utils.sh
 **Source**: OWASP Security Analysis (Nov 2025)
 **File**: `/workspace/containers/lib/base/apt-utils.sh` (lines 149, 285)
 
@@ -337,7 +123,7 @@ if timeout "$APT_TIMEOUT" "${cmd_array[@]}"; then
 
 ---
 
-#### 6. [MEDIUM] Validate PATH Additions Before Modification
+#### 7. [MEDIUM] Validate PATH Additions Before Modification
 **Source**: OWASP Security Analysis (Nov 2025)
 **Files**: Multiple feature scripts, `/workspace/containers/lib/runtime/setup-paths.sh`
 
@@ -356,7 +142,7 @@ if timeout "$APT_TIMEOUT" "${cmd_array[@]}"; then
 
 ---
 
-#### 7. [MEDIUM] Improve kubectl Completion Validation
+#### 8. [MEDIUM] Improve kubectl Completion Validation
 **Source**: OWASP Security Analysis (Nov 2025)
 **File**: `/workspace/containers/lib/features/kubernetes.sh` (lines 358-366)
 
@@ -378,7 +164,7 @@ if timeout "$APT_TIMEOUT" "${cmd_array[@]}"; then
 
 ---
 
-#### 8. [MEDIUM] Pipe Curl Downloads in Kubernetes and Terraform Features
+#### 9. [MEDIUM] Pipe Curl Downloads in Kubernetes and Terraform Features
 **Files**:
 - `/workspace/containers/lib/features/kubernetes.sh`
 - `/workspace/containers/lib/features/terraform.sh`
@@ -406,7 +192,7 @@ curl -fsSL https://... | gpg --dearmor -o /etc/apt/keyrings/...
 
 ---
 
-#### 9. [MEDIUM] Dynamic Checksum Fetching Has MITM Risk
+#### 10. [MEDIUM] Dynamic Checksum Fetching Has MITM Risk
 **File**: `/workspace/containers/lib/features/lib/checksum-fetch.sh`
 
 **Issue**: Fetches checksums from upstream websites at build time:
@@ -435,7 +221,7 @@ checksum=$(echo "$page_content" | grep -oP '...')
 
 ---
 
-#### 10. [LOW] Temp Directory Permissions May Be Too Permissive
+#### 11. [LOW] Temp Directory Permissions May Be Too Permissive
 **File**: `/workspace/containers/lib/base/feature-header.sh`
 
 **Issue**: Temporary directories use 755 permissions (allows non-owner read/execute)
@@ -457,7 +243,7 @@ checksum=$(echo "$page_content" | grep -oP '...')
 
 ---
 
-#### 11. [LOW] GPG Key Handling Could Validate Key IDs
+#### 12. [LOW] GPG Key Handling Could Validate Key IDs
 **Files**: `/workspace/containers/lib/features/kubernetes.sh`, `terraform.sh`
 
 **Issue**: Imports GPG keys without verifying key IDs:
@@ -474,43 +260,12 @@ curl -fsSL <url> | gpg --dearmor -o /etc/apt/keyrings/...
 
 ### Production Readiness
 
-#### 12. [CRITICAL] ✅ COMPLETE - Create Production-Optimized Image Variants
-**Source**: Production Readiness Analysis (Nov 2025)
-**Completed**: November 2025
-**Status**: ✅ Complete
-
-**What Was Delivered**:
-Instead of creating separate Dockerfiles (which would violate the universal Dockerfile principle), implemented production examples using the main Dockerfile with production-focused build arguments:
-
-**Files Created**:
-- `examples/production/docker-compose.minimal.yml` - Minimal base (~163MB)
-- `examples/production/docker-compose.python.yml` - Python runtime-only
-- `examples/production/docker-compose.node.yml` - Node runtime-only
-- `examples/production/README.md` - Comprehensive production guide
-- `examples/production/COMPARISON.md` - Dev vs prod comparison tables
-- `examples/production/build-prod.sh` - CLI helper for building production images
-- `examples/production/compare-sizes.sh` - Size comparison utility
-- `tests/integration/builds/test_production.sh` - Production build tests (6/6 passing)
-
-**Key Features**:
-- Uses `debian:bookworm-slim` base (~100MB smaller than full Debian)
-- `ENABLE_PASSWORDLESS_SUDO=false` for security
-- `INCLUDE_DEV_TOOLS=false` removes editors, debuggers, etc.
-- Runtime-only packages: `INCLUDE_<LANG>_DEV=false`
-- Security hardening examples (read-only filesystem, cap_drop, no-new-privileges)
-- Image size reductions: 30-35% smaller than dev variants
-
-**Test Results**: All production tests passing (100%)
-
-**Bugs Fixed During Implementation**:
-- Fixed logging initialization issue in `lib/base/logging.sh` (lib/base/logging.sh:244-283)
-- Updated version validation to require semantic versions (documented need for flexible resolution in item #4)
-
-**Impact**: ✅ COMPLETE - Production deployment now fully supported with examples and documentation
+#### 13. ✅ COMPLETE - Production-Optimized Image Variants
+See git history for details.
 
 ---
 
-#### 13. [CRITICAL] Add Kubernetes Deployment Templates
+#### 14. [CRITICAL] Add Kubernetes Deployment Templates
 **Source**: Production Readiness Analysis (Nov 2025)
 **Priority**: P0 (Critical for enterprise deployment)
 **Effort**: 3-4 days
@@ -553,7 +308,7 @@ Instead of creating separate Dockerfiles (which would violate the universal Dock
 
 ---
 
-#### 14. [CRITICAL] Implement Observability Integration
+#### 15. [CRITICAL] Implement Observability Integration
 **Source**: Production Readiness Analysis (Nov 2025)
 **Priority**: P0 (Critical for production operations)
 **Effort**: 4-5 days
@@ -603,111 +358,12 @@ Instead of creating separate Dockerfiles (which would violate the universal Dock
 
 ---
 
-#### 15. [HIGH] ✅ COMPLETE - Add Configuration Validation Framework
-**Source**: Production Readiness Analysis (Nov 2025)
-**Priority**: P1 (High)
-**Effort**: 2 days
-**Status**: ✅ COMPLETE (Nov 2025)
-**Completed**: November 2025
-
-**What Was Delivered (November 2025)**:
-
-✅ **Complete Configuration Validation Framework**:
-Created comprehensive runtime configuration validation system with opt-in activation, validation functions, secret detection, and custom validation rules support.
-
-**Files Created**:
-- `lib/runtime/validate-config.sh` (447 lines) - Complete validation framework
-  * `cv_require_var()` - Validate required environment variables
-  * `cv_validate_url()` - Validate URL format with optional scheme checking (http, https, postgresql, redis, etc.)
-  * `cv_validate_port()` - Validate port numbers (1-65535)
-  * `cv_validate_email()` - Validate email format
-  * `cv_validate_boolean()` - Validate boolean values (true/false/yes/no/1/0)
-  * `cv_validate_path()` - Validate file/directory paths (with optional existence check)
-  * `cv_detect_secrets()` - Detect potential plaintext secrets in environment variables
-  * `cv_load_custom_rules()` - Load custom validation rules from external files
-  * `validate_configuration()` - Main entry point
-  * Colored output with error/warning/success indicators
-  * Error and warning counters with summary reporting
-  * Strict mode support (treat warnings as errors)
-  * Quiet mode support (suppress informational messages)
-
-**Integration Complete**:
-- `lib/runtime/entrypoint.sh` (lines 29-40) - Validation runs before startup
-  * Sources validate-config.sh if present
-  * Calls validate_configuration() and aborts on failure
-  * Only runs if VALIDATE_CONFIG=true (opt-in)
-
-**Examples Created**:
-- `examples/validation/README.md` (334 lines) - Comprehensive documentation
-  * Usage instructions and configuration options
-  * Environment variable reference
-  * Complete examples for web apps, API services, and workers
-  * Best practices and security considerations
-- `examples/validation/web-app-validation.sh` (162 lines) - Web app validation rules
-  * Database URL validation (PostgreSQL)
-  * Redis URL validation
-  * Port validation (3000, 9090)
-  * Secret detection (SECRET_KEY, JWT_SECRET, SESSION_SECRET)
-  * Email validation (ADMIN_EMAIL)
-- `examples/validation/api-service-validation.sh` (210 lines) - API service validation rules
-  * Multiple database support (PostgreSQL + Redis)
-  * JWT secret validation
-  * Rate limiting configuration
-  * CORS origin validation
-  * External service integration (Stripe, SendGrid)
-- `examples/validation/worker-validation.sh` (169 lines) - Worker validation rules
-  * Queue configuration (Redis URL, concurrency, priorities)
-  * Job timeout and retry configuration
-  * Resource limits validation
-  * Storage configuration (local + S3 optional)
-- `examples/validation/docker-compose.web-app.yml` - Web app Docker Compose example
-- `examples/validation/docker-compose.api-service.yml` - API service Docker Compose example with strict mode
-- `examples/validation/docker-compose.worker.yml` - Background worker Docker Compose example
-
-**Testing Complete**:
-- `tests/unit/runtime/validate-config.sh` (529 lines) - Comprehensive unit tests
-  * 35 tests covering all validation functions
-  * 100% pass rate (35/35 passing)
-  * Tests for required variables (set, empty, unset)
-  * Tests for URL validation (HTTP, HTTPS, PostgreSQL, Redis, invalid formats)
-  * Tests for port validation (valid, min, max, zero, too high, non-numeric)
-  * Tests for email validation (valid, subdomain, invalid formats)
-  * Tests for boolean validation (true/false/yes/no/1/0, invalid)
-  * Tests for path validation (absolute, relative, existence, directory)
-  * Tests for secret detection (short placeholder, long plaintext, reference, file path, non-secret)
-  * Proper setup/teardown to reset state between tests
-  * All shellcheck warnings fixed
-
-**Configuration Options**:
-- `VALIDATE_CONFIG` - Enable validation (true/false, default: false) - opt-in activation
-- `VALIDATE_CONFIG_STRICT` - Fail on warnings (true/false, default: false)
-- `VALIDATE_CONFIG_RULES` - Path to custom validation rules file
-- `VALIDATE_CONFIG_QUIET` - Suppress informational messages (true/false, default: false)
-
-**Key Features**:
-- ✅ Required environment variable validation with clear error messages
-- ✅ Format validation (URLs, paths, ports, emails, booleans)
-- ✅ Secret detection with warnings for plaintext passwords/keys
-- ✅ Custom validation rules support via external files
-- ✅ Clear error messages with remediation hints
-- ✅ Colored output for better readability
-- ✅ Error and warning counters with summary
-- ✅ Strict mode (treat warnings as errors)
-- ✅ Opt-in activation (VALIDATE_CONFIG=true required)
-- ✅ Graceful handling of missing validation rules
-- ✅ Support for custom validation functions via cv_custom_validations()
-
-**Validation Results**:
-- ✅ All 721 unit tests passing (720 passed, 1 skipped, 0 failed)
-- ✅ All shellcheck warnings fixed (7 warnings resolved)
-- ✅ 100% pass rate on validation framework tests (35/35)
-- ✅ Pre-commit hooks passing
-
-**Impact**: ✅ COMPLETE - Prevents misconfiguration issues in production with comprehensive validation framework. Users can now validate environment variables, detect secrets, and ensure proper configuration before containers start.
+#### 16. ✅ COMPLETE - Configuration Validation Framework
+See git history for details.
 
 ---
 
-#### 16. [HIGH] Enhance Secret Management Integrations
+#### 17. [HIGH] Enhance Secret Management Integrations
 **Source**: Production Readiness Analysis (Nov 2025)
 **Priority**: P1 (High)
 **Effort**: 3 days
@@ -746,7 +402,7 @@ fi
 
 ---
 
-#### 17. [HIGH] Create CI/CD Pipeline Templates
+#### 18. [HIGH] Create CI/CD Pipeline Templates
 **Source**: Production Readiness Analysis (Nov 2025)
 **Priority**: P1 (High)
 **Effort**: 2-3 days
@@ -784,7 +440,7 @@ fi
 
 ---
 
-#### 18. [MEDIUM] Add Operational Runbooks
+#### 19. [MEDIUM] Add Operational Runbooks
 **Source**: Production Readiness Analysis (Nov 2025)
 **Priority**: P2 (Medium)
 **Effort**: 3 days
@@ -818,7 +474,7 @@ fi
 
 ---
 
-#### 19. [MEDIUM] Performance Optimization Guide
+#### 20. [MEDIUM] Performance Optimization Guide
 **Source**: Production Readiness Analysis (Nov 2025)
 **Priority**: P2 (Medium)
 **Effort**: 2 days
@@ -842,374 +498,28 @@ fi
 
 ### Architecture & Code Organization
 
-#### 20. [MEDIUM] ✅ COMPLETE - Extract cache-utils.sh Shared Utility (November 2025)
-**Status**: ✅ COMPLETE
-**Completed**: November 2025
-
-**What Was Delivered (November 2025)**:
-✅ **Created lib/base/cache-utils.sh**:
-- `create_language_cache()` - Single cache directory creation
-- `create_language_caches()` - Multiple cache directories at once
-- `create_cache_directories()` - Custom paths support
-- Atomic directory creation with correct ownership (USER_UID:USER_GID)
-- Proper error handling and logging with `cu_` namespace prefix
-
-✅ **Refactored 11 feature scripts**:
-- python.sh, node.sh, golang.sh, java.sh, r.sh, mojo.sh
-- docker.sh, dev-tools.sh, terraform.sh, cloudflare.sh, op-cli.sh
-- Eliminated ~120 lines of duplicated code
-- Replaced with 1-2 line function calls
-
-✅ **Validation**:
-- All shellcheck validations passing
-- Unit tests: 676/677 passing (99% pass rate)
-- Pre-commit hook validated all changes
-
-**Original Issue**: Cache directory creation duplicated across 8+ feature scripts
-- 50+ lines of duplicated code
-- Inconsistent error handling approaches
-- Different permission patterns
-
-**Original duplication** in:
-- python.sh:85-102
-- golang.sh:168-181
-- rust.sh:63-76
-- node.sh (similar)
-- ruby.sh (similar)
-- r.sh (similar)
-- java.sh (similar)
-- mojo.sh (similar)
-
-**Recommendation**:
-```bash
-# Create lib/base/cache-utils.sh
-create_language_cache() {
-    local cache_name="$1"
-    local cache_path="/cache/${cache_name}"
-
-    log_command "Creating ${cache_name} cache directory" \
-        bash -c "install -d -m 0755 -o '${USER_UID}' -g '${USER_GID}' '${cache_path}'"
-
-    echo "$cache_path"
-}
-
-create_multiple_caches() {
-    local -n cache_array=$1
-    for cache_name in "${cache_array[@]}"; do
-        create_language_cache "$cache_name"
-    done
-}
-```
-
-**Impact**: Reduces ~50 lines of duplication, ensures consistency
+#### 21. ✅ COMPLETE - Extract cache-utils.sh
+See git history for details.
 
 ---
 
-#### 21. [MEDIUM] ✅ COMPLETE - Extract path-utils.sh Shared Utility (November 2025)
-**Status**: ✅ COMPLETE
-**Completed**: November 2025
-
-**What Was Delivered (November 2025)**:
-✅ **Created lib/base/path-utils.sh**:
-- `add_to_system_path()` - Safely adds paths to /etc/environment
-- Handles existing PATH reading and merging
-- Prevents duplicate path entries
-- Atomic file updates with proper error handling
-- Default system PATH fallback if /etc/environment doesn't exist
-
-✅ **Refactored 3 feature scripts**:
-- python.sh: Replaced 24 lines with 2 lines (adds /opt/pipx/bin)
-- rust.sh: Replaced 24 lines with 2 lines (adds /cache/cargo/bin)
-- ruby.sh: Replaced 24 lines with 2 lines (adds /cache/ruby/gems/bin)
-- Eliminated ~72 lines of duplicated code
-
-✅ **Validation**:
-- All shellcheck validations passing
-- Unit tests: 676/677 passing (99% pass rate)
-- Pre-commit hook validated all changes
-
-**Original Issue**: PATH manipulation duplicated across 5+ feature scripts
-- ~40 lines of duplicated code
-- Potential for bugs in path handling
-- Inconsistent error handling
-
-**Original duplication** in:
-- python.sh:315-333
-- rust.sh:246-264
-- golang.sh (similar)
-- node.sh (similar)
-- ruby.sh (similar)
-
-**Recommendation**:
-```bash
-# Create lib/base/path-utils.sh
-add_to_system_path() {
-    local new_path="$1"
-    local environment_file="/etc/environment"
-
-    # Read existing PATH
-    if [ -f "$environment_file" ] && grep -q "^PATH=" "$environment_file"; then
-        local existing_path
-        existing_path=$(grep "^PATH=" "$environment_file" | cut -d'"' -f2)
-        grep -v "^PATH=" "$environment_file" > "${environment_file}.tmp"
-        mv "${environment_file}.tmp" "$environment_file"
-    else
-        local existing_path="/usr/local/bin:/usr/bin:/bin"
-    fi
-
-    # Add new path if not present
-    if [[ ":$existing_path:" != *":$new_path:"* ]]; then
-        existing_path="${existing_path}:${new_path}"
-    fi
-
-    echo "PATH=\"$existing_path\"" >> "$environment_file"
-}
-```
-
-**Impact**: Reduces ~40 lines of duplication, standardizes PATH management
+#### 22. ✅ COMPLETE - Extract path-utils.sh
+See git history for details.
 
 ---
 
-#### 22. [REMOVED] Split dev-tools.sh into Sub-Features
+#### 23. [REMOVED] Split dev-tools.sh into Sub-Features
 **Status**: ❌ REMOVED (November 2025)
 **Reason**: Over-engineered. No practical use case for granular dev-tools selection. The all-or-nothing approach works well - developers who want dev tools typically want the full suite. Adding 4-5 build args and splitting into multiple files creates unnecessary complexity without clear value.
 
 ---
 
-#### 23. [MEDIUM] ✅ COMPLETE - Extract Project Templates from Functions (All Languages)
-**Source**: Architecture Analysis (Nov 2025)
-**Priority**: P1 (Code organization)
-**Effort**: 1-2 days
-**Status**: ✅ COMPLETE for all languages: Go, Node.js, R, Rust, Mojo, Java, and Ruby (November 2025)
-**Completed**: November 2025
-
-**What Was Delivered (November 2025)**:
-
-✅ **Complete Go Template Extraction**:
-Extracted all heredoc templates from `go-init` function into separate template files with loader function.
-
-**Files Created (Go)**:
-- `lib/features/templates/go/common/gitignore.tmpl` - Go .gitignore template
-- `lib/features/templates/go/common/Makefile.tmpl` - Go Makefile template
-- `lib/features/templates/go/cli/main.go.tmpl` - CLI project template
-- `lib/features/templates/go/api/main.go.tmpl` - API project template
-- `lib/features/templates/go/lib/lib.go.tmpl` - Library package template
-- `lib/features/templates/go/lib/lib_test.go.tmpl` - Library test template
-- `tests/unit/test_go_templates.sh` - Comprehensive unit tests (23 tests, 100% pass)
-
-**Integration Complete (Go)**:
-- Created `load_go_template()` function in `lib/features/golang.sh` (lines 275-303)
-- Replaced 6 heredocs with template loader calls
-- Reduced `golang.sh` from 682 to 587 lines (95 line reduction)
-- Uses `__PROJECT__` placeholder with sed substitution
-- Function renamed: `go-new` → `go-init` (standardized naming)
-- All tests passing (23/23 unit tests)
-
-✅ **Complete Node.js Template Extraction**:
-Extracted all heredoc templates from `node-init` function into separate template files with loader function.
-
-**Files Created (Node.js)**:
-- `lib/features/templates/node/common/gitignore.tmpl` - Node.js .gitignore template
-- `lib/features/templates/node/config/tsconfig.json.tmpl` - TypeScript configuration
-- `lib/features/templates/node/config/jest.config.js.tmpl` - Jest test configuration
-- `lib/features/templates/node/config/eslintrc.js.tmpl` - ESLint configuration
-- `lib/features/templates/node/config/prettierrc.tmpl` - Prettier configuration
-- `lib/features/templates/node/config/vite.config.ts.tmpl` - Vite build configuration
-- `lib/features/templates/node/api/index.ts.tmpl` - Express API template
-- `lib/features/templates/node/cli/index.ts.tmpl` - CLI tool template (Commander.js)
-- `lib/features/templates/node/lib/index.ts.tmpl` - Library package template
-- `lib/features/templates/node/test/index.test.ts.tmpl` - Test file template
-- `tests/unit/test_node_templates.sh` - Comprehensive unit tests (39 tests, 100% pass)
-
-**Integration Complete (Node.js)**:
-- Created `load_node_template()` function in both `node-dev.sh` and `node.sh`
-- Replaced 9 heredocs with template loader calls in `node-dev.sh`
-- Replaced 1 heredoc with template loader call in `node.sh`
-- Reduced `node-dev.sh` from 775 to 654 lines (121 line reduction)
-- Uses `__PROJECT_NAME__` placeholder with sed substitution
-- Function renamed: `node-new-project` → `node-init` (standardized naming)
-- All tests passing (39/39 unit tests)
-
-✅ **Naming Convention Standardization**:
-Established `{lang}-init` as the standard pattern for all project scaffolding commands, aligning with industry standards (`npm init`, `cargo init`).
-
-**Standardized Function Names**:
-- `go-init <module-name> [cli|lib|api]` - Create new Go projects
-- `node-init <project-name> [api|cli|lib|web]` - Create new Node.js projects
-
-**Benefits of Standardization**:
-- ✅ Consistent, intuitive naming across all languages
-- ✅ Aligns with industry conventions (npm init, cargo init, pipenv init)
-- ✅ Better tab completion (all `go-*` commands group together)
-- ✅ Clear intent: `{lang}-init` signals project creation
-- ✅ Extensible pattern for future languages (python-init, ruby-init, rust-init)
-
-**Template Loader Implementation Pattern**:
-```bash
-# Same pattern used in both golang.sh and node-dev.sh
-load_{lang}_template() {
-    local template_path="$1"
-    local project_name="${2:-}"
-    local template_file="/tmp/build-scripts/features/templates/{lang}/${template_path}"
-
-    if [ ! -f "$template_file" ]; then
-        echo "Error: Template not found: $template_file" >&2
-        return 1
-    fi
-
-    if [ -n "$project_name" ]; then
-        sed "s/__PLACEHOLDER__/${project_name}/g" "$template_file"
-    else
-        cat "$template_file"
-    fi
-}
-```
-
-✅ **Complete R Template Extraction**:
-Extracted all heredoc templates from `r-new-package` and `r-new-analysis` functions into separate template files with loader function.
-
-**Files Created (R)**:
-- `lib/features/templates/r/analysis/analysis.Rmd.tmpl` - R Markdown analysis template
-- `tests/unit/test_r_templates.sh` - Comprehensive unit tests (13 tests, 100% pass)
-
-**Integration Complete (R)**:
-- Created `load_r_template()` function in `lib/features/r-dev.sh`
-- Replaced 1 heredoc with template loader call
-- Uses `__PROJECT_NAME__` placeholder with sed substitution
-- Functions renamed for consistency:
-  - `r-new-package` → `r-init-package` (standardized naming)
-  - `r-new-analysis` → `r-init-analysis` (standardized naming)
-- All tests passing (13/13 unit tests)
-
-**Standardized Function Names (R)**:
-- `r-init-package <package-name>` - Create new R packages
-- `r-init-analysis <analysis-name>` - Create new R analysis projects
-
-**Benefits of Standardization**:
-- ✅ Consistent with other languages (`go-init`, `node-init`)
-- ✅ Clear intent: `{lang}-init-*` signals project creation
-- ✅ Better tab completion and discoverability
-
-✅ **Complete Rust Template Extraction**:
-Extracted all heredoc templates from `ts-init-grammar` and `just-init` functions into separate template files with loader function.
-
-**Files Created (Rust)**:
-- `lib/features/templates/rust/treesitter/grammar.js.tmpl` - Tree-sitter grammar template
-- `lib/features/templates/rust/just/justfile.tmpl` - Justfile template
-- `tests/unit/test_rust_templates.sh` - Comprehensive unit tests (20 tests, 100% pass)
-
-**Integration Complete (Rust)**:
-- Created `load_rust_template()` function in `lib/features/rust-dev.sh`
-- Replaced 2 heredocs with template loader calls
-- Functions refactored:
-  - `ts-init-grammar` - Tree-sitter grammar initialization
-  - `just-init` - Justfile initialization
-- Uses `__GRAMMAR_NAME__` and `__PROJECT_NAME__` placeholders with sed substitution
-- All tests passing (20/20 unit tests)
-
-**Standardized Function Names (Rust)**:
-- `ts-init-grammar <grammar-name>` - Initialize Tree-sitter grammar projects
-- `just-init <project-name>` - Initialize Just task runner configuration
-
-**Benefits of Standardization**:
-- ✅ Consistent with other languages (`go-init`, `node-init`, `r-init-*`)
-- ✅ Templates separated from shell logic
-- ✅ Better maintainability and testability
-
-✅ **Complete Mojo Template Extraction**:
-Extracted all heredoc templates from `mojo-init` function into separate template files with loader function.
-
-**Files Created (Mojo)**:
-- `lib/features/templates/mojo/project/README.md.tmpl` - Mojo project README template
-- `lib/features/templates/mojo/project/gitignore.tmpl` - Mojo .gitignore template
-- `lib/features/templates/mojo/src/main.mojo.tmpl` - Mojo source file template
-- `lib/features/templates/mojo/tests/test_main.mojo.tmpl` - Mojo test file template
-- `tests/unit/test_mojo_templates.sh` - Comprehensive unit tests (26 tests, 100% pass)
-
-**Integration Complete (Mojo)**:
-- Created `load_mojo_template()` function in `lib/features/mojo.sh`
-- Replaced 4 heredocs with template loader calls
-- Function refactored: `mojo-init` - Initialize Mojo projects
-- Uses `__PROJECT_NAME__` placeholder with sed substitution
-- All tests passing (26/26 unit tests)
-
-**Standardized Function Names (Mojo)**:
-- `mojo-init <project-name>` - Initialize Mojo projects
-
-**Benefits of Standardization**:
-- ✅ Consistent with other languages (`go-init`, `node-init`, `r-init-*`, `ts-init-grammar`, `just-init`)
-- ✅ Templates separated from shell logic
-- ✅ Better maintainability and testability
-
-✅ **Complete Java Template Extraction**:
-Extracted all heredoc templates from `java-benchmark` function and config templates into separate template files with loader functions.
-
-**Files Created (Java)**:
-- `lib/features/templates/java/benchmark/Benchmark.java.tmpl` - Java microbenchmark template
-- `lib/features/templates/java/config/checkstyle.xml.tmpl` - Checkstyle configuration template
-- `lib/features/templates/java/config/pmd-ruleset.xml.tmpl` - PMD ruleset configuration template
-- `lib/features/templates/java/config/spotbugs-exclude.xml.tmpl` - SpotBugs exclusion configuration template
-- `tests/unit/test_java_templates.sh` - Comprehensive unit tests (23 tests, 100% pass)
-
-**Integration Complete (Java)**:
-- Created `load_java_template()` function in `lib/features/java-dev.sh` for benchmark template
-- Created `load_java_config_template()` function in `lib/features/java-dev.sh` for config templates
-- Replaced 1 heredoc in `java-benchmark` function with template loader call
-- Replaced 3 config heredocs with config template loader calls
-- Uses `__CLASS_NAME__` placeholder with sed substitution
-- All tests passing (23/23 unit tests)
-
-**Functions Refactored (Java)**:
-- `java-benchmark <benchmark-name>` - Create JMH benchmark classes
-
-**Benefits of Standardization**:
-- ✅ Consistent with other languages (`go-init`, `node-init`, `r-init-*`, `ts-init-grammar`, `just-init`, `mojo-init`)
-- ✅ Templates separated from shell logic (benchmark + 3 configs)
-- ✅ Better maintainability and testability
-
-✅ **Complete Ruby Template Extraction**:
-Extracted all heredoc templates from Ruby config generation into separate template files with loader function.
-
-**Files Created (Ruby)**:
-- `lib/features/templates/ruby/config/rspec.tmpl` - RSpec test configuration
-- `lib/features/templates/ruby/config/rubocop.yml.tmpl` - Rubocop linter configuration
-- `tests/unit/test_ruby_templates.sh` - Comprehensive unit tests (12 tests, 100% pass)
-
-**Integration Complete (Ruby)**:
-- Created `load_ruby_config_template()` function in `lib/features/ruby-dev.sh`
-- Replaced 2 config heredocs with template loader calls
-- Templates loaded during build time for project scaffolding
-- All tests passing (12/12 unit tests)
-
-**Config Templates (Ruby)**:
-- RSpec configuration (.rspec) - Test framework configuration
-- Rubocop configuration (.rubocop.yml) - Code style and linting rules
-
-**Benefits of Standardization**:
-- ✅ Consistent with other languages (Go, Node.js, R, Rust, Mojo, Java)
-- ✅ Config templates separated from shell logic
-- ✅ Better maintainability and testability
-- ✅ Fixed grep pattern matching issue (using `grep -q --` for patterns starting with `--`)
-
-**Total Line Reduction**: 246+ lines (95 from golang.sh + 121 from node-dev.sh + 30 from ruby-dev.sh + R/Rust/Mojo/Java templates extracted)
-**Total Tests**: 156 passing (23 Go + 39 Node.js + 13 R + 20 Rust + 26 Mojo + 23 Java + 12 Ruby)
-
-**Benefits Achieved**:
-- ✅ Reduced code duplication (246+ lines removed total)
-- ✅ Templates separated from shell logic across all 7 languages
-- ✅ Easier to update and maintain templates
-- ✅ Enables template versioning
-- ✅ Comprehensive test coverage (156 tests)
-- ✅ Consistent naming convention across all languages (Go, Node.js, R, Rust, Mojo, Java, Ruby)
-
-**Remaining Work**:
-None - all languages with template-based scaffolding are complete. Python does not have project scaffolding functions at this time.
-
-**Impact**: ✅ COMPLETE for all 7 languages - Significantly improved maintainability, code organization, and user experience across the entire codebase
+#### 24. ✅ COMPLETE - Extract Project Templates
+See git history for details.
 
 ---
 
-#### 24. [LOW] Implement Feature Manifest System
+#### 25. [LOW] Implement Feature Manifest System
 **Source**: Architecture Analysis (Nov 2025)
 **Priority**: P2 (Long-term architecture)
 **Effort**: 5-7 days
@@ -1250,7 +560,7 @@ tags:
 
 ---
 
-#### 25. [LOW] Standardize Verification Scripts
+#### 26. [LOW] Standardize Verification Scripts
 **Source**: Architecture Analysis (Nov 2025)
 **Priority**: P2 (Consistency)
 **Effort**: 2 days
@@ -1279,7 +589,12 @@ generate_verification_script() {
 
 ### Missing Features
 
-#### 26. [LOW] Missing docker --version and Tool Version Output in Entrypoint
+#### 27. ✅ COMPLETE - Case-Insensitive Filesystem Detection
+See git history for details.
+
+---
+
+#### 28. [LOW] Missing Tool Version Output in Entrypoint
 **Issue**: Users don't get immediate feedback on installed versions
 
 **Recommendation**:
@@ -1292,64 +607,9 @@ generate_verification_script() {
 
 ---
 
-#### 27. [LOW] ✅ COMPLETE - Case-Insensitive Filesystem Issues on macOS/Windows Volume Mounts
-**Source**: User feedback (Nov 2025)
-**Priority**: P3 (Low - quality of life, cross-platform compatibility)
-**Status**: ✅ COMPLETE (Nov 2025)
-**Completed**: November 2025
-
-**What Was Delivered (November 2025)**:
-
-✅ **Complete Documentation, Detection, and Warning System**:
-Implemented comprehensive documentation and automatic detection for case-insensitive filesystem issues when mounting host volumes from macOS/Windows.
-
-**Files Created**:
-- `docs/troubleshooting/case-sensitive-filesystems.md` (500+ lines) - Comprehensive troubleshooting guide
-  * Problem description and common symptoms
-  * Platform-specific detection and solutions
-  * macOS: Case-sensitive APFS volume creation guide
-  * Windows: WSL2 filesystem recommendations
-  * Docker volume alternatives
-  * Prevention strategies and best practices
-  * Testing procedures and FAQ
-- `bin/detect-case-sensitivity.sh` (156 lines) - Detection utility script
-  * Automatic detection of case-sensitive vs case-insensitive filesystems
-  * Exit codes: 0 (case-sensitive), 1 (case-insensitive), 2 (error)
-  * Quiet mode support for programmatic use
-  * Detailed recommendations in output
-  * Proper cleanup with trap handlers
-- `tests/unit/bin/test_detect-case-sensitivity.sh` (272 lines) - Comprehensive unit tests
-  * 15 tests covering all detection scenarios (100% pass rate)
-  * Tests for valid/invalid directories, cleanup, edge cases
-  * Verified with shellcheck (no warnings)
-
-**Integration Complete**:
-- `lib/runtime/entrypoint.sh` (lines 42-80) - Automatic detection on container startup
-  * Runs detection for /workspace on every container start
-  * Displays clear warning when case-insensitive filesystem detected
-  * Provides actionable recommendations
-  * Opt-out via `SKIP_CASE_CHECK=true`
-  * Non-blocking (warning only, doesn't prevent startup)
-- `Dockerfile` (lines 386-388) - Installation of detection utility
-  * Copies detect-case-sensitivity.sh to /usr/local/bin
-  * Makes it globally available in containers
-- `CLAUDE.md` (lines 176-197) - Cross-platform development section
-  * Common issues documented
-  * Solutions for macOS, Windows, all platforms
-  * Instructions to disable check
-
-**Testing Complete**:
-- ✅ All 15 unit tests passing (100% pass rate)
-- ✅ All shellcheck warnings resolved
-- ✅ Uses `command find` for alias safety (consistent with codebase patterns)
-
-**Impact**: ✅ COMPLETE - Significantly improves cross-platform developer experience by detecting and warning about case-insensitive filesystems with clear, actionable recommendations. Users can now identify this common source of confusion immediately on container startup.
-
----
-
 ### Anti-Patterns & Code Smells
 
-#### 28. [MEDIUM] Sed Usage in Parsing Without Proper Escaping
+#### 29. [MEDIUM] Sed Usage in Parsing Without Proper Escaping
 **File**: `/workspace/containers/lib/features/lib/checksum-fetch.sh`
 
 **Issue**: Parsing HTML with sed is brittle:
@@ -1368,7 +628,7 @@ sed 's/>Ruby //; s/<//'
 
 ---
 
-#### 29. [LOW] Feature Scripts Use Different Logging Approaches
+#### 30. [LOW] Feature Scripts Use Different Logging Approaches
 **Issue**: Some variations in logging detail level across features
 
 **Impact**:
@@ -1384,7 +644,7 @@ sed 's/>Ruby //; s/<//'
 
 ---
 
-#### 30. [LOW] Version Validation Spread Across Multiple Files
+#### 31. [LOW] Version Validation Spread Across Multiple Files
 **Files**:
 - `version-validation.sh`
 - `checksum-fetch.sh`
@@ -1404,7 +664,12 @@ sed 's/>Ruby //; s/<//'
 
 ### Testing Gaps
 
-#### 31. [MEDIUM] Integration Tests Don't Cover All Feature Combinations
+#### 32. ✅ COMPLETE - Pre-Push Git Hook
+See git history for details.
+
+---
+
+#### 33. [MEDIUM] Integration Tests Don't Cover All Feature Combinations
 **Issue**: Only 6-7 test variants but 28+ features
 
 **Gap**:
@@ -1433,196 +698,28 @@ sed 's/>Ruby //; s/<//'
 
 ---
 
-#### 32. [HIGH] ✅ COMPLETE - Add Pre-Push Git Hook for Validation (Shellcheck + Unit Tests)
-**Source**: Production examples development experience (Nov 2025)
-**Priority**: P1 (High - prevents CI failures and speeds up development)
-**Effort**: 1 day
-**Status**: ✅ COMPLETE (November 2025)
-**Completed**: November 2025
-
-**What Was Delivered (November 2025)**:
-
-✅ **Complete Pre-Push Hook System**:
-Created comprehensive pre-push validation hook that runs both shellcheck and unit tests before allowing push, catching issues locally before CI.
-
-**Files Created**:
-- `.githooks/pre-push` - Pre-push validation hook (shellcheck + unit tests)
-- Enhanced `bin/setup-dev-environment.sh` with hook verification and setup
-- Created `tests/unit/bin/setup-dev-environment.sh` - 19 unit tests (100% pass)
-
-**Integration Complete**:
-- Pre-push hook validates ALL 153 shell scripts (respects .gitignore)
-- Runs full unit test suite before push (686 tests, 99% pass rate)
-- Updated `.devcontainer/devcontainer.json` to run setup-git-ssh.sh on startup
-- Aligned `.github/workflows/ci.yml` with pre-push hook validation scope
-- Fixed 100+ shellcheck warnings across codebase to achieve compliance
-
-**Validation Results**:
-- ✅ All 153 shell scripts pass shellcheck (warning severity level)
-- ✅ All 686 unit tests pass (685 passed, 0 failed, 1 skipped)
-- ✅ Pre-push hook passes successfully
-- ✅ Can be bypassed with `git push --no-verify` for emergencies
-
-**Benefits Achieved**:
-- ✅ Catches shellcheck and test failures locally before push (fast feedback)
-- ✅ Reduces CI failures and wasted CI time significantly
-- ✅ Better developer experience with immediate feedback
-- ✅ Complements existing pre-commit hook for defense in depth
-
-**Impact**: ✅ COMPLETE - Significantly improves developer experience and reduces CI costs by catching issues locally before push.
-
-**Previous Issue**: Validation errors currently only caught in CI
-- Developers push code with shellcheck violations and test failures
-- CI catches them one at a time (slow feedback loop)
-- Requires multiple push cycles to fix all issues
-- Wastes CI resources and developer time
-- Recent example: Multiple shellcheck issues found during production examples work
-
-**Previous State**:
-- ✅ Pre-commit hook exists (runs shellcheck on staged files)
-- ❌ No pre-push hook (allows pushing code that fails CI)
-- ❌ Developers can bypass pre-commit hook with `--no-verify`
-- ❌ Unit tests not run locally before push
-- Result: Shellcheck and test failures still reach CI regularly
-
-**Recommended Solution**:
-
-Create `.git/hooks/pre-push` hook that runs shellcheck AND unit tests before push:
-
-```bash
-#!/usr/bin/env bash
-# Pre-push hook: Run validation checks before push
-set -euo pipefail
-
-echo "=== Running pre-push validation ==="
-echo ""
-
-# Track overall failure status
-overall_failed=0
-
-# 1. Run shellcheck on all shell scripts
-echo "1. Running shellcheck on all shell scripts..."
-shell_files=$(find . -type f \( -name "*.sh" -o -name "*.bash" \) \
-  ! -path "./.git/*" \
-  ! -path "*/node_modules/*" \
-  ! -path "*/vendor/*")
-
-shellcheck_failed=0
-for file in $shell_files; do
-  if ! shellcheck "$file" > /dev/null 2>&1; then
-    if [ $shellcheck_failed -eq 0 ]; then
-      echo "❌ Shellcheck failures:"
-    fi
-    shellcheck "$file"
-    shellcheck_failed=1
-  fi
-done
-
-if [ $shellcheck_failed -eq 0 ]; then
-  echo "✅ All shell scripts passed shellcheck"
-else
-  overall_failed=1
-fi
-echo ""
-
-# 2. Run unit tests (fast, no Docker required)
-echo "2. Running unit tests..."
-if ./tests/run_unit_tests.sh; then
-  echo "✅ All unit tests passed"
-else
-  echo "❌ Unit tests failed"
-  overall_failed=1
-fi
-echo ""
-
-# Final result
-if [ $overall_failed -eq 1 ]; then
-  echo "❌ Pre-push validation FAILED!"
-  echo "Fix issues above or use 'git push --no-verify' to skip"
-  exit 1
-fi
-
-echo "✅ Pre-push validation PASSED!"
-echo "All checks successful - proceeding with push"
-```
-
-**Implementation Steps**:
-
-1. Create `bin/install-git-hooks.sh` script that:
-   - Installs pre-push hook
-   - Also ensures pre-commit hook is installed
-   - Can be run by developers: `./bin/install-git-hooks.sh`
-   - Runs automatically in CI setup
-
-2. Add to `.githooks/pre-push` template (tracked in repo)
-
-3. Update documentation:
-   - Add to CONTRIBUTING.md: "Run `./bin/install-git-hooks.sh` after clone"
-   - Add to README.md setup instructions
-   - Document `--no-verify` escape hatch for emergencies
-
-4. Add CI check that verifies hooks are installed:
-   ```bash
-   # In CI, verify hooks would have caught issues
-   ./bin/install-git-hooks.sh
-   ```
-
-**Benefits**:
-- ✅ Catches shellcheck issues before push (fast local feedback)
-- ✅ Catches unit test failures before push (no Docker required)
-- ✅ Reduces CI failures and wasted CI time significantly
-- ✅ Fewer commit cycles to fix issues
-- ✅ Better developer experience
-- ✅ Unit tests are fast (~seconds, no build required)
-- ✅ Still allows `--no-verify` for emergencies
-- ✅ Complements existing pre-commit hook
-
-**Comparison with Pre-Commit Hook**:
-
-| Hook | When It Runs | What It Checks | Can Bypass |
-|------|--------------|----------------|------------|
-| pre-commit | Before commit | Staged files only (shellcheck) | `--no-verify` |
-| pre-push | Before push | All shell scripts + unit tests | `--no-verify` |
-
-**Why Both Are Needed**:
-- Pre-commit: Fast feedback on current changes (shellcheck staged files only)
-- Pre-push: Comprehensive validation before sharing with team/CI (all shell scripts + unit tests)
-- Defense in depth: Two chances to catch issues
-- Unit tests in pre-push: Fast enough (~seconds) but comprehensive enough to catch regressions
-
-**Files to Create/Modify**:
-- Create: `bin/install-git-hooks.sh`
-- Create: `.githooks/pre-push`
-- Modify: `README.md` (add setup step)
-- Create: `docs/development/git-hooks.md` (documentation)
-- Modify: `.github/workflows/*.yml` (run install script in CI)
-
-**Priority**: HIGH - Directly improves developer experience and reduces CI costs
-
----
-
 ## Summary
 
-**Total Remaining**: 29 items (updated November 2025)
+**Total Remaining**: 21 items
 
 **By Priority**:
-- CRITICAL: 2 items (Production deployment blockers)
-- HIGH: 2 items (Enterprise features) - Items #2, #3, #4, #15 complete
-- MEDIUM: 15 items (Code quality, architecture, operations)
-- LOW: 11 items (Nice-to-have enhancements) - Item #27 complete
+- CRITICAL: 2 items (Kubernetes deployment, observability)
+- HIGH: 2 items (Secret management, CI/CD templates)
+- MEDIUM: 11 items (Security hardening, architecture, operations)
+- LOW: 6 items (Nice-to-have enhancements)
 
 **By Category**:
-- Security Concerns: 10 items (0 CRITICAL, 2 HIGH, 5 MEDIUM, 3 LOW) - Items #2, #3 complete
-- Production Readiness: 6 items (2 CRITICAL, 3 HIGH, 1 MEDIUM) - Items #12, #15 COMPLETE
-- Architecture & Code Organization: 6 items (5 MEDIUM, 1 LOW)
-- Anti-Patterns & Code Smells: 3 items (1 MEDIUM, 2 LOW)
-- Testing Gaps: 2 items (1 HIGH, 1 MEDIUM)
-- Missing Features: 0 items - Item #27 COMPLETE
+- Security Concerns: 7 items (0 CRITICAL, 0 HIGH, 5 MEDIUM, 2 LOW)
+- Production Readiness: 5 items (2 CRITICAL, 2 HIGH, 1 MEDIUM, 0 LOW)
+- Architecture & Code Organization: 2 items (0 CRITICAL, 0 HIGH, 0 MEDIUM, 2 LOW)
+- Anti-Patterns & Code Smells: 3 items (0 CRITICAL, 0 HIGH, 1 MEDIUM, 2 LOW)
+- Testing Gaps: 1 item (0 CRITICAL, 0 HIGH, 1 MEDIUM, 0 LOW)
+- Missing Features: 1 item (0 CRITICAL, 0 HIGH, 0 MEDIUM, 1 LOW)
 
 **Overall Assessment**:
 The codebase has **excellent fundamentals** (Security: 7.5/10, Architecture: 8.5/10, Developer Experience: 9/10) but needs **production-grade enhancements** for enterprise deployment (Production Readiness: 6/10).
 
-**Critical gaps**: Production-optimized images, Kubernetes templates, and observability integration (metrics, logging, tracing).
+**Critical gaps**: Kubernetes templates and observability integration (metrics, logging, tracing).
 
 **Key strengths**: Strong security posture, well-architected codebase, comprehensive testing framework, excellent documentation.
 
@@ -1631,36 +728,27 @@ The codebase has **excellent fundamentals** (Security: 7.5/10, Architecture: 8.5
 ## Next Steps
 
 ### Immediate Actions (P0 - Critical, 1-2 weeks)
-1. **[CRITICAL]** Create production-optimized image variants (item #12)
-2. **[CRITICAL]** Add Kubernetes deployment templates (item #13)
-3. **[CRITICAL]** Implement observability integration (item #14)
+1. **[CRITICAL]** Add Kubernetes deployment templates (item #14)
+2. **[CRITICAL]** Implement observability integration (item #15)
 
 ### Short-Term Actions (P1 - High Priority, 1 month)
-4. **[HIGH]** Complete GPG verification and pinned checksums (item #1 - infrastructure complete, need checksums.json population)
-5. **[HIGH]** ~~Change passwordless sudo default to false (item #2)~~ ✅ COMPLETE
-6. **[HIGH]** ~~Remove Docker socket auto-fix script (item #3)~~ ✅ COMPLETE
-7. **[HIGH]** ~~Add configuration validation framework (item #15)~~ ✅ COMPLETE
-8. **[HIGH]** Enhance secret management integrations (item #16)
-9. **[HIGH]** Create CI/CD pipeline templates (item #17)
-10. **[MEDIUM]** ~~Extract cache-utils.sh shared utility (item #20)~~ ✅ COMPLETE
-11. **[MEDIUM]** ~~Extract path-utils.sh shared utility (item #21)~~ ✅ COMPLETE
+3. **[HIGH]** Enhance secret management integrations (item #17)
+4. **[HIGH]** Create CI/CD pipeline templates (item #18)
 
 ### Medium-Term Actions (P2 - 2-3 months)
-12. **[MEDIUM]** Expand GPG verification to remaining tools (item #5)
-13. **[MEDIUM]** Fix command injection vectors in apt-utils.sh (item #6)
-14. **[MEDIUM]** Validate PATH additions before modification (item #6)
-15. **[MEDIUM]** Improve kubectl completion validation (item #7)
-16. **[MEDIUM]** Split dev-tools.sh into sub-features (item #22)
-17. **[MEDIUM]** Extract project templates from functions (item #23)
-18. **[MEDIUM]** Add operational runbooks (item #18)
-19. **[MEDIUM]** Performance optimization guide (item #19)
-20. **[MEDIUM]** Integration test coverage for feature combinations (item #30)
+5. **[MEDIUM]** Expand GPG verification to remaining tools (item #5)
+6. **[MEDIUM]** Fix command injection vectors in apt-utils.sh (item #6)
+7. **[MEDIUM]** Validate PATH additions before modification (item #7)
+8. **[MEDIUM]** Improve kubectl completion validation (item #8)
+9. **[MEDIUM]** Add operational runbooks (item #19)
+10. **[MEDIUM]** Performance optimization guide (item #20)
+11. **[MEDIUM]** Integration test coverage for feature combinations (item #33)
 
 ### Long-Term Enhancements (P3 - Future)
-21. All remaining LOW priority items (items #10, #11, #24, #25, #26, #27, #28, #29)
+12. All remaining LOW priority items (items #11, #12, #25, #26, #28, #29, #30, #31)
 
 **Focus Areas**:
-- **Week 1-2**: Security (pin checksums, sudo default, GPG verification)
-- **Week 3-4**: Production deployment (images, K8s templates, observability)
-- **Month 2**: Enterprise features (config validation, secrets, CI/CD)
-- **Month 3**: Code quality (extract utilities, split large scripts)
+- **Week 1-2**: Production deployment (K8s templates, observability)
+- **Week 3-4**: Enterprise features (secrets, CI/CD)
+- **Month 2**: Security hardening (PATH validation, completion validation, GPG expansion)
+- **Month 3**: Code quality & testing (architecture improvements, test coverage)
