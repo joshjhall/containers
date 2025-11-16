@@ -12,7 +12,7 @@
   "initializeCommand": "bash -c './bin/setup-docker-socket.sh'",
 
   // Auto-configure git hooks, development environment, and SSH keys after container starts
-  "postStartCommand": "bash -c './bin/setup-dev-environment.sh && ./bin/setup-git-ssh.sh'",
+  "postStartCommand": "bash -c './bin/setup-dev-environment.sh && ./.devcontainer/setup-git-ssh.sh'",
 
   "customizations": {
     "vscode": {

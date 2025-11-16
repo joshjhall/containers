@@ -21,6 +21,8 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ..:/workspace/containers
+    group_add:
+      - ${DOCKER_GID:-999}
     environment:
       - TZ=${TZ:-America/Chicago}
       - ENVIRONMENT=${ENVIRONMENT:-development}

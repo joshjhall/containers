@@ -141,11 +141,8 @@ set -euo pipefail
 #    - Disk space checks before operations
 
 readonly SCRIPT_VERSION="3.5.2"
-# Split declare and assign to avoid masking return values
-readonly SCRIPT_DIR
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-readonly SCRIPT_NAME
-SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
+readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
 
 
 # Network and retry configuration
@@ -153,9 +150,7 @@ readonly MAX_RETRIES=3
 readonly RETRY_DELAY=2
 readonly NETWORK_TIMEOUT=15  # Reduced from 30s for better UX
 readonly HEALTH_CHECK_TIMEOUT=5  # Timeout for individual health checks
-# shellcheck disable=SC2034  # Reserved for future use
 readonly OP_RATE_LIMIT_DELAY=0.5  # Delay between 1Password API calls
-# shellcheck disable=SC2034  # Reserved for future use
 readonly OP_MAX_CONCURRENT=1  # Maximum concurrent 1Password operations
 
 # SSH and security constants
@@ -201,15 +196,14 @@ log() {
     local level=$1
     shift
     local message="$*"
-    local timestamp
-    timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
     local level_str=""
 
     case $level in
-        "$LOG_ERROR") level_str="ERROR" ;;
-        "$LOG_WARN")  level_str="WARN " ;;
-        "$LOG_INFO")  level_str="INFO " ;;
-        "$LOG_DEBUG") level_str="DEBUG" ;;
+        $LOG_ERROR) level_str="ERROR" ;;
+        $LOG_WARN)  level_str="WARN " ;;
+        $LOG_INFO)  level_str="INFO " ;;
+        $LOG_DEBUG) level_str="DEBUG" ;;
     esac
 
     # Early logging to stderr only
@@ -229,8 +223,7 @@ readonly LOG_DIR="${TMPDIR:-/tmp}/post-create-logs-$$"
 # Check disk space before creating log directory
 check_disk_space() {
     local path="${1:-/tmp}"
-    local available
-    available=$(df -k "$path" 2>/dev/null | awk 'NR==2 {print $4}' || echo "0")
+    local available=$(df -k "$path" 2>/dev/null | awk 'NR==2 {print $4}' || echo "0")
     if [ "$available" -lt $((MIN_DISK_SPACE / 1024)) ]; then
         log_error "Insufficient disk space in $path (need ${MIN_DISK_SPACE} bytes)"
         return 1
@@ -245,8 +238,7 @@ fi
 
 mkdir -p "$LOG_DIR"
 chmod 700 "$LOG_DIR"
-readonly LOG_FILE
-LOG_FILE="$LOG_DIR/post-create-$(date +%Y%m%d-%H%M%S).log"
+readonly LOG_FILE="$LOG_DIR/post-create-$(date +%Y%m%d-%H%M%S).log"
 readonly MAX_LOG_SIZE=$((1024 * 1024))  # 1MB max log size
 
 # Initialize log file with restricted permissions
@@ -265,9 +257,9 @@ get_file_size() {
 
 # Log rotation function
 rotate_log_if_needed() {
-    if [ -f "$LOG_FILE" ] && [ "$(get_file_size "$LOG_FILE")" -gt "$MAX_LOG_SIZE" ]; then
+    if [ -f "$LOG_FILE" ] && [ $(get_file_size "$LOG_FILE") -gt $MAX_LOG_SIZE ]; then
         local rotated_log="${LOG_FILE}.1"
-        command mv "$LOG_FILE" "$rotated_log"
+        mv "$LOG_FILE" "$rotated_log"
         gzip "$rotated_log" 2>/dev/null || true
         touch "$LOG_FILE"
         chmod 600 "$LOG_FILE"
@@ -313,8 +305,7 @@ detect_platform() {
         *)          echo "unknown" ;;
     esac
 }
-readonly PLATFORM
-PLATFORM=$(detect_platform)
+readonly PLATFORM=$(detect_platform)
 
 # Security settings
 umask 077  # Restrictive file permissions
@@ -390,9 +381,9 @@ cleanup_on_exit() {
         if [ -f "$file" ]; then
             # Use shred if available for sensitive files
             if command -v shred >/dev/null 2>&1; then
-                shred -vfzu "$file" 2>/dev/null || command rm -f "$file"
+                shred -vfzu "$file" 2>/dev/null || rm -f "$file"
             else
-                command rm -f "$file"
+                rm -f "$file"
             fi
         fi
     done
@@ -400,7 +391,7 @@ cleanup_on_exit() {
     # Remove all registered directories
     for dir in "${CLEANUP_DIRS[@]}"; do
         if [ -d "$dir" ]; then
-            command rm -rf "$dir"
+            rm -rf "$dir"
         fi
     done
 
@@ -448,8 +439,7 @@ fi
 audit_log() {
     local event="$1"
     local details="$2"
-    local timestamp
-    timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
     local caller="${3:-${FUNCNAME[2]:-unknown}}"
 
     # Log to both regular log and audit trail
@@ -465,8 +455,7 @@ audit_log() {
 check_rate_limit() {
     local operation="$1"
     local max_calls="${2:-10}"
-    local current_time
-    current_time=$(date +%s)
+    local current_time=$(date +%s)
 
     # Initialize if needed
     if [ -z "${RATE_LIMIT_WINDOWS[$operation]:-}" ]; then
@@ -509,9 +498,7 @@ secure_clear_var() {
 
     # Overwrite with random data multiple times
     for i in {1..3}; do
-        local random_data
-        random_data=$(printf '%*s' "$var_len" "" | tr ' ' 'X')
-        printf -v "$var_name" '%s' "$random_data"
+        printf -v "$var_name" '%*s' "$var_len" | tr ' ' 'X'
     done
 
     # Finally unset
@@ -523,25 +510,24 @@ log() {
     local level=$1
     shift
     local message="$*"
-    local timestamp
-    timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
     local level_str_plain=""
     local level_str_color=""
 
     case $level in
-        "$LOG_ERROR")
+        $LOG_ERROR)
             level_str_plain="ERROR"
             level_str_color="${COLOR_RED}ERROR${COLOR_RESET}"
             ;;
-        "$LOG_WARN")
+        $LOG_WARN)
             level_str_plain="WARN "
             level_str_color="${COLOR_YELLOW}WARN ${COLOR_RESET}"
             ;;
-        "$LOG_INFO")
+        $LOG_INFO)
             level_str_plain="INFO "
             level_str_color="${COLOR_GREEN}INFO ${COLOR_RESET}"
             ;;
-        "$LOG_DEBUG")
+        $LOG_DEBUG)
             level_str_plain="DEBUG"
             level_str_color="${COLOR_BLUE}DEBUG${COLOR_RESET}"
             ;;
@@ -638,7 +624,7 @@ signal_handler() {
 cleanup() {
     # Remove any temporary files
     if [ -n "${TEMP_DIR:-}" ] && [ -d "$TEMP_DIR" ]; then
-        command rm -rf "$TEMP_DIR"
+        rm -rf "$TEMP_DIR"
     fi
 
     # Clear sensitive variables
@@ -678,8 +664,7 @@ cleanup_on_error() {
 # Acquire exclusive lock
 acquire_lock() {
     local lock_acquired=false
-    local lock_start
-    lock_start=$(date +%s)
+    local lock_start=$(date +%s)
     local retry_count=0
     local max_lock_retries=$((LOCK_TIMEOUT / LOCK_RETRY_DIVISOR))  # Maximum retries based on timeout
 
@@ -692,26 +677,24 @@ acquire_lock() {
 
             # Check if lock is stale
             if [ -f "$LOCK_FILE" ]; then
-                local lock_pid
-                lock_pid=$(command cat "$LOCK_FILE" 2>/dev/null || echo "0")
+                local lock_pid=$(cat "$LOCK_FILE" 2>/dev/null || echo "0")
 
                 # Validate PID format
                 if [[ ! "$lock_pid" =~ ^[0-9]+$ ]]; then
                     log_warn "Invalid PID in lock file, removing"
-                    command rm -f "$LOCK_FILE"
+                    rm -f "$LOCK_FILE"
                     continue
                 fi
 
                 if ! kill -0 "$lock_pid" 2>/dev/null; then
                     log_warn "Removing stale lock from PID $lock_pid"
-                    command rm -f "$LOCK_FILE"
+                    rm -f "$LOCK_FILE"
                     continue
                 fi
             fi
 
             # Check timeout
-            local current_time
-            current_time=$(date +%s)
+            local current_time=$(date +%s)
             if [ $((current_time - lock_start)) -gt $LOCK_TIMEOUT ] || [ $retry_count -gt $max_lock_retries ]; then
                 log_error "Failed to acquire lock after ${LOCK_TIMEOUT}s (${retry_count} attempts)"
                 return 1
@@ -728,10 +711,9 @@ acquire_lock() {
 # Release lock
 release_lock() {
     if [ -f "$LOCK_FILE" ]; then
-        local lock_pid
-        lock_pid=$(command cat "$LOCK_FILE" 2>/dev/null || echo "0")
+        local lock_pid=$(cat "$LOCK_FILE" 2>/dev/null || echo "0")
         if [ "$lock_pid" = "$$" ]; then
-            command rm -f "$LOCK_FILE"
+            rm -f "$LOCK_FILE"
             log_debug "Released lock"
         fi
     fi
@@ -797,8 +779,7 @@ create_secure_temp() {
     fi
 
     # Create with restrictive umask
-    local old_umask
-    old_umask=$(umask)
+    local old_umask=$(umask)
     umask 077
 
     temp_dir=$(mktemp -d -t "post-create-XXXXXX") || {
@@ -811,14 +792,14 @@ create_secure_temp() {
 
     # Verify it's actually a directory and we own it
     if [ ! -d "$temp_dir" ] || [ ! -O "$temp_dir" ]; then
-        command rm -rf "$temp_dir" 2>/dev/null || true
+        rm -rf "$temp_dir" 2>/dev/null || true
         log_error "Temp directory creation failed security check"
         return 1
     fi
 
     # Set permissions (redundant with umask, but explicit)
     chmod 700 "$temp_dir" || {
-        command rm -rf "$temp_dir"
+        rm -rf "$temp_dir"
         log_error "Failed to set permissions on temporary directory"
         return 1
     }
@@ -905,7 +886,6 @@ validate_json() {
 # Validate SSH key format and content
 validate_ssh_key() {
     local key_data="$1"
-    # shellcheck disable=SC2034  # Reserved for future validation use
     local key_type="${2:-any}"
 
     # Check key length
@@ -1018,14 +998,12 @@ secure_op_command() {
     fi
 
     # Verify op binary location (should be in standard paths)
-    local op_path
-    op_path=$(command -v op)
+    local op_path=$(command -v op)
 
     # First check if it's a symlink
     if [ -L "$op_path" ]; then
         # Resolve the symlink
-        local real_op_path
-        real_op_path=$(readlink -f "$op_path" 2>/dev/null || readlink "$op_path" 2>/dev/null)
+        local real_op_path=$(readlink -f "$op_path" 2>/dev/null || readlink "$op_path" 2>/dev/null)
         log_debug "op is a symlink: $op_path -> $real_op_path"
         op_path="$real_op_path"
     fi
@@ -1035,8 +1013,7 @@ secure_op_command() {
             log_debug "Using op from: $op_path"
 
             # Get file permissions in octal
-            local op_perms
-            op_perms=$(stat -c '%a' "$op_path" 2>/dev/null || stat -f '%A' "$op_path" 2>/dev/null)
+            local op_perms=$(stat -c '%a' "$op_path" 2>/dev/null || stat -f '%A' "$op_path" 2>/dev/null)
 
             # Check if world-writable (ends in 2, 3, 6, or 7)
             if [[ "$op_perms" =~ [2367]$ ]]; then
@@ -1045,8 +1022,7 @@ secure_op_command() {
             fi
 
             # Verify ownership
-            local op_owner
-            op_owner=$(stat -c '%U' "$op_path" 2>/dev/null || stat -f '%Su' "$op_path" 2>/dev/null)
+            local op_owner=$(stat -c '%U' "$op_path" 2>/dev/null || stat -f '%Su' "$op_path" 2>/dev/null)
             if [ "$op_owner" != "root" ] && [ "$op_owner" != "$USER" ]; then
                 log_warn "Warning: op binary owned by $op_owner (expected root or $USER)"
             fi
@@ -1066,24 +1042,23 @@ secure_op_command() {
 
     if timeout $NETWORK_TIMEOUT op "$op_command" "${args[@]}" >"$temp_out" 2>"$temp_err"; then
         local output
-        output=$(command cat "$temp_out")
+        output=$(cat "$temp_out")
 
         # Validate JSON output if it looks like JSON
         if [[ "$output" =~ ^\s*[\{\[] ]]; then
             if ! validate_json "$output"; then
                 log_error "Invalid JSON response from 1Password CLI"
-                command rm -f "$temp_out" "$temp_err"
+                rm -f "$temp_out" "$temp_err"
                 return 1
             fi
         fi
 
         echo "$output"
-        command rm -f "$temp_out" "$temp_err"
+        rm -f "$temp_out" "$temp_err"
         return 0
     else
         local exit_code=$?
-        local error_msg
-        error_msg=$(command cat "$temp_err" 2>/dev/null || echo "Unknown error")
+        local error_msg=$(cat "$temp_err" 2>/dev/null || echo "Unknown error")
 
         # Handle specific error cases
         case $exit_code in
@@ -1102,7 +1077,7 @@ secure_op_command() {
             log_debug "Network diagnostics available in debug mode"
         fi
 
-        command rm -f "$temp_out" "$temp_err"
+        rm -f "$temp_out" "$temp_err"
         return $exit_code
     fi
 }
@@ -1125,7 +1100,7 @@ atomic_write() {
     chmod "$mode" "$temp_file"
 
     # Atomically move to target
-    command mv -f "$temp_file" "$target_file"
+    mv -f "$temp_file" "$target_file"
 }
 
 # Append to file atomically
@@ -1138,14 +1113,14 @@ atomic_append() {
 
     # Copy existing content if file exists
     if [ -f "$target_file" ]; then
-        command cp "$target_file" "$temp_file"
+        cp "$target_file" "$temp_file"
     fi
 
     # Append new content
     echo "$content" >> "$temp_file"
 
     # Atomically move to target
-    command mv -f "$temp_file" "$target_file"
+    mv -f "$temp_file" "$target_file"
 }
 
 # ============================================================================
@@ -1218,10 +1193,8 @@ load_env_file() {
     for possible_env in "${search_paths[@]}"; do
         # Expand glob patterns and check if file exists
         # Use nullglob to handle non-matching globs safely
-        local saved_nullglob
-        saved_nullglob=$(shopt -p nullglob)
+        local saved_nullglob=$(shopt -p nullglob)
         shopt -s nullglob
-        # shellcheck disable=SC2206  # Word splitting intentional for glob expansion
         local expanded_paths=($possible_env)
         eval "$saved_nullglob"  # Restore original nullglob setting
 
@@ -1240,12 +1213,10 @@ load_env_file() {
                 fi
             fi
 
-            if [ -f "$abs_path" ] && [[ ! " ${env_files_loaded[*]} " =~ \ ${abs_path}\  ]]; then
+            if [ -f "$abs_path" ] && [[ ! " ${env_files_loaded[@]} " =~ " ${abs_path} " ]]; then
                 # Check file permissions and ownership
-                local file_perms
-                file_perms=$(stat -c '%a' "$abs_path" 2>/dev/null || stat -f '%A' "$abs_path" 2>/dev/null)
-                local file_owner
-                file_owner=$(stat -c '%U' "$abs_path" 2>/dev/null || stat -f '%Su' "$abs_path" 2>/dev/null)
+                local file_perms=$(stat -c '%a' "$abs_path" 2>/dev/null || stat -f '%A' "$abs_path" 2>/dev/null)
+                local file_owner=$(stat -c '%U' "$abs_path" 2>/dev/null || stat -f '%Su' "$abs_path" 2>/dev/null)
 
                 # Warn if .env file has overly permissive permissions
                 if [ -n "$file_perms" ] && [ "$file_perms" -gt 644 ]; then
@@ -1258,8 +1229,7 @@ load_env_file() {
                 fi
 
                 # Check file size (limit to 1MB for .env files)
-                local file_size
-                file_size=$(get_file_size "$abs_path")
+                local file_size=$(get_file_size "$abs_path")
                 if [ "$file_size" -gt $((1024 * 1024)) ]; then
                     log_warn "Warning: $abs_path is larger than 1MB ($file_size bytes), skipping for safety"
                     continue
@@ -1293,7 +1263,7 @@ load_env_file() {
                         value="${BASH_REMATCH[2]}"
 
                         # Trim whitespace from key
-                        key=$(echo "$key" | command sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+                        key=$(echo "$key" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
 
                         # Skip if key is empty or contains invalid characters
                         if [ -z "$key" ] || [[ "$key" =~ [^A-Za-z0-9_] ]]; then
@@ -1562,7 +1532,7 @@ sanitize_git_name() {
     local name="$1"
 
     # Remove leading/trailing whitespace
-    name=$(echo "$name" | command sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+    name=$(echo "$name" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
 
     # Remove control characters and non-printable characters
     name=$(echo "$name" | tr -d '[:cntrl:]')
@@ -1583,7 +1553,7 @@ sanitize_git_name() {
     fi
 
     # Remove dangerous characters that could cause issues
-    name=$(echo "$name" | command sed 's/[<>|;&$`\\]//g')
+    name=$(echo "$name" | sed 's/[<>|;&$`\\]//g')
 
     echo "$name"
 }
@@ -1593,7 +1563,7 @@ sanitize_email() {
     local email="$1"
 
     # Remove leading/trailing whitespace
-    email=$(echo "$email" | command sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+    email=$(echo "$email" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
 
     # Remove mailto: prefix if present
     email="${email#mailto:}"
@@ -1605,11 +1575,10 @@ sanitize_email() {
     email=$(echo "$email" | tr -d '[:cntrl:]')
 
     # Remove dangerous characters but keep valid email chars
-    email=$(echo "$email" | command sed 's/[^a-zA-Z0-9._%+-@]//g')
+    email=$(echo "$email" | sed 's/[^a-zA-Z0-9._%+-@]//g')
 
     # Ensure single @ symbol
-    local at_count
-    at_count=$(echo "$email" | tr -cd '@' | wc -c)
+    local at_count=$(echo "$email" | tr -cd '@' | wc -c)
     if [ "$at_count" -ne 1 ]; then
         log_warn "Email has $at_count @ symbols: '$email'"
         echo ""
@@ -1741,12 +1710,9 @@ validate_ssh_agent_socket() {
     fi
 
     # Verify parent directory ownership (prevent symlink attacks)
-    local parent_dir
-    parent_dir=$(dirname "$socket_path")
-    local parent_owner
-    parent_owner=$(stat -c '%u' "$parent_dir" 2>/dev/null || stat -f '%u' "$parent_dir" 2>/dev/null)
-    local current_uid
-    current_uid=$(id -u)
+    local parent_dir=$(dirname "$socket_path")
+    local parent_owner=$(stat -c '%u' "$parent_dir" 2>/dev/null || stat -f '%u' "$parent_dir" 2>/dev/null)
+    local current_uid=$(id -u)
 
     if [ "$parent_owner" != "$current_uid" ] && [ "$parent_owner" != "0" ]; then
         log_debug "Parent directory not owned by user or root: $parent_dir"
@@ -1755,8 +1721,7 @@ validate_ssh_agent_socket() {
 
     # Check that parent directory is not world-writable
     # Exception: /tmp is allowed for VS Code SSH auth sockets
-    local parent_perms
-    parent_perms=$(stat -c '%a' "$parent_dir" 2>/dev/null || stat -f '%A' "$parent_dir" 2>/dev/null)
+    local parent_perms=$(stat -c '%a' "$parent_dir" 2>/dev/null || stat -f '%A' "$parent_dir" 2>/dev/null)
     if [[ "$parent_perms" =~ [2367]$ ]]; then
         # Allow world-writable /tmp for VS Code sockets
         if [[ "$parent_dir" = "/tmp" && "$socket_path" =~ ^/tmp/vscode-ssh-auth-.*\.sock$ ]]; then
@@ -1774,16 +1739,14 @@ validate_ssh_agent_socket() {
     fi
 
     # Check socket permissions (should not be world-writable)
-    local socket_perms
-    socket_perms=$(stat -c '%a' "$socket_path" 2>/dev/null || stat -f '%A' "$socket_path" 2>/dev/null)
+    local socket_perms=$(stat -c '%a' "$socket_path" 2>/dev/null || stat -f '%A' "$socket_path" 2>/dev/null)
     if [[ "$socket_perms" =~ [2367]$ ]]; then
         log_error "SSH agent socket is world-writable: $socket_path"
         return 1
     fi
 
     # Verify socket is owned by current user
-    local socket_owner
-    socket_owner=$(stat -c '%u' "$socket_path" 2>/dev/null || stat -f '%u' "$socket_path" 2>/dev/null)
+    local socket_owner=$(stat -c '%u' "$socket_path" 2>/dev/null || stat -f '%u' "$socket_path" 2>/dev/null)
     if [ "$socket_owner" != "$current_uid" ]; then
         log_error "SSH agent socket not owned by current user: $socket_path"
         return 1
@@ -1802,8 +1765,7 @@ setup_ssh_agent() {
             log_warn "Invalid SSH_AUTH_SOCK, starting new agent"
             unset SSH_AUTH_SOCK
         elif ssh-add -l &>/dev/null; then
-            local key_count
-            key_count=$(ssh-add -l | wc -l | tr -d ' ')
+            local key_count=$(ssh-add -l | wc -l | tr -d ' ')
             log_info "Using existing SSH agent with $key_count keys"
             audit_log "SSH_AGENT_REUSED" "socket=$SSH_AUTH_SOCK keys=$key_count"
             return 0
@@ -1826,8 +1788,7 @@ setup_ssh_agent() {
     fi
 
     # Verify .ssh directory permissions
-    local ssh_dir_perms
-    ssh_dir_perms=$(stat -c '%a' "$HOME/.ssh" 2>/dev/null || stat -f '%A' "$HOME/.ssh" 2>/dev/null)
+    local ssh_dir_perms=$(stat -c '%a' "$HOME/.ssh" 2>/dev/null || stat -f '%A' "$HOME/.ssh" 2>/dev/null)
     if [ "$ssh_dir_perms" != "700" ]; then
         log_warn "Warning: ~/.ssh has insecure permissions ($ssh_dir_perms), fixing..."
         chmod 700 "$HOME/.ssh"
@@ -1842,23 +1803,21 @@ setup_ssh_agent() {
         # Check again inside lock
         if [ -f "$agent_env" ]; then
             # Validate agent env file permissions
-            local env_perms
-            env_perms=$(stat -c '%a' "$agent_env" 2>/dev/null || stat -f '%A' "$agent_env" 2>/dev/null)
+            local env_perms=$(stat -c '%a' "$agent_env" 2>/dev/null || stat -f '%A' "$agent_env" 2>/dev/null)
             if [ "$env_perms" != "600" ]; then
                 log_warn "Warning: agent.env has insecure permissions, removing"
-                command rm -f "$agent_env"
+                rm -f "$agent_env"
             else
                 # Validate agent.env content before sourcing
                 if grep -qE '(^|\s)(rm|curl|wget|nc|exec|eval|python|perl|ruby|php)' "$agent_env"; then
                     log_error "Agent environment file contains suspicious commands"
-                    command rm -f "$agent_env"
+                    rm -f "$agent_env"
                 else
                     # shellcheck disable=SC1090
                     source "$agent_env" >/dev/null 2>&1 || true
                     if [ -n "${SSH_AGENT_PID:-}" ] && kill -0 "$SSH_AGENT_PID" 2>/dev/null; then
                         # Verify the process is actually ssh-agent (exact match)
-                        local agent_cmd
-                        agent_cmd=$(ps -p "$SSH_AGENT_PID" -o comm= 2>/dev/null || true)
+                        local agent_cmd=$(ps -p "$SSH_AGENT_PID" -o comm= 2>/dev/null || true)
                         # Strip path and match exact binary name
                         agent_cmd=$(basename "$agent_cmd" 2>/dev/null || echo "$agent_cmd")
                         if [[ "$agent_cmd" == "ssh-agent" ]]; then
@@ -1873,7 +1832,7 @@ setup_ssh_agent() {
                 fi
             fi
             # Clean up stale environment file
-            command rm -f "$agent_env"
+            rm -f "$agent_env"
         fi
 
         # Start new agent with specific lifetime
@@ -1900,14 +1859,13 @@ setup_ssh_agent() {
         log_debug "flock not available, using simple check"
         if [ -f "$agent_env" ]; then
             # Validate permissions first
-            local env_perms
-            env_perms=$(stat -c '%a' "$agent_env" 2>/dev/null || stat -f '%A' "$agent_env" 2>/dev/null)
+            local env_perms=$(stat -c '%a' "$agent_env" 2>/dev/null || stat -f '%A' "$agent_env" 2>/dev/null)
             if [ "$env_perms" != "600" ]; then
                 log_warn "Warning: agent.env has insecure permissions, removing"
-                command rm -f "$agent_env"
+                rm -f "$agent_env"
             elif grep -qE '(^|\s)(rm|curl|wget|nc|exec|eval|python|perl|ruby|php)' "$agent_env"; then
                 log_error "Agent environment file contains suspicious commands"
-                command rm -f "$agent_env"
+                rm -f "$agent_env"
             else
                 # shellcheck disable=SC1090
                 source "$agent_env" >/dev/null 2>&1 || true
@@ -1919,7 +1877,7 @@ setup_ssh_agent() {
                 fi
             fi
             # Clean up stale environment file
-            command rm -f "$agent_env"
+            rm -f "$agent_env"
         fi
 
         # Start new agent
@@ -2001,7 +1959,7 @@ if [ -f ~/.ssh/agent.env ]; then
         export SSH_AUTH_SOCK SSH_AGENT_PID
     else
         # Remove compromised agent file
-        command rm -f ~/.ssh/agent.env
+        rm -f ~/.ssh/agent.env
     fi
 fi
 '
@@ -2010,11 +1968,10 @@ fi
     for rc_file in ~/.bashrc ~/.zshrc ~/.profile ~/.bash_profile; do
         if [ -f "$rc_file" ]; then
             # Create backup
-            command cp "$rc_file" "$rc_file.backup.$$"
+            cp "$rc_file" "$rc_file.backup.$$"
 
             # Remove existing agent setup safely
-            local temp_rc
-            temp_rc=$(mktemp)
+            local temp_rc=$(mktemp)
             grep -v -F "# SSH agent environment" "$rc_file" | \
             awk '/^$/ && ssh_block {next} {print; if (/# SSH agent environment/) ssh_block=1; else if (/^$/) ssh_block=0}' > "$temp_rc"
 
@@ -2022,8 +1979,8 @@ fi
             echo "$agent_script" >> "$temp_rc"
 
             # Replace atomically
-            command mv "$temp_rc" "$rc_file"
-            command rm -f "$rc_file.backup.$$"
+            mv "$temp_rc" "$rc_file"
+            rm -f "$rc_file.backup.$$"
 
             log_debug "Updated $rc_file"
         fi
@@ -2054,8 +2011,7 @@ unmask_signals() {
 # Run function with signals masked
 with_signals_masked() {
     # Save current trap handlers
-    local saved_traps
-    saved_traps=$(trap -p)
+    local saved_traps=$(trap -p)
 
     # Mask critical signals
     trap '' INT TERM HUP
@@ -2104,11 +2060,10 @@ process_ssh_key() {
     chmod 600 "$temp_key"
 
     # Verify permissions were set correctly
-    local actual_perms
-    actual_perms=$(stat -c '%a' "$temp_key" 2>/dev/null || stat -f '%A' "$temp_key" 2>/dev/null)
+    local actual_perms=$(stat -c '%a' "$temp_key" 2>/dev/null || stat -f '%A' "$temp_key" 2>/dev/null)
     if [ "$actual_perms" != "600" ]; then
         log_error "Failed to set secure permissions on temp key file"
-        command rm -f "$temp_key"
+        rm -f "$temp_key"
         return 1
     fi
 
@@ -2122,14 +2077,14 @@ process_ssh_key() {
 
     if [ -z "$private_key" ]; then
         log_warn "No private key found for: $key_title"
-        command rm -f "$temp_key"
+        rm -f "$temp_key"
         return 1
     fi
 
     # Validate SSH key format
     if ! validate_ssh_key "$private_key"; then
         log_error "Invalid SSH key format for: $key_title"
-        command rm -f "$temp_key"
+        rm -f "$temp_key"
         unset private_key
         return 1
     fi
@@ -2143,7 +2098,7 @@ process_ssh_key() {
             # Add known bad fingerprints here
             "SHA256:RjY3K2JlKShb*"|"MD5:98:2e:d7:e0:de:9f:ac:67:28:c2:42:2d:37:16:58:4d")
                 log_error "SSH key matches known compromised key: $key_title"
-                command rm -f "$temp_key"
+                rm -f "$temp_key"
                 unset private_key
                 return 1
                 ;;
@@ -2156,7 +2111,7 @@ process_ssh_key() {
     # Verify file was written and is not empty
     if [ ! -s "$temp_key" ]; then
         log_error "Failed to write SSH key to temp file"
-        command rm -f "$temp_key"
+        rm -f "$temp_key"
         unset private_key
         return 1
     fi
@@ -2194,16 +2149,16 @@ process_ssh_key() {
             # Only check and warn if file still exists after sync
             if [ -e "$temp_key" ]; then
                 log_warn "Warning: temp key file persists after shred"
-                command rm -rf "$temp_key" 2>/dev/null || true
+                rm -rf "$temp_key" 2>/dev/null || true
             fi
         else
             # shred failed, use fallback
-            command rm -f "$temp_key" 2>/dev/null || true
+            rm -f "$temp_key" 2>/dev/null || true
         fi
     else
         # Fallback: overwrite with random data before deletion
         dd if=/dev/urandom of="$temp_key" bs=1k count=10 2>/dev/null || true
-        command rm -f "$temp_key"
+        rm -f "$temp_key"
 
         # For non-shred case, use sync to avoid race condition
         sync 2>/dev/null || true
@@ -2211,7 +2166,7 @@ process_ssh_key() {
         # Final check only if needed
         if [ -e "$temp_key" ]; then
             log_debug "Temp file removal delayed, forcing cleanup"
-            command rm -rf "$temp_key" 2>/dev/null || true
+            rm -rf "$temp_key" 2>/dev/null || true
         fi
     fi
 
@@ -2501,7 +2456,6 @@ perform_health_checks() {
     wait
 
     # Process results
-    # shellcheck disable=SC2034  # check_name used for structure but not in logic
     while IFS=: read -r check_name check_passed check_message; do
         checks_total=$((checks_total + 1))
         if [ "$check_passed" = "1" ]; then
@@ -2512,7 +2466,7 @@ perform_health_checks() {
         fi
     done < <(sort "$check_results_file" 2>/dev/null || true)
 
-    command rm -f "$check_results_file"
+    rm -f "$check_results_file"
 
     log_info "Health check summary: $checks_passed/$checks_total passed"
 
@@ -2539,8 +2493,7 @@ display_setup_summary() {
 
     # Show SSH keys status
     if ssh-add -l &>/dev/null; then
-        local key_count
-        key_count=$(ssh-add -l | wc -l | tr -d ' ')
+        local key_count=$(ssh-add -l | wc -l | tr -d ' ')
         log_info "SSH keys: $key_count loaded"
     else
         log_info "SSH keys: None loaded"
@@ -2634,7 +2587,7 @@ main() {
         # Try to use system username as fallback
         local fallback_name="${USER:-${USERNAME:-Developer}}"
         # Capitalize first letter if it's lowercase
-        fallback_name="$(echo "$fallback_name" | command sed 's/^./\U&/')"
+        fallback_name="$(echo "$fallback_name" | sed 's/^./\U&/')"
         git config --global user.name "$fallback_name"
         log_info "Set fallback Git user.name: $fallback_name"
     fi

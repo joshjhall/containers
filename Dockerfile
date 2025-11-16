@@ -389,6 +389,7 @@ RUN chmod +x /usr/local/bin/detect-case-sensitivity.sh
 
 # Clean up build scripts but keep runtime scripts
 RUN cp -r /tmp/build-scripts/runtime /opt/container-runtime && \
+    chmod -R +rx /opt/container-runtime && \
     rm -rf /tmp/build-scripts
 
 # Install check-build-logs script if it exists
