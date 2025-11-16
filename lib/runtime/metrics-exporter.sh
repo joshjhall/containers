@@ -131,7 +131,8 @@ collect_runtime_metrics() {
 
         local health_end
         health_end=$(date +%s%3N 2>/dev/null || date +%s)
-        local health_duration=$(echo "scale=3; ($health_end - $health_start) / 1000" | bc 2>/dev/null || echo "0")
+        local health_duration
+        health_duration=$(echo "scale=3; ($health_end - $health_start) / 1000" | bc 2>/dev/null || echo "0")
 
         metrics+="# HELP container_healthcheck_status Current health status (1=healthy, 0=unhealthy)\n"
         metrics+="# TYPE container_healthcheck_status gauge\n"
