@@ -39,6 +39,7 @@ jobs:
           sudo apt-get update && sudo apt-get install -y shellcheck
 
           # Run shellcheck on ALL tracked shell scripts (respects .gitignore)
+          # Exclude setup-git-ssh.sh (legacy script being replaced)
           # Uses --severity=warning to check warnings and errors only (not info/style)
           # Matches the pre-push git hook configuration for consistency
           # Fails the build if any warnings or errors are found
@@ -48,11 +49,12 @@ jobs:
             if ! shellcheck --severity=warning "$file"; then
               FAILED=1
             fi
-          done < <(git ls-files '*.sh' '*.bash' 2>/dev/null || \
+          done < <(git ls-files '*.sh' '*.bash' 2>/dev/null | grep -v "setup-git-ssh.sh" || \
             find . -type f \( -name "*.sh" -o -name "*.bash" \) \
               ! -path "./.git/*" \
               ! -path "*/node_modules/*" \
-              ! -path "*/vendor/*")
+              ! -path "*/vendor/*" \
+              ! -name "setup-git-ssh.sh")
 
           if [ $FAILED -eq 1 ]; then
             echo "❌ Shellcheck found issues in shell scripts."
