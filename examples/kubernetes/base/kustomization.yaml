@@ -1,0 +1,90 @@
+# Kustomization: Defines a set of Kubernetes resources and customizations
+# Kustomize is built into kubectl (kubectl apply -k <directory>)
+# It allows you to customize YAML without templates
+# https://kustomize.io/
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Metadata for this kustomization
+metadata:
+  name: devcontainer-base
+  annotations:
+    # Optional: Add descriptions or documentation links
+    description: "Base configuration for development containers"
+    documentation: "https://github.com/joshjhall/containers/tree/main/examples/kubernetes"
+
+# Common labels applied to all resources
+commonLabels:
+  app: devcontainer
+  managed-by: kustomize
+
+# Common annotations applied to all resources
+commonAnnotations:
+  # Track which version of the container system this uses
+  containers.joshjhall.dev/version: "4.9.2"
+
+# Namespace to deploy resources into
+# Can be overridden in overlays
+# namespace: devcontainer
+
+# Name prefix for all resources
+# Useful for deploying multiple instances
+# namePrefix: dev-
+
+# Name suffix for all resources
+# nameSuffix: -v1
+
+# Resources to include in this kustomization
+resources:
+  - deployment.yaml
+  - service.yaml
+  - configmap.yaml
+  - secrets.yaml
+
+# Images to replace (allows changing image tags without editing YAMLs)
+# This is useful for CI/CD pipelines
+images:
+  - name: ghcr.io/joshjhall/containers
+    # newName: ghcr.io/joshjhall/containers  # Change registry/repo
+    newTag: python-dev-4.9.2  # Change tag
+
+# ConfigMap generator (alternative to configmap.yaml)
+# Generates ConfigMap from files or literals
+# configMapGenerator:
+# - name: devcontainer-config
+#   literals:
+#   - environment=development
+#   - log_level=INFO
+#   files:
+#   - configs/app-config.yaml
+
+# Secret generator (alternative to secrets.yaml)
+# NEVER commit actual secrets - use this with .gitignore'd files
+# secretGenerator:
+# - name: devcontainer-secrets
+#   files:
+#   - secrets/db-password.txt
+#   - secrets/api-token.txt
+
+# Patches - modify resources using strategic merge or JSON6902
+# patches:
+# - path: increase-replicas.yaml
+#   target:
+#     kind: Deployment
+#     name: devcontainer
+
+# Replacements - replace values across multiple resources
+# replacements:
+# - source:
+#     kind: ConfigMap
+#     name: devcontainer-config
+#     fieldPath: data.environment
+#   targets:
+#   - select:
+#       kind: Deployment
+#     fieldPaths:
+#     - spec.template.metadata.annotations.environment
+
+# vars - deprecated, use replacements instead
+# vars: []

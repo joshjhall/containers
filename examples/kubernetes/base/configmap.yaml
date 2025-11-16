@@ -1,0 +1,85 @@
+---
+# ConfigMap: Stores non-sensitive configuration data as key-value pairs or files
+# Can be mounted as files or exposed as environment variables
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: devcontainer-config
+  labels:
+    app: devcontainer
+    component: development
+data:
+  # Simple key-value pairs (used as environment variables)
+  environment: "development"
+  log_level: "INFO"
+
+  # Feature flags
+  enable_docker: "false"
+  enable_kubernetes: "true"
+
+  # Build arguments that were used (for reference)
+  python_version: "3.12"
+  node_version: "20"
+
+  # Configuration files (can be mounted as files in the container)
+  # Each file becomes a separate file when mounted
+
+  # Example: Custom shell configuration
+  bashrc: |
+    # Custom bash configuration for development
+    export PS1='\[\033[01;32m\]\u@\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$ '
+    export EDITOR=vim
+
+    # Helpful aliases
+    alias k='kubectl'
+    alias ll='ls -lah'
+    alias gs='git status'
+    alias gp='git pull'
+
+    # Load any additional configuration
+    if [ -f ~/.bashrc.local ]; then
+      source ~/.bashrc.local
+    fi
+
+  # Example: Git configuration
+  gitconfig: |
+    [user]
+      # Override these with your own values
+      name = Developer
+      email = dev@example.com
+
+    [core]
+      editor = vim
+      autocrlf = input
+
+    [pull]
+      rebase = false
+
+    [init]
+      defaultBranch = main
+
+    [alias]
+      st = status
+      co = checkout
+      br = branch
+      cm = commit
+      lg = log --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit
+
+  # Example: Application configuration
+  app-config.yaml: |
+    # Application-specific configuration
+    server:
+      port: 8080
+      host: 0.0.0.0
+
+    logging:
+      level: INFO
+      format: json
+
+    cache:
+      enabled: true
+      ttl: 3600
+
+    features:
+      experimental: false
+      debug_mode: false

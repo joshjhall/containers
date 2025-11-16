@@ -1,0 +1,70 @@
+# ResourceQuota: Limits aggregate resource consumption in a namespace
+# Prevents a single application from consuming all cluster resources
+# https://kubernetes.io/docs/concepts/policy/resource-quotas/
+
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: production-quota
+spec:
+  hard:
+    # Limit total number of pods in namespace
+    pods: "50"
+
+    # Limit total CPU requests across all pods
+    requests.cpu: "20"
+    # Limit total CPU limits across all pods
+    limits.cpu: "40"
+
+    # Limit total memory requests across all pods
+    requests.memory: "40Gi"
+    # Limit total memory limits across all pods
+    limits.memory: "80Gi"
+
+    # Limit total storage requests
+    requests.storage: "500Gi"
+
+    # Limit total number of persistent volume claims
+    persistentvolumeclaims: "20"
+
+    # Limit total number of services
+    services: "20"
+    # Limit number of LoadBalancer services (expensive)
+    services.loadbalancers: "5"
+    # Limit number of NodePort services
+    services.nodeports: "10"
+
+    # Limit number of secrets
+    secrets: "50"
+    # Limit number of configmaps
+    configmaps: "50"
+
+    # Limit number of ReplicationControllers (legacy, use Deployments)
+    replicationcontrollers: "0"
+
+  # Scope selectors allow different quotas for different priority classes
+  scopeSelector:
+    matchExpressions:
+    - operator: In
+      scopeName: PriorityClass
+      values:
+      - high
+      - medium
+
+---
+# Example: Separate quota for different priority classes
+# apiVersion: v1
+# kind: ResourceQuota
+# metadata:
+#   name: high-priority-quota
+# spec:
+#   hard:
+#     pods: "10"
+#     requests.cpu: "10"
+#     requests.memory: "20Gi"
+#   scopeSelector:
+#     matchExpressions:
+#     - operator: In
+#       scopeName: PriorityClass
+#       values:
+#       - high

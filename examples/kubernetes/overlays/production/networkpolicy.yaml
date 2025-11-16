@@ -1,0 +1,172 @@
+# NetworkPolicy: Controls network traffic to and from pods
+# Implements micro-segmentation and zero-trust networking
+# Requires a network plugin that supports NetworkPolicy (Calico, Cilium, Weave)
+
+---
+# Default deny all ingress and egress traffic (security baseline)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+spec:
+  podSelector:
+    matchLabels:
+      app: devcontainer
+  policyTypes:
+  - Ingress
+  - Egress
+
+---
+# Allow ingress from specific sources
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: devcontainer-ingress
+spec:
+  podSelector:
+    matchLabels:
+      app: devcontainer
+  policyTypes:
+  - Ingress
+  ingress:
+  # Allow traffic from pods with specific labels (e.g., ingress controller)
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    - podSelector:
+        matchLabels:
+          app: nginx-ingress
+    ports:
+    - protocol: TCP
+      port: 8080
+    - protocol: TCP
+      port: 3000
+
+  # Allow traffic from same namespace (pod-to-pod communication)
+  - from:
+    - podSelector: {}
+    ports:
+    - protocol: TCP
+      port: 8080
+    - protocol: TCP
+      port: 3000
+
+  # Allow Prometheus scraping from monitoring namespace
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: monitoring
+      podSelector:
+        matchLabels:
+          app: prometheus
+    ports:
+    - protocol: TCP
+      port: 9090
+
+---
+# Allow egress to specific destinations
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: devcontainer-egress
+spec:
+  podSelector:
+    matchLabels:
+      app: devcontainer
+  policyTypes:
+  - Egress
+  egress:
+  # Allow DNS queries
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: kube-system
+      podSelector:
+        matchLabels:
+          k8s-app: kube-dns
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+
+  # Allow HTTPS to external services (for package downloads, API calls)
+  - to:
+    - namespaceSelector: {}
+    ports:
+    - protocol: TCP
+      port: 443
+
+  # Allow HTTP to external services (less secure, avoid if possible)
+  - to:
+    - namespaceSelector: {}
+    ports:
+    - protocol: TCP
+      port: 80
+
+  # Allow access to Kubernetes API server
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: default
+      podSelector:
+        matchLabels:
+          component: apiserver
+    ports:
+    - protocol: TCP
+      port: 6443
+
+  # Allow communication within the same namespace
+  - to:
+    - podSelector: {}
+
+  # Allow specific external IPs (e.g., database, external APIs)
+  # - to:
+  #   - ipBlock:
+  #       cidr: 10.0.0.0/24
+  #       except:
+  #       - 10.0.0.1/32
+  #   ports:
+  #   - protocol: TCP
+  #     port: 5432  # PostgreSQL
+
+---
+# More restrictive example: Only allow specific egress destinations
+# apiVersion: networking.k8s.io/v1
+# kind: NetworkPolicy
+# metadata:
+#   name: devcontainer-strict-egress
+# spec:
+#   podSelector:
+#     matchLabels:
+#       app: devcontainer
+#   policyTypes:
+#   - Egress
+#   egress:
+#   # DNS only
+#   - to:
+#     - namespaceSelector: {}
+#       podSelector:
+#         matchLabels:
+#           k8s-app: kube-dns
+#     ports:
+#     - port: 53
+#       protocol: UDP
+#
+#   # Specific database
+#   - to:
+#     - podSelector:
+#         matchLabels:
+#           app: postgresql
+#     ports:
+#     - port: 5432
+#       protocol: TCP
+#
+#   # Specific API endpoint
+#   - to:
+#     - ipBlock:
+#         cidr: 1.2.3.4/32
+#     ports:
+#     - port: 443
+#       protocol: TCP

@@ -1,0 +1,90 @@
+# Development Overlay
+# Customizes base configuration for local/development environments
+# Deploy with: kubectl apply -k examples/kubernetes/overlays/development
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Reference to base configuration
+resources:
+  - ../../base
+
+# Namespace for development environment
+namespace: dev
+
+# Add dev-specific labels
+commonLabels:
+  environment: development
+  tier: dev
+
+# Add dev-specific annotations
+commonAnnotations:
+  deployment.kubernetes.io/revision: "dev"
+  description: "Development environment - not for production use"
+
+# Name prefix to distinguish from other environments
+namePrefix: dev-
+
+# Override image tag for development (e.g., latest or dev builds)
+images:
+  - name: ghcr.io/joshjhall/containers
+    newTag: python-dev-latest  # Use latest for development
+
+# Patches to customize resources for development
+patches:
+  # Patch 1: Reduce resource requests for development (smaller instances)
+  - target:
+      kind: Deployment
+      name: devcontainer
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/cpu
+        value: "100m"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/memory
+        value: "256Mi"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/cpu
+        value: "500m"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/memory
+        value: "512Mi"
+
+  # Patch 2: Set replicas to 1 for development
+  - target:
+      kind: Deployment
+      name: devcontainer
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 1
+
+  # Patch 3: Add development-specific environment variables
+  - target:
+      kind: Deployment
+      name: devcontainer
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value:
+          name: DEBUG
+          value: "true"
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value:
+          name: LOG_LEVEL
+          value: "DEBUG"
+
+# ConfigMap generator for dev-specific configuration
+configMapGenerator:
+  - name: devcontainer-config
+    behavior: merge  # Merge with base ConfigMap
+    literals:
+      - environment=development
+      - log_level=DEBUG
+      - enable_docker=true
+      - enable_debug_tools=true
+
+# Replace service type with NodePort for easy local access
+patchesStrategicMerge:
+  - service-nodeport.yaml

@@ -1,0 +1,99 @@
+# Staging Overlay
+# Production-like environment for final testing before production
+# Deploy with: kubectl apply -k examples/kubernetes/overlays/staging
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Reference to base configuration
+resources:
+  - ../../base
+
+# Namespace for staging environment
+namespace: staging
+
+# Add staging-specific labels
+commonLabels:
+  environment: staging
+  tier: staging
+
+# Add staging-specific annotations
+commonAnnotations:
+  deployment.kubernetes.io/revision: "staging"
+  description: "Staging environment - production-like testing"
+
+# Name prefix to distinguish from other environments
+namePrefix: staging-
+
+# Override image tag for staging (use specific versions, not latest)
+images:
+  - name: ghcr.io/joshjhall/containers
+    newTag: python-dev-4.9.2  # Use specific version for staging
+
+# Patches to customize resources for staging
+patches:
+  # Patch 1: Moderate resources (between dev and prod)
+  - target:
+      kind: Deployment
+      name: devcontainer
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/cpu
+        value: "250m"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/memory
+        value: "512Mi"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/cpu
+        value: "1000m"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/memory
+        value: "1Gi"
+
+  # Patch 2: Set replicas to 2 for staging (test HA behavior)
+  - target:
+      kind: Deployment
+      name: devcontainer
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 2
+
+  # Patch 3: Add staging-specific environment variables
+  - target:
+      kind: Deployment
+      name: devcontainer
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value:
+          name: STAGING
+          value: "true"
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value:
+          name: LOG_LEVEL
+          value: "INFO"
+
+  # Patch 4: Add pod disruption budget for staging
+  - target:
+      kind: Deployment
+      name: devcontainer
+    patch: |-
+      - op: add
+        path: /spec/template/metadata/annotations/cluster-autoscaler.kubernetes.io~1safe-to-evict
+        value: "true"
+
+# ConfigMap generator for staging-specific configuration
+configMapGenerator:
+  - name: devcontainer-config
+    behavior: merge
+    literals:
+      - environment=staging
+      - log_level=INFO
+      - enable_docker=false
+      - enable_debug_tools=false
+
+# Add pod disruption budget to ensure availability during updates
+patchesStrategicMerge:
+  - poddisruptionbudget.yaml

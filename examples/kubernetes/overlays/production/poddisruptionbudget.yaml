@@ -1,0 +1,13 @@
+# PodDisruptionBudget for production: Ensure minimum availability
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: devcontainer
+spec:
+  # Keep at least 2 pods running during voluntary disruptions
+  minAvailable: 2
+
+  # Selector must match pod labels
+  selector:
+    matchLabels:
+      app: devcontainer

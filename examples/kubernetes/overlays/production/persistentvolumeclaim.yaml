@@ -1,0 +1,98 @@
+# PersistentVolumeClaim: Request for persistent storage
+# Storage persists across pod restarts and rescheduling
+# https://kubernetes.io/docs/concepts/storage/persistent-volumes/
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: devcontainer-cache-pvc
+  labels:
+    app: devcontainer
+    component: storage
+spec:
+  # Access modes:
+  # - ReadWriteOnce (RWO): Volume can be mounted read-write by single node
+  # - ReadOnlyMany (ROX): Volume can be mounted read-only by many nodes
+  # - ReadWriteMany (RWX): Volume can be mounted read-write by many nodes
+  accessModes:
+    - ReadWriteOnce
+
+  # Storage class defines the type of storage
+  # Examples: gp3, standard, fast-ssd, etc.
+  # Leave empty to use default storage class
+  storageClassName: fast-ssd  # Adjust based on your cluster
+
+  # Resource request
+  resources:
+    requests:
+      storage: 50Gi
+
+  # Optional: Volume mode
+  # - Filesystem: Volume is mounted as a directory (default)
+  # - Block: Volume is presented as a block device
+  volumeMode: Filesystem
+
+  # Optional: Selector to bind to specific PersistentVolume
+  # selector:
+  #   matchLabels:
+  #     environment: production
+  #     type: cache
+
+---
+# Example: PersistentVolume (usually created by admin or storage class)
+# Most cloud providers auto-provision PVs via storage classes
+# apiVersion: v1
+# kind: PersistentVolume
+# metadata:
+#   name: devcontainer-cache-pv
+# spec:
+#   capacity:
+#     storage: 50Gi
+#   accessModes:
+#     - ReadWriteOnce
+#   persistentVolumeReclaimPolicy: Retain
+#   storageClassName: fast-ssd
+#   hostPath:
+#     path: /mnt/data/devcontainer-cache
+#     type: DirectoryOrCreate
+
+---
+# Example: Using cloud provider storage classes
+# AWS EBS gp3:
+# apiVersion: v1
+# kind: PersistentVolumeClaim
+# metadata:
+#   name: devcontainer-cache-pvc
+# spec:
+#   accessModes:
+#     - ReadWriteOnce
+#   storageClassName: gp3
+#   resources:
+#     requests:
+#       storage: 50Gi
+
+# GCP Persistent Disk:
+# apiVersion: v1
+# kind: PersistentVolumeClaim
+# metadata:
+#   name: devcontainer-cache-pvc
+# spec:
+#   accessModes:
+#     - ReadWriteOnce
+#   storageClassName: pd-ssd
+#   resources:
+#     requests:
+#       storage: 50Gi
+
+# Azure Disk:
+# apiVersion: v1
+# kind: PersistentVolumeClaim
+# metadata:
+#   name: devcontainer-cache-pvc
+# spec:
+#   accessModes:
+#     - ReadWriteOnce
+#   storageClassName: managed-premium
+#   resources:
+#     requests:
+#       storage: 50Gi

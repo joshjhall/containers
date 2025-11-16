@@ -1,0 +1,190 @@
+# Production Overlay
+# Production-ready configuration with security and reliability best practices
+# Deploy with: kubectl apply -k examples/kubernetes/overlays/production
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Reference to base configuration
+resources:
+  - ../../base
+  - poddisruptionbudget.yaml
+  - networkpolicy.yaml
+  - resourcequota.yaml
+  - limitrange.yaml
+
+# Namespace for production environment
+namespace: production
+
+# Add production-specific labels
+commonLabels:
+  environment: production
+  tier: production
+  criticality: high
+
+# Add production-specific annotations
+commonAnnotations:
+  deployment.kubernetes.io/revision: "production"
+  description: "Production environment - handle with care"
+  contact: "ops-team@example.com"
+  runbook: "https://docs.example.com/runbooks/devcontainer"
+
+# Name prefix to distinguish from other environments
+namePrefix: prod-
+
+# Override image tag for production (use specific pinned versions)
+images:
+  - name: ghcr.io/joshjhall/containers
+    newTag: python-dev-4.9.2  # Always pin specific versions in production
+
+# Patches to customize resources for production
+patches:
+  # Patch 1: Production resource limits
+  - target:
+      kind: Deployment
+      name: devcontainer
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/cpu
+        value: "500m"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/memory
+        value: "512Mi"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/cpu
+        value: "2000m"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/memory
+        value: "2Gi"
+
+  # Patch 2: Set replicas to 3 for high availability
+  - target:
+      kind: Deployment
+      name: devcontainer
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 3
+
+  # Patch 3: Add production environment variables
+  - target:
+      kind: Deployment
+      name: devcontainer
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value:
+          name: PRODUCTION
+          value: "true"
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value:
+          name: LOG_LEVEL
+          value: "WARN"
+
+  # Patch 4: Enable read-only root filesystem for security
+  - target:
+      kind: Deployment
+      name: devcontainer
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/securityContext/readOnlyRootFilesystem
+        value: true
+
+  # Patch 5: Add anti-affinity to spread pods across nodes
+  - target:
+      kind: Deployment
+      name: devcontainer
+    patch: |-
+      - op: add
+        path: /spec/template/spec/affinity
+        value:
+          podAntiAffinity:
+            requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - devcontainer
+              topologyKey: kubernetes.io/hostname
+
+  # Patch 6: Add topology spread constraints for even distribution
+  - target:
+      kind: Deployment
+      name: devcontainer
+    patch: |-
+      - op: add
+        path: /spec/template/spec/topologySpreadConstraints
+        value:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app: devcontainer
+
+  # Patch 7: Set update strategy to RollingUpdate with specific parameters
+  - target:
+      kind: Deployment
+      name: devcontainer
+    patch: |-
+      - op: add
+        path: /spec/strategy
+        value:
+          type: RollingUpdate
+          rollingUpdate:
+            maxSurge: 1
+            maxUnavailable: 0
+
+  # Patch 8: Add lifecycle hooks for graceful shutdown
+  - target:
+      kind: Deployment
+      name: devcontainer
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/lifecycle
+        value:
+          preStop:
+            exec:
+              command:
+              - /bin/sh
+              - -c
+              - sleep 15
+
+  # Patch 9: Set termination grace period
+  - target:
+      kind: Deployment
+      name: devcontainer
+    patch: |-
+      - op: add
+        path: /spec/template/spec/terminationGracePeriodSeconds
+        value: 30
+
+  # Patch 10: Use persistent volume for cache (not emptyDir)
+  - target:
+      kind: Deployment
+      name: devcontainer
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/volumes/1
+        value:
+          name: cache
+          persistentVolumeClaim:
+            claimName: devcontainer-cache-pvc
+
+# ConfigMap generator for production-specific configuration
+configMapGenerator:
+  - name: devcontainer-config
+    behavior: merge
+    literals:
+      - environment=production
+      - log_level=WARN
+      - enable_docker=false
+      - enable_debug_tools=false
+      - enable_metrics=true
+      - enable_tracing=true
+
+# Additional production resources
+patchesStrategicMerge:
+  - persistentvolumeclaim.yaml

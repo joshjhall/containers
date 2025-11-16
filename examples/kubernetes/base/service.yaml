@@ -1,0 +1,130 @@
+---
+# Service: Exposes pods to network traffic
+# Provides a stable IP address and DNS name for accessing pods
+# Even if pods are recreated, the service IP/DNS remains the same
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: devcontainer
+  labels:
+    app: devcontainer
+    component: development
+spec:
+  # Service type determines how the service is exposed:
+  # - ClusterIP: Only accessible within the cluster (default)
+  # - NodePort: Accessible on each node's IP at a static port
+  # - LoadBalancer: Creates an external load balancer (cloud providers)
+  # - ExternalName: Maps to an external DNS name
+  type: ClusterIP
+
+  # Selector determines which pods receive traffic
+  # Must match the labels on your pods
+  selector:
+    app: devcontainer
+
+  # Ports exposed by this service
+  ports:
+  # Example: Web application port
+  - name: http
+    # Port exposed by the service (what other pods/users connect to)
+    port: 8080
+    # Port on the container (what your app listens on)
+    targetPort: 8080
+    # Protocol (TCP or UDP)
+    protocol: TCP
+
+  # Example: Additional application port
+  - name: api
+    port: 3000
+    targetPort: 3000
+    protocol: TCP
+
+  # Example: Metrics port for Prometheus
+  - name: metrics
+    port: 9090
+    targetPort: 9090
+    protocol: TCP
+
+  # Example: Debug port (like Python debugger, Node inspector)
+  - name: debug
+    port: 5678
+    targetPort: 5678
+    protocol: TCP
+
+  # Session affinity (sticky sessions)
+  # - None: Requests distributed to any pod (default)
+  # - ClientIP: Requests from same client go to same pod
+  sessionAffinity: None
+
+  # Optional: External traffic policy (for NodePort/LoadBalancer)
+  # - Cluster: Traffic can be forwarded to any node
+  # - Local: Traffic only goes to pods on the same node (preserves source IP)
+  # externalTrafficPolicy: Cluster
+
+---
+# Example: NodePort Service (exposes service on each node's IP)
+# Useful for development when you don't have a load balancer
+# apiVersion: v1
+# kind: Service
+# metadata:
+#   name: devcontainer-nodeport
+#   labels:
+#     app: devcontainer
+# spec:
+#   type: NodePort
+#   selector:
+#     app: devcontainer
+#   ports:
+#   - name: http
+#     port: 8080
+#     targetPort: 8080
+#     # NodePort range: 30000-32767
+#     # If not specified, Kubernetes assigns one automatically
+#     nodePort: 30080
+
+---
+# Example: Headless Service (no cluster IP, direct pod access)
+# Useful for StatefulSets or when you need to access individual pods
+# apiVersion: v1
+# kind: Service
+# metadata:
+#   name: devcontainer-headless
+#   labels:
+#     app: devcontainer
+# spec:
+#   # ClusterIP: None makes it headless
+#   clusterIP: None
+#   selector:
+#     app: devcontainer
+#   ports:
+#   - name: http
+#     port: 8080
+#     targetPort: 8080
+
+---
+# Example: LoadBalancer Service (creates external load balancer)
+# Only works on cloud providers (AWS, GCP, Azure, etc.)
+# apiVersion: v1
+# kind: Service
+# metadata:
+#   name: devcontainer-lb
+#   labels:
+#     app: devcontainer
+#   annotations:
+#     # Cloud provider-specific annotations
+#     # AWS example: service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+#     # GCP example: cloud.google.com/load-balancer-type: "Internal"
+# spec:
+#   type: LoadBalancer
+#   selector:
+#     app: devcontainer
+#   ports:
+#   - name: http
+#     port: 80
+#     targetPort: 8080
+#   # Optional: Specify load balancer IP (if supported by provider)
+#   # loadBalancerIP: "1.2.3.4"
+#   # Optional: Restrict which IPs can access the load balancer
+#   # loadBalancerSourceRanges:
+#   # - "10.0.0.0/8"

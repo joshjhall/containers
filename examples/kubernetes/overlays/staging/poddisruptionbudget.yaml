@@ -1,0 +1,19 @@
+# PodDisruptionBudget: Limits the number of pods that can be down simultaneously
+# Ensures availability during voluntary disruptions (node drains, updates, etc.)
+# https://kubernetes.io/docs/tasks/run-application/configure-pdb/
+
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: devcontainer
+spec:
+  # Minimum pods that must be available during disruption
+  minAvailable: 1
+
+  # Alternative: Maximum pods that can be unavailable
+  # maxUnavailable: 1
+
+  # Selector must match pod labels
+  selector:
+    matchLabels:
+      app: devcontainer
