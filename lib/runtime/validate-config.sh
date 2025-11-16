@@ -47,7 +47,7 @@ readonly CV_NC='\033[0m' # No Color
 
 # Cleanup on exit
 cleanup_validation_files() {
-    rm -f "$CV_ERRORS_FILE" "$CV_WARNINGS_FILE"
+    command rm -f "$CV_ERRORS_FILE" "$CV_WARNINGS_FILE"
 }
 trap cleanup_validation_files EXIT
 

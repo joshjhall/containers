@@ -29,7 +29,7 @@ awk -v version="$VERSION" '
 
 # If no content found, provide default message
 if [ "${PIPESTATUS[0]}" -ne 0 ] || [ -z "$(awk -v version="$VERSION" '/^## \['"$VERSION"'\]/ { found=1; next } found && /^## \[/ { exit } found { print }' "$CHANGELOG")" ]; then
-    cat <<EOF
+    command cat <<EOF
 ## Release v$VERSION
 
 See [CHANGELOG.md](https://github.com/joshjhall/containers/blob/v$VERSION/CHANGELOG.md) for complete details.

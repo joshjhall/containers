@@ -85,7 +85,7 @@ if [ "$NODE_INSTALLED" = false ] || [ "$NODE_VERSION_OK" = false ]; then
 
     # Download and install NodeSource GPG key
     log_command "Downloading NodeSource GPG key" \
-        curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key -o /tmp/nodesource.gpg.key
+        command curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key -o /tmp/nodesource.gpg.key
 
     # Convert GPG key to binary format for apt (required for Debian 13+)
     log_command "Converting GPG key to binary format" \
@@ -93,12 +93,12 @@ if [ "$NODE_INSTALLED" = false ] || [ "$NODE_VERSION_OK" = false ]; then
 
     # Add NodeSource repository with signed-by directive
     log_message "Adding NodeSource repository to apt sources..."
-    cat > /etc/apt/sources.list.d/nodesource.list << EOF
+    command cat > /etc/apt/sources.list.d/nodesource.list << EOF
 deb [signed-by=/usr/share/keyrings/nodesource.gpg] https://deb.nodesource.com/node_${CLOUDFLARE_NODE_VERSION}.x nodistro main
 EOF
 
     # Clean up temporary GPG key file
-    rm -f /tmp/nodesource.gpg.key
+    command rm -f /tmp/nodesource.gpg.key
 
     # Update apt package lists
     apt_update
@@ -223,7 +223,7 @@ if [ -n "$CLOUDFLARED_DEB" ]; then
 
     cd /
     log_command "Cleaning up build directory" \
-        rm -rf "$BUILD_TEMP"
+        command rm -rf "$BUILD_TEMP"
 fi
 
 # ============================================================================
@@ -369,7 +369,7 @@ log_message "Creating Cloudflare startup scripts..."
 log_command "Creating container startup directory" \
     mkdir -p /etc/container/first-startup
 
-cat > /etc/container/first-startup/20-cloudflare-setup.sh << EOF
+command cat > /etc/container/first-startup/20-cloudflare-setup.sh << EOF
 #!/bin/bash
 # Check for Cloudflare credentials
 if [ ! -f ~/.wrangler/config/default.toml ] && [ -f ${WORKING_DIR}/.wrangler/config/default.toml ]; then
@@ -410,7 +410,7 @@ log_command "Setting Cloudflare startup script permissions" \
 # ============================================================================
 log_message "Creating Cloudflare verification script..."
 
-cat > /usr/local/bin/test-cloudflare << 'EOF'
+command cat > /usr/local/bin/test-cloudflare << 'EOF'
 #!/bin/bash
 echo "=== Cloudflare Tools Status ==="
 

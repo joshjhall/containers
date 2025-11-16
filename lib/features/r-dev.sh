@@ -91,7 +91,7 @@ export R_LIBS_SITE="/cache/r/library"
 BUILD_TEMP=$(create_secure_temp_dir)
 
 # Create installation script
-cat > "${BUILD_TEMP}/install_r_dev_tools.R" << 'EOF'
+command cat > "${BUILD_TEMP}/install_r_dev_tools.R" << 'EOF'
 # R Development Tools Installation Script
 
 # Use CRAN mirror
@@ -248,7 +248,7 @@ load_r_template() {
     fi
 
     # No substitution needed for R templates (they use R's inline evaluation)
-    cat "$template_file"
+    command cat "$template_file"
 }
 
 # ----------------------------------------------------------------------------
@@ -489,7 +489,7 @@ log_command "Creating R dev templates directory" \
     mkdir -p /etc/r-dev-templates
 
 # .lintr configuration template
-cat > /etc/r-dev-templates/.lintr << 'EOF'
+command cat > /etc/r-dev-templates/.lintr << 'EOF'
 linters: linters_with_defaults(
     line_length_linter(120),
     commented_code_linter = NULL,
@@ -504,7 +504,7 @@ exclusions: list(
 EOF
 
 # testthat helper template
-cat > /etc/r-dev-templates/testthat-helper.R << 'EOF'
+command cat > /etc/r-dev-templates/testthat-helper.R << 'EOF'
 # Helper functions for testthat
 
 # Skip tests on CI
@@ -535,7 +535,7 @@ log_message "Creating r-dev startup script..."
 log_command "Creating container startup directory" \
     mkdir -p /etc/container/first-startup
 
-cat > /etc/container/first-startup/25-r-dev-setup.sh << 'EOF'
+command cat > /etc/container/first-startup/25-r-dev-setup.sh << 'EOF'
 #!/bin/bash
 # R development tools configuration
 if command -v R &> /dev/null; then
@@ -548,7 +548,7 @@ if command -v R &> /dev/null; then
         # Copy templates if files don't exist
         if [ ! -f ${WORKING_DIR}/.lintr ] && command -v Rscript &> /dev/null; then
             if Rscript -e "requireNamespace('lintr', quietly = TRUE)" &> /dev/null; then
-                cp /etc/r-dev-templates/.lintr ${WORKING_DIR}/
+                command cp /etc/r-dev-templates/.lintr ${WORKING_DIR}/
                 echo "Created .lintr configuration"
             fi
         fi
@@ -604,7 +604,7 @@ log_command "Setting R dev startup script permissions" \
 # ============================================================================
 log_message "Creating r-dev verification script..."
 
-cat > /usr/local/bin/test-r-dev << 'EOF'
+command cat > /usr/local/bin/test-r-dev << 'EOF'
 #!/bin/bash
 echo "=== R Development Tools Status ==="
 

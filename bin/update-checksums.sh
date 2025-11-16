@@ -95,7 +95,7 @@ echo
 
 # Create backup
 BACKUP_FILE="${CHECKSUMS_FILE}.backup-$(date +%Y%m%d-%H%M%S)"
-cp "$CHECKSUMS_FILE" "$BACKUP_FILE"
+command cp "$CHECKSUMS_FILE" "$BACKUP_FILE"
 echo -e "${BLUE}Created backup: $BACKUP_FILE${NC}"
 
 # Track changes
@@ -190,7 +190,7 @@ update_checksum() {
         "$CHECKSUMS_FILE" > "$tmp_file"
     
     if jq empty "$tmp_file" 2>/dev/null; then
-        mv "$tmp_file" "$CHECKSUMS_FILE"
+        command mv "$tmp_file" "$CHECKSUMS_FILE"
         ((UPDATED_COUNT++))
     else
         echo -e "${RED}    ✗ Failed to update JSON (invalid output)${NC}"
@@ -223,7 +223,7 @@ done
 if [ "$DRY_RUN" = false ] && [ "$UPDATED_COUNT" -gt 0 ]; then
     tmp_file=$(mktemp)
     jq ".metadata.generated = \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"" "$CHECKSUMS_FILE" > "$tmp_file"
-    mv "$tmp_file" "$CHECKSUMS_FILE"
+    command mv "$tmp_file" "$CHECKSUMS_FILE"
 fi
 
 echo

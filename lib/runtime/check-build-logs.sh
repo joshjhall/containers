@@ -65,7 +65,7 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         -h|--help)
-            cat << EOF
+            command cat << EOF
 Usage: check-build-logs.sh [options] [feature]
 
 Options:
@@ -115,7 +115,7 @@ show_feature() {
         summary)
             if [ -f "$summary_file" ]; then
                 echo -e "${BLUE}=== ${feature} ===${NC}"
-                cat "$summary_file"
+                command cat "$summary_file"
                 echo ""
             fi
             ;;
@@ -124,7 +124,7 @@ show_feature() {
             if [ -f "$error_file" ]; then
                 echo -e "${BLUE}=== ${feature} Errors/Warnings ===${NC}"
                 if [ -s "$error_file" ]; then
-                    cat "$error_file"
+                    command cat "$error_file"
                 else
                     echo -e "${GREEN}No errors or warnings found!${NC}"
                 fi
@@ -137,7 +137,7 @@ show_feature() {
                 echo -e "${BLUE}=== ${feature} Full Log ===${NC}"
                 echo "Warning: This log may be very long. Press Enter to continue or Ctrl+C to cancel..."
                 read -r
-                cat "$log_file"
+                command cat "$log_file"
             else
                 echo "No log file found for $feature"
             fi

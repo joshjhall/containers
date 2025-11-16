@@ -62,7 +62,7 @@ test_update_checksum_variable() {
 
     # Create temporary test file
     local test_file="$RESULTS_DIR/test_checksum_update.sh"
-    cat > "$test_file" <<'EOF'
+    command cat > "$test_file" <<'EOF'
 #!/bin/bash
 K9S_AMD64_SHA256="old_checksum_abc123"
 K9S_ARM64_SHA256="old_checksum_def456"
@@ -83,7 +83,7 @@ EOF
     fi
 
     # Clean up
-    rm -f "$test_file"
+    command rm -f "$test_file"
 }
 
 # ============================================================================
@@ -96,7 +96,7 @@ test_verify_checksum_update() {
 
     # Create temporary test file
     local test_file="$RESULTS_DIR/test_verify_checksum.sh"
-    cat > "$test_file" <<'EOF'
+    command cat > "$test_file" <<'EOF'
 #!/bin/bash
 K9S_AMD64_SHA256="bda09dc030a08987fe2b3bed678b15b52f23d6705e872d561932d4ca07db7818"
 EOF
@@ -116,7 +116,7 @@ EOF
     fi
 
     # Clean up
-    rm -f "$test_file"
+    command rm -f "$test_file"
 }
 
 # ============================================================================
@@ -129,7 +129,7 @@ test_update_version_comment() {
 
     # Create temporary test file
     local test_file="$RESULTS_DIR/test_version_comment.sh"
-    cat > "$test_file" <<'EOF'
+    command cat > "$test_file" <<'EOF'
 #!/bin/bash
 # Verified on: 2025-01-01
 K9S_VERSION="0.50.16"
@@ -148,7 +148,7 @@ EOF
     fi
 
     # Clean up
-    rm -f "$test_file"
+    command rm -f "$test_file"
 }
 
 # ============================================================================

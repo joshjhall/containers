@@ -250,12 +250,12 @@ GJF_VERSION="1.32.0"
 JMH_VERSION="1.37"
 export JMH_VERSION  # Export for use in shell functions
 GJF_URL="https://github.com/google/google-java-format/releases/download/v${GJF_VERSION}/google-java-format-${GJF_VERSION}-all-deps.jar"
-if wget -q --spider "${GJF_URL}" 2>/dev/null; then
+if command wget -q --spider "${GJF_URL}" 2>/dev/null; then
     log_command "Downloading Google Java Format ${GJF_VERSION}" \
-        wget -q "${GJF_URL}" -O "${JARS_DIR}/google-java-format.jar"
+        command wget -q "${GJF_URL}" -O "${JARS_DIR}/google-java-format.jar"
 
     # Create wrapper script
-    cat > /usr/local/bin/google-java-format << 'EOF'
+    command cat > /usr/local/bin/google-java-format << 'EOF'
 #!/bin/bash
 java -jar /opt/java-tools/jars/google-java-format.jar "$@"
 EOF
@@ -544,9 +544,9 @@ load_java_template() {
     fi
 
     if [ -n "$class_name" ]; then
-        sed "s/__CLASS_NAME__/${class_name}/g" "$template_file"
+        command sed "s/__CLASS_NAME__/${class_name}/g" "$template_file"
     else
-        cat "$template_file"
+        command cat "$template_file"
     fi
 }
 
@@ -599,7 +599,7 @@ load_java_config_template() {
         return 1
     fi
 
-    cat "$template_file"
+    command cat "$template_file"
 }
 
 # Checkstyle configuration from template
@@ -617,7 +617,7 @@ load_java_config_template "config/spotbugs-exclude.xml.tmpl" > "${TEMPLATES_DIR}
 # Note: Original heredoc code removed, now using templates
 # Checkstyle configuration (legacy heredoc preserved as comment for reference)
 : << 'LEGACY_CHECKSTYLE'
-cat > "${TEMPLATES_DIR}/checkstyle.xml" << 'EOF'
+command cat > "${TEMPLATES_DIR}/checkstyle.xml" << 'EOF'
 <?xml version="1.0"?>
 <!DOCTYPE module PUBLIC
     "-//Checkstyle//DTD Checkstyle Configuration 1.3//EN"
@@ -658,7 +658,7 @@ cat > "${TEMPLATES_DIR}/checkstyle.xml" << 'EOF'
 EOF
 
 # PMD ruleset
-cat > "${TEMPLATES_DIR}/pmd-ruleset.xml" << 'EOF'
+command cat > "${TEMPLATES_DIR}/pmd-ruleset.xml" << 'EOF'
 <?xml version="1.0"?>
 <ruleset name="Custom Rules"
     xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
@@ -701,7 +701,7 @@ LEGACY_CHECKSTYLE
 # ============================================================================
 log_message "Creating java-dev startup script..."
 
-cat > /etc/container/first-startup/35-java-dev-setup.sh << 'EOF'
+command cat > /etc/container/first-startup/35-java-dev-setup.sh << 'EOF'
 #!/bin/bash
 # Java development tools configuration
 if command -v java &> /dev/null; then
@@ -721,17 +721,17 @@ if command -v java &> /dev/null; then
     if [ -f ${WORKING_DIR}/pom.xml ] || [ -f ${WORKING_DIR}/build.gradle* ]; then
         # Copy templates if they don't exist
         if [ ! -f ${WORKING_DIR}/checkstyle.xml ] && [ -f /etc/java-dev-templates/checkstyle.xml ]; then
-            cp /etc/java-dev-templates/checkstyle.xml ${WORKING_DIR}/
+            command cp /etc/java-dev-templates/checkstyle.xml ${WORKING_DIR}/
             echo "Created checkstyle.xml configuration"
         fi
 
         if [ ! -f ${WORKING_DIR}/pmd-ruleset.xml ] && [ -f /etc/java-dev-templates/pmd-ruleset.xml ]; then
-            cp /etc/java-dev-templates/pmd-ruleset.xml ${WORKING_DIR}/
+            command cp /etc/java-dev-templates/pmd-ruleset.xml ${WORKING_DIR}/
             echo "Created pmd-ruleset.xml configuration"
         fi
 
         if [ ! -f ${WORKING_DIR}/spotbugs-exclude.xml ] && [ -f /etc/java-dev-templates/spotbugs-exclude.xml ]; then
-            cp /etc/java-dev-templates/spotbugs-exclude.xml ${WORKING_DIR}/
+            command cp /etc/java-dev-templates/spotbugs-exclude.xml ${WORKING_DIR}/
             echo "Created spotbugs-exclude.xml filter"
         fi
 
@@ -753,7 +753,7 @@ log_command "Setting Java dev startup script permissions" \
 # ============================================================================
 log_message "Creating java-dev verification script..."
 
-cat > /usr/local/bin/test-java-dev << 'EOF'
+command cat > /usr/local/bin/test-java-dev << 'EOF'
 #!/bin/bash
 echo "=== Java Development Tools Status ==="
 
@@ -801,7 +801,7 @@ log_command "Setting test-java-dev script permissions" \
     chmod +x /usr/local/bin/test-java-dev
 
 # Create help command
-cat > /usr/local/bin/java-dev-help << 'EOF'
+command cat > /usr/local/bin/java-dev-help << 'EOF'
 #!/bin/bash
 echo "=== Java Development Commands ==="
 echo ""

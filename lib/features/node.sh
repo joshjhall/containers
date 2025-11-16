@@ -129,7 +129,7 @@ NODE_URL="https://nodejs.org/dist/v${NODE_VERSION}/${NODE_TARBALL}"
 
 # Download Node.js tarball
 log_message "Downloading Node.js ${NODE_VERSION}..."
-if ! curl -fsSL "$NODE_URL" -o "$NODE_TARBALL"; then
+if ! command curl -fsSL "$NODE_URL" -o "$NODE_TARBALL"; then
     log_error "Failed to download Node.js ${NODE_VERSION}"
     log_error "Please verify version exists: https://nodejs.org/dist/v${NODE_VERSION}/"
     log_feature_end
@@ -150,7 +150,7 @@ log_command "Extracting Node.js to /usr/local" \
 # Clean up build files
 cd /
 log_command "Cleaning up Node.js build directory" \
-    rm -rf "$BUILD_TEMP"
+    command rm -rf "$BUILD_TEMP"
 
 # ============================================================================
 # Package Manager Setup
@@ -338,10 +338,10 @@ load_node_template() {
 
     if [ -n "$project_name" ]; then
         # Replace __PROJECT_NAME__ placeholder with actual project name
-        sed "s/__PROJECT_NAME__/${project_name}/g" "$template_file"
+        command sed "s/__PROJECT_NAME__/${project_name}/g" "$template_file"
     else
         # No substitution needed, just output the template
-        cat "$template_file"
+        command cat "$template_file"
     fi
 }
 
@@ -531,7 +531,7 @@ log_message "Creating Node.js startup script..."
 log_command "Creating container startup directory" \
     mkdir -p /etc/container/first-startup
 
-cat > /etc/container/first-startup/20-node-setup.sh << 'EOF'
+command cat > /etc/container/first-startup/20-node-setup.sh << 'EOF'
 #!/bin/bash
 # Node.js development environment setup
 
@@ -599,7 +599,7 @@ log_command "Setting Node.js startup script permissions" \
 # ============================================================================
 log_message "Creating Node.js verification script..."
 
-cat > /usr/local/bin/test-node << 'EOF'
+command cat > /usr/local/bin/test-node << 'EOF'
 #!/bin/bash
 echo "=== Node.js Installation Status ==="
 if command -v node &> /dev/null; then
@@ -630,7 +630,7 @@ echo "NPM global: ${NPM_GLOBAL_DIR:-/cache/npm-global}"
 echo ""
 echo "=== Global Packages ==="
 if [ -d "${NPM_GLOBAL_DIR:-/cache/npm-global}/lib/node_modules" ]; then
-    ls -1 "${NPM_GLOBAL_DIR:-/cache/npm-global}/lib/node_modules" 2>/dev/null | grep -v "^npm$" | sed 's/^/  /' || echo "  No global packages installed"
+    ls -1 "${NPM_GLOBAL_DIR:-/cache/npm-global}/lib/node_modules" 2>/dev/null | grep -v "^npm$" | command sed 's/^/  /' || echo "  No global packages installed"
 else
     echo "  No global packages directory found"
 fi

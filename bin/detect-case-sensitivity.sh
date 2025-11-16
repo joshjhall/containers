@@ -94,7 +94,7 @@ TEST_FILE_UPPER="${CHECK_PATH}/.CASE-TEST-${TIMESTAMP}-UPPER"
 
 # Cleanup function
 cleanup() {
-    rm -f "$TEST_FILE_LOWER" "$TEST_FILE_UPPER" 2>/dev/null || true
+    command rm -f "$TEST_FILE_LOWER" "$TEST_FILE_UPPER" 2>/dev/null || true
 }
 
 # Ensure cleanup on exit

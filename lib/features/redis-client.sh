@@ -192,7 +192,7 @@ log_message "Creating connection configuration templates..."
 
 # Create connection template
 log_command "Creating .redisclirc template" \
-    bash -c "cat > /etc/skel/.rediscli.template << 'EOF'
+    bash -c "command cat > /etc/skel/.rediscli.template << 'EOF'
 # Redis CLI configuration template
 # Copy to ~/.redisclirc and uncomment/modify as needed
 #
@@ -222,7 +222,7 @@ log_message "Creating Redis startup script..."
 log_command "Creating container startup directory" \
     mkdir -p /etc/container/first-startup
 
-cat > /etc/container/first-startup/20-redis-setup.sh << 'EOF'
+command cat > /etc/container/first-startup/20-redis-setup.sh << 'EOF'
 #!/bin/bash
 # Redis client configuration
 if [ ! -f ~/.redisclirc ] && [ -f ~/.rediscli.template ]; then
@@ -258,7 +258,7 @@ log_command "Setting Redis startup script permissions" \
 # ============================================================================
 log_message "Creating Redis verification script..."
 
-cat > /usr/local/bin/test-redis << 'EOF'
+command cat > /usr/local/bin/test-redis << 'EOF'
 #!/bin/bash
 echo "=== Redis Client Status ==="
 if command -v redis-cli &> /dev/null; then

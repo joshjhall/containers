@@ -133,7 +133,7 @@ done
 # Verification and Helpers
 # ============================================================================
 # Create verification script
-cat > /usr/local/bin/test-rust-dev << 'EOF'
+command cat > /usr/local/bin/test-rust-dev << 'EOF'
 #!/bin/bash
 echo "=== Rust Development Tools Status ==="
 tools=(
@@ -294,9 +294,9 @@ load_rust_template() {
     fi
 
     if [ -n "$lang_name" ]; then
-        sed "s/__LANG_NAME__/${lang_name}/g" "$template_file"
+        command sed "s/__LANG_NAME__/${lang_name}/g" "$template_file"
     else
-        cat "$template_file"
+        command cat "$template_file"
     fi
 }
 
@@ -400,7 +400,7 @@ echo "=== Creating rust-dev startup script ==="
 log_command "Creating startup directory" \
     mkdir -p /etc/container/first-startup
 
-cat > /etc/container/first-startup/20-rust-dev-setup.sh << 'EOF'
+command cat > /etc/container/first-startup/20-rust-dev-setup.sh << 'EOF'
 #!/bin/bash
 # Rust development tools configuration
 if command -v cargo &> /dev/null; then

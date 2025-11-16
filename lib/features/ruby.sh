@@ -130,7 +130,7 @@ RUBY_TARBALL="ruby-${RUBY_VERSION}.tar.gz"
 
 # Download Ruby tarball
 log_message "Downloading Ruby ${RUBY_VERSION}..."
-if ! curl -fsSL "$RUBY_URL" -o "$RUBY_TARBALL"; then
+if ! command curl -fsSL "$RUBY_URL" -o "$RUBY_TARBALL"; then
     log_error "Failed to download Ruby ${RUBY_VERSION}"
     log_error "Please verify version exists: https://www.ruby-lang.org/en/downloads/"
     log_feature_end
@@ -167,7 +167,7 @@ log_command "Installing Ruby" \
 # Clean up build files
 cd /
 log_command "Cleaning up build directory" \
-    rm -rf "$BUILD_TEMP"
+    command rm -rf "$BUILD_TEMP"
 
 # ============================================================================
 # Post-installation Setup
@@ -175,7 +175,7 @@ log_command "Cleaning up build directory" \
 log_message "Configuring Ruby and installing bundler..."
 
 # Configure gem to not install documentation
-cat > /usr/local/etc/gemrc << EOF
+command cat > /usr/local/etc/gemrc << EOF
 gem: --no-document
 install: --no-document
 update: --no-document
@@ -254,7 +254,7 @@ log_command "Creating startup directory" \
     mkdir -p /etc/container/first-startup
 
 # Create startup script for Ruby projects
-cat > /etc/container/first-startup/10-ruby-bundle.sh << 'EOF'
+command cat > /etc/container/first-startup/10-ruby-bundle.sh << 'EOF'
 #!/bin/bash
 # Install Ruby gems if Gemfile exists
 if [ -f ${WORKING_DIR}/Gemfile ]; then
@@ -272,7 +272,7 @@ log_command "Setting startup script permissions" \
 # ============================================================================
 log_message "Creating Ruby verification script..."
 
-cat > /usr/local/bin/test-ruby << 'EOF'
+command cat > /usr/local/bin/test-ruby << 'EOF'
 #!/bin/bash
 echo "=== Ruby Installation Status ==="
 if command -v ruby &> /dev/null; then

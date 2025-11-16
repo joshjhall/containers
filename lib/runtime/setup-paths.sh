@@ -10,7 +10,7 @@ echo "=== Setting up comprehensive PATH configuration ==="
 mkdir -p /etc/bashrc.d
 
 # Create comprehensive PATH setup that handles all installed tools
-cat > /etc/bashrc.d/10-tool-paths.sh << 'EOF'
+command cat > /etc/bashrc.d/10-tool-paths.sh << 'EOF'
 # Comprehensive PATH setup for all installed tools
 
 # Security: Safe eval for tool initialization

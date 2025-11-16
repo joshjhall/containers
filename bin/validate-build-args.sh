@@ -49,7 +49,7 @@ WARNINGS=0
 
 # Print usage
 show_help() {
-    head -n 30 "$0" | grep "^#" | sed 's/^# \?//'
+    head -n 30 "$0" | grep "^#" | command sed 's/^# \?//'
     exit 0
 }
 

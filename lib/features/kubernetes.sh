@@ -84,7 +84,7 @@ if command -v apt-key >/dev/null 2>&1; then
     # Old method for Debian 11/12 compatibility
     log_message "Using apt-key method (Debian 11/12)"
     log_command "Adding Kubernetes GPG key" \
-        bash -c "curl -fsSL https://pkgs.k8s.io/core:/stable:/v${KUBECTL_MINOR_VERSION}/deb/Release.key | apt-key add -"
+        bash -c "command curl -fsSL https://pkgs.k8s.io/core:/stable:/v${KUBECTL_MINOR_VERSION}/deb/Release.key | apt-key add -"
 
     log_command "Adding Kubernetes repository" \
         bash -c "echo 'deb https://pkgs.k8s.io/core:/stable:/v${KUBECTL_MINOR_VERSION}/deb/ /' > /etc/apt/sources.list.d/kubernetes.list"
@@ -95,7 +95,7 @@ else
         mkdir -p /etc/apt/keyrings
 
     log_command "Adding Kubernetes GPG key" \
-        bash -c "curl -fsSL https://pkgs.k8s.io/core:/stable:/v${KUBECTL_MINOR_VERSION}/deb/Release.key | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg"
+        bash -c "command curl -fsSL https://pkgs.k8s.io/core:/stable:/v${KUBECTL_MINOR_VERSION}/deb/Release.key | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg"
 
     log_command "Setting GPG key permissions" \
         chmod 644 /etc/apt/keyrings/kubernetes-apt-keyring.gpg
@@ -228,7 +228,7 @@ if [ -n "$HELM_FILENAME" ]; then
     # Move helm binary to /usr/local/bin
     if [ -f "${HELM_DIR}/helm" ]; then
         log_command "Installing Helm binary" \
-            mv "${HELM_DIR}/helm" /usr/local/bin/helm
+            command mv "${HELM_DIR}/helm" /usr/local/bin/helm
     else
         log_error "Helm binary not found after extraction"
         log_feature_end
@@ -366,7 +366,7 @@ if command -v kubectl &> /dev/null; then
             complete -F __start_kubectl k
         fi
     fi
-    rm -f "$COMPLETION_FILE"
+    command rm -f "$COMPLETION_FILE"
 fi
 
 # krew PATH
@@ -512,7 +512,7 @@ log_message "Creating Kubernetes startup script..."
 log_command "Creating container startup directory" \
     mkdir -p /etc/container/first-startup
 
-cat > /etc/container/first-startup/20-kubernetes-setup.sh << 'EOF'
+command cat > /etc/container/first-startup/20-kubernetes-setup.sh << 'EOF'
 #!/bin/bash
 # Check for kubernetes config
 if [ ! -f ~/.kube/config ] && [ -f ${WORKING_DIR}/.kube/config ]; then
@@ -540,7 +540,7 @@ log_command "Setting Kubernetes startup script permissions" \
 # ============================================================================
 log_message "Creating Kubernetes verification script..."
 
-cat > /usr/local/bin/test-kubernetes << 'EOF'
+command cat > /usr/local/bin/test-kubernetes << 'EOF'
 #!/bin/bash
 echo "=== Kubernetes Tools Status ==="
 

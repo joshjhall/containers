@@ -128,7 +128,7 @@ PYTHON_URL="https://www.python.org/ftp/python/${PYTHON_VERSION}/${PYTHON_TARBALL
 
 # Download Python tarball
 log_message "Downloading Python ${PYTHON_VERSION}..."
-if ! curl -fsSL "$PYTHON_URL" -o "$PYTHON_TARBALL"; then
+if ! command curl -fsSL "$PYTHON_URL" -o "$PYTHON_TARBALL"; then
     log_error "Failed to download Python ${PYTHON_VERSION}"
     log_error "Please verify version exists: https://www.python.org/downloads/release/python-${PYTHON_VERSION//.}"
     log_feature_end
@@ -169,7 +169,7 @@ log_command "Installing Python" \
 # Clean up build files
 cd /
 log_command "Cleaning up Python build directory" \
-    rm -rf "$BUILD_TEMP"
+    command rm -rf "$BUILD_TEMP"
 
 # Update library cache
 log_command "Updating library cache" \
@@ -215,7 +215,7 @@ log_message "✓ get-pip.py verified successfully"
 log_command "Installing pip" \
     /usr/local/bin/python3 get-pip.py --no-cache-dir
 
-rm get-pip.py
+command rm get-pip.py
 
 # Upgrade pip, setuptools, and wheel as the user
 log_command "Upgrading pip, setuptools, and wheel" \
@@ -239,17 +239,17 @@ if [ -d /tmp/python-project-files ] && [ -n "$(ls -A /tmp/python-project-files 2
         if [ -f "$file" ]; then
             filename=$(basename "$file")
             log_command "Copying $filename to workspace" \
-                cp "$file" "${WORKING_DIR}/"
+                command cp "$file" "${WORKING_DIR}/"
         fi
     done
-    
+
     # Fix ownership
     log_command "Setting correct ownership on workspace" \
         chown -R "${USER_UID}":"${USER_GID}" "${WORKING_DIR}"
-    
+
     # Clean up temp files
     log_command "Cleaning up temporary files" \
-        rm -rf /tmp/python-project-files
+        command rm -rf /tmp/python-project-files
 fi
 
 # ============================================================================
@@ -331,7 +331,7 @@ log_message "Creating Python startup script..."
 log_command "Creating startup directory" \
     mkdir -p /etc/container/first-startup
 
-cat > /etc/container/first-startup/10-poetry-install.sh << 'PYTHON_POETRY_EOF'
+command cat > /etc/container/first-startup/10-poetry-install.sh << 'PYTHON_POETRY_EOF'
 #!/bin/bash
 # Install Python dependencies if pyproject.toml exists
 if [ -f ${WORKING_DIR}/pyproject.toml ]; then
@@ -357,7 +357,7 @@ log_command "Setting startup script permissions" \
 # ============================================================================
 log_message "Creating Python verification script..."
 
-cat > /usr/local/bin/test-python << 'PYTHON_TEST_EOF'
+command cat > /usr/local/bin/test-python << 'PYTHON_TEST_EOF'
 #!/bin/bash
 echo "=== Python Installation Status ==="
 if command -v python3 &> /dev/null; then

@@ -124,7 +124,7 @@ RUSTUP_CHECKSUM_URL="${RUSTUP_URL}.sha256"
 
 # Fetch SHA256 checksum from official source
 log_message "Fetching rustup checksum from rust-lang.org..."
-if ! RUSTUP_CHECKSUM=$(curl -fsSL "$RUSTUP_CHECKSUM_URL" 2>/dev/null); then
+if ! RUSTUP_CHECKSUM=$(command curl -fsSL "$RUSTUP_CHECKSUM_URL" 2>/dev/null); then
     log_error "Failed to fetch checksum for rustup"
     log_error "URL: ${RUSTUP_CHECKSUM_URL}"
     log_feature_end
@@ -172,7 +172,7 @@ log_command "Installing Rust via verified rustup" \
 
 cd /
 log_command "Cleaning up build directory" \
-    rm -rf "$BUILD_TEMP"
+    command rm -rf "$BUILD_TEMP"
 
 # Install additional Cargo tools
 # These enhance the development experience but aren't required for basic Rust usage

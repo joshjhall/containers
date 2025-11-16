@@ -141,7 +141,7 @@ if command -v ollama >/dev/null 2>&1; then
     log_message "Creating Ollama helper scripts..."
 
     # Create a helper script to start Ollama in the background
-    cat > /usr/local/bin/start-ollama << 'EOF'
+    command cat > /usr/local/bin/start-ollama << 'EOF'
 #!/bin/bash
 # Start Ollama service in the background
 
@@ -195,7 +195,7 @@ EOF
         chmod +x /usr/local/bin/start-ollama
 
     # Create a helper script to pull common models
-    cat > /usr/local/bin/ollama-pull-defaults << 'EOF'
+    command cat > /usr/local/bin/ollama-pull-defaults << 'EOF'
 #!/bin/bash
 # Pull commonly used models for development
 echo "=== Pulling default Ollama models ==="
@@ -236,7 +236,7 @@ EOF
         mkdir -p /etc/container/startup
 
     # Create startup script to start Ollama service (runs every container start)
-    cat > /etc/container/startup/20-ollama-start.sh << 'EOF'
+    command cat > /etc/container/startup/20-ollama-start.sh << 'EOF'
 #!/bin/bash
 # Start Ollama service if available
 if command -v ollama &> /dev/null; then
@@ -311,7 +311,7 @@ OLLAMA_BASHRC_EOF
     # ============================================================================
     log_message "Creating Ollama verification script..."
 
-    cat > /usr/local/bin/test-ollama << 'EOF'
+    command cat > /usr/local/bin/test-ollama << 'EOF'
 #!/bin/bash
 echo "=== Ollama Status ==="
 if command -v ollama &> /dev/null; then

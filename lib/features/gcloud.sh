@@ -64,7 +64,7 @@ if command -v apt-key >/dev/null 2>&1; then
     # Old method for Debian 11/12 compatibility
     log_message "Using apt-key method (Debian 11/12)"
     log_command "Adding Google Cloud GPG key" \
-        bash -c "curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key --keyring /usr/share/keyrings/cloud.google.gpg add -"
+        bash -c "command curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key --keyring /usr/share/keyrings/cloud.google.gpg add -"
 
     log_command "Adding Google Cloud SDK repository" \
         bash -c "echo 'deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main' > /etc/apt/sources.list.d/google-cloud-sdk.list"
@@ -72,7 +72,7 @@ else
     # New method for Debian 13+ (Trixie and later)
     log_message "Using signed-by method (Debian 13+)"
     log_command "Adding Google Cloud GPG key" \
-        bash -c "curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg > /usr/share/keyrings/cloud.google.gpg"
+        bash -c "command curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg > /usr/share/keyrings/cloud.google.gpg"
 
     log_command "Setting GPG key permissions" \
         chmod go+r /usr/share/keyrings/cloud.google.gpg
@@ -249,7 +249,7 @@ log_message "Creating Google Cloud startup scripts..."
 log_command "Creating container startup directory" \
     mkdir -p /etc/container/first-startup
 
-cat > /etc/container/first-startup/20-gcloud-setup.sh << EOF
+command cat > /etc/container/first-startup/20-gcloud-setup.sh << EOF
 #!/bin/bash
 # Check for gcloud credentials
 if [ ! -d ~/.config/gcloud ] && [ -d ${WORKING_DIR}/.config/gcloud ]; then
@@ -280,7 +280,7 @@ log_command "Setting gcloud startup script permissions" \
 # ============================================================================
 log_message "Creating Google Cloud verification script..."
 
-cat > /usr/local/bin/test-gcloud << 'EOF'
+command cat > /usr/local/bin/test-gcloud << 'EOF'
 #!/bin/bash
 echo "=== Google Cloud SDK Status ==="
 if command -v gcloud &> /dev/null; then

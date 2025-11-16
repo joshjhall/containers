@@ -249,10 +249,10 @@ load_node_template() {
 
     if [ -n "$project_name" ]; then
         # Replace __PROJECT_NAME__ placeholder with actual project name
-        sed "s/__PROJECT_NAME__/${project_name}/g" "$template_file"
+        command sed "s/__PROJECT_NAME__/${project_name}/g" "$template_file"
     else
         # No substitution needed, just output the template
-        cat "$template_file"
+        command cat "$template_file"
     fi
 }
 
@@ -433,7 +433,7 @@ node-clean() {
     echo "=== Cleaning build artifacts and caches ==="
 
     # Remove common build directories
-    rm -rf dist/ build/ .next/ out/ coverage/ .cache/ .parcel-cache/
+    command rm -rf dist/ build/ .next/ out/ coverage/ .cache/ .parcel-cache/
 
     # Clean package manager caches
     npm cache clean --force
@@ -465,7 +465,7 @@ log_message "Creating node-dev startup script..."
 log_command "Creating container startup directory" \
     mkdir -p /etc/container/first-startup
 
-cat > /etc/container/first-startup/25-node-dev-setup.sh << 'NODE_DEV_STARTUP_EOF'
+command cat > /etc/container/first-startup/25-node-dev-setup.sh << 'NODE_DEV_STARTUP_EOF'
 #!/bin/bash
 # Node.js development tools configuration
 if command -v node &> /dev/null; then
@@ -524,7 +524,7 @@ log_command "Setting Node.js dev startup script permissions" \
 # ============================================================================
 log_message "Creating node-dev verification script..."
 
-cat > /usr/local/bin/test-node-dev << 'NODE_DEV_TEST_EOF'
+command cat > /usr/local/bin/test-node-dev << 'NODE_DEV_TEST_EOF'
 #!/bin/bash
 echo "=== Node.js Development Tools Status ==="
 
@@ -599,12 +599,12 @@ log_command "Setting test-node-dev script permissions" \
     chmod +x /usr/local/bin/test-node-dev
 
 # Add helper to list all node dev tools
-cat > /usr/local/bin/node-dev-list << 'NODE_DEV_LIST_EOF'
+command cat > /usr/local/bin/node-dev-list << 'NODE_DEV_LIST_EOF'
 #!/bin/bash
 echo "=== Installed Node.js Development Tools ==="
 echo ""
 echo "Global npm packages:"
-npm list -g --depth=0 | grep -v "npm@" | sed 's/├── //g' | sed 's/└── //g' | sort
+npm list -g --depth=0 | grep -v "npm@" | command sed 's/├── //g' | command sed 's/└── //g' | sort
 NODE_DEV_LIST_EOF
 log_command "Setting node-dev-list script permissions" \
     chmod +x /usr/local/bin/node-dev-list

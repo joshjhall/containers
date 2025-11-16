@@ -224,7 +224,7 @@ load_ruby_config_template() {
         return 1
     fi
 
-    cat "$template_file"
+    command cat "$template_file"
 }
 
 # RSpec configuration from template
@@ -243,7 +243,7 @@ echo "=== Creating ruby-dev startup script ==="
 log_command "Creating startup directory" \
     mkdir -p /etc/container/first-startup
 
-cat > /etc/container/first-startup/20-ruby-dev-setup.sh << 'EOF'
+command cat > /etc/container/first-startup/20-ruby-dev-setup.sh << 'EOF'
 #!/bin/bash
 # Ruby development tools configuration
 if command -v ruby &> /dev/null; then

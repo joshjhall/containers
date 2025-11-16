@@ -95,7 +95,7 @@ log_command "Creating keyrings directory" \
     install -m 0755 -d /etc/apt/keyrings
 
 log_command "Adding Docker GPG key" \
-    curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+    command curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
 
 log_command "Setting Docker GPG key permissions" \
     chmod a+r /etc/apt/keyrings/docker.gpg
@@ -204,7 +204,7 @@ download_and_extract \
 
 # Install binary
 log_command "Installing lazydocker binary" \
-    mv ./lazydocker /usr/local/bin/
+    command mv ./lazydocker /usr/local/bin/
 
 log_command "Setting lazydocker permissions" \
     chmod +x /usr/local/bin/lazydocker
@@ -213,7 +213,7 @@ log_message "✓ lazydocker v${LAZYDOCKER_VERSION} installed successfully"
 
 cd /
 log_command "Cleaning up build directory" \
-    rm -rf "$BUILD_TEMP"
+    command rm -rf "$BUILD_TEMP"
 
 # ============================================================================
 # Dive Installation
@@ -257,7 +257,7 @@ log_command "Installing dive package" \
 
 cd /
 log_command "Cleaning up build directory" \
-    rm -rf "$BUILD_TEMP"
+    command rm -rf "$BUILD_TEMP"
 
 # ============================================================================
 # Cache Configuration
@@ -438,7 +438,7 @@ log_command "Creating container startup directories" \
     mkdir -p /etc/container/first-startup /etc/container/startup
 
 # First-time startup script - runs once
-cat > /etc/container/first-startup/20-docker-setup.sh << 'DOCKER_STARTUP_EOF'
+command cat > /etc/container/first-startup/20-docker-setup.sh << 'DOCKER_STARTUP_EOF'
 #!/bin/bash
 # Check if Docker socket is mounted
 if [ -S /var/run/docker.sock ]; then
@@ -464,7 +464,7 @@ log_command "Setting Docker first-startup script permissions" \
 # ============================================================================
 log_message "Creating Docker verification script..."
 
-cat > /usr/local/bin/test-docker << 'DOCKER_TEST_EOF'
+command cat > /usr/local/bin/test-docker << 'DOCKER_TEST_EOF'
 #!/bin/bash
 echo "=== Docker CLI Status ==="
 

@@ -126,7 +126,7 @@ done
 log_message "Creating Mojo development helper scripts..."
 
 # Simple project initializer
-cat > /usr/local/bin/mojo-init << 'EOF'
+command cat > /usr/local/bin/mojo-init << 'EOF'
 #!/bin/bash
 # Initialize a new Mojo project with basic structure
 
@@ -144,9 +144,9 @@ load_mojo_template() {
     fi
 
     if [ -n "$project_name" ]; then
-        sed "s/__PROJECT_NAME__/${project_name}/g" "$template_file"
+        command sed "s/__PROJECT_NAME__/${project_name}/g" "$template_file"
     else
-        cat "$template_file"
+        command cat "$template_file"
     fi
 }
 
@@ -254,7 +254,7 @@ log_command "Setting Mojo dev bashrc script permissions" \
 # ============================================================================
 log_message "Creating mojo-dev startup script..."
 
-cat > /etc/container/first-startup/45-mojo-dev-setup.sh << 'EOF'
+command cat > /etc/container/first-startup/45-mojo-dev-setup.sh << 'EOF'
 #!/bin/bash
 # Mojo development tools configuration
 if command -v mojo &> /dev/null; then
@@ -291,7 +291,7 @@ log_command "Setting Mojo dev startup script permissions" \
 # ============================================================================
 log_message "Creating mojo-dev verification script..."
 
-cat > /usr/local/bin/test-mojo-dev << 'EOF'
+command cat > /usr/local/bin/test-mojo-dev << 'EOF'
 #!/bin/bash
 echo "=== Mojo Development Tools Status ==="
 

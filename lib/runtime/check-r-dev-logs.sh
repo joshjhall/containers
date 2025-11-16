@@ -68,7 +68,7 @@ case $ACTION in
     summary)
         if [ -f "$SUMMARY_LOG" ]; then
             echo "=== R Development Tools Installation Summary ==="
-            cat "$SUMMARY_LOG"
+            command cat "$SUMMARY_LOG"
         else
             echo "No summary log found at $SUMMARY_LOG"
         fi
@@ -78,7 +78,7 @@ case $ACTION in
         if [ -f "$ERROR_LOG" ]; then
             echo "=== R Development Tools Installation Errors/Warnings ==="
             if [ -s "$ERROR_LOG" ]; then
-                cat "$ERROR_LOG"
+                command cat "$ERROR_LOG"
                 echo ""
                 echo "Total errors: $(grep -c -i "error" "$ERROR_LOG" 2>/dev/null || echo "0")"
                 echo "Total warnings: $(grep -c -i "warning" "$ERROR_LOG" 2>/dev/null || echo "0")"
@@ -96,7 +96,7 @@ case $ACTION in
             echo "Warning: This log is very long. Consider using 'less' or redirecting to a file."
             echo "Press Enter to continue or Ctrl+C to cancel..."
             read -r
-            cat "$LOG_FILE"
+            command cat "$LOG_FILE"
         else
             echo "No installation log found at $LOG_FILE"
         fi
