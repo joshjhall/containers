@@ -507,7 +507,7 @@ log_message "Creating golang-dev startup script..."
 log_command "Creating container startup directory" \
     mkdir -p /etc/container/first-startup
 
-cat > /etc/container/first-startup/35-golang-dev-setup.sh << EOF
+command cat > /etc/container/first-startup/35-golang-dev-setup.sh << EOF
 #!/bin/bash
 # Go development tools configuration
 if command -v go &> /dev/null; then
@@ -563,7 +563,7 @@ log_command "Creating go-dev-templates directory" \
     mkdir -p /etc/go-dev-templates
 
 # Default .golangci.yml
-cat > /etc/go-dev-templates/.golangci.yml << 'EOF'
+command cat > /etc/go-dev-templates/.golangci.yml << 'EOF'
 linters:
   enable:
     - gofmt
@@ -603,7 +603,7 @@ issues:
 EOF
 
 # Default .air.toml
-cat > /etc/go-dev-templates/.air.toml << 'EOF'
+command cat > /etc/go-dev-templates/.air.toml << 'EOF'
 root = "."
 testdata_dir = "testdata"
 tmp_dir = "tmp"
@@ -641,7 +641,7 @@ EOF
 # ============================================================================
 log_message "Creating golang-dev verification script..."
 
-cat > /usr/local/bin/test-golang-dev << 'EOF'
+command cat > /usr/local/bin/test-golang-dev << 'EOF'
 #!/bin/bash
 echo "=== Go Development Tools Status ==="
 

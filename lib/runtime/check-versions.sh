@@ -101,7 +101,7 @@ get_github_release() {
 # Get latest Python version
 get_latest_python() {
     # Use Python's official JSON API endpoint
-    curl -s https://endoflife.date/api/python.json | jq -r '.[] | select(.latest) | .latest' | head -1 || echo "unknown"
+    command curl -shttps://endoflife.date/api/python.json | jq -r '.[] | select(.latest) | .latest' | head -1 || echo "unknown"
 }
 
 # Get latest Ruby version
@@ -117,24 +117,24 @@ get_latest_ruby() {
         echo "rate-limited"
         return
     fi
-    echo "$response" | jq -r '.[].tag_name | select(startswith("v"))' | head -1 | sed 's/^v//' | tr '_' '.' || echo "unknown"
+    echo "$response" | jq -r '.[].tag_name | select(startswith("v"))' | head -1 | command sed's/^v//' | tr '_' '.' || echo "unknown"
 }
 
 # Get latest Node.js LTS version
 get_latest_node() {
-    curl -s https://nodejs.org/dist/index.json | jq -r '.[] | select(.lts != false) | .version' | head -1 | sed 's/^v//' | cut -d. -f1 || echo "unknown"
+    command curl -shttps://nodejs.org/dist/index.json | jq -r '.[] | select(.lts != false) | .version' | head -1 | command sed's/^v//' | cut -d. -f1 || echo "unknown"
 }
 
 # Get latest Go version
 get_latest_go() {
-    curl -s https://go.dev/VERSION?m=text | head -1 | sed 's/^go//' || echo "unknown"
+    command curl -shttps://go.dev/VERSION?m=text | head -1 | command sed's/^go//' || echo "unknown"
 }
 
 # Get latest Rust stable version
 get_latest_rust() {
     # Try to get the latest stable version from the Rust release API
     local version
-    version=$(curl -s https://api.github.com/repos/rust-lang/rust/releases | jq -r '.[] | select(.prerelease == false) | .tag_name' | head -1 | sed 's/^v//')
+    version=$(curl -s https://api.github.com/repos/rust-lang/rust/releases | jq -r '.[] | select(.prerelease == false) | .tag_name' | head -1 | command sed's/^v//')
     
     if [ -n "$version" ] && [ "$version" != "null" ]; then
         echo "$version"
@@ -343,7 +343,7 @@ fi
 if [ -f "$FEATURES_DIR/dev-tools.sh" ]; then
     # direnv
     current=$(extract_version "$FEATURES_DIR/dev-tools.sh" 'DIRENV_VERSION="\K[^"]+')
-    latest=$(get_github_release "direnv/direnv" | sed 's/^v//')
+    latest=$(get_github_release "direnv/direnv" | command sed's/^v//')
     status=$(compare_version "$current" "$latest")
     CURRENT_VERSIONS["direnv"]="$current"
     LATEST_VERSIONS["direnv"]="$latest"
@@ -352,7 +352,7 @@ if [ -f "$FEATURES_DIR/dev-tools.sh" ]; then
     
     # lazygit
     current=$(extract_version "$FEATURES_DIR/dev-tools.sh" 'LAZYGIT_VERSION="\K[^"]+')
-    latest=$(get_github_release "jesseduffield/lazygit" | sed 's/^v//')
+    latest=$(get_github_release "jesseduffield/lazygit" | command sed's/^v//')
     status=$(compare_version "$current" "$latest")
     CURRENT_VERSIONS["lazygit"]="$current"
     LATEST_VERSIONS["lazygit"]="$latest"
@@ -361,7 +361,7 @@ if [ -f "$FEATURES_DIR/dev-tools.sh" ]; then
     
     # delta
     current=$(extract_version "$FEATURES_DIR/dev-tools.sh" 'DELTA_VERSION="\K[^"]+')
-    latest=$(get_github_release "dandavison/delta" | sed 's/^v//')
+    latest=$(get_github_release "dandavison/delta" | command sed's/^v//')
     status=$(compare_version "$current" "$latest")
     CURRENT_VERSIONS["delta"]="$current"
     LATEST_VERSIONS["delta"]="$latest"
@@ -370,7 +370,7 @@ if [ -f "$FEATURES_DIR/dev-tools.sh" ]; then
     
     # mkcert
     current=$(extract_version "$FEATURES_DIR/dev-tools.sh" 'MKCERT_VERSION="\K[^"]+')
-    latest=$(get_github_release "FiloSottile/mkcert" | sed 's/^v//')
+    latest=$(get_github_release "FiloSottile/mkcert" | command sed's/^v//')
     status=$(compare_version "$current" "$latest")
     CURRENT_VERSIONS["mkcert"]="$current"
     LATEST_VERSIONS["mkcert"]="$latest"
@@ -379,7 +379,7 @@ if [ -f "$FEATURES_DIR/dev-tools.sh" ]; then
     
     # act
     current=$(extract_version "$FEATURES_DIR/dev-tools.sh" 'ACT_VERSION="\K[^"]+')
-    latest=$(get_github_release "nektos/act" | sed 's/^v//')
+    latest=$(get_github_release "nektos/act" | command sed's/^v//')
     status=$(compare_version "$current" "$latest")
     CURRENT_VERSIONS["act"]="$current"
     LATEST_VERSIONS["act"]="$latest"
@@ -389,7 +389,7 @@ if [ -f "$FEATURES_DIR/dev-tools.sh" ]; then
     # glab
     current=$(extract_version "$FEATURES_DIR/dev-tools.sh" 'GLAB_VERSION="\K[^"]+')
     # GitLab CLI is hosted on GitLab, not GitHub - use GitLab API
-    latest=$(curl -s "https://gitlab.com/api/v4/projects/gitlab-org%2Fcli/releases" | jq -r '.[0].tag_name' | sed 's/^v//' || echo "unknown")
+    latest=$(curl -s "https://gitlab.com/api/v4/projects/gitlab-org%2Fcli/releases" | jq -r '.[0].tag_name' | command sed's/^v//' || echo "unknown")
     status=$(compare_version "$current" "$latest")
     CURRENT_VERSIONS["glab"]="$current"
     LATEST_VERSIONS["glab"]="$latest"
@@ -417,7 +417,7 @@ if [ -f "$FEATURES_DIR/terraform.sh" ]; then
         latest="latest"
         status="up-to-date"
     else
-        latest=$(get_github_release "hashicorp/terraform" | sed 's/^v//')
+        latest=$(get_github_release "hashicorp/terraform" | command sed's/^v//')
         status=$(compare_version "$current" "$latest")
     fi
     CURRENT_VERSIONS["Terraform"]="$current"
@@ -427,7 +427,7 @@ if [ -f "$FEATURES_DIR/terraform.sh" ]; then
     
     # Terragrunt version
     current=$(extract_version "$FEATURES_DIR/terraform.sh" 'TERRAGRUNT_VERSION="?\$\{TERRAGRUNT_VERSION:-\K[^"}]+')
-    latest=$(get_github_release "gruntwork-io/terragrunt" | sed 's/^v//')
+    latest=$(get_github_release "gruntwork-io/terragrunt" | command sed's/^v//')
     status=$(compare_version "$current" "$latest")
     CURRENT_VERSIONS["Terragrunt"]="$current"
     LATEST_VERSIONS["Terragrunt"]="$latest"
@@ -436,7 +436,7 @@ if [ -f "$FEATURES_DIR/terraform.sh" ]; then
     
     # terraform-docs version
     current=$(extract_version "$FEATURES_DIR/terraform.sh" 'TFDOCS_VERSION="?\$\{TFDOCS_VERSION:-\K[^"}]+')
-    latest=$(get_github_release "terraform-docs/terraform-docs" | sed 's/^v//')
+    latest=$(get_github_release "terraform-docs/terraform-docs" | command sed's/^v//')
     status=$(compare_version "$current" "$latest")
     CURRENT_VERSIONS["terraform-docs"]="$current"
     LATEST_VERSIONS["terraform-docs"]="$latest"
@@ -449,7 +449,7 @@ if [ -f "$FEATURES_DIR/kubernetes.sh" ]; then
     # kubectl
     current=$(extract_version "$FEATURES_DIR/kubernetes.sh" 'KUBECTL_VERSION="?\$\{KUBECTL_VERSION:-\K[^"}]+')
     # kubectl returns the full version, but we track major.minor
-    latest=$(curl -Ls https://dl.k8s.io/release/stable.txt | sed 's/^v//' | cut -d. -f1,2 || echo "unknown")
+    latest=$(curl -Ls https://dl.k8s.io/release/stable.txt | command sed's/^v//' | cut -d. -f1,2 || echo "unknown")
     status=$(compare_version "$current" "$latest")
     CURRENT_VERSIONS["kubectl"]="$current"
     LATEST_VERSIONS["kubectl"]="$latest"
@@ -458,7 +458,7 @@ if [ -f "$FEATURES_DIR/kubernetes.sh" ]; then
     
     # k9s
     current=$(extract_version "$FEATURES_DIR/kubernetes.sh" 'K9S_VERSION="?\$\{K9S_VERSION:-\K[^"}]+')
-    latest=$(get_github_release "derailed/k9s" | sed 's/^v//')
+    latest=$(get_github_release "derailed/k9s" | command sed's/^v//')
     status=$(compare_version "$current" "$latest")
     CURRENT_VERSIONS["k9s"]="$current"
     LATEST_VERSIONS["k9s"]="$latest"
@@ -467,7 +467,7 @@ if [ -f "$FEATURES_DIR/kubernetes.sh" ]; then
     
     # krew
     current=$(extract_version "$FEATURES_DIR/kubernetes.sh" 'KREW_VERSION="?\$\{KREW_VERSION:-\K[^"}]+')
-    latest=$(get_github_release "kubernetes-sigs/krew" | sed 's/^v//')
+    latest=$(get_github_release "kubernetes-sigs/krew" | command sed's/^v//')
     status=$(compare_version "$current" "$latest")
     CURRENT_VERSIONS["krew"]="$current"
     LATEST_VERSIONS["krew"]="$latest"
@@ -480,7 +480,7 @@ if [ -f "$FEATURES_DIR/kubernetes.sh" ]; then
         latest="latest"
         status="up-to-date"
     else
-        latest=$(get_github_release "helm/helm" | sed 's/^v//')
+        latest=$(get_github_release "helm/helm" | command sed's/^v//')
         status=$(compare_version "$current" "$latest")
     fi
     CURRENT_VERSIONS["Helm"]="$current"

@@ -79,7 +79,7 @@ log_message "Adding R repository key..."
 
 # Method 1: Try to download the key directly from CRAN
 if log_command "Downloading R repository key from CRAN" \
-    bash -c "wget -qO- https://cloud.r-project.org/bin/linux/debian/marutter_pubkey.asc 2>/dev/null | gpg --dearmor > /usr/share/keyrings/r-project-archive-keyring.gpg 2>/dev/null"; then
+    bash -c "command wget -qO- https://cloud.r-project.org/bin/linux/debian/marutter_pubkey.asc 2>/dev/null | gpg --dearmor > /usr/share/keyrings/r-project-archive-keyring.gpg 2>/dev/null"; then
     log_message "Key downloaded from CRAN"
 else
     log_warning "CRAN key failed, trying keyserver..."
@@ -92,8 +92,8 @@ else
         log_warning "Keyserver failed, trying direct download..."
         # Method 3: Direct download from keyserver
         log_command "Direct download from keyserver" \
-            bash -c "wget -O- 'https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x95C0FAF38DB3CCAD0C080A7BDC78B2DDEABC47B7' | \
-                sed -n '/-----BEGIN/,/-----END/p' | \
+            bash -c "command wget -O- 'https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x95C0FAF38DB3CCAD0C080A7BDC78B2DDEABC47B7' | \
+                command sed -n '/-----BEGIN/,/-----END/p' | \
                 gpg --dearmor > /usr/share/keyrings/r-project-archive-keyring.gpg"
     fi
 fi
@@ -333,7 +333,7 @@ log_message "Creating global R configuration"
 # Create system-wide Rprofile
 log_command "Creating R config directory" \
     mkdir -p /etc/R
-cat > /etc/R/Rprofile.site << 'EOF'
+command cat > /etc/R/Rprofile.site << 'EOF'
 # System-wide R startup configuration
 local({
     # Set default CRAN mirror
@@ -354,7 +354,7 @@ local({
 EOF
 
 # Create system-wide Renviron
-cat > /etc/R/Renviron.site << EOF
+command cat > /etc/R/Renviron.site << EOF
 # System-wide R environment variables
 R_LIBS_USER=/cache/r/library
 R_LIBS_SITE=/cache/r/library
@@ -372,7 +372,7 @@ log_message "Creating R startup script"
 log_command "Creating container startup directory" \
     mkdir -p /etc/container/first-startup
 
-cat > /etc/container/first-startup/10-r-setup.sh << 'EOF'
+command cat > /etc/container/first-startup/10-r-setup.sh << 'EOF'
 #!/bin/bash
 # R development environment setup
 
@@ -418,7 +418,7 @@ log_command "Setting R startup script permissions" \
 # ============================================================================
 log_message "Creating R verification script..."
 
-cat > /usr/local/bin/test-r << 'EOF'
+command cat > /usr/local/bin/test-r << 'EOF'
 #!/bin/bash
 echo "=== R Installation Status ==="
 if command -v R &> /dev/null; then
@@ -426,7 +426,7 @@ if command -v R &> /dev/null; then
     echo "R binary: $(which R)"
     echo "R home: $(R RHOME)"
     echo "R library paths:"
-    Rscript -e ".libPaths()" | sed 's/^/  /'
+    Rscript -e ".libPaths()" | command sed 's/^/  /'
 else
     echo "✗ R is not installed"
 fi

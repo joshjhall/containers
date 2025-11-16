@@ -75,7 +75,7 @@ log_message "Configuring 1Password repository..."
 
 # Add 1Password GPG key for package verification
 log_command "Adding 1Password GPG key" \
-    curl -sS https://downloads.1password.com/linux/keys/1password.asc | \
+    command curl -sS https://downloads.1password.com/linux/keys/1password.asc | \
     gpg --dearmor --output /usr/share/keyrings/1password-archive-keyring.gpg
 
 # Add 1Password repository
@@ -91,11 +91,11 @@ log_message "Configuring security policy for package verification..."
 log_command "Creating debsig policy directory" \
     mkdir -p /etc/debsig/policies/AC2D62742012EA22/
 log_command "Downloading 1Password debsig policy" \
-    bash -c "curl -sS https://downloads.1password.com/linux/debian/debsig/1password.pol > /etc/debsig/policies/AC2D62742012EA22/1password.pol"
+    bash -c "command curl -sS https://downloads.1password.com/linux/debian/debsig/1password.pol > /etc/debsig/policies/AC2D62742012EA22/1password.pol"
 log_command "Creating debsig keyrings directory" \
     mkdir -p /usr/share/debsig/keyrings/AC2D62742012EA22
 log_command "Adding 1Password debsig GPG key" \
-    curl -sS https://downloads.1password.com/linux/keys/1password.asc | \
+    command curl -sS https://downloads.1password.com/linux/keys/1password.asc | \
     gpg --dearmor --output /usr/share/debsig/keyrings/AC2D62742012EA22/debsig.gpg
 
 # ============================================================================
@@ -294,7 +294,7 @@ log_message "Creating 1Password startup script..."
 log_command "Creating container startup directory" \
     mkdir -p /etc/container/first-startup
 
-cat > /etc/container/first-startup/50-1password-setup.sh << 'EOF'
+command cat > /etc/container/first-startup/50-1password-setup.sh << 'EOF'
 #!/bin/bash
 # 1Password CLI setup
 
@@ -320,7 +320,7 @@ log_command "Setting 1Password startup script permissions" \
 # ============================================================================
 log_message "Creating 1Password verification script..."
 
-cat > /usr/local/bin/test-1password << 'EOF'
+command cat > /usr/local/bin/test-1password << 'EOF'
 #!/bin/bash
 echo "=== 1Password CLI Status ==="
 

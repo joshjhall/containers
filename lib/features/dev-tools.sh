@@ -53,7 +53,7 @@ log_message "Configuring repositories for development tools..."
 
 # Add GitHub CLI repository
 log_command "Adding GitHub CLI GPG key" \
-    bash -c "curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg > /usr/share/keyrings/githubcli-archive-keyring.gpg"
+    bash -c "command curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg > /usr/share/keyrings/githubcli-archive-keyring.gpg"
 
 log_command "Setting GitHub CLI GPG key permissions" \
     chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg
@@ -492,7 +492,7 @@ if [ -n "$DIRENV_BINARY" ]; then
         "direnv"
 
     log_command "Installing direnv binary" \
-        mv direnv /usr/local/bin/direnv
+        command mv direnv /usr/local/bin/direnv
 
     log_command "Setting direnv permissions" \
         chmod +x /usr/local/bin/direnv
@@ -587,7 +587,7 @@ if [ -n "$DELTA_FILENAME" ]; then
     log_command "Extracting delta" \
         tar -xzf delta-verified.tar.gz
     log_command "Installing delta binary" \
-        mv "${DELTA_DIR}/delta" /usr/local/bin/
+        command mv "${DELTA_DIR}/delta" /usr/local/bin/
 
     cd /
 fi
@@ -629,7 +629,7 @@ if [ -n "$MKCERT_BINARY" ]; then
         "mkcert"
 
     log_command "Installing mkcert binary" \
-        mv mkcert /usr/local/bin/mkcert
+        command mv mkcert /usr/local/bin/mkcert
 
     log_command "Setting mkcert permissions" \
         chmod +x /usr/local/bin/mkcert
@@ -715,7 +715,7 @@ if [ -n "$GITCLIFF_FILENAME" ]; then
     log_command "Extracting git-cliff" \
         tar -xzf git-cliff-verified.tar.gz
     log_command "Installing git-cliff binary" \
-        mv git-cliff-${GITCLIFF_VERSION}/git-cliff /usr/local/bin/
+        command mv git-cliff-${GITCLIFF_VERSION}/git-cliff /usr/local/bin/
 
     cd /
     log_message "✓ git-cliff ${GITCLIFF_VERSION} installed successfully"
@@ -841,7 +841,7 @@ log_message "Creating startup scripts..."
 log_command "Creating container startup directory" \
     mkdir -p /etc/container/first-startup
 
-cat > /etc/container/first-startup/30-claude-code-setup.sh << 'EOF'
+command cat > /etc/container/first-startup/30-claude-code-setup.sh << 'EOF'
 #!/bin/bash
 # Check if Claude Code needs setup
 if command -v claude &> /dev/null && [ ! -f ~/.config/claude/config.json ]; then
@@ -859,7 +859,7 @@ log_command "Setting Claude Code startup script permissions" \
 # ============================================================================
 log_message "Configuring git to use delta..."
 
-cat >> /etc/gitconfig << 'EOF'
+command cat >> /etc/gitconfig << 'EOF'
 [core]
     pager = delta
 [interactive]
@@ -926,7 +926,7 @@ if command -v just &> /dev/null; then
             source "$COMPLETION_FILE"
         fi
     fi
-    rm -f "$COMPLETION_FILE"
+    command rm -f "$COMPLETION_FILE"
 fi
 
 # mkcert helpers
@@ -940,7 +940,7 @@ if command -v fzf &> /dev/null && command -v git &> /dev/null; then
     # Git branch selector
     # Use 'command grep' to bypass aliases for reliable filtering
     fgb() {
-        git branch -a | command grep -v HEAD | fzf --preview 'git log --oneline --graph --date=short --color=always --pretty="format:%C(auto)%cd %h%d %s" $(echo {} | sed "s/.* //")' | sed "s/.* //"
+        git branch -a | command grep -v HEAD | fzf --preview 'git log --oneline --graph --date=short --color=always --pretty="format:%C(auto)%cd %h%d %s" $(echo {} | command sed "s/.* //")' | command sed "s/.* //"
     }
 
     # Git checkout with fzf
@@ -1014,7 +1014,7 @@ log_command "Setting dev-tools bashrc script permissions" \
 # ============================================================================
 log_message "Creating dev tools verification script..."
 
-cat > /usr/local/bin/test-dev-tools << 'EOF'
+command cat > /usr/local/bin/test-dev-tools << 'EOF'
 #!/bin/bash
 echo "=== Development Tools Status ==="
 echo ""

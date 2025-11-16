@@ -51,7 +51,7 @@ fi
 # ============================================================================
 
 show_help() {
-    head -n 30 "$0" | grep "^#" | sed 's/^# \?//'
+    head -n 30 "$0" | grep "^#" | command sed 's/^# \?//'
 }
 
 # Extract description from feature script
@@ -66,7 +66,7 @@ extract_description() {
         found && /^#$/ { next }
         found && /^# [A-Z]/ { exit }
         found { exit }
-    ' "$script" | tr '\n' ' ' | sed 's/  */ /g; s/^ //; s/ $//')
+    ' "$script" | tr '\n' ' ' | command sed 's/  */ /g; s/^ //; s/ $//')
 
     echo "$desc"
 }
@@ -82,7 +82,7 @@ extract_dependencies() {
         found && /^#   / { print; next }
         found && /^#$/ { next }
         found { exit }
-    ' "$script" | grep -i "requires\|depends" | sed 's/^#   //; s/feature to be enabled.*//; s/Requires //; s/INCLUDE_//' | tr -d '.' | xargs)
+    ' "$script" | grep -i "requires\|depends" | command sed 's/^#   //; s/feature to be enabled.*//; s/Requires //; s/INCLUDE_//' | tr -d '.' | xargs)
 
     echo "$deps"
 }
@@ -272,7 +272,7 @@ else
         # Print feature info
         printf "  %-20s %s\n" "$name" "$build_arg"
         if [ -n "$description" ]; then
-            echo "    $description" | fold -s -w 76 | sed '1!s/^/    /'
+            echo "    $description" | fold -s -w 76 | command sed '1!s/^/    /'
         fi
         if [ -n "$version_arg" ]; then
             echo "    Version: $version_arg"

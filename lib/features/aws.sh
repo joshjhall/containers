@@ -127,16 +127,16 @@ log_message "✓ AWS CLI GPG key verified"
 # Download and Verify AWS CLI v2
 # ============================================================================
 log_command "Downloading AWS CLI v2" \
-    curl -sL "$AWS_CLI_URL" -o "awscliv2.zip"
+    command curl -sL "$AWS_CLI_URL" -o "awscliv2.zip"
 
 log_command "Downloading AWS CLI v2 signature" \
-    curl -sL "${AWS_CLI_URL}.sig" -o "awscliv2.sig"
+    command curl -sL "${AWS_CLI_URL}.sig" -o "awscliv2.sig"
 
 log_message "Verifying GPG signature..."
 if ! gpg --verify awscliv2.sig awscliv2.zip 2>/dev/null; then
     log_error "GPG signature verification failed!"
     log_error "The downloaded AWS CLI package may be compromised."
-    rm -f awscliv2.zip awscliv2.sig
+    command rm -f awscliv2.zip awscliv2.sig
     exit 1
 fi
 
@@ -150,7 +150,7 @@ log_command "Installing AWS CLI v2" \
 
 cd /
 log_command "Cleaning up build directory" \
-    rm -rf "$BUILD_TEMP"
+    command rm -rf "$BUILD_TEMP"
 
 # ============================================================================
 # Session Manager Plugin Installation
@@ -192,7 +192,7 @@ if [ -n "$SESSION_MANAGER_URL" ]; then
 
     cd /
     log_command "Cleaning up build directory" \
-        rm -rf "$BUILD_TEMP"
+        command rm -rf "$BUILD_TEMP"
 fi
 
 # ============================================================================
@@ -407,7 +407,7 @@ log_message "Creating AWS startup scripts..."
 log_command "Creating container startup directory" \
     mkdir -p /etc/container/first-startup
 
-cat > /etc/container/first-startup/20-aws-setup.sh << EOF
+command cat > /etc/container/first-startup/20-aws-setup.sh << EOF
 #!/bin/bash
 # Check for AWS credentials
 if [ ! -f ~/.aws/credentials ] && [ -f ${WORKING_DIR}/.aws/credentials ]; then
@@ -437,7 +437,7 @@ log_command "Setting AWS startup script permissions" \
 # ============================================================================
 log_message "Creating AWS verification script..."
 
-cat > /usr/local/bin/test-aws << 'EOF'
+command cat > /usr/local/bin/test-aws << 'EOF'
 #!/bin/bash
 echo "=== AWS CLI Status ==="
 if command -v aws &> /dev/null; then

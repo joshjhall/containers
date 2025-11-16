@@ -56,7 +56,7 @@ OUTPUT_JSON=false
 # ============================================================================
 
 show_help() {
-    head -n 30 "$0" | grep '^#' | sed 's/^# \?//'
+    head -n 30 "$0" | grep '^#' | command sed 's/^# \?//'
 }
 
 error() {
@@ -175,7 +175,7 @@ save_baseline() {
 
     local baseline_file="$BASELINE_DIR/${variant}.json"
 
-    cat > "$baseline_file" << EOF
+    command cat > "$baseline_file" << EOF
 {
   "variant": "$variant",
   "timestamp": "$(timestamp)",
@@ -197,7 +197,7 @@ load_baseline() {
         error "No baseline found for variant: $variant (run with --save-baseline first)"
     fi
 
-    cat "$baseline_file"
+    command cat "$baseline_file"
 }
 
 # Compare current metrics against baseline
@@ -287,7 +287,7 @@ output_json() {
     local size_bytes="$2"
     local build_time="$3"
 
-    cat << EOF
+    command cat << EOF
 {
   "variant": "$variant",
   "timestamp": "$(timestamp)",

@@ -71,10 +71,10 @@ load_go_template() {
 
     if [ -n "$project_name" ]; then
         # Replace __PROJECT__ placeholder with actual project name
-        sed "s/__PROJECT__/${project_name}/g" "$template_file"
+        command sed "s/__PROJECT__/${project_name}/g" "$template_file"
     else
         # No substitution needed, just output the template
-        cat "$template_file"
+        command cat "$template_file"
     fi
 }
 
@@ -173,7 +173,7 @@ GO_URL="https://go.dev/dl/${GO_TARBALL}"
 
 # Download Go tarball
 log_message "Downloading Go ${GO_VERSION} for ${GO_ARCH}..."
-if ! curl -fsSL "$GO_URL" -o "$GO_TARBALL"; then
+if ! command curl -fsSL "$GO_URL" -o "$GO_TARBALL"; then
     log_error "Failed to download Go ${GO_VERSION}"
     log_error "Please verify version exists: https://go.dev/dl/#go${GO_VERSION}"
     log_feature_end
@@ -195,7 +195,7 @@ log_command "Extracting Go to /usr/local" \
 # Clean up
 cd /
 log_command "Cleaning up Go build directory" \
-    rm -rf "$BUILD_TEMP"
+    command rm -rf "$BUILD_TEMP"
 
 # ============================================================================
 # Cache and Path Configuration
@@ -474,7 +474,7 @@ echo "=== Creating Go startup script ==="
 log_command "Creating startup directory" \
     mkdir -p /etc/container/first-startup
 
-cat > /etc/container/first-startup/30-go-setup.sh << 'EOF'
+command cat > /etc/container/first-startup/30-go-setup.sh << 'EOF'
 #!/bin/bash
 # Go development environment setup
 
@@ -532,7 +532,7 @@ log_command "Setting startup script permissions" \
 # ============================================================================
 log_message "Creating Go verification script..."
 
-cat > /usr/local/bin/test-go << 'EOF'
+command cat > /usr/local/bin/test-go << 'EOF'
 #!/bin/bash
 echo "=== Go Installation Status ==="
 if command -v go &> /dev/null; then

@@ -94,7 +94,7 @@ if command -v apt-key >/dev/null 2>&1; then
     # Old method for Debian 11/12 compatibility
     log_message "Using apt-key method (Debian 11/12)"
     log_command "Adding HashiCorp GPG key" \
-        bash -c "curl -fsSL https://apt.releases.hashicorp.com/gpg | apt-key add -"
+        bash -c "command curl -fsSL https://apt.releases.hashicorp.com/gpg | apt-key add -"
 
     log_command "Adding HashiCorp repository" \
         apt-add-repository "deb [arch=$(dpkg --print-architecture)] https://apt.releases.hashicorp.com $(lsb_release -cs) main"
@@ -102,7 +102,7 @@ else
     # New method for Debian 13+ (Trixie and later)
     log_message "Using signed-by method (Debian 13+)"
     log_command "Adding HashiCorp GPG key" \
-        bash -c "curl -fsSL https://apt.releases.hashicorp.com/gpg | gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg"
+        bash -c "command curl -fsSL https://apt.releases.hashicorp.com/gpg | gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg"
 
     log_command "Setting GPG key permissions" \
         chmod go+r /usr/share/keyrings/hashicorp-archive-keyring.gpg
@@ -157,7 +157,7 @@ if [ "$ARCH" = "amd64" ] || [ "$ARCH" = "arm64" ]; then
 
     # Install the verified binary
     log_command "Installing Terragrunt binary" \
-        mv terragrunt /usr/local/bin/terragrunt
+        command mv terragrunt /usr/local/bin/terragrunt
 
     log_command "Setting Terragrunt permissions" \
         chmod +x /usr/local/bin/terragrunt
@@ -205,7 +205,7 @@ download_and_extract \
 
 # Install binary
 log_command "Installing terraform-docs binary" \
-    mv ./terraform-docs /usr/local/bin/
+    command mv ./terraform-docs /usr/local/bin/
 
 log_command "Setting terraform-docs permissions" \
     chmod +x /usr/local/bin/terraform-docs
@@ -334,7 +334,7 @@ fi
 
 # Helper function to clean Terraform cache
 tf-clean() {
-    command find . -type d -name ".terraform" -exec rm -rf {} + 2>/dev/null || true
+    command find . -type d -name ".terraform" -exec command rm -rf {} + 2>/dev/null || true
     command find . -type f -name ".terraform.lock.hcl" -delete 2>/dev/null || true
     echo "Cleaned Terraform cache files"
 }
@@ -364,7 +364,7 @@ log_message "Creating Terraform startup scripts..."
 log_command "Creating container startup directory" \
     mkdir -p /etc/container/first-startup
 
-cat > /etc/container/first-startup/20-terraform-setup.sh << 'EOF'
+command cat > /etc/container/first-startup/20-terraform-setup.sh << 'EOF'
 #!/bin/bash
 # Initialize Terraform if in a Terraform project
 if [ -f ${WORKING_DIR}/main.tf ] || [ -f ${WORKING_DIR}/terraform.tf ]; then
@@ -397,7 +397,7 @@ log_command "Setting Terraform startup script permissions" \
 # ============================================================================
 log_message "Creating Terraform verification script..."
 
-cat > /usr/local/bin/test-terraform << 'EOF'
+command cat > /usr/local/bin/test-terraform << 'EOF'
 #!/bin/bash
 echo "=== Terraform Status ==="
 if command -v terraform &> /dev/null; then

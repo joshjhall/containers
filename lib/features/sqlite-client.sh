@@ -305,7 +305,7 @@ log_message "Creating SQLite startup script..."
 log_command "Creating container startup directory" \
     mkdir -p /etc/container/first-startup
 
-cat > /etc/container/first-startup/20-sqlite-setup.sh << 'EOF'
+command cat > /etc/container/first-startup/20-sqlite-setup.sh << 'EOF'
 #!/bin/bash
 # SQLite client configuration
 echo "=== SQLite Configuration ==="
@@ -338,7 +338,7 @@ log_command "Setting SQLite startup script permissions" \
 # ============================================================================
 log_message "Creating SQLite verification script..."
 
-cat > /usr/local/bin/test-sqlite << 'EOF'
+command cat > /usr/local/bin/test-sqlite << 'EOF'
 #!/bin/bash
 echo "=== SQLite Client Status ==="
 if command -v sqlite3 &> /dev/null; then

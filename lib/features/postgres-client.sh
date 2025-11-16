@@ -184,7 +184,7 @@ log_message "Creating connection configuration templates..."
 
 # Create template .pgpass file
 log_command "Creating .pgpass template" \
-    bash -c "cat > /etc/skel/.pgpass.template << 'EOF'
+    bash -c "command cat > /etc/skel/.pgpass.template << 'EOF'
 # PostgreSQL password file template
 # Format: hostname:port:database:username:password
 #
@@ -205,7 +205,7 @@ log_message "Creating PostgreSQL startup script..."
 log_command "Creating container startup directory" \
     mkdir -p /etc/container/first-startup
 
-cat > /etc/container/first-startup/20-postgres-setup.sh << 'EOF'
+command cat > /etc/container/first-startup/20-postgres-setup.sh << 'EOF'
 #!/bin/bash
 # PostgreSQL client configuration
 if [ ! -f ~/.pgpass ] && [ -f ~/.pgpass.template ]; then
@@ -232,7 +232,7 @@ log_command "Setting PostgreSQL startup script permissions" \
 # ============================================================================
 log_message "Creating PostgreSQL verification script..."
 
-cat > /usr/local/bin/test-postgres << 'EOF'
+command cat > /usr/local/bin/test-postgres << 'EOF'
 #!/bin/bash
 echo "=== PostgreSQL Client Status ==="
 if command -v psql &> /dev/null; then

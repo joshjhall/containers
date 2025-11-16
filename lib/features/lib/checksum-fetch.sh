@@ -31,7 +31,7 @@ fi
 #
 # Note: Internal function, not exported
 _curl_with_timeout() {
-    curl --connect-timeout 10 --max-time 30 "$@"
+    command curl --connect-timeout 10 --max-time 30 "$@"
 }
 
 # _is_partial_version - Check if version string is partial (e.g., "1.23" vs "1.23.0")
@@ -103,7 +103,7 @@ fetch_go_checksum() {
     checksum=$(echo "$page_content" | \
         grep -A 5 "${filename}" | \
         grep -oP '<tt>[a-f0-9]{64}</tt>' | \
-        sed 's/<tt>\|<\/tt>//g' | \
+        command sed 's/<tt>\|<\/tt>//g' | \
         head -1)
 
     if [ -n "$checksum" ] && [[ "$checksum" =~ ^[a-fA-F0-9]{64}$ ]]; then
@@ -117,7 +117,7 @@ fetch_go_checksum() {
         local matching_versions
         matching_versions=$(echo "$page_content" | \
             grep -oP "go${version}\.\d+\.linux-${arch}\.tar\.gz" | \
-            sed "s/go//; s/\.linux-${arch}\.tar\.gz//" | \
+            command sed "s/go//; s/\.linux-${arch}\.tar\.gz//" | \
             sort -V | \
             tail -1)
 
@@ -127,7 +127,7 @@ fetch_go_checksum() {
             checksum=$(echo "$page_content" | \
                 grep -A 5 "${resolved_filename}" | \
                 grep -oP '<tt>[a-f0-9]{64}</tt>' | \
-                sed 's/<tt>\|<\/tt>//g' | \
+                command sed 's/<tt>\|<\/tt>//g' | \
                 head -1)
 
             if [ -n "$checksum" ] && [[ "$checksum" =~ ^[a-fA-F0-9]{64}$ ]]; then
@@ -298,7 +298,7 @@ calculate_checksum_sha256() {
     local file_url="$1"
 
     local checksum
-    checksum=$(curl --connect-timeout 10 --max-time 300 -fsSL "$file_url" | sha256sum | awk '{print $1}')
+    checksum=$(command curl --connect-timeout 10 --max-time 300 -fsSL "$file_url" | sha256sum | awk '{print $1}')
 
     if [ -n "$checksum" ] && [[ "$checksum" =~ ^[a-fA-F0-9]{64}$ ]]; then
         echo "$checksum"
@@ -353,7 +353,7 @@ fetch_ruby_checksum() {
         local matching_versions
         matching_versions=$(echo "$page_content" | \
             grep -oP ">Ruby ${version}\.\d+" | \
-            sed 's/>Ruby //' | \
+            command sed 's/>Ruby //' | \
             sort -V | \
             tail -1)
 

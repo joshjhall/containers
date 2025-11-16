@@ -114,7 +114,7 @@ apt_install \
 log_message "Adding Eclipse Temurin repository..."
 
 log_command "Adding Adoptium GPG key" \
-    bash -c "wget -qO - https://packages.adoptium.net/artifactory/api/gpg/key/public | gpg --dearmor -o /usr/share/keyrings/adoptium.gpg"
+    bash -c "command wget -qO - https://packages.adoptium.net/artifactory/api/gpg/key/public | gpg --dearmor -o /usr/share/keyrings/adoptium.gpg"
 
 log_command "Adding Adoptium repository" \
     bash -c 'echo "deb [signed-by=/usr/share/keyrings/adoptium.gpg] https://packages.adoptium.net/artifactory/deb $(awk -F= '\''/^VERSION_CODENAME/{print$2}'\'' /etc/os-release) main" > /etc/apt/sources.list.d/adoptium.list'
@@ -376,12 +376,12 @@ java-clean-cache() {
 
     if [ -d "${MAVEN_USER_HOME:-/cache/maven}/repository" ]; then
         echo "Cleaning Maven cache..."
-        rm -rf "${MAVEN_USER_HOME:-/cache/maven}/repository"/*
+        command rm -rf "${MAVEN_USER_HOME:-/cache/maven}/repository"/*
     fi
 
     if [ -d "${GRADLE_USER_HOME:-/cache/gradle}/caches" ]; then
         echo "Cleaning Gradle cache..."
-        rm -rf "${GRADLE_USER_HOME:-/cache/gradle}/caches"/*
+        command rm -rf "${GRADLE_USER_HOME:-/cache/gradle}/caches"/*
     fi
 
     echo "Cache cleanup complete"
@@ -428,7 +428,7 @@ log_command "Creating Maven config directory" \
     mkdir -p /etc/maven
 
 # Create a template settings.xml that uses cache directory
-cat > /etc/maven/settings-template.xml << 'EOF'
+command cat > /etc/maven/settings-template.xml << 'EOF'
 <?xml version="1.0" encoding="UTF-8"?>
 <settings xmlns="http://maven.apache.org/SETTINGS/1.2.0"
           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
@@ -474,7 +474,7 @@ log_message "Creating Java startup script..."
 log_command "Creating container startup directory" \
     mkdir -p /etc/container/first-startup
 
-cat > /etc/container/first-startup/30-java-setup.sh << 'EOF'
+command cat > /etc/container/first-startup/30-java-setup.sh << 'EOF'
 #!/bin/bash
 # Java development environment setup
 
@@ -541,12 +541,12 @@ log_command "Setting Java startup script permissions" \
 # ============================================================================
 log_message "Creating Java verification script..."
 
-cat > /usr/local/bin/test-java << 'EOF'
+command cat > /usr/local/bin/test-java << 'EOF'
 #!/bin/bash
 echo "=== Java Installation Status ==="
 if command -v java &> /dev/null; then
     echo "✓ Java is installed"
-    java -version 2>&1 | head -n 1 | sed 's/^/  /'
+    java -version 2>&1 | head -n 1 | command sed 's/^/  /'
     echo "  JAVA_HOME: $JAVA_HOME"
     echo "  Binary: $(which java)"
 else

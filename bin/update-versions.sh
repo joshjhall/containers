@@ -89,45 +89,45 @@ update_version() {
             # Update ARG lines in Dockerfile
             case "$tool" in
                 Python)
-                    sed -i "s/^ARG PYTHON_VERSION=.*/ARG PYTHON_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
+                    command sed -i "s/^ARGPYTHON_VERSION=.*/ARG PYTHON_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
                     ;;
                 Node.js)
-                    sed -i "s/^ARG NODE_VERSION=.*/ARG NODE_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
+                    command sed -i "s/^ARGNODE_VERSION=.*/ARG NODE_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
                     ;;
                 Go)
-                    sed -i "s/^ARG GO_VERSION=.*/ARG GO_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
+                    command sed -i "s/^ARGGO_VERSION=.*/ARG GO_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
                     ;;
                 Rust)
-                    sed -i "s/^ARG RUST_VERSION=.*/ARG RUST_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
+                    command sed -i "s/^ARGRUST_VERSION=.*/ARG RUST_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
                     ;;
                 Ruby)
-                    sed -i "s/^ARG RUBY_VERSION=.*/ARG RUBY_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
+                    command sed -i "s/^ARGRUBY_VERSION=.*/ARG RUBY_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
                     # Also update the fallback default in ruby.sh
                     sed -i "s/RUBY_VERSION=\"\${RUBY_VERSION:-.*}\"/RUBY_VERSION=\"\${RUBY_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/ruby.sh"
                     ;;
                 Java)
-                    sed -i "s/^ARG JAVA_VERSION=.*/ARG JAVA_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
+                    command sed -i "s/^ARGJAVA_VERSION=.*/ARG JAVA_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
                     ;;
                 R)
-                    sed -i "s/^ARG R_VERSION=.*/ARG R_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
+                    command sed -i "s/^ARGR_VERSION=.*/ARG R_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
                     ;;
                 kubectl)
-                    sed -i "s/^ARG KUBECTL_VERSION=.*/ARG KUBECTL_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
+                    command sed -i "s/^ARGKUBECTL_VERSION=.*/ARG KUBECTL_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
                     ;;
                 k9s)
-                    sed -i "s/^ARG K9S_VERSION=.*/ARG K9S_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
+                    command sed -i "s/^ARGK9S_VERSION=.*/ARG K9S_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
                     ;;
                 krew)
-                    sed -i "s/^ARG KREW_VERSION=.*/ARG KREW_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
+                    command sed -i "s/^ARGKREW_VERSION=.*/ARG KREW_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
                     ;;
                 Helm)
-                    sed -i "s/^ARG HELM_VERSION=.*/ARG HELM_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
+                    command sed -i "s/^ARGHELM_VERSION=.*/ARG HELM_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
                     ;;
                 Terragrunt)
-                    sed -i "s/^ARG TERRAGRUNT_VERSION=.*/ARG TERRAGRUNT_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
+                    command sed -i "s/^ARGTERRAGRUNT_VERSION=.*/ARG TERRAGRUNT_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
                     ;;
                 terraform-docs)
-                    sed -i "s/^ARG TERRAFORM_DOCS_VERSION=.*/ARG TERRAFORM_DOCS_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
+                    command sed -i "s/^ARGTERRAFORM_DOCS_VERSION=.*/ARG TERRAFORM_DOCS_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
                     ;;
                 *)
                     echo -e "${YELLOW}    Warning: Unknown Dockerfile tool: $tool${NC}"
@@ -229,7 +229,7 @@ if [ -n "$INPUT_FILE" ]; then
         echo -e "${RED}Error: Input file not found: $INPUT_FILE${NC}"
         exit 1
     fi
-    VERSION_DATA=$(cat "$INPUT_FILE")
+    VERSION_DATA=$(command cat "$INPUT_FILE")
 else
     echo "Running version check..."
     VERSION_DATA=$("$BIN_DIR/check-versions.sh" --json 2>/dev/null)

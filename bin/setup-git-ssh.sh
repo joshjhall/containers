@@ -267,7 +267,7 @@ get_file_size() {
 rotate_log_if_needed() {
     if [ -f "$LOG_FILE" ] && [ "$(get_file_size "$LOG_FILE")" -gt "$MAX_LOG_SIZE" ]; then
         local rotated_log="${LOG_FILE}.1"
-        mv "$LOG_FILE" "$rotated_log"
+        command mv "$LOG_FILE" "$rotated_log"
         gzip "$rotated_log" 2>/dev/null || true
         touch "$LOG_FILE"
         chmod 600 "$LOG_FILE"
@@ -392,7 +392,7 @@ cleanup_on_exit() {
             if command -v shred >/dev/null 2>&1; then
                 shred -vfzu "$file" 2>/dev/null || rm -f "$file"
             else
-                rm -f "$file"
+                command rm -f "$file"
             fi
         fi
     done
@@ -400,7 +400,7 @@ cleanup_on_exit() {
     # Remove all registered directories
     for dir in "${CLEANUP_DIRS[@]}"; do
         if [ -d "$dir" ]; then
-            rm -rf "$dir"
+            command rm -rf "$dir"
         fi
     done
 
@@ -638,7 +638,7 @@ signal_handler() {
 cleanup() {
     # Remove any temporary files
     if [ -n "${TEMP_DIR:-}" ] && [ -d "$TEMP_DIR" ]; then
-        rm -rf "$TEMP_DIR"
+        command rm -rf "$TEMP_DIR"
     fi
 
     # Clear sensitive variables
@@ -693,7 +693,7 @@ acquire_lock() {
             # Check if lock is stale
             if [ -f "$LOCK_FILE" ]; then
                 local lock_pid
-                lock_pid=$(cat "$LOCK_FILE" 2>/dev/null || echo "0")
+                lock_pid=$(command cat "$LOCK_FILE" 2>/dev/null || echo "0")
 
                 # Validate PID format
                 if [[ ! "$lock_pid" =~ ^[0-9]+$ ]]; then
@@ -729,7 +729,7 @@ acquire_lock() {
 release_lock() {
     if [ -f "$LOCK_FILE" ]; then
         local lock_pid
-        lock_pid=$(cat "$LOCK_FILE" 2>/dev/null || echo "0")
+        lock_pid=$(command cat "$LOCK_FILE" 2>/dev/null || echo "0")
         if [ "$lock_pid" = "$$" ]; then
             rm -f "$LOCK_FILE"
             log_debug "Released lock"
@@ -1066,7 +1066,7 @@ secure_op_command() {
 
     if timeout $NETWORK_TIMEOUT op "$op_command" "${args[@]}" >"$temp_out" 2>"$temp_err"; then
         local output
-        output=$(cat "$temp_out")
+        output=$(command cat "$temp_out")
 
         # Validate JSON output if it looks like JSON
         if [[ "$output" =~ ^\s*[\{\[] ]]; then
@@ -1083,7 +1083,7 @@ secure_op_command() {
     else
         local exit_code=$?
         local error_msg
-        error_msg=$(cat "$temp_err" 2>/dev/null || echo "Unknown error")
+        error_msg=$(command cat "$temp_err" 2>/dev/null || echo "Unknown error")
 
         # Handle specific error cases
         case $exit_code in
@@ -1125,7 +1125,7 @@ atomic_write() {
     chmod "$mode" "$temp_file"
 
     # Atomically move to target
-    mv -f "$temp_file" "$target_file"
+    command mv -f "$temp_file" "$target_file"
 }
 
 # Append to file atomically
@@ -1138,14 +1138,14 @@ atomic_append() {
 
     # Copy existing content if file exists
     if [ -f "$target_file" ]; then
-        cp "$target_file" "$temp_file"
+        command cp "$target_file" "$temp_file"
     fi
 
     # Append new content
     echo "$content" >> "$temp_file"
 
     # Atomically move to target
-    mv -f "$temp_file" "$target_file"
+    command mv -f "$temp_file" "$target_file"
 }
 
 # ============================================================================
@@ -1293,7 +1293,7 @@ load_env_file() {
                         value="${BASH_REMATCH[2]}"
 
                         # Trim whitespace from key
-                        key=$(echo "$key" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+                        key=$(echo "$key" | command sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
 
                         # Skip if key is empty or contains invalid characters
                         if [ -z "$key" ] || [[ "$key" =~ [^A-Za-z0-9_] ]]; then
@@ -2010,7 +2010,7 @@ fi
     for rc_file in ~/.bashrc ~/.zshrc ~/.profile ~/.bash_profile; do
         if [ -f "$rc_file" ]; then
             # Create backup
-            cp "$rc_file" "$rc_file.backup.$$"
+            command cp "$rc_file" "$rc_file.backup.$$"
 
             # Remove existing agent setup safely
             local temp_rc
@@ -2022,7 +2022,7 @@ fi
             echo "$agent_script" >> "$temp_rc"
 
             # Replace atomically
-            mv "$temp_rc" "$rc_file"
+            command mv "$temp_rc" "$rc_file"
             rm -f "$rc_file.backup.$$"
 
             log_debug "Updated $rc_file"

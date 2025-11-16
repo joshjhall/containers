@@ -51,7 +51,7 @@ fetch_github_checksum_file() {
 
     log_info "Fetching checksums from: $url" >&2
 
-    if ! curl -fsSL "$url"; then
+    if ! command curl-fsSL "$url"; then
         log_error "Failed to download checksum file from $url"
         return 1
     fi
@@ -190,10 +190,10 @@ update_checksum_variable() {
 
     log_info "Updating ${variable_name} in $(basename "$script_file")..."
 
-    # Use sed to update the variable assignment
+    # Use command sed to update the variable assignment
     # Match: VARIABLE_NAME="old_value"
     # Replace with: VARIABLE_NAME="new_value"
-    if sed -i "s/^${variable_name}=\"[^\"]*\"/${variable_name}=\"${new_checksum}\"/" "$script_file"; then
+    if command sed -i "s/^${variable_name}=\"[^\"]*\"/${variable_name}=\"${new_checksum}\"/" "$script_file"; then
         log_success "Updated ${variable_name}"
         return 0
     else
@@ -225,7 +225,7 @@ update_version_comment() {
 
     log_info "Updating verification date in $(basename "$script_file")..."
 
-    if sed -i "s|${comment_pattern}.*|${comment_pattern} ${new_date}|" "$script_file"; then
+    if command sed -i "s|${comment_pattern}.*|${comment_pattern} ${new_date}|" "$script_file"; then
         log_success "Updated verification date"
         return 0
     else

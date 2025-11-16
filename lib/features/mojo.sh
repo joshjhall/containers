@@ -173,7 +173,7 @@ else
 
         # Move pixi to bin directory
         log_command "Moving pixi to bin directory" \
-            mv "${PIXI_HOME}/pixi" "${PIXI_HOME}/bin/pixi"
+            command mv "${PIXI_HOME}/pixi" "${PIXI_HOME}/bin/pixi"
 
         # Ensure the binary is executable and has correct permissions
         log_command "Setting pixi binary permissions" \
@@ -228,7 +228,7 @@ log_command "Setting mojo-env directory ownership" \
 log_message "Creating system-wide Mojo wrapper scripts..."
 
 # Create a wrapper script for mojo command
-cat > /usr/local/bin/mojo << 'EOF'
+command cat > /usr/local/bin/mojo << 'EOF'
 #!/bin/bash
 # Wrapper script for Mojo via pixi
 export PIXI_CACHE_DIR="/cache/pixi"
@@ -243,7 +243,7 @@ log_command "Setting mojo wrapper permissions" \
     chmod 755 /usr/local/bin/mojo
 
 # Create wrapper for mojo-lsp-server
-cat > /usr/local/bin/mojo-lsp-server << 'EOF'
+command cat > /usr/local/bin/mojo-lsp-server << 'EOF'
 #!/bin/bash
 # Wrapper script for Mojo LSP server via pixi
 export PIXI_CACHE_DIR="/cache/pixi"
@@ -333,7 +333,7 @@ log_message "Creating Mojo startup script..."
 log_command "Creating container startup directory" \
     mkdir -p /etc/container/first-startup
 
-cat > /etc/container/first-startup/30-mojo-setup.sh << 'EOF'
+command cat > /etc/container/first-startup/30-mojo-setup.sh << 'EOF'
 #!/bin/bash
 # Mojo environment setup
 
@@ -365,7 +365,7 @@ log_command "Setting Mojo startup script permissions" \
 # ============================================================================
 log_message "Creating Mojo verification script..."
 
-cat > /usr/local/bin/test-mojo << 'EOF'
+command cat > /usr/local/bin/test-mojo << 'EOF'
 #!/bin/bash
 echo "=== Mojo Installation Status ==="
 

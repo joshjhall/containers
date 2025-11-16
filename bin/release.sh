@@ -45,7 +45,7 @@ usage() {
     echo "  $0 --non-interactive patch    # Run without prompts (CI/CD)"
     echo "  $0 --full-auto minor          # Complete automated release"
     echo ""
-    echo "Current version: $(cat VERSION)"
+    echo "Current version: $(command cat VERSION)"
     exit 1
 }
 
@@ -93,7 +93,7 @@ if [ ! -f VERSION ]; then
 fi
 
 # Get current version
-CURRENT_VERSION=$(cat VERSION)
+CURRENT_VERSION=$(command cat VERSION)
 validate_version "$CURRENT_VERSION"
 
 # Parse arguments
@@ -231,7 +231,7 @@ ensure_git_cliff() {
 
     echo "Downloading git-cliff from $download_url..."
     if curl -sL "$download_url" | tar xz -C "$temp_dir"; then
-        sudo mv "$temp_dir/git-cliff-${version}/git-cliff" /usr/local/bin/
+        sudo command mv "$temp_dir/git-cliff-${version}/git-cliff" /usr/local/bin/
         sudo chmod +x /usr/local/bin/git-cliff
         rm -rf "$temp_dir"
         echo -e "${GREEN}✓${NC} git-cliff installed successfully"
