@@ -930,23 +930,20 @@ Created `lib/base/retry-utils.sh` with three retry functions:
    - Detects rate limit errors (403, "rate limit" messages)
    - Provides helpful messages about token benefits
 
-Updated `lib/features/lib/checksum-fetch.sh` to use retry_github_api for:
+   Updated `lib/features/lib/checksum-fetch.sh` to use retry_github_api for:
+   - `fetch_github_checksums_txt()` - Checksums.txt file fetching
+   - `fetch_github_sha256_file()` - Individual .sha256 file fetching
+   - `fetch_github_sha512_file()` - Individual .sha512 file fetching
 
-- `fetch_github_checksums_txt()` - Checksums.txt file fetching
-- `fetch_github_sha256_file()` - Individual .sha256 file fetching
-- `fetch_github_sha512_file()` - Individual .sha512 file fetching
+   **Files Modified**:
+   - `lib/base/retry-utils.sh` (NEW)
+   - `lib/features/lib/checksum-fetch.sh`
 
-**Files Modified**:
-
-- `lib/base/retry-utils.sh` (NEW)
-- `lib/features/lib/checksum-fetch.sh`
-
-**Benefits**:
-
-- Reduced build failures from transient network issues
-- GitHub rate limit detection and helpful guidance
-- 5000x rate limit increase when using GITHUB_TOKEN (60 → 5000 requests/hour)
-- Exponential backoff prevents hammering external services
+   **Benefits**:
+   - Reduced build failures from transient network issues
+   - GitHub rate limit detection and helpful guidance
+   - 5000x rate limit increase when using GITHUB_TOKEN (60 → 5000 requests/hour)
+   - Exponential backoff prevents hammering external services
 
 ---
 

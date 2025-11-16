@@ -635,4 +635,3 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [4.2.0]: https://github.com/joshjhall/containers/compare/v4.1.0...v4.2.0
 [4.1.0]: https://github.com/joshjhall/containers/compare/v4.0.0...v4.1.0
 [4.0.0]: https://github.com/joshjhall/containers/compare/eaf66b40b4bcdf36e8b6da1113b349e3509fb26c...v4.0.0
-

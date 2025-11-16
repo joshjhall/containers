@@ -8,10 +8,11 @@
     "tables": false,
     "headings": false
   },
-  "MD024": { "siblings_only": true },
+  "MD024": false,
   "MD033": {
     "allowed_elements": ["details", "summary", "img", "br", "sub", "sup", "kbd", "a"]
   },
   "MD034": false,
-  "MD041": false
+  "MD041": false,
+  "MD051": false
 }
