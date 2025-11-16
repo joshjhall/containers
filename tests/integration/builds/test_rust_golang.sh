@@ -108,6 +108,9 @@ test_go_tools() {
 
     # Go can format code
     assert_command_in_container "$image" "go version" "go version"
+
+    # govulncheck (security scanner) works
+    assert_executable_in_path "$image" "govulncheck"
 }
 
 # Test: Cache directories configured

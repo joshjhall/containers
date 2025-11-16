@@ -305,6 +305,19 @@ go-lint-all() {
 }
 
 # ----------------------------------------------------------------------------
+# go-security-check - Run security scanners
+# ----------------------------------------------------------------------------
+go-security-check() {
+    echo "=== Running Go security scanners ==="
+
+    echo "Running gosec (static security analysis)..."
+    gosec ./... || true
+
+    echo -e "\nRunning govulncheck (vulnerability database)..."
+    govulncheck ./... || true
+}
+
+# ----------------------------------------------------------------------------
 # go-test-coverage - Run tests with detailed coverage report
 # ----------------------------------------------------------------------------
 go-test-coverage() {
@@ -747,7 +760,7 @@ log_feature_summary \
     --tools "gopls,dlv,golangci-lint,goimports,gomodifytags,impl,staticcheck,gosec,revive,errcheck,gotests,mockgen,richgo,air,goreleaser,ko,swag,wire,govulncheck" \
     --paths "${GOPATH},${GOCACHE},${GOMODCACHE}" \
     --env "GOPATH,GOCACHE,GOMODCACHE,GOROOT" \
-    --commands "gopls,dlv,golangci-lint,goimports,staticcheck,gosec,gotests,mockgen,air,goreleaser,ko,go-lint-all,go-test-coverage,go-live" \
+    --commands "gopls,dlv,golangci-lint,goimports,staticcheck,gosec,gotests,mockgen,air,goreleaser,ko,go-lint-all,go-security-check,go-test-coverage,go-live" \
     --next-steps "Run 'test-golang-dev' to check installed tools. Use go-lint-all for comprehensive linting, go-live for hot reload."
 
 # End logging
