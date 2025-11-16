@@ -1,14 +1,15 @@
 #!/bin/bash
 set -euo pipefail
 
-# shellcheck disable=SC2155  # Declare and assign separately to avoid masking return values
-# shellcheck disable=SC1090  # Can't follow non-constant source
-# shellcheck disable=SC2086  # Double quote to prevent globbing (used intentionally)
-# shellcheck disable=SC2254  # Quote expansions in case patterns (used intentionally for log levels)
-# shellcheck disable=SC2034  # Variables appear unused (reserved for future use or external tools)
-# shellcheck disable=SC2046  # Quote to prevent word splitting (intentional in specific contexts)
-# shellcheck disable=SC2183  # Printf format string (false positive on dynamic formatting)
-# shellcheck disable=SC2199  # Arrays implicitly concatenate (intentional for array operations)
+# shellcheck disable=SC2155,SC1090,SC2086,SC2254,SC2034,SC2046,SC2183,SC2199
+# SC2155: Declare and assign separately
+# SC1090: Can't follow non-constant source
+# SC2086: Double quote to prevent globbing (used intentionally)
+# SC2254: Quote expansions in case patterns (used intentionally for log levels)
+# SC2034: Variables appear unused (reserved for future use or external tools)
+# SC2046: Quote to prevent word splitting (intentional in specific contexts)
+# SC2183: Printf format string (false positive on dynamic formatting)
+# SC2199: Arrays implicitly concatenate (intentional for array operations)
 
 # Secure Post-Create Script for Devcontainer
 # Version: 3.5.2

@@ -32,11 +32,13 @@ if ! command -v shellcheck &> /dev/null; then
     echo "  or: brew install shellcheck (macOS)"
 else
     # Find all tracked shell scripts (respects .gitignore)
-    shell_files=$(git ls-files '*.sh' '*.bash' 2>/dev/null || \
+    # Exclude setup-git-ssh.sh (legacy script being replaced)
+    shell_files=$(git ls-files '*.sh' '*.bash' 2>/dev/null | grep -v "setup-git-ssh.sh" || \
       find . -type f \( -name "*.sh" -o -name "*.bash" \) \
         ! -path "./.git/*" \
         ! -path "*/node_modules/*" \
-        ! -path "*/vendor/*")
+        ! -path "*/vendor/*" \
+        ! -name "setup-git-ssh.sh")
 
     shellcheck_failed=0
     checked_count=0
