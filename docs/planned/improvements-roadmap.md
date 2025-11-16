@@ -14,13 +14,14 @@ This document tracks remaining improvements for the container build system based
 
 ## Progress Summary
 
-**Completed Items**: 48 items (All HIGH priority, 2 CRITICAL, most MEDIUM priority, many LOW priority)
+**Completed Items**: 49 items (All HIGH priority, 2 CRITICAL, most MEDIUM priority, many LOW priority)
 **Partially Complete**: 0 items
-**Remaining Items**: 30 items (2 CRITICAL, 2 HIGH, 15 MEDIUM, 12 LOW)
+**Remaining Items**: 29 items (2 CRITICAL, 2 HIGH, 15 MEDIUM, 11 LOW)
 
 See git history and CHANGELOG.md for details on completed items.
 
 **Latest Updates (November 2025)**:
+- ✅ **Item #27 COMPLETE**: Case-Insensitive Filesystem Detection - Automatic detection and warnings for cross-platform development
 - ✅ **Item #15 COMPLETE**: Configuration Validation Framework - 35 tests passing, opt-in activation, comprehensive validation
 - ✅ **Item #23 COMPLETE**: Template extraction for all 7 languages (Go, Node.js, R, Rust, Mojo, Java, Ruby) - 156 tests passing
 - ✅ **Item #4 COMPLETE**: Flexible version resolution for all 6 languages (Python, Node.js, Go, Ruby, Rust, Java)
@@ -1291,63 +1292,58 @@ generate_verification_script() {
 
 ---
 
-#### 27. [LOW] Case-Insensitive Filesystem Issues on macOS/Windows Volume Mounts
+#### 27. [LOW] ✅ COMPLETE - Case-Insensitive Filesystem Issues on macOS/Windows Volume Mounts
 **Source**: User feedback (Nov 2025)
 **Priority**: P3 (Low - quality of life, cross-platform compatibility)
+**Status**: ✅ COMPLETE (Nov 2025)
+**Completed**: November 2025
 
-**Issue**: Case-sensitivity conflicts when mounting host volumes from macOS/Windows
+**What Was Delivered (November 2025)**:
 
-**Problem Description**:
-- macOS uses case-insensitive APFS by default (`file.txt` == `File.txt`)
-- Windows filesystems are case-insensitive
-- Linux containers expect case-sensitive filesystems
-- Git tracks case changes but filesystem may not reflect them
-- Example: Renaming `README.md` → `readme.md` causes confusion
+✅ **Complete Documentation, Detection, and Warning System**:
+Implemented comprehensive documentation and automatic detection for case-insensitive filesystem issues when mounting host volumes from macOS/Windows.
 
-**Common Symptoms**:
-```bash
-# On macOS host
-git mv README.md readme.md
-git commit -m "Lowercase readme"
+**Files Created**:
+- `docs/troubleshooting/case-sensitive-filesystems.md` (500+ lines) - Comprehensive troubleshooting guide
+  * Problem description and common symptoms
+  * Platform-specific detection and solutions
+  * macOS: Case-sensitive APFS volume creation guide
+  * Windows: WSL2 filesystem recommendations
+  * Docker volume alternatives
+  * Prevention strategies and best practices
+  * Testing procedures and FAQ
+- `bin/detect-case-sensitivity.sh` (156 lines) - Detection utility script
+  * Automatic detection of case-sensitive vs case-insensitive filesystems
+  * Exit codes: 0 (case-sensitive), 1 (case-insensitive), 2 (error)
+  * Quiet mode support for programmatic use
+  * Detailed recommendations in output
+  * Proper cleanup with trap handlers
+- `tests/unit/bin/test_detect-case-sensitivity.sh` (272 lines) - Comprehensive unit tests
+  * 15 tests covering all detection scenarios (100% pass rate)
+  * Tests for valid/invalid directories, cleanup, edge cases
+  * Verified with shellcheck (no warnings)
 
-# Inside Linux container
-ls -la
-# Shows: README.md (filesystem didn't change)
-# Git shows: readme.md (tracked change)
-```
+**Integration Complete**:
+- `lib/runtime/entrypoint.sh` (lines 42-80) - Automatic detection on container startup
+  * Runs detection for /workspace on every container start
+  * Displays clear warning when case-insensitive filesystem detected
+  * Provides actionable recommendations
+  * Opt-out via `SKIP_CASE_CHECK=true`
+  * Non-blocking (warning only, doesn't prevent startup)
+- `Dockerfile` (lines 386-388) - Installation of detection utility
+  * Copies detect-case-sensitivity.sh to /usr/local/bin
+  * Makes it globally available in containers
+- `CLAUDE.md` (lines 176-197) - Cross-platform development section
+  * Common issues documented
+  * Solutions for macOS, Windows, all platforms
+  * Instructions to disable check
 
-**Potential Solutions**:
+**Testing Complete**:
+- ✅ All 15 unit tests passing (100% pass rate)
+- ✅ All shellcheck warnings resolved
+- ✅ Uses `command find` for alias safety (consistent with codebase patterns)
 
-1. **Documentation Approach** (Easiest):
-   - Document the issue in troubleshooting guide
-   - Recommend case-sensitive APFS volumes for macOS developers
-   - Add to CLAUDE.md for awareness
-
-2. **Detection & Warning** (Medium):
-   - Create startup script to detect case-insensitive mounts
-   - Warn users when `/workspace` is case-insensitive
-   - Provide remediation steps in warning message
-
-3. **Workaround Helper** (Advanced):
-   - Create utility script to sync git index with filesystem
-   - `fix-case-sensitivity.sh` to reconcile git vs filesystem
-   - Run as part of startup scripts (opt-in)
-
-4. **Volume Configuration** (Requires Docker Desktop changes):
-   - Explore Docker Desktop volume driver options
-   - Research if osxfs/grpcfuse has case-sensitivity controls
-   - Likely not feasible without Docker changes
-
-**Recommended Approach**:
-Start with #1 (documentation) + #2 (detection/warning), defer #3 and #4
-
-**Files to Create/Modify**:
-- Create: `docs/troubleshooting/case-sensitive-filesystems.md`
-- Modify: `lib/runtime/startup.sh` (add detection)
-- Modify: `CLAUDE.md` (add cross-platform notes)
-- Optional: Create `bin/fix-case-sensitivity.sh` utility
-
-**Impact**: LOW - Affects cross-platform developers, but has workarounds
+**Impact**: ✅ COMPLETE - Significantly improves cross-platform developer experience by detecting and warning about case-insensitive filesystems with clear, actionable recommendations. Users can now identify this common source of confusion immediately on container startup.
 
 ---
 
@@ -1607,13 +1603,13 @@ echo "All checks successful - proceeding with push"
 
 ## Summary
 
-**Total Remaining**: 30 items (updated November 2025)
+**Total Remaining**: 29 items (updated November 2025)
 
 **By Priority**:
 - CRITICAL: 2 items (Production deployment blockers)
 - HIGH: 2 items (Enterprise features) - Items #2, #3, #4, #15 complete
 - MEDIUM: 15 items (Code quality, architecture, operations)
-- LOW: 12 items (Nice-to-have enhancements)
+- LOW: 11 items (Nice-to-have enhancements) - Item #27 complete
 
 **By Category**:
 - Security Concerns: 10 items (0 CRITICAL, 2 HIGH, 5 MEDIUM, 3 LOW) - Items #2, #3 complete
@@ -1621,7 +1617,7 @@ echo "All checks successful - proceeding with push"
 - Architecture & Code Organization: 6 items (5 MEDIUM, 1 LOW)
 - Anti-Patterns & Code Smells: 3 items (1 MEDIUM, 2 LOW)
 - Testing Gaps: 2 items (1 HIGH, 1 MEDIUM)
-- Missing Features: 1 item (LOW)
+- Missing Features: 0 items - Item #27 COMPLETE
 
 **Overall Assessment**:
 The codebase has **excellent fundamentals** (Security: 7.5/10, Architecture: 8.5/10, Developer Experience: 9/10) but needs **production-grade enhancements** for enterprise deployment (Production Readiness: 6/10).
