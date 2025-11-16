@@ -103,7 +103,7 @@ update_version() {
                 Ruby)
                     command sed -i "s/^ARGRUBY_VERSION=.*/ARG RUBY_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
                     # Also update the fallback default in ruby.sh
-                    sed -i "s/RUBY_VERSION=\"\${RUBY_VERSION:-.*}\"/RUBY_VERSION=\"\${RUBY_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/ruby.sh"
+                    command sed -i "s/RUBY_VERSION=\"\${RUBY_VERSION:-.*}\"/RUBY_VERSION=\"\${RUBY_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/ruby.sh"
                     ;;
                 Java)
                     command sed -i "s/^ARGJAVA_VERSION=.*/ARG JAVA_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
@@ -139,7 +139,7 @@ update_version() {
             local script_path="$PROJECT_ROOT/lib/base/$file"
             case "$tool" in
                 zoxide)
-                    sed -i "s/ZOXIDE_VERSION=\"[^\"]*\"/ZOXIDE_VERSION=\"$latest\"/" "$script_path"
+                    command sed -i "s/ZOXIDE_VERSION=\"[^\"]*\"/ZOXIDE_VERSION=\"$latest\"/" "$script_path"
                     ;;
                 *)
                     echo -e "${YELLOW}    Warning: Unknown base setup tool: $tool${NC}"
@@ -151,49 +151,49 @@ update_version() {
             local script_path="$PROJECT_ROOT/lib/features/$file"
             case "$tool" in
                 lazygit)
-                    sed -i "s/LAZYGIT_VERSION=\"[^\"]*\"/LAZYGIT_VERSION=\"$latest\"/" "$script_path"
+                    command sed -i "s/LAZYGIT_VERSION=\"[^\"]*\"/LAZYGIT_VERSION=\"$latest\"/" "$script_path"
                     ;;
                 direnv)
-                    sed -i "s/DIRENV_VERSION=\"[^\"]*\"/DIRENV_VERSION=\"$latest\"/" "$script_path"
+                    command sed -i "s/DIRENV_VERSION=\"[^\"]*\"/DIRENV_VERSION=\"$latest\"/" "$script_path"
                     ;;
                 act)
-                    sed -i "s/ACT_VERSION=\"[^\"]*\"/ACT_VERSION=\"$latest\"/" "$script_path"
+                    command sed -i "s/ACT_VERSION=\"[^\"]*\"/ACT_VERSION=\"$latest\"/" "$script_path"
                     ;;
                 delta)
-                    sed -i "s/DELTA_VERSION=\"[^\"]*\"/DELTA_VERSION=\"$latest\"/" "$script_path"
+                    command sed -i "s/DELTA_VERSION=\"[^\"]*\"/DELTA_VERSION=\"$latest\"/" "$script_path"
                     ;;
                 glab)
-                    sed -i "s/GLAB_VERSION=\"[^\"]*\"/GLAB_VERSION=\"$latest\"/" "$script_path"
+                    command sed -i "s/GLAB_VERSION=\"[^\"]*\"/GLAB_VERSION=\"$latest\"/" "$script_path"
                     ;;
                 mkcert)
-                    sed -i "s/MKCERT_VERSION=\"[^\"]*\"/MKCERT_VERSION=\"$latest\"/" "$script_path"
+                    command sed -i "s/MKCERT_VERSION=\"[^\"]*\"/MKCERT_VERSION=\"$latest\"/" "$script_path"
                     ;;
                 dive)
-                    sed -i "s/DIVE_VERSION=\"[^\"]*\"/DIVE_VERSION=\"$latest\"/" "$script_path"
+                    command sed -i "s/DIVE_VERSION=\"[^\"]*\"/DIVE_VERSION=\"$latest\"/" "$script_path"
                     ;;
                 lazydocker)
-                    sed -i "s/LAZYDOCKER_VERSION=\"[^\"]*\"/LAZYDOCKER_VERSION=\"$latest\"/" "$script_path"
+                    command sed -i "s/LAZYDOCKER_VERSION=\"[^\"]*\"/LAZYDOCKER_VERSION=\"$latest\"/" "$script_path"
                     ;;
                 spring-boot-cli)
-                    sed -i "s/SPRING_VERSION=\"[^\"]*\"/SPRING_VERSION=\"$latest\"/" "$script_path"
+                    command sed -i "s/SPRING_VERSION=\"[^\"]*\"/SPRING_VERSION=\"$latest\"/" "$script_path"
                     ;;
                 jbang)
-                    sed -i "s/JBANG_VERSION=\"[^\"]*\"/JBANG_VERSION=\"$latest\"/" "$script_path"
+                    command sed -i "s/JBANG_VERSION=\"[^\"]*\"/JBANG_VERSION=\"$latest\"/" "$script_path"
                     ;;
                 mvnd)
-                    sed -i "s/MVND_VERSION=\"[^\"]*\"/MVND_VERSION=\"$latest\"/" "$script_path"
+                    command sed -i "s/MVND_VERSION=\"[^\"]*\"/MVND_VERSION=\"$latest\"/" "$script_path"
                     ;;
                 google-java-format)
-                    sed -i "s/GJF_VERSION=\"[^\"]*\"/GJF_VERSION=\"$latest\"/" "$script_path"
+                    command sed -i "s/GJF_VERSION=\"[^\"]*\"/GJF_VERSION=\"$latest\"/" "$script_path"
                     ;;
                 jmh)
-                    sed -i "s/JMH_VERSION=\"[^\"]*\"/JMH_VERSION=\"$latest\"/" "$script_path"
+                    command sed -i "s/JMH_VERSION=\"[^\"]*\"/JMH_VERSION=\"$latest\"/" "$script_path"
                     ;;
                 duf)
-                    sed -i "s/DUF_VERSION=\"[^\"]*\"/DUF_VERSION=\"$latest\"/" "$script_path"
+                    command sed -i "s/DUF_VERSION=\"[^\"]*\"/DUF_VERSION=\"$latest\"/" "$script_path"
                     ;;
                 entr)
-                    sed -i "s/ENTR_VERSION=\"[^\"]*\"/ENTR_VERSION=\"$latest\"/" "$script_path"
+                    command sed -i "s/ENTR_VERSION=\"[^\"]*\"/ENTR_VERSION=\"$latest\"/" "$script_path"
                     ;;
                 *)
                     echo -e "${YELLOW}    Warning: Unknown shell script tool: $tool${NC}"
@@ -205,7 +205,7 @@ update_version() {
             local workflow_path="$PROJECT_ROOT/.github/workflows/$file"
             case "$tool" in
                 trivy-action)
-                    sed -i "s|uses: aquasecurity/trivy-action@[0-9.]*|uses: aquasecurity/trivy-action@$latest|g" "$workflow_path"
+                    command sed -i "s|uses: aquasecurity/trivy-action@[0-9.]*|uses: aquasecurity/trivy-action@$latest|g" "$workflow_path"
                     ;;
                 *)
                     echo -e "${YELLOW}    Warning: Unknown ci.yml tool: $tool${NC}"

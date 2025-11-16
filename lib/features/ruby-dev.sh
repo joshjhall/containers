@@ -255,12 +255,12 @@ if command -v ruby &> /dev/null; then
 
         # Copy templates if files don't exist
         if [ ! -f ${WORKING_DIR}/.rspec ] && command -v rspec &> /dev/null; then
-            cp /etc/ruby-dev-templates/.rspec ${WORKING_DIR}/
+            command cp /etc/ruby-dev-templates/.rspec ${WORKING_DIR}/
             echo "Created .rspec configuration"
         fi
 
         if [ ! -f ${WORKING_DIR}/.rubocop.yml ] && command -v rubocop &> /dev/null; then
-            cp /etc/ruby-dev-templates/.rubocop.yml ${WORKING_DIR}/
+            command cp /etc/ruby-dev-templates/.rubocop.yml ${WORKING_DIR}/
             echo "Created .rubocop.yml configuration"
         fi
 

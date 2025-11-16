@@ -25,7 +25,7 @@ awk -v version="$VERSION" '
     /^## \['"$VERSION"'\]/ { found=1; next }
     found && /^## \[/ { exit }
     found { print }
-' "$CHANGELOG" | sed '1{/^$/d}' | sed -e :a -e '/^\n*$/{$d;N;ba' -e '}'
+' "$CHANGELOG" | command sed '1{/^$/d}' | command sed -e :a -e '/^\n*$/{$d;N;ba' -e '}'
 
 # If no content found, provide default message
 if [ "${PIPESTATUS[0]}" -ne 0 ] || [ -z "$(awk -v version="$VERSION" '/^## \['"$VERSION"'\]/ { found=1; next } found && /^## \[/ { exit } found { print }' "$CHANGELOG")" ]; then

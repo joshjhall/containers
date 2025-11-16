@@ -73,9 +73,9 @@ get_github_release() {
     local response
     if [ -z "$tag_pattern" ]; then
         if [ -n "${GITHUB_TOKEN:-}" ]; then
-            response=$(curl -s -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com/repos/${repo}/releases/latest")
+            response=$(command curl -s -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com/repos/${repo}/releases/latest")
         else
-            response=$(curl -s "https://api.github.com/repos/${repo}/releases/latest")
+            response=$(command curl -s "https://api.github.com/repos/${repo}/releases/latest")
         fi
         # Check if we got rate limited
         if echo "$response" | ggrep -q "rate limit exceeded"; then
@@ -86,9 +86,9 @@ get_github_release() {
     else
         # For specific tag patterns (e.g., some projects use different naming)
         if [ -n "${GITHUB_TOKEN:-}" ]; then
-            response=$(curl -s -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com/repos/${repo}/tags")
+            response=$(command curl -s -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com/repos/${repo}/tags")
         else
-            response=$(curl -s "https://api.github.com/repos/${repo}/tags")
+            response=$(command curl -s "https://api.github.com/repos/${repo}/tags")
         fi
         if echo "$response" | ggrep -q "rate limit exceeded"; then
             echo "rate-limited"
@@ -108,9 +108,9 @@ get_latest_python() {
 get_latest_ruby() {
     local response
     if [ -n "${GITHUB_TOKEN:-}" ]; then
-        response=$(curl -s -H "Authorization: token $GITHUB_TOKEN" https://api.github.com/repos/ruby/ruby/releases)
+        response=$(command curl -s -H "Authorization: token $GITHUB_TOKEN" https://api.github.com/repos/ruby/ruby/releases)
     else
-        response=$(curl -s https://api.github.com/repos/ruby/ruby/releases)
+        response=$(command curl -s https://api.github.com/repos/ruby/ruby/releases)
     fi
 
     if echo "$response" | ggrep -q "rate limit exceeded"; then
@@ -134,13 +134,13 @@ get_latest_go() {
 get_latest_rust() {
     # Try to get the latest stable version from the Rust release API
     local version
-    version=$(curl -s https://api.github.com/repos/rust-lang/rust/releases | jq -r '.[] | select(.prerelease == false) | .tag_name' | head -1 | command sed's/^v//')
+    version=$(command curl -s https://api.github.com/repos/rust-lang/rust/releases | jq -r '.[] | select(.prerelease == false) | .tag_name' | head -1 | command sed's/^v//')
     
     if [ -n "$version" ] && [ "$version" != "null" ]; then
         echo "$version"
     else
         # Fallback: try forge.rust-lang.org
-        version=$(curl -s https://forge.rust-lang.org/infra/channel-layout.html | ggrep -oP 'stable.*?rustc \K[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+        version=$(command curl -s https://forge.rust-lang.org/infra/channel-layout.html | ggrep -oP 'stable.*?rustc \K[0-9]+\.[0-9]+\.[0-9]+' | head -1)
         if [ -n "$version" ]; then
             echo "$version"
         else
@@ -389,7 +389,7 @@ if [ -f "$FEATURES_DIR/dev-tools.sh" ]; then
     # glab
     current=$(extract_version "$FEATURES_DIR/dev-tools.sh" 'GLAB_VERSION="\K[^"]+')
     # GitLab CLI is hosted on GitLab, not GitHub - use GitLab API
-    latest=$(curl -s "https://gitlab.com/api/v4/projects/gitlab-org%2Fcli/releases" | jq -r '.[0].tag_name' | command sed's/^v//' || echo "unknown")
+    latest=$(command curl -s "https://gitlab.com/api/v4/projects/gitlab-org%2Fcli/releases" | jq -r '.[0].tag_name' | command sed's/^v//' || echo "unknown")
     status=$(compare_version "$current" "$latest")
     CURRENT_VERSIONS["glab"]="$current"
     LATEST_VERSIONS["glab"]="$latest"
@@ -449,7 +449,7 @@ if [ -f "$FEATURES_DIR/kubernetes.sh" ]; then
     # kubectl
     current=$(extract_version "$FEATURES_DIR/kubernetes.sh" 'KUBECTL_VERSION="?\$\{KUBECTL_VERSION:-\K[^"}]+')
     # kubectl returns the full version, but we track major.minor
-    latest=$(curl -Ls https://dl.k8s.io/release/stable.txt | command sed's/^v//' | cut -d. -f1,2 || echo "unknown")
+    latest=$(command curl -Ls https://dl.k8s.io/release/stable.txt | command sed's/^v//' | cut -d. -f1,2 || echo "unknown")
     status=$(compare_version "$current" "$latest")
     CURRENT_VERSIONS["kubectl"]="$current"
     LATEST_VERSIONS["kubectl"]="$latest"
@@ -510,7 +510,7 @@ fi
 get_pypi_version() {
     local package="$1"
     local response
-    response=$(curl -s "https://pypi.org/pypi/${package}/json")
+    response=$(command curl -s "https://pypi.org/pypi/${package}/json")
     if [ $? -eq 0 ]; then
         echo "$response" | jq -r '.info.version' 2>/dev/null || echo "unknown"
     else
@@ -555,7 +555,7 @@ fi
 get_crates_version() {
     local package="$1"
     local response
-    response=$(curl -s "https://crates.io/api/v1/crates/${package}")
+    response=$(command curl -s "https://crates.io/api/v1/crates/${package}")
     if [ $? -eq 0 ]; then
         echo "$response" | jq -r '.crate.max_version' 2>/dev/null || echo "unknown"
     else
@@ -596,7 +596,7 @@ fi
 get_rubygems_version() {
     local gem="$1"
     local response
-    response=$(curl -s "https://rubygems.org/api/v1/gems/${gem}.json")
+    response=$(command curl -s "https://rubygems.org/api/v1/gems/${gem}.json")
     if [ $? -eq 0 ]; then
         echo "$response" | jq -r '.version' 2>/dev/null || echo "unknown"
     else
@@ -653,7 +653,7 @@ get_cran_version() {
     local package="$1"
     # Use the CRAN API to get package info
     local response
-    response=$(curl -s "https://crandb.r-pkg.org/${package}")
+    response=$(command curl -s "https://crandb.r-pkg.org/${package}")
     if [ $? -eq 0 ]; then
         echo "$response" | jq -r '.Version // .version // "unknown"' 2>/dev/null || echo "unknown"
     else

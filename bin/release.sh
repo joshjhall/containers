@@ -230,14 +230,14 @@ ensure_git_cliff() {
     temp_dir=$(mktemp -d)
 
     echo "Downloading git-cliff from $download_url..."
-    if curl -sL "$download_url" | tar xz -C "$temp_dir"; then
+    if command curl -sL "$download_url" | tar xz -C "$temp_dir"; then
         sudo command mv "$temp_dir/git-cliff-${version}/git-cliff" /usr/local/bin/
         sudo chmod +x /usr/local/bin/git-cliff
-        rm -rf "$temp_dir"
+        command rm -rf "$temp_dir"
         echo -e "${GREEN}✓${NC} git-cliff installed successfully"
         return 0
     else
-        rm -rf "$temp_dir"
+        command rm -rf "$temp_dir"
         echo -e "${RED}Failed to install git-cliff${NC}"
         return 1
     fi
@@ -295,13 +295,13 @@ echo "$NEW_VERSION" > VERSION
 echo -e "${GREEN}✓${NC} Updated VERSION file"
 
 # Update Dockerfile version
-sed -i.bak "s/# Version: .*/# Version: $NEW_VERSION/" Dockerfile && rm Dockerfile.bak
+command sed -i.bak "s/# Version: .*/# Version: $NEW_VERSION/" Dockerfile && command rm Dockerfile.bak
 echo -e "${GREEN}✓${NC} Updated Dockerfile version"
 
 # Update test framework version if it exists
 if [ -f tests/framework.sh ]; then
-    sed -i.bak "s/readonly TEST_FRAMEWORK_VERSION=.*/readonly TEST_FRAMEWORK_VERSION=\"$NEW_VERSION\"/" tests/framework.sh && rm tests/framework.sh.bak
-    sed -i.bak "s/# Version: .*/# Version: $NEW_VERSION/" tests/framework.sh && rm tests/framework.sh.bak
+    command sed -i.bak "s/readonly TEST_FRAMEWORK_VERSION=.*/readonly TEST_FRAMEWORK_VERSION=\"$NEW_VERSION\"/" tests/framework.sh && command rm tests/framework.sh.bak
+    command sed -i.bak "s/# Version: .*/# Version: $NEW_VERSION/" tests/framework.sh && command rm tests/framework.sh.bak
     echo -e "${GREEN}✓${NC} Updated test framework version"
 fi
 
