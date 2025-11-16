@@ -23,7 +23,7 @@ setup() {
     mkdir -p /tmp/build-scripts/base
 
     # Create a minimal logging.sh stub that captures error messages
-    cat > /tmp/build-scripts/base/logging.sh << 'EOF'
+    command cat > /tmp/build-scripts/base/logging.sh << 'EOF'
 #!/bin/bash
 # Stub logging functions for testing
 log_error() {
@@ -45,11 +45,11 @@ EOF
 teardown() {
     # Clean up test directory
     if [ -n "${TEST_TEMP_DIR:-}" ] && [ -d "$TEST_TEMP_DIR" ]; then
-        rm -rf "$TEST_TEMP_DIR"
+        command rm -rf "$TEST_TEMP_DIR"
     fi
 
     # Clean up the logging.sh stub
-    rm -f /tmp/build-scripts/base/logging.sh
+    command rm -f /tmp/build-scripts/base/logging.sh
 
     # Unset test variables
     unset TEST_TEMP_DIR 2>/dev/null || true
@@ -114,12 +114,12 @@ test_semver_invalid_format_with_v_prefix() {
 
 test_semver_injection_attempt() {
     local output
-    output=$(validate_semver "1.2.3; rm -rf /" "TEST_VERSION" 2>&1 || true)
+    output=$(validate_semver "1.2.3; command rm -rf /" "TEST_VERSION" 2>&1 || true)
 
     assert_contains "$output" "Invalid TEST_VERSION format" \
         "Command injection attempt produces error message"
 
-    if validate_semver "1.2.3; rm -rf /" "TEST_VERSION" 2>/dev/null; then
+    if validate_semver "1.2.3; command rm -rf /" "TEST_VERSION" 2>/dev/null; then
         fail_test "validate_semver should block injection attempts"
     fi
 }

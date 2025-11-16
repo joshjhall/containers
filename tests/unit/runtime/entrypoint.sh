@@ -37,7 +37,7 @@ setup() {
 # Teardown function - runs after each test
 teardown() {
     # Clean up test directory
-    rm -rf "$TEST_TEMP_DIR"
+    command rm -rf "$TEST_TEMP_DIR"
     
     # Unset test variables
     unset TEST_USERNAME TEST_HOME FIRST_STARTUP_DIR STARTUP_DIR FIRST_RUN_MARKER 2>/dev/null || true
@@ -156,7 +156,7 @@ test_user_context() {
 # Test: First-run marker creation
 test_first_run_marker_creation() {
     # Ensure marker doesn't exist
-    rm -f "$FIRST_RUN_MARKER"
+    command rm -f "$FIRST_RUN_MARKER"
     
     # Simulate marker creation
     touch "$FIRST_RUN_MARKER"
@@ -174,8 +174,8 @@ test_first_run_marker_creation() {
 # Test: Empty directory handling
 test_empty_directory_handling() {
     # Remove all scripts
-    rm -f "$FIRST_STARTUP_DIR"/*.sh
-    rm -f "$STARTUP_DIR"/*.sh
+    command rm -f "$FIRST_STARTUP_DIR"/*.sh
+    command rm -f "$STARTUP_DIR"/*.sh
     
     # Test with empty directories
     local first_count
@@ -190,14 +190,14 @@ test_empty_directory_handling() {
 # Test: Script error handling
 test_script_error_handling() {
     # Create script that fails
-    cat > "$STARTUP_DIR/10-fail.sh" << 'EOF'
+    command cat > "$STARTUP_DIR/10-fail.sh" << 'EOF'
 #!/bin/bash
 exit 1
 EOF
 
     # Create script that should run after failure
     # Use cat with variable substitution to pass TEST_TEMP_DIR into the script
-    cat > "$STARTUP_DIR/20-continue.sh" << EOF
+    command cat > "$STARTUP_DIR/20-continue.sh" << EOF
 #!/bin/bash
 echo "after-fail" > "${TEST_TEMP_DIR}/continue.log"
 EOF

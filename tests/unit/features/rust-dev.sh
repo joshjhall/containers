@@ -34,7 +34,7 @@ setup() {
 teardown() {
     # Clean up test directory
     if [ -n "${TEST_TEMP_DIR:-}" ]; then
-        rm -rf "$TEST_TEMP_DIR"
+        command rm -rf "$TEST_TEMP_DIR"
     fi
     
     # Unset test variables
@@ -87,7 +87,7 @@ test_clippy_config() {
     local clippy_toml="$TEST_TEMP_DIR/clippy.toml"
     
     # Create config
-    cat > "$clippy_toml" << 'EOF'
+    command cat > "$clippy_toml" << 'EOF'
 msrv = "1.70.0"
 warn-on-all-wildcard-imports = true
 allow-expect-in-tests = true
@@ -109,7 +109,7 @@ test_bacon_config() {
     local bacon_toml="$TEST_TEMP_DIR/bacon.toml"
     
     # Create config
-    cat > "$bacon_toml" << 'EOF'
+    command cat > "$bacon_toml" << 'EOF'
 [jobs.check]
 command = ["cargo", "check", "--color", "always"]
 
@@ -132,7 +132,7 @@ test_rustfmt_config() {
     local rustfmt_toml="$TEST_TEMP_DIR/rustfmt.toml"
     
     # Create config
-    cat > "$rustfmt_toml" << 'EOF'
+    command cat > "$rustfmt_toml" << 'EOF'
 edition = "2021"
 max_width = 100
 use_field_init_shorthand = true
@@ -195,7 +195,7 @@ test_rust_dev_aliases() {
     local bashrc_file="$TEST_TEMP_DIR/etc/bashrc.d/40-rust-dev.sh"
     
     # Create aliases
-    cat > "$bashrc_file" << 'EOF'
+    command cat > "$bashrc_file" << 'EOF'
 alias cw='cargo watch'
 alias cwa='cargo watch -x test'
 alias ca='cargo audit'
@@ -233,7 +233,7 @@ test_rust_dev_verification() {
     local test_script="$TEST_TEMP_DIR/test-rust-dev.sh"
     
     # Create verification script
-    cat > "$test_script" << 'EOF'
+    command cat > "$test_script" << 'EOF'
 #!/bin/bash
 echo "Rust dev tools:"
 for tool in cargo-watch cargo-edit cargo-audit bacon rust-analyzer; do

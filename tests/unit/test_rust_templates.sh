@@ -93,7 +93,7 @@ echo ""
 # Test 6: Simulated template loading
 echo "Test: Template loading simulation"
 TEMP_DIR=$(mktemp -d)
-trap 'rm -rf "$TEMP_DIR"' EXIT
+trap 'command rm -rf "$TEMP_DIR"' EXIT
 
 # Simulate the load_rust_template function
 load_rust_template_test() {
@@ -107,7 +107,7 @@ load_rust_template_test() {
     fi
 
     if [ -n "$lang_name" ]; then
-        sed "s/__LANG_NAME__/${lang_name}/g" "$template_file"
+        command sed "s/__LANG_NAME__/${lang_name}/g" "$template_file"
     else
         cat "$template_file"
     fi

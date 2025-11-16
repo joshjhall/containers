@@ -36,7 +36,7 @@ setup() {
 teardown() {
     # Clean up test directory
     if [ -n "${TEST_TEMP_DIR:-}" ]; then
-        rm -rf "$TEST_TEMP_DIR"
+        command rm -rf "$TEST_TEMP_DIR"
     fi
     
     # Unset test variables
@@ -72,7 +72,7 @@ test_gopls_config() {
     mkdir -p "$(dirname "$gopls_config")"
     
     # Create config
-    cat > "$gopls_config" << 'EOF'
+    command cat > "$gopls_config" << 'EOF'
 formatting:
   gofumpt: true
 ui:
@@ -97,7 +97,7 @@ test_golangci_config() {
     local config_file="$TEST_TEMP_DIR/.golangci.yml"
     
     # Create config
-    cat > "$config_file" << 'EOF'
+    command cat > "$config_file" << 'EOF'
 linters:
   enable:
     - gofmt
@@ -141,7 +141,7 @@ test_air_config() {
     local air_config="$TEST_TEMP_DIR/.air.toml"
     
     # Create config
-    cat > "$air_config" << 'EOF'
+    command cat > "$air_config" << 'EOF'
 root = "."
 tmp_dir = "tmp"
 
@@ -166,7 +166,7 @@ test_go_workspace() {
     local workspace_file="$TEST_TEMP_DIR/go.work"
     
     # Create workspace file
-    cat > "$workspace_file" << 'EOF'
+    command cat > "$workspace_file" << 'EOF'
 go 1.21
 
 use (
@@ -191,7 +191,7 @@ test_go_makefile() {
     local makefile="$TEST_TEMP_DIR/Makefile"
     
     # Create Makefile
-    cat > "$makefile" << 'EOF'
+    command cat > "$makefile" << 'EOF'
 .PHONY: lint test build
 
 lint:
@@ -219,7 +219,7 @@ test_go_dev_aliases() {
     local bashrc_file="$TEST_TEMP_DIR/etc/bashrc.d/25-golang-dev.sh"
     
     # Create aliases
-    cat > "$bashrc_file" << 'EOF'
+    command cat > "$bashrc_file" << 'EOF'
 alias glt='golangci-lint run'
 alias dlv='dlv debug'
 alias gops='gopls'
@@ -257,7 +257,7 @@ test_golang_dev_verification() {
     local test_script="$TEST_TEMP_DIR/test-golang-dev.sh"
     
     # Create verification script
-    cat > "$test_script" << 'EOF'
+    command cat > "$test_script" << 'EOF'
 #!/bin/bash
 echo "Go dev tools:"
 for tool in gopls delve golangci-lint goimports air; do

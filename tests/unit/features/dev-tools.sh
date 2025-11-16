@@ -41,7 +41,7 @@ setup() {
 teardown() {
     # Clean up test directory
     if [ -n "${TEST_TEMP_DIR:-}" ]; then
-        rm -rf "$TEST_TEMP_DIR"
+        command rm -rf "$TEST_TEMP_DIR"
     fi
     
     # Unset test variables
@@ -147,7 +147,7 @@ test_bashrc_integration() {
     local bashrc_file="$TEST_TEMP_DIR/etc/bashrc.d/30-dev-tools.sh"
     
     # Create mock bashrc content
-    cat > "$bashrc_file" << 'EOF'
+    command cat > "$bashrc_file" << 'EOF'
 # Development tools aliases
 alias lg='lazygit'
 alias ll='eza -la'

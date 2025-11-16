@@ -28,7 +28,7 @@ setup() {
 teardown() {
     # Clean up test directory
     if [ -n "${TEST_TEMP_DIR:-}" ]; then
-        rm -rf "$TEST_TEMP_DIR"
+        command rm -rf "$TEST_TEMP_DIR"
     fi
     
     # Unset test variables
@@ -84,7 +84,7 @@ test_language_paths() {
     local paths_file="$TEST_TEMP_DIR/paths.txt"
     
     # Create paths configuration
-    cat > "$paths_file" << 'EOF'
+    command cat > "$paths_file" << 'EOF'
 /usr/local/go/bin
 /home/testuser/.cargo/bin
 /home/testuser/.rbenv/bin
@@ -107,7 +107,7 @@ test_path_deduplication() {
     
     # Remove duplicates (simplified test)
     local unique_path
-    unique_path=$(echo "$test_path" | tr ':' '\n' | awk '!seen[$0]++' | tr '\n' ':' | sed 's/:$//')
+    unique_path=$(echo "$test_path" | tr ':' '\n' | awk '!seen[$0]++' | tr '\n' ':' | command sed 's/:$//')
 
     # Count occurrences of /usr/bin
     local count
@@ -183,7 +183,7 @@ test_export_path() {
     local export_file="$TEST_TEMP_DIR/export.sh"
     
     # Create export script
-    cat > "$export_file" << 'EOF'
+    command cat > "$export_file" << 'EOF'
 export PATH="/usr/local/bin:/usr/bin:/bin"
 export PATH="$HOME/bin:$PATH"
 export PATH="$HOME/.local/bin:$PATH"
@@ -219,7 +219,7 @@ test_path_verification() {
     local test_script="$TEST_TEMP_DIR/test-paths.sh"
     
     # Create verification script
-    cat > "$test_script" << 'EOF'
+    command cat > "$test_script" << 'EOF'
 #!/bin/bash
 echo "Current PATH:"
 echo "$PATH" | tr ':' '\n'

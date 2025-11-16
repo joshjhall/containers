@@ -32,7 +32,7 @@ setup() {
 teardown() {
     # Clean up test directory
     if [ -n "${TEST_TEMP_DIR:-}" ] && [ -d "$TEST_TEMP_DIR" ]; then
-        rm -rf "$TEST_TEMP_DIR"
+        command rm -rf "$TEST_TEMP_DIR"
     fi
 
     # Unset test variables
@@ -67,7 +67,7 @@ test_baseline_json_format() {
     # Create a test baseline file
     local baseline_file="$TEST_BASELINE_DIR/test-variant.json"
 
-    cat > "$baseline_file" << 'EOF'
+    command cat > "$baseline_file" << 'EOF'
 {
   "variant": "test-variant",
   "timestamp": "2025-11-12_01:00:00",
@@ -156,7 +156,7 @@ test_get_build_args_python_dev() {
 test_regression_detection_size_increase() {
     # Create a baseline
     local baseline_file="$TEST_BASELINE_DIR/test.json"
-    cat > "$baseline_file" << 'EOF'
+    command cat > "$baseline_file" << 'EOF'
 {
   "variant": "test",
   "size_bytes": 500000000,

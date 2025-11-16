@@ -38,7 +38,7 @@ setup() {
 teardown() {
     # Clean up test directory
     if [ -n "${TEST_TEMP_DIR:-}" ]; then
-        rm -rf "$TEST_TEMP_DIR"
+        command rm -rf "$TEST_TEMP_DIR"
     fi
     
     # Unset test variables
@@ -137,7 +137,7 @@ test_gem_configuration() {
     local gem_config="$TEST_TEMP_DIR/home/testuser/.gemrc"
     
     # Create gem configuration
-    cat > "$gem_config" << 'EOF'
+    command cat > "$gem_config" << 'EOF'
 ---
 :backtrace: false
 :bulk_threshold: 1000
@@ -168,7 +168,7 @@ test_bundle_cache_configuration() {
     mkdir -p "$(dirname "$bundle_config")"
     
     # Create bundle config
-    cat > "$bundle_config" << 'EOF'
+    command cat > "$bundle_config" << 'EOF'
 ---
 BUNDLE_PATH: "/cache/bundle"
 BUNDLE_CACHE_ALL: "true"
@@ -198,7 +198,7 @@ test_ruby_environment_variables() {
     local bashrc_file="$TEST_TEMP_DIR/etc/bashrc.d/35-ruby.sh"
     
     # Create mock bashrc content
-    cat > "$bashrc_file" << 'EOF'
+    command cat > "$bashrc_file" << 'EOF'
 export RBENV_ROOT="/usr/local/rbenv"
 export PATH="$RBENV_ROOT/bin:$RBENV_ROOT/shims:$PATH"
 export BUNDLE_PATH="/cache/bundle"
@@ -240,7 +240,7 @@ test_ruby_aliases_helpers() {
     local bashrc_file="$TEST_TEMP_DIR/etc/bashrc.d/35-ruby.sh"
     
     # Add aliases section
-    cat >> "$bashrc_file" << 'EOF'
+    command cat >> "$bashrc_file" << 'EOF'
 
 # Ruby aliases
 alias be='bundle exec'
@@ -273,7 +273,7 @@ test_gemfile_detection() {
     mkdir -p "$project_dir"
     
     # Create mock Gemfile
-    cat > "$project_dir/Gemfile" << 'EOF'
+    command cat > "$project_dir/Gemfile" << 'EOF'
 source 'https://rubygems.org'
 
 ruby '3.3.0'
@@ -332,7 +332,7 @@ test_ruby_verification() {
     local test_script="$TEST_TEMP_DIR/test-ruby.sh"
     
     # Create verification script
-    cat > "$test_script" << 'EOF'
+    command cat > "$test_script" << 'EOF'
 #!/bin/bash
 echo "Ruby version:"
 ruby --version 2>/dev/null || echo "Ruby not installed"

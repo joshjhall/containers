@@ -28,7 +28,7 @@ setup() {
 teardown() {
     # Clean up test directory
     if [ -n "${TEST_TEMP_DIR:-}" ]; then
-        rm -rf "$TEST_TEMP_DIR"
+        command rm -rf "$TEST_TEMP_DIR"
     fi
     
     # Unset test variables
@@ -52,14 +52,14 @@ test_build_log_creation() {
     mkdir -p "$BUILD_LOG_DIR/features"
     
     # Create mock build logs
-    cat > "$BUILD_LOG_DIR/features/python.log" << 'EOF'
+    command cat > "$BUILD_LOG_DIR/features/python.log" << 'EOF'
 === Installing Python ===
 [2025-08-11 10:00:00] Starting Python installation
 [2025-08-11 10:00:01] Installing Python 3.12.0
 [2025-08-11 10:00:05] Python installed successfully
 EOF
     
-    cat > "$BUILD_LOG_DIR/features/node.log" << 'EOF'
+    command cat > "$BUILD_LOG_DIR/features/node.log" << 'EOF'
 === Installing Node.js ===
 [2025-08-11 10:01:00] Starting Node.js installation
 [2025-08-11 10:01:01] Installing Node.js 20.11.0
@@ -75,7 +75,7 @@ test_master_summary_log() {
     local summary_log="$BUILD_LOG_DIR/master-summary.log"
     
     # Create master summary
-    cat > "$summary_log" << 'EOF'
+    command cat > "$summary_log" << 'EOF'
 === Container Build Summary ===
 Build started: 2025-08-11 10:00:00
 Build completed: 2025-08-11 10:15:00
@@ -128,7 +128,7 @@ test_log_search() {
     local test_log="$BUILD_LOG_DIR/features/test.log"
     
     # Create log with searchable content
-    cat > "$test_log" << 'EOF'
+    command cat > "$test_log" << 'EOF'
 [INFO] Starting installation
 [ERROR] Failed to download package
 [WARNING] Using cached version
@@ -178,7 +178,7 @@ test_log_timestamps() {
     local test_log="$BUILD_LOG_DIR/test.log"
     
     # Create log with timestamps
-    cat > "$test_log" << 'EOF'
+    command cat > "$test_log" << 'EOF'
 [2025-08-11 10:00:00] Starting process
 [2025-08-11 10:00:01] Process running
 [2025-08-11 10:00:02] Process complete
@@ -195,12 +195,12 @@ EOF
 # Test: Error log detection
 test_error_detection() {
     # Create logs with various error states
-    cat > "$BUILD_LOG_DIR/success.log" << 'EOF'
+    command cat > "$BUILD_LOG_DIR/success.log" << 'EOF'
 [INFO] Installation successful
 [SUCCESS] All tests passed
 EOF
     
-    cat > "$BUILD_LOG_DIR/failure.log" << 'EOF'
+    command cat > "$BUILD_LOG_DIR/failure.log" << 'EOF'
 [ERROR] Installation failed
 [FATAL] Cannot continue
 EOF
@@ -243,7 +243,7 @@ test_script_usage() {
     local script_output="$TEST_TEMP_DIR/usage.txt"
     
     # Create mock usage output
-    cat > "$script_output" << 'EOF'
+    command cat > "$script_output" << 'EOF'
 Usage: check-build-logs.sh [feature-name|master-summary]
 
 Examples:

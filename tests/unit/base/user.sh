@@ -124,7 +124,7 @@ test_build_env_structure() {
     local test_env_file="$RESULTS_DIR/build-env"
     
     # Simulate what the script writes
-    cat > "$test_env_file" <<EOF
+    command cat > "$test_env_file" <<EOF
 export ACTUAL_UID=1000
 export ACTUAL_GID=1000
 export USERNAME=testuser
@@ -140,7 +140,7 @@ EOF
     assert_equals "testuser" "$USERNAME" "Build env username set correctly"
     
     # Cleanup
-    rm -f "$test_env_file"
+    command rm -f "$test_env_file"
 }
 
 # Test: Sudo configuration validation
@@ -182,7 +182,7 @@ test_bashrc_d_structure() {
     assert_dir_exists "$test_bashrc_d"
     
     # Cleanup
-    rm -rf "$test_home"
+    command rm -rf "$test_home"
 }
 
 # Test: Script parameter handling

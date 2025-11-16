@@ -35,7 +35,7 @@ setup() {
 teardown() {
     # Clean up test directory
     if [ -n "${TEST_TEMP_DIR:-}" ]; then
-        rm -rf "$TEST_TEMP_DIR"
+        command rm -rf "$TEST_TEMP_DIR"
     fi
     
     # Unset test variables
@@ -90,7 +90,7 @@ test_gcloud_config() {
     mkdir -p "$(dirname "$config_file")"
     
     # Create config
-    cat > "$config_file" << 'EOF'
+    command cat > "$config_file" << 'EOF'
 [core]
 account = user@example.com
 project = my-project
@@ -115,7 +115,7 @@ test_app_default_credentials() {
     mkdir -p "$(dirname "$adc_file")"
     
     # Create mock ADC
-    cat > "$adc_file" << 'EOF'
+    command cat > "$adc_file" << 'EOF'
 {
   "type": "authorized_user",
   "client_id": "test.apps.googleusercontent.com",
@@ -131,7 +131,7 @@ test_gcloud_aliases() {
     local bashrc_file="$TEST_TEMP_DIR/etc/bashrc.d/66-gcloud.sh"
     
     # Create aliases
-    cat > "$bashrc_file" << 'EOF'
+    command cat > "$bashrc_file" << 'EOF'
 alias gc='gcloud'
 alias gcp='gcloud projects'
 alias gce='gcloud compute'
@@ -152,7 +152,7 @@ test_gcloud_environment() {
     local bashrc_file="$TEST_TEMP_DIR/etc/bashrc.d/66-gcloud.sh"
     
     # Add environment variables
-    cat >> "$bashrc_file" << 'EOF'
+    command cat >> "$bashrc_file" << 'EOF'
 export CLOUDSDK_PYTHON="python3"
 export CLOUDSDK_CONFIG="$HOME/.config/gcloud"
 EOF
@@ -170,7 +170,7 @@ test_gcloud_completion() {
     local bashrc_file="$TEST_TEMP_DIR/etc/bashrc.d/66-gcloud.sh"
     
     # Add completion
-    cat >> "$bashrc_file" << 'EOF'
+    command cat >> "$bashrc_file" << 'EOF'
 source /usr/share/google-cloud-sdk/completion.bash.inc
 EOF
     
@@ -187,7 +187,7 @@ test_cloud_build_config() {
     local cloudbuild_yaml="$TEST_TEMP_DIR/cloudbuild.yaml"
     
     # Create config
-    cat > "$cloudbuild_yaml" << 'EOF'
+    command cat > "$cloudbuild_yaml" << 'EOF'
 steps:
 - name: 'gcr.io/cloud-builders/docker'
   args: ['build', '-t', 'gcr.io/$PROJECT_ID/app', '.']
@@ -224,7 +224,7 @@ test_gcloud_verification() {
     local test_script="$TEST_TEMP_DIR/test-gcloud.sh"
     
     # Create verification script
-    cat > "$test_script" << 'EOF'
+    command cat > "$test_script" << 'EOF'
 #!/bin/bash
 echo "Google Cloud SDK version:"
 gcloud version 2>/dev/null || echo "gcloud not installed"

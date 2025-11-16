@@ -35,7 +35,7 @@ setup() {
 teardown() {
     # Clean up test directory
     if [ -n "${TEST_TEMP_DIR:-}" ]; then
-        rm -rf "$TEST_TEMP_DIR"
+        command rm -rf "$TEST_TEMP_DIR"
     fi
     
     # Unset test variables
@@ -70,7 +70,7 @@ test_psql_config() {
     local psqlrc="$TEST_TEMP_DIR/home/testuser/.psqlrc"
     
     # Create psqlrc
-    cat > "$psqlrc" << 'EOF'
+    command cat > "$psqlrc" << 'EOF'
 \set QUIET 1
 \set ON_ERROR_ROLLBACK interactive
 \set VERBOSITY verbose
@@ -104,7 +104,7 @@ test_pg_service() {
     local pg_service="$TEST_TEMP_DIR/home/testuser/.pg_service.conf"
     
     # Create service file
-    cat > "$pg_service" << 'EOF'
+    command cat > "$pg_service" << 'EOF'
 [development]
 host=localhost
 port=5432
@@ -140,7 +140,7 @@ test_postgres_environment() {
     local bashrc_file="$TEST_TEMP_DIR/etc/bashrc.d/70-postgres.sh"
     
     # Create environment setup
-    cat > "$bashrc_file" << 'EOF'
+    command cat > "$bashrc_file" << 'EOF'
 export PGUSER="${PGUSER:-postgres}"
 export PGDATABASE="${PGDATABASE:-postgres}"
 export PGCONNECT_TIMEOUT=10
@@ -166,7 +166,7 @@ test_postgres_aliases() {
     local bashrc_file="$TEST_TEMP_DIR/etc/bashrc.d/70-postgres.sh"
     
     # Add aliases
-    cat >> "$bashrc_file" << 'EOF'
+    command cat >> "$bashrc_file" << 'EOF'
 
 # PostgreSQL aliases
 alias pglocal='psql -h localhost'
@@ -195,7 +195,7 @@ test_psql_history() {
     local history_file="$TEST_TEMP_DIR/home/testuser/.psql_history"
     
     # Create history file
-    cat > "$history_file" << 'EOF'
+    command cat > "$history_file" << 'EOF'
 SELECT version();
 \dt
 SELECT * FROM users LIMIT 10;
@@ -218,7 +218,7 @@ test_connection_scripts() {
     mkdir -p "$script_dir"
     
     # Create connection helper
-    cat > "$script_dir/pgconnect" << 'EOF'
+    command cat > "$script_dir/pgconnect" << 'EOF'
 #!/bin/bash
 SERVICE="${1:-development}"
 psql "service=$SERVICE"
@@ -281,7 +281,7 @@ test_postgres_verification() {
     local test_script="$TEST_TEMP_DIR/test-postgres.sh"
     
     # Create verification script
-    cat > "$test_script" << 'EOF'
+    command cat > "$test_script" << 'EOF'
 #!/bin/bash
 echo "PostgreSQL client version:"
 psql --version 2>/dev/null || echo "psql not installed"

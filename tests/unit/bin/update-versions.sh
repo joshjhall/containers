@@ -30,13 +30,13 @@ test_dry_run_mode() {
     test_dir=$(mktemp -d)
     
     # Create mock Dockerfile
-    cat > "$test_dir/Dockerfile" << 'EOF'
+    command cat > "$test_dir/Dockerfile" << 'EOF'
 ARG PYTHON_VERSION=3.13.0
 ARG NODE_VERSION=22.10.0
 EOF
     
     # Create mock JSON with updates
-    cat > "$test_dir/test.json" << 'EOF'
+    command cat > "$test_dir/test.json" << 'EOF'
 {
   "tools": [
     {
@@ -56,10 +56,10 @@ EOF
     
     # Check that file wasn't modified
     if grep -q "ARG PYTHON_VERSION=3.13.0" Dockerfile && echo "$output" | grep -q "DRY RUN"; then
-        rm -rf "$test_dir"
+        command rm -rf "$test_dir"
         return 0
     else
-        rm -rf "$test_dir"
+        command rm -rf "$test_dir"
         return 1
     fi
 }
@@ -71,7 +71,7 @@ test_version_update() {
     test_dir=$(mktemp -d)
     
     # Create mock Dockerfile
-    cat > "$test_dir/Dockerfile" << 'EOF'
+    command cat > "$test_dir/Dockerfile" << 'EOF'
 ARG PYTHON_VERSION=3.13.0
 ARG NODE_VERSION=22.10.0
 EOF
@@ -80,7 +80,7 @@ EOF
     mkdir -p "$test_dir/lib/features"
     
     # Create mock JSON with updates
-    cat > "$test_dir/test.json" << 'EOF'
+    command cat > "$test_dir/test.json" << 'EOF'
 {
   "tools": [
     {
@@ -114,10 +114,10 @@ EOF
     
     # Check that file was modified
     if grep -q "ARG PYTHON_VERSION=3.13.6" Dockerfile; then
-        rm -rf "$test_dir"
+        command rm -rf "$test_dir"
         return 0
     else
-        rm -rf "$test_dir"
+        command rm -rf "$test_dir"
         return 1
     fi
 }
@@ -129,7 +129,7 @@ test_no_updates() {
     test_dir=$(mktemp -d)
     
     # Create mock JSON with no updates
-    cat > "$test_dir/test.json" << 'EOF'
+    command cat > "$test_dir/test.json" << 'EOF'
 {
   "tools": [
     {
@@ -147,10 +147,10 @@ EOF
     output=$(PROJECT_ROOT_OVERRIDE="$test_dir" "$PROJECT_ROOT/bin/update-versions.sh" --no-bump --input test.json 2>&1)
     
     if echo "$output" | grep -q "All versions are up to date"; then
-        rm -rf "$test_dir"
+        command rm -rf "$test_dir"
         return 0
     else
-        rm -rf "$test_dir"
+        command rm -rf "$test_dir"
         return 1
     fi
 }
@@ -174,14 +174,14 @@ test_shell_script_update() {
     
     # Create lib/features directory and mock script
     mkdir -p "$test_dir/lib/features"
-    cat > "$test_dir/lib/features/dev-tools.sh" << 'EOF'
+    command cat > "$test_dir/lib/features/dev-tools.sh" << 'EOF'
 #!/bin/bash
 LAZYGIT_VERSION="0.54.1"
 DIRENV_VERSION="2.37.1"
 EOF
     
     # Create mock JSON with shell script update
-    cat > "$test_dir/test.json" << 'EOF'
+    command cat > "$test_dir/test.json" << 'EOF'
 {
   "tools": [
     {
@@ -215,10 +215,10 @@ EOF
     
     # Check that file was modified
     if grep -q 'LAZYGIT_VERSION="0.54.2"' lib/features/dev-tools.sh; then
-        rm -rf "$test_dir"
+        command rm -rf "$test_dir"
         return 0
     else
-        rm -rf "$test_dir"
+        command rm -rf "$test_dir"
         return 1
     fi
 }
@@ -231,7 +231,7 @@ test_java_dev_tools_update() {
     
     # Create lib/features directory and mock script
     mkdir -p "$test_dir/lib/features"
-    cat > "$test_dir/lib/features/java-dev.sh" << 'EOF'
+    command cat > "$test_dir/lib/features/java-dev.sh" << 'EOF'
 #!/bin/bash
 SPRING_VERSION="3.4.2"
 JBANG_VERSION="0.121.0"
@@ -240,7 +240,7 @@ GJF_VERSION="1.25.2"
 EOF
     
     # Create mock JSON with Java tool updates
-    cat > "$test_dir/test.json" << 'EOF'
+    command cat > "$test_dir/test.json" << 'EOF'
 {
   "tools": [
     {
@@ -308,7 +308,7 @@ EOF
         all_updated=false
     fi
     
-    rm -rf "$test_dir"
+    command rm -rf "$test_dir"
     
     if [ "$all_updated" = true ]; then
         return 0
@@ -325,14 +325,14 @@ test_duf_entr_update() {
     
     # Create lib/features directory and mock script
     mkdir -p "$test_dir/lib/features"
-    cat > "$test_dir/lib/features/dev-tools.sh" << 'EOF'
+    command cat > "$test_dir/lib/features/dev-tools.sh" << 'EOF'
 #!/bin/bash
 DUF_VERSION="0.8.0"
 ENTR_VERSION="5.5"
 EOF
     
     # Create mock JSON with tool updates
-    cat > "$test_dir/test.json" << 'EOF'
+    command cat > "$test_dir/test.json" << 'EOF'
 {
   "tools": [
     {
@@ -380,7 +380,7 @@ EOF
         all_updated=false
     fi
     
-    rm -rf "$test_dir"
+    command rm -rf "$test_dir"
     
     if [ "$all_updated" = true ]; then
         return 0
@@ -396,7 +396,7 @@ test_invalid_version_validation() {
     test_dir=$(mktemp -d)
     
     # Create mock Dockerfile
-    cat > "$test_dir/Dockerfile" << 'EOF'
+    command cat > "$test_dir/Dockerfile" << 'EOF'
 ARG PYTHON_VERSION=3.13.0
 ARG NODE_VERSION=22.10.0
 ARG GO_VERSION=1.22.3
@@ -404,7 +404,7 @@ ARG RUST_VERSION=1.80.0
 EOF
     
     # Create mock JSON with invalid versions
-    cat > "$test_dir/test.json" << 'EOF'
+    command cat > "$test_dir/test.json" << 'EOF'
 {
   "tools": [
     {
@@ -484,7 +484,7 @@ EOF
         success=false
     fi
     
-    rm -rf "$test_dir"
+    command rm -rf "$test_dir"
     
     if [ "$success" = true ]; then
         return 0
@@ -500,14 +500,14 @@ test_mixed_valid_invalid_versions() {
     test_dir=$(mktemp -d)
     
     # Create mock Dockerfile
-    cat > "$test_dir/Dockerfile" << 'EOF'
+    command cat > "$test_dir/Dockerfile" << 'EOF'
 ARG PYTHON_VERSION=3.13.0
 ARG NODE_VERSION=22.10.0
 ARG GO_VERSION=1.22.3
 EOF
     
     # Create mock JSON with mixed valid and invalid versions
-    cat > "$test_dir/test.json" << 'EOF'
+    command cat > "$test_dir/test.json" << 'EOF'
 {
   "tools": [
     {
@@ -576,7 +576,7 @@ EOF
         success=false
     fi
     
-    rm -rf "$test_dir"
+    command rm -rf "$test_dir"
     
     if [ "$success" = true ]; then
         return 0
@@ -588,11 +588,11 @@ EOF
 # Test: Script updates zoxide version in base setup
 test_update_zoxide_version() {
     local test_dir="$RESULTS_DIR/test_zoxide_update"
-    rm -rf "$test_dir"
+    command rm -rf "$test_dir"
     mkdir -p "$test_dir/lib/base"
     
     # Create test base setup script with old zoxide version
-    cat > "$test_dir/lib/base/setup.sh" <<'EOF'
+    command cat > "$test_dir/lib/base/setup.sh" <<'EOF'
 #!/bin/bash
 # Base system setup
 
@@ -603,7 +603,7 @@ cd /tmp
 EOF
     
     # Create mock version check output
-    cat > "$test_dir/test.json" <<'EOF'
+    command cat > "$test_dir/test.json" <<'EOF'
 {
   "timestamp": "2024-08-13T10:00:00Z",
   "tools": [
@@ -642,7 +642,7 @@ EOF
         updated=true
     fi
     
-    rm -rf "$test_dir"
+    command rm -rf "$test_dir"
     
     if [ "$updated" = true ]; then
         return 0

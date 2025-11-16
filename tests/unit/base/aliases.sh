@@ -31,7 +31,7 @@ setup() {
 teardown() {
     # Clean up test directory
     if [ -n "${TEST_TEMP_DIR:-}" ]; then
-        rm -rf "$TEST_TEMP_DIR"
+        command rm -rf "$TEST_TEMP_DIR"
     fi
     
     # Unset test variables
@@ -41,7 +41,7 @@ teardown() {
 # Test: Script appends aliases to bashrc
 test_aliases_written_to_bashrc() {
     # Simulate the script's append operation
-    cat >> "$TEST_BASHRC" << 'EOF'
+    command cat >> "$TEST_BASHRC" << 'EOF'
 alias ll='ls -alF'
 alias la='ls -A'
 alias l='ls -CF'
@@ -66,7 +66,7 @@ EOF
 # Test: Navigation aliases are included
 test_navigation_aliases() {
     # Write navigation aliases
-    cat >> "$TEST_BASHRC" << 'EOF'
+    command cat >> "$TEST_BASHRC" << 'EOF'
 alias ..='cd ..'
 alias ...='cd ../..'
 alias ....='cd ../../..'
@@ -89,14 +89,14 @@ EOF
 # Test: Safety aliases (interactive mode)
 test_safety_aliases() {
     # Write safety aliases
-    cat >> "$TEST_BASHRC" << 'EOF'
-alias rm='rm -i'
+    command cat >> "$TEST_BASHRC" << 'EOF'
+alias rm='command rm -i'
 alias cp='cp -i'
 alias mv='mv -i'
 EOF
     
     # Check safety aliases
-    if grep -q "alias rm='rm -i'" "$TEST_BASHRC"; then
+    if grep -q "alias rm='command rm -i'" "$TEST_BASHRC"; then
         assert_true true "Safe rm alias written"
     else
         assert_true false "Safe rm alias not found"
@@ -118,7 +118,7 @@ EOF
 # Test: Git aliases are included
 test_git_aliases() {
     # Write git aliases
-    cat >> "$TEST_BASHRC" << 'EOF'
+    command cat >> "$TEST_BASHRC" << 'EOF'
 alias g='git'
 alias gs='git status'
 alias gd='git diff'
@@ -140,7 +140,7 @@ EOF
 # Test: Environment variables are set
 test_environment_variables() {
     # Write environment exports
-    cat >> "$TEST_BASHRC" << 'EOF'
+    command cat >> "$TEST_BASHRC" << 'EOF'
 export TERM=xterm-256color
 export COLORTERM=truecolor
 export LESS="-R"
@@ -166,7 +166,7 @@ EOF
 # Test: Shell options are configured
 test_shell_options() {
     # Write shell options
-    cat >> "$TEST_BASHRC" << 'EOF'
+    command cat >> "$TEST_BASHRC" << 'EOF'
 shopt -s histappend
 shopt -s checkwinsize
 shopt -s globstar 2>/dev/null || true
@@ -190,7 +190,7 @@ EOF
 # Test: Productivity shortcuts are included
 test_productivity_shortcuts() {
     # Write productivity aliases
-    cat >> "$TEST_BASHRC" << 'EOF'
+    command cat >> "$TEST_BASHRC" << 'EOF'
 alias h='history'
 alias hgrep='history | grep'
 alias j='jobs -l'

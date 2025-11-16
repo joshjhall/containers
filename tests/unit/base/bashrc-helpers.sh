@@ -24,7 +24,7 @@ setup() {
     mkdir -p "$TEST_BASHRC_D"
     
     # Copy and modify bashrc-helpers for testing
-    sed "s|/etc/bashrc.d|$TEST_BASHRC_D|g" "$PROJECT_ROOT/lib/base/bashrc-helpers.sh" > "$TEST_TEMP_DIR/bashrc-helpers-test.sh"
+    command sed "s|/etc/bashrc.d|$TEST_BASHRC_D|g" "$PROJECT_ROOT/lib/base/bashrc-helpers.sh" > "$TEST_TEMP_DIR/bashrc-helpers-test.sh"
     
     # Define the function to test (since we can't source the actual file in tests)
     source_bashrc_d() {
@@ -43,7 +43,7 @@ setup() {
 teardown() {
     # Clean up test directory
     if [ -n "${TEST_TEMP_DIR:-}" ]; then
-        rm -rf "$TEST_TEMP_DIR"
+        command rm -rf "$TEST_TEMP_DIR"
     fi
     
     # Unset test variables
@@ -80,11 +80,11 @@ test_source_bashrc_d_skip_nonexecutable() {
     
     if [[ -x "$test_file" ]]; then
         # Filesystem doesn't properly handle executable bits (e.g., fakeowner mount)
-        rm -f "$test_file"
+        command rm -f "$test_file"
         skip_test "Filesystem doesn't properly handle executable permissions (fakeowner mount)"
         return
     fi
-    rm -f "$test_file"
+    command rm -f "$test_file"
     
     # Create executable and non-executable scripts
     echo 'export EXEC_VAR="executed"' > "$TEST_BASHRC_D/10-exec.sh"

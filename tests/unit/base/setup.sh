@@ -128,7 +128,7 @@ test_cache_cleanup() {
     # The apt_cleanup function handles all the cleanup operations:
     # - apt-get autoremove
     # - apt-get clean  
-    # - rm -rf /var/lib/apt/lists/*
+    # - command rm -rf /var/lib/apt/lists/*
     assert_true true "Cleanup operations handled by apt_cleanup"
 }
 

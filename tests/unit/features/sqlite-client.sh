@@ -35,7 +35,7 @@ setup() {
 teardown() {
     # Clean up test directory
     if [ -n "${TEST_TEMP_DIR:-}" ]; then
-        rm -rf "$TEST_TEMP_DIR"
+        command rm -rf "$TEST_TEMP_DIR"
     fi
     
     # Unset test variables
@@ -65,7 +65,7 @@ test_sqlite_config() {
     local sqliterc="$TEST_TEMP_DIR/home/testuser/.sqliterc"
     
     # Create config
-    cat > "$sqliterc" << 'EOF'
+    command cat > "$sqliterc" << 'EOF'
 .mode column
 .headers on
 .timer on
@@ -93,7 +93,7 @@ test_sqlite_aliases() {
     local bashrc_file="$TEST_TEMP_DIR/etc/bashrc.d/80-sqlite.sh"
     
     # Create aliases
-    cat > "$bashrc_file" << 'EOF'
+    command cat > "$bashrc_file" << 'EOF'
 alias sq='sqlite3'
 alias sqmem='sqlite3 :memory:'
 alias sqcsv='sqlite3 -csv'
@@ -141,7 +141,7 @@ test_sqlite_history() {
     local history_file="$TEST_TEMP_DIR/home/testuser/.sqlite_history"
     
     # Create history
-    cat > "$history_file" << 'EOF'
+    command cat > "$history_file" << 'EOF'
 .tables
 SELECT * FROM users;
 .schema
@@ -156,7 +156,7 @@ test_sqlite_environment() {
     local bashrc_file="$TEST_TEMP_DIR/etc/bashrc.d/80-sqlite.sh"
     
     # Add environment variables
-    cat >> "$bashrc_file" << 'EOF'
+    command cat >> "$bashrc_file" << 'EOF'
 export SQLITE_HISTORY="$HOME/.sqlite_history"
 EOF
     
@@ -184,7 +184,7 @@ test_backup_scripts() {
     mkdir -p "$(dirname "$script")"
     
     # Create backup script
-    cat > "$script" << 'EOF'
+    command cat > "$script" << 'EOF'
 #!/bin/bash
 DB="$1"
 sqlite3 "$DB" ".backup ${DB}.backup"
@@ -206,7 +206,7 @@ test_sqlite_verification() {
     local test_script="$TEST_TEMP_DIR/test-sqlite.sh"
     
     # Create verification script
-    cat > "$test_script" << 'EOF'
+    command cat > "$test_script" << 'EOF'
 #!/bin/bash
 echo "SQLite version:"
 sqlite3 --version 2>/dev/null || echo "SQLite not installed"

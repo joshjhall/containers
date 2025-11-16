@@ -36,7 +36,7 @@ setup() {
 teardown() {
     # Clean up test directory
     if [ -n "${TEST_TEMP_DIR:-}" ]; then
-        rm -rf "$TEST_TEMP_DIR"
+        command rm -rf "$TEST_TEMP_DIR"
     fi
     
     # Unset test variables
@@ -72,7 +72,7 @@ test_typescript_config() {
     local tsconfig="$TEST_TEMP_DIR/tsconfig.json"
     
     # Create config
-    cat > "$tsconfig" << 'EOF'
+    command cat > "$tsconfig" << 'EOF'
 {
   "compilerOptions": {
     "target": "ES2022",
@@ -100,7 +100,7 @@ test_eslint_config() {
     local eslintrc="$TEST_TEMP_DIR/.eslintrc.json"
     
     # Create config
-    cat > "$eslintrc" << 'EOF'
+    command cat > "$eslintrc" << 'EOF'
 {
   "extends": ["eslint:recommended"],
   "env": {
@@ -128,7 +128,7 @@ test_prettier_config() {
     local prettierrc="$TEST_TEMP_DIR/.prettierrc"
     
     # Create config
-    cat > "$prettierrc" << 'EOF'
+    command cat > "$prettierrc" << 'EOF'
 {
   "semi": true,
   "singleQuote": true,
@@ -152,7 +152,7 @@ test_jest_config() {
     local jestconfig="$TEST_TEMP_DIR/jest.config.js"
     
     # Create config
-    cat > "$jestconfig" << 'EOF'
+    command cat > "$jestconfig" << 'EOF'
 module.exports = {
   testEnvironment: 'node',
   coverageDirectory: 'coverage',
@@ -175,7 +175,7 @@ test_nodemon_config() {
     local nodemon_json="$TEST_TEMP_DIR/nodemon.json"
     
     # Create config
-    cat > "$nodemon_json" << 'EOF'
+    command cat > "$nodemon_json" << 'EOF'
 {
   "watch": ["src"],
   "ext": "js,ts,json",
@@ -198,7 +198,7 @@ test_npm_scripts() {
     local package_json="$TEST_TEMP_DIR/package.json"
     
     # Create package.json with scripts
-    cat > "$package_json" << 'EOF'
+    command cat > "$package_json" << 'EOF'
 {
   "scripts": {
     "dev": "nodemon",
@@ -225,7 +225,7 @@ test_node_dev_aliases() {
     local bashrc_file="$TEST_TEMP_DIR/etc/bashrc.d/25-node-dev.sh"
     
     # Create aliases
-    cat > "$bashrc_file" << 'EOF'
+    command cat > "$bashrc_file" << 'EOF'
 alias nrd='npm run dev'
 alias nrb='npm run build'
 alias nrt='npm run test'
@@ -270,7 +270,7 @@ test_node_dev_verification() {
     local test_script="$TEST_TEMP_DIR/test-node-dev.sh"
     
     # Create verification script
-    cat > "$test_script" << 'EOF'
+    command cat > "$test_script" << 'EOF'
 #!/bin/bash
 echo "Node.js dev tools:"
 for tool in typescript eslint prettier jest nodemon pm2; do

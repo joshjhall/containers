@@ -27,13 +27,13 @@ setup() {
     export WORKING_DIR="/workspace/test"
     
     # Create a test version of feature-header.sh
-    cp "$PROJECT_ROOT/lib/base/feature-header.sh" "$TEST_TEMP_DIR/feature-header-test.sh"
+    command cp "$PROJECT_ROOT/lib/base/feature-header.sh" "$TEST_TEMP_DIR/feature-header-test.sh"
 }
 
 # Teardown function - runs after each test
 teardown() {
     # Clean up test directory
-    rm -rf "$TEST_TEMP_DIR"
+    command rm -rf "$TEST_TEMP_DIR"
     
     # Unset test variables
     unset USERNAME USER_UID USER_GID HOME WORKING_DIR
@@ -114,7 +114,7 @@ test_write_bashrc_content() {
         local file="$1"
         local section="$2"
         echo "# $section" > "$file"
-        cat >> "$file"
+        command cat >> "$file"
     }
     export -f write_bashrc_content
     

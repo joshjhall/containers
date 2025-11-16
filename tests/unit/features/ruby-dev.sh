@@ -34,7 +34,7 @@ setup() {
 teardown() {
     # Clean up test directory
     if [ -n "${TEST_TEMP_DIR:-}" ]; then
-        rm -rf "$TEST_TEMP_DIR"
+        command rm -rf "$TEST_TEMP_DIR"
     fi
     
     # Unset test variables
@@ -69,7 +69,7 @@ test_rubocop_config() {
     local rubocop_yml="$TEST_TEMP_DIR/.rubocop.yml"
     
     # Create config
-    cat > "$rubocop_yml" << 'EOF'
+    command cat > "$rubocop_yml" << 'EOF'
 AllCops:
   TargetRubyVersion: 3.3
   NewCops: enable
@@ -93,7 +93,7 @@ test_solargraph_config() {
     local solargraph_yml="$TEST_TEMP_DIR/.solargraph.yml"
     
     # Create config
-    cat > "$solargraph_yml" << 'EOF'
+    command cat > "$solargraph_yml" << 'EOF'
 include:
   - "**/*.rb"
 exclude:
@@ -134,7 +134,7 @@ test_rspec_config() {
     local rspec_file="$TEST_TEMP_DIR/.rspec"
     
     # Create config
-    cat > "$rspec_file" << 'EOF'
+    command cat > "$rspec_file" << 'EOF'
 --require spec_helper
 --format documentation
 --color
@@ -155,7 +155,7 @@ test_guard_config() {
     local guardfile="$TEST_TEMP_DIR/Guardfile"
     
     # Create Guardfile
-    cat > "$guardfile" << 'EOF'
+    command cat > "$guardfile" << 'EOF'
 guard :rspec, cmd: "bundle exec rspec" do
   watch(%r{^spec/.+_spec\.rb$})
   watch(%r{^lib/(.+)\.rb$}) { |m| "spec/lib/#{m[1]}_spec.rb" }
@@ -177,7 +177,7 @@ test_ruby_dev_aliases() {
     local bashrc_file="$TEST_TEMP_DIR/etc/bashrc.d/35-ruby-dev.sh"
     
     # Create aliases
-    cat > "$bashrc_file" << 'EOF'
+    command cat > "$bashrc_file" << 'EOF'
 alias rbc='rubocop'
 alias rbca='rubocop -a'
 alias rsp='rspec'
@@ -197,7 +197,7 @@ test_pry_config() {
     local pryrc="$TEST_TEMP_DIR/home/testuser/.pryrc"
     
     # Create config
-    cat > "$pryrc" << 'EOF'
+    command cat > "$pryrc" << 'EOF'
 Pry.config.editor = "nano"
 Pry.config.prompt_name = "dev"
 EOF
@@ -235,7 +235,7 @@ test_ruby_dev_verification() {
     local test_script="$TEST_TEMP_DIR/test-ruby-dev.sh"
     
     # Create verification script
-    cat > "$test_script" << 'EOF'
+    command cat > "$test_script" << 'EOF'
 #!/bin/bash
 echo "Ruby dev tools:"
 for tool in rubocop solargraph rspec pry rails; do

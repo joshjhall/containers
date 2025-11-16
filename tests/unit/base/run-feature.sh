@@ -21,7 +21,7 @@ setup() {
     
     # Create mock feature script
     export MOCK_FEATURE="$TEST_TEMP_DIR/test-feature.sh"
-    cat > "$MOCK_FEATURE" << 'EOF'
+    command cat > "$MOCK_FEATURE" << 'EOF'
 #!/bin/bash
 echo "USERNAME=$1"
 echo "UID=$2"
@@ -37,7 +37,7 @@ EOF
 teardown() {
     # Clean up test directory
     if [ -n "${TEST_TEMP_DIR:-}" ]; then
-        rm -rf "$TEST_TEMP_DIR"
+        command rm -rf "$TEST_TEMP_DIR"
     fi
     
     # Unset test variables
@@ -79,7 +79,7 @@ test_argument_passing() {
 # Test: Build-env file overrides UID/GID
 test_build_env_override() {
     # Create build-env file
-    cat > "$MOCK_BUILD_ENV" << 'EOF'
+    command cat > "$MOCK_BUILD_ENV" << 'EOF'
 ACTUAL_UID=2000
 ACTUAL_GID=2000
 EOF
@@ -109,7 +109,7 @@ EOF
 # Test: Fallback when build-env doesn't exist
 test_fallback_without_build_env() {
     # Ensure build-env doesn't exist
-    rm -f "$MOCK_BUILD_ENV"
+    command rm -f "$MOCK_BUILD_ENV"
     
     # Simulate wrapper behavior without build-env
     local username="testuser"
@@ -168,7 +168,7 @@ test_missing_arguments() {
 # Test: Script preserves additional arguments
 test_additional_arguments() {
     # Create feature script that accepts extra args
-    cat > "$MOCK_FEATURE" << 'EOF'
+    command cat > "$MOCK_FEATURE" << 'EOF'
 #!/bin/bash
 echo "USERNAME=$1"
 echo "UID=$2"
@@ -191,7 +191,7 @@ EOF
 # Test: Script handles spaces in arguments
 test_spaces_in_arguments() {
     # Create feature script that handles spaces
-    cat > "$MOCK_FEATURE" << 'EOF'
+    command cat > "$MOCK_FEATURE" << 'EOF'
 #!/bin/bash
 echo "USERNAME=[$1]"
 EOF

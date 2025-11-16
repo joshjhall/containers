@@ -37,7 +37,7 @@ setup() {
 teardown() {
     # Clean up test directory
     if [ -n "${TEST_TEMP_DIR:-}" ]; then
-        rm -rf "$TEST_TEMP_DIR"
+        command rm -rf "$TEST_TEMP_DIR"
     fi
     
     # Unset test variables
@@ -124,7 +124,7 @@ test_go_environment_variables() {
     local bashrc_file="$TEST_TEMP_DIR/etc/bashrc.d/25-golang.sh"
     
     # Create mock bashrc content
-    cat > "$bashrc_file" << 'EOF'
+    command cat > "$bashrc_file" << 'EOF'
 export GOROOT="/usr/local/go"
 export GOPATH="${GOPATH:-/cache/go}"
 export GOCACHE="${GOCACHE:-$GOPATH/cache}"
@@ -200,7 +200,7 @@ test_go_aliases_helpers() {
     local bashrc_file="$TEST_TEMP_DIR/etc/bashrc.d/25-golang.sh"
     
     # Add aliases section
-    cat >> "$bashrc_file" << 'EOF'
+    command cat >> "$bashrc_file" << 'EOF'
 
 # Go aliases
 alias gotest='go test -v ./...'
@@ -261,7 +261,7 @@ test_go_module_proxy() {
     local bashrc_file="$TEST_TEMP_DIR/etc/bashrc.d/25-golang.sh"
     
     # Add proxy configuration
-    cat >> "$bashrc_file" << 'EOF'
+    command cat >> "$bashrc_file" << 'EOF'
 
 # Go module proxy (optional, improves download speed)
 export GOPROXY="${GOPROXY:-https://proxy.golang.org,direct}"
@@ -287,7 +287,7 @@ test_go_verification() {
     local test_script="$TEST_TEMP_DIR/test-go.sh"
     
     # Create verification script
-    cat > "$test_script" << 'EOF'
+    command cat > "$test_script" << 'EOF'
 #!/bin/bash
 echo "Go version:"
 go version 2>/dev/null || echo "Go not installed"

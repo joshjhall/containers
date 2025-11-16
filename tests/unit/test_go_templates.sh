@@ -95,7 +95,7 @@ echo ""
 # Test 5: Simulated template loading
 echo "Test: Template loading simulation"
 TEMP_DIR=$(mktemp -d)
-trap 'rm -rf "$TEMP_DIR"' EXIT
+trap 'command rm -rf "$TEMP_DIR"' EXIT
 
 # Simulate the load_go_template function
 load_go_template_test() {
@@ -109,7 +109,7 @@ load_go_template_test() {
     fi
 
     if [ -n "$project_name" ]; then
-        sed "s/__PROJECT__/${project_name}/g" "$template_file"
+        command sed "s/__PROJECT__/${project_name}/g" "$template_file"
     else
         cat "$template_file"
     fi
