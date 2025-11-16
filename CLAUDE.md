@@ -80,7 +80,7 @@ docker build -t test:minimal \
 ./tests/test_feature.sh kubernetes
 ```
 
-**IMPORTANT: Testing Docker Builds Manually**
+#### IMPORTANT: Testing Docker Builds Manually
 
 When testing Docker builds manually, **DO NOT run `docker build` commands
 directly** because Docker may be configured with buildx as the default builder,

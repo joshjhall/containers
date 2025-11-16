@@ -37,13 +37,13 @@ This container build system follows [Semantic Versioning](https://semver.org/):
 
 Check your current version:
 
-```bash
+````bash
 # From your project root
 cat containers/VERSION
 
 # Or check git submodule commit
 cd containers && git describe --tags
-```
+```text
 
 ---
 
@@ -51,12 +51,12 @@ cd containers && git describe --tags
 
 ### Recommended Upgrade Paths
 
-```
+```text
 v3.x → v4.0.0 → v4.7.0 (current)
 v4.0.x → v4.7.0 (direct upgrade)
 v4.1.x → v4.7.0 (direct upgrade)
 v4.5.x → v4.7.0 (direct upgrade)
-```
+```text
 
 **Best Practice**: Always upgrade through major versions sequentially (v3 → v4 →
 v5), not skipping major versions.
@@ -76,13 +76,13 @@ v5), not skipping major versions.
    - **Migration**: Automatic - scripts detect Debian version
    - **Action Required**: None if using default base images
 
-2. **apt-key Deprecation Handling**
+1. **apt-key Deprecation Handling**
    - **Impact**: Features using apt repositories (terraform, gcloud, kubernetes)
      changed
    - **Migration**: Automatic version detection
    - **Action Required**: Rebuild images if locked to old Debian versions
 
-3. **Python Installation Method Changed**
+1. **Python Installation Method Changed**
    - **Impact**: Switched from pyenv to direct source installation
    - **Migration**: Simplified installation, same user experience
    - **Action Required**: None - environment variables remain compatible
@@ -132,7 +132,7 @@ cd /path/to/your/project
 cd containers
 git describe --tags
 # Output: v4.5.0 (example)
-```
+```text
 
 #### Step 2: Review Release Notes
 
@@ -159,7 +159,7 @@ cd ..
 # Commit the submodule update
 git add containers
 git commit -m "chore: Upgrade container build system to v4.7.0"
-```
+```text
 
 #### Step 4: Rebuild Images
 
@@ -177,7 +177,7 @@ docker build -t myproject:dev \
 # Test the new image
 docker run --rm myproject:dev python3 --version
 docker run --rm myproject:dev node --version
-```
+```text
 
 #### Step 5: Update CI/CD (if applicable)
 
@@ -190,7 +190,7 @@ docker run --rm myproject:dev node --version
 
 - name: Build container
   run: docker build -t test:latest .
-```
+```text
 
 ---
 
@@ -215,9 +215,9 @@ FROM mcr.microsoft.com/devcontainers/base:bookworm
 
 # New (v4.0+)
 FROM mcr.microsoft.com/devcontainers/base:trixie
-```
+```text
 
-2. **Remove pyenv/rbenv References**
+1. **Remove pyenv/rbenv References**
 
 If you have custom scripts or configurations referencing pyenv or rbenv:
 
@@ -228,13 +228,13 @@ pyenv global 3.11.0
 
 # New - Direct installation
 python3 --version  # Already at specified version
-```
+```text
 
-3. **Update Build Arguments (if customized)**
+1. **Update Build Arguments (if customized)**
 
 No changes required - all build arguments remain compatible.
 
-4. **Test Migration**
+1. **Test Migration**
 
 ```bash
 # Build with v4.0+
@@ -245,7 +245,7 @@ docker run --rm myproject:test-v4 check-installed-versions.sh
 
 # Compare with v3.x image
 docker run --rm myproject:old check-installed-versions.sh
-```
+```text
 
 #### Known Issues and Solutions
 
@@ -258,9 +258,10 @@ docker run --rm myproject:old check-installed-versions.sh
 
 - **Cause**: Version pinning from pyenv era
 - **Solution**: Specify version via build args:
+
   ```bash
   docker build --build-arg PYTHON_VERSION=3.12.0 .
-  ```
+````
 
 ---
 
@@ -268,12 +269,12 @@ docker run --rm myproject:old check-installed-versions.sh
 
 This is a **non-breaking upgrade**. Simply update the submodule:
 
-```bash
+````bash
 cd containers && git checkout v4.7.0 && cd ..
 git add containers
 git commit -m "chore: Update to v4.7.0"
 docker build --no-cache -t myproject:latest .
-```
+```text
 
 **Optional Enhancements to Adopt**:
 
@@ -283,9 +284,9 @@ docker build --no-cache -t myproject:latest .
 # Add to your Dockerfile
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s \
   CMD /usr/local/bin/healthcheck.sh --quick || exit 1
-```
+```text
 
-2. **Use Retry Configuration** (new in v4.7.0)
+1. **Use Retry Configuration** (new in v4.7.0)
 
 ```bash
 # Environment variables for retry behavior
@@ -293,7 +294,7 @@ docker build \
   -e RETRY_MAX_ATTEMPTS=5 \
   -e RETRY_INITIAL_DELAY=1 \
   -t myproject:latest .
-```
+```text
 
 ---
 
@@ -322,7 +323,7 @@ docker run --rm myproject:latest env | grep -E "(CACHE|VERSION|PATH)"
 # 5. Test development workflow
 docker run -it --rm -v "$(pwd):/workspace/project" myproject:latest bash
 # Inside container: run your normal dev commands
-```
+```text
 
 ### Integration Testing
 
@@ -334,7 +335,7 @@ docker run --rm -v "$(pwd):/workspace/project" \
 
 # Compare build times (optional)
 time docker build --no-cache -t myproject:test .
-```
+```text
 
 ### Smoke Tests
 
@@ -361,7 +362,7 @@ docker run --rm myproject:latest ls -la /cache
 docker run --rm myproject:latest healthcheck.sh --quick
 
 echo "All smoke tests passed!"
-```
+```text
 
 ---
 
@@ -383,7 +384,7 @@ git commit -m "rollback: Revert to container system v4.5.0"
 
 # Rebuild with old version
 docker build --no-cache -t myproject:latest .
-```
+```text
 
 ### Emergency Rollback
 
@@ -403,16 +404,16 @@ rollback procedures including:
 
 **Symptoms**:
 
-```
+```text
 ERROR: failed to solve: failed to compute cache key
-```
+```text
 
 **Solutions**:
 
 1. Clear Docker cache: `docker builder prune -af`
-2. Rebuild without cache: `docker build --no-cache .`
-3. Check Dockerfile syntax changes
-4. Verify build arguments are still valid
+1. Rebuild without cache: `docker build --no-cache .`
+1. Check Dockerfile syntax changes
+1. Verify build arguments are still valid
 
 ### Issue: Features Not Installing
 
@@ -421,14 +422,19 @@ ERROR: failed to solve: failed to compute cache key
 **Solutions**:
 
 1. Check feature names haven't changed:
+
    ```bash
    ./containers/bin/list-features.sh
-   ```
-2. Verify build arguments:
+````
+
+1. Verify build arguments:
+
    ```bash
    grep "^ARG INCLUDE_" containers/Dockerfile
    ```
-3. Check feature dependencies:
+
+1. Check feature dependencies:
+
    ```bash
    cat containers/docs/feature-dependencies.md
    ```
@@ -452,7 +458,8 @@ ERROR: failed to solve: failed to compute cache key
    diff old-env.txt new-env.txt
    ```
 
-2. Check docs:
+1. Check docs:
+
    ```bash
    cat containers/docs/environment-variables.md
    ```
@@ -469,13 +476,14 @@ ERROR: failed to solve: failed to compute cache key
    docker images myproject --format "{{.Size}}"
    ```
 
-2. Profile build time:
+1. Profile build time:
 
    ```bash
    time docker build --no-cache .
    ```
 
-3. Review cache strategy:
+1. Review cache strategy:
+
    ```bash
    cat containers/docs/cache-strategy.md
    ```
@@ -491,12 +499,13 @@ ERROR: failed to solve: failed to compute cache key
    - Test in dev/staging environment
    - Run full test suite
 
-2. **Document Your Configuration**
+1. **Document Your Configuration**
    - List all `INCLUDE_*` build arguments you use
    - Document any custom Dockerfile modifications
    - Note environment variable customizations
 
-3. **Create a Backup**
+1. **Create a Backup**
+
    ```bash
    # Tag current working image
    docker tag myproject:latest myproject:pre-migration-backup
@@ -512,7 +521,7 @@ ERROR: failed to solve: failed to compute cache key
    cd containers && git checkout v4.7.0
    ```
 
-2. **Maintain Changelog**
+1. **Maintain Changelog**
    - Document why you're upgrading
    - Note any configuration changes
    - Record test results
@@ -524,12 +533,12 @@ ERROR: failed to solve: failed to compute cache key
    - Check application logs
    - Monitor resource usage
 
-2. **Update Documentation**
+1. **Update Documentation**
    - Update README with new version
    - Document any new features adopted
    - Note any workarounds applied
 
-3. **Share Knowledge**
+1. **Share Knowledge**
    - Document lessons learned
    - Update team runbooks
    - Share migration tips with team
@@ -553,7 +562,7 @@ ERROR: failed to solve: failed to compute cache key
    - Search troubleshooting guide
    - Check GitHub issues
 
-2. **GitHub Issues**
+1. **GitHub Issues**
    - Search existing issues: https://github.com/joshjhall/containers/issues
    - Create new issue with:
      - Old version
@@ -561,7 +570,7 @@ ERROR: failed to solve: failed to compute cache key
      - Error messages
      - Steps to reproduce
 
-3. **Emergency Rollback**
+1. **Emergency Rollback**
    - See [emergency-rollback.md](emergency-rollback.md)
    - Pin to last known good version
    - Report issue after recovery
@@ -596,9 +605,9 @@ Watch the [CHANGELOG.md](../CHANGELOG.md) for deprecation notices. Deprecated
 features will:
 
 1. Be marked deprecated for at least one major version
-2. Include migration path in documentation
-3. Show warnings during build
-4. Be removed in next major version
+1. Include migration path in documentation
+1. Show warnings during build
+1. Be removed in next major version
 
 ---
 

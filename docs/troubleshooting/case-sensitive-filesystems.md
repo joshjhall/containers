@@ -20,16 +20,16 @@ into containers, this mismatch can cause confusion and unexpected behavior.
 
 1. **Git tracks case changes** - Git records `README.md` vs `readme.md` as
    different filenames
-2. **Filesystem ignores case** - macOS/Windows treat them as the same file
-3. **Container sees what filesystem shows** - Linux container sees what the
+1. **Filesystem ignores case** - macOS/Windows treat them as the same file
+1. **Container sees what filesystem shows** - Linux container sees what the
    mounted filesystem provides
-4. **Confusion ensues** - Git and filesystem disagree on what exists
+1. **Confusion ensues** - Git and filesystem disagree on what exists
 
 ## Common Symptoms
 
 ### Symptom 1: Git Changes Not Reflected
 
-```bash
+````bash
 # On macOS host
 git mv README.md readme.md
 git commit -m "Lowercase readme"
@@ -46,7 +46,7 @@ git status
 # But git thinks filename is readme.md
 git ls-files | grep -i readme
 # Shows: readme.md
-```
+```text
 
 ### Symptom 2: Import/Module Errors
 
@@ -57,7 +57,7 @@ class MyClass:
 
 # file: main.py
 from mymodule import MyClass  # Works on macOS, fails on Linux
-```
+```text
 
 On macOS: Import succeeds (case-insensitive) On Linux: Import fails (can't find
 `mymodule`, only `MyModule`)
@@ -70,7 +70,7 @@ On macOS: Import succeeds (case-insensitive) On Linux: Import fails (can't find
 
 # On macOS: make succeeds
 # On Linux: make fails (file not found)
-```
+```text
 
 ## Detection
 
@@ -79,14 +79,14 @@ On macOS: Import succeeds (case-insensitive) On Linux: Import fails (can't find
 When you start a container, the runtime automatically detects case-insensitive
 mounts and displays a warning:
 
-```
+```text
 ⚠ Case-insensitive filesystem detected on /workspace
    Host: macOS with case-insensitive APFS
    This may cause issues with git case changes and imports
 
    Recommendation: Use a case-sensitive volume for development
    See: docs/troubleshooting/case-sensitive-filesystems.md
-```
+```text
 
 ### Manual Detection
 
@@ -99,7 +99,7 @@ Check if a mount point is case-sensitive:
 # Output examples:
 # ✓ /workspace is case-sensitive (safe)
 # ⚠ /workspace is case-insensitive (may cause issues)
-```
+```text
 
 Or manually test:
 
@@ -111,7 +111,7 @@ ls -la | grep -i testfile
 # Case-sensitive: shows both testfile and TESTFILE
 # Case-insensitive: shows only one file (last write wins)
 rm -f testfile TESTFILE
-```
+```text
 
 ## Solutions
 
@@ -134,7 +134,7 @@ ln -s /Volumes/DevWorkspace/projects ~/projects
 
 # Auto-mount on login (optional)
 # System Preferences > Users & Groups > Login Items > Add DevWorkspace.dmg
-```
+```text
 
 **Pros**:
 
@@ -172,7 +172,7 @@ docker run --rm \
   -v myproject-code:/workspace \
   -v "$(pwd):/dest" \
   alpine sh -c "cp -a /workspace/. /dest/"
-```
+```text
 
 **Pros**:
 
@@ -195,7 +195,7 @@ If you can't use solutions 1 or 2, follow these guidelines:
    - ✅ Or always PascalCase: `MyFile.py`, `MyModule.go`
    - ❌ Never mix: `myFile.py` and `MyFile.py`
 
-2. **Never rename just to change case**:
+1. **Never rename just to change case**:
 
    ```bash
    # ❌ DON'T: macOS won't reflect this change
@@ -206,9 +206,9 @@ If you can't use solutions 1 or 2, follow these guidelines:
    git commit -m "Rename step 1"
    git mv temp.md readme.md
    git commit -m "Rename step 2"
-   ```
+````
 
-3. **Use language conventions**:
+1. **Use language conventions**:
    - Python: `lowercase_with_underscores.py`
    - Go: `lowercase.go` or `package_name.go`
    - JavaScript: `camelCase.js` or `kebab-case.js`
@@ -217,7 +217,7 @@ If you can't use solutions 1 or 2, follow these guidelines:
 
 If you have existing case mismatches:
 
-```bash
+````bash
 # Find files where git and filesystem disagree
 git ls-files | while read file; do
     if [ ! -f "$file" ]; then
@@ -232,16 +232,16 @@ git commit -m "Temp rename"
 git mv temp-readme.md readme.md
 git commit -m "Fix case"
 git push
-```
+```text
 
 ## Prevention
 
 ### For New Projects
 
 1. **Start with case-sensitive storage** (Solution 1)
-2. **Establish naming conventions early**
-3. **Document filesystem requirements** in project README
-4. **Add pre-commit hook** to check for case issues:
+1. **Establish naming conventions early**
+1. **Document filesystem requirements** in project README
+1. **Add pre-commit hook** to check for case issues:
 
 ```bash
 #!/bin/bash
@@ -252,14 +252,14 @@ git ls-files | tr '[:upper:]' '[:lower:]' | sort | uniq -d | while read file; do
     echo "ERROR: Multiple files differ only by case: $file"
     exit 1
 done
-```
+```text
 
 ### For Team Development
 
 1. **Document filesystem setup** in project README
-2. **Test on Linux** regularly (even if developing on macOS/Windows)
-3. **Use CI/CD** to catch case-sensitivity issues early
-4. **Agree on naming conventions** (commit them to CONTRIBUTING.md)
+1. **Test on Linux** regularly (even if developing on macOS/Windows)
+1. **Use CI/CD** to catch case-sensitivity issues early
+1. **Agree on naming conventions** (commit them to CONTRIBUTING.md)
 
 ## Platform-Specific Notes
 
@@ -271,7 +271,7 @@ done
 diskutil info / | grep "File System"
 # Case-sensitive APFS: ✅ Good
 # APFS: ⚠ Case-insensitive (default)
-```
+```text
 
 **Create case-sensitive APFS**:
 
@@ -280,7 +280,7 @@ diskutil info / | grep "File System"
 # Name: DevWorkspace
 # Size: 50 GB
 # Format: APFS (Case-sensitive)
-```
+```text
 
 ### Windows
 
@@ -291,11 +291,11 @@ diskutil info / | grep "File System"
    ```powershell
    # Store code in WSL2, not Windows
    \\wsl$\Ubuntu\home\user\projects
-   ```
+````
 
-2. Use Docker volumes (always case-sensitive)
+1. Use Docker volumes (always case-sensitive)
 
-3. Use virtual machine with Linux filesystem
+1. Use virtual machine with Linux filesystem
 
 ### Linux
 
@@ -305,7 +305,7 @@ Linux filesystems (ext4, xfs, btrfs) are **always case-sensitive**. No issues!
 
 Run this test to verify case-sensitivity:
 
-```bash
+````bash
 # Create test directory
 mkdir -p /tmp/case-test
 cd /tmp/case-test
@@ -326,7 +326,7 @@ fi
 # Cleanup
 rm -f testfile.txt TESTFILE.TXT
 cd -
-```
+```text
 
 ## FAQ
 
@@ -335,8 +335,8 @@ cd -
 **A**: No, you cannot convert in-place. You must:
 
 1. Create a new case-sensitive APFS container or disk image
-2. Copy files to the new volume
-3. Update paths and bookmarks
+1. Copy files to the new volume
+1. Update paths and bookmarks
 
 ### Q: Will case-sensitive APFS break macOS applications?
 
@@ -367,7 +367,7 @@ git ls-files | tr '[:upper:]' '[:lower:]' | sort | uniq -d
 git ls-files | while read f; do
     [ -f "$f" ] || echo "Missing: $f"
 done
-```
+```text
 
 ## Related Documentation
 
@@ -381,10 +381,10 @@ done
 
 1. ✅ Use case-sensitive storage for development (macOS: APFS volume, Windows:
    WSL2)
-2. ✅ Use consistent naming conventions
-3. ✅ Test on Linux regularly
-4. ✅ Avoid case-only renames
-5. ✅ Document filesystem requirements
+1. ✅ Use consistent naming conventions
+1. ✅ Test on Linux regularly
+1. ✅ Avoid case-only renames
+1. ✅ Document filesystem requirements
 
 **Quick Fix**:
 
@@ -402,3 +402,4 @@ done
 
 **Need help?** See [main troubleshooting guide](../troubleshooting.md) or
 [file an issue](https://github.com/joshjhall/containers/issues).
+````

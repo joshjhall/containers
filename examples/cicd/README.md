@@ -66,16 +66,16 @@ These templates provide complete CI/CD pipelines with:
    cp examples/cicd/github-actions/*.yml .github/workflows/
    ```
 
-2. Customize for your project:
+1. Customize for your project:
    - Update `IMAGE_NAME` environment variable
    - Modify container variants in the build matrix
    - Adjust build arguments for your features
 
-3. Configure secrets in GitHub:
+1. Configure secrets in GitHub:
    - Go to Settings → Secrets → Actions
    - Add: `KUBE_CONFIG_STAGING`, `KUBE_CONFIG_PRODUCTION`
 
-4. Push to main branch or create a pull request
+1. Push to main branch or create a pull request
 
 ### Workflows
 
@@ -91,13 +91,13 @@ Runs on every push and pull request:
 
 **Trigger:**
 
-```yaml
+````yaml
 on:
   push:
     branches: [main, develop]
   pull_request:
     branches: [main]
-```
+```text
 
 **Matrix builds:**
 
@@ -108,7 +108,7 @@ strategy:
       - name: minimal
       - name: python-dev
       - name: node-dev
-```
+```text
 
 #### Deploy to Staging (`deploy-staging.yml`)
 
@@ -127,7 +127,7 @@ on:
     workflows: ['Build and Test']
     types: [completed]
     branches: [main]
-```
+```text
 
 **Environment:**
 
@@ -135,7 +135,7 @@ on:
 environment:
   name: staging
   url: https://staging.example.com
-```
+```text
 
 #### Deploy to Production (`deploy-production.yml`)
 
@@ -155,14 +155,14 @@ on:
     inputs:
       image_tag: ...
       deployment_strategy: ...
-```
+```text
 
 **Manual approval:**
 
 ```yaml
 environment:
   name: production # Requires approval in GitHub settings
-```
+```text
 
 #### Rollback (`rollback.yml`)
 
@@ -192,16 +192,16 @@ cat ~/.kube/config | base64 -w 0
 # Add to GitHub: Settings → Secrets → Actions → New repository secret
 # Name: KUBE_CONFIG_STAGING
 # Value: <paste base64 output>
-```
+```text
 
 #### Environment Protection
 
 Configure production environment protection:
 
 1. Go to Settings → Environments → production
-2. Enable "Required reviewers"
-3. Add reviewers who can approve deployments
-4. (Optional) Set deployment branches to `main` only
+1. Enable "Required reviewers"
+1. Add reviewers who can approve deployments
+1. (Optional) Set deployment branches to `main` only
 
 ## GitLab CI
 
@@ -211,19 +211,19 @@ Configure production environment protection:
 
    ```bash
    cp examples/cicd/gitlab-ci/.gitlab-ci.yml .
-   ```
+````
 
-2. Configure CI/CD variables in GitLab:
+1. Configure CI/CD variables in GitLab:
    - Settings → CI/CD → Variables
    - Add: `KUBE_CONFIG_STAGING`, `KUBE_CONFIG_PRODUCTION`
 
-3. Push to repository
+1. Push to repository
 
 ### Pipeline Stages
 
-```
+````text
 test → build → security-scan → deploy-staging → deploy-production
-```
+```text
 
 ### Features
 
@@ -259,23 +259,23 @@ Ensure runners have:
 
    ```bash
    cp examples/cicd/jenkins/Jenkinsfile .
-   ```
+````
 
-2. Create Jenkins credentials:
+1. Create Jenkins credentials:
    - Credentials → Add Credentials
    - Add: `github-container-registry`, `kube-config-staging`,
      `kube-config-production`
 
-3. Create Jenkins pipeline job:
+1. Create Jenkins pipeline job:
    - New Item → Pipeline
    - Pipeline → Definition → Pipeline script from SCM
    - SCM → Git → Add repository URL
 
-4. Run pipeline
+1. Run pipeline
 
 ### Pipeline Structure
 
-```groovy
+````groovy
 pipeline {
     stages {
         Test (parallel: Unit Tests, Code Quality)
@@ -285,7 +285,7 @@ pipeline {
         Deploy to Production (manual approval)
     }
 }
-```
+```text
 
 ### Parameters
 
@@ -297,7 +297,7 @@ parameters {
     choice(name: 'VARIANT', ...)
     booleanParam(name: 'RUN_SECURITY_SCAN', ...)
 }
-```
+```text
 
 ### Required Plugins
 
@@ -328,9 +328,9 @@ parameters {
 **How it works:**
 
 1. Deploy new version to "green" environment
-2. Test green environment thoroughly
-3. Switch all traffic from "blue" to "green"
-4. Keep blue environment for quick rollback
+1. Test green environment thoroughly
+1. Switch all traffic from "blue" to "green"
+1. Keep blue environment for quick rollback
 
 **Usage:**
 
@@ -338,7 +338,7 @@ parameters {
 ./deployment-strategies/blue-green-deployment.sh \
     ghcr.io/myorg/app:v1.2.3 \
     production
-```
+```text
 
 **Variables:**
 
@@ -354,7 +354,7 @@ KEEP_OLD=false \
 ./deployment-strategies/blue-green-deployment.sh \
     ghcr.io/myorg/app:v1.2.3 \
     production
-```
+```text
 
 ### Canary Deployment
 
@@ -367,10 +367,10 @@ KEEP_OLD=false \
 **How it works:**
 
 1. Deploy canary alongside current version
-2. Route small percentage to canary (e.g., 10%)
-3. Monitor canary for issues
-4. Gradually increase canary traffic
-5. Promote canary to replace main deployment
+1. Route small percentage to canary (e.g., 10%)
+1. Monitor canary for issues
+1. Gradually increase canary traffic
+1. Promote canary to replace main deployment
 
 **Usage:**
 
@@ -379,7 +379,7 @@ KEEP_OLD=false \
     ghcr.io/myorg/app:v1.2.3 \
     production \
     10  # 10% traffic to canary
-```
+```text
 
 **Variables:**
 
@@ -397,7 +397,7 @@ AUTO_ROLLBACK=true \
     ghcr.io/myorg/app:v1.2.3 \
     production \
     10
-```
+```text
 
 ## Quick Start
 
@@ -421,7 +421,7 @@ cp examples/cicd/gitlab-ci/.gitlab-ci.yml .
 
 # For Jenkins
 cp examples/cicd/jenkins/Jenkinsfile .
-```
+```text
 
 ### 3. Customize
 
@@ -457,17 +457,17 @@ Start with a pull request or feature branch:
    - Rotate credentials regularly
    - Use least-privilege service accounts
 
-2. **Scan for vulnerabilities**
+1. **Scan for vulnerabilities**
    - Run Trivy on every build
    - Fail builds on CRITICAL vulnerabilities
    - Review and patch HIGH vulnerabilities
 
-3. **Sign and verify images**
+1. **Sign and verify images**
    - Use Cosign for image signing
    - Verify signatures before deployment
    - Use SBOM (Software Bill of Materials)
 
-4. **Use minimal base images**
+1. **Use minimal base images**
    - Prefer slim/distroless images
    - Remove unnecessary packages
    - Keep images updated
@@ -479,17 +479,17 @@ Start with a pull request or feature branch:
    - Integration tests after build
    - Smoke tests after deployment
 
-2. **Use staging environments**
+1. **Use staging environments**
    - Mirror production configuration
    - Test deployments in staging first
    - Validate with production-like data
 
-3. **Implement progressive delivery**
+1. **Implement progressive delivery**
    - Start with canary deployments
    - Gradually increase traffic
    - Monitor metrics continuously
 
-4. **Have rollback procedures**
+1. **Have rollback procedures**
    - Document rollback steps
    - Test rollback regularly
    - Keep previous versions available
@@ -502,13 +502,13 @@ Start with a pull request or feature branch:
    - Mean time to recovery
    - Change failure rate
 
-2. **Set up alerts**
+1. **Set up alerts**
    - Deployment failures
    - High error rates
    - Resource exhaustion
    - Security vulnerabilities
 
-3. **Log everything**
+1. **Log everything**
    - Structured logging (JSON)
    - Centralized log aggregation
    - Retention policies
@@ -528,7 +528,7 @@ docker system prune -af
 
 # GitLab CI: Increase runner disk space or enable cleanup
 # Jenkins: Configure disk cleanup plugin
-```
+```text
 
 **Problem**: Build args not being recognized
 
@@ -542,7 +542,7 @@ ARG INCLUDE_PYTHON_DEV=false
 # Pass with --build-arg:
 --build-arg PROJECT_NAME=myproject
 --build-arg INCLUDE_PYTHON_DEV=true
-```
+```text
 
 ### Deployment Failures
 
@@ -559,7 +559,7 @@ kubectl config get-contexts
 
 # Ensure service account has proper RBAC:
 kubectl auth can-i create deployments --namespace=production
-```
+```text
 
 **Problem**: Pods stuck in "ImagePullBackOff"
 
@@ -574,7 +574,7 @@ kubectl get secret regcred -n production -o yaml
 
 # Check pod events:
 kubectl describe pod <pod-name> -n production
-```
+```text
 
 ### Rollback Issues
 
@@ -588,7 +588,7 @@ kubectl rollout history deployment/myapp -n production
 
 # Rollback to specific revision:
 kubectl rollout undo deployment/myapp -n production --to-revision=2
-```
+```text
 
 **Problem**: Traffic not switching during blue-green
 
@@ -604,7 +604,7 @@ kubectl get pods -n production --show-labels
 # Manually patch service:
 kubectl patch service myapp -n production \
     -p '{"spec":{"selector":{"deployment":"green"}}}'
-```
+```text
 
 ## Additional Resources
 
@@ -626,3 +626,4 @@ For issues and questions:
 
 This project is licensed under the MIT License - see the
 [LICENSE](../../LICENSE) file for details.
+````

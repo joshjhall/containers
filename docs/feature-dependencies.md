@@ -11,7 +11,7 @@ automatically enable dependent features - you must explicitly enable them.
 
 ## Dependency Graph
 
-```
+````text
 python-dev → python
 node-dev → node
 rust-dev → rust
@@ -21,7 +21,7 @@ golang-dev → golang
 java-dev → java
 mojo-dev → mojo
 cloudflare → node (wrangler requires Node.js)
-```
+```text
 
 ## Feature Dependencies Reference
 
@@ -79,7 +79,7 @@ docker build \
 docker build \
   --build-arg INCLUDE_PYTHON_DEV=true \
   -t myproject:python-dev .
-```
+```text
 
 ### Multiple Languages with Dev Tools
 
@@ -92,7 +92,7 @@ docker build \
   --build-arg INCLUDE_RUST=true \
   --build-arg INCLUDE_RUST_DEV=true \
   -t myproject:polyglot .
-```
+```text
 
 ### Production: Languages Without Dev Tools
 
@@ -104,7 +104,7 @@ docker build \
   --build-arg INCLUDE_PYTHON=true \
   --build-arg INCLUDE_NODE=true \
   -t myproject:prod .
-```
+```text
 
 ### Cloudflare Development
 
@@ -115,7 +115,7 @@ docker build \
   --build-arg INCLUDE_NODE=true \
   --build-arg INCLUDE_CLOUDFLARE=true \
   -t myproject:cloudflare .
-```
+```text
 
 ## Troubleshooting Dependency Issues
 
@@ -133,7 +133,7 @@ docker build \
   --build-arg INCLUDE_PYTHON=true \
   --build-arg INCLUDE_PYTHON_DEV=true \
   -t myproject:fixed .
-```
+```text
 
 ### Error: Module not found when running dev tools
 
@@ -154,7 +154,7 @@ docker run --rm myproject:dev check-installed-versions.sh
 # Test specific feature
 docker run --rm myproject:dev test-python
 docker run --rm myproject:dev test-node
-```
+```text
 
 ### Using list-features.sh
 
@@ -166,7 +166,7 @@ bin/list-features.sh
 
 # Get JSON with dependency info
 bin/list-features.sh --json | jq '.features[] | select(.dependencies | length > 0)'
-```
+```text
 
 ## Automatic Dependency Resolution (Future Enhancement)
 
@@ -182,7 +182,7 @@ planned automatic dependency resolution.
 ```bash
 # Future: Automatically enables INCLUDE_PYTHON=true
 docker build --build-arg INCLUDE_PYTHON_DEV=true .
-```
+```text
 
 ## Feature Compatibility Matrix
 
@@ -201,7 +201,7 @@ docker build \
   --build-arg INCLUDE_JAVA=true \
   --build-arg INCLUDE_R=true \
   -t myproject:polyglot .
-```
+```text
 
 ### Tool Combinations
 
@@ -217,7 +217,7 @@ docker build \
   --build-arg INCLUDE_CLOUDFLARE=true \
   --build-arg INCLUDE_NODE=true \
   -t myproject:cloud .
-```
+```text
 
 ### Database Clients
 
@@ -230,7 +230,7 @@ docker build \
   --build-arg INCLUDE_REDIS_CLIENT=true \
   --build-arg INCLUDE_SQLITE_CLIENT=true \
   -t myproject:databases .
-```
+```text
 
 ## Recommended Combinations
 
@@ -247,7 +247,7 @@ docker build \
   --build-arg INCLUDE_DOCKER=true \
   --build-arg INCLUDE_DEV_TOOLS=true \
   -t myproject:fullstack .
-```
+```text
 
 ### Data Science
 
@@ -260,7 +260,7 @@ docker build \
   --build-arg INCLUDE_POSTGRES_CLIENT=true \
   --build-arg INCLUDE_DEV_TOOLS=true \
   -t myproject:datascience .
-```
+```text
 
 ### Systems Programming
 
@@ -272,7 +272,7 @@ docker build \
   --build-arg INCLUDE_GOLANG_DEV=true \
   --build-arg INCLUDE_DEV_TOOLS=true \
   -t myproject:systems .
-```
+```text
 
 ### Cloud-Native Development
 
@@ -286,7 +286,7 @@ docker build \
   --build-arg INCLUDE_AWS=true \
   --build-arg INCLUDE_GCLOUD=true \
   -t myproject:cloudnative .
-```
+```text
 
 ## Environment Variable Examples
 
@@ -320,7 +320,7 @@ set +a
 docker build \
   $(env | grep '^INCLUDE_' | sed 's/^/--build-arg /') \
   -t myproject:dev .
-```
+```text
 
 ### Build Script Example
 
@@ -349,7 +349,7 @@ done
 
 # Execute build
 docker build $BUILD_ARGS -t myproject:dev .
-```
+```text
 
 ## Testing Dependencies
 
@@ -364,7 +364,7 @@ docker run --rm myproject:dev bash -c '
   npm --version &&
   echo "All dependencies satisfied!"
 '
-```
+```text
 
 ### Integration Tests
 
@@ -375,7 +375,7 @@ Use the test framework to verify feature combinations:
 ./tests/run_integration_tests.sh python_dev
 ./tests/run_integration_tests.sh node_dev
 ./tests/run_integration_tests.sh fullstack
-```
+```text
 
 ## Related Documentation
 
@@ -386,3 +386,4 @@ Use the test framework to verify feature combinations:
 - [examples/env/](../examples/env/) - Environment file examples
 - [planned/improvements-roadmap.md](planned/improvements-roadmap.md) - Future
   enhancements
+````

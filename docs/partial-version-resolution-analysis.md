@@ -81,14 +81,14 @@ resolve
 ### Implemented (2/6)
 
 1. ✅ **fetch_ruby_checksum()** - Ruby version resolution (commit 8b8016c)
-2. ✅ **fetch_go_checksum()** - Go version resolution (commit f105a8d)
+1. ✅ **fetch_go_checksum()** - Go version resolution (commit f105a8d)
 
 ### Not Applicable (4/6)
 
-3. ❌ **fetch_github_checksums_txt()** - Discrete GitHub release tags
-4. ❌ **fetch_github_sha256_file()** - Discrete GitHub release tags
-5. ❌ **fetch_github_sha512_file()** - Discrete GitHub release tags
-6. ❌ **calculate_checksum_sha256()** - No version metadata
+1. ❌ **fetch_github_checksums_txt()** - Discrete GitHub release tags
+1. ❌ **fetch_github_sha256_file()** - Discrete GitHub release tags
+1. ❌ **fetch_github_sha512_file()** - Discrete GitHub release tags
+1. ❌ **calculate_checksum_sha256()** - No version metadata
 
 ## Benefits of Partial Version Support
 
@@ -159,8 +159,8 @@ fi
 All implementations tested with:
 
 1. **Exact version**: Verifies exact match still works
-2. **Partial version**: Verifies resolution to latest patch
-3. **Invalid version**: Verifies error handling
+1. **Partial version**: Verifies resolution to latest patch
+1. **Invalid version**: Verifies error handling
 
 Test results:
 

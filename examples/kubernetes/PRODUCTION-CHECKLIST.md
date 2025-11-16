@@ -175,14 +175,18 @@ and checked off.
 
 - [ ] **Deployment Execution**
   - [ ] Deployment command reviewed:
+
     ```bash
     kubectl apply -k examples/kubernetes/overlays/production
     ```
+
   - [ ] Deployment progress monitored
   - [ ] Rollout status verified:
+
     ```bash
     kubectl rollout status deployment/prod-devcontainer -n production
     ```
+
   - [ ] No errors in pod logs
 
 - [ ] **Health Verification**
@@ -299,7 +303,7 @@ Document your emergency contacts:
 
 ---
 
-**Sign-Off**
+## Sign-Off
 
 - [ ] Deployment Engineer: **\*\*\*\***\_\_**\*\*\*\*** Date: \***\*\_\_\*\***
 - [ ] DevOps Lead: **\*\*\*\***\_\_**\*\*\*\*** Date: \***\*\_\_\*\***

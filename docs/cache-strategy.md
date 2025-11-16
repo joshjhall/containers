@@ -23,7 +23,7 @@ The build system employs a **two-layer caching strategy** to optimize builds:
 
 1. **BuildKit cache mounts** - Temporary caches during image builds (package
    downloads, compilation artifacts)
-2. **Persistent cache directories** - Persistent caches in `/cache` directory
+1. **Persistent cache directories** - Persistent caches in `/cache` directory
    for runtime and rebuilds
 
 ### Benefits
@@ -66,11 +66,11 @@ installation.
 
 **Example**:
 
-```dockerfile
+````dockerfile
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     apt-get update && apt-get install -y python3
-```
+```text
 
 **Benefits**:
 
@@ -100,7 +100,7 @@ across container restarts.
 
 ```bash
 docker run -v project-cache:/cache myproject:dev
-```
+```text
 
 ---
 
@@ -114,7 +114,7 @@ Every feature installation uses BuildKit cache mounts for APT operations:
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     /tmp/build-scripts/features/python.sh
-```
+```text
 
 **Cache targets**:
 
@@ -134,7 +134,7 @@ docker build -t myapp:v1 .
 
 # Second build: Downloads the SAME 500MB again
 docker build -t myapp:v2 .
-```
+```text
 
 With cache mounts:
 
@@ -144,7 +144,7 @@ docker build -t myapp:v1 .
 
 # Second build: Reuses cached packages, downloads only what changed
 docker build -t myapp:v2 .  # Much faster!
-```
+```text
 
 ### Cache Mount Limitations
 
@@ -176,7 +176,7 @@ export PIP_CACHE_DIR="/cache/pip"
 export POETRY_CACHE_DIR="/cache/poetry"
 export PIPX_HOME="/cache/pipx"
 export PIPX_BIN_DIR="/cache/pipx/bin"
-```
+```text
 
 **How it works**:
 
@@ -202,7 +202,7 @@ export NPM_CONFIG_CACHE="/cache/npm"
 export NPM_CONFIG_PREFIX="/cache/npm-global"
 export PNPM_HOME="/cache/pnpm"
 export YARN_CACHE_FOLDER="/cache/yarn"
-```
+```text
 
 **How it works**:
 
@@ -222,7 +222,7 @@ export YARN_CACHE_FOLDER="/cache/yarn"
 
 ```bash
 export CARGO_HOME="/cache/cargo"
-```
+```text
 
 **How it works**:
 
@@ -242,7 +242,7 @@ export CARGO_HOME="/cache/cargo"
 ```bash
 export GOMODCACHE="/cache/go/mod"
 export GOCACHE="/cache/go/build"
-```
+```text
 
 **How it works**:
 
@@ -263,7 +263,7 @@ export GOCACHE="/cache/go/build"
 export GEM_HOME="/cache/ruby/gems"
 export GEM_PATH="/cache/ruby/gems"
 export BUNDLE_PATH="/cache/ruby/bundle"
-```
+```text
 
 **How it works**:
 
@@ -284,7 +284,7 @@ export BUNDLE_PATH="/cache/ruby/bundle"
 export R_LIBS_USER="/cache/r/library"
 export R_CACHE_DIR="/cache/r"
 export TMPDIR="/cache/r/tmp"
-```
+```text
 
 **Configuration files**:
 
@@ -309,7 +309,7 @@ export TMPDIR="/cache/r/tmp"
 ```bash
 export MAVEN_OPTS="-Dmaven.repo.local=/cache/maven"
 export GRADLE_USER_HOME="/cache/gradle"
-```
+```text
 
 **How it works**:
 
@@ -338,7 +338,7 @@ export GRADLE_USER_HOME="/cache/gradle"
 
 The complete `/cache` directory structure:
 
-```
+```text
 /cache/
 ├── pip/                    # Python pip cache
 ├── poetry/                 # Python Poetry cache
@@ -369,7 +369,7 @@ The complete `/cache` directory structure:
 ├── pixi/                  # Pixi cache
 └── mojo/                  # Mojo environment
     └── project/           # Mojo project directory
-```
+```text
 
 ### Ownership
 
@@ -410,7 +410,7 @@ docker volume create project-cache
 
 # Mount at runtime
 docker run -v project-cache:/cache myproject:dev
-```
+```text
 
 ### Benefits of Volume Mounts
 
@@ -423,7 +423,7 @@ docker run myproject:dev pip install numpy pandas
 # Container stopped, recreated
 docker run myproject:dev pip install numpy pandas
 # Downloads SAME packages again!
-```
+```text
 
 **With volume mount**:
 
@@ -434,7 +434,7 @@ docker run -v project-cache:/cache myproject:dev pip install numpy pandas
 # Container stopped, recreated
 docker run -v project-cache:/cache myproject:dev pip install numpy pandas
 # Reuses cached packages from volume - instant!
-```
+```text
 
 ### Development Workflow
 
@@ -445,7 +445,7 @@ docker run -it \
   -v "project-cache:/cache" \
   --name myproject-dev \
   myproject:dev
-```
+```text
 
 **Advantages**:
 
@@ -469,7 +469,7 @@ services:
 volumes:
   cache:
     driver: local
-```
+```text
 
 ### Cache Volume Management
 
@@ -488,7 +488,7 @@ docker run --rm -v project-cache:/cache alpine rm -rf /cache/pip
 
 # Remove volume (clears all caches)
 docker volume rm project-cache
-```
+```text
 
 ---
 
@@ -499,15 +499,15 @@ docker volume rm project-cache
 **BuildKit caches** are invalidated when:
 
 1. Dockerfile `RUN` instruction changes
-2. Copied files change (COPY instructions before RUN)
-3. Build arguments affecting the RUN command change
-4. Cache manually cleared: `docker builder prune`
+1. Copied files change (COPY instructions before RUN)
+1. Build arguments affecting the RUN command change
+1. Cache manually cleared: `docker builder prune`
 
 **Runtime caches** are invalidated when:
 
 1. Image is rebuilt without mounting `/cache` volume
-2. Cache directories manually deleted
-3. Docker volume removed
+1. Cache directories manually deleted
+1. Docker volume removed
 
 ### Manual Cache Clearing
 
@@ -519,7 +519,7 @@ docker builder prune -af
 
 # Clear specific cache (not directly possible, rebuild needed)
 docker build --no-cache -t myproject:dev .
-```
+```text
 
 **Clear runtime caches** (volume mounted):
 
@@ -535,7 +535,7 @@ docker run --rm -v project-cache:/cache alpine rm -rf /cache/npm
 docker run --rm -v project-cache:/cache alpine sh -c "
   rm -rf /cache/pip /cache/poetry /cache/pipx
 "
-```
+```text
 
 **Clear runtime caches** (in image):
 
@@ -547,7 +547,7 @@ docker run --rm myproject:dev bash -c "
 
 # Or rebuild image
 docker build --no-cache -t myproject:dev .
-```
+```text
 
 ### When to Clear Caches
 
@@ -569,9 +569,9 @@ docker build --no-cache -t myproject:dev .
 
 1. **Don't clear caches unnecessarily** - Rebuilding caches takes time and
    bandwidth
-2. **Clear specific caches** - Only clear the cache related to your issue
-3. **Use `--no-cache` sparingly** - Only when truly needed for troubleshooting
-4. **Monitor cache sizes** - Large caches may indicate issues
+1. **Clear specific caches** - Only clear the cache related to your issue
+1. **Use `--no-cache` sparingly** - Only when truly needed for troubleshooting
+1. **Monitor cache sizes** - Large caches may indicate issues
 
 ---
 
@@ -585,7 +585,7 @@ docker run -v cache:/cache myproject:dev
 
 # ❌ Bad: No persistence, slower
 docker run myproject:dev
-```
+```text
 
 ### 2. Use Named Volumes, Not Bind Mounts
 
@@ -595,7 +595,7 @@ docker run -v project-cache:/cache myproject:dev
 
 # ⚠️ Works but not recommended: Host path binding
 docker run -v /tmp/cache:/cache myproject:dev
-```
+```text
 
 **Why?** Named volumes:
 
@@ -613,7 +613,7 @@ docker run -v projectB-cache:/cache projectB:dev
 # ⚠️ Risky: Shared cache may cause conflicts
 docker run -v shared-cache:/cache projectA:dev
 docker run -v shared-cache:/cache projectB:dev
-```
+```text
 
 **Why?** Isolated caches prevent:
 
@@ -635,7 +635,7 @@ docker run \
   -v "$(pwd):/workspace" \
   myproject:dev
 # Now /workspace/cache is empty or host directory!
-```
+```text
 
 ### 5. Periodically Clean Old Caches
 
@@ -645,7 +645,7 @@ docker run --rm -v project-cache:/cache alpine du -sh /cache/*
 
 # Remove old/unused caches (example: npm cache over 30 days old)
 docker run --rm -v project-cache:/cache alpine find /cache/npm -mtime +30 -delete
-```
+```text
 
 ### 6. Build with Cache, Test Without Cache
 
@@ -655,7 +655,7 @@ docker build -t myproject:dev .
 
 # CI/CD: Occasionally test without cache
 docker build --no-cache -t myproject:test .
-```
+```text
 
 **Why?** Ensures builds work without relying on potentially stale caches.
 
@@ -675,7 +675,7 @@ RUN pip install -r requirements.txt
 # Production stage: Copy only artifacts, no caches
 FROM python:3.14-slim AS production
 COPY --from=builder /app/dist /app/dist
-```
+```text
 
 See [production-deployment.md](production-deployment.md) for details.
 
@@ -687,15 +687,15 @@ See [production-deployment.md](production-deployment.md) for details.
 
 **Symptoms**:
 
-```
+```text
 ERROR: Could not install packages due to an OSError: [Errno 13] Permission denied: '/cache/pip'
-```
+```text
 
 **Causes**:
 
 1. Cache directories have incorrect ownership
-2. Running as different user than cache was created for
-3. Volume mounted with incorrect permissions
+1. Running as different user than cache was created for
+1. Volume mounted with incorrect permissions
 
 **Solutions**:
 
@@ -703,16 +703,17 @@ ERROR: Could not install packages due to an OSError: [Errno 13] Permission denie
 
    ```bash
    docker run --rm -v project-cache:/cache myproject:dev ls -la /cache
-   ```
+````
 
-2. **Fix ownership** (if using volume):
+1. **Fix ownership** (if using volume):
 
    ```bash
    # Fix ownership to match container user (UID 1000)
    docker run --rm -v project-cache:/cache myproject:dev chown -R 1000:1000 /cache
    ```
 
-3. **Rebuild with correct USER_UID**:
+1. **Rebuild with correct USER_UID**:
+
    ```bash
    # Build with specific UID/GID
    docker build --build-arg USER_UID=1001 -t myproject:dev .
@@ -722,15 +723,15 @@ ERROR: Could not install packages due to an OSError: [Errno 13] Permission denie
 
 **Symptoms**:
 
-```
+````text
 Downloading packages... (every build, even for same Dockerfile)
-```
+```text
 
 **Causes**:
 
 1. BuildKit not enabled
-2. Cache mounts not specified in Dockerfile
-3. `--no-cache` flag used
+1. Cache mounts not specified in Dockerfile
+1. `--no-cache` flag used
 
 **Solutions**:
 
@@ -739,16 +740,16 @@ Downloading packages... (every build, even for same Dockerfile)
    ```bash
    export DOCKER_BUILDKIT=1
    docker build -t myproject:dev .
-   ```
+````
 
-2. **Verify cache mounts in Dockerfile**:
+1. **Verify cache mounts in Dockerfile**:
 
    ```dockerfile
    RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
        apt-get update && apt-get install -y python3
    ```
 
-3. **Don't use `--no-cache` unless needed**:
+1. **Don't use `--no-cache` unless needed**:
 
    ```bash
    # ✅ Use cache
@@ -762,14 +763,14 @@ Downloading packages... (every build, even for same Dockerfile)
 
 **Symptoms**:
 
-```
+````text
 # Install packages in container
 pip install numpy
 
 # Restart container, packages gone!
 pip show numpy
 # ERROR: Package not found
-```
+```text
 
 **Cause**: Not mounting `/cache` as a volume.
 
@@ -778,7 +779,7 @@ pip show numpy
 ```bash
 # Mount cache volume
 docker run -v project-cache:/cache myproject:dev
-```
+```text
 
 ### Issue: Large cache volumes consuming disk space
 
@@ -787,7 +788,7 @@ docker run -v project-cache:/cache myproject:dev
 ```bash
 docker volume inspect project-cache
 # "Size": "5.2GB"
-```
+```text
 
 **Solutions**:
 
@@ -795,9 +796,9 @@ docker volume inspect project-cache
 
    ```bash
    docker run --rm -v project-cache:/cache alpine du -sh /cache/*
-   ```
+````
 
-2. **Clear specific large caches**:
+1. **Clear specific large caches**:
 
    ```bash
    # Clear npm cache (typically safe)
@@ -807,7 +808,8 @@ docker volume inspect project-cache
    docker run --rm -v project-cache:/cache alpine rm -rf /cache/pip
    ```
 
-3. **Clear all caches and rebuild**:
+1. **Clear all caches and rebuild**:
+
    ```bash
    docker volume rm project-cache
    docker volume create project-cache
@@ -818,10 +820,10 @@ docker volume inspect project-cache
 
 **Symptoms**:
 
-```bash
+````bash
 # Dockerfile specifies Python 3.14
 # But container has packages for Python 3.12
-```
+```text
 
 **Cause**: Cached packages from previous Python version.
 
@@ -835,7 +837,7 @@ docker run --rm -v project-cache:/cache alpine sh -c "
 
 # Rebuild
 docker build -t myproject:dev .
-```
+```text
 
 ### Issue: Cache not shared between builds
 
@@ -845,8 +847,8 @@ Dockerfiles.
 **Causes**:
 
 1. Using different Docker builders
-2. BuildKit cache isolation
-3. Building on different machines
+1. BuildKit cache isolation
+1. Building on different machines
 
 **Solutions**:
 
@@ -858,9 +860,9 @@ Dockerfiles.
 
    # Use default builder
    docker buildx use default
-   ```
+````
 
-2. **Export/import build cache**:
+1. **Export/import build cache**:
 
    ```bash
    # Export cache
@@ -884,10 +886,10 @@ Dockerfiles.
 
 **Monitor cache growth**:
 
-```bash
+````bash
 # Watch cache size over time
 watch 'docker run --rm -v project-cache:/cache alpine du -sh /cache'
-```
+```text
 
 ### Cache Warming
 
@@ -900,7 +902,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     pip install --cache-dir /cache/pip numpy pandas requests
 
 # Packages now cached in image, available immediately at runtime
-```
+```text
 
 ### Multi-Stage Build Cache Strategy
 
@@ -917,7 +919,7 @@ RUN python setup.py build
 FROM python:3.14-slim AS runtime
 COPY --from=builder /build/dist /app/dist
 # No /cache directory in runtime image
-```
+```text
 
 ---
 
@@ -937,12 +939,12 @@ COPY --from=builder /build/dist /app/dist
 **Key Takeaways**:
 
 1. **Two cache layers**: BuildKit (build-time) and `/cache` directory (runtime)
-2. **BuildKit caches** speed up apt operations during builds
-3. **Runtime caches** in `/cache` persist package downloads
-4. **Mount volumes** for persistent caches: `-v cache:/cache`
-5. **Clear caches selectively** when troubleshooting
-6. **Monitor cache sizes** to prevent disk exhaustion
-7. **Use named volumes** for portability and management
+1. **BuildKit caches** speed up apt operations during builds
+1. **Runtime caches** in `/cache` persist package downloads
+1. **Mount volumes** for persistent caches: `-v cache:/cache`
+1. **Clear caches selectively** when troubleshooting
+1. **Monitor cache sizes** to prevent disk exhaustion
+1. **Use named volumes** for portability and management
 
 **Quick Reference**:
 
@@ -958,4 +960,5 @@ docker run --rm -v project-cache:/cache alpine du -sh /cache
 
 # Clear all caches
 docker volume rm project-cache && docker builder prune -af
-```
+```text
+````

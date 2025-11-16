@@ -49,7 +49,7 @@ These Kubernetes manifests use **Kustomize** (built into kubectl) to provide:
 
 ### Verify Your Cluster
 
-```bash
+````bash
 # Check kubectl is configured
 kubectl version
 
@@ -64,7 +64,7 @@ kubectl config get-contexts
 
 # Switch context if needed
 kubectl config use-context my-cluster
-```
+```text
 
 ## Quick Start
 
@@ -88,7 +88,7 @@ kubectl port-forward -n dev service/dev-devcontainer 8080:8080
 
 # Clean up
 kubectl delete -k examples/kubernetes/overlays/development
-```
+```text
 
 ### Staging Environment
 
@@ -104,7 +104,7 @@ kubectl logs -n staging -l app=devcontainer --all-containers=true
 
 # Clean up
 kubectl delete -k examples/kubernetes/overlays/staging
-```
+```text
 
 ### Production Environment
 
@@ -123,11 +123,11 @@ kubectl get networkpolicy -n production
 
 # Clean up (BE CAREFUL IN PRODUCTION!)
 # kubectl delete -k examples/kubernetes/overlays/production
-```
+```text
 
 ## Directory Structure
 
-```
+```text
 examples/kubernetes/
 ├── base/                           # Base configuration (shared)
 │   ├── deployment.yaml            # Pod deployment specification
@@ -155,7 +155,7 @@ examples/kubernetes/
 │
 ├── README.md                      # This file
 └── PRODUCTION-CHECKLIST.md        # Pre-deployment checklist
-```
+```text
 
 ## Deployment Environments
 
@@ -189,7 +189,7 @@ curl http://localhost:8080
 
 # Via kubectl exec
 kubectl exec -it -n dev deployment/dev-devcontainer -- /bin/bash
-```
+```text
 
 ### Staging
 
@@ -242,7 +242,7 @@ Edit the appropriate `kustomization.yaml`:
 images:
   - name: ghcr.io/joshjhall/containers
     newTag: node-dev-4.9.2 # Change to desired variant
-```
+```text
 
 Available variants:
 
@@ -271,7 +271,7 @@ patches:
       - op: replace
         path: /spec/template/spec/containers/0/resources/requests/memory
         value: "2Gi"    # 2 GB memory
-```
+```text
 
 **Resource guidelines**:
 
@@ -291,7 +291,7 @@ configMapGenerator:
     literals:
       - MY_VAR=value
       - ANOTHER_VAR=another_value
-```
+```text
 
 Or reference in deployment:
 
@@ -302,7 +302,7 @@ env:
       configMapKeyRef:
         name: devcontainer-config
         key: MY_VAR
-```
+```text
 
 ### Managing Secrets
 
@@ -315,7 +315,7 @@ kubectl create secret generic devcontainer-secrets \
   --from-literal=db-password=MySecretPassword123 \
   --from-file=ssh-key=~/.ssh/id_rsa \
   -n production
-```
+```text
 
 Option 2: Use external secret management:
 
@@ -340,7 +340,7 @@ Only accessible within cluster:
 ```yaml
 spec:
   type: ClusterIP
-```
+```text
 
 #### NodePort
 
@@ -352,7 +352,7 @@ spec:
   ports:
     - port: 8080
       nodePort: 30080 # 30000-32767 range
-```
+```text
 
 Access: `http://<node-ip>:30080`
 
@@ -363,13 +363,13 @@ Creates cloud load balancer:
 ```yaml
 spec:
   type: LoadBalancer
-```
+```text
 
 Get external IP:
 
 ```bash
 kubectl get service -n production prod-devcontainer
-```
+```text
 
 #### Ingress
 
@@ -392,7 +392,7 @@ spec:
                 name: devcontainer
                 port:
                   number: 8080
-```
+```text
 
 ## Security Best Practices
 
@@ -405,7 +405,7 @@ securityContext:
   runAsNonRoot: true
   runAsUser: 1000
   runAsGroup: 1000
-```
+```text
 
 ### 2. Read-Only Root Filesystem
 
@@ -414,7 +414,7 @@ Enabled in production overlay:
 ```yaml
 securityContext:
   readOnlyRootFilesystem: true
-```
+```text
 
 **Note**: Some dev tools may need write access. Use volume mounts for writable
 directories.
@@ -425,7 +425,7 @@ directories.
 securityContext:
   capabilities:
     drop: ['ALL']
-```
+```text
 
 ### 4. Network Policies
 
@@ -437,7 +437,7 @@ kubectl get networkpolicy -n production
 
 # Describe a policy
 kubectl describe networkpolicy devcontainer-ingress -n production
-```
+```text
 
 ### 5. Resource Limits
 
@@ -451,7 +451,7 @@ resources:
   limits: # Maximum
     cpu: '2000m'
     memory: '2Gi'
-```
+```text
 
 ### 6. Pod Security Standards
 
@@ -463,7 +463,7 @@ kubectl label namespace production \
   pod-security.kubernetes.io/enforce=restricted \
   pod-security.kubernetes.io/audit=restricted \
   pod-security.kubernetes.io/warn=restricted
-```
+```text
 
 ### 7. Secrets Management
 
@@ -496,7 +496,7 @@ livenessProbe:
     command: ['/bin/sh', '-c', 'ps aux | grep -v grep | grep -q sleep']
   initialDelaySeconds: 10
   periodSeconds: 30
-```
+```text
 
 **Readiness probe** - Remove from service if not ready:
 
@@ -506,7 +506,7 @@ readinessProbe:
     command: ['/bin/sh', '-c', 'test -d /workspace']
   initialDelaySeconds: 5
   periodSeconds: 10
-```
+```text
 
 ### Logging
 
@@ -524,7 +524,7 @@ kubectl logs -n production -l app=devcontainer -f
 
 # Previous container (if pod restarted)
 kubectl logs -n production pod/prod-devcontainer-xxxxx --previous
-```
+```text
 
 ### Metrics
 
@@ -539,7 +539,7 @@ kubectl top nodes
 
 # Detailed pod information
 kubectl describe pod -n production prod-devcontainer-xxxxx
-```
+```text
 
 ### Events
 
@@ -554,7 +554,7 @@ kubectl get events -n production --watch
 
 # Events for specific pod
 kubectl describe pod -n production prod-devcontainer-xxxxx
-```
+```text
 
 ## Troubleshooting
 
@@ -572,7 +572,7 @@ kubectl logs -n production prod-devcontainer-xxxxx
 
 # Check previous logs if pod restarted
 kubectl logs -n production prod-devcontainer-xxxxx --previous
-```
+```text
 
 Common issues:
 
@@ -597,7 +597,7 @@ kubectl get endpoints -n production prod-devcontainer
 kubectl run -it --rm debug --image=busybox --restart=Never -- sh
 # Inside pod:
 wget -O- http://prod-devcontainer.production.svc.cluster.local:8080
-```
+```text
 
 Common issues:
 
@@ -618,7 +618,7 @@ kubectl describe networkpolicy -n production devcontainer-ingress
 kubectl run -it --rm debug --image=nicolaka/netshoot --restart=Never -n production -- sh
 # Inside pod: Try connecting to service
 curl http://prod-devcontainer:8080
-```
+```text
 
 ### Resource Quota Exceeded
 
@@ -631,7 +631,7 @@ kubectl describe resourcequota -n production production-quota
 
 # View current usage
 kubectl describe namespace production
-```
+```text
 
 ### Persistent Volume Issues
 
@@ -647,7 +647,7 @@ kubectl get pv
 
 # Check storage classes
 kubectl get storageclass
-```
+```text
 
 ### Debugging Inside Container
 
@@ -660,7 +660,7 @@ ps aux
 df -h
 env
 netstat -tuln
-```
+```text
 
 ## Production Checklist
 
@@ -693,7 +693,7 @@ An automated integration test validates all Kubernetes manifests using **kind**
 
 # Or run all integration tests (includes Kubernetes test)
 ./tests/run_integration_tests.sh
-```
+```text
 
 **What the test does:**
 
@@ -744,7 +744,7 @@ kubectl get all -n dev
 # Clean up
 kubectl delete -k examples/kubernetes/overlays/development
 kind delete cluster --name test-cluster
-```
+```text
 
 ## Additional Resources
 
@@ -779,3 +779,4 @@ For issues and questions:
 
 This project is licensed under the MIT License - see the
 [LICENSE](../../LICENSE) file for details.
+````

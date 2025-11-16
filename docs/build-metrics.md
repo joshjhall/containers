@@ -255,7 +255,7 @@ Thresholds can be adjusted based on variant characteristics:
 
 If the image doesn't exist, the script will attempt to build it:
 
-```
+```text
 Image not found, building python-dev...
 ```
 
@@ -274,7 +274,7 @@ docker build -t test:python-dev \
 
 If comparing without a baseline:
 
-```
+```text
 ERROR: No baseline found for variant: python-dev (run with --save-baseline first)
 ```
 
@@ -289,7 +289,7 @@ Solution:
 
 If a build fails during measurement:
 
-```
+```text
 ERROR: Build failed for variant: python-dev
 ```
 
@@ -374,7 +374,7 @@ The metrics system integrates with the test framework:
 
 ## Files and Directories
 
-```
+```text
 metrics/
 ├── baselines/              # Saved baseline metrics
 │   ├── minimal.json

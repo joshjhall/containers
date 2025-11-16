@@ -46,6 +46,7 @@ and best practices for contributing to this project.
    - Check for recommended tools
 
 3. Create a feature branch:
+
    ```bash
    git checkout -b feature/your-feature-name
    ```
@@ -537,7 +538,7 @@ When adding new features:
 
 Follow conventional commit format:
 
-```
+```text
 <type>(<scope>): <subject>
 
 <body>
@@ -556,7 +557,7 @@ Types:
 
 Example:
 
-```
+```text
 feat(python): Add support for Python 3.14
 
 - Updated version validation

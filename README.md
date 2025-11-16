@@ -51,7 +51,7 @@ git submodule add https://github.com/joshjhall/containers.git containers
 git submodule update --init --recursive
 ```
 
-2. Build your container using the Dockerfile from the submodule:
+1. Build your container using the Dockerfile from the submodule:
 
 ```bash
 # Build from project root (recommended)
@@ -79,7 +79,7 @@ docker build -t test:dev \
 git submodule add https://github.com/joshjhall/containers.git containers
 ```
 
-2. Create build scripts or update your CI/CD to use the shared Dockerfile:
+1. Create build scripts or update your CI/CD to use the shared Dockerfile:
 
 ```bash
 # scripts/build-dev.sh
@@ -380,7 +380,7 @@ Cryptographic proof using publisher's public key.
 - **Process:** Downloads `.asc` signature file and verifies against publisher's
   GPG key
 
-```
+```text
 🔐 TIER 1: Attempting GPG signature verification
    Fetching signature from python.org...
    ✅ TIER 1 VERIFICATION PASSED
@@ -395,7 +395,7 @@ Git-tracked checksums from `lib/checksums.json`.
 - **Security:** ✅ High - git-tracked, auditable, reviewed
 - **Updates:** Weekly via auto-patch workflow
 
-```
+```text
 📌 TIER 2: Checking pinned checksums database
    ✓ Found pinned checksum in git-tracked database
    ✅ TIER 2 VERIFICATION PASSED
@@ -416,7 +416,7 @@ Download checksum from official publisher (e.g., python.org, nodejs.org).
 - **Security:** ⚠️ Medium - MITM vulnerable but better than calculating
 - **Process:** Fetches checksum from publisher's server, compares to download
 
-```
+```text
 🌐 TIER 3: Fetching published checksum from official source
    Checking python.org FTP directory...
    ✓ Retrieved checksum from official publisher
@@ -438,7 +438,7 @@ Calculate checksum of downloaded file (TOFU - Trust On First Use).
 - **Security:** ⚠️ Low - no external verification, MITM vulnerable
 - **Warning:** Prominent warning box displayed during build
 
-```
+```text
 ⚠️  TIER 4: Using calculated checksum (FALLBACK)
 
    ╔════════════════════════════════════════════════════════════╗
@@ -866,7 +866,7 @@ docker build -t myapp:prod \
 
 ### Security: Handling Secrets
 
-**⚠️ Critical: Never Pass Secrets as Build Arguments**
+#### ⚠️ Critical: Never Pass Secrets as Build Arguments
 
 Build arguments are **permanently stored** in Docker images and visible in
 multiple locations:

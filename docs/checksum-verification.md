@@ -26,7 +26,7 @@ When downloading language runtimes, the system tries verification methods **in
 order from strongest to weakest**, automatically falling back to the next tier
 if a stronger method isn't available:
 
-```
+````text
 TIER 1: Cryptographic Signatures (GPG + Sigstore) ← BEST
     ↓ (if unavailable)
 TIER 2: Pinned Checksums (lib/checksums.json) ← GOOD
@@ -34,7 +34,7 @@ TIER 2: Pinned Checksums (lib/checksums.json) ← GOOD
 TIER 3: Published Checksums (from official source) ← ACCEPTABLE
     ↓ (if unavailable)
 TIER 4: Calculated Checksums (TOFU fallback) ← LAST RESORT
-```
+```text
 
 ### Tier 1: Cryptographic Signatures (BEST)
 
@@ -55,7 +55,7 @@ TIER 4: Calculated Checksums (TOFU fallback) ← LAST RESORT
 # lib/base/signature-verify.sh handles this automatically
 verify_signature "Python-3.12.7.tar.gz" "python" "3.12.7"
 # → Downloads .asc file, verifies with GPG keys from lib/gpg-keys/python/
-```
+```text
 
 **Why This is Better Than Checksums**: A checksum only tells you the file hasn't
 been corrupted. A cryptographic signature proves the file was created by someone
@@ -88,7 +88,7 @@ checksums are auditable, reviewed in PRs, version-controlled **Available For**:
     }
   }
 }
-```
+```text
 
 **Database Growth Strategy**:
 
@@ -107,7 +107,7 @@ checksums are auditable, reviewed in PRs, version-controlled **Available For**:
 
 # Test without making changes
 ./bin/update-checksums.sh --dry-run
-```
+```text
 
 The `bin/update-checksums.sh` script:
 
@@ -130,7 +130,7 @@ files
 # Node.js publishes SHASUMS256.txt for each version
 curl -fsSL "https://nodejs.org/dist/v22.12.0/SHASUMS256.txt" | \
   grep "node-v22.12.0-linux-x64.tar.xz" | awk '{print $1}'
-```
+```text
 
 ### Tier 4: Calculated Checksums (FALLBACK)
 
@@ -141,7 +141,7 @@ when no other verification method is available
 
 **Security Warning Displayed**:
 
-```
+```text
 ⚠️  TIER 4: Using calculated checksum (FALLBACK)
 
    ╔════════════════════════════════════════════════════════════╗
@@ -154,7 +154,7 @@ when no other verification method is available
    ║                                                            ║
    ║ Risk: Vulnerable to man-in-the-middle attacks.            ║
    ╚════════════════════════════════════════════════════════════╝
-```
+```text
 
 ### Language-by-Language Verification Matrix
 
@@ -200,7 +200,7 @@ source /tmp/build-scripts/base/checksum-verification.sh
 
 # Verify a language runtime download (tries all tiers automatically)
 verify_download "language" "nodejs" "22.12.0" "/tmp/node.tar.xz"
-```
+```text
 
 The system automatically:
 
@@ -241,11 +241,11 @@ source /tmp/build-scripts/base/download-verify.sh
 
 # Source checksum fetching utilities
 source /tmp/build-scripts/features/lib/checksum-fetch.sh
-```
+```text
 
 ### 2. Choose Verification Method
 
-**Option A: Published Checksums (PREFERRED)**
+#### Option A: Published Checksums (PREFERRED)
 
 If the project publishes checksums on GitHub releases:
 
@@ -267,9 +267,9 @@ fi
 
 # Download and verify
 download_and_verify "$TOOL_URL" "$TOOL_CHECKSUM" "$TOOL_TARBALL"
-```
+````
 
-**Option B: Calculated Checksums (FALLBACK)**
+#### Option B: Calculated Checksums (FALLBACK)
 
 If no published checksums are available:
 
@@ -292,11 +292,11 @@ log_message "Expected SHA256: ${TOOL_CHECKSUM}"
 download_and_verify "$TOOL_URL" "$TOOL_CHECKSUM" "tool.tar.gz"
 ```
 
-**Option C: Internal Verification**
+#### Option C: Internal Verification
 
 If the install script performs its own verification, document it clearly:
 
-```bash
+````bash
 # Security Note: The tool install script performs checksum verification internally:
 # 1. Downloads manifest with expected checksums
 # 2. Downloads the binary
@@ -305,7 +305,7 @@ If the install script performs its own verification, document it clearly:
 # This makes it safe to use.
 
 curl -fsSL 'https://example.com/install.sh' | bash
-```
+```text
 
 ### 3. Common Checksum File Patterns
 
@@ -480,3 +480,4 @@ These download binaries directly without verification.
 
 **Bug Fixes**: Fixed pre-existing heredoc bug in java-dev.sh:270 that caused
 unbound variable error with `set -euo pipefail`.
+````

@@ -59,10 +59,10 @@ arbitrary shell commands.
 
 **Current Code**:
 
-```bash
+`````bash
 curl_opts="$curl_opts -H \"Authorization: token $GITHUB_TOKEN\""
 response=$(eval "curl $curl_opts \"https://api.github.com/repos/${repo}/releases/latest\"")
-```
+```text
 
 **Recommended Fix**:
 
@@ -74,7 +74,7 @@ if [ -n "${GITHUB_TOKEN:-}" ]; then
 else
     response=$(curl "https://api.github.com/repos/${repo}/releases/latest")
 fi
-```
+```text
 
 **Testing Requirements**:
 
@@ -101,7 +101,7 @@ development, full passwordless sudo violates least privilege principle.
 ```bash
 echo "${USERNAME} ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/${USERNAME}
 chmod 0440 /etc/sudoers.d/${USERNAME}
-```
+```text
 
 **Recommended Fix**:
 
@@ -117,7 +117,7 @@ if [ "${ENABLE_PASSWORDLESS_SUDO}" = "true" ]; then
 else
     log_message "Passwordless sudo disabled (production mode)"
 fi
-```
+```text
 
 **Additional Work**:
 
@@ -149,7 +149,7 @@ eval "$(zoxide init bash)"
 eval "$(rbenv init - 2>/dev/null || true)"
 eval "$(direnv hook bash)"
 eval "$(just --completions bash)"
-```
+```text
 
 **Recommended Fix**:
 
@@ -176,7 +176,7 @@ safe_eval() {
 # Usage
 safe_eval "zoxide init bash"
 safe_eval "direnv hook bash"
-```
+```text
 
 **Testing Requirements**:
 
@@ -208,7 +208,7 @@ for script in /etc/container/first-startup/*.sh; do
         fi
     fi
 done
-```
+```text
 
 **Recommended Fix**:
 
@@ -230,7 +230,7 @@ for script in /etc/container/first-startup/*.sh; do
         fi
     fi
 done
-```
+```text
 
 **Testing Requirements**:
 
@@ -259,7 +259,7 @@ curl -fsSL 'https://claude.ai/install.sh' -o /tmp/claude-install.sh || {
     log_warning "Failed to download Claude Code installer"
 }
 su -c "cd '$USER_HOME' && bash /tmp/claude-install.sh" "$TARGET_USER"
-```
+```text
 
 **Recommended Fix Option A - Checksum Verification**:
 
@@ -285,7 +285,7 @@ else
         log_warning "Claude installation failed, continuing..."
     }
 fi
-```
+```text
 
 **Recommended Fix Option B - Version Pinning**:
 
@@ -299,7 +299,7 @@ download_and_verify \
     "$CLAUDE_INSTALLER_URL" \
     "$CLAUDE_INSTALLER_SHA256" \
     "/tmp/claude-install.sh"
-```
+```text
 
 **Decision Needed**: Choose between calculated checksums (Option A) or version
 pinning (Option B)
@@ -324,7 +324,7 @@ logs when using `eval` with credentials.
 #   eval $(op-env <vault>/<item>)
 #   eval $(op-env Development/API-Keys)
     eval $(op-env "$item")
-```
+```text
 
 **Recommended Fix**:
 
@@ -355,7 +355,7 @@ op-env-safe() {
 
     set -x  # Re-enable command echoing if it was on
 }
-```
+```text
 
 **Additional Work**:
 
@@ -390,7 +390,7 @@ input. While build-time only, malicious build args could inject commands.
 ```bash
 PYTHON_VERSION="${PYTHON_VERSION:-3.13.5}"
 # Version used directly in URLs and file paths
-```
+```text
 
 **Recommended Fix**:
 
@@ -440,7 +440,7 @@ validate_go_version() {
 
     return 0
 }
-```
+```text
 
 **Usage in Feature Scripts**:
 
@@ -451,7 +451,7 @@ source /tmp/build-scripts/base/version-validation.sh
 # Validate Python version
 PYTHON_VERSION="${PYTHON_VERSION:-3.13.5}"
 validate_semver "$PYTHON_VERSION" "PYTHON_VERSION" || exit 1
-```
+```text
 
 **Testing Requirements**:
 
@@ -483,7 +483,7 @@ log_command "Creating Python cache directories" \
 
 log_command "Setting cache directory ownership" \
     chown -R ${USER_UID}:${USER_GID} "${PIP_CACHE_DIR}" "${POETRY_CACHE_DIR}" "${PIPX_HOME}"
-```
+```text
 
 **Recommended Fix**:
 
@@ -496,7 +496,7 @@ log_command "Creating Python cache directories with correct permissions" \
     install -d -m 0755 -o ${USER_UID} -g ${USER_GID} '${PIPX_HOME}'
     install -d -m 0755 -o ${USER_UID} -g ${USER_GID} '${PIPX_BIN_DIR}'
     "
-```
+```text
 
 **Benefits**:
 
@@ -523,7 +523,7 @@ harder to defend against.
 ```bash
 source <(kubectl completion bash)
 source <(just --completions bash)
-```
+```text
 
 **Recommended Fix**:
 
@@ -542,7 +542,7 @@ if command -v kubectl >/dev/null 2>&1; then
         rm -f "$COMPLETION_FILE"
     fi
 fi
-```
+```text
 
 **Alternative Approach**:
 
@@ -552,7 +552,7 @@ fi
 if command -v kubectl >/dev/null 2>&1; then
     kubectl completion bash > /etc/bash_completion.d/kubectl
 fi
-```
+```text
 
 ---
 
@@ -580,7 +580,7 @@ aws-assume-role() {
         --role-arn "$role_arn" \
         --role-session-name "$session_name" \
         --output json)
-```
+```text
 
 **Recommended Fix**:
 
@@ -608,7 +608,7 @@ aws-assume-role() {
         --role-arn "$role_arn" \
         --role-session-name "$session_name" \
         --output json)
-```
+```text
 
 **Similar Fixes Needed**:
 
@@ -650,9 +650,9 @@ mistakenly pass secrets as build args, they would be exposed.
 #   - Mounted config files
 #   - Secret management tools (1Password CLI, AWS Secrets Manager, etc.)
 # ============================================================================
-```
+```text
 
-2. **Add to README.md**:
+1. **Add to README.md**:
 
 ````markdown
 ## Security Best Practices
@@ -669,12 +669,12 @@ Build arguments are **permanently stored** in the image and visible in:
 
 ```bash
 docker build --build-arg API_KEY=secret123 ...
-```
-````
+```text
+`````
 
 **✅ DO THIS INSTEAD:**
 
-```bash
+````bash
 # Use environment variables at runtime
 docker run -e API_KEY=secret123 ...
 
@@ -687,20 +687,21 @@ docker run -v ./secrets:/secrets:ro ...
 
 # Or use secret management tools
 docker run -e OP_SERVICE_ACCOUNT_TOKEN=... ...
-```
+```text
 
 ````
 
-3. **Consider Implementing Secret Scrubbing** (future enhancement):
-```bash
-# In logging functions, scrub common secret patterns
-log_message() {
+1. **Consider Implementing Secret Scrubbing** (future enhancement):
+
+   ```bash
+   # In logging functions, scrub common secret patterns
+   log_message() {
     local message="$1"
     # Scrub common secret patterns
     message=$(echo "$message" | sed -E 's/(password|secret|key|token)=[^ ]+/\1=***REDACTED***/gi')
     echo "[$(date +'%Y-%m-%d %H:%M:%S')] $message" | tee -a "$LOG_FILE"
-}
-````
+   }
+   ```
 
 ---
 
@@ -722,7 +723,7 @@ grants full Docker API access, which can be used to escape the container.
 
 1. **Update `lib/features/docker.sh` header comments**:
 
-```bash
+`````bash
 #!/bin/bash
 # Docker CLI and Tools
 #
@@ -746,9 +747,9 @@ grants full Docker API access, which can be used to escape the container.
 # Usage:
 #   Build with: --build-arg INCLUDE_DOCKER=true
 #   Run with: -v /var/run/docker.sock:/var/run/docker.sock
-```
+```text
 
-2. **Add to README.md Docker section**:
+1. **Add to README.md Docker section**:
 
 ```markdown
 ### Docker Feature Security Considerations
@@ -771,7 +772,7 @@ only be used in trusted development environments.
 - **Podman**: Daemonless container engine (no socket required)
 - **Kaniko**: Build container images without Docker daemon
 - **BuildKit**: Rootless mode for secure builds
-```
+```text
 
 ---
 
@@ -792,7 +793,7 @@ always using secure temporary file creation patterns.
 cd /tmp
 wget https://example.com/file.tar.gz
 tar -xzf file.tar.gz
-```
+```text
 
 **Recommended Pattern**:
 
@@ -805,7 +806,7 @@ cd "$BUILD_TEMP"
 wget https://example.com/file.tar.gz
 tar -xzf file.tar.gz
 # Work is automatically cleaned up on exit
-```
+```text
 
 **Benefits**:
 
@@ -817,8 +818,8 @@ tar -xzf file.tar.gz
 **Implementation Plan**:
 
 1. Create helper function in `lib/base/feature-header.sh`
-2. Update all feature scripts to use the pattern
-3. Ensure trap handlers don't conflict
+1. Update all feature scripts to use the pattern
+1. Ensure trap handlers don't conflict
 
 ---
 
@@ -868,9 +869,9 @@ retry_with_backoff() {
 
 # Usage
 retry_with_backoff curl -fsSL "https://api.github.com/..."
-```
+```text
 
-2. **Cache Frequently Accessed Checksums** (future enhancement):
+1. **Cache Frequently Accessed Checksums** (future enhancement):
 
 ```bash
 # Cache checksums in BuildKit cache mount
@@ -884,9 +885,9 @@ else
     checksum=$(fetch_github_checksums_txt "...")
     echo "$checksum" > "$CHECKSUM_CACHE/$cache_key"
 fi
-```
+```text
 
-3. **Document GitHub Token for CI/CD**:
+1. **Document GitHub Token for CI/CD**:
 
 ````markdown
 ## CI/CD Best Practices
@@ -898,43 +899,50 @@ limits:
 
 ```bash
 docker build --build-arg GITHUB_TOKEN="${GITHUB_TOKEN}" ...
-```
-````
+```text
+`````
 
 Rate limits:
 
 - Unauthenticated: 60 requests/hour
 - With token: 5000 requests/hour
 
-````
+```text
+
+```
 
 **Implementation**:
 
 Created `lib/base/retry-utils.sh` with three retry functions:
 
-1. **retry_with_backoff()** - Generic retry with exponential backoff (2s → 4s → 8s, max 30s)
-   - Configurable via `RETRY_MAX_ATTEMPTS`, `RETRY_INITIAL_DELAY`, `RETRY_MAX_DELAY`
+1. **retry_with_backoff()** - Generic retry with exponential backoff (2s → 4s →
+   8s, max 30s)
+   - Configurable via `RETRY_MAX_ATTEMPTS`, `RETRY_INITIAL_DELAY`,
+     `RETRY_MAX_DELAY`
    - Returns original exit code after final attempt
 
-2. **retry_command()** - Wrapper with logging integration
+1. **retry_command()** - Wrapper with logging integration
    - Takes description as first parameter
    - Integrates with logging.sh if available
 
-3. **retry_github_api()** - GitHub-specific retry with rate limit awareness
+1. **retry_github_api()** - GitHub-specific retry with rate limit awareness
    - Automatically adds `Authorization` header if `GITHUB_TOKEN` is set
    - Detects rate limit errors (403, "rate limit" messages)
    - Provides helpful messages about token benefits
 
 Updated `lib/features/lib/checksum-fetch.sh` to use retry_github_api for:
+
 - `fetch_github_checksums_txt()` - Checksums.txt file fetching
 - `fetch_github_sha256_file()` - Individual .sha256 file fetching
 - `fetch_github_sha512_file()` - Individual .sha512 file fetching
 
 **Files Modified**:
+
 - `lib/base/retry-utils.sh` (NEW)
 - `lib/features/lib/checksum-fetch.sh`
 
 **Benefits**:
+
 - Reduced build failures from transient network issues
 - GitHub rate limit detection and helpful guidance
 - 5000x rate limit increase when using GITHUB_TOKEN (60 → 5000 requests/hour)
@@ -944,15 +952,19 @@ Updated `lib/features/lib/checksum-fetch.sh` to use retry_github_api for:
 
 ### ✅ #15: Missing Container Image Digests in Releases
 
-**Priority**: MEDIUM
-**Status**: ✅ COMPLETE (2025-11-09)
-**Actual Effort**: 30 minutes
+**Priority**: MEDIUM **Status**: ✅ COMPLETE (2025-11-09) **Actual Effort**: 30
+minutes
 
-**Risk**: Users cannot verify container image integrity. Missing standard supply chain security practice for published artifacts.
+**Risk**: Users cannot verify container image integrity. Missing standard supply
+chain security practice for published artifacts.
 
-**Observation**: The CI/CD pipeline builds and publishes container images to GHCR, but doesn't publish image digests (SHA256 hashes) in GitHub releases. This makes it difficult for users to verify they're pulling the correct, unmodified images.
+**Observation**: The CI/CD pipeline builds and publishes container images to
+GHCR, but doesn't publish image digests (SHA256 hashes) in GitHub releases. This
+makes it difficult for users to verify they're pulling the correct, unmodified
+images.
 
 **Current Gap**:
+
 - Images are pushed to `ghcr.io/joshjhall/containers` with tags
 - GitHub releases are created with usage notes
 - **Missing**: No checksums.txt or image digests published
@@ -994,7 +1006,7 @@ Add a new step to the `release` job in `.github/workflows/ci.yml`:
   uses: softprops/action-gh-release@v2
   with:
     files: image-digests.txt
-````
+```
 
 **Benefits**:
 
@@ -1005,27 +1017,27 @@ Add a new step to the `release` job in `.github/workflows/ci.yml`:
 
 **Example Output** (`image-digests.txt`):
 
-```
+````text
 # Container Image Digests for Release v4.5.0
 
 ## minimal
-```
+```text
 
 Image: ghcr.io/joshjhall/containers:v4.5.0-minimal Digest: sha256:abc123... Pull
 command: docker pull ghcr.io/joshjhall/containers:minimal@sha256:abc123...
 
-```
+```text
 
 ## python-dev
-```
+```text
 
 Image: ghcr.io/joshjhall/containers:v4.5.0-python-dev Digest: sha256:def456...
 Pull command: docker pull
 ghcr.io/joshjhall/containers:python-dev@sha256:def456...
 
-```
+```text
 
-```
+```text
 
 ---
 
@@ -1134,9 +1146,9 @@ This is a supply chain security best practice supported by Sigstore/Cosign.
   uses: softprops/action-gh-release@v2
   with:
     files: VERIFY-IMAGES.md
-```
+```text
 
-2. **Update release notes template** to mention image signing:
+1. **Update release notes template** to mention image signing:
 
 ```yaml
 - name: Generate release notes
@@ -1156,7 +1168,7 @@ This is a supply chain security best practice supported by Sigstore/Cosign.
     ### Available Images
     ...
     EOF
-```
+```text
 
 **Security Properties**:
 
@@ -1184,7 +1196,7 @@ cosign verify \
 
 # Now safe to run
 docker run -it ghcr.io/joshjhall/containers:v4.5.0-python-dev
-```
+```text
 
 **Permissions Required**: Add to `.github/workflows/ci.yml` `release` job:
 
@@ -1193,7 +1205,7 @@ permissions:
   contents: write
   packages: read
   id-token: write # Required for OIDC signing
-```
+```text
 
 ---
 
@@ -1339,3 +1351,4 @@ vulnerabilities requiring immediate patching.
 - **Phase 1** should be completed before next release
 - **Phases 2-3** improve robustness and should be completed soon
 - **Phases 4-5** are nice-to-have improvements for long-term maintenance
+````

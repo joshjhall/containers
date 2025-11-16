@@ -113,9 +113,9 @@ item extends that work to remaining tools.
 **Implementation Priority**:
 
 1. HashiCorp tools (Terraform, etc.) - high value
-2. Ruby - signatures available
-3. R - if signatures available
-4. Java/OpenJDK - complex, many sources
+1. Ruby - signatures available
+1. R - if signatures available
+1. Java/OpenJDK - complex, many sources
 
 **Impact**: MEDIUM - Further improves supply chain security after core tools
 covered
@@ -800,23 +800,23 @@ Kubernetes deployment templates.
 
 ### Short-Term Actions (P1 - High Priority, 1 month)
 
-2. **[HIGH]** Enhance secret management integrations (item #17)
-3. **[HIGH]** Create CI/CD pipeline templates (item #18)
+1. **[HIGH]** Enhance secret management integrations (item #17)
+1. **[HIGH]** Create CI/CD pipeline templates (item #18)
 
 ### Medium-Term Actions (P2 - 2-3 months)
 
-4. **[MEDIUM]** Expand GPG verification to remaining tools (item #5)
-5. **[MEDIUM]** Fix command injection vectors in apt-utils.sh (item #6)
-6. **[MEDIUM]** Validate PATH additions before modification (item #7)
-7. **[MEDIUM]** Improve kubectl completion validation (item #8)
-8. **[MEDIUM]** Add operational runbooks (item #19)
-9. **[MEDIUM]** Performance optimization guide (item #20)
-10. **[MEDIUM]** Integration test coverage for feature combinations (item #33)
+1. **[MEDIUM]** Expand GPG verification to remaining tools (item #5)
+1. **[MEDIUM]** Fix command injection vectors in apt-utils.sh (item #6)
+1. **[MEDIUM]** Validate PATH additions before modification (item #7)
+1. **[MEDIUM]** Improve kubectl completion validation (item #8)
+1. **[MEDIUM]** Add operational runbooks (item #19)
+1. **[MEDIUM]** Performance optimization guide (item #20)
+1. **[MEDIUM]** Integration test coverage for feature combinations (item #33)
 
 ### Long-Term Enhancements (P3 - Future)
 
-11. All remaining LOW priority items (items #11, #12, #25, #26, #28, #29, #30,
-    #31)
+1. All remaining LOW priority items (items #11, #12, #25, #26, #28, #29, #30,
+   #31)
 
 **Focus Areas**:
 

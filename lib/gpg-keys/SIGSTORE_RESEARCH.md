@@ -57,7 +57,7 @@ Other languages use alternative verification methods.
 
 Given this research, our 4-tier verification system will implement:
 
-**Tier 1: Signature Verification**
+### Tier 1: Signature Verification
 
 - Python 3.11.0+: Try Sigstore first, fallback to GPG
 - Python < 3.11.0: GPG only
