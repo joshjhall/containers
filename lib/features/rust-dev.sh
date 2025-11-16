@@ -109,6 +109,9 @@ log_command "Installing cargo-audit" \
 log_command "Installing cargo-deny" \
     su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/cargo install cargo-deny"
 
+log_command "Installing cargo-geiger" \
+    su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/cargo install cargo-geiger"
+
 log_command "Installing bacon" \
     su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/cargo install bacon"
 
@@ -129,7 +132,7 @@ log_command "Installing mdbook" \
 
 # Create symlinks for the installed tools
 log_message "Creating symlinks for Rust dev tools..."
-for tool in tree-sitter cargo-watch cargo-add cargo-rm cargo-upgrade cargo-expand cargo-outdated cargo-audit cargo-deny bacon tokei hyperfine just sccache mdbook; do
+for tool in tree-sitter cargo-watch cargo-add cargo-rm cargo-upgrade cargo-expand cargo-outdated cargo-audit cargo-deny cargo-geiger bacon tokei hyperfine just sccache mdbook; do
     if [ -f "${CARGO_HOME}/bin/${tool}" ]; then
         create_symlink "${CARGO_HOME}/bin/${tool}" "/usr/local/bin/${tool}" "${tool} Rust dev tool"
     fi
@@ -150,6 +153,7 @@ tools=(
     "cargo-outdated"
     "cargo-audit"
     "cargo-deny"
+    "cargo-geiger"
     "bacon"
     "tokei"
     "hyperfine"
@@ -227,7 +231,7 @@ alias bench='hyperfine'
 
 # Unified workflow aliases
 alias rust-lint-all='cargo clippy --all-targets --all-features'
-alias rust-security-check='cargo audit && cargo deny check 2>/dev/null || cargo audit'
+alias rust-security-check='cargo audit && cargo deny check 2>/dev/null || true && command -v cargo-geiger >/dev/null && cargo geiger --output-format GitHubMarkdown 2>/dev/null || true'
 alias rust-watch='cargo watch -x check -x test'
 
 # ----------------------------------------------------------------------------

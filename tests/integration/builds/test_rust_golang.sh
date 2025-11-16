@@ -97,6 +97,9 @@ test_rust_tools() {
 
     # cargo-deny (supply chain security) works
     assert_executable_in_path "$image" "cargo-deny"
+
+    # cargo-geiger (unsafe code detector) works
+    assert_executable_in_path "$image" "cargo-geiger"
 }
 
 # Test: Go development tools
