@@ -31,7 +31,7 @@ setup() {
     unset WARNING_COUNT 2>/dev/null || true
     
     # Create a modified version of logging.sh for testing
-    sed 's|/var/log/container-build|'"$TEST_LOG_DIR"'|g' "$PROJECT_ROOT/lib/base/logging.sh" > "$TEST_LOG_DIR/logging-test.sh"
+    command sed 's|/var/log/container-build|'"$TEST_LOG_DIR"'|g' "$PROJECT_ROOT/lib/base/logging.sh" > "$TEST_LOG_DIR/logging-test.sh"
     
     # Source the modified version
     source "$TEST_LOG_DIR/logging-test.sh"
@@ -40,7 +40,7 @@ setup() {
 # Teardown function - runs after each test
 teardown() {
     # Clean up test log directory
-    rm -rf "$TEST_LOG_DIR"
+    command rm -rf "$TEST_LOG_DIR"
 }
 
 # Test: log_feature_start creates log files

@@ -35,7 +35,7 @@ setup() {
 teardown() {
     # Clean up test directory
     if [ -n "${TEST_TEMP_DIR:-}" ]; then
-        rm -rf "$TEST_TEMP_DIR"
+        command rm -rf "$TEST_TEMP_DIR"
     fi
     
     # Unset test variables
@@ -80,14 +80,14 @@ test_aws_credentials() {
     local credentials_file="$aws_dir/credentials"
     
     # Create mock credentials
-    cat > "$credentials_file" << 'EOF'
+    command cat > "$credentials_file" << 'EOF'
 [default]
-aws_access_key_id = AKIAIOSFODNN7EXAMPLE
-aws_secret_access_key = wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+aws_access_key_id = FAKE_ACCESS_KEY_ID_12345
+aws_secret_access_key = FAKE_SECRET_ACCESS_KEY_ABCDEFGHIJKLMNOP
 
 [production]
-aws_access_key_id = AKIAIOSFODNN7EXAMPLE2
-aws_secret_access_key = wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY2
+aws_access_key_id = FAKE_ACCESS_KEY_ID_67890
+aws_secret_access_key = FAKE_SECRET_ACCESS_KEY_QRSTUVWXYZ123456
 EOF
     
     assert_file_exists "$credentials_file"
@@ -112,7 +112,7 @@ test_aws_config() {
     local config_file="$aws_dir/config"
     
     # Create mock config
-    cat > "$config_file" << 'EOF'
+    command cat > "$config_file" << 'EOF'
 [default]
 region = us-east-1
 output = json
@@ -143,7 +143,7 @@ test_aws_environment() {
     local bashrc_file="$TEST_TEMP_DIR/etc/bashrc.d/65-aws.sh"
     
     # Create environment setup
-    cat > "$bashrc_file" << 'EOF'
+    command cat > "$bashrc_file" << 'EOF'
 export AWS_CONFIG_FILE="$HOME/.aws/config"
 export AWS_SHARED_CREDENTIALS_FILE="$HOME/.aws/credentials"
 export AWS_DEFAULT_REGION="us-east-1"
@@ -169,7 +169,7 @@ test_aws_aliases() {
     local bashrc_file="$TEST_TEMP_DIR/etc/bashrc.d/65-aws.sh"
     
     # Add aliases
-    cat >> "$bashrc_file" << 'EOF'
+    command cat >> "$bashrc_file" << 'EOF'
 
 # AWS aliases
 alias awsp='aws --profile'
@@ -209,7 +209,7 @@ test_aws_completion() {
     local bashrc_file="$TEST_TEMP_DIR/etc/bashrc.d/65-aws.sh"
     
     # Add completion
-    cat >> "$bashrc_file" << 'EOF'
+    command cat >> "$bashrc_file" << 'EOF'
 complete -C aws_completer aws
 EOF
     
@@ -242,7 +242,7 @@ test_aws_verification() {
     local test_script="$TEST_TEMP_DIR/test-aws.sh"
     
     # Create verification script
-    cat > "$test_script" << 'EOF'
+    command cat > "$test_script" << 'EOF'
 #!/bin/bash
 echo "AWS CLI version:"
 aws --version 2>/dev/null || echo "AWS CLI not installed"

@@ -38,7 +38,7 @@ setup() {
 teardown() {
     # Clean up test directory
     if [ -n "${TEST_TEMP_DIR:-}" ]; then
-        rm -rf "$TEST_TEMP_DIR"
+        command rm -rf "$TEST_TEMP_DIR"
     fi
     
     # Unset test variables
@@ -130,7 +130,7 @@ test_maven_cache_configuration() {
     mkdir -p "$(dirname "$maven_settings")"
     
     # Create Maven settings
-    cat > "$maven_settings" << 'EOF'
+    command cat > "$maven_settings" << 'EOF'
 <settings>
   <localRepository>/cache/maven</localRepository>
 </settings>
@@ -157,7 +157,7 @@ test_gradle_cache_configuration() {
     mkdir -p "$(dirname "$gradle_props")"
     
     # Create Gradle properties
-    cat > "$gradle_props" << 'EOF'
+    command cat > "$gradle_props" << 'EOF'
 org.gradle.caching=true
 org.gradle.daemon=true
 org.gradle.parallel=true
@@ -187,7 +187,7 @@ test_java_environment_variables() {
     local bashrc_file="$TEST_TEMP_DIR/etc/bashrc.d/45-java.sh"
     
     # Create mock bashrc content
-    cat > "$bashrc_file" << 'EOF'
+    command cat > "$bashrc_file" << 'EOF'
 export JAVA_HOME="/usr/lib/jvm/java-21-openjdk"
 export PATH="$JAVA_HOME/bin:$PATH"
 export MAVEN_OPTS="-Xmx512m"
@@ -226,7 +226,7 @@ test_java_aliases_helpers() {
     local bashrc_file="$TEST_TEMP_DIR/etc/bashrc.d/45-java.sh"
     
     # Add aliases section
-    cat >> "$bashrc_file" << 'EOF'
+    command cat >> "$bashrc_file" << 'EOF'
 
 # Java aliases
 alias jv='java -version'
@@ -267,7 +267,7 @@ test_project_file_detection() {
     mkdir -p "$project_dir"
     
     # Create pom.xml for Maven
-    cat > "$project_dir/pom.xml" << 'EOF'
+    command cat > "$project_dir/pom.xml" << 'EOF'
 <?xml version="1.0" encoding="UTF-8"?>
 <project>
     <modelVersion>4.0.0</modelVersion>
@@ -282,7 +282,7 @@ test_project_file_detection() {
 EOF
     
     # Create build.gradle for Gradle
-    cat > "$project_dir/build.gradle" << 'EOF'
+    command cat > "$project_dir/build.gradle" << 'EOF'
 plugins {
     id 'java'
 }
@@ -346,7 +346,7 @@ test_java_verification() {
     local test_script="$TEST_TEMP_DIR/test-java.sh"
     
     # Create verification script
-    cat > "$test_script" << 'EOF'
+    command cat > "$test_script" << 'EOF'
 #!/bin/bash
 echo "Java version:"
 java -version 2>&1 || echo "Java not installed"

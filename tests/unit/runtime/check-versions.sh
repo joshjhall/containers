@@ -13,7 +13,7 @@ setup() {
 }
 
 teardown() {
-    [ -n "${TEST_TEMP_DIR:-}" ] && rm -rf "$TEST_TEMP_DIR"
+    [ -n "${TEST_TEMP_DIR:-}" ] && command rm -rf "$TEST_TEMP_DIR"
 }
 
 test_script_exists() {

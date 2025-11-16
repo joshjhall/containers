@@ -38,7 +38,7 @@ setup() {
 teardown() {
     # Clean up test directory
     if [ -n "${TEST_TEMP_DIR:-}" ]; then
-        rm -rf "$TEST_TEMP_DIR"
+        command rm -rf "$TEST_TEMP_DIR"
     fi
     
     # Unset test variables
@@ -73,7 +73,7 @@ test_rustup_installation() {
     local rustup_script="$TEST_TEMP_DIR/rustup-init.sh"
     
     # Create mock rustup installation script
-    cat > "$rustup_script" << 'EOF'
+    command cat > "$rustup_script" << 'EOF'
 #!/bin/sh
 echo "Installing Rust..."
 echo "Rust installed successfully"
@@ -128,7 +128,7 @@ test_cargo_cache_configuration() {
     mkdir -p "$(dirname "$cargo_config")"
     
     # Create mock Cargo config
-    cat > "$cargo_config" << 'EOF'
+    command cat > "$cargo_config" << 'EOF'
 [build]
 target-dir = "/cache/cargo/target"
 
@@ -186,7 +186,7 @@ test_rust_environment_variables() {
     local bashrc_file="$TEST_TEMP_DIR/etc/bashrc.d/40-rust.sh"
     
     # Create mock bashrc content
-    cat > "$bashrc_file" << 'EOF'
+    command cat > "$bashrc_file" << 'EOF'
 export CARGO_HOME="${CARGO_HOME:-$HOME/.cargo}"
 export RUSTUP_HOME="${RUSTUP_HOME:-$HOME/.rustup}"
 export PATH="$CARGO_HOME/bin:$PATH"
@@ -224,7 +224,7 @@ test_rust_aliases_helpers() {
     local bashrc_file="$TEST_TEMP_DIR/etc/bashrc.d/40-rust.sh"
     
     # Add aliases section
-    cat >> "$bashrc_file" << 'EOF'
+    command cat >> "$bashrc_file" << 'EOF'
 
 # Rust aliases
 alias cb='cargo build'
@@ -265,7 +265,7 @@ test_cargo_toml_detection() {
     mkdir -p "$project_dir"
     
     # Create mock Cargo.toml
-    cat > "$project_dir/Cargo.toml" << 'EOF'
+    command cat > "$project_dir/Cargo.toml" << 'EOF'
 [package]
 name = "test-project"
 version = "0.1.0"
@@ -318,7 +318,7 @@ test_rust_verification() {
     local test_script="$TEST_TEMP_DIR/test-rust.sh"
     
     # Create verification script
-    cat > "$test_script" << 'EOF'
+    command cat > "$test_script" << 'EOF'
 #!/bin/bash
 echo "Rust version:"
 rustc --version 2>/dev/null || echo "Rust not installed"

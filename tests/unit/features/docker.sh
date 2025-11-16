@@ -40,7 +40,7 @@ setup() {
 # Teardown function - runs after each test
 teardown() {
     # Clean up test directory
-    rm -rf "$TEST_TEMP_DIR"
+    command rm -rf "$TEST_TEMP_DIR"
     
     # Unset test variables
     unset USERNAME USER_UID USER_GID MOCK_DOCKER_SOCK 2>/dev/null || true
@@ -120,7 +120,7 @@ test_docker_bashrc_setup() {
     local bashrc_file="$TEST_TEMP_DIR/etc/bashrc.d/50-docker.sh"
     
     # Create a mock bashrc file
-    cat > "$bashrc_file" << 'EOF'
+    command cat > "$bashrc_file" << 'EOF'
 alias d='docker'
 alias dc='docker compose'
 docker-clean() { echo "Cleaning Docker resources"; }
@@ -226,7 +226,7 @@ test_docker_verification_script() {
     local test_script="$TEST_TEMP_DIR/usr/local/bin/test-docker"
     
     # Create mock verification script
-    cat > "$test_script" << 'EOF'
+    command cat > "$test_script" << 'EOF'
 #!/bin/bash
 echo "=== Docker CLI Status ==="
 command -v docker && echo "Docker CLI installed"

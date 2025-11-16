@@ -36,7 +36,7 @@ setup() {
 teardown() {
     # Clean up test directory
     if [ -n "${TEST_TEMP_DIR:-}" ]; then
-        rm -rf "$TEST_TEMP_DIR"
+        command rm -rf "$TEST_TEMP_DIR"
     fi
     
     # Unset test variables
@@ -72,7 +72,7 @@ test_poetry_config() {
     mkdir -p "$(dirname "$poetry_config")"
     
     # Create config
-    cat > "$poetry_config" << 'EOF'
+    command cat > "$poetry_config" << 'EOF'
 [virtualenvs]
 in-project = true
 create = true
@@ -95,7 +95,7 @@ test_ruff_config() {
     local ruff_config="$TEST_TEMP_DIR/home/testuser/.ruff.toml"
     
     # Create config
-    cat > "$ruff_config" << 'EOF'
+    command cat > "$ruff_config" << 'EOF'
 line-length = 88
 target-version = "py311"
 select = ["E", "F", "W", "I", "N"]
@@ -116,7 +116,7 @@ test_black_config() {
     local black_config="$TEST_TEMP_DIR/home/testuser/pyproject.toml"
     
     # Create config
-    cat > "$black_config" << 'EOF'
+    command cat > "$black_config" << 'EOF'
 [tool.black]
 line-length = 88
 target-version = ['py311']
@@ -137,7 +137,7 @@ test_pytest_config() {
     local pytest_ini="$TEST_TEMP_DIR/home/testuser/pytest.ini"
     
     # Create config
-    cat > "$pytest_ini" << 'EOF'
+    command cat > "$pytest_ini" << 'EOF'
 [pytest]
 testpaths = tests
 python_files = test_*.py
@@ -160,7 +160,7 @@ test_precommit_hooks() {
     local precommit_config="$TEST_TEMP_DIR/.pre-commit-config.yaml"
     
     # Create config
-    cat > "$precommit_config" << 'EOF'
+    command cat > "$precommit_config" << 'EOF'
 repos:
   - repo: https://github.com/charliermarsh/ruff-pre-commit
     rev: v0.1.0
@@ -189,7 +189,7 @@ test_ipython_config() {
     
     # Create startup script
     mkdir -p "$ipython_dir/startup"
-    cat > "$ipython_dir/startup/00-imports.py" << 'EOF'
+    command cat > "$ipython_dir/startup/00-imports.py" << 'EOF'
 import numpy as np
 import pandas as pd
 EOF
@@ -202,7 +202,7 @@ test_dev_aliases() {
     local bashrc_file="$TEST_TEMP_DIR/etc/bashrc.d/30-python-dev.sh"
     
     # Create aliases
-    cat > "$bashrc_file" << 'EOF'
+    command cat > "$bashrc_file" << 'EOF'
 alias pyt='pytest'
 alias pytv='pytest -v'
 alias pytc='pytest --cov'
@@ -241,7 +241,7 @@ test_python_dev_verification() {
     local test_script="$TEST_TEMP_DIR/test-python-dev.sh"
     
     # Create verification script
-    cat > "$test_script" << 'EOF'
+    command cat > "$test_script" << 'EOF'
 #!/bin/bash
 echo "Python dev tools:"
 for tool in poetry pipenv black ruff mypy pytest; do

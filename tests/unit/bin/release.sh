@@ -23,7 +23,7 @@ setup() {
     echo "1.2.3" > "$TEST_VERSION_FILE"
     
     # Create initial CHANGELOG
-    cat > "$TEST_CHANGELOG_FILE" <<'EOF'
+    command cat > "$TEST_CHANGELOG_FILE" <<'EOF'
 # Changelog
 
 ## [Unreleased]
@@ -35,7 +35,7 @@ EOF
 
 # Teardown function - runs after each test
 teardown() {
-    rm -f "$TEST_VERSION_FILE" "$TEST_CHANGELOG_FILE"
+    command rm -f "$TEST_VERSION_FILE" "$TEST_CHANGELOG_FILE"
 }
 
 # Test: Script exists and is executable
@@ -132,7 +132,7 @@ test_version_file_check() {
 # Test: Changelog file exists check
 test_changelog_file_check() {
     # Create test changelog
-    cat > "$TEST_CHANGELOG_FILE" <<'EOF'
+    command cat > "$TEST_CHANGELOG_FILE" <<'EOF'
 # Changelog
 
 ## [Unreleased]

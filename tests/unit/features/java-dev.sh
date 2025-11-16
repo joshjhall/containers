@@ -35,7 +35,7 @@ setup() {
 teardown() {
     # Clean up test directory
     if [ -n "${TEST_TEMP_DIR:-}" ]; then
-        rm -rf "$TEST_TEMP_DIR"
+        command rm -rf "$TEST_TEMP_DIR"
     fi
     
     # Unset test variables
@@ -114,7 +114,7 @@ test_checkstyle_config() {
     local checkstyle_xml="$TEST_TEMP_DIR/checkstyle.xml"
     
     # Create config
-    cat > "$checkstyle_xml" << 'EOF'
+    command cat > "$checkstyle_xml" << 'EOF'
 <?xml version="1.0"?>
 <!DOCTYPE module PUBLIC "-//Checkstyle//DTD Checkstyle Configuration 1.3//EN"
           "https://checkstyle.org/dtds/configuration_1_3.dtd">
@@ -140,7 +140,7 @@ test_spotbugs_config() {
     local spotbugs_xml="$TEST_TEMP_DIR/spotbugs-exclude.xml"
     
     # Create config
-    cat > "$spotbugs_xml" << 'EOF'
+    command cat > "$spotbugs_xml" << 'EOF'
 <FindBugsFilter>
     <Match>
         <Class name="~.*Test"/>
@@ -163,7 +163,7 @@ test_junit_config() {
     local junit_platform="$TEST_TEMP_DIR/junit-platform.properties"
     
     # Create config
-    cat > "$junit_platform" << 'EOF'
+    command cat > "$junit_platform" << 'EOF'
 junit.jupiter.testinstance.lifecycle.default=per_class
 junit.jupiter.execution.parallel.enabled=true
 EOF
@@ -183,7 +183,7 @@ test_java_dev_aliases() {
     local bashrc_file="$TEST_TEMP_DIR/etc/bashrc.d/45-java-dev.sh"
     
     # Create aliases
-    cat > "$bashrc_file" << 'EOF'
+    command cat > "$bashrc_file" << 'EOF'
 alias mvnw='./mvnw'
 alias gdlw='./gradlew'
 alias sboot='spring boot'
@@ -213,7 +213,7 @@ test_java_dev_verification() {
     local test_script="$TEST_TEMP_DIR/test-java-dev.sh"
     
     # Create verification script
-    cat > "$test_script" << 'EOF'
+    command cat > "$test_script" << 'EOF'
 #!/bin/bash
 echo "Java dev tools:"
 for tool in mvn gradle spring; do

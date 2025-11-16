@@ -145,12 +145,12 @@ test_missing_env_file() {
     local env_backup=""
     if [ -f "$PROJECT_ROOT/.env" ]; then
         env_backup="$PROJECT_ROOT/.env.backup.$$"
-        mv "$PROJECT_ROOT/.env" "$env_backup"
+        command mv "$PROJECT_ROOT/.env" "$env_backup"
     fi
     
     # Run script without .env file (strip ANSI colors)
     local output
-    output=$("$PROJECT_ROOT/bin/check-versions.sh" 2>&1 | sed 's/\x1b\[[0-9;]*m//g' | head -10 || true)
+    output=$("$PROJECT_ROOT/bin/check-versions.sh" 2>&1 | command sed 's/\x1b\[[0-9;]*m//g' | head -10 || true)
     
     # Check for warning about missing token
     if echo "$output" | grep -q "Warning: No GITHUB_TOKEN set"; then
@@ -162,7 +162,7 @@ test_missing_env_file() {
     
     # Restore .env if it was backed up
     if [ -n "$env_backup" ] && [ -f "$env_backup" ]; then
-        mv "$env_backup" "$PROJECT_ROOT/.env"
+        command mv "$env_backup" "$PROJECT_ROOT/.env"
     fi
 }
 
@@ -170,7 +170,7 @@ test_missing_env_file() {
 test_extract_dockerfile_versions() {
     # Create a temporary test Dockerfile
     local test_dockerfile="$RESULTS_DIR/test_dockerfile"
-    cat > "$test_dockerfile" <<'EOF'
+    command cat > "$test_dockerfile" <<'EOF'
 ARG PYTHON_VERSION=3.13.6
 ARG NODE_VERSION=22
 ARG GO_VERSION=1.24.6
@@ -186,7 +186,7 @@ EOF
     assert_equals "22" "$node_ver" "Node version extracted correctly"
     
     # Clean up
-    rm -f "$test_dockerfile"
+    command rm -f "$test_dockerfile"
 }
 
 # Test: Script extracts versions from feature scripts
@@ -253,7 +253,7 @@ test_extract_java_dev_versions() {
         jbang_ver=$(grep '^JBANG_VERSION=' "$PROJECT_ROOT/lib/features/java-dev.sh" 2>/dev/null | cut -d= -f2 | tr -d '"')
         # MVND_VERSION is indented in the actual file
         local mvnd_ver
-        mvnd_ver=$(grep 'MVND_VERSION=' "$PROJECT_ROOT/lib/features/java-dev.sh" 2>/dev/null | sed 's/.*MVND_VERSION=//' | tr -d '"' | head -1)
+        mvnd_ver=$(grep 'MVND_VERSION=' "$PROJECT_ROOT/lib/features/java-dev.sh" 2>/dev/null | command sed 's/.*MVND_VERSION=//' | tr -d '"' | head -1)
         local gjf_ver
         gjf_ver=$(grep '^GJF_VERSION=' "$PROJECT_ROOT/lib/features/java-dev.sh" 2>/dev/null | cut -d= -f2 | tr -d '"')
 
@@ -286,7 +286,7 @@ test_extract_duf_entr_versions() {
 test_handle_indented_versions() {
     # Create a temporary test script with indented versions
     local test_script="$RESULTS_DIR/test_indented.sh"
-    cat > "$test_script" <<'EOF'
+    command cat > "$test_script" <<'EOF'
 #!/bin/bash
 if [ condition ]; then
     SOME_VERSION="1.2.3"
@@ -296,15 +296,15 @@ EOF
     
     # Check if indented versions can be extracted with proper pattern
     local some_ver
-    some_ver=$(grep '^\s*SOME_VERSION=' "$test_script" 2>/dev/null | sed 's/.*=//' | tr -d '"')
+    some_ver=$(grep '^\s*SOME_VERSION=' "$test_script" 2>/dev/null | command sed 's/.*=//' | tr -d '"')
     local another_ver
-    another_ver=$(grep 'ANOTHER_VERSION=' "$test_script" 2>/dev/null | sed 's/.*=//' | tr -d '"')
+    another_ver=$(grep 'ANOTHER_VERSION=' "$test_script" 2>/dev/null | command sed 's/.*=//' | tr -d '"')
 
     assert_equals "1.2.3" "$some_ver" "Indented version extracted correctly"
     assert_equals "4.5.6" "$another_ver" "Another indented version extracted correctly"
     
     # Clean up
-    rm -f "$test_script"
+    command rm -f "$test_script"
 }
 
 # Test: Script extracts zoxide version from base setup

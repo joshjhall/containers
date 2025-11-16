@@ -97,7 +97,7 @@ echo ""
 # Test 6: Simulated template loading
 echo "Test: Template loading simulation"
 TEMP_DIR=$(mktemp -d)
-trap 'rm -rf "$TEMP_DIR"' EXIT
+trap 'command rm -rf "$TEMP_DIR"' EXIT
 
 # Simulate the load_java_template function
 load_java_template_test() {
@@ -111,9 +111,9 @@ load_java_template_test() {
     fi
 
     if [ -n "$class_name" ]; then
-        sed "s/__CLASS_NAME__/${class_name}/g" "$template_file"
+        command sed "s/__CLASS_NAME__/${class_name}/g" "$template_file"
     else
-        cat "$template_file"
+        command cat "$template_file"
     fi
 }
 

@@ -30,7 +30,7 @@ setup() {
 teardown() {
     # Clean up test directory
     if [ -n "${TEST_DIR:-}" ] && [ -d "$TEST_DIR" ]; then
-        rm -rf "$TEST_DIR"
+        command rm -rf "$TEST_DIR"
     fi
 }
 

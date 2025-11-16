@@ -36,7 +36,7 @@ setup() {
 teardown() {
     # Clean up test directory
     if [ -n "${TEST_TEMP_DIR:-}" ]; then
-        rm -rf "$TEST_TEMP_DIR"
+        command rm -rf "$TEST_TEMP_DIR"
     fi
     
     # Unset test variables
@@ -85,7 +85,7 @@ test_kubeconfig_setup() {
     local kubeconfig="$kube_dir/config"
     
     # Create mock kubeconfig
-    cat > "$kubeconfig" << 'EOF'
+    command cat > "$kubeconfig" << 'EOF'
 apiVersion: v1
 kind: Config
 clusters:
@@ -138,7 +138,7 @@ test_kubernetes_aliases() {
     local bashrc_file="$TEST_TEMP_DIR/etc/bashrc.d/55-kubernetes.sh"
     
     # Create aliases
-    cat > "$bashrc_file" << 'EOF'
+    command cat > "$bashrc_file" << 'EOF'
 alias k='kubectl'
 alias kgp='kubectl get pods'
 alias kgs='kubectl get services'
@@ -169,7 +169,7 @@ test_helm_repositories() {
     mkdir -p "$helm_dir"
     
     # Create repositories file
-    cat > "$helm_dir/repositories.yaml" << 'EOF'
+    command cat > "$helm_dir/repositories.yaml" << 'EOF'
 apiVersion: v1
 repositories:
 - name: stable
@@ -193,7 +193,7 @@ test_k8s_environment() {
     local bashrc_file="$TEST_TEMP_DIR/etc/bashrc.d/55-kubernetes.sh"
     
     # Add environment variables
-    cat >> "$bashrc_file" << 'EOF'
+    command cat >> "$bashrc_file" << 'EOF'
 export KUBECONFIG="$HOME/.kube/config"
 export KUBE_EDITOR="nano"
 export HELM_HOME="$HOME/.helm"
@@ -218,7 +218,7 @@ test_kubectl_completion() {
     local bashrc_file="$TEST_TEMP_DIR/etc/bashrc.d/55-kubernetes.sh"
     
     # Add completion
-    cat >> "$bashrc_file" << 'EOF'
+    command cat >> "$bashrc_file" << 'EOF'
 source <(kubectl completion bash)
 complete -F __start_kubectl k
 EOF
@@ -237,7 +237,7 @@ test_manifest_files() {
     mkdir -p "$project_dir"
     
     # Create deployment manifest
-    cat > "$project_dir/deployment.yaml" << 'EOF'
+    command cat > "$project_dir/deployment.yaml" << 'EOF'
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -264,7 +264,7 @@ test_k8s_verification() {
     local test_script="$TEST_TEMP_DIR/test-k8s.sh"
     
     # Create verification script
-    cat > "$test_script" << 'EOF'
+    command cat > "$test_script" << 'EOF'
 #!/bin/bash
 echo "kubectl version:"
 kubectl version --client 2>/dev/null || echo "kubectl not installed"

@@ -37,7 +37,7 @@ setup() {
 teardown() {
     # Clean up test directory
     if [ -n "${TEST_TEMP_DIR:-}" ]; then
-        rm -rf "$TEST_TEMP_DIR"
+        command rm -rf "$TEST_TEMP_DIR"
     fi
     
     # Unset test variables
@@ -93,7 +93,7 @@ test_terraform_plugin_cache() {
     mkdir -p "$cache_dir"
     
     # Create .terraformrc
-    cat > "$terraformrc" << 'EOF'
+    command cat > "$terraformrc" << 'EOF'
 plugin_cache_dir = "/cache/terraform/plugin-cache"
 disable_checkpoint = true
 EOF
@@ -114,7 +114,7 @@ test_terraform_environment() {
     local bashrc_file="$TEST_TEMP_DIR/etc/bashrc.d/60-terraform.sh"
     
     # Create mock bashrc content
-    cat > "$bashrc_file" << 'EOF'
+    command cat > "$bashrc_file" << 'EOF'
 export TF_PLUGIN_CACHE_DIR="/cache/terraform/plugin-cache"
 export TF_CLI_CONFIG_FILE="$HOME/.terraformrc"
 export TERRAFORM_WORKSPACE="default"
@@ -139,7 +139,7 @@ test_terraform_aliases() {
     local bashrc_file="$TEST_TEMP_DIR/etc/bashrc.d/60-terraform.sh"
     
     # Add aliases
-    cat >> "$bashrc_file" << 'EOF'
+    command cat >> "$bashrc_file" << 'EOF'
 
 # Terraform aliases
 alias tf='terraform'
@@ -172,7 +172,7 @@ test_terraform_files() {
     mkdir -p "$project_dir"
     
     # Create main.tf
-    cat > "$project_dir/main.tf" << 'EOF'
+    command cat > "$project_dir/main.tf" << 'EOF'
 terraform {
   required_version = ">= 1.0"
   required_providers {
@@ -185,7 +185,7 @@ terraform {
 EOF
     
     # Create variables.tf
-    cat > "$project_dir/variables.tf" << 'EOF'
+    command cat > "$project_dir/variables.tf" << 'EOF'
 variable "region" {
   type    = string
   default = "us-east-1"
@@ -226,7 +226,7 @@ test_state_file_handling() {
     mkdir -p "$project_dir"
     
     # Create mock state file
-    cat > "$project_dir/terraform.tfstate" << 'EOF'
+    command cat > "$project_dir/terraform.tfstate" << 'EOF'
 {
   "version": 4,
   "terraform_version": "1.10.0",
@@ -268,7 +268,7 @@ test_terraform_verification() {
     local test_script="$TEST_TEMP_DIR/test-terraform.sh"
     
     # Create verification script
-    cat > "$test_script" << 'EOF'
+    command cat > "$test_script" << 'EOF'
 #!/bin/bash
 echo "Terraform version:"
 terraform version 2>/dev/null || echo "Terraform not installed"

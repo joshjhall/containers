@@ -34,7 +34,7 @@ setup() {
 
 teardown() {
     # Cleanup
-    rm -rf "$TEST_TEMP_DIR" 2>/dev/null || true
+    command rm -rf "$TEST_TEMP_DIR" 2>/dev/null || true
 }
 
 # ============================================================================

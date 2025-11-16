@@ -41,7 +41,7 @@ setup() {
 teardown() {
     # Clean up temporary log directory (ignore errors)
     if [ -n "${BUILD_LOG_DIR:-}" ] && [ -d "$BUILD_LOG_DIR" ]; then
-        rm -rf "$BUILD_LOG_DIR" 2>/dev/null || true
+        command rm -rf "$BUILD_LOG_DIR" 2>/dev/null || true
     fi
 
     unset RATE_LIMIT_HIT 2>/dev/null || true

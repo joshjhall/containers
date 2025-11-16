@@ -33,7 +33,7 @@ setup() {
 teardown() {
     # Clean up test directory
     if [ -n "${TEST_TEMP_DIR:-}" ]; then
-        rm -rf "$TEST_TEMP_DIR"
+        command rm -rf "$TEST_TEMP_DIR"
     fi
     
     # Unset test variables
@@ -54,12 +54,12 @@ test_first_startup_scripts() {
     local first_startup="$TEST_TEMP_DIR/etc/container/first-startup"
     
     # Create mock startup scripts
-    cat > "$first_startup/10-welcome.sh" << 'EOF'
+    command cat > "$first_startup/10-welcome.sh" << 'EOF'
 #!/bin/bash
 echo "Welcome to the development container!"
 EOF
     
-    cat > "$first_startup/20-git-setup.sh" << 'EOF'
+    command cat > "$first_startup/20-git-setup.sh" << 'EOF'
 #!/bin/bash
 git config --global init.defaultBranch main
 EOF
@@ -122,7 +122,7 @@ test_environment_setup() {
     mkdir -p "$(dirname "$env_script")"
     
     # Create environment setup
-    cat > "$env_script" << 'EOF'
+    command cat > "$env_script" << 'EOF'
 #!/bin/bash
 export CONTAINER_STARTED="true"
 export WORKING_DIR="/workspace/project"
@@ -146,7 +146,7 @@ test_git_detection() {
     mkdir -p "$(dirname "$git_script")"
     
     # Create git detection script
-    cat > "$git_script" << 'EOF'
+    command cat > "$git_script" << 'EOF'
 #!/bin/bash
 if [ -d "${WORKING_DIR}/.git" ]; then
     echo "Git repository detected"
@@ -172,7 +172,7 @@ test_project_detection() {
     mkdir -p "$(dirname "$detect_script")"
     
     # Create project detection script
-    cat > "$detect_script" << 'EOF'
+    command cat > "$detect_script" << 'EOF'
 #!/bin/bash
 cd "${WORKING_DIR}"
 if [ -f "package.json" ]; then
@@ -201,7 +201,7 @@ test_ssh_agent_setup() {
     mkdir -p "$(dirname "$ssh_script")"
     
     # Create SSH agent script
-    cat > "$ssh_script" << 'EOF'
+    command cat > "$ssh_script" << 'EOF'
 #!/bin/bash
 if [ -z "$SSH_AUTH_SOCK" ]; then
     eval $(ssh-agent -s)
@@ -225,7 +225,7 @@ test_banner_display() {
     mkdir -p "$(dirname "$banner_script")"
     
     # Create banner script
-    cat > "$banner_script" << 'EOF'
+    command cat > "$banner_script" << 'EOF'
 #!/bin/bash
 cat << 'BANNER'
 =====================================
@@ -250,7 +250,7 @@ test_startup_verification() {
     local test_script="$TEST_TEMP_DIR/test-startup.sh"
     
     # Create verification script
-    cat > "$test_script" << 'EOF'
+    command cat > "$test_script" << 'EOF'
 #!/bin/bash
 echo "Startup scripts:"
 for dir in /etc/container/first-startup /etc/container/startup; do
