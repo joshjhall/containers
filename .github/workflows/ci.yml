@@ -99,6 +99,12 @@ jobs:
         run: |
           echo "Running Docker Compose validation..."
 
+          # Check if docker-compose is installed
+          if ! command -v docker-compose &> /dev/null; then
+            echo "⚠️  docker-compose not installed, skipping Docker Compose validation"
+            exit 0
+          fi
+
           # Find all docker-compose files
           compose_files=$(git ls-files '*docker-compose*.yml' '*docker-compose*.yaml' '*compose*.yml' '*compose*.yaml' || true)
 
