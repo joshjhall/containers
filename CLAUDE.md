@@ -173,6 +173,29 @@ The system uses `/cache` directory with subdirectories for each tool:
 - Proper file permissions maintained throughout
 - SSH/GPG utilities included for secure operations
 
+## Cross-Platform Development
+
+### Case-Sensitive Filesystem Considerations
+
+**Important**: Linux containers expect case-sensitive filesystems, but macOS and Windows use case-insensitive filesystems by default. This mismatch can cause issues when mounting host directories.
+
+**Common Issues**:
+- Git tracks case changes (`README.md` → `readme.md`) but filesystem doesn't reflect them
+- Case-sensitive imports fail (Python: `from MyModule` vs `from mymodule`)
+- Build tools expecting exact case matches may fail
+
+**Detection**: The container automatically detects case-insensitive mounts at startup and displays a warning with recommendations.
+
+**Solutions**:
+1. **macOS**: Use case-sensitive APFS volume for development
+2. **Windows**: Use WSL2 filesystem (not Windows paths)
+3. **All platforms**: Use Docker volumes instead of bind mounts
+4. **Workaround**: Follow strict naming conventions (always lowercase or always PascalCase)
+
+**Disable check**: Set `SKIP_CASE_CHECK=true` to suppress the warning
+
+**Detailed guide**: See `docs/troubleshooting/case-sensitive-filesystems.md`
+
 ## Debian Version Compatibility
 
 The build system supports Debian 11 (Bullseye), 12 (Bookworm), and 13 (Trixie) with automatic version detection and conditional package installation.

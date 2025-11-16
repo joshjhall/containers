@@ -383,6 +383,10 @@ RUN chmod +x /usr/local/bin/entrypoint
 COPY bin/healthcheck.sh /usr/local/bin/healthcheck
 RUN chmod +x /usr/local/bin/healthcheck
 
+# Copy case-sensitivity detection utility
+COPY bin/detect-case-sensitivity.sh /usr/local/bin/detect-case-sensitivity.sh
+RUN chmod +x /usr/local/bin/detect-case-sensitivity.sh
+
 # Clean up build scripts but keep runtime scripts
 RUN cp -r /tmp/build-scripts/runtime /opt/container-runtime && \
     rm -rf /tmp/build-scripts
