@@ -13,8 +13,21 @@
 #     log_command "Installing Python dependencies" apt-get install -y ...
 #     log_feature_end
 #
+#   Enable JSON logging (optional):
+#     export ENABLE_JSON_LOGGING=true
+#
 
 set -euo pipefail
+
+# Source JSON logging utilities if enabled
+if [ "${ENABLE_JSON_LOGGING:-false}" = "true" ]; then
+    # shellcheck source=lib/base/json-logging.sh
+    if [ -f "/tmp/build-scripts/base/json-logging.sh" ]; then
+        source "/tmp/build-scripts/base/json-logging.sh"
+    elif [ -f "$(dirname "${BASH_SOURCE[0]}")/json-logging.sh" ]; then
+        source "$(dirname "${BASH_SOURCE[0]}")/json-logging.sh"
+    fi
+fi
 
 # Global variables for logging
 # Allow BUILD_LOG_DIR to be overridden (e.g., for tests)
@@ -87,7 +100,12 @@ log_feature_start() {
     
     # Clear error file
     true > "$CURRENT_ERROR_FILE"
-    
+
+    # Initialize JSON logging if enabled
+    if [ "${ENABLE_JSON_LOGGING:-false}" = "true" ] && command -v json_log_init >/dev/null 2>&1; then
+        json_log_init "$feature_name" "$version"
+    fi
+
     # Show on console
     echo "=== Installing $feature_name${version:+ version $version} ==="
 }
@@ -137,7 +155,12 @@ log_command() {
         echo "--------------------------------------------------------------------------------"
         echo "Exit code: $exit_code (Duration: ${duration}s)"
     } | tee -a "$CURRENT_LOG_FILE"
-    
+
+    # Log to JSON if enabled
+    if [ "${ENABLE_JSON_LOGGING:-false}" = "true" ] && command -v json_log_command >/dev/null 2>&1; then
+        json_log_command "$description" "$COMMAND_COUNT" "$exit_code" "$duration"
+    fi
+
     # Extract any errors or warnings from the last command output
     if [ -f "$CURRENT_LOG_FILE" ]; then
         # Get lines since the last command marker
@@ -213,18 +236,23 @@ log_feature_end() {
     # Append summary to main log
     echo "" >> "$CURRENT_LOG_FILE"
     command cat "$CURRENT_SUMMARY_FILE" >> "$CURRENT_LOG_FILE"
-    
+
     # Create a master summary file
     {
         echo "$CURRENT_FEATURE: $ERROR_COUNT errors, $WARNING_COUNT warnings (${total_duration}s)"
     } >> "$BUILD_LOG_DIR/master-summary.log"
-    
+
+    # Log feature completion to JSON if enabled
+    if [ "${ENABLE_JSON_LOGGING:-false}" = "true" ] && command -v json_log_feature_end >/dev/null 2>&1; then
+        json_log_feature_end "$total_duration"
+    fi
+
     # Show summary on console
     echo ""
     echo "=== $CURRENT_FEATURE installation complete ==="
     echo "Errors: $ERROR_COUNT, Warnings: $WARNING_COUNT"
     echo "Full log: $CURRENT_LOG_FILE"
-    
+
     # Reset variables
     CURRENT_FEATURE=""
     CURRENT_LOG_FILE=""
@@ -278,6 +306,11 @@ log_error() {
     fi
 
     ERROR_COUNT=$((ERROR_COUNT + 1))
+
+    # Log to JSON if enabled
+    if [ "${ENABLE_JSON_LOGGING:-false}" = "true" ] && command -v json_log_error >/dev/null 2>&1; then
+        json_log_error "$message"
+    fi
 }
 
 # ============================================================================
@@ -303,6 +336,11 @@ log_warning() {
     fi
 
     WARNING_COUNT=$((WARNING_COUNT + 1))
+
+    # Log to JSON if enabled
+    if [ "${ENABLE_JSON_LOGGING:-false}" = "true" ] && command -v json_log_warning >/dev/null 2>&1; then
+        json_log_warning "$message"
+    fi
 }
 
 # ============================================================================

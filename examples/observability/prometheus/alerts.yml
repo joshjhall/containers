@@ -1,0 +1,293 @@
+# Prometheus Alerting Rules for Container Observability
+#
+# Load this file in Prometheus configuration:
+#
+# rule_files:
+#   - "alerts.yml"
+#
+# Alerts are organized by severity:
+# - critical: Immediate action required (paging alert)
+# - warning: Action needed soon (email/Slack)
+# - info: Informational only (logging)
+
+groups:
+  # ============================================================================
+  # Container Build Alerts
+  # ============================================================================
+  - name: container_build
+    interval: 30s
+    rules:
+      - alert: ContainerBuildFailed
+        expr: container_build_errors_total > 0
+        for: 5m
+        labels:
+          severity: warning
+          component: build
+        annotations:
+          summary: "Container build has errors"
+          description: >-
+            Feature {{ $labels.feature }} has {{ $value }} build errors.
+            This may indicate a failed installation or missing dependencies.
+          runbook_url: "https://github.com/yourorg/containers/blob/main/docs/observability/runbooks/build-failed.md"
+
+      - alert: ContainerBuildSlow
+        expr: container_build_duration_seconds > 600
+        for: 1m
+        labels:
+          severity: info
+          component: build
+        annotations:
+          summary: "Container build is slow"
+          description: >-
+            Feature {{ $labels.feature }} took {{ $value }}s to build (threshold: 600s).
+            Consider optimizing the build process or checking network connectivity.
+          runbook_url: "https://github.com/yourorg/containers/blob/main/docs/observability/runbooks/build-slow.md"
+
+      - alert: ContainerBuildWarnings
+        expr: container_build_warnings_total > 10
+        for: 5m
+        labels:
+          severity: info
+          component: build
+        annotations:
+          summary: "Container build has many warnings"
+          description: >-
+            Feature {{ $labels.feature }} has {{ $value }} build warnings.
+            Review build logs to identify potential issues.
+          runbook_url: "https://github.com/yourorg/containers/blob/main/docs/observability/runbooks/build-warnings.md"
+
+      - alert: ContainerBuildErrorTrend
+        expr: |
+          (
+            container_build_errors_total_all -
+            container_build_errors_total_all offset 1h
+          ) > 0
+        for: 10m
+        labels:
+          severity: warning
+          component: build
+        annotations:
+          summary: "Build errors are increasing"
+          description: >-
+            Total build errors increased in the last hour.
+            This may indicate a regression or environmental issue.
+          runbook_url: "https://github.com/yourorg/containers/blob/main/docs/observability/runbooks/build-error-trend.md"
+
+  # ============================================================================
+  # Container Runtime Health Alerts
+  # ============================================================================
+  - name: container_runtime
+    interval: 15s
+    rules:
+      - alert: ContainerUnhealthy
+        expr: container_healthcheck_status == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: runtime
+        annotations:
+          summary: "Container is unhealthy"
+          description: >-
+            Container healthcheck is failing for {{ $labels.instance }}.
+            This indicates a critical issue with the container runtime.
+          runbook_url: "https://github.com/yourorg/containers/blob/main/docs/observability/runbooks/container-unhealthy.md"
+
+      - alert: ContainerHealthcheckSlow
+        expr: container_healthcheck_duration_seconds > 5
+        for: 5m
+        labels:
+          severity: warning
+          component: runtime
+        annotations:
+          summary: "Container healthcheck is slow"
+          description: >-
+            Healthcheck taking {{ $value }}s (threshold: 5s) on {{ $labels.instance }}.
+            Container may be under heavy load or experiencing performance issues.
+          runbook_url: "https://github.com/yourorg/containers/blob/main/docs/observability/runbooks/healthcheck-slow.md"
+
+      - alert: ContainerRestarted
+        expr: container_uptime_seconds < 300
+        for: 1m
+        labels:
+          severity: warning
+          component: runtime
+        annotations:
+          summary: "Container recently restarted"
+          description: >-
+            Container {{ $labels.instance }} has been up for only {{ $value }}s.
+            Check logs for crash or restart reasons.
+          runbook_url: "https://github.com/yourorg/containers/blob/main/docs/observability/runbooks/container-restarted.md"
+
+      - alert: ContainerFlapping
+        expr: |
+          (
+            changes(container_uptime_seconds[30m]) > 3
+          )
+        for: 5m
+        labels:
+          severity: critical
+          component: runtime
+        annotations:
+          summary: "Container is restarting frequently"
+          description: >-
+            Container {{ $labels.instance }} has restarted {{ $value }} times in 30 minutes.
+            This indicates a severe stability issue.
+          runbook_url: "https://github.com/yourorg/containers/blob/main/docs/observability/runbooks/container-flapping.md"
+
+  # ============================================================================
+  # Container Resource Alerts
+  # ============================================================================
+  - name: container_resources
+    interval: 60s
+    rules:
+      - alert: ContainerDiskUsageHigh
+        expr: container_disk_usage_bytes{path="/cache"} > 10737418240
+        for: 10m
+        labels:
+          severity: warning
+          component: resources
+        annotations:
+          summary: "Container cache disk usage is high"
+          description: >-
+            Cache directory is using {{ humanize $value }} (threshold: 10GB).
+            Consider cleaning cache or increasing disk space.
+          runbook_url: "https://github.com/yourorg/containers/blob/main/docs/observability/runbooks/disk-usage-high.md"
+
+      - alert: ContainerLogsDiskUsageHigh
+        expr: container_disk_usage_bytes{path=~"/var/log/.*"} > 1073741824
+        for: 10m
+        labels:
+          severity: warning
+          component: resources
+        annotations:
+          summary: "Container logs disk usage is high"
+          description: >-
+            Log directory is using {{ humanize $value }} (threshold: 1GB).
+            Logs should be rotated or archived.
+          runbook_url: "https://github.com/yourorg/containers/blob/main/docs/observability/runbooks/logs-disk-usage-high.md"
+
+      - alert: ContainerWorkspaceDiskUsageHigh
+        expr: container_disk_usage_bytes{path="/workspace"} > 53687091200
+        for: 10m
+        labels:
+          severity: info
+          component: resources
+        annotations:
+          summary: "Container workspace disk usage is high"
+          description: >-
+            Workspace directory is using {{ humanize $value }} (threshold: 50GB).
+            Review workspace contents and clean up if needed.
+          runbook_url: "https://github.com/yourorg/containers/blob/main/docs/observability/runbooks/workspace-disk-usage-high.md"
+
+  # ============================================================================
+  # Container Metrics Collection Alerts
+  # ============================================================================
+  - name: container_metrics
+    interval: 60s
+    rules:
+      - alert: ContainerMetricsStale
+        expr: |
+          (
+            time() - container_metrics_scrape_timestamp_seconds > 120
+          )
+        for: 5m
+        labels:
+          severity: warning
+          component: metrics
+        annotations:
+          summary: "Container metrics are stale"
+          description: >-
+            Metrics for {{ $labels.instance }} haven't been updated in {{ $value }}s.
+            Metrics exporter may be stopped or Prometheus scraping may be failing.
+          runbook_url: "https://github.com/yourorg/containers/blob/main/docs/observability/runbooks/metrics-stale.md"
+
+      - alert: ContainerMetricsMissing
+        expr: |
+          absent(container_uptime_seconds) == 1
+        for: 5m
+        labels:
+          severity: warning
+          component: metrics
+        annotations:
+          summary: "Container metrics are missing"
+          description: >-
+            No metrics received from container.
+            Check if metrics exporter is running and Prometheus is scraping correctly.
+          runbook_url: "https://github.com/yourorg/containers/blob/main/docs/observability/runbooks/metrics-missing.md"
+
+  # ============================================================================
+  # Aggregated Fleet Alerts (for multiple containers)
+  # ============================================================================
+  - name: container_fleet
+    interval: 60s
+    rules:
+      - alert: ContainerFleetUnhealthyRate
+        expr: |
+          (
+            sum(container_healthcheck_status == 0)
+            /
+            count(container_healthcheck_status)
+          ) > 0.3
+        for: 5m
+        labels:
+          severity: critical
+          component: fleet
+        annotations:
+          summary: "High rate of unhealthy containers"
+          description: >-
+            {{ $value | humanizePercentage }} of containers are unhealthy.
+            This may indicate a systemic issue affecting multiple containers.
+          runbook_url: "https://github.com/yourorg/containers/blob/main/docs/observability/runbooks/fleet-unhealthy-rate.md"
+
+      - alert: ContainerFleetBuildFailureRate
+        expr: |
+          (
+            sum(container_build_errors_total > 0)
+            /
+            count(container_build_errors_total)
+          ) > 0.5
+        for: 10m
+        labels:
+          severity: warning
+          component: fleet
+        annotations:
+          summary: "High rate of build failures across fleet"
+          description: >-
+            {{ $value | humanizePercentage }} of containers have build errors.
+            This may indicate a problem with base images or shared dependencies.
+          runbook_url: "https://github.com/yourorg/containers/blob/main/docs/observability/runbooks/fleet-build-failure-rate.md"
+
+# ============================================================================
+# Alert Routing Examples (for Alertmanager)
+# ============================================================================
+# Add to alertmanager.yml:
+#
+# route:
+#   group_by: ['alertname', 'component']
+#   group_wait: 10s
+#   group_interval: 10s
+#   repeat_interval: 12h
+#   receiver: 'default'
+#   routes:
+#     - match:
+#         severity: critical
+#       receiver: 'pagerduty'
+#       continue: true
+#     - match:
+#         severity: warning
+#       receiver: 'slack'
+#     - match:
+#         severity: info
+#       receiver: 'email'
+#
+# receivers:
+#   - name: 'default'
+#     email_configs:
+#       - to: 'team@example.com'
+#   - name: 'slack'
+#     slack_configs:
+#       - channel: '#container-alerts'
+#         api_url: 'https://hooks.slack.com/services/...'
+#   - name: 'pagerduty'
+#     pagerduty_configs:
+#       - service_key: 'your-pagerduty-key'

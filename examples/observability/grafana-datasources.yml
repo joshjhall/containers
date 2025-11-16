@@ -1,0 +1,37 @@
+# Grafana Datasources Configuration
+#
+# This file provisions datasources automatically when Grafana starts.
+
+apiVersion: 1
+
+datasources:
+  # Prometheus
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: true
+    jsonData:
+      timeInterval: "15s"
+      httpMethod: POST
+
+  # Jaeger
+  - name: Jaeger
+    type: jaeger
+    access: proxy
+    url: http://jaeger:16686
+    editable: true
+
+  # Loki (Optional - uncomment if using Loki)
+  # - name: Loki
+  #   type: loki
+  #   access: proxy
+  #   url: http://loki:3100
+  #   editable: true
+  #   jsonData:
+  #     derivedFields:
+  #       - datasourceUid: Jaeger
+  #         matcherRegex: "traceID=(\\w+)"
+  #         name: TraceID
+  #         url: "$${__value.raw}"
