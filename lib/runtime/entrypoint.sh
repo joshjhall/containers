@@ -39,7 +39,7 @@ cleanup_on_exit() {
     echo "=== Container shutting down (exit code: $exit_code) ==="
 
     # Flush metrics if they exist
-    METRICS_DIR="/var/run/container-metrics"
+    METRICS_DIR="/tmp/container-metrics"
     if [ -d "$METRICS_DIR" ]; then
         # Ensure all metrics are written to disk
         sync 2>/dev/null || true
@@ -250,7 +250,7 @@ STARTUP_END_TIME=$(date +%s)
 STARTUP_DURATION=$((STARTUP_END_TIME - STARTUP_BEGIN_TIME))
 
 # Create metrics directory if it doesn't exist
-METRICS_DIR="/var/run/container-metrics"
+METRICS_DIR="/tmp/container-metrics"
 mkdir -p "$METRICS_DIR"
 
 # Write startup metrics (Prometheus format)

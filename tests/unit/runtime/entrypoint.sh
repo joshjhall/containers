@@ -277,7 +277,7 @@ test_startup_time_tracking() {
 # Test: Startup metrics file creation
 test_startup_metrics_file() {
     # Check that entrypoint.sh creates metrics directory
-    if grep -q "METRICS_DIR=\"/var/run/container-metrics\"" "$PROJECT_ROOT/lib/runtime/entrypoint.sh"; then
+    if grep -q "METRICS_DIR=\"/tmp/container-metrics\"" "$PROJECT_ROOT/lib/runtime/entrypoint.sh"; then
         assert_true true "Metrics directory is defined"
     else
         assert_true false "Metrics directory not defined"
