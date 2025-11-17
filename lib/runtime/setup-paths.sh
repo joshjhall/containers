@@ -13,6 +13,14 @@ mkdir -p /etc/bashrc.d
 command cat > /etc/bashrc.d/10-tool-paths.sh << 'EOF'
 # Comprehensive PATH setup for all installed tools
 
+# Source base utilities for secure PATH management
+if [ -f /opt/container-runtime/base/logging.sh ]; then
+    source /opt/container-runtime/base/logging.sh
+fi
+if [ -f /opt/container-runtime/base/path-utils.sh ]; then
+    source /opt/container-runtime/base/path-utils.sh
+fi
+
 # Security: Safe eval for tool initialization
 safe_eval() {
     local output
@@ -30,8 +38,12 @@ safe_eval() {
 # Base paths
 export PATH="/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin:/sbin"
 
-# User local bin
-export PATH="$HOME/.local/bin:$PATH"
+# User local bin with security validation
+if command -v safe_add_to_path >/dev/null 2>&1; then
+    safe_add_to_path "$HOME/.local/bin" 2>/dev/null || export PATH="$HOME/.local/bin:$PATH"
+else
+    export PATH="$HOME/.local/bin:$PATH"
+fi
 
 # Python paths are handled by the Python feature script
 
@@ -42,13 +54,21 @@ elif [ -d "$HOME/.rbenv" ]; then
     export RBENV_ROOT="$HOME/.rbenv"
 fi
 if [ -n "${RBENV_ROOT:-}" ]; then
-    export PATH="$RBENV_ROOT/bin:$PATH"
+    if command -v safe_add_to_path >/dev/null 2>&1; then
+        safe_add_to_path "$RBENV_ROOT/bin" 2>/dev/null || export PATH="$RBENV_ROOT/bin:$PATH"
+    else
+        export PATH="$RBENV_ROOT/bin:$PATH"
+    fi
     safe_eval rbenv init -
 fi
 
 # Go
 if [ -d /usr/local/go ]; then
-    export PATH="/usr/local/go/bin:$PATH"
+    if command -v safe_add_to_path >/dev/null 2>&1; then
+        safe_add_to_path "/usr/local/go/bin" 2>/dev/null || export PATH="/usr/local/go/bin:$PATH"
+    else
+        export PATH="/usr/local/go/bin:$PATH"
+    fi
 fi
 if [ -d /cache/go ]; then
     export GOPATH="/cache/go"
@@ -56,7 +76,11 @@ elif [ -d "$HOME/go" ]; then
     export GOPATH="$HOME/go"
 fi
 if [ -n "${GOPATH:-}" ]; then
-    export PATH="$GOPATH/bin:$PATH"
+    if command -v safe_add_to_path >/dev/null 2>&1; then
+        safe_add_to_path "$GOPATH/bin" 2>/dev/null || export PATH="$GOPATH/bin:$PATH"
+    else
+        export PATH="$GOPATH/bin:$PATH"
+    fi
 fi
 
 # Rust
@@ -68,34 +92,62 @@ elif [ -d "$HOME/.cargo" ]; then
     export RUSTUP_HOME="$HOME/.rustup"
 fi
 if [ -n "${CARGO_HOME:-}" ]; then
-    export PATH="$CARGO_HOME/bin:$PATH"
+    if command -v safe_add_to_path >/dev/null 2>&1; then
+        safe_add_to_path "$CARGO_HOME/bin" 2>/dev/null || export PATH="$CARGO_HOME/bin:$PATH"
+    else
+        export PATH="$CARGO_HOME/bin:$PATH"
+    fi
 fi
 
 # Node.js global packages
 if [ -d /cache/npm-global ]; then
-    export PATH="/cache/npm-global/bin:$PATH"
+    if command -v safe_add_to_path >/dev/null 2>&1; then
+        safe_add_to_path "/cache/npm-global/bin" 2>/dev/null || export PATH="/cache/npm-global/bin:$PATH"
+    else
+        export PATH="/cache/npm-global/bin:$PATH"
+    fi
 elif [ -d "$HOME/.npm-global" ]; then
-    export PATH="$HOME/.npm-global/bin:$PATH"
+    if command -v safe_add_to_path >/dev/null 2>&1; then
+        safe_add_to_path "$HOME/.npm-global/bin" 2>/dev/null || export PATH="$HOME/.npm-global/bin:$PATH"
+    else
+        export PATH="$HOME/.npm-global/bin:$PATH"
+    fi
 fi
 
 # pipx
 if [ -d /opt/pipx/bin ]; then
-    export PATH="/opt/pipx/bin:$PATH"
+    if command -v safe_add_to_path >/dev/null 2>&1; then
+        safe_add_to_path "/opt/pipx/bin" 2>/dev/null || export PATH="/opt/pipx/bin:$PATH"
+    else
+        export PATH="/opt/pipx/bin:$PATH"
+    fi
 fi
 
 # Mojo
 if [ -d "$HOME/.modular/bin" ]; then
-    export PATH="$HOME/.modular/bin:$PATH"
+    if command -v safe_add_to_path >/dev/null 2>&1; then
+        safe_add_to_path "$HOME/.modular/bin" 2>/dev/null || export PATH="$HOME/.modular/bin:$PATH"
+    else
+        export PATH="$HOME/.modular/bin:$PATH"
+    fi
 fi
 
 # Krew (kubectl plugins)
 if [ -d "$HOME/.krew/bin" ]; then
-    export PATH="$HOME/.krew/bin:$PATH"
+    if command -v safe_add_to_path >/dev/null 2>&1; then
+        safe_add_to_path "$HOME/.krew/bin" 2>/dev/null || export PATH="$HOME/.krew/bin:$PATH"
+    else
+        export PATH="$HOME/.krew/bin:$PATH"
+    fi
 fi
 
 # fzf
 if [ -d /opt/fzf/bin ]; then
-    export PATH="/opt/fzf/bin:$PATH"
+    if command -v safe_add_to_path >/dev/null 2>&1; then
+        safe_add_to_path "/opt/fzf/bin" 2>/dev/null || export PATH="/opt/fzf/bin:$PATH"
+    else
+        export PATH="/opt/fzf/bin:$PATH"
+    fi
 fi
 EOF
 
