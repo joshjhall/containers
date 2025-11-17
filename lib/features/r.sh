@@ -51,6 +51,17 @@ R_VERSION_SHORT="${R_VERSION_MAJOR}0"
 log_feature_start "R" "${R_VERSION}"
 
 # ============================================================================
+# Build Dependency Cleanup Strategy
+# ============================================================================
+# Determine if we should cleanup build dependencies after installation
+# Only cleanup if neither dev-tools nor r-dev is enabled
+CLEANUP_BUILD_DEPS="false"
+if [ "${INCLUDE_DEV_TOOLS:-false}" != "true" ] && [ "${INCLUDE_R_DEV:-false}" != "true" ]; then
+    CLEANUP_BUILD_DEPS="true"
+    log_message "📦 Production build detected - build dependencies will be removed after installation"
+fi
+
+# ============================================================================
 # R Installation from CRAN Repository
 # ============================================================================
 log_message "Setting up R repository..."
@@ -177,6 +188,38 @@ create_cache_directories "${R_CACHE_DIR}" "${R_LIBS_USER}" "${R_CACHE_DIR}/tmp"
 
 log_message "R library path: ${R_LIBS_USER}"
 log_message "R cache directory: ${R_CACHE_DIR}"
+
+# ============================================================================
+# Clean Up Build Dependencies (Production Builds Only)
+# ============================================================================
+if [ "${CLEANUP_BUILD_DEPS}" = "true" ]; then
+    log_message "Removing build dependencies (production build)..."
+
+    # Remove build dependencies for R package compilation
+    # Note: We keep r-base-dev as some R packages may need it at runtime
+    # We also keep ca-certificates, wget, gnupg, and dirmngr for runtime operations
+    log_command "Removing R package build dependencies" \
+        apt-get remove --purge -y \
+            libcurl4-openssl-dev \
+            libssl-dev \
+            libxml2-dev \
+            libfontconfig1-dev \
+            libharfbuzz-dev \
+            libfribidi-dev \
+            libfreetype6-dev \
+            libpng-dev \
+            libtiff5-dev \
+            libjpeg-dev \
+            libcairo2-dev || true  # Don't fail if some packages aren't installed
+
+    log_command "Removing orphaned dependencies" \
+        apt-get autoremove -y
+
+    log_command "Cleaning apt cache" \
+        apt-get clean
+
+    log_message "✓ Build dependencies removed successfully"
+fi
 
 # ============================================================================
 # Create symlinks for R binaries

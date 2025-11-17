@@ -68,6 +68,17 @@ fi
 log_feature_start "Ruby" "${RUBY_VERSION}"
 
 # ============================================================================
+# Build Dependency Cleanup Strategy
+# ============================================================================
+# Determine if we should cleanup build dependencies after compilation
+# Only cleanup if neither dev-tools nor ruby-dev is enabled
+CLEANUP_BUILD_DEPS="false"
+if [ "${INCLUDE_DEV_TOOLS:-false}" != "true" ] && [ "${INCLUDE_RUBY_DEV:-false}" != "true" ]; then
+    CLEANUP_BUILD_DEPS="true"
+    log_message "📦 Production build detected - build dependencies will be removed after compilation"
+fi
+
+# ============================================================================
 # System Dependencies
 # ============================================================================
 log_message "Installing Ruby build dependencies..."
@@ -168,6 +179,40 @@ log_command "Installing Ruby" \
 cd /
 log_command "Cleaning up build directory" \
     command rm -rf "$BUILD_TEMP"
+
+# ============================================================================
+# Clean Up Build Dependencies (Production Builds Only)
+# ============================================================================
+if [ "${CLEANUP_BUILD_DEPS}" = "true" ]; then
+    log_message "Removing build dependencies (production build)..."
+
+    # Remove build dependencies we installed earlier
+    # Note: We keep wget and ca-certificates as they may be needed for runtime operations
+    log_command "Removing build packages" \
+        apt-get remove --purge -y \
+            autoconf \
+            bison \
+            build-essential \
+            libssl-dev \
+            libyaml-dev \
+            libreadline-dev \
+            zlib1g-dev \
+            libncurses5-dev \
+            libffi-dev \
+            libgdbm-dev \
+            libdb-dev \
+            uuid-dev || true  # Don't fail if some packages aren't installed
+
+    # Keep libgdbm6 as it's a runtime library, not just a dev package
+
+    log_command "Removing orphaned dependencies" \
+        apt-get autoremove -y
+
+    log_command "Cleaning apt cache" \
+        apt-get clean
+
+    log_message "✓ Build dependencies removed successfully"
+fi
 
 # ============================================================================
 # Post-installation Setup

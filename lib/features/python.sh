@@ -66,6 +66,17 @@ fi
 log_feature_start "Python" "${PYTHON_VERSION}"
 
 # ============================================================================
+# Build Dependency Cleanup Strategy
+# ============================================================================
+# Determine if we should cleanup build dependencies after compilation
+# Only cleanup if neither dev-tools nor python-dev is enabled
+CLEANUP_BUILD_DEPS="false"
+if [ "${INCLUDE_DEV_TOOLS:-false}" != "true" ] && [ "${INCLUDE_PYTHON_DEV:-false}" != "true" ]; then
+    CLEANUP_BUILD_DEPS="true"
+    log_message "📦 Production build detected - build dependencies will be removed after compilation"
+fi
+
+# ============================================================================
 # System Dependencies
 # ============================================================================
 log_message "Installing Python build dependencies..."
@@ -174,6 +185,42 @@ log_command "Cleaning up Python build directory" \
 # Update library cache
 log_command "Updating library cache" \
     ldconfig
+
+# ============================================================================
+# Clean Up Build Dependencies (Production Builds Only)
+# ============================================================================
+if [ "${CLEANUP_BUILD_DEPS}" = "true" ]; then
+    log_message "Removing build dependencies (production build)..."
+
+    # Remove build dependencies we installed earlier
+    # Note: We keep wget and ca-certificates as they may be needed for runtime operations
+    log_command "Removing build packages" \
+        apt-get remove --purge -y \
+            build-essential \
+            gdb \
+            lcov \
+            libbz2-dev \
+            libffi-dev \
+            libgdbm-dev \
+            liblzma-dev \
+            libncurses5-dev \
+            libreadline-dev \
+            libsqlite3-dev \
+            libssl-dev \
+            tk-dev \
+            uuid-dev \
+            zlib1g-dev \
+            lzma \
+            lzma-dev || true  # Don't fail if some packages aren't installed
+
+    log_command "Removing orphaned dependencies" \
+        apt-get autoremove -y
+
+    log_command "Cleaning apt cache" \
+        apt-get clean
+
+    log_message "✓ Build dependencies removed successfully"
+fi
 
 # ============================================================================
 # Create symlinks for Python 3
