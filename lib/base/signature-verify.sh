@@ -255,6 +255,65 @@ verify_sigstore_signature() {
 }
 
 # ============================================================================
+# get_python_release_manager - Get release manager info for Python version
+#
+# Arguments:
+#   $1 - Python version (e.g., "3.12.0")
+#
+# Outputs:
+#   Two lines: certificate identity, then OIDC issuer
+#
+# Returns:
+#   0 on success, 1 if version mapping not found
+#
+# Based on: https://www.python.org/downloads/metadata/sigstore/
+# ============================================================================
+get_python_release_manager() {
+    local version="$1"
+    local major minor
+    IFS='.' read -r major minor _ <<< "$version"
+
+    # Only Python 3.x is supported
+    if [ "$major" != "3" ]; then
+        return 1
+    fi
+
+    # Map minor version to release manager
+    # Source: https://www.python.org/downloads/metadata/sigstore/
+    case "$minor" in
+        7)
+            echo "nad@python.org"
+            echo "https://github.com/login/oauth"
+            ;;
+        8|9)
+            echo "lukasz@langa.pl"
+            echo "https://github.com/login/oauth"
+            ;;
+        10|11)
+            echo "pablogsal@python.org"
+            echo "https://accounts.google.com"
+            ;;
+        12|13)
+            echo "thomas@python.org"
+            echo "https://accounts.google.com"
+            ;;
+        14|15)
+            echo "hugo@python.org"
+            echo "https://github.com/login/oauth"
+            ;;
+        16|17)
+            echo "savannah@python.org"
+            echo "https://github.com/login/oauth"
+            ;;
+        *)
+            # Unknown version - return error
+            return 1
+            ;;
+    esac
+    return 0
+}
+
+# ============================================================================
 # download_and_verify_sigstore - Download Sigstore bundle and verify
 #
 # Arguments:
@@ -336,9 +395,31 @@ verify_signature() {
             log_message "Python ${version} supports Sigstore, trying Sigstore first..."
 
             if command -v cosign >/dev/null 2>&1; then
-                # Sigstore verification not yet implemented (tracked in issue #22)
-                log_message "Sigstore available but requires release manager configuration"
-                log_message "Falling back to GPG verification"
+                # Get release manager information
+                local cert_identity oidc_issuer
+                if ! cert_identity=$(get_python_release_manager "$version" | head -1); then
+                    log_warning "Could not determine release manager for Python ${version}"
+                    log_message "Falling back to GPG verification"
+                else
+                    oidc_issuer=$(get_python_release_manager "$version" | tail -1)
+
+                    # Construct Sigstore bundle URL
+                    # Format: https://www.python.org/ftp/python/{version}/Python-{version}.tar.xz.sigstore
+                    local bundle_url
+                    bundle_url="https://www.python.org/ftp/python/${version}/$(basename "$file").sigstore"
+
+                    log_message "Attempting Sigstore verification..."
+                    log_message "  Certificate Identity: ${cert_identity}"
+                    log_message "  OIDC Issuer: ${oidc_issuer}"
+
+                    # Try Sigstore verification
+                    if download_and_verify_sigstore "$file" "$bundle_url" "$cert_identity" "$oidc_issuer"; then
+                        log_message "✓ Sigstore verification successful"
+                        return 0
+                    else
+                        log_warning "Sigstore verification failed, falling back to GPG"
+                    fi
+                fi
             else
                 log_message "Cosign not available, skipping Sigstore verification"
             fi
@@ -373,5 +454,6 @@ export -f import_gpg_keys
 export -f verify_gpg_signature
 export -f download_and_verify_gpg
 export -f verify_sigstore_signature
+export -f get_python_release_manager
 export -f download_and_verify_sigstore
 export -f verify_signature
