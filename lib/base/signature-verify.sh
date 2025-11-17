@@ -201,24 +201,33 @@ download_and_verify_gpg() {
 # ============================================================================
 # verify_sigstore_signature - Verify Sigstore signature using cosign
 #
+# Supports both bundle format and separate signature/certificate files.
+# Python uses separate .sig and .crt files, not the bundled .sigstore format.
+#
 # Arguments:
 #   $1 - File to verify
-#   $2 - Sigstore bundle file (.sigstore)
+#   $2 - Signature file (.sig) or bundle file (.sigstore)
 #   $3 - Certificate identity (e.g., release manager email)
 #   $4 - OIDC issuer URL
+#   $5 - Optional: Certificate file (.crt) if using separate files
 #
 # Returns:
 #   0 on successful verification, 1 on failure
 #
-# Example:
-#   verify_sigstore_signature "Python-3.12.0.tar.gz" "Python-3.12.0.tar.gz.sigstore" \
-#     "thomas@python.org" "https://accounts.google.com"
+# Example (bundle format):
+#   verify_sigstore_signature "file.tar.gz" "file.tar.gz.sigstore" \
+#     "user@example.org" "https://accounts.google.com"
+#
+# Example (separate files - Python format):
+#   verify_sigstore_signature "Python-3.12.0.tar.gz" "Python-3.12.0.tar.gz.sig" \
+#     "thomas@python.org" "https://accounts.google.com" "Python-3.12.0.tar.gz.crt"
 # ============================================================================
 verify_sigstore_signature() {
     local file="$1"
-    local bundle_file="$2"
+    local sig_or_bundle="$2"
     local cert_identity="$3"
     local oidc_issuer="$4"
+    local cert_file="${5:-}"
 
     # Check if cosign is available
     if ! command -v cosign >/dev/null 2>&1; then
@@ -231,26 +240,72 @@ verify_sigstore_signature() {
         return 1
     fi
 
-    if [ ! -f "$bundle_file" ]; then
-        log_error "Sigstore bundle not found: $bundle_file"
+    if [ ! -f "$sig_or_bundle" ]; then
+        log_error "Signature/bundle file not found: $sig_or_bundle"
         return 1
     fi
 
     log_message "Verifying Sigstore signature for $(basename "$file")..."
 
-    # Verify using cosign
-    if cosign verify-blob \
-        --bundle "$bundle_file" \
-        --certificate-identity "$cert_identity" \
-        --certificate-oidc-issuer "$oidc_issuer" \
-        "$file" >/dev/null 2>&1; then
+    # Determine format based on whether cert_file is provided
+    if [ -n "$cert_file" ]; then
+        # Separate signature and certificate files (Python format)
+        if [ ! -f "$cert_file" ]; then
+            log_error "Certificate file not found: $cert_file"
+            return 1
+        fi
 
-        log_message "✓ Sigstore signature verified successfully"
-        log_message "  Cert Identity: $cert_identity"
-        return 0
+        log_message "  Using separate .sig and .crt files"
+
+        # Verify using separate files
+        if cosign verify-blob \
+            --signature "$sig_or_bundle" \
+            --certificate "$cert_file" \
+            --certificate-identity "$cert_identity" \
+            --certificate-oidc-issuer "$oidc_issuer" \
+            "$file" 2>&1 | tee /tmp/cosign-verify-output.txt | grep -q "Verified OK"; then
+
+            log_message "✓ Sigstore signature verified successfully"
+            log_message "  Cert Identity: $cert_identity"
+            command rm -f /tmp/cosign-verify-output.txt
+            return 0
+        else
+            log_warning "Sigstore signature verification failed"
+
+            # Show verification output for debugging
+            if [ -f /tmp/cosign-verify-output.txt ]; then
+                log_error "Cosign verification output:"
+                command cat /tmp/cosign-verify-output.txt >&2
+                command rm -f /tmp/cosign-verify-output.txt
+            fi
+            return 1
+        fi
     else
-        log_warning "Sigstore signature verification failed"
-        return 1
+        # Bundle format (.sigstore file)
+        log_message "  Using bundled .sigstore file"
+
+        # Verify using bundle
+        if cosign verify-blob \
+            --bundle "$sig_or_bundle" \
+            --certificate-identity "$cert_identity" \
+            --certificate-oidc-issuer "$oidc_issuer" \
+            "$file" 2>&1 | tee /tmp/cosign-verify-output.txt | grep -q "Verified OK"; then
+
+            log_message "✓ Sigstore signature verified successfully"
+            log_message "  Cert Identity: $cert_identity"
+            command rm -f /tmp/cosign-verify-output.txt
+            return 0
+        else
+            log_warning "Sigstore signature verification failed"
+
+            # Show verification output for debugging
+            if [ -f /tmp/cosign-verify-output.txt ]; then
+                log_error "Cosign verification output:"
+                command cat /tmp/cosign-verify-output.txt >&2
+                command rm -f /tmp/cosign-verify-output.txt
+            fi
+            return 1
+        fi
     fi
 }
 
@@ -314,41 +369,79 @@ get_python_release_manager() {
 }
 
 # ============================================================================
-# download_and_verify_sigstore - Download Sigstore bundle and verify
+# download_and_verify_sigstore - Download Sigstore files and verify
+#
+# Supports both bundle format (.sigstore) and separate files (.sig + .crt).
+# Python uses separate .sig and .crt files.
 #
 # Arguments:
 #   $1 - File to verify
-#   $2 - Sigstore bundle URL
+#   $2 - Sigstore signature URL (can be .sigstore bundle or .sig file)
 #   $3 - Certificate identity
 #   $4 - OIDC issuer URL
+#   $5 - Optional: Certificate URL (.crt file) for separate file format
 #
 # Returns:
 #   0 on successful verification, 1 on failure
 # ============================================================================
 download_and_verify_sigstore() {
     local file="$1"
-    local bundle_url="$2"
+    local sig_url="$2"
     local cert_identity="$3"
     local oidc_issuer="$4"
+    local cert_url="${5:-}"
 
-    local bundle_file="${file}.sigstore"
+    local sig_file cert_file
 
-    # Download bundle file
-    log_message "Downloading Sigstore bundle from ${bundle_url}..."
+    # Check if using separate files (Python format) or bundle
+    if [ -n "$cert_url" ]; then
+        # Separate .sig and .crt files
+        sig_file="${file}.sig"
+        cert_file="${file}.crt"
 
-    if ! command curl -fsSL -o "$bundle_file" "$bundle_url" 2>/dev/null; then
-        log_warning "Failed to download Sigstore bundle from ${bundle_url}"
-        return 1
+        # Download signature file
+        log_message "Downloading Sigstore signature from ${sig_url}..."
+        if ! command curl -fsSL -o "$sig_file" "$sig_url" 2>/dev/null; then
+            log_warning "Failed to download Sigstore signature from ${sig_url}"
+            return 1
+        fi
+
+        # Download certificate file
+        log_message "Downloading Sigstore certificate from ${cert_url}..."
+        if ! command curl -fsSL -o "$cert_file" "$cert_url" 2>/dev/null; then
+            log_warning "Failed to download Sigstore certificate from ${cert_url}"
+            command rm -f "$sig_file"
+            return 1
+        fi
+
+        # Verify the signature with separate files
+        verify_sigstore_signature "$file" "$sig_file" "$cert_identity" "$oidc_issuer" "$cert_file"
+        local result=$?
+
+        # Clean up files
+        command rm -f "$sig_file" "$cert_file"
+
+        return $result
+    else
+        # Bundle format (.sigstore file)
+        local bundle_file="${file}.sigstore"
+
+        # Download bundle file
+        log_message "Downloading Sigstore bundle from ${sig_url}..."
+        if ! command curl -fsSL -o "$bundle_file" "$sig_url" 2>/dev/null; then
+            log_warning "Failed to download Sigstore bundle from ${sig_url}"
+            return 1
+        fi
+
+        # Verify the signature with bundle
+        verify_sigstore_signature "$file" "$bundle_file" "$cert_identity" "$oidc_issuer"
+        local result=$?
+
+        # Clean up bundle file
+        command rm -f "$bundle_file"
+
+        return $result
     fi
-
-    # Verify the signature
-    verify_sigstore_signature "$file" "$bundle_file" "$cert_identity" "$oidc_issuer"
-    local result=$?
-
-    # Clean up bundle file
-    command rm -f "$bundle_file"
-
-    return $result
 }
 
 # ============================================================================
@@ -403,17 +496,19 @@ verify_signature() {
                 else
                     oidc_issuer=$(get_python_release_manager "$version" | tail -1)
 
-                    # Construct Sigstore bundle URL
-                    # Format: https://www.python.org/ftp/python/{version}/Python-{version}.tar.xz.sigstore
-                    local bundle_url
-                    bundle_url="https://www.python.org/ftp/python/${version}/$(basename "$file").sigstore"
+                    # Construct Sigstore URLs (Python uses separate .sig and .crt files)
+                    # Format: https://www.python.org/ftp/python/{version}/Python-{version}.tar.xz.sig
+                    #         https://www.python.org/ftp/python/{version}/Python-{version}.tar.xz.crt
+                    local sig_url cert_url
+                    sig_url="https://www.python.org/ftp/python/${version}/$(basename "$file").sig"
+                    cert_url="https://www.python.org/ftp/python/${version}/$(basename "$file").crt"
 
                     log_message "Attempting Sigstore verification..."
                     log_message "  Certificate Identity: ${cert_identity}"
                     log_message "  OIDC Issuer: ${oidc_issuer}"
 
-                    # Try Sigstore verification
-                    if download_and_verify_sigstore "$file" "$bundle_url" "$cert_identity" "$oidc_issuer"; then
+                    # Try Sigstore verification with separate .sig and .crt files
+                    if download_and_verify_sigstore "$file" "$sig_url" "$cert_identity" "$oidc_issuer" "$cert_url"; then
                         log_message "✓ Sigstore verification successful"
                         return 0
                     else
