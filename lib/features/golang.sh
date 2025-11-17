@@ -46,6 +46,9 @@ source /tmp/build-scripts/features/lib/checksum-fetch.sh
 source /tmp/build-scripts/base/checksum-verification.sh
 source /tmp/build-scripts/base/cache-utils.sh
 
+# Source path utilities for secure PATH management
+source /tmp/build-scripts/base/path-utils.sh
+
 # ============================================================================
 # Template Loading Helper
 # ============================================================================
@@ -267,7 +270,10 @@ export GOROOT=/usr/local/go
 export GOPATH="/cache/go"
 export GOCACHE="/cache/go-build"
 export GOMODCACHE="/cache/go-mod"
-export PATH="/usr/local/go/bin:${GOPATH}/bin:$PATH"
+
+# Add Go binaries to PATH with security validation
+safe_add_to_path "${GOPATH}/bin"
+safe_add_to_path "/usr/local/go/bin"
 
 # Go proxy settings for faster module downloads
 export GOPROXY="https://proxy.golang.org,direct"
@@ -478,11 +484,22 @@ command cat > /etc/container/first-startup/30-go-setup.sh << 'EOF'
 #!/bin/bash
 # Go development environment setup
 
+# Source base utilities for secure PATH management
+if [ -f /opt/container-runtime/base/logging.sh ]; then
+    source /opt/container-runtime/base/logging.sh
+fi
+if [ -f /opt/container-runtime/base/path-utils.sh ]; then
+    source /opt/container-runtime/base/path-utils.sh
+fi
+
 # Set up Go environment
 export GOPATH="/cache/go"
 export GOCACHE="/cache/go-build"
 export GOMODCACHE="/cache/go-mod"
-export PATH="/usr/local/go/bin:${GOPATH}/bin:$PATH"
+
+# Add Go binaries to PATH with security validation
+safe_add_to_path "${GOPATH}/bin"
+safe_add_to_path "/usr/local/go/bin"
 
 # Check for Go projects
 if [ -f ${WORKING_DIR}/go.mod ]; then

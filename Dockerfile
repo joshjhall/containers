@@ -387,8 +387,11 @@ RUN chmod +x /usr/local/bin/healthcheck
 COPY bin/detect-case-sensitivity.sh /usr/local/bin/detect-case-sensitivity.sh
 RUN chmod +x /usr/local/bin/detect-case-sensitivity.sh
 
-# Clean up build scripts but keep runtime scripts
+# Clean up build scripts but keep runtime scripts and base utilities
 RUN cp -r /tmp/build-scripts/runtime /opt/container-runtime && \
+    mkdir -p /opt/container-runtime/base && \
+    cp /tmp/build-scripts/base/path-utils.sh /opt/container-runtime/base/ && \
+    cp /tmp/build-scripts/base/logging.sh /opt/container-runtime/base/ && \
     chmod -R +rx /opt/container-runtime && \
     rm -rf /tmp/build-scripts
 
