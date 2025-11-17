@@ -158,10 +158,19 @@ fi
 # Add useful helper functions to user's bashrc
 command cat >> /home/"${USERNAME}"/.bashrc << 'EOF'
 
+# Source base utilities for secure PATH management
+if [ -f /opt/container-runtime/base/path-utils.sh ]; then
+    source /opt/container-runtime/base/path-utils.sh
+fi
+
 # Node modules in PATH helper
 add_node_modules_to_path() {
     if [[ -d "$PWD/node_modules/.bin" ]]; then
-        export PATH="$PWD/node_modules/.bin:${PATH##*$PWD/node_modules/.bin:}"
+        if command -v safe_add_to_path >/dev/null 2>&1; then
+            safe_add_to_path "$PWD/node_modules/.bin" 2>/dev/null || export PATH="$PWD/node_modules/.bin:${PATH##*$PWD/node_modules/.bin:}"
+        else
+            export PATH="$PWD/node_modules/.bin:${PATH##*$PWD/node_modules/.bin:}"
+        fi
     fi
 }
 

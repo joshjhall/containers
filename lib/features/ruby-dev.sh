@@ -24,6 +24,9 @@ source /tmp/build-scripts/base/feature-header.sh
 # Source apt utilities for reliable package installation
 source /tmp/build-scripts/base/apt-utils.sh
 
+# Source path utilities for secure PATH management
+source /tmp/build-scripts/base/path-utils.sh
+
 # Start logging
 log_feature_start "Ruby Development Tools"
 
@@ -72,7 +75,7 @@ log_message "Installing Ruby development tools via gem..."
 # Set gem paths
 export GEM_HOME="/cache/ruby/gems"
 export GEM_PATH="/cache/ruby/gems"
-export PATH="${GEM_HOME}/bin:$PATH"
+safe_add_to_path "${GEM_HOME}/bin"
 
 # Helper function to install gems as user
 gem_install_as_user() {

@@ -39,6 +39,9 @@ source /tmp/build-scripts/base/cache-utils.sh
 # Source apt utilities for reliable package installation
 source /tmp/build-scripts/base/apt-utils.sh
 
+# Source path utilities for secure PATH management
+source /tmp/build-scripts/base/path-utils.sh
+
 # Start logging
 log_feature_start "Cloudflare Tools"
 
@@ -142,7 +145,7 @@ create_cache_directories "$NPM_CACHE_DIR" "$NPM_PREFIX"
     bash -c "install -d -m 0755 -o '${USER_UID}' -g '${USER_GID}' '$NPM_CACHE_DIR' && install -d -m 0755 -o '${USER_UID}' -g '${USER_GID}' '$NPM_PREFIX'"
 
 # Also add to system-wide PATH before checking
-export PATH="${NPM_PREFIX}/bin:$PATH"
+safe_add_to_path "${NPM_PREFIX}/bin"
 
 # Check if wrangler is already installed
 if command -v wrangler &> /dev/null; then
@@ -154,12 +157,22 @@ else
     # Install wrangler globally as the user
     log_command "Installing wrangler globally" \
         su - "${USERNAME}" -c "
+            # Source path utilities for secure PATH management
+            if [ -f /tmp/build-scripts/base/path-utils.sh ]; then
+                source /tmp/build-scripts/base/path-utils.sh
+            fi
+
             export npm_config_cache='${NPM_CACHE_DIR}'
             export npm_config_prefix='${NPM_PREFIX}'
-            export PATH='${NPM_PREFIX}/bin:\$PATH'
 
-            # Ensure npm is in PATH (from Node.js installation)
-            export PATH='/usr/bin:\$PATH'
+            # Securely add to PATH
+            if command -v safe_add_to_path >/dev/null 2>&1; then
+                safe_add_to_path '${NPM_PREFIX}/bin'
+                safe_add_to_path '/usr/bin'
+            else
+                export PATH='${NPM_PREFIX}/bin:\$PATH'
+                export PATH='/usr/bin:\$PATH'
+            fi
 
             npm install -g wrangler
 
@@ -170,12 +183,9 @@ else
         "
 fi
 
-# Also add to system-wide PATH
-log_command "Adding npm global to system PATH" \
-    bash -c "echo 'export PATH=\"${NPM_PREFIX}/bin:\$PATH\"' > /etc/profile.d/npm-global.sh"
-
-log_command "Setting npm profile script permissions" \
-    chmod +x /etc/profile.d/npm-global.sh
+# Also add to system-wide PATH using safe_add_to_path
+log_message "Adding npm global to system PATH..."
+safe_add_to_path "${NPM_PREFIX}/bin"
 
 # ============================================================================
 # Cloudflared Installation
@@ -484,7 +494,7 @@ log_command "Setting test-cloudflare permissions" \
 log_message "Verifying Cloudflare tools installation..."
 
 # Need to export PATH for verification
-export PATH="${NPM_PREFIX}/bin:$PATH"
+safe_add_to_path "${NPM_PREFIX}/bin"
 
 if command -v wrangler &> /dev/null; then
     log_command "Checking wrangler version" \

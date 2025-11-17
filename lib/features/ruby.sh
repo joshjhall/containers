@@ -184,7 +184,8 @@ EOF
 # Set up gem environment
 export GEM_HOME="${GEM_HOME_DIR}"
 export GEM_PATH="${GEM_HOME_DIR}"
-export PATH="/usr/local/bin:${GEM_HOME_DIR}/bin:$PATH"
+safe_add_to_path "/usr/local/bin"
+safe_add_to_path "${GEM_HOME_DIR}/bin"
 
 # Install bundler as the user
 log_command "Installing bundler" \
@@ -222,6 +223,14 @@ if [[ $- != *i* ]]; then
     return 0
 fi
 
+# Source base utilities for secure PATH management
+if [ -f /opt/container-runtime/base/logging.sh ]; then
+    source /opt/container-runtime/base/logging.sh
+fi
+if [ -f /opt/container-runtime/base/path-utils.sh ]; then
+    source /opt/container-runtime/base/path-utils.sh
+fi
+
 # Ruby gem cache locations
 export GEM_HOME="/cache/ruby/gems"
 export GEM_PATH="/cache/ruby/gems"
@@ -229,7 +238,11 @@ export BUNDLE_PATH="/cache/ruby/bundle"
 
 # Only add gem bin path if not already there
 if [ -d "${GEM_HOME}/bin" ] && [[ ":$PATH:" != *":${GEM_HOME}/bin:"* ]]; then
-    export PATH="${GEM_HOME}/bin:$PATH"
+    if command -v safe_add_to_path >/dev/null 2>&1; then
+        safe_add_to_path "${GEM_HOME}/bin" 2>/dev/null || export PATH="${GEM_HOME}/bin:$PATH"
+    else
+        export PATH="${GEM_HOME}/bin:$PATH"
+    fi
 fi
 
 # Note: We leave set +u and set +e in place for interactive shells

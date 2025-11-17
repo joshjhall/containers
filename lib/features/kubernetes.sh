@@ -55,6 +55,9 @@ source /tmp/build-scripts/features/lib/checksum-fetch.sh
 
 # Source secure temp directory utilities
 
+# Source path utilities for secure PATH management
+source /tmp/build-scripts/base/path-utils.sh
+
 # Start logging
 log_feature_start "Kubernetes Tools"
 
@@ -369,8 +372,20 @@ if command -v kubectl &> /dev/null; then
     command rm -f "$COMPLETION_FILE"
 fi
 
+# Source base utilities for secure PATH management
+if [ -f /opt/container-runtime/base/logging.sh ]; then
+    source /opt/container-runtime/base/logging.sh
+fi
+if [ -f /opt/container-runtime/base/path-utils.sh ]; then
+    source /opt/container-runtime/base/path-utils.sh
+fi
+
 # krew PATH
-export PATH="${PATH}:${HOME}/.krew/bin"
+if command -v safe_add_to_path >/dev/null 2>&1; then
+    safe_add_to_path "${HOME}/.krew/bin" 2>/dev/null || export PATH="${PATH}:${HOME}/.krew/bin"
+else
+    export PATH="${PATH}:${HOME}/.krew/bin"
+fi
 
 # ----------------------------------------------------------------------------
 # k-logs - Stream logs from all pods matching a label

@@ -47,6 +47,9 @@ source /tmp/build-scripts/base/version-resolution.sh
 source /tmp/build-scripts/base/checksum-verification.sh
 source /tmp/build-scripts/base/cache-utils.sh
 
+# Source path utilities for secure PATH management
+source /tmp/build-scripts/base/path-utils.sh
+
 # ============================================================================
 # Version Configuration
 # ============================================================================
@@ -248,8 +251,20 @@ export YARN_CACHE_DIR="/cache/yarn"
 export PNPM_STORE_DIR="/cache/pnpm"
 export NPM_GLOBAL_DIR="/cache/npm-global"
 
+# Source base utilities for secure PATH management
+if [ -f /opt/container-runtime/base/logging.sh ]; then
+    source /opt/container-runtime/base/logging.sh
+fi
+if [ -f /opt/container-runtime/base/path-utils.sh ]; then
+    source /opt/container-runtime/base/path-utils.sh
+fi
+
 # Add global package directories to PATH
-export PATH="${NPM_GLOBAL_DIR}/bin:$PATH"
+if command -v safe_add_to_path >/dev/null 2>&1; then
+    safe_add_to_path "${NPM_GLOBAL_DIR}/bin" 2>/dev/null || export PATH="${NPM_GLOBAL_DIR}/bin:$PATH"
+else
+    export PATH="${NPM_GLOBAL_DIR}/bin:$PATH"
+fi
 
 # Package manager cache environment variables
 export npm_config_cache="${NPM_CACHE_DIR}"

@@ -53,11 +53,22 @@ if command -v write_bashrc_content &>/dev/null; then
 # Base PATH setup
 # This is sourced by both interactive and non-interactive shells
 
+# Source path utilities for secure PATH management
+if [ -f /opt/container-runtime/base/logging.sh ]; then
+    source /opt/container-runtime/base/logging.sh
+fi
+if [ -f /opt/container-runtime/base/path-utils.sh ]; then
+    source /opt/container-runtime/base/path-utils.sh
+fi
+
 # Start with clean system paths
 export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
-# Add user's local bin if it exists
-if [ -d "$HOME/.local/bin" ]; then
+# Add user's local bin if it exists (with security validation)
+if command -v safe_add_to_path >/dev/null 2>&1; then
+    safe_add_to_path "$HOME/.local/bin" 2>/dev/null || true
+elif [ -d "$HOME/.local/bin" ]; then
+    # Fallback if safe_add_to_path not available
     export PATH="$HOME/.local/bin:$PATH"
 fi
 
@@ -69,11 +80,22 @@ else
 # Base PATH setup
 # This is sourced by both interactive and non-interactive shells
 
+# Source path utilities for secure PATH management
+if [ -f /opt/container-runtime/base/logging.sh ]; then
+    source /opt/container-runtime/base/logging.sh
+fi
+if [ -f /opt/container-runtime/base/path-utils.sh ]; then
+    source /opt/container-runtime/base/path-utils.sh
+fi
+
 # Start with clean system paths
 export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
-# Add user's local bin if it exists
-if [ -d "$HOME/.local/bin" ]; then
+# Add user's local bin if it exists (with security validation)
+if command -v safe_add_to_path >/dev/null 2>&1; then
+    safe_add_to_path "$HOME/.local/bin" 2>/dev/null || true
+elif [ -d "$HOME/.local/bin" ]; then
+    # Fallback if safe_add_to_path not available
     export PATH="$HOME/.local/bin:$PATH"
 fi
 

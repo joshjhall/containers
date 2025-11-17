@@ -54,6 +54,9 @@ source /tmp/build-scripts/base/feature-header.sh
 # Source apt utilities for reliable package installation
 source /tmp/build-scripts/base/apt-utils.sh
 
+# Source path utilities for secure PATH management
+source /tmp/build-scripts/base/path-utils.sh
+
 # Start logging
 log_feature_start "Golang Development Tools"
 
@@ -103,7 +106,8 @@ log_message "Installing Go development tools via go install..."
 export GOPATH="/cache/go"
 export GOCACHE="/cache/go-build"
 export GOMODCACHE="/cache/go-mod"
-export PATH="/usr/local/go/bin:${GOPATH}/bin:${PATH}"
+safe_add_to_path "/usr/local/go/bin"
+safe_add_to_path "${GOPATH}/bin"
 
 # Core development tools
 log_message "Installing core development tools..."

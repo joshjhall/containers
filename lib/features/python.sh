@@ -262,15 +262,27 @@ log_command "Installing pipx" \
     su - "${USERNAME}" -c "export PIP_CACHE_DIR='${PIP_CACHE_DIR}' && /usr/local/bin/python3 -m pip install --no-cache-dir pipx"
 
 # Ensure pipx bin directory is in PATH
-export PATH="${PIPX_BIN_DIR}:$PATH"
+safe_add_to_path "${PIPX_BIN_DIR}"
 
 # Use pipx to install Poetry with pinned version
 POETRY_VERSION="2.2.1"
 log_command "Installing Poetry ${POETRY_VERSION} via pipx" \
     su - "${USERNAME}" -c "
+    # Source path utilities for secure PATH management
+    if [ -f /tmp/build-scripts/base/path-utils.sh ]; then
+        source /tmp/build-scripts/base/path-utils.sh
+    fi
+
     export PIPX_HOME='${PIPX_HOME}'
     export PIPX_BIN_DIR='${PIPX_BIN_DIR}'
-    export PATH='${PIPX_BIN_DIR}:/usr/local/bin:$PATH'
+
+    # Securely add to PATH
+    if command -v safe_add_to_path >/dev/null 2>&1; then
+        safe_add_to_path '${PIPX_BIN_DIR}'
+        safe_add_to_path '/usr/local/bin'
+    else
+        export PATH='${PIPX_BIN_DIR}:/usr/local/bin:$PATH'
+    fi
 
     /usr/local/bin/python3 -m pipx install poetry==${POETRY_VERSION}
 
@@ -305,11 +317,23 @@ export PIP_DISABLE_PIP_VERSION_CHECK=1
 export POETRY_CACHE_DIR="/cache/poetry"
 export POETRY_VIRTUALENVS_IN_PROJECT=true
 
+# Source base utilities for secure PATH management
+if [ -f /opt/container-runtime/base/logging.sh ]; then
+    source /opt/container-runtime/base/logging.sh
+fi
+if [ -f /opt/container-runtime/base/path-utils.sh ]; then
+    source /opt/container-runtime/base/path-utils.sh
+fi
+
 # pipx configuration
 if [ -d /opt/pipx ] && [[ ":$PATH:" != *":/opt/pipx/bin:"* ]]; then
     export PIPX_HOME="/opt/pipx"
     export PIPX_BIN_DIR="/opt/pipx/bin"
-    export PATH="$PIPX_BIN_DIR:$PATH"
+    if command -v safe_add_to_path >/dev/null 2>&1; then
+        safe_add_to_path "$PIPX_BIN_DIR" 2>/dev/null || export PATH="$PIPX_BIN_DIR:$PATH"
+    else
+        export PATH="$PIPX_BIN_DIR:$PATH"
+    fi
 fi
 PYTHON_BASHRC_EOF
 
@@ -333,11 +357,20 @@ log_command "Creating startup directory" \
 
 command cat > /etc/container/first-startup/10-poetry-install.sh << 'PYTHON_POETRY_EOF'
 #!/bin/bash
+# Source base utilities for secure PATH management
+if [ -f /opt/container-runtime/base/path-utils.sh ]; then
+    source /opt/container-runtime/base/path-utils.sh
+fi
+
 # Install Python dependencies if pyproject.toml exists
 if [ -f ${WORKING_DIR}/pyproject.toml ]; then
     echo "Installing Poetry dependencies..."
     cd ${WORKING_DIR}
-    export PATH="/opt/pipx/bin:$PATH"
+    if command -v safe_add_to_path >/dev/null 2>&1; then
+        safe_add_to_path "/opt/pipx/bin" 2>/dev/null || export PATH="/opt/pipx/bin:$PATH"
+    else
+        export PATH="/opt/pipx/bin:$PATH"
+    fi
     poetry install --no-interaction || echo "Poetry install failed, continuing..."
 fi
 

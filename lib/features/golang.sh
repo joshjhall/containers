@@ -260,6 +260,14 @@ if [[ $- != *i* ]]; then
     return 0
 fi
 
+# Source base utilities for secure PATH management
+if [ -f /opt/container-runtime/base/logging.sh ]; then
+    source /opt/container-runtime/base/logging.sh
+fi
+if [ -f /opt/container-runtime/base/path-utils.sh ]; then
+    source /opt/container-runtime/base/path-utils.sh
+fi
+
 # Defensive programming - check for required commands
 _check_command() {
     command -v "$1" >/dev/null 2>&1
@@ -272,8 +280,13 @@ export GOCACHE="/cache/go-build"
 export GOMODCACHE="/cache/go-mod"
 
 # Add Go binaries to PATH with security validation
-safe_add_to_path "${GOPATH}/bin"
-safe_add_to_path "/usr/local/go/bin"
+if command -v safe_add_to_path >/dev/null 2>&1; then
+    safe_add_to_path "${GOPATH}/bin" 2>/dev/null || export PATH="${GOPATH}/bin:$PATH"
+    safe_add_to_path "/usr/local/go/bin" 2>/dev/null || export PATH="/usr/local/go/bin:$PATH"
+else
+    # Fallback if safe_add_to_path not available
+    export PATH="${GOPATH}/bin:/usr/local/go/bin:$PATH"
+fi
 
 # Go proxy settings for faster module downloads
 export GOPROXY="https://proxy.golang.org,direct"
@@ -498,17 +511,22 @@ export GOCACHE="/cache/go-build"
 export GOMODCACHE="/cache/go-mod"
 
 # Add Go binaries to PATH with security validation
-safe_add_to_path "${GOPATH}/bin"
-safe_add_to_path "/usr/local/go/bin"
+if command -v safe_add_to_path >/dev/null 2>&1; then
+    safe_add_to_path "${GOPATH}/bin" 2>/dev/null || export PATH="${GOPATH}/bin:$PATH"
+    safe_add_to_path "/usr/local/go/bin" 2>/dev/null || export PATH="/usr/local/go/bin:$PATH"
+else
+    # Fallback if safe_add_to_path not available
+    export PATH="${GOPATH}/bin:/usr/local/go/bin:$PATH"
+fi
 
-# Check for Go projects
-if [ -f ${WORKING_DIR}/go.mod ]; then
+# Check for Go projects (only if WORKING_DIR is set)
+if [ -n "${WORKING_DIR:-}" ] && [ -f "${WORKING_DIR}/go.mod" ]; then
     echo "=== Go Project Detected ==="
     echo "Go $(go version | awk '{print $3}') is installed"
     echo "GOPATH: ${GOPATH}"
-    echo "Module: $(head -1 ${WORKING_DIR}/go.mod | awk '{print $2}')"
+    echo "Module: $(head -1 "${WORKING_DIR}/go.mod" | awk '{print $2}')"
 
-    cd ${WORKING_DIR}
+    cd "${WORKING_DIR}"
 
     # Download dependencies
     echo "Downloading Go module dependencies..."

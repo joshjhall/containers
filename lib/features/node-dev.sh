@@ -27,6 +27,9 @@ source /tmp/build-scripts/base/feature-header.sh
 # Source apt utilities for reliable package installation
 source /tmp/build-scripts/base/apt-utils.sh
 
+# Source path utilities for secure PATH management
+source /tmp/build-scripts/base/path-utils.sh
+
 # Start logging
 log_feature_start "Node.js Development Tools"
 
@@ -84,7 +87,7 @@ log_message "Installing Node.js development tools..."
 
 # Set npm global directory from cache
 export NPM_GLOBAL_DIR="/cache/npm-global"
-export PATH="${NPM_GLOBAL_DIR}/bin:$PATH"
+safe_add_to_path "${NPM_GLOBAL_DIR}/bin"
 
 # Configure npm to use global directory
 log_command "Configuring npm global directory" \

@@ -14,6 +14,12 @@
 # Functions:
 #   add_to_system_path - Add a directory to system PATH in /etc/environment
 
+# Prevent multiple sourcing
+if [ -n "${PATH_UTILS_LOADED:-}" ]; then
+    return 0
+fi
+readonly PATH_UTILS_LOADED=1
+
 set -euo pipefail
 
 # Default system PATH if /etc/environment doesn't exist
