@@ -70,6 +70,16 @@ apt_update
 log_message "Installing development tools grouped by category..."
 
 # ----------------------------------------------------------------------------
+# Build Tools (required for compiling tools from source)
+# ----------------------------------------------------------------------------
+log_message "Installing build tools for development..."
+apt_install \
+    build-essential \
+    pkg-config \
+    libssl-dev \
+    libffi-dev
+
+# ----------------------------------------------------------------------------
 # Version Control Extras
 # ----------------------------------------------------------------------------
 log_message "Installing version control tools..."
