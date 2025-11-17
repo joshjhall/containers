@@ -336,11 +336,7 @@ verify_signature() {
             log_message "Python ${version} supports Sigstore, trying Sigstore first..."
 
             if command -v cosign >/dev/null 2>&1; then
-                # TODO: Implement Sigstore verification for Python 3.11.0+
-                # Will need to:
-                # 1. Download .sigstore bundle from https://www.python.org/ftp/python/${version}/
-                # 2. Determine cert identity and OIDC issuer based on version/release manager
-                # 3. Call download_and_verify_sigstore() with proper parameters
+                # Sigstore verification not yet implemented (tracked in issue #22)
                 log_message "Sigstore available but requires release manager configuration"
                 log_message "Falling back to GPG verification"
             else
