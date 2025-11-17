@@ -348,6 +348,84 @@ test_startup_metrics_output() {
     fi
 }
 
+# Test: Exit handler function exists
+test_exit_handler_function() {
+    # Check that cleanup_on_exit function is defined
+    if grep -q "^cleanup_on_exit()" "$PROJECT_ROOT/lib/runtime/entrypoint.sh"; then
+        assert_true true "cleanup_on_exit function is defined"
+    else
+        assert_true false "cleanup_on_exit function not found"
+    fi
+
+    # Check that function captures exit code
+    if grep -q "local exit_code=\$?" "$PROJECT_ROOT/lib/runtime/entrypoint.sh"; then
+        assert_true true "Exit code is captured"
+    else
+        assert_true false "Exit code capture not found"
+    fi
+
+    # Check that exit code is preserved
+    if grep -q "exit \$exit_code" "$PROJECT_ROOT/lib/runtime/entrypoint.sh"; then
+        assert_true true "Exit code is preserved"
+    else
+        assert_true false "Exit code preservation not found"
+    fi
+}
+
+# Test: Trap handlers are configured
+test_trap_handlers() {
+    # Check for trap handler setup
+    if grep -q "trap cleanup_on_exit EXIT TERM INT" "$PROJECT_ROOT/lib/runtime/entrypoint.sh"; then
+        assert_true true "Trap handlers are configured for EXIT TERM INT"
+    else
+        assert_true false "Trap handlers not configured"
+    fi
+}
+
+# Test: Exit handler metrics cleanup
+test_exit_handler_metrics_cleanup() {
+    # Check that metrics directory is checked
+    if grep -q "METRICS_DIR=" "$PROJECT_ROOT/lib/runtime/entrypoint.sh"; then
+        assert_true true "Metrics directory is defined in cleanup"
+    else
+        assert_true false "Metrics directory not defined in cleanup"
+    fi
+
+    # Check for sync command to flush metrics
+    if grep -q "sync" "$PROJECT_ROOT/lib/runtime/entrypoint.sh"; then
+        assert_true true "Sync command is used to flush data"
+    else
+        assert_true false "Sync command not found"
+    fi
+}
+
+# Test: Exit handler logging
+test_exit_handler_logging() {
+    # Check for shutdown message
+    if grep -q "Container shutting down" "$PROJECT_ROOT/lib/runtime/entrypoint.sh"; then
+        assert_true true "Shutdown message is logged"
+    else
+        assert_true false "Shutdown message not found"
+    fi
+
+    # Check for completion message
+    if grep -q "Shutdown complete" "$PROJECT_ROOT/lib/runtime/entrypoint.sh"; then
+        assert_true true "Completion message is logged"
+    else
+        assert_true false "Completion message not found"
+    fi
+}
+
+# Test: Exit handler error handling
+test_exit_handler_error_handling() {
+    # Check that sync errors are handled gracefully
+    if grep -q "sync.*|| true" "$PROJECT_ROOT/lib/runtime/entrypoint.sh"; then
+        assert_true true "Sync errors are handled gracefully"
+    else
+        assert_true false "Sync error handling not found"
+    fi
+}
+
 # Run tests with setup/teardown
 run_test_with_setup() {
     local test_function="$1"
@@ -373,6 +451,11 @@ run_test_with_setup test_startup_metrics_file "Startup metrics file creation"
 run_test_with_setup test_startup_metrics_format "Startup metrics Prometheus format"
 run_test_with_setup test_startup_duration_calculation "Startup duration calculation"
 run_test_with_setup test_startup_metrics_output "Startup metrics output message"
+run_test_with_setup test_exit_handler_function "Exit handler function definition"
+run_test_with_setup test_trap_handlers "Trap handlers configuration"
+run_test_with_setup test_exit_handler_metrics_cleanup "Exit handler metrics cleanup"
+run_test_with_setup test_exit_handler_logging "Exit handler logging messages"
+run_test_with_setup test_exit_handler_error_handling "Exit handler error handling"
 
 # Generate test report
 generate_report

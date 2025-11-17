@@ -10,6 +10,7 @@
 #   for both first-time and subsequent container starts.
 #
 # Features:
+#   - Graceful shutdown with cleanup handlers (EXIT, TERM, INT signals)
 #   - Resource limits (file descriptors, processes, core dumps)
 #   - First-time setup script execution (run once per container)
 #   - Every-boot script execution (run on each start)
@@ -26,6 +27,39 @@
 #   The first-run marker persists across restarts but not image rebuilds.
 #
 set -euo pipefail
+
+# ============================================================================
+# Exit Handler - Graceful Shutdown
+# ============================================================================
+# Cleanup function called on container exit/termination
+# Ensures proper cleanup of resources, metrics, and logs
+cleanup_on_exit() {
+    local exit_code=$?
+
+    echo "=== Container shutting down (exit code: $exit_code) ==="
+
+    # Flush metrics if they exist
+    METRICS_DIR="/var/run/container-metrics"
+    if [ -d "$METRICS_DIR" ]; then
+        # Ensure all metrics are written to disk
+        sync 2>/dev/null || true
+        echo "✓ Metrics flushed"
+    fi
+
+    # Sync any pending filesystem writes
+    sync 2>/dev/null || true
+
+    echo "✓ Shutdown complete"
+
+    # Preserve original exit code
+    exit $exit_code
+}
+
+# Set up trap handlers for graceful shutdown
+# EXIT: Normal script exit
+# TERM: Termination signal (docker stop)
+# INT: Interrupt signal (Ctrl+C)
+trap cleanup_on_exit EXIT TERM INT
 
 # ============================================================================
 # Startup Time Tracking
