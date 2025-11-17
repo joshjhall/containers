@@ -195,6 +195,21 @@ log_message "R cache directory: ${R_CACHE_DIR}"
 if [ "${CLEANUP_BUILD_DEPS}" = "true" ]; then
     log_message "Removing build dependencies (production build)..."
 
+    # Mark runtime libraries as manually installed to prevent autoremove from removing them
+    log_command "Marking runtime libraries as manually installed" \
+        apt-mark manual \
+            libcurl4 \
+            libxml2 \
+            libfontconfig1 \
+            libharfbuzz0b \
+            libfribidi0 \
+            libfreetype6 \
+            libpng16-16 \
+            libtiff6 \
+            libjpeg62-turbo \
+            libcairo2 \
+            libssl3 2>/dev/null || true
+
     # Remove build dependencies for R package compilation
     # Note: We keep r-base-dev as some R packages may need it at runtime
     # We also keep ca-certificates, wget, gnupg, and dirmngr for runtime operations
@@ -212,6 +227,7 @@ if [ "${CLEANUP_BUILD_DEPS}" = "true" ]; then
             libjpeg-dev \
             libcairo2-dev || true  # Don't fail if some packages aren't installed
 
+    # Now safe to remove orphaned dependencies (runtime libs are marked manual)
     log_command "Removing orphaned dependencies" \
         apt-get autoremove -y
 

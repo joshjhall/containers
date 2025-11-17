@@ -186,6 +186,19 @@ log_command "Cleaning up build directory" \
 if [ "${CLEANUP_BUILD_DEPS}" = "true" ]; then
     log_message "Removing build dependencies (production build)..."
 
+    # Mark runtime libraries as manually installed to prevent autoremove from removing them
+    log_command "Marking runtime libraries as manually installed" \
+        apt-mark manual \
+            libgdbm6 \
+            libyaml-0-2 \
+            libreadline8 \
+            zlib1g \
+            libncurses6 \
+            libncursesw6 \
+            libffi8 \
+            libssl3 \
+            libdb5.3 2>/dev/null || true
+
     # Remove build dependencies we installed earlier
     # Note: We keep wget and ca-certificates as they may be needed for runtime operations
     log_command "Removing build packages" \
@@ -203,8 +216,7 @@ if [ "${CLEANUP_BUILD_DEPS}" = "true" ]; then
             libdb-dev \
             uuid-dev || true  # Don't fail if some packages aren't installed
 
-    # Keep libgdbm6 as it's a runtime library, not just a dev package
-
+    # Now safe to remove orphaned dependencies (runtime libs are marked manual)
     log_command "Removing orphaned dependencies" \
         apt-get autoremove -y
 

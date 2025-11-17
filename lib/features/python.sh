@@ -192,6 +192,20 @@ log_command "Updating library cache" \
 if [ "${CLEANUP_BUILD_DEPS}" = "true" ]; then
     log_message "Removing build dependencies (production build)..."
 
+    # Mark runtime libraries as manually installed to prevent autoremove from removing them
+    log_command "Marking runtime libraries as manually installed" \
+        apt-mark manual \
+            libbz2-1.0 \
+            libffi8 \
+            libgdbm6 \
+            liblzma5 \
+            libncurses6 \
+            libncursesw6 \
+            libreadline8 \
+            libsqlite3-0 \
+            libssl3 \
+            zlib1g 2>/dev/null || true
+
     # Remove build dependencies we installed earlier
     # Note: We keep wget and ca-certificates as they may be needed for runtime operations
     log_command "Removing build packages" \
@@ -213,6 +227,7 @@ if [ "${CLEANUP_BUILD_DEPS}" = "true" ]; then
             lzma \
             lzma-dev || true  # Don't fail if some packages aren't installed
 
+    # Now safe to remove orphaned dependencies (runtime libs are marked manual)
     log_command "Removing orphaned dependencies" \
         apt-get autoremove -y
 
