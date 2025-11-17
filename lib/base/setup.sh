@@ -93,6 +93,21 @@ command mv zoxide /usr/local/bin/
 chmod +x /usr/local/bin/zoxide
 cd /
 
+# ============================================================================
+# Cosign Installation - Sigstore signature verification
+# ============================================================================
+echo "=== Installing cosign ==="
+COSIGN_VERSION="2.4.1"
+cd /tmp
+if [ "$ARCH" = "amd64" ]; then
+    command curl -fsSL "https://github.com/sigstore/cosign/releases/download/v${COSIGN_VERSION}/cosign-linux-amd64" -o cosign
+elif [ "$ARCH" = "arm64" ]; then
+    command curl -fsSL "https://github.com/sigstore/cosign/releases/download/v${COSIGN_VERSION}/cosign-linux-arm64" -o cosign
+fi
+command mv cosign /usr/local/bin/
+chmod +x /usr/local/bin/cosign
+cd /
+
 # Note: Python packages are installed via system packages to comply with PEP 668
 # pipx will be used for installing Python applications in isolated environments
 
