@@ -33,8 +33,9 @@ apt_retry apt-get upgrade -y
 echo "=== Installing essential system packages ==="
 
 # Install essential system packages
+# Note: build-essential, pkg-config, libssl-dev, libffi-dev removed from base
+# Language features (python, ruby, r) install these as needed and clean up in production
 apt_install \
-    build-essential \
     make \
     sudo \
     ca-certificates \
@@ -47,9 +48,6 @@ apt_install \
     gnupg \
     locales \
     lsb-release \
-    pkg-config \
-    libssl-dev \
-    libffi-dev \
     jq \
     shellcheck \
     unzip \
