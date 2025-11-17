@@ -278,8 +278,8 @@ log_command "Installing Poetry ${POETRY_VERSION} via pipx" \
 
     # Securely add to PATH
     if command -v safe_add_to_path >/dev/null 2>&1; then
-        safe_add_to_path '${PIPX_BIN_DIR}'
-        safe_add_to_path '/usr/local/bin'
+        safe_add_to_path '${PIPX_BIN_DIR}' 2>/dev/null || export PATH='${PIPX_BIN_DIR}:$PATH'
+        safe_add_to_path '/usr/local/bin' 2>/dev/null || export PATH='/usr/local/bin:$PATH'
     else
         export PATH='${PIPX_BIN_DIR}:/usr/local/bin:$PATH'
     fi
