@@ -162,21 +162,21 @@ apt_install_conditional() {
     local min_version="$1"
     local max_version="$2"
     shift 2
-    local packages="$*"
+    local packages=("$@")
 
     local current_version
     current_version=$(get_debian_major_version)
 
     if [ "$current_version" = "unknown" ]; then
-        echo "⚠ Warning: Could not determine Debian version, skipping conditional packages: $packages"
+        echo "⚠ Warning: Could not determine Debian version, skipping conditional packages: ${packages[*]}"
         return 0
     fi
 
     if [ "$current_version" -ge "$min_version" ] && [ "$current_version" -le "$max_version" ]; then
-        echo "Installing version-specific packages for Debian $current_version: $packages"
-        apt_install "$packages"
+        echo "Installing version-specific packages for Debian $current_version: ${packages[*]}"
+        apt_install "${packages[@]}"
     else
-        echo "Skipping packages (not needed for Debian $current_version): $packages"
+        echo "Skipping packages (not needed for Debian $current_version): ${packages[*]}"
     fi
 }
 
