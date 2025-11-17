@@ -91,6 +91,14 @@ RUN chmod +x /tmp/build-scripts/features/*.sh /tmp/build-scripts/base/*.sh
 # ============================================================================
 
 # Python + Python development tools
+
+# ============================================================================
+# LANGUAGES (Production Runtime)
+# ============================================================================
+# NOTE: Language base runtimes install and may clean up build dependencies
+#       in production builds. Dev tools are installed LAST to prevent removal.
+# ============================================================================
+
 ARG INCLUDE_PYTHON=false
 ARG INCLUDE_PYTHON_DEV=false
 ARG PYTHON_VERSION=3.14.0
@@ -111,19 +119,11 @@ RUN --mount=type=bind,source=.,target=/build_context \
     cp /build_context/requirements.txt /tmp/python-project-files/; \
     fi; \
     fi
-
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     if [ "${INCLUDE_PYTHON}" = "true" ] || [ "${INCLUDE_PYTHON_DEV}" = "true" ]; then \
     PYTHON_VERSION=${PYTHON_VERSION} /tmp/build-scripts/features/python.sh; \
     fi
-
-RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
-    --mount=type=cache,target=/var/lib/apt,sharing=locked \
-    if [ "${INCLUDE_PYTHON_DEV}" = "true" ]; then \
-    /tmp/build-scripts/features/python-dev.sh; \
-    fi
-
 # Node.js + Node.js development tools
 # Note: Installed early as it's a common dependency for other tools
 ARG INCLUDE_NODE=false
@@ -134,13 +134,6 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     if [ "${INCLUDE_NODE}" = "true" ] || [ "${INCLUDE_NODE_DEV}" = "true" ]; then \
     NODE_VERSION=${NODE_VERSION} /tmp/build-scripts/features/node.sh; \
     fi
-
-RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
-    --mount=type=cache,target=/var/lib/apt,sharing=locked \
-    if [ "${INCLUDE_NODE_DEV}" = "true" ]; then \
-    /tmp/build-scripts/features/node-dev.sh; \
-    fi
-
 # Rust + Rust development tools
 ARG INCLUDE_RUST=false
 ARG INCLUDE_RUST_DEV=false
@@ -150,13 +143,6 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     if [ "${INCLUDE_RUST}" = "true" ] || [ "${INCLUDE_RUST_DEV}" = "true" ]; then \
     RUST_VERSION=${RUST_VERSION} /tmp/build-scripts/features/rust.sh; \
     fi
-
-RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
-    --mount=type=cache,target=/var/lib/apt,sharing=locked \
-    if [ "${INCLUDE_RUST_DEV}" = "true" ]; then \
-    /tmp/build-scripts/features/rust-dev.sh; \
-    fi
-
 # Ruby + Ruby development tools
 ARG INCLUDE_RUBY=false
 ARG INCLUDE_RUBY_DEV=false
@@ -166,13 +152,6 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     if [ "${INCLUDE_RUBY}" = "true" ] || [ "${INCLUDE_RUBY_DEV}" = "true" ]; then \
     RUBY_VERSION=${RUBY_VERSION} /tmp/build-scripts/features/ruby.sh; \
     fi
-
-RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
-    --mount=type=cache,target=/var/lib/apt,sharing=locked \
-    if [ "${INCLUDE_RUBY_DEV}" = "true" ]; then \
-    /tmp/build-scripts/features/ruby-dev.sh; \
-    fi
-
 # R Statistical Computing
 ARG INCLUDE_R=false
 ARG INCLUDE_R_DEV=false
@@ -182,13 +161,6 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     if [ "${INCLUDE_R}" = "true" ] || [ "${INCLUDE_R_DEV}" = "true" ]; then \
     R_VERSION=${R_VERSION} /tmp/build-scripts/features/r.sh; \
     fi
-
-RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
-    --mount=type=cache,target=/var/lib/apt,sharing=locked \
-    if [ "${INCLUDE_R_DEV}" = "true" ]; then \
-    /tmp/build-scripts/features/r-dev.sh; \
-    fi
-
 # Go + Go development tools
 ARG INCLUDE_GOLANG=false
 ARG INCLUDE_GOLANG_DEV=false
@@ -198,13 +170,6 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     if [ "${INCLUDE_GOLANG}" = "true" ] || [ "${INCLUDE_GOLANG_DEV}" = "true" ]; then \
     GO_VERSION=${GO_VERSION} /tmp/build-scripts/features/golang.sh; \
     fi
-
-RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
-    --mount=type=cache,target=/var/lib/apt,sharing=locked \
-    if [ "${INCLUDE_GOLANG_DEV}" = "true" ]; then \
-    /tmp/build-scripts/features/golang-dev.sh; \
-    fi
-
 # Mojo (x86_64/amd64 only)
 ARG INCLUDE_MOJO=false
 ARG INCLUDE_MOJO_DEV=false
@@ -220,18 +185,6 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     echo "Warning: Skipping Mojo installation - only supported on x86_64/amd64 (current: $ARCH)"; \
     fi; \
     fi
-
-RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
-    --mount=type=cache,target=/var/lib/apt,sharing=locked \
-    if [ "${INCLUDE_MOJO_DEV}" = "true" ]; then \
-    ARCH=$(dpkg --print-architecture); \
-    if [ "$ARCH" = "amd64" ]; then \
-    /tmp/build-scripts/features/mojo-dev.sh; \
-    else \
-    echo "Warning: Skipping Mojo dev tools - only supported on x86_64/amd64 (current: $ARCH)"; \
-    fi; \
-    fi
-
 # Java
 ARG INCLUDE_JAVA=false
 ARG INCLUDE_JAVA_DEV=false
@@ -242,14 +195,8 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     JAVA_VERSION=${JAVA_VERSION} /tmp/build-scripts/features/java.sh; \
     fi
 
-RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
-    --mount=type=cache,target=/var/lib/apt,sharing=locked \
-    if [ "${INCLUDE_JAVA_DEV}" = "true" ]; then \
-    /tmp/build-scripts/features/java-dev.sh; \
-    fi
-
 # ============================================================================
-# DEVELOPMENT TOOLS - General development utilities
+# SUPPORT TOOLS
 # ============================================================================
 
 # Docker CLI and tools
@@ -259,7 +206,6 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     if [ "${INCLUDE_DOCKER}" = "true" ]; then \
     /tmp/build-scripts/features/docker.sh; \
     fi
-
 # 1Password CLI
 ARG INCLUDE_OP=false
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
@@ -267,44 +213,10 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     if [ "${INCLUDE_OP}" = "true" ]; then \
     /tmp/build-scripts/features/op-cli.sh; \
     fi
-
-# General development tools
-ARG INCLUDE_DEV_TOOLS=false
-RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
-    --mount=type=cache,target=/var/lib/apt,sharing=locked \
-    if [ "${INCLUDE_DEV_TOOLS}" = "true" ]; then \
-    /tmp/build-scripts/features/dev-tools.sh; \
-    fi
-
 # ============================================================================
-# DATABASE TOOLS
+# AI/ML TOOLS
 # ============================================================================
 
-# PostgreSQL client
-ARG INCLUDE_POSTGRES_CLIENT=false
-RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
-    --mount=type=cache,target=/var/lib/apt,sharing=locked \
-    if [ "${INCLUDE_POSTGRES_CLIENT}" = "true" ]; then \
-    /tmp/build-scripts/features/postgres-client.sh; \
-    fi
-
-# Redis client
-ARG INCLUDE_REDIS_CLIENT=false
-RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
-    --mount=type=cache,target=/var/lib/apt,sharing=locked \
-    if [ "${INCLUDE_REDIS_CLIENT}" = "true" ]; then \
-    /tmp/build-scripts/features/redis-client.sh; \
-    fi
-
-# SQLite client
-ARG INCLUDE_SQLITE_CLIENT=false
-RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
-    --mount=type=cache,target=/var/lib/apt,sharing=locked \
-    if [ "${INCLUDE_SQLITE_CLIENT}" = "true" ]; then \
-    /tmp/build-scripts/features/sqlite-client.sh; \
-    fi
-
-# ============================================================================
 # AI/ML TOOLS
 # ============================================================================
 
@@ -315,7 +227,28 @@ ARG INCLUDE_OLLAMA=false
 RUN if [ "${INCLUDE_OLLAMA}" = "true" ]; then \
     /tmp/build-scripts/features/ollama.sh; \
     fi
+# ============================================================================
+# DATABASE TOOLS
+# ============================================================================
 
+ARG INCLUDE_POSTGRES_CLIENT=false
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    if [ "${INCLUDE_POSTGRES_CLIENT}" = "true" ]; then \
+    /tmp/build-scripts/features/postgres-client.sh; \
+    fi
+ARG INCLUDE_REDIS_CLIENT=false
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    if [ "${INCLUDE_REDIS_CLIENT}" = "true" ]; then \
+    /tmp/build-scripts/features/redis-client.sh; \
+    fi
+ARG INCLUDE_SQLITE_CLIENT=false
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    if [ "${INCLUDE_SQLITE_CLIENT}" = "true" ]; then \
+    /tmp/build-scripts/features/sqlite-client.sh; \
+    fi
 # ============================================================================
 # CLOUD AND INFRASTRUCTURE TOOLS
 # ============================================================================
@@ -332,7 +265,6 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     KUBECTL_VERSION=${KUBECTL_VERSION} K9S_VERSION=${K9S_VERSION} KREW_VERSION=${KREW_VERSION} HELM_VERSION=${HELM_VERSION} \
     /tmp/build-scripts/features/kubernetes.sh; \
     fi
-
 # AWS CLI
 ARG INCLUDE_AWS=false
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
@@ -340,7 +272,6 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     if [ "${INCLUDE_AWS}" = "true" ]; then \
     /tmp/build-scripts/features/aws.sh; \
     fi
-
 # Terraform
 ARG INCLUDE_TERRAFORM=false
 ARG TERRAGRUNT_VERSION=0.93.8
@@ -352,7 +283,6 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     TERRAGRUNT_VERSION=${TERRAGRUNT_VERSION} TFDOCS_VERSION=${TFDOCS_VERSION} TFLINT_VERSION=${TFLINT_VERSION} \
     /tmp/build-scripts/features/terraform.sh; \
     fi
-
 # Google Cloud SDK
 ARG INCLUDE_GCLOUD=false
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
@@ -360,7 +290,6 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     if [ "${INCLUDE_GCLOUD}" = "true" ]; then \
     /tmp/build-scripts/features/gcloud.sh; \
     fi
-
 # Cloudflare tools
 ARG INCLUDE_CLOUDFLARE=false
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
@@ -369,6 +298,74 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     /tmp/build-scripts/features/cloudflare.sh; \
     fi
 
+# ============================================================================
+# LANGUAGE DEVELOPMENT TOOLS
+# ============================================================================
+# NOTE: Installed after production layers to ensure build dependencies
+#       are not cleaned up when INCLUDE_DEV_TOOLS or INCLUDE_*_DEV is set.
+# ============================================================================
+
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    if [ "${INCLUDE_PYTHON_DEV}" = "true" ]; then \
+    /tmp/build-scripts/features/python-dev.sh; \
+    fi
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    if [ "${INCLUDE_NODE_DEV}" = "true" ]; then \
+    /tmp/build-scripts/features/node-dev.sh; \
+    fi
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    if [ "${INCLUDE_RUST_DEV}" = "true" ]; then \
+    /tmp/build-scripts/features/rust-dev.sh; \
+    fi
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    if [ "${INCLUDE_RUBY_DEV}" = "true" ]; then \
+    /tmp/build-scripts/features/ruby-dev.sh; \
+    fi
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    if [ "${INCLUDE_R_DEV}" = "true" ]; then \
+    /tmp/build-scripts/features/r-dev.sh; \
+    fi
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    if [ "${INCLUDE_GOLANG_DEV}" = "true" ]; then \
+    /tmp/build-scripts/features/golang-dev.sh; \
+    fi
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    if [ "${INCLUDE_MOJO_DEV}" = "true" ]; then \
+    ARCH=$(dpkg --print-architecture); \
+    if [ "$ARCH" = "amd64" ]; then \
+    /tmp/build-scripts/features/mojo-dev.sh; \
+    else \
+    echo "Warning: Skipping Mojo dev tools - only supported on x86_64/amd64 (current: $ARCH)"; \
+    fi; \
+    fi
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    if [ "${INCLUDE_JAVA_DEV}" = "true" ]; then \
+    /tmp/build-scripts/features/java-dev.sh; \
+    fi
+
+# ============================================================================
+# GENERAL DEVELOPMENT TOOLS (MUST BE LAST!)
+# ============================================================================
+# NOTE: General dev-tools installs build-essential and related packages.
+#       This MUST come after all language installations to prevent build
+#       dependencies from being cleaned up by production language builds.
+# ============================================================================
+
+# General development tools
+ARG INCLUDE_DEV_TOOLS=false
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    if [ "${INCLUDE_DEV_TOOLS}" = "true" ]; then \
+    /tmp/build-scripts/features/dev-tools.sh; \
+    fi
 # Set up startup script system
 RUN /tmp/build-scripts/runtime/setup-startup.sh
 
