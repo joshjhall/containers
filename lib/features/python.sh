@@ -410,9 +410,9 @@ if [ -f /opt/container-runtime/base/path-utils.sh ]; then
 fi
 
 # Install Python dependencies if pyproject.toml exists
-if [ -f ${WORKING_DIR}/pyproject.toml ]; then
+if [ -n "${WORKING_DIR:-}" ] && [ -f "${WORKING_DIR}/pyproject.toml" ]; then
     echo "Installing Poetry dependencies..."
-    cd ${WORKING_DIR}
+    cd "${WORKING_DIR}"
     if command -v safe_add_to_path >/dev/null 2>&1; then
         safe_add_to_path "/opt/pipx/bin" 2>/dev/null || export PATH="/opt/pipx/bin:$PATH"
     else
@@ -422,9 +422,9 @@ if [ -f ${WORKING_DIR}/pyproject.toml ]; then
 fi
 
 # Install pip requirements if requirements.txt exists
-if [ -f ${WORKING_DIR}/requirements.txt ]; then
+if [ -n "${WORKING_DIR:-}" ] && [ -f "${WORKING_DIR}/requirements.txt" ]; then
     echo "Installing pip requirements..."
-    cd ${WORKING_DIR}
+    cd "${WORKING_DIR}"
     python3 -m pip install -r requirements.txt || echo "pip install failed, continuing..."
 fi
 PYTHON_POETRY_EOF

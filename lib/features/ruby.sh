@@ -315,9 +315,9 @@ log_command "Creating startup directory" \
 command cat > /etc/container/first-startup/10-ruby-bundle.sh << 'EOF'
 #!/bin/bash
 # Install Ruby gems if Gemfile exists
-if [ -f ${WORKING_DIR}/Gemfile ]; then
+if [ -n "${WORKING_DIR:-}" ] && [ -f "${WORKING_DIR}/Gemfile" ]; then
     echo "Installing Ruby gems..."
-    cd ${WORKING_DIR}
+    cd "${WORKING_DIR}"
     bundle install || echo "Bundle install failed, continuing..."
 fi
 EOF
