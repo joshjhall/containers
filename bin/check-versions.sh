@@ -289,6 +289,9 @@ extract_all_versions() {
     if [ -f "$PROJECT_ROOT/lib/base/setup.sh" ]; then
         ver=$(grep "^ZOXIDE_VERSION=" "$PROJECT_ROOT/lib/base/setup.sh" 2>/dev/null | cut -d= -f2 | tr -d '"')
         [ -n "$ver" ] && add_tool "zoxide" "$ver" "setup.sh"
+
+        ver=$(grep "^COSIGN_VERSION=" "$PROJECT_ROOT/lib/base/setup.sh" 2>/dev/null | cut -d= -f2 | tr -d '"')
+        [ -n "$ver" ] && add_tool "cosign" "$ver" "setup.sh"
     fi
 
     # GitHub Actions from workflows
@@ -668,6 +671,7 @@ main() {
             duf) check_github_release "duf" "muesli/duf" ;;
             entr) check_entr ;;
             zoxide) check_github_release "zoxide" "ajeetdsouza/zoxide" ;;
+            cosign) check_github_release "cosign" "sigstore/cosign" ;;
             trivy-action) check_github_release "trivy-action" "aquasecurity/trivy-action" ;;
             *) [ "$OUTPUT_FORMAT" = "text" ] && echo "  Skipping $tool (no checker)" ;;
         esac

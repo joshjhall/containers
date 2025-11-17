@@ -141,6 +141,9 @@ update_version() {
                 zoxide)
                     command sed -i "s/ZOXIDE_VERSION=\"[^\"]*\"/ZOXIDE_VERSION=\"$latest\"/" "$script_path"
                     ;;
+                cosign)
+                    command sed -i "s/COSIGN_VERSION=\"[^\"]*\"/COSIGN_VERSION=\"$latest\"/" "$script_path"
+                    ;;
                 *)
                     echo -e "${YELLOW}    Warning: Unknown base setup tool: $tool${NC}"
                     ;;
