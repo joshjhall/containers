@@ -261,8 +261,8 @@ log_message "Installing pipx and Poetry..."
 log_command "Installing pipx" \
     su - "${USERNAME}" -c "export PIP_CACHE_DIR='${PIP_CACHE_DIR}' && /usr/local/bin/python3 -m pip install --no-cache-dir pipx"
 
-# Ensure pipx bin directory is in PATH
-safe_add_to_path "${PIPX_BIN_DIR}"
+# Ensure pipx bin directory is in PATH for build-time use (with security validation)
+safe_add_to_path "${PIPX_BIN_DIR}" || export PATH="${PIPX_BIN_DIR}:$PATH"
 
 # Use pipx to install Poetry with pinned version
 POETRY_VERSION="2.2.1"

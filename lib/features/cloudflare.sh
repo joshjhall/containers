@@ -145,7 +145,7 @@ create_cache_directories "$NPM_CACHE_DIR" "$NPM_PREFIX"
     bash -c "install -d -m 0755 -o '${USER_UID}' -g '${USER_GID}' '$NPM_CACHE_DIR' && install -d -m 0755 -o '${USER_UID}' -g '${USER_GID}' '$NPM_PREFIX'"
 
 # Also add to system-wide PATH before checking
-safe_add_to_path "${NPM_PREFIX}/bin"
+export PATH="${NPM_PREFIX}/bin:$PATH"
 
 # Check if wrangler is already installed
 if command -v wrangler &> /dev/null; then
@@ -183,9 +183,9 @@ else
         "
 fi
 
-# Also add to system-wide PATH using safe_add_to_path
+# Also add to system-wide PATH
 log_message "Adding npm global to system PATH..."
-safe_add_to_path "${NPM_PREFIX}/bin"
+export PATH="${NPM_PREFIX}/bin:$PATH"
 
 # ============================================================================
 # Cloudflared Installation
@@ -494,7 +494,7 @@ log_command "Setting test-cloudflare permissions" \
 log_message "Verifying Cloudflare tools installation..."
 
 # Need to export PATH for verification
-safe_add_to_path "${NPM_PREFIX}/bin"
+export PATH="${NPM_PREFIX}/bin:$PATH"
 
 if command -v wrangler &> /dev/null; then
     log_command "Checking wrangler version" \

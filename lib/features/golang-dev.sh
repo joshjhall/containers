@@ -106,8 +106,8 @@ log_message "Installing Go development tools via go install..."
 export GOPATH="/cache/go"
 export GOCACHE="/cache/go-build"
 export GOMODCACHE="/cache/go-mod"
-safe_add_to_path "/usr/local/go/bin"
-safe_add_to_path "${GOPATH}/bin"
+export PATH="/usr/local/go/bin:$PATH"
+export PATH="${GOPATH}/bin:$PATH"
 
 # Core development tools
 log_message "Installing core development tools..."

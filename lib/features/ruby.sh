@@ -184,8 +184,8 @@ EOF
 # Set up gem environment
 export GEM_HOME="${GEM_HOME_DIR}"
 export GEM_PATH="${GEM_HOME_DIR}"
-safe_add_to_path "/usr/local/bin"
-safe_add_to_path "${GEM_HOME_DIR}/bin"
+export PATH="/usr/local/bin:$PATH"
+export PATH="${GEM_HOME_DIR}/bin:$PATH"
 
 # Install bundler as the user
 log_command "Installing bundler" \

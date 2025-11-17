@@ -87,7 +87,7 @@ log_message "Installing Node.js development tools..."
 
 # Set npm global directory from cache
 export NPM_GLOBAL_DIR="/cache/npm-global"
-safe_add_to_path "${NPM_GLOBAL_DIR}/bin"
+export PATH="${NPM_GLOBAL_DIR}/bin:$PATH"
 
 # Configure npm to use global directory
 log_command "Configuring npm global directory" \

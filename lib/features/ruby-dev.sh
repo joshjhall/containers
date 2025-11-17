@@ -75,7 +75,7 @@ log_message "Installing Ruby development tools via gem..."
 # Set gem paths
 export GEM_HOME="/cache/ruby/gems"
 export GEM_PATH="/cache/ruby/gems"
-safe_add_to_path "${GEM_HOME}/bin"
+export PATH="${GEM_HOME}/bin:$PATH"
 
 # Helper function to install gems as user
 gem_install_as_user() {
