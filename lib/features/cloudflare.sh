@@ -167,8 +167,8 @@ else
 
             # Securely add to PATH
             if command -v safe_add_to_path >/dev/null 2>&1; then
-                safe_add_to_path '${NPM_PREFIX}/bin'
-                safe_add_to_path '/usr/bin'
+                safe_add_to_path '${NPM_PREFIX}/bin' 2>/dev/null || export PATH='${NPM_PREFIX}/bin:\$PATH'
+                safe_add_to_path '/usr/bin' 2>/dev/null || export PATH='/usr/bin:\$PATH'
             else
                 export PATH='${NPM_PREFIX}/bin:\$PATH'
                 export PATH='/usr/bin:\$PATH'
