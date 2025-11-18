@@ -14,16 +14,17 @@ various compliance frameworks and how to deploy securely.
 
 ## Document Overview
 
-| Document                                         | Purpose                           |
-| ------------------------------------------------ | --------------------------------- |
-| [Framework Analysis](../reference/compliance.md) | Comprehensive coverage analysis   |
-| [Production Checklist](production-checklist.md)  | Pre-deployment security checklist |
-| [OWASP Docker Top 10](owasp.md)                  | Container-specific security       |
-| [SOC 2](soc2.md)                                 | Service organization controls     |
-| [Encryption at Rest](encryption-at-rest.md)      | Data encryption guidance          |
-| [Incident Response](incident-response.md)        | Security incident playbooks       |
-| [Data Classification](data-classification.md)    | Data handling procedures          |
-| [Software Allowlist](software-allowlist.md)      | Approved software catalog         |
+| Document                                         | Purpose                            |
+| ------------------------------------------------ | ---------------------------------- |
+| [Framework Analysis](../reference/compliance.md) | Comprehensive coverage analysis    |
+| [Production Checklist](production-checklist.md)  | Pre-deployment security checklist  |
+| [OWASP Docker Top 10](owasp.md)                  | Container-specific security        |
+| [SOC 2](soc2.md)                                 | Service organization controls      |
+| [Encryption at Rest](encryption-at-rest.md)      | Data encryption guidance           |
+| [Incident Response](incident-response.md)        | Security incident playbooks        |
+| [Data Classification](data-classification.md)    | Data handling procedures           |
+| [Software Allowlist](software-allowlist.md)      | Approved software catalog          |
+| [Security Testing](security-testing.md)          | DAST, pentesting, regression tests |
 
 ## Framework Coverage Summary
 
