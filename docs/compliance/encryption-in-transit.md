@@ -5,14 +5,14 @@ container deployments to meet compliance requirements.
 
 ## Compliance Coverage
 
-| Framework          | Requirement                        | Section        |
-| ------------------ | ---------------------------------- | -------------- |
-| GDPR               | Encryption of personal data        | Article 32     |
-| HIPAA              | Transmission security              | §164.312(e)    |
-| PCI DSS            | Strong cryptography for cardholder | Requirement 4  |
-| SOC 2              | Encryption of data in transit      | CC6.7          |
-| FedRAMP            | Transmission confidentiality       | SC-8           |
-| ISO 27001          | Network security controls          | A.13.1         |
+| Framework | Requirement                        | Section       |
+| --------- | ---------------------------------- | ------------- |
+| GDPR      | Encryption of personal data        | Article 32    |
+| HIPAA     | Transmission security              | §164.312(e)   |
+| PCI DSS   | Strong cryptography for cardholder | Requirement 4 |
+| SOC 2     | Encryption of data in transit      | CC6.7         |
+| FedRAMP   | Transmission confidentiality       | SC-8          |
+| ISO 27001 | Network security controls          | A.13.1        |
 
 ## Implementation Options
 
@@ -87,12 +87,12 @@ ECDHE-RSA-AES128-GCM-SHA256
 
 ### Certificate Requirements
 
-| Parameter       | Requirement                  |
-| --------------- | ---------------------------- |
-| Key Algorithm   | RSA 2048+ or ECDSA P-256+    |
-| Validity Period | 90 days maximum              |
-| Renewal Window  | 30 days before expiry        |
-| Subject         | Proper CN/SAN for service    |
+| Parameter       | Requirement               |
+| --------------- | ------------------------- |
+| Key Algorithm   | RSA 2048+ or ECDSA P-256+ |
+| Validity Period | 90 days maximum           |
+| Renewal Window  | 30 days before expiry     |
+| Subject         | Proper CN/SAN for service |
 
 ## Certificate Rotation
 
@@ -104,8 +104,8 @@ cert-manager handles rotation automatically:
 apiVersion: cert-manager.io/v1
 kind: Certificate
 spec:
-  duration: 2160h      # 90 days
-  renewBefore: 720h    # Renew 30 days before expiry
+  duration: 2160h # 90 days
+  renewBefore: 720h # Renew 30 days before expiry
 ```
 
 ### Manual Rotation Process
@@ -118,12 +118,12 @@ spec:
 
 ### Rotation Schedule
 
-| Certificate Type     | Rotation Frequency | Lead Time   |
-| -------------------- | ------------------ | ----------- |
-| External TLS         | 90 days            | 30 days     |
-| Internal mTLS        | 30 days            | 7 days      |
-| Root CA              | 10 years           | 1 year      |
-| Intermediate CA      | 2 years            | 6 months    |
+| Certificate Type | Rotation Frequency | Lead Time |
+| ---------------- | ------------------ | --------- |
+| External TLS     | 90 days            | 30 days   |
+| Internal mTLS    | 30 days            | 7 days    |
+| Root CA          | 10 years           | 1 year    |
+| Intermediate CA  | 2 years            | 6 months  |
 
 ## Verification
 

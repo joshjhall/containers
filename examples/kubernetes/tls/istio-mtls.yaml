@@ -52,8 +52,7 @@ kind: AuthorizationPolicy
 metadata:
   name: deny-all
   namespace: default
-spec:
-  {}  # Empty spec = deny all
+spec: {} # Empty spec = deny all
 
 ---
 # Authorization Policy - Allow specific services
@@ -115,7 +114,7 @@ spec:
         protocol: HTTPS
       tls:
         mode: SIMPLE
-        credentialName: app-tls-secret  # From cert-manager
+        credentialName: app-tls-secret # From cert-manager
       hosts:
         - app.example.com
     - port:

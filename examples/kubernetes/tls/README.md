@@ -5,20 +5,20 @@ container deployments.
 
 ## Compliance Coverage
 
-| Framework    | Requirement                    | Implementation              |
-| ------------ | ------------------------------ | --------------------------- |
-| GDPR Art. 32 | Encryption of personal data    | TLS/mTLS for all traffic    |
-| HIPAA        | Transmission security          | Encrypted service mesh      |
-| PCI DSS 4.1  | Strong cryptography            | TLS 1.2+, strong ciphers    |
-| SOC 2 CC6.7  | Encryption in transit          | cert-manager + Istio        |
-| FedRAMP SC-8 | Transmission confidentiality   | mTLS between services       |
+| Framework    | Requirement                  | Implementation           |
+| ------------ | ---------------------------- | ------------------------ |
+| GDPR Art. 32 | Encryption of personal data  | TLS/mTLS for all traffic |
+| HIPAA        | Transmission security        | Encrypted service mesh   |
+| PCI DSS 4.1  | Strong cryptography          | TLS 1.2+, strong ciphers |
+| SOC 2 CC6.7  | Encryption in transit        | cert-manager + Istio     |
+| FedRAMP SC-8 | Transmission confidentiality | mTLS between services    |
 
 ## Files
 
-| File               | Description                                |
-| ------------------ | ------------------------------------------ |
-| cert-manager.yaml  | Automated certificate management           |
-| istio-mtls.yaml    | Service mesh mTLS configuration            |
+| File              | Description                      |
+| ----------------- | -------------------------------- |
+| cert-manager.yaml | Automated certificate management |
+| istio-mtls.yaml   | Service mesh mTLS configuration  |
 
 ## Quick Start
 
@@ -56,8 +56,8 @@ cert-manager automatically rotates certificates before expiry:
 
 ```yaml
 spec:
-  duration: 2160h     # 90 days
-  renewBefore: 360h   # Renew 15 days before expiry
+  duration: 2160h # 90 days
+  renewBefore: 360h # Renew 15 days before expiry
 ```
 
 ### Manual Rotation
@@ -148,7 +148,7 @@ spec:
         value:
           transport_socket:
             typed_config:
-              "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext
+              '@type': type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext
               common_tls_context:
                 tls_params:
                   tls_minimum_protocol_version: TLSv1_2

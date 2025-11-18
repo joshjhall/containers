@@ -18,7 +18,7 @@ metadata:
 spec:
   acme:
     server: https://acme-v02.api.letsencrypt.org/directory
-    email: security@example.com  # Change to your email
+    email: security@example.com # Change to your email
     privateKeySecretRef:
       name: letsencrypt-prod-key
     solvers:
@@ -35,7 +35,7 @@ metadata:
 spec:
   acme:
     server: https://acme-staging-v02.api.letsencrypt.org/directory
-    email: security@example.com  # Change to your email
+    email: security@example.com # Change to your email
     privateKeySecretRef:
       name: letsencrypt-staging-key
     solvers:
@@ -63,8 +63,8 @@ spec:
   isCA: true
   commonName: internal-root-ca
   secretName: internal-root-ca-secret
-  duration: 87600h  # 10 years
-  renewBefore: 8760h  # 1 year
+  duration: 87600h # 10 years
+  renewBefore: 8760h # 1 year
   privateKey:
     algorithm: ECDSA
     size: 256
@@ -92,8 +92,8 @@ metadata:
   namespace: default
 spec:
   secretName: app-tls-secret
-  duration: 2160h  # 90 days
-  renewBefore: 360h  # 15 days
+  duration: 2160h # 90 days
+  renewBefore: 360h # 15 days
   subject:
     organizations:
       - Example Org
