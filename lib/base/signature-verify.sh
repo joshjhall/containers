@@ -908,6 +908,7 @@ export -f verify_gpg_signature
 export -f download_and_verify_gpg
 export -f download_and_verify_nodejs_gpg
 export -f download_and_verify_terraform_gpg
+export -f download_and_verify_kubectl_sigstore
 export -f verify_sigstore_signature
 export -f get_python_release_manager
 export -f download_and_verify_sigstore
