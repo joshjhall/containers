@@ -141,9 +141,9 @@ dast-scan:
 Create `.zap/rules.tsv` to customize scan rules:
 
 ```tsv
-10016	IGNORE	(Web Browser XSS Protection Not Enabled)
-10017	IGNORE	(Cross-Domain JavaScript Source File Inclusion)
-10096	WARN	(Timestamp Disclosure - Unix)
+10016  IGNORE  (Web Browser XSS Protection Not Enabled)
+10017  IGNORE  (Cross-Domain JavaScript Source File Inclusion)
+10096  WARN  (Timestamp Disclosure - Unix)
 ```
 
 ---
