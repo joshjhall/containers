@@ -85,6 +85,11 @@ apt_install gnupg software-properties-common
 # ============================================================================
 log_message "Installing Terraform..."
 
+# Note: Terraform is installed via HashiCorp APT repository which handles GPG
+# signature verification automatically. For direct binary downloads (if needed),
+# the download_and_verify_terraform_gpg() function in signature-verify.sh provides
+# GPG verification using HashiCorp's signing key and SHA256SUMS files.
+
 # Add HashiCorp GPG key and repository
 # Support both old (apt-key) and new (signed-by) methods for backwards compatibility
 # - Debian 11 (Bullseye) and 12 (Bookworm): apt-key still available

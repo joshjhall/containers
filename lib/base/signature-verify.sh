@@ -27,8 +27,8 @@ if [ -f /tmp/build-scripts/base/logging.sh ]; then
     source /tmp/build-scripts/base/logging.sh
 fi
 
-# GPG keyring directory
-GPG_KEYRING_DIR="/tmp/build-scripts/gpg-keys"
+# GPG keyring directory (can be overridden for testing)
+GPG_KEYRING_DIR="${GPG_KEYRING_DIR:-/tmp/build-scripts/gpg-keys}"
 
 # ============================================================================
 # import_gpg_keys - Import GPG keys for a language from keyring directory
