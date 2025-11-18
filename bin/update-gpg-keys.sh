@@ -8,13 +8,14 @@
 #   ./bin/update-gpg-keys.sh [language...]
 #
 # Languages:
-#   python  - Update Python release manager GPG keys
-#   nodejs  - Update Node.js release team GPG keyring
-#   all     - Update all language GPG keys (default if no args)
+#   python     - Update Python release manager GPG keys
+#   nodejs     - Update Node.js release team GPG keyring
+#   hashicorp  - Update HashiCorp Security GPG key (for Terraform, Vault, etc.)
+#   all        - Update all language GPG keys (default if no args)
 #
 # Examples:
 #   ./bin/update-gpg-keys.sh python
-#   ./bin/update-gpg-keys.sh nodejs python
+#   ./bin/update-gpg-keys.sh nodejs python hashicorp
 #   ./bin/update-gpg-keys.sh all
 
 set -euo pipefail
@@ -229,6 +230,69 @@ EOF
 }
 
 # ============================================================================
+# update_hashicorp_keys - Update HashiCorp GPG key
+# ============================================================================
+update_hashicorp_keys() {
+    log_info "=== Updating HashiCorp GPG Key ==="
+    echo ""
+
+    local keys_dir="${GPG_KEYS_DIR}/hashicorp/keys"
+    local temp_dir=$(mktemp -d)
+
+    # Download HashiCorp GPG key from official source
+    log_info "Fetching HashiCorp Security GPG key..."
+
+    local hashicorp_key_url="https://www.hashicorp.com/.well-known/pgp-key.txt"
+    local expected_fingerprint="C874011F0AB405110D02105534365D9472D7468F"
+
+    if ! curl -fsSL "$hashicorp_key_url" -o "$temp_dir/hashicorp.asc" 2>/dev/null; then
+        log_error "Failed to download HashiCorp GPG key from ${hashicorp_key_url}"
+        rm -rf "$temp_dir"
+        return 1
+    fi
+
+    log_success "Downloaded HashiCorp GPG key"
+
+    # Verify the fingerprint matches the expected value
+    log_info "Verifying key fingerprint..."
+    local actual_fingerprint
+    actual_fingerprint=$(gpg --with-colons --show-keys "$temp_dir/hashicorp.asc" 2>/dev/null | \
+        awk -F: '/^fpr:/ {print $10; exit}')
+
+    if [ "$actual_fingerprint" != "$expected_fingerprint" ]; then
+        log_error "GPG key fingerprint mismatch!"
+        log_error "Expected: ${expected_fingerprint}"
+        log_error "Got:      ${actual_fingerprint}"
+        rm -rf "$temp_dir"
+        return 1
+    fi
+
+    log_success "Key fingerprint verified: ${actual_fingerprint}"
+
+    # Create keys directory if it doesn't exist
+    mkdir -p "$keys_dir"
+
+    # Copy key to directory
+    cp "$temp_dir/hashicorp.asc" "$keys_dir/"
+
+    # Set secure permissions
+    chmod 700 "$keys_dir"
+    chmod 600 "$keys_dir"/hashicorp.asc
+
+    # Clean up
+    rm -rf "$temp_dir"
+
+    echo ""
+    log_success "HashiCorp GPG key updated successfully"
+    log_info "  Keys directory: $keys_dir"
+    log_info "  Key file: hashicorp.asc"
+    log_info "  Fingerprint: ${actual_fingerprint}"
+    echo ""
+
+    return 0
+}
+
+# ============================================================================
 # Main Script
 # ============================================================================
 main() {
@@ -236,7 +300,7 @@ main() {
 
     # If no arguments or "all" specified, update all languages
     if [ ${#languages[@]} -eq 0 ] || [[ " ${languages[*]} " =~ " all " ]]; then
-        languages=("python" "nodejs")
+        languages=("python" "nodejs" "hashicorp")
     fi
 
     echo "=== GPG Keys Update Script ==="
@@ -257,6 +321,13 @@ main() {
                     UPDATED_LANGUAGES+=("nodejs")
                 else
                     FAILED_LANGUAGES+=("nodejs")
+                fi
+                ;;
+            hashicorp)
+                if update_hashicorp_keys; then
+                    UPDATED_LANGUAGES+=("hashicorp")
+                else
+                    FAILED_LANGUAGES+=("hashicorp")
                 fi
                 ;;
             all)
