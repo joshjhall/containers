@@ -386,6 +386,10 @@ RUN chmod +x /usr/local/bin/entrypoint
 COPY bin/healthcheck.sh /usr/local/bin/healthcheck
 RUN chmod +x /usr/local/bin/healthcheck
 
+# Copy shell completion test utility
+COPY bin/test-completions.sh /usr/local/bin/test-completions
+RUN chmod +x /usr/local/bin/test-completions
+
 # Copy case-sensitivity detection utility
 COPY bin/detect-case-sensitivity.sh /usr/local/bin/detect-case-sensitivity.sh
 RUN chmod +x /usr/local/bin/detect-case-sensitivity.sh

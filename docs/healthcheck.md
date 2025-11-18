@@ -358,6 +358,74 @@ docker inspect <container_id> | jq '.[0].Config.Healthcheck'
 
 ### Custom Health Checks
 
+The healthcheck system supports modular custom checks. Place executable scripts
+in `/etc/healthcheck.d/` and they will be run automatically during full health
+checks.
+
+#### Custom Check Directory
+
+```bash
+# Directory structure
+/etc/healthcheck.d/
+├── 10-database.sh      # Check database connectivity
+├── 20-redis.sh         # Check Redis connectivity
+└── 30-external-api.sh  # Check external API
+
+# Scripts run in sorted order (use numeric prefixes)
+```
+
+#### Example Custom Check Script
+
+```bash
+#!/bin/bash
+# /etc/healthcheck.d/10-database.sh
+# Check PostgreSQL connectivity
+
+if ! pg_isready -h localhost -p 5432 >/dev/null 2>&1; then
+    echo "Database not ready"
+    exit 1
+fi
+
+exit 0
+```
+
+#### Running Custom Checks Only
+
+```bash
+# Run only custom checks
+healthcheck --feature custom
+
+# Run full check (includes custom)
+healthcheck --verbose
+```
+
+#### Custom Check Directory Override
+
+Override the default directory with an environment variable:
+
+```bash
+# In docker-compose.yml
+environment:
+  HEALTHCHECK_CUSTOM_DIR: /app/health-checks
+
+# Or at runtime
+docker run -e HEALTHCHECK_CUSTOM_DIR=/app/checks myimage
+```
+
+#### Mounting Custom Checks at Runtime
+
+```yaml
+# docker-compose.yml
+services:
+  app:
+    volumes:
+      - ./my-checks:/etc/healthcheck.d:ro
+    healthcheck:
+      test: ['CMD', 'healthcheck', '--verbose']
+```
+
+#### Alternative: Wrapper Script
+
 For application-specific health, combine with your own checks:
 
 ```bash

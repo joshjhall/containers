@@ -21,6 +21,7 @@ QUICK_MODE=false
 VERBOSE=false
 SPECIFIC_FEATURE=""
 EXIT_CODE=0
+CUSTOM_CHECKS_DIR="${HEALTHCHECK_CUSTOM_DIR:-/etc/healthcheck.d}"
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -36,6 +37,22 @@ while [[ $# -gt 0 ]]; do
         --feature)
             SPECIFIC_FEATURE="$2"
             shift 2
+            ;;
+        --help|-h)
+            echo "Usage: $0 [--quick] [--verbose] [--feature NAME]"
+            echo ""
+            echo "Options:"
+            echo "  --quick           Core checks only (fast)"
+            echo "  --verbose         Detailed output"
+            echo "  --feature NAME    Check specific feature"
+            echo ""
+            echo "Features: core, python, node, rust, go, ruby, r, java, docker, kubernetes, custom"
+            echo ""
+            echo "Custom checks:"
+            echo "  Place executable scripts in $CUSTOM_CHECKS_DIR"
+            echo "  Scripts run in sorted order (use 10-foo.sh, 20-bar.sh naming)"
+            echo "  Override directory with HEALTHCHECK_CUSTOM_DIR environment variable"
+            exit 0
             ;;
         *)
             echo "Unknown option: $1"
@@ -292,6 +309,45 @@ check_kubernetes() {
     fi
 }
 
+# Run custom health checks from directory
+run_custom_checks() {
+    if [ ! -d "$CUSTOM_CHECKS_DIR" ]; then
+        log_check "No custom checks directory: $CUSTOM_CHECKS_DIR"
+        return 0
+    fi
+
+    # Check if there are any executable files
+    local has_checks=false
+    for check in "$CUSTOM_CHECKS_DIR"/*; do
+        if [ -x "$check" ] && [ -f "$check" ]; then
+            has_checks=true
+            break
+        fi
+    done
+
+    if [ "$has_checks" = "false" ]; then
+        log_check "No custom checks found in $CUSTOM_CHECKS_DIR"
+        return 0
+    fi
+
+    log_check "Running custom health checks..."
+
+    # Run checks in sorted order (allows 10-foo.sh, 20-bar.sh ordering)
+    for check in "$CUSTOM_CHECKS_DIR"/*; do
+        if [ -x "$check" ] && [ -f "$check" ]; then
+            local check_name
+            check_name=$(basename "$check")
+            log_check "Running custom check: $check_name"
+
+            if "$check"; then
+                log_pass "Custom check passed: $check_name"
+            else
+                log_fail "Custom check failed: $check_name"
+            fi
+        fi
+    done
+}
+
 # Auto-detect installed features and run checks
 auto_detect_features() {
     log_check "Auto-detecting installed features..."
@@ -310,6 +366,9 @@ auto_detect_features() {
     command -v java >/dev/null 2>&1 && check_java || true
     command -v docker >/dev/null 2>&1 && check_docker || true
     command -v kubectl >/dev/null 2>&1 && check_kubernetes || true
+
+    # Run custom checks if any exist
+    run_custom_checks
 }
 
 # Main execution
@@ -326,9 +385,10 @@ if [ -n "$SPECIFIC_FEATURE" ]; then
         java) check_java ;;
         docker) check_docker ;;
         kubernetes|k8s) check_kubernetes ;;
+        custom) run_custom_checks ;;
         *)
             echo "Unknown feature: $SPECIFIC_FEATURE"
-            echo "Available: core, python, node, rust, go, ruby, r, java, docker, kubernetes"
+            echo "Available: core, python, node, rust, go, ruby, r, java, docker, kubernetes, custom"
             exit 1
             ;;
     esac
