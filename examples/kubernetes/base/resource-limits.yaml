@@ -1,0 +1,147 @@
+# Resource Limits and Quotas for Kubernetes
+#
+# This file provides namespace-level resource controls for:
+# - LimitRange: Default and maximum resource limits for pods/containers
+# - ResourceQuota: Aggregate resource limits for the namespace
+#
+# Compliance Coverage:
+# - OWASP D07: Resource limits
+# - SOC 2 A1.1: Availability controls
+# - GDPR Art. 32: Security of processing (availability)
+#
+# Usage:
+#   kubectl apply -f resource-limits.yaml -n <namespace>
+#
+# Customize values based on your workload requirements using the
+# sizing guidelines below.
+
+---
+# LimitRange - Default and Maximum Resource Limits
+#
+# Applies to all pods in the namespace. Containers without explicit
+# resource specifications will receive the default values.
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: container-resource-limits
+  labels:
+    app.kubernetes.io/component: resource-management
+spec:
+  limits:
+    # Container-level limits
+    - type: Container
+      # Default limits applied when not specified
+      default:
+        cpu: "1"
+        memory: "1Gi"
+        ephemeral-storage: "2Gi"
+      # Default requests applied when not specified
+      defaultRequest:
+        cpu: "100m"
+        memory: "256Mi"
+        ephemeral-storage: "500Mi"
+      # Maximum allowed values
+      max:
+        cpu: "4"
+        memory: "8Gi"
+        ephemeral-storage: "20Gi"
+      # Minimum allowed values
+      min:
+        cpu: "50m"
+        memory: "64Mi"
+        ephemeral-storage: "100Mi"
+      # Ratio of limit to request (prevents overcommitment)
+      maxLimitRequestRatio:
+        cpu: "10"
+        memory: "4"
+
+    # Pod-level limits (aggregate of all containers)
+    - type: Pod
+      max:
+        cpu: "8"
+        memory: "16Gi"
+
+    # PVC storage limits
+    - type: PersistentVolumeClaim
+      min:
+        storage: "1Gi"
+      max:
+        storage: "100Gi"
+
+---
+# ResourceQuota - Namespace Aggregate Limits
+#
+# Limits total resource consumption across all pods in the namespace.
+# Prevents a single namespace from consuming cluster resources.
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: namespace-resource-quota
+  labels:
+    app.kubernetes.io/component: resource-management
+spec:
+  hard:
+    # Compute resources
+    requests.cpu: "20"
+    requests.memory: "40Gi"
+    limits.cpu: "40"
+    limits.memory: "80Gi"
+
+    # Storage
+    requests.storage: "500Gi"
+    persistentvolumeclaims: "20"
+    requests.ephemeral-storage: "100Gi"
+    limits.ephemeral-storage: "200Gi"
+
+    # Object counts
+    pods: "50"
+    services: "20"
+    secrets: "100"
+    configmaps: "100"
+
+---
+# ResourceQuota for Best Effort pods
+#
+# Separate quota for pods without resource specifications.
+# Use this to limit uncontrolled workloads.
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: best-effort-quota
+  labels:
+    app.kubernetes.io/component: resource-management
+spec:
+  hard:
+    pods: "5"
+  scopeSelector:
+    matchExpressions:
+      - operator: In
+        scopeName: PriorityClass
+        values: ["low-priority"]
+
+---
+# Sizing Guidelines
+#
+# Use these recommendations as starting points. Adjust based on
+# actual workload profiling and monitoring data.
+#
+# Workload Type       | CPU Req | CPU Lim | Mem Req | Mem Lim | Notes
+# --------------------|---------|---------|---------|---------|------------------
+# Web API (light)     | 100m    | 500m    | 128Mi   | 512Mi   | Stateless, scales horizontally
+# Web API (heavy)     | 500m    | 2       | 512Mi   | 2Gi     | Complex processing
+# Background Worker   | 250m    | 1       | 256Mi   | 1Gi     | Async tasks
+# Data Processing     | 1       | 4       | 1Gi     | 8Gi     | ML, ETL workloads
+# Database Proxy      | 100m    | 500m    | 128Mi   | 512Mi   | Connection pooling
+# Cache (Redis)       | 250m    | 1       | 1Gi     | 4Gi     | Memory-intensive
+# Development         | 500m    | 2       | 1Gi     | 4Gi     | IDE containers
+#
+# Formulas:
+# - CPU Request: Average utilization * 1.2 (20% buffer)
+# - CPU Limit: P99 utilization * 1.5 (burst capacity)
+# - Memory Request: Average usage * 1.3 (30% buffer)
+# - Memory Limit: Maximum observed + 20% (OOM prevention)
+#
+# Monitoring:
+# - Use container_cpu_usage_seconds_total for CPU profiling
+# - Use container_memory_working_set_bytes for memory profiling
+# - Review with: kubectl top pods -n <namespace>

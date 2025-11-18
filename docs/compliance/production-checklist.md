@@ -110,6 +110,14 @@ item includes the relevant compliance frameworks it addresses.
       ephemeral-storage: '10Gi'
   ```
 
+- [ ] **Apply namespace-level limits** (recommended)
+
+  See
+  [Resource Limits Examples](../../examples/kubernetes/base/resource-limits.yaml)
+  for LimitRange and ResourceQuota templates with sizing guidelines.
+
+  _Frameworks: OWASP D07, SOC 2 A1.1, CIS Kubernetes Benchmark 5.2_
+
 ### Health Monitoring
 
 - [ ] **Configure health checks**
