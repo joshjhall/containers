@@ -45,8 +45,10 @@ TIER 4: Calculated Checksums (TOFU fallback) ← LAST RESORT
 
 - **Python 3.11.0+**: Sigstore (preferred) + GPG (fallback)
 - **Python < 3.11.0**: GPG only
-- **Node.js**: GPG signatures (future implementation)
-- **Go**: GPG signatures (future implementation)
+- **Node.js**: GPG signatures (SHASUMS256.txt.sig via release team keyring)
+- **Go (Golang)**: GPG signatures (.asc via Google signing key)
+- **Terraform**: GPG signatures (SHA256SUMS.sig via HashiCorp key)
+- **kubectl**: Sigstore (requires cosign from kubernetes or docker feature)
 
 **Example**:
 
@@ -158,16 +160,18 @@ when no other verification method is available
 
 ### Language-by-Language Verification Matrix
 
-| Language    | Tier 1 (Signatures) | Tier 2 (Pinned) | Tier 3 (Published) | Notes                                               |
-| ----------- | ------------------- | --------------- | ------------------ | --------------------------------------------------- |
-| **Python**  | ✅ GPG + Sigstore   | N/A             | N/A                | Best security - signatures preferred over checksums |
-| **Node.js** | 🔜 GPG (future)     | ✅ Yes          | ✅ SHASUMS256.txt  | Currently uses Tier 2 or 3                          |
-| **Go**      | 🔜 GPG (future)     | ✅ Yes          | ✅ go.dev/dl JSON  | Currently uses Tier 2 or 3                          |
-| **Ruby**    | ❌ None             | ✅ Yes          | ✅ ruby-lang.org   | Currently uses Tier 2 or 3                          |
-| **Rust**    | N/A                 | N/A             | ✅ rustup-init     | Verified by rustup's built-in system                |
-| **R**       | N/A                 | N/A             | N/A                | Installed via apt (GPG-verified automatically)      |
-| **Java**    | N/A                 | N/A             | N/A                | Installed via apt (GPG-verified automatically)      |
-| **Mojo**    | N/A                 | N/A             | N/A                | Installed via pixi/conda (verified by conda)        |
+| Language      | Tier 1 (Signatures) | Tier 2 (Pinned) | Tier 3 (Published) | Notes                                               |
+| ------------- | ------------------- | --------------- | ------------------ | --------------------------------------------------- |
+| **Python**    | ✅ GPG + Sigstore   | N/A             | N/A                | Best security - signatures preferred over checksums |
+| **Node.js**   | ✅ GPG              | ✅ Yes          | ✅ SHASUMS256.txt  | Signature verification via release team keyring     |
+| **Go**        | ✅ GPG              | ✅ Yes          | ✅ go.dev/dl JSON  | Signature verification via Google signing key       |
+| **Terraform** | ✅ GPG              | N/A             | ✅ SHA256SUMS      | Signature verification via HashiCorp key            |
+| **kubectl**   | ✅ Sigstore         | N/A             | N/A                | Sigstore verification requires cosign               |
+| **Ruby**      | ❌ None             | ✅ Yes          | ✅ ruby-lang.org   | Currently uses Tier 2 or 3                          |
+| **Rust**      | N/A                 | N/A             | ✅ rustup-init     | Verified by rustup's built-in system                |
+| **R**         | N/A                 | N/A             | N/A                | Installed via apt (GPG-verified automatically)      |
+| **Java**      | N/A                 | N/A             | N/A                | Installed via apt (GPG-verified automatically)      |
+| **Mojo**      | N/A                 | N/A             | N/A                | Installed via pixi/conda (verified by conda)        |
 
 **Key Insights**:
 
@@ -177,6 +181,8 @@ when no other verification method is available
   layers
 - **Python** is the gold standard - GPG + Sigstore is more secure than any
   checksum
+- **Node.js, Go, Terraform, and kubectl** now have cryptographic signature
+  verification (Tier 1)
 
 ### Implementation Files
 
@@ -184,7 +190,13 @@ when no other verification method is available
 
 - `lib/base/checksum-verification.sh` - Main 4-tier orchestration
 - `lib/base/signature-verify.sh` - GPG + Sigstore verification (Tier 1)
-- `lib/gpg-keys/` - GPG public keys for Python, Node.js, Go
+- `lib/gpg-keys/` - GPG public keys for Python, Node.js, Go, HashiCorp
+  (Terraform)
+  - `lib/gpg-keys/python/` - Python release manager keys
+  - `lib/gpg-keys/nodejs/` - Node.js release team keyring
+  - `lib/gpg-keys/golang/` - Google Linux Packages Signing Key
+  - `lib/gpg-keys/hashicorp/` - HashiCorp Security key
+- `bin/update-gpg-keys.sh` - Automated GPG key update script
 
 **Checksum Database**:
 
