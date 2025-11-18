@@ -108,13 +108,12 @@ test_essential_utilities() {
     assert_executable_in_path "$image" "curl"
     assert_executable_in_path "$image" "wget"
 
-    # Build essentials
-    assert_executable_in_path "$image" "make"
-    assert_executable_in_path "$image" "gcc"
-
     # System utilities
     assert_executable_in_path "$image" "htop"
     assert_executable_in_path "$image" "unzip"
+
+    # Note: Build tools (make, gcc) should NOT be in minimal image
+    # They are only available with INCLUDE_DEV_TOOLS=true
 }
 
 # Run all tests
