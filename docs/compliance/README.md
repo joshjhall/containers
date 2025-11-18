@@ -20,6 +20,7 @@ various compliance frameworks and how to deploy securely.
 | [Production Checklist](production-checklist.md)  | Pre-deployment security checklist |
 | [OWASP Docker Top 10](owasp.md)                  | Container-specific security       |
 | [SOC 2](soc2.md)                                 | Service organization controls     |
+| [Encryption at Rest](encryption-at-rest.md)      | Data encryption guidance          |
 
 ## Framework Coverage Summary
 

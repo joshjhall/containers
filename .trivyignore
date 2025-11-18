@@ -1,0 +1,10 @@
+# Trivy Ignore File
+# Use this file to suppress false positives in vulnerability and secret scanning
+#
+# Documentation: https://aquasecurity.github.io/trivy/latest/docs/configuration/filtering/
+
+# Example entries:
+# CVE-2023-12345          # Description of why this is ignored
+# secret:generic-api-key  # False positive in test fixtures
+
+# Currently no suppressions needed - add entries as false positives are identified
