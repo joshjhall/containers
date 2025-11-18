@@ -28,7 +28,6 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
 NC='\033[0m'
 
 # =============================================================================
@@ -109,9 +108,6 @@ generate_inventory() {
         docker create --name "$temp_container" "$container" /bin/true >/dev/null 2>&1
         container="$temp_container"
     fi
-
-    # Collect component information
-    local components=()
 
     # System packages (Debian)
     local dpkg_list
@@ -273,7 +269,6 @@ generate_sbom() {
     fi
 
     # Generate SBOM with Trivy
-    local sbom_output
     if [[ -n "$output" ]]; then
         trivy image --format cyclonedx --output "$output" "$container"
         log_info "SBOM written to: $output"

@@ -76,6 +76,7 @@ build_test_image() {
 }
 
 # Cleanup function
+# shellcheck disable=SC2317  # Function is used by trap
 cleanup() {
     if [[ "$TEST_IMAGE" == security-test:* ]]; then
         log_info "Cleaning up test image..."
@@ -103,7 +104,6 @@ test_non_root_user() {
     fi
 
     # Test 2: User has no passwordless sudo by default
-    local sudo_check
     if docker run --rm "$TEST_IMAGE" sudo -n true 2>/dev/null; then
         log_test_fail "Passwordless sudo is enabled"
     else
