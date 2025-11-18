@@ -19,6 +19,44 @@
 
 set -euo pipefail
 
+# ============================================================================
+# Log Level Configuration
+# ============================================================================
+# Levels: ERROR (0), WARN (1), INFO (2), DEBUG (3)
+# Default: INFO - shows errors, warnings, and informational messages
+#
+# Usage:
+#   LOG_LEVEL=ERROR   # Only errors
+#   LOG_LEVEL=WARN    # Errors + warnings
+#   LOG_LEVEL=INFO    # Normal verbosity (default)
+#   LOG_LEVEL=DEBUG   # Full verbosity
+# ============================================================================
+
+# Numeric log levels
+export LOG_LEVEL_ERROR=0
+export LOG_LEVEL_WARN=1
+export LOG_LEVEL_INFO=2
+export LOG_LEVEL_DEBUG=3
+
+# Convert string log level to numeric
+_get_log_level_num() {
+    case "${LOG_LEVEL:-INFO}" in
+        ERROR|error|0) echo $LOG_LEVEL_ERROR ;;
+        WARN|warn|WARNING|warning|1) echo $LOG_LEVEL_WARN ;;
+        INFO|info|2) echo $LOG_LEVEL_INFO ;;
+        DEBUG|debug|3) echo $LOG_LEVEL_DEBUG ;;
+        *) echo $LOG_LEVEL_INFO ;; # Default for invalid values
+    esac
+}
+
+# Check if a message at given level should be logged
+_should_log() {
+    local level=$1
+    local current
+    current=$(_get_log_level_num)
+    [ "$level" -le "$current" ]
+}
+
 # Source JSON logging utilities if enabled
 if [ "${ENABLE_JSON_LOGGING:-false}" = "true" ]; then
     # shellcheck source=lib/base/json-logging.sh
@@ -261,8 +299,8 @@ log_feature_end() {
 }
 
 # ============================================================================
-# log_message - Log a simple message
-# 
+# log_message - Log a simple message (INFO level)
+#
 # Arguments:
 #   $1 - Message to log
 #
@@ -270,6 +308,11 @@ log_feature_end() {
 #   log_message "Creating cache directories..."
 # ============================================================================
 log_message() {
+    # Respect LOG_LEVEL
+    if ! _should_log $LOG_LEVEL_INFO; then
+        return 0
+    fi
+
     local message="$1"
 
     # Handle case where logging is not yet initialized
@@ -280,6 +323,51 @@ log_message() {
     else
         # Logging not initialized yet, just print to stdout
         echo "[$(date '+%H:%M:%S')] $message"
+    fi
+}
+
+# ============================================================================
+# log_info - Log an informational message (INFO level)
+#
+# Explicit INFO level logging. Same as log_message but clearer intent.
+#
+# Arguments:
+#   $1 - Message to log
+#
+# Example:
+#   log_info "Starting installation..."
+# ============================================================================
+log_info() {
+    log_message "$1"
+}
+
+# ============================================================================
+# log_debug - Log a debug message (DEBUG level)
+#
+# Only shown when LOG_LEVEL=DEBUG. Use for detailed troubleshooting info.
+#
+# Arguments:
+#   $1 - Message to log
+#
+# Example:
+#   log_debug "Checking path: $path"
+# ============================================================================
+log_debug() {
+    # Respect LOG_LEVEL
+    if ! _should_log $LOG_LEVEL_DEBUG; then
+        return 0
+    fi
+
+    local message="$1"
+
+    # Handle case where logging is not yet initialized
+    if [ -n "$CURRENT_LOG_FILE" ]; then
+        {
+            echo "[$(date '+%H:%M:%S')] DEBUG: $message"
+        } | tee -a "$CURRENT_LOG_FILE"
+    else
+        # Logging not initialized yet, just print to stdout
+        echo "[$(date '+%H:%M:%S')] DEBUG: $message"
     fi
 }
 
@@ -314,8 +402,8 @@ log_error() {
 }
 
 # ============================================================================
-# log_warning - Log a warning message
-# 
+# log_warning - Log a warning message (WARN level)
+#
 # Arguments:
 #   $1 - Warning message
 #
@@ -323,6 +411,11 @@ log_error() {
 #   log_warning "Package version might be outdated"
 # ============================================================================
 log_warning() {
+    # Respect LOG_LEVEL
+    if ! _should_log $LOG_LEVEL_WARN; then
+        return 0
+    fi
+
     local message="$1"
 
     # Handle case where logging is not yet initialized
@@ -524,6 +617,10 @@ export -f log_command
 export -f log_feature_end
 export -f log_feature_summary
 export -f log_message
+export -f log_info
+export -f log_debug
 export -f log_error
 export -f log_warning
 export -f safe_eval
+export -f _get_log_level_num
+export -f _should_log

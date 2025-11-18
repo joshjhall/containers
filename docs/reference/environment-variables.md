@@ -37,6 +37,31 @@ installed. They are converted to environment variables during the build process.
 | `USER_GID`                 | `1000`      | Group ID for the non-root user                 |
 | `ENABLE_PASSWORDLESS_SUDO` | `true`      | Allow passwordless sudo (for dev environments) |
 
+### Build Output Configuration
+
+| Variable    | Default | Description                                    |
+| ----------- | ------- | ---------------------------------------------- |
+| `LOG_LEVEL` | `INFO`  | Build log verbosity (ERROR, WARN, INFO, DEBUG) |
+
+**Log Levels:**
+
+- `ERROR` (0): Only errors - minimal output for CI/CD
+- `WARN` (1): Errors and warnings
+- `INFO` (2): Normal verbosity (default)
+- `DEBUG` (3): Full verbosity for troubleshooting
+
+**Example - Quiet build for CI:**
+
+```bash
+docker build --build-arg LOG_LEVEL=ERROR -t myimage .
+```
+
+**Example - Verbose build for debugging:**
+
+```bash
+docker build --build-arg LOG_LEVEL=DEBUG -t myimage .
+```
+
 ### Feature Flags
 
 All features are disabled by default. Set to `true` to enable:
@@ -384,7 +409,8 @@ list-features.sh --filter dev-tools
 - [Dockerfile](../Dockerfile) - Complete list of build arguments with defaults
 - [Troubleshooting](troubleshooting.md) - Common issues with environment
   variables
-- [Testing Framework](../development/testing.md) - Test environment configuration
+- [Testing Framework](../development/testing.md) - Test environment
+  configuration
 
 ---
 

@@ -60,6 +60,12 @@ ARG USER_UID=1000
 ARG USER_GID=$USER_UID
 ARG ENABLE_PASSWORDLESS_SUDO=false
 
+# Build output verbosity
+# Values: ERROR (0), WARN (1), INFO (2), DEBUG (3)
+# Default: INFO for normal builds, use ERROR for quieter builds
+ARG LOG_LEVEL=INFO
+ENV LOG_LEVEL=${LOG_LEVEL}
+
 # Working directory and project name
 ARG PROJECT_NAME=project
 ARG WORKING_DIR=/workspace/${PROJECT_NAME}

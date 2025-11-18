@@ -126,11 +126,15 @@ test_log_command_failure() {
 
 # Test: log_message function
 test_log_message() {
+    # Set LOG_LEVEL to INFO to ensure messages are logged
+    # (test framework defaults to WARN which suppresses INFO)
+    export LOG_LEVEL=INFO
+
     log_feature_start "Test Feature"
-    
+
     # Log a message
     log_message "This is a test message"
-    
+
     # Check that message was logged
     if grep -q "This is a test message" "$CURRENT_LOG_FILE"; then
         assert_true true "Message logged successfully"
