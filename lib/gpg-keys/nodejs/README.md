@@ -1,6 +1,7 @@
 # Node.js Release Team GPG Keys
 
-This directory contains the GPG keyring for verifying Node.js release signatures.
+This directory contains the GPG keyring for verifying Node.js release
+signatures.
 
 ## Directory Structure
 
@@ -16,17 +17,22 @@ lib/gpg-keys/nodejs/
 
 ## Keyring Coverage
 
-The keyring contains GPG keys for **all Node.js release team members** (both active and historical), supporting verification of:
+The keyring contains GPG keys for **all Node.js release team members** (both
+active and historical), supporting verification of:
 
 - **Current releases** (latest major/minor/patch versions)
 - **LTS releases** (all active LTS lines)
 - **Historical releases** (older versions that may still be in use)
 
-**Important**: This is a single, unified keyring that works across all Node.js versions. Any Node.js release can be signed by any active releaser at the time of that release, so we maintain a complete keyring with all current and historical release team members' keys.
+**Important**: This is a single, unified keyring that works across all Node.js
+versions. Any Node.js release can be signed by any active releaser at the time
+of that release, so we maintain a complete keyring with all current and
+historical release team members' keys.
 
 ## Source
 
 The keyring is sourced from the official Node.js release-keys repository:
+
 - **Repository**: https://github.com/nodejs/release-keys
 - **Last Updated**: See `keyring-metadata.json` for commit hash and date
 - **Total Keys**: 28 (8 active releasers + 20 historical releasers)
@@ -44,15 +50,18 @@ The keyring is sourced from the official Node.js release-keys repository:
 
 ## Usage
 
-These keys are used by `lib/base/signature-verify.sh` to verify GPG signatures on Node.js release tarballs downloaded from https://nodejs.org/dist/.
+These keys are used by `lib/base/signature-verify.sh` to verify GPG signatures
+on Node.js release tarballs downloaded from https://nodejs.org/dist/.
 
 ### Verification Process
 
 Node.js releases include two signature file formats:
+
 - `SHASUMS256.txt.sig` - Binary GPG signature
 - `SHASUMS256.txt.asc` - ASCII-armored GPG signature
 
 The verification workflow:
+
 1. Download the Node.js tarball and SHASUMS256.txt file
 2. Download either the .sig or .asc signature file
 3. Verify the signature using the keyring in this directory
@@ -67,6 +76,7 @@ The verification workflow:
 ```
 
 This script:
+
 1. Clones the official nodejs/release-keys repository
 2. Copies the full keyring (including historical keys)
 3. Sets secure permissions (700 for directory, 600 for files)
@@ -76,18 +86,25 @@ This script:
 ### Automated Update
 
 The keyring should be updated when:
+
 - **New Node.js major/minor versions are released** (may have new releasers)
-- **New patch versions are released** (could be signed by different team members)
+- **New patch versions are released** (could be signed by different team
+  members)
 - **Release team membership changes** (new members join or keys are rotated)
 
 **Integration with version automation**:
-- The `bin/check-versions.sh` script can call `update-keyring.sh` when new Node.js versions are detected
-- The `bin/update-versions.sh` script can update the keyring as part of the version update process
+
+- The `bin/check-versions.sh` script can call `update-keyring.sh` when new
+  Node.js versions are detected
+- The `bin/update-versions.sh` script can update the keyring as part of the
+  version update process
 - This ensures GPG keys are refreshed whenever we update Node.js version pins
 
 ### Update Frequency
 
-**Recommended**: Check for keyring updates whenever new Node.js versions are detected by the automated version checking system. This ensures we always have the latest release team keys.
+**Recommended**: Check for keyring updates whenever new Node.js versions are
+detected by the automated version checking system. This ensures we always have
+the latest release team keys.
 
 **Minimum**: Update when new major/minor Node.js versions are released.
 
@@ -101,14 +118,18 @@ The keyring should be updated when:
 
 ### Verification Chain
 
-1. **Source Trust**: Keys are fetched from the official nodejs/release-keys repository
-2. **Git Integrity**: Repository is cloned via HTTPS with certificate verification
+1. **Source Trust**: Keys are fetched from the official nodejs/release-keys
+   repository
+2. **Git Integrity**: Repository is cloned via HTTPS with certificate
+   verification
 3. **Metadata Tracking**: We record the exact commit hash and date of the source
-4. **Reproducibility**: Anyone can verify our keyring matches the official source
+4. **Reproducibility**: Anyone can verify our keyring matches the official
+   source
 
 ### Cross-Reference
 
 The release team members can be cross-referenced with:
+
 - https://github.com/nodejs/node#release-keys
 - https://github.com/nodejs/node/blob/main/README.md#release-keys
 - Individual GPG key fingerprints on https://nodejs.org
@@ -117,9 +138,12 @@ The release team members can be cross-referenced with:
 
 ### Signature Verification Fails
 
-1. **Check keyring is up to date**: Run `./lib/gpg-keys/nodejs/update-keyring.sh`
-2. **Verify release team membership**: Check if the signer is in the official release-keys repo
-3. **Check signature file**: Ensure you're using SHASUMS256.txt.sig or .asc from the official dist server
+1. **Check keyring is up to date**: Run
+   `./lib/gpg-keys/nodejs/update-keyring.sh`
+2. **Verify release team membership**: Check if the signer is in the official
+   release-keys repo
+3. **Check signature file**: Ensure you're using SHASUMS256.txt.sig or .asc from
+   the official dist server
 
 ### Updating Keyring from Specific Commit
 
@@ -141,4 +165,5 @@ chmod 600 <containers-repo>/lib/gpg-keys/nodejs/keyring/*
 - Official Node.js release keys: https://github.com/nodejs/release-keys
 - Node.js security information: https://nodejs.org/en/about/security/
 - Node.js downloads: https://nodejs.org/dist/
-- GPG signature verification guide: https://github.com/nodejs/node#verifying-binaries
+- GPG signature verification guide:
+  https://github.com/nodejs/node#verifying-binaries
