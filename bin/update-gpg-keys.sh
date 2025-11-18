@@ -11,11 +11,12 @@
 #   python     - Update Python release manager GPG keys
 #   nodejs     - Update Node.js release team GPG keyring
 #   hashicorp  - Update HashiCorp Security GPG key (for Terraform, Vault, etc.)
+#   golang     - Update Google Linux Packages Signing Key (for Go releases)
 #   all        - Update all language GPG keys (default if no args)
 #
 # Examples:
 #   ./bin/update-gpg-keys.sh python
-#   ./bin/update-gpg-keys.sh nodejs python hashicorp
+#   ./bin/update-gpg-keys.sh nodejs python hashicorp golang
 #   ./bin/update-gpg-keys.sh all
 
 set -euo pipefail
@@ -293,6 +294,70 @@ update_hashicorp_keys() {
 }
 
 # ============================================================================
+# update_golang_keys - Update Google Linux Packages Signing Key (for Go)
+# ============================================================================
+update_golang_keys() {
+    log_info "=== Updating Go (Golang) GPG Key ==="
+    echo ""
+
+    local keys_dir="${GPG_KEYS_DIR}/golang/keys"
+    local temp_dir=$(mktemp -d)
+
+    # Download Google Linux Packages Signing Key
+    log_info "Fetching Google Linux Packages Signing Key..."
+
+    local google_key_url="https://dl.google.com/linux/linux_signing_key.pub"
+    local expected_fingerprint="EB4C1BFD4F042F6DDDCCEC917721F63BD38B4796"
+
+    if ! curl -fsSL "$google_key_url" -o "$temp_dir/google-linux-signing-key.asc" 2>/dev/null; then
+        log_error "Failed to download Google signing key from ${google_key_url}"
+        rm -rf "$temp_dir"
+        return 1
+    fi
+
+    log_success "Downloaded Google Linux Packages Signing Key"
+
+    # Verify the fingerprint matches the expected value
+    log_info "Verifying key fingerprint..."
+    local actual_fingerprint
+    actual_fingerprint=$(gpg --with-colons --show-keys "$temp_dir/google-linux-signing-key.asc" 2>/dev/null | \
+        awk -F: '/^fpr:/ {print $10; exit}')
+
+    if [ "$actual_fingerprint" != "$expected_fingerprint" ]; then
+        log_error "GPG key fingerprint mismatch!"
+        log_error "Expected: ${expected_fingerprint}"
+        log_error "Got:      ${actual_fingerprint}"
+        rm -rf "$temp_dir"
+        return 1
+    fi
+
+    log_success "Key fingerprint verified: ${actual_fingerprint}"
+
+    # Create keys directory if it doesn't exist
+    mkdir -p "$keys_dir"
+
+    # Copy key to directory
+    cp "$temp_dir/google-linux-signing-key.asc" "$keys_dir/"
+
+    # Set secure permissions
+    chmod 700 "$keys_dir"
+    chmod 600 "$keys_dir"/google-linux-signing-key.asc
+
+    # Clean up
+    rm -rf "$temp_dir"
+
+    echo ""
+    log_success "Google Linux Packages Signing Key updated successfully"
+    log_info "  Keys directory: $keys_dir"
+    log_info "  Key file: google-linux-signing-key.asc"
+    log_info "  Fingerprint: ${actual_fingerprint}"
+    log_info "  Used for: Go (Golang) binary releases and other Google Linux packages"
+    echo ""
+
+    return 0
+}
+
+# ============================================================================
 # Main Script
 # ============================================================================
 main() {
@@ -300,7 +365,7 @@ main() {
 
     # If no arguments or "all" specified, update all languages
     if [ ${#languages[@]} -eq 0 ] || [[ " ${languages[*]} " =~ " all " ]]; then
-        languages=("python" "nodejs" "hashicorp")
+        languages=("python" "nodejs" "hashicorp" "golang")
     fi
 
     echo "=== GPG Keys Update Script ==="
@@ -328,6 +393,13 @@ main() {
                     UPDATED_LANGUAGES+=("hashicorp")
                 else
                     FAILED_LANGUAGES+=("hashicorp")
+                fi
+                ;;
+            golang)
+                if update_golang_keys; then
+                    UPDATED_LANGUAGES+=("golang")
+                else
+                    FAILED_LANGUAGES+=("golang")
                 fi
                 ;;
             all)

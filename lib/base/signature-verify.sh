@@ -9,6 +9,7 @@
 #   - Python 3.11.0+:  Sigstore (preferred) + GPG (fallback)
 #   - Python < 3.11.0: GPG only
 #   - Node.js:         GPG (SHASUMS256.txt.sig or .asc)
+#   - Go (Golang):     GPG (.asc signatures via Google signing key)
 #   - Terraform:       GPG (terraform_<version>_SHA256SUMS.sig via HashiCorp key)
 #   - kubectl:         Sigstore (requires cosign from kubernetes or docker feature)
 #   - All others:      GPG only (where available)
@@ -418,6 +419,53 @@ download_and_verify_terraform_gpg() {
         command rm -f "$shasums_file" "$signature_file"
         return 1
     fi
+}
+
+# ============================================================================
+# download_and_verify_golang_gpg - Go-specific GPG verification
+#
+# Go releases include .asc signature files that can be verified using
+# Google's Linux Packages Signing Key.
+#
+# Arguments:
+#   $1 - File to verify (e.g., "go1.23.4.linux-amd64.tar.gz")
+#   $2 - Go version (e.g., "1.23.4")
+#
+# Returns:
+#   0 on successful verification, 1 on failure
+#
+# Example:
+#   download_and_verify_golang_gpg "go1.23.4.linux-amd64.tar.gz" "1.23.4"
+# ============================================================================
+download_and_verify_golang_gpg() {
+    local file="$1"
+    local version="$2"
+    local filename
+    filename=$(basename "$file")
+
+    # Go signature URL
+    local sig_url="https://go.dev/dl/${filename}.asc"
+    local signature_file="${file}.asc"
+
+    log_message "Downloading Go GPG signature..."
+    if ! command curl -fsSL -o "$signature_file" "$sig_url" 2>/dev/null; then
+        log_warning "Failed to download GPG signature from ${sig_url}"
+        return 1
+    fi
+
+    log_message "✓ Downloaded GPG signature"
+
+    # Verify the GPG signature
+    log_message "Verifying GPG signature..."
+    if ! verify_gpg_signature "$file" "$signature_file" "golang"; then
+        log_error "GPG signature verification failed"
+        command rm -f "$signature_file"
+        return 1
+    fi
+
+    log_message "✓ GPG signature verified successfully"
+    command rm -f "$signature_file"
+    return 0
 }
 
 # ============================================================================
@@ -878,6 +926,18 @@ verify_signature() {
         fi
     fi
 
+    # Go-specific logic: Use .asc signature verification
+    if [ "$language" = "golang" ] || [ "$language" = "go" ]; then
+        log_message "Go detected, using GPG .asc signature verification..."
+
+        if download_and_verify_golang_gpg "$file" "$version"; then
+            log_message "✓ Go GPG verification successful"
+            return 0
+        else
+            log_warning "Go GPG verification failed"
+        fi
+    fi
+
     # Try GPG verification for all languages (fallback for Python/Node.js, primary for others)
     log_message "Attempting GPG verification..."
 
@@ -908,6 +968,7 @@ export -f verify_gpg_signature
 export -f download_and_verify_gpg
 export -f download_and_verify_nodejs_gpg
 export -f download_and_verify_terraform_gpg
+export -f download_and_verify_golang_gpg
 export -f download_and_verify_kubectl_sigstore
 export -f verify_sigstore_signature
 export -f get_python_release_manager
