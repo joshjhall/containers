@@ -8,6 +8,7 @@
 # Signature Support by Language:
 #   - Python 3.11.0+:  Sigstore (preferred) + GPG (fallback)
 #   - Python < 3.11.0: GPG only
+#   - Node.js:         GPG (SHASUMS256.txt.sig or .asc)
 #   - All others:      GPG only (where available)
 #
 # Usage:
@@ -39,6 +40,10 @@ GPG_KEYRING_DIR="/tmp/build-scripts/gpg-keys"
 #
 # Example:
 #   import_gpg_keys "python"
+#
+# Supports two keyring formats:
+#   1. Individual key files: keys/*.asc, keys/*.gpg (Python style)
+#   2. GPG keyring directory: keyring/pubring.kbx + trustdb.gpg (Node.js style)
 # ============================================================================
 import_gpg_keys() {
     local language="$1"
@@ -49,12 +54,39 @@ import_gpg_keys() {
         return 1
     fi
 
+    # Check if there's a keyring subdirectory (Node.js style)
+    if [ -d "${keyring_path}/keyring" ] && [ -f "${keyring_path}/keyring/pubring.kbx" ]; then
+        log_message "Using GPG keyring directory for ${language}"
+
+        # Export GNUPGHOME to use this keyring for verification
+        export GNUPGHOME="${keyring_path}/keyring"
+
+        # Verify keyring is readable
+        if ! gpg --list-keys >/dev/null 2>&1; then
+            log_error "Failed to read GPG keyring for ${language}"
+            return 1
+        fi
+
+        local key_count
+        key_count=$(gpg --list-keys 2>/dev/null | grep -c "^pub" || echo "0")
+        log_message "Using keyring with ${key_count} GPG keys for ${language}"
+        return 0
+    fi
+
+    # Otherwise, import individual key files (Python style)
+    # Check for keys in a 'keys/' subdirectory first, then fall back to root
+    local keys_dir="${keyring_path}"
+    if [ -d "${keyring_path}/keys" ]; then
+        keys_dir="${keyring_path}/keys"
+        log_message "Using individual GPG keys from ${language}/keys/"
+    fi
+
     local key_count=0
     local imported_count=0
 
-    # Import all .asc and .gpg files from the keyring directory
+    # Import all .asc and .gpg files from the keys directory
     for ext in asc gpg; do
-        for key_file in "${keyring_path}"/*."${ext}"; do
+        for key_file in "${keys_dir}"/*."${ext}"; do
             [ -f "$key_file" ] || continue
 
             key_count=$((key_count + 1))
@@ -192,6 +224,108 @@ download_and_verify_gpg() {
     command rm -f "$signature_file"
 
     return $result
+}
+
+# ============================================================================
+# download_and_verify_nodejs_gpg - Node.js-specific GPG verification
+#
+# Node.js uses a SHASUMS256.txt file with a GPG signature, rather than
+# per-file signatures. This function:
+#   1. Downloads SHASUMS256.txt and its signature (.sig or .asc)
+#   2. Verifies the GPG signature of SHASUMS256.txt
+#   3. Extracts the checksum for the specific file
+#   4. Verifies the file checksum matches
+#
+# Arguments:
+#   $1 - File to verify (e.g., "node-v20.18.0-linux-x64.tar.xz")
+#   $2 - Node.js version (e.g., "20.18.0")
+#
+# Returns:
+#   0 on successful verification, 1 on failure
+#
+# Example:
+#   download_and_verify_nodejs_gpg "node-v20.18.0-linux-x64.tar.xz" "20.18.0"
+# ============================================================================
+download_and_verify_nodejs_gpg() {
+    local file="$1"
+    local version="$2"
+    local filename
+    filename=$(basename "$file")
+
+    # Node.js SHASUMS256.txt URL
+    local shasums_url="https://nodejs.org/dist/v${version}/SHASUMS256.txt"
+    local shasums_file="${file%/*}/SHASUMS256.txt"
+
+    log_message "Downloading Node.js checksums file..."
+    if ! command curl -fsSL -o "$shasums_file" "$shasums_url" 2>/dev/null; then
+        log_warning "Failed to download SHASUMS256.txt from ${shasums_url}"
+        return 1
+    fi
+
+    # Try .sig first (binary signature), then .asc (ASCII-armored)
+    local signature_file=""
+    local sig_url=""
+
+    for ext in sig asc; do
+        sig_url="${shasums_url}.${ext}"
+        signature_file="${shasums_file}.${ext}"
+
+        log_message "Attempting to download SHASUMS256.txt.${ext}..."
+        if command curl -fsSL -o "$signature_file" "$sig_url" 2>/dev/null; then
+            log_message "✓ Downloaded SHASUMS256.txt.${ext}"
+            break
+        else
+            log_message "  SHASUMS256.txt.${ext} not available"
+            signature_file=""
+        fi
+    done
+
+    if [ -z "$signature_file" ] || [ ! -f "$signature_file" ]; then
+        log_warning "Failed to download Node.js GPG signature (.sig or .asc)"
+        command rm -f "$shasums_file"
+        return 1
+    fi
+
+    # Verify the GPG signature of SHASUMS256.txt
+    log_message "Verifying GPG signature of SHASUMS256.txt..."
+    if ! verify_gpg_signature "$shasums_file" "$signature_file" "nodejs"; then
+        log_error "GPG signature verification failed for SHASUMS256.txt"
+        command rm -f "$shasums_file" "$signature_file"
+        return 1
+    fi
+
+    log_message "✓ GPG signature verified successfully"
+
+    # Extract checksum for our specific file from SHASUMS256.txt
+    log_message "Extracting checksum for ${filename}..."
+    local expected_checksum
+    expected_checksum=$(grep "${filename}" "$shasums_file" | awk '{print $1}')
+
+    if [ -z "$expected_checksum" ]; then
+        log_error "File ${filename} not found in SHASUMS256.txt"
+        command rm -f "$shasums_file" "$signature_file"
+        return 1
+    fi
+
+    log_message "Expected checksum: ${expected_checksum}"
+
+    # Calculate actual checksum
+    local actual_checksum
+    actual_checksum=$(sha256sum "$file" | awk '{print $1}')
+    log_message "Actual checksum:   ${actual_checksum}"
+
+    # Compare checksums
+    if [ "$actual_checksum" = "$expected_checksum" ]; then
+        log_message "✓ Checksum verification passed"
+        command rm -f "$shasums_file" "$signature_file"
+        return 0
+    else
+        log_error "Checksum mismatch!"
+        log_error "Expected: ${expected_checksum}"
+        log_error "Got:      ${actual_checksum}"
+        command rm -f "$shasums_file" "$signature_file"
+        return 1
+    fi
 }
 
 # ============================================================================
@@ -521,7 +655,19 @@ verify_signature() {
         fi
     fi
 
-    # Try GPG verification for all languages (fallback for Python, primary for others)
+    # Node.js-specific logic: Use SHASUMS-based verification
+    if [ "$language" = "nodejs" ]; then
+        log_message "Node.js detected, using SHASUMS-based GPG verification..."
+
+        if download_and_verify_nodejs_gpg "$file" "$version"; then
+            log_message "✓ Node.js GPG verification successful"
+            return 0
+        else
+            log_warning "Node.js GPG verification failed"
+        fi
+    fi
+
+    # Try GPG verification for all languages (fallback for Python/Node.js, primary for others)
     log_message "Attempting GPG verification..."
 
     # Try to auto-detect GPG signature URL if not provided
@@ -531,6 +677,7 @@ verify_signature() {
                 signature_url="https://www.python.org/ftp/python/${version}/$(basename "$file").asc"
                 ;;
             # Add other languages as GPG support is implemented
+            # Note: nodejs uses SHASUMS-based verification (handled above)
         esac
     fi
 
@@ -548,6 +695,7 @@ verify_signature() {
 export -f import_gpg_keys
 export -f verify_gpg_signature
 export -f download_and_verify_gpg
+export -f download_and_verify_nodejs_gpg
 export -f verify_sigstore_signature
 export -f get_python_release_manager
 export -f download_and_verify_sigstore

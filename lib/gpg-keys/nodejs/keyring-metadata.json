@@ -1,0 +1,41 @@
+{
+  "source": {
+    "repository": "https://github.com/nodejs/release-keys",
+    "commit": "901fc09b83c686693be51b3c9a13578929cbc1ab",
+    "commit_date": "2025-07-18T11:35:24-05:00",
+    "commit_message": "Merge pull request #47 from nodejs/update-ulises"
+  },
+  "fetched": {
+    "date": "2025-11-17",
+    "by": "automated"
+  },
+  "keyring": {
+    "total_keys": 28,
+    "active_releasers": 8,
+    "includes_historical": true,
+    "description": "Complete keyring including both active and historical Node.js release signing keys"
+  },
+  "active_releasers": [
+    "Antoine du Hamel",
+    "Juan José Arboleda",
+    "Marco Ippolito",
+    "Michaël Zasso",
+    "Rafael Gonzaga",
+    "Richard Lau",
+    "Ruy Adorno",
+    "Ulises Gascón"
+  ],
+  "usage": {
+    "verification_method": "GPG signature verification",
+    "signature_files": [
+      "SHASUMS256.txt.sig (binary signature)",
+      "SHASUMS256.txt.asc (ASCII-armored signature)"
+    ],
+    "supported_versions": "All Node.js versions (current, LTS, and historical releases)"
+  },
+  "update_instructions": {
+    "manual": "Run: bin/update-gpg-keys.sh",
+    "automated": "Triggered automatically when check-versions.sh detects new Node.js releases",
+    "frequency": "Check for updates when new Node.js major/minor versions are released"
+  }
+}
