@@ -9,19 +9,23 @@
 
 ## Description
 
-The container healthcheck is failing, indicating a critical issue with the container runtime environment. This means core functionality (user, directories, essential commands, or installed features) is not working correctly.
+The container healthcheck is failing, indicating a critical issue with the
+container runtime environment. This means core functionality (user, directories,
+essential commands, or installed features) is not working correctly.
 
 ## Impact
 
 ### User Impact
 
-- **HIGH**: Users cannot use the container for development or production workloads
+- **HIGH**: Users cannot use the container for development or production
+  workloads
 - Container may be restarting repeatedly
 - Work in progress may be lost if container terminates
 
 ### System Impact
 
-- Container orchestration (Kubernetes, Docker Swarm) may kill and restart the container
+- Container orchestration (Kubernetes, Docker Swarm) may kill and restart the
+  container
 - Dependent services may fail if they rely on this container
 - Metrics and logs may be incomplete due to restart cycles
 
@@ -112,7 +116,8 @@ check-installed-versions.sh
 
 ### Common Causes
 
-1. **Incomplete initialization**: Container started before initialization completed
+1. **Incomplete initialization**: Container started before initialization
+   completed
 2. **Disk full**: No space left for healthcheck or feature operation
 3. **Missing dependencies**: Feature installation failed during build
 4. **Corrupted files**: Critical files were deleted or corrupted
@@ -202,8 +207,10 @@ watch -n 10 'healthcheck && echo "HEALTHY"'
 ### Short-term
 
 - **Add retry logic** to critical operations during container startup
-- **Increase healthcheck timeout** if legitimate operations take longer than 2 minutes
-- **Add resource alerts** to detect disk/memory issues before they cause failures
+- **Increase healthcheck timeout** if legitimate operations take longer than 2
+  minutes
+- **Add resource alerts** to detect disk/memory issues before they cause
+  failures
 
 ### Long-term
 
@@ -261,7 +268,8 @@ Escalate to:
 ## History
 
 - **First Occurrence**: [Track in incident log]
-- **Frequency**: Monitor via Prometheus query: `count_over_time(ALERTS{alertname="ContainerUnhealthy"}[7d])`
+- **Frequency**: Monitor via Prometheus query:
+  `count_over_time(ALERTS{alertname="ContainerUnhealthy"}[7d])`
 - **False Positive Rate**: If high (>20%), adjust healthcheck thresholds
 
 ## Post-Incident

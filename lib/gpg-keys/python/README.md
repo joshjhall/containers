@@ -27,7 +27,7 @@ signatures.
 
 ## Directory Structure
 
-```
+```text
 lib/gpg-keys/python/
 ├── keys/                   # Individual GPG key files (permissions: 700)
 │   ├── thomas-wouters.asc # Python 3.12.x, 3.13.x (permissions: 600)

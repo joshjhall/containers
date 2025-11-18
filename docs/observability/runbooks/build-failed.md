@@ -9,7 +9,9 @@
 
 ## Description
 
-One or more features failed to install correctly during container build. This is indicated by non-zero error counts in the build logs. While the container may still run, missing features will not be available.
+One or more features failed to install correctly during container build. This is
+indicated by non-zero error counts in the build logs. While the container may
+still run, missing features will not be available.
 
 ## Impact
 
@@ -347,7 +349,8 @@ Escalate to:
 ## History
 
 - **First Occurrence**: [Track in build logs]
-- **Frequency**: Query via: `count_over_time(ALERTS{alertname="ContainerBuildFailed"}[7d])`
+- **Frequency**: Query via:
+  `count_over_time(ALERTS{alertname="ContainerBuildFailed"}[7d])`
 - **Common Features**: Track which features fail most often
 - **False Positive Rate**: Should be low for build errors
 

@@ -307,15 +307,20 @@ conftest test deployment.yaml -p policy/
 ### Remediation
 
 1. **Document the misconfiguration**
+
 2. **Apply correct configuration**
+
    ```bash
    kubectl patch deployment <deployment> \
      -p '{"spec":{"template":{"spec":{"securityContext":{"runAsNonRoot":true}}}}}'
    ```
+
 3. **Verify fix**
+
    ```bash
    kubectl get deployment <deployment> -o yaml | grep -A5 securityContext
    ```
+
 4. **Update configuration management**
 
 ---
@@ -324,7 +329,7 @@ conftest test deployment.yaml -p policy/
 
 ### Initial Notification (Internal)
 
-```
+```text
 Subject: [SECURITY INCIDENT] <Severity> - <Brief Description>
 
 Incident ID: INC-<YYYY-MM-DD>-<number>
@@ -347,7 +352,7 @@ Contact: <Incident Commander>
 
 ### Status Update
 
-```
+```text
 Subject: [UPDATE] INC-<ID> - <Brief Description>
 
 Status: <Current status>
@@ -364,7 +369,7 @@ ETA for resolution: <Time if known>
 
 ### Post-Incident Report
 
-```
+```text
 Incident Report: INC-<ID>
 
 1. Executive Summary

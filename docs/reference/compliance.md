@@ -147,33 +147,33 @@ organization.
 
 ### High Priority Gaps
 
-3. **TLS/mTLS Enforcement** - GitHub Issue #26
+1. **TLS/mTLS Enforcement** - GitHub Issue #26
    - Affects: GDPR, HIPAA, PCI DSS, FedRAMP
    - Solution: Network policies, service mesh examples
    - Effort: 2 days
 
-4. **Policy Enforcement** - GitHub Issue #28
+2. **Policy Enforcement** - GitHub Issue #28
    - Affects: SOC 2, ISO 27001, GDPR, HIPAA
    - Solution: OPA Gatekeeper for admission control
    - Effort: 4 days
 
-5. **Immutable Log Storage** - GitHub Issue #29
+3. **Immutable Log Storage** - GitHub Issue #29
    - Affects: SOC 2, ISO 27001, GDPR, HIPAA, PCI DSS
    - Solution: Loki with S3 backend, object lock
    - Effort: 3 days
 
 ### Medium Priority Gaps
 
-6. **Backup and DR** - GitHub Issue #33
-7. **Security Contexts** - GitHub Issue #32
-8. **Resource Limits** - GitHub Issue #34
-9. **Data Classification** - GitHub Issue #35
+1. **Backup and DR** - GitHub Issue #33
+2. **Security Contexts** - GitHub Issue #32
+3. **Resource Limits** - GitHub Issue #34
+4. **Data Classification** - GitHub Issue #35
 
 ### Documentation Gaps
 
-10. **Encryption-at-Rest** - GitHub Issue #42
-11. **Software Allowlist** - GitHub Issue #43
-12. **MFA Integration** - GitHub Issue #30
+1. **Encryption-at-Rest** - GitHub Issue #42
+2. **Software Allowlist** - GitHub Issue #43
+3. **MFA Integration** - GitHub Issue #30
 
 ## Implementation Roadmap
 
@@ -216,27 +216,33 @@ organization.
 ### SOC 2 Type II
 
 **Estimated Effort**: 3-4 weeks of implementation
+
 **Key Requirements**: Issues #24, #27, #28, #29
 
 ### ISO 27001:2022
 
 **Estimated Effort**: 3-4 weeks of implementation
+
 **Key Requirements**: Issues #24, #26, #27, #28
 
 ### HIPAA
 
 **Estimated Effort**: 4-5 weeks of implementation
+
 **Key Requirements**: Issues #24, #26, #29, #30, #33
+
 **Special Note**: 6-year log retention required
 
 ### PCI DSS v4.0
 
 **Estimated Effort**: 4-5 weeks of implementation
+
 **Key Requirements**: Issues #24, #26, #27, #42
 
 ### FedRAMP Moderate
 
 **Estimated Effort**: 6-8 weeks of implementation
+
 **Key Requirements**: Issues #24, #26, #28, #29, #30, #43, #44
 
 ## Related Resources

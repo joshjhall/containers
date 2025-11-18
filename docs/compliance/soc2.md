@@ -5,7 +5,7 @@ Services Criteria (TSC), focusing on the Security and Availability principles.
 
 ## Summary
 
-**Overall Coverage: ~65%**
+Overall Coverage: ~65%
 
 Strong coverage for Security principle; Availability and Confidentiality
 partially addressed. Processing Integrity and Privacy are application-specific
@@ -25,7 +25,7 @@ and outside container scope.
 
 #### CC6.1 - Logical Access Security
 
-**Status: ✅ Complete**
+Status: ✅ Complete
 
 **Criteria**: The entity implements logical access security software,
 infrastructure, and architectures to protect information assets.
@@ -54,7 +54,7 @@ docker run --rm \
 
 #### CC6.6 - System Boundaries
 
-**Status: ⚠️ Partial**
+Status: ⚠️ Partial
 
 **Criteria**: The entity implements logical access security to protect against
 threats from outside system boundaries.
@@ -75,7 +75,7 @@ threats from outside system boundaries.
 
 #### CC6.8 - Preventing Malicious Software
 
-**Status: ✅ Complete**
+Status: ✅ Complete
 
 **Criteria**: The entity implements controls to prevent or detect and remediate
 malicious software.
@@ -105,7 +105,7 @@ cosign verify --certificate-identity-regexp=... your-image
 
 #### CC7.1 - Configuration Management
 
-**Status: ✅ Complete**
+Status: ✅ Complete
 
 **Criteria**: The entity manages changes to infrastructure, data, software, and
 procedures.
@@ -127,7 +127,7 @@ procedures.
 
 #### CC7.2 - Monitoring and Detection
 
-**Status: ⚠️ Partial**
+Status: ⚠️ Partial
 
 **Criteria**: The entity monitors system components for anomalies and evaluates
 events for security incidents.
@@ -149,7 +149,7 @@ events for security incidents.
 
 #### CC7.3 - Vulnerability Management
 
-**Status: ✅ Complete**
+Status: ✅ Complete
 
 **Criteria**: The entity evaluates and manages vulnerabilities.
 
@@ -176,7 +176,7 @@ trivy image --severity CRITICAL,HIGH your-image
 
 #### CC8.1 - Authorization of Changes
 
-**Status: ⚠️ Partial**
+Status: ⚠️ Partial
 
 **Criteria**: The entity authorizes, designs, develops, tests, and implements
 changes.
@@ -202,7 +202,7 @@ changes.
 
 #### A1.1 - Capacity Planning
 
-**Status: ⚠️ Examples**
+Status: ⚠️ Examples
 
 **Criteria**: The entity maintains processing capacity to meet commitments.
 
@@ -227,7 +227,7 @@ resources:
 
 #### A1.2 - Recovery Procedures
 
-**Status: ⚠️ Gap**
+Status: ⚠️ Gap
 
 **Criteria**: The entity establishes backup and recovery procedures.
 
@@ -249,7 +249,7 @@ resources:
 
 ### C1: Protection of Confidential Information
 
-**Status: ⚠️ Partial**
+Status: ⚠️ Partial
 
 **Criteria**: The entity protects confidential information during processing.
 

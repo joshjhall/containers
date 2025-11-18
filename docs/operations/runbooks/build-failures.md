@@ -139,7 +139,7 @@ docker build --progress=plain -f containers/Dockerfile . 2>&1 | tee build.log
 
 Look for the last successful step and the first failing step in the output:
 
-```
+```text
 #15 [base-setup 3/5] RUN /tmp/build-scripts/base/install-packages.sh
 #15 DONE 45.2s
 

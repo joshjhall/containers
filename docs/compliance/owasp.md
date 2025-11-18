@@ -6,7 +6,7 @@ risks.
 
 ## Summary
 
-**Overall Coverage: 8/10 controls fully addressed**
+Overall Coverage: 8/10 controls fully addressed
 
 | Risk | Status      | Summary                                   |
 | ---- | ----------- | ----------------------------------------- |
@@ -25,7 +25,7 @@ risks.
 
 ### D01: Secure User Mapping
 
-**Status: ✅ Complete**
+Status: ✅ Complete
 
 **Risk**: Running containers as root gives attackers elevated privileges if they
 escape the container.
@@ -49,7 +49,7 @@ docker run --rm your-image id
 
 ### D02: Patch Management Strategy
 
-**Status: ✅ Complete**
+Status: ✅ Complete
 
 **Risk**: Outdated packages contain known vulnerabilities.
 
@@ -77,7 +77,7 @@ trivy image --severity HIGH,CRITICAL your-image
 
 ### D03: Network Segmentation and Firewalling
 
-**Status: ⚠️ Examples Provided**
+Status: ⚠️ Examples Provided
 
 **Risk**: Unrestricted network access enables lateral movement.
 
@@ -108,7 +108,7 @@ spec:
 
 ### D04: Secure Defaults and Hardening
 
-**Status: ✅ Complete**
+Status: ✅ Complete
 
 **Risk**: Insecure defaults expose unnecessary attack surface.
 
@@ -132,7 +132,7 @@ docker run --rm your-image find / -perm /6000 -type f 2>/dev/null
 
 ### D05: Maintain Security Contexts
 
-**Status: ⚠️ Partial**
+Status: ⚠️ Partial
 
 **Risk**: Missing security contexts allow privilege escalation.
 
@@ -160,7 +160,7 @@ securityContext:
 
 ### D06: Protect Secrets
 
-**Status: ✅ Complete**
+Status: ✅ Complete
 
 **Risk**: Secrets embedded in images or exposed in logs.
 
@@ -187,7 +187,7 @@ trivy image --scanners secret your-image
 
 ### D07: Resource Protection
 
-**Status: ⚠️ Examples Provided**
+Status: ⚠️ Examples Provided
 
 **Risk**: Resource exhaustion enables denial of service.
 
@@ -214,7 +214,7 @@ See [Production Checklist](production-checklist.md#resource-configuration).
 
 ### D08: Container Image Integrity and Origin
 
-**Status: ✅ Complete**
+Status: ✅ Complete
 
 **Risk**: Tampered images introduce malicious code.
 
@@ -241,7 +241,7 @@ cosign verify \
 
 ### D09: Immutable Container Filesystems
 
-**Status: ✅ Complete**
+Status: ✅ Complete
 
 **Risk**: Writable filesystems allow runtime modification.
 
@@ -267,7 +267,7 @@ volumeMounts:
 
 ### D10: Logging
 
-**Status: ✅ Complete**
+Status: ✅ Complete
 
 **Risk**: Insufficient logging prevents incident detection.
 
