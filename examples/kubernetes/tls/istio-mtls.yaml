@@ -1,0 +1,150 @@
+# Istio Service Mesh mTLS Configuration
+#
+# Prerequisites:
+#   istioctl install --set profile=default
+#   kubectl label namespace default istio-injection=enabled
+#
+# Compliance Coverage:
+#   - GDPR Art. 32: Encryption of personal data
+#   - HIPAA §164.312(e): Transmission security
+#   - PCI DSS 4.1: Strong cryptography
+#   - SOC 2 CC6.7: Encryption in transit
+
+---
+# Namespace-wide strict mTLS
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: default
+  namespace: default
+spec:
+  mtls:
+    mode: STRICT
+
+---
+# Mesh-wide strict mTLS (apply to istio-system namespace)
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: default
+  namespace: istio-system
+spec:
+  mtls:
+    mode: STRICT
+
+---
+# DestinationRule to enforce mTLS for all services
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: default
+  namespace: istio-system
+spec:
+  host: "*.local"
+  trafficPolicy:
+    tls:
+      mode: ISTIO_MUTUAL
+
+---
+# Authorization Policy - Deny all by default
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: deny-all
+  namespace: default
+spec:
+  {}  # Empty spec = deny all
+
+---
+# Authorization Policy - Allow specific services
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: allow-app
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: myapp
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            principals:
+              - cluster.local/ns/default/sa/frontend
+      to:
+        - operation:
+            methods:
+              - GET
+              - POST
+            paths:
+              - /api/*
+
+---
+# RequestAuthentication for JWT validation
+apiVersion: security.istio.io/v1beta1
+kind: RequestAuthentication
+metadata:
+  name: jwt-auth
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: myapp
+  jwtRules:
+    - issuer: https://auth.example.com
+      jwksUri: https://auth.example.com/.well-known/jwks.json
+      audiences:
+        - myapp
+      forwardOriginalToken: true
+
+---
+# Gateway with TLS termination
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: app-gateway
+  namespace: default
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+    - port:
+        number: 443
+        name: https
+        protocol: HTTPS
+      tls:
+        mode: SIMPLE
+        credentialName: app-tls-secret  # From cert-manager
+      hosts:
+        - app.example.com
+    - port:
+        number: 80
+        name: http
+        protocol: HTTP
+      hosts:
+        - app.example.com
+      tls:
+        httpsRedirect: true
+
+---
+# VirtualService for routing
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: app
+  namespace: default
+spec:
+  hosts:
+    - app.example.com
+  gateways:
+    - app-gateway
+  http:
+    - match:
+        - uri:
+            prefix: /
+      route:
+        - destination:
+            host: app
+            port:
+              number: 8080
