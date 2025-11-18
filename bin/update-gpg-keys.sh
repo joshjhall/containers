@@ -57,7 +57,8 @@ update_python_keys() {
     echo ""
 
     local keys_dir="${GPG_KEYS_DIR}/python/keys"
-    local temp_dir=$(mktemp -d)
+    local temp_dir
+    temp_dir=$(mktemp -d)
 
     # Download Python GPG keys from official sources
     log_info "Fetching Python release manager GPG keys..."
@@ -105,7 +106,8 @@ update_python_keys() {
     chmod 600 "$keys_dir"/*.asc
 
     # Count keys
-    local key_count=$(ls -1 "$keys_dir"/*.asc 2>/dev/null | wc -l)
+    local key_count
+    key_count=$(ls -1 "$keys_dir"/*.asc 2>/dev/null | wc -l)
 
     # Clean up
     rm -rf "$temp_dir"
@@ -128,7 +130,8 @@ update_nodejs_keys() {
 
     local keyring_dir="${GPG_KEYS_DIR}/nodejs/keyring"
     local metadata_file="${GPG_KEYS_DIR}/nodejs/keyring-metadata.json"
-    local temp_dir=$(mktemp -d)
+    local temp_dir
+    temp_dir=$(mktemp -d)
 
     # Clone the official release-keys repository
     log_info "Fetching latest release-keys from GitHub..."
@@ -140,9 +143,12 @@ update_nodejs_keys() {
 
     # Get metadata from the repository
     cd "$temp_dir/release-keys"
-    local commit_hash=$(git log -1 --format="%H")
-    local commit_date=$(git log -1 --format="%ci")
-    local commit_msg=$(git log -1 --format="%s")
+    local commit_hash
+    local commit_date
+    local commit_msg
+    commit_hash=$(git log -1 --format="%H")
+    commit_date=$(git log -1 --format="%ci")
+    commit_msg=$(git log -1 --format="%s")
 
     log_info "  Latest commit: $commit_hash"
     log_info "  Commit date: $commit_date"
@@ -159,7 +165,8 @@ update_nodejs_keys() {
     chmod 600 "$keyring_dir"/*
 
     # Count keys
-    local total_keys=$(GNUPGHOME="$temp_dir/release-keys/gpg" gpg --list-keys 2>/dev/null | grep -c "^pub" || echo "0")
+    local total_keys
+    total_keys=$(GNUPGHOME="$temp_dir/release-keys/gpg" gpg --list-keys 2>/dev/null | grep -c "^pub" || echo "0")
     log_info "  Total keys in keyring: $total_keys"
     echo ""
 
@@ -169,7 +176,8 @@ update_nodejs_keys() {
         grep "^uid" | sed 's/uid.*\] /  - /' | sort -u
 
     # Generate metadata file
-    local fetch_date=$(date +%Y-%m-%d)
+    local fetch_date
+    fetch_date=$(date +%Y-%m-%d)
     cat > "$metadata_file" << EOF
 {
   "source": {
@@ -238,7 +246,8 @@ update_hashicorp_keys() {
     echo ""
 
     local keys_dir="${GPG_KEYS_DIR}/hashicorp/keys"
-    local temp_dir=$(mktemp -d)
+    local temp_dir
+    temp_dir=$(mktemp -d)
 
     # Download HashiCorp GPG key from official source
     log_info "Fetching HashiCorp Security GPG key..."
@@ -301,7 +310,8 @@ update_golang_keys() {
     echo ""
 
     local keys_dir="${GPG_KEYS_DIR}/golang/keys"
-    local temp_dir=$(mktemp -d)
+    local temp_dir
+    temp_dir=$(mktemp -d)
 
     # Download Google Linux Packages Signing Key
     log_info "Fetching Google Linux Packages Signing Key..."
