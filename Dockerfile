@@ -66,6 +66,12 @@ ARG ENABLE_PASSWORDLESS_SUDO=false
 ARG LOG_LEVEL=INFO
 ENV LOG_LEVEL=${LOG_LEVEL}
 
+# JSON logging for production environments
+# Set to true for structured logging suitable for log aggregation
+# Recommended for production: --build-arg ENABLE_JSON_LOGGING=true
+ARG ENABLE_JSON_LOGGING=false
+ENV ENABLE_JSON_LOGGING=${ENABLE_JSON_LOGGING}
+
 # Working directory and project name
 ARG PROJECT_NAME=project
 ARG WORKING_DIR=/workspace/${PROJECT_NAME}
