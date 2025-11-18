@@ -98,6 +98,35 @@ jobs:
             echo "Warning: Checksum updates failed, continuing anyway"
           }
 
+          # Update GPG keys (check for changes)
+          echo "Checking for GPG key updates..."
+          git diff --quiet lib/gpg-keys/ || echo "HAS_EXISTING_CHANGES=true" >> $GITHUB_ENV
+
+          ./bin/update-gpg-keys.sh all || {
+            echo "Warning: GPG key updates failed, continuing anyway"
+          }
+
+          # Detect if GPG keys changed
+          if git diff --quiet lib/gpg-keys/; then
+            echo "No GPG key changes detected"
+            echo "gpg_keys_changed=false" >> $GITHUB_ENV
+          else
+            echo "GPG key changes detected!"
+            echo "gpg_keys_changed=true" >> $GITHUB_ENV
+
+            # Capture detailed changes for notification
+            GPG_CHANGES=$(git diff --stat lib/gpg-keys/ | head -20)
+            echo "GPG_CHANGES<<EOF" >> $GITHUB_ENV
+            echo "$GPG_CHANGES" >> $GITHUB_ENV
+            echo "EOF" >> $GITHUB_ENV
+
+            # Get more detailed change summary
+            GPG_DETAIL=$(git diff lib/gpg-keys/ | grep -E '^\+\+\+|^---|\+.*fingerprint|\+.*Key ID' | head -30)
+            echo "GPG_DETAIL<<EOF" >> $GITHUB_ENV
+            echo "$GPG_DETAIL" >> $GITHUB_ENV
+            echo "EOF" >> $GITHUB_ENV
+          fi
+
           # Bump patch version
           echo "Bumping patch version..."
           echo "y" | ./bin/release.sh patch
@@ -116,6 +145,21 @@ jobs:
           ${{ steps.check.outputs.updates_summary }}
 
           Bumped version: ${NEW_VERSION}
+          EOF
+
+          # Add GPG key changes to commit message if detected
+          if [ "${{ env.gpg_keys_changed }}" = "true" ]; then
+            cat >> /tmp/commit-message.txt << 'EOF'
+
+          ⚠️ GPG Key Changes Detected:
+
+          ${{ env.GPG_CHANGES }}
+
+          Review the changes carefully before merging.
+          EOF
+          fi
+
+          cat >> /tmp/commit-message.txt << 'EOF'
 
           This is an automated patch release. CI will validate these changes
           and automatically merge if all tests pass.
@@ -131,6 +175,46 @@ jobs:
 
           # Save branch name for potential use
           echo "PATCH_BRANCH=$BRANCH_NAME" >> $GITHUB_ENV
+
+      - name: Send CRITICAL notification for GPG key changes
+        if: env.gpg_keys_changed == 'true'
+        run: |
+          # Build detailed notification message
+          NOTIFICATION_MSG="🔐 CRITICAL: GPG Signing Key Changes Detected
+
+          Branch: ${{ env.PATCH_BRANCH }}
+          Version: ${{ env.new_version }}
+
+          SECURITY REVIEW REQUIRED
+
+          Files changed:
+          ${{ env.GPG_CHANGES }}
+
+          Key details:
+          ${{ env.GPG_DETAIL }}
+
+          ⚠️ Action Required:
+          1. Review the changes at: ${{ github.server_url }}/${{ github.repository }}/tree/${{ env.PATCH_BRANCH }}
+          2. Verify fingerprints match official sources
+          3. Check timing - did you expect this key change?
+          4. Look for anomalies (unexpected keys, wrong fingerprints, suspicious timing)
+
+          This is RARE - GPG keys typically don't change often.
+          If this seems unexpected, investigate immediately.
+
+          Workflow: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+          # Send CRITICAL priority notification
+          curl -s \
+            --form-string "token=${{ secrets.PUSHOVER_TOKEN }}" \
+            --form-string "user=${{ secrets.PUSHOVER_USER }}" \
+            --form-string "title=🔐 CRITICAL: GPG Key Changes" \
+            --form-string "message=$NOTIFICATION_MSG" \
+            --form-string "priority=2" \
+            --form-string "retry=300" \
+            --form-string "expire=3600" \
+            --form-string "sound=siren" \
+            https://api.pushover.net/1/messages.json
 
       - name: Send version-check failure notification
         if: failure()
