@@ -5,7 +5,7 @@ signatures.
 
 ## Directory Structure
 
-```
+```text
 lib/gpg-keys/nodejs/
 ├── keyring/                    # GPG keyring directory (permissions: 700)
 │   ├── pubring.kbx            # Public keys (permissions: 600)
