@@ -10,6 +10,7 @@
 #   - Python < 3.11.0: GPG only
 #   - Node.js:         GPG (SHASUMS256.txt.sig or .asc)
 #   - Terraform:       GPG (terraform_<version>_SHA256SUMS.sig via HashiCorp key)
+#   - kubectl:         Sigstore (requires cosign from kubernetes or docker feature)
 #   - All others:      GPG only (where available)
 #
 # Usage:
@@ -420,6 +421,101 @@ download_and_verify_terraform_gpg() {
 }
 
 # ============================================================================
+# download_and_verify_kubectl_sigstore - Download and verify kubectl using Sigstore
+#
+# Kubernetes binaries are signed using Sigstore/cosign. This function downloads
+# the binary's signature (.sig) and certificate (.cert) files and verifies them
+# using cosign.
+#
+# Arguments:
+#   $1 - Binary file path
+#   $2 - Version (e.g., "1.28.0")
+#
+# Returns:
+#   0 on successful verification, 1 on failure
+#
+# Example:
+#   download_and_verify_kubectl_sigstore "/tmp/kubectl" "1.28.0"
+#
+# Note: Requires cosign to be installed
+# ============================================================================
+download_and_verify_kubectl_sigstore() {
+    local file="$1"
+    local version="$2"
+
+    # Check if cosign is available
+    if ! command -v cosign &> /dev/null; then
+        log_warning "cosign not found, cannot verify kubectl Sigstore signature"
+        log_warning "Install kubernetes or docker feature to get cosign"
+        return 1
+    fi
+
+    local filename
+    filename=$(basename "$file")
+
+    # Kubectl signature files are hosted alongside the binary
+    # For example: https://dl.k8s.io/release/v1.28.0/bin/linux/amd64/kubectl.sig
+    local base_url
+    base_url=$(dirname "$(grep -o 'https://dl.k8s.io/release/v[^/]*/bin/[^/]*/[^/]*' <<< "$file" 2>/dev/null || echo "")")
+
+    if [ -z "$base_url" ]; then
+        # Construct URL if not found in file path
+        local arch
+        case "$(uname -m)" in
+            x86_64) arch="amd64" ;;
+            aarch64) arch="arm64" ;;
+            *) arch="amd64" ;;
+        esac
+        base_url="https://dl.k8s.io/release/v${version}/bin/linux/${arch}"
+    fi
+
+    local sig_url="${base_url}/${filename}.sig"
+    local cert_url="${base_url}/${filename}.cert"
+    local sig_file="${file}.sig"
+    local cert_file="${file}.cert"
+
+    # Download signature file
+    log_message "Downloading kubectl Sigstore signature..."
+    if ! command curl -fsSL -o "$sig_file" "$sig_url" 2>/dev/null; then
+        log_warning "Failed to download signature from ${sig_url}"
+        return 1
+    fi
+
+    # Download certificate file
+    log_message "Downloading kubectl Sigstore certificate..."
+    if ! command curl -fsSL -o "$cert_file" "$cert_url" 2>/dev/null; then
+        log_warning "Failed to download certificate from ${cert_url}"
+        command rm -f "$sig_file"
+        return 1
+    fi
+
+    log_message "✓ Downloaded signature and certificate"
+
+    # Verify using cosign
+    # Kubernetes uses:
+    #   - Certificate Identity: krel-staging@k8s-releng-prod.iam.gserviceaccount.com
+    #   - OIDC Issuer: https://accounts.google.com
+    log_message "Verifying kubectl binary with Sigstore/cosign..."
+
+    if cosign verify-blob "$file" \
+        --signature "$sig_file" \
+        --certificate "$cert_file" \
+        --certificate-identity "krel-staging@k8s-releng-prod.iam.gserviceaccount.com" \
+        --certificate-oidc-issuer "https://accounts.google.com" \
+        2>&1 | tee /tmp/cosign-verify.log; then
+
+        log_message "✓ kubectl Sigstore verification successful"
+        command rm -f "$sig_file" "$cert_file" /tmp/cosign-verify.log
+        return 0
+    else
+        log_error "kubectl Sigstore verification failed"
+        log_error "See /tmp/cosign-verify.log for details"
+        command rm -f "$sig_file" "$cert_file"
+        return 1
+    fi
+}
+
+# ============================================================================
 # Sigstore Verification Functions
 # ============================================================================
 
@@ -755,6 +851,18 @@ verify_signature() {
             return 0
         else
             log_warning "Node.js GPG verification failed"
+        fi
+    fi
+
+    # kubectl-specific logic: Use Sigstore verification (requires cosign)
+    if [ "$language" = "kubectl" ] || [ "$language" = "kubernetes" ]; then
+        log_message "kubectl detected, using Sigstore verification..."
+
+        if download_and_verify_kubectl_sigstore "$file" "$version"; then
+            log_message "✓ kubectl Sigstore verification successful"
+            return 0
+        else
+            log_warning "kubectl Sigstore verification failed"
         fi
     fi
 
