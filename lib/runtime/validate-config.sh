@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # Configuration Validation Framework
-# Version: 1.0.0
+# Version: 2.0.0
 #
 # Description:
 #   Runtime configuration validation system that validates environment variables,
 #   checks formats, detects secrets, and ensures proper application configuration
-#   before the container starts.
+#   before the container starts. Supports compliance mode validation for PCI-DSS,
+#   HIPAA, FedRAMP, and CMMC frameworks.
 #
 # Usage:
 #   source /opt/container-runtime/validate-config.sh
@@ -16,6 +17,8 @@
 #   VALIDATE_CONFIG_STRICT - Fail on warnings (true/false, default: false)
 #   VALIDATE_CONFIG_RULES - Path to custom validation rules file
 #   VALIDATE_CONFIG_QUIET - Suppress informational messages (true/false, default: false)
+#   COMPLIANCE_MODE - Compliance framework to validate (pci-dss, hipaa, fedramp, cmmc)
+#   COMPLIANCE_REPORT_PATH - Path to write compliance report (optional)
 #
 # Features:
 #   - Required environment variable validation
@@ -23,6 +26,7 @@
 #   - Secret detection (plaintext passwords/keys)
 #   - Custom validation rules support
 #   - Clear error messages with remediation hints
+#   - Compliance mode validation (PCI-DSS, HIPAA, FedRAMP, CMMC)
 
 set -eo pipefail
 
@@ -331,6 +335,416 @@ cv_load_custom_rules() {
 }
 
 # ============================================================================
+# Compliance Mode Validation
+# ============================================================================
+
+# Compliance state
+CV_COMPLIANCE_CHECKS=0
+CV_COMPLIANCE_PASSED=0
+CV_COMPLIANCE_FAILED=0
+CV_COMPLIANCE_REPORT=""
+
+# Record a compliance check result
+cv_compliance_check() {
+    local check_name="$1"
+    local check_result="$2"  # pass, fail, warn
+    local framework="$3"
+    local requirement="$4"
+    local description="$5"
+    local remediation="${6:-}"
+
+    CV_COMPLIANCE_CHECKS=$((CV_COMPLIANCE_CHECKS + 1))
+
+    case "$check_result" in
+        pass)
+            CV_COMPLIANCE_PASSED=$((CV_COMPLIANCE_PASSED + 1))
+            cv_success "[$framework] $check_name: $description"
+            CV_COMPLIANCE_REPORT+="PASS|$framework|$requirement|$check_name|$description\n"
+            ;;
+        fail)
+            CV_COMPLIANCE_FAILED=$((CV_COMPLIANCE_FAILED + 1))
+            cv_error "[$framework] $check_name: $description"
+            if [ -n "$remediation" ]; then
+                cv_error "  Fix: $remediation"
+            fi
+            CV_COMPLIANCE_REPORT+="FAIL|$framework|$requirement|$check_name|$description|$remediation\n"
+            ;;
+        warn)
+            cv_warning "[$framework] $check_name: $description"
+            CV_COMPLIANCE_REPORT+="WARN|$framework|$requirement|$check_name|$description\n"
+            ;;
+    esac
+}
+
+# Check TLS/encryption settings
+cv_check_encryption() {
+    local framework="$1"
+    local requirement="$2"
+
+    # Check TLS is enabled
+    if [ "${TLS_ENABLED:-false}" = "true" ] || [ "${SSL_ENABLED:-false}" = "true" ]; then
+        cv_compliance_check "TLS Enabled" "pass" "$framework" "$requirement" \
+            "Transport encryption is enabled"
+    else
+        cv_compliance_check "TLS Enabled" "fail" "$framework" "$requirement" \
+            "Transport encryption is not enabled" \
+            "Set TLS_ENABLED=true or configure TLS in your application"
+    fi
+
+    # Check TLS version (minimum 1.2)
+    local tls_version="${TLS_MIN_VERSION:-${SSL_MIN_VERSION:-}}"
+    if [ -n "$tls_version" ]; then
+        if [[ "$tls_version" =~ ^(1\.2|1\.3|TLSv1\.2|TLSv1\.3)$ ]]; then
+            cv_compliance_check "TLS Version" "pass" "$framework" "$requirement" \
+                "TLS version $tls_version meets minimum requirements"
+        else
+            cv_compliance_check "TLS Version" "fail" "$framework" "$requirement" \
+                "TLS version $tls_version is below minimum (1.2)" \
+                "Set TLS_MIN_VERSION=1.2 or higher"
+        fi
+    fi
+
+    # Check encryption at rest
+    if [ "${ENCRYPTION_AT_REST:-false}" = "true" ] || [ -n "${ENCRYPTION_KEY:-}" ]; then
+        cv_compliance_check "Encryption at Rest" "pass" "$framework" "$requirement" \
+            "Data encryption at rest is configured"
+    else
+        cv_compliance_check "Encryption at Rest" "warn" "$framework" "$requirement" \
+            "Encryption at rest not explicitly configured"
+    fi
+}
+
+# Check audit logging
+cv_check_audit_logging() {
+    local framework="$1"
+    local requirement="$2"
+
+    # Check if audit logging is enabled
+    if [ "${AUDIT_LOG_ENABLED:-false}" = "true" ] || [ -n "${AUDIT_LOG_PATH:-}" ]; then
+        cv_compliance_check "Audit Logging" "pass" "$framework" "$requirement" \
+            "Audit logging is enabled"
+
+        # Check audit log destination
+        if [ -n "${AUDIT_LOG_PATH:-}" ]; then
+            if [ -d "$(dirname "${AUDIT_LOG_PATH}")" ]; then
+                cv_compliance_check "Audit Log Path" "pass" "$framework" "$requirement" \
+                    "Audit log path is valid: $AUDIT_LOG_PATH"
+            else
+                cv_compliance_check "Audit Log Path" "fail" "$framework" "$requirement" \
+                    "Audit log directory does not exist" \
+                    "Create directory: $(dirname "${AUDIT_LOG_PATH}")"
+            fi
+        fi
+    else
+        cv_compliance_check "Audit Logging" "fail" "$framework" "$requirement" \
+            "Audit logging is not enabled" \
+            "Set AUDIT_LOG_ENABLED=true and AUDIT_LOG_PATH=/path/to/audit.log"
+    fi
+
+    # Check log retention
+    if [ -n "${LOG_RETENTION_DAYS:-}" ]; then
+        if [ "${LOG_RETENTION_DAYS}" -ge 90 ]; then
+            cv_compliance_check "Log Retention" "pass" "$framework" "$requirement" \
+                "Log retention period is ${LOG_RETENTION_DAYS} days"
+        else
+            cv_compliance_check "Log Retention" "warn" "$framework" "$requirement" \
+                "Log retention (${LOG_RETENTION_DAYS} days) may be insufficient for compliance"
+        fi
+    fi
+}
+
+# Check resource limits
+cv_check_resource_limits() {
+    local framework="$1"
+    local requirement="$2"
+
+    # Check memory limits
+    if [ -n "${MEMORY_LIMIT:-}" ]; then
+        cv_compliance_check "Memory Limit" "pass" "$framework" "$requirement" \
+            "Memory limit configured: $MEMORY_LIMIT"
+    else
+        cv_compliance_check "Memory Limit" "warn" "$framework" "$requirement" \
+            "Memory limit not configured"
+    fi
+
+    # Check CPU limits
+    if [ -n "${CPU_LIMIT:-}" ]; then
+        cv_compliance_check "CPU Limit" "pass" "$framework" "$requirement" \
+            "CPU limit configured: $CPU_LIMIT"
+    else
+        cv_compliance_check "CPU Limit" "warn" "$framework" "$requirement" \
+            "CPU limit not configured"
+    fi
+}
+
+# Check security context
+cv_check_security_context() {
+    local framework="$1"
+    local requirement="$2"
+
+    # Check non-root user
+    if [ "$(id -u)" -ne 0 ]; then
+        cv_compliance_check "Non-root User" "pass" "$framework" "$requirement" \
+            "Container running as non-root user (UID: $(id -u))"
+    else
+        cv_compliance_check "Non-root User" "fail" "$framework" "$requirement" \
+            "Container is running as root" \
+            "Configure container to run as non-root user"
+    fi
+
+    # Check privileged mode (via environment hint)
+    if [ "${CONTAINER_PRIVILEGED:-false}" = "true" ]; then
+        cv_compliance_check "Privileged Mode" "fail" "$framework" "$requirement" \
+            "Container is running in privileged mode" \
+            "Remove privileged: true from container security context"
+    else
+        cv_compliance_check "Privileged Mode" "pass" "$framework" "$requirement" \
+            "Container is not running in privileged mode"
+    fi
+
+    # Check read-only filesystem
+    if [ "${READ_ONLY_ROOT_FS:-false}" = "true" ]; then
+        cv_compliance_check "Read-only Filesystem" "pass" "$framework" "$requirement" \
+            "Root filesystem is read-only"
+    else
+        cv_compliance_check "Read-only Filesystem" "warn" "$framework" "$requirement" \
+            "Root filesystem is not read-only"
+    fi
+}
+
+# Check health monitoring
+cv_check_health_monitoring() {
+    local framework="$1"
+    local requirement="$2"
+
+    # Check if healthcheck is configured
+    if [ -n "${HEALTHCHECK_ENABLED:-}" ] && [ "${HEALTHCHECK_ENABLED}" = "true" ]; then
+        cv_compliance_check "Health Check" "pass" "$framework" "$requirement" \
+            "Health check is configured"
+    elif [ -f "/opt/container-runtime/healthcheck.sh" ]; then
+        cv_compliance_check "Health Check" "pass" "$framework" "$requirement" \
+            "Health check script is present"
+    else
+        cv_compliance_check "Health Check" "warn" "$framework" "$requirement" \
+            "Health check may not be configured"
+    fi
+}
+
+# Check network security
+cv_check_network_security() {
+    local framework="$1"
+    local requirement="$2"
+
+    # Check network policy hints
+    if [ "${NETWORK_POLICY_ENFORCED:-false}" = "true" ]; then
+        cv_compliance_check "Network Policy" "pass" "$framework" "$requirement" \
+            "Network policies are enforced"
+    else
+        cv_compliance_check "Network Policy" "warn" "$framework" "$requirement" \
+            "Network policy enforcement not confirmed"
+    fi
+}
+
+# Check backup configuration
+cv_check_backup_config() {
+    local framework="$1"
+    local requirement="$2"
+
+    if [ -n "${BACKUP_ENABLED:-}" ] && [ "${BACKUP_ENABLED}" = "true" ]; then
+        cv_compliance_check "Backup Configuration" "pass" "$framework" "$requirement" \
+            "Backup is configured"
+
+        # Check backup schedule
+        if [ -n "${BACKUP_SCHEDULE:-}" ]; then
+            cv_compliance_check "Backup Schedule" "pass" "$framework" "$requirement" \
+                "Backup schedule: $BACKUP_SCHEDULE"
+        fi
+    else
+        cv_compliance_check "Backup Configuration" "warn" "$framework" "$requirement" \
+            "Backup configuration not detected"
+    fi
+}
+
+# PCI-DSS compliance profile
+cv_validate_pci_dss() {
+    cv_info "Validating PCI-DSS compliance requirements..."
+
+    # Requirement 4: Encrypt transmission of cardholder data
+    cv_check_encryption "PCI-DSS" "4.1"
+
+    # Requirement 10: Track and monitor all access
+    cv_check_audit_logging "PCI-DSS" "10.1"
+
+    # Requirement 6: Develop and maintain secure systems
+    cv_check_security_context "PCI-DSS" "6.2"
+
+    # Requirement 12: Maintain security policy
+    cv_check_resource_limits "PCI-DSS" "12.1"
+
+    # Requirement 11: Test security systems
+    cv_check_health_monitoring "PCI-DSS" "11.4"
+}
+
+# HIPAA compliance profile
+cv_validate_hipaa() {
+    cv_info "Validating HIPAA compliance requirements..."
+
+    # §164.312(e)(1): Transmission security
+    cv_check_encryption "HIPAA" "164.312(e)(1)"
+
+    # §164.312(b): Audit controls
+    cv_check_audit_logging "HIPAA" "164.312(b)"
+
+    # §164.312(a)(1): Access control
+    cv_check_security_context "HIPAA" "164.312(a)(1)"
+
+    # §164.308(a)(7): Contingency plan
+    cv_check_backup_config "HIPAA" "164.308(a)(7)"
+
+    # §164.312(c)(1): Integrity controls
+    cv_check_health_monitoring "HIPAA" "164.312(c)(1)"
+}
+
+# FedRAMP compliance profile
+cv_validate_fedramp() {
+    cv_info "Validating FedRAMP compliance requirements..."
+
+    # SC-8: Transmission confidentiality
+    cv_check_encryption "FedRAMP" "SC-8"
+
+    # AU-2: Audit events
+    cv_check_audit_logging "FedRAMP" "AU-2"
+
+    # SC-4: Information in shared resources
+    cv_check_resource_limits "FedRAMP" "SC-4"
+
+    # AC-6: Least privilege
+    cv_check_security_context "FedRAMP" "AC-6"
+
+    # SC-7: Boundary protection
+    cv_check_network_security "FedRAMP" "SC-7"
+
+    # CP-9: System backup
+    cv_check_backup_config "FedRAMP" "CP-9"
+
+    # SI-4: System monitoring
+    cv_check_health_monitoring "FedRAMP" "SI-4"
+}
+
+# CMMC Level 2 compliance profile
+cv_validate_cmmc() {
+    cv_info "Validating CMMC Level 2 compliance requirements..."
+
+    # SC.L2-3.13.8: Encrypt CUI in transit
+    cv_check_encryption "CMMC" "SC.L2-3.13.8"
+
+    # AU.L2-3.3.1: Create audit logs
+    cv_check_audit_logging "CMMC" "AU.L2-3.3.1"
+
+    # CM.L2-3.4.2: Security configuration enforcement
+    cv_check_security_context "CMMC" "CM.L2-3.4.2"
+
+    # SC.L2-3.13.4: Shared resource control
+    cv_check_resource_limits "CMMC" "SC.L2-3.13.4"
+
+    # SI.L2-3.14.3: Security alerts
+    cv_check_health_monitoring "CMMC" "SI.L2-3.14.3"
+}
+
+# Generate compliance report
+cv_generate_compliance_report() {
+    local report_path="${COMPLIANCE_REPORT_PATH:-}"
+
+    if [ -z "$report_path" ]; then
+        return 0
+    fi
+
+    local report_dir
+    report_dir=$(dirname "$report_path")
+    if [ ! -d "$report_dir" ]; then
+        mkdir -p "$report_dir"
+    fi
+
+    {
+        echo "# Compliance Validation Report"
+        echo "# Generated: $(date -Iseconds)"
+        echo "# Framework: ${COMPLIANCE_MODE:-none}"
+        echo "# Total Checks: $CV_COMPLIANCE_CHECKS"
+        echo "# Passed: $CV_COMPLIANCE_PASSED"
+        echo "# Failed: $CV_COMPLIANCE_FAILED"
+        echo "#"
+        echo "# Format: STATUS|FRAMEWORK|REQUIREMENT|CHECK|DESCRIPTION|REMEDIATION"
+        echo "#"
+        echo -e "$CV_COMPLIANCE_REPORT"
+    } > "$report_path"
+
+    cv_info "Compliance report written to: $report_path"
+}
+
+# Main compliance validation function
+cv_validate_compliance() {
+    local mode="${COMPLIANCE_MODE:-}"
+
+    if [ -z "$mode" ]; then
+        return 0
+    fi
+
+    echo ""
+    echo "================================================================"
+    echo "  Compliance Validation: $(echo "$mode" | tr '[:lower:]' '[:upper:]')"
+    echo "================================================================"
+    echo ""
+
+    # Reset compliance counters
+    CV_COMPLIANCE_CHECKS=0
+    CV_COMPLIANCE_PASSED=0
+    CV_COMPLIANCE_FAILED=0
+    CV_COMPLIANCE_REPORT=""
+
+    # Run framework-specific validation
+    case "$mode" in
+        pci-dss|pci_dss|pcidss)
+            cv_validate_pci_dss
+            ;;
+        hipaa)
+            cv_validate_hipaa
+            ;;
+        fedramp)
+            cv_validate_fedramp
+            ;;
+        cmmc|cmmc-l2)
+            cv_validate_cmmc
+            ;;
+        *)
+            cv_error "Unknown compliance mode: $mode"
+            cv_error "Supported modes: pci-dss, hipaa, fedramp, cmmc"
+            return 1
+            ;;
+    esac
+
+    # Generate report if path specified
+    cv_generate_compliance_report
+
+    # Print compliance summary
+    echo ""
+    echo "================================================================"
+    echo "  Compliance Summary"
+    echo "================================================================"
+    echo "  Framework: $(echo "$mode" | tr '[:lower:]' '[:upper:]')"
+    echo "  Total Checks: $CV_COMPLIANCE_CHECKS"
+    echo -e "  ${CV_GREEN}Passed: $CV_COMPLIANCE_PASSED${CV_NC}"
+
+    if [ "$CV_COMPLIANCE_FAILED" -gt 0 ]; then
+        echo -e "  ${CV_RED}Failed: $CV_COMPLIANCE_FAILED${CV_NC}"
+        return 1
+    fi
+
+    echo ""
+    echo -e "${CV_GREEN}✓ Compliance validation passed${CV_NC}"
+    return 0
+}
+
+# ============================================================================
 # Main Validation Entry Point
 # ============================================================================
 
@@ -399,6 +813,12 @@ validate_configuration() {
     # Load custom validation rules if provided
     cv_load_custom_rules
 
+    # Run compliance validation if mode is set
+    local compliance_result=0
+    if [ -n "${COMPLIANCE_MODE:-}" ]; then
+        cv_validate_compliance || compliance_result=$?
+    fi
+
     # Print summary
     echo ""
     echo "================================================================"
@@ -433,6 +853,12 @@ validate_configuration() {
 
     echo -e "${CV_GREEN}✓ Configuration validation passed${CV_NC}"
     echo "  (with warnings)"
+
+    # Return compliance failure if applicable
+    if [ "$compliance_result" -ne 0 ]; then
+        return "$compliance_result"
+    fi
+
     return 0
 }
 
@@ -448,3 +874,5 @@ export -f cv_error
 export -f cv_warning
 export -f cv_success
 export -f cv_info
+export -f cv_compliance_check
+export -f cv_validate_compliance
