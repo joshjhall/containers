@@ -22,6 +22,7 @@ various compliance frameworks and how to deploy securely.
 | [SOC 2](soc2.md)                                  | Service organization controls      |
 | [Encryption at Rest](encryption-at-rest.md)       | Data encryption guidance           |
 | [Encryption in Transit](encryption-in-transit.md) | TLS/mTLS configuration             |
+| [MFA Integration](mfa-integration.md)             | Multi-factor authentication        |
 | [Incident Response](incident-response.md)         | Security incident playbooks        |
 | [Data Classification](data-classification.md)     | Data handling procedures           |
 | [Software Allowlist](software-allowlist.md)       | Approved software catalog          |
