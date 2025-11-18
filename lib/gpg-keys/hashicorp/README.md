@@ -39,8 +39,7 @@ lib/gpg-keys/hashicorp/
 HashiCorp uses a signed checksums file pattern for verification:
 
 1. Download the product binary (e.g., `terraform_1.10.0_linux_amd64.zip`)
-2. Download the checksums file
-   (`terraform_1.10.0_SHA256SUMS`)
+2. Download the checksums file (`terraform_1.10.0_SHA256SUMS`)
 3. Download the GPG signature (`terraform_1.10.0_SHA256SUMS.sig`)
 4. Verify the signature of the checksums file using this GPG key
 5. Verify the binary checksum matches the signed checksums file
@@ -78,21 +77,27 @@ The script will:
 If you need to update manually:
 
 1. Download the public key:
+
    ```bash
    curl -fsSL https://www.hashicorp.com/.well-known/pgp-key.txt \
      -o lib/gpg-keys/hashicorp/keys/hashicorp.asc
    ```
+
 2. Verify the fingerprint:
+
    ```bash
    gpg --show-keys --with-fingerprint \
      lib/gpg-keys/hashicorp/keys/hashicorp.asc
    ```
+
 3. Confirm it matches: `C874 011F 0AB4 0511 0D02 1055 3436 5D94 72D7 468F`
 4. Set secure permissions:
+
    ```bash
    chmod 700 lib/gpg-keys/hashicorp/keys
    chmod 600 lib/gpg-keys/hashicorp/keys/hashicorp.asc
    ```
+
 5. Update this README if the key information changes
 
 ## Key Rotation
@@ -111,5 +116,4 @@ When a new key is published:
 - **Official Key Page**: https://www.hashicorp.com/security
 - **Key Download**: https://www.hashicorp.com/.well-known/pgp-key.txt
 - **Security Policy**: https://www.hashicorp.com/security
-- **Trust Signature Documentation**:
-  https://www.hashicorp.com/trust/security
+- **Trust Signature Documentation**: https://www.hashicorp.com/trust/security
