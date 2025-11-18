@@ -10,6 +10,7 @@
 #   - k9s: Terminal-based Kubernetes cluster UI
 #   - helm: Kubernetes package manager
 #   - krew: kubectl plugin package manager
+#   - cosign: kubectl binary and container image verification (Sigstore)
 #   - Essential plugins: ctx, ns, tree, neat
 #   - Auto-completion for kubectl and aliases
 #   - Automatic kubeconfig detection
@@ -19,6 +20,7 @@
 #   - k9s: Terminal UI for Kubernetes
 #   - helm: Latest version
 #   - krew: Plugin manager for kubectl
+#   - cosign: Sigstore for kubectl binary and image verification
 #
 # Version Compatibility:
 #   kubectl version should be within one minor version of your cluster.
@@ -305,6 +307,54 @@ if [ -n "$KREW_FILENAME" ]; then
     done
 
     cd /
+fi
+
+# ============================================================================
+# Cosign Installation (for kubectl Sigstore verification)
+# ============================================================================
+if ! command -v cosign &> /dev/null; then
+    log_message "Installing cosign (kubectl binary and container image verification)..."
+
+    # Set cosign version
+    COSIGN_VERSION="3.0.2"
+
+    # Construct the cosign package filename
+    COSIGN_PACKAGE="cosign_${COSIGN_VERSION}_${ARCH}.deb"
+    COSIGN_URL="https://github.com/sigstore/cosign/releases/download/v${COSIGN_VERSION}/${COSIGN_PACKAGE}"
+
+    # Fetch checksum dynamically from GitHub releases
+    log_message "Fetching cosign checksum from GitHub..."
+    COSIGN_CHECKSUMS_URL="https://github.com/sigstore/cosign/releases/download/v${COSIGN_VERSION}/cosign_checksums.txt"
+
+    if ! COSIGN_CHECKSUM=$(fetch_github_checksums_txt "$COSIGN_CHECKSUMS_URL" "$COSIGN_PACKAGE" 2>/dev/null); then
+        log_error "Failed to fetch checksum for cosign ${COSIGN_VERSION}"
+        log_error "Please verify version exists: https://github.com/sigstore/cosign/releases/tag/v${COSIGN_VERSION}"
+        log_feature_end
+        exit 1
+    fi
+
+    log_message "Expected SHA256: ${COSIGN_CHECKSUM}"
+
+    # Download and verify cosign with checksum verification
+    BUILD_TEMP=$(create_secure_temp_dir)
+    cd "$BUILD_TEMP"
+    log_message "Downloading and verifying cosign..."
+    download_and_verify \
+        "$COSIGN_URL" \
+        "$COSIGN_CHECKSUM" \
+        "cosign.deb"
+
+    log_message "✓ cosign v${COSIGN_VERSION} verified successfully"
+
+    # Install the verified package
+    log_command "Installing cosign package" \
+        dpkg -i cosign.deb
+
+    cd /
+    log_command "Cleaning up build directory" \
+        command rm -rf "$BUILD_TEMP"
+else
+    log_message "cosign already installed (likely from docker feature), skipping..."
 fi
 
 # ============================================================================
@@ -644,11 +694,11 @@ fi
 # Log feature summary
 log_feature_summary \
     --feature "Kubernetes Tools" \
-    --tools "kubectl,k9s,helm,krew" \
+    --tools "kubectl,k9s,helm,krew,cosign" \
     --paths "$HOME/.kube,$HOME/.krew" \
     --env "KUBECONFIG,KUBECTL_EXTERNAL_DIFF" \
-    --commands "kubectl,k9s,helm,krew,k,kgp,kgs,kgd,kaf,k-logs,k-shell,k-events,k-resources" \
-    --next-steps "Run 'test-kubernetes' to verify installation. Link kubeconfig or use 'kubectl config' to set up clusters. Install plugins with 'kubectl krew install <plugin>'."
+    --commands "kubectl,k9s,helm,krew,cosign,k,kgp,kgs,kgd,kaf,k-logs,k-shell,k-events,k-resources" \
+    --next-steps "Run 'test-kubernetes' to verify installation. Link kubeconfig or use 'kubectl config' to set up clusters. Install plugins with 'kubectl krew install <plugin>'. Use 'cosign' to verify kubectl binaries and container images."
 
 # End logging
 log_feature_end

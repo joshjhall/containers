@@ -43,6 +43,7 @@
 #   - Docker Buildx: Advanced build capabilities with BuildKit
 #   - lazydocker: Terminal UI for Docker management
 #   - dive: Docker image layer analysis tool
+#   - cosign: Container image signing and verification (Sigstore)
 #   - Helper functions for common operations
 #   - Automatic user group configuration
 #
@@ -52,6 +53,7 @@
 #   - docker-buildx-plugin: Docker Buildx for advanced builds
 #   - lazydocker: Terminal UI for Docker management
 #   - dive: Docker image layer analysis tool
+#   - cosign: Sigstore container image signing and verification
 #
 # Requirements:
 #   - Docker socket: Mount with -v /var/run/docker.sock:/var/run/docker.sock
@@ -258,6 +260,54 @@ log_command "Installing dive package" \
 cd /
 log_command "Cleaning up build directory" \
     command rm -rf "$BUILD_TEMP"
+
+# ============================================================================
+# Cosign Installation (Container Image Signing)
+# ============================================================================
+if ! command -v cosign &> /dev/null; then
+    log_message "Installing cosign (container image signing and verification)..."
+
+    # Set cosign version
+    COSIGN_VERSION="3.0.2"
+
+    # Construct the cosign package filename
+    COSIGN_PACKAGE="cosign_${COSIGN_VERSION}_${ARCH}.deb"
+    COSIGN_URL="https://github.com/sigstore/cosign/releases/download/v${COSIGN_VERSION}/${COSIGN_PACKAGE}"
+
+    # Fetch checksum dynamically from GitHub releases
+    log_message "Fetching cosign checksum from GitHub..."
+    COSIGN_CHECKSUMS_URL="https://github.com/sigstore/cosign/releases/download/v${COSIGN_VERSION}/cosign_checksums.txt"
+
+    if ! COSIGN_CHECKSUM=$(fetch_github_checksums_txt "$COSIGN_CHECKSUMS_URL" "$COSIGN_PACKAGE" 2>/dev/null); then
+        log_error "Failed to fetch checksum for cosign ${COSIGN_VERSION}"
+        log_error "Please verify version exists: https://github.com/sigstore/cosign/releases/tag/v${COSIGN_VERSION}"
+        log_feature_end
+        exit 1
+    fi
+
+    log_message "Expected SHA256: ${COSIGN_CHECKSUM}"
+
+    # Download and verify cosign with checksum verification
+    BUILD_TEMP=$(create_secure_temp_dir)
+    cd "$BUILD_TEMP"
+    log_message "Downloading and verifying cosign..."
+    download_and_verify \
+        "$COSIGN_URL" \
+        "$COSIGN_CHECKSUM" \
+        "cosign.deb"
+
+    log_message "✓ cosign v${COSIGN_VERSION} verified successfully"
+
+    # Install the verified package
+    log_command "Installing cosign package" \
+        dpkg -i cosign.deb
+
+    cd /
+    log_command "Cleaning up build directory" \
+        command rm -rf "$BUILD_TEMP"
+else
+    log_message "cosign already installed, skipping..."
+fi
 
 # ============================================================================
 # Cache Configuration
@@ -488,7 +538,7 @@ fi
 
 echo ""
 echo "=== Docker Tools ==="
-for tool in lazydocker dive; do
+for tool in lazydocker dive cosign; do
     if command -v $tool &> /dev/null; then
         echo "✓ $tool is installed at $(which $tool)"
     else
@@ -546,11 +596,11 @@ export DOCKER_CLI_PLUGINS_PATH="/cache/docker/cli-plugins"
 
 log_feature_summary \
     --feature "Docker" \
-    --tools "docker,docker-compose,lazydocker,dive" \
+    --tools "docker,docker-compose,lazydocker,dive,cosign" \
     --paths "${DOCKER_CONFIG},${DOCKER_CLI_PLUGINS_PATH}" \
     --env "DOCKER_CONFIG,DOCKER_CLI_PLUGINS_PATH" \
-    --commands "docker,docker compose,lazydocker,dive" \
-    --next-steps "Run 'test-docker' to verify installation. Mount Docker socket with -v /var/run/docker.sock:/var/run/docker.sock to use Docker commands."
+    --commands "docker,docker compose,lazydocker,dive,cosign" \
+    --next-steps "Run 'test-docker' to verify installation. Mount Docker socket with -v /var/run/docker.sock:/var/run/docker.sock to use Docker commands. Use 'cosign' to sign and verify container images."
 
 # End logging
 log_feature_end
