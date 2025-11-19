@@ -1,0 +1,470 @@
+# OPA Gatekeeper Constraint Templates for Compliance
+#
+# Description:
+#   ConstraintTemplates define the policy logic using Rego.
+#   These templates are then instantiated as Constraints.
+#
+# Compliance Coverage:
+#   - SOC 2 CC6.1: Logical and physical access controls
+#   - SOC 2 CC6.6: System boundary protection
+#   - ISO 27001 A.14.2: Secure development
+#   - HIPAA 164.312(a)(1): Access controls
+#   - PCI DSS 2.2: Configuration standards
+#   - GDPR Art. 25: Data protection by design
+#   - FedRAMP CM-7: Least functionality
+#
+# Usage:
+#   kubectl apply -f constraint-templates.yaml
+
+---
+# Block privileged containers (SOC 2 CC6.1, PCI DSS 2.2)
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: k8sblockprivilegedcontainer
+  annotations:
+    description: "Blocks privileged containers for compliance"
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sBlockPrivilegedContainer
+      validation:
+        openAPIV3Schema:
+          type: object
+          properties:
+            allowedExceptions:
+              type: array
+              items:
+                type: string
+              description: "Namespaces where privileged containers are allowed"
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8sblockprivilegedcontainer
+
+        violation[{"msg": msg}] {
+          container := input.review.object.spec.containers[_]
+          container.securityContext.privileged == true
+          not namespace_allowed
+          msg := sprintf("Privileged container '%v' is not allowed. SOC 2 CC6.1 violation.", [container.name])
+        }
+
+        violation[{"msg": msg}] {
+          container := input.review.object.spec.initContainers[_]
+          container.securityContext.privileged == true
+          not namespace_allowed
+          msg := sprintf("Privileged init container '%v' is not allowed. SOC 2 CC6.1 violation.", [container.name])
+        }
+
+        namespace_allowed {
+          input.review.object.metadata.namespace == input.parameters.allowedExceptions[_]
+        }
+
+---
+# Require resource limits (SOC 2 CC6.6, FedRAMP CM-7)
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: k8srequireresourcelimits
+  annotations:
+    description: "Requires CPU and memory limits on containers"
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sRequireResourceLimits
+      validation:
+        openAPIV3Schema:
+          type: object
+          properties:
+            requireCPU:
+              type: boolean
+              default: true
+            requireMemory:
+              type: boolean
+              default: true
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8srequireresourcelimits
+
+        violation[{"msg": msg}] {
+          container := input.review.object.spec.containers[_]
+          input.parameters.requireCPU == true
+          not container.resources.limits.cpu
+          msg := sprintf("Container '%v' must have CPU limits. SOC 2 CC6.6 requires resource controls.", [container.name])
+        }
+
+        violation[{"msg": msg}] {
+          container := input.review.object.spec.containers[_]
+          input.parameters.requireMemory == true
+          not container.resources.limits.memory
+          msg := sprintf("Container '%v' must have memory limits. SOC 2 CC6.6 requires resource controls.", [container.name])
+        }
+
+---
+# Block latest tag (GDPR Art. 25, FedRAMP CM-7)
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: k8sblocklatesttag
+  annotations:
+    description: "Blocks use of :latest image tag"
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sBlockLatestTag
+      validation:
+        openAPIV3Schema:
+          type: object
+          properties:
+            allowedRegistries:
+              type: array
+              items:
+                type: string
+              description: "Registries where latest is allowed (for dev)"
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8sblocklatesttag
+
+        violation[{"msg": msg}] {
+          container := input.review.object.spec.containers[_]
+          endswith(container.image, ":latest")
+          not registry_allowed(container.image)
+          msg := sprintf("Container '%v' uses :latest tag. Use specific version for reproducibility (GDPR Art. 25).", [container.name])
+        }
+
+        violation[{"msg": msg}] {
+          container := input.review.object.spec.containers[_]
+          not contains(container.image, ":")
+          not registry_allowed(container.image)
+          msg := sprintf("Container '%v' has no tag (defaults to latest). Specify version for reproducibility.", [container.name])
+        }
+
+        registry_allowed(image) {
+          startswith(image, input.parameters.allowedRegistries[_])
+        }
+
+---
+# Require health checks (SOC 2 CC7.1, PCI DSS 2.2)
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: k8srequirehealthchecks
+  annotations:
+    description: "Requires liveness and readiness probes"
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sRequireHealthChecks
+      validation:
+        openAPIV3Schema:
+          type: object
+          properties:
+            requireLiveness:
+              type: boolean
+              default: true
+            requireReadiness:
+              type: boolean
+              default: true
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8srequirehealthchecks
+
+        violation[{"msg": msg}] {
+          container := input.review.object.spec.containers[_]
+          input.parameters.requireLiveness == true
+          not container.livenessProbe
+          msg := sprintf("Container '%v' must have liveness probe. SOC 2 CC7.1 requires monitoring.", [container.name])
+        }
+
+        violation[{"msg": msg}] {
+          container := input.review.object.spec.containers[_]
+          input.parameters.requireReadiness == true
+          not container.readinessProbe
+          msg := sprintf("Container '%v' must have readiness probe for availability monitoring.", [container.name])
+        }
+
+---
+# Require encryption labels for HIPAA (HIPAA 164.312(a)(2))
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: k8srequirehipaaencryption
+  annotations:
+    description: "Requires encryption labels for HIPAA workloads"
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sRequireHIPAAEncryption
+      validation:
+        openAPIV3Schema:
+          type: object
+          properties:
+            hipaaNamespaces:
+              type: array
+              items:
+                type: string
+              description: "Namespaces containing PHI"
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8srequirehipaaencryption
+
+        violation[{"msg": msg}] {
+          is_hipaa_namespace
+          not input.review.object.metadata.labels["encryption"]
+          msg := "HIPAA workload must have 'encryption' label. 164.312(a)(2) requires encryption mechanism."
+        }
+
+        violation[{"msg": msg}] {
+          is_hipaa_namespace
+          input.review.object.metadata.labels["encryption"] != "aes-256"
+          input.review.object.metadata.labels["encryption"] != "aes-256-gcm"
+          msg := sprintf("HIPAA workload encryption must be 'aes-256' or 'aes-256-gcm', got '%v'.", [input.review.object.metadata.labels["encryption"]])
+        }
+
+        violation[{"msg": msg}] {
+          is_hipaa_namespace
+          not input.review.object.metadata.labels["data-classification"]
+          msg := "HIPAA workload must have 'data-classification' label (phi, sensitive, public)."
+        }
+
+        is_hipaa_namespace {
+          input.review.object.metadata.namespace == input.parameters.hipaaNamespaces[_]
+        }
+
+---
+# Block root user (SOC 2 CC6.1, FedRAMP AC-6)
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: k8sblockrootuser
+  annotations:
+    description: "Blocks containers running as root"
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sBlockRootUser
+      validation:
+        openAPIV3Schema:
+          type: object
+          properties:
+            allowedExceptions:
+              type: array
+              items:
+                type: string
+              description: "Container names allowed to run as root"
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8sblockrootuser
+
+        violation[{"msg": msg}] {
+          container := input.review.object.spec.containers[_]
+          not is_exception(container.name)
+          runs_as_root(container)
+          msg := sprintf("Container '%v' runs as root (UID 0). SOC 2 CC6.1 requires least privilege.", [container.name])
+        }
+
+        runs_as_root(container) {
+          container.securityContext.runAsUser == 0
+        }
+
+        runs_as_root(container) {
+          not container.securityContext.runAsNonRoot
+          not container.securityContext.runAsUser
+          not input.review.object.spec.securityContext.runAsNonRoot
+          not input.review.object.spec.securityContext.runAsUser
+        }
+
+        is_exception(name) {
+          name == input.parameters.allowedExceptions[_]
+        }
+
+---
+# Require network policies (PCI DSS 1.3, SOC 2 CC6.6)
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: k8srequirenetworkpolicy
+  annotations:
+    description: "Requires NetworkPolicy for sensitive namespaces"
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sRequireNetworkPolicy
+      validation:
+        openAPIV3Schema:
+          type: object
+          properties:
+            sensitiveNamespaces:
+              type: array
+              items:
+                type: string
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8srequirenetworkpolicy
+
+        violation[{"msg": msg}] {
+          input.review.kind.kind == "Pod"
+          is_sensitive_namespace
+          not has_network_policy
+          msg := sprintf("Namespace '%v' requires NetworkPolicy for PCI DSS 1.3 network segmentation.", [input.review.object.metadata.namespace])
+        }
+
+        is_sensitive_namespace {
+          input.review.object.metadata.namespace == input.parameters.sensitiveNamespaces[_]
+        }
+
+        # This checks if there's a label indicating network policy exists
+        has_network_policy {
+          input.review.object.metadata.labels["network-policy"] == "enforced"
+        }
+
+---
+# Require image from trusted registry (GDPR Art. 25, FedRAMP CM-7)
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: k8strustedregistry
+  annotations:
+    description: "Requires images from approved registries"
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sTrustedRegistry
+      validation:
+        openAPIV3Schema:
+          type: object
+          properties:
+            registries:
+              type: array
+              items:
+                type: string
+              description: "Allowed image registries"
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8strustedregistry
+
+        violation[{"msg": msg}] {
+          container := input.review.object.spec.containers[_]
+          not trusted_registry(container.image)
+          msg := sprintf("Container '%v' uses untrusted registry. Image '%v' not from approved registries.", [container.name, container.image])
+        }
+
+        violation[{"msg": msg}] {
+          container := input.review.object.spec.initContainers[_]
+          not trusted_registry(container.image)
+          msg := sprintf("Init container '%v' uses untrusted registry.", [container.name])
+        }
+
+        trusted_registry(image) {
+          startswith(image, input.parameters.registries[_])
+        }
+
+---
+# Block host namespaces (SOC 2 CC6.1, PCI DSS 2.2)
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: k8sblockhostnamespace
+  annotations:
+    description: "Blocks hostPID, hostIPC, hostNetwork"
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sBlockHostNamespace
+      validation:
+        openAPIV3Schema:
+          type: object
+          properties:
+            allowHostNetwork:
+              type: boolean
+              default: false
+            allowHostPID:
+              type: boolean
+              default: false
+            allowHostIPC:
+              type: boolean
+              default: false
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8sblockhostnamespace
+
+        violation[{"msg": msg}] {
+          input.review.object.spec.hostPID == true
+          input.parameters.allowHostPID == false
+          msg := "hostPID is not allowed. SOC 2 CC6.1 requires process isolation."
+        }
+
+        violation[{"msg": msg}] {
+          input.review.object.spec.hostIPC == true
+          input.parameters.allowHostIPC == false
+          msg := "hostIPC is not allowed. SOC 2 CC6.1 requires IPC isolation."
+        }
+
+        violation[{"msg": msg}] {
+          input.review.object.spec.hostNetwork == true
+          input.parameters.allowHostNetwork == false
+          msg := "hostNetwork is not allowed. PCI DSS 2.2 requires network isolation."
+        }
+
+---
+# Require security context (SOC 2 CC6.1)
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: k8srequiresecuritycontext
+  annotations:
+    description: "Requires securityContext with specific settings"
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sRequireSecurityContext
+      validation:
+        openAPIV3Schema:
+          type: object
+          properties:
+            requireReadOnlyRootFilesystem:
+              type: boolean
+              default: true
+            requireDropCapabilities:
+              type: boolean
+              default: true
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8srequiresecuritycontext
+
+        violation[{"msg": msg}] {
+          container := input.review.object.spec.containers[_]
+          input.parameters.requireReadOnlyRootFilesystem == true
+          not container.securityContext.readOnlyRootFilesystem == true
+          msg := sprintf("Container '%v' must have readOnlyRootFilesystem: true for SOC 2 CC6.1.", [container.name])
+        }
+
+        violation[{"msg": msg}] {
+          container := input.review.object.spec.containers[_]
+          input.parameters.requireDropCapabilities == true
+          not drops_all_capabilities(container)
+          msg := sprintf("Container '%v' must drop ALL capabilities. Add securityContext.capabilities.drop: ['ALL'].", [container.name])
+        }
+
+        drops_all_capabilities(container) {
+          container.securityContext.capabilities.drop[_] == "ALL"
+        }

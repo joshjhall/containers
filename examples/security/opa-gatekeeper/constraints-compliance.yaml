@@ -1,0 +1,243 @@
+# OPA Gatekeeper Constraints for Compliance
+#
+# Description:
+#   Instantiates constraint templates with specific parameters.
+#   Apply after constraint-templates.yaml.
+#
+# Usage:
+#   kubectl apply -f constraints-compliance.yaml
+
+---
+# Block privileged containers in production
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sBlockPrivilegedContainer
+metadata:
+  name: block-privileged-production
+spec:
+  enforcementAction: deny
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Pod"]
+    namespaces:
+      - "production"
+      - "staging"
+    excludedNamespaces:
+      - "kube-system"
+      - "gatekeeper-system"
+  parameters:
+    allowedExceptions:
+      - "kube-system"
+      - "gatekeeper-system"
+      - "falco-system"
+
+---
+# Require resource limits on all pods
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sRequireResourceLimits
+metadata:
+  name: require-resource-limits
+spec:
+  enforcementAction: deny
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Pod"]
+    excludedNamespaces:
+      - "kube-system"
+  parameters:
+    requireCPU: true
+    requireMemory: true
+
+---
+# Block latest tag in production
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sBlockLatestTag
+metadata:
+  name: block-latest-tag-production
+spec:
+  enforcementAction: deny
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Pod"]
+    namespaces:
+      - "production"
+      - "staging"
+  parameters:
+    allowedRegistries: []
+
+---
+# Warn on latest tag in development
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sBlockLatestTag
+metadata:
+  name: warn-latest-tag-development
+spec:
+  enforcementAction: warn
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Pod"]
+    namespaces:
+      - "development"
+      - "default"
+  parameters:
+    allowedRegistries:
+      - "localhost"
+      - "127.0.0.1"
+
+---
+# Require health checks in production
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sRequireHealthChecks
+metadata:
+  name: require-health-checks-production
+spec:
+  enforcementAction: deny
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Pod"]
+    namespaces:
+      - "production"
+  parameters:
+    requireLiveness: true
+    requireReadiness: true
+
+---
+# Require HIPAA encryption labels
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sRequireHIPAAEncryption
+metadata:
+  name: require-hipaa-encryption
+spec:
+  enforcementAction: deny
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Pod"]
+  parameters:
+    hipaaNamespaces:
+      - "hipaa-production"
+      - "healthcare"
+      - "phi-workloads"
+
+---
+# Block root user in production
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sBlockRootUser
+metadata:
+  name: block-root-user-production
+spec:
+  enforcementAction: deny
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Pod"]
+    namespaces:
+      - "production"
+      - "staging"
+    excludedNamespaces:
+      - "kube-system"
+  parameters:
+    allowedExceptions: []
+
+---
+# Require network policies for PCI namespaces
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sRequireNetworkPolicy
+metadata:
+  name: require-network-policy-pci
+spec:
+  enforcementAction: deny
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Pod"]
+  parameters:
+    sensitiveNamespaces:
+      - "pci-production"
+      - "payment-processing"
+      - "cardholder-data"
+
+---
+# Require trusted registries
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sTrustedRegistry
+metadata:
+  name: trusted-registries-production
+spec:
+  enforcementAction: deny
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Pod"]
+    namespaces:
+      - "production"
+      - "staging"
+  parameters:
+    registries:
+      - "gcr.io/your-project/"
+      - "ghcr.io/your-org/"
+      - "your-registry.azurecr.io/"
+      - "123456789012.dkr.ecr.us-east-1.amazonaws.com/"
+
+---
+# Block host namespaces
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sBlockHostNamespace
+metadata:
+  name: block-host-namespace-production
+spec:
+  enforcementAction: deny
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Pod"]
+    excludedNamespaces:
+      - "kube-system"
+      - "falco-system"
+  parameters:
+    allowHostNetwork: false
+    allowHostPID: false
+    allowHostIPC: false
+
+---
+# Require security context
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sRequireSecurityContext
+metadata:
+  name: require-security-context-production
+spec:
+  enforcementAction: deny
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Pod"]
+    namespaces:
+      - "production"
+    excludedNamespaces:
+      - "kube-system"
+  parameters:
+    requireReadOnlyRootFilesystem: true
+    requireDropCapabilities: true
+
+---
+# Audit mode for development
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sRequireSecurityContext
+metadata:
+  name: audit-security-context-development
+spec:
+  enforcementAction: dryrun
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Pod"]
+    namespaces:
+      - "development"
+      - "default"
+  parameters:
+    requireReadOnlyRootFilesystem: true
+    requireDropCapabilities: true
