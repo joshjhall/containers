@@ -98,15 +98,38 @@ apt_install google-cloud-cli
 # ============================================================================
 log_message "Installing additional gcloud components..."
 
-# Install commonly needed components
-# Note: Using --quiet to avoid interactive prompts
-log_command "Installing gcloud components" \
-    gcloud components install \
-        gke-gcloud-auth-plugin \
-        kubectl \
-        beta \
-        alpha \
-        --quiet || true
+# Install commonly needed components with retry logic
+# gcloud components install can fail due to network issues or rate limiting
+install_gcloud_components() {
+    local max_attempts=3
+    local attempt=1
+    local delay=5
+
+    while [ $attempt -le $max_attempts ]; do
+        log_message "Installing gcloud components (attempt $attempt/$max_attempts)..."
+        if gcloud components install \
+            gke-gcloud-auth-plugin \
+            kubectl \
+            beta \
+            alpha \
+            --quiet 2>&1; then
+            log_message "✓ gcloud components installed successfully"
+            return 0
+        fi
+
+        if [ $attempt -lt $max_attempts ]; then
+            log_warning "gcloud components install failed, retrying in ${delay}s..."
+            sleep $delay
+            delay=$((delay * 2))
+        fi
+        attempt=$((attempt + 1))
+    done
+
+    log_warning "gcloud components install failed after $max_attempts attempts (non-fatal)"
+    return 0  # Don't fail the build - base gcloud CLI is still functional
+}
+
+install_gcloud_components
 
 # ============================================================================
 # Environment Configuration
