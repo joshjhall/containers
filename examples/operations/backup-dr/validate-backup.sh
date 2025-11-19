@@ -213,7 +213,8 @@ create_validation_namespace() {
 
 # Perform test restore
 perform_restore() {
-    local restore_name="validate-${BACKUP_NAME}-$(date +%s)"
+    local restore_name
+    restore_name="validate-${BACKUP_NAME}-$(date +%s)"
 
     log_info "Starting test restore: $restore_name"
 
@@ -310,7 +311,8 @@ cleanup() {
 # Generate validation report
 generate_report() {
     local status="$1"
-    local report_file="/tmp/backup-validation-report-$(date +%Y%m%d-%H%M%S).json"
+    local report_file
+    report_file="/tmp/backup-validation-report-$(date +%Y%m%d-%H%M%S).json"
 
     cat > "$report_file" << EOF
 {

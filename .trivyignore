@@ -7,4 +7,9 @@
 # CVE-2023-12345          # Description of why this is ignored
 # secret:generic-api-key  # False positive in test fixtures
 
-# Currently no suppressions needed - add entries as false positives are identified
+# mkcert (v1.4.4) - built with Go 1.18, upstream unmaintained since Feb 2022
+# These CVEs are not exploitable in mkcert's context:
+CVE-2024-45337  # SSH authorization bypass - mkcert doesn't use SSH
+CVE-2023-24538  # html/template backticks - mkcert doesn't serve HTML
+CVE-2023-24540  # html/template JS whitespace - mkcert doesn't serve HTML
+CVE-2024-24790  # net/netip issue - mkcert uses standard net package
