@@ -122,8 +122,9 @@ benchmark_variant() {
     end_time=$(date +%s.%N)
     local build_time
     build_time=$(echo "$end_time - $start_time" | bc 2>/dev/null || true)
-    # Ensure build_time is never empty (bc can fail silently)
+    # Ensure build_time is valid JSON number (not empty, has leading zero)
     [ -z "$build_time" ] && build_time="0"
+    [[ "$build_time" == .* ]] && build_time="0$build_time"
 
     # Get image size
     local image_size
@@ -131,11 +132,13 @@ benchmark_variant() {
     [ -z "$image_size" ] && image_size="0"
     local image_size_mb
     image_size_mb=$(echo "scale=2; $image_size / 1048576" | bc 2>/dev/null || true)
+    # Ensure valid JSON number (not empty, has leading zero for decimals)
     [ -z "$image_size_mb" ] && image_size_mb="0"
+    [[ "$image_size_mb" == .* ]] && image_size_mb="0$image_size_mb"
 
     # Get layer count
     local layer_count
-    layer_count=$(docker image history "$image_tag" --quiet | wc -l)
+    layer_count=$(docker image history "$image_tag" --quiet | wc -l | tr -d ' ')
     [ -z "$layer_count" ] && layer_count="0"
 
     # Check cache utilization
@@ -148,7 +151,9 @@ benchmark_variant() {
     local cache_rate=0
     if [ "$total_steps" -gt 0 ]; then
         cache_rate=$(echo "scale=2; $cached_steps * 100 / $total_steps" | bc 2>/dev/null || true)
+        # Ensure valid JSON number
         [ -z "$cache_rate" ] && cache_rate="0"
+        [[ "$cache_rate" == .* ]] && cache_rate="0$cache_rate"
     fi
 
     # Output results
