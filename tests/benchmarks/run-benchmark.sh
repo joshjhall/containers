@@ -101,7 +101,7 @@ benchmark_variant() {
     local build_args="$2"
     local image_tag="benchmark-$name:$TIMESTAMP"
 
-    echo "Benchmarking: $name"
+    echo "Benchmarking: $name" >&2
 
     local cache_flag=""
     if [ "$NO_CACHE" = "true" ]; then
@@ -124,7 +124,7 @@ benchmark_variant() {
         $cache_flag \
         -t "$image_tag" \
         "$PROJECT_ROOT" 2>&1) || {
-        echo "  Build failed!"
+        echo "  Build failed!" >&2
         build_failed=true
     }
 
