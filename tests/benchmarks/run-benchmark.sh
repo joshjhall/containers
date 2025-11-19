@@ -121,24 +121,19 @@ benchmark_variant() {
     local end_time
     end_time=$(date +%s.%N)
     local build_time
-    build_time=$(echo "$end_time - $start_time" | bc 2>/dev/null || true)
-    # Ensure build_time is valid JSON number (not empty, has leading zero)
-    [ -z "$build_time" ] && build_time="0"
-    [[ "$build_time" == .* ]] && build_time="0$build_time"
+    # Use awk instead of bc for reliable numeric output
+    build_time=$(awk "BEGIN {printf \"%.2f\", $end_time - $start_time}" 2>/dev/null || echo "0")
 
     # Get image size
     local image_size
     image_size=$(docker image inspect "$image_tag" --format '{{.Size}}' 2>/dev/null || echo "0")
     [ -z "$image_size" ] && image_size="0"
     local image_size_mb
-    image_size_mb=$(echo "scale=2; $image_size / 1048576" | bc 2>/dev/null || true)
-    # Ensure valid JSON number (not empty, has leading zero for decimals)
-    [ -z "$image_size_mb" ] && image_size_mb="0"
-    [[ "$image_size_mb" == .* ]] && image_size_mb="0$image_size_mb"
+    image_size_mb=$(awk "BEGIN {printf \"%.2f\", $image_size / 1048576}" 2>/dev/null || echo "0")
 
-    # Get layer count
+    # Get layer count (strip whitespace from wc output)
     local layer_count
-    layer_count=$(docker image history "$image_tag" --quiet | wc -l | tr -d ' ')
+    layer_count=$(docker image history "$image_tag" --quiet 2>/dev/null | wc -l | tr -d ' ')
     [ -z "$layer_count" ] && layer_count="0"
 
     # Check cache utilization
@@ -150,10 +145,7 @@ benchmark_variant() {
     [ -z "$cached_steps" ] && cached_steps=0
     local cache_rate=0
     if [ "$total_steps" -gt 0 ]; then
-        cache_rate=$(echo "scale=2; $cached_steps * 100 / $total_steps" | bc 2>/dev/null || true)
-        # Ensure valid JSON number
-        [ -z "$cache_rate" ] && cache_rate="0"
-        [[ "$cache_rate" == .* ]] && cache_rate="0$cache_rate"
+        cache_rate=$(awk "BEGIN {printf \"%.2f\", $cached_steps * 100 / $total_steps}" 2>/dev/null || echo "0")
     fi
 
     # Output results
