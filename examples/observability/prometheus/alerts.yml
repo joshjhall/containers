@@ -71,7 +71,9 @@ groups:
           description: >-
             Total build errors increased in the last hour.
             This may indicate a regression or environmental issue.
-          runbook_url: "https://github.com/yourorg/containers/blob/main/docs/observability/runbooks/build-error-trend.md"
+          runbook_url: >-
+            https://github.com/yourorg/containers/blob/main/docs/
+            observability/runbooks/build-error-trend.md
 
   # ============================================================================
   # Container Runtime Health Alerts
@@ -90,7 +92,9 @@ groups:
           description: >-
             Container healthcheck is failing for {{ $labels.instance }}.
             This indicates a critical issue with the container runtime.
-          runbook_url: "https://github.com/yourorg/containers/blob/main/docs/observability/runbooks/container-unhealthy.md"
+          runbook_url: >-
+            https://github.com/yourorg/containers/blob/main/docs/
+            observability/runbooks/container-unhealthy.md
 
       - alert: ContainerHealthcheckSlow
         expr: container_healthcheck_duration_seconds > 5
@@ -116,7 +120,9 @@ groups:
           description: >-
             Container {{ $labels.instance }} has been up for only {{ $value }}s.
             Check logs for crash or restart reasons.
-          runbook_url: "https://github.com/yourorg/containers/blob/main/docs/observability/runbooks/container-restarted.md"
+          runbook_url: >-
+            https://github.com/yourorg/containers/blob/main/docs/
+            observability/runbooks/container-restarted.md
 
       - alert: ContainerFlapping
         expr: |
@@ -132,7 +138,9 @@ groups:
           description: >-
             Container {{ $labels.instance }} has restarted {{ $value }} times in 30 minutes.
             This indicates a severe stability issue.
-          runbook_url: "https://github.com/yourorg/containers/blob/main/docs/observability/runbooks/container-flapping.md"
+          runbook_url: >-
+            https://github.com/yourorg/containers/blob/main/docs/
+            observability/runbooks/container-flapping.md
 
   # ============================================================================
   # Container Resource Alerts
@@ -164,7 +172,9 @@ groups:
           description: >-
             Log directory is using {{ humanize $value }} (threshold: 1GB).
             Logs should be rotated or archived.
-          runbook_url: "https://github.com/yourorg/containers/blob/main/docs/observability/runbooks/logs-disk-usage-high.md"
+          runbook_url: >-
+            https://github.com/yourorg/containers/blob/main/docs/
+            observability/runbooks/logs-disk-usage-high.md
 
       - alert: ContainerWorkspaceDiskUsageHigh
         expr: container_disk_usage_bytes{path="/workspace"} > 53687091200
@@ -177,7 +187,9 @@ groups:
           description: >-
             Workspace directory is using {{ humanize $value }} (threshold: 50GB).
             Review workspace contents and clean up if needed.
-          runbook_url: "https://github.com/yourorg/containers/blob/main/docs/observability/runbooks/workspace-disk-usage-high.md"
+          runbook_url: >-
+            https://github.com/yourorg/containers/blob/main/docs/
+            observability/runbooks/workspace-disk-usage-high.md
 
   # ============================================================================
   # Container Metrics Collection Alerts
@@ -237,7 +249,9 @@ groups:
           description: >-
             {{ $value | humanizePercentage }} of containers are unhealthy.
             This may indicate a systemic issue affecting multiple containers.
-          runbook_url: "https://github.com/yourorg/containers/blob/main/docs/observability/runbooks/fleet-unhealthy-rate.md"
+          runbook_url: >-
+            https://github.com/yourorg/containers/blob/main/docs/
+            observability/runbooks/fleet-unhealthy-rate.md
 
       - alert: ContainerFleetBuildFailureRate
         expr: |
@@ -255,7 +269,9 @@ groups:
           description: >-
             {{ $value | humanizePercentage }} of containers have build errors.
             This may indicate a problem with base images or shared dependencies.
-          runbook_url: "https://github.com/yourorg/containers/blob/main/docs/observability/runbooks/fleet-build-failure-rate.md"
+          runbook_url: >-
+            https://github.com/yourorg/containers/blob/main/docs/
+            observability/runbooks/fleet-build-failure-rate.md
 
 # ============================================================================
 # Alert Routing Examples (for Alertmanager)

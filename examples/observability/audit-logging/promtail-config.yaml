@@ -65,7 +65,7 @@ scrape_configs:
       # Parse JSON logs
       - json:
           expressions:
-            timestamp: '@timestamp'
+            timestamp: "@timestamp"
             level: level
             category: category
             category_code: category_code
@@ -100,7 +100,11 @@ scrape_configs:
       # Calculate severity for alerting
       - template:
           source: level
-          template: '{{ if eq .Value "critical" }}P1{{ else if eq .Value "error" }}P2{{ else if eq .Value "warn" }}P3{{ else }}P4{{ end }}'
+          template: >-
+            {{ if eq .Value "critical" }}P1
+            {{ else if eq .Value "error" }}P2
+            {{ else if eq .Value "warn" }}P3
+            {{ else }}P4{{ end }}
       - labels:
           priority:
 
@@ -128,7 +132,7 @@ scrape_configs:
     pipeline_stages:
       - json:
           expressions:
-            timestamp: '@timestamp'
+            timestamp: "@timestamp"
             level: level
             category: category
             event_id: event_id
@@ -144,7 +148,6 @@ scrape_configs:
 
       - output:
           source: message
-
 # Target discovery for Kubernetes pods
 # Uncomment for Kubernetes deployments
 # kubernetes_sd_configs:

@@ -114,6 +114,7 @@ benchmark_variant() {
 
     # Build the image
     local build_output
+    local build_failed=false
     # shellcheck disable=SC2086  # Word splitting intentional for build_args
     build_output=$(docker build \
         -f "$PROJECT_ROOT/Dockerfile" \
@@ -124,58 +125,64 @@ benchmark_variant() {
         -t "$image_tag" \
         "$PROJECT_ROOT" 2>&1) || {
         echo "  Build failed!"
-        return 1
+        build_failed=true
     }
 
     local end_time
     end_time=$(date +%s.%N)
-    local build_time
-    # Use awk instead of bc for reliable numeric output
-    # Validate inputs are numeric before calculation
-    build_time=$(awk "BEGIN {printf \"%.2f\", $end_time - $start_time}" 2>/dev/null)
-    # Ensure we have a valid number (not empty, not containing letters)
-    if [ -z "$build_time" ] || ! [[ "$build_time" =~ ^[0-9.]+$ ]]; then
-        build_time="0"
-    fi
 
-    # Get image size
-    local image_size
-    image_size=$(docker image inspect "$image_tag" --format '{{.Size}}' 2>/dev/null || echo "0")
-    # Validate image_size is numeric
-    if [ -z "$image_size" ] || ! [[ "$image_size" =~ ^[0-9]+$ ]]; then
-        image_size="0"
-    fi
-    local image_size_mb
-    image_size_mb=$(awk "BEGIN {printf \"%.2f\", $image_size / 1048576}" 2>/dev/null)
-    if [ -z "$image_size_mb" ] || ! [[ "$image_size_mb" =~ ^[0-9.]+$ ]]; then
-        image_size_mb="0"
-    fi
-
-    # Get layer count (strip whitespace from wc output)
-    local layer_count
-    layer_count=$(docker image history "$image_tag" --quiet 2>/dev/null | wc -l | tr -d ' ')
-    # Validate layer_count is numeric
-    if [ -z "$layer_count" ] || ! [[ "$layer_count" =~ ^[0-9]+$ ]]; then
-        layer_count="0"
-    fi
-
-    # Check cache utilization
+    # Initialize all metrics with defaults
+    local build_time="0"
+    local image_size="0"
+    local image_size_mb="0"
+    local layer_count="0"
     local cached_steps=0
     local total_steps=0
-    total_steps=$(echo "$build_output" | grep -c "^#[0-9]" || echo 0)
-    cached_steps=$(echo "$build_output" | grep -c "CACHED" || echo 0)
-    # Validate step counts are numeric
-    if [ -z "$total_steps" ] || ! [[ "$total_steps" =~ ^[0-9]+$ ]]; then
-        total_steps=0
-    fi
-    if [ -z "$cached_steps" ] || ! [[ "$cached_steps" =~ ^[0-9]+$ ]]; then
-        cached_steps=0
-    fi
-    local cache_rate=0
-    if [ "$total_steps" -gt 0 ]; then
-        cache_rate=$(awk "BEGIN {printf \"%.2f\", $cached_steps * 100 / $total_steps}" 2>/dev/null)
-        if [ -z "$cache_rate" ] || ! [[ "$cache_rate" =~ ^[0-9.]+$ ]]; then
-            cache_rate="0"
+    local cache_rate="0"
+
+    # Only collect metrics if build succeeded
+    if [ "$build_failed" = "false" ]; then
+        # Use awk instead of bc for reliable numeric output
+        # Validate inputs are numeric before calculation
+        build_time=$(awk "BEGIN {printf \"%.2f\", $end_time - $start_time}" 2>/dev/null)
+        # Ensure we have a valid number (not empty, not containing letters)
+        if [ -z "$build_time" ] || ! [[ "$build_time" =~ ^[0-9.]+$ ]]; then
+            build_time="0"
+        fi
+
+        # Get image size
+        image_size=$(docker image inspect "$image_tag" --format '{{.Size}}' 2>/dev/null || echo "0")
+        # Validate image_size is numeric
+        if [ -z "$image_size" ] || ! [[ "$image_size" =~ ^[0-9]+$ ]]; then
+            image_size="0"
+        fi
+        image_size_mb=$(awk "BEGIN {printf \"%.2f\", $image_size / 1048576}" 2>/dev/null)
+        if [ -z "$image_size_mb" ] || ! [[ "$image_size_mb" =~ ^[0-9.]+$ ]]; then
+            image_size_mb="0"
+        fi
+
+        # Get layer count (strip whitespace from wc output)
+        layer_count=$(docker image history "$image_tag" --quiet 2>/dev/null | wc -l | tr -d ' ')
+        # Validate layer_count is numeric
+        if [ -z "$layer_count" ] || ! [[ "$layer_count" =~ ^[0-9]+$ ]]; then
+            layer_count="0"
+        fi
+
+        # Check cache utilization
+        total_steps=$(echo "$build_output" | grep -c "^#[0-9]" || echo 0)
+        cached_steps=$(echo "$build_output" | grep -c "CACHED" || echo 0)
+        # Validate step counts are numeric
+        if [ -z "$total_steps" ] || ! [[ "$total_steps" =~ ^[0-9]+$ ]]; then
+            total_steps=0
+        fi
+        if [ -z "$cached_steps" ] || ! [[ "$cached_steps" =~ ^[0-9]+$ ]]; then
+            cached_steps=0
+        fi
+        if [ "$total_steps" -gt 0 ]; then
+            cache_rate=$(awk "BEGIN {printf \"%.2f\", $cached_steps * 100 / $total_steps}" 2>/dev/null)
+            if [ -z "$cache_rate" ] || ! [[ "$cache_rate" =~ ^[0-9.]+$ ]]; then
+                cache_rate="0"
+            fi
         fi
     fi
 
