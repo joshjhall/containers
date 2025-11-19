@@ -1,0 +1,386 @@
+# Falco DaemonSet for Container Runtime Security Monitoring
+#
+# Description:
+#   Kubernetes DaemonSet deployment for Falco runtime security monitoring.
+#   Monitors syscalls, file access, network activity, and container behavior.
+#
+# Compliance Coverage:
+#   - SOC 2 CC6.8: Malicious software detection
+#   - SOC 2 CC7.2: Security event monitoring
+#   - ISO 27001 A.12.4.1: Event logging
+#   - HIPAA 164.312(b): Audit controls
+#   - PCI DSS 10.6: Review of security events
+#   - GDPR Art. 32: Security of processing
+#   - FedRAMP SI-4: Information system monitoring
+#
+# Usage:
+#   kubectl apply -f falco-daemonset.yaml
+#
+# Prerequisites:
+#   - Kubernetes 1.19+
+#   - Privileged containers allowed (for kernel module/eBPF)
+#   - Helm 3+ (for easier installation)
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: falco-system
+  labels:
+    app.kubernetes.io/name: falco
+    app.kubernetes.io/component: security
+    compliance: soc2-hipaa-pci-gdpr
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: falco
+  namespace: falco-system
+  labels:
+    app.kubernetes.io/name: falco
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: falco
+  labels:
+    app.kubernetes.io/name: falco
+rules:
+  - apiGroups: [""]
+    resources: ["nodes", "namespaces", "pods", "services", "endpoints"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "replicasets", "daemonsets", "statefulsets"]
+    verbs: ["get", "list", "watch"]
+  - nonResourceURLs: ["/healthz", "/healthz/*"]
+    verbs: ["get"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: falco
+  labels:
+    app.kubernetes.io/name: falco
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: falco
+subjects:
+  - kind: ServiceAccount
+    name: falco
+    namespace: falco-system
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: falco-config
+  namespace: falco-system
+  labels:
+    app.kubernetes.io/name: falco
+data:
+  falco.yaml: |
+    # Falco configuration
+    rules_file:
+      - /etc/falco/falco_rules.yaml
+      - /etc/falco/falco_rules.local.yaml
+      - /etc/falco/rules.d
+
+    # Watch config files for hot reload
+    watch_config_files: true
+
+    # Time format for JSON output
+    time_format_iso_8601: true
+
+    # Output in JSON for log aggregation
+    json_output: true
+    json_include_output_property: true
+    json_include_tags_property: true
+
+    # Log level
+    log_stderr: true
+    log_syslog: false
+    log_level: info
+
+    # Priority filter (emergency, alert, critical, error, warning, notice, info, debug)
+    priority: notice
+
+    # Buffered outputs
+    buffered_outputs: false
+
+    # Syscall event drops
+    syscall_event_drops:
+      threshold: 0.1
+      actions:
+        - log
+        - alert
+      rate: 0.03333
+      max_burst: 1
+
+    # Output channels
+    stdout_output:
+      enabled: true
+
+    file_output:
+      enabled: true
+      keep_alive: false
+      filename: /var/log/falco/events.json
+
+    http_output:
+      enabled: false
+      url: "http://falcosidekick:2801"
+
+    grpc_output:
+      enabled: false
+      bind_address: "unix:///var/run/falco/falco.sock"
+      threadiness: 0
+
+    # Metrics for Prometheus
+    metrics:
+      enabled: true
+      interval: 1h
+      output_rule: true
+      resource_utilization_enabled: true
+      state_counters_enabled: true
+      kernel_event_counters_enabled: true
+      libbpf_stats_enabled: true
+      convert_memory_to_mb: true
+      include_empty_values: false
+
+    # Kubernetes metadata enrichment
+    metadata_download:
+      max_mb: 100
+      chunk_wait_us: 1000
+      watch_freq_sec: 1
+
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: falco
+  namespace: falco-system
+  labels:
+    app.kubernetes.io/name: falco
+    app.kubernetes.io/component: security-monitoring
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: falco
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: falco
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8765"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: falco
+      tolerations:
+        - key: node-role.kubernetes.io/master
+          effect: NoSchedule
+        - key: node-role.kubernetes.io/control-plane
+          effect: NoSchedule
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      hostPID: true
+      containers:
+        - name: falco
+          image: falcosecurity/falco-no-driver:0.37.1
+          imagePullPolicy: IfNotPresent
+          resources:
+            limits:
+              cpu: 1000m
+              memory: 1024Mi
+            requests:
+              cpu: 100m
+              memory: 512Mi
+          securityContext:
+            privileged: true
+          args:
+            - /usr/bin/falco
+            - --cri
+            - /run/containerd/containerd.sock
+            - --cri
+            - /run/crio/crio.sock
+            - -K
+            - /var/run/secrets/kubernetes.io/serviceaccount/token
+            - -k
+            - https://$(KUBERNETES_SERVICE_HOST)
+            - --k8s-node
+            - $(FALCO_K8S_NODE_NAME)
+            - -pk
+          env:
+            - name: FALCO_K8S_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: FALCO_BPF_PROBE
+              value: ""
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8765
+            initialDelaySeconds: 60
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8765
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          volumeMounts:
+            - name: falco-config
+              mountPath: /etc/falco
+            - name: custom-rules
+              mountPath: /etc/falco/rules.d
+            - name: containerd-socket
+              mountPath: /run/containerd/containerd.sock
+              readOnly: true
+            - name: crio-socket
+              mountPath: /run/crio/crio.sock
+              readOnly: true
+            - name: docker-socket
+              mountPath: /var/run/docker.sock
+              readOnly: true
+            - name: dev
+              mountPath: /host/dev
+              readOnly: true
+            - name: proc
+              mountPath: /host/proc
+              readOnly: true
+            - name: boot
+              mountPath: /host/boot
+              readOnly: true
+            - name: lib-modules
+              mountPath: /host/lib/modules
+              readOnly: true
+            - name: usr
+              mountPath: /host/usr
+              readOnly: true
+            - name: etc
+              mountPath: /host/etc
+              readOnly: true
+            - name: falco-logs
+              mountPath: /var/log/falco
+
+        # Falco Exporter for Prometheus metrics
+        - name: falco-exporter
+          image: falcosecurity/falco-exporter:0.8.3
+          imagePullPolicy: IfNotPresent
+          args:
+            - --listen-address=0.0.0.0:9376
+            - --falco-unix-socket=/var/run/falco/falco.sock
+          ports:
+            - name: metrics
+              containerPort: 9376
+              protocol: TCP
+          resources:
+            limits:
+              cpu: 100m
+              memory: 128Mi
+            requests:
+              cpu: 10m
+              memory: 64Mi
+          volumeMounts:
+            - name: falco-socket
+              mountPath: /var/run/falco
+
+      volumes:
+        - name: falco-config
+          configMap:
+            name: falco-config
+        - name: custom-rules
+          configMap:
+            name: falco-rules-compliance
+        - name: containerd-socket
+          hostPath:
+            path: /run/containerd/containerd.sock
+            type: Socket
+        - name: crio-socket
+          hostPath:
+            path: /run/crio/crio.sock
+            type: Socket
+        - name: docker-socket
+          hostPath:
+            path: /var/run/docker.sock
+            type: Socket
+        - name: dev
+          hostPath:
+            path: /dev
+        - name: proc
+          hostPath:
+            path: /proc
+        - name: boot
+          hostPath:
+            path: /boot
+        - name: lib-modules
+          hostPath:
+            path: /lib/modules
+        - name: usr
+          hostPath:
+            path: /usr
+        - name: etc
+          hostPath:
+            path: /etc
+        - name: falco-logs
+          hostPath:
+            path: /var/log/falco
+            type: DirectoryOrCreate
+        - name: falco-socket
+          hostPath:
+            path: /var/run/falco
+            type: DirectoryOrCreate
+
+---
+# Service for Prometheus scraping
+apiVersion: v1
+kind: Service
+metadata:
+  name: falco-exporter
+  namespace: falco-system
+  labels:
+    app.kubernetes.io/name: falco-exporter
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "9376"
+spec:
+  selector:
+    app.kubernetes.io/name: falco
+  ports:
+    - name: metrics
+      port: 9376
+      targetPort: 9376
+      protocol: TCP
+
+---
+# ServiceMonitor for Prometheus Operator
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: falco
+  namespace: falco-system
+  labels:
+    app.kubernetes.io/name: falco
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: falco-exporter
+  namespaceSelector:
+    matchNames:
+      - falco-system
+  endpoints:
+    - port: metrics
+      interval: 30s
+      path: /metrics

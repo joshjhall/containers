@@ -1,0 +1,437 @@
+# Falco Compliance Rules for Container Runtime Security
+#
+# Description:
+#   Custom Falco rules for compliance monitoring covering SOC 2, HIPAA,
+#   PCI DSS, GDPR, and FedRAMP requirements.
+#
+# Compliance Coverage:
+#   - SOC 2 CC6.1: Logical and physical access controls
+#   - SOC 2 CC6.8: Malicious software prevention
+#   - SOC 2 CC7.2: Security event monitoring
+#   - HIPAA 164.312(a)(1): Access controls
+#   - HIPAA 164.312(b): Audit controls
+#   - HIPAA 164.312(e)(1): Transmission security
+#   - PCI DSS 10.2: Audit trail events
+#   - PCI DSS 10.6: Security event review
+#   - GDPR Art. 32: Security of processing
+#   - GDPR Art. 33: Breach notification
+#   - FedRAMP AC-2: Account management
+#   - FedRAMP AU-2: Audit events
+#   - FedRAMP SI-4: Information system monitoring
+#
+# Usage:
+#   kubectl create configmap falco-rules-compliance \
+#     --from-file=compliance_rules.yaml=falco-rules-compliance.yaml \
+#     -n falco-system
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: falco-rules-compliance
+  namespace: falco-system
+  labels:
+    app.kubernetes.io/name: falco
+    app.kubernetes.io/component: rules
+data:
+  compliance_rules.yaml: |
+    #############################################################
+    # HIPAA Compliance Rules - Protected Health Information (PHI)
+    #############################################################
+
+    - rule: HIPAA - PHI Data Access Attempt
+      desc: Detect access to files that may contain PHI
+      condition: >
+        open_read and
+        container and
+        (fd.name contains "patient" or
+         fd.name contains "medical" or
+         fd.name contains "health" or
+         fd.name contains "hipaa" or
+         fd.name contains "phi" or
+         fd.name contains "ehr" or
+         fd.name contains "emr")
+      output: >
+        HIPAA PHI data access detected
+        (user=%user.name user_uid=%user.uid command=%proc.cmdline
+         file=%fd.name container_id=%container.id
+         container_name=%container.name image=%container.image.repository
+         k8s_ns=%k8s.ns.name k8s_pod=%k8s.pod.name)
+      priority: WARNING
+      tags: [hipaa, phi, data_access, compliance]
+
+    - rule: HIPAA - PHI Data Export
+      desc: Detect potential PHI data exfiltration
+      condition: >
+        spawned_process and
+        container and
+        (proc.name in (curl, wget, scp, rsync, ftp, sftp, nc, netcat) or
+         proc.name startswith "python" or
+         proc.name startswith "ruby" or
+         proc.name startswith "perl") and
+        (proc.args contains "patient" or
+         proc.args contains "medical" or
+         proc.args contains "health")
+      output: >
+        HIPAA potential PHI export detected
+        (user=%user.name command=%proc.cmdline container_id=%container.id
+         container_name=%container.name image=%container.image.repository
+         k8s_ns=%k8s.ns.name k8s_pod=%k8s.pod.name)
+      priority: CRITICAL
+      tags: [hipaa, phi, data_exfiltration, compliance]
+
+    - rule: HIPAA - Unauthorized Database Access
+      desc: Detect unauthorized database connections
+      condition: >
+        spawned_process and
+        container and
+        proc.name in (mysql, psql, mongo, redis-cli, sqlcmd) and
+        not user.name in (app, service, postgres, mysql, mongodb)
+      output: >
+        HIPAA unauthorized database access attempt
+        (user=%user.name user_uid=%user.uid command=%proc.cmdline
+         container_id=%container.id container_name=%container.name
+         k8s_ns=%k8s.ns.name k8s_pod=%k8s.pod.name)
+      priority: WARNING
+      tags: [hipaa, database, access_control, compliance]
+
+    #############################################################
+    # SOC 2 Compliance Rules - Trust Service Criteria
+    #############################################################
+
+    - rule: SOC2 - Privileged Container Started
+      desc: Detect privileged containers (CC6.1)
+      condition: >
+        container_started and
+        container.privileged=true
+      output: >
+        SOC2 CC6.1 violation - Privileged container started
+        (container_id=%container.id container_name=%container.name
+         image=%container.image.repository
+         k8s_ns=%k8s.ns.name k8s_pod=%k8s.pod.name)
+      priority: WARNING
+      tags: [soc2, cc6.1, privileged, compliance]
+
+    - rule: SOC2 - Root User Activity
+      desc: Detect root user activity in containers (CC6.1)
+      condition: >
+        spawned_process and
+        container and
+        user.uid=0 and
+        not proc.name in (init, systemd, containerd-shim, runc)
+      output: >
+        SOC2 CC6.1 - Root user activity detected
+        (user=%user.name user_uid=%user.uid command=%proc.cmdline
+         container_id=%container.id container_name=%container.name
+         k8s_ns=%k8s.ns.name k8s_pod=%k8s.pod.name)
+      priority: NOTICE
+      tags: [soc2, cc6.1, root_access, compliance]
+
+    - rule: SOC2 - Cryptominer Detection
+      desc: Detect potential cryptomining activity (CC6.8)
+      condition: >
+        spawned_process and
+        container and
+        (proc.name in (xmrig, minerd, cpuminer, cgminer, bfgminer, ethminer) or
+         proc.cmdline contains "stratum+tcp" or
+         proc.cmdline contains "mining" or
+         proc.cmdline contains "cryptonight" or
+         proc.cmdline contains "monero")
+      output: >
+        SOC2 CC6.8 violation - Cryptominer detected
+        (user=%user.name command=%proc.cmdline container_id=%container.id
+         container_name=%container.name image=%container.image.repository
+         k8s_ns=%k8s.ns.name k8s_pod=%k8s.pod.name)
+      priority: CRITICAL
+      tags: [soc2, cc6.8, malware, cryptominer, compliance]
+
+    - rule: SOC2 - Reverse Shell Detected
+      desc: Detect reverse shell attempts (CC6.8, CC7.2)
+      condition: >
+        spawned_process and
+        container and
+        ((proc.name = bash and proc.args contains "&" and proc.args contains "/dev/tcp") or
+         (proc.name in (nc, netcat, ncat) and proc.args contains "-e") or
+         (proc.name = python and proc.args contains "socket" and proc.args contains "subprocess") or
+         (proc.name = perl and proc.args contains "socket") or
+         (proc.name = ruby and proc.args contains "TCPSocket"))
+      output: >
+        SOC2 CC6.8/CC7.2 - Reverse shell detected
+        (user=%user.name command=%proc.cmdline container_id=%container.id
+         container_name=%container.name k8s_ns=%k8s.ns.name k8s_pod=%k8s.pod.name)
+      priority: CRITICAL
+      tags: [soc2, cc6.8, cc7.2, reverse_shell, malware, compliance]
+
+    - rule: SOC2 - Sensitive File Modification
+      desc: Detect modification of sensitive configuration files (CC7.1)
+      condition: >
+        open_write and
+        container and
+        (fd.name startswith /etc/passwd or
+         fd.name startswith /etc/shadow or
+         fd.name startswith /etc/sudoers or
+         fd.name startswith /etc/pam.d or
+         fd.name startswith /etc/ssh or
+         fd.name startswith /root/.ssh)
+      output: >
+        SOC2 CC7.1 - Sensitive file modification
+        (user=%user.name user_uid=%user.uid command=%proc.cmdline
+         file=%fd.name container_id=%container.id
+         container_name=%container.name k8s_ns=%k8s.ns.name)
+      priority: ERROR
+      tags: [soc2, cc7.1, file_integrity, compliance]
+
+    #############################################################
+    # PCI DSS Compliance Rules - Cardholder Data Environment
+    #############################################################
+
+    - rule: PCI-DSS - Credit Card Data Access
+      desc: Detect access to files containing payment card data (10.2.1)
+      condition: >
+        open_read and
+        container and
+        (fd.name contains "card" or
+         fd.name contains "payment" or
+         fd.name contains "credit" or
+         fd.name contains "pan" or
+         fd.name contains "cvv" or
+         fd.name contains "cardholder")
+      output: >
+        PCI-DSS 10.2.1 - Payment card data access
+        (user=%user.name user_uid=%user.uid command=%proc.cmdline
+         file=%fd.name container_id=%container.id
+         container_name=%container.name k8s_ns=%k8s.ns.name)
+      priority: WARNING
+      tags: [pci-dss, 10.2.1, cardholder_data, compliance]
+
+    - rule: PCI-DSS - Failed Authentication
+      desc: Detect failed authentication attempts (10.2.4)
+      condition: >
+        spawned_process and
+        container and
+        (proc.name in (login, sshd, sudo, su) and
+         proc.args contains "failure")
+      output: >
+        PCI-DSS 10.2.4 - Failed authentication attempt
+        (user=%user.name command=%proc.cmdline container_id=%container.id
+         container_name=%container.name k8s_ns=%k8s.ns.name)
+      priority: WARNING
+      tags: [pci-dss, 10.2.4, authentication, compliance]
+
+    - rule: PCI-DSS - Audit Log Tampering
+      desc: Detect attempts to clear or modify audit logs (10.5.2)
+      condition: >
+        (open_write or unlink) and
+        container and
+        (fd.name startswith /var/log/audit or
+         fd.name startswith /var/log/falco or
+         fd.name contains "audit.log" or
+         fd.name contains "secure" or
+         fd.name contains "auth.log")
+      output: >
+        PCI-DSS 10.5.2 violation - Audit log tampering attempt
+        (user=%user.name user_uid=%user.uid command=%proc.cmdline
+         file=%fd.name container_id=%container.id
+         container_name=%container.name k8s_ns=%k8s.ns.name)
+      priority: CRITICAL
+      tags: [pci-dss, 10.5.2, audit_tampering, compliance]
+
+    - rule: PCI-DSS - Network Service Started
+      desc: Detect unauthorized network services (1.3.2)
+      condition: >
+        spawned_process and
+        container and
+        proc.name in (nc, netcat, ncat, socat, nmap, masscan) and
+        not k8s.ns.name in (kube-system, monitoring)
+      output: >
+        PCI-DSS 1.3.2 - Unauthorized network tool executed
+        (user=%user.name command=%proc.cmdline container_id=%container.id
+         container_name=%container.name k8s_ns=%k8s.ns.name)
+      priority: WARNING
+      tags: [pci-dss, 1.3.2, network_security, compliance]
+
+    #############################################################
+    # GDPR Compliance Rules - Data Protection
+    #############################################################
+
+    - rule: GDPR - Personal Data Access
+      desc: Detect access to personal data files (Art. 32)
+      condition: >
+        open_read and
+        container and
+        (fd.name contains "personal" or
+         fd.name contains "gdpr" or
+         fd.name contains "pii" or
+         fd.name contains "customer" or
+         fd.name contains "user_data" or
+         fd.name contains "private")
+      output: >
+        GDPR Art. 32 - Personal data access detected
+        (user=%user.name user_uid=%user.uid command=%proc.cmdline
+         file=%fd.name container_id=%container.id
+         container_name=%container.name k8s_ns=%k8s.ns.name)
+      priority: NOTICE
+      tags: [gdpr, art32, personal_data, compliance]
+
+    - rule: GDPR - Data Export to External
+      desc: Detect potential data export outside EU (Art. 44)
+      condition: >
+        spawned_process and
+        container and
+        proc.name in (curl, wget, scp, rsync) and
+        not proc.args contains "localhost" and
+        not proc.args contains "127.0.0.1" and
+        not proc.args contains "10." and
+        not proc.args contains "172.16" and
+        not proc.args contains "192.168"
+      output: >
+        GDPR Art. 44 - Potential data export to external network
+        (user=%user.name command=%proc.cmdline container_id=%container.id
+         container_name=%container.name k8s_ns=%k8s.ns.name)
+      priority: WARNING
+      tags: [gdpr, art44, data_transfer, compliance]
+
+    - rule: GDPR - Encryption Key Access
+      desc: Detect access to encryption keys (Art. 32)
+      condition: >
+        open_read and
+        container and
+        (fd.name contains ".key" or
+         fd.name contains ".pem" or
+         fd.name contains "private" or
+         fd.name contains "secret" or
+         fd.name startswith /etc/ssl/private)
+      output: >
+        GDPR Art. 32 - Encryption key accessed
+        (user=%user.name user_uid=%user.uid command=%proc.cmdline
+         file=%fd.name container_id=%container.id
+         container_name=%container.name k8s_ns=%k8s.ns.name)
+      priority: NOTICE
+      tags: [gdpr, art32, encryption, compliance]
+
+    #############################################################
+    # FedRAMP Compliance Rules - Federal Security Controls
+    #############################################################
+
+    - rule: FedRAMP - Account Creation
+      desc: Detect user account creation (AC-2)
+      condition: >
+        spawned_process and
+        container and
+        proc.name in (useradd, adduser, usermod, groupadd, addgroup)
+      output: >
+        FedRAMP AC-2 - Account management activity
+        (user=%user.name command=%proc.cmdline container_id=%container.id
+         container_name=%container.name k8s_ns=%k8s.ns.name)
+      priority: NOTICE
+      tags: [fedramp, ac-2, account_management, compliance]
+
+    - rule: FedRAMP - Package Installation
+      desc: Detect package installation attempts (CM-7)
+      condition: >
+        spawned_process and
+        container and
+        proc.name in (apt, apt-get, yum, dnf, apk, pip, npm, gem)
+      output: >
+        FedRAMP CM-7 - Package installation attempt
+        (user=%user.name command=%proc.cmdline container_id=%container.id
+         container_name=%container.name k8s_ns=%k8s.ns.name)
+      priority: WARNING
+      tags: [fedramp, cm-7, package_install, compliance]
+
+    - rule: FedRAMP - Binary Modification
+      desc: Detect binary file modification (SI-7)
+      condition: >
+        open_write and
+        container and
+        (fd.name startswith /bin or
+         fd.name startswith /sbin or
+         fd.name startswith /usr/bin or
+         fd.name startswith /usr/sbin or
+         fd.name startswith /usr/local/bin)
+      output: >
+        FedRAMP SI-7 - Binary modification detected
+        (user=%user.name user_uid=%user.uid command=%proc.cmdline
+         file=%fd.name container_id=%container.id
+         container_name=%container.name k8s_ns=%k8s.ns.name)
+      priority: CRITICAL
+      tags: [fedramp, si-7, binary_modification, compliance]
+
+    - rule: FedRAMP - Outbound Connection
+      desc: Monitor outbound network connections (SC-7)
+      condition: >
+        outbound and
+        container and
+        fd.sip.name != "127.0.0.1" and
+        not k8s.ns.name in (kube-system, istio-system)
+      output: >
+        FedRAMP SC-7 - Outbound connection
+        (user=%user.name command=%proc.cmdline
+         connection=%fd.name container_id=%container.id
+         container_name=%container.name k8s_ns=%k8s.ns.name)
+      priority: DEBUG
+      tags: [fedramp, sc-7, network, compliance]
+
+    #############################################################
+    # General Security Rules
+    #############################################################
+
+    - rule: Container Escape Attempt
+      desc: Detect potential container escape attempts
+      condition: >
+        spawned_process and
+        container and
+        (proc.cmdline contains "nsenter" or
+         proc.cmdline contains "docker.sock" or
+         proc.cmdline contains "cgroup" or
+         proc.cmdline contains "/proc/1" or
+         proc.name = mount)
+      output: >
+        CRITICAL - Container escape attempt detected
+        (user=%user.name command=%proc.cmdline container_id=%container.id
+         container_name=%container.name k8s_ns=%k8s.ns.name)
+      priority: CRITICAL
+      tags: [container_escape, security, critical]
+
+    - rule: Kubernetes Secret Access
+      desc: Detect access to Kubernetes secrets
+      condition: >
+        open_read and
+        container and
+        fd.name startswith /var/run/secrets/kubernetes.io
+      output: >
+        Kubernetes secret accessed
+        (user=%user.name user_uid=%user.uid command=%proc.cmdline
+         file=%fd.name container_id=%container.id
+         container_name=%container.name k8s_ns=%k8s.ns.name)
+      priority: NOTICE
+      tags: [kubernetes, secrets, access_control]
+
+    - rule: Suspicious Process Spawned
+      desc: Detect suspicious process execution
+      condition: >
+        spawned_process and
+        container and
+        proc.name in (gdb, strace, ltrace, tcpdump, tshark, ngrep,
+                      rawshark, mitmproxy, bettercap, ettercap)
+      output: >
+        Suspicious debugging/sniffing tool executed
+        (user=%user.name command=%proc.cmdline container_id=%container.id
+         container_name=%container.name k8s_ns=%k8s.ns.name)
+      priority: WARNING
+      tags: [suspicious, debugging, network_sniffing]
+
+    - rule: Shell Spawned in Container
+      desc: Detect interactive shell in production container
+      condition: >
+        spawned_process and
+        container and
+        proc.name in (bash, sh, zsh, ksh, csh, tcsh, fish) and
+        proc.tty != 0 and
+        not k8s.ns.name in (kube-system, default)
+      output: >
+        Interactive shell spawned in container
+        (user=%user.name command=%proc.cmdline container_id=%container.id
+         container_name=%container.name k8s_ns=%k8s.ns.name)
+      priority: NOTICE
+      tags: [shell, interactive, container_access]

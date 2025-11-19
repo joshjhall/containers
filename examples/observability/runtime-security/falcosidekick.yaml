@@ -1,0 +1,337 @@
+# Falcosidekick - Alert Routing and Integration
+#
+# Description:
+#   Routes Falco alerts to various outputs including Slack, PagerDuty,
+#   Elasticsearch, Prometheus, and more.
+#
+# Compliance Coverage:
+#   - SOC 2 CC7.3: Security incident response
+#   - ISO 27001 A.16.1: Incident management
+#   - HIPAA 164.308(a)(6): Security incident procedures
+#   - PCI DSS 12.10: Incident response plan
+#   - GDPR Art. 33: Notification of breaches
+#   - FedRAMP IR-4: Incident handling
+#
+# Usage:
+#   kubectl apply -f falcosidekick.yaml
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: falcosidekick-config
+  namespace: falco-system
+  labels:
+    app.kubernetes.io/name: falcosidekick
+data:
+  config.yaml: |
+    # Listen address
+    listenaddress: "0.0.0.0"
+    listenport: 2801
+
+    # Debug mode
+    debug: false
+
+    # Custom fields added to all alerts
+    customfields:
+      environment: "production"
+      cluster: "main"
+
+    # Prometheus metrics
+    prometheus:
+      extralabels: "rule,priority,source,k8s_ns_name,k8s_pod_name"
+
+    # Slack integration
+    slack:
+      webhookurl: "${SLACK_WEBHOOK_URL}"
+      channel: "#security-alerts"
+      username: "Falco"
+      icon: "https://falco.org/img/favicon.png"
+      outputformat: "all"
+      minimumpriority: "warning"
+      messageformat: |
+        *Priority:* {{ .Priority }}
+        *Rule:* {{ .Rule }}
+        *Output:* {{ .Output }}
+        *Time:* {{ .Time }}
+        *Tags:* {{ range .Tags }}{{ . }} {{ end }}
+
+    # PagerDuty integration
+    pagerduty:
+      routingkey: "${PAGERDUTY_ROUTING_KEY}"
+      minimumpriority: "critical"
+
+    # Elasticsearch for long-term storage
+    elasticsearch:
+      hostport: "${ELASTICSEARCH_HOST}:9200"
+      index: "falco-alerts"
+      type: "_doc"
+      minimumpriority: "notice"
+      mutualtls: false
+      checkcert: true
+      username: "${ELASTICSEARCH_USER}"
+      password: "${ELASTICSEARCH_PASSWORD}"
+
+    # AWS CloudWatch
+    aws:
+      cloudwatchlogs:
+        loggroup: "/falco/security-alerts"
+        logstream: ""
+        minimumpriority: "warning"
+
+    # Loki for Grafana
+    loki:
+      hostport: "${LOKI_HOST}:3100"
+      minimumpriority: "notice"
+      tenant: ""
+      endpoint: "/loki/api/v1/push"
+
+    # Webhook for custom integrations
+    webhook:
+      address: "${WEBHOOK_URL}"
+      minimumpriority: "warning"
+      mutualtls: false
+      checkcert: true
+
+    # Alert deduplication
+    alertmanager:
+      hostport: "${ALERTMANAGER_HOST}:9093"
+      minimumpriority: "warning"
+      mutualtls: false
+      checkcert: true
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: falcosidekick
+  namespace: falco-system
+  labels:
+    app.kubernetes.io/name: falcosidekick
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: falcosidekick
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: falcosidekick
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "2801"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: falco
+      containers:
+        - name: falcosidekick
+          image: falcosecurity/falcosidekick:2.28.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 2801
+              protocol: TCP
+          envFrom:
+            - secretRef:
+                name: falcosidekick-secrets
+          resources:
+            limits:
+              cpu: 200m
+              memory: 256Mi
+            requests:
+              cpu: 50m
+              memory: 128Mi
+          livenessProbe:
+            httpGet:
+              path: /ping
+              port: 2801
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /ping
+              port: 2801
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          volumeMounts:
+            - name: config
+              mountPath: /etc/falcosidekick
+      volumes:
+        - name: config
+          configMap:
+            name: falcosidekick-config
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: falcosidekick
+  namespace: falco-system
+  labels:
+    app.kubernetes.io/name: falcosidekick
+spec:
+  selector:
+    app.kubernetes.io/name: falcosidekick
+  ports:
+    - name: http
+      port: 2801
+      targetPort: 2801
+      protocol: TCP
+
+---
+# Secret template - fill in with actual values
+apiVersion: v1
+kind: Secret
+metadata:
+  name: falcosidekick-secrets
+  namespace: falco-system
+type: Opaque
+stringData:
+  SLACK_WEBHOOK_URL: "https://hooks.slack.com/services/xxx/yyy/zzz"
+  PAGERDUTY_ROUTING_KEY: "your-pagerduty-key"
+  ELASTICSEARCH_HOST: "elasticsearch.monitoring.svc.cluster.local"
+  ELASTICSEARCH_USER: "elastic"
+  ELASTICSEARCH_PASSWORD: "changeme"
+  LOKI_HOST: "loki.monitoring.svc.cluster.local"
+  ALERTMANAGER_HOST: "alertmanager.monitoring.svc.cluster.local"
+  WEBHOOK_URL: "https://your-webhook-endpoint.com/falco"
+
+---
+# Prometheus alert rules for Falco metrics
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: falco-alerts
+  namespace: falco-system
+  labels:
+    app.kubernetes.io/name: falco
+    prometheus: main
+spec:
+  groups:
+    - name: falco.rules
+      rules:
+        - alert: FalcoCriticalAlert
+          expr: |
+            increase(falco_events{priority="Critical"}[5m]) > 0
+          for: 0m
+          labels:
+            severity: critical
+            compliance: "soc2,hipaa,pci-dss"
+          annotations:
+            summary: "Critical security event detected by Falco"
+            description: "Falco detected a critical security event. Check Falco logs for details."
+            runbook_url: "https://github.com/your-org/runbooks/blob/main/falco-critical.md"
+
+        - alert: FalcoErrorAlert
+          expr: |
+            increase(falco_events{priority="Error"}[5m]) > 5
+          for: 5m
+          labels:
+            severity: warning
+            compliance: "soc2,pci-dss"
+          annotations:
+            summary: "Multiple error-level security events detected"
+            description: "Falco detected {{ $value }} error-level events in the last 5 minutes."
+
+        - alert: FalcoHighEventRate
+          expr: |
+            rate(falco_events[5m]) > 10
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High rate of Falco security events"
+            description: "Falco is detecting {{ $value }} events per second. This may indicate an attack."
+
+        - alert: FalcoDroppedEvents
+          expr: |
+            increase(falco_kernel_event_drops_total[5m]) > 0
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Falco is dropping kernel events"
+            description: "Falco dropped {{ $value }} events in the last 5 minutes due to buffer overflow."
+
+        - alert: FalcoNotRunning
+          expr: |
+            absent(falco_events) == 1
+          for: 5m
+          labels:
+            severity: critical
+            compliance: "soc2,hipaa,pci-dss"
+          annotations:
+            summary: "Falco is not running"
+            description: "No Falco events received for 5 minutes. Runtime security monitoring is down."
+
+---
+# Grafana dashboard ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: falco-dashboard
+  namespace: falco-system
+  labels:
+    grafana_dashboard: "1"
+data:
+  falco-dashboard.json: |
+    {
+      "title": "Falco Security Monitoring",
+      "uid": "falco-security",
+      "panels": [
+        {
+          "title": "Critical Events (24h)",
+          "type": "stat",
+          "targets": [
+            {
+              "expr": "sum(increase(falco_events{priority=\"Critical\"}[24h]))"
+            }
+          ]
+        },
+        {
+          "title": "Events by Priority",
+          "type": "piechart",
+          "targets": [
+            {
+              "expr": "sum by (priority) (increase(falco_events[24h]))"
+            }
+          ]
+        },
+        {
+          "title": "Events by Rule",
+          "type": "table",
+          "targets": [
+            {
+              "expr": "topk(10, sum by (rule) (increase(falco_events[24h])))"
+            }
+          ]
+        },
+        {
+          "title": "Events by Namespace",
+          "type": "bargauge",
+          "targets": [
+            {
+              "expr": "sum by (k8s_ns_name) (increase(falco_events[24h]))"
+            }
+          ]
+        },
+        {
+          "title": "Event Rate",
+          "type": "timeseries",
+          "targets": [
+            {
+              "expr": "sum(rate(falco_events[5m]))"
+            }
+          ]
+        },
+        {
+          "title": "Dropped Events",
+          "type": "timeseries",
+          "targets": [
+            {
+              "expr": "sum(rate(falco_kernel_event_drops_total[5m]))"
+            }
+          ]
+        }
+      ]
+    }
