@@ -141,7 +141,8 @@ spec:
           container := input.review.object.spec.containers[_]
           not contains(container.image, ":")
           not registry_allowed(container.image)
-          msg := sprintf("Container '%v' has no tag (defaults to latest). Specify version for reproducibility.", [container.name])
+          msg := sprintf("Container '%v' has no tag (defaults to latest). %s",
+            [container.name, "Specify version for reproducibility."])
         }
 
         registry_allowed(image) {
@@ -227,7 +228,9 @@ spec:
           is_hipaa_namespace
           input.review.object.metadata.labels["encryption"] != "aes-256"
           input.review.object.metadata.labels["encryption"] != "aes-256-gcm"
-          msg := sprintf("HIPAA workload encryption must be 'aes-256' or 'aes-256-gcm', got '%v'.", [input.review.object.metadata.labels["encryption"]])
+          encryption := input.review.object.metadata.labels["encryption"]
+          msg := sprintf("HIPAA workload encryption must be 'aes-256' or %s",
+            ["'aes-256-gcm', got '" + encryption + "'."])
         }
 
         violation[{"msg": msg}] {
@@ -319,7 +322,9 @@ spec:
           input.review.kind.kind == "Pod"
           is_sensitive_namespace
           not has_network_policy
-          msg := sprintf("Namespace '%v' requires NetworkPolicy for PCI DSS 1.3 network segmentation.", [input.review.object.metadata.namespace])
+          ns := input.review.object.metadata.namespace
+          msg := sprintf("Namespace '%v' requires NetworkPolicy for %s",
+            [ns, "PCI DSS 1.3 network segmentation."])
         }
 
         is_sensitive_namespace {
@@ -361,7 +366,8 @@ spec:
         violation[{"msg": msg}] {
           container := input.review.object.spec.containers[_]
           not trusted_registry(container.image)
-          msg := sprintf("Container '%v' uses untrusted registry. Image '%v' not from approved registries.", [container.name, container.image])
+          msg := sprintf("Container '%v' uses untrusted registry. %s",
+            [container.name, "Image '" + container.image + "' not approved."])
         }
 
         violation[{"msg": msg}] {
@@ -462,7 +468,8 @@ spec:
           container := input.review.object.spec.containers[_]
           input.parameters.requireDropCapabilities == true
           not drops_all_capabilities(container)
-          msg := sprintf("Container '%v' must drop ALL capabilities. Add securityContext.capabilities.drop: ['ALL'].", [container.name])
+          msg := sprintf("Container '%v' must drop ALL capabilities. %s",
+            [container.name, "Add securityContext.capabilities.drop: ['ALL']."])
         }
 
         drops_all_capabilities(container) {
