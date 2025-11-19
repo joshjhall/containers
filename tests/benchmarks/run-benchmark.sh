@@ -200,7 +200,7 @@ main() {
                 first=false
             fi
             benchmark_variant "$variant" "${VARIANTS[$variant]:-}"
-            echo ""
+            [ "$OUTPUT_FORMAT" = "text" ] && echo ""
         done
     fi
 
