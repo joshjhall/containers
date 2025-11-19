@@ -39,6 +39,9 @@ source /tmp/build-scripts/base/cache-utils.sh
 # Source apt utilities for reliable package installation
 source /tmp/build-scripts/base/apt-utils.sh
 
+# Source retry utilities for network operations
+source /tmp/build-scripts/base/retry-utils.sh
+
 # Source path utilities for secure PATH management
 source /tmp/build-scripts/base/path-utils.sh
 
@@ -87,8 +90,8 @@ if [ "$NODE_INSTALLED" = false ] || [ "$NODE_VERSION_OK" = false ]; then
     log_message "Adding NodeSource repository manually..."
 
     # Download and install NodeSource GPG key
-    log_command "Downloading NodeSource GPG key" \
-        command curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key -o /tmp/nodesource.gpg.key
+    log_message "Downloading NodeSource GPG key"
+    retry_with_backoff curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key -o /tmp/nodesource.gpg.key
 
     # Convert GPG key to binary format for apt (required for Debian 13+)
     log_command "Converting GPG key to binary format" \

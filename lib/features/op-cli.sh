@@ -41,6 +41,9 @@ source /tmp/build-scripts/base/feature-header.sh
 # Source apt utilities for reliable package installation
 source /tmp/build-scripts/base/apt-utils.sh
 
+# Source retry utilities for network operations
+source /tmp/build-scripts/base/retry-utils.sh
+
 # Start logging
 log_feature_start "1Password CLI"
 
@@ -74,8 +77,8 @@ esac
 log_message "Configuring 1Password repository..."
 
 # Add 1Password GPG key for package verification
-log_command "Adding 1Password GPG key" \
-    command curl -sS https://downloads.1password.com/linux/keys/1password.asc | \
+log_message "Adding 1Password GPG key"
+retry_with_backoff curl -sS https://downloads.1password.com/linux/keys/1password.asc | \
     gpg --dearmor --output /usr/share/keyrings/1password-archive-keyring.gpg
 
 # Add 1Password repository
@@ -90,12 +93,12 @@ log_message "Configuring security policy for package verification..."
 # Add the debsig-verify policy for additional package verification
 log_command "Creating debsig policy directory" \
     mkdir -p /etc/debsig/policies/AC2D62742012EA22/
-log_command "Downloading 1Password debsig policy" \
-    bash -c "command curl -sS https://downloads.1password.com/linux/debian/debsig/1password.pol > /etc/debsig/policies/AC2D62742012EA22/1password.pol"
+log_message "Downloading 1Password debsig policy"
+retry_with_backoff curl -sS https://downloads.1password.com/linux/debian/debsig/1password.pol -o /etc/debsig/policies/AC2D62742012EA22/1password.pol
 log_command "Creating debsig keyrings directory" \
     mkdir -p /usr/share/debsig/keyrings/AC2D62742012EA22
-log_command "Adding 1Password debsig GPG key" \
-    command curl -sS https://downloads.1password.com/linux/keys/1password.asc | \
+log_message "Adding 1Password debsig GPG key"
+retry_with_backoff curl -sS https://downloads.1password.com/linux/keys/1password.asc | \
     gpg --dearmor --output /usr/share/debsig/keyrings/AC2D62742012EA22/debsig.gpg
 
 # ============================================================================

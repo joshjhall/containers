@@ -77,6 +77,9 @@ source /tmp/build-scripts/base/feature-header.sh
 # Source apt utilities for reliable package installation
 source /tmp/build-scripts/base/apt-utils.sh
 
+# Source retry utilities for network operations
+source /tmp/build-scripts/base/retry-utils.sh
+
 # Source checksum utilities for secure binary downloads
 source /tmp/build-scripts/features/lib/checksum-fetch.sh
 
@@ -96,8 +99,8 @@ log_message "Configuring Docker repository..."
 log_command "Creating keyrings directory" \
     install -m 0755 -d /etc/apt/keyrings
 
-log_command "Adding Docker GPG key" \
-    command curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+log_message "Adding Docker GPG key"
+retry_with_backoff curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
 
 log_command "Setting Docker GPG key permissions" \
     chmod a+r /etc/apt/keyrings/docker.gpg

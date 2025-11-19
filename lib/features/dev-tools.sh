@@ -27,6 +27,9 @@ source /tmp/build-scripts/base/feature-header.sh
 # Source apt utilities for reliable package installation
 source /tmp/build-scripts/base/apt-utils.sh
 
+# Source retry utilities for network operations
+source /tmp/build-scripts/base/retry-utils.sh
+
 # Source download verification utilities for secure binary downloads
 source /tmp/build-scripts/base/download-verify.sh
 
@@ -52,8 +55,8 @@ GITCLIFF_VERSION="2.8.0"
 log_message "Configuring repositories for development tools..."
 
 # Add GitHub CLI repository
-log_command "Adding GitHub CLI GPG key" \
-    bash -c "command curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg > /usr/share/keyrings/githubcli-archive-keyring.gpg"
+log_message "Adding GitHub CLI GPG key"
+retry_with_backoff curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg -o /usr/share/keyrings/githubcli-archive-keyring.gpg
 
 log_command "Setting GitHub CLI GPG key permissions" \
     chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg

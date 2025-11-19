@@ -49,6 +49,9 @@ source /tmp/build-scripts/base/feature-header.sh
 # Source apt utilities for reliable package installation
 source /tmp/build-scripts/base/apt-utils.sh
 
+# Source retry utilities for network operations
+source /tmp/build-scripts/base/retry-utils.sh
+
 # Source download verification utilities for secure binary downloads
 source /tmp/build-scripts/base/download-verify.sh
 
@@ -88,8 +91,8 @@ log_message "Setting up kubectl repository..."
 if command -v apt-key >/dev/null 2>&1; then
     # Old method for Debian 11/12 compatibility
     log_message "Using apt-key method (Debian 11/12)"
-    log_command "Adding Kubernetes GPG key" \
-        bash -c "command curl -fsSL https://pkgs.k8s.io/core:/stable:/v${KUBECTL_MINOR_VERSION}/deb/Release.key | apt-key add -"
+    log_message "Adding Kubernetes GPG key"
+    retry_with_backoff curl -fsSL "https://pkgs.k8s.io/core:/stable:/v${KUBECTL_MINOR_VERSION}/deb/Release.key" | apt-key add -
 
     log_command "Adding Kubernetes repository" \
         bash -c "echo 'deb https://pkgs.k8s.io/core:/stable:/v${KUBECTL_MINOR_VERSION}/deb/ /' > /etc/apt/sources.list.d/kubernetes.list"
@@ -99,8 +102,8 @@ else
     log_command "Creating keyrings directory" \
         mkdir -p /etc/apt/keyrings
 
-    log_command "Adding Kubernetes GPG key" \
-        bash -c "command curl -fsSL https://pkgs.k8s.io/core:/stable:/v${KUBECTL_MINOR_VERSION}/deb/Release.key | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg"
+    log_message "Adding Kubernetes GPG key"
+    retry_with_backoff curl -fsSL "https://pkgs.k8s.io/core:/stable:/v${KUBECTL_MINOR_VERSION}/deb/Release.key" | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
 
     log_command "Setting GPG key permissions" \
         chmod 644 /etc/apt/keyrings/kubernetes-apt-keyring.gpg

@@ -49,6 +49,9 @@ source /tmp/build-scripts/base/feature-header.sh
 # Source apt utilities for reliable package installation
 source /tmp/build-scripts/base/apt-utils.sh
 
+# Source retry utilities for network operations
+source /tmp/build-scripts/base/retry-utils.sh
+
 # Source checksum utilities for secure binary downloads
 source /tmp/build-scripts/features/lib/checksum-fetch.sh
 
@@ -98,16 +101,16 @@ log_message "Installing Terraform..."
 if command -v apt-key >/dev/null 2>&1; then
     # Old method for Debian 11/12 compatibility
     log_message "Using apt-key method (Debian 11/12)"
-    log_command "Adding HashiCorp GPG key" \
-        bash -c "command curl -fsSL https://apt.releases.hashicorp.com/gpg | apt-key add -"
+    log_message "Adding HashiCorp GPG key"
+    retry_with_backoff curl -fsSL https://apt.releases.hashicorp.com/gpg | apt-key add -
 
     log_command "Adding HashiCorp repository" \
         apt-add-repository "deb [arch=$(dpkg --print-architecture)] https://apt.releases.hashicorp.com $(lsb_release -cs) main"
 else
     # New method for Debian 13+ (Trixie and later)
     log_message "Using signed-by method (Debian 13+)"
-    log_command "Adding HashiCorp GPG key" \
-        bash -c "command curl -fsSL https://apt.releases.hashicorp.com/gpg | gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg"
+    log_message "Adding HashiCorp GPG key"
+    retry_with_backoff curl -fsSL https://apt.releases.hashicorp.com/gpg | gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
 
     log_command "Setting GPG key permissions" \
         chmod go+r /usr/share/keyrings/hashicorp-archive-keyring.gpg

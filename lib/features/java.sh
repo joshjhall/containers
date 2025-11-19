@@ -46,6 +46,9 @@ source /tmp/build-scripts/base/feature-header.sh
 # Source apt utilities for reliable package installation
 source /tmp/build-scripts/base/apt-utils.sh
 
+# Source retry utilities for network operations
+source /tmp/build-scripts/base/retry-utils.sh
+
 # Source version validation utilities
 source /tmp/build-scripts/base/version-validation.sh
 
@@ -116,8 +119,8 @@ apt_install \
 # ============================================================================
 log_message "Adding Eclipse Temurin repository..."
 
-log_command "Adding Adoptium GPG key" \
-    bash -c "command wget -qO - https://packages.adoptium.net/artifactory/api/gpg/key/public | gpg --dearmor -o /usr/share/keyrings/adoptium.gpg"
+log_message "Adding Adoptium GPG key"
+retry_with_backoff wget -qO - https://packages.adoptium.net/artifactory/api/gpg/key/public | gpg --dearmor -o /usr/share/keyrings/adoptium.gpg
 
 log_command "Adding Adoptium repository" \
     bash -c 'echo "deb [signed-by=/usr/share/keyrings/adoptium.gpg] https://packages.adoptium.net/artifactory/deb $(awk -F= '\''/^VERSION_CODENAME/{print$2}'\'' /etc/os-release) main" > /etc/apt/sources.list.d/adoptium.list'

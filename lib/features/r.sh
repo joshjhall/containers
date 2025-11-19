@@ -28,6 +28,9 @@ source /tmp/build-scripts/base/feature-header.sh
 # Source apt utilities for reliable package installation
 source /tmp/build-scripts/base/apt-utils.sh
 
+# Source retry utilities for network operations
+source /tmp/build-scripts/base/retry-utils.sh
+
 # Source version validation utilities
 source /tmp/build-scripts/base/version-validation.sh
 source /tmp/build-scripts/base/cache-utils.sh
@@ -88,9 +91,9 @@ log_command "Setting gnupg permissions" \
 # Add R CRAN repository key (using new keyring method)
 log_message "Adding R repository key..."
 
-# Method 1: Try to download the key directly from CRAN
-if log_command "Downloading R repository key from CRAN" \
-    bash -c "command wget -qO- https://cloud.r-project.org/bin/linux/debian/marutter_pubkey.asc 2>/dev/null | gpg --dearmor > /usr/share/keyrings/r-project-archive-keyring.gpg 2>/dev/null"; then
+# Method 1: Try to download the key directly from CRAN with retry
+log_message "Downloading R repository key from CRAN"
+if retry_with_backoff wget -qO- https://cloud.r-project.org/bin/linux/debian/marutter_pubkey.asc 2>/dev/null | gpg --dearmor > /usr/share/keyrings/r-project-archive-keyring.gpg 2>/dev/null; then
     log_message "Key downloaded from CRAN"
 else
     log_warning "CRAN key failed, trying keyserver..."
