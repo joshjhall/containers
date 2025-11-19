@@ -296,6 +296,55 @@ test_test_counters() {
 }
 
 # ============================================================================
+# Update Matrix Function Tests
+# ============================================================================
+
+test_update_matrix_jq_available() {
+    # Test that jq is used for matrix updates
+    local script_content
+    script_content=$(cat "$PROJECT_ROOT/bin/test-version-compatibility.sh")
+
+    assert_contains "$script_content" "command -v jq" "Should check for jq availability"
+    assert_contains "$script_content" "updated_matrix=\$(jq" "Should use jq for JSON manipulation"
+}
+
+test_update_matrix_entry_replacement() {
+    # Test that update_matrix can replace existing entries
+    local script_content
+    script_content=$(cat "$PROJECT_ROOT/bin/test-version-compatibility.sh")
+
+    assert_contains "$script_content" "new_entry.variant" "Should check for existing variants"
+    assert_contains "$script_content" "tested_combinations" "Should update tested_combinations"
+}
+
+test_update_matrix_language_versions() {
+    # Test that update_matrix updates language_versions
+    local script_content
+    script_content=$(cat "$PROJECT_ROOT/bin/test-version-compatibility.sh")
+
+    assert_contains "$script_content" "language_versions" "Should update language_versions"
+    assert_contains "$script_content" ".current" "Should update current version"
+    assert_contains "$script_content" ".tested" "Should update tested array"
+}
+
+test_update_matrix_fallback() {
+    # Test that update_matrix falls back to JSONL without jq
+    local script_content
+    script_content=$(cat "$PROJECT_ROOT/bin/test-version-compatibility.sh")
+
+    assert_contains "$script_content" "falling back to JSONL" "Should fall back without jq"
+    assert_contains "$script_content" "version-compat-results.jsonl" "Should use JSONL fallback"
+}
+
+test_update_matrix_timestamp() {
+    # Test that update_matrix updates timestamp
+    local script_content
+    script_content=$(cat "$PROJECT_ROOT/bin/test-version-compatibility.sh")
+
+    assert_contains "$script_content" "last_updated" "Should update last_updated timestamp"
+}
+
+# ============================================================================
 # Run all tests
 # ============================================================================
 
@@ -329,6 +378,13 @@ run_test_with_setup test_version_set_structure "Version set structure"
 
 # Counter tests
 run_test_with_setup test_test_counters "Test counter functionality"
+
+# Update matrix tests
+run_test_with_setup test_update_matrix_jq_available "Update matrix jq availability"
+run_test_with_setup test_update_matrix_entry_replacement "Update matrix entry replacement"
+run_test_with_setup test_update_matrix_language_versions "Update matrix language versions"
+run_test_with_setup test_update_matrix_fallback "Update matrix fallback to JSONL"
+run_test_with_setup test_update_matrix_timestamp "Update matrix timestamp"
 
 # Generate test report
 generate_report

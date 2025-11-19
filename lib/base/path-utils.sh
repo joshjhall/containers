@@ -170,7 +170,10 @@ safe_add_to_path() {
     # Add to PATH (prepend for precedence)
     export PATH="$dir:$PATH"
 
-    log_message "Added to PATH: $dir"
+    # Log only if verbose mode is enabled (disabled by default to keep output clean)
+    if [ "${VERBOSE_PATH_NOTICES:-}" = "true" ]; then
+        log_message "Added to PATH: $dir"
+    fi
     return 0
 }
 
