@@ -18,6 +18,10 @@ rules:
   comments:
     min-spaces-from-content: 1
 
+  # Comments indentation - disable due to false positives
+  # (comments at service level after nested content)
+  comments-indentation: disable
+
   # Document start (---) - not required for all files
   document-start:
     present: false

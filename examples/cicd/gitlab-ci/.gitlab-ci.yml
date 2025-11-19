@@ -313,10 +313,14 @@ release:
 
         case $variant in
           python-dev)
-            BUILD_ARGS="$BUILD_ARGS --build-arg INCLUDE_PYTHON_DEV=true --build-arg INCLUDE_DEV_TOOLS=true --build-arg INCLUDE_DOCKER=true"
+            BUILD_ARGS="$BUILD_ARGS --build-arg INCLUDE_PYTHON_DEV=true"
+            BUILD_ARGS="$BUILD_ARGS --build-arg INCLUDE_DEV_TOOLS=true"
+            BUILD_ARGS="$BUILD_ARGS --build-arg INCLUDE_DOCKER=true"
             ;;
           node-dev)
-            BUILD_ARGS="$BUILD_ARGS --build-arg INCLUDE_NODE_DEV=true --build-arg INCLUDE_DEV_TOOLS=true --build-arg INCLUDE_DOCKER=true"
+            BUILD_ARGS="$BUILD_ARGS --build-arg INCLUDE_NODE_DEV=true"
+            BUILD_ARGS="$BUILD_ARGS --build-arg INCLUDE_DEV_TOOLS=true"
+            BUILD_ARGS="$BUILD_ARGS --build-arg INCLUDE_DOCKER=true"
             ;;
         esac
 

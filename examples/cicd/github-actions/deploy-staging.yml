@@ -141,7 +141,8 @@ jobs:
           #       "type": "section",
           #       "text": {
           #         "type": "mrkdwn",
-          #         "text": "*Deployment Status:* ${{ job.status }}\n*Environment:* staging\n*Commit:* ${{ github.sha }}"
+          #         "text": "*Deployment Status:* ${{ job.status }}\n
+          #                  *Environment:* staging\n*Commit:* ${{ github.sha }}"
           #       }
           #     }]
           #   }'

@@ -69,13 +69,20 @@ RESULTS_FILE="$RESULTS_DIR/benchmark-$TIMESTAMP.json"
 
 # Get system info
 get_system_info() {
+    local cpus memory_gb
+    cpus=$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 1)
+    memory_gb=$(free -g 2>/dev/null | awk '/Mem:/{print $2}')
+    # Ensure numeric values are never empty
+    [ -z "$cpus" ] && cpus=1
+    [ -z "$memory_gb" ] && memory_gb=0
+
     echo "{"
     echo "  \"hostname\": \"$(hostname)\","
     echo "  \"os\": \"$(uname -s)\","
     echo "  \"arch\": \"$(uname -m)\","
     echo "  \"docker_version\": \"$(docker --version | awk '{print $3}' | tr -d ',')\","
-    echo "  \"cpus\": $(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 1),"
-    echo "  \"memory_gb\": $(free -g 2>/dev/null | awk '/Mem:/{print $2}' || echo 0)"
+    echo "  \"cpus\": $cpus,"
+    echo "  \"memory_gb\": $memory_gb"
     echo "}"
 }
 
@@ -114,26 +121,34 @@ benchmark_variant() {
     local end_time
     end_time=$(date +%s.%N)
     local build_time
-    build_time=$(echo "$end_time - $start_time" | bc 2>/dev/null || echo "0")
+    build_time=$(echo "$end_time - $start_time" | bc 2>/dev/null || true)
+    # Ensure build_time is never empty (bc can fail silently)
+    [ -z "$build_time" ] && build_time="0"
 
     # Get image size
     local image_size
     image_size=$(docker image inspect "$image_tag" --format '{{.Size}}' 2>/dev/null || echo "0")
+    [ -z "$image_size" ] && image_size="0"
     local image_size_mb
-    image_size_mb=$(echo "scale=2; $image_size / 1048576" | bc 2>/dev/null || echo "0")
+    image_size_mb=$(echo "scale=2; $image_size / 1048576" | bc 2>/dev/null || true)
+    [ -z "$image_size_mb" ] && image_size_mb="0"
 
     # Get layer count
     local layer_count
     layer_count=$(docker image history "$image_tag" --quiet | wc -l)
+    [ -z "$layer_count" ] && layer_count="0"
 
     # Check cache utilization
     local cached_steps=0
     local total_steps=0
     total_steps=$(echo "$build_output" | grep -c "^#[0-9]" || echo 0)
     cached_steps=$(echo "$build_output" | grep -c "CACHED" || echo 0)
+    [ -z "$total_steps" ] && total_steps=0
+    [ -z "$cached_steps" ] && cached_steps=0
     local cache_rate=0
     if [ "$total_steps" -gt 0 ]; then
-        cache_rate=$(echo "scale=2; $cached_steps * 100 / $total_steps" | bc 2>/dev/null || echo "0")
+        cache_rate=$(echo "scale=2; $cached_steps * 100 / $total_steps" | bc 2>/dev/null || true)
+        [ -z "$cache_rate" ] && cache_rate="0"
     fi
 
     # Output results

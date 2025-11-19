@@ -183,7 +183,9 @@ jobs:
           #       "type": "section",
           #       "text": {
           #         "type": "mrkdwn",
-          #         "text": "*Rollback Alert*\n*Environment:* ${{ inputs.environment }}\n*Status:* '$STATUS'\n*Rolled back to:* `${{ inputs.rollback_to }}`\n*Reason:* ${{ inputs.reason }}\n*By:* @${{ github.actor }}"
+          #         "text": "*Rollback Alert*\n*Environment:* ${{ inputs.environment }}\n
+          #                  *Status:* '$STATUS'\n*Rolled back to:* `${{ inputs.rollback_to }}`\n
+          #                  *Reason:* ${{ inputs.reason }}\n*By:* @${{ github.actor }}"
           #       }
           #     }]
           #   }'

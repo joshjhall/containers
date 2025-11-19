@@ -1,4 +1,3 @@
----
 # ConfigMap: Stores non-sensitive configuration data as key-value pairs or files
 # Can be mounted as files or exposed as environment variables
 apiVersion: v1
@@ -63,7 +62,7 @@ data:
       co = checkout
       br = branch
       cm = commit
-      lg = log --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit
+      lg = log --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset'
 
   # Example: Application configuration
   app-config.yaml: |

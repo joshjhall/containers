@@ -251,7 +251,8 @@ jobs:
           #       "type": "section",
           #       "text": {
           #         "type": "mrkdwn",
-          #         "text": "*Production Deployment*\n*Image:* ${{ inputs.image_tag }}\n*Strategy:* ${{ inputs.deployment_strategy }}\n*Status:* Success"
+          #         "text": "*Production Deployment*\n*Image:* ${{ inputs.image_tag }}\n
+          #                  *Strategy:* ${{ inputs.deployment_strategy }}\n*Status:* Success"
           #       }
           #     }]
           #   }'
@@ -275,7 +276,8 @@ jobs:
           #       "type": "section",
           #       "text": {
           #         "type": "mrkdwn",
-          #         "text": "*Production Deployment Failed*\n*Attempted:* ${{ inputs.image_tag }}\n*Rolled back to:* ${{ steps.backup.outputs.current_image }}"
+          #         "text": "*Production Deployment Failed*\n*Attempted:* ${{ inputs.image_tag }}\n
+          #                  *Rolled back to:* ${{ steps.backup.outputs.current_image }}"
           #       }
           #     }]
           #   }'
