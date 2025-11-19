@@ -93,14 +93,16 @@ spec:
           container := input.review.object.spec.containers[_]
           input.parameters.requireCPU == true
           not container.resources.limits.cpu
-          msg := sprintf("Container '%v' must have CPU limits. SOC 2 CC6.6 requires resource controls.", [container.name])
+          msg := sprintf("Container '%v' must have CPU limits. %s",
+            [container.name, "SOC 2 CC6.6 requires resource controls."])
         }
 
         violation[{"msg": msg}] {
           container := input.review.object.spec.containers[_]
           input.parameters.requireMemory == true
           not container.resources.limits.memory
-          msg := sprintf("Container '%v' must have memory limits. SOC 2 CC6.6 requires resource controls.", [container.name])
+          msg := sprintf("Container '%v' must have memory limits. %s",
+            [container.name, "SOC 2 CC6.6 requires resource controls."])
         }
 
 ---
@@ -134,7 +136,8 @@ spec:
           container := input.review.object.spec.containers[_]
           endswith(container.image, ":latest")
           not registry_allowed(container.image)
-          msg := sprintf("Container '%v' uses :latest tag. Use specific version for reproducibility (GDPR Art. 25).", [container.name])
+          msg := sprintf("Container '%v' uses :latest tag. %s",
+            [container.name, "Use specific version for reproducibility (GDPR Art. 25)."])
         }
 
         violation[{"msg": msg}] {
