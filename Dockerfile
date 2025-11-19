@@ -50,7 +50,7 @@ COPY lib /tmp/build-scripts
 # Base system setup - always needed
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
-    chmod +x /tmp/build-scripts/base/*.sh && \
+    chmod 755 /tmp/build-scripts/base/*.sh && \
     /tmp/build-scripts/base/setup.sh && \
     /tmp/build-scripts/base/setup-bashrc.d.sh
 
@@ -108,7 +108,7 @@ ARG WORKING_DIR=/workspace/${PROJECT_NAME}
 RUN /tmp/build-scripts/base/user.sh ${USERNAME} ${USER_UID} ${USER_GID} ${PROJECT_NAME} ${WORKING_DIR} ${ENABLE_PASSWORDLESS_SUDO}
 
 # Make all feature scripts executable
-RUN chmod +x /tmp/build-scripts/features/*.sh /tmp/build-scripts/base/*.sh
+RUN chmod 755 /tmp/build-scripts/features/*.sh /tmp/build-scripts/base/*.sh
 
 # Apply shell hardening
 # Must happen after user creation but before feature installations
@@ -404,19 +404,19 @@ RUN /tmp/build-scripts/runtime/setup-paths.sh
 
 # Copy entrypoint script
 COPY lib/runtime/entrypoint.sh /usr/local/bin/entrypoint
-RUN chmod +x /usr/local/bin/entrypoint
+RUN chmod 755 /usr/local/bin/entrypoint
 
 # Copy healthcheck script
 COPY bin/healthcheck.sh /usr/local/bin/healthcheck
-RUN chmod +x /usr/local/bin/healthcheck
+RUN chmod 755 /usr/local/bin/healthcheck
 
 # Copy shell completion test utility
 COPY bin/test-completions.sh /usr/local/bin/test-completions
-RUN chmod +x /usr/local/bin/test-completions
+RUN chmod 755 /usr/local/bin/test-completions
 
 # Copy case-sensitivity detection utility
 COPY bin/detect-case-sensitivity.sh /usr/local/bin/detect-case-sensitivity.sh
-RUN chmod +x /usr/local/bin/detect-case-sensitivity.sh
+RUN chmod 755 /usr/local/bin/detect-case-sensitivity.sh
 
 # Clean up build scripts but keep runtime scripts and base utilities
 RUN cp -r /tmp/build-scripts/runtime /opt/container-runtime && \
@@ -429,13 +429,13 @@ RUN cp -r /tmp/build-scripts/runtime /opt/container-runtime && \
 # Install check-build-logs script if it exists
 RUN if [ -f /opt/container-runtime/check-build-logs.sh ]; then \
     cp /opt/container-runtime/check-build-logs.sh /usr/local/bin/check-build-logs.sh && \
-    chmod +x /usr/local/bin/check-build-logs.sh; \
+    chmod 755 /usr/local/bin/check-build-logs.sh; \
     fi
 
 # Install secret loading startup script
 RUN if [ -f /opt/container-runtime/secrets/50-load-secrets.sh ]; then \
     cp /opt/container-runtime/secrets/50-load-secrets.sh /etc/container/startup/50-load-secrets.sh && \
-    chmod +x /etc/container/startup/50-load-secrets.sh; \
+    chmod 755 /etc/container/startup/50-load-secrets.sh; \
     fi
 
 # Create audit log directory with secure permissions (when audit logging enabled)

@@ -98,6 +98,44 @@ jobs:
             echo "Warning: Checksum updates failed, continuing anyway"
           }
 
+          # Update version compatibility matrix with new versions
+          echo "Updating version compatibility matrix..."
+          if [ -f "version-compatibility-matrix.json" ]; then
+            # Extract current versions from Dockerfile
+            PYTHON_VER=$(grep "^ARG PYTHON_VERSION=" Dockerfile | cut -d= -f2 | tr -d '"')
+            NODE_VER=$(grep "^ARG NODE_VERSION=" Dockerfile | cut -d= -f2 | tr -d '"')
+            RUST_VER=$(grep "^ARG RUST_VERSION=" Dockerfile | cut -d= -f2 | tr -d '"')
+            GO_VER=$(grep "^ARG GO_VERSION=" Dockerfile | cut -d= -f2 | tr -d '"')
+            RUBY_VER=$(grep "^ARG RUBY_VERSION=" Dockerfile | cut -d= -f2 | tr -d '"')
+            JAVA_VER=$(grep "^ARG JAVA_VERSION=" Dockerfile | cut -d= -f2 | tr -d '"')
+            R_VER=$(grep "^ARG R_VERSION=" Dockerfile | cut -d= -f2 | tr -d '"')
+
+            # Update the matrix with current versions
+            jq \
+              --arg timestamp "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+              --arg python "${PYTHON_VER:-}" \
+              --arg node "${NODE_VER:-}" \
+              --arg rust "${RUST_VER:-}" \
+              --arg go "${GO_VER:-}" \
+              --arg ruby "${RUBY_VER:-}" \
+              --arg java "${JAVA_VER:-}" \
+              --arg r "${R_VER:-}" \
+              '
+              .last_updated = $timestamp |
+              (if $python != "" then .language_versions.python.current = $python else . end) |
+              (if $node != "" then .language_versions.node.current = $node else . end) |
+              (if $rust != "" then .language_versions.rust.current = $rust else . end) |
+              (if $go != "" then .language_versions.go.current = $go else . end) |
+              (if $ruby != "" then .language_versions.ruby.current = $ruby else . end) |
+              (if $java != "" then .language_versions.java.current = $java else . end) |
+              (if $r != "" then .language_versions.r.current = $r else . end)
+              ' version-compatibility-matrix.json > version-compatibility-matrix.json.tmp \
+              && mv version-compatibility-matrix.json.tmp version-compatibility-matrix.json
+            echo "Version compatibility matrix updated"
+          else
+            echo "Warning: version-compatibility-matrix.json not found"
+          fi
+
           # Update GPG keys (check for changes)
           echo "Checking for GPG key updates..."
           git diff --quiet lib/gpg-keys/ || echo "HAS_EXISTING_CHANGES=true" >> $GITHUB_ENV
@@ -275,6 +313,83 @@ jobs:
           echo "commit_message<<EOF" >> $GITHUB_OUTPUT
           echo "$COMMIT_MSG" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Update compatibility matrix with test results
+        run: |
+          echo "Updating compatibility matrix with passing test results..."
+          if [ -f "version-compatibility-matrix.json" ]; then
+            # Extract current versions from Dockerfile
+            PYTHON_VER=$(grep "^ARG PYTHON_VERSION=" Dockerfile | cut -d= -f2 | tr -d '"')
+            NODE_VER=$(grep "^ARG NODE_VERSION=" Dockerfile | cut -d= -f2 | tr -d '"')
+            RUST_VER=$(grep "^ARG RUST_VERSION=" Dockerfile | cut -d= -f2 | tr -d '"')
+            GO_VER=$(grep "^ARG GO_VERSION=" Dockerfile | cut -d= -f2 | tr -d '"')
+            RUBY_VER=$(grep "^ARG RUBY_VERSION=" Dockerfile | cut -d= -f2 | tr -d '"')
+            JAVA_VER=$(grep "^ARG JAVA_VERSION=" Dockerfile | cut -d= -f2 | tr -d '"')
+            R_VER=$(grep "^ARG R_VERSION=" Dockerfile | cut -d= -f2 | tr -d '"')
+
+            # Update tested_combinations status to passing and update tested arrays
+            jq \
+              --arg timestamp "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+              --arg python "${PYTHON_VER:-}" \
+              --arg node "${NODE_VER:-}" \
+              --arg rust "${RUST_VER:-}" \
+              --arg go "${GO_VER:-}" \
+              --arg ruby "${RUBY_VER:-}" \
+              --arg java "${JAVA_VER:-}" \
+              --arg r "${R_VER:-}" \
+              '
+              .last_updated = $timestamp |
+              # Update all tested_combinations to passing with current timestamp
+              .tested_combinations = [
+                .tested_combinations[] |
+                .status = "passing" |
+                .tested_at = $timestamp |
+                # Update versions in tested combinations
+                if .variant == "python-dev" and $python != "" then .versions.python = $python
+                elif .variant == "node-dev" and $node != "" then .versions.node = $node
+                elif .variant == "rust-golang" and $rust != "" and $go != "" then .versions.rust = $rust | .versions.go = $go
+                elif .variant == "polyglot" then
+                  (if $python != "" then .versions.python = $python else . end) |
+                  (if $node != "" then .versions.node = $node else . end) |
+                  (if $rust != "" then .versions.rust = $rust else . end) |
+                  (if $go != "" then .versions.go = $go else . end)
+                else .
+                end
+              ] |
+              # Update tested arrays in language_versions
+              (if $python != "" and (.language_versions.python.tested | index($python) | not) then
+                .language_versions.python.tested += [$python]
+              else . end) |
+              (if $node != "" and (.language_versions.node.tested | index($node) | not) then
+                .language_versions.node.tested += [$node]
+              else . end) |
+              (if $rust != "" and (.language_versions.rust.tested | index($rust) | not) then
+                .language_versions.rust.tested += [$rust]
+              else . end) |
+              (if $go != "" and (.language_versions.go.tested | index($go) | not) then
+                .language_versions.go.tested += [$go]
+              else . end) |
+              (if $ruby != "" and (.language_versions.ruby.tested | index($ruby) | not) then
+                .language_versions.ruby.tested += [$ruby]
+              else . end) |
+              (if $java != "" and (.language_versions.java.tested | index($java) | not) then
+                .language_versions.java.tested += [$java]
+              else . end) |
+              (if $r != "" and (.language_versions.r.tested | index($r) | not) then
+                .language_versions.r.tested += [$r]
+              else . end)
+              ' version-compatibility-matrix.json > version-compatibility-matrix.json.tmp \
+              && mv version-compatibility-matrix.json.tmp version-compatibility-matrix.json
+
+            # Commit the matrix update
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add version-compatibility-matrix.json
+            git commit -m "chore: Update compatibility matrix with passing test results" || echo "No matrix changes to commit"
+            echo "Compatibility matrix updated with test results"
+          else
+            echo "Warning: version-compatibility-matrix.json not found"
+          fi
 
       - name: Merge to main
         run: |

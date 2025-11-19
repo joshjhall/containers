@@ -325,9 +325,60 @@ EOF
     log_info "New compatibility entry:"
     echo "$new_entry"
 
-    # Note: Actual JSON update would require jq or similar
-    # For now, just log the entry
-    echo "$new_entry" >> "$PROJECT_ROOT/version-compat-results.jsonl"
+    # Update the matrix JSON file using jq
+    if ! command -v jq &> /dev/null; then
+        log_info "jq not available, falling back to JSONL append"
+        echo "$new_entry" >> "$PROJECT_ROOT/version-compat-results.jsonl"
+        return
+    fi
+
+    # Update tested_combinations: replace existing entry or add new one
+    local updated_matrix
+    updated_matrix=$(jq \
+        --argjson new_entry "$new_entry" \
+        --arg timestamp "$(timestamp)" \
+        '
+        .last_updated = $timestamp |
+        # Check if variant exists in tested_combinations
+        if (.tested_combinations | map(.variant) | index($new_entry.variant)) then
+            # Update existing entry
+            .tested_combinations = [
+                .tested_combinations[] |
+                if .variant == $new_entry.variant then
+                    $new_entry
+                else
+                    .
+                end
+            ]
+        else
+            # Add new entry
+            .tested_combinations += [$new_entry]
+        end |
+        # Update language_versions.*.current with tested versions
+        reduce ($new_entry.versions | to_entries[]) as $ver (
+            .;
+            if .language_versions[$ver.key] then
+                .language_versions[$ver.key].current = $ver.value |
+                # Add to tested array if not present
+                if (.language_versions[$ver.key].tested | index($ver.value) | not) then
+                    .language_versions[$ver.key].tested += [$ver.value]
+                else
+                    .
+                end
+            else
+                .
+            end
+        )
+        ' "$MATRIX_FILE")
+
+    if [ -n "$updated_matrix" ]; then
+        echo "$updated_matrix" > "$MATRIX_FILE"
+        log_success "Matrix file updated"
+    else
+        log_failure "Failed to update matrix file"
+        # Fallback to JSONL
+        echo "$new_entry" >> "$PROJECT_ROOT/version-compat-results.jsonl"
+    fi
 }
 
 # ============================================================================
