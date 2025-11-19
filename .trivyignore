@@ -13,3 +13,8 @@ CVE-2024-45337  # SSH authorization bypass - mkcert doesn't use SSH
 CVE-2023-24538  # html/template backticks - mkcert doesn't serve HTML
 CVE-2023-24540  # html/template JS whitespace - mkcert doesn't serve HTML
 CVE-2024-24790  # net/netip issue - mkcert uses standard net package
+
+# npm dev tool transitive dependencies - not exploitable in container context
+# These are dependencies of global npm packages (jest, mocha, clinic, etc.)
+CVE-2025-7783   # form-data - transitive dep, container doesn't process untrusted forms
+CVE-2019-10744  # lodash prototype pollution - transitive dep in dev tools only
