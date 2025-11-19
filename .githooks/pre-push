@@ -77,9 +77,99 @@ fi
 echo ""
 
 # =========================================
-# 2. UNIT TESTS
+# 2. FILE PERMISSIONS CHECK
 # =========================================
-echo -e "${BLUE}2. Running unit tests...${NC}"
+echo -e "${BLUE}2. Checking file permissions...${NC}"
+
+permission_issues=0
+checked_count=0
+
+# Check all .sh files have execute permission
+while IFS= read -r -d '' file; do
+    checked_count=$((checked_count + 1))
+    if [ ! -x "$file" ]; then
+        if [ $permission_issues -eq 0 ]; then
+            echo ""
+            echo -e "${RED}✗ Files missing execute permission:${NC}"
+        fi
+        echo -e "  ${RED}✗${NC} $file"
+        permission_issues=$((permission_issues + 1))
+    fi
+    # Also check read permission
+    if [ ! -r "$file" ]; then
+        if [ $permission_issues -eq 0 ]; then
+            echo ""
+            echo -e "${RED}✗ Files missing read permission:${NC}"
+        fi
+        echo -e "  ${RED}✗${NC} $file (not readable)"
+        permission_issues=$((permission_issues + 1))
+    fi
+done < <(find . -name "*.sh" -type f -not -path "./.git/*" -print0 2>/dev/null)
+
+# Check .bash files
+while IFS= read -r -d '' file; do
+    checked_count=$((checked_count + 1))
+    if [ ! -x "$file" ]; then
+        if [ $permission_issues -eq 0 ]; then
+            echo ""
+            echo -e "${RED}✗ Files missing execute permission:${NC}"
+        fi
+        echo -e "  ${RED}✗${NC} $file"
+        permission_issues=$((permission_issues + 1))
+    fi
+done < <(find . -name "*.bash" -type f -not -path "./.git/*" -print0 2>/dev/null)
+
+# Check .githooks
+for hook in .githooks/*; do
+    if [ -f "$hook" ]; then
+        checked_count=$((checked_count + 1))
+        if [ ! -x "$hook" ]; then
+            if [ $permission_issues -eq 0 ]; then
+                echo ""
+                echo -e "${RED}✗ Git hooks missing execute permission:${NC}"
+            fi
+            echo -e "  ${RED}✗${NC} $hook"
+            permission_issues=$((permission_issues + 1))
+        fi
+    fi
+done
+
+# Check secure files (GPG keys, SSH keys, PEM) have 600 permissions (owner only)
+secure_patterns=("*.gpg" "*.asc" "*.key" "*.pem" "*id_rsa*" "*id_ed25519*" "*id_ecdsa*")
+for pattern in "${secure_patterns[@]}"; do
+    while IFS= read -r -d '' file; do
+        checked_count=$((checked_count + 1))
+        # Get current permissions
+        current_perms=$(stat -c '%a' "$file" 2>/dev/null || stat -f '%Lp' "$file" 2>/dev/null)
+
+        # Secure files must be 600 (owner read/write only)
+        if [ "$current_perms" != "600" ]; then
+            if [ $permission_issues -eq 0 ]; then
+                echo ""
+                echo -e "${RED}✗ Secure files with incorrect permissions:${NC}"
+            fi
+            echo -e "  ${RED}✗${NC} $file (mode $current_perms, should be 600)"
+            permission_issues=$((permission_issues + 1))
+        fi
+    done < <(find . -name "$pattern" -type f -not -path "./.git/*" -print0 2>/dev/null)
+done
+
+if [ $permission_issues -eq 0 ]; then
+    echo -e "  ${GREEN}✓${NC} All $checked_count files have correct permissions"
+else
+    echo ""
+    echo -e "  ${RED}✗${NC} $permission_issues files have incorrect permissions"
+    echo -e "  ${YELLOW}For scripts: find . -name '*.sh' -type f -exec chmod +x {} \\;${NC}"
+    echo -e "  ${YELLOW}For secure files: chmod 600 <file>${NC}"
+    overall_failed=1
+fi
+
+echo ""
+
+# =========================================
+# 3. UNIT TESTS
+# =========================================
+echo -e "${BLUE}3. Running unit tests...${NC}"
 
 # Check if unit test script exists
 if [ ! -f "./tests/run_unit_tests.sh" ]; then
@@ -105,9 +195,9 @@ fi
 echo ""
 
 # =========================================
-# 3. YAML VALIDATION
+# 4. YAML VALIDATION
 # =========================================
-echo -e "${BLUE}3. Running YAML validation...${NC}"
+echo -e "${BLUE}4. Running YAML validation...${NC}"
 
 # Check if yamllint is installed
 if ! command -v yamllint &> /dev/null; then
@@ -158,9 +248,9 @@ fi
 echo ""
 
 # =========================================
-# 4. MARKDOWN LINT VALIDATION
+# 5. MARKDOWN LINT VALIDATION
 # =========================================
-echo -e "${BLUE}4. Running markdown lint validation...${NC}"
+echo -e "${BLUE}5. Running markdown lint validation...${NC}"
 
 # Check if markdownlint is installed
 if ! command -v markdownlint &> /dev/null; then
@@ -211,9 +301,9 @@ fi
 echo ""
 
 # =========================================
-# 5. DOCKER COMPOSE VALIDATION
+# 6. DOCKER COMPOSE VALIDATION
 # =========================================
-echo -e "${BLUE}5. Running Docker Compose validation...${NC}"
+echo -e "${BLUE}6. Running Docker Compose validation...${NC}"
 
 # Check if docker-compose is installed
 if ! command -v docker &> /dev/null || ! command -v docker-compose &> /dev/null; then

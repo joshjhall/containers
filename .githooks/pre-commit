@@ -55,6 +55,79 @@ for pattern in "${CREDENTIAL_PATTERNS[@]}"; do
 done
 
 # =========================================
+# FILE PERMISSIONS CHECK AND FIX
+# =========================================
+
+echo -e "${GREEN}Checking file permissions...${NC}"
+
+# Find all .sh files and ensure they have execute permission
+permission_fixed=false
+while IFS= read -r -d '' file; do
+    if [ ! -x "$file" ]; then
+        echo -e "  ${YELLOW}Fixing execute permission:${NC} $file"
+        chmod +x "$file"
+        git add "$file"
+        permission_fixed=true
+    fi
+    # Also ensure files have read permission
+    if [ ! -r "$file" ]; then
+        echo -e "  ${YELLOW}Fixing read permission:${NC} $file"
+        chmod +r "$file"
+        git add "$file"
+        permission_fixed=true
+    fi
+done < <(find . -name "*.sh" -type f -not -path "./.git/*" -print0 2>/dev/null)
+
+# Also check .bash files
+while IFS= read -r -d '' file; do
+    if [ ! -x "$file" ]; then
+        echo -e "  ${YELLOW}Fixing execute permission:${NC} $file"
+        chmod +x "$file"
+        git add "$file"
+        permission_fixed=true
+    fi
+    if [ ! -r "$file" ]; then
+        echo -e "  ${YELLOW}Fixing read permission:${NC} $file"
+        chmod +r "$file"
+        git add "$file"
+        permission_fixed=true
+    fi
+done < <(find . -name "*.bash" -type f -not -path "./.git/*" -print0 2>/dev/null)
+
+# Check the .githooks directory for executable scripts
+for hook in .githooks/*; do
+    if [ -f "$hook" ] && [ ! -x "$hook" ]; then
+        echo -e "  ${YELLOW}Fixing execute permission:${NC} $hook"
+        chmod +x "$hook"
+        git add "$hook"
+        permission_fixed=true
+    fi
+done
+
+# Check secure files (GPG keys, SSH keys, PEM) have restrictive permissions (600 - owner only)
+secure_patterns=("*.gpg" "*.asc" "*.key" "*.pem" "*id_rsa*" "*id_ed25519*" "*id_ecdsa*")
+for pattern in "${secure_patterns[@]}"; do
+    while IFS= read -r -d '' file; do
+        # Get current permissions
+        current_perms=$(stat -c '%a' "$file" 2>/dev/null || stat -f '%Lp' "$file" 2>/dev/null)
+
+        # Secure files should be 600 (owner read/write only)
+        if [ "$current_perms" != "600" ]; then
+            echo -e "  ${YELLOW}Fixing secure file permissions:${NC} $file (was $current_perms, setting to 600)"
+            chmod 600 "$file"
+            git add "$file"
+            permission_fixed=true
+        fi
+    done < <(find . -name "$pattern" -type f -not -path "./.git/*" -print0 2>/dev/null)
+done
+
+if [ "$permission_fixed" = true ]; then
+    echo -e "${GREEN}✓ File permissions fixed and staged${NC}"
+else
+    echo -e "${GREEN}✓ All file permissions are correct${NC}"
+fi
+
+# =========================================
 # PRETTIER FORMATTING CHECK
 # =========================================
 
