@@ -1,0 +1,457 @@
+# Velero Backup and Disaster Recovery Deployment
+#
+# Description:
+#   Velero installation with encryption for HIPAA-compliant backups.
+#   Supports AWS S3, GCP, Azure, and MinIO backends.
+#
+# Compliance Coverage:
+#   - HIPAA 164.308(a)(7): Contingency plan
+#   - HIPAA 164.310(d)(2)(iv): Data backup and storage
+#   - SOC 2 A1.2: System availability
+#   - ISO 27001 A.17.1: Information security continuity
+#   - PCI DSS 9.5: Protect media containing cardholder data
+#   - GDPR Art. 32: Security of processing
+#   - FedRAMP CP-9: Information system backup
+#
+# Usage:
+#   kubectl apply -f velero-deployment.yaml
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: velero
+  labels:
+    app.kubernetes.io/name: velero
+    compliance/hipaa: "true"
+    compliance/pci-dss: "true"
+
+---
+# Velero ServiceAccount
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: velero
+  namespace: velero
+  labels:
+    app.kubernetes.io/name: velero
+
+---
+# ClusterRole for Velero
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: velero
+  labels:
+    app.kubernetes.io/name: velero
+rules:
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["persistentvolumes"]
+    verbs: ["get", "list", "watch", "create", "delete"]
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims"]
+    verbs: ["get", "list", "watch", "create", "delete"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list", "watch", "create", "update", "delete"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs: ["create"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get", "list", "watch", "create", "delete"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch", "create", "update", "delete"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "statefulsets", "daemonsets", "replicasets"]
+    verbs: ["get", "list", "watch", "create", "update", "delete"]
+  - apiGroups: ["batch"]
+    resources: ["jobs", "cronjobs"]
+    verbs: ["get", "list", "watch", "create", "update", "delete"]
+  - apiGroups: ["velero.io"]
+    resources: ["*"]
+    verbs: ["*"]
+  - apiGroups: ["snapshot.storage.k8s.io"]
+    resources: ["volumesnapshots", "volumesnapshotcontents", "volumesnapshotclasses"]
+    verbs: ["get", "list", "watch", "create", "update", "delete"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: velero
+  labels:
+    app.kubernetes.io/name: velero
+subjects:
+  - kind: ServiceAccount
+    name: velero
+    namespace: velero
+roleRef:
+  kind: ClusterRole
+  name: velero
+  apiGroup: rbac.authorization.k8s.io
+
+---
+# Velero Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: velero
+  namespace: velero
+  labels:
+    app.kubernetes.io/name: velero
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: velero
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: velero
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8085"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: velero
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+        - name: velero
+          image: velero/velero:v1.13.0
+          imagePullPolicy: IfNotPresent
+          command:
+            - /velero
+          args:
+            - server
+            - --features=EnableCSI
+            - --uploader-type=restic
+            - --default-backup-storage-location=default
+            - --default-volume-snapshot-locations=default
+          ports:
+            - name: metrics
+              containerPort: 8085
+              protocol: TCP
+          env:
+            - name: VELERO_SCRATCH_DIR
+              value: /scratch
+            - name: VELERO_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: LD_LIBRARY_PATH
+              value: /plugins
+            # AWS credentials (if using S3)
+            - name: AWS_SHARED_CREDENTIALS_FILE
+              value: /credentials/cloud
+            # Google Cloud credentials (if using GCS)
+            - name: GOOGLE_APPLICATION_CREDENTIALS
+              value: /credentials/cloud
+          resources:
+            limits:
+              cpu: 1000m
+              memory: 512Mi
+            requests:
+              cpu: 500m
+              memory: 128Mi
+          volumeMounts:
+            - name: plugins
+              mountPath: /plugins
+            - name: scratch
+              mountPath: /scratch
+            - name: cloud-credentials
+              mountPath: /credentials
+              readOnly: true
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+          livenessProbe:
+            httpGet:
+              path: /metrics
+              port: 8085
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /metrics
+              port: 8085
+            initialDelaySeconds: 5
+            periodSeconds: 10
+      volumes:
+        - name: plugins
+          emptyDir: {}
+        - name: scratch
+          emptyDir: {}
+        - name: cloud-credentials
+          secret:
+            secretName: velero-credentials
+
+---
+# Node Agent DaemonSet for file-level backups
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: node-agent
+  namespace: velero
+  labels:
+    app.kubernetes.io/name: velero
+    app.kubernetes.io/component: node-agent
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: velero
+      app.kubernetes.io/component: node-agent
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: velero
+        app.kubernetes.io/component: node-agent
+    spec:
+      serviceAccountName: velero
+      securityContext:
+        runAsUser: 0
+      containers:
+        - name: node-agent
+          image: velero/velero:v1.13.0
+          imagePullPolicy: IfNotPresent
+          command:
+            - /velero
+          args:
+            - node-agent
+            - server
+          env:
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: VELERO_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: VELERO_SCRATCH_DIR
+              value: /scratch
+            - name: AWS_SHARED_CREDENTIALS_FILE
+              value: /credentials/cloud
+            - name: GOOGLE_APPLICATION_CREDENTIALS
+              value: /credentials/cloud
+          resources:
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+            requests:
+              cpu: 500m
+              memory: 512Mi
+          volumeMounts:
+            - name: host-pods
+              mountPath: /host_pods
+              mountPropagation: HostToContainer
+            - name: scratch
+              mountPath: /scratch
+            - name: cloud-credentials
+              mountPath: /credentials
+              readOnly: true
+          securityContext:
+            privileged: false
+            capabilities:
+              add:
+                - SYS_PTRACE
+      volumes:
+        - name: host-pods
+          hostPath:
+            path: /var/lib/kubelet/pods
+        - name: scratch
+          emptyDir: {}
+        - name: cloud-credentials
+          secret:
+            secretName: velero-credentials
+
+---
+# Velero Service for metrics
+apiVersion: v1
+kind: Service
+metadata:
+  name: velero
+  namespace: velero
+  labels:
+    app.kubernetes.io/name: velero
+spec:
+  selector:
+    app.kubernetes.io/name: velero
+  ports:
+    - name: metrics
+      port: 8085
+      targetPort: 8085
+      protocol: TCP
+
+---
+# ServiceMonitor for Prometheus
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: velero
+  namespace: velero
+  labels:
+    app.kubernetes.io/name: velero
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: velero
+  endpoints:
+    - port: metrics
+      interval: 30s
+      path: /metrics
+
+---
+# Cloud credentials secret template
+# Replace with actual credentials
+apiVersion: v1
+kind: Secret
+metadata:
+  name: velero-credentials
+  namespace: velero
+type: Opaque
+stringData:
+  # AWS S3 credentials format:
+  cloud: |
+    [default]
+    aws_access_key_id = YOUR_ACCESS_KEY_ID
+    aws_secret_access_key = YOUR_SECRET_ACCESS_KEY
+
+  # OR GCP credentials format (JSON key file content):
+  # cloud: |
+  #   {
+  #     "type": "service_account",
+  #     "project_id": "your-project",
+  #     ...
+  #   }
+
+  # OR Azure credentials format:
+  # cloud: |
+  #   AZURE_SUBSCRIPTION_ID=your-subscription-id
+  #   AZURE_TENANT_ID=your-tenant-id
+  #   AZURE_CLIENT_ID=your-client-id
+  #   AZURE_CLIENT_SECRET=your-client-secret
+  #   AZURE_RESOURCE_GROUP=your-resource-group
+
+---
+# BackupStorageLocation with encryption
+apiVersion: velero.io/v1
+kind: BackupStorageLocation
+metadata:
+  name: default
+  namespace: velero
+spec:
+  provider: aws
+  objectStorage:
+    bucket: your-backup-bucket
+    prefix: velero
+  config:
+    region: us-east-1
+    # Server-side encryption with AWS KMS
+    kmsKeyId: "arn:aws:kms:us-east-1:123456789012:key/your-kms-key-id"
+    # Or use AES-256 encryption
+    # serverSideEncryption: AES256
+  credential:
+    name: velero-credentials
+    key: cloud
+
+---
+# VolumeSnapshotLocation
+apiVersion: velero.io/v1
+kind: VolumeSnapshotLocation
+metadata:
+  name: default
+  namespace: velero
+spec:
+  provider: aws
+  config:
+    region: us-east-1
+
+---
+# Prometheus alert rules for backup monitoring
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: velero-alerts
+  namespace: velero
+  labels:
+    app.kubernetes.io/name: velero
+    prometheus: main
+spec:
+  groups:
+    - name: velero.rules
+      rules:
+        - alert: VeleroBackupFailed
+          expr: |
+            increase(velero_backup_failure_total[1h]) > 0
+          for: 5m
+          labels:
+            severity: critical
+            compliance: "hipaa,soc2,pci-dss"
+          annotations:
+            summary: "Velero backup failed"
+            description: "A Velero backup has failed in the last hour. HIPAA 164.308(a)(7) requires working backups."
+            runbook_url: "https://github.com/your-org/runbooks/blob/main/velero-backup-failed.md"
+
+        - alert: VeleroBackupPartiallyFailed
+          expr: |
+            increase(velero_backup_partial_failure_total[1h]) > 0
+          for: 5m
+          labels:
+            severity: warning
+            compliance: "hipaa,soc2"
+          annotations:
+            summary: "Velero backup partially failed"
+            description: "A Velero backup partially failed. Some resources may not be backed up."
+
+        - alert: VeleroBackupNotRunRecently
+          expr: |
+            time() - velero_backup_last_successful_timestamp{schedule!=""} > 86400
+          for: 1h
+          labels:
+            severity: warning
+            compliance: "hipaa,soc2"
+          annotations:
+            summary: "Velero scheduled backup not run in 24 hours"
+            description: "Schedule {{ $labels.schedule }} has not completed a backup in over 24 hours."
+
+        - alert: VeleroRestoreFailed
+          expr: |
+            increase(velero_restore_failure_total[1h]) > 0
+          for: 5m
+          labels:
+            severity: critical
+            compliance: "hipaa,soc2,pci-dss"
+          annotations:
+            summary: "Velero restore failed"
+            description: "A Velero restore has failed. Disaster recovery capability may be impacted."
+
+        - alert: VeleroBackupStorageLocationUnavailable
+          expr: |
+            velero_backup_storage_location_available == 0
+          for: 10m
+          labels:
+            severity: critical
+            compliance: "hipaa,soc2,pci-dss"
+          annotations:
+            summary: "Velero backup storage location unavailable"
+            description: "Backup storage location {{ $labels.location }} is unavailable. Backups cannot be stored."

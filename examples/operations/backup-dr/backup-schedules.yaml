@@ -1,0 +1,302 @@
+# Velero Backup Schedules with HIPAA Retention
+#
+# Description:
+#   Scheduled backups with compliance-specific retention policies.
+#   HIPAA requires 6-year retention for PHI.
+#
+# Compliance Coverage:
+#   - HIPAA 164.530(j): Record retention (6 years)
+#   - SOC 2 A1.2: System availability
+#   - PCI DSS 3.1: Data retention policy
+#   - GDPR Art. 17: Right to erasure (consider for non-PHI)
+#   - FedRAMP CP-9: Information system backup
+#
+# Usage:
+#   kubectl apply -f backup-schedules.yaml
+
+---
+# Daily backup - All namespaces (7-day retention)
+apiVersion: velero.io/v1
+kind: Schedule
+metadata:
+  name: daily-all-namespaces
+  namespace: velero
+  labels:
+    app.kubernetes.io/name: velero
+    backup-type: daily
+spec:
+  schedule: "0 2 * * *" # 2 AM daily
+  template:
+    ttl: 168h # 7 days
+    includedNamespaces:
+      - "*"
+    excludedNamespaces:
+      - kube-system
+      - kube-public
+      - kube-node-lease
+      - velero
+    includeClusterResources: true
+    snapshotVolumes: true
+    storageLocation: default
+    volumeSnapshotLocations:
+      - default
+    hooks:
+      resources:
+        - name: database-backup
+          includedNamespaces:
+            - production
+          labelSelector:
+            matchLabels:
+              backup-type: database
+          pre:
+            - exec:
+                container: app
+                command:
+                  - /bin/sh
+                  - -c
+                  - "pg_dump -h localhost -U $POSTGRES_USER $POSTGRES_DB > /backup/pre-backup.sql"
+                onError: Fail
+                timeout: 300s
+    metadata:
+      labels:
+        backup-type: daily
+        retention: short-term
+
+---
+# Weekly backup - All namespaces (30-day retention)
+apiVersion: velero.io/v1
+kind: Schedule
+metadata:
+  name: weekly-all-namespaces
+  namespace: velero
+  labels:
+    app.kubernetes.io/name: velero
+    backup-type: weekly
+spec:
+  schedule: "0 3 * * 0" # 3 AM Sunday
+  template:
+    ttl: 720h # 30 days
+    includedNamespaces:
+      - "*"
+    excludedNamespaces:
+      - kube-system
+      - kube-public
+      - kube-node-lease
+      - velero
+    includeClusterResources: true
+    snapshotVolumes: true
+    storageLocation: default
+    volumeSnapshotLocations:
+      - default
+    metadata:
+      labels:
+        backup-type: weekly
+        retention: medium-term
+
+---
+# Monthly backup - All namespaces (1-year retention)
+apiVersion: velero.io/v1
+kind: Schedule
+metadata:
+  name: monthly-all-namespaces
+  namespace: velero
+  labels:
+    app.kubernetes.io/name: velero
+    backup-type: monthly
+spec:
+  schedule: "0 4 1 * *" # 4 AM first day of month
+  template:
+    ttl: 8760h # 365 days
+    includedNamespaces:
+      - "*"
+    excludedNamespaces:
+      - kube-system
+      - kube-public
+      - kube-node-lease
+      - velero
+    includeClusterResources: true
+    snapshotVolumes: true
+    storageLocation: default
+    volumeSnapshotLocations:
+      - default
+    metadata:
+      labels:
+        backup-type: monthly
+        retention: long-term
+
+---
+# HIPAA PHI backup - 6-year retention
+# Required for protected health information
+apiVersion: velero.io/v1
+kind: Schedule
+metadata:
+  name: hipaa-phi-backup
+  namespace: velero
+  labels:
+    app.kubernetes.io/name: velero
+    backup-type: hipaa
+    compliance: hipaa
+spec:
+  schedule: "0 1 * * *" # 1 AM daily
+  template:
+    ttl: 52560h # 6 years (2190 days)
+    includedNamespaces:
+      - hipaa-production
+      - healthcare
+      - phi-workloads
+    includeClusterResources: false
+    snapshotVolumes: true
+    storageLocation: default
+    volumeSnapshotLocations:
+      - default
+    # Use restic for file-level backups with encryption
+    defaultVolumesToFsBackup: true
+    hooks:
+      resources:
+        - name: phi-database-backup
+          includedNamespaces:
+            - hipaa-production
+          labelSelector:
+            matchLabels:
+              data-classification: phi
+          pre:
+            - exec:
+                container: app
+                command:
+                  - /bin/sh
+                  - -c
+                  - |
+                    echo "Starting PHI database backup at $(date)"
+                    pg_dump --format=custom --compress=9 \
+                      -h localhost -U $POSTGRES_USER $POSTGRES_DB \
+                      > /backup/phi-backup-$(date +%Y%m%d).dump
+                    echo "PHI backup completed"
+                onError: Fail
+                timeout: 600s
+    metadata:
+      labels:
+        backup-type: hipaa-compliant
+        retention: 6-years
+        data-classification: phi
+        encryption: required
+
+---
+# PCI DSS cardholder data backup - 1-year retention
+apiVersion: velero.io/v1
+kind: Schedule
+metadata:
+  name: pci-cardholder-backup
+  namespace: velero
+  labels:
+    app.kubernetes.io/name: velero
+    backup-type: pci
+    compliance: pci-dss
+spec:
+  schedule: "0 1 * * *" # 1 AM daily
+  template:
+    ttl: 8760h # 1 year
+    includedNamespaces:
+      - pci-production
+      - payment-processing
+      - cardholder-data
+    includeClusterResources: false
+    snapshotVolumes: true
+    storageLocation: default
+    volumeSnapshotLocations:
+      - default
+    defaultVolumesToFsBackup: true
+    metadata:
+      labels:
+        backup-type: pci-compliant
+        retention: 1-year
+        data-classification: cardholder
+        encryption: required
+
+---
+# Critical infrastructure backup - Hourly
+apiVersion: velero.io/v1
+kind: Schedule
+metadata:
+  name: hourly-critical
+  namespace: velero
+  labels:
+    app.kubernetes.io/name: velero
+    backup-type: hourly
+spec:
+  schedule: "0 * * * *" # Every hour
+  template:
+    ttl: 72h # 3 days
+    includedNamespaces:
+      - production
+    labelSelector:
+      matchLabels:
+        criticality: high
+    includeClusterResources: false
+    snapshotVolumes: true
+    storageLocation: default
+    volumeSnapshotLocations:
+      - default
+    metadata:
+      labels:
+        backup-type: hourly
+        retention: short-term
+
+---
+# Cluster state backup (secrets, configmaps, CRDs)
+apiVersion: velero.io/v1
+kind: Schedule
+metadata:
+  name: cluster-state-backup
+  namespace: velero
+  labels:
+    app.kubernetes.io/name: velero
+    backup-type: cluster-state
+spec:
+  schedule: "30 * * * *" # 30 minutes past every hour
+  template:
+    ttl: 168h # 7 days
+    includedNamespaces:
+      - "*"
+    includedResources:
+      - secrets
+      - configmaps
+      - serviceaccounts
+      - roles
+      - rolebindings
+      - clusterroles
+      - clusterrolebindings
+      - customresourcedefinitions
+      - networkpolicies
+    includeClusterResources: true
+    snapshotVolumes: false
+    storageLocation: default
+    metadata:
+      labels:
+        backup-type: cluster-state
+        retention: short-term
+
+---
+# Pre-deployment backup template
+# Use before major deployments
+apiVersion: velero.io/v1
+kind: Backup
+metadata:
+  name: pre-deployment-template
+  namespace: velero
+  labels:
+    app.kubernetes.io/name: velero
+    backup-type: pre-deployment
+spec:
+  ttl: 168h # 7 days
+  includedNamespaces:
+    - production
+    - staging
+  includeClusterResources: true
+  snapshotVolumes: true
+  storageLocation: default
+  volumeSnapshotLocations:
+    - default
+  metadata:
+    labels:
+      backup-type: pre-deployment
+      triggered-by: manual
