@@ -22,9 +22,8 @@ rules:
   # (comments at service level after nested content)
   comments-indentation: disable
 
-  # Document start (---) - not required for all files
-  document-start:
-    present: false
+  # Document start (---) - disable to allow multi-document YAML (Kubernetes manifests)
+  document-start: disable
 
   # Truthy values - allow yes/no/on/off
   truthy:
