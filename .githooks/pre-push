@@ -215,9 +215,62 @@ fi
 echo ""
 
 # =========================================
-# 5. DOCKER COMPOSE VALIDATION
+# 5. MARKDOWN LINT VALIDATION
 # =========================================
-echo -e "${BLUE}5. Running Docker Compose validation...${NC}"
+echo -e "${BLUE}5. Running markdown lint validation...${NC}"
+
+# Check if markdownlint is installed
+if ! command -v markdownlint &> /dev/null; then
+    echo -e "${YELLOW}⚠ markdownlint not installed. Skipping markdown validation.${NC}"
+    echo "  Install with: npm install -g markdownlint-cli"
+else
+    # Find all markdown files (respects .gitignore)
+    md_files=$(git ls-files '*.md' 2>/dev/null || \
+      find . -type f -name "*.md" \
+        ! -path "./.git/*" \
+        ! -path "*/node_modules/*" \
+        ! -path "*/vendor/*")
+
+    mdlint_failed=0
+    checked_count=0
+    failed_count=0
+
+    while IFS= read -r file; do
+        if [ -z "$file" ] || [ ! -f "$file" ]; then
+            continue
+        fi
+
+        checked_count=$((checked_count + 1))
+
+        # Run markdownlint with config file (same as CI)
+        if ! markdownlint --config .markdownlint.json "$file" > /dev/null 2>&1; then
+            if [ $mdlint_failed -eq 0 ]; then
+                echo ""
+                echo -e "${RED}✗ Markdown lint failures detected:${NC}"
+                echo ""
+            fi
+            echo -e "  ${RED}✗${NC} $file"
+            markdownlint --config .markdownlint.json "$file" 2>&1 | sed 's/^/    /'
+            echo ""
+            mdlint_failed=1
+            failed_count=$((failed_count + 1))
+        fi
+    done <<< "$md_files"
+
+    if [ $mdlint_failed -eq 0 ]; then
+        echo -e "  ${GREEN}✓${NC} All $checked_count markdown files passed lint validation"
+    else
+        echo -e "  ${RED}✗${NC} $failed_count of $checked_count markdown files failed lint validation"
+        overall_failed=1
+    fi
+fi
+
+echo ""
+
+# =========================================
+# 6. DOCKER COMPOSE VALIDATION
+# =========================================
+echo -e "${BLUE}6. Running Docker Compose validation...${NC}"
 
 # Check if docker-compose is installed
 if ! command -v docker &> /dev/null || ! command -v docker-compose &> /dev/null; then

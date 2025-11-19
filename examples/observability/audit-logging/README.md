@@ -5,38 +5,49 @@ supporting compliance requirements for SOC 2, HIPAA, PCI DSS, GDPR, and FedRAMP.
 
 ## Compliance Coverage
 
-| Framework    | Requirement                    | Implementation                    |
-| ------------ | ------------------------------ | --------------------------------- |
-| SOC 2 CC7.2  | Security event monitoring      | Structured JSON logging           |
-| ISO 27001    | A.12.4 Logging and monitoring  | Centralized log collection        |
-| HIPAA        | 164.312(b) Audit controls      | 6-year retention, immutable logs  |
-| PCI DSS 10.2 | Audit trail events             | Event categorization              |
-| GDPR Art. 30 | Records of processing          | Data access logging               |
-| FedRAMP AU-2 | Audit events                   | Comprehensive event capture       |
-| NIST 800-53  | AU-2 Event logging             | Security event categories         |
+| Framework    | Requirement                   | Implementation                   |
+| ------------ | ----------------------------- | -------------------------------- |
+| SOC 2 CC7.2  | Security event monitoring     | Structured JSON logging          |
+| ISO 27001    | A.12.4 Logging and monitoring | Centralized log collection       |
+| HIPAA        | 164.312(b) Audit controls     | 6-year retention, immutable logs |
+| PCI DSS 10.2 | Audit trail events            | Event categorization             |
+| GDPR Art. 30 | Records of processing         | Data access logging              |
+| FedRAMP AU-2 | Audit events                  | Comprehensive event capture      |
+| NIST 800-53  | AU-2 Event logging            | Security event categories        |
 
 ## Files
 
-| File                    | Description                              |
-| ----------------------- | ---------------------------------------- |
-| fluentd-config.conf     | Fluentd/Fluent Bit configuration         |
-| cloudwatch-config.json  | AWS CloudWatch Logs agent configuration  |
-| promtail-config.yaml    | Grafana Loki (Promtail) configuration    |
+### Log Shipping Configurations
+
+| File                   | Description                             |
+| ---------------------- | --------------------------------------- |
+| fluentd-config.conf    | Fluentd/Fluent Bit configuration        |
+| cloudwatch-config.json | AWS CloudWatch Logs agent configuration |
+| promtail-config.yaml   | Grafana Loki (Promtail) configuration   |
+
+### Immutable Storage Configurations
+
+| File                       | Description                                          |
+| -------------------------- | ---------------------------------------------------- |
+| aws-s3-immutable.yaml      | AWS S3 with Object Lock (CloudFormation)             |
+| gcp-storage-immutable.tf   | GCP Cloud Storage with retention (Terraform)         |
+| cloudflare-r2-immutable.tf | Cloudflare R2 with Worker access control (Terraform) |
 
 ## Retention Policies by Framework
 
 Different compliance frameworks have different retention requirements:
 
-| Framework | Minimum Retention | Notes                                      |
-| --------- | ----------------- | ------------------------------------------ |
-| SOC 2     | 12 months         | Common audit period                        |
-| HIPAA     | 6 years           | Longest requirement, use as default        |
-| PCI DSS   | 1 year            | 3 months immediately available             |
-| GDPR      | As needed         | Data minimization principle applies        |
-| FedRAMP   | 3 years           | Federal records requirements               |
-| SOX       | 7 years           | Financial records                          |
+| Framework | Minimum Retention | Notes                               |
+| --------- | ----------------- | ----------------------------------- |
+| SOC 2     | 12 months         | Common audit period                 |
+| HIPAA     | 6 years           | Longest requirement, use as default |
+| PCI DSS   | 1 year            | 3 months immediately available      |
+| GDPR      | As needed         | Data minimization principle applies |
+| FedRAMP   | 3 years           | Federal records requirements        |
+| SOX       | 7 years           | Financial records                   |
 
-**Recommendation**: Use 6-year retention (HIPAA) as default to satisfy all frameworks.
+**Recommendation**: Use 6-year retention (HIPAA) as default to satisfy all
+frameworks.
 
 ## Quick Start
 
@@ -88,7 +99,7 @@ gem install fluent-plugin-elasticsearch
 gem install fluent-plugin-s3
 ```
 
-2. Copy and customize configuration:
+1. Copy and customize configuration:
 
 ```bash
 cp fluentd-config.conf /etc/fluentd/fluent.conf
@@ -99,7 +110,7 @@ export AUDIT_LOGS_BUCKET=my-audit-logs
 export AWS_REGION=us-east-1
 ```
 
-3. Create Elasticsearch template for ILM:
+1. Create Elasticsearch template for ILM:
 
 ```json
 {
@@ -122,7 +133,7 @@ wget https://s3.amazonaws.com/amazoncloudwatch-agent/debian/amd64/latest/amazon-
 dpkg -i amazon-cloudwatch-agent.deb
 ```
 
-2. Apply configuration:
+1. Apply configuration:
 
 ```bash
 cp cloudwatch-config.json /opt/aws/amazon-cloudwatch-agent/etc/
@@ -131,7 +142,7 @@ cp cloudwatch-config.json /opt/aws/amazon-cloudwatch-agent/etc/
 amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -c file:/opt/aws/amazon-cloudwatch-agent/etc/cloudwatch-config.json -s
 ```
 
-3. Create log group with retention:
+1. Create log group with retention:
 
 ```bash
 aws logs create-log-group --log-group-name /containers/audit-logs
@@ -148,7 +159,7 @@ unzip promtail-linux-amd64.zip
 mv promtail-linux-amd64 /usr/local/bin/promtail
 ```
 
-2. Apply configuration:
+1. Apply configuration:
 
 ```bash
 cp promtail-config.yaml /etc/promtail/config.yaml
@@ -158,7 +169,7 @@ export LOKI_URL=https://loki.example.com
 export ENVIRONMENT=production
 ```
 
-3. Configure Loki retention:
+1. Configure Loki retention:
 
 ```yaml
 # loki-config.yaml
@@ -168,25 +179,25 @@ compactor:
   compaction_interval: 10m
 
 limits_config:
-  retention_period: 52560h  # 6 years
+  retention_period: 52560h # 6 years
 ```
 
 ## Event Categories
 
 The audit logger uses these categories for compliance mapping:
 
-| Category       | Code     | PCI DSS | SOC 2   | HIPAA            |
-| -------------- | -------- | ------- | ------- | ---------------- |
-| authentication | AUTH     | 10.2.4  | CC6.1   | 164.312(d)       |
-| authorization  | AUTHZ    | 10.2.1  | CC6.1   | 164.312(a)(1)    |
-| data_access    | DATA     | 10.2.1  | CC6.7   | 164.312(b)       |
-| configuration  | CONFIG   | 10.2.7  | CC7.1   | 164.312(c)(1)    |
-| system         | SYS      | 10.2.6  | CC7.2   | 164.312(b)       |
-| network        | NET      | 10.2.4  | CC6.6   | 164.312(e)       |
-| file           | FILE     | 10.2.7  | CC6.1   | 164.312(c)(2)    |
-| process        | PROC     | 10.2.7  | CC7.2   | 164.312(b)       |
-| security       | SEC      | 10.6    | CC7.3   | 164.308(a)(6)    |
-| compliance     | COMP     | 12.10   | CC4.1   | 164.308(a)(8)    |
+| Category       | Code   | PCI DSS | SOC 2 | HIPAA         |
+| -------------- | ------ | ------- | ----- | ------------- |
+| authentication | AUTH   | 10.2.4  | CC6.1 | 164.312(d)    |
+| authorization  | AUTHZ  | 10.2.1  | CC6.1 | 164.312(a)(1) |
+| data_access    | DATA   | 10.2.1  | CC6.7 | 164.312(b)    |
+| configuration  | CONFIG | 10.2.7  | CC7.1 | 164.312(c)(1) |
+| system         | SYS    | 10.2.6  | CC7.2 | 164.312(b)    |
+| network        | NET    | 10.2.4  | CC6.6 | 164.312(e)    |
+| file           | FILE   | 10.2.7  | CC6.1 | 164.312(c)(2) |
+| process        | PROC   | 10.2.7  | CC7.2 | 164.312(b)    |
+| security       | SEC    | 10.6    | CC7.3 | 164.308(a)(6) |
+| compliance     | COMP   | 12.10   | CC4.1 | 164.308(a)(8) |
 
 ## Log Format
 
@@ -216,12 +227,101 @@ Audit logs are written in JSON format with these fields:
 
 ## Immutable Storage
 
-For tamper-proof audit logs, configure your storage backend:
+For tamper-proof audit logs, deploy one of the provided infrastructure
+configurations:
 
 ### AWS S3 with Object Lock
 
+Deploy the CloudFormation stack:
+
 ```bash
-# Enable object lock on bucket
+# Deploy with default 6-year HIPAA retention
+aws cloudformation create-stack \
+  --stack-name audit-logs-production \
+  --template-body file://aws-s3-immutable.yaml \
+  --parameters \
+    ParameterKey=Environment,ParameterValue=production \
+    ParameterKey=RetentionMode,ParameterValue=COMPLIANCE \
+    ParameterKey=RetentionDays,ParameterValue=2190 \
+  --capabilities CAPABILITY_NAMED_IAM
+
+# Get outputs
+aws cloudformation describe-stacks --stack-name audit-logs-production --query 'Stacks[0].Outputs'
+```
+
+Features:
+
+- S3 Object Lock in COMPLIANCE mode (cannot be overridden)
+- KMS encryption with automatic key rotation
+- Lifecycle rules: Standard -> IA (90d) -> Glacier (365d) -> Deep Archive (730d)
+- Bucket policy denying deletions and unencrypted uploads
+- CloudWatch alarms for unauthorized access
+
+### GCP Cloud Storage with Retention Policy
+
+Deploy with Terraform:
+
+```bash
+cd examples/observability/audit-logging
+
+# Initialize and deploy
+terraform init
+terraform plan \
+  -var="project_id=my-gcp-project" \
+  -var="environment=production" \
+  -var="retention_days=2190" \
+  -var="lock_retention=true"
+
+terraform apply
+```
+
+Features:
+
+- Locked retention policy (cannot be shortened once enabled)
+- Customer-managed KMS encryption with 90-day rotation
+- Lifecycle rules: Standard -> Nearline (90d) -> Coldline (365d) -> Archive
+  (730d)
+- Service accounts for writers and readers with least privilege
+- Monitoring alerts for unauthorized access
+
+### Cloudflare R2 with Worker Access Control
+
+Deploy with Terraform:
+
+```bash
+export CLOUDFLARE_API_TOKEN="your-api-token"
+
+terraform init
+terraform plan \
+  -var="account_id=your-account-id" \
+  -var="environment=production" \
+  -var="retention_days=2190"
+
+terraform apply
+```
+
+Features:
+
+- Worker gateway that blocks DELETE and overwrite operations
+- Automatic access logging for audit trail
+- Health monitoring with scheduled checks
+- S3-compatible API for easy integration
+- Custom domain support
+
+Upload logs via Worker gateway:
+
+```bash
+curl -X PUT "https://audit-log-gateway-production.YOUR_ACCOUNT.workers.dev/audit-logs/$(date +%Y/%m/%d)/event.json" \
+  -H "Content-Type: application/json" \
+  -d '{"event": "login", "user": "admin"}'
+```
+
+### Quick CLI Commands
+
+For simple setups without infrastructure-as-code:
+
+```bash
+# AWS S3
 aws s3api put-object-lock-configuration \
   --bucket audit-logs-bucket \
   --object-lock-configuration '{
@@ -233,15 +333,23 @@ aws s3api put-object-lock-configuration \
       }
     }
   }'
-```
 
-### GCS with Retention Policy
-
-```bash
+# GCP Cloud Storage
 gcloud storage buckets update gs://audit-logs-bucket \
   --retention-period=6y \
   --lock-retention-period
 ```
+
+### Comparison
+
+| Feature             | AWS S3        | GCP Storage      | Cloudflare R2     |
+| ------------------- | ------------- | ---------------- | ----------------- |
+| Object Lock         | Native        | Retention policy | Worker-enforced   |
+| Encryption          | KMS           | CMEK             | At-rest default   |
+| Lifecycle rules     | Yes           | Yes              | Manual            |
+| Egress costs        | Yes           | Yes              | No                |
+| Global distribution | Multi-region  | Dual-region      | Global by default |
+| Compliance certs    | SOC/HIPAA/PCI | SOC/HIPAA/PCI    | SOC 2             |
 
 ## Alerting
 
