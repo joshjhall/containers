@@ -1,0 +1,227 @@
+# SELinux Configuration for Kubernetes
+#
+# SELinux provides mandatory access control (MAC) on Red Hat-based systems.
+# These configurations define security contexts for pods.
+#
+# Prerequisites:
+#   - SELinux enabled on cluster nodes (RHEL, CentOS, Fedora)
+#   - container-selinux package installed
+#   - SELinux in enforcing mode
+#
+# Compliance Coverage:
+#   - OWASP D05: Security misconfigurations
+#   - ISO 27001 A.9.4: System and application access control
+#   - FedRAMP AC-3: Access enforcement
+#   - NIST 800-53 AC-4: Information flow enforcement
+
+---
+# Example: Pod with SELinux context
+apiVersion: v1
+kind: Pod
+metadata:
+  name: selinux-pod
+  namespace: default
+spec:
+  securityContext:
+    seLinuxOptions:
+      # Multi-Category Security (MCS) labels
+      level: "s0:c123,c456"
+      # Type for container processes
+      type: "container_t"
+      # User context
+      user: "system_u"
+      # Role context
+      role: "system_r"
+  containers:
+    - name: app
+      image: myapp:latest
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop:
+            - ALL
+
+---
+# Example: Different SELinux levels for multi-tenant isolation
+apiVersion: v1
+kind: Pod
+metadata:
+  name: tenant-a-pod
+  namespace: tenant-a
+spec:
+  securityContext:
+    seLinuxOptions:
+      # Unique MCS label for tenant isolation
+      level: "s0:c100,c200"
+      type: "container_t"
+  containers:
+    - name: app
+      image: myapp:latest
+      securityContext:
+        allowPrivilegeEscalation: false
+
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: tenant-b-pod
+  namespace: tenant-b
+spec:
+  securityContext:
+    seLinuxOptions:
+      # Different MCS label - cannot access tenant-a resources
+      level: "s0:c300,c400"
+      type: "container_t"
+  containers:
+    - name: app
+      image: myapp:latest
+      securityContext:
+        allowPrivilegeEscalation: false
+
+---
+# Example: Pod with volume SELinux relabeling
+apiVersion: v1
+kind: Pod
+metadata:
+  name: selinux-volume-pod
+  namespace: default
+spec:
+  securityContext:
+    seLinuxOptions:
+      level: "s0:c123,c456"
+      type: "container_t"
+    # FSGroup changes volume ownership
+    fsGroup: 1000
+  containers:
+    - name: app
+      image: myapp:latest
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        allowPrivilegeEscalation: false
+      volumeMounts:
+        - name: data
+          mountPath: /data
+  volumes:
+    - name: data
+      persistentVolumeClaim:
+        claimName: app-data
+
+---
+# PersistentVolumeClaim with SELinux mount options
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: selinux-pvc
+  namespace: default
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: standard
+
+---
+# StorageClass with SELinux mount options
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: selinux-storage
+provisioner: kubernetes.io/gce-pd
+parameters:
+  type: pd-standard
+mountOptions:
+  # SELinux context for mounted volumes
+  - "context=system_u:object_r:container_file_t:s0"
+
+---
+# Example: Deployment with SELinux
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: selinux-app
+  namespace: default
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: selinux-app
+  template:
+    metadata:
+      labels:
+        app: selinux-app
+    spec:
+      securityContext:
+        seLinuxOptions:
+          level: "s0:c500,c600"
+          type: "container_t"
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: app
+          image: myapp:latest
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            limits:
+              memory: "256Mi"
+              cpu: "500m"
+            requests:
+              memory: "128Mi"
+              cpu: "250m"
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+
+---
+# OpenShift SecurityContextConstraints (SCC)
+# For OpenShift clusters, use SCC instead of PSP
+apiVersion: security.openshift.io/v1
+kind: SecurityContextConstraints
+metadata:
+  name: restricted-custom
+allowHostDirVolumePlugin: false
+allowHostIPC: false
+allowHostNetwork: false
+allowHostPID: false
+allowHostPorts: false
+allowPrivilegeEscalation: false
+allowPrivilegedContainer: false
+allowedCapabilities: []
+defaultAddCapabilities: []
+fsGroup:
+  type: MustRunAs
+  ranges:
+    - min: 1000
+      max: 65534
+readOnlyRootFilesystem: true
+requiredDropCapabilities:
+  - ALL
+runAsUser:
+  type: MustRunAsNonRoot
+seLinuxContext:
+  type: MustRunAs
+  seLinuxOptions:
+    type: container_t
+supplementalGroups:
+  type: RunAsAny
+users: []
+groups: []
+volumes:
+  - configMap
+  - downwardAPI
+  - emptyDir
+  - persistentVolumeClaim
+  - projected
+  - secret

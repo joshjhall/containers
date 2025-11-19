@@ -1,0 +1,272 @@
+# AppArmor Profile ConfigMap for Kubernetes
+#
+# AppArmor provides mandatory access control (MAC) for Linux containers.
+# These profiles restrict what system calls and file accesses containers can make.
+#
+# Prerequisites:
+#   - AppArmor enabled on cluster nodes
+#   - AppArmor kernel module loaded
+#   - apparmor-utils package installed on nodes
+#
+# Compliance Coverage:
+#   - OWASP D05: Security misconfigurations
+#   - ISO 27001 A.9.4: System and application access control
+#   - FedRAMP AC-3: Access enforcement
+#   - CMMC AC.L2-3.1.3: Control flow of CUI
+
+---
+# ConfigMap containing AppArmor profiles
+# Deploy to each node using a DaemonSet
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: apparmor-profiles
+  namespace: kube-system
+data:
+  # Restricted profile for general applications
+  k8s-restricted: |
+    #include <tunables/global>
+
+    profile k8s-restricted flags=(attach_disconnected,mediate_deleted) {
+      #include <abstractions/base>
+      #include <abstractions/nameservice>
+
+      # Deny all file writes by default
+      deny /** w,
+
+      # Allow reading common paths
+      /usr/** r,
+      /lib/** r,
+      /etc/** r,
+      /proc/** r,
+      /sys/** r,
+
+      # Allow tmp and cache directories
+      owner /tmp/** rw,
+      owner /var/tmp/** rw,
+      owner /var/cache/** rw,
+
+      # Allow application directory
+      owner /app/** r,
+      owner /home/*/** rw,
+
+      # Network access
+      network inet stream,
+      network inet dgram,
+      network inet6 stream,
+      network inet6 dgram,
+
+      # Deny dangerous capabilities
+      deny capability sys_admin,
+      deny capability sys_ptrace,
+      deny capability sys_module,
+      deny capability sys_rawio,
+
+      # Allow necessary capabilities
+      capability net_bind_service,
+      capability setuid,
+      capability setgid,
+
+      # Deny mounting
+      deny mount,
+
+      # Deny access to sensitive paths
+      deny /etc/shadow r,
+      deny /etc/passwd w,
+      deny /etc/group w,
+      deny /proc/*/mem rw,
+      deny /sys/firmware/** rw,
+    }
+
+  # Web application profile
+  k8s-webapp: |
+    #include <tunables/global>
+
+    profile k8s-webapp flags=(attach_disconnected,mediate_deleted) {
+      #include <abstractions/base>
+      #include <abstractions/nameservice>
+
+      # Read-only filesystem with specific exceptions
+      / r,
+      /** r,
+
+      # Application directories
+      owner /app/** r,
+      owner /var/www/** r,
+
+      # Writable directories
+      owner /tmp/** rw,
+      owner /var/log/** w,
+      owner /var/cache/** rw,
+      owner /run/** rw,
+
+      # Network for web traffic
+      network inet stream,
+      network inet6 stream,
+
+      # Allow binding to ports
+      capability net_bind_service,
+
+      # Deny dangerous operations
+      deny capability sys_admin,
+      deny capability sys_ptrace,
+      deny /proc/*/mem rw,
+      deny mount,
+    }
+
+  # Database client profile
+  k8s-database-client: |
+    #include <tunables/global>
+
+    profile k8s-database-client flags=(attach_disconnected,mediate_deleted) {
+      #include <abstractions/base>
+      #include <abstractions/nameservice>
+      #include <abstractions/ssl_certs>
+
+      # Read access
+      / r,
+      /usr/** r,
+      /lib/** r,
+      /etc/** r,
+
+      # Database client binaries
+      /usr/bin/psql rix,
+      /usr/bin/mysql rix,
+      /usr/bin/redis-cli rix,
+
+      # Writable directories
+      owner /tmp/** rw,
+      owner /home/*/.psql_history rw,
+      owner /home/*/.mysql_history rw,
+
+      # Network for database connections
+      network inet stream,
+      network inet6 stream,
+      network unix stream,
+
+      # TLS/SSL
+      /etc/ssl/** r,
+
+      # Deny dangerous operations
+      deny capability sys_admin,
+      deny capability sys_ptrace,
+      deny mount,
+    }
+
+---
+# DaemonSet to load AppArmor profiles on all nodes
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: apparmor-loader
+  namespace: kube-system
+  labels:
+    app: apparmor-loader
+spec:
+  selector:
+    matchLabels:
+      app: apparmor-loader
+  template:
+    metadata:
+      labels:
+        app: apparmor-loader
+    spec:
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+      initContainers:
+        - name: apparmor-loader
+          image: ubuntu:22.04
+          command:
+            - /bin/bash
+            - -c
+            - |
+              set -e
+              apt-get update && apt-get install -y apparmor-utils
+
+              # Load each profile from ConfigMap
+              for profile in /profiles/*; do
+                if [ -f "$profile" ]; then
+                  echo "Loading AppArmor profile: $profile"
+                  apparmor_parser -r -W "$profile"
+                fi
+              done
+
+              echo "AppArmor profiles loaded successfully"
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - name: profiles
+              mountPath: /profiles
+              readOnly: true
+            - name: sys
+              mountPath: /sys
+      containers:
+        - name: sleep
+          image: busybox:latest
+          command: ["sleep", "infinity"]
+      volumes:
+        - name: profiles
+          configMap:
+            name: apparmor-profiles
+        - name: sys
+          hostPath:
+            path: /sys
+
+---
+# Example: Pod using custom AppArmor profile
+apiVersion: v1
+kind: Pod
+metadata:
+  name: webapp-with-apparmor
+  namespace: default
+  annotations:
+    # Reference the AppArmor profile by name
+    container.apparmor.security.beta.kubernetes.io/webapp: localhost/k8s-webapp
+spec:
+  containers:
+    - name: webapp
+      image: nginx:latest
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop:
+            - ALL
+          add:
+            - NET_BIND_SERVICE
+      ports:
+        - containerPort: 8080
+
+---
+# Example: Pod with restricted AppArmor profile
+apiVersion: v1
+kind: Pod
+metadata:
+  name: app-restricted-apparmor
+  namespace: default
+  annotations:
+    container.apparmor.security.beta.kubernetes.io/app: localhost/k8s-restricted
+spec:
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: app
+      image: myapp:latest
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop:
+            - ALL
+      volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+  volumes:
+    - name: tmp
+      emptyDir: {}

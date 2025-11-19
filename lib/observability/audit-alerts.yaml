@@ -1,0 +1,257 @@
+# Prometheus AlertManager Rules for Audit Log Analysis
+#
+# Compliance Coverage:
+#   - PCI DSS 10.6: Review logs and security events
+#   - HITRUST 09.ab: Monitoring system use
+#   - FedRAMP AU-6: Audit review, analysis, and reporting
+#   - CMMC AU.L2-3.3.5: Audit record review
+#
+# Usage:
+#   Add to Prometheus alerting rules configuration
+
+groups:
+  - name: audit-security-alerts
+    rules:
+      # Failed Authentication Alerts
+      - alert: HighFailedAuthenticationRate
+        expr: |
+          increase(audit_failed_authentication_total[5m]) > 10
+        for: 2m
+        labels:
+          severity: warning
+          compliance: "PCI-DSS-10.6"
+        annotations:
+          summary: High failed authentication rate detected
+          description: >
+            Detected {{ $value }} failed authentication attempts in the last 5 minutes.
+            This may indicate a brute force attack.
+          runbook_url: https://docs/runbooks/failed-authentication.md
+
+      - alert: CriticalFailedAuthenticationRate
+        expr: |
+          increase(audit_failed_authentication_total[5m]) > 50
+        for: 1m
+        labels:
+          severity: critical
+          compliance: "PCI-DSS-10.6"
+        annotations:
+          summary: Critical failed authentication rate - possible attack
+          description: >
+            Detected {{ $value }} failed authentication attempts in the last 5 minutes.
+            Immediate investigation required.
+          runbook_url: https://docs/runbooks/failed-authentication.md
+
+      # Privilege Escalation Alerts
+      - alert: PrivilegeEscalationDetected
+        expr: |
+          increase(audit_privilege_escalation_total[5m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+          compliance: "FedRAMP-AC-6"
+        annotations:
+          summary: Privilege escalation event detected
+          description: >
+            Detected {{ $value }} privilege escalation events.
+            User: {{ $labels.user }}
+            Verify this is authorized activity.
+          runbook_url: https://docs/runbooks/privilege-escalation.md
+
+      - alert: UnauthorizedSudoUsage
+        expr: |
+          increase(audit_sudo_commands_total{authorized="false"}[5m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+          compliance: "ISO-27001-A.9.2"
+        annotations:
+          summary: Unauthorized sudo usage detected
+          description: >
+            Unauthorized sudo command executed.
+            User: {{ $labels.user }}
+            Command: {{ $labels.command }}
+          runbook_url: https://docs/runbooks/unauthorized-access.md
+
+      # Configuration Change Alerts
+      - alert: HighConfigurationChangeRate
+        expr: |
+          increase(audit_config_changes_total[1h]) > 20
+        for: 5m
+        labels:
+          severity: warning
+          compliance: "CMMC-CM.L2-3.4.2"
+        annotations:
+          summary: High rate of configuration changes
+          description: >
+            Detected {{ $value }} configuration changes in the last hour.
+            Verify these changes are authorized.
+          runbook_url: https://docs/runbooks/configuration-changes.md
+
+      - alert: CriticalSystemConfigChange
+        expr: |
+          increase(audit_config_changes_total{path=~"/etc/.*|/sys/.*"}[5m]) > 0
+        for: 0m
+        labels:
+          severity: high
+          compliance: "FedRAMP-CM-6"
+        annotations:
+          summary: Critical system configuration changed
+          description: >
+            System configuration file modified.
+            Path: {{ $labels.path }}
+            User: {{ $labels.user }}
+          runbook_url: https://docs/runbooks/system-config-change.md
+
+      # Access Anomaly Alerts
+      - alert: UnusualAccessPattern
+        expr: |
+          audit_access_requests_total >
+          (avg_over_time(audit_access_requests_total[7d]) * 3)
+        for: 10m
+        labels:
+          severity: warning
+          compliance: "HITRUST-09.ab"
+        annotations:
+          summary: Unusual access pattern detected
+          description: >
+            Access rate is {{ $value }} which is 3x higher than the 7-day average.
+            Resource: {{ $labels.resource }}
+          runbook_url: https://docs/runbooks/anomaly-detection.md
+
+      - alert: AccessFromUnusualLocation
+        expr: |
+          audit_access_requests_total{location!~"expected_locations"}
+        for: 0m
+        labels:
+          severity: high
+          compliance: "PCI-DSS-10.6"
+        annotations:
+          summary: Access from unusual location
+          description: >
+            Access detected from unexpected location.
+            User: {{ $labels.user }}
+            Location: {{ $labels.location }}
+          runbook_url: https://docs/runbooks/unusual-location.md
+
+      - alert: AfterHoursAccess
+        expr: |
+          audit_access_requests_total and ON()
+          (hour() < 6 or hour() > 22)
+        for: 0m
+        labels:
+          severity: warning
+          compliance: "SOC2-CC6.1"
+        annotations:
+          summary: After-hours access detected
+          description: >
+            Access occurred outside normal business hours.
+            User: {{ $labels.user }}
+            Time: {{ $labels.timestamp }}
+          runbook_url: https://docs/runbooks/after-hours-access.md
+
+      # Data Access Alerts
+      - alert: SensitiveDataAccess
+        expr: |
+          increase(audit_sensitive_data_access_total[5m]) > 0
+        for: 0m
+        labels:
+          severity: high
+          compliance: "HIPAA-164.312(b)"
+        annotations:
+          summary: Sensitive data accessed
+          description: >
+            Sensitive data was accessed.
+            User: {{ $labels.user }}
+            Data Type: {{ $labels.data_type }}
+            Verify this access is authorized.
+          runbook_url: https://docs/runbooks/sensitive-data-access.md
+
+      - alert: BulkDataExport
+        expr: |
+          increase(audit_data_export_bytes_total[1h]) > 1073741824
+        for: 0m
+        labels:
+          severity: critical
+          compliance: "GDPR-Art-32"
+        annotations:
+          summary: Large data export detected
+          description: >
+            Exported {{ $value | humanize1024 }}B of data in the last hour.
+            User: {{ $labels.user }}
+            This may indicate data exfiltration.
+          runbook_url: https://docs/runbooks/data-exfiltration.md
+
+      # Audit System Health
+      - alert: AuditLogMissing
+        expr: |
+          absent(audit_events_total)
+        for: 5m
+        labels:
+          severity: critical
+          compliance: "PCI-DSS-10.7"
+        annotations:
+          summary: Audit logging system not reporting
+          description: >
+            No audit events received in the last 5 minutes.
+            The audit logging system may be down.
+          runbook_url: https://docs/runbooks/audit-system-down.md
+
+      - alert: AuditLogStorageLow
+        expr: |
+          audit_log_storage_bytes_free / audit_log_storage_bytes_total < 0.1
+        for: 10m
+        labels:
+          severity: warning
+          compliance: "FedRAMP-AU-4"
+        annotations:
+          summary: Audit log storage running low
+          description: >
+            Less than 10% of audit log storage remaining.
+            Current free: {{ $value | humanize1024 }}B
+          runbook_url: https://docs/runbooks/audit-storage-low.md
+
+  - name: audit-compliance-alerts
+    rules:
+      # Log Retention Compliance
+      - alert: LogRetentionViolation
+        expr: |
+          audit_oldest_log_age_days > 365
+        for: 0m
+        labels:
+          severity: warning
+          compliance: "PCI-DSS-10.7"
+        annotations:
+          summary: Audit logs exceed retention period
+          description: >
+            Oldest audit log is {{ $value }} days old.
+            Logs older than retention period should be archived.
+          runbook_url: https://docs/runbooks/log-retention.md
+
+      - alert: LogRetentionInsufficient
+        expr: |
+          audit_oldest_log_age_days < 90
+        for: 0m
+        labels:
+          severity: warning
+          compliance: "HIPAA-164.312(b)"
+        annotations:
+          summary: Audit log retention may be insufficient
+          description: >
+            Oldest audit log is only {{ $value }} days old.
+            Verify retention policies meet compliance requirements.
+          runbook_url: https://docs/runbooks/log-retention.md
+
+      # Daily Review Compliance
+      - alert: DailyAuditReviewMissing
+        expr: |
+          time() - audit_last_review_timestamp_seconds > 86400
+        for: 1h
+        labels:
+          severity: warning
+          compliance: "PCI-DSS-10.6"
+        annotations:
+          summary: Daily audit log review not completed
+          description: >
+            Last audit review was more than 24 hours ago.
+            PCI DSS requires daily review of security events.
+          runbook_url: https://docs/runbooks/daily-review.md
