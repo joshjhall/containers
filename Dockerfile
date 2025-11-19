@@ -78,6 +78,12 @@ ENV LOG_LEVEL=${LOG_LEVEL}
 ARG ENABLE_JSON_LOGGING=false
 ENV ENABLE_JSON_LOGGING=${ENABLE_JSON_LOGGING}
 
+# Audit logging for compliance and security monitoring
+# Set to true for security event logging with retention support
+# Recommended for: SOC 2, HIPAA, PCI DSS, GDPR, FedRAMP compliance
+ARG ENABLE_AUDIT_LOGGING=false
+ENV ENABLE_AUDIT_LOGGING=${ENABLE_AUDIT_LOGGING}
+
 # Working directory and project name
 ARG PROJECT_NAME=project
 ARG WORKING_DIR=/workspace/${PROJECT_NAME}
@@ -431,6 +437,11 @@ RUN if [ -f /opt/container-runtime/secrets/50-load-secrets.sh ]; then \
     cp /opt/container-runtime/secrets/50-load-secrets.sh /etc/container/startup/50-load-secrets.sh && \
     chmod +x /etc/container/startup/50-load-secrets.sh; \
     fi
+
+# Create audit log directory with secure permissions (when audit logging enabled)
+# Directory is writable by root only, logs have restricted read access
+RUN mkdir -p /var/log/audit && \
+    chmod 750 /var/log/audit
 
 # Switch to user
 USER ${USERNAME}

@@ -1,0 +1,47 @@
+{
+  "agent": {
+    "metrics_collection_interval": 60,
+    "run_as_user": "root",
+    "debug": false
+  },
+  "logs": {
+    "logs_collected": {
+      "files": {
+        "collect_list": [
+          {
+            "file_path": "/var/log/audit/container-audit.log",
+            "log_group_name": "/containers/audit-logs",
+            "log_stream_name": "{instance_id}/{hostname}",
+            "timestamp_format": "%Y-%m-%dT%H:%M:%S.%fZ",
+            "multi_line_start_pattern": "^{",
+            "timezone": "UTC",
+            "retention_in_days": 2190,
+            "filters": [
+              {
+                "type": "include",
+                "expression": ".*"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "log_stream_name": "default",
+    "force_flush_interval": 5
+  },
+  "metrics": {
+    "namespace": "Container/AuditLogs",
+    "metrics_collected": {
+      "statsd": {
+        "service_address": ":8125",
+        "metrics_collection_interval": 10,
+        "metrics_aggregation_interval": 60
+      }
+    },
+    "append_dimensions": {
+      "Environment": "${ENVIRONMENT}",
+      "Service": "${SERVICE_NAME}",
+      "Cluster": "${CLUSTER_NAME}"
+    }
+  }
+}
