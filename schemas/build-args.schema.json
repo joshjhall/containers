@@ -42,6 +42,32 @@
       "description": "Enable passwordless sudo for the user (DISABLE IN PRODUCTION)",
       "default": true
     },
+    "RESTRICT_SHELLS": {
+      "type": "boolean",
+      "description": "Restrict available shells to bash only (security hardening)",
+      "default": true
+    },
+    "PRODUCTION_MODE": {
+      "type": "boolean",
+      "description": "Enable production mode with security hardening and optimizations",
+      "default": false
+    },
+    "LOG_LEVEL": {
+      "type": "string",
+      "description": "Logging level for container runtime",
+      "default": "INFO",
+      "enum": ["DEBUG", "INFO", "WARN", "ERROR"]
+    },
+    "ENABLE_JSON_LOGGING": {
+      "type": "boolean",
+      "description": "Enable structured JSON logging for observability",
+      "default": false
+    },
+    "ENABLE_AUDIT_LOGGING": {
+      "type": "boolean",
+      "description": "Enable audit logging for compliance (SOC2, HIPAA, PCI-DSS)",
+      "default": false
+    },
     "PROJECT_NAME": {
       "type": "string",
       "description": "Project name for workspace directory",
@@ -176,6 +202,18 @@
       "description": "Install Mojo development tools (requires INCLUDE_MOJO=true)",
       "default": false
     },
+    "MOJO_VERSION": {
+      "type": "string",
+      "description": "Mojo version to install (YY.N format)",
+      "default": "25.4",
+      "pattern": "^[0-9]+\\.[0-9]+$"
+    },
+    "PIXI_VERSION": {
+      "type": "string",
+      "description": "Pixi package manager version for Mojo",
+      "default": "0.59.0",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
     "INCLUDE_DEV_TOOLS": {
       "type": "boolean",
       "description": "Install general development tools (git, make, etc.)",
@@ -186,7 +224,7 @@
       "description": "Install Docker CLI tools",
       "default": false
     },
-    "INCLUDE_OP_CLI": {
+    "INCLUDE_OP": {
       "type": "boolean",
       "description": "Install 1Password CLI",
       "default": false
@@ -196,10 +234,52 @@
       "description": "Install Kubernetes tools (kubectl, k9s, helm)",
       "default": false
     },
+    "KUBECTL_VERSION": {
+      "type": "string",
+      "description": "kubectl version to install",
+      "default": "1.31.0",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "K9S_VERSION": {
+      "type": "string",
+      "description": "k9s version to install",
+      "default": "0.50.16",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "KREW_VERSION": {
+      "type": "string",
+      "description": "krew kubectl plugin manager version",
+      "default": "0.4.5",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "HELM_VERSION": {
+      "type": "string",
+      "description": "Helm version to install",
+      "default": "4.0.0",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
     "INCLUDE_TERRAFORM": {
       "type": "boolean",
       "description": "Install Terraform and related tools",
       "default": false
+    },
+    "TERRAGRUNT_VERSION": {
+      "type": "string",
+      "description": "Terragrunt version to install",
+      "default": "0.93.8",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "TFDOCS_VERSION": {
+      "type": "string",
+      "description": "terraform-docs version to install",
+      "default": "0.20.0",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "TFLINT_VERSION": {
+      "type": "string",
+      "description": "TFLint version to install",
+      "default": "0.59.1",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
     },
     "INCLUDE_AWS": {
       "type": "boolean",
