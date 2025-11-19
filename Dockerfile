@@ -60,6 +60,12 @@ ARG USER_UID=1000
 ARG USER_GID=$USER_UID
 ARG ENABLE_PASSWORDLESS_SUDO=false
 
+# Shell hardening options
+# RESTRICT_SHELLS: Limit /etc/shells to bash only (default: true)
+# PRODUCTION_MODE: Enable production hardening - nologin for service users (default: false)
+ARG RESTRICT_SHELLS=true
+ARG PRODUCTION_MODE=false
+
 # Build output verbosity
 # Values: ERROR (0), WARN (1), INFO (2), DEBUG (3)
 # Default: INFO for normal builds, use ERROR for quieter builds
@@ -97,6 +103,12 @@ RUN /tmp/build-scripts/base/user.sh ${USERNAME} ${USER_UID} ${USER_GID} ${PROJEC
 
 # Make all feature scripts executable
 RUN chmod +x /tmp/build-scripts/features/*.sh /tmp/build-scripts/base/*.sh
+
+# Apply shell hardening
+# Must happen after user creation but before feature installations
+RUN RESTRICT_SHELLS=${RESTRICT_SHELLS} \
+    PRODUCTION_MODE=${PRODUCTION_MODE} \
+    /tmp/build-scripts/base/shell-hardening.sh
 
 # ============================================================================
 # LANGUAGE INSTALLATIONS - Grouped with their development tools
