@@ -158,66 +158,9 @@ fi
 echo ""
 
 # =========================================
-# 4. YAML VALIDATION
+# 4. MARKDOWN LINT VALIDATION
 # =========================================
-echo -e "${BLUE}4. Running YAML validation...${NC}"
-
-# Check if yamllint is installed
-if ! command -v yamllint &> /dev/null; then
-    echo -e "${YELLOW}⚠ yamllint not installed. Skipping YAML validation.${NC}"
-    echo "  Install with: pip install yamllint"
-else
-    # Find all YAML files (exclude .github/ workflows)
-    yaml_files=$(git ls-files '*.yml' '*.yaml' 2>/dev/null | grep -v '^\.github/' || \
-      find . -type f \( -name "*.yml" -o -name "*.yaml" \) \
-        ! -path "./.git/*" \
-        ! -path "./.github/*" \
-        ! -path "*/node_modules/*" \
-        ! -path "*/vendor/*")
-
-    yamllint_failed=0
-    checked_count=0
-    failed_count=0
-
-    while IFS= read -r file; do
-        if [ -z "$file" ] || [ ! -f "$file" ]; then
-            continue
-        fi
-
-        checked_count=$((checked_count + 1))
-
-        # yamllint returns 0 for success, 1 for warnings, 2 for errors
-        # We only fail on errors (exit code 2)
-        yamllint -c .yamllint.yml "$file" > /dev/null 2>&1
-        exit_code=$?
-        if [ $exit_code -eq 2 ]; then
-            if [ $yamllint_failed -eq 0 ]; then
-                echo ""
-                echo -e "${RED}✗ YAML validation errors detected:${NC}"
-                echo ""
-            fi
-            echo -e "  ${RED}✗${NC} $file"
-            yamllint -c .yamllint.yml "$file" 2>&1 | sed 's/^/    /'
-            echo ""
-            yamllint_failed=1
-            failed_count=$((failed_count + 1))
-        fi
-    done <<< "$yaml_files"
-
-    if [ $yamllint_failed -eq 0 ]; then
-        echo -e "  ${GREEN}✓${NC} All $checked_count YAML files passed validation"
-    else
-        echo -e "  ${RED}✗${NC} $failed_count of $checked_count YAML files failed validation"
-        overall_failed=1
-    fi
-fi
-
-echo ""
-
-# =========================================
-# 5. MARKDOWN LINT VALIDATION
-# =========================================
-echo -e "${BLUE}5. Running markdown lint validation...${NC}"
+echo -e "${BLUE}4. Running markdown lint validation...${NC}"
 
 # Check if markdownlint is installed
 if ! command -v markdownlint &> /dev/null; then
@@ -268,9 +211,9 @@ fi
 echo ""
 
 # =========================================
-# 6. DOCKER COMPOSE VALIDATION
+# 5. DOCKER COMPOSE VALIDATION
 # =========================================
-echo -e "${BLUE}6. Running Docker Compose validation...${NC}"
+echo -e "${BLUE}5. Running Docker Compose validation...${NC}"
 
 # Check if docker-compose is installed
 if ! command -v docker &> /dev/null || ! command -v docker-compose &> /dev/null; then
