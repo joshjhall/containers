@@ -464,9 +464,12 @@ jobs:
         # =====================================================
         # VARIANT FEATURE TOGGLE (for debugging/development)
         # =====================================================
-        # Must match enabled variants in the 'build' job above.
+        # Subset of variants for security scanning:
+        # - minimal: Base image security posture
+        # - polyglot: Covers Python + Node packages (most CVE-prone)
+        # - cloud-ops: Cloud tools (K8s, Terraform, cloud CLIs)
         # =====================================================
-        variant: [minimal, python-dev, node-dev, cloud-ops, polyglot, rust-golang, r-dev]
+        variant: [minimal, polyglot, cloud-ops]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
