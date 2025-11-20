@@ -5,6 +5,152 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.10.0] - 2025-11-20
+
+### Added
+
+- Add production-ready Kubernetes deployment templates
+- Add production-ready CI/CD pipeline templates
+- Add comprehensive code quality checks and formatters
+- Install quality check tools automatically
+- Add comprehensive secret management integrations
+- Add Docker Secrets and GCP Secret Manager integrations
+- Add YAML validation to pre-push hook
+- Add comprehensive observability stack
+- Add GitHub CLI authentication via 1Password
+- Add script to migrate roadmap to GitHub Issues
+- Add pip-audit for vulnerability scanning
+- Add cargo-audit and cargo-deny for security scanning
+- Add go-security-check function for vulnerability scanning
+- Add cargo-geiger for unsafe code detection
+- Implement resource limits to prevent exhaustion (Fixes #6)
+- Add container startup time metrics
+- Add graceful shutdown handlers to entrypoint
+- Implement Sigstore verification for Python 3.11.0+
+- Install cosign for Sigstore verification
+- Add cosign to version check/update scripts
+- Add secure PATH validation (Issue #3)
+- Add secure PATH validation (Issue #3)
+- Add build dependency cleanup for production images (Issue #23)
+- Add GPG verification for Node.js and Python
+- Add GPG verification for Terraform/HashiCorp
+- Complete Terraform GPG verification implementation
+- Add cosign for Sigstore image/binary verification
+- Add Sigstore verification for kubectl binaries
+- Add Go (Golang) GPG signature verification
+- Add automated GPG key updates with critical security notifications
+- Add compliance documentation, logging levels, and security improvements
+- Add custom health checks, shell completion tests, and benchmarks
+- Enhance CI with markdown linting, Trivy scanning, and benchmarks
+- Add JSON logging build arg and compliance documentation
+- Add security testing automation and component inventory
+- Add TLS/mTLS encryption in transit examples
+- Add MFA integration documentation
+- Add compliance validation mode to config validator
+- Add security context, backup validation, and log analysis
+- Add shell hardening for production environments
+- Add mandatory audit logging system
+- Add immutable storage configurations for audit logs
+- Add Falco runtime security monitoring for compliance
+- Add OPA Gatekeeper policy enforcement for compliance
+- Add automated backup and disaster recovery with Velero
+- Add runtime anomaly detection baseline and tuning
+- Add retry logic to all GPG key downloads
+- Add file permissions check to pre-commit and pre-push
+
+### Changed
+
+- Reorganize layer ordering for optimal caching
+- Use shared retry-utils for component install
+
+### Documentation
+
+- Update progress summary with completed items
+- Add pragmatic testing strategy
+- Add Docker for Mac case-sensitivity guide
+- Reorganize documentation into categorized structure
+- Archive improvements roadmap after GitHub Issues migration
+- Consolidate security scanning design and remove docs/planned
+- Update security-checksums.md with completed signature verification
+- Add encryption-at-rest docs, operational runbooks, and Trivy ignore
+- Add incident response, data classification, and software allowlist
+- Update build-args schema with all current build arguments
+
+### Fixed
+
+- Push branch before creating tag to validate commits
+- Fix setup script, permissions, and linting support
+- Add shellcheck disables to setup-git-ssh.sh
+- Exclude setup-git-ssh.sh from pre-push shellcheck
+- Exclude setup-git-ssh.sh from CI shellcheck
+- Allow yamllint warnings, fail only on errors
+- Skip Docker Compose validation if not installed
+- Resolve shellcheck SC2155 in json-logging.sh
+- Resolve shellcheck SC2155 in metrics-exporter.sh
+- Remove unused variable in test_json_logging.sh
+- Make library scripts executable
+- Fix token handling and invalid Authorization header error
+- Add run_tests helper and compatibility functions for observability tests
+- Add package name validation and improve Debian version detection
+- Allow version specifications in package name validation
+- Fix apt_install_conditional to pass packages as separate args
+- Use /tmp/container-metrics instead of /var/run
+- Use separate .sig and .crt files for Python verification
+- Ensure shell scripts are executable
+- Complete PATH validation coverage
+- Use graceful fallback for pipx PATH during build
+- Add graceful fallback for Poetry installation PATH
+- Add defensive WORKING_DIR checks in first-startup scripts
+- Add graceful fallback for PATH validation in wrangler install
+- Remove build-essential from base image
+- Add build dependencies for development environments
+- Preserve runtime libraries during production cleanup
+- Remove build tools check from minimal integration test
+- Add missing export for kubectl verification function
+- Resolve SC2155 warnings in update-gpg-keys.sh
+- Resolve markdown linting errors
+- Resolve shellcheck warnings in inventory-components.sh
+- Replace hard tabs with spaces in security-testing.md
+- Update cosign to 3.0.2 and fix benchmark JSON output
+- Fix benchmark JSON output breaking on empty lines
+- Ignore non-exploitable mkcert CVEs in Trivy scan
+- Restore execute permissions on shell scripts
+- Update version compatibility matrix during auto-patch process
+- Suppress PATH notices by default and add unit tests
+- Disable MD060 table column alignment rule
+- Fix benchmark JSON output and YAML lint warnings
+- Handle bc decimal output without leading zero
+- Use clearer placeholder names in GCP example
+- Use awk instead of bc for benchmark calculations
+- Add retry logic for gcloud components install
+- Add robust numeric validation in benchmark script
+- Remove duplicate YAML validation in pre-push hook
+- Output valid JSON even when benchmark builds fail
+- Redirect benchmark progress messages to stderr
+- Break long lines in OPA Gatekeeper constraint templates
+- Fix remaining long lines in OPA Gatekeeper constraint templates
+- Only scan for vulnerabilities in blocking Trivy check
+- Ignore npm dev tool transitive dependency CVEs
+- Free up disk space before security scans
+- Reduce security scan to representative variant subset
+
+### Miscellaneous
+
+- Remove TODO comment and track in GitHub issue #22
+
+### Security
+
+- Fix remaining linting issues for clean pre-commit
+
+### Style
+
+- Apply prettier formatting to all files
+- Fix markdownlint issues across all markdown files
+- Fix prettier formatting in Node.js GPG keys README
+- Fix markdownlint issue - add language to code fence
+- Fix prettier and markdownlint formatting in README
+- Format TLS documentation files
+
 ## [4.9.2] - 2025-11-16
 
 ## [4.9.1] - 2025-11-16
@@ -616,6 +762,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add helpful error message when release is cancelled
 - Add VS Code workspace settings and improve gitignore
 
+[4.10.0]: https://github.com/joshjhall/containers/compare/v4.9.2...v4.10.0
 [4.9.2]: https://github.com/joshjhall/containers/compare/v4.9.1...v4.9.2
 [4.9.1]: https://github.com/joshjhall/containers/compare/v4.9.0...v4.9.1
 [4.9.0]: https://github.com/joshjhall/containers/compare/v4.8.6...v4.9.0
@@ -634,4 +781,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [4.3.0]: https://github.com/joshjhall/containers/compare/v4.2.0...v4.3.0
 [4.2.0]: https://github.com/joshjhall/containers/compare/v4.1.0...v4.2.0
 [4.1.0]: https://github.com/joshjhall/containers/compare/v4.0.0...v4.1.0
-[4.0.0]: https://github.com/joshjhall/containers/compare/eaf66b40b4bcdf36e8b6da1113b349e3509fb26c...v4.0.0
+[4.0.0]: https://github.com/joshjhall/containers/compare/b2699c052d341b50ab3567775e4918a77ee78277...v4.0.0
