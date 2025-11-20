@@ -490,6 +490,15 @@ jobs:
         run: |
           docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.sanitized }}-${{ matrix.variant }}
 
+      - name: Free up disk space for large image scanning
+        run: |
+          # Remove unnecessary tools to free space for Trivy to export large images
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          sudo docker system prune -af --volumes
+          # Re-pull the image after prune
+          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.sanitized }}-${{ matrix.variant }}
+          df -h
+
       - name: Scan filesystem for misconfigurations
         uses: aquasecurity/trivy-action@0.33.1
         with:
