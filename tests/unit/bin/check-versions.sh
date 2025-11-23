@@ -232,10 +232,9 @@ test_json_output_format() {
 test_json_output_valid() {
     # Run the script with --json flag and validate output with jq
     local output
-    local exit_code=0
 
     # Capture both stdout and stderr, use timeout to prevent hanging
-    output=$(timeout 30 "$PROJECT_ROOT/bin/check-versions.sh" --json --no-cache 2>&1 || exit_code=$?)
+    output=$(timeout 30 "$PROJECT_ROOT/bin/check-versions.sh" --json --no-cache 2>&1 || true)
 
     # Check if the output is valid JSON using jq
     if echo "$output" | jq empty 2>/dev/null; then
