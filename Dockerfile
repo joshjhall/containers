@@ -304,9 +304,9 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     fi
 # Terraform
 ARG INCLUDE_TERRAFORM=false
-ARG TERRAGRUNT_VERSION=0.93.8
+ARG TERRAGRUNT_VERSION=0.93.10
 ARG TFDOCS_VERSION=0.20.0
-ARG TFLINT_VERSION=0.59.1
+ARG TFLINT_VERSION=0.60.0
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     if [ "${INCLUDE_TERRAFORM}" = "true" ]; then \
