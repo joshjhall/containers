@@ -205,12 +205,12 @@ test_extract_feature_versions() {
 test_json_output_format() {
     # Test that the script supports --json flag
     local output
-    
+
     # First check if --help mentions JSON
     if "$PROJECT_ROOT/bin/check-versions.sh" --help 2>&1 | grep -q "json"; then
         # JSON is supported, test it with a short timeout
         output=$(timeout 5 "$PROJECT_ROOT/bin/check-versions.sh" --json --no-cache 2>/dev/null || true)
-        
+
         if [[ "$output" == "{"* ]]; then
             assert_true true "Script produces JSON output"
         else
@@ -225,6 +225,48 @@ test_json_output_format() {
         else
             assert_true false "Script output format is incorrect"
         fi
+    fi
+}
+
+# Test: JSON output is valid and well-formed
+test_json_output_valid() {
+    # Run the script with --json flag and validate output with jq
+    local output
+    local exit_code=0
+
+    # Capture both stdout and stderr, use timeout to prevent hanging
+    output=$(timeout 30 "$PROJECT_ROOT/bin/check-versions.sh" --json --no-cache 2>&1 || exit_code=$?)
+
+    # Check if the output is valid JSON using jq
+    if echo "$output" | jq empty 2>/dev/null; then
+        assert_true true "Script produces valid JSON that can be parsed by jq"
+
+        # Also verify the JSON has expected structure
+        if echo "$output" | jq -e '.tools' >/dev/null 2>&1 && \
+           echo "$output" | jq -e '.summary' >/dev/null 2>&1; then
+            assert_true true "JSON output has expected structure (tools, summary)"
+        else
+            assert_true false "JSON output is missing expected fields"
+        fi
+    else
+        # If JSON is invalid, show the error for debugging
+        echo "Invalid JSON output:" >&2
+        echo "$output" | head -20 >&2
+        assert_true false "Script failed to produce valid JSON (syntax error or malformed output)"
+    fi
+}
+
+# Test: Script has no bash syntax errors
+test_script_syntax() {
+    # Use bash -n to check for syntax errors without executing
+    if bash -n "$PROJECT_ROOT/bin/check-versions.sh" 2>/dev/null; then
+        assert_true true "Script has valid bash syntax"
+    else
+        local errors
+        errors=$(bash -n "$PROJECT_ROOT/bin/check-versions.sh" 2>&1 || true)
+        echo "Bash syntax errors found:" >&2
+        echo "$errors" >&2
+        assert_true false "Script contains bash syntax errors"
     fi
 }
 
@@ -324,6 +366,7 @@ test_extract_zoxide_version() {
 
 # Run tests
 run_test test_script_exists "Version checker script exists and is executable"
+run_test test_script_syntax "Script has valid bash syntax (no typos)"
 run_test test_version_matches_exact "version_matches handles exact matches"
 run_test test_version_matches_partial "version_matches handles partial matches"
 run_test test_version_matches_different "version_matches rejects non-matches"
@@ -331,6 +374,7 @@ run_test test_missing_env_file "Script handles missing .env file gracefully"
 run_test test_extract_dockerfile_versions "Script extracts versions from Dockerfile"
 run_test test_extract_feature_versions "Script extracts versions from feature scripts"
 run_test test_json_output_format "JSON output format is correct"
+run_test test_json_output_valid "JSON output is valid and well-formed"
 run_test test_exit_code_current "Exit code is 0 when all versions current"
 run_test test_exit_code_outdated "Exit code is 1 when versions outdated"
 run_test test_extract_java_dev_versions "Script extracts Java dev tool versions"
