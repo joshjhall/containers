@@ -269,19 +269,19 @@ extract_all_versions() {
     
     # Java dev tools from java-dev.sh
     if [ -f "$PROJECT_ROOT/lib/features/java-dev.sh" ]; then
-        ver=$(grep "^[[:space:]]*SPRING_VERSION=" "$PROJECT_ROOT/lib/features/java-dev.sh" 2>/dev/null | command sed's/.*=//' | tr -d '"')
+        ver=$(grep "^[[:space:]]*SPRING_VERSION=" "$PROJECT_ROOT/lib/features/java-dev.sh" 2>/dev/null | command sed 's/.*=//' | tr -d '"')
         [ -n "$ver" ] && add_tool "spring-boot-cli" "$ver" "java-dev.sh"
         
-        ver=$(grep "^[[:space:]]*JBANG_VERSION=" "$PROJECT_ROOT/lib/features/java-dev.sh" 2>/dev/null | command sed's/.*=//' | tr -d '"')
+        ver=$(grep "^[[:space:]]*JBANG_VERSION=" "$PROJECT_ROOT/lib/features/java-dev.sh" 2>/dev/null | command sed 's/.*=//' | tr -d '"')
         [ -n "$ver" ] && add_tool "jbang" "$ver" "java-dev.sh"
         
-        ver=$(grep "^[[:space:]]*MVND_VERSION=" "$PROJECT_ROOT/lib/features/java-dev.sh" 2>/dev/null | command sed's/.*=//' | tr -d '"')
+        ver=$(grep "^[[:space:]]*MVND_VERSION=" "$PROJECT_ROOT/lib/features/java-dev.sh" 2>/dev/null | command sed 's/.*=//' | tr -d '"')
         [ -n "$ver" ] && add_tool "mvnd" "$ver" "java-dev.sh"
         
-        ver=$(grep "^[[:space:]]*GJF_VERSION=" "$PROJECT_ROOT/lib/features/java-dev.sh" 2>/dev/null | command sed's/.*=//' | tr -d '"')
+        ver=$(grep "^[[:space:]]*GJF_VERSION=" "$PROJECT_ROOT/lib/features/java-dev.sh" 2>/dev/null | command sed 's/.*=//' | tr -d '"')
         [ -n "$ver" ] && add_tool "google-java-format" "$ver" "java-dev.sh"
         
-        ver=$(grep "^[[:space:]]*JMH_VERSION=" "$PROJECT_ROOT/lib/features/java-dev.sh" 2>/dev/null | command sed's/.*=//' | tr -d '"')
+        ver=$(grep "^[[:space:]]*JMH_VERSION=" "$PROJECT_ROOT/lib/features/java-dev.sh" 2>/dev/null | command sed 's/.*=//' | tr -d '"')
         [ -n "$ver" ] && add_tool "jmh" "$ver" "java-dev.sh"
     fi
     
@@ -296,7 +296,7 @@ extract_all_versions() {
 
     # GitHub Actions from workflows
     if [ -f "$PROJECT_ROOT/.github/workflows/ci.yml" ]; then
-        ver=$(grep "uses: aquasecurity/trivy-action@" "$PROJECT_ROOT/.github/workflows/ci.yml" 2>/dev/null | head -1 | command sed's/.*@//' | tr -d ' ')
+        ver=$(grep "uses: aquasecurity/trivy-action@" "$PROJECT_ROOT/.github/workflows/ci.yml" 2>/dev/null | head -1 | command sed 's/.*@//' | tr -d ' ')
         [ -n "$ver" ] && [ "$ver" != "master" ] && add_tool "trivy-action" "$ver" "ci.yml"
     fi
 }
@@ -336,14 +336,14 @@ check_nodejs() {
     local latest=""
     # If version is just major (like "22"), get the latest LTS in that major version
     if [[ "$current" =~ ^[0-9]+$ ]]; then
-        latest=$(fetch_url "https://nodejs.org/dist/index.json" | jq -r "[.[] | select(.version | startswith(\"v$current.\")) | select(.lts != false)] | .[0].version" 2>/dev/null | command sed's/^v//')
+        latest=$(fetch_url "https://nodejs.org/dist/index.json" | jq -r "[.[] | select(.version | startswith(\"v$current.\")) | select(.lts != false)] | .[0].version" 2>/dev/null | command sed 's/^v//')
         # If no LTS found for that major, get any version
         if [ -z "$latest" ] || [ "$latest" = "null" ]; then
-            latest=$(fetch_url "https://nodejs.org/dist/index.json" | jq -r "[.[] | select(.version | startswith(\"v$current.\"))] | .[0].version" 2>/dev/null | command sed's/^v//')
+            latest=$(fetch_url "https://nodejs.org/dist/index.json" | jq -r "[.[] | select(.version | startswith(\"v$current.\"))] | .[0].version" 2>/dev/null | command sed 's/^v//')
         fi
     else
         # Get latest LTS
-        latest=$(fetch_url "https://nodejs.org/dist/index.json" | jq -r '[.[] | select(.lts != false)] | .[0].version' 2>/dev/null | command sed's/^v//')
+        latest=$(fetch_url "https://nodejs.org/dist/index.json" | jq -r '[.[] | select(.lts != false)] | .[0].version' 2>/dev/null | command sed 's/^v//')
     fi
     
     set_latest "Node.js" "$latest"
@@ -353,7 +353,7 @@ check_nodejs() {
 check_go() {
     progress_msg "  Go..."
     local latest
-    latest=$(fetch_url "https://go.dev/VERSION?m=text" | head -1 | command sed's/^go//')
+    latest=$(fetch_url "https://go.dev/VERSION?m=text" | head -1 | command sed 's/^go//')
     set_latest "Go" "$latest"
     progress_done
 }
@@ -374,7 +374,7 @@ check_rust() {
 check_ruby() {
     progress_msg "  Ruby..."
     local latest
-    latest=$(fetch_url "https://api.github.com/repos/ruby/ruby/releases/latest" | jq -r '.tag_name' 2>/dev/null | command sed's/^v//' | command sed's/_/./g')
+    latest=$(fetch_url "https://api.github.com/repos/ruby/ruby/releases/latest" | jq -r '.tag_name' 2>/dev/null | command sed 's/^v//' | command sed 's/_/./g')
     set_latest "Ruby" "$latest"
     progress_done
 }
@@ -392,11 +392,11 @@ check_java() {
     
     # Use Adoptium API to get latest version for this major
     local latest
-    latest=$(fetch_url "https://api.adoptium.net/v3/info/release_versions?release_type=ga&version=${current_major}" | jq -r '.versions[0].semver' 2>/dev/null | command sed's/+.*//')
+    latest=$(fetch_url "https://api.adoptium.net/v3/info/release_versions?release_type=ga&version=${current_major}" | jq -r '.versions[0].semver' 2>/dev/null | command sed 's/+.*//')
     
     # If that fails, try the release names endpoint
     if [ -z "$latest" ] || [ "$latest" = "null" ]; then
-        latest=$(fetch_url "https://api.adoptium.net/v3/assets/latest/${current_major}/hotspot" | jq -r '.[0].release_name' 2>/dev/null | command sed's/jdk-//' | command sed's/+.*//')
+        latest=$(fetch_url "https://api.adoptium.net/v3/assets/latest/${current_major}/hotspot" | jq -r '.[0].release_name' 2>/dev/null | command sed 's/jdk-//' | command sed 's/+.*//')
     fi
     
     set_latest "Java" "$latest"
@@ -409,7 +409,7 @@ check_r() {
 
     # Use CRAN sources page - more reliable than homepage or SVN
     # Parse the latest release tarball name
-    latest=$(fetch_url "https://cran.r-project.org/sources.html" 8 | grep -oE 'R-[0-9]+\.[0-9]+\.[0-9]+\.tar\.gz' | head -1 | command sed's/R-//;s/\.tar\.gz//' 2>/dev/null)
+    latest=$(fetch_url "https://cran.r-project.org/sources.html" 8 | grep -oE 'R-[0-9]+\.[0-9]+\.[0-9]+\.tar\.gz' | head -1 | command sed 's/R-//;s/\.tar\.gz//' 2>/dev/null)
 
     # Mark as error if fetch failed
     if [ -z "$latest" ]; then
@@ -425,7 +425,7 @@ check_github_release() {
     local repo="$2"
     progress_msg "  $tool..."
     local latest
-    latest=$(fetch_url "https://api.github.com/repos/$repo/releases/latest" | jq -r '.tag_name // "null"' 2>/dev/null | command sed's/^v//')
+    latest=$(fetch_url "https://api.github.com/repos/$repo/releases/latest" | jq -r '.tag_name // "null"' 2>/dev/null | command sed 's/^v//')
     set_latest "$tool" "$latest"
     progress_done
 }
@@ -435,7 +435,7 @@ check_gitlab_release() {
     local project_id="$2"
     progress_msg "  $tool..."
     local latest
-    latest=$(fetch_url "https://gitlab.com/api/v4/projects/$project_id/releases" | jq -r '.[0].tag_name // "null"' 2>/dev/null | command sed's/^v//')
+    latest=$(fetch_url "https://gitlab.com/api/v4/projects/$project_id/releases" | jq -r '.[0].tag_name // "null"' 2>/dev/null | command sed 's/^v//')
     set_latest "$tool" "$latest"
     progress_done
 }
@@ -445,7 +445,7 @@ check_entr() {
     # entr uses a simple versioning on their website
     # We'll check the latest version from the downloads page
     local latest
-    latest=$(fetch_url "http://eradman.com/entrproject/" | grep -oE 'entr-[0-9]+\.[0-9]+\.tar\.gz' | head -1 | command sed's/entr-//;s/\.tar\.gz//')
+    latest=$(fetch_url "http://eradman.com/entrproject/" | grep -oE 'entr-[0-9]+\.[0-9]+\.tar\.gz' | head -1 | command sed 's/entr-//;s/\.tar\.gz//')
     
     set_latest "entr" "$latest"
     progress_done
@@ -483,12 +483,12 @@ check_kubectl() {
     # kubectl uses major.minor format - get latest patch
     if [[ "$current" =~ ^[0-9]+\.[0-9]+$ ]]; then
         # Get latest patch version for this major.minor
-        latest=$(fetch_url "https://api.github.com/repos/kubernetes/kubernetes/releases" | jq -r "[.[] | select(.tag_name | startswith(\"v$current.\"))] | .[0].tag_name" 2>/dev/null | command sed's/^v//')
+        latest=$(fetch_url "https://api.github.com/repos/kubernetes/kubernetes/releases" | jq -r "[.[] | select(.tag_name | startswith(\"v$current.\"))] | .[0].tag_name" 2>/dev/null | command sed 's/^v//')
     fi
     
     # If no specific version found, get the stable version
     if [ -z "$latest" ] || [ "$latest" = "null" ]; then
-        latest=$(fetch_url "https://storage.googleapis.com/kubernetes-release/release/stable.txt" | command sed's/^v//')
+        latest=$(fetch_url "https://storage.googleapis.com/kubernetes-release/release/stable.txt" | command sed 's/^v//')
     fi
     
     set_latest "kubectl" "$latest"
