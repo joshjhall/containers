@@ -107,6 +107,14 @@ ARG WORKING_DIR=/workspace/${PROJECT_NAME}
 # 3. Clear the Docker build cache and rebuild
 RUN /tmp/build-scripts/base/user.sh ${USERNAME} ${USER_UID} ${USER_GID} ${PROJECT_NAME} ${WORKING_DIR} ${ENABLE_PASSWORDLESS_SUDO}
 
+# Install fixuid for runtime UID/GID remapping (development containers only)
+# This allows the container user to match the host user's UID/GID at runtime
+# Enable at runtime with: FIXUID_ENABLED=true and -u $(id -u):$(id -g)
+ARG INCLUDE_FIXUID=true
+RUN if [ "${INCLUDE_FIXUID}" = "true" ]; then \
+    /tmp/build-scripts/base/fixuid.sh; \
+    fi
+
 # Make all feature scripts executable
 RUN chmod 755 /tmp/build-scripts/features/*.sh /tmp/build-scripts/base/*.sh
 

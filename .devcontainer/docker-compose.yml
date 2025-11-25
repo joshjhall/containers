@@ -11,6 +11,7 @@ services:
         INCLUDE_OP: "true"
         INCLUDE_DEV_TOOLS: "true"
         INCLUDE_DOCKER: "true"
+        INCLUDE_FIXUID: "true"
         # Python and Node needed for quality check tools (yamllint, prettier, markdownlint)
         INCLUDE_PYTHON: "true"
         INCLUDE_NODE: "true"
