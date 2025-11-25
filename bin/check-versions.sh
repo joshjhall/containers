@@ -49,6 +49,23 @@ done
 CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/container-version-checker"
 mkdir -p "$CACHE_DIR"
 
+# Helper function to extract version from a variable assignment
+# Handles both plain assignments (VAR="1.2.3") and parameter expansion (VAR="${VAR:-1.2.3}")
+extract_version_from_line() {
+    local line="$1"
+    local ver
+
+    # Extract the value after the = sign, removing quotes
+    ver=$(echo "$line" | cut -d= -f2 | tr -d '"')
+
+    # If it's a parameter expansion like ${VAR:-default}, extract the default value
+    if [[ "$ver" =~ \$\{[^:]*:-([^}]+)\} ]]; then
+        ver="${BASH_REMATCH[1]}"
+    fi
+
+    echo "$ver"
+}
+
 # Load .env file if it exists
 if [ -f "$PROJECT_ROOT/.env" ]; then
     set -a
@@ -222,85 +239,76 @@ extract_all_versions() {
 
     # Python tools
     if [ -f "$PROJECT_ROOT/lib/features/python.sh" ]; then
-        ver=$(grep "POETRY_VERSION=" "$PROJECT_ROOT/lib/features/python.sh" 2>/dev/null | head -1 | cut -d= -f2 | tr -d '"')
+        ver=$(extract_version_from_line "$(grep "POETRY_VERSION=" "$PROJECT_ROOT/lib/features/python.sh" 2>/dev/null | head -1)")
         [ -n "$ver" ] && add_tool "Poetry" "$ver" "python.sh"
     fi
-    
+
     # Dev tools from dev-tools.sh
     if [ -f "$PROJECT_ROOT/lib/features/dev-tools.sh" ]; then
-        ver=$(grep "^LAZYGIT_VERSION=" "$PROJECT_ROOT/lib/features/dev-tools.sh" 2>/dev/null | cut -d= -f2 | tr -d '"')
+        ver=$(extract_version_from_line "$(grep "^LAZYGIT_VERSION=" "$PROJECT_ROOT/lib/features/dev-tools.sh" 2>/dev/null)")
         [ -n "$ver" ] && add_tool "lazygit" "$ver" "dev-tools.sh"
-        
-        ver=$(grep "^DIRENV_VERSION=" "$PROJECT_ROOT/lib/features/dev-tools.sh" 2>/dev/null | cut -d= -f2 | tr -d '"')
+
+        ver=$(extract_version_from_line "$(grep "^DIRENV_VERSION=" "$PROJECT_ROOT/lib/features/dev-tools.sh" 2>/dev/null)")
         [ -n "$ver" ] && add_tool "direnv" "$ver" "dev-tools.sh"
-        
-        ver=$(grep "^ACT_VERSION=" "$PROJECT_ROOT/lib/features/dev-tools.sh" 2>/dev/null | cut -d= -f2 | tr -d '"')
+
+        ver=$(extract_version_from_line "$(grep "^ACT_VERSION=" "$PROJECT_ROOT/lib/features/dev-tools.sh" 2>/dev/null)")
         [ -n "$ver" ] && add_tool "act" "$ver" "dev-tools.sh"
-        
-        ver=$(grep "^DELTA_VERSION=" "$PROJECT_ROOT/lib/features/dev-tools.sh" 2>/dev/null | cut -d= -f2 | tr -d '"')
+
+        ver=$(extract_version_from_line "$(grep "^DELTA_VERSION=" "$PROJECT_ROOT/lib/features/dev-tools.sh" 2>/dev/null)")
         [ -n "$ver" ] && add_tool "delta" "$ver" "dev-tools.sh"
-        
-        ver=$(grep "^GLAB_VERSION=" "$PROJECT_ROOT/lib/features/dev-tools.sh" 2>/dev/null | cut -d= -f2 | tr -d '"')
+
+        ver=$(extract_version_from_line "$(grep "^GLAB_VERSION=" "$PROJECT_ROOT/lib/features/dev-tools.sh" 2>/dev/null)")
         [ -n "$ver" ] && add_tool "glab" "$ver" "dev-tools.sh"
-        
-        ver=$(grep "^MKCERT_VERSION=" "$PROJECT_ROOT/lib/features/dev-tools.sh" 2>/dev/null | cut -d= -f2 | tr -d '"')
+
+        ver=$(extract_version_from_line "$(grep "^MKCERT_VERSION=" "$PROJECT_ROOT/lib/features/dev-tools.sh" 2>/dev/null)")
         [ -n "$ver" ] && add_tool "mkcert" "$ver" "dev-tools.sh"
-        
-        ver=$(grep "^DUF_VERSION=" "$PROJECT_ROOT/lib/features/dev-tools.sh" 2>/dev/null | cut -d= -f2 | tr -d '"')
+
+        ver=$(extract_version_from_line "$(grep "^DUF_VERSION=" "$PROJECT_ROOT/lib/features/dev-tools.sh" 2>/dev/null)")
         [ -n "$ver" ] && add_tool "duf" "$ver" "dev-tools.sh"
-        
-        ver=$(grep "^ENTR_VERSION=" "$PROJECT_ROOT/lib/features/dev-tools.sh" 2>/dev/null | cut -d= -f2 | tr -d '"')
+
+        ver=$(extract_version_from_line "$(grep "^ENTR_VERSION=" "$PROJECT_ROOT/lib/features/dev-tools.sh" 2>/dev/null)")
         [ -n "$ver" ] && add_tool "entr" "$ver" "dev-tools.sh"
     fi
     
     # Docker tools from docker.sh
     if [ -f "$PROJECT_ROOT/lib/features/docker.sh" ]; then
-        ver=$(grep "^DIVE_VERSION=" "$PROJECT_ROOT/lib/features/docker.sh" 2>/dev/null | cut -d= -f2 | tr -d '"')
+        ver=$(extract_version_from_line "$(grep "^DIVE_VERSION=" "$PROJECT_ROOT/lib/features/docker.sh" 2>/dev/null)")
         [ -n "$ver" ] && add_tool "dive" "$ver" "docker.sh"
 
-        # Handle parameter expansion syntax like ${VAR:-default}
-        ver=$(grep "^LAZYDOCKER_VERSION=" "$PROJECT_ROOT/lib/features/docker.sh" 2>/dev/null | cut -d= -f2 | tr -d '"')
-        # Extract default value if parameter expansion syntax is present
-        if [[ "$ver" =~ \$\{[^:]*:-([^}]+)\} ]]; then
-            ver="${BASH_REMATCH[1]}"
-        fi
+        ver=$(extract_version_from_line "$(grep "^LAZYDOCKER_VERSION=" "$PROJECT_ROOT/lib/features/docker.sh" 2>/dev/null)")
         [ -n "$ver" ] && add_tool "lazydocker" "$ver" "docker.sh"
     fi
-    
+
     # Java dev tools from java-dev.sh
     if [ -f "$PROJECT_ROOT/lib/features/java-dev.sh" ]; then
-        ver=$(grep "^[[:space:]]*SPRING_VERSION=" "$PROJECT_ROOT/lib/features/java-dev.sh" 2>/dev/null | command sed 's/.*=//' | tr -d '"')
+        ver=$(extract_version_from_line "$(grep "^SPRING_VERSION=" "$PROJECT_ROOT/lib/features/java-dev.sh" 2>/dev/null)")
         [ -n "$ver" ] && add_tool "spring-boot-cli" "$ver" "java-dev.sh"
-        
-        ver=$(grep "^[[:space:]]*JBANG_VERSION=" "$PROJECT_ROOT/lib/features/java-dev.sh" 2>/dev/null | command sed 's/.*=//' | tr -d '"')
+
+        ver=$(extract_version_from_line "$(grep "^JBANG_VERSION=" "$PROJECT_ROOT/lib/features/java-dev.sh" 2>/dev/null)")
         [ -n "$ver" ] && add_tool "jbang" "$ver" "java-dev.sh"
-        
-        ver=$(grep "^[[:space:]]*MVND_VERSION=" "$PROJECT_ROOT/lib/features/java-dev.sh" 2>/dev/null | command sed 's/.*=//' | tr -d '"')
+
+        ver=$(extract_version_from_line "$(grep "^MVND_VERSION=" "$PROJECT_ROOT/lib/features/java-dev.sh" 2>/dev/null)")
         [ -n "$ver" ] && add_tool "mvnd" "$ver" "java-dev.sh"
-        
-        ver=$(grep "^[[:space:]]*GJF_VERSION=" "$PROJECT_ROOT/lib/features/java-dev.sh" 2>/dev/null | command sed 's/.*=//' | tr -d '"')
+
+        ver=$(extract_version_from_line "$(grep "^GJF_VERSION=" "$PROJECT_ROOT/lib/features/java-dev.sh" 2>/dev/null)")
         [ -n "$ver" ] && add_tool "google-java-format" "$ver" "java-dev.sh"
-        
-        ver=$(grep "^[[:space:]]*JMH_VERSION=" "$PROJECT_ROOT/lib/features/java-dev.sh" 2>/dev/null | command sed 's/.*=//' | tr -d '"')
+
+        ver=$(extract_version_from_line "$(grep "^JMH_VERSION=" "$PROJECT_ROOT/lib/features/java-dev.sh" 2>/dev/null)")
         [ -n "$ver" ] && add_tool "jmh" "$ver" "java-dev.sh"
     fi
-    
+
     # Base system tools from setup.sh
     if [ -f "$PROJECT_ROOT/lib/base/setup.sh" ]; then
-        ver=$(grep "^ZOXIDE_VERSION=" "$PROJECT_ROOT/lib/base/setup.sh" 2>/dev/null | cut -d= -f2 | tr -d '"')
+        ver=$(extract_version_from_line "$(grep "^ZOXIDE_VERSION=" "$PROJECT_ROOT/lib/base/setup.sh" 2>/dev/null)")
         [ -n "$ver" ] && add_tool "zoxide" "$ver" "setup.sh"
 
-        ver=$(grep "^COSIGN_VERSION=" "$PROJECT_ROOT/lib/base/setup.sh" 2>/dev/null | cut -d= -f2 | tr -d '"')
+        ver=$(extract_version_from_line "$(grep "^COSIGN_VERSION=" "$PROJECT_ROOT/lib/base/setup.sh" 2>/dev/null)")
         [ -n "$ver" ] && add_tool "cosign" "$ver" "setup.sh"
     fi
 
     # fixuid from fixuid.sh
     if [ -f "$PROJECT_ROOT/lib/base/fixuid.sh" ]; then
-        ver=$(grep "^FIXUID_VERSION=" "$PROJECT_ROOT/lib/base/fixuid.sh" 2>/dev/null | cut -d= -f2 | tr -d '"')
-        # Extract default value if parameter expansion syntax is present (${VAR:-default})
-        if [[ "$ver" =~ \$\{[^:]*:-([^}]+)\} ]]; then
-            ver="${BASH_REMATCH[1]}"
-        fi
+        ver=$(extract_version_from_line "$(grep "^FIXUID_VERSION=" "$PROJECT_ROOT/lib/base/fixuid.sh" 2>/dev/null)")
         [ -n "$ver" ] && add_tool "fixuid" "$ver" "fixuid.sh"
     fi
 

@@ -142,13 +142,16 @@ update_version() {
             ;;
         setup.sh)
             # Update version strings in base setup script
+            # Preserve ${VAR:-default} pattern if present
             local script_path="$PROJECT_ROOT/lib/base/$file"
             case "$tool" in
                 zoxide)
-                    command sed -i "s/ZOXIDE_VERSION=\"[^\"]*\"/ZOXIDE_VERSION=\"$latest\"/" "$script_path"
+                    command sed -i "s/ZOXIDE_VERSION=\"\${ZOXIDE_VERSION:-[^}]*}\"/ZOXIDE_VERSION=\"\${ZOXIDE_VERSION:-$latest}\"/" "$script_path"
+                    command sed -i "s/^ZOXIDE_VERSION=\"[0-9][^\"]*\"/ZOXIDE_VERSION=\"\${ZOXIDE_VERSION:-$latest}\"/" "$script_path"
                     ;;
                 cosign)
-                    command sed -i "s/COSIGN_VERSION=\"[^\"]*\"/COSIGN_VERSION=\"$latest\"/" "$script_path"
+                    command sed -i "s/COSIGN_VERSION=\"\${COSIGN_VERSION:-[^}]*}\"/COSIGN_VERSION=\"\${COSIGN_VERSION:-$latest}\"/" "$script_path"
+                    command sed -i "s/^COSIGN_VERSION=\"[0-9][^\"]*\"/COSIGN_VERSION=\"\${COSIGN_VERSION:-$latest}\"/" "$script_path"
                     ;;
                 *)
                     echo -e "${YELLOW}    Warning: Unknown base setup tool: $tool${NC}"
@@ -172,52 +175,72 @@ update_version() {
             ;;
         *.sh)
             # Update version strings in feature shell scripts
+            # Preserve ${VAR:-default} pattern if present
             local script_path="$PROJECT_ROOT/lib/features/$file"
             case "$tool" in
                 lazygit)
-                    command sed -i "s/LAZYGIT_VERSION=\"[^\"]*\"/LAZYGIT_VERSION=\"$latest\"/" "$script_path"
+                    command sed -i "s/LAZYGIT_VERSION=\"\${LAZYGIT_VERSION:-[^}]*}\"/LAZYGIT_VERSION=\"\${LAZYGIT_VERSION:-$latest}\"/" "$script_path"
+                    command sed -i "s/^LAZYGIT_VERSION=\"[0-9][^\"]*\"/LAZYGIT_VERSION=\"\${LAZYGIT_VERSION:-$latest}\"/" "$script_path"
                     ;;
                 direnv)
-                    command sed -i "s/DIRENV_VERSION=\"[^\"]*\"/DIRENV_VERSION=\"$latest\"/" "$script_path"
+                    command sed -i "s/DIRENV_VERSION=\"\${DIRENV_VERSION:-[^}]*}\"/DIRENV_VERSION=\"\${DIRENV_VERSION:-$latest}\"/" "$script_path"
+                    command sed -i "s/^DIRENV_VERSION=\"[0-9][^\"]*\"/DIRENV_VERSION=\"\${DIRENV_VERSION:-$latest}\"/" "$script_path"
                     ;;
                 act)
-                    command sed -i "s/ACT_VERSION=\"[^\"]*\"/ACT_VERSION=\"$latest\"/" "$script_path"
+                    command sed -i "s/ACT_VERSION=\"\${ACT_VERSION:-[^}]*}\"/ACT_VERSION=\"\${ACT_VERSION:-$latest}\"/" "$script_path"
+                    command sed -i "s/^ACT_VERSION=\"[0-9][^\"]*\"/ACT_VERSION=\"\${ACT_VERSION:-$latest}\"/" "$script_path"
                     ;;
                 delta)
-                    command sed -i "s/DELTA_VERSION=\"[^\"]*\"/DELTA_VERSION=\"$latest\"/" "$script_path"
+                    command sed -i "s/DELTA_VERSION=\"\${DELTA_VERSION:-[^}]*}\"/DELTA_VERSION=\"\${DELTA_VERSION:-$latest}\"/" "$script_path"
+                    command sed -i "s/^DELTA_VERSION=\"[0-9][^\"]*\"/DELTA_VERSION=\"\${DELTA_VERSION:-$latest}\"/" "$script_path"
                     ;;
                 glab)
-                    command sed -i "s/GLAB_VERSION=\"[^\"]*\"/GLAB_VERSION=\"$latest\"/" "$script_path"
+                    command sed -i "s/GLAB_VERSION=\"\${GLAB_VERSION:-[^}]*}\"/GLAB_VERSION=\"\${GLAB_VERSION:-$latest}\"/" "$script_path"
+                    command sed -i "s/^GLAB_VERSION=\"[0-9][^\"]*\"/GLAB_VERSION=\"\${GLAB_VERSION:-$latest}\"/" "$script_path"
                     ;;
                 mkcert)
-                    command sed -i "s/MKCERT_VERSION=\"[^\"]*\"/MKCERT_VERSION=\"$latest\"/" "$script_path"
+                    command sed -i "s/MKCERT_VERSION=\"\${MKCERT_VERSION:-[^}]*}\"/MKCERT_VERSION=\"\${MKCERT_VERSION:-$latest}\"/" "$script_path"
+                    command sed -i "s/^MKCERT_VERSION=\"[0-9][^\"]*\"/MKCERT_VERSION=\"\${MKCERT_VERSION:-$latest}\"/" "$script_path"
                     ;;
                 dive)
-                    command sed -i "s/DIVE_VERSION=\"[^\"]*\"/DIVE_VERSION=\"$latest\"/" "$script_path"
+                    command sed -i "s/DIVE_VERSION=\"\${DIVE_VERSION:-[^}]*}\"/DIVE_VERSION=\"\${DIVE_VERSION:-$latest}\"/" "$script_path"
+                    command sed -i "s/^DIVE_VERSION=\"[0-9][^\"]*\"/DIVE_VERSION=\"\${DIVE_VERSION:-$latest}\"/" "$script_path"
                     ;;
                 lazydocker)
-                    command sed -i "s/LAZYDOCKER_VERSION=\"[^\"]*\"/LAZYDOCKER_VERSION=\"$latest\"/" "$script_path"
+                    command sed -i "s/LAZYDOCKER_VERSION=\"\${LAZYDOCKER_VERSION:-[^}]*}\"/LAZYDOCKER_VERSION=\"\${LAZYDOCKER_VERSION:-$latest}\"/" "$script_path"
+                    command sed -i "s/^LAZYDOCKER_VERSION=\"[0-9][^\"]*\"/LAZYDOCKER_VERSION=\"\${LAZYDOCKER_VERSION:-$latest}\"/" "$script_path"
                     ;;
                 spring-boot-cli)
-                    command sed -i "s/SPRING_VERSION=\"[^\"]*\"/SPRING_VERSION=\"$latest\"/" "$script_path"
+                    command sed -i "s/SPRING_VERSION=\"\${SPRING_VERSION:-[^}]*}\"/SPRING_VERSION=\"\${SPRING_VERSION:-$latest}\"/" "$script_path"
+                    command sed -i "s/^SPRING_VERSION=\"[0-9][^\"]*\"/SPRING_VERSION=\"\${SPRING_VERSION:-$latest}\"/" "$script_path"
                     ;;
                 jbang)
-                    command sed -i "s/JBANG_VERSION=\"[^\"]*\"/JBANG_VERSION=\"$latest\"/" "$script_path"
+                    command sed -i "s/JBANG_VERSION=\"\${JBANG_VERSION:-[^}]*}\"/JBANG_VERSION=\"\${JBANG_VERSION:-$latest}\"/" "$script_path"
+                    command sed -i "s/^JBANG_VERSION=\"[0-9][^\"]*\"/JBANG_VERSION=\"\${JBANG_VERSION:-$latest}\"/" "$script_path"
                     ;;
                 mvnd)
-                    command sed -i "s/MVND_VERSION=\"[^\"]*\"/MVND_VERSION=\"$latest\"/" "$script_path"
+                    command sed -i "s/MVND_VERSION=\"\${MVND_VERSION:-[^}]*}\"/MVND_VERSION=\"\${MVND_VERSION:-$latest}\"/" "$script_path"
+                    command sed -i "s/^MVND_VERSION=\"[0-9][^\"]*\"/MVND_VERSION=\"\${MVND_VERSION:-$latest}\"/" "$script_path"
                     ;;
                 google-java-format)
-                    command sed -i "s/GJF_VERSION=\"[^\"]*\"/GJF_VERSION=\"$latest\"/" "$script_path"
+                    command sed -i "s/GJF_VERSION=\"\${GJF_VERSION:-[^}]*}\"/GJF_VERSION=\"\${GJF_VERSION:-$latest}\"/" "$script_path"
+                    command sed -i "s/^GJF_VERSION=\"[0-9][^\"]*\"/GJF_VERSION=\"\${GJF_VERSION:-$latest}\"/" "$script_path"
                     ;;
                 jmh)
-                    command sed -i "s/JMH_VERSION=\"[^\"]*\"/JMH_VERSION=\"$latest\"/" "$script_path"
+                    command sed -i "s/JMH_VERSION=\"\${JMH_VERSION:-[^}]*}\"/JMH_VERSION=\"\${JMH_VERSION:-$latest}\"/" "$script_path"
+                    command sed -i "s/^JMH_VERSION=\"[0-9][^\"]*\"/JMH_VERSION=\"\${JMH_VERSION:-$latest}\"/" "$script_path"
                     ;;
                 duf)
-                    command sed -i "s/DUF_VERSION=\"[^\"]*\"/DUF_VERSION=\"$latest\"/" "$script_path"
+                    command sed -i "s/DUF_VERSION=\"\${DUF_VERSION:-[^}]*}\"/DUF_VERSION=\"\${DUF_VERSION:-$latest}\"/" "$script_path"
+                    command sed -i "s/^DUF_VERSION=\"[0-9][^\"]*\"/DUF_VERSION=\"\${DUF_VERSION:-$latest}\"/" "$script_path"
                     ;;
                 entr)
-                    command sed -i "s/ENTR_VERSION=\"[^\"]*\"/ENTR_VERSION=\"$latest\"/" "$script_path"
+                    command sed -i "s/ENTR_VERSION=\"\${ENTR_VERSION:-[^}]*}\"/ENTR_VERSION=\"\${ENTR_VERSION:-$latest}\"/" "$script_path"
+                    command sed -i "s/^ENTR_VERSION=\"[0-9][^\"]*\"/ENTR_VERSION=\"\${ENTR_VERSION:-$latest}\"/" "$script_path"
+                    ;;
+                Poetry)
+                    command sed -i "s/POETRY_VERSION=\"\${POETRY_VERSION:-[^}]*}\"/POETRY_VERSION=\"\${POETRY_VERSION:-$latest}\"/" "$script_path"
+                    command sed -i "s/^POETRY_VERSION=\"[0-9][^\"]*\"/POETRY_VERSION=\"\${POETRY_VERSION:-$latest}\"/" "$script_path"
                     ;;
                 *)
                     echo -e "${YELLOW}    Warning: Unknown shell script tool: $tool${NC}"
