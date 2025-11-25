@@ -163,6 +163,60 @@ else
 fi
 
 # ============================================================================
+# fixuid - Runtime UID/GID Remapping
+# ============================================================================
+# If FIXUID_ENABLED=true and fixuid is installed, remap the container user's
+# UID/GID to match the runtime user. This solves permission issues with mounted
+# volumes when the host user's UID/GID doesn't match the container user.
+#
+# Usage: docker run -u $(id -u):$(id -g) -e FIXUID_ENABLED=true ...
+if [ "${FIXUID_ENABLED:-false}" = "true" ] && [ -x /usr/local/bin/fixuid ]; then
+    echo "🔧 Running fixuid to remap UID/GID..."
+    # fixuid outputs environment variables to eval (like HOME)
+    # Run it and capture the output
+    if FIXUID_OUTPUT=$(fixuid -q 2>&1); then
+        eval "$FIXUID_OUTPUT"
+        echo "✓ UID/GID remapped successfully"
+    else
+        echo "⚠️  Warning: fixuid failed: $FIXUID_OUTPUT"
+        echo "   Continuing without UID/GID remapping"
+    fi
+fi
+
+# ============================================================================
+# Docker Socket Access Fix
+# ============================================================================
+# Automatically configure Docker socket access if the socket exists
+# We create/use a 'docker' group, chown the socket to that group, and add the user
+# This is more secure than chmod 666 as it limits access to group members only
+if [ "$RUNNING_AS_ROOT" = "true" ] && [ -S /var/run/docker.sock ]; then
+    # Check if the non-root user can already access the socket
+    if ! su -s /bin/sh "$USERNAME" -c "test -r /var/run/docker.sock -a -w /var/run/docker.sock" 2>/dev/null; then
+        echo "🔧 Configuring Docker socket access..."
+
+        # Create docker group if it doesn't exist
+        if ! getent group docker >/dev/null 2>&1; then
+            groupadd docker 2>/dev/null || {
+                echo "⚠️  Warning: Could not create docker group"
+            }
+        fi
+
+        # Change socket ownership to root:docker with 660 permissions
+        chown root:docker /var/run/docker.sock 2>/dev/null && \
+        chmod 660 /var/run/docker.sock 2>/dev/null || {
+            echo "⚠️  Warning: Could not change Docker socket ownership/permissions"
+        }
+
+        # Add user to docker group
+        usermod -aG docker "$USERNAME" 2>/dev/null || {
+            echo "⚠️  Warning: Could not add $USERNAME to docker group"
+        }
+
+        echo "✓ Docker socket access configured (user added to docker group)"
+    fi
+fi
+
+# ============================================================================
 # First-Time Setup
 # ============================================================================
 # Run first-time setup scripts if marker doesn't exist
@@ -267,4 +321,20 @@ echo "✓ Container initialized in ${STARTUP_DURATION}s"
 # ============================================================================
 # Execute the main command
 echo "=== Starting main process ==="
-exec "$@"
+
+if [ "$RUNNING_AS_ROOT" = "true" ]; then
+    # Drop privileges to non-root user for main process
+    # Using 'su -l' ensures a fresh login that picks up updated group memberships
+    # from /etc/group (including any groups added for Docker socket access)
+    #
+    # Build a properly quoted command string to handle arguments with spaces
+    QUOTED_CMD=""
+    for arg in "$@"; do
+        # Escape single quotes in the argument and wrap in single quotes
+        escaped_arg=$(printf '%s' "$arg" | sed "s/'/'\\\\''/g")
+        QUOTED_CMD="$QUOTED_CMD '${escaped_arg}'"
+    done
+    exec su -l "$USERNAME" -c "cd '$(pwd)' && exec $QUOTED_CMD"
+else
+    exec "$@"
+fi
