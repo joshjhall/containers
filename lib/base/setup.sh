@@ -80,7 +80,7 @@ echo "$TZ" > /etc/timezone
 # ============================================================================
 echo "=== Installing zoxide ==="
 ARCH=$(dpkg --print-architecture)
-ZOXIDE_VERSION="0.9.8"
+ZOXIDE_VERSION="${ZOXIDE_VERSION:-0.9.8}"
 cd /tmp
 if [ "$ARCH" = "amd64" ]; then
     command curl -L https://github.com/ajeetdsouza/zoxide/releases/download/v${ZOXIDE_VERSION}/zoxide-${ZOXIDE_VERSION}-x86_64-unknown-linux-musl.tar.gz | tar xz
@@ -95,7 +95,7 @@ cd /
 # Cosign Installation - Sigstore signature verification
 # ============================================================================
 echo "=== Installing cosign ==="
-COSIGN_VERSION="3.0.2"
+COSIGN_VERSION="${COSIGN_VERSION:-3.0.2}"
 cd /tmp
 if [ "$ARCH" = "amd64" ]; then
     command curl -fsSL "https://github.com/sigstore/cosign/releases/download/v${COSIGN_VERSION}/cosign-linux-amd64" -o cosign

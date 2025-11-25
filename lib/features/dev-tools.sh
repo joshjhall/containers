@@ -43,11 +43,11 @@ log_feature_start "Development Tools"
 # ============================================================================
 # Version Configuration
 # ============================================================================
-# Tool versions
-LAZYGIT_VERSION="0.56.0"
-DELTA_VERSION="0.18.2"
-ACT_VERSION="0.2.82"
-GITCLIFF_VERSION="2.8.0"
+# Tool versions (can be overridden via environment variables)
+LAZYGIT_VERSION="${LAZYGIT_VERSION:-0.56.0}"
+DELTA_VERSION="${DELTA_VERSION:-0.18.2}"
+ACT_VERSION="${ACT_VERSION:-0.2.82}"
+GITCLIFF_VERSION="${GITCLIFF_VERSION:-2.8.0}"
 
 # ============================================================================
 # Repository Configuration
@@ -307,7 +307,7 @@ log_message "Installing additional development tools..."
 
 # Install duf (modern disk usage utility)
 log_message "Installing duf (modern disk usage utility)..."
-DUF_VERSION="0.9.1"
+DUF_VERSION="${DUF_VERSION:-0.9.1}"
 ARCH=$(dpkg --print-architecture)
 
 if [ "$ARCH" = "amd64" ] || [ "$ARCH" = "arm64" ]; then
@@ -349,7 +349,7 @@ fi
 
 # Install entr (file watcher)
 log_message "Installing entr (file watcher)..."
-ENTR_VERSION="5.7"
+ENTR_VERSION="${ENTR_VERSION:-5.7}"
 ENTR_TARBALL="entr-${ENTR_VERSION}.tar.gz"
 ENTR_URL="http://eradman.com/entrproject/code/${ENTR_TARBALL}"
 
@@ -470,7 +470,7 @@ fi
 # Install direnv
 log_message "Installing direnv..."
 ARCH=$(dpkg --print-architecture)
-DIRENV_VERSION="2.37.1"
+DIRENV_VERSION="${DIRENV_VERSION:-2.37.1}"
 
 if [ "$ARCH" = "amd64" ]; then
     DIRENV_BINARY="direnv.linux-amd64"
@@ -607,7 +607,7 @@ fi
 
 # Install mkcert (local HTTPS certificates)
 log_message "Installing mkcert (local HTTPS certificates)..."
-MKCERT_VERSION="1.4.4"
+MKCERT_VERSION="${MKCERT_VERSION:-1.4.4}"
 
 if [ "$ARCH" = "amd64" ]; then
     MKCERT_BINARY="mkcert-v${MKCERT_VERSION}-linux-amd64"
@@ -738,7 +738,7 @@ fi
 
 # Install GitLab CLI (glab)
 log_message "Installing glab (GitLab CLI)..."
-GLAB_VERSION="1.78.2"
+GLAB_VERSION="${GLAB_VERSION:-1.78.2}"
 
 # GitLab CLI provides builds for amd64 and arm64
 if [ "$ARCH" = "amd64" ]; then

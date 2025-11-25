@@ -178,8 +178,8 @@ case "$ARCH" in
         ;;
 esac
 
-# Version is configurable via build arg
-LAZYDOCKER_VERSION="0.24.2"
+# Version is configurable via environment variable
+LAZYDOCKER_VERSION="${LAZYDOCKER_VERSION:-0.24.2}"
 LAZYDOCKER_ARCHIVE="lazydocker_${LAZYDOCKER_VERSION}_Linux_${LAZYDOCKER_ARCH}.tar.gz"
 LAZYDOCKER_URL="https://github.com/jesseduffield/lazydocker/releases/download/v${LAZYDOCKER_VERSION}/${LAZYDOCKER_ARCHIVE}"
 
@@ -225,8 +225,8 @@ log_command "Cleaning up build directory" \
 # ============================================================================
 log_message "Installing dive (Docker image layer analysis tool)..."
 
-# Set dive version
-DIVE_VERSION="0.13.1"
+# Set dive version (configurable via environment variable)
+DIVE_VERSION="${DIVE_VERSION:-0.13.1}"
 
 # Construct the dive package filename
 DIVE_PACKAGE="dive_${DIVE_VERSION}_linux_${ARCH}.deb"

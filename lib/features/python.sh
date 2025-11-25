@@ -327,7 +327,7 @@ log_command "Installing pipx" \
 safe_add_to_path "${PIPX_BIN_DIR}" || export PATH="${PIPX_BIN_DIR}:$PATH"
 
 # Use pipx to install Poetry with pinned version
-POETRY_VERSION="2.2.1"
+POETRY_VERSION="${POETRY_VERSION:-2.2.1}"
 log_command "Installing Poetry ${POETRY_VERSION} via pipx" \
     su - "${USERNAME}" -c "
     # Source path utilities for secure PATH management
