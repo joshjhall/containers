@@ -155,6 +155,21 @@ update_version() {
                     ;;
             esac
             ;;
+        fixuid.sh)
+            # Update version in fixuid.sh
+            local script_path="$PROJECT_ROOT/lib/base/$file"
+            case "$tool" in
+                fixuid)
+                    # Preserve the ${FIXUID_VERSION:-X.X.X} pattern if present
+                    command sed -i "s/FIXUID_VERSION=\"\${FIXUID_VERSION:-[^}]*}\"/FIXUID_VERSION=\"\${FIXUID_VERSION:-$latest}\"/" "$script_path"
+                    # Also handle plain version format
+                    command sed -i "s/^FIXUID_VERSION=\"[0-9][^\"]*\"/FIXUID_VERSION=\"\${FIXUID_VERSION:-$latest}\"/" "$script_path"
+                    ;;
+                *)
+                    echo -e "${YELLOW}    Warning: Unknown fixuid.sh tool: $tool${NC}"
+                    ;;
+            esac
+            ;;
         *.sh)
             # Update version strings in feature shell scripts
             local script_path="$PROJECT_ROOT/lib/features/$file"

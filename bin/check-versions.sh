@@ -294,6 +294,16 @@ extract_all_versions() {
         [ -n "$ver" ] && add_tool "cosign" "$ver" "setup.sh"
     fi
 
+    # fixuid from fixuid.sh
+    if [ -f "$PROJECT_ROOT/lib/base/fixuid.sh" ]; then
+        ver=$(grep "^FIXUID_VERSION=" "$PROJECT_ROOT/lib/base/fixuid.sh" 2>/dev/null | cut -d= -f2 | tr -d '"')
+        # Extract default value if parameter expansion syntax is present (${VAR:-default})
+        if [[ "$ver" =~ \$\{[^:]*:-([^}]+)\} ]]; then
+            ver="${BASH_REMATCH[1]}"
+        fi
+        [ -n "$ver" ] && add_tool "fixuid" "$ver" "fixuid.sh"
+    fi
+
     # GitHub Actions from workflows
     if [ -f "$PROJECT_ROOT/.github/workflows/ci.yml" ]; then
         ver=$(grep "uses: aquasecurity/trivy-action@" "$PROJECT_ROOT/.github/workflows/ci.yml" 2>/dev/null | head -1 | command sed 's/.*@//' | tr -d ' ')
@@ -672,6 +682,7 @@ main() {
             entr) check_entr ;;
             zoxide) check_github_release "zoxide" "ajeetdsouza/zoxide" ;;
             cosign) check_github_release "cosign" "sigstore/cosign" ;;
+            fixuid) check_github_release "fixuid" "boxboat/fixuid" ;;
             trivy-action) check_github_release "trivy-action" "aquasecurity/trivy-action" ;;
             *) [ "$OUTPUT_FORMAT" = "text" ] && echo "  Skipping $tool (no checker)" ;;
         esac
