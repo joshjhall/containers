@@ -436,7 +436,139 @@ run_test_with_setup() {
     teardown
 }
 
+# Test: Docker socket fix section exists
+test_docker_socket_fix_section() {
+    local script="$PROJECT_ROOT/lib/runtime/entrypoint.sh"
+
+    # Check for Docker socket fix section
+    if grep -q "Docker Socket Access Fix" "$script"; then
+        assert_true true "Docker socket fix section exists"
+    else
+        assert_true false "Docker socket fix section not found"
+    fi
+}
+
+# Test: Docker socket fix creates docker group
+test_docker_socket_creates_group() {
+    local script="$PROJECT_ROOT/lib/runtime/entrypoint.sh"
+
+    if grep -q "groupadd docker" "$script"; then
+        assert_true true "Docker group creation is handled"
+    else
+        assert_true false "Docker group creation not found"
+    fi
+}
+
+# Test: Docker socket fix sets correct permissions
+test_docker_socket_permissions() {
+    local script="$PROJECT_ROOT/lib/runtime/entrypoint.sh"
+
+    # Check for chown to docker group
+    if grep -q "chown root:docker /var/run/docker.sock" "$script"; then
+        assert_true true "Socket ownership set to root:docker"
+    else
+        assert_true false "Socket ownership change not found"
+    fi
+
+    # Check for 660 permissions
+    if grep -q "chmod 660 /var/run/docker.sock" "$script"; then
+        assert_true true "Socket permissions set to 660"
+    else
+        assert_true false "Socket permissions not set to 660"
+    fi
+}
+
+# Test: Docker socket fix adds user to group
+test_docker_socket_user_group() {
+    local script="$PROJECT_ROOT/lib/runtime/entrypoint.sh"
+
+    if grep -q 'usermod -aG docker "\$USERNAME"' "$script"; then
+        assert_true true "User added to docker group"
+    else
+        assert_true false "User not added to docker group"
+    fi
+}
+
+# Test: Docker socket fix checks for existing access
+test_docker_socket_checks_access() {
+    local script="$PROJECT_ROOT/lib/runtime/entrypoint.sh"
+
+    # Should check if user can already access before fixing
+    if grep -q "test -r /var/run/docker.sock" "$script"; then
+        assert_true true "Socket access check exists"
+    else
+        assert_true false "Socket access check not found"
+    fi
+}
+
+# Test: fixuid section exists
+test_fixuid_section_exists() {
+    local script="$PROJECT_ROOT/lib/runtime/entrypoint.sh"
+
+    if grep -q "fixuid" "$script"; then
+        assert_true true "fixuid section exists in entrypoint"
+    else
+        assert_true false "fixuid section not found"
+    fi
+}
+
+# Test: fixuid is conditionally enabled
+test_fixuid_conditional_enable() {
+    local script="$PROJECT_ROOT/lib/runtime/entrypoint.sh"
+
+    if grep -q 'FIXUID_ENABLED.*true' "$script"; then
+        assert_true true "fixuid conditional enable check exists"
+    else
+        assert_true false "fixuid conditional enable not found"
+    fi
+}
+
+# Test: fixuid checks for binary existence
+test_fixuid_binary_check() {
+    local script="$PROJECT_ROOT/lib/runtime/entrypoint.sh"
+
+    if grep -q "/usr/local/bin/fixuid" "$script"; then
+        assert_true true "fixuid binary path check exists"
+    else
+        assert_true false "fixuid binary check not found"
+    fi
+}
+
+# Test: Privilege drop for main process
+test_privilege_drop() {
+    local script="$PROJECT_ROOT/lib/runtime/entrypoint.sh"
+
+    # Should use su -l for login shell to pick up new groups
+    if grep -q 'su -l "\$USERNAME"' "$script"; then
+        assert_true true "Privilege drop uses su -l for login shell"
+    else
+        assert_true false "Privilege drop with su -l not found"
+    fi
+}
+
+# Test: Main process exec with proper quoting
+test_main_process_exec() {
+    local script="$PROJECT_ROOT/lib/runtime/entrypoint.sh"
+
+    # Should have exec for main process
+    if grep -q 'exec.*"\$@"' "$script" || grep -q 'exec su -l' "$script"; then
+        assert_true true "Main process uses exec"
+    else
+        assert_true false "Main process exec not found"
+    fi
+}
+
 # Run all tests
+run_test_with_setup test_docker_socket_fix_section "Docker socket fix section exists"
+run_test_with_setup test_docker_socket_creates_group "Docker socket creates docker group"
+run_test_with_setup test_docker_socket_permissions "Docker socket sets correct permissions"
+run_test_with_setup test_docker_socket_user_group "Docker socket adds user to group"
+run_test_with_setup test_docker_socket_checks_access "Docker socket checks existing access"
+run_test_with_setup test_fixuid_section_exists "fixuid section exists"
+run_test_with_setup test_fixuid_conditional_enable "fixuid conditional enable"
+run_test_with_setup test_fixuid_binary_check "fixuid binary check"
+run_test_with_setup test_privilege_drop "Privilege drop for main process"
+run_test_with_setup test_main_process_exec "Main process exec"
 run_test_with_setup test_first_run_detection "First-run detection works correctly"
 run_test_with_setup test_first_startup_script_order "First-startup scripts run in order"
 run_test_with_setup test_every_boot_scripts "Every-boot scripts execute properly"
