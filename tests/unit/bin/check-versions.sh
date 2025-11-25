@@ -13,6 +13,23 @@ init_test_framework
 # Test suite
 test_suite "Bin Check Versions Tests"
 
+# Helper function to extract version from a variable assignment
+# Handles both plain assignments (VAR="1.2.3") and parameter expansion (VAR="${VAR:-1.2.3}")
+extract_version_from_line() {
+    local line="$1"
+    local ver
+
+    # Extract the value after the = sign, removing quotes
+    ver=$(echo "$line" | cut -d= -f2 | tr -d '"')
+
+    # If it's a parameter expansion like ${VAR:-default}, extract the default value
+    if [[ "$ver" =~ \$\{[^:]*:-([^}]+)\} ]]; then
+        ver="${BASH_REMATCH[1]}"
+    fi
+
+    echo "$ver"
+}
+
 # Mock function to simulate fetch_url responses
 mock_fetch_url() {
     local url="$1"
@@ -353,7 +370,7 @@ test_extract_zoxide_version() {
     # Check if base/setup.sh has zoxide version definition
     if [ -f "$PROJECT_ROOT/lib/base/setup.sh" ]; then
         local zoxide_ver
-        zoxide_ver=$(grep '^ZOXIDE_VERSION=' "$PROJECT_ROOT/lib/base/setup.sh" 2>/dev/null | cut -d= -f2 | tr -d '"')
+        zoxide_ver=$(extract_version_from_line "$(grep '^ZOXIDE_VERSION=' "$PROJECT_ROOT/lib/base/setup.sh" 2>/dev/null)")
 
         assert_not_empty "$zoxide_ver" "zoxide version extracted from base/setup.sh"
         # Current version is 0.9.8
@@ -361,6 +378,23 @@ test_extract_zoxide_version() {
     else
         skip_test "base/setup.sh not found"
     fi
+}
+
+# Test: extract_version_from_line handles parameter expansion
+test_extract_version_parameter_expansion() {
+    local result
+
+    # Test plain assignment
+    result=$(extract_version_from_line 'VAR="1.2.3"')
+    assert_equals "1.2.3" "$result" "Plain assignment extracted correctly"
+
+    # Test parameter expansion
+    result=$(extract_version_from_line 'VAR="${VAR:-1.2.3}"')
+    assert_equals "1.2.3" "$result" "Parameter expansion extracted correctly"
+
+    # Test with different variable names
+    result=$(extract_version_from_line 'LAZYGIT_VERSION="${LAZYGIT_VERSION:-0.56.0}"')
+    assert_equals "0.56.0" "$result" "Real-world parameter expansion works"
 }
 
 # Run tests
@@ -380,6 +414,7 @@ run_test test_extract_java_dev_versions "Script extracts Java dev tool versions"
 run_test test_extract_duf_entr_versions "Script extracts duf and entr versions"
 run_test test_handle_indented_versions "Script handles indented version patterns"
 run_test test_extract_zoxide_version "Script extracts zoxide version from base setup"
+run_test test_extract_version_parameter_expansion "extract_version_from_line handles parameter expansion"
 
 # Test: Script extracts krew version from Dockerfile
 test_extract_krew_version() {
