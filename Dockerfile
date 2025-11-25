@@ -296,7 +296,7 @@ ARG INCLUDE_KUBERNETES=false
 ARG KUBECTL_VERSION=1.31.0
 ARG K9S_VERSION=0.50.16
 ARG KREW_VERSION=0.4.5
-ARG HELM_VERSION=4.0.0
+ARG HELM_VERSION=4.0.1
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     if [ "${INCLUDE_KUBERNETES}" = "true" ]; then \
@@ -312,7 +312,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     fi
 # Terraform
 ARG INCLUDE_TERRAFORM=false
-ARG TERRAGRUNT_VERSION=0.93.10
+ARG TERRAGRUNT_VERSION=0.93.11
 ARG TFDOCS_VERSION=0.20.0
 ARG TFLINT_VERSION=0.60.0
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
