@@ -4,6 +4,10 @@
   "service": "devcontainer",
   "workspaceFolder": "/workspace/${localWorkspaceFolderBasename}",
 
+  // Use the container's ENTRYPOINT instead of VS Code's default "sleep infinity"
+  // This ensures our entrypoint runs to set up Docker socket permissions, etc.
+  "overrideCommand": false,
+
   // Don't use features in VS Code. Rather, use the container features to be consistent across environments.
   // "features": {},
 

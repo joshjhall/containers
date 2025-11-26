@@ -29,6 +29,17 @@
 set -euo pipefail
 
 # ============================================================================
+# Re-entry Guard
+# ============================================================================
+# Prevent the entrypoint from running twice when using su -l to drop privileges
+# This can happen because su -l starts a login shell which may re-invoke entrypoint
+if [ "${ENTRYPOINT_ALREADY_RAN:-}" = "true" ]; then
+    # We're being called again after su -l, just exec the command
+    exec "$@"
+fi
+export ENTRYPOINT_ALREADY_RAN=true
+
+# ============================================================================
 # Exit Handler - Graceful Shutdown
 # ============================================================================
 # Cleanup function called on container exit/termination
@@ -146,20 +157,19 @@ if [ "${SKIP_CASE_CHECK:-false}" != "true" ] && [ -f "/usr/local/bin/detect-case
     fi
 fi
 
-# Detect the non-root user in the container
-# Don't rely on environment variables which might come from the host
-# The container should have a user with UID 1000 created during build
-USERNAME=$(getent passwd 1000 | cut -d: -f1)
-if [ -z "$USERNAME" ]; then
-    echo "Error: No user with UID 1000 found in container"
-    exit 1
-fi
-
 # Check if we're running as root
 if [ "$(id -u)" -eq 0 ]; then
     RUNNING_AS_ROOT=true
+    # Detect the non-root user in the container
+    # The container should have a user with UID 1000 created during build
+    USERNAME=$(getent passwd 1000 | cut -d: -f1)
+    if [ -z "$USERNAME" ]; then
+        echo "Error: No user with UID 1000 found in container"
+        exit 1
+    fi
 else
     RUNNING_AS_ROOT=false
+    USERNAME=$(whoami)
 fi
 
 # ============================================================================
@@ -168,30 +178,63 @@ fi
 # Automatically configure Docker socket access if the socket exists
 # We create/use a 'docker' group, chown the socket to that group, and add the user
 # This is more secure than chmod 666 as it limits access to group members only
-if [ "$RUNNING_AS_ROOT" = "true" ] && [ -S /var/run/docker.sock ]; then
-    # Check if the non-root user can already access the socket
-    if ! su -s /bin/sh "$USERNAME" -c "test -r /var/run/docker.sock -a -w /var/run/docker.sock" 2>/dev/null; then
+#
+# This works in two modes:
+# 1. Running as root: directly modify socket permissions
+# 2. Running as non-root with sudo: use sudo for privileged operations
+if [ -S /var/run/docker.sock ]; then
+    # Check if we can already access the socket
+    if ! test -r /var/run/docker.sock -a -w /var/run/docker.sock 2>/dev/null; then
         echo "🔧 Configuring Docker socket access..."
 
-        # Create docker group if it doesn't exist
-        if ! getent group docker >/dev/null 2>&1; then
-            groupadd docker 2>/dev/null || {
-                echo "⚠️  Warning: Could not create docker group"
-            }
+        # Determine if we can perform privileged operations
+        CAN_SUDO=false
+        if [ "$RUNNING_AS_ROOT" = "true" ]; then
+            CAN_SUDO=true
+        elif command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
+            CAN_SUDO=true
         fi
 
-        # Change socket ownership to root:docker with 660 permissions
-        chown root:docker /var/run/docker.sock 2>/dev/null && \
-        chmod 660 /var/run/docker.sock 2>/dev/null || {
-            echo "⚠️  Warning: Could not change Docker socket ownership/permissions"
-        }
+        if [ "$CAN_SUDO" = "true" ]; then
+            # Helper function to run commands with appropriate privileges
+            run_privileged() {
+                if [ "$RUNNING_AS_ROOT" = "true" ]; then
+                    "$@"
+                else
+                    sudo "$@"
+                fi
+            }
 
-        # Add user to docker group
-        usermod -aG docker "$USERNAME" 2>/dev/null || {
-            echo "⚠️  Warning: Could not add $USERNAME to docker group"
-        }
+            # Create docker group if it doesn't exist
+            if ! getent group docker >/dev/null 2>&1; then
+                run_privileged groupadd docker 2>/dev/null || {
+                    echo "⚠️  Warning: Could not create docker group"
+                }
+            fi
 
-        echo "✓ Docker socket access configured (user added to docker group)"
+            # Change socket ownership to root:docker with 660 permissions
+            if ! run_privileged chown root:docker /var/run/docker.sock 2>/dev/null || \
+               ! run_privileged chmod 660 /var/run/docker.sock 2>/dev/null; then
+                echo "⚠️  Warning: Could not change Docker socket ownership/permissions"
+            fi
+
+            # Add user to docker group
+            run_privileged usermod -aG docker "$USERNAME" 2>/dev/null || {
+                echo "⚠️  Warning: Could not add $USERNAME to docker group"
+            }
+
+            echo "✓ Docker socket access configured (user added to docker group)"
+
+            # If running as non-root, we need to re-exec with new group membership
+            # The sg command runs a command with a supplementary group
+            if [ "$RUNNING_AS_ROOT" = "false" ] && [ -n "$*" ]; then
+                # Mark that we've already configured docker so we don't loop
+                export DOCKER_SOCKET_CONFIGURED=true
+            fi
+        else
+            echo "⚠️  Warning: Cannot configure Docker socket - no root access or sudo"
+            echo "   Docker commands may fail. Run container as root or enable passwordless sudo."
+        fi
     fi
 fi
 
@@ -317,6 +360,15 @@ if [ "$RUNNING_AS_ROOT" = "true" ]; then
         QUOTED_CMD="$QUOTED_CMD '${escaped_arg}'"
     done
     exec su -l "$USERNAME" -c "cd '$(pwd)' && exec $QUOTED_CMD"
+elif [ "${DOCKER_SOCKET_CONFIGURED:-false}" = "true" ] && getent group docker >/dev/null 2>&1; then
+    # We configured docker socket access but need new group membership
+    # Use sg to run command with docker group, or newgrp if sg unavailable
+    if command -v sg >/dev/null 2>&1; then
+        exec sg docker -c "exec $*"
+    else
+        # Fallback: newgrp replaces shell, so we exec into a new shell with docker group
+        exec newgrp docker <<< "exec $*"
+    fi
 else
     exec "$@"
 fi

@@ -501,6 +501,30 @@ test_docker_socket_checks_access() {
     fi
 }
 
+# Test: Docker socket fix supports sudo for non-root
+test_docker_socket_sudo_support() {
+    local script="$PROJECT_ROOT/lib/runtime/entrypoint.sh"
+
+    # Should have sudo support for non-root users
+    if grep -q "sudo -n true" "$script" && grep -q "run_privileged" "$script"; then
+        assert_true true "Sudo support for non-root users exists"
+    else
+        assert_true false "Sudo support not found"
+    fi
+}
+
+# Test: Re-entry guard prevents double execution
+test_reentry_guard() {
+    local script="$PROJECT_ROOT/lib/runtime/entrypoint.sh"
+
+    # Should have a guard to prevent re-entry
+    if grep -q "ENTRYPOINT_ALREADY_RAN" "$script"; then
+        assert_true true "Re-entry guard exists"
+    else
+        assert_true false "Re-entry guard not found"
+    fi
+}
+
 # Test: Privilege drop for main process
 test_privilege_drop() {
     local script="$PROJECT_ROOT/lib/runtime/entrypoint.sh"
@@ -531,6 +555,8 @@ run_test_with_setup test_docker_socket_creates_group "Docker socket creates dock
 run_test_with_setup test_docker_socket_permissions "Docker socket sets correct permissions"
 run_test_with_setup test_docker_socket_user_group "Docker socket adds user to group"
 run_test_with_setup test_docker_socket_checks_access "Docker socket checks existing access"
+run_test_with_setup test_docker_socket_sudo_support "Docker socket sudo support for non-root"
+run_test_with_setup test_reentry_guard "Re-entry guard exists"
 run_test_with_setup test_privilege_drop "Privilege drop for main process"
 run_test_with_setup test_main_process_exec "Main process exec"
 run_test_with_setup test_first_run_detection "First-run detection works correctly"

@@ -8,6 +8,8 @@ services:
         PROJECT_NAME: containers
         USERNAME: vscode
         WORKING_DIR: /workspace/containers
+        # Enable passwordless sudo for development (allows entrypoint to fix Docker socket)
+        ENABLE_PASSWORDLESS_SUDO: "true"
         INCLUDE_OP: "true"
         INCLUDE_DEV_TOOLS: "true"
         INCLUDE_DOCKER: "true"
@@ -18,9 +20,6 @@ services:
         - type=local,src=/tmp/.buildx-cache
       cache_to:
         - type=local,dest=/tmp/.buildx-cache,mode=max
-    # Start as root so entrypoint can fix Docker socket permissions
-    # The entrypoint drops to the non-root user for the main process
-    user: root
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ..:/workspace/containers
@@ -29,9 +28,9 @@ services:
       - ENVIRONMENT=${ENVIRONMENT:-development}
       # 1Password integration
       - OP_CONTAINERS_ENV_VAULT=${OP_CONTAINERS_ENV_VAULT:-Development}
-    # Run entrypoint first to fix Docker socket permissions, then sleep
-    # VS Code bypasses entrypoint with 'sleep infinity', so we explicitly call it
-    command: ["/bin/bash", "-c", "/usr/local/bin/entrypoint sleep infinity"]
+    # Entrypoint handles Docker socket permissions via sudo (no root needed)
+    # devcontainer.json sets overrideCommand: false so our ENTRYPOINT runs
+    command: ["sleep", "infinity"]
     # Health check configuration (inherits from Dockerfile)
     # Override if needed: healthcheck: {test: ["CMD", "healthcheck", "--verbose"]}
     networks:
