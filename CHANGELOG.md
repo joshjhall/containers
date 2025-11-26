@@ -5,7 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.12.0] - 2025-11-26
+
+### Fixed
+
+- Restore file and directory permissions
+- Docker socket permissions via root entrypoint
+- Run container as non-root with sudo for Docker socket
+
 ## [4.11.0] - 2025-11-25
+
+### Added
+
+- Add fixuid for runtime UID/GID remapping
+- Add fixuid to version check and update scripts
 
 ### Changed
 
@@ -16,17 +29,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add Docker socket permission fix in entrypoint
 - Support parameter expansion in version check/update scripts
 
-### Removed
-
-- Remove fixuid feature - it was more hassle than it was worth for UID/GID remapping
-
 ### Miscellaneous
 
 - Remove host-side Docker socket setup
+- Update tool versions
 
 ### Testing
 
-- Add tests for Docker socket fix
+- Add tests for Docker socket fix and fixuid
 - Add tests for parameter expansion version extraction
 
 ## [4.10.1] - 2025-11-23
@@ -802,6 +812,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add helpful error message when release is cancelled
 - Add VS Code workspace settings and improve gitignore
 
+[4.12.0]: https://github.com/joshjhall/containers/compare/v4.11.0...v4.12.0
 [4.11.0]: https://github.com/joshjhall/containers/compare/v4.10.1...v4.11.0
 [4.10.1]: https://github.com/joshjhall/containers/compare/v4.10.0...v4.10.1
 [4.10.0]: https://github.com/joshjhall/containers/compare/v4.9.2...v4.10.0
