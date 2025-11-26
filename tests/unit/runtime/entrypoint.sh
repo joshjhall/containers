@@ -501,39 +501,6 @@ test_docker_socket_checks_access() {
     fi
 }
 
-# Test: fixuid section exists
-test_fixuid_section_exists() {
-    local script="$PROJECT_ROOT/lib/runtime/entrypoint.sh"
-
-    if grep -q "fixuid" "$script"; then
-        assert_true true "fixuid section exists in entrypoint"
-    else
-        assert_true false "fixuid section not found"
-    fi
-}
-
-# Test: fixuid is conditionally enabled
-test_fixuid_conditional_enable() {
-    local script="$PROJECT_ROOT/lib/runtime/entrypoint.sh"
-
-    if grep -q 'FIXUID_ENABLED.*true' "$script"; then
-        assert_true true "fixuid conditional enable check exists"
-    else
-        assert_true false "fixuid conditional enable not found"
-    fi
-}
-
-# Test: fixuid checks for binary existence
-test_fixuid_binary_check() {
-    local script="$PROJECT_ROOT/lib/runtime/entrypoint.sh"
-
-    if grep -q "/usr/local/bin/fixuid" "$script"; then
-        assert_true true "fixuid binary path check exists"
-    else
-        assert_true false "fixuid binary check not found"
-    fi
-}
-
 # Test: Privilege drop for main process
 test_privilege_drop() {
     local script="$PROJECT_ROOT/lib/runtime/entrypoint.sh"
@@ -564,9 +531,6 @@ run_test_with_setup test_docker_socket_creates_group "Docker socket creates dock
 run_test_with_setup test_docker_socket_permissions "Docker socket sets correct permissions"
 run_test_with_setup test_docker_socket_user_group "Docker socket adds user to group"
 run_test_with_setup test_docker_socket_checks_access "Docker socket checks existing access"
-run_test_with_setup test_fixuid_section_exists "fixuid section exists"
-run_test_with_setup test_fixuid_conditional_enable "fixuid conditional enable"
-run_test_with_setup test_fixuid_binary_check "fixuid binary check"
 run_test_with_setup test_privilege_drop "Privilege drop for main process"
 run_test_with_setup test_main_process_exec "Main process exec"
 run_test_with_setup test_first_run_detection "First-run detection works correctly"

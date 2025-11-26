@@ -11,7 +11,6 @@ services:
         INCLUDE_OP: "true"
         INCLUDE_DEV_TOOLS: "true"
         INCLUDE_DOCKER: "true"
-        INCLUDE_FIXUID: "true"
         # Python and Node needed for quality check tools (yamllint, prettier, markdownlint)
         INCLUDE_PYTHON: "true"
         INCLUDE_NODE: "true"
@@ -19,17 +18,20 @@ services:
         - type=local,src=/tmp/.buildx-cache
       cache_to:
         - type=local,dest=/tmp/.buildx-cache,mode=max
+    # Start as root so entrypoint can fix Docker socket permissions
+    # The entrypoint drops to the non-root user for the main process
+    user: root
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ..:/workspace/containers
-    group_add:
-      - ${DOCKER_GID:-999}
     environment:
       - TZ=${TZ:-America/Chicago}
       - ENVIRONMENT=${ENVIRONMENT:-development}
       # 1Password integration
       - OP_CONTAINERS_ENV_VAULT=${OP_CONTAINERS_ENV_VAULT:-Development}
-    command: sleep infinity
+    # Run entrypoint first to fix Docker socket permissions, then sleep
+    # VS Code bypasses entrypoint with 'sleep infinity', so we explicitly call it
+    command: ["/bin/bash", "-c", "/usr/local/bin/entrypoint sleep infinity"]
     # Health check configuration (inherits from Dockerfile)
     # Override if needed: healthcheck: {test: ["CMD", "healthcheck", "--verbose"]}
     networks:

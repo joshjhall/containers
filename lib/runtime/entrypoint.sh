@@ -163,27 +163,6 @@ else
 fi
 
 # ============================================================================
-# fixuid - Runtime UID/GID Remapping
-# ============================================================================
-# If FIXUID_ENABLED=true and fixuid is installed, remap the container user's
-# UID/GID to match the runtime user. This solves permission issues with mounted
-# volumes when the host user's UID/GID doesn't match the container user.
-#
-# Usage: docker run -u $(id -u):$(id -g) -e FIXUID_ENABLED=true ...
-if [ "${FIXUID_ENABLED:-false}" = "true" ] && [ -x /usr/local/bin/fixuid ]; then
-    echo "🔧 Running fixuid to remap UID/GID..."
-    # fixuid outputs environment variables to eval (like HOME)
-    # Run it and capture the output
-    if FIXUID_OUTPUT=$(fixuid -q 2>&1); then
-        eval "$FIXUID_OUTPUT"
-        echo "✓ UID/GID remapped successfully"
-    else
-        echo "⚠️  Warning: fixuid failed: $FIXUID_OUTPUT"
-        echo "   Continuing without UID/GID remapping"
-    fi
-fi
-
-# ============================================================================
 # Docker Socket Access Fix
 # ============================================================================
 # Automatically configure Docker socket access if the socket exists
@@ -304,15 +283,18 @@ STARTUP_END_TIME=$(date +%s)
 STARTUP_DURATION=$((STARTUP_END_TIME - STARTUP_BEGIN_TIME))
 
 # Create metrics directory if it doesn't exist
+# Use a subdir under /tmp that we can control permissions for
 METRICS_DIR="/tmp/container-metrics"
-mkdir -p "$METRICS_DIR"
+mkdir -p "$METRICS_DIR" 2>/dev/null || true
+chmod 1777 "$METRICS_DIR" 2>/dev/null || true
 
 # Write startup metrics (Prometheus format)
+# Fail gracefully if we can't write metrics (non-critical)
 {
     echo "# HELP container_startup_seconds Time taken for container initialization in seconds"
     echo "# TYPE container_startup_seconds gauge"
     echo "container_startup_seconds $STARTUP_DURATION"
-} > "$METRICS_DIR/startup-metrics.txt"
+} > "$METRICS_DIR/startup-metrics.txt" 2>/dev/null || true
 
 echo "✓ Container initialized in ${STARTUP_DURATION}s"
 

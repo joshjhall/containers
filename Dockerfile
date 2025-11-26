@@ -93,10 +93,10 @@ ARG WORKING_DIR=/workspace/${PROJECT_NAME}
 # automatically find and use alternative values. However, cache mounts in subsequent
 # RUN commands still use the original ${USER_UID}/${USER_GID} values from build args.
 # This is a Docker limitation - mount options are evaluated at parse time, not runtime.
-# 
+#
 # Cache Strategy: We use /cache/* paths for all feature caches to be username-agnostic.
 # This allows the same cache paths to work regardless of the USERNAME build arg.
-# 
+#
 # Impact: If UID conflicts occur, cache directories may have incorrect ownership,
 # potentially causing permission errors during builds. The actual builds will still
 # work (scripts use the correct UID/GID), but caching may be ineffective.
@@ -106,14 +106,6 @@ ARG WORKING_DIR=/workspace/${PROJECT_NAME}
 # 2. Remove the cache mounts for affected features
 # 3. Clear the Docker build cache and rebuild
 RUN /tmp/build-scripts/base/user.sh ${USERNAME} ${USER_UID} ${USER_GID} ${PROJECT_NAME} ${WORKING_DIR} ${ENABLE_PASSWORDLESS_SUDO}
-
-# Install fixuid for runtime UID/GID remapping (development containers only)
-# This allows the container user to match the host user's UID/GID at runtime
-# Enable at runtime with: FIXUID_ENABLED=true and -u $(id -u):$(id -g)
-ARG INCLUDE_FIXUID=true
-RUN if [ "${INCLUDE_FIXUID}" = "true" ]; then \
-    /tmp/build-scripts/base/fixuid.sh; \
-    fi
 
 # Make all feature scripts executable
 RUN chmod 755 /tmp/build-scripts/features/*.sh /tmp/build-scripts/base/*.sh

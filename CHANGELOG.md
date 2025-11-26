@@ -7,11 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [4.11.0] - 2025-11-25
 
-### Added
-
-- Add fixuid for runtime UID/GID remapping
-- Add fixuid to version check and update scripts
-
 ### Changed
 
 - Use parameter expansion for version overrides
@@ -21,13 +16,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add Docker socket permission fix in entrypoint
 - Support parameter expansion in version check/update scripts
 
+### Removed
+
+- Remove fixuid feature - it was more hassle than it was worth for UID/GID remapping
+
 ### Miscellaneous
 
 - Remove host-side Docker socket setup
 
 ### Testing
 
-- Add tests for Docker socket fix and fixuid
+- Add tests for Docker socket fix
 - Add tests for parameter expansion version extraction
 
 ## [4.10.1] - 2025-11-23
