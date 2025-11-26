@@ -264,6 +264,12 @@ generate_changelog() {
 
     # Generate changelog
     if git-cliff -o CHANGELOG.md --tag "v$new_version"; then
+        # Remove trailing blank lines to pass markdown lint (MD012)
+        # This creates a temp file, removes trailing newlines, then moves it back
+        local tmp_file
+        tmp_file=$(mktemp)
+        # Remove trailing blank lines while preserving final newline
+        sed -e :a -e '/^\n*$/{$d;N;ba' -e '}' CHANGELOG.md > "$tmp_file" && mv "$tmp_file" CHANGELOG.md
         echo -e "${GREEN}✓${NC} Generated CHANGELOG.md"
         return 0
     else
