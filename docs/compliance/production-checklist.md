@@ -26,7 +26,7 @@ item includes the relevant compliance frameworks it addresses.
 - [ ] **Use minimal base image**
 
   ```bash
-  --build-arg BASE_IMAGE=debian:bookworm-slim
+  --build-arg BASE_IMAGE=debian:trixie-slim
   ```
 
   _Frameworks: OWASP D04, CIS Docker Benchmark 4.1_
@@ -390,7 +390,7 @@ For audit purposes, maintain records of:
 docker build \
   -f containers/Dockerfile \
   --build-arg PROJECT_NAME=myapp \
-  --build-arg BASE_IMAGE=debian:bookworm-slim \
+  --build-arg BASE_IMAGE=debian:trixie-slim \
   --build-arg ENABLE_PASSWORDLESS_SUDO=false \
   --build-arg ENABLE_JSON_LOGGING=true \
   --build-arg INCLUDE_PYTHON_DEV=true \

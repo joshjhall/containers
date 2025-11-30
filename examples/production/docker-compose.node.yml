@@ -19,7 +19,7 @@ services:
       dockerfile: Dockerfile
       args:
         # Use lightweight Debian slim as base
-        BASE_IMAGE: "debian:bookworm-slim"
+        BASE_IMAGE: "debian:trixie-slim"
 
         # Project configuration
         PROJECT_NAME: "myproject"

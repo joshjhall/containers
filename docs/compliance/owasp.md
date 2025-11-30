@@ -114,7 +114,7 @@ Status: ✅ Complete
 
 **Implementation**:
 
-- Minimal base image (`debian:bookworm-slim`)
+- Minimal base image (`debian:trixie-slim`)
 - Only essential packages installed
 - Unnecessary services disabled
 - Secure file permissions

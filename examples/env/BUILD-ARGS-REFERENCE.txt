@@ -17,7 +17,7 @@ INCLUDE_NODE=false           # Node.js 20 + npm, yarn, pnpm
 INCLUDE_GO=false             # Go 1.24.5
 INCLUDE_RUST=false           # Rust stable + cargo + mdBook
 INCLUDE_JAVA=false           # OpenJDK 17 + Maven + Gradle
-INCLUDE_RUBY=false           # Ruby 3.3 via rbenv
+INCLUDE_RUBY=false           # Ruby 3.3 runtime
 INCLUDE_R=false              # R 4.0+ with tidyverse
 INCLUDE_MOJO=false           # Mojo (x86_64 only)
 

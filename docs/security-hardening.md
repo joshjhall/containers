@@ -146,10 +146,9 @@ hours
 
 ```bash
 eval "$(zoxide init bash)"
-eval "$(rbenv init - 2>/dev/null || true)"
 eval "$(direnv hook bash)"
 eval "$(just --completions bash)"
-```text
+```
 
 **Recommended Fix**:
 

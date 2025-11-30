@@ -42,7 +42,7 @@ build:
 - `rust.env` - Rust and Cargo configuration
 - `go.env` - Go language configuration
 - `java.env` - Java, Maven, and Gradle configuration
-- `ruby.env` - Ruby and rbenv configuration
+- `ruby.env` - Ruby configuration
 - `r.env` - R language and package configuration
 - `docker.env` - Docker CLI and compose configuration
 - `dev-tools.env` - Development tools (fzf, direnv, lazygit, etc.)

@@ -7,11 +7,11 @@ between development and production container configurations.
 
 ### Core Configuration
 
-| Build Argument             | Development              | Production             | Impact                                  |
-| -------------------------- | ------------------------ | ---------------------- | --------------------------------------- |
-| `BASE_IMAGE`               | `debian:bookworm` (full) | `debian:bookworm-slim` | ~100MB size reduction                   |
-| `ENABLE_PASSWORDLESS_SUDO` | `true`                   | `false`                | Security: prevents privilege escalation |
-| `INCLUDE_DEV_TOOLS`        | `true`                   | `false`                | ~50-100MB size reduction                |
+| Build Argument             | Development            | Production           | Impact                                  |
+| -------------------------- | ---------------------- | -------------------- | --------------------------------------- |
+| `BASE_IMAGE`               | `debian:trixie` (full) | `debian:trixie-slim` | ~100MB size reduction                   |
+| `ENABLE_PASSWORDLESS_SUDO` | `true`                 | `false`              | Security: prevents privilege escalation |
+| `INCLUDE_DEV_TOOLS`        | `true`                 | `false`              | ~50-100MB size reduction                |
 
 ### Python Configuration
 
@@ -72,7 +72,7 @@ services:
   app-dev:
     build:
       args:
-        BASE_IMAGE: 'debian:bookworm'
+        BASE_IMAGE: 'debian:trixie'
         ENABLE_PASSWORDLESS_SUDO: 'true'
         INCLUDE_DEV_TOOLS: 'true'
 
@@ -94,7 +94,7 @@ services:
   app-prod:
     build:
       args:
-        BASE_IMAGE: 'debian:bookworm-slim'
+        BASE_IMAGE: 'debian:trixie-slim'
         ENABLE_PASSWORDLESS_SUDO: 'false'
         INCLUDE_DEV_TOOLS: 'false'
 
@@ -282,7 +282,7 @@ deploy:
 
 When moving from development to production configuration:
 
-- [ ] Change base image to `debian:bookworm-slim`
+- [ ] Change base image to `debian:trixie-slim`
 - [ ] Set `ENABLE_PASSWORDLESS_SUDO=false`
 - [ ] Set `INCLUDE_DEV_TOOLS=false`
 - [ ] For each language: Set `INCLUDE_<LANG>_DEV=false`
