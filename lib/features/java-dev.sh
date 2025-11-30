@@ -149,7 +149,7 @@ cd /
 log_message "Installing JBang..."
 
 # Download and extract JBang directly (more reliable than installer script)
-JBANG_VERSION="${JBANG_VERSION:-0.134.2}"
+JBANG_VERSION="${JBANG_VERSION:-0.134.3}"
 JBANG_TAR="jbang-${JBANG_VERSION}.tar"
 JBANG_URL="https://github.com/jbangdev/jbang/releases/download/v${JBANG_VERSION}/${JBANG_TAR}"
 
