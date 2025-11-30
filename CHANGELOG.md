@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.12.2] - 2025-11-30
+
+### Documentation
+
+- Update documentation for recent Docker socket and base image changes
+- Additional updates for Debian trixie default and rbenv removal
+- Update examples and tests to use Debian 13 (trixie) as default
+
+### Fixed
+
+- Restore full changelog and fix auto-patch shallow clone
+- Prevent double-counting in test framework pass/fail/skip
+- Migrate template tests to main framework and fix flaky CI
+
 ## [4.12.1] - 2025-11-30
 
 ### Fixed
@@ -825,6 +839,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add helpful error message when release is cancelled
 - Add VS Code workspace settings and improve gitignore
 
+[4.12.2]: https://github.com/joshjhall/containers/compare/v4.12.1...v4.12.2
 [4.12.1]: https://github.com/joshjhall/containers/compare/v4.12.0...v4.12.1
 [4.12.0]: https://github.com/joshjhall/containers/compare/v4.11.0...v4.12.0
 [4.11.0]: https://github.com/joshjhall/containers/compare/v4.10.1...v4.11.0
