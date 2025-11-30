@@ -2,11 +2,11 @@
   "source": {
     "repository": "https://github.com/nodejs/release-keys",
     "commit": "901fc09b83c686693be51b3c9a13578929cbc1ab",
-    "commit_date": "2025-07-18T11:35:24-05:00",
+    "commit_date": "2025-07-18T16:35:24+00:00",
     "commit_message": "Merge pull request #47 from nodejs/update-ulises"
   },
   "fetched": {
-    "date": "2025-11-17",
+    "date": "2025-11-30",
     "by": "automated"
   },
   "keyring": {
@@ -34,7 +34,7 @@
     "supported_versions": "All Node.js versions (current, LTS, and historical releases)"
   },
   "update_instructions": {
-    "manual": "Run: bin/update-gpg-keys.sh",
+    "manual": "Run: bin/update-gpg-keys.sh nodejs",
     "automated": "Triggered automatically when check-versions.sh detects new Node.js releases",
     "frequency": "Check for updates when new Node.js major/minor versions are released"
   }
