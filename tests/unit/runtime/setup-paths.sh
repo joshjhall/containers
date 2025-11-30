@@ -82,12 +82,13 @@ test_user_bin_directories() {
 # Test: Language-specific paths
 test_language_paths() {
     local paths_file="$TEST_TEMP_DIR/paths.txt"
-    
+
     # Create paths configuration
+    # Note: Ruby is installed directly to /usr/local (no rbenv since v4.0)
     command cat > "$paths_file" << 'EOF'
 /usr/local/go/bin
 /home/testuser/.cargo/bin
-/home/testuser/.rbenv/bin
+/usr/local/bin
 /cache/npm/bin
 /home/testuser/.local/bin
 EOF

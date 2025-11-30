@@ -46,21 +46,7 @@ else
 fi
 
 # Python paths are handled by the Python feature script
-
-# Ruby (rbenv)
-if [ -d /cache/rbenv ]; then
-    export RBENV_ROOT="/cache/rbenv"
-elif [ -d "$HOME/.rbenv" ]; then
-    export RBENV_ROOT="$HOME/.rbenv"
-fi
-if [ -n "${RBENV_ROOT:-}" ]; then
-    if command -v safe_add_to_path >/dev/null 2>&1; then
-        safe_add_to_path "$RBENV_ROOT/bin" 2>/dev/null || export PATH="$RBENV_ROOT/bin:$PATH"
-    else
-        export PATH="$RBENV_ROOT/bin:$PATH"
-    fi
-    safe_eval rbenv init -
-fi
+# Ruby is installed directly to /usr/local (no rbenv)
 
 # Go
 if [ -d /usr/local/go ]; then

@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
 # File Assertions - File system and permission checks
-# Version: 2.0.0
+# Version: 2.1.0
 #
 # Provides assertions for file system operations including existence checks,
-# directory validation, and permission verification.
+# directory validation, permission verification, and content checks.
 #
 # Functions:
 # - assert_file_exists/assert_file_not_exists: Check file existence
 # - assert_dir_exists/assert_dir_not_exists: Check directory existence
 # - assert_readable/assert_writable/assert_executable: Check file permissions
+# - assert_file_contains/assert_file_not_contains: Check file contents
 #
 # Namespace: tff_ (Test Framework File)
 # All local variables use the tff_ prefix.
@@ -188,7 +189,86 @@ assert_executable() {
     fi
 }
 
+# Assert that a file contains a pattern (grep pattern)
+#
+# Usage:
+#   assert_file_contains "$config_file" "debug=true" "Debug mode should be enabled"
+#   assert_file_contains "/etc/hosts" "localhost"
+#   assert_file_contains "$script" "^main()" "Script should have main function"
+#
+# Args:
+#   $1: File path to check
+#   $2: Pattern to search for (grep regex)
+#   $3: Optional message
+#
+# Returns:
+#   0 if pattern found, 1 if not
+assert_file_contains() {
+    local tff_file="$1"
+    local tff_pattern="$2"
+    local tff_message="${3:-File should contain pattern}"
+
+    if [ ! -f "$tff_file" ]; then
+        tf_fail_assertion \
+            "File:     '$tff_file'" \
+            "Pattern:  '$tff_pattern'" \
+            "Error:    File does not exist" \
+            "Message:  $tff_message"
+        return 1
+    fi
+
+    if grep -q -- "$tff_pattern" "$tff_file" 2>/dev/null; then
+        return 0
+    else
+        tf_fail_assertion \
+            "File:     '$tff_file'" \
+            "Pattern:  '$tff_pattern'" \
+            "Message:  $tff_message"
+    fi
+}
+
+# Assert that a file does not contain a pattern
+#
+# Usage:
+#   assert_file_not_contains "$config_file" "password=" "Config should not have plaintext password"
+#   assert_file_not_contains "$script" "TODO" "No TODOs should remain"
+#
+# Args:
+#   $1: File path to check
+#   $2: Pattern to search for (grep regex)
+#   $3: Optional message
+#
+# Returns:
+#   0 if pattern not found, 1 if found
+assert_file_not_contains() {
+    local tff_file="$1"
+    local tff_pattern="$2"
+    local tff_message="${3:-File should not contain pattern}"
+
+    if [ ! -f "$tff_file" ]; then
+        tf_fail_assertion \
+            "File:     '$tff_file'" \
+            "Pattern:  '$tff_pattern'" \
+            "Error:    File does not exist" \
+            "Message:  $tff_message"
+        return 1
+    fi
+
+    if ! grep -q -- "$tff_pattern" "$tff_file" 2>/dev/null; then
+        return 0
+    else
+        local tff_match
+        tff_match=$(grep -n -- "$tff_pattern" "$tff_file" 2>/dev/null | head -1)
+        tf_fail_assertion \
+            "File:     '$tff_file'" \
+            "Pattern:  '$tff_pattern'" \
+            "Found:    $tff_match" \
+            "Message:  $tff_message"
+    fi
+}
+
 # Export all functions
 export -f assert_file_exists assert_file_not_exists
 export -f assert_dir_exists assert_dir_not_exists
 export -f assert_readable assert_writable assert_executable
+export -f assert_file_contains assert_file_not_contains

@@ -9,200 +9,155 @@
 
 set -euo pipefail
 
-# Colors
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-NC='\033[0m'
-
+# Source test framework
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
+source "$SCRIPT_DIR/../framework.sh"
 
-TESTS_PASSED=0
-TESTS_FAILED=0
+# Initialize test framework
+init_test_framework
 
-# Test helper
-assert_file_exists() {
-    local file="$1"
-    local desc="$2"
+# Test suite
+test_suite "Java Template System Tests"
 
-    if [ -f "$file" ]; then
-        echo -e "${GREEN}✓${NC} $desc"
-        TESTS_PASSED=$((TESTS_PASSED + 1))
-        return 0
-    else
-        echo -e "${RED}✗${NC} $desc - file not found: $file"
-        TESTS_FAILED=$((TESTS_FAILED + 1))
-        return 1
-    fi
+# Setup
+TEMPLATE_DIR="$PROJECT_ROOT/lib/features/templates/java"
+JAVA_DEV_SH="$PROJECT_ROOT/lib/features/java-dev.sh"
+
+# Test: Template files exist
+test_template_files_exist() {
+    assert_file_exists "$TEMPLATE_DIR/benchmark/Benchmark.java.tmpl"
+    assert_file_exists "$TEMPLATE_DIR/config/checkstyle.xml.tmpl"
+    assert_file_exists "$TEMPLATE_DIR/config/pmd-ruleset.xml.tmpl"
+    assert_file_exists "$TEMPLATE_DIR/config/spotbugs-exclude.xml.tmpl"
 }
 
-assert_file_contains() {
-    local file="$1"
-    local pattern="$2"
-    local desc="$3"
-
-    if grep -q "$pattern" "$file"; then
-        echo -e "${GREEN}✓${NC} $desc"
-        TESTS_PASSED=$((TESTS_PASSED + 1))
-        return 0
-    else
-        echo -e "${RED}✗${NC} $desc - pattern not found: $pattern"
-        TESTS_FAILED=$((TESTS_FAILED + 1))
-        return 1
-    fi
+# Test: Benchmark template content
+test_benchmark_template_content() {
+    assert_file_contains "$TEMPLATE_DIR/benchmark/Benchmark.java.tmpl" "__CLASS_NAME__" "Benchmark has class name placeholder"
+    assert_file_contains "$TEMPLATE_DIR/benchmark/Benchmark.java.tmpl" "org.openjdk.jmh.annotations" "Benchmark imports JMH"
+    assert_file_contains "$TEMPLATE_DIR/benchmark/Benchmark.java.tmpl" "@Benchmark" "Benchmark has annotation"
 }
 
-echo -e "${YELLOW}Testing Java Template System${NC}"
-echo "========================================"
-echo ""
-
-# Test 1: Template files exist
-echo "Test: Template files exist"
-assert_file_exists "$PROJECT_ROOT/lib/features/templates/java/benchmark/Benchmark.java.tmpl" "Benchmark template exists"
-assert_file_exists "$PROJECT_ROOT/lib/features/templates/java/config/checkstyle.xml.tmpl" "Checkstyle template exists"
-assert_file_exists "$PROJECT_ROOT/lib/features/templates/java/config/pmd-ruleset.xml.tmpl" "PMD template exists"
-assert_file_exists "$PROJECT_ROOT/lib/features/templates/java/config/spotbugs-exclude.xml.tmpl" "SpotBugs template exists"
-echo ""
-
-# Test 2: Template content validation
-echo "Test: Template content is valid"
-assert_file_contains "$PROJECT_ROOT/lib/features/templates/java/benchmark/Benchmark.java.tmpl" "__CLASS_NAME__" "Benchmark has class name placeholder"
-assert_file_contains "$PROJECT_ROOT/lib/features/templates/java/benchmark/Benchmark.java.tmpl" "org.openjdk.jmh.annotations" "Benchmark imports JMH"
-assert_file_contains "$PROJECT_ROOT/lib/features/templates/java/benchmark/Benchmark.java.tmpl" "@Benchmark" "Benchmark has annotation"
-assert_file_contains "$PROJECT_ROOT/lib/features/templates/java/config/checkstyle.xml.tmpl" "TreeWalker" "Checkstyle has TreeWalker"
-assert_file_contains "$PROJECT_ROOT/lib/features/templates/java/config/pmd-ruleset.xml.tmpl" "ruleset" "PMD has ruleset"
-assert_file_contains "$PROJECT_ROOT/lib/features/templates/java/config/spotbugs-exclude.xml.tmpl" "FindBugsFilter" "SpotBugs has filter"
-echo ""
-
-# Test 3: load_java_template function exists
-echo "Test: load_java_template function exists"
-assert_file_contains "$PROJECT_ROOT/lib/features/java-dev.sh" "^load_java_template()" "load_java_template function is defined"
-assert_file_contains "$PROJECT_ROOT/lib/features/java-dev.sh" "templates/java/" "Function references Java templates directory"
-echo ""
-
-# Test 4: java-benchmark uses template loader
-echo "Test: java-benchmark uses template loader"
-assert_file_contains "$PROJECT_ROOT/lib/features/java-dev.sh" "load_java_template.*benchmark/Benchmark.java.tmpl" "java-benchmark uses template loader"
-echo ""
-
-# Test 5: Config templates use loader
-echo "Test: Config templates use loader"
-assert_file_contains "$PROJECT_ROOT/lib/features/java-dev.sh" "load_java_config_template" "load_java_config_template function exists"
-assert_file_contains "$PROJECT_ROOT/lib/features/java-dev.sh" "load_java_config_template.*checkstyle.xml.tmpl" "Uses checkstyle template"
-assert_file_contains "$PROJECT_ROOT/lib/features/java-dev.sh" "load_java_config_template.*pmd-ruleset.xml.tmpl" "Uses PMD template"
-assert_file_contains "$PROJECT_ROOT/lib/features/java-dev.sh" "load_java_config_template.*spotbugs-exclude.xml.tmpl" "Uses SpotBugs template"
-echo ""
-
-# Test 6: Simulated template loading
-echo "Test: Template loading simulation"
-TEMP_DIR=$(mktemp -d)
-trap 'command rm -rf "$TEMP_DIR"' EXIT
-
-# Simulate the load_java_template function
-load_java_template_test() {
-    local template_path="$1"
-    local class_name="${2:-}"
-    local template_file="$PROJECT_ROOT/lib/features/templates/java/${template_path}"
-
-    if [ ! -f "$template_file" ]; then
-        echo "Error: Template not found: $template_file" >&2
-        return 1
-    fi
-
-    if [ -n "$class_name" ]; then
-        command sed "s/__CLASS_NAME__/${class_name}/g" "$template_file"
-    else
-        command cat "$template_file"
-    fi
+# Test: Checkstyle template content
+test_checkstyle_template_content() {
+    assert_file_contains "$TEMPLATE_DIR/config/checkstyle.xml.tmpl" "TreeWalker" "Checkstyle has TreeWalker"
 }
 
-# Test loading benchmark with substitution
-if load_java_template_test "benchmark/Benchmark.java.tmpl" "MyBenchmark" > "$TEMP_DIR/MyBenchmark.java"; then
-    if grep -q "public class MyBenchmark" "$TEMP_DIR/MyBenchmark.java"; then
-        echo -e "${GREEN}✓${NC} Benchmark template substitution works correctly"
-        TESTS_PASSED=$((TESTS_PASSED + 1))
+# Test: PMD template content
+test_pmd_template_content() {
+    assert_file_contains "$TEMPLATE_DIR/config/pmd-ruleset.xml.tmpl" "ruleset" "PMD has ruleset"
+}
+
+# Test: SpotBugs template content
+test_spotbugs_template_content() {
+    assert_file_contains "$TEMPLATE_DIR/config/spotbugs-exclude.xml.tmpl" "FindBugsFilter" "SpotBugs has filter"
+}
+
+# Test: load_java_template function exists
+test_load_function_exists() {
+    assert_file_exists "$JAVA_DEV_SH"
+    assert_file_contains "$JAVA_DEV_SH" "^load_java_template()" "load_java_template function is defined"
+    assert_file_contains "$JAVA_DEV_SH" "templates/java/" "Function references Java templates directory"
+}
+
+# Test: java-benchmark uses template loader
+test_benchmark_uses_templates() {
+    assert_file_contains "$JAVA_DEV_SH" "load_java_template.*benchmark/Benchmark.java.tmpl" "java-benchmark uses template loader"
+}
+
+# Test: Config templates use loader
+test_config_templates_use_loader() {
+    assert_file_contains "$JAVA_DEV_SH" "load_java_config_template" "load_java_config_template function exists"
+    assert_file_contains "$JAVA_DEV_SH" "load_java_config_template.*checkstyle.xml.tmpl" "Uses checkstyle template"
+    assert_file_contains "$JAVA_DEV_SH" "load_java_config_template.*pmd-ruleset.xml.tmpl" "Uses PMD template"
+    assert_file_contains "$JAVA_DEV_SH" "load_java_config_template.*spotbugs-exclude.xml.tmpl" "Uses SpotBugs template"
+}
+
+# Test: Benchmark template substitution
+test_benchmark_substitution() {
+    local tff_temp_dir
+    tff_temp_dir=$(mktemp -d)
+
+    if sed "s/__CLASS_NAME__/MyBenchmark/g" "$TEMPLATE_DIR/benchmark/Benchmark.java.tmpl" > "$tff_temp_dir/MyBenchmark.java"; then
+        if grep -q "public class MyBenchmark" "$tff_temp_dir/MyBenchmark.java"; then
+            assert_true true "Benchmark template substitution works correctly"
+        else
+            assert_true false "Class name not substituted in benchmark"
+        fi
+
+        # Verify placeholder was removed
+        if grep -q "__CLASS_NAME__" "$tff_temp_dir/MyBenchmark.java"; then
+            assert_true false "Placeholder still present after substitution"
+        else
+            assert_true true "All placeholders substituted in benchmark"
+        fi
     else
-        echo -e "${RED}✗${NC} Class name not substituted in benchmark"
-        TESTS_FAILED=$((TESTS_FAILED + 1))
+        assert_true false "Benchmark template loading failed"
     fi
-else
-    echo -e "${RED}✗${NC} Benchmark template loading failed"
-    TESTS_FAILED=$((TESTS_FAILED + 1))
-fi
 
-# Verify placeholder was removed
-if grep -q "__CLASS_NAME__" "$TEMP_DIR/MyBenchmark.java"; then
-    echo -e "${RED}✗${NC} Placeholder still present after substitution"
-    TESTS_FAILED=$((TESTS_FAILED + 1))
-else
-    echo -e "${GREEN}✓${NC} All placeholders substituted in benchmark"
-    TESTS_PASSED=$((TESTS_PASSED + 1))
-fi
+    command rm -rf "$tff_temp_dir"
+}
 
-# Test checkstyle config loading
-if load_java_template_test "config/checkstyle.xml.tmpl" > "$TEMP_DIR/checkstyle.xml"; then
-    if grep -q "TreeWalker" "$TEMP_DIR/checkstyle.xml" && grep -q "LineLength" "$TEMP_DIR/checkstyle.xml"; then
-        echo -e "${GREEN}✓${NC} Checkstyle config template has valid structure"
-        TESTS_PASSED=$((TESTS_PASSED + 1))
+# Test: Config templates have valid structure
+test_config_templates_structure() {
+    local tff_temp_dir
+    tff_temp_dir=$(mktemp -d)
+
+    # Test checkstyle config
+    if cp "$TEMPLATE_DIR/config/checkstyle.xml.tmpl" "$tff_temp_dir/checkstyle.xml"; then
+        if grep -q "TreeWalker" "$tff_temp_dir/checkstyle.xml" && grep -q "LineLength" "$tff_temp_dir/checkstyle.xml"; then
+            assert_true true "Checkstyle config template has valid structure"
+        else
+            assert_true false "Checkstyle config template missing required elements"
+        fi
     else
-        echo -e "${RED}✗${NC} Checkstyle config template missing required elements"
-        TESTS_FAILED=$((TESTS_FAILED + 1))
+        assert_true false "Checkstyle config template loading failed"
     fi
-else
-    echo -e "${RED}✗${NC} Checkstyle config template loading failed"
-    TESTS_FAILED=$((TESTS_FAILED + 1))
-fi
 
-# Test PMD ruleset loading
-if load_java_template_test "config/pmd-ruleset.xml.tmpl" > "$TEMP_DIR/pmd-ruleset.xml"; then
-    if grep -q "category/java/bestpractices.xml" "$TEMP_DIR/pmd-ruleset.xml"; then
-        echo -e "${GREEN}✓${NC} PMD ruleset template has valid structure"
-        TESTS_PASSED=$((TESTS_PASSED + 1))
+    # Test PMD ruleset
+    if cp "$TEMPLATE_DIR/config/pmd-ruleset.xml.tmpl" "$tff_temp_dir/pmd-ruleset.xml"; then
+        if grep -q "category/java/bestpractices.xml" "$tff_temp_dir/pmd-ruleset.xml"; then
+            assert_true true "PMD ruleset template has valid structure"
+        else
+            assert_true false "PMD ruleset template missing required elements"
+        fi
     else
-        echo -e "${RED}✗${NC} PMD ruleset template missing required elements"
-        TESTS_FAILED=$((TESTS_FAILED + 1))
+        assert_true false "PMD ruleset template loading failed"
     fi
-else
-    echo -e "${RED}✗${NC} PMD ruleset template loading failed"
-    TESTS_FAILED=$((TESTS_FAILED + 1))
-fi
 
-# Test SpotBugs filter loading
-if load_java_template_test "config/spotbugs-exclude.xml.tmpl" > "$TEMP_DIR/spotbugs-exclude.xml"; then
-    if grep -q "FindBugsFilter" "$TEMP_DIR/spotbugs-exclude.xml"; then
-        echo -e "${GREEN}✓${NC} SpotBugs filter template has valid structure"
-        TESTS_PASSED=$((TESTS_PASSED + 1))
+    # Test SpotBugs filter
+    if cp "$TEMPLATE_DIR/config/spotbugs-exclude.xml.tmpl" "$tff_temp_dir/spotbugs-exclude.xml"; then
+        if grep -q "FindBugsFilter" "$tff_temp_dir/spotbugs-exclude.xml"; then
+            assert_true true "SpotBugs filter template has valid structure"
+        else
+            assert_true false "SpotBugs filter template missing required elements"
+        fi
     else
-        echo -e "${RED}✗${NC} SpotBugs filter template missing required elements"
-        TESTS_FAILED=$((TESTS_FAILED + 1))
+        assert_true false "SpotBugs filter template loading failed"
     fi
-else
-    echo -e "${RED}✗${NC} SpotBugs filter template loading failed"
-    TESTS_FAILED=$((TESTS_FAILED + 1))
-fi
 
-# Verify benchmark has JMH annotations
-if grep -q "@BenchmarkMode" "$TEMP_DIR/MyBenchmark.java" && \
-   grep -q "@Benchmark" "$TEMP_DIR/MyBenchmark.java" && \
-   grep -q "Runner" "$TEMP_DIR/MyBenchmark.java"; then
-    echo -e "${GREEN}✓${NC} Benchmark includes required JMH components"
-    TESTS_PASSED=$((TESTS_PASSED + 1))
-else
-    echo -e "${RED}✗${NC} Benchmark missing JMH components"
-    TESTS_FAILED=$((TESTS_FAILED + 1))
-fi
+    command rm -rf "$tff_temp_dir"
+}
 
-echo ""
-echo "========================================"
-echo -e "Tests passed: ${GREEN}$TESTS_PASSED${NC}"
-echo -e "Tests failed: ${RED}$TESTS_FAILED${NC}"
-echo "========================================"
+# Test: Benchmark has JMH components
+test_benchmark_jmh_components() {
+    assert_file_contains "$TEMPLATE_DIR/benchmark/Benchmark.java.tmpl" "@BenchmarkMode" "Benchmark has BenchmarkMode annotation"
+    assert_file_contains "$TEMPLATE_DIR/benchmark/Benchmark.java.tmpl" "@Benchmark" "Benchmark has Benchmark annotation"
+    assert_file_contains "$TEMPLATE_DIR/benchmark/Benchmark.java.tmpl" "Runner" "Benchmark has Runner"
+}
 
-if [ $TESTS_FAILED -eq 0 ]; then
-    echo -e "${GREEN}All tests passed!${NC}"
-    exit 0
-else
-    echo -e "${RED}Some tests failed!${NC}"
-    exit 1
-fi
+# Run all tests
+run_test test_template_files_exist "Template files exist"
+run_test test_benchmark_template_content "Benchmark template has correct content"
+run_test test_checkstyle_template_content "Checkstyle template has correct content"
+run_test test_pmd_template_content "PMD template has correct content"
+run_test test_spotbugs_template_content "SpotBugs template has correct content"
+run_test test_load_function_exists "load_java_template function exists"
+run_test test_benchmark_uses_templates "java-benchmark uses template loader"
+run_test test_config_templates_use_loader "Config templates use loader"
+run_test test_benchmark_substitution "Benchmark template substitution works"
+run_test test_config_templates_structure "Config templates have valid structure"
+run_test test_benchmark_jmh_components "Benchmark has JMH components"
+
+# Generate test report
+generate_report

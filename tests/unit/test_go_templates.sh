@@ -8,161 +8,137 @@
 
 set -euo pipefail
 
-# Colors
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-NC='\033[0m'
-
+# Source test framework
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
+source "$SCRIPT_DIR/../framework.sh"
 
-TESTS_PASSED=0
-TESTS_FAILED=0
+# Initialize test framework
+init_test_framework
 
-# Test helper
-assert_file_exists() {
-    local file="$1"
-    local desc="$2"
+# Test suite
+test_suite "Go Template System Tests"
 
-    if [ -f "$file" ]; then
-        echo -e "${GREEN}✓${NC} $desc"
-        TESTS_PASSED=$((TESTS_PASSED + 1))
-        return 0
-    else
-        echo -e "${RED}✗${NC} $desc - file not found: $file"
-        TESTS_FAILED=$((TESTS_FAILED + 1))
-        return 1
-    fi
+# Setup
+TEMPLATE_DIR="$PROJECT_ROOT/lib/features/templates/go"
+
+# Test: Template files exist
+test_template_files_exist() {
+    assert_file_exists "$TEMPLATE_DIR/common/gitignore.tmpl"
+    assert_file_exists "$TEMPLATE_DIR/common/Makefile.tmpl"
+    assert_file_exists "$TEMPLATE_DIR/cli/main.go.tmpl"
+    assert_file_exists "$TEMPLATE_DIR/api/main.go.tmpl"
+    assert_file_exists "$TEMPLATE_DIR/lib/lib.go.tmpl"
+    assert_file_exists "$TEMPLATE_DIR/lib/lib_test.go.tmpl"
 }
 
-assert_file_contains() {
-    local file="$1"
-    local pattern="$2"
-    local desc="$3"
-
-    if grep -q "$pattern" "$file"; then
-        echo -e "${GREEN}✓${NC} $desc"
-        TESTS_PASSED=$((TESTS_PASSED + 1))
-        return 0
-    else
-        echo -e "${RED}✗${NC} $desc - pattern not found: $pattern"
-        TESTS_FAILED=$((TESTS_FAILED + 1))
-        return 1
-    fi
+# Test: gitignore template content
+test_gitignore_template_content() {
+    assert_file_contains "$TEMPLATE_DIR/common/gitignore.tmpl" "*.exe" "gitignore contains binary patterns"
 }
 
-echo -e "${YELLOW}Testing Go Template System${NC}"
-echo "========================================"
-echo ""
-
-# Test 1: All template files exist
-echo "Test: Template files exist"
-assert_file_exists "$PROJECT_ROOT/lib/features/templates/go/common/gitignore.tmpl" "gitignore template exists"
-assert_file_exists "$PROJECT_ROOT/lib/features/templates/go/common/Makefile.tmpl" "Makefile template exists"
-assert_file_exists "$PROJECT_ROOT/lib/features/templates/go/cli/main.go.tmpl" "CLI template exists"
-assert_file_exists "$PROJECT_ROOT/lib/features/templates/go/api/main.go.tmpl" "API template exists"
-assert_file_exists "$PROJECT_ROOT/lib/features/templates/go/lib/lib.go.tmpl" "Library template exists"
-assert_file_exists "$PROJECT_ROOT/lib/features/templates/go/lib/lib_test.go.tmpl" "Library test template exists"
-echo ""
-
-# Test 2: Template content validation
-echo "Test: Template content is valid"
-assert_file_contains "$PROJECT_ROOT/lib/features/templates/go/common/gitignore.tmpl" "*.exe" "gitignore contains binary patterns"
-assert_file_contains "$PROJECT_ROOT/lib/features/templates/go/common/Makefile.tmpl" "build:" "Makefile has build target"
-assert_file_contains "$PROJECT_ROOT/lib/features/templates/go/cli/main.go.tmpl" "package main" "CLI template is main package"
-assert_file_contains "$PROJECT_ROOT/lib/features/templates/go/api/main.go.tmpl" "http.HandleFunc" "API template has HTTP handling"
-assert_file_contains "$PROJECT_ROOT/lib/features/templates/go/lib/lib.go.tmpl" "__PROJECT__" "Library template has placeholder"
-assert_file_contains "$PROJECT_ROOT/lib/features/templates/go/lib/lib_test.go.tmpl" "__PROJECT__" "Test template has placeholder"
-echo ""
-
-# Test 3: load_go_template function exists
-echo "Test: load_go_template function exists in golang.sh"
-assert_file_contains "$PROJECT_ROOT/lib/features/golang.sh" "^load_go_template()" "load_go_template function is defined"
-assert_file_contains "$PROJECT_ROOT/lib/features/golang.sh" "sed \"s/__PROJECT__" "Function has placeholder substitution"
-echo ""
-
-# Test 4: go-init function uses templates
-echo "Test: go-init function uses template loader"
-assert_file_contains "$PROJECT_ROOT/lib/features/golang.sh" "load_go_template.*gitignore.tmpl" "go-init uses gitignore template"
-assert_file_contains "$PROJECT_ROOT/lib/features/golang.sh" "load_go_template.*Makefile.tmpl" "go-init uses Makefile template"
-assert_file_contains "$PROJECT_ROOT/lib/features/golang.sh" "load_go_template.*cli/main.go.tmpl" "go-init uses CLI template"
-assert_file_contains "$PROJECT_ROOT/lib/features/golang.sh" "load_go_template.*api/main.go.tmpl" "go-init uses API template"
-assert_file_contains "$PROJECT_ROOT/lib/features/golang.sh" "load_go_template.*lib/lib.go.tmpl" "go-init uses lib template"
-assert_file_contains "$PROJECT_ROOT/lib/features/golang.sh" "load_go_template.*lib/lib_test.go.tmpl" "go-init uses test template"
-echo ""
-
-# Test 5: Simulated template loading
-echo "Test: Template loading simulation"
-TEMP_DIR=$(mktemp -d)
-trap 'command rm -rf "$TEMP_DIR"' EXIT
-
-# Simulate the load_go_template function
-load_go_template_test() {
-    local template_path="$1"
-    local project_name="${2:-}"
-    local template_file="$PROJECT_ROOT/lib/features/templates/go/${template_path}"
-
-    if [ ! -f "$template_file" ]; then
-        echo "Error: Template not found: $template_file" >&2
-        return 1
-    fi
-
-    if [ -n "$project_name" ]; then
-        command sed "s/__PROJECT__/${project_name}/g" "$template_file"
-    else
-        cat "$template_file"
-    fi
+# Test: Makefile template content
+test_makefile_template_content() {
+    assert_file_contains "$TEMPLATE_DIR/common/Makefile.tmpl" "build:" "Makefile has build target"
 }
 
-# Test loading without substitution
-if load_go_template_test "common/gitignore.tmpl" > "$TEMP_DIR/gitignore"; then
-    if grep -q '\*.exe' "$TEMP_DIR/gitignore"; then
-        echo -e "${GREEN}✓${NC} Template loads without substitution"
-        TESTS_PASSED=$((TESTS_PASSED + 1))
+# Test: CLI template content
+test_cli_template_content() {
+    assert_file_contains "$TEMPLATE_DIR/cli/main.go.tmpl" "package main" "CLI template is main package"
+}
+
+# Test: API template content
+test_api_template_content() {
+    assert_file_contains "$TEMPLATE_DIR/api/main.go.tmpl" "http.HandleFunc" "API template has HTTP handling"
+}
+
+# Test: Library template has placeholder
+test_lib_template_placeholder() {
+    assert_file_contains "$TEMPLATE_DIR/lib/lib.go.tmpl" "__PROJECT__" "Library template has placeholder"
+}
+
+# Test: Test template has placeholder
+test_test_template_placeholder() {
+    assert_file_contains "$TEMPLATE_DIR/lib/lib_test.go.tmpl" "__PROJECT__" "Test template has placeholder"
+}
+
+# Test: load_go_template function exists in golang.sh
+test_load_function_exists() {
+    local golang_sh="$PROJECT_ROOT/lib/features/golang.sh"
+    assert_file_exists "$golang_sh"
+    assert_file_contains "$golang_sh" "^load_go_template()" "load_go_template function is defined"
+    assert_file_contains "$golang_sh" 'sed "s/__PROJECT__' "Function has placeholder substitution"
+}
+
+# Test: go-init uses templates
+test_go_init_uses_templates() {
+    local golang_sh="$PROJECT_ROOT/lib/features/golang.sh"
+    assert_file_contains "$golang_sh" "load_go_template.*gitignore.tmpl" "go-init uses gitignore template"
+    assert_file_contains "$golang_sh" "load_go_template.*Makefile.tmpl" "go-init uses Makefile template"
+    assert_file_contains "$golang_sh" "load_go_template.*cli/main.go.tmpl" "go-init uses CLI template"
+    assert_file_contains "$golang_sh" "load_go_template.*api/main.go.tmpl" "go-init uses API template"
+    assert_file_contains "$golang_sh" "load_go_template.*lib/lib.go.tmpl" "go-init uses lib template"
+    assert_file_contains "$golang_sh" "load_go_template.*lib/lib_test.go.tmpl" "go-init uses test template"
+}
+
+# Test: Template loading without substitution
+test_template_loading_no_substitution() {
+    local tff_temp_dir
+    tff_temp_dir=$(mktemp -d)
+
+    # Simulate template loading
+    if cp "$TEMPLATE_DIR/common/gitignore.tmpl" "$tff_temp_dir/gitignore"; then
+        if grep -q '\*.exe' "$tff_temp_dir/gitignore"; then
+            assert_true true "Template loads without substitution"
+        else
+            assert_true false "Template content invalid"
+        fi
     else
-        echo -e "${RED}✗${NC} Template content invalid"
-        TESTS_FAILED=$((TESTS_FAILED + 1))
+        assert_true false "Template loading failed"
     fi
-else
-    echo -e "${RED}✗${NC} Template loading failed"
-    TESTS_FAILED=$((TESTS_FAILED + 1))
-fi
 
-# Test loading with substitution
-if load_go_template_test "lib/lib.go.tmpl" "testproject" > "$TEMP_DIR/lib.go"; then
-    if grep -q "package testproject" "$TEMP_DIR/lib.go"; then
-        echo -e "${GREEN}✓${NC} Template substitution works correctly"
-        TESTS_PASSED=$((TESTS_PASSED + 1))
+    # Cleanup
+    command rm -rf "$tff_temp_dir"
+}
+
+# Test: Template loading with substitution
+test_template_loading_with_substitution() {
+    local tff_temp_dir
+    tff_temp_dir=$(mktemp -d)
+
+    # Simulate template loading with placeholder substitution
+    if sed "s/__PROJECT__/testproject/g" "$TEMPLATE_DIR/lib/lib.go.tmpl" > "$tff_temp_dir/lib.go"; then
+        if grep -q "package testproject" "$tff_temp_dir/lib.go"; then
+            assert_true true "Template substitution works correctly"
+        else
+            assert_true false "Placeholder not substituted"
+        fi
+
+        # Verify placeholder was removed
+        if grep -q "__PROJECT__" "$tff_temp_dir/lib.go"; then
+            assert_true false "Placeholder still present after substitution"
+        else
+            assert_true true "All placeholders substituted"
+        fi
     else
-        echo -e "${RED}✗${NC} Placeholder not substituted"
-        TESTS_FAILED=$((TESTS_FAILED + 1))
-        cat "$TEMP_DIR/lib.go"
+        assert_true false "Template loading with substitution failed"
     fi
-else
-    echo -e "${RED}✗${NC} Template loading with substitution failed"
-    TESTS_FAILED=$((TESTS_FAILED + 1))
-fi
 
-# Verify placeholder was removed
-if grep -q "__PROJECT__" "$TEMP_DIR/lib.go"; then
-    echo -e "${RED}✗${NC} Placeholder still present after substitution"
-    TESTS_FAILED=$((TESTS_FAILED + 1))
-else
-    echo -e "${GREEN}✓${NC} All placeholders substituted"
-    TESTS_PASSED=$((TESTS_PASSED + 1))
-fi
+    # Cleanup
+    command rm -rf "$tff_temp_dir"
+}
 
-echo ""
-echo "========================================"
-echo -e "Tests passed: ${GREEN}$TESTS_PASSED${NC}"
-echo -e "Tests failed: ${RED}$TESTS_FAILED${NC}"
-echo "========================================"
+# Run all tests
+run_test test_template_files_exist "Template files exist"
+run_test test_gitignore_template_content "gitignore template has correct content"
+run_test test_makefile_template_content "Makefile template has correct content"
+run_test test_cli_template_content "CLI template has correct content"
+run_test test_api_template_content "API template has correct content"
+run_test test_lib_template_placeholder "Library template has placeholder"
+run_test test_test_template_placeholder "Test template has placeholder"
+run_test test_load_function_exists "load_go_template function exists"
+run_test test_go_init_uses_templates "go-init uses template loader"
+run_test test_template_loading_no_substitution "Template loads without substitution"
+run_test test_template_loading_with_substitution "Template loads with substitution"
 
-if [ $TESTS_FAILED -eq 0 ]; then
-    echo -e "${GREEN}All tests passed!${NC}"
-    exit 0
-else
-    echo -e "${RED}Some tests failed!${NC}"
-    exit 1
-fi
+# Generate test report
+generate_report
