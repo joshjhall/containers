@@ -104,6 +104,13 @@ fi
 
 # Initialize test framework
 init_test_framework() {
+    # Reset test counters for this test run
+    TESTS_RUN=0
+    TESTS_PASSED=0
+    TESTS_FAILED=0
+    TESTS_SKIPPED=0
+    TEST_STATUS=""
+
     # Create directories
     mkdir -p "$RESULTS_DIR"
     mkdir -p "$FIXTURES_DIR"
@@ -113,7 +120,7 @@ init_test_framework() {
     export LOG_LEVEL="${LOG_LEVEL:-1}"  # WARN level by default in tests
 
     # Timestamp for this test run
-        export TEST_RUN_ID
+    export TEST_RUN_ID
     TEST_RUN_ID=$(date +%Y%m%d-%H%M%S)
 
     # Check Docker is available (skip if SKIP_DOCKER_CHECK is set)
@@ -159,7 +166,11 @@ test_case() {
 # Pass current test
 pass_test() {
     echo -e "${TEST_COLOR_PASS}PASS${TEST_COLOR_RESET}"
-    TESTS_PASSED=$((TESTS_PASSED + 1))
+    # Only increment TESTS_PASSED once per test (not per assertion)
+    if [ "$TEST_STATUS" != "passed" ]; then
+        TESTS_PASSED=$((TESTS_PASSED + 1))
+    fi
+    TEST_STATUS="passed"
 }
 
 # Fail current test
@@ -167,7 +178,11 @@ fail_test() {
     local reason="$1"
     echo -e "${TEST_COLOR_FAIL}FAIL${TEST_COLOR_RESET}"
     echo "    $reason"
-    TESTS_FAILED=$((TESTS_FAILED + 1))
+    # Only increment TESTS_FAILED once per test (not per assertion)
+    if [ "$TEST_STATUS" != "failed" ]; then
+        TESTS_FAILED=$((TESTS_FAILED + 1))
+    fi
+    TEST_STATUS="failed"
 }
 
 # Skip current test
@@ -175,7 +190,10 @@ skip_test() {
     local reason="$1"
     echo -e "${TEST_COLOR_SKIP}SKIP${TEST_COLOR_RESET}"
     echo "    $reason"
-    TESTS_SKIPPED=$((TESTS_SKIPPED + 1))
+    # Only increment TESTS_SKIPPED once per test
+    if [ "$TEST_STATUS" != "skipped" ]; then
+        TESTS_SKIPPED=$((TESTS_SKIPPED + 1))
+    fi
     TEST_STATUS="skipped"
 }
 

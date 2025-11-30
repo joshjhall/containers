@@ -176,7 +176,11 @@ assert_exit_code() {
 #   Always returns 0
 pass_test() {
     echo -e "${TEST_COLOR_PASS}PASS${TEST_COLOR_RESET}"
-    TESTS_PASSED=$((TESTS_PASSED + 1))
+    # Only increment TESTS_PASSED once per test (not per assertion)
+    if [ "$TEST_STATUS" != "passed" ]; then
+        TESTS_PASSED=$((TESTS_PASSED + 1))
+    fi
+    TEST_STATUS="passed"
 }
 
 # Manually mark the current test as failed with a reason
@@ -193,7 +197,11 @@ fail_test() {
     local tfc_message="$1"
     echo -e "${TEST_COLOR_FAIL}FAIL${TEST_COLOR_RESET}"
     echo "    Message: $tfc_message"
-    TESTS_FAILED=$((TESTS_FAILED + 1))
+    # Only increment TESTS_FAILED once per test (not per assertion)
+    if [ "$TEST_STATUS" != "failed" ]; then
+        TESTS_FAILED=$((TESTS_FAILED + 1))
+    fi
+    TEST_STATUS="failed"
 }
 
 # Skip the current test with a reason
@@ -213,7 +221,11 @@ skip_test() {
     local tfc_reason="$1"
     echo -e "${TEST_COLOR_SKIP}SKIP${TEST_COLOR_RESET}"
     echo "    Reason: $tfc_reason"
-    TESTS_SKIPPED=$((TESTS_SKIPPED + 1))
+    # Only increment TESTS_SKIPPED once per test
+    if [ "$TEST_STATUS" != "skipped" ]; then
+        TESTS_SKIPPED=$((TESTS_SKIPPED + 1))
+    fi
+    TEST_STATUS="skipped"
 }
 
 # Export all functions
