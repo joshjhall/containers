@@ -112,7 +112,7 @@ services:
       context: ..
       dockerfile: containers/Dockerfile
       args:
-        BASE_IMAGE: mcr.microsoft.com/devcontainers/base:bookworm
+        BASE_IMAGE: mcr.microsoft.com/devcontainers/base:trixie
         PROJECT_NAME: myproject
         INCLUDE_PYTHON_DEV: 'true'
         INCLUDE_NODE_DEV: 'true'
@@ -524,14 +524,14 @@ tests across 6 variants):
 
 ### Quick Verification
 
-To quickly verify installed features in a running container:
+To verify installed features in a running container:
 
 ```bash
-# From your project root
-./containers/bin/test-all-features.sh
+# Inside the container - check all installed tool versions
+check-installed-versions.sh
 
-# Show all tools (including not installed)
-./containers/bin/test-all-features.sh --all
+# Check build logs for any issues
+check-build-logs.sh
 ```
 
 ---
@@ -594,18 +594,6 @@ socket to manage containers from within your dev environment.
 **Use Case**: Local development where your main container needs to manage
 dependency containers (databases, Redis, message queues, etc.)
 
-**Setup** (First-time only):
-
-For **VS Code Dev Containers**: Automatically configured via `initializeCommand`
-in `.devcontainer/devcontainer.json`
-
-For **Docker Compose only**:
-
-```bash
-# Run once to detect and configure Docker socket GID
-./bin/setup-docker-socket.sh
-```
-
 **Configuration**:
 
 ```yaml
@@ -618,20 +606,29 @@ services:
       args:
         INCLUDE_DOCKER: 'true'
         INCLUDE_PYTHON_DEV: 'true'
+        # Enable passwordless sudo so entrypoint can fix Docker socket permissions
+        ENABLE_PASSWORDLESS_SUDO: 'true'
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock # ⚠️ Development only
       - ..:/workspace/myproject
-    # Grant Docker socket access without sudo (secure method)
-    # DOCKER_GID is auto-detected by bin/setup-docker-socket.sh
-    group_add:
-      - ${DOCKER_GID:-999}
+    command: ['sleep', 'infinity']
+```
+
+For **VS Code Dev Containers**, also set in `devcontainer.json`:
+
+```json
+{
+  // Allow container's ENTRYPOINT to run (fixes Docker socket permissions)
+  "overrideCommand": false
+}
 ```
 
 **How it works**:
 
-- The setup script detects your Docker socket's group ID (GID)
-- Adds the container user to that group via `group_add`
-- No sudo or permission changes required
+- The container entrypoint automatically detects the Docker socket
+- Creates a `docker` group and sets socket permissions to `660`
+- Adds the container user to the `docker` group
+- Uses passwordless sudo for privilege operations (non-root containers)
 - Works on Linux, macOS, WSL2, and Docker Desktop
 
 **Why this is useful**:
@@ -777,18 +774,19 @@ For more security guidance, see [SECURITY.md](SECURITY.md).
 
 ### Passwordless Sudo Access
 
-By default, containers are configured with passwordless sudo for development
-convenience. For production deployments, disable this feature to follow the
-principle of least privilege.
+By default, passwordless sudo is **disabled** for security. For development
+environments that need Docker socket access or frequent system modifications,
+you can enable it explicitly.
 
-#### Development Use (Default)
+#### Development Use (Enable Explicitly)
 
 ```bash
-# Default behavior - passwordless sudo enabled
+# Enable passwordless sudo for development
 docker build -t myapp:dev \
   -f containers/Dockerfile \
   --build-arg PROJECT_NAME=myapp \
   --build-arg INCLUDE_PYTHON_DEV=true \
+  --build-arg ENABLE_PASSWORDLESS_SUDO=true \
   .
 ```
 
@@ -805,15 +803,14 @@ docker build -t myapp:dev \
   vulnerabilities)
 - Suitable for trusted development environments only
 
-#### Production Use (Recommended)
+#### Production Use (Default)
 
 ```bash
-# Production: Disable passwordless sudo
+# Production: Passwordless sudo disabled by default
 docker build -t myapp:prod \
   -f containers/Dockerfile \
   --build-arg PROJECT_NAME=myapp \
   --build-arg INCLUDE_PYTHON=true \
-  --build-arg ENABLE_PASSWORDLESS_SUDO=false \
   .
 ```
 
@@ -931,12 +928,11 @@ For more information, see `/workspace/containers/SECURITY.md`.
 ### General Best Practices
 
 1. **Choose the right base image**:
-   - `debian:bookworm-slim` (Debian 12): Minimal size, good compatibility
-     (default)
+   - `debian:trixie-slim` (Debian 13): Default, latest features (default)
+   - `debian:bookworm-slim` (Debian 12): Stable release, good compatibility
    - `debian:bullseye-slim` (Debian 11): Older stable release
-   - `debian:trixie-slim` (Debian 13): Latest testing release
    - `ubuntu:24.04`: More packages available, larger size
-   - `mcr.microsoft.com/devcontainers/base:bookworm`: VS Code optimized
+   - `mcr.microsoft.com/devcontainers/base:trixie`: VS Code optimized
 
 2. **Optimize build times**:
    - Only include features you actually need

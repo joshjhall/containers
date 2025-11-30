@@ -33,7 +33,7 @@ This container build system follows [Semantic Versioning](https://semver.org/):
 
 ## Current Version
 
-**Latest Stable**: v4.7.0 (2025-11-11)
+**Latest Stable**: v4.12.1 (2025-11-30)
 
 Check your current version:
 
@@ -52,11 +52,11 @@ cd containers && git describe --tags
 ### Recommended Upgrade Paths
 
 ```text
-v3.x → v4.0.0 → v4.7.0 (current)
-v4.0.x → v4.7.0 (direct upgrade)
-v4.1.x → v4.7.0 (direct upgrade)
-v4.5.x → v4.7.0 (direct upgrade)
-```text
+v3.x → v4.0.0 → v4.12.x (current)
+v4.0.x → v4.12.x (direct upgrade)
+v4.1.x → v4.12.x (direct upgrade)
+v4.5.x → v4.12.x (direct upgrade)
+```
 
 **Best Practice**: Always upgrade through major versions sequentially (v3 → v4 →
 v5), not skipping major versions.
@@ -202,7 +202,7 @@ docker run --rm myproject:dev node --version
 
 - [ ] Review all custom build arguments in your Dockerfiles
 - [ ] Check if you're using pyenv or rbenv (removed in v4.0)
-- [ ] Verify base image (should be debian:trixie-slim or bookworm-slim)
+- [ ] Verify base image (default is now debian:trixie-slim)
 - [ ] Back up current working images
 
 #### Migration Steps

@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Container Build System includes a comprehensive testing framework with 450+
+The Container Build System includes a comprehensive testing framework with 850+
 unit tests covering all library files. The framework is designed to test bash
 scripts in isolation with proper mocking and assertion capabilities.
 

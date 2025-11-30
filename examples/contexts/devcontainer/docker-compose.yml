@@ -31,11 +31,11 @@ services:
         - USERNAME=${USERNAME:-developer}
         - USER_UID=${USER_UID:-1000}
         - USER_GID=${USER_GID:-1000}
-        - VARIANT=3.12-bookworm
-        # Enable passwordless sudo for local development convenience
-        # Allows installing packages, fixing permissions without password prompts
-        # NOT recommended for production - this is safe for local dev only
+        - BASE_IMAGE=debian:trixie-slim
+        # Enable passwordless sudo for local development
+        # Required for Docker socket permission fix in entrypoint
         - ENABLE_PASSWORDLESS_SUDO=true
+        - INCLUDE_DEV_TOOLS=true
       cache_from:
         - type=registry,ref=ghcr.io/project/devcontainer:cache
     environment:
@@ -99,12 +99,8 @@ services:
       - vscode-extensions:/home/${USERNAME:-developer}/.vscode-server/extensions
       - vscode-insiders:/home/${USERNAME:-developer}/.vscode-server-insiders
 
-    # Grant Docker socket access without requiring sudo or permission changes
-    # The DOCKER_GID should match the GID of /var/run/docker.sock on your host
-    # This is auto-detected by: ./bin/setup-docker-socket.sh
-    # For VS Code users, this runs automatically via initializeCommand
-    group_add:
-      - ${DOCKER_GID:-999} # Fallback to 999 if not set
+    # Docker socket access is handled by the entrypoint script
+    # It uses sudo to fix permissions when ENABLE_PASSWORDLESS_SUDO=true
 
     ports:
       # Application ports

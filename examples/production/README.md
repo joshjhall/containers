@@ -16,7 +16,7 @@ The key differences between production and development builds:
 
 | Aspect            | Development                   | Production                              |
 | ----------------- | ----------------------------- | --------------------------------------- |
-| Base Image        | `debian:bookworm` (full)      | `debian:bookworm-slim`                  |
+| Base Image        | `debian:trixie` (full)        | `debian:trixie-slim`                    |
 | Passwordless Sudo | `true` (convenience)          | `false` (security)                      |
 | Dev Tools         | Included (editors, debuggers) | Excluded                                |
 | Language Runtimes | Often with `-dev` packages    | Runtime-only packages                   |
@@ -30,7 +30,7 @@ The key differences between production and development builds:
 
 ```dockerfile
 # Use lightweight base
-BASE_IMAGE: "debian:bookworm-slim"
+BASE_IMAGE: "debian:trixie-slim"
 
 # Disable passwordless sudo for security
 ENABLE_PASSWORDLESS_SUDO: "false"
@@ -76,7 +76,7 @@ services:
       context: ../..
       dockerfile: Dockerfile
       args:
-        BASE_IMAGE: 'debian:bookworm-slim'
+        BASE_IMAGE: 'debian:trixie-slim'
         ENABLE_PASSWORDLESS_SUDO: 'false'
         INCLUDE_PYTHON: 'false'
         INCLUDE_NODE: 'false'
@@ -99,7 +99,7 @@ services:
       context: ../..
       dockerfile: Dockerfile
       args:
-        BASE_IMAGE: 'debian:bookworm-slim'
+        BASE_IMAGE: 'debian:trixie-slim'
         ENABLE_PASSWORDLESS_SUDO: 'false'
         INCLUDE_PYTHON: 'true'
         INCLUDE_PYTHON_DEV: 'false'
@@ -124,7 +124,7 @@ services:
       context: ../..
       dockerfile: Dockerfile
       args:
-        BASE_IMAGE: 'debian:bookworm-slim'
+        BASE_IMAGE: 'debian:trixie-slim'
         ENABLE_PASSWORDLESS_SUDO: 'false'
         INCLUDE_NODE: 'true'
         INCLUDE_NODE_DEV: 'false'
@@ -170,7 +170,7 @@ From your project root:
 docker build \
   -f containers/Dockerfile \
   -t myproject:minimal-prod \
-  --build-arg BASE_IMAGE="debian:bookworm-slim" \
+  --build-arg BASE_IMAGE="debian:trixie-slim" \
   --build-arg ENABLE_PASSWORDLESS_SUDO="false" \
   --build-arg INCLUDE_DEV_TOOLS="false" \
   --build-arg INCLUDE_PYTHON="false" \
@@ -181,7 +181,7 @@ docker build \
 docker build \
   -f containers/Dockerfile \
   -t myproject:python-prod \
-  --build-arg BASE_IMAGE="debian:bookworm-slim" \
+  --build-arg BASE_IMAGE="debian:trixie-slim" \
   --build-arg ENABLE_PASSWORDLESS_SUDO="false" \
   --build-arg INCLUDE_PYTHON="true" \
   --build-arg INCLUDE_PYTHON_DEV="false" \
@@ -233,7 +233,7 @@ services:
       context: ../..
       dockerfile: Dockerfile
       args:
-        BASE_IMAGE: 'debian:bookworm-slim'
+        BASE_IMAGE: 'debian:trixie-slim'
         ENABLE_PASSWORDLESS_SUDO: 'false'
 
         # Multiple runtimes
@@ -331,7 +331,7 @@ base:
 ```yaml
 args:
   # Add common runtime libraries if needed
-  BASE_IMAGE: 'debian:bookworm-slim'
+  BASE_IMAGE: 'debian:trixie-slim'
   # Then manually install additional libs via DEBIAN_PACKAGES build arg
 ```
 
