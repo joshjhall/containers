@@ -56,7 +56,7 @@ stages:
 # =====================================
 unit-tests:
   stage: test
-  image: debian:bookworm-slim
+  image: debian:trixie-slim
   script:
     - apt-get update && apt-get install -y bash
     - export SKIP_DOCKER_CHECK=true

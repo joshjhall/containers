@@ -62,7 +62,7 @@ pipeline {
                 stage('Unit Tests') {
                     agent {
                         docker {
-                            image 'debian:bookworm-slim'
+                            image 'debian:trixie-slim'
                             args '-v /var/run/docker.sock:/var/run/docker.sock'
                         }
                     }

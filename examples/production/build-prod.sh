@@ -34,7 +34,7 @@ BUILD_CONTEXT="${CONTAINERS_DIR}"
 
 # Production base arguments (always applied)
 PROD_BASE_ARGS=(
-    "BASE_IMAGE=debian:bookworm-slim"
+    "BASE_IMAGE=debian:trixie-slim"
     "ENABLE_PASSWORDLESS_SUDO=false"
     "INCLUDE_DEV_TOOLS=false"
 )

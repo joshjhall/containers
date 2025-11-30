@@ -75,7 +75,7 @@ build_dev() {
 
     local build_args=(
         "--build-arg" "PROJECT_NAME=${PROJECT_NAME}"
-        "--build-arg" "BASE_IMAGE=debian:bookworm"
+        "--build-arg" "BASE_IMAGE=debian:trixie"
         "--build-arg" "ENABLE_PASSWORDLESS_SUDO=true"
         "--build-arg" "INCLUDE_DEV_TOOLS=true"
     )
@@ -116,7 +116,7 @@ build_prod() {
 
     local build_args=(
         "--build-arg" "PROJECT_NAME=${PROJECT_NAME}"
-        "--build-arg" "BASE_IMAGE=debian:bookworm-slim"
+        "--build-arg" "BASE_IMAGE=debian:trixie-slim"
         "--build-arg" "ENABLE_PASSWORDLESS_SUDO=false"
         "--build-arg" "INCLUDE_DEV_TOOLS=false"
     )

@@ -35,10 +35,10 @@ docker build --check -f containers/Dockerfile .
 
 ```bash
 # Test DNS
-docker run --rm debian:bookworm-slim nslookup deb.debian.org
+docker run --rm debian:trixie-slim nslookup deb.debian.org
 
 # Test connectivity
-docker run --rm debian:bookworm-slim curl -I https://deb.debian.org
+docker run --rm debian:trixie-slim curl -I https://deb.debian.org
 ```
 
 **Fix**:

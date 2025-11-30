@@ -235,7 +235,7 @@ docker volume rm project-cache
 
 # Recreate with correct permissions
 docker volume create project-cache
-docker run --rm -v project-cache:/cache debian:bookworm-slim \
+docker run --rm -v project-cache:/cache debian:trixie-slim \
   chown -R 1000:1000 /cache
 ```
 
@@ -245,7 +245,7 @@ docker run --rm -v project-cache:/cache debian:bookworm-slim \
 # In docker-compose.yml, use init container
 services:
   cache-init:
-    image: debian:bookworm-slim
+    image: debian:trixie-slim
     volumes:
       - cache:/cache
     command: chown -R 1000:1000 /cache

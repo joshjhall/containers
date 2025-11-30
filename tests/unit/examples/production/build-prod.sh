@@ -56,7 +56,7 @@ test_presets_documented() {
 
 # Test: Production base args are defined
 test_production_base_args() {
-    assert_file_contains "$SCRIPT_PATH" "BASE_IMAGE=debian:bookworm-slim" "Uses slim base"
+    assert_file_contains "$SCRIPT_PATH" "BASE_IMAGE=debian:trixie-slim" "Uses slim base"
     assert_file_contains "$SCRIPT_PATH" "ENABLE_PASSWORDLESS_SUDO=false" "Disables passwordless sudo"
     assert_file_contains "$SCRIPT_PATH" "INCLUDE_DEV_TOOLS=false" "Disables dev tools"
 }

@@ -19,7 +19,7 @@ docker run --rm <image> id
 docker run --rm <image> ls -la /workspace /cache /home/vscode
 
 # Check volume ownership
-docker run --rm -v <volume>:/mnt debian:bookworm-slim ls -la /mnt
+docker run --rm -v <volume>:/mnt debian:trixie-slim ls -la /mnt
 ```
 
 ## Common Causes
@@ -177,7 +177,7 @@ sudo chown -R 1000:1000 /host/path
 
 # Option 3: Use named volume with correct ownership
 docker volume create --driver local myvolume
-docker run --rm -v myvolume:/data debian:bookworm-slim \
+docker run --rm -v myvolume:/data debian:trixie-slim \
   chown -R 1000:1000 /data
 ```
 
@@ -233,7 +233,7 @@ With init container to fix permissions:
 ```yaml
 services:
   init:
-    image: debian:bookworm-slim
+    image: debian:trixie-slim
     volumes:
       - cache:/cache
     command: chown -R 1000:1000 /cache

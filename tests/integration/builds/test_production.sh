@@ -28,7 +28,7 @@ test_minimal_production_base() {
     assert_build_succeeds "Dockerfile" \
         --build-arg PROJECT_PATH=. \
         --build-arg PROJECT_NAME=test-prod \
-        --build-arg BASE_IMAGE=debian:bookworm-slim \
+        --build-arg BASE_IMAGE=debian:trixie-slim \
         --build-arg ENABLE_PASSWORDLESS_SUDO=false \
         --build-arg INCLUDE_DEV_TOOLS=false \
         --build-arg INCLUDE_PYTHON=false \
@@ -63,7 +63,7 @@ test_python_production_runtime() {
     assert_build_succeeds "Dockerfile" \
         --build-arg PROJECT_PATH=. \
         --build-arg PROJECT_NAME=test-prod \
-        --build-arg BASE_IMAGE=debian:bookworm-slim \
+        --build-arg BASE_IMAGE=debian:trixie-slim \
         --build-arg ENABLE_PASSWORDLESS_SUDO=false \
         --build-arg INCLUDE_PYTHON=true \
         --build-arg INCLUDE_PYTHON_DEV=false \
@@ -102,7 +102,7 @@ test_node_production_runtime() {
     assert_build_succeeds "Dockerfile" \
         --build-arg PROJECT_PATH=. \
         --build-arg PROJECT_NAME=test-prod \
-        --build-arg BASE_IMAGE=debian:bookworm-slim \
+        --build-arg BASE_IMAGE=debian:trixie-slim \
         --build-arg ENABLE_PASSWORDLESS_SUDO=false \
         --build-arg INCLUDE_NODE=true \
         --build-arg INCLUDE_NODE_DEV=false \
@@ -141,7 +141,7 @@ test_multi_runtime_production() {
     assert_build_succeeds "Dockerfile" \
         --build-arg PROJECT_PATH=. \
         --build-arg PROJECT_NAME=test-prod \
-        --build-arg BASE_IMAGE=debian:bookworm-slim \
+        --build-arg BASE_IMAGE=debian:trixie-slim \
         --build-arg ENABLE_PASSWORDLESS_SUDO=false \
         --build-arg INCLUDE_PYTHON=true \
         --build-arg INCLUDE_PYTHON_DEV=false \
@@ -199,7 +199,7 @@ test_production_security() {
     assert_build_succeeds "Dockerfile" \
         --build-arg PROJECT_PATH=. \
         --build-arg PROJECT_NAME=test-prod \
-        --build-arg BASE_IMAGE=debian:bookworm-slim \
+        --build-arg BASE_IMAGE=debian:trixie-slim \
         --build-arg ENABLE_PASSWORDLESS_SUDO=false \
         --build-arg INCLUDE_DEV_TOOLS=false \
         -t "$image"
@@ -227,7 +227,7 @@ test_production_image_size() {
     assert_build_succeeds "Dockerfile" \
         --build-arg PROJECT_PATH=. \
         --build-arg PROJECT_NAME=test-prod \
-        --build-arg BASE_IMAGE=debian:bookworm-slim \
+        --build-arg BASE_IMAGE=debian:trixie-slim \
         --build-arg ENABLE_PASSWORDLESS_SUDO=false \
         --build-arg INCLUDE_DEV_TOOLS=false \
         --build-arg INCLUDE_PYTHON=false \
@@ -259,7 +259,7 @@ test_production_healthcheck() {
     assert_build_succeeds "Dockerfile" \
         --build-arg PROJECT_PATH=. \
         --build-arg PROJECT_NAME=test-prod \
-        --build-arg BASE_IMAGE=debian:bookworm-slim \
+        --build-arg BASE_IMAGE=debian:trixie-slim \
         --build-arg ENABLE_PASSWORDLESS_SUDO=false \
         -t "$image"
 

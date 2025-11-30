@@ -13,10 +13,10 @@ Debug and resolve container network connectivity problems.
 
 ```bash
 # Test DNS resolution
-docker run --rm debian:bookworm-slim nslookup google.com
+docker run --rm debian:trixie-slim nslookup google.com
 
 # Test external connectivity
-docker run --rm debian:bookworm-slim curl -I https://google.com
+docker run --rm debian:trixie-slim curl -I https://google.com
 
 # Check Docker networks
 docker network ls
@@ -35,8 +35,8 @@ docker inspect <container_id> --format='{{json .NetworkSettings.Networks}}'
 
 ```bash
 # Test DNS
-docker run --rm debian:bookworm-slim cat /etc/resolv.conf
-docker run --rm debian:bookworm-slim nslookup deb.debian.org
+docker run --rm debian:trixie-slim cat /etc/resolv.conf
+docker run --rm debian:trixie-slim nslookup deb.debian.org
 ```
 
 **Fix**:
@@ -86,7 +86,7 @@ docker build --build-arg HTTP_PROXY=http://proxy:8080 .
 
 ```bash
 # Test specific port
-docker run --rm debian:bookworm-slim nc -zv github.com 443
+docker run --rm debian:trixie-slim nc -zv github.com 443
 
 # Check iptables (on host)
 sudo iptables -L -n | grep DOCKER
@@ -136,13 +136,13 @@ docker inspect <container_id> --format='{{.HostConfig.NetworkMode}}'
 
 ```bash
 # Ping test
-docker run --rm debian:bookworm-slim ping -c 3 8.8.8.8
+docker run --rm debian:trixie-slim ping -c 3 8.8.8.8
 
 # DNS test
-docker run --rm debian:bookworm-slim nslookup google.com
+docker run --rm debian:trixie-slim nslookup google.com
 
 # HTTP test
-docker run --rm debian:bookworm-slim curl -v https://google.com
+docker run --rm debian:trixie-slim curl -v https://google.com
 ```
 
 ### Step 2: Check Network Configuration
@@ -158,13 +158,13 @@ docker exec <container_id> ip route
 
 ```bash
 # Test apt mirrors
-docker run --rm debian:bookworm-slim curl -I http://deb.debian.org
+docker run --rm debian:trixie-slim curl -I http://deb.debian.org
 
 # Test GitHub
-docker run --rm debian:bookworm-slim curl -I https://api.github.com
+docker run --rm debian:trixie-slim curl -I https://api.github.com
 
 # Test Python packages
-docker run --rm debian:bookworm-slim curl -I https://pypi.org
+docker run --rm debian:trixie-slim curl -I https://pypi.org
 ```
 
 ### Step 4: Compare With Host
@@ -174,7 +174,7 @@ docker run --rm debian:bookworm-slim curl -I https://pypi.org
 curl -I https://google.com
 
 # Test from container (should match)
-docker run --network host debian:bookworm-slim curl -I https://google.com
+docker run --network host debian:trixie-slim curl -I https://google.com
 ```
 
 ### Step 5: Check for MTU Issues
@@ -185,7 +185,7 @@ docker network inspect bridge | grep MTU
 
 # Test with different MTU
 docker run --rm --network-opt com.docker.network.driver.mtu=1400 \
-  debian:bookworm-slim ping -c 3 google.com
+  debian:trixie-slim ping -c 3 google.com
 ```
 
 ## Resolution

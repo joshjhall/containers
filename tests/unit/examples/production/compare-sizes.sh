@@ -77,7 +77,7 @@ test_get_image_size_function() {
 # Test: build_dev function
 test_build_dev_function() {
     assert_file_contains "$SCRIPT_PATH" "build_dev()" "Has build_dev function"
-    assert_file_contains "$SCRIPT_PATH" "BASE_IMAGE=debian:bookworm" "Uses full Debian"
+    assert_file_contains "$SCRIPT_PATH" "BASE_IMAGE=debian:trixie" "Uses full Debian"
     assert_file_contains "$SCRIPT_PATH" "ENABLE_PASSWORDLESS_SUDO=true" "Enables sudo in dev"
     assert_file_contains "$SCRIPT_PATH" "INCLUDE_DEV_TOOLS=true" "Includes dev tools"
 }
@@ -85,7 +85,7 @@ test_build_dev_function() {
 # Test: build_prod function
 test_build_prod_function() {
     assert_file_contains "$SCRIPT_PATH" "build_prod()" "Has build_prod function"
-    assert_file_contains "$SCRIPT_PATH" "BASE_IMAGE=debian:bookworm-slim" "Uses slim Debian"
+    assert_file_contains "$SCRIPT_PATH" "BASE_IMAGE=debian:trixie-slim" "Uses slim Debian"
     assert_file_contains "$SCRIPT_PATH" "ENABLE_PASSWORDLESS_SUDO=false" "Disables sudo in prod"
     assert_file_contains "$SCRIPT_PATH" "INCLUDE_DEV_TOOLS=false" "Excludes dev tools"
 }

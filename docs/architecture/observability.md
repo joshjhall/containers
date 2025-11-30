@@ -91,7 +91,7 @@ Add JSON logging capability while maintaining backward compatibility with existi
   "error_count": 0,
   "warning_count": 2,
   "metadata": {
-    "platform": "debian:bookworm",
+    "platform": "debian:trixie",
     "build_arg_include_python_dev": "true"
   }
 }

@@ -72,7 +72,7 @@ find . -size +10M -type f
 
 ```bash
 # Test apt mirror speed
-curl -o /dev/null -s -w '%{time_total}' http://deb.debian.org/debian/dists/bookworm/Release
+curl -o /dev/null -s -w '%{time_total}' http://deb.debian.org/debian/dists/trixie/Release
 ```
 
 **Fix**:
