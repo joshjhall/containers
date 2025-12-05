@@ -46,7 +46,7 @@ test_rust_dev_tools() {
     local cargo_bin="$TEST_TEMP_DIR/home/testuser/.cargo/bin"
 
     # List of Rust dev tools
-    local tools=("cargo-watch" "cargo-edit" "cargo-audit" "cargo-outdated" "bacon" "sccache" "cargo-nextest")
+    local tools=("cargo-watch" "cargo-audit" "cargo-outdated" "bacon" "sccache" "cargo-nextest")
 
     # Create mock tools
     for tool in "${tools[@]}"; do
@@ -236,7 +236,7 @@ test_rust_dev_verification() {
     command cat > "$test_script" << 'EOF'
 #!/bin/bash
 echo "Rust dev tools:"
-for tool in cargo-watch cargo-edit cargo-audit bacon rust-analyzer; do
+for tool in cargo-watch cargo-audit bacon rust-analyzer; do
     command -v $tool &>/dev/null && echo "  - $tool: installed" || echo "  - $tool: not found"
 done
 EOF

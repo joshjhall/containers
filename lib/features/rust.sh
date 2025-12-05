@@ -8,8 +8,10 @@
 # Features:
 #   - Rust toolchain installed via rustup (stable by default)
 #   - Essential components: rust-src, rust-analyzer, clippy, rustfmt
-#   - Development tools: cargo-watch (auto-rebuild), cargo-edit (dependency management)
+#   - Development tools: cargo-watch (auto-rebuild)
 #   - Documentation tools: mdBook and plugins for creating Rust documentation
+#
+# Note: cargo-edit is no longer needed as cargo add/remove are built into Cargo 1.62+
 #
 # Cache Strategy:
 #   - Uses /cache/cargo and /cache/rustup for consistent caching
@@ -183,9 +185,9 @@ log_command "Installing cargo development tools" \
     source ${CARGO_HOME}/env
 
     # cargo-watch: Automatically re-run commands when files change
-    # cargo-edit: Add/remove dependencies from Cargo.toml via CLI
+    # Note: cargo add/remove are now built into Cargo 1.62+, no need for cargo-edit
     echo 'Installing development tools...'
-    cargo install --locked cargo-watch cargo-edit || true
+    cargo install --locked cargo-watch || true
 
     # mdBook: Create books from Markdown (Rust's documentation standard)
     # Includes plugins for enhanced documentation features
@@ -210,7 +212,7 @@ for cmd in rustc cargo rustup rust-analyzer rustfmt clippy-driver; do
 done
 
 # Also link cargo-installed tools
-for cmd in cargo-watch cargo-add cargo-rm cargo-upgrade mdbook; do
+for cmd in cargo-watch mdbook; do
     if [ -f "${RUST_BIN_DIR}/${cmd}" ]; then
         create_symlink "${RUST_BIN_DIR}/${cmd}" "/usr/local/bin/${cmd}" "${cmd} cargo tool"
     fi
@@ -305,5 +307,5 @@ echo "Rust installation complete:"
 echo "    Toolchain: ${RUST_VERSION}"
 echo "    CARGO_HOME: ${CARGO_HOME}"
 echo "    RUSTUP_HOME: ${RUSTUP_HOME}"
-echo "    Tools installed: cargo-watch, cargo-edit, mdBook suite"
+echo "    Tools installed: cargo-watch, mdBook suite"
 echo "Run 'check-build-logs.sh rust' to review installation logs"

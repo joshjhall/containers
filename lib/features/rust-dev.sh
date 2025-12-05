@@ -9,7 +9,6 @@
 # Tools Installed:
 #   - tree-sitter-cli: Incremental parsing library and code analysis
 #   - cargo-watch: Automatically rebuild on file changes
-#   - cargo-edit: Add/remove dependencies from command line
 #   - cargo-expand: Expand macros to see generated code
 #   - cargo-outdated: Check for outdated dependencies
 #   - sccache: Shared compilation cache for faster builds
@@ -21,7 +20,7 @@
 #
 # Common Commands:
 #   - cargo watch -x run: Auto-rebuild and run on changes
-#   - cargo add <crate>: Add dependency to Cargo.toml
+#   - cargo add <crate>: Add dependency to Cargo.toml (built into cargo)
 #   - cargo expand: Show macro-expanded code
 #   - cargo outdated: List outdated dependencies
 #   - bacon: Run continuous background compilation
@@ -94,9 +93,6 @@ log_command "Installing tree-sitter-cli" \
 log_command "Installing cargo-watch" \
     su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/cargo install cargo-watch"
 
-log_command "Installing cargo-edit" \
-    su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/cargo install cargo-edit"
-
 log_command "Installing cargo-expand" \
     su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/cargo install cargo-expand"
 
@@ -132,7 +128,7 @@ log_command "Installing mdbook" \
 
 # Create symlinks for the installed tools
 log_message "Creating symlinks for Rust dev tools..."
-for tool in tree-sitter cargo-watch cargo-add cargo-rm cargo-upgrade cargo-expand cargo-outdated cargo-audit cargo-deny cargo-geiger bacon tokei hyperfine just sccache mdbook; do
+for tool in tree-sitter cargo-watch cargo-expand cargo-outdated cargo-audit cargo-deny cargo-geiger bacon tokei hyperfine just sccache mdbook; do
     if [ -f "${CARGO_HOME}/bin/${tool}" ]; then
         create_symlink "${CARGO_HOME}/bin/${tool}" "/usr/local/bin/${tool}" "${tool} Rust dev tool"
     fi
@@ -148,7 +144,6 @@ echo "=== Rust Development Tools Status ==="
 tools=(
     "tree-sitter"
     "cargo-watch"
-    "cargo-add"
     "cargo-expand"
     "cargo-outdated"
     "cargo-audit"
@@ -487,7 +482,7 @@ export CARGO_HOME="/cache/cargo"
 export RUSTUP_HOME="/cache/rustup"
 log_feature_summary \
     --feature "Rust Development Tools" \
-    --tools "rust-analyzer,clippy,rustfmt,cargo-watch,cargo-audit,cargo-outdated,cargo-edit,cargo-expand,cargo-flamegraph,cargo-nextest,cargo-deny,cargo-tarpaulin,tokio-console" \
+    --tools "rust-analyzer,clippy,rustfmt,cargo-watch,cargo-audit,cargo-outdated,cargo-expand,cargo-flamegraph,cargo-nextest,cargo-deny,cargo-tarpaulin,tokio-console" \
     --paths "${CARGO_HOME},${RUSTUP_HOME}" \
     --env "CARGO_HOME,RUSTUP_HOME" \
     --commands "rust-analyzer,cargo-clippy,cargo-fmt,cargo-watch,cargo-audit,cargo-outdated,cargo-nextest,rust-lint-all,rust-security-check,rust-watch" \
