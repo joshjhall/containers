@@ -19,68 +19,52 @@ test_script_exists() {
     assert_executable "$PROJECT_ROOT/bin/setup-dev-environment.sh"
 }
 
-# Test: Git hooks directory exists
-test_git_hooks_directory_exists() {
-    if [ -d "$PROJECT_ROOT/.githooks" ]; then
-        assert_true true ".githooks directory exists"
-    else
-        assert_true false ".githooks directory does not exist"
-    fi
+# Test: Pre-commit config exists
+test_precommit_config_exists() {
+    assert_file_exists "$PROJECT_ROOT/.pre-commit-config.yaml"
 }
 
-# Test: Pre-commit hook exists and is executable
-test_precommit_hook_exists() {
-    assert_file_exists "$PROJECT_ROOT/.githooks/pre-commit"
-    assert_executable "$PROJECT_ROOT/.githooks/pre-commit"
-}
-
-# Test: Pre-push hook exists and is executable
-test_prepush_hook_exists() {
-    assert_file_exists "$PROJECT_ROOT/.githooks/pre-push"
-    assert_executable "$PROJECT_ROOT/.githooks/pre-push"
-}
-
-# Test: Pre-commit hook contains shellcheck validation
+# Test: Pre-commit config has shellcheck hook
 test_precommit_has_shellcheck() {
-    local hook_file="$PROJECT_ROOT/.githooks/pre-commit"
+    local config_file="$PROJECT_ROOT/.pre-commit-config.yaml"
 
-    if grep -q "shellcheck" "$hook_file"; then
-        assert_true true "Pre-commit hook includes shellcheck validation"
+    if grep -q "shellcheck" "$config_file"; then
+        assert_true true "Pre-commit config includes shellcheck"
     else
-        assert_true false "Pre-commit hook missing shellcheck validation"
+        assert_true false "Pre-commit config missing shellcheck"
     fi
 }
 
-# Test: Pre-push hook contains shellcheck validation
-test_prepush_has_shellcheck() {
-    local hook_file="$PROJECT_ROOT/.githooks/pre-push"
+# Test: Pre-commit config has unit tests hook for pre-push
+test_precommit_has_unit_tests() {
+    local config_file="$PROJECT_ROOT/.pre-commit-config.yaml"
 
-    if grep -q "shellcheck" "$hook_file"; then
-        assert_true true "Pre-push hook includes shellcheck validation"
+    if grep -q "unit-tests" "$config_file" && grep -q "pre-push" "$config_file"; then
+        assert_true true "Pre-commit config includes unit tests on pre-push"
     else
-        assert_true false "Pre-push hook missing shellcheck validation"
+        assert_true false "Pre-commit config missing unit tests on pre-push"
     fi
 }
 
-# Test: Pre-push hook contains unit test validation
-test_prepush_has_unit_tests() {
-    local hook_file="$PROJECT_ROOT/.githooks/pre-push"
+# Test: Pre-commit config has credential detection
+test_precommit_has_credential_detection() {
+    local config_file="$PROJECT_ROOT/.pre-commit-config.yaml"
 
-    if grep -q "run_unit_tests.sh" "$hook_file"; then
-        assert_true true "Pre-push hook includes unit test validation"
+    if grep -q "credential-patterns\|gitleaks" "$config_file"; then
+        assert_true true "Pre-commit config includes credential detection"
     else
-        assert_true false "Pre-push hook missing unit test validation"
+        assert_true false "Pre-commit config missing credential detection"
     fi
 }
 
-# Test: Pre-commit hook checks for .env file
-test_precommit_checks_env() {
-    local hook_file="$PROJECT_ROOT/.githooks/pre-commit"
+# Test: Pre-commit config prevents .env commit
+test_precommit_prevents_env_commit() {
+    local config_file="$PROJECT_ROOT/.pre-commit-config.yaml"
 
-    if grep -q ".env" "$hook_file"; then
-        assert_true true "Pre-commit hook checks for .env file"
+    if grep -q "no-env-file\|\.env" "$config_file"; then
+        assert_true true "Pre-commit config prevents .env commit"
     else
-        assert_true false "Pre-commit hook missing .env check"
+        assert_true false "Pre-commit config missing .env prevention"
     fi
 }
 
@@ -93,25 +77,25 @@ test_gitignore_has_env() {
     fi
 }
 
-# Test: Setup script mentions both hooks in documentation
-test_script_documents_both_hooks() {
+# Test: Setup script uses pre-commit install
+test_script_uses_precommit_install() {
     local script="$PROJECT_ROOT/bin/setup-dev-environment.sh"
 
-    local has_precommit_docs=false
-    local has_prepush_docs=false
-
-    if grep -q "Pre-commit hook" "$script"; then
-        has_precommit_docs=true
-    fi
-
-    if grep -q "Pre-push hook" "$script"; then
-        has_prepush_docs=true
-    fi
-
-    if [ "$has_precommit_docs" = true ] && [ "$has_prepush_docs" = true ]; then
-        assert_true true "Setup script documents both pre-commit and pre-push hooks"
+    if grep -q "pre-commit install" "$script"; then
+        assert_true true "Setup script uses pre-commit install"
     else
-        assert_true false "Setup script missing hook documentation"
+        assert_true false "Setup script doesn't use pre-commit install"
+    fi
+}
+
+# Test: Setup script installs pre-push hooks
+test_script_installs_prepush() {
+    local script="$PROJECT_ROOT/bin/setup-dev-environment.sh"
+
+    if grep -q "pre-push" "$script"; then
+        assert_true true "Setup script installs pre-push hooks"
+    else
+        assert_true false "Setup script doesn't install pre-push hooks"
     fi
 }
 
@@ -126,18 +110,7 @@ test_script_has_colors() {
     fi
 }
 
-# Test: Setup script configures git hooks path
-test_script_configures_hooks_path() {
-    local script="$PROJECT_ROOT/bin/setup-dev-environment.sh"
-
-    if grep -q "git config core.hooksPath" "$script"; then
-        assert_true true "Setup script configures git hooks path"
-    else
-        assert_true false "Setup script doesn't configure git hooks path"
-    fi
-}
-
-# Test: Setup script checks for .env in .gitignore
+# Test: Setup script checks .gitignore
 test_script_checks_gitignore() {
     local script="$PROJECT_ROOT/bin/setup-dev-environment.sh"
 
@@ -181,27 +154,14 @@ test_script_checks_docker() {
     fi
 }
 
-# Test: Setup script checks for jq
-test_script_checks_jq() {
+# Test: Setup script checks for pre-commit
+test_script_checks_precommit() {
     local script="$PROJECT_ROOT/bin/setup-dev-environment.sh"
 
-    if grep -q 'check_tool.*jq' "$script"; then
-        assert_true true "Setup script checks for jq"
+    if grep -q 'check_tool.*pre-commit' "$script"; then
+        assert_true true "Setup script checks for pre-commit"
     else
-        # This will fail initially, but should pass after implementation
-        skip_test "Setup script doesn't check for jq yet (expected improvement)"
-    fi
-}
-
-# Test: Setup script verifies hook executability
-test_script_verifies_hook_executability() {
-    local script="$PROJECT_ROOT/bin/setup-dev-environment.sh"
-
-    if grep -q "chmod.*hook" "$script" || grep -q '\-x.*hook' "$script"; then
-        assert_true true "Setup script verifies hook executability"
-    else
-        # This will fail initially, but should pass after implementation
-        skip_test "Setup script doesn't verify hook executability yet (expected improvement)"
+        assert_true false "Setup script doesn't check for pre-commit"
     fi
 }
 
@@ -212,31 +172,37 @@ test_script_checks_git_config() {
     if grep -q "git config user.name" "$script" || grep -q "git config user.email" "$script"; then
         assert_true true "Setup script checks git user configuration"
     else
-        # This will fail initially, but should pass after implementation
-        skip_test "Setup script doesn't check git config yet (expected improvement)"
+        assert_true false "Setup script doesn't check git config"
+    fi
+}
+
+# Test: No .githooks directory (using pre-commit instead)
+test_no_githooks_directory() {
+    if [ ! -d "$PROJECT_ROOT/.githooks" ]; then
+        assert_true true "No .githooks directory (using pre-commit framework)"
+    else
+        assert_true false ".githooks directory still exists (should use pre-commit)"
     fi
 }
 
 # Run tests
 run_test test_script_exists "Setup script exists and is executable"
-run_test test_git_hooks_directory_exists "Git hooks directory exists"
-run_test test_precommit_hook_exists "Pre-commit hook exists and is executable"
-run_test test_prepush_hook_exists "Pre-push hook exists and is executable"
-run_test test_precommit_has_shellcheck "Pre-commit hook includes shellcheck"
-run_test test_prepush_has_shellcheck "Pre-push hook includes shellcheck"
-run_test test_prepush_has_unit_tests "Pre-push hook includes unit tests"
-run_test test_precommit_checks_env "Pre-commit hook checks for .env"
+run_test test_precommit_config_exists "Pre-commit config exists"
+run_test test_precommit_has_shellcheck "Pre-commit config includes shellcheck"
+run_test test_precommit_has_unit_tests "Pre-commit config includes unit tests on pre-push"
+run_test test_precommit_has_credential_detection "Pre-commit config includes credential detection"
+run_test test_precommit_prevents_env_commit "Pre-commit config prevents .env commit"
 run_test test_gitignore_has_env ".gitignore contains .env"
-run_test test_script_documents_both_hooks "Setup script documents both hooks"
+run_test test_script_uses_precommit_install "Setup script uses pre-commit install"
+run_test test_script_installs_prepush "Setup script installs pre-push hooks"
 run_test test_script_has_colors "Setup script has color variables"
-run_test test_script_configures_hooks_path "Setup script configures hooks path"
 run_test test_script_checks_gitignore "Setup script checks .gitignore"
 run_test test_script_has_tool_checker "Setup script has check_tool function"
 run_test test_script_checks_shellcheck "Setup script checks for shellcheck"
 run_test test_script_checks_docker "Setup script checks for docker"
-run_test test_script_checks_jq "Setup script checks for jq"
-run_test test_script_verifies_hook_executability "Setup script verifies hook executability"
+run_test test_script_checks_precommit "Setup script checks for pre-commit"
 run_test test_script_checks_git_config "Setup script checks git user config"
+run_test test_no_githooks_directory "No .githooks directory (using pre-commit)"
 
 # Generate test report
 generate_report

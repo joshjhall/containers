@@ -96,6 +96,47 @@ repos:
     hooks:
       - id: gitleaks
 
+  # ==========================================================================
+  # Custom local hooks
+  # ==========================================================================
+  - repo: local
+    hooks:
+      # Prevent .env file from being committed
+      - id: no-env-file
+        name: Prevent .env commit
+        entry: "bash -c 'git diff --cached --name-only | grep -q \"^\\.env$\" && echo ERROR && exit 1 || exit 0'"
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      # Fix shell script permissions
+      - id: fix-shell-permissions
+        name: Fix shell script permissions
+        entry: bash -c 'for f in "$@"; do [ -f "$f" ] && [ ! -x "$f" ] && chmod +x "$f"; done; exit 0'
+        language: system
+        types: [shell]
+
+  # ==========================================================================
+  # Pre-push hooks
+  # ==========================================================================
+  - repo: local
+    hooks:
+      - id: unit-tests
+        name: Run unit tests
+        entry: ./tests/run_unit_tests.sh
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
+
+      - id: docker-compose-validate
+        name: Validate Docker Compose files
+        entry: bash -c 'for f in $(git ls-files "*compose*.yml" "*compose*.yaml" 2>/dev/null); do [ -f "$f" ] && docker compose -f "$f" config > /dev/null || exit 1; done; exit 0'
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
+
 # CI configuration - run these hooks in CI
 ci:
   autofix_prs: false

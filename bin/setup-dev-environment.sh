@@ -18,32 +18,27 @@ PROJECT_ROOT="$(dirname "$BIN_DIR")"
 
 cd "$PROJECT_ROOT"
 
-# 1. Configure git hooks
-echo -e "${BLUE}[1/4] Configuring git hooks...${NC}"
-if git config core.hooksPath .githooks; then
-    echo -e "${GREEN}✓${NC} Git hooks enabled (.githooks)"
-    echo "  - Shellcheck validation on commits"
-    echo "  - Credential leak prevention"
-else
-    echo -e "${RED}✗${NC} Failed to configure git hooks"
-    exit 1
-fi
+# 1. Install pre-commit hooks
+echo -e "${BLUE}[1/4] Installing pre-commit hooks...${NC}"
 
-# Verify hook files exist and are executable
-for hook in pre-commit pre-push; do
-    hook_file=".githooks/$hook"
-    if [ -f "$hook_file" ]; then
-        if [ -x "$hook_file" ]; then
-            echo -e "${GREEN}✓${NC} $hook hook is executable"
-        else
-            echo -e "${YELLOW}⚠${NC}  $hook hook exists but is not executable - fixing..."
-            chmod +x "$hook_file"
-            echo -e "${GREEN}✓${NC} Made $hook hook executable"
-        fi
+if command -v pre-commit &> /dev/null; then
+    # Install commit and push hooks
+    if pre-commit install --install-hooks > /dev/null 2>&1; then
+        echo -e "${GREEN}✓${NC} pre-commit hooks installed"
     else
-        echo -e "${YELLOW}⚠${NC}  $hook hook not found at $hook_file"
+        echo -e "${YELLOW}⚠${NC}  Failed to install pre-commit hooks"
     fi
-done
+
+    if pre-commit install --hook-type pre-push > /dev/null 2>&1; then
+        echo -e "${GREEN}✓${NC} pre-push hooks installed"
+    else
+        echo -e "${YELLOW}⚠${NC}  Failed to install pre-push hooks"
+    fi
+else
+    echo -e "${YELLOW}⚠${NC}  pre-commit not found"
+    echo "  Install with: pip install pre-commit"
+    echo "  Then re-run this script"
+fi
 
 # 2. Verify .env is not committed
 echo ""
@@ -69,39 +64,9 @@ else
     echo ".env" >> .gitignore
 fi
 
-# 3. Install pre-commit framework
+# 3. Check recommended tools
 echo ""
-echo -e "${BLUE}[3/5] Installing pre-commit framework...${NC}"
-
-if command -v pip3 &> /dev/null; then
-    if ! command -v pre-commit &> /dev/null; then
-        echo -e "${BLUE}Installing pre-commit...${NC}"
-        if pip3 install --user pre-commit > /dev/null 2>&1; then
-            echo -e "${GREEN}✓${NC} pre-commit installed"
-        else
-            echo -e "${YELLOW}⚠${NC}  Failed to install pre-commit"
-        fi
-    else
-        echo -e "${GREEN}✓${NC} pre-commit already installed"
-    fi
-
-    # Install pre-commit hooks (downloads tool environments)
-    if command -v pre-commit &> /dev/null; then
-        echo -e "${BLUE}Setting up pre-commit hook environments...${NC}"
-        if pre-commit install-hooks > /dev/null 2>&1; then
-            echo -e "${GREEN}✓${NC} pre-commit hooks installed"
-        else
-            echo -e "${YELLOW}⚠${NC}  Failed to install pre-commit hooks (will install on first run)"
-        fi
-    fi
-else
-    echo -e "${YELLOW}⚠${NC}  pip3 not found - skipping pre-commit installation"
-    echo "  Install Python 3 to enable pre-commit framework"
-fi
-
-# 4. Check recommended tools
-echo ""
-echo -e "${BLUE}[4/5] Checking recommended development tools...${NC}"
+echo -e "${BLUE}[3/4] Checking recommended development tools...${NC}"
 
 check_tool() {
     local tool=$1
@@ -121,12 +86,12 @@ check_tool "docker" "https://docs.docker.com/get-docker/"
 check_tool "gh" "https://cli.github.com/"
 check_tool "jq" "apt-get install jq (or brew install jq)"
 check_tool "git-cliff" "cargo install git-cliff (optional, for changelogs)"
-check_tool "pre-commit" "pip3 install pre-commit"
+check_tool "pre-commit" "pip install pre-commit"
 check_tool "biome" "included in dev-tools feature"
 
-# 5. Check git configuration
+# 4. Check git configuration
 echo ""
-echo -e "${BLUE}[5/5] Checking git configuration...${NC}"
+echo -e "${BLUE}[4/4] Checking git configuration...${NC}"
 if git config user.name > /dev/null && git config user.email > /dev/null; then
     echo -e "${GREEN}✓${NC} Git user.name and user.email are configured"
 else
@@ -147,19 +112,19 @@ echo ""
 echo "Git hooks are now active (via pre-commit framework):"
 echo ""
 echo "Pre-commit hook (runs on: git commit):"
-echo "  - Credential leak prevention (custom)"
-echo "  - File permission fixes (custom)"
 echo "  - Trailing whitespace and EOF fixes"
-echo "  - YAML/JSON/TOML validation"
+echo "  - YAML/JSON validation"
 echo "  - Shellcheck on shell scripts"
 echo "  - Markdown formatting (mdformat)"
 echo "  - Markdown linting (pymarkdown)"
 echo "  - JSON linting (biome)"
 echo "  - Secret detection (gitleaks)"
+echo "  - Credential pattern detection"
+echo "  - Shell script permission fixes"
 echo "  - Skip with: git commit --no-verify"
 echo ""
 echo "Pre-push hook (runs on: git push):"
-echo "  - All pre-commit checks on all files"
-echo "  - Unit tests (fast, no Docker required)"
+echo "  - Unit tests"
 echo "  - Docker Compose validation"
 echo "  - Skip with: git push --no-verify"
+echo ""
