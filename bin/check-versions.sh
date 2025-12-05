@@ -168,14 +168,14 @@ set_latest() {
     fi
     
     for i in "${!TOOLS[@]}"; do
-        if [ "${TOOLS[$i]}" = "$tool" ]; then
-            LATEST_VERSIONS[$i]="$version"
-            if version_matches "${CURRENT_VERSIONS[$i]}" "$version"; then
-                VERSION_STATUS[$i]="current"
+        if [ "${TOOLS[i]}" = "$tool" ]; then
+            LATEST_VERSIONS[i]="$version"
+            if version_matches "${CURRENT_VERSIONS[i]}" "$version"; then
+                VERSION_STATUS[i]="current"
             elif [ "$version" = "error" ]; then
-                VERSION_STATUS[$i]="error"
+                VERSION_STATUS[i]="error"
             else
-                VERSION_STATUS[$i]="outdated"
+                VERSION_STATUS[i]="outdated"
             fi
             break
         fi
@@ -268,6 +268,9 @@ extract_all_versions() {
 
         ver=$(extract_version_from_line "$(grep "^ENTR_VERSION=" "$PROJECT_ROOT/lib/features/dev-tools.sh" 2>/dev/null)")
         [ -n "$ver" ] && add_tool "entr" "$ver" "dev-tools.sh"
+
+        ver=$(extract_version_from_line "$(grep "^BIOME_VERSION=" "$PROJECT_ROOT/lib/features/dev-tools.sh" 2>/dev/null)")
+        [ -n "$ver" ] && add_tool "biome" "$ver" "dev-tools.sh"
     fi
     
     # Docker tools from docker.sh
@@ -458,8 +461,17 @@ check_entr() {
     # We'll check the latest version from the downloads page
     local latest
     latest=$(fetch_url "http://eradman.com/entrproject/" | grep -oE 'entr-[0-9]+\.[0-9]+\.tar\.gz' | head -1 | command sed 's/entr-//;s/\.tar\.gz//')
-    
+
     set_latest "entr" "$latest"
+    progress_done
+}
+
+check_biome() {
+    progress_msg "  biome..."
+    # Biome uses cli/vX.Y.Z tag format for CLI releases
+    local latest
+    latest=$(fetch_url "https://api.github.com/repos/biomejs/biome/releases" | jq -r '[.[] | select(.tag_name | startswith("cli/v"))] | .[0].tag_name // "null"' 2>/dev/null | command sed 's|^cli/v||')
+    set_latest "biome" "$latest"
     progress_done
 }
 
@@ -682,6 +694,7 @@ main() {
             jmh) check_maven_central "jmh" "org.openjdk.jmh" "jmh-core" ;;
             duf) check_github_release "duf" "muesli/duf" ;;
             entr) check_entr ;;
+            biome) check_biome ;;
             zoxide) check_github_release "zoxide" "ajeetdsouza/zoxide" ;;
             cosign) check_github_release "cosign" "sigstore/cosign" ;;
             trivy-action) check_github_release "trivy-action" "aquasecurity/trivy-action" ;;
