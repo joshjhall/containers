@@ -80,6 +80,7 @@ test_binary_tool_installations() {
         "act"
         "glab"
         "mkcert"
+        "biome"
     )
     
     # Simulate tool installation
@@ -109,6 +110,7 @@ test_tool_versions() {
         "MKCERT_VERSION=1.4.4"
         "ACT_VERSION=0.2.80"
         "GLAB_VERSION=1.65.0"
+        "BIOME_VERSION=1.9.4"
     )
     
     # Check version format
