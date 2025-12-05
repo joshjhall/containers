@@ -18,10 +18,10 @@ setup() {
     # Create temporary VERSION and CHANGELOG files for testing
     export TEST_VERSION_FILE="$RESULTS_DIR/VERSION"
     export TEST_CHANGELOG_FILE="$RESULTS_DIR/CHANGELOG.md"
-    
+
     # Create initial VERSION file
     echo "1.2.3" > "$TEST_VERSION_FILE"
-    
+
     # Create initial CHANGELOG
     command cat > "$TEST_CHANGELOG_FILE" <<'EOF'
 # Changelog
@@ -49,17 +49,17 @@ test_bump_patch() {
     # Simulate bumping patch version
     local current="1.2.3"
     local expected="1.2.4"
-    
+
     # Extract version components
     local major="${current%%.*}"
     local minor="${current#*.}"
     minor="${minor%%.*}"
     local patch="${current##*.}"
-    
+
     # Bump patch
     patch=$((patch + 1))
     local new_version="${major}.${minor}.${patch}"
-    
+
     assert_equals "$expected" "$new_version" "Patch version bump calculation"
 }
 
@@ -68,16 +68,16 @@ test_bump_minor() {
     # Simulate bumping minor version
     local current="1.2.3"
     local expected="1.3.0"
-    
+
     # Extract version components
     local major="${current%%.*}"
     local minor="${current#*.}"
     minor="${minor%%.*}"
-    
+
     # Bump minor, reset patch
     minor=$((minor + 1))
     local new_version="${major}.${minor}.0"
-    
+
     assert_equals "$expected" "$new_version" "Minor version bump calculation"
 }
 
@@ -86,14 +86,14 @@ test_bump_major() {
     # Simulate bumping major version
     local current="1.2.3"
     local expected="2.0.0"
-    
+
     # Extract version components
     local major="${current%%.*}"
-    
+
     # Bump major, reset minor and patch
     major=$((major + 1))
     local new_version="${major}.0.0"
-    
+
     assert_equals "$expected" "$new_version" "Major version bump calculation"
 }
 
@@ -101,14 +101,14 @@ test_bump_major() {
 test_invalid_version_format() {
     # Test various invalid formats
     local version="1.2"  # Missing patch
-    
+
     # Check if version has three parts
     if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
         assert_true true "Invalid version format detected: $version"
     else
         assert_true false "Failed to detect invalid version format"
     fi
-    
+
     version="v1.2.3"  # Has 'v' prefix
     if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
         assert_true true "Invalid version format detected: $version"
@@ -122,7 +122,7 @@ test_version_file_check() {
     # Test with existing file
     echo "1.0.0" > "$TEST_VERSION_FILE"
     assert_file_exists "$TEST_VERSION_FILE"
-    
+
     # Test reading version from file
     local version
     version=$(cat "$TEST_VERSION_FILE")
@@ -139,9 +139,9 @@ test_changelog_file_check() {
 
 ## [1.0.0] - 2025-01-01
 EOF
-    
+
     assert_file_exists "$TEST_CHANGELOG_FILE"
-    
+
     # Check if Unreleased section exists
     if grep -q "## \[Unreleased\]" "$TEST_CHANGELOG_FILE"; then
         assert_true true "Unreleased section found in changelog"
@@ -155,7 +155,7 @@ test_requires_argument() {
     # The release script should fail without arguments
     local exit_code=0
     "$PROJECT_ROOT/bin/release.sh" 2>/dev/null || exit_code=$?
-    
+
     if [ $exit_code -ne 0 ]; then
         assert_true true "Script correctly requires an argument"
     else
@@ -167,7 +167,7 @@ test_requires_argument() {
 test_valid_bump_types() {
     # Test that script recognizes valid bump types
     local valid_types=("patch" "minor" "major")
-    
+
     for bump_type in "${valid_types[@]}"; do
         # Just check if the bump type is valid (don't actually run)
         if [[ "$bump_type" =~ ^(patch|minor|major)$ ]]; then
@@ -182,7 +182,7 @@ test_valid_bump_types() {
 test_invalid_bump_types() {
     # Test that script rejects invalid bump types
     local invalid_types=("micro" "release" "version" "1.2.3")
-    
+
     for bump_type in "${invalid_types[@]}"; do
         if [[ ! "$bump_type" =~ ^(patch|minor|major)$ ]]; then
             assert_true true "Correctly rejected invalid bump type: $bump_type"
@@ -195,13 +195,13 @@ test_invalid_bump_types() {
 # Test: Semantic version parsing
 test_semver_parsing() {
     local version="2.5.8"
-    
+
     # Parse version components
     local major="${version%%.*}"
     local temp="${version#*.}"
     local minor="${temp%%.*}"
     local patch="${temp#*.}"
-    
+
     assert_equals "2" "$major" "Major version parsed correctly"
     assert_equals "5" "$minor" "Minor version parsed correctly"
     assert_equals "8" "$patch" "Patch version parsed correctly"
@@ -235,19 +235,19 @@ test_cancellation_message() {
     else
         assert_true false "Missing cancellation message"
     fi
-    
+
     if echo "$output" | grep -q "echo 'y' |"; then
         assert_true true "Shows echo 'y' automation example"
     else
         assert_true false "Missing echo 'y' automation example"
     fi
-    
+
     if echo "$output" | grep -q "yes |"; then
         assert_true true "Shows yes command automation example"
     else
         assert_true false "Missing yes command automation example"
     fi
-    
+
     teardown
 }
 
@@ -266,7 +266,7 @@ test_auto_confirmation() {
     else
         assert_true false "Auto-confirmation would not be accepted"
     fi
-    
+
     # Verify the release script exists and can handle piped input
     if [ -x "$PROJECT_ROOT/bin/release.sh" ]; then
         assert_true true "Release script is executable"
@@ -279,7 +279,7 @@ test_auto_confirmation() {
 run_test_with_setup() {
     local test_function="$1"
     local test_description="$2"
-    
+
     setup
     run_test "$test_function" "$test_description"
     teardown

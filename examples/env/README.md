@@ -159,11 +159,11 @@ INCLUDE_KUBERNETES=true
 
 1. **Never commit real credentials** - These files show variable names, not
    values
-2. **Use secrets management** - For production, use Docker secrets or vault
+1. **Use secrets management** - For production, use Docker secrets or vault
    systems
-3. **Minimize exposure** - Only include variables actually needed by your
+1. **Minimize exposure** - Only include variables actually needed by your
    application
-4. **Rotate regularly** - Especially for cloud provider credentials
+1. **Rotate regularly** - Especially for cloud provider credentials
 
 ## Feature Dependencies
 

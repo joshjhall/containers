@@ -18,15 +18,15 @@ setup() {
     # Create temporary directory for testing
     export TEST_TEMP_DIR="$RESULTS_DIR/test-setup-bashrc.d"
     mkdir -p "$TEST_TEMP_DIR"
-    
+
     # Create mock etc directory
     export MOCK_ETC="$TEST_TEMP_DIR/etc"
     mkdir -p "$MOCK_ETC"
-    
+
     # Create mock bash.bashrc
     export MOCK_BASHRC="$MOCK_ETC/bash.bashrc"
     echo "# Original bashrc content" > "$MOCK_BASHRC"
-    
+
     # Create mock bashrc.d directory
     export MOCK_BASHRC_D="$MOCK_ETC/bashrc.d"
 }
@@ -37,7 +37,7 @@ teardown() {
     if [ -n "${TEST_TEMP_DIR:-}" ]; then
         command rm -rf "$TEST_TEMP_DIR"
     fi
-    
+
     # Unset test variables
     unset MOCK_ETC MOCK_BASHRC MOCK_BASHRC_D 2>/dev/null || true
 }
@@ -46,9 +46,9 @@ teardown() {
 test_bashrc_d_directory_created() {
     # Simulate creating the directory
     mkdir -p "$MOCK_BASHRC_D"
-    
+
     assert_dir_exists "$MOCK_BASHRC_D"
-    
+
     # Check permissions
     if [ -d "$MOCK_BASHRC_D" ]; then
         assert_true true "bashrc.d directory created successfully"
@@ -71,14 +71,14 @@ if [ -d /etc/bashrc.d ]; then
 fi
 EOF
     fi
-    
+
     # Check that sourcing was added
     if grep -q "/etc/bashrc.d" "$MOCK_BASHRC"; then
         assert_true true "Sourcing added to bash.bashrc"
     else
         assert_true false "Sourcing not added to bash.bashrc"
     fi
-    
+
     # Check for loop structure
     if grep -q "for f in /etc/bashrc.d/\*.sh" "$MOCK_BASHRC"; then
         assert_true true "For loop structure correct"
@@ -90,7 +90,7 @@ EOF
 # Test: bash_env file created for non-interactive shells
 test_bash_env_created() {
     local bash_env="$MOCK_ETC/bash_env"
-    
+
     # Create bash_env file
     command cat > "$bash_env" << 'EOF'
 #!/bin/bash
@@ -104,16 +104,16 @@ if [ -d /etc/bashrc.d ]; then
     done
 fi
 EOF
-    
+
     assert_file_exists "$bash_env"
-    
+
     # Check shebang
     if head -n1 "$bash_env" | grep -q "#!/bin/bash"; then
         assert_true true "bash_env has shebang"
     else
         assert_true false "bash_env missing shebang"
     fi
-    
+
     # Check error handling (|| true)
     if grep -q "|| true" "$bash_env"; then
         assert_true true "bash_env has error handling"
@@ -125,11 +125,11 @@ EOF
 # Test: bash_env is executable
 test_bash_env_executable() {
     local bash_env="$MOCK_ETC/bash_env"
-    
+
     # Create and make executable
     touch "$bash_env"
     chmod +x "$bash_env"
-    
+
     if [ -x "$bash_env" ]; then
         assert_true true "bash_env is executable"
     else
@@ -141,7 +141,7 @@ test_bash_env_executable() {
 test_base_paths_script() {
     mkdir -p "$MOCK_BASHRC_D"
     local base_paths="$MOCK_BASHRC_D/00-base-paths.sh"
-    
+
     # Create base paths script
     command cat > "$base_paths" << 'EOF'
 # Base PATH setup
@@ -155,16 +155,16 @@ if [ -d "$HOME/.local/bin" ]; then
     export PATH="$HOME/.local/bin:$PATH"
 fi
 EOF
-    
+
     assert_file_exists "$base_paths"
-    
+
     # Check PATH export
     if grep -q 'export PATH="/usr/local/sbin' "$base_paths"; then
         assert_true true "Base PATH is set"
     else
         assert_true false "Base PATH not set"
     fi
-    
+
     # Check HOME/.local/bin addition
     if grep -q 'HOME/.local/bin' "$base_paths"; then
         assert_true true "User local bin added to PATH"
@@ -177,10 +177,10 @@ EOF
 test_base_paths_executable() {
     mkdir -p "$MOCK_BASHRC_D"
     local base_paths="$MOCK_BASHRC_D/00-base-paths.sh"
-    
+
     touch "$base_paths"
     chmod +x "$base_paths"
-    
+
     if [ -x "$base_paths" ]; then
         assert_true true "Base paths script is executable"
     else
@@ -191,11 +191,11 @@ test_base_paths_executable() {
 # Test: Script numbering for order
 test_script_numbering() {
     mkdir -p "$MOCK_BASHRC_D"
-    
+
     # Check that base paths uses 00- prefix for early execution
     local base_paths="$MOCK_BASHRC_D/00-base-paths.sh"
     touch "$base_paths"
-    
+
     local filename
     filename=$(basename "$base_paths")
     if [[ "$filename" =~ ^00- ]]; then
@@ -216,10 +216,10 @@ if [ -d /etc/bashrc.d ]; then
     done
 fi
 EOF
-    
+
     local line_count_before
     line_count_before=$(grep -c "/etc/bashrc.d" "$MOCK_BASHRC")
-    
+
     # Try to add again (should skip if already present)
     if ! grep -q "/etc/bashrc.d" "$MOCK_BASHRC" 2>/dev/null; then
         command cat >> "$MOCK_BASHRC" << 'EOF'
@@ -231,10 +231,10 @@ if [ -d /etc/bashrc.d ]; then
 fi
 EOF
     fi
-    
+
     local line_count_after
     line_count_after=$(grep -c "/etc/bashrc.d" "$MOCK_BASHRC")
-    
+
     assert_equals "$line_count_before" "$line_count_after" "Sourcing not duplicated"
 }
 
@@ -242,7 +242,7 @@ EOF
 run_test_with_setup() {
     local test_function="$1"
     local test_description="$2"
-    
+
     setup
     run_test "$test_function" "$test_description"
     teardown

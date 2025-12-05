@@ -14,7 +14,7 @@ handling.
 | PCI DSS 12.10     | Incident response plan         | Guidance |
 | NIST CSF RS       | Response planning              | Guidance |
 
----
+______________________________________________________________________
 
 ## Incident Classification
 
@@ -30,12 +30,12 @@ handling.
 ### Incident Categories
 
 1. **Container Compromise** - Unauthorized access or code execution
-2. **Data Exposure** - Sensitive data leaked or accessed
-3. **Supply Chain** - Compromised dependency or image
-4. **Misconfiguration** - Security settings incorrect
-5. **Availability** - Denial of service or resource exhaustion
+1. **Data Exposure** - Sensitive data leaked or accessed
+1. **Supply Chain** - Compromised dependency or image
+1. **Misconfiguration** - Security settings incorrect
+1. **Availability** - Denial of service or resource exhaustion
 
----
+______________________________________________________________________
 
 ## Playbook: Container Compromise
 
@@ -85,7 +85,7 @@ kubectl exec <pod> -- find / -mmin -60 -type f 2>/dev/null
    EOF
    ```
 
-2. **Capture forensic evidence**
+1. **Capture forensic evidence**
 
    ```bash
    # Export container logs
@@ -98,7 +98,8 @@ kubectl exec <pod> -- find / -mmin -60 -type f 2>/dev/null
    kubectl exec <pod> -- tar czf - / > container-snapshot.tar.gz
    ```
 
-3. **Notify stakeholders**
+1. **Notify stakeholders**
+
    - Security team
    - Infrastructure team
    - Management (if Critical/High)
@@ -106,11 +107,12 @@ kubectl exec <pod> -- find / -mmin -60 -type f 2>/dev/null
 ### Eradication
 
 1. **Identify root cause**
+
    - Review logs and forensic evidence
    - Check for vulnerability exploitation
    - Verify image integrity
 
-2. **Remove threat**
+1. **Remove threat**
 
    ```bash
    # Delete compromised pod
@@ -120,7 +122,8 @@ kubectl exec <pod> -- find / -mmin -60 -type f 2>/dev/null
    kubectl get pods,deployments,daemonsets -l app=<app>
    ```
 
-3. **Patch vulnerability**
+1. **Patch vulnerability**
+
    - Update container image
    - Apply security patches
    - Update dependencies
@@ -140,7 +143,7 @@ kubectl exec <pod> -- find / -mmin -60 -type f 2>/dev/null
    trivy image --severity CRITICAL,HIGH myapp:recovery
    ```
 
-2. **Restore service**
+1. **Restore service**
 
    ```bash
    # Deploy clean version
@@ -150,7 +153,8 @@ kubectl exec <pod> -- find / -mmin -60 -type f 2>/dev/null
    kubectl rollout status deployment/<deployment>
    ```
 
-3. **Monitor for recurrence**
+1. **Monitor for recurrence**
+
    - Enable enhanced logging
    - Watch for similar indicators
    - Set up alerts
@@ -162,11 +166,11 @@ kubectl exec <pod> -- find / -mmin -60 -type f 2>/dev/null
 - Update security controls
 - Schedule lessons learned meeting
 
----
+______________________________________________________________________
 
 ## Playbook: Data Exposure
 
-### Detection
+### Data Exposure Detection
 
 **Indicators**:
 
@@ -175,7 +179,7 @@ kubectl exec <pod> -- find / -mmin -60 -type f 2>/dev/null
 - Data in unencrypted storage
 - Gitleaks/Trivy alerts
 
-### Containment
+### Data Exposure Containment
 
 1. **Rotate exposed credentials immediately**
 
@@ -189,12 +193,14 @@ kubectl exec <pod> -- find / -mmin -60 -type f 2>/dev/null
    kubectl rollout restart deployment/<deployment>
    ```
 
-2. **Revoke access tokens**
+1. **Revoke access tokens**
+
    - API keys
    - OAuth tokens
    - Service account credentials
 
-3. **Block unauthorized access**
+1. **Block unauthorized access**
+
    - Update firewall rules
    - Revoke user access
    - Invalidate sessions
@@ -202,18 +208,19 @@ kubectl exec <pod> -- find / -mmin -60 -type f 2>/dev/null
 ### Investigation
 
 1. **Determine scope**
+
    - What data was exposed?
    - Who had access?
    - How long was it exposed?
 
-2. **Audit access logs**
+1. **Audit access logs**
 
    ```bash
    # Check Kubernetes audit logs
    kubectl logs -n kube-system -l component=kube-apiserver | grep <resource>
    ```
 
-3. **Document exposure timeline**
+1. **Document exposure timeline**
 
 ### Notification
 
@@ -224,11 +231,11 @@ Based on data type and regulations:
 - **GDPR**: Notify authority within 72 hours
 - **Internal**: Follow company notification policy
 
----
+______________________________________________________________________
 
 ## Playbook: Supply Chain Attack
 
-### Detection
+### Supply Chain Attack Detection
 
 **Indicators**:
 
@@ -237,7 +244,7 @@ Based on data type and regulations:
 - New vulnerabilities in dependencies
 - SBOM changes
 
-### Verification
+### Supply Chain Attack Verification
 
 ```bash
 # Verify image signature
@@ -262,7 +269,7 @@ trivy image --severity CRITICAL <image>
    kubectl scale deployment/<deployment> --replicas=0
    ```
 
-2. **Identify affected systems**
+1. **Identify affected systems**
 
    ```bash
    # Find pods using the image
@@ -270,19 +277,19 @@ trivy image --severity CRITICAL <image>
      jq '.items[] | select(.spec.containers[].image == "<affected-image>")'
    ```
 
-3. **Roll back to known good version**
+1. **Roll back to known good version**
 
    ```bash
    kubectl rollout undo deployment/<deployment>
    ```
 
-4. **Notify upstream maintainers**
+1. **Notify upstream maintainers**
 
----
+______________________________________________________________________
 
 ## Playbook: Security Misconfiguration
 
-### Detection
+### Misconfiguration Detection
 
 **Indicators**:
 
@@ -291,7 +298,7 @@ trivy image --severity CRITICAL <image>
 - Configuration drift
 - Compliance audit failures
 
-### Assessment
+### Misconfiguration Assessment
 
 ```bash
 # Check current configuration
@@ -308,22 +315,22 @@ conftest test deployment.yaml -p policy/
 
 1. **Document the misconfiguration**
 
-2. **Apply correct configuration**
+1. **Apply correct configuration**
 
    ```bash
    kubectl patch deployment <deployment> \
      -p '{"spec":{"template":{"spec":{"securityContext":{"runAsNonRoot":true}}}}}'
    ```
 
-3. **Verify fix**
+1. **Verify fix**
 
    ```bash
    kubectl get deployment <deployment> -o yaml | grep -A5 securityContext
    ```
 
-4. **Update configuration management**
+1. **Update configuration management**
 
----
+______________________________________________________________________
 
 ## Communication Templates
 
@@ -381,7 +388,7 @@ Incident Report: INC-<ID>
 7. Recommendations
 ```
 
----
+______________________________________________________________________
 
 ## Escalation Matrix
 
@@ -392,7 +399,7 @@ Incident Report: INC-<ID>
 | Medium   | Team lead         | Security Lead              | Daily summary    |
 | Low      | Assigned engineer | Team lead                  | Weekly summary   |
 
----
+______________________________________________________________________
 
 ## Integration Points
 
@@ -441,7 +448,7 @@ spec:
             template: slack-notify
 ```
 
----
+______________________________________________________________________
 
 ## Tabletop Exercises
 
@@ -457,10 +464,10 @@ Conduct quarterly tabletop exercises to test incident response:
 ### Exercise Template
 
 1. **Scenario presentation** (10 min)
-2. **Team response discussion** (30 min)
-3. **Walkthrough of playbook** (15 min)
-4. **Gap identification** (15 min)
-5. **Action items** (10 min)
+1. **Team response discussion** (30 min)
+1. **Walkthrough of playbook** (15 min)
+1. **Gap identification** (15 min)
+1. **Action items** (10 min)
 
 ### Post-Exercise
 
@@ -469,7 +476,7 @@ Conduct quarterly tabletop exercises to test incident response:
 - Assign improvement tasks
 - Schedule follow-up
 
----
+______________________________________________________________________
 
 ## Related Documentation
 

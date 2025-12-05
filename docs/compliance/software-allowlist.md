@@ -12,7 +12,7 @@ addressing compliance requirements for authorized software control.
 | NIST 800-53 CM-7(5) | Authorized software           | Compliant |
 | CIS Controls 2.5    | Software inventory            | Compliant |
 
----
+______________________________________________________________________
 
 ## Approved Software Categories
 
@@ -32,7 +32,7 @@ All language runtimes are version-pinned and signature-verified.
 
 **Version Policy**: Use latest stable/LTS version. Update weekly via auto-patch.
 
----
+______________________________________________________________________
 
 ### 2. Base System Packages
 
@@ -53,7 +53,7 @@ Installed from Debian official repositories.
 
 **Version Policy**: Latest from Debian stable repository.
 
----
+______________________________________________________________________
 
 ### 3. Build Dependencies
 
@@ -74,7 +74,7 @@ Required for compiling language extensions.
 
 **Version Policy**: Latest from Debian stable. Removed in production builds.
 
----
+______________________________________________________________________
 
 ### 4. Security Tools
 
@@ -84,7 +84,7 @@ Required for compiling language extensions.
 | trivy    | (CI only)       | Vulnerability scanning | N/A          |
 | gitleaks | (CI only)       | Secret detection       | N/A          |
 
----
+______________________________________________________________________
 
 ### 5. Cloud & Infrastructure CLIs
 
@@ -97,7 +97,7 @@ Required for compiling language extensions.
 | gcloud    | Latest          | Google Cloud  | Checksum     |
 | az        | Latest          | Microsoft     | Checksum     |
 
----
+______________________________________________________________________
 
 ### 6. Development Tools
 
@@ -113,29 +113,33 @@ Version-pinned in feature scripts.
 
 See [docs/reference/versions.md](../reference/versions.md) for complete list.
 
----
+______________________________________________________________________
 
 ## Approval Process
 
 ### Adding New Software
 
 1. **Request**: Open GitHub issue with:
+
    - Software name and version
    - Business justification
    - Security review (CVE history, maintenance status)
    - License compliance check
 
-2. **Review**: Security team evaluates:
+1. **Review**: Security team evaluates:
+
    - Attack surface increase
    - Dependency chain
    - Update/patch availability
    - Signature verification method
 
-3. **Approval**: Requires sign-off from:
+1. **Approval**: Requires sign-off from:
+
    - Project maintainer
    - Security lead (for tools with network access)
 
-4. **Implementation**:
+1. **Implementation**:
+
    - Add to feature script with version pinning
    - Implement verification (checksum/GPG/Sigstore)
    - Add to check-versions.sh for tracking
@@ -144,11 +148,11 @@ See [docs/reference/versions.md](../reference/versions.md) for complete list.
 ### Removing Software
 
 1. Check for dependencies
-2. Update deprecation in CHANGELOG
-3. Remove from feature scripts
-4. Update allowlist
+1. Update deprecation in CHANGELOG
+1. Remove from feature scripts
+1. Update allowlist
 
----
+______________________________________________________________________
 
 ## Version Control
 
@@ -184,7 +188,7 @@ The auto-patch workflow (`bin/check-versions.sh`) checks for updates:
 ./bin/update-versions.sh versions.json
 ```
 
----
+______________________________________________________________________
 
 ## Verification Methods
 
@@ -214,7 +218,7 @@ cosign verify-blob \
 echo "<expected_hash>  ruby-<version>.tar.gz" | sha256sum -c -
 ```
 
----
+______________________________________________________________________
 
 ## Audit Evidence
 
@@ -259,7 +263,7 @@ echo "=== SBOM Available ==="
 ls -la sbom-*.json 2>/dev/null || echo "Run CI to generate SBOM"
 ```
 
----
+______________________________________________________________________
 
 ## Non-Allowed Software
 
@@ -275,7 +279,7 @@ The following are explicitly **NOT allowed**:
 
 Exceptions require documented business justification and security review.
 
----
+______________________________________________________________________
 
 ## Change Log
 
@@ -286,7 +290,7 @@ Track changes to the allowlist:
 | 2025-11-01 | Initial allowlist creation  | @joshjhall |
 | 2025-11-15 | Added Sigstore verification | @joshjhall |
 
----
+______________________________________________________________________
 
 ## Related Documentation
 

@@ -156,6 +156,7 @@ frameworks
    ```
 
 1. Review recent changes to the cluster
+
 1. Escalate to security team
 
 **Post-Incident**:
@@ -165,7 +166,7 @@ frameworks
 - Document in incident tracker
 - Notify compliance officer if breach confirmed
 
----
+______________________________________________________________________
 
 ### Critical: Cryptominer Detected
 
@@ -228,7 +229,7 @@ frameworks
 - Enable image signing verification
 - Update SOC 2 incident log
 
----
+______________________________________________________________________
 
 ### Warning: PHI Data Access
 
@@ -245,6 +246,7 @@ frameworks
    ```
 
 1. Verify authorized access
+
    - Check if user has PHI access approval
    - Verify business need for access
    - Check access time vs. working hours
@@ -269,7 +271,7 @@ frameworks
 - Update BAA if third-party involved
 - Train user on PHI access policies
 
----
+______________________________________________________________________
 
 ### Warning: Reverse Shell Detected
 
@@ -312,6 +314,7 @@ frameworks
    ```
 
 1. Identify command & control server
+
 1. Block C2 IP at firewall/security group
 
 **Post-Incident**:
@@ -322,7 +325,7 @@ frameworks
 - Implement network segmentation
 - File security incident report
 
----
+______________________________________________________________________
 
 ### Notice: Interactive Shell in Container
 
@@ -339,6 +342,7 @@ frameworks
    ```
 
 1. Document the session
+
    - User identity
    - Business justification
    - Duration of access
@@ -363,7 +367,7 @@ frameworks
 - Implement break-glass procedures
 - Enable session recording
 
----
+______________________________________________________________________
 
 ## Prometheus Queries
 

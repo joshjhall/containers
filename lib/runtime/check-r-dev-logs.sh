@@ -73,7 +73,7 @@ case $ACTION in
             echo "No summary log found at $SUMMARY_LOG"
         fi
         ;;
-    
+
     errors)
         if [ -f "$ERROR_LOG" ]; then
             echo "=== R Development Tools Installation Errors/Warnings ==="
@@ -89,7 +89,7 @@ case $ACTION in
             echo "No error log found at $ERROR_LOG"
         fi
         ;;
-    
+
     full)
         if [ -f "$LOG_FILE" ]; then
             echo "=== Full R Development Tools Installation Log ==="

@@ -12,7 +12,7 @@ system, organized by category.
 - [Feature-Specific Variables](#feature-specific-variables)
 - [Runtime Configuration](#runtime-configuration)
 
----
+______________________________________________________________________
 
 ## Build Arguments
 
@@ -99,7 +99,7 @@ helm | | `INCLUDE_TERRAFORM` | Install Terraform and related tools |
 `INCLUDE_DOCKER` | Install Docker CLI tools | | `INCLUDE_OP_CLI` | Install
 1Password CLI | | `INCLUDE_OLLAMA` | Install Ollama for local LLMs |
 
----
+______________________________________________________________________
 
 ## Language Versions
 
@@ -116,7 +116,7 @@ Control which version of each language to install:
 | `JAVA_VERSION`   | `21`     | Java JDK version (Temurin)              |
 | `MOJO_VERSION`   | `24.6.0` | Mojo version via pixi                   |
 
----
+______________________________________________________________________
 
 ## Cache Directories
 
@@ -196,7 +196,7 @@ All cache directories are located under `/cache` for persistence across builds:
 | `CAROOT`           | `/cache/dev-tools/mkcert-ca`    | mkcert CA certificates     |
 | `DIRENV_ALLOW_DIR` | `/cache/dev-tools/direnv-allow` | direnv allowed directories |
 
----
+______________________________________________________________________
 
 ## Feature-Specific Variables
 
@@ -227,7 +227,7 @@ All cache directories are located under `/cache` for persistence across builds:
 | -------------------------------- | ------- | ---------------------------------- |
 | `BUNDLE_AUDIT_UPDATE_ON_INSTALL` | `true`  | Update vulnerability DB on install |
 
----
+______________________________________________________________________
 
 ## Runtime Configuration
 
@@ -302,7 +302,7 @@ docker run \
 See [examples/validation/](../examples/validation/) for complete examples
 including web apps, API services, and background workers.
 
----
+______________________________________________________________________
 
 ## Usage Examples
 
@@ -360,7 +360,7 @@ docker run \
   myproject:dev
 ```
 
----
+______________________________________________________________________
 
 ## Finding Variables in Your Container
 
@@ -401,7 +401,7 @@ list-features.sh --filter language
 list-features.sh --filter dev-tools
 ```
 
----
+______________________________________________________________________
 
 ## Related Documentation
 
@@ -412,13 +412,13 @@ list-features.sh --filter dev-tools
 - [Testing Framework](../development/testing.md) - Test environment
   configuration
 
----
+______________________________________________________________________
 
 ## Contributing
 
 When adding new features or environment variables:
 
 1. Update this documentation
-2. Add to the feature's `log_feature_summary` call
-3. Include in the feature's test verification script
-4. Document in the feature script's header comments
+1. Add to the feature's `log_feature_summary` call
+1. Include in the feature's test verification script
+1. Document in the feature script's header comments

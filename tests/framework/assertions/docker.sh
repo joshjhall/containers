@@ -17,7 +17,7 @@
 assert_image_exists() {
     local image="$1"
     local message="${2:-Image $image should exist}"
-    
+
     if docker image inspect "$image" >/dev/null 2>&1; then
         return 0
     else
@@ -30,7 +30,7 @@ assert_image_exists() {
 assert_image_not_exists() {
     local image="$1"
     local message="${2:-Image $image should not exist}"
-    
+
     if ! docker image inspect "$image" >/dev/null 2>&1; then
         return 0
     else
@@ -43,7 +43,7 @@ assert_image_not_exists() {
 assert_container_running() {
     local container="$1"
     local message="${2:-Container $container should be running}"
-    
+
     if docker ps --format '{{.Names}}' | grep -q "^${container}$"; then
         return 0
     else
@@ -56,7 +56,7 @@ assert_container_running() {
 assert_container_not_running() {
     local container="$1"
     local message="${2:-Container $container should not be running}"
-    
+
     if ! docker ps --format '{{.Names}}' | grep -q "^${container}$"; then
         return 0
     else
@@ -71,7 +71,7 @@ assert_build_succeeds() {
     shift
     local build_args=("$@")
     local build_context="${BUILD_CONTEXT:-.}"
-    
+
     capture_result docker build -f "$dockerfile" "${build_args[@]}" "$build_context"
     if [ "$TEST_EXIT_CODE" -eq 0 ]; then
         return 0
@@ -103,7 +103,7 @@ assert_command_in_container() {
     local command="$2"
     local expected="${3:-}"
     local message="${4:-Command should succeed in container}"
-    
+
     capture_result docker run --rm "$image" bash -c "$command"
 
     if [ "$TEST_EXIT_CODE" -ne 0 ]; then
@@ -130,7 +130,7 @@ assert_command_fails_in_container() {
     local image="$1"
     local command="$2"
     local message="${3:-Command should fail in container}"
-    
+
     capture_result docker run --rm "$image" bash -c "$command"
 
     if [ "$TEST_EXIT_CODE" -eq 0 ]; then
@@ -163,7 +163,7 @@ assert_file_in_image() {
     local image="$1"
     local file_path="$2"
     local message="${3:-File $file_path should exist in image}"
-    
+
     if docker run --rm "$image" test -f "$file_path"; then
         return 0
     else
@@ -177,7 +177,7 @@ assert_dir_in_image() {
     local image="$1"
     local dir_path="$2"
     local message="${3:-Directory $dir_path should exist in image}"
-    
+
     if docker run --rm "$image" test -d "$dir_path"; then
         return 0
     else
@@ -191,7 +191,7 @@ assert_executable_in_path() {
     local image="$1"
     local executable="$2"
     local message="${3:-Executable $executable should be in PATH}"
-    
+
     if docker run --rm "$image" which "$executable" >/dev/null 2>&1; then
         return 0
     else
@@ -206,7 +206,7 @@ assert_env_var_set() {
     local var_name="$2"
     local expected_value="${3:-}"
     local message="${4:-Environment variable $var_name should be set}"
-    
+
     capture_result docker run --rm "$image" printenv "$var_name"
 
     if [ "$TEST_EXIT_CODE" -ne 0 ]; then

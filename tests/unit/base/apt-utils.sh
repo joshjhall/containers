@@ -24,13 +24,13 @@ test_functions_exported() {
     else
         assert_true false "apt_update function not exported"
     fi
-    
+
     if grep -q "export -f apt_install" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
         assert_true true "apt_install function is exported"
     else
         assert_true false "apt_install function not exported"
     fi
-    
+
     if grep -q "export -f apt_cleanup" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
         assert_true true "apt_cleanup function is exported"
     else
@@ -46,7 +46,7 @@ test_apt_update_function() {
     else
         assert_true false "apt_update function not found"
     fi
-    
+
     # Check for retry logic
     if grep -q "APT_MAX_RETRIES" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
         assert_true true "Retry logic with APT_MAX_RETRIES is present"
@@ -63,7 +63,7 @@ test_apt_install_function() {
     else
         assert_true false "apt_install function not found"
     fi
-    
+
     # Check for --no-install-recommends flag
     if grep -q "\-\-no-install-recommends" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
         assert_true true "Using --no-install-recommends for minimal installs"
@@ -80,14 +80,14 @@ test_apt_cleanup_function() {
     else
         assert_true false "apt_cleanup function not found"
     fi
-    
+
     # Check for clean command (autoremove is not in apt_cleanup)
     if grep -q "apt-get clean" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
         assert_true true "apt_cleanup includes clean command"
     else
         assert_true false "apt_cleanup missing clean command"
     fi
-    
+
     # Check for clean
     if grep -q "apt-get clean" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
         assert_true true "apt_cleanup includes clean"
@@ -104,7 +104,7 @@ test_apt_retry_function() {
     else
         assert_true false "apt_retry function not found"
     fi
-    
+
     # Check for exponential backoff
     if grep -q "sleep.*delay" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
         assert_true true "Retry includes delay/backoff logic"
@@ -121,7 +121,7 @@ test_timeout_configuration() {
     else
         assert_true false "HTTP timeout not configured"
     fi
-    
+
     if grep -q "Acquire::https::Timeout" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
         assert_true true "HTTPS timeout is configured"
     else
@@ -137,7 +137,7 @@ test_network_diagnostics() {
     else
         assert_true false "DNS diagnostics missing"
     fi
-    
+
     if grep -q "ping" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
         assert_true true "Network connectivity test included"
     else
@@ -153,13 +153,13 @@ test_environment_defaults() {
     else
         assert_true false "Default max retries not set"
     fi
-    
+
     if grep -q "APT_RETRY_DELAY:-5" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
         assert_true true "Default retry delay is 5 seconds"
     else
         assert_true false "Default retry delay not set"
     fi
-    
+
     if grep -q "APT_TIMEOUT:-300" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
         assert_true true "Default timeout is 300 seconds"
     else

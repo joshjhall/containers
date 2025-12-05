@@ -296,17 +296,17 @@ docker buildx build \
 ## Prevention
 
 1. **Set up cache monitoring** - Alert on cache growth
-2. **Configure automatic pruning** - Keep cache size bounded
-3. **Use consistent builder** - Don't switch between builders
-4. **Document cache volumes** - Include in project setup
-5. **Test cache effectiveness** - Include in CI benchmarks
+1. **Configure automatic pruning** - Keep cache size bounded
+1. **Use consistent builder** - Don't switch between builders
+1. **Document cache volumes** - Include in project setup
+1. **Test cache effectiveness** - Include in CI benchmarks
 
 ## Escalation
 
 If cache issues persist:
 
 1. Document cache sizes and growth rate
-2. Note which cache types are problematic
-3. Include Docker and BuildKit versions
-4. Describe build environment (CI vs local)
-5. Open GitHub issue with `bug` label
+1. Note which cache types are problematic
+1. Include Docker and BuildKit versions
+1. Describe build environment (CI vs local)
+1. Open GitHub issue with `bug` label

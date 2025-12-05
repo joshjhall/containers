@@ -8,8 +8,8 @@ the right documentation for your needs.
 **New to the project?** Start with:
 
 1. [Main README](../README.md) - Overview and quick start
-2. [CLAUDE.md](../CLAUDE.md) - Working with the codebase
-3. [Troubleshooting](troubleshooting.md) - Common issues and solutions
+1. [CLAUDE.md](../CLAUDE.md) - Working with the codebase
+1. [Troubleshooting](troubleshooting.md) - Common issues and solutions
 
 ## User Documentation
 
@@ -159,22 +159,22 @@ Platform-specific troubleshooting:
 When updating documentation:
 
 1. **Keep it current** - Update docs when code changes
-2. **Cross-reference** - Link to related docs
-3. **Use examples** - Show real commands and output
-4. **Be concise** - Keep docs clear and focused
-5. **Follow structure** - Use appropriate category directories
+1. **Cross-reference** - Link to related docs
+1. **Use examples** - Show real commands and output
+1. **Be concise** - Keep docs clear and focused
+1. **Follow structure** - Use appropriate category directories
 
 See [Development/Code Style](development/code-style.md) for style conventions.
 
 ## Getting Help
 
 1. Check [Troubleshooting](troubleshooting.md) first
-2. Search existing documentation using categories above
-3. Check [CHANGELOG.md](../CHANGELOG.md) for recent changes
-4. Review [GitHub Actions](https://github.com/joshjhall/containers/actions) for
+1. Search existing documentation using categories above
+1. Check [CHANGELOG.md](../CHANGELOG.md) for recent changes
+1. Review [GitHub Actions](https://github.com/joshjhall/containers/actions) for
    CI status
-5. Create an issue at https://github.com/joshjhall/containers/issues
+1. Create an issue at `https://github.com/joshjhall/containers/issues`
 
----
+______________________________________________________________________
 
 **Last Updated**: 2025-11-16 **Documentation Structure Version**: 2.0

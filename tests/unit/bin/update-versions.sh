@@ -15,7 +15,7 @@ test_suite "Update Versions Tests"
 # Test: Help output
 test_help_output() {
     output=$("$PROJECT_ROOT/bin/update-versions.sh" --help 2>&1 || true)
-    
+
     if echo "$output" | grep -q "Usage:"; then
         return 0
     else
@@ -28,13 +28,13 @@ test_dry_run_mode() {
     # Create temporary test directory
     local test_dir
     test_dir=$(mktemp -d)
-    
+
     # Create mock Dockerfile
     command cat > "$test_dir/Dockerfile" << 'EOF'
 ARG PYTHON_VERSION=3.13.0
 ARG NODE_VERSION=22.10.0
 EOF
-    
+
     # Create mock JSON with updates
     command cat > "$test_dir/test.json" << 'EOF'
 {
@@ -49,11 +49,11 @@ EOF
   ]
 }
 EOF
-    
+
     # Run in dry run mode
     cd "$test_dir"
     output=$(PROJECT_ROOT_OVERRIDE="$test_dir" "$PROJECT_ROOT/bin/update-versions.sh" --dry-run --input test.json 2>&1)
-    
+
     # Check that file wasn't modified
     if grep -q "ARG PYTHON_VERSION=3.13.0" Dockerfile && echo "$output" | grep -q "DRY RUN"; then
         command rm -rf "$test_dir"
@@ -69,16 +69,16 @@ test_version_update() {
     # Create temporary test directory
     local test_dir
     test_dir=$(mktemp -d)
-    
+
     # Create mock Dockerfile
     command cat > "$test_dir/Dockerfile" << 'EOF'
 ARG PYTHON_VERSION=3.13.0
 ARG NODE_VERSION=22.10.0
 EOF
-    
+
     # Create lib/features directory
     mkdir -p "$test_dir/lib/features"
-    
+
     # Create mock JSON with updates
     command cat > "$test_dir/test.json" << 'EOF'
 {
@@ -93,7 +93,7 @@ EOF
   ]
 }
 EOF
-    
+
     # Initialize git repo (required for commits)
     cd "$test_dir"
     git init --quiet
@@ -101,17 +101,17 @@ EOF
     git config user.name "Test User"
     git add -A
     git commit -m "Initial" --quiet
-    
+
     # Create mock release script
     mkdir -p bin
     echo '#!/bin/bash' > bin/release.sh
     echo 'echo "1.4.1" > VERSION' >> bin/release.sh
     chmod +x bin/release.sh
     echo "1.4.0" > VERSION
-    
+
     # Run update with --no-commit to avoid git operations
     PROJECT_ROOT_OVERRIDE="$test_dir" "$PROJECT_ROOT/bin/update-versions.sh" --no-commit --no-bump --input test.json >/dev/null 2>&1
-    
+
     # Check that file was modified
     if grep -q "ARG PYTHON_VERSION=3.13.6" Dockerfile; then
         command rm -rf "$test_dir"
@@ -127,7 +127,7 @@ test_no_updates() {
     # Create temporary test directory
     local test_dir
     test_dir=$(mktemp -d)
-    
+
     # Create mock JSON with no updates
     command cat > "$test_dir/test.json" << 'EOF'
 {
@@ -142,10 +142,10 @@ test_no_updates() {
   ]
 }
 EOF
-    
+
     cd "$test_dir"
     output=$(PROJECT_ROOT_OVERRIDE="$test_dir" "$PROJECT_ROOT/bin/update-versions.sh" --no-bump --input test.json 2>&1)
-    
+
     if echo "$output" | grep -q "All versions are up to date"; then
         command rm -rf "$test_dir"
         return 0
@@ -158,7 +158,7 @@ EOF
 # Test: Invalid input file
 test_invalid_input() {
     output=$("$PROJECT_ROOT/bin/update-versions.sh" --input /nonexistent/file.json 2>&1 || true)
-    
+
     if echo "$output" | grep -q "Error: Input file not found"; then
         return 0
     else
@@ -171,7 +171,7 @@ test_shell_script_update() {
     # Create temporary test directory
     local test_dir
     test_dir=$(mktemp -d)
-    
+
     # Create lib/features directory and mock script
     mkdir -p "$test_dir/lib/features"
     command cat > "$test_dir/lib/features/dev-tools.sh" << 'EOF'
@@ -179,7 +179,7 @@ test_shell_script_update() {
 LAZYGIT_VERSION="0.54.1"
 DIRENV_VERSION="2.37.1"
 EOF
-    
+
     # Create mock JSON with shell script update
     command cat > "$test_dir/test.json" << 'EOF'
 {
@@ -194,7 +194,7 @@ EOF
   ]
 }
 EOF
-    
+
     # Initialize git repo
     cd "$test_dir"
     git init --quiet
@@ -202,17 +202,17 @@ EOF
     git config user.name "Test User"
     git add -A
     git commit -m "Initial" --quiet
-    
+
     # Create mock release script
     mkdir -p bin
     echo '#!/bin/bash' > bin/release.sh
     echo 'echo "1.4.1" > VERSION' >> bin/release.sh
     chmod +x bin/release.sh
     echo "1.4.0" > VERSION
-    
+
     # Run update
     PROJECT_ROOT_OVERRIDE="$test_dir" "$PROJECT_ROOT/bin/update-versions.sh" --no-commit --no-bump --input test.json >/dev/null 2>&1
-    
+
     # Check that file was modified
     if grep -q 'LAZYGIT_VERSION="0.54.2"' lib/features/dev-tools.sh; then
         command rm -rf "$test_dir"
@@ -228,7 +228,7 @@ test_java_dev_tools_update() {
     # Create temporary test directory
     local test_dir
     test_dir=$(mktemp -d)
-    
+
     # Create lib/features directory and mock script
     mkdir -p "$test_dir/lib/features"
     command cat > "$test_dir/lib/features/java-dev.sh" << 'EOF'
@@ -238,7 +238,7 @@ JBANG_VERSION="0.121.0"
     MVND_VERSION="1.0.2"
 GJF_VERSION="1.25.2"
 EOF
-    
+
     # Create mock JSON with Java tool updates
     command cat > "$test_dir/test.json" << 'EOF'
 {
@@ -274,7 +274,7 @@ EOF
   ]
 }
 EOF
-    
+
     # Initialize git repo
     cd "$test_dir"
     git init --quiet
@@ -282,17 +282,17 @@ EOF
     git config user.name "Test User"
     git add -A
     git commit -m "Initial" --quiet
-    
+
     # Create mock release script
     mkdir -p bin
     echo '#!/bin/bash' > bin/release.sh
     echo 'echo "1.4.1" > VERSION' >> bin/release.sh
     chmod +x bin/release.sh
     echo "1.4.0" > VERSION
-    
+
     # Run update
     PROJECT_ROOT_OVERRIDE="$test_dir" "$PROJECT_ROOT/bin/update-versions.sh" --no-commit --no-bump --input test.json >/dev/null 2>&1
-    
+
     # Check that all Java tools were updated
     local all_updated=true
     if ! grep -q 'SPRING_VERSION="3.5.4"' lib/features/java-dev.sh; then
@@ -307,9 +307,9 @@ EOF
     if ! grep -q 'GJF_VERSION="1.28.0"' lib/features/java-dev.sh; then
         all_updated=false
     fi
-    
+
     command rm -rf "$test_dir"
-    
+
     if [ "$all_updated" = true ]; then
         return 0
     else
@@ -322,7 +322,7 @@ test_duf_entr_update() {
     # Create temporary test directory
     local test_dir
     test_dir=$(mktemp -d)
-    
+
     # Create lib/features directory and mock script
     mkdir -p "$test_dir/lib/features"
     command cat > "$test_dir/lib/features/dev-tools.sh" << 'EOF'
@@ -330,7 +330,7 @@ test_duf_entr_update() {
 DUF_VERSION="0.8.0"
 ENTR_VERSION="5.5"
 EOF
-    
+
     # Create mock JSON with tool updates
     command cat > "$test_dir/test.json" << 'EOF'
 {
@@ -352,7 +352,7 @@ EOF
   ]
 }
 EOF
-    
+
     # Initialize git repo
     cd "$test_dir"
     git init --quiet
@@ -360,17 +360,17 @@ EOF
     git config user.name "Test User"
     git add -A
     git commit -m "Initial" --quiet
-    
+
     # Create mock release script
     mkdir -p bin
     echo '#!/bin/bash' > bin/release.sh
     echo 'echo "1.4.1" > VERSION' >> bin/release.sh
     chmod +x bin/release.sh
     echo "1.4.0" > VERSION
-    
+
     # Run update
     PROJECT_ROOT_OVERRIDE="$test_dir" "$PROJECT_ROOT/bin/update-versions.sh" --no-commit --no-bump --input test.json >/dev/null 2>&1
-    
+
     # Check that both tools were updated
     local all_updated=true
     if ! grep -q 'DUF_VERSION="0.8.1"' lib/features/dev-tools.sh; then
@@ -379,9 +379,9 @@ EOF
     if ! grep -q 'ENTR_VERSION="5.7"' lib/features/dev-tools.sh; then
         all_updated=false
     fi
-    
+
     command rm -rf "$test_dir"
-    
+
     if [ "$all_updated" = true ]; then
         return 0
     else
@@ -394,7 +394,7 @@ test_invalid_version_validation() {
     # Create temporary test directory
     local test_dir
     test_dir=$(mktemp -d)
-    
+
     # Create mock Dockerfile
     command cat > "$test_dir/Dockerfile" << 'EOF'
 ARG PYTHON_VERSION=3.13.0
@@ -402,7 +402,7 @@ ARG NODE_VERSION=22.10.0
 ARG GO_VERSION=1.22.3
 ARG RUST_VERSION=1.80.0
 EOF
-    
+
     # Create mock JSON with invalid versions
     command cat > "$test_dir/test.json" << 'EOF'
 {
@@ -438,7 +438,7 @@ EOF
   ]
 }
 EOF
-    
+
     # Initialize git repo (required for commits)
     cd "$test_dir"
     git init --quiet
@@ -446,30 +446,30 @@ EOF
     git config user.name "Test User"
     git add -A
     git commit -m "Initial" --quiet
-    
+
     # Create mock release script
     mkdir -p bin
     echo '#!/bin/bash' > bin/release.sh
     echo 'echo "1.4.1" > VERSION' >> bin/release.sh
     chmod +x bin/release.sh
     echo "1.4.0" > VERSION
-    
+
     # Run update with --no-commit to avoid git operations
     output=$(PROJECT_ROOT_OVERRIDE="$test_dir" "$PROJECT_ROOT/bin/update-versions.sh" --no-commit --no-bump --input test.json 2>&1)
-    
+
     # Check that invalid versions were rejected and files were not modified
     local success=true
-    
+
     # Check output contains error messages
     if ! echo "$output" | grep -q "Invalid version format"; then
         success=false
     fi
-    
+
     # Check that no invalid versions were written to Dockerfile
     if grep -q "null\|undefined\|error" Dockerfile; then
         success=false
     fi
-    
+
     # Check original versions are still there
     if ! grep -q "ARG PYTHON_VERSION=3.13.0" Dockerfile; then
         success=false
@@ -483,9 +483,9 @@ EOF
     if ! grep -q "ARG RUST_VERSION=1.80.0" Dockerfile; then
         success=false
     fi
-    
+
     command rm -rf "$test_dir"
-    
+
     if [ "$success" = true ]; then
         return 0
     else
@@ -498,14 +498,14 @@ test_mixed_valid_invalid_versions() {
     # Create temporary test directory
     local test_dir
     test_dir=$(mktemp -d)
-    
+
     # Create mock Dockerfile
     command cat > "$test_dir/Dockerfile" << 'EOF'
 ARG PYTHON_VERSION=3.13.0
 ARG NODE_VERSION=22.10.0
 ARG GO_VERSION=1.22.3
 EOF
-    
+
     # Create mock JSON with mixed valid and invalid versions
     command cat > "$test_dir/test.json" << 'EOF'
 {
@@ -534,7 +534,7 @@ EOF
   ]
 }
 EOF
-    
+
     # Initialize git repo
     cd "$test_dir"
     git init --quiet
@@ -542,42 +542,42 @@ EOF
     git config user.name "Test User"
     git add -A
     git commit -m "Initial" --quiet
-    
+
     # Create mock release script
     mkdir -p bin
     echo '#!/bin/bash' > bin/release.sh
     echo 'echo "1.4.1" > VERSION' >> bin/release.sh
     chmod +x bin/release.sh
     echo "1.4.0" > VERSION
-    
+
     # Run update
     output=$(PROJECT_ROOT_OVERRIDE="$test_dir" "$PROJECT_ROOT/bin/update-versions.sh" --no-commit --no-bump --input test.json 2>&1)
-    
+
     # Check that valid versions were updated and invalid ones were rejected
     local success=true
-    
+
     # Python should be updated (valid)
     if ! grep -q "ARG PYTHON_VERSION=3.13.6" Dockerfile; then
         success=false
     fi
-    
+
     # Node.js should NOT be updated (invalid)
     if ! grep -q "ARG NODE_VERSION=22.10.0" Dockerfile; then
         success=false
     fi
-    
+
     # Go should be updated (valid)
     if ! grep -q "ARG GO_VERSION=1.25.0" Dockerfile; then
         success=false
     fi
-    
+
     # Check that "null" was not written
     if grep -q "null" Dockerfile; then
         success=false
     fi
-    
+
     command rm -rf "$test_dir"
-    
+
     if [ "$success" = true ]; then
         return 0
     else
@@ -590,7 +590,7 @@ test_update_zoxide_version() {
     local test_dir="$RESULTS_DIR/test_zoxide_update"
     command rm -rf "$test_dir"
     mkdir -p "$test_dir/lib/base"
-    
+
     # Create test base setup script with old zoxide version
     command cat > "$test_dir/lib/base/setup.sh" <<'EOF'
 #!/bin/bash
@@ -601,7 +601,7 @@ ARCH=$(dpkg --print-architecture)
 ZOXIDE_VERSION="0.9.0"
 cd /tmp
 EOF
-    
+
     # Create mock version check output
     command cat > "$test_dir/test.json" <<'EOF'
 {
@@ -617,7 +617,7 @@ EOF
   ]
 }
 EOF
-    
+
     # Initialize git repo
     cd "$test_dir"
     git init --quiet
@@ -625,25 +625,25 @@ EOF
     git config user.name "Test User"
     git add -A
     git commit -m "Initial" --quiet
-    
+
     # Create mock release script
     mkdir -p bin
     echo '#!/bin/bash' > bin/release.sh
     echo 'echo "1.0.1" > VERSION' >> bin/release.sh
     chmod +x bin/release.sh
     echo "1.0.0" > VERSION
-    
+
     # Run update
     PROJECT_ROOT_OVERRIDE="$test_dir" "$PROJECT_ROOT/bin/update-versions.sh" --no-commit --no-bump --input test.json >/dev/null 2>&1
-    
+
     # Check that zoxide was updated
     local updated=false
     if grep -q 'ZOXIDE_VERSION="0.9.8"' lib/base/setup.sh; then
         updated=true
     fi
-    
+
     command rm -rf "$test_dir"
-    
+
     if [ "$updated" = true ]; then
         return 0
     else

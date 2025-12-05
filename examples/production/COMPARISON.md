@@ -265,18 +265,18 @@ deploy:
 ### Development Priorities
 
 1. **Developer Experience**: Tools and utilities for productivity
-2. **Debugging**: Enhanced error messages and stack traces
-3. **Fast Iteration**: Hot reload, auto-restart tools
-4. **Flexibility**: Passwordless sudo, relaxed security
-5. **Completeness**: Include everything that might be useful
+1. **Debugging**: Enhanced error messages and stack traces
+1. **Fast Iteration**: Hot reload, auto-restart tools
+1. **Flexibility**: Passwordless sudo, relaxed security
+1. **Completeness**: Include everything that might be useful
 
 ### Production Priorities
 
 1. **Security**: Minimal attack surface, hardened configuration
-2. **Size**: Smaller images = faster deployments
-3. **Performance**: Runtime-only packages, optimized settings
-4. **Reliability**: Health checks, auto-restart policies
-5. **Immutability**: Read-only filesystems, declarative configuration
+1. **Size**: Smaller images = faster deployments
+1. **Performance**: Runtime-only packages, optimized settings
+1. **Reliability**: Health checks, auto-restart policies
+1. **Immutability**: Read-only filesystems, declarative configuration
 
 ## Migration Checklist
 

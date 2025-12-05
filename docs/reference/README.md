@@ -75,14 +75,14 @@ check-installed-versions.sh --compare
 
 See [Version Tracking](versions.md) for version policies.
 
-### Security
+### Security Verification
 
 All downloads are verified using a 4-tier progressive system:
 
 1. **Tier 1**: Cryptographic signatures (GPG/Sigstore) - Best
-2. **Tier 2**: Pinned checksums (lib/checksums.json) - Good
-3. **Tier 3**: Published checksums (from official source) - Acceptable
-4. **Tier 4**: Calculated checksums (TOFU fallback) - Last resort
+1. **Tier 2**: Pinned checksums (lib/checksums.json) - Good
+1. **Tier 3**: Published checksums (from official source) - Acceptable
+1. **Tier 4**: Calculated checksums (TOFU fallback) - Last resort
 
 See [Security Checksums](security-checksums.md) for complete details.
 
@@ -91,8 +91,8 @@ See [Security Checksums](security-checksums.md) for complete details.
 When building containers:
 
 1. Check [Environment Variables](environment-variables.md) for available options
-2. Review [Version Compatibility](compatibility.md) for supported platforms
-3. Consult [Feature Dependencies](features.md) to understand requirements
+1. Review [Version Compatibility](compatibility.md) for supported platforms
+1. Consult [Feature Dependencies](features.md) to understand requirements
 
 ## For Contributors
 
@@ -100,9 +100,9 @@ When adding new features:
 
 1. Document new build arguments in
    [Environment Variables](environment-variables.md)
-2. Update [Feature Dependencies](features.md) if adding dependencies
-3. Document version policies in [Version Tracking](versions.md)
-4. Follow security guidelines in [Security Checksums](security-checksums.md)
+1. Update [Feature Dependencies](features.md) if adding dependencies
+1. Document version policies in [Version Tracking](versions.md)
+1. Follow security guidelines in [Security Checksums](security-checksums.md)
 
 ## Related Documentation
 

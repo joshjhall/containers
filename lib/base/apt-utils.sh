@@ -182,7 +182,7 @@ apt_install_conditional() {
 
 # ============================================================================
 # apt_retry - Generic retry wrapper for any apt command
-# 
+#
 # Usage:
 #   apt_retry <command>
 #
@@ -201,9 +201,9 @@ apt_retry() {
             echo "✓ Command succeeded: ${cmd_array[*]}"
             return 0
         fi
-        
+
         local exit_code=$?
-        
+
         if [ $attempt -lt "$APT_MAX_RETRIES" ]; then
             echo "⚠ Command failed (exit code: $exit_code), retrying in ${delay}s..."
             sleep "$delay"
@@ -212,14 +212,14 @@ apt_retry() {
             echo "✗ Command failed after $APT_MAX_RETRIES attempts: ${cmd_array[*]}"
             return $exit_code
         fi
-        
+
         attempt=$((attempt + 1))
     done
 }
 
 # ============================================================================
 # apt_update - Update package lists with retry logic
-# 
+#
 # Usage:
 #   apt_update
 #
@@ -230,10 +230,10 @@ apt_retry() {
 apt_update() {
     local attempt=1
     local delay="$APT_RETRY_DELAY"
-    
+
     while [ $attempt -le "$APT_MAX_RETRIES" ]; do
         echo "Updating package lists (attempt $attempt/$APT_MAX_RETRIES)..."
-        
+
         # Configure apt with timeout and retry options
         if timeout "$APT_TIMEOUT" apt-get update \
             -o Acquire::http::Timeout=30 \
@@ -244,27 +244,27 @@ apt_update() {
             echo "✓ Package lists updated successfully"
             return 0
         fi
-        
+
         local exit_code=$?
-        
+
         if [ $attempt -lt "$APT_MAX_RETRIES" ]; then
             echo "⚠ apt-get update failed (exit code: $exit_code), retrying in ${delay}s..."
-            
+
             # Check for specific network errors
             if [ $exit_code -eq 100 ]; then
                 echo "  Network connectivity issue detected, waiting longer..."
                 delay=$((delay * 2))  # Double the delay for network issues
             fi
-            
+
             sleep "$delay"
             delay=$((delay * 2))  # Exponential backoff
-            
+
             # Try to clean apt cache before retry
             apt-get clean || true
             command rm -rf /var/lib/apt/lists/* || true
         else
             echo "✗ apt-get update failed after $APT_MAX_RETRIES attempts"
-            
+
             # Provide diagnostic information
             echo ""
             echo "=== Diagnostic Information ==="
@@ -275,7 +275,7 @@ apt_update() {
             else
                 echo "  ✓ DNS resolution working"
             fi
-            
+
             # Test connectivity to common package repositories
             for host in deb.debian.org security.debian.org archive.ubuntu.com; do
                 if timeout 5 ping -c 1 "$host" >/dev/null 2>&1; then
@@ -284,22 +284,22 @@ apt_update() {
                     echo "  ✗ Cannot reach $host"
                 fi
             done
-            
+
             echo ""
             echo "Current apt sources:"
             command cat /etc/apt/sources.list 2>/dev/null || echo "  No sources.list found"
             ls /etc/apt/sources.list.d/*.list 2>/dev/null || echo "  No additional sources"
-            
+
             return $exit_code
         fi
-        
+
         attempt=$((attempt + 1))
     done
 }
 
 # ============================================================================
 # apt_install - Install packages with retry logic
-# 
+#
 # Arguments:
 #   $@ - Package names to install
 #
@@ -350,12 +350,12 @@ apt_install() {
             echo "✓ Packages installed successfully: ${packages[*]}"
             return 0
         fi
-        
+
         local exit_code=$?
-        
+
         if [ $attempt -lt "$APT_MAX_RETRIES" ]; then
             echo "⚠ Package installation failed (exit code: $exit_code), retrying in ${delay}s..."
-            
+
             # Check for specific errors
             if [ $exit_code -eq 100 ]; then
                 echo "  Network connectivity issue detected"
@@ -363,7 +363,7 @@ apt_install() {
                 echo "  Attempting to refresh package lists..."
                 apt-get update -qq || true
             fi
-            
+
             sleep "$delay"
             delay=$((delay * 2))  # Exponential backoff
         else
@@ -371,14 +371,14 @@ apt_install() {
             echo "  Failed packages: ${packages[*]}"
             return $exit_code
         fi
-        
+
         attempt=$((attempt + 1))
     done
 }
 
 # ============================================================================
 # apt_cleanup - Clean up apt cache to save space
-# 
+#
 # Usage:
 #   apt_cleanup
 # ============================================================================
@@ -391,7 +391,7 @@ apt_cleanup() {
 
 # ============================================================================
 # configure_apt_mirrors - Configure apt to use faster/more reliable mirrors
-# 
+#
 # Usage:
 #   configure_apt_mirrors
 #
@@ -399,12 +399,12 @@ apt_cleanup() {
 # ============================================================================
 configure_apt_mirrors() {
     echo "Configuring apt mirrors for better reliability..."
-    
+
     # Create a backup of the original sources.list
     if [ -f /etc/apt/sources.list ] && [ ! -f /etc/apt/sources.list.original ]; then
         command cp /etc/apt/sources.list /etc/apt/sources.list.original
     fi
-    
+
     # Add retry and timeout configurations to apt.conf.d
     command cat > /etc/apt/apt.conf.d/99-retries << 'EOF'
 # Network timeout and retry configuration
@@ -419,7 +419,7 @@ APT::Update::Error-Mode "any";
 Acquire::Queue-Mode "host";
 Acquire::Languages "none";
 EOF
-    
+
     echo "✓ apt configured with timeout and retry settings"
 }
 

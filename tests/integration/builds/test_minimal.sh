@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Test minimal container builds
-# 
+#
 # This test verifies that the most basic container configurations
 # build successfully and have the expected base functionality.
 

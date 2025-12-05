@@ -16,12 +16,12 @@ version resolution (e.g., "3.3" → "3.3.10").
 ### 1. fetch_ruby_checksum() ✅ COMPLETED
 
 **Status**: Implemented with partial version support (2025-11-08) **Source**:
-https://www.ruby-lang.org/en/downloads/ **Pattern**:
+`https://www.ruby-lang.org/en/downloads/` **Pattern**:
 
 - Ruby downloads page lists latest patch per minor version
 - Example: 3.3.10, 3.4.7 (not 3.3.9, 3.3.8, etc.) **Implementation**:
 - Detect partial version by counting dots (1 dot = partial)
-- Search page for all matching versions (e.g., "Ruby 3.3.\d+")
+- Search page for all matching versions (e.g., "Ruby 3.3.\\d+")
 - Sort with `sort -V` and take highest
 - Export RUBY_RESOLVED_VERSION for caller **Testing**:
 - `RUBY_VERSION=3.3` → resolves to 3.3.10 ✓
@@ -31,14 +31,14 @@ https://www.ruby-lang.org/en/downloads/ **Pattern**:
 ### 2. fetch_go_checksum() ✅ COMPLETED
 
 **Status**: Implemented with partial version support (2025-11-08) **Source**:
-https://go.dev/dl/ **Pattern**:
+`https://go.dev/dl/` **Pattern**:
 
 - Go downloads page lists ALL releases including older patches
 - Example: 1.25.4, 1.25.3, 1.25.2, 1.25.1, 1.25.0, 1.24.10, 1.24.9, etc.
   **Semantic Versioning**: Yes (1.X.Y format) **Implementation**:
 - Similar to Ruby implementation
 - Detect partial version (1.23 vs 1.23.0)
-- Search page for matching filenames (go1.23.\d+.linux-${arch}.tar.gz)
+- Search page for matching filenames (go1.23.\\d+.linux-${arch}.tar.gz)
 - Sort with `sort -V` and take highest
 - Export GO_RESOLVED_VERSION for caller **Testing**:
 - `GO_VERSION=1.23` → resolves to 1.23.12 ✓

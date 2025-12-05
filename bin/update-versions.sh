@@ -62,27 +62,27 @@ update_version() {
     local current="$2"
     local latest="$3"
     local file="$4"
-    
+
     # Validate the new version before updating
     if ! validate_version "$latest"; then
         echo -e "${RED}  ERROR: Invalid version format for $tool: '$latest'${NC}"
         echo -e "${YELLOW}  Skipping update for $tool${NC}"
         return 1
     fi
-    
+
     # Also check that we're not downgrading (basic check)
     if [ "$current" = "$latest" ]; then
         echo -e "${YELLOW}  Skipping $tool: already at version $current${NC}"
         return 0
     fi
-    
+
     echo -e "${BLUE}  Updating $tool: $current → $latest in $file${NC}"
-    
+
     if [ "$DRY_RUN" = true ]; then
         echo "    [DRY RUN] Would update $file"
         return
     fi
-    
+
     # Update based on file type
     case "$file" in
         Dockerfile)
@@ -296,7 +296,7 @@ while IFS= read -r update; do
     CURRENT=$(echo "$update" | jq -r '.current')
     LATEST=$(echo "$update" | jq -r '.latest')
     FILE=$(echo "$update" | jq -r '.file')
-    
+
     if update_version "$TOOL" "$CURRENT" "$LATEST" "$FILE"; then
         SUCCESSFUL_UPDATES=$((SUCCESSFUL_UPDATES + 1))
         UPDATES_APPLIED=true
@@ -346,11 +346,11 @@ fi
 if [ "$UPDATES_APPLIED" = true ] && [ "$DRY_RUN" = false ]; then
     if [ "$AUTO_COMMIT" = true ]; then
         echo -e "${BLUE}Committing changes...${NC}"
-        
+
         # Stage changes
         cd "$PROJECT_ROOT"
         git add -A
-        
+
         # Create commit message with update details
         COMMIT_MSG="chore: Update dependency versions
 
@@ -362,16 +362,16 @@ Updated versions:"
             COMMIT_MSG="$COMMIT_MSG
 - $TOOL: $CURRENT → $LATEST"
         done < <(echo "$OUTDATED" | jq -c '.[]')
-        
+
         git commit -m "$COMMIT_MSG"
         echo -e "${GREEN}✓ Changes committed${NC}"
-        
+
         # Bump version if requested
         if [ "$BUMP_VERSION" = true ]; then
             echo ""
             echo -e "${BLUE}Bumping patch version...${NC}"
             echo "y" | "$BIN_DIR/release.sh" patch
-            
+
             # Commit version bump
             git add -A
             git commit -m "chore: Release patch version with dependency updates
@@ -382,7 +382,7 @@ Automated dependency updates applied."
     else
         echo -e "${YELLOW}Changes made but not committed (--no-commit flag set)${NC}"
     fi
-    
+
     echo ""
     echo -e "${GREEN}=== Update Complete ===${NC}"
     echo "Updates applied: $SUCCESSFUL_UPDATES"

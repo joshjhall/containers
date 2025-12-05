@@ -318,17 +318,17 @@ Docker network misconfigured. Restart Docker or recreate network.
 ## Prevention
 
 1. **Configure DNS** in Docker daemon
-2. **Document proxy settings** for corporate environments
-3. **Test network** as part of container startup
-4. **Monitor connectivity** in health checks
-5. **Use network policies** to document expected connections
+1. **Document proxy settings** for corporate environments
+1. **Test network** as part of container startup
+1. **Monitor connectivity** in health checks
+1. **Use network policies** to document expected connections
 
 ## Escalation
 
 If network issues persist:
 
 1. Document the specific error message
-2. Include results of diagnostic steps
-3. Note network environment (corporate, VPN, etc.)
-4. Provide Docker and OS versions
-5. Open GitHub issue with `bug` label
+1. Include results of diagnostic steps
+1. Note network environment (corporate, VPN, etc.)
+1. Provide Docker and OS versions
+1. Open GitHub issue with `bug` label

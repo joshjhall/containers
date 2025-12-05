@@ -255,24 +255,24 @@ COPY . /workspace/project
 ### Optimize for Your Use Case
 
 1. **Only enable needed features** - Each feature adds time
-2. **Use production builds** - Smaller, faster
-3. **Leverage layer caching** - Order Dockerfile commands
-4. **Use multi-stage builds** - Reduce final image size
+1. **Use production builds** - Smaller, faster
+1. **Leverage layer caching** - Order Dockerfile commands
+1. **Use multi-stage builds** - Reduce final image size
 
 ## Prevention
 
 1. **Monitor build times** in CI/CD
-2. **Set up build cache** for all environments
-3. **Keep .dockerignore updated**
-4. **Use benchmark tests** to detect regressions
-5. **Review build logs** periodically for optimization opportunities
+1. **Set up build cache** for all environments
+1. **Keep .dockerignore updated**
+1. **Use benchmark tests** to detect regressions
+1. **Review build logs** periodically for optimization opportunities
 
 ## Escalation
 
 If builds remain slow after optimization:
 
 1. Document build times and what was tried
-2. Include hardware specs (CPU, RAM, disk type)
-3. Provide network test results
-4. Note which steps are slowest
-5. Open GitHub issue with performance metrics
+1. Include hardware specs (CPU, RAM, disk type)
+1. Provide network test results
+1. Note which steps are slowest
+1. Open GitHub issue with performance metrics

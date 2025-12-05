@@ -61,9 +61,9 @@ validate_version() {
 bump_version() {
     local current_version="$1"
     local bump_type="$2"
-    
+
     IFS='.' read -r major minor patch <<< "$current_version"
-    
+
     case "$bump_type" in
         major)
             major=$((major + 1))
@@ -82,7 +82,7 @@ bump_version() {
             exit 1
             ;;
     esac
-    
+
     echo "${major}.${minor}.${patch}"
 }
 

@@ -47,9 +47,9 @@ The main GitHub Actions workflows:
 When working with CI/CD:
 
 1. Test locally before pushing (run `./tests/run_all.sh`)
-2. Check build metrics for size regressions
-3. Update baselines after intentional size changes
-4. Document authentication setup in team docs
+1. Check build metrics for size regressions
+1. Update baselines after intentional size changes
+1. Document authentication setup in team docs
 
 ## Related Documentation
 

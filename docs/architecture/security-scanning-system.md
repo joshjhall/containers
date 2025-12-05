@@ -7,10 +7,10 @@
 
 **Related Issues:**
 
-- #18: Add cargo-audit and cargo-deny to rust-dev.sh
-- #19: Add pip-audit to python-dev.sh
-- #20: Add cargo-geiger to rust-dev.sh
-- #21: Add govulncheck to golang-dev.sh
+- Issue #18: Add cargo-audit and cargo-deny to rust-dev.sh
+- Issue #19: Add pip-audit to python-dev.sh
+- Issue #20: Add cargo-geiger to rust-dev.sh
+- Issue #21: Add govulncheck to golang-dev.sh
 
 ## Overview
 
@@ -23,10 +23,10 @@ that works seamlessly across all development environments.
 
 1. **Security First**: Built-in vulnerability scanning for all supported
    languages
-2. **Consistency**: Unified commands that work across all languages
-3. **CI/CD Ready**: Same tools work locally and in CI pipelines
-4. **Extensibility**: Easy to add new languages and tools
-5. **Non-invasive**: Opt-in system that doesn't modify projects without
+1. **Consistency**: Unified commands that work across all languages
+1. **CI/CD Ready**: Same tools work locally and in CI pipelines
+1. **Extensibility**: Easy to add new languages and tools
+1. **Non-invasive**: Opt-in system that doesn't modify projects without
    permission
 
 ## Language-Specific Security Tools
@@ -313,7 +313,7 @@ echo "Run 'dev-init --scan --report' to generate detailed reports"
 
 ## Long-Term Vision (Stibbons Integration)
 
-### Overview
+### Stibbons Overview
 
 Migrate core functionality to Stibbons, a Rust-based CLI environment management
 tool, providing:
@@ -366,23 +366,27 @@ impl ProjectEnvironment {
 ### Stibbons Features
 
 1. **Multi-branch Development**
+
    - Manage multiple development environments across git branches
    - Isolate dependencies and configurations per branch
    - Enable parallel development by multiple AI agents
 
-2. **Security First**
+1. **Security First**
+
    - Built-in SBOM generation
    - Dependency license checking
    - Security policy enforcement
    - Automated CVE tracking
 
-3. **Project Templates**
+1. **Project Templates**
+
    - Rich project scaffolding
    - Interactive project initialization
    - Custom template repositories
    - Organization-specific defaults
 
-4. **CI/CD Integration**
+1. **CI/CD Integration**
+
    - Generate CI configs for multiple platforms
    - Automatic security gates
    - Performance benchmarking
@@ -418,7 +422,7 @@ stibbons ci validate             # Validate CI config
 stibbons ci run --local          # Run CI pipeline locally
 ```
 
-### Migration Strategy
+### Stibbons Migration Strategy
 
 #### Phase 1: Parallel Development (Months 1-3)
 
@@ -446,33 +450,33 @@ stibbons ci run --local          # Run CI pipeline locally
 ### Immediate (Current sprint)
 
 1. Add cargo-audit and cargo-deny (#18)
-2. Add pip-audit (#19)
-3. Add cargo-geiger (#20)
-4. Add govulncheck (#21)
+1. Add pip-audit (#19)
+1. Add cargo-geiger (#20)
+1. Add govulncheck (#21)
 
 ### Short-term (Next 3-4 weeks)
 
 1. Wait for Stibbons initial release
-2. Evaluate Stibbons capabilities
-3. Decide on implementation approach
-4. Begin integration if Stibbons is ready
+1. Evaluate Stibbons capabilities
+1. Decide on implementation approach
+1. Begin integration if Stibbons is ready
 
 ### Medium-term (2-3 months)
 
 1. Create template directory structure
-2. Implement template-manager.sh
-3. Create dev-init unified command
-4. Full security scanning for all languages
-5. CI/CD template generation
-6. Git hooks automation
-7. Documentation generation
+1. Implement template-manager.sh
+1. Create dev-init unified command
+1. Full security scanning for all languages
+1. CI/CD template generation
+1. Git hooks automation
+1. Documentation generation
 
 ### Long-term (6+ months)
 
 1. Full Stibbons integration
-2. Multi-environment orchestration
-3. Plugin ecosystem
-4. Advanced AI agent support
+1. Multi-environment orchestration
+1. Plugin ecosystem
+1. Advanced AI agent support
 
 ## Benefits
 

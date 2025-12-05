@@ -12,7 +12,7 @@ verifies container initialization and feature availability.
 - [Monitoring](#monitoring)
 - [Troubleshooting](#troubleshooting)
 
----
+______________________________________________________________________
 
 ## Overview
 
@@ -45,7 +45,7 @@ with multiple modes:
 - **Docker**: docker CLI, daemon connectivity
 - **Kubernetes**: kubectl, helm
 
----
+______________________________________________________________________
 
 ## Usage
 
@@ -95,7 +95,7 @@ $ healthcheck --verbose
 ✓ Container is healthy
 ```
 
----
+______________________________________________________________________
 
 ## Docker Integration
 
@@ -143,7 +143,7 @@ docker run --no-healthcheck myimage
 HEALTHCHECK NONE
 ```
 
----
+______________________________________________________________________
 
 ## Docker Compose Examples
 
@@ -235,7 +235,7 @@ services:
       interval: 60s
 ```
 
----
+______________________________________________________________________
 
 ## Monitoring
 
@@ -284,7 +284,7 @@ services:
       retries: 3
 ```
 
----
+______________________________________________________________________
 
 ## Troubleshooting
 
@@ -452,33 +452,33 @@ healthcheck:
   test: ['CMD', '/app/custom-healthcheck.sh']
 ```
 
----
+______________________________________________________________________
 
 ## Best Practices
 
 ### Production
 
 1. **Use quick mode** for minimal overhead
-2. **Set reasonable intervals** (30s-60s)
-3. **Allow adequate start period** for initialization
-4. **Monitor health status** in orchestration platform
-5. **Log health events** for debugging
+1. **Set reasonable intervals** (30s-60s)
+1. **Allow adequate start period** for initialization
+1. **Monitor health status** in orchestration platform
+1. **Log health events** for debugging
 
 ### Development
 
 1. **Use verbose mode** for detailed feedback
-2. **Enable feature-specific checks** for debugging
-3. **Reduce interval** for faster feedback (10s-20s)
-4. **Test healthcheck manually** before deployment
+1. **Enable feature-specific checks** for debugging
+1. **Reduce interval** for faster feedback (10s-20s)
+1. **Test healthcheck manually** before deployment
 
 ### CI/CD
 
 1. **Verify healthcheck passes** in integration tests
-2. **Test health recovery** (stop/start services)
-3. **Validate dependent services** wait for health
-4. **Check health in deployment pipelines**
+1. **Test health recovery** (stop/start services)
+1. **Validate dependent services** wait for health
+1. **Check health in deployment pipelines**
 
----
+______________________________________________________________________
 
 ## See Also
 

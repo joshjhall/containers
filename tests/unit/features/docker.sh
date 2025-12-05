@@ -18,12 +18,12 @@ setup() {
     # Create temporary directory for testing
     export TEST_TEMP_DIR="$RESULTS_DIR/test-docker"
     mkdir -p "$TEST_TEMP_DIR"
-    
+
     # Mock environment
     export USERNAME="testuser"
     export USER_UID="1000"
     export USER_GID="1000"
-    
+
     # Create mock directories
     mkdir -p "$TEST_TEMP_DIR/etc/apt/keyrings"
     mkdir -p "$TEST_TEMP_DIR/etc/bashrc.d"
@@ -31,7 +31,7 @@ setup() {
     mkdir -p "$TEST_TEMP_DIR/etc/container/startup"
     mkdir -p "$TEST_TEMP_DIR/usr/local/bin"
     mkdir -p "$TEST_TEMP_DIR/cache/docker"
-    
+
     # Mock Docker socket for testing
     export MOCK_DOCKER_SOCK="$TEST_TEMP_DIR/var/run/docker.sock"
     mkdir -p "$(dirname "$MOCK_DOCKER_SOCK")"
@@ -41,7 +41,7 @@ setup() {
 teardown() {
     # Clean up test directory
     command rm -rf "$TEST_TEMP_DIR"
-    
+
     # Unset test variables
     unset USERNAME USER_UID USER_GID MOCK_DOCKER_SOCK 2>/dev/null || true
 }
@@ -50,9 +50,9 @@ teardown() {
 test_docker_repository_setup() {
     # Check that the script would create the keyrings directory
     local keyrings_dir="$TEST_TEMP_DIR/etc/apt/keyrings"
-    
+
     assert_dir_exists "$keyrings_dir"
-    
+
     # Verify the script sets up proper permissions
     if [ -d "$keyrings_dir" ]; then
         assert_true true "Keyrings directory exists for Docker GPG key"
@@ -65,13 +65,13 @@ test_docker_repository_setup() {
 test_docker_group_creation() {
     # Simulate checking if docker group would be created
     # In real script, this would be: groupadd docker || true
-    
+
     # Test that the command would handle existing group gracefully
     local test_cmd="groupadd docker || true"
-    
+
     # The || true ensures it doesn't fail if group exists
     assert_not_empty "$test_cmd" "Docker group creation command is defined"
-    
+
     if [[ "$test_cmd" == *"|| true"* ]]; then
         assert_true true "Command handles existing group gracefully"
     else
@@ -83,10 +83,10 @@ test_docker_group_creation() {
 test_user_docker_group() {
     # Test the usermod command structure
     local expected_cmd="usermod -aG docker ${USERNAME}"
-    
+
     assert_equals "testuser" "$USERNAME" "Username is set correctly"
     assert_not_empty "$expected_cmd" "Usermod command is formed"
-    
+
     # Check command structure
     if [[ "$expected_cmd" == *"-aG docker"* ]]; then
         assert_true true "User would be added to docker group"
@@ -99,18 +99,18 @@ test_user_docker_group() {
 test_docker_socket_permissions_build() {
     # Create a mock socket file
     touch "$MOCK_DOCKER_SOCK"
-    
+
     # Test that socket detection works
     if [ -e "$MOCK_DOCKER_SOCK" ]; then
         assert_true true "Docker socket detection works"
     else
         assert_true false "Docker socket not detected"
     fi
-    
+
     # Test permission commands would be formed correctly
     local chgrp_cmd="chgrp docker $MOCK_DOCKER_SOCK || true"
     local chmod_cmd="chmod g+rw $MOCK_DOCKER_SOCK || true"
-    
+
     assert_not_empty "$chgrp_cmd" "Socket group change command formed"
     assert_not_empty "$chmod_cmd" "Socket permission command formed"
 }
@@ -118,29 +118,29 @@ test_docker_socket_permissions_build() {
 # Test: Docker bashrc configuration
 test_docker_bashrc_setup() {
     local bashrc_file="$TEST_TEMP_DIR/etc/bashrc.d/50-docker.sh"
-    
+
     # Create a mock bashrc file
     command cat > "$bashrc_file" << 'EOF'
 alias d='docker'
 alias dc='docker compose'
 docker-clean() { echo "Cleaning Docker resources"; }
 EOF
-    
+
     assert_file_exists "$bashrc_file"
-    
+
     # Check for essential aliases
     if grep -q "alias d='docker'" "$bashrc_file"; then
         assert_true true "Docker alias 'd' is defined"
     else
         assert_true false "Docker alias 'd' not found"
     fi
-    
+
     if grep -q "alias dc='docker compose'" "$bashrc_file"; then
         assert_true true "Docker Compose alias is defined"
     else
         assert_true false "Docker Compose alias not found"
     fi
-    
+
     if grep -q "docker-clean" "$bashrc_file"; then
         assert_true true "docker-clean function is defined"
     else
@@ -173,10 +173,10 @@ test_docker_cli_tools() {
     # Test environment variables for Docker CLI
     local docker_config="/cache/docker"
     local docker_plugins="/cache/docker/cli-plugins"
-    
+
     assert_not_empty "$docker_config" "DOCKER_CONFIG path is defined"
     assert_not_empty "$docker_plugins" "Docker CLI plugins path is defined"
-    
+
     # Check cache directory structure
     if [[ "$docker_config" == "/cache/docker" ]]; then
         assert_true true "Docker cache uses standard cache directory"
@@ -188,13 +188,13 @@ test_docker_cli_tools() {
 # Test: Lazydocker installation paths
 test_lazydocker_installation() {
     local lazydocker_bin="$TEST_TEMP_DIR/usr/local/bin/lazydocker"
-    
+
     # Create mock lazydocker binary
     touch "$lazydocker_bin"
     chmod +x "$lazydocker_bin"
-    
+
     assert_file_exists "$lazydocker_bin"
-    
+
     # Check if it's executable
     if [ -x "$lazydocker_bin" ]; then
         assert_true true "Lazydocker binary is executable"
@@ -206,13 +206,13 @@ test_lazydocker_installation() {
 # Test: Dive installation paths
 test_dive_installation() {
     local dive_bin="$TEST_TEMP_DIR/usr/local/bin/dive"
-    
+
     # Create mock dive binary
     touch "$dive_bin"
     chmod +x "$dive_bin"
-    
+
     assert_file_exists "$dive_bin"
-    
+
     # Check if it's executable
     if [ -x "$dive_bin" ]; then
         assert_true true "Dive binary is executable"
@@ -224,7 +224,7 @@ test_dive_installation() {
 # Test: test-docker verification script
 test_docker_verification_script() {
     local test_script="$TEST_TEMP_DIR/usr/local/bin/test-docker"
-    
+
     # Create mock verification script
     command cat > "$test_script" << 'EOF'
 #!/bin/bash
@@ -234,16 +234,16 @@ echo "=== Docker Socket Status ==="
 [ -S /var/run/docker.sock ] && echo "Socket mounted"
 EOF
     chmod +x "$test_script"
-    
+
     assert_file_exists "$test_script"
-    
+
     # Check script content
     if grep -q "Docker CLI Status" "$test_script"; then
         assert_true true "Verification script checks Docker CLI"
     else
         assert_true false "Verification script missing CLI check"
     fi
-    
+
     if grep -q "Docker Socket Status" "$test_script"; then
         assert_true true "Verification script checks socket"
     else
@@ -255,7 +255,7 @@ EOF
 run_test_with_setup() {
     local test_function="$1"
     local test_description="$2"
-    
+
     setup
     run_test "$test_function" "$test_description"
     teardown

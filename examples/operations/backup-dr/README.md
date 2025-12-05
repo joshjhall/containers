@@ -131,7 +131,7 @@ hour **Compliance**: HIPAA 164.308(a)(7), SOC 2 A1.2
    kubectl wait --for=condition=available deployment/velero -n velero --timeout=300s
    ```
 
-2. **Verify backup storage access**
+1. **Verify backup storage access**
 
    ```bash
    # Check backup storage location
@@ -141,7 +141,7 @@ hour **Compliance**: HIPAA 164.308(a)(7), SOC 2 A1.2
    velero backup-location get default -o json | jq '.status.phase'
    ```
 
-3. **List available backups**
+1. **List available backups**
 
    ```bash
    # List all backups
@@ -151,7 +151,7 @@ hour **Compliance**: HIPAA 164.308(a)(7), SOC 2 A1.2
    velero backup get --selector velero.io/schedule-name=daily-all-namespaces
    ```
 
-4. **Restore cluster state first**
+1. **Restore cluster state first**
 
    ```bash
    # Restore CRDs, RBAC, and cluster resources
@@ -161,7 +161,7 @@ hour **Compliance**: HIPAA 164.308(a)(7), SOC 2 A1.2
      --wait
    ```
 
-5. **Restore namespaces in order**
+1. **Restore namespaces in order**
 
    ```bash
    # 1. Infrastructure namespaces
@@ -182,7 +182,7 @@ hour **Compliance**: HIPAA 164.308(a)(7), SOC 2 A1.2
      --wait
    ```
 
-6. **Verify restoration**
+1. **Verify restoration**
 
    ```bash
    # Check restore status
@@ -195,7 +195,7 @@ hour **Compliance**: HIPAA 164.308(a)(7), SOC 2 A1.2
    kubectl get pvc --all-namespaces | grep Pending
    ```
 
-7. **Update DNS and load balancers**
+1. **Update DNS and load balancers**
 
    ```bash
    # Get new ingress IPs
@@ -204,7 +204,8 @@ hour **Compliance**: HIPAA 164.308(a)(7), SOC 2 A1.2
    # Update DNS records in your DNS provider
    ```
 
-8. **Validate application functionality**
+1. **Validate application functionality**
+
    - Run smoke tests
    - Verify database connectivity
    - Check external integrations
@@ -218,14 +219,14 @@ hour **Compliance**: HIPAA 164.308(a)(7), SOC 2 A1.2
 - [ ] Conduct lessons learned meeting
 - [ ] Update runbook if needed
 
----
+______________________________________________________________________
 
 ### DR-002: Namespace Data Loss
 
 **Scenario**: Accidental deletion or corruption of namespace **RTO**: 1 hour |
 **RPO**: Based on backup frequency **Compliance**: SOC 2 A1.2, PCI DSS 9.5
 
-#### Recovery Steps
+#### Namespace Recovery Steps
 
 1. **Identify the affected namespace and last good backup**
 
@@ -238,7 +239,7 @@ hour **Compliance**: HIPAA 164.308(a)(7), SOC 2 A1.2
    velero backup describe daily-all-namespaces-YYYYMMDD --details
    ```
 
-2. **Restore the namespace**
+1. **Restore the namespace**
 
    ```bash
    # Full namespace restore
@@ -255,7 +256,7 @@ hour **Compliance**: HIPAA 164.308(a)(7), SOC 2 A1.2
      --wait
    ```
 
-3. **Verify restoration**
+1. **Verify restoration**
 
    ```bash
    # Check all resources restored
@@ -268,14 +269,14 @@ hour **Compliance**: HIPAA 164.308(a)(7), SOC 2 A1.2
    kubectl logs -n NAMESPACE -l app=YOUR_APP --tail=100
    ```
 
----
+______________________________________________________________________
 
 ### DR-003: Database Corruption
 
 **Scenario**: Database data corruption requiring point-in-time recovery **RTO**:
 2 hours | **RPO**: 1 hour **Compliance**: HIPAA 164.310(d)(2)(iv), PCI DSS 9.5.1
 
-#### Recovery Steps
+#### Database Recovery Steps
 
 1. **Stop application traffic**
 
@@ -299,7 +300,7 @@ hour **Compliance**: HIPAA 164.308(a)(7), SOC 2 A1.2
    EOF
    ```
 
-2. **Identify backup with good database state**
+1. **Identify backup with good database state**
 
    ```bash
    # List database backups
@@ -309,7 +310,7 @@ hour **Compliance**: HIPAA 164.308(a)(7), SOC 2 A1.2
    velero backup describe hipaa-phi-backup-YYYYMMDD --details
    ```
 
-3. **Restore database PVC**
+1. **Restore database PVC**
 
    ```bash
    # Delete corrupted PVC (data will be lost)
@@ -324,7 +325,7 @@ hour **Compliance**: HIPAA 164.308(a)(7), SOC 2 A1.2
      --wait
    ```
 
-4. **Restart database and verify**
+1. **Restart database and verify**
 
    ```bash
    # Restart database pod
@@ -338,7 +339,7 @@ hour **Compliance**: HIPAA 164.308(a)(7), SOC 2 A1.2
    kubectl exec -it DATABASE_POD -n NAMESPACE -- psql -c "SELECT count(*) FROM critical_table;"
    ```
 
-5. **Restore application traffic**
+1. **Restore application traffic**
 
    ```bash
    # Remove network policy
@@ -348,7 +349,7 @@ hour **Compliance**: HIPAA 164.308(a)(7), SOC 2 A1.2
    kubectl scale deployment APP_NAME -n NAMESPACE --replicas=3
    ```
 
----
+______________________________________________________________________
 
 ### DR-004: HIPAA PHI Breach Recovery
 
@@ -356,7 +357,7 @@ hour **Compliance**: HIPAA 164.308(a)(7), SOC 2 A1.2
 recovery **RTO**: 4 hours | **RPO**: 0 (preserve current state) **Compliance**:
 HIPAA 164.308(a)(6), 164.404
 
-#### Recovery Steps
+#### Breach Recovery Steps
 
 1. **IMMEDIATE: Preserve forensic evidence**
 
@@ -371,7 +372,7 @@ HIPAA 164.308(a)(6), 164.404
    kubectl logs -n hipaa-production --all-containers --timestamps > /tmp/breach-logs.txt
    ```
 
-2. **Isolate affected workloads**
+1. **Isolate affected workloads**
 
    ```bash
    # Apply strict network policy
@@ -389,12 +390,13 @@ HIPAA 164.308(a)(6), 164.404
    EOF
    ```
 
-3. **Notify compliance officer**
+1. **Notify compliance officer**
+
    - Contact: [HIPAA Privacy Officer]
    - Document timeline of events
    - Preserve all evidence
 
-4. **Restore from last known good state**
+1. **Restore from last known good state**
 
    ```bash
    # Identify pre-breach backup
@@ -407,7 +409,7 @@ HIPAA 164.308(a)(6), 164.404
      --wait
    ```
 
-5. **Validate restored data integrity**
+1. **Validate restored data integrity**
 
    ```bash
    # Compare record counts
@@ -418,13 +420,14 @@ HIPAA 164.308(a)(6), 164.404
      jq '.items[].metadata.labels.encryption'
    ```
 
-6. **Document for compliance reporting**
+1. **Document for compliance reporting**
+
    - Timeline of incident
    - Affected records estimate
    - Recovery actions taken
    - Preventive measures implemented
 
----
+______________________________________________________________________
 
 ## Backup Validation Schedule
 

@@ -264,17 +264,17 @@ docker system prune -a --volumes
 ## Prevention
 
 1. **Use CI for builds** - Consistent environment
-2. **Pin base image versions** - Avoid unexpected changes
-3. **Monitor disk space** - Set up alerts
-4. **Keep .dockerignore updated** - Reduce context size
-5. **Test locally before pushing** - Catch issues early
+1. **Pin base image versions** - Avoid unexpected changes
+1. **Monitor disk space** - Set up alerts
+1. **Keep .dockerignore updated** - Reduce context size
+1. **Test locally before pushing** - Catch issues early
 
 ## Escalation
 
 If the issue persists:
 
 1. Run `docker build --progress=plain` and save full output
-2. Note Docker version: `docker version`
-3. Note build args used
-4. Check if issue is reproducible in CI
-5. Open GitHub issue with `bug` label and build logs
+1. Note Docker version: `docker version`
+1. Note build args used
+1. Check if issue is reproducible in CI
+1. Open GitHub issue with `bug` label and build logs

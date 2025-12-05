@@ -32,6 +32,7 @@ item includes the relevant compliance frameworks it addresses.
   _Frameworks: OWASP D04, CIS Docker Benchmark 4.1_
 
 - [ ] **Pin all version numbers**
+
   - Verify PYTHON_VERSION, NODE_VERSION, etc. are explicitly set
   - Check that Dockerfile uses specific tags, not `latest`
 
@@ -62,6 +63,7 @@ item includes the relevant compliance frameworks it addresses.
   _Frameworks: OWASP D08, SOC 2 CC6.8, ISO 27001 A.8.24_
 
 - [ ] **Review SBOM (Software Bill of Materials)**
+
   - Download SBOM from CI artifacts
   - Review for unexpected or outdated components
   - Archive for compliance records
@@ -138,12 +140,14 @@ item includes the relevant compliance frameworks it addresses.
   _Frameworks: SOC 2 A1.2, ISO 27001 A.8.14_
 
 - [ ] **Set up custom health checks** (if needed)
+
   - Add scripts to `/etc/healthcheck.d/`
   - Test with `healthcheck --verbose`
 
 ### Data Protection
 
 - [ ] **Enable encryption in transit**
+
   - Configure TLS for all service endpoints
   - Use cert-manager or similar for certificate management
   - Enforce minimum TLS 1.2
@@ -151,6 +155,7 @@ item includes the relevant compliance frameworks it addresses.
   _Frameworks: HIPAA §164.312(e), PCI DSS 4.1, GDPR Art. 32_
 
 - [ ] **Document encryption at rest**
+
   - Persistent volumes use encrypted storage classes
   - Database connections use TLS
   - Secrets are stored in encrypted secret management (Vault, AWS SM, etc.)
@@ -158,6 +163,7 @@ item includes the relevant compliance frameworks it addresses.
   _Frameworks: HIPAA §164.312(a), PCI DSS 3.4, GDPR Art. 32_
 
 - [ ] **Configure log retention**
+
   - Security logs: minimum 90 days (PCI DSS requires 1 year online)
   - Audit logs: per compliance requirements
   - Set up log rotation to prevent disk exhaustion
@@ -237,6 +243,7 @@ item includes the relevant compliance frameworks it addresses.
 ### Access Control
 
 - [ ] **Configure RBAC**
+
   - Create service accounts for each application
   - Apply least privilege principle
   - Avoid cluster-admin role for applications
@@ -260,6 +267,7 @@ item includes the relevant compliance frameworks it addresses.
 ### Policy Enforcement
 
 - [ ] **Deploy OPA Gatekeeper** (recommended)
+
   - Enforce allowed registries
   - Require resource limits
   - Block privileged containers
@@ -290,6 +298,7 @@ item includes the relevant compliance frameworks it addresses.
 ### Logging and Monitoring
 
 - [ ] **Set up log aggregation**
+
   - Deploy Loki, Elasticsearch, or cloud provider solution
   - Configure JSON log parsing
   - Set up dashboards for security events
@@ -297,6 +306,7 @@ item includes the relevant compliance frameworks it addresses.
   _Frameworks: SOC 2 CC7.2, ISO 27001 A.8.16, PCI DSS 10.x_
 
 - [ ] **Configure alerting**
+
   - Container restarts
   - Health check failures
   - Security events (Falco alerts)
@@ -337,11 +347,13 @@ item includes the relevant compliance frameworks it addresses.
 ### Ongoing Monitoring
 
 - [ ] **Set up vulnerability scanning schedule**
+
   - Daily: Trivy scans of running images
   - Weekly: Full SBOM review
   - Monthly: Compliance posture review
 
 - [ ] **Configure backup verification**
+
   - Test restore procedures
   - Document RTO/RPO
   - Schedule regular restore tests
@@ -349,11 +361,13 @@ item includes the relevant compliance frameworks it addresses.
   _Frameworks: SOC 2 A1.2, ISO 27001 A.8.13, HIPAA §164.308(a)(7)_
 
 - [ ] **Review security events**
+
   - Check Falco alerts daily
   - Review audit logs weekly
   - Investigate anomalies promptly
 
 - [ ] **Test incident response**
+
   - Conduct tabletop exercises quarterly
   - Test alerting and escalation paths
   - Update runbooks based on findings
@@ -380,7 +394,7 @@ For audit purposes, maintain records of:
 | Security        |      |      |           |
 | Change Manager  |      |      |           |
 
----
+______________________________________________________________________
 
 ## Quick Reference
 

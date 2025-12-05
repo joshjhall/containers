@@ -38,7 +38,7 @@ test_version_parsing() {
 test_download_url_construction() {
     local version="3.13.6"
     local expected_url="https://www.python.org/ftp/python/${version}/Python-${version}.tgz"
-    
+
     assert_equals "$expected_url" "https://www.python.org/ftp/python/3.13.6/Python-3.13.6.tgz" "Python download URL constructed correctly"
 }
 
@@ -104,7 +104,7 @@ test_poetry_installation() {
     # Poetry is actually installed in python-dev.sh, not python.sh
     # Test that we can handle Poetry version checking
     local poetry_version="1.8.5"  # Mock version
-    
+
     if [[ "$poetry_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
         assert_true true "Poetry version format is valid: $poetry_version"
     else
@@ -117,7 +117,7 @@ test_cache_directories() {
     # Test pip cache path
     local pip_cache="/cache/pip"
     assert_equals "/cache/pip" "$pip_cache" "Pip cache directory path"
-    
+
     # Test that cache paths are absolute
     if [[ "$pip_cache" == /* ]]; then
         assert_true true "Cache path is absolute"
@@ -131,7 +131,7 @@ test_python_paths() {
     local python_version="3.13"
     local expected_python="/usr/local/bin/python${python_version}"
     local expected_pip="/usr/local/bin/pip${python_version}"
-    
+
     # Test path construction
     assert_equals "/usr/local/bin/python3.13" "$expected_python" "Python executable path"
     assert_equals "/usr/local/bin/pip3.13" "$expected_pip" "Pip executable path"
@@ -141,11 +141,11 @@ test_python_paths() {
 test_environment_variables() {
     # Test Python-related environment variables
     local python_version="3.13"
-    
+
     # Test PYTHONPATH construction
     local pythonpath="/usr/local/lib/python${python_version}/site-packages"
     assert_equals "/usr/local/lib/python3.13/site-packages" "$pythonpath" "Python path construction"
-    
+
     # Test cache environment variables
     local pip_cache_dir="/cache/pip"
     assert_equals "/cache/pip" "$pip_cache_dir" "Pip cache directory"
@@ -174,7 +174,7 @@ test_python_verification() {
     # Test version check command
     local version_check_cmd="python3 --version"
     assert_equals "python3 --version" "$version_check_cmd" "Version check command"
-    
+
     # Test pip version check
     local pip_check_cmd="pip3 --version"
     assert_equals "pip3 --version" "$pip_check_cmd" "Pip version check command"
@@ -188,7 +188,7 @@ test_feature_header() {
     else
         assert_true false "Feature header not sourced"
     fi
-    
+
     # Test logging integration
     if grep -q "log_feature_start" "$PROJECT_ROOT/lib/features/python.sh"; then
         assert_true true "Logging integration present"
@@ -215,7 +215,7 @@ test_package_commands() {
     else
         assert_true false "apt-utils.sh not sourced"
     fi
-    
+
     # Test that apt_install is used for package installation
     if grep -q "apt_install" "$PROJECT_ROOT/lib/features/python.sh"; then
         assert_true true "Using apt_install function from apt-utils"
@@ -228,7 +228,7 @@ test_package_commands() {
 test_cleanup_operations() {
     # Test that build artifacts are cleaned up
     local cleanup_patterns=("*.tar.gz" "Python-*" "build" "*.pyc")
-    
+
     # Test cleanup of source archives
     if [[ " ${cleanup_patterns[*]} " == *" *.tar.gz "* ]]; then
         assert_true true "Source archive cleanup included"

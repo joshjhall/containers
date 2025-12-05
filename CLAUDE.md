@@ -162,13 +162,13 @@ Version control via build arguments:
 This container system is designed to be used as a git submodule:
 
 1. Projects add this repository as a submodule (typically at `containers/`)
-2. Build commands reference the Dockerfile from the submodule:
+1. Build commands reference the Dockerfile from the submodule:
    `-f containers/Dockerfile`
-3. The build context is the project root (where you run `docker build .`)
-4. The Dockerfile assumes it's in `containers/` and project files are in the
+1. The build context is the project root (where you run `docker build .`)
+1. The Dockerfile assumes it's in `containers/` and project files are in the
    parent directory
-5. Different environments are created by varying the build arguments
-6. For standalone testing, use `PROJECT_PATH=.` to indicate no parent project
+1. Different environments are created by varying the build arguments
+1. For standalone testing, use `PROJECT_PATH=.` to indicate no parent project
 
 ## Cache Management
 
@@ -206,9 +206,9 @@ startup and displays a warning with recommendations.
 **Solutions**:
 
 1. **macOS**: Use case-sensitive APFS volume for development
-2. **Windows**: Use WSL2 filesystem (not Windows paths)
-3. **All platforms**: Use Docker volumes instead of bind mounts
-4. **Workaround**: Follow strict naming conventions (always lowercase or always
+1. **Windows**: Use WSL2 filesystem (not Windows paths)
+1. **All platforms**: Use Docker volumes instead of bind mounts
+1. **Workaround**: Follow strict naming conventions (always lowercase or always
    PascalCase)
 
 **Disable check**: Set `SKIP_CASE_CHECK=true` to suppress the warning
@@ -256,14 +256,14 @@ fi
 - **Package migrations**: Some packages removed/renamed in Trixie (e.g.,
   `lzma-dev` merged into `liblzma-dev`)
 
-### Testing
+### Debian Version Testing
 
 CI automatically tests builds on all three Debian versions. When modifying
 feature scripts:
 
 1. Test locally with different base images using `BASE_IMAGE` build arg
-2. Check the `debian-version-test` job in GitHub Actions
-3. See `docs/troubleshooting.md` for detailed examples and patterns
+1. Check the `debian-version-test` job in GitHub Actions
+1. See `docs/troubleshooting.md` for detailed examples and patterns
 
 ## Automated Version Updates
 
@@ -340,7 +340,7 @@ The tag push triggers GitHub Actions to:
 - Push images to ghcr.io/joshjhall/containers
 - Create GitHub release with automated release notes
 
-## Additional Documentation
+## Documentation Resources
 
 Detailed documentation is available in the `docs/` directory:
 

@@ -18,14 +18,14 @@ setup() {
     # Create temporary directory for testing
     export TEST_TEMP_DIR="$RESULTS_DIR/test-rust"
     mkdir -p "$TEST_TEMP_DIR"
-    
+
     # Mock environment
     export RUST_VERSION="${RUST_VERSION:-stable}"
     export USERNAME="testuser"
     export USER_UID="1000"
     export USER_GID="1000"
     export HOME="/home/testuser"
-    
+
     # Create mock directories
     mkdir -p "$TEST_TEMP_DIR/usr/local/bin"
     mkdir -p "$TEST_TEMP_DIR/home/testuser/.cargo"
@@ -40,7 +40,7 @@ teardown() {
     if [ -n "${TEST_TEMP_DIR:-}" ]; then
         command rm -rf "$TEST_TEMP_DIR"
     fi
-    
+
     # Unset test variables
     unset RUST_VERSION USERNAME USER_UID USER_GID HOME 2>/dev/null || true
 }
@@ -50,15 +50,15 @@ test_rust_version_handling() {
     # Test stable version
     local version="stable"
     assert_equals "stable" "$version" "Stable version string recognized"
-    
+
     # Test beta version
     version="beta"
     assert_equals "beta" "$version" "Beta version string recognized"
-    
+
     # Test nightly version
     version="nightly"
     assert_equals "nightly" "$version" "Nightly version string recognized"
-    
+
     # Test specific version
     version="1.72.0"
     if [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
@@ -71,7 +71,7 @@ test_rust_version_handling() {
 # Test: Rustup installation script
 test_rustup_installation() {
     local rustup_script="$TEST_TEMP_DIR/rustup-init.sh"
-    
+
     # Create mock rustup installation script
     command cat > "$rustup_script" << 'EOF'
 #!/bin/sh
@@ -79,9 +79,9 @@ echo "Installing Rust..."
 echo "Rust installed successfully"
 EOF
     chmod +x "$rustup_script"
-    
+
     assert_file_exists "$rustup_script"
-    
+
     # Check script is executable
     if [ -x "$rustup_script" ]; then
         assert_true true "Rustup script is executable"
@@ -94,14 +94,14 @@ EOF
 test_cargo_directories() {
     local cargo_home="$TEST_TEMP_DIR/home/testuser/.cargo"
     local rustup_home="$TEST_TEMP_DIR/home/testuser/.rustup"
-    
+
     # Create expected Cargo directory structure
     mkdir -p "$cargo_home/bin"
     mkdir -p "$cargo_home/registry"
     mkdir -p "$cargo_home/git"
     mkdir -p "$rustup_home/toolchains"
     mkdir -p "$rustup_home/update-hashes"
-    
+
     # Check directories exist
     assert_dir_exists "$cargo_home"
     assert_dir_exists "$cargo_home/bin"
@@ -113,20 +113,20 @@ test_cargo_directories() {
 # Test: Cargo cache configuration
 test_cargo_cache_configuration() {
     local cache_dir="$TEST_TEMP_DIR/cache/cargo"
-    
+
     # Create cache directories
     mkdir -p "$cache_dir/registry"
     mkdir -p "$cache_dir/git"
     mkdir -p "$cache_dir/target"
-    
+
     assert_dir_exists "$cache_dir/registry"
     assert_dir_exists "$cache_dir/git"
     assert_dir_exists "$cache_dir/target"
-    
+
     # Check cache would be used
     local cargo_config="$TEST_TEMP_DIR/home/testuser/.cargo/config.toml"
     mkdir -p "$(dirname "$cargo_config")"
-    
+
     # Create mock Cargo config
     command cat > "$cargo_config" << 'EOF'
 [build]
@@ -135,9 +135,9 @@ target-dir = "/cache/cargo/target"
 [registry]
 cache-dir = "/cache/cargo/registry"
 EOF
-    
+
     assert_file_exists "$cargo_config"
-    
+
     # Check cache directories are configured
     if grep -q "/cache/cargo/target" "$cargo_config"; then
         assert_true true "Target directory uses cache"
@@ -149,10 +149,10 @@ EOF
 # Test: Rust toolchain components
 test_rust_toolchain_components() {
     local cargo_bin="$TEST_TEMP_DIR/home/testuser/.cargo/bin"
-    
+
     # Create cargo bin directory
     mkdir -p "$cargo_bin"
-    
+
     # List of expected Rust tools
     local tools=(
         "cargo"
@@ -164,13 +164,13 @@ test_rust_toolchain_components() {
         "cargo-clippy"
         "rustdoc"
     )
-    
+
     # Create mock tools
     for tool in "${tools[@]}"; do
         touch "$cargo_bin/$tool"
         chmod +x "$cargo_bin/$tool"
     done
-    
+
     # Check each tool
     for tool in "${tools[@]}"; do
         if [ -x "$cargo_bin/$tool" ]; then
@@ -184,7 +184,7 @@ test_rust_toolchain_components() {
 # Test: Environment variables
 test_rust_environment_variables() {
     local bashrc_file="$TEST_TEMP_DIR/etc/bashrc.d/40-rust.sh"
-    
+
     # Create mock bashrc content
     command cat > "$bashrc_file" << 'EOF'
 export CARGO_HOME="${CARGO_HOME:-$HOME/.cargo}"
@@ -192,26 +192,26 @@ export RUSTUP_HOME="${RUSTUP_HOME:-$HOME/.rustup}"
 export PATH="$CARGO_HOME/bin:$PATH"
 export RUST_BACKTRACE=1
 EOF
-    
+
     # Check environment variables
     if grep -q "export CARGO_HOME=" "$bashrc_file"; then
         assert_true true "CARGO_HOME is exported"
     else
         assert_true false "CARGO_HOME is not exported"
     fi
-    
+
     if grep -q "export RUSTUP_HOME=" "$bashrc_file"; then
         assert_true true "RUSTUP_HOME is exported"
     else
         assert_true false "RUSTUP_HOME is not exported"
     fi
-    
+
     if grep -q 'PATH.*CARGO_HOME/bin' "$bashrc_file"; then
         assert_true true "PATH includes Cargo bin directory"
     else
         assert_true false "PATH doesn't include Cargo bin directory"
     fi
-    
+
     if grep -q "export RUST_BACKTRACE=1" "$bashrc_file"; then
         assert_true true "RUST_BACKTRACE is enabled"
     else
@@ -222,7 +222,7 @@ EOF
 # Test: Rust aliases and helpers
 test_rust_aliases_helpers() {
     local bashrc_file="$TEST_TEMP_DIR/etc/bashrc.d/40-rust.sh"
-    
+
     # Add aliases section
     command cat >> "$bashrc_file" << 'EOF'
 
@@ -238,20 +238,20 @@ alias cf='cargo fmt'
 alias cu='cargo update'
 alias ci='cargo install'
 EOF
-    
+
     # Check common aliases
     if grep -q "alias cb='cargo build'" "$bashrc_file"; then
         assert_true true "cargo build alias defined"
     else
         assert_true false "cargo build alias not defined"
     fi
-    
+
     if grep -q "alias ct='cargo test'" "$bashrc_file"; then
         assert_true true "cargo test alias defined"
     else
         assert_true false "cargo test alias not defined"
     fi
-    
+
     if grep -q "alias ccl='cargo clippy'" "$bashrc_file"; then
         assert_true true "cargo clippy alias defined"
     else
@@ -263,7 +263,7 @@ EOF
 test_cargo_toml_detection() {
     local project_dir="$TEST_TEMP_DIR/project"
     mkdir -p "$project_dir"
-    
+
     # Create mock Cargo.toml
     command cat > "$project_dir/Cargo.toml" << 'EOF'
 [package]
@@ -274,16 +274,16 @@ edition = "2021"
 [dependencies]
 serde = "1.0"
 EOF
-    
+
     assert_file_exists "$project_dir/Cargo.toml"
-    
+
     # Check if Cargo.toml can be parsed
     if grep -q '\[package\]' "$project_dir/Cargo.toml"; then
         assert_true true "Cargo.toml has package section"
     else
         assert_true false "Cargo.toml missing package section"
     fi
-    
+
     if grep -q 'edition = "2021"' "$project_dir/Cargo.toml"; then
         assert_true true "Cargo.toml uses 2021 edition"
     else
@@ -295,17 +295,17 @@ EOF
 test_rust_permissions() {
     local cargo_home="$TEST_TEMP_DIR/home/testuser/.cargo"
     local rustup_home="$TEST_TEMP_DIR/home/testuser/.rustup"
-    
+
     # Create directories
     mkdir -p "$cargo_home" "$rustup_home"
-    
+
     # Check directories exist and are accessible
     if [ -d "$cargo_home" ] && [ -w "$cargo_home" ]; then
         assert_true true "Cargo home is writable"
     else
         assert_true false "Cargo home is not writable"
     fi
-    
+
     if [ -d "$rustup_home" ] && [ -w "$rustup_home" ]; then
         assert_true true "Rustup home is writable"
     else
@@ -316,7 +316,7 @@ test_rust_permissions() {
 # Test: Rust verification script
 test_rust_verification() {
     local test_script="$TEST_TEMP_DIR/test-rust.sh"
-    
+
     # Create verification script
     command cat > "$test_script" << 'EOF'
 #!/bin/bash
@@ -330,9 +330,9 @@ echo "Installed toolchains:"
 rustup show 2>/dev/null || echo "No toolchains"
 EOF
     chmod +x "$test_script"
-    
+
     assert_file_exists "$test_script"
-    
+
     # Check script is executable
     if [ -x "$test_script" ]; then
         assert_true true "Verification script is executable"

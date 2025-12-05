@@ -44,7 +44,7 @@ INCLUDE_DEV_TOOLS: "false"
 For each language, there are two sets of build arguments:
 
 1. **`INCLUDE_<LANG>`**: Installs the runtime
-2. **`INCLUDE_<LANG>_DEV`**: Installs development tools
+1. **`INCLUDE_<LANG>_DEV`**: Installs development tools
 
 **Production pattern**: Set `INCLUDE_<LANG>=true` but `INCLUDE_<LANG>_DEV=false`
 
@@ -268,17 +268,17 @@ should typically live in CI containers, not runtime containers.
 ## Best Practices
 
 1. **Start Minimal**: Begin with the minimal base and add only what you need
-2. **Separate Build/Runtime**: Consider multi-stage builds where build tools are
+1. **Separate Build/Runtime**: Consider multi-stage builds where build tools are
    in build stage only
-3. **Pin Versions**: Use specific version build args for reproducibility
-4. **Test Locally**: Build and test production images locally before deploying
-5. **Scan Images**: Run security scanners (trivy, grype) on production images
-6. **Monitor Size**: Keep track of image sizes and investigate unexpected growth
-7. **Use Cache Mounts**: BuildKit cache mounts speed up rebuilds significantly
-8. **Read-Only Filesystem**: Use `read_only: true` when possible for security
-9. **Minimal Capabilities**: Drop all capabilities and add back only what's
+1. **Pin Versions**: Use specific version build args for reproducibility
+1. **Test Locally**: Build and test production images locally before deploying
+1. **Scan Images**: Run security scanners (trivy, grype) on production images
+1. **Monitor Size**: Keep track of image sizes and investigate unexpected growth
+1. **Use Cache Mounts**: BuildKit cache mounts speed up rebuilds significantly
+1. **Read-Only Filesystem**: Use `read_only: true` when possible for security
+1. **Minimal Capabilities**: Drop all capabilities and add back only what's
    needed
-10. **Health Checks**: Always define proper health checks for runtime containers
+1. **Health Checks**: Always define proper health checks for runtime containers
 
 ## Environment-Specific Configurations
 

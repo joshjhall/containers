@@ -229,12 +229,12 @@ Tests must run non-interactively:
 ## Best Practices
 
 1. **Isolation**: Each test should be independent and not rely on others
-2. **Cleanup**: Always clean up test artifacts in teardown
-3. **Descriptive Names**: Use clear, descriptive test function names
-4. **Meaningful Assertions**: Include descriptive messages with assertions
-5. **Fast Execution**: Keep tests fast by avoiding unnecessary operations
-6. **Deterministic**: Tests should produce consistent results
-7. **Coverage**: Aim for comprehensive coverage of all code paths
+1. **Cleanup**: Always clean up test artifacts in teardown
+1. **Descriptive Names**: Use clear, descriptive test function names
+1. **Meaningful Assertions**: Include descriptive messages with assertions
+1. **Fast Execution**: Keep tests fast by avoiding unnecessary operations
+1. **Deterministic**: Tests should produce consistent results
+1. **Coverage**: Aim for comprehensive coverage of all code paths
 
 ## Continuous Integration
 
@@ -262,17 +262,17 @@ cat tests/results/test-report-*.txt
 ### Common Issues
 
 1. **Permission Errors**: Ensure test files are executable
-2. **Path Issues**: Use absolute paths or `$PROJECT_ROOT`
-3. **Environment Pollution**: Check for unset variables in teardown
-4. **Race Conditions**: Avoid time-dependent tests
+1. **Path Issues**: Use absolute paths or `$PROJECT_ROOT`
+1. **Environment Pollution**: Check for unset variables in teardown
+1. **Race Conditions**: Avoid time-dependent tests
 
 ## Contributing Tests
 
 When adding new features or fixing bugs:
 
 1. Write tests first (TDD approach)
-2. Ensure tests fail initially
-3. Implement the feature/fix
-4. Verify tests pass
-5. Check for regressions by running full test suite
-6. Update test documentation if adding new patterns
+1. Ensure tests fail initially
+1. Implement the feature/fix
+1. Verify tests pass
+1. Check for regressions by running full test suite
+1. Update test documentation if adding new patterns

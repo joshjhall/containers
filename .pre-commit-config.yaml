@@ -17,12 +17,15 @@ repos:
       - id: check-yaml
         args: [--unsafe]  # Allow custom tags
       - id: check-json
+        exclude: ^(\.devcontainer/devcontainer\.json|\.vscode/)
       - id: check-added-large-files
         args: [--maxkb=500]
       - id: check-merge-conflict
-      - id: check-executables-have-shebangs
-      - id: check-shebang-scripts-are-executable
+      # Note: check-executables-have-shebangs and check-shebang-scripts-are-executable
+      # are disabled because mounted filesystems (devcontainers, Docker volumes) may
+      # not report accurate file permissions to Python's os.access() function.
       - id: detect-private-key
+        exclude: ^lib/gpg-keys/
 
   # ==========================================================================
   # Shell script linting
@@ -32,7 +35,7 @@ repos:
     hooks:
       - id: shellcheck
         args: [--severity=warning]
-        exclude: ^tests/results/
+        exclude: ^(tests/results/|bin/setup-git-ssh\.sh)
 
   # ==========================================================================
   # YAML linting

@@ -100,7 +100,7 @@ export WARNING_COUNT=0
 
 # ============================================================================
 # log_feature_start - Initialize logging for a feature installation
-# 
+#
 # Arguments:
 #   $1 - Feature name (e.g., "Python", "Node.js", "Rust")
 #   $2 - Version (optional, e.g., "3.13.5")
@@ -111,11 +111,11 @@ export WARNING_COUNT=0
 log_feature_start() {
     local feature_name="$1"
     local version="${2:-}"
-    
+
     # Sanitize feature name for filename
     local safe_name
     safe_name=$(echo "$feature_name" | tr '[:upper:]' '[:lower:]' | tr ' ' '-' | tr -cd '[:alnum:]-')
-    
+
     # Set up logging paths
     CURRENT_FEATURE="$feature_name"
     CURRENT_LOG_FILE="$BUILD_LOG_DIR/${safe_name}-install.log"
@@ -125,7 +125,7 @@ log_feature_start() {
     COMMAND_COUNT=0
     ERROR_COUNT=0
     WARNING_COUNT=0
-    
+
     # Initialize log files
     {
         echo "================================================================================"
@@ -135,7 +135,7 @@ log_feature_start() {
         echo "================================================================================"
         echo ""
     } | tee "$CURRENT_LOG_FILE"
-    
+
     # Clear error file
     true > "$CURRENT_ERROR_FILE"
 
@@ -150,7 +150,7 @@ log_feature_start() {
 
 # ============================================================================
 # log_command - Execute and log a command
-# 
+#
 # Arguments:
 #   $1 - Description of what the command does
 #   $@ - The command to execute
@@ -161,9 +161,9 @@ log_feature_start() {
 log_command() {
     local description="$1"
     shift
-    
+
     COMMAND_COUNT=$((COMMAND_COUNT + 1))
-    
+
     # Log command start
     {
         echo ""
@@ -171,23 +171,23 @@ log_command() {
         echo "Executing: $*"
         echo "--------------------------------------------------------------------------------"
     } | tee -a "$CURRENT_LOG_FILE"
-    
+
     # Execute command and capture output
     local start_time
     start_time=$(date +%s)
     local exit_code=0
-    
+
     # Run command with output capture
     if "$@" 2>&1 | tee -a "$CURRENT_LOG_FILE"; then
         exit_code=0
     else
         exit_code=$?
     fi
-    
+
     local end_time
     end_time=$(date +%s)
     local duration=$((end_time - start_time))
-    
+
     # Log command result
     {
         echo "--------------------------------------------------------------------------------"
@@ -204,36 +204,36 @@ log_command() {
         # Get lines since the last command marker
         tail -n +$(($(grep -n "^Executing: " "$CURRENT_LOG_FILE" | tail -1 | cut -d: -f1) + 1)) "$CURRENT_LOG_FILE" | \
         grep -E "(ERROR|Error|error|FAILED|Failed|failed|FATAL|Fatal|fatal)" >> "$CURRENT_ERROR_FILE" 2>/dev/null || true
-        
+
         local new_errors
         new_errors=$(tail -n +$(($(grep -n "^Executing: " "$CURRENT_LOG_FILE" | tail -1 | cut -d: -f1) + 1)) "$CURRENT_LOG_FILE" | \
         grep -cE "(ERROR|Error|error|FAILED|Failed|failed|FATAL|Fatal|fatal)" 2>/dev/null || echo 0)
         new_errors=$(echo "$new_errors" | tr -d '[:space:]')
         ERROR_COUNT=$((ERROR_COUNT + ${new_errors:-0}))
-        
+
         tail -n +$(($(grep -n "^Executing: " "$CURRENT_LOG_FILE" | tail -1 | cut -d: -f1) + 1)) "$CURRENT_LOG_FILE" | \
         grep -E "(WARNING|Warning|warning|WARN|Warn|warn)" >> "$CURRENT_ERROR_FILE" 2>/dev/null || true
-        
+
         local new_warnings
         new_warnings=$(tail -n +$(($(grep -n "^Executing: " "$CURRENT_LOG_FILE" | tail -1 | cut -d: -f1) + 1)) "$CURRENT_LOG_FILE" | \
         grep -cE "(WARNING|Warning|warning|WARN|Warn|warn)" 2>/dev/null || echo 0)
         new_warnings=$(echo "$new_warnings" | tr -d '[:space:]')
         WARNING_COUNT=$((WARNING_COUNT + ${new_warnings:-0}))
     fi
-    
+
     # Show status on console
     if [ $exit_code -eq 0 ]; then
         echo "✓ $description completed successfully"
     else
         echo "✗ $description failed with exit code $exit_code"
     fi
-    
+
     return $exit_code
 }
 
 # ============================================================================
 # log_feature_end - Finalize logging and generate summary
-# 
+#
 # Arguments:
 #   None
 #
@@ -244,7 +244,7 @@ log_feature_end() {
     local end_time
     end_time=$(date +%s)
     local total_duration=$((end_time - FEATURE_START_TIME))
-    
+
     # Generate summary
     {
         echo "================================================================================"
@@ -256,7 +256,7 @@ log_feature_end() {
         echo "Errors Found: $ERROR_COUNT"
         echo "Warnings Found: $WARNING_COUNT"
         echo ""
-        
+
         if [ -s "$CURRENT_ERROR_FILE" ]; then
             echo "--- First 10 Errors/Warnings ---"
             head -10 "$CURRENT_ERROR_FILE"
@@ -265,12 +265,12 @@ log_feature_end() {
         else
             echo "No errors or warnings detected!"
         fi
-        
+
         echo ""
         echo "End Time: $(date '+%Y-%m-%d %H:%M:%S')"
         echo "================================================================================"
     } | tee "$CURRENT_SUMMARY_FILE"
-    
+
     # Append summary to main log
     echo "" >> "$CURRENT_LOG_FILE"
     command cat "$CURRENT_SUMMARY_FILE" >> "$CURRENT_LOG_FILE"
@@ -373,7 +373,7 @@ log_debug() {
 
 # ============================================================================
 # log_error - Log an error message
-# 
+#
 # Arguments:
 #   $1 - Error message
 #

@@ -291,11 +291,11 @@ log_message "Checking for Python project files..."
 # If Python project files were copied to temp during build, move them to workspace
 if [ -d /tmp/python-project-files ] && [ -n "$(ls -A /tmp/python-project-files 2>/dev/null)" ]; then
     log_message "Found Python project files, moving to workspace..."
-    
+
     # Ensure workspace directory exists
     log_command "Creating workspace directory" \
         mkdir -p "${WORKING_DIR}"
-    
+
     # Copy files to workspace
     for file in /tmp/python-project-files/*; do
         if [ -f "$file" ]; then

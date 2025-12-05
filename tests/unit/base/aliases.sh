@@ -18,11 +18,11 @@ setup() {
     # Create temporary directory for testing
     export TEST_TEMP_DIR="$RESULTS_DIR/test-aliases"
     mkdir -p "$TEST_TEMP_DIR"
-    
+
     # Create mock bashrc file
     export TEST_BASHRC="$TEST_TEMP_DIR/bash.bashrc"
     touch "$TEST_BASHRC"
-    
+
     # Create mock build scripts directory
     mkdir -p "$TEST_TEMP_DIR/tmp/build-scripts/base"
 }
@@ -33,7 +33,7 @@ teardown() {
     if [ -n "${TEST_TEMP_DIR:-}" ]; then
         command rm -rf "$TEST_TEMP_DIR"
     fi
-    
+
     # Unset test variables
     unset TEST_BASHRC 2>/dev/null || true
 }
@@ -46,16 +46,16 @@ alias ll='ls -alF'
 alias la='ls -A'
 alias l='ls -CF'
 EOF
-    
+
     # Check that aliases were written
     assert_file_exists "$TEST_BASHRC"
-    
+
     if grep -q "alias ll='ls -alF'" "$TEST_BASHRC"; then
         assert_true true "ll alias written to bashrc"
     else
         assert_true false "ll alias not found in bashrc"
     fi
-    
+
     if grep -q "alias la='ls -A'" "$TEST_BASHRC"; then
         assert_true true "la alias written to bashrc"
     else
@@ -71,14 +71,14 @@ alias ..='cd ..'
 alias ...='cd ../..'
 alias ....='cd ../../..'
 EOF
-    
+
     # Check navigation aliases
     if grep -q "alias \.\.='cd \.\.'" "$TEST_BASHRC"; then
         assert_true true "Parent directory alias (..) written"
     else
         assert_true false "Parent directory alias not found"
     fi
-    
+
     if grep -q "alias \.\.\.='cd \.\./\.\.'" "$TEST_BASHRC"; then
         assert_true true "Two-level parent alias (...) written"
     else
@@ -94,20 +94,20 @@ alias rm='command rm -i'
 alias cp='cp -i'
 alias mv='mv -i'
 EOF
-    
+
     # Check safety aliases
     if grep -q "alias rm='command rm -i'" "$TEST_BASHRC"; then
         assert_true true "Safe rm alias written"
     else
         assert_true false "Safe rm alias not found"
     fi
-    
+
     if grep -q "alias cp='cp -i'" "$TEST_BASHRC"; then
         assert_true true "Safe cp alias written"
     else
         assert_true false "Safe cp alias not found"
     fi
-    
+
     if grep -q "alias mv='mv -i'" "$TEST_BASHRC"; then
         assert_true true "Safe mv alias written"
     else
@@ -126,7 +126,7 @@ alias gl='git log --oneline'
 alias ga='git add'
 alias gc='git commit'
 EOF
-    
+
     # Check git aliases
     for alias_cmd in "g='git'" "gs='git status'" "gd='git diff'"; do
         if grep -q "alias $alias_cmd" "$TEST_BASHRC"; then
@@ -148,14 +148,14 @@ export HISTSIZE=10000
 export HISTFILESIZE=20000
 export HISTCONTROL=ignoreboth:erasedups
 EOF
-    
+
     # Check environment variables
     if grep -q "export TERM=xterm-256color" "$TEST_BASHRC"; then
         assert_true true "TERM environment variable set"
     else
         assert_true false "TERM environment variable not found"
     fi
-    
+
     if grep -q "export HISTSIZE=10000" "$TEST_BASHRC"; then
         assert_true true "HISTSIZE environment variable set"
     else
@@ -172,14 +172,14 @@ shopt -s checkwinsize
 shopt -s globstar 2>/dev/null || true
 shopt -s autocd 2>/dev/null || true
 EOF
-    
+
     # Check shell options
     if grep -q "shopt -s histappend" "$TEST_BASHRC"; then
         assert_true true "histappend shell option set"
     else
         assert_true false "histappend shell option not found"
     fi
-    
+
     if grep -q "shopt -s checkwinsize" "$TEST_BASHRC"; then
         assert_true true "checkwinsize shell option set"
     else
@@ -198,14 +198,14 @@ alias which='type -a'
 alias path='echo -e ${PATH//:/\\n}'
 alias psg='ps aux | grep -v grep | grep -i'
 EOF
-    
+
     # Check productivity aliases
     if grep -q "alias h='history'" "$TEST_BASHRC"; then
         assert_true true "History alias written"
     else
         assert_true false "History alias not found"
     fi
-    
+
     if grep -q "alias psg=" "$TEST_BASHRC"; then
         assert_true true "Process grep alias written"
     else
@@ -217,7 +217,7 @@ EOF
 run_test_with_setup() {
     local test_function="$1"
     local test_description="$2"
-    
+
     setup
     run_test "$test_function" "$test_description"
     teardown

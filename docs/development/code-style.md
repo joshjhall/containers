@@ -143,10 +143,10 @@ CACHE_DIR="/cache/tool"  # cache directory
 ## Consistency Rules
 
 1. Always use `echo "=== Action ==="` for user-visible progress messages
-2. Use `# ===...` for section separators in code
-3. Use `# ---...` for subsection separators
-4. Keep separator lines to exactly 76 characters (fits in 80-char terminal)
-5. Use complete sentences in comments
-6. Document all environment variables in the file header
-7. Explain any non-obvious commands or logic
-8. Group related operations under clear section headers
+1. Use `# ===...` for section separators in code
+1. Use `# ---...` for subsection separators
+1. Keep separator lines to exactly 76 characters (fits in 80-char terminal)
+1. Use complete sentences in comments
+1. Document all environment variables in the file header
+1. Explain any non-obvious commands or logic
+1. Group related operations under clear section headers

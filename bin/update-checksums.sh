@@ -107,7 +107,7 @@ update_checksum() {
     local language="$1"
     local version="$2"
     local current_checksum="$3"
-    
+
     # Skip if checksum already exists and is valid
     if [ -n "$current_checksum" ] && \
        [ "$current_checksum" != "null" ] && \
@@ -115,12 +115,12 @@ update_checksum() {
        [ "$current_checksum" != "MANUAL_VERIFICATION_NEEDED" ]; then
         return 0
     fi
-    
+
     echo -e "${BLUE}  Fetching checksum for $language $version...${NC}"
-    
+
     local checksum=""
     local url=""
-    
+
     # Fetch checksum based on language
     case "$language" in
         nodejs)
@@ -158,28 +158,28 @@ update_checksum() {
             return 1
             ;;
     esac
-    
+
     if [ -z "$checksum" ] || [ "$checksum" = "null" ]; then
         echo -e "${RED}    ✗ Failed to fetch checksum for $language $version${NC}"
         ((FAILED_COUNT++))
         return 1
     fi
-    
+
     # Validate checksum format (SHA256 should be 64 hex characters)
     if ! [[ "$checksum" =~ ^[a-fA-F0-9]{64}$ ]]; then
         echo -e "${RED}    ✗ Invalid checksum format: $checksum${NC}"
         ((FAILED_COUNT++))
         return 1
     fi
-    
+
     echo -e "${GREEN}    ✓ $checksum${NC}"
-    
+
     if [ "$DRY_RUN" = true ]; then
         echo -e "${YELLOW}    [DRY RUN] Would update checksums.json${NC}"
         ((UPDATED_COUNT++))
         return 0
     fi
-    
+
     # Update checksums.json
     local tmp_file
     tmp_file=$(mktemp)
@@ -188,7 +188,7 @@ update_checksum() {
         .languages.${language}.versions.\"${version}\".added = \"$(date -u +%Y-%m-%d)\" | \
         del(.languages.${language}.versions.\"${version}\".note)" \
         "$CHECKSUMS_FILE" > "$tmp_file"
-    
+
     if jq empty "$tmp_file" 2>/dev/null; then
         command mv "$tmp_file" "$CHECKSUMS_FILE"
         ((UPDATED_COUNT++))
@@ -206,13 +206,13 @@ echo -e "${BLUE}Checking existing versions for missing checksums...${NC}"
 for language in nodejs golang ruby; do
     # Get all versions for this language
     versions=$(jq -r ".languages.${language}.versions | keys[]" "$CHECKSUMS_FILE" 2>/dev/null || echo "")
-    
+
     if [ -z "$versions" ]; then
         continue
     fi
-    
+
     echo -e "${BLUE}${language}:${NC}"
-    
+
     while IFS= read -r version; do
         checksum=$(jq -r ".languages.${language}.versions.\"${version}\".sha256" "$CHECKSUMS_FILE")
         update_checksum "$language" "$version" "$checksum"

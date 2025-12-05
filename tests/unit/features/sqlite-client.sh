@@ -18,13 +18,13 @@ setup() {
     # Create temporary directory for testing
     export TEST_TEMP_DIR="$RESULTS_DIR/test-sqlite"
     mkdir -p "$TEST_TEMP_DIR"
-    
+
     # Mock environment
     export USERNAME="testuser"
     export USER_UID="1000"
     export USER_GID="1000"
     export HOME="/home/testuser"
-    
+
     # Create mock directories
     mkdir -p "$TEST_TEMP_DIR/usr/bin"
     mkdir -p "$TEST_TEMP_DIR/home/testuser/.sqlite"
@@ -37,7 +37,7 @@ teardown() {
     if [ -n "${TEST_TEMP_DIR:-}" ]; then
         command rm -rf "$TEST_TEMP_DIR"
     fi
-    
+
     # Unset test variables
     unset USERNAME USER_UID USER_GID HOME 2>/dev/null || true
 }
@@ -45,13 +45,13 @@ teardown() {
 # Test: SQLite3 installation
 test_sqlite3_installation() {
     local bin_dir="$TEST_TEMP_DIR/usr/bin"
-    
+
     # Create mock sqlite3 binary
     touch "$bin_dir/sqlite3"
     chmod +x "$bin_dir/sqlite3"
-    
+
     assert_file_exists "$bin_dir/sqlite3"
-    
+
     # Check executable
     if [ -x "$bin_dir/sqlite3" ]; then
         assert_true true "sqlite3 is executable"
@@ -63,7 +63,7 @@ test_sqlite3_installation() {
 # Test: SQLite configuration
 test_sqlite_config() {
     local sqliterc="$TEST_TEMP_DIR/home/testuser/.sqliterc"
-    
+
     # Create config
     command cat > "$sqliterc" << 'EOF'
 .mode column
@@ -71,16 +71,16 @@ test_sqlite_config() {
 .timer on
 .nullvalue NULL
 EOF
-    
+
     assert_file_exists "$sqliterc"
-    
+
     # Check configuration
     if grep -q ".headers on" "$sqliterc"; then
         assert_true true "Headers enabled"
     else
         assert_true false "Headers not enabled"
     fi
-    
+
     if grep -q ".timer on" "$sqliterc"; then
         assert_true true "Timer enabled"
     else
@@ -91,7 +91,7 @@ EOF
 # Test: SQLite aliases
 test_sqlite_aliases() {
     local bashrc_file="$TEST_TEMP_DIR/etc/bashrc.d/80-sqlite.sh"
-    
+
     # Create aliases
     command cat > "$bashrc_file" << 'EOF'
 alias sq='sqlite3'
@@ -99,7 +99,7 @@ alias sqmem='sqlite3 :memory:'
 alias sqcsv='sqlite3 -csv'
 alias sqjson='sqlite3 -json'
 EOF
-    
+
     # Check aliases
     if grep -q "alias sq='sqlite3'" "$bashrc_file"; then
         assert_true true "sqlite3 alias defined"
@@ -111,12 +111,12 @@ EOF
 # Test: Database directory
 test_database_directory() {
     local db_dir="$TEST_TEMP_DIR/home/testuser/databases"
-    
+
     # Create database directory
     mkdir -p "$db_dir"
-    
+
     assert_dir_exists "$db_dir"
-    
+
     # Check directory is writable
     if [ -w "$db_dir" ]; then
         assert_true true "Database directory is writable"
@@ -129,17 +129,17 @@ test_database_directory() {
 test_sample_database() {
     local db_file="$TEST_TEMP_DIR/home/testuser/databases/test.db"
     mkdir -p "$(dirname "$db_file")"
-    
+
     # Create empty database file
     touch "$db_file"
-    
+
     assert_file_exists "$db_file"
 }
 
 # Test: SQLite history
 test_sqlite_history() {
     local history_file="$TEST_TEMP_DIR/home/testuser/.sqlite_history"
-    
+
     # Create history
     command cat > "$history_file" << 'EOF'
 .tables
@@ -147,19 +147,19 @@ SELECT * FROM users;
 .schema
 .quit
 EOF
-    
+
     assert_file_exists "$history_file"
 }
 
 # Test: Environment variables
 test_sqlite_environment() {
     local bashrc_file="$TEST_TEMP_DIR/etc/bashrc.d/80-sqlite.sh"
-    
+
     # Add environment variables
     command cat >> "$bashrc_file" << 'EOF'
 export SQLITE_HISTORY="$HOME/.sqlite_history"
 EOF
-    
+
     # Check environment variables
     if grep -q "export SQLITE_HISTORY=" "$bashrc_file"; then
         assert_true true "History file env var set"
@@ -171,10 +171,10 @@ EOF
 # Test: Extensions directory
 test_extensions_directory() {
     local ext_dir="$TEST_TEMP_DIR/home/testuser/.sqlite/extensions"
-    
+
     # Create extensions directory
     mkdir -p "$ext_dir"
-    
+
     assert_dir_exists "$ext_dir"
 }
 
@@ -182,7 +182,7 @@ test_extensions_directory() {
 test_backup_scripts() {
     local script="$TEST_TEMP_DIR/home/testuser/bin/sqlite-backup"
     mkdir -p "$(dirname "$script")"
-    
+
     # Create backup script
     command cat > "$script" << 'EOF'
 #!/bin/bash
@@ -190,9 +190,9 @@ DB="$1"
 sqlite3 "$DB" ".backup ${DB}.backup"
 EOF
     chmod +x "$script"
-    
+
     assert_file_exists "$script"
-    
+
     # Check script is executable
     if [ -x "$script" ]; then
         assert_true true "Backup script is executable"
@@ -204,7 +204,7 @@ EOF
 # Test: Verification script
 test_sqlite_verification() {
     local test_script="$TEST_TEMP_DIR/test-sqlite.sh"
-    
+
     # Create verification script
     command cat > "$test_script" << 'EOF'
 #!/bin/bash
@@ -214,9 +214,9 @@ echo "Testing in-memory database:"
 echo "SELECT 1+1;" | sqlite3 :memory: 2>/dev/null || echo "SQLite test failed"
 EOF
     chmod +x "$test_script"
-    
+
     assert_file_exists "$test_script"
-    
+
     # Check script is executable
     if [ -x "$test_script" ]; then
         assert_true true "Verification script is executable"
@@ -229,7 +229,7 @@ EOF
 run_test_with_setup() {
     local test_function="$1"
     local test_description="$2"
-    
+
     setup
     run_test "$test_function" "$test_description"
     teardown

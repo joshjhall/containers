@@ -10,7 +10,7 @@ This directory contains GPG public keys used to verify Go binary releases.
 - **Fingerprint**: `EB4C 1BFD 4F04 2F6D DDCC EC91 7721 F63B D38B 4796`
 - **UID**: Google Inc. (Linux Packages Signing Authority)
   <linux-packages-keymaster@google.com>
-- **Source**: https://dl.google.com/linux/linux_signing_key.pub
+- **Source**: `https://dl.google.com/linux/linux_signing_key.pub`
 - **Created**: 2016-04-12
 
 ### Products Verified with This Key
@@ -30,9 +30,9 @@ this key.
 ### Verification Process
 
 1. Download Go binary (e.g., `go1.23.4.linux-amd64.tar.gz`)
-2. Download signature file (e.g., `go1.23.4.linux-amd64.tar.gz.asc`)
-3. Import GPG key: `gpg --import google-linux-signing-key.asc`
-4. Verify signature:
+1. Download signature file (e.g., `go1.23.4.linux-amd64.tar.gz.asc`)
+1. Import GPG key: `gpg --import google-linux-signing-key.asc`
+1. Verify signature:
    `gpg --verify go1.23.4.linux-amd64.tar.gz.asc go1.23.4.linux-amd64.tar.gz`
 
 The signature verification is handled automatically by the
@@ -82,6 +82,6 @@ chmod 600 lib/gpg-keys/golang/keys/google-linux-signing-key.asc
 
 ## References
 
-- Go Downloads: https://go.dev/dl/
-- Google Linux Signing Key: https://dl.google.com/linux/linux_signing_key.pub
-- Go Security Policy: https://go.dev/security/policy
+- Go Downloads: `https://go.dev/dl/`
+- Google Linux Signing Key: `https://dl.google.com/linux/linux_signing_key.pub`
+- Go Security Policy: `https://go.dev/security/policy`

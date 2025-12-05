@@ -18,14 +18,14 @@ setup() {
     # Create temporary directory for testing
     export TEST_TEMP_DIR="$RESULTS_DIR/test-feature-header"
     mkdir -p "$TEST_TEMP_DIR"
-    
+
     # Mock environment variables
     export USERNAME="testuser"
     export USER_UID="1000"
     export USER_GID="1000"
     export HOME="/home/testuser"
     export WORKING_DIR="/workspace/test"
-    
+
     # Create a test version of feature-header.sh
     command cp "$PROJECT_ROOT/lib/base/feature-header.sh" "$TEST_TEMP_DIR/feature-header-test.sh"
 }
@@ -34,7 +34,7 @@ setup() {
 teardown() {
     # Clean up test directory
     command rm -rf "$TEST_TEMP_DIR"
-    
+
     # Unset test variables
     unset USERNAME USER_UID USER_GID HOME WORKING_DIR
 }
@@ -43,7 +43,7 @@ teardown() {
 test_environment_variables() {
     # Source the feature header
     source "$TEST_TEMP_DIR/feature-header-test.sh"
-    
+
     # Check that essential variables are set
     assert_not_empty "$USERNAME" "USERNAME is set"
     assert_not_empty "$USER_UID" "USER_UID is set"
@@ -58,18 +58,18 @@ test_default_values() {
     local saved_username="$USERNAME"
     local saved_uid="$USER_UID"
     local saved_gid="$USER_GID"
-    
+
     # Unset variables to test defaults
     unset USERNAME USER_UID USER_GID
-    
+
     # Source the feature header
     source "$TEST_TEMP_DIR/feature-header-test.sh"
-    
+
     # Check defaults are applied (or existing values used)
     assert_not_empty "$USERNAME" "USERNAME is set to some value"
     assert_not_empty "$USER_UID" "USER_UID is set to some value"
     assert_not_empty "$USER_GID" "USER_GID is set to some value"
-    
+
     # Restore values
     USERNAME="$saved_username"
     USER_UID="$saved_uid"
@@ -83,23 +83,23 @@ test_logging_functions_available() {
     log_command() { echo "log_command called"; }
     log_message() { echo "log_message called"; }
     export -f log_feature_start log_command log_message
-    
+
     # Source the feature header
     source "$TEST_TEMP_DIR/feature-header-test.sh"
-    
+
     # Check that logging functions exist
     if type -t log_feature_start >/dev/null; then
         assert_true true "log_feature_start function exists"
     else
         assert_true false "log_feature_start function not found"
     fi
-    
+
     if type -t log_command >/dev/null; then
         assert_true true "log_command function exists"
     else
         assert_true false "log_command function not found"
     fi
-    
+
     if type -t log_message >/dev/null; then
         assert_true true "log_message function exists"
     else
@@ -117,29 +117,29 @@ test_write_bashrc_content() {
         command cat >> "$file"
     }
     export -f write_bashrc_content
-    
+
     # Source the feature header
     source "$TEST_TEMP_DIR/feature-header-test.sh"
-    
+
     # Create a test bashrc file
     local test_bashrc="$TEST_TEMP_DIR/test.bashrc"
-    
+
     # Write content using the function
     write_bashrc_content "$test_bashrc" "Test Section" << 'EOF'
 echo "Test content"
 export TEST_VAR="test"
 EOF
-    
+
     # Check file was created
     assert_file_exists "$test_bashrc"
-    
+
     # Check content
     if grep -q "Test Section" "$test_bashrc"; then
         assert_true true "Section header written"
     else
         assert_true false "Section header not found"
     fi
-    
+
     if grep -q "Test content" "$test_bashrc"; then
         assert_true true "Content written correctly"
     else
@@ -155,7 +155,7 @@ test_error_handling() {
     else
         assert_true false "errexit (set -e) is not enabled"
     fi
-    
+
     if [[ $- == *u* ]]; then
         assert_true true "nounset (set -u) is enabled"
     else
@@ -167,13 +167,13 @@ test_error_handling() {
 test_path_configuration() {
     # Set BUILD_LOG_DIR for testing
     export BUILD_LOG_DIR="/var/log/container-build"
-    
+
     # Source the feature header
     source "$TEST_TEMP_DIR/feature-header-test.sh"
-    
+
     # Check that BUILD_LOG_DIR is set
     assert_not_empty "${BUILD_LOG_DIR:-}" "BUILD_LOG_DIR is set"
-    
+
     # Check the default path
     assert_equals "/var/log/container-build" "$BUILD_LOG_DIR" "BUILD_LOG_DIR has correct default"
 }
@@ -182,7 +182,7 @@ test_path_configuration() {
 run_test_with_setup() {
     local test_function="$1"
     local test_description="$2"
-    
+
     setup
     run_test "$test_function" "$test_description"
     teardown

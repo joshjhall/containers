@@ -13,11 +13,11 @@ response.
 Each runbook includes:
 
 1. **Alert Information**: Name, severity, description
-2. **Impact**: What this alert means for users/systems
-3. **Diagnosis**: Steps to investigate the root cause
-4. **Resolution**: How to fix the issue
-5. **Prevention**: How to prevent recurrence
-6. **Escalation**: When and how to escalate
+1. **Impact**: What this alert means for users/systems
+1. **Diagnosis**: Steps to investigate the root cause
+1. **Resolution**: How to fix the issue
+1. **Prevention**: How to prevent recurrence
+1. **Escalation**: When and how to escalate
 
 ## Available Runbooks
 
@@ -120,21 +120,21 @@ find /var/log/container-build -type f -mtime +7 -delete
 ## Escalation Path
 
 1. **On-Call Engineer**: First responder for all alerts
-2. **Team Lead**: Escalate if issue persists after 1 hour
-3. **Platform Team**: Escalate for infrastructure issues
-4. **Security Team**: Escalate for security-related incidents
+1. **Team Lead**: Escalate if issue persists after 1 hour
+1. **Platform Team**: Escalate for infrastructure issues
+1. **Security Team**: Escalate for security-related incidents
 
 ## On-Call Procedures
 
 ### When You Receive an Alert
 
 1. **Acknowledge** the alert in PagerDuty/monitoring system
-2. **Assess** severity and impact
-3. **Investigate** using the appropriate runbook
-4. **Communicate** status to team (Slack, incident channel)
-5. **Resolve** the issue following runbook guidance
-6. **Document** actions taken and resolution
-7. **Post-mortem** if critical incident (within 24 hours)
+1. **Assess** severity and impact
+1. **Investigate** using the appropriate runbook
+1. **Communicate** status to team (Slack, incident channel)
+1. **Resolve** the issue following runbook guidance
+1. **Document** actions taken and resolution
+1. **Post-mortem** if critical incident (within 24 hours)
 
 ### If You Can't Resolve
 
@@ -148,9 +148,9 @@ find /var/log/container-build -type f -mtime +7 -delete
 ### Adding a New Runbook
 
 1. Copy the template below
-2. Fill in all sections
-3. Add link to this README
-4. Update alert definition to include runbook URL
+1. Fill in all sections
+1. Add link to this README
+1. Update alert definition to include runbook URL
 
 ### Runbook Template
 
@@ -208,8 +208,8 @@ find /var/log/container-build -type f -mtime +7 -delete
 ### Permanent Fix
 
 1. Step 1
-2. Step 2
-3. Step 3
+1. Step 2
+1. Step 3
 
 ### Verification
 

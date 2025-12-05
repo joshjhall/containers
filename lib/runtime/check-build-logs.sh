@@ -110,7 +110,7 @@ show_feature() {
     local summary_file="${LOG_DIR}/${feature}-summary.log"
     local error_file="${LOG_DIR}/${feature}-errors.log"
     local log_file="${LOG_DIR}/${feature}-install.log"
-    
+
     case $action in
         summary)
             if [ -f "$summary_file" ]; then
@@ -119,7 +119,7 @@ show_feature() {
                 echo ""
             fi
             ;;
-        
+
         errors)
             if [ -f "$error_file" ]; then
                 echo -e "${BLUE}=== ${feature} Errors/Warnings ===${NC}"
@@ -131,7 +131,7 @@ show_feature() {
                 echo ""
             fi
             ;;
-        
+
         full)
             if [ -f "$log_file" ]; then
                 echo -e "${BLUE}=== ${feature} Full Log ===${NC}"
@@ -155,7 +155,7 @@ case $ACTION in
             echo "  - $feature"
         done
         ;;
-    
+
     summary|errors|full)
         if [ -n "$FEATURE" ]; then
             # Show specific feature
@@ -176,18 +176,18 @@ case $ACTION in
                 echo ""
                 printf "%-20s %s\n" "Feature" "Status"
                 printf "%-20s %s\n" "-------" "------"
-                
+
                 while IFS=: read -r feature status; do
                     feature=$(echo "$feature" | xargs)
                     status=$(echo "$status" | xargs)
-                    
+
                     if echo "$status" | grep -q "0 errors"; then
                         printf "%-20s ${GREEN}✓ %s${NC}\n" "$feature" "$status"
                     else
                         printf "%-20s ${RED}✗ %s${NC}\n" "$feature" "$status"
                     fi
                 done < "$LOG_DIR/master-summary.log"
-                
+
                 echo ""
                 echo "Use 'check-build-logs.sh <feature>' for details"
                 echo "Use 'check-build-logs.sh -e' to see all errors"

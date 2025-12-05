@@ -18,7 +18,7 @@ built with this system to production environments.
 - [Deployment Platforms](#deployment-platforms)
 - [Checklist](#production-readiness-checklist)
 
----
+______________________________________________________________________
 
 ## Overview
 
@@ -37,7 +37,7 @@ and optimization is required.
 | **Logging**       | Verbose                     | Structured, minimal           |
 | **Health Checks** | Optional                    | Required                      |
 
----
+______________________________________________________________________
 
 ## Security Hardening
 
@@ -124,7 +124,7 @@ docker scout cves myapp:prod
 snyk container test myapp:prod
 ```
 
----
+______________________________________________________________________
 
 ## Image Optimization
 
@@ -192,7 +192,7 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 ```
 
----
+______________________________________________________________________
 
 ## Runtime Configuration
 
@@ -304,7 +304,7 @@ spec:
           cpu: '500m'
 ```
 
----
+______________________________________________________________________
 
 ## Secrets Management
 
@@ -372,7 +372,7 @@ docker run \
   myapp:prod
 ```
 
----
+______________________________________________________________________
 
 ## Health Checks
 
@@ -427,7 +427,7 @@ This system includes health check scripts:
 HEALTHCHECK --interval=30s CMD /usr/local/bin/container-health-check.sh
 ```
 
----
+______________________________________________________________________
 
 ## Logging and Monitoring
 
@@ -493,9 +493,9 @@ requests_total = Counter('http_requests_total', 'Total HTTP requests')
 start_http_server(9090)
 ```
 
----
+______________________________________________________________________
 
-## Resource Limits
+## Container Resource Limits
 
 ### Memory Limits
 
@@ -542,7 +542,7 @@ docker run \
   myapp:prod
 ```
 
----
+______________________________________________________________________
 
 ## Multi-Stage Builds for Production
 
@@ -581,7 +581,7 @@ HEALTHCHECK CMD curl -f http://localhost:8080/health || exit 1
 CMD ["python", "-m", "app"]
 ```
 
----
+______________________________________________________________________
 
 ## Container Registries
 
@@ -629,7 +629,7 @@ aws ecr put-image-scanning-configuration \
 
 - Enable vulnerability scanning in registry settings
 
----
+______________________________________________________________________
 
 ## Deployment Platforms
 
@@ -780,7 +780,7 @@ spec:
 }
 ```
 
----
+______________________________________________________________________
 
 ## Production Readiness Checklist
 
@@ -836,9 +836,11 @@ spec:
 - [ ] Secrets management documented
 - [ ] Deployment procedure documented
 
----
+______________________________________________________________________
 
-## Related Documentation
+## Additional Resources
+
+Related Documentation:
 
 - [Security Best Practices](security-hardening.md) - Comprehensive security
   guide
@@ -847,13 +849,13 @@ spec:
 - [Troubleshooting](troubleshooting.md) - Common issues and solutions
 - [CLAUDE.md](../CLAUDE.md) - Build system overview
 
----
+______________________________________________________________________
 
 ## Getting Help
 
 For production deployment assistance:
 
 1. Review this guide thoroughly
-2. Check [troubleshooting.md](troubleshooting.md) for common issues
-3. Review security hardening documentation
-4. Open an issue on GitHub for specific questions
+1. Check [troubleshooting.md](troubleshooting.md) for common issues
+1. Review security hardening documentation
+1. Open an issue on GitHub for specific questions

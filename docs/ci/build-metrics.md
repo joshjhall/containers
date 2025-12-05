@@ -222,10 +222,12 @@ ls -lh metrics/baselines/
 ### Default Thresholds
 
 - **Size Threshold**: 100MB increase
+
   - Triggers when image grows by more than 100MB
   - Indicates potential bloat or missing cleanup
 
 - **Time Threshold**: 20% increase
+
   - Triggers when build time increases by >20%
   - Indicates potential inefficiency or network issues
 

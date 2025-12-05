@@ -23,7 +23,7 @@ The following security enhancements have been implemented:
 This document serves as a reference for understanding the security architecture
 and can be used for security audits or compliance requirements.
 
----
+______________________________________________________________________
 
 ## Overview
 
@@ -39,7 +39,7 @@ and can be used for security audits or compliance requirements.
 - **File Permissions**: Cache directories, sudoers, keys properly secured
 - **Path Sanitization**: Most operations use absolute paths
 
----
+______________________________________________________________________
 
 ## HIGH SEVERITY ISSUES
 
@@ -702,7 +702,7 @@ docker run -e OP_SERVICE_ACCOUNT_TOKEN=... ...
    }
    ```
 
----
+______________________________________________________________________
 
 ### ✅ #12: Docker Socket Mounting Creates Container Escape Vector
 
@@ -916,35 +916,41 @@ Created `lib/base/retry-utils.sh` with three retry functions:
 
 1. **retry_with_backoff()** - Generic retry with exponential backoff (2s → 4s →
    8s, max 30s)
+
    - Configurable via `RETRY_MAX_ATTEMPTS`, `RETRY_INITIAL_DELAY`,
      `RETRY_MAX_DELAY`
    - Returns original exit code after final attempt
 
 1. **retry_command()** - Wrapper with logging integration
+
    - Takes description as first parameter
    - Integrates with logging.sh if available
 
 1. **retry_github_api()** - GitHub-specific retry with rate limit awareness
+
    - Automatically adds `Authorization` header if `GITHUB_TOKEN` is set
    - Detects rate limit errors (403, "rate limit" messages)
    - Provides helpful messages about token benefits
 
    Updated `lib/features/lib/checksum-fetch.sh` to use retry_github_api for:
+
    - `fetch_github_checksums_txt()` - Checksums.txt file fetching
    - `fetch_github_sha256_file()` - Individual .sha256 file fetching
    - `fetch_github_sha512_file()` - Individual .sha512 file fetching
 
    **Files Modified**:
+
    - `lib/base/retry-utils.sh` (NEW)
    - `lib/features/lib/checksum-fetch.sh`
 
    **Benefits**:
+
    - Reduced build failures from transient network issues
    - GitHub rate limit detection and helpful guidance
    - 5000x rate limit increase when using GITHUB_TOKEN (60 → 5000 requests/hour)
    - Exponential backoff prevents hammering external services
 
----
+______________________________________________________________________
 
 ### ✅ #15: Missing Container Image Digests in Releases
 

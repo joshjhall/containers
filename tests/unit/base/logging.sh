@@ -19,7 +19,7 @@ setup() {
     export TEST_LOG_DIR="$RESULTS_DIR/test-logs"
     export BUILD_LOG_DIR="$TEST_LOG_DIR"
     mkdir -p "$BUILD_LOG_DIR"
-    
+
     # Reset logging variables
     unset CURRENT_FEATURE 2>/dev/null || true
     unset CURRENT_LOG_FILE 2>/dev/null || true
@@ -29,10 +29,10 @@ setup() {
     unset COMMAND_COUNT 2>/dev/null || true
     unset ERROR_COUNT 2>/dev/null || true
     unset WARNING_COUNT 2>/dev/null || true
-    
+
     # Create a modified version of logging.sh for testing
     command sed 's|/var/log/container-build|'"$TEST_LOG_DIR"'|g' "$PROJECT_ROOT/lib/base/logging.sh" > "$TEST_LOG_DIR/logging-test.sh"
-    
+
     # Source the modified version
     source "$TEST_LOG_DIR/logging-test.sh"
 }
@@ -46,25 +46,25 @@ teardown() {
 # Test: log_feature_start creates log files
 test_log_feature_start() {
     log_feature_start "Python" "3.13.6"
-    
+
     # Check that feature name is set
     assert_equals "Python" "$CURRENT_FEATURE" "Feature name is set"
-    
+
     # Check that log files are created
     assert_not_empty "$CURRENT_LOG_FILE" "Log file path is set"
     assert_not_empty "$CURRENT_ERROR_FILE" "Error file path is set"
     assert_not_empty "$CURRENT_SUMMARY_FILE" "Summary file path is set"
-    
+
     # Check that files exist
     assert_file_exists "$CURRENT_LOG_FILE"
     assert_file_exists "$CURRENT_ERROR_FILE"
-    
+
     # Save summary file path before log_feature_end resets it
     local summary_file="$CURRENT_SUMMARY_FILE"
-    
+
     # Call log_feature_end to create summary file
     log_feature_end
-    
+
     # Now check that summary file exists using saved path
     assert_file_exists "$summary_file"
 }
@@ -72,7 +72,7 @@ test_log_feature_start() {
 # Test: Feature name sanitization
 test_feature_name_sanitization() {
     log_feature_start "Node.js Dev Tools" "22.18.0"
-    
+
     # Check that the log file has a sanitized name
     if [[ "$CURRENT_LOG_FILE" =~ nodejs-dev-tools ]]; then
         assert_true true "Feature name properly sanitized in log filename"
@@ -84,24 +84,24 @@ test_feature_name_sanitization() {
 # Test: log_command function
 test_log_command() {
     log_feature_start "Test Feature"
-    
+
     # Run a simple command
     log_command "Testing echo command" echo "Hello, World!"
-    
+
     # Check that command was logged
     if grep -q "Testing echo command" "$CURRENT_LOG_FILE"; then
         assert_true true "Command description logged"
     else
         assert_true false "Command description not found in log"
     fi
-    
+
     # Check that output was captured
     if grep -q "Hello, World!" "$CURRENT_LOG_FILE"; then
         assert_true true "Command output logged"
     else
         assert_true false "Command output not found in log"
     fi
-    
+
     # Check command count
     assert_equals "1" "$COMMAND_COUNT" "Command count incremented"
 }
@@ -109,13 +109,13 @@ test_log_command() {
 # Test: log_command with failing command
 test_log_command_failure() {
     log_feature_start "Test Feature"
-    
+
     # Reset error count
     ERROR_COUNT=0
-    
+
     # Run a failing command (should continue due to || true in most scripts)
     log_command "Testing false command" false || true
-    
+
     # Check that error was logged
     if grep -q "Exit code: 1" "$CURRENT_LOG_FILE"; then
         assert_true true "Error exit code logged"
@@ -146,17 +146,17 @@ test_log_message() {
 # Test: log_error function
 test_log_error() {
     log_feature_start "Test Feature"
-    
+
     # Log an error
     log_error "This is an error message"
-    
+
     # Check that error was logged to error file
     if grep -q "This is an error message" "$CURRENT_ERROR_FILE"; then
         assert_true true "Error logged to error file"
     else
         assert_true false "Error not found in error file"
     fi
-    
+
     # Check that error count increased
     assert_equals "1" "$ERROR_COUNT" "Error count incremented"
 }
@@ -164,17 +164,17 @@ test_log_error() {
 # Test: log_warning function
 test_log_warning() {
     log_feature_start "Test Feature"
-    
+
     # Log a warning
     log_warning "This is a warning message"
-    
+
     # Check that warning was logged
     if grep -q "WARNING: This is a warning message" "$CURRENT_LOG_FILE"; then
         assert_true true "Warning logged successfully"
     else
         assert_true false "Warning not found in log"
     fi
-    
+
     # Check that warning count increased
     assert_equals "1" "$WARNING_COUNT" "Warning count incremented"
 }
@@ -184,15 +184,15 @@ test_master_summary() {
     log_feature_start "Test Feature 1"
     log_command "Test command" echo "test"
     log_feature_end
-    
+
     log_feature_start "Test Feature 2"
     log_command "Another test" echo "test2"
     log_feature_end
-    
+
     # Check that master summary exists
     local master_summary="$BUILD_LOG_DIR/master-summary.log"
     assert_file_exists "$master_summary"
-    
+
     # Check that both features are in summary
     if grep -q "Test Feature 1" "$master_summary" && grep -q "Test Feature 2" "$master_summary"; then
         assert_true true "Both features appear in master summary"
@@ -204,15 +204,15 @@ test_master_summary() {
 # Test: Duration calculation
 test_duration_calculation() {
     log_feature_start "Test Feature"
-    
+
     # Save summary file path before log_feature_end resets it
     local summary_file="$CURRENT_SUMMARY_FILE"
-    
+
     # Simulate some work
     sleep 1
-    
+
     log_feature_end
-    
+
     # Check that duration was recorded in summary file
     if [ -f "$summary_file" ] && grep -q "Total Duration:" "$summary_file"; then
         assert_true true "Duration recorded in summary"
@@ -224,10 +224,10 @@ test_duration_calculation() {
 # Test: Log directory structure
 test_log_directory_structure() {
     log_feature_start "Python" "3.13.6"
-    
+
     # Check directory exists
     assert_dir_exists "$BUILD_LOG_DIR"
-    
+
     # Check that logs are in the correct directory
     local log_dir
     log_dir=$(dirname "$CURRENT_LOG_FILE")
@@ -238,7 +238,7 @@ test_log_directory_structure() {
 test_check_build_logs_function() {
     # Create a mock check-build-logs script path
     local script_path="/usr/local/bin/check-build-logs.sh"
-    
+
     # Test that we can reference it (actual script testing would be integration)
     if [[ -n "$script_path" ]]; then
         assert_true true "Build logs check script path can be referenced"
@@ -251,7 +251,7 @@ test_check_build_logs_function() {
 run_test_with_setup() {
     local test_function="$1"
     local test_description="$2"
-    
+
     setup
     run_test "$test_function" "$test_description"
     teardown

@@ -9,7 +9,7 @@ releases, including Terraform.
 
 - **Key ID**: 72D7468F
 - **Fingerprint**: `C874 011F 0AB4 0511 0D02 1055 3436 5D94 72D7 468F`
-- **Source**: https://www.hashicorp.com/.well-known/pgp-key.txt
+- **Source**: `https://www.hashicorp.com/.well-known/pgp-key.txt`
 - **UID**: HashiCorp Security (hashicorp.com/security) <security@hashicorp.com>
 - **Valid**: 2021-04-19 to 2026-04-18
 - **Used for**: Signing release checksums for all HashiCorp products
@@ -39,10 +39,10 @@ lib/gpg-keys/hashicorp/
 HashiCorp uses a signed checksums file pattern for verification:
 
 1. Download the product binary (e.g., `terraform_1.10.0_linux_amd64.zip`)
-2. Download the checksums file (`terraform_1.10.0_SHA256SUMS`)
-3. Download the GPG signature (`terraform_1.10.0_SHA256SUMS.sig`)
-4. Verify the signature of the checksums file using this GPG key
-5. Verify the binary checksum matches the signed checksums file
+1. Download the checksums file (`terraform_1.10.0_SHA256SUMS`)
+1. Download the GPG signature (`terraform_1.10.0_SHA256SUMS.sig`)
+1. Verify the signature of the checksums file using this GPG key
+1. Verify the binary checksum matches the signed checksums file
 
 ### Example URLs
 
@@ -67,10 +67,10 @@ Run the update script to fetch the latest key from HashiCorp:
 
 The script will:
 
-1. Download the key from https://www.hashicorp.com/.well-known/pgp-key.txt
-2. Verify the key fingerprint matches the expected value
-3. Save it to `keys/hashicorp.asc` with secure permissions (600)
-4. Set directory permissions to 700
+1. Download the key from `https://www.hashicorp.com/.well-known/pgp-key.txt`
+1. Verify the key fingerprint matches the expected value
+1. Save it to `keys/hashicorp.asc` with secure permissions (600)
+1. Set directory permissions to 700
 
 ### Manual Update
 
@@ -83,27 +83,28 @@ If you need to update manually:
      -o lib/gpg-keys/hashicorp/keys/hashicorp.asc
    ```
 
-2. Verify the fingerprint:
+1. Verify the fingerprint:
 
    ```bash
    gpg --show-keys --with-fingerprint \
      lib/gpg-keys/hashicorp/keys/hashicorp.asc
    ```
 
-3. Confirm it matches: `C874 011F 0AB4 0511 0D02 1055 3436 5D94 72D7 468F`
-4. Set secure permissions:
+1. Confirm it matches: `C874 011F 0AB4 0511 0D02 1055 3436 5D94 72D7 468F`
+
+1. Set secure permissions:
 
    ```bash
    chmod 700 lib/gpg-keys/hashicorp/keys
    chmod 600 lib/gpg-keys/hashicorp/keys/hashicorp.asc
    ```
 
-5. Update this README if the key information changes
+1. Update this README if the key information changes
 
 ## Key Rotation
 
 HashiCorp's current key expires in April 2026. Monitor
-https://www.hashicorp.com/security for key rotation announcements.
+`https://www.hashicorp.com/security` for key rotation announcements.
 
 When a new key is published:
 
@@ -113,7 +114,7 @@ When a new key is published:
 
 ## References
 
-- **Official Key Page**: https://www.hashicorp.com/security
-- **Key Download**: https://www.hashicorp.com/.well-known/pgp-key.txt
-- **Security Policy**: https://www.hashicorp.com/security
-- **Trust Signature Documentation**: https://www.hashicorp.com/trust/security
+- **Official Key Page**: `https://www.hashicorp.com/security`
+- **Key Download**: `https://www.hashicorp.com/.well-known/pgp-key.txt`
+- **Security Policy**: `https://www.hashicorp.com/security`
+- **Trust Signature Documentation**: `https://www.hashicorp.com/trust/security`

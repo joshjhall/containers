@@ -55,21 +55,21 @@ test_version_matches_exact() {
     version_matches() {
         local current="$1"
         local latest="$2"
-        
+
         # Handle exact matches first
         if [[ "$current" == "$latest" ]]; then
             return 0
         fi
-        
+
         # Handle prefix matching with proper version boundaries
         # e.g., "22" matches "22.18.0" but not "220.0.0"
         if [[ "$latest" == "$current."* ]] || [[ "$latest" == "$current" ]]; then
             return 0
         fi
-        
+
         return 1
     }
-    
+
     # Test exact match
     if version_matches "3.13.6" "3.13.6"; then
         assert_true true "Exact version match works"
@@ -84,28 +84,28 @@ test_version_matches_partial() {
     version_matches() {
         local current="$1"
         local latest="$2"
-        
+
         # Handle exact matches first
         if [[ "$current" == "$latest" ]]; then
             return 0
         fi
-        
+
         # Handle prefix matching with proper version boundaries
         # e.g., "22" matches "22.18.0" but not "220.0.0"
         if [[ "$latest" == "$current."* ]] || [[ "$latest" == "$current" ]]; then
             return 0
         fi
-        
+
         return 1
     }
-    
+
     # Test partial match (major.minor matches major.minor.patch)
     if version_matches "1.33" "1.33.3"; then
         assert_true true "Partial version match works (1.33 matches 1.33.3)"
     else
         assert_true false "Partial version match failed"
     fi
-    
+
     # Test major version match
     if version_matches "22" "22.18.0"; then
         assert_true true "Major version match works (22 matches 22.18.0)"
@@ -120,28 +120,28 @@ test_version_matches_different() {
     version_matches() {
         local current="$1"
         local latest="$2"
-        
+
         # Handle exact matches first
         if [[ "$current" == "$latest" ]]; then
             return 0
         fi
-        
+
         # Handle prefix matching with proper version boundaries
         # e.g., "22" matches "22.18.0" but not "220.0.0"
         if [[ "$latest" == "$current."* ]] || [[ "$latest" == "$current" ]]; then
             return 0
         fi
-        
+
         return 1
     }
-    
+
     # Test different versions
     if ! version_matches "1.32" "1.33.3"; then
         assert_true true "Different versions correctly identified as non-match"
     else
         assert_true false "Different versions incorrectly matched"
     fi
-    
+
     # Test partial that shouldn't match
     if ! version_matches "21" "210.0.0"; then
         assert_true true "Prefix check correctly rejects invalid match"
@@ -164,11 +164,11 @@ test_missing_env_file() {
         env_backup="$PROJECT_ROOT/.env.backup.$$"
         command mv "$PROJECT_ROOT/.env" "$env_backup"
     fi
-    
+
     # Run script without .env file (strip ANSI colors)
     local output
     output=$("$PROJECT_ROOT/bin/check-versions.sh" 2>&1 | command sed 's/\x1b\[[0-9;]*m//g' | head -10 || true)
-    
+
     # Check for warning about missing token
     if echo "$output" | grep -q "Warning: No GITHUB_TOKEN set"; then
         assert_true true "Script handles missing .env file gracefully"
@@ -176,7 +176,7 @@ test_missing_env_file() {
         # The script might be using the token from environment
         assert_true true "Script runs without .env file"
     fi
-    
+
     # Restore .env if it was backed up
     if [ -n "$env_backup" ] && [ -f "$env_backup" ]; then
         command mv "$env_backup" "$PROJECT_ROOT/.env"
@@ -192,7 +192,7 @@ ARG PYTHON_VERSION=3.13.6
 ARG NODE_VERSION=22
 ARG GO_VERSION=1.24.6
 EOF
-    
+
     # Check if versions can be extracted
     local python_ver
     python_ver=$(grep "^ARG PYTHON_VERSION=" "$test_dockerfile" | cut -d= -f2 | tr -d '"')
@@ -201,7 +201,7 @@ EOF
     local node_ver
     node_ver=$(grep "^ARG NODE_VERSION=" "$test_dockerfile" | cut -d= -f2 | tr -d '"')
     assert_equals "22" "$node_ver" "Node version extracted correctly"
-    
+
     # Clean up
     command rm -f "$test_dockerfile"
 }
@@ -371,7 +371,7 @@ if [ condition ]; then
     ANOTHER_VERSION="4.5.6"
 fi
 EOF
-    
+
     # Check if indented versions can be extracted with proper pattern
     local some_ver
     some_ver=$(grep '^\s*SOME_VERSION=' "$test_script" 2>/dev/null | command sed 's/.*=//' | tr -d '"')
@@ -380,7 +380,7 @@ EOF
 
     assert_equals "1.2.3" "$some_ver" "Indented version extracted correctly"
     assert_equals "4.5.6" "$another_ver" "Another indented version extracted correctly"
-    
+
     # Clean up
     command rm -f "$test_script"
 }

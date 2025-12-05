@@ -13,7 +13,7 @@ regression testing.
 | PCI DSS 11.3    | Penetration testing     | Guidance  |
 | NIST CSF DE.CM  | Security monitoring     | Compliant |
 
----
+______________________________________________________________________
 
 ## Security Test Suite
 
@@ -34,39 +34,46 @@ Run the security regression test suite against any container image:
 The test suite validates:
 
 1. **Non-root User Configuration**
+
    - Container runs as non-root
    - Passwordless sudo is disabled
    - Home directory ownership
 
-2. **File Permissions**
+1. **File Permissions**
+
    - No world-writable files in /usr
    - Sensitive files have correct permissions
    - Shadow file is protected
 
-3. **Linux Capabilities**
+1. **Linux Capabilities**
+
    - No dangerous capabilities (SYS_ADMIN, SYS_PTRACE, NET_ADMIN)
    - Capability restrictions enforced
 
-4. **Network Security**
+1. **Network Security**
+
    - No listening services by default
    - CA certificates installed
 
-5. **Secret Protection**
+1. **Secret Protection**
+
    - No secrets in environment variables
    - No .env files in image
    - SSH directory permissions
 
-6. **Image Security**
+1. **Image Security**
+
    - Metadata labels present
    - No unnecessary ports exposed
    - Healthcheck configured
 
-7. **Build Security**
+1. **Build Security**
+
    - Package manager cache cleaned
    - Temporary files removed
    - Build scripts cleaned up
 
----
+______________________________________________________________________
 
 ## CI/CD Integration
 
@@ -113,7 +120,7 @@ Already integrated in CI workflow:
     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 ```
 
----
+______________________________________________________________________
 
 ## DAST (Dynamic Application Security Testing)
 
@@ -146,7 +153,7 @@ Create `.zap/rules.tsv` to customize scan rules:
 10096  WARN  (Timestamp Disclosure - Unix)
 ```
 
----
+______________________________________________________________________
 
 ## Penetration Testing Schedule
 
@@ -170,10 +177,10 @@ Create `.zap/rules.tsv` to customize scan rules:
 ### Post-Engagement Actions
 
 1. Review findings with security team
-2. Prioritize vulnerabilities by severity
-3. Create remediation plan with timelines
-4. Implement fixes and validate
-5. Update security documentation
+1. Prioritize vulnerabilities by severity
+1. Create remediation plan with timelines
+1. Implement fixes and validate
+1. Update security documentation
 
 ### Penetration Test Report Template
 
@@ -208,7 +215,7 @@ Create `.zap/rules.tsv` to customize scan rules:
 [Prioritized list of improvements]
 ```
 
----
+______________________________________________________________________
 
 ## Chaos Engineering
 
@@ -268,7 +275,7 @@ spec:
 | Weekly    | Network partition   | Test isolation          |
 | Monthly   | Resource exhaustion | Validate limits         |
 
----
+______________________________________________________________________
 
 ## Security Regression Tests
 
@@ -296,12 +303,12 @@ test_custom_security
 ### Test Best Practices
 
 1. **Idempotent**: Tests should produce same results on repeated runs
-2. **Independent**: Tests should not depend on other tests
-3. **Fast**: Keep tests quick to enable frequent execution
-4. **Clear**: Use descriptive names and messages
-5. **Comprehensive**: Cover all security requirements
+1. **Independent**: Tests should not depend on other tests
+1. **Fast**: Keep tests quick to enable frequent execution
+1. **Clear**: Use descriptive names and messages
+1. **Comprehensive**: Cover all security requirements
 
----
+______________________________________________________________________
 
 ## Compliance Reporting
 
@@ -336,7 +343,7 @@ Set up alerts for:
 - Secret detection alerts
 - Unusual container behavior
 
----
+______________________________________________________________________
 
 ## Related Documentation
 

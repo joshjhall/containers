@@ -8,12 +8,14 @@ and checked off.
 ### Security
 
 - [ ] **Secrets Management**
+
   - [ ] Real secrets are NOT committed to git
   - [ ] Using external secret manager (Vault, AWS Secrets Manager, etc.)
   - [ ] Secret rotation policy is defined and documented
   - [ ] Least-privilege access to secrets is enforced
 
 - [ ] **Image Security**
+
   - [ ] Container images scanned for vulnerabilities
   - [ ] Using specific version tags (not `:latest`)
   - [ ] Images signed and verified
@@ -21,12 +23,14 @@ and checked off.
   - [ ] Image pull secrets configured if using private registry
 
 - [ ] **Network Security**
+
   - [ ] NetworkPolicies configured and tested
   - [ ] Default deny-all policy is in place
   - [ ] Only necessary ingress/egress rules are allowed
   - [ ] TLS/HTTPS enforced for all external communication
 
 - [ ] **Pod Security**
+
   - [ ] Running as non-root user (`runAsNonRoot: true`)
   - [ ] All capabilities dropped (`capabilities: drop: ["ALL"]`)
   - [ ] Read-only root filesystem where possible
@@ -34,6 +38,7 @@ and checked off.
   - [ ] Pod Security Standards enforced on namespace
 
 - [ ] **RBAC (Role-Based Access Control)**
+
   - [ ] ServiceAccounts configured with minimal permissions
   - [ ] Roles/ClusterRoles follow least-privilege principle
   - [ ] No use of `cluster-admin` for applications
@@ -42,17 +47,20 @@ and checked off.
 ### Resource Management
 
 - [ ] **Resource Limits**
+
   - [ ] CPU requests and limits configured
   - [ ] Memory requests and limits configured
   - [ ] Requests match actual usage (tested under load)
   - [ ] Limits prevent resource exhaustion
 
 - [ ] **Namespace Configuration**
+
   - [ ] ResourceQuota applied to namespace
   - [ ] LimitRange configured for default limits
   - [ ] Namespace has appropriate labels
 
 - [ ] **Storage**
+
   - [ ] PersistentVolumeClaims configured if needed
   - [ ] Storage class appropriate for workload (SSD vs HDD)
   - [ ] Backup strategy defined for persistent data
@@ -61,17 +69,20 @@ and checked off.
 ### High Availability
 
 - [ ] **Replicas**
+
   - [ ] Minimum 3 replicas for production
   - [ ] Replicas tested under load
   - [ ] PodDisruptionBudget configured (minAvailable: 2)
 
 - [ ] **Pod Scheduling**
+
   - [ ] Anti-affinity rules to spread pods across nodes
   - [ ] Topology spread constraints configured
   - [ ] Node selectors or affinity rules if needed
   - [ ] Tolerations configured if using tainted nodes
 
 - [ ] **Updates and Rollbacks**
+
   - [ ] RollingUpdate strategy configured
   - [ ] maxUnavailable and maxSurge set appropriately
   - [ ] Rollback procedure documented and tested
@@ -80,24 +91,28 @@ and checked off.
 ### Health and Observability
 
 - [ ] **Health Checks**
+
   - [ ] Liveness probe configured and tested
   - [ ] Readiness probe configured and tested
   - [ ] Startup probe configured if needed (for slow-starting apps)
   - [ ] Probe thresholds appropriate for application
 
 - [ ] **Logging**
+
   - [ ] Centralized logging configured (Fluentd, Logstash, etc.)
   - [ ] Log retention policy defined
   - [ ] Sensitive data not logged
   - [ ] Log levels appropriate (WARN or ERROR in production)
 
 - [ ] **Monitoring**
+
   - [ ] Metrics exported (Prometheus, CloudWatch, etc.)
   - [ ] Key metrics identified and tracked
   - [ ] Dashboards created for visualization
   - [ ] Service-level objectives (SLOs) defined
 
 - [ ] **Alerting**
+
   - [ ] Alerts configured for critical metrics
   - [ ] Alert routing and escalation configured
   - [ ] Runbooks exist for each alert
@@ -106,18 +121,21 @@ and checked off.
 ### Configuration
 
 - [ ] **Environment Configuration**
+
   - [ ] ConfigMaps contain appropriate values for production
   - [ ] Environment variables properly set
   - [ ] Feature flags configured correctly
   - [ ] No debug/development features enabled
 
 - [ ] **Image Configuration**
+
   - [ ] Correct image variant selected
   - [ ] Image version pinned to specific tag
   - [ ] All required features included in image
   - [ ] Image tested in staging environment
 
 - [ ] **Service Configuration**
+
   - [ ] Service type appropriate (ClusterIP, LoadBalancer, etc.)
   - [ ] Service ports match application configuration
   - [ ] Session affinity configured if needed
@@ -126,24 +144,28 @@ and checked off.
 ### Testing
 
 - [ ] **Functional Testing**
+
   - [ ] Application functionality tested in staging
   - [ ] All critical user flows tested
   - [ ] Integration tests passing
   - [ ] End-to-end tests passing
 
 - [ ] **Performance Testing**
+
   - [ ] Load testing completed
   - [ ] Performance benchmarks met
   - [ ] Resource usage under load validated
   - [ ] No memory leaks detected
 
 - [ ] **Failure Testing**
+
   - [ ] Pod failures handled gracefully
   - [ ] Node failures tested (if applicable)
   - [ ] Network partition scenarios tested
   - [ ] Backup and restore tested
 
 - [ ] **Security Testing**
+
   - [ ] Penetration testing completed
   - [ ] Vulnerability scanning completed
   - [ ] Compliance requirements met
@@ -151,21 +173,24 @@ and checked off.
 
 ## Deployment
 
-### Pre-Deployment
+### Pre-Deployment Actions
 
 - [ ] **Communication**
+
   - [ ] Deployment window scheduled and communicated
   - [ ] Stakeholders notified
   - [ ] Maintenance window announced if needed
   - [ ] Rollback plan communicated to team
 
 - [ ] **Backup**
+
   - [ ] Current production state backed up
   - [ ] Database backup completed (if applicable)
   - [ ] Configuration exported and saved
   - [ ] Rollback scripts ready
 
 - [ ] **Cluster Readiness**
+
   - [ ] Cluster capacity sufficient for deployment
   - [ ] No other maintenance scheduled
   - [ ] All nodes healthy
@@ -174,6 +199,7 @@ and checked off.
 ### During Deployment
 
 - [ ] **Deployment Execution**
+
   - [ ] Deployment command reviewed:
 
     ```bash
@@ -181,6 +207,7 @@ and checked off.
     ```
 
   - [ ] Deployment progress monitored
+
   - [ ] Rollout status verified:
 
     ```bash
@@ -190,6 +217,7 @@ and checked off.
   - [ ] No errors in pod logs
 
 - [ ] **Health Verification**
+
   - [ ] All pods running and ready
   - [ ] Health checks passing
   - [ ] Endpoints populated in service
@@ -198,18 +226,21 @@ and checked off.
 ### Post-Deployment
 
 - [ ] **Smoke Testing**
+
   - [ ] Critical user flows tested in production
   - [ ] API endpoints responding correctly
   - [ ] No obvious errors or issues
   - [ ] Performance within acceptable range
 
 - [ ] **Monitoring**
+
   - [ ] Metrics being collected
   - [ ] No alerts firing
   - [ ] Resource usage within expected range
   - [ ] Error rates normal
 
 - [ ] **Documentation**
+
   - [ ] Deployment notes recorded
   - [ ] Any issues encountered documented
   - [ ] Configuration changes documented
@@ -218,24 +249,28 @@ and checked off.
 ## Post-Deployment (24-48 hours)
 
 - [ ] **Stability Monitoring**
+
   - [ ] No unexpected restarts
   - [ ] Memory usage stable (no leaks)
   - [ ] CPU usage within expected range
   - [ ] No increase in error rates
 
 - [ ] **Performance Monitoring**
+
   - [ ] Response times acceptable
   - [ ] Throughput meeting requirements
   - [ ] No performance degradation
   - [ ] Resource utilization optimal
 
 - [ ] **Security Monitoring**
+
   - [ ] No security alerts
   - [ ] Access logs reviewed
   - [ ] No unauthorized access attempts
   - [ ] Network traffic patterns normal
 
 - [ ] **User Feedback**
+
   - [ ] No user-reported issues
   - [ ] User experience satisfactory
   - [ ] Support tickets normal
@@ -246,16 +281,18 @@ and checked off.
 If issues are detected, follow this rollback procedure:
 
 1. **Assess Severity**
+
    - Determine if issue requires immediate rollback
    - Check if issue affects all users or subset
    - Evaluate impact on business operations
 
-2. **Communicate**
+1. **Communicate**
+
    - Notify stakeholders of rollback decision
    - Update status page if applicable
    - Alert on-call team
 
-3. **Execute Rollback**
+1. **Execute Rollback**
 
    ```bash
    # Rollback to previous deployment
@@ -268,13 +305,15 @@ If issues are detected, follow this rollback procedure:
    kubectl rollout status deployment/prod-devcontainer -n production
    ```
 
-4. **Verify Rollback**
+1. **Verify Rollback**
+
    - Confirm pods are running
    - Test critical functionality
    - Check metrics and logs
    - Verify error rates return to normal
 
-5. **Post-Mortem**
+1. **Post-Mortem**
+
    - Document what went wrong
    - Identify root cause
    - Plan remediation
@@ -301,7 +340,7 @@ Document your emergency contacts:
 - **Last Updated**: 2025-01-16
 - **Next Review**: [Date]
 
----
+______________________________________________________________________
 
 ## Sign-Off
 

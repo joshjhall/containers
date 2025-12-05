@@ -18,14 +18,14 @@ setup() {
     # Create temporary directory for testing
     export TEST_TEMP_DIR="$RESULTS_DIR/test-kubernetes"
     mkdir -p "$TEST_TEMP_DIR"
-    
+
     # Mock environment
     export KUBECTL_VERSION="${KUBECTL_VERSION:-latest}"
     export USERNAME="testuser"
     export USER_UID="1000"
     export USER_GID="1000"
     export HOME="/home/testuser"
-    
+
     # Create mock directories
     mkdir -p "$TEST_TEMP_DIR/usr/local/bin"
     mkdir -p "$TEST_TEMP_DIR/home/testuser/.kube"
@@ -38,7 +38,7 @@ teardown() {
     if [ -n "${TEST_TEMP_DIR:-}" ]; then
         command rm -rf "$TEST_TEMP_DIR"
     fi
-    
+
     # Unset test variables
     unset KUBECTL_VERSION USERNAME USER_UID USER_GID HOME 2>/dev/null || true
 }
@@ -46,13 +46,13 @@ teardown() {
 # Test: kubectl installation
 test_kubectl_installation() {
     local bin_dir="$TEST_TEMP_DIR/usr/local/bin"
-    
+
     # Create mock kubectl binary
     touch "$bin_dir/kubectl"
     chmod +x "$bin_dir/kubectl"
-    
+
     assert_file_exists "$bin_dir/kubectl"
-    
+
     # Check executable
     if [ -x "$bin_dir/kubectl" ]; then
         assert_true true "kubectl is executable"
@@ -64,13 +64,13 @@ test_kubectl_installation() {
 # Test: Helm installation
 test_helm_installation() {
     local bin_dir="$TEST_TEMP_DIR/usr/local/bin"
-    
+
     # Create mock helm binary
     touch "$bin_dir/helm"
     chmod +x "$bin_dir/helm"
-    
+
     assert_file_exists "$bin_dir/helm"
-    
+
     # Check executable
     if [ -x "$bin_dir/helm" ]; then
         assert_true true "helm is executable"
@@ -83,7 +83,7 @@ test_helm_installation() {
 test_kubeconfig_setup() {
     local kube_dir="$TEST_TEMP_DIR/home/testuser/.kube"
     local kubeconfig="$kube_dir/config"
-    
+
     # Create mock kubeconfig
     command cat > "$kubeconfig" << 'EOF'
 apiVersion: v1
@@ -99,9 +99,9 @@ contexts:
   name: docker-desktop
 current-context: docker-desktop
 EOF
-    
+
     assert_file_exists "$kubeconfig"
-    
+
     # Check kubeconfig structure
     if grep -q "apiVersion: v1" "$kubeconfig"; then
         assert_true true "kubeconfig has correct API version"
@@ -113,16 +113,16 @@ EOF
 # Test: K8s tools installation
 test_k8s_tools() {
     local bin_dir="$TEST_TEMP_DIR/usr/local/bin"
-    
+
     # List of K8s tools
     local tools=("kubectx" "kubens" "k9s" "stern" "kustomize")
-    
+
     # Create mock tools
     for tool in "${tools[@]}"; do
         touch "$bin_dir/$tool"
         chmod +x "$bin_dir/$tool"
     done
-    
+
     # Check each tool
     for tool in "${tools[@]}"; do
         if [ -x "$bin_dir/$tool" ]; then
@@ -136,7 +136,7 @@ test_k8s_tools() {
 # Test: Kubernetes aliases
 test_kubernetes_aliases() {
     local bashrc_file="$TEST_TEMP_DIR/etc/bashrc.d/55-kubernetes.sh"
-    
+
     # Create aliases
     command cat > "$bashrc_file" << 'EOF'
 alias k='kubectl'
@@ -148,14 +148,14 @@ alias kdel='kubectl delete'
 alias klog='kubectl logs'
 alias kexec='kubectl exec -it'
 EOF
-    
+
     # Check aliases
     if grep -q "alias k='kubectl'" "$bashrc_file"; then
         assert_true true "kubectl alias defined"
     else
         assert_true false "kubectl alias not defined"
     fi
-    
+
     if grep -q "alias kgp='kubectl get pods'" "$bashrc_file"; then
         assert_true true "get pods alias defined"
     else
@@ -167,7 +167,7 @@ EOF
 test_helm_repositories() {
     local helm_dir="$TEST_TEMP_DIR/home/testuser/.config/helm"
     mkdir -p "$helm_dir"
-    
+
     # Create repositories file
     command cat > "$helm_dir/repositories.yaml" << 'EOF'
 apiVersion: v1
@@ -177,9 +177,9 @@ repositories:
 - name: bitnami
   url: https://charts.bitnami.com/bitnami
 EOF
-    
+
     assert_file_exists "$helm_dir/repositories.yaml"
-    
+
     # Check repository configuration
     if grep -q "charts.helm.sh/stable" "$helm_dir/repositories.yaml"; then
         assert_true true "Stable repo configured"
@@ -191,21 +191,21 @@ EOF
 # Test: Environment variables
 test_k8s_environment() {
     local bashrc_file="$TEST_TEMP_DIR/etc/bashrc.d/55-kubernetes.sh"
-    
+
     # Add environment variables
     command cat >> "$bashrc_file" << 'EOF'
 export KUBECONFIG="$HOME/.kube/config"
 export KUBE_EDITOR="nano"
 export HELM_HOME="$HOME/.helm"
 EOF
-    
+
     # Check environment variables
     if grep -q "export KUBECONFIG=" "$bashrc_file"; then
         assert_true true "KUBECONFIG is exported"
     else
         assert_true false "KUBECONFIG is not exported"
     fi
-    
+
     if grep -q "export HELM_HOME=" "$bashrc_file"; then
         assert_true true "HELM_HOME is exported"
     else
@@ -216,13 +216,13 @@ EOF
 # Test: kubectl completion
 test_kubectl_completion() {
     local bashrc_file="$TEST_TEMP_DIR/etc/bashrc.d/55-kubernetes.sh"
-    
+
     # Add completion
     command cat >> "$bashrc_file" << 'EOF'
 source <(kubectl completion bash)
 complete -F __start_kubectl k
 EOF
-    
+
     # Check completion setup
     if grep -q "kubectl completion bash" "$bashrc_file"; then
         assert_true true "kubectl completion configured"
@@ -235,7 +235,7 @@ EOF
 test_manifest_files() {
     local project_dir="$TEST_TEMP_DIR/project"
     mkdir -p "$project_dir"
-    
+
     # Create deployment manifest
     command cat > "$project_dir/deployment.yaml" << 'EOF'
 apiVersion: apps/v1
@@ -248,9 +248,9 @@ spec:
     matchLabels:
       app: test-app
 EOF
-    
+
     assert_file_exists "$project_dir/deployment.yaml"
-    
+
     # Check manifest structure
     if grep -q "kind: Deployment" "$project_dir/deployment.yaml"; then
         assert_true true "Deployment manifest valid"
@@ -262,7 +262,7 @@ EOF
 # Test: Verification script
 test_k8s_verification() {
     local test_script="$TEST_TEMP_DIR/test-k8s.sh"
-    
+
     # Create verification script
     command cat > "$test_script" << 'EOF'
 #!/bin/bash
@@ -272,9 +272,9 @@ echo "helm version:"
 helm version 2>/dev/null || echo "helm not installed"
 EOF
     chmod +x "$test_script"
-    
+
     assert_file_exists "$test_script"
-    
+
     # Check script is executable
     if [ -x "$test_script" ]; then
         assert_true true "Verification script is executable"
@@ -344,7 +344,7 @@ test_sources_download_verify() {
 run_test_with_setup() {
     local test_function="$1"
     local test_description="$2"
-    
+
     setup
     run_test "$test_function" "$test_description"
     teardown

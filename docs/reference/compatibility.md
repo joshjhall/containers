@@ -376,18 +376,18 @@ For polyglot images, test critical combinations:
 If a version combination fails to build:
 
 1. Check build logs in `/tmp/version-compat-build.log`
-2. Verify the version exists and is downloadable
-3. Check for dependency conflicts
-4. Review feature script for version-specific issues
+1. Verify the version exists and is downloadable
+1. Check for dependency conflicts
+1. Review feature script for version-specific issues
 
 ### Test Failures
 
 If integration tests fail:
 
 1. Check test logs in `/tmp/version-compat-test.log`
-2. Run tests manually for the specific variant
-3. Check for breaking changes in the new version
-4. Review language-specific compatibility notes
+1. Run tests manually for the specific variant
+1. Check for breaking changes in the new version
+1. Review language-specific compatibility notes
 
 ### Matrix Update Issues
 

@@ -18,13 +18,13 @@ setup() {
     # Create temporary directory for testing
     export TEST_TEMP_DIR="$RESULTS_DIR/test-gcloud"
     mkdir -p "$TEST_TEMP_DIR"
-    
+
     # Mock environment
     export USERNAME="testuser"
     export USER_UID="1000"
     export USER_GID="1000"
     export HOME="/home/testuser"
-    
+
     # Create mock directories
     mkdir -p "$TEST_TEMP_DIR/usr/local/bin"
     mkdir -p "$TEST_TEMP_DIR/home/testuser/.config/gcloud"
@@ -37,7 +37,7 @@ teardown() {
     if [ -n "${TEST_TEMP_DIR:-}" ]; then
         command rm -rf "$TEST_TEMP_DIR"
     fi
-    
+
     # Unset test variables
     unset USERNAME USER_UID USER_GID HOME 2>/dev/null || true
 }
@@ -45,13 +45,13 @@ teardown() {
 # Test: gcloud CLI installation
 test_gcloud_installation() {
     local gcloud_bin="$TEST_TEMP_DIR/usr/local/bin/gcloud"
-    
+
     # Create mock gcloud
     touch "$gcloud_bin"
     chmod +x "$gcloud_bin"
-    
+
     assert_file_exists "$gcloud_bin"
-    
+
     # Check executable
     if [ -x "$gcloud_bin" ]; then
         assert_true true "gcloud is executable"
@@ -63,16 +63,16 @@ test_gcloud_installation() {
 # Test: gcloud components
 test_gcloud_components() {
     local bin_dir="$TEST_TEMP_DIR/usr/local/bin"
-    
+
     # List of gcloud components
     local components=("gsutil" "bq" "kubectl")
-    
+
     # Create mock components
     for comp in "${components[@]}"; do
         touch "$bin_dir/$comp"
         chmod +x "$bin_dir/$comp"
     done
-    
+
     # Check each component
     for comp in "${components[@]}"; do
         if [ -x "$bin_dir/$comp" ]; then
@@ -88,7 +88,7 @@ test_gcloud_config() {
     local config_dir="$TEST_TEMP_DIR/home/testuser/.config/gcloud"
     local config_file="$config_dir/configurations/config_default"
     mkdir -p "$(dirname "$config_file")"
-    
+
     # Create config
     command cat > "$config_file" << 'EOF'
 [core]
@@ -98,9 +98,9 @@ project = my-project
 region = us-central1
 zone = us-central1-a
 EOF
-    
+
     assert_file_exists "$config_file"
-    
+
     # Check configuration
     if grep -q "project = my-project" "$config_file"; then
         assert_true true "Default project configured"
@@ -113,7 +113,7 @@ EOF
 test_app_default_credentials() {
     local adc_file="$TEST_TEMP_DIR/home/testuser/.config/gcloud/application_default_credentials.json"
     mkdir -p "$(dirname "$adc_file")"
-    
+
     # Create mock ADC
     command cat > "$adc_file" << 'EOF'
 {
@@ -122,14 +122,14 @@ test_app_default_credentials() {
   "client_secret": "test_secret"
 }
 EOF
-    
+
     assert_file_exists "$adc_file"
 }
 
 # Test: gcloud aliases
 test_gcloud_aliases() {
     local bashrc_file="$TEST_TEMP_DIR/etc/bashrc.d/66-gcloud.sh"
-    
+
     # Create aliases
     command cat > "$bashrc_file" << 'EOF'
 alias gc='gcloud'
@@ -138,7 +138,7 @@ alias gce='gcloud compute'
 alias gke='gcloud container'
 alias gcr='gcloud container images'
 EOF
-    
+
     # Check aliases
     if grep -q "alias gc='gcloud'" "$bashrc_file"; then
         assert_true true "gcloud alias defined"
@@ -150,13 +150,13 @@ EOF
 # Test: gcloud environment variables
 test_gcloud_environment() {
     local bashrc_file="$TEST_TEMP_DIR/etc/bashrc.d/66-gcloud.sh"
-    
+
     # Add environment variables
     command cat >> "$bashrc_file" << 'EOF'
 export CLOUDSDK_PYTHON="python3"
 export CLOUDSDK_CONFIG="$HOME/.config/gcloud"
 EOF
-    
+
     # Check environment variables
     if grep -q "export CLOUDSDK_CONFIG=" "$bashrc_file"; then
         assert_true true "CLOUDSDK_CONFIG is exported"
@@ -168,12 +168,12 @@ EOF
 # Test: gcloud completion
 test_gcloud_completion() {
     local bashrc_file="$TEST_TEMP_DIR/etc/bashrc.d/66-gcloud.sh"
-    
+
     # Add completion
     command cat >> "$bashrc_file" << 'EOF'
 source /usr/share/google-cloud-sdk/completion.bash.inc
 EOF
-    
+
     # Check completion setup
     if grep -q "completion.bash.inc" "$bashrc_file"; then
         assert_true true "gcloud completion configured"
@@ -185,16 +185,16 @@ EOF
 # Test: Cloud Build config
 test_cloud_build_config() {
     local cloudbuild_yaml="$TEST_TEMP_DIR/cloudbuild.yaml"
-    
+
     # Create config
     command cat > "$cloudbuild_yaml" << 'EOF'
 steps:
 - name: 'gcr.io/cloud-builders/docker'
   args: ['build', '-t', 'gcr.io/$PROJECT_ID/app', '.']
 EOF
-    
+
     assert_file_exists "$cloudbuild_yaml"
-    
+
     # Check configuration
     if grep -q "gcr.io/cloud-builders/docker" "$cloudbuild_yaml"; then
         assert_true true "Cloud Build uses docker builder"
@@ -206,11 +206,11 @@ EOF
 # Test: Firebase CLI
 test_firebase_cli() {
     local firebase_bin="$TEST_TEMP_DIR/usr/local/bin/firebase"
-    
+
     # Create mock firebase
     touch "$firebase_bin"
     chmod +x "$firebase_bin"
-    
+
     # Check Firebase CLI
     if [ -x "$firebase_bin" ]; then
         assert_true true "Firebase CLI is available"
@@ -222,7 +222,7 @@ test_firebase_cli() {
 # Test: Verification script
 test_gcloud_verification() {
     local test_script="$TEST_TEMP_DIR/test-gcloud.sh"
-    
+
     # Create verification script
     command cat > "$test_script" << 'EOF'
 #!/bin/bash
@@ -232,9 +232,9 @@ echo "Components:"
 gcloud components list 2>/dev/null || echo "No components"
 EOF
     chmod +x "$test_script"
-    
+
     assert_file_exists "$test_script"
-    
+
     # Check script is executable
     if [ -x "$test_script" ]; then
         assert_true true "Verification script is executable"
@@ -247,7 +247,7 @@ EOF
 run_test_with_setup() {
     local test_function="$1"
     local test_description="$2"
-    
+
     setup
     run_test "$test_function" "$test_description"
     teardown

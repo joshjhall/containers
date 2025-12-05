@@ -50,16 +50,16 @@ git commit --no-verify -m "your message"
 These hooks are designed to be:
 
 1. **Non-intrusive** - Only check changed files
-2. **Configurable** - Easy to adjust strictness
-3. **Skippable** - Can bypass when needed
-4. **Informative** - Show issues without always blocking
+1. **Configurable** - Easy to adjust strictness
+1. **Skippable** - Can bypass when needed
+1. **Informative** - Show issues without always blocking
 
 ## Troubleshooting
 
 If the hooks are too strict for your workflow:
 
 1. Adjust `SHELLCHECK_SEVERITY` to only block on errors
-2. Use `--no-verify` when you need to commit work-in-progress
-3. Disable hooks entirely with `git config --unset core.hooksPath`
+1. Use `--no-verify` when you need to commit work-in-progress
+1. Disable hooks entirely with `git config --unset core.hooksPath`
 
 The goal is to improve code quality without disrupting development flow.

@@ -18,13 +18,13 @@ setup() {
     # Create temporary directory for testing
     export TEST_TEMP_DIR="$RESULTS_DIR/test-java-dev"
     mkdir -p "$TEST_TEMP_DIR"
-    
+
     # Mock environment
     export USERNAME="testuser"
     export USER_UID="1000"
     export USER_GID="1000"
     export HOME="/home/testuser"
-    
+
     # Create mock directories
     mkdir -p "$TEST_TEMP_DIR/usr/local/bin"
     mkdir -p "$TEST_TEMP_DIR/home/testuser/.m2"
@@ -37,7 +37,7 @@ teardown() {
     if [ -n "${TEST_TEMP_DIR:-}" ]; then
         command rm -rf "$TEST_TEMP_DIR"
     fi
-    
+
     # Unset test variables
     unset USERNAME USER_UID USER_GID HOME 2>/dev/null || true
 }
@@ -45,13 +45,13 @@ teardown() {
 # Test: Maven installation
 test_maven_installation() {
     local mvn_bin="$TEST_TEMP_DIR/usr/local/bin/mvn"
-    
+
     # Create mock maven
     touch "$mvn_bin"
     chmod +x "$mvn_bin"
-    
+
     assert_file_exists "$mvn_bin"
-    
+
     # Check executable
     if [ -x "$mvn_bin" ]; then
         assert_true true "Maven is executable"
@@ -63,13 +63,13 @@ test_maven_installation() {
 # Test: Gradle installation
 test_gradle_installation() {
     local gradle_bin="$TEST_TEMP_DIR/usr/local/bin/gradle"
-    
+
     # Create mock gradle
     touch "$gradle_bin"
     chmod +x "$gradle_bin"
-    
+
     assert_file_exists "$gradle_bin"
-    
+
     # Check executable
     if [ -x "$gradle_bin" ]; then
         assert_true true "Gradle is executable"
@@ -81,13 +81,13 @@ test_gradle_installation() {
 # Test: Spring Boot CLI
 test_spring_boot_cli() {
     local spring_bin="$TEST_TEMP_DIR/usr/local/bin/spring"
-    
+
     # Create mock spring
     touch "$spring_bin"
     chmod +x "$spring_bin"
-    
+
     assert_file_exists "$spring_bin"
-    
+
     # Check executable
     if [ -x "$spring_bin" ]; then
         assert_true true "Spring Boot CLI is executable"
@@ -100,11 +100,11 @@ test_spring_boot_cli() {
 test_idea_config() {
     local idea_dir="$TEST_TEMP_DIR/home/testuser/.idea"
     mkdir -p "$idea_dir"
-    
+
     # Create config files
     touch "$idea_dir/workspace.xml"
     touch "$idea_dir/modules.xml"
-    
+
     assert_dir_exists "$idea_dir"
     assert_file_exists "$idea_dir/workspace.xml"
 }
@@ -112,7 +112,7 @@ test_idea_config() {
 # Test: CheckStyle configuration
 test_checkstyle_config() {
     local checkstyle_xml="$TEST_TEMP_DIR/checkstyle.xml"
-    
+
     # Create config
     command cat > "$checkstyle_xml" << 'EOF'
 <?xml version="1.0"?>
@@ -124,9 +124,9 @@ test_checkstyle_config() {
     </module>
 </module>
 EOF
-    
+
     assert_file_exists "$checkstyle_xml"
-    
+
     # Check configuration
     if grep -q "JavadocMethod" "$checkstyle_xml"; then
         assert_true true "CheckStyle Javadoc check enabled"
@@ -138,7 +138,7 @@ EOF
 # Test: SpotBugs configuration
 test_spotbugs_config() {
     local spotbugs_xml="$TEST_TEMP_DIR/spotbugs-exclude.xml"
-    
+
     # Create config
     command cat > "$spotbugs_xml" << 'EOF'
 <FindBugsFilter>
@@ -147,9 +147,9 @@ test_spotbugs_config() {
     </Match>
 </FindBugsFilter>
 EOF
-    
+
     assert_file_exists "$spotbugs_xml"
-    
+
     # Check configuration
     if grep -q "Test" "$spotbugs_xml"; then
         assert_true true "SpotBugs excludes test classes"
@@ -161,15 +161,15 @@ EOF
 # Test: JUnit configuration
 test_junit_config() {
     local junit_platform="$TEST_TEMP_DIR/junit-platform.properties"
-    
+
     # Create config
     command cat > "$junit_platform" << 'EOF'
 junit.jupiter.testinstance.lifecycle.default=per_class
 junit.jupiter.execution.parallel.enabled=true
 EOF
-    
+
     assert_file_exists "$junit_platform"
-    
+
     # Check configuration
     if grep -q "parallel.enabled=true" "$junit_platform"; then
         assert_true true "JUnit parallel execution enabled"
@@ -181,14 +181,14 @@ EOF
 # Test: Java dev aliases
 test_java_dev_aliases() {
     local bashrc_file="$TEST_TEMP_DIR/etc/bashrc.d/45-java-dev.sh"
-    
+
     # Create aliases
     command cat > "$bashrc_file" << 'EOF'
 alias mvnw='./mvnw'
 alias gdlw='./gradlew'
 alias sboot='spring boot'
 EOF
-    
+
     # Check aliases
     if grep -q "alias mvnw='./mvnw'" "$bashrc_file"; then
         assert_true true "Maven wrapper alias defined"
@@ -201,17 +201,17 @@ EOF
 test_lombok_support() {
     local lombok_jar="$TEST_TEMP_DIR/home/testuser/.m2/repository/org/projectlombok/lombok/lombok.jar"
     mkdir -p "$(dirname "$lombok_jar")"
-    
+
     # Create mock lombok jar
     touch "$lombok_jar"
-    
+
     assert_file_exists "$lombok_jar"
 }
 
 # Test: Verification script
 test_java_dev_verification() {
     local test_script="$TEST_TEMP_DIR/test-java-dev.sh"
-    
+
     # Create verification script
     command cat > "$test_script" << 'EOF'
 #!/bin/bash
@@ -221,9 +221,9 @@ for tool in mvn gradle spring; do
 done
 EOF
     chmod +x "$test_script"
-    
+
     assert_file_exists "$test_script"
-    
+
     # Check script is executable
     if [ -x "$test_script" ]; then
         assert_true true "Verification script is executable"
@@ -236,7 +236,7 @@ EOF
 run_test_with_setup() {
     local test_function="$1"
     local test_description="$2"
-    
+
     setup
     run_test "$test_function" "$test_description"
     teardown

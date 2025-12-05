@@ -33,7 +33,7 @@ historical release team members' keys.
 
 The keyring is sourced from the official Node.js release-keys repository:
 
-- **Repository**: https://github.com/nodejs/release-keys
+- **Repository**: `https://github.com/nodejs/release-keys`
 - **Last Updated**: See `keyring-metadata.json` for commit hash and date
 - **Total Keys**: 28 (8 active releasers + 20 historical releasers)
 
@@ -51,7 +51,7 @@ The keyring is sourced from the official Node.js release-keys repository:
 ## Usage
 
 These keys are used by `lib/base/signature-verify.sh` to verify GPG signatures
-on Node.js release tarballs downloaded from https://nodejs.org/dist/.
+on Node.js release tarballs downloaded from `https://nodejs.org/dist/`.
 
 ### Verification Process
 
@@ -63,9 +63,9 @@ Node.js releases include two signature file formats:
 The verification workflow:
 
 1. Download the Node.js tarball and SHASUMS256.txt file
-2. Download either the .sig or .asc signature file
-3. Verify the signature using the keyring in this directory
-4. Check the tarball's SHA256 checksum against SHASUMS256.txt
+1. Download either the .sig or .asc signature file
+1. Verify the signature using the keyring in this directory
+1. Check the tarball's SHA256 checksum against SHASUMS256.txt
 
 ## Updating the Keyring
 
@@ -78,10 +78,10 @@ The verification workflow:
 This script:
 
 1. Clones the official nodejs/release-keys repository
-2. Copies the full keyring (including historical keys)
-3. Sets secure permissions (700 for directory, 600 for files)
-4. Generates updated metadata with commit hash and date
-5. Lists all keys for verification
+1. Copies the full keyring (including historical keys)
+1. Sets secure permissions (700 for directory, 600 for files)
+1. Generates updated metadata with commit hash and date
+1. Lists all keys for verification
 
 ### Automated Update
 
@@ -120,19 +120,19 @@ the latest release team keys.
 
 1. **Source Trust**: Keys are fetched from the official nodejs/release-keys
    repository
-2. **Git Integrity**: Repository is cloned via HTTPS with certificate
+1. **Git Integrity**: Repository is cloned via HTTPS with certificate
    verification
-3. **Metadata Tracking**: We record the exact commit hash and date of the source
-4. **Reproducibility**: Anyone can verify our keyring matches the official
+1. **Metadata Tracking**: We record the exact commit hash and date of the source
+1. **Reproducibility**: Anyone can verify our keyring matches the official
    source
 
 ### Cross-Reference
 
 The release team members can be cross-referenced with:
 
-- https://github.com/nodejs/node#release-keys
-- https://github.com/nodejs/node/blob/main/README.md#release-keys
-- Individual GPG key fingerprints on https://nodejs.org
+- `https://github.com/nodejs/node#release-keys`
+- `https://github.com/nodejs/node/blob/main/README.md#release-keys`
+- Individual GPG key fingerprints on `https://nodejs.org`
 
 ## Troubleshooting
 
@@ -140,9 +140,9 @@ The release team members can be cross-referenced with:
 
 1. **Check keyring is up to date**: Run
    `./lib/gpg-keys/nodejs/update-keyring.sh`
-2. **Verify release team membership**: Check if the signer is in the official
+1. **Verify release team membership**: Check if the signer is in the official
    release-keys repo
-3. **Check signature file**: Ensure you're using SHASUMS256.txt.sig or .asc from
+1. **Check signature file**: Ensure you're using SHASUMS256.txt.sig or .asc from
    the official dist server
 
 ### Updating Keyring from Specific Commit
@@ -162,8 +162,8 @@ chmod 600 <containers-repo>/lib/gpg-keys/nodejs/keyring/*
 
 ## References
 
-- Official Node.js release keys: https://github.com/nodejs/release-keys
-- Node.js security information: https://nodejs.org/en/about/security/
-- Node.js downloads: https://nodejs.org/dist/
+- Official Node.js release keys: `https://github.com/nodejs/release-keys`
+- Node.js security information: `https://nodejs.org/en/about/security/`
+- Node.js downloads: `https://nodejs.org/dist/`
 - GPG signature verification guide:
-  https://github.com/nodejs/node#verifying-binaries
+  `https://github.com/nodejs/node#verifying-binaries`

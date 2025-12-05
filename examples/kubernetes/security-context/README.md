@@ -97,7 +97,7 @@ Pod Security Policies (PSP) are deprecated. Migrate to Pod Security Standards:
    kubectl get rolebinding,clusterrolebinding -A | grep psp
    ```
 
-2. **Map PSP to PSS levels**
+1. **Map PSP to PSS levels**
 
    | PSP Setting            | PSS Level  |
    | ---------------------- | ---------- |
@@ -106,7 +106,7 @@ Pod Security Policies (PSP) are deprecated. Migrate to Pod Security Standards:
    | readOnlyRootFilesystem | restricted |
    | allowPrivilegeEsc      | restricted |
 
-3. **Apply PSS labels to namespaces**
+1. **Apply PSS labels to namespaces**
 
    ```bash
    kubectl label namespace my-ns \
@@ -115,14 +115,14 @@ Pod Security Policies (PSP) are deprecated. Migrate to Pod Security Standards:
      pod-security.kubernetes.io/audit=restricted
    ```
 
-4. **Test workloads**
+1. **Test workloads**
 
    ```bash
    # Dry-run deployment
    kubectl apply --dry-run=server -f deployment.yaml
    ```
 
-5. **Remove PSP resources**
+1. **Remove PSP resources**
 
    ```bash
    kubectl delete psp --all
@@ -289,18 +289,18 @@ sealert -a /var/log/audit/audit.log
 1. **Start with Restricted PSS** - Apply restricted level to all production
    namespaces
 
-2. **Use runtime/default profiles** - AppArmor and Seccomp defaults provide good
+1. **Use runtime/default profiles** - AppArmor and Seccomp defaults provide good
    baseline
 
-3. **Drop ALL capabilities** - Add only specific capabilities needed
+1. **Drop ALL capabilities** - Add only specific capabilities needed
 
-4. **Read-only root filesystem** - Use emptyDir for writable paths
+1. **Read-only root filesystem** - Use emptyDir for writable paths
 
-5. **Run as non-root** - Use runAsNonRoot: true and specific UID
+1. **Run as non-root** - Use runAsNonRoot: true and specific UID
 
-6. **Audit before enforce** - Test with warn/audit modes before enforcing
+1. **Audit before enforce** - Test with warn/audit modes before enforcing
 
-7. **Document exceptions** - If elevated permissions needed, document why
+1. **Document exceptions** - If elevated permissions needed, document why
 
 ## Related Documentation
 

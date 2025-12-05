@@ -39,9 +39,9 @@ context for:
 When adding new features or making significant changes:
 
 1. Review relevant architecture docs first
-2. Consider whether your change affects the documented design
-3. Update architecture docs if introducing new patterns
-4. Add new analysis docs for complex features
+1. Consider whether your change affects the documented design
+1. Update architecture docs if introducing new patterns
+1. Add new analysis docs for complex features
 
 ## Related Documentation
 

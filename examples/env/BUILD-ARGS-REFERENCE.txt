@@ -1,10 +1,10 @@
 # BUILD ARGUMENTS REFERENCE (NOT ENVIRONMENT VARIABLES!)
-# 
+#
 # This file shows all available build arguments for quick reference.
 # These are NOT runtime environment variables and should NOT be in .env files.
-# 
+#
 # For full documentation, see: ../BUILD-ARGS.md
-# 
+#
 # Set these via:
 #   docker build --build-arg INCLUDE_PYTHON=true .
 #   OR in docker-compose.yml under build: args:

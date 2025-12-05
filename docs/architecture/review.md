@@ -38,7 +38,7 @@ ARCH=$(dpkg --print-architecture)
    ARCH=$(dpkg --print-architecture)
    ```
 
-2. **URL Selection**:
+1. **URL Selection**:
 
    ```bash
    if [ "$ARCH" = "amd64" ]; then
@@ -48,7 +48,7 @@ ARCH=$(dpkg --print-architecture)
    fi
    ```
 
-3. **Graceful Fallback**:
+1. **Graceful Fallback**:
 
    ```bash
    if [ "$ARCH" != "amd64" ]; then

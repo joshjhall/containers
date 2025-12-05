@@ -129,12 +129,14 @@ These tools get the latest version at build time, which is generally fine:
 These tools get the latest stable version by design:
 
 1. **Package manager installed tools** (cargo, npm, gem)
+
    - cargo-watch, tree-sitter-cli, tokei, etc. (via cargo install)
    - typescript, jest, vitest, etc. (via npm install -g)
    - bundler, rails, rspec, etc. (via gem install)
    - These package managers handle their own versioning and updates
 
-2. **System packages** (via apt-get)
+1. **System packages** (via apt-get)
+
    - git, curl, build-essential, etc.
    - Managed by Debian package management
 

@@ -9,12 +9,12 @@ providing metrics, structured logging, and monitoring capabilities for productio
 
 1. **Metrics**: Expose Prometheus-compatible metrics for monitoring container health and
    performance
-2. **Structured Logging**: Provide JSON-formatted logs with correlation IDs for log
+1. **Structured Logging**: Provide JSON-formatted logs with correlation IDs for log
    aggregation
-3. **Tracing**: Enable OpenTelemetry integration for distributed tracing
-4. **Dashboards**: Pre-built Grafana dashboards for common monitoring scenarios
-5. **Alerting**: Prometheus alerting rules for common issues
-6. **Runbooks**: Documentation for responding to alerts
+1. **Tracing**: Enable OpenTelemetry integration for distributed tracing
+1. **Dashboards**: Pre-built Grafana dashboards for common monitoring scenarios
+1. **Alerting**: Prometheus alerting rules for common issues
+1. **Runbooks**: Documentation for responding to alerts
 
 ## Architecture
 
@@ -100,10 +100,10 @@ Add JSON logging capability while maintaining backward compatibility with existi
 #### Implementation Strategy
 
 1. Add `log_json()` function to logging.sh
-2. Environment variable `ENABLE_JSON_LOGGING=true` to opt-in
-3. JSON logs written to `/var/log/container-build/json/`
-4. Maintain all existing text logging functions
-5. Add correlation ID tracking through build process
+1. Environment variable `ENABLE_JSON_LOGGING=true` to opt-in
+1. JSON logs written to `/var/log/container-build/json/`
+1. Maintain all existing text logging functions
+1. Add correlation ID tracking through build process
 
 ### 2. Metrics Exporter
 
@@ -176,18 +176,21 @@ Pre-built dashboard templates for common scenarios.
 #### Dashboards
 
 1. **Container Build Overview**
+
    - Build durations by feature
    - Error/warning trends
    - Feature installation status
    - Build success rate
 
-2. **Container Runtime Health**
+1. **Container Runtime Health**
+
    - Uptime
    - Healthcheck status over time
    - Resource usage (disk, if available)
    - Container restart count
 
-3. **Multi-Container Fleet**
+1. **Multi-Container Fleet**
+
    - Aggregate metrics across multiple containers
    - Feature distribution
    - Health status by container
@@ -258,7 +261,7 @@ Each runbook includes:
 
 Guide for integrating OpenTelemetry for distributed tracing.
 
-#### Features
+**Features:**
 
 - OTLP exporter configuration
 - Trace context propagation
@@ -271,38 +274,38 @@ Guide for integrating OpenTelemetry for distributed tracing.
 ### Phase 1: Core Metrics (Days 1-2)
 
 1. ✅ Design document (this file)
-2. Create metrics exporter script
-3. Implement basic Prometheus metrics
-4. Add metrics endpoint to runtime
-5. Test with local Prometheus instance
+1. Create metrics exporter script
+1. Implement basic Prometheus metrics
+1. Add metrics endpoint to runtime
+1. Test with local Prometheus instance
 
 ### Phase 2: Structured Logging (Days 2-3)
 
 1. Enhance logging.sh with JSON support
-2. Add correlation ID tracking
-3. Create log aggregation examples
-4. Test with log collectors (Loki, Elasticsearch)
+1. Add correlation ID tracking
+1. Create log aggregation examples
+1. Test with log collectors (Loki, Elasticsearch)
 
 ### Phase 3: Dashboards & Alerts (Days 3-4)
 
 1. Create Grafana dashboard templates
-2. Create Prometheus alerting rules
-3. Write runbooks for each alert
-4. Test full monitoring stack
+1. Create Prometheus alerting rules
+1. Write runbooks for each alert
+1. Test full monitoring stack
 
 ### Phase 4: OpenTelemetry (Day 4-5)
 
 1. Write OpenTelemetry integration guide
-2. Create OTLP exporter examples
-3. Document trace context propagation
-4. Provide example configurations
+1. Create OTLP exporter examples
+1. Document trace context propagation
+1. Provide example configurations
 
 ### Phase 5: Testing & Documentation (Day 5)
 
 1. Add unit tests for metrics exporter
-2. Add integration tests for monitoring stack
-3. Update main documentation
-4. Create quickstart guide
+1. Add integration tests for monitoring stack
+1. Update main documentation
+1. Create quickstart guide
 
 ## Configuration
 
@@ -338,25 +341,30 @@ ARG INCLUDE_OBSERVABILITY=false
 ### Existing Systems
 
 1. **Logging System** (`lib/base/logging.sh`)
+
    - Extend with JSON output
    - Add correlation ID support
    - Maintain backward compatibility
 
-2. **Healthcheck** (`lib/runtime/healthcheck`)
+1. **Healthcheck** (`lib/runtime/healthcheck`)
+
    - Export health status as metric
    - Add health history tracking
 
-3. **Build System** (Dockerfile)
+1. **Build System** (Dockerfile)
+
    - Collect build metrics during feature installation
    - Store metrics for later export
 
 ### New Systems
 
 1. **Metrics Exporter** (new)
+
    - Runtime script for metric collection
    - HTTP endpoint for Prometheus
 
-2. **Log Aggregation** (external)
+1. **Log Aggregation** (external)
+
    - Fluentd/Fluent Bit configuration
    - Loki configuration
    - Elasticsearch configuration
@@ -364,16 +372,19 @@ ARG INCLUDE_OBSERVABILITY=false
 ## Security Considerations
 
 1. **Metrics Endpoint**
+
    - No authentication by default (internal network only)
    - Optional basic auth configuration
    - Network policy restrictions (Kubernetes)
 
-2. **Log Data**
+1. **Log Data**
+
    - No secrets in logs (already enforced)
    - Structured logging makes redaction easier
    - Correlation IDs don't leak sensitive data
 
-3. **Resource Usage**
+1. **Resource Usage**
+
    - Metrics collection is lightweight
    - JSON logging has minimal overhead
    - Configurable refresh intervals
@@ -381,17 +392,20 @@ ARG INCLUDE_OBSERVABILITY=false
 ## Testing Strategy
 
 1. **Unit Tests**
+
    - Test JSON log formatting
    - Test metrics calculation
    - Test correlation ID generation
 
-2. **Integration Tests**
+1. **Integration Tests**
+
    - Test with Prometheus scraper
    - Test with Grafana
    - Test log aggregation
    - Test alert firing
 
-3. **Performance Tests**
+1. **Performance Tests**
+
    - Measure logging overhead
    - Measure metrics collection overhead
    - Ensure minimal impact on build time
@@ -399,12 +413,12 @@ ARG INCLUDE_OBSERVABILITY=false
 ## Documentation Deliverables
 
 1. ✅ This design document
-2. Observability quickstart guide
-3. OpenTelemetry integration guide
-4. Metrics reference documentation
-5. Structured logging reference
-6. Grafana dashboard guide
-7. Alerting runbooks (per-alert)
+1. Observability quickstart guide
+1. OpenTelemetry integration guide
+1. Metrics reference documentation
+1. Structured logging reference
+1. Grafana dashboard guide
+1. Alerting runbooks (per-alert)
 
 ## Success Criteria
 
@@ -420,19 +434,23 @@ ARG INCLUDE_OBSERVABILITY=false
 ## Future Enhancements
 
 1. **Advanced Metrics**
+
    - Cache hit rates
    - Network usage during build
    - CPU/memory usage per feature
 
-2. **Anomaly Detection**
+1. **Anomaly Detection**
+
    - ML-based anomaly detection
    - Automatic performance regression detection
 
-3. **Cost Tracking**
+1. **Cost Tracking**
+
    - Track build costs (time = money)
    - Resource utilization optimization
 
-4. **Service Mesh Integration**
+1. **Service Mesh Integration**
+
    - Istio/Linkerd metrics
    - Automatic trace propagation
 

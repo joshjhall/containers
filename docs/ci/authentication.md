@@ -42,25 +42,28 @@ The workflow automatically creates Pull Requests for version updates:
 ### Default Behavior (No Additional Setup Required)
 
 1. **Weekly scan** runs every Sunday at 2am UTC
-2. **Detects** outdated versions in feature scripts
-3. **Creates PR** with all updates applied
-4. **CI runs** all tests on the PR
-5. **You review** and merge when ready
+1. **Detects** outdated versions in feature scripts
+1. **Creates PR** with all updates applied
+1. **CI runs** all tests on the PR
+1. **You review** and merge when ready
 
 ### Optional: Enable Auto-Merge
 
 To fully automate the process (auto-merge PRs after tests pass):
 
 1. **Enable auto-merge** in repository settings:
+
    - Settings → General → Pull Requests
    - Check "Allow auto-merge"
 
-2. **Configure branch protection** (recommended):
+1. **Configure branch protection** (recommended):
+
    - Settings → Branches → Add rule for `main`
    - Require status checks to pass before merging
    - Include the "Run Tests" check
 
-3. **The auto-merge workflow** will:
+1. **The auto-merge workflow** will:
+
    - Wait for all CI checks to pass
    - Automatically squash and merge the PR
    - Delete the branch after merge
@@ -76,22 +79,25 @@ To enable more complex automation scenarios:
 
 1. Go to **Settings** → **Developer settings** → **Personal access tokens** →
    **Tokens (classic)**
-2. Click **Generate new token**
-3. Configure:
+
+1. Click **Generate new token**
+
+1. Configure:
+
    - **Name**: `containers-ci`
    - **Expiration**: Set as needed
    - **Scopes**:
      - `repo` (full control of private repositories)
      - `workflow` (if updating GitHub Actions workflows)
 
-4. Copy the generated token
+1. Copy the generated token
 
 ### 2. Add as Repository Secret
 
 1. Navigate to your repository's **Settings** → **Secrets and variables** →
    **Actions**
-2. Click **New repository secret**
-3. Add:
+1. Click **New repository secret**
+1. Add:
    - **Name**: `CI_PUSH_TOKEN`
    - **Secret**: The token you copied
 
@@ -119,7 +125,7 @@ If pushing to protected branches like `main`:
 ### Option 1: Branch Protection Bypass
 
 1. Create a PAT from an admin account
-2. Add the admin user to the bypass list in branch protection settings
+1. Add the admin user to the bypass list in branch protection settings
 
 ### Option 2: Pull Request Workflow
 
@@ -147,8 +153,8 @@ Instead of pushing directly, create pull requests:
 For organizations, using a GitHub App provides better security:
 
 1. Create a GitHub App with repository permissions
-2. Install the app on your repository
-3. Use the app's credentials in workflows:
+1. Install the app on your repository
+1. Use the app's credentials in workflows:
 
 ```yaml
 - name: Generate token
@@ -211,11 +217,11 @@ See `docs/security-hardening.md` issue #16 for complete implementation details.
 ## Security Best Practices
 
 1. **Use least privilege**: Only grant necessary permissions
-2. **Rotate tokens regularly**: Set expiration dates
-3. **Use repository secrets**: Never hardcode tokens
-4. **Prefer GitHub Apps** for organization repositories
-5. **Use environment protection rules** for sensitive operations
-6. **Enable OIDC for Cosign**: Use `id-token: write` for keyless image signing
+1. **Rotate tokens regularly**: Set expiration dates
+1. **Use repository secrets**: Never hardcode tokens
+1. **Prefer GitHub Apps** for organization repositories
+1. **Use environment protection rules** for sensitive operations
+1. **Enable OIDC for Cosign**: Use `id-token: write` for keyless image signing
 
 ## Troubleshooting
 
@@ -236,6 +242,6 @@ See `docs/security-hardening.md` issue #16 for complete implementation details.
 ## Testing the Configuration
 
 1. Create a test branch and push a small change
-2. Check Actions tab for workflow runs
-3. Verify automated commits appear with correct author
-4. Ensure subsequent workflows trigger (if needed)
+1. Check Actions tab for workflow runs
+1. Verify automated commits appear with correct author
+1. Ensure subsequent workflows trigger (if needed)

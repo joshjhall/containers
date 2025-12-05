@@ -18,13 +18,13 @@ setup() {
     # Create temporary directory for testing
     export TEST_TEMP_DIR="$RESULTS_DIR/test-node-dev"
     mkdir -p "$TEST_TEMP_DIR"
-    
+
     # Mock environment
     export USERNAME="testuser"
     export USER_UID="1000"
     export USER_GID="1000"
     export HOME="/home/testuser"
-    
+
     # Create mock directories
     mkdir -p "$TEST_TEMP_DIR/usr/local/bin"
     mkdir -p "$TEST_TEMP_DIR/cache/npm"
@@ -38,7 +38,7 @@ teardown() {
     if [ -n "${TEST_TEMP_DIR:-}" ]; then
         command rm -rf "$TEST_TEMP_DIR"
     fi
-    
+
     # Unset test variables
     unset USERNAME USER_UID USER_GID HOME 2>/dev/null || true
 }
@@ -47,16 +47,16 @@ teardown() {
 test_global_npm_packages() {
     local npm_dir="$TEST_TEMP_DIR/cache/npm/bin"
     mkdir -p "$npm_dir"
-    
+
     # List of dev tools
     local tools=("typescript" "ts-node" "nodemon" "eslint" "prettier" "jest" "pm2" "nx")
-    
+
     # Create mock tools
     for tool in "${tools[@]}"; do
         touch "$npm_dir/$tool"
         chmod +x "$npm_dir/$tool"
     done
-    
+
     # Check each tool
     for tool in "${tools[@]}"; do
         if [ -x "$npm_dir/$tool" ]; then
@@ -70,7 +70,7 @@ test_global_npm_packages() {
 # Test: TypeScript configuration
 test_typescript_config() {
     local tsconfig="$TEST_TEMP_DIR/tsconfig.json"
-    
+
     # Create config
     command cat > "$tsconfig" << 'EOF'
 {
@@ -84,9 +84,9 @@ test_typescript_config() {
   }
 }
 EOF
-    
+
     assert_file_exists "$tsconfig"
-    
+
     # Check configuration
     if grep -q '"strict": true' "$tsconfig"; then
         assert_true true "TypeScript strict mode enabled"
@@ -98,7 +98,7 @@ EOF
 # Test: ESLint configuration
 test_eslint_config() {
     local eslintrc="$TEST_TEMP_DIR/.eslintrc.json"
-    
+
     # Create config
     command cat > "$eslintrc" << 'EOF'
 {
@@ -112,9 +112,9 @@ test_eslint_config() {
   }
 }
 EOF
-    
+
     assert_file_exists "$eslintrc"
-    
+
     # Check configuration
     if grep -q '"eslint:recommended"' "$eslintrc"; then
         assert_true true "ESLint recommended rules enabled"
@@ -126,7 +126,7 @@ EOF
 # Test: Prettier configuration
 test_prettier_config() {
     local prettierrc="$TEST_TEMP_DIR/.prettierrc"
-    
+
     # Create config
     command cat > "$prettierrc" << 'EOF'
 {
@@ -136,9 +136,9 @@ test_prettier_config() {
   "trailingComma": "es5"
 }
 EOF
-    
+
     assert_file_exists "$prettierrc"
-    
+
     # Check configuration
     if grep -q '"singleQuote": true' "$prettierrc"; then
         assert_true true "Prettier single quotes enabled"
@@ -150,7 +150,7 @@ EOF
 # Test: Jest configuration
 test_jest_config() {
     local jestconfig="$TEST_TEMP_DIR/jest.config.js"
-    
+
     # Create config
     command cat > "$jestconfig" << 'EOF'
 module.exports = {
@@ -159,9 +159,9 @@ module.exports = {
   collectCoverageFrom: ['src/**/*.{js,ts}']
 };
 EOF
-    
+
     assert_file_exists "$jestconfig"
-    
+
     # Check configuration
     if grep -q "testEnvironment: 'node'" "$jestconfig"; then
         assert_true true "Jest node environment configured"
@@ -173,7 +173,7 @@ EOF
 # Test: Nodemon configuration
 test_nodemon_config() {
     local nodemon_json="$TEST_TEMP_DIR/nodemon.json"
-    
+
     # Create config
     command cat > "$nodemon_json" << 'EOF'
 {
@@ -182,9 +182,9 @@ test_nodemon_config() {
   "exec": "ts-node"
 }
 EOF
-    
+
     assert_file_exists "$nodemon_json"
-    
+
     # Check configuration
     if grep -q '"exec": "ts-node"' "$nodemon_json"; then
         assert_true true "Nodemon uses ts-node"
@@ -196,7 +196,7 @@ EOF
 # Test: NPM scripts
 test_npm_scripts() {
     local package_json="$TEST_TEMP_DIR/package.json"
-    
+
     # Create package.json with scripts
     command cat > "$package_json" << 'EOF'
 {
@@ -209,9 +209,9 @@ test_npm_scripts() {
   }
 }
 EOF
-    
+
     assert_file_exists "$package_json"
-    
+
     # Check scripts
     if grep -q '"dev": "nodemon"' "$package_json"; then
         assert_true true "Dev script configured"
@@ -223,7 +223,7 @@ EOF
 # Test: Node dev aliases
 test_node_dev_aliases() {
     local bashrc_file="$TEST_TEMP_DIR/etc/bashrc.d/25-node-dev.sh"
-    
+
     # Create aliases
     command cat > "$bashrc_file" << 'EOF'
 alias nrd='npm run dev'
@@ -233,7 +233,7 @@ alias nrl='npm run lint'
 alias tsc='npx tsc'
 alias tsn='npx ts-node'
 EOF
-    
+
     # Check aliases
     if grep -q "alias nrd='npm run dev'" "$bashrc_file"; then
         assert_true true "npm run dev alias defined"
@@ -245,19 +245,19 @@ EOF
 # Test: Yarn/PNPM support
 test_package_managers() {
     local bin_dir="$TEST_TEMP_DIR/usr/local/bin"
-    
+
     # Create mock binaries
     touch "$bin_dir/yarn"
     touch "$bin_dir/pnpm"
     chmod +x "$bin_dir/yarn" "$bin_dir/pnpm"
-    
+
     # Check package managers
     if [ -x "$bin_dir/yarn" ]; then
         assert_true true "Yarn is installed"
     else
         assert_true false "Yarn is not installed"
     fi
-    
+
     if [ -x "$bin_dir/pnpm" ]; then
         assert_true true "PNPM is installed"
     else
@@ -268,7 +268,7 @@ test_package_managers() {
 # Test: Verification script
 test_node_dev_verification() {
     local test_script="$TEST_TEMP_DIR/test-node-dev.sh"
-    
+
     # Create verification script
     command cat > "$test_script" << 'EOF'
 #!/bin/bash
@@ -278,9 +278,9 @@ for tool in typescript eslint prettier jest nodemon pm2; do
 done
 EOF
     chmod +x "$test_script"
-    
+
     assert_file_exists "$test_script"
-    
+
     # Check script is executable
     if [ -x "$test_script" ]; then
         assert_true true "Verification script is executable"
@@ -293,7 +293,7 @@ EOF
 run_test_with_setup() {
     local test_function="$1"
     local test_description="$2"
-    
+
     setup
     run_test "$test_function" "$test_description"
     teardown

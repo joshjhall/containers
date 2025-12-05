@@ -18,14 +18,14 @@ setup() {
     # Create temporary directory for testing
     export TEST_TEMP_DIR="$RESULTS_DIR/test-bashrc-helpers"
     mkdir -p "$TEST_TEMP_DIR"
-    
+
     # Create mock bashrc.d directory
     export TEST_BASHRC_D="$TEST_TEMP_DIR/bashrc.d"
     mkdir -p "$TEST_BASHRC_D"
-    
+
     # Copy and modify bashrc-helpers for testing
     command sed "s|/etc/bashrc.d|$TEST_BASHRC_D|g" "$PROJECT_ROOT/lib/base/bashrc-helpers.sh" > "$TEST_TEMP_DIR/bashrc-helpers-test.sh"
-    
+
     # Define the function to test (since we can't source the actual file in tests)
     source_bashrc_d() {
         local dir="${1:-/etc/bashrc.d}"
@@ -45,7 +45,7 @@ teardown() {
     if [ -n "${TEST_TEMP_DIR:-}" ]; then
         command rm -rf "$TEST_TEMP_DIR"
     fi
-    
+
     # Unset test variables
     unset TEST_BASHRC_D 2>/dev/null || true
     unset TEST_TEMP_DIR 2>/dev/null || true
@@ -58,15 +58,15 @@ test_source_bashrc_d() {
     echo 'export TEST_VAR2="value2"' > "$TEST_BASHRC_D/20-test2.sh"
     echo 'export TEST_VAR3="value3"' > "$TEST_BASHRC_D/30-test3.sh"
     chmod +x "$TEST_BASHRC_D"/*.sh
-    
+
     # Source the scripts
     source_bashrc_d "$TEST_BASHRC_D"
-    
+
     # Check that variables were set
     assert_equals "value1" "${TEST_VAR1:-}" "TEST_VAR1 was sourced"
     assert_equals "value2" "${TEST_VAR2:-}" "TEST_VAR2 was sourced"
     assert_equals "value3" "${TEST_VAR3:-}" "TEST_VAR3 was sourced"
-    
+
     # Clean up test variables
     unset TEST_VAR1 TEST_VAR2 TEST_VAR3
 }
@@ -77,7 +77,7 @@ test_source_bashrc_d_skip_nonexecutable() {
     local test_file="$TEST_BASHRC_D/test_perms"
     touch "$test_file"
     chmod 644 "$test_file"
-    
+
     if [[ -x "$test_file" ]]; then
         # Filesystem doesn't properly handle executable bits (e.g., fakeowner mount)
         command rm -f "$test_file"
@@ -85,23 +85,23 @@ test_source_bashrc_d_skip_nonexecutable() {
         return
     fi
     command rm -f "$test_file"
-    
+
     # Create executable and non-executable scripts
     echo 'export EXEC_VAR="executed"' > "$TEST_BASHRC_D/10-exec.sh"
     echo 'export NONEXEC_VAR="should_not_run"' > "$TEST_BASHRC_D/20-nonexec.sh"
     chmod +x "$TEST_BASHRC_D/10-exec.sh"
     chmod 644 "$TEST_BASHRC_D/20-nonexec.sh"  # Explicitly make non-executable
-    
+
     # Ensure NONEXEC_VAR is not set
     unset NONEXEC_VAR 2>/dev/null || true
-    
+
     # Source the scripts
     source_bashrc_d "$TEST_BASHRC_D"
-    
+
     # Check that only executable was sourced
     assert_equals "executed" "${EXEC_VAR:-}" "Executable script was sourced"
     assert_empty "${NONEXEC_VAR:-}" "Non-executable script was not sourced"
-    
+
     # Clean up
     unset EXEC_VAR 2>/dev/null || true
 }
@@ -110,10 +110,10 @@ test_source_bashrc_d_skip_nonexecutable() {
 test_source_bashrc_d_missing_directory() {
     # Try to source from non-existent directory
     local missing_dir="$TEST_TEMP_DIR/nonexistent"
-    
+
     # This should not error
     source_bashrc_d "$missing_dir" || true
-    
+
     # If we get here, the function handled it gracefully
     assert_true true "Function handled missing directory gracefully"
 }
@@ -125,13 +125,13 @@ test_source_bashrc_d_order() {
     echo 'export ORDER_TEST="${ORDER_TEST}_second"' > "$TEST_BASHRC_D/20-second.sh"
     echo 'export ORDER_TEST="${ORDER_TEST}_third"' > "$TEST_BASHRC_D/30-third.sh"
     chmod +x "$TEST_BASHRC_D"/*.sh
-    
+
     # Source the scripts
     source_bashrc_d "$TEST_BASHRC_D"
-    
+
     # Check that they ran in order
     assert_equals "first_second_third" "${ORDER_TEST:-}" "Scripts sourced in correct order"
-    
+
     # Clean up
     unset ORDER_TEST
 }
@@ -143,15 +143,15 @@ test_source_bashrc_d_extension_filter() {
     echo 'export TXT_VAR="from_txt"' > "$TEST_BASHRC_D/20-test.txt"
     echo 'export NO_EXT_VAR="no_extension"' > "$TEST_BASHRC_D/30-test"
     chmod +x "$TEST_BASHRC_D"/*
-    
+
     # Source the scripts
     source_bashrc_d "$TEST_BASHRC_D"
-    
+
     # Check that only .sh file was sourced
     assert_equals "from_sh" "${SH_VAR:-}" ".sh file was sourced"
     assert_empty "${TXT_VAR:-}" ".txt file was not sourced"
     assert_empty "${NO_EXT_VAR:-}" "File without extension was not sourced"
-    
+
     # Clean up
     unset SH_VAR TXT_VAR NO_EXT_VAR 2>/dev/null || true
 }
@@ -163,14 +163,14 @@ test_source_bashrc_d_error_handling() {
     echo 'false # This will fail' > "$TEST_BASHRC_D/20-error.sh"
     echo 'export AFTER_ERROR="yes"' > "$TEST_BASHRC_D/30-after.sh"
     chmod +x "$TEST_BASHRC_D"/*.sh
-    
+
     # Source the scripts (should continue despite error)
     source_bashrc_d "$TEST_BASHRC_D" 2>/dev/null || true
-    
+
     # Check that scripts before and after the error were still sourced
     assert_equals "yes" "${BEFORE_ERROR:-}" "Script before error was sourced"
     assert_equals "yes" "${AFTER_ERROR:-}" "Script after error was sourced"
-    
+
     # Clean up
     unset BEFORE_ERROR AFTER_ERROR 2>/dev/null || true
 }
@@ -179,7 +179,7 @@ test_source_bashrc_d_error_handling() {
 run_test_with_setup() {
     local test_function="$1"
     local test_description="$2"
-    
+
     setup
     run_test "$test_function" "$test_description"
     teardown

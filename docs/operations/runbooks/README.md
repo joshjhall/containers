@@ -18,9 +18,9 @@ procedures.
 ## Using These Runbooks
 
 1. **Identify the symptom** - Match your issue to a runbook above
-2. **Follow the diagnostic steps** - Each runbook has ordered steps
-3. **Check common causes** - Most issues fall into known patterns
-4. **Escalate if needed** - Document findings for further investigation
+1. **Follow the diagnostic steps** - Each runbook has ordered steps
+1. **Check common causes** - Most issues fall into known patterns
+1. **Escalate if needed** - Document findings for further investigation
 
 ## Runbook Structure
 

@@ -188,9 +188,9 @@ istioctl analyze
 Add to your deployment process:
 
 1. **Pre-deployment**: Verify cert-manager is installed
-2. **Deployment**: Apply TLS configuration
-3. **Post-deployment**: Verify certificates are valid
-4. **Monitoring**: Alert on certificate expiry < 14 days
+1. **Deployment**: Apply TLS configuration
+1. **Post-deployment**: Verify certificates are valid
+1. **Monitoring**: Alert on certificate expiry < 14 days
 
 ```bash
 # Add to CI/CD pipeline

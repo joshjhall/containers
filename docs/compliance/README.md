@@ -8,9 +8,9 @@ various compliance frameworks and how to deploy securely.
 
 1. **Understand compliance coverage**: Read the
    [Framework Analysis](../reference/compliance.md)
-2. **Prepare for production**: Follow the
+1. **Prepare for production**: Follow the
    [Production Security Checklist](production-checklist.md)
-3. **Choose your framework**: Use the framework-specific guides below
+1. **Choose your framework**: Use the framework-specific guides below
 
 ## Document Overview
 
@@ -56,21 +56,21 @@ These gaps are intentionally left to the deploying organization:
 
 1. Review the [Framework Analysis](../reference/compliance.md) for control
    mappings
-2. Check specific framework sections (OWASP, SOC 2, ISO 27001, etc.)
-3. Note which controls are build-time vs runtime responsibilities
+1. Check specific framework sections (OWASP, SOC 2, ISO 27001, etc.)
+1. Note which controls are build-time vs runtime responsibilities
 
 ### For DevOps Teams
 
 1. Complete the [Production Checklist](production-checklist.md) before
    deployment
-2. Implement runtime controls (network policies, monitoring, etc.)
-3. Document your implementation for audit purposes
+1. Implement runtime controls (network policies, monitoring, etc.)
+1. Document your implementation for audit purposes
 
 ### For Security Teams
 
 1. Review gap analysis and prioritize based on your framework requirements
-2. Use the checklist to verify deployments
-3. Implement additional runtime security (Falco, OPA Gatekeeper, etc.)
+1. Use the checklist to verify deployments
+1. Implement additional runtime security (Falco, OPA Gatekeeper, etc.)
 
 ## Compliance by Framework
 

@@ -113,9 +113,9 @@ Gatekeeper supports three enforcement actions:
 ### Recommended Rollout Strategy
 
 1. **Week 1**: Deploy with `dryrun` mode across all namespaces
-2. **Week 2**: Review violations, update applications
-3. **Week 3**: Switch to `warn` mode in staging
-4. **Week 4**: Enable `deny` mode in production
+1. **Week 2**: Review violations, update applications
+1. **Week 3**: Switch to `warn` mode in staging
+1. **Week 4**: Enable `deny` mode in production
 
 ## Customization
 

@@ -13,7 +13,7 @@ containers processing sensitive data.
 | SOC 2 C1        | Confidentiality       | Guidance |
 | ISO 27001 A.8.2 | Information labeling  | Guidance |
 
----
+______________________________________________________________________
 
 ## Classification Taxonomy
 
@@ -34,7 +34,7 @@ containers processing sensitive data.
 - No access restrictions
 - No special container requirements
 
----
+______________________________________________________________________
 
 ### Level 2: Internal
 
@@ -62,7 +62,7 @@ securityContext:
   allowPrivilegeEscalation: false
 ```
 
----
+______________________________________________________________________
 
 ### Level 3: Confidential
 
@@ -103,7 +103,7 @@ metadata:
     audit-logging: required
 ```
 
----
+______________________________________________________________________
 
 ### Level 4: Restricted
 
@@ -151,7 +151,7 @@ metadata:
     pii-present: 'true'
 ```
 
----
+______________________________________________________________________
 
 ## Kubernetes Enforcement
 
@@ -224,7 +224,7 @@ spec:
         }
 ```
 
----
+______________________________________________________________________
 
 ## Data Handling Procedures
 
@@ -244,9 +244,9 @@ grep -r -E '\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b' /app  # Email
 Only collect and store data that is necessary:
 
 1. Review data collection requirements
-2. Remove unnecessary data fields
-3. Implement data masking where possible
-4. Use tokenization for sensitive identifiers
+1. Remove unnecessary data fields
+1. Implement data masking where possible
+1. Use tokenization for sensitive identifiers
 
 ### Data Encryption
 
@@ -293,7 +293,7 @@ spec:
                 - /scripts/cleanup-expired-data.py
 ```
 
----
+______________________________________________________________________
 
 ## Access Control
 
@@ -334,7 +334,7 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
 ```
 
----
+______________________________________________________________________
 
 ## Audit Requirements
 
@@ -365,7 +365,7 @@ For Confidential/Restricted data:
 }
 ```
 
----
+______________________________________________________________________
 
 ## Compliance Mapping
 
@@ -390,7 +390,7 @@ For Confidential/Restricted data:
 - **7.1**: Limit access to cardholder data
 - **10.x**: Track and monitor all access
 
----
+______________________________________________________________________
 
 ## Implementation Checklist
 
@@ -410,7 +410,7 @@ For Confidential/Restricted data:
 - [ ] Retention policy enforcement
 - [ ] Audit log reviews
 
----
+______________________________________________________________________
 
 ## Related Documentation
 

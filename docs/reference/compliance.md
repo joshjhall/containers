@@ -54,7 +54,7 @@ organization.
 | CC8.1 Authorization            | ⚠️ Gap      | OPA Gatekeeper recommended             |
 | A1.2 Recovery Procedures       | ⚠️ Gap      | Backup/DR documentation needed         |
 
-### ISO 27001:2022
+### ISO 27001:2022 Controls
 
 | Control                               | Status      | Notes                      |
 | ------------------------------------- | ----------- | -------------------------- |
@@ -136,11 +136,13 @@ organization.
 ### Critical Gaps (Affect 7+ Frameworks)
 
 1. **Audit Logging System** - GitHub Issue #24
+
    - Affects: SOC 2, ISO 27001, GDPR, HIPAA, PCI DSS, FedRAMP, CMMC, CIS
    - Solution: Mandatory structured JSON logging with retention
    - Effort: 3-4 days
 
-2. **Runtime Security Monitoring** - GitHub Issue #27
+1. **Runtime Security Monitoring** - GitHub Issue #27
+
    - Affects: SOC 2, OWASP, ISO 27001, PCI DSS, FedRAMP, CMMC
    - Solution: Falco integration for container behavior monitoring
    - Effort: 3 days
@@ -148,16 +150,19 @@ organization.
 ### High Priority Gaps
 
 1. **TLS/mTLS Enforcement** - GitHub Issue #26
+
    - Affects: GDPR, HIPAA, PCI DSS, FedRAMP
    - Solution: Network policies, service mesh examples
    - Effort: 2 days
 
-2. **Policy Enforcement** - GitHub Issue #28
+1. **Policy Enforcement** - GitHub Issue #28
+
    - Affects: SOC 2, ISO 27001, GDPR, HIPAA
    - Solution: OPA Gatekeeper for admission control
    - Effort: 4 days
 
-3. **Immutable Log Storage** - GitHub Issue #29
+1. **Immutable Log Storage** - GitHub Issue #29
+
    - Affects: SOC 2, ISO 27001, GDPR, HIPAA, PCI DSS
    - Solution: Loki with S3 backend, object lock
    - Effort: 3 days
@@ -165,15 +170,15 @@ organization.
 ### Medium Priority Gaps
 
 1. **Backup and DR** - GitHub Issue #33
-2. **Security Contexts** - GitHub Issue #32
-3. **Resource Limits** - GitHub Issue #34
-4. **Data Classification** - GitHub Issue #35
+1. **Security Contexts** - GitHub Issue #32
+1. **Resource Limits** - GitHub Issue #34
+1. **Data Classification** - GitHub Issue #35
 
 ### Documentation Gaps
 
 1. **Encryption-at-Rest** - GitHub Issue #42
-2. **Software Allowlist** - GitHub Issue #43
-3. **MFA Integration** - GitHub Issue #30
+1. **Software Allowlist** - GitHub Issue #43
+1. **MFA Integration** - GitHub Issue #30
 
 ## Implementation Roadmap
 
@@ -219,13 +224,13 @@ organization.
 
 **Key Requirements**: Issues #24, #27, #28, #29
 
-### ISO 27001:2022
+### ISO 27001:2022 Certification
 
 **Estimated Effort**: 3-4 weeks of implementation
 
 **Key Requirements**: Issues #24, #26, #27, #28
 
-### HIPAA
+### HIPAA Compliance
 
 **Estimated Effort**: 4-5 weeks of implementation
 
@@ -233,7 +238,7 @@ organization.
 
 **Special Note**: 6-year log retention required
 
-### PCI DSS v4.0
+### PCI DSS v4.0 Compliance
 
 **Estimated Effort**: 4-5 weeks of implementation
 

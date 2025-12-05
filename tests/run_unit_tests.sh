@@ -47,10 +47,10 @@ echo ""
 for test_file in $UNIT_TEST_FILES; do
     test_name=$(basename "$test_file" .sh)
     echo -e "${BLUE}Running $test_name...${NC}"
-    
+
     # Make sure test is executable
     chmod +x "$test_file"
-    
+
     # Run the test and capture output
     if output=$("$test_file" 2>&1); then
         # Parse test results from output
@@ -58,13 +58,13 @@ for test_file in $UNIT_TEST_FILES; do
         suite_failed=$(echo "$output" | grep -o "Failed:[[:space:]]*[0-9]*" | grep -o "[0-9]*" || echo "0")
         suite_skipped=$(echo "$output" | grep -o "Skipped:[[:space:]]*[0-9]*" | grep -o "[0-9]*" || echo "0")
         suite_total=$((suite_passed + suite_failed + suite_skipped))
-        
+
         # Update totals
         TOTAL_TESTS=$((TOTAL_TESTS + suite_total))
         TOTAL_PASSED=$((TOTAL_PASSED + suite_passed))
         TOTAL_FAILED=$((TOTAL_FAILED + suite_failed))
         TOTAL_SKIPPED=$((TOTAL_SKIPPED + suite_skipped))
-        
+
         # Report suite results
         if [ "$suite_failed" -eq 0 ]; then
             echo -e "  ${GREEN}✓ PASS${NC} ($suite_passed passed, $suite_skipped skipped)"
@@ -125,7 +125,7 @@ Project Root: $PROJECT_ROOT
 Test Results:
   Total Tests: $TOTAL_TESTS
   Passed: $TOTAL_PASSED
-  Failed: $TOTAL_FAILED  
+  Failed: $TOTAL_FAILED
   Skipped: $TOTAL_SKIPPED
   Pass Rate: ${PASS_RATE:-0}%
 

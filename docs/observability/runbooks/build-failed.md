@@ -43,7 +43,7 @@ still run, missing features will not be available.
    curl http://localhost:9090/metrics | grep 'container_build_errors_total{.*} [1-9]'
    ```
 
-2. **Check feature-specific logs**:
+1. **Check feature-specific logs**:
 
    ```bash
    # List all build logs
@@ -54,7 +54,7 @@ still run, missing features will not be available.
    check-build-logs.sh node-dev
    ```
 
-3. **Verify feature availability**:
+1. **Verify feature availability**:
 
    ```bash
    # Check if commands are available
@@ -125,32 +125,38 @@ docker build --network=host ...
 ### Common Causes
 
 1. **Network Issues**:
+
    - Download timeouts
    - DNS resolution failures
    - Firewall/proxy blocking downloads
    - Rate limiting from package repositories
 
-2. **Version Mismatches**:
+1. **Version Mismatches**:
+
    - Requested version no longer available
    - Incompatible version combinations
    - Repository URLs changed
 
-3. **Dependency Conflicts**:
+1. **Dependency Conflicts**:
+
    - Missing system packages
    - Conflicting package versions
    - Circular dependencies
 
-4. **Resource Constraints**:
+1. **Resource Constraints**:
+
    - Disk full during installation
    - Out of memory during compilation
    - Build timeout
 
-5. **Permission Issues**:
+1. **Permission Issues**:
+
    - Cannot write to installation directory
    - Cannot execute downloaded scripts
    - Incorrect file ownership
 
-6. **Script Bugs**:
+1. **Script Bugs**:
+
    - Errors in feature installation scripts
    - Broken package checksums
    - Incorrect paths
@@ -328,8 +334,8 @@ Escalate if:
 Escalate to:
 
 1. **Feature maintainer** (if specific to one feature)
-2. **Team lead** (if blocking work)
-3. **Platform team** (if infrastructure related)
+1. **Team lead** (if blocking work)
+1. **Platform team** (if infrastructure related)
 
 ## Related
 
@@ -359,7 +365,7 @@ Escalate to:
 After resolution:
 
 1. **Update version pins** to prevent recurrence
-2. **Document** root cause in feature script comments
-3. **Add test** for the failure scenario
-4. **Review** dependency chain for fragility
-5. **Consider** vendoring critical dependencies
+1. **Document** root cause in feature script comments
+1. **Add test** for the failure scenario
+1. **Review** dependency chain for fragility
+1. **Consider** vendoring critical dependencies

@@ -111,10 +111,10 @@ spec:
 ### Manual Rotation Process
 
 1. Generate new certificate
-2. Deploy new certificate alongside old
-3. Update services to use new certificate
-4. Remove old certificate
-5. Document rotation in audit log
+1. Deploy new certificate alongside old
+1. Update services to use new certificate
+1. Remove old certificate
+1. Document rotation in audit log
 
 ### Rotation Schedule
 
@@ -194,15 +194,15 @@ kubectl get peerauthentication -A -o yaml | grep -A2 "mtls:"
 ### Acceptable Exceptions
 
 1. **Health check endpoints**: May use HTTP internally
-2. **Metrics endpoints**: Prometheus scraping within mesh
-3. **Legacy systems**: Documented migration plan required
+1. **Metrics endpoints**: Prometheus scraping within mesh
+1. **Legacy systems**: Documented migration plan required
 
 ### Exception Process
 
 1. Document business justification
-2. Implement compensating controls
-3. Set expiration date (max 90 days)
-4. Review and renew or remediate
+1. Implement compensating controls
+1. Set expiration date (max 90 days)
+1. Review and renew or remediate
 
 ## Audit Evidence
 

@@ -33,7 +33,7 @@ TEST_EXIT_CODE=0
 capture_result() {
     local tfh_output
     local tfh_exit_code
-    
+
     # Execute command and capture output
     tfh_output=$("$@" 2>&1) || tfh_exit_code=$?
 
@@ -41,7 +41,7 @@ capture_result() {
     # shellcheck disable=SC2034  # Variable set for external use
     TEST_OUTPUT="$tfh_output"
     TEST_EXIT_CODE="${tfh_exit_code:-0}"
-    
+
     # Return original exit code
     return $TEST_EXIT_CODE
 }
@@ -50,18 +50,18 @@ capture_result() {
 with_warnings_suppressed() {
     local tfh_old_log_level="${LOG_LEVEL:-}"
     export LOG_LEVEL=2  # ERROR level only
-    
+
     # Execute command
     "$@"
     local tfh_exit_code=$?
-    
+
     # Restore log level
     if [ -n "$tfh_old_log_level" ]; then
         export LOG_LEVEL="$tfh_old_log_level"
     else
         unset LOG_LEVEL
     fi
-    
+
     return $tfh_exit_code
 }
 
@@ -72,7 +72,7 @@ build_test_image() {
     local image_tag="$1"
     shift
     local build_args=("$@")
-    
+
     # Build the image
     if docker build -t "$image_tag" "${build_args[@]}"; then
         # Track for cleanup
@@ -89,7 +89,7 @@ run_test_container() {
     local image="$2"
     shift 2
     local run_args=("$@")
-    
+
     # Run the container
     if docker run --name "$container_name" "$image" "${run_args[@]}"; then
         # Track for cleanup
@@ -104,7 +104,7 @@ run_test_container() {
 exec_in_container() {
     local image="$1"
     local command="$2"
-    
+
     docker run --rm "$image" bash -c "$command"
 }
 
@@ -131,7 +131,7 @@ wait_for_container() {
     local container="$1"
     local timeout="${2:-30}"
     local check_command="${3:-true}"
-    
+
     local elapsed=0
     while [ $elapsed -lt $timeout ]; do
         if docker exec "$container" bash -c "$check_command" >/dev/null 2>&1; then
@@ -140,7 +140,7 @@ wait_for_container() {
         sleep 1
         elapsed=$((elapsed + 1))
     done
-    
+
     return 1
 }
 

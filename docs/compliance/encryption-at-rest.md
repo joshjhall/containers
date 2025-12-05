@@ -24,13 +24,13 @@ but the actual encryption must be configured in your deployment environment.
 ### Key Principles
 
 1. **Never store sensitive data unencrypted** in container images or volumes
-2. **Use platform-native encryption** when available (cloud provider, storage
+1. **Use platform-native encryption** when available (cloud provider, storage
    class)
-3. **Implement proper key management** with rotation policies
-4. **Verify encryption is enabled** before storing sensitive data
-5. **Document your encryption implementation** for audit purposes
+1. **Implement proper key management** with rotation policies
+1. **Verify encryption is enabled** before storing sensitive data
+1. **Document your encryption implementation** for audit purposes
 
----
+______________________________________________________________________
 
 ## Kubernetes Encrypted Storage
 
@@ -117,7 +117,7 @@ spec:
             claimName: encrypted-data
 ```
 
----
+______________________________________________________________________
 
 ## Docker Volume Encryption
 
@@ -168,7 +168,7 @@ volumes:
       device: ':/encrypted/share'
 ```
 
----
+______________________________________________________________________
 
 ## Cloud Provider Integration
 
@@ -244,7 +244,7 @@ az storage account create \
   --encryption-key-name mykey
 ```
 
----
+______________________________________________________________________
 
 ## Key Management Best Practices
 
@@ -301,7 +301,7 @@ spec:
 - [ ] Key backup and recovery procedures documented
 - [ ] Key deletion policies defined
 
----
+______________________________________________________________________
 
 ## Database Encryption
 
@@ -366,13 +366,13 @@ encrypted_ssn = field.encrypt("123-45-6789")
 # Store encrypted_ssn in database
 ```
 
----
+______________________________________________________________________
 
 ## Verification Procedures
 
-### Verify Volume Encryption
+### Volume Encryption Verification
 
-#### AWS
+#### AWS Volumes
 
 ```bash
 # Check EBS volume encryption
@@ -384,7 +384,7 @@ aws ec2 describe-volumes \
   --query 'Volumes[?Encrypted==`false`].VolumeId'
 ```
 
-#### GCP
+#### GCP Volumes
 
 ```bash
 # Check disk encryption
@@ -411,7 +411,7 @@ kubectl get pv -o custom-columns='NAME:.metadata.name,STORAGECLASS:.spec.storage
 - [ ] Encryption key management audit logs reviewed
 - [ ] Key rotation verified
 
----
+______________________________________________________________________
 
 ## Compliance Documentation
 
@@ -420,21 +420,25 @@ For audit purposes, document the following:
 ### Required Evidence
 
 1. **Encryption Configuration**
+
    - StorageClass definitions showing encryption enabled
    - Cloud provider encryption settings
    - Key management service configuration
 
-2. **Key Management**
+1. **Key Management**
+
    - KMS key policies
    - Key rotation schedules
    - Access control policies
 
-3. **Verification Records**
+1. **Verification Records**
+
    - Regular encryption verification results
    - Audit log samples
    - Compliance scan reports
 
-4. **Procedures**
+1. **Procedures**
+
    - Key rotation procedures
    - Key recovery procedures
    - Incident response for key compromise
@@ -467,7 +471,7 @@ EOF
 chmod +x encryption-audit.sh
 ```
 
----
+______________________________________________________________________
 
 ## Implementation Checklist
 
@@ -493,7 +497,7 @@ chmod +x encryption-audit.sh
 - [ ] Audit log review (quarterly)
 - [ ] Update documentation for changes
 
----
+______________________________________________________________________
 
 ## Related Documentation
 

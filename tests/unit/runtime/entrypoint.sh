@@ -18,18 +18,18 @@ setup() {
     # Create temporary directory for testing
     export TEST_TEMP_DIR="$RESULTS_DIR/test-entrypoint"
     mkdir -p "$TEST_TEMP_DIR"
-    
+
     # Mock container environment
     export TEST_USERNAME="testuser"
     export TEST_HOME="$TEST_TEMP_DIR/home/testuser"
     mkdir -p "$TEST_HOME"
-    
+
     # Create mock startup directories
     export FIRST_STARTUP_DIR="$TEST_TEMP_DIR/etc/container/first-startup"
     export STARTUP_DIR="$TEST_TEMP_DIR/etc/container/startup"
     mkdir -p "$FIRST_STARTUP_DIR"
     mkdir -p "$STARTUP_DIR"
-    
+
     # Mock first-run marker
     export FIRST_RUN_MARKER="$TEST_HOME/.container-initialized"
 }
@@ -38,7 +38,7 @@ setup() {
 teardown() {
     # Clean up test directory
     command rm -rf "$TEST_TEMP_DIR"
-    
+
     # Unset test variables
     unset TEST_USERNAME TEST_HOME FIRST_STARTUP_DIR STARTUP_DIR FIRST_RUN_MARKER 2>/dev/null || true
 }
@@ -51,10 +51,10 @@ test_first_run_detection() {
     else
         assert_true false "First run not detected"
     fi
-    
+
     # Create marker and test again
     touch "$FIRST_RUN_MARKER"
-    
+
     if [ -f "$FIRST_RUN_MARKER" ]; then
         assert_true true "Subsequent run detected when marker exists"
     else
@@ -69,14 +69,14 @@ test_first_startup_script_order() {
     echo 'echo "20" >> '$TEST_TEMP_DIR'/order.txt' > "$FIRST_STARTUP_DIR/20-second.sh"
     echo 'echo "30" >> '$TEST_TEMP_DIR'/order.txt' > "$FIRST_STARTUP_DIR/30-third.sh"
     chmod +x "$FIRST_STARTUP_DIR"/*.sh
-    
+
     # Simulate script execution in order
     for script in "$FIRST_STARTUP_DIR"/*.sh; do
         if [ -f "$script" ]; then
             bash "$script"
         fi
     done
-    
+
     # Check execution order
     if [ -f "$TEST_TEMP_DIR/order.txt" ]; then
         local order
@@ -93,14 +93,14 @@ test_every_boot_scripts() {
     echo 'echo "startup1" >> '$TEST_TEMP_DIR'/startup.log' > "$STARTUP_DIR/10-startup1.sh"
     echo 'echo "startup2" >> '$TEST_TEMP_DIR'/startup.log' > "$STARTUP_DIR/20-startup2.sh"
     chmod +x "$STARTUP_DIR"/*.sh
-    
+
     # Execute startup scripts
     for script in "$STARTUP_DIR"/*.sh; do
         if [ -f "$script" ]; then
             bash "$script"
         fi
     done
-    
+
     # Check that scripts ran
     if [ -f "$TEST_TEMP_DIR/startup.log" ]; then
         local lines
@@ -118,7 +118,7 @@ test_script_permissions() {
     echo 'echo "not-executable"' > "$STARTUP_DIR/20-noexec.txt"
     chmod +x "$STARTUP_DIR/10-exec.sh"
     chmod -x "$STARTUP_DIR/20-noexec.txt"
-    
+
     # Check executable .sh file detection
     local exec_count=0
     for script in "$STARTUP_DIR"/*.sh; do
@@ -126,7 +126,7 @@ test_script_permissions() {
             exec_count=$((exec_count + 1))
         fi
     done
-    
+
     assert_equals "1" "$exec_count" "Only executable scripts counted"
 }
 
@@ -135,17 +135,17 @@ test_user_context() {
     # Test UID detection
     local uid_1000
     uid_1000=$(getent passwd 1000 2>/dev/null | cut -d: -f1 || echo "")
-    
+
     if [ -n "$uid_1000" ]; then
         assert_not_empty "$uid_1000" "User with UID 1000 can be detected"
     else
         # In test environment, user might not exist
         assert_true true "User detection test skipped (no UID 1000)"
     fi
-    
+
     # Test su command formation
     local su_cmd="su ${TEST_USERNAME} -c 'bash /path/to/script.sh'"
-    
+
     if [[ "$su_cmd" == *"su ${TEST_USERNAME}"* ]]; then
         assert_true true "su command properly formed"
     else
@@ -157,12 +157,12 @@ test_user_context() {
 test_first_run_marker_creation() {
     # Ensure marker doesn't exist
     command rm -f "$FIRST_RUN_MARKER"
-    
+
     # Simulate marker creation
     touch "$FIRST_RUN_MARKER"
-    
+
     assert_file_exists "$FIRST_RUN_MARKER"
-    
+
     # Check marker persistence
     if [ -f "$FIRST_RUN_MARKER" ]; then
         assert_true true "First-run marker persists"
@@ -176,7 +176,7 @@ test_empty_directory_handling() {
     # Remove all scripts
     command rm -f "$FIRST_STARTUP_DIR"/*.sh
     command rm -f "$STARTUP_DIR"/*.sh
-    
+
     # Test with empty directories
     local first_count
     first_count=$(command find "$FIRST_STARTUP_DIR" -name "*.sh" -type f 2>/dev/null | wc -l)
@@ -232,14 +232,14 @@ EOF
 test_environment_preservation() {
     # Set test environment variable
     export TEST_ENV_VAR="preserved"
-    
+
     # Create script that checks environment
     echo 'echo "$TEST_ENV_VAR" > '$TEST_TEMP_DIR'/env.txt' > "$STARTUP_DIR/10-env.sh"
     chmod +x "$STARTUP_DIR/10-env.sh"
-    
+
     # Execute script
     bash "$STARTUP_DIR/10-env.sh"
-    
+
     # Check environment was preserved
     if [ -f "$TEST_TEMP_DIR/env.txt" ]; then
         local value
@@ -248,7 +248,7 @@ test_environment_preservation() {
     else
         assert_true false "Environment check failed"
     fi
-    
+
     unset TEST_ENV_VAR
 }
 
@@ -430,7 +430,7 @@ test_exit_handler_error_handling() {
 run_test_with_setup() {
     local test_function="$1"
     local test_description="$2"
-    
+
     setup
     run_test "$test_function" "$test_description"
     teardown

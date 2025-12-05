@@ -11,7 +11,7 @@ releases, including automated patch releases.
 - [Post-Rollback Actions](#post-rollback-actions)
 - [Prevention](#prevention)
 
----
+______________________________________________________________________
 
 ## Quick Reference
 
@@ -35,23 +35,26 @@ gh release delete vX.Y.Z --yes
 git push --delete origin vX.Y.Z
 ```
 
----
+______________________________________________________________________
 
 ## Identifying the Issue
 
 ### Symptoms of a Problematic Release
 
 1. **Build Failures**
+
    - CI builds failing on main branch
    - Integration tests failing
    - Security scans failing
 
-2. **Runtime Issues**
+1. **Runtime Issues**
+
    - Containers won't start
    - Features not working as expected
    - Performance degradation
 
-3. **User Reports**
+1. **User Reports**
+
    - Multiple issue reports for same problem
    - Production deployments failing
 
@@ -71,7 +74,7 @@ git log --oneline | grep "automated version updates"
 gh run list --limit 10
 ```
 
----
+______________________________________________________________________
 
 ## Rollback Procedures
 
@@ -152,7 +155,7 @@ git push origin vX.Y.Z
 # Post announcement in all channels
 ```
 
----
+______________________________________________________________________
 
 ## Post-Rollback Actions
 
@@ -171,33 +174,38 @@ git push origin vX.Y.Z
    ./tests/run_integration_tests.sh
    ```
 
-2. **Notify stakeholders**
+1. **Notify stakeholders**
+
    - Post incident report
    - Update GitHub release notes
    - Notify dependent projects
 
-3. **Update container images**
+1. **Update container images**
+
    - Verify new images are built and pushed
    - Update documentation if tags changed
 
 ### Follow-Up Actions
 
 1. **Root Cause Analysis**
+
    - Document what went wrong
    - Identify gaps in testing
    - Update tests to catch similar issues
 
-2. **Process Improvements**
+1. **Process Improvements**
+
    - Add integration tests for failure scenario
    - Update auto-patch workflow if needed
    - Improve monitoring/alerting
 
-3. **Documentation**
+1. **Documentation**
+
    - Update CHANGELOG.md with rollback notes
    - Document the incident in docs/incidents/
    - Update roadmap with lessons learned
 
----
+______________________________________________________________________
 
 ## Prevention
 
@@ -230,7 +238,7 @@ For auto-patch releases:
    gh run watch
    ```
 
-2. **Test Immediately After Release**
+1. **Test Immediately After Release**
 
    ```bash
    # Pull and test new release
@@ -238,7 +246,8 @@ For auto-patch releases:
    docker run --rm ghcr.io/joshjhall/containers:vX.Y.Z-minimal check-installed-versions.sh
    ```
 
-3. **Check GitHub Issues/Discussions**
+1. **Check GitHub Issues/Discussions**
+
    - Monitor for user reports
    - Check CI status badges
 
@@ -264,7 +273,7 @@ For auto-patch releases:
 - **Development**: Use `:latest` or auto-patch
 - **CI/CD**: Pin to specific version, update deliberately
 
----
+______________________________________________________________________
 
 ## Examples
 
@@ -318,7 +327,7 @@ gh api repos/joshjhall/containers/security-advisories \
   -f description="..."
 ```
 
----
+______________________________________________________________________
 
 ## Contact
 

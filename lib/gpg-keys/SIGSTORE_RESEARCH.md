@@ -75,7 +75,7 @@ calculated checksums)
 
 ## References
 
-- Python Sigstore: https://www.python.org/downloads/metadata/sigstore/
-- Python PGP: https://www.python.org/downloads/metadata/pgp/
-- PEP 761: https://peps.python.org/pep-0761/
-- Sigstore: https://www.sigstore.dev/
+- Python Sigstore: `https://www.python.org/downloads/metadata/sigstore/`
+- Python PGP: `https://www.python.org/downloads/metadata/pgp/`
+- PEP 761: `https://peps.python.org/pep-0761/`
+- Sigstore: `https://www.sigstore.dev/`

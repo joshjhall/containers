@@ -14,7 +14,7 @@ and best practices for contributing to this project.
 - [Documentation](#documentation)
 - [Pull Request Process](#pull-request-process)
 
----
+______________________________________________________________________
 
 ## Getting Started
 
@@ -34,24 +34,25 @@ and best practices for contributing to this project.
    cd containers
    ```
 
-2. Run the development environment setup:
+1. Run the development environment setup:
 
    ```bash
    ./bin/setup-dev-environment.sh
    ```
 
    This will:
+
    - Enable git hooks for shellcheck and credential leak prevention
    - Verify your development environment
    - Check for recommended tools
 
-3. Create a feature branch:
+1. Create a feature branch:
 
    ```bash
    git checkout -b feature/your-feature-name
    ```
 
----
+______________________________________________________________________
 
 ## Feature Script Guidelines
 
@@ -96,15 +97,15 @@ Every feature script MUST include:
 
 1. **Shebang and header comments**: Describe purpose, dependencies, environment
    variables
-2. **Error handling**: `set -euo pipefail` immediately after shebang/comments
-3. **Source utilities**: Import required base scripts
-4. **Logging calls**:
+1. **Error handling**: `set -euo pipefail` immediately after shebang/comments
+1. **Source utilities**: Import required base scripts
+1. **Logging calls**:
    - `log_feature_start` at the beginning
    - `log_feature_summary` before completion
    - `log_feature_end` at the end
-5. **Environment variable exports**: Add to `/etc/bashrc.d/` for persistence
-6. **Verification**: Test that installed tools work correctly
-7. **Configuration summary**: Use `log_feature_summary` to show what was
+1. **Environment variable exports**: Add to `/etc/bashrc.d/` for persistence
+1. **Verification**: Test that installed tools work correctly
+1. **Configuration summary**: Use `log_feature_summary` to show what was
    installed
 
 ### Feature Script Structure
@@ -157,7 +158,7 @@ log_feature_summary \
 log_feature_end
 ```
 
----
+______________________________________________________________________
 
 ## Error Handling
 
@@ -366,7 +367,7 @@ test_missing_args() {
 }
 ```
 
----
+______________________________________________________________________
 
 ## Testing Requirements
 
@@ -428,7 +429,7 @@ Run integration tests:
 - **Edge cases**: Version resolution, partial downloads, network failures
 - **Error paths**: Test that errors are properly handled
 
----
+______________________________________________________________________
 
 ## Code Style
 
@@ -437,11 +438,11 @@ Run integration tests:
 Follow these conventions:
 
 1. **Indentation**: 4 spaces (no tabs)
-2. **Line length**: Maximum 100 characters
-3. **Variable naming**:
+1. **Line length**: Maximum 100 characters
+1. **Variable naming**:
    - `UPPERCASE_WITH_UNDERSCORES` for constants/environment variables
    - `lowercase_with_underscores` for local variables
-4. **Function naming**: `verb_noun` pattern (e.g., `install_python`,
+1. **Function naming**: `verb_noun` pattern (e.g., `install_python`,
    `fetch_checksum`)
 
 ### Example
@@ -514,7 +515,7 @@ VARIABLE_NAME="value"
 word_splitting_intended $variable
 ```
 
----
+______________________________________________________________________
 
 ## Documentation
 
@@ -523,9 +524,9 @@ word_splitting_intended $variable
 When adding new features:
 
 1. **Update README.md**: Add feature to the feature list
-2. **Update docs/environment-variables.md**: Document any new variables
-3. **Update examples/**: Add usage examples if applicable
-4. **Add inline comments**: Explain complex logic
+1. **Update docs/environment-variables.md**: Document any new variables
+1. **Update examples/**: Add usage examples if applicable
+1. **Add inline comments**: Explain complex logic
 
 ### Documentation Style
 
@@ -567,7 +568,7 @@ feat(python): Add support for Python 3.14
 Closes #123
 ```
 
----
+______________________________________________________________________
 
 ## Pull Request Process
 
@@ -579,17 +580,17 @@ Closes #123
    ./tests/run_all.sh
    ```
 
-2. **Run shellcheck**:
+1. **Run shellcheck**:
 
    ```bash
    find lib bin -name "*.sh" -exec shellcheck {} +
    ```
 
-3. **Update documentation**: Ensure all docs are up to date
+1. **Update documentation**: Ensure all docs are up to date
 
-4. **Create atomic commits**: Each commit should be a logical unit
+1. **Create atomic commits**: Each commit should be a logical unit
 
-5. **Write clear commit messages**: Follow the conventional commit format
+1. **Write clear commit messages**: Follow the conventional commit format
 
 ### Pull Request Template
 
@@ -626,12 +627,12 @@ Brief description of changes
 ### Review Process
 
 1. Automated checks must pass (CI, shellcheck)
-2. At least one maintainer review required
-3. Address all feedback
-4. Squash commits if requested
-5. Maintainer will merge when approved
+1. At least one maintainer review required
+1. Address all feedback
+1. Squash commits if requested
+1. Maintainer will merge when approved
 
----
+______________________________________________________________________
 
 ## Common Patterns
 
@@ -676,7 +677,7 @@ readonly CACHE_DIR="/cache/toolname"
 install -d -m 0755 -o "${USER_UID}" -g "${USER_GID}" "$CACHE_DIR"
 ```
 
----
+______________________________________________________________________
 
 ## Getting Help
 
@@ -685,14 +686,14 @@ install -d -m 0755 -o "${USER_UID}" -g "${USER_GID}" "$CACHE_DIR"
 - **Security**: See [SECURITY.md](SECURITY.md)
 - **Documentation**: Check [docs/](docs/) directory
 
----
+______________________________________________________________________
 
 ## Code of Conduct
 
 Be respectful and constructive in all interactions. We aim to maintain a
 welcoming community for all contributors.
 
----
+______________________________________________________________________
 
 ## License
 

@@ -24,10 +24,10 @@ VirtioFS has better POSIX compliance and may preserve case-sensitivity.
 **Steps**:
 
 1. Open Docker Desktop settings
-2. Navigate to: Settings → General → Choose file sharing implementation
-3. Select "VirtioFS" (if available)
-4. Restart Docker Desktop
-5. Rebuild your devcontainer
+1. Navigate to: Settings → General → Choose file sharing implementation
+1. Select "VirtioFS" (if available)
+1. Restart Docker Desktop
+1. Rebuild your devcontainer
 
 **Verify**:
 
@@ -155,9 +155,9 @@ colima start --vm-type vz --mount-type virtiofs
 ## Workarounds if Stuck with Case-Insensitive
 
 1. **Never rename with case only**: `git mv README.md readme.md` won't work
-2. **Use consistent casing**: Always lowercase or always PascalCase
-3. **Avoid case-sensitive imports**: Don't rely on case differences
-4. **Test in CI**: CI runs in Linux with case-sensitive fs
+1. **Use consistent casing**: Always lowercase or always PascalCase
+1. **Avoid case-sensitive imports**: Don't rely on case differences
+1. **Test in CI**: CI runs in Linux with case-sensitive fs
 
 ## Recommended Configuration
 

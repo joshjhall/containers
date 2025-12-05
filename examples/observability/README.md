@@ -24,9 +24,9 @@ docker-compose -f examples/observability/docker-compose.yml up -d
 
 ### 2. Access the UIs
 
-- **Grafana**: http://localhost:3000 (admin/admin)
-- **Prometheus**: http://localhost:9090
-- **Jaeger**: http://localhost:16686
+- **Grafana**: `http://localhost:3000` (admin/admin)
+- **Prometheus**: `http://localhost:9090`
+- **Jaeger**: `http://localhost:16686`
 
 ### 3. Enable Observability in Your Container
 
@@ -53,15 +53,18 @@ docker run -d \
 ### 4. View Metrics and Traces
 
 1. **Grafana Dashboards**:
+
    - Navigate to Dashboards → Container Build Overview
    - Navigate to Dashboards → Container Runtime Health
 
-2. **Prometheus Metrics**:
-   - Visit http://localhost:9090
+1. **Prometheus Metrics**:
+
+   - Visit `http://localhost:9090`
    - Query: `container_build_duration_seconds`
 
-3. **Jaeger Traces**:
-   - Visit http://localhost:16686
+1. **Jaeger Traces**:
+
+   - Visit `http://localhost:16686`
    - Search for service: `myproject`
 
 ## Architecture
@@ -167,7 +170,7 @@ export ENABLE_JSON_LOGGING=true
 Two pre-built dashboards:
 
 1. **Container Build Overview** - Build metrics and status
-2. **Container Runtime Health** - Health and resource usage
+1. **Container Runtime Health** - Health and resource usage
 
 Import via Grafana UI or provisioning (see `grafana-dashboards.yml`).
 
@@ -346,14 +349,14 @@ docker run -d \
    docker exec <container> curl http://localhost:9090/metrics
    ```
 
-2. Verify Prometheus scraping:
+1. Verify Prometheus scraping:
 
    ```bash
    # Check targets
    curl http://localhost:9090/api/v1/targets | jq '.data.activeTargets'
    ```
 
-3. Check container logs:
+1. Check container logs:
 
    ```bash
    docker logs <container> | grep -i metric
@@ -362,13 +365,15 @@ docker run -d \
 ### Dashboards Show No Data
 
 1. Verify Prometheus datasource in Grafana:
+
    - Settings → Data Sources → Prometheus
    - Click "Test" button
 
-2. Check metrics are being scraped:
+1. Check metrics are being scraped:
+
    - Prometheus UI → Status → Targets
 
-3. Verify time range in Grafana matches data availability
+1. Verify time range in Grafana matches data availability
 
 ### Traces Not Appearing in Jaeger
 
@@ -378,14 +383,14 @@ docker run -d \
    docker logs otel-collector | grep -i error
    ```
 
-2. Verify OTLP endpoint is reachable:
+1. Verify OTLP endpoint is reachable:
 
    ```bash
    curl http://localhost:4318/v1/traces
    # Should return "method not allowed" (endpoint exists)
    ```
 
-3. Check trace export from container:
+1. Check trace export from container:
 
    ```bash
    docker logs <container> | grep -i otel
@@ -438,5 +443,5 @@ For production, deploy with redundancy:
 For issues or questions:
 
 1. Check [Troubleshooting Guide](../../docs/troubleshooting.md)
-2. Review [Alert Runbooks](../../docs/observability/runbooks/)
-3. Open an issue in the repository
+1. Review [Alert Runbooks](../../docs/observability/runbooks/)
+1. Open an issue in the repository

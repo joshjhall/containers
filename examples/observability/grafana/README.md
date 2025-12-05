@@ -57,7 +57,7 @@ Monitors container health and resource usage in real-time.
    Grafana → Dashboards → New → Import → Upload JSON file
    ```
 
-2. **Via API**:
+1. **Via API**:
 
    ```bash
    curl -X POST http://grafana:3000/api/dashboards/db \
@@ -66,7 +66,7 @@ Monitors container health and resource usage in real-time.
      -d @container-build-overview.json
    ```
 
-3. **Via Provisioning** (Recommended for automation):
+1. **Via Provisioning** (Recommended for automation):
 
    Create `grafana-provisioning.yaml`:
 
@@ -210,7 +210,7 @@ metadata:
    Verify container target is UP
    ```
 
-2. **Verify metrics exporter**:
+1. **Verify metrics exporter**:
 
    ```bash
    # Inside container
@@ -219,7 +219,7 @@ metadata:
    # Should return Prometheus-format metrics
    ```
 
-3. **Check Grafana datasource**:
+1. **Check Grafana datasource**:
 
    ```text
    Grafana → Configuration → Data Sources → Prometheus

@@ -18,7 +18,7 @@ setup() {
     # Create temporary directory for testing
     export TEST_TEMP_DIR="$RESULTS_DIR/test-run-feature"
     mkdir -p "$TEST_TEMP_DIR"
-    
+
     # Create mock feature script
     export MOCK_FEATURE="$TEST_TEMP_DIR/test-feature.sh"
     command cat > "$MOCK_FEATURE" << 'EOF'
@@ -28,7 +28,7 @@ echo "UID=$2"
 echo "GID=$3"
 EOF
     chmod +x "$MOCK_FEATURE"
-    
+
     # Create mock build-env file
     export MOCK_BUILD_ENV="$TEST_TEMP_DIR/build-env"
 }
@@ -39,7 +39,7 @@ teardown() {
     if [ -n "${TEST_TEMP_DIR:-}" ]; then
         command rm -rf "$TEST_TEMP_DIR"
     fi
-    
+
     # Unset test variables
     unset MOCK_FEATURE MOCK_BUILD_ENV 2>/dev/null || true
 }
@@ -51,24 +51,24 @@ test_argument_passing() {
     local username="testuser"
     local uid="1000"
     local gid="1000"
-    
+
     # Execute the mock feature script directly
         local output
     output=$("$feature_script" "$username" "$uid" "$gid")
-    
+
     # Check output
     if [[ "$output" == *"USERNAME=testuser"* ]]; then
         assert_true true "Username passed correctly"
     else
         assert_true false "Username not passed correctly"
     fi
-    
+
     if [[ "$output" == *"UID=1000"* ]]; then
         assert_true true "UID passed correctly"
     else
         assert_true false "UID not passed correctly"
     fi
-    
+
     if [[ "$output" == *"GID=1000"* ]]; then
         assert_true true "GID passed correctly"
     else
@@ -83,26 +83,26 @@ test_build_env_override() {
 ACTUAL_UID=2000
 ACTUAL_GID=2000
 EOF
-    
+
     # Simulate sourcing build-env and using actual values
     source "$MOCK_BUILD_ENV"
-    
+
     # Check that ACTUAL_UID and ACTUAL_GID are set
     assert_equals "2000" "$ACTUAL_UID" "ACTUAL_UID is set from build-env"
     assert_equals "2000" "$ACTUAL_GID" "ACTUAL_GID is set from build-env"
-    
+
     # Simulate wrapper logic
     local username="testuser"
     local provided_uid="1000"
     local provided_gid="1000"
-    
+
     # Use actual values if build-env exists
     local final_uid="${ACTUAL_UID:-$provided_uid}"
     local final_gid="${ACTUAL_GID:-$provided_gid}"
-    
+
     assert_equals "2000" "$final_uid" "UID overridden by build-env"
     assert_equals "2000" "$final_gid" "GID overridden by build-env"
-    
+
     unset ACTUAL_UID ACTUAL_GID
 }
 
@@ -110,22 +110,22 @@ EOF
 test_fallback_without_build_env() {
     # Ensure build-env doesn't exist
     command rm -f "$MOCK_BUILD_ENV"
-    
+
     # Simulate wrapper behavior without build-env
     local username="testuser"
     local uid="1500"
     local gid="1500"
-    
+
     # Since build-env doesn't exist, use passed values
     local output
     output=$("$MOCK_FEATURE" "$username" "$uid" "$gid")
-    
+
     if [[ "$output" == *"UID=1500"* ]]; then
         assert_true true "Fallback UID used when build-env missing"
     else
         assert_true false "Fallback UID not used"
     fi
-    
+
     if [[ "$output" == *"GID=1500"* ]]; then
         assert_true true "Fallback GID used when build-env missing"
     else
@@ -137,7 +137,7 @@ test_fallback_without_build_env() {
 test_missing_arguments() {
     # Test with only feature script argument
     local feature_script="$MOCK_FEATURE"
-    
+
     # Create a wrapper function that handles missing args
     run_feature_wrapper() {
         local script="$1"
@@ -147,17 +147,17 @@ test_missing_arguments() {
         local gid="${3:-1000}"
         "$script" "$username" "$uid" "$gid"
     }
-    
+
     # Test with missing arguments
     local output
     output=$(run_feature_wrapper "$feature_script")
-    
+
     if [[ "$output" == *"USERNAME=developer"* ]]; then
         assert_true true "Default username used when missing"
     else
         assert_true false "Default username not used"
     fi
-    
+
     if [[ "$output" == *"UID=1000"* ]]; then
         assert_true true "Default UID used when missing"
     else
@@ -176,11 +176,11 @@ echo "GID=$3"
 echo "EXTRA=${4:-none}"
 EOF
     chmod +x "$MOCK_FEATURE"
-    
+
     # Test with extra arguments
     local output
     output=$("$MOCK_FEATURE" "user" "1000" "1000" "extra-arg")
-    
+
     if [[ "$output" == *"EXTRA=extra-arg"* ]]; then
         assert_true true "Additional arguments preserved"
     else
@@ -196,11 +196,11 @@ test_spaces_in_arguments() {
 echo "USERNAME=[$1]"
 EOF
     chmod +x "$MOCK_FEATURE"
-    
+
     # Test with username containing spaces
     local output
     output=$("$MOCK_FEATURE" "test user" "1000" "1000")
-    
+
     if [[ "$output" == *"USERNAME=[test user]"* ]]; then
         assert_true true "Spaces in arguments handled correctly"
     else
@@ -216,7 +216,7 @@ test_script_execution() {
     else
         assert_true false "Feature script is not executable"
     fi
-    
+
     # Test that script can be executed
     if "$MOCK_FEATURE" "test" "1000" "1000" >/dev/null 2>&1; then
         assert_true true "Feature script executes successfully"
@@ -229,7 +229,7 @@ test_script_execution() {
 run_test_with_setup() {
     local test_function="$1"
     local test_description="$2"
-    
+
     setup
     run_test "$test_function" "$test_description"
     teardown

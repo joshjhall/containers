@@ -15,7 +15,7 @@ build times and reduce network bandwidth during builds.
 - [Best Practices](#best-practices)
 - [Troubleshooting](#troubleshooting)
 
----
+______________________________________________________________________
 
 ## Overview
 
@@ -46,7 +46,7 @@ All language package managers are configured to use consistent cache paths under
 - Clear specific caches without affecting others
 - Monitor cache sizes and usage patterns
 
----
+______________________________________________________________________
 
 ## Cache Types
 
@@ -872,7 +872,7 @@ Dockerfiles.
    docker buildx build --cache-from=type=local,src=/tmp/cache .
    ```
 
----
+______________________________________________________________________
 
 ## Advanced Topics
 

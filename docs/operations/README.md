@@ -28,10 +28,10 @@ See [Automated Releases](automated-releases.md) for details.
 When issues are detected in production:
 
 1. Review [Emergency Rollback](rollback.md) guide
-2. Identify the problematic version
-3. Rollback to last known good version
-4. Create incident report
-5. Fix root cause
+1. Identify the problematic version
+1. Rollback to last known good version
+1. Create incident report
+1. Fix root cause
 
 ## Production Deployment
 

@@ -8,7 +8,7 @@
 #
 # Usage:
 #   ./check-versions.sh [--json]
-#   
+#
 # Options:
 #   --json    Output results in JSON format
 #
@@ -135,7 +135,7 @@ get_latest_rust() {
     # Try to get the latest stable version from the Rust release API
     local version
     version=$(command curl -s https://api.github.com/repos/rust-lang/rust/releases | jq -r '.[] | select(.prerelease == false) | .tag_name' | head -1 | command sed 's/^v//')
-    
+
     if [ -n "$version" ] && [ "$version" != "null" ]; then
         echo "$version"
     else
@@ -160,7 +160,7 @@ get_latest_mojo() {
     # Mojo uses YY.M format (e.g., 25.3, 25.4)
     # Since Mojo's versioning follows YY.M and we're in July 2025,
     # we expect versions like 25.3, 25.4, 25.5, etc.
-    # 
+    #
     # Note: Mojo doesn't have a simple API for latest version yet
     # This is a placeholder that should be updated when Modular provides
     # a proper API endpoint or when we find a reliable source
@@ -180,7 +180,7 @@ extract_version() {
 compare_version() {
     local current="$1"
     local latest="$2"
-    
+
     if [ "$current" = "$latest" ]; then
         echo "up-to-date"
     elif [ "$latest" = "unknown" ] || [ "$latest" = "not found" ] || [ "$latest" = "rate-limited" ]; then
@@ -208,28 +208,28 @@ print_result() {
     local current="$2"
     local latest="$3"
     local status="$4"
-    
+
     if [ "$OUTPUT_FORMAT" = "--json" ]; then
         return  # JSON output handled separately
     fi
-    
+
     local status_color
     local status_text="$status"
     case "$status" in
-        "up-to-date") 
-            status_color="$GREEN" 
+        "up-to-date")
+            status_color="$GREEN"
             ;;
-        "newer") 
-            status_color="$BLUE" 
+        "newer")
+            status_color="$BLUE"
             ;;
-        "outdated") 
-            status_color="$YELLOW" 
+        "outdated")
+            status_color="$YELLOW"
             ;;
-        *) 
-            status_color="$RED" 
+        *)
+            status_color="$RED"
             ;;
     esac
-    
+
     printf "%-25s %-15s %-15s ${status_color}%-12s${NC}\n" "$name" "$current" "$latest" "$status_text"
 }
 
@@ -349,7 +349,7 @@ if [ -f "$FEATURES_DIR/dev-tools.sh" ]; then
     LATEST_VERSIONS["direnv"]="$latest"
     VERSION_STATUS["direnv"]="$status"
     print_result "direnv" "$current" "$latest" "$status"
-    
+
     # lazygit
     current=$(extract_version "$FEATURES_DIR/dev-tools.sh" 'LAZYGIT_VERSION="\K[^"]+')
     latest=$(get_github_release "jesseduffield/lazygit" | command sed 's/^v//')
@@ -358,7 +358,7 @@ if [ -f "$FEATURES_DIR/dev-tools.sh" ]; then
     LATEST_VERSIONS["lazygit"]="$latest"
     VERSION_STATUS["lazygit"]="$status"
     print_result "lazygit" "$current" "$latest" "$status"
-    
+
     # delta
     current=$(extract_version "$FEATURES_DIR/dev-tools.sh" 'DELTA_VERSION="\K[^"]+')
     latest=$(get_github_release "dandavison/delta" | command sed 's/^v//')
@@ -367,7 +367,7 @@ if [ -f "$FEATURES_DIR/dev-tools.sh" ]; then
     LATEST_VERSIONS["delta"]="$latest"
     VERSION_STATUS["delta"]="$status"
     print_result "delta" "$current" "$latest" "$status"
-    
+
     # mkcert
     current=$(extract_version "$FEATURES_DIR/dev-tools.sh" 'MKCERT_VERSION="\K[^"]+')
     latest=$(get_github_release "FiloSottile/mkcert" | command sed 's/^v//')
@@ -376,7 +376,7 @@ if [ -f "$FEATURES_DIR/dev-tools.sh" ]; then
     LATEST_VERSIONS["mkcert"]="$latest"
     VERSION_STATUS["mkcert"]="$status"
     print_result "mkcert" "$current" "$latest" "$status"
-    
+
     # act
     current=$(extract_version "$FEATURES_DIR/dev-tools.sh" 'ACT_VERSION="\K[^"]+')
     latest=$(get_github_release "nektos/act" | command sed 's/^v//')
@@ -385,7 +385,7 @@ if [ -f "$FEATURES_DIR/dev-tools.sh" ]; then
     LATEST_VERSIONS["act"]="$latest"
     VERSION_STATUS["act"]="$status"
     print_result "act" "$current" "$latest" "$status"
-    
+
     # glab
     current=$(extract_version "$FEATURES_DIR/dev-tools.sh" 'GLAB_VERSION="\K[^"]+')
     # GitLab CLI is hosted on GitLab, not GitHub - use GitLab API
@@ -424,7 +424,7 @@ if [ -f "$FEATURES_DIR/terraform.sh" ]; then
     LATEST_VERSIONS["Terraform"]="$latest"
     VERSION_STATUS["Terraform"]="$status"
     print_result "Terraform" "$current" "$latest" "$status"
-    
+
     # Terragrunt version
     current=$(extract_version "$FEATURES_DIR/terraform.sh" 'TERRAGRUNT_VERSION="?\$\{TERRAGRUNT_VERSION:-\K[^"}]+')
     latest=$(get_github_release "gruntwork-io/terragrunt" | command sed 's/^v//')
@@ -433,7 +433,7 @@ if [ -f "$FEATURES_DIR/terraform.sh" ]; then
     LATEST_VERSIONS["Terragrunt"]="$latest"
     VERSION_STATUS["Terragrunt"]="$status"
     print_result "Terragrunt" "$current" "$latest" "$status"
-    
+
     # terraform-docs version
     current=$(extract_version "$FEATURES_DIR/terraform.sh" 'TFDOCS_VERSION="?\$\{TFDOCS_VERSION:-\K[^"}]+')
     latest=$(get_github_release "terraform-docs/terraform-docs" | command sed 's/^v//')
@@ -455,7 +455,7 @@ if [ -f "$FEATURES_DIR/kubernetes.sh" ]; then
     LATEST_VERSIONS["kubectl"]="$latest"
     VERSION_STATUS["kubectl"]="$status"
     print_result "kubectl" "$current" "$latest" "$status"
-    
+
     # k9s
     current=$(extract_version "$FEATURES_DIR/kubernetes.sh" 'K9S_VERSION="?\$\{K9S_VERSION:-\K[^"}]+')
     latest=$(get_github_release "derailed/k9s" | command sed 's/^v//')
@@ -464,7 +464,7 @@ if [ -f "$FEATURES_DIR/kubernetes.sh" ]; then
     LATEST_VERSIONS["k9s"]="$latest"
     VERSION_STATUS["k9s"]="$status"
     print_result "k9s" "$current" "$latest" "$status"
-    
+
     # krew
     current=$(extract_version "$FEATURES_DIR/kubernetes.sh" 'KREW_VERSION="?\$\{KREW_VERSION:-\K[^"}]+')
     latest=$(get_github_release "kubernetes-sigs/krew" | command sed 's/^v//')
@@ -473,7 +473,7 @@ if [ -f "$FEATURES_DIR/kubernetes.sh" ]; then
     LATEST_VERSIONS["krew"]="$latest"
     VERSION_STATUS["krew"]="$status"
     print_result "krew" "$current" "$latest" "$status"
-    
+
     # helm
     current=$(extract_version "$FEATURES_DIR/kubernetes.sh" 'HELM_VERSION="?\$\{HELM_VERSION:-\K[^"}]+')
     if [ "$current" = "latest" ]; then
@@ -680,15 +680,15 @@ fi
 if [ "$OUTPUT_FORMAT" != "--json" ]; then
     echo
     echo "Summary:"
-    
+
     outdated_count=0
     uptodate_count=0
     newer_count=0
     unknown_count=0
-    
+
     # Debug: check array size
     # echo "Debug: VERSION_STATUS has ${#VERSION_STATUS[@]} elements"
-    
+
     for tool in "${!VERSION_STATUS[@]}"; do
         case "${VERSION_STATUS[$tool]}" in
             "outdated") outdated_count=$((outdated_count + 1)) ;;
@@ -697,17 +697,17 @@ if [ "$OUTPUT_FORMAT" != "--json" ]; then
             *) unknown_count=$((unknown_count + 1)) ;;
         esac
     done
-    
+
     echo -e "  Up-to-date: ${GREEN}${uptodate_count}${NC}"
     echo -e "  Newer: ${BLUE}${newer_count}${NC}"
     echo -e "  Outdated: ${YELLOW}${outdated_count}${NC}"
     echo -e "  Unknown: ${RED}${unknown_count}${NC}"
-    
+
     if [ $outdated_count -gt 0 ]; then
         echo
         echo "Run 'make update-versions' to update outdated versions (when implemented)"
     fi
-    
+
     # Check if any rate limiting occurred
     if printf '%s\n' "${LATEST_VERSIONS[@]}" | ggrep -q "rate-limited"; then
         echo

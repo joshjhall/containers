@@ -6,8 +6,8 @@ system.
 ## Getting Started
 
 1. Read [Code Style Guide](code-style.md) for conventions
-2. Review [Testing Framework](testing.md) to understand test structure
-3. Check [Changelog Conventions](changelog.md) for commit message format
+1. Review [Testing Framework](testing.md) to understand test structure
+1. Check [Changelog Conventions](changelog.md) for commit message format
 
 ## Available Guides
 

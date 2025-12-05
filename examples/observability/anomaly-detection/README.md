@@ -19,10 +19,10 @@ Anomaly detection requires establishing a baseline of normal behavior before
 alerts can be tuned effectively. This process involves:
 
 1. **Baseline Collection** (30 days): Collect metrics during normal operations
-2. **Statistical Analysis**: Calculate mean, standard deviation, thresholds
-3. **Rule Tuning**: Generate Falco exceptions and alert thresholds
-4. **Continuous Monitoring**: Compare current behavior to baseline
-5. **Quarterly Updates**: Re-baseline to account for application changes
+1. **Statistical Analysis**: Calculate mean, standard deviation, thresholds
+1. **Rule Tuning**: Generate Falco exceptions and alert thresholds
+1. **Continuous Monitoring**: Compare current behavior to baseline
+1. **Quarterly Updates**: Re-baseline to account for application changes
 
 ## Quick Start
 
@@ -138,9 +138,9 @@ processes
 ### Severity Determination Factors
 
 1. **Deviation from baseline**: > 3σ = Critical, > 2σ = High
-2. **Compliance impact**: PHI access = automatic High
-3. **Attack pattern match**: Known malware = Critical
-4. **Time of occurrence**: Off-hours = increase severity
+1. **Compliance impact**: PHI access = automatic High
+1. **Attack pattern match**: Known malware = Critical
+1. **Time of occurrence**: Off-hours = increase severity
 
 ## Anomaly Response Procedures
 
@@ -149,7 +149,7 @@ processes
 **Symptoms**: Unexpected process spawned in container **Severity**: Medium to
 Critical (based on process type)
 
-#### Response Steps
+#### Process Anomaly Response Steps
 
 1. **Identify the process**
 
@@ -159,18 +159,20 @@ Critical (based on process type)
      grep "proc.name" | tail -20
    ```
 
-2. **Assess severity**
+1. **Assess severity**
+
    - Shell (bash, sh, zsh): High
    - Package manager (apt, yum, pip): High
    - Network tool (curl, wget, nc): Critical
    - Expected utility: Low
 
-3. **Check if legitimate**
+1. **Check if legitimate**
+
    - Deployment in progress?
    - Scheduled maintenance?
    - Debug session authorized?
 
-4. **If malicious**
+1. **If malicious**
 
    ```bash
    # Terminate the process
@@ -180,18 +182,19 @@ Critical (based on process type)
    kubectl delete pod POD_NAME -n NAMESPACE --grace-period=0
    ```
 
-5. **Document and tune**
+1. **Document and tune**
+
    - If legitimate: add exception to baseline
    - If malicious: escalate to security team
 
----
+______________________________________________________________________
 
 ### ANOM-002: Network Traffic Anomaly
 
 **Symptoms**: Unusual outbound connections or traffic patterns **Severity**:
 Medium to Critical
 
-#### Response Steps
+#### Network Anomaly Response Steps
 
 1. **Capture connection details**
 
@@ -200,7 +203,7 @@ Medium to Critical
    kubectl exec POD_NAME -n NAMESPACE -- cat /proc/net/tcp
    ```
 
-2. **Identify destination**
+1. **Identify destination**
 
    ```bash
    # Resolve IP to hostname
@@ -210,12 +213,13 @@ Medium to Critical
    curl "https://api.abuseipdb.com/api/v2/check?ipAddress=DEST_IP"
    ```
 
-3. **Assess purpose**
+1. **Assess purpose**
+
    - Known service endpoint?
    - Cloud metadata (169.254.169.254)?
    - Mining pool or C2 server?
 
-4. **If malicious**
+1. **If malicious**
 
    ```bash
    # Apply network policy to isolate
@@ -223,11 +227,12 @@ Medium to Critical
    kubectl apply -f quarantine-network-policy.yaml
    ```
 
-5. **Block at network level**
+1. **Block at network level**
+
    - Add to security group blocklist
    - Update firewall rules
 
----
+______________________________________________________________________
 
 ### ANOM-003: File Access Anomaly
 
@@ -245,7 +250,7 @@ High to Critical for sensitive files
 | ~/.aws/            | Critical    | Cloud credentials     |
 | /var/run/secrets/  | Critical    | Kubernetes secrets    |
 
-#### Response Steps
+#### File Access Anomaly Response Steps
 
 1. **Identify what was accessed**
 
@@ -254,26 +259,29 @@ High to Critical for sensitive files
      grep "fd.name" | grep NAMESPACE
    ```
 
-2. **Check process that accessed**
+1. **Check process that accessed**
+
    - Is it the expected application?
    - What user context?
 
-3. **Assess data exposure**
+1. **Assess data exposure**
+
    - Was file content read?
    - Could data be exfiltrated?
 
-4. **For credential files**
+1. **For credential files**
+
    - Rotate affected credentials immediately
    - Check for unauthorized access
 
----
+______________________________________________________________________
 
 ### ANOM-004: Privilege Escalation Attempt
 
 **Symptoms**: Process attempting to gain elevated privileges **Severity**:
 Critical
 
-#### Response Steps
+#### Privilege Escalation Response Steps
 
 1. **Immediate containment**
 
@@ -281,7 +289,7 @@ Critical
    kubectl delete pod POD_NAME -n NAMESPACE --grace-period=0 --force
    ```
 
-2. **Check for success**
+1. **Check for success**
 
    ```bash
    # Were elevated operations performed?
@@ -289,12 +297,14 @@ Critical
      grep -E "user.uid=0|setuid|capability"
    ```
 
-3. **Investigate container image**
+1. **Investigate container image**
+
    - Check for vulnerabilities
    - Verify image provenance
    - Compare to known-good digest
 
-4. **Review cluster security**
+1. **Review cluster security**
+
    - Pod security policies
    - RBAC permissions
    - Network policies

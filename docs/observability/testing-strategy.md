@@ -93,25 +93,25 @@ Manual testing with example workload
 ### During Development
 
 1. Run unit tests: `./tests/unit/observability/test_*.sh`
-2. Manual smoke test with stack:
+1. Manual smoke test with stack:
    `docker-compose -f examples/observability/docker-compose.yml up`
-3. Verify metrics appear in Prometheus UI
-4. Verify dashboards load in Grafana
+1. Verify metrics appear in Prometheus UI
+1. Verify dashboards load in Grafana
 
 ### In CI
 
 1. ✅ Run unit tests (JSON, metrics format)
-2. ✅ Validate YAML syntax (alerts, dashboards)
-3. ✅ Check scripts are executable and don't crash
-4. ❌ Skip full integration (too slow/expensive)
+1. ✅ Validate YAML syntax (alerts, dashboards)
+1. ✅ Check scripts are executable and don't crash
+1. ❌ Skip full integration (too slow/expensive)
 
 ### First Deployment
 
 1. Deploy observability stack
-2. Enable metrics in one container
-3. Verify end-to-end: Container → Prometheus → Grafana
-4. Test one alert firing
-5. Document any issues in runbooks
+1. Enable metrics in one container
+1. Verify end-to-end: Container → Prometheus → Grafana
+1. Test one alert firing
+1. Document any issues in runbooks
 
 ## Manual Smoke Test Checklist
 
@@ -165,33 +165,33 @@ find /var/log/container-build/json -name "*.jsonl" \
 ### Scenario: Prometheus Can't Scrape Metrics
 
 1. Check unit tests pass (format is valid)
-2. Check metrics endpoint returns data: `curl localhost:9090/metrics`
-3. Check Prometheus config syntax
-4. Check network connectivity
-5. See runbook: `docs/observability/runbooks/metrics-stale.md`
+1. Check metrics endpoint returns data: `curl localhost:9090/metrics`
+1. Check Prometheus config syntax
+1. Check network connectivity
+1. See runbook: `docs/observability/runbooks/metrics-stale.md`
 
 ### Scenario: Grafana Dashboard Broken
 
 1. Check JSON syntax: `jq '.' dashboard.json`
-2. Check datasource configured
-3. Verify metrics exist in Prometheus
-4. Consult Grafana logs
+1. Check datasource configured
+1. Verify metrics exist in Prometheus
+1. Consult Grafana logs
 
 ### Scenario: Alerts Not Firing
 
 1. Check rule syntax: `promtool check rules alerts.yml` (if available)
-2. Manually trigger condition
-3. Check Prometheus Rules page
-4. Check Alertmanager (if configured)
+1. Manually trigger condition
+1. Check Prometheus Rules page
+1. Check Alertmanager (if configured)
 
 ## Future Improvements
 
 If observability becomes critical and resources allow:
 
 1. **Add promtool to CI** - Validate Prometheus rules
-2. **Add integration test** - One full workflow (build → metrics → alert)
-3. **Snapshot testing** - Compare dashboard JSON to known-good state
-4. **Chaos testing** - Verify observability survives failures
+1. **Add integration test** - One full workflow (build → metrics → alert)
+1. **Snapshot testing** - Compare dashboard JSON to known-good state
+1. **Chaos testing** - Verify observability survives failures
 
 But for Phase 1: **Focus on format correctness and basic smoke testing**
 

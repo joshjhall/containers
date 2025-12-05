@@ -50,7 +50,7 @@ docker run --rm \
   your-image sudo -l
 ```
 
----
+______________________________________________________________________
 
 #### CC6.6 - System Boundaries
 
@@ -71,7 +71,7 @@ threats from outside system boundaries.
 - Configure firewall rules
 - Implement service mesh if needed
 
----
+______________________________________________________________________
 
 #### CC6.8 - Preventing Malicious Software
 
@@ -99,7 +99,7 @@ malicious software.
 cosign verify --certificate-identity-regexp=... your-image
 ```
 
----
+______________________________________________________________________
 
 ### CC7: System Operations
 
@@ -123,7 +123,7 @@ procedures.
 - GitHub Actions logs show build configurations
 - Release tags with changelogs
 
----
+______________________________________________________________________
 
 #### CC7.2 - Monitoring and Detection
 
@@ -145,7 +145,7 @@ events for security incidents.
 - Configure security alerting
 - Implement audit logging
 
----
+______________________________________________________________________
 
 #### CC7.3 - Vulnerability Management
 
@@ -170,7 +170,7 @@ Status: ✅ Complete
 trivy image --severity CRITICAL,HIGH your-image
 ```
 
----
+______________________________________________________________________
 
 ### CC8: Change Management
 
@@ -194,7 +194,7 @@ changes.
 - Enforce approval workflows
 - Document change management procedures
 
----
+______________________________________________________________________
 
 ## Availability Principle
 
@@ -223,7 +223,7 @@ resources:
     memory: '1Gi'
 ```
 
----
+______________________________________________________________________
 
 #### A1.2 - Recovery Procedures
 
@@ -243,7 +243,7 @@ Status: ⚠️ Gap
 - Test recovery procedures regularly
 - Define RTO/RPO objectives
 
----
+______________________________________________________________________
 
 ## Confidentiality Principle
 
@@ -265,7 +265,7 @@ Status: ⚠️ Partial
 - Configure encryption at rest for volumes
 - Implement secret rotation
 
----
+______________________________________________________________________
 
 ## Control Mapping Table
 

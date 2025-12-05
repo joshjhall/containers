@@ -45,7 +45,7 @@ docker run --rm your-image id
 
 **Files**: `lib/base/create-user.sh`
 
----
+______________________________________________________________________
 
 ### D02: Patch Management Strategy
 
@@ -73,7 +73,7 @@ trivy image --severity HIGH,CRITICAL your-image
 
 **Files**: `.github/workflows/auto-patch.yml`, `lib/versions.sh`
 
----
+______________________________________________________________________
 
 ### D03: Network Segmentation and Firewalling
 
@@ -104,7 +104,7 @@ spec:
 
 **Files**: `examples/kubernetes/network-policies/`
 
----
+______________________________________________________________________
 
 ### D04: Secure Defaults and Hardening
 
@@ -128,7 +128,7 @@ Status: ✅ Complete
 docker run --rm your-image find / -perm /6000 -type f 2>/dev/null
 ```
 
----
+______________________________________________________________________
 
 ### D05: Maintain Security Contexts
 
@@ -156,7 +156,7 @@ securityContext:
 
 **Gap**: Need to provide default AppArmor/SELinux profiles.
 
----
+______________________________________________________________________
 
 ### D06: Protect Secrets
 
@@ -183,7 +183,7 @@ trivy image --scanners secret your-image
 
 **Files**: `.gitleaks.toml`, `.github/workflows/ci.yml`
 
----
+______________________________________________________________________
 
 ### D07: Resource Protection
 
@@ -210,7 +210,7 @@ resources:
 
 See [Production Checklist](production-checklist.md#resource-configuration).
 
----
+______________________________________________________________________
 
 ### D08: Container Image Integrity and Origin
 
@@ -237,7 +237,7 @@ cosign verify \
 
 **Files**: `lib/base/signature-verify.sh`, `lib/base/checksum-verification.sh`
 
----
+______________________________________________________________________
 
 ### D09: Immutable Container Filesystems
 
@@ -263,7 +263,7 @@ volumeMounts:
     mountPath: /cache
 ```
 
----
+______________________________________________________________________
 
 ### D10: Logging
 
@@ -285,29 +285,29 @@ Status: ✅ Complete
 
 **Files**: `lib/base/logging.sh`, `lib/observability/json-logging.sh`
 
----
+______________________________________________________________________
 
 ## Implementation Priorities
 
 ### Immediate Actions (Complete)
 
 1. ✅ Use non-root user
-2. ✅ Enable Gitleaks scanning
-3. ✅ Verify image signatures
-4. ✅ Enable JSON logging for production
+1. ✅ Enable Gitleaks scanning
+1. ✅ Verify image signatures
+1. ✅ Enable JSON logging for production
 
 ### Short-term Actions (Deployment Team)
 
 1. Apply network policies
-2. Set resource limits
-3. Configure read-only root filesystem
-4. Enable audit logging
+1. Set resource limits
+1. Configure read-only root filesystem
+1. Enable audit logging
 
 ### Medium-term Actions (Platform Team)
 
 1. Create AppArmor/SELinux profiles
-2. Implement OPA Gatekeeper policies
-3. Deploy Falco for runtime monitoring
+1. Implement OPA Gatekeeper policies
+1. Deploy Falco for runtime monitoring
 
 ## Related Documentation
 

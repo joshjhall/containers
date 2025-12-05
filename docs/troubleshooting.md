@@ -396,6 +396,7 @@ whether `apt-key` is available:
 ````
 
 1. Or manually patch the affected files:
+
    - `lib/features/terraform.sh`
    - `lib/features/gcloud.sh`
    - `lib/features/kubernetes.sh`
@@ -798,6 +799,7 @@ indicate:
    ```
 
 1. **Report security concerns**:
+
    - If retries fail consistently
    - If checksum source is unreachable
    - If you suspect tampering

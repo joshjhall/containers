@@ -41,7 +41,7 @@ essential commands, or installed features) is not working correctly.
    kubectl get pods | grep <pod-name>
    ```
 
-2. **Run healthcheck manually**:
+1. **Run healthcheck manually**:
 
    ```bash
    # Inside container
@@ -51,7 +51,7 @@ essential commands, or installed features) is not working correctly.
    docker exec <container-id> healthcheck --verbose
    ```
 
-3. **Check recent logs**:
+1. **Check recent logs**:
 
    ```bash
    docker logs <container-id> --tail 100
@@ -118,11 +118,11 @@ check-installed-versions.sh
 
 1. **Incomplete initialization**: Container started before initialization
    completed
-2. **Disk full**: No space left for healthcheck or feature operation
-3. **Missing dependencies**: Feature installation failed during build
-4. **Corrupted files**: Critical files were deleted or corrupted
-5. **Permission issues**: Files/directories have wrong ownership
-6. **Resource exhaustion**: Out of memory, file descriptors, etc.
+1. **Disk full**: No space left for healthcheck or feature operation
+1. **Missing dependencies**: Feature installation failed during build
+1. **Corrupted files**: Critical files were deleted or corrupted
+1. **Permission issues**: Files/directories have wrong ownership
+1. **Resource exhaustion**: Out of memory, file descriptors, etc.
 
 ## Resolution
 
@@ -225,8 +225,11 @@ watch -n 10 'healthcheck && echo "HEALTHY"'
   ```
 
 - **Add resource quotas** to prevent resource exhaustion
+
 - **Implement graceful degradation** where features fail independently
+
 - **Add pre-healthcheck** that runs before marking container ready
+
 - **Monitor build logs** in CI to catch issues before deployment
 
 ### Monitoring Improvements
@@ -250,8 +253,8 @@ Escalate if:
 Escalate to:
 
 1. **Team Lead** (first escalation)
-2. **Platform Team** (if infrastructure related)
-3. **On-call Manager** (if production outage)
+1. **Platform Team** (if infrastructure related)
+1. **On-call Manager** (if production outage)
 
 ## Related
 
@@ -277,7 +280,7 @@ Escalate to:
 After resolution:
 
 1. **Document** root cause in incident report
-2. **Update** this runbook with new findings
-3. **Implement** preventive measures
-4. **Test** similar scenarios in staging
-5. **Review** alert thresholds if false positive
+1. **Update** this runbook with new findings
+1. **Implement** preventive measures
+1. **Test** similar scenarios in staging
+1. **Review** alert thresholds if false positive

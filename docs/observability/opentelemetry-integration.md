@@ -347,7 +347,7 @@ docker run -d --name jaeger \
   jaegertracing/all-in-one:latest
 ```
 
-**Access UI**: http://localhost:16686
+**Access UI**: `http://localhost:16686`
 
 **Query Traces**:
 
@@ -495,9 +495,9 @@ docker-compose -f docker-compose-observability.yml up -d
 
 **Access UIs**:
 
-- Grafana: http://localhost:3000
-- Jaeger: http://localhost:16686
-- Prometheus: http://localhost:9090
+- Grafana: `http://localhost:3000`
+- Jaeger: `http://localhost:16686`
+- Prometheus: `http://localhost:9090`
 
 ## Troubleshooting
 
@@ -509,20 +509,20 @@ docker-compose -f docker-compose-observability.yml up -d
    echo $OTEL_ENABLED  # Should be "true"
    ```
 
-2. **Verify collector is reachable**:
+1. **Verify collector is reachable**:
 
    ```bash
    curl http://otel-collector:4318/v1/traces
    # Should return method not allowed (means endpoint exists)
    ```
 
-3. **Check collector logs**:
+1. **Check collector logs**:
 
    ```bash
    docker logs otel-collector | grep -i error
    ```
 
-4. **Test manual span export**:
+1. **Test manual span export**:
 
    ```bash
    curl -X POST http://otel-collector:4318/v1/traces \
@@ -546,10 +546,10 @@ docker-compose -f docker-compose-observability.yml up -d
 ## Best Practices
 
 1. **Span Granularity**: Create spans for operations > 100ms
-2. **Attributes**: Add meaningful attributes (version, feature, etc.)
-3. **Error Handling**: Always call `otel_span_end` even on errors
-4. **Sampling**: Use 100% in dev, 10-50% in production
-5. **Cardinality**: Avoid high-cardinality attributes (timestamps, IDs)
+1. **Attributes**: Add meaningful attributes (version, feature, etc.)
+1. **Error Handling**: Always call `otel_span_end` even on errors
+1. **Sampling**: Use 100% in dev, 10-50% in production
+1. **Cardinality**: Avoid high-cardinality attributes (timestamps, IDs)
 
 ## Additional Resources
 

@@ -20,97 +20,50 @@
   "language_versions": {
     "python": {
       "current": "3.14.0",
-      "supported": [
-        "3.12.0",
-        "3.13.0",
-        "3.14.0"
-      ],
-      "tested": [
-        "3.14.0"
-      ],
+      "supported": ["3.12.0", "3.13.0", "3.14.0"],
+      "tested": ["3.14.0"],
       "deprecated": []
     },
     "node": {
       "current": "22",
-      "supported": [
-        "20",
-        "22"
-      ],
-      "tested": [
-        "22"
-      ],
+      "supported": ["20", "22"],
+      "tested": ["22"],
       "deprecated": []
     },
     "rust": {
       "current": "1.91.1",
-      "supported": [
-        "1.80.0",
-        "1.81.0",
-        "1.82.0",
-        "1.91.0"
-      ],
-      "tested": [
-        "1.91.0",
-        "1.91.1"
-      ],
+      "supported": ["1.80.0", "1.81.0", "1.82.0", "1.91.0"],
+      "tested": ["1.91.0", "1.91.1"],
       "deprecated": []
     },
     "go": {
       "current": "1.25.4",
-      "supported": [
-        "1.23.0",
-        "1.24.0",
-        "1.25.4"
-      ],
-      "tested": [
-        "1.25.4"
-      ],
+      "supported": ["1.23.0", "1.24.0", "1.25.4"],
+      "tested": ["1.25.4"],
       "deprecated": []
     },
     "ruby": {
       "current": "3.4.7",
-      "supported": [
-        "3.3.0",
-        "3.4.0",
-        "3.4.7"
-      ],
-      "tested": [
-        "3.4.7"
-      ],
+      "supported": ["3.3.0", "3.4.0", "3.4.7"],
+      "tested": ["3.4.7"],
       "deprecated": []
     },
     "java": {
       "current": "21",
-      "supported": [
-        "17",
-        "21"
-      ],
-      "tested": [
-        "21"
-      ],
+      "supported": ["17", "21"],
+      "tested": ["21"],
       "deprecated": []
     },
     "r": {
       "current": "4.5.2",
-      "supported": [
-        "4.4.0",
-        "4.5.0",
-        "4.5.2"
-      ],
-      "tested": [
-        "4.5.2"
-      ],
+      "supported": ["4.4.0", "4.5.0", "4.5.2"],
+      "tested": ["4.5.2"],
       "deprecated": []
     },
     "mojo": {
       "current": "25.4",
-      "supported": [
-        "24.5.0",
-        "25.4"
-      ],
-      "tested": [
-        "25.4"
-      ],
+      "supported": ["24.5.0", "25.4"],
+      "tested": ["25.4"],
       "deprecated": []
     }
   },

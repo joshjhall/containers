@@ -27,14 +27,14 @@ test_package_commands() {
     else
         assert_true false "apt-utils.sh not sourced"
     fi
-    
+
     # Test that apt_update is used instead of direct apt-get update
     if grep -q "apt_update" "$PROJECT_ROOT/lib/base/setup.sh"; then
         assert_true true "Using apt_update function from apt-utils"
     else
         assert_true false "Not using apt_update function"
     fi
-    
+
     # Test that apt_install is used for package installation
     if grep -q "apt_install" "$PROJECT_ROOT/lib/base/setup.sh"; then
         assert_true true "Using apt_install function from apt-utils"
@@ -53,7 +53,7 @@ test_essential_packages() {
     else
         assert_true false "curl package missing"
     fi
-    
+
     # Test that we have ca-certificates
     if [[ "$packages_string" == *"ca-certificates"* ]]; then
         assert_true true "ca-certificates package included"
@@ -71,7 +71,7 @@ test_development_packages() {
     else
         assert_true false "Build tools missing"
     fi
-    
+
     # Test git
     if [[ "$dev_string" == *"git"* ]]; then
         assert_true true "Git included in development packages"
@@ -85,11 +85,11 @@ test_locale_setup() {
     # Test locale generation command
     local locale_cmd="locale-gen en_US.UTF-8"
     assert_equals "locale-gen en_US.UTF-8" "$locale_cmd" "Locale generation command"
-    
+
     # Test locale environment variables
     local lang_var="LANG=en_US.UTF-8"
     assert_equals "LANG=en_US.UTF-8" "$lang_var" "Language environment variable"
-    
+
     local lc_all_var="LC_ALL=en_US.UTF-8"
     assert_equals "LC_ALL=en_US.UTF-8" "$lc_all_var" "LC_ALL environment variable"
 }
@@ -99,7 +99,7 @@ test_timezone_setup() {
     # Test timezone setting
     local timezone="UTC"
     assert_equals "UTC" "$timezone" "Default timezone is UTC"
-    
+
     # Test timezone file path
     local tz_path="/etc/timezone"
     assert_equals "/etc/timezone" "$tz_path" "Timezone file path"
@@ -110,7 +110,7 @@ test_sudo_setup() {
     # Test sudo package installation
     local sudo_check="sudo"
     assert_equals "sudo" "$sudo_check" "Sudo package name"
-    
+
     # Test sudoers directory
     local sudoers_dir="/etc/sudoers.d"
     assert_equals "/etc/sudoers.d" "$sudoers_dir" "Sudoers directory path"
@@ -124,10 +124,10 @@ test_cache_cleanup() {
     else
         assert_true false "Not using apt_cleanup function"
     fi
-    
+
     # The apt_cleanup function handles all the cleanup operations:
     # - apt-get autoremove
-    # - apt-get clean  
+    # - apt-get clean
     # - command rm -rf /var/lib/apt/lists/*
     assert_true true "Cleanup operations handled by apt_cleanup"
 }
@@ -152,7 +152,7 @@ test_logging_integration() {
     # Test that setup script can integrate with logging
     local log_dir="/var/log/container-build"
     assert_equals "/var/log/container-build" "$log_dir" "Log directory path"
-    
+
     # Test log file creation
     if [[ "$log_dir" == /var/log/* ]]; then
         assert_true true "Log directory in system location"
@@ -192,7 +192,7 @@ test_system_optimization() {
     else
         assert_true false "System installation not optimized"
     fi
-    
+
     # Test cache cleanup optimization
     assert_true true "System cleanup strategies defined"
 }
@@ -202,7 +202,7 @@ test_container_optimizations() {
     # Test environment variables for container
     local debian_frontend="DEBIAN_FRONTEND=noninteractive"
     assert_equals "DEBIAN_FRONTEND=noninteractive" "$debian_frontend" "Non-interactive frontend"
-    
+
     # Test timezone setting
     local tz_var="TZ=UTC"
     assert_equals "TZ=UTC" "$tz_var" "Timezone environment variable"
@@ -213,7 +213,7 @@ test_file_permissions() {
     # Test executable permissions for common directories
     local bin_permissions="755"
     assert_equals "755" "$bin_permissions" "Binary directory permissions"
-    
+
     # Test that permissions are properly set
     assert_true true "File permission management included"
 }

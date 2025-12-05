@@ -331,11 +331,12 @@ stringData:
 ### Emergency Access Procedure
 
 1. **Authorization Required**
+
    - Minimum two authorized personnel must approve
    - Document business justification
    - Notify security team immediately
 
-2. **Access Retrieval**
+1. **Access Retrieval**
 
    ```bash
    # Retrieve break-glass credentials from secure vault
@@ -346,7 +347,7 @@ stringData:
      --secret=break-glass-admin
    ```
 
-3. **Session Logging**
+1. **Session Logging**
 
    ```bash
    # All break-glass sessions must be recorded
@@ -357,7 +358,8 @@ stringData:
      "Break-glass access initiated by $USER"
    ```
 
-4. **Post-Incident Actions**
+1. **Post-Incident Actions**
+
    - Rotate all break-glass credentials
    - Review audit logs
    - Document incident timeline

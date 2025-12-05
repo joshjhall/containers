@@ -12,12 +12,14 @@ vulnerability, please follow responsible disclosure practices:
 Instead, please report security issues via:
 
 1. **GitHub Security Advisories** (preferred)
+
    - Navigate to the
      [Security tab](https://github.com/joshjhall/containers/security/advisories)
    - Click "Report a vulnerability"
    - Provide detailed information about the vulnerability
 
-2. **Direct Contact**
+1. **Direct Contact**
+
    - Create a private issue via GitHub's vulnerability reporting feature
    - Include as much detail as possible
 
@@ -134,11 +136,11 @@ However, be aware:
 When security vulnerabilities are reported and confirmed:
 
 1. **Assessment**: Security team assesses severity and impact
-2. **Fix Development**: Patch is developed in private branch
-3. **Testing**: Full CI/CD pipeline validation
-4. **Release**: Security release with CVE details (if applicable)
-5. **Notification**: GitHub Security Advisory published
-6. **Documentation**: CHANGELOG updated with security notes
+1. **Fix Development**: Patch is developed in private branch
+1. **Testing**: Full CI/CD pipeline validation
+1. **Release**: Security release with CVE details (if applicable)
+1. **Notification**: GitHub Security Advisory published
+1. **Documentation**: CHANGELOG updated with security notes
 
 ## Known Security Considerations
 
@@ -164,10 +166,10 @@ Be cautious about secrets in the build context:
 When using this container system:
 
 1. **Regularly update**: Keep submodule updated to latest version
-2. **Scan your images**: Run `trivy image yourimage:tag` regularly
-3. **Review build logs**: Check `check-build-logs.sh` for unexpected behavior
-4. **Minimal privileges**: Use least-privilege principle for container runtime
-5. **Network isolation**: Use Docker networks for container-to-container
+1. **Scan your images**: Run `trivy image yourimage:tag` regularly
+1. **Review build logs**: Check `check-build-logs.sh` for unexpected behavior
+1. **Minimal privileges**: Use least-privilege principle for container runtime
+1. **Network isolation**: Use Docker networks for container-to-container
    communication
 
 ## Security Testing
@@ -202,6 +204,6 @@ clarifications, etc.), you can:
 
 For urgent security matters, use the vulnerability reporting process above.
 
----
+______________________________________________________________________
 
 **Last Updated**: 2025-11-09 **Security Policy Version**: 1.1

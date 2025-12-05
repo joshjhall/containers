@@ -13,7 +13,7 @@ system when used as a git submodule in your projects.
 - [Testing Your Migration](#testing-your-migration)
 - [Rollback Procedures](#rollback-procedures)
 
----
+______________________________________________________________________
 
 ## Overview
 
@@ -29,7 +29,7 @@ This container build system follows [Semantic Versioning](https://semver.org/):
 - **Previous minor**: Security fixes only
 - **Older versions**: No support, upgrade recommended
 
----
+______________________________________________________________________
 
 ## Current Version
 
@@ -263,7 +263,7 @@ docker run --rm myproject:old check-installed-versions.sh
   docker build --build-arg PYTHON_VERSION=3.12.0 .
 ````
 
----
+______________________________________________________________________
 
 ### Migrating from v4.x to v4.7.0 (Minor Update)
 
@@ -488,18 +488,20 @@ ERROR: failed to solve: failed to compute cache key
    cat containers/docs/cache-strategy.md
    ```
 
----
+______________________________________________________________________
 
 ## Best Practices
 
 ### Before Migration
 
 1. **Test in Development First**
+
    - Never upgrade in production directly
    - Test in dev/staging environment
    - Run full test suite
 
 1. **Document Your Configuration**
+
    - List all `INCLUDE_*` build arguments you use
    - Document any custom Dockerfile modifications
    - Note environment variable customizations
@@ -522,6 +524,7 @@ ERROR: failed to solve: failed to compute cache key
    ```
 
 1. **Maintain Changelog**
+
    - Document why you're upgrading
    - Note any configuration changes
    - Record test results
@@ -529,21 +532,24 @@ ERROR: failed to solve: failed to compute cache key
 ### After Migration
 
 1. **Monitor for Issues**
+
    - Watch build times
    - Check application logs
    - Monitor resource usage
 
 1. **Update Documentation**
+
    - Update README with new version
    - Document any new features adopted
    - Note any workarounds applied
 
 1. **Share Knowledge**
+
    - Document lessons learned
    - Update team runbooks
    - Share migration tips with team
 
----
+______________________________________________________________________
 
 ## Getting Help
 
@@ -558,12 +564,14 @@ ERROR: failed to solve: failed to compute cache key
 ### Support Channels
 
 1. **Check Documentation First**
+
    - Review [docs/](../docs/) directory
    - Search troubleshooting guide
    - Check GitHub issues
 
 1. **GitHub Issues**
-   - Search existing issues: https://github.com/joshjhall/containers/issues
+
+   - Search existing issues: `https://github.com/joshjhall/containers/issues`
    - Create new issue with:
      - Old version
      - New version
@@ -571,11 +579,12 @@ ERROR: failed to solve: failed to compute cache key
      - Steps to reproduce
 
 1. **Emergency Rollback**
+
    - See [emergency-rollback.md](operations/rollback.md)
    - Pin to last known good version
    - Report issue after recovery
 
----
+______________________________________________________________________
 
 ## Version History Reference
 
@@ -591,7 +600,7 @@ ERROR: failed to solve: failed to compute cache key
 | v4.1.0  | 2025-XX-XX   | Minor | Feature additions                                |
 | v4.0.0  | 2024-XX-XX   | Major | **Breaking**: Debian Trixie, pyenv/rbenv removal |
 
----
+______________________________________________________________________
 
 ## Deprecation Notices
 
@@ -609,7 +618,7 @@ features will:
 1. Show warnings during build
 1. Be removed in next major version
 
----
+______________________________________________________________________
 
 ## Related Documentation
 

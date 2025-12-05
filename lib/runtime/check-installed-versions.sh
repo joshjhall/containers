@@ -195,7 +195,7 @@ get_cran_version() {
 compare_version() {
     local current="$1"
     local latest="$2"
-    
+
     if [ "$current" = "$latest" ]; then
         echo "up-to-date"
     elif [ "$latest" = "unknown" ] || [ "$latest" = "not found" ] || [ "$latest" = "rate-limited" ]; then
@@ -224,7 +224,7 @@ check_version() {
     local extract_pattern="${4:-}"
     local latest_getter="${5:-}"
     local latest_args="${6:-}"
-    
+
     if command -v "$command" >/dev/null 2>&1; then
         local version
         if [ -n "$extract_pattern" ]; then
@@ -232,7 +232,7 @@ check_version() {
         else
             version=$("$command" "$version_flag" 2>&1 | head -1 || echo "error")
         fi
-        
+
         # Special handling for cargo subcommands that don't report version
         if [ "$version" = "error" ] && [ "$name" = "cargo-outdated" ]; then
             # Check if the command exists by looking for the subcommand
@@ -240,9 +240,9 @@ check_version() {
                 version="installed"
             fi
         fi
-        
+
         INSTALLED_VERSIONS["$name"]="$version"
-        
+
         # Get latest version if getter provided
         if [ -n "$latest_getter" ]; then
             local latest
@@ -309,18 +309,18 @@ print_result() {
             return
         fi
     fi
-    
+
     local status_color
     local status_text="$status"
     case "$status" in
-        "up-to-date") 
-            status_color="$GREEN" 
+        "up-to-date")
+            status_color="$GREEN"
             ;;
-        "newer") 
-            status_color="$BLUE" 
+        "newer")
+            status_color="$BLUE"
             ;;
-        "outdated") 
-            status_color="$YELLOW" 
+        "outdated")
+            status_color="$YELLOW"
             ;;
         "installed")
             status_color="$GREEN"
@@ -334,11 +334,11 @@ print_result() {
             status_color="$RED"
             status_text="not installed"
             ;;
-        *) 
-            status_color="$RED" 
+        *)
+            status_color="$RED"
             ;;
     esac
-    
+
     printf "%-25s %-20s %-20s ${status_color}%-12s${NC}\n" "$name" "$installed" "$latest" "$status_text"
 }
 
@@ -383,7 +383,7 @@ if [ "$OUTPUT_FORMAT" != "json" ]; then
             print_result "$lang" "${INSTALLED_VERSIONS[$lang]}" "${LATEST_VERSIONS[$lang]:-}" "${VERSION_STATUS[$lang]}"
         fi
     done
-    
+
     echo
     echo "Package Managers:"
     echo "================="
@@ -407,7 +407,7 @@ if [ "$OUTPUT_FORMAT" != "json" ]; then
             print_result "$pm" "${INSTALLED_VERSIONS[$pm]}" "${LATEST_VERSIONS[$pm]:-}" "${VERSION_STATUS[$pm]}"
         fi
     done
-    
+
     echo
     echo "Python Development Tools:"
     echo "========================="
@@ -439,7 +439,7 @@ if [ "$OUTPUT_FORMAT" != "json" ]; then
             print_result "$tool" "${INSTALLED_VERSIONS[$tool]}" "${LATEST_VERSIONS[$tool]:-}" "${VERSION_STATUS[$tool]}"
         fi
     done
-    
+
     echo
     echo "Rust Development Tools:"
     echo "======================="
@@ -469,7 +469,7 @@ if [ "$OUTPUT_FORMAT" != "json" ]; then
             print_result "$tool" "${INSTALLED_VERSIONS[$tool]}" "${LATEST_VERSIONS[$tool]:-}" "${VERSION_STATUS[$tool]}"
         fi
     done
-    
+
     echo
     echo "Ruby Development Tools:"
     echo "======================="
@@ -494,7 +494,7 @@ if [ "$OUTPUT_FORMAT" != "json" ]; then
             print_result "$tool" "${INSTALLED_VERSIONS[$tool]}" "${LATEST_VERSIONS[$tool]:-}" "${VERSION_STATUS[$tool]}"
         fi
     done
-    
+
     echo
     echo "R Development Tools:"
     echo "===================="
@@ -506,12 +506,12 @@ fi
 check_r_package() {
     local name="$1"
     local package="$2"
-    
+
     if command -v Rscript >/dev/null 2>&1; then
         local version
         version=$(Rscript -e "if(requireNamespace('$package', quietly = TRUE)) cat(as.character(packageVersion('$package'))) else cat('not installed')" 2>/dev/null || echo "error")
         INSTALLED_VERSIONS["$name"]="$version"
-        
+
         if [ "$version" != "not installed" ] && [ "$version" != "error" ]; then
             local latest
             latest=$(get_cran_version "$package")
@@ -556,7 +556,7 @@ if [ "$OUTPUT_FORMAT" != "json" ]; then
             print_result "$tool" "${INSTALLED_VERSIONS[$tool]}" "${LATEST_VERSIONS[$tool]:-}" "${VERSION_STATUS[$tool]}"
         fi
     done
-    
+
     echo
     echo "Development Tools:"
     echo "=================="
@@ -590,7 +590,7 @@ if [ "$OUTPUT_FORMAT" != "json" ]; then
             print_result "$tool" "${INSTALLED_VERSIONS[$tool]}" "${LATEST_VERSIONS[$tool]:-}" "${VERSION_STATUS[$tool]}"
         fi
     done
-    
+
     echo
     echo "Cloud Tools:"
     echo "============"
@@ -619,7 +619,7 @@ if [ "$OUTPUT_FORMAT" != "json" ]; then
             print_result "$tool" "${INSTALLED_VERSIONS[$tool]}" "${LATEST_VERSIONS[$tool]:-}" "${VERSION_STATUS[$tool]}"
         fi
     done
-    
+
     echo
     echo "Database Tools:"
     echo "==============="
@@ -687,7 +687,7 @@ else
     newer_count=0
     unknown_count=0
     total_count=0
-    
+
     for tool in "${!VERSION_STATUS[@]}"; do
         ((total_count++))
         case "${VERSION_STATUS[$tool]}" in
@@ -699,27 +699,27 @@ else
             *) ((unknown_count++)) ;;
         esac
     done
-    
+
     echo -e "  Total tools checked: ${total_count}"
-    
+
     if [ "$SHOW_ALL" = true ]; then
         echo -e "  Installed: ${GREEN}${installed_count}${NC}"
         echo -e "  Missing: ${RED}${missing_count}${NC}"
     else
         echo -e "  Showing only installed tools (use --all to see missing tools)"
     fi
-    
+
     echo -e "  Up-to-date: ${GREEN}${uptodate_count}${NC}"
     echo -e "  Newer: ${BLUE}${newer_count}${NC}"
     echo -e "  Outdated: ${YELLOW}${outdated_count}${NC}"
     echo -e "  Unknown: ${RED}${unknown_count}${NC}"
-    
+
     if [ $outdated_count -gt 0 ]; then
         echo
         echo "Note: Some tools have newer versions available."
         echo "Consider updating your container build to get the latest versions."
     fi
-    
+
     # Check if any rate limiting occurred
     if printf '%s\n' "${LATEST_VERSIONS[@]}" | grep -q "rate-limited"; then
         echo

@@ -307,17 +307,17 @@ spec:
 ## Prevention
 
 1. **Use consistent UIDs** across development team
-2. **Document volume permissions** in project setup
-3. **Use init containers** to set ownership in Kubernetes
-4. **Test permissions** as part of CI/CD
-5. **Avoid running as root** in production
+1. **Document volume permissions** in project setup
+1. **Use init containers** to set ownership in Kubernetes
+1. **Test permissions** as part of CI/CD
+1. **Avoid running as root** in production
 
 ## Escalation
 
 If permission issues persist:
 
 1. Document the exact error message
-2. Include output of `id` command in container
-3. Show `ls -la` of affected directories
-4. Note the host OS and Docker version
-5. Open GitHub issue with `bug` label
+1. Include output of `id` command in container
+1. Show `ls -la` of affected directories
+1. Note the host OS and Docker version
+1. Open GitHub issue with `bug` label

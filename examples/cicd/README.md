@@ -32,25 +32,30 @@ These templates provide complete CI/CD pipelines with:
 ### CI/CD Platforms
 
 - **[GitHub Actions](./github-actions/)** - Native GitHub CI/CD
+
   - `build-and-test.yml` - Build and test containers
   - `deploy-staging.yml` - Deploy to staging environment
   - `deploy-production.yml` - Deploy to production with approval
   - `rollback.yml` - Manual rollback workflow
 
 - **[GitLab CI](./gitlab-ci/)** - GitLab CI/CD
+
   - `.gitlab-ci.yml` - Complete pipeline with stages
 
 - **[Jenkins](./jenkins/)** - Jenkins Declarative Pipeline
+
   - `Jenkinsfile` - Multi-stage pipeline with parallel builds
 
 ### Deployment Strategies
 
 - **[Blue-Green Deployment](./deployment-strategies/blue-green-deployment.sh)**
+
   - Zero-downtime deployments
   - Instant rollback capability
   - Test new version before switching traffic
 
 - **[Canary Deployment](./deployment-strategies/canary-deployment.sh)**
+
   - Gradual traffic shifting (10% → 25% → 50% → 100%)
   - Monitor new version with real traffic
   - Automatic rollback on issues
@@ -67,11 +72,13 @@ These templates provide complete CI/CD pipelines with:
    ```
 
 1. Customize for your project:
+
    - Update `IMAGE_NAME` environment variable
    - Modify container variants in the build matrix
    - Adjust build arguments for your features
 
 1. Configure secrets in GitHub:
+
    - Go to Settings → Secrets → Actions
    - Add: `KUBE_CONFIG_STAGING`, `KUBE_CONFIG_PRODUCTION`
 
@@ -214,6 +221,7 @@ Configure production environment protection:
 ````
 
 1. Configure CI/CD variables in GitLab:
+
    - Settings → CI/CD → Variables
    - Add: `KUBE_CONFIG_STAGING`, `KUBE_CONFIG_PRODUCTION`
 
@@ -262,11 +270,13 @@ Ensure runners have:
 ````
 
 1. Create Jenkins credentials:
+
    - Credentials → Add Credentials
    - Add: `github-container-registry`, `kube-config-staging`,
      `kube-config-production`
 
 1. Create Jenkins pipeline job:
+
    - New Item → Pipeline
    - Pipeline → Definition → Pipeline script from SCM
    - SCM → Git → Add repository URL

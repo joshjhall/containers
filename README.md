@@ -36,7 +36,7 @@ full-featured development environments using a single, configurable Dockerfile.
 - 🐧 **Debian Compatible**: Supports Debian 11 (Bullseye), 12 (Bookworm), and 13
   (Trixie)
 
----
+______________________________________________________________________
 
 ## Quick Start
 
@@ -98,7 +98,7 @@ docker build -t myproject:prod \
   .
 ```
 
----
+______________________________________________________________________
 
 ## VS Code Dev Container
 
@@ -124,7 +124,7 @@ For complete examples with databases, 1Password integration, and advanced
 configurations, see the [examples/devcontainer/](examples/devcontainer/)
 directory
 
----
+______________________________________________________________________
 
 ## Available Features
 
@@ -176,7 +176,7 @@ All features are enabled via `INCLUDE_<FEATURE>=true` build arguments.
 | **1Password** | `INCLUDE_OP=true`        | 1Password CLI                                           |
 | **Ollama**    | `INCLUDE_OLLAMA=true`    | Local LLM support                                       |
 
----
+______________________________________________________________________
 
 ## Example Use Cases
 
@@ -244,7 +244,7 @@ docker build -t myservice:ci \
   .
 ```
 
----
+______________________________________________________________________
 
 ## Version Management
 
@@ -292,8 +292,8 @@ The script will check:
 The GitHub Actions workflow automatically checks for updates weekly:
 
 1. Runs every Sunday at 2am UTC (configured via cron schedule)
-2. Creates a pull request with version updates when available
-3. Auto-merges after CI tests pass (if configured)
+1. Creates a pull request with version updates when available
+1. Auto-merges after CI tests pass (if configured)
 
 The workflow creates PRs with updated versions that can be reviewed before
 merging.
@@ -464,15 +464,15 @@ Calculate checksum of downloaded file (TOFU - Trust On First Use).
 For every download, the system:
 
 1. **Attempts Tier 1** (GPG) if available for that tool
-2. **Falls back to Tier 2** (pinned checksums) if GPG unavailable
-3. **Falls back to Tier 3** (published checksums) if not pinned
-4. **Falls back to Tier 4** (calculated) as last resort
-5. **Logs detailed explanation** of which tier succeeded and why
+1. **Falls back to Tier 2** (pinned checksums) if GPG unavailable
+1. **Falls back to Tier 3** (published checksums) if not pinned
+1. **Falls back to Tier 4** (calculated) as last resort
+1. **Logs detailed explanation** of which tier succeeded and why
 
 **Result:** You get the **best available security** for every download with
 **full transparency** about verification method.
 
----
+______________________________________________________________________
 
 ## Testing
 
@@ -534,7 +534,7 @@ check-installed-versions.sh
 check-build-logs.sh
 ```
 
----
+______________________________________________________________________
 
 ## Security Features
 
@@ -580,7 +580,7 @@ This build system includes comprehensive security hardening:
 
 For detailed security information, see [SECURITY.md](SECURITY.md).
 
----
+______________________________________________________________________
 
 ## Security Considerations
 
@@ -662,9 +662,9 @@ services:
 **Alternatives for Production**:
 
 1. **Docker-in-Docker (DinD)**: Run Docker daemon inside container (for CI/CD)
-2. **Docker API**: Use restricted Docker API with limited permissions
-3. **Kubernetes**: Use Kubernetes API instead of Docker
-4. **External orchestration**: Let CI/CD system manage containers
+1. **Docker API**: Use restricted Docker API with limited permissions
+1. **Kubernetes**: Use Kubernetes API instead of Docker
+1. **External orchestration**: Let CI/CD system manage containers
 
 #### Development vs Production Builds
 
@@ -734,9 +734,9 @@ services:
 **Alternatives for Production**:
 
 1. **Pre-install everything at build time**: Use RUN commands in Dockerfile
-2. **Init containers**: Use Kubernetes init containers for setup
-3. **Proper IAM/RBAC**: Use cloud provider IAM instead of sudo
-4. **Configuration management**: Use proper deployment tools
+1. **Init containers**: Use Kubernetes init containers for setup
+1. **Proper IAM/RBAC**: Use cloud provider IAM instead of sudo
+1. **Configuration management**: Use proper deployment tools
 
 **Production Security Best Practices**:
 
@@ -745,28 +745,32 @@ services:
 - ✅ Use least-privilege principles
 - ✅ User can still sudo with password if absolutely necessary
 
-#### Security Best Practices
+#### Socket and Sudo Security Best Practices
 
 1. **Only enable passwordless sudo in trusted environments**
+
    - ✅ Local development on your personal machine
    - ✅ Isolated development containers
    - ❌ Production deployments
    - ❌ Shared development environments
    - ❌ CI/CD systems (should build at build time)
 
-2. **Only mount socket in trusted environments**
+1. **Only mount socket in trusted environments**
+
    - ✅ Local development on your machine
    - ✅ Isolated development containers
    - ❌ Production deployments
    - ❌ Multi-tenant environments
    - ❌ Containers running untrusted code
 
-3. **Use least-privilege alternatives when possible**
+1. **Use least-privilege alternatives when possible**
+
    - Consider rootless Docker
    - Use Docker contexts with limited access
    - Explore Docker socket proxies with ACLs
 
-4. **Monitor socket access**
+1. **Monitor socket access**
+
    - Audit what containers access the socket
    - Log Docker API calls in sensitive environments
 
@@ -834,7 +838,7 @@ docker build -t myapp:prod \
 - ✅ VS Code Dev Containers
 - ✅ CI/CD containers that need to install dependencies (with caution)
 
-#### Security Best Practices
+#### Production Deployment Security Best Practices
 
 1. **Use separate builds for dev and prod**
 
@@ -846,18 +850,20 @@ docker build -t myapp:prod \
    docker build --build-arg ENABLE_PASSWORDLESS_SUDO=false ...
    ```
 
-2. **Review sudo requirements**
+1. **Review sudo requirements**
+
    - If your application never needs sudo, disable it
    - If only specific commands need sudo, configure sudoers accordingly
    - Consider removing sudo entirely for runtime-only containers
 
-3. **Layer your security**
+1. **Layer your security**
+
    - Disable passwordless sudo
    - Use read-only filesystems where possible
    - Drop unnecessary capabilities
    - Use security profiles (AppArmor, SELinux)
 
----
+______________________________________________________________________
 
 ## Best Practices
 
@@ -894,7 +900,7 @@ docker build --build-arg AWS_SECRET_ACCESS_KEY=... ...
    docker run --env-file .env my-image:latest
    ```
 
-2. **Docker Secrets** (recommended for Docker Swarm/Compose):
+1. **Docker Secrets** (recommended for Docker Swarm/Compose):
 
    ```bash
    # Create secret
@@ -904,14 +910,14 @@ docker build --build-arg AWS_SECRET_ACCESS_KEY=... ...
    docker service create --secret api_key my-image:latest
    ```
 
-3. **Mounted Config Files** (recommended for sensitive files):
+1. **Mounted Config Files** (recommended for sensitive files):
 
    ```bash
    # Mount secrets directory read-only
    docker run -v ./secrets:/secrets:ro my-image:latest
    ```
 
-4. **Secret Management Tools** (recommended for production):
+1. **Secret Management Tools** (recommended for production):
 
    ```bash
    # 1Password CLI (included via INCLUDE_OP=true)
@@ -923,23 +929,26 @@ docker build --build-arg AWS_SECRET_ACCESS_KEY=... ...
 
 For more information, see `/workspace/containers/SECURITY.md`.
 
----
+______________________________________________________________________
 
 ### General Best Practices
 
 1. **Choose the right base image**:
+
    - `debian:trixie-slim` (Debian 13): Default, latest features (default)
    - `debian:bookworm-slim` (Debian 12): Stable release, good compatibility
    - `debian:bullseye-slim` (Debian 11): Older stable release
    - `ubuntu:24.04`: More packages available, larger size
    - `mcr.microsoft.com/devcontainers/base:trixie`: VS Code optimized
 
-2. **Optimize build times**:
+1. **Optimize build times**:
+
    - Only include features you actually need
    - Use BuildKit cache mounts (already configured)
    - Layer expensive operations early in the Dockerfile
 
-3. **Security considerations**:
+1. **Security considerations**:
+
    - Always use non-root users in production
    - Remove passwordless sudo in production builds
      (`ENABLE_PASSWORDLESS_SUDO=false`)
@@ -949,42 +958,48 @@ For more information, see `/workspace/containers/SECURITY.md`.
    - Regularly update the submodule for security patches
    - See detailed security guidance below
 
-4. **Version pinning**:
+1. **Version pinning**:
+
    - Pin the submodule to specific commits for stability
    - Use version build arguments for reproducible builds
    - Document version requirements in your project
 
-5. **Build context**:
+1. **Build context**:
+
    - The build context should be your project root (where you run
      `docker build .`)
    - The Dockerfile path is `-f containers/Dockerfile`
    - Your project files are available for COPY commands during build
    - Use `.dockerignore` to exclude sensitive files from build context
 
----
+______________________________________________________________________
 
 ## Contributing
 
 Contributions are welcome! For detailed guidelines, see
 [CONTRIBUTING.md](CONTRIBUTING.md).
 
-### Quick Start
+### Contributing Quick Start
 
 1. Fork the repository
-2. **Run the development environment setup**:
+
+1. **Run the development environment setup**:
 
    ```bash
    ./bin/setup-dev-environment.sh
    ```
 
    This will:
+
    - Enable git hooks for shellcheck and credential leak prevention
    - Verify your development environment
    - Check for recommended tools
 
-3. Create a feature branch
-4. Add tests for new features
-5. Submit a pull request
+1. Create a feature branch
+
+1. Add tests for new features
+
+1. Submit a pull request
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for:
 
@@ -996,9 +1011,9 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for:
 
 See [.githooks/README.md](.githooks/README.md) for configuration options.
 
----
+______________________________________________________________________
 
-## Emergency Procedures
+## Rollback and Emergency Procedures
 
 ### Rollback/Downgrade
 
@@ -1030,7 +1045,7 @@ gh release delete vX.Y.Z --yes --cleanup-tag
 
 **Recommendation**: Pin production to specific stable versions.
 
----
+______________________________________________________________________
 
 ## License
 

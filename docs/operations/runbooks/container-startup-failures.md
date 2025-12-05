@@ -217,16 +217,16 @@ kubectl exec -it <pod_name> -- /bin/bash
 ## Prevention
 
 1. **Test locally** before deploying to production
-2. **Use health checks** to detect startup failures early
-3. **Set appropriate resource limits** based on actual usage
-4. **Pin image versions** to avoid unexpected changes
-5. **Review logs** as part of deployment verification
+1. **Use health checks** to detect startup failures early
+1. **Set appropriate resource limits** based on actual usage
+1. **Pin image versions** to avoid unexpected changes
+1. **Review logs** as part of deployment verification
 
 ## Escalation
 
 If the issue persists after following this runbook:
 
 1. Collect all logs and diagnostic output
-2. Note the exact error message and exit code
-3. Document steps already attempted
-4. Open a GitHub issue with the `bug` label
+1. Note the exact error message and exit code
+1. Document steps already attempted
+1. Open a GitHub issue with the `bug` label

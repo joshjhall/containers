@@ -98,7 +98,7 @@ is_cache_valid() {
     if [ ! -f "$cache_file" ] || [ "$USE_CACHE" = "false" ]; then
         return 1
     fi
-    
+
     local file_age=$(($(date +%s) - $(stat -c %Y "$cache_file" 2>/dev/null || stat -f %m "$cache_file" 2>/dev/null || echo 0)))
     if [ "$file_age" -lt "$CACHE_DURATION" ]; then
         return 0
@@ -112,13 +112,13 @@ fetch_url() {
     local timeout="${2:-10}"
     local cache_file
     cache_file=$(get_cache_file "$url")
-    
+
     # Check cache first
     if is_cache_valid "$cache_file"; then
         command cat "$cache_file"
         return 0
     fi
-    
+
     # Fetch fresh data
     # Use both --connect-timeout and --max-time to prevent hanging
     local response
@@ -127,18 +127,18 @@ fetch_url() {
     else
         response=$(command curl -s --connect-timeout 5 --max-time "$timeout" "$url" 2>/dev/null || echo "")
     fi
-    
+
     # Cache the response if not empty
     if [ -n "$response" ] && [ "$USE_CACHE" = "true" ]; then
         echo "$response" > "$cache_file"
     fi
-    
+
     echo "$response"
 }
 
 # Version storage
 declare -a TOOLS
-declare -a CURRENT_VERSIONS  
+declare -a CURRENT_VERSIONS
 declare -a LATEST_VERSIONS
 declare -a VERSION_STATUS
 declare -a VERSION_FILES
@@ -161,12 +161,12 @@ add_tool() {
 set_latest() {
     local tool="$1"
     local version="$2"
-    
+
     # Validate version is not empty, null, or error-like
     if [ -z "$version" ] || [ "$version" = "null" ] || [ "$version" = "undefined" ]; then
         version="error"
     fi
-    
+
     for i in "${!TOOLS[@]}"; do
         if [ "${TOOLS[i]}" = "$tool" ]; then
             LATEST_VERSIONS[i]="$version"
@@ -187,34 +187,34 @@ extract_all_versions() {
     if [ "$OUTPUT_FORMAT" = "text" ]; then
         echo -e "${BLUE}Scanning for version pins...${NC}"
     fi
-    
+
     # Languages from Dockerfile
     local ver
     ver=$(grep "^ARG PYTHON_VERSION=" "$PROJECT_ROOT/Dockerfile" 2>/dev/null | cut -d= -f2 | tr -d '"')
     [ -n "$ver" ] && add_tool "Python" "$ver" "Dockerfile"
-    
+
     ver=$(grep "^ARG NODE_VERSION=" "$PROJECT_ROOT/Dockerfile" 2>/dev/null | cut -d= -f2 | tr -d '"')
     [ -n "$ver" ] && add_tool "Node.js" "$ver" "Dockerfile"
-    
+
     ver=$(grep "^ARG GO_VERSION=" "$PROJECT_ROOT/Dockerfile" 2>/dev/null | cut -d= -f2 | tr -d '"')
     [ -n "$ver" ] && add_tool "Go" "$ver" "Dockerfile"
-    
+
     ver=$(grep "^ARG RUST_VERSION=" "$PROJECT_ROOT/Dockerfile" 2>/dev/null | cut -d= -f2 | tr -d '"')
     [ -n "$ver" ] && add_tool "Rust" "$ver" "Dockerfile"
-    
+
     ver=$(grep "^ARG RUBY_VERSION=" "$PROJECT_ROOT/Dockerfile" 2>/dev/null | cut -d= -f2 | tr -d '"')
     [ -n "$ver" ] && add_tool "Ruby" "$ver" "Dockerfile"
-    
+
     ver=$(grep "^ARG JAVA_VERSION=" "$PROJECT_ROOT/Dockerfile" 2>/dev/null | cut -d= -f2 | tr -d '"')
     [ -n "$ver" ] && add_tool "Java" "$ver" "Dockerfile"
-    
+
     ver=$(grep "^ARG R_VERSION=" "$PROJECT_ROOT/Dockerfile" 2>/dev/null | cut -d= -f2 | tr -d '"')
     [ -n "$ver" ] && add_tool "R" "$ver" "Dockerfile"
-    
+
     # Kubernetes tools from Dockerfile
     ver=$(grep "^ARG KUBECTL_VERSION=" "$PROJECT_ROOT/Dockerfile" 2>/dev/null | cut -d= -f2 | tr -d '"')
     [ -n "$ver" ] && add_tool "kubectl" "$ver" "Dockerfile"
-    
+
     ver=$(grep "^ARG K9S_VERSION=" "$PROJECT_ROOT/Dockerfile" 2>/dev/null | cut -d= -f2 | tr -d '"')
     [ -n "$ver" ] && add_tool "k9s" "$ver" "Dockerfile"
 
@@ -223,7 +223,7 @@ extract_all_versions() {
 
     ver=$(grep "^ARG HELM_VERSION=" "$PROJECT_ROOT/Dockerfile" 2>/dev/null | cut -d= -f2 | tr -d '"')
     [ -n "$ver" ] && [ "$ver" != "latest" ] && add_tool "Helm" "$ver" "Dockerfile"
-    
+
     # Terraform tools from Dockerfile
     ver=$(grep "^ARG TERRAGRUNT_VERSION=" "$PROJECT_ROOT/Dockerfile" 2>/dev/null | cut -d= -f2 | tr -d '"')
     [ -n "$ver" ] && add_tool "Terragrunt" "$ver" "Dockerfile"
@@ -272,7 +272,7 @@ extract_all_versions() {
         ver=$(extract_version_from_line "$(grep "^BIOME_VERSION=" "$PROJECT_ROOT/lib/features/dev-tools.sh" 2>/dev/null)")
         [ -n "$ver" ] && add_tool "biome" "$ver" "dev-tools.sh"
     fi
-    
+
     # Docker tools from docker.sh
     if [ -f "$PROJECT_ROOT/lib/features/docker.sh" ]; then
         ver=$(extract_version_from_line "$(grep "^DIVE_VERSION=" "$PROJECT_ROOT/lib/features/docker.sh" 2>/dev/null)")
@@ -347,7 +347,7 @@ check_nodejs() {
             break
         fi
     done
-    
+
     local latest=""
     # If version is just major (like "22"), get the latest LTS in that major version
     if [[ "$current" =~ ^[0-9]+$ ]]; then
@@ -360,7 +360,7 @@ check_nodejs() {
         # Get latest LTS
         latest=$(fetch_url "https://nodejs.org/dist/index.json" | jq -r '[.[] | select(.lts != false)] | .[0].version' 2>/dev/null | command sed 's/^v//')
     fi
-    
+
     set_latest "Node.js" "$latest"
     progress_done
 }
@@ -404,16 +404,16 @@ check_java() {
             break
         fi
     done
-    
+
     # Use Adoptium API to get latest version for this major
     local latest
     latest=$(fetch_url "https://api.adoptium.net/v3/info/release_versions?release_type=ga&version=${current_major}" | jq -r '.versions[0].semver' 2>/dev/null | command sed 's/+.*//')
-    
+
     # If that fails, try the release names endpoint
     if [ -z "$latest" ] || [ "$latest" = "null" ]; then
         latest=$(fetch_url "https://api.adoptium.net/v3/assets/latest/${current_major}/hotspot" | jq -r '.[0].release_name' 2>/dev/null | command sed 's/jdk-//' | command sed 's/+.*//')
     fi
-    
+
     set_latest "Java" "$latest"
     progress_done
 }
@@ -484,7 +484,7 @@ check_maven_central() {
     local latest
     latest=$(fetch_url "https://search.maven.org/solrsearch/select?q=g:${group_id}+AND+a:${artifact_id}&rows=1&wt=json" | \
         jq -r '.response.docs[0].latestVersion // "unknown"' 2>/dev/null)
-    
+
     if [ -n "$latest" ] && [ "$latest" != "unknown" ] && [ "$latest" != "null" ]; then
         set_latest "$tool" "$latest"
     else
@@ -502,19 +502,19 @@ check_kubectl() {
             break
         fi
     done
-    
+
     local latest=""
     # kubectl uses major.minor format - get latest patch
     if [[ "$current" =~ ^[0-9]+\.[0-9]+$ ]]; then
         # Get latest patch version for this major.minor
         latest=$(fetch_url "https://api.github.com/repos/kubernetes/kubernetes/releases" | jq -r "[.[] | select(.tag_name | startswith(\"v$current.\"))] | .[0].tag_name" 2>/dev/null | command sed 's/^v//')
     fi
-    
+
     # If no specific version found, get the stable version
     if [ -z "$latest" ] || [ "$latest" = "null" ]; then
         latest=$(fetch_url "https://storage.googleapis.com/kubernetes-release/release/stable.txt" | command sed 's/^v//')
     fi
-    
+
     set_latest "kubectl" "$latest"
     progress_done
 }
@@ -525,19 +525,19 @@ print_json_results() {
     local current=0
     local errors=0
     local manual=0
-    
+
     # Build JSON array
     echo "{"
     echo "  \"timestamp\": \"$(date -Iseconds)\","
     echo "  \"tools\": ["
-    
+
     for i in "${!TOOLS[@]}"; do
         local tool="${TOOLS[$i]}"
         local cur_ver="${CURRENT_VERSIONS[$i]}"
         local latest="${LATEST_VERSIONS[$i]}"
         local status="${VERSION_STATUS[$i]}"
         local file="${VERSION_FILES[$i]}"
-        
+
         # Update counters
         case "$status" in
             outdated) outdated=$((outdated + 1)) ;;
@@ -545,7 +545,7 @@ print_json_results() {
             error) errors=$((errors + 1)) ;;
             manual) manual=$((manual + 1)) ;;
         esac
-        
+
         # Print JSON object for this tool
         echo -n "    {"
         echo -n "\"tool\":\"$tool\","
@@ -562,7 +562,7 @@ print_json_results() {
             echo ""
         fi
     done
-    
+
     echo "  ],"
     echo "  \"summary\": {"
     echo "    \"total\": ${#TOOLS[@]},"
@@ -581,26 +581,26 @@ print_results() {
         print_json_results
         return
     fi
-    
+
     echo ""
     echo -e "${BLUE}=== Version Check Results ===${NC}"
     echo ""
-    
+
     printf "%-20s %-15s %-15s %-20s %s\n" "Tool" "Current" "Latest" "File" "Status"
     printf "%-20s %-15s %-15s %-20s %s\n" "----" "-------" "------" "----" "------"
-    
+
     local outdated=0
     local current=0
     local errors=0
     local manual=0
-    
+
     for i in "${!TOOLS[@]}"; do
         local tool="${TOOLS[$i]}"
         local cur_ver="${CURRENT_VERSIONS[$i]}"
         local lat_ver="${LATEST_VERSIONS[$i]:-unknown}"
         local file="${VERSION_FILES[$i]}"
         local status="${VERSION_STATUS[$i]}"
-        
+
         local status_color=""
         case "$status" in
             current)
@@ -624,17 +624,17 @@ print_results() {
                 fi
                 ;;
         esac
-        
+
         printf "%-20s %-15s %-15s %-20s %b\n" "$tool" "$cur_ver" "$lat_ver" "$file" "$status_color"
     done
-    
+
     echo ""
     echo -e "${BLUE}Summary:${NC}"
     echo -e "  Current: ${GREEN}$current${NC}"
     echo -e "  Outdated: ${YELLOW}$outdated${NC}"
     echo -e "  Errors: ${RED}$errors${NC}"
     echo -e "  Manual Check: ${BLUE}$manual${NC}"
-    
+
     if [ $outdated -gt 0 ]; then
         echo ""
         echo -e "${YELLOW}Note: $outdated tool(s) have newer versions available${NC}"
@@ -645,7 +645,7 @@ print_results() {
 # Main execution
 main() {
     extract_all_versions
-    
+
     if [ ${#TOOLS[@]} -eq 0 ]; then
         if [ "$OUTPUT_FORMAT" = "json" ]; then
             echo '{"timestamp":"'"$(date -Iseconds)"'","tools":[],"summary":{"total":0},"exit_code":0}'
@@ -654,11 +654,11 @@ main() {
         fi
         exit 0
     fi
-    
+
     if [ "$OUTPUT_FORMAT" = "text" ]; then
         echo -e "${BLUE}Checking for latest versions...${NC}"
     fi
-    
+
     # Check each tool
     for i in "${!TOOLS[@]}"; do
         local tool="${TOOLS[$i]}"
@@ -701,7 +701,7 @@ main() {
             *) [ "$OUTPUT_FORMAT" = "text" ] && echo "  Skipping $tool (no checker)" ;;
         esac
     done
-    
+
     print_results
 }
 

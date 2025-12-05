@@ -147,7 +147,7 @@ docker service create \
 HashiCorp Vault is an enterprise-grade secret management solution with extensive
 authentication options and dynamic secret support.
 
-#### Configuration
+#### Vault Configuration
 
 ```bash
 # Enable Vault integration
@@ -221,7 +221,7 @@ spec:
 AWS Secrets Manager provides native AWS integration with automatic rotation
 support.
 
-#### Configuration
+#### AWS Secrets Manager Configuration
 
 ```bash
 # Enable AWS Secrets Manager integration
@@ -251,10 +251,10 @@ AWS_SECRET_ENV_VAR="DATABASE_URL"
 AWS Secrets Manager uses the standard AWS authentication chain:
 
 1. Environment variables (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`)
-2. AWS CLI config files (`~/.aws/credentials`, `~/.aws/config`)
-3. IAM instance profile (EC2)
-4. ECS task role (ECS)
-5. IRSA - IAM Roles for Service Accounts (EKS)
+1. AWS CLI config files (`~/.aws/credentials`, `~/.aws/config`)
+1. IAM instance profile (EC2)
+1. ECS task role (ECS)
+1. IRSA - IAM Roles for Service Accounts (EKS)
 
 #### Example: EC2 with IAM Instance Profile
 
@@ -297,7 +297,7 @@ spec:
 Azure Key Vault integrates with Azure Managed Identity for secure,
 credential-free access.
 
-#### Configuration
+#### Azure Key Vault Configuration
 
 ```bash
 # Enable Azure Key Vault integration
@@ -321,14 +321,14 @@ AZURE_CLIENT_ID="client-id-here"
 AZURE_CLIENT_SECRET="client-secret-here"
 ```
 
-#### Authentication
+#### Azure Authentication
 
 Azure Key Vault supports:
 
 1. **Managed Identity** (Recommended for Azure VMs, AKS, Azure Container
    Instances)
-2. **Service Principal** (Environment variables)
-3. **Azure CLI authentication** (Development)
+1. **Service Principal** (Environment variables)
+1. **Azure CLI authentication** (Development)
 
 #### Example: AKS with Managed Identity
 
@@ -368,7 +368,7 @@ docker run -it --rm \
 Google Cloud Secret Manager provides native GCP integration with automatic
 rotation support and Workload Identity for GKE.
 
-#### Configuration
+#### GCP Secret Manager Configuration
 
 ```bash
 # Enable GCP Secret Manager integration
@@ -390,15 +390,15 @@ GCP_SECRET_PREFIX="APP_"
 GCP_SERVICE_ACCOUNT_KEY="/path/to/key.json"
 ```
 
-#### Authentication
+#### GCP Authentication
 
 GCP Secret Manager uses the standard GCP authentication chain:
 
 1. Service account key file (`GCP_SERVICE_ACCOUNT_KEY`)
-2. Application Default Credentials (ADC)
-3. Workload Identity (GKE)
-4. Compute Engine metadata server
-5. gcloud CLI authentication
+1. Application Default Credentials (ADC)
+1. Workload Identity (GKE)
+1. Compute Engine metadata server
+1. gcloud CLI authentication
 
 #### Example: GKE with Workload Identity
 
@@ -443,7 +443,7 @@ docker run -it --rm \
 1Password provides both Connect Server (for production) and CLI-based (for
 development) secret management.
 
-#### Configuration
+#### 1Password Configuration
 
 ```bash
 # Enable 1Password integration
@@ -635,15 +635,15 @@ check_all_providers_health
    echo $SECRET_LOADER_ENABLED
    ```
 
-2. Check container logs for error messages:
+1. Check container logs for error messages:
 
    ```bash
    docker logs <container-id>
    ```
 
-3. Verify provider-specific environment variables are set
+1. Verify provider-specific environment variables are set
 
-4. Test provider health manually:
+1. Test provider health manually:
 
    ```bash
    # Vault
@@ -684,13 +684,13 @@ Install missing tools or disable the corresponding provider.
 ## Security Best Practices
 
 1. **Never commit secrets** to version control
-2. **Use IAM roles** instead of access keys when possible
-3. **Enable secret rotation** in your secret management provider
-4. **Limit secret access** using least-privilege IAM policies
-5. **Audit secret access** using provider audit logs
-6. **Use namespaces/projects** to isolate secrets by environment
-7. **Set expiration** on temporary credentials
-8. **Monitor for anomalies** in secret access patterns
+1. **Use IAM roles** instead of access keys when possible
+1. **Enable secret rotation** in your secret management provider
+1. **Limit secret access** using least-privilege IAM policies
+1. **Audit secret access** using provider audit logs
+1. **Use namespaces/projects** to isolate secrets by environment
+1. **Set expiration** on temporary credentials
+1. **Monitor for anomalies** in secret access patterns
 
 ## Related Documentation
 
