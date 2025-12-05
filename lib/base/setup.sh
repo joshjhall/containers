@@ -83,9 +83,9 @@ ARCH=$(dpkg --print-architecture)
 ZOXIDE_VERSION="${ZOXIDE_VERSION:-0.9.8}"
 cd /tmp
 if [ "$ARCH" = "amd64" ]; then
-    command curl -L https://github.com/ajeetdsouza/zoxide/releases/download/v${ZOXIDE_VERSION}/zoxide-${ZOXIDE_VERSION}-x86_64-unknown-linux-musl.tar.gz | tar xz
+    command curl -L "https://github.com/ajeetdsouza/zoxide/releases/download/v${ZOXIDE_VERSION}/zoxide-${ZOXIDE_VERSION}-x86_64-unknown-linux-musl.tar.gz" | tar xz
 elif [ "$ARCH" = "arm64" ]; then
-    command curl -L https://github.com/ajeetdsouza/zoxide/releases/download/v${ZOXIDE_VERSION}/zoxide-${ZOXIDE_VERSION}-aarch64-unknown-linux-musl.tar.gz | tar xz
+    command curl -L "https://github.com/ajeetdsouza/zoxide/releases/download/v${ZOXIDE_VERSION}/zoxide-${ZOXIDE_VERSION}-aarch64-unknown-linux-musl.tar.gz" | tar xz
 fi
 command mv zoxide /usr/local/bin/
 chmod +x /usr/local/bin/zoxide

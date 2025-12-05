@@ -400,6 +400,7 @@ run_variant_test() {
     build_args=$(get_variant_build_args "$variant")
 
     # Build the variant
+    # shellcheck disable=SC2086  # build_args intentionally word-splits to multiple args
     if build_variant "$variant" $build_args; then
         log_success "Build succeeded for $variant"
 

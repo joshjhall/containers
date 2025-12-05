@@ -356,16 +356,15 @@ auto_detect_features() {
     check_core
 
     # Only check features that are installed
-    # Use || true to prevent set -e from exiting if command is not found
-    command -v python3 >/dev/null 2>&1 && check_python || true
-    command -v node >/dev/null 2>&1 && check_node || true
-    command -v rustc >/dev/null 2>&1 && check_rust || true
-    command -v go >/dev/null 2>&1 && check_golang || true
-    command -v ruby >/dev/null 2>&1 && check_ruby || true
-    command -v R >/dev/null 2>&1 && check_r || true
-    command -v java >/dev/null 2>&1 && check_java || true
-    command -v docker >/dev/null 2>&1 && check_docker || true
-    command -v kubectl >/dev/null 2>&1 && check_kubernetes || true
+    if command -v python3 >/dev/null 2>&1; then check_python || true; fi
+    if command -v node >/dev/null 2>&1; then check_node || true; fi
+    if command -v rustc >/dev/null 2>&1; then check_rust || true; fi
+    if command -v go >/dev/null 2>&1; then check_golang || true; fi
+    if command -v ruby >/dev/null 2>&1; then check_ruby || true; fi
+    if command -v R >/dev/null 2>&1; then check_r || true; fi
+    if command -v java >/dev/null 2>&1; then check_java || true; fi
+    if command -v docker >/dev/null 2>&1; then check_docker || true; fi
+    if command -v kubectl >/dev/null 2>&1; then check_kubernetes || true; fi
 
     # Run custom checks if any exist
     run_custom_checks

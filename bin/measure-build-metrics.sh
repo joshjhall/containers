@@ -113,6 +113,7 @@ measure_build_time() {
 
     # Build the image
     # Note: This is a simplified example - actual builds may need more configuration
+    # shellcheck disable=SC2086  # build_args intentionally word-splits to multiple args
     if ! docker build \
         -f "$PROJECT_ROOT/Dockerfile" \
         --build-arg PROJECT_PATH=. \

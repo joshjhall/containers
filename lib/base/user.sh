@@ -74,10 +74,12 @@ if [ "$USER_EXISTS" = false ]; then
 fi
 
 # Export actual UID/GID and USERNAME for use in subsequent scripts
-echo "export USERNAME=${USERNAME}" >> /tmp/build-env
-echo "export ACTUAL_UID=${ACTUAL_UID}" >> /tmp/build-env
-echo "export ACTUAL_GID=${ACTUAL_GID}" >> /tmp/build-env
-echo "export WORKING_DIR=${WORKING_DIR}" >> /tmp/build-env
+{
+    echo "export USERNAME=${USERNAME}"
+    echo "export ACTUAL_UID=${ACTUAL_UID}"
+    echo "export ACTUAL_GID=${ACTUAL_GID}"
+    echo "export WORKING_DIR=${WORKING_DIR}"
+} >> /tmp/build-env
 
 # Also export as environment variables for the current build
 export ACTUAL_UID="${ACTUAL_UID}"
@@ -150,9 +152,11 @@ chown "${USERNAME}":"${USERNAME}" /home/"${USERNAME}"/.bashrc.d
 
 # Add sourcing of bashrc.d directory to user's bashrc if not already present
 if ! grep -q "bashrc.d" /home/"${USERNAME}"/.bashrc; then
-    echo "" >> /home/"${USERNAME}"/.bashrc
-    echo "# Source additional configurations from features" >> /home/"${USERNAME}"/.bashrc
-    echo 'for f in ~/.bashrc.d/*; do [ -r "$f" ] && source "$f"; done' >> /home/"${USERNAME}"/.bashrc
+    {
+        echo ""
+        echo "# Source additional configurations from features"
+        echo 'for f in ~/.bashrc.d/*; do [ -r "$f" ] && source "$f"; done'
+    } >> /home/"${USERNAME}"/.bashrc
 fi
 
 # Add useful helper functions to user's bashrc

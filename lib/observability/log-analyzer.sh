@@ -148,9 +148,9 @@ analyze_failed_auth() {
     local pattern="authentication failure|auth.*fail|login.*fail|invalid password"
 
     if [ -d "$LOG_PATH" ]; then
-        count=$(grep -riE "$pattern" "$LOG_PATH" 2>/dev/null | wc -l || echo 0)
+        count=$(grep -ricE "$pattern" "$LOG_PATH" 2>/dev/null | cut -d: -f2 | awk '{s+=$1} END {print s+0}')
     elif [ -f "$LOG_PATH" ]; then
-        count=$(grep -iE "$pattern" "$LOG_PATH" 2>/dev/null | wc -l || echo 0)
+        count=$(grep -icE "$pattern" "$LOG_PATH" 2>/dev/null || echo 0)
     fi
 
     if [ "$count" -ge "$FAILED_AUTH_THRESHOLD" ]; then
@@ -171,9 +171,9 @@ analyze_privilege_escalation() {
     local pattern="sudo|su -|setuid|setgid|capability|privilege"
 
     if [ -d "$LOG_PATH" ]; then
-        count=$(grep -riE "$pattern" "$LOG_PATH" 2>/dev/null | grep -viE "normal|expected|authorized" | wc -l || echo 0)
+        count=$(grep -riE "$pattern" "$LOG_PATH" 2>/dev/null | grep -vicE "normal|expected|authorized" || echo 0)
     elif [ -f "$LOG_PATH" ]; then
-        count=$(grep -iE "$pattern" "$LOG_PATH" 2>/dev/null | grep -viE "normal|expected|authorized" | wc -l || echo 0)
+        count=$(grep -iE "$pattern" "$LOG_PATH" 2>/dev/null | grep -vicE "normal|expected|authorized" || echo 0)
     fi
 
     if [ "$count" -ge "$PRIVILEGE_ESCALATION_THRESHOLD" ]; then
@@ -194,9 +194,9 @@ analyze_config_changes() {
     local pattern="config.*change|modified|updated|created|deleted|permission.*change"
 
     if [ -d "$LOG_PATH" ]; then
-        count=$(grep -riE "$pattern" "$LOG_PATH" 2>/dev/null | wc -l || echo 0)
+        count=$(grep -ricE "$pattern" "$LOG_PATH" 2>/dev/null | cut -d: -f2 | awk '{s+=$1} END {print s+0}')
     elif [ -f "$LOG_PATH" ]; then
-        count=$(grep -iE "$pattern" "$LOG_PATH" 2>/dev/null | wc -l || echo 0)
+        count=$(grep -icE "$pattern" "$LOG_PATH" 2>/dev/null || echo 0)
     fi
 
     if [ "$count" -ge "$CONFIG_CHANGE_THRESHOLD" ]; then
@@ -216,9 +216,9 @@ analyze_anomalies() {
     local pattern="denied|forbidden|unauthorized|blocked|rejected|violation"
 
     if [ -d "$LOG_PATH" ]; then
-        count=$(grep -riE "$pattern" "$LOG_PATH" 2>/dev/null | wc -l || echo 0)
+        count=$(grep -ricE "$pattern" "$LOG_PATH" 2>/dev/null | cut -d: -f2 | awk '{s+=$1} END {print s+0}')
     elif [ -f "$LOG_PATH" ]; then
-        count=$(grep -iE "$pattern" "$LOG_PATH" 2>/dev/null | wc -l || echo 0)
+        count=$(grep -icE "$pattern" "$LOG_PATH" 2>/dev/null || echo 0)
     fi
 
     if [ "$count" -ge "$ANOMALY_THRESHOLD" ]; then

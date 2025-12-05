@@ -107,7 +107,7 @@ update_python_keys() {
 
     # Count keys
     local key_count
-    key_count=$(ls -1 "$keys_dir"/*.asc 2>/dev/null | wc -l)
+    key_count=$(find "$keys_dir" -maxdepth 1 -name "*.asc" 2>/dev/null | wc -l)
 
     # Clean up
     rm -rf "$temp_dir"

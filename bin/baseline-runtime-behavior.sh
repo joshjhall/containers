@@ -440,7 +440,7 @@ start_baseline() {
     mkdir -p "$OUTPUT_DIR"
 
     # Record start time
-    echo "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "${OUTPUT_DIR}/baseline_start"
+    date -u +%Y-%m-%dT%H:%M:%SZ > "${OUTPUT_DIR}/baseline_start"
 
     for ns in "${namespaces[@]}"; do
         collect_process_baseline "$ns"

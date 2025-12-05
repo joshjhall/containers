@@ -113,13 +113,10 @@ log_message "Installing Docker CLI tools..."
 # Add Docker repository for latest CLI version
 # Note: We can't use log_command here because it would include log output in the file
 log_message "Adding Docker repository..."
-echo \
+if echo \
 "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian \
 $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
-tee /etc/apt/sources.list.d/docker.list > /dev/null
-
-# Log the result
-if [ $? -eq 0 ]; then
+tee /etc/apt/sources.list.d/docker.list > /dev/null; then
     log_message "✓ Docker repository added successfully"
 else
     log_error "Failed to add Docker repository"
