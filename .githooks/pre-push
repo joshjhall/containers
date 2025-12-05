@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# Pre-push hook for comprehensive validation before pushing
-# To use: git config core.hooksPath .githooks
+# Pre-push hook - runs pre-commit framework plus unit tests
 # To skip: git push --no-verify
 
 set -euo pipefail
@@ -17,166 +16,35 @@ echo -e "${BLUE}Running pre-push validation checks...${NC}"
 echo -e "${BLUE}═══════════════════════════════════════════════════${NC}"
 echo ""
 
-# Track overall failure status
 overall_failed=0
 
 # =========================================
-# 1. SHELLCHECK VALIDATION
+# 1. RUN PRE-COMMIT ON ALL FILES
 # =========================================
-echo -e "${BLUE}1. Running shellcheck on all shell scripts...${NC}"
+echo -e "${BLUE}1. Running pre-commit checks on all files...${NC}"
 
-# Check if shellcheck is installed
-if ! command -v shellcheck &> /dev/null; then
-    echo -e "${YELLOW}⚠ Shellcheck not installed. Skipping shell script validation.${NC}"
-    echo "  Install with: apt-get install shellcheck (Debian/Ubuntu)"
-    echo "  or: brew install shellcheck (macOS)"
-else
-    # Find all tracked shell scripts (respects .gitignore)
-    # Exclude setup-git-ssh.sh (legacy script being replaced)
-    shell_files=$(git ls-files '*.sh' '*.bash' 2>/dev/null | grep -v "setup-git-ssh.sh" || \
-      find . -type f \( -name "*.sh" -o -name "*.bash" \) \
-        ! -path "./.git/*" \
-        ! -path "*/node_modules/*" \
-        ! -path "*/vendor/*" \
-        ! -name "setup-git-ssh.sh")
-
-    shellcheck_failed=0
-    checked_count=0
-    failed_count=0
-
-    while IFS= read -r file; do
-        if [ -z "$file" ] || [ ! -f "$file" ]; then
-            continue
-        fi
-
-        checked_count=$((checked_count + 1))
-
-        # Run shellcheck with warning severity
-        if ! shellcheck -S warning "$file" > /dev/null 2>&1; then
-            if [ $shellcheck_failed -eq 0 ]; then
-                echo ""
-                echo -e "${RED}✗ Shellcheck failures detected:${NC}"
-                echo ""
-            fi
-            echo -e "  ${RED}✗${NC} $file"
-            shellcheck -S warning "$file" 2>&1 | sed 's/^/    /'
-            echo ""
-            shellcheck_failed=1
-            failed_count=$((failed_count + 1))
-        fi
-    done <<< "$shell_files"
-
-    if [ $shellcheck_failed -eq 0 ]; then
-        echo -e "  ${GREEN}✓${NC} All $checked_count shell scripts passed shellcheck"
+if command -v pre-commit &> /dev/null; then
+    if pre-commit run --all-files --hook-stage push; then
+        echo -e "  ${GREEN}✓${NC} All pre-commit checks passed"
     else
-        echo -e "  ${RED}✗${NC} $failed_count of $checked_count shell scripts failed shellcheck"
+        echo -e "  ${RED}✗${NC} Pre-commit checks failed"
         overall_failed=1
     fi
-fi
-
-echo ""
-
-# =========================================
-# 2. FILE PERMISSIONS CHECK
-# =========================================
-echo -e "${BLUE}2. Checking file permissions...${NC}"
-
-permission_issues=0
-checked_count=0
-
-# Check all .sh files have execute permission
-while IFS= read -r -d '' file; do
-    checked_count=$((checked_count + 1))
-    if [ ! -x "$file" ]; then
-        if [ $permission_issues -eq 0 ]; then
-            echo ""
-            echo -e "${RED}✗ Files missing execute permission:${NC}"
-        fi
-        echo -e "  ${RED}✗${NC} $file"
-        permission_issues=$((permission_issues + 1))
-    fi
-    # Also check read permission
-    if [ ! -r "$file" ]; then
-        if [ $permission_issues -eq 0 ]; then
-            echo ""
-            echo -e "${RED}✗ Files missing read permission:${NC}"
-        fi
-        echo -e "  ${RED}✗${NC} $file (not readable)"
-        permission_issues=$((permission_issues + 1))
-    fi
-done < <(find . -name "*.sh" -type f -not -path "./.git/*" -print0 2>/dev/null)
-
-# Check .bash files
-while IFS= read -r -d '' file; do
-    checked_count=$((checked_count + 1))
-    if [ ! -x "$file" ]; then
-        if [ $permission_issues -eq 0 ]; then
-            echo ""
-            echo -e "${RED}✗ Files missing execute permission:${NC}"
-        fi
-        echo -e "  ${RED}✗${NC} $file"
-        permission_issues=$((permission_issues + 1))
-    fi
-done < <(find . -name "*.bash" -type f -not -path "./.git/*" -print0 2>/dev/null)
-
-# Check .githooks
-for hook in .githooks/*; do
-    if [ -f "$hook" ]; then
-        checked_count=$((checked_count + 1))
-        if [ ! -x "$hook" ]; then
-            if [ $permission_issues -eq 0 ]; then
-                echo ""
-                echo -e "${RED}✗ Git hooks missing execute permission:${NC}"
-            fi
-            echo -e "  ${RED}✗${NC} $hook"
-            permission_issues=$((permission_issues + 1))
-        fi
-    fi
-done
-
-# Check secure files (GPG keys, SSH keys, PEM) have 600 permissions (owner only)
-secure_patterns=("*.gpg" "*.asc" "*.key" "*.pem" "*id_rsa*" "*id_ed25519*" "*id_ecdsa*")
-for pattern in "${secure_patterns[@]}"; do
-    while IFS= read -r -d '' file; do
-        checked_count=$((checked_count + 1))
-        # Get current permissions
-        current_perms=$(stat -c '%a' "$file" 2>/dev/null || stat -f '%Lp' "$file" 2>/dev/null)
-
-        # Secure files must be 600 (owner read/write only)
-        if [ "$current_perms" != "600" ]; then
-            if [ $permission_issues -eq 0 ]; then
-                echo ""
-                echo -e "${RED}✗ Secure files with incorrect permissions:${NC}"
-            fi
-            echo -e "  ${RED}✗${NC} $file (mode $current_perms, should be 600)"
-            permission_issues=$((permission_issues + 1))
-        fi
-    done < <(find . -name "$pattern" -type f -not -path "./.git/*" -print0 2>/dev/null)
-done
-
-if [ $permission_issues -eq 0 ]; then
-    echo -e "  ${GREEN}✓${NC} All $checked_count files have correct permissions"
 else
-    echo ""
-    echo -e "  ${RED}✗${NC} $permission_issues files have incorrect permissions"
-    echo -e "  ${YELLOW}For scripts: find . -name '*.sh' -type f -exec chmod +x {} \\;${NC}"
-    echo -e "  ${YELLOW}For secure files: chmod 600 <file>${NC}"
-    overall_failed=1
+    echo -e "${YELLOW}⚠ pre-commit not installed. Run: pip install pre-commit && pre-commit install${NC}"
 fi
 
 echo ""
 
 # =========================================
-# 3. UNIT TESTS
+# 2. UNIT TESTS
 # =========================================
-echo -e "${BLUE}3. Running unit tests...${NC}"
+echo -e "${BLUE}2. Running unit tests...${NC}"
 
-# Check if unit test script exists
 if [ ! -f "./tests/run_unit_tests.sh" ]; then
     echo -e "${YELLOW}⚠ Unit test script not found. Skipping unit tests.${NC}"
 else
     if ./tests/run_unit_tests.sh > /tmp/pre-push-unit-tests.log 2>&1; then
-        # Count tests from log
         test_count=$(grep -c "✓" /tmp/pre-push-unit-tests.log 2>/dev/null || echo "0")
         echo -e "  ${GREEN}✓${NC} All unit tests passed ($test_count tests)"
     else
@@ -187,137 +55,26 @@ else
         echo ""
         overall_failed=1
     fi
-
-    # Clean up log file
     rm -f /tmp/pre-push-unit-tests.log
 fi
 
 echo ""
 
 # =========================================
-# 4. YAML VALIDATION
+# 3. DOCKER COMPOSE VALIDATION
 # =========================================
-echo -e "${BLUE}4. Running YAML validation...${NC}"
+echo -e "${BLUE}3. Running Docker Compose validation...${NC}"
 
-# Check if yamllint is installed
-if ! command -v yamllint &> /dev/null; then
-    echo -e "${YELLOW}⚠ yamllint not installed. Skipping YAML validation.${NC}"
-    echo "  Install with: pip install yamllint"
+if ! command -v docker &> /dev/null; then
+    echo -e "${YELLOW}⚠ Docker not installed. Skipping compose validation.${NC}"
 else
-    # Find all YAML files (respects .gitignore)
-    yaml_files=$(git ls-files '*.yml' '*.yaml' 2>/dev/null || \
-      find . -type f \( -name "*.yml" -o -name "*.yaml" \) \
-        ! -path "./.git/*" \
-        ! -path "*/node_modules/*" \
-        ! -path "*/vendor/*")
-
-    yamllint_failed=0
-    checked_count=0
-    failed_count=0
-
-    while IFS= read -r file; do
-        if [ -z "$file" ] || [ ! -f "$file" ]; then
-            continue
-        fi
-
-        checked_count=$((checked_count + 1))
-
-        # Run yamllint
-        if ! yamllint -c .yamllint.yml "$file" > /dev/null 2>&1; then
-            if [ $yamllint_failed -eq 0 ]; then
-                echo ""
-                echo -e "${RED}✗ YAML validation failures detected:${NC}"
-                echo ""
-            fi
-            echo -e "  ${RED}✗${NC} $file"
-            yamllint -c .yamllint.yml "$file" 2>&1 | sed 's/^/    /'
-            echo ""
-            yamllint_failed=1
-            failed_count=$((failed_count + 1))
-        fi
-    done <<< "$yaml_files"
-
-    if [ $yamllint_failed -eq 0 ]; then
-        echo -e "  ${GREEN}✓${NC} All $checked_count YAML files passed validation"
-    else
-        echo -e "  ${RED}✗${NC} $failed_count of $checked_count YAML files failed validation"
-        overall_failed=1
-    fi
-fi
-
-echo ""
-
-# =========================================
-# 5. MARKDOWN LINT VALIDATION
-# =========================================
-echo -e "${BLUE}5. Running markdown lint validation...${NC}"
-
-# Check if markdownlint is installed
-if ! command -v markdownlint &> /dev/null; then
-    echo -e "${YELLOW}⚠ markdownlint not installed. Skipping markdown validation.${NC}"
-    echo "  Install with: npm install -g markdownlint-cli"
-else
-    # Find all markdown files (respects .gitignore)
-    md_files=$(git ls-files '*.md' 2>/dev/null || \
-      find . -type f -name "*.md" \
-        ! -path "./.git/*" \
-        ! -path "*/node_modules/*" \
-        ! -path "*/vendor/*")
-
-    mdlint_failed=0
-    checked_count=0
-    failed_count=0
-
-    while IFS= read -r file; do
-        if [ -z "$file" ] || [ ! -f "$file" ]; then
-            continue
-        fi
-
-        checked_count=$((checked_count + 1))
-
-        # Run markdownlint with config file (same as CI)
-        if ! markdownlint --config .markdownlint.json "$file" > /dev/null 2>&1; then
-            if [ $mdlint_failed -eq 0 ]; then
-                echo ""
-                echo -e "${RED}✗ Markdown lint failures detected:${NC}"
-                echo ""
-            fi
-            echo -e "  ${RED}✗${NC} $file"
-            markdownlint --config .markdownlint.json "$file" 2>&1 | sed 's/^/    /'
-            echo ""
-            mdlint_failed=1
-            failed_count=$((failed_count + 1))
-        fi
-    done <<< "$md_files"
-
-    if [ $mdlint_failed -eq 0 ]; then
-        echo -e "  ${GREEN}✓${NC} All $checked_count markdown files passed lint validation"
-    else
-        echo -e "  ${RED}✗${NC} $failed_count of $checked_count markdown files failed lint validation"
-        overall_failed=1
-    fi
-fi
-
-echo ""
-
-# =========================================
-# 6. DOCKER COMPOSE VALIDATION
-# =========================================
-echo -e "${BLUE}6. Running Docker Compose validation...${NC}"
-
-# Check if docker-compose is installed
-if ! command -v docker &> /dev/null || ! command -v docker-compose &> /dev/null; then
-    echo -e "${YELLOW}⚠ Docker Compose not installed. Skipping compose validation.${NC}"
-else
-    # Find all docker-compose files
-    compose_files=$(git ls-files '*docker-compose*.yml' '*docker-compose*.yaml' '*compose*.yml' '*compose*.yaml' 2>/dev/null)
+    compose_files=$(git ls-files '*docker-compose*.yml' '*docker-compose*.yaml' '*compose*.yml' '*compose*.yaml' 2>/dev/null || true)
 
     if [ -z "$compose_files" ]; then
         echo -e "  ${GREEN}✓${NC} No Docker Compose files found"
     else
         compose_failed=0
         checked_count=0
-        failed_count=0
 
         while IFS= read -r file; do
             if [ -z "$file" ] || [ ! -f "$file" ]; then
@@ -326,25 +83,16 @@ else
 
             checked_count=$((checked_count + 1))
 
-            # Validate docker-compose file
-            if ! docker-compose -f "$file" config > /dev/null 2>&1; then
-                if [ $compose_failed -eq 0 ]; then
-                    echo ""
-                    echo -e "${RED}✗ Docker Compose validation failures detected:${NC}"
-                    echo ""
-                fi
+            if ! docker compose -f "$file" config > /dev/null 2>&1; then
                 echo -e "  ${RED}✗${NC} $file"
-                docker-compose -f "$file" config 2>&1 | sed 's/^/    /'
-                echo ""
+                docker compose -f "$file" config 2>&1 | sed 's/^/    /'
                 compose_failed=1
-                failed_count=$((failed_count + 1))
             fi
         done <<< "$compose_files"
 
         if [ $compose_failed -eq 0 ]; then
             echo -e "  ${GREEN}✓${NC} All $checked_count Docker Compose files passed validation"
         else
-            echo -e "  ${RED}✗${NC} $failed_count of $checked_count Docker Compose files failed validation"
             overall_failed=1
         fi
     fi

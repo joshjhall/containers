@@ -1,0 +1,99 @@
+# Pre-commit configuration
+# Install: pip install pre-commit && pre-commit install
+# Run all: pre-commit run --all-files
+# Update: pre-commit autoupdate
+
+repos:
+  # ==========================================================================
+  # General file checks
+  # ==========================================================================
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: ^tests/results/
+      - id: end-of-file-fixer
+        exclude: ^tests/results/
+      - id: check-yaml
+        args: [--unsafe]  # Allow custom tags
+      - id: check-json
+      - id: check-added-large-files
+        args: [--maxkb=500]
+      - id: check-merge-conflict
+      - id: check-executables-have-shebangs
+      - id: check-shebang-scripts-are-executable
+      - id: detect-private-key
+
+  # ==========================================================================
+  # Shell script linting
+  # ==========================================================================
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.10.0.1
+    hooks:
+      - id: shellcheck
+        args: [--severity=warning]
+        exclude: ^tests/results/
+
+  # ==========================================================================
+  # YAML linting
+  # ==========================================================================
+  - repo: https://github.com/adrienverge/yamllint
+    rev: v1.35.1
+    hooks:
+      - id: yamllint
+        args: [-c, .yamllint.yml]
+        exclude: ^tests/results/
+
+  # ==========================================================================
+  # Markdown formatting and linting
+  # ==========================================================================
+  # mdformat runs first to auto-fix formatting issues
+  - repo: https://github.com/executablebooks/mdformat
+    rev: 0.7.21
+    hooks:
+      - id: mdformat
+        additional_dependencies:
+          - mdformat-gfm        # GitHub Flavored Markdown
+          - mdformat-frontmatter  # YAML frontmatter support
+          - mdformat-tables     # Table formatting
+        exclude: ^(CHANGELOG\.md|tests/results/)
+
+  # pymarkdownlnt validates after formatting
+  - repo: https://github.com/jackdewinter/pymarkdown
+    rev: v0.9.25
+    hooks:
+      - id: pymarkdown
+        args:
+          - --disable-rules
+          # MD013: Line length (too strict for prose with long URLs/paths)
+          # MD029: Ordered list prefix (bibliographies use intentional numbering)
+          # MD036: Emphasis as heading (conflicts with mdformat auto-formatting)
+          # MD041: First line heading (not always applicable for partial docs)
+          - MD013,MD029,MD036,MD041
+          - scan
+        exclude: ^(CHANGELOG\.md|tests/results/)
+
+  # ==========================================================================
+  # JSON linting with Biome
+  # ==========================================================================
+  - repo: local
+    hooks:
+      - id: biome-json
+        name: biome (JSON)
+        entry: biome check --write
+        language: system
+        types: [json]
+        exclude: ^(tests/results/|\.vscode/)
+
+  # ==========================================================================
+  # Security checks
+  # ==========================================================================
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.21.2
+    hooks:
+      - id: gitleaks
+
+# CI configuration - run these hooks in CI
+ci:
+  autofix_prs: false
+  autoupdate_schedule: monthly

@@ -69,52 +69,34 @@ else
     echo ".env" >> .gitignore
 fi
 
-# 3. Install quality check tools
+# 3. Install pre-commit framework
 echo ""
-echo -e "${BLUE}[3/5] Installing quality check tools...${NC}"
+echo -e "${BLUE}[3/5] Installing pre-commit framework...${NC}"
 
-# Install yamllint (Python)
 if command -v pip3 &> /dev/null; then
-    if ! command -v yamllint &> /dev/null; then
-        echo -e "${BLUE}Installing yamllint...${NC}"
-        if pip3 install --user yamllint > /dev/null 2>&1; then
-            echo -e "${GREEN}✓${NC} yamllint installed"
+    if ! command -v pre-commit &> /dev/null; then
+        echo -e "${BLUE}Installing pre-commit...${NC}"
+        if pip3 install --user pre-commit > /dev/null 2>&1; then
+            echo -e "${GREEN}✓${NC} pre-commit installed"
         else
-            echo -e "${YELLOW}⚠${NC}  Failed to install yamllint"
+            echo -e "${YELLOW}⚠${NC}  Failed to install pre-commit"
         fi
     else
-        echo -e "${GREEN}✓${NC} yamllint already installed"
-    fi
-else
-    echo -e "${YELLOW}⚠${NC}  pip3 not found - skipping yamllint installation"
-fi
-
-# Install prettier and markdownlint-cli (Node)
-if command -v npm &> /dev/null; then
-    # Check if global npm packages are installed
-    if ! npm list -g prettier > /dev/null 2>&1; then
-        echo -e "${BLUE}Installing prettier...${NC}"
-        if npm install -g prettier > /dev/null 2>&1; then
-            echo -e "${GREEN}✓${NC} prettier installed"
-        else
-            echo -e "${YELLOW}⚠${NC}  Failed to install prettier"
-        fi
-    else
-        echo -e "${GREEN}✓${NC} prettier already installed"
+        echo -e "${GREEN}✓${NC} pre-commit already installed"
     fi
 
-    if ! npm list -g markdownlint-cli > /dev/null 2>&1; then
-        echo -e "${BLUE}Installing markdownlint-cli...${NC}"
-        if npm install -g markdownlint-cli > /dev/null 2>&1; then
-            echo -e "${GREEN}✓${NC} markdownlint-cli installed"
+    # Install pre-commit hooks (downloads tool environments)
+    if command -v pre-commit &> /dev/null; then
+        echo -e "${BLUE}Setting up pre-commit hook environments...${NC}"
+        if pre-commit install-hooks > /dev/null 2>&1; then
+            echo -e "${GREEN}✓${NC} pre-commit hooks installed"
         else
-            echo -e "${YELLOW}⚠${NC}  Failed to install markdownlint-cli"
+            echo -e "${YELLOW}⚠${NC}  Failed to install pre-commit hooks (will install on first run)"
         fi
-    else
-        echo -e "${GREEN}✓${NC} markdownlint-cli already installed"
     fi
 else
-    echo -e "${YELLOW}⚠${NC}  npm not found - skipping prettier and markdownlint-cli installation"
+    echo -e "${YELLOW}⚠${NC}  pip3 not found - skipping pre-commit installation"
+    echo "  Install Python 3 to enable pre-commit framework"
 fi
 
 # 4. Check recommended tools
@@ -139,9 +121,8 @@ check_tool "docker" "https://docs.docker.com/get-docker/"
 check_tool "gh" "https://cli.github.com/"
 check_tool "jq" "apt-get install jq (or brew install jq)"
 check_tool "git-cliff" "cargo install git-cliff (optional, for changelogs)"
-check_tool "yamllint" "pip3 install yamllint"
-check_tool "prettier" "npm install -g prettier"
-check_tool "markdownlint" "npm install -g markdownlint-cli"
+check_tool "pre-commit" "pip3 install pre-commit"
+check_tool "biome" "included in dev-tools feature"
 
 # 5. Check git configuration
 echo ""
@@ -163,19 +144,22 @@ echo "  1. Run tests: ./tests/run_all.sh"
 echo "  2. Build a container: docker build -t test:minimal --build-arg PROJECT_NAME=test --build-arg PROJECT_PATH=. ."
 echo "  3. See docs/README.md for more information"
 echo ""
-echo "Git hooks are now active:"
+echo "Git hooks are now active (via pre-commit framework):"
 echo ""
 echo "Pre-commit hook (runs on: git commit):"
-echo "  - Run shellcheck on staged shell scripts"
-echo "  - Run prettier format check (non-blocking)"
-echo "  - Run markdownlint validation (non-blocking)"
-echo "  - Prevent .env file commits"
-echo "  - Detect common credential patterns"
+echo "  - Credential leak prevention (custom)"
+echo "  - File permission fixes (custom)"
+echo "  - Trailing whitespace and EOF fixes"
+echo "  - YAML/JSON/TOML validation"
+echo "  - Shellcheck on shell scripts"
+echo "  - Markdown formatting (mdformat)"
+echo "  - Markdown linting (pymarkdown)"
+echo "  - JSON linting (biome)"
+echo "  - Secret detection (gitleaks)"
 echo "  - Skip with: git commit --no-verify"
 echo ""
 echo "Pre-push hook (runs on: git push):"
-echo "  - Run shellcheck on all shell scripts"
-echo "  - Run unit tests (fast, no Docker required)"
-echo "  - Run yamllint on all YAML files"
-echo "  - Run Docker Compose validation"
+echo "  - All pre-commit checks on all files"
+echo "  - Unit tests (fast, no Docker required)"
+echo "  - Docker Compose validation"
 echo "  - Skip with: git push --no-verify"

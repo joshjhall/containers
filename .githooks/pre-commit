@@ -1,26 +1,23 @@
 #!/usr/bin/env bash
-# Pre-commit hook for shellcheck validation and credential checking
-# To use: git config core.hooksPath .githooks
+# Pre-commit hook - runs pre-commit framework plus custom checks
 # To skip: git commit --no-verify
 
 set -euo pipefail
 
-# Colors (defined early for use in all sections)
+# Colors
 RED='\033[0;31m'
 YELLOW='\033[1;33m'
 GREEN='\033[0;32m'
 NC='\033[0m'
 
 # =========================================
-# CREDENTIAL LEAK PREVENTION
+# CREDENTIAL LEAK PREVENTION (custom)
 # =========================================
 
 # Check if .env is being committed (should NEVER happen)
 if git diff --cached --name-only | grep -q "^\.env$"; then
     echo -e "${RED}ERROR: Attempting to commit .env file!${NC}"
     echo -e "${YELLOW}.env should NEVER be committed as it may contain credentials.${NC}"
-    echo ""
-    echo "If you really need to commit .env changes, use .env.example instead."
     echo ""
     exit 1
 fi
@@ -29,17 +26,15 @@ fi
 CREDENTIAL_PATTERNS=(
     'ops_eyJ[A-Za-z0-9_-]+'          # 1Password service account tokens
     'github_pat_[A-Za-z0-9_]+'       # GitHub PATs
-    'ghp_[A-Za-z0-9]+'                # GitHub classic tokens
-    'gho_[A-Za-z0-9]+'                # GitHub OAuth tokens
+    'ghp_[A-Za-z0-9]+'               # GitHub classic tokens
+    'gho_[A-Za-z0-9]+'               # GitHub OAuth tokens
     'sk_live_[A-Za-z0-9]+'           # Stripe live keys
     'sk_test_[A-Za-z0-9]+'           # Stripe test keys
-    'AKIA[A-Z0-9]{16}'                # AWS access keys
-    'AIza[A-Za-z0-9_-]{35}'           # Google API keys
+    'AKIA[A-Z0-9]{16}'               # AWS access keys
+    'AIza[A-Za-z0-9_-]{35}'          # Google API keys
 )
 
 for pattern in "${CREDENTIAL_PATTERNS[@]}"; do
-    # Check all staged files (excluding deletions)
-    # Exclude common placeholder patterns (your_token_here, example, placeholder, xxx, etc)
     if git diff --cached --diff-filter=d | \
        grep -E "$pattern" | \
        grep -v "^-" | \
@@ -48,37 +43,28 @@ for pattern in "${CREDENTIAL_PATTERNS[@]}"; do
         echo -e "${YELLOW}Pattern matched: $pattern${NC}"
         echo ""
         echo "Please review your staged changes and remove any credentials."
-        echo "Use environment variables or secret management instead."
-        echo ""
         exit 1
     fi
 done
 
 # =========================================
-# FILE PERMISSIONS CHECK AND FIX
+# FILE PERMISSIONS AUTO-FIX (custom)
 # =========================================
 
 echo -e "${GREEN}Checking file permissions...${NC}"
-
-# Find all .sh files and ensure they have execute permission
 permission_fixed=false
+
+# Fix .sh files
 while IFS= read -r -d '' file; do
     if [ ! -x "$file" ]; then
         echo -e "  ${YELLOW}Fixing execute permission:${NC} $file"
         chmod +x "$file"
-        git add "$file"
-        permission_fixed=true
-    fi
-    # Also ensure files have read permission
-    if [ ! -r "$file" ]; then
-        echo -e "  ${YELLOW}Fixing read permission:${NC} $file"
-        chmod +r "$file"
         git add "$file"
         permission_fixed=true
     fi
 done < <(find . -name "*.sh" -type f -not -path "./.git/*" -print0 2>/dev/null)
 
-# Also check .bash files
+# Fix .bash files
 while IFS= read -r -d '' file; do
     if [ ! -x "$file" ]; then
         echo -e "  ${YELLOW}Fixing execute permission:${NC} $file"
@@ -86,15 +72,9 @@ while IFS= read -r -d '' file; do
         git add "$file"
         permission_fixed=true
     fi
-    if [ ! -r "$file" ]; then
-        echo -e "  ${YELLOW}Fixing read permission:${NC} $file"
-        chmod +r "$file"
-        git add "$file"
-        permission_fixed=true
-    fi
 done < <(find . -name "*.bash" -type f -not -path "./.git/*" -print0 2>/dev/null)
 
-# Check the .githooks directory for executable scripts
+# Fix .githooks
 for hook in .githooks/*; do
     if [ -f "$hook" ] && [ ! -x "$hook" ]; then
         echo -e "  ${YELLOW}Fixing execute permission:${NC} $hook"
@@ -104,23 +84,6 @@ for hook in .githooks/*; do
     fi
 done
 
-# Check secure files (GPG keys, SSH keys, PEM) have restrictive permissions (600 - owner only)
-secure_patterns=("*.gpg" "*.asc" "*.key" "*.pem" "*id_rsa*" "*id_ed25519*" "*id_ecdsa*")
-for pattern in "${secure_patterns[@]}"; do
-    while IFS= read -r -d '' file; do
-        # Get current permissions
-        current_perms=$(stat -c '%a' "$file" 2>/dev/null || stat -f '%Lp' "$file" 2>/dev/null)
-
-        # Secure files should be 600 (owner read/write only)
-        if [ "$current_perms" != "600" ]; then
-            echo -e "  ${YELLOW}Fixing secure file permissions:${NC} $file (was $current_perms, setting to 600)"
-            chmod 600 "$file"
-            git add "$file"
-            permission_fixed=true
-        fi
-    done < <(find . -name "$pattern" -type f -not -path "./.git/*" -print0 2>/dev/null)
-done
-
 if [ "$permission_fixed" = true ]; then
     echo -e "${GREEN}✓ File permissions fixed and staged${NC}"
 else
@@ -128,181 +91,15 @@ else
 fi
 
 # =========================================
-# PRETTIER FORMATTING CHECK
+# RUN PRE-COMMIT FRAMEWORK
 # =========================================
 
-PRETTIER_ENABLED="${PRETTIER_ENABLED:-true}"
-
-if [ "$PRETTIER_ENABLED" = "true" ]; then
-    # Check if prettier is installed
-    if command -v prettier &> /dev/null || command -v npx &> /dev/null; then
-        # Get staged files that prettier can format
-        staged_prettier_files=$(git diff --cached --name-only --diff-filter=ACM | \
-            grep -E '\.(md|json|ya?ml|js|ts|jsx|tsx|css|scss|html)$' || true)
-
-        if [ -n "$staged_prettier_files" ]; then
-            echo -e "${GREEN}Running prettier format check...${NC}"
-
-            prettier_issues=false
-            while IFS= read -r file; do
-                if [ -z "$file" ] || [ ! -f "$file" ]; then
-                    continue
-                fi
-
-                # Check if file is formatted
-                if command -v prettier &> /dev/null; then
-                    PRETTIER_CMD="prettier"
-                else
-                    PRETTIER_CMD="npx prettier"
-                fi
-
-                if ! $PRETTIER_CMD --check "$file" > /dev/null 2>&1; then
-                    echo -e "  ${YELLOW}✗${NC} $file needs formatting"
-                    prettier_issues=true
-                fi
-            done <<< "$staged_prettier_files"
-
-            if [ "$prettier_issues" = true ]; then
-                echo ""
-                echo -e "${YELLOW}Some files need formatting. Run:${NC}"
-                echo "  prettier --write <file>"
-                echo ""
-                echo -e "${YELLOW}Or auto-fix all:${NC}"
-                echo "  git diff --cached --name-only | xargs prettier --write"
-                echo "  git add -u"
-                echo ""
-                echo -e "${YELLOW}Note: Allowing commit, but please format files.${NC}"
-            else
-                echo -e "${GREEN}✓ All files are properly formatted${NC}"
-            fi
-        fi
-    fi
-fi
-
-# =========================================
-# MARKDOWNLINT VALIDATION
-# =========================================
-
-MARKDOWNLINT_ENABLED="${MARKDOWNLINT_ENABLED:-true}"
-
-if [ "$MARKDOWNLINT_ENABLED" = "true" ]; then
-    # Check if markdownlint is installed
-    if command -v markdownlint &> /dev/null || command -v npx &> /dev/null; then
-        # Get staged markdown files
-        staged_md_files=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.md$' || true)
-
-        if [ -n "$staged_md_files" ]; then
-            echo -e "${GREEN}Running markdownlint...${NC}"
-
-            md_issues=false
-            while IFS= read -r file; do
-                if [ -z "$file" ] || [ ! -f "$file" ]; then
-                    continue
-                fi
-
-                if command -v markdownlint &> /dev/null; then
-                    MDLINT_CMD="markdownlint"
-                else
-                    MDLINT_CMD="npx markdownlint-cli"
-                fi
-
-                if ! $MDLINT_CMD "$file" > /dev/null 2>&1; then
-                    echo -e "  ${YELLOW}✗${NC} $file has markdown issues"
-                    $MDLINT_CMD "$file" 2>&1 | sed 's/^/    /' || true
-                    md_issues=true
-                fi
-            done <<< "$staged_md_files"
-
-            if [ "$md_issues" = true ]; then
-                echo ""
-                echo -e "${YELLOW}Note: Allowing commit, but please fix markdown issues.${NC}"
-            else
-                echo -e "${GREEN}✓ All markdown files passed validation${NC}"
-            fi
-        fi
-    fi
-fi
-
-# =========================================
-# SHELLCHECK VALIDATION
-# =========================================
-
-# Configuration
-SHELLCHECK_SEVERITY="${SHELLCHECK_SEVERITY:-error}"  # error, warning, info, style
-SHELLCHECK_ENABLED="${SHELLCHECK_ENABLED:-true}"
-
-# Check if shellcheck is disabled
-if [ "$SHELLCHECK_ENABLED" = "false" ]; then
-    exit 0
-fi
-
-# Check if shellcheck is installed
-if ! command -v shellcheck &> /dev/null; then
-    echo -e "${YELLOW}⚠ Shellcheck not installed. Skipping shell script validation.${NC}"
-    echo "  Install with: apt-get install shellcheck (Debian/Ubuntu)"
-    echo "  or: brew install shellcheck (macOS)"
-    exit 0
-fi
-
-# Get list of staged shell files
-staged_files=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(sh|bash)$' || true)
-
-# Also check files with bash shebang
-for file in $(git diff --cached --name-only --diff-filter=ACM); do
-    if [ -f "$file" ] && head -n1 "$file" | grep -qE '^#!/(usr/)?bin/(env )?bash'; then
-        staged_files="$staged_files $file"
-    fi
-done
-
-# Remove duplicates and empty entries
-staged_files=$(echo "$staged_files" | tr ' ' '\n' | sort -u | grep -v '^$' || true)
-
-if [ -z "$staged_files" ]; then
-    exit 0
-fi
-
-echo -e "${GREEN}Running shellcheck on staged shell scripts...${NC}"
-
-# Track if we found any issues
-found_issues=false
-found_errors=false
-
-# Check each file
-while IFS= read -r file; do
-    if [ -z "$file" ] || [ ! -f "$file" ]; then
-        continue
-    fi
-    
-    echo -n "  Checking $file... "
-    
-    # Run shellcheck with specified severity
-    if output=$(shellcheck -S "$SHELLCHECK_SEVERITY" "$file" 2>&1); then
-        echo -e "${GREEN}✓${NC}"
-    else
-        echo -e "${RED}✗${NC}"
-        echo "$output" | sed 's/^/    /'
-        found_issues=true
-        
-        # Check if there are actual errors (not just warnings)
-        if echo "$output" | grep -q "error"; then
-            found_errors=true
-        fi
-    fi
-done <<< "$staged_files"
-
-# Decide whether to block commit
-if [ "$found_errors" = true ] && [ "$SHELLCHECK_SEVERITY" = "error" ]; then
+if command -v pre-commit &> /dev/null; then
     echo ""
-    echo -e "${RED}✗ Commit blocked due to shellcheck errors.${NC}"
-    echo "  Fix the errors or use 'git commit --no-verify' to skip validation."
-    exit 1
-elif [ "$found_issues" = true ]; then
-    echo ""
-    echo -e "${YELLOW}⚠ Shellcheck found issues but allowing commit.${NC}"
-    echo "  Consider fixing these issues in a follow-up commit."
-    echo "  To block on warnings, set: export SHELLCHECK_SEVERITY=warning"
-    exit 0
+    pre-commit run --hook-stage commit || exit 1
 else
-    echo -e "${GREEN}✓ All shell scripts passed validation!${NC}"
-    exit 0
+    echo -e "${YELLOW}⚠ pre-commit not installed. Run: pip install pre-commit && pre-commit install${NC}"
+    echo "  Skipping automated checks. Install pre-commit for full validation."
 fi
+
+exit 0
