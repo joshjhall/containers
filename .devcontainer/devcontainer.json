@@ -16,6 +16,9 @@
   //   "SKIP_CASE_CHECK": "true"  // Suppress case-sensitivity warning if you're aware of limitations
   // },
 
+  // Install development dependencies once when container is created
+  "postCreateCommand": "pipx install pre-commit",
+
   // Auto-configure git hooks, development environment, SSH keys, and GitHub CLI after container starts
   "postStartCommand": "bash -c './bin/setup-dev-environment.sh && ./bin/setup-git-ssh.sh && ./bin/setup-gh-cli.sh'",
 
