@@ -133,23 +133,22 @@ jobs:
       - name: Run Markdown linting
         run: |
           echo "Running Markdown linting..."
-          npm install -g markdownlint-cli
+          pip install pymarkdownlnt
 
-          # Find all markdown files
-          md_files=$(git ls-files '*.md' || true)
+          # Find all markdown files (exclude CHANGELOG.md which is auto-generated)
+          md_files=$(git ls-files '*.md' | grep -v '^CHANGELOG\.md$' || true)
 
           if [ -z "$md_files" ]; then
             echo "✅ No Markdown files found"
             exit 0
           fi
 
-          # Run markdownlint with config if available
-          if [ -f .markdownlint.json ]; then
-            markdownlint --config .markdownlint.json $md_files
-          else
-            # Default rules: disable line-length (MD013) for flexibility
-            markdownlint --disable MD013 -- $md_files
-          fi
+          # Run pymarkdown with disabled rules matching pre-commit config
+          # MD013: Line length (too strict for prose with long URLs/paths)
+          # MD029: Ordered list prefix (bibliographies use intentional numbering)
+          # MD036: Emphasis as heading (conflicts with mdformat auto-formatting)
+          # MD041: First line heading (not always applicable for partial docs)
+          pymarkdown --disable-rules MD013,MD029,MD036,MD041 scan $md_files
 
           echo "✅ All Markdown files passed linting"
 
