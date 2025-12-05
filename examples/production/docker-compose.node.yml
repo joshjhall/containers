@@ -82,7 +82,7 @@ services:
 
     # Health check (built into image)
     healthcheck:
-      test: ["/usr/local/bin/healthcheck", "--quick"]
+      test: ["CMD", "/usr/local/bin/healthcheck", "--quick"]
       interval: 30s
       timeout: 10s
       retries: 3

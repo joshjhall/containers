@@ -16,8 +16,6 @@
 #   - Jaeger:     http://localhost:16686
 #   - Container:  http://localhost:8080 (if applicable)
 
-version: "3.8"
-
 services:
   # ============================================================================
   # Metrics Collection
