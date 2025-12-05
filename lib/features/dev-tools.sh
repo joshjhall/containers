@@ -16,6 +16,7 @@
 #   - GitHub/GitLab CLIs: gh, act (local GitHub Actions), glab
 #   - Text processing: jq
 #   - Release tools: git-cliff (automatic changelog from conventional commits)
+#   - Linting/Formatting: biome (fast linter/formatter for JS/TS/JSON/CSS)
 #   - Claude Code CLI tool
 #   - And many more productivity tools
 #
@@ -48,6 +49,7 @@ LAZYGIT_VERSION="${LAZYGIT_VERSION:-0.56.0}"
 DELTA_VERSION="${DELTA_VERSION:-0.18.2}"
 ACT_VERSION="${ACT_VERSION:-0.2.82}"
 GITCLIFF_VERSION="${GITCLIFF_VERSION:-2.8.0}"
+BIOME_VERSION="${BIOME_VERSION:-1.9.4}"
 
 # ============================================================================
 # Repository Configuration
@@ -728,7 +730,7 @@ if [ -n "$GITCLIFF_FILENAME" ]; then
     log_command "Extracting git-cliff" \
         tar -xzf git-cliff-verified.tar.gz
     log_command "Installing git-cliff binary" \
-        command mv git-cliff-${GITCLIFF_VERSION}/git-cliff /usr/local/bin/
+        command mv "git-cliff-${GITCLIFF_VERSION}/git-cliff" /usr/local/bin/
 
     cd /
     log_message "✓ git-cliff ${GITCLIFF_VERSION} installed successfully"
@@ -784,6 +786,56 @@ if [ -n "$GLAB_ARCH" ]; then
 
         cd /
     fi
+fi
+
+# Install Biome (linting and formatting tool)
+log_message "Installing Biome ${BIOME_VERSION}..."
+
+# Determine Biome binary name based on architecture
+case "$ARCH" in
+    amd64)
+        BIOME_BINARY="biome-linux-x64"
+        ;;
+    arm64)
+        BIOME_BINARY="biome-linux-arm64"
+        ;;
+    *)
+        log_warning "Biome not available for architecture $ARCH, skipping..."
+        BIOME_BINARY=""
+        ;;
+esac
+
+if [ -n "$BIOME_BINARY" ]; then
+    BIOME_URL="https://github.com/biomejs/biome/releases/download/cli/v${BIOME_VERSION}/${BIOME_BINARY}"
+
+    # Calculate checksum from download (Biome doesn't publish checksums)
+    log_message "Calculating checksum for Biome ${BIOME_VERSION}..."
+    if ! BIOME_CHECKSUM=$(calculate_checksum_sha256 "$BIOME_URL" 2>/dev/null); then
+        log_error "Failed to download and calculate checksum for Biome ${BIOME_VERSION}"
+        log_error "Please verify version exists: https://github.com/biomejs/biome/releases/tag/cli/v${BIOME_VERSION}"
+        log_feature_end
+        exit 1
+    fi
+
+    log_message "✓ Calculated checksum from download"
+
+    # Download and verify Biome
+    BUILD_TEMP=$(create_secure_temp_dir)
+    cd "$BUILD_TEMP"
+    log_message "Downloading and verifying Biome for ${ARCH}..."
+    download_and_verify \
+        "$BIOME_URL" \
+        "${BIOME_CHECKSUM}" \
+        "biome"
+
+    log_command "Installing Biome binary" \
+        command mv biome /usr/local/bin/biome
+
+    log_command "Setting Biome permissions" \
+        chmod +x /usr/local/bin/biome
+
+    cd /
+    log_message "✓ Biome ${BIOME_VERSION} installed successfully"
 fi
 
 # Install Claude Code CLI
@@ -1071,7 +1123,7 @@ done
 
 echo ""
 echo "Development Utilities:"
-for tool in direnv entr just mkcert act glab; do
+for tool in direnv entr just mkcert act glab biome; do
     if command -v $tool &> /dev/null; then
         echo "  ✓ $tool is installed"
     else
@@ -1104,10 +1156,10 @@ export DIRENV_ALLOW_DIR="${DEV_TOOLS_CACHE}/direnv-allow"
 # Log feature summary
 log_feature_summary \
     --feature "Development Tools" \
-    --tools "gh,lazygit,delta,act,git-cliff,glab,duf,entr,fzf,direnv,mkcert,jq,ripgrep,fd,bat,eza/exa,htop,ncdu,claude" \
+    --tools "gh,lazygit,delta,act,git-cliff,glab,biome,duf,entr,fzf,direnv,mkcert,jq,ripgrep,fd,bat,eza/exa,htop,ncdu,claude" \
     --paths "${DEV_TOOLS_CACHE},/opt/fzf,${CAROOT}" \
     --env "DEV_TOOLS_CACHE,CAROOT,DIRENV_ALLOW_DIR" \
-    --commands "gh,lazygit,delta,act,git-cliff,glab,duf,entr,fzf,direnv,mkcert,jq,rg,fd,bat,eza/exa,htop,ncdu,claude" \
+    --commands "gh,lazygit,delta,act,git-cliff,glab,biome,duf,entr,fzf,direnv,mkcert,jq,rg,fd,bat,eza/exa,htop,ncdu,claude" \
     --next-steps "Run 'test-dev-tools' to verify installation. Many modern CLI replacements are aliased (ls=eza, cat=bat, grep=rg, find=fd)."
 
 # End logging
