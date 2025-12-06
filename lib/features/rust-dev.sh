@@ -128,11 +128,31 @@ log_command "Installing sccache" \
 log_command "Installing mdbook" \
     su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/cargo install mdbook"
 
-# Pin to 0.25.18 to avoid trycmd 0.15.11 / toml_edit 0.23.8 type inference conflict
-# 0.25.18 uses toml_edit ^0.22.x which is unaffected
-# See: https://github.com/crate-ci/cargo-release/issues
-log_command "Installing cargo-release" \
-    su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/cargo install cargo-release --version 0.25.18"
+# cargo-release installation
+# Build from source with pinned toml_edit to avoid type inference conflict
+# See: https://github.com/toml-rs/toml/issues/1073
+CARGO_RELEASE_VERSION="0.25.17"
+log_message "Installing cargo-release ${CARGO_RELEASE_VERSION} from source with pinned dependencies..."
+
+BUILD_TEMP=$(mktemp -d)
+cd "$BUILD_TEMP"
+
+# Clone at specific tag
+git clone --depth 1 --branch "v${CARGO_RELEASE_VERSION}" https://github.com/crate-ci/cargo-release.git
+cd cargo-release
+
+# Pin toml_edit to working version by adding to Cargo.toml
+echo '' >> Cargo.toml
+echo '# Temporary pin to avoid trycmd/toml_edit 0.23.8 conflict' >> Cargo.toml
+echo '[patch.crates-io]' >> Cargo.toml
+echo 'toml_edit = { git = "https://github.com/toml-rs/toml", tag = "toml_edit-v0.23.7" }' >> Cargo.toml
+
+# Build and install
+log_command "Building cargo-release" \
+    su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && cd ${BUILD_TEMP}/cargo-release && /usr/local/bin/cargo install --path ."
+
+cd /
+rm -rf "$BUILD_TEMP"
 
 # Install taplo-cli (TOML formatter/linter) if not already installed by dev-tools
 if ! command -v taplo &> /dev/null; then
