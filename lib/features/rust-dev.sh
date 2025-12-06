@@ -144,8 +144,9 @@ su - "${USERNAME}" -c "cd ${BUILD_TEMP} && git clone --depth 1 --branch v${CARGO
 cat >> "${BUILD_TEMP}/cargo-release/Cargo.toml" << 'EOF'
 
 # Temporary pin to avoid trycmd/toml_edit 0.23.8 conflict
+# See: https://github.com/toml-rs/toml/issues/1073
 [patch.crates-io]
-toml_edit = { git = "https://github.com/toml-rs/toml", tag = "toml_edit-v0.23.7" }
+toml_edit = { git = "https://github.com/toml-rs/toml", tag = "v0.23.7" }
 EOF
 
 # Build and install
