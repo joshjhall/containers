@@ -271,6 +271,9 @@ extract_all_versions() {
 
         ver=$(extract_version_from_line "$(grep "^BIOME_VERSION=" "$PROJECT_ROOT/lib/features/dev-tools.sh" 2>/dev/null)")
         [ -n "$ver" ] && add_tool "biome" "$ver" "dev-tools.sh"
+
+        ver=$(extract_version_from_line "$(grep "^TAPLO_VERSION=" "$PROJECT_ROOT/lib/features/dev-tools.sh" 2>/dev/null)")
+        [ -n "$ver" ] && add_tool "taplo" "$ver" "dev-tools.sh"
     fi
 
     # Docker tools from docker.sh
@@ -472,6 +475,14 @@ check_biome() {
     local latest
     latest=$(fetch_url "https://api.github.com/repos/biomejs/biome/releases" | jq -r '[.[] | select(.tag_name | startswith("cli/v"))] | .[0].tag_name // "null"' 2>/dev/null | command sed 's|^cli/v||')
     set_latest "biome" "$latest"
+    progress_done
+}
+
+check_taplo() {
+    progress_msg "  taplo..."
+    local latest
+    latest=$(fetch_url "https://api.github.com/repos/tamasfe/taplo/releases/latest" | jq -r '.tag_name // "null"' 2>/dev/null)
+    set_latest "taplo" "$latest"
     progress_done
 }
 
@@ -695,6 +706,7 @@ main() {
             duf) check_github_release "duf" "muesli/duf" ;;
             entr) check_entr ;;
             biome) check_biome ;;
+            taplo) check_taplo ;;
             zoxide) check_github_release "zoxide" "ajeetdsouza/zoxide" ;;
             cosign) check_github_release "cosign" "sigstore/cosign" ;;
             trivy-action) check_github_release "trivy-action" "aquasecurity/trivy-action" ;;

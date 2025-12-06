@@ -17,6 +17,7 @@
 #   - Text processing: jq
 #   - Release tools: git-cliff (automatic changelog from conventional commits)
 #   - Linting/Formatting: biome (fast linter/formatter for JS/TS/JSON/CSS)
+#   - TOML tools: taplo (TOML formatter and linter)
 #   - Claude Code CLI tool
 #   - And many more productivity tools
 #
@@ -50,6 +51,7 @@ DELTA_VERSION="${DELTA_VERSION:-0.18.2}"
 ACT_VERSION="${ACT_VERSION:-0.2.83}"
 GITCLIFF_VERSION="${GITCLIFF_VERSION:-2.8.0}"
 BIOME_VERSION="${BIOME_VERSION:-1.9.4}"
+TAPLO_VERSION="${TAPLO_VERSION:-0.10.0}"
 
 # ============================================================================
 # Repository Configuration
@@ -838,6 +840,63 @@ if [ -n "$BIOME_BINARY" ]; then
     log_message "✓ Biome ${BIOME_VERSION} installed successfully"
 fi
 
+# Install taplo (TOML formatter/linter) if not already installed by rust-dev
+if ! command -v taplo &> /dev/null; then
+    log_message "Installing taplo ${TAPLO_VERSION}..."
+
+    # Determine taplo binary name based on architecture
+    case "$ARCH" in
+        amd64)
+            TAPLO_BINARY="taplo-linux-x86_64.gz"
+            ;;
+        arm64)
+            TAPLO_BINARY="taplo-linux-aarch64.gz"
+            ;;
+        *)
+            log_warning "taplo not available for architecture $ARCH, skipping..."
+            TAPLO_BINARY=""
+            ;;
+    esac
+
+    if [ -n "$TAPLO_BINARY" ]; then
+        TAPLO_URL="https://github.com/tamasfe/taplo/releases/download/${TAPLO_VERSION}/${TAPLO_BINARY}"
+
+        # Calculate checksum from download (taplo doesn't publish checksums)
+        log_message "Calculating checksum for taplo ${TAPLO_VERSION}..."
+        if ! TAPLO_CHECKSUM=$(calculate_checksum_sha256 "$TAPLO_URL" 2>/dev/null); then
+            log_error "Failed to download and calculate checksum for taplo ${TAPLO_VERSION}"
+            log_error "Please verify version exists: https://github.com/tamasfe/taplo/releases/tag/${TAPLO_VERSION}"
+            log_feature_end
+            exit 1
+        fi
+
+        log_message "✓ Calculated checksum from download"
+
+        # Download and verify taplo
+        BUILD_TEMP=$(create_secure_temp_dir)
+        cd "$BUILD_TEMP"
+        log_message "Downloading and verifying taplo for ${ARCH}..."
+        download_and_verify \
+            "$TAPLO_URL" \
+            "${TAPLO_CHECKSUM}" \
+            "taplo.gz"
+
+        log_command "Extracting taplo" \
+            gunzip taplo.gz
+
+        log_command "Installing taplo binary" \
+            command mv taplo /usr/local/bin/taplo
+
+        log_command "Setting taplo permissions" \
+            chmod +x /usr/local/bin/taplo
+
+        cd /
+        log_message "✓ taplo ${TAPLO_VERSION} installed successfully"
+    fi
+else
+    log_message "taplo already installed (likely via rust-dev), skipping..."
+fi
+
 # Install Claude Code CLI
 log_message "Installing Claude Code CLI..."
 
@@ -1123,7 +1182,7 @@ done
 
 echo ""
 echo "Development Utilities:"
-for tool in direnv entr just mkcert act glab biome; do
+for tool in direnv entr just mkcert act glab biome taplo; do
     if command -v $tool &> /dev/null; then
         echo "  ✓ $tool is installed"
     else
@@ -1156,7 +1215,7 @@ export DIRENV_ALLOW_DIR="${DEV_TOOLS_CACHE}/direnv-allow"
 # Log feature summary
 log_feature_summary \
     --feature "Development Tools" \
-    --tools "gh,lazygit,delta,act,git-cliff,glab,biome,duf,entr,fzf,direnv,mkcert,jq,ripgrep,fd,bat,eza/exa,htop,ncdu,claude" \
+    --tools "gh,lazygit,delta,act,git-cliff,glab,biome,taplo,duf,entr,fzf,direnv,mkcert,jq,ripgrep,fd,bat,eza/exa,htop,ncdu,claude" \
     --paths "${DEV_TOOLS_CACHE},/opt/fzf,${CAROOT}" \
     --env "DEV_TOOLS_CACHE,CAROOT,DIRENV_ALLOW_DIR" \
     --commands "gh,lazygit,delta,act,git-cliff,glab,biome,duf,entr,fzf,direnv,mkcert,jq,rg,fd,bat,eza/exa,htop,ncdu,claude" \
