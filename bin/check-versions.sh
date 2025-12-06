@@ -276,6 +276,13 @@ extract_all_versions() {
         [ -n "$ver" ] && add_tool "taplo" "$ver" "dev-tools.sh"
     fi
 
+    # Rust dev tools from rust-dev.sh (pinned versions only)
+    if [ -f "$PROJECT_ROOT/lib/features/rust-dev.sh" ]; then
+        # cargo-release is pinned due to upstream bug - check for new versions
+        ver=$(grep "cargo install cargo-release --version" "$PROJECT_ROOT/lib/features/rust-dev.sh" 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+        [ -n "$ver" ] && add_tool "cargo-release" "$ver" "rust-dev.sh"
+    fi
+
     # Docker tools from docker.sh
     if [ -f "$PROJECT_ROOT/lib/features/docker.sh" ]; then
         ver=$(extract_version_from_line "$(grep "^DIVE_VERSION=" "$PROJECT_ROOT/lib/features/docker.sh" 2>/dev/null)")
@@ -483,6 +490,15 @@ check_taplo() {
     local latest
     latest=$(fetch_url "https://api.github.com/repos/tamasfe/taplo/releases/latest" | jq -r '.tag_name // "null"' 2>/dev/null)
     set_latest "taplo" "$latest"
+    progress_done
+}
+
+check_cargo_release() {
+    progress_msg "  cargo-release..."
+    local latest
+    # Check crates.io for latest version
+    latest=$(fetch_url "https://crates.io/api/v1/crates/cargo-release" | jq -r '.crate.max_version // "null"' 2>/dev/null)
+    set_latest "cargo-release" "$latest"
     progress_done
 }
 
@@ -707,6 +723,7 @@ main() {
             entr) check_entr ;;
             biome) check_biome ;;
             taplo) check_taplo ;;
+            cargo-release) check_cargo_release ;;
             zoxide) check_github_release "zoxide" "ajeetdsouza/zoxide" ;;
             cosign) check_github_release "cosign" "sigstore/cosign" ;;
             trivy-action) check_github_release "trivy-action" "aquasecurity/trivy-action" ;;
