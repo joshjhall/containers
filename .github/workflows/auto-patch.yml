@@ -145,22 +145,26 @@ jobs:
             echo "Warning: GPG key updates failed, continuing anyway"
           }
 
-          # Detect if GPG keys changed
-          if git diff --quiet lib/gpg-keys/; then
-            echo "No GPG key changes detected"
+          # Detect if actual GPG key files changed (not just metadata)
+          # Only alert on .asc files and keyring/* contents, ignore metadata JSON and README
+          KEY_FILES_CHANGED=$(git diff --name-only lib/gpg-keys/ | grep -E '\.(asc|kbx|gpg)$' || true)
+
+          if [ -z "$KEY_FILES_CHANGED" ]; then
+            echo "No GPG key file changes detected (metadata-only changes are ignored)"
             echo "gpg_keys_changed=false" >> $GITHUB_ENV
           else
-            echo "GPG key changes detected!"
+            echo "GPG key file changes detected!"
+            echo "$KEY_FILES_CHANGED"
             echo "gpg_keys_changed=true" >> $GITHUB_ENV
 
-            # Capture detailed changes for notification
-            GPG_CHANGES=$(git diff --stat lib/gpg-keys/ | head -20)
+            # Capture detailed changes for notification (only key files)
+            GPG_CHANGES=$(git diff --stat $KEY_FILES_CHANGED | head -20)
             echo "GPG_CHANGES<<EOF" >> $GITHUB_ENV
             echo "$GPG_CHANGES" >> $GITHUB_ENV
             echo "EOF" >> $GITHUB_ENV
 
             # Get more detailed change summary
-            GPG_DETAIL=$(git diff lib/gpg-keys/ | grep -E '^\+\+\+|^---|\+.*fingerprint|\+.*Key ID' | head -30)
+            GPG_DETAIL=$(git diff $KEY_FILES_CHANGED | grep -E '^\+\+\+|^---|\+.*fingerprint|\+.*Key ID' | head -30)
             echo "GPG_DETAIL<<EOF" >> $GITHUB_ENV
             echo "$GPG_DETAIL" >> $GITHUB_ENV
             echo "EOF" >> $GITHUB_ENV
