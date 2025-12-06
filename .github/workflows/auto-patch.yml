@@ -145,12 +145,13 @@ jobs:
             echo "Warning: GPG key updates failed, continuing anyway"
           }
 
-          # Detect if actual GPG key files changed (not just metadata)
+          # Detect if actual GPG key files changed (not just metadata or whitespace)
           # Only alert on .asc files and keyring/* contents, ignore metadata JSON and README
-          KEY_FILES_CHANGED=$(git diff --name-only lib/gpg-keys/ | grep -E '\.(asc|kbx|gpg)$' || true)
+          # Use --ignore-space-change to skip whitespace-only diffs (e.g., trailing newlines)
+          KEY_FILES_CHANGED=$(git diff --ignore-space-change --name-only lib/gpg-keys/ | grep -E '\.(asc|kbx|gpg)$' || true)
 
           if [ -z "$KEY_FILES_CHANGED" ]; then
-            echo "No GPG key file changes detected (metadata-only changes are ignored)"
+            echo "No GPG key file changes detected (metadata and whitespace-only changes are ignored)"
             echo "gpg_keys_changed=false" >> $GITHUB_ENV
           else
             echo "GPG key file changes detected!"
