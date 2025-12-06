@@ -279,9 +279,14 @@ extract_all_versions() {
     # Rust dev tools from rust-dev.sh (pinned versions only)
     if [ -f "$PROJECT_ROOT/lib/features/rust-dev.sh" ]; then
         # cargo-release is pinned due to upstream bug - check for new versions
-        ver=$(grep "cargo install cargo-release --version" "$PROJECT_ROOT/lib/features/rust-dev.sh" 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+        ver=$(grep "CARGO_RELEASE_VERSION=" "$PROJECT_ROOT/lib/features/rust-dev.sh" 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
         [ -n "$ver" ] && add_tool "cargo-release" "$ver" "rust-dev.sh"
     fi
+
+    # toml_edit - pinned in cargo-release patch due to upstream bug
+    # Tracking to know when fix is available
+    # See: https://github.com/toml-rs/toml/issues/1073
+    add_tool "toml_edit" "0.23.7" "rust-dev.sh (pinned)"
 
     # Docker tools from docker.sh
     if [ -f "$PROJECT_ROOT/lib/features/docker.sh" ]; then
@@ -499,6 +504,15 @@ check_cargo_release() {
     # Check crates.io for latest version
     latest=$(fetch_url "https://crates.io/api/v1/crates/cargo-release" | jq -r '.crate.max_version // "null"' 2>/dev/null)
     set_latest "cargo-release" "$latest"
+    progress_done
+}
+
+check_toml_edit() {
+    progress_msg "  toml_edit..."
+    local latest
+    # Check crates.io for latest version
+    latest=$(fetch_url "https://crates.io/api/v1/crates/toml_edit" | jq -r '.crate.max_version // "null"' 2>/dev/null)
+    set_latest "toml_edit" "$latest"
     progress_done
 }
 
@@ -724,6 +738,7 @@ main() {
             biome) check_biome ;;
             taplo) check_taplo ;;
             cargo-release) check_cargo_release ;;
+            toml_edit) check_toml_edit ;;
             zoxide) check_github_release "zoxide" "ajeetdsouza/zoxide" ;;
             cosign) check_github_release "cosign" "sigstore/cosign" ;;
             trivy-action) check_github_release "trivy-action" "aquasecurity/trivy-action" ;;

@@ -81,23 +81,46 @@ jobs:
             echo "cargo_release_update=$CARGO_RELEASE_UPDATE" >> $GITHUB_OUTPUT
           fi
 
+          # Check for toml_edit update (pinned due to upstream bug)
+          TOML_EDIT_UPDATE=$(echo "$OUTPUT" | jq -r '.tools[] | select(.tool == "toml_edit" and .status == "outdated") | .latest // empty' 2>/dev/null || true)
+          if [ -n "$TOML_EDIT_UPDATE" ]; then
+            echo "toml_edit_update=$TOML_EDIT_UPDATE" >> $GITHUB_OUTPUT
+          fi
+
       - name: Notify cargo-release update available
         if: steps.check.outputs.cargo_release_update != ''
         run: |
-          # cargo-release is pinned to 0.25.21 due to upstream bug
-          # Notify when new version available so we can check if bug is fixed
           curl -s \
             --form-string "token=${{ secrets.PUSHOVER_TOKEN }}" \
             --form-string "user=${{ secrets.PUSHOVER_USER }}" \
             --form-string "title=🦀 cargo-release update available" \
             --form-string "message=cargo-release ${{ steps.check.outputs.cargo_release_update }} is now available.
 
-          Currently pinned to 0.25.21 due to trycmd/toml_edit bug.
+          Currently pinned to 0.25.17 due to trycmd/toml_edit bug.
 
           Check if upstream issue is fixed:
-          https://github.com/crate-ci/cargo-release/issues
+          https://github.com/toml-rs/toml/issues/1073
 
           If fixed, update rust-dev.sh to remove version pin." \
+            --form-string "priority=0" \
+            --form-string "sound=pushover" \
+            https://api.pushover.net/1/messages.json
+
+      - name: Notify toml_edit update available
+        if: steps.check.outputs.toml_edit_update != ''
+        run: |
+          curl -s \
+            --form-string "token=${{ secrets.PUSHOVER_TOKEN }}" \
+            --form-string "user=${{ secrets.PUSHOVER_USER }}" \
+            --form-string "title=📦 toml_edit update available" \
+            --form-string "message=toml_edit ${{ steps.check.outputs.toml_edit_update }} is now available.
+
+          Currently pinned to 0.23.7 in cargo-release build.
+
+          Check if type inference bug is fixed:
+          https://github.com/toml-rs/toml/issues/1073
+
+          If fixed, remove patch from rust-dev.sh cargo-release build." \
             --form-string "priority=0" \
             --form-string "sound=pushover" \
             https://api.pushover.net/1/messages.json
