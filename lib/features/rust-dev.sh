@@ -128,10 +128,11 @@ log_command "Installing sccache" \
 log_command "Installing mdbook" \
     su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/cargo install mdbook"
 
-# Pin to 0.25.21 to avoid trycmd/toml_edit type inference conflict in 0.25.22
+# Pin to 0.25.18 to avoid trycmd 0.15.11 / toml_edit 0.23.8 type inference conflict
+# 0.25.18 uses toml_edit ^0.22.x which is unaffected
 # See: https://github.com/crate-ci/cargo-release/issues
 log_command "Installing cargo-release" \
-    su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/cargo install cargo-release --version 0.25.21"
+    su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/cargo install cargo-release --version 0.25.18"
 
 # Install taplo-cli (TOML formatter/linter) if not already installed by dev-tools
 if ! command -v taplo &> /dev/null; then
