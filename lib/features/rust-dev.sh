@@ -131,7 +131,7 @@ log_command "Installing mdbook" \
 # cargo-release installation
 # Build from source with pinned toml_edit to avoid type inference conflict
 # See: https://github.com/toml-rs/toml/issues/1073
-CARGO_RELEASE_VERSION="0.25.17"
+CARGO_RELEASE_VERSION="0.25.22"
 log_message "Installing cargo-release ${CARGO_RELEASE_VERSION} from source with pinned dependencies..."
 
 BUILD_TEMP=$(mktemp -d)
