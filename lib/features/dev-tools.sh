@@ -47,7 +47,7 @@ log_feature_start "Development Tools"
 # Tool versions (can be overridden via environment variables)
 LAZYGIT_VERSION="${LAZYGIT_VERSION:-0.56.0}"
 DELTA_VERSION="${DELTA_VERSION:-0.18.2}"
-ACT_VERSION="${ACT_VERSION:-0.2.82}"
+ACT_VERSION="${ACT_VERSION:-0.2.83}"
 GITCLIFF_VERSION="${GITCLIFF_VERSION:-2.8.0}"
 BIOME_VERSION="${BIOME_VERSION:-1.9.4}"
 
@@ -740,7 +740,7 @@ fi
 
 # Install GitLab CLI (glab)
 log_message "Installing glab (GitLab CLI)..."
-GLAB_VERSION="${GLAB_VERSION:-1.78.3}"
+GLAB_VERSION="${GLAB_VERSION:-1.79.0}"
 
 # GitLab CLI provides builds for amd64 and arm64
 if [ "$ARCH" = "amd64" ]; then

@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 # Universal Container Build System
-# Version: 4.12.2
+# Version: 4.12.3
 # Supports multiple contexts: devcontainer, agents, CI/CD, production
 
 # ============================================================================
@@ -131,7 +131,7 @@ RUN RESTRICT_SHELLS=${RESTRICT_SHELLS} \
 
 ARG INCLUDE_PYTHON=false
 ARG INCLUDE_PYTHON_DEV=false
-ARG PYTHON_VERSION=3.14.0
+ARG PYTHON_VERSION=3.14.1
 
 # Handle optional Python project files only if Python is being installed
 # Copy to temp location first since we're running as root and user doesn't exist yet
@@ -194,7 +194,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 # Go + Go development tools
 ARG INCLUDE_GOLANG=false
 ARG INCLUDE_GOLANG_DEV=false
-ARG GO_VERSION=1.25.4
+ARG GO_VERSION=1.25.5
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     if [ "${INCLUDE_GOLANG}" = "true" ] || [ "${INCLUDE_GOLANG_DEV}" = "true" ]; then \
@@ -204,7 +204,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 ARG INCLUDE_MOJO=false
 ARG INCLUDE_MOJO_DEV=false
 ARG MOJO_VERSION=25.4
-ARG PIXI_VERSION=0.59.0
+ARG PIXI_VERSION=0.60.0
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     if [ "${INCLUDE_MOJO}" = "true" ] || [ "${INCLUDE_MOJO_DEV}" = "true" ]; then \
@@ -304,7 +304,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     fi
 # Terraform
 ARG INCLUDE_TERRAFORM=false
-ARG TERRAGRUNT_VERSION=0.93.11
+ARG TERRAGRUNT_VERSION=0.93.13
 ARG TFDOCS_VERSION=0.20.0
 ARG TFLINT_VERSION=0.60.0
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
