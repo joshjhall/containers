@@ -1,5 +1,5 @@
 {
-  "last_updated": "2025-12-06T02:26:27Z",
+  "last_updated": "2025-12-06T03:31:54Z",
   "base_images": [
     {
       "name": "debian:11-slim",
@@ -26,7 +26,8 @@
         "3.14.0"
       ],
       "tested": [
-        "3.14.0"
+        "3.14.0",
+        "3.14.1"
       ],
       "deprecated": []
     },
@@ -63,7 +64,8 @@
         "1.25.4"
       ],
       "tested": [
-        "1.25.4"
+        "1.25.4",
+        "1.25.5"
       ],
       "deprecated": []
     },
@@ -120,17 +122,17 @@
       "base_image": "debian:13-slim",
       "versions": {},
       "status": "passing",
-      "tested_at": "2025-11-30T05:28:51Z",
+      "tested_at": "2025-12-06T03:31:54Z",
       "notes": "Base system only, no language runtimes"
     },
     {
       "variant": "python-dev",
       "base_image": "debian:13-slim",
       "versions": {
-        "python": "3.14.0"
+        "python": "3.14.1"
       },
       "status": "passing",
-      "tested_at": "2025-11-30T05:28:51Z"
+      "tested_at": "2025-12-06T03:31:54Z"
     },
     {
       "variant": "node-dev",
@@ -139,37 +141,37 @@
         "node": "22"
       },
       "status": "passing",
-      "tested_at": "2025-11-30T05:28:51Z"
+      "tested_at": "2025-12-06T03:31:54Z"
     },
     {
       "variant": "rust-golang",
       "base_image": "debian:13-slim",
       "versions": {
         "rust": "1.91.1",
-        "go": "1.25.4"
+        "go": "1.25.5"
       },
       "status": "passing",
-      "tested_at": "2025-11-30T05:28:51Z"
+      "tested_at": "2025-12-06T03:31:54Z"
     },
     {
       "variant": "cloud-ops",
       "base_image": "debian:13-slim",
       "versions": {},
       "status": "passing",
-      "tested_at": "2025-11-30T05:28:51Z",
+      "tested_at": "2025-12-06T03:31:54Z",
       "notes": "Docker, Kubernetes, Terraform, AWS CLI"
     },
     {
       "variant": "polyglot",
       "base_image": "debian:13-slim",
       "versions": {
-        "python": "3.14.0",
+        "python": "3.14.1",
         "node": "22",
         "rust": "1.91.1",
-        "go": "1.25.4"
+        "go": "1.25.5"
       },
       "status": "passing",
-      "tested_at": "2025-11-30T05:28:51Z"
+      "tested_at": "2025-12-06T03:31:54Z"
     }
   ]
 }
