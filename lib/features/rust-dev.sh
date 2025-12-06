@@ -135,23 +135,23 @@ CARGO_RELEASE_VERSION="0.25.17"
 log_message "Installing cargo-release ${CARGO_RELEASE_VERSION} from source with pinned dependencies..."
 
 BUILD_TEMP=$(mktemp -d)
-cd "$BUILD_TEMP"
+chown "${USER_UID}:${USER_GID}" "$BUILD_TEMP"
 
-# Clone at specific tag
-git clone --depth 1 --branch "v${CARGO_RELEASE_VERSION}" https://github.com/crate-ci/cargo-release.git
-cd cargo-release
+# Clone at specific tag (as target user for proper permissions)
+su - "${USERNAME}" -c "cd ${BUILD_TEMP} && git clone --depth 1 --branch v${CARGO_RELEASE_VERSION} https://github.com/crate-ci/cargo-release.git"
 
 # Pin toml_edit to working version by adding to Cargo.toml
-echo '' >> Cargo.toml
-echo '# Temporary pin to avoid trycmd/toml_edit 0.23.8 conflict' >> Cargo.toml
-echo '[patch.crates-io]' >> Cargo.toml
-echo 'toml_edit = { git = "https://github.com/toml-rs/toml", tag = "toml_edit-v0.23.7" }' >> Cargo.toml
+cat >> "${BUILD_TEMP}/cargo-release/Cargo.toml" << 'EOF'
+
+# Temporary pin to avoid trycmd/toml_edit 0.23.8 conflict
+[patch.crates-io]
+toml_edit = { git = "https://github.com/toml-rs/toml", tag = "toml_edit-v0.23.7" }
+EOF
 
 # Build and install
 log_command "Building cargo-release" \
     su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && cd ${BUILD_TEMP}/cargo-release && /usr/local/bin/cargo install --path ."
 
-cd /
 rm -rf "$BUILD_TEMP"
 
 # Install taplo-cli (TOML formatter/linter) if not already installed by dev-tools
