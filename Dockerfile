@@ -396,6 +396,15 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     if [ "${INCLUDE_DEV_TOOLS}" = "true" ]; then \
     /tmp/build-scripts/features/dev-tools.sh; \
     fi
+
+# Keyboard bindings (readline/inputrc configuration for terminal shortcuts)
+# KEYBINDING_PROFILE options: iterm (default), xterm, minimal
+ARG INCLUDE_KEYBINDINGS=false
+ARG KEYBINDING_PROFILE=iterm
+RUN if [ "${INCLUDE_KEYBINDINGS}" = "true" ]; then \
+    KEYBINDING_PROFILE=${KEYBINDING_PROFILE} /tmp/build-scripts/features/keybindings.sh; \
+    fi
+
 # Set up startup script system
 RUN /tmp/build-scripts/runtime/setup-startup.sh
 

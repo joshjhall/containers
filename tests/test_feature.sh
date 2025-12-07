@@ -84,6 +84,7 @@ declare -A FEATURE_MAP=(
     ["postgres-client"]="INCLUDE_POSTGRES_CLIENT"
     ["redis-client"]="INCLUDE_REDIS_CLIENT"
     ["sqlite-client"]="INCLUDE_SQLITE_CLIENT"
+    ["keybindings"]="INCLUDE_KEYBINDINGS"
 )
 
 # Check if feature is valid
@@ -223,6 +224,27 @@ case "$FEATURE" in
             echo -e "${GREEN}✓ Docker installed: $VERSION${NC}"
         else
             echo -e "${RED}✗ Docker not found${NC}"
+            exit 1
+        fi
+        ;;
+
+    keybindings)
+        if docker run --rm "$IMAGE_NAME" test -f /etc/inputrc; then
+            echo -e "${GREEN}✓ /etc/inputrc exists${NC}"
+        else
+            echo -e "${RED}✗ /etc/inputrc not found${NC}"
+            exit 1
+        fi
+        if docker run --rm "$IMAGE_NAME" test -f /etc/bashrc.d/10-keybindings.sh; then
+            echo -e "${GREEN}✓ /etc/bashrc.d/10-keybindings.sh exists${NC}"
+        else
+            echo -e "${RED}✗ /etc/bashrc.d/10-keybindings.sh not found${NC}"
+            exit 1
+        fi
+        if docker run --rm "$IMAGE_NAME" which test-keybindings > /dev/null 2>&1; then
+            echo -e "${GREEN}✓ test-keybindings command available${NC}"
+        else
+            echo -e "${RED}✗ test-keybindings command not found${NC}"
             exit 1
         fi
         ;;
