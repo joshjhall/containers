@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.12.4] - 2025-12-07
+
+### Added
+
+- Add cargo-release and taplo-cli
+- Track cargo-release and notify on updates
+- Track toml_edit and notify on updates
+
+### Fixed
+
+- Ignore whitespace-only GPG key changes
+- Pin cargo-release to 0.25.21
+- Pin cargo-release to 0.25.18
+- Build cargo-release from source with pinned toml_edit
+- Fix permissions for cargo-release build temp directory
+- Correct toml_edit git tag format
+- Use latest cargo-release with pinned toml_edit
+
 ## [4.12.3] - 2025-12-06
 
 ### Added
@@ -29,6 +47,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Miscellaneous
 
 - Exclude pre-commit config from line-length check
+- Automated version updates to v4.12.3
+- Update compatibility matrix with passing test results
 
 ### Testing
 
@@ -654,6 +674,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix prettier and markdownlint formatting in README
 - Format TLS documentation files
 
+[4.12.4]: https://github.com/joshjhall/containers/compare/v4.12.3...v4.12.4
 [4.12.3]: https://github.com/joshjhall/containers/compare/v4.12.2...v4.12.3
 [4.12.2]: https://github.com/joshjhall/containers/compare/v4.12.1...v4.12.2
 [4.12.1]: https://github.com/joshjhall/containers/compare/v4.12.0...v4.12.1

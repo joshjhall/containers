@@ -1,5 +1,5 @@
 {
-  "last_updated": "2025-12-06T03:31:54Z",
+  "last_updated": "2025-12-07T03:54:05Z",
   "base_images": [
     {
       "name": "debian:11-slim",
@@ -19,7 +19,7 @@
   ],
   "language_versions": {
     "python": {
-      "current": "3.14.1",
+      "current": "3.14.2",
       "supported": [
         "3.12.0",
         "3.13.0",
@@ -27,7 +27,8 @@
       ],
       "tested": [
         "3.14.0",
-        "3.14.1"
+        "3.14.1",
+        "3.14.2"
       ],
       "deprecated": []
     },
@@ -122,17 +123,17 @@
       "base_image": "debian:13-slim",
       "versions": {},
       "status": "passing",
-      "tested_at": "2025-12-06T03:31:54Z",
+      "tested_at": "2025-12-07T03:54:05Z",
       "notes": "Base system only, no language runtimes"
     },
     {
       "variant": "python-dev",
       "base_image": "debian:13-slim",
       "versions": {
-        "python": "3.14.1"
+        "python": "3.14.2"
       },
       "status": "passing",
-      "tested_at": "2025-12-06T03:31:54Z"
+      "tested_at": "2025-12-07T03:54:05Z"
     },
     {
       "variant": "node-dev",
@@ -141,7 +142,7 @@
         "node": "22"
       },
       "status": "passing",
-      "tested_at": "2025-12-06T03:31:54Z"
+      "tested_at": "2025-12-07T03:54:05Z"
     },
     {
       "variant": "rust-golang",
@@ -151,27 +152,27 @@
         "go": "1.25.5"
       },
       "status": "passing",
-      "tested_at": "2025-12-06T03:31:54Z"
+      "tested_at": "2025-12-07T03:54:05Z"
     },
     {
       "variant": "cloud-ops",
       "base_image": "debian:13-slim",
       "versions": {},
       "status": "passing",
-      "tested_at": "2025-12-06T03:31:54Z",
+      "tested_at": "2025-12-07T03:54:05Z",
       "notes": "Docker, Kubernetes, Terraform, AWS CLI"
     },
     {
       "variant": "polyglot",
       "base_image": "debian:13-slim",
       "versions": {
-        "python": "3.14.1",
+        "python": "3.14.2",
         "node": "22",
         "rust": "1.91.1",
         "go": "1.25.5"
       },
       "status": "passing",
-      "tested_at": "2025-12-06T03:31:54Z"
+      "tested_at": "2025-12-07T03:54:05Z"
     }
   ]
 }

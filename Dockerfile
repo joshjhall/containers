@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 # Universal Container Build System
-# Version: 4.12.3
+# Version: 4.12.4
 # Supports multiple contexts: devcontainer, agents, CI/CD, production
 
 # ============================================================================
@@ -131,7 +131,7 @@ RUN RESTRICT_SHELLS=${RESTRICT_SHELLS} \
 
 ARG INCLUDE_PYTHON=false
 ARG INCLUDE_PYTHON_DEV=false
-ARG PYTHON_VERSION=3.14.1
+ARG PYTHON_VERSION=3.14.2
 
 # Handle optional Python project files only if Python is being installed
 # Copy to temp location first since we're running as root and user doesn't exist yet
