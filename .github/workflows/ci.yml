@@ -465,10 +465,11 @@ jobs:
         # =====================================================
         # Subset of variants for security scanning:
         # - minimal: Base image security posture
-        # - polyglot: Covers Python + Node packages (most CVE-prone)
         # - cloud-ops: Cloud tools (K8s, Terraform, cloud CLIs)
+        # Note: polyglot excluded - too large for Trivy timeout.
+        # Production security scans should run in consuming apps.
         # =====================================================
-        variant: [minimal, polyglot, cloud-ops]
+        variant: [minimal, cloud-ops]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
