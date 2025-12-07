@@ -44,7 +44,7 @@ safe_eval() {
 # File and Directory Navigation
 # ----------------------------------------------------------------------------
 alias ll='ls -alF'
-alias la='ls -A'
+alias la='ls -al'
 alias l='ls -CF'
 alias lt='ls -la --tree 2>/dev/null || tree'
 alias ..='cd ..'
