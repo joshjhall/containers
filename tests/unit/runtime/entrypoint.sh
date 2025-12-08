@@ -15,8 +15,10 @@ test_suite "Entrypoint Runtime Tests"
 
 # Setup function - runs before each test
 setup() {
-    # Create temporary directory for testing
-    export TEST_TEMP_DIR="$RESULTS_DIR/test-entrypoint"
+    # Create unique temporary directory for testing (avoid collisions with parallel runs)
+    local unique_id
+    unique_id="$$-$(date +%s%N)"
+    export TEST_TEMP_DIR="$RESULTS_DIR/test-entrypoint-$unique_id"
     mkdir -p "$TEST_TEMP_DIR"
 
     # Mock container environment
