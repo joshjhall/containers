@@ -185,6 +185,25 @@ The system uses `/cache` directory with subdirectories for each tool:
 - Proper file permissions maintained throughout
 - SSH/GPG utilities included for secure operations
 
+## Init System (Zombie Process Reaping)
+
+The container uses **tini** as PID 1 to properly reap zombie processes and
+forward signals. This is critical for long-running development containers where
+child processes (pre-commit hooks, git operations, test runners) may become
+orphaned.
+
+- **Dockerfile**: Uses `ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/entrypoint"]`
+- **Docker Compose**: All examples include `init: true` as belt-and-suspenders
+
+When writing docker-compose files, always include `init: true`:
+
+```yaml
+services:
+  myservice:
+    init: true  # Ensures proper zombie reaping
+    command: ["sleep", "infinity"]
+```
+
 ## Cross-Platform Development
 
 ### Case-Sensitive Filesystem Considerations

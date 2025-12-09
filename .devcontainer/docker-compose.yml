@@ -27,6 +27,10 @@ services:
       - ENVIRONMENT=${ENVIRONMENT:-development}
       # 1Password integration
       - OP_CONTAINERS_ENV_VAULT=${OP_CONTAINERS_ENV_VAULT:-Development}
+    # Use tini as init system for proper zombie process reaping
+    # This is a belt-and-suspenders approach - the Dockerfile also includes tini,
+    # but init: true ensures proper PID 1 behavior even if command overrides entrypoint
+    init: true
     # Entrypoint handles Docker socket permissions via sudo (no root needed)
     # devcontainer.json sets overrideCommand: false so our ENTRYPOINT runs
     command: ["sleep", "infinity"]

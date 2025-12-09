@@ -118,6 +118,8 @@ services:
     restart: unless-stopped
     stdin_open: true
     tty: true
+    # Use tini as init system for proper zombie process reaping
+    init: true
     command: /bin/bash
 
   # PostgreSQL with vector extensions

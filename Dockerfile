@@ -497,8 +497,11 @@ ENV BASH_ENV=/etc/bash_env
 # in interactive sessions. For non-interactive use, explicitly set these
 # environment variables or source the shell configuration.
 
-# Set entrypoint
-ENTRYPOINT ["/usr/local/bin/entrypoint"]
+# Set entrypoint with tini as init system
+# Tini ensures proper zombie process reaping and signal forwarding
+# This is critical for long-running containers where child processes may become orphaned
+# (e.g., pre-commit hooks spawning git subprocesses)
+ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/entrypoint"]
 
 # Default command
 CMD ["/bin/bash"]

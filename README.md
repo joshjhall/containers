@@ -863,6 +863,62 @@ docker build -t myapp:prod \
    - Drop unnecessary capabilities
    - Use security profiles (AppArmor, SELinux)
 
+### Zombie Process Reaping (Init System)
+
+Containers using `sleep infinity` or long-running processes can accumulate
+zombie processes when child processes (e.g., from pre-commit hooks, git
+operations) are orphaned. This happens because the main process (PID 1) doesn't
+implement `wait()` to reap child processes.
+
+#### Built-in Protection
+
+This container system includes **tini** as an init system wrapper, which:
+
+- Properly reaps zombie processes
+- Forwards signals to child processes
+- Ensures clean container shutdown
+
+The Dockerfile uses tini in the ENTRYPOINT:
+
+```dockerfile
+ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/entrypoint"]
+```
+
+#### Belt-and-Suspenders: Docker Compose `init: true`
+
+For extra protection (especially when `command:` overrides the entrypoint), add
+`init: true` to your docker-compose services:
+
+```yaml
+services:
+  devcontainer:
+    build:
+      context: ..
+      dockerfile: containers/Dockerfile
+    # Ensures proper zombie reaping even if command overrides entrypoint
+    init: true
+    command: ['sleep', 'infinity']
+```
+
+#### Diagnosing Zombie Processes
+
+If you suspect zombie accumulation:
+
+```bash
+# Count zombie processes
+ps aux | grep -c 'Z'
+
+# List zombie processes with parent info
+ps -eo pid,ppid,stat,cmd | grep ' Z'
+```
+
+#### When to Use `init: true`
+
+- ✅ Always recommended for development containers
+- ✅ Containers running `sleep infinity`
+- ✅ Containers spawning many child processes (pre-commit, test runners)
+- ✅ Long-running containers (days/weeks uptime)
+
 ______________________________________________________________________
 
 ## Best Practices

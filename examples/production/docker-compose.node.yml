@@ -91,6 +91,9 @@ services:
     # Restart policy
     restart: unless-stopped
 
+    # Use tini as init system for proper zombie process reaping
+    init: true
+
     # Default command - override with your application entrypoint
     command: sleep infinity
 

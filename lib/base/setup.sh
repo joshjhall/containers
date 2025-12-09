@@ -56,7 +56,8 @@ apt_install \
     procps \
     htop \
     tzdata \
-    coreutils
+    coreutils \
+    tini
 
 # ============================================================================
 # Locale Configuration

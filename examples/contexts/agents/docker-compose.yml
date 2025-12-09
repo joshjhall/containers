@@ -37,6 +37,8 @@ services:
         - USERNAME=${USERNAME:-agent}
         - USER_UID=${USER_UID:-1000}
         - USER_GID=${USER_GID:-1000}
+    # Use tini as init system for proper zombie process reaping
+    init: true
     restart: unless-stopped
     depends_on:
       redis:
@@ -106,6 +108,8 @@ services:
       dockerfile: ./shell-tools/docker/agents/Dockerfile
       args:
         - BUILDKIT_INLINE_CACHE=1
+    # Use tini as init system for proper zombie process reaping
+    init: true
     restart: unless-stopped
     depends_on:
       redis:
