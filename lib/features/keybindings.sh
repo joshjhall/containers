@@ -31,13 +31,6 @@
 #     - Option + Right Arrow → Move forward one word
 #     - Option + Backspace   → Delete word backward
 #     - Option + Delete      → Delete word forward
-#     - Shift + Return       → Insert soft line continuation (backslash + newline)
-#
-#   iTerm2 Shift+Return Setup:
-#     Preferences → Profiles → Keys → Key Mappings → + (add)
-#     Keyboard Shortcut: Shift+Return
-#     Action: Send Escape Sequence
-#     Value: [13;2u
 #
 # xterm Profile:
 #   Standard xterm escape sequences for Linux terminals and SSH.
@@ -182,11 +175,6 @@ case "${KEYBINDING_PROFILE}" in
 "\e[A": history-search-backward
 "\e[B": history-search-forward
 
-# Soft line continuation (Shift + Return → backslash + newline)
-# Requires iTerm2 key mapping: Shift+Return → Send Escape Sequence → [13;2u
-# This inserts a backslash followed by a newline for multi-line commands
-"\e[13;2u": "\\\n"
-
 INPUTRC_ITERM_EOF
         ;;
 
@@ -234,10 +222,6 @@ INPUTRC_ITERM_EOF
 "\e[B": history-search-forward
 "\eOA": history-search-backward
 "\eOB": history-search-forward
-
-# Soft line continuation (Shift + Return → backslash + newline)
-# Works with terminals supporting CSI u protocol (kitty, foot, etc.)
-"\e[13;2u": "\\\n"
 
 INPUTRC_XTERM_EOF
         ;;
@@ -373,19 +357,9 @@ case "${KEYBINDING_PROFILE:-iterm}" in
         echo "    - Option + Backspace   → Delete word backward"
         echo "    - Option + Delete      → Delete word forward"
         echo ""
-        echo "  Line Continuation:"
-        echo "    - Shift + Return       → Insert soft return (backslash + newline)"
-        echo ""
         echo "  Setup Required:"
         echo "    iTerm2: Preferences → Profiles → Keys → General"
         echo "            Set 'Left Option key' to 'Esc+'"
-        echo ""
-        echo "    For Shift+Return (soft line continuation):"
-        echo "      Preferences → Profiles → Keys → Key Mappings"
-        echo "      Click '+' to add new mapping:"
-        echo "        Keyboard Shortcut: Shift+Return"
-        echo "        Action: Send Escape Sequence"
-        echo "        Value: [13;2u"
         echo ""
         echo "    Terminal.app: Preferences → Profiles → Keyboard"
         echo "                  Check 'Use Option as Meta key'"

@@ -416,30 +416,6 @@ test_history_search_bindings() {
     fi
 }
 
-# Test: Soft line continuation (Shift+Return)
-test_soft_return_binding() {
-    local script="$PROJECT_ROOT/lib/features/keybindings.sh"
-
-    if ! [ -f "$script" ]; then
-        skip_test "keybindings.sh not found"
-        return
-    fi
-
-    # Check for CSI u sequence for Shift+Return (13 = Return keycode, 2 = Shift modifier)
-    if grep -q '\\e\[13;2u' "$script"; then
-        assert_true true "Shift+Return CSI u sequence present"
-    else
-        assert_true false "Shift+Return CSI u sequence not found"
-    fi
-
-    # Check that it maps to backslash + newline
-    if grep -q '\\e\[13;2u.*\\\\\\n' "$script"; then
-        assert_true true "Shift+Return maps to soft line continuation"
-    else
-        assert_true false "Shift+Return mapping incorrect"
-    fi
-}
-
 # Test: Dockerfile integration
 test_dockerfile_integration() {
     local dockerfile="$PROJECT_ROOT/Dockerfile"
@@ -490,7 +466,6 @@ run_test test_xterm_keybindings_in_script "xterm keybindings in script"
 run_test test_standard_bindings "Standard readline bindings present"
 run_test test_word_deletion_bindings "Word deletion bindings present"
 run_test test_history_search_bindings "History search bindings present"
-run_test test_soft_return_binding "Soft line continuation (Shift+Return) binding"
 run_test test_dockerfile_integration "Dockerfile integration correct"
 
 # Tests with setup/teardown
