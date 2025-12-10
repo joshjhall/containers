@@ -72,11 +72,13 @@ log_message "Installing system dependencies for Rust dev tools"
 # pkg-config needed for finding system libraries
 # libssl-dev needed for crates using OpenSSL
 # cmake needed for some complex crates
+# libclang-dev needed for bindgen (used by tree-sitter-cli and other crates)
 apt_install \
     build-essential \
     pkg-config \
     libssl-dev \
-    cmake
+    cmake \
+    libclang-dev
 
 # ============================================================================
 # Rust Development Tools Installation
