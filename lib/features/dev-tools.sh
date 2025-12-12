@@ -195,14 +195,14 @@ _check_command() {
 # Prefer eza (maintained) over exa (deprecated but still in older Debian)
 if command -v eza &> /dev/null; then
     alias ls='eza'
-    alias ll='eza -la'
-    alias la='eza -a'
+    alias ll='eza -l'
+    alias la='eza -la'
     alias l='eza -F'
     alias tree='eza --tree'
 elif command -v exa &> /dev/null; then
     alias ls='exa'
-    alias ll='exa -la'
-    alias la='exa -a'
+    alias ll='exa -l'
+    alias la='exa -la'
     alias l='exa -F'
     alias tree='exa --tree'
 fi
