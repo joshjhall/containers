@@ -1,12 +1,12 @@
 {
   "source": {
     "repository": "https://github.com/nodejs/release-keys",
-    "commit": "901fc09b83c686693be51b3c9a13578929cbc1ab",
-    "commit_date": "2025-07-18T16:35:24+00:00",
-    "commit_message": "Merge pull request #47 from nodejs/update-ulises"
+    "commit": "b362bd15f2ac7ce350d7563fc03e0c625e455e5f",
+    "commit_date": "2025-12-09T19:22:27+00:00",
+    "commit_message": "Merge pull request #49 from nodejs/targos-key-update"
   },
   "fetched": {
-    "date": "2025-12-07",
+    "date": "2025-12-14",
     "by": "automated"
   },
   "keyring": {
