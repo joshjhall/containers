@@ -96,7 +96,7 @@ cd /
 # Cosign Installation - Sigstore signature verification
 # ============================================================================
 echo "=== Installing cosign ==="
-COSIGN_VERSION="${COSIGN_VERSION:-3.0.2}"
+COSIGN_VERSION="${COSIGN_VERSION:-3.0.3}"
 cd /tmp
 if [ "$ARCH" = "amd64" ]; then
     command curl -fsSL "https://github.com/sigstore/cosign/releases/download/v${COSIGN_VERSION}/cosign-linux-amd64" -o cosign
