@@ -428,18 +428,22 @@ resolve_go_version() {
 
     if _is_major_minor "$version"; then
         # Major.minor like "1.23" -> find latest "1.23.X"
+        # Filter out pre-release versions (rc, beta, alpha)
         resolved=$(echo "$versions_json" | \
             grep '"version"' | \
             command sed 's/.*"version": "go//; s/".*//' | \
             grep "^${version}\." | \
+            grep -v 'rc\|beta\|alpha' | \
             sort -V | \
             tail -1)
     elif _is_major_only "$version"; then
         # Major only like "1" -> find latest "1.X.Y"
+        # Filter out pre-release versions (rc, beta, alpha)
         resolved=$(echo "$versions_json" | \
             grep '"version"' | \
             command sed 's/.*"version": "go//; s/".*//' | \
             grep "^${version}\." | \
+            grep -v 'rc\|beta\|alpha' | \
             sort -V | \
             tail -1)
     fi
