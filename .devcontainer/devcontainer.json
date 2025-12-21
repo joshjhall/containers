@@ -25,15 +25,16 @@
   "customizations": {
     "vscode": {
       "extensions": [
-        "ms-azuretools.vscode-docker",
-        "donjayamanne.githistory",
-        "usernamehw.errorlens",
-        "streetsidesoftware.code-spell-checker",
-        "wayou.vscode-todo-highlight",
-        "biomejs.biome",
-        "ms-vscode.makefile-tools",
+        "Anthropic.claude-code",
         "bierner.markdown-mermaid",
-        "Anthropic.claude-code"
+        "biomejs.biome",
+        "donjayamanne.githistory",
+        "mohsen1.prettify-json",
+        "ms-azuretools.vscode-docker",
+        "ms-vscode.makefile-tools",
+        "streetsidesoftware.code-spell-checker",
+        "usernamehw.errorlens",
+        "wayou.vscode-todo-highlight"
       ],
 
       "settings": {

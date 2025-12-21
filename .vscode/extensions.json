@@ -1,0 +1,15 @@
+{
+  "recommendations": [
+    "Anthropic.claude-code",
+    "bierner.markdown-mermaid",
+    "biomejs.biome",
+    "donjayamanne.githistory",
+    "mohsen1.prettify-json",
+    "ms-azuretools.vscode-docker",
+    "ms-vscode-remote.remote-containers",
+    "ms-vscode.makefile-tools",
+    "streetsidesoftware.code-spell-checker",
+    "usernamehw.errorlens",
+    "wayou.vscode-todo-highlight"
+  ]
+}

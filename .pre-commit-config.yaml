@@ -86,7 +86,7 @@ repos:
         entry: biome check --write
         language: system
         types: [json]
-        exclude: ^(tests/results/|\.vscode/)
+        exclude: ^(tests/results/|\.vscode/|\.devcontainer/)
 
   # ==========================================================================
   # Security checks
