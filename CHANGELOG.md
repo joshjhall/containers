@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.12.7] - 2025-12-21
+
+### Fixed
+
+- Filter out Go pre-release versions
+
 ## [4.12.6] - 2025-12-14
 
 ### Added
@@ -15,6 +21,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Add libclang-dev for bindgen support
 - Correct ll and la listing behavior
+
+### Miscellaneous
+
+- Automated version updates to v4.12.6
+- Update compatibility matrix with passing test results
 
 ## [4.12.5] - 2025-12-09
 
@@ -712,6 +723,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix prettier and markdownlint formatting in README
 - Format TLS documentation files
 
+[4.12.7]: https://github.com/joshjhall/containers/compare/v4.12.6...v4.12.7
 [4.12.6]: https://github.com/joshjhall/containers/compare/v4.12.5...v4.12.6
 [4.12.5]: https://github.com/joshjhall/containers/compare/v4.12.4...v4.12.5
 [4.12.4]: https://github.com/joshjhall/containers/compare/v4.12.3...v4.12.4
