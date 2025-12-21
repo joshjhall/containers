@@ -21,13 +21,10 @@
       "indentStyle": "space",
       "indentWidth": 2,
       "lineWidth": 100
-    },
-    "linter": {
-      "enabled": true
     }
   },
   "files": {
     "include": ["*.json", "**/*.json"],
-    "ignore": ["node_modules", "tests/results", ".vscode", "*.lock"]
+    "ignore": ["node_modules", "tests/results", ".vscode", ".devcontainer", "*.lock"]
   }
 }
