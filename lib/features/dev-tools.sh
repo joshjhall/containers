@@ -742,7 +742,7 @@ fi
 
 # Install GitLab CLI (glab)
 log_message "Installing glab (GitLab CLI)..."
-GLAB_VERSION="${GLAB_VERSION:-1.79.0}"
+GLAB_VERSION="${GLAB_VERSION:-1.80.4}"
 
 # GitLab CLI provides builds for amd64 and arm64
 if [ "$ARCH" = "amd64" ]; then

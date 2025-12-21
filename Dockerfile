@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 # Universal Container Build System
-# Version: 4.12.6
+# Version: 4.12.7
 # Supports multiple contexts: devcontainer, agents, CI/CD, production
 
 # ============================================================================
@@ -176,7 +176,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 # Ruby + Ruby development tools
 ARG INCLUDE_RUBY=false
 ARG INCLUDE_RUBY_DEV=false
-ARG RUBY_VERSION=3.4.7
+ARG RUBY_VERSION=3.4.8
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     if [ "${INCLUDE_RUBY}" = "true" ] || [ "${INCLUDE_RUBY_DEV}" = "true" ]; then \
@@ -204,7 +204,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 ARG INCLUDE_MOJO=false
 ARG INCLUDE_MOJO_DEV=false
 ARG MOJO_VERSION=25.4
-ARG PIXI_VERSION=0.61.0
+ARG PIXI_VERSION=0.62.1
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     if [ "${INCLUDE_MOJO}" = "true" ] || [ "${INCLUDE_MOJO_DEV}" = "true" ]; then \
@@ -304,7 +304,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     fi
 # Terraform
 ARG INCLUDE_TERRAFORM=false
-ARG TERRAGRUNT_VERSION=0.95.1
+ARG TERRAGRUNT_VERSION=0.96.1
 ARG TFDOCS_VERSION=0.21.0
 ARG TFLINT_VERSION=0.60.0
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
