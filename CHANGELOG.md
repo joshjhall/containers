@@ -5,11 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.12.8] - 2025-12-28
+
+### Miscellaneous
+
+- Sync extension recommendations across configs
+
 ## [4.12.7] - 2025-12-21
 
 ### Fixed
 
 - Filter out Go pre-release versions
+- Ignore devcontainer.json and remove invalid linter key
+
+### Miscellaneous
+
+- Automated version updates to v4.12.7
+- Update compatibility matrix with passing test results
 
 ## [4.12.6] - 2025-12-14
 
@@ -723,6 +735,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix prettier and markdownlint formatting in README
 - Format TLS documentation files
 
+[4.12.8]: https://github.com/joshjhall/containers/compare/v4.12.7...v4.12.8
 [4.12.7]: https://github.com/joshjhall/containers/compare/v4.12.6...v4.12.7
 [4.12.6]: https://github.com/joshjhall/containers/compare/v4.12.5...v4.12.6
 [4.12.5]: https://github.com/joshjhall/containers/compare/v4.12.4...v4.12.5
