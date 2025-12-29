@@ -149,7 +149,7 @@ All features are controlled via `INCLUDE_<FEATURE>=true/false` build arguments:
 **Dev Tools**: `PYTHON_DEV`, `NODE_DEV`, `RUST_DEV`, `RUBY_DEV`, `R_DEV`,
 `GOLANG_DEV`, `JAVA_DEV`, `MOJO_DEV`
 **Tools**: `DEV_TOOLS`, `DOCKER`, `OP` (1Password CLI)
-**Claude Code**: `CLAUDE_INTEGRATIONS` (LSP servers), `MCP_SERVERS` (MCP servers)
+**Claude Code**: `MCP_SERVERS` (MCP servers + bash LSP)
 **Cloud**: `KUBERNETES`, `TERRAFORM`, `AWS`, `GCLOUD`, `CLOUDFLARE`
 **Database**: `POSTGRES_CLIENT`, `REDIS_CLIENT`, `SQLITE_CLIENT`
 **AI/ML**: `OLLAMA` (Local LLM support)
@@ -176,19 +176,23 @@ This container system is designed to be used as a git submodule:
 
 ## Claude Code Integrations
 
-When `INCLUDE_DEV_TOOLS=true`, the container installs Claude Code CLI. Additional
-integrations can enhance Claude Code's capabilities:
+When `INCLUDE_DEV_TOOLS=true`, the container installs Claude Code CLI.
 
-### LSP Servers (`INCLUDE_CLAUDE_INTEGRATIONS=true`, default: true)
+### LSP Servers (installed with `*_dev` features)
 
-Installs language server protocol servers based on detected languages:
+Language server protocol servers are installed automatically with their
+respective language development features. This enables IDE features like
+code completion, go-to-definition, and diagnostics for any IDE (VSCode,
+Cursor, Neovim, etc.):
 
-- **Python**: `python-lsp-server` with black and ruff plugins
-- **Node/TypeScript**: `typescript-language-server`
-- **R**: `languageserver`
-
-Note: Go (gopls), Ruby (solargraph), and Rust (rust-analyzer) are already
-installed by their respective `*-dev` scripts.
+| Feature              | LSP Server                                      |
+| -------------------- | ----------------------------------------------- |
+| `INCLUDE_PYTHON_DEV` | `python-lsp-server` with black and ruff plugins |
+| `INCLUDE_NODE_DEV`   | `typescript-language-server`                    |
+| `INCLUDE_R_DEV`      | `languageserver`                                |
+| `INCLUDE_GOLANG_DEV` | `gopls`                                         |
+| `INCLUDE_RUBY_DEV`   | `solargraph`                                    |
+| `INCLUDE_RUST_DEV`   | `rust-analyzer`                                 |
 
 ### MCP Servers (`INCLUDE_MCP_SERVERS=false`, default: false)
 
@@ -197,6 +201,11 @@ Installs Model Context Protocol servers for enhanced Claude Code capabilities:
 - **Filesystem**: `@modelcontextprotocol/server-filesystem` - Enhanced file ops
 - **GitHub**: `@modelcontextprotocol/server-github` - GitHub API integration
 - **GitLab**: `@modelcontextprotocol/server-gitlab` - GitLab API integration
+- **Bash LSP**: `bash-language-server` - Shell script language server (grouped
+  here since it requires Node.js)
+
+Note: `INCLUDE_MCP_SERVERS=true` automatically triggers Node.js installation
+and requires `INCLUDE_DEV_TOOLS=true` (for Claude CLI).
 
 MCP configuration is created on first container startup via
 `/etc/container/first-startup/30-claude-mcp-setup.sh`. The script uses

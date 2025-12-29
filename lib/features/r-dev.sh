@@ -631,6 +631,22 @@ log_command "Setting test-r-dev script permissions" \
     chmod +x /usr/local/bin/test-r-dev
 
 # ============================================================================
+# R Language Server (for IDE support)
+# ============================================================================
+log_message "Installing R language server for IDE support..."
+
+# Install R languageserver package
+log_command "Installing R languageserver" \
+    su - "${USERNAME}" -c "export R_LIBS_USER='${R_LIBS_USER}' R_LIBS_SITE='${R_LIBS_SITE}' && /usr/local/bin/Rscript -e \"install.packages('languageserver', repos='https://cloud.r-project.org/', quiet=TRUE)\""
+
+# Verify LSP installation
+if /usr/local/bin/Rscript -e "library(languageserver)" &>/dev/null; then
+    log_message "R LSP installed successfully"
+else
+    log_warning "R LSP installation could not be verified"
+fi
+
+# ============================================================================
 # Final verification
 # ============================================================================
 log_message "Verifying key R development tools..."

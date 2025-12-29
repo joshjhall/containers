@@ -158,6 +158,14 @@ test_r_dev_tools() {
     assert_command_in_container "$image" "Rscript -e 'library(styler); cat(\"ok\")'" "ok"
 }
 
+# Test: R language server is installed (for IDE support)
+test_r_languageserver() {
+    local image="${IMAGE_TO_TEST:-test-r-dev-$$}"
+
+    # languageserver for IDE support
+    assert_command_in_container "$image" "Rscript -e 'library(languageserver); cat(\"ok\")'" "ok"
+}
+
 # Run all tests
 run_test test_r_dev_build "R dev environment builds successfully"
 run_test test_r_version "R version and basic functionality work"
@@ -168,6 +176,7 @@ run_test test_r_tidyverse_packages "Tidyverse and data manipulation packages wor
 run_test test_r_package_install "R can install new packages"
 run_test test_r_cache "R cache directories are configured correctly"
 run_test test_r_dev_tools "R development tools work"
+run_test test_r_languageserver "R language server is installed"
 
 # Generate test report
 generate_report

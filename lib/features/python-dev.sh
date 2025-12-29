@@ -268,6 +268,28 @@ alias py-security-check='bandit -r . && pip-audit'
 PYTHON_DEV_ALIASES_EOF
 
 # ============================================================================
+# Python Language Server (for IDE support)
+# ============================================================================
+log_message "Installing Python language server for IDE support..."
+
+# Install python-lsp-server with formatting and linting plugins
+# - python-lsp-server: Core LSP implementation
+# - python-lsp-black: Black formatter integration
+# - python-lsp-ruff: Ruff linter integration (fast, replaces flake8/isort)
+log_command "Installing python-lsp-server with plugins" \
+    su - "${USERNAME}" -c "export PIP_CACHE_DIR='${PIP_CACHE_DIR}' && /usr/local/bin/python -m pip install --no-warn-script-location --prefer-binary \
+    python-lsp-server \
+    python-lsp-black \
+    python-lsp-ruff"
+
+# Verify LSP installation
+if command -v pylsp &>/dev/null; then
+    log_message "Python LSP installed successfully"
+else
+    log_warning "Python LSP installation could not be verified"
+fi
+
+# ============================================================================
 # Final verification
 # ============================================================================
 log_message "Verifying Python development tools installation..."

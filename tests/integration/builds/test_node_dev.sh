@@ -53,6 +53,9 @@ test_node_dev_build() {
     assert_executable_in_path "$image" "eslint"
     assert_executable_in_path "$image" "jest"
 
+    # Verify TypeScript LSP (for IDE support)
+    assert_executable_in_path "$image" "typescript-language-server"
+
     # Verify dev tools
     assert_executable_in_path "$image" "git"
     assert_executable_in_path "$image" "gh"

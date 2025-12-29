@@ -613,6 +613,23 @@ log_command "Setting node-dev-list script permissions" \
     chmod +x /usr/local/bin/node-dev-list
 
 # ============================================================================
+# TypeScript Language Server (for IDE support)
+# ============================================================================
+log_message "Installing TypeScript language server for IDE support..."
+
+# typescript-language-server: LSP wrapper for TypeScript's tsserver
+# Note: typescript is already installed above, just need the LSP wrapper
+log_command "Installing typescript-language-server" \
+    npm_install_as_user typescript-language-server
+
+# Verify LSP installation
+if command -v typescript-language-server &>/dev/null; then
+    log_message "TypeScript LSP installed successfully"
+else
+    log_warning "TypeScript LSP installation could not be verified"
+fi
+
+# ============================================================================
 # Final Verification
 # ============================================================================
 log_message "Verifying key Node.js development tools..."

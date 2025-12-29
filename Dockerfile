@@ -400,16 +400,8 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     /tmp/build-scripts/features/dev-tools.sh; \
     fi
 
-# Claude Code LSP integrations (language-specific LSP servers)
-# Only runs if Claude Code CLI is installed (via dev-tools)
-ARG INCLUDE_CLAUDE_INTEGRATIONS=true
-RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
-    --mount=type=cache,target=/var/lib/apt,sharing=locked \
-    if [ "${INCLUDE_CLAUDE_INTEGRATIONS}" = "true" ] && [ "${INCLUDE_DEV_TOOLS}" = "true" ]; then \
-    /tmp/build-scripts/features/claude-lsp.sh; \
-    fi
-
-# Claude Code MCP servers (filesystem, GitHub, GitLab integrations)
+# Claude Code MCP servers and bash-language-server
+# (filesystem, GitHub, GitLab integrations + bash LSP)
 # Note: INCLUDE_MCP_SERVERS already declared in Node.js section above
 # This triggers Node.js installation automatically when enabled
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \

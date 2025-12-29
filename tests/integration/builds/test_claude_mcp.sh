@@ -5,6 +5,7 @@
 # - @modelcontextprotocol/server-filesystem
 # - @modelcontextprotocol/server-github
 # - @modelcontextprotocol/server-gitlab
+# - bash-language-server (shell script LSP)
 # - MCP configuration in ~/.claude/settings.json
 #
 # Note: Requires INCLUDE_DEV_TOOLS=true for Claude CLI to be present
@@ -60,6 +61,9 @@ test_claude_mcp_install() {
     assert_command_in_container "$image" \
         "npm list -g @modelcontextprotocol/server-gitlab 2>/dev/null | grep -q server-gitlab && echo 'installed'" \
         "installed"
+
+    # Verify bash-language-server is installed (grouped with MCPs since both need Node)
+    assert_executable_in_path "$image" "bash-language-server"
 }
 
 # Test: MCP first-startup script is created with smart detection

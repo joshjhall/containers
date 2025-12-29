@@ -56,6 +56,9 @@ test_python_dev_build() {
     assert_executable_in_path "$image" "pytest"
     assert_executable_in_path "$image" "pip-audit"
 
+    # Verify Python LSP (for IDE support)
+    assert_executable_in_path "$image" "pylsp"
+
     # Verify dev tools
     assert_executable_in_path "$image" "git"
     assert_executable_in_path "$image" "gh"

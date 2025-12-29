@@ -15,6 +15,9 @@
 #   - @modelcontextprotocol/server-github: GitHub API integration
 #   - @modelcontextprotocol/server-gitlab: GitLab API integration
 #
+# LSP Server Installed:
+#   - bash-language-server: Shell script language server (grouped here since it needs Node)
+#
 # Configuration:
 #   Creates ~/.claude/settings.json with MCP server configurations.
 #   Tokens are read from environment variables at runtime:
@@ -78,6 +81,25 @@ log_command "Installing @modelcontextprotocol/server-gitlab" \
     npm install -g --silent @modelcontextprotocol/server-gitlab || {
     log_warning "Failed to install GitLab MCP server"
 }
+
+# ============================================================================
+# Bash Language Server (grouped with MCPs since both require Node)
+# ============================================================================
+log_message "Installing bash-language-server for shell script IDE support..."
+
+# bash-language-server provides LSP for bash/sh/zsh scripts
+# Integrates with shellcheck for linting (if installed)
+log_command "Installing bash-language-server" \
+    npm install -g --silent bash-language-server || {
+    log_warning "Failed to install bash-language-server"
+}
+
+# Verify installation
+if command -v bash-language-server &>/dev/null; then
+    log_message "bash-language-server installed successfully"
+else
+    log_warning "bash-language-server installation could not be verified"
+fi
 
 # ============================================================================
 # First-Startup Script for MCP Configuration
