@@ -198,7 +198,10 @@ Installs Model Context Protocol servers for enhanced Claude Code capabilities:
 - **GitHub**: `@modelcontextprotocol/server-github` - GitHub API integration
 - **GitLab**: `@modelcontextprotocol/server-gitlab` - GitLab API integration
 
-When enabled, creates `~/.claude/settings.json` with default MCP configuration.
+MCP configuration is created on first container startup via
+`/etc/container/first-startup/30-claude-mcp-setup.sh`, which ensures it works
+correctly with mounted home directories.
+
 Set these environment variables at runtime for GitHub/GitLab integration:
 
 - `GITHUB_TOKEN`: GitHub personal access token

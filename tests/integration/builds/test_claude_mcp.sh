@@ -62,30 +62,30 @@ test_claude_mcp_install() {
         "installed"
 }
 
-# Test: MCP configuration file is created
-test_claude_mcp_config() {
+# Test: MCP first-startup script is created
+test_claude_mcp_startup_script() {
     local image="${IMAGE_TO_TEST:-test-claude-mcp-$$}"
 
-    # Verify settings.json exists
+    # Verify first-startup script exists
     assert_command_in_container "$image" \
-        "test -f ~/.claude/settings.json && echo 'exists'" \
+        "test -f /etc/container/first-startup/30-claude-mcp-setup.sh && echo 'exists'" \
         "exists"
 
-    # Verify settings.json contains MCP server configurations
+    # Verify startup script contains MCP configuration
     assert_command_in_container "$image" \
-        "grep -q 'mcpServers' ~/.claude/settings.json && echo 'has mcp'" \
+        "grep -q 'mcpServers' /etc/container/first-startup/30-claude-mcp-setup.sh && echo 'has mcp'" \
         "has mcp"
 
     assert_command_in_container "$image" \
-        "grep -q 'filesystem' ~/.claude/settings.json && echo 'has filesystem'" \
+        "grep -q 'filesystem' /etc/container/first-startup/30-claude-mcp-setup.sh && echo 'has filesystem'" \
         "has filesystem"
 
     assert_command_in_container "$image" \
-        "grep -q 'github' ~/.claude/settings.json && echo 'has github'" \
+        "grep -q 'github' /etc/container/first-startup/30-claude-mcp-setup.sh && echo 'has github'" \
         "has github"
 
     assert_command_in_container "$image" \
-        "grep -q 'gitlab' ~/.claude/settings.json && echo 'has gitlab'" \
+        "grep -q 'gitlab' /etc/container/first-startup/30-claude-mcp-setup.sh && echo 'has gitlab'" \
         "has gitlab"
 }
 
@@ -149,7 +149,7 @@ test_claude_mcp_requires_devtools() {
 
 # Run all tests
 run_test test_claude_mcp_install "MCP servers are installed correctly"
-run_test test_claude_mcp_config "MCP configuration file is created"
+run_test test_claude_mcp_startup_script "MCP first-startup script is created"
 
 # Skip additional tests if using pre-built image
 if [ -z "${IMAGE_TO_TEST:-}" ]; then

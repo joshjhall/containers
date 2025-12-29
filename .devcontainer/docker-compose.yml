@@ -15,6 +15,8 @@ services:
         INCLUDE_DOCKER: "true"
         # Python needed for pre-commit framework and linting tools
         INCLUDE_PYTHON: "true"
+        # MCP servers for Claude Code integration (filesystem, GitHub, GitLab)
+        INCLUDE_MCP_SERVERS: "true"
       cache_from:
         - type=local,src=/tmp/.buildx-cache
       cache_to:

@@ -80,28 +80,30 @@ log_command "Installing @modelcontextprotocol/server-gitlab" \
 }
 
 # ============================================================================
-# MCP Configuration
+# First-Startup Script for MCP Configuration
 # ============================================================================
+# The MCP config needs to be created at runtime, not build time, because:
+# - The home directory is often mounted as a volume
+# - Build-time config would be hidden by the volume mount
 
-log_message "Setting up Claude Code MCP configuration..."
+log_message "Setting up MCP configuration first-startup script..."
 
-# Get target user's home directory
-TARGET_USER="${USERNAME:-developer}"
-if [ "$TARGET_USER" = "root" ]; then
-    USER_HOME="/root"
-else
-    USER_HOME="/home/$TARGET_USER"
-fi
+log_command "Creating container startup directory" \
+    mkdir -p /etc/container/first-startup
 
-CLAUDE_CONFIG_DIR="${USER_HOME}/.claude"
+command cat > /etc/container/first-startup/30-claude-mcp-setup.sh << 'MCP_STARTUP_EOF'
+#!/bin/bash
+# Claude Code MCP Configuration Setup
+# Creates default MCP server configuration on first container start
 
-# Create Claude config directory
-log_command "Creating Claude config directory" \
-    mkdir -p "$CLAUDE_CONFIG_DIR"
+CLAUDE_CONFIG_DIR="${HOME}/.claude"
 
-# Only create settings.json if it doesn't exist (don't overwrite user config)
+# Only create if it doesn't exist (preserve user config)
 if [ ! -f "${CLAUDE_CONFIG_DIR}/settings.json" ]; then
-    log_message "Creating default MCP configuration..."
+    echo "=== Claude Code MCP Configuration ==="
+    echo "Creating default MCP server configuration..."
+
+    mkdir -p "$CLAUDE_CONFIG_DIR"
 
     cat > "${CLAUDE_CONFIG_DIR}/settings.json" << 'SETTINGS_EOF'
 {
@@ -132,14 +134,20 @@ if [ ! -f "${CLAUDE_CONFIG_DIR}/settings.json" ]; then
 }
 SETTINGS_EOF
 
-    # Set proper ownership
-    log_command "Setting config ownership" \
-        chown -R "${TARGET_USER}:${TARGET_USER}" "$CLAUDE_CONFIG_DIR"
-
-    log_message "MCP configuration created at ${CLAUDE_CONFIG_DIR}/settings.json"
+    echo "MCP configuration created at ${CLAUDE_CONFIG_DIR}/settings.json"
+    echo ""
+    echo "To use GitHub/GitLab MCP servers, set environment variables:"
+    echo "  - GITHUB_TOKEN: Your GitHub personal access token"
+    echo "  - GITLAB_TOKEN: Your GitLab personal access token"
+    echo "  - GITLAB_API_URL: GitLab API URL (optional, defaults to gitlab.com)"
 else
-    log_message "Existing settings.json found - preserving user configuration"
+    echo "=== Claude Code MCP Configuration ==="
+    echo "Existing settings.json found - preserving your configuration"
 fi
+MCP_STARTUP_EOF
+
+log_command "Setting MCP startup script permissions" \
+    chmod +x /etc/container/first-startup/30-claude-mcp-setup.sh
 
 # ============================================================================
 # Verification
@@ -173,6 +181,7 @@ else
 fi
 
 log_message ""
+log_message "MCP configuration will be created on first container startup."
 log_message "To use GitHub/GitLab MCP servers, set environment variables:"
 log_message "  - GITHUB_TOKEN: Your GitHub personal access token"
 log_message "  - GITLAB_TOKEN: Your GitLab personal access token"
