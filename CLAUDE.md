@@ -199,14 +199,17 @@ Installs Model Context Protocol servers for enhanced Claude Code capabilities:
 - **GitLab**: `@modelcontextprotocol/server-gitlab` - GitLab API integration
 
 MCP configuration is created on first container startup via
-`/etc/container/first-startup/30-claude-mcp-setup.sh`, which ensures it works
-correctly with mounted home directories.
+`/etc/container/first-startup/30-claude-mcp-setup.sh`. The script:
 
-Set these environment variables at runtime for GitHub/GitLab integration:
+- **Always** configures the filesystem MCP server
+- **Detects** GitHub vs GitLab from the git remote origin URL
+- **Auto-configures** GitLab API URL for private instances (e.g., `gitlab.mycompany.com`)
+- **Is idempotent** - safe to run multiple times, won't duplicate entries
 
-- `GITHUB_TOKEN`: GitHub personal access token
-- `GITLAB_TOKEN`: GitLab personal access token
-- `GITLAB_API_URL`: GitLab API URL (defaults to `https://gitlab.com/api/v4`)
+Set the appropriate environment variable at runtime:
+
+- `GITHUB_TOKEN`: GitHub personal access token (when using GitHub)
+- `GITLAB_TOKEN`: GitLab personal access token (when using GitLab)
 
 ## Cache Management
 

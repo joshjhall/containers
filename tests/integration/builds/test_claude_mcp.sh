@@ -62,7 +62,7 @@ test_claude_mcp_install() {
         "installed"
 }
 
-# Test: MCP first-startup script is created
+# Test: MCP first-startup script is created with smart detection
 test_claude_mcp_startup_script() {
     local image="${IMAGE_TO_TEST:-test-claude-mcp-$$}"
 
@@ -71,22 +71,30 @@ test_claude_mcp_startup_script() {
         "test -f /etc/container/first-startup/30-claude-mcp-setup.sh && echo 'exists'" \
         "exists"
 
-    # Verify startup script contains MCP configuration
+    # Verify startup script has git platform detection
     assert_command_in_container "$image" \
-        "grep -q 'mcpServers' /etc/container/first-startup/30-claude-mcp-setup.sh && echo 'has mcp'" \
-        "has mcp"
+        "grep -q 'detect_git_platform' /etc/container/first-startup/30-claude-mcp-setup.sh && echo 'has detection'" \
+        "has detection"
 
+    # Verify startup script is idempotent (has_mcp_server check)
     assert_command_in_container "$image" \
-        "grep -q 'filesystem' /etc/container/first-startup/30-claude-mcp-setup.sh && echo 'has filesystem'" \
+        "grep -q 'has_mcp_server' /etc/container/first-startup/30-claude-mcp-setup.sh && echo 'is idempotent'" \
+        "is idempotent"
+
+    # Verify filesystem MCP is always included
+    assert_command_in_container "$image" \
+        "grep -q 'FILESYSTEM_CONFIG' /etc/container/first-startup/30-claude-mcp-setup.sh && echo 'has filesystem'" \
         "has filesystem"
 
+    # Verify GitHub detection
     assert_command_in_container "$image" \
-        "grep -q 'github' /etc/container/first-startup/30-claude-mcp-setup.sh && echo 'has github'" \
-        "has github"
+        "grep -q 'github.com' /etc/container/first-startup/30-claude-mcp-setup.sh && echo 'detects github'" \
+        "detects github"
 
+    # Verify GitLab detection with dynamic API URL
     assert_command_in_container "$image" \
-        "grep -q 'gitlab' /etc/container/first-startup/30-claude-mcp-setup.sh && echo 'has gitlab'" \
-        "has gitlab"
+        "grep -q 'generate_gitlab_config' /etc/container/first-startup/30-claude-mcp-setup.sh && echo 'has gitlab config'" \
+        "has gitlab config"
 }
 
 # Test: MCP triggers Node.js installation automatically
