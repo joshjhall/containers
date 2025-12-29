@@ -156,12 +156,15 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     fi
 # Node.js + Node.js development tools
 # Note: Installed early as it's a common dependency for other tools
+# Also triggered by INCLUDE_MCP_SERVERS since MCP servers require Node.js
 ARG INCLUDE_NODE=false
 ARG INCLUDE_NODE_DEV=false
+ARG INCLUDE_MCP_SERVERS=false
 ARG NODE_VERSION=22
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
-    if [ "${INCLUDE_NODE}" = "true" ] || [ "${INCLUDE_NODE_DEV}" = "true" ]; then \
+    if [ "${INCLUDE_NODE}" = "true" ] || [ "${INCLUDE_NODE_DEV}" = "true" ] || \
+       [ "${INCLUDE_MCP_SERVERS}" = "true" ]; then \
     NODE_VERSION=${NODE_VERSION} /tmp/build-scripts/features/node.sh; \
     fi
 # Rust + Rust development tools
@@ -395,6 +398,24 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     if [ "${INCLUDE_DEV_TOOLS}" = "true" ]; then \
     /tmp/build-scripts/features/dev-tools.sh; \
+    fi
+
+# Claude Code LSP integrations (language-specific LSP servers)
+# Only runs if Claude Code CLI is installed (via dev-tools)
+ARG INCLUDE_CLAUDE_INTEGRATIONS=true
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    if [ "${INCLUDE_CLAUDE_INTEGRATIONS}" = "true" ] && [ "${INCLUDE_DEV_TOOLS}" = "true" ]; then \
+    /tmp/build-scripts/features/claude-lsp.sh; \
+    fi
+
+# Claude Code MCP servers (filesystem, GitHub, GitLab integrations)
+# Note: INCLUDE_MCP_SERVERS already declared in Node.js section above
+# This triggers Node.js installation automatically when enabled
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    if [ "${INCLUDE_MCP_SERVERS}" = "true" ] && [ "${INCLUDE_DEV_TOOLS}" = "true" ]; then \
+    /tmp/build-scripts/features/claude-mcp.sh; \
     fi
 
 # Keyboard bindings (readline/inputrc configuration for terminal shortcuts)

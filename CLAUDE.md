@@ -147,10 +147,14 @@ All features are controlled via `INCLUDE_<FEATURE>=true/false` build arguments:
 
 **Languages**: `PYTHON`, `NODE`, `RUST`, `RUBY`, `R`, `GOLANG`, `JAVA`, `MOJO`
 **Dev Tools**: `PYTHON_DEV`, `NODE_DEV`, `RUST_DEV`, `RUBY_DEV`, `R_DEV`,
-`GOLANG_DEV`, `JAVA_DEV`, `MOJO_DEV` **Tools**: `DEV_TOOLS`, `DOCKER`, `OP`
-(1Password CLI) **Cloud**: `KUBERNETES`, `TERRAFORM`, `AWS`, `GCLOUD`,
-`CLOUDFLARE` **Database**: `POSTGRES_CLIENT`, `REDIS_CLIENT`, `SQLITE_CLIENT`
+`GOLANG_DEV`, `JAVA_DEV`, `MOJO_DEV`
+**Tools**: `DEV_TOOLS`, `DOCKER`, `OP` (1Password CLI)
+**Claude Code**: `CLAUDE_INTEGRATIONS` (LSP servers), `MCP_SERVERS` (MCP servers)
+**Cloud**: `KUBERNETES`, `TERRAFORM`, `AWS`, `GCLOUD`, `CLOUDFLARE`
+**Database**: `POSTGRES_CLIENT`, `REDIS_CLIENT`, `SQLITE_CLIENT`
 **AI/ML**: `OLLAMA` (Local LLM support)
+
+Note: `MCP_SERVERS` auto-triggers Node.js installation since MCP servers require it.
 
 Version control via build arguments:
 
@@ -169,6 +173,37 @@ This container system is designed to be used as a git submodule:
    parent directory
 1. Different environments are created by varying the build arguments
 1. For standalone testing, use `PROJECT_PATH=.` to indicate no parent project
+
+## Claude Code Integrations
+
+When `INCLUDE_DEV_TOOLS=true`, the container installs Claude Code CLI. Additional
+integrations can enhance Claude Code's capabilities:
+
+### LSP Servers (`INCLUDE_CLAUDE_INTEGRATIONS=true`, default: true)
+
+Installs language server protocol servers based on detected languages:
+
+- **Python**: `python-lsp-server` with black and ruff plugins
+- **Node/TypeScript**: `typescript-language-server`
+- **R**: `languageserver`
+
+Note: Go (gopls), Ruby (solargraph), and Rust (rust-analyzer) are already
+installed by their respective `*-dev` scripts.
+
+### MCP Servers (`INCLUDE_MCP_SERVERS=false`, default: false)
+
+Installs Model Context Protocol servers for enhanced Claude Code capabilities:
+
+- **Filesystem**: `@modelcontextprotocol/server-filesystem` - Enhanced file ops
+- **GitHub**: `@modelcontextprotocol/server-github` - GitHub API integration
+- **GitLab**: `@modelcontextprotocol/server-gitlab` - GitLab API integration
+
+When enabled, creates `~/.claude/settings.json` with default MCP configuration.
+Set these environment variables at runtime for GitHub/GitLab integration:
+
+- `GITHUB_TOKEN`: GitHub personal access token
+- `GITLAB_TOKEN`: GitLab personal access token
+- `GITLAB_API_URL`: GitLab API URL (defaults to `https://gitlab.com/api/v4`)
 
 ## Cache Management
 
