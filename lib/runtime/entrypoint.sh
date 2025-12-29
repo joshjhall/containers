@@ -239,6 +239,54 @@ if [ -S /var/run/docker.sock ]; then
 fi
 
 # ============================================================================
+# Cache Directory Permissions Fix
+# ============================================================================
+# Fix ownership of /cache directories that may have been created as root
+# during Docker build (e.g., npm global installs create cache files as root)
+#
+# This runs on every startup because:
+# 1. Cache volumes may be shared across containers with different UIDs
+# 2. New cache subdirectories may be created by root during image updates
+# 3. It's idempotent and fast when permissions are already correct
+if [ -d "/cache" ]; then
+    # Check if we need to fix permissions (any root-owned files in /cache)
+    if find /cache -user root -print -quit 2>/dev/null | grep -q .; then
+        echo "🔧 Fixing /cache directory permissions..."
+
+        # Determine if we can perform privileged operations
+        CAN_FIX_CACHE=false
+        if [ "$RUNNING_AS_ROOT" = "true" ]; then
+            CAN_FIX_CACHE=true
+        elif command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
+            CAN_FIX_CACHE=true
+        fi
+
+        if [ "$CAN_FIX_CACHE" = "true" ]; then
+            # Helper function reused from Docker socket section
+            cache_run_privileged() {
+                if [ "$RUNNING_AS_ROOT" = "true" ]; then
+                    "$@"
+                else
+                    sudo "$@"
+                fi
+            }
+
+            # Fix ownership of all cache directories
+            if cache_run_privileged chown -R "${USERNAME}:${USERNAME}" /cache 2>/dev/null; then
+                echo "✓ Cache directory permissions fixed"
+            else
+                echo "⚠️  Warning: Could not fix all cache permissions"
+                echo "   Some package manager operations may fail"
+            fi
+        else
+            echo "⚠️  Warning: Cannot fix /cache permissions - no root access or sudo"
+            echo "   Some package manager operations may fail (npm, pip, etc.)"
+            echo "   To fix: run container as root or enable ENABLE_PASSWORDLESS_SUDO=true"
+        fi
+    fi
+fi
+
+# ============================================================================
 # First-Time Setup
 # ============================================================================
 # Run first-time setup scripts if marker doesn't exist

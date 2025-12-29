@@ -94,20 +94,28 @@ log_command "Creating container startup directory" \
 command cat > /etc/container/first-startup/30-claude-mcp-setup.sh << 'MCP_STARTUP_EOF'
 #!/bin/bash
 # Claude Code MCP Configuration Setup
-# Intelligently configures MCP servers based on git remote detection
+# Uses `claude mcp add` CLI command for proper configuration
 #
 # Features:
 # - Always includes filesystem MCP server
 # - Detects GitHub vs GitLab from git remote origin
 # - Auto-configures GitLab API URL for private instances
-# - Idempotent: won't overwrite existing config or duplicate entries
+# - Idempotent: checks existing config before adding
 
 set -euo pipefail
 
-CLAUDE_CONFIG_DIR="${HOME}/.claude"
-CLAUDE_CONFIG_FILE="${CLAUDE_CONFIG_DIR}/settings.json"
-
 echo "=== Claude Code MCP Configuration ==="
+
+# ============================================================================
+# Prerequisites Check
+# ============================================================================
+
+# Verify claude CLI is available
+if ! command -v claude &>/dev/null; then
+    echo "Warning: Claude CLI not found in PATH"
+    echo "MCP servers are installed but must be configured manually"
+    exit 0
+fi
 
 # ============================================================================
 # Git Remote Detection
@@ -158,88 +166,37 @@ detect_git_platform() {
 }
 
 # ============================================================================
-# JSON Helper Functions (using jq)
+# MCP Server Helper Functions
 # ============================================================================
 
-# Check if an MCP server already exists in config
+# Check if an MCP server is already configured
 has_mcp_server() {
     local server_name="$1"
-    if [ -f "$CLAUDE_CONFIG_FILE" ] && command -v jq &>/dev/null; then
-        jq -e ".mcpServers.\"$server_name\" // empty" "$CLAUDE_CONFIG_FILE" &>/dev/null
-        return $?
-    fi
-    return 1
+    claude mcp list 2>/dev/null | grep -q "^${server_name}:"
 }
 
-# Add an MCP server to the config (idempotent)
+# Add an MCP server using claude CLI (idempotent)
 add_mcp_server() {
     local server_name="$1"
-    local server_config="$2"
+    shift
+    local args=("$@")
 
     if has_mcp_server "$server_name"; then
         echo "  - $server_name: already configured (skipping)"
         return 0
     fi
 
-    if [ -f "$CLAUDE_CONFIG_FILE" ]; then
-        # Merge into existing config
-        local tmp_file
-        tmp_file=$(mktemp)
-        jq ".mcpServers.\"$server_name\" = $server_config" "$CLAUDE_CONFIG_FILE" > "$tmp_file"
-        mv "$tmp_file" "$CLAUDE_CONFIG_FILE"
+    if claude mcp add -s user -t stdio "$server_name" "${args[@]}" 2>/dev/null; then
+        echo "  - $server_name: added"
     else
-        # Create new config
-        mkdir -p "$CLAUDE_CONFIG_DIR"
-        echo "{\"mcpServers\": {\"$server_name\": $server_config}}" | jq . > "$CLAUDE_CONFIG_FILE"
+        echo "  - $server_name: failed to add"
+        return 1
     fi
-
-    echo "  - $server_name: added"
-}
-
-# ============================================================================
-# MCP Server Configurations
-# ============================================================================
-
-FILESYSTEM_CONFIG='{
-  "command": "npx",
-  "args": ["-y", "@modelcontextprotocol/server-filesystem", "/workspace"]
-}'
-
-GITHUB_CONFIG='{
-  "command": "npx",
-  "args": ["-y", "@modelcontextprotocol/server-github"],
-  "env": {
-    "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_TOKEN}"
-  }
-}'
-
-# GitLab config is generated dynamically based on detected host
-generate_gitlab_config() {
-    local gitlab_host="$1"
-    local api_url="https://${gitlab_host}/api/v4"
-
-    cat <<GITLAB_JSON
-{
-  "command": "npx",
-  "args": ["-y", "@modelcontextprotocol/server-gitlab"],
-  "env": {
-    "GITLAB_PERSONAL_ACCESS_TOKEN": "\${GITLAB_TOKEN}",
-    "GITLAB_API_URL": "$api_url"
-  }
-}
-GITLAB_JSON
 }
 
 # ============================================================================
 # Main Configuration Logic
 # ============================================================================
-
-# Check for jq (required for idempotent operations)
-if ! command -v jq &>/dev/null; then
-    echo "Warning: jq not found - cannot perform idempotent configuration"
-    echo "MCP servers are installed but settings.json must be configured manually"
-    exit 0
-fi
 
 # Detect git platform
 platform_info=$(detect_git_platform)
@@ -251,18 +208,24 @@ echo ""
 echo "Configuring MCP servers:"
 
 # Always add filesystem MCP
-add_mcp_server "filesystem" "$FILESYSTEM_CONFIG"
+add_mcp_server "filesystem" -- npx -y @modelcontextprotocol/server-filesystem /workspace
 
 # Add platform-specific MCP
 case "$platform" in
     github)
-        add_mcp_server "github" "$GITHUB_CONFIG"
+        # Note: Token is referenced via environment variable at runtime
+        add_mcp_server "github" \
+            -e 'GITHUB_PERSONAL_ACCESS_TOKEN=${GITHUB_TOKEN}' \
+            -- npx -y @modelcontextprotocol/server-github
         echo ""
         echo "GitHub detected. Set GITHUB_TOKEN environment variable for API access."
         ;;
     gitlab)
-        gitlab_config=$(generate_gitlab_config "$platform_host")
-        add_mcp_server "gitlab" "$gitlab_config"
+        # GitLab with custom API URL for private instances
+        add_mcp_server "gitlab" \
+            -e 'GITLAB_PERSONAL_ACCESS_TOKEN=${GITLAB_TOKEN}' \
+            -e "GITLAB_API_URL=https://${platform_host}/api/v4" \
+            -- npx -y @modelcontextprotocol/server-gitlab
         echo ""
         echo "GitLab detected ($platform_host)."
         echo "Set GITLAB_TOKEN environment variable for API access."
@@ -270,7 +233,7 @@ case "$platform" in
     unknown)
         echo ""
         echo "Unknown git host: $platform_host"
-        echo "Configure MCP servers manually in ~/.claude/settings.json if needed."
+        echo "Configure MCP servers manually with: claude mcp add <name> -- <command>"
         ;;
     none)
         echo ""
@@ -280,7 +243,7 @@ case "$platform" in
 esac
 
 echo ""
-echo "Configuration saved to: $CLAUDE_CONFIG_FILE"
+echo "MCP configuration complete. Run 'claude mcp list' to verify."
 MCP_STARTUP_EOF
 
 log_command "Setting MCP startup script permissions" \

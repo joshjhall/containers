@@ -199,17 +199,20 @@ Installs Model Context Protocol servers for enhanced Claude Code capabilities:
 - **GitLab**: `@modelcontextprotocol/server-gitlab` - GitLab API integration
 
 MCP configuration is created on first container startup via
-`/etc/container/first-startup/30-claude-mcp-setup.sh`. The script:
+`/etc/container/first-startup/30-claude-mcp-setup.sh`. The script uses
+`claude mcp add` to register servers in `~/.claude.json`:
 
-- **Always** configures the filesystem MCP server
+- **Always** configures the filesystem MCP server for `/workspace`
 - **Detects** GitHub vs GitLab from the git remote origin URL
 - **Auto-configures** GitLab API URL for private instances (e.g., `gitlab.mycompany.com`)
-- **Is idempotent** - safe to run multiple times, won't duplicate entries
+- **Is idempotent** - checks existing config before adding, safe to run multiple times
 
 Set the appropriate environment variable at runtime:
 
 - `GITHUB_TOKEN`: GitHub personal access token (when using GitHub)
 - `GITLAB_TOKEN`: GitLab personal access token (when using GitLab)
+
+Verify MCP configuration with: `claude mcp list`
 
 ## Cache Management
 
@@ -218,6 +221,18 @@ The system uses `/cache` directory with subdirectories for each tool:
 - `/cache/pip`, `/cache/npm`, `/cache/cargo`, `/cache/go`, `/cache/bundle`
 - Mount as Docker volume for persistence across builds
 - Scripts automatically configure tools to use these cache directories
+
+### Cache Permission Handling
+
+Some cache files may be created as root during Docker builds (e.g., npm global
+installs). The entrypoint automatically fixes `/cache` permissions on startup:
+
+- **Running as root**: Directly fixes ownership to the container user
+- **Running with sudo**: Uses `sudo chown` to fix permissions
+- **No sudo available**: Warns user; some package manager operations may fail
+
+To enable automatic permission fixes in sudo-less containers, set
+`ENABLE_PASSWORDLESS_SUDO=true` during build.
 
 ## Security Considerations
 
