@@ -45,8 +45,8 @@ teardown() {
 test_rust_dev_tools() {
     local cargo_bin="$TEST_TEMP_DIR/home/testuser/.cargo/bin"
 
-    # List of Rust dev tools
-    local tools=("cargo-watch" "cargo-audit" "cargo-outdated" "bacon" "sccache" "cargo-nextest")
+    # List of Rust dev tools (including cargo-sweep)
+    local tools=("cargo-watch" "cargo-audit" "cargo-outdated" "cargo-sweep" "bacon" "sccache" "cargo-nextest")
 
     # Create mock tools
     for tool in "${tools[@]}"; do
@@ -236,7 +236,7 @@ test_rust_dev_verification() {
     command cat > "$test_script" << 'EOF'
 #!/bin/bash
 echo "Rust dev tools:"
-for tool in cargo-watch cargo-audit bacon rust-analyzer; do
+for tool in cargo-watch cargo-audit bacon rust-analyzer cargo-sweep; do
     command -v $tool &>/dev/null && echo "  - $tool: installed" || echo "  - $tool: not found"
 done
 EOF
@@ -249,6 +249,90 @@ EOF
         assert_true true "Verification script is executable"
     else
         assert_true false "Verification script is not executable"
+    fi
+}
+
+# Test: cargo-sweep aliases
+test_cargo_sweep_aliases() {
+    local bashrc_file="$TEST_TEMP_DIR/etc/bashrc.d/35-rust-dev.sh"
+
+    # Create aliases matching actual rust-dev.sh output
+    command cat > "$bashrc_file" << 'EOF'
+alias cw='cargo watch'
+alias sweep='cargo-sweep sweep --time 14'
+alias sweep-all='find "${WORKING_DIR:-/workspace}" -name "Cargo.toml" -exec dirname {} \; | xargs -I{} cargo-sweep sweep --time 14 {}'
+EOF
+
+    # Check sweep alias
+    if grep -q "alias sweep='cargo-sweep sweep --time 14'" "$bashrc_file"; then
+        assert_true true "cargo-sweep alias defined"
+    else
+        assert_true false "cargo-sweep alias not defined"
+    fi
+
+    # Check sweep-all alias
+    if grep -q "alias sweep-all=" "$bashrc_file"; then
+        assert_true true "sweep-all alias defined"
+    else
+        assert_true false "sweep-all alias not defined"
+    fi
+}
+
+# Test: cargo-sweep startup script
+test_cargo_sweep_startup_script() {
+    local startup_dir="$TEST_TEMP_DIR/etc/container/startup"
+    local startup_script="$startup_dir/25-cargo-sweep.sh"
+
+    mkdir -p "$startup_dir"
+
+    # Create startup script matching actual rust-dev.sh output
+    command cat > "$startup_script" << 'EOF'
+#!/bin/bash
+# Delayed cargo-sweep cleanup - runs in background after boot
+#
+# Environment variables:
+#   CARGO_SWEEP_DELAY - Delay before running sweep (default: 300 seconds / 5 minutes)
+#   CARGO_SWEEP_DAYS  - Remove artifacts older than this many days (default: 14)
+#   CARGO_SWEEP_DISABLE - Set to "true" to disable automatic sweep
+
+if [ "${CARGO_SWEEP_DISABLE:-false}" = "true" ]; then
+    echo "cargo-sweep: Disabled via CARGO_SWEEP_DISABLE=true"
+    exit 0
+fi
+
+SWEEP_DELAY="${CARGO_SWEEP_DELAY:-300}"
+SWEEP_DAYS="${CARGO_SWEEP_DAYS:-14}"
+EOF
+    chmod +x "$startup_script"
+
+    assert_file_exists "$startup_script"
+
+    # Check script is executable
+    if [ -x "$startup_script" ]; then
+        assert_true true "cargo-sweep startup script is executable"
+    else
+        assert_true false "cargo-sweep startup script is not executable"
+    fi
+
+    # Check for CARGO_SWEEP_DISABLE check
+    if grep -q "CARGO_SWEEP_DISABLE" "$startup_script"; then
+        assert_true true "Startup script has disable option"
+    else
+        assert_true false "Startup script missing disable option"
+    fi
+
+    # Check for default delay (300 seconds / 5 minutes)
+    if grep -q "CARGO_SWEEP_DELAY:-300" "$startup_script"; then
+        assert_true true "Startup script has 5-minute default delay"
+    else
+        assert_true false "Startup script missing default delay"
+    fi
+
+    # Check for default sweep age (14 days)
+    if grep -q "CARGO_SWEEP_DAYS:-14" "$startup_script"; then
+        assert_true true "Startup script has 14-day default threshold"
+    else
+        assert_true false "Startup script missing default threshold"
     fi
 }
 
@@ -273,6 +357,8 @@ run_test_with_setup test_cross_compilation "Cross-compilation support"
 run_test_with_setup test_rust_dev_aliases "Rust dev aliases"
 run_test_with_setup test_wasm_support "Wasm support"
 run_test_with_setup test_rust_dev_verification "Rust dev verification"
+run_test_with_setup test_cargo_sweep_aliases "cargo-sweep aliases"
+run_test_with_setup test_cargo_sweep_startup_script "cargo-sweep startup script"
 
 # Generate test report
 generate_report

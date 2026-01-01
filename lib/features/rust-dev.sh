@@ -12,6 +12,7 @@
 #   - cargo-expand: Expand macros to see generated code
 #   - cargo-modules: Visualize module structure and visibility
 #   - cargo-outdated: Check for outdated dependencies
+#   - cargo-sweep: Clean up old build artifacts to reclaim disk space
 #   - cargo-release: Semantic versioning and crate publishing
 #   - sccache: Shared compilation cache for faster builds
 #   - bacon: Background rust code checker
@@ -27,10 +28,18 @@
 #   - cargo expand: Show macro-expanded code
 #   - cargo modules structure: Visualize module tree and visibility
 #   - cargo outdated: List outdated dependencies
+#   - cargo sweep --time 14: Remove build artifacts older than 14 days
 #   - bacon: Run continuous background compilation
 #   - tokei: Count lines of code by language
 #   - hyperfine <cmd>: Benchmark command execution
 #   - just: Run project tasks
+#
+# Automatic Cleanup:
+#   On every container boot, cargo-sweep runs in the background (after 5 min
+#   delay) to clean artifacts older than 14 days. Configure via env vars:
+#   - CARGO_SWEEP_DELAY: Seconds to wait before sweep (default: 300)
+#   - CARGO_SWEEP_DAYS: Age threshold in days (default: 14)
+#   - CARGO_SWEEP_DISABLE: Set to "true" to disable automatic sweep
 #
 # Requirements:
 #   - Rust/Cargo must be installed (via INCLUDE_RUST=true)
@@ -108,6 +117,9 @@ log_command "Installing cargo-modules" \
 log_command "Installing cargo-outdated" \
     su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/cargo install cargo-outdated"
 
+log_command "Installing cargo-sweep" \
+    su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/cargo install cargo-sweep"
+
 log_command "Installing cargo-audit" \
     su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/cargo install cargo-audit"
 
@@ -172,7 +184,7 @@ fi
 
 # Create symlinks for the installed tools
 log_message "Creating symlinks for Rust dev tools..."
-for tool in tree-sitter cargo-watch cargo-expand cargo-modules cargo-outdated cargo-audit cargo-deny cargo-geiger bacon tokei hyperfine just sccache mdbook cargo-release taplo; do
+for tool in tree-sitter cargo-watch cargo-expand cargo-modules cargo-outdated cargo-sweep cargo-audit cargo-deny cargo-geiger bacon tokei hyperfine just sccache mdbook cargo-release taplo; do
     if [ -f "${CARGO_HOME}/bin/${tool}" ]; then
         create_symlink "${CARGO_HOME}/bin/${tool}" "/usr/local/bin/${tool}" "${tool} Rust dev tool"
     fi
@@ -191,6 +203,7 @@ tools=(
     "cargo-expand"
     "cargo-modules"
     "cargo-outdated"
+    "cargo-sweep"
     "cargo-audit"
     "cargo-deny"
     "cargo-geiger"
@@ -270,6 +283,10 @@ alias cwc='cargo watch -x check'
 # Other tools
 alias loc='tokei'
 alias bench='hyperfine'
+
+# Cargo sweep aliases
+alias sweep='cargo-sweep sweep --time 14'
+alias sweep-all='find "${WORKING_DIR:-/workspace}" -name "Cargo.toml" -exec dirname {} \; | xargs -I{} cargo-sweep sweep --time 14 {}'
 
 # Unified workflow aliases
 alias rust-lint-all='cargo clippy --all-targets --all-features'
@@ -515,6 +532,67 @@ log_command "Setting startup script permissions" \
     chmod +x /etc/container/first-startup/20-rust-dev-setup.sh
 
 # ============================================================================
+# Every-Boot Cleanup Script (cargo-sweep)
+# ============================================================================
+echo "=== Creating cargo-sweep cleanup script ==="
+
+# Create every-boot startup directory if it doesn't exist
+log_command "Creating every-boot startup directory" \
+    mkdir -p /etc/container/startup
+
+# Default delay before running sweep (in seconds) - can be overridden via env var
+# Default sweep age (in days) - artifacts older than this are removed
+command cat > /etc/container/startup/25-cargo-sweep.sh << 'EOF'
+#!/bin/bash
+# Delayed cargo-sweep cleanup - runs in background after boot
+#
+# Environment variables:
+#   CARGO_SWEEP_DELAY - Delay before running sweep (default: 300 seconds / 5 minutes)
+#   CARGO_SWEEP_DAYS  - Remove artifacts older than this many days (default: 14)
+#   CARGO_SWEEP_DISABLE - Set to "true" to disable automatic sweep
+#
+
+# Skip if disabled
+if [ "${CARGO_SWEEP_DISABLE:-false}" = "true" ]; then
+    echo "cargo-sweep: Disabled via CARGO_SWEEP_DISABLE=true"
+    exit 0
+fi
+
+# Check if cargo-sweep is installed
+if ! command -v cargo-sweep &> /dev/null; then
+    exit 0
+fi
+
+# Configuration with defaults
+SWEEP_DELAY="${CARGO_SWEEP_DELAY:-300}"
+SWEEP_DAYS="${CARGO_SWEEP_DAYS:-14}"
+WORKING_DIR="${WORKING_DIR:-/workspace}"
+
+# Run the sweep in the background so we don't block container startup
+(
+    # Wait before running sweep
+    sleep "$SWEEP_DELAY"
+
+    # Only sweep if we have Rust projects in the workspace
+    if [ -d "$WORKING_DIR" ]; then
+        # Find all directories with Cargo.toml and sweep them
+        find "$WORKING_DIR" -name "Cargo.toml" -type f 2>/dev/null | while read -r cargo_file; do
+            project_dir=$(dirname "$cargo_file")
+            if [ -d "$project_dir/target" ]; then
+                echo "cargo-sweep: Cleaning artifacts older than ${SWEEP_DAYS} days in $project_dir"
+                cargo-sweep sweep --time "$SWEEP_DAYS" "$project_dir" 2>/dev/null || true
+            fi
+        done
+    fi
+) &
+
+echo "cargo-sweep: Scheduled cleanup (${SWEEP_DAYS}d threshold) in ${SWEEP_DELAY}s"
+EOF
+
+log_command "Setting cargo-sweep startup script permissions" \
+    chmod +x /etc/container/startup/25-cargo-sweep.sh
+
+# ============================================================================
 # Final ownership fix
 # ============================================================================
 # Note: rust-dev does not create cache directories itself, it relies on the base rust feature
@@ -529,11 +607,11 @@ export CARGO_HOME="/cache/cargo"
 export RUSTUP_HOME="/cache/rustup"
 log_feature_summary \
     --feature "Rust Development Tools" \
-    --tools "rust-analyzer,clippy,rustfmt,cargo-watch,cargo-audit,cargo-outdated,cargo-expand,cargo-modules,cargo-release,cargo-deny,sccache,bacon,tokei,hyperfine,just,mdbook,taplo" \
+    --tools "rust-analyzer,clippy,rustfmt,cargo-watch,cargo-audit,cargo-outdated,cargo-sweep,cargo-expand,cargo-modules,cargo-release,cargo-deny,sccache,bacon,tokei,hyperfine,just,mdbook,taplo" \
     --paths "${CARGO_HOME},${RUSTUP_HOME}" \
-    --env "CARGO_HOME,RUSTUP_HOME" \
-    --commands "rust-analyzer,cargo-clippy,cargo-fmt,cargo-watch,cargo-audit,cargo-outdated,cargo-nextest,rust-lint-all,rust-security-check,rust-watch" \
-    --next-steps "Run 'test-rust-dev' to check installed tools. Use 'cargo clippy' for linting, 'cargo fmt' for formatting, 'cargo watch' for hot reload, 'cargo nextest run' for fast tests."
+    --env "CARGO_HOME,RUSTUP_HOME,CARGO_SWEEP_DELAY,CARGO_SWEEP_DAYS,CARGO_SWEEP_DISABLE" \
+    --commands "rust-analyzer,cargo-clippy,cargo-fmt,cargo-watch,cargo-audit,cargo-outdated,cargo-sweep,cargo-nextest,rust-lint-all,rust-security-check,rust-watch" \
+    --next-steps "Run 'test-rust-dev' to check installed tools. Use 'cargo clippy' for linting, 'cargo fmt' for formatting, 'cargo watch' for hot reload, 'cargo sweep --time 14' to clean old artifacts."
 
 # End logging
 log_feature_end
