@@ -195,6 +195,33 @@ Cursor, Neovim, etc.):
 | `INCLUDE_RUBY_DEV`   | `solargraph`                                    |
 | `INCLUDE_RUST_DEV`   | `rust-analyzer`                                 |
 
+### Claude Code LSP Integration
+
+When `INCLUDE_DEV_TOOLS=true`, LSP support for Claude Code is automatically
+configured:
+
+1. **Environment variable**: `ENABLE_LSP_TOOL=1` is set in the shell environment
+1. **Plugin auto-installation**: On first container startup, the
+   `/etc/container/first-startup/30-claude-code-setup.sh` script:
+   - Detects which LSP binaries are installed
+   - Installs corresponding plugins from the `Piebald-AI/claude-code-lsps`
+     marketplace
+
+| LSP Binary                   | Claude Code Plugin                      |
+| ---------------------------- | --------------------------------------- |
+| `rust-analyzer`              | `rust-analyzer@claude-code-lsps`        |
+| `pylsp`                      | `pylsp@claude-code-lsps`                |
+| `gopls`                      | `gopls@claude-code-lsps`                |
+| `typescript-language-server` | `vtsls@claude-code-lsps`                |
+| `solargraph`                 | `solargraph@claude-code-lsps`           |
+| `bash-language-server`       | `bash-language-server@claude-code-lsps` |
+
+**Note**: The startup script is idempotent and will skip plugins that are
+already installed. To verify installed plugins, run: `claude plugin list`
+
+**Manual override**: To disable automatic LSP for Claude Code, unset the
+environment variable: `unset ENABLE_LSP_TOOL`
+
 ### MCP Servers (`INCLUDE_MCP_SERVERS=false`, default: false)
 
 Installs Model Context Protocol servers for enhanced Claude Code capabilities:

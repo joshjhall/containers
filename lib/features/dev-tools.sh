@@ -967,13 +967,98 @@ log_command "Creating container startup directory" \
 
 command cat > /etc/container/first-startup/30-claude-code-setup.sh << 'EOF'
 #!/bin/bash
-# Check if Claude Code needs setup
+# Claude Code CLI and LSP Setup
+# Configures Claude Code and automatically installs LSP plugins for detected language servers
+#
+# Features:
+# - Prompts user to configure Claude Code if not yet set up
+# - Detects installed LSP binaries (rust-analyzer, pylsp, gopls, etc.)
+# - Installs corresponding plugins from Piebald-AI/claude-code-lsps marketplace
+# - Idempotent: safe to run multiple times
+#
+# LSP Plugin Mapping:
+#   rust-analyzer    -> rust-analyzer@claude-code-lsps
+#   pylsp            -> pylsp@claude-code-lsps
+#   gopls            -> gopls@claude-code-lsps
+#   typescript-language-server -> vtsls@claude-code-lsps (TypeScript/JavaScript)
+#   solargraph       -> solargraph@claude-code-lsps (Ruby)
+#   bash-language-server -> bash-language-server@claude-code-lsps
+
+set -euo pipefail
+
+# ============================================================================
+# Claude Code Basic Setup Check
+# ============================================================================
 if command -v claude &> /dev/null && [ ! -f ~/.config/claude/config.json ]; then
     echo "=== Claude Code CLI Setup ==="
     echo "Claude Code is installed but not configured."
     echo "To set up Claude Code, run: claude login"
     echo "You'll need your API key from https://console.anthropic.com"
+    echo ""
 fi
+
+# ============================================================================
+# LSP Plugin Configuration
+# ============================================================================
+# Only proceed with LSP setup if Claude Code is available
+if ! command -v claude &> /dev/null; then
+    exit 0
+fi
+
+echo "=== Claude Code LSP Configuration ==="
+
+# Marketplace configuration
+MARKETPLACE="Piebald-AI/claude-code-lsps"
+
+# Helper: Check if a plugin is already installed
+has_plugin() {
+    local plugin_name="$1"
+    claude plugin list 2>/dev/null | grep -q "${plugin_name}@" 2>/dev/null || return 1
+}
+
+# Helper: Install a plugin if the corresponding binary exists
+install_lsp_plugin() {
+    local binary_name="$1"
+    local plugin_name="$2"
+
+    # Check if the binary is installed
+    if ! command -v "$binary_name" &>/dev/null; then
+        return 0
+    fi
+
+    # Check if plugin is already installed
+    if has_plugin "$plugin_name"; then
+        echo "  - $plugin_name: already installed (skipping)"
+        return 0
+    fi
+
+    echo "  - Installing $plugin_name (detected $binary_name)..."
+    if claude plugin install "${plugin_name}@${MARKETPLACE}" 2>/dev/null; then
+        echo "    ✓ $plugin_name installed"
+    else
+        echo "    ⚠ Failed to install $plugin_name (may need manual setup)"
+    fi
+}
+
+echo "Detecting installed language servers..."
+echo ""
+echo "Installing LSP plugins:"
+
+# Install plugins for detected LSPs
+# Binary name -> Plugin name mapping
+install_lsp_plugin "rust-analyzer" "rust-analyzer"
+install_lsp_plugin "pylsp" "pylsp"
+install_lsp_plugin "gopls" "gopls"
+install_lsp_plugin "typescript-language-server" "vtsls"
+install_lsp_plugin "solargraph" "solargraph"
+install_lsp_plugin "bash-language-server" "bash-language-server"
+
+echo ""
+echo "LSP configuration complete."
+echo "Run 'claude plugin list' to see installed plugins."
+echo ""
+echo "Note: ENABLE_LSP_TOOL=1 is set in your environment."
+echo "Claude Code will use these LSPs for improved code intelligence."
 EOF
 log_command "Setting Claude Code startup script permissions" \
     chmod +x /etc/container/first-startup/30-claude-code-setup.sh
@@ -1127,6 +1212,11 @@ export CAROOT="${DEV_TOOLS_CACHE}/mkcert-ca"
 
 # direnv allow directory
 export DIRENV_ALLOW_DIR="${DEV_TOOLS_CACHE}/direnv-allow"
+
+# Claude Code LSP support
+# Enables Language Server Protocol integration for better code intelligence
+# LSP plugins are configured automatically on first container startup
+export ENABLE_LSP_TOOL=1
 DEV_TOOLS_BASHRC_EOF
 
 # Make bashrc.d script executable to match other scripts in the directory
