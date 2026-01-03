@@ -52,6 +52,7 @@ test_cron_startup_script() {
     command cat > "$startup_script" << 'EOF'
 #!/bin/bash
 # Start cron daemon on container boot
+# Note: cron daemon requires root privileges to start
 
 # Check if cron is already running
 if pgrep -x "cron" > /dev/null 2>&1; then
@@ -65,11 +66,14 @@ if ! command -v cron &> /dev/null; then
     exit 0
 fi
 
-# Start the cron daemon
-if command -v service &> /dev/null; then
-    service cron start > /dev/null 2>&1 || true
+# Start the cron daemon - requires root privileges
+if [ "$(id -u)" = "0" ]; then
+    service cron start > /dev/null 2>&1
+elif command -v sudo &> /dev/null && sudo -n true 2>/dev/null; then
+    sudo service cron start > /dev/null 2>&1
 else
-    cron
+    echo "cron: Cannot start daemon (requires root or passwordless sudo)"
+    exit 0
 fi
 EOF
     chmod +x "$startup_script"
@@ -88,6 +92,13 @@ EOF
         assert_true true "Startup script checks if cron is already running"
     else
         assert_true false "Startup script missing idempotent check"
+    fi
+
+    # Check for sudo fallback
+    if grep -q "sudo" "$startup_script"; then
+        assert_true true "Startup script has sudo fallback"
+    else
+        assert_true false "Startup script missing sudo fallback"
     fi
 }
 

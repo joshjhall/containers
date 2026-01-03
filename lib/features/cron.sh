@@ -26,6 +26,11 @@
 #   INCLUDE_DEV_TOOLS=true, as scheduled tasks are commonly needed in
 #   development environments.
 #
+# Requirements:
+#   The cron daemon requires root privileges to start. To enable automatic
+#   startup, build with ENABLE_PASSWORDLESS_SUDO=true. Otherwise, start
+#   manually with: sudo service cron start
+#
 set -euo pipefail
 
 # Source standard feature header for user handling
@@ -117,6 +122,7 @@ command cat > /etc/container/startup/05-cron.sh << 'CRON_STARTUP_EOF'
 # Start cron daemon on container boot
 #
 # This script is idempotent - safe to run multiple times
+# Note: cron daemon requires root privileges to start
 
 # Check if cron is already running
 if pgrep -x "cron" > /dev/null 2>&1; then
@@ -130,13 +136,27 @@ if ! command -v cron &> /dev/null; then
     exit 0
 fi
 
-# Start the cron daemon
-# Use service command which works across Debian versions
-if command -v service &> /dev/null; then
-    service cron start > /dev/null 2>&1 || true
+# Function to start cron daemon
+start_cron() {
+    if command -v service &> /dev/null; then
+        service cron start > /dev/null 2>&1
+    else
+        cron
+    fi
+}
+
+# Start the cron daemon - requires root privileges
+if [ "$(id -u)" = "0" ]; then
+    # Running as root, start directly
+    start_cron
+elif command -v sudo &> /dev/null && sudo -n true 2>/dev/null; then
+    # Sudo available without password, use it
+    sudo service cron start > /dev/null 2>&1 || sudo cron
 else
-    # Fallback: start cron directly
-    cron
+    echo "cron: Cannot start daemon (requires root or passwordless sudo)"
+    echo "cron: Enable with ENABLE_PASSWORDLESS_SUDO=true at build time"
+    echo "cron: Or start manually with: sudo service cron start"
+    exit 0
 fi
 
 # Verify it started

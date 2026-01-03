@@ -156,6 +156,7 @@ All features are controlled via `INCLUDE_<FEATURE>=true/false` build arguments:
 
 Note: `MCP_SERVERS` auto-triggers Node.js installation since MCP servers require it.
 Note: `CRON` auto-triggers when `INCLUDE_RUST_DEV=true` or `INCLUDE_DEV_TOOLS=true`.
+Cron daemon requires `ENABLE_PASSWORDLESS_SUDO=true` to auto-start.
 
 Version control via build arguments:
 
