@@ -278,61 +278,86 @@ EOF
     fi
 }
 
-# Test: cargo-sweep startup script
-test_cargo_sweep_startup_script() {
-    local startup_dir="$TEST_TEMP_DIR/etc/container/startup"
-    local startup_script="$startup_dir/25-cargo-sweep.sh"
+# Test: cargo-sweep cron job
+test_cargo_sweep_cron_job() {
+    local cron_dir="$TEST_TEMP_DIR/etc/cron.d"
+    local cron_job="$cron_dir/cargo-sweep"
+    local wrapper_script="$TEST_TEMP_DIR/usr/local/bin/cargo-sweep-cron"
 
-    mkdir -p "$startup_dir"
+    mkdir -p "$cron_dir"
+    mkdir -p "$(dirname "$wrapper_script")"
 
-    # Create startup script matching actual rust-dev.sh output
-    command cat > "$startup_script" << 'EOF'
+    # Create cron job file matching actual rust-dev.sh output
+    command cat > "$cron_job" << 'EOF'
+# Cargo-sweep automatic cleanup - clean old Rust build artifacts
+# Runs every 6 hours
+# Configuration via environment variables:
+#   CARGO_SWEEP_DAYS - Age threshold in days (default: 14)
+#   CARGO_SWEEP_DISABLE - Set to "true" to disable
+
+SHELL=/bin/bash
+PATH=/usr/local/bin:/usr/bin:/bin
+
+# Run at minute 0 of hours 0, 6, 12, 18
+0 */6 * * * testuser /usr/local/bin/cargo-sweep-cron
+EOF
+    chmod 644 "$cron_job"
+
+    # Create wrapper script matching actual rust-dev.sh output
+    command cat > "$wrapper_script" << 'EOF'
 #!/bin/bash
-# Delayed cargo-sweep cleanup - runs in background after boot
-#
-# Environment variables:
-#   CARGO_SWEEP_DELAY - Delay before running sweep (default: 300 seconds / 5 minutes)
-#   CARGO_SWEEP_DAYS  - Remove artifacts older than this many days (default: 14)
-#   CARGO_SWEEP_DISABLE - Set to "true" to disable automatic sweep
+# Wrapper script for cargo-sweep cron job
 
+# Load container environment
+if [ -f /etc/container/cron-env ]; then
+    source /etc/container/cron-env
+fi
+
+# Check if disabled
 if [ "${CARGO_SWEEP_DISABLE:-false}" = "true" ]; then
-    echo "cargo-sweep: Disabled via CARGO_SWEEP_DISABLE=true"
     exit 0
 fi
 
-SWEEP_DELAY="${CARGO_SWEEP_DELAY:-300}"
 SWEEP_DAYS="${CARGO_SWEEP_DAYS:-14}"
 EOF
-    chmod +x "$startup_script"
+    chmod +x "$wrapper_script"
 
-    assert_file_exists "$startup_script"
+    assert_file_exists "$cron_job"
+    assert_file_exists "$wrapper_script"
 
-    # Check script is executable
-    if [ -x "$startup_script" ]; then
-        assert_true true "cargo-sweep startup script is executable"
+    # Check wrapper script is executable
+    if [ -x "$wrapper_script" ]; then
+        assert_true true "cargo-sweep-cron wrapper script is executable"
     else
-        assert_true false "cargo-sweep startup script is not executable"
+        assert_true false "cargo-sweep-cron wrapper script is not executable"
     fi
 
-    # Check for CARGO_SWEEP_DISABLE check
-    if grep -q "CARGO_SWEEP_DISABLE" "$startup_script"; then
-        assert_true true "Startup script has disable option"
+    # Check cron job has correct schedule (every 6 hours)
+    if grep -q "0 \*/6 \* \* \*" "$cron_job"; then
+        assert_true true "Cron job runs every 6 hours"
     else
-        assert_true false "Startup script missing disable option"
+        assert_true false "Cron job schedule is incorrect"
     fi
 
-    # Check for default delay (300 seconds / 5 minutes)
-    if grep -q "CARGO_SWEEP_DELAY:-300" "$startup_script"; then
-        assert_true true "Startup script has 5-minute default delay"
+    # Check for CARGO_SWEEP_DISABLE check in wrapper
+    if grep -q "CARGO_SWEEP_DISABLE" "$wrapper_script"; then
+        assert_true true "Wrapper script has disable option"
     else
-        assert_true false "Startup script missing default delay"
+        assert_true false "Wrapper script missing disable option"
     fi
 
     # Check for default sweep age (14 days)
-    if grep -q "CARGO_SWEEP_DAYS:-14" "$startup_script"; then
-        assert_true true "Startup script has 14-day default threshold"
+    if grep -q "CARGO_SWEEP_DAYS:-14" "$wrapper_script"; then
+        assert_true true "Wrapper script has 14-day default threshold"
     else
-        assert_true false "Startup script missing default threshold"
+        assert_true false "Wrapper script missing default threshold"
+    fi
+
+    # Check wrapper sources cron-env
+    if grep -q "cron-env" "$wrapper_script"; then
+        assert_true true "Wrapper script sources cron environment"
+    else
+        assert_true false "Wrapper script doesn't source cron environment"
     fi
 }
 
@@ -358,7 +383,7 @@ run_test_with_setup test_rust_dev_aliases "Rust dev aliases"
 run_test_with_setup test_wasm_support "Wasm support"
 run_test_with_setup test_rust_dev_verification "Rust dev verification"
 run_test_with_setup test_cargo_sweep_aliases "cargo-sweep aliases"
-run_test_with_setup test_cargo_sweep_startup_script "cargo-sweep startup script"
+run_test_with_setup test_cargo_sweep_cron_job "cargo-sweep cron job"
 
 # Generate test report
 generate_report

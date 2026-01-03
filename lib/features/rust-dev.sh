@@ -35,11 +35,12 @@
 #   - just: Run project tasks
 #
 # Automatic Cleanup:
-#   On every container boot, cargo-sweep runs in the background (after 5 min
-#   delay) to clean artifacts older than 14 days. Configure via env vars:
-#   - CARGO_SWEEP_DELAY: Seconds to wait before sweep (default: 300)
+#   cargo-sweep runs via cron (every 6 hours) to clean old build artifacts.
+#   Configure via environment variables:
 #   - CARGO_SWEEP_DAYS: Age threshold in days (default: 14)
 #   - CARGO_SWEEP_DISABLE: Set to "true" to disable automatic sweep
+#
+#   Note: Requires INCLUDE_CRON=true (auto-enabled with INCLUDE_RUST_DEV)
 #
 # Requirements:
 #   - Rust/Cargo must be installed (via INCLUDE_RUST=true)
@@ -532,65 +533,74 @@ log_command "Setting startup script permissions" \
     chmod +x /etc/container/first-startup/20-rust-dev-setup.sh
 
 # ============================================================================
-# Every-Boot Cleanup Script (cargo-sweep)
+# Cron Job for cargo-sweep
 # ============================================================================
-echo "=== Creating cargo-sweep cleanup script ==="
+echo "=== Creating cargo-sweep cron job ==="
 
-# Create every-boot startup directory if it doesn't exist
-log_command "Creating every-boot startup directory" \
-    mkdir -p /etc/container/startup
+# Create cron.d directory if it doesn't exist
+log_command "Creating cron.d directory" \
+    mkdir -p /etc/cron.d
 
-# Default delay before running sweep (in seconds) - can be overridden via env var
-# Default sweep age (in days) - artifacts older than this are removed
-command cat > /etc/container/startup/25-cargo-sweep.sh << 'EOF'
+# Create the wrapper script that cron will execute
+command cat > /usr/local/bin/cargo-sweep-cron << 'SWEEP_SCRIPT_EOF'
 #!/bin/bash
-# Delayed cargo-sweep cleanup - runs in background after boot
-#
-# Environment variables:
-#   CARGO_SWEEP_DELAY - Delay before running sweep (default: 300 seconds / 5 minutes)
-#   CARGO_SWEEP_DAYS  - Remove artifacts older than this many days (default: 14)
-#   CARGO_SWEEP_DISABLE - Set to "true" to disable automatic sweep
-#
+# Wrapper script for cargo-sweep cron job
+# Sources container environment and respects configuration
 
-# Skip if disabled
+# Load container environment (provides PATH, CARGO_HOME, etc.)
+if [ -f /etc/container/cron-env ]; then
+    source /etc/container/cron-env
+fi
+
+# Check if disabled
 if [ "${CARGO_SWEEP_DISABLE:-false}" = "true" ]; then
-    echo "cargo-sweep: Disabled via CARGO_SWEEP_DISABLE=true"
     exit 0
 fi
 
-# Check if cargo-sweep is installed
+# Check if cargo-sweep is available
 if ! command -v cargo-sweep &> /dev/null; then
     exit 0
 fi
 
-# Configuration with defaults
-SWEEP_DELAY="${CARGO_SWEEP_DELAY:-300}"
+# Configuration
 SWEEP_DAYS="${CARGO_SWEEP_DAYS:-14}"
 WORKING_DIR="${WORKING_DIR:-/workspace}"
 
-# Run the sweep in the background so we don't block container startup
-(
-    # Wait before running sweep
-    sleep "$SWEEP_DELAY"
+# Only sweep if we have Rust projects in the workspace
+if [ -d "$WORKING_DIR" ]; then
+    # Find all directories with Cargo.toml and sweep them
+    find "$WORKING_DIR" -name "Cargo.toml" -type f 2>/dev/null | while read -r cargo_file; do
+        project_dir=$(dirname "$cargo_file")
+        if [ -d "$project_dir/target" ]; then
+            logger -t cargo-sweep "Cleaning artifacts older than ${SWEEP_DAYS} days in $project_dir"
+            cargo-sweep sweep --time "$SWEEP_DAYS" "$project_dir" 2>/dev/null || true
+        fi
+    done
+fi
+SWEEP_SCRIPT_EOF
 
-    # Only sweep if we have Rust projects in the workspace
-    if [ -d "$WORKING_DIR" ]; then
-        # Find all directories with Cargo.toml and sweep them
-        find "$WORKING_DIR" -name "Cargo.toml" -type f 2>/dev/null | while read -r cargo_file; do
-            project_dir=$(dirname "$cargo_file")
-            if [ -d "$project_dir/target" ]; then
-                echo "cargo-sweep: Cleaning artifacts older than ${SWEEP_DAYS} days in $project_dir"
-                cargo-sweep sweep --time "$SWEEP_DAYS" "$project_dir" 2>/dev/null || true
-            fi
-        done
-    fi
-) &
+log_command "Setting cargo-sweep-cron script permissions" \
+    chmod +x /usr/local/bin/cargo-sweep-cron
 
-echo "cargo-sweep: Scheduled cleanup (${SWEEP_DAYS}d threshold) in ${SWEEP_DELAY}s"
-EOF
+# Create the cron job in /etc/cron.d/
+# Runs every 6 hours at minute 0
+# Note: USERNAME is substituted at build time
+command cat > /etc/cron.d/cargo-sweep << CRON_EOF
+# Cargo-sweep automatic cleanup - clean old Rust build artifacts
+# Runs every 6 hours
+# Configuration via environment variables:
+#   CARGO_SWEEP_DAYS - Age threshold in days (default: 14)
+#   CARGO_SWEEP_DISABLE - Set to "true" to disable
 
-log_command "Setting cargo-sweep startup script permissions" \
-    chmod +x /etc/container/startup/25-cargo-sweep.sh
+SHELL=/bin/bash
+PATH=/usr/local/bin:/usr/bin:/bin
+
+# Run at minute 0 of hours 0, 6, 12, 18
+0 */6 * * * ${USERNAME} /usr/local/bin/cargo-sweep-cron
+CRON_EOF
+
+log_command "Setting cargo-sweep cron job permissions" \
+    chmod 644 /etc/cron.d/cargo-sweep
 
 # ============================================================================
 # Final ownership fix
@@ -609,7 +619,7 @@ log_feature_summary \
     --feature "Rust Development Tools" \
     --tools "rust-analyzer,clippy,rustfmt,cargo-watch,cargo-audit,cargo-outdated,cargo-sweep,cargo-expand,cargo-modules,cargo-release,cargo-deny,sccache,bacon,tokei,hyperfine,just,mdbook,taplo" \
     --paths "${CARGO_HOME},${RUSTUP_HOME}" \
-    --env "CARGO_HOME,RUSTUP_HOME,CARGO_SWEEP_DELAY,CARGO_SWEEP_DAYS,CARGO_SWEEP_DISABLE" \
+    --env "CARGO_HOME,RUSTUP_HOME,CARGO_SWEEP_DAYS,CARGO_SWEEP_DISABLE" \
     --commands "rust-analyzer,cargo-clippy,cargo-fmt,cargo-watch,cargo-audit,cargo-outdated,cargo-sweep,cargo-nextest,rust-lint-all,rust-security-check,rust-watch" \
     --next-steps "Run 'test-rust-dev' to check installed tools. Use 'cargo clippy' for linting, 'cargo fmt' for formatting, 'cargo watch' for hot reload, 'cargo sweep --time 14' to clean old artifacts."
 

@@ -148,13 +148,14 @@ All features are controlled via `INCLUDE_<FEATURE>=true/false` build arguments:
 **Languages**: `PYTHON`, `NODE`, `RUST`, `RUBY`, `R`, `GOLANG`, `JAVA`, `MOJO`
 **Dev Tools**: `PYTHON_DEV`, `NODE_DEV`, `RUST_DEV`, `RUBY_DEV`, `R_DEV`,
 `GOLANG_DEV`, `JAVA_DEV`, `MOJO_DEV`
-**Tools**: `DEV_TOOLS`, `DOCKER`, `OP` (1Password CLI)
+**Tools**: `DEV_TOOLS`, `DOCKER`, `OP` (1Password CLI), `CRON`
 **Claude Code**: `MCP_SERVERS` (MCP servers + bash LSP)
 **Cloud**: `KUBERNETES`, `TERRAFORM`, `AWS`, `GCLOUD`, `CLOUDFLARE`
 **Database**: `POSTGRES_CLIENT`, `REDIS_CLIENT`, `SQLITE_CLIENT`
 **AI/ML**: `OLLAMA` (Local LLM support)
 
 Note: `MCP_SERVERS` auto-triggers Node.js installation since MCP servers require it.
+Note: `CRON` auto-triggers when `INCLUDE_RUST_DEV=true` or `INCLUDE_DEV_TOOLS=true`.
 
 Version control via build arguments:
 

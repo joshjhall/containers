@@ -400,6 +400,16 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     /tmp/build-scripts/features/dev-tools.sh; \
     fi
 
+# Cron daemon for scheduled tasks
+# Automatically installed when INCLUDE_RUST_DEV or INCLUDE_DEV_TOOLS is enabled
+ARG INCLUDE_CRON=false
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    if [ "${INCLUDE_CRON}" = "true" ] || [ "${INCLUDE_RUST_DEV}" = "true" ] || \
+       [ "${INCLUDE_DEV_TOOLS}" = "true" ]; then \
+    /tmp/build-scripts/features/cron.sh; \
+    fi
+
 # Claude Code MCP servers and bash-language-server
 # (filesystem, GitHub, GitLab integrations + bash LSP)
 # Note: INCLUDE_MCP_SERVERS already declared in Node.js section above
