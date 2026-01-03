@@ -51,29 +51,27 @@ test_cron_startup_script() {
     # Create startup script matching actual cron.sh output
     command cat > "$startup_script" << 'EOF'
 #!/bin/bash
-# Start cron daemon on container boot
-# Note: cron daemon requires root privileges to start
-
-# Check if cron is already running
-if pgrep -x "cron" > /dev/null 2>&1; then
-    echo "cron: Daemon already running"
-    exit 0
-fi
+# Cron daemon status check
+#
+# The cron daemon is normally started by the entrypoint while still running
+# as root (before dropping to non-root user).
 
 # Check if cron is installed
 if ! command -v cron &> /dev/null; then
-    echo "cron: Not installed, skipping"
     exit 0
 fi
 
-# Start the cron daemon - requires root privileges
-if [ "$(id -u)" = "0" ]; then
-    service cron start > /dev/null 2>&1
-elif command -v sudo &> /dev/null && sudo -n true 2>/dev/null; then
-    sudo service cron start > /dev/null 2>&1
-else
-    echo "cron: Cannot start daemon (requires root or passwordless sudo)"
+# Check if cron is already running (started by entrypoint)
+if pgrep -x "cron" > /dev/null 2>&1; then
+    echo "cron: Daemon running"
     exit 0
+fi
+
+# Cron not running - try to start it (fallback)
+if [ "$(id -u)" = "0" ]; then
+    service cron start > /dev/null 2>&1 || cron
+elif command -v sudo &> /dev/null && sudo -n true 2>/dev/null; then
+    sudo service cron start > /dev/null 2>&1 || sudo cron
 fi
 EOF
     chmod +x "$startup_script"
@@ -94,11 +92,11 @@ EOF
         assert_true false "Startup script missing idempotent check"
     fi
 
-    # Check for sudo fallback
-    if grep -q "sudo" "$startup_script"; then
-        assert_true true "Startup script has sudo fallback"
+    # Check script mentions entrypoint handles startup
+    if grep -q "entrypoint" "$startup_script"; then
+        assert_true true "Startup script documents entrypoint handles cron"
     else
-        assert_true false "Startup script missing sudo fallback"
+        assert_true false "Startup script should mention entrypoint"
     fi
 }
 

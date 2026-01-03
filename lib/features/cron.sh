@@ -26,10 +26,10 @@
 #   INCLUDE_DEV_TOOLS=true, as scheduled tasks are commonly needed in
 #   development environments.
 #
-# Requirements:
-#   The cron daemon requires root privileges to start. To enable automatic
-#   startup, build with ENABLE_PASSWORDLESS_SUDO=true. Otherwise, start
-#   manually with: sudo service cron start
+# Daemon Startup:
+#   The cron daemon is started automatically by the container entrypoint
+#   while still running as root (before dropping privileges). No sudo
+#   required for normal operation.
 #
 set -euo pipefail
 
@@ -117,45 +117,39 @@ log_command "Creating container startup directories" \
     mkdir -p /etc/container/startup
 
 # Create startup script (early number to start before jobs that need it)
+# Note: The entrypoint now starts cron as root before dropping privileges,
+# so this script mainly serves as a fallback and status check.
 command cat > /etc/container/startup/05-cron.sh << 'CRON_STARTUP_EOF'
 #!/bin/bash
-# Start cron daemon on container boot
+# Cron daemon status check
 #
-# This script is idempotent - safe to run multiple times
-# Note: cron daemon requires root privileges to start
-
-# Check if cron is already running
-if pgrep -x "cron" > /dev/null 2>&1; then
-    echo "cron: Daemon already running"
-    exit 0
-fi
+# The cron daemon is normally started by the entrypoint while still running
+# as root (before dropping to non-root user). This script verifies the daemon
+# is running and attempts to start it if not (requires sudo).
 
 # Check if cron is installed
 if ! command -v cron &> /dev/null; then
-    echo "cron: Not installed, skipping"
     exit 0
 fi
 
-# Function to start cron daemon
-start_cron() {
-    if command -v service &> /dev/null; then
-        service cron start > /dev/null 2>&1
-    else
-        cron
-    fi
-}
+# Check if cron is already running (started by entrypoint)
+if pgrep -x "cron" > /dev/null 2>&1; then
+    echo "cron: Daemon running"
+    exit 0
+fi
 
-# Start the cron daemon - requires root privileges
+# Cron not running - try to start it (fallback for non-standard entrypoints)
+echo "cron: Daemon not running, attempting to start..."
+
 if [ "$(id -u)" = "0" ]; then
     # Running as root, start directly
-    start_cron
+    service cron start > /dev/null 2>&1 || cron
 elif command -v sudo &> /dev/null && sudo -n true 2>/dev/null; then
-    # Sudo available without password, use it
+    # Sudo available without password
     sudo service cron start > /dev/null 2>&1 || sudo cron
 else
-    echo "cron: Cannot start daemon (requires root or passwordless sudo)"
-    echo "cron: Enable with ENABLE_PASSWORDLESS_SUDO=true at build time"
-    echo "cron: Or start manually with: sudo service cron start"
+    echo "cron: Cannot start daemon (requires root or sudo)"
+    echo "cron: Start manually with: sudo service cron start"
     exit 0
 fi
 

@@ -287,6 +287,33 @@ if [ -d "/cache" ]; then
 fi
 
 # ============================================================================
+# Cron Daemon Startup
+# ============================================================================
+# Start cron daemon if installed (requires root privileges)
+# This runs before dropping to non-root user so no sudo is needed
+if command -v cron &> /dev/null; then
+    if ! pgrep -x "cron" > /dev/null 2>&1; then
+        echo "🔧 Starting cron daemon..."
+        if [ "$RUNNING_AS_ROOT" = "true" ]; then
+            # Start cron directly as root
+            if command -v service &> /dev/null; then
+                service cron start > /dev/null 2>&1 || cron
+            else
+                cron
+            fi
+            if pgrep -x "cron" > /dev/null 2>&1; then
+                echo "✓ Cron daemon started"
+            else
+                echo "⚠️  Warning: Cron daemon may not have started"
+            fi
+        else
+            # Not running as root, cron startup will be attempted by startup script
+            echo "   Cron startup deferred to startup scripts (not running as root)"
+        fi
+    fi
+fi
+
+# ============================================================================
 # First-Time Setup
 # ============================================================================
 # Run first-time setup scripts if marker doesn't exist
