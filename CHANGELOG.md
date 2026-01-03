@@ -5,11 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.13.0] - 2026-01-03
+
+### Added
+
+- Add Claude Code LSP and MCP server integrations
+- Smart MCP config with git platform detection
+- Add cargo-sweep with automatic cleanup
+- Add cron feature with cargo-sweep migration
+
+### Changed
+
+- Move LSP servers to language dev features
+- Rename CLAUDE.md to AGENTS.md with symlink
+- Start daemon in entrypoint before user drop
+
+### Fixed
+
+- Use first-startup script for MCP config creation
+- Cache permissions and MCP config using CLI
+- Use sudo for daemon startup when available
+
 ## [4.12.8] - 2025-12-28
 
 ### Miscellaneous
 
 - Sync extension recommendations across configs
+- Automated version updates to v4.12.8
+- Update compatibility matrix with passing test results
 
 ## [4.12.7] - 2025-12-21
 
@@ -735,6 +758,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix prettier and markdownlint formatting in README
 - Format TLS documentation files
 
+[4.13.0]: https://github.com/joshjhall/containers/compare/v4.12.8...v4.13.0
 [4.12.8]: https://github.com/joshjhall/containers/compare/v4.12.7...v4.12.8
 [4.12.7]: https://github.com/joshjhall/containers/compare/v4.12.6...v4.12.7
 [4.12.6]: https://github.com/joshjhall/containers/compare/v4.12.5...v4.12.6
