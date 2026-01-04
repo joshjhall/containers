@@ -46,9 +46,9 @@ log_feature_start "Development Tools"
 # Version Configuration
 # ============================================================================
 # Tool versions (can be overridden via environment variables)
-LAZYGIT_VERSION="${LAZYGIT_VERSION:-0.57.0}"
+LAZYGIT_VERSION="${LAZYGIT_VERSION:-0.58.0}"
 DELTA_VERSION="${DELTA_VERSION:-0.18.2}"
-ACT_VERSION="${ACT_VERSION:-0.2.83}"
+ACT_VERSION="${ACT_VERSION:-0.2.84}"
 GITCLIFF_VERSION="${GITCLIFF_VERSION:-2.8.0}"
 BIOME_VERSION="${BIOME_VERSION:-1.9.4}"
 TAPLO_VERSION="${TAPLO_VERSION:-0.10.0}"
