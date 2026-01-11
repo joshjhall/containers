@@ -11,6 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Auto-configure LSP plugins for Claude Code
 
+### Miscellaneous
+
+- Automated version updates to v4.13.1
+- Update compatibility matrix with passing test results
+
 ## [4.13.0] - 2026-01-03
 
 ### Added
