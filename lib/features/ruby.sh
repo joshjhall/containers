@@ -44,7 +44,7 @@ source /tmp/build-scripts/base/checksum-verification.sh
 # ============================================================================
 # Version Configuration
 # ============================================================================
-RUBY_VERSION="${RUBY_VERSION:-4.0.0}"
+RUBY_VERSION="${RUBY_VERSION:-4.0.1}"
 
 # Validate Ruby version format to prevent shell injection
 validate_ruby_version "$RUBY_VERSION" || {
