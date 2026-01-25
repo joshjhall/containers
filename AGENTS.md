@@ -145,9 +145,11 @@ check-installed-versions.sh
 
 All features are controlled via `INCLUDE_<FEATURE>=true/false` build arguments:
 
-**Languages**: `PYTHON`, `NODE`, `RUST`, `RUBY`, `R`, `GOLANG`, `JAVA`, `MOJO`
+**Languages**: `PYTHON`, `NODE`, `RUST`, `RUBY`, `R`, `GOLANG`, `JAVA`, `MOJO`,
+`KOTLIN`
 **Dev Tools**: `PYTHON_DEV`, `NODE_DEV`, `RUST_DEV`, `RUBY_DEV`, `R_DEV`,
-`GOLANG_DEV`, `JAVA_DEV`, `MOJO_DEV`
+`GOLANG_DEV`, `JAVA_DEV`, `MOJO_DEV`, `KOTLIN_DEV`
+**Android**: `ANDROID`, `ANDROID_DEV`
 **Tools**: `DEV_TOOLS`, `DOCKER`, `OP` (1Password CLI), `CRON`
 **Claude Code**: `MCP_SERVERS` (MCP servers + bash LSP)
 **Cloud**: `KUBERNETES`, `TERRAFORM`, `AWS`, `GCLOUD`, `CLOUDFLARE`
@@ -156,11 +158,13 @@ All features are controlled via `INCLUDE_<FEATURE>=true/false` build arguments:
 
 Note: `MCP_SERVERS` auto-triggers Node.js installation since MCP servers require it.
 Note: `CRON` auto-triggers when `INCLUDE_RUST_DEV=true` or `INCLUDE_DEV_TOOLS=true`.
+Note: `KOTLIN` and `ANDROID` features auto-trigger Java installation (similar to `MCP_SERVERS` auto-triggering Node.js).
 
 Version control via build arguments:
 
 - `PYTHON_VERSION`, `NODE_VERSION`, `RUST_VERSION`, `GO_VERSION`,
-  `RUBY_VERSION`, `JAVA_VERSION`, `R_VERSION`
+  `RUBY_VERSION`, `JAVA_VERSION`, `R_VERSION`, `KOTLIN_VERSION`
+- `ANDROID_CMDLINE_TOOLS_VERSION`, `ANDROID_API_LEVELS`, `ANDROID_NDK_VERSION`
 
 ## Integration as Git Submodule
 
@@ -194,6 +198,7 @@ Cursor, Neovim, etc.):
 | `INCLUDE_GOLANG_DEV` | `gopls`                                         |
 | `INCLUDE_RUBY_DEV`   | `solargraph`                                    |
 | `INCLUDE_RUST_DEV`   | `rust-analyzer`                                 |
+| `INCLUDE_KOTLIN_DEV` | `kotlin-language-server`                        |
 
 ### Claude Code LSP Integration
 
@@ -207,14 +212,15 @@ configured:
    - Installs corresponding plugins from the `Piebald-AI/claude-code-lsps`
      marketplace
 
-| LSP Binary                   | Claude Code Plugin                      |
-| ---------------------------- | --------------------------------------- |
-| `rust-analyzer`              | `rust-analyzer@claude-code-lsps`        |
-| `pylsp`                      | `pylsp@claude-code-lsps`                |
-| `gopls`                      | `gopls@claude-code-lsps`                |
-| `typescript-language-server` | `vtsls@claude-code-lsps`                |
-| `solargraph`                 | `solargraph@claude-code-lsps`           |
-| `bash-language-server`       | `bash-language-server@claude-code-lsps` |
+| LSP Binary                   | Claude Code Plugin                        |
+| ---------------------------- | ----------------------------------------- |
+| `rust-analyzer`              | `rust-analyzer@claude-code-lsps`          |
+| `pylsp`                      | `pylsp@claude-code-lsps`                  |
+| `gopls`                      | `gopls@claude-code-lsps`                  |
+| `typescript-language-server` | `vtsls@claude-code-lsps`                  |
+| `solargraph`                 | `solargraph@claude-code-lsps`             |
+| `bash-language-server`       | `bash-language-server@claude-code-lsps`   |
+| `kotlin-language-server`     | `kotlin-language-server@claude-code-lsps` |
 
 **Note**: The startup script is idempotent and will skip plugins that are
 already installed. To verify installed plugins, run: `claude plugin list`
