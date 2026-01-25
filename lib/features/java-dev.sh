@@ -95,7 +95,7 @@ log_command "Creating tools directory" \
 # ============================================================================
 log_message "Installing Spring Boot CLI..."
 
-SPRING_VERSION="${SPRING_VERSION:-4.0.1}"
+SPRING_VERSION="${SPRING_VERSION:-4.0.2}"
 export SPRING_VERSION  # Export for use in shell functions
 
 # Build Maven Central URL
