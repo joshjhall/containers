@@ -556,7 +556,11 @@ fi
 
 # Display Java environment
 echo ""
-java-version
+echo "=== Java Environment ==="
+if command -v java &>/dev/null; then
+    java -version 2>&1 | head -n 3
+    echo "JAVA_HOME: ${JAVA_HOME:-not set}"
+fi
 EOF
 
 log_command "Setting Java startup script permissions" \
