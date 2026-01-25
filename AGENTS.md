@@ -190,15 +190,17 @@ respective language development features. This enables IDE features like
 code completion, go-to-definition, and diagnostics for any IDE (VSCode,
 Cursor, Neovim, etc.):
 
-| Feature              | LSP Server                                      |
-| -------------------- | ----------------------------------------------- |
-| `INCLUDE_PYTHON_DEV` | `python-lsp-server` with black and ruff plugins |
-| `INCLUDE_NODE_DEV`   | `typescript-language-server`                    |
-| `INCLUDE_R_DEV`      | `languageserver`                                |
-| `INCLUDE_GOLANG_DEV` | `gopls`                                         |
-| `INCLUDE_RUBY_DEV`   | `solargraph`                                    |
-| `INCLUDE_RUST_DEV`   | `rust-analyzer`                                 |
-| `INCLUDE_KOTLIN_DEV` | `kotlin-language-server`                        |
+| Feature               | LSP Server                                      |
+| --------------------- | ----------------------------------------------- |
+| `INCLUDE_PYTHON_DEV`  | `python-lsp-server` with black and ruff plugins |
+| `INCLUDE_NODE_DEV`    | `typescript-language-server`                    |
+| `INCLUDE_R_DEV`       | `languageserver`                                |
+| `INCLUDE_GOLANG_DEV`  | `gopls`                                         |
+| `INCLUDE_RUBY_DEV`    | `solargraph`                                    |
+| `INCLUDE_RUST_DEV`    | `rust-analyzer`                                 |
+| `INCLUDE_KOTLIN_DEV`  | `kotlin-language-server`, `jdtls`               |
+| `INCLUDE_JAVA_DEV`    | `jdtls` (Eclipse JDT Language Server)           |
+| `INCLUDE_ANDROID_DEV` | `jdtls` (Eclipse JDT Language Server)           |
 
 ### Claude Code LSP Integration
 
@@ -221,6 +223,7 @@ configured:
 | `solargraph`                 | `solargraph@claude-code-lsps`             |
 | `bash-language-server`       | `bash-language-server@claude-code-lsps`   |
 | `kotlin-language-server`     | `kotlin-language-server@claude-code-lsps` |
+| `jdtls`                      | `jdtls@claude-code-lsps`                  |
 
 **Note**: The startup script is idempotent and will skip plugins that are
 already installed. To verify installed plugins, run: `claude plugin list`
