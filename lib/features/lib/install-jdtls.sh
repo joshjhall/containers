@@ -59,8 +59,18 @@ install_jdtls() {
 
     log_message "Installing Eclipse JDT Language Server ${JDTLS_VERSION}..."
 
-    # Download URL from Eclipse
-    local download_url="https://download.eclipse.org/jdtls/milestones/${JDTLS_VERSION}/jdt-language-server-${JDTLS_VERSION}-202501141519.tar.gz"
+    # Fetch the directory listing to get the correct filename (timestamp varies per release)
+    local base_url="https://download.eclipse.org/jdtls/milestones/${JDTLS_VERSION}"
+    local filename
+    filename=$(curl -fsSL "${base_url}/" 2>/dev/null | grep -oE 'jdt-language-server-[0-9.]+-[0-9]+\.tar\.gz' | head -1)
+
+    if [ -z "$filename" ]; then
+        log_warning "Could not find jdtls ${JDTLS_VERSION} download, skipping"
+        return 1
+    fi
+
+    local download_url="${base_url}/${filename}"
+    log_message "Downloading from: ${download_url}"
 
     # Create installation directory
     mkdir -p "${JDTLS_HOME}"
