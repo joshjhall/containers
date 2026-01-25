@@ -983,6 +983,7 @@ command cat > /etc/container/first-startup/30-claude-code-setup.sh << 'EOF'
 #   typescript-language-server -> vtsls@claude-code-lsps (TypeScript/JavaScript)
 #   solargraph       -> solargraph@claude-code-lsps (Ruby)
 #   bash-language-server -> bash-language-server@claude-code-lsps
+#   kotlin-language-server -> kotlin-language-server@claude-code-lsps (Kotlin)
 
 set -euo pipefail
 
@@ -1052,6 +1053,7 @@ install_lsp_plugin "gopls" "gopls"
 install_lsp_plugin "typescript-language-server" "vtsls"
 install_lsp_plugin "solargraph" "solargraph"
 install_lsp_plugin "bash-language-server" "bash-language-server"
+install_lsp_plugin "kotlin-language-server" "kotlin-language-server"
 
 echo ""
 echo "LSP configuration complete."
