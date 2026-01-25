@@ -53,6 +53,9 @@ source /tmp/build-scripts/base/path-utils.sh
 # Source version validation utilities
 source /tmp/build-scripts/base/version-validation.sh
 
+# Source jdtls installation utilities
+source /tmp/build-scripts/features/lib/install-jdtls.sh
+
 # ============================================================================
 # Version Configuration
 # ============================================================================
@@ -416,6 +419,15 @@ log_command "Setting Kotlin LSP setup script permissions" \
     chmod +x /etc/container/first-startup/31-kotlin-lsp-setup.sh
 
 # ============================================================================
+# Eclipse JDT Language Server (jdtls)
+# ============================================================================
+# Install jdtls for Java interop and mixed Kotlin/Java projects
+# This is installed idempotently - skipped if already present from java-dev
+log_message "Installing Eclipse JDT Language Server for Java interop..."
+install_jdtls
+configure_jdtls_env
+
+# ============================================================================
 # Verification Script
 # ============================================================================
 log_message "Creating Kotlin dev tools verification script..."
@@ -443,12 +455,19 @@ else
 fi
 
 echo ""
-echo "=== Language Server ==="
+echo "=== Language Servers ==="
 if command -v kotlin-language-server &>/dev/null; then
     echo "✓ kotlin-language-server is installed"
     echo "  Binary: $(which kotlin-language-server)"
 else
     echo "✗ kotlin-language-server is not installed"
+fi
+
+if [ -d "/opt/jdtls" ]; then
+    echo "✓ jdtls (Eclipse JDT Language Server) is installed"
+    echo "  For Java interop and mixed Kotlin/Java projects"
+else
+    echo "✗ jdtls is not installed"
 fi
 
 echo ""

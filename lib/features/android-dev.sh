@@ -53,6 +53,9 @@ source /tmp/build-scripts/base/cache-utils.sh
 # Source path utilities for secure PATH management
 source /tmp/build-scripts/base/path-utils.sh
 
+# Source jdtls installation utilities
+source /tmp/build-scripts/features/lib/install-jdtls.sh
+
 # ============================================================================
 # Configuration
 # ============================================================================
@@ -571,6 +574,15 @@ log_command "Setting Android dev startup script permissions" \
     chmod +x /etc/container/first-startup/31-android-dev-setup.sh
 
 # ============================================================================
+# Eclipse JDT Language Server (jdtls)
+# ============================================================================
+# Install jdtls for Java/Kotlin IDE support in Android projects
+# This is installed idempotently - skipped if already present
+log_message "Installing Eclipse JDT Language Server for Android development..."
+install_jdtls
+configure_jdtls_env
+
+# ============================================================================
 # Verification Script
 # ============================================================================
 log_message "Creating Android dev verification script..."
@@ -618,6 +630,15 @@ sdkmanager --list_installed 2>/dev/null | grep "system-images" | command sed 's/
 echo ""
 echo "=== Installed Sources ==="
 sdkmanager --list_installed 2>/dev/null | grep "sources" | command sed 's/^/  /' || echo "  None found"
+
+echo ""
+echo "=== Language Server ==="
+if [ -d "/opt/jdtls" ]; then
+    echo "✓ jdtls (Eclipse JDT Language Server) is installed"
+    echo "  For Java/Kotlin IDE support in Android projects"
+else
+    echo "✗ jdtls is not installed"
+fi
 
 echo ""
 echo "=== Helper Commands ==="

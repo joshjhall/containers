@@ -38,7 +38,8 @@ source /tmp/build-scripts/base/download-verify.sh
 # Source checksum fetching utilities
 source /tmp/build-scripts/features/lib/checksum-fetch.sh
 
-# Source secure temp directory utilities
+# Source jdtls installation utilities
+source /tmp/build-scripts/features/lib/install-jdtls.sh
 
 # Start logging
 log_feature_start "Java Development Tools"
@@ -749,6 +750,15 @@ log_command "Setting Java dev startup script permissions" \
     chmod +x /etc/container/first-startup/35-java-dev-setup.sh
 
 # ============================================================================
+# Eclipse JDT Language Server (jdtls)
+# ============================================================================
+log_message "Installing Eclipse JDT Language Server..."
+
+# Install jdtls for IDE support (VS Code, Neovim, Claude Code)
+install_jdtls
+configure_jdtls_env
+
+# ============================================================================
 # Verification Script
 # ============================================================================
 log_message "Creating java-dev verification script..."
@@ -792,6 +802,15 @@ for tool in spotbugs pmd cpd checkstyle google-java-format; do
         echo "✗ $tool is not found"
     fi
 done
+
+# Check IDE/Language Server
+echo ""
+echo "IDE/Language Server:"
+if [ -d "/opt/jdtls" ]; then
+    echo "✓ jdtls (Eclipse JDT Language Server) is installed"
+else
+    echo "✗ jdtls is not found"
+fi
 
 echo ""
 echo "Run 'java-dev-help' to see available commands"
