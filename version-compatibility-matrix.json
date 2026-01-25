@@ -1,5 +1,5 @@
 {
-  "last_updated": "2026-01-18T04:02:33Z",
+  "last_updated": "2026-01-25T02:49:06Z",
   "base_images": [
     {
       "name": "debian:11-slim",
@@ -44,7 +44,7 @@
       "deprecated": []
     },
     "rust": {
-      "current": "1.92.0",
+      "current": "1.93.0",
       "supported": [
         "1.80.0",
         "1.81.0",
