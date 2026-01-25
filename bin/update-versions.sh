@@ -111,6 +111,15 @@ update_version() {
                 R)
                     command sed -i "s/^ARG R_VERSION=.*/ARG R_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
                     ;;
+                Kotlin)
+                    command sed -i "s/^ARG KOTLIN_VERSION=.*/ARG KOTLIN_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
+                    ;;
+                android-cmdline-tools)
+                    command sed -i "s/^ARG ANDROID_CMDLINE_TOOLS_VERSION=.*/ARG ANDROID_CMDLINE_TOOLS_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
+                    ;;
+                android-ndk)
+                    command sed -i "s/^ARG ANDROID_NDK_VERSION=.*/ARG ANDROID_NDK_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
+                    ;;
                 kubectl)
                     command sed -i "s/^ARG KUBECTL_VERSION=.*/ARG KUBECTL_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
                     ;;
@@ -234,6 +243,18 @@ update_version() {
                 Poetry)
                     command sed -i "s/POETRY_VERSION=\"\${POETRY_VERSION:-[^}]*}\"/POETRY_VERSION=\"\${POETRY_VERSION:-$latest}\"/" "$script_path"
                     command sed -i "s/^POETRY_VERSION=\"[0-9][^\"]*\"/POETRY_VERSION=\"\${POETRY_VERSION:-$latest}\"/" "$script_path"
+                    ;;
+                ktlint)
+                    command sed -i "s/KTLINT_VERSION=\"\${KTLINT_VERSION:-[^}]*}\"/KTLINT_VERSION=\"\${KTLINT_VERSION:-$latest}\"/" "$script_path"
+                    command sed -i "s/^KTLINT_VERSION=\"[0-9][^\"]*\"/KTLINT_VERSION=\"\${KTLINT_VERSION:-$latest}\"/" "$script_path"
+                    ;;
+                detekt)
+                    command sed -i "s/DETEKT_VERSION=\"\${DETEKT_VERSION:-[^}]*}\"/DETEKT_VERSION=\"\${DETEKT_VERSION:-$latest}\"/" "$script_path"
+                    command sed -i "s/^DETEKT_VERSION=\"[0-9][^\"]*\"/DETEKT_VERSION=\"\${DETEKT_VERSION:-$latest}\"/" "$script_path"
+                    ;;
+                kotlin-language-server)
+                    command sed -i "s/KLS_VERSION=\"\${KLS_VERSION:-[^}]*}\"/KLS_VERSION=\"\${KLS_VERSION:-$latest}\"/" "$script_path"
+                    command sed -i "s/^KLS_VERSION=\"[0-9][^\"]*\"/KLS_VERSION=\"\${KLS_VERSION:-$latest}\"/" "$script_path"
                     ;;
                 *)
                     echo -e "${YELLOW}    Warning: Unknown shell script tool: $tool${NC}"

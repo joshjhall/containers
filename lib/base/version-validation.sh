@@ -231,3 +231,148 @@ validate_java_version() {
 validate_mojo_version() {
     validate_semver "$1" "MOJO_VERSION"
 }
+
+# Validate Kotlin version format (X.Y.Z)
+# Kotlin uses semantic versioning
+#
+# Args:
+#   $1: version string to validate
+#
+# Returns:
+#   0 if valid, 1 if invalid
+#
+# Example:
+#   validate_kotlin_version "2.1.0" || exit 1
+validate_kotlin_version() {
+    validate_semver "$1" "KOTLIN_VERSION"
+}
+
+# Validate Android API level format (integer)
+# API levels are simple integers like 34, 35
+#
+# Args:
+#   $1: API level to validate
+#
+# Returns:
+#   0 if valid, 1 if invalid
+#
+# Example:
+#   validate_android_api_level "35" || exit 1
+validate_android_api_level() {
+    local level="$1"
+
+    if [ -z "$level" ]; then
+        log_error "Empty ANDROID_API_LEVEL provided"
+        return 1
+    fi
+
+    if ! [[ "$level" =~ ^[0-9]+$ ]]; then
+        log_error "Invalid ANDROID_API_LEVEL format: $level"
+        log_error "Expected format: integer (e.g., 34, 35)"
+        return 1
+    fi
+
+    return 0
+}
+
+# Validate Android cmdline-tools version format (integer)
+# Cmdline tools versions are integers like 11076708
+#
+# Args:
+#   $1: version to validate
+#
+# Returns:
+#   0 if valid, 1 if invalid
+#
+# Example:
+#   validate_android_cmdline_tools_version "11076708" || exit 1
+validate_android_cmdline_tools_version() {
+    local version="$1"
+
+    if [ -z "$version" ]; then
+        log_error "Empty ANDROID_CMDLINE_TOOLS_VERSION provided"
+        return 1
+    fi
+
+    if ! [[ "$version" =~ ^[0-9]+$ ]]; then
+        log_error "Invalid ANDROID_CMDLINE_TOOLS_VERSION format: $version"
+        log_error "Expected format: integer (e.g., 11076708)"
+        return 1
+    fi
+
+    return 0
+}
+
+# Validate Android NDK version format (X.Y.Z or X.Y.ZZZZZZZ)
+# NDK versions can be like 27.2.12479018
+#
+# Args:
+#   $1: version to validate
+#
+# Returns:
+#   0 if valid, 1 if invalid
+#
+# Example:
+#   validate_android_ndk_version "27.2.12479018" || exit 1
+validate_android_ndk_version() {
+    local version="$1"
+
+    if [ -z "$version" ]; then
+        log_error "Empty ANDROID_NDK_VERSION provided"
+        return 1
+    fi
+
+    # NDK uses X.Y.ZZZZZZZ format
+    if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        log_error "Invalid ANDROID_NDK_VERSION format: $version"
+        log_error "Expected format: X.Y.Z (e.g., 27.2.12479018)"
+        return 1
+    fi
+
+    return 0
+}
+
+# Validate ktlint version format (X.Y.Z)
+# ktlint uses semantic versioning
+#
+# Args:
+#   $1: version string to validate
+#
+# Returns:
+#   0 if valid, 1 if invalid
+#
+# Example:
+#   validate_ktlint_version "1.5.0" || exit 1
+validate_ktlint_version() {
+    validate_semver "$1" "KTLINT_VERSION"
+}
+
+# Validate detekt version format (X.Y.Z)
+# detekt uses semantic versioning
+#
+# Args:
+#   $1: version string to validate
+#
+# Returns:
+#   0 if valid, 1 if invalid
+#
+# Example:
+#   validate_detekt_version "1.23.7" || exit 1
+validate_detekt_version() {
+    validate_semver "$1" "DETEKT_VERSION"
+}
+
+# Validate kotlin-language-server version format (X.Y.Z)
+# KLS uses semantic versioning
+#
+# Args:
+#   $1: version string to validate
+#
+# Returns:
+#   0 if valid, 1 if invalid
+#
+# Example:
+#   validate_kls_version "1.3.12" || exit 1
+validate_kls_version() {
+    validate_semver "$1" "KLS_VERSION"
+}

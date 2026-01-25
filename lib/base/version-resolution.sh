@@ -459,13 +459,83 @@ resolve_go_version() {
 }
 
 # ============================================================================
+# Kotlin Version Resolution
+# ============================================================================
+
+# resolve_kotlin_version - Resolve partial Kotlin version to full version
+#
+# Arguments:
+#   $1 - Kotlin version (e.g., "2", "2.1", "2.1.0")
+#
+# Returns:
+#   Full version string (e.g., "2.1.0")
+#
+# Exports:
+#   KOTLIN_RESOLVED_VERSION - The resolved version if partial
+#
+# Supports:
+#   "2.1.0" -> "2.1.0" (no change)
+#   "2.1" -> "2.1.0" (latest patch)
+#   "2" -> "2.1.0" (latest minor+patch)
+#
+# Example:
+#   resolved=$(resolve_kotlin_version "2.1")
+resolve_kotlin_version() {
+    local version="$1"
+
+    # If already full version, return as-is
+    if _is_full_version "$version"; then
+        echo "$version"
+        return 0
+    fi
+
+    # Fetch Kotlin versions from GitHub releases
+    local releases_url="https://api.github.com/repos/JetBrains/kotlin/releases?per_page=100"
+    local releases_json
+    releases_json=$(_curl_safe "$releases_url" 2>/dev/null || echo "")
+
+    if [ -z "$releases_json" ]; then
+        log_error "Failed to fetch Kotlin version list"
+        return 1
+    fi
+
+    local resolved
+
+    if _is_major_minor "$version"; then
+        # Major.minor like "2.1" -> find latest "2.1.X"
+        # Format in JSON: "tag_name": "v2.1.0",
+        resolved=$(echo "$releases_json" | \
+            grep -oP '"tag_name":\s*"v'"${version}"'\.\d+"' | \
+            command sed 's/"tag_name":\s*"v//; s/"$//' | \
+            sort -V | \
+            tail -1)
+    elif _is_major_only "$version"; then
+        # Major only like "2" -> find latest "2.X.Y"
+        resolved=$(echo "$releases_json" | \
+            grep -oP '"tag_name":\s*"v'"${version}"'\.\d+\.\d+"' | \
+            command sed 's/"tag_name":\s*"v//; s/"$//' | \
+            sort -V | \
+            tail -1)
+    fi
+
+    if [ -n "$resolved" ]; then
+        export KOTLIN_RESOLVED_VERSION="$resolved"
+        echo "$resolved"
+        return 0
+    fi
+
+    log_error "Failed to resolve Kotlin version: $version"
+    return 1
+}
+
+# ============================================================================
 # Wrapper Function for All Languages
 # ============================================================================
 
 # resolve_version - Generic version resolver that delegates to language-specific functions
 #
 # Arguments:
-#   $1 - Language (python, node, rust, ruby, java, go)
+#   $1 - Language (python, node, rust, ruby, java, go, kotlin)
 #   $2 - Version string
 #
 # Returns:
@@ -496,6 +566,9 @@ resolve_version() {
         go|golang)
             resolve_go_version "$version"
             ;;
+        kotlin)
+            resolve_kotlin_version "$version"
+            ;;
         *)
             log_error "Unknown language for version resolution: $language"
             echo "$version"
@@ -511,4 +584,5 @@ export -f resolve_rust_version
 export -f resolve_java_version
 export -f resolve_ruby_version
 export -f resolve_go_version
+export -f resolve_kotlin_version
 export -f resolve_version

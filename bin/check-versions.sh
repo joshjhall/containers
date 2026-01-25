@@ -211,6 +211,15 @@ extract_all_versions() {
     ver=$(grep "^ARG R_VERSION=" "$PROJECT_ROOT/Dockerfile" 2>/dev/null | cut -d= -f2 | tr -d '"')
     [ -n "$ver" ] && add_tool "R" "$ver" "Dockerfile"
 
+    ver=$(grep "^ARG KOTLIN_VERSION=" "$PROJECT_ROOT/Dockerfile" 2>/dev/null | cut -d= -f2 | tr -d '"')
+    [ -n "$ver" ] && add_tool "Kotlin" "$ver" "Dockerfile"
+
+    ver=$(grep "^ARG ANDROID_CMDLINE_TOOLS_VERSION=" "$PROJECT_ROOT/Dockerfile" 2>/dev/null | cut -d= -f2 | tr -d '"')
+    [ -n "$ver" ] && add_tool "android-cmdline-tools" "$ver" "Dockerfile"
+
+    ver=$(grep "^ARG ANDROID_NDK_VERSION=" "$PROJECT_ROOT/Dockerfile" 2>/dev/null | cut -d= -f2 | tr -d '"')
+    [ -n "$ver" ] && add_tool "android-ndk" "$ver" "Dockerfile"
+
     # Kubernetes tools from Dockerfile
     ver=$(grep "^ARG KUBECTL_VERSION=" "$PROJECT_ROOT/Dockerfile" 2>/dev/null | cut -d= -f2 | tr -d '"')
     [ -n "$ver" ] && add_tool "kubectl" "$ver" "Dockerfile"
@@ -295,6 +304,18 @@ extract_all_versions() {
 
         ver=$(extract_version_from_line "$(grep "^LAZYDOCKER_VERSION=" "$PROJECT_ROOT/lib/features/docker.sh" 2>/dev/null)")
         [ -n "$ver" ] && add_tool "lazydocker" "$ver" "docker.sh"
+    fi
+
+    # Kotlin dev tools from kotlin-dev.sh
+    if [ -f "$PROJECT_ROOT/lib/features/kotlin-dev.sh" ]; then
+        ver=$(extract_version_from_line "$(grep "^KTLINT_VERSION=" "$PROJECT_ROOT/lib/features/kotlin-dev.sh" 2>/dev/null)")
+        [ -n "$ver" ] && add_tool "ktlint" "$ver" "kotlin-dev.sh"
+
+        ver=$(extract_version_from_line "$(grep "^DETEKT_VERSION=" "$PROJECT_ROOT/lib/features/kotlin-dev.sh" 2>/dev/null)")
+        [ -n "$ver" ] && add_tool "detekt" "$ver" "kotlin-dev.sh"
+
+        ver=$(extract_version_from_line "$(grep "^KLS_VERSION=" "$PROJECT_ROOT/lib/features/kotlin-dev.sh" 2>/dev/null)")
+        [ -n "$ver" ] && add_tool "kotlin-language-server" "$ver" "kotlin-dev.sh"
     fi
 
     # Java dev tools from java-dev.sh
@@ -447,6 +468,91 @@ check_r() {
     fi
 
     set_latest "R" "$latest"
+    progress_done
+}
+
+check_kotlin() {
+    progress_msg "  Kotlin..."
+    local latest
+    latest=$(fetch_url "https://api.github.com/repos/JetBrains/kotlin/releases/latest" | jq -r '.tag_name // "null"' 2>/dev/null | command sed 's/^v//')
+    set_latest "Kotlin" "$latest"
+    progress_done
+}
+
+check_ktlint() {
+    progress_msg "  ktlint..."
+    local latest
+    latest=$(fetch_url "https://api.github.com/repos/pinterest/ktlint/releases/latest" | jq -r '.tag_name // "null"' 2>/dev/null | command sed 's/^v//')
+    set_latest "ktlint" "$latest"
+    progress_done
+}
+
+check_detekt() {
+    progress_msg "  detekt..."
+    local latest
+    latest=$(fetch_url "https://api.github.com/repos/detekt/detekt/releases/latest" | jq -r '.tag_name // "null"' 2>/dev/null | command sed 's/^v//')
+    set_latest "detekt" "$latest"
+    progress_done
+}
+
+check_kotlin_language_server() {
+    progress_msg "  kotlin-language-server..."
+    local latest
+    latest=$(fetch_url "https://api.github.com/repos/fwcd/kotlin-language-server/releases/latest" | jq -r '.tag_name // "null"' 2>/dev/null | command sed 's/^v//')
+    set_latest "kotlin-language-server" "$latest"
+    progress_done
+}
+
+check_android_cmdline_tools() {
+    progress_msg "  android-cmdline-tools..."
+    # Get the latest cmdline-tools version from the Android Studio download page
+    # The version is embedded in the download filename
+    local latest
+    latest=$(fetch_url "https://developer.android.com/studio" 10 | grep -oE 'commandlinetools-linux-[0-9]+_latest\.zip' | head -1 | grep -oE '[0-9]+' 2>/dev/null)
+    if [ -z "$latest" ] || [ "$latest" = "null" ]; then
+        # Fallback: mark as needing manual check
+        set_latest "android-cmdline-tools" "error"
+    else
+        set_latest "android-cmdline-tools" "$latest"
+    fi
+    progress_done
+}
+
+check_android_ndk() {
+    progress_msg "  android-ndk..."
+    # Get the latest NDK version from the download page
+    # NDK versions are like r27d, r29, etc. We need to map to the SDK manager format
+    local ndk_release
+    ndk_release=$(fetch_url "https://developer.android.com/ndk/downloads" 10 | grep -oE 'android-ndk-r[0-9]+[a-z]?' | sort -V | tail -1 | grep -oE 'r[0-9]+[a-z]?' 2>/dev/null)
+
+    if [ -z "$ndk_release" ]; then
+        set_latest "android-ndk" "error"
+    else
+        # NDK version format in SDK manager is like "29.0.14206865"
+        # We can't easily get the full version, but we can check if major version matches
+        # Extract major version (e.g., r29 -> 29)
+        local major_ver
+        major_ver=$(echo "$ndk_release" | grep -oE '[0-9]+')
+
+        # Get the current major version from what's pinned
+        local current=""
+        for i in "${!TOOLS[@]}"; do
+            if [ "${TOOLS[$i]}" = "android-ndk" ]; then
+                current="${CURRENT_VERSIONS[$i]}"
+                break
+            fi
+        done
+        local current_major
+        current_major=$(echo "$current" | cut -d. -f1)
+
+        # If major versions match, consider it current
+        if [ "$major_ver" = "$current_major" ]; then
+            set_latest "android-ndk" "$current"
+        else
+            # Different major version - report the release name for reference
+            set_latest "android-ndk" "${major_ver}.x.x ($ndk_release)"
+        fi
+    fi
     progress_done
 }
 
@@ -711,6 +817,12 @@ main() {
             Ruby) check_ruby ;;
             Java) check_java ;;
             R) check_r ;;
+            Kotlin) check_kotlin ;;
+            ktlint) check_ktlint ;;
+            detekt) check_detekt ;;
+            kotlin-language-server) check_kotlin_language_server ;;
+            android-cmdline-tools) check_android_cmdline_tools ;;
+            android-ndk) check_android_ndk ;;
             kubectl) check_kubectl ;;
             k9s) check_github_release "k9s" "derailed/k9s" ;;
             krew) check_github_release "krew" "kubernetes-sigs/krew" ;;
