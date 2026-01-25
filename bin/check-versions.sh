@@ -318,6 +318,12 @@ extract_all_versions() {
         [ -n "$ver" ] && add_tool "kotlin-language-server" "$ver" "kotlin-dev.sh"
     fi
 
+    # jdtls from install-jdtls.sh
+    if [ -f "$PROJECT_ROOT/lib/features/lib/install-jdtls.sh" ]; then
+        ver=$(extract_version_from_line "$(grep "^JDTLS_VERSION=" "$PROJECT_ROOT/lib/features/lib/install-jdtls.sh" 2>/dev/null)")
+        [ -n "$ver" ] && add_tool "jdtls" "$ver" "install-jdtls.sh"
+    fi
+
     # Java dev tools from java-dev.sh
     if [ -f "$PROJECT_ROOT/lib/features/java-dev.sh" ]; then
         ver=$(extract_version_from_line "$(grep "^SPRING_VERSION=" "$PROJECT_ROOT/lib/features/java-dev.sh" 2>/dev/null)")
@@ -500,6 +506,19 @@ check_kotlin_language_server() {
     local latest
     latest=$(fetch_url "https://api.github.com/repos/fwcd/kotlin-language-server/releases/latest" | jq -r '.tag_name // "null"' 2>/dev/null | command sed 's/^v//')
     set_latest "kotlin-language-server" "$latest"
+    progress_done
+}
+
+check_jdtls() {
+    progress_msg "  jdtls..."
+    # Get the latest jdtls version from Eclipse downloads
+    local latest
+    latest=$(fetch_url "https://download.eclipse.org/jdtls/milestones/" 10 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | sort -V | tail -1 2>/dev/null)
+    if [ -z "$latest" ] || [ "$latest" = "null" ]; then
+        set_latest "jdtls" "error"
+    else
+        set_latest "jdtls" "$latest"
+    fi
     progress_done
 }
 
@@ -821,6 +840,7 @@ main() {
             ktlint) check_ktlint ;;
             detekt) check_detekt ;;
             kotlin-language-server) check_kotlin_language_server ;;
+            jdtls) check_jdtls ;;
             android-cmdline-tools) check_android_cmdline_tools ;;
             android-ndk) check_android_ndk ;;
             kubectl) check_kubectl ;;
