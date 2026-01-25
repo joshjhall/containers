@@ -173,11 +173,10 @@ bin/list-features.sh --json | jq '.features[] | select(.dependencies | length > 
 **Current behavior**: Dependencies are NOT automatically resolved. You must
 explicitly enable all required features.
 
-**Future enhancement**: See
-[docs/planned/improvements-roadmap.md](planned/improvements-roadmap.md) for
-planned automatic dependency resolution.
+**Note**: Some features auto-trigger dependencies (e.g., `INCLUDE_ANDROID`
+auto-enables Java, `INCLUDE_MCP_SERVERS` auto-enables Node.js).
 
-**Example of planned behavior**:
+**Example of auto-triggering**:
 
 ```bash
 # Future: Automatically enables INCLUDE_PYTHON=true
@@ -384,6 +383,4 @@ Use the test framework to verify feature combinations:
 - [CLAUDE.md](../CLAUDE.md) - Build system overview and examples
 - [troubleshooting.md](troubleshooting.md) - Common dependency issues
 - [examples/env/](../examples/env/) - Environment file examples
-- [planned/improvements-roadmap.md](planned/improvements-roadmap.md) - Future
-  enhancements
 ````
