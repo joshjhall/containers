@@ -148,32 +148,8 @@ log_command "Installing sccache" \
 log_command "Installing mdbook" \
     su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/cargo install mdbook"
 
-# cargo-release installation
-# Build from source with pinned toml_edit to avoid type inference conflict
-# See: https://github.com/toml-rs/toml/issues/1073
-CARGO_RELEASE_VERSION="0.25.22"
-log_message "Installing cargo-release ${CARGO_RELEASE_VERSION} from source with pinned dependencies..."
-
-BUILD_TEMP=$(mktemp -d)
-chown "${USER_UID}:${USER_GID}" "$BUILD_TEMP"
-
-# Clone at specific tag (as target user for proper permissions)
-su - "${USERNAME}" -c "cd ${BUILD_TEMP} && git clone --depth 1 --branch v${CARGO_RELEASE_VERSION} https://github.com/crate-ci/cargo-release.git"
-
-# Pin toml_edit to working version by adding to Cargo.toml
-cat >> "${BUILD_TEMP}/cargo-release/Cargo.toml" << 'EOF'
-
-# Temporary pin to avoid trycmd/toml_edit 0.23.8 conflict
-# See: https://github.com/toml-rs/toml/issues/1073
-[patch.crates-io]
-toml_edit = { git = "https://github.com/toml-rs/toml", tag = "v0.23.7" }
-EOF
-
-# Build and install
-log_command "Building cargo-release" \
-    su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && cd ${BUILD_TEMP}/cargo-release && /usr/local/bin/cargo install --path ."
-
-rm -rf "$BUILD_TEMP"
+log_command "Installing cargo-release" \
+    su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/cargo install cargo-release"
 
 # Install taplo-cli (TOML formatter/linter) if not already installed by dev-tools
 if ! command -v taplo &> /dev/null; then
