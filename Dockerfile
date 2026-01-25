@@ -219,13 +219,41 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     fi; \
     fi
 # Java
+# Note: Java is auto-triggered when Kotlin or Android features are enabled
 ARG INCLUDE_JAVA=false
 ARG INCLUDE_JAVA_DEV=false
 ARG JAVA_VERSION=21
+ARG INCLUDE_KOTLIN=false
+ARG INCLUDE_KOTLIN_DEV=false
+ARG INCLUDE_ANDROID=false
+ARG INCLUDE_ANDROID_DEV=false
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
-    if [ "${INCLUDE_JAVA}" = "true" ] || [ "${INCLUDE_JAVA_DEV}" = "true" ]; then \
+    if [ "${INCLUDE_JAVA}" = "true" ] || [ "${INCLUDE_JAVA_DEV}" = "true" ] || \
+       [ "${INCLUDE_KOTLIN}" = "true" ] || [ "${INCLUDE_KOTLIN_DEV}" = "true" ] || \
+       [ "${INCLUDE_ANDROID}" = "true" ] || [ "${INCLUDE_ANDROID_DEV}" = "true" ]; then \
     JAVA_VERSION=${JAVA_VERSION} /tmp/build-scripts/features/java.sh; \
+    fi
+
+# Kotlin (Java auto-triggered above)
+ARG KOTLIN_VERSION=2.3.0
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    if [ "${INCLUDE_KOTLIN}" = "true" ] || [ "${INCLUDE_KOTLIN_DEV}" = "true" ]; then \
+    KOTLIN_VERSION=${KOTLIN_VERSION} /tmp/build-scripts/features/kotlin.sh; \
+    fi
+
+# Android SDK (Java auto-triggered above)
+ARG ANDROID_CMDLINE_TOOLS_VERSION=14742923
+ARG ANDROID_API_LEVELS=34,35
+ARG ANDROID_NDK_VERSION=29.0.14206865
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    if [ "${INCLUDE_ANDROID}" = "true" ] || [ "${INCLUDE_ANDROID_DEV}" = "true" ]; then \
+    ANDROID_CMDLINE_TOOLS_VERSION=${ANDROID_CMDLINE_TOOLS_VERSION} \
+    ANDROID_API_LEVELS=${ANDROID_API_LEVELS} \
+    ANDROID_NDK_VERSION=${ANDROID_NDK_VERSION} \
+    /tmp/build-scripts/features/android.sh; \
     fi
 
 # ============================================================================
@@ -383,6 +411,16 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     if [ "${INCLUDE_JAVA_DEV}" = "true" ]; then \
     /tmp/build-scripts/features/java-dev.sh; \
     fi
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    if [ "${INCLUDE_KOTLIN_DEV}" = "true" ]; then \
+    /tmp/build-scripts/features/kotlin-dev.sh; \
+    fi
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    if [ "${INCLUDE_ANDROID_DEV}" = "true" ]; then \
+    ANDROID_API_LEVELS=${ANDROID_API_LEVELS} /tmp/build-scripts/features/android-dev.sh; \
+    fi
 
 # ============================================================================
 # GENERAL DEVELOPMENT TOOLS (MUST BE LAST!)
@@ -489,6 +527,17 @@ ENV PATH="/home/${USERNAME}/.local/bin:/usr/local/bin:/usr/bin:/bin:${PATH}"
 
 # Java environment variables (consistent across installations)
 ENV JAVA_HOME="/usr/lib/jvm/default-java"
+
+# Kotlin environment variables (for version pinning and tooling)
+ENV KOTLIN_VERSION=${KOTLIN_VERSION}
+ENV KOTLIN_HOME="/opt/kotlin"
+
+# Android SDK environment variables (for version pinning and tooling)
+ENV ANDROID_HOME="/opt/android-sdk"
+ENV ANDROID_SDK_ROOT="/opt/android-sdk"
+ENV ANDROID_CMDLINE_TOOLS_VERSION=${ANDROID_CMDLINE_TOOLS_VERSION}
+ENV ANDROID_API_LEVELS=${ANDROID_API_LEVELS}
+ENV ANDROID_NDK_VERSION=${ANDROID_NDK_VERSION}
 
 # Python environment variables (for tools that don't read shell config)
 ENV POETRY_VIRTUALENVS_IN_PROJECT=true
