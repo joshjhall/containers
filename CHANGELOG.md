@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.14.0] - 2026-01-25
+
+### Added
+
+- Add Kotlin language support
+- Add Android SDK support
+- Add Android and Kotlin build stages
+- Add Kotlin and Android version management
+- Add Kotlin language server integration
+
+### Documentation
+
+- Add Android/Kotlin examples and architecture guide
+- Add Kotlin and Android to feature documentation
+
+### Fixed
+
+- Inline Java version display in startup script
+
+### Testing
+
+- Add Kotlin and Android test suites
+
+## [4.13.4] - 2026-01-25
+
+### Miscellaneous
+
+- Automated version updates to v4.13.4
+- Update compatibility matrix with passing test results
+
 ## [4.13.3] - 2026-01-18
 
 ### Miscellaneous
@@ -783,6 +813,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix prettier and markdownlint formatting in README
 - Format TLS documentation files
 
+[4.14.0]: https://github.com/joshjhall/containers/compare/v4.13.4...v4.14.0
+[4.13.4]: https://github.com/joshjhall/containers/compare/v4.13.3...v4.13.4
 [4.13.3]: https://github.com/joshjhall/containers/compare/v4.13.2...v4.13.3
 [4.13.2]: https://github.com/joshjhall/containers/compare/v4.13.1...v4.13.2
 [4.13.1]: https://github.com/joshjhall/containers/compare/v4.13.0...v4.13.1
