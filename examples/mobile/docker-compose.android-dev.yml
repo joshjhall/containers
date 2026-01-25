@@ -1,0 +1,82 @@
+# Android/Kotlin Mobile Development Container
+#
+# This docker-compose file demonstrates the recommended setup for Android and
+# Kotlin development, including handling architecture requirements.
+#
+# IMPORTANT: Android SDK platform-tools (adb, fastboot) and the Android Emulator
+# are x86_64 binaries ONLY. On arm64 hosts (Apple Silicon, AWS Graviton), you
+# MUST use --platform linux/amd64 to run via emulation.
+#
+# Usage:
+#   # On any host (arm64 will use emulation automatically)
+#   docker compose -f docker-compose.android-dev.yml up -d
+#
+#   # Enter the container
+#   docker compose -f docker-compose.android-dev.yml exec android-dev bash
+#
+#   # Verify tools work
+#   adb version
+#   kotlinc -version
+#   sdkmanager --list_installed
+
+services:
+  android-dev:
+    # Force x86_64 platform for full Android tool compatibility
+    # On arm64 hosts, this runs via Rosetta 2 (macOS) or QEMU emulation
+    platform: linux/amd64
+
+    build:
+      context: ../..  # Points to containers/ directory
+      dockerfile: Dockerfile
+      args:
+        PROJECT_PATH: "."
+        PROJECT_NAME: "android-dev"
+        # Android SDK with NDK
+        INCLUDE_ANDROID_DEV: "true"
+        ANDROID_API_LEVELS: "34,35"
+        ANDROID_NDK_VERSION: "29.0.14206865"
+        # Kotlin development tools
+        INCLUDE_KOTLIN_DEV: "true"
+        KOTLIN_VERSION: "2.3.0"
+        # Java is auto-triggered by Android/Kotlin
+        JAVA_VERSION: "21"
+        # Development tools (Claude Code, git helpers)
+        INCLUDE_DEV_TOOLS: "true"
+
+    # Ensure proper zombie process reaping
+    init: true
+
+    # Keep container running for interactive development
+    command: ["sleep", "infinity"]
+
+    volumes:
+      # Mount your project source code
+      - ../../..:/workspace/project
+
+      # Persistent cache for build artifacts (significantly speeds up rebuilds)
+      - android-cache:/cache
+
+      # Persist AVD (Android Virtual Device) configurations
+      - android-avd:/cache/android-avd
+
+    environment:
+      # Emulator uses system libraries (better compatibility)
+      ANDROID_EMULATOR_USE_SYSTEM_LIBS: "1"
+
+      # For GitHub integration (optional)
+      # GITHUB_TOKEN: "${GITHUB_TOKEN}"
+
+    # Required for running Android Emulator with hardware acceleration
+    # Remove if not using emulator, or if host doesn't support KVM
+    # devices:
+    #   - /dev/kvm:/dev/kvm
+
+    # Expose ADB port for remote debugging (optional)
+    # ports:
+    #   - "5037:5037"
+
+volumes:
+  android-cache:
+    name: android-dev-cache
+  android-avd:
+    name: android-dev-avd
