@@ -290,6 +290,7 @@ JBANG
 jbangdev
 jbedit
 jbrun
+jdtls
 jesseduffield
 jestconfig
 jgautheron
@@ -375,6 +376,7 @@ localdomain
 localtime
 localtunnel
 loov
+lsps
 lzma
 matplotlib
 mdbook
@@ -501,6 +503,7 @@ pycache
 pyenv
 pylint
 PYLINTHOME
+pylsp
 pypi
 pypoetry
 pyproject
@@ -653,6 +656,7 @@ vitejs
 vitep
 vitest
 Vitest
+vtsls
 wagoodman
 wayou
 whois

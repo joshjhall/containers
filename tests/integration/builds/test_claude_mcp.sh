@@ -1,15 +1,14 @@
 #!/usr/bin/env bash
-# Test Claude Code MCP server integrations
+# Test Claude Code MCP server and plugin integrations
 #
-# This test verifies the claude-mcp configuration that includes:
-# - @modelcontextprotocol/server-filesystem
-# - @modelcontextprotocol/server-github
-# - @modelcontextprotocol/server-gitlab
-# - bash-language-server (shell script LSP)
-# - MCP configuration in ~/.claude/settings.json
+# This test verifies the consolidated Claude Code setup that includes:
+# - MCP servers: filesystem, github, gitlab (npm packages)
+# - bash-language-server (npm package)
+# - claude-setup command for plugin/MCP configuration
+# - Build-time config file for runtime plugin installation
 #
-# Note: Requires INCLUDE_DEV_TOOLS=true for Claude CLI to be present
-# Note: INCLUDE_MCP_SERVERS=true auto-triggers Node.js installation
+# Note: MCP servers are now installed by dev-tools.sh when Node.js is available
+# Note: INCLUDE_MCP_SERVERS is deprecated (kept for backward compatibility)
 
 # Get the directory where this script is located
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -24,89 +23,208 @@ init_test_framework
 export BUILD_CONTEXT="$CONTAINERS_DIR"
 
 # Define test suite
-test_suite "Claude Code MCP Server Integrations"
+test_suite "Claude Code MCP and Plugin Integrations"
 
-# Test: MCP servers build and install
-test_claude_mcp_install() {
-    # Use pre-built image if provided, otherwise build locally
-    if [ -n "${IMAGE_TO_TEST:-}" ]; then
-        local image="$IMAGE_TO_TEST"
-        echo "Testing pre-built image: $image"
-    else
-        local image="test-claude-mcp-$$"
-        echo "Building image locally: $image"
+# Test: MCP servers installed with dev-tools + Node.js
+test_mcp_with_devtools_and_node() {
+    local image="test-claude-mcp-$$"
+    echo "Building image with INCLUDE_DEV_TOOLS=true and INCLUDE_NODE=true"
 
-        # Build with MCP servers enabled (triggers Node.js automatically)
-        assert_build_succeeds "Dockerfile" \
-            --build-arg PROJECT_PATH=. \
-            --build-arg PROJECT_NAME=test-claude-mcp \
-            --build-arg INCLUDE_DEV_TOOLS=true \
-            --build-arg INCLUDE_MCP_SERVERS=true \
-            -t "$image"
-    fi
+    # Build with dev-tools and Node.js (no INCLUDE_MCP_SERVERS needed)
+    assert_build_succeeds "Dockerfile" \
+        --build-arg PROJECT_PATH=. \
+        --build-arg PROJECT_NAME=test-claude-mcp \
+        --build-arg INCLUDE_DEV_TOOLS=true \
+        --build-arg INCLUDE_NODE=true \
+        -t "$image"
 
-    # Verify Node.js was installed (required for MCP)
+    # Verify Node.js is installed
     assert_executable_in_path "$image" "node"
     assert_executable_in_path "$image" "npm"
 
-    # Verify MCP servers are installed globally
+    # Verify MCP servers are installed globally (check /usr/local where build installs them)
     assert_command_in_container "$image" \
-        "npm list -g @modelcontextprotocol/server-filesystem 2>/dev/null | grep -q server-filesystem && echo 'installed'" \
+        "test -d /usr/local/lib/node_modules/@modelcontextprotocol/server-filesystem && echo 'installed'" \
         "installed"
 
     assert_command_in_container "$image" \
-        "npm list -g @modelcontextprotocol/server-github 2>/dev/null | grep -q server-github && echo 'installed'" \
+        "test -d /usr/local/lib/node_modules/@modelcontextprotocol/server-github && echo 'installed'" \
         "installed"
 
     assert_command_in_container "$image" \
-        "npm list -g @modelcontextprotocol/server-gitlab 2>/dev/null | grep -q server-gitlab && echo 'installed'" \
+        "test -d /usr/local/lib/node_modules/@modelcontextprotocol/server-gitlab && echo 'installed'" \
         "installed"
 
-    # Verify bash-language-server is installed (grouped with MCPs since both need Node)
-    assert_executable_in_path "$image" "bash-language-server"
+    # Verify bash-language-server is installed
+    assert_command_in_container "$image" \
+        "test -d /usr/local/lib/node_modules/bash-language-server && echo 'installed'" \
+        "installed"
 }
 
-# Test: MCP first-startup script is created with smart detection
-test_claude_mcp_startup_script() {
+# Test: claude-setup command exists and is executable
+test_claude_setup_command() {
     local image="${IMAGE_TO_TEST:-test-claude-mcp-$$}"
 
-    # Verify first-startup script exists
+    # Verify claude-setup command exists
+    assert_executable_in_path "$image" "claude-setup"
+
+    # Verify it has correct permissions
     assert_command_in_container "$image" \
-        "test -f /etc/container/first-startup/30-claude-mcp-setup.sh && echo 'exists'" \
+        "test -x /usr/local/bin/claude-setup && echo 'executable'" \
+        "executable"
+}
+
+# Test: Correct marketplace used in claude-setup script
+test_correct_marketplace() {
+    local image="${IMAGE_TO_TEST:-test-claude-mcp-$$}"
+
+    # Verify claude-setup uses correct marketplace (claude-plugins-official)
+    assert_command_in_container "$image" \
+        "grep -q 'claude-plugins-official' /usr/local/bin/claude-setup && echo 'correct'" \
+        "correct"
+
+    # Verify old marketplace (Piebald-AI) is NOT used
+    assert_command_in_container "$image" \
+        "grep -q 'Piebald-AI' /usr/local/bin/claude-setup && echo 'old' || echo 'good'" \
+        "good"
+}
+
+# Test: Correct plugin names in claude-setup script
+test_plugin_names() {
+    local image="${IMAGE_TO_TEST:-test-claude-mcp-$$}"
+
+    # Verify correct LSP plugin names are used
+    assert_command_in_container "$image" \
+        "grep -q 'rust-analyzer-lsp' /usr/local/bin/claude-setup && echo 'correct'" \
+        "correct"
+
+    assert_command_in_container "$image" \
+        "grep -q 'pyright-lsp' /usr/local/bin/claude-setup && echo 'correct'" \
+        "correct"
+
+    assert_command_in_container "$image" \
+        "grep -q 'typescript-lsp' /usr/local/bin/claude-setup && echo 'correct'" \
+        "correct"
+
+    assert_command_in_container "$image" \
+        "grep -q 'kotlin-lsp' /usr/local/bin/claude-setup && echo 'correct'" \
+        "correct"
+
+    # Verify core plugins are listed
+    assert_command_in_container "$image" \
+        "grep -q 'install_plugin \"figma\"' /usr/local/bin/claude-setup && echo 'has figma'" \
+        "has figma"
+
+    assert_command_in_container "$image" \
+        "grep -q 'install_plugin \"pr-review-toolkit\"' /usr/local/bin/claude-setup && echo 'has pr-review'" \
+        "has pr-review"
+}
+
+# Test: Build-time config file created with correct flags
+test_enabled_features_config() {
+    local image="test-claude-config-$$"
+
+    # Build with specific features enabled
+    assert_build_succeeds "Dockerfile" \
+        --build-arg PROJECT_PATH=. \
+        --build-arg PROJECT_NAME=test \
+        --build-arg INCLUDE_DEV_TOOLS=true \
+        --build-arg INCLUDE_NODE=true \
+        --build-arg INCLUDE_PYTHON_DEV=true \
+        --build-arg INCLUDE_RUST_DEV=true \
+        -t "$image"
+
+    # Verify config file exists
+    assert_command_in_container "$image" \
+        "test -f /etc/container/config/enabled-features.conf && echo 'exists'" \
         "exists"
 
-    # Verify startup script has git platform detection
+    # Verify Python flag is set correctly
     assert_command_in_container "$image" \
-        "grep -q 'detect_git_platform' /etc/container/first-startup/30-claude-mcp-setup.sh && echo 'has detection'" \
+        "grep 'INCLUDE_PYTHON_DEV=true' /etc/container/config/enabled-features.conf && echo 'python'" \
+        "python"
+
+    # Verify Rust flag is set correctly
+    assert_command_in_container "$image" \
+        "grep 'INCLUDE_RUST_DEV=true' /etc/container/config/enabled-features.conf && echo 'rust'" \
+        "rust"
+
+    # Verify Node flag is set (should be false since we used INCLUDE_NODE not INCLUDE_NODE_DEV)
+    assert_command_in_container "$image" \
+        "grep 'INCLUDE_NODE_DEV=false' /etc/container/config/enabled-features.conf && echo 'node_dev_false'" \
+        "node_dev_false"
+}
+
+# Test: Figma MCP is configured in claude-setup script
+test_figma_mcp() {
+    local image="${IMAGE_TO_TEST:-test-claude-mcp-$$}"
+
+    # Verify figma-desktop MCP is configured
+    assert_command_in_container "$image" \
+        "grep -q 'figma-desktop' /usr/local/bin/claude-setup && echo 'has figma'" \
+        "has figma"
+
+    # Verify Docker host URL is used
+    assert_command_in_container "$image" \
+        "grep -q 'host.docker.internal:3845' /usr/local/bin/claude-setup && echo 'has docker host'" \
+        "has docker host"
+}
+
+# Test: Git platform detection in claude-setup script
+test_git_platform_detection() {
+    local image="${IMAGE_TO_TEST:-test-claude-mcp-$$}"
+
+    # Verify claude-setup has git platform detection
+    assert_command_in_container "$image" \
+        "grep -q 'detect_git_platform' /usr/local/bin/claude-setup && echo 'has detection'" \
         "has detection"
-
-    # Verify startup script is idempotent (has_mcp_server check)
-    assert_command_in_container "$image" \
-        "grep -q 'has_mcp_server' /etc/container/first-startup/30-claude-mcp-setup.sh && echo 'is idempotent'" \
-        "is idempotent"
-
-    # Verify filesystem MCP is always included
-    assert_command_in_container "$image" \
-        "grep -q 'FILESYSTEM_CONFIG' /etc/container/first-startup/30-claude-mcp-setup.sh && echo 'has filesystem'" \
-        "has filesystem"
 
     # Verify GitHub detection
     assert_command_in_container "$image" \
-        "grep -q 'github.com' /etc/container/first-startup/30-claude-mcp-setup.sh && echo 'detects github'" \
+        "grep -q 'github.com' /usr/local/bin/claude-setup && echo 'detects github'" \
         "detects github"
 
-    # Verify GitLab detection with dynamic API URL
+    # Verify GitLab detection
     assert_command_in_container "$image" \
-        "grep -q 'generate_gitlab_config' /etc/container/first-startup/30-claude-mcp-setup.sh && echo 'has gitlab config'" \
-        "has gitlab config"
+        "grep -q 'gitlab' /usr/local/bin/claude-setup && echo 'detects gitlab'" \
+        "detects gitlab"
+
+    # Verify fallback to both when ambiguous
+    assert_command_in_container "$image" \
+        "grep -q 'installing both GitHub and GitLab' /usr/local/bin/claude-setup && echo 'has fallback'" \
+        "has fallback"
 }
 
-# Test: MCP triggers Node.js installation automatically
-test_claude_mcp_triggers_node() {
-    local image="test-claude-mcp-node-$$"
+# Test: MCP idempotency check
+test_mcp_idempotency() {
+    local image="${IMAGE_TO_TEST:-test-claude-mcp-$$}"
 
-    # Build with ONLY MCP servers (no INCLUDE_NODE)
-    # This should still have Node.js because MCP triggers it
+    # Verify claude-setup has MCP server existence check
+    assert_command_in_container "$image" \
+        "grep -q 'has_mcp_server' /usr/local/bin/claude-setup && echo 'is idempotent'" \
+        "is idempotent"
+}
+
+# Test: Plugin installation skipped when not authenticated
+test_plugin_auth_check() {
+    local image="${IMAGE_TO_TEST:-test-claude-mcp-$$}"
+
+    # Verify claude-setup has authentication check
+    assert_command_in_container "$image" \
+        "grep -q 'is_claude_authenticated' /usr/local/bin/claude-setup && echo 'has auth check'" \
+        "has auth check"
+
+    # Verify ANTHROPIC_API_KEY is checked
+    assert_command_in_container "$image" \
+        "grep -q 'ANTHROPIC_API_KEY' /usr/local/bin/claude-setup && echo 'checks api key'" \
+        "checks api key"
+}
+
+# Test: Backward compatibility - deprecated INCLUDE_MCP_SERVERS still triggers Node.js
+test_backward_compat_mcp_servers_flag() {
+    local image="test-claude-mcp-compat-$$"
+
+    # Build with deprecated INCLUDE_MCP_SERVERS flag
     assert_build_succeeds "Dockerfile" \
         --build-arg PROJECT_PATH=. \
         --build-arg PROJECT_NAME=test-claude-mcp \
@@ -115,59 +233,44 @@ test_claude_mcp_triggers_node() {
         --build-arg INCLUDE_MCP_SERVERS=true \
         -t "$image"
 
-    # Verify Node.js was installed even though INCLUDE_NODE=false
+    # Verify Node.js was still installed (backward compat)
     assert_executable_in_path "$image" "node"
 }
 
-# Test: MCP servers can be disabled
-test_claude_mcp_disabled() {
-    local image="test-claude-mcp-disabled-$$"
+# Test: MCP not installed without Node.js
+test_mcp_requires_node() {
+    local image="test-claude-no-node-$$"
 
-    # Build with MCP servers disabled
+    # Build with dev-tools but no Node.js
     assert_build_succeeds "Dockerfile" \
         --build-arg PROJECT_PATH=. \
-        --build-arg PROJECT_NAME=test-claude-mcp \
+        --build-arg PROJECT_NAME=test-claude-no-node \
         --build-arg INCLUDE_DEV_TOOLS=true \
+        --build-arg INCLUDE_NODE=false \
         --build-arg INCLUDE_MCP_SERVERS=false \
         -t "$image"
 
-    # Verify MCP servers are NOT installed when disabled
-    # Note: Node.js may or may not be present depending on other flags
+    # Verify MCP servers are NOT installed when Node.js is not available
     assert_command_in_container "$image" \
-        "npm list -g @modelcontextprotocol/server-filesystem 2>/dev/null | grep -q server-filesystem && echo 'installed' || echo 'not installed'" \
-        "not installed"
-}
-
-# Test: MCP doesn't run without dev-tools
-test_claude_mcp_requires_devtools() {
-    local image="test-claude-mcp-no-devtools-$$"
-
-    # Build with MCP servers but NO dev-tools
-    assert_build_succeeds "Dockerfile" \
-        --build-arg PROJECT_PATH=. \
-        --build-arg PROJECT_NAME=test-claude-mcp \
-        --build-arg INCLUDE_DEV_TOOLS=false \
-        --build-arg INCLUDE_MCP_SERVERS=true \
-        -t "$image"
-
-    # Node.js should still be installed (MCP triggers it)
-    assert_executable_in_path "$image" "node"
-
-    # But MCP servers should NOT be installed (no dev-tools = no Claude CLI)
-    assert_command_in_container "$image" \
-        "npm list -g @modelcontextprotocol/server-filesystem 2>/dev/null | grep -q server-filesystem && echo 'installed' || echo 'not installed'" \
+        "test -d /usr/local/lib/node_modules/@modelcontextprotocol/server-filesystem && echo 'installed' || echo 'not installed'" \
         "not installed"
 }
 
 # Run all tests
-run_test test_claude_mcp_install "MCP servers are installed correctly"
-run_test test_claude_mcp_startup_script "MCP first-startup script is created"
+run_test test_mcp_with_devtools_and_node "MCP servers installed with dev-tools + Node.js"
+run_test test_claude_setup_command "claude-setup command exists"
+run_test test_correct_marketplace "claude-setup uses correct marketplace"
+run_test test_plugin_names "claude-setup uses correct plugin names"
+run_test test_figma_mcp "Figma MCP is configured"
+run_test test_git_platform_detection "Git platform detection in claude-setup"
+run_test test_mcp_idempotency "MCP configuration is idempotent"
+run_test test_plugin_auth_check "Plugin installation has auth check"
 
-# Skip additional tests if using pre-built image
+# Skip tests that require building new images if using pre-built image
 if [ -z "${IMAGE_TO_TEST:-}" ]; then
-    run_test test_claude_mcp_triggers_node "MCP triggers Node.js installation"
-    run_test test_claude_mcp_disabled "MCP servers can be disabled"
-    run_test test_claude_mcp_requires_devtools "MCP requires dev-tools to be enabled"
+    run_test test_enabled_features_config "Build-time config file created with correct flags"
+    run_test test_backward_compat_mcp_servers_flag "Backward compat: INCLUDE_MCP_SERVERS triggers Node.js"
+    run_test test_mcp_requires_node "MCP not installed without Node.js"
 fi
 
 # Generate test report

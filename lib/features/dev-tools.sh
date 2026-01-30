@@ -957,6 +957,77 @@ if [ -f "${BUILD_TEMP}/claude-install.sh" ]; then
 fi
 
 # ============================================================================
+# Build-Time Configuration for Runtime
+# ============================================================================
+# Pass build-time feature flags to runtime startup scripts via config file
+log_message "Writing build configuration for runtime..."
+
+log_command "Creating container config directory" \
+    mkdir -p /etc/container/config
+
+cat > /etc/container/config/enabled-features.conf << FEATURES_EOF
+# Auto-generated at build time - DO NOT EDIT
+# This file passes build-time feature flags to runtime startup scripts
+INCLUDE_PYTHON_DEV=${INCLUDE_PYTHON_DEV:-false}
+INCLUDE_NODE_DEV=${INCLUDE_NODE_DEV:-false}
+INCLUDE_RUST_DEV=${INCLUDE_RUST_DEV:-false}
+INCLUDE_RUBY_DEV=${INCLUDE_RUBY_DEV:-false}
+INCLUDE_GOLANG_DEV=${INCLUDE_GOLANG_DEV:-false}
+INCLUDE_JAVA_DEV=${INCLUDE_JAVA_DEV:-false}
+INCLUDE_KOTLIN_DEV=${INCLUDE_KOTLIN_DEV:-false}
+INCLUDE_ANDROID_DEV=${INCLUDE_ANDROID_DEV:-false}
+
+# Extra plugins to install (comma-separated)
+# Can be overridden at runtime via environment variable
+CLAUDE_EXTRA_PLUGINS_DEFAULT="${CLAUDE_EXTRA_PLUGINS:-}"
+FEATURES_EOF
+
+log_command "Setting config file permissions" \
+    chmod 644 /etc/container/config/enabled-features.conf
+
+# ============================================================================
+# MCP Servers and Bash LSP (merged from claude-mcp.sh)
+# ============================================================================
+# MCP servers require Node.js - install if available
+if command -v node &>/dev/null && command -v npm &>/dev/null; then
+    log_message "Installing MCP servers and bash-language-server..."
+
+    export NPM_CONFIG_PREFIX="/usr/local"
+
+    log_command "Installing @modelcontextprotocol/server-filesystem" \
+        npm install -g --silent @modelcontextprotocol/server-filesystem || {
+        log_warning "Failed to install filesystem MCP server"
+    }
+
+    log_command "Installing @modelcontextprotocol/server-github" \
+        npm install -g --silent @modelcontextprotocol/server-github || {
+        log_warning "Failed to install GitHub MCP server"
+    }
+
+    log_command "Installing @modelcontextprotocol/server-gitlab" \
+        npm install -g --silent @modelcontextprotocol/server-gitlab || {
+        log_warning "Failed to install GitLab MCP server"
+    }
+
+    log_command "Installing bash-language-server" \
+        npm install -g --silent bash-language-server || {
+        log_warning "Failed to install bash-language-server"
+    }
+
+    # Verify bash-language-server installation
+    if command -v bash-language-server &>/dev/null; then
+        log_message "bash-language-server installed successfully"
+    else
+        log_warning "bash-language-server installation could not be verified"
+    fi
+
+    log_message "MCP servers installed successfully"
+else
+    log_message "Node.js not available - skipping MCP servers and bash-language-server"
+    log_message "To enable MCP servers, add INCLUDE_NODE=true or INCLUDE_NODE_DEV=true"
+fi
+
+# ============================================================================
 # Container Startup Scripts
 # ============================================================================
 log_message "Creating startup scripts..."
@@ -965,104 +1036,311 @@ log_message "Creating startup scripts..."
 log_command "Creating container startup directory" \
     mkdir -p /etc/container/first-startup
 
-command cat > /etc/container/first-startup/30-claude-code-setup.sh << 'EOF'
+# ============================================================================
+# Create claude-setup Command
+# ============================================================================
+# This command can be run manually by users after 'claude login' to install
+# plugins and configure MCP servers. It's also called automatically at startup
+# if Claude is authenticated.
+log_message "Creating claude-setup command..."
+
+command cat > /usr/local/bin/claude-setup << 'CLAUDE_SETUP_EOF'
 #!/bin/bash
-# Claude Code CLI and LSP Setup
-# Configures Claude Code and automatically installs LSP plugins for detected language servers
+# claude-setup - Configure Claude Code plugins and MCP servers
+#
+# This script installs Claude Code plugins and configures MCP servers.
+# It can be run manually after 'claude login' or automatically at startup.
 #
 # Features:
-# - Prompts user to configure Claude Code if not yet set up
-# - Detects installed LSP binaries (rust-analyzer, pylsp, gopls, etc.)
-# - Installs corresponding plugins from Piebald-AI/claude-code-lsps marketplace
+# - Installs core plugins from claude-plugins-official marketplace
+# - Installs language-specific LSP plugins based on build-time flags
+# - Configures MCP servers (filesystem, figma-desktop, github/gitlab)
 # - Idempotent: safe to run multiple times
+# - Graceful: skips plugin installation if not authenticated
 #
-# LSP Plugin Mapping:
-#   rust-analyzer    -> rust-analyzer@claude-code-lsps
-#   pylsp            -> pylsp@claude-code-lsps
-#   gopls            -> gopls@claude-code-lsps
-#   typescript-language-server -> vtsls@claude-code-lsps (TypeScript/JavaScript)
-#   solargraph       -> solargraph@claude-code-lsps (Ruby)
-#   bash-language-server -> bash-language-server@claude-code-lsps
-#   kotlin-language-server -> kotlin-language-server@claude-code-lsps (Kotlin)
-#   jdtls            -> jdtls@claude-code-lsps (Java)
+# Usage:
+#   claude-setup           # Run with authentication check
+#   claude-setup --force   # Run even if not authenticated (for MCP setup only)
+#
+# Plugin Marketplace: claude-plugins-official
 
 set -euo pipefail
 
+FORCE_MODE=false
+[ "${1:-}" = "--force" ] && FORCE_MODE=true
+
 # ============================================================================
-# Claude Code Basic Setup Check
+# Load Build-Time Configuration
 # ============================================================================
-if command -v claude &> /dev/null && [ ! -f ~/.config/claude/config.json ]; then
-    echo "=== Claude Code CLI Setup ==="
-    echo "Claude Code is installed but not configured."
-    echo "To set up Claude Code, run: claude login"
-    echo "You'll need your API key from https://console.anthropic.com"
+ENABLED_FEATURES_FILE="/etc/container/config/enabled-features.conf"
+if [ -f "$ENABLED_FEATURES_FILE" ]; then
+    # shellcheck source=/dev/null
+    source "$ENABLED_FEATURES_FILE"
+fi
+
+# ============================================================================
+# Authentication Check
+# ============================================================================
+is_claude_authenticated() {
+    # Check for API key in environment (most reliable)
+    [ -n "${ANTHROPIC_API_KEY:-}" ] && return 0
+
+    # Check if claude config has an API key set
+    # ~/.claude.json may exist from MCP config but without auth
+    if [ -f ~/.claude.json ]; then
+        # Check for primaryApiKey or similar auth indicators
+        if grep -qE '"primaryApiKey"|"apiKey"' ~/.claude.json 2>/dev/null; then
+            return 0
+        fi
+    fi
+
+    # Check legacy config location
+    if [ -f ~/.config/claude/config.json ]; then
+        if grep -qE '"primaryApiKey"|"apiKey"' ~/.config/claude/config.json 2>/dev/null; then
+            return 0
+        fi
+    fi
+
+    return 1
+}
+
+# Exit early if Claude Code not available
+if ! command -v claude &> /dev/null; then
+    echo "Claude Code CLI not installed. Skipping setup."
+    exit 0
+fi
+
+echo "=== Claude Code Setup ==="
+echo ""
+
+# ============================================================================
+# Plugin Installation Logic
+# ============================================================================
+# --force mode: skip plugins entirely, only configure MCP servers
+# normal mode: install plugins if authenticated
+SKIP_PLUGINS=false
+if [ "$FORCE_MODE" = "true" ]; then
+    if ! is_claude_authenticated; then
+        SKIP_PLUGINS=true
+    fi
+fi
+
+# ============================================================================
+# Plugin Helpers
+# ============================================================================
+MARKETPLACE="claude-plugins-official"
+PLUGINS_INSTALLED=false
+
+has_plugin() {
+    local plugin_name="$1"
+    claude plugin list 2>/dev/null | grep -q "❯ ${plugin_name}@" 2>/dev/null || return 1
+}
+
+install_plugin() {
+    local plugin_name="$1"
+    local full_name="${plugin_name}@${MARKETPLACE}"
+
+    if has_plugin "$plugin_name"; then
+        echo "    ✓ $plugin_name (already installed)"
+        return 0
+    fi
+
+    echo "  - Installing $plugin_name..."
+    if claude plugin install "$full_name" 2>&1 | grep -v "^Installing plugin"; then
+        echo "    ✓ $plugin_name installed"
+        PLUGINS_INSTALLED=true
+    else
+        echo "    ⚠ Failed to install $plugin_name"
+        return 1
+    fi
+}
+
+# ============================================================================
+# Plugin Installation (requires authentication)
+# ============================================================================
+if [ "$SKIP_PLUGINS" = "true" ]; then
+    echo "Skipping plugin installation (not authenticated)"
+    echo "After authenticating, run: claude-setup"
+    echo ""
+elif is_claude_authenticated; then
+    echo "Installing plugins..."
+    echo ""
+
+    # Core Plugins (Always Installed)
+    echo "Core plugins:"
+    install_plugin "commit-commands" || true
+    install_plugin "frontend-design" || true
+    install_plugin "code-simplifier" || true
+    install_plugin "context7" || true
+    install_plugin "security-guidance" || true
+    install_plugin "claude-md-management" || true
+    install_plugin "figma" || true
+    install_plugin "pr-review-toolkit" || true
+    install_plugin "code-review" || true
+    install_plugin "hookify" || true
+    install_plugin "claude-code-setup" || true
+    install_plugin "feature-dev" || true
+
+    # Language-Specific LSP Plugins (Based on Build Flags)
+    echo ""
+    echo "Language LSP plugins:"
+    [ "${INCLUDE_RUST_DEV:-false}" = "true" ] && { install_plugin "rust-analyzer-lsp" || true; }
+    [ "${INCLUDE_PYTHON_DEV:-false}" = "true" ] && { install_plugin "pyright-lsp" || true; }
+    [ "${INCLUDE_NODE_DEV:-false}" = "true" ] && { install_plugin "typescript-lsp" || true; }
+    [ "${INCLUDE_KOTLIN_DEV:-false}" = "true" ] && { install_plugin "kotlin-lsp" || true; }
+
+    # Extra Plugins (From Environment Variable)
+    # CLAUDE_EXTRA_PLUGINS can be set at build time or runtime
+    EXTRA_PLUGINS_TO_INSTALL="${CLAUDE_EXTRA_PLUGINS:-${CLAUDE_EXTRA_PLUGINS_DEFAULT:-}}"
+    if [ -n "$EXTRA_PLUGINS_TO_INSTALL" ]; then
+        echo ""
+        echo "Extra plugins (CLAUDE_EXTRA_PLUGINS):"
+        IFS=',' read -ra EXTRA_PLUGINS <<< "$EXTRA_PLUGINS_TO_INSTALL"
+        for plugin in "${EXTRA_PLUGINS[@]}"; do
+            plugin=$(echo "$plugin" | xargs)  # Trim whitespace
+            [ -n "$plugin" ] && { install_plugin "$plugin" || true; }
+        done
+    fi
+
+    echo ""
+else
+    echo "Claude Code not authenticated."
+    echo ""
+    echo "To install plugins:"
+    echo "  1. Run: claude login"
+    echo "  2. Run: claude-setup"
+    echo ""
+    echo "Or set ANTHROPIC_API_KEY environment variable."
     echo ""
 fi
 
 # ============================================================================
-# LSP Plugin Configuration
+# MCP Server Configuration (no authentication required)
 # ============================================================================
-# Only proceed with LSP setup if Claude Code is available
-if ! command -v claude &> /dev/null; then
-    exit 0
-fi
+echo "Configuring MCP servers..."
+echo ""
 
-echo "=== Claude Code LSP Configuration ==="
-
-# Marketplace configuration
-MARKETPLACE="Piebald-AI/claude-code-lsps"
-
-# Helper: Check if a plugin is already installed
-has_plugin() {
-    local plugin_name="$1"
-    claude plugin list 2>/dev/null | grep -q "${plugin_name}@" 2>/dev/null || return 1
+has_mcp_server() {
+    local server_name="$1"
+    claude mcp list 2>/dev/null | grep -qE "^${server_name}[[:space:]]" 2>/dev/null || return 1
 }
 
-# Helper: Install a plugin if the corresponding binary exists
-install_lsp_plugin() {
-    local binary_name="$1"
-    local plugin_name="$2"
+add_mcp_server() {
+    local server_name="$1"
+    shift
+    local args=("$@")
 
-    # Check if the binary is installed
-    if ! command -v "$binary_name" &>/dev/null; then
+    if has_mcp_server "$server_name"; then
+        echo "    ✓ $server_name (already configured)"
         return 0
     fi
 
-    # Check if plugin is already installed
-    if has_plugin "$plugin_name"; then
-        echo "  - $plugin_name: already installed (skipping)"
-        return 0
-    fi
-
-    echo "  - Installing $plugin_name (detected $binary_name)..."
-    if claude plugin install "${plugin_name}@${MARKETPLACE}" 2>/dev/null; then
-        echo "    ✓ $plugin_name installed"
+    echo "  - Adding $server_name..."
+    if claude mcp add -s user "${args[@]}" 2>&1 | grep -v "^Added"; then
+        echo "    ✓ $server_name added"
     else
-        echo "    ⚠ Failed to install $plugin_name (may need manual setup)"
+        echo "    ⚠ Failed to add $server_name"
     fi
 }
 
-echo "Detecting installed language servers..."
-echo ""
-echo "Installing LSP plugins:"
+# Filesystem MCP (always)
+add_mcp_server "filesystem" -t stdio "filesystem" -- npx -y @modelcontextprotocol/server-filesystem /workspace
 
-# Install plugins for detected LSPs
-# Binary name -> Plugin name mapping
-install_lsp_plugin "rust-analyzer" "rust-analyzer"
-install_lsp_plugin "pylsp" "pylsp"
-install_lsp_plugin "gopls" "gopls"
-install_lsp_plugin "typescript-language-server" "vtsls"
-install_lsp_plugin "solargraph" "solargraph"
-install_lsp_plugin "bash-language-server" "bash-language-server"
-install_lsp_plugin "kotlin-language-server" "kotlin-language-server"
-install_lsp_plugin "jdtls" "jdtls"
+# Figma desktop MCP (always - connects to Figma desktop app via Docker host)
+add_mcp_server "figma-desktop" -t http "figma-desktop" "http://host.docker.internal:3845/mcp"
+
+# ============================================================================
+# Git Platform Detection for GitHub/GitLab MCPs
+# ============================================================================
+detect_git_platform() {
+    local remote_url=""
+    if command -v git &>/dev/null && git rev-parse --git-dir &>/dev/null 2>&1; then
+        remote_url=$(git config --get remote.origin.url 2>/dev/null || true)
+    fi
+    [ -z "$remote_url" ] && { echo "none"; return; }
+
+    local host=""
+    [[ "$remote_url" =~ ^https?://([^/]+)/ ]] && host="${BASH_REMATCH[1]}"
+    [[ "$remote_url" =~ ^git@([^:]+): ]] && host="${BASH_REMATCH[1]}"
+    [[ "$remote_url" =~ ^ssh://[^@]+@([^/]+)/ ]] && host="${BASH_REMATCH[1]}"
+    [ -z "$host" ] && { echo "none"; return; }
+
+    host="${host%%:*}"
+    [[ "$host" == "github.com" ]] && { echo "github"; return; }
+    [[ "$host" == "gitlab.com" ]] || [[ "$host" == *"gitlab"* ]] && { echo "gitlab:$host"; return; }
+    echo "unknown:$host"
+}
+
+platform_info=$(detect_git_platform)
+platform="${platform_info%%:*}"
+platform_host="${platform_info#*:}"
+
+case "$platform" in
+    github)
+        echo "  Detected GitHub repository"
+        add_mcp_server "github" -t stdio "github" \
+            -e 'GITHUB_PERSONAL_ACCESS_TOKEN=${GITHUB_TOKEN}' \
+            -- npx -y @modelcontextprotocol/server-github
+        ;;
+    gitlab)
+        echo "  Detected GitLab repository ($platform_host)"
+        add_mcp_server "gitlab" -t stdio "gitlab" \
+            -e 'GITLAB_PERSONAL_ACCESS_TOKEN=${GITLAB_TOKEN}' \
+            -e "GITLAB_API_URL=https://${platform_host}/api/v4" \
+            -- npx -y @modelcontextprotocol/server-gitlab
+        ;;
+    *)
+        # Ambiguous or no git remote - install both for flexibility
+        echo "  No specific git platform detected - installing both GitHub and GitLab MCPs"
+        add_mcp_server "github" -t stdio "github" \
+            -e 'GITHUB_PERSONAL_ACCESS_TOKEN=${GITHUB_TOKEN}' \
+            -- npx -y @modelcontextprotocol/server-github
+        add_mcp_server "gitlab" -t stdio "gitlab" \
+            -e 'GITLAB_PERSONAL_ACCESS_TOKEN=${GITLAB_TOKEN}' \
+            -- npx -y @modelcontextprotocol/server-gitlab
+        ;;
+esac
 
 echo ""
-echo "LSP configuration complete."
-echo "Run 'claude plugin list' to see installed plugins."
+echo "=== Setup Complete ==="
 echo ""
-echo "Note: ENABLE_LSP_TOOL=1 is set in your environment."
-echo "Claude Code will use these LSPs for improved code intelligence."
+echo "Verify with:"
+echo "  claude plugin list  - See installed plugins"
+echo "  claude mcp list     - See configured MCP servers"
+echo ""
+if ! is_claude_authenticated; then
+    echo "Note: Plugins were not installed (not authenticated)."
+    echo "After running 'claude login', run 'claude-setup' again."
+    echo ""
+fi
+echo "Environment: ENABLE_LSP_TOOL=1"
+echo "Set GITHUB_TOKEN or GITLAB_TOKEN for git platform API access."
+CLAUDE_SETUP_EOF
+
+log_command "Setting claude-setup permissions" \
+    chmod +x /usr/local/bin/claude-setup
+
+# ============================================================================
+# Create First-Startup Script (calls claude-setup)
+# ============================================================================
+log_message "Creating first-startup script..."
+
+command cat > /etc/container/first-startup/30-claude-code-setup.sh << 'EOF'
+#!/bin/bash
+# Claude Code first-startup wrapper
+# Calls claude-setup to configure plugins and MCP servers
+#
+# This script runs once on first container startup. It:
+# - Checks if Claude is authenticated
+# - Runs claude-setup automatically if authenticated
+# - Shows instructions if not authenticated
+
+set -euo pipefail
+
+# Run claude-setup (it handles authentication checks internally)
+if command -v claude-setup &> /dev/null; then
+    claude-setup --force
+fi
 EOF
 log_command "Setting Claude Code startup script permissions" \
     chmod +x /etc/container/first-startup/30-claude-code-setup.sh

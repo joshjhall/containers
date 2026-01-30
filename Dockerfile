@@ -432,9 +432,20 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 
 # General development tools
 ARG INCLUDE_DEV_TOOLS=false
+# Extra Claude Code plugins to install (comma-separated, e.g., "stripe,posthog,vercel")
+ARG CLAUDE_EXTRA_PLUGINS=""
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     if [ "${INCLUDE_DEV_TOOLS}" = "true" ]; then \
+    INCLUDE_PYTHON_DEV=${INCLUDE_PYTHON_DEV} \
+    INCLUDE_NODE_DEV=${INCLUDE_NODE_DEV} \
+    INCLUDE_RUST_DEV=${INCLUDE_RUST_DEV} \
+    INCLUDE_RUBY_DEV=${INCLUDE_RUBY_DEV} \
+    INCLUDE_GOLANG_DEV=${INCLUDE_GOLANG_DEV} \
+    INCLUDE_JAVA_DEV=${INCLUDE_JAVA_DEV} \
+    INCLUDE_KOTLIN_DEV=${INCLUDE_KOTLIN_DEV} \
+    INCLUDE_ANDROID_DEV=${INCLUDE_ANDROID_DEV} \
+    CLAUDE_EXTRA_PLUGINS=${CLAUDE_EXTRA_PLUGINS} \
     /tmp/build-scripts/features/dev-tools.sh; \
     fi
 

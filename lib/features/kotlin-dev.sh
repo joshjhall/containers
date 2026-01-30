@@ -390,35 +390,6 @@ GITIGNORE
 KOTLIN_DEV_BASHRC_EOF
 
 # ============================================================================
-# Claude Code LSP Integration
-# ============================================================================
-log_message "Setting up Claude Code LSP integration..."
-
-log_command "Creating first-startup directory" \
-    mkdir -p /etc/container/first-startup
-
-# Add to existing claude-code-setup or create new
-command cat > /etc/container/first-startup/31-kotlin-lsp-setup.sh << 'EOF'
-#!/bin/bash
-# Kotlin LSP setup for Claude Code
-
-# Check if Claude Code is installed and LSP is enabled
-if command -v claude &>/dev/null && [ "${ENABLE_LSP_TOOL:-0}" = "1" ]; then
-    # Check if kotlin-language-server is installed
-    if command -v kotlin-language-server &>/dev/null; then
-        # Check if plugin is already installed
-        if ! claude plugin list 2>/dev/null | grep -q "kotlin"; then
-            echo "Installing Kotlin LSP plugin for Claude Code..."
-            claude plugin add kotlin-language-server@claude-code-lsps 2>/dev/null || true
-        fi
-    fi
-fi
-EOF
-
-log_command "Setting Kotlin LSP setup script permissions" \
-    chmod +x /etc/container/first-startup/31-kotlin-lsp-setup.sh
-
-# ============================================================================
 # Eclipse JDT Language Server (jdtls)
 # ============================================================================
 # Install jdtls for Java interop and mixed Kotlin/Java projects

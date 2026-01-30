@@ -174,7 +174,10 @@ bin/list-features.sh --json | jq '.features[] | select(.dependencies | length > 
 explicitly enable all required features.
 
 **Note**: Some features auto-trigger dependencies (e.g., `INCLUDE_ANDROID`
-auto-enables Java, `INCLUDE_MCP_SERVERS` auto-enables Node.js).
+auto-enables Java, `INCLUDE_KOTLIN` auto-enables Java).
+
+**Note**: `INCLUDE_MCP_SERVERS` is **deprecated**. MCP servers are now
+automatically installed with `INCLUDE_DEV_TOOLS=true` when Node.js is available.
 
 **Example of auto-triggering**:
 

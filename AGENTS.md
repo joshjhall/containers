@@ -202,63 +202,86 @@ Cursor, Neovim, etc.):
 | `INCLUDE_JAVA_DEV`    | `jdtls` (Eclipse JDT Language Server)           |
 | `INCLUDE_ANDROID_DEV` | `jdtls` (Eclipse JDT Language Server)           |
 
-### Claude Code LSP Integration
+### Claude Code Plugins and LSP Integration
 
-When `INCLUDE_DEV_TOOLS=true`, LSP support for Claude Code is automatically
-configured:
+When `INCLUDE_DEV_TOOLS=true`, Claude Code plugins and LSP support are
+automatically configured on first container startup via
+`/etc/container/first-startup/30-claude-code-setup.sh`.
 
-1. **Environment variable**: `ENABLE_LSP_TOOL=1` is set in the shell environment
-1. **Plugin auto-installation**: On first container startup, the
-   `/etc/container/first-startup/30-claude-code-setup.sh` script:
-   - Detects which LSP binaries are installed
-   - Installs corresponding plugins from the `Piebald-AI/claude-code-lsps`
-     marketplace
+**Core plugins** (always installed):
 
-| LSP Binary                   | Claude Code Plugin                        |
-| ---------------------------- | ----------------------------------------- |
-| `rust-analyzer`              | `rust-analyzer@claude-code-lsps`          |
-| `pylsp`                      | `pylsp@claude-code-lsps`                  |
-| `gopls`                      | `gopls@claude-code-lsps`                  |
-| `typescript-language-server` | `vtsls@claude-code-lsps`                  |
-| `solargraph`                 | `solargraph@claude-code-lsps`             |
-| `bash-language-server`       | `bash-language-server@claude-code-lsps`   |
-| `kotlin-language-server`     | `kotlin-language-server@claude-code-lsps` |
-| `jdtls`                      | `jdtls@claude-code-lsps`                  |
+- `commit-commands` - Git commit helpers
+- `frontend-design` - Interface design assistance
+- `code-simplifier` - Code simplification
+- `context7` - Documentation lookup
+- `security-guidance` - Security best practices
+- `claude-md-management` - CLAUDE.md file management
+- `figma` - Figma design integration
+- `pr-review-toolkit` - Comprehensive PR review tools
+- `code-review` - Code review assistance
+- `hookify` - Hook creation helpers
+- `claude-code-setup` - Project setup assistance
+- `feature-dev` - Feature development workflow
+
+**Language-specific LSP plugins** (based on build flags):
+
+| Build Flag           | Claude Code Plugin                          |
+| -------------------- | ------------------------------------------- |
+| `INCLUDE_RUST_DEV`   | `rust-analyzer-lsp@claude-plugins-official` |
+| `INCLUDE_PYTHON_DEV` | `pyright-lsp@claude-plugins-official`       |
+| `INCLUDE_NODE_DEV`   | `typescript-lsp@claude-plugins-official`    |
+| `INCLUDE_KOTLIN_DEV` | `kotlin-lsp@claude-plugins-official`        |
+
+**Extra plugins**: Use `CLAUDE_EXTRA_PLUGINS` to install additional plugins:
+
+```bash
+# At build time
+docker build --build-arg CLAUDE_EXTRA_PLUGINS="stripe,posthog,vercel" ...
+
+# At runtime (overrides build-time value)
+docker run -e CLAUDE_EXTRA_PLUGINS="stripe,posthog" ...
+```
+
+**Environment variable**: `ENABLE_LSP_TOOL=1` is set in the shell environment.
+
+**Build-time configuration**: Feature flags are persisted to
+`/etc/container/config/enabled-features.conf` for use by startup scripts.
 
 **Note**: The startup script is idempotent and will skip plugins that are
 already installed. To verify installed plugins, run: `claude plugin list`
 
-**Manual override**: To disable automatic LSP for Claude Code, unset the
-environment variable: `unset ENABLE_LSP_TOOL`
+### MCP Servers (installed with dev-tools when Node.js available)
 
-### MCP Servers (`INCLUDE_MCP_SERVERS=false`, default: false)
-
-Installs Model Context Protocol servers for enhanced Claude Code capabilities:
+MCP servers are automatically installed by `dev-tools.sh` when Node.js is
+available (`INCLUDE_NODE=true` or `INCLUDE_NODE_DEV=true`):
 
 - **Filesystem**: `@modelcontextprotocol/server-filesystem` - Enhanced file ops
 - **GitHub**: `@modelcontextprotocol/server-github` - GitHub API integration
 - **GitLab**: `@modelcontextprotocol/server-gitlab` - GitLab API integration
-- **Bash LSP**: `bash-language-server` - Shell script language server (grouped
-  here since it requires Node.js)
+- **Bash LSP**: `bash-language-server` - Shell script language server
 
-Note: `INCLUDE_MCP_SERVERS=true` automatically triggers Node.js installation
-and requires `INCLUDE_DEV_TOOLS=true` (for Claude CLI).
+> **Note**: `INCLUDE_MCP_SERVERS` is **deprecated**. It is kept for backward
+> compatibility (triggers Node.js installation) but MCP servers are now
+> installed automatically with `INCLUDE_DEV_TOOLS=true` when Node.js is present.
 
 MCP configuration is created on first container startup via
-`/etc/container/first-startup/30-claude-mcp-setup.sh`. The script uses
-`claude mcp add` to register servers in `~/.claude.json`:
+`/etc/container/first-startup/30-claude-code-setup.sh`:
 
-- **Always** configures the filesystem MCP server for `/workspace`
-- **Detects** GitHub vs GitLab from the git remote origin URL
-- **Auto-configures** GitLab API URL for private instances (e.g., `gitlab.mycompany.com`)
-- **Is idempotent** - checks existing config before adding, safe to run multiple times
+- **Always** configures filesystem MCP server for `/workspace`
+- **Always** configures Figma desktop MCP (`http://host.docker.internal:3845/mcp`)
+- **Detects** GitHub vs GitLab from git remote origin URL
+- **Fallback**: Installs both GitHub and GitLab MCPs when remote is ambiguous
+- **Is idempotent** - checks existing config before adding
 
 Set the appropriate environment variable at runtime:
 
 - `GITHUB_TOKEN`: GitHub personal access token (when using GitHub)
 - `GITLAB_TOKEN`: GitLab personal access token (when using GitLab)
 
-Verify MCP configuration with: `claude mcp list`
+Verify configuration with:
+
+- `claude plugin list` - See installed plugins
+- `claude mcp list` - See configured MCP servers
 
 ## Cache Management
 
