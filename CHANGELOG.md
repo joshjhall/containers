@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.14.2] - 2026-01-30
+
+### Added
+
+- Consolidate Claude Code plugin and MCP setup
+
 ## [4.14.1] - 2026-01-25
 
 ### Added
@@ -838,6 +844,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix prettier and markdownlint formatting in README
 - Format TLS documentation files
 
+[4.14.2]: https://github.com/joshjhall/containers/compare/v4.14.1...v4.14.2
 [4.14.1]: https://github.com/joshjhall/containers/compare/v4.14.0...v4.14.1
 [4.14.0]: https://github.com/joshjhall/containers/compare/v4.13.4...v4.14.0
 [4.13.4]: https://github.com/joshjhall/containers/compare/v4.13.3...v4.13.4
