@@ -118,11 +118,19 @@ docker run --env-file .env --env-file .env.aws myproject:dev
 # In docker-compose.yml:
 services:
   app:
+    # Optional env_file (won't fail if file doesn't exist)
     env_file:
-      - .env
-      - .env.python
-      - .env.aws
+      - path: .env
+        required: false
+      - path: .env.python
+        required: false
+    environment:
+      # These override/supplement .env values
+      - LOG_LEVEL=${LOG_LEVEL:-info}
 ```
+
+> **Note**: The `required: false` syntax requires Docker Compose v2.24+.
+> For older versions, use `env_file: [".env"]` but ensure the file exists.
 
 ## Common Patterns
 
