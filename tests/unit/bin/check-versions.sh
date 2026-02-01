@@ -393,8 +393,12 @@ test_extract_zoxide_version() {
         zoxide_ver=$(extract_version_from_line "$(grep '^ZOXIDE_VERSION=' "$PROJECT_ROOT/lib/base/setup.sh" 2>/dev/null)")
 
         assert_not_empty "$zoxide_ver" "zoxide version extracted from base/setup.sh"
-        # Current version is 0.9.8
-        assert_equals "0.9.8" "$zoxide_ver" "zoxide version is correctly extracted"
+        # Verify extracted version matches semver pattern (don't hardcode specific versions)
+        if [[ "$zoxide_ver" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            pass_test "zoxide version matches semver format"
+        else
+            fail_test "zoxide version '$zoxide_ver' does not match semver format"
+        fi
     else
         skip_test "base/setup.sh not found"
     fi
