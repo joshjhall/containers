@@ -459,14 +459,19 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     /tmp/build-scripts/features/cron.sh; \
     fi
 
-# Claude Code MCP servers and bash-language-server
-# (filesystem, GitHub, GitLab integrations + bash LSP)
+# Claude Code setup (CLI, plugins, MCP servers)
+# Runs after dev-tools.sh to use the enabled-features.conf it creates
 # Note: INCLUDE_MCP_SERVERS already declared in Node.js section above
-# This triggers Node.js installation automatically when enabled
+# (kept for backward compatibility - triggers Node.js installation)
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
-    if [ "${INCLUDE_MCP_SERVERS}" = "true" ] && [ "${INCLUDE_DEV_TOOLS}" = "true" ]; then \
-    /tmp/build-scripts/features/claude-mcp.sh; \
+    if [ "${INCLUDE_DEV_TOOLS}" = "true" ]; then \
+    INCLUDE_PYTHON_DEV=${INCLUDE_PYTHON_DEV} \
+    INCLUDE_NODE_DEV=${INCLUDE_NODE_DEV} \
+    INCLUDE_RUST_DEV=${INCLUDE_RUST_DEV} \
+    INCLUDE_KOTLIN_DEV=${INCLUDE_KOTLIN_DEV} \
+    CLAUDE_EXTRA_PLUGINS=${CLAUDE_EXTRA_PLUGINS} \
+    /tmp/build-scripts/features/claude-code-setup.sh; \
     fi
 
 # Keyboard bindings (readline/inputrc configuration for terminal shortcuts)
