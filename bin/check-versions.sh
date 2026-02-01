@@ -596,9 +596,13 @@ check_entr() {
 
 check_biome() {
     progress_msg "  biome..."
-    # Biome uses cli/vX.Y.Z tag format for CLI releases
+    # Biome changed tag format from cli/vX.Y.Z to @biomejs/biome@X.Y.Z
     local latest
-    latest=$(fetch_url "https://api.github.com/repos/biomejs/biome/releases" | jq -r '[.[] | select(.tag_name | startswith("cli/v"))] | .[0].tag_name // "null"' 2>/dev/null | command sed 's|^cli/v||')
+    latest=$(fetch_url "https://api.github.com/repos/biomejs/biome/releases" | jq -r '[.[] | select(.tag_name | startswith("@biomejs/biome@"))] | .[0].tag_name // "null"' 2>/dev/null | command sed 's|^@biomejs/biome@||')
+    # Fallback to old format if new format not found
+    if [ -z "$latest" ] || [ "$latest" = "null" ]; then
+        latest=$(fetch_url "https://api.github.com/repos/biomejs/biome/releases" | jq -r '[.[] | select(.tag_name | startswith("cli/v"))] | .[0].tag_name // "null"' 2>/dev/null | command sed 's|^cli/v||')
+    fi
     set_latest "biome" "$latest"
     progress_done
 }
@@ -649,15 +653,17 @@ check_kubectl() {
     done
 
     local latest=""
-    # kubectl uses major.minor format - get latest patch
-    if [[ "$current" =~ ^[0-9]+\.[0-9]+$ ]]; then
-        # Get latest patch version for this major.minor
-        latest=$(fetch_url "https://api.github.com/repos/kubernetes/kubernetes/releases" | jq -r "[.[] | select(.tag_name | startswith(\"v$current.\"))] | .[0].tag_name" 2>/dev/null | command sed 's/^v//')
+    # Extract major.minor from current version (handles both 1.33 and 1.33.0 formats)
+    local major_minor=""
+    if [[ "$current" =~ ^([0-9]+\.[0-9]+) ]]; then
+        major_minor="${BASH_REMATCH[1]}"
+        # Get latest patch version for this major.minor from GitHub releases
+        latest=$(fetch_url "https://api.github.com/repos/kubernetes/kubernetes/releases" | jq -r "[.[] | select(.tag_name | startswith(\"v$major_minor.\")) | select(.prerelease == false)] | .[0].tag_name" 2>/dev/null | command sed 's/^v//')
     fi
 
-    # If no specific version found, get the stable version
+    # If no specific version found, get the latest stable release (not stable.txt which lags behind)
     if [ -z "$latest" ] || [ "$latest" = "null" ]; then
-        latest=$(fetch_url "https://storage.googleapis.com/kubernetes-release/release/stable.txt" | command sed 's/^v//')
+        latest=$(fetch_url "https://api.github.com/repos/kubernetes/kubernetes/releases" | jq -r '[.[] | select(.prerelease == false)] | .[0].tag_name' 2>/dev/null | command sed 's/^v//')
     fi
 
     set_latest "kubectl" "$latest"
