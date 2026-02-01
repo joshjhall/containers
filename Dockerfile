@@ -316,7 +316,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 
 # Kubernetes tools
 ARG INCLUDE_KUBERNETES=false
-ARG KUBECTL_VERSION=1.31.0
+ARG KUBECTL_VERSION=1.33.0
 ARG K9S_VERSION=0.50.18
 ARG KREW_VERSION=0.4.5
 ARG HELM_VERSION=4.1.0
