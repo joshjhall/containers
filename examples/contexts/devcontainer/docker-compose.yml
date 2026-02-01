@@ -38,7 +38,12 @@ services:
         - INCLUDE_DEV_TOOLS=true
       cache_from:
         - type=registry,ref=ghcr.io/project/devcontainer:cache
+    # Load environment variables from .env file (optional, create from .env.example)
+    env_file:
+      - path: .env
+        required: false
     environment:
+      # These override/supplement .env values
       # Development environment
       - ENVIRONMENT=development
       - LOG_LEVEL=${LOG_LEVEL:-debug}
@@ -60,7 +65,8 @@ services:
 
       # LLM configuration
       - OLLAMA_HOST=http://ollama:11434
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      # Note: Claude Code CLI requires running 'claude' to authenticate interactively.
+      # Environment variables do NOT work. See CLAUDE.md for setup instructions.
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
 
       # Object storage

@@ -36,7 +36,12 @@ services:
     ports:
       - "8080:8080"
       - "9090:9090" # Metrics port
+    # Load environment variables from .env file (optional, create from .env.example)
+    env_file:
+      - path: .env
+        required: false
     environment:
+      # These override/supplement .env values
       # Enable strict configuration validation
       - VALIDATE_CONFIG=true
       - VALIDATE_CONFIG_STRICT=true

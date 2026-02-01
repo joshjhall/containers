@@ -43,7 +43,12 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+    # Load environment variables from .env file (optional, create from .env.example)
+    env_file:
+      - path: .env
+        required: false
     environment:
+      # These override/supplement .env values
       # Redis connection
       - REDIS_URL=redis://redis:6379
 
@@ -56,7 +61,8 @@ services:
       - OLLAMA_HOST=${OLLAMA_HOST:-http://host.docker.internal:11434}
 
       # API keys (if using cloud models)
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      # Note: Claude Code CLI requires running 'claude' to authenticate interactively.
+      # Environment variables do NOT work. See CLAUDE.md for setup instructions.
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
     volumes:
       # Shared knowledge base

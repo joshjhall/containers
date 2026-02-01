@@ -35,7 +35,12 @@ services:
         condition: service_healthy
     ports:
       - "3000:3000"
+    # Load environment variables from .env file (optional, create from .env.example)
+    env_file:
+      - path: .env
+        required: false
     environment:
+      # These override/supplement .env values
       # Enable configuration validation
       - VALIDATE_CONFIG=true
       - VALIDATE_CONFIG_RULES=/app/config/web-app-validation.sh
@@ -55,6 +60,8 @@ services:
       - SESSION_SECRET=${SESSION_SECRET:-dev-session-secret}
 
       # API keys (should use secrets in production)
+      # Note: These are for direct API usage in your application code.
+      # They do NOT work with Claude Code CLI (which requires running 'claude' to authenticate).
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
 
