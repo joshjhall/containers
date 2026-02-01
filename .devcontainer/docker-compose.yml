@@ -35,7 +35,7 @@ services:
     init: true
     # Entrypoint handles Docker socket permissions via sudo (no root needed)
     # devcontainer.json sets overrideCommand: false so our ENTRYPOINT runs
-    command: ["sleep", "infinity"]
+    command: [ "sleep", "infinity" ]
     # Health check configuration (inherits from Dockerfile)
     # Override if needed: healthcheck: {test: ["CMD", "healthcheck", "--verbose"]}
     networks:
