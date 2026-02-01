@@ -151,7 +151,7 @@ All features are controlled via `INCLUDE_<FEATURE>=true/false` build arguments:
 `GOLANG_DEV`, `JAVA_DEV`, `MOJO_DEV`, `KOTLIN_DEV`
 **Android**: `ANDROID`, `ANDROID_DEV`
 **Tools**: `DEV_TOOLS`, `DOCKER`, `OP` (1Password CLI), `CRON`
-**Claude Code**: `MCP_SERVERS` (MCP servers + bash LSP)
+**Claude Code**: `MCP_SERVERS` (deprecated, kept for backward compatibility)
 **Cloud**: `KUBERNETES`, `TERRAFORM`, `AWS`, `GCLOUD`, `CLOUDFLARE`
 **Database**: `POSTGRES_CLIENT`, `REDIS_CLIENT`, `SQLITE_CLIENT`
 **AI/ML**: `OLLAMA` (Local LLM support)
@@ -250,10 +250,10 @@ docker run -e CLAUDE_EXTRA_PLUGINS="stripe,posthog" ...
 **Note**: The startup script is idempotent and will skip plugins that are
 already installed. To verify installed plugins, run: `claude plugin list`
 
-### MCP Servers (installed with dev-tools when Node.js available)
+### MCP Servers (installed by claude-code-setup.sh when Node.js available)
 
-MCP servers are automatically installed by `dev-tools.sh` when Node.js is
-available (`INCLUDE_NODE=true` or `INCLUDE_NODE_DEV=true`):
+MCP servers are automatically installed by `claude-code-setup.sh` when Node.js
+is available (`INCLUDE_NODE=true` or `INCLUDE_NODE_DEV=true`):
 
 - **Filesystem**: `@modelcontextprotocol/server-filesystem` - Enhanced file ops
 - **GitHub**: `@modelcontextprotocol/server-github` - GitHub API integration
@@ -277,6 +277,27 @@ Set the appropriate environment variable at runtime:
 
 - `GITHUB_TOKEN`: GitHub personal access token (when using GitHub)
 - `GITLAB_TOKEN`: GitLab personal access token (when using GitLab)
+
+### Claude Code Authentication
+
+Plugin installation requires interactive authentication.
+
+**Plugin installation workflow**:
+
+```bash
+# 1. Inside container, run Claude and authenticate when prompted
+claude
+
+# 2. Close the Claude client (Ctrl+C or exit)
+
+# 3. Run setup to install plugins
+claude-setup
+
+# 4. Restart Claude if needed
+```
+
+**Note**: Environment variables (including `ANTHROPIC_API_KEY`) do NOT work with the
+Claude Code CLI. You must run `claude` to authenticate interactively.
 
 Verify configuration with:
 
