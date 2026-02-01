@@ -81,7 +81,7 @@ echo "$TZ" > /etc/timezone
 # ============================================================================
 echo "=== Installing zoxide ==="
 ARCH=$(dpkg --print-architecture)
-ZOXIDE_VERSION="${ZOXIDE_VERSION:-0.9.8}"
+ZOXIDE_VERSION="0.9.9"
 cd /tmp
 if [ "$ARCH" = "amd64" ]; then
     command curl -L "https://github.com/ajeetdsouza/zoxide/releases/download/v${ZOXIDE_VERSION}/zoxide-${ZOXIDE_VERSION}-x86_64-unknown-linux-musl.tar.gz" | tar xz

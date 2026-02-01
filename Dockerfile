@@ -316,7 +316,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 
 # Kubernetes tools
 ARG INCLUDE_KUBERNETES=false
-ARG KUBECTL_VERSION=1.33.0
+ARG KUBECTL_VERSION=1.33.7
 ARG K9S_VERSION=0.50.18
 ARG KREW_VERSION=0.4.5
 ARG HELM_VERSION=4.1.0
@@ -335,7 +335,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     fi
 # Terraform
 ARG INCLUDE_TERRAFORM=false
-ARG TERRAGRUNT_VERSION=0.98.0
+ARG TERRAGRUNT_VERSION=0.99.1
 ARG TFDOCS_VERSION=0.21.0
 ARG TFLINT_VERSION=0.60.0
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \

@@ -24,7 +24,7 @@
 # Configuration
 # ============================================================================
 
-JDTLS_VERSION="${JDTLS_VERSION:-1.55.0}"
+JDTLS_VERSION="1.56.0"
 JDTLS_HOME="/opt/jdtls"
 JDTLS_DATA_DIR="/cache/jdtls"
 
