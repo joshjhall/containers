@@ -52,7 +52,7 @@ LAZYGIT_VERSION="${LAZYGIT_VERSION:-0.58.1}"
 DELTA_VERSION="${DELTA_VERSION:-0.18.2}"
 ACT_VERSION="${ACT_VERSION:-0.2.84}"
 GITCLIFF_VERSION="${GITCLIFF_VERSION:-2.8.0}"
-BIOME_VERSION="${BIOME_VERSION:-1.9.4}"
+BIOME_VERSION="2.3.13"
 TAPLO_VERSION="${TAPLO_VERSION:-0.10.0}"
 
 # ============================================================================
@@ -810,13 +810,14 @@ case "$ARCH" in
 esac
 
 if [ -n "$BIOME_BINARY" ]; then
-    BIOME_URL="https://github.com/biomejs/biome/releases/download/cli/v${BIOME_VERSION}/${BIOME_BINARY}"
+    # Biome 2.x uses @biomejs/biome@VERSION tag format (1.x used cli/vVERSION)
+    BIOME_URL="https://github.com/biomejs/biome/releases/download/@biomejs/biome@${BIOME_VERSION}/${BIOME_BINARY}"
 
     # Calculate checksum from download (Biome doesn't publish checksums)
     log_message "Calculating checksum for Biome ${BIOME_VERSION}..."
     if ! BIOME_CHECKSUM=$(calculate_checksum_sha256 "$BIOME_URL" 2>/dev/null); then
         log_error "Failed to download and calculate checksum for Biome ${BIOME_VERSION}"
-        log_error "Please verify version exists: https://github.com/biomejs/biome/releases/tag/cli/v${BIOME_VERSION}"
+        log_error "Please verify version exists: https://github.com/biomejs/biome/releases/tag/@biomejs/biome@${BIOME_VERSION}"
         log_feature_end
         exit 1
     fi
