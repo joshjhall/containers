@@ -42,6 +42,10 @@ log_feature_start "Claude Code Setup"
 # ============================================================================
 log_message "Installing Claude Code CLI..."
 
+# Claude Code release channel (stable or latest)
+CLAUDE_CHANNEL="${CLAUDE_CHANNEL:-stable}"
+log_message "Using Claude Code channel: ${CLAUDE_CHANNEL}"
+
 # Get the target user's home directory
 TARGET_USER="${USERNAME:-developer}"
 if [ "$TARGET_USER" = "root" ]; then
@@ -85,8 +89,9 @@ fi
 
 if [ -f "${BUILD_TEMP}/claude-install.sh" ]; then
     # Install Claude Code to the target user's home directory
-    log_command "Installing Claude Code for user $TARGET_USER" \
-        su -c "cd '$USER_HOME' && bash ${BUILD_TEMP}/claude-install.sh" "$TARGET_USER" || {
+    # Pass the channel (stable or latest) to the installer
+    log_command "Installing Claude Code for user $TARGET_USER (channel: ${CLAUDE_CHANNEL})" \
+        su -c "cd '$USER_HOME' && bash ${BUILD_TEMP}/claude-install.sh ${CLAUDE_CHANNEL}" "$TARGET_USER" || {
             log_warning "Claude Code installation failed"
             log_warning "Claude Code will not be available in this container"
         }
