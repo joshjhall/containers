@@ -278,6 +278,50 @@ op-exec() {
     "$@"
 }
 
+# ----------------------------------------------------------------------------
+# Automatic MCP Token Loading from 1Password
+# ----------------------------------------------------------------------------
+# Automatically load GITHUB_TOKEN and GITLAB_TOKEN from 1Password
+# when OP_SERVICE_ACCOUNT_TOKEN is set and token refs are configured.
+#
+# Environment Variables:
+#   OP_SERVICE_ACCOUNT_TOKEN - 1Password service account token
+#   OP_GITHUB_TOKEN_REF      - 1Password ref for GitHub token (e.g., op://Vault/Item/field)
+#   OP_GITLAB_TOKEN_REF      - 1Password ref for GitLab token (e.g., op://Vault/Item/field)
+#
+# Example usage in .env or docker-compose.yml:
+#   OP_SERVICE_ACCOUNT_TOKEN=ops_xxx...
+#   OP_GITHUB_TOKEN_REF=op://Development/GitHub-PAT/token
+#   OP_GITLAB_TOKEN_REF=op://Development/GitLab-PAT/token
+# ----------------------------------------------------------------------------
+_op_load_mcp_tokens() {
+    # Skip if op not available or no service account token
+    if ! _check_command op || [ -z "${OP_SERVICE_ACCOUNT_TOKEN:-}" ]; then
+        return 0
+    fi
+
+    # Disable xtrace to prevent token exposure in logs
+    local _old_xtrace
+    _old_xtrace=$(set +o | grep xtrace)
+    set +x
+
+    # Load GITHUB_TOKEN if ref configured and not already set
+    if [ -n "${OP_GITHUB_TOKEN_REF:-}" ] && [ -z "${GITHUB_TOKEN:-}" ]; then
+        GITHUB_TOKEN=$(op read "${OP_GITHUB_TOKEN_REF}" 2>/dev/null) && export GITHUB_TOKEN
+    fi
+
+    # Load GITLAB_TOKEN if ref configured and not already set
+    if [ -n "${OP_GITLAB_TOKEN_REF:-}" ] && [ -z "${GITLAB_TOKEN:-}" ]; then
+        GITLAB_TOKEN=$(op read "${OP_GITLAB_TOKEN_REF}" 2>/dev/null) && export GITLAB_TOKEN
+    fi
+
+    # Restore xtrace state
+    eval "$_old_xtrace"
+}
+
+# Automatically load MCP tokens on shell initialization
+_op_load_mcp_tokens
+
 # Clean up helper functions
 unset -f _check_command 2>/dev/null || true
 
@@ -317,6 +361,55 @@ EOF
 
 log_command "Setting 1Password startup script permissions" \
     chmod +x /etc/container/first-startup/50-1password-setup.sh
+
+# ============================================================================
+# MCP Token Loading Startup Script
+# ============================================================================
+log_message "Creating MCP token loading startup script..."
+
+# Create regular startup directory if it doesn't exist
+log_command "Creating container startup directory" \
+    mkdir -p /etc/container/startup
+
+command cat > /etc/container/startup/45-op-mcp-tokens.sh << 'EOF'
+#!/bin/bash
+# Load MCP tokens (GITHUB_TOKEN, GITLAB_TOKEN) from 1Password on container startup
+#
+# This script runs on every container startup (not just first startup) to ensure
+# tokens are available for background processes and non-interactive shells.
+#
+# Environment Variables:
+#   OP_SERVICE_ACCOUNT_TOKEN - 1Password service account token (required)
+#   OP_GITHUB_TOKEN_REF      - 1Password ref for GitHub token
+#   OP_GITLAB_TOKEN_REF      - 1Password ref for GitLab token
+#
+# Example:
+#   OP_SERVICE_ACCOUNT_TOKEN=ops_xxx...
+#   OP_GITHUB_TOKEN_REF=op://Development/GitHub-PAT/token
+#
+set +e  # Don't exit on errors
+
+# Skip if op not available
+command -v op >/dev/null 2>&1 || exit 0
+
+# Skip if no service account token configured
+[ -z "${OP_SERVICE_ACCOUNT_TOKEN:-}" ] && exit 0
+
+# Load GITHUB_TOKEN if ref configured and not already set
+if [ -n "${OP_GITHUB_TOKEN_REF:-}" ] && [ -z "${GITHUB_TOKEN:-}" ]; then
+    GITHUB_TOKEN=$(op read "${OP_GITHUB_TOKEN_REF}" 2>/dev/null) && export GITHUB_TOKEN
+fi
+
+# Load GITLAB_TOKEN if ref configured and not already set
+if [ -n "${OP_GITLAB_TOKEN_REF:-}" ] && [ -z "${GITLAB_TOKEN:-}" ]; then
+    GITLAB_TOKEN=$(op read "${OP_GITLAB_TOKEN_REF}" 2>/dev/null) && export GITLAB_TOKEN
+fi
+
+exit 0
+EOF
+
+log_command "Setting MCP token startup script permissions" \
+    chmod 755 /etc/container/startup/45-op-mcp-tokens.sh
 
 # ============================================================================
 # Verification Script

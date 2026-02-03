@@ -242,6 +242,16 @@ docker build --build-arg CLAUDE_EXTRA_PLUGINS="stripe,posthog,vercel" ...
 docker run -e CLAUDE_EXTRA_PLUGINS="stripe,posthog" ...
 ```
 
+**Release channel**: Use `CLAUDE_CHANNEL` to select the Claude Code release channel:
+
+```bash
+# Use stable channel (default, recommended)
+docker build --build-arg CLAUDE_CHANNEL=stable ...
+
+# Use latest channel (bleeding edge)
+docker build --build-arg CLAUDE_CHANNEL=latest ...
+```
+
 **Environment variable**: `ENABLE_LSP_TOOL=1` is set in the shell environment.
 
 **Build-time configuration**: Feature flags are persisted to
@@ -277,6 +287,30 @@ Set the appropriate environment variable at runtime:
 
 - `GITHUB_TOKEN`: GitHub personal access token (when using GitHub)
 - `GITLAB_TOKEN`: GitLab personal access token (when using GitLab)
+
+#### Automatic Token Loading from 1Password
+
+When `INCLUDE_OP=true`, you can automatically load `GITHUB_TOKEN` and `GITLAB_TOKEN`
+from 1Password using a service account:
+
+| Variable                   | Purpose                         | Example                       |
+| -------------------------- | ------------------------------- | ----------------------------- |
+| `OP_SERVICE_ACCOUNT_TOKEN` | 1Password service account token | `ops_xxx...`                  |
+| `OP_GITHUB_TOKEN_REF`      | 1Password ref for GitHub token  | `op://Vault/GitHub-PAT/token` |
+| `OP_GITLAB_TOKEN_REF`      | 1Password ref for GitLab token  | `op://Vault/GitLab-PAT/token` |
+
+Example docker-compose.yml:
+
+```yaml
+services:
+  dev:
+    environment:
+      - OP_SERVICE_ACCOUNT_TOKEN=${OP_SERVICE_ACCOUNT_TOKEN}
+      - OP_GITHUB_TOKEN_REF=op://Development/GitHub-PAT/token
+```
+
+Tokens are loaded automatically on shell initialization and container startup.
+Existing tokens are preserved (won't overwrite if already set).
 
 ### Claude Code Authentication
 
