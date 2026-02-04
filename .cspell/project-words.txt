@@ -1,7 +1,4 @@
-# Custom dictionary for rust-core project
-# This file will be automatically updated when you add words via VS Code
 adoptium
-Adoptium
 AIKMS
 ajeetdsouza
 AKIAIOSFODNN
@@ -41,7 +38,6 @@ blogdown
 bookdown
 btop
 buildkit
-BUILDKIT
 buildx
 busa
 byebug
@@ -56,11 +52,12 @@ cftroute
 cftrun
 checkwinsize
 chgrp
+ci
 CLIINDEX
 CLIMAIN
+clippy
 cloudbuild
 cloudflared
-Cloudflared
 CLOUDSDK
 codellama
 colordiff
@@ -77,12 +74,12 @@ coverprofile
 covr
 CPUPROFILE
 cran
-CRAN
 crcmod
 createdb
 createuser
 creds
 csvfile
+# Custom dictionary for rust-core project
 cweill
 Daemonless
 dandavison
@@ -94,15 +91,12 @@ dbnum
 dbplyr
 dbstat
 debsig
-Debsig
 debugme
 depcheck
 devcontainers
 Dgroup
 Dinteractive
 direnv
-Direnv
-DIRENV
 direnvrc
 dirmngr
 dirspell
@@ -130,8 +124,6 @@ dylib
 emailaddress
 ensurepip
 entr
-Entr
-ENTR
 eradman
 erasedups
 errcheck
@@ -179,9 +171,9 @@ gids
 GITCLIFF
 githistory
 githubcli
+gitlab
 gitlog
 glab
-GLAB
 glci
 glis
 gliv
@@ -191,7 +183,6 @@ glpipe
 gobench
 gobin
 gocache
-GOCACHE
 gochecknoglobals
 gochecknoinits
 gocognit
@@ -209,7 +200,6 @@ gofmtall
 gofumpt
 goimports
 golangci
-Golangci
 golint
 gols
 gomd
@@ -217,16 +207,13 @@ gomi
 gomock
 gomod
 gomodcache
-GOMODCACHE
 gomodifytags
 gomt
 gomv
 googleusercontent
 gopath
-GOPATH
 goplay
 gopls
-Gopls
 GOPROXY
 gops
 gordonklaus
@@ -257,14 +244,12 @@ groff
 gruntwork
 gsutil
 guardfile
-Guardfile
 gwcb
 gwdep
 gwtasks
 gwts
 haya
 healthcheck
-HEALTHCHECK
 hgrep
 histappend
 historyfile
@@ -283,10 +268,8 @@ IPYTHONDIR
 Iseconds
 isort
 javac
-Javac
 javap
 jbang
-JBANG
 jbangdev
 jbedit
 jbrun
@@ -303,7 +286,6 @@ jstack
 junegunn
 jupyterlab
 justfile
-JUSTFILE
 Kaniko
 kctx
 kdel
@@ -311,23 +293,18 @@ kdesc
 kexec
 keygen
 keyserver
-Keyserver
 kgns
 kgpa
 kisielk
 klog
 knitr
 krew
-Krew
 kubeconfig
-KUBECONFIG
 kubectx
 kubens
 kyoh
 lazydocker
-Lazydocker
 lazygit
-LAZYGIT
 ldconfig
 LDFLAGS
 LESSOPEN
@@ -371,7 +348,6 @@ libyaml
 linestyle
 lintr
 lldb
-LLDB
 localdomain
 localtime
 localtunnel
@@ -389,7 +365,6 @@ Microbenchmark
 mjbd
 mjbo
 mkcert
-MKCERT
 mocharc
 mockgen
 mojopkg
@@ -400,7 +375,6 @@ mvnci
 mvncist
 mvncp
 mvnd
-MVND
 mvndaemon
 mvndep
 mvndeps
@@ -439,7 +413,6 @@ nmon
 nocapture
 nocaseglob
 nodemon
-Nodemon
 nodesource
 nodistro
 noninteractive
@@ -453,6 +426,7 @@ ntest
 nullglob
 nullvalue
 numpy
+observability
 ofabry
 ollama
 oneline
@@ -465,7 +439,6 @@ pcall
 pcinstall
 Perc
 pgconnect
-PGCONNECT
 PGDATABASE
 pgdump
 PGHOST
@@ -480,8 +453,6 @@ PGUSER
 pipenv
 pipx
 pixi
-Pixi
-PIXI
 pkgbuild
 pkgdown
 platformdirs
@@ -496,7 +467,6 @@ protoc
 prun
 pryrc
 psql
-PSQL
 psqlrc
 purrr
 pycache
@@ -509,11 +479,9 @@ pypoetry
 pyproject
 pytc
 pytest
-Pytest
 PYTHONDEVMODE
 PYTHONHOME
 pythonpath
-PYTHONPATH
 pytv
 Rakefile
 Ranke
@@ -528,7 +496,6 @@ readr
 readxl
 realname
 rediscli
-REDISCLI
 redisclirc
 renv
 Renviron
@@ -549,13 +516,11 @@ Rscript
 Rserve
 rstyle
 rubocop
-Rubocop
 rubygems
 rustc
 rustdoc
+rustfmt
 rustup
-Rustup
-RUSTUP
 rvest
 sbinit
 sbjar
@@ -567,6 +532,7 @@ SCRIPTNAME
 SDKMAN
 secretpass
 securego
+serde
 setuptools
 setwd
 sharkdp
@@ -580,7 +546,6 @@ simplecov
 skel
 socat
 solargraph
-Solargraph
 Sottile
 spotbugs
 springframework
@@ -603,12 +568,8 @@ Sysbox
 sysstat
 tcpdump
 temurin
-Temurin
-TEMURIN
 terraformrc
 terragrunt
-Terragrunt
-TERRAGRUNT
 testcov
 testdata
 testinstance
@@ -623,6 +584,7 @@ tflint
 tfsec
 tfst
 tfstate
+# This file will be automatically updated when you add words via VS Code
 tibble
 tidyr
 tidyverse
@@ -631,7 +593,9 @@ tlsv
 tmpl
 TOCTOU
 tokei
+tokio
 traceroute
+tracing
 trixie
 truecolor
 typedoc
@@ -641,7 +605,6 @@ unparam
 uptodate
 urandom
 usermod
-Usermod
 usernamehw
 usethis
 uudashr
@@ -649,13 +612,11 @@ venv
 vfzu
 virtualenvs
 vite
-Vite
 viteb
 VITECONFIG
 vitejs
 vitep
 vitest
-Vitest
 vtsls
 wagoodman
 wayou

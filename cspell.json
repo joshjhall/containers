@@ -10,7 +10,7 @@
     }
   ],
   "dictionaries": ["project-words"],
-  "words": ["rustfmt", "clippy", "serde", "tokio", "tracing", "observability", "gitlab", "ci"],
+  "words": [],
   "ignoreWords": [],
   "import": []
 }

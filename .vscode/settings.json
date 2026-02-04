@@ -1,5 +1,5 @@
 {
-    // Editor settings
+  // Editor settings
   "editor.formatOnSave": true,
   "editor.codeActionsOnSave": {
     "source.organizeImports": "explicit",
@@ -8,5 +8,13 @@
 
   // cSpell settings - use external configuration file
   "cSpell.useGitignore": true,
-  "cSpell.import": ["./cspell.json"]
+  "cSpell.import": ["./cspell.json"],
+  "cSpell.customDictionaries": {
+    "project-words": {
+      "name": "project-words",
+      "path": "${workspaceFolder}/.cspell/project-words.txt",
+      "addWords": true,
+      "scope": "workspace"
+    }
+  }
 }
