@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 # Universal Container Build System
-# Version: 4.14.3
+# Version: 4.14.4
 # Supports multiple contexts: devcontainer, agents, CI/CD, production
 
 # ============================================================================
