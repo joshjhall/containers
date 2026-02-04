@@ -150,7 +150,7 @@ cd /
 log_message "Installing JBang..."
 
 # Download and extract JBang directly (more reliable than installer script)
-JBANG_VERSION="${JBANG_VERSION:-0.135.1}"
+JBANG_VERSION="${JBANG_VERSION:-0.136.0}"
 JBANG_TAR="jbang-${JBANG_VERSION}.tar"
 JBANG_URL="https://github.com/jbangdev/jbang/releases/download/v${JBANG_VERSION}/${JBANG_TAR}"
 
@@ -245,7 +245,7 @@ log_command "Creating JARs directory" \
 # ============================================================================
 log_message "Installing Google Java Format..."
 
-GJF_VERSION="${GJF_VERSION:-1.33.0}"
+GJF_VERSION="${GJF_VERSION:-1.34.0}"
 
 # JMH version for benchmarking
 JMH_VERSION="1.37"
