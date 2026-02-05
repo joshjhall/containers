@@ -259,9 +259,23 @@ fi
 MARKETPLACE="claude-plugins-official"
 PLUGINS_INSTALLED=false
 
+# Pattern matching function (testable - takes list output as parameter)
+# Output format from 'claude plugin list':
+#   ❯ plugin-name@marketplace - description
+#   ❯ another-plugin@marketplace - description
+_match_plugin_in_list() {
+    local plugin_name="$1"
+    local list_output="$2"
+    # Match: "❯ plugin-name@" at start of line (after any whitespace)
+    # The ❯ character is followed by space, then plugin name, then @
+    echo "$list_output" | grep -qE "^[[:space:]]*❯ ${plugin_name}@" 2>/dev/null
+}
+
 has_plugin() {
     local plugin_name="$1"
-    claude plugin list 2>/dev/null | grep -q "❯ ${plugin_name}@" 2>/dev/null || return 1
+    local list_output
+    list_output=$(claude plugin list 2>/dev/null) || return 1
+    _match_plugin_in_list "$plugin_name" "$list_output"
 }
 
 install_plugin() {
@@ -392,11 +406,22 @@ fi
 echo "Configuring MCP servers..."
 echo ""
 
+# Pattern matching function (testable - takes list output as parameter)
+# Output format from 'claude mcp list':
+#   servername: npx -y @modelcontextprotocol/server-xxx - running
+#   another-server: command args - stopped
+_match_mcp_server_in_list() {
+    local server_name="$1"
+    local list_output="$2"
+    # Match: server name at start of line followed by colon
+    echo "$list_output" | grep -qE "^${server_name}:" 2>/dev/null
+}
+
 has_mcp_server() {
     local server_name="$1"
-    # Output format is: "servername: command args - status"
-    # Match server name at start of line followed by colon
-    claude mcp list 2>/dev/null | grep -qE "^${server_name}:" 2>/dev/null || return 1
+    local list_output
+    list_output=$(claude mcp list 2>/dev/null) || return 1
+    _match_mcp_server_in_list "$server_name" "$list_output"
 }
 
 add_mcp_server() {
@@ -439,11 +464,45 @@ add_mcp_server "figma-desktop" -t http "figma-desktop" "http://host.docker.inter
 # Values: github, gitlab, both, none
 GIT_PLATFORM_OVERRIDE="${GIT_PLATFORM:-}"
 
+# Parse host from git remote URL (testable - pure function)
+# Supports: https://, git@, ssh:// URL formats
+# Returns: hostname or empty string if parsing fails
+_parse_git_remote_host() {
+    local remote_url="$1"
+    local host=""
+
+    # HTTPS: https://github.com/user/repo.git
+    [[ "$remote_url" =~ ^https?://([^/]+)/ ]] && host="${BASH_REMATCH[1]}"
+
+    # SSH shorthand: git@github.com:user/repo.git
+    [[ -z "$host" && "$remote_url" =~ ^git@([^:]+): ]] && host="${BASH_REMATCH[1]}"
+
+    # SSH URL: ssh://git@github.com/user/repo.git
+    [[ -z "$host" && "$remote_url" =~ ^ssh://[^@]+@([^/]+)/ ]] && host="${BASH_REMATCH[1]}"
+
+    # Strip port number if present (e.g., github.com:22 -> github.com)
+    host="${host%%:*}"
+
+    echo "$host"
+}
+
+# Determine git platform from hostname (testable - pure function)
+# Returns: github, gitlab:hostname, or unknown:hostname
+_classify_git_host() {
+    local host="$1"
+
+    [[ -z "$host" ]] && { echo "none"; return; }
+    [[ "$host" == "github.com" ]] && { echo "github"; return; }
+    [[ "$host" == "gitlab.com" || "$host" == *"gitlab"* ]] && { echo "gitlab:$host"; return; }
+    echo "unknown:$host"
+}
+
 detect_git_platform() {
     local remote_url=""
     if command -v git &>/dev/null && git rev-parse --git-dir &>/dev/null 2>&1; then
         remote_url=$(git config --get remote.origin.url 2>/dev/null || true)
     fi
+
     if [ -z "$remote_url" ]; then
         echo "[debug] No git remote URL found" >&2
         echo "none"
@@ -451,21 +510,17 @@ detect_git_platform() {
     fi
     echo "[debug] Git remote URL: $remote_url" >&2
 
-    local host=""
-    [[ "$remote_url" =~ ^https?://([^/]+)/ ]] && host="${BASH_REMATCH[1]}"
-    [[ "$remote_url" =~ ^git@([^:]+): ]] && host="${BASH_REMATCH[1]}"
-    [[ "$remote_url" =~ ^ssh://[^@]+@([^/]+)/ ]] && host="${BASH_REMATCH[1]}"
+    local host
+    host=$(_parse_git_remote_host "$remote_url")
+
     if [ -z "$host" ]; then
         echo "[debug] Could not parse host from URL" >&2
         echo "none"
         return
     fi
 
-    host="${host%%:*}"
     echo "[debug] Detected host: $host" >&2
-    [[ "$host" == "github.com" ]] && { echo "github"; return; }
-    [[ "$host" == "gitlab.com" ]] || [[ "$host" == *"gitlab"* ]] && { echo "gitlab:$host"; return; }
-    echo "unknown:$host"
+    _classify_git_host "$host"
 }
 
 # Use override if set, otherwise detect
