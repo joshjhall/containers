@@ -371,7 +371,9 @@ echo ""
 
 has_mcp_server() {
     local server_name="$1"
-    claude mcp list 2>/dev/null | grep -qE "^${server_name}[[:space:]]" 2>/dev/null || return 1
+    # Check multiple possible output formats from claude mcp list
+    # Format can be: "servername" on its own line, or "  servername  type  ..." with columns
+    claude mcp list 2>/dev/null | grep -qE "(^|[[:space:]])${server_name}([[:space:]]|$)" 2>/dev/null || return 1
 }
 
 add_mcp_server() {
@@ -401,28 +403,50 @@ add_mcp_server "figma-desktop" -t http "figma-desktop" "http://host.docker.inter
 # ============================================================================
 # Git Platform Detection for GitHub/GitLab MCPs
 # ============================================================================
+# Allow explicit override via environment variable
+# Values: github, gitlab, both, none
+GIT_PLATFORM_OVERRIDE="${GIT_PLATFORM:-}"
+
 detect_git_platform() {
     local remote_url=""
     if command -v git &>/dev/null && git rev-parse --git-dir &>/dev/null 2>&1; then
         remote_url=$(git config --get remote.origin.url 2>/dev/null || true)
     fi
-    [ -z "$remote_url" ] && { echo "none"; return; }
+    if [ -z "$remote_url" ]; then
+        echo "[debug] No git remote URL found" >&2
+        echo "none"
+        return
+    fi
+    echo "[debug] Git remote URL: $remote_url" >&2
 
     local host=""
     [[ "$remote_url" =~ ^https?://([^/]+)/ ]] && host="${BASH_REMATCH[1]}"
     [[ "$remote_url" =~ ^git@([^:]+): ]] && host="${BASH_REMATCH[1]}"
     [[ "$remote_url" =~ ^ssh://[^@]+@([^/]+)/ ]] && host="${BASH_REMATCH[1]}"
-    [ -z "$host" ] && { echo "none"; return; }
+    if [ -z "$host" ]; then
+        echo "[debug] Could not parse host from URL" >&2
+        echo "none"
+        return
+    fi
 
     host="${host%%:*}"
+    echo "[debug] Detected host: $host" >&2
     [[ "$host" == "github.com" ]] && { echo "github"; return; }
     [[ "$host" == "gitlab.com" ]] || [[ "$host" == *"gitlab"* ]] && { echo "gitlab:$host"; return; }
     echo "unknown:$host"
 }
 
-platform_info=$(detect_git_platform)
-platform="${platform_info%%:*}"
-platform_host="${platform_info#*:}"
+# Use override if set, otherwise detect
+if [ -n "$GIT_PLATFORM_OVERRIDE" ]; then
+    echo "  Using GIT_PLATFORM override: $GIT_PLATFORM_OVERRIDE"
+    platform_info="$GIT_PLATFORM_OVERRIDE"
+    platform="$GIT_PLATFORM_OVERRIDE"
+    platform_host=""
+else
+    platform_info=$(detect_git_platform)
+    platform="${platform_info%%:*}"
+    platform_host="${platform_info#*:}"
+fi
 
 case "$platform" in
     github)
@@ -438,15 +462,30 @@ case "$platform" in
             -e "GITLAB_API_URL=https://${platform_host}/api/v4" \
             -- npx -y @modelcontextprotocol/server-gitlab
         ;;
-    *)
-        # Ambiguous or no git remote - install both for flexibility
-        echo "  No specific git platform detected - installing both GitHub and GitLab MCPs"
+    both)
+        echo "  Installing both GitHub and GitLab MCPs (GIT_PLATFORM=both)"
         add_mcp_server "github" -t stdio "github" \
             -e 'GITHUB_PERSONAL_ACCESS_TOKEN=${GITHUB_TOKEN}' \
             -- npx -y @modelcontextprotocol/server-github
         add_mcp_server "gitlab" -t stdio "gitlab" \
             -e 'GITLAB_PERSONAL_ACCESS_TOKEN=${GITLAB_TOKEN}' \
             -- npx -y @modelcontextprotocol/server-gitlab
+        ;;
+    none)
+        # No git remote and no override - default to GitHub only (most common case)
+        echo "  No git remote detected - defaulting to GitHub MCP only"
+        echo "  Tip: Set GIT_PLATFORM=both or GIT_PLATFORM=gitlab to change"
+        add_mcp_server "github" -t stdio "github" \
+            -e 'GITHUB_PERSONAL_ACCESS_TOKEN=${GITHUB_TOKEN}' \
+            -- npx -y @modelcontextprotocol/server-github
+        ;;
+    *)
+        # Unknown host (e.g., self-hosted git server) - default to GitHub only
+        echo "  Unknown git host ($platform_host) - defaulting to GitHub MCP"
+        echo "  Tip: Set GIT_PLATFORM=gitlab or GIT_PLATFORM=both if needed"
+        add_mcp_server "github" -t stdio "github" \
+            -e 'GITHUB_PERSONAL_ACCESS_TOKEN=${GITHUB_TOKEN}' \
+            -- npx -y @modelcontextprotocol/server-github
         ;;
 esac
 
@@ -505,15 +544,251 @@ log_command "Setting Claude Code startup script permissions" \
     chmod +x /etc/container/first-startup/30-claude-code-setup.sh
 
 # ============================================================================
+# Auto-Setup Watcher (Detects authentication and runs claude-setup)
+# ============================================================================
+log_message "Creating authentication watcher scripts..."
+
+# Create the watcher script that monitors for credential file changes
+command cat > /usr/local/bin/claude-auth-watcher << 'AUTH_WATCHER_EOF'
+#!/bin/bash
+# claude-auth-watcher - Watches for Claude authentication and runs setup
+#
+# This script runs in the background after container startup. It watches for
+# Claude credential files to appear (created when user runs 'claude') and
+# automatically triggers claude-setup when authentication is detected.
+#
+# Uses inotifywait for efficient event-driven detection, with polling fallback.
+#
+# Environment Variables:
+#   CLAUDE_AUTH_WATCHER_TIMEOUT: Timeout in seconds (default: 14400 = 4 hours)
+#   CLAUDE_AUTH_WATCHER_INTERVAL: Polling interval in seconds (default: 30)
+
+set -euo pipefail
+
+# Configuration
+TIMEOUT="${CLAUDE_AUTH_WATCHER_TIMEOUT:-14400}"  # 4 hours default
+POLL_INTERVAL="${CLAUDE_AUTH_WATCHER_INTERVAL:-30}"
+CLAUDE_DIR="$HOME/.claude"
+MARKER_FILE="$CLAUDE_DIR/.container-setup-complete"
+CREDENTIALS_FILE="$CLAUDE_DIR/.credentials.json"
+
+log() {
+    echo "[claude-auth-watcher] $(date '+%Y-%m-%d %H:%M:%S') $*"
+}
+
+# Check if setup has already been completed
+if [ -f "$MARKER_FILE" ]; then
+    log "Setup already completed (marker file exists). Exiting."
+    exit 0
+fi
+
+# Check if already authenticated
+is_authenticated() {
+    if [ -f "$CREDENTIALS_FILE" ]; then
+        if grep -q '"claudeAiOauth"' "$CREDENTIALS_FILE" 2>/dev/null; then
+            return 0
+        fi
+    fi
+    if [ -f "$HOME/.claude.json" ]; then
+        if grep -q '"oauthAccount"' "$HOME/.claude.json" 2>/dev/null; then
+            return 0
+        fi
+    fi
+    return 1
+}
+
+# Run setup and create marker file
+run_setup() {
+    log "Authentication detected! Running claude-setup..."
+    if command -v claude-setup &>/dev/null; then
+        # Give a moment for auth files to be fully written
+        sleep 2
+        if claude-setup 2>&1 | tee -a "/tmp/claude-auth-watcher.log"; then
+            log "Setup completed successfully"
+            mkdir -p "$CLAUDE_DIR"
+            touch "$MARKER_FILE"
+            log "Marker file created: $MARKER_FILE"
+            return 0
+        else
+            log "Setup failed (see /tmp/claude-auth-watcher.log)"
+            return 1
+        fi
+    else
+        log "claude-setup not found"
+        return 1
+    fi
+}
+
+# If already authenticated, run setup immediately
+if is_authenticated; then
+    log "Already authenticated. Running setup..."
+    run_setup
+    exit $?
+fi
+
+log "Waiting for Claude authentication..."
+log "Timeout: ${TIMEOUT}s, Poll interval: ${POLL_INTERVAL}s"
+
+# Ensure .claude directory exists for watching
+mkdir -p "$CLAUDE_DIR"
+
+# Calculate end time
+END_TIME=$(($(date +%s) + TIMEOUT))
+
+# Try to use inotifywait if available (efficient event-driven detection)
+if command -v inotifywait &>/dev/null; then
+    log "Using inotifywait for efficient credential detection"
+
+    while [ "$(date +%s)" -lt "$END_TIME" ]; do
+        # Watch for credential file creation/modification
+        # Timeout after poll interval to allow periodic authentication check
+        if inotifywait -q -t "$POLL_INTERVAL" -e create -e modify "$CLAUDE_DIR" "$HOME" 2>/dev/null; then
+            # File change detected, check authentication
+            if is_authenticated; then
+                run_setup
+                exit $?
+            fi
+        fi
+
+        # Also check periodically in case we missed the event
+        if is_authenticated; then
+            run_setup
+            exit $?
+        fi
+    done
+else
+    log "inotifywait not available, using polling (install inotify-tools for efficiency)"
+
+    while [ "$(date +%s)" -lt "$END_TIME" ]; do
+        if is_authenticated; then
+            run_setup
+            exit $?
+        fi
+        sleep "$POLL_INTERVAL"
+    done
+fi
+
+log "Timeout reached. Exiting without setup."
+log "To run setup manually after authenticating: claude-setup"
+exit 0
+AUTH_WATCHER_EOF
+
+log_command "Setting claude-auth-watcher permissions" \
+    chmod +x /usr/local/bin/claude-auth-watcher
+
+# Create startup directory if it doesn't exist
+log_command "Creating container startup directory" \
+    mkdir -p /etc/container/startup
+
+# Create startup script that spawns the watcher in the background
+command cat > /etc/container/startup/35-claude-auth-watcher.sh << 'STARTUP_WATCHER_EOF'
+#!/bin/bash
+# Spawn Claude authentication watcher in background
+#
+# This runs as part of container startup and launches the watcher process
+# that will detect when the user authenticates with Claude and automatically
+# run claude-setup.
+
+MARKER_FILE="$HOME/.claude/.container-setup-complete"
+WATCHER_PID_FILE="/tmp/claude-auth-watcher.pid"
+
+# Skip if setup already completed
+if [ -f "$MARKER_FILE" ]; then
+    exit 0
+fi
+
+# Skip if watcher already running
+if [ -f "$WATCHER_PID_FILE" ] && kill -0 "$(cat "$WATCHER_PID_FILE")" 2>/dev/null; then
+    exit 0
+fi
+
+# Skip if claude-auth-watcher not available
+if ! command -v claude-auth-watcher &>/dev/null; then
+    exit 0
+fi
+
+# Launch watcher in background
+echo "[startup] Starting Claude authentication watcher in background..."
+nohup claude-auth-watcher > /tmp/claude-auth-watcher.log 2>&1 &
+echo $! > "$WATCHER_PID_FILE"
+echo "[startup] Watcher started (PID: $(cat "$WATCHER_PID_FILE"))"
+STARTUP_WATCHER_EOF
+
+log_command "Setting auth watcher startup script permissions" \
+    chmod +x /etc/container/startup/35-claude-auth-watcher.sh
+
+# Create bashrc hook as fallback detection mechanism
+command cat > /etc/bashrc.d/90-claude-auth-check.sh << 'BASHRC_AUTH_EOF'
+# Claude authentication check (fallback for prompt hook)
+#
+# This provides a fallback mechanism that checks for Claude authentication
+# on every Nth prompt. It's less efficient than the inotifywait watcher but
+# ensures setup runs even if the watcher isn't running.
+
+# Only run in interactive shells
+[[ $- != *i* ]] && return 0
+
+# Counter for prompt checks (run every 5th prompt)
+__CLAUDE_AUTH_CHECK_COUNTER=${__CLAUDE_AUTH_CHECK_COUNTER:-0}
+
+__claude_auth_prompt_check() {
+    local marker_file="$HOME/.claude/.container-setup-complete"
+
+    # Skip if setup already completed
+    [ -f "$marker_file" ] && return 0
+
+    # Increment counter and check every 5th prompt
+    __CLAUDE_AUTH_CHECK_COUNTER=$(( (__CLAUDE_AUTH_CHECK_COUNTER + 1) % 5 ))
+    [ "$__CLAUDE_AUTH_CHECK_COUNTER" -ne 0 ] && return 0
+
+    # Check for authentication
+    local credentials_file="$HOME/.claude/.credentials.json"
+    local config_file="$HOME/.claude.json"
+
+    if [ -f "$credentials_file" ] && grep -q '"claudeAiOauth"' "$credentials_file" 2>/dev/null; then
+        # Authenticated! Run setup in background
+        echo ""
+        echo "[claude] Authentication detected! Running setup in background..."
+        (claude-setup && touch "$marker_file") &>/dev/null &
+        disown 2>/dev/null || true
+        return 0
+    fi
+
+    if [ -f "$config_file" ] && grep -q '"oauthAccount"' "$config_file" 2>/dev/null; then
+        echo ""
+        echo "[claude] Authentication detected! Running setup in background..."
+        (claude-setup && touch "$marker_file") &>/dev/null &
+        disown 2>/dev/null || true
+        return 0
+    fi
+}
+
+# Add to PROMPT_COMMAND if not already present
+if [[ ! "${PROMPT_COMMAND:-}" =~ __claude_auth_prompt_check ]]; then
+    PROMPT_COMMAND="${PROMPT_COMMAND:+$PROMPT_COMMAND; }__claude_auth_prompt_check"
+fi
+BASHRC_AUTH_EOF
+
+log_command "Setting auth check bashrc permissions" \
+    chmod +x /etc/bashrc.d/90-claude-auth-check.sh
+
+# Install inotify-tools for efficient file watching (if apt available)
+if command -v apt-get &>/dev/null; then
+    log_message "Installing inotify-tools for efficient authentication detection..."
+    apt-get update -qq && apt-get install -y -qq inotify-tools 2>/dev/null || \
+        log_warning "Could not install inotify-tools (watcher will use polling)"
+fi
+
+# ============================================================================
 # Feature Summary
 # ============================================================================
 log_feature_summary \
     --feature "Claude Code Setup" \
-    --tools "claude,claude-setup,bash-language-server" \
-    --paths "/usr/local/bin/claude,/usr/local/bin/claude-setup,/etc/container/first-startup/30-claude-code-setup.sh" \
-    --env "ENABLE_LSP_TOOL,CLAUDE_EXTRA_PLUGINS" \
-    --commands "claude,claude-setup" \
-    --next-steps "Run 'claude' to authenticate, then 'claude-setup' to install plugins and configure MCP servers."
+    --tools "claude,claude-setup,claude-auth-watcher,bash-language-server" \
+    --paths "/usr/local/bin/claude,/usr/local/bin/claude-setup,/usr/local/bin/claude-auth-watcher,/etc/container/first-startup/30-claude-code-setup.sh,/etc/container/startup/35-claude-auth-watcher.sh" \
+    --env "ENABLE_LSP_TOOL,CLAUDE_EXTRA_PLUGINS,GIT_PLATFORM,CLAUDE_AUTH_WATCHER_TIMEOUT" \
+    --commands "claude,claude-setup,claude-auth-watcher" \
+    --next-steps "Run 'claude' to authenticate. Setup runs automatically after auth (via watcher). Manual: 'claude-setup'."
 
 # End logging
 log_feature_end
