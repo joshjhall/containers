@@ -218,27 +218,49 @@ test_system_tools_list() {
     # List of system tools that should be marked for installation
     # Note: either exa (Debian 11/12) or eza (Debian 13+) will be installed
     local system_tools=(
-        "telnet"
-        "netcat"
-        "nmap"
-        "tcpdump"
-        "socat"
-        "whois"
-        "htop"
-        "btop"
-        "iotop"
-        "sysstat"
-        "strace"
-        "unzip"
+        # Search and file tools
+        "ripgrep"
+        "fd-find"
+        "silversearcher-ag"
+        "ack"
+        "tree"
+        "rsync"
         "zip"
-        "p7zip-full"
-        "jq"
+        "unzip"
+        # Terminal and monitoring
+        "htop"
+        "ncdu"
         "bat"
+        "tmux"
         "eza"
         "exa"
-        "fd-find"
-        "ripgrep"
-        "duf"
+        # Network tools
+        "netcat-openbsd"
+        "dnsutils"
+        "iputils-ping"
+        "traceroute"
+        # System monitoring
+        "lsof"
+        "strace"
+        "sysstat"
+        "iotop"
+        # File processing
+        "jq"
+        "xxd"
+        # Development helpers
+        "inotify-tools"
+        "supervisor"
+        "xclip"
+        # Text editors
+        "nano"
+        "vim"
+        # Build tools
+        "build-essential"
+        "pkg-config"
+        # Version control extras
+        "tig"
+        "colordiff"
+        "gh"
     )
 
     # Verify each tool is in the expected list
