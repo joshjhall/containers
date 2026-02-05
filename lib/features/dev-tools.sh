@@ -7,18 +7,21 @@
 #
 # Features:
 #   - Modern CLI replacements: eza/exa (ls), bat (cat), duf (df), fd (find), ripgrep (grep)
-#   - Git helpers: lazygit, delta (side-by-side diffs), git-cliff (changelog generation)
-#   - Development utilities: direnv, just (with modules), entr
-#   - Network tools: telnet, netcat, nmap, tcpdump, socat, whois
-#   - System monitoring: htop, btop, iotop, sysstat, strace
+#   - Git helpers: lazygit, delta (side-by-side diffs), git-cliff, tig, colordiff
+#   - Development utilities: direnv, entr, fzf (fuzzy finder), inotify-tools
+#   - Network tools: netcat-openbsd, dnsutils, iputils-ping, traceroute
+#   - System monitoring: htop, iotop, sysstat, strace, lsof, ncdu
 #   - Security tools: mkcert (local HTTPS certificates)
-#   - Archive tools: unzip, zip, tar, 7zip
+#   - Archive tools: zip, unzip
 #   - GitHub/GitLab CLIs: gh, act (local GitHub Actions), glab
-#   - Text processing: jq
-#   - Release tools: git-cliff (automatic changelog from conventional commits)
+#   - Text processing: jq, xxd
+#   - Search tools: silversearcher-ag, ack, tree, rsync
+#   - Build tools: build-essential, pkg-config, libssl-dev, libffi-dev
+#   - Terminal tools: tmux, xclip
+#   - Text editors: nano, vim
+#   - Process management: supervisor
 #   - Linting/Formatting: biome (fast linter/formatter for JS/TS/JSON/CSS)
 #   - TOML tools: taplo (TOML formatter and linter)
-#   - And many more productivity tools
 #
 # Note: Claude Code CLI, plugins, and MCP servers are now installed by
 #       claude-code-setup.sh which runs after this script.
@@ -108,7 +111,8 @@ apt_install \
     ack \
     tree \
     rsync \
-    zip
+    zip \
+    unzip
 
 # Terminal and monitoring tools
 log_message "Installing terminal and monitoring tools..."
@@ -148,6 +152,7 @@ apt_install \
 # File processing extras
 log_message "Installing file processing tools..."
 apt_install \
+    jq \
     xxd
 
 # Development helpers

@@ -6,12 +6,13 @@
 #   code quality, and documentation. All tools are installed as gems.
 #
 # Features:
-#   - Testing: rspec, minitest, capybara, simplecov
-#   - Debugging: pry, byebug, better_errors
-#   - Code Quality: rubocop, reek, brakeman
-#   - Documentation: yard, rdoc
-#   - Utilities: bundler-audit, solargraph (LSP)
-#   - Rails tools: rails, spring
+#   - Testing: rspec, minitest, test-unit, cucumber, capybara, simplecov
+#   - Debugging: pry, pry-byebug, pry-rescue, pry-doc, byebug, better_errors, binding_of_caller
+#   - Code Quality: rubocop, rubocop-rspec, rubocop-rails, rubocop-performance, reek, brakeman
+#   - Documentation: yard, yard-junk, rdoc
+#   - Utilities: bundler-audit, license_finder, solargraph (LSP), prettier_print
+#   - Rails tools: rails, spring, spring-commands-rspec, guard, guard-rspec
+#   - Performance: benchmark-ips, stackprof, memory_profiler
 #
 # Requirements:
 #   - Ruby must be installed (via INCLUDE_RUBY=true)

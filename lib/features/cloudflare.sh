@@ -21,7 +21,8 @@
 #   - CLOUDFLARE_API_TOKEN: API token for authentication (optional)
 #
 # Note:
-#   Requires Node.js to be installed for wrangler.
+#   Wrangler requires Node.js. If Node.js is not installed or version is below 20,
+#   this feature will automatically install Node.js 20 LTS.
 #   Authentication credentials are automatically linked from the working directory if present.
 #
 set -euo pipefail

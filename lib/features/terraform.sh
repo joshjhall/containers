@@ -4,14 +4,15 @@
 # Description:
 #   Installs Terraform and essential tools for infrastructure as code development,
 #   including Terragrunt for DRY configurations, terraform-docs for documentation,
-#   and tflint for code quality checks. Configures plugin caching for optimal
-#   performance in containerized environments.
+#   tflint for code quality checks, and tfsec for security scanning. Configures
+#   plugin caching for optimal performance in containerized environments.
 #
 # Features:
 #   - Official Terraform CLI from HashiCorp
 #   - Terragrunt for managing Terraform configurations at scale
 #   - terraform-docs for automatic documentation generation
 #   - tflint for Terraform linting and best practices
+#   - tfsec for security vulnerability scanning
 #   - Intelligent plugin cache configuration
 #   - Shell aliases and helper functions
 #   - Auto-initialization for Terraform projects
@@ -21,6 +22,7 @@
 #   - Terragrunt (infrastructure as code wrapper)
 #   - terraform-docs (documentation generator)
 #   - tflint (linter for Terraform)
+#   - tfsec (security scanner for Terraform)
 #
 # Common Commands:
 #   terraform init              # Initialize Terraform working directory
@@ -32,6 +34,7 @@
 #   terragrunt run-all plan    # Plan across multiple modules
 #   terraform-docs markdown .  # Generate documentation
 #   tflint                     # Lint Terraform files
+#   tfsec .                    # Security scan Terraform files
 #
 # Environment Variables:
 #   TF_PLUGIN_CACHE_DIR - Plugin cache directory (auto-configured)
@@ -70,6 +73,7 @@ log_feature_start "Terraform"
 TERRAGRUNT_VERSION="${TERRAGRUNT_VERSION:-0.93.0}"
 TFDOCS_VERSION="${TFDOCS_VERSION:-0.20.0}"
 TFLINT_VERSION="${TFLINT_VERSION:-0.59.1}"
+TFSEC_VERSION="${TFSEC_VERSION:-1.28.11}"
 
 # ============================================================================
 # Dependencies Installation
@@ -264,6 +268,47 @@ log_command "Installing tflint binary" \
     install -c -v ./tflint /usr/local/bin/
 
 log_message "✓ tflint v${TFLINT_VERSION} installed successfully"
+
+cd /
+
+# ============================================================================
+# tfsec Installation (Security Scanner)
+# ============================================================================
+log_message "Installing tfsec ${TFSEC_VERSION}..."
+
+# Determine the correct binary filename
+TFSEC_BINARY="tfsec-linux-${ARCH}"
+TFSEC_URL="https://github.com/aquasecurity/tfsec/releases/download/v${TFSEC_VERSION}/${TFSEC_BINARY}"
+
+log_message "Installing tfsec v${TFSEC_VERSION} for ${ARCH}..."
+
+# Fetch checksum dynamically from GitHub releases
+log_message "Fetching tfsec checksum from GitHub..."
+TFSEC_CHECKSUMS_URL="https://github.com/aquasecurity/tfsec/releases/download/v${TFSEC_VERSION}/tfsec_checksums.txt"
+
+if ! TFSEC_CHECKSUM=$(fetch_github_checksums_txt "$TFSEC_CHECKSUMS_URL" "$TFSEC_BINARY" 2>/dev/null); then
+    log_error "Failed to fetch checksum for tfsec ${TFSEC_VERSION}"
+    log_error "Please verify version exists: https://github.com/aquasecurity/tfsec/releases/tag/v${TFSEC_VERSION}"
+    log_feature_end
+    exit 1
+fi
+
+log_message "Expected SHA256: ${TFSEC_CHECKSUM}"
+
+# Download and verify with checksum
+BUILD_TEMP=$(create_secure_temp_dir)
+cd "$BUILD_TEMP"
+log_message "Downloading and verifying tfsec..."
+download_and_verify \
+    "$TFSEC_URL" \
+    "$TFSEC_CHECKSUM" \
+    "$TFSEC_BINARY"
+
+# Install binary
+log_command "Installing tfsec binary" \
+    install -c -v -m 755 "./$TFSEC_BINARY" /usr/local/bin/tfsec
+
+log_message "✓ tfsec v${TFSEC_VERSION} installed successfully"
 
 cd /
 
@@ -503,6 +548,14 @@ else
     echo "✗ tflint is not installed"
 fi
 
+if command -v tfsec &> /dev/null; then
+    echo "✓ tfsec is installed"
+    echo "  Version: $(tfsec --version 2>&1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
+    echo "  Binary: $(which tfsec)"
+else
+    echo "✗ tfsec is not installed"
+fi
+
 echo ""
 echo "=== Configuration ==="
 echo "  TF_PLUGIN_CACHE_DIR: ${TF_PLUGIN_CACHE_DIR:-/cache/terraform}"
@@ -549,6 +602,11 @@ fi
 if command -v tflint &> /dev/null; then
     log_command "Checking tflint version" \
         tflint --version || log_warning "tflint version check failed"
+fi
+
+if command -v tfsec &> /dev/null; then
+    log_command "Checking tfsec version" \
+        tfsec --version || log_warning "tfsec version check failed"
 fi
 
 # Log feature summary

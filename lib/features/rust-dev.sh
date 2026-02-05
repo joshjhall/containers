@@ -14,6 +14,9 @@
 #   - cargo-outdated: Check for outdated dependencies
 #   - cargo-sweep: Clean up old build artifacts to reclaim disk space
 #   - cargo-release: Semantic versioning and crate publishing
+#   - cargo-audit: Security vulnerability scanning for dependencies
+#   - cargo-deny: Dependency linting (licenses, duplicates, bans)
+#   - cargo-geiger: Detect unsafe Rust code usage
 #   - sccache: Shared compilation cache for faster builds
 #   - bacon: Background rust code checker
 #   - tokei: Code statistics tool

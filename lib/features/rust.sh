@@ -9,7 +9,7 @@
 #   - Rust toolchain installed via rustup (stable by default)
 #   - Essential components: rust-src, rust-analyzer, clippy, rustfmt
 #   - Development tools: cargo-watch (auto-rebuild)
-#   - Documentation tools: mdBook and plugins for creating Rust documentation
+#   - Documentation: mdbook, mdbook-mermaid, mdbook-toc, mdbook-admonish
 #
 # Note: cargo-edit is no longer needed as cargo add/remove are built into Cargo 1.62+
 #

@@ -6,13 +6,14 @@
 #   and documentation. All tools are installed via pipx for isolation.
 #
 # Features:
-#   - Testing: pytest, tox
+#   - Testing: pytest, pytest-cov, pytest-xdist, pytest-asyncio, tox
 #   - Formatting: black, isort, ruff
-#   - Linting: flake8, mypy, pylint, bandit
+#   - Linting: flake8, mypy, pylint, bandit, pip-audit
 #   - Documentation: sphinx, sphinx-autobuild, doc8
 #   - Utilities: cookiecutter, rich-cli, httpie, yq
-#   - Interactive: jupyter, ipython
+#   - Interactive: jupyter, jupyterlab, ipython
 #   - Pre-commit hooks
+#   - LSP: python-lsp-server with black and ruff plugins
 #
 # Note:
 #   Requires INCLUDE_PYTHON feature to be enabled first.

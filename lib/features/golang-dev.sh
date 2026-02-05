@@ -42,6 +42,11 @@
 #     - swag: Swagger documentation generator
 #     - mockgen: Generate mocks for interfaces
 #     - wire: Dependency injection
+#   Documentation:
+#     - godoc: Go documentation server
+#   Protocol Buffers:
+#     - protoc-gen-go: Protocol buffer compiler plugin for Go
+#     - protoc-gen-go-grpc: gRPC plugin for Protocol buffers
 #
 # Requirements:
 #   - Go must be installed (via INCLUDE_GOLANG=true)

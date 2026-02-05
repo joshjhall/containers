@@ -213,6 +213,10 @@ Cursor, Neovim, etc.):
 | `INCLUDE_KOTLIN_DEV`  | `kotlin-language-server`, `jdtls`               |
 | `INCLUDE_JAVA_DEV`    | `jdtls` (Eclipse JDT Language Server)           |
 | `INCLUDE_ANDROID_DEV` | `jdtls` (Eclipse JDT Language Server)           |
+| `INCLUDE_DEV_TOOLS`\* | `bash-language-server` (requires Node.js)       |
+
+\*`bash-language-server` is installed when both `INCLUDE_DEV_TOOLS=true` and Node.js
+is available (`INCLUDE_NODE=true` or `INCLUDE_NODE_DEV=true`).
 
 ### Claude Code Plugins and LSP Integration
 

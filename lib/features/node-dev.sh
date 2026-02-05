@@ -9,12 +9,14 @@
 #   - Testing: jest, mocha, chai, vitest, playwright
 #   - Linting/Formatting: eslint, prettier, standard
 #   - Build Tools: webpack, vite, esbuild, rollup, parcel
-#   - TypeScript: typescript, ts-node, tsx
-#   - Process Management: pm2, nodemon, concurrently
+#   - TypeScript: typescript, ts-node, tsx, @types/node
+#   - Process Management: pm2, nodemon, concurrently, wait-on
 #   - Profiling: clinic (use Node.js --inspect for debugging)
-#   - API Development: express-generator, fastify-cli
-#   - Documentation: jsdoc, typedoc
-#   - Utilities: npm-check-updates, npkill, serve, http-server
+#   - API Development: @nestjs/cli, fastify-cli, json-server
+#   - Documentation: jsdoc, typedoc, documentation
+#   - Utilities: npm-check-updates, npkill, serve, http-server, live-server, localtunnel
+#   - Dependency Analysis: npm-check, depcheck, cost-of-modules
+#   - LSP: typescript-language-server
 #
 # Requirements:
 #   - Node.js must be installed (via INCLUDE_NODE=true)
@@ -111,7 +113,7 @@ log_command "Installing TypeScript toolchain" \
 
 # Testing frameworks
 log_command "Installing testing frameworks" \
-    npm_install_as_user jest mocha vitest @playwright/test
+    npm_install_as_user jest mocha chai vitest @playwright/test
 
 # Linting and formatting
 log_command "Installing linting and formatting tools" \
@@ -510,7 +512,7 @@ if command -v node &> /dev/null; then
     echo ""
     echo "Node.js development tools available:"
     echo "  TypeScript: tsc, ts-node, tsx"
-    echo "  Testing: jest, mocha, vitest, playwright"
+    echo "  Testing: jest, mocha, chai, vitest, playwright"
     echo "  Linting: eslint, prettier, standard"
     echo "  Building: webpack, vite, esbuild, rollup, parcel"
     echo "  Process: pm2, nodemon, concurrently"
@@ -660,7 +662,7 @@ export NPM_GLOBAL_DIR="/cache/npm-global"
 
 log_feature_summary \
     --feature "Node.js Development Tools" \
-    --tools "typescript,ts-node,tsx,jest,mocha,vitest,playwright,eslint,prettier,webpack,vite,esbuild,rollup,parcel,pm2,nodemon,concurrently,clinic,fastify-cli,jsdoc,typedoc,npm-check-updates" \
+    --tools "typescript,ts-node,tsx,jest,mocha,chai,vitest,playwright,eslint,prettier,webpack,vite,esbuild,rollup,parcel,pm2,nodemon,concurrently,clinic,fastify-cli,jsdoc,typedoc,npm-check-updates" \
     --paths "${NPM_CACHE_DIR},${NPM_GLOBAL_DIR}" \
     --env "NPM_CONFIG_CACHE,NPM_CONFIG_PREFIX" \
     --commands "tsc,ts-node,tsx,jest,mocha,vitest,eslint,prettier,webpack,vite,pm2,nodemon,node-init,node-test-all,node-clean" \
