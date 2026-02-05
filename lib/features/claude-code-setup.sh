@@ -274,17 +274,40 @@ install_plugin() {
     fi
 
     echo "  - Installing $plugin_name..."
+
+    # Retry with exponential backoff for "not found" errors
+    # This handles the race condition where auth is detected but
+    # the marketplace API isn't fully ready yet
+    local max_retries=4
+    local retry_delay=2
+    local attempt=1
     local output
-    if output=$(claude plugin install "$full_name" 2>&1); then
-        echo "    ✓ $plugin_name installed"
-        PLUGINS_INSTALLED=true
-        return 0
-    else
-        # Show error output for debugging
+
+    while [ $attempt -le $max_retries ]; do
+        if output=$(claude plugin install "$full_name" 2>&1); then
+            echo "    ✓ $plugin_name installed"
+            PLUGINS_INSTALLED=true
+            return 0
+        fi
+
+        # Check if this is a "not found" error (marketplace not ready)
+        if echo "$output" | grep -q "not found in marketplace"; then
+            if [ $attempt -lt $max_retries ]; then
+                echo "    ⏳ Marketplace not ready, retrying in ${retry_delay}s... (attempt $attempt/$max_retries)"
+                sleep $retry_delay
+                retry_delay=$((retry_delay * 2))  # Exponential backoff: 2, 4, 8, 16
+                attempt=$((attempt + 1))
+                continue
+            fi
+        fi
+
+        # Non-retryable error or max retries reached
         echo "    ⚠ Failed to install $plugin_name"
         echo "$output" | sed 's/^/      /' | head -5
         return 1
-    fi
+    done
+
+    return 1
 }
 
 # ============================================================================
@@ -371,9 +394,9 @@ echo ""
 
 has_mcp_server() {
     local server_name="$1"
-    # Check multiple possible output formats from claude mcp list
-    # Format can be: "servername" on its own line, or "  servername  type  ..." with columns
-    claude mcp list 2>/dev/null | grep -qE "(^|[[:space:]])${server_name}([[:space:]]|$)" 2>/dev/null || return 1
+    # Output format is: "servername: command args - status"
+    # Match server name at start of line followed by colon
+    claude mcp list 2>/dev/null | grep -qE "^${server_name}:" 2>/dev/null || return 1
 }
 
 add_mcp_server() {
@@ -387,10 +410,19 @@ add_mcp_server() {
     fi
 
     echo "  - Adding $server_name..."
-    if claude mcp add -s user "${args[@]}" 2>&1 | grep -v "^Added"; then
+    local output
+    if output=$(claude mcp add -s user "${args[@]}" 2>&1); then
         echo "    ✓ $server_name added"
+        return 0
     else
+        # Check if it's actually an "already exists" message (not a real failure)
+        if echo "$output" | grep -q "already exists"; then
+            echo "    ✓ $server_name (already configured)"
+            return 0
+        fi
         echo "    ⚠ Failed to add $server_name"
+        echo "$output" | sed 's/^/      /' | head -3
+        return 1
     fi
 }
 
@@ -601,8 +633,10 @@ is_authenticated() {
 run_setup() {
     log "Authentication detected! Running claude-setup..."
     if command -v claude-setup &>/dev/null; then
-        # Give a moment for auth files to be fully written
-        sleep 2
+        # Brief delay for auth files to be fully written
+        # Plugin installation has retry logic with exponential backoff
+        # for marketplace propagation delays
+        sleep 5
         if claude-setup 2>&1 | tee -a "/tmp/claude-auth-watcher.log"; then
             log "Setup completed successfully"
             mkdir -p "$CLAUDE_DIR"
