@@ -11,7 +11,7 @@ automatically enable dependent features - you must explicitly enable them.
 
 ## Dependency Graph
 
-````text
+```text
 python-dev → python
 node-dev → node
 rust-dev → rust
@@ -20,8 +20,13 @@ r-dev → r
 golang-dev → golang
 java-dev → java
 mojo-dev → mojo
+kotlin → java (auto-triggered)
+kotlin-dev → kotlin + java
+android → java (auto-triggered)
+android-dev → android + java
 cloudflare → node (wrangler requires Node.js)
-```text
+dev-tools + MCP → node (MCP servers require Node.js)
+```
 
 ## Feature Dependencies Reference
 
@@ -29,16 +34,26 @@ cloudflare → node (wrangler requires Node.js)
 
 All `-dev` features require their base language:
 
-| Dev Feature  | Requires | Build Args                                          |
-| ------------ | -------- | --------------------------------------------------- |
-| `python-dev` | `python` | `INCLUDE_PYTHON=true`<br/>`INCLUDE_PYTHON_DEV=true` |
-| `node-dev`   | `node`   | `INCLUDE_NODE=true`<br/>`INCLUDE_NODE_DEV=true`     |
-| `rust-dev`   | `rust`   | `INCLUDE_RUST=true`<br/>`INCLUDE_RUST_DEV=true`     |
-| `ruby-dev`   | `ruby`   | `INCLUDE_RUBY=true`<br/>`INCLUDE_RUBY_DEV=true`     |
-| `r-dev`      | `r`      | `INCLUDE_R=true`<br/>`INCLUDE_R_DEV=true`           |
-| `golang-dev` | `golang` | `INCLUDE_GOLANG=true`<br/>`INCLUDE_GOLANG_DEV=true` |
-| `java-dev`   | `java`   | `INCLUDE_JAVA=true`<br/>`INCLUDE_JAVA_DEV=true`     |
-| `mojo-dev`   | `mojo`   | `INCLUDE_MOJO=true`<br/>`INCLUDE_MOJO_DEV=true`     |
+| Dev Feature  | Requires | Build Args                                       |
+| ------------ | -------- | ------------------------------------------------ |
+| `python-dev` | `python` | `INCLUDE_PYTHON=true`, `INCLUDE_PYTHON_DEV=true` |
+| `node-dev`   | `node`   | `INCLUDE_NODE=true`, `INCLUDE_NODE_DEV=true`     |
+| `rust-dev`   | `rust`   | `INCLUDE_RUST=true`, `INCLUDE_RUST_DEV=true`     |
+| `ruby-dev`   | `ruby`   | `INCLUDE_RUBY=true`, `INCLUDE_RUBY_DEV=true`     |
+| `r-dev`      | `r`      | `INCLUDE_R=true`, `INCLUDE_R_DEV=true`           |
+| `golang-dev` | `golang` | `INCLUDE_GOLANG=true`, `INCLUDE_GOLANG_DEV=true` |
+| `java-dev`   | `java`   | `INCLUDE_JAVA=true`, `INCLUDE_JAVA_DEV=true`     |
+| `mojo-dev`   | `mojo`   | `INCLUDE_MOJO=true`, `INCLUDE_MOJO_DEV=true`     |
+| `kotlin-dev` | `kotlin` | `INCLUDE_KOTLIN=true`, `INCLUDE_KOTLIN_DEV=true` |
+
+### Mobile Development
+
+| Dev Feature   | Requires  | Build Args                                         | Notes              |
+| ------------- | --------- | -------------------------------------------------- | ------------------ |
+| `android`     | (none)    | `INCLUDE_ANDROID=true`                             | Auto-triggers Java |
+| `android-dev` | `android` | `INCLUDE_ANDROID=true`, `INCLUDE_ANDROID_DEV=true` | Auto-triggers Java |
+| `kotlin`      | (none)    | `INCLUDE_KOTLIN=true`                              | Auto-triggers Java |
+| `kotlin-dev`  | `kotlin`  | `INCLUDE_KOTLIN=true`, `INCLUDE_KOTLIN_DEV=true`   | Auto-triggers Java |
 
 ### Cloud Tools
 
@@ -50,9 +65,9 @@ All `-dev` features require their base language:
 
 These features have no dependencies and can be installed independently:
 
-- `dev-tools` - General development tools
+- `dev-tools` - General development tools + Claude Code CLI
 - `docker` - Docker CLI tools
-- `op-cli` - 1Password CLI
+- `op-cli` - 1Password CLI (auto-loads tokens from 1Password)
 - `aws` - AWS CLI
 - `gcloud` - Google Cloud SDK
 - `kubernetes` - kubectl, k9s, helm
@@ -61,6 +76,24 @@ These features have no dependencies and can be installed independently:
 - `redis-client` - Redis client
 - `sqlite-client` - SQLite client
 - `ollama` - Local LLM runtime
+- `cron` - Cron daemon (auto-enabled with `rust-dev` or `dev-tools`)
+
+### Claude Code / MCP Servers
+
+| Component       | Requires | Notes                                             |
+| --------------- | -------- | ------------------------------------------------- |
+| Claude Code CLI | (none)   | Installed with `INCLUDE_DEV_TOOLS=true`           |
+| MCP Servers     | `node`   | Auto-installed when Node.js available             |
+| LSP Plugins     | (varies) | Language-specific, based on enabled `*_dev` flags |
+
+For full Claude Code support with MCP servers:
+
+```bash
+docker build \
+  --build-arg INCLUDE_DEV_TOOLS=true \
+  --build-arg INCLUDE_NODE=true \
+  ...
+```
 
 ## Common Build Patterns
 
@@ -68,7 +101,7 @@ These features have no dependencies and can be installed independently:
 
 **Always enable both the base language AND the dev tools**:
 
-```bash
+````bash
 # ✅ Correct: Both features enabled
 docker build \
   --build-arg INCLUDE_PYTHON=true \

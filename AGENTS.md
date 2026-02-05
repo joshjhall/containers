@@ -166,6 +166,18 @@ Version control via build arguments:
   `RUBY_VERSION`, `JAVA_VERSION`, `R_VERSION`, `KOTLIN_VERSION`
 - `ANDROID_CMDLINE_TOOLS_VERSION`, `ANDROID_API_LEVELS`, `ANDROID_NDK_VERSION`
 
+**Flexible version formats** (auto-resolved to latest patch):
+
+| Language | Accepted Formats        | Example                    |
+| -------- | ----------------------- | -------------------------- |
+| Python   | X, X.Y, X.Y.Z           | `3`, `3.12`, `3.12.7`      |
+| Rust     | X.Y, X.Y.Z, stable/beta | `1.84`, `1.82.0`, `stable` |
+| Ruby     | X.Y, X.Y.Z              | `3.4`, `3.3.6`             |
+| Node.js  | X, X.Y, X.Y.Z           | `22`, `20.18`, `20.18.1`   |
+| Go       | X.Y, X.Y.Z              | `1.23`, `1.23.5`           |
+
+Partial versions are resolved to the latest patch with pinned checksums.
+
 ## Integration as Git Submodule
 
 This container system is designed to be used as a git submodule:
@@ -280,10 +292,24 @@ MCP configuration is created on first container startup via
 - **Always** configures filesystem MCP server for `/workspace`
 - **Always** configures Figma desktop MCP (`http://host.docker.internal:3845/mcp`)
 - **Detects** GitHub vs GitLab from git remote origin URL
-- **Fallback**: Installs both GitHub and GitLab MCPs when remote is ambiguous
+- **Fallback**: Defaults to GitHub MCP only when remote is ambiguous (most common case)
 - **Is idempotent** - checks existing config before adding
 
-Set the appropriate environment variable at runtime:
+**Platform selection** (environment variable):
+
+| Value    | Behavior                                     |
+| -------- | -------------------------------------------- |
+| `github` | Configure GitHub MCP only                    |
+| `gitlab` | Configure GitLab MCP only                    |
+| `both`   | Configure both GitHub and GitLab MCPs        |
+| (unset)  | Auto-detect from git remote, default: GitHub |
+
+```bash
+# Override platform detection
+docker run -e GIT_PLATFORM=gitlab ...
+```
+
+Set the appropriate token at runtime:
 
 - `GITHUB_TOKEN`: GitHub personal access token (when using GitHub)
 - `GITLAB_TOKEN`: GitLab personal access token (when using GitLab)
@@ -316,7 +342,12 @@ Existing tokens are preserved (won't overwrite if already set).
 
 Plugin installation requires interactive authentication.
 
-**Plugin installation workflow**:
+**Automatic setup (recommended)**: After running `claude` and authenticating, plugins
+and MCP servers are configured automatically within 30-60 seconds by the background
+`claude-auth-watcher` process. A marker file (`~/.claude/.container-setup-complete`)
+prevents repeated setup runs.
+
+**Manual workflow** (if auto-setup doesn't run):
 
 ```bash
 # 1. Inside container, run Claude and authenticate when prompted
@@ -330,6 +361,16 @@ claude-setup
 # 4. Restart Claude if needed
 ```
 
+**Auto-setup configuration**:
+
+| Variable                       | Purpose                     | Default |
+| ------------------------------ | --------------------------- | ------- |
+| `CLAUDE_AUTH_WATCHER_TIMEOUT`  | Watcher timeout in seconds  | 14400   |
+| `CLAUDE_AUTH_WATCHER_INTERVAL` | Polling interval in seconds | 30      |
+
+The watcher uses `inotifywait` for efficient event-driven detection when available,
+falling back to polling otherwise.
+
 **Note**: Environment variables (including `ANTHROPIC_API_KEY`) do NOT work with the
 Claude Code CLI. You must run `claude` to authenticate interactively.
 
@@ -337,6 +378,7 @@ Verify configuration with:
 
 - `claude plugin list` - See installed plugins
 - `claude mcp list` - See configured MCP servers
+- `pgrep -f claude-auth-watcher` - Check if watcher is running
 
 ## Cache Management
 

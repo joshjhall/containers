@@ -148,6 +148,17 @@ All features are enabled via `INCLUDE_<FEATURE>=true` build arguments.
 | **Java Dev**   | `INCLUDE_JAVA_DEV=true`   | + Maven, Gradle                              |
 | **R**          | `INCLUDE_R=true`          | R environment                                |
 | **R Dev**      | `INCLUDE_R_DEV=true`      | + tidyverse, devtools                        |
+| **Kotlin**     | `INCLUDE_KOTLIN=true`     | Kotlin compiler (auto-triggers Java)         |
+| **Kotlin Dev** | `INCLUDE_KOTLIN_DEV=true` | + ktlint, detekt, kotlin-language-server     |
+| **Mojo**       | `INCLUDE_MOJO=true`       | Mojo language runtime                        |
+| **Mojo Dev**   | `INCLUDE_MOJO_DEV=true`   | + Mojo development tools                     |
+
+### Mobile Development
+
+| Feature         | Build Arg                  | What's Included                            |
+| --------------- | -------------------------- | ------------------------------------------ |
+| **Android**     | `INCLUDE_ANDROID=true`     | Android SDK, cmdline-tools (triggers Java) |
+| **Android Dev** | `INCLUDE_ANDROID_DEV=true` | + Gradle, ADB, emulator support            |
 
 ### Infrastructure & Cloud
 
@@ -170,11 +181,32 @@ All features are enabled via `INCLUDE_<FEATURE>=true` build arguments.
 
 ### Utilities
 
-| Feature       | Build Arg                | What's Included                                         |
-| ------------- | ------------------------ | ------------------------------------------------------- |
-| **Dev Tools** | `INCLUDE_DEV_TOOLS=true` | git, gh CLI, lazygit, fzf, ripgrep, bat, eza/exa, delta |
-| **1Password** | `INCLUDE_OP=true`        | 1Password CLI                                           |
-| **Ollama**    | `INCLUDE_OLLAMA=true`    | Local LLM support                                       |
+| Feature       | Build Arg                | What's Included                                            |
+| ------------- | ------------------------ | ---------------------------------------------------------- |
+| **Dev Tools** | `INCLUDE_DEV_TOOLS=true` | Claude Code CLI, git, gh CLI, lazygit, fzf, ripgrep, bat   |
+| **1Password** | `INCLUDE_OP=true`        | 1Password CLI (auto-loads tokens from 1Password)           |
+| **Ollama**    | `INCLUDE_OLLAMA=true`    | Local LLM support                                          |
+| **Cron**      | `INCLUDE_CRON=true`      | Cron daemon for scheduled tasks (auto with Rust/Dev Tools) |
+
+### Claude Code Integration
+
+When `INCLUDE_DEV_TOOLS=true`, the container includes:
+
+- **Claude Code CLI** - Anthropic's official CLI for Claude
+- **MCP Servers** (when Node.js available) - Filesystem, GitHub/GitLab integration
+- **Auto-setup watcher** - Automatically configures plugins after authentication
+- **LSP plugins** - Language-specific plugins based on enabled features
+
+MCP servers require Node.js. Add `INCLUDE_NODE=true` for full Claude Code support:
+
+```bash
+docker build -t myproject:dev \
+  --build-arg INCLUDE_DEV_TOOLS=true \
+  --build-arg INCLUDE_NODE=true \
+  ...
+```
+
+See [CLAUDE.md](CLAUDE.md) for detailed Claude Code configuration.
 
 ______________________________________________________________________
 
