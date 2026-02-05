@@ -145,7 +145,10 @@ validate_node_version() {
     return 0
 }
 
-# Validate Python version format (X.Y.Z)
+# Validate Python version format (X, X.Y, or X.Y.Z)
+#
+# Note: Python supports partial versions (3 or 3.12) which will be resolved
+# to full versions (3.12.12) by resolve_python_version() before installation.
 #
 # Args:
 #   $1: version string to validate
@@ -154,12 +157,33 @@ validate_node_version() {
 #   0 if valid, 1 if invalid
 #
 # Example:
+#   validate_python_version "3" || exit 1
+#   validate_python_version "3.12" || exit 1
 #   validate_python_version "3.13.5" || exit 1
 validate_python_version() {
-    validate_semver "$1" "PYTHON_VERSION"
+    local version="$1"
+
+    if [ -z "$version" ]; then
+        log_error "Empty PYTHON_VERSION provided"
+        return 1
+    fi
+
+    # Allow X, X.Y, or X.Y.Z format (partial versions are resolved later)
+    if ! [[ "$version" =~ ^[0-9]+(\.[0-9]+(\.[0-9]+)?)?$ ]]; then
+        log_error "Invalid PYTHON_VERSION format: $version"
+        log_error "Expected format: X, X.Y, or X.Y.Z (e.g., 3, 3.12, or 3.12.7)"
+        log_error "Only digits and dots allowed, no other characters"
+        return 1
+    fi
+
+    return 0
 }
 
-# Validate Rust version format (X.Y.Z)
+# Validate Rust version format (X.Y or X.Y.Z)
+#
+# Note: Rust supports partial versions (1.84) which will be resolved
+# to full versions (1.84.1) by resolve_rust_version() before installation.
+# Can also be: stable, beta, nightly (these bypass numeric validation)
 #
 # Args:
 #   $1: version string to validate
@@ -168,12 +192,38 @@ validate_python_version() {
 #   0 if valid, 1 if invalid
 #
 # Example:
+#   validate_rust_version "1.84" || exit 1
 #   validate_rust_version "1.82.0" || exit 1
+#   validate_rust_version "stable" || exit 1
 validate_rust_version() {
-    validate_semver "$1" "RUST_VERSION"
+    local version="$1"
+
+    if [ -z "$version" ]; then
+        log_error "Empty RUST_VERSION provided"
+        return 1
+    fi
+
+    # Allow special channel names
+    if [[ "$version" =~ ^(stable|beta|nightly)$ ]]; then
+        return 0
+    fi
+
+    # Allow X.Y or X.Y.Z format (partial versions are resolved later)
+    if ! [[ "$version" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
+        log_error "Invalid RUST_VERSION format: $version"
+        log_error "Expected format: X.Y or X.Y.Z (e.g., 1.84 or 1.82.0)"
+        log_error "Or: stable, beta, nightly"
+        log_error "Only digits and dots allowed for version numbers"
+        return 1
+    fi
+
+    return 0
 }
 
-# Validate Ruby version format (X.Y.Z)
+# Validate Ruby version format (X.Y or X.Y.Z)
+#
+# Note: Ruby supports partial versions (3.4) which will be resolved
+# to full versions (3.4.7) by resolve_ruby_version() before installation.
 #
 # Args:
 #   $1: version string to validate
@@ -182,9 +232,25 @@ validate_rust_version() {
 #   0 if valid, 1 if invalid
 #
 # Example:
+#   validate_ruby_version "3.4" || exit 1
 #   validate_ruby_version "3.3.6" || exit 1
 validate_ruby_version() {
-    validate_semver "$1" "RUBY_VERSION"
+    local version="$1"
+
+    if [ -z "$version" ]; then
+        log_error "Empty RUBY_VERSION provided"
+        return 1
+    fi
+
+    # Allow X.Y or X.Y.Z format (partial versions are resolved later)
+    if ! [[ "$version" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
+        log_error "Invalid RUBY_VERSION format: $version"
+        log_error "Expected format: X.Y or X.Y.Z (e.g., 3.4 or 3.3.6)"
+        log_error "Only digits and dots allowed, no other characters"
+        return 1
+    fi
+
+    return 0
 }
 
 # Validate Java version format (flexible for different distributions)

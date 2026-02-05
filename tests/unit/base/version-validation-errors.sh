@@ -228,7 +228,7 @@ test_node_version_valid_xyz_format() {
 }
 
 # ============================================================================
-# Tests for validate_python_version
+# Tests for validate_python_version - X, X.Y, or X.Y.Z format (flexible)
 # ============================================================================
 
 test_python_version_empty_string() {
@@ -243,21 +243,35 @@ test_python_version_empty_string() {
     fi
 }
 
-test_python_version_missing_patch() {
-    local output
-    output=$(validate_python_version "3.13" 2>&1 || true)
-
-    assert_contains "$output" "Invalid PYTHON_VERSION format: 3.13" \
-        "Missing patch version produces error message"
-
-    if validate_python_version "3.13" 2>/dev/null; then
-        fail_test "validate_python_version should fail for X.Y format"
+test_python_version_valid_major_only() {
+    # Python now accepts major-only versions (resolved to latest minor.patch)
+    if ! validate_python_version "3" 2>/dev/null; then
+        fail_test "validate_python_version should pass for major version only"
     fi
 }
 
-test_python_version_valid_format() {
+test_python_version_valid_xy_format() {
+    # Python now accepts X.Y versions (resolved to latest patch)
+    if ! validate_python_version "3.13" 2>/dev/null; then
+        fail_test "validate_python_version should pass for X.Y format"
+    fi
+}
+
+test_python_version_valid_xyz_format() {
     if ! validate_python_version "3.13.5" 2>/dev/null; then
         fail_test "validate_python_version should pass for X.Y.Z format"
+    fi
+}
+
+test_python_version_invalid_characters() {
+    local output
+    output=$(validate_python_version "3.13-rc1" 2>&1 || true)
+
+    assert_contains "$output" "Invalid PYTHON_VERSION format: 3.13-rc1" \
+        "Invalid characters produce error message"
+
+    if validate_python_version "3.13-rc1" 2>/dev/null; then
+        fail_test "validate_python_version should fail for non-numeric versions"
     fi
 }
 
@@ -304,6 +318,100 @@ test_java_version_valid_xy_format() {
 test_java_version_valid_xyz_format() {
     if ! validate_java_version "11.0.21" 2>/dev/null; then
         fail_test "validate_java_version should pass for X.Y.Z format"
+    fi
+}
+
+# ============================================================================
+# Tests for validate_rust_version - X.Y, X.Y.Z, or channel (flexible)
+# ============================================================================
+
+test_rust_version_empty_string() {
+    local output
+    output=$(validate_rust_version "" 2>&1 || true)
+
+    assert_contains "$output" "Empty RUST_VERSION provided" \
+        "Empty Rust version produces error message"
+
+    if validate_rust_version "" 2>/dev/null; then
+        fail_test "validate_rust_version should fail for empty string"
+    fi
+}
+
+test_rust_version_valid_xy_format() {
+    # Rust now accepts X.Y versions (resolved to latest patch)
+    if ! validate_rust_version "1.84" 2>/dev/null; then
+        fail_test "validate_rust_version should pass for X.Y format"
+    fi
+}
+
+test_rust_version_valid_xyz_format() {
+    if ! validate_rust_version "1.82.0" 2>/dev/null; then
+        fail_test "validate_rust_version should pass for X.Y.Z format"
+    fi
+}
+
+test_rust_version_valid_stable_channel() {
+    if ! validate_rust_version "stable" 2>/dev/null; then
+        fail_test "validate_rust_version should pass for 'stable'"
+    fi
+}
+
+test_rust_version_valid_nightly_channel() {
+    if ! validate_rust_version "nightly" 2>/dev/null; then
+        fail_test "validate_rust_version should pass for 'nightly'"
+    fi
+}
+
+test_rust_version_invalid_characters() {
+    local output
+    output=$(validate_rust_version "1.84-rc1" 2>&1 || true)
+
+    assert_contains "$output" "Invalid RUST_VERSION format: 1.84-rc1" \
+        "Invalid characters produce error message"
+
+    if validate_rust_version "1.84-rc1" 2>/dev/null; then
+        fail_test "validate_rust_version should fail for non-numeric versions"
+    fi
+}
+
+# ============================================================================
+# Tests for validate_ruby_version - X.Y or X.Y.Z format (flexible)
+# ============================================================================
+
+test_ruby_version_empty_string() {
+    local output
+    output=$(validate_ruby_version "" 2>&1 || true)
+
+    assert_contains "$output" "Empty RUBY_VERSION provided" \
+        "Empty Ruby version produces error message"
+
+    if validate_ruby_version "" 2>/dev/null; then
+        fail_test "validate_ruby_version should fail for empty string"
+    fi
+}
+
+test_ruby_version_valid_xy_format() {
+    # Ruby now accepts X.Y versions (resolved to latest patch)
+    if ! validate_ruby_version "3.4" 2>/dev/null; then
+        fail_test "validate_ruby_version should pass for X.Y format"
+    fi
+}
+
+test_ruby_version_valid_xyz_format() {
+    if ! validate_ruby_version "3.3.6" 2>/dev/null; then
+        fail_test "validate_ruby_version should pass for X.Y.Z format"
+    fi
+}
+
+test_ruby_version_invalid_characters() {
+    local output
+    output=$(validate_ruby_version "3.4-preview" 2>&1 || true)
+
+    assert_contains "$output" "Invalid RUBY_VERSION format: 3.4-preview" \
+        "Invalid characters produce error message"
+
+    if validate_ruby_version "3.4-preview" 2>/dev/null; then
+        fail_test "validate_ruby_version should fail for non-numeric versions"
     fi
 }
 
@@ -381,10 +489,12 @@ run_test_with_setup test_node_version_valid_major_only "Node: Valid major-only p
 run_test_with_setup test_node_version_valid_xy_format "Node: Valid X.Y passes"
 run_test_with_setup test_node_version_valid_xyz_format "Node: Valid X.Y.Z passes"
 
-# Python version tests
+# Python version tests (flexible: X, X.Y, X.Y.Z)
 run_test_with_setup test_python_version_empty_string "Python: Empty string error message"
-run_test_with_setup test_python_version_missing_patch "Python: Missing patch error message"
-run_test_with_setup test_python_version_valid_format "Python: Valid format passes"
+run_test_with_setup test_python_version_valid_major_only "Python: Valid major-only passes"
+run_test_with_setup test_python_version_valid_xy_format "Python: Valid X.Y passes"
+run_test_with_setup test_python_version_valid_xyz_format "Python: Valid X.Y.Z passes"
+run_test_with_setup test_python_version_invalid_characters "Python: Invalid characters error message"
 
 # Java version tests
 run_test_with_setup test_java_version_empty_string "Java: Empty string error message"
@@ -392,6 +502,20 @@ run_test_with_setup test_java_version_invalid_format "Java: Invalid format error
 run_test_with_setup test_java_version_valid_major_only "Java: Valid major-only passes"
 run_test_with_setup test_java_version_valid_xy_format "Java: Valid X.Y passes"
 run_test_with_setup test_java_version_valid_xyz_format "Java: Valid X.Y.Z passes"
+
+# Rust version tests (flexible: X.Y, X.Y.Z, or channel)
+run_test_with_setup test_rust_version_empty_string "Rust: Empty string error message"
+run_test_with_setup test_rust_version_valid_xy_format "Rust: Valid X.Y passes"
+run_test_with_setup test_rust_version_valid_xyz_format "Rust: Valid X.Y.Z passes"
+run_test_with_setup test_rust_version_valid_stable_channel "Rust: Valid 'stable' passes"
+run_test_with_setup test_rust_version_valid_nightly_channel "Rust: Valid 'nightly' passes"
+run_test_with_setup test_rust_version_invalid_characters "Rust: Invalid characters error message"
+
+# Ruby version tests (flexible: X.Y, X.Y.Z)
+run_test_with_setup test_ruby_version_empty_string "Ruby: Empty string error message"
+run_test_with_setup test_ruby_version_valid_xy_format "Ruby: Valid X.Y passes"
+run_test_with_setup test_ruby_version_valid_xyz_format "Ruby: Valid X.Y.Z passes"
+run_test_with_setup test_ruby_version_invalid_characters "Ruby: Invalid characters error message"
 
 # Security tests
 run_test_with_setup test_injection_with_backticks "Security: Backtick injection blocked"
