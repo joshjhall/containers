@@ -4,7 +4,7 @@
 # Description:
 #   Installs Terraform and essential tools for infrastructure as code development,
 #   including Terragrunt for DRY configurations, terraform-docs for documentation,
-#   tflint for code quality checks, and tfsec for security scanning. Configures
+#   tflint for code quality checks, and Trivy for security scanning. Configures
 #   plugin caching for optimal performance in containerized environments.
 #
 # Features:
@@ -12,7 +12,7 @@
 #   - Terragrunt for managing Terraform configurations at scale
 #   - terraform-docs for automatic documentation generation
 #   - tflint for Terraform linting and best practices
-#   - tfsec for security vulnerability scanning
+#   - Trivy for security vulnerability scanning (replaces deprecated tfsec)
 #   - Intelligent plugin cache configuration
 #   - Shell aliases and helper functions
 #   - Auto-initialization for Terraform projects
@@ -22,7 +22,7 @@
 #   - Terragrunt (infrastructure as code wrapper)
 #   - terraform-docs (documentation generator)
 #   - tflint (linter for Terraform)
-#   - tfsec (security scanner for Terraform)
+#   - Trivy (security scanner - replaces deprecated tfsec)
 #
 # Common Commands:
 #   terraform init              # Initialize Terraform working directory
@@ -34,7 +34,7 @@
 #   terragrunt run-all plan    # Plan across multiple modules
 #   terraform-docs markdown .  # Generate documentation
 #   tflint                     # Lint Terraform files
-#   tfsec .                    # Security scan Terraform files
+#   trivy fs .                 # Security scan Terraform files
 #
 # Environment Variables:
 #   TF_PLUGIN_CACHE_DIR - Plugin cache directory (auto-configured)
@@ -73,7 +73,7 @@ log_feature_start "Terraform"
 TERRAGRUNT_VERSION="${TERRAGRUNT_VERSION:-0.93.0}"
 TFDOCS_VERSION="${TFDOCS_VERSION:-0.20.0}"
 TFLINT_VERSION="${TFLINT_VERSION:-0.59.1}"
-TFSEC_VERSION="${TFSEC_VERSION:-1.28.11}"
+TRIVY_VERSION="${TRIVY_VERSION:-0.69.1}"
 
 # ============================================================================
 # Dependencies Installation
@@ -272,45 +272,59 @@ log_message "✓ tflint v${TFLINT_VERSION} installed successfully"
 cd /
 
 # ============================================================================
-# tfsec Installation (Security Scanner)
+# Trivy Installation (Security Scanner)
 # ============================================================================
-log_message "Installing tfsec ${TFSEC_VERSION}..."
+# Note: tfsec has been deprecated and merged into Trivy.
+# See: https://github.com/aquasecurity/tfsec/discussions/1994
+log_message "Installing Trivy ${TRIVY_VERSION}..."
 
-# Determine the correct binary filename
-TFSEC_BINARY="tfsec-linux-${ARCH}"
-TFSEC_URL="https://github.com/aquasecurity/tfsec/releases/download/v${TFSEC_VERSION}/${TFSEC_BINARY}"
-
-log_message "Installing tfsec v${TFSEC_VERSION} for ${ARCH}..."
-
-# Fetch checksum dynamically from GitHub releases
-log_message "Fetching tfsec checksum from GitHub..."
-TFSEC_CHECKSUMS_URL="https://github.com/aquasecurity/tfsec/releases/download/v${TFSEC_VERSION}/tfsec_checksums.txt"
-
-if ! TFSEC_CHECKSUM=$(fetch_github_checksums_txt "$TFSEC_CHECKSUMS_URL" "$TFSEC_BINARY" 2>/dev/null); then
-    log_error "Failed to fetch checksum for tfsec ${TFSEC_VERSION}"
-    log_error "Please verify version exists: https://github.com/aquasecurity/tfsec/releases/tag/v${TFSEC_VERSION}"
-    log_feature_end
-    exit 1
+# Determine the correct archive filename
+# Trivy uses Linux_64bit for amd64 and Linux_ARM64 for arm64
+if [ "$ARCH" = "amd64" ]; then
+    TRIVY_ARCH="64bit"
+elif [ "$ARCH" = "arm64" ]; then
+    TRIVY_ARCH="ARM64"
+else
+    log_warning "Trivy not available for architecture $ARCH, skipping..."
+    TRIVY_ARCH=""
 fi
 
-log_message "Expected SHA256: ${TFSEC_CHECKSUM}"
+if [ -n "$TRIVY_ARCH" ]; then
+    TRIVY_ARCHIVE="trivy_${TRIVY_VERSION}_Linux-${TRIVY_ARCH}.tar.gz"
+    TRIVY_URL="https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/${TRIVY_ARCHIVE}"
 
-# Download and verify with checksum
-BUILD_TEMP=$(create_secure_temp_dir)
-cd "$BUILD_TEMP"
-log_message "Downloading and verifying tfsec..."
-download_and_verify \
-    "$TFSEC_URL" \
-    "$TFSEC_CHECKSUM" \
-    "$TFSEC_BINARY"
+    log_message "Installing Trivy v${TRIVY_VERSION} for ${ARCH}..."
 
-# Install binary
-log_command "Installing tfsec binary" \
-    install -c -v -m 755 "./$TFSEC_BINARY" /usr/local/bin/tfsec
+    # Fetch checksum dynamically from GitHub releases
+    log_message "Fetching Trivy checksum from GitHub..."
+    TRIVY_CHECKSUMS_URL="https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_checksums.txt"
 
-log_message "✓ tfsec v${TFSEC_VERSION} installed successfully"
+    if ! TRIVY_CHECKSUM=$(fetch_github_checksums_txt "$TRIVY_CHECKSUMS_URL" "$TRIVY_ARCHIVE" 2>/dev/null); then
+        log_error "Failed to fetch checksum for Trivy ${TRIVY_VERSION}"
+        log_error "Please verify version exists: https://github.com/aquasecurity/trivy/releases/tag/v${TRIVY_VERSION}"
+        log_feature_end
+        exit 1
+    fi
 
-cd /
+    log_message "Expected SHA256: ${TRIVY_CHECKSUM}"
+
+    # Download and extract with checksum verification
+    BUILD_TEMP=$(create_secure_temp_dir)
+    cd "$BUILD_TEMP"
+    log_message "Downloading and verifying Trivy..."
+    download_and_extract \
+        "$TRIVY_URL" \
+        "$TRIVY_CHECKSUM" \
+        "."
+
+    # Install binary
+    log_command "Installing Trivy binary" \
+        install -c -v -m 755 ./trivy /usr/local/bin/trivy
+
+    log_message "✓ Trivy v${TRIVY_VERSION} installed successfully"
+
+    cd /
+fi
 
 # ============================================================================
 # Cache Configuration
@@ -548,12 +562,13 @@ else
     echo "✗ tflint is not installed"
 fi
 
-if command -v tfsec &> /dev/null; then
-    echo "✓ tfsec is installed"
-    echo "  Version: $(tfsec --version 2>&1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
-    echo "  Binary: $(which tfsec)"
+if command -v trivy &> /dev/null; then
+    echo "✓ Trivy is installed (replaces deprecated tfsec)"
+    echo "  Version: $(trivy --version 2>&1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
+    echo "  Binary: $(which trivy)"
+    echo "  Usage: trivy fs . (for Terraform scanning)"
 else
-    echo "✗ tfsec is not installed"
+    echo "✗ Trivy is not installed"
 fi
 
 echo ""
@@ -604,19 +619,19 @@ if command -v tflint &> /dev/null; then
         tflint --version || log_warning "tflint version check failed"
 fi
 
-if command -v tfsec &> /dev/null; then
-    log_command "Checking tfsec version" \
-        tfsec --version || log_warning "tfsec version check failed"
+if command -v trivy &> /dev/null; then
+    log_command "Checking Trivy version" \
+        trivy --version || log_warning "Trivy version check failed"
 fi
 
 # Log feature summary
 log_feature_summary \
     --feature "Terraform" \
-    --tools "terraform,terraform-docs,tflint,tfsec" \
+    --tools "terraform,terraform-docs,tflint,trivy" \
     --paths "$HOME/.terraform.d,$HOME/.tflint.d" \
     --env "TF_DATA_DIR,TF_LOG,TF_LOG_PATH" \
-    --commands "terraform,tf,tfi,tfp,tfa,tfd,terraform-docs,tflint,tfsec,tf-workspace,tf-format-all,tf-validate-all" \
-    --next-steps "Run 'test-terraform' to verify installation. Use 'tf init' to initialize, 'tf plan' to preview, 'tf apply' to deploy. Lint with 'tflint', security scan with 'tfsec'."
+    --commands "terraform,tf,tfi,tfp,tfa,tfd,terraform-docs,tflint,trivy,tf-workspace,tf-format-all,tf-validate-all" \
+    --next-steps "Run 'test-terraform' to verify installation. Use 'tf init' to initialize, 'tf plan' to preview, 'tf apply' to deploy. Lint with 'tflint', security scan with 'trivy fs .'."
 
 # End logging
 log_feature_end

@@ -243,6 +243,12 @@ extract_all_versions() {
     ver=$(grep "^ARG TFLINT_VERSION=" "$PROJECT_ROOT/Dockerfile" 2>/dev/null | cut -d= -f2 | tr -d '"')
     [ -n "$ver" ] && add_tool "tflint" "$ver" "Dockerfile"
 
+    # Trivy from terraform.sh (replaces deprecated tfsec)
+    if [ -f "$PROJECT_ROOT/lib/features/terraform.sh" ]; then
+        ver=$(extract_version_from_line "$(grep "^TRIVY_VERSION=" "$PROJECT_ROOT/lib/features/terraform.sh" 2>/dev/null)")
+        [ -n "$ver" ] && add_tool "Trivy" "$ver" "terraform.sh"
+    fi
+
     ver=$(grep "^ARG PIXI_VERSION=" "$PROJECT_ROOT/Dockerfile" 2>/dev/null | cut -d= -f2 | tr -d '"')
     [ -n "$ver" ] && add_tool "pixi" "$ver" "Dockerfile"
 
@@ -835,6 +841,7 @@ main() {
             Terragrunt) check_github_release "Terragrunt" "gruntwork-io/terragrunt" ;;
             terraform-docs) check_github_release "terraform-docs" "terraform-docs/terraform-docs" ;;
             tflint) check_github_release "tflint" "terraform-linters/tflint" ;;
+            Trivy) check_github_release "Trivy" "aquasecurity/trivy" ;;
             pixi) check_github_release "pixi" "prefix-dev/pixi" ;;
             Poetry) check_github_release "Poetry" "python-poetry/poetry" ;;
             lazygit) check_github_release "lazygit" "jesseduffield/lazygit" ;;
