@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.14.5] - 2026-02-08
+
+### Added
+
+- Accept flexible version formats for Python, Rust, Ruby
+- Add auto-setup watcher and improve git platform detection
+
+### Documentation
+
+- Update documentation for new features and improvements
+
+### Fixed
+
+- Improve plugin install reliability and MCP detection
+- Sync feature documentation with actual installations
+- Load .env file into container environment
+- Replace deprecated tfsec with Trivy (CVE-2025-21613)
+
+### Miscellaneous
+
+- Reorganize build args with comments
+- Update project dictionary
+
+### Testing
+
+- Add unit tests for pattern matching functions
+- Update system tools list to match actual installations
+
 ## [4.14.4] - 2026-02-04
 
 ### Added
@@ -12,10 +40,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add release channel selection
 - Auto-load MCP tokens from 1Password
 
+### Fixed
+
+- Configure VS Code to add words to project-words.txt
+- Restore executable permissions on shell scripts
+
 ### Miscellaneous
 
 - Migrate config to Biome 2.x schema
 - Update dependency versions
+- Release patch version with dependency updates
 
 ## [4.14.3] - 2026-02-01
 
@@ -882,6 +916,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix prettier and markdownlint formatting in README
 - Format TLS documentation files
 
+[4.14.5]: https://github.com/joshjhall/containers/compare/v4.14.4...v4.14.5
 [4.14.4]: https://github.com/joshjhall/containers/compare/v4.14.3...v4.14.4
 [4.14.3]: https://github.com/joshjhall/containers/compare/v4.14.2...v4.14.3
 [4.14.2]: https://github.com/joshjhall/containers/compare/v4.14.1...v4.14.2
