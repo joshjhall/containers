@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 # Universal Container Build System
-# Version: 4.14.4
+# Version: 4.14.5
 # Supports multiple contexts: devcontainer, agents, CI/CD, production
 
 # ============================================================================
@@ -236,7 +236,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     fi
 
 # Kotlin (Java auto-triggered above)
-ARG KOTLIN_VERSION=2.3.0
+ARG KOTLIN_VERSION=2.3.10
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     if [ "${INCLUDE_KOTLIN}" = "true" ] || [ "${INCLUDE_KOTLIN_DEV}" = "true" ]; then \
@@ -337,7 +337,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 ARG INCLUDE_TERRAFORM=false
 ARG TERRAGRUNT_VERSION=0.99.1
 ARG TFDOCS_VERSION=0.21.0
-ARG TFLINT_VERSION=0.60.0
+ARG TFLINT_VERSION=0.61.0
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     if [ "${INCLUDE_TERRAFORM}" = "true" ]; then \
