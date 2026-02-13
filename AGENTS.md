@@ -232,7 +232,6 @@ automatically configured on first container startup via
 - `context7` - Documentation lookup
 - `security-guidance` - Security best practices
 - `claude-md-management` - CLAUDE.md file management
-- `figma` - Figma design integration
 - `pr-review-toolkit` - Comprehensive PR review tools
 - `code-review` - Code review assistance
 - `hookify` - Hook creation helpers

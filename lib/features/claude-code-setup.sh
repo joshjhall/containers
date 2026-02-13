@@ -384,7 +384,6 @@ elif is_claude_authenticated; then
     install_plugin "context7" || true
     install_plugin "security-guidance" || true
     install_plugin "claude-md-management" || true
-    install_plugin "figma" || true
     install_plugin "pr-review-toolkit" || true
     install_plugin "code-review" || true
     install_plugin "hookify" || true
