@@ -933,6 +933,14 @@ CLAUDE_EXTRA_PLUGINS_DEFAULT="${CLAUDE_EXTRA_PLUGINS:-}"
 # Extra MCP servers to install (comma-separated)
 # Can be overridden at runtime via environment variable
 CLAUDE_EXTRA_MCPS_DEFAULT="${CLAUDE_EXTRA_MCPS:-}"
+
+# Support tool flags (for conditional skills/agents)
+INCLUDE_DOCKER=${INCLUDE_DOCKER:-false}
+INCLUDE_KUBERNETES=${INCLUDE_KUBERNETES:-false}
+INCLUDE_TERRAFORM=${INCLUDE_TERRAFORM:-false}
+INCLUDE_AWS=${INCLUDE_AWS:-false}
+INCLUDE_GCLOUD=${INCLUDE_GCLOUD:-false}
+INCLUDE_CLOUDFLARE=${INCLUDE_CLOUDFLARE:-false}
 FEATURES_EOF
 
 log_command "Setting config file permissions" \
