@@ -178,6 +178,21 @@ else
 fi
 
 # ============================================================================
+# Stage Skill and Agent Templates for Runtime Installation
+# ============================================================================
+log_message "Staging skill and agent templates for runtime installation..."
+
+if [ -d /tmp/build-scripts/features/templates/claude ]; then
+    mkdir -p /etc/container/config/claude-templates
+    cp -r /tmp/build-scripts/features/templates/claude/* /etc/container/config/claude-templates/
+    chmod -R 644 /etc/container/config/claude-templates/
+    find /etc/container/config/claude-templates -type d -exec chmod 755 {} \;
+    log_message "Skill and agent templates staged to /etc/container/config/claude-templates/"
+else
+    log_warning "No skill/agent templates found at /tmp/build-scripts/features/templates/claude"
+fi
+
+# ============================================================================
 # Container Startup Scripts
 # ============================================================================
 log_message "Creating startup scripts..."
@@ -654,12 +669,182 @@ elif [ -n "$EXTRA_MCPS_TO_CONFIGURE" ]; then
     echo ""
 fi
 
+# ============================================================================
+# Skills & Agents Installation
+# ============================================================================
+TEMPLATES_DIR="/etc/container/config/claude-templates"
+CLAUDE_DIR="$HOME/.claude"
+
+if [ -d "$TEMPLATES_DIR" ]; then
+    echo "Installing skills and agents..."
+    echo ""
+
+    # --- Static Skills ---
+    echo "Skills:"
+    if [ -d "$TEMPLATES_DIR/skills" ]; then
+        for skill_dir in "$TEMPLATES_DIR/skills"/*/; do
+            [ -d "$skill_dir" ] || continue
+            skill_name=$(basename "$skill_dir")
+
+            # Skip conditional skills (handled below)
+            [ "$skill_name" = "container-environment" ] && continue
+            [ "$skill_name" = "docker-development" ] && continue
+            [ "$skill_name" = "cloud-infrastructure" ] && continue
+
+            target_dir="$CLAUDE_DIR/skills/$skill_name"
+            if [ -d "$target_dir" ]; then
+                echo "    ✓ $skill_name (already installed)"
+            else
+                mkdir -p "$target_dir"
+                cp "$skill_dir"/* "$target_dir/"
+                echo "    ✓ $skill_name installed"
+            fi
+        done
+    fi
+
+    # --- Dynamic: container-environment skill ---
+    target_dir="$CLAUDE_DIR/skills/container-environment"
+    if [ -d "$target_dir" ]; then
+        echo "    ✓ container-environment (already installed)"
+    else
+        mkdir -p "$target_dir"
+        # Generate dynamic content from enabled-features.conf
+        {
+            cat << 'SKILL_HEADER'
+---
+description: "Container development environment details and available tools"
+---
+# Container Environment
+
+This skill describes the development container environment, installed tools,
+and container-specific patterns.
+
+## Container Patterns
+- Working directory: /workspace
+- Non-root user (configurable via USERNAME build arg)
+- tini as PID 1 for zombie process reaping
+- First-startup scripts in /etc/container/first-startup/
+- Startup scripts in /etc/container/startup/
+- Build logs available via: check-build-logs.sh <feature-name>
+
+## Cache Paths
+All caches are under /cache/ for Docker volume persistence:
+- pip: /cache/pip
+- npm: /cache/npm
+- cargo: /cache/cargo
+- go: /cache/go
+- bundle: /cache/bundle
+- dev-tools: /cache/dev-tools
+
+SKILL_HEADER
+            echo "## Installed Languages & Tools"
+            if [ -f "$ENABLED_FEATURES_FILE" ]; then
+                [ "${INCLUDE_PYTHON_DEV:-false}" = "true" ] && echo "- Python (dev tools: yes)"
+                [ "${INCLUDE_NODE_DEV:-false}" = "true" ] && echo "- Node.js (dev tools: yes)"
+                [ "${INCLUDE_RUST_DEV:-false}" = "true" ] && echo "- Rust (dev tools: yes)"
+                [ "${INCLUDE_RUBY_DEV:-false}" = "true" ] && echo "- Ruby (dev tools: yes)"
+                [ "${INCLUDE_GOLANG_DEV:-false}" = "true" ] && echo "- Go (dev tools: yes)"
+                [ "${INCLUDE_JAVA_DEV:-false}" = "true" ] && echo "- Java (dev tools: yes)"
+                [ "${INCLUDE_KOTLIN_DEV:-false}" = "true" ] && echo "- Kotlin (dev tools: yes)"
+                [ "${INCLUDE_ANDROID_DEV:-false}" = "true" ] && echo "- Android (dev tools: yes)"
+                [ "${INCLUDE_DOCKER:-false}" = "true" ] && echo "- Docker CLI"
+                [ "${INCLUDE_KUBERNETES:-false}" = "true" ] && echo "- Kubernetes (kubectl, helm, k9s)"
+                [ "${INCLUDE_TERRAFORM:-false}" = "true" ] && echo "- Terraform"
+                [ "${INCLUDE_AWS:-false}" = "true" ] && echo "- AWS CLI"
+                [ "${INCLUDE_GCLOUD:-false}" = "true" ] && echo "- Google Cloud SDK"
+                [ "${INCLUDE_CLOUDFLARE:-false}" = "true" ] && echo "- Cloudflare tools"
+            fi
+            echo ""
+            echo "## Useful Commands"
+            echo "- check-build-logs.sh <feature> - View build logs for a feature"
+            echo "- check-installed-versions.sh - Show installed tool versions"
+            echo "- test-dev-tools - Verify development tool installation"
+        } > "$target_dir/SKILL.md"
+        echo "    ✓ container-environment installed (dynamic)"
+    fi
+
+    # --- Conditional: docker-development skill ---
+    if [ "${INCLUDE_DOCKER:-false}" = "true" ]; then
+        target_dir="$CLAUDE_DIR/skills/docker-development"
+        if [ -d "$target_dir" ]; then
+            echo "    ✓ docker-development (already installed)"
+        else
+            mkdir -p "$target_dir"
+            cp "$TEMPLATES_DIR/skills/docker-development/"* "$target_dir/"
+            echo "    ✓ docker-development installed"
+        fi
+    fi
+
+    # --- Dynamic: cloud-infrastructure skill ---
+    HAS_CLOUD=false
+    [ "${INCLUDE_KUBERNETES:-false}" = "true" ] && HAS_CLOUD=true
+    [ "${INCLUDE_TERRAFORM:-false}" = "true" ] && HAS_CLOUD=true
+    [ "${INCLUDE_AWS:-false}" = "true" ] && HAS_CLOUD=true
+    [ "${INCLUDE_GCLOUD:-false}" = "true" ] && HAS_CLOUD=true
+    [ "${INCLUDE_CLOUDFLARE:-false}" = "true" ] && HAS_CLOUD=true
+
+    if [ "$HAS_CLOUD" = "true" ]; then
+        target_dir="$CLAUDE_DIR/skills/cloud-infrastructure"
+        if [ -d "$target_dir" ]; then
+            echo "    ✓ cloud-infrastructure (already installed)"
+        else
+            mkdir -p "$target_dir"
+            {
+                cat << 'CLOUD_HEADER'
+---
+description: "Cloud infrastructure tools available in this container"
+---
+# Cloud Infrastructure
+
+## Available Tools
+CLOUD_HEADER
+                [ "${INCLUDE_KUBERNETES:-false}" = "true" ] && echo "- Kubernetes: kubectl, helm, k9s, krew"
+                [ "${INCLUDE_TERRAFORM:-false}" = "true" ] && echo "- Terraform: terraform, terragrunt, tflint, terraform-docs"
+                [ "${INCLUDE_AWS:-false}" = "true" ] && echo "- AWS: aws CLI"
+                [ "${INCLUDE_GCLOUD:-false}" = "true" ] && echo "- Google Cloud: gcloud, gsutil, bq"
+                [ "${INCLUDE_CLOUDFLARE:-false}" = "true" ] && echo "- Cloudflare: wrangler"
+                echo ""
+                echo "## General Patterns"
+                echo "- Use infrastructure-as-code (Terraform, CloudFormation, etc.)"
+                echo "- Keep credentials in environment variables, never in code"
+                echo "- Use least-privilege IAM roles and service accounts"
+                echo "- Tag resources for cost tracking and ownership"
+                echo "- Use separate environments (dev, staging, production)"
+            } > "$target_dir/SKILL.md"
+            echo "    ✓ cloud-infrastructure installed (dynamic)"
+        fi
+    fi
+
+    # --- Agents ---
+    echo ""
+    echo "Agents:"
+    if [ -d "$TEMPLATES_DIR/agents" ]; then
+        for agent_dir in "$TEMPLATES_DIR/agents"/*/; do
+            [ -d "$agent_dir" ] || continue
+            agent_name=$(basename "$agent_dir")
+
+            target_dir="$CLAUDE_DIR/agents/$agent_name"
+            if [ -d "$target_dir" ]; then
+                echo "    ✓ $agent_name (already installed)"
+            else
+                mkdir -p "$target_dir"
+                cp "$agent_dir"/* "$target_dir/"
+                echo "    ✓ $agent_name installed"
+            fi
+        done
+    fi
+
+    echo ""
+fi
+
 echo ""
 echo "=== Setup Complete ==="
 echo ""
 echo "Verify with:"
 echo "  claude plugin list  - See installed plugins"
 echo "  claude mcp list     - See configured MCP servers"
+echo "  ls ~/.claude/skills/ - See installed skills"
+echo "  ls ~/.claude/agents/ - See installed agents"
 echo ""
 if ! is_claude_authenticated; then
     echo "Note: Plugins were not installed (not authenticated)."
