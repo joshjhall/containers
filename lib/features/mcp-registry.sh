@@ -1,20 +1,22 @@
 #!/bin/bash
-# MCP Server Registry - Maps short names to npm packages and configuration
+# MCP Server Registry - Maps short names to packages and configuration
 #
 # Description:
 #   Provides a registry of optional MCP servers that can be installed via
 #   the CLAUDE_EXTRA_MCPS build argument or runtime environment variable.
-#   Each entry maps a short name to its npm package and claude mcp add arguments.
+#   Each entry maps a short name to its package and claude mcp add arguments.
+#   Supports both npm packages (via npx) and Python packages (via uvx).
 #
 # Usage:
 #   source mcp-registry.sh
 #   mcp_registry_get_npm_package "brave-search"  # @modelcontextprotocol/server-brave-search
+#   mcp_registry_get_package_type "brave-search"  # npm
 #   mcp_registry_get_add_args "brave-search"      # -t stdio brave-search -- npx -y ...
 #   mcp_registry_get_env_docs "brave-search"      # BRAVE_API_KEY
 #   mcp_registry_is_registered "brave-search"      # returns 0 (true)
 #
 # Adding a new MCP server:
-#   Add a case to each of the four functions below. No other files need changes.
+#   Add a case to each of the five functions below. No other files need changes.
 #
 
 # Get the npm package name for an MCP server
@@ -43,6 +45,27 @@ mcp_registry_get_npm_package() {
             ;;
         perplexity)
             echo "@perplexity-ai/mcp-server"
+            ;;
+        kagi)
+            echo "kagimcp"
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+# Get the package type for an MCP server (npm or uvx)
+# Usage: mcp_registry_get_package_type <name>
+# Returns: "npm" or "uvx" on stdout, exit 1 if not registered
+mcp_registry_get_package_type() {
+    local name="${1:-}"
+    case "$name" in
+        kagi)
+            echo "uvx"
+            ;;
+        brave-search|fetch|memory|sequential-thinking|git|sentry|perplexity)
+            echo "npm"
             ;;
         *)
             return 1
@@ -78,6 +101,9 @@ mcp_registry_get_add_args() {
         perplexity)
             echo "-t stdio perplexity -e PERPLEXITY_API_KEY=\${PERPLEXITY_API_KEY} -- npx -y @perplexity-ai/mcp-server"
             ;;
+        kagi)
+            echo "-t stdio kagi -e KAGI_API_KEY=\${KAGI_API_KEY} -- uvx kagimcp"
+            ;;
         *)
             return 1
             ;;
@@ -111,6 +137,9 @@ mcp_registry_get_env_docs() {
         perplexity)
             echo "PERPLEXITY_API_KEY"
             ;;
+        kagi)
+            echo "KAGI_API_KEY"
+            ;;
         *)
             echo ""
             ;;
@@ -129,5 +158,5 @@ mcp_registry_is_registered() {
 # Usage: mcp_registry_list
 # Returns: space-separated list of registered names
 mcp_registry_list() {
-    echo "brave-search fetch memory sequential-thinking git sentry perplexity"
+    echo "brave-search fetch memory sequential-thinking git sentry perplexity kagi"
 }
