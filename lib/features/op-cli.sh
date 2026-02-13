@@ -279,22 +279,23 @@ op-exec() {
 }
 
 # ----------------------------------------------------------------------------
-# Automatic MCP Token Loading from 1Password
+# Automatic Secret Loading from 1Password (OP_*_REF convention)
 # ----------------------------------------------------------------------------
-# Automatically load GITHUB_TOKEN and GITLAB_TOKEN from 1Password
-# when OP_SERVICE_ACCOUNT_TOKEN is set and token refs are configured.
+# Scans the environment for variables matching OP_<NAME>_REF and populates
+# <NAME> from 1Password. Requires OP_SERVICE_ACCOUNT_TOKEN to be set.
 #
-# Environment Variables:
-#   OP_SERVICE_ACCOUNT_TOKEN - 1Password service account token
-#   OP_GITHUB_TOKEN_REF      - 1Password ref for GitHub token (e.g., op://Vault/Item/field)
-#   OP_GITLAB_TOKEN_REF      - 1Password ref for GitLab token (e.g., op://Vault/Item/field)
+# Convention:
+#   OP_<NAME>_REF=op://vault/item/field  →  exports <NAME>=<secret_value>
 #
-# Example usage in .env or docker-compose.yml:
-#   OP_SERVICE_ACCOUNT_TOKEN=ops_xxx...
-#   OP_GITHUB_TOKEN_REF=op://Development/GitHub-PAT/token
-#   OP_GITLAB_TOKEN_REF=op://Development/GitLab-PAT/token
+# Examples:
+#   OP_GITHUB_TOKEN_REF=op://Dev/GitHub-PAT/token   → GITHUB_TOKEN
+#   OP_KAGI_API_KEY_REF=op://Dev/Kagi/api-key       → KAGI_API_KEY
+#   OP_MY_SECRET_REF=op://Vault/Item/field           → MY_SECRET
+#
+# - Direct env var always wins (if <NAME> is already set, OP ref is skipped)
+# - Fails silently if OP is unavailable or unauthenticated
 # ----------------------------------------------------------------------------
-_op_load_mcp_tokens() {
+_op_load_secrets() {
     # Skip if op not available or no service account token
     if ! _check_command op || [ -z "${OP_SERVICE_ACCOUNT_TOKEN:-}" ]; then
         return 0
@@ -305,22 +306,26 @@ _op_load_mcp_tokens() {
     _old_xtrace=$(set +o | grep xtrace)
     set +x
 
-    # Load GITHUB_TOKEN if ref configured and not already set
-    if [ -n "${OP_GITHUB_TOKEN_REF:-}" ] && [ -z "${GITHUB_TOKEN:-}" ]; then
-        GITHUB_TOKEN=$(op read "${OP_GITHUB_TOKEN_REF}" 2>/dev/null) && export GITHUB_TOKEN
-    fi
-
-    # Load GITLAB_TOKEN if ref configured and not already set
-    if [ -n "${OP_GITLAB_TOKEN_REF:-}" ] && [ -z "${GITLAB_TOKEN:-}" ]; then
-        GITLAB_TOKEN=$(op read "${OP_GITLAB_TOKEN_REF}" 2>/dev/null) && export GITLAB_TOKEN
-    fi
+    local _ref_var _target_var _ref_value _secret_value
+    for _ref_var in $(compgen -v | grep '^OP_.\+_REF$'); do
+        _target_var="${_ref_var#OP_}"
+        _target_var="${_target_var%_REF}"
+        [ -z "$_target_var" ] && continue
+        # Skip if target variable is already set
+        [ -n "${!_target_var:-}" ] && continue
+        _ref_value="${!_ref_var:-}"
+        [ -z "$_ref_value" ] && continue
+        if _secret_value=$(op read "$_ref_value" 2>/dev/null); then
+            export "${_target_var}=${_secret_value}"
+        fi
+    done
 
     # Restore xtrace state
     eval "$_old_xtrace"
 }
 
-# Automatically load MCP tokens on shell initialization
-_op_load_mcp_tokens
+# Automatically load secrets on shell initialization
+_op_load_secrets
 
 # Clean up helper functions
 unset -f _check_command 2>/dev/null || true
@@ -363,29 +368,31 @@ log_command "Setting 1Password startup script permissions" \
     chmod +x /etc/container/first-startup/50-1password-setup.sh
 
 # ============================================================================
-# MCP Token Loading Startup Script
+# Secret Loading Startup Script (OP_*_REF convention)
 # ============================================================================
-log_message "Creating MCP token loading startup script..."
+log_message "Creating 1Password secret loading startup script..."
 
 # Create regular startup directory if it doesn't exist
 log_command "Creating container startup directory" \
     mkdir -p /etc/container/startup
 
-command cat > /etc/container/startup/45-op-mcp-tokens.sh << 'EOF'
+command cat > /etc/container/startup/45-op-secrets.sh << 'EOF'
 #!/bin/bash
-# Load MCP tokens (GITHUB_TOKEN, GITLAB_TOKEN) from 1Password on container startup
+# Load secrets from 1Password on container startup (OP_*_REF convention)
 #
 # This script runs on every container startup (not just first startup) to ensure
-# tokens are available for background processes and non-interactive shells.
+# secrets are available for background processes and non-interactive shells.
+#
+# Convention:
+#   OP_<NAME>_REF=op://vault/item/field  →  exports <NAME>=<secret_value>
 #
 # Environment Variables:
 #   OP_SERVICE_ACCOUNT_TOKEN - 1Password service account token (required)
-#   OP_GITHUB_TOKEN_REF      - 1Password ref for GitHub token
-#   OP_GITLAB_TOKEN_REF      - 1Password ref for GitLab token
+#   OP_<NAME>_REF            - 1Password ref for any secret
 #
-# Example:
-#   OP_SERVICE_ACCOUNT_TOKEN=ops_xxx...
-#   OP_GITHUB_TOKEN_REF=op://Development/GitHub-PAT/token
+# Examples:
+#   OP_GITHUB_TOKEN_REF=op://Dev/GitHub-PAT/token   → GITHUB_TOKEN
+#   OP_KAGI_API_KEY_REF=op://Dev/Kagi/api-key       → KAGI_API_KEY
 #
 set +e  # Don't exit on errors
 
@@ -395,21 +402,31 @@ command -v op >/dev/null 2>&1 || exit 0
 # Skip if no service account token configured
 [ -z "${OP_SERVICE_ACCOUNT_TOKEN:-}" ] && exit 0
 
-# Load GITHUB_TOKEN if ref configured and not already set
-if [ -n "${OP_GITHUB_TOKEN_REF:-}" ] && [ -z "${GITHUB_TOKEN:-}" ]; then
-    GITHUB_TOKEN=$(op read "${OP_GITHUB_TOKEN_REF}" 2>/dev/null) && export GITHUB_TOKEN
-fi
+# Disable xtrace to prevent secret exposure in logs
+_old_xtrace=$(set +o | grep xtrace)
+set +x
 
-# Load GITLAB_TOKEN if ref configured and not already set
-if [ -n "${OP_GITLAB_TOKEN_REF:-}" ] && [ -z "${GITLAB_TOKEN:-}" ]; then
-    GITLAB_TOKEN=$(op read "${OP_GITLAB_TOKEN_REF}" 2>/dev/null) && export GITLAB_TOKEN
-fi
+for _ref_var in $(compgen -v | grep '^OP_.\+_REF$'); do
+    _target_var="${_ref_var#OP_}"
+    _target_var="${_target_var%_REF}"
+    [ -z "$_target_var" ] && continue
+    # Skip if target variable is already set
+    [ -n "${!_target_var:-}" ] && continue
+    _ref_value="${!_ref_var:-}"
+    [ -z "$_ref_value" ] && continue
+    if _secret_value=$(op read "$_ref_value" 2>/dev/null); then
+        export "${_target_var}=${_secret_value}"
+    fi
+done
+
+# Restore xtrace state
+eval "$_old_xtrace"
 
 exit 0
 EOF
 
-log_command "Setting MCP token startup script permissions" \
-    chmod 755 /etc/container/startup/45-op-mcp-tokens.sh
+log_command "Setting 1Password secret startup script permissions" \
+    chmod 755 /etc/container/startup/45-op-secrets.sh
 
 # ============================================================================
 # Verification Script
