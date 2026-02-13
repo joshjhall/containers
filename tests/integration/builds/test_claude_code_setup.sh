@@ -111,10 +111,10 @@ test_plugin_names() {
         "grep -q 'kotlin-lsp' /usr/local/bin/claude-setup && echo 'correct'" \
         "correct"
 
-    # Verify core plugins are listed
+    # Verify core plugins are listed (figma moved to optional, available via CLAUDE_EXTRA_PLUGINS)
     assert_command_in_container "$image" \
-        "grep -q 'install_plugin \"figma\"' /usr/local/bin/claude-setup && echo 'has figma'" \
-        "has figma"
+        "grep -q 'install_plugin \"commit-commands\"' /usr/local/bin/claude-setup && echo 'has commit-commands'" \
+        "has commit-commands"
 
     assert_command_in_container "$image" \
         "grep -q 'install_plugin \"pr-review-toolkit\"' /usr/local/bin/claude-setup && echo 'has pr-review'" \
@@ -238,6 +238,63 @@ test_backward_compat_mcp_servers_flag() {
     assert_executable_in_path "$image" "node"
 }
 
+# Test: Extra MCP servers installed with CLAUDE_EXTRA_MCPS
+test_extra_mcps_installed() {
+    local image="test-claude-extra-mcps-$$"
+
+    # Build with extra MCPs
+    assert_build_succeeds "Dockerfile" \
+        --build-arg PROJECT_PATH=. \
+        --build-arg PROJECT_NAME=test-claude-extra-mcps \
+        --build-arg INCLUDE_DEV_TOOLS=true \
+        --build-arg INCLUDE_NODE=true \
+        --build-arg CLAUDE_EXTRA_MCPS="fetch,memory" \
+        -t "$image"
+
+    # Verify extra MCP npm packages are installed
+    assert_command_in_container "$image" \
+        "test -d /usr/local/lib/node_modules/@modelcontextprotocol/server-fetch && echo 'installed'" \
+        "installed"
+
+    assert_command_in_container "$image" \
+        "test -d /usr/local/lib/node_modules/@modelcontextprotocol/server-memory && echo 'installed'" \
+        "installed"
+
+    # Verify MCP registry is persisted to runtime config
+    assert_command_in_container "$image" \
+        "test -f /etc/container/config/mcp-registry.sh && echo 'exists'" \
+        "exists"
+
+    # Verify enabled-features.conf contains CLAUDE_EXTRA_MCPS_DEFAULT
+    assert_command_in_container "$image" \
+        "grep 'CLAUDE_EXTRA_MCPS_DEFAULT' /etc/container/config/enabled-features.conf && echo 'has mcps'" \
+        "has mcps"
+
+    # Verify claude-setup has extra MCP configuration logic
+    assert_command_in_container "$image" \
+        "grep -q 'mcp_registry_is_registered' /usr/local/bin/claude-setup && echo 'has registry'" \
+        "has registry"
+}
+
+# Test: Unknown MCP server name handled gracefully (no build failure)
+test_unknown_mcp_graceful() {
+    local image="test-claude-unknown-mcp-$$"
+
+    # Build with an unknown MCP name - should NOT fail
+    assert_build_succeeds "Dockerfile" \
+        --build-arg PROJECT_PATH=. \
+        --build-arg PROJECT_NAME=test-claude-unknown-mcp \
+        --build-arg INCLUDE_DEV_TOOLS=true \
+        --build-arg INCLUDE_NODE=true \
+        --build-arg CLAUDE_EXTRA_MCPS="fetch,nonexistent-server" \
+        -t "$image"
+
+    # Verify the valid MCP was still installed despite the invalid one
+    assert_command_in_container "$image" \
+        "test -d /usr/local/lib/node_modules/@modelcontextprotocol/server-fetch && echo 'installed'" \
+        "installed"
+}
+
 # Test: MCP not installed without Node.js
 test_mcp_requires_node() {
     local image="test-claude-no-node-$$"
@@ -272,6 +329,8 @@ if [ -z "${IMAGE_TO_TEST:-}" ]; then
     run_test test_enabled_features_config "Build-time config file created with correct flags"
     run_test test_backward_compat_mcp_servers_flag "Backward compat: INCLUDE_MCP_SERVERS triggers Node.js"
     run_test test_mcp_requires_node "MCP not installed without Node.js"
+    run_test test_extra_mcps_installed "Extra MCP servers installed with CLAUDE_EXTRA_MCPS"
+    run_test test_unknown_mcp_graceful "Unknown MCP server name handled gracefully"
 fi
 
 # Generate test report
