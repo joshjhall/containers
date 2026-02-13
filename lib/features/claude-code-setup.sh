@@ -151,16 +151,21 @@ if command -v node &>/dev/null && command -v npm &>/dev/null; then
             [ -z "$mcp_name" ] && continue
 
             if ! mcp_registry_is_registered "$mcp_name"; then
-                log_warning "Unknown MCP server '$mcp_name' - skipping npm install"
+                log_warning "Unknown MCP server '$mcp_name' - skipping install"
                 log_warning "Registered servers: $(mcp_registry_list)"
                 continue
             fi
 
-            npm_package=$(mcp_registry_get_npm_package "$mcp_name")
-            log_command "Installing $npm_package" \
-                npm install -g --silent "$npm_package" || {
-                log_warning "Failed to install $npm_package"
-            }
+            pkg_type=$(mcp_registry_get_package_type "$mcp_name" 2>/dev/null || echo "npm")
+            if [ "$pkg_type" = "npm" ]; then
+                npm_package=$(mcp_registry_get_npm_package "$mcp_name")
+                log_command "Installing $npm_package" \
+                    npm install -g --silent "$npm_package" || {
+                    log_warning "Failed to install $npm_package"
+                }
+            else
+                log_message "Skipping build-time install for $mcp_name (uses $pkg_type at runtime)"
+            fi
         done
     fi
 
