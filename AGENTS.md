@@ -258,6 +258,28 @@ docker build --build-arg CLAUDE_EXTRA_PLUGINS="stripe,posthog,vercel" ...
 docker run -e CLAUDE_EXTRA_PLUGINS="stripe,posthog" ...
 ```
 
+**Extra MCP servers**: Use `CLAUDE_EXTRA_MCPS` to install additional MCP servers:
+
+```bash
+# At build time
+docker build --build-arg CLAUDE_EXTRA_MCPS="brave-search,memory,fetch" ...
+
+# At runtime (overrides build-time value)
+docker run -e CLAUDE_EXTRA_MCPS="brave-search,sentry" -e BRAVE_API_KEY=xxx ...
+```
+
+Available MCP servers:
+
+| Short Name            | NPM Package                                        | Required Env Vars             |
+| --------------------- | -------------------------------------------------- | ----------------------------- |
+| `brave-search`        | `@modelcontextprotocol/server-brave-search`        | `BRAVE_API_KEY`               |
+| `fetch`               | `@modelcontextprotocol/server-fetch`               | (none)                        |
+| `memory`              | `@modelcontextprotocol/server-memory`              | `MEMORY_FILE_PATH` (optional) |
+| `sequential-thinking` | `@modelcontextprotocol/server-sequential-thinking` | (none)                        |
+| `git`                 | `@modelcontextprotocol/server-git`                 | (none)                        |
+| `sentry`              | `@sentry/mcp-server`                               | `SENTRY_ACCESS_TOKEN`         |
+| `perplexity`          | `@perplexity-ai/mcp-server`                        | `PERPLEXITY_API_KEY`          |
+
 **Release channel**: Use `CLAUDE_CHANNEL` to select the Claude Code release channel:
 
 ```bash

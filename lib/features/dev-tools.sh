@@ -929,6 +929,10 @@ INCLUDE_ANDROID_DEV=${INCLUDE_ANDROID_DEV:-false}
 # Extra plugins to install (comma-separated)
 # Can be overridden at runtime via environment variable
 CLAUDE_EXTRA_PLUGINS_DEFAULT="${CLAUDE_EXTRA_PLUGINS:-}"
+
+# Extra MCP servers to install (comma-separated)
+# Can be overridden at runtime via environment variable
+CLAUDE_EXTRA_MCPS_DEFAULT="${CLAUDE_EXTRA_MCPS:-}"
 FEATURES_EOF
 
 log_command "Setting config file permissions" \

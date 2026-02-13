@@ -434,6 +434,8 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 ARG INCLUDE_DEV_TOOLS=false
 # Extra Claude Code plugins to install (comma-separated, e.g., "stripe,posthog,vercel")
 ARG CLAUDE_EXTRA_PLUGINS=""
+# Extra MCP servers to install (comma-separated, e.g., "brave-search,memory,fetch")
+ARG CLAUDE_EXTRA_MCPS=""
 # Claude Code release channel: stable (recommended) or latest
 ARG CLAUDE_CHANNEL=stable
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
@@ -448,6 +450,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     INCLUDE_KOTLIN_DEV=${INCLUDE_KOTLIN_DEV} \
     INCLUDE_ANDROID_DEV=${INCLUDE_ANDROID_DEV} \
     CLAUDE_EXTRA_PLUGINS=${CLAUDE_EXTRA_PLUGINS} \
+    CLAUDE_EXTRA_MCPS=${CLAUDE_EXTRA_MCPS} \
     /tmp/build-scripts/features/dev-tools.sh; \
     fi
 
@@ -473,6 +476,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     INCLUDE_RUST_DEV=${INCLUDE_RUST_DEV} \
     INCLUDE_KOTLIN_DEV=${INCLUDE_KOTLIN_DEV} \
     CLAUDE_EXTRA_PLUGINS=${CLAUDE_EXTRA_PLUGINS} \
+    CLAUDE_EXTRA_MCPS=${CLAUDE_EXTRA_MCPS} \
     CLAUDE_CHANNEL=${CLAUDE_CHANNEL} \
     /tmp/build-scripts/features/claude-code-setup.sh; \
     fi

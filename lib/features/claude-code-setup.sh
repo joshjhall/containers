@@ -139,6 +139,38 @@ if command -v node &>/dev/null && command -v npm &>/dev/null; then
         log_warning "bash-language-server installation could not be verified"
     fi
 
+    # Install extra MCP server packages from CLAUDE_EXTRA_MCPS
+    EXTRA_MCPS_TO_INSTALL="${CLAUDE_EXTRA_MCPS:-}"
+    if [ -n "$EXTRA_MCPS_TO_INSTALL" ]; then
+        log_message "Installing extra MCP server packages..."
+        source /tmp/build-scripts/features/mcp-registry.sh
+
+        IFS=',' read -ra EXTRA_MCP_LIST <<< "$EXTRA_MCPS_TO_INSTALL"
+        for mcp_name in "${EXTRA_MCP_LIST[@]}"; do
+            mcp_name=$(echo "$mcp_name" | xargs)  # Trim whitespace
+            [ -z "$mcp_name" ] && continue
+
+            if ! mcp_registry_is_registered "$mcp_name"; then
+                log_warning "Unknown MCP server '$mcp_name' - skipping npm install"
+                log_warning "Registered servers: $(mcp_registry_list)"
+                continue
+            fi
+
+            npm_package=$(mcp_registry_get_npm_package "$mcp_name")
+            log_command "Installing $npm_package" \
+                npm install -g --silent "$npm_package" || {
+                log_warning "Failed to install $npm_package"
+            }
+        done
+    fi
+
+    # Copy MCP registry to runtime config for use by claude-setup
+    mkdir -p /etc/container/config
+    log_command "Copying MCP registry to runtime config" \
+        cp /tmp/build-scripts/features/mcp-registry.sh /etc/container/config/mcp-registry.sh
+    log_command "Setting MCP registry permissions" \
+        chmod 644 /etc/container/config/mcp-registry.sh
+
     log_message "MCP servers installed successfully"
 else
     log_message "Node.js not available - skipping MCP servers and bash-language-server"
@@ -576,6 +608,53 @@ case "$platform" in
         ;;
 esac
 
+# ============================================================================
+# Extra MCP Servers (from CLAUDE_EXTRA_MCPS)
+# ============================================================================
+MCP_REGISTRY="/etc/container/config/mcp-registry.sh"
+EXTRA_MCPS_TO_CONFIGURE="${CLAUDE_EXTRA_MCPS:-${CLAUDE_EXTRA_MCPS_DEFAULT:-}}"
+
+if [ -n "$EXTRA_MCPS_TO_CONFIGURE" ] && [ -f "$MCP_REGISTRY" ]; then
+    echo "Configuring extra MCP servers..."
+    # shellcheck source=/dev/null
+    source "$MCP_REGISTRY"
+
+    REQUIRED_ENV_VARS=""
+    IFS=',' read -ra EXTRA_MCP_LIST <<< "$EXTRA_MCPS_TO_CONFIGURE"
+    for mcp_name in "${EXTRA_MCP_LIST[@]}"; do
+        mcp_name=$(echo "$mcp_name" | xargs)  # Trim whitespace
+        [ -z "$mcp_name" ] && continue
+
+        if ! mcp_registry_is_registered "$mcp_name"; then
+            echo "    ⚠ Unknown MCP server: $mcp_name (skipping)"
+            echo "      Registered: $(mcp_registry_list)"
+            continue
+        fi
+
+        # Get the add_mcp_server arguments from the registry
+        add_args=$(mcp_registry_get_add_args "$mcp_name")
+        # Use eval to properly expand the arguments string into separate args
+        eval "add_mcp_server $add_args" || true
+
+        # Collect required env vars for user information
+        env_docs=$(mcp_registry_get_env_docs "$mcp_name")
+        if [ -n "$env_docs" ]; then
+            REQUIRED_ENV_VARS="${REQUIRED_ENV_VARS:+$REQUIRED_ENV_VARS, }${mcp_name}: ${env_docs}"
+        fi
+    done
+
+    if [ -n "$REQUIRED_ENV_VARS" ]; then
+        echo ""
+        echo "  Required environment variables for extra MCPs:"
+        echo "    $REQUIRED_ENV_VARS"
+    fi
+    echo ""
+elif [ -n "$EXTRA_MCPS_TO_CONFIGURE" ]; then
+    echo "  ⚠ MCP registry not found at $MCP_REGISTRY"
+    echo "    Extra MCP servers cannot be configured without the registry."
+    echo ""
+fi
+
 echo ""
 echo "=== Setup Complete ==="
 echo ""
@@ -875,7 +954,7 @@ log_feature_summary \
     --feature "Claude Code Setup" \
     --tools "claude,claude-setup,claude-auth-watcher,bash-language-server" \
     --paths "/usr/local/bin/claude,/usr/local/bin/claude-setup,/usr/local/bin/claude-auth-watcher,/etc/container/first-startup/30-claude-code-setup.sh,/etc/container/startup/35-claude-auth-watcher.sh" \
-    --env "ENABLE_LSP_TOOL,CLAUDE_EXTRA_PLUGINS,GIT_PLATFORM,CLAUDE_AUTH_WATCHER_TIMEOUT" \
+    --env "ENABLE_LSP_TOOL,CLAUDE_EXTRA_PLUGINS,CLAUDE_EXTRA_MCPS,GIT_PLATFORM,CLAUDE_AUTH_WATCHER_TIMEOUT" \
     --commands "claude,claude-setup,claude-auth-watcher" \
     --next-steps "Run 'claude' to authenticate. Setup runs automatically after auth (via watcher). Manual: 'claude-setup'."
 
