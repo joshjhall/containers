@@ -94,6 +94,148 @@ run_test_with_setup() {
     teardown
 }
 
+# ============================================================================
+# OP_*_REF Pattern Tests
+# ============================================================================
+
+# Helper: derive target variable name from an OP_*_REF variable name
+# (mirrors the logic in _op_load_secrets / 45-op-secrets.sh)
+_derive_target() {
+    local ref_var="$1"
+    local target="${ref_var#OP_}"
+    target="${target%_REF}"
+    echo "$target"
+}
+
+test_op_ref_pattern_matching() {
+    # Set up test env vars (export so compgen -v finds them)
+    export OP_GITHUB_TOKEN_REF="op://Vault/GitHub/token"
+    export OP_KAGI_API_KEY_REF="op://Vault/Kagi/key"
+    export OP_MY_PROJECT_SECRET_REF="op://Vault/Item/field"
+    # These should NOT match
+    export OP_SERVICE_ACCOUNT_TOKEN="ops_xxx"
+    export OP_REF="should-not-match"
+    export GITHUB_TOKEN_REF="missing-op-prefix"
+
+    local matches
+    matches=$(compgen -v | grep '^OP_.\+_REF$' || true)
+
+    echo "$matches" | grep -q "OP_GITHUB_TOKEN_REF" \
+        && assert_true 0 "OP_GITHUB_TOKEN_REF matches pattern" \
+        || assert_true 1 "OP_GITHUB_TOKEN_REF should match pattern"
+
+    echo "$matches" | grep -q "OP_KAGI_API_KEY_REF" \
+        && assert_true 0 "OP_KAGI_API_KEY_REF matches pattern" \
+        || assert_true 1 "OP_KAGI_API_KEY_REF should match pattern"
+
+    echo "$matches" | grep -q "OP_MY_PROJECT_SECRET_REF" \
+        && assert_true 0 "OP_MY_PROJECT_SECRET_REF matches pattern" \
+        || assert_true 1 "OP_MY_PROJECT_SECRET_REF should match pattern"
+
+    # Should NOT match
+    echo "$matches" | grep -q "OP_SERVICE_ACCOUNT_TOKEN" \
+        && assert_true 1 "OP_SERVICE_ACCOUNT_TOKEN should not match" \
+        || assert_true 0 "OP_SERVICE_ACCOUNT_TOKEN excluded from pattern"
+
+    echo "$matches" | grep -q '^OP_REF$' \
+        && assert_true 1 "OP_REF should not match (no middle)" \
+        || assert_true 0 "OP_REF excluded from pattern"
+
+    echo "$matches" | grep -q '^GITHUB_TOKEN_REF$' \
+        && assert_true 1 "GITHUB_TOKEN_REF should not match (no OP_ prefix)" \
+        || assert_true 0 "GITHUB_TOKEN_REF excluded from pattern"
+
+    # Clean up
+    unset OP_GITHUB_TOKEN_REF OP_KAGI_API_KEY_REF OP_MY_PROJECT_SECRET_REF
+    unset OP_SERVICE_ACCOUNT_TOKEN OP_REF GITHUB_TOKEN_REF
+}
+
+test_op_ref_target_derivation() {
+    # Verify prefix/suffix stripping produces the correct target variable name
+    local result
+
+    result=$(_derive_target "OP_GITHUB_TOKEN_REF")
+    [ "$result" = "GITHUB_TOKEN" ] \
+        && assert_true 0 "OP_GITHUB_TOKEN_REF derives GITHUB_TOKEN" \
+        || assert_true 1 "Expected GITHUB_TOKEN, got $result"
+
+    result=$(_derive_target "OP_KAGI_API_KEY_REF")
+    [ "$result" = "KAGI_API_KEY" ] \
+        && assert_true 0 "OP_KAGI_API_KEY_REF derives KAGI_API_KEY" \
+        || assert_true 1 "Expected KAGI_API_KEY, got $result"
+
+    result=$(_derive_target "OP_GITLAB_TOKEN_REF")
+    [ "$result" = "GITLAB_TOKEN" ] \
+        && assert_true 0 "OP_GITLAB_TOKEN_REF derives GITLAB_TOKEN" \
+        || assert_true 1 "Expected GITLAB_TOKEN, got $result"
+
+    result=$(_derive_target "OP_MY_PROJECT_SECRET_REF")
+    [ "$result" = "MY_PROJECT_SECRET" ] \
+        && assert_true 0 "OP_MY_PROJECT_SECRET_REF derives MY_PROJECT_SECRET" \
+        || assert_true 1 "Expected MY_PROJECT_SECRET, got $result"
+
+    result=$(_derive_target "OP_X_REF")
+    [ "$result" = "X" ] \
+        && assert_true 0 "OP_X_REF derives X (single char)" \
+        || assert_true 1 "Expected X, got $result"
+}
+
+test_op_ref_skip_when_set() {
+    # Simulate the skip logic: if target var is already set, OP ref should be skipped
+    export GITHUB_TOKEN="existing-value"
+    export OP_GITHUB_TOKEN_REF="op://Vault/GitHub/token"
+
+    local _target_var="GITHUB_TOKEN"
+    # This is the guard condition from the loop
+    [ -n "${!_target_var:-}" ] \
+        && assert_true 0 "Existing GITHUB_TOKEN causes skip" \
+        || assert_true 1 "Should skip when target already set"
+
+    # When target is empty, should NOT skip
+    unset GITHUB_TOKEN
+    export GITHUB_TOKEN=""
+    _target_var="GITHUB_TOKEN"
+    [ -n "${!_target_var:-}" ] \
+        && assert_true 1 "Empty GITHUB_TOKEN should not cause skip" \
+        || assert_true 0 "Empty target var allows loading"
+
+    # Completely unset — should not skip
+    unset GITHUB_TOKEN
+    [ -n "${!_target_var:-}" ] \
+        && assert_true 1 "Unset GITHUB_TOKEN should not cause skip" \
+        || assert_true 0 "Unset target var allows loading"
+
+    # Clean up
+    unset OP_GITHUB_TOKEN_REF GITHUB_TOKEN 2>/dev/null || true
+}
+
+test_op_ref_bashrc_contains_generic_loop() {
+    # Verify the op-cli.sh build script generates the generic _op_load_secrets function
+    local op_cli_script
+    op_cli_script="$(dirname "${BASH_SOURCE[0]}")/../../../lib/features/op-cli.sh"
+
+    grep -q '_op_load_secrets' "$op_cli_script" \
+        && assert_true 0 "op-cli.sh contains _op_load_secrets function" \
+        || assert_true 1 "op-cli.sh missing _op_load_secrets function"
+
+    grep -q 'compgen -v' "$op_cli_script" \
+        && assert_true 0 "op-cli.sh uses compgen -v for generic scanning" \
+        || assert_true 1 "op-cli.sh missing compgen -v"
+
+    grep -q '45-op-secrets.sh' "$op_cli_script" \
+        && assert_true 0 "op-cli.sh creates 45-op-secrets.sh startup script" \
+        || assert_true 1 "op-cli.sh missing 45-op-secrets.sh reference"
+
+    # Ensure old hardcoded references are removed
+    grep -q '_op_load_mcp_tokens' "$op_cli_script" \
+        && assert_true 1 "Old _op_load_mcp_tokens should be removed" \
+        || assert_true 0 "Old _op_load_mcp_tokens removed"
+
+    grep -q '45-op-mcp-tokens.sh' "$op_cli_script" \
+        && assert_true 1 "Old 45-op-mcp-tokens.sh should be removed" \
+        || assert_true 0 "Old 45-op-mcp-tokens.sh removed"
+}
+
 run_test_with_setup test_installation "Installation test"
 run_test_with_setup test_configuration "Configuration test"
 run_test_with_setup test_environment "Environment test"
@@ -104,5 +246,9 @@ run_test_with_setup test_cache_directory "Cache directory test"
 run_test_with_setup test_user_config "User config test"
 run_test_with_setup test_startup_script "Startup script test"
 run_test_with_setup test_verification "Verification test"
+run_test_with_setup test_op_ref_pattern_matching "OP_*_REF pattern matching test"
+run_test_with_setup test_op_ref_target_derivation "OP_*_REF target derivation test"
+run_test_with_setup test_op_ref_skip_when_set "OP_*_REF skip when target set test"
+run_test_with_setup test_op_ref_bashrc_contains_generic_loop "OP_*_REF bashrc generic loop test"
 
 generate_report

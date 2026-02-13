@@ -19,6 +19,8 @@ services:
         INCLUDE_DOCKER: "true"
         # Python needed for pre-commit framework and linting tools
         INCLUDE_PYTHON: "true"
+        # Extra MCP servers (kagi for search)
+        CLAUDE_EXTRA_MCPS: "kagi,memory"
       cache_from:
         - type=local,src=/tmp/.buildx-cache
       cache_to:
@@ -28,11 +30,6 @@ services:
       - ..:/workspace/containers
     env_file:
       - ../.env
-    environment:
-      - TZ=${TZ:-America/Chicago}
-      - ENVIRONMENT=${ENVIRONMENT:-development}
-      # 1Password integration
-      - OP_CONTAINERS_ENV_VAULT=${OP_CONTAINERS_ENV_VAULT:-Development}
     # Use tini as init system for proper zombie process reaping
     # This is a belt-and-suspenders approach - the Dockerfile also includes tini,
     # but init: true ensures proper PID 1 behavior even if command overrides entrypoint
