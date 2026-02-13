@@ -67,6 +67,9 @@ test_npm_package_values() {
 
     package=$(mcp_registry_get_npm_package "perplexity")
     assert_equals "@perplexity-ai/mcp-server" "$package" "perplexity npm package"
+
+    package=$(mcp_registry_get_npm_package "kagi")
+    assert_equals "kagimcp" "$package" "kagi package"
 }
 
 # Test: All registered servers return add args with correct structure
@@ -82,8 +85,14 @@ test_add_args() {
         assert_not_empty "$args" "$server has add args"
         # All args should contain -t stdio
         assert_contains "$args" "-t stdio" "$server args include -t stdio"
-        # All args should contain npx -y
-        assert_contains "$args" "npx -y" "$server args include npx -y"
+        # Args should contain a package runner (npx -y for npm, uvx for Python)
+        local pkg_type
+        pkg_type=$(mcp_registry_get_package_type "$server")
+        if [ "$pkg_type" = "uvx" ]; then
+            assert_contains "$args" "uvx" "$server args include uvx"
+        else
+            assert_contains "$args" "npx -y" "$server args include npx -y"
+        fi
     done
 }
 
@@ -100,6 +109,9 @@ test_env_vars_in_args() {
 
     args=$(mcp_registry_get_add_args "perplexity")
     assert_contains "$args" "PERPLEXITY_API_KEY" "perplexity args include env var"
+
+    args=$(mcp_registry_get_add_args "kagi")
+    assert_contains "$args" "KAGI_API_KEY" "kagi args include env var"
 }
 
 # Test: Servers without required env vars have clean args
@@ -133,6 +145,9 @@ test_env_docs() {
 
     docs=$(mcp_registry_get_env_docs "sequential-thinking")
     assert_equals "" "$docs" "sequential-thinking has no required env vars"
+
+    docs=$(mcp_registry_get_env_docs "kagi")
+    assert_equals "KAGI_API_KEY" "$docs" "kagi env docs"
 }
 
 # Test: Unknown server name returns error
@@ -161,6 +176,7 @@ test_is_registered() {
     assert_true mcp_registry_is_registered "memory" "memory is registered"
     assert_true mcp_registry_is_registered "git" "git is registered"
     assert_true mcp_registry_is_registered "sentry" "sentry is registered"
+    assert_true mcp_registry_is_registered "kagi" "kagi is registered"
 
     assert_false mcp_registry_is_registered "nonexistent" "nonexistent is not registered"
     assert_false mcp_registry_is_registered "" "empty string is not registered"
@@ -180,6 +196,28 @@ test_list_function() {
     assert_contains "$list" "git" "list includes git"
     assert_contains "$list" "sentry" "list includes sentry"
     assert_contains "$list" "perplexity" "list includes perplexity"
+    assert_contains "$list" "kagi" "list includes kagi"
+}
+
+# Test: Package type returns correct values
+test_package_type() {
+    source "$REGISTRY_FILE"
+
+    local pkg_type
+    pkg_type=$(mcp_registry_get_package_type "brave-search")
+    assert_equals "npm" "$pkg_type" "brave-search is npm type"
+
+    pkg_type=$(mcp_registry_get_package_type "fetch")
+    assert_equals "npm" "$pkg_type" "fetch is npm type"
+
+    pkg_type=$(mcp_registry_get_package_type "kagi")
+    assert_equals "uvx" "$pkg_type" "kagi is uvx type"
+
+    if mcp_registry_get_package_type "nonexistent" >/dev/null 2>&1; then
+        fail_test "Unknown server should return error from get_package_type"
+    else
+        pass_test "Unknown server rejected by get_package_type"
+    fi
 }
 
 # Test: Registry is referenced in claude-code-setup.sh
@@ -202,6 +240,7 @@ run_test test_env_docs "Environment docs return correct values"
 run_test test_unknown_server_rejected "Unknown server names are rejected"
 run_test test_is_registered "is_registered correctly identifies servers"
 run_test test_list_function "List function returns all servers"
+run_test test_package_type "Package type returns correct values"
 run_test test_registry_used_in_setup "Registry is referenced in claude-code-setup.sh"
 
 # Generate test report

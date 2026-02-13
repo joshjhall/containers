@@ -269,7 +269,7 @@ docker run -e CLAUDE_EXTRA_MCPS="brave-search,sentry" -e BRAVE_API_KEY=xxx ...
 
 Available MCP servers:
 
-| Short Name            | NPM Package                                        | Required Env Vars             |
+| Short Name            | Package                                            | Required Env Vars             |
 | --------------------- | -------------------------------------------------- | ----------------------------- |
 | `brave-search`        | `@modelcontextprotocol/server-brave-search`        | `BRAVE_API_KEY`               |
 | `fetch`               | `@modelcontextprotocol/server-fetch`               | (none)                        |
@@ -278,6 +278,7 @@ Available MCP servers:
 | `git`                 | `@modelcontextprotocol/server-git`                 | (none)                        |
 | `sentry`              | `@sentry/mcp-server`                               | `SENTRY_ACCESS_TOKEN`         |
 | `perplexity`          | `@perplexity-ai/mcp-server`                        | `PERPLEXITY_API_KEY`          |
+| `kagi`                | `kagimcp` (Python/uvx)                             | `KAGI_API_KEY`                |
 
 **Release channel**: Use `CLAUDE_CHANNEL` to select the Claude Code release channel:
 
