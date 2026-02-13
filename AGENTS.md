@@ -376,16 +376,19 @@ Set the appropriate token at runtime:
 - `GITHUB_TOKEN`: GitHub personal access token (when using GitHub)
 - `GITLAB_TOKEN`: GitLab personal access token (when using GitLab)
 
-#### Automatic Token Loading from 1Password
+#### Automatic Secret Loading from 1Password (`OP_*_REF` convention)
 
-When `INCLUDE_OP=true`, you can automatically load `GITHUB_TOKEN` and `GITLAB_TOKEN`
-from 1Password using a service account:
+When `INCLUDE_OP=true`, any environment variable matching `OP_<NAME>_REF` is
+automatically resolved from 1Password and exported as `<NAME>`. This is generic
+-- projects can add their own refs with zero changes to the container build system.
 
-| Variable                   | Purpose                         | Example                       |
-| -------------------------- | ------------------------------- | ----------------------------- |
-| `OP_SERVICE_ACCOUNT_TOKEN` | 1Password service account token | `ops_xxx...`                  |
-| `OP_GITHUB_TOKEN_REF`      | 1Password ref for GitHub token  | `op://Vault/GitHub-PAT/token` |
-| `OP_GITLAB_TOKEN_REF`      | 1Password ref for GitLab token  | `op://Vault/GitLab-PAT/token` |
+| Variable                   | Exports        | Example                       |
+| -------------------------- | -------------- | ----------------------------- |
+| `OP_SERVICE_ACCOUNT_TOKEN` | *(required)*   | `ops_xxx...`                  |
+| `OP_GITHUB_TOKEN_REF`      | `GITHUB_TOKEN` | `op://Vault/GitHub-PAT/token` |
+| `OP_GITLAB_TOKEN_REF`      | `GITLAB_TOKEN` | `op://Vault/GitLab-PAT/token` |
+| `OP_KAGI_API_KEY_REF`      | `KAGI_API_KEY` | `op://Vault/Kagi/api-key`     |
+| `OP_MY_SECRET_REF`         | `MY_SECRET`    | `op://Vault/Item/field`       |
 
 Example docker-compose.yml:
 
@@ -395,10 +398,11 @@ services:
     environment:
       - OP_SERVICE_ACCOUNT_TOKEN=${OP_SERVICE_ACCOUNT_TOKEN}
       - OP_GITHUB_TOKEN_REF=op://Development/GitHub-PAT/token
+      - OP_KAGI_API_KEY_REF=op://Development/Kagi/api-key
 ```
 
-Tokens are loaded automatically on shell initialization and container startup.
-Existing tokens are preserved (won't overwrite if already set).
+Secrets are loaded automatically on shell initialization and container startup.
+Direct env vars always win (if `<NAME>` is already set, the OP ref is skipped).
 
 ### Claude Code Authentication
 
