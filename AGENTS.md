@@ -297,6 +297,42 @@ docker build --build-arg CLAUDE_CHANNEL=latest ...
 **Note**: The startup script is idempotent and will skip plugins that are
 already installed. To verify installed plugins, run: `claude plugin list`
 
+### Pre-installed Skills & Agents
+
+When `INCLUDE_DEV_TOOLS=true`, Claude Code skills and agents are automatically
+installed to `~/.claude/skills/` and `~/.claude/agents/` on first container
+startup via `claude-setup`. Project-level `.claude/` configs merge with these
+(union semantics, project wins on name conflicts).
+
+**Skills** (always installed):
+
+| Skill                   | Purpose                                                              |
+| ----------------------- | -------------------------------------------------------------------- |
+| `container-environment` | Dynamic - describes installed tools, cache paths, container patterns |
+| `git-workflow`          | Git commit conventions, branch naming, PR workflow                   |
+| `testing-patterns`      | Test-first development, test framework patterns                      |
+| `code-quality`          | Linting, formatting, code review checklist                           |
+
+**Conditional skills**:
+
+| Skill                  | Condition                                                                                                         |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `docker-development`   | `INCLUDE_DOCKER=true`                                                                                             |
+| `cloud-infrastructure` | Any cloud flag (`INCLUDE_KUBERNETES`, `INCLUDE_TERRAFORM`, `INCLUDE_AWS`, `INCLUDE_GCLOUD`, `INCLUDE_CLOUDFLARE`) |
+
+**Agents** (always installed):
+
+| Agent           | Purpose                                              |
+| --------------- | ---------------------------------------------------- |
+| `code-reviewer` | Reviews code for bugs, security, performance, style  |
+| `test-writer`   | Generates tests for existing code, detects framework |
+| `refactorer`    | Refactors code while preserving behavior             |
+
+Templates are staged at build time to `/etc/container/config/claude-templates/`
+and installed at runtime by `claude-setup`. All installations are idempotent.
+
+To verify: `ls ~/.claude/skills/` and `ls ~/.claude/agents/`
+
 ### MCP Servers (installed by claude-code-setup.sh when Node.js available)
 
 MCP servers are automatically installed by `claude-code-setup.sh` when Node.js
