@@ -1,0 +1,198 @@
+#!/bin/bash
+set -euo pipefail
+
+# setup-git — Configure git identity, SSH agent, auth key, and signing key
+#
+# Environment variables (set directly or via OP_*_REF convention):
+#   GIT_USER_NAME        - Git user.name
+#   GIT_USER_EMAIL       - Git user.email
+#   GIT_AUTH_SSH_KEY     - SSH auth private key (raw PEM text)
+#   GIT_SIGNING_SSH_KEY  - SSH signing private key (raw PEM text)
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+_info()  { printf '[setup-git] %s\n' "$*" >&2; }
+_ok()    { printf '[setup-git] OK: %s\n' "$*" >&2; }
+_skip()  { printf '[setup-git] skip: %s\n' "$*" >&2; }
+_warn()  { printf '[setup-git] WARN: %s\n' "$*" >&2; }
+
+# Write key material to file only if content differs. Returns 0 if written, 1 if unchanged.
+_write_key() {
+    local path="$1" content="$2"
+    if [ -f "$path" ] && [ "$(cat "$path")" = "$content" ]; then
+        return 1
+    fi
+    # Disable xtrace around key material
+    { set +x; } 2>/dev/null
+    printf '%s\n' "$content" > "$path"
+    chmod 600 "$path"
+    { set -x; } 2>/dev/null || true
+    return 0
+}
+
+# ---------------------------------------------------------------------------
+# 1. Git identity
+# ---------------------------------------------------------------------------
+setup_identity() {
+    local changed=false
+
+    if [ -n "${GIT_USER_NAME:-}" ]; then
+        local current
+        current=$(git config --global user.name 2>/dev/null || true)
+        if [ "$current" != "$GIT_USER_NAME" ]; then
+            git config --global user.name "$GIT_USER_NAME"
+            changed=true
+        fi
+    fi
+
+    if [ -n "${GIT_USER_EMAIL:-}" ]; then
+        local current
+        current=$(git config --global user.email 2>/dev/null || true)
+        if [ "$current" != "$GIT_USER_EMAIL" ]; then
+            git config --global user.email "$GIT_USER_EMAIL"
+            changed=true
+        fi
+    fi
+
+    if [ "$changed" = true ]; then
+        _ok "git identity: $(git config --global user.name) <$(git config --global user.email)>"
+    elif [ -n "${GIT_USER_NAME:-}" ] || [ -n "${GIT_USER_EMAIL:-}" ]; then
+        _skip "git identity already configured"
+    fi
+}
+
+# ---------------------------------------------------------------------------
+# 2. SSH agent
+# ---------------------------------------------------------------------------
+ensure_ssh_agent() {
+    local agent_env="${HOME}/.ssh/agent.env"
+    mkdir -p "${HOME}/.ssh"
+    chmod 700 "${HOME}/.ssh"
+
+    # Already running?
+    if [ -n "${SSH_AUTH_SOCK:-}" ] && [ -S "${SSH_AUTH_SOCK}" ]; then
+        # Verify agent is alive
+        if ssh-add -l >/dev/null 2>&1 || [ $? -eq 1 ]; then
+            return 0
+        fi
+    fi
+
+    # Try loading persisted agent
+    if [ -f "$agent_env" ]; then
+        # shellcheck disable=SC1090
+        source "$agent_env" >/dev/null 2>&1 || true
+        if [ -n "${SSH_AUTH_SOCK:-}" ] && [ -S "${SSH_AUTH_SOCK}" ]; then
+            if ssh-add -l >/dev/null 2>&1 || [ $? -eq 1 ]; then
+                return 0
+            fi
+        fi
+    fi
+
+    # Start new agent
+    _info "starting ssh-agent"
+    eval "$(ssh-agent -s)" >/dev/null 2>&1
+    # Persist for future shells
+    cat > "$agent_env" <<EOF
+SSH_AUTH_SOCK=${SSH_AUTH_SOCK}; export SSH_AUTH_SOCK;
+SSH_AGENT_PID=${SSH_AGENT_PID:-}; export SSH_AGENT_PID;
+EOF
+    chmod 600 "$agent_env"
+    _ok "ssh-agent started (PID ${SSH_AGENT_PID:-unknown})"
+}
+
+# ---------------------------------------------------------------------------
+# 3. Auth SSH key
+# ---------------------------------------------------------------------------
+setup_auth_key() {
+    [ -n "${GIT_AUTH_SSH_KEY:-}" ] || return 0
+
+    local key_path="${HOME}/.ssh/git_auth_key"
+
+    if _write_key "$key_path" "$GIT_AUTH_SSH_KEY"; then
+        _ok "wrote auth key to ${key_path}"
+    else
+        _skip "auth key unchanged"
+    fi
+
+    # Add to agent if not already present
+    local key_fp
+    key_fp=$(ssh-keygen -lf "$key_path" 2>/dev/null | awk '{print $2}') || true
+    if [ -n "$key_fp" ]; then
+        if ! ssh-add -l 2>/dev/null | grep -qF "$key_fp"; then
+            ssh-add "$key_path" 2>/dev/null
+            _ok "auth key added to ssh-agent"
+        else
+            _skip "auth key already in ssh-agent"
+        fi
+    fi
+}
+
+# ---------------------------------------------------------------------------
+# 4. Signing SSH key
+# ---------------------------------------------------------------------------
+setup_signing_key() {
+    [ -n "${GIT_SIGNING_SSH_KEY:-}" ] || return 0
+
+    local priv="${HOME}/.ssh/git_signing_key"
+    local pub="${priv}.pub"
+    local signers="${HOME}/.ssh/allowed_signers"
+
+    # Write private key
+    if _write_key "$priv" "$GIT_SIGNING_SSH_KEY"; then
+        _ok "wrote signing key to ${priv}"
+    else
+        _skip "signing key unchanged"
+    fi
+
+    # Derive and write public key
+    local pubkey
+    pubkey=$(ssh-keygen -y -f "$priv" 2>/dev/null) || {
+        _warn "could not derive public key from signing key"
+        return 0
+    }
+    printf '%s\n' "$pubkey" > "$pub"
+    chmod 644 "$pub"
+
+    # Configure git for SSH signing
+    local email
+    email=$(git config --global user.email 2>/dev/null || echo "user@container")
+
+    git config --global gpg.format ssh
+    git config --global user.signingkey "$pub"
+    git config --global commit.gpgsign true
+    git config --global tag.gpgsign true
+
+    # Create allowed_signers
+    printf '%s %s\n' "$email" "$pubkey" > "$signers"
+    chmod 644 "$signers"
+    git config --global gpg.ssh.allowedSignersFile "$signers"
+
+    _ok "git signing configured (gpg.format=ssh)"
+
+    # Add to agent if not already present
+    local key_fp
+    key_fp=$(ssh-keygen -lf "$priv" 2>/dev/null | awk '{print $2}') || true
+    if [ -n "$key_fp" ]; then
+        if ! ssh-add -l 2>/dev/null | grep -qF "$key_fp"; then
+            ssh-add "$priv" 2>/dev/null
+            _ok "signing key added to ssh-agent"
+        else
+            _skip "signing key already in ssh-agent"
+        fi
+    fi
+}
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+main() {
+    _info "configuring git environment"
+    setup_identity
+    ensure_ssh_agent
+    setup_auth_key
+    setup_signing_key
+    _ok "done"
+}
+
+main "$@"

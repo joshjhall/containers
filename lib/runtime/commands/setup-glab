@@ -1,0 +1,56 @@
+#!/bin/bash
+set -euo pipefail
+
+# setup-glab — Authenticate GitLab CLI
+#
+# Environment variables (set directly or via OP_*_REF convention):
+#   GITLAB_TOKEN  - GitLab personal access token
+#   GITLAB_HOST   - GitLab hostname (default: gitlab.com)
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+_info()  { printf '[setup-glab] %s\n' "$*" >&2; }
+_ok()    { printf '[setup-glab] OK: %s\n' "$*" >&2; }
+_skip()  { printf '[setup-glab] skip: %s\n' "$*" >&2; }
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+main() {
+    # glab not installed — nothing to do
+    if ! command -v glab >/dev/null 2>&1; then
+        _skip "glab CLI not installed"
+        return 0
+    fi
+
+    # Already authenticated
+    if glab auth status >/dev/null 2>&1; then
+        _skip "glab already authenticated"
+        return 0
+    fi
+
+    # No token — print help and exit (not an error)
+    if [ -z "${GITLAB_TOKEN:-}" ]; then
+        _info "GITLAB_TOKEN not set — skipping glab authentication"
+        _info "Set GITLAB_TOKEN directly or via OP_GITLAB_TOKEN_REF"
+        return 0
+    fi
+
+    local host="${GITLAB_HOST:-gitlab.com}"
+
+    # Authenticate
+    _info "authenticating glab CLI (host: ${host})"
+    { set +x; } 2>/dev/null
+    glab auth login --hostname "$host" --token "$GITLAB_TOKEN" 2>&1
+    { set -x; } 2>/dev/null || true
+
+    # Verify
+    if glab auth status >/dev/null 2>&1; then
+        _ok "glab authenticated (host: ${host})"
+    else
+        _info "glab authentication could not be verified"
+    fi
+}
+
+main "$@"

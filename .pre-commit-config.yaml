@@ -35,7 +35,7 @@ repos:
     hooks:
       - id: shellcheck
         args: [--severity=warning]
-        exclude: ^(tests/results/|bin/setup-git-ssh\.sh)
+        exclude: ^tests/results/
 
   # ==========================================================================
   # YAML linting

@@ -1,0 +1,82 @@
+#!/bin/bash
+set -euo pipefail
+
+# setup-gh — Authenticate GitHub CLI
+#
+# Environment variables (set directly or via OP_*_REF convention):
+#   GITHUB_TOKEN  - GitHub personal access token
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+_info()  { printf '[setup-gh] %s\n' "$*" >&2; }
+_ok()    { printf '[setup-gh] OK: %s\n' "$*" >&2; }
+_skip()  { printf '[setup-gh] skip: %s\n' "$*" >&2; }
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+main() {
+    # gh not installed — nothing to do
+    if ! command -v gh >/dev/null 2>&1; then
+        _skip "gh CLI not installed"
+        return 0
+    fi
+
+    # Already authenticated — export token and exit
+    if gh auth status >/dev/null 2>&1; then
+        _skip "gh already authenticated"
+        # Ensure GITHUB_TOKEN is available for child processes
+        if [ -z "${GITHUB_TOKEN:-}" ]; then
+            local token
+            token=$(gh auth token 2>/dev/null | tr -d '[:space:]') || true
+            if [ -n "$token" ]; then
+                export GITHUB_TOKEN="$token"
+            fi
+        fi
+        _persist_token
+        return 0
+    fi
+
+    # No token — print help and exit (not an error)
+    if [ -z "${GITHUB_TOKEN:-}" ]; then
+        _info "GITHUB_TOKEN not set — skipping gh authentication"
+        _info "Set GITHUB_TOKEN directly or via OP_GITHUB_TOKEN_REF"
+        return 0
+    fi
+
+    # Sanitize token (strip whitespace)
+    local token
+    token=$(printf '%s' "$GITHUB_TOKEN" | tr -d '[:space:]')
+
+    # Authenticate
+    _info "authenticating gh CLI"
+    { set +x; } 2>/dev/null
+    printf '%s' "$token" | gh auth login --with-token 2>&1
+    { set -x; } 2>/dev/null || true
+
+    # Persist token derivation in bashrc
+    _persist_token
+
+    # Verify
+    if gh auth status >/dev/null 2>&1; then
+        _ok "gh authenticated"
+    else
+        _info "gh authentication could not be verified"
+    fi
+}
+
+_persist_token() {
+    local marker="# setup-gh: GITHUB_TOKEN"
+    if ! grep -qF "$marker" "${HOME}/.bashrc" 2>/dev/null; then
+        cat >> "${HOME}/.bashrc" <<'BASHRC'
+
+# setup-gh: GITHUB_TOKEN
+if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
+    export GITHUB_TOKEN=$(gh auth token 2>/dev/null | tr -d '[:space:]')
+fi
+BASHRC
+    fi
+}
+
+main "$@"
