@@ -339,10 +339,14 @@ if [ ! -f "$FIRST_RUN_MARKER" ]; then
                 echo "Running first-startup script: $(basename "$script")"
                 if [ "$RUNNING_AS_ROOT" = "true" ]; then
                     # Running as root, use su to switch to non-root user
-                    su "${USERNAME}" -c "bash $script"
+                    su "${USERNAME}" -c "bash $script" || {
+                        echo "⚠️  WARNING: First-startup script failed: $(basename "$script") (continuing)"
+                    }
                 else
                     # Already running as non-root user, execute directly
-                    bash "$script"
+                    bash "$script" || {
+                        echo "⚠️  WARNING: First-startup script failed: $(basename "$script") (continuing)"
+                    }
                 fi
             else
                 echo "⚠️  WARNING: Skipping script outside expected directory: $script"
@@ -381,10 +385,14 @@ if [ -d "$STARTUP_DIR" ]; then
                 echo "Running startup script: $(basename "$script")"
                 if [ "$RUNNING_AS_ROOT" = "true" ]; then
                     # Running as root, use su to switch to non-root user
-                    su "${USERNAME}" -c "bash $script"
+                    su "${USERNAME}" -c "bash $script" || {
+                        echo "⚠️  WARNING: Startup script failed: $(basename "$script") (continuing)"
+                    }
                 else
                     # Already running as non-root user, execute directly
-                    bash "$script"
+                    bash "$script" || {
+                        echo "⚠️  WARNING: Startup script failed: $(basename "$script") (continuing)"
+                    }
                 fi
             else
                 echo "⚠️  WARNING: Skipping script outside expected directory: $script"

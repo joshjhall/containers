@@ -269,16 +269,18 @@ docker run -e CLAUDE_EXTRA_MCPS="brave-search,sentry" -e BRAVE_API_KEY=xxx ...
 
 Available MCP servers:
 
-| Short Name            | Package                                            | Required Env Vars             |
-| --------------------- | -------------------------------------------------- | ----------------------------- |
-| `brave-search`        | `@modelcontextprotocol/server-brave-search`        | `BRAVE_API_KEY`               |
-| `fetch`               | `@modelcontextprotocol/server-fetch`               | (none)                        |
-| `memory`              | `@modelcontextprotocol/server-memory`              | `MEMORY_FILE_PATH` (optional) |
-| `sequential-thinking` | `@modelcontextprotocol/server-sequential-thinking` | (none)                        |
-| `git`                 | `@modelcontextprotocol/server-git`                 | (none)                        |
-| `sentry`              | `@sentry/mcp-server`                               | `SENTRY_ACCESS_TOKEN`         |
-| `perplexity`          | `@perplexity-ai/mcp-server`                        | `PERPLEXITY_API_KEY`          |
-| `kagi`                | `kagimcp` (Python/uvx)                             | `KAGI_API_KEY`                |
+| Short Name            | Package                                            | Required Env Vars                       |
+| --------------------- | -------------------------------------------------- | --------------------------------------- |
+| `github`              | `@modelcontextprotocol/server-github`              | `GITHUB_TOKEN`                          |
+| `gitlab`              | `@modelcontextprotocol/server-gitlab`              | `GITLAB_TOKEN`, `GITLAB_API_URL` (opt.) |
+| `brave-search`        | `@modelcontextprotocol/server-brave-search`        | `BRAVE_API_KEY`                         |
+| `fetch`               | `@modelcontextprotocol/server-fetch`               | (none)                                  |
+| `memory`              | `@modelcontextprotocol/server-memory`              | `MEMORY_FILE_PATH` (optional)           |
+| `sequential-thinking` | `@modelcontextprotocol/server-sequential-thinking` | (none)                                  |
+| `git`                 | `@modelcontextprotocol/server-git`                 | (none)                                  |
+| `sentry`              | `@sentry/mcp-server`                               | `SENTRY_ACCESS_TOKEN`                   |
+| `perplexity`          | `@perplexity-ai/mcp-server`                        | `PERPLEXITY_API_KEY`                    |
+| `kagi`                | `kagimcp` (Python/uvx)                             | `KAGI_API_KEY`                          |
 
 **Release channel**: Use `CLAUDE_CHANNEL` to select the Claude Code release channel:
 
@@ -336,12 +338,10 @@ To verify: `ls ~/.claude/skills/` and `ls ~/.claude/agents/`
 
 ### MCP Servers (installed by claude-code-setup.sh when Node.js available)
 
-MCP servers are automatically installed by `claude-code-setup.sh` when Node.js
-is available (`INCLUDE_NODE=true` or `INCLUDE_NODE_DEV=true`):
+Core MCP servers are automatically installed by `claude-code-setup.sh` when
+Node.js is available (`INCLUDE_NODE=true` or `INCLUDE_NODE_DEV=true`):
 
 - **Filesystem**: `@modelcontextprotocol/server-filesystem` - Enhanced file ops
-- **GitHub**: `@modelcontextprotocol/server-github` - GitHub API integration
-- **GitLab**: `@modelcontextprotocol/server-gitlab` - GitLab API integration
 - **Bash LSP**: `bash-language-server` - Shell script language server
 
 > **Note**: `INCLUDE_MCP_SERVERS` is **deprecated**. It is kept for backward
@@ -353,28 +353,25 @@ MCP configuration is created on first container startup via
 
 - **Always** configures filesystem MCP server for `/workspace`
 - **Always** configures Figma desktop MCP (`http://host.docker.internal:3845/mcp`)
-- **Detects** GitHub vs GitLab from git remote origin URL
-- **Fallback**: Defaults to GitHub MCP only when remote is ambiguous (most common case)
 - **Is idempotent** - checks existing config before adding
 
-**Platform selection** (environment variable):
-
-| Value    | Behavior                                     |
-| -------- | -------------------------------------------- |
-| `github` | Configure GitHub MCP only                    |
-| `gitlab` | Configure GitLab MCP only                    |
-| `both`   | Configure both GitHub and GitLab MCPs        |
-| (unset)  | Auto-detect from git remote, default: GitHub |
+**GitHub/GitLab MCPs** are optional. Add them via `CLAUDE_EXTRA_MCPS`:
 
 ```bash
-# Override platform detection
-docker run -e GIT_PLATFORM=gitlab ...
+# GitHub MCP only
+CLAUDE_EXTRA_MCPS="github,kagi,memory"
+
+# GitLab MCP
+CLAUDE_EXTRA_MCPS="gitlab,kagi"
+
+# Both
+CLAUDE_EXTRA_MCPS="github,gitlab"
 ```
 
 Set the appropriate token at runtime:
 
-- `GITHUB_TOKEN`: GitHub personal access token (when using GitHub)
-- `GITLAB_TOKEN`: GitLab personal access token (when using GitLab)
+- `GITHUB_TOKEN`: GitHub personal access token (when using GitHub MCP)
+- `GITLAB_TOKEN`: GitLab personal access token (when using GitLab MCP)
 
 #### Automatic Secret Loading from 1Password (`OP_*_REF` convention)
 
@@ -385,14 +382,23 @@ automatically resolved from 1Password and exported as `<NAME>`. This is generic
 | Variable                     | Exports               | Example                                  |
 | ---------------------------- | --------------------- | ---------------------------------------- |
 | `OP_SERVICE_ACCOUNT_TOKEN`   | *(required)*          | `ops_xxx...`                             |
-| `OP_GITHUB_TOKEN_REF`        | `GITHUB_TOKEN`        | `op://Vault/GitHub-PAT/token`            |
-| `OP_GITLAB_TOKEN_REF`        | `GITLAB_TOKEN`        | `op://Vault/GitLab-PAT/token`            |
-| `OP_KAGI_API_KEY_REF`        | `KAGI_API_KEY`        | `op://Vault/Kagi/api-key`                |
+| `OP_GITHUB_TOKEN_REF`        | `GITHUB_TOKEN`        | `op://Vault/GitHub-PAT/credential`       |
+| `OP_GITLAB_TOKEN_REF`        | `GITLAB_TOKEN`        | `op://Vault/GitLab-PAT/credential`       |
+| `OP_KAGI_API_KEY_REF`        | `KAGI_API_KEY`        | `op://Vault/Kagi-API-Key/credential`     |
 | `OP_GIT_USER_NAME_REF`       | `GIT_USER_NAME`       | `op://Vault/Identity/full name`          |
 | `OP_GIT_USER_EMAIL_REF`      | `GIT_USER_EMAIL`      | `op://Vault/Identity/email`              |
 | `OP_GIT_AUTH_SSH_KEY_REF`    | `GIT_AUTH_SSH_KEY`    | `op://Vault/Git-Auth-Key/private key`    |
 | `OP_GIT_SIGNING_SSH_KEY_REF` | `GIT_SIGNING_SSH_KEY` | `op://Vault/Git-Signing-Key/private key` |
 | `OP_MY_SECRET_REF`           | `MY_SECRET`           | `op://Vault/Item/field`                  |
+
+**Field names** depend on your 1Password item type: API_CREDENTIAL items use
+`credential`, LOGIN items use `password`, SSH_KEY items use `private key`, etc.
+Check your item in 1Password to find the correct field name.
+
+**Git identity fallback**: If `OP_GIT_USER_NAME_REF` points to a 1Password
+Identity item (which has separate `first name`/`last name` fields instead of
+`full name`), the system automatically combines them. If nothing resolves,
+defaults to `Devcontainer` / `devcontainer@localhost`.
 
 Example docker-compose.yml:
 
@@ -401,9 +407,9 @@ services:
   dev:
     environment:
       - OP_SERVICE_ACCOUNT_TOKEN=${OP_SERVICE_ACCOUNT_TOKEN}
-      - OP_GITHUB_TOKEN_REF=op://Development/GitHub-PAT/token
-      - OP_GIT_USER_NAME_REF=op://Development/Git Configuration/full name
-      - OP_GIT_USER_EMAIL_REF=op://Development/Git Configuration/email
+      - OP_GITHUB_TOKEN_REF=op://Development/GitHub-PAT/credential
+      - OP_GIT_USER_NAME_REF=op://Development/Git-Config/full name
+      - OP_GIT_USER_EMAIL_REF=op://Development/Git-Config/email
       - OP_GIT_AUTH_SSH_KEY_REF=op://Development/Git-Auth-Key/private key
       - OP_GIT_SIGNING_SSH_KEY_REF=op://Development/Git-Signing-Key/private key
 ```

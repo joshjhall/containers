@@ -62,6 +62,12 @@ test_npm_package_values() {
     package=$(mcp_registry_get_npm_package "git")
     assert_equals "@modelcontextprotocol/server-git" "$package" "git npm package"
 
+    package=$(mcp_registry_get_npm_package "github")
+    assert_equals "@modelcontextprotocol/server-github" "$package" "github npm package"
+
+    package=$(mcp_registry_get_npm_package "gitlab")
+    assert_equals "@modelcontextprotocol/server-gitlab" "$package" "gitlab npm package"
+
     package=$(mcp_registry_get_npm_package "sentry")
     assert_equals "@sentry/mcp-server" "$package" "sentry npm package"
 
@@ -112,6 +118,12 @@ test_env_vars_in_args() {
 
     args=$(mcp_registry_get_add_args "kagi")
     assert_contains "$args" "KAGI_API_KEY" "kagi args include env var"
+
+    args=$(mcp_registry_get_add_args "github")
+    assert_contains "$args" "GITHUB_PERSONAL_ACCESS_TOKEN" "github args include env var"
+
+    args=$(mcp_registry_get_add_args "gitlab")
+    assert_contains "$args" "GITLAB_PERSONAL_ACCESS_TOKEN" "gitlab args include env var"
 }
 
 # Test: Servers without required env vars have clean args
@@ -148,6 +160,9 @@ test_env_docs() {
 
     docs=$(mcp_registry_get_env_docs "kagi")
     assert_equals "KAGI_API_KEY" "$docs" "kagi env docs"
+
+    docs=$(mcp_registry_get_env_docs "github")
+    assert_equals "GITHUB_TOKEN" "$docs" "github env docs"
 }
 
 # Test: Unknown server name returns error
@@ -175,6 +190,8 @@ test_is_registered() {
     assert_true mcp_registry_is_registered "fetch" "fetch is registered"
     assert_true mcp_registry_is_registered "memory" "memory is registered"
     assert_true mcp_registry_is_registered "git" "git is registered"
+    assert_true mcp_registry_is_registered "github" "github is registered"
+    assert_true mcp_registry_is_registered "gitlab" "gitlab is registered"
     assert_true mcp_registry_is_registered "sentry" "sentry is registered"
     assert_true mcp_registry_is_registered "kagi" "kagi is registered"
 
@@ -194,6 +211,8 @@ test_list_function() {
     assert_contains "$list" "memory" "list includes memory"
     assert_contains "$list" "sequential-thinking" "list includes sequential-thinking"
     assert_contains "$list" "git" "list includes git"
+    assert_contains "$list" "github" "list includes github"
+    assert_contains "$list" "gitlab" "list includes gitlab"
     assert_contains "$list" "sentry" "list includes sentry"
     assert_contains "$list" "perplexity" "list includes perplexity"
     assert_contains "$list" "kagi" "list includes kagi"
@@ -209,6 +228,12 @@ test_package_type() {
 
     pkg_type=$(mcp_registry_get_package_type "fetch")
     assert_equals "npm" "$pkg_type" "fetch is npm type"
+
+    pkg_type=$(mcp_registry_get_package_type "github")
+    assert_equals "npm" "$pkg_type" "github is npm type"
+
+    pkg_type=$(mcp_registry_get_package_type "gitlab")
+    assert_equals "npm" "$pkg_type" "gitlab is npm type"
 
     pkg_type=$(mcp_registry_get_package_type "kagi")
     assert_equals "uvx" "$pkg_type" "kagi is uvx type"

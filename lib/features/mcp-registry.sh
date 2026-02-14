@@ -18,6 +18,11 @@
 # Adding a new MCP server:
 #   Add a case to each of the five functions below. No other files need changes.
 #
+# IMPORTANT: In mcp_registry_get_add_args, -e values MUST be wrapped in single
+# quotes to survive eval expansion without triggering set -u on unset env vars.
+# The single quotes ensure ${VAR} is passed literally to claude mcp add, which
+# resolves the variable at MCP server startup time.
+#
 
 # Get the npm package name for an MCP server
 # Usage: mcp_registry_get_npm_package <name>
@@ -39,6 +44,12 @@ mcp_registry_get_npm_package() {
             ;;
         git)
             echo "@modelcontextprotocol/server-git"
+            ;;
+        github)
+            echo "@modelcontextprotocol/server-github"
+            ;;
+        gitlab)
+            echo "@modelcontextprotocol/server-gitlab"
             ;;
         sentry)
             echo "@sentry/mcp-server"
@@ -64,7 +75,7 @@ mcp_registry_get_package_type() {
         kagi)
             echo "uvx"
             ;;
-        brave-search|fetch|memory|sequential-thinking|git|sentry|perplexity)
+        brave-search|fetch|memory|sequential-thinking|git|github|gitlab|sentry|perplexity)
             echo "npm"
             ;;
         *)
@@ -77,11 +88,14 @@ mcp_registry_get_package_type() {
 # Usage: mcp_registry_get_add_args <name>
 # Returns: arguments for claude mcp add on stdout, exit 1 if not registered
 # Note: The server name is included as part of the args
+# IMPORTANT: -e values use single quotes so ${VAR} survives eval without
+# triggering set -u. The literal ${VAR} is passed to claude mcp add which
+# resolves it from the environment at MCP server startup time.
 mcp_registry_get_add_args() {
     local name="${1:-}"
     case "$name" in
         brave-search)
-            echo "-t stdio brave-search -e BRAVE_API_KEY=\${BRAVE_API_KEY} -- npx -y @modelcontextprotocol/server-brave-search"
+            echo "-t stdio brave-search -e 'BRAVE_API_KEY=\${BRAVE_API_KEY}' -- npx -y @modelcontextprotocol/server-brave-search"
             ;;
         fetch)
             echo "-t stdio fetch -- npx -y @modelcontextprotocol/server-fetch"
@@ -95,14 +109,20 @@ mcp_registry_get_add_args() {
         git)
             echo "-t stdio git -- npx -y @modelcontextprotocol/server-git"
             ;;
+        github)
+            echo "-t stdio github -e 'GITHUB_PERSONAL_ACCESS_TOKEN=\${GITHUB_TOKEN}' -- npx -y @modelcontextprotocol/server-github"
+            ;;
+        gitlab)
+            echo "-t stdio gitlab -e 'GITLAB_PERSONAL_ACCESS_TOKEN=\${GITLAB_TOKEN}' -- npx -y @modelcontextprotocol/server-gitlab"
+            ;;
         sentry)
-            echo "-t stdio sentry -e SENTRY_ACCESS_TOKEN=\${SENTRY_ACCESS_TOKEN} -- npx -y @sentry/mcp-server"
+            echo "-t stdio sentry -e 'SENTRY_ACCESS_TOKEN=\${SENTRY_ACCESS_TOKEN}' -- npx -y @sentry/mcp-server"
             ;;
         perplexity)
-            echo "-t stdio perplexity -e PERPLEXITY_API_KEY=\${PERPLEXITY_API_KEY} -- npx -y @perplexity-ai/mcp-server"
+            echo "-t stdio perplexity -e 'PERPLEXITY_API_KEY=\${PERPLEXITY_API_KEY}' -- npx -y @perplexity-ai/mcp-server"
             ;;
         kagi)
-            echo "-t stdio kagi -e KAGI_API_KEY=\${KAGI_API_KEY} -- uvx kagimcp"
+            echo "-t stdio kagi -e 'KAGI_API_KEY=\${KAGI_API_KEY}' -- uvx --python 3.13 kagimcp"
             ;;
         *)
             return 1
@@ -131,6 +151,12 @@ mcp_registry_get_env_docs() {
         git)
             echo ""
             ;;
+        github)
+            echo "GITHUB_TOKEN"
+            ;;
+        gitlab)
+            echo "GITLAB_TOKEN, GITLAB_API_URL (optional, defaults to gitlab.com)"
+            ;;
         sentry)
             echo "SENTRY_ACCESS_TOKEN"
             ;;
@@ -158,5 +184,5 @@ mcp_registry_is_registered() {
 # Usage: mcp_registry_list
 # Returns: space-separated list of registered names
 mcp_registry_list() {
-    echo "brave-search fetch memory sequential-thinking git sentry perplexity kagi"
+    echo "brave-search fetch memory sequential-thinking git github gitlab sentry perplexity kagi"
 }

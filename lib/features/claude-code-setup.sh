@@ -117,16 +117,6 @@ if command -v node &>/dev/null && command -v npm &>/dev/null; then
         log_warning "Failed to install filesystem MCP server"
     }
 
-    log_command "Installing @modelcontextprotocol/server-github" \
-        npm install -g --silent @modelcontextprotocol/server-github || {
-        log_warning "Failed to install GitHub MCP server"
-    }
-
-    log_command "Installing @modelcontextprotocol/server-gitlab" \
-        npm install -g --silent @modelcontextprotocol/server-gitlab || {
-        log_warning "Failed to install GitLab MCP server"
-    }
-
     log_command "Installing bash-language-server" \
         npm install -g --silent bash-language-server || {
         log_warning "Failed to install bash-language-server"
@@ -163,8 +153,24 @@ if command -v node &>/dev/null && command -v npm &>/dev/null; then
                     npm install -g --silent "$npm_package" || {
                     log_warning "Failed to install $npm_package"
                 }
-            else
-                log_message "Skipping build-time install for $mcp_name (uses $pkg_type at runtime)"
+            elif [ "$pkg_type" = "uvx" ]; then
+                # uvx-type packages need uv installed (provides uvx command)
+                if ! command -v uvx &>/dev/null; then
+                    if command -v pip &>/dev/null; then
+                        log_command "Installing uv (provides uvx for $mcp_name)" \
+                            pip install --quiet uv || {
+                            log_warning "Failed to install uv - $mcp_name may not work at runtime"
+                        }
+                    elif command -v pip3 &>/dev/null; then
+                        log_command "Installing uv (provides uvx for $mcp_name)" \
+                            pip3 install --quiet uv || {
+                            log_warning "Failed to install uv - $mcp_name may not work at runtime"
+                        }
+                    else
+                        log_warning "pip not available - cannot install uv for $mcp_name"
+                        log_warning "Add INCLUDE_PYTHON=true to enable uvx-based MCP servers"
+                    fi
+                fi
             fi
         done
     fi
@@ -503,133 +509,16 @@ add_mcp_server() {
 }
 
 # Filesystem MCP (always)
-add_mcp_server "filesystem" -t stdio "filesystem" -- npx -y @modelcontextprotocol/server-filesystem /workspace
+add_mcp_server "filesystem" -t stdio "filesystem" -- npx -y @modelcontextprotocol/server-filesystem /workspace || true
 
 # Figma desktop MCP (always - connects to Figma desktop app via Docker host)
-add_mcp_server "figma-desktop" -t http "figma-desktop" "http://host.docker.internal:3845/mcp"
-
-# ============================================================================
-# Git Platform Detection for GitHub/GitLab MCPs
-# ============================================================================
-# Allow explicit override via environment variable
-# Values: github, gitlab, both, none
-GIT_PLATFORM_OVERRIDE="${GIT_PLATFORM:-}"
-
-# Parse host from git remote URL (testable - pure function)
-# Supports: https://, git@, ssh:// URL formats
-# Returns: hostname or empty string if parsing fails
-_parse_git_remote_host() {
-    local remote_url="$1"
-    local host=""
-
-    # HTTPS: https://github.com/user/repo.git
-    [[ "$remote_url" =~ ^https?://([^/]+)/ ]] && host="${BASH_REMATCH[1]}"
-
-    # SSH shorthand: git@github.com:user/repo.git
-    [[ -z "$host" && "$remote_url" =~ ^git@([^:]+): ]] && host="${BASH_REMATCH[1]}"
-
-    # SSH URL: ssh://git@github.com/user/repo.git
-    [[ -z "$host" && "$remote_url" =~ ^ssh://[^@]+@([^/]+)/ ]] && host="${BASH_REMATCH[1]}"
-
-    # Strip port number if present (e.g., github.com:22 -> github.com)
-    host="${host%%:*}"
-
-    echo "$host"
-}
-
-# Determine git platform from hostname (testable - pure function)
-# Returns: github, gitlab:hostname, or unknown:hostname
-_classify_git_host() {
-    local host="$1"
-
-    [[ -z "$host" ]] && { echo "none"; return; }
-    [[ "$host" == "github.com" ]] && { echo "github"; return; }
-    [[ "$host" == "gitlab.com" || "$host" == *"gitlab"* ]] && { echo "gitlab:$host"; return; }
-    echo "unknown:$host"
-}
-
-detect_git_platform() {
-    local remote_url=""
-    if command -v git &>/dev/null && git rev-parse --git-dir &>/dev/null 2>&1; then
-        remote_url=$(git config --get remote.origin.url 2>/dev/null || true)
-    fi
-
-    if [ -z "$remote_url" ]; then
-        echo "[debug] No git remote URL found" >&2
-        echo "none"
-        return
-    fi
-    echo "[debug] Git remote URL: $remote_url" >&2
-
-    local host
-    host=$(_parse_git_remote_host "$remote_url")
-
-    if [ -z "$host" ]; then
-        echo "[debug] Could not parse host from URL" >&2
-        echo "none"
-        return
-    fi
-
-    echo "[debug] Detected host: $host" >&2
-    _classify_git_host "$host"
-}
-
-# Use override if set, otherwise detect
-if [ -n "$GIT_PLATFORM_OVERRIDE" ]; then
-    echo "  Using GIT_PLATFORM override: $GIT_PLATFORM_OVERRIDE"
-    platform_info="$GIT_PLATFORM_OVERRIDE"
-    platform="$GIT_PLATFORM_OVERRIDE"
-    platform_host=""
-else
-    platform_info=$(detect_git_platform)
-    platform="${platform_info%%:*}"
-    platform_host="${platform_info#*:}"
-fi
-
-case "$platform" in
-    github)
-        echo "  Detected GitHub repository"
-        add_mcp_server "github" -t stdio "github" \
-            -e 'GITHUB_PERSONAL_ACCESS_TOKEN=${GITHUB_TOKEN}' \
-            -- npx -y @modelcontextprotocol/server-github
-        ;;
-    gitlab)
-        echo "  Detected GitLab repository ($platform_host)"
-        add_mcp_server "gitlab" -t stdio "gitlab" \
-            -e 'GITLAB_PERSONAL_ACCESS_TOKEN=${GITLAB_TOKEN}' \
-            -e "GITLAB_API_URL=https://${platform_host}/api/v4" \
-            -- npx -y @modelcontextprotocol/server-gitlab
-        ;;
-    both)
-        echo "  Installing both GitHub and GitLab MCPs (GIT_PLATFORM=both)"
-        add_mcp_server "github" -t stdio "github" \
-            -e 'GITHUB_PERSONAL_ACCESS_TOKEN=${GITHUB_TOKEN}' \
-            -- npx -y @modelcontextprotocol/server-github
-        add_mcp_server "gitlab" -t stdio "gitlab" \
-            -e 'GITLAB_PERSONAL_ACCESS_TOKEN=${GITLAB_TOKEN}' \
-            -- npx -y @modelcontextprotocol/server-gitlab
-        ;;
-    none)
-        # No git remote and no override - default to GitHub only (most common case)
-        echo "  No git remote detected - defaulting to GitHub MCP only"
-        echo "  Tip: Set GIT_PLATFORM=both or GIT_PLATFORM=gitlab to change"
-        add_mcp_server "github" -t stdio "github" \
-            -e 'GITHUB_PERSONAL_ACCESS_TOKEN=${GITHUB_TOKEN}' \
-            -- npx -y @modelcontextprotocol/server-github
-        ;;
-    *)
-        # Unknown host (e.g., self-hosted git server) - default to GitHub only
-        echo "  Unknown git host ($platform_host) - defaulting to GitHub MCP"
-        echo "  Tip: Set GIT_PLATFORM=gitlab or GIT_PLATFORM=both if needed"
-        add_mcp_server "github" -t stdio "github" \
-            -e 'GITHUB_PERSONAL_ACCESS_TOKEN=${GITHUB_TOKEN}' \
-            -- npx -y @modelcontextprotocol/server-github
-        ;;
-esac
+add_mcp_server "figma-desktop" -t http "figma-desktop" "http://host.docker.internal:3845/mcp" || true
 
 # ============================================================================
 # Extra MCP Servers (from CLAUDE_EXTRA_MCPS)
 # ============================================================================
+# GitHub and GitLab MCPs are now optional - add them via CLAUDE_EXTRA_MCPS.
+# Example: CLAUDE_EXTRA_MCPS="github,kagi,memory"
 MCP_REGISTRY="/etc/container/config/mcp-registry.sh"
 EXTRA_MCPS_TO_CONFIGURE="${CLAUDE_EXTRA_MCPS:-${CLAUDE_EXTRA_MCPS_DEFAULT:-}}"
 
@@ -652,8 +541,9 @@ if [ -n "$EXTRA_MCPS_TO_CONFIGURE" ] && [ -f "$MCP_REGISTRY" ]; then
 
         # Get the add_mcp_server arguments from the registry
         add_args=$(mcp_registry_get_add_args "$mcp_name")
-        # Use eval to properly expand the arguments string into separate args
-        eval "add_mcp_server $add_args" || true
+        # Pass mcp_name as first arg (for has_mcp_server check and logging),
+        # then eval the registry args (for claude mcp add).
+        eval "add_mcp_server \"\$mcp_name\" $add_args" || true
 
         # Collect required env vars for user information
         env_docs=$(mcp_registry_get_env_docs "$mcp_name")
@@ -857,7 +747,7 @@ if ! is_claude_authenticated; then
     echo ""
 fi
 echo "Environment: ENABLE_LSP_TOOL=1"
-echo "Set GITHUB_TOKEN or GITLAB_TOKEN for git platform API access."
+echo "Add github or gitlab to CLAUDE_EXTRA_MCPS for git platform MCP access."
 CLAUDE_SETUP_EOF
 
 log_command "Setting claude-setup permissions" \
@@ -1143,7 +1033,7 @@ log_feature_summary \
     --feature "Claude Code Setup" \
     --tools "claude,claude-setup,claude-auth-watcher,bash-language-server" \
     --paths "/usr/local/bin/claude,/usr/local/bin/claude-setup,/usr/local/bin/claude-auth-watcher,/etc/container/first-startup/30-claude-code-setup.sh,/etc/container/startup/35-claude-auth-watcher.sh" \
-    --env "ENABLE_LSP_TOOL,CLAUDE_EXTRA_PLUGINS,CLAUDE_EXTRA_MCPS,GIT_PLATFORM,CLAUDE_AUTH_WATCHER_TIMEOUT" \
+    --env "ENABLE_LSP_TOOL,CLAUDE_EXTRA_PLUGINS,CLAUDE_EXTRA_MCPS,CLAUDE_AUTH_WATCHER_TIMEOUT" \
     --commands "claude,claude-setup,claude-auth-watcher" \
     --next-steps "Run 'claude' to authenticate. Setup runs automatically after auth (via watcher). Manual: 'claude-setup'."
 

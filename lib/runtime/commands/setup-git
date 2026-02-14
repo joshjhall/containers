@@ -37,27 +37,27 @@ _write_key() {
 setup_identity() {
     local changed=false
 
-    if [ -n "${GIT_USER_NAME:-}" ]; then
-        local current
-        current=$(git config --global user.name 2>/dev/null || true)
-        if [ "$current" != "$GIT_USER_NAME" ]; then
-            git config --global user.name "$GIT_USER_NAME"
-            changed=true
-        fi
+    # Apply fallback defaults so git operations never fail with missing identity.
+    # These are intentionally obvious so users notice and fix their config.
+    local name="${GIT_USER_NAME:-Devcontainer}"
+    local email="${GIT_USER_EMAIL:-devcontainer@localhost}"
+
+    local current
+    current=$(git config --global user.name 2>/dev/null || true)
+    if [ "$current" != "$name" ]; then
+        git config --global user.name "$name"
+        changed=true
     fi
 
-    if [ -n "${GIT_USER_EMAIL:-}" ]; then
-        local current
-        current=$(git config --global user.email 2>/dev/null || true)
-        if [ "$current" != "$GIT_USER_EMAIL" ]; then
-            git config --global user.email "$GIT_USER_EMAIL"
-            changed=true
-        fi
+    current=$(git config --global user.email 2>/dev/null || true)
+    if [ "$current" != "$email" ]; then
+        git config --global user.email "$email"
+        changed=true
     fi
 
     if [ "$changed" = true ]; then
         _ok "git identity: $(git config --global user.name) <$(git config --global user.email)>"
-    elif [ -n "${GIT_USER_NAME:-}" ] || [ -n "${GIT_USER_EMAIL:-}" ]; then
+    else
         _skip "git identity already configured"
     fi
 }

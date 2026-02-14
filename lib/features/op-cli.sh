@@ -327,6 +327,47 @@ _op_load_secrets() {
 # Automatically load secrets on shell initialization
 _op_load_secrets
 
+# ----------------------------------------------------------------------------
+# Smart Git Identity Resolution
+# ----------------------------------------------------------------------------
+# If GIT_USER_NAME wasn't resolved by _op_load_secrets (e.g., the referenced
+# item is a 1Password Identity with separate first/last name fields instead of
+# a single "full name" field), try combining first name + last name.
+# Falls back to "Devcontainer" if nothing resolves.
+_op_resolve_git_identity() {
+    if ! _check_command op || [ -z "${OP_SERVICE_ACCOUNT_TOKEN:-}" ]; then
+        return 0
+    fi
+
+    local _old_xtrace
+    _old_xtrace=$(set +o | grep xtrace)
+    set +x
+
+    # Resolve GIT_USER_NAME: try custom "full name" field, then first+last
+    if [ -z "${GIT_USER_NAME:-}" ] && [ -n "${OP_GIT_USER_NAME_REF:-}" ]; then
+        local _base_path="${OP_GIT_USER_NAME_REF%/*}"
+        local _first _last
+        _first=$(op read "${_base_path}/first name" 2>/dev/null) || true
+        _last=$(op read "${_base_path}/last name" 2>/dev/null) || true
+        if [ -n "${_first}" ] || [ -n "${_last}" ]; then
+            local _full_name="${_first}${_first:+ }${_last}"
+            export GIT_USER_NAME="$_full_name"
+        fi
+    fi
+
+    # Apply defaults so git operations never fail
+    if [ -z "${GIT_USER_NAME:-}" ]; then
+        export GIT_USER_NAME="Devcontainer"
+    fi
+    if [ -z "${GIT_USER_EMAIL:-}" ]; then
+        export GIT_USER_EMAIL="devcontainer@localhost"
+    fi
+
+    eval "$_old_xtrace"
+}
+
+_op_resolve_git_identity
+
 # Clean up helper functions
 unset -f _check_command 2>/dev/null || true
 
@@ -418,6 +459,21 @@ for _ref_var in $(compgen -v | grep '^OP_.\+_REF$'); do
         export "${_target_var}=${_secret_value}"
     fi
 done
+
+# Smart Git Identity Resolution: if GIT_USER_NAME wasn't resolved (e.g.,
+# Identity item with separate first/last fields), try combining them.
+if [ -z "${GIT_USER_NAME:-}" ] && [ -n "${OP_GIT_USER_NAME_REF:-}" ]; then
+    _base_path="${OP_GIT_USER_NAME_REF%/*}"
+    _first=$(op read "${_base_path}/first name" 2>/dev/null) || true
+    _last=$(op read "${_base_path}/last name" 2>/dev/null) || true
+    if [ -n "${_first}" ] || [ -n "${_last}" ]; then
+        export GIT_USER_NAME="${_first}${_first:+ }${_last}"
+    fi
+fi
+
+# Apply defaults so git operations never fail
+[ -z "${GIT_USER_NAME:-}" ] && export GIT_USER_NAME="Devcontainer"
+[ -z "${GIT_USER_EMAIL:-}" ] && export GIT_USER_EMAIL="devcontainer@localhost"
 
 # Restore xtrace state
 eval "$_old_xtrace"

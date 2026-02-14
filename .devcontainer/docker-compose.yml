@@ -12,14 +12,14 @@ services:
         ENABLE_PASSWORDLESS_SUDO: "true"
         # Main dev tools
         INCLUDE_DEV_TOOLS: "true"
-        # MCP servers for Claude Code integration (filesystem, GitHub, GitLab)
+        # MCP servers (deprecated but triggers Node.js; INCLUDE_DEV_TOOLS handles the rest)
         INCLUDE_MCP_SERVERS: "true"
         # Additional dev tools
         INCLUDE_OP: "true"
         INCLUDE_DOCKER: "true"
         # Python needed for pre-commit framework and linting tools
         INCLUDE_PYTHON: "true"
-        # Extra MCP servers (kagi for search)
+        # Extra MCP servers (github/gitlab also available here if needed)
         CLAUDE_EXTRA_MCPS: "kagi,memory"
       cache_from:
         - type=local,src=/tmp/.buildx-cache
