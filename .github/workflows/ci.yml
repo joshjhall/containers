@@ -133,8 +133,9 @@ jobs:
           echo "Running Markdown linting..."
           pip install pymarkdownlnt
 
-          # Find all markdown files (exclude CHANGELOG.md which is auto-generated)
-          md_files=$(git ls-files '*.md' | grep -v '^CHANGELOG\.md$' || true)
+          # Find all markdown files (exclude CHANGELOG.md and claude templates,
+          # matching pre-commit config exclusions)
+          md_files=$(git ls-files '*.md' | grep -v -e '^CHANGELOG\.md$' -e '^lib/features/templates/claude/' || true)
 
           if [ -z "$md_files" ]; then
             echo "✅ No Markdown files found"
