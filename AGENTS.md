@@ -382,13 +382,17 @@ When `INCLUDE_OP=true`, any environment variable matching `OP_<NAME>_REF` is
 automatically resolved from 1Password and exported as `<NAME>`. This is generic
 -- projects can add their own refs with zero changes to the container build system.
 
-| Variable                   | Exports        | Example                       |
-| -------------------------- | -------------- | ----------------------------- |
-| `OP_SERVICE_ACCOUNT_TOKEN` | *(required)*   | `ops_xxx...`                  |
-| `OP_GITHUB_TOKEN_REF`      | `GITHUB_TOKEN` | `op://Vault/GitHub-PAT/token` |
-| `OP_GITLAB_TOKEN_REF`      | `GITLAB_TOKEN` | `op://Vault/GitLab-PAT/token` |
-| `OP_KAGI_API_KEY_REF`      | `KAGI_API_KEY` | `op://Vault/Kagi/api-key`     |
-| `OP_MY_SECRET_REF`         | `MY_SECRET`    | `op://Vault/Item/field`       |
+| Variable                     | Exports               | Example                                  |
+| ---------------------------- | --------------------- | ---------------------------------------- |
+| `OP_SERVICE_ACCOUNT_TOKEN`   | *(required)*          | `ops_xxx...`                             |
+| `OP_GITHUB_TOKEN_REF`        | `GITHUB_TOKEN`        | `op://Vault/GitHub-PAT/token`            |
+| `OP_GITLAB_TOKEN_REF`        | `GITLAB_TOKEN`        | `op://Vault/GitLab-PAT/token`            |
+| `OP_KAGI_API_KEY_REF`        | `KAGI_API_KEY`        | `op://Vault/Kagi/api-key`                |
+| `OP_GIT_USER_NAME_REF`       | `GIT_USER_NAME`       | `op://Vault/Identity/full name`          |
+| `OP_GIT_USER_EMAIL_REF`      | `GIT_USER_EMAIL`      | `op://Vault/Identity/email`              |
+| `OP_GIT_AUTH_SSH_KEY_REF`    | `GIT_AUTH_SSH_KEY`    | `op://Vault/Git-Auth-Key/private key`    |
+| `OP_GIT_SIGNING_SSH_KEY_REF` | `GIT_SIGNING_SSH_KEY` | `op://Vault/Git-Signing-Key/private key` |
+| `OP_MY_SECRET_REF`           | `MY_SECRET`           | `op://Vault/Item/field`                  |
 
 Example docker-compose.yml:
 
@@ -398,11 +402,43 @@ services:
     environment:
       - OP_SERVICE_ACCOUNT_TOKEN=${OP_SERVICE_ACCOUNT_TOKEN}
       - OP_GITHUB_TOKEN_REF=op://Development/GitHub-PAT/token
-      - OP_KAGI_API_KEY_REF=op://Development/Kagi/api-key
+      - OP_GIT_USER_NAME_REF=op://Development/Git Configuration/full name
+      - OP_GIT_USER_EMAIL_REF=op://Development/Git Configuration/email
+      - OP_GIT_AUTH_SSH_KEY_REF=op://Development/Git-Auth-Key/private key
+      - OP_GIT_SIGNING_SSH_KEY_REF=op://Development/Git-Signing-Key/private key
 ```
 
 Secrets are loaded automatically on shell initialization and container startup.
 Direct env vars always win (if `<NAME>` is already set, the OP ref is skipped).
+
+### Container Setup Commands
+
+Three setup commands are installed to `/usr/local/bin/` and available in PATH:
+
+| Command      | Purpose                                        |
+| ------------ | ---------------------------------------------- |
+| `setup-git`  | Git identity, SSH agent, auth key, signing key |
+| `setup-gh`   | Authenticate GitHub CLI (`gh`)                 |
+| `setup-glab` | Authenticate GitLab CLI (`glab`)               |
+
+All commands are idempotent (safe to run multiple times), OP-agnostic (they
+only read direct env vars — OP ref resolution happens before they run), and
+graceful (missing tools or tokens result in a skip, not an error).
+
+**Direct env vars** (for non-OP users):
+
+| Variable              | Purpose                                 |
+| --------------------- | --------------------------------------- |
+| `GIT_USER_NAME`       | Git user.name                           |
+| `GIT_USER_EMAIL`      | Git user.email                          |
+| `GIT_AUTH_SSH_KEY`    | SSH auth private key (PEM)              |
+| `GIT_SIGNING_SSH_KEY` | SSH signing private key (PEM)           |
+| `GITHUB_TOKEN`        | GitHub PAT                              |
+| `GITLAB_TOKEN`        | GitLab PAT                              |
+| `GITLAB_HOST`         | GitLab hostname (default: `gitlab.com`) |
+
+Source: `lib/runtime/commands/setup-git`, `lib/runtime/commands/setup-gh`,
+`lib/runtime/commands/setup-glab`.
 
 ### Claude Code Authentication
 
