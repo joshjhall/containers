@@ -37,7 +37,7 @@ jobs:
         run: |
           echo "Running all linters via pre-commit (single source of truth)..."
           pip install pre-commit
-          npm install -g @biomejs/biome
+          npm install -g @biomejs/biome@$(grep -o '"https://biomejs.dev/schemas/[^"]*"' biome.json | grep -o '[0-9]\+\.[0-9]\+\.[0-9]\+')
           pre-commit run --all-files
 
       - name: Run secret scanning with Gitleaks
