@@ -88,21 +88,15 @@ test_verification() {
     [ -x "$verify_script" ] && assert_true true "Verification script ready" || assert_true false "Verification script not ready"
 }
 
-run_test_with_setup() {
-    setup
-    run_test "$1" "$2"
-    teardown
-}
-
-run_test_with_setup test_installation "Installation test"
-run_test_with_setup test_configuration "Configuration test"
-run_test_with_setup test_environment "Environment test"
-run_test_with_setup test_permissions "Permissions test"
-run_test_with_setup test_aliases "Aliases test"
-run_test_with_setup test_dependencies "Dependencies test"
-run_test_with_setup test_cache_directory "Cache directory test"
-run_test_with_setup test_user_config "User config test"
-run_test_with_setup test_startup_script "Startup script test"
-run_test_with_setup test_verification "Verification test"
+run_test test_installation "Installation test"
+run_test test_configuration "Configuration test"
+run_test test_environment "Environment test"
+run_test test_permissions "Permissions test"
+run_test test_aliases "Aliases test"
+run_test test_dependencies "Dependencies test"
+run_test test_cache_directory "Cache directory test"
+run_test test_user_config "User config test"
+run_test test_startup_script "Startup script test"
+run_test test_verification "Verification test"
 
 generate_report
