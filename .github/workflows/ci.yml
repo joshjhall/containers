@@ -391,7 +391,7 @@ jobs:
           df -h
 
       - name: Scan filesystem for misconfigurations
-        uses: aquasecurity/trivy-action@0.33.1
+        uses: aquasecurity/trivy-action@0.34.0
         with:
           scan-type: 'fs'
           scan-ref: '.'
@@ -402,7 +402,7 @@ jobs:
         continue-on-error: true
 
       - name: Scan Dockerfile for issues
-        uses: aquasecurity/trivy-action@0.33.1
+        uses: aquasecurity/trivy-action@0.34.0
         with:
           scan-type: 'config'
           scan-ref: './Dockerfile'
@@ -411,7 +411,7 @@ jobs:
         continue-on-error: true
 
       - name: Run Trivy vulnerability scanner (CRITICAL - blocking)
-        uses: aquasecurity/trivy-action@0.33.1
+        uses: aquasecurity/trivy-action@0.34.0
         with:
           image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.sanitized }}-${{ matrix.variant }}
           format: 'table'
@@ -423,7 +423,7 @@ jobs:
         # Note: secrets are checked in filesystem scan with continue-on-error
 
       - name: Run Trivy vulnerability scanner (SARIF report)
-        uses: aquasecurity/trivy-action@0.33.1
+        uses: aquasecurity/trivy-action@0.34.0
         if: always()
         with:
           image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.sanitized }}-${{ matrix.variant }}
@@ -439,7 +439,7 @@ jobs:
           category: 'container-${{ matrix.variant }}'
 
       - name: Generate SBOM
-        uses: aquasecurity/trivy-action@0.33.1
+        uses: aquasecurity/trivy-action@0.34.0
         if: always()
         with:
           image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.sanitized }}-${{ matrix.variant }}
@@ -447,7 +447,7 @@ jobs:
           output: 'sbom-${{ matrix.variant }}.json'
 
       - name: Run Trivy for detailed report
-        uses: aquasecurity/trivy-action@0.33.1
+        uses: aquasecurity/trivy-action@0.34.0
         if: always()
         with:
           image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.sanitized }}-${{ matrix.variant }}

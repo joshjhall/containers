@@ -170,7 +170,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 # Rust + Rust development tools
 ARG INCLUDE_RUST=false
 ARG INCLUDE_RUST_DEV=false
-ARG RUST_VERSION=1.93.0
+ARG RUST_VERSION=1.93.1
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     if [ "${INCLUDE_RUST}" = "true" ] || [ "${INCLUDE_RUST_DEV}" = "true" ]; then \
@@ -197,7 +197,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 # Go + Go development tools
 ARG INCLUDE_GOLANG=false
 ARG INCLUDE_GOLANG_DEV=false
-ARG GO_VERSION=1.25.7
+ARG GO_VERSION=1.26.0
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     if [ "${INCLUDE_GOLANG}" = "true" ] || [ "${INCLUDE_GOLANG_DEV}" = "true" ]; then \
@@ -316,10 +316,10 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 
 # Kubernetes tools
 ARG INCLUDE_KUBERNETES=false
-ARG KUBECTL_VERSION=1.33.7
+ARG KUBECTL_VERSION=1.33.8
 ARG K9S_VERSION=0.50.18
 ARG KREW_VERSION=0.4.5
-ARG HELM_VERSION=4.1.0
+ARG HELM_VERSION=4.1.1
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     if [ "${INCLUDE_KUBERNETES}" = "true" ]; then \
@@ -335,7 +335,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     fi
 # Terraform
 ARG INCLUDE_TERRAFORM=false
-ARG TERRAGRUNT_VERSION=0.99.1
+ARG TERRAGRUNT_VERSION=0.99.2
 ARG TFDOCS_VERSION=0.21.0
 ARG TFLINT_VERSION=0.61.0
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
