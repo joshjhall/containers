@@ -14,6 +14,10 @@ CVE-2023-24538  # html/template backticks - mkcert doesn't serve HTML
 CVE-2023-24540  # html/template JS whitespace - mkcert doesn't serve HTML
 CVE-2024-24790  # net/netip issue - mkcert uses standard net package
 
+# cosign (v3.0.4) - built with Go 1.25.5, waiting on upstream rebuild with Go >= 1.25.7
+# TODO: Remove once cosign releases a version compiled with Go >= 1.25.7
+CVE-2025-68121  # crypto/tls session resumption - in cosign's embedded Go stdlib
+
 # npm dev tool transitive dependencies - not exploitable in container context
 # These are dependencies of global npm packages (jest, mocha, clinic, etc.)
 CVE-2025-7783   # form-data - transitive dep, container doesn't process untrusted forms
