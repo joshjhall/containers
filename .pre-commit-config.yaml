@@ -74,7 +74,7 @@ repos:
           # MD041: First line heading (not always applicable for partial docs)
           - MD013,MD029,MD036,MD041
           - scan
-        exclude: ^(CHANGELOG\.md|tests/results/|lib/features/templates/claude/)
+        exclude: ^(CHANGELOG\.md|tests/results/|lib/features/templates/claude/|\.claude/)
 
   # ==========================================================================
   # JSON linting with Biome

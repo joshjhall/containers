@@ -14,7 +14,7 @@ Thumbs.db
 .vscode/*
 !.vscode/settings.json
 !.vscode/extensions.json
-.claude/
+.claude/settings.local.json
 *.swp
 *.swo
 *~
