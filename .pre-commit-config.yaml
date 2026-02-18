@@ -67,14 +67,10 @@ repos:
     hooks:
       - id: pymarkdown
         args:
-          - --disable-rules
-          # MD013: Line length (too strict for prose with long URLs/paths)
-          # MD029: Ordered list prefix (bibliographies use intentional numbering)
-          # MD036: Emphasis as heading (conflicts with mdformat auto-formatting)
-          # MD041: First line heading (not always applicable for partial docs)
-          - MD013,MD029,MD036,MD041
+          - --config
+          - .pymarkdown.json
           - scan
-        exclude: ^(CHANGELOG\.md|tests/results/|lib/features/templates/claude/|\.claude/)
+        exclude: ^(CHANGELOG\.md|tests/results/)
 
   # ==========================================================================
   # JSON linting with Biome

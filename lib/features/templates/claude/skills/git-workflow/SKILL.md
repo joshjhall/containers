@@ -11,7 +11,7 @@ description: Git commit conventions, branch naming, and PR workflow. Use when co
 - Use imperative mood, add body for non-trivial changes explaining why
 - One logical change per commit — keep commits atomic and bisectable
 
-```
+```text
 Bad:  "fixed stuff"
 Bad:  "Updated the login and also refactored utils and added tests"
 Good: "fix(auth): prevent session fixation on token refresh"
