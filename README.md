@@ -134,7 +134,7 @@ All features are enabled via `INCLUDE_<FEATURE>=true` build arguments.
 
 | Feature        | Build Arg                 | What's Included                              |
 | -------------- | ------------------------- | -------------------------------------------- |
-| **Python**     | `INCLUDE_PYTHON=true`     | Python 3.14+ from source, pip, pipx          |
+| **Python**     | `INCLUDE_PYTHON=true`     | Python 3.14+ from source, pip, pipx, uv      |
 | **Python Dev** | `INCLUDE_PYTHON_DEV=true` | + Poetry, black, ruff, mypy, pytest, jupyter |
 | **Node.js**    | `INCLUDE_NODE=true`       | Node 22 LTS, npm, yarn, pnpm                 |
 | **Node Dev**   | `INCLUDE_NODE_DEV=true`   | + TypeScript, ESLint, Jest, Vite, webpack    |

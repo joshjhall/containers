@@ -11,6 +11,7 @@
 #   - pip, setuptools, wheel for package management
 #   - pipx for isolated tool installations
 #   - Poetry for modern dependency management
+#   - uv for fast package installation and resolution
 #   - Cache optimization for containerized environments
 #
 # Environment Variables:
