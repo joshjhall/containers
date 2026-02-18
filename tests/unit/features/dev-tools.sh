@@ -468,5 +468,125 @@ run_test test_sources_download_verify "Script sources download-verify.sh"
 run_test test_checksum_verification_date "Checksum verification date is documented"
 run_test test_version_checksum_consistency "Version and checksum documentation is consistent"
 
+# ============================================================================
+# Batch 6: Additional Static Analysis Tests
+# ============================================================================
+
+# Test: fzf retry mechanism
+test_fzf_retry_mechanism() {
+    local source_file="$PROJECT_ROOT/lib/features/dev-tools.sh"
+    assert_file_contains "$source_file" "retry" "dev-tools.sh contains retry logic"
+    assert_file_contains "$source_file" "max_retries" "dev-tools.sh defines max_retries for fzf"
+}
+
+# Test: Architecture-specific binary selection
+test_arch_specific_binary_selection() {
+    local source_file="$PROJECT_ROOT/lib/features/dev-tools.sh"
+    assert_file_contains "$source_file" "amd64" "dev-tools.sh handles amd64 architecture"
+    assert_file_contains "$source_file" "arm64" "dev-tools.sh handles arm64 architecture"
+}
+
+# Test: Git config block content - delta pager config
+test_git_delta_pager_config() {
+    local source_file="$PROJECT_ROOT/lib/features/dev-tools.sh"
+    assert_file_contains "$source_file" "pager = delta" "dev-tools.sh configures delta as git pager"
+}
+
+# Test: Symlink creation patterns for bat/fd alternatives
+test_symlink_creation_patterns() {
+    local source_file="$PROJECT_ROOT/lib/features/dev-tools.sh"
+    assert_file_contains "$source_file" "batcat" "dev-tools.sh references batcat for symlink creation"
+    assert_file_contains "$source_file" "fdfind" "dev-tools.sh references fdfind for symlink creation"
+}
+
+# Test: entr build-from-source pattern
+test_entr_build_from_source() {
+    local source_file="$PROJECT_ROOT/lib/features/dev-tools.sh"
+    assert_file_contains "$source_file" "entr" "dev-tools.sh installs entr"
+    assert_file_contains "$source_file" "configure" "dev-tools.sh builds entr from source using configure"
+    assert_file_contains "$source_file" "make install" "dev-tools.sh builds entr from source using make install"
+}
+
+# Test: Just version variable defined
+test_just_version_variable() {
+    local source_file="$PROJECT_ROOT/lib/features/dev-tools.sh"
+    # just is installed via rust-dev or apt, but referenced in dev-tools bashrc
+    # Check that just is referenced in the script
+    assert_file_contains "$source_file" "just" "dev-tools.sh references just"
+}
+
+# Test: Biome version variable defined
+test_biome_version_variable() {
+    local source_file="$PROJECT_ROOT/lib/features/dev-tools.sh"
+    assert_file_contains "$source_file" "BIOME_VERSION=" "dev-tools.sh defines BIOME_VERSION"
+}
+
+# Test: ACT version variable defined
+test_act_version_variable() {
+    local source_file="$PROJECT_ROOT/lib/features/dev-tools.sh"
+    assert_file_contains "$source_file" "ACT_VERSION=" "dev-tools.sh defines ACT_VERSION"
+}
+
+# Test: GLAB version variable defined
+test_glab_version_variable() {
+    local source_file="$PROJECT_ROOT/lib/features/dev-tools.sh"
+    assert_file_contains "$source_file" "GLAB_VERSION=" "dev-tools.sh defines GLAB_VERSION"
+}
+
+# Test: MKCERT version variable defined
+test_mkcert_version_variable() {
+    local source_file="$PROJECT_ROOT/lib/features/dev-tools.sh"
+    assert_file_contains "$source_file" "MKCERT_VERSION=" "dev-tools.sh defines MKCERT_VERSION"
+}
+
+# Test: DIRENV version variable defined
+test_direnv_version_variable() {
+    local source_file="$PROJECT_ROOT/lib/features/dev-tools.sh"
+    assert_file_contains "$source_file" "DIRENV_VERSION=" "dev-tools.sh defines DIRENV_VERSION"
+}
+
+# Test: DELTA version variable defined
+test_delta_version_variable() {
+    local source_file="$PROJECT_ROOT/lib/features/dev-tools.sh"
+    assert_file_contains "$source_file" "DELTA_VERSION=" "dev-tools.sh defines DELTA_VERSION"
+}
+
+# Test: Sources download-verify.sh with sha256 checksum pattern
+test_download_verify_sha256_pattern() {
+    local source_file="$PROJECT_ROOT/lib/features/dev-tools.sh"
+    assert_file_contains "$source_file" "source.*download-verify.sh" "dev-tools.sh sources download-verify.sh"
+    assert_file_contains "$source_file" "sha256" "dev-tools.sh uses sha256 checksum verification"
+}
+
+# Test: Uses dpkg --print-architecture for architecture detection
+test_dpkg_architecture_detection() {
+    local source_file="$PROJECT_ROOT/lib/features/dev-tools.sh"
+    assert_file_contains "$source_file" "dpkg --print-architecture" "dev-tools.sh uses dpkg --print-architecture"
+}
+
+# Test: Installs Claude Code CLI reference
+test_claude_code_reference() {
+    local source_file="$PROJECT_ROOT/lib/features/dev-tools.sh"
+    # Claude Code CLI is installed by claude-code-setup.sh, but dev-tools references it
+    assert_file_contains "$source_file" "claude" "dev-tools.sh references Claude Code"
+}
+
+# Run Batch 6 tests
+run_test test_fzf_retry_mechanism "fzf retry mechanism is implemented"
+run_test test_arch_specific_binary_selection "Architecture-specific binary selection"
+run_test test_git_delta_pager_config "Git config uses delta as pager"
+run_test test_symlink_creation_patterns "Symlink creation for bat/fd alternatives"
+run_test test_entr_build_from_source "entr is built from source"
+run_test test_just_version_variable "Just version/reference defined"
+run_test test_biome_version_variable "Biome version variable defined"
+run_test test_act_version_variable "ACT version variable defined"
+run_test test_glab_version_variable "GLAB version variable defined"
+run_test test_mkcert_version_variable "MKCERT version variable defined"
+run_test test_direnv_version_variable "DIRENV version variable defined"
+run_test test_delta_version_variable "DELTA version variable defined"
+run_test test_download_verify_sha256_pattern "Download verification uses sha256 checksum pattern"
+run_test test_dpkg_architecture_detection "Uses dpkg --print-architecture for arch detection"
+run_test test_claude_code_reference "References Claude Code CLI"
+
 # Generate test report
 generate_report

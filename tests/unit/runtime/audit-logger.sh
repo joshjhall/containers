@@ -167,5 +167,125 @@ run_test test_json_format "JSON format support"
 run_test test_secure_permissions "Secure permissions enforced"
 run_test test_retention_docs "Retention requirements documented"
 
+# ============================================================================
+# Batch 6: Specialized Audit Functions and Utility Tests
+# ============================================================================
+
+SOURCE_FILE="$PROJECT_ROOT/lib/runtime/audit-logger.sh"
+
+# Test: defines audit_auth function
+test_audit_auth_func() {
+    assert_file_contains "$SOURCE_FILE" "audit_auth()" "audit-logger.sh defines audit_auth function"
+}
+
+# Test: defines audit_authz function
+test_audit_authz_func() {
+    assert_file_contains "$SOURCE_FILE" "audit_authz()" "audit-logger.sh defines audit_authz function"
+}
+
+# Test: defines audit_data_access function
+test_audit_data_access_func() {
+    assert_file_contains "$SOURCE_FILE" "audit_data_access()" "audit-logger.sh defines audit_data_access function"
+}
+
+# Test: defines audit_config function
+test_audit_config_func() {
+    assert_file_contains "$SOURCE_FILE" "audit_config()" "audit-logger.sh defines audit_config function"
+}
+
+# Test: defines audit_security function
+test_audit_security_func() {
+    assert_file_contains "$SOURCE_FILE" "audit_security()" "audit-logger.sh defines audit_security function"
+}
+
+# Test: defines audit_network function
+test_audit_network_func() {
+    assert_file_contains "$SOURCE_FILE" "audit_network()" "audit-logger.sh defines audit_network function"
+}
+
+# Test: defines audit_file function
+test_audit_file_func() {
+    assert_file_contains "$SOURCE_FILE" "audit_file()" "audit-logger.sh defines audit_file function"
+}
+
+# Test: defines audit_process function
+test_audit_process_func() {
+    assert_file_contains "$SOURCE_FILE" "audit_process()" "audit-logger.sh defines audit_process function"
+}
+
+# Test: defines audit_compliance function
+test_audit_compliance_func() {
+    assert_file_contains "$SOURCE_FILE" "audit_compliance()" "audit-logger.sh defines audit_compliance function"
+}
+
+# Test: defines audit_rotate function
+test_audit_rotate_func() {
+    assert_file_contains "$SOURCE_FILE" "audit_rotate()" "audit-logger.sh defines audit_rotate function"
+}
+
+# Test: defines audit_verify_integrity function
+test_audit_verify_integrity_func() {
+    assert_file_contains "$SOURCE_FILE" "audit_verify_integrity()" "audit-logger.sh defines audit_verify_integrity function"
+}
+
+# Test: defines get_retention_policy function
+test_get_retention_policy_func() {
+    assert_file_contains "$SOURCE_FILE" "get_retention_policy()" "audit-logger.sh defines get_retention_policy function"
+}
+
+# Test: defines build_json_entry function
+test_build_json_entry_func() {
+    assert_file_contains "$SOURCE_FILE" "build_json_entry()" "audit-logger.sh defines build_json_entry function"
+}
+
+# Test: Log rotation size-based trigger
+test_log_rotation_size_trigger() {
+    assert_file_contains "$SOURCE_FILE" "stat" "audit-logger.sh checks file size via stat"
+    assert_file_contains "$SOURCE_FILE" "max_size" "audit-logger.sh uses max_size for rotation threshold"
+}
+
+# Test: Log rotation compression
+test_log_rotation_compression() {
+    assert_file_contains "$SOURCE_FILE" "gzip" "audit-logger.sh compresses rotated logs with gzip"
+}
+
+# Test: Integrity verification with sha256sum
+test_integrity_sha256sum() {
+    assert_file_contains "$SOURCE_FILE" "sha256sum" "audit-logger.sh uses sha256sum for integrity verification"
+}
+
+# Test: UUID generation
+test_uuid_generation() {
+    assert_file_contains "$SOURCE_FILE" "/proc/sys/kernel/random/uuid" "audit-logger.sh uses /proc/sys/kernel/random/uuid"
+    assert_file_contains "$SOURCE_FILE" "RANDOM" "audit-logger.sh has RANDOM fallback for UUID generation"
+}
+
+# Test: Functions exported for use in other scripts
+test_functions_exported() {
+    assert_file_contains "$SOURCE_FILE" "export -f audit_log" "audit-logger.sh exports audit_log function"
+    assert_file_contains "$SOURCE_FILE" "export -f audit_security" "audit-logger.sh exports audit_security function"
+    assert_file_contains "$SOURCE_FILE" "export -f audit_init" "audit-logger.sh exports audit_init function"
+}
+
+# Run Batch 6 audit-logger tests
+run_test test_audit_auth_func "Defines audit_auth function"
+run_test test_audit_authz_func "Defines audit_authz function"
+run_test test_audit_data_access_func "Defines audit_data_access function"
+run_test test_audit_config_func "Defines audit_config function"
+run_test test_audit_security_func "Defines audit_security function"
+run_test test_audit_network_func "Defines audit_network function"
+run_test test_audit_file_func "Defines audit_file function"
+run_test test_audit_process_func "Defines audit_process function"
+run_test test_audit_compliance_func "Defines audit_compliance function"
+run_test test_audit_rotate_func "Defines audit_rotate function"
+run_test test_audit_verify_integrity_func "Defines audit_verify_integrity function"
+run_test test_get_retention_policy_func "Defines get_retention_policy function"
+run_test test_build_json_entry_func "Defines build_json_entry function"
+run_test test_log_rotation_size_trigger "Log rotation size-based trigger"
+run_test test_log_rotation_compression "Log rotation uses gzip compression"
+run_test test_integrity_sha256sum "Integrity verification uses sha256sum"
+run_test test_uuid_generation "UUID generation with fallback"
+run_test test_functions_exported "Functions exported for other scripts"
+
 # Generate report
 generate_report

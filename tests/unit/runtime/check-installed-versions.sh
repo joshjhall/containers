@@ -107,4 +107,77 @@ run_test_with_setup test_logging "Logging test"
 run_test_with_setup test_configuration "Configuration test"
 run_test_with_setup test_validation "Validation test"
 
+# ============================================================================
+# Batch 6: Static Analysis Tests for check-installed-versions.sh
+# ============================================================================
+
+SOURCE_FILE="$PROJECT_ROOT/lib/runtime/check-installed-versions.sh"
+
+# Test: set -euo pipefail
+test_civ_strict_mode() {
+    assert_file_contains "$SOURCE_FILE" "set -euo pipefail" "check-installed-versions.sh uses strict mode"
+}
+
+# Test: defines check_version function
+test_civ_check_version_func() {
+    assert_file_contains "$SOURCE_FILE" "check_version()" "check-installed-versions.sh defines check_version function"
+}
+
+# Test: defines compare_version function
+test_civ_compare_version_func() {
+    assert_file_contains "$SOURCE_FILE" "compare_version()" "check-installed-versions.sh defines compare_version function"
+}
+
+# Test: defines should_display_section function
+test_civ_should_display_section_func() {
+    assert_file_contains "$SOURCE_FILE" "should_display_section()" "check-installed-versions.sh defines should_display_section function"
+}
+
+# Test: --filter flag handling
+test_civ_filter_flag() {
+    assert_file_contains "$SOURCE_FILE" "--filter" "check-installed-versions.sh supports --filter flag"
+    assert_file_contains "$SOURCE_FILE" "FILTER_CATEGORY" "check-installed-versions.sh uses FILTER_CATEGORY variable"
+}
+
+# Test: --compare flag handling
+test_civ_compare_flag() {
+    assert_file_contains "$SOURCE_FILE" "--compare" "check-installed-versions.sh supports --compare flag"
+    assert_file_contains "$SOURCE_FILE" "COMPARE_MODE" "check-installed-versions.sh uses COMPARE_MODE variable"
+}
+
+# Test: --all flag handling
+test_civ_all_flag() {
+    assert_file_contains "$SOURCE_FILE" "--all" "check-installed-versions.sh supports --all flag"
+    assert_file_contains "$SOURCE_FILE" "SHOW_ALL" "check-installed-versions.sh uses SHOW_ALL variable"
+}
+
+# Test: --json output format
+test_civ_json_output() {
+    assert_file_contains "$SOURCE_FILE" "--json" "check-installed-versions.sh supports --json output"
+    assert_file_contains "$SOURCE_FILE" "OUTPUT_FORMAT" "check-installed-versions.sh uses OUTPUT_FORMAT variable"
+}
+
+# Test: Version extraction regex patterns
+test_civ_version_extraction_patterns() {
+    assert_file_contains "$SOURCE_FILE" 'grep -oP' "check-installed-versions.sh uses grep -oP for version extraction"
+}
+
+# Test: Summary statistics counting
+test_civ_summary_statistics() {
+    assert_file_contains "$SOURCE_FILE" "installed_count" "check-installed-versions.sh counts installed tools"
+    assert_file_contains "$SOURCE_FILE" "outdated_count" "check-installed-versions.sh counts outdated tools"
+}
+
+# Run Batch 6 check-installed-versions tests
+run_test test_civ_strict_mode "check-installed-versions.sh uses set -euo pipefail"
+run_test test_civ_check_version_func "Defines check_version function"
+run_test test_civ_compare_version_func "Defines compare_version function"
+run_test test_civ_should_display_section_func "Defines should_display_section function"
+run_test test_civ_filter_flag "--filter flag handling"
+run_test test_civ_compare_flag "--compare flag handling"
+run_test test_civ_all_flag "--all flag handling"
+run_test test_civ_json_output "--json output format supported"
+run_test test_civ_version_extraction_patterns "Version extraction regex patterns"
+run_test test_civ_summary_statistics "Summary statistics counting"
+
 generate_report

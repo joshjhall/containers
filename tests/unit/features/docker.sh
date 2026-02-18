@@ -354,5 +354,83 @@ run_test test_docker_dive_checksum "docker.sh verifies dive checksum"
 run_test test_docker_sources_libraries "docker.sh sources verification libraries"
 run_test test_docker_lazydocker_checksum "docker.sh verifies lazydocker checksum"
 
+# ============================================================================
+# Batch 6: Additional Static Analysis Tests for docker.sh
+# ============================================================================
+
+# Test: Socket permission handling - chgrp docker
+test_docker_socket_chgrp_pattern() {
+    local source_file="$PROJECT_ROOT/lib/features/docker.sh"
+    assert_file_contains "$source_file" "chgrp docker" "docker.sh uses chgrp docker for socket permissions"
+}
+
+# Test: Socket permission handling - chmod g+rw
+test_docker_socket_chmod_pattern() {
+    local source_file="$PROJECT_ROOT/lib/features/docker.sh"
+    assert_file_contains "$source_file" "chmod g+rw" "docker.sh uses chmod g+rw for socket permissions"
+}
+
+# Test: Lazydocker architecture filename mapping
+test_lazydocker_arch_mapping() {
+    local source_file="$PROJECT_ROOT/lib/features/docker.sh"
+    assert_file_contains "$source_file" "LAZYDOCKER_ARCH" "docker.sh maps architecture for lazydocker"
+    assert_file_contains "$source_file" "x86_64" "docker.sh maps amd64 to x86_64 for lazydocker"
+}
+
+# Test: Dive architecture filename mapping
+test_dive_arch_mapping() {
+    local source_file="$PROJECT_ROOT/lib/features/docker.sh"
+    assert_file_contains "$source_file" "DIVE_PACKAGE" "docker.sh constructs dive package filename"
+    assert_file_contains "$source_file" "dive_" "docker.sh uses dive deb package naming"
+}
+
+# Test: Cosign installation
+test_cosign_installation_reference() {
+    local source_file="$PROJECT_ROOT/lib/features/docker.sh"
+    assert_file_contains "$source_file" "cosign" "docker.sh installs cosign for container image signing"
+}
+
+# Test: Docker helper functions - docker-clean
+test_docker_clean_function_definition() {
+    local source_file="$PROJECT_ROOT/lib/features/docker.sh"
+    assert_file_contains "$source_file" "docker-clean()" "docker.sh defines docker-clean function"
+}
+
+# Test: Docker helper functions - docker-shell
+test_docker_shell_function_definition() {
+    local source_file="$PROJECT_ROOT/lib/features/docker.sh"
+    assert_file_contains "$source_file" "docker-shell()" "docker.sh defines docker-shell function"
+}
+
+# Test: Cache directory env vars - DOCKER_CONFIG
+test_docker_config_env_var() {
+    local source_file="$PROJECT_ROOT/lib/features/docker.sh"
+    assert_file_contains "$source_file" "DOCKER_CONFIG" "docker.sh sets DOCKER_CONFIG env var"
+}
+
+# Test: DOCKER_CLI_PLUGINS_PATH reference
+test_docker_cli_plugins_path() {
+    local source_file="$PROJECT_ROOT/lib/features/docker.sh"
+    assert_file_contains "$source_file" "DOCKER_CLI_PLUGINS_PATH" "docker.sh references DOCKER_CLI_PLUGINS_PATH"
+}
+
+# Test: Docker Compose plugin installation
+test_docker_compose_plugin_install() {
+    local source_file="$PROJECT_ROOT/lib/features/docker.sh"
+    assert_file_contains "$source_file" "docker-compose-plugin" "docker.sh installs docker-compose-plugin"
+}
+
+# Run Batch 6 docker tests
+run_test test_docker_socket_chgrp_pattern "Docker socket uses chgrp docker"
+run_test test_docker_socket_chmod_pattern "Docker socket uses chmod g+rw"
+run_test test_lazydocker_arch_mapping "Lazydocker architecture filename mapping"
+run_test test_dive_arch_mapping "Dive architecture filename mapping"
+run_test test_cosign_installation_reference "Cosign installation referenced"
+run_test test_docker_clean_function_definition "docker-clean function defined"
+run_test test_docker_shell_function_definition "docker-shell function defined"
+run_test test_docker_config_env_var "DOCKER_CONFIG env var set"
+run_test test_docker_cli_plugins_path "DOCKER_CLI_PLUGINS_PATH referenced"
+run_test test_docker_compose_plugin_install "Docker Compose plugin installation"
+
 # Generate test report
 generate_report

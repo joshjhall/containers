@@ -251,4 +251,99 @@ run_test_with_setup test_op_ref_target_derivation "OP_*_REF target derivation te
 run_test_with_setup test_op_ref_skip_when_set "OP_*_REF skip when target set test"
 run_test_with_setup test_op_ref_bashrc_contains_generic_loop "OP_*_REF bashrc generic loop test"
 
+# ============================================================================
+# Batch 6: Static Analysis Tests for op-cli.sh
+# ============================================================================
+
+# Test: op-env-safe xtrace disable/restore pattern
+test_op_env_safe_xtrace_pattern() {
+    local source_file="$PROJECT_ROOT/lib/features/op-cli.sh"
+    assert_file_contains "$source_file" "set +x" "op-cli.sh disables xtrace to prevent secret exposure"
+}
+
+# Test: Git identity fallback with first/last name
+test_git_identity_fallback_first_last() {
+    local source_file="$PROJECT_ROOT/lib/features/op-cli.sh"
+    assert_file_contains "$source_file" "first name" "op-cli.sh handles 1Password Identity first name field"
+    assert_file_contains "$source_file" "last name" "op-cli.sh handles 1Password Identity last name field"
+}
+
+# Test: Skip-if-target-already-set logic
+test_skip_if_target_set_pattern() {
+    local source_file="$PROJECT_ROOT/lib/features/op-cli.sh"
+    assert_file_contains "$source_file" '${!_target_var:-}' "op-cli.sh uses indirect variable expansion for skip check"
+}
+
+# Test: debsig-verify policy setup
+test_debsig_verify_policy() {
+    local source_file="$PROJECT_ROOT/lib/features/op-cli.sh"
+    assert_file_contains "$source_file" "debsig" "op-cli.sh configures debsig verification policy"
+}
+
+# Test: 1Password GPG key handling
+test_op_gpg_key_handling() {
+    local source_file="$PROJECT_ROOT/lib/features/op-cli.sh"
+    assert_file_contains "$source_file" "gpg" "op-cli.sh handles GPG keys for package verification"
+    assert_file_contains "$source_file" "keyring" "op-cli.sh references keyring for GPG key storage"
+}
+
+# Test: OP_SERVICE_ACCOUNT_TOKEN reference
+test_op_service_account_token_ref() {
+    local source_file="$PROJECT_ROOT/lib/features/op-cli.sh"
+    assert_file_contains "$source_file" "OP_SERVICE_ACCOUNT_TOKEN" "op-cli.sh references OP_SERVICE_ACCOUNT_TOKEN"
+}
+
+# Test: op read command pattern
+test_op_read_command_pattern() {
+    local source_file="$PROJECT_ROOT/lib/features/op-cli.sh"
+    assert_file_contains "$source_file" "op read" "op-cli.sh uses op read to retrieve secrets"
+}
+
+# Test: /etc/bashrc.d/ file creation
+test_bashrc_d_file_creation() {
+    local source_file="$PROJECT_ROOT/lib/features/op-cli.sh"
+    assert_file_contains "$source_file" "/etc/bashrc.d/" "op-cli.sh creates files in /etc/bashrc.d/"
+}
+
+# Test: dpkg -i installation pattern
+test_dpkg_install_pattern() {
+    local source_file="$PROJECT_ROOT/lib/features/op-cli.sh"
+    # 1Password is installed via apt_install, not dpkg directly
+    assert_file_contains "$source_file" "apt_install" "op-cli.sh uses apt_install for package installation"
+}
+
+# Test: Architecture detection (amd64/arm64)
+test_op_arch_detection() {
+    local source_file="$PROJECT_ROOT/lib/features/op-cli.sh"
+    assert_file_contains "$source_file" "amd64" "op-cli.sh handles amd64 architecture"
+    assert_file_contains "$source_file" "arm64" "op-cli.sh handles arm64 architecture"
+}
+
+# Test: Version or package reference for OP CLI
+test_op_cli_package_reference() {
+    local source_file="$PROJECT_ROOT/lib/features/op-cli.sh"
+    assert_file_contains "$source_file" "1password-cli" "op-cli.sh references 1password-cli package"
+}
+
+# Test: curl download pattern for OP package
+test_op_curl_download_pattern() {
+    local source_file="$PROJECT_ROOT/lib/features/op-cli.sh"
+    assert_file_contains "$source_file" "curl" "op-cli.sh uses curl for downloading packages"
+    assert_file_contains "$source_file" "downloads.1password.com" "op-cli.sh downloads from official 1Password URL"
+}
+
+# Run Batch 6 tests
+run_test test_op_env_safe_xtrace_pattern "op-env-safe disables xtrace for security"
+run_test test_git_identity_fallback_first_last "Git identity fallback handles first/last name"
+run_test test_skip_if_target_set_pattern "Skip-if-target-already-set uses indirect expansion"
+run_test test_debsig_verify_policy "debsig-verify policy is configured"
+run_test test_op_gpg_key_handling "1Password GPG key handling"
+run_test test_op_service_account_token_ref "OP_SERVICE_ACCOUNT_TOKEN referenced"
+run_test test_op_read_command_pattern "op read command pattern used"
+run_test test_bashrc_d_file_creation "/etc/bashrc.d/ file creation pattern"
+run_test test_dpkg_install_pattern "Package installation via apt_install"
+run_test test_op_arch_detection "Architecture detection for amd64/arm64"
+run_test test_op_cli_package_reference "1password-cli package referenced"
+run_test test_op_curl_download_pattern "curl download pattern for OP package"
+
 generate_report

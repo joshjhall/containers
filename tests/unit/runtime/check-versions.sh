@@ -107,4 +107,87 @@ run_test_with_setup test_logging "Logging test"
 run_test_with_setup test_configuration "Configuration test"
 run_test_with_setup test_validation "Validation test"
 
+# ============================================================================
+# Batch 6: Static Analysis Tests for check-versions.sh
+# ============================================================================
+
+SOURCE_FILE="$PROJECT_ROOT/lib/runtime/check-versions.sh"
+
+# Test: set -euo pipefail
+test_cv_strict_mode() {
+    assert_file_contains "$SOURCE_FILE" "set -euo pipefail" "check-versions.sh uses strict mode"
+}
+
+# Test: defines get_github_release function
+test_cv_get_github_release_func() {
+    assert_file_contains "$SOURCE_FILE" "get_github_release()" "check-versions.sh defines get_github_release function"
+}
+
+# Test: defines get_latest_python function
+test_cv_get_latest_python_func() {
+    assert_file_contains "$SOURCE_FILE" "get_latest_python()" "check-versions.sh defines get_latest_python function"
+}
+
+# Test: defines get_latest_node function
+test_cv_get_latest_node_func() {
+    assert_file_contains "$SOURCE_FILE" "get_latest_node()" "check-versions.sh defines get_latest_node function"
+}
+
+# Test: defines get_latest_go function
+test_cv_get_latest_go_func() {
+    assert_file_contains "$SOURCE_FILE" "get_latest_go()" "check-versions.sh defines get_latest_go function"
+}
+
+# Test: defines compare_version function
+test_cv_compare_version_func() {
+    assert_file_contains "$SOURCE_FILE" "compare_version()" "check-versions.sh defines compare_version function"
+}
+
+# Test: defines extract_version function
+test_cv_extract_version_func() {
+    assert_file_contains "$SOURCE_FILE" "extract_version()" "check-versions.sh defines extract_version function"
+}
+
+# Test: defines print_result function
+test_cv_print_result_func() {
+    assert_file_contains "$SOURCE_FILE" "print_result()" "check-versions.sh defines print_result function"
+}
+
+# Test: GitHub API rate limiting detection
+test_cv_rate_limit_detection() {
+    assert_file_contains "$SOURCE_FILE" "rate limit exceeded" "check-versions.sh detects GitHub API rate limiting"
+}
+
+# Test: Version comparison with sort -V
+test_cv_sort_version_comparison() {
+    assert_file_contains "$SOURCE_FILE" "sort -V" "check-versions.sh uses sort -V for version comparison"
+}
+
+# Test: JSON output format handling
+test_cv_json_output_flag() {
+    assert_file_contains "$SOURCE_FILE" "--json" "check-versions.sh supports --json flag"
+}
+
+# Test: Color output variables
+test_cv_color_variables() {
+    assert_file_contains "$SOURCE_FILE" "RED=" "check-versions.sh defines RED color variable"
+    assert_file_contains "$SOURCE_FILE" "GREEN=" "check-versions.sh defines GREEN color variable"
+    assert_file_contains "$SOURCE_FILE" "YELLOW=" "check-versions.sh defines YELLOW color variable"
+    assert_file_contains "$SOURCE_FILE" "NC=" "check-versions.sh defines NC (no color) variable"
+}
+
+# Run Batch 6 check-versions tests
+run_test test_cv_strict_mode "check-versions.sh uses set -euo pipefail"
+run_test test_cv_get_github_release_func "Defines get_github_release function"
+run_test test_cv_get_latest_python_func "Defines get_latest_python function"
+run_test test_cv_get_latest_node_func "Defines get_latest_node function"
+run_test test_cv_get_latest_go_func "Defines get_latest_go function"
+run_test test_cv_compare_version_func "Defines compare_version function"
+run_test test_cv_extract_version_func "Defines extract_version function"
+run_test test_cv_print_result_func "Defines print_result function"
+run_test test_cv_rate_limit_detection "GitHub API rate limiting detection"
+run_test test_cv_sort_version_comparison "Version comparison with sort -V"
+run_test test_cv_json_output_flag "JSON output format supported"
+run_test test_cv_color_variables "Color output variables defined"
+
 generate_report
