@@ -5,6 +5,67 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.15.0] - 2026-02-18
+
+### Added
+
+- Add MCP server registry with CLAUDE_EXTRA_MCPS support
+- Add skill and agent template files
+- Pass cloud/docker flags to enabled-features.conf
+- Install skills and agents at build/runtime
+- Add Kagi MCP and package type support
+- Handle non-npm MCP packages at build time
+- Generic OP_*_REF secret loading convention
+- Add setup-git, setup-gh, setup-glab container commands
+- Update setup commands and add unit tests
+- Update and add Claude skills, agents, and templates
+- Add project-specific skills for feature scripts and test framework
+
+### Changed
+
+- Move figma from core plugins to optional
+- Delete legacy setup scripts and CI exclusions
+- Move GitHub/GitLab MCPs to registry and harden startup
+- Use pre-commit for linting instead of duplicated checks
+
+### Documentation
+
+- Document pre-installed skills and agents
+- Document generic OP_*_REF secret loading convention
+- Document container setup commands and git OP_*_REF vars
+
+### Fixed
+
+- Remove double setup/teardown in ollama unit tests
+- Exclude claude templates from PyMarkdown linting
+- Pin biome version and fix missing trailing newline
+- Update dev-tools feature script
+- Enable PyMarkdown front-matter extension instead of excluding files
+- Use empty PATH for CLI-missing tests to fix CI failures
+- Resolve all PyMarkdown violations in template files
+
+### Miscellaneous
+
+- Update dependency versions and sync biome schema automatically
+- Ignore CVE-2025-68121 in cosign until upstream fix
+- Update config, IDE settings, and biome schema
+
+### Testing
+
+- Add tests for MCP registry and extra MCPs
+- Add integration tests for skills and agents
+- Add Kagi MCP tests and documentation
+- Add OP_*_REF tests and clean up docker-compose env vars
+- Add unit tests for secrets management (167 tests)
+- Add unit tests for checksum and version validation (114 tests)
+- Add unit tests for error messages, cache utils, JSON logging (79 tests)
+- Add unit tests for bin scripts, jdtls installer, metrics exporter (139 tests)
+- Expand coverage for 6 existing test suites (+77 tests)
+
+### Style
+
+- Apply biome formatting to version-compatibility-matrix
+
 ## [4.14.5] - 2026-02-08
 
 ### Added
@@ -27,6 +88,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Reorganize build args with comments
 - Update project dictionary
+- Automated version updates to v4.14.5
+- Update compatibility matrix with passing test results
 
 ### Testing
 
@@ -916,6 +979,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix prettier and markdownlint formatting in README
 - Format TLS documentation files
 
+[4.15.0]: https://github.com/joshjhall/containers/compare/v4.14.5...v4.15.0
 [4.14.5]: https://github.com/joshjhall/containers/compare/v4.14.4...v4.14.5
 [4.14.4]: https://github.com/joshjhall/containers/compare/v4.14.3...v4.14.4
 [4.14.3]: https://github.com/joshjhall/containers/compare/v4.14.2...v4.14.3
