@@ -179,7 +179,7 @@ test_returns_error_when_secret_name_missing() {
 test_returns_error_when_aws_cli_missing() {
     local exit_code=0
     _run_aws_subshell "
-        export PATH='/usr/bin'
+        export PATH='$TEST_TEMP_DIR/bin'
         export AWS_SECRETS_ENABLED='true'
         export AWS_SECRET_NAME='test-secret'
         load_secrets_from_aws >/dev/null 2>&1
@@ -240,7 +240,7 @@ test_health_check_returns_error_when_name_missing() {
 test_health_check_returns_error_when_cli_missing() {
     local exit_code=0
     _run_aws_subshell "
-        export PATH='/usr/bin'
+        export PATH='$TEST_TEMP_DIR/bin'
         export AWS_SECRETS_ENABLED='true'
         export AWS_SECRET_NAME='test-secret'
         aws_secrets_health_check >/dev/null 2>&1

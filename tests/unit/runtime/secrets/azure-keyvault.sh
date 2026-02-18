@@ -159,7 +159,7 @@ test_returns_error_when_vault_name_missing() {
 test_returns_error_when_az_cli_missing() {
     local exit_code=0
     _run_azure_subshell "
-        export PATH='/usr/bin'
+        export PATH='$TEST_TEMP_DIR/bin'
         export AZURE_KEYVAULT_ENABLED='true'
         export AZURE_KEYVAULT_NAME='my-vault'
         load_secrets_from_azure >/dev/null 2>&1
@@ -245,7 +245,7 @@ test_health_check_vault_name_missing() {
 test_health_check_without_az_cli() {
     local exit_code=0
     _run_azure_subshell "
-        export PATH='/usr/bin'
+        export PATH='$TEST_TEMP_DIR/bin'
         export AZURE_KEYVAULT_ENABLED='true'
         export AZURE_KEYVAULT_NAME='my-vault'
         azure_keyvault_health_check >/dev/null 2>&1

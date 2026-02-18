@@ -146,7 +146,7 @@ test_disabled_by_default() {
 test_returns_error_when_gcloud_missing() {
     local exit_code=0
     _run_gcp_subshell "
-        export PATH='/usr/bin'
+        export PATH='$TEST_TEMP_DIR/bin'
         export GCP_SECRETS_ENABLED='true'
         load_secrets_from_gcp >/dev/null 2>&1
     " || exit_code=$?
@@ -260,7 +260,7 @@ test_health_check_when_disabled() {
 test_health_check_without_gcloud() {
     local exit_code=0
     _run_gcp_subshell "
-        export PATH='/usr/bin'
+        export PATH='$TEST_TEMP_DIR/bin'
         export GCP_SECRETS_ENABLED='true'
         gcp_secrets_health_check >/dev/null 2>&1
     " || exit_code=$?
