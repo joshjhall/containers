@@ -1,5 +1,5 @@
 ---
-description: Container development environment details and available tools
+description: Container development environment details and available tools. Use when you need to know what tools, languages, and caches are available in this container.
 ---
 
 # Container Environment
@@ -35,6 +35,8 @@ See /etc/container/config/enabled-features.conf for build-time feature flags.
 
 ## Useful Commands
 
-- check-build-logs.sh <feature> - View build logs for a feature
-- check-installed-versions.sh - Show installed tool versions
-- test-dev-tools - Verify development tool installation
+- `check-build-logs.sh python-dev` — view build logs for a specific feature
+- `check-build-logs.sh master-summary` — view the overall build summary
+- `check-installed-versions.sh` — show all installed tool versions
+- `test-dev-tools` — verify development tool installation
+- `cat /etc/container/config/enabled-features.conf` — check feature flags

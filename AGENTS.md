@@ -309,12 +309,18 @@ startup via `claude-setup`. Project-level `.claude/` configs merge with these
 
 **Skills** (always installed):
 
-| Skill                   | Purpose                                                              |
-| ----------------------- | -------------------------------------------------------------------- |
-| `container-environment` | Dynamic - describes installed tools, cache paths, container patterns |
-| `git-workflow`          | Git commit conventions, branch naming, PR workflow                   |
-| `testing-patterns`      | Test-first development, test framework patterns                      |
-| `code-quality`          | Linting, formatting, code review checklist                           |
+| Skill                     | Purpose                                                              |
+| ------------------------- | -------------------------------------------------------------------- |
+| `container-environment`   | Dynamic - describes installed tools, cache paths, container patterns |
+| `git-workflow`            | Git commit conventions, branch naming, PR workflow                   |
+| `testing-patterns`        | Test-first development, test framework patterns                      |
+| `code-quality`            | Linting, formatting, code review checklist                           |
+| `development-workflow`    | Phased feature development, task decomposition, scope control        |
+| `error-handling`          | Error hierarchy, validation, retry strategies, resilience patterns   |
+| `documentation-authoring` | Progressive documentation, writing standards, organization patterns  |
+| `shell-scripting`         | Shell naming conventions, namespace safety, testing, error handling  |
+| `skill-authoring`         | Skill/instruction writing, quality criteria, cross-tool patterns     |
+| `agent-authoring`         | Agent/subagent design, tool scoping, model selection, prompt design  |
 
 **Conditional skills**:
 
@@ -325,11 +331,12 @@ startup via `claude-setup`. Project-level `.claude/` configs merge with these
 
 **Agents** (always installed):
 
-| Agent           | Purpose                                              |
-| --------------- | ---------------------------------------------------- |
-| `code-reviewer` | Reviews code for bugs, security, performance, style  |
-| `test-writer`   | Generates tests for existing code, detects framework |
-| `refactorer`    | Refactors code while preserving behavior             |
+| Agent           | Purpose                                                        |
+| --------------- | -------------------------------------------------------------- |
+| `code-reviewer` | Reviews code for bugs, security, performance, style            |
+| `test-writer`   | Generates tests for existing code, detects framework           |
+| `refactorer`    | Refactors code while preserving behavior                       |
+| `debugger`      | Systematic debugging for errors, test failures, runtime issues |
 
 Templates are staged at build time to `/etc/container/config/claude-templates/`
 and installed at runtime by `claude-setup`. All installations are idempotent.

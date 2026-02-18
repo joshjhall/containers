@@ -47,6 +47,12 @@ test_templates_staged() {
     assert_file_in_image "$image" "/etc/container/config/claude-templates/skills/git-workflow/SKILL.md"
     assert_file_in_image "$image" "/etc/container/config/claude-templates/skills/testing-patterns/SKILL.md"
     assert_file_in_image "$image" "/etc/container/config/claude-templates/skills/code-quality/SKILL.md"
+    assert_file_in_image "$image" "/etc/container/config/claude-templates/skills/development-workflow/SKILL.md"
+    assert_file_in_image "$image" "/etc/container/config/claude-templates/skills/error-handling/SKILL.md"
+    assert_file_in_image "$image" "/etc/container/config/claude-templates/skills/documentation-authoring/SKILL.md"
+    assert_file_in_image "$image" "/etc/container/config/claude-templates/skills/shell-scripting/SKILL.md"
+    assert_file_in_image "$image" "/etc/container/config/claude-templates/skills/skill-authoring/SKILL.md"
+    assert_file_in_image "$image" "/etc/container/config/claude-templates/skills/agent-authoring/SKILL.md"
     assert_file_in_image "$image" "/etc/container/config/claude-templates/skills/docker-development/SKILL.md"
     assert_file_in_image "$image" "/etc/container/config/claude-templates/skills/cloud-infrastructure/SKILL.md"
 
@@ -55,6 +61,7 @@ test_templates_staged() {
     assert_file_in_image "$image" "/etc/container/config/claude-templates/agents/code-reviewer/code-reviewer.md"
     assert_file_in_image "$image" "/etc/container/config/claude-templates/agents/test-writer/test-writer.md"
     assert_file_in_image "$image" "/etc/container/config/claude-templates/agents/refactorer/refactorer.md"
+    assert_file_in_image "$image" "/etc/container/config/claude-templates/agents/debugger/debugger.md"
 }
 
 # Test: Agent templates have correct YAML frontmatter
@@ -74,6 +81,11 @@ test_agent_frontmatter() {
     # Verify refactorer has name field
     assert_command_in_container "$image" \
         "grep -q 'name: refactorer' /etc/container/config/claude-templates/agents/refactorer/refactorer.md && echo 'found'" \
+        "found"
+
+    # Verify debugger has name field
+    assert_command_in_container "$image" \
+        "grep -q 'name: debugger' /etc/container/config/claude-templates/agents/debugger/debugger.md && echo 'found'" \
         "found"
 }
 
