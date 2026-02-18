@@ -58,6 +58,7 @@ test_python_dev_build() {
 
     # Verify Python LSP (for IDE support)
     assert_executable_in_path "$image" "pylsp"
+    assert_executable_in_path "$image" "pyright"
 
     # Verify dev tools
     assert_executable_in_path "$image" "git"

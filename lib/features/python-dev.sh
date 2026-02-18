@@ -13,7 +13,7 @@
 #   - Utilities: cookiecutter, rich-cli, httpie, yq
 #   - Interactive: jupyter, jupyterlab, ipython
 #   - Pre-commit hooks
-#   - LSP: python-lsp-server with black and ruff plugins
+#   - LSP: python-lsp-server with black and ruff plugins, pyright
 #
 # Note:
 #   Requires INCLUDE_PYTHON feature to be enabled first.
@@ -290,6 +290,19 @@ else
     log_warning "Python LSP installation could not be verified"
 fi
 
+# Install pyright (type checker and language server)
+# Required by the pyright-lsp Claude Code plugin for type checking integration.
+# The pip package is a wrapper that bundles the pyright Node.js binary.
+log_command "Installing pyright" \
+    su - "${USERNAME}" -c "export PIP_CACHE_DIR='${PIP_CACHE_DIR}' && /usr/local/bin/python -m pip install --no-warn-script-location --prefer-binary pyright"
+
+# Verify pyright installation
+if command -v pyright &>/dev/null; then
+    log_message "Pyright installed successfully"
+else
+    log_warning "Pyright installation could not be verified"
+fi
+
 # ============================================================================
 # Final verification
 # ============================================================================
@@ -330,7 +343,7 @@ export PIP_CACHE_DIR="/cache/pip"
 
 log_feature_summary \
     --feature "Python Development Tools" \
-    --tools "ipython,pytest,black,ruff,mypy,pylint,bandit,pip-audit" \
+    --tools "ipython,pytest,black,ruff,mypy,pylint,bandit,pip-audit,pyright" \
     --paths "${PIP_CACHE_DIR}" \
     --env "PIP_CACHE_DIR" \
     --commands "ipython,pytest,black,ruff,mypy,pylint,bandit,pip-audit,py-lint-all,py-format-all,py-security-check" \

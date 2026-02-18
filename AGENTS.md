@@ -202,18 +202,18 @@ respective language development features. This enables IDE features like
 code completion, go-to-definition, and diagnostics for any IDE (VSCode,
 Cursor, Neovim, etc.):
 
-| Feature               | LSP Server                                      |
-| --------------------- | ----------------------------------------------- |
-| `INCLUDE_PYTHON_DEV`  | `python-lsp-server` with black and ruff plugins |
-| `INCLUDE_NODE_DEV`    | `typescript-language-server`                    |
-| `INCLUDE_R_DEV`       | `languageserver`                                |
-| `INCLUDE_GOLANG_DEV`  | `gopls`                                         |
-| `INCLUDE_RUBY_DEV`    | `solargraph`                                    |
-| `INCLUDE_RUST_DEV`    | `rust-analyzer`                                 |
-| `INCLUDE_KOTLIN_DEV`  | `kotlin-language-server`, `jdtls`               |
-| `INCLUDE_JAVA_DEV`    | `jdtls` (Eclipse JDT Language Server)           |
-| `INCLUDE_ANDROID_DEV` | `jdtls` (Eclipse JDT Language Server)           |
-| `INCLUDE_DEV_TOOLS`\* | `bash-language-server` (requires Node.js)       |
+| Feature               | LSP Server                                                 |
+| --------------------- | ---------------------------------------------------------- |
+| `INCLUDE_PYTHON_DEV`  | `python-lsp-server` with black and ruff plugins, `pyright` |
+| `INCLUDE_NODE_DEV`    | `typescript-language-server`                               |
+| `INCLUDE_R_DEV`       | `languageserver`                                           |
+| `INCLUDE_GOLANG_DEV`  | `gopls`                                                    |
+| `INCLUDE_RUBY_DEV`    | `solargraph`                                               |
+| `INCLUDE_RUST_DEV`    | `rust-analyzer`                                            |
+| `INCLUDE_KOTLIN_DEV`  | `kotlin-language-server`, `jdtls`                          |
+| `INCLUDE_JAVA_DEV`    | `jdtls` (Eclipse JDT Language Server)                      |
+| `INCLUDE_ANDROID_DEV` | `jdtls` (Eclipse JDT Language Server)                      |
+| `INCLUDE_DEV_TOOLS`\* | `bash-language-server` (requires Node.js)                  |
 
 \*`bash-language-server` is installed when both `INCLUDE_DEV_TOOLS=true` and Node.js
 is available (`INCLUDE_NODE=true` or `INCLUDE_NODE_DEV=true`).
