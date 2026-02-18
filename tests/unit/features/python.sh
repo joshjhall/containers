@@ -112,6 +112,33 @@ test_poetry_installation() {
     fi
 }
 
+# Test: uv version format
+test_uv_version_format() {
+    local version
+    version=$(grep "UV_VERSION=" "$PROJECT_ROOT/lib/features/python.sh" | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
+
+    if [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        assert_true true "UV_VERSION format is valid: $version"
+    else
+        assert_true false "UV_VERSION format invalid: $version"
+    fi
+}
+
+# Test: uv installation
+test_uv_installation() {
+    if grep -q "UV_VERSION=" "$PROJECT_ROOT/lib/features/python.sh"; then
+        assert_true true "UV_VERSION is defined in python.sh"
+    else
+        assert_true false "UV_VERSION is not defined in python.sh"
+    fi
+
+    if grep -q "pip install.*uv==" "$PROJECT_ROOT/lib/features/python.sh"; then
+        assert_true true "uv is installed via pip"
+    else
+        assert_true false "uv pip install command not found"
+    fi
+}
+
 # Test: Cache directory configuration
 test_cache_directories() {
     # Test pip cache path
@@ -244,6 +271,8 @@ run_test test_download_url_construction "Python download URL construction"
 run_test test_build_dependencies "Build dependencies validation"
 run_test test_configure_options "Python configure options"
 run_test test_poetry_installation "Poetry installation logic"
+run_test test_uv_version_format "uv version format validation"
+run_test test_uv_installation "uv installation in python.sh"
 run_test test_cache_directories "Cache directory configuration"
 run_test test_python_paths "Python executable paths"
 run_test test_environment_variables "Environment variables setup"

@@ -48,7 +48,7 @@ test_dev_tools_installation() {
     local bin_dir="$TEST_TEMP_DIR/home/testuser/.local/bin"
 
     # List of Python dev tools
-    local tools=("poetry" "pipenv" "black" "ruff" "mypy" "pytest" "tox" "pre-commit")
+    local tools=("poetry" "pipenv" "black" "ruff" "mypy" "pytest" "tox" "pre-commit" "uv" "uvx")
 
     # Create mock tools
     for tool in "${tools[@]}"; do

@@ -256,6 +256,9 @@ extract_all_versions() {
     if [ -f "$PROJECT_ROOT/lib/features/python.sh" ]; then
         ver=$(extract_version_from_line "$(grep "POETRY_VERSION=" "$PROJECT_ROOT/lib/features/python.sh" 2>/dev/null | head -1)")
         [ -n "$ver" ] && add_tool "Poetry" "$ver" "python.sh"
+
+        ver=$(extract_version_from_line "$(grep "UV_VERSION=" "$PROJECT_ROOT/lib/features/python.sh" 2>/dev/null | head -1)")
+        [ -n "$ver" ] && add_tool "uv" "$ver" "python.sh"
     fi
 
     # Dev tools from dev-tools.sh
@@ -844,6 +847,7 @@ main() {
             Trivy) check_github_release "Trivy" "aquasecurity/trivy" ;;
             pixi) check_github_release "pixi" "prefix-dev/pixi" ;;
             Poetry) check_github_release "Poetry" "python-poetry/poetry" ;;
+            uv) check_github_release "uv" "astral-sh/uv" ;;
             lazygit) check_github_release "lazygit" "jesseduffield/lazygit" ;;
             lazydocker) check_github_release "lazydocker" "jesseduffield/lazydocker" ;;
             direnv) check_github_release "direnv" "direnv/direnv" ;;

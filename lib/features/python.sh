@@ -354,6 +354,14 @@ log_command "Installing Poetry ${POETRY_VERSION} via pipx" \
 "
 
 # ============================================================================
+# Install uv (fast Python package manager)
+# ============================================================================
+UV_VERSION="${UV_VERSION:-0.10.4}"
+log_command "Installing uv ${UV_VERSION}" \
+    su - "${USERNAME}" -c "export PIP_CACHE_DIR='${PIP_CACHE_DIR}' && \
+    /usr/local/bin/python -m pip install --no-warn-script-location uv==${UV_VERSION}"
+
+# ============================================================================
 # System-wide Configuration
 # ============================================================================
 log_message "Configuring Python environment..."
@@ -469,7 +477,7 @@ fi
 
 echo ""
 echo "=== Python Package Managers ==="
-for cmd in pip pip3 pipx poetry; do
+for cmd in pip pip3 pipx poetry uv; do
     if command -v $cmd &> /dev/null; then
         version=$($cmd --version 2>&1 | head -1)
         echo "✓ $cmd: $version"
@@ -509,6 +517,9 @@ log_command "Checking pip version" \
 log_command "Checking Poetry version" \
     ${PIPX_BIN_DIR}/poetry --version || log_warning "poetry not installed"
 
+log_command "Checking uv version" \
+    uv --version || log_warning "uv not installed"
+
 # ============================================================================
 # Final ownership fix
 # ============================================================================
@@ -528,10 +539,10 @@ export POETRY_CACHE_DIR="/cache/poetry"
 log_feature_summary \
     --feature "Python" \
     --version "${PYTHON_VERSION}" \
-    --tools "pip,poetry,pipx" \
+    --tools "pip,poetry,pipx,uv" \
     --paths "${PIP_CACHE_DIR},${POETRY_CACHE_DIR},${PIPX_HOME},${PIPX_BIN_DIR}" \
     --env "PIP_CACHE_DIR,POETRY_CACHE_DIR,PIPX_HOME,PIPX_BIN_DIR,PYTHON_VERSION" \
-    --commands "python3,pip,poetry,pipx" \
+    --commands "python3,pip,poetry,pipx,uv,uvx" \
     --next-steps "Run 'test-python' to verify installation"
 
 # End logging
