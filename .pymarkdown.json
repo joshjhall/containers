@@ -16,6 +16,9 @@
     },
     "md041": {
       "enabled": false
+    },
+    "md024": {
+      "siblings_only": true
     }
   }
 }

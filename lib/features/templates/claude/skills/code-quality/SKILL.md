@@ -26,7 +26,7 @@ description: Code quality standards, naming conventions, and review checklist. U
 - Use appropriate severity: errors for failures, info for operations, debug for details
 - Include context fields (request ID, user, operation) — don't concatenate into messages
 
-```
+```text
 Bad:  log(f"User {user_id} failed to process order {order_id}: {err}")
 Good: log.error("order_processing_failed", user_id=user_id, order_id=order_id, error=err)
 ```

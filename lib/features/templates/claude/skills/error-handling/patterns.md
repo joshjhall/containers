@@ -24,7 +24,7 @@ ______________________________________________________________________
 
 ### Good Error Pattern
 
-```
+```text
 Error includes:
 - Specific type (FileParsingError, not GenericError)
 - Structured context (file_path, line_number, expected_format)
@@ -86,7 +86,7 @@ Validation happens at three layers, applied at system boundaries:
 
 Good validation errors explain what's wrong AND how to fix it:
 
-```
+```text
 Bad:  "Invalid input"
 Bad:  "Validation failed"
 Good: "Pattern name must be at least 3 characters, got 1: 'x'"
@@ -124,7 +124,7 @@ ______________________________________________________________________
 
 ### Backoff Configuration
 
-```
+```text
 Exponential backoff with jitter:
 
   delay = min(max_delay, base_delay * (2 ^ attempt)) + random_jitter
@@ -202,7 +202,7 @@ When operating in degraded mode, warnings should include:
 - How to install/fix the missing dependency
 - Whether the workaround is transparent or lossy
 
-```
+```text
 Bad:  "Feature unavailable"
 Good: "GPU acceleration not available — operations will be slower.
        To enable: pip install package[gpu]"

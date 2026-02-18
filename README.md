@@ -478,10 +478,10 @@ Calculate checksum of downloaded file (TOFU - Trust On First Use).
    ╠════════════════════════════════════════════════════════════╣
    ║ No trusted checksum available for verification.            ║
    ║                                                            ║
-   ║ Using TOFU (Trust On First Use) - calculating checksum    ║
-   ║ from downloaded file without external verification.       ║
+   ║ Using TOFU (Trust On First Use) - calculating checksum     ║
+   ║ from downloaded file without external verification.        ║
    ║                                                            ║
-   ║ Risk: Vulnerable to man-in-the-middle attacks.            ║
+   ║ Risk: Vulnerable to man-in-the-middle attacks.             ║
    ╚════════════════════════════════════════════════════════════╝
 ```
 

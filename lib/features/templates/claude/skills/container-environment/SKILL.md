@@ -14,7 +14,7 @@ and container-specific patterns.
 - tini as PID 1 for zombie process reaping
 - First-startup scripts in /etc/container/first-startup/
 - Startup scripts in /etc/container/startup/
-- Build logs available via: check-build-logs.sh <feature-name>
+- Build logs available via: `check-build-logs.sh <feature-name>`
 
 ## Cache Paths
 

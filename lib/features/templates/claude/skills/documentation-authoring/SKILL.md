@@ -19,7 +19,7 @@ description: Documentation standards, progressive writing, and organization patt
 - Include at least one working example and one "what if" error case
 - Add output examples when the result isn't obvious
 
-```
+```text
 Bad:  "It processes the data and returns the result to the caller."
 Good: "parse_config() reads the YAML file at config_path and returns
        a validated Settings object, raising ConfigError on invalid keys."

@@ -18,15 +18,21 @@ When invoked:
 ## Test Design Checklist
 
 - **Descriptive names**: Test names explain the expected behavior, not the implementation
-  ```
+
+  ```text
   Bad:  test_function, test_case_1, test_error
   Good: test_returns_empty_list_when_no_matches_found
   Good: test_raises_ValueError_when_amount_is_negative
   ```
+
 - **Independent**: Each test can run in isolation, no shared mutable state between tests
+
 - **Deterministic**: No reliance on time, random values, or external services
+
 - **Boundary values**: Test at limits (0, 1, max, empty, null/nil/None)
+
 - **Error paths**: Test expected failures, not just the happy path
+
 - **Mock at boundaries**: Mock external dependencies (APIs, databases, filesystem), not internal logic
 
 ## File Placement

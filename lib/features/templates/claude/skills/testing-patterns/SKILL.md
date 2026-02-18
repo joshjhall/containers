@@ -18,7 +18,7 @@ description: Test-first development patterns and framework conventions. Use when
 - Descriptive test names explaining the expected behavior and condition
 - Group related tests logically
 
-```
+```text
 Bad:  test_login()
 Bad:  test_email_validation_works()
 Good: test_login_fails_with_expired_token()
@@ -27,7 +27,7 @@ Good: test_email_rejects_missing_at_symbol()
 
 ### Test Organization
 
-```
+```text
 Test Suite
 ├── Happy path tests
 ├── Edge cases (boundary values, empty/null, special characters)
