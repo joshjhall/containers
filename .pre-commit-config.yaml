@@ -105,11 +105,11 @@ repos:
         pass_filenames: false
         always_run: true
 
-      # Fix shell script permissions
+      # Fix shell script permissions (in git index, not just filesystem)
       - id: fix-shell-permissions
         name: Fix shell script permissions
-        entry: bash -c 'for f in "$@"; do [ -f "$f" ] && [ ! -x "$f" ] && chmod +x "$f"; done; exit 0'
-        language: system
+        entry: bin/fix-shell-permissions.sh
+        language: script
         types: [shell]
 
   # ==========================================================================
