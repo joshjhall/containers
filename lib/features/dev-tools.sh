@@ -55,7 +55,7 @@ LAZYGIT_VERSION="${LAZYGIT_VERSION:-0.59.0}"
 DELTA_VERSION="${DELTA_VERSION:-0.18.2}"
 ACT_VERSION="${ACT_VERSION:-0.2.84}"
 GITCLIFF_VERSION="${GITCLIFF_VERSION:-2.8.0}"
-BIOME_VERSION="${BIOME_VERSION:-2.3.15}"
+BIOME_VERSION="${BIOME_VERSION:-2.4.2}"
 TAPLO_VERSION="${TAPLO_VERSION:-0.10.0}"
 
 # ============================================================================
@@ -749,7 +749,7 @@ fi
 
 # Install GitLab CLI (glab)
 log_message "Installing glab (GitLab CLI)..."
-GLAB_VERSION="${GLAB_VERSION:-1.85.1}"
+GLAB_VERSION="${GLAB_VERSION:-1.85.3}"
 
 # GitLab CLI provides builds for amd64 and arm64
 if [ "$ARCH" = "amd64" ]; then
