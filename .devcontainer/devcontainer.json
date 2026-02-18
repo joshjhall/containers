@@ -20,8 +20,7 @@
   "postCreateCommand": "pipx install pre-commit",
 
   // Auto-configure git hooks, development environment, SSH keys, and GitHub CLI after container starts
-  "postStartCommand": "bash -c './bin/setup-dev-environment.sh && setup-git && setup-gh && setup-glab'",
-
+  "postStartCommand": "bash -c './bin/setup-dev-environment.sh && setup-git && setup-gh'",
   "customizations": {
     "vscode": {
       "extensions": [
