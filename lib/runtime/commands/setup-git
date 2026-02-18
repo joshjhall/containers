@@ -19,15 +19,18 @@ _warn()  { printf '[setup-git] WARN: %s\n' "$*" >&2; }
 
 # Write key material to file only if content differs. Returns 0 if written, 1 if unchanged.
 _write_key() {
-    local path="$1" content="$2"
+    local path="$1" var_name="$2"
+    # Save xtrace state and disable it to avoid leaking key material
+    local _xt; _xt=$(set +o | grep xtrace)
+    { set +x; } 2>/dev/null
+    local content="${!var_name}"
     if [ -f "$path" ] && [ "$(cat "$path")" = "$content" ]; then
+        eval "$_xt"
         return 1
     fi
-    # Disable xtrace around key material
-    { set +x; } 2>/dev/null
     printf '%s\n' "$content" > "$path"
     chmod 600 "$path"
-    { set -x; } 2>/dev/null || true
+    eval "$_xt"
     return 0
 }
 
@@ -109,7 +112,7 @@ setup_auth_key() {
 
     local key_path="${HOME}/.ssh/git_auth_key"
 
-    if _write_key "$key_path" "$GIT_AUTH_SSH_KEY"; then
+    if _write_key "$key_path" GIT_AUTH_SSH_KEY; then
         _ok "wrote auth key to ${key_path}"
     else
         _skip "auth key unchanged"
@@ -139,7 +142,7 @@ setup_signing_key() {
     local signers="${HOME}/.ssh/allowed_signers"
 
     # Write private key
-    if _write_key "$priv" "$GIT_SIGNING_SSH_KEY"; then
+    if _write_key "$priv" GIT_SIGNING_SSH_KEY; then
         _ok "wrote signing key to ${priv}"
     else
         _skip "signing key unchanged"

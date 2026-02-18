@@ -49,11 +49,12 @@ main() {
     local token
     token=$(printf '%s' "$GITHUB_TOKEN" | tr -d '[:space:]')
 
-    # Authenticate
+    # Authenticate (pipe token via stdin to avoid exposing it in process listings)
     _info "authenticating gh CLI"
+    local _xt; _xt=$(set +o | grep xtrace)
     { set +x; } 2>/dev/null
     printf '%s' "$token" | gh auth login --with-token 2>&1
-    { set -x; } 2>/dev/null || true
+    eval "$_xt"
 
     # Persist token derivation in bashrc
     _persist_token

@@ -24,9 +24,20 @@ main() {
         return 0
     fi
 
-    # Already authenticated
-    if glab auth status >/dev/null 2>&1; then
-        _skip "glab already authenticated"
+    local host="${GITLAB_HOST:-gitlab.com}"
+
+    # Already authenticated — export token and exit
+    if glab auth status --hostname "$host" >/dev/null 2>&1; then
+        _skip "glab already authenticated (host: ${host})"
+        # Ensure GITLAB_TOKEN is available for child processes
+        if [ -z "${GITLAB_TOKEN:-}" ]; then
+            local token
+            token=$(glab config get token --host "$host" 2>/dev/null | tr -d '[:space:]') || true
+            if [ -n "$token" ]; then
+                export GITLAB_TOKEN="$token"
+            fi
+        fi
+        _persist_token
         return 0
     fi
 
@@ -37,19 +48,39 @@ main() {
         return 0
     fi
 
-    local host="${GITLAB_HOST:-gitlab.com}"
+    # Sanitize token (strip whitespace)
+    local token
+    token=$(printf '%s' "$GITLAB_TOKEN" | tr -d '[:space:]')
 
-    # Authenticate
+    # Authenticate (pipe token via stdin to avoid exposing it in process listings)
     _info "authenticating glab CLI (host: ${host})"
+    local _xt; _xt=$(set +o | grep xtrace)
     { set +x; } 2>/dev/null
-    glab auth login --hostname "$host" --token "$GITLAB_TOKEN" 2>&1
-    { set -x; } 2>/dev/null || true
+    printf '%s' "$token" | glab auth login --hostname "$host" --stdin 2>&1
+    eval "$_xt"
+
+    # Persist token derivation in bashrc
+    _persist_token
 
     # Verify
-    if glab auth status >/dev/null 2>&1; then
+    if glab auth status --hostname "$host" >/dev/null 2>&1; then
         _ok "glab authenticated (host: ${host})"
     else
         _info "glab authentication could not be verified"
+    fi
+}
+
+_persist_token() {
+    local host="${GITLAB_HOST:-gitlab.com}"
+    local marker="# setup-glab: GITLAB_TOKEN"
+    if ! grep -qF "$marker" "${HOME}/.bashrc" 2>/dev/null; then
+        cat >> "${HOME}/.bashrc" <<'BASHRC'
+
+# setup-glab: GITLAB_TOKEN
+if [ -z "${GITLAB_TOKEN:-}" ] && command -v glab >/dev/null 2>&1 && glab auth status >/dev/null 2>&1; then
+    export GITLAB_TOKEN=$(glab config get token --host "${GITLAB_HOST:-gitlab.com}" 2>/dev/null | tr -d '[:space:]')
+fi
+BASHRC
     fi
 }
 
