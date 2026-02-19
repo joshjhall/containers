@@ -402,6 +402,41 @@ automatically resolved from 1Password and exported as `<NAME>`. This is generic
 `credential`, LOGIN items use `password`, SSH_KEY items use `private key`, etc.
 Check your item in 1Password to find the correct field name.
 
+#### File-Based Secrets (`OP_*_FILE_REF` convention)
+
+Some credentials must be **file paths** rather than string values (e.g.,
+`GOOGLE_APPLICATION_CREDENTIALS` must point to a JSON file on disk). The
+`_FILE_REF` convention fetches content from 1Password, writes it to a secure
+RAM-backed path, and exports the **file path** as the environment variable.
+
+| Variable                                     | Exports                                      | Example                             |
+| -------------------------------------------- | -------------------------------------------- | ----------------------------------- |
+| `OP_GOOGLE_APPLICATION_CREDENTIALS_FILE_REF` | `GOOGLE_APPLICATION_CREDENTIALS` (file path) | `op://Vault/GCP-SA-Key/sa-key.json` |
+| `OP_MY_CERT_FILE_REF`                        | `MY_CERT` (file path)                        | `op://Vault/TLS-Cert/cert.pem`      |
+
+**How it works**:
+
+- Content is fetched via `op read` (same as `_REF`, works with both Document
+  items and file attachments on regular items)
+- Written to `/dev/shm/` (RAM-backed tmpfs, never touches disk)
+- File permissions set to `0600` (owner read/write only)
+- Filename derived from the variable name (lowercase, underscores become
+  dashes), e.g., `GOOGLE_APPLICATION_CREDENTIALS` → `google-application-credentials`
+- Extension derived from the URI's last path segment (e.g., `sa-key.json` →
+  `.json`; `credential` → no extension)
+- Same precedence rules: direct env var always wins
+
+**URI format**: Point the URI at the **filename** (for Document items) or
+**file attachment name** (for regular items), not a text field:
+
+```bash
+# Document item — use the filename
+OP_GOOGLE_APPLICATION_CREDENTIALS_FILE_REF=op://Development/GCP Service Account/sa-key.json
+
+# File attachment on API_CREDENTIAL item — use the attachment name
+OP_GOOGLE_APPLICATION_CREDENTIALS_FILE_REF=op://Development/GCP Credentials/sa-key.json
+```
+
 **Git identity fallback**: If `OP_GIT_USER_NAME_REF` points to a 1Password
 Identity item (which has separate `first name`/`last name` fields instead of
 `full name`), the system automatically combines them. If nothing resolves,
@@ -415,6 +450,7 @@ services:
     environment:
       - OP_SERVICE_ACCOUNT_TOKEN=${OP_SERVICE_ACCOUNT_TOKEN}
       - OP_GITHUB_TOKEN_REF=op://Development/GitHub-PAT/credential
+      - OP_GOOGLE_APPLICATION_CREDENTIALS_FILE_REF=op://Development/GCP Service Account/sa-key.json
       - OP_GIT_USER_NAME_REF=op://Development/Git-Config/full name
       - OP_GIT_USER_EMAIL_REF=op://Development/Git-Config/email
       - OP_GIT_AUTH_SSH_KEY_REF=op://Development/Git-Auth-Key/private key

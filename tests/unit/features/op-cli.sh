@@ -346,4 +346,175 @@ run_test test_op_arch_detection "Architecture detection for amd64/arm64"
 run_test test_op_cli_package_reference "1password-cli package referenced"
 run_test test_op_curl_download_pattern "curl download pattern for OP package"
 
+# ============================================================================
+# OP_*_FILE_REF Pattern Tests
+# ============================================================================
+
+# Helper: derive target variable name from an OP_*_FILE_REF variable name
+# (mirrors the logic in _op_load_secrets / 45-op-secrets.sh)
+_derive_file_ref_target() {
+    local ref_var="$1"
+    local target="${ref_var#OP_}"
+    target="${target%_FILE_REF}"
+    echo "$target"
+}
+
+test_op_file_ref_pattern_matching() {
+    # Set up test env vars
+    export OP_GOOGLE_APPLICATION_CREDENTIALS_FILE_REF="op://Vault/GCP/sa-key.json"
+    export OP_MY_CERT_FILE_REF="op://Vault/Cert/cert.pem"
+    # These should NOT match _FILE_REF pattern
+    export OP_GITHUB_TOKEN_REF="op://Vault/GitHub/token"
+    export OP_SERVICE_ACCOUNT_TOKEN="ops_xxx"
+
+    local matches
+    matches=$(compgen -v | grep '^OP_.\+_FILE_REF$' || true)
+
+    echo "$matches" | grep -q "OP_GOOGLE_APPLICATION_CREDENTIALS_FILE_REF" \
+        && assert_true 0 "OP_GOOGLE_APPLICATION_CREDENTIALS_FILE_REF matches _FILE_REF pattern" \
+        || assert_true 1 "OP_GOOGLE_APPLICATION_CREDENTIALS_FILE_REF should match _FILE_REF pattern"
+
+    echo "$matches" | grep -q "OP_MY_CERT_FILE_REF" \
+        && assert_true 0 "OP_MY_CERT_FILE_REF matches _FILE_REF pattern" \
+        || assert_true 1 "OP_MY_CERT_FILE_REF should match _FILE_REF pattern"
+
+    # Should NOT match
+    echo "$matches" | grep -q "OP_GITHUB_TOKEN_REF" \
+        && assert_true 1 "OP_GITHUB_TOKEN_REF should not match _FILE_REF pattern" \
+        || assert_true 0 "OP_GITHUB_TOKEN_REF excluded from _FILE_REF pattern"
+
+    echo "$matches" | grep -q "OP_SERVICE_ACCOUNT_TOKEN" \
+        && assert_true 1 "OP_SERVICE_ACCOUNT_TOKEN should not match _FILE_REF pattern" \
+        || assert_true 0 "OP_SERVICE_ACCOUNT_TOKEN excluded from _FILE_REF pattern"
+
+    # Clean up
+    unset OP_GOOGLE_APPLICATION_CREDENTIALS_FILE_REF OP_MY_CERT_FILE_REF
+    unset OP_GITHUB_TOKEN_REF OP_SERVICE_ACCOUNT_TOKEN
+}
+
+test_op_file_ref_target_derivation() {
+    local result
+
+    result=$(_derive_file_ref_target "OP_GOOGLE_APPLICATION_CREDENTIALS_FILE_REF")
+    [ "$result" = "GOOGLE_APPLICATION_CREDENTIALS" ] \
+        && assert_true 0 "OP_GOOGLE_APPLICATION_CREDENTIALS_FILE_REF derives GOOGLE_APPLICATION_CREDENTIALS" \
+        || assert_true 1 "Expected GOOGLE_APPLICATION_CREDENTIALS, got $result"
+
+    result=$(_derive_file_ref_target "OP_MY_CERT_FILE_REF")
+    [ "$result" = "MY_CERT" ] \
+        && assert_true 0 "OP_MY_CERT_FILE_REF derives MY_CERT" \
+        || assert_true 1 "Expected MY_CERT, got $result"
+
+    result=$(_derive_file_ref_target "OP_X_FILE_REF")
+    [ "$result" = "X" ] \
+        && assert_true 0 "OP_X_FILE_REF derives X (single char)" \
+        || assert_true 1 "Expected X, got $result"
+}
+
+test_op_file_ref_extension_derivation() {
+    # Test the extension derivation logic from the URI's last path segment
+    local _uri_field _file_ext
+
+    # .json extension
+    _uri_field="sa-key.json"
+    case "$_uri_field" in
+        *.*) _file_ext=".${_uri_field##*.}" ;;
+        *)   _file_ext="" ;;
+    esac
+    [ "$_file_ext" = ".json" ] \
+        && assert_true 0 "sa-key.json produces .json extension" \
+        || assert_true 1 "Expected .json, got $_file_ext"
+
+    # .pem extension
+    _uri_field="cert.pem"
+    case "$_uri_field" in
+        *.*) _file_ext=".${_uri_field##*.}" ;;
+        *)   _file_ext="" ;;
+    esac
+    [ "$_file_ext" = ".pem" ] \
+        && assert_true 0 "cert.pem produces .pem extension" \
+        || assert_true 1 "Expected .pem, got $_file_ext"
+
+    # No extension (plain field name like "credential")
+    _uri_field="credential"
+    case "$_uri_field" in
+        *.*) _file_ext=".${_uri_field##*.}" ;;
+        *)   _file_ext="" ;;
+    esac
+    [ "$_file_ext" = "" ] \
+        && assert_true 0 "credential produces no extension" \
+        || assert_true 1 "Expected empty, got $_file_ext"
+
+    # Multiple dots (e.g., file.tar.gz)
+    _uri_field="archive.tar.gz"
+    case "$_uri_field" in
+        *.*) _file_ext=".${_uri_field##*.}" ;;
+        *)   _file_ext="" ;;
+    esac
+    [ "$_file_ext" = ".gz" ] \
+        && assert_true 0 "archive.tar.gz produces .gz extension (last dot)" \
+        || assert_true 1 "Expected .gz, got $_file_ext"
+}
+
+test_op_file_ref_excludes_from_ref_loop() {
+    # Verify the _REF loop regex excludes _FILE_REF variables
+    export OP_GOOGLE_APPLICATION_CREDENTIALS_FILE_REF="op://Vault/GCP/sa-key.json"
+    export OP_GITHUB_TOKEN_REF="op://Vault/GitHub/token"
+
+    local ref_matches
+    ref_matches=$(compgen -v | grep '^OP_.\+_REF$' | grep -v '_FILE_REF$' || true)
+
+    echo "$ref_matches" | grep -q "OP_GITHUB_TOKEN_REF" \
+        && assert_true 0 "OP_GITHUB_TOKEN_REF still matches _REF pattern" \
+        || assert_true 1 "OP_GITHUB_TOKEN_REF should match _REF pattern"
+
+    echo "$ref_matches" | grep -q "OP_GOOGLE_APPLICATION_CREDENTIALS_FILE_REF" \
+        && assert_true 1 "_FILE_REF var should be excluded from _REF loop" \
+        || assert_true 0 "_FILE_REF var correctly excluded from _REF loop"
+
+    # Clean up
+    unset OP_GOOGLE_APPLICATION_CREDENTIALS_FILE_REF OP_GITHUB_TOKEN_REF
+}
+
+# Static analysis: _FILE_REF pattern in bashrc content
+test_op_file_ref_in_bashrc() {
+    local source_file="$PROJECT_ROOT/lib/features/op-cli.sh"
+    assert_file_contains "$source_file" "_FILE_REF" "op-cli.sh contains _FILE_REF pattern"
+    assert_file_contains "$source_file" "/dev/shm/" "op-cli.sh writes file secrets to /dev/shm"
+    assert_file_contains "$source_file" "chmod 600" "op-cli.sh sets 0600 permissions on secret files"
+}
+
+# Static analysis: _FILE_REF pattern in startup script
+test_op_file_ref_in_startup_script() {
+    local source_file="$PROJECT_ROOT/lib/features/op-cli.sh"
+    # Verify the startup script heredoc section also contains _FILE_REF loop
+    # The startup script is between 'cat > /etc/container/startup/45-op-secrets.sh' and 'EOF'
+    # We grep for the _FILE_REF pattern appearing after 45-op-secrets.sh
+    grep -A 200 '45-op-secrets.sh' "$source_file" | grep -q '_FILE_REF' \
+        && assert_true 0 "45-op-secrets.sh heredoc contains _FILE_REF loop" \
+        || assert_true 1 "45-op-secrets.sh heredoc should contain _FILE_REF loop"
+
+    grep -A 200 '45-op-secrets.sh' "$source_file" | grep -q '/dev/shm/' \
+        && assert_true 0 "45-op-secrets.sh heredoc uses /dev/shm for file secrets" \
+        || assert_true 1 "45-op-secrets.sh heredoc should use /dev/shm"
+
+    grep -A 200 '45-op-secrets.sh' "$source_file" | grep -q 'chmod 600' \
+        && assert_true 0 "45-op-secrets.sh heredoc applies chmod 600" \
+        || assert_true 1 "45-op-secrets.sh heredoc should apply chmod 600"
+}
+
+# Static analysis: _REF loop excludes _FILE_REF in source code
+test_op_ref_loop_excludes_file_ref_in_source() {
+    local source_file="$PROJECT_ROOT/lib/features/op-cli.sh"
+    assert_file_contains "$source_file" "grep -v '_FILE_REF" "op-cli.sh _REF loop excludes _FILE_REF variables"
+}
+
+run_test_with_setup test_op_file_ref_pattern_matching "OP_*_FILE_REF pattern matching test"
+run_test_with_setup test_op_file_ref_target_derivation "OP_*_FILE_REF target derivation test"
+run_test_with_setup test_op_file_ref_extension_derivation "OP_*_FILE_REF extension derivation test"
+run_test_with_setup test_op_file_ref_excludes_from_ref_loop "OP_*_FILE_REF excluded from _REF loop test"
+run_test test_op_file_ref_in_bashrc "OP_*_FILE_REF in bashrc content"
+run_test test_op_file_ref_in_startup_script "OP_*_FILE_REF in startup script"
+run_test test_op_ref_loop_excludes_file_ref_in_source "_REF loop excludes _FILE_REF in source"
+
 generate_report
