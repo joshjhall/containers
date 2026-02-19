@@ -189,9 +189,9 @@ write_bashrc_content /etc/bashrc.d/25-python-dev.sh "Python development aliases"
 # Python development aliases
 alias fmt='black . && isort .'
 alias lint='flake8 && mypy . && pylint **/*.py'
-alias test='pytest'
-alias testv='pytest -v'
-alias testcov='pytest --cov=. --cov-report=html'
+alias pyt='pytest'
+alias pytv='pytest -v'
+alias pytcov='pytest --cov=. --cov-report=html'
 alias notebook='jupyter notebook'
 alias lab='jupyter lab'
 alias ipy='ipython'
@@ -249,9 +249,9 @@ _smart_ipython() {
 # Override aliases with functions when in interactive mode
 # This allows the smart detection to work while keeping familiar command names
 if [[ $- == *i* ]]; then
-    function test() { _smart_pytest "$@"; }
-    function testv() { _smart_pytest_verbose "$@"; }
-    function testcov() { _smart_pytest_coverage "$@"; }
+    function pyt() { _smart_pytest "$@"; }
+    function pytv() { _smart_pytest_verbose "$@"; }
+    function pytcov() { _smart_pytest_coverage "$@"; }
     function fmt() { _smart_format "$@"; }
     function lint() { _smart_lint "$@"; }
     function ipy() { _smart_ipython "$@"; }
