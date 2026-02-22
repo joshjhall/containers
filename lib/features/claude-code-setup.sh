@@ -43,7 +43,7 @@ log_feature_start "Claude Code Setup"
 log_message "Installing Claude Code CLI..."
 
 # Claude Code release channel (stable or latest)
-CLAUDE_CHANNEL="${CLAUDE_CHANNEL:-stable}"
+CLAUDE_CHANNEL="${CLAUDE_CHANNEL:-latest}"
 log_message "Using Claude Code channel: ${CLAUDE_CHANNEL}"
 
 # Get the target user's home directory
@@ -265,11 +265,34 @@ if [ -f "$ENABLED_FEATURES_FILE" ]; then
 fi
 
 # ============================================================================
-# Authentication Check
+# Authentication Check (Token-based or OAuth)
 # ============================================================================
 is_claude_authenticated() {
+    # Check for token-based authentication (via proxy like LiteLLM)
+    if [ -n "${ANTHROPIC_AUTH_TOKEN:-}" ]; then
+        return 0
+    fi
+
+    # Try to resolve from 1Password (handles non-interactive contexts where
+    # bashrc hasn't run, e.g. called from auth watcher or cron)
+    if [ -n "${OP_ANTHROPIC_AUTH_TOKEN_REF:-}" ] && [ -n "${OP_SERVICE_ACCOUNT_TOKEN:-}" ]; then
+        if command -v op &>/dev/null; then
+            local resolved
+            resolved=$(op read "${OP_ANTHROPIC_AUTH_TOKEN_REF}" 2>/dev/null) || true
+            if [ -n "$resolved" ]; then
+                export ANTHROPIC_AUTH_TOKEN="$resolved"
+                # Also resolve base URL if ref exists
+                if [ -n "${OP_ANTHROPIC_BASE_URL_REF:-}" ] && [ -z "${ANTHROPIC_BASE_URL:-}" ]; then
+                    local base_url
+                    base_url=$(op read "${OP_ANTHROPIC_BASE_URL_REF}" 2>/dev/null) || true
+                    [ -n "$base_url" ] && export ANTHROPIC_BASE_URL="$base_url"
+                fi
+                return 0
+            fi
+        fi
+    fi
+
     # Check for OAuth credentials (created by running 'claude' and authenticating)
-    # This is the ONLY authentication method that works for plugin installation
     if [ -f ~/.claude/.credentials.json ]; then
         if grep -q '"claudeAiOauth"' ~/.claude/.credentials.json 2>/dev/null; then
             return 0
@@ -302,8 +325,8 @@ echo ""
 # ============================================================================
 # Plugin Installation Logic
 # ============================================================================
-# --force mode: skip plugins entirely, only configure MCP servers
-# normal mode: install plugins if authenticated
+# --force mode: skip plugins if unauthenticated (MCP/skills setup only)
+# normal mode: install plugins if authenticated, show instructions otherwise
 SKIP_PLUGINS=false
 if [ "$FORCE_MODE" = "true" ]; then
     if ! is_claude_authenticated; then
@@ -391,7 +414,9 @@ if [ "$SKIP_PLUGINS" = "true" ]; then
     echo ""
 elif is_claude_authenticated; then
     # Show which auth method was detected (helpful for debugging)
-    if [ -f ~/.claude/.credentials.json ] && grep -q '"claudeAiOauth"' ~/.claude/.credentials.json 2>/dev/null; then
+    if [ -n "${ANTHROPIC_AUTH_TOKEN:-}" ]; then
+        echo "Authentication: Token (ANTHROPIC_AUTH_TOKEN)"
+    elif [ -f ~/.claude/.credentials.json ] && grep -q '"claudeAiOauth"' ~/.claude/.credentials.json 2>/dev/null; then
         echo "Authentication: OAuth (interactive)"
     elif [ -f ~/.claude.json ] && grep -q '"oauthAccount"' ~/.claude.json 2>/dev/null; then
         echo "Authentication: OAuth account"
@@ -827,8 +852,51 @@ if [ -f "$MARKER_FILE" ]; then
     exit 0
 fi
 
+# Try to resolve secrets from 1Password (for background processes that
+# started before OP resolution ran in bashrc/startup scripts)
+_try_resolve_op_secrets() {
+    # Already resolved or no OP ref available
+    [ -n "${ANTHROPIC_AUTH_TOKEN:-}" ] && return 0
+
+    # Need both the ref and service account token
+    [ -z "${OP_ANTHROPIC_AUTH_TOKEN_REF:-}" ] && return 1
+    [ -z "${OP_SERVICE_ACCOUNT_TOKEN:-}" ] && return 1
+    command -v op &>/dev/null || return 1
+
+    local resolved
+    resolved=$(op read "${OP_ANTHROPIC_AUTH_TOKEN_REF}" 2>/dev/null) || return 1
+    if [ -n "$resolved" ]; then
+        export ANTHROPIC_AUTH_TOKEN="$resolved"
+        log "Resolved ANTHROPIC_AUTH_TOKEN from 1Password"
+
+        # Also resolve ANTHROPIC_BASE_URL if ref exists
+        if [ -n "${OP_ANTHROPIC_BASE_URL_REF:-}" ] && [ -z "${ANTHROPIC_BASE_URL:-}" ]; then
+            local base_url
+            base_url=$(op read "${OP_ANTHROPIC_BASE_URL_REF}" 2>/dev/null) || true
+            if [ -n "$base_url" ]; then
+                export ANTHROPIC_BASE_URL="$base_url"
+                log "Resolved ANTHROPIC_BASE_URL from 1Password"
+            fi
+        fi
+        return 0
+    fi
+    return 1
+}
+
 # Check if already authenticated
 is_authenticated() {
+    # Check for token-based authentication (via proxy like LiteLLM)
+    if [ -n "${ANTHROPIC_AUTH_TOKEN:-}" ]; then
+        return 0
+    fi
+
+    # Try to resolve from 1Password (handles case where watcher started
+    # before OP secrets were resolved by startup scripts)
+    if _try_resolve_op_secrets; then
+        return 0
+    fi
+
+    # Check for OAuth credentials
     if [ -f "$CREDENTIALS_FILE" ]; then
         if grep -q '"claudeAiOauth"' "$CREDENTIALS_FILE" 2>/dev/null; then
             return 0
@@ -836,20 +904,44 @@ is_authenticated() {
     fi
     if [ -f "$HOME/.claude.json" ]; then
         if grep -q '"oauthAccount"' "$HOME/.claude.json" 2>/dev/null; then
-            return 0
+            # Verify it's not null/empty (same check as claude-setup)
+            if jq -e '.oauthAccount != null and .oauthAccount != ""' "$HOME/.claude.json" >/dev/null 2>&1; then
+                return 0
+            fi
         fi
     fi
     return 1
 }
 
+# Quick test if the Claude plugin marketplace is reachable.
+# Exit code 0 from 'claude plugin list' confirms connectivity;
+# empty output is valid (first run, no plugins installed yet)
+_is_marketplace_available() {
+    local output
+    output=$(timeout 10 claude plugin list 2>&1) || return 1
+    # Error indicators mean marketplace is down/unauthorized
+    echo "$output" | grep -qi "error\|unauthorized\|forbidden\|unavailable" && return 1
+    return 0
+}
+
 # Run setup and create marker file
 run_setup() {
-    log "Authentication detected! Running claude-setup..."
+    log "Authentication detected! Checking marketplace availability..."
+
+    # Test marketplace before running setup
+    # The install_plugin function has retry logic, but testing first avoids log noise
+    if _is_marketplace_available; then
+        log "Marketplace is available! Running claude-setup..."
+    else
+        log "Marketplace not yet available. Waiting 10s before retry..."
+        sleep 10
+
+        if ! _is_marketplace_available; then
+            log "Marketplace still not available. Running setup anyway (has retry logic)..."
+        fi
+    fi
+
     if command -v claude-setup &>/dev/null; then
-        # Brief delay for auth files to be fully written
-        # Plugin installation has retry logic with exponential backoff
-        # for marketplace propagation delays
-        sleep 5
         if claude-setup 2>&1 | tee -a "/tmp/claude-auth-watcher.log"; then
             log "Setup completed successfully"
             mkdir -p "$CLAUDE_DIR"
@@ -988,14 +1080,21 @@ __claude_auth_prompt_check() {
     __CLAUDE_AUTH_CHECK_COUNTER=$(( (__CLAUDE_AUTH_CHECK_COUNTER + 1) % 5 ))
     [ "$__CLAUDE_AUTH_CHECK_COUNTER" -ne 0 ] && return 0
 
-    # Check for authentication
+    # Check for authentication (token or OAuth)
+    if [ -n "${ANTHROPIC_AUTH_TOKEN:-}" ]; then
+        echo ""
+        echo "[claude] Token authentication detected! Running setup in background..."
+        (claude-setup && touch "$marker_file") &>/dev/null &
+        disown 2>/dev/null || true
+        return 0
+    fi
+
     local credentials_file="$HOME/.claude/.credentials.json"
     local config_file="$HOME/.claude.json"
 
     if [ -f "$credentials_file" ] && grep -q '"claudeAiOauth"' "$credentials_file" 2>/dev/null; then
-        # Authenticated! Run setup in background
         echo ""
-        echo "[claude] Authentication detected! Running setup in background..."
+        echo "[claude] OAuth authentication detected! Running setup in background..."
         (claude-setup && touch "$marker_file") &>/dev/null &
         disown 2>/dev/null || true
         return 0
@@ -1003,7 +1102,7 @@ __claude_auth_prompt_check() {
 
     if [ -f "$config_file" ] && grep -q '"oauthAccount"' "$config_file" 2>/dev/null; then
         echo ""
-        echo "[claude] Authentication detected! Running setup in background..."
+        echo "[claude] OAuth authentication detected! Running setup in background..."
         (claude-setup && touch "$marker_file") &>/dev/null &
         disown 2>/dev/null || true
         return 0
@@ -1019,6 +1118,32 @@ BASHRC_AUTH_EOF
 log_command "Setting auth check bashrc permissions" \
     chmod +x /etc/bashrc.d/90-claude-auth-check.sh
 
+# ============================================================================
+# Create Claude Environment Configuration
+# ============================================================================
+log_message "Creating Claude environment configuration..."
+
+mkdir -p /etc/bashrc.d
+command cat > /etc/bashrc.d/95-claude-env.sh << 'CLAUDE_ENV_EOF'
+#!/bin/bash
+# Claude Code CLI environment configuration
+# Exports ANTHROPIC_MODEL and ANTHROPIC_AUTH_TOKEN if set
+
+# Export ANTHROPIC_MODEL if set (values: opus, sonnet, haiku)
+# This sets the default model for the Claude Code CLI
+if [ -n "${ANTHROPIC_MODEL:-}" ]; then
+    export ANTHROPIC_MODEL
+fi
+
+# Export ANTHROPIC_AUTH_TOKEN if set (for proxy-based authentication)
+if [ -n "${ANTHROPIC_AUTH_TOKEN:-}" ]; then
+    export ANTHROPIC_AUTH_TOKEN
+fi
+CLAUDE_ENV_EOF
+
+log_command "Setting Claude environment script permissions" \
+    chmod +x /etc/bashrc.d/95-claude-env.sh
+
 # Install inotify-tools for efficient file watching (if apt available)
 if command -v apt-get &>/dev/null; then
     log_message "Installing inotify-tools for efficient authentication detection..."
@@ -1033,7 +1158,7 @@ log_feature_summary \
     --feature "Claude Code Setup" \
     --tools "claude,claude-setup,claude-auth-watcher,bash-language-server" \
     --paths "/usr/local/bin/claude,/usr/local/bin/claude-setup,/usr/local/bin/claude-auth-watcher,/etc/container/first-startup/30-claude-code-setup.sh,/etc/container/startup/35-claude-auth-watcher.sh" \
-    --env "ENABLE_LSP_TOOL,CLAUDE_EXTRA_PLUGINS,CLAUDE_EXTRA_MCPS,CLAUDE_AUTH_WATCHER_TIMEOUT" \
+    --env "ENABLE_LSP_TOOL,ANTHROPIC_AUTH_TOKEN,ANTHROPIC_MODEL,CLAUDE_CHANNEL,CLAUDE_EXTRA_PLUGINS,CLAUDE_EXTRA_MCPS,CLAUDE_AUTH_WATCHER_TIMEOUT" \
     --commands "claude,claude-setup,claude-auth-watcher" \
     --next-steps "Run 'claude' to authenticate. Setup runs automatically after auth (via watcher). Manual: 'claude-setup'."
 

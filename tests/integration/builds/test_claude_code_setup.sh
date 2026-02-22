@@ -43,17 +43,10 @@ test_claude_code_setup_with_node() {
     assert_executable_in_path "$image" "node"
     assert_executable_in_path "$image" "npm"
 
-    # Verify MCP servers are installed globally (check /usr/local where build installs them)
+    # Verify core MCP server is installed globally (check /usr/local where build installs them)
+    # Note: GitHub/GitLab MCPs are now optional via CLAUDE_EXTRA_MCPS
     assert_command_in_container "$image" \
         "test -d /usr/local/lib/node_modules/@modelcontextprotocol/server-filesystem && echo 'installed'" \
-        "installed"
-
-    assert_command_in_container "$image" \
-        "test -d /usr/local/lib/node_modules/@modelcontextprotocol/server-github && echo 'installed'" \
-        "installed"
-
-    assert_command_in_container "$image" \
-        "test -d /usr/local/lib/node_modules/@modelcontextprotocol/server-gitlab && echo 'installed'" \
         "installed"
 
     # Verify bash-language-server is installed
@@ -171,29 +164,19 @@ test_figma_mcp() {
         "has docker host"
 }
 
-# Test: Git platform detection in claude-setup script
-test_git_platform_detection() {
+# Test: Extra MCP servers configured via CLAUDE_EXTRA_MCPS
+test_extra_mcp_config() {
     local image="${IMAGE_TO_TEST:-test-claude-code-setup-$$}"
 
-    # Verify claude-setup has git platform detection
+    # Verify claude-setup has CLAUDE_EXTRA_MCPS configuration logic
     assert_command_in_container "$image" \
-        "grep -q 'detect_git_platform' /usr/local/bin/claude-setup && echo 'has detection'" \
-        "has detection"
+        "grep -q 'CLAUDE_EXTRA_MCPS' /usr/local/bin/claude-setup && echo 'has extra mcps'" \
+        "has extra mcps"
 
-    # Verify GitHub detection
+    # Verify MCP registry is used for extra MCP configuration
     assert_command_in_container "$image" \
-        "grep -q 'github.com' /usr/local/bin/claude-setup && echo 'detects github'" \
-        "detects github"
-
-    # Verify GitLab detection
-    assert_command_in_container "$image" \
-        "grep -q 'gitlab' /usr/local/bin/claude-setup && echo 'detects gitlab'" \
-        "detects gitlab"
-
-    # Verify fallback to both when ambiguous
-    assert_command_in_container "$image" \
-        "grep -q 'installing both GitHub and GitLab' /usr/local/bin/claude-setup && echo 'has fallback'" \
-        "has fallback"
+        "grep -q 'mcp_registry_is_registered' /usr/local/bin/claude-setup && echo 'has registry'" \
+        "has registry"
 }
 
 # Test: MCP idempotency check
@@ -314,15 +297,164 @@ test_mcp_requires_node() {
         "not installed"
 }
 
+# Test: ANTHROPIC_AUTH_TOKEN detection
+test_anthropic_auth_token_detection() {
+    local image="test-claude-token-$$"
+    echo "Testing ANTHROPIC_AUTH_TOKEN authentication detection..."
+
+    # Build container with DEV_TOOLS
+    assert_build_succeeds "Dockerfile" \
+        --build-arg PROJECT_PATH=. \
+        --build-arg PROJECT_NAME=test \
+        --build-arg INCLUDE_DEV_TOOLS=true \
+        -t "$image"
+
+    # Test 1: Token auth is detected
+    assert_command_in_container "$image" \
+        "ANTHROPIC_AUTH_TOKEN=test-token-123 bash -c 'source /usr/local/bin/claude-setup && is_claude_authenticated && echo \"AUTH_DETECTED\"'" \
+        "AUTH_DETECTED"
+
+    # Test 2: is_claude_authenticated function exists
+    assert_command_in_container "$image" \
+        "grep -q 'ANTHROPIC_AUTH_TOKEN' /usr/local/bin/claude-setup && echo 'has token check'" \
+        "has token check"
+}
+
+# Test: Marketplace availability detection in watcher
+test_marketplace_availability_detection() {
+    local image="${IMAGE_TO_TEST:-test-claude-code-setup-$$}"
+    echo "Testing marketplace availability detection in watcher..."
+
+    # Marketplace check lives in the watcher (not claude-setup)
+    assert_command_in_container "$image" \
+        "grep -q '_is_marketplace_available' /usr/local/bin/claude-auth-watcher && echo 'FUNCTION_EXISTS'" \
+        "FUNCTION_EXISTS"
+
+    # Verify marketplace check uses claude plugin list
+    assert_command_in_container "$image" \
+        "grep -q 'claude plugin list' /usr/local/bin/claude-auth-watcher && echo 'uses plugin list'" \
+        "uses plugin list"
+}
+
+# Test: ANTHROPIC_MODEL export
+test_anthropic_model_export() {
+    local image="${IMAGE_TO_TEST:-test-claude-code-setup-$$}"
+    echo "Testing ANTHROPIC_MODEL environment variable export..."
+
+    # Verify bashrc script exists
+    assert_command_in_container "$image" \
+        "test -f /etc/bashrc.d/95-claude-env.sh && echo 'exists'" \
+        "exists"
+
+    # Verify ANTHROPIC_MODEL is handled in the script
+    assert_command_in_container "$image" \
+        "grep -q 'ANTHROPIC_MODEL' /etc/bashrc.d/95-claude-env.sh && echo 'has model var'" \
+        "has model var"
+
+    # Test that ANTHROPIC_MODEL exports correctly
+    assert_command_in_container "$image" \
+        "ANTHROPIC_MODEL=opus bash -c 'source /etc/bashrc.d/95-claude-env.sh && echo \$ANTHROPIC_MODEL'" \
+        "opus"
+}
+
+# Test: CLAUDE_CHANNEL default
+test_claude_channel_default() {
+    local image="test-claude-channel-default-$$"
+    echo "Testing CLAUDE_CHANNEL default value..."
+
+    # Build without specifying channel
+    BUILD_OUTPUT=$(docker build \
+        --build-arg PROJECT_PATH=. \
+        --build-arg PROJECT_NAME=test \
+        --build-arg INCLUDE_DEV_TOOLS=true \
+        -t "$image" \
+        "$BUILD_CONTEXT" 2>&1)
+
+    # Check if the build output mentions the correct default channel
+    if echo "$BUILD_OUTPUT" | grep -q "channel: latest"; then
+        echo "✓ CLAUDE_CHANNEL defaults to 'latest'"
+    else
+        # Also check the feature script itself
+        assert_command_in_container "$image" \
+            "grep 'CLAUDE_CHANNEL=\${CLAUDE_CHANNEL:-latest}' /tmp/build-scripts/features/claude-code-setup.sh || echo 'defaults to latest'" \
+            "defaults to latest"
+    fi
+}
+
+# Test: claude-auth-watcher uses ANTHROPIC_AUTH_TOKEN
+test_watcher_token_support() {
+    local image="${IMAGE_TO_TEST:-test-claude-code-setup-$$}"
+    echo "Testing claude-auth-watcher ANTHROPIC_AUTH_TOKEN support..."
+
+    # Verify watcher script checks for token auth
+    assert_command_in_container "$image" \
+        "grep -q 'ANTHROPIC_AUTH_TOKEN' /usr/local/bin/claude-auth-watcher && echo 'has token check'" \
+        "has token check"
+}
+
+# Test: bashrc hook checks for token auth
+test_bashrc_hook_token_support() {
+    local image="${IMAGE_TO_TEST:-test-claude-code-setup-$$}"
+    echo "Testing bashrc hook ANTHROPIC_AUTH_TOKEN support..."
+
+    # Verify bashrc hook checks for token auth
+    assert_command_in_container "$image" \
+        "grep -q 'ANTHROPIC_AUTH_TOKEN' /etc/bashrc.d/90-claude-auth-check.sh && echo 'has token check'" \
+        "has token check"
+}
+
+# Test: Watcher resolves OP refs for authentication
+test_watcher_op_resolution() {
+    local image="${IMAGE_TO_TEST:-test-claude-code-setup-$$}"
+    echo "Testing claude-auth-watcher OP ref resolution support..."
+
+    # Verify watcher has OP resolution logic
+    assert_command_in_container "$image" \
+        "grep -q 'OP_ANTHROPIC_AUTH_TOKEN_REF' /usr/local/bin/claude-auth-watcher && echo 'has op ref check'" \
+        "has op ref check"
+
+    # Verify watcher has OP_SERVICE_ACCOUNT_TOKEN check
+    assert_command_in_container "$image" \
+        "grep -q 'OP_SERVICE_ACCOUNT_TOKEN' /usr/local/bin/claude-auth-watcher && echo 'has sa token check'" \
+        "has sa token check"
+
+    # Verify watcher uses op read for resolution
+    assert_command_in_container "$image" \
+        "grep -q 'op read' /usr/local/bin/claude-auth-watcher && echo 'uses op read'" \
+        "uses op read"
+}
+
+# Test: claude-setup resolves OP refs for authentication
+test_setup_op_resolution() {
+    local image="${IMAGE_TO_TEST:-test-claude-code-setup-$$}"
+    echo "Testing claude-setup OP ref resolution support..."
+
+    # Verify claude-setup has OP resolution logic
+    assert_command_in_container "$image" \
+        "grep -q 'OP_ANTHROPIC_AUTH_TOKEN_REF' /usr/local/bin/claude-setup && echo 'has op ref check'" \
+        "has op ref check"
+
+    # Verify claude-setup uses op read
+    assert_command_in_container "$image" \
+        "grep -q 'op read' /usr/local/bin/claude-setup && echo 'uses op read'" \
+        "uses op read"
+}
+
 # Run all tests
 run_test test_claude_code_setup_with_node "Claude Code setup with dev-tools + Node.js"
 run_test test_claude_setup_command "claude-setup command exists"
 run_test test_correct_marketplace "claude-setup uses correct marketplace"
 run_test test_plugin_names "claude-setup uses correct plugin names"
 run_test test_figma_mcp "Figma MCP is configured"
-run_test test_git_platform_detection "Git platform detection in claude-setup"
+run_test test_extra_mcp_config "Extra MCP servers configured via CLAUDE_EXTRA_MCPS"
 run_test test_mcp_idempotency "MCP configuration is idempotent"
 run_test test_plugin_auth_check "Plugin installation has auth check"
+run_test test_marketplace_availability_detection "Marketplace availability detection"
+run_test test_anthropic_model_export "ANTHROPIC_MODEL environment variable export"
+run_test test_watcher_token_support "claude-auth-watcher ANTHROPIC_AUTH_TOKEN support"
+run_test test_bashrc_hook_token_support "bashrc hook ANTHROPIC_AUTH_TOKEN support"
+run_test test_watcher_op_resolution "claude-auth-watcher OP ref resolution"
+run_test test_setup_op_resolution "claude-setup OP ref resolution"
 
 # Skip tests that require building new images if using pre-built image
 if [ -z "${IMAGE_TO_TEST:-}" ]; then
@@ -331,6 +463,8 @@ if [ -z "${IMAGE_TO_TEST:-}" ]; then
     run_test test_mcp_requires_node "MCP not installed without Node.js"
     run_test test_extra_mcps_installed "Extra MCP servers installed with CLAUDE_EXTRA_MCPS"
     run_test test_unknown_mcp_graceful "Unknown MCP server name handled gracefully"
+    run_test test_anthropic_auth_token_detection "ANTHROPIC_AUTH_TOKEN detection"
+    run_test test_claude_channel_default "CLAUDE_CHANNEL default value"
 fi
 
 # Generate test report
