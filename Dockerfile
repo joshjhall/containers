@@ -436,8 +436,8 @@ ARG INCLUDE_DEV_TOOLS=false
 ARG CLAUDE_EXTRA_PLUGINS=""
 # Extra MCP servers to install (comma-separated, e.g., "brave-search,memory,fetch")
 ARG CLAUDE_EXTRA_MCPS=""
-# Claude Code release channel: stable (recommended) or latest
-ARG CLAUDE_CHANNEL=stable
+# Claude Code release channel: latest (default) or stable
+ARG CLAUDE_CHANNEL=latest
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     if [ "${INCLUDE_DEV_TOOLS}" = "true" ]; then \
@@ -461,12 +461,12 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     fi
 
 # Cron daemon for scheduled tasks
-# Automatically installed when INCLUDE_RUST_DEV or INCLUDE_DEV_TOOLS is enabled
+# Automatically installed when INCLUDE_RUST_DEV, INCLUDE_DEV_TOOLS, or INCLUDE_BINDFS is enabled
 ARG INCLUDE_CRON=false
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     if [ "${INCLUDE_CRON}" = "true" ] || [ "${INCLUDE_RUST_DEV}" = "true" ] || \
-       [ "${INCLUDE_DEV_TOOLS}" = "true" ]; then \
+       [ "${INCLUDE_DEV_TOOLS}" = "true" ] || [ "${INCLUDE_BINDFS}" = "true" ]; then \
     /tmp/build-scripts/features/cron.sh; \
     fi
 

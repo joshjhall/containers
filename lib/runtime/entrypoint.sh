@@ -415,7 +415,7 @@ if command -v bindfs >/dev/null 2>&1; then
                         --force-group="$USERNAME" \
                         --create-for-user="$BINDFS_UID" \
                         --create-for-group="$BINDFS_GID" \
-                        --perms=a+rX \
+                        --perms=u+rwX,gd+rX,od+rX \
                         -o allow_other \
                         "$mnt_target" "$mnt_target" 2>/dev/null; then
                         echo "   ✓ Applied bindfs overlay on $mnt_target"
@@ -445,6 +445,29 @@ if command -v bindfs >/dev/null 2>&1; then
         fi
     fi
 fi
+
+# ============================================================================
+# FUSE Hidden File Cleanup (boot-time pass)
+# ============================================================================
+# FUSE filesystems (including bindfs) create .fuse_hiddenXXXX files when a file
+# is deleted while still held open by a process. Stale ones are left behind
+# after unclean exits or container stops.
+#
+# This boot-time pass cleans up files left from the previous session. Ongoing
+# cleanup during the session is handled by the fuse-cleanup-cron job (every 10
+# minutes, installed by lib/features/bindfs.sh when cron is available).
+_fuse_cleaned=0
+while IFS= read -r -d '' _hidden_file; do
+    # Skip files still held open by a running process
+    if command -v fuser >/dev/null 2>&1; then
+        fuser "$_hidden_file" >/dev/null 2>&1 && continue
+    fi
+    rm -f "$_hidden_file" 2>/dev/null && _fuse_cleaned=$((_fuse_cleaned + 1))
+done < <(find /workspace -maxdepth 3 -name '.fuse_hidden*' -print0 2>/dev/null)
+if [ "$_fuse_cleaned" -gt 0 ]; then
+    echo "🧹 Cleaned up $_fuse_cleaned stale .fuse_hidden file(s)"
+fi
+unset _fuse_cleaned _hidden_file
 
 # ============================================================================
 # Cron Daemon Startup

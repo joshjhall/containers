@@ -94,14 +94,91 @@ else
 fi
 
 # ============================================================================
+# Cron Job for FUSE Hidden File Cleanup
+# ============================================================================
+# FUSE filesystems defer file deletion when a process still holds the file open,
+# renaming it to .fuse_hidden* until the last file descriptor closes. Stale files
+# can be left behind after unclean process exits or container stops. This cron job
+# cleans them up every 10 minutes (the entrypoint handles the boot-time pass).
+log_message "Creating FUSE hidden file cleanup cron job..."
+
+# Create cron.d directory if it doesn't exist
+mkdir -p /etc/cron.d
+
+# Create the wrapper script that cron will execute
+command cat > /usr/local/bin/fuse-cleanup-cron << 'FUSE_CLEANUP_EOF'
+#!/bin/bash
+# Wrapper script for FUSE hidden file cleanup cron job
+# Sources container environment and cleans stale .fuse_hidden* files
+# from all FUSE/bindfs mount points.
+
+# Load container environment (provides PATH, etc.)
+if [ -f /etc/container/cron-env ]; then
+    source /etc/container/cron-env
+fi
+
+# Check if disabled
+if [ "${FUSE_CLEANUP_DISABLE:-false}" = "true" ]; then
+    exit 0
+fi
+
+# Find all FUSE mount points (fuse, fuse.bindfs, etc.)
+fuse_mounts=$(findmnt -n -r -o TARGET -t fuse,fuse.bindfs 2>/dev/null || true)
+
+if [ -z "$fuse_mounts" ]; then
+    # No FUSE mounts active, nothing to clean
+    exit 0
+fi
+
+cleaned=0
+while IFS= read -r mnt_target; do
+    [ -z "$mnt_target" ] && continue
+
+    while IFS= read -r -d '' hidden_file; do
+        # Skip files still held open by a running process
+        if command -v fuser >/dev/null 2>&1; then
+            fuser "$hidden_file" >/dev/null 2>&1 && continue
+        fi
+        rm -f "$hidden_file" 2>/dev/null && cleaned=$((cleaned + 1))
+    done < <(find "$mnt_target" -maxdepth 3 -name '.fuse_hidden*' -print0 2>/dev/null)
+done <<< "$fuse_mounts"
+
+if [ "$cleaned" -gt 0 ]; then
+    logger -t fuse-cleanup "Cleaned $cleaned stale .fuse_hidden file(s)"
+fi
+FUSE_CLEANUP_EOF
+
+chmod +x /usr/local/bin/fuse-cleanup-cron
+
+# Create the cron job in /etc/cron.d/
+# Runs every 10 minutes
+# Note: USERNAME is substituted at build time
+command cat > /etc/cron.d/fuse-cleanup << CRON_EOF
+# FUSE hidden file cleanup - remove stale .fuse_hidden* files
+# Runs every 10 minutes
+# Configuration via environment variables:
+#   FUSE_CLEANUP_DISABLE - Set to "true" to disable
+
+SHELL=/bin/bash
+PATH=/usr/local/bin:/usr/bin:/bin
+
+*/10 * * * * ${USERNAME} /usr/local/bin/fuse-cleanup-cron
+CRON_EOF
+
+chmod 644 /etc/cron.d/fuse-cleanup
+
+log_message "  Created /usr/local/bin/fuse-cleanup-cron"
+log_message "  Created /etc/cron.d/fuse-cleanup (every 10 minutes)"
+
+# ============================================================================
 # Feature Summary
 # ============================================================================
 
 log_feature_summary \
     --feature "Bindfs" \
     --tools "bindfs,fusermount3" \
-    --paths "/etc/fuse.conf" \
-    --env "BINDFS_ENABLED,BINDFS_SKIP_PATHS" \
+    --paths "/etc/fuse.conf,/usr/local/bin/fuse-cleanup-cron,/etc/cron.d/fuse-cleanup" \
+    --env "BINDFS_ENABLED,BINDFS_SKIP_PATHS,FUSE_CLEANUP_DISABLE" \
     --next-steps "Run container with --cap-add SYS_ADMIN --device /dev/fuse. Overlays applied automatically by entrypoint."
 
 # End logging
