@@ -66,6 +66,36 @@ test_entrypoint_has_bindfs() {
     assert_command_in_container "$image" "grep -c BINDFS_ENABLED /usr/local/bin/entrypoint" ""
 }
 
+# Test: fuse-cleanup-cron wrapper script exists and is executable
+test_fuse_cleanup_cron_script() {
+    local image="${IMAGE_TO_TEST:-test-bindfs-$$}"
+
+    assert_command_in_container "$image" "test -x /usr/local/bin/fuse-cleanup-cron && echo exists" "exists"
+}
+
+# Test: fuse-cleanup cron job file exists with correct permissions
+test_fuse_cleanup_cron_job() {
+    local image="${IMAGE_TO_TEST:-test-bindfs-$$}"
+
+    assert_command_in_container "$image" "test -f /etc/cron.d/fuse-cleanup && echo exists" "exists"
+    # Verify permissions are 644 (rw-r--r--)
+    assert_command_in_container "$image" "stat -c '%a' /etc/cron.d/fuse-cleanup" "644"
+}
+
+# Test: Cron daemon is installed (auto-triggered by bindfs)
+test_cron_installed() {
+    local image="${IMAGE_TO_TEST:-test-bindfs-$$}"
+
+    assert_executable_in_path "$image" "cron"
+}
+
+# Test: fuse-cleanup-cron wrapper exits cleanly with no FUSE mounts
+test_fuse_cleanup_cron_runs() {
+    local image="${IMAGE_TO_TEST:-test-bindfs-$$}"
+
+    assert_command_in_container "$image" "bash /usr/local/bin/fuse-cleanup-cron; echo exit_\$?" "exit_0"
+}
+
 # Test: Build without bindfs flag does not include it
 test_no_bindfs_without_flag() {
     local image="test-no-bindfs-$$"
@@ -86,6 +116,10 @@ run_test test_bindfs_build "Bindfs builds successfully"
 run_test test_bindfs_version "bindfs --version works"
 run_test test_fuse_conf "/etc/fuse.conf has user_allow_other"
 run_test test_entrypoint_has_bindfs "Entrypoint contains bindfs logic"
+run_test test_fuse_cleanup_cron_script "fuse-cleanup-cron wrapper exists and is executable"
+run_test test_fuse_cleanup_cron_job "fuse-cleanup cron job has correct permissions"
+run_test test_cron_installed "Cron daemon auto-installed with bindfs"
+run_test test_fuse_cleanup_cron_runs "fuse-cleanup-cron runs cleanly"
 run_test test_no_bindfs_without_flag "Build without bindfs flag excludes it"
 
 # Generate test report

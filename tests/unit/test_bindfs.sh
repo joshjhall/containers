@@ -61,6 +61,29 @@ test_feature_logging() {
     assert_file_contains "$FEATURE_FILE" "log_feature_summary" "Has log_feature_summary"
 }
 
+# Test: Feature script creates fuse-cleanup-cron wrapper
+test_creates_fuse_cleanup_cron_script() {
+    assert_file_contains "$FEATURE_FILE" "/usr/local/bin/fuse-cleanup-cron" "Creates fuse-cleanup-cron wrapper script"
+    assert_file_contains "$FEATURE_FILE" "FUSE_CLEANUP_DISABLE" "Respects FUSE_CLEANUP_DISABLE"
+    assert_file_contains "$FEATURE_FILE" "findmnt.*fuse" "Uses findmnt to find FUSE mount points"
+    assert_file_contains "$FEATURE_FILE" "fuser" "Uses fuser to check open files"
+    assert_file_contains "$FEATURE_FILE" "logger -t fuse-cleanup" "Logs via syslog"
+}
+
+# Test: Feature script creates cron job file
+test_creates_fuse_cleanup_cron_job() {
+    assert_file_contains "$FEATURE_FILE" "/etc/cron.d/fuse-cleanup" "Creates cron job file"
+    assert_file_contains "$FEATURE_FILE" "chmod 644 /etc/cron.d/fuse-cleanup" "Sets correct cron job permissions"
+    # Verify 10-minute schedule
+    assert_file_contains "$FEATURE_FILE" '*/10' "Cron job runs every 10 minutes"
+}
+
+# Test: Feature summary includes cron paths and env
+test_feature_summary_includes_cron() {
+    assert_file_contains "$FEATURE_FILE" "fuse-cleanup-cron" "Feature summary includes cron script path"
+    assert_file_contains "$FEATURE_FILE" "FUSE_CLEANUP_DISABLE" "Feature summary includes FUSE_CLEANUP_DISABLE env var"
+}
+
 # Test: Entrypoint contains bindfs overlay section
 test_entrypoint_has_bindfs_section() {
     assert_file_contains "$ENTRYPOINT_FILE" "Bindfs Overlay" "Entrypoint has Bindfs Overlay section header"
@@ -148,9 +171,27 @@ test_dockerfile_dev_tools_trigger() {
         "Dockerfile bindfs block checks both INCLUDE_BINDFS and INCLUDE_DEV_TOOLS"
 }
 
+# Test: Dockerfile triggers cron from INCLUDE_BINDFS
+test_dockerfile_cron_bindfs_trigger() {
+    # The cron conditional should include INCLUDE_BINDFS in the condition that runs cron.sh
+    # Extract the cron RUN block and verify INCLUDE_BINDFS is in its condition
+    local cron_block
+    cron_block=$(sed -n '/INCLUDE_CRON/,/cron\.sh/p' "$DOCKERFILE")
+    assert_true echo "$cron_block" | grep -q 'INCLUDE_BINDFS' \
+        "Dockerfile cron auto-trigger condition includes INCLUDE_BINDFS"
+}
+
 # Test: Dockerfile runs bindfs.sh
 test_dockerfile_runs_bindfs_script() {
     assert_file_contains "$DOCKERFILE" "bindfs.sh" "Dockerfile runs bindfs.sh"
+}
+
+# Test: Entrypoint FUSE cleanup references cron job for ongoing cleanup
+test_entrypoint_fuse_cleanup_mentions_cron() {
+    assert_file_contains "$ENTRYPOINT_FILE" "boot-time" \
+        "Entrypoint FUSE cleanup section mentions boot-time"
+    assert_file_contains "$ENTRYPOINT_FILE" "fuse-cleanup-cron" \
+        "Entrypoint FUSE cleanup section references cron job"
 }
 
 # Test: Bindfs section is between cache fix and cron in entrypoint
@@ -182,9 +223,14 @@ run_test test_entrypoint_permission_probe "Entrypoint probes permissions in auto
 run_test test_entrypoint_detects_fake_fs_types "Entrypoint detects Docker Desktop fake filesystem types"
 run_test test_entrypoint_skips_fuse "Entrypoint skips existing fuse mounts"
 run_test test_entrypoint_privilege_pattern "Entrypoint uses existing privilege pattern"
+run_test test_creates_fuse_cleanup_cron_script "Feature script creates fuse-cleanup-cron wrapper"
+run_test test_creates_fuse_cleanup_cron_job "Feature script creates fuse-cleanup cron job"
+run_test test_feature_summary_includes_cron "Feature summary includes cron paths and env"
 run_test test_dockerfile_build_arg "Dockerfile declares INCLUDE_BINDFS build arg"
 run_test test_dockerfile_dev_tools_trigger "Dockerfile triggers bindfs from INCLUDE_DEV_TOOLS"
+run_test test_dockerfile_cron_bindfs_trigger "Dockerfile triggers cron from INCLUDE_BINDFS"
 run_test test_dockerfile_runs_bindfs_script "Dockerfile runs bindfs.sh"
+run_test test_entrypoint_fuse_cleanup_mentions_cron "Entrypoint FUSE cleanup references cron job"
 run_test test_entrypoint_section_ordering "Bindfs section is correctly ordered in entrypoint"
 
 # Generate test report
