@@ -150,7 +150,7 @@ All features are controlled via `INCLUDE_<FEATURE>=true/false` build arguments:
 **Dev Tools**: `PYTHON_DEV`, `NODE_DEV`, `RUST_DEV`, `RUBY_DEV`, `R_DEV`,
 `GOLANG_DEV`, `JAVA_DEV`, `MOJO_DEV`, `KOTLIN_DEV`
 **Android**: `ANDROID`, `ANDROID_DEV`
-**Tools**: `DEV_TOOLS`, `DOCKER`, `OP` (1Password CLI), `CRON`
+**Tools**: `DEV_TOOLS`, `DOCKER`, `OP` (1Password CLI), `CRON`, `BINDFS`
 **Claude Code**: `MCP_SERVERS` (deprecated, kept for backward compatibility)
 **Cloud**: `KUBERNETES`, `TERRAFORM`, `AWS`, `GCLOUD`, `CLOUDFLARE`
 **Database**: `POSTGRES_CLIENT`, `REDIS_CLIENT`, `SQLITE_CLIENT`
@@ -158,6 +158,7 @@ All features are controlled via `INCLUDE_<FEATURE>=true/false` build arguments:
 
 Note: `MCP_SERVERS` auto-triggers Node.js installation since MCP servers require it.
 Note: `CRON` auto-triggers when `INCLUDE_RUST_DEV=true` or `INCLUDE_DEV_TOOLS=true`.
+Note: `BINDFS` auto-triggers when `INCLUDE_DEV_TOOLS=true`. Requires `--cap-add SYS_ADMIN --device /dev/fuse` at runtime.
 Note: `KOTLIN` and `ANDROID` features auto-trigger Java installation (similar to `MCP_SERVERS` auto-triggering Node.js).
 
 Version control via build arguments:
@@ -606,6 +607,47 @@ startup and displays a warning with recommendations.
 **Disable check**: Set `SKIP_CASE_CHECK=true` to suppress the warning
 
 **Detailed guide**: See `docs/troubleshooting/case-sensitive-filesystems.md`
+
+### Bindfs Permission Overlay (macOS / VirtioFS)
+
+macOS users with VirtioFS bind mounts experience permission issues (execute bits
+dropping, ownership mismatches) because APFS lacks full Linux permission
+semantics. `bindfs` solves this by creating a FUSE overlay that forces correct
+ownership and permissions in-place.
+
+**How it works**: At container startup the entrypoint auto-detects broken
+permissions on `/workspace` bind mounts and applies bindfs overlays. Safe on
+all platforms — does nothing unless `/dev/fuse` is present AND permissions are
+actually broken (or `BINDFS_ENABLED=true`).
+
+**Runtime requirements** (docker-compose.yml):
+
+```yaml
+services:
+  dev:
+    build:
+      args:
+        INCLUDE_DEV_TOOLS: "true"  # auto-installs bindfs
+    cap_add:
+      - SYS_ADMIN
+    devices:
+      - /dev/fuse
+    volumes:
+      - .:/workspace/project
+```
+
+**Environment variables**:
+
+| Variable            | Default | Purpose                                                       |
+| ------------------- | ------- | ------------------------------------------------------------- |
+| `BINDFS_ENABLED`    | `auto`  | `auto`: probe + apply if broken; `true`: always; `false`: off |
+| `BINDFS_SKIP_PATHS` | (empty) | Comma-separated paths to exclude (e.g., `/workspace/.git`)    |
+
+**Standalone usage** (without `INCLUDE_DEV_TOOLS`):
+
+```bash
+docker build --build-arg INCLUDE_BINDFS=true ...
+```
 
 ## Debian Version Compatibility
 

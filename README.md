@@ -181,12 +181,13 @@ All features are enabled via `INCLUDE_<FEATURE>=true` build arguments.
 
 ### Utilities
 
-| Feature       | Build Arg                | What's Included                                            |
-| ------------- | ------------------------ | ---------------------------------------------------------- |
-| **Dev Tools** | `INCLUDE_DEV_TOOLS=true` | Claude Code CLI, git, gh CLI, lazygit, fzf, ripgrep, bat   |
-| **1Password** | `INCLUDE_OP=true`        | 1Password CLI (auto-loads tokens from 1Password)           |
-| **Ollama**    | `INCLUDE_OLLAMA=true`    | Local LLM support                                          |
-| **Cron**      | `INCLUDE_CRON=true`      | Cron daemon for scheduled tasks (auto with Rust/Dev Tools) |
+| Feature       | Build Arg                | What's Included                                                        |
+| ------------- | ------------------------ | ---------------------------------------------------------------------- |
+| **Dev Tools** | `INCLUDE_DEV_TOOLS=true` | Claude Code CLI, git, gh CLI, lazygit, fzf, ripgrep, bat               |
+| **1Password** | `INCLUDE_OP=true`        | 1Password CLI (auto-loads tokens from 1Password)                       |
+| **Ollama**    | `INCLUDE_OLLAMA=true`    | Local LLM support                                                      |
+| **Cron**      | `INCLUDE_CRON=true`      | Cron daemon for scheduled tasks (auto with Rust/Dev Tools)             |
+| **Bindfs**    | `INCLUDE_BINDFS=true`    | FUSE overlay for macOS VirtioFS permission fixes (auto with Dev Tools) |
 
 ### Claude Code Integration
 

@@ -72,6 +72,26 @@ using in production:
 - **Scan images regularly**: Use Trivy or similar tools to scan for
   vulnerabilities
 
+### Bindfs FUSE Overlay (SYS_ADMIN Capability)
+
+When `INCLUDE_BINDFS=true` (or `INCLUDE_DEV_TOOLS=true`), the container can use
+bindfs to fix macOS VirtioFS permission issues. This requires the `SYS_ADMIN`
+capability and access to `/dev/fuse` at runtime.
+
+**Security implications of SYS_ADMIN**:
+
+- Grants the ability to create FUSE mounts (the only usage in this system)
+- Is a **broad capability** that also permits other mount operations
+- Should only be granted in trusted development environments
+
+**Recommendations**:
+
+- ⚠️ **Development Use**: Acceptable for local dev environments on macOS
+- ❌ **Production Use**: Never grant `SYS_ADMIN` in production containers
+- ❌ **Untrusted Code**: Never grant when running untrusted code
+- The entrypoint is safe on all platforms: it does nothing unless `/dev/fuse` is
+  present AND permissions are actually broken (or `BINDFS_ENABLED=true`)
+
 ### Docker Socket Security
 
 Mounting the Docker socket (`/var/run/docker.sock`) grants **root-equivalent

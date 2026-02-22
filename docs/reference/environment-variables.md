@@ -97,7 +97,8 @@ helm | | `INCLUDE_TERRAFORM` | Install Terraform and related tools |
 
 **Other Tools:** | Variable | Description | |----------|-------------| |
 `INCLUDE_DOCKER` | Install Docker CLI tools | | `INCLUDE_OP_CLI` | Install
-1Password CLI | | `INCLUDE_OLLAMA` | Install Ollama for local LLMs |
+1Password CLI | | `INCLUDE_OLLAMA` | Install Ollama for local LLMs | |
+`INCLUDE_BINDFS` | Install bindfs FUSE overlay for VirtioFS permission fixes |
 
 ______________________________________________________________________
 
@@ -226,6 +227,18 @@ ______________________________________________________________________
 | Variable                         | Default | Description                        |
 | -------------------------------- | ------- | ---------------------------------- |
 | `BUNDLE_AUDIT_UPDATE_ON_INSTALL` | `true`  | Update vulnerability DB on install |
+
+### Bindfs Configuration
+
+| Variable            | Default | Description                                                         |
+| ------------------- | ------- | ------------------------------------------------------------------- |
+| `BINDFS_ENABLED`    | `auto`  | `auto`: probe + apply if broken; `true`: always apply; `false`: off |
+| `BINDFS_SKIP_PATHS` | (empty) | Comma-separated paths to exclude (e.g., `/workspace/.git`)          |
+
+Bindfs requires `--cap-add SYS_ADMIN` and `--device /dev/fuse` at runtime.
+In `auto` mode (default), the entrypoint probes permissions on bind mounts
+under `/workspace` and only applies overlays when permissions are broken
+(common on macOS VirtioFS). On Linux hosts, this is a safe no-op.
 
 ______________________________________________________________________
 

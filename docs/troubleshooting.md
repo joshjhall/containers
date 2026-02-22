@@ -633,6 +633,57 @@ docker build --build-arg INCLUDE_PYTHON_DEV=true .
 
 ## Permission Issues
 
+### macOS VirtioFS permission issues (execute bits dropping)
+
+**Symptom**: File permissions don't stick on bind-mounted volumes. `chmod 755`
+on a file results in `644` or similar. Scripts lose their execute bit. Ownership
+appears incorrect.
+
+**Cause**: macOS APFS lacks full Linux permission semantics. The VirtioFS
+translation layer cannot faithfully represent Linux permissions on an APFS
+volume.
+
+**Solution**: The container includes **bindfs** (auto-installed with
+`INCLUDE_DEV_TOOLS=true`) which creates a FUSE overlay that forces correct
+permissions.
+
+1. Add capabilities to your `docker-compose.yml`:
+
+   ```yaml
+   services:
+     devcontainer:
+       cap_add:
+         - SYS_ADMIN
+       devices:
+         - /dev/fuse
+   ```
+
+2. The entrypoint auto-detects broken permissions and applies the overlay. Check
+   startup logs for:
+
+   ```text
+   🔧 Checking bind mounts for permission fixes (bindfs=auto)...
+      ✓ Applied bindfs overlay on /workspace/myproject
+   ```
+
+3. To force bindfs on (bypassing auto-detection):
+
+   ```bash
+   docker run -e BINDFS_ENABLED=true ...
+   ```
+
+4. To exclude specific paths:
+
+   ```bash
+   docker run -e BINDFS_SKIP_PATHS="/workspace/.git,/workspace/node_modules" ...
+   ```
+
+**Note**: This does NOT fix case-sensitivity issues. For those, see
+`docs/troubleshooting/case-sensitive-filesystems.md`.
+
+**Note**: On Linux hosts, bindfs is a safe no-op — the entrypoint detects that
+permissions work correctly and skips the overlay.
+
 ### Cannot write to /workspace
 
 **Symptom**: Permission denied when creating files in workspace.

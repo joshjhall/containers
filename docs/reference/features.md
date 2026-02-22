@@ -77,6 +77,8 @@ These features have no dependencies and can be installed independently:
 - `sqlite-client` - SQLite client
 - `ollama` - Local LLM runtime
 - `cron` - Cron daemon (auto-enabled with `rust-dev` or `dev-tools`)
+- `bindfs` - FUSE overlay for VirtioFS permission fixes (auto-enabled with
+  `dev-tools`). Requires `--cap-add SYS_ADMIN --device /dev/fuse` at runtime.
 
 ### Claude Code / MCP Servers
 
