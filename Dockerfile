@@ -470,6 +470,16 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     /tmp/build-scripts/features/cron.sh; \
     fi
 
+# Bindfs FUSE overlay for host bind mount permission fixes
+# Automatically installed when INCLUDE_DEV_TOOLS is enabled
+# Fixes macOS VirtioFS permission issues; requires --cap-add SYS_ADMIN --device /dev/fuse at runtime
+ARG INCLUDE_BINDFS=false
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    if [ "${INCLUDE_BINDFS}" = "true" ] || [ "${INCLUDE_DEV_TOOLS}" = "true" ]; then \
+    /tmp/build-scripts/features/bindfs.sh; \
+    fi
+
 # Claude Code setup (CLI, plugins, MCP servers)
 # Runs after dev-tools.sh to use the enabled-features.conf it creates
 # Note: INCLUDE_MCP_SERVERS already declared in Node.js section above
