@@ -142,6 +142,11 @@ jobs:
           echo "Checking for GPG key updates..."
           git diff --quiet lib/gpg-keys/ || echo "HAS_EXISTING_CHANGES=true" >> $GITHUB_ENV
 
+          # Format JSON files to match biome style (jq expands compact arrays)
+          npx @biomejs/biome format --write '*.json' 'schemas/*.json' || {
+            echo "Warning: biome format failed, continuing anyway"
+          }
+
           ./bin/update-gpg-keys.sh all || {
             echo "Warning: GPG key updates failed, continuing anyway"
           }
@@ -387,6 +392,9 @@ jobs:
               else . end)
               ' version-compatibility-matrix.json > version-compatibility-matrix.json.tmp \
               && mv version-compatibility-matrix.json.tmp version-compatibility-matrix.json
+
+            # Format JSON to match biome style (jq expands compact arrays)
+            npx @biomejs/biome format --write version-compatibility-matrix.json || true
 
             # Commit the matrix update
             git config user.name "github-actions[bot]"
