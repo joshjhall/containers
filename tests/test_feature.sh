@@ -85,6 +85,7 @@ declare -A FEATURE_MAP=(
     ["redis-client"]="INCLUDE_REDIS_CLIENT"
     ["sqlite-client"]="INCLUDE_SQLITE_CLIENT"
     ["keybindings"]="INCLUDE_KEYBINDINGS"
+    ["bindfs"]="INCLUDE_BINDFS"
 )
 
 # Check if feature is valid
@@ -245,6 +246,28 @@ case "$FEATURE" in
             echo -e "${GREEN}✓ test-keybindings command available${NC}"
         else
             echo -e "${RED}✗ test-keybindings command not found${NC}"
+            exit 1
+        fi
+        ;;
+
+    bindfs)
+        if docker run --rm "$IMAGE_NAME" which bindfs > /dev/null 2>&1; then
+            VERSION=$(docker run --rm "$IMAGE_NAME" bindfs --version 2>&1 | head -1)
+            echo -e "${GREEN}✓ bindfs installed: $VERSION${NC}"
+        else
+            echo -e "${RED}✗ bindfs not found${NC}"
+            exit 1
+        fi
+        if docker run --rm "$IMAGE_NAME" which fusermount3 > /dev/null 2>&1; then
+            echo -e "${GREEN}✓ fusermount3 available${NC}"
+        else
+            echo -e "${RED}✗ fusermount3 not found${NC}"
+            exit 1
+        fi
+        if docker run --rm "$IMAGE_NAME" grep -q "user_allow_other" /etc/fuse.conf; then
+            echo -e "${GREEN}✓ /etc/fuse.conf has user_allow_other${NC}"
+        else
+            echo -e "${RED}✗ /etc/fuse.conf missing user_allow_other${NC}"
             exit 1
         fi
         ;;
