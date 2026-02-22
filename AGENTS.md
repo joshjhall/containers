@@ -157,8 +157,8 @@ All features are controlled via `INCLUDE_<FEATURE>=true/false` build arguments:
 **AI/ML**: `OLLAMA` (Local LLM support)
 
 Note: `MCP_SERVERS` auto-triggers Node.js installation since MCP servers require it.
-Note: `CRON` auto-triggers when `INCLUDE_RUST_DEV=true` or `INCLUDE_DEV_TOOLS=true`.
-Note: `BINDFS` auto-triggers when `INCLUDE_DEV_TOOLS=true`. Requires `--cap-add SYS_ADMIN --device /dev/fuse` at runtime.
+Note: `CRON` auto-triggers when `INCLUDE_RUST_DEV=true`, `INCLUDE_DEV_TOOLS=true`, or `INCLUDE_BINDFS=true`.
+Note: `BINDFS` auto-triggers when `INCLUDE_DEV_TOOLS=true`. Auto-triggers `CRON` for periodic `.fuse_hidden*` cleanup. Requires `--cap-add SYS_ADMIN --device /dev/fuse` at runtime.
 Note: `KOTLIN` and `ANDROID` features auto-trigger Java installation (similar to `MCP_SERVERS` auto-triggering Node.js).
 
 Version control via build arguments:
@@ -286,12 +286,51 @@ Available MCP servers:
 **Release channel**: Use `CLAUDE_CHANNEL` to select the Claude Code release channel:
 
 ```bash
-# Use stable channel (default, recommended)
+# Use latest channel (default, recommended for new features)
+docker build --build-arg CLAUDE_CHANNEL=latest ...
+
+# Use stable channel (1-week delay, skips regressions)
 docker build --build-arg CLAUDE_CHANNEL=stable ...
 
-# Use latest channel (bleeding edge)
-docker build --build-arg CLAUDE_CHANNEL=latest ...
+# Runtime override (requires rebuild to take effect)
+docker run -e CLAUDE_CHANNEL=stable ...
 ```
+
+**Default**: `latest` (get new features immediately)
+**Stable**: Delays ~1 week, skips releases with known issues
+
+**Model selection**: Use `ANTHROPIC_MODEL` to set the default model:
+
+```bash
+# Set default model at runtime (docker-compose.yml or .env)
+ANTHROPIC_MODEL=claude-opus-4-6              # Claude Opus 4.6 (most capable)
+ANTHROPIC_MODEL=claude-sonnet-4-6            # Claude Sonnet 4.6 (balanced)
+ANTHROPIC_MODEL=claude-sonnet-4-5-20250929   # Claude Sonnet 4.5 (specific version)
+ANTHROPIC_MODEL=claude-haiku-4-5-20251001    # Claude Haiku 4.5 (fastest)
+```
+
+**Note**: Use full model IDs (e.g., `claude-opus-4-6`), not aliases like `opus` or `sonnet`.
+
+**Authentication**: Claude Code supports two authentication methods:
+
+1. **Interactive OAuth** (browser-based):
+
+   ```bash
+   claude  # Opens browser for authentication
+   ```
+
+1. **Token-based** (via proxy like LiteLLM):
+
+   ```bash
+   # Set environment variable
+   export ANTHROPIC_AUTH_TOKEN=your-token-here
+
+   # Or in docker-compose.yml
+   environment:
+     - ANTHROPIC_AUTH_TOKEN=${ANTHROPIC_AUTH_TOKEN}
+   ```
+
+Both methods are detected automatically by `claude-setup` and `claude-auth-watcher`.
 
 **Environment variable**: `ENABLE_LSP_TOOL=1` is set in the shell environment.
 
@@ -523,8 +562,12 @@ claude-setup
 The watcher uses `inotifywait` for efficient event-driven detection when available,
 falling back to polling otherwise.
 
-**Note**: Environment variables (including `ANTHROPIC_API_KEY`) do NOT work with the
-Claude Code CLI. You must run `claude` to authenticate interactively.
+**Note**: Claude Code CLI supports two authentication methods:
+
+- **Interactive OAuth**: Run `claude` and authenticate via browser
+- **Token-based**: Set `ANTHROPIC_AUTH_TOKEN` environment variable (for proxy setups like LiteLLM)
+
+Both methods work with plugin installation and MCP server configuration.
 
 Verify configuration with:
 
@@ -638,16 +681,25 @@ services:
 
 **Environment variables**:
 
-| Variable            | Default | Purpose                                                       |
-| ------------------- | ------- | ------------------------------------------------------------- |
-| `BINDFS_ENABLED`    | `auto`  | `auto`: probe + apply if broken; `true`: always; `false`: off |
-| `BINDFS_SKIP_PATHS` | (empty) | Comma-separated paths to exclude (e.g., `/workspace/.git`)    |
+| Variable               | Default | Purpose                                                            |
+| ---------------------- | ------- | ------------------------------------------------------------------ |
+| `BINDFS_ENABLED`       | `auto`  | `auto`: probe + apply if broken; `true`: always; `false`: off      |
+| `BINDFS_SKIP_PATHS`    | (empty) | Comma-separated paths to exclude (e.g., `/workspace/.git`)         |
+| `FUSE_CLEANUP_DISABLE` | `false` | Set to `true` to disable the periodic `.fuse_hidden*` cron cleanup |
 
 **Standalone usage** (without `INCLUDE_DEV_TOOLS`):
 
 ```bash
 docker build --build-arg INCLUDE_BINDFS=true ...
 ```
+
+**`.fuse_hidden*` files**: FUSE filesystems defer file deletion when a process
+still has the file open, renaming it to `.fuse_hidden*` until the last file
+descriptor closes. Stale files can be left behind if a process exits uncleanly.
+The entrypoint cleans these up automatically on startup (using `fuser` to skip
+files still held open by active processes), and the `.gitignore` excludes them.
+If you maintain a separate `.gitignore` in a project using this container system,
+add `.fuse_hidden*` to it.
 
 ## Debian Version Compatibility
 

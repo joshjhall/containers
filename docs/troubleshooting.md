@@ -684,6 +684,45 @@ permissions.
 **Note**: On Linux hosts, bindfs is a safe no-op — the entrypoint detects that
 permissions work correctly and skips the overlay.
 
+### Stale `.fuse_hidden*` files
+
+**Symptom**: Files named `.fuse_hidden0000000300000003` (or similar) appear in
+your workspace, often inside `.claude/` or other directories.
+
+**Cause**: When a FUSE filesystem (including bindfs) is active and a file is
+deleted while a process still has it open, FUSE defers the removal by renaming
+the file to `.fuse_hiddenXXXX`. The file is deleted when the last file
+descriptor closes. However, if the process exits uncleanly or the container is
+stopped before cleanup completes, these files are left behind.
+
+This is normal FUSE behavior and cannot be disabled without breaking POSIX
+semantics (the `-o hard_remove` FUSE option exists but causes `read()`/`write()`
+failures on open deleted files and is explicitly discouraged).
+
+**Solution**:
+
+1. **Automatic cleanup**: The container handles this in two ways:
+   - **Boot-time pass**: The entrypoint cleans up stale files from the previous
+     session on every container start.
+   - **Ongoing cron job**: When bindfs and cron are installed, a cron job runs
+     every 10 minutes to clean up stale `.fuse_hidden*` files across all FUSE
+     mount points. It uses `fuser` to skip files still held open by a process,
+     so only truly orphaned files are removed. Disable with
+     `FUSE_CLEANUP_DISABLE=true`.
+
+2. Add `.fuse_hidden*` to your project's `.gitignore`:
+
+   ```gitignore
+   # FUSE filesystem artifacts (bindfs overlay deferred deletes)
+   .fuse_hidden*
+   ```
+
+3. To manually clean up:
+
+   ```bash
+   find /workspace -name '.fuse_hidden*' -delete
+   ```
+
 ### Cannot write to /workspace
 
 **Symptom**: Permission denied when creating files in workspace.

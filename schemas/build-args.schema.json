@@ -318,7 +318,7 @@
     },
     "INCLUDE_CRON": {
       "type": "boolean",
-      "description": "Install cron daemon (auto-enabled with INCLUDE_RUST_DEV or INCLUDE_DEV_TOOLS)",
+      "description": "Install cron daemon (auto-enabled with INCLUDE_RUST_DEV, INCLUDE_DEV_TOOLS, or INCLUDE_BINDFS)",
       "default": false
     },
     "INCLUDE_BINDFS": {

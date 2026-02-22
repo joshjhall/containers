@@ -9,6 +9,10 @@
 ehthumbs.db
 Thumbs.db
 
+# FUSE filesystem artifacts (created by bindfs overlays when a file is deleted
+# while still open — FUSE defers removal by renaming to .fuse_hiddenXXXX)
+.fuse_hidden*
+
 # Editor directories and files
 .idea/
 .vscode/*
