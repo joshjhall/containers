@@ -315,6 +315,16 @@
       "type": "boolean",
       "description": "Install Ollama local LLM runtime",
       "default": false
+    },
+    "INCLUDE_CRON": {
+      "type": "boolean",
+      "description": "Install cron daemon (auto-enabled with INCLUDE_RUST_DEV or INCLUDE_DEV_TOOLS)",
+      "default": false
+    },
+    "INCLUDE_BINDFS": {
+      "type": "boolean",
+      "description": "Install bindfs FUSE overlay for VirtioFS permission fixes (auto-enabled with INCLUDE_DEV_TOOLS). Requires --cap-add SYS_ADMIN --device /dev/fuse at runtime.",
+      "default": false
     }
   },
   "additionalProperties": false,
