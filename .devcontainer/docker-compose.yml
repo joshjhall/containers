@@ -34,6 +34,11 @@ services:
     # This is a belt-and-suspenders approach - the Dockerfile also includes tini,
     # but init: true ensures proper PID 1 behavior even if command overrides entrypoint
     init: true
+    # Required for bindfs FUSE overlay (fixes macOS VirtioFS permission issues)
+    cap_add:
+      - SYS_ADMIN
+    devices:
+      - /dev/fuse
     # Entrypoint handles Docker socket permissions via sudo (no root needed)
     # devcontainer.json sets overrideCommand: false so our ENTRYPOINT runs
     command: [ "sleep", "infinity" ]

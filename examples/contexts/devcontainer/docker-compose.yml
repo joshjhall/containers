@@ -105,6 +105,13 @@ services:
       - vscode-extensions:/home/${USERNAME:-developer}/.vscode-server/extensions
       - vscode-insiders:/home/${USERNAME:-developer}/.vscode-server-insiders
 
+    # Required for bindfs FUSE overlay (fixes macOS VirtioFS permission issues)
+    # Safe no-op on Linux hosts where permissions work natively
+    cap_add:
+      - SYS_ADMIN
+    devices:
+      - /dev/fuse
+
     # Docker socket access is handled by the entrypoint script
     # It uses sudo to fix permissions when ENABLE_PASSWORDLESS_SUDO=true
 
