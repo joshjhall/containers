@@ -335,7 +335,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     fi
 # Terraform
 ARG INCLUDE_TERRAFORM=false
-ARG TERRAGRUNT_VERSION=0.99.2
+ARG TERRAGRUNT_VERSION=0.99.4
 ARG TFDOCS_VERSION=0.21.0
 ARG TFLINT_VERSION=0.61.0
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
