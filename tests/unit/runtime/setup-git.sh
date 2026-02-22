@@ -17,10 +17,12 @@ test_suite "Setup-Git Command Tests"
 SETUP_GIT_SCRIPT="$PROJECT_ROOT/lib/runtime/commands/setup-git"
 
 # Setup function - runs before each test (overrides framework setup)
+# Uses /tmp for temp files because /workspace may have a bindfs overlay
+# that forces permissions (e.g. 644), breaking chmod 600 assertions.
 setup() {
     local unique_id
     unique_id="$$-$(date +%s%N)"
-    export TEST_TEMP_DIR="$RESULTS_DIR/test-setup-git-$unique_id"
+    export TEST_TEMP_DIR="/tmp/test-setup-git-$unique_id"
     mkdir -p "$TEST_TEMP_DIR"
 
     export TEST_HOME="$TEST_TEMP_DIR/home"
