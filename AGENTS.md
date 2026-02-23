@@ -297,6 +297,15 @@ without modifying shared team config. Runtime-only (no build-time default):
 CLAUDE_USER_MCPS=@myorg/mcp-internal,my-api=http://localhost:8080/mcp
 ```
 
+**GitHub/GitLab auto-detection**: At first startup, git remotes under
+`/workspace/` are inspected. If `github.com` or `gitlab` patterns are found
+and the corresponding token (`GITHUB_TOKEN` / `GITLAB_TOKEN`) is set, the
+platform MCP is automatically added. Opt-out:
+
+```bash
+CLAUDE_AUTO_DETECT_MCPS=false
+```
+
 **Release channel**: Use `CLAUDE_CHANNEL` to select the Claude Code release channel:
 
 ```bash
@@ -412,23 +421,16 @@ MCP configuration is created on first container startup via
 - **Always** configures Figma desktop MCP (`http://host.docker.internal:3845/mcp`)
 - **Is idempotent** - checks existing config before adding
 
-**GitHub/GitLab MCPs** are optional. Add them via `CLAUDE_EXTRA_MCPS`:
-
-```bash
-# GitHub MCP only
-CLAUDE_EXTRA_MCPS="github,kagi,memory"
-
-# GitLab MCP
-CLAUDE_EXTRA_MCPS="gitlab,kagi"
-
-# Both
-CLAUDE_EXTRA_MCPS="github,gitlab"
-```
+**GitHub/GitLab MCPs** are auto-detected from git remotes when the corresponding
+token is set (`GITHUB_TOKEN` / `GITLAB_TOKEN`). They can also be added
+explicitly via `CLAUDE_EXTRA_MCPS="github,gitlab"`.
 
 Set the appropriate token at runtime:
 
 - `GITHUB_TOKEN`: GitHub personal access token (when using GitHub MCP)
 - `GITLAB_TOKEN`: GitLab personal access token (when using GitLab MCP)
+
+To disable auto-detection: `CLAUDE_AUTO_DETECT_MCPS=false`
 
 #### Automatic Secret Loading from 1Password (`OP_*_REF` convention)
 

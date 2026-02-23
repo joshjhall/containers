@@ -451,6 +451,21 @@ test_mcp_passthrough_logic() {
         "has passthrough"
 }
 
+# Test: claude-setup contains auto-detect logic
+test_auto_detect_logic() {
+    local image="${IMAGE_TO_TEST:-test-claude-code-setup-$$}"
+
+    # Verify auto-detect environment variable
+    assert_command_in_container "$image" \
+        "grep -q 'CLAUDE_AUTO_DETECT_MCPS' /usr/local/bin/claude-setup && echo 'has auto detect'" \
+        "has auto detect"
+
+    # Verify git remote inspection
+    assert_command_in_container "$image" \
+        "grep -q 'git.*remote' /usr/local/bin/claude-setup && echo 'has git remote check'" \
+        "has git remote check"
+}
+
 # Run all tests
 run_test test_claude_code_setup_with_node "Claude Code setup with dev-tools + Node.js"
 run_test test_claude_setup_command "claude-setup command exists"
@@ -468,6 +483,7 @@ run_test test_watcher_op_resolution "claude-auth-watcher OP ref resolution"
 run_test test_setup_op_resolution "claude-setup OP ref resolution"
 run_test test_user_mcps_in_setup "claude-setup contains user MCP support"
 run_test test_mcp_passthrough_logic "claude-setup contains MCP passthrough logic"
+run_test test_auto_detect_logic "claude-setup contains auto-detect logic"
 
 # Skip tests that require building new images if using pre-built image
 if [ -z "${IMAGE_TO_TEST:-}" ]; then

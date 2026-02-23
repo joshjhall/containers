@@ -628,6 +628,59 @@ USER_MCPS="${CLAUDE_USER_MCPS:-}"
 configure_mcp_list "$USER_MCPS" "User MCP servers (CLAUDE_USER_MCPS)"
 
 # ============================================================================
+# Auto-detect GitHub/GitLab MCP from git remotes
+# ============================================================================
+# Inspects git repos under /workspace to auto-add platform MCPs when the
+# corresponding token env var is set. Opt-out: CLAUDE_AUTO_DETECT_MCPS=false
+if [ "${CLAUDE_AUTO_DETECT_MCPS:-true}" != "false" ] && [ -f "$MCP_REGISTRY" ]; then
+    # Ensure registry is sourced
+    if ! type mcp_registry_is_registered &>/dev/null; then
+        # shellcheck source=/dev/null
+        source "$MCP_REGISTRY"
+    fi
+
+    DETECTED_GITHUB=false
+    DETECTED_GITLAB=false
+
+    # Find git repos under /workspace (limit depth to avoid deep traversal)
+    while IFS= read -r git_dir; do
+        repo_dir=$(dirname "$git_dir")
+        remote_urls=$(git -C "$repo_dir" remote -v 2>/dev/null || true)
+
+        if [ -n "$remote_urls" ]; then
+            if echo "$remote_urls" | grep -qi 'github\.com' 2>/dev/null; then
+                DETECTED_GITHUB=true
+            fi
+            if echo "$remote_urls" | grep -qiE 'gitlab\.com|gitlab\.' 2>/dev/null; then
+                DETECTED_GITLAB=true
+            fi
+        fi
+    done < <(find /workspace -maxdepth 4 -name .git -type d 2>/dev/null)
+
+    if [ "$DETECTED_GITHUB" = "true" ]; then
+        if [ -n "${GITHUB_TOKEN:-}" ]; then
+            echo "Auto-detected GitHub remote with GITHUB_TOKEN set"
+            add_args=$(mcp_registry_get_add_args "github")
+            eval "add_mcp_server \"github\" $add_args" || true
+        else
+            echo "  Auto-detected GitHub remote but GITHUB_TOKEN not set (skipping github MCP)"
+        fi
+    fi
+
+    if [ "$DETECTED_GITLAB" = "true" ]; then
+        if [ -n "${GITLAB_TOKEN:-}" ]; then
+            echo "Auto-detected GitLab remote with GITLAB_TOKEN set"
+            add_args=$(mcp_registry_get_add_args "gitlab")
+            eval "add_mcp_server \"gitlab\" $add_args" || true
+        else
+            echo "  Auto-detected GitLab remote but GITLAB_TOKEN not set (skipping gitlab MCP)"
+        fi
+    fi
+
+    echo ""
+fi
+
+# ============================================================================
 # Skills & Agents Installation
 # ============================================================================
 TEMPLATES_DIR="/etc/container/config/claude-templates"
@@ -1196,7 +1249,7 @@ log_feature_summary \
     --feature "Claude Code Setup" \
     --tools "claude,claude-setup,claude-auth-watcher,bash-language-server" \
     --paths "/usr/local/bin/claude,/usr/local/bin/claude-setup,/usr/local/bin/claude-auth-watcher,/etc/container/first-startup/30-claude-code-setup.sh,/etc/container/startup/35-claude-auth-watcher.sh" \
-    --env "ENABLE_LSP_TOOL,ANTHROPIC_AUTH_TOKEN,ANTHROPIC_MODEL,CLAUDE_CHANNEL,CLAUDE_EXTRA_PLUGINS,CLAUDE_EXTRA_MCPS,CLAUDE_USER_MCPS,CLAUDE_AUTH_WATCHER_TIMEOUT" \
+    --env "ENABLE_LSP_TOOL,ANTHROPIC_AUTH_TOKEN,ANTHROPIC_MODEL,CLAUDE_CHANNEL,CLAUDE_EXTRA_PLUGINS,CLAUDE_EXTRA_MCPS,CLAUDE_USER_MCPS,CLAUDE_AUTO_DETECT_MCPS,CLAUDE_AUTH_WATCHER_TIMEOUT" \
     --commands "claude,claude-setup,claude-auth-watcher" \
     --next-steps "Run 'claude' to authenticate. Setup runs automatically after auth (via watcher). Manual: 'claude-setup'."
 
