@@ -151,15 +151,13 @@ All features are controlled via `INCLUDE_<FEATURE>=true/false` build arguments:
 `GOLANG_DEV`, `JAVA_DEV`, `MOJO_DEV`, `KOTLIN_DEV`
 **Android**: `ANDROID`, `ANDROID_DEV`
 **Tools**: `DEV_TOOLS`, `DOCKER`, `OP` (1Password CLI), `CRON`, `BINDFS`
-**Claude Code**: `MCP_SERVERS` (deprecated, kept for backward compatibility)
 **Cloud**: `KUBERNETES`, `TERRAFORM`, `AWS`, `GCLOUD`, `CLOUDFLARE`
 **Database**: `POSTGRES_CLIENT`, `REDIS_CLIENT`, `SQLITE_CLIENT`
 **AI/ML**: `OLLAMA` (Local LLM support)
 
-Note: `MCP_SERVERS` auto-triggers Node.js installation since MCP servers require it.
 Note: `CRON` auto-triggers when `INCLUDE_RUST_DEV=true`, `INCLUDE_DEV_TOOLS=true`, or `INCLUDE_BINDFS=true`.
 Note: `BINDFS` auto-triggers when `INCLUDE_DEV_TOOLS=true`. Auto-triggers `CRON` for periodic `.fuse_hidden*` cleanup. Requires `--cap-add SYS_ADMIN --device /dev/fuse` at runtime.
-Note: `KOTLIN` and `ANDROID` features auto-trigger Java installation (similar to `MCP_SERVERS` auto-triggering Node.js).
+Note: `KOTLIN` and `ANDROID` features auto-trigger Java installation.
 
 Version control via build arguments:
 
@@ -390,10 +388,6 @@ Node.js is available (`INCLUDE_NODE=true` or `INCLUDE_NODE_DEV=true`):
 
 - **Filesystem**: `@modelcontextprotocol/server-filesystem` - Enhanced file ops
 - **Bash LSP**: `bash-language-server` - Shell script language server
-
-> **Note**: `INCLUDE_MCP_SERVERS` is **deprecated**. It is kept for backward
-> compatibility (triggers Node.js installation) but MCP servers are now
-> installed automatically with `INCLUDE_DEV_TOOLS=true` when Node.js is present.
 
 MCP configuration is created on first container startup via
 `/etc/container/first-startup/30-claude-code-setup.sh`:

@@ -12,15 +12,13 @@ services:
         ENABLE_PASSWORDLESS_SUDO: "true"
         # Main dev tools
         INCLUDE_DEV_TOOLS: "true"
-        # MCP servers (deprecated but triggers Node.js; INCLUDE_DEV_TOOLS handles the rest)
-        INCLUDE_MCP_SERVERS: "true"
+        # Node.js (required for MCP servers and bash-language-server)
+        INCLUDE_NODE: "true"
         # Additional dev tools
         INCLUDE_OP: "true"
         INCLUDE_DOCKER: "true"
         # Python needed for pre-commit framework and linting tools
         INCLUDE_PYTHON: "true"
-        # Extra MCP servers (github/gitlab also available here if needed)
-        CLAUDE_EXTRA_MCPS: "kagi,memory"
       cache_from:
         - type=local,src=/tmp/.buildx-cache
       cache_to:

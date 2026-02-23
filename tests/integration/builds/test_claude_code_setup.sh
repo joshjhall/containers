@@ -9,7 +9,6 @@
 # - Build-time config file for runtime plugin installation
 #
 # Note: claude-code-setup.sh runs after dev-tools.sh and reads enabled-features.conf
-# Note: INCLUDE_MCP_SERVERS is deprecated (kept for backward compatibility)
 
 # Get the directory where this script is located
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -204,23 +203,6 @@ test_plugin_auth_check() {
         "requires interactive auth"
 }
 
-# Test: Backward compatibility - deprecated INCLUDE_MCP_SERVERS still triggers Node.js
-test_backward_compat_mcp_servers_flag() {
-    local image="test-claude-code-setup-compat-$$"
-
-    # Build with deprecated INCLUDE_MCP_SERVERS flag
-    assert_build_succeeds "Dockerfile" \
-        --build-arg PROJECT_PATH=. \
-        --build-arg PROJECT_NAME=test-claude-code-setup \
-        --build-arg INCLUDE_NODE=false \
-        --build-arg INCLUDE_DEV_TOOLS=true \
-        --build-arg INCLUDE_MCP_SERVERS=true \
-        -t "$image"
-
-    # Verify Node.js was still installed (backward compat)
-    assert_executable_in_path "$image" "node"
-}
-
 # Test: Extra MCP servers installed with CLAUDE_EXTRA_MCPS
 test_extra_mcps_installed() {
     local image="test-claude-extra-mcps-$$"
@@ -288,7 +270,6 @@ test_mcp_requires_node() {
         --build-arg PROJECT_NAME=test-claude-no-node \
         --build-arg INCLUDE_DEV_TOOLS=true \
         --build-arg INCLUDE_NODE=false \
-        --build-arg INCLUDE_MCP_SERVERS=false \
         -t "$image"
 
     # Verify MCP servers are NOT installed when Node.js is not available
@@ -459,7 +440,6 @@ run_test test_setup_op_resolution "claude-setup OP ref resolution"
 # Skip tests that require building new images if using pre-built image
 if [ -z "${IMAGE_TO_TEST:-}" ]; then
     run_test test_enabled_features_config "Build-time config file created with correct flags"
-    run_test test_backward_compat_mcp_servers_flag "Backward compat: INCLUDE_MCP_SERVERS triggers Node.js"
     run_test test_mcp_requires_node "MCP not installed without Node.js"
     run_test test_extra_mcps_installed "Extra MCP servers installed with CLAUDE_EXTRA_MCPS"
     run_test test_unknown_mcp_graceful "Unknown MCP server name handled gracefully"

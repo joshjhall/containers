@@ -211,8 +211,8 @@ explicitly enable all required features.
 **Note**: Some features auto-trigger dependencies (e.g., `INCLUDE_ANDROID`
 auto-enables Java, `INCLUDE_KOTLIN` auto-enables Java).
 
-**Note**: `INCLUDE_MCP_SERVERS` is **deprecated**. MCP servers are now
-automatically installed with `INCLUDE_DEV_TOOLS=true` when Node.js is available.
+**Note**: MCP servers are automatically installed with `INCLUDE_DEV_TOOLS=true`
+when Node.js is available (`INCLUDE_NODE=true` or `INCLUDE_NODE_DEV=true`).
 
 **Example of auto-triggering**:
 
