@@ -337,7 +337,29 @@ fi
 # Plugin Helpers
 # ============================================================================
 MARKETPLACE="claude-plugins-official"
+MARKETPLACE_REPO="anthropics/claude-plugins-official"
 PLUGINS_INSTALLED=false
+
+# Ensure the official marketplace is registered before attempting installs.
+# With token-based auth (ANTHROPIC_AUTH_TOKEN), no interactive 'claude' session
+# runs to trigger auto-registration, so we must do it explicitly.
+ensure_marketplace() {
+    # Check if marketplace is already registered (appears in known_marketplaces.json)
+    local known_file="$HOME/.claude/plugins/known_marketplaces.json"
+    if [ -f "$known_file" ] && grep -q "\"$MARKETPLACE\"" "$known_file" 2>/dev/null; then
+        return 0
+    fi
+
+    echo "  Registering marketplace: $MARKETPLACE_REPO..."
+    local output
+    if output=$(claude plugin marketplace add "$MARKETPLACE_REPO" 2>&1); then
+        echo "  ✓ Marketplace registered"
+        return 0
+    else
+        echo "  ⚠ Failed to register marketplace: $output"
+        return 1
+    fi
+}
 
 # Pattern matching function (testable - takes list output as parameter)
 # Output format from 'claude plugin list':
@@ -425,6 +447,12 @@ elif is_claude_authenticated; then
     echo ""
     echo "Installing plugins..."
     echo ""
+
+    # Ensure marketplace is registered before attempting installs
+    if ! ensure_marketplace; then
+        echo "  ⚠ Could not register marketplace. Plugin installation may fail."
+        echo ""
+    fi
 
     # Core Plugins (Always Installed)
     echo "Core plugins:"
@@ -1015,9 +1043,30 @@ _is_marketplace_available() {
     return 0
 }
 
+# Ensure the official marketplace is registered (for the watcher context).
+# claude-setup has its own ensure_marketplace, but we also pre-register here
+# so the availability check is meaningful.
+_ensure_marketplace_registered() {
+    local known_file="$HOME/.claude/plugins/known_marketplaces.json"
+    if [ -f "$known_file" ] && grep -q '"claude-plugins-official"' "$known_file" 2>/dev/null; then
+        return 0
+    fi
+    log "Registering claude-plugins-official marketplace..."
+    if claude plugin marketplace add "anthropics/claude-plugins-official" &>/dev/null; then
+        log "Marketplace registered successfully"
+        return 0
+    else
+        log "Failed to register marketplace (claude-setup will retry)"
+        return 1
+    fi
+}
+
 # Run setup and create marker file
 run_setup() {
     log "Authentication detected! Checking marketplace availability..."
+
+    # Ensure marketplace is registered before checking availability
+    _ensure_marketplace_registered || true
 
     # Test marketplace before running setup
     # The install_plugin function has retry logic, but testing first avoids log noise
