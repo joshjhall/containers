@@ -266,7 +266,7 @@ docker build --build-arg CLAUDE_EXTRA_MCPS="brave-search,memory,fetch" ...
 docker run -e CLAUDE_EXTRA_MCPS="brave-search,sentry" -e BRAVE_API_KEY=xxx ...
 ```
 
-Available MCP servers:
+Available MCP servers (registered short names):
 
 | Short Name            | Package                                            | Required Env Vars                       |
 | --------------------- | -------------------------------------------------- | --------------------------------------- |
@@ -280,6 +280,22 @@ Available MCP servers:
 | `sentry`              | `@sentry/mcp-server`                               | `SENTRY_ACCESS_TOKEN`                   |
 | `perplexity`          | `@perplexity-ai/mcp-server`                        | `PERPLEXITY_API_KEY`                    |
 | `kagi`                | `kagimcp` (Python/uvx)                             | `KAGI_API_KEY`                          |
+
+Both `CLAUDE_EXTRA_MCPS` and `CLAUDE_USER_MCPS` support three entry formats:
+
+| Format                | Example                            | Behavior                             |
+| --------------------- | ---------------------------------- | ------------------------------------ |
+| Registered short name | `memory`, `fetch`                  | Resolved via MCP registry            |
+| npm package           | `@myorg/mcp-internal`              | Passed through as `npx -y <package>` |
+| `name=url`            | `my-api=http://localhost:8080/mcp` | Added as HTTP MCP server             |
+
+**Personal MCP servers**: Use `CLAUDE_USER_MCPS` for personal MCP additions
+without modifying shared team config. Runtime-only (no build-time default):
+
+```bash
+# In your personal .env file
+CLAUDE_USER_MCPS=@myorg/mcp-internal,my-api=http://localhost:8080/mcp
+```
 
 **Release channel**: Use `CLAUDE_CHANNEL` to select the Claude Code release channel:
 

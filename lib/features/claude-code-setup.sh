@@ -141,8 +141,7 @@ if command -v node &>/dev/null && command -v npm &>/dev/null; then
             [ -z "$mcp_name" ] && continue
 
             if ! mcp_registry_is_registered "$mcp_name"; then
-                log_warning "Unknown MCP server '$mcp_name' - skipping install"
-                log_warning "Registered servers: $(mcp_registry_list)"
+                log_message "Unknown MCP server '$mcp_name' - will be resolved at runtime via npx"
                 continue
             fi
 
@@ -533,6 +532,76 @@ add_mcp_server() {
     fi
 }
 
+# ============================================================================
+# MCP Helper: Derive short name from npm package
+# ============================================================================
+derive_mcp_name_from_package() {
+    local pkg="$1"
+    # Extract last segment after / (e.g., @foo/bar-server -> bar-server)
+    echo "${pkg##*/}"
+}
+
+# ============================================================================
+# MCP Helper: Configure a comma-separated list of MCPs (registry + passthrough)
+# ============================================================================
+configure_mcp_list() {
+    local mcp_list="$1"
+    local label="$2"
+
+    [ -z "$mcp_list" ] && return 0
+
+    echo "Configuring ${label}..."
+
+    local registry="$MCP_REGISTRY"
+    local has_registry=false
+    if [ -f "$registry" ]; then
+        # shellcheck source=/dev/null
+        source "$registry"
+        has_registry=true
+    fi
+
+    local required_env_vars=""
+    IFS=',' read -ra MCP_ITEMS <<< "$mcp_list"
+    for mcp_entry in "${MCP_ITEMS[@]}"; do
+        mcp_entry=$(echo "$mcp_entry" | xargs)  # Trim whitespace
+        [ -z "$mcp_entry" ] && continue
+
+        # Check for name=url syntax (HTTP MCP servers)
+        if [[ "$mcp_entry" == *=http://* ]] || [[ "$mcp_entry" == *=https://* ]]; then
+            local http_name="${mcp_entry%%=*}"
+            local http_url="${mcp_entry#*=}"
+            echo "  - HTTP MCP: $http_name -> $http_url"
+            add_mcp_server "$http_name" -t http "$http_name" "$http_url" || true
+            continue
+        fi
+
+        local mcp_name="$mcp_entry"
+        if [ "$has_registry" = "true" ] && mcp_registry_is_registered "$mcp_name"; then
+            # Known name: use registry
+            add_args=$(mcp_registry_get_add_args "$mcp_name")
+            eval "add_mcp_server \"\$mcp_name\" $add_args" || true
+
+            env_docs=$(mcp_registry_get_env_docs "$mcp_name")
+            if [ -n "$env_docs" ]; then
+                required_env_vars="${required_env_vars:+$required_env_vars, }${mcp_name}: ${env_docs}"
+            fi
+        else
+            # Unknown name: passthrough as npx -y <package>
+            local short_name
+            short_name=$(derive_mcp_name_from_package "$mcp_name")
+            echo "  - Passthrough: $mcp_name (as $short_name via npx)"
+            add_mcp_server "$short_name" -t stdio "$short_name" -- npx -y "$mcp_name" || true
+        fi
+    done
+
+    if [ -n "$required_env_vars" ]; then
+        echo ""
+        echo "  Required environment variables for ${label}:"
+        echo "    $required_env_vars"
+    fi
+    echo ""
+}
+
 # Filesystem MCP (always)
 add_mcp_server "filesystem" -t stdio "filesystem" -- npx -y @modelcontextprotocol/server-filesystem /workspace || true
 
@@ -544,50 +613,19 @@ add_mcp_server "figma-desktop" -t http "figma-desktop" "http://host.docker.inter
 # ============================================================================
 # GitHub and GitLab MCPs are now optional - add them via CLAUDE_EXTRA_MCPS.
 # Example: CLAUDE_EXTRA_MCPS="github,kagi,memory"
+# Unknown names are passed through as npx -y <package>.
 MCP_REGISTRY="/etc/container/config/mcp-registry.sh"
 EXTRA_MCPS_TO_CONFIGURE="${CLAUDE_EXTRA_MCPS:-${CLAUDE_EXTRA_MCPS_DEFAULT:-}}"
+configure_mcp_list "$EXTRA_MCPS_TO_CONFIGURE" "Extra MCP servers (CLAUDE_EXTRA_MCPS)"
 
-if [ -n "$EXTRA_MCPS_TO_CONFIGURE" ] && [ -f "$MCP_REGISTRY" ]; then
-    echo "Configuring extra MCP servers..."
-    # shellcheck source=/dev/null
-    source "$MCP_REGISTRY"
-
-    REQUIRED_ENV_VARS=""
-    IFS=',' read -ra EXTRA_MCP_LIST <<< "$EXTRA_MCPS_TO_CONFIGURE"
-    for mcp_name in "${EXTRA_MCP_LIST[@]}"; do
-        mcp_name=$(echo "$mcp_name" | xargs)  # Trim whitespace
-        [ -z "$mcp_name" ] && continue
-
-        if ! mcp_registry_is_registered "$mcp_name"; then
-            echo "    ⚠ Unknown MCP server: $mcp_name (skipping)"
-            echo "      Registered: $(mcp_registry_list)"
-            continue
-        fi
-
-        # Get the add_mcp_server arguments from the registry
-        add_args=$(mcp_registry_get_add_args "$mcp_name")
-        # Pass mcp_name as first arg (for has_mcp_server check and logging),
-        # then eval the registry args (for claude mcp add).
-        eval "add_mcp_server \"\$mcp_name\" $add_args" || true
-
-        # Collect required env vars for user information
-        env_docs=$(mcp_registry_get_env_docs "$mcp_name")
-        if [ -n "$env_docs" ]; then
-            REQUIRED_ENV_VARS="${REQUIRED_ENV_VARS:+$REQUIRED_ENV_VARS, }${mcp_name}: ${env_docs}"
-        fi
-    done
-
-    if [ -n "$REQUIRED_ENV_VARS" ]; then
-        echo ""
-        echo "  Required environment variables for extra MCPs:"
-        echo "    $REQUIRED_ENV_VARS"
-    fi
-    echo ""
-elif [ -n "$EXTRA_MCPS_TO_CONFIGURE" ]; then
-    echo "  ⚠ MCP registry not found at $MCP_REGISTRY"
-    echo "    Extra MCP servers cannot be configured without the registry."
-    echo ""
-fi
+# ============================================================================
+# User MCP Servers (from CLAUDE_USER_MCPS - runtime-only, personal additions)
+# ============================================================================
+# Personal MCP additions via .env without modifying shared config.
+# Known names resolved via registry; unknown names passed to npx -y <package>.
+# Example: CLAUDE_USER_MCPS="my-custom-server,@myorg/mcp-internal"
+USER_MCPS="${CLAUDE_USER_MCPS:-}"
+configure_mcp_list "$USER_MCPS" "User MCP servers (CLAUDE_USER_MCPS)"
 
 # ============================================================================
 # Skills & Agents Installation
@@ -1158,7 +1196,7 @@ log_feature_summary \
     --feature "Claude Code Setup" \
     --tools "claude,claude-setup,claude-auth-watcher,bash-language-server" \
     --paths "/usr/local/bin/claude,/usr/local/bin/claude-setup,/usr/local/bin/claude-auth-watcher,/etc/container/first-startup/30-claude-code-setup.sh,/etc/container/startup/35-claude-auth-watcher.sh" \
-    --env "ENABLE_LSP_TOOL,ANTHROPIC_AUTH_TOKEN,ANTHROPIC_MODEL,CLAUDE_CHANNEL,CLAUDE_EXTRA_PLUGINS,CLAUDE_EXTRA_MCPS,CLAUDE_AUTH_WATCHER_TIMEOUT" \
+    --env "ENABLE_LSP_TOOL,ANTHROPIC_AUTH_TOKEN,ANTHROPIC_MODEL,CLAUDE_CHANNEL,CLAUDE_EXTRA_PLUGINS,CLAUDE_EXTRA_MCPS,CLAUDE_USER_MCPS,CLAUDE_AUTH_WATCHER_TIMEOUT" \
     --commands "claude,claude-setup,claude-auth-watcher" \
     --next-steps "Run 'claude' to authenticate. Setup runs automatically after auth (via watcher). Manual: 'claude-setup'."
 

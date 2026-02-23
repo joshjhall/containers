@@ -421,6 +421,36 @@ test_setup_op_resolution() {
         "uses op read"
 }
 
+# Test: claude-setup contains user MCP support
+test_user_mcps_in_setup() {
+    local image="${IMAGE_TO_TEST:-test-claude-code-setup-$$}"
+
+    # Verify claude-setup has CLAUDE_USER_MCPS support
+    assert_command_in_container "$image" \
+        "grep -q 'CLAUDE_USER_MCPS' /usr/local/bin/claude-setup && echo 'has user mcps'" \
+        "has user mcps"
+
+    # Verify configure_mcp_list function exists
+    assert_command_in_container "$image" \
+        "grep -q 'configure_mcp_list' /usr/local/bin/claude-setup && echo 'has configure func'" \
+        "has configure func"
+}
+
+# Test: claude-setup contains MCP passthrough logic
+test_mcp_passthrough_logic() {
+    local image="${IMAGE_TO_TEST:-test-claude-code-setup-$$}"
+
+    # Verify derive_mcp_name_from_package function exists
+    assert_command_in_container "$image" \
+        "grep -q 'derive_mcp_name_from_package' /usr/local/bin/claude-setup && echo 'has derive func'" \
+        "has derive func"
+
+    # Verify passthrough logic for unknown packages
+    assert_command_in_container "$image" \
+        "grep -q 'Passthrough' /usr/local/bin/claude-setup && echo 'has passthrough'" \
+        "has passthrough"
+}
+
 # Run all tests
 run_test test_claude_code_setup_with_node "Claude Code setup with dev-tools + Node.js"
 run_test test_claude_setup_command "claude-setup command exists"
@@ -436,6 +466,8 @@ run_test test_watcher_token_support "claude-auth-watcher ANTHROPIC_AUTH_TOKEN su
 run_test test_bashrc_hook_token_support "bashrc hook ANTHROPIC_AUTH_TOKEN support"
 run_test test_watcher_op_resolution "claude-auth-watcher OP ref resolution"
 run_test test_setup_op_resolution "claude-setup OP ref resolution"
+run_test test_user_mcps_in_setup "claude-setup contains user MCP support"
+run_test test_mcp_passthrough_logic "claude-setup contains MCP passthrough logic"
 
 # Skip tests that require building new images if using pre-built image
 if [ -z "${IMAGE_TO_TEST:-}" ]; then
