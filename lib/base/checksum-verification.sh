@@ -263,9 +263,11 @@ verify_published_checksum() {
 #   $1 - File path
 #
 # Returns:
-#   0 always (just calculates and logs warning)
+#   2 always (unverified/TOFU - no external verification available)
 #
-# Note: This doesn't provide real verification, just ensures file integrity
+# Note: This doesn't provide real verification, just ensures file integrity.
+#       Returns 2 (not 0) so callers can distinguish "verified" (0) from
+#       "verification failed" (1) from "no verification available" (2).
 verify_calculated_checksum() {
     local file="$1"
 
@@ -290,9 +292,9 @@ verify_calculated_checksum() {
     checksum=$(sha256sum "$file" | awk '{print $1}')
 
     log_message "   Calculated SHA256: $checksum"
-    log_message "   ✅ TIER 4: File integrity recorded (no external verification)"
+    log_message "   ⚠️  TIER 4: File integrity recorded (no external verification)"
 
-    return 0
+    return 2
 }
 
 # ============================================================================
@@ -309,8 +311,14 @@ verify_calculated_checksum() {
 #   $5 - Architecture (optional, default: amd64)
 #
 # Returns:
-#   0 if any tier succeeds
-#   1 if all tiers fail
+#   0 if verification succeeded (Tier 1, 2, or 3)
+#   1 if verification failed (checksum mismatch or TOFU blocked by policy)
+#   2 if no verification available (Tier 4 TOFU fallback)
+#
+# Environment:
+#   REQUIRE_VERIFIED_DOWNLOADS - When "true", Tier 4 TOFU fallback returns 1
+#     instead of 2, enforcing at least Tier 2 verification. Defaults to the
+#     value of PRODUCTION_MODE (which defaults to "false").
 #
 # Example:
 #   verify_download "language" "python" "3.12.7" "/tmp/Python-3.12.7.tgz"
@@ -348,8 +356,16 @@ verify_download() {
     fi
 
     # TIER 4: Calculated Checksum (Fallback)
-    verify_calculated_checksum "$file"
-    return 0
+    local tier4_rc=0
+    verify_calculated_checksum "$file" || tier4_rc=$?
+
+    if [ "${REQUIRE_VERIFIED_DOWNLOADS:-${PRODUCTION_MODE:-false}}" = "true" ]; then
+        log_error "REQUIRE_VERIFIED_DOWNLOADS is enabled — Tier 4 TOFU fallback is not allowed"
+        log_error "Add a pinned checksum to lib/checksums.json for $name $version"
+        return 1
+    fi
+
+    return "$tier4_rc"
 }
 
 # Export functions for use in feature scripts

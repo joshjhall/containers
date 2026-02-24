@@ -159,6 +159,11 @@ Note: `CRON` auto-triggers when `INCLUDE_RUST_DEV=true`, `INCLUDE_DEV_TOOLS=true
 Note: `BINDFS` auto-triggers when `INCLUDE_DEV_TOOLS=true`. Auto-triggers `CRON` for periodic `.fuse_hidden*` cleanup. Requires `--cap-add SYS_ADMIN --device /dev/fuse` at runtime.
 Note: `KOTLIN` and `ANDROID` features auto-trigger Java installation.
 
+**Security**: `REQUIRE_VERIFIED_DOWNLOADS` — when `true`, blocks Tier 4 TOFU
+(Trust On First Use) checksum fallback, enforcing at least Tier 2 pinned
+checksums for all downloads. Defaults to the value of `PRODUCTION_MODE`
+(which defaults to `false`). Recommended for production builds.
+
 Version control via build arguments:
 
 - `PYTHON_VERSION`, `NODE_VERSION`, `RUST_VERSION`, `GO_VERSION`,

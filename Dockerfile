@@ -66,6 +66,12 @@ ARG ENABLE_PASSWORDLESS_SUDO=false
 ARG RESTRICT_SHELLS=true
 ARG PRODUCTION_MODE=false
 
+# Download verification policy
+# When true, Tier 4 TOFU (Trust On First Use) checksum fallback is blocked,
+# enforcing at least Tier 2 pinned checksums for all downloads.
+# Defaults to the value of PRODUCTION_MODE when not explicitly set.
+ARG REQUIRE_VERIFIED_DOWNLOADS=false
+
 # Build output verbosity
 # Values: ERROR (0), WARN (1), INFO (2), DEBUG (3)
 # Default: INFO for normal builds, use ERROR for quieter builds

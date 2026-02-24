@@ -223,7 +223,7 @@ EOF
 # Functional Tests - verify_calculated_checksum()
 # ============================================================================
 
-test_verify_calculated_checksum_always_returns_0() {
+test_verify_calculated_checksum_returns_2() {
     # Create a test file to calculate checksum for
     echo "test file content" > "$TEST_TEMP_DIR/testfile.tgz"
 
@@ -232,10 +232,10 @@ test_verify_calculated_checksum_always_returns_0() {
         verify_calculated_checksum '$TEST_TEMP_DIR/testfile.tgz'
     " || exit_code=$?
 
-    assert_equals "0" "$exit_code" "verify_calculated_checksum always returns 0"
+    assert_equals "2" "$exit_code" "verify_calculated_checksum returns 2 (unverified/TOFU)"
 }
 
-test_verify_calculated_checksum_returns_0_for_binary_file() {
+test_verify_calculated_checksum_returns_2_for_binary_file() {
     # Create a binary-like file
     dd if=/dev/urandom of="$TEST_TEMP_DIR/binary.tgz" bs=1024 count=1 2>/dev/null
 
@@ -244,7 +244,7 @@ test_verify_calculated_checksum_returns_0_for_binary_file() {
         verify_calculated_checksum '$TEST_TEMP_DIR/binary.tgz'
     " || exit_code=$?
 
-    assert_equals "0" "$exit_code" "verify_calculated_checksum returns 0 for binary files"
+    assert_equals "2" "$exit_code" "verify_calculated_checksum returns 2 for binary files"
 }
 
 # ============================================================================
@@ -304,11 +304,66 @@ test_exports_all_functions() {
         "lookup_pinned_checksum is exported"
 }
 
-test_verify_download_always_returns_0() {
-    # verify_download ends with "return 0" after tier 4 fallback
-    # This means it never fails completely - it always falls back to tier 4
+test_verify_download_returns_2_for_tofu() {
+    # verify_download returns 2 (not 0) when falling back to tier 4 TOFU
+    # This lets callers distinguish verified (0), failed (1), and unverified (2)
+    echo "test content for tofu" > "$TEST_TEMP_DIR/tofu-test.tgz"
+
+    # Create empty checksums.json so tier 2 fails
+    echo '{"languages":{},"tools":{}}' > "$TEST_TEMP_DIR/checksums.json"
+
+    local exit_code=0
+    _run_checksum_subshell "
+        export CHECKSUMS_DB='$TEST_TEMP_DIR/checksums.json'
+        verify_download 'language' 'unknown-lang' '0.0.0' '$TEST_TEMP_DIR/tofu-test.tgz'
+    " || exit_code=$?
+
+    assert_equals "2" "$exit_code" "verify_download returns 2 for Tier 4 TOFU fallback"
+}
+
+test_verify_download_calls_calculated_checksum_fallback() {
+    # verify_download calls verify_calculated_checksum as final fallback
     assert_file_contains "$SOURCE_FILE" "verify_calculated_checksum" \
         "verify_download calls verify_calculated_checksum as final fallback"
+}
+
+test_require_verified_downloads_blocks_tofu() {
+    # When REQUIRE_VERIFIED_DOWNLOADS=true, tier 4 returns 1 (hard fail)
+    echo "test content for blocked tofu" > "$TEST_TEMP_DIR/blocked-tofu.tgz"
+
+    # Create empty checksums.json so tier 2 fails
+    echo '{"languages":{},"tools":{}}' > "$TEST_TEMP_DIR/checksums.json"
+
+    local exit_code=0
+    _run_checksum_subshell "
+        export CHECKSUMS_DB='$TEST_TEMP_DIR/checksums.json'
+        export REQUIRE_VERIFIED_DOWNLOADS=true
+        verify_download 'language' 'unknown-lang' '0.0.0' '$TEST_TEMP_DIR/blocked-tofu.tgz'
+    " || exit_code=$?
+
+    assert_equals "1" "$exit_code" "REQUIRE_VERIFIED_DOWNLOADS=true blocks TOFU fallback with exit 1"
+}
+
+test_production_mode_blocks_tofu() {
+    # When PRODUCTION_MODE=true (and REQUIRE_VERIFIED_DOWNLOADS unset), tier 4 returns 1
+    echo "test content for prod tofu" > "$TEST_TEMP_DIR/prod-tofu.tgz"
+
+    # Create empty checksums.json so tier 2 fails
+    echo '{"languages":{},"tools":{}}' > "$TEST_TEMP_DIR/checksums.json"
+
+    local exit_code=0
+    _run_checksum_subshell "
+        export CHECKSUMS_DB='$TEST_TEMP_DIR/checksums.json'
+        export PRODUCTION_MODE=true
+        verify_download 'language' 'unknown-lang' '0.0.0' '$TEST_TEMP_DIR/prod-tofu.tgz'
+    " || exit_code=$?
+
+    assert_equals "1" "$exit_code" "PRODUCTION_MODE=true blocks TOFU fallback via REQUIRE_VERIFIED_DOWNLOADS default"
+}
+
+test_source_contains_require_verified_downloads() {
+    assert_file_contains "$SOURCE_FILE" "REQUIRE_VERIFIED_DOWNLOADS" \
+        "Source references REQUIRE_VERIFIED_DOWNLOADS env var"
 }
 
 test_tier3_skipped_for_tools() {
@@ -351,8 +406,8 @@ run_test_with_setup test_lookup_pinned_checksum_unknown_version "lookup_pinned_c
 run_test_with_setup test_lookup_pinned_checksum_skips_placeholder "lookup_pinned_checksum rejects placeholder checksums"
 
 # verify_calculated_checksum
-run_test_with_setup test_verify_calculated_checksum_always_returns_0 "verify_calculated_checksum always returns 0"
-run_test_with_setup test_verify_calculated_checksum_returns_0_for_binary_file "verify_calculated_checksum returns 0 for binary files"
+run_test_with_setup test_verify_calculated_checksum_returns_2 "verify_calculated_checksum returns 2 (unverified/TOFU)"
+run_test_with_setup test_verify_calculated_checksum_returns_2_for_binary_file "verify_calculated_checksum returns 2 for binary files"
 
 # Tier architecture (static analysis)
 run_test_with_setup test_verify_download_skips_tier1_for_tools "verify_download skips tier 1 for tools"
@@ -363,7 +418,11 @@ run_test_with_setup test_tier_fallback_order_tier4_fallback "Tier 4 section pres
 run_test_with_setup test_sha256_pattern_in_source "Source uses sha256sum for checksums"
 run_test_with_setup test_checksum_format_64_hex_chars "Source references SHA256 format"
 run_test_with_setup test_exports_all_functions "All public functions are exported"
-run_test_with_setup test_verify_download_always_returns_0 "verify_download falls back to tier 4"
+run_test_with_setup test_verify_download_calls_calculated_checksum_fallback "verify_download falls back to tier 4"
+run_test_with_setup test_verify_download_returns_2_for_tofu "verify_download returns 2 for TOFU fallback"
+run_test_with_setup test_require_verified_downloads_blocks_tofu "REQUIRE_VERIFIED_DOWNLOADS blocks TOFU"
+run_test_with_setup test_production_mode_blocks_tofu "PRODUCTION_MODE blocks TOFU via default"
+run_test_with_setup test_source_contains_require_verified_downloads "Source contains REQUIRE_VERIFIED_DOWNLOADS"
 run_test_with_setup test_tier3_skipped_for_tools "Tier 3 only for language category"
 run_test_with_setup test_security_warning_in_tier4 "Tier 4 includes security warning"
 run_test_with_setup test_tofu_warning_in_tier4 "Tier 4 warns about TOFU risk"
