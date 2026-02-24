@@ -17,12 +17,9 @@ if [ "${_SECRETS_COMMON_LOADED:-}" = "true" ]; then
 fi
 _SECRETS_COMMON_LOADED=true
 
-# Source logging utilities with build/runtime path fallback, or define stubs
+# Source logging utilities from runtime path, or define stubs
 _secrets_source_logging() {
-    if [ -f "/tmp/build-scripts/base/logging.sh" ]; then
-        # shellcheck source=/dev/null
-        source "/tmp/build-scripts/base/logging.sh"
-    elif [ -f "/opt/container-runtime/base/logging.sh" ]; then
+    if [ -f "/opt/container-runtime/base/logging.sh" ]; then
         # shellcheck source=/dev/null
         source "/opt/container-runtime/base/logging.sh"
     else

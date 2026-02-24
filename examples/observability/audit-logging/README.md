@@ -431,5 +431,5 @@ audit_log "system" "info" "Test event" '{"test":true}'
 
 - [Observability Overview](../../docs/observability/README.md)
 - [JSON Logging](../../../lib/observability/json-logging.sh)
-- [Audit Alerts](../../../lib/observability/audit-alerts.yaml)
+- [Audit Alerts](../audit-analysis/audit-alerts.yaml)
 - [Production Checklist](../../../docs/compliance/production-checklist.md)
