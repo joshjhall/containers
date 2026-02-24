@@ -56,12 +56,24 @@ test_templates_staged() {
     assert_file_in_image "$image" "/etc/container/config/claude-templates/skills/docker-development/SKILL.md"
     assert_file_in_image "$image" "/etc/container/config/claude-templates/skills/cloud-infrastructure/SKILL.md"
 
+    # Verify codebase-audit skill templates (SKILL.md + companions)
+    assert_file_in_image "$image" "/etc/container/config/claude-templates/skills/codebase-audit/SKILL.md"
+    assert_file_in_image "$image" "/etc/container/config/claude-templates/skills/codebase-audit/finding-schema.md"
+    assert_file_in_image "$image" "/etc/container/config/claude-templates/skills/codebase-audit/issue-templates.md"
+
     # Verify agent templates
     assert_dir_in_image "$image" "/etc/container/config/claude-templates/agents"
     assert_file_in_image "$image" "/etc/container/config/claude-templates/agents/code-reviewer/code-reviewer.md"
     assert_file_in_image "$image" "/etc/container/config/claude-templates/agents/test-writer/test-writer.md"
     assert_file_in_image "$image" "/etc/container/config/claude-templates/agents/refactorer/refactorer.md"
     assert_file_in_image "$image" "/etc/container/config/claude-templates/agents/debugger/debugger.md"
+
+    # Verify audit scanner agent templates
+    assert_file_in_image "$image" "/etc/container/config/claude-templates/agents/audit-code-health/audit-code-health.md"
+    assert_file_in_image "$image" "/etc/container/config/claude-templates/agents/audit-security/audit-security.md"
+    assert_file_in_image "$image" "/etc/container/config/claude-templates/agents/audit-test-gaps/audit-test-gaps.md"
+    assert_file_in_image "$image" "/etc/container/config/claude-templates/agents/audit-architecture/audit-architecture.md"
+    assert_file_in_image "$image" "/etc/container/config/claude-templates/agents/audit-docs/audit-docs.md"
 }
 
 # Test: Agent templates have correct YAML frontmatter
@@ -87,6 +99,27 @@ test_agent_frontmatter() {
     assert_command_in_container "$image" \
         "grep -q 'name: debugger' /etc/container/config/claude-templates/agents/debugger/debugger.md && echo 'found'" \
         "found"
+
+    # Verify audit scanner agents have name fields
+    assert_command_in_container "$image" \
+        "grep -q 'name: audit-code-health' /etc/container/config/claude-templates/agents/audit-code-health/audit-code-health.md && echo 'found'" \
+        "found"
+
+    assert_command_in_container "$image" \
+        "grep -q 'name: audit-security' /etc/container/config/claude-templates/agents/audit-security/audit-security.md && echo 'found'" \
+        "found"
+
+    assert_command_in_container "$image" \
+        "grep -q 'name: audit-test-gaps' /etc/container/config/claude-templates/agents/audit-test-gaps/audit-test-gaps.md && echo 'found'" \
+        "found"
+
+    assert_command_in_container "$image" \
+        "grep -q 'name: audit-architecture' /etc/container/config/claude-templates/agents/audit-architecture/audit-architecture.md && echo 'found'" \
+        "found"
+
+    assert_command_in_container "$image" \
+        "grep -q 'name: audit-docs' /etc/container/config/claude-templates/agents/audit-docs/audit-docs.md && echo 'found'" \
+        "found"
 }
 
 # Test: Skill templates have correct YAML frontmatter
@@ -106,6 +139,11 @@ test_skill_frontmatter() {
     # Verify code-quality has description
     assert_command_in_container "$image" \
         "grep -q 'description:' /etc/container/config/claude-templates/skills/code-quality/SKILL.md && echo 'found'" \
+        "found"
+
+    # Verify codebase-audit has description
+    assert_command_in_container "$image" \
+        "grep -q 'description:' /etc/container/config/claude-templates/skills/codebase-audit/SKILL.md && echo 'found'" \
         "found"
 }
 
