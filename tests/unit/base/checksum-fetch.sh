@@ -252,6 +252,101 @@ test_is_partial_version_many_dots() {
 }
 
 # ============================================================================
+# Functional Tests - fetch_go_checksum() curl failure
+# ============================================================================
+
+test_fetch_go_checksum_curl_failure() {
+    local exit_code=0
+    local result
+    result=$(bash -c "
+        retry_github_api() { \"\$@\"; }
+        export -f retry_github_api
+        source '$SOURCE_FILE' >/dev/null 2>&1
+
+        # Override AFTER sourcing so it takes effect
+        _curl_with_timeout() { return 1; }
+
+        fetch_go_checksum '1.23.5' 'amd64'
+    " 2>/dev/null) || exit_code=$?
+
+    assert_not_equals "0" "$exit_code" "fetch_go_checksum returns non-zero on curl failure"
+    assert_empty "$result" "fetch_go_checksum returns empty output on curl failure"
+}
+
+test_fetch_ruby_checksum_curl_failure() {
+    local exit_code=0
+    local result
+    result=$(bash -c "
+        retry_github_api() { \"\$@\"; }
+        export -f retry_github_api
+        source '$SOURCE_FILE' >/dev/null 2>&1
+
+        # Override AFTER sourcing so it takes effect
+        _curl_with_timeout() { return 1; }
+
+        fetch_ruby_checksum '3.4.1'
+    " 2>/dev/null) || exit_code=$?
+
+    assert_not_equals "0" "$exit_code" "fetch_ruby_checksum returns non-zero on curl failure"
+    assert_empty "$result" "fetch_ruby_checksum returns empty output on curl failure"
+}
+
+# ============================================================================
+# Functional Tests - fetch_go_checksum() HTML extraction
+# ============================================================================
+
+test_fetch_go_checksum_extracts_from_html() {
+    local expected_hash="a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+    local result
+    result=$(bash -c "
+        retry_github_api() { \"\$@\"; }
+        export -f retry_github_api
+        source '$SOURCE_FILE' >/dev/null 2>&1
+
+        # Override AFTER sourcing to return mock HTML
+        _curl_with_timeout() {
+            cat <<'MOCK_HTML'
+<tr class=\"\"><td><a href=\"/dl/go1.23.0.linux-amd64.tar.gz\">go1.23.0.linux-amd64.tar.gz</a></td>
+<td>Archive</td>
+<td>Linux</td>
+<td>x86-64</td>
+<td>65MB</td>
+<td><tt>a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2</tt></td></tr>
+MOCK_HTML
+        }
+
+        fetch_go_checksum '1.23.0' 'amd64'
+    " 2>/dev/null)
+
+    assert_equals "$expected_hash" "$result" "fetch_go_checksum extracts correct hash from HTML"
+}
+
+test_fetch_ruby_checksum_extracts_from_html() {
+    local expected_hash="b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b200"
+    local result
+    result=$(bash -c "
+        retry_github_api() { \"\$@\"; }
+        export -f retry_github_api
+        source '$SOURCE_FILE' >/dev/null 2>&1
+
+        # Override AFTER sourcing to return mock HTML
+        _curl_with_timeout() {
+            cat <<'MOCK_HTML'
+<li>
+<a href=\"/en/news/2024/12/25/ruby-3-4-1-released/\">Ruby 3.4.1 Released</a>
+>Ruby 3.4.1
+sha256: b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b200
+</li>
+MOCK_HTML
+        }
+
+        fetch_ruby_checksum '3.4.1'
+    " 2>/dev/null)
+
+    assert_equals "$expected_hash" "$result" "fetch_ruby_checksum extracts correct hash from HTML"
+}
+
+# ============================================================================
 # Static Analysis - Export checks
 # ============================================================================
 
@@ -335,6 +430,14 @@ run_test_with_setup test_is_partial_version_xy "Partial version: X.Y is partial"
 run_test_with_setup test_is_partial_version_xyz "Full version: X.Y.Z is not partial"
 run_test_with_setup test_is_partial_version_major_only "Major only: no dots is not partial"
 run_test_with_setup test_is_partial_version_many_dots "Many dots: X.Y.Z.W is not partial"
+
+# Curl failure tests (mocked, always run offline)
+run_test_with_setup test_fetch_go_checksum_curl_failure "Go checksum: curl failure returns error"
+run_test_with_setup test_fetch_ruby_checksum_curl_failure "Ruby checksum: curl failure returns error"
+
+# Mock HTML extraction tests (mocked, always run offline)
+run_test_with_setup test_fetch_go_checksum_extracts_from_html "Go checksum: extracts hash from HTML"
+run_test_with_setup test_fetch_ruby_checksum_extracts_from_html "Ruby checksum: extracts hash from HTML"
 
 # Export checks
 run_test_with_setup test_exports_fetch_go_checksum "Exports fetch_go_checksum"

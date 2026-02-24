@@ -424,6 +424,103 @@ test_go_major_only_resolution() {
 }
 
 # ============================================================================
+# Kotlin Version Resolution Tests
+# ============================================================================
+
+test_kotlin_full_version_passthrough() {
+    local result
+    result=$(resolve_kotlin_version "2.1.0")
+    assert_equals "2.1.0" "$result" "Full Kotlin version passes through"
+}
+
+test_kotlin_major_minor_resolution() {
+    if ! check_network; then
+        skip_test "No network connection available"
+        return
+    fi
+
+    local result
+    result=$(resolve_kotlin_version "2.1" 2>&1) || {
+        if echo "$result" | grep -qi "rate limit\|failed to fetch"; then
+            skip_test "GitHub API rate limit or fetch failure (not a code error)"
+            if [ -z "${GITHUB_TOKEN:-}" ]; then
+                echo "  💡 TIP: Set GITHUB_TOKEN to increase rate limits"
+            fi
+            return
+        fi
+        assert_true false "Kotlin 2.1 resolution failed: $result"
+        return
+    }
+
+    # Result should be 2.1.X
+    if [[ "$result" =~ ^2\.1\.[0-9]+$ ]]; then
+        assert_true true "Kotlin 2.1 resolved to valid patch version: $result"
+    else
+        assert_true false "Kotlin 2.1 resolved to invalid version: $result"
+    fi
+}
+
+test_kotlin_major_only_resolution() {
+    if ! check_network; then
+        skip_test "No network connection available"
+        return
+    fi
+
+    local result
+    result=$(resolve_kotlin_version "2" 2>&1) || {
+        if echo "$result" | grep -qi "rate limit\|failed to fetch"; then
+            skip_test "GitHub API rate limit or fetch failure (not a code error)"
+            if [ -z "${GITHUB_TOKEN:-}" ]; then
+                echo "  💡 TIP: Set GITHUB_TOKEN to increase rate limits"
+            fi
+            return
+        fi
+        assert_true false "Kotlin 2 resolution failed: $result"
+        return
+    }
+
+    # Result should be 2.X.Y
+    if [[ "$result" =~ ^2\.[0-9]+\.[0-9]+$ ]]; then
+        assert_true true "Kotlin 2 resolved to valid version: $result"
+    else
+        assert_true false "Kotlin 2 resolved to invalid version: $result"
+    fi
+}
+
+# ============================================================================
+# Network Failure Tests (mocked, always run offline)
+# ============================================================================
+
+test_network_failure_returns_error() {
+    # Mock _curl_safe to simulate network failure, then try resolving a
+    # partial version which requires network access
+    local exit_code=0
+    (
+        # Override _curl_safe to return empty (simulating network failure)
+        _curl_safe() { echo ""; }
+        export -f _curl_safe
+
+        resolve_python_version "3.12" 2>/dev/null
+    ) > /dev/null 2>&1 || exit_code=$?
+
+    assert_not_equals "0" "$exit_code" "Partial version resolution fails when network is unavailable"
+}
+
+test_network_failure_full_version_bypasses_network() {
+    # Full versions should return immediately without calling curl
+    local result
+    result=$(
+        # Override _curl_safe to return empty (simulating network failure)
+        _curl_safe() { echo ""; }
+        export -f _curl_safe
+
+        resolve_python_version "3.12.7" 2>/dev/null
+    )
+
+    assert_equals "3.12.7" "$result" "Full version passes through even when network is unavailable"
+}
+
+# ============================================================================
 # Generic resolve_version Wrapper Tests
 # ============================================================================
 
@@ -580,6 +677,15 @@ run_test_with_setup test_ruby_major_only_resolution "Ruby major only resolution"
 run_test_with_setup test_go_full_version_passthrough "Go full version passthrough"
 run_test_with_setup test_go_major_minor_resolution "Go major.minor resolution"
 run_test_with_setup test_go_major_only_resolution "Go major only resolution"
+
+# Kotlin tests
+run_test_with_setup test_kotlin_full_version_passthrough "Kotlin full version passthrough"
+run_test_with_setup test_kotlin_major_minor_resolution "Kotlin major.minor resolution"
+run_test_with_setup test_kotlin_major_only_resolution "Kotlin major only resolution"
+
+# Network failure tests (mocked, always run offline)
+run_test_with_setup test_network_failure_returns_error "Network failure returns error for partial version"
+run_test_with_setup test_network_failure_full_version_bypasses_network "Full version bypasses network even on failure"
 
 # Wrapper function tests
 run_test_with_setup test_resolve_version_wrapper_python "Wrapper: resolve python version"
