@@ -335,6 +335,7 @@ run_test_with_setup() {
 test_checksum_variables_defined() {
     # Check that dev-tools.sh uses dynamic checksum fetching
     local dev_tools_script="$PROJECT_ROOT/lib/features/dev-tools.sh"
+    local helper_script="$PROJECT_ROOT/lib/features/lib/install-github-release.sh"
 
     # Should source checksum-fetch.sh for dynamic fetching
     if grep -q "source.*checksum-fetch.sh" "$dev_tools_script"; then
@@ -343,20 +344,20 @@ test_checksum_variables_defined() {
         assert_true false "dev-tools.sh doesn't source checksum-fetch.sh"
     fi
 
-    # Should use dynamic fetching functions (not hardcoded checksums)
-    if grep -q "fetch_github_checksums_txt" "$dev_tools_script"; then
+    # Should use dynamic fetching functions (directly or via helper)
+    if grep -rq "fetch_github_checksums_txt" "$dev_tools_script" "$helper_script"; then
         assert_true true "Uses fetch_github_checksums_txt for dynamic fetching"
     else
         assert_true false "Doesn't use fetch_github_checksums_txt"
     fi
 
-    if grep -q "calculate_checksum_sha256" "$dev_tools_script"; then
+    if grep -rq "calculate_checksum_sha256" "$dev_tools_script" "$helper_script"; then
         assert_true true "Uses calculate_checksum_sha256 for checksum calculation"
     else
         assert_true false "Doesn't use calculate_checksum_sha256"
     fi
 
-    if grep -q "fetch_github_sha512_file" "$dev_tools_script"; then
+    if grep -rq "fetch_github_sha512_file" "$dev_tools_script" "$helper_script"; then
         assert_true true "Uses fetch_github_sha512_file for SHA512 fetching"
     else
         assert_true false "Doesn't use fetch_github_sha512_file"
@@ -387,15 +388,16 @@ test_checksum_format_validation() {
 # Test: Download verification functions are called
 test_download_verification_usage() {
     local dev_tools_script="$PROJECT_ROOT/lib/features/dev-tools.sh"
+    local helper_script="$PROJECT_ROOT/lib/features/lib/install-github-release.sh"
 
-    # Check that download verification functions are used (not curl | tar)
-    if grep -q "download_and_extract" "$dev_tools_script"; then
+    # Check that download verification functions are used (directly or via helper)
+    if grep -rq "download_and_extract" "$dev_tools_script" "$helper_script"; then
         assert_true true "Uses download_and_extract for verification"
     else
         assert_true false "Doesn't use download_and_extract"
     fi
 
-    if grep -q "download_and_verify" "$dev_tools_script"; then
+    if grep -rq "download_and_verify" "$dev_tools_script" "$helper_script"; then
         assert_true true "Uses download_and_verify for verification"
     else
         assert_true false "Doesn't use download_and_verify"

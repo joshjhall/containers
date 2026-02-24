@@ -44,6 +44,9 @@ source /tmp/build-scripts/base/download-verify.sh
 source /tmp/build-scripts/features/lib/checksum-fetch.sh
 source /tmp/build-scripts/base/cache-utils.sh
 
+# Source GitHub release installer for binary tool installations
+source /tmp/build-scripts/features/lib/install-github-release.sh
+
 # Start logging
 log_feature_start "Development Tools"
 
@@ -51,6 +54,11 @@ log_feature_start "Development Tools"
 # Version Configuration
 # ============================================================================
 # Tool versions (can be overridden via environment variables)
+DUF_VERSION="${DUF_VERSION:-0.9.1}"
+DIRENV_VERSION="${DIRENV_VERSION:-2.37.1}"
+ENTR_VERSION="${ENTR_VERSION:-5.7}"
+MKCERT_VERSION="${MKCERT_VERSION:-1.4.4}"
+GLAB_VERSION="${GLAB_VERSION:-1.86.0}"
 LAZYGIT_VERSION="${LAZYGIT_VERSION:-0.59.0}"
 DELTA_VERSION="${DELTA_VERSION:-0.18.2}"
 ACT_VERSION="${ACT_VERSION:-0.2.84}"
@@ -316,55 +324,18 @@ DEV_TOOLS_BASHRC_EOF
 # ============================================================================
 log_message "Installing additional development tools..."
 
-# Install duf (modern disk usage utility)
-log_message "Installing duf (modern disk usage utility)..."
-DUF_VERSION="${DUF_VERSION:-0.9.1}"
-ARCH=$(dpkg --print-architecture)
+# duf (modern disk usage utility)
+install_github_release "duf" "$DUF_VERSION" \
+    "https://github.com/muesli/duf/releases/download/v${DUF_VERSION}" \
+    "duf_${DUF_VERSION}_linux_amd64.deb" "duf_${DUF_VERSION}_linux_arm64.deb" \
+    "checksums_txt" "dpkg" \
+    || { log_feature_end; exit 1; }
 
-if [ "$ARCH" = "amd64" ] || [ "$ARCH" = "arm64" ]; then
-    DUF_DEB="duf_${DUF_VERSION}_linux_${ARCH}.deb"
-    DUF_URL="https://github.com/muesli/duf/releases/download/v${DUF_VERSION}/${DUF_DEB}"
-
-    # Fetch checksum dynamically from GitHub releases
-    log_message "Fetching duf checksum from GitHub..."
-    DUF_CHECKSUMS_URL="https://github.com/muesli/duf/releases/download/v${DUF_VERSION}/checksums.txt"
-
-    if ! DUF_CHECKSUM=$(fetch_github_checksums_txt "$DUF_CHECKSUMS_URL" "$DUF_DEB" 2>/dev/null); then
-        log_error "Failed to fetch checksum for duf ${DUF_VERSION}"
-        log_error "Please verify version exists: https://github.com/muesli/duf/releases/tag/v${DUF_VERSION}"
-        log_feature_end
-        exit 1
-    fi
-
-    log_message "Expected SHA256: ${DUF_CHECKSUM}"
-
-    # Download and verify duf with checksum verification
-    BUILD_TEMP=$(create_secure_temp_dir)
-    cd "$BUILD_TEMP"
-    log_message "Downloading and verifying duf..."
-    download_and_verify \
-        "$DUF_URL" \
-        "$DUF_CHECKSUM" \
-        "duf.deb"
-
-    log_message "✓ duf v${DUF_VERSION} verified successfully"
-
-    # Install the verified package
-    log_command "Installing duf package" \
-        dpkg -i duf.deb
-
-    cd /
-else
-    log_warning "duf not available for architecture $ARCH, skipping..."
-fi
-
-# Install entr (file watcher)
+# Install entr (file watcher) — source build, not a GitHub release binary
 log_message "Installing entr (file watcher)..."
-ENTR_VERSION="${ENTR_VERSION:-5.7}"
 ENTR_TARBALL="entr-${ENTR_VERSION}.tar.gz"
 ENTR_URL="http://eradman.com/entrproject/code/${ENTR_TARBALL}"
 
-# Calculate checksum for verification (eradman.com doesn't publish checksums)
 log_message "Calculating checksum for entr ${ENTR_VERSION}..."
 ENTR_CHECKSUM=$(calculate_checksum_sha256 "$ENTR_URL" 2>/dev/null)
 
@@ -376,7 +347,6 @@ fi
 
 log_message "Expected SHA256: ${ENTR_CHECKSUM}"
 
-# Download and verify entr source
 BUILD_TEMP=$(create_secure_temp_dir)
 cd "$BUILD_TEMP"
 log_message "Downloading and verifying entr ${ENTR_VERSION}..."
@@ -395,16 +365,14 @@ log_command "Building entr" \
 
 cd /
 
-# Install fzf (fuzzy finder)
+# Install fzf (fuzzy finder) — git clone with custom retry logic
 log_message "Installing fzf (fuzzy finder)..."
 
-# Function to install fzf with retries
 install_fzf() {
     local max_retries=3
     local retry_delay=5
     local i
 
-    # Clone the repository with retries
     for i in $(seq 1 $max_retries); do
         log_message "Cloning fzf repository (attempt $i/$max_retries)..."
         if log_command "Cloning fzf repository" \
@@ -422,8 +390,7 @@ install_fzf() {
         fi
     done
 
-    # Run the installer non-interactively with retries
-    export FZF_NO_UPDATE_RC=1  # Don't modify shell rc files
+    export FZF_NO_UPDATE_RC=1
     retry_delay=5
     for i in $(seq 1 $max_retries); do
         log_message "Running fzf installer (attempt $i/$max_retries)..."
@@ -444,13 +411,10 @@ install_fzf() {
     return 1
 }
 
-# Install fzf with error handling
 if ! install_fzf; then
     log_warning "fzf installation failed, continuing without fzf"
     log_warning "fzf will not be available in this container"
-    # Don't fail the entire build due to fzf
 else
-    # Ensure proper ownership of fzf directory
     if [ -d /opt/fzf ]; then
         log_command "Setting fzf directory ownership" \
             chown -R "${USER_UID}:${USER_GID}" /opt/fzf
@@ -470,7 +434,6 @@ if command -v batcat &> /dev/null && ! command -v bat &> /dev/null; then
     create_symlink "$(which batcat)" "/usr/local/bin/bat" "bat (cat alternative)"
 fi
 
-# Create symlinks for fzf
 if [ -f /opt/fzf/bin/fzf ]; then
     create_symlink "/opt/fzf/bin/fzf" "/usr/local/bin/fzf" "fzf fuzzy finder"
     if [ -f /opt/fzf/bin/fzf-tmux ]; then
@@ -478,429 +441,72 @@ if [ -f /opt/fzf/bin/fzf ]; then
     fi
 fi
 
-# Install direnv
-log_message "Installing direnv..."
-ARCH=$(dpkg --print-architecture)
-DIRENV_VERSION="${DIRENV_VERSION:-2.37.1}"
-
-if [ "$ARCH" = "amd64" ]; then
-    DIRENV_BINARY="direnv.linux-amd64"
-elif [ "$ARCH" = "arm64" ]; then
-    DIRENV_BINARY="direnv.linux-arm64"
-else
-    log_warning "direnv not available for architecture $ARCH, skipping..."
-    DIRENV_BINARY=""
-fi
-
-if [ -n "$DIRENV_BINARY" ]; then
-    DIRENV_URL="https://github.com/direnv/direnv/releases/download/v${DIRENV_VERSION}/${DIRENV_BINARY}"
-
-    # Calculate checksum from download (direnv doesn't publish checksums)
-    log_message "Calculating checksum for direnv ${DIRENV_VERSION}..."
-    if ! DIRENV_CHECKSUM=$(calculate_checksum_sha256 "$DIRENV_URL" 2>/dev/null); then
-        log_error "Failed to download and calculate checksum for direnv ${DIRENV_VERSION}"
-        log_error "Please verify version exists: https://github.com/direnv/direnv/releases/tag/v${DIRENV_VERSION}"
-        log_feature_end
-        exit 1
-    fi
-
-    log_message "✓ Calculated checksum from download"
-
-    # Download and verify direnv
-    BUILD_TEMP=$(create_secure_temp_dir)
-    cd "$BUILD_TEMP"
-    log_message "Downloading and verifying direnv for ${ARCH}..."
-    download_and_verify \
-        "$DIRENV_URL" \
-        "${DIRENV_CHECKSUM}" \
-        "direnv"
-
-    log_command "Installing direnv binary" \
-        command mv direnv /usr/local/bin/direnv
-
-    log_command "Setting direnv permissions" \
-        chmod +x /usr/local/bin/direnv
-
-    cd /
-fi
-
-# Install lazygit with checksum verification
-log_message "Installing lazygit ${LAZYGIT_VERSION}..."
-
-# Determine lazygit filename based on architecture
-case "$ARCH" in
-    amd64)
-        LAZYGIT_FILENAME="lazygit_${LAZYGIT_VERSION}_linux_x86_64.tar.gz"
-        ;;
-    arm64)
-        LAZYGIT_FILENAME="lazygit_${LAZYGIT_VERSION}_linux_arm64.tar.gz"
-        ;;
-    *)
-        log_warning "lazygit not available for architecture $ARCH, skipping..."
-        LAZYGIT_FILENAME=""
-        ;;
-esac
-
-if [ -n "$LAZYGIT_FILENAME" ]; then
-    log_message "Fetching checksum for lazygit ${LAZYGIT_VERSION} ${ARCH}..."
-
-    # Fetch checksum dynamically from GitHub checksums.txt file
-    LAZYGIT_CHECKSUMS_URL="https://github.com/jesseduffield/lazygit/releases/download/v${LAZYGIT_VERSION}/checksums.txt"
-    if ! LAZYGIT_CHECKSUM=$(fetch_github_checksums_txt "$LAZYGIT_CHECKSUMS_URL" "$LAZYGIT_FILENAME" 2>/dev/null); then
-        log_error "Failed to fetch checksum for lazygit ${LAZYGIT_VERSION}"
-        log_error "Please verify version exists: https://github.com/jesseduffield/lazygit/releases/tag/v${LAZYGIT_VERSION}"
-        log_feature_end
-        exit 1
-    fi
-
-    log_message "✓ Fetched checksum from GitHub"
-
-    # Download and verify lazygit
-    log_message "Downloading and verifying lazygit for ${ARCH}..."
-    download_and_extract \
-        "https://github.com/jesseduffield/lazygit/releases/download/v${LAZYGIT_VERSION}/${LAZYGIT_FILENAME}" \
-        "${LAZYGIT_CHECKSUM}" \
-        "/usr/local/bin" \
-        "lazygit"
-fi
-
-# Install delta (better git diffs) with checksum verification
-log_message "Installing delta ${DELTA_VERSION}..."
-
-# Determine delta filename and directory based on architecture
-case "$ARCH" in
-    amd64)
-        DELTA_FILENAME="delta-${DELTA_VERSION}-x86_64-unknown-linux-gnu.tar.gz"
-        DELTA_DIR="delta-${DELTA_VERSION}-x86_64-unknown-linux-gnu"
-        ;;
-    arm64)
-        DELTA_FILENAME="delta-${DELTA_VERSION}-aarch64-unknown-linux-gnu.tar.gz"
-        DELTA_DIR="delta-${DELTA_VERSION}-aarch64-unknown-linux-gnu"
-        ;;
-    *)
-        log_warning "delta not available for architecture $ARCH, skipping..."
-        DELTA_FILENAME=""
-        ;;
-esac
-
-if [ -n "$DELTA_FILENAME" ]; then
-    BUILD_TEMP=$(create_secure_temp_dir)
-    cd "$BUILD_TEMP"
-
-    log_message "Calculating checksum for delta ${DELTA_VERSION} ${ARCH}..."
-    log_message "(Delta doesn't publish checksums, calculating on download)"
-
-    # Calculate checksum from download (delta project doesn't publish checksums)
-    DELTA_URL="https://github.com/dandavison/delta/releases/download/${DELTA_VERSION}/${DELTA_FILENAME}"
-    if ! DELTA_CHECKSUM=$(calculate_checksum_sha256 "$DELTA_URL" 2>/dev/null); then
-        log_error "Failed to download and calculate checksum for delta ${DELTA_VERSION}"
-        log_error "Please verify version exists: https://github.com/dandavison/delta/releases/tag/${DELTA_VERSION}"
-        log_feature_end
-        exit 1
-    fi
-
-    log_message "✓ Calculated checksum from download"
-
-    # Download and verify delta
-    log_message "Downloading and verifying delta for ${ARCH}..."
-    download_and_verify \
-        "$DELTA_URL" \
-        "${DELTA_CHECKSUM}" \
-        "delta-verified.tar.gz"
-
-    log_command "Extracting delta" \
-        tar -xzf delta-verified.tar.gz
-    log_command "Installing delta binary" \
-        command mv "${DELTA_DIR}/delta" /usr/local/bin/
-
-    cd /
-fi
-
-# Install mkcert (local HTTPS certificates)
-log_message "Installing mkcert (local HTTPS certificates)..."
-MKCERT_VERSION="${MKCERT_VERSION:-1.4.4}"
-
-if [ "$ARCH" = "amd64" ]; then
-    MKCERT_BINARY="mkcert-v${MKCERT_VERSION}-linux-amd64"
-elif [ "$ARCH" = "arm64" ]; then
-    MKCERT_BINARY="mkcert-v${MKCERT_VERSION}-linux-arm64"
-else
-    log_warning "mkcert not available for architecture $ARCH, skipping..."
-    MKCERT_BINARY=""
-fi
-
-if [ -n "$MKCERT_BINARY" ]; then
-    MKCERT_URL="https://github.com/FiloSottile/mkcert/releases/download/v${MKCERT_VERSION}/${MKCERT_BINARY}"
-
-    # Calculate checksum from download (mkcert doesn't publish checksums)
-    log_message "Calculating checksum for mkcert ${MKCERT_VERSION}..."
-    if ! MKCERT_CHECKSUM=$(calculate_checksum_sha256 "$MKCERT_URL" 2>/dev/null); then
-        log_error "Failed to download and calculate checksum for mkcert ${MKCERT_VERSION}"
-        log_error "Please verify version exists: https://github.com/FiloSottile/mkcert/releases/tag/v${MKCERT_VERSION}"
-        log_feature_end
-        exit 1
-    fi
-
-    log_message "✓ Calculated checksum from download"
-
-    # Download and verify mkcert
-    BUILD_TEMP=$(create_secure_temp_dir)
-    cd "$BUILD_TEMP"
-    log_message "Downloading and verifying mkcert for ${ARCH}..."
-    download_and_verify \
-        "$MKCERT_URL" \
-        "${MKCERT_CHECKSUM}" \
-        "mkcert"
-
-    log_command "Installing mkcert binary" \
-        command mv mkcert /usr/local/bin/mkcert
-
-    log_command "Setting mkcert permissions" \
-        chmod +x /usr/local/bin/mkcert
-
-    cd /
-fi
-
-# Install GitHub Actions CLI (act) with checksum verification
-log_message "Installing act ${ACT_VERSION}..."
-
-# Determine act filename based on architecture
-case "$ARCH" in
-    amd64)
-        ACT_FILENAME="act_Linux_x86_64.tar.gz"
-        ;;
-    arm64)
-        ACT_FILENAME="act_Linux_arm64.tar.gz"
-        ;;
-    *)
-        log_warning "act not available for architecture $ARCH, skipping..."
-        ACT_FILENAME=""
-        ;;
-esac
-
-if [ -n "$ACT_FILENAME" ]; then
-    log_message "Fetching checksum for act ${ACT_VERSION} ${ARCH}..."
-
-    # Fetch checksum dynamically from GitHub checksums.txt file
-    ACT_CHECKSUMS_URL="https://github.com/nektos/act/releases/download/v${ACT_VERSION}/checksums.txt"
-    if ! ACT_CHECKSUM=$(fetch_github_checksums_txt "$ACT_CHECKSUMS_URL" "$ACT_FILENAME" 2>/dev/null); then
-        log_error "Failed to fetch checksum for act ${ACT_VERSION}"
-        log_error "Please verify version exists: https://github.com/nektos/act/releases/tag/v${ACT_VERSION}"
-        log_feature_end
-        exit 1
-    fi
-
-    log_message "✓ Fetched checksum from GitHub"
-
-    # Download and verify act
-    log_message "Downloading and verifying act for ${ARCH}..."
-    download_and_extract \
-        "https://github.com/nektos/act/releases/download/v${ACT_VERSION}/${ACT_FILENAME}" \
-        "${ACT_CHECKSUM}" \
-        "/usr/local/bin" \
-        "act"
-fi
-
-# Install git-cliff (automatic changelog generator) with SHA512 checksum verification
-log_message "Installing git-cliff ${GITCLIFF_VERSION}..."
-
-# Determine git-cliff filename based on architecture
-case "$ARCH" in
-    amd64) GITCLIFF_FILENAME="git-cliff-${GITCLIFF_VERSION}-x86_64-unknown-linux-gnu.tar.gz" ;;
-    arm64) GITCLIFF_FILENAME="git-cliff-${GITCLIFF_VERSION}-aarch64-unknown-linux-gnu.tar.gz" ;;
-    *) GITCLIFF_FILENAME="" ;;
-esac
-
-if [ -n "$GITCLIFF_FILENAME" ]; then
-    log_message "Fetching checksum for git-cliff ${GITCLIFF_VERSION} ${ARCH}..."
-
-    GITCLIFF_SHA512_URL="https://github.com/orhun/git-cliff/releases/download/v${GITCLIFF_VERSION}/${GITCLIFF_FILENAME}.sha512"
-    if ! GITCLIFF_CHECKSUM=$(fetch_github_sha512_file "$GITCLIFF_SHA512_URL" 2>/dev/null); then
-        log_error "Failed to fetch checksum for git-cliff ${GITCLIFF_VERSION}"
-        log_feature_end
-        exit 1
-    fi
-
-    log_message "✓ Fetched SHA512 checksum from GitHub"
-
-    # Validate checksum format (should be 128 hex chars for SHA512)
-    if ! validate_checksum_format "$GITCLIFF_CHECKSUM" "sha512"; then
-        log_error "Invalid SHA512 checksum format for git-cliff ${GITCLIFF_VERSION}: ${GITCLIFF_CHECKSUM}"
-        log_feature_end
-        exit 1
-    fi
-
-    # Download and verify, then extract manually (binary is in subdirectory)
-    BUILD_TEMP=$(create_secure_temp_dir)
-    cd "$BUILD_TEMP"
-    GITCLIFF_URL="https://github.com/orhun/git-cliff/releases/download/v${GITCLIFF_VERSION}/${GITCLIFF_FILENAME}"
-    download_and_verify "$GITCLIFF_URL" "${GITCLIFF_CHECKSUM}" "git-cliff-verified.tar.gz"
-
-    log_command "Extracting git-cliff" \
-        tar -xzf git-cliff-verified.tar.gz
-    log_command "Installing git-cliff binary" \
-        command mv "git-cliff-${GITCLIFF_VERSION}/git-cliff" /usr/local/bin/
-
-    cd /
-    log_message "✓ git-cliff ${GITCLIFF_VERSION} installed successfully"
-else
-    log_warning "Unsupported architecture for git-cliff: $ARCH"
-fi
-
-# Install GitLab CLI (glab)
-log_message "Installing glab (GitLab CLI)..."
-GLAB_VERSION="${GLAB_VERSION:-1.86.0}"
-
-# GitLab CLI provides builds for amd64 and arm64
-if [ "$ARCH" = "amd64" ]; then
-    GLAB_ARCH="amd64"
-elif [ "$ARCH" = "arm64" ]; then
-    GLAB_ARCH="arm64"
-else
-    log_warning "Unsupported architecture for glab: $ARCH"
-    GLAB_ARCH=""
-fi
-
-if [ -n "$GLAB_ARCH" ]; then
-    GLAB_DEB="glab_${GLAB_VERSION}_linux_${GLAB_ARCH}.deb"
-    GLAB_URL="https://gitlab.com/gitlab-org/cli/-/releases/v${GLAB_VERSION}/downloads/${GLAB_DEB}"
-
-    # Fetch checksum dynamically from GitLab releases
-    log_message "Fetching glab checksum from GitLab..."
-    GLAB_CHECKSUMS_URL="https://gitlab.com/gitlab-org/cli/-/releases/v${GLAB_VERSION}/downloads/checksums.txt"
-
-    if ! GLAB_CHECKSUM=$(fetch_github_checksums_txt "$GLAB_CHECKSUMS_URL" "$GLAB_DEB" 2>/dev/null); then
-        log_warning "Failed to fetch checksum for glab ${GLAB_VERSION}, skipping installation"
-        log_warning "Please verify version exists: https://gitlab.com/gitlab-org/cli/-/releases/v${GLAB_VERSION}"
-    else
-        log_message "Expected SHA256: ${GLAB_CHECKSUM}"
-
-        # Download and verify glab with checksum verification
-        BUILD_TEMP=$(create_secure_temp_dir)
-        cd "$BUILD_TEMP"
-        log_message "Downloading and verifying glab..."
-        if download_and_verify \
-            "$GLAB_URL" \
-            "$GLAB_CHECKSUM" \
-            "glab.deb"; then
-
-            log_message "✓ glab v${GLAB_VERSION} verified successfully"
-
-            # Install the verified package
-            log_command "Installing glab package" \
-                dpkg -i glab.deb || log_warning "Failed to install glab"
-        else
-            log_warning "glab verification failed, skipping installation"
-        fi
-
-        cd /
-    fi
-fi
-
-# Install Biome (linting and formatting tool)
-log_message "Installing Biome ${BIOME_VERSION}..."
-
-# Determine Biome binary name based on architecture
-case "$ARCH" in
-    amd64)
-        BIOME_BINARY="biome-linux-x64"
-        ;;
-    arm64)
-        BIOME_BINARY="biome-linux-arm64"
-        ;;
-    *)
-        log_warning "Biome not available for architecture $ARCH, skipping..."
-        BIOME_BINARY=""
-        ;;
-esac
-
-if [ -n "$BIOME_BINARY" ]; then
-    # Biome 2.x uses @biomejs/biome@VERSION tag format (1.x used cli/vVERSION)
-    BIOME_URL="https://github.com/biomejs/biome/releases/download/@biomejs/biome@${BIOME_VERSION}/${BIOME_BINARY}"
-
-    # Calculate checksum from download (Biome doesn't publish checksums)
-    log_message "Calculating checksum for Biome ${BIOME_VERSION}..."
-    if ! BIOME_CHECKSUM=$(calculate_checksum_sha256 "$BIOME_URL" 2>/dev/null); then
-        log_error "Failed to download and calculate checksum for Biome ${BIOME_VERSION}"
-        log_error "Please verify version exists: https://github.com/biomejs/biome/releases/tag/@biomejs/biome@${BIOME_VERSION}"
-        log_feature_end
-        exit 1
-    fi
-
-    log_message "✓ Calculated checksum from download"
-
-    # Download and verify Biome
-    BUILD_TEMP=$(create_secure_temp_dir)
-    cd "$BUILD_TEMP"
-    log_message "Downloading and verifying Biome for ${ARCH}..."
-    download_and_verify \
-        "$BIOME_URL" \
-        "${BIOME_CHECKSUM}" \
-        "biome"
-
-    log_command "Installing Biome binary" \
-        command mv biome /usr/local/bin/biome
-
-    log_command "Setting Biome permissions" \
-        chmod +x /usr/local/bin/biome
-
-    cd /
-    log_message "✓ Biome ${BIOME_VERSION} installed successfully"
-fi
-
-# Install taplo (TOML formatter/linter) if not already installed by rust-dev
+# direnv (direct binary, no published checksums)
+install_github_release "direnv" "$DIRENV_VERSION" \
+    "https://github.com/direnv/direnv/releases/download/v${DIRENV_VERSION}" \
+    "direnv.linux-amd64" "direnv.linux-arm64" \
+    "calculate" "binary" \
+    || { log_feature_end; exit 1; }
+
+# lazygit (tar with binary at top level)
+install_github_release "lazygit" "$LAZYGIT_VERSION" \
+    "https://github.com/jesseduffield/lazygit/releases/download/v${LAZYGIT_VERSION}" \
+    "lazygit_${LAZYGIT_VERSION}_linux_x86_64.tar.gz" \
+    "lazygit_${LAZYGIT_VERSION}_linux_arm64.tar.gz" \
+    "checksums_txt" "extract_flat:lazygit" \
+    || { log_feature_end; exit 1; }
+
+# delta (better git diffs — tar with binary in subdirectory, no published checksums)
+install_github_release "delta" "$DELTA_VERSION" \
+    "https://github.com/dandavison/delta/releases/download/${DELTA_VERSION}" \
+    "delta-${DELTA_VERSION}-x86_64-unknown-linux-gnu.tar.gz" \
+    "delta-${DELTA_VERSION}-aarch64-unknown-linux-gnu.tar.gz" \
+    "calculate" "extract:delta" \
+    || { log_feature_end; exit 1; }
+
+# mkcert (local HTTPS certificates, no published checksums)
+install_github_release "mkcert" "$MKCERT_VERSION" \
+    "https://github.com/FiloSottile/mkcert/releases/download/v${MKCERT_VERSION}" \
+    "mkcert-v${MKCERT_VERSION}-linux-amd64" "mkcert-v${MKCERT_VERSION}-linux-arm64" \
+    "calculate" "binary" \
+    || { log_feature_end; exit 1; }
+
+# act (GitHub Actions CLI)
+install_github_release "act" "$ACT_VERSION" \
+    "https://github.com/nektos/act/releases/download/v${ACT_VERSION}" \
+    "act_Linux_x86_64.tar.gz" "act_Linux_arm64.tar.gz" \
+    "checksums_txt" "extract_flat:act" \
+    || { log_feature_end; exit 1; }
+
+# git-cliff (automatic changelog generator, SHA512 checksums)
+install_github_release "git-cliff" "$GITCLIFF_VERSION" \
+    "https://github.com/orhun/git-cliff/releases/download/v${GITCLIFF_VERSION}" \
+    "git-cliff-${GITCLIFF_VERSION}-x86_64-unknown-linux-gnu.tar.gz" \
+    "git-cliff-${GITCLIFF_VERSION}-aarch64-unknown-linux-gnu.tar.gz" \
+    "sha512" "extract:git-cliff" \
+    || { log_feature_end; exit 1; }
+
+# glab (GitLab CLI — non-fatal, uses GitLab release URLs)
+install_github_release "glab" "$GLAB_VERSION" \
+    "https://gitlab.com/gitlab-org/cli/-/releases/v${GLAB_VERSION}/downloads" \
+    "glab_${GLAB_VERSION}_linux_amd64.deb" "glab_${GLAB_VERSION}_linux_arm64.deb" \
+    "checksums_txt" "dpkg" \
+    || log_warning "glab installation failed, continuing without glab"
+
+# biome (linting and formatting — non-standard tag format, no published checksums)
+install_github_release "biome" "$BIOME_VERSION" \
+    "https://github.com/biomejs/biome/releases/download/@biomejs/biome@${BIOME_VERSION}" \
+    "biome-linux-x64" "biome-linux-arm64" \
+    "calculate" "binary" \
+    || { log_feature_end; exit 1; }
+
+# taplo (TOML formatter/linter) — skip if already installed by rust-dev
 if ! command -v taplo &> /dev/null; then
-    log_message "Installing taplo ${TAPLO_VERSION}..."
-
-    # Determine taplo binary name based on architecture
-    case "$ARCH" in
-        amd64)
-            TAPLO_BINARY="taplo-linux-x86_64.gz"
-            ;;
-        arm64)
-            TAPLO_BINARY="taplo-linux-aarch64.gz"
-            ;;
-        *)
-            log_warning "taplo not available for architecture $ARCH, skipping..."
-            TAPLO_BINARY=""
-            ;;
-    esac
-
-    if [ -n "$TAPLO_BINARY" ]; then
-        TAPLO_URL="https://github.com/tamasfe/taplo/releases/download/${TAPLO_VERSION}/${TAPLO_BINARY}"
-
-        # Calculate checksum from download (taplo doesn't publish checksums)
-        log_message "Calculating checksum for taplo ${TAPLO_VERSION}..."
-        if ! TAPLO_CHECKSUM=$(calculate_checksum_sha256 "$TAPLO_URL" 2>/dev/null); then
-            log_error "Failed to download and calculate checksum for taplo ${TAPLO_VERSION}"
-            log_error "Please verify version exists: https://github.com/tamasfe/taplo/releases/tag/${TAPLO_VERSION}"
-            log_feature_end
-            exit 1
-        fi
-
-        log_message "✓ Calculated checksum from download"
-
-        # Download and verify taplo
-        BUILD_TEMP=$(create_secure_temp_dir)
-        cd "$BUILD_TEMP"
-        log_message "Downloading and verifying taplo for ${ARCH}..."
-        download_and_verify \
-            "$TAPLO_URL" \
-            "${TAPLO_CHECKSUM}" \
-            "taplo.gz"
-
-        log_command "Extracting taplo" \
-            gunzip taplo.gz
-
-        log_command "Installing taplo binary" \
-            command mv taplo /usr/local/bin/taplo
-
-        log_command "Setting taplo permissions" \
-            chmod +x /usr/local/bin/taplo
-
-        cd /
-        log_message "✓ taplo ${TAPLO_VERSION} installed successfully"
-    fi
+    install_github_release "taplo" "$TAPLO_VERSION" \
+        "https://github.com/tamasfe/taplo/releases/download/${TAPLO_VERSION}" \
+        "taplo-linux-x86_64.gz" "taplo-linux-aarch64.gz" \
+        "calculate" "gunzip" \
+        || { log_feature_end; exit 1; }
 else
     log_message "taplo already installed (likely via rust-dev), skipping..."
 fi
