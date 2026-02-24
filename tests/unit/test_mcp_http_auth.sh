@@ -86,6 +86,14 @@ test_bearer_token_reference_format() {
         "Auth header uses \${ANTHROPIC_AUTH_TOKEN} env var reference"
 }
 
+# Test: HTTP MCP URLs are normalized with trailing slash
+test_http_url_trailing_slash_normalization() {
+    assert_file_exists "$SETUP_SCRIPT"
+    # Verify URL normalization to avoid redirect chains stripping auth headers
+    assert_file_contains "$SETUP_SCRIPT" 'http_url.*/' \
+        "claude-code-setup.sh normalizes HTTP MCP URLs with trailing slash"
+}
+
 # Run all tests
 run_test test_inject_mcp_headers_exists "inject_mcp_headers function exists"
 run_test test_inject_mcp_auth_header_exists "inject_mcp_auth_header function exists"
@@ -94,6 +102,7 @@ run_test test_claude_mcp_auto_auth_referenced "CLAUDE_MCP_AUTO_AUTH env var refe
 run_test test_jq_mcp_headers_pattern "jq used for mcpServers header injection"
 run_test test_auto_auth_skips_hardcoded_mcps "Auto-auth skips hardcoded MCPs"
 run_test test_bearer_token_reference_format "Bearer token uses env var reference"
+run_test test_http_url_trailing_slash_normalization "HTTP URL trailing slash normalization"
 
 # Generate test report
 generate_report

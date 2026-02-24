@@ -676,6 +676,9 @@ configure_mcp_list() {
             local http_rest="${mcp_entry#*=}"
             # Split on pipe: first segment is URL, remaining are headers
             local http_url="${http_rest%%|*}"
+            # Normalize URL: ensure trailing slash to avoid redirect chains
+            # that strip Authorization headers (HTTPS->HTTP redirect security)
+            [[ "$http_url" != */ ]] && http_url="${http_url}/"
             local http_headers_str=""
             if [[ "$http_rest" == *"|"* ]]; then
                 http_headers_str="${http_rest#*|}"
