@@ -1,0 +1,231 @@
+#!/bin/bash
+# claude-auth-watcher - Watches for Claude authentication and runs setup
+#
+# This script runs in the background after container startup. It watches for
+# Claude credential files to appear (created when user runs 'claude') and
+# automatically triggers claude-setup when authentication is detected.
+#
+# Uses inotifywait for efficient event-driven detection, with polling fallback.
+#
+# Environment Variables:
+#   CLAUDE_AUTH_WATCHER_TIMEOUT: Timeout in seconds (default: 14400 = 4 hours)
+#   CLAUDE_AUTH_WATCHER_INTERVAL: Polling interval in seconds (default: 30)
+
+set -euo pipefail
+
+# Configuration
+TIMEOUT="${CLAUDE_AUTH_WATCHER_TIMEOUT:-14400}"  # 4 hours default
+POLL_INTERVAL="${CLAUDE_AUTH_WATCHER_INTERVAL:-30}"
+CLAUDE_DIR="$HOME/.claude"
+MARKER_FILE="$CLAUDE_DIR/.container-setup-complete"
+CREDENTIALS_FILE="$CLAUDE_DIR/.credentials.json"
+
+log() {
+    echo "[claude-auth-watcher] $(date '+%Y-%m-%d %H:%M:%S') $*"
+}
+
+# Check if setup has already been completed
+if [ -f "$MARKER_FILE" ]; then
+    log "Setup already completed (marker file exists). Exiting."
+    exit 0
+fi
+
+# Secure token storage (RAM-backed, never touches disk)
+_ANTHROPIC_TOKEN_FILE="/dev/shm/anthropic-auth-token"
+
+_store_token() {
+    printf '%s' "$1" > "$_ANTHROPIC_TOKEN_FILE"
+    chmod 600 "$_ANTHROPIC_TOKEN_FILE"
+}
+
+_has_token() {
+    [ -s "$_ANTHROPIC_TOKEN_FILE" ]
+}
+
+# Try to resolve secrets from 1Password (for background processes that
+# started before OP resolution ran in bashrc/startup scripts)
+_try_resolve_op_secrets() {
+    # Already resolved via env or file
+    [ -n "${ANTHROPIC_AUTH_TOKEN:-}" ] && { _store_token "$ANTHROPIC_AUTH_TOKEN"; return 0; }
+    _has_token && return 0
+
+    # Need both the ref and service account token
+    [ -z "${OP_ANTHROPIC_AUTH_TOKEN_REF:-}" ] && return 1
+    [ -z "${OP_SERVICE_ACCOUNT_TOKEN:-}" ] && return 1
+    command -v op &>/dev/null || return 1
+
+    local resolved
+    resolved=$(op read "${OP_ANTHROPIC_AUTH_TOKEN_REF}" 2>/dev/null) || return 1
+    if [ -n "$resolved" ]; then
+        _store_token "$resolved"
+        log "Resolved ANTHROPIC_AUTH_TOKEN from 1Password"
+
+        # Also resolve ANTHROPIC_BASE_URL if ref exists
+        if [ -n "${OP_ANTHROPIC_BASE_URL_REF:-}" ] && [ -z "${ANTHROPIC_BASE_URL:-}" ]; then
+            local base_url
+            base_url=$(op read "${OP_ANTHROPIC_BASE_URL_REF}" 2>/dev/null) || true
+            if [ -n "$base_url" ]; then
+                export ANTHROPIC_BASE_URL="$base_url"
+                log "Resolved ANTHROPIC_BASE_URL from 1Password"
+            fi
+        fi
+        return 0
+    fi
+    return 1
+}
+
+# Check if already authenticated
+is_authenticated() {
+    # Check for token-based authentication (via proxy like LiteLLM)
+    # Capture env token to secure file
+    if [ -n "${ANTHROPIC_AUTH_TOKEN:-}" ]; then
+        _store_token "$ANTHROPIC_AUTH_TOKEN"
+        return 0
+    fi
+
+    # Check if token already stored in secure file
+    if _has_token; then
+        return 0
+    fi
+
+    # Try to resolve from 1Password (handles case where watcher started
+    # before OP secrets were resolved by startup scripts)
+    if _try_resolve_op_secrets; then
+        return 0
+    fi
+
+    # Check for OAuth credentials
+    if [ -f "$CREDENTIALS_FILE" ]; then
+        if grep -q '"claudeAiOauth"' "$CREDENTIALS_FILE" 2>/dev/null; then
+            return 0
+        fi
+    fi
+    if [ -f "$HOME/.claude.json" ]; then
+        if grep -q '"oauthAccount"' "$HOME/.claude.json" 2>/dev/null; then
+            # Verify it's not null/empty (same check as claude-setup)
+            if jq -e '.oauthAccount != null and .oauthAccount != ""' "$HOME/.claude.json" >/dev/null 2>&1; then
+                return 0
+            fi
+        fi
+    fi
+    return 1
+}
+
+# Quick test if the Claude plugin marketplace is reachable.
+# Exit code 0 from 'claude plugin list' confirms connectivity;
+# empty output is valid (first run, no plugins installed yet)
+_is_marketplace_available() {
+    local output
+    output=$(timeout 10 claude plugin list 2>&1) || return 1
+    # Error indicators mean marketplace is down/unauthorized
+    echo "$output" | grep -qi "error\|unauthorized\|forbidden\|unavailable" && return 1
+    return 0
+}
+
+# Ensure the official marketplace is registered (for the watcher context).
+# claude-setup has its own ensure_marketplace, but we also pre-register here
+# so the availability check is meaningful.
+_ensure_marketplace_registered() {
+    local known_file="$HOME/.claude/plugins/known_marketplaces.json"
+    if [ -f "$known_file" ] && grep -q '"claude-plugins-official"' "$known_file" 2>/dev/null; then
+        return 0
+    fi
+    log "Registering claude-plugins-official marketplace..."
+    if claude plugin marketplace add "anthropics/claude-plugins-official" &>/dev/null; then
+        log "Marketplace registered successfully"
+        return 0
+    else
+        log "Failed to register marketplace (claude-setup will retry)"
+        return 1
+    fi
+}
+
+# Run setup and create marker file
+run_setup() {
+    log "Authentication detected! Checking marketplace availability..."
+
+    # Ensure marketplace is registered before checking availability
+    _ensure_marketplace_registered || true
+
+    # Test marketplace before running setup
+    # The install_plugin function has retry logic, but testing first avoids log noise
+    if _is_marketplace_available; then
+        log "Marketplace is available! Running claude-setup..."
+    else
+        log "Marketplace not yet available. Waiting 10s before retry..."
+        sleep 10
+
+        if ! _is_marketplace_available; then
+            log "Marketplace still not available. Running setup anyway (has retry logic)..."
+        fi
+    fi
+
+    if command -v claude-setup &>/dev/null; then
+        if claude-setup 2>&1 | tee -a "/tmp/claude-auth-watcher.log"; then
+            log "Setup completed successfully"
+            mkdir -p "$CLAUDE_DIR"
+            touch "$MARKER_FILE"
+            log "Marker file created: $MARKER_FILE"
+            return 0
+        else
+            log "Setup failed (see /tmp/claude-auth-watcher.log)"
+            return 1
+        fi
+    else
+        log "claude-setup not found"
+        return 1
+    fi
+}
+
+# If already authenticated, run setup immediately
+if is_authenticated; then
+    log "Already authenticated. Running setup..."
+    run_setup
+    exit $?
+fi
+
+log "Waiting for Claude authentication..."
+log "Timeout: ${TIMEOUT}s, Poll interval: ${POLL_INTERVAL}s"
+
+# Ensure .claude directory exists for watching
+mkdir -p "$CLAUDE_DIR"
+
+# Calculate end time
+END_TIME=$(($(date +%s) + TIMEOUT))
+
+# Try to use inotifywait if available (efficient event-driven detection)
+if command -v inotifywait &>/dev/null; then
+    log "Using inotifywait for efficient credential detection"
+
+    while [ "$(date +%s)" -lt "$END_TIME" ]; do
+        # Watch for credential file creation/modification
+        # Timeout after poll interval to allow periodic authentication check
+        if inotifywait -q -t "$POLL_INTERVAL" -e create -e modify "$CLAUDE_DIR" "$HOME" 2>/dev/null; then
+            # File change detected, check authentication
+            if is_authenticated; then
+                run_setup
+                exit $?
+            fi
+        fi
+
+        # Also check periodically in case we missed the event
+        if is_authenticated; then
+            run_setup
+            exit $?
+        fi
+    done
+else
+    log "inotifywait not available, using polling (install inotify-tools for efficiency)"
+
+    while [ "$(date +%s)" -lt "$END_TIME" ]; do
+        if is_authenticated; then
+            run_setup
+            exit $?
+        fi
+        sleep "$POLL_INTERVAL"
+    done
+fi
+
+log "Timeout reached. Exiting without setup."
+log "To run setup manually after authenticating: claude-setup"
+exit 0

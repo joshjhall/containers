@@ -245,13 +245,15 @@ test_package_type() {
     fi
 }
 
-# Test: Registry is referenced in claude-code-setup.sh
+# Test: Registry is referenced in claude-code-setup.sh and claude-setup
 test_registry_used_in_setup() {
     local setup_file="$PROJECT_ROOT/lib/features/claude-code-setup.sh"
+    local claude_setup_cmd="$PROJECT_ROOT/lib/features/lib/claude/claude-setup"
     assert_file_exists "$setup_file"
+    assert_file_exists "$claude_setup_cmd"
     assert_file_contains "$setup_file" "mcp-registry.sh" "claude-code-setup.sh references mcp-registry.sh"
     assert_file_contains "$setup_file" "mcp_registry_is_registered" "claude-code-setup.sh uses registry validation"
-    assert_file_contains "$setup_file" "mcp_registry_get_add_args" "claude-code-setup.sh uses registry add args"
+    assert_file_contains "$claude_setup_cmd" "mcp_registry_get_add_args" "claude-setup uses registry add args"
 }
 
 # Run all tests

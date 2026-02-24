@@ -20,6 +20,7 @@ test_suite "MCP User MCPs and Auto-detect Tests"
 # Setup
 DOCKERFILE="$PROJECT_ROOT/Dockerfile"
 SETUP_SCRIPT="$PROJECT_ROOT/lib/features/claude-code-setup.sh"
+CLAUDE_SETUP_CMD="$PROJECT_ROOT/lib/features/lib/claude/claude-setup"
 
 # Test: INCLUDE_MCP_SERVERS fully removed from Dockerfile
 test_mcp_servers_removed_from_dockerfile() {
@@ -32,51 +33,51 @@ test_mcp_servers_removed_from_dockerfile() {
     fi
 }
 
-# Test: CLAUDE_USER_MCPS referenced in claude-setup script
+# Test: CLAUDE_USER_MCPS referenced in claude-setup command
 test_user_mcps_in_setup() {
-    assert_file_exists "$SETUP_SCRIPT"
-    assert_file_contains "$SETUP_SCRIPT" "CLAUDE_USER_MCPS" \
-        "claude-code-setup.sh references CLAUDE_USER_MCPS"
+    assert_file_exists "$CLAUDE_SETUP_CMD"
+    assert_file_contains "$CLAUDE_SETUP_CMD" "CLAUDE_USER_MCPS" \
+        "claude-setup references CLAUDE_USER_MCPS"
 }
 
-# Test: CLAUDE_AUTO_DETECT_MCPS referenced in claude-setup script
+# Test: CLAUDE_AUTO_DETECT_MCPS referenced in claude-setup command
 test_auto_detect_mcps_in_setup() {
-    assert_file_exists "$SETUP_SCRIPT"
-    assert_file_contains "$SETUP_SCRIPT" "CLAUDE_AUTO_DETECT_MCPS" \
-        "claude-code-setup.sh references CLAUDE_AUTO_DETECT_MCPS"
+    assert_file_exists "$CLAUDE_SETUP_CMD"
+    assert_file_contains "$CLAUDE_SETUP_CMD" "CLAUDE_AUTO_DETECT_MCPS" \
+        "claude-setup references CLAUDE_AUTO_DETECT_MCPS"
 }
 
 # Test: derive_mcp_name_from_package function exists
 test_derive_mcp_name_function_exists() {
-    assert_file_exists "$SETUP_SCRIPT"
-    assert_file_contains "$SETUP_SCRIPT" "derive_mcp_name_from_package" \
-        "claude-code-setup.sh contains derive_mcp_name_from_package"
+    assert_file_exists "$CLAUDE_SETUP_CMD"
+    assert_file_contains "$CLAUDE_SETUP_CMD" "derive_mcp_name_from_package" \
+        "claude-setup contains derive_mcp_name_from_package"
 }
 
 # Test: configure_mcp_list function exists
 test_configure_mcp_list_function_exists() {
-    assert_file_exists "$SETUP_SCRIPT"
-    assert_file_contains "$SETUP_SCRIPT" "configure_mcp_list" \
-        "claude-code-setup.sh contains configure_mcp_list"
+    assert_file_exists "$CLAUDE_SETUP_CMD"
+    assert_file_contains "$CLAUDE_SETUP_CMD" "configure_mcp_list" \
+        "claude-setup contains configure_mcp_list"
 }
 
 # Test: Auto-detection uses git remote inspection
 test_auto_detect_uses_git_remotes() {
-    assert_file_exists "$SETUP_SCRIPT"
-    assert_file_contains "$SETUP_SCRIPT" "git.*remote" \
-        "claude-code-setup.sh inspects git remotes"
-    assert_file_contains "$SETUP_SCRIPT" "github" \
-        "claude-code-setup.sh checks for github in remotes"
-    assert_file_contains "$SETUP_SCRIPT" "gitlab" \
-        "claude-code-setup.sh checks for gitlab in remotes"
+    assert_file_exists "$CLAUDE_SETUP_CMD"
+    assert_file_contains "$CLAUDE_SETUP_CMD" "git.*remote" \
+        "claude-setup inspects git remotes"
+    assert_file_contains "$CLAUDE_SETUP_CMD" "github" \
+        "claude-setup checks for github in remotes"
+    assert_file_contains "$CLAUDE_SETUP_CMD" "gitlab" \
+        "claude-setup checks for gitlab in remotes"
 }
 
 # Test: Auto-detection gates on token env vars
 test_auto_detect_gates_on_tokens() {
-    assert_file_exists "$SETUP_SCRIPT"
-    assert_file_contains "$SETUP_SCRIPT" "GITHUB_TOKEN" \
+    assert_file_exists "$CLAUDE_SETUP_CMD"
+    assert_file_contains "$CLAUDE_SETUP_CMD" "GITHUB_TOKEN" \
         "Auto-detection checks GITHUB_TOKEN"
-    assert_file_contains "$SETUP_SCRIPT" "GITLAB_TOKEN" \
+    assert_file_contains "$CLAUDE_SETUP_CMD" "GITLAB_TOKEN" \
         "Auto-detection checks GITLAB_TOKEN"
 }
 
@@ -89,19 +90,19 @@ test_unknown_mcp_build_time_passthrough() {
 
 # Test: configure_mcp_list handles passthrough for unknown names
 test_configure_mcp_list_passthrough_logic() {
-    assert_file_exists "$SETUP_SCRIPT"
-    assert_file_contains "$SETUP_SCRIPT" "Passthrough" \
+    assert_file_exists "$CLAUDE_SETUP_CMD"
+    assert_file_contains "$CLAUDE_SETUP_CMD" "Passthrough" \
         "configure_mcp_list has passthrough logic for unknown names"
 }
 
 # Test: configure_mcp_list supports name=url HTTP MCP syntax
 test_http_mcp_support() {
-    assert_file_exists "$SETUP_SCRIPT"
-    assert_file_contains "$SETUP_SCRIPT" "HTTP MCP" \
+    assert_file_exists "$CLAUDE_SETUP_CMD"
+    assert_file_contains "$CLAUDE_SETUP_CMD" "HTTP MCP" \
         "configure_mcp_list has HTTP MCP support"
-    assert_file_contains "$SETUP_SCRIPT" "http://" \
+    assert_file_contains "$CLAUDE_SETUP_CMD" "http://" \
         "configure_mcp_list checks for http:// URLs"
-    assert_file_contains "$SETUP_SCRIPT" "https://" \
+    assert_file_contains "$CLAUDE_SETUP_CMD" "https://" \
         "configure_mcp_list checks for https:// URLs"
 }
 

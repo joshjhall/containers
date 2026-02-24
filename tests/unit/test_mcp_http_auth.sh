@@ -18,54 +18,54 @@ init_test_framework
 test_suite "MCP HTTP Authentication Tests"
 
 # Setup
-SETUP_SCRIPT="$PROJECT_ROOT/lib/features/claude-code-setup.sh"
+CLAUDE_SETUP_CMD="$PROJECT_ROOT/lib/features/lib/claude/claude-setup"
 
 # Test: inject_mcp_headers function exists
 test_inject_mcp_headers_exists() {
-    assert_file_exists "$SETUP_SCRIPT"
-    assert_file_contains "$SETUP_SCRIPT" "inject_mcp_headers" \
-        "claude-code-setup.sh contains inject_mcp_headers function"
+    assert_file_exists "$CLAUDE_SETUP_CMD"
+    assert_file_contains "$CLAUDE_SETUP_CMD" "inject_mcp_headers" \
+        "claude-setup contains inject_mcp_headers function"
 }
 
 # Test: inject_mcp_auth_header function exists
 test_inject_mcp_auth_header_exists() {
-    assert_file_exists "$SETUP_SCRIPT"
-    assert_file_contains "$SETUP_SCRIPT" "inject_mcp_auth_header" \
-        "claude-code-setup.sh contains inject_mcp_auth_header function"
+    assert_file_exists "$CLAUDE_SETUP_CMD"
+    assert_file_contains "$CLAUDE_SETUP_CMD" "inject_mcp_auth_header" \
+        "claude-setup contains inject_mcp_auth_header function"
 }
 
 # Test: Pipe-delimited header parsing variable exists
 test_pipe_delimited_headers_parsing() {
-    assert_file_exists "$SETUP_SCRIPT"
-    assert_file_contains "$SETUP_SCRIPT" "http_headers_str" \
-        "claude-code-setup.sh has pipe-delimited header parsing variable"
+    assert_file_exists "$CLAUDE_SETUP_CMD"
+    assert_file_contains "$CLAUDE_SETUP_CMD" "http_headers_str" \
+        "claude-setup has pipe-delimited header parsing variable"
 }
 
 # Test: CLAUDE_MCP_AUTO_AUTH env var is referenced
 test_claude_mcp_auto_auth_referenced() {
-    assert_file_exists "$SETUP_SCRIPT"
-    assert_file_contains "$SETUP_SCRIPT" "CLAUDE_MCP_AUTO_AUTH" \
-        "claude-code-setup.sh references CLAUDE_MCP_AUTO_AUTH env var"
+    assert_file_exists "$CLAUDE_SETUP_CMD"
+    assert_file_contains "$CLAUDE_SETUP_CMD" "CLAUDE_MCP_AUTO_AUTH" \
+        "claude-setup references CLAUDE_MCP_AUTO_AUTH env var"
 }
 
 # Test: jq used for mcpServers header injection
 test_jq_mcp_headers_pattern() {
-    assert_file_exists "$SETUP_SCRIPT"
+    assert_file_exists "$CLAUDE_SETUP_CMD"
     # jq and mcpServers may be on different lines due to line continuation
-    assert_file_contains "$SETUP_SCRIPT" 'mcpServers.*headers' \
-        "claude-code-setup.sh writes to mcpServers headers"
-    assert_file_contains "$SETUP_SCRIPT" 'jq --arg name' \
-        "claude-code-setup.sh uses jq with server name arg"
+    assert_file_contains "$CLAUDE_SETUP_CMD" 'mcpServers.*headers' \
+        "claude-setup writes to mcpServers headers"
+    assert_file_contains "$CLAUDE_SETUP_CMD" 'jq --arg name' \
+        "claude-setup uses jq with server name arg"
 }
 
 # Test: Auto-auth never applies to hardcoded MCPs (figma-desktop)
 test_auto_auth_skips_hardcoded_mcps() {
-    assert_file_exists "$SETUP_SCRIPT"
+    assert_file_exists "$CLAUDE_SETUP_CMD"
     # Auto-inject should only happen in the configure_mcp_list HTTP block,
     # not for hardcoded MCPs like figma-desktop.
     # Verify the lines around figma-desktop don't reference inject_mcp_auth_header
     local figma_block
-    figma_block=$(grep -A5 'figma-desktop' "$SETUP_SCRIPT" | head -6)
+    figma_block=$(grep -A5 'figma-desktop' "$CLAUDE_SETUP_CMD" | head -6)
     if echo "$figma_block" | grep -q 'inject_mcp_auth_header'; then
         fail_test "figma-desktop should not have auto-injected auth headers"
     else
@@ -75,36 +75,36 @@ test_auto_auth_skips_hardcoded_mcps() {
 
 # Test: Bearer token uses ${ANTHROPIC_AUTH_TOKEN} env var reference (not literal)
 test_bearer_token_reference_format() {
-    assert_file_exists "$SETUP_SCRIPT"
+    assert_file_exists "$CLAUDE_SETUP_CMD"
     # Verify we write the env var reference, not a literal token
-    assert_file_contains "$SETUP_SCRIPT" 'Bearer \${ANTHROPIC_AUTH_TOKEN}' \
+    assert_file_contains "$CLAUDE_SETUP_CMD" 'Bearer \${ANTHROPIC_AUTH_TOKEN}' \
         "Auth header uses \${ANTHROPIC_AUTH_TOKEN} env var reference"
 }
 
 # Test: HTTP MCP URLs are normalized with trailing slash
 test_http_url_trailing_slash_normalization() {
-    assert_file_exists "$SETUP_SCRIPT"
+    assert_file_exists "$CLAUDE_SETUP_CMD"
     # Verify URL normalization to avoid redirect chains stripping auth headers
-    assert_file_contains "$SETUP_SCRIPT" 'http_url.*/' \
-        "claude-code-setup.sh normalizes HTTP MCP URLs with trailing slash"
+    assert_file_contains "$CLAUDE_SETUP_CMD" 'http_url.*/' \
+        "claude-setup normalizes HTTP MCP URLs with trailing slash"
 }
 
 # Test: HTTP name validation regex exists in source
 test_http_name_validation_exists() {
-    assert_file_contains "$SETUP_SCRIPT" 'Skipping HTTP MCP with invalid name' \
-        "claude-code-setup.sh validates HTTP MCP server names"
+    assert_file_contains "$CLAUDE_SETUP_CMD" 'Skipping HTTP MCP with invalid name' \
+        "claude-setup validates HTTP MCP server names"
 }
 
 # Test: HTTP URL scheme validation exists in source
 test_http_url_scheme_validation_exists() {
-    assert_file_contains "$SETUP_SCRIPT" 'URL must be https:// or http://localhost' \
-        "claude-code-setup.sh validates HTTP MCP URL schemes"
+    assert_file_contains "$CLAUDE_SETUP_CMD" 'URL must be https:// or http://localhost' \
+        "claude-setup validates HTTP MCP URL schemes"
 }
 
 # Test: HTTP URL localhost restriction exists in source
 test_http_url_localhost_restriction_exists() {
-    assert_file_contains "$SETUP_SCRIPT" 'host\.docker\.internal' \
-        "claude-code-setup.sh restricts http:// to localhost patterns"
+    assert_file_contains "$CLAUDE_SETUP_CMD" 'host\.docker\.internal' \
+        "claude-setup restricts http:// to localhost patterns"
 }
 
 # Functional test: valid HTTP MCP names pass the regex
