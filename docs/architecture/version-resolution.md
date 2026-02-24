@@ -169,7 +169,7 @@ Test results:
 
 ## Related Documentation
 
-- `/workspace/containers/lib/features/lib/checksum-fetch.sh` - Checksum fetching
+- `/workspace/containers/lib/base/checksum-fetch.sh` - Checksum fetching
   library
 - `/workspace/containers/lib/features/ruby.sh` - Ruby installation script
 - `/workspace/containers/lib/features/golang.sh` - Go installation script

@@ -40,7 +40,7 @@ source /tmp/build-scripts/base/version-resolution.sh
 source /tmp/build-scripts/base/download-verify.sh
 
 # Source checksum fetching utilities
-source /tmp/build-scripts/features/lib/checksum-fetch.sh
+source /tmp/build-scripts/base/checksum-fetch.sh
 
 # Source 4-tier checksum verification system
 source /tmp/build-scripts/base/checksum-verification.sh

@@ -932,7 +932,7 @@ Created `lib/base/retry-utils.sh` with three retry functions:
    - Detects rate limit errors (403, "rate limit" messages)
    - Provides helpful messages about token benefits
 
-   Updated `lib/features/lib/checksum-fetch.sh` to use retry_github_api for:
+   Updated `lib/base/checksum-fetch.sh` to use retry_github_api for:
 
    - `fetch_github_checksums_txt()` - Checksums.txt file fetching
    - `fetch_github_sha256_file()` - Individual .sha256 file fetching
@@ -941,7 +941,7 @@ Created `lib/base/retry-utils.sh` with three retry functions:
    **Files Modified**:
 
    - `lib/base/retry-utils.sh` (NEW)
-   - `lib/features/lib/checksum-fetch.sh`
+   - `lib/base/checksum-fetch.sh`
 
    **Benefits**:
 

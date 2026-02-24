@@ -651,7 +651,7 @@ validate_version_format "$VERSION" || {
 
 ```bash
 # Always verify checksums for downloads
-source /tmp/build-scripts/features/lib/checksum-fetch.sh
+source /tmp/build-scripts/base/checksum-fetch.sh
 checksum=$(fetch_github_sha256_file "$url.sha256")
 download_and_verify "$url" "$checksum" "$dest"
 ```

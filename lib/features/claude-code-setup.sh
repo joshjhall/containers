@@ -32,7 +32,7 @@ source /tmp/build-scripts/base/retry-utils.sh
 source /tmp/build-scripts/base/download-verify.sh
 
 # Source checksum fetching utilities for dynamic checksum retrieval
-source /tmp/build-scripts/features/lib/checksum-fetch.sh
+source /tmp/build-scripts/base/checksum-fetch.sh
 
 # Start logging
 log_feature_start "Claude Code Setup"

@@ -66,7 +66,7 @@ test_checksums_sources_common() {
 # Test: Script sources or references checksum-fetch.sh
 test_checksums_sources_checksum_fetch() {
     assert_file_contains "$SOURCE_FILE" "checksum-fetch.sh" \
-        "Should source or reference lib/features/lib/checksum-fetch.sh"
+        "Should source or reference lib/base/checksum-fetch.sh"
 }
 
 # ---------------------------------------------------------------------------

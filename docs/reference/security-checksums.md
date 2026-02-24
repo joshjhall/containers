@@ -202,7 +202,7 @@ when no other verification method is available
 
 - `lib/checksums.json` - Pinned checksums (Tier 2)
 - `bin/update-checksums.sh` - Automated maintenance script
-- `lib/features/lib/checksum-fetch.sh` - Checksum fetching utilities
+- `lib/base/checksum-fetch.sh` - Checksum fetching utilities
 
 **Usage in Feature Scripts**:
 
@@ -252,7 +252,7 @@ Add to the top of your feature script (after feature-header.sh):
 source /tmp/build-scripts/base/download-verify.sh
 
 # Source checksum fetching utilities
-source /tmp/build-scripts/features/lib/checksum-fetch.sh
+source /tmp/build-scripts/base/checksum-fetch.sh
 ```text
 
 ### 2. Choose Verification Method

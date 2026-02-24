@@ -6,7 +6,7 @@
 # not just pre-stored versions.
 #
 # Usage:
-#   source /tmp/build-scripts/features/lib/checksum-fetch.sh
+#   source /tmp/build-scripts/base/checksum-fetch.sh
 #   checksum=$(fetch_go_checksum "1.25.3" "amd64")
 
 set -euo pipefail

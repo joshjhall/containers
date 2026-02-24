@@ -898,7 +898,7 @@ indicate:
 **Related Files**:
 
 - `lib/base/download-verify.sh` - Core verification logic
-- `lib/features/lib/checksum-fetch.sh` - Checksum fetching utilities
+- `lib/base/checksum-fetch.sh` - Checksum fetching utilities
 - `docs/checksum-verification.md` - Complete implementation guide
 
 ### GPG signature verification failure
@@ -999,7 +999,7 @@ docker build --progress=plain . 2>&1 | grep -A 20 "download_and_verify"
 **Related Files**:
 
 - `lib/base/download-verify.sh` - Core download verification functions
-- `lib/features/lib/checksum-fetch.sh` - Checksum fetching from GitHub releases
+- `lib/base/checksum-fetch.sh` - Checksum fetching from GitHub releases
 
 ### Checksum fetch failures (GitHub releases)
 
@@ -1049,7 +1049,7 @@ Error: Failed to fetch checksum for tool 1.2.3
 
 **Related Files**:
 
-- `lib/features/lib/checksum-fetch.sh` - GitHub checksum fetching logic
+- `lib/base/checksum-fetch.sh` - GitHub checksum fetching logic
 
 ### Security best practices
 

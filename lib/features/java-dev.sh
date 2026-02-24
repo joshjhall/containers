@@ -36,7 +36,7 @@ source /tmp/build-scripts/base/version-validation.sh
 source /tmp/build-scripts/base/download-verify.sh
 
 # Source checksum fetching utilities
-source /tmp/build-scripts/features/lib/checksum-fetch.sh
+source /tmp/build-scripts/base/checksum-fetch.sh
 
 # Source jdtls installation utilities
 source /tmp/build-scripts/features/lib/install-jdtls.sh

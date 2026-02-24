@@ -42,8 +42,8 @@ if [ -f /tmp/build-scripts/base/signature-verify.sh ]; then
     source /tmp/build-scripts/base/signature-verify.sh
 fi
 
-if [ -f /tmp/build-scripts/features/lib/checksum-fetch.sh ]; then
-    source /tmp/build-scripts/features/lib/checksum-fetch.sh
+if [ -f /tmp/build-scripts/base/checksum-fetch.sh ]; then
+    source /tmp/build-scripts/base/checksum-fetch.sh
 fi
 
 # Path to pinned checksums database

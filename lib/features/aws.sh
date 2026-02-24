@@ -52,7 +52,7 @@ source /tmp/build-scripts/base/apt-utils.sh
 source /tmp/build-scripts/base/download-verify.sh
 
 # Source checksum utilities for secure binary downloads
-source /tmp/build-scripts/features/lib/checksum-fetch.sh
+source /tmp/build-scripts/base/checksum-fetch.sh
 
 # Start logging
 log_feature_start "AWS CLI v2"

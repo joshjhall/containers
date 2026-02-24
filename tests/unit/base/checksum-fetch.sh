@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Unit tests for lib/features/lib/checksum-fetch.sh
+# Unit tests for lib/base/checksum-fetch.sh
 # Tests checksum fetching utilities for download verification
 
 set -euo pipefail
@@ -14,7 +14,7 @@ init_test_framework
 test_suite "Checksum Fetch Tests"
 
 # Source file under test
-SOURCE_FILE="$PROJECT_ROOT/lib/features/lib/checksum-fetch.sh"
+SOURCE_FILE="$PROJECT_ROOT/lib/base/checksum-fetch.sh"
 
 # Setup function - runs before each test
 setup() {

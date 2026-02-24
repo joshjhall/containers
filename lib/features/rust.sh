@@ -42,7 +42,7 @@ source /tmp/build-scripts/base/version-validation.sh
 source /tmp/build-scripts/base/version-resolution.sh
 
 # Source checksum utilities for secure binary downloads
-source /tmp/build-scripts/features/lib/checksum-fetch.sh
+source /tmp/build-scripts/base/checksum-fetch.sh
 
 # Source download verification utilities
 source /tmp/build-scripts/base/download-verify.sh

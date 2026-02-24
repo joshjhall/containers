@@ -66,7 +66,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Source checksum-fetch utilities
-if [ ! -f "$PROJECT_ROOT/lib/features/lib/checksum-fetch.sh" ]; then
+if [ ! -f "$PROJECT_ROOT/lib/base/checksum-fetch.sh" ]; then
     echo -e "${RED}ERROR: checksum-fetch.sh not found${NC}"
     exit 1
 fi
@@ -74,7 +74,7 @@ fi
 # We need to source this in a way that works outside of container builds
 # Create a minimal stub environment
 export -f echo 2>/dev/null || true
-source "$PROJECT_ROOT/lib/features/lib/checksum-fetch.sh" 2>/dev/null || {
+source "$PROJECT_ROOT/lib/base/checksum-fetch.sh" 2>/dev/null || {
     echo -e "${YELLOW}Warning: Some checksum fetch functions may not be available${NC}"
 }
 

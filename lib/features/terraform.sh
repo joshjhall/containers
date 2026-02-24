@@ -56,7 +56,7 @@ source /tmp/build-scripts/base/apt-utils.sh
 source /tmp/build-scripts/base/retry-utils.sh
 
 # Source checksum utilities for secure binary downloads
-source /tmp/build-scripts/features/lib/checksum-fetch.sh
+source /tmp/build-scripts/base/checksum-fetch.sh
 
 # Source download verification utilities
 source /tmp/build-scripts/base/download-verify.sh
