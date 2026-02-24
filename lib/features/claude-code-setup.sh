@@ -673,12 +673,26 @@ configure_mcp_list() {
         # Format: name=url or name=url|Header1:Value1|Header2:Value2
         if [[ "$mcp_entry" == *=http://* ]] || [[ "$mcp_entry" == *=https://* ]]; then
             local http_name="${mcp_entry%%=*}"
+            # Validate server name: must be non-empty, alphanumeric with hyphens/underscores
+            if [[ ! "$http_name" =~ ^[a-zA-Z0-9][a-zA-Z0-9_-]*$ ]]; then
+                echo "  ⚠ Skipping HTTP MCP with invalid name: '$http_name'"
+                continue
+            fi
             local http_rest="${mcp_entry#*=}"
             # Split on pipe: first segment is URL, remaining are headers
             local http_url="${http_rest%%|*}"
             # Normalize URL: ensure trailing slash to avoid redirect chains
             # that strip Authorization headers (HTTPS->HTTP redirect security)
             [[ "$http_url" != */ ]] && http_url="${http_url}/"
+            # Validate URL scheme: only http:// (localhost only) and https://
+            if [[ "$http_url" =~ ^https:// ]]; then
+                : # HTTPS always allowed
+            elif [[ "$http_url" =~ ^http://(localhost|127\.0\.0\.1|\[::1\]|host\.docker\.internal)(:|/) ]]; then
+                : # HTTP allowed for localhost only
+            else
+                echo "  ⚠ Skipping HTTP MCP '$http_name': URL must be https:// or http://localhost"
+                continue
+            fi
             local http_headers_str=""
             if [[ "$http_rest" == *"|"* ]]; then
                 http_headers_str="${http_rest#*|}"

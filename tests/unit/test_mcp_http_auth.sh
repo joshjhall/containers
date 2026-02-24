@@ -94,6 +94,96 @@ test_http_url_trailing_slash_normalization() {
         "claude-code-setup.sh normalizes HTTP MCP URLs with trailing slash"
 }
 
+# Test: HTTP name validation regex exists in source
+test_http_name_validation_exists() {
+    assert_file_contains "$SETUP_SCRIPT" 'Skipping HTTP MCP with invalid name' \
+        "claude-code-setup.sh validates HTTP MCP server names"
+}
+
+# Test: HTTP URL scheme validation exists in source
+test_http_url_scheme_validation_exists() {
+    assert_file_contains "$SETUP_SCRIPT" 'URL must be https:// or http://localhost' \
+        "claude-code-setup.sh validates HTTP MCP URL schemes"
+}
+
+# Test: HTTP URL localhost restriction exists in source
+test_http_url_localhost_restriction_exists() {
+    assert_file_contains "$SETUP_SCRIPT" 'host\.docker\.internal' \
+        "claude-code-setup.sh restricts http:// to localhost patterns"
+}
+
+# Functional test: valid HTTP MCP names pass the regex
+test_valid_http_names_accepted() {
+    local name_regex='^[a-zA-Z0-9][a-zA-Z0-9_-]*$'
+    local valid_names=("my-server" "api_v2" "prod1" "MyMCP" "a" "test123" "a-b_c")
+    for name in "${valid_names[@]}"; do
+        if [[ ! "$name" =~ $name_regex ]]; then
+            fail_test "Valid name '$name' was rejected by name regex"
+            return
+        fi
+    done
+    pass_test "All valid HTTP MCP names accepted by regex"
+}
+
+# Functional test: invalid HTTP MCP names fail the regex
+test_invalid_http_names_rejected() {
+    local name_regex='^[a-zA-Z0-9][a-zA-Z0-9_-]*$'
+    local invalid_names=("../escape" "foo bar" 'name;rm' "" '"quoted"' "-start" "_start" "a/b" 'x"y')
+    for name in "${invalid_names[@]}"; do
+        if [[ "$name" =~ $name_regex ]]; then
+            fail_test "Invalid name '$name' was accepted by name regex"
+            return
+        fi
+    done
+    pass_test "All invalid HTTP MCP names rejected by regex"
+}
+
+# Functional test: valid URLs pass scheme validation
+test_valid_urls_accepted() {
+    local accepted=0
+    local urls=(
+        "https://api.example.com/"
+        "https://internal.corp.net:8443/mcp/"
+        "http://localhost:8080/mcp/"
+        "http://127.0.0.1:4000/"
+        "http://[::1]:8080/mcp/"
+        "http://host.docker.internal:8080/mcp/"
+    )
+    for url in "${urls[@]}"; do
+        if [[ "$url" =~ ^https:// ]]; then
+            ((accepted++))
+        elif [[ "$url" =~ ^http://(localhost|127\.0\.0\.1|\[::1\]|host\.docker\.internal)(:|/) ]]; then
+            ((accepted++))
+        fi
+    done
+    assert_equals "$accepted" "${#urls[@]}" "All valid URLs accepted"
+}
+
+# Functional test: invalid URLs fail scheme validation
+test_invalid_urls_rejected() {
+    local urls=(
+        "file:///etc/passwd"
+        "javascript:alert(1)"
+        "http://evil.com/mcp/"
+        "ftp://files.example.com/"
+        "http://attacker.internal:8080/"
+        "gopher://host/"
+    )
+    for url in "${urls[@]}"; do
+        local accepted=false
+        if [[ "$url" =~ ^https:// ]]; then
+            accepted=true
+        elif [[ "$url" =~ ^http://(localhost|127\.0\.0\.1|\[::1\]|host\.docker\.internal)(:|/) ]]; then
+            accepted=true
+        fi
+        if [ "$accepted" = "true" ]; then
+            fail_test "Invalid URL '$url' was accepted by scheme validation"
+            return
+        fi
+    done
+    pass_test "All invalid URLs rejected by scheme validation"
+}
+
 # Run all tests
 run_test test_inject_mcp_headers_exists "inject_mcp_headers function exists"
 run_test test_inject_mcp_auth_header_exists "inject_mcp_auth_header function exists"
@@ -103,6 +193,13 @@ run_test test_jq_mcp_headers_pattern "jq used for mcpServers header injection"
 run_test test_auto_auth_skips_hardcoded_mcps "Auto-auth skips hardcoded MCPs"
 run_test test_bearer_token_reference_format "Bearer token uses env var reference"
 run_test test_http_url_trailing_slash_normalization "HTTP URL trailing slash normalization"
+run_test test_http_name_validation_exists "HTTP name validation exists in source"
+run_test test_http_url_scheme_validation_exists "HTTP URL scheme validation exists in source"
+run_test test_http_url_localhost_restriction_exists "HTTP URL localhost restriction exists"
+run_test test_valid_http_names_accepted "Valid HTTP MCP names accepted"
+run_test test_invalid_http_names_rejected "Invalid HTTP MCP names rejected"
+run_test test_valid_urls_accepted "Valid URLs accepted by scheme validation"
+run_test test_invalid_urls_rejected "Invalid URLs rejected by scheme validation"
 
 # Generate test report
 generate_report
