@@ -199,7 +199,7 @@ op-env() {
         return 1
     fi
 
-    op item get "$1" --format json | jq -r '.fields[] | select(.purpose == "NOTES" or .type == "CONCEALED") | "export \(.label)=\"\(.value)\""'
+    op item get "$1" --format json | jq -r '.fields[] | select(.purpose == "NOTES" or .type == "CONCEALED") | "export " + .label + "=" + (.value | @sh)'
 }
 
 # ----------------------------------------------------------------------------
@@ -236,18 +236,19 @@ op-env-safe() {
         return 1
     fi
 
-    # Parse and export variables without showing values in process list
-    local export_commands
-    export_commands=$(echo "$json_output" | jq -r '.fields[] | select(.purpose == "NOTES" or .type == "CONCEALED") | "export \(.label)=\"\(.value)\""' 2>/dev/null)
+    # Parse and export variables safely using tab-separated output from jq
+    local _found=false
+    while IFS=$'\t' read -r _label _value; do
+        [ -z "$_label" ] && continue
+        export "$_label=$_value"
+        _found=true
+    done < <(echo "$json_output" | jq -r '.fields[] | select(.purpose == "NOTES" or .type == "CONCEALED") | [.label, .value] | @tsv' 2>/dev/null)
 
-    if [ -z "$export_commands" ]; then
+    if [ "$_found" = "false" ]; then
         echo "No environment variables found in 1Password item: $item" >&2
         eval "$old_x_state"
         return 1
     fi
-
-    # Export variables using eval (unavoidable, but local to this function)
-    eval "$export_commands"
 
     # Re-enable command echoing if it was on
     eval "$old_x_state"

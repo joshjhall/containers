@@ -517,4 +517,45 @@ run_test test_op_file_ref_in_bashrc "OP_*_FILE_REF in bashrc content"
 run_test test_op_file_ref_in_startup_script "OP_*_FILE_REF in startup script"
 run_test test_op_ref_loop_excludes_file_ref_in_source "_REF loop excludes _FILE_REF in source"
 
+# ============================================================================
+# Eval Injection Prevention Tests
+# ============================================================================
+
+# Test: op-env-safe must not use eval to run jq-generated export commands
+test_op_env_safe_no_eval_of_field_values() {
+    local source_file="$PROJECT_ROOT/lib/features/op-cli.sh"
+    # The old vulnerable pattern: jq produces 'export LABEL="VALUE"' and eval runs it
+    if grep -A 20 'op-env-safe()' "$source_file" | grep -q 'eval "\$export_commands"'; then
+        fail_test "op-env-safe still uses eval on jq-generated export commands (injection risk)"
+    else
+        pass_test "op-env-safe does not eval jq-generated export commands"
+    fi
+}
+
+# Test: op-env-safe uses safe @tsv or direct export pattern
+test_op_env_safe_uses_safe_export() {
+    local source_file="$PROJECT_ROOT/lib/features/op-cli.sh"
+    # Search the full function body (up to 30 lines after the function definition)
+    if grep -A 30 '^op-env-safe()' "$source_file" | grep -qE '@tsv|export "\$'; then
+        pass_test "op-env-safe uses safe @tsv / direct export pattern"
+    else
+        fail_test "op-env-safe should use @tsv or direct export pattern"
+    fi
+}
+
+# Test: op-env function uses @sh for safe escaping of values
+test_op_env_uses_safe_escaping() {
+    local source_file="$PROJECT_ROOT/lib/features/op-cli.sh"
+    # Search the full function body (up to 10 lines after the function definition)
+    if grep -A 10 '^op-env()' "$source_file" | grep -q '@sh'; then
+        pass_test "op-env uses jq @sh for safe value escaping"
+    else
+        fail_test "op-env should use jq @sh for safe value escaping"
+    fi
+}
+
+run_test test_op_env_safe_no_eval_of_field_values "op-env-safe: No eval of field values (injection prevention)"
+run_test test_op_env_safe_uses_safe_export "op-env-safe: Uses safe @tsv / direct export pattern"
+run_test test_op_env_uses_safe_escaping "op-env: Uses @sh for safe value escaping"
+
 generate_report

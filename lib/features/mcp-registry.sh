@@ -19,9 +19,9 @@
 #   Add a case to each of the five functions below. No other files need changes.
 #
 # IMPORTANT: In mcp_registry_get_add_args, -e values MUST be wrapped in single
-# quotes to survive eval expansion without triggering set -u on unset env vars.
-# The single quotes ensure ${VAR} is passed literally to claude mcp add, which
-# resolves the variable at MCP server startup time.
+# quotes to survive eval array splitting without triggering set -u on unset env
+# vars. The single quotes ensure ${VAR} is passed literally to claude mcp add,
+# which resolves the variable at MCP server startup time.
 #
 
 # Get the npm package name for an MCP server
@@ -88,9 +88,9 @@ mcp_registry_get_package_type() {
 # Usage: mcp_registry_get_add_args <name>
 # Returns: arguments for claude mcp add on stdout, exit 1 if not registered
 # Note: The server name is included as part of the args
-# IMPORTANT: -e values use single quotes so ${VAR} survives eval without
-# triggering set -u. The literal ${VAR} is passed to claude mcp add which
-# resolves it from the environment at MCP server startup time.
+# IMPORTANT: -e values use single quotes so ${VAR} survives eval array
+# splitting without triggering set -u. The literal ${VAR} is passed to
+# claude mcp add which resolves it from the environment at MCP server startup.
 mcp_registry_get_add_args() {
     local name="${1:-}"
     case "$name" in

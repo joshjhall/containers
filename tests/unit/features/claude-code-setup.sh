@@ -473,6 +473,62 @@ test_invalid_channels_rejected() {
 }
 
 # ============================================================================
+# MCP Passthrough npm Package Name Validation Tests
+# ============================================================================
+
+# Helper: test whether a package name matches the npm validation regex
+_is_valid_npm_package_name() {
+    local name="$1"
+    [[ "$name" =~ ^[@a-zA-Z0-9][-a-zA-Z0-9_./@]*$ ]]
+}
+
+test_mcp_passthrough_validation_exists() {
+    # Static check: the source file must contain the npm package name regex guard
+    if grep -q '\^[@a-zA-Z0-9\]' "$CLAUDE_CODE_SETUP_SRC"; then
+        pass_test "Source contains npm package name validation guard"
+    else
+        fail_test "Source is missing npm package name validation guard"
+    fi
+}
+
+test_valid_npm_names_accepted() {
+    local valid_names=(
+        "@modelcontextprotocol/server-fetch"
+        "my-server"
+        "@org/pkg"
+        "@sentry/mcp-server"
+        "some_package.v2"
+    )
+    local failures=0
+    for name in "${valid_names[@]}"; do
+        if ! _is_valid_npm_package_name "$name"; then
+            echo "  FAIL: '$name' should be accepted" >&2
+            failures=$((failures + 1))
+        fi
+    done
+    assert_equals "$failures" "0" "All valid npm package names accepted"
+}
+
+test_invalid_npm_names_rejected() {
+    local adversarial_values=(
+        "'; rm -rf /'"
+        '$(whoami)'
+        ""
+        '`id`'
+        "; echo pwned"
+        '| cat /etc/passwd'
+    )
+    local failures=0
+    for name in "${adversarial_values[@]}"; do
+        if _is_valid_npm_package_name "$name"; then
+            echo "  FAIL: '$name' should be rejected" >&2
+            failures=$((failures + 1))
+        fi
+    done
+    assert_equals "$failures" "0" "All adversarial npm package names rejected"
+}
+
+# ============================================================================
 # Run Tests
 # ============================================================================
 
@@ -480,6 +536,11 @@ test_invalid_channels_rejected() {
 run_test test_channel_validation_exists "Channel: Validation guard exists in source"
 run_test test_valid_channels_accepted "Channel: Valid values accepted"
 run_test test_invalid_channels_rejected "Channel: Adversarial values rejected"
+
+# MCP passthrough npm package name validation tests
+run_test test_mcp_passthrough_validation_exists "MCP passthrough: Validation guard exists in source"
+run_test test_valid_npm_names_accepted "MCP passthrough: Valid npm names accepted"
+run_test test_invalid_npm_names_rejected "MCP passthrough: Adversarial npm names rejected"
 
 # Plugin matching tests
 run_test test_plugin_match_exact_name "Plugin: Match exact name"

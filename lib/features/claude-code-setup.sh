@@ -730,8 +730,10 @@ configure_mcp_list() {
         local mcp_name="$mcp_entry"
         if [ "$has_registry" = "true" ] && mcp_registry_is_registered "$mcp_name"; then
             # Known name: use registry
+            # Split registry args into array (safe: add_args comes from hardcoded registry strings)
             add_args=$(mcp_registry_get_add_args "$mcp_name")
-            eval "add_mcp_server \"\$mcp_name\" $add_args" || true
+            eval "local add_args_array=($add_args)"
+            add_mcp_server "$mcp_name" "${add_args_array[@]}" || true
 
             env_docs=$(mcp_registry_get_env_docs "$mcp_name")
             if [ -n "$env_docs" ]; then
@@ -739,6 +741,11 @@ configure_mcp_list() {
             fi
         else
             # Unknown name: passthrough as npx -y <package>
+            # Validate npm package name to prevent command injection
+            if [[ ! "$mcp_name" =~ ^[@a-zA-Z0-9][-a-zA-Z0-9_./@]*$ ]]; then
+                echo "  ⚠ Skipping MCP with invalid package name: '$mcp_name'"
+                continue
+            fi
             local short_name
             short_name=$(derive_mcp_name_from_package "$mcp_name")
             echo "  - Passthrough: $mcp_name (as $short_name via npx)"
@@ -813,7 +820,8 @@ if [ "${CLAUDE_AUTO_DETECT_MCPS:-true}" != "false" ] && [ -f "$MCP_REGISTRY" ]; 
         if [ -n "${GITHUB_TOKEN:-}" ]; then
             echo "Auto-detected GitHub remote with GITHUB_TOKEN set"
             add_args=$(mcp_registry_get_add_args "github")
-            eval "add_mcp_server \"github\" $add_args" || true
+            eval "local add_args_array=($add_args)"
+            add_mcp_server "github" "${add_args_array[@]}" || true
         else
             echo "  Auto-detected GitHub remote but GITHUB_TOKEN not set (skipping github MCP)"
         fi
@@ -823,7 +831,8 @@ if [ "${CLAUDE_AUTO_DETECT_MCPS:-true}" != "false" ] && [ -f "$MCP_REGISTRY" ]; 
         if [ -n "${GITLAB_TOKEN:-}" ]; then
             echo "Auto-detected GitLab remote with GITLAB_TOKEN set"
             add_args=$(mcp_registry_get_add_args "gitlab")
-            eval "add_mcp_server \"gitlab\" $add_args" || true
+            eval "local add_args_array=($add_args)"
+            add_mcp_server "gitlab" "${add_args_array[@]}" || true
         else
             echo "  Auto-detected GitLab remote but GITLAB_TOKEN not set (skipping gitlab MCP)"
         fi
