@@ -529,8 +529,84 @@ test_invalid_npm_names_rejected() {
 }
 
 # ============================================================================
+# Secure Token Storage Tests (Issue #62)
+# ============================================================================
+
+test_no_export_anthropic_auth_token() {
+    # Source MUST NOT export ANTHROPIC_AUTH_TOKEN to the shell environment
+    if grep -qE '^\s*export\s+ANTHROPIC_AUTH_TOKEN' "$CLAUDE_CODE_SETUP_SRC"; then
+        fail_test "Source still contains 'export ANTHROPIC_AUTH_TOKEN' (security issue #62)"
+    else
+        pass_test "No 'export ANTHROPIC_AUTH_TOKEN' found in source"
+    fi
+}
+
+test_uses_secure_token_file() {
+    # Source MUST use /dev/shm for token storage
+    if grep -q '/dev/shm/anthropic-auth-token' "$CLAUDE_CODE_SETUP_SRC"; then
+        pass_test "Source uses /dev/shm/anthropic-auth-token for secure storage"
+    else
+        fail_test "Source is missing /dev/shm/anthropic-auth-token secure storage"
+    fi
+}
+
+test_store_anthropic_token_helper_exists() {
+    # Source MUST define the _store_anthropic_token helper
+    if grep -q '_store_anthropic_token()' "$CLAUDE_CODE_SETUP_SRC"; then
+        pass_test "Source defines _store_anthropic_token helper"
+    else
+        fail_test "Source is missing _store_anthropic_token helper"
+    fi
+}
+
+test_claude_env_contains_wrapper() {
+    # The 95-claude-env.sh heredoc MUST contain a claude() wrapper function
+    if grep -q 'claude()' "$CLAUDE_CODE_SETUP_SRC"; then
+        pass_test "Source contains claude() wrapper function"
+    else
+        fail_test "Source is missing claude() wrapper function in 95-claude-env.sh"
+    fi
+}
+
+test_claude_env_unsets_token() {
+    # The 95-claude-env.sh heredoc MUST unset ANTHROPIC_AUTH_TOKEN from env
+    if grep -q 'unset ANTHROPIC_AUTH_TOKEN' "$CLAUDE_CODE_SETUP_SRC"; then
+        pass_test "Source unsets ANTHROPIC_AUTH_TOKEN from environment"
+    else
+        fail_test "Source does not unset ANTHROPIC_AUTH_TOKEN from environment"
+    fi
+}
+
+test_mcp_auto_auth_checks_file() {
+    # MCP auto-auth MUST check the secure token file
+    if grep -q '\-s /dev/shm/anthropic-auth-token' "$CLAUDE_CODE_SETUP_SRC"; then
+        pass_test "MCP auto-auth checks /dev/shm/anthropic-auth-token file"
+    else
+        fail_test "MCP auto-auth does not check /dev/shm/anthropic-auth-token file"
+    fi
+}
+
+test_auth_watcher_uses_secure_storage() {
+    # Auth watcher heredoc MUST use _store_token (inlined helper)
+    if grep -q '_store_token' "$CLAUDE_CODE_SETUP_SRC"; then
+        pass_test "Auth watcher uses _store_token for secure storage"
+    else
+        fail_test "Auth watcher does not use _store_token"
+    fi
+}
+
+# ============================================================================
 # Run Tests
 # ============================================================================
+
+# Secure token storage tests (Issue #62)
+run_test test_no_export_anthropic_auth_token "Security: No export ANTHROPIC_AUTH_TOKEN"
+run_test test_uses_secure_token_file "Security: Uses /dev/shm token file"
+run_test test_store_anthropic_token_helper_exists "Security: _store_anthropic_token helper exists"
+run_test test_claude_env_contains_wrapper "Security: claude() wrapper in env script"
+run_test test_claude_env_unsets_token "Security: Unsets token from environment"
+run_test test_mcp_auto_auth_checks_file "Security: MCP auto-auth checks token file"
+run_test test_auth_watcher_uses_secure_storage "Security: Auth watcher uses secure storage"
 
 # CLAUDE_CHANNEL validation tests
 run_test test_channel_validation_exists "Channel: Validation guard exists in source"

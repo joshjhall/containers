@@ -259,6 +259,25 @@ set -euo pipefail
 FORCE_MODE=false
 [ "${1:-}" = "--force" ] && FORCE_MODE=true
 
+# Secure token storage path (RAM-backed, never touches disk)
+ANTHROPIC_TOKEN_FILE="/dev/shm/anthropic-auth-token"
+
+# Write token to secure file instead of exporting to environment
+_store_anthropic_token() {
+    printf '%s' "$1" > "$ANTHROPIC_TOKEN_FILE"
+    chmod 600 "$ANTHROPIC_TOKEN_FILE"
+}
+
+# Read token from secure file
+_read_anthropic_token() {
+    cat "$ANTHROPIC_TOKEN_FILE" 2>/dev/null || true
+}
+
+# Check if token is available (file exists and is non-empty)
+_has_anthropic_token() {
+    [ -s "$ANTHROPIC_TOKEN_FILE" ]
+}
+
 # ============================================================================
 # Load Build-Time Configuration
 # ============================================================================
@@ -273,7 +292,14 @@ fi
 # ============================================================================
 is_claude_authenticated() {
     # Check for token-based authentication (via proxy like LiteLLM)
+    # Capture env token to secure file and clear from environment
     if [ -n "${ANTHROPIC_AUTH_TOKEN:-}" ]; then
+        _store_anthropic_token "$ANTHROPIC_AUTH_TOKEN"
+        return 0
+    fi
+
+    # Check if token already stored in secure file
+    if _has_anthropic_token; then
         return 0
     fi
 
@@ -284,7 +310,7 @@ is_claude_authenticated() {
             local resolved
             resolved=$(op read "${OP_ANTHROPIC_AUTH_TOKEN_REF}" 2>/dev/null) || true
             if [ -n "$resolved" ]; then
-                export ANTHROPIC_AUTH_TOKEN="$resolved"
+                _store_anthropic_token "$resolved"
                 # Also resolve base URL if ref exists
                 if [ -n "${OP_ANTHROPIC_BASE_URL_REF:-}" ] && [ -z "${ANTHROPIC_BASE_URL:-}" ]; then
                     local base_url
@@ -440,7 +466,7 @@ if [ "$SKIP_PLUGINS" = "true" ]; then
     echo ""
 elif is_claude_authenticated; then
     # Show which auth method was detected (helpful for debugging)
-    if [ -n "${ANTHROPIC_AUTH_TOKEN:-}" ]; then
+    if [ -n "${ANTHROPIC_AUTH_TOKEN:-}" ] || [ -s /dev/shm/anthropic-auth-token ]; then
         echo "Authentication: Token (ANTHROPIC_AUTH_TOKEN)"
     elif [ -f ~/.claude/.credentials.json ] && grep -q '"claudeAiOauth"' ~/.claude/.credentials.json 2>/dev/null; then
         echo "Authentication: OAuth (interactive)"
@@ -718,10 +744,10 @@ configure_mcp_list() {
             # Auto-inject auth header when:
             # - No explicit Authorization header was provided
             # - CLAUDE_MCP_AUTO_AUTH is not disabled (default: true)
-            # - ANTHROPIC_AUTH_TOKEN is set in the environment
+            # - ANTHROPIC_AUTH_TOKEN is available (env or secure file)
             if [ "$has_explicit_auth" = "false" ] && \
                [ "${CLAUDE_MCP_AUTO_AUTH:-true}" != "false" ] && \
-               [ -n "${ANTHROPIC_AUTH_TOKEN:-}" ]; then
+               { [ -n "${ANTHROPIC_AUTH_TOKEN:-}" ] || [ -s /dev/shm/anthropic-auth-token ]; }; then
                 inject_mcp_auth_header "$http_name"
             fi
             continue
@@ -1104,11 +1130,24 @@ if [ -f "$MARKER_FILE" ]; then
     exit 0
 fi
 
+# Secure token storage (RAM-backed, never touches disk)
+_ANTHROPIC_TOKEN_FILE="/dev/shm/anthropic-auth-token"
+
+_store_token() {
+    printf '%s' "$1" > "$_ANTHROPIC_TOKEN_FILE"
+    chmod 600 "$_ANTHROPIC_TOKEN_FILE"
+}
+
+_has_token() {
+    [ -s "$_ANTHROPIC_TOKEN_FILE" ]
+}
+
 # Try to resolve secrets from 1Password (for background processes that
 # started before OP resolution ran in bashrc/startup scripts)
 _try_resolve_op_secrets() {
-    # Already resolved or no OP ref available
-    [ -n "${ANTHROPIC_AUTH_TOKEN:-}" ] && return 0
+    # Already resolved via env or file
+    [ -n "${ANTHROPIC_AUTH_TOKEN:-}" ] && { _store_token "$ANTHROPIC_AUTH_TOKEN"; return 0; }
+    _has_token && return 0
 
     # Need both the ref and service account token
     [ -z "${OP_ANTHROPIC_AUTH_TOKEN_REF:-}" ] && return 1
@@ -1118,7 +1157,7 @@ _try_resolve_op_secrets() {
     local resolved
     resolved=$(op read "${OP_ANTHROPIC_AUTH_TOKEN_REF}" 2>/dev/null) || return 1
     if [ -n "$resolved" ]; then
-        export ANTHROPIC_AUTH_TOKEN="$resolved"
+        _store_token "$resolved"
         log "Resolved ANTHROPIC_AUTH_TOKEN from 1Password"
 
         # Also resolve ANTHROPIC_BASE_URL if ref exists
@@ -1138,7 +1177,14 @@ _try_resolve_op_secrets() {
 # Check if already authenticated
 is_authenticated() {
     # Check for token-based authentication (via proxy like LiteLLM)
+    # Capture env token to secure file
     if [ -n "${ANTHROPIC_AUTH_TOKEN:-}" ]; then
+        _store_token "$ANTHROPIC_AUTH_TOKEN"
+        return 0
+    fi
+
+    # Check if token already stored in secure file
+    if _has_token; then
         return 0
     fi
 
@@ -1354,7 +1400,7 @@ __claude_auth_prompt_check() {
     [ "$__CLAUDE_AUTH_CHECK_COUNTER" -ne 0 ] && return 0
 
     # Check for authentication (token or OAuth)
-    if [ -n "${ANTHROPIC_AUTH_TOKEN:-}" ]; then
+    if [ -n "${ANTHROPIC_AUTH_TOKEN:-}" ] || [ -s /dev/shm/anthropic-auth-token ]; then
         echo ""
         echo "[claude] Token authentication detected! Running setup in background..."
         (claude-setup && touch "$marker_file") &>/dev/null &
@@ -1400,7 +1446,6 @@ mkdir -p /etc/bashrc.d
 command cat > /etc/bashrc.d/95-claude-env.sh << 'CLAUDE_ENV_EOF'
 #!/bin/bash
 # Claude Code CLI environment configuration
-# Exports ANTHROPIC_MODEL and ANTHROPIC_AUTH_TOKEN if set
 
 # Export ANTHROPIC_MODEL if set (values: opus, sonnet, haiku)
 # This sets the default model for the Claude Code CLI
@@ -1408,10 +1453,28 @@ if [ -n "${ANTHROPIC_MODEL:-}" ]; then
     export ANTHROPIC_MODEL
 fi
 
-# Export ANTHROPIC_AUTH_TOKEN if set (for proxy-based authentication)
+# Secure ANTHROPIC_AUTH_TOKEN: capture to /dev/shm file, remove from env.
+# Token is injected into only the claude CLI process via the wrapper below.
 if [ -n "${ANTHROPIC_AUTH_TOKEN:-}" ]; then
-    export ANTHROPIC_AUTH_TOKEN
+    printf '%s' "$ANTHROPIC_AUTH_TOKEN" > /dev/shm/anthropic-auth-token
+    chmod 600 /dev/shm/anthropic-auth-token
+    unset ANTHROPIC_AUTH_TOKEN
 fi
+
+# Wrapper: inject token from secure file into claude process only
+claude() {
+    local _old_xtrace
+    _old_xtrace=$(set +o | grep xtrace)
+    set +x
+    local _token
+    _token=$(cat /dev/shm/anthropic-auth-token 2>/dev/null) || true
+    eval "$_old_xtrace"
+    if [ -n "$_token" ]; then
+        ANTHROPIC_AUTH_TOKEN="$_token" command claude "$@"
+    else
+        command claude "$@"
+    fi
+}
 CLAUDE_ENV_EOF
 
 log_command "Setting Claude environment script permissions" \

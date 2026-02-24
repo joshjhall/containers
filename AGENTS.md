@@ -313,10 +313,14 @@ an `Authorization: Bearer ${ANTHROPIC_AUTH_TOKEN}` header (env var reference,
 not a literal value). This enables LiteLLM proxy setups where the same token
 authenticates both the API and MCP endpoints.
 
+- The token is stored in `/dev/shm/anthropic-auth-token` (RAM-backed, mode
+  0600, never touches disk) and removed from the shell environment on login
+- A `claude()` shell wrapper injects the token into only the `claude` CLI
+  process, so it never appears in `env`, `/proc/PID/environ`, or `ps e` output
 - Auto-injection only applies to user-specified HTTP MCPs, never hardcoded ones
   (e.g., `figma-desktop`)
 - Only the `${ANTHROPIC_AUTH_TOKEN}` reference is written to `~/.claude.json` —
-  the token stays in memory, never persisted to disk
+  the wrapper ensures the env var exists for the CLI process that reads the config
 - Explicit headers in the pipe-delimited syntax override auto-injection for
   that MCP
 - Opt out entirely: `CLAUDE_MCP_AUTO_AUTH=false`
