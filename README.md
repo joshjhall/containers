@@ -121,7 +121,7 @@ services:
 ```
 
 For complete examples with databases, 1Password integration, and advanced
-configurations, see the [examples/devcontainer/](examples/devcontainer/)
+configurations, see the [examples/contexts/devcontainer/](examples/contexts/devcontainer/)
 directory
 
 ______________________________________________________________________
@@ -303,12 +303,12 @@ of pinned tools are available:
 ./containers/bin/check-versions.sh
 
 # Output in JSON format (for CI integration)
-./containers/bin/check-versions.sh json
+./containers/bin/check-versions.sh --json
 
 # With GitHub token (to avoid rate limits)
 GITHUB_TOKEN=ghp_your_token ./containers/bin/check-versions.sh
 
-# Or add to .env file
+# Or add to .env file (from project root; containers/ is a git submodule)
 cp containers/.env.example containers/.env
 # Edit .env and add your GITHUB_TOKEN
 ./containers/bin/check-versions.sh
@@ -1107,7 +1107,7 @@ ______________________________________________________________________
 ### Rollback/Downgrade
 
 If a release introduces critical issues, see
-**[docs/emergency-rollback.md](docs/emergency-rollback.md)** for:
+**[docs/operations/rollback.md](docs/operations/rollback.md)** for:
 
 - Quick rollback commands
 - Auto-patch revert procedures

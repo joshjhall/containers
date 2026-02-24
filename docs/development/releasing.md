@@ -411,7 +411,7 @@ git stash pop
 
 ## Related Documentation
 
-- [Automated Patch Releases](./automated-patch-releases.md) - Weekly automation
+- [Automated Patch Releases](../operations/automated-releases.md) - Weekly automation
 - [CI/CD Pipeline](../.github/workflows/ci.yml) - GitHub Actions configuration
 - [Keep a Changelog](https://keepachangelog.com/) - Changelog format
 - [Semantic Versioning](https://semver.org/) - Version numbering

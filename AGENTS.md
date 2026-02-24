@@ -493,6 +493,8 @@ MCP configuration is created on first container startup via
 
 - **Always** configures filesystem MCP server for `/workspace`
 - **Always** configures Figma desktop MCP (`http://host.docker.internal:3845/mcp`)
+- **Auth-conditional** — plugin installation requires prior authentication
+  (gracefully skips with instructions if unauthenticated)
 - **Is idempotent** - checks existing config before adding
 
 **GitHub/GitLab MCPs** are auto-detected from git remotes when the corresponding

@@ -35,7 +35,7 @@ installed. They are converted to environment variables during the build process.
 | `USERNAME`                 | `developer` | Non-root username to create                    |
 | `USER_UID`                 | `1000`      | User ID for the non-root user                  |
 | `USER_GID`                 | `1000`      | Group ID for the non-root user                 |
-| `ENABLE_PASSWORDLESS_SUDO` | `true`      | Allow passwordless sudo (for dev environments) |
+| `ENABLE_PASSWORDLESS_SUDO` | `false`     | Allow passwordless sudo (for dev environments) |
 
 ### Build Output Configuration
 
@@ -96,7 +96,7 @@ helm | | `INCLUDE_TERRAFORM` | Install Terraform and related tools |
 `INCLUDE_SQLITE_CLIENT` | Install SQLite client (sqlite3) |
 
 **Other Tools:** | Variable | Description | |----------|-------------| |
-`INCLUDE_DOCKER` | Install Docker CLI tools | | `INCLUDE_OP_CLI` | Install
+`INCLUDE_DOCKER` | Install Docker CLI tools | | `INCLUDE_OP` | Install
 1Password CLI | | `INCLUDE_OLLAMA` | Install Ollama for local LLMs | |
 `INCLUDE_BINDFS` | Install bindfs FUSE overlay for VirtioFS permission fixes |
 

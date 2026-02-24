@@ -7,45 +7,46 @@ that need tracking and updating.
 
 These are defined as build arguments in the Dockerfile:
 
-- `PYTHON_VERSION` (currently 3.13.6)
-- `NODE_VERSION` (currently 22.10.0)
-- `RUST_VERSION` (currently 1.89.0)
-- `RUBY_VERSION` (currently 3.4.5)
-- `R_VERSION` (currently 4.5.1)
-- `GO_VERSION` (currently 1.24.6)
+- `PYTHON_VERSION` (currently 3.14.3)
+- `NODE_VERSION` (currently 22)
+- `RUST_VERSION` (currently 1.93.1)
+- `RUBY_VERSION` (currently 4.0.1)
+- `R_VERSION` (currently 4.5.2)
+- `GO_VERSION` (currently 1.26.0)
 - `MOJO_VERSION` (currently 25.4)
 - `JAVA_VERSION` (currently 21)
-- `KUBECTL_VERSION` (currently 1.33)
-- `K9S_VERSION` (currently 0.50.9)
+- `KOTLIN_VERSION` (currently 2.3.10)
+- `KUBECTL_VERSION` (currently 1.33.8)
+- `K9S_VERSION` (currently 0.50.18)
 - `KREW_VERSION` (currently 0.4.5)
-- `HELM_VERSION` (currently 3.19.0)
-- `TERRAGRUNT_VERSION` (currently 0.84.1)
-- `TFDOCS_VERSION` (currently 0.20.0)
+- `HELM_VERSION` (currently 4.1.1)
+- `TERRAGRUNT_VERSION` (currently 0.99.4)
+- `TFDOCS_VERSION` (currently 0.21.0)
 
 ## Shell Script Hardcoded Versions
 
 ### lib/features/dev-tools.sh
 
 - `DIRENV_VERSION="2.37.1"`
-- `LAZYGIT_VERSION="0.54.2"`
+- `LAZYGIT_VERSION="0.59.0"`
 - `DELTA_VERSION="0.18.2"`
 - `MKCERT_VERSION="1.4.4"`
-- `ACT_VERSION="0.2.80"`
-- `GLAB_VERSION="1.65.0"`
+- `ACT_VERSION="0.2.84"`
+- `GLAB_VERSION="1.86.0"`
 - `DUF_VERSION="0.9.1"`
 - `ENTR_VERSION="5.7"`
 
 ### lib/features/docker.sh
 
-- `LAZYDOCKER_VERSION="0.24.1"`
+- `LAZYDOCKER_VERSION="0.24.4"`
 - `DIVE_VERSION="0.13.1"`
 
 ### lib/features/java-dev.sh
 
-- `SPRING_VERSION="3.4.2"`
-- `JBANG_VERSION="0.121.0"`
-- `MVND_VERSION="1.0.2"` (indented)
-- `GJF_VERSION="1.25.2"`
+- `SPRING_VERSION="4.0.3"`
+- `JBANG_VERSION="0.137.0"`
+- `MVND_VERSION="1.0.3"` (indented)
+- `GJF_VERSION="1.34.1"`
 
 ## Tools Installed Without Version Pinning
 
@@ -88,7 +89,7 @@ These tools get the latest version at build time, which is generally fine:
 
 ### lib/features/python.sh
 
-- `POETRY_VERSION="2.2.1"` (installed via pipx)
+- `POETRY_VERSION="2.3.2"` (installed via pipx)
 
 ### Via apt-get install
 
@@ -98,7 +99,7 @@ These tools get the latest version at build time, which is generally fine:
 
 ✅ **Dockerfile versions:**
 
-- Python, Node.js, Go, Rust, Ruby, Java, R, Mojo
+- Python, Node.js, Go, Rust, Ruby, Java, R, Mojo, Kotlin
 - kubectl, k9s, Helm, Krew, Terragrunt, terraform-docs
 
 ✅ **Shell script versions:**
@@ -114,8 +115,8 @@ These tools get the latest version at build time, which is generally fine:
 
 - All Dockerfile ARG versions are pinned and tracked
 - All shell script tool installations use version variables
-- Poetry is pinned to a specific version (2.2.1)
-- Helm is pinned to a specific version (3.19.0)
+- Poetry is pinned to a specific version (2.3.2)
+- Helm is pinned to a specific version (4.1.1)
 - duf and entr have version variables (0.9.1 and 5.7)
 
 ✅ **Automated version management:**
