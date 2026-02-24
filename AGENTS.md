@@ -281,13 +281,14 @@ Available MCP servers (registered short names):
 | `perplexity`          | `@perplexity-ai/mcp-server`                        | `PERPLEXITY_API_KEY`                    |
 | `kagi`                | `kagimcp` (Python/uvx)                             | `KAGI_API_KEY`                          |
 
-Both `CLAUDE_EXTRA_MCPS` and `CLAUDE_USER_MCPS` support three entry formats:
+Both `CLAUDE_EXTRA_MCPS` and `CLAUDE_USER_MCPS` support four entry formats:
 
-| Format                | Example                            | Behavior                             |
-| --------------------- | ---------------------------------- | ------------------------------------ |
-| Registered short name | `memory`, `fetch`                  | Resolved via MCP registry            |
-| npm package           | `@myorg/mcp-internal`              | Passed through as `npx -y <package>` |
-| `name=url`            | `my-api=http://localhost:8080/mcp` | Added as HTTP MCP server             |
+| Format                   | Example                                            | Behavior                             |
+| ------------------------ | -------------------------------------------------- | ------------------------------------ |
+| Registered short name    | `memory`, `fetch`                                  | Resolved via MCP registry            |
+| npm package              | `@myorg/mcp-internal`                              | Passed through as `npx -y <package>` |
+| `name=url`               | `my-api=http://localhost:8080/mcp`                 | Added as HTTP MCP server             |
+| `name=url\|Header:Value` | `api=http://host/mcp\|Authorization:Bearer ${TOK}` | HTTP MCP with custom headers         |
 
 **Personal MCP servers**: Use `CLAUDE_USER_MCPS` for personal MCP additions
 without modifying shared team config. Runtime-only (no build-time default):
@@ -304,6 +305,31 @@ platform MCP is automatically added. Opt-out:
 
 ```bash
 CLAUDE_AUTO_DETECT_MCPS=false
+```
+
+**HTTP MCP Authentication**: When `ANTHROPIC_AUTH_TOKEN` is set, HTTP MCP
+servers from `CLAUDE_EXTRA_MCPS` / `CLAUDE_USER_MCPS` automatically receive
+an `Authorization: Bearer ${ANTHROPIC_AUTH_TOKEN}` header (env var reference,
+not a literal value). This enables LiteLLM proxy setups where the same token
+authenticates both the API and MCP endpoints.
+
+- Auto-injection only applies to user-specified HTTP MCPs, never hardcoded ones
+  (e.g., `figma-desktop`)
+- Only the `${ANTHROPIC_AUTH_TOKEN}` reference is written to `~/.claude.json` —
+  the token stays in memory, never persisted to disk
+- Explicit headers in the pipe-delimited syntax override auto-injection for
+  that MCP
+- Opt out entirely: `CLAUDE_MCP_AUTO_AUTH=false`
+
+```bash
+# Auto-inject auth (default when ANTHROPIC_AUTH_TOKEN is set)
+CLAUDE_EXTRA_MCPS=olympus=http://litellm:8080/mcp
+
+# Explicit headers via pipe-delimited syntax
+CLAUDE_EXTRA_MCPS=olympus=http://litellm:8080/mcp|Authorization:Bearer ${ANTHROPIC_AUTH_TOKEN}|X-Custom:value
+
+# Disable auto-injection
+CLAUDE_MCP_AUTO_AUTH=false
 ```
 
 **Release channel**: Use `CLAUDE_CHANNEL` to select the Claude Code release channel:

@@ -561,6 +561,81 @@ add_mcp_server() {
 }
 
 # ============================================================================
+# MCP Helper: Inject headers into HTTP MCP server config via jq
+# ============================================================================
+inject_mcp_headers() {
+    local server_name="$1"
+    local headers_str="$2"
+    local config_file="$HOME/.claude.json"
+
+    [ -z "$headers_str" ] && return 0
+
+    # Ensure config file exists with valid JSON
+    if [ ! -f "$config_file" ]; then
+        echo '{}' > "$config_file"
+    fi
+
+    # Parse pipe-delimited headers and inject via jq
+    IFS='|' read -ra HEADER_PAIRS <<< "$headers_str"
+    for header_pair in "${HEADER_PAIRS[@]}"; do
+        header_pair=$(echo "$header_pair" | xargs)  # Trim whitespace
+        [ -z "$header_pair" ] && continue
+
+        # Split on first colon only (value may contain colons)
+        local header_key="${header_pair%%:*}"
+        local header_value="${header_pair#*:}"
+        header_key=$(echo "$header_key" | xargs)
+        header_value=$(echo "$header_value" | xargs)
+
+        [ -z "$header_key" ] && continue
+
+        local tmp_file
+        tmp_file=$(mktemp)
+        if jq --arg name "$server_name" --arg key "$header_key" --arg val "$header_value" \
+            '.mcpServers[$name].headers[$key] = $val' \
+            "$config_file" > "$tmp_file" 2>/dev/null; then
+            mv "$tmp_file" "$config_file"
+        else
+            rm -f "$tmp_file"
+            echo "    ⚠ Failed to inject header $header_key for $server_name"
+        fi
+    done
+}
+
+# ============================================================================
+# MCP Helper: Auto-inject Authorization header for HTTP MCP servers
+# ============================================================================
+inject_mcp_auth_header() {
+    local server_name="$1"
+    local config_file="$HOME/.claude.json"
+
+    # Ensure config file exists with valid JSON
+    if [ ! -f "$config_file" ]; then
+        echo '{}' > "$config_file"
+    fi
+
+    # Skip if Authorization header already exists
+    if jq -e --arg name "$server_name" \
+        '.mcpServers[$name].headers.Authorization // empty' \
+        "$config_file" >/dev/null 2>&1; then
+        return 0
+    fi
+
+    # Write the ${ANTHROPIC_AUTH_TOKEN} env var reference (not the literal value)
+    local tmp_file
+    tmp_file=$(mktemp)
+    if jq --arg name "$server_name" \
+        '.mcpServers[$name].headers.Authorization = "Bearer ${ANTHROPIC_AUTH_TOKEN}"' \
+        "$config_file" > "$tmp_file" 2>/dev/null; then
+        mv "$tmp_file" "$config_file"
+        echo "    ✓ Auto-injected Authorization header for $server_name"
+    else
+        rm -f "$tmp_file"
+        echo "    ⚠ Failed to auto-inject Authorization header for $server_name"
+    fi
+}
+
+# ============================================================================
 # MCP Helper: Derive short name from npm package
 # ============================================================================
 derive_mcp_name_from_package() {
@@ -594,12 +669,39 @@ configure_mcp_list() {
         mcp_entry=$(echo "$mcp_entry" | xargs)  # Trim whitespace
         [ -z "$mcp_entry" ] && continue
 
-        # Check for name=url syntax (HTTP MCP servers)
+        # Check for name=url syntax (HTTP MCP servers), with optional pipe-delimited headers
+        # Format: name=url or name=url|Header1:Value1|Header2:Value2
         if [[ "$mcp_entry" == *=http://* ]] || [[ "$mcp_entry" == *=https://* ]]; then
             local http_name="${mcp_entry%%=*}"
-            local http_url="${mcp_entry#*=}"
+            local http_rest="${mcp_entry#*=}"
+            # Split on pipe: first segment is URL, remaining are headers
+            local http_url="${http_rest%%|*}"
+            local http_headers_str=""
+            if [[ "$http_rest" == *"|"* ]]; then
+                http_headers_str="${http_rest#*|}"
+            fi
             echo "  - HTTP MCP: $http_name -> $http_url"
             add_mcp_server "$http_name" -t http "$http_name" "$http_url" || true
+
+            # Inject explicit pipe-delimited headers
+            local has_explicit_auth=false
+            if [ -n "$http_headers_str" ]; then
+                # Check if Authorization was explicitly provided before injecting
+                if echo "$http_headers_str" | grep -qiE '(^|[|])Authorization:'; then
+                    has_explicit_auth=true
+                fi
+                inject_mcp_headers "$http_name" "$http_headers_str"
+            fi
+
+            # Auto-inject auth header when:
+            # - No explicit Authorization header was provided
+            # - CLAUDE_MCP_AUTO_AUTH is not disabled (default: true)
+            # - ANTHROPIC_AUTH_TOKEN is set in the environment
+            if [ "$has_explicit_auth" = "false" ] && \
+               [ "${CLAUDE_MCP_AUTO_AUTH:-true}" != "false" ] && \
+               [ -n "${ANTHROPIC_AUTH_TOKEN:-}" ]; then
+                inject_mcp_auth_header "$http_name"
+            fi
             continue
         fi
 
@@ -1298,7 +1400,7 @@ log_feature_summary \
     --feature "Claude Code Setup" \
     --tools "claude,claude-setup,claude-auth-watcher,bash-language-server" \
     --paths "/usr/local/bin/claude,/usr/local/bin/claude-setup,/usr/local/bin/claude-auth-watcher,/etc/container/first-startup/30-claude-code-setup.sh,/etc/container/startup/35-claude-auth-watcher.sh" \
-    --env "ENABLE_LSP_TOOL,ANTHROPIC_AUTH_TOKEN,ANTHROPIC_MODEL,CLAUDE_CHANNEL,CLAUDE_EXTRA_PLUGINS,CLAUDE_EXTRA_MCPS,CLAUDE_USER_MCPS,CLAUDE_AUTO_DETECT_MCPS,CLAUDE_AUTH_WATCHER_TIMEOUT" \
+    --env "ENABLE_LSP_TOOL,ANTHROPIC_AUTH_TOKEN,ANTHROPIC_MODEL,CLAUDE_CHANNEL,CLAUDE_EXTRA_PLUGINS,CLAUDE_EXTRA_MCPS,CLAUDE_USER_MCPS,CLAUDE_AUTO_DETECT_MCPS,CLAUDE_MCP_AUTO_AUTH,CLAUDE_AUTH_WATCHER_TIMEOUT" \
     --commands "claude,claude-setup,claude-auth-watcher" \
     --next-steps "Run 'claude' to authenticate. Setup runs automatically after auth (via watcher). Manual: 'claude-setup'."
 

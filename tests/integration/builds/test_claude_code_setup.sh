@@ -451,6 +451,41 @@ test_mcp_passthrough_logic() {
         "has passthrough"
 }
 
+# Test: HTTP MCP auth injection helpers exist in built image
+test_http_mcp_auth_injection() {
+    local image="${IMAGE_TO_TEST:-test-claude-code-setup-$$}"
+
+    # Verify inject_mcp_headers function exists in claude-setup
+    assert_command_in_container "$image" \
+        "grep -q 'inject_mcp_headers' /usr/local/bin/claude-setup && echo 'has inject headers'" \
+        "has inject headers"
+
+    # Verify inject_mcp_auth_header function exists
+    assert_command_in_container "$image" \
+        "grep -q 'inject_mcp_auth_header' /usr/local/bin/claude-setup && echo 'has inject auth'" \
+        "has inject auth"
+
+    # Verify CLAUDE_MCP_AUTO_AUTH is checked
+    assert_command_in_container "$image" \
+        "grep -q 'CLAUDE_MCP_AUTO_AUTH' /usr/local/bin/claude-setup && echo 'has auto auth'" \
+        "has auto auth"
+}
+
+# Test: Pipe-delimited header support in HTTP MCP parsing
+test_pipe_delimited_headers() {
+    local image="${IMAGE_TO_TEST:-test-claude-code-setup-$$}"
+
+    # Verify pipe-delimited header parsing
+    assert_command_in_container "$image" \
+        "grep -q 'http_headers_str' /usr/local/bin/claude-setup && echo 'has header parsing'" \
+        "has header parsing"
+
+    # Verify jq is used for header injection into ~/.claude.json
+    assert_command_in_container "$image" \
+        "grep -q 'jq.*mcpServers' /usr/local/bin/claude-setup && echo 'has jq injection'" \
+        "has jq injection"
+}
+
 # Test: claude-setup contains auto-detect logic
 test_auto_detect_logic() {
     local image="${IMAGE_TO_TEST:-test-claude-code-setup-$$}"
@@ -483,6 +518,8 @@ run_test test_watcher_op_resolution "claude-auth-watcher OP ref resolution"
 run_test test_setup_op_resolution "claude-setup OP ref resolution"
 run_test test_user_mcps_in_setup "claude-setup contains user MCP support"
 run_test test_mcp_passthrough_logic "claude-setup contains MCP passthrough logic"
+run_test test_http_mcp_auth_injection "HTTP MCP auth injection helpers exist"
+run_test test_pipe_delimited_headers "Pipe-delimited header support"
 run_test test_auto_detect_logic "claude-setup contains auto-detect logic"
 
 # Skip tests that require building new images if using pre-built image
