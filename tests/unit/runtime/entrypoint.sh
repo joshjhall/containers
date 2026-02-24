@@ -551,7 +551,119 @@ test_main_process_exec() {
     fi
 }
 
+# Test: sg docker uses QUOTED_CMD (not unquoted $*)
+test_sg_docker_uses_quoted_cmd() {
+    local script="$PROJECT_ROOT/lib/runtime/entrypoint.sh"
+
+    # sg docker -c must use $QUOTED_CMD, not $*
+    if grep -q 'exec sg docker -c "exec \$QUOTED_CMD"' "$script"; then
+        assert_true true "sg docker path uses QUOTED_CMD"
+    else
+        assert_true false "sg docker path does not use QUOTED_CMD — command injection risk"
+    fi
+}
+
+# Test: newgrp docker uses QUOTED_CMD (not unquoted $*)
+test_newgrp_docker_uses_quoted_cmd() {
+    local script="$PROJECT_ROOT/lib/runtime/entrypoint.sh"
+
+    # newgrp docker must use $QUOTED_CMD, not $*
+    if grep -q 'exec newgrp docker <<< "exec \$QUOTED_CMD"' "$script"; then
+        assert_true true "newgrp docker path uses QUOTED_CMD"
+    else
+        assert_true false "newgrp docker path does not use QUOTED_CMD — command injection risk"
+    fi
+}
+
+# Test: No unquoted $* in any exec context (prevents command injection)
+test_no_unquoted_dollar_star_in_exec() {
+    local script="$PROJECT_ROOT/lib/runtime/entrypoint.sh"
+
+    # Search for lines that use $* (unquoted word-split expansion) in exec
+    # This pattern is dangerous because it allows command injection
+    if grep -E 'exec .* \$\*' "$script" | grep -v '^[[:space:]]*#' | grep -q .; then
+        assert_true false "Found unquoted \$* in exec context — command injection risk"
+    else
+        assert_true true "No unquoted \$* found in exec contexts"
+    fi
+}
+
+# Test: Path traversal guard validates scripts with realpath
+test_path_traversal_guard_exists() {
+    local script="$PROJECT_ROOT/lib/runtime/entrypoint.sh"
+
+    # Verify all four components of the path traversal guard exist:
+    # 1. realpath resolution
+    local has_realpath=false
+    if grep -q 'script_realpath=\$(realpath' "$script"; then
+        has_realpath=true
+    fi
+
+    # 2. Starts-with directory check
+    local has_prefix_check=false
+    if grep -q 'script_realpath" == "\$.*DIR' "$script"; then
+        has_prefix_check=true
+    fi
+
+    # 3. Double-dot rejection (source uses =~ \.\. regex)
+    local has_dotdot_check=false
+    if grep -q 'script_realpath.*=~.*\\\.\\\.' "$script"; then
+        has_dotdot_check=true
+    fi
+
+    # 4. Not-the-directory-itself check
+    local has_dir_check=false
+    if grep -q 'script_realpath" != "\$' "$script"; then
+        has_dir_check=true
+    fi
+
+    if [ "$has_realpath" = "true" ] && [ "$has_prefix_check" = "true" ] && \
+       [ "$has_dotdot_check" = "true" ] && [ "$has_dir_check" = "true" ]; then
+        assert_true true "Path traversal guard has all four validation checks"
+    else
+        assert_true false "Path traversal guard incomplete (realpath=$has_realpath prefix=$has_prefix_check dotdot=$has_dotdot_check dir=$has_dir_check)"
+    fi
+}
+
+# Test: su -c script invocations use quoted $script
+test_su_script_uses_quoting() {
+    local script="$PROJECT_ROOT/lib/runtime/entrypoint.sh"
+
+    # All su ... -c "bash ..." lines must quote the script path
+    # Correct: su "${USERNAME}" -c "bash '$script'"
+    # Wrong:   su "${USERNAME}" -c "bash $script"
+    local unquoted_count
+    unquoted_count=$(grep -c "bash \\\$script\"" "$script" || true)
+    local quoted_count
+    quoted_count=$(grep -c "bash '\\\$script'" "$script" || true)
+
+    if [ "$unquoted_count" -eq 0 ] && [ "$quoted_count" -ge 1 ]; then
+        assert_true true "All su -c bash invocations use quoted script path ($quoted_count found)"
+    else
+        assert_true false "Found $unquoted_count unquoted and $quoted_count quoted su -c bash invocations"
+    fi
+}
+
+# Test: su -c touch uses quoted $FIRST_RUN_MARKER
+test_su_touch_marker_uses_quoting() {
+    local script="$PROJECT_ROOT/lib/runtime/entrypoint.sh"
+
+    # Correct: su "${USERNAME}" -c "touch '$FIRST_RUN_MARKER'"
+    # Wrong:   su "${USERNAME}" -c "touch $FIRST_RUN_MARKER"
+    if grep -q "touch '\\\$FIRST_RUN_MARKER'" "$script"; then
+        assert_true true "su -c touch uses quoted FIRST_RUN_MARKER"
+    else
+        assert_true false "su -c touch does not quote FIRST_RUN_MARKER"
+    fi
+}
+
 # Run all tests
+run_test_with_setup test_sg_docker_uses_quoted_cmd "sg docker uses QUOTED_CMD (not \$*)"
+run_test_with_setup test_newgrp_docker_uses_quoted_cmd "newgrp docker uses QUOTED_CMD (not \$*)"
+run_test_with_setup test_no_unquoted_dollar_star_in_exec "No unquoted \$* in exec contexts"
+run_test_with_setup test_path_traversal_guard_exists "Path traversal guard has all checks"
+run_test_with_setup test_su_script_uses_quoting "su -c bash uses quoted script path"
+run_test_with_setup test_su_touch_marker_uses_quoting "su -c touch uses quoted marker path"
 run_test_with_setup test_docker_socket_fix_section "Docker socket fix section exists"
 run_test_with_setup test_docker_socket_creates_group "Docker socket creates docker group"
 run_test_with_setup test_docker_socket_permissions "Docker socket sets correct permissions"

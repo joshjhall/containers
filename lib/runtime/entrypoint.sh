@@ -522,7 +522,7 @@ if [ ! -f "$FIRST_RUN_MARKER" ]; then
                 echo "Running first-startup script: $(basename "$script")"
                 if [ "$RUNNING_AS_ROOT" = "true" ]; then
                     # Running as root, use su to switch to non-root user
-                    su "${USERNAME}" -c "bash $script" || {
+                    su "${USERNAME}" -c "bash '$script'" || {
                         echo "⚠️  WARNING: First-startup script failed: $(basename "$script") (continuing)"
                     }
                 else
@@ -539,7 +539,7 @@ if [ ! -f "$FIRST_RUN_MARKER" ]; then
 
     # Create marker file
     if [ "$RUNNING_AS_ROOT" = "true" ]; then
-        su "${USERNAME}" -c "touch $FIRST_RUN_MARKER"
+        su "${USERNAME}" -c "touch '$FIRST_RUN_MARKER'"
     else
         touch "$FIRST_RUN_MARKER"
     fi
@@ -568,7 +568,7 @@ if [ -d "$STARTUP_DIR" ]; then
                 echo "Running startup script: $(basename "$script")"
                 if [ "$RUNNING_AS_ROOT" = "true" ]; then
                     # Running as root, use su to switch to non-root user
-                    su "${USERNAME}" -c "bash $script" || {
+                    su "${USERNAME}" -c "bash '$script'" || {
                         echo "⚠️  WARNING: Startup script failed: $(basename "$script") (continuing)"
                     }
                 else
@@ -613,27 +613,28 @@ echo "✓ Container initialized in ${STARTUP_DURATION}s"
 # Execute the main command
 echo "=== Starting main process ==="
 
+# Build a properly quoted command string to handle arguments with spaces
+# Used by su -l, sg docker, and newgrp docker paths to prevent command injection
+QUOTED_CMD=""
+for arg in "$@"; do
+    # Escape single quotes in the argument and wrap in single quotes
+    escaped_arg=$(printf '%s' "$arg" | sed "s/'/'\\\\''/g")
+    QUOTED_CMD="$QUOTED_CMD '${escaped_arg}'"
+done
+
 if [ "$RUNNING_AS_ROOT" = "true" ]; then
     # Drop privileges to non-root user for main process
     # Using 'su -l' ensures a fresh login that picks up updated group memberships
     # from /etc/group (including any groups added for Docker socket access)
-    #
-    # Build a properly quoted command string to handle arguments with spaces
-    QUOTED_CMD=""
-    for arg in "$@"; do
-        # Escape single quotes in the argument and wrap in single quotes
-        escaped_arg=$(printf '%s' "$arg" | sed "s/'/'\\\\''/g")
-        QUOTED_CMD="$QUOTED_CMD '${escaped_arg}'"
-    done
     exec su -l "$USERNAME" -c "cd '$(pwd)' && exec $QUOTED_CMD"
 elif [ "${DOCKER_SOCKET_CONFIGURED:-false}" = "true" ] && getent group docker >/dev/null 2>&1; then
     # We configured docker socket access but need new group membership
     # Use sg to run command with docker group, or newgrp if sg unavailable
     if command -v sg >/dev/null 2>&1; then
-        exec sg docker -c "exec $*"
+        exec sg docker -c "exec $QUOTED_CMD"
     else
         # Fallback: newgrp replaces shell, so we exec into a new shell with docker group
-        exec newgrp docker <<< "exec $*"
+        exec newgrp docker <<< "exec $QUOTED_CMD"
     fi
 else
     exec "$@"
