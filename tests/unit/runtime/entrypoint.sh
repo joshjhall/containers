@@ -599,9 +599,9 @@ test_path_traversal_guard_exists() {
         has_realpath=true
     fi
 
-    # 2. Starts-with directory check
+    # 2. Starts-with directory check (matches $dir or $*DIR variables)
     local has_prefix_check=false
-    if grep -q 'script_realpath" == "\$.*DIR' "$script"; then
+    if grep -q 'script_realpath" == "\$' "$script"; then
         has_prefix_check=true
     fi
 
@@ -644,6 +644,63 @@ test_su_script_uses_quoting() {
     fi
 }
 
+# Test: run_startup_scripts function exists
+test_run_startup_scripts_function() {
+    local script="$PROJECT_ROOT/lib/runtime/entrypoint.sh"
+
+    if grep -q '^run_startup_scripts()' "$script"; then
+        assert_true true "run_startup_scripts function is defined"
+    else
+        assert_true false "run_startup_scripts function not found"
+    fi
+}
+
+# Test: run_startup_scripts is called for both startup phases
+test_run_startup_scripts_called() {
+    local script="$PROJECT_ROOT/lib/runtime/entrypoint.sh"
+
+    local first_startup=false
+    local every_boot=false
+
+    if grep -q 'run_startup_scripts "\$FIRST_STARTUP_DIR" "first-startup"' "$script"; then
+        first_startup=true
+    fi
+    if grep -q 'run_startup_scripts "\$STARTUP_DIR" "startup"' "$script"; then
+        every_boot=true
+    fi
+
+    if [ "$first_startup" = "true" ] && [ "$every_boot" = "true" ]; then
+        assert_true true "run_startup_scripts called for both startup phases"
+    else
+        assert_true false "run_startup_scripts not called for both phases (first=$first_startup every=$every_boot)"
+    fi
+}
+
+# Test: No duplicate privilege helper functions
+test_no_duplicate_privilege_helpers() {
+    local script="$PROJECT_ROOT/lib/runtime/entrypoint.sh"
+
+    # Should have exactly one run_privileged() definition
+    local count
+    count=$(grep -c '^run_privileged()' "$script" || true)
+
+    if [ "$count" -eq 1 ]; then
+        assert_true true "Exactly one run_privileged() definition found"
+    else
+        assert_true false "Expected 1 run_privileged() definition, found $count"
+    fi
+
+    # Should have no cache_run_privileged or bindfs_run_privileged
+    local stale
+    stale=$(grep -c 'cache_run_privileged\|bindfs_run_privileged' "$script" || true)
+
+    if [ "$stale" -eq 0 ]; then
+        assert_true true "No stale privilege helper functions remain"
+    else
+        assert_true false "Found $stale stale privilege helper references"
+    fi
+}
+
 # Test: su -c touch uses quoted $FIRST_RUN_MARKER
 test_su_touch_marker_uses_quoting() {
     local script="$PROJECT_ROOT/lib/runtime/entrypoint.sh"
@@ -664,6 +721,9 @@ run_test_with_setup test_no_unquoted_dollar_star_in_exec "No unquoted \$* in exe
 run_test_with_setup test_path_traversal_guard_exists "Path traversal guard has all checks"
 run_test_with_setup test_su_script_uses_quoting "su -c bash uses quoted script path"
 run_test_with_setup test_su_touch_marker_uses_quoting "su -c touch uses quoted marker path"
+run_test_with_setup test_run_startup_scripts_function "run_startup_scripts function exists"
+run_test_with_setup test_run_startup_scripts_called "run_startup_scripts called for both phases"
+run_test_with_setup test_no_duplicate_privilege_helpers "No duplicate privilege helper functions"
 run_test_with_setup test_docker_socket_fix_section "Docker socket fix section exists"
 run_test_with_setup test_docker_socket_creates_group "Docker socket creates docker group"
 run_test_with_setup test_docker_socket_permissions "Docker socket sets correct permissions"

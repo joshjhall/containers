@@ -155,7 +155,7 @@ test_entrypoint_skips_fuse() {
 # Test: Entrypoint uses existing privilege escalation pattern
 test_entrypoint_privilege_pattern() {
     assert_file_contains "$ENTRYPOINT_FILE" "RUNNING_AS_ROOT" "Entrypoint uses RUNNING_AS_ROOT variable"
-    assert_file_contains "$ENTRYPOINT_FILE" "bindfs_run_privileged" "Entrypoint has bindfs privilege helper"
+    assert_file_contains "$ENTRYPOINT_FILE" "run_privileged" "Entrypoint has privilege helper"
 }
 
 # Test: Dockerfile contains INCLUDE_BINDFS build arg

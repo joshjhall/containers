@@ -173,6 +173,58 @@ else
 fi
 
 # ============================================================================
+# Shared Helper Functions
+# ============================================================================
+# Run a command with root privileges (directly if root, via sudo otherwise)
+run_privileged() {
+    if [ "$RUNNING_AS_ROOT" = "true" ]; then
+        "$@"
+    else
+        sudo "$@"
+    fi
+}
+
+# Run all *.sh scripts in a directory with path traversal validation and
+# user context switching.  Arguments:
+#   $1 - directory containing scripts
+#   $2 - label for log messages (e.g. "first-startup", "startup")
+run_startup_scripts() {
+    local dir="$1"
+    local label="$2"
+
+    for script in "${dir}"/*.sh; do
+        # Skip if not a regular file or is a symlink
+        if [ -f "$script" ] && [ ! -L "$script" ]; then
+            # Strict path traversal validation:
+            # 1. Resolve canonical path (resolves symlinks and ..)
+            # 2. Verify resolved path is within expected directory
+            # 3. Verify no .. components remain (paranoid check)
+            # 4. Verify not the directory itself (must be file within)
+            script_realpath=$(realpath "$script" 2>/dev/null || echo "")
+            if [ -n "$script_realpath" ] && \
+               [[ "$script_realpath" == "$dir"/* ]] && \
+               [[ ! "$script_realpath" =~ \.\. ]] && \
+               [ "$script_realpath" != "$dir" ]; then
+                echo "Running ${label} script: $(basename "$script")"
+                if [ "$RUNNING_AS_ROOT" = "true" ]; then
+                    # Running as root, use su to switch to non-root user
+                    su "${USERNAME}" -c "bash '$script'" || {
+                        echo "⚠️  WARNING: ${label^} script failed: $(basename "$script") (continuing)"
+                    }
+                else
+                    # Already running as non-root user, execute directly
+                    bash "$script" || {
+                        echo "⚠️  WARNING: ${label^} script failed: $(basename "$script") (continuing)"
+                    }
+                fi
+            else
+                echo "⚠️  WARNING: Skipping script outside expected directory: $script"
+            fi
+        fi
+    done
+}
+
+# ============================================================================
 # Docker Socket Access Fix
 # ============================================================================
 # Automatically configure Docker socket access if the socket exists
@@ -196,15 +248,6 @@ if [ -S /var/run/docker.sock ]; then
         fi
 
         if [ "$CAN_SUDO" = "true" ]; then
-            # Helper function to run commands with appropriate privileges
-            run_privileged() {
-                if [ "$RUNNING_AS_ROOT" = "true" ]; then
-                    "$@"
-                else
-                    sudo "$@"
-                fi
-            }
-
             # Create docker group if it doesn't exist
             if ! getent group docker >/dev/null 2>&1; then
                 run_privileged groupadd docker 2>/dev/null || {
@@ -262,17 +305,8 @@ if [ -d "/cache" ]; then
         fi
 
         if [ "$CAN_FIX_CACHE" = "true" ]; then
-            # Helper function reused from Docker socket section
-            cache_run_privileged() {
-                if [ "$RUNNING_AS_ROOT" = "true" ]; then
-                    "$@"
-                else
-                    sudo "$@"
-                fi
-            }
-
             # Fix ownership of all cache directories
-            if cache_run_privileged chown -R "${USERNAME}:${USERNAME}" /cache 2>/dev/null; then
+            if run_privileged chown -R "${USERNAME}:${USERNAME}" /cache 2>/dev/null; then
                 echo "✓ Cache directory permissions fixed"
             else
                 echo "⚠️  Warning: Could not fix all cache permissions"
@@ -329,15 +363,6 @@ if command -v bindfs >/dev/null 2>&1; then
             elif command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
                 BINDFS_CAN_SUDO=true
             fi
-
-            # Helper to run commands with appropriate privileges
-            bindfs_run_privileged() {
-                if [ "$RUNNING_AS_ROOT" = "true" ]; then
-                    "$@"
-                else
-                    sudo "$@"
-                fi
-            }
 
             # Get the target user's UID/GID
             BINDFS_UID=$(id -u "$USERNAME")
@@ -410,7 +435,7 @@ if command -v bindfs >/dev/null 2>&1; then
 
                 # Apply bindfs overlay
                 if [ "$BINDFS_CAN_SUDO" = "true" ]; then
-                    if bindfs_run_privileged bindfs \
+                    if run_privileged bindfs \
                         --force-user="$USERNAME" \
                         --force-group="$USERNAME" \
                         --create-for-user="$BINDFS_UID" \
@@ -504,38 +529,7 @@ FIRST_RUN_MARKER="/home/${USERNAME}/.container-initialized"
 FIRST_STARTUP_DIR="/etc/container/first-startup"
 if [ ! -f "$FIRST_RUN_MARKER" ]; then
     echo "=== Running first-time setup scripts ==="
-
-    # Run all first-startup scripts
-    for script in "${FIRST_STARTUP_DIR}"/*.sh; do
-        # Skip if not a regular file or is a symlink
-        if [ -f "$script" ] && [ ! -L "$script" ]; then
-            # Strict path traversal validation:
-            # 1. Resolve canonical path (resolves symlinks and ..)
-            # 2. Verify resolved path is within expected directory
-            # 3. Verify no .. components remain (paranoid check)
-            # 4. Verify not the directory itself (must be file within)
-            script_realpath=$(realpath "$script" 2>/dev/null || echo "")
-            if [ -n "$script_realpath" ] && \
-               [[ "$script_realpath" == "$FIRST_STARTUP_DIR"/* ]] && \
-               [[ ! "$script_realpath" =~ \.\. ]] && \
-               [ "$script_realpath" != "$FIRST_STARTUP_DIR" ]; then
-                echo "Running first-startup script: $(basename "$script")"
-                if [ "$RUNNING_AS_ROOT" = "true" ]; then
-                    # Running as root, use su to switch to non-root user
-                    su "${USERNAME}" -c "bash '$script'" || {
-                        echo "⚠️  WARNING: First-startup script failed: $(basename "$script") (continuing)"
-                    }
-                else
-                    # Already running as non-root user, execute directly
-                    bash "$script" || {
-                        echo "⚠️  WARNING: First-startup script failed: $(basename "$script") (continuing)"
-                    }
-                fi
-            else
-                echo "⚠️  WARNING: Skipping script outside expected directory: $script"
-            fi
-        fi
-    done
+    run_startup_scripts "$FIRST_STARTUP_DIR" "first-startup"
 
     # Create marker file
     if [ "$RUNNING_AS_ROOT" = "true" ]; then
@@ -552,36 +546,7 @@ fi
 STARTUP_DIR="/etc/container/startup"
 if [ -d "$STARTUP_DIR" ]; then
     echo "=== Running startup scripts ==="
-    for script in "${STARTUP_DIR}"/*.sh; do
-        # Skip if not a regular file or is a symlink
-        if [ -f "$script" ] && [ ! -L "$script" ]; then
-            # Strict path traversal validation:
-            # 1. Resolve canonical path (resolves symlinks and ..)
-            # 2. Verify resolved path is within expected directory
-            # 3. Verify no .. components remain (paranoid check)
-            # 4. Verify not the directory itself (must be file within)
-            script_realpath=$(realpath "$script" 2>/dev/null || echo "")
-            if [ -n "$script_realpath" ] && \
-               [[ "$script_realpath" == "$STARTUP_DIR"/* ]] && \
-               [[ ! "$script_realpath" =~ \.\. ]] && \
-               [ "$script_realpath" != "$STARTUP_DIR" ]; then
-                echo "Running startup script: $(basename "$script")"
-                if [ "$RUNNING_AS_ROOT" = "true" ]; then
-                    # Running as root, use su to switch to non-root user
-                    su "${USERNAME}" -c "bash '$script'" || {
-                        echo "⚠️  WARNING: Startup script failed: $(basename "$script") (continuing)"
-                    }
-                else
-                    # Already running as non-root user, execute directly
-                    bash "$script" || {
-                        echo "⚠️  WARNING: Startup script failed: $(basename "$script") (continuing)"
-                    }
-                fi
-            else
-                echo "⚠️  WARNING: Skipping script outside expected directory: $script"
-            fi
-        fi
-    done
+    run_startup_scripts "$STARTUP_DIR" "startup"
 fi
 
 # ============================================================================
