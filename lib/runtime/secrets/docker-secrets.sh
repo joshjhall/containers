@@ -98,6 +98,11 @@ load_secrets_from_docker() {
         for secret_name in "${secret_names[@]}"; do
             secret_name=$(echo "$secret_name" | xargs)  # Trim whitespace
             if [ -n "$secret_name" ]; then
+                # Validate secret name to prevent path traversal
+                if ! [[ "$secret_name" =~ ^[a-zA-Z0-9._-]+$ ]]; then
+                    log_warning "Invalid secret name rejected (must match [a-zA-Z0-9._-]+): $secret_name"
+                    continue
+                fi
                 secret_files+=("$secrets_dir/$secret_name")
             fi
         done

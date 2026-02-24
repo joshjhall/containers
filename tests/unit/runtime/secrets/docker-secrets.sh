@@ -381,6 +381,114 @@ test_health_check_when_disabled() {
 }
 
 # ============================================================================
+# Path Traversal Prevention Tests
+# ============================================================================
+
+test_rejects_path_traversal() {
+    echo "stolen-value" > "$TEST_TEMP_DIR/passwd"
+
+    local result
+    result=$(_run_secrets_subshell "
+        export DOCKER_SECRETS_DIR='$DOCKER_SECRETS_DIR'
+        export DOCKER_SECRETS_ENABLED='true'
+        export DOCKER_SECRET_NAMES='../passwd'
+        load_secrets_from_docker >/dev/null 2>&1
+        echo \"\${PASSWD:-UNSET}\"
+    ")
+
+    assert_equals "UNSET" "$result" "Path traversal name ../passwd should be rejected"
+}
+
+test_rejects_absolute_path() {
+    local result
+    result=$(_run_secrets_subshell "
+        export DOCKER_SECRETS_DIR='$DOCKER_SECRETS_DIR'
+        export DOCKER_SECRETS_ENABLED='true'
+        export DOCKER_SECRET_NAMES='/etc/passwd'
+        load_secrets_from_docker >/dev/null 2>&1
+        echo \"\${ETC_PASSWD:-UNSET}\"
+    ")
+
+    assert_equals "UNSET" "$result" "Absolute path /etc/passwd should be rejected"
+}
+
+test_rejects_shell_metacharacters() {
+    local result
+    result=$(_run_secrets_subshell "
+        export DOCKER_SECRETS_DIR='$DOCKER_SECRETS_DIR'
+        export DOCKER_SECRETS_ENABLED='true'
+        export DOCKER_SECRET_NAMES='secret;rm -rf /'
+        load_secrets_from_docker >/dev/null 2>&1
+        echo 'OK'
+    ")
+
+    assert_equals "OK" "$result" "Names with shell metacharacters should be rejected"
+}
+
+test_rejects_dollar_sign() {
+    echo "value" > "$DOCKER_SECRETS_DIR/normal"
+
+    local result
+    result=$(_run_secrets_subshell "
+        export DOCKER_SECRETS_DIR='$DOCKER_SECRETS_DIR'
+        export DOCKER_SECRETS_ENABLED='true'
+        export DOCKER_SECRET_NAMES='\$(whoami)'
+        load_secrets_from_docker >/dev/null 2>&1
+        echo 'OK'
+    ")
+
+    assert_equals "OK" "$result" "Names with \$ should be rejected"
+}
+
+test_accepts_valid_hyphen_name() {
+    echo "valid-value" > "$DOCKER_SECRETS_DIR/my-secret"
+
+    local result
+    result=$(_run_secrets_subshell "
+        export DOCKER_SECRETS_DIR='$DOCKER_SECRETS_DIR'
+        export DOCKER_SECRETS_ENABLED='true'
+        export DOCKER_SECRET_NAMES='my-secret'
+        load_secrets_from_docker >/dev/null 2>&1
+        echo \"\${MY_SECRET:-UNSET}\"
+    ")
+
+    assert_equals "valid-value" "$result" "Valid name with hyphens should be accepted"
+}
+
+test_accepts_valid_dot_name() {
+    echo "dot-value" > "$DOCKER_SECRETS_DIR/app.config"
+
+    local result
+    result=$(_run_secrets_subshell "
+        export DOCKER_SECRETS_DIR='$DOCKER_SECRETS_DIR'
+        export DOCKER_SECRETS_ENABLED='true'
+        export DOCKER_SECRET_NAMES='app.config'
+        load_secrets_from_docker >/dev/null 2>&1
+        echo \"\${APP_CONFIG:-UNSET}\"
+    ")
+
+    assert_equals "dot-value" "$result" "Valid name with dots should be accepted"
+}
+
+test_rejects_backtick_name() {
+    local result
+    result=$(_run_secrets_subshell "
+        export DOCKER_SECRETS_DIR='$DOCKER_SECRETS_DIR'
+        export DOCKER_SECRETS_ENABLED='true'
+        export DOCKER_SECRET_NAMES='\`whoami\`'
+        load_secrets_from_docker >/dev/null 2>&1
+        echo 'OK'
+    ")
+
+    assert_equals "OK" "$result" "Names with backticks should be rejected"
+}
+
+test_validation_pattern_in_source() {
+    assert_file_contains "$SOURCE_FILE" 'a-zA-Z0-9._-' \
+        "Source should contain the allowlist pattern for secret name validation"
+}
+
+# ============================================================================
 # Run all tests
 # ============================================================================
 
@@ -421,6 +529,16 @@ run_test_with_setup test_returns_zero_for_successful_load "Returns 0 on successf
 run_test_with_setup test_health_check_when_secrets_available "Health check passes with secrets"
 run_test_with_setup test_health_check_when_no_secrets "Health check fails without secrets"
 run_test_with_setup test_health_check_when_disabled "Health check passes when disabled"
+
+# Path traversal prevention
+run_test_with_setup test_rejects_path_traversal "Rejects path traversal names (../)"
+run_test_with_setup test_rejects_absolute_path "Rejects absolute path names (/etc/passwd)"
+run_test_with_setup test_rejects_shell_metacharacters "Rejects names with shell metacharacters"
+run_test_with_setup test_rejects_dollar_sign "Rejects names with dollar signs"
+run_test_with_setup test_accepts_valid_hyphen_name "Accepts valid names with hyphens"
+run_test_with_setup test_accepts_valid_dot_name "Accepts valid names with dots"
+run_test_with_setup test_rejects_backtick_name "Rejects names with backticks"
+run_test_with_setup test_validation_pattern_in_source "Source contains validation pattern"
 
 # Generate test report
 generate_report

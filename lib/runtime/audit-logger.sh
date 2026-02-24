@@ -104,6 +104,16 @@ audit_init() {
 }
 
 # ============================================================================
+# JSON Escaping Helper
+# ============================================================================
+
+# Escape a string for safe inclusion in a JSON value.
+# Handles: backslash, double-quote, tab, newline, carriage return.
+_json_escape() {
+    printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g; s/\t/\\t/g; s/\n/\\n/g; s/\r/\\r/g'
+}
+
+# ============================================================================
 # Core Logging Functions
 # ============================================================================
 
@@ -166,7 +176,7 @@ build_json_entry() {
 
     # Escape message for JSON
     local escaped_message
-    escaped_message=$(printf '%s' "$message" | sed 's/\\/\\\\/g; s/"/\\"/g; s/\t/\\t/g; s/\n/\\n/g; s/\r/\\r/g')
+    escaped_message=$(_json_escape "$message")
 
     # Build base JSON
     local json="{"
@@ -192,13 +202,18 @@ build_json_entry() {
     json+=",\"container_id\":\"${HOSTNAME:-unknown}\""
     json+=",\"container_name\":\"${CONTAINER_NAME:-unknown}\""
 
-    # Merge extra data if valid JSON
+    # Merge extra data if valid JSON object (must start with { and end with })
     if [ -n "$extra_data" ] && [ "$extra_data" != "{}" ]; then
-        # Strip outer braces and append
-        local extra_content
-        extra_content=$(echo "$extra_data" | sed 's/^{//; s/}$//')
-        if [ -n "$extra_content" ]; then
-            json+=",$extra_content"
+        # Validate structure: must start with { and end with }
+        local trimmed
+        trimmed=$(echo "$extra_data" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+        if [[ "$trimmed" == "{"*"}" ]]; then
+            # Strip outer braces and append
+            local extra_content
+            extra_content=$(echo "$trimmed" | sed 's/^{//; s/}$//')
+            if [ -n "$extra_content" ]; then
+                json+=",$extra_content"
+            fi
         fi
     fi
 
@@ -217,7 +232,8 @@ audit_auth() {
     local result="$3"      # success, failure
     local details="$4"
 
-    local extra_data="{\"action\":\"$action\",\"user\":\"$user\",\"result\":\"$result\""
+    local extra_data
+    extra_data="{\"action\":\"$(_json_escape "$action")\",\"user\":\"$(_json_escape "$user")\",\"result\":\"$(_json_escape "$result")\""
     if [ -n "$details" ]; then
         extra_data+=",\"details\":$details"
     fi
@@ -237,11 +253,10 @@ audit_authz() {
     local result="$4"      # granted, denied
     local reason="$5"
 
-    local extra_data="{\"resource\":\"$resource\",\"action\":\"$action\",\"user\":\"$user\",\"result\":\"$result\""
+    local extra_data
+    extra_data="{\"resource\":\"$(_json_escape "$resource")\",\"action\":\"$(_json_escape "$action")\",\"user\":\"$(_json_escape "$user")\",\"result\":\"$(_json_escape "$result")\""
     if [ -n "$reason" ]; then
-        local escaped_reason
-        escaped_reason=$(printf '%s' "$reason" | sed 's/\\/\\\\/g; s/"/\\"/g')
-        extra_data+=",\"reason\":\"$escaped_reason\""
+        extra_data+=",\"reason\":\"$(_json_escape "$reason")\""
     fi
     extra_data+="}"
 
@@ -259,14 +274,13 @@ audit_data_access() {
     local record_count="$4"
     local purpose="$5"
 
-    local extra_data="{\"data_type\":\"$data_type\",\"operation\":\"$operation\",\"user\":\"$user\""
+    local extra_data
+    extra_data="{\"data_type\":\"$(_json_escape "$data_type")\",\"operation\":\"$(_json_escape "$operation")\",\"user\":\"$(_json_escape "$user")\""
     if [ -n "$record_count" ]; then
         extra_data+=",\"record_count\":$record_count"
     fi
     if [ -n "$purpose" ]; then
-        local escaped_purpose
-        escaped_purpose=$(printf '%s' "$purpose" | sed 's/\\/\\\\/g; s/"/\\"/g')
-        extra_data+=",\"purpose\":\"$escaped_purpose\""
+        extra_data+=",\"purpose\":\"$(_json_escape "$purpose")\""
     fi
     extra_data+="}"
 
@@ -281,16 +295,13 @@ audit_config() {
     local old_value="$4"
     local new_value="$5"
 
-    local extra_data="{\"component\":\"$component\",\"change_type\":\"$change_type\",\"user\":\"$user\""
+    local extra_data
+    extra_data="{\"component\":\"$(_json_escape "$component")\",\"change_type\":\"$(_json_escape "$change_type")\",\"user\":\"$(_json_escape "$user")\""
     if [ -n "$old_value" ]; then
-        local escaped_old
-        escaped_old=$(printf '%s' "$old_value" | sed 's/\\/\\\\/g; s/"/\\"/g')
-        extra_data+=",\"old_value\":\"$escaped_old\""
+        extra_data+=",\"old_value\":\"$(_json_escape "$old_value")\""
     fi
     if [ -n "$new_value" ]; then
-        local escaped_new
-        escaped_new=$(printf '%s' "$new_value" | sed 's/\\/\\\\/g; s/"/\\"/g')
-        extra_data+=",\"new_value\":\"$escaped_new\""
+        extra_data+=",\"new_value\":\"$(_json_escape "$new_value")\""
     fi
     extra_data+="}"
 
@@ -304,7 +315,8 @@ audit_security() {
     local description="$3"
     local indicators="$4"  # JSON object with IOCs
 
-    local extra_data="{\"event_type\":\"$event_type\",\"severity\":\"$severity\""
+    local extra_data
+    extra_data="{\"event_type\":\"$(_json_escape "$event_type")\",\"severity\":\"$(_json_escape "$severity")\""
     if [ -n "$indicators" ]; then
         extra_data+=",\"indicators\":$indicators"
     fi
@@ -325,11 +337,12 @@ audit_network() {
     local dst_port="$5"
     local protocol="$6"
 
-    local extra_data="{\"event_type\":\"$event_type\",\"direction\":\"$direction\""
-    [ -n "$src_ip" ] && extra_data+=",\"src_ip\":\"$src_ip\""
-    [ -n "$dst_ip" ] && extra_data+=",\"dst_ip\":\"$dst_ip\""
+    local extra_data
+    extra_data="{\"event_type\":\"$(_json_escape "$event_type")\",\"direction\":\"$(_json_escape "$direction")\""
+    [ -n "$src_ip" ] && extra_data+=",\"src_ip\":\"$(_json_escape "$src_ip")\""
+    [ -n "$dst_ip" ] && extra_data+=",\"dst_ip\":\"$(_json_escape "$dst_ip")\""
     [ -n "$dst_port" ] && extra_data+=",\"dst_port\":$dst_port"
-    [ -n "$protocol" ] && extra_data+=",\"protocol\":\"$protocol\""
+    [ -n "$protocol" ] && extra_data+=",\"protocol\":\"$(_json_escape "$protocol")\""
     extra_data+="}"
 
     audit_log "network" "info" "Network event: $event_type $direction" "$extra_data"
@@ -342,12 +355,10 @@ audit_file() {
     local user="$3"
     local checksum="$4"
 
-    local escaped_path
-    escaped_path=$(printf '%s' "$file_path" | sed 's/\\/\\\\/g; s/"/\\"/g')
-
-    local extra_data="{\"event_type\":\"$event_type\",\"file_path\":\"$escaped_path\",\"user\":\"$user\""
+    local extra_data
+    extra_data="{\"event_type\":\"$(_json_escape "$event_type")\",\"file_path\":\"$(_json_escape "$file_path")\",\"user\":\"$(_json_escape "$user")\""
     if [ -n "$checksum" ]; then
-        extra_data+=",\"checksum\":\"$checksum\""
+        extra_data+=",\"checksum\":\"$(_json_escape "$checksum")\""
     fi
     extra_data+="}"
 
@@ -362,10 +373,11 @@ audit_process() {
     local exit_code="$4"
     local user="$5"
 
-    local extra_data="{\"event_type\":\"$event_type\",\"process_name\":\"$process_name\""
+    local extra_data
+    extra_data="{\"event_type\":\"$(_json_escape "$event_type")\",\"process_name\":\"$(_json_escape "$process_name")\""
     [ -n "$pid" ] && extra_data+=",\"process_pid\":$pid"
     [ -n "$exit_code" ] && extra_data+=",\"exit_code\":$exit_code"
-    [ -n "$user" ] && extra_data+=",\"user\":\"$user\""
+    [ -n "$user" ] && extra_data+=",\"user\":\"$(_json_escape "$user")\""
     extra_data+="}"
 
     audit_log "process" "info" "Process event: $event_type $process_name" "$extra_data"
@@ -378,7 +390,8 @@ audit_compliance() {
     local status="$3"      # compliant, non_compliant, exception
     local evidence="$4"    # JSON object with supporting evidence
 
-    local extra_data="{\"framework\":\"$framework\",\"requirement\":\"$requirement\",\"status\":\"$status\""
+    local extra_data
+    extra_data="{\"framework\":\"$(_json_escape "$framework")\",\"requirement\":\"$(_json_escape "$requirement")\",\"status\":\"$(_json_escape "$status")\""
     if [ -n "$evidence" ]; then
         extra_data+=",\"evidence\":$evidence"
     fi
@@ -575,6 +588,7 @@ get_retention_policy() {
 }
 
 # Export functions for use in other scripts
+export -f _json_escape
 export -f audit_log audit_auth audit_authz audit_data_access audit_config
 export -f audit_security audit_network audit_file audit_process audit_compliance
 export -f audit_init audit_rotate audit_verify_integrity get_retention_policy

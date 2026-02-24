@@ -253,6 +253,56 @@ run_test_with_setup() {
     teardown
 }
 
+# ============================================================================
+# safe_eval blocklist tests
+# ============================================================================
+
+SETUP_PATHS_SOURCE="$PROJECT_ROOT/lib/runtime/setup-paths.sh"
+
+# Test: safe_eval defines _SAFE_EVAL_BLOCKLIST variable
+test_safe_eval_blocklist_defined() {
+    assert_file_contains "$SETUP_PATHS_SOURCE" "_SAFE_EVAL_BLOCKLIST" \
+        "safe_eval should define _SAFE_EVAL_BLOCKLIST pattern variable"
+}
+
+# Test: blocklist blocks mkfifo (named pipe for data exfiltration)
+test_safe_eval_blocks_mkfifo() {
+    assert_file_contains "$SETUP_PATHS_SOURCE" 'mkfifo' \
+        "safe_eval blocklist should include mkfifo pattern"
+}
+
+# Test: blocklist blocks nc/ncat (netcat reverse shells)
+test_safe_eval_blocks_netcat() {
+    assert_file_contains "$SETUP_PATHS_SOURCE" 'ncat' \
+        "safe_eval blocklist should include ncat pattern"
+    assert_file_contains "$SETUP_PATHS_SOURCE" '\\bnc\\b' \
+        "safe_eval blocklist should include nc word-boundary pattern"
+}
+
+# Test: blocklist blocks python one-liners
+test_safe_eval_blocks_python() {
+    assert_file_contains "$SETUP_PATHS_SOURCE" 'python' \
+        "safe_eval blocklist should include python pattern"
+}
+
+# Test: blocklist blocks perl one-liners
+test_safe_eval_blocks_perl() {
+    assert_file_contains "$SETUP_PATHS_SOURCE" 'perl' \
+        "safe_eval blocklist should include perl pattern"
+}
+
+# Test: blocklist blocks chmod +s (setuid)
+test_safe_eval_blocks_setuid() {
+    assert_file_contains "$SETUP_PATHS_SOURCE" 'chmod' \
+        "safe_eval blocklist should include chmod +s pattern"
+}
+
+# Test: blocklist blocks standalone wget
+test_safe_eval_blocks_wget() {
+    assert_file_contains "$SETUP_PATHS_SOURCE" '\\bwget\\b' \
+        "safe_eval blocklist should include standalone wget pattern"
+}
+
 # Run all tests
 run_test_with_setup test_standard_paths "Standard paths in PATH"
 run_test_with_setup test_user_bin_directories "User bin directories"
@@ -264,6 +314,15 @@ run_test_with_setup test_path_priority "Path order priority"
 run_test_with_setup test_export_path "PATH export configuration"
 run_test_with_setup test_path_validation "PATH validation"
 run_test_with_setup test_path_verification "Path verification script"
+
+# safe_eval blocklist tests
+run_test test_safe_eval_blocklist_defined "safe_eval defines _SAFE_EVAL_BLOCKLIST variable"
+run_test test_safe_eval_blocks_mkfifo "safe_eval blocklist blocks mkfifo"
+run_test test_safe_eval_blocks_netcat "safe_eval blocklist blocks nc/ncat"
+run_test test_safe_eval_blocks_python "safe_eval blocklist blocks python one-liners"
+run_test test_safe_eval_blocks_perl "safe_eval blocklist blocks perl one-liners"
+run_test test_safe_eval_blocks_setuid "safe_eval blocklist blocks chmod +s"
+run_test test_safe_eval_blocks_wget "safe_eval blocklist blocks standalone wget"
 
 # Generate test report
 generate_report

@@ -287,5 +287,146 @@ run_test test_integrity_sha256sum "Integrity verification uses sha256sum"
 run_test test_uuid_generation "UUID generation with fallback"
 run_test test_functions_exported "Functions exported for other scripts"
 
+# ============================================================================
+# Batch 7: JSON Escaping and Validation Tests
+# ============================================================================
+
+# Test: _json_escape helper is defined
+test_json_escape_defined() {
+    assert_file_contains "$SOURCE_FILE" "_json_escape()" \
+        "audit-logger.sh should define _json_escape helper function"
+}
+
+# Test: _json_escape is exported
+test_json_escape_exported() {
+    assert_file_contains "$SOURCE_FILE" "export -f _json_escape" \
+        "audit-logger.sh should export _json_escape function"
+}
+
+# Test: audit_auth uses _json_escape
+test_audit_auth_uses_escape() {
+    # Extract audit_auth function body and check for _json_escape usage
+    local func_body
+    func_body=$(sed -n '/^audit_auth()/,/^}/p' "$SOURCE_FILE")
+    if echo "$func_body" | grep -q '_json_escape'; then
+        pass_test "audit_auth uses _json_escape for field escaping"
+    else
+        fail_test "audit_auth does not use _json_escape"
+    fi
+}
+
+# Test: audit_authz uses _json_escape
+test_audit_authz_uses_escape() {
+    local func_body
+    func_body=$(sed -n '/^audit_authz()/,/^}/p' "$SOURCE_FILE")
+    if echo "$func_body" | grep -q '_json_escape'; then
+        pass_test "audit_authz uses _json_escape for field escaping"
+    else
+        fail_test "audit_authz does not use _json_escape"
+    fi
+}
+
+# Test: audit_data_access uses _json_escape
+test_audit_data_access_uses_escape() {
+    local func_body
+    func_body=$(sed -n '/^audit_data_access()/,/^}/p' "$SOURCE_FILE")
+    if echo "$func_body" | grep -q '_json_escape'; then
+        pass_test "audit_data_access uses _json_escape for field escaping"
+    else
+        fail_test "audit_data_access does not use _json_escape"
+    fi
+}
+
+# Test: audit_config uses _json_escape
+test_audit_config_uses_escape() {
+    local func_body
+    func_body=$(sed -n '/^audit_config()/,/^}/p' "$SOURCE_FILE")
+    if echo "$func_body" | grep -q '_json_escape'; then
+        pass_test "audit_config uses _json_escape for field escaping"
+    else
+        fail_test "audit_config does not use _json_escape"
+    fi
+}
+
+# Test: audit_security uses _json_escape
+test_audit_security_uses_escape() {
+    local func_body
+    func_body=$(sed -n '/^audit_security()/,/^}/p' "$SOURCE_FILE")
+    if echo "$func_body" | grep -q '_json_escape'; then
+        pass_test "audit_security uses _json_escape for field escaping"
+    else
+        fail_test "audit_security does not use _json_escape"
+    fi
+}
+
+# Test: audit_network uses _json_escape
+test_audit_network_uses_escape() {
+    local func_body
+    func_body=$(sed -n '/^audit_network()/,/^}/p' "$SOURCE_FILE")
+    if echo "$func_body" | grep -q '_json_escape'; then
+        pass_test "audit_network uses _json_escape for field escaping"
+    else
+        fail_test "audit_network does not use _json_escape"
+    fi
+}
+
+# Test: audit_file uses _json_escape
+test_audit_file_uses_escape() {
+    local func_body
+    func_body=$(sed -n '/^audit_file()/,/^}/p' "$SOURCE_FILE")
+    if echo "$func_body" | grep -q '_json_escape'; then
+        pass_test "audit_file uses _json_escape for field escaping"
+    else
+        fail_test "audit_file does not use _json_escape"
+    fi
+}
+
+# Test: audit_process uses _json_escape
+test_audit_process_uses_escape() {
+    local func_body
+    func_body=$(sed -n '/^audit_process()/,/^}/p' "$SOURCE_FILE")
+    if echo "$func_body" | grep -q '_json_escape'; then
+        pass_test "audit_process uses _json_escape for field escaping"
+    else
+        fail_test "audit_process does not use _json_escape"
+    fi
+}
+
+# Test: audit_compliance uses _json_escape
+test_audit_compliance_uses_escape() {
+    local func_body
+    func_body=$(sed -n '/^audit_compliance()/,/^}/p' "$SOURCE_FILE")
+    if echo "$func_body" | grep -q '_json_escape'; then
+        pass_test "audit_compliance uses _json_escape for field escaping"
+    else
+        fail_test "audit_compliance does not use _json_escape"
+    fi
+}
+
+# Test: build_json_entry validates extra_data structure
+test_build_json_entry_validates_extra_data() {
+    local func_body
+    func_body=$(sed -n '/^build_json_entry()/,/^}/p' "$SOURCE_FILE")
+    if echo "$func_body" | grep -qE '\{.*\}'; then
+        pass_test "build_json_entry validates extra_data starts with { and ends with }"
+    else
+        fail_test "build_json_entry does not validate extra_data structure"
+    fi
+}
+
+# Run Batch 7 tests
+run_test test_json_escape_defined "Defines _json_escape helper function"
+run_test test_json_escape_exported "Exports _json_escape function"
+run_test test_audit_auth_uses_escape "audit_auth uses _json_escape"
+run_test test_audit_authz_uses_escape "audit_authz uses _json_escape"
+run_test test_audit_data_access_uses_escape "audit_data_access uses _json_escape"
+run_test test_audit_config_uses_escape "audit_config uses _json_escape"
+run_test test_audit_security_uses_escape "audit_security uses _json_escape"
+run_test test_audit_network_uses_escape "audit_network uses _json_escape"
+run_test test_audit_file_uses_escape "audit_file uses _json_escape"
+run_test test_audit_process_uses_escape "audit_process uses _json_escape"
+run_test test_audit_compliance_uses_escape "audit_compliance uses _json_escape"
+run_test test_build_json_entry_validates_extra_data "build_json_entry validates extra_data structure"
+
 # Generate report
 generate_report
