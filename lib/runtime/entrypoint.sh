@@ -224,6 +224,105 @@ run_startup_scripts() {
     done
 }
 
+# Parse BINDFS_SKIP_PATHS env var into associative array for O(1) lookup
+# Sets global: BINDFS_SKIP_MAP
+parse_bindfs_skip_paths() {
+    declare -gA BINDFS_SKIP_MAP=()
+    if [ -n "${BINDFS_SKIP_PATHS:-}" ]; then
+        local _skip_arr _skip_path
+        IFS=',' read -ra _skip_arr <<< "$BINDFS_SKIP_PATHS"
+        for _skip_path in "${_skip_arr[@]}"; do
+            # Trim whitespace
+            _skip_path="${_skip_path## }"
+            _skip_path="${_skip_path%% }"
+            [ -n "$_skip_path" ] && BINDFS_SKIP_MAP["$_skip_path"]=1
+        done
+    fi
+}
+
+# Check if a mount point needs a bindfs overlay
+# Arguments:
+#   $1 - mount target path
+#   $2 - mount filesystem type
+#   $3 - bindfs mode ("auto" or "true")
+# Returns: 0 if fix needed, 1 if not
+probe_mount_needs_fix() {
+    local mnt_target="$1"
+    local mnt_fstype="$2"
+    local mode="$3"
+
+    # Skip mounts that are already FUSE overlays
+    if [[ "$mnt_fstype" == *fuse* ]]; then
+        return 1
+    fi
+
+    # Skip paths in BINDFS_SKIP_PATHS
+    if [ -n "${BINDFS_SKIP_MAP[$mnt_target]+_}" ]; then
+        echo "   Skipping $mnt_target (in BINDFS_SKIP_PATHS)"
+        return 1
+    fi
+
+    # In "true" mode, always apply
+    if [ "$mode" != "auto" ]; then
+        return 0
+    fi
+
+    # Auto mode: probe permissions before applying
+    # Check 1: filesystem type indicates permission faking
+    case "$mnt_fstype" in
+        fakeowner|virtiofs|grpcfuse|osxfs)
+            return 0
+            ;;
+    esac
+
+    # Check 2: direct permission probe
+    local _probe_file="$mnt_target/.bindfs-probe-$$"
+    if touch "$_probe_file" 2>/dev/null; then
+        chmod 755 "$_probe_file" 2>/dev/null || true
+        local _actual_perms
+        _actual_perms=$(stat -c '%a' "$_probe_file" 2>/dev/null || echo "000")
+        rm -f "$_probe_file" 2>/dev/null || true
+
+        if [ "$_actual_perms" != "755" ]; then
+            return 0
+        fi
+    else
+        # Can't write to probe - skip this mount
+        return 1
+    fi
+
+    return 1
+}
+
+# Apply bindfs overlay to a single mount point
+# Arguments:
+#   $1 - mount target path
+# Uses globals: BINDFS_CAN_SUDO, USERNAME, BINDFS_UID, BINDFS_GID
+# Returns: 0 on success, 1 on failure
+apply_bindfs_overlay() {
+    local mnt_target="$1"
+
+    if [ "$BINDFS_CAN_SUDO" = "true" ]; then
+        if run_privileged bindfs \
+            --force-user="$USERNAME" \
+            --force-group="$USERNAME" \
+            --create-for-user="$BINDFS_UID" \
+            --create-for-group="$BINDFS_GID" \
+            --perms=u+rwX,gd+rX,od+rX \
+            -o allow_other \
+            "$mnt_target" "$mnt_target" 2>/dev/null; then
+            echo "   ✓ Applied bindfs overlay on $mnt_target"
+            return 0
+        else
+            echo "   ⚠️  Failed to apply bindfs on $mnt_target"
+            return 1
+        fi
+    else
+        echo "   ⚠️  Cannot apply bindfs on $mnt_target - no root access or sudo"
+        return 1
+    fi
+}
+
 # ============================================================================
 # Docker Socket Access Fix
 # ============================================================================
@@ -339,24 +438,11 @@ if command -v bindfs >/dev/null 2>&1; then
     BINDFS_ENABLED="${BINDFS_ENABLED:-auto}"
 
     if [ "$BINDFS_ENABLED" != "false" ]; then
-        # Check for /dev/fuse
         if [ -e /dev/fuse ]; then
             echo "🔧 Checking bind mounts for permission fixes (bindfs=$BINDFS_ENABLED)..."
 
-            # Parse BINDFS_SKIP_PATHS into associative array for O(1) lookup
-            declare -A BINDFS_SKIP_MAP=()
-            if [ -n "${BINDFS_SKIP_PATHS:-}" ]; then
-                IFS=',' read -ra _skip_arr <<< "$BINDFS_SKIP_PATHS"
-                for _skip_path in "${_skip_arr[@]}"; do
-                    # Trim whitespace
-                    _skip_path="${_skip_path## }"
-                    _skip_path="${_skip_path%% }"
-                    [ -n "$_skip_path" ] && BINDFS_SKIP_MAP["$_skip_path"]=1
-                done
-                unset _skip_arr _skip_path
-            fi
+            parse_bindfs_skip_paths
 
-            # Determine if we can perform privileged operations
             BINDFS_CAN_SUDO=false
             if [ "$RUNNING_AS_ROOT" = "true" ]; then
                 BINDFS_CAN_SUDO=true
@@ -364,92 +450,14 @@ if command -v bindfs >/dev/null 2>&1; then
                 BINDFS_CAN_SUDO=true
             fi
 
-            # Get the target user's UID/GID
             BINDFS_UID=$(id -u "$USERNAME")
             BINDFS_GID=$(id -g "$USERNAME")
 
-            # Find all mount points under /workspace
-            # Note: --submounts requires the path itself to be a mount point,
-            # which may not be the case (e.g., /workspace/project is mounted
-            # but /workspace is not). List all mounts and filter by prefix.
             BINDFS_APPLIED=0
             while IFS=' ' read -r mnt_target mnt_fstype; do
-                # Skip empty lines
                 [ -z "$mnt_target" ] && continue
-
-                # Skip mounts that are already FUSE overlays
-                if [[ "$mnt_fstype" == *fuse* ]]; then
-                    continue
-                fi
-
-                # Skip paths in BINDFS_SKIP_PATHS
-                if [ -n "${BINDFS_SKIP_MAP[$mnt_target]+_}" ]; then
-                    echo "   Skipping $mnt_target (in BINDFS_SKIP_PATHS)"
-                    continue
-                fi
-
-                # For auto mode: probe permissions before applying
-                if [ "$BINDFS_ENABLED" = "auto" ]; then
-                    _needs_fix=false
-
-                    # Check 1: filesystem type indicates permission faking.
-                    # Docker Desktop uses these filesystem types for host
-                    # bind mounts — they lack full Linux permission semantics.
-                    #   fakeowner - Docker Desktop FUSE layer that intercepts
-                    #               stat/chmod (reports success but underlying
-                    #               APFS ignores it)
-                    #   virtiofs  - VirtioFS (Docker Desktop 4.x+)
-                    #   grpcfuse  - gRPC-FUSE (older Docker Desktop)
-                    #   osxfs     - legacy macOS filesystem sharing
-                    case "$mnt_fstype" in
-                        fakeowner|virtiofs|grpcfuse|osxfs)
-                            _needs_fix=true
-                            ;;
-                    esac
-
-                    # Check 2: direct permission probe (catches other broken
-                    # mounts not covered by the filesystem type check above)
-                    if [ "$_needs_fix" = "false" ]; then
-                        _probe_file="$mnt_target/.bindfs-probe-$$"
-
-                        if touch "$_probe_file" 2>/dev/null; then
-                            chmod 755 "$_probe_file" 2>/dev/null || true
-                            _actual_perms=$(stat -c '%a' "$_probe_file" 2>/dev/null || echo "000")
-                            rm -f "$_probe_file" 2>/dev/null || true
-
-                            if [ "$_actual_perms" != "755" ]; then
-                                _needs_fix=true
-                            fi
-                        else
-                            # Can't write to probe - skip this mount
-                            continue
-                        fi
-                        unset _probe_file _actual_perms
-                    fi
-
-                    if [ "$_needs_fix" = "false" ]; then
-                        continue
-                    fi
-                    unset _needs_fix
-                fi
-
-                # Apply bindfs overlay
-                if [ "$BINDFS_CAN_SUDO" = "true" ]; then
-                    if run_privileged bindfs \
-                        --force-user="$USERNAME" \
-                        --force-group="$USERNAME" \
-                        --create-for-user="$BINDFS_UID" \
-                        --create-for-group="$BINDFS_GID" \
-                        --perms=u+rwX,gd+rX,od+rX \
-                        -o allow_other \
-                        "$mnt_target" "$mnt_target" 2>/dev/null; then
-                        echo "   ✓ Applied bindfs overlay on $mnt_target"
-                        BINDFS_APPLIED=$((BINDFS_APPLIED + 1))
-                    else
-                        echo "   ⚠️  Failed to apply bindfs on $mnt_target"
-                    fi
-                else
-                    echo "   ⚠️  Cannot apply bindfs on $mnt_target - no root access or sudo"
+                if probe_mount_needs_fix "$mnt_target" "$mnt_fstype" "$BINDFS_ENABLED"; then
+                    apply_bindfs_overlay "$mnt_target" && BINDFS_APPLIED=$((BINDFS_APPLIED + 1))
                 fi
             done < <(findmnt -n -r -o TARGET,FSTYPE 2>/dev/null | grep -E '^/workspace(/| )' || true)
 
@@ -461,12 +469,10 @@ if command -v bindfs >/dev/null 2>&1; then
 
             unset BINDFS_SKIP_MAP BINDFS_CAN_SUDO BINDFS_UID BINDFS_GID BINDFS_APPLIED
         else
-            # /dev/fuse not available
             if [ "$BINDFS_ENABLED" = "true" ]; then
                 echo "⚠️  Warning: BINDFS_ENABLED=true but /dev/fuse not available"
                 echo "   Run container with: --cap-add SYS_ADMIN --device /dev/fuse"
             fi
-            # In auto mode, silently skip when /dev/fuse is missing
         fi
     fi
 fi

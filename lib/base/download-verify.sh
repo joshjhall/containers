@@ -31,7 +31,6 @@ set -euo pipefail
 # Color codes for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
 # ============================================================================
@@ -216,42 +215,6 @@ verify_checksum() {
         return 0
     else
         echo -e "${RED}✗ Checksum mismatch${NC}" >&2
-        return 1
-    fi
-}
-
-# ============================================================================
-# Helper Functions
-# ============================================================================
-
-# get_github_release_checksum - Helper to get checksums from GitHub releases
-#
-# Note: This is a placeholder. In practice, checksums should be hardcoded
-# in feature scripts after verifying them from official sources.
-#
-# Arguments:
-#   $1 - GitHub repo (e.g., "derailed/k9s")
-#   $2 - Version (e.g., "v0.32.4")
-#   $3 - Asset name pattern (e.g., "k9s_Linux_amd64.tar.gz")
-#
-# Returns:
-#   SHA256 checksum if found in checksums file
-get_github_release_checksum() {
-    local repo="$1"
-    local version="$2"
-    local asset_name="$3"
-
-    echo -e "${YELLOW}⚠ Note: Checksums should be hardcoded in scripts${NC}" >&2
-    echo -e "${YELLOW}  This function is for reference only${NC}" >&2
-
-    # Try to find checksums file
-    local checksums_url="https://github.com/${repo}/releases/download/${version}/checksums.txt"
-    local checksums
-
-    if checksums=$(command curl -fsSL "$checksums_url" 2>/dev/null); then
-        echo "$checksums" | grep "$asset_name" | cut -d' ' -f1
-    else
-        echo -e "${RED}✗ Could not fetch checksums from GitHub${NC}" >&2
         return 1
     fi
 }

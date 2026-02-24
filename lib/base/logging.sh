@@ -57,6 +57,22 @@ _should_log() {
     [ "$level" -le "$current" ]
 }
 
+# Get line number after last "Executing:" marker in a log file
+_get_last_command_start_line() {
+    local log_file="$1"
+    local marker_line
+    marker_line=$(grep -n "^Executing: " "$log_file" | tail -1 | cut -d: -f1)
+    echo $((marker_line + 1))
+}
+
+# Count pattern matches in log output since a given line
+_count_patterns_since() {
+    local log_file="$1"
+    local start_line="$2"
+    local pattern="$3"
+    tail -n +"$start_line" "$log_file" | grep -cE "$pattern" 2>/dev/null || echo 0
+}
+
 # Source JSON logging utilities if enabled
 if [ "${ENABLE_JSON_LOGGING:-false}" = "true" ]; then
     # shellcheck source=lib/base/json-logging.sh
@@ -201,22 +217,24 @@ log_command() {
 
     # Extract any errors or warnings from the last command output
     if [ -f "$CURRENT_LOG_FILE" ]; then
-        # Get lines since the last command marker
-        tail -n +$(($(grep -n "^Executing: " "$CURRENT_LOG_FILE" | tail -1 | cut -d: -f1) + 1)) "$CURRENT_LOG_FILE" | \
-        grep -E "(ERROR|Error|error|FAILED|Failed|failed|FATAL|Fatal|fatal)" >> "$CURRENT_ERROR_FILE" 2>/dev/null || true
+        local start_line
+        start_line=$(_get_last_command_start_line "$CURRENT_LOG_FILE")
 
+        local error_pattern="(ERROR|Error|error|FAILED|Failed|failed|FATAL|Fatal|fatal)"
+        local warn_pattern="(WARNING|Warning|warning|WARN|Warn|warn)"
+
+        # Append matching lines to error file
+        tail -n +"$start_line" "$CURRENT_LOG_FILE" | grep -E "$error_pattern" >> "$CURRENT_ERROR_FILE" 2>/dev/null || true
+        tail -n +"$start_line" "$CURRENT_LOG_FILE" | grep -E "$warn_pattern" >> "$CURRENT_ERROR_FILE" 2>/dev/null || true
+
+        # Count new errors and warnings
         local new_errors
-        new_errors=$(tail -n +$(($(grep -n "^Executing: " "$CURRENT_LOG_FILE" | tail -1 | cut -d: -f1) + 1)) "$CURRENT_LOG_FILE" | \
-        grep -cE "(ERROR|Error|error|FAILED|Failed|failed|FATAL|Fatal|fatal)" 2>/dev/null || echo 0)
+        new_errors=$(_count_patterns_since "$CURRENT_LOG_FILE" "$start_line" "$error_pattern")
         new_errors=$(echo "$new_errors" | tr -d '[:space:]')
         ERROR_COUNT=$((ERROR_COUNT + ${new_errors:-0}))
 
-        tail -n +$(($(grep -n "^Executing: " "$CURRENT_LOG_FILE" | tail -1 | cut -d: -f1) + 1)) "$CURRENT_LOG_FILE" | \
-        grep -E "(WARNING|Warning|warning|WARN|Warn|warn)" >> "$CURRENT_ERROR_FILE" 2>/dev/null || true
-
         local new_warnings
-        new_warnings=$(tail -n +$(($(grep -n "^Executing: " "$CURRENT_LOG_FILE" | tail -1 | cut -d: -f1) + 1)) "$CURRENT_LOG_FILE" | \
-        grep -cE "(WARNING|Warning|warning|WARN|Warn|warn)" 2>/dev/null || echo 0)
+        new_warnings=$(_count_patterns_since "$CURRENT_LOG_FILE" "$start_line" "$warn_pattern")
         new_warnings=$(echo "$new_warnings" | tr -d '[:space:]')
         WARNING_COUNT=$((WARNING_COUNT + ${new_warnings:-0}))
     fi
@@ -624,3 +642,5 @@ export -f log_warning
 export -f safe_eval
 export -f _get_log_level_num
 export -f _should_log
+export -f _get_last_command_start_line
+export -f _count_patterns_since
