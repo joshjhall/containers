@@ -43,76 +43,86 @@ _is_major_only() {
     [[ "$version" =~ ^[0-9]+$ ]]
 }
 
-# ============================================================================
-# Python Version Resolution
-# ============================================================================
-
-# resolve_python_version - Resolve partial Python version to full version
+# _resolve_version_from_api - Common version resolution from API data
+#
+# Encapsulates the shared algorithm: full-version early return, API fetch,
+# grep -oP extraction, optional sed cleanup, sort -V, and export.
 #
 # Arguments:
-#   $1 - Python version (e.g., "3", "3.12", "3.12.7")
-#
-# Returns:
-#   Full version string (e.g., "3.12.7")
-#
-# Exports:
-#   PYTHON_RESOLVED_VERSION - The resolved version if partial
-#
-# Supports:
-#   "3.12.7" -> "3.12.7" (no change)
-#   "3.12" -> "3.12.8" (latest patch)
-#   "3" -> "3.13.1" (latest stable)
-#
-# Example:
-#   resolved=$(resolve_python_version "3.12")
-#   if [ -n "$PYTHON_RESOLVED_VERSION" ]; then
-#       log_message "Resolved Python 3.12 -> $PYTHON_RESOLVED_VERSION"
-#   fi
-resolve_python_version() {
-    local version="$1"
+#   $1 - Language name for error messages (e.g., "Python")
+#   $2 - Version string to resolve
+#   $3 - API URL to fetch version data from
+#   $4 - grep -oP pattern for major.minor (X.Y) matching
+#   $5 - sed expression for major.minor cleanup (empty to skip)
+#   $6 - grep -oP pattern for major-only (X) matching
+#   $7 - sed expression for major-only cleanup (empty to skip)
+#   $8 - Export variable name (e.g., "PYTHON_RESOLVED_VERSION")
+_resolve_version_from_api() {
+    local language="$1"
+    local version="$2"
+    local api_url="$3"
+    local mm_grep="$4"
+    local mm_sed="$5"
+    local mo_grep="$6"
+    local mo_sed="$7"
+    local export_var="$8"
 
-    # If already full version, return as-is
     if _is_full_version "$version"; then
         echo "$version"
         return 0
     fi
 
-    # Try to fetch from python.org FTP directory listing
-    local python_ftp="https://www.python.org/ftp/python/"
-    local versions_page
-    versions_page=$(_curl_safe "$python_ftp" 2>/dev/null || echo "")
+    local api_data
+    api_data=$(_curl_safe "$api_url" 2>/dev/null || echo "")
 
-    if [ -z "$versions_page" ]; then
-        log_error "Failed to fetch Python version list from python.org"
+    if [ -z "$api_data" ]; then
+        log_error "Failed to fetch $language version list"
         return 1
     fi
 
-    local resolved
+    local resolved="" grep_pattern="" sed_expr=""
 
     if _is_major_minor "$version"; then
-        # Major.minor like "3.12" -> find latest "3.12.X"
-        resolved=$(echo "$versions_page" | \
-            grep -oP ">${version}\.\d+/" | \
-            command sed 's/>//; s/\///' | \
-            sort -V | \
-            tail -1)
+        grep_pattern="$mm_grep"
+        sed_expr="$mm_sed"
     elif _is_major_only "$version"; then
-        # Major only like "3" -> find latest "3.X.Y"
-        resolved=$(echo "$versions_page" | \
-            grep -oP ">${version}\.\d+\.\d+/" | \
-            command sed 's/>//; s/\///' | \
-            sort -V | \
-            tail -1)
+        grep_pattern="$mo_grep"
+        sed_expr="$mo_sed"
+    fi
+
+    if [ -n "$grep_pattern" ]; then
+        resolved=$(echo "$api_data" | grep -oP "$grep_pattern" || true)
+        if [ -n "$sed_expr" ]; then
+            resolved=$(echo "$resolved" | command sed "$sed_expr")
+        fi
+        resolved=$(echo "$resolved" | sort -V | tail -1)
     fi
 
     if [ -n "$resolved" ]; then
-        export PYTHON_RESOLVED_VERSION="$resolved"
+        export "$export_var=$resolved"
         echo "$resolved"
         return 0
     fi
 
-    log_error "Failed to resolve Python version: $version"
+    log_error "Failed to resolve $language version: $version"
     return 1
+}
+
+# ============================================================================
+# Python Version Resolution
+# ============================================================================
+
+# resolve_python_version - Resolve partial Python version to full version
+#   "3.12" -> "3.12.8", "3" -> "3.13.1", "3.12.7" -> "3.12.7"
+# Exports: PYTHON_RESOLVED_VERSION
+resolve_python_version() {
+    _resolve_version_from_api "Python" "$1" \
+        "https://www.python.org/ftp/python/" \
+        '>'"$1"'\.\d+/' \
+        's/>//; s/\///' \
+        '>'"$1"'\.\d+\.\d+/' \
+        's/>//; s/\///' \
+        "PYTHON_RESOLVED_VERSION"
 }
 
 # ============================================================================
@@ -120,66 +130,16 @@ resolve_python_version() {
 # ============================================================================
 
 # resolve_node_version - Resolve partial Node.js version to full version
-#
-# Arguments:
-#   $1 - Node version (e.g., "20", "20.18", "20.18.0")
-#
-# Returns:
-#   Full version string (e.g., "20.18.0")
-#
-# Exports:
-#   NODE_RESOLVED_VERSION - The resolved version if partial
-#
-# Supports:
-#   "20.18.0" -> "20.18.0" (no change)
-#   "20.18" -> "20.18.3" (latest patch)
-#   "20" -> "20.18.3" (latest minor+patch)
-#
-# Example:
-#   resolved=$(resolve_node_version "20")
+#   "20.18" -> "20.18.3", "20" -> "20.18.3", "20.18.0" -> "20.18.0"
+# Exports: NODE_RESOLVED_VERSION
 resolve_node_version() {
-    local version="$1"
-
-    # If already full version, return as-is
-    if _is_full_version "$version"; then
-        echo "$version"
-        return 0
-    fi
-
-    # Fetch Node.js version index
-    local index_url="https://nodejs.org/dist/index.json"
-    local versions_json
-    versions_json=$(_curl_safe "$index_url" 2>/dev/null || echo "")
-
-    if [ -z "$versions_json" ]; then
-        log_error "Failed to fetch Node.js version list"
-        return 1
-    fi
-
-    local resolved
-
-    if _is_major_minor "$version"; then
-        # Major.minor like "20.18" -> find latest "20.18.X"
-        resolved=$(echo "$versions_json" | \
-            grep -oP '"version":"v\K'"${version}"'\.\d+' | \
-            sort -V | \
-            tail -1)
-    elif _is_major_only "$version"; then
-        # Major only like "20" -> find latest "20.X.Y"
-        resolved=$(echo "$versions_json" | \
-            grep -oP '"version":"v\K'"${version}"'\.\d+\.\d+' | \
-            sort -V | \
-            tail -1)
-    fi
-
-    if [ -n "$resolved" ]; then
-        export NODE_RESOLVED_VERSION="$resolved"
-        echo "$resolved"
-        return 0
-    fi
-
-    log_error "Failed to resolve Node.js version: $version"
-    return 1
+    _resolve_version_from_api "Node.js" "$1" \
+        "https://nodejs.org/dist/index.json" \
+        '"version":"v\K'"$1"'\.\d+' \
+        "" \
+        '"version":"v\K'"$1"'\.\d+\.\d+' \
+        "" \
+        "NODE_RESOLVED_VERSION"
 }
 
 # ============================================================================
@@ -187,69 +147,16 @@ resolve_node_version() {
 # ============================================================================
 
 # resolve_rust_version - Resolve partial Rust version to full version
-#
-# Arguments:
-#   $1 - Rust version (e.g., "1", "1.82", "1.82.0")
-#
-# Returns:
-#   Full version string (e.g., "1.82.0")
-#
-# Exports:
-#   RUST_RESOLVED_VERSION - The resolved version if partial
-#
-# Supports:
-#   "1.82.0" -> "1.82.0" (no change)
-#   "1.82" -> "1.82.0" (latest patch)
-#   "1" -> "1.84.0" (latest stable)
-#
-# Example:
-#   resolved=$(resolve_rust_version "1.82")
+#   "1.82" -> "1.82.0", "1" -> "1.84.0", "1.82.0" -> "1.82.0"
+# Exports: RUST_RESOLVED_VERSION
 resolve_rust_version() {
-    local version="$1"
-
-    # If already full version, return as-is
-    if _is_full_version "$version"; then
-        echo "$version"
-        return 0
-    fi
-
-    # Fetch Rust versions from GitHub releases
-    local releases_url="https://api.github.com/repos/rust-lang/rust/releases?per_page=100"
-    local releases_json
-    releases_json=$(_curl_safe "$releases_url" 2>/dev/null || echo "")
-
-    if [ -z "$releases_json" ]; then
-        log_error "Failed to fetch Rust version list"
-        return 1
-    fi
-
-    local resolved
-
-    if _is_major_minor "$version"; then
-        # Major.minor like "1.82" -> find latest "1.82.X"
-        # Format in JSON: "tag_name": "1.82.0",
-        resolved=$(echo "$releases_json" | \
-            grep -oP '"tag_name":\s*"'"${version}"'\.\d+"' | \
-            command sed 's/"tag_name":\s*"//; s/"$//' | \
-            sort -V | \
-            tail -1)
-    elif _is_major_only "$version"; then
-        # Major only like "1" -> find latest "1.X.Y"
-        resolved=$(echo "$releases_json" | \
-            grep -oP '"tag_name":\s*"'"${version}"'\.\d+\.\d+"' | \
-            command sed 's/"tag_name":\s*"//; s/"$//' | \
-            sort -V | \
-            tail -1)
-    fi
-
-    if [ -n "$resolved" ]; then
-        export RUST_RESOLVED_VERSION="$resolved"
-        echo "$resolved"
-        return 0
-    fi
-
-    log_error "Failed to resolve Rust version: $version"
-    return 1
+    _resolve_version_from_api "Rust" "$1" \
+        "https://api.github.com/repos/rust-lang/rust/releases?per_page=100" \
+        '"tag_name":\s*"'"$1"'\.\d+"' \
+        's/"tag_name":\s*"//; s/"$//' \
+        '"tag_name":\s*"'"$1"'\.\d+\.\d+"' \
+        's/"tag_name":\s*"//; s/"$//' \
+        "RUST_RESOLVED_VERSION"
 }
 
 # ============================================================================
@@ -319,68 +226,16 @@ resolve_java_version() {
 # ============================================================================
 
 # resolve_ruby_version - Resolve partial Ruby version to full version
-#
-# Arguments:
-#   $1 - Ruby version (e.g., "3", "3.4", "3.4.7")
-#
-# Returns:
-#   Full version string (e.g., "3.4.7")
-#
-# Exports:
-#   RUBY_RESOLVED_VERSION - The resolved version if partial
-#
-# Supports:
-#   "3.4.7" -> "3.4.7" (no change)
-#   "3.4" -> "3.4.7" (latest patch)
-#   "3" -> "3.4.7" (latest stable)
-#
-# Example:
-#   resolved=$(resolve_ruby_version "3.4")
+#   "3.4" -> "3.4.7", "3" -> "3.4.7", "3.4.7" -> "3.4.7"
+# Exports: RUBY_RESOLVED_VERSION
 resolve_ruby_version() {
-    local version="$1"
-
-    # If already full version, return as-is
-    if _is_full_version "$version"; then
-        echo "$version"
-        return 0
-    fi
-
-    # Fetch Ruby releases from ruby-lang.org downloads page
-    local downloads_url="https://www.ruby-lang.org/en/downloads/releases/"
-    local releases_page
-    releases_page=$(_curl_safe "$downloads_url" 2>/dev/null || echo "")
-
-    if [ -z "$releases_page" ]; then
-        log_error "Failed to fetch Ruby version list from ruby-lang.org"
-        return 1
-    fi
-
-    local resolved
-
-    if _is_major_minor "$version"; then
-        # Major.minor like "3.4" -> find latest "3.4.X"
-        resolved=$(echo "$releases_page" | \
-            grep -oP "Ruby ${version}\.\d+" | \
-            command sed 's/Ruby //' | \
-            sort -V | \
-            tail -1)
-    elif _is_major_only "$version"; then
-        # Major only like "3" -> find latest "3.X.Y"
-        resolved=$(echo "$releases_page" | \
-            grep -oP "Ruby ${version}\.\d+\.\d+" | \
-            command sed 's/Ruby //' | \
-            sort -V | \
-            tail -1)
-    fi
-
-    if [ -n "$resolved" ]; then
-        export RUBY_RESOLVED_VERSION="$resolved"
-        echo "$resolved"
-        return 0
-    fi
-
-    log_error "Failed to resolve Ruby version: $version"
-    return 1
+    _resolve_version_from_api "Ruby" "$1" \
+        "https://www.ruby-lang.org/en/downloads/releases/" \
+        "Ruby $1\.\d+" \
+        's/Ruby //' \
+        "Ruby $1\.\d+\.\d+" \
+        's/Ruby //' \
+        "RUBY_RESOLVED_VERSION"
 }
 
 # ============================================================================
@@ -388,74 +243,20 @@ resolve_ruby_version() {
 # ============================================================================
 
 # resolve_go_version - Resolve partial Go version to full version
+#   "1.23" -> "1.23.5", "1" -> "1.23.5", "1.23.5" -> "1.23.5"
+# Exports: GO_RESOLVED_VERSION
 #
-# Arguments:
-#   $1 - Go version (e.g., "1", "1.23", "1.23.5")
-#
-# Returns:
-#   Full version string (e.g., "1.23.5")
-#
-# Exports:
-#   GO_RESOLVED_VERSION - The resolved version if partial
-#
-# Supports:
-#   "1.23.5" -> "1.23.5" (no change)
-#   "1.23" -> "1.23.5" (latest patch)
-#   "1" -> "1.23.5" (latest stable)
-#
-# Example:
-#   resolved=$(resolve_go_version "1.23")
+# Note: Pre-release versions (rc, beta, alpha) are excluded by the grep
+# patterns requiring numeric segments after dots (e.g., \.\d+), which
+# naturally rejects formats like "go1.24rc1".
 resolve_go_version() {
-    local version="$1"
-
-    # If already full version, return as-is
-    if _is_full_version "$version"; then
-        echo "$version"
-        return 0
-    fi
-
-    # Fetch Go version list from go.dev
-    local versions_url="https://go.dev/dl/?mode=json&include=all"
-    local versions_json
-    versions_json=$(_curl_safe "$versions_url" 2>/dev/null || echo "")
-
-    if [ -z "$versions_json" ]; then
-        log_error "Failed to fetch Go version list from go.dev"
-        return 1
-    fi
-
-    local resolved
-
-    if _is_major_minor "$version"; then
-        # Major.minor like "1.23" -> find latest "1.23.X"
-        # Filter out pre-release versions (rc, beta, alpha)
-        resolved=$(echo "$versions_json" | \
-            grep '"version"' | \
-            command sed 's/.*"version": "go//; s/".*//' | \
-            grep "^${version}\." | \
-            grep -v 'rc\|beta\|alpha' | \
-            sort -V | \
-            tail -1)
-    elif _is_major_only "$version"; then
-        # Major only like "1" -> find latest "1.X.Y"
-        # Filter out pre-release versions (rc, beta, alpha)
-        resolved=$(echo "$versions_json" | \
-            grep '"version"' | \
-            command sed 's/.*"version": "go//; s/".*//' | \
-            grep "^${version}\." | \
-            grep -v 'rc\|beta\|alpha' | \
-            sort -V | \
-            tail -1)
-    fi
-
-    if [ -n "$resolved" ]; then
-        export GO_RESOLVED_VERSION="$resolved"
-        echo "$resolved"
-        return 0
-    fi
-
-    log_error "Failed to resolve Go version: $version"
-    return 1
+    _resolve_version_from_api "Go" "$1" \
+        "https://go.dev/dl/?mode=json&include=all" \
+        '"version":\s*"go'"$1"'\.\d+"' \
+        's/.*"go//; s/"$//' \
+        '"version":\s*"go'"$1"'\.\d+\.\d+"' \
+        's/.*"go//; s/"$//' \
+        "GO_RESOLVED_VERSION"
 }
 
 # ============================================================================
@@ -463,69 +264,16 @@ resolve_go_version() {
 # ============================================================================
 
 # resolve_kotlin_version - Resolve partial Kotlin version to full version
-#
-# Arguments:
-#   $1 - Kotlin version (e.g., "2", "2.1", "2.1.0")
-#
-# Returns:
-#   Full version string (e.g., "2.1.0")
-#
-# Exports:
-#   KOTLIN_RESOLVED_VERSION - The resolved version if partial
-#
-# Supports:
-#   "2.1.0" -> "2.1.0" (no change)
-#   "2.1" -> "2.1.0" (latest patch)
-#   "2" -> "2.1.0" (latest minor+patch)
-#
-# Example:
-#   resolved=$(resolve_kotlin_version "2.1")
+#   "2.1" -> "2.1.0", "2" -> "2.1.0", "2.1.0" -> "2.1.0"
+# Exports: KOTLIN_RESOLVED_VERSION
 resolve_kotlin_version() {
-    local version="$1"
-
-    # If already full version, return as-is
-    if _is_full_version "$version"; then
-        echo "$version"
-        return 0
-    fi
-
-    # Fetch Kotlin versions from GitHub releases
-    local releases_url="https://api.github.com/repos/JetBrains/kotlin/releases?per_page=100"
-    local releases_json
-    releases_json=$(_curl_safe "$releases_url" 2>/dev/null || echo "")
-
-    if [ -z "$releases_json" ]; then
-        log_error "Failed to fetch Kotlin version list"
-        return 1
-    fi
-
-    local resolved
-
-    if _is_major_minor "$version"; then
-        # Major.minor like "2.1" -> find latest "2.1.X"
-        # Format in JSON: "tag_name": "v2.1.0",
-        resolved=$(echo "$releases_json" | \
-            grep -oP '"tag_name":\s*"v'"${version}"'\.\d+"' | \
-            command sed 's/"tag_name":\s*"v//; s/"$//' | \
-            sort -V | \
-            tail -1)
-    elif _is_major_only "$version"; then
-        # Major only like "2" -> find latest "2.X.Y"
-        resolved=$(echo "$releases_json" | \
-            grep -oP '"tag_name":\s*"v'"${version}"'\.\d+\.\d+"' | \
-            command sed 's/"tag_name":\s*"v//; s/"$//' | \
-            sort -V | \
-            tail -1)
-    fi
-
-    if [ -n "$resolved" ]; then
-        export KOTLIN_RESOLVED_VERSION="$resolved"
-        echo "$resolved"
-        return 0
-    fi
-
-    log_error "Failed to resolve Kotlin version: $version"
-    return 1
+    _resolve_version_from_api "Kotlin" "$1" \
+        "https://api.github.com/repos/JetBrains/kotlin/releases?per_page=100" \
+        '"tag_name":\s*"v'"$1"'\.\d+"' \
+        's/"tag_name":\s*"v//; s/"$//' \
+        '"tag_name":\s*"v'"$1"'\.\d+\.\d+"' \
+        's/"tag_name":\s*"v//; s/"$//' \
+        "KOTLIN_RESOLVED_VERSION"
 }
 
 # ============================================================================
