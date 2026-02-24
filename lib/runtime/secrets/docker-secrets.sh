@@ -29,19 +29,9 @@
 
 set -euo pipefail
 
-# Source logging utilities if available
-if [ -f "/tmp/build-scripts/base/logging.sh" ]; then
-    # shellcheck source=/dev/null
-    source "/tmp/build-scripts/base/logging.sh"
-elif [ -f "/opt/container-runtime/base/logging.sh" ]; then
-    # shellcheck source=/dev/null
-    source "/opt/container-runtime/base/logging.sh"
-else
-    # Fallback logging functions
-    log_info() { echo "[INFO] $*"; }
-    log_error() { echo "[ERROR] $*" >&2; }
-    log_warning() { echo "[WARNING] $*" >&2; }
-fi
+# Source shared logging and helpers
+# shellcheck source=common.sh
+source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 
 # ============================================================================
 # Docker Secrets Detection

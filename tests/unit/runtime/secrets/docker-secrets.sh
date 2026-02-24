@@ -80,9 +80,9 @@ test_defines_health_check() {
         "Script defines docker_secrets_health_check function"
 }
 
-test_fallback_logging_defined() {
-    assert_file_contains "$SOURCE_FILE" 'log_info()' \
-        "Script defines fallback log_info"
+test_sources_common_sh() {
+    assert_file_contains "$SOURCE_FILE" 'common\.sh' \
+        "Script sources common.sh for logging and helpers"
 }
 
 test_default_secrets_dir() {
@@ -389,7 +389,7 @@ run_test_with_setup test_strict_mode "Script uses strict mode"
 run_test_with_setup test_defines_docker_secrets_available "Defines docker_secrets_available function"
 run_test_with_setup test_defines_load_secrets_from_docker "Defines load_secrets_from_docker function"
 run_test_with_setup test_defines_health_check "Defines health check function"
-run_test_with_setup test_fallback_logging_defined "Fallback logging functions defined"
+run_test_with_setup test_sources_common_sh "Sources common.sh for logging and helpers"
 run_test_with_setup test_default_secrets_dir "Uses /run/secrets as default"
 
 # Availability detection

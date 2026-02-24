@@ -33,19 +33,9 @@
 
 set -euo pipefail
 
-# Source logging utilities if available
-if [ -f "/tmp/build-scripts/base/logging.sh" ]; then
-    # shellcheck source=/dev/null
-    source "/tmp/build-scripts/base/logging.sh"
-elif [ -f "/opt/container-runtime/base/logging.sh" ]; then
-    # shellcheck source=/dev/null
-    source "/opt/container-runtime/base/logging.sh"
-else
-    # Fallback logging functions
-    log_info() { echo "[INFO] $*"; }
-    log_error() { echo "[ERROR] $*" >&2; }
-    log_warning() { echo "[WARNING] $*" >&2; }
-fi
+# Source shared logging and helpers
+# shellcheck source=common.sh
+source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 
 # ============================================================================
 # 1Password Connect Server Functions
@@ -153,10 +143,8 @@ op_connect_load_secrets() {
             # Extract fields and export as environment variables
             while IFS='=' read -r field_label field_value; do
                 if [ -n "$field_label" ] && [ -n "$field_value" ]; then
-                    # Convert field label to valid env var name
-                    local env_var="${prefix}${field_label// /_}"
-                    env_var="${env_var//[^a-zA-Z0-9_]/}"
-                    env_var="${env_var^^}"
+                    local env_var
+                    env_var=$(normalize_env_var_name "$prefix" "$field_label")
 
                     export "${env_var}=${field_value}"
                     count=$((count + 1))
@@ -261,10 +249,8 @@ op_cli_load_secrets() {
             if command -v jq > /dev/null 2>&1; then
                 while IFS='=' read -r field_label field_value; do
                     if [ -n "$field_label" ] && [ -n "$field_value" ]; then
-                        # Convert field label to valid env var name
-                        local env_var="${prefix}${field_label// /_}"
-                        env_var="${env_var//[^a-zA-Z0-9_]/}"
-                        env_var="${env_var^^}"
+                        local env_var
+                        env_var=$(normalize_env_var_name "$prefix" "$field_label")
 
                         export "${env_var}=${field_value}"
                         count=$((count + 1))

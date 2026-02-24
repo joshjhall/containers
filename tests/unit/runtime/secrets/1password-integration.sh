@@ -82,9 +82,9 @@ test_defines_op_health_check() {
         "Script defines op_health_check function"
 }
 
-test_fallback_logging_defined() {
-    assert_file_contains "$SOURCE_FILE" 'log_info()' \
-        "Script defines fallback log_info"
+test_sources_common_sh() {
+    assert_file_contains "$SOURCE_FILE" 'common\.sh' \
+        "Script sources common.sh for logging and helpers"
 }
 
 # ============================================================================
@@ -216,12 +216,9 @@ test_connect_jq_not_available() {
 }
 
 test_connect_field_name_normalization() {
-    # Verify the source code contains the field_label to env_var conversion pattern
-    # This checks that field labels are uppercased and non-alphanumeric chars stripped
-    assert_file_contains "$SOURCE_FILE" 'env_var="${env_var^^}"' \
-        "Source should uppercase field labels for env var names"
-    assert_file_contains "$SOURCE_FILE" 'env_var="${env_var//' \
-        "Source should contain env var name normalization pattern"
+    # Verify the source code uses normalize_env_var_name from common.sh
+    assert_file_contains "$SOURCE_FILE" 'normalize_env_var_name' \
+        "Source should use normalize_env_var_name for field label conversion"
 }
 
 # ============================================================================
@@ -358,7 +355,7 @@ run_test_with_setup test_defines_op_connect_load_secrets "Defines op_connect_loa
 run_test_with_setup test_defines_op_cli_load_secrets "Defines op_cli_load_secrets function"
 run_test_with_setup test_defines_load_secrets_from_1password "Defines load_secrets_from_1password function"
 run_test_with_setup test_defines_op_health_check "Defines op_health_check function"
-run_test_with_setup test_fallback_logging_defined "Fallback logging functions defined"
+run_test_with_setup test_sources_common_sh "Sources common.sh for logging and helpers"
 
 # load_secrets_from_1password
 run_test_with_setup test_load_secrets_disabled_by_default "Returns 0 when OP_ENABLED not set (disabled)"
