@@ -420,8 +420,66 @@ test_plugin_marketplace_variation() {
 }
 
 # ============================================================================
+# CLAUDE_CHANNEL Validation Tests
+# ============================================================================
+
+# Path to the source file under test
+CLAUDE_CODE_SETUP_SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../lib/features" && pwd)/claude-code-setup.sh"
+
+# Helper: test whether a channel value matches the allowlist pattern
+_is_valid_channel() {
+    local channel="$1"
+    case "$channel" in
+        latest|stable) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+test_channel_validation_exists() {
+    # Static check: the source file must contain the case guard
+    if grep -q 'Invalid CLAUDE_CHANNEL' "$CLAUDE_CODE_SETUP_SRC"; then
+        pass_test "Source contains CLAUDE_CHANNEL validation guard"
+    else
+        fail_test "Source is missing CLAUDE_CHANNEL validation guard"
+    fi
+}
+
+test_valid_channels_accepted() {
+    local failures=0
+    for ch in "latest" "stable"; do
+        if ! _is_valid_channel "$ch"; then
+            failures=$((failures + 1))
+        fi
+    done
+    assert_equals "$failures" "0" "Both 'latest' and 'stable' accepted"
+}
+
+test_invalid_channels_rejected() {
+    local adversarial_values=(
+        'latest; echo INJECTED'
+        'stable && rm -rf /'
+        'beta'
+        ''
+        '../../etc/passwd'
+        'latest$(whoami)'
+    )
+    local failures=0
+    for ch in "${adversarial_values[@]}"; do
+        if _is_valid_channel "$ch"; then
+            failures=$((failures + 1))
+        fi
+    done
+    assert_equals "$failures" "0" "All adversarial channel values rejected"
+}
+
+# ============================================================================
 # Run Tests
 # ============================================================================
+
+# CLAUDE_CHANNEL validation tests
+run_test test_channel_validation_exists "Channel: Validation guard exists in source"
+run_test test_valid_channels_accepted "Channel: Valid values accepted"
+run_test test_invalid_channels_rejected "Channel: Adversarial values rejected"
 
 # Plugin matching tests
 run_test test_plugin_match_exact_name "Plugin: Match exact name"

@@ -44,6 +44,11 @@ log_message "Installing Claude Code CLI..."
 
 # Claude Code release channel (stable or latest)
 CLAUDE_CHANNEL="${CLAUDE_CHANNEL:-latest}"
+case "$CLAUDE_CHANNEL" in
+    latest|stable) ;;
+    *) log_error "Invalid CLAUDE_CHANNEL: '$CLAUDE_CHANNEL' (must be 'latest' or 'stable')"
+       exit 1 ;;
+esac
 log_message "Using Claude Code channel: ${CLAUDE_CHANNEL}"
 
 # Get the target user's home directory
