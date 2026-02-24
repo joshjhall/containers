@@ -66,37 +66,9 @@ command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
 
-# Get latest release from GitHub
-get_github_release() {
-    local repo="$1"
-    local tag_pattern="${2:-}"
-    local response
-    if [ -z "$tag_pattern" ]; then
-        if [ -n "${GITHUB_TOKEN:-}" ]; then
-            response=$(command curl -s -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com/repos/${repo}/releases/latest")
-        else
-            response=$(command curl -s "https://api.github.com/repos/${repo}/releases/latest")
-        fi
-        # Check if we got rate limited
-        if echo "$response" | ggrep -q "rate limit exceeded"; then
-            echo "rate-limited"
-            return
-        fi
-        echo "$response" | ggrep -oP '"tag_name": "\K[^"]+' || echo "unknown"
-    else
-        # For specific tag patterns (e.g., some projects use different naming)
-        if [ -n "${GITHUB_TOKEN:-}" ]; then
-            response=$(command curl -s -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com/repos/${repo}/tags")
-        else
-            response=$(command curl -s "https://api.github.com/repos/${repo}/tags")
-        fi
-        if echo "$response" | ggrep -q "rate limit exceeded"; then
-            echo "rate-limited"
-            return
-        fi
-        echo "$response" | jq -r ".[].name | select(. | test(\"${tag_pattern}\"))" | head -1 || echo "unknown"
-    fi
-}
+# Source shared version API functions
+# shellcheck source=lib/runtime/lib/version-api.sh
+source "${SCRIPT_DIR}/lib/version-api.sh"
 
 # Get latest Python version
 get_latest_python() {
@@ -174,32 +146,6 @@ extract_version() {
     local file="$1"
     local pattern="$2"
     ggrep -oP "${pattern}" "$file" | head -1 || echo "not found"
-}
-
-# Compare versions
-compare_version() {
-    local current="$1"
-    local latest="$2"
-
-    if [ "$current" = "$latest" ]; then
-        echo "up-to-date"
-    elif [ "$latest" = "unknown" ] || [ "$latest" = "not found" ] || [ "$latest" = "rate-limited" ]; then
-        echo "unknown"
-    else
-        # Try to determine if current is newer than latest
-        # This is a simple comparison - works for most semantic versions
-        if command -v sort &>/dev/null; then
-            local sorted
-            sorted=$(printf "%s\n%s" "$current" "$latest" | sort -V | tail -1)
-            if [ "$sorted" = "$current" ] && [ "$current" != "$latest" ]; then
-                echo "newer"
-            else
-                echo "outdated"
-            fi
-        else
-            echo "outdated"
-        fi
-    fi
 }
 
 # Print result
@@ -507,16 +453,6 @@ if [ "$OUTPUT_FORMAT" != "--json" ]; then
 fi
 
 # Function to get PyPI package latest version
-get_pypi_version() {
-    local package="$1"
-    local response
-    if response=$(command curl -s "https://pypi.org/pypi/${package}/json"); then
-        echo "$response" | jq -r '.info.version' 2>/dev/null || echo "unknown"
-    else
-        echo "unknown"
-    fi
-}
-
 # Python dev tools (informational only)
 python_dev_tools=(
     "black"
@@ -550,17 +486,6 @@ if [ "$OUTPUT_FORMAT" != "--json" ]; then
     printf "%-25s %-15s\n" "----" "----------------"
 fi
 
-# Function to get crates.io package latest version
-get_crates_version() {
-    local package="$1"
-    local response
-    if response=$(command curl -s "https://crates.io/api/v1/crates/${package}"); then
-        echo "$response" | jq -r '.crate.max_version' 2>/dev/null || echo "unknown"
-    else
-        echo "unknown"
-    fi
-}
-
 # Rust dev tools (informational only)
 rust_dev_tools=(
     "tree-sitter-cli"
@@ -589,17 +514,6 @@ if [ "$OUTPUT_FORMAT" != "--json" ]; then
     printf "%-25s %-15s\n" "TOOL" "LATEST AVAILABLE"
     printf "%-25s %-15s\n" "----" "----------------"
 fi
-
-# Function to get RubyGems latest version
-get_rubygems_version() {
-    local gem="$1"
-    local response
-    if response=$(command curl -s "https://rubygems.org/api/v1/gems/${gem}.json"); then
-        echo "$response" | jq -r '.version' 2>/dev/null || echo "unknown"
-    else
-        echo "unknown"
-    fi
-}
 
 # Ruby dev tools (informational only)
 ruby_dev_tools=(
@@ -644,18 +558,6 @@ r_dev_tools=(
     "renv"
     "pak"
 )
-
-# Function to get CRAN package latest version
-get_cran_version() {
-    local package="$1"
-    # Use the CRAN API to get package info
-    local response
-    if response=$(command curl -s "https://crandb.r-pkg.org/${package}"); then
-        echo "$response" | jq -r '.Version // .version // "unknown"' 2>/dev/null || echo "unknown"
-    else
-        echo "unknown"
-    fi
-}
 
 for tool in "${r_dev_tools[@]}"; do
     latest=$(get_cran_version "$tool")

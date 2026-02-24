@@ -115,107 +115,10 @@ should_display_section() {
     esac
 }
 
-# Get latest release from GitHub
-get_github_release() {
-    local repo="$1"
-    local tag_pattern="${2:-}"
-    local response
-
-    if [ -z "$tag_pattern" ]; then
-        if [ -n "${GITHUB_TOKEN:-}" ]; then
-            response=$(command curl -s -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com/repos/${repo}/releases/latest")
-        else
-            response=$(command curl -s "https://api.github.com/repos/${repo}/releases/latest")
-        fi
-        # Check if we got rate limited
-        if echo "$response" | grep -q "rate limit exceeded"; then
-            echo "rate-limited"
-            return
-        fi
-        echo "$response" | grep -oP '"tag_name": "\K[^"]+' || echo "unknown"
-    else
-        if [ -n "${GITHUB_TOKEN:-}" ]; then
-            response=$(command curl -s -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com/repos/${repo}/tags")
-        else
-            response=$(command curl -s "https://api.github.com/repos/${repo}/tags")
-        fi
-        if echo "$response" | grep -q "rate limit exceeded"; then
-            echo "rate-limited"
-            return
-        fi
-        echo "$response" | jq -r ".[].name | select(. | test(\"${tag_pattern}\"))" | head -1 || echo "unknown"
-    fi
-}
-
-# Get PyPI package latest version
-get_pypi_version() {
-    local package="$1"
-    local response
-    if response=$(command curl -s "https://pypi.org/pypi/${package}/json"); then
-        echo "$response" | jq -r '.info.version' 2>/dev/null || echo "unknown"
-    else
-        echo "unknown"
-    fi
-}
-
-# Get crates.io package latest version
-get_crates_version() {
-    local package="$1"
-    local response
-    if response=$(command curl -s "https://crates.io/api/v1/crates/${package}"); then
-        echo "$response" | jq -r '.crate.max_version' 2>/dev/null || echo "unknown"
-    else
-        echo "unknown"
-    fi
-}
-
-# Get RubyGems latest version
-get_rubygems_version() {
-    local gem="$1"
-    local response
-    if response=$(command curl -s "https://rubygems.org/api/v1/gems/${gem}.json"); then
-        echo "$response" | jq -r '.version' 2>/dev/null || echo "unknown"
-    else
-        echo "unknown"
-    fi
-}
-
-# Get CRAN package latest version
-get_cran_version() {
-    local package="$1"
-    local response
-    if response=$(command curl -s "https://crandb.r-pkg.org/${package}"); then
-        echo "$response" | jq -r '.Version // .version // "unknown"' 2>/dev/null || echo "unknown"
-    else
-        echo "unknown"
-    fi
-}
-
-# Compare versions
-compare_version() {
-    local current="$1"
-    local latest="$2"
-
-    if [ "$current" = "$latest" ]; then
-        echo "up-to-date"
-    elif [ "$latest" = "unknown" ] || [ "$latest" = "not found" ] || [ "$latest" = "rate-limited" ]; then
-        echo "unknown"
-    else
-        # Try to determine if current is newer than latest
-        # This is a simple comparison - works for most semantic versions
-        if command -v sort &>/dev/null; then
-            local sorted
-            sorted=$(printf "%s\n%s" "$current" "$latest" | sort -V | tail -1)
-            if [ "$sorted" = "$current" ] && [ "$current" != "$latest" ]; then
-                echo "newer"
-            else
-                echo "outdated"
-            fi
-        else
-            echo "outdated"
-        fi
-    fi
-}
+# Source shared version API functions
+# shellcheck source=lib/runtime/lib/version-api.sh
+_script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${_script_dir}/lib/version-api.sh"
 
 check_version() {
     local name="$1"
@@ -342,165 +245,75 @@ print_result() {
     printf "%-25s %-20s %-20s ${status_color}%-12s${NC}\n" "$name" "$installed" "$latest" "$status_text"
 }
 
-# ============================================================================
-# Version Checks
-# ============================================================================
+# Run a section: check versions and print results for a list of tools.
+# Each entry in the tools array is: "name:cmd:flag:pattern[:getter[:getter_args]]"
+# Arguments:
+#   $1 - Section display name (e.g., "Programming Languages")
+#   $2 - Section filter name for should_display_section (same as $1 typically)
+#   $@ - Remaining args are tool entries
+run_section() {
+    local section_name="$1"
+    local section_filter="$2"
+    shift 2
 
-if [ "$OUTPUT_FORMAT" != "json" ]; then
-    echo "Checking installed versions in container..."
-    if [ -n "${GITHUB_TOKEN:-}" ]; then
-        echo "Using GitHub token for API authentication"
-    else
-        echo "No GitHub token found. To avoid rate limits, set GITHUB_TOKEN in .env file"
+    local tools=("$@")
+    local tool_names=()
+
+    # Check all tools
+    for entry in "${tools[@]}"; do
+        IFS=':' read -r name cmd flag pattern getter getter_args <<< "$entry"
+        check_version "$name" "$cmd" "$flag" "$pattern" "${getter:-}" "${getter_args:-}"
+        tool_names+=("$name")
+    done
+
+    # Print section header and results
+    if [ "$OUTPUT_FORMAT" != "json" ] && should_display_section "$section_filter"; then
+        echo "$section_name:"
+        printf '%0.s=' $(seq 1 ${#section_name})
+        echo
+        printf "%-25s %-20s %-20s %-12s\n" "TOOL" "INSTALLED" "LATEST" "STATUS"
+        printf "%-25s %-20s %-20s %-12s\n" "----" "---------" "------" "------"
+
+        for name in "${tool_names[@]}"; do
+            if [ -n "${INSTALLED_VERSIONS[$name]:-}" ]; then
+                print_result "$name" "${INSTALLED_VERSIONS[$name]}" "${LATEST_VERSIONS[$name]:-}" "${VERSION_STATUS[$name]}"
+            fi
+        done
+        echo
     fi
-    if [ "$COMPARE_MODE" = true ]; then
-        echo "Compare mode: Showing only tools with version differences"
+}
+
+# Run a section for R packages using check_r_package instead of check_version.
+# Each entry is: "name:package"
+run_r_section() {
+    local section_name="$1"
+    local section_filter="$2"
+    shift 2
+
+    local tools=("$@")
+    local tool_names=()
+
+    for entry in "${tools[@]}"; do
+        IFS=':' read -r name package <<< "$entry"
+        check_r_package "$name" "$package"
+        tool_names+=("$name")
+    done
+
+    if [ "$OUTPUT_FORMAT" != "json" ] && should_display_section "$section_filter"; then
+        echo "$section_name:"
+        printf '%0.s=' $(seq 1 ${#section_name})
+        echo
+        printf "%-25s %-20s %-20s %-12s\n" "TOOL" "INSTALLED" "LATEST" "STATUS"
+        printf "%-25s %-20s %-20s %-12s\n" "----" "---------" "------" "------"
+
+        for name in "${tool_names[@]}"; do
+            if [ -n "${INSTALLED_VERSIONS[$name]:-}" ]; then
+                print_result "$name" "${INSTALLED_VERSIONS[$name]}" "${LATEST_VERSIONS[$name]:-}" "${VERSION_STATUS[$name]}"
+            fi
+        done
+        echo
     fi
-    echo
-fi
-
-if [ "$OUTPUT_FORMAT" != "json" ] && should_display_section "Programming Languages"; then
-    echo "Programming Languages:"
-    echo "====================="
-    printf "%-25s %-20s %-20s %-12s\n" "TOOL" "INSTALLED" "LATEST" "STATUS"
-    printf "%-25s %-20s %-20s %-12s\n" "----" "---------" "------" "------"
-fi
-
-# Check languages
-check_version "Python" "python" "--version" "Python \K[0-9]+\.[0-9]+\.[0-9]+"
-check_version "Ruby" "ruby" "--version" "ruby \K[0-9]+\.[0-9]+\.[0-9]+"
-check_version "Node.js" "node" "--version" "v\K[0-9]+\.[0-9]+\.[0-9]+"
-check_version "Go" "go" "version" "go\K[0-9]+\.[0-9]+\.[0-9]+"
-check_version "Rust" "rustc" "--version" "rustc \K[0-9]+\.[0-9]+\.[0-9]+"
-check_version "Java" "java" "--version" "openjdk \K[0-9]+"
-check_version "R" "R" "--version" "R version \K[0-9]+\.[0-9]+\.[0-9]+"
-check_version "Mojo" "mojo" "--version" "mojo \K[0-9]+\.[0-9]+\.[0-9]+"
-
-# Print language results
-if [ "$OUTPUT_FORMAT" != "json" ]; then
-    for lang in "Python" "Ruby" "Node.js" "Go" "Rust" "Java" "R" "Mojo"; do
-        if [ -n "${INSTALLED_VERSIONS[$lang]:-}" ]; then
-            print_result "$lang" "${INSTALLED_VERSIONS[$lang]}" "${LATEST_VERSIONS[$lang]:-}" "${VERSION_STATUS[$lang]}"
-        fi
-    done
-
-    echo
-    echo "Package Managers:"
-    echo "================="
-fi
-
-# Check package managers
-check_version "pip" "pip" "--version" "pip \K[0-9]+\.[0-9]+\.[0-9]+"
-check_version "pipx" "pipx" "--version" "\K[0-9]+\.[0-9]+\.[0-9]+"
-check_version "Poetry" "poetry" "--version" "Poetry.*version \K[0-9]+\.[0-9]+\.[0-9]+"
-check_version "gem" "gem" "--version" "\K[0-9]+\.[0-9]+\.[0-9]+"
-check_version "bundler" "bundle" "--version" "Bundler version \K[0-9]+\.[0-9]+\.[0-9]+"
-check_version "npm" "npm" "--version" "\K[0-9]+\.[0-9]+\.[0-9]+"
-check_version "yarn" "yarn" "--version" "\K[0-9]+\.[0-9]+\.[0-9]+"
-check_version "pnpm" "pnpm" "--version" "\K[0-9]+\.[0-9]+\.[0-9]+"
-check_version "cargo" "cargo" "--version" "cargo \K[0-9]+\.[0-9]+\.[0-9]+"
-
-# Print package manager results
-if [ "$OUTPUT_FORMAT" != "json" ]; then
-    for pm in "pip" "pipx" "Poetry" "gem" "bundler" "npm" "yarn" "pnpm" "cargo"; do
-        if [ -n "${INSTALLED_VERSIONS[$pm]:-}" ]; then
-            print_result "$pm" "${INSTALLED_VERSIONS[$pm]}" "${LATEST_VERSIONS[$pm]:-}" "${VERSION_STATUS[$pm]}"
-        fi
-    done
-
-    echo
-    echo "Python Development Tools:"
-    echo "========================="
-    printf "%-25s %-20s %-20s %-12s\n" "TOOL" "INSTALLED" "LATEST" "STATUS"
-    printf "%-25s %-20s %-20s %-12s\n" "----" "---------" "------" "------"
-fi
-
-# Check Python dev tools
-check_version "black" "black" "--version" "black, \K[0-9]+\.[0-9]+\.[0-9]+"
-check_version "isort" "isort" "--version 2>&1 | grep 'VERSION'" "VERSION \K[0-9]+\.[0-9]+\.[0-9]+"
-check_version "ruff" "ruff" "--version" "ruff \K[0-9]+\.[0-9]+\.[0-9]+"
-check_version "flake8" "flake8" "--version" "\K[0-9]+\.[0-9]+\.[0-9]+"
-check_version "mypy" "mypy" "--version" "mypy \K[0-9]+\.[0-9]+\.[0-9]+"
-check_version "pylint" "pylint" "--version" "pylint \K[0-9]+\.[0-9]+\.[0-9]+"
-check_version "pytest" "pytest" "--version" "pytest \K[0-9]+\.[0-9]+\.[0-9]+"
-check_version "tox" "tox" "--version 2>&1 | tail -1" "\K[0-9]+\.[0-9]+\.[0-9]+"
-check_version "pre-commit" "pre-commit" "--version" "pre-commit \K[0-9]+\.[0-9]+\.[0-9]+"
-check_version "cookiecutter" "cookiecutter" "--version" "Cookiecutter \K[0-9]+\.[0-9]+\.[0-9]+"
-check_version "sphinx" "sphinx-build" "--version" "sphinx-build \K[0-9]+\.[0-9]+\.[0-9]+"
-check_version "jupyter" "jupyter" "--version 2>&1 | grep 'jupyter_core'" "jupyter_core.*: \K[0-9]+\.[0-9]+\.[0-9]+"
-check_version "ipython" "ipython" "--version" "\K[0-9]+\.[0-9]+\.[0-9]+"
-check_version "httpie" "http" "--version" "\K[0-9]+\.[0-9]+\.[0-9]+"
-check_version "yq" "yq" "--version" "yq \K[0-9]+\.[0-9]+\.[0-9]+"
-
-# Print Python dev tools results
-if [ "$OUTPUT_FORMAT" != "json" ]; then
-    for tool in "black" "isort" "ruff" "flake8" "mypy" "pylint" "pytest" "tox" "pre-commit" "cookiecutter" "sphinx" "jupyter" "ipython" "httpie" "yq"; do
-        if [ -n "${INSTALLED_VERSIONS[$tool]:-}" ]; then
-            print_result "$tool" "${INSTALLED_VERSIONS[$tool]}" "${LATEST_VERSIONS[$tool]:-}" "${VERSION_STATUS[$tool]}"
-        fi
-    done
-
-    echo
-    echo "Rust Development Tools:"
-    echo "======================="
-    printf "%-25s %-20s %-20s %-12s\n" "TOOL" "INSTALLED" "LATEST" "STATUS"
-    printf "%-25s %-20s %-20s %-12s\n" "----" "---------" "------" "------"
-fi
-
-# Check Rust dev tools
-check_version "tree-sitter" "tree-sitter" "--version" "tree-sitter \K[0-9]+\.[0-9]+\.[0-9]+" "crates" "tree-sitter-cli"
-check_version "cargo-watch" "cargo-watch" "--version" "cargo-watch \K[0-9]+\.[0-9]+\.[0-9]+" "crates" "cargo-watch"
-# cargo-edit provides cargo-add command, check version via cargo install --list
-check_version "cargo-edit" "cargo" "install --list | grep 'cargo-edit' | head -1" "v\K[0-9]+\.[0-9]+\.[0-9]+" "crates" "cargo-edit"
-check_version "cargo-expand" "cargo-expand" "--version" "cargo-expand \K[0-9]+\.[0-9]+\.[0-9]+" "crates" "cargo-expand"
-# cargo-outdated is invoked as 'cargo outdated', check version via cargo install --list
-check_version "cargo-outdated" "cargo" "install --list | grep 'cargo-outdated' | head -1" "v\K[0-9]+\.[0-9]+\.[0-9]+" "crates" "cargo-outdated"
-check_version "bacon" "bacon" "--version" "bacon \K[0-9]+\.[0-9]+\.[0-9]+" "crates" "bacon"
-check_version "tokei" "tokei" "--version" "tokei \K[0-9]+\.[0-9]+\.[0-9]+" "crates" "tokei"
-check_version "hyperfine" "hyperfine" "--version" "hyperfine \K[0-9]+\.[0-9]+\.[0-9]+" "crates" "hyperfine"
-check_version "just" "just" "--version" "just \K[0-9]+\.[0-9]+\.[0-9]+" "github" "casey/just"
-check_version "sccache" "sccache" "--version" "sccache \K[0-9]+\.[0-9]+\.[0-9]+" "crates" "sccache"
-check_version "mdbook" "mdbook" "--version" "mdbook \K[0-9]+\.[0-9]+\.[0-9]+" "crates" "mdbook"
-
-# Print Rust dev tools results
-if [ "$OUTPUT_FORMAT" != "json" ]; then
-    for tool in "tree-sitter" "cargo-watch" "cargo-edit" "cargo-expand" "cargo-outdated" "bacon" "tokei" "hyperfine" "just" "sccache" "mdbook"; do
-        if [ -n "${INSTALLED_VERSIONS[$tool]:-}" ]; then
-            print_result "$tool" "${INSTALLED_VERSIONS[$tool]}" "${LATEST_VERSIONS[$tool]:-}" "${VERSION_STATUS[$tool]}"
-        fi
-    done
-
-    echo
-    echo "Ruby Development Tools:"
-    echo "======================="
-    printf "%-25s %-20s %-20s %-12s\n" "TOOL" "INSTALLED" "LATEST" "STATUS"
-    printf "%-25s %-20s %-20s %-12s\n" "----" "---------" "------" "------"
-fi
-
-# Check Ruby dev tools
-check_version "rspec" "rspec" "--version" "RSpec \K[0-9]+\.[0-9]+\.[0-9]+" "rubygems" "rspec"
-check_version "rubocop" "rubocop" "--version" "\K[0-9]+\.[0-9]+\.[0-9]+" "rubygems" "rubocop"
-check_version "pry" "pry" "--version" "Pry version \K[0-9]+\.[0-9]+\.[0-9]+" "rubygems" "pry"
-check_version "yard" "yard" "--version" "yard \K[0-9]+\.[0-9]+\.[0-9]+" "rubygems" "yard"
-check_version "reek" "reek" "--version" "reek \K[0-9]+\.[0-9]+\.[0-9]+" "rubygems" "reek"
-check_version "brakeman" "brakeman" "--version" "\K[0-9]+\.[0-9]+\.[0-9]+" "rubygems" "brakeman"
-check_version "rails" "rails" "--version" "Rails \K[0-9]+\.[0-9]+\.[0-9]+" "rubygems" "rails"
-check_version "solargraph" "solargraph" "--version" "\K[0-9]+\.[0-9]+\.[0-9]+" "rubygems" "solargraph"
-
-# Print Ruby dev tools results
-if [ "$OUTPUT_FORMAT" != "json" ]; then
-    for tool in "rspec" "rubocop" "pry" "yard" "reek" "brakeman" "rails" "solargraph"; do
-        if [ -n "${INSTALLED_VERSIONS[$tool]:-}" ]; then
-            print_result "$tool" "${INSTALLED_VERSIONS[$tool]}" "${LATEST_VERSIONS[$tool]:-}" "${VERSION_STATUS[$tool]}"
-        fi
-    done
-
-    echo
-    echo "R Development Tools:"
-    echo "===================="
-    printf "%-25s %-20s %-20s %-12s\n" "TOOL" "INSTALLED" "LATEST" "STATUS"
-    printf "%-25s %-20s %-20s %-12s\n" "----" "---------" "------" "------"
-fi
+}
 
 # Check R dev tools - using Rscript to check package versions
 check_r_package() {
@@ -534,112 +347,145 @@ check_r_package() {
     fi
 }
 
-# Check R development packages
-check_r_package "devtools" "devtools"
-check_r_package "tidyverse" "tidyverse"
-check_r_package "testthat" "testthat"
-check_r_package "roxygen2" "roxygen2"
-check_r_package "usethis" "usethis"
-check_r_package "rmarkdown" "rmarkdown"
-check_r_package "knitr" "knitr"
-check_r_package "shiny" "shiny"
-check_r_package "plumber" "plumber"
-check_r_package "lintr" "lintr"
-check_r_package "styler" "styler"
-check_r_package "profvis" "profvis"
-check_r_package "renv" "renv"
+# ============================================================================
+# Version Checks
+# ============================================================================
 
-# Print R dev tools results
 if [ "$OUTPUT_FORMAT" != "json" ]; then
-    for tool in "devtools" "tidyverse" "testthat" "roxygen2" "usethis" "rmarkdown" "knitr" "shiny" "plumber" "lintr" "styler" "profvis" "renv"; do
-        if [ -n "${INSTALLED_VERSIONS[$tool]:-}" ]; then
-            print_result "$tool" "${INSTALLED_VERSIONS[$tool]}" "${LATEST_VERSIONS[$tool]:-}" "${VERSION_STATUS[$tool]}"
-        fi
-    done
-
+    echo "Checking installed versions in container..."
+    if [ -n "${GITHUB_TOKEN:-}" ]; then
+        echo "Using GitHub token for API authentication"
+    else
+        echo "No GitHub token found. To avoid rate limits, set GITHUB_TOKEN in .env file"
+    fi
+    if [ "$COMPARE_MODE" = true ]; then
+        echo "Compare mode: Showing only tools with version differences"
+    fi
     echo
-    echo "Development Tools:"
-    echo "=================="
-    printf "%-25s %-20s %-20s %-12s\n" "TOOL" "INSTALLED" "LATEST" "STATUS"
-    printf "%-25s %-20s %-20s %-12s\n" "----" "---------" "------" "------"
 fi
 
-# Check dev tools
-check_version "git" "git" "--version" "git version \K[0-9]+\.[0-9]+\.[0-9]+" "github" "git/git"
-check_version "gh" "gh" "--version" "gh version \K[0-9]+\.[0-9]+\.[0-9]+" "github" "cli/cli"
-check_version "glab" "glab" "--version" "glab version \K[0-9]+\.[0-9]+\.[0-9]+"
-check_version "docker" "docker" "--version" "Docker version \K[0-9]+\.[0-9]+\.[0-9]+"
-check_version "docker-compose" "docker-compose" "--version" "docker-compose version \K[0-9]+\.[0-9]+\.[0-9]+"
-check_version "direnv" "direnv" "version" "\K[0-9]+\.[0-9]+\.[0-9]+" "github" "direnv/direnv"
-check_version "lazygit" "lazygit" "--version" "version=\K[0-9]+\.[0-9]+\.[0-9]+" "github" "jesseduffield/lazygit"
-check_version "delta" "delta" "--version" "delta \K[0-9]+\.[0-9]+\.[0-9]+" "github" "dandavison/delta"
-check_version "mkcert" "mkcert" "--version" "v\K[0-9]+\.[0-9]+\.[0-9]+" "github" "FiloSottile/mkcert"
-check_version "act" "act" "--version" "act version \K[0-9]+\.[0-9]+\.[0-9]+" "github" "nektos/act"
-check_version "fzf" "fzf" "--version" "\K[0-9]+\.[0-9]+\.[0-9]+" "github" "junegunn/fzf"
-check_version "ripgrep" "rg" "--version" "ripgrep \K[0-9]+\.[0-9]+\.[0-9]+" "github" "BurntSushi/ripgrep"
-check_version "fd" "fd" "--version" "fd \K[0-9]+\.[0-9]+\.[0-9]+" "github" "sharkdp/fd"
-check_version "bat" "bat" "--version" "bat \K[0-9]+\.[0-9]+\.[0-9]+" "github" "sharkdp/bat"
-check_version "eza" "eza" "--version" "v\K[0-9]+\.[0-9]+\.[0-9]+" "github" "eza-community/eza"
-check_version "exa" "exa" "--version" "v\K[0-9]+\.[0-9]+\.[0-9]+" "github" "ogham/exa"
-check_version "op" "op" "--version" "\K[0-9]+\.[0-9]+\.[0-9]+" "github" "1Password/op"
+# --- Programming Languages ---
+run_section "Programming Languages" "Programming Languages" \
+    "Python:python:--version:Python \K[0-9]+\.[0-9]+\.[0-9]+" \
+    "Ruby:ruby:--version:ruby \K[0-9]+\.[0-9]+\.[0-9]+" \
+    "Node.js:node:--version:v\K[0-9]+\.[0-9]+\.[0-9]+" \
+    "Go:go:version:go\K[0-9]+\.[0-9]+\.[0-9]+" \
+    "Rust:rustc:--version:rustc \K[0-9]+\.[0-9]+\.[0-9]+" \
+    "Java:java:--version:openjdk \K[0-9]+" \
+    "R:R:--version:R version \K[0-9]+\.[0-9]+\.[0-9]+" \
+    "Mojo:mojo:--version:mojo \K[0-9]+\.[0-9]+\.[0-9]+"
 
-# Print dev tools results
-if [ "$OUTPUT_FORMAT" != "json" ]; then
-    for tool in "git" "gh" "glab" "docker" "docker-compose" "direnv" "lazygit" "delta" "mkcert" "act" "fzf" "ripgrep" "fd" "bat" "eza" "exa" "op"; do
-        if [ -n "${INSTALLED_VERSIONS[$tool]:-}" ]; then
-            print_result "$tool" "${INSTALLED_VERSIONS[$tool]}" "${LATEST_VERSIONS[$tool]:-}" "${VERSION_STATUS[$tool]}"
-        fi
-    done
+# --- Package Managers ---
+run_section "Package Managers" "Programming Languages" \
+    "pip:pip:--version:pip \K[0-9]+\.[0-9]+\.[0-9]+" \
+    "pipx:pipx:--version:\K[0-9]+\.[0-9]+\.[0-9]+" \
+    "Poetry:poetry:--version:Poetry.*version \K[0-9]+\.[0-9]+\.[0-9]+" \
+    "gem:gem:--version:\K[0-9]+\.[0-9]+\.[0-9]+" \
+    "bundler:bundle:--version:Bundler version \K[0-9]+\.[0-9]+\.[0-9]+" \
+    "npm:npm:--version:\K[0-9]+\.[0-9]+\.[0-9]+" \
+    "yarn:yarn:--version:\K[0-9]+\.[0-9]+\.[0-9]+" \
+    "pnpm:pnpm:--version:\K[0-9]+\.[0-9]+\.[0-9]+" \
+    "cargo:cargo:--version:cargo \K[0-9]+\.[0-9]+\.[0-9]+"
 
-    echo
-    echo "Cloud Tools:"
-    echo "============"
-    printf "%-25s %-20s %-20s %-12s\n" "TOOL" "INSTALLED" "LATEST" "STATUS"
-    printf "%-25s %-20s %-20s %-12s\n" "----" "---------" "------" "------"
-fi
+# --- Python Development Tools ---
+run_section "Python Development Tools" "Development Tools" \
+    "black:black:--version:black, \K[0-9]+\.[0-9]+\.[0-9]+" \
+    "isort:isort:--version 2>&1 | grep 'VERSION':VERSION \K[0-9]+\.[0-9]+\.[0-9]+" \
+    "ruff:ruff:--version:ruff \K[0-9]+\.[0-9]+\.[0-9]+" \
+    "flake8:flake8:--version:\K[0-9]+\.[0-9]+\.[0-9]+" \
+    "mypy:mypy:--version:mypy \K[0-9]+\.[0-9]+\.[0-9]+" \
+    "pylint:pylint:--version:pylint \K[0-9]+\.[0-9]+\.[0-9]+" \
+    "pytest:pytest:--version:pytest \K[0-9]+\.[0-9]+\.[0-9]+" \
+    "tox:tox:--version 2>&1 | tail -1:\K[0-9]+\.[0-9]+\.[0-9]+" \
+    "pre-commit:pre-commit:--version:pre-commit \K[0-9]+\.[0-9]+\.[0-9]+" \
+    "cookiecutter:cookiecutter:--version:Cookiecutter \K[0-9]+\.[0-9]+\.[0-9]+" \
+    "sphinx:sphinx-build:--version:sphinx-build \K[0-9]+\.[0-9]+\.[0-9]+" \
+    "jupyter:jupyter:--version 2>&1 | grep 'jupyter_core':jupyter_core.*: \K[0-9]+\.[0-9]+\.[0-9]+" \
+    "ipython:ipython:--version:\K[0-9]+\.[0-9]+\.[0-9]+" \
+    "httpie:http:--version:\K[0-9]+\.[0-9]+\.[0-9]+" \
+    "yq:yq:--version:yq \K[0-9]+\.[0-9]+\.[0-9]+"
 
-# Check cloud tools
-check_version "kubectl" "kubectl" "version --client" "Client Version: v\K[0-9]+\.[0-9]+\.[0-9]+"
-check_version "k9s" "k9s" "version" "Version:\s*v\K[0-9]+\.[0-9]+\.[0-9]+" "github" "derailed/k9s"
-check_version "krew" "kubectl-krew" "version" "GitTag:\"v\K[0-9]+\.[0-9]+\.[0-9]+" "github" "kubernetes-sigs/krew"
-check_version "helm" "helm" "version" "Version:\"v\K[0-9]+\.[0-9]+\.[0-9]+" "github" "helm/helm"
-check_version "terraform" "terraform" "version" "Terraform v\K[0-9]+\.[0-9]+\.[0-9]+" "github" "hashicorp/terraform"
-check_version "terragrunt" "terragrunt" "--version" "terragrunt version v\K[0-9]+\.[0-9]+\.[0-9]+" "github" "gruntwork-io/terragrunt"
-check_version "terraform-docs" "terraform-docs" "--version" "terraform-docs version v\K[0-9]+\.[0-9]+\.[0-9]+" "github" "terraform-docs/terraform-docs"
-check_version "aws" "aws" "--version" "aws-cli/\K[0-9]+\.[0-9]+\.[0-9]+"
-check_version "gcloud" "gcloud" "--version" "Google Cloud SDK \K[0-9]+\.[0-9]+\.[0-9]+"
-check_version "az" "az" "--version" "azure-cli.*\K[0-9]+\.[0-9]+\.[0-9]+"
-check_version "wrangler" "wrangler" "--version" "wrangler \K[0-9]+\.[0-9]+\.[0-9]+"
-check_version "ollama" "ollama" "--version" "ollama version is \K[0-9]+\.[0-9]+\.[0-9]+" "github" "ollama/ollama"
+# --- Rust Development Tools ---
+run_section "Rust Development Tools" "Development Tools" \
+    "tree-sitter:tree-sitter:--version:tree-sitter \K[0-9]+\.[0-9]+\.[0-9]+:crates:tree-sitter-cli" \
+    "cargo-watch:cargo-watch:--version:cargo-watch \K[0-9]+\.[0-9]+\.[0-9]+:crates:cargo-watch" \
+    "cargo-edit:cargo:install --list | grep 'cargo-edit' | head -1:v\K[0-9]+\.[0-9]+\.[0-9]+:crates:cargo-edit" \
+    "cargo-expand:cargo-expand:--version:cargo-expand \K[0-9]+\.[0-9]+\.[0-9]+:crates:cargo-expand" \
+    "cargo-outdated:cargo:install --list | grep 'cargo-outdated' | head -1:v\K[0-9]+\.[0-9]+\.[0-9]+:crates:cargo-outdated" \
+    "bacon:bacon:--version:bacon \K[0-9]+\.[0-9]+\.[0-9]+:crates:bacon" \
+    "tokei:tokei:--version:tokei \K[0-9]+\.[0-9]+\.[0-9]+:crates:tokei" \
+    "hyperfine:hyperfine:--version:hyperfine \K[0-9]+\.[0-9]+\.[0-9]+:crates:hyperfine" \
+    "just:just:--version:just \K[0-9]+\.[0-9]+\.[0-9]+:github:casey/just" \
+    "sccache:sccache:--version:sccache \K[0-9]+\.[0-9]+\.[0-9]+:crates:sccache" \
+    "mdbook:mdbook:--version:mdbook \K[0-9]+\.[0-9]+\.[0-9]+:crates:mdbook"
 
-# Print cloud tools results
-if [ "$OUTPUT_FORMAT" != "json" ]; then
-    for tool in "kubectl" "k9s" "krew" "helm" "terraform" "terragrunt" "terraform-docs" "aws" "gcloud" "az" "wrangler" "ollama"; do
-        if [ -n "${INSTALLED_VERSIONS[$tool]:-}" ]; then
-            print_result "$tool" "${INSTALLED_VERSIONS[$tool]}" "${LATEST_VERSIONS[$tool]:-}" "${VERSION_STATUS[$tool]}"
-        fi
-    done
+# --- Ruby Development Tools ---
+run_section "Ruby Development Tools" "Development Tools" \
+    "rspec:rspec:--version:RSpec \K[0-9]+\.[0-9]+\.[0-9]+:rubygems:rspec" \
+    "rubocop:rubocop:--version:\K[0-9]+\.[0-9]+\.[0-9]+:rubygems:rubocop" \
+    "pry:pry:--version:Pry version \K[0-9]+\.[0-9]+\.[0-9]+:rubygems:pry" \
+    "yard:yard:--version:yard \K[0-9]+\.[0-9]+\.[0-9]+:rubygems:yard" \
+    "reek:reek:--version:reek \K[0-9]+\.[0-9]+\.[0-9]+:rubygems:reek" \
+    "brakeman:brakeman:--version:\K[0-9]+\.[0-9]+\.[0-9]+:rubygems:brakeman" \
+    "rails:rails:--version:Rails \K[0-9]+\.[0-9]+\.[0-9]+:rubygems:rails" \
+    "solargraph:solargraph:--version:\K[0-9]+\.[0-9]+\.[0-9]+:rubygems:solargraph"
 
-    echo
-    echo "Database Tools:"
-    echo "==============="
-    printf "%-25s %-20s %-20s %-12s\n" "TOOL" "INSTALLED" "LATEST" "STATUS"
-    printf "%-25s %-20s %-20s %-12s\n" "----" "---------" "------" "------"
-fi
+# --- R Development Tools ---
+run_r_section "R Development Tools" "Development Tools" \
+    "devtools:devtools" \
+    "tidyverse:tidyverse" \
+    "testthat:testthat" \
+    "roxygen2:roxygen2" \
+    "usethis:usethis" \
+    "rmarkdown:rmarkdown" \
+    "knitr:knitr" \
+    "shiny:shiny" \
+    "plumber:plumber" \
+    "lintr:lintr" \
+    "styler:styler" \
+    "profvis:profvis" \
+    "renv:renv"
 
-# Check database tools
-check_version "psql" "psql" "--version" "psql \(PostgreSQL\) \K[0-9]+\.[0-9]+"
-check_version "redis-cli" "redis-cli" "--version" "redis-cli \K[0-9]+\.[0-9]+\.[0-9]+"
-check_version "sqlite3" "sqlite3" "--version" "\K[0-9]+\.[0-9]+\.[0-9]+"
+# --- Development Tools ---
+run_section "Development Tools" "Development Tools" \
+    "git:git:--version:git version \K[0-9]+\.[0-9]+\.[0-9]+:github:git/git" \
+    "gh:gh:--version:gh version \K[0-9]+\.[0-9]+\.[0-9]+:github:cli/cli" \
+    "glab:glab:--version:glab version \K[0-9]+\.[0-9]+\.[0-9]+" \
+    "docker:docker:--version:Docker version \K[0-9]+\.[0-9]+\.[0-9]+" \
+    "docker-compose:docker-compose:--version:docker-compose version \K[0-9]+\.[0-9]+\.[0-9]+" \
+    "direnv:direnv:version:\K[0-9]+\.[0-9]+\.[0-9]+:github:direnv/direnv" \
+    "lazygit:lazygit:--version:version=\K[0-9]+\.[0-9]+\.[0-9]+:github:jesseduffield/lazygit" \
+    "delta:delta:--version:delta \K[0-9]+\.[0-9]+\.[0-9]+:github:dandavison/delta" \
+    "mkcert:mkcert:--version:v\K[0-9]+\.[0-9]+\.[0-9]+:github:FiloSottile/mkcert" \
+    "act:act:--version:act version \K[0-9]+\.[0-9]+\.[0-9]+:github:nektos/act" \
+    "fzf:fzf:--version:\K[0-9]+\.[0-9]+\.[0-9]+:github:junegunn/fzf" \
+    "ripgrep:rg:--version:ripgrep \K[0-9]+\.[0-9]+\.[0-9]+:github:BurntSushi/ripgrep" \
+    "fd:fd:--version:fd \K[0-9]+\.[0-9]+\.[0-9]+:github:sharkdp/fd" \
+    "bat:bat:--version:bat \K[0-9]+\.[0-9]+\.[0-9]+:github:sharkdp/bat" \
+    "eza:eza:--version:v\K[0-9]+\.[0-9]+\.[0-9]+:github:eza-community/eza" \
+    "exa:exa:--version:v\K[0-9]+\.[0-9]+\.[0-9]+:github:ogham/exa" \
+    "op:op:--version:\K[0-9]+\.[0-9]+\.[0-9]+:github:1Password/op"
 
-# Print database tools results
-if [ "$OUTPUT_FORMAT" != "json" ]; then
-    for tool in "psql" "redis-cli" "sqlite3"; do
-        if [ -n "${INSTALLED_VERSIONS[$tool]:-}" ]; then
-            print_result "$tool" "${INSTALLED_VERSIONS[$tool]}" "${LATEST_VERSIONS[$tool]:-}" "${VERSION_STATUS[$tool]}"
-        fi
-    done
-fi
+# --- Cloud Tools ---
+run_section "Cloud Tools" "Cloud Tools" \
+    "kubectl:kubectl:version --client:Client Version: v\K[0-9]+\.[0-9]+\.[0-9]+" \
+    "k9s:k9s:version:Version:\s*v\K[0-9]+\.[0-9]+\.[0-9]+:github:derailed/k9s" \
+    "krew:kubectl-krew:version:GitTag:\"v\K[0-9]+\.[0-9]+\.[0-9]+:github:kubernetes-sigs/krew" \
+    "helm:helm:version:Version:\"v\K[0-9]+\.[0-9]+\.[0-9]+:github:helm/helm" \
+    "terraform:terraform:version:Terraform v\K[0-9]+\.[0-9]+\.[0-9]+:github:hashicorp/terraform" \
+    "terragrunt:terragrunt:--version:terragrunt version v\K[0-9]+\.[0-9]+\.[0-9]+:github:gruntwork-io/terragrunt" \
+    "terraform-docs:terraform-docs:--version:terraform-docs version v\K[0-9]+\.[0-9]+\.[0-9]+:github:terraform-docs/terraform-docs" \
+    "aws:aws:--version:aws-cli/\K[0-9]+\.[0-9]+\.[0-9]+" \
+    "gcloud:gcloud:--version:Google Cloud SDK \K[0-9]+\.[0-9]+\.[0-9]+" \
+    "az:az:--version:azure-cli.*\K[0-9]+\.[0-9]+\.[0-9]+" \
+    "wrangler:wrangler:--version:wrangler \K[0-9]+\.[0-9]+\.[0-9]+" \
+    "ollama:ollama:--version:ollama version is \K[0-9]+\.[0-9]+\.[0-9]+:github:ollama/ollama"
+
+# --- Database Tools ---
+run_section "Database Tools" "Database Tools" \
+    "psql:psql:--version:psql \(PostgreSQL\) \K[0-9]+\.[0-9]+" \
+    "redis-cli:redis-cli:--version:redis-cli \K[0-9]+\.[0-9]+\.[0-9]+" \
+    "sqlite3:sqlite3:--version:\K[0-9]+\.[0-9]+\.[0-9]+"
 
 # ============================================================================
 # Output Results

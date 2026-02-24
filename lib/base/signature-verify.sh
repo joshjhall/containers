@@ -230,6 +230,57 @@ download_and_verify_gpg() {
 }
 
 # ============================================================================
+# verify_file_against_shasums - Verify a file's checksum against a SHASUMS file
+#
+# Shared logic used by Node.js and Terraform GPG verification. Extracts the
+# expected checksum for a specific file from a SHASUMS file, calculates the
+# actual checksum, and compares them. Cleans up shasums/sig files on completion.
+#
+# Arguments:
+#   $1 - File to verify
+#   $2 - SHASUMS file path
+#   $3 - Signature file path (cleaned up along with shasums)
+#
+# Returns:
+#   0 on match, 1 on mismatch or missing entry
+# ============================================================================
+verify_file_against_shasums() {
+    local file="$1"
+    local shasums_file="$2"
+    local signature_file="$3"
+    local filename
+    filename=$(basename "$file")
+
+    log_message "Extracting checksum for ${filename}..."
+    local expected_checksum
+    expected_checksum=$(grep "${filename}" "$shasums_file" | awk '{print $1}')
+
+    if [ -z "$expected_checksum" ]; then
+        log_error "File ${filename} not found in $(basename "$shasums_file")"
+        command rm -f "$shasums_file" "$signature_file"
+        return 1
+    fi
+
+    log_message "Expected checksum: ${expected_checksum}"
+
+    local actual_checksum
+    actual_checksum=$(sha256sum "$file" | awk '{print $1}')
+    log_message "Actual checksum:   ${actual_checksum}"
+
+    if [ "$actual_checksum" = "$expected_checksum" ]; then
+        log_message "✓ Checksum verification passed"
+        command rm -f "$shasums_file" "$signature_file"
+        return 0
+    else
+        log_error "Checksum mismatch!"
+        log_error "Expected: ${expected_checksum}"
+        log_error "Got:      ${actual_checksum}"
+        command rm -f "$shasums_file" "$signature_file"
+        return 1
+    fi
+}
+
+# ============================================================================
 # download_and_verify_nodejs_gpg - Node.js-specific GPG verification
 #
 # Node.js uses a SHASUMS256.txt file with a GPG signature, rather than
@@ -299,36 +350,7 @@ download_and_verify_nodejs_gpg() {
 
     log_message "✓ GPG signature verified successfully"
 
-    # Extract checksum for our specific file from SHASUMS256.txt
-    log_message "Extracting checksum for ${filename}..."
-    local expected_checksum
-    expected_checksum=$(grep "${filename}" "$shasums_file" | awk '{print $1}')
-
-    if [ -z "$expected_checksum" ]; then
-        log_error "File ${filename} not found in SHASUMS256.txt"
-        command rm -f "$shasums_file" "$signature_file"
-        return 1
-    fi
-
-    log_message "Expected checksum: ${expected_checksum}"
-
-    # Calculate actual checksum
-    local actual_checksum
-    actual_checksum=$(sha256sum "$file" | awk '{print $1}')
-    log_message "Actual checksum:   ${actual_checksum}"
-
-    # Compare checksums
-    if [ "$actual_checksum" = "$expected_checksum" ]; then
-        log_message "✓ Checksum verification passed"
-        command rm -f "$shasums_file" "$signature_file"
-        return 0
-    else
-        log_error "Checksum mismatch!"
-        log_error "Expected: ${expected_checksum}"
-        log_error "Got:      ${actual_checksum}"
-        command rm -f "$shasums_file" "$signature_file"
-        return 1
-    fi
+    verify_file_against_shasums "$file" "$shasums_file" "$signature_file"
 }
 
 # ============================================================================
@@ -389,36 +411,7 @@ download_and_verify_terraform_gpg() {
 
     log_message "✓ GPG signature verified successfully"
 
-    # Extract checksum for our specific file from SHA256SUMS
-    log_message "Extracting checksum for ${filename}..."
-    local expected_checksum
-    expected_checksum=$(grep "${filename}" "$shasums_file" | awk '{print $1}')
-
-    if [ -z "$expected_checksum" ]; then
-        log_error "File ${filename} not found in SHA256SUMS"
-        command rm -f "$shasums_file" "$signature_file"
-        return 1
-    fi
-
-    log_message "Expected checksum: ${expected_checksum}"
-
-    # Calculate actual checksum
-    local actual_checksum
-    actual_checksum=$(sha256sum "$file" | awk '{print $1}')
-    log_message "Actual checksum:   ${actual_checksum}"
-
-    # Compare checksums
-    if [ "$actual_checksum" = "$expected_checksum" ]; then
-        log_message "✓ Checksum verification passed"
-        command rm -f "$shasums_file" "$signature_file"
-        return 0
-    else
-        log_error "Checksum mismatch!"
-        log_error "Expected: ${expected_checksum}"
-        log_error "Got:      ${actual_checksum}"
-        command rm -f "$shasums_file" "$signature_file"
-        return 1
-    fi
+    verify_file_against_shasums "$file" "$shasums_file" "$signature_file"
 }
 
 # ============================================================================

@@ -118,9 +118,9 @@ test_cv_strict_mode() {
     assert_file_contains "$SOURCE_FILE" "set -euo pipefail" "check-versions.sh uses strict mode"
 }
 
-# Test: defines get_github_release function
+# Test: sources shared version-api.sh (provides get_github_release, compare_version, etc.)
 test_cv_get_github_release_func() {
-    assert_file_contains "$SOURCE_FILE" "get_github_release()" "check-versions.sh defines get_github_release function"
+    assert_file_contains "$SOURCE_FILE" "version-api.sh" "check-versions.sh sources shared version-api.sh"
 }
 
 # Test: defines get_latest_python function
@@ -138,9 +138,10 @@ test_cv_get_latest_go_func() {
     assert_file_contains "$SOURCE_FILE" "get_latest_go()" "check-versions.sh defines get_latest_go function"
 }
 
-# Test: defines compare_version function
+# Test: compare_version available via shared version-api.sh
 test_cv_compare_version_func() {
-    assert_file_contains "$SOURCE_FILE" "compare_version()" "check-versions.sh defines compare_version function"
+    local shared_lib="$PROJECT_ROOT/lib/runtime/lib/version-api.sh"
+    assert_file_contains "$shared_lib" "compare_version()" "version-api.sh defines compare_version function"
 }
 
 # Test: defines extract_version function
@@ -158,9 +159,10 @@ test_cv_rate_limit_detection() {
     assert_file_contains "$SOURCE_FILE" "rate limit exceeded" "check-versions.sh detects GitHub API rate limiting"
 }
 
-# Test: Version comparison with sort -V
+# Test: Version comparison with sort -V (in shared version-api.sh)
 test_cv_sort_version_comparison() {
-    assert_file_contains "$SOURCE_FILE" "sort -V" "check-versions.sh uses sort -V for version comparison"
+    local shared_lib="$PROJECT_ROOT/lib/runtime/lib/version-api.sh"
+    assert_file_contains "$shared_lib" "sort -V" "version-api.sh uses sort -V for version comparison"
 }
 
 # Test: JSON output format handling

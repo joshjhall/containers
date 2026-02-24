@@ -404,14 +404,6 @@ check_nodejs() {
     progress_done
 }
 
-check_go() {
-    progress_msg "  Go..."
-    local latest
-    latest=$(fetch_url "https://go.dev/VERSION?m=text" | head -1 | command sed 's/^go//')
-    set_latest "Go" "$latest"
-    progress_done
-}
-
 check_rust() {
     progress_msg "  Rust..."
     # Try the Rust API endpoint
@@ -422,14 +414,6 @@ check_rust() {
         latest=$(fetch_url "https://forge.rust-lang.org/infra/channel-layout.html" | grep -oE 'stable.*?[0-9]+\.[0-9]+\.[0-9]+' | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
     fi
     set_latest "Rust" "$latest"
-    progress_done
-}
-
-check_ruby() {
-    progress_msg "  Ruby..."
-    local latest
-    latest=$(fetch_url "https://api.github.com/repos/ruby/ruby/releases/latest" | jq -r '.tag_name' 2>/dev/null | command sed 's/^v//' | command sed 's/_/./g')
-    set_latest "Ruby" "$latest"
     progress_done
 }
 
@@ -471,38 +455,6 @@ check_r() {
     fi
 
     set_latest "R" "$latest"
-    progress_done
-}
-
-check_kotlin() {
-    progress_msg "  Kotlin..."
-    local latest
-    latest=$(fetch_url "https://api.github.com/repos/JetBrains/kotlin/releases/latest" | jq -r '.tag_name // "null"' 2>/dev/null | command sed 's/^v//')
-    set_latest "Kotlin" "$latest"
-    progress_done
-}
-
-check_ktlint() {
-    progress_msg "  ktlint..."
-    local latest
-    latest=$(fetch_url "https://api.github.com/repos/pinterest/ktlint/releases/latest" | jq -r '.tag_name // "null"' 2>/dev/null | command sed 's/^v//')
-    set_latest "ktlint" "$latest"
-    progress_done
-}
-
-check_detekt() {
-    progress_msg "  detekt..."
-    local latest
-    latest=$(fetch_url "https://api.github.com/repos/detekt/detekt/releases/latest" | jq -r '.tag_name // "null"' 2>/dev/null | command sed 's/^v//')
-    set_latest "detekt" "$latest"
-    progress_done
-}
-
-check_kotlin_language_server() {
-    progress_msg "  kotlin-language-server..."
-    local latest
-    latest=$(fetch_url "https://api.github.com/repos/fwcd/kotlin-language-server/releases/latest" | jq -r '.tag_name // "null"' 2>/dev/null | command sed 's/^v//')
-    set_latest "kotlin-language-server" "$latest"
     progress_done
 }
 
@@ -616,20 +568,13 @@ check_biome() {
     progress_done
 }
 
-check_taplo() {
-    progress_msg "  taplo..."
+check_crates_io() {
+    local tool="$1"
+    local crate="${2:-$tool}"
+    progress_msg "  $tool..."
     local latest
-    latest=$(fetch_url "https://api.github.com/repos/tamasfe/taplo/releases/latest" | jq -r '.tag_name // "null"' 2>/dev/null)
-    set_latest "taplo" "$latest"
-    progress_done
-}
-
-check_cargo_release() {
-    progress_msg "  cargo-release..."
-    local latest
-    # Check crates.io for latest version
-    latest=$(fetch_url "https://crates.io/api/v1/crates/cargo-release" | jq -r '.crate.max_version // "null"' 2>/dev/null)
-    set_latest "cargo-release" "$latest"
+    latest=$(fetch_url "https://crates.io/api/v1/crates/$crate" | jq -r '.crate.max_version // "null"' 2>/dev/null)
+    set_latest "$tool" "$latest"
     progress_done
 }
 
@@ -825,15 +770,23 @@ main() {
         case "$tool" in
             Python) check_python ;;
             Node.js) check_nodejs ;;
-            Go) check_go ;;
+            Go)
+                progress_msg "  Go..."
+                set_latest "Go" "$(fetch_url "https://go.dev/VERSION?m=text" | head -1 | command sed 's/^go//')"
+                progress_done
+                ;;
             Rust) check_rust ;;
-            Ruby) check_ruby ;;
+            Ruby)
+                progress_msg "  Ruby..."
+                set_latest "Ruby" "$(fetch_url "https://api.github.com/repos/ruby/ruby/releases/latest" | jq -r '.tag_name' 2>/dev/null | command sed 's/^v//' | command sed 's/_/./g')"
+                progress_done
+                ;;
             Java) check_java ;;
             R) check_r ;;
-            Kotlin) check_kotlin ;;
-            ktlint) check_ktlint ;;
-            detekt) check_detekt ;;
-            kotlin-language-server) check_kotlin_language_server ;;
+            Kotlin) check_github_release "Kotlin" "JetBrains/kotlin" ;;
+            ktlint) check_github_release "ktlint" "pinterest/ktlint" ;;
+            detekt) check_github_release "detekt" "detekt/detekt" ;;
+            kotlin-language-server) check_github_release "kotlin-language-server" "fwcd/kotlin-language-server" ;;
             jdtls) check_jdtls ;;
             android-cmdline-tools) check_android_cmdline_tools ;;
             android-ndk) check_android_ndk ;;
@@ -864,8 +817,8 @@ main() {
             duf) check_github_release "duf" "muesli/duf" ;;
             entr) check_entr ;;
             biome) check_biome ;;
-            taplo) check_taplo ;;
-            cargo-release) check_cargo_release ;;
+            taplo) check_github_release "taplo" "tamasfe/taplo" ;;
+            cargo-release) check_crates_io "cargo-release" ;;
             zoxide) check_github_release "zoxide" "ajeetdsouza/zoxide" ;;
             cosign) check_github_release "cosign" "sigstore/cosign" ;;
             trivy-action) check_github_release "trivy-action" "aquasecurity/trivy-action" ;;

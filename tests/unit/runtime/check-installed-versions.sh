@@ -123,9 +123,10 @@ test_civ_check_version_func() {
     assert_file_contains "$SOURCE_FILE" "check_version()" "check-installed-versions.sh defines check_version function"
 }
 
-# Test: defines compare_version function
+# Test: compare_version available via shared version-api.sh
 test_civ_compare_version_func() {
-    assert_file_contains "$SOURCE_FILE" "compare_version()" "check-installed-versions.sh defines compare_version function"
+    local shared_lib="$PROJECT_ROOT/lib/runtime/lib/version-api.sh"
+    assert_file_contains "$shared_lib" "compare_version()" "version-api.sh defines compare_version function"
 }
 
 # Test: defines should_display_section function

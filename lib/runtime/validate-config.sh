@@ -565,90 +565,33 @@ cv_check_backup_config() {
     fi
 }
 
-# PCI-DSS compliance profile
-cv_validate_pci_dss() {
-    cv_info "Validating PCI-DSS compliance requirements..."
+# Compliance framework registry: framework → "check:requirement_id ..."
+# Each entry maps a cv_check_* function suffix to a requirement identifier.
+declare -A CV_FRAMEWORK_CHECKS
+CV_FRAMEWORK_CHECKS=(
+    [PCI-DSS]="encryption:4.1 audit_logging:10.1 security_context:6.2 resource_limits:12.1 health_monitoring:11.4"
+    [HIPAA]="encryption:164.312(e)(1) audit_logging:164.312(b) security_context:164.312(a)(1) backup_config:164.308(a)(7) health_monitoring:164.312(c)(1)"
+    [FedRAMP]="encryption:SC-8 audit_logging:AU-2 resource_limits:SC-4 security_context:AC-6 network_security:SC-7 backup_config:CP-9 health_monitoring:SI-4"
+    [CMMC]="encryption:SC.L2-3.13.8 audit_logging:AU.L2-3.3.1 security_context:CM.L2-3.4.2 resource_limits:SC.L2-3.13.4 health_monitoring:SI.L2-3.14.3"
+)
 
-    # Requirement 4: Encrypt transmission of cardholder data
-    cv_check_encryption "PCI-DSS" "4.1"
+# Generic compliance framework validator
+cv_validate_framework() {
+    local framework="$1"
+    local checks="${CV_FRAMEWORK_CHECKS[$framework]:-}"
 
-    # Requirement 10: Track and monitor all access
-    cv_check_audit_logging "PCI-DSS" "10.1"
+    if [ -z "$checks" ]; then
+        cv_error "No checks defined for framework: $framework"
+        return 1
+    fi
 
-    # Requirement 6: Develop and maintain secure systems
-    cv_check_security_context "PCI-DSS" "6.2"
+    cv_info "Validating ${framework} compliance requirements..."
 
-    # Requirement 12: Maintain security policy
-    cv_check_resource_limits "PCI-DSS" "12.1"
-
-    # Requirement 11: Test security systems
-    cv_check_health_monitoring "PCI-DSS" "11.4"
-}
-
-# HIPAA compliance profile
-cv_validate_hipaa() {
-    cv_info "Validating HIPAA compliance requirements..."
-
-    # §164.312(e)(1): Transmission security
-    cv_check_encryption "HIPAA" "164.312(e)(1)"
-
-    # §164.312(b): Audit controls
-    cv_check_audit_logging "HIPAA" "164.312(b)"
-
-    # §164.312(a)(1): Access control
-    cv_check_security_context "HIPAA" "164.312(a)(1)"
-
-    # §164.308(a)(7): Contingency plan
-    cv_check_backup_config "HIPAA" "164.308(a)(7)"
-
-    # §164.312(c)(1): Integrity controls
-    cv_check_health_monitoring "HIPAA" "164.312(c)(1)"
-}
-
-# FedRAMP compliance profile
-cv_validate_fedramp() {
-    cv_info "Validating FedRAMP compliance requirements..."
-
-    # SC-8: Transmission confidentiality
-    cv_check_encryption "FedRAMP" "SC-8"
-
-    # AU-2: Audit events
-    cv_check_audit_logging "FedRAMP" "AU-2"
-
-    # SC-4: Information in shared resources
-    cv_check_resource_limits "FedRAMP" "SC-4"
-
-    # AC-6: Least privilege
-    cv_check_security_context "FedRAMP" "AC-6"
-
-    # SC-7: Boundary protection
-    cv_check_network_security "FedRAMP" "SC-7"
-
-    # CP-9: System backup
-    cv_check_backup_config "FedRAMP" "CP-9"
-
-    # SI-4: System monitoring
-    cv_check_health_monitoring "FedRAMP" "SI-4"
-}
-
-# CMMC Level 2 compliance profile
-cv_validate_cmmc() {
-    cv_info "Validating CMMC Level 2 compliance requirements..."
-
-    # SC.L2-3.13.8: Encrypt CUI in transit
-    cv_check_encryption "CMMC" "SC.L2-3.13.8"
-
-    # AU.L2-3.3.1: Create audit logs
-    cv_check_audit_logging "CMMC" "AU.L2-3.3.1"
-
-    # CM.L2-3.4.2: Security configuration enforcement
-    cv_check_security_context "CMMC" "CM.L2-3.4.2"
-
-    # SC.L2-3.13.4: Shared resource control
-    cv_check_resource_limits "CMMC" "SC.L2-3.13.4"
-
-    # SI.L2-3.14.3: Security alerts
-    cv_check_health_monitoring "CMMC" "SI.L2-3.14.3"
+    for entry in $checks; do
+        local check_func="cv_check_${entry%%:*}"
+        local requirement_id="${entry#*:}"
+        "$check_func" "$framework" "$requirement_id"
+    done
 }
 
 # Generate compliance report
@@ -701,26 +644,21 @@ cv_validate_compliance() {
     CV_COMPLIANCE_FAILED=0
     CV_COMPLIANCE_REPORT=""
 
-    # Run framework-specific validation
+    # Normalize mode to registry key
+    local framework_key
     case "$mode" in
-        pci-dss|pci_dss|pcidss)
-            cv_validate_pci_dss
-            ;;
-        hipaa)
-            cv_validate_hipaa
-            ;;
-        fedramp)
-            cv_validate_fedramp
-            ;;
-        cmmc|cmmc-l2)
-            cv_validate_cmmc
-            ;;
+        pci-dss|pci_dss|pcidss) framework_key="PCI-DSS" ;;
+        hipaa) framework_key="HIPAA" ;;
+        fedramp) framework_key="FedRAMP" ;;
+        cmmc|cmmc-l2) framework_key="CMMC" ;;
         *)
             cv_error "Unknown compliance mode: $mode"
             cv_error "Supported modes: pci-dss, hipaa, fedramp, cmmc"
             return 1
             ;;
     esac
+
+    cv_validate_framework "$framework_key"
 
     # Generate report if path specified
     cv_generate_compliance_report
