@@ -714,6 +714,77 @@ test_su_touch_marker_uses_quoting() {
     fi
 }
 
+# ============================================================================
+# Functional Tests - Re-entry guard behavior
+# ============================================================================
+
+# Functional test: re-entry guard skips startup when ENTRYPOINT_ALREADY_RAN=true
+test_reentry_guard_skips_when_set() {
+    # Create a temp script that mimics the entrypoint's re-entry guard.
+    # If the guard triggers, exec runs the command immediately (no startup).
+    # If the guard doesn't trigger, a marker file is created (simulating startup).
+    local guard_script="$TEST_TEMP_DIR/reentry-test.sh"
+    cat > "$guard_script" << 'GUARD_EOF'
+#!/bin/bash
+# Re-entry guard (same logic as entrypoint.sh:36-40)
+if [ "${ENTRYPOINT_ALREADY_RAN:-}" = "true" ]; then
+    exec "$@"
+fi
+export ENTRYPOINT_ALREADY_RAN=true
+
+# Simulate startup work
+touch "$TEST_TEMP_DIR/startup-ran.marker"
+
+# Run the command
+exec "$@"
+GUARD_EOF
+    chmod +x "$guard_script"
+
+    # Run with ENTRYPOINT_ALREADY_RAN=true — guard should skip startup
+    local output
+    output=$(ENTRYPOINT_ALREADY_RAN=true TEST_TEMP_DIR="$TEST_TEMP_DIR" \
+        bash "$guard_script" echo "executed")
+
+    assert_equals "executed" "$output" "Command was executed via re-entry guard"
+
+    if [ -f "$TEST_TEMP_DIR/startup-ran.marker" ]; then
+        fail_test "Startup should NOT have run when ENTRYPOINT_ALREADY_RAN=true"
+    else
+        pass_test "Re-entry guard correctly skipped startup"
+    fi
+}
+
+# Functional test: re-entry guard runs startup when ENTRYPOINT_ALREADY_RAN is unset
+test_reentry_guard_runs_when_unset() {
+    local guard_script="$TEST_TEMP_DIR/reentry-test.sh"
+    cat > "$guard_script" << 'GUARD_EOF'
+#!/bin/bash
+if [ "${ENTRYPOINT_ALREADY_RAN:-}" = "true" ]; then
+    exec "$@"
+fi
+export ENTRYPOINT_ALREADY_RAN=true
+
+# Simulate startup work
+touch "$TEST_TEMP_DIR/startup-ran.marker"
+
+exec "$@"
+GUARD_EOF
+    chmod +x "$guard_script"
+
+    # Run without ENTRYPOINT_ALREADY_RAN — startup should execute
+    local output
+    output=$(unset ENTRYPOINT_ALREADY_RAN; TEST_TEMP_DIR="$TEST_TEMP_DIR" \
+        bash "$guard_script" echo "executed")
+
+    assert_equals "executed" "$output" "Command was executed after startup"
+
+    if [ -f "$TEST_TEMP_DIR/startup-ran.marker" ]; then
+        pass_test "Startup correctly ran when ENTRYPOINT_ALREADY_RAN was unset"
+    else
+        fail_test "Startup should have run when ENTRYPOINT_ALREADY_RAN was unset"
+    fi
+}
+
 # Run all tests
 run_test_with_setup test_sg_docker_uses_quoted_cmd "sg docker uses QUOTED_CMD (not \$*)"
 run_test_with_setup test_newgrp_docker_uses_quoted_cmd "newgrp docker uses QUOTED_CMD (not \$*)"
@@ -752,6 +823,8 @@ run_test_with_setup test_trap_handlers "Trap handlers configuration"
 run_test_with_setup test_exit_handler_metrics_cleanup "Exit handler metrics cleanup"
 run_test_with_setup test_exit_handler_logging "Exit handler logging messages"
 run_test_with_setup test_exit_handler_error_handling "Exit handler error handling"
+run_test_with_setup test_reentry_guard_skips_when_set "Re-entry guard skips startup when set"
+run_test_with_setup test_reentry_guard_runs_when_unset "Re-entry guard runs startup when unset"
 
 # Generate test report
 generate_report

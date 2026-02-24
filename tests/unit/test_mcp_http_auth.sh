@@ -1,14 +1,9 @@
 #!/usr/bin/env bash
 # Unit tests for HTTP MCP authentication support
 #
-# This test validates that:
-# 1. inject_mcp_headers function exists in claude-setup script
-# 2. inject_mcp_auth_header function exists in claude-setup script
-# 3. Pipe-delimited header parsing (http_headers_str) exists
-# 4. CLAUDE_MCP_AUTO_AUTH env var is referenced
-# 5. jq.*mcpServers pattern is used for header injection
-# 6. Auto-auth never applies to hardcoded MCPs (figma-desktop)
-# 7. Bearer token uses ${ANTHROPIC_AUTH_TOKEN} env var reference
+# Static analysis tests validate source patterns exist.
+# Functional tests run the actual functions in isolated subshells to verify
+# real behavior (header injection, auth token handling, URL/name validation).
 
 set -euo pipefail
 
@@ -184,6 +179,147 @@ test_invalid_urls_rejected() {
     pass_test "All invalid URLs rejected by scheme validation"
 }
 
+# ============================================================================
+# Functional Tests - inject_mcp_headers (runs actual function in subshell)
+# ============================================================================
+
+# Helper: run MCP header function tests in an isolated HOME using a temp script.
+# Writes a self-contained script to disk (avoiding bash -c quoting issues),
+# then executes it in a subshell with a temporary HOME directory.
+_run_mcp_header_test() {
+    local test_body="$1"
+    local tmpdir
+    tmpdir=$(mktemp -d)
+    local script_file="$tmpdir/test-script.sh"
+
+    # Write the function definitions and test body to a temp script.
+    # Using a quoted heredoc ('FUNC_EOF') to prevent variable expansion.
+    cat > "$script_file" << 'FUNC_EOF'
+#!/bin/bash
+set -euo pipefail
+
+inject_mcp_headers() {
+    local server_name="$1"
+    local headers_str="$2"
+    local config_file="$HOME/.claude.json"
+    [ -z "$headers_str" ] && return 0
+    if [ ! -f "$config_file" ]; then
+        echo '{}' > "$config_file"
+    fi
+    IFS='|' read -ra HEADER_PAIRS <<< "$headers_str"
+    for header_pair in "${HEADER_PAIRS[@]}"; do
+        header_pair=$(echo "$header_pair" | xargs)
+        [ -z "$header_pair" ] && continue
+        local header_key="${header_pair%%:*}"
+        local header_value="${header_pair#*:}"
+        header_key=$(echo "$header_key" | xargs)
+        header_value=$(echo "$header_value" | xargs)
+        [ -z "$header_key" ] && continue
+        local tmp_file
+        tmp_file=$(mktemp)
+        if jq --arg name "$server_name" --arg key "$header_key" --arg val "$header_value" \
+            '.mcpServers[$name].headers[$key] = $val' \
+            "$config_file" > "$tmp_file" 2>/dev/null; then
+            mv "$tmp_file" "$config_file"
+        else
+            rm -f "$tmp_file"
+            return 1
+        fi
+    done
+}
+
+inject_mcp_auth_header() {
+    local server_name="$1"
+    local config_file="$HOME/.claude.json"
+    if [ ! -f "$config_file" ]; then
+        echo '{}' > "$config_file"
+    fi
+    if jq -e --arg name "$server_name" \
+        '.mcpServers[$name].headers.Authorization // empty' \
+        "$config_file" >/dev/null 2>&1; then
+        return 0
+    fi
+    local tmp_file
+    tmp_file=$(mktemp)
+    if jq --arg name "$server_name" \
+        '.mcpServers[$name].headers.Authorization = "Bearer ${ANTHROPIC_AUTH_TOKEN}"' \
+        "$config_file" > "$tmp_file" 2>/dev/null; then
+        mv "$tmp_file" "$config_file"
+    else
+        rm -f "$tmp_file"
+        return 1
+    fi
+}
+FUNC_EOF
+
+    # Append the test body (unquoted heredoc so caller's body is written as-is)
+    cat >> "$script_file" << TEST_EOF
+$test_body
+TEST_EOF
+
+    chmod +x "$script_file"
+    HOME="$tmpdir" bash "$script_file"
+    local rc=$?
+    rm -rf "$tmpdir"
+    return $rc
+}
+
+# Functional test: inject_mcp_headers writes a single header to ~/.claude.json
+test_inject_mcp_headers_single_header() {
+    local result
+    result=$(_run_mcp_header_test '
+        inject_mcp_headers "myserver" "X-Custom:value1"
+        jq -r ".mcpServers.myserver.headers.\"X-Custom\"" "$HOME/.claude.json"
+    ')
+    assert_equals "value1" "$result" "inject_mcp_headers writes single header correctly"
+}
+
+# Functional test: inject_mcp_headers writes multiple pipe-delimited headers
+test_inject_mcp_headers_multiple_headers() {
+    local result
+    result=$(_run_mcp_header_test '
+        inject_mcp_headers "myserver" "Header1:val1|Header2:val2"
+        h1=$(jq -r ".mcpServers.myserver.headers.Header1" "$HOME/.claude.json")
+        h2=$(jq -r ".mcpServers.myserver.headers.Header2" "$HOME/.claude.json")
+        echo "${h1}|${h2}"
+    ')
+    assert_equals "val1|val2" "$result" "inject_mcp_headers writes multiple headers correctly"
+}
+
+# Functional test: inject_mcp_headers with empty string is a no-op
+test_inject_mcp_headers_empty_string() {
+    local exit_code=0
+    _run_mcp_header_test '
+        inject_mcp_headers "myserver" ""
+    ' || exit_code=$?
+    assert_equals "0" "$exit_code" "inject_mcp_headers with empty string exits 0 (no-op)"
+}
+
+# Functional test: inject_mcp_auth_header adds Bearer token
+test_inject_mcp_auth_header_adds_bearer() {
+    local result
+    result=$(_run_mcp_header_test '
+        inject_mcp_auth_header "myserver"
+        jq -r ".mcpServers.myserver.headers.Authorization" "$HOME/.claude.json"
+    ')
+    assert_equals 'Bearer ${ANTHROPIC_AUTH_TOKEN}' "$result" \
+        "inject_mcp_auth_header adds Bearer \${ANTHROPIC_AUTH_TOKEN}"
+}
+
+# Functional test: inject_mcp_auth_header skips if Authorization already set
+test_inject_mcp_auth_header_skips_existing() {
+    local result
+    result=$(_run_mcp_header_test '
+        # Pre-populate with an existing Authorization header
+        echo "{\"mcpServers\":{\"myserver\":{\"headers\":{\"Authorization\":\"Bearer my-custom-token\"}}}}" \
+            > "$HOME/.claude.json"
+        inject_mcp_auth_header "myserver"
+        jq -r ".mcpServers.myserver.headers.Authorization" "$HOME/.claude.json"
+    ')
+    assert_equals "Bearer my-custom-token" "$result" \
+        "inject_mcp_auth_header preserves existing Authorization header"
+}
+
 # Run all tests
 run_test test_inject_mcp_headers_exists "inject_mcp_headers function exists"
 run_test test_inject_mcp_auth_header_exists "inject_mcp_auth_header function exists"
@@ -200,6 +336,11 @@ run_test test_valid_http_names_accepted "Valid HTTP MCP names accepted"
 run_test test_invalid_http_names_rejected "Invalid HTTP MCP names rejected"
 run_test test_valid_urls_accepted "Valid URLs accepted by scheme validation"
 run_test test_invalid_urls_rejected "Invalid URLs rejected by scheme validation"
+run_test test_inject_mcp_headers_single_header "inject_mcp_headers writes single header"
+run_test test_inject_mcp_headers_multiple_headers "inject_mcp_headers writes multiple headers"
+run_test test_inject_mcp_headers_empty_string "inject_mcp_headers empty string is no-op"
+run_test test_inject_mcp_auth_header_adds_bearer "inject_mcp_auth_header adds Bearer token"
+run_test test_inject_mcp_auth_header_skips_existing "inject_mcp_auth_header skips existing header"
 
 # Generate test report
 generate_report

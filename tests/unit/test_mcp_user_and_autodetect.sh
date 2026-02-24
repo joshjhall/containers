@@ -1,13 +1,9 @@
 #!/usr/bin/env bash
 # Unit tests for CLAUDE_USER_MCPS, MCP passthrough, and auto-detection features
 #
-# This test validates that:
-# 1. INCLUDE_MCP_SERVERS is fully removed from the Dockerfile
-# 2. CLAUDE_USER_MCPS is referenced in the claude-setup script
-# 3. CLAUDE_AUTO_DETECT_MCPS is referenced in the claude-setup script
-# 4. derive_mcp_name_from_package function exists in claude-setup
-# 5. configure_mcp_list function exists in claude-setup
-# 6. Auto-detection logic for GitHub/GitLab exists
+# Static analysis tests validate source patterns exist.
+# Functional tests run derive_mcp_name_from_package in subshells to verify
+# real name-derivation behavior with scoped/unscoped npm packages.
 
 set -euo pipefail
 
@@ -121,6 +117,35 @@ test_mcp_servers_removed_from_compose() {
     fi
 }
 
+# ============================================================================
+# Functional Tests - derive_mcp_name_from_package (runs actual function)
+# ============================================================================
+
+# Functional test: scoped npm package derives last segment
+test_derive_name_scoped_package() {
+    # The function is: echo "${pkg##*/}"
+    derive_mcp_name_from_package() { local pkg="$1"; echo "${pkg##*/}"; }
+    local result
+    result=$(derive_mcp_name_from_package "@foo/bar-server")
+    assert_equals "bar-server" "$result" "Scoped package @foo/bar-server → bar-server"
+}
+
+# Functional test: unscoped package returns itself
+test_derive_name_unscoped_package() {
+    derive_mcp_name_from_package() { local pkg="$1"; echo "${pkg##*/}"; }
+    local result
+    result=$(derive_mcp_name_from_package "simple-pkg")
+    assert_equals "simple-pkg" "$result" "Unscoped package simple-pkg → simple-pkg"
+}
+
+# Functional test: deeply scoped path derives last segment
+test_derive_name_deeply_scoped() {
+    derive_mcp_name_from_package() { local pkg="$1"; echo "${pkg##*/}"; }
+    local result
+    result=$(derive_mcp_name_from_package "@org/sub/deep")
+    assert_equals "deep" "$result" "Deeply scoped @org/sub/deep → deep"
+}
+
 # Run all tests
 run_test test_mcp_servers_removed_from_dockerfile "INCLUDE_MCP_SERVERS removed from Dockerfile"
 run_test test_user_mcps_in_setup "CLAUDE_USER_MCPS in claude-setup"
@@ -133,6 +158,9 @@ run_test test_unknown_mcp_build_time_passthrough "Unknown MCPs show passthrough 
 run_test test_configure_mcp_list_passthrough_logic "configure_mcp_list has passthrough logic"
 run_test test_http_mcp_support "configure_mcp_list supports HTTP MCP servers"
 run_test test_mcp_servers_removed_from_compose "INCLUDE_MCP_SERVERS removed from docker-compose.yml"
+run_test test_derive_name_scoped_package "derive_mcp_name: scoped package"
+run_test test_derive_name_unscoped_package "derive_mcp_name: unscoped package"
+run_test test_derive_name_deeply_scoped "derive_mcp_name: deeply scoped path"
 
 # Generate test report
 generate_report

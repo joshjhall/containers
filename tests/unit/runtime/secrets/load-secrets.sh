@@ -212,6 +212,29 @@ test_fail_on_error_exit_code() {
         "Returns exit code 2 when fail_on_error triggered"
 }
 
+# Functional test: load_all_secrets returns exit code 2 when FAIL_ON_ERROR=true
+# and a provider fails. Uses a mock provider function to simulate failure.
+test_fail_on_error_returns_exit_code_2() {
+    local exit_code=0
+    _run_loader_subshell "
+        # Override source_provider to prevent real provider scripts from
+        # clobbering our mock function during load_all_secrets
+        source_provider() { return 0; }
+
+        # Define a mock docker provider that always fails
+        load_secrets_from_docker() { return 1; }
+
+        export SECRET_LOADER_ENABLED='true'
+        export SECRET_LOADER_FAIL_ON_ERROR='true'
+        export SECRET_LOADER_PRIORITY='docker'
+
+        load_all_secrets >/dev/null 2>&1
+    " || exit_code=$?
+
+    assert_equals "2" "$exit_code" \
+        "load_all_secrets returns exit code 2 when FAIL_ON_ERROR=true and provider fails"
+}
+
 # ============================================================================
 # Run all tests
 # ============================================================================
@@ -248,6 +271,7 @@ run_test_with_setup test_function_name_mapping "Function name mappings"
 # Fail on error
 run_test_with_setup test_fail_on_error_documented "FAIL_ON_ERROR is documented"
 run_test_with_setup test_fail_on_error_exit_code "FAIL_ON_ERROR returns exit code 2"
+run_test_with_setup test_fail_on_error_returns_exit_code_2 "FAIL_ON_ERROR actually returns exit code 2"
 
 # Generate test report
 generate_report
