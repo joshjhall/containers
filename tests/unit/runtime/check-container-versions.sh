@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Unit tests for lib/runtime/check-versions.sh
+# Unit tests for lib/runtime/check-container-versions.sh
 
 set -euo pipefail
 
@@ -111,7 +111,7 @@ run_test_with_setup test_validation "Validation test"
 # Batch 6: Static Analysis Tests for check-versions.sh
 # ============================================================================
 
-SOURCE_FILE="$PROJECT_ROOT/lib/runtime/check-versions.sh"
+SOURCE_FILE="$PROJECT_ROOT/lib/runtime/check-container-versions.sh"
 
 # Test: set -euo pipefail
 test_cv_strict_mode() {

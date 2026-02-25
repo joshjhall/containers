@@ -516,15 +516,6 @@ gradle-wrapper() {
 }
 
 # ----------------------------------------------------------------------------
-# java-benchmark - Create and run a JMH benchmark
-#
-# Arguments:
-#   $1 - Class name (required)
-#
-# Example:
-#   java-benchmark StringBenchmark
-# ----------------------------------------------------------------------------
-# ----------------------------------------------------------------------------
 # load_java_template - Load a Java template with variable substitution
 #
 # Arguments:
@@ -551,6 +542,15 @@ load_java_template() {
     fi
 }
 
+# ----------------------------------------------------------------------------
+# java-benchmark - Create and run a JMH benchmark
+#
+# Arguments:
+#   $1 - Class name (required)
+#
+# Example:
+#   java-benchmark StringBenchmark
+# ----------------------------------------------------------------------------
 java-benchmark() {
     if [ -z "$1" ]; then
         echo "Usage: java-benchmark <class-name>"

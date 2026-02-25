@@ -333,52 +333,57 @@ apply_bindfs_overlay() {
 # This works in two modes:
 # 1. Running as root: directly modify socket permissions
 # 2. Running as non-root with sudo: use sudo for privileged operations
-if [ -S /var/run/docker.sock ]; then
+configure_docker_socket() {
+    [ -S /var/run/docker.sock ] || return 0
+
     # Check if we can already access the socket
-    if ! test -r /var/run/docker.sock -a -w /var/run/docker.sock 2>/dev/null; then
-        echo "🔧 Configuring Docker socket access..."
-
-        # Determine if we can perform privileged operations
-        CAN_SUDO=false
-        if [ "$RUNNING_AS_ROOT" = "true" ]; then
-            CAN_SUDO=true
-        elif command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
-            CAN_SUDO=true
-        fi
-
-        if [ "$CAN_SUDO" = "true" ]; then
-            # Create docker group if it doesn't exist
-            if ! getent group docker >/dev/null 2>&1; then
-                run_privileged groupadd docker 2>/dev/null || {
-                    echo "⚠️  Warning: Could not create docker group"
-                }
-            fi
-
-            # Change socket ownership to root:docker with 660 permissions
-            if ! run_privileged chown root:docker /var/run/docker.sock 2>/dev/null || \
-               ! run_privileged chmod 660 /var/run/docker.sock 2>/dev/null; then
-                echo "⚠️  Warning: Could not change Docker socket ownership/permissions"
-            fi
-
-            # Add user to docker group
-            run_privileged usermod -aG docker "$USERNAME" 2>/dev/null || {
-                echo "⚠️  Warning: Could not add $USERNAME to docker group"
-            }
-
-            echo "✓ Docker socket access configured (user added to docker group)"
-
-            # If running as non-root, we need to re-exec with new group membership
-            # The sg command runs a command with a supplementary group
-            if [ "$RUNNING_AS_ROOT" = "false" ] && [ -n "$*" ]; then
-                # Mark that we've already configured docker so we don't loop
-                export DOCKER_SOCKET_CONFIGURED=true
-            fi
-        else
-            echo "⚠️  Warning: Cannot configure Docker socket - no root access or sudo"
-            echo "   Docker commands may fail. Run container as root or enable passwordless sudo."
-        fi
+    if test -r /var/run/docker.sock -a -w /var/run/docker.sock 2>/dev/null; then
+        return 0
     fi
-fi
+
+    echo "🔧 Configuring Docker socket access..."
+
+    # Determine if we can perform privileged operations
+    local can_sudo=false
+    if [ "$RUNNING_AS_ROOT" = "true" ]; then
+        can_sudo=true
+    elif command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
+        can_sudo=true
+    fi
+
+    if [ "$can_sudo" = "true" ]; then
+        # Create docker group if it doesn't exist
+        if ! getent group docker >/dev/null 2>&1; then
+            run_privileged groupadd docker 2>/dev/null || {
+                echo "⚠️  Warning: Could not create docker group"
+            }
+        fi
+
+        # Change socket ownership to root:docker with 660 permissions
+        if ! run_privileged chown root:docker /var/run/docker.sock 2>/dev/null || \
+           ! run_privileged chmod 660 /var/run/docker.sock 2>/dev/null; then
+            echo "⚠️  Warning: Could not change Docker socket ownership/permissions"
+        fi
+
+        # Add user to docker group
+        run_privileged usermod -aG docker "$USERNAME" 2>/dev/null || {
+            echo "⚠️  Warning: Could not add $USERNAME to docker group"
+        }
+
+        echo "✓ Docker socket access configured (user added to docker group)"
+
+        # If running as non-root, we need to re-exec with new group membership
+        # The sg command runs a command with a supplementary group
+        if [ "$RUNNING_AS_ROOT" = "false" ] && [ -n "$*" ]; then
+            # Mark that we've already configured docker so we don't loop
+            export DOCKER_SOCKET_CONFIGURED=true
+        fi
+    else
+        echo "⚠️  Warning: Cannot configure Docker socket - no root access or sudo"
+        echo "   Docker commands may fail. Run container as root or enable passwordless sudo."
+    fi
+}
+configure_docker_socket "$@"
 
 # ============================================================================
 # Cache Directory Permissions Fix
@@ -390,34 +395,39 @@ fi
 # 1. Cache volumes may be shared across containers with different UIDs
 # 2. New cache subdirectories may be created by root during image updates
 # 3. It's idempotent and fast when permissions are already correct
-if [ -d "/cache" ]; then
+fix_cache_permissions() {
+    [ -d "/cache" ] || return 0
+
     # Check if we need to fix permissions (any root-owned files in /cache)
-    if find /cache -user root -print -quit 2>/dev/null | grep -q .; then
-        echo "🔧 Fixing /cache directory permissions..."
-
-        # Determine if we can perform privileged operations
-        CAN_FIX_CACHE=false
-        if [ "$RUNNING_AS_ROOT" = "true" ]; then
-            CAN_FIX_CACHE=true
-        elif command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
-            CAN_FIX_CACHE=true
-        fi
-
-        if [ "$CAN_FIX_CACHE" = "true" ]; then
-            # Fix ownership of all cache directories
-            if run_privileged chown -R "${USERNAME}:${USERNAME}" /cache 2>/dev/null; then
-                echo "✓ Cache directory permissions fixed"
-            else
-                echo "⚠️  Warning: Could not fix all cache permissions"
-                echo "   Some package manager operations may fail"
-            fi
-        else
-            echo "⚠️  Warning: Cannot fix /cache permissions - no root access or sudo"
-            echo "   Some package manager operations may fail (npm, pip, etc.)"
-            echo "   To fix: run container as root or enable ENABLE_PASSWORDLESS_SUDO=true"
-        fi
+    if ! find /cache -user root -print -quit 2>/dev/null | grep -q .; then
+        return 0
     fi
-fi
+
+    echo "🔧 Fixing /cache directory permissions..."
+
+    # Determine if we can perform privileged operations
+    local can_fix=false
+    if [ "$RUNNING_AS_ROOT" = "true" ]; then
+        can_fix=true
+    elif command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
+        can_fix=true
+    fi
+
+    if [ "$can_fix" = "true" ]; then
+        # Fix ownership of all cache directories
+        if run_privileged chown -R "${USERNAME}:${USERNAME}" /cache 2>/dev/null; then
+            echo "✓ Cache directory permissions fixed"
+        else
+            echo "⚠️  Warning: Could not fix all cache permissions"
+            echo "   Some package manager operations may fail"
+        fi
+    else
+        echo "⚠️  Warning: Cannot fix /cache permissions - no root access or sudo"
+        echo "   Some package manager operations may fail (npm, pip, etc.)"
+        echo "   To fix: run container as root or enable ENABLE_PASSWORDLESS_SUDO=true"
+    fi
+}
+fix_cache_permissions
 
 # ============================================================================
 # Bindfs Overlay for Host Bind Mount Permission Fixes

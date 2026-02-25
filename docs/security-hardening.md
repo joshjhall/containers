@@ -50,7 +50,7 @@ ______________________________________________________________________
 
 **Affected Files**:
 
-- `lib/runtime/check-versions.sh` (lines 81, 90, 113)
+- `lib/runtime/check-container-versions.sh` (lines 81, 90, 113)
 - `lib/runtime/check-installed-versions.sh` (lines 78, 86)
 
 **Risk**: Command injection if `GITHUB_TOKEN` environment variable contains
