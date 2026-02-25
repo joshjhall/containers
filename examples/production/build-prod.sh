@@ -220,22 +220,20 @@ build_image() {
     done
     echo ""
 
-    # Build docker command
-    local docker_cmd="docker build"
-    docker_cmd+=" -f ${DOCKERFILE}"
-    docker_cmd+=" -t ${image_tag}"
+    # Build docker command as array to prevent injection via interpolated variables
+    local docker_args=(docker build -f "$DOCKERFILE" -t "$image_tag")
 
     for arg in "${all_args[@]}"; do
-        docker_cmd+=" --build-arg ${arg}"
+        docker_args+=(--build-arg "$arg")
     done
 
-    docker_cmd+=" ${BUILD_CONTEXT}"
+    docker_args+=("$BUILD_CONTEXT")
 
     # Execute build
-    log_info "Executing: ${docker_cmd}"
+    log_info "Executing: ${docker_args[*]}"
     echo ""
 
-    if eval "${docker_cmd}"; then
+    if "${docker_args[@]}"; then
         echo ""
         log_success "Build completed successfully!"
         log_success "Image: ${image_tag}"

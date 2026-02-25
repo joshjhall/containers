@@ -50,10 +50,10 @@ readonly CV_BLUE='\033[0;34m'
 readonly CV_NC='\033[0m' # No Color
 
 # Cleanup on exit
-cleanup_validation_files() {
+cv_cleanup() {
     command rm -f "$CV_ERRORS_FILE" "$CV_WARNINGS_FILE"
 }
-trap cleanup_validation_files EXIT
+trap cv_cleanup EXIT
 
 # ============================================================================
 # Logging Functions

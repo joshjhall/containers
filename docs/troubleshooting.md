@@ -1309,7 +1309,7 @@ env:
 ```bash
 # Inside container
 check-build-logs.sh python-dev
-check-build-logs.sh master-summary
+check-build-logs.sh
 
 # Or manually
 cat /var/log/build-*.log
@@ -1335,7 +1335,7 @@ go version
 ./tests/run_unit_tests.sh
 
 # Test specific feature
-./bin/test-all-features.sh --verbose
+./tests/test_feature.sh python-dev
 
 # Check if feature script ran
 grep "python-dev" /var/log/build-master-summary.log

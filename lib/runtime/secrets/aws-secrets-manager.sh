@@ -77,20 +77,23 @@ load_secrets_from_aws() {
 
     log_info "Retrieving secret from AWS Secrets Manager: $AWS_SECRET_NAME (region: $region)"
 
-    # Build AWS CLI command
-    local aws_cmd="aws secretsmanager get-secret-value --secret-id $AWS_SECRET_NAME --region $region"
+    # Build AWS CLI command as array to prevent injection via env vars
+    local aws_args=(aws secretsmanager get-secret-value
+        --secret-id "$AWS_SECRET_NAME"
+        --region "$region"
+    )
 
     # Add version parameters if specified
     if [ -n "${AWS_SECRET_VERSION_ID:-}" ]; then
-        aws_cmd="$aws_cmd --version-id $AWS_SECRET_VERSION_ID"
+        aws_args+=(--version-id "$AWS_SECRET_VERSION_ID")
     elif [ -n "${AWS_SECRET_VERSION_STAGE:-}" ]; then
-        aws_cmd="$aws_cmd --version-stage $AWS_SECRET_VERSION_STAGE"
+        aws_args+=(--version-stage "$AWS_SECRET_VERSION_STAGE")
     fi
 
     # Retrieve secret from AWS Secrets Manager
     local secret_response
-    secret_response=$($aws_cmd --output json 2>&1) || {
-        log_error "Failed to retrieve secret from AWS Secrets Manager: $secret_response"
+    secret_response=$("${aws_args[@]}" --output json 2>&1) || {
+        log_error "Failed to retrieve secret from AWS Secrets Manager (check IAM permissions and region)"
 
         # Check for common authentication errors
         if echo "$secret_response" | grep -q "UnrecognizedClientException\|InvalidClientTokenId\|AccessDenied"; then

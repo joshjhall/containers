@@ -141,8 +141,9 @@ test_tool_completion() {
         return 1
     fi
 
-    # Check for dangerous patterns
-    if echo "$completion_output" | grep -qE '(rm -rf|curl.*\|.*bash|wget.*\|.*bash)'; then
+    # Check for dangerous patterns (matches safe_eval blocklist from lib/base/logging.sh)
+    local blocklist='rm -rf|curl.*bash|\bwget\b|;\s*rm|\$\(.*rm|exec\s+[^$]|/bin/sh.*-c|bash.*-c.*http|\bmkfifo\b|\bnc\b|\bncat\b|\bchmod\b.*\+s|\bpython[23]?\b.*-c|\bperl\b.*-e'
+    if echo "$completion_output" | grep -qE "$blocklist"; then
         log_fail "$tool completion contains dangerous patterns"
         return 1
     fi

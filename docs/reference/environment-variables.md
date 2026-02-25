@@ -113,7 +113,7 @@ Control which version of each language to install:
 | `RUST_VERSION`   | `1.91.0` | Rust toolchain version                  |
 | `RUBY_VERSION`   | `3.3.6`  | Ruby version to install from source     |
 | `R_VERSION`      | `4.4`    | R version from CRAN repositories        |
-| `GOLANG_VERSION` | `1.24.0` | Go version to install                   |
+| `GO_VERSION`     | `1.26.0` | Go version to install                   |
 | `JAVA_VERSION`   | `21`     | Java JDK version (Temurin)              |
 | `MOJO_VERSION`   | `24.6.0` | Mojo version via pixi                   |
 

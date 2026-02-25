@@ -38,6 +38,7 @@ Key directories:
 docker build -t projectname:python-dev \
   -f containers/Dockerfile \
   --build-arg PROJECT_NAME=projectname \
+  --build-arg INCLUDE_PYTHON=true \
   --build-arg INCLUDE_PYTHON_DEV=true \
   .
 
@@ -45,7 +46,9 @@ docker build -t projectname:python-dev \
 docker build -t projectname:full-dev \
   -f containers/Dockerfile \
   --build-arg PROJECT_NAME=projectname \
+  --build-arg INCLUDE_PYTHON=true \
   --build-arg INCLUDE_PYTHON_DEV=true \
+  --build-arg INCLUDE_NODE=true \
   --build-arg INCLUDE_NODE_DEV=true \
   --build-arg INCLUDE_DOCKER=true \
   --build-arg INCLUDE_DEV_TOOLS=true \
@@ -135,7 +138,7 @@ docker run -it --rm \
 ```bash
 # Inside container - check build logs
 check-build-logs.sh python-dev
-check-build-logs.sh master-summary
+check-build-logs.sh
 
 # Check installed versions
 check-installed-versions.sh
@@ -885,16 +888,16 @@ never manually edit the VERSION file.
 
 ```bash
 # For bug fixes (4.3.2 -> 4.3.3)
-echo 'y' | ./bin/release.sh patch
+./bin/release.sh --non-interactive patch
 
 # For new features (4.3.2 -> 4.4.0)
-echo 'y' | ./bin/release.sh minor
+./bin/release.sh --non-interactive minor
 
 # For breaking changes (4.3.2 -> 5.0.0)
-echo 'y' | ./bin/release.sh major
+./bin/release.sh --non-interactive major
 
 # For specific version
-echo 'y' | ./bin/release.sh 4.5.0
+./bin/release.sh --non-interactive 4.5.0
 ```
 
 The release script automatically:

@@ -58,6 +58,7 @@ git submodule update --init --recursive
 docker build -t myproject:dev \
   -f containers/Dockerfile \
   --build-arg PROJECT_NAME=myproject \
+  --build-arg INCLUDE_NODE=true \
   --build-arg INCLUDE_NODE_DEV=true \
   --build-arg INCLUDE_DEV_TOOLS=true \
   .
@@ -67,6 +68,7 @@ cd containers
 docker build -t test:dev \
   --build-arg PROJECT_PATH=. \
   --build-arg PROJECT_NAME=test \
+  --build-arg INCLUDE_NODE=true \
   --build-arg INCLUDE_NODE_DEV=true \
   .
 ```
@@ -86,6 +88,7 @@ git submodule add https://github.com/joshjhall/containers.git containers
 docker build -t myproject:dev \
   -f containers/Dockerfile \
   --build-arg PROJECT_NAME=myproject \
+  --build-arg INCLUDE_PYTHON=true \
   --build-arg INCLUDE_PYTHON_DEV=true \
   --build-arg INCLUDE_POSTGRES_CLIENT=true \
   .
@@ -220,6 +223,7 @@ ______________________________________________________________________
 docker build -t myapi:dev \
   -f containers/Dockerfile \
   --build-arg PROJECT_NAME=myapi \
+  --build-arg INCLUDE_NODE=true \
   --build-arg INCLUDE_NODE_DEV=true \
   --build-arg INCLUDE_POSTGRES_CLIENT=true \
   --build-arg INCLUDE_DEV_TOOLS=true \
@@ -241,6 +245,7 @@ docker build -t myapi:prod \
 docker build -t myml:dev \
   -f containers/Dockerfile \
   --build-arg PROJECT_NAME=myml \
+  --build-arg INCLUDE_PYTHON=true \
   --build-arg INCLUDE_PYTHON_DEV=true \
   --build-arg PYTHON_VERSION=3.11.2 \
   .
@@ -262,7 +267,9 @@ docker build -t myml:train \
 docker build -t myservice:dev \
   -f containers/Dockerfile \
   --build-arg PROJECT_NAME=myservice \
+  --build-arg INCLUDE_GOLANG=true \
   --build-arg INCLUDE_GOLANG_DEV=true \
+  --build-arg INCLUDE_RUST=true \
   --build-arg INCLUDE_RUST_DEV=true \
   --build-arg INCLUDE_DOCKER=true \
   --build-arg INCLUDE_KUBERNETES=true \

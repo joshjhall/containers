@@ -36,7 +36,7 @@ See /etc/container/config/enabled-features.conf for build-time feature flags.
 ## Useful Commands
 
 - `check-build-logs.sh python-dev` — view build logs for a specific feature
-- `check-build-logs.sh master-summary` — view the overall build summary
+- `check-build-logs.sh` — view the overall build summary
 - `check-installed-versions.sh` — show all installed tool versions
 - `test-dev-tools` — verify development tool installation
 - `cat /etc/container/config/enabled-features.conf` — check feature flags

@@ -50,7 +50,7 @@ docker run --rm <image> env | grep -E "^(PATH|HOME|USER)"
 docker run --rm <image> ls -la ~/.container-initialized
 
 # Check build logs
-docker run --rm <image> check-build-logs.sh master-summary
+docker run --rm <image> check-build-logs.sh
 ```
 
 **Fix**: Review initialization script output for specific errors
