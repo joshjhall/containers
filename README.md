@@ -516,13 +516,12 @@ ______________________________________________________________________
 
 ## Testing
 
-The project includes comprehensive test coverage with **657 total tests** across
-unit and integration test suites.
+The project includes a comprehensive test suite across unit and integration
+tests. Run `./tests/run_all.sh` to see current counts.
 
 ### Unit Tests
 
-Unit tests validate individual components and scripts (497 tests, 99% pass
-rate):
+Unit tests validate individual components and scripts:
 
 ```bash
 # Run all unit tests (no Docker required)
@@ -535,15 +534,13 @@ rate):
 
 **Unit Test Coverage:**
 
-- ✅ 497 unit tests covering all features and utilities
-- ✅ 99% pass rate (496 passed, 1 legitimate skip)
+- ✅ Covers all features and utilities
 - ✅ Tests bash scripts directly without Docker
 - ✅ Fast execution (~30 seconds)
 
 ### Integration Tests
 
-Integration tests verify that feature combinations build and work together (160
-tests across 6 variants):
+Integration tests verify that feature combinations build and work together:
 
 ```bash
 # Run all integration tests

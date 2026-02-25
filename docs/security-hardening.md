@@ -1334,7 +1334,7 @@ security story.
 - **OWASP Docker Security**:
   https://cheatsheetseries.owasp.org/cheatsheets/Docker_Security_Cheat_Sheet.html
 - **CIS Docker Benchmark**: https://www.cisecurity.org/benchmark/docker
-- **Supply Chain Security**: `docs/checksum-verification.md`
+- **Supply Chain Security**: `docs/reference/security-checksums.md`
 
 ---
 

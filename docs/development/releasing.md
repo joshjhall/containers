@@ -259,7 +259,7 @@ When creating a security release:
 
 1. **Reference security documentation**:
    - Link to `docs/security-hardening.md` for roadmap items
-   - Update `docs/checksum-verification.md` if adding verification
+   - Update `docs/reference/security-checksums.md` if adding verification
    - Document in CHANGELOG.md under "Security" or "Added" sections
 
 1. **Example CHANGELOG entry** (from v4.5.0):
@@ -334,7 +334,7 @@ git push origin v4.5.0
 **CHANGELOG.md automatically captured**:
 
 - 39 security-related commits
-- References to docs/checksum-verification.md
+- References to docs/reference/security-checksums.md
 - Links to security-hardening.md roadmap
 
 ### Security Hotfixes

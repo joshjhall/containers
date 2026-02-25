@@ -108,14 +108,18 @@ Control which version of each language to install:
 
 | Variable         | Default  | Description                             |
 | ---------------- | -------- | --------------------------------------- |
-| `PYTHON_VERSION` | `3.14.0` | Python version to install from source   |
+| `PYTHON_VERSION` | `3.14.3` | Python version to install from source   |
 | `NODE_VERSION`   | `22`     | Node.js major version (from NodeSource) |
-| `RUST_VERSION`   | `1.91.0` | Rust toolchain version                  |
-| `RUBY_VERSION`   | `3.3.6`  | Ruby version to install from source     |
-| `R_VERSION`      | `4.4`    | R version from CRAN repositories        |
+| `RUST_VERSION`   | `1.93.1` | Rust toolchain version                  |
+| `RUBY_VERSION`   | `4.0.1`  | Ruby version to install from source     |
+| `R_VERSION`      | `4.5.2`  | R version from CRAN repositories        |
 | `GO_VERSION`     | `1.26.0` | Go version to install                   |
 | `JAVA_VERSION`   | `21`     | Java JDK version (Temurin)              |
-| `MOJO_VERSION`   | `24.6.0` | Mojo version via pixi                   |
+| `MOJO_VERSION`   | `25.4`   | Mojo version via pixi                   |
+
+> **Note**: The Dockerfile is the authoritative source for default versions.
+> These values drift with automated patch releases — check the `ARG` declarations
+> in the [Dockerfile](../../Dockerfile) for current defaults.
 
 ______________________________________________________________________
 

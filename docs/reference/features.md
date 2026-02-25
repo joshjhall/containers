@@ -330,8 +330,8 @@ docker build \
 See complete examples in [examples/env/](../examples/env/) directory:
 
 - `python-dev.env` - Python development setup
-- `node-dev.env` - Node.js development setup
-- `fullstack.env` - Full-stack web development
+- `node.env` - Node.js development setup
+- `dev-tools.env` - Development tools setup
 - `cloudflare.env` - Cloudflare Workers development
 
 ## Scripting Build Configurations

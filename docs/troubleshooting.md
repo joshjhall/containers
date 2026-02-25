@@ -358,7 +358,7 @@ curl -I https://www.python.org/ftp/python/3.14.0/Python-3.14.0.tgz
 docker build --build-arg PYTHON_VERSION=3.13.7 .
 
 # Check version-tracking.md for tested versions
-cat docs/version-tracking.md
+cat docs/reference/versions.md
 ```text
 
 ## Debian Version Compatibility
@@ -893,13 +893,13 @@ indicate:
    - If retries fail consistently
    - If checksum source is unreachable
    - If you suspect tampering
-   - See `docs/SECURITY.md` for reporting procedures
+   - See `SECURITY.md` for reporting procedures
 
 **Related Files**:
 
 - `lib/base/download-verify.sh` - Core verification logic
 - `lib/base/checksum-fetch.sh` - Checksum fetching utilities
-- `docs/checksum-verification.md` - Complete implementation guide
+- `docs/reference/security-checksums.md` - Complete implementation guide
 
 ### GPG signature verification failure
 
@@ -1067,7 +1067,7 @@ When encountering download or verification issues:
 **Supply Chain Security**:
 
 - All downloads use SHA256 verification (as of v4.5.0)
-- See `docs/checksum-verification.md` for complete audit
+- See `docs/reference/security-checksums.md` for complete audit
 - See `docs/security-hardening.md` for roadmap
 
 ## Feature-Specific Issues
@@ -1428,7 +1428,7 @@ docker exec mycontainer /bin/check-installed-versions.sh
 
 - [Version Tracking](reference/versions.md) - Managing tool versions
 - [Testing Framework](development/testing.md) - Testing guide
-- [Security and Init System](security-and-init-system.md) - Security model
+- [Security and Init System](security-hardening.md) - Security model
 - [README](../README.md) - Getting started
 - [CHANGELOG](../CHANGELOG.md) - Recent changes and fixes
 ````
