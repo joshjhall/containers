@@ -18,6 +18,16 @@ source "$PROJECT_ROOT/tests/framework.sh"
 export BUILD_LOG_DIR="/tmp/test-metrics-$$"
 mkdir -p "$BUILD_LOG_DIR"
 
+# Create mock du to avoid slow FUSE filesystem scans (du -sb /workspace takes 25s+)
+MOCK_BIN_DIR="/tmp/test-metrics-mock-$$"
+mkdir -p "$MOCK_BIN_DIR"
+cat > "$MOCK_BIN_DIR/du" << 'MOCK'
+#!/bin/bash
+# Mock du to avoid slow FUSE filesystem scans in tests
+echo "1024	${@: -1}"
+MOCK
+chmod +x "$MOCK_BIN_DIR/du"
+
 # Create mock build logs
 setup_mock_logs() {
     cat > "$BUILD_LOG_DIR/master-summary.log" <<EOF
@@ -45,7 +55,7 @@ test_metrics_generation() {
     setup_mock_logs
 
     local metrics
-    metrics=$("$PROJECT_ROOT/lib/runtime/metrics-exporter.sh")
+    metrics=$(BASH_ENV='' PATH="$MOCK_BIN_DIR:$PATH" "$PROJECT_ROOT/lib/runtime/metrics-exporter.sh")
 
     assert_not_empty "$metrics" "Should generate metrics output"
 
@@ -58,7 +68,7 @@ test_prometheus_format() {
     setup_mock_logs
 
     local metrics
-    metrics=$("$PROJECT_ROOT/lib/runtime/metrics-exporter.sh")
+    metrics=$(BASH_ENV='' PATH="$MOCK_BIN_DIR:$PATH" "$PROJECT_ROOT/lib/runtime/metrics-exporter.sh")
 
     # Should contain HELP comments
     echo "$metrics" | grep -q "^# HELP"
@@ -81,7 +91,7 @@ test_build_metrics() {
     setup_mock_logs
 
     local metrics
-    metrics=$("$PROJECT_ROOT/lib/runtime/metrics-exporter.sh")
+    metrics=$(BASH_ENV='' PATH="$MOCK_BIN_DIR:$PATH" "$PROJECT_ROOT/lib/runtime/metrics-exporter.sh")
 
     # Should contain build duration metrics
     echo "$metrics" | grep -q "container_build_duration_seconds"
@@ -116,7 +126,7 @@ test_runtime_metrics() {
     echo "$(date +%s)" > /tmp/container-start-time
 
     local metrics
-    metrics=$("$PROJECT_ROOT/lib/runtime/metrics-exporter.sh")
+    metrics=$(BASH_ENV='' PATH="$MOCK_BIN_DIR:$PATH" "$PROJECT_ROOT/lib/runtime/metrics-exporter.sh")
 
     # Should contain uptime metric
     echo "$metrics" | grep -q "container_uptime_seconds"
@@ -138,7 +148,7 @@ test_healthcheck_metrics() {
     start_test "Healthcheck metrics are generated when available"
 
     local metrics
-    metrics=$("$PROJECT_ROOT/lib/runtime/metrics-exporter.sh")
+    metrics=$(BASH_ENV='' PATH="$MOCK_BIN_DIR:$PATH" "$PROJECT_ROOT/lib/runtime/metrics-exporter.sh")
 
     # Healthcheck metrics depend on whether healthcheck command exists
     # This test just verifies the exporter handles it gracefully
@@ -155,7 +165,7 @@ test_feature_count() {
     setup_mock_logs
 
     local metrics
-    metrics=$("$PROJECT_ROOT/lib/runtime/metrics-exporter.sh")
+    metrics=$(BASH_ENV='' PATH="$MOCK_BIN_DIR:$PATH" "$PROJECT_ROOT/lib/runtime/metrics-exporter.sh")
 
     # Should count 3 features from mock logs
     echo "$metrics" | grep -q "container_features_installed 3"
@@ -170,7 +180,7 @@ test_aggregate_errors() {
     setup_mock_logs
 
     local metrics
-    metrics=$("$PROJECT_ROOT/lib/runtime/metrics-exporter.sh")
+    metrics=$(BASH_ENV='' PATH="$MOCK_BIN_DIR:$PATH" "$PROJECT_ROOT/lib/runtime/metrics-exporter.sh")
 
     # Total errors: Python(0) + Node(0) + Rust(1) = 1
     echo "$metrics" | grep -q "container_build_errors_total_all 1"
@@ -189,7 +199,7 @@ test_status_labels() {
     setup_mock_logs
 
     local metrics
-    metrics=$("$PROJECT_ROOT/lib/runtime/metrics-exporter.sh")
+    metrics=$(BASH_ENV='' PATH="$MOCK_BIN_DIR:$PATH" "$PROJECT_ROOT/lib/runtime/metrics-exporter.sh")
 
     # Python and Node should have status="success" (0 errors)
     echo "$metrics" | grep -q 'status="success"'
@@ -209,7 +219,7 @@ test_empty_logs() {
     rm -f "$BUILD_LOG_DIR/master-summary.log"
 
     local metrics
-    metrics=$("$PROJECT_ROOT/lib/runtime/metrics-exporter.sh")
+    metrics=$(BASH_ENV='' PATH="$MOCK_BIN_DIR:$PATH" "$PROJECT_ROOT/lib/runtime/metrics-exporter.sh")
 
     # Should still generate output (runtime metrics at minimum)
     assert_not_empty "$metrics" "Should generate output even without build logs"
@@ -226,7 +236,7 @@ test_metrics_timestamp() {
     setup_mock_logs
 
     local metrics
-    metrics=$("$PROJECT_ROOT/lib/runtime/metrics-exporter.sh")
+    metrics=$(BASH_ENV='' PATH="$MOCK_BIN_DIR:$PATH" "$PROJECT_ROOT/lib/runtime/metrics-exporter.sh")
 
     # Should have scrape timestamp
     echo "$metrics" | grep -q "container_metrics_scrape_timestamp_seconds"
@@ -251,6 +261,7 @@ test_metrics_timestamp() {
 # Cleanup
 cleanup() {
     rm -rf "$BUILD_LOG_DIR"
+    rm -rf "$MOCK_BIN_DIR"
     rm -f /tmp/container-start-time
 }
 

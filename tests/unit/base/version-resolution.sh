@@ -26,6 +26,14 @@ setup() {
     # Source the version resolution library
     source "$PROJECT_ROOT/lib/base/version-resolution.sh"
 
+    # Override _curl_safe with tighter timeouts for faster test feedback.
+    # Production uses --connect-timeout 10 --max-time 30; successful API calls
+    # complete in <1s so these tighter limits only affect failing requests.
+    _curl_safe() {
+        command curl --connect-timeout 3 --max-time 5 -fsSL "$@"
+    }
+    export -f _curl_safe
+
     # Track if we hit rate limits (for informative skip messages)
     export RATE_LIMIT_HIT=false
 
