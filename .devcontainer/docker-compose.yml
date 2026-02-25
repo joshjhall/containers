@@ -26,8 +26,6 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ..:/workspace/containers
-    environment:
-      - OP_SERVICE_ACCOUNT_TOKEN=${OP_DEV_SERVICE_ACCOUNT_TOKEN}
     env_file:
       - ../.env
     # Use tini as init system for proper zombie process reaping
