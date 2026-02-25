@@ -5,6 +5,75 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.15.1] - 2026-02-25
+
+### Added
+
+- Add uv package manager to base Python feature
+- Add OP_*_FILE_REF convention for file-based secrets
+- Add feature script for FUSE overlay installation
+- Add entrypoint auto-detection and FUSE overlay logic
+- Add Dockerfile build arg with DEV_TOOLS auto-trigger
+- Add SYS_ADMIN and /dev/fuse to docker-compose configs
+- Update channel default to latest and add token auth
+- Add FUSE hidden file garbage collection via cron
+- Add CLAUDE_USER_MCPS with registry lookup and passthrough
+- Auto-detect GitHub/GitLab MCP from git remotes
+- Add HTTP MCP authentication header support
+- Add codebase-audit skill with 5 scanner agents
+
+### Changed
+
+- Remove deprecated INCLUDE_MCP_SERVERS build arg
+- Deduplicate privileged helpers and startup loops (#67)
+- Deduplicate logging and normalization in secrets subsystem (#68)
+- Remove dead code and reduce complexity in logging, download-verify, and entrypoint (#70)
+- Deduplicate binary installations with install_github_release helper (#65)
+- Deduplicate resolve functions with shared helper (#69)
+- Promote checksum-fetch.sh from features/lib/ to base/ layer (#71)
+- Reduce duplication in 6 files exceeding 500-line threshold (#66)
+- Extract 6 heredocs from claude-code-setup.sh into standalone files (#64)
+
+### Documentation
+
+- Mention uv in README and python.sh header
+- Document bindfs feature across all references
+- Document FUSE cleanup cron and auto-triggers
+
+### Fixed
+
+- Install pyright for Claude Code LSP plugin support
+- Rename test aliases to avoid shadowing shell builtin
+- Use /tmp for setup-git tests to avoid bindfs overlay
+- Run biome format after jq in auto-patch workflow
+- Register marketplace before plugin installation
+- Normalize HTTP MCP URLs with trailing slash to prevent auth header loss
+- Prevent command injection in entrypoint docker group paths (#58)
+- Validate HTTP MCP server names and URL schemes (#61)
+- Validate CLAUDE_CHANNEL against allowlist to prevent command injection (#73)
+- Prevent eval injection in MCP and 1Password integrations (#59)
+- Prevent benchmark job from blocking CI on runner failures
+- Fix broken links, wrong defaults, and stale versions (#76)
+- Remove dead build-path fallback and relocate orphaned observability files (#72)
+- Source OP token from host env instead of .env file
+- Stop exporting ANTHROPIC_AUTH_TOKEN to shell environment (#62)
+- Return exit code 2 for TOFU checksum fallback (#60)
+- Close input validation gaps in secrets and eval paths (#63)
+- Remove redundant OP_SERVICE_ACCOUNT_TOKEN from docker-compose
+
+### Miscellaneous
+
+- Add INCLUDE_CRON and INCLUDE_BINDFS to build-args schema
+- Update tool versions
+- Bump pixi 0.63.2 → 0.64.0 and uv 0.10.4 → 0.10.5
+
+### Testing
+
+- Add unit, integration, and feature tests
+- Add FUSE cleanup cron tests
+- Add missing version resolution and checksum fetch tests (#74)
+- Add functional tests for MCP headers, secrets, and entrypoint guard (#75)
+
 ## [4.15.0] - 2026-02-18
 
 ### Added
@@ -43,6 +112,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Enable PyMarkdown front-matter extension instead of excluding files
 - Use empty PATH for CLI-missing tests to fix CI failures
 - Resolve all PyMarkdown violations in template files
+- Restore executable permission on tests/framework.sh
+- Rewrite shell permission hook to fix git index, not just filesystem
 
 ### Miscellaneous
 
@@ -979,6 +1050,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix prettier and markdownlint formatting in README
 - Format TLS documentation files
 
+[4.15.1]: https://github.com/joshjhall/containers/compare/v4.15.0...v4.15.1
 [4.15.0]: https://github.com/joshjhall/containers/compare/v4.14.5...v4.15.0
 [4.14.5]: https://github.com/joshjhall/containers/compare/v4.14.4...v4.14.5
 [4.14.4]: https://github.com/joshjhall/containers/compare/v4.14.3...v4.14.4
