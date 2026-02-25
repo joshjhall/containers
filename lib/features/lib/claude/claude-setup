@@ -619,7 +619,7 @@ if [ "${CLAUDE_AUTO_DETECT_MCPS:-true}" != "false" ] && [ -f "$MCP_REGISTRY" ]; 
         if [ -n "${GITHUB_TOKEN:-}" ]; then
             echo "Auto-detected GitHub remote with GITHUB_TOKEN set"
             add_args=$(mcp_registry_get_add_args "github")
-            eval "local add_args_array=($add_args)"
+            eval "add_args_array=($add_args)"
             add_mcp_server "github" "${add_args_array[@]}" || true
         else
             echo "  Auto-detected GitHub remote but GITHUB_TOKEN not set (skipping github MCP)"
@@ -630,7 +630,7 @@ if [ "${CLAUDE_AUTO_DETECT_MCPS:-true}" != "false" ] && [ -f "$MCP_REGISTRY" ]; 
         if [ -n "${GITLAB_TOKEN:-}" ]; then
             echo "Auto-detected GitLab remote with GITLAB_TOKEN set"
             add_args=$(mcp_registry_get_add_args "gitlab")
-            eval "local add_args_array=($add_args)"
+            eval "add_args_array=($add_args)"
             add_mcp_server "gitlab" "${add_args_array[@]}" || true
         else
             echo "  Auto-detected GitLab remote but GITLAB_TOKEN not set (skipping gitlab MCP)"
