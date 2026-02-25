@@ -609,66 +609,36 @@ verify_sigstore_signature() {
 
     log_message "Verifying Sigstore signature for $(basename "$file")..."
 
-    # Determine format based on whether cert_file is provided
+    # Build cosign args: separate .sig/.crt vs bundled .sigstore
+    local -a cosign_args=(verify-blob)
     if [ -n "$cert_file" ]; then
-        # Separate signature and certificate files (Python format)
         if [ ! -f "$cert_file" ]; then
             log_error "Certificate file not found: $cert_file"
             return 1
         fi
-
         log_message "  Using separate .sig and .crt files"
-
-        # Verify using separate files
-        if cosign verify-blob \
-            --signature "$sig_or_bundle" \
-            --certificate "$cert_file" \
-            --certificate-identity "$cert_identity" \
-            --certificate-oidc-issuer "$oidc_issuer" \
-            "$file" 2>&1 | tee /tmp/cosign-verify-output.txt | grep -q "Verified OK"; then
-
-            log_message "✓ Sigstore signature verified successfully"
-            log_message "  Cert Identity: $cert_identity"
-            command rm -f /tmp/cosign-verify-output.txt
-            return 0
-        else
-            log_warning "Sigstore signature verification failed"
-
-            # Show verification output for debugging
-            if [ -f /tmp/cosign-verify-output.txt ]; then
-                log_error "Cosign verification output:"
-                command cat /tmp/cosign-verify-output.txt >&2
-                command rm -f /tmp/cosign-verify-output.txt
-            fi
-            return 1
-        fi
+        cosign_args+=(--signature "$sig_or_bundle" --certificate "$cert_file")
     else
-        # Bundle format (.sigstore file)
         log_message "  Using bundled .sigstore file"
-
-        # Verify using bundle
-        if cosign verify-blob \
-            --bundle "$sig_or_bundle" \
-            --certificate-identity "$cert_identity" \
-            --certificate-oidc-issuer "$oidc_issuer" \
-            "$file" 2>&1 | tee /tmp/cosign-verify-output.txt | grep -q "Verified OK"; then
-
-            log_message "✓ Sigstore signature verified successfully"
-            log_message "  Cert Identity: $cert_identity"
-            command rm -f /tmp/cosign-verify-output.txt
-            return 0
-        else
-            log_warning "Sigstore signature verification failed"
-
-            # Show verification output for debugging
-            if [ -f /tmp/cosign-verify-output.txt ]; then
-                log_error "Cosign verification output:"
-                command cat /tmp/cosign-verify-output.txt >&2
-                command rm -f /tmp/cosign-verify-output.txt
-            fi
-            return 1
-        fi
+        cosign_args+=(--bundle "$sig_or_bundle")
     fi
+    cosign_args+=(--certificate-identity "$cert_identity" --certificate-oidc-issuer "$oidc_issuer" "$file")
+
+    # Single verification path
+    if cosign "${cosign_args[@]}" 2>&1 | tee /tmp/cosign-verify-output.txt | grep -q "Verified OK"; then
+        log_message "✓ Sigstore signature verified successfully"
+        log_message "  Cert Identity: $cert_identity"
+        command rm -f /tmp/cosign-verify-output.txt
+        return 0
+    fi
+
+    log_warning "Sigstore signature verification failed"
+    if [ -f /tmp/cosign-verify-output.txt ]; then
+        log_error "Cosign verification output:"
+        command cat /tmp/cosign-verify-output.txt >&2
+        command rm -f /tmp/cosign-verify-output.txt
+    fi
+    return 1
 }
 
 # ============================================================================
@@ -811,6 +781,45 @@ download_and_verify_sigstore() {
 # ============================================================================
 
 # ============================================================================
+# _verify_language_handler - Dispatch to per-language signature verification
+#
+# Handles languages with straightforward single-method verification.
+# Python is NOT dispatched here because it has Sigstore-first + GPG fallback.
+#
+# Arguments:
+#   $1 - Language name
+#   $2 - File to verify
+#   $3 - Version
+#
+# Returns:
+#   0 on successful verification, 1 on failure, 2 if language not handled
+# ============================================================================
+_verify_language_handler() {
+    local language="$1" file="$2" version="$3"
+    case "$language" in
+        nodejs)
+            log_message "Node.js detected, using SHASUMS-based GPG verification..."
+            download_and_verify_nodejs_gpg "$file" "$version"
+            ;;
+        kubectl|kubernetes)
+            log_message "kubectl detected, using Sigstore verification..."
+            download_and_verify_kubectl_sigstore "$file" "$version"
+            ;;
+        terraform)
+            log_message "Terraform detected, using HashiCorp SHA256SUMS GPG verification..."
+            download_and_verify_terraform_gpg "$file" "$version"
+            ;;
+        golang|go)
+            log_message "Go detected, using GPG .asc signature verification..."
+            download_and_verify_golang_gpg "$file" "$version"
+            ;;
+        *)
+            return 2
+            ;;
+    esac
+}
+
+# ============================================================================
 # verify_signature - Unified signature verification (Sigstore + GPG)
 #
 # Automatically chooses the appropriate verification method based on:
@@ -840,17 +849,15 @@ verify_signature() {
 
     log_message "Attempting Tier 1: Signature verification (Sigstore/GPG)"
 
-    # Python-specific logic: Try Sigstore first for 3.11.0+
+    # Python-specific logic: Try Sigstore first for 3.11.0+, then fall through to GPG
     if [ "$language" = "python" ]; then
         local major minor
         IFS='.' read -r major minor _ <<< "$version"
 
-        # Check if version >= 3.11.0
         if [ "$major" -ge 3 ] && [ "$minor" -ge 11 ]; then
             log_message "Python ${version} supports Sigstore, trying Sigstore first..."
 
             if command -v cosign >/dev/null 2>&1; then
-                # Get release manager information
                 local cert_identity oidc_issuer
                 if ! cert_identity=$(get_python_release_manager "$version" | head -1); then
                     log_warning "Could not determine release manager for Python ${version}"
@@ -858,9 +865,6 @@ verify_signature() {
                 else
                     oidc_issuer=$(get_python_release_manager "$version" | tail -1)
 
-                    # Construct Sigstore URLs (Python uses separate .sig and .crt files)
-                    # Format: https://www.python.org/ftp/python/{version}/Python-{version}.tar.xz.sig
-                    #         https://www.python.org/ftp/python/{version}/Python-{version}.tar.xz.crt
                     local sig_url cert_url
                     sig_url="https://www.python.org/ftp/python/${version}/$(basename "$file").sig"
                     cert_url="https://www.python.org/ftp/python/${version}/$(basename "$file").crt"
@@ -869,7 +873,6 @@ verify_signature() {
                     log_message "  Certificate Identity: ${cert_identity}"
                     log_message "  OIDC Issuer: ${oidc_issuer}"
 
-                    # Try Sigstore verification with separate .sig and .crt files
                     if download_and_verify_sigstore "$file" "$sig_url" "$cert_identity" "$oidc_issuer" "$cert_url"; then
                         log_message "✓ Sigstore verification successful"
                         return 0
@@ -883,65 +886,25 @@ verify_signature() {
         fi
     fi
 
-    # Node.js-specific logic: Use SHASUMS-based verification
-    if [ "$language" = "nodejs" ]; then
-        log_message "Node.js detected, using SHASUMS-based GPG verification..."
-
-        if download_and_verify_nodejs_gpg "$file" "$version"; then
-            log_message "✓ Node.js GPG verification successful"
-            return 0
-        else
-            log_warning "Node.js GPG verification failed"
-        fi
+    # Dispatch to per-language handler (nodejs, kubectl, terraform, golang)
+    local handler_result=0
+    _verify_language_handler "$language" "$file" "$version" || handler_result=$?
+    if [ "$handler_result" -eq 0 ]; then
+        log_message "✓ ${language} signature verification successful"
+        return 0
+    elif [ "$handler_result" -eq 1 ]; then
+        log_warning "${language} signature verification failed"
     fi
+    # handler_result == 2 means language not handled, fall through to GPG
 
-    # kubectl-specific logic: Use Sigstore verification (requires cosign)
-    if [ "$language" = "kubectl" ] || [ "$language" = "kubernetes" ]; then
-        log_message "kubectl detected, using Sigstore verification..."
-
-        if download_and_verify_kubectl_sigstore "$file" "$version"; then
-            log_message "✓ kubectl Sigstore verification successful"
-            return 0
-        else
-            log_warning "kubectl Sigstore verification failed"
-        fi
-    fi
-
-    # Terraform-specific logic: Use HashiCorp SHA256SUMS-based verification
-    if [ "$language" = "terraform" ]; then
-        log_message "Terraform detected, using HashiCorp SHA256SUMS GPG verification..."
-
-        if download_and_verify_terraform_gpg "$file" "$version"; then
-            log_message "✓ Terraform GPG verification successful"
-            return 0
-        else
-            log_warning "Terraform GPG verification failed"
-        fi
-    fi
-
-    # Go-specific logic: Use .asc signature verification
-    if [ "$language" = "golang" ] || [ "$language" = "go" ]; then
-        log_message "Go detected, using GPG .asc signature verification..."
-
-        if download_and_verify_golang_gpg "$file" "$version"; then
-            log_message "✓ Go GPG verification successful"
-            return 0
-        else
-            log_warning "Go GPG verification failed"
-        fi
-    fi
-
-    # Try GPG verification for all languages (fallback for Python/Node.js, primary for others)
+    # Try GPG verification (fallback for Python, primary for unhandled languages)
     log_message "Attempting GPG verification..."
 
-    # Try to auto-detect GPG signature URL if not provided
     if [ -z "$signature_url" ]; then
         case "$language" in
             python)
                 signature_url="https://www.python.org/ftp/python/${version}/$(basename "$file").asc"
                 ;;
-            # Add other languages as GPG support is implemented
-            # Note: nodejs uses SHASUMS-based verification (handled above)
         esac
     fi
 
@@ -966,4 +929,5 @@ export -f download_and_verify_kubectl_sigstore
 export -f verify_sigstore_signature
 export -f get_python_release_manager
 export -f download_and_verify_sigstore
+export -f _verify_language_handler
 export -f verify_signature

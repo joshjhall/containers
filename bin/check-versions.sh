@@ -182,6 +182,25 @@ set_latest() {
     done
 }
 
+# Extract version from a Dockerfile ARG and add as a tool
+_add_dockerfile_version() {
+    local arg_name="$1" tool_name="$2"
+    local ver
+    ver=$(grep "^ARG ${arg_name}=" "$PROJECT_ROOT/Dockerfile" 2>/dev/null | cut -d= -f2 | tr -d '"')
+    [ -n "$ver" ] && add_tool "$tool_name" "$ver" "Dockerfile"
+}
+
+# Extract version from a feature script variable and add as a tool
+_add_feature_version() {
+    local var_name="$1" tool_name="$2" file="$3"
+    local source_label="${4:-$file}"
+    local full_path="$PROJECT_ROOT/lib/features/$file"
+    [ -f "$full_path" ] || return 0
+    local ver
+    ver=$(extract_version_from_line "$(grep "^${var_name}=" "$full_path" 2>/dev/null | head -1)")
+    [ -n "$ver" ] && add_tool "$tool_name" "$ver" "$source_label"
+}
+
 # Extract all versions from files
 extract_all_versions() {
     if [ "$OUTPUT_FORMAT" = "text" ]; then
@@ -189,70 +208,38 @@ extract_all_versions() {
     fi
 
     # Languages from Dockerfile
-    local ver
-    ver=$(grep "^ARG PYTHON_VERSION=" "$PROJECT_ROOT/Dockerfile" 2>/dev/null | cut -d= -f2 | tr -d '"')
-    [ -n "$ver" ] && add_tool "Python" "$ver" "Dockerfile"
-
-    ver=$(grep "^ARG NODE_VERSION=" "$PROJECT_ROOT/Dockerfile" 2>/dev/null | cut -d= -f2 | tr -d '"')
-    [ -n "$ver" ] && add_tool "Node.js" "$ver" "Dockerfile"
-
-    ver=$(grep "^ARG GO_VERSION=" "$PROJECT_ROOT/Dockerfile" 2>/dev/null | cut -d= -f2 | tr -d '"')
-    [ -n "$ver" ] && add_tool "Go" "$ver" "Dockerfile"
-
-    ver=$(grep "^ARG RUST_VERSION=" "$PROJECT_ROOT/Dockerfile" 2>/dev/null | cut -d= -f2 | tr -d '"')
-    [ -n "$ver" ] && add_tool "Rust" "$ver" "Dockerfile"
-
-    ver=$(grep "^ARG RUBY_VERSION=" "$PROJECT_ROOT/Dockerfile" 2>/dev/null | cut -d= -f2 | tr -d '"')
-    [ -n "$ver" ] && add_tool "Ruby" "$ver" "Dockerfile"
-
-    ver=$(grep "^ARG JAVA_VERSION=" "$PROJECT_ROOT/Dockerfile" 2>/dev/null | cut -d= -f2 | tr -d '"')
-    [ -n "$ver" ] && add_tool "Java" "$ver" "Dockerfile"
-
-    ver=$(grep "^ARG R_VERSION=" "$PROJECT_ROOT/Dockerfile" 2>/dev/null | cut -d= -f2 | tr -d '"')
-    [ -n "$ver" ] && add_tool "R" "$ver" "Dockerfile"
-
-    ver=$(grep "^ARG KOTLIN_VERSION=" "$PROJECT_ROOT/Dockerfile" 2>/dev/null | cut -d= -f2 | tr -d '"')
-    [ -n "$ver" ] && add_tool "Kotlin" "$ver" "Dockerfile"
-
-    ver=$(grep "^ARG ANDROID_CMDLINE_TOOLS_VERSION=" "$PROJECT_ROOT/Dockerfile" 2>/dev/null | cut -d= -f2 | tr -d '"')
-    [ -n "$ver" ] && add_tool "android-cmdline-tools" "$ver" "Dockerfile"
-
-    ver=$(grep "^ARG ANDROID_NDK_VERSION=" "$PROJECT_ROOT/Dockerfile" 2>/dev/null | cut -d= -f2 | tr -d '"')
-    [ -n "$ver" ] && add_tool "android-ndk" "$ver" "Dockerfile"
+    _add_dockerfile_version PYTHON_VERSION "Python"
+    _add_dockerfile_version NODE_VERSION "Node.js"
+    _add_dockerfile_version GO_VERSION "Go"
+    _add_dockerfile_version RUST_VERSION "Rust"
+    _add_dockerfile_version RUBY_VERSION "Ruby"
+    _add_dockerfile_version JAVA_VERSION "Java"
+    _add_dockerfile_version R_VERSION "R"
+    _add_dockerfile_version KOTLIN_VERSION "Kotlin"
+    _add_dockerfile_version ANDROID_CMDLINE_TOOLS_VERSION "android-cmdline-tools"
+    _add_dockerfile_version ANDROID_NDK_VERSION "android-ndk"
 
     # Kubernetes tools from Dockerfile
-    ver=$(grep "^ARG KUBECTL_VERSION=" "$PROJECT_ROOT/Dockerfile" 2>/dev/null | cut -d= -f2 | tr -d '"')
-    [ -n "$ver" ] && add_tool "kubectl" "$ver" "Dockerfile"
+    _add_dockerfile_version KUBECTL_VERSION "kubectl"
+    _add_dockerfile_version K9S_VERSION "k9s"
+    _add_dockerfile_version KREW_VERSION "krew"
 
-    ver=$(grep "^ARG K9S_VERSION=" "$PROJECT_ROOT/Dockerfile" 2>/dev/null | cut -d= -f2 | tr -d '"')
-    [ -n "$ver" ] && add_tool "k9s" "$ver" "Dockerfile"
-
-    ver=$(grep "^ARG KREW_VERSION=" "$PROJECT_ROOT/Dockerfile" 2>/dev/null | cut -d= -f2 | tr -d '"')
-    [ -n "$ver" ] && add_tool "krew" "$ver" "Dockerfile"
-
+    # Helm: skip "latest" sentinel
+    local ver
     ver=$(grep "^ARG HELM_VERSION=" "$PROJECT_ROOT/Dockerfile" 2>/dev/null | cut -d= -f2 | tr -d '"')
     [ -n "$ver" ] && [ "$ver" != "latest" ] && add_tool "Helm" "$ver" "Dockerfile"
 
     # Terraform tools from Dockerfile
-    ver=$(grep "^ARG TERRAGRUNT_VERSION=" "$PROJECT_ROOT/Dockerfile" 2>/dev/null | cut -d= -f2 | tr -d '"')
-    [ -n "$ver" ] && add_tool "Terragrunt" "$ver" "Dockerfile"
-
-    ver=$(grep "^ARG TFDOCS_VERSION=" "$PROJECT_ROOT/Dockerfile" 2>/dev/null | cut -d= -f2 | tr -d '"')
-    [ -n "$ver" ] && add_tool "terraform-docs" "$ver" "Dockerfile"
-
-    ver=$(grep "^ARG TFLINT_VERSION=" "$PROJECT_ROOT/Dockerfile" 2>/dev/null | cut -d= -f2 | tr -d '"')
-    [ -n "$ver" ] && add_tool "tflint" "$ver" "Dockerfile"
+    _add_dockerfile_version TERRAGRUNT_VERSION "Terragrunt"
+    _add_dockerfile_version TFDOCS_VERSION "terraform-docs"
+    _add_dockerfile_version TFLINT_VERSION "tflint"
 
     # Trivy from terraform.sh (replaces deprecated tfsec)
-    if [ -f "$PROJECT_ROOT/lib/features/terraform.sh" ]; then
-        ver=$(extract_version_from_line "$(grep "^TRIVY_VERSION=" "$PROJECT_ROOT/lib/features/terraform.sh" 2>/dev/null)")
-        [ -n "$ver" ] && add_tool "Trivy" "$ver" "terraform.sh"
-    fi
+    _add_feature_version TRIVY_VERSION "Trivy" "terraform.sh"
 
-    ver=$(grep "^ARG PIXI_VERSION=" "$PROJECT_ROOT/Dockerfile" 2>/dev/null | cut -d= -f2 | tr -d '"')
-    [ -n "$ver" ] && add_tool "pixi" "$ver" "Dockerfile"
+    _add_dockerfile_version PIXI_VERSION "pixi"
 
-    # Python tools
+    # Python tools (use non-anchored grep for POETRY_VERSION/UV_VERSION)
     if [ -f "$PROJECT_ROOT/lib/features/python.sh" ]; then
         ver=$(extract_version_from_line "$(grep "POETRY_VERSION=" "$PROJECT_ROOT/lib/features/python.sh" 2>/dev/null | head -1)")
         [ -n "$ver" ] && add_tool "Poetry" "$ver" "python.sh"
@@ -262,84 +249,40 @@ extract_all_versions() {
     fi
 
     # Dev tools from dev-tools.sh
-    if [ -f "$PROJECT_ROOT/lib/features/dev-tools.sh" ]; then
-        ver=$(extract_version_from_line "$(grep "^LAZYGIT_VERSION=" "$PROJECT_ROOT/lib/features/dev-tools.sh" 2>/dev/null)")
-        [ -n "$ver" ] && add_tool "lazygit" "$ver" "dev-tools.sh"
-
-        ver=$(extract_version_from_line "$(grep "^DIRENV_VERSION=" "$PROJECT_ROOT/lib/features/dev-tools.sh" 2>/dev/null)")
-        [ -n "$ver" ] && add_tool "direnv" "$ver" "dev-tools.sh"
-
-        ver=$(extract_version_from_line "$(grep "^ACT_VERSION=" "$PROJECT_ROOT/lib/features/dev-tools.sh" 2>/dev/null)")
-        [ -n "$ver" ] && add_tool "act" "$ver" "dev-tools.sh"
-
-        ver=$(extract_version_from_line "$(grep "^DELTA_VERSION=" "$PROJECT_ROOT/lib/features/dev-tools.sh" 2>/dev/null)")
-        [ -n "$ver" ] && add_tool "delta" "$ver" "dev-tools.sh"
-
-        ver=$(extract_version_from_line "$(grep "^GLAB_VERSION=" "$PROJECT_ROOT/lib/features/dev-tools.sh" 2>/dev/null)")
-        [ -n "$ver" ] && add_tool "glab" "$ver" "dev-tools.sh"
-
-        ver=$(extract_version_from_line "$(grep "^MKCERT_VERSION=" "$PROJECT_ROOT/lib/features/dev-tools.sh" 2>/dev/null)")
-        [ -n "$ver" ] && add_tool "mkcert" "$ver" "dev-tools.sh"
-
-        ver=$(extract_version_from_line "$(grep "^DUF_VERSION=" "$PROJECT_ROOT/lib/features/dev-tools.sh" 2>/dev/null)")
-        [ -n "$ver" ] && add_tool "duf" "$ver" "dev-tools.sh"
-
-        ver=$(extract_version_from_line "$(grep "^ENTR_VERSION=" "$PROJECT_ROOT/lib/features/dev-tools.sh" 2>/dev/null)")
-        [ -n "$ver" ] && add_tool "entr" "$ver" "dev-tools.sh"
-
-        ver=$(extract_version_from_line "$(grep "^BIOME_VERSION=" "$PROJECT_ROOT/lib/features/dev-tools.sh" 2>/dev/null)")
-        [ -n "$ver" ] && add_tool "biome" "$ver" "dev-tools.sh"
-
-        ver=$(extract_version_from_line "$(grep "^TAPLO_VERSION=" "$PROJECT_ROOT/lib/features/dev-tools.sh" 2>/dev/null)")
-        [ -n "$ver" ] && add_tool "taplo" "$ver" "dev-tools.sh"
-    fi
+    _add_feature_version LAZYGIT_VERSION "lazygit" "dev-tools.sh"
+    _add_feature_version DIRENV_VERSION "direnv" "dev-tools.sh"
+    _add_feature_version ACT_VERSION "act" "dev-tools.sh"
+    _add_feature_version DELTA_VERSION "delta" "dev-tools.sh"
+    _add_feature_version GLAB_VERSION "glab" "dev-tools.sh"
+    _add_feature_version MKCERT_VERSION "mkcert" "dev-tools.sh"
+    _add_feature_version DUF_VERSION "duf" "dev-tools.sh"
+    _add_feature_version ENTR_VERSION "entr" "dev-tools.sh"
+    _add_feature_version BIOME_VERSION "biome" "dev-tools.sh"
+    _add_feature_version TAPLO_VERSION "taplo" "dev-tools.sh"
 
     # Docker tools from docker.sh
-    if [ -f "$PROJECT_ROOT/lib/features/docker.sh" ]; then
-        ver=$(extract_version_from_line "$(grep "^DIVE_VERSION=" "$PROJECT_ROOT/lib/features/docker.sh" 2>/dev/null)")
-        [ -n "$ver" ] && add_tool "dive" "$ver" "docker.sh"
-
-        ver=$(extract_version_from_line "$(grep "^LAZYDOCKER_VERSION=" "$PROJECT_ROOT/lib/features/docker.sh" 2>/dev/null)")
-        [ -n "$ver" ] && add_tool "lazydocker" "$ver" "docker.sh"
-    fi
+    _add_feature_version DIVE_VERSION "dive" "docker.sh"
+    _add_feature_version LAZYDOCKER_VERSION "lazydocker" "docker.sh"
 
     # Kotlin dev tools from kotlin-dev.sh
-    if [ -f "$PROJECT_ROOT/lib/features/kotlin-dev.sh" ]; then
-        ver=$(extract_version_from_line "$(grep "^KTLINT_VERSION=" "$PROJECT_ROOT/lib/features/kotlin-dev.sh" 2>/dev/null)")
-        [ -n "$ver" ] && add_tool "ktlint" "$ver" "kotlin-dev.sh"
+    _add_feature_version KTLINT_VERSION "ktlint" "kotlin-dev.sh"
+    _add_feature_version DETEKT_VERSION "detekt" "kotlin-dev.sh"
+    _add_feature_version KLS_VERSION "kotlin-language-server" "kotlin-dev.sh"
 
-        ver=$(extract_version_from_line "$(grep "^DETEKT_VERSION=" "$PROJECT_ROOT/lib/features/kotlin-dev.sh" 2>/dev/null)")
-        [ -n "$ver" ] && add_tool "detekt" "$ver" "kotlin-dev.sh"
-
-        ver=$(extract_version_from_line "$(grep "^KLS_VERSION=" "$PROJECT_ROOT/lib/features/kotlin-dev.sh" 2>/dev/null)")
-        [ -n "$ver" ] && add_tool "kotlin-language-server" "$ver" "kotlin-dev.sh"
-    fi
-
-    # jdtls from install-jdtls.sh
+    # jdtls from install-jdtls.sh (nested path, use inline)
     if [ -f "$PROJECT_ROOT/lib/features/lib/install-jdtls.sh" ]; then
         ver=$(extract_version_from_line "$(grep "^JDTLS_VERSION=" "$PROJECT_ROOT/lib/features/lib/install-jdtls.sh" 2>/dev/null)")
         [ -n "$ver" ] && add_tool "jdtls" "$ver" "install-jdtls.sh"
     fi
 
     # Java dev tools from java-dev.sh
-    if [ -f "$PROJECT_ROOT/lib/features/java-dev.sh" ]; then
-        ver=$(extract_version_from_line "$(grep "^SPRING_VERSION=" "$PROJECT_ROOT/lib/features/java-dev.sh" 2>/dev/null)")
-        [ -n "$ver" ] && add_tool "spring-boot-cli" "$ver" "java-dev.sh"
+    _add_feature_version SPRING_VERSION "spring-boot-cli" "java-dev.sh"
+    _add_feature_version JBANG_VERSION "jbang" "java-dev.sh"
+    _add_feature_version MVND_VERSION "mvnd" "java-dev.sh"
+    _add_feature_version GJF_VERSION "google-java-format" "java-dev.sh"
+    _add_feature_version JMH_VERSION "jmh" "java-dev.sh"
 
-        ver=$(extract_version_from_line "$(grep "^JBANG_VERSION=" "$PROJECT_ROOT/lib/features/java-dev.sh" 2>/dev/null)")
-        [ -n "$ver" ] && add_tool "jbang" "$ver" "java-dev.sh"
-
-        ver=$(extract_version_from_line "$(grep "^MVND_VERSION=" "$PROJECT_ROOT/lib/features/java-dev.sh" 2>/dev/null)")
-        [ -n "$ver" ] && add_tool "mvnd" "$ver" "java-dev.sh"
-
-        ver=$(extract_version_from_line "$(grep "^GJF_VERSION=" "$PROJECT_ROOT/lib/features/java-dev.sh" 2>/dev/null)")
-        [ -n "$ver" ] && add_tool "google-java-format" "$ver" "java-dev.sh"
-
-        ver=$(extract_version_from_line "$(grep "^JMH_VERSION=" "$PROJECT_ROOT/lib/features/java-dev.sh" 2>/dev/null)")
-        [ -n "$ver" ] && add_tool "jmh" "$ver" "java-dev.sh"
-    fi
-
-    # Base system tools from setup.sh
+    # Base system tools from setup.sh (different base path, use inline)
     if [ -f "$PROJECT_ROOT/lib/base/setup.sh" ]; then
         ver=$(extract_version_from_line "$(grep "^ZOXIDE_VERSION=" "$PROJECT_ROOT/lib/base/setup.sh" 2>/dev/null)")
         [ -n "$ver" ] && add_tool "zoxide" "$ver" "setup.sh"

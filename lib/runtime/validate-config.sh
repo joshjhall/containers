@@ -686,6 +686,21 @@ cv_validate_compliance() {
 # Main Validation Entry Point
 # ============================================================================
 
+# Run built-in URL and port validations from declarative lists
+_run_builtin_validations() {
+    local -a url_checks=("DATABASE_URL:postgresql" "REDIS_URL:redis")
+    local -a port_checks=("PORT" "REDIS_PORT")
+    local entry var scheme
+
+    for entry in "${url_checks[@]}"; do
+        var="${entry%%:*}"; scheme="${entry#*:}"
+        [ -n "${!var:-}" ] && cv_validate_url "$var" "$scheme"
+    done
+    for var in "${port_checks[@]}"; do
+        [ -n "${!var:-}" ] && cv_validate_port "$var"
+    done
+}
+
 validate_configuration() {
     # Check if validation is enabled
     if [ "${VALIDATE_CONFIG:-false}" != "true" ]; then
@@ -704,27 +719,8 @@ validate_configuration() {
     : > "$CV_ERRORS_FILE"
     : > "$CV_WARNINGS_FILE"
 
-    # Example built-in validations (these can be customized per application)
-    # Users should override this function or provide custom rules
-
-    # Database validation example
-    if [ -n "${DATABASE_URL:-}" ]; then
-        cv_validate_url DATABASE_URL "postgresql"
-    fi
-
-    # Redis validation example
-    if [ -n "${REDIS_URL:-}" ]; then
-        cv_validate_url REDIS_URL "redis"
-    fi
-
-    # Port validation examples
-    if [ -n "${PORT:-}" ]; then
-        cv_validate_port PORT
-    fi
-
-    if [ -n "${REDIS_PORT:-}" ]; then
-        cv_validate_port REDIS_PORT
-    fi
+    # Built-in URL/port validations
+    _run_builtin_validations
 
     # Secret detection for common secret variables
     local secret_vars=(
@@ -743,9 +739,7 @@ validate_configuration() {
     )
 
     for var in "${secret_vars[@]}"; do
-        if [ -n "${!var:-}" ]; then
-            cv_detect_secrets "$var"
-        fi
+        cv_detect_secrets "$var"
     done
 
     # Load custom validation rules if provided
