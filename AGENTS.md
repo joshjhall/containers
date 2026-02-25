@@ -443,6 +443,7 @@ startup via `claude-setup`. Project-level `.claude/` configs merge with these
 | `audit-test-gaps`    | Identifies untested APIs, missing error/edge tests             |
 | `audit-architecture` | Detects circular deps, coupling, bus-factor, layer violations  |
 | `audit-docs`         | Finds stale comments, missing API docs, outdated READMEs       |
+| `audit-ai-config`    | Checks skills, agents, CLAUDE.md, MCP configs, hooks quality   |
 
 Templates are staged at build time to `/etc/container/config/claude-templates/`
 and installed at runtime by `claude-setup`. All installations are idempotent.
@@ -453,7 +454,7 @@ To verify: `ls ~/.claude/skills/` and `ls ~/.claude/agents/`
 
 The `codebase-audit` skill provides a periodic codebase sweep that identifies
 tech debt, security issues, test gaps, architecture problems, and documentation
-staleness. It dispatches 5 scanner agents in parallel and creates actionable
+staleness. It dispatches 6 scanner agents in parallel and creates actionable
 GitHub/GitLab issues for each group of findings.
 
 **Invoke**: `/codebase-audit` (or describe "run a codebase audit")
@@ -463,7 +464,7 @@ GitHub/GitLab issues for each group of findings.
 | Parameter            | Default     | Description                           |
 | -------------------- | ----------- | ------------------------------------- |
 | `scope`              | entire repo | Directory or glob to limit the scan   |
-| `categories`         | all five    | Scanner names to run                  |
+| `categories`         | all six     | Scanner names to run                  |
 | `depth`              | `standard`  | `quick`, `standard`, or `deep`        |
 | `severity-threshold` | `medium`    | Minimum severity to report            |
 | `dry-run`            | `false`     | Output report without creating issues |
@@ -477,14 +478,20 @@ GitHub/GitLab issues for each group of findings.
 | `audit-test-gaps`    | Untested APIs, error path tests, edge cases, assertions                          |
 | `audit-architecture` | Circular deps, coupling, bus factor, layer violations                            |
 | `audit-docs`         | Stale comments, missing API docs, outdated READMEs                               |
+| `audit-ai-config`    | Skill/agent quality, CLAUDE.md drift, MCP misconfig, hook safety                 |
 
 **Depth modes**: `quick` scans files changed in the last 50 commits;
 `standard` scans all source files; `deep` adds full git history analysis
 for contributor stats and churn data.
 
-**Output**: In dry-run mode, produces a summary table and prioritized
-findings list. Otherwise, creates grouped GitHub/GitLab issues with labels
-(`audit/{category}`, `severity/{level}`, `effort/{size}`).
+**Output**: In dry-run mode, produces a summary table, prioritized findings
+list, and acknowledged findings table. Otherwise, creates grouped GitHub/GitLab
+issues with labels (`audit/{category}`, `severity/{level}`, `effort/{size}`).
+
+**Inline suppression**: Add `audit:acknowledge category=<slug>` comments in
+source files to suppress known findings from being re-raised. Supports optional
+`date=YYYY-MM-DD`, `baseline=<number>` (for numeric thresholds), and
+`reason="..."` fields. Acknowledgments older than 12 months auto-expire.
 
 **Skill files**:
 

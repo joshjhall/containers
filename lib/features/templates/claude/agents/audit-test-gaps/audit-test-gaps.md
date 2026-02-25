@@ -77,11 +77,36 @@ When invoked, you receive a work manifest in the task prompt containing:
   low (minor quality issues)
 - Evidence: the anti-pattern found, which test, why it's problematic
 
+## Inline Acknowledgment Handling
+
+Before scanning, search each file for inline acknowledgment comments matching:
+
+```text
+audit:acknowledge category=<slug> [date=YYYY-MM-DD] [baseline=<number>] [reason="..."]
+```
+
+Build a per-file acknowledgment map. When a finding matches an acknowledged
+entry (same file, same category, overlapping line range):
+
+- **Numeric categories** (`low-assertion-density`): Suppress only if the
+  current measurement is at or below the `baseline` value. If exceeded,
+  re-raise with `acknowledged: true` and `acknowledged_baseline` set to the
+  baseline value.
+- **Boolean categories** (`untested-public-api`, `missing-error-path-test`,
+  `missing-edge-case`, `test-quality`): Suppress entirely — move to
+  `acknowledged_findings`.
+- **Stale acknowledgments**: If `date` is present and older than 12 months,
+  re-raise with a note that the acknowledgment has expired.
+
+Suppressed findings go in the `acknowledged_findings` array (sibling to
+`findings`). Active findings stay in `findings` as normal.
+
 ## Output Format
 
 Return a single JSON object in a \`\`\`json markdown fence following the finding
 schema provided in the task prompt. Include the `summary` with counts and the
-`findings` array with all detected issues.
+`findings` array with all detected issues. Include `acknowledged_findings`
+array for any suppressed acknowledged findings.
 
 ## Guidelines
 

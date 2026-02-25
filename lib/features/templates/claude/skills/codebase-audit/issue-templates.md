@@ -19,12 +19,14 @@ ______________________________________________________________________
 
 ### Cross-Scanner Correlation Rules
 
-| Scanner A Finding       | Scanner B Finding            | Action                         |
-| ----------------------- | ---------------------------- | ------------------------------ |
-| dead-code (code-health) | orphaned-file (architecture) | Merge into single issue        |
-| any (security)          | untested-\* (test-gaps)      | Bump severity, note in issue   |
-| stale-comment (docs)    | deprecated-api (code-health) | Merge into single issue        |
-| high-coupling (arch)    | code-duplication (health)    | Cross-reference, keep separate |
+| Scanner A Finding                | Scanner B Finding            | Action                         |
+| -------------------------------- | ---------------------------- | ------------------------------ |
+| dead-code (code-health)          | orphaned-file (architecture) | Merge into single issue        |
+| any (security)                   | untested-\* (test-gaps)      | Bump severity, note in issue   |
+| stale-comment (docs)             | deprecated-api (code-health) | Merge into single issue        |
+| high-coupling (arch)             | code-duplication (health)    | Cross-reference, keep separate |
+| claude-md-drift (ai-config)      | outdated-readme (docs)       | Merge into single issue        |
+| mcp-misconfiguration (ai-config) | hardcoded-secret (security)  | Merge into single issue        |
 
 ### Deduplication
 
@@ -78,6 +80,7 @@ ______________________________________________________________________
 | `audit/test-gaps`    | Findings from test-gaps scanner    |
 | `audit/architecture` | Findings from architecture scanner |
 | `audit/docs`         | Findings from docs scanner         |
+| `audit/ai-config`    | Findings from ai-config scanner    |
 
 ### Severity Labels
 
@@ -168,7 +171,8 @@ When `dry-run` is enabled, output a summary table instead of creating issues:
 | test-gaps     | 0        | 4    | 3      | 1   | 25    |
 | architecture  | 0        | 1    | 2      | 0   | 42    |
 | docs          | 0        | 0    | 3      | 2   | 15    |
-| **Total**     | **1**    | **10**| **14** | **5**| —    |
+| ai-config     | 0        | 1    | 2      | 1   | 8     |
+| **Total**     | **1**    | **11**| **16** | **6**| —    |
 
 ### Top Findings (by severity, then effort)
 
@@ -183,5 +187,13 @@ When `dry-run` is enabled, output a summary table instead of creating issues:
 |---|-------|--------|----------|
 | 1 | Audit: security — Hardcoded secrets | audit/security, severity/critical | sec-001 |
 | 2 | Audit: code-health — Oversized files | audit/code-health, severity/high | ch-001, ch-003 |
+...
+
+### Acknowledged Findings ({M} suppressed)
+
+| File | Category | Acknowledged | Reason |
+|------|----------|-------------|--------|
+| `src/config.py` | file-length | 2025-06-01 (baseline=450) | Intentionally large config module |
+| `.claude/skills/custom/SKILL.md` | skill-quality | 2025-09-01 | Broad scope is intentional |
 ...
 ```

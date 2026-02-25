@@ -95,11 +95,33 @@ When invoked, you receive a work manifest in the task prompt containing:
 - Severity: varies by CVE severity
 - Evidence: the dependency, version, known issue if identifiable
 
+## Inline Acknowledgment Handling
+
+Before scanning, search each file for inline acknowledgment comments matching:
+
+```text
+audit:acknowledge category=<slug> [date=YYYY-MM-DD] [baseline=<number>] [reason="..."]
+```
+
+Build a per-file acknowledgment map. When a finding matches an acknowledged
+entry (same file, same category, overlapping line range):
+
+- **All security categories are boolean** (`injection`, `auth-bypass`,
+  `data-exposure`, `hardcoded-secret`, `insecure-crypto`,
+  `missing-validation`, `dependency-cve`, `xss`): Suppress entirely — move
+  to `acknowledged_findings`.
+- **Stale acknowledgments**: If `date` is present and older than 12 months,
+  re-raise with a note that the acknowledgment has expired.
+
+Suppressed findings go in the `acknowledged_findings` array (sibling to
+`findings`). Active findings stay in `findings` as normal.
+
 ## Output Format
 
 Return a single JSON object in a \`\`\`json markdown fence following the finding
 schema provided in the task prompt. Include the `summary` with counts and the
-`findings` array with all detected issues.
+`findings` array with all detected issues. Include `acknowledged_findings`
+array for any suppressed acknowledged findings.
 
 ## Guidelines
 

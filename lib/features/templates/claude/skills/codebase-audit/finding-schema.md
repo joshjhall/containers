@@ -125,6 +125,11 @@ grouping and deduplication.
 
 `stale-comment`, `missing-api-docs`, `outdated-readme`, `misleading-example`
 
+### ai-config
+
+`skill-quality`, `agent-quality`, `claude-md-drift`, `mcp-misconfiguration`,
+`hook-safety`, `config-inconsistency`
+
 ______________________________________________________________________
 
 ## Validation Rules
@@ -140,3 +145,103 @@ Scanners must ensure:
 - `tags` and `related_files` are arrays (empty `[]` if none)
 - JSON is valid and parseable
 - Output is wrapped in a \`\`\`json markdown fence
+
+______________________________________________________________________
+
+## Inline Acknowledgment Comments
+
+Developers can suppress known findings by placing an `audit:acknowledge`
+comment near the relevant code. Scanners must detect, parse, and respect
+these comments.
+
+### Comment Grammar
+
+```text
+audit:acknowledge category=<slug> [date=YYYY-MM-DD] [baseline=<number>] [reason="..."]
+```
+
+- `category` (required): Must match one of the scanner's category slugs
+- `date` (optional): When the acknowledgment was added (ISO 8601 date)
+- `baseline` (optional): Numeric threshold to allow (e.g., `baseline=450` for
+  a file-length acknowledgment at 450 lines)
+- `reason` (optional): Quoted free-text explanation
+
+The comment can appear in any language's comment syntax (`#`, `//`, `/* */`,
+`<!-- -->`, etc.) on the line immediately before or on the same line as the
+relevant code.
+
+Examples:
+
+```python
+# audit:acknowledge category=file-length date=2025-06-01 baseline=450 reason="Intentionally large config module"
+```
+
+```javascript
+// audit:acknowledge category=magic-numbers date=2025-03-15 reason="Protocol-defined constants"
+```
+
+```markdown
+<!-- audit:acknowledge category=claude-md-drift date=2025-09-01 reason="Roadmap section, not current state" -->
+```
+
+### Scanner Behavior
+
+1. **Parse**: Before analyzing each file, scan for `audit:acknowledge` comments
+   and build a per-file acknowledgment map keyed by `(category, line_range)`
+1. **Match**: When generating a finding, check the acknowledgment map for the
+   same file + same category + overlapping line range (acknowledgment line
+   within 5 lines of finding's `line_start`)
+1. **Suppress or re-raise**:
+   - **Numeric categories** (those with measurable thresholds like
+     `file-length`, `function-complexity`, `code-duplication`,
+     `low-assertion-density`): Suppress only if the current measurement is
+     at or below the `baseline` value. If the measurement exceeds the
+     baseline, re-raise with `acknowledged: true` and
+     `acknowledged_baseline` set to the baseline value
+   - **Boolean categories** (all others): Suppress entirely — move to
+     `acknowledged_findings`
+   - **Stale acknowledgments**: If `date` is present and older than 12
+     months, re-raise the finding with a note that the acknowledgment
+     has expired
+
+### Schema Extensions
+
+When acknowledgments are present, scanners add these fields:
+
+**Top-level** (sibling to `findings`):
+
+```json
+{
+  "scanner": "<scanner-name>",
+  "summary": { ... },
+  "findings": [ ... ],
+  "acknowledged_findings": [
+    {
+      "id": "<scanner>-ack-<NNN>",
+      "category": "<category-slug>",
+      "severity": "...",
+      "title": "...",
+      "file": "path/to/file.ext",
+      "line_start": 1,
+      "line_end": 50,
+      "acknowledged": true,
+      "acknowledged_date": "2025-06-01",
+      "acknowledged_baseline": 450,
+      "acknowledged_reason": "Intentionally large config module"
+    }
+  ]
+}
+```
+
+**Additional finding fields** (on re-raised findings in `findings` array):
+
+| Field                   | Type    | Required | Description                                    |
+| ----------------------- | ------- | -------- | ---------------------------------------------- |
+| `acknowledged`          | boolean | no       | `true` if finding was previously acknowledged  |
+| `acknowledged_baseline` | number  | no       | Baseline value from the acknowledgment comment |
+| `acknowledged_date`     | string  | no       | Date from the acknowledgment comment           |
+| `acknowledged_reason`   | string  | no       | Reason from the acknowledgment comment         |
+
+Re-raised findings (baseline exceeded or stale) appear in `findings` with
+`acknowledged: true`. Fully suppressed findings appear only in
+`acknowledged_findings`.

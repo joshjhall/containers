@@ -15,7 +15,7 @@ Accept these from the user's invocation (all optional):
 | Parameter            | Default     | Description                                                       |
 | -------------------- | ----------- | ----------------------------------------------------------------- |
 | `scope`              | entire repo | Directory or glob pattern to limit the scan                       |
-| `categories`         | all five    | Scanner names to run (comma-separated)                            |
+| `categories`         | all six     | Scanner names to run (comma-separated)                            |
 | `depth`              | `standard`  | `quick`: last 50 commits; `standard`: full; `deep`: + git history |
 | `severity-threshold` | `medium`    | Minimum severity to report                                        |
 | `dry-run`            | `false`     | Output findings report without creating issues                    |
@@ -30,12 +30,13 @@ Follow these steps in order. Do not skip steps.
 1. Run `wc -l` via Bash on source files to get line counts
 1. Classify files into categories by extension and path:
 
-| Classification | Extensions / Patterns                                                               |
-| -------------- | ----------------------------------------------------------------------------------- |
-| Source         | `.py`, `.js`, `.ts`, `.go`, `.rs`, `.rb`, `.java`, `.kt`, `.sh`, `.c`, `.cpp`, `.h` |
-| Test           | `test_*`, `*_test.*`, `*.test.*`, `*.spec.*`, `tests/`, `spec/`, `__tests__/`       |
-| Config         | `.json`, `.yaml`, `.yml`, `.toml`, `.ini`, `.env*`, `Makefile`, `Dockerfile`        |
-| Doc            | `.md`, `.rst`, `.txt`, `README*`, `CHANGELOG*`, `docs/`                             |
+| Classification | Extensions / Patterns                                                                   |
+| -------------- | --------------------------------------------------------------------------------------- |
+| Source         | `.py`, `.js`, `.ts`, `.go`, `.rs`, `.rb`, `.java`, `.kt`, `.sh`, `.c`, `.cpp`, `.h`     |
+| Test           | `test_*`, `*_test.*`, `*.test.*`, `*.spec.*`, `tests/`, `spec/`, `__tests__/`           |
+| Config         | `.json`, `.yaml`, `.yml`, `.toml`, `.ini`, `.env*`, `Makefile`, `Dockerfile`            |
+| Doc            | `.md`, `.rst`, `.txt`, `README*`, `CHANGELOG*`, `docs/`                                 |
+| AI Config      | `.claude/`, `CLAUDE.md`, `**/CLAUDE.md`, skill/agent `.md` files, `.claude.json`, hooks |
 
 4. Filter untracked `.env*` files out of scanner manifests. Run
    `git ls-files --error-unmatch <file>` for each `.env*` match — if the file
@@ -58,6 +59,7 @@ scanners based on classification:
 | Test files              | test-gaps only                      |
 | Config files            | security only                       |
 | Doc files               | docs only                           |
+| AI Config files         | ai-config only                      |
 | Source + paired test    | test-gaps (paired)                  |
 | High-churn files (deep) | all scanners                        |
 
@@ -91,7 +93,7 @@ deep mode) in addition to `files`.
 
 ### Step 3: Dispatch Scanners in Parallel
 
-Send **a single message** with up to 5 `Task` tool calls (one per scanner).
+Send **a single message** with up to 6 `Task` tool calls (one per scanner).
 Each task prompt must include:
 
 1. The scanner's manifest (from Step 2)
@@ -105,6 +107,7 @@ Use these agent names:
 - `audit-test-gaps` — test gaps scanner
 - `audit-architecture` — architecture scanner
 - `audit-docs` — documentation scanner
+- `audit-ai-config` — AI tooling configuration scanner
 
 All scanners use `model: sonnet` and `tools: Read, Grep, Glob, Bash`.
 
@@ -121,6 +124,10 @@ After all scanners return:
    - Dead code (code-health) + orphaned file (architecture) → merge
    - Security issue + test gap on same file → bump severity of the group
    - Stale comment (docs) + deprecated API (code-health) → merge
+   - CLAUDE.md drift (ai-config) + outdated README (docs) → merge
+   - MCP misconfiguration (ai-config) + hardcoded secret (security) → merge
+1. **Aggregate acknowledged findings**: Collect `acknowledged_findings` arrays
+   from all scanners into a unified list for the final report
 1. **Filter**: Remove findings below `severity-threshold`
 1. **Sort**: By severity (critical first), then by effort (trivial first —
    quick wins surface to the top)
@@ -128,8 +135,9 @@ After all scanners return:
 
 ### Step 5: Create Issues (or Dry-Run Report)
 
-**If `dry-run` is true**: Output the summary table and findings list as
-described in `issue-templates.md` (Dry-Run Output Format section). Stop here.
+**If `dry-run` is true**: Output the summary table, findings list, and
+acknowledged findings table as described in `issue-templates.md` (Dry-Run
+Output Format section). Stop here.
 
 **If `dry-run` is false**:
 
