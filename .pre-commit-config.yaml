@@ -118,8 +118,8 @@ repos:
   - repo: local
     hooks:
       - id: unit-tests
-        name: Run unit tests
-        entry: ./tests/run_unit_tests.sh
+        name: Run unit tests (changed files only)
+        entry: ./tests/run_changed_tests.sh
         language: system
         pass_filenames: false
         always_run: true

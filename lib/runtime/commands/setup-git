@@ -105,7 +105,33 @@ EOF
 }
 
 # ---------------------------------------------------------------------------
-# 3. Auth SSH key
+# 3. SSH keep-alive for common Git hosts
+# ---------------------------------------------------------------------------
+setup_ssh_keepalive() {
+    local ssh_config="${HOME}/.ssh/config"
+    mkdir -p "${HOME}/.ssh"
+
+    # Skip if keep-alive is already configured for github.com
+    if [ -f "$ssh_config" ] && grep -q 'Host github.com' "$ssh_config" 2>/dev/null; then
+        if grep -A5 'Host github.com' "$ssh_config" | grep -q 'ServerAliveInterval' 2>/dev/null; then
+            _skip "SSH keep-alive already configured"
+            return 0
+        fi
+    fi
+
+    cat >> "$ssh_config" <<'SSHEOF'
+
+# Keep-alive for Git hosting providers (prevents timeout on long pushes)
+Host github.com gitlab.com
+    ServerAliveInterval 60
+    ServerAliveCountMax 10
+SSHEOF
+    chmod 600 "$ssh_config"
+    _ok "SSH keep-alive configured for github.com and gitlab.com"
+}
+
+# ---------------------------------------------------------------------------
+# 4. Auth SSH key
 # ---------------------------------------------------------------------------
 setup_auth_key() {
     [ -n "${GIT_AUTH_SSH_KEY:-}" ] || return 0
@@ -132,7 +158,7 @@ setup_auth_key() {
 }
 
 # ---------------------------------------------------------------------------
-# 4. Signing SSH key
+# 5. Signing SSH key
 # ---------------------------------------------------------------------------
 setup_signing_key() {
     [ -n "${GIT_SIGNING_SSH_KEY:-}" ] || return 0
@@ -193,6 +219,7 @@ main() {
     _info "configuring git environment"
     setup_identity
     ensure_ssh_agent
+    setup_ssh_keepalive
     setup_auth_key
     setup_signing_key
     _ok "done"
