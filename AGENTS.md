@@ -470,13 +470,13 @@ GitHub/GitLab issues for each group of findings.
 
 **Scanners** (dispatched in parallel via Task tool):
 
-| Scanner              | Categories                                              |
-| -------------------- | ------------------------------------------------------- |
-| `audit-code-health`  | File length, complexity, duplication, dead code, naming |
-| `audit-security`     | OWASP patterns, secrets, crypto, validation, CVEs       |
-| `audit-test-gaps`    | Untested APIs, error path tests, edge cases, assertions |
-| `audit-architecture` | Circular deps, coupling, bus factor, layer violations   |
-| `audit-docs`         | Stale comments, missing API docs, outdated READMEs      |
+| Scanner              | Categories                                                                       |
+| -------------------- | -------------------------------------------------------------------------------- |
+| `audit-code-health`  | File length, complexity, duplication, dead code, naming                          |
+| `audit-security`     | OWASP patterns, secrets, crypto, validation, CVEs (skips untracked `.env` files) |
+| `audit-test-gaps`    | Untested APIs, error path tests, edge cases, assertions                          |
+| `audit-architecture` | Circular deps, coupling, bus factor, layer violations                            |
+| `audit-docs`         | Stale comments, missing API docs, outdated READMEs                               |
 
 **Depth modes**: `quick` scans files changed in the last 50 commits;
 `standard` scans all source files; `deep` adds full git history analysis

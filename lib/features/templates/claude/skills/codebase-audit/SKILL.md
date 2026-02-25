@@ -37,7 +37,11 @@ Follow these steps in order. Do not skip steps.
 | Config         | `.json`, `.yaml`, `.yml`, `.toml`, `.ini`, `.env*`, `Makefile`, `Dockerfile`        |
 | Doc            | `.md`, `.rst`, `.txt`, `README*`, `CHANGELOG*`, `docs/`                             |
 
-4. Detect language(s) from config files (`package.json`, `pyproject.toml`,
+4. Filter untracked `.env*` files out of scanner manifests. Run
+   `git ls-files --error-unmatch <file>` for each `.env*` match — if the file
+   is not tracked by git, exclude it from all scanner file lists (untracked
+   env files are local-only and not a repository risk)
+1. Detect language(s) from config files (`package.json`, `pyproject.toml`,
    `Cargo.toml`, `go.mod`, `Gemfile`, `build.gradle`, etc.)
 1. Detect platform (GitHub or GitLab) from `git remote -v`
 1. For `quick` depth: run `git log --oneline -50 --name-only` to limit to

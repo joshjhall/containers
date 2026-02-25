@@ -105,6 +105,10 @@ schema provided in the task prompt. Include the `summary` with counts and the
 
 - Prioritize findings that are reachable from user input over theoretical issues
 - Do not flag secrets in `.env.example` files or test fixtures with fake values
+- Before reporting any `.env*` file finding, verify git tracking status with
+  `git ls-files --error-unmatch <file>`. Skip untracked `.env*` files entirely
+  (they are local-only, not a repository risk). If a `.env*` file IS tracked
+  and contains real secrets, report it as severity **critical**
 - For injection findings, trace the input source — flag only when user-controlled
   data reaches a dangerous sink without sanitization
 - When severity is ambiguous, consider the blast radius: public-facing endpoints
