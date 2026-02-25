@@ -255,11 +255,11 @@ test_java_dev_spring_boot_checksum() {
         return
     fi
 
-    # Check for checksum fetching
-    if grep -q "fetch_maven_sha1" "$java_dev_script"; then
-        assert_true true "java-dev.sh fetches Spring Boot CLI checksum from Maven Central"
+    # Check for SHA256 checksum fetching
+    if grep -q "fetch_maven_sha256" "$java_dev_script"; then
+        assert_true true "java-dev.sh fetches Spring Boot CLI SHA256 checksum from Maven Central"
     else
-        assert_true false "java-dev.sh does not fetch Spring Boot CLI checksum"
+        assert_true false "java-dev.sh does not fetch Spring Boot CLI SHA256 checksum"
     fi
 
     # Check for download_and_verify usage (matches "/tmp/spring-boot-cli.tar.gz")

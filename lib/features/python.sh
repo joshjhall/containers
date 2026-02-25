@@ -259,6 +259,23 @@ log_message "Installing pip..."
 # Download and install pip with checksum verification
 GET_PIP_URL="https://bootstrap.pypa.io/get-pip.py"
 
+# PyPA doesn't publish checksums for get-pip.py, so we can only use Tier 4 TOFU
+# (download, self-compute hash, then verify against that same hash).
+# When REQUIRE_VERIFIED_DOWNLOADS is enabled, block this insecure pattern.
+if [ "${REQUIRE_VERIFIED_DOWNLOADS:-false}" = "true" ]; then
+    log_error "get-pip.py uses Tier 4 TOFU verification (self-computed checksum)"
+    log_error "This does not provide meaningful integrity assurance."
+    log_error ""
+    log_error "To fix, either:"
+    log_error "  1. Add a pinned checksum for get-pip.py to lib/checksums.json"
+    log_error "  2. Set REQUIRE_VERIFIED_DOWNLOADS=false to allow TOFU downloads"
+    log_feature_end
+    exit 1
+fi
+
+log_warning "get-pip.py uses Tier 4 TOFU verification (self-computed checksum)"
+log_warning "PyPA does not publish checksums for get-pip.py"
+
 # Calculate checksum for verification (PyPA doesn't publish checksums for get-pip.py)
 log_message "Calculating checksum for get-pip.py..."
 GET_PIP_CHECKSUM=$(calculate_checksum_sha256 "$GET_PIP_URL" 2>/dev/null)

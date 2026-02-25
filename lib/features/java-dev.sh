@@ -102,10 +102,10 @@ export SPRING_VERSION  # Export for use in shell functions
 # Build Maven Central URL
 SPRING_BASE_URL="https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-cli/${SPRING_VERSION}/spring-boot-cli-${SPRING_VERSION}-bin.tar.gz"
 
-# Fetch SHA1 checksum from Maven Central
+# Fetch SHA256 checksum from Maven Central
 log_message "Fetching checksum for Spring Boot CLI ${SPRING_VERSION}..."
-if ! SPRING_CHECKSUM=$(fetch_maven_sha1 "${SPRING_BASE_URL}" 2>/dev/null); then
-    log_error "Failed to fetch SHA1 checksum for Spring Boot CLI ${SPRING_VERSION} from Maven Central"
+if ! SPRING_CHECKSUM=$(fetch_maven_sha256 "${SPRING_BASE_URL}" 2>/dev/null); then
+    log_error "Failed to fetch SHA256 checksum for Spring Boot CLI ${SPRING_VERSION} from Maven Central"
     log_error ""
     log_error "This could mean:"
     log_error "  - Maven Central is unreachable (network issue)"
@@ -118,11 +118,11 @@ if ! SPRING_CHECKSUM=$(fetch_maven_sha1 "${SPRING_BASE_URL}" 2>/dev/null); then
     exit 1
 fi
 
-log_message "✓ Fetched SHA1 checksum from Maven Central"
+log_message "✓ Fetched SHA256 checksum from Maven Central"
 
 # Validate checksum format
-if ! validate_checksum_format "$SPRING_CHECKSUM" "sha1"; then
-    log_error "Invalid SHA1 checksum format for Spring Boot CLI ${SPRING_VERSION}: ${SPRING_CHECKSUM}"
+if ! validate_checksum_format "$SPRING_CHECKSUM" "sha256"; then
+    log_error "Invalid SHA256 checksum format for Spring Boot CLI ${SPRING_VERSION}: ${SPRING_CHECKSUM}"
     log_feature_end
     exit 1
 fi
@@ -131,7 +131,7 @@ fi
 BUILD_TEMP=$(create_secure_temp_dir)
 cd "$BUILD_TEMP"
 log_message "Downloading and verifying Spring Boot CLI ${SPRING_VERSION}..."
-log_message "Using SHA1 checksum: ${SPRING_CHECKSUM}"
+log_message "Using SHA256 checksum: ${SPRING_CHECKSUM}"
 download_and_verify \
     "${SPRING_BASE_URL}" \
     "${SPRING_CHECKSUM}" \

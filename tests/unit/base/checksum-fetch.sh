@@ -89,6 +89,11 @@ test_defines_fetch_ruby_checksum() {
         "Script defines fetch_ruby_checksum function"
 }
 
+test_defines_fetch_maven_sha256() {
+    assert_file_contains "$SOURCE_FILE" "fetch_maven_sha256()" \
+        "Script defines fetch_maven_sha256 function"
+}
+
 test_defines_fetch_maven_sha1() {
     assert_file_contains "$SOURCE_FILE" "fetch_maven_sha1()" \
         "Script defines fetch_maven_sha1 function"
@@ -380,6 +385,11 @@ test_exports_validate_checksum_format() {
         "validate_checksum_format is exported"
 }
 
+test_exports_fetch_maven_sha256() {
+    assert_file_contains "$SOURCE_FILE" "export -f fetch_maven_sha256" \
+        "fetch_maven_sha256 is exported"
+}
+
 test_sha256_regex_64_hex() {
     # The source should validate SHA256 as exactly 64 hex characters
     assert_file_contains "$SOURCE_FILE" '\[a-fA-F0-9\]{64}' \
@@ -403,6 +413,7 @@ run_test_with_setup test_defines_fetch_github_checksums_txt "Defines fetch_githu
 run_test_with_setup test_defines_fetch_github_sha256_file "Defines fetch_github_sha256_file function"
 run_test_with_setup test_defines_fetch_github_sha512_file "Defines fetch_github_sha512_file function"
 run_test_with_setup test_defines_fetch_ruby_checksum "Defines fetch_ruby_checksum function"
+run_test_with_setup test_defines_fetch_maven_sha256 "Defines fetch_maven_sha256 function"
 run_test_with_setup test_defines_fetch_maven_sha1 "Defines fetch_maven_sha1 function"
 run_test_with_setup test_defines_validate_checksum_format "Defines validate_checksum_format function"
 run_test_with_setup test_defines_is_partial_version "Defines _is_partial_version function"
@@ -445,6 +456,7 @@ run_test_with_setup test_exports_fetch_github_checksums_txt "Exports fetch_githu
 run_test_with_setup test_exports_fetch_github_sha256_file "Exports fetch_github_sha256_file"
 run_test_with_setup test_exports_fetch_github_sha512_file "Exports fetch_github_sha512_file"
 run_test_with_setup test_exports_fetch_ruby_checksum "Exports fetch_ruby_checksum"
+run_test_with_setup test_exports_fetch_maven_sha256 "Exports fetch_maven_sha256"
 run_test_with_setup test_exports_validate_checksum_format "Exports validate_checksum_format"
 run_test_with_setup test_sha256_regex_64_hex "Source validates SHA256 as 64 hex chars"
 run_test_with_setup test_sha512_regex_128_hex "Source validates SHA512 as 128 hex chars"

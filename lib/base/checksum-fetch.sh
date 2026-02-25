@@ -245,7 +245,39 @@ fetch_github_sha512_file() {
 # Maven Central Checksum Fetching
 # ============================================================================
 
+# fetch_maven_sha256 - Fetch SHA256 checksum from Maven Central
+#
+# Maven Central publishes .sha256 files alongside artifacts.
+#
+# Arguments:
+#   $1 - Artifact base URL (without .sha256 extension)
+#
+# Returns:
+#   SHA256 checksum string on success
+#   Empty string on failure
+#
+# Example:
+#   base_url="https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-cli/3.5.7/spring-boot-cli-3.5.7-bin.tar.gz"
+#   checksum=$(fetch_maven_sha256 "$base_url")
+fetch_maven_sha256() {
+    local base_url="$1"
+    local sha256_url="${base_url}.sha256"
+
+    # Fetch the .sha256 file
+    local checksum
+    checksum=$(_curl_with_timeout -fsSL "$sha256_url" | awk '{print $1}' | head -1)
+
+    if [ -n "$checksum" ] && [[ "$checksum" =~ ^[a-fA-F0-9]{64}$ ]]; then
+        echo "$checksum"
+        return 0
+    else
+        return 1
+    fi
+}
+
 # fetch_maven_sha1 - Fetch SHA1 checksum from Maven Central
+# DEPRECATED: Use fetch_maven_sha256() instead. SHA1 is cryptographically
+# broken and should not be used for integrity verification.
 #
 # Maven Central publishes .sha1 files alongside artifacts.
 #
@@ -414,6 +446,7 @@ export -f fetch_github_checksums_txt
 export -f fetch_github_sha256_file
 export -f fetch_github_sha512_file
 export -f fetch_ruby_checksum
+export -f fetch_maven_sha256
 export -f fetch_maven_sha1
 export -f calculate_checksum_sha256
 export -f validate_checksum_format
