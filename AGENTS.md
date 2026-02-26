@@ -225,493 +225,53 @@ Cursor, Neovim, etc.):
 \*`bash-language-server` is installed when both `INCLUDE_DEV_TOOLS=true` and Node.js
 is available (`INCLUDE_NODE=true` or `INCLUDE_NODE_DEV=true`).
 
-### Claude Code Plugins and LSP Integration
+### Plugins & MCP Servers
 
-When `INCLUDE_DEV_TOOLS=true`, Claude Code plugins and LSP support are
-automatically configured on first container startup via
-`/etc/container/first-startup/30-claude-code-setup.sh`.
+11 core plugins and language-specific LSP plugins are auto-installed on first
+startup. Extra plugins via `CLAUDE_EXTRA_PLUGINS`, extra MCPs via
+`CLAUDE_EXTRA_MCPS` / `CLAUDE_USER_MCPS`. See
+`docs/claude-code/plugins-and-mcps.md` for the full plugin list, MCP server
+registry (10 short names), entry formats, HTTP auth, release channel, and
+model selection.
 
-**Core plugins** (always installed):
+### Skills & Agents
 
-- `commit-commands` - Git commit helpers
-- `frontend-design` - Interface design assistance
-- `code-simplifier` - Code simplification
-- `context7` - Documentation lookup
-- `security-guidance` - Security best practices
-- `claude-md-management` - CLAUDE.md file management
-- `pr-review-toolkit` - Comprehensive PR review tools
-- `code-review` - Code review assistance
-- `hookify` - Hook creation helpers
-- `claude-code-setup` - Project setup assistance
-- `feature-dev` - Feature development workflow
+10 always-installed skills + 2 conditional, 11 agents (including 6 audit
+scanners and `issue-writer`). The `/codebase-audit` command dispatches scanners
+in parallel. See `docs/claude-code/skills-and-agents.md` for tables, audit
+parameters, depth modes, and inline suppression.
 
-**Language-specific LSP plugins** (based on build flags):
+### Secrets & Setup Commands
 
-| Build Flag           | Claude Code Plugin                          |
-| -------------------- | ------------------------------------------- |
-| `INCLUDE_RUST_DEV`   | `rust-analyzer-lsp@claude-plugins-official` |
-| `INCLUDE_PYTHON_DEV` | `pyright-lsp@claude-plugins-official`       |
-| `INCLUDE_NODE_DEV`   | `typescript-lsp@claude-plugins-official`    |
-| `INCLUDE_KOTLIN_DEV` | `kotlin-lsp@claude-plugins-official`        |
+When `INCLUDE_OP=true`, `OP_<NAME>_REF` env vars auto-resolve from 1Password.
+`OP_<NAME>_FILE_REF` writes content to `/dev/shm/` and exports the file path.
+Three setup commands: `setup-git`, `setup-gh`, `setup-glab`. See
+`docs/claude-code/secrets-and-setup.md` for variable tables, docker-compose
+examples, and git identity fallback.
 
-**Extra plugins**: Use `CLAUDE_EXTRA_PLUGINS` to install additional plugins:
+### Authentication
 
-```bash
-# At build time
-docker build --build-arg CLAUDE_EXTRA_PLUGINS="stripe,posthog,vercel" ...
-
-# At runtime (overrides build-time value)
-docker run -e CLAUDE_EXTRA_PLUGINS="stripe,posthog" ...
-```
-
-**Extra MCP servers**: Use `CLAUDE_EXTRA_MCPS` to install additional MCP servers:
-
-```bash
-# At build time
-docker build --build-arg CLAUDE_EXTRA_MCPS="brave-search,memory,fetch" ...
-
-# At runtime (overrides build-time value)
-docker run -e CLAUDE_EXTRA_MCPS="brave-search,sentry" -e BRAVE_API_KEY=xxx ...
-```
-
-Available MCP servers (registered short names):
-
-| Short Name            | Package                                            | Required Env Vars                       |
-| --------------------- | -------------------------------------------------- | --------------------------------------- |
-| `github`              | `@modelcontextprotocol/server-github`              | `GITHUB_TOKEN`                          |
-| `gitlab`              | `@modelcontextprotocol/server-gitlab`              | `GITLAB_TOKEN`, `GITLAB_API_URL` (opt.) |
-| `brave-search`        | `@modelcontextprotocol/server-brave-search`        | `BRAVE_API_KEY`                         |
-| `fetch`               | `@modelcontextprotocol/server-fetch`               | (none)                                  |
-| `memory`              | `@modelcontextprotocol/server-memory`              | `MEMORY_FILE_PATH` (optional)           |
-| `sequential-thinking` | `@modelcontextprotocol/server-sequential-thinking` | (none)                                  |
-| `git`                 | `@modelcontextprotocol/server-git`                 | (none)                                  |
-| `sentry`              | `@sentry/mcp-server`                               | `SENTRY_ACCESS_TOKEN`                   |
-| `perplexity`          | `@perplexity-ai/mcp-server`                        | `PERPLEXITY_API_KEY`                    |
-| `kagi`                | `kagimcp` (Python/uvx)                             | `KAGI_API_KEY`                          |
-
-Both `CLAUDE_EXTRA_MCPS` and `CLAUDE_USER_MCPS` support four entry formats:
-
-| Format                   | Example                                            | Behavior                             |
-| ------------------------ | -------------------------------------------------- | ------------------------------------ |
-| Registered short name    | `memory`, `fetch`                                  | Resolved via MCP registry            |
-| npm package              | `@myorg/mcp-internal`                              | Passed through as `npx -y <package>` |
-| `name=url`               | `my-api=http://localhost:8080/mcp`                 | Added as HTTP MCP server             |
-| `name=url\|Header:Value` | `api=http://host/mcp\|Authorization:Bearer ${TOK}` | HTTP MCP with custom headers         |
-
-**Personal MCP servers**: Use `CLAUDE_USER_MCPS` for personal MCP additions
-without modifying shared team config. Runtime-only (no build-time default):
-
-```bash
-# In your personal .env file
-CLAUDE_USER_MCPS=@myorg/mcp-internal,my-api=http://localhost:8080/mcp
-```
-
-**GitHub/GitLab auto-detection**: At first startup, git remotes under
-`/workspace/` are inspected. If `github.com` or `gitlab` patterns are found
-and the corresponding token (`GITHUB_TOKEN` / `GITLAB_TOKEN`) is set, the
-platform MCP is automatically added. Opt-out:
-
-```bash
-CLAUDE_AUTO_DETECT_MCPS=false
-```
-
-**HTTP MCP Authentication**: When `ANTHROPIC_AUTH_TOKEN` is set, HTTP MCP
-servers from `CLAUDE_EXTRA_MCPS` / `CLAUDE_USER_MCPS` automatically receive
-an `Authorization: Bearer ${ANTHROPIC_AUTH_TOKEN}` header (env var reference,
-not a literal value). This enables LiteLLM proxy setups where the same token
-authenticates both the API and MCP endpoints.
-
-- The token is stored in `/dev/shm/anthropic-auth-token` (RAM-backed, mode
-  0600, never touches disk) and removed from the shell environment on login
-- A `claude()` shell wrapper injects the token into only the `claude` CLI
-  process, so it never appears in `env`, `/proc/PID/environ`, or `ps e` output
-- Auto-injection only applies to user-specified HTTP MCPs, never hardcoded ones
-  (e.g., `figma-desktop`)
-- Only the `${ANTHROPIC_AUTH_TOKEN}` reference is written to `~/.claude.json` —
-  the wrapper ensures the env var exists for the CLI process that reads the config
-- Explicit headers in the pipe-delimited syntax override auto-injection for
-  that MCP
-- Opt out entirely: `CLAUDE_MCP_AUTO_AUTH=false`
-
-```bash
-# Auto-inject auth (default when ANTHROPIC_AUTH_TOKEN is set)
-CLAUDE_EXTRA_MCPS=olympus=http://litellm:8080/mcp
-
-# Explicit headers via pipe-delimited syntax
-CLAUDE_EXTRA_MCPS=olympus=http://litellm:8080/mcp|Authorization:Bearer ${ANTHROPIC_AUTH_TOKEN}|X-Custom:value
-
-# Disable auto-injection
-CLAUDE_MCP_AUTO_AUTH=false
-```
-
-**Release channel**: Use `CLAUDE_CHANNEL` to select the Claude Code release channel:
-
-```bash
-# Use latest channel (default, recommended for new features)
-docker build --build-arg CLAUDE_CHANNEL=latest ...
-
-# Use stable channel (1-week delay, skips regressions)
-docker build --build-arg CLAUDE_CHANNEL=stable ...
-
-# Runtime override (requires rebuild to take effect)
-docker run -e CLAUDE_CHANNEL=stable ...
-```
-
-**Default**: `latest` (get new features immediately)
-**Stable**: Delays ~1 week, skips releases with known issues
-
-**Model selection**: Use `ANTHROPIC_MODEL` to set the default model:
-
-```bash
-# Set default model at runtime (docker-compose.yml or .env)
-ANTHROPIC_MODEL=claude-opus-4-6              # Claude Opus 4.6 (most capable)
-ANTHROPIC_MODEL=claude-sonnet-4-6            # Claude Sonnet 4.6 (balanced)
-ANTHROPIC_MODEL=claude-sonnet-4-5-20250929   # Claude Sonnet 4.5 (specific version)
-ANTHROPIC_MODEL=claude-haiku-4-5-20251001    # Claude Haiku 4.5 (fastest)
-```
-
-**Note**: Use full model IDs (e.g., `claude-opus-4-6`), not aliases like `opus` or `sonnet`.
-
-**Authentication**: Claude Code supports two authentication methods:
-
-1. **Interactive OAuth** (browser-based):
-
-   ```bash
-   claude  # Opens browser for authentication
-   ```
-
-1. **Token-based** (via proxy like LiteLLM):
-
-   ```bash
-   # Set environment variable
-   export ANTHROPIC_AUTH_TOKEN=your-token-here
-
-   # Or in docker-compose.yml
-   environment:
-     - ANTHROPIC_AUTH_TOKEN=${ANTHROPIC_AUTH_TOKEN}
-   ```
-
-Both methods are detected automatically by `claude-setup` and `claude-auth-watcher`.
+Two methods: **Interactive OAuth** (`claude` opens browser) or **Token-based**
+(`ANTHROPIC_AUTH_TOKEN` for proxy setups). After authenticating, the background
+`claude-auth-watcher` auto-configures plugins within 30-60s. Manual fallback:
+run `claude-setup`. Verify with `claude plugin list` / `claude mcp list`.
 
 **Environment variable**: `ENABLE_LSP_TOOL=1` is set in the shell environment.
 
 **Build-time configuration**: Feature flags are persisted to
 `/etc/container/config/enabled-features.conf` for use by startup scripts.
 
-**Note**: The startup script is idempotent and will skip plugins that are
-already installed. To verify installed plugins, run: `claude plugin list`
-
-### Pre-installed Skills & Agents
-
-When `INCLUDE_DEV_TOOLS=true`, Claude Code skills and agents are automatically
-installed to `~/.claude/skills/` and `~/.claude/agents/` on first container
-startup via `claude-setup`. Project-level `.claude/` configs merge with these
-(union semantics, project wins on name conflicts).
-
-**Skills** (always installed):
-
-| Skill                     | Purpose                                                              |
-| ------------------------- | -------------------------------------------------------------------- |
-| `container-environment`   | Dynamic - describes installed tools, cache paths, container patterns |
-| `git-workflow`            | Git commit conventions, branch naming, PR workflow                   |
-| `testing-patterns`        | Test-first development, test framework patterns                      |
-| `code-quality`            | Linting, formatting, code review checklist                           |
-| `development-workflow`    | Phased feature development, task decomposition, scope control        |
-| `error-handling`          | Error hierarchy, validation, retry strategies, resilience patterns   |
-| `documentation-authoring` | Progressive documentation, writing standards, organization patterns  |
-| `shell-scripting`         | Shell naming conventions, namespace safety, testing, error handling  |
-| `skill-authoring`         | Skill/instruction writing, quality criteria, cross-tool patterns     |
-| `agent-authoring`         | Agent/subagent design, tool scoping, model selection, prompt design  |
-
-**Conditional skills**:
-
-| Skill                  | Condition                                                                                                         |
-| ---------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `docker-development`   | `INCLUDE_DOCKER=true`                                                                                             |
-| `cloud-infrastructure` | Any cloud flag (`INCLUDE_KUBERNETES`, `INCLUDE_TERRAFORM`, `INCLUDE_AWS`, `INCLUDE_GCLOUD`, `INCLUDE_CLOUDFLARE`) |
-
-**Agents** (always installed):
-
-| Agent                | Purpose                                                        |
-| -------------------- | -------------------------------------------------------------- |
-| `code-reviewer`      | Reviews code for bugs, security, performance, style            |
-| `test-writer`        | Generates tests for existing code, detects framework           |
-| `refactorer`         | Refactors code while preserving behavior                       |
-| `debugger`           | Systematic debugging for errors, test failures, runtime issues |
-| `audit-code-health`  | Scans for file length, complexity, duplication, dead code      |
-| `audit-security`     | Scans for OWASP patterns, secrets, crypto, validation issues   |
-| `audit-test-gaps`    | Identifies untested APIs, missing error/edge tests             |
-| `audit-architecture` | Detects circular deps, coupling, bus-factor, layer violations  |
-| `audit-docs`         | Finds stale comments, missing API docs, outdated READMEs       |
-| `audit-ai-config`    | Checks skills, agents, CLAUDE.md, MCP configs, hooks quality   |
-| `issue-writer`       | Creates GitHub/GitLab issues from grouped audit findings       |
-
-Templates are staged at build time to `/etc/container/config/claude-templates/`
-and installed at runtime by `claude-setup`. All installations are idempotent.
-
-To verify: `ls ~/.claude/skills/` and `ls ~/.claude/agents/`
-
-### Codebase Audit System
-
-The `codebase-audit` skill provides a periodic codebase sweep that identifies
-tech debt, security issues, test gaps, architecture problems, and documentation
-staleness. It dispatches 6 scanner agents in parallel. Each scanner automatically
-fans out to batch sub-agents (model: haiku) when the manifest exceeds 2000
-source lines, preventing context exhaustion on large codebases. After
-cross-scanner deduplication, the orchestrator spawns `issue-writer` sub-agents
-to create GitHub/GitLab issues in parallel.
-
-**Invoke**: `/codebase-audit` (or describe "run a codebase audit")
-
-**Parameters**:
-
-| Parameter            | Default     | Description                           |
-| -------------------- | ----------- | ------------------------------------- |
-| `scope`              | entire repo | Directory or glob to limit the scan   |
-| `categories`         | all six     | Scanner names to run                  |
-| `depth`              | `standard`  | `quick`, `standard`, or `deep`        |
-| `severity-threshold` | `medium`    | Minimum severity to report            |
-| `dry-run`            | `false`     | Output report without creating issues |
-
-**Scanners** (dispatched in parallel via Task tool):
-
-| Scanner              | Categories                                                                       |
-| -------------------- | -------------------------------------------------------------------------------- |
-| `audit-code-health`  | File length, complexity, duplication, dead code, naming                          |
-| `audit-security`     | OWASP patterns, secrets, crypto, validation, CVEs (skips untracked `.env` files) |
-| `audit-test-gaps`    | Untested APIs, error path tests, edge cases, assertions                          |
-| `audit-architecture` | Circular deps, coupling, bus factor, layer violations                            |
-| `audit-docs`         | Stale comments, missing API docs, outdated READMEs                               |
-| `audit-ai-config`    | Skill/agent quality, CLAUDE.md drift, MCP misconfig, hook safety                 |
-
-**Depth modes**: `quick` scans files changed in the last 50 commits;
-`standard` scans all source files; `deep` adds full git history analysis
-for contributor stats and churn data.
-
-**Output**: In dry-run mode, produces a summary table, prioritized findings
-list, and acknowledged findings table. Otherwise, creates grouped GitHub/GitLab
-issues with labels (`audit/{category}`, `severity/{level}`, `effort/{size}`).
-
-**Inline suppression**: Add `audit:acknowledge category=<slug>` comments in
-source files to suppress known findings from being re-raised. Supports optional
-`date=YYYY-MM-DD`, `baseline=<number>` (for numeric thresholds), and
-`reason="..."` fields. Acknowledgments older than 12 months auto-expire.
-
-**Skill files**:
-
-- `skills/codebase-audit/SKILL.md` — orchestration protocol
-- `skills/codebase-audit/finding-schema.md` — JSON contract for scanner output
-- `skills/codebase-audit/issue-templates.md` — issue grouping and creation rules
-
-### MCP Servers (installed by claude-code-setup.sh when Node.js available)
-
-Core MCP servers are automatically installed by `claude-code-setup.sh` when
-Node.js is available (`INCLUDE_NODE=true` or `INCLUDE_NODE_DEV=true`):
-
-- **Filesystem**: `@modelcontextprotocol/server-filesystem` - Enhanced file ops
-- **Bash LSP**: `bash-language-server` - Shell script language server
-
-MCP configuration is created on first container startup via
-`/etc/container/first-startup/30-claude-code-setup.sh`:
-
-- **Always** configures filesystem MCP server for `/workspace`
-- **Always** configures Figma desktop MCP (`http://host.docker.internal:3845/mcp`)
-- **Auth-conditional** — plugin installation requires prior authentication
-  (gracefully skips with instructions if unauthenticated)
-- **Is idempotent** - checks existing config before adding
-
-**GitHub/GitLab MCPs** are auto-detected from git remotes when the corresponding
-token is set (`GITHUB_TOKEN` / `GITLAB_TOKEN`). They can also be added
-explicitly via `CLAUDE_EXTRA_MCPS="github,gitlab"`.
-
-Set the appropriate token at runtime:
-
-- `GITHUB_TOKEN`: GitHub personal access token (when using GitHub MCP)
-- `GITLAB_TOKEN`: GitLab personal access token (when using GitLab MCP)
-
-To disable auto-detection: `CLAUDE_AUTO_DETECT_MCPS=false`
-
-#### Automatic Secret Loading from 1Password (`OP_*_REF` convention)
-
-When `INCLUDE_OP=true`, any environment variable matching `OP_<NAME>_REF` is
-automatically resolved from 1Password and exported as `<NAME>`. This is generic
--- projects can add their own refs with zero changes to the container build system.
-
-| Variable                     | Exports               | Example                                  |
-| ---------------------------- | --------------------- | ---------------------------------------- |
-| `OP_SERVICE_ACCOUNT_TOKEN`   | *(required)*          | `ops_xxx...`                             |
-| `OP_GITHUB_TOKEN_REF`        | `GITHUB_TOKEN`        | `op://Vault/GitHub-PAT/credential`       |
-| `OP_GITLAB_TOKEN_REF`        | `GITLAB_TOKEN`        | `op://Vault/GitLab-PAT/credential`       |
-| `OP_KAGI_API_KEY_REF`        | `KAGI_API_KEY`        | `op://Vault/Kagi-API-Key/credential`     |
-| `OP_GIT_USER_NAME_REF`       | `GIT_USER_NAME`       | `op://Vault/Identity/full name`          |
-| `OP_GIT_USER_EMAIL_REF`      | `GIT_USER_EMAIL`      | `op://Vault/Identity/email`              |
-| `OP_GIT_AUTH_SSH_KEY_REF`    | `GIT_AUTH_SSH_KEY`    | `op://Vault/Git-Auth-Key/private key`    |
-| `OP_GIT_SIGNING_SSH_KEY_REF` | `GIT_SIGNING_SSH_KEY` | `op://Vault/Git-Signing-Key/private key` |
-| `OP_MY_SECRET_REF`           | `MY_SECRET`           | `op://Vault/Item/field`                  |
-
-**Field names** depend on your 1Password item type: API_CREDENTIAL items use
-`credential`, LOGIN items use `password`, SSH_KEY items use `private key`, etc.
-Check your item in 1Password to find the correct field name.
-
-#### File-Based Secrets (`OP_*_FILE_REF` convention)
-
-Some credentials must be **file paths** rather than string values (e.g.,
-`GOOGLE_APPLICATION_CREDENTIALS` must point to a JSON file on disk). The
-`_FILE_REF` convention fetches content from 1Password, writes it to a secure
-RAM-backed path, and exports the **file path** as the environment variable.
-
-| Variable                                     | Exports                                      | Example                             |
-| -------------------------------------------- | -------------------------------------------- | ----------------------------------- |
-| `OP_GOOGLE_APPLICATION_CREDENTIALS_FILE_REF` | `GOOGLE_APPLICATION_CREDENTIALS` (file path) | `op://Vault/GCP-SA-Key/sa-key.json` |
-| `OP_MY_CERT_FILE_REF`                        | `MY_CERT` (file path)                        | `op://Vault/TLS-Cert/cert.pem`      |
-
-**How it works**:
-
-- Content is fetched via `op read` (same as `_REF`, works with both Document
-  items and file attachments on regular items)
-- Written to `/dev/shm/` (RAM-backed tmpfs, never touches disk)
-- File permissions set to `0600` (owner read/write only)
-- Filename derived from the variable name (lowercase, underscores become
-  dashes), e.g., `GOOGLE_APPLICATION_CREDENTIALS` → `google-application-credentials`
-- Extension derived from the URI's last path segment (e.g., `sa-key.json` →
-  `.json`; `credential` → no extension)
-- Same precedence rules: direct env var always wins
-
-**URI format**: Point the URI at the **filename** (for Document items) or
-**file attachment name** (for regular items), not a text field:
-
-```bash
-# Document item — use the filename
-OP_GOOGLE_APPLICATION_CREDENTIALS_FILE_REF=op://Development/GCP Service Account/sa-key.json
-
-# File attachment on API_CREDENTIAL item — use the attachment name
-OP_GOOGLE_APPLICATION_CREDENTIALS_FILE_REF=op://Development/GCP Credentials/sa-key.json
-```
-
-**Git identity fallback**: If `OP_GIT_USER_NAME_REF` points to a 1Password
-Identity item (which has separate `first name`/`last name` fields instead of
-`full name`), the system automatically combines them. If nothing resolves,
-defaults to `Devcontainer` / `devcontainer@localhost`.
-
-Example docker-compose.yml:
-
-```yaml
-services:
-  dev:
-    environment:
-      - OP_SERVICE_ACCOUNT_TOKEN=${OP_SERVICE_ACCOUNT_TOKEN}
-      - OP_GITHUB_TOKEN_REF=op://Development/GitHub-PAT/credential
-      - OP_GOOGLE_APPLICATION_CREDENTIALS_FILE_REF=op://Development/GCP Service Account/sa-key.json
-      - OP_GIT_USER_NAME_REF=op://Development/Git-Config/full name
-      - OP_GIT_USER_EMAIL_REF=op://Development/Git-Config/email
-      - OP_GIT_AUTH_SSH_KEY_REF=op://Development/Git-Auth-Key/private key
-      - OP_GIT_SIGNING_SSH_KEY_REF=op://Development/Git-Signing-Key/private key
-```
-
-Secrets are loaded automatically on shell initialization and container startup.
-Direct env vars always win (if `<NAME>` is already set, the OP ref is skipped).
-
-### Container Setup Commands
-
-Three setup commands are installed to `/usr/local/bin/` and available in PATH:
-
-| Command      | Purpose                                        |
-| ------------ | ---------------------------------------------- |
-| `setup-git`  | Git identity, SSH agent, auth key, signing key |
-| `setup-gh`   | Authenticate GitHub CLI (`gh`)                 |
-| `setup-glab` | Authenticate GitLab CLI (`glab`)               |
-
-All commands are idempotent (safe to run multiple times), OP-agnostic (they
-only read direct env vars — OP ref resolution happens before they run), and
-graceful (missing tools or tokens result in a skip, not an error).
-
-**Direct env vars** (for non-OP users):
-
-| Variable              | Purpose                                 |
-| --------------------- | --------------------------------------- |
-| `GIT_USER_NAME`       | Git user.name                           |
-| `GIT_USER_EMAIL`      | Git user.email                          |
-| `GIT_AUTH_SSH_KEY`    | SSH auth private key (PEM)              |
-| `GIT_SIGNING_SSH_KEY` | SSH signing private key (PEM)           |
-| `GITHUB_TOKEN`        | GitHub PAT                              |
-| `GITLAB_TOKEN`        | GitLab PAT                              |
-| `GITLAB_HOST`         | GitLab hostname (default: `gitlab.com`) |
-
-Source: `lib/runtime/commands/setup-git`, `lib/runtime/commands/setup-gh`,
-`lib/runtime/commands/setup-glab`.
-
-### Claude Code Authentication
-
-Plugin installation requires interactive authentication.
-
-**Automatic setup (recommended)**: After running `claude` and authenticating, plugins
-and MCP servers are configured automatically within 30-60 seconds by the background
-`claude-auth-watcher` process. A marker file (`~/.claude/.container-setup-complete`)
-prevents repeated setup runs.
-
-**Manual workflow** (if auto-setup doesn't run):
-
-```bash
-# 1. Inside container, run Claude and authenticate when prompted
-claude
-
-# 2. Close the Claude client (Ctrl+C or exit)
-
-# 3. Run setup to install plugins
-claude-setup
-
-# 4. Restart Claude if needed
-```
-
-**Auto-setup configuration**:
-
-| Variable                       | Purpose                     | Default |
-| ------------------------------ | --------------------------- | ------- |
-| `CLAUDE_AUTH_WATCHER_TIMEOUT`  | Watcher timeout in seconds  | 14400   |
-| `CLAUDE_AUTH_WATCHER_INTERVAL` | Polling interval in seconds | 30      |
-
-The watcher uses `inotifywait` for efficient event-driven detection when available,
-falling back to polling otherwise.
-
-**Note**: Claude Code CLI supports two authentication methods:
-
-- **Interactive OAuth**: Run `claude` and authenticate via browser
-- **Token-based**: Set `ANTHROPIC_AUTH_TOKEN` environment variable (for proxy setups like LiteLLM)
-
-Both methods work with plugin installation and MCP server configuration.
-
-Verify configuration with:
-
-- `claude plugin list` - See installed plugins
-- `claude mcp list` - See configured MCP servers
-- `pgrep -f claude-auth-watcher` - Check if watcher is running
-
 ## Cache Management
 
-The system uses `/cache` directory with subdirectories for each tool:
-
-- `/cache/pip`, `/cache/npm`, `/cache/cargo`, `/cache/go`, `/cache/bundle`
-- Mount as Docker volume for persistence across builds
-- Scripts automatically configure tools to use these cache directories
-
-### Cache Permission Handling
-
-Some cache files may be created as root during Docker builds (e.g., npm global
-installs). The entrypoint automatically fixes `/cache` permissions on startup:
-
-- **Running as root**: Directly fixes ownership to the container user
-- **Running with sudo**: Uses `sudo chown` to fix permissions
-- **No sudo available**: Warns user; some package manager operations may fail
-
-To enable automatic permission fixes in sudo-less containers, set
-`ENABLE_PASSWORDLESS_SUDO=true` during build.
+All caches live under `/cache` (`pip`, `npm`, `cargo`, `go`, `bundle`, etc.).
+Mount as a Docker volume for persistence. The entrypoint auto-fixes `/cache`
+permissions on startup. See `docs/architecture/caching.md` for details and
+`docs/reference/environment-variables.md` for per-tool cache paths.
 
 ## Security Considerations
 
-- Non-root user by default (configurable via `USERNAME` build arg)
-- Each feature script validates its installation
-- Proper file permissions maintained throughout
-- SSH/GPG utilities included for secure operations
+Non-root user by default (`USERNAME` build arg), validated feature installs,
+proper file permissions. See `docs/security-hardening.md` for full details.
 
 ## Init System (Zombie Process Reaping)
 
@@ -734,83 +294,16 @@ services:
 
 ## Cross-Platform Development
 
-### Case-Sensitive Filesystem Considerations
+**Case-sensitive filesystems**: The container auto-detects case-insensitive
+mounts and warns. Set `SKIP_CASE_CHECK=true` to suppress. See
+`docs/troubleshooting/case-sensitive-filesystems.md`.
 
-**Important**: Linux containers expect case-sensitive filesystems, but macOS and
-Windows use case-insensitive filesystems by default. This mismatch can cause
-issues when mounting host directories.
-
-**Common Issues**:
-
-- Git tracks case changes (`README.md` → `readme.md`) but filesystem doesn't
-  reflect them
-- Case-sensitive imports fail (Python: `from MyModule` vs `from mymodule`)
-- Build tools expecting exact case matches may fail
-
-**Detection**: The container automatically detects case-insensitive mounts at
-startup and displays a warning with recommendations.
-
-**Solutions**:
-
-1. **macOS**: Use case-sensitive APFS volume for development
-1. **Windows**: Use WSL2 filesystem (not Windows paths)
-1. **All platforms**: Use Docker volumes instead of bind mounts
-1. **Workaround**: Follow strict naming conventions (always lowercase or always
-   PascalCase)
-
-**Disable check**: Set `SKIP_CASE_CHECK=true` to suppress the warning
-
-**Detailed guide**: See `docs/troubleshooting/case-sensitive-filesystems.md`
-
-### Bindfs Permission Overlay (macOS / VirtioFS)
-
-macOS users with VirtioFS bind mounts experience permission issues (execute bits
-dropping, ownership mismatches) because APFS lacks full Linux permission
-semantics. `bindfs` solves this by creating a FUSE overlay that forces correct
-ownership and permissions in-place.
-
-**How it works**: At container startup the entrypoint auto-detects broken
-permissions on `/workspace` bind mounts and applies bindfs overlays. Safe on
-all platforms — does nothing unless `/dev/fuse` is present AND permissions are
-actually broken (or `BINDFS_ENABLED=true`).
-
-**Runtime requirements** (docker-compose.yml):
-
-```yaml
-services:
-  dev:
-    build:
-      args:
-        INCLUDE_DEV_TOOLS: "true"  # auto-installs bindfs
-    cap_add:
-      - SYS_ADMIN
-    devices:
-      - /dev/fuse
-    volumes:
-      - .:/workspace/project
-```
-
-**Environment variables**:
-
-| Variable               | Default | Purpose                                                            |
-| ---------------------- | ------- | ------------------------------------------------------------------ |
-| `BINDFS_ENABLED`       | `auto`  | `auto`: probe + apply if broken; `true`: always; `false`: off      |
-| `BINDFS_SKIP_PATHS`    | (empty) | Comma-separated paths to exclude (e.g., `/workspace/.git`)         |
-| `FUSE_CLEANUP_DISABLE` | `false` | Set to `true` to disable the periodic `.fuse_hidden*` cron cleanup |
-
-**Standalone usage** (without `INCLUDE_DEV_TOOLS`):
-
-```bash
-docker build --build-arg INCLUDE_BINDFS=true ...
-```
-
-**`.fuse_hidden*` files**: FUSE filesystems defer file deletion when a process
-still has the file open, renaming it to `.fuse_hidden*` until the last file
-descriptor closes. Stale files can be left behind if a process exits uncleanly.
-The entrypoint cleans these up automatically on startup (using `fuser` to skip
-files still held open by active processes), and the `.gitignore` excludes them.
-If you maintain a separate `.gitignore` in a project using this container system,
-add `.fuse_hidden*` to it.
+**Bindfs (macOS / VirtioFS)**: Auto-applies a FUSE permission overlay when
+broken permissions are detected on `/workspace` bind mounts. Requires
+`--cap-add SYS_ADMIN --device /dev/fuse` at runtime. Controls:
+`BINDFS_ENABLED` (`auto`/`true`/`false`), `BINDFS_SKIP_PATHS`,
+`FUSE_CLEANUP_DISABLE`. Add `.fuse_hidden*` to project `.gitignore`. See
+`docs/troubleshooting/docker-mac-case-sensitivity.md`.
 
 ## Debian Version Compatibility
 
@@ -864,87 +357,39 @@ feature scripts:
 
 ## Automated Version Updates
 
-This repository has an automated patch release system that runs weekly:
-
-- **Auto-patch workflow** runs Sundays at 2am UTC
-- Creates branches like `auto-patch/YYYYMMDD-HHMMSS`
-- Automatically checks for tool version updates
-- Runs full CI pipeline and auto-merges on success
-
-**What this means for you:**
-
-- Expect automated commits from the `auto-patch` system
-- Don't manually edit `auto-patch/*` branches
-- The system uses `check-versions.sh` → `update-versions.sh` → `release.sh`
-
-**Manual version checking:**
-
-```bash
-# Check for outdated tool versions
-./bin/check-versions.sh
-
-# Output as JSON for automation
-./bin/check-versions.sh --json
-
-# Update versions from JSON file
-./bin/update-versions.sh versions.json
-```
+Weekly auto-patch runs Sundays at 2am UTC (`auto-patch/YYYYMMDD-HHMMSS`
+branches). Don't manually edit `auto-patch/*` branches. Manual check:
+`./bin/check-versions.sh` (add `--json` for automation). See
+`docs/operations/automated-releases.md`.
 
 ## Release Process
 
-When you're ready to release a new version, **ALWAYS use the release script** -
-never manually edit the VERSION file.
-
-### Creating a Release
+**ALWAYS use the release script** — never manually edit the VERSION file.
 
 ```bash
-# For bug fixes (4.3.2 -> 4.3.3)
-./bin/release.sh --non-interactive patch
-
-# For new features (4.3.2 -> 4.4.0)
-./bin/release.sh --non-interactive minor
-
-# For breaking changes (4.3.2 -> 5.0.0)
-./bin/release.sh --non-interactive major
-
-# For specific version
-./bin/release.sh --non-interactive 4.5.0
+./bin/release.sh --non-interactive patch   # bug fix (4.3.2 -> 4.3.3)
+./bin/release.sh --non-interactive minor   # new feature (4.3.2 -> 4.4.0)
+./bin/release.sh --non-interactive major   # breaking change (4.3.2 -> 5.0.0)
 ```
 
-The release script automatically:
-
-- Updates VERSION file
-- Updates Dockerfile version comment
-- Updates test framework version
-- Generates CHANGELOG.md using git-cliff
-
-### After Running Release Script
-
-Complete the release by committing and pushing:
-
-```bash
-git add -A
-git commit -m "chore(release): Release version X.Y.Z"
-git tag -a vX.Y.Z -m "Release version X.Y.Z"
-git push origin main
-git push origin vX.Y.Z
-```
-
-The tag push triggers GitHub Actions to:
-
-- Build all container variants on multiple Debian versions
-- Run full test suite
-- Push images to ghcr.io/joshjhall/containers
-- Create GitHub release with automated release notes
+The script updates VERSION, Dockerfile, test framework version, and generates
+CHANGELOG.md. Then commit, tag (`vX.Y.Z`), and push — the tag triggers CI to
+build, test, and publish. See `docs/development/releasing.md` for full details.
 
 ## Documentation Resources
 
 Detailed documentation is available in the `docs/` directory:
 
+- `docs/claude-code/` - Plugins, MCP servers, skills, agents, secrets, setup
+- `docs/architecture/caching.md` - Cache strategy and optimization
+- `docs/security-hardening.md` - Security configuration and best practices
 - `docs/troubleshooting.md` - Common issues and solutions
+- `docs/troubleshooting/case-sensitive-filesystems.md` - Filesystem issues
 - `docs/operations/automated-releases.md` - How the auto-patch system works
-- `docs/reference/versions.md` - Which tools are pinned vs. latest
+- `docs/development/releasing.md` - Release process and versioning
 - `docs/development/testing.md` - Test framework details
+- `docs/reference/versions.md` - Which tools are pinned vs. latest
+- `docs/reference/environment-variables.md` - All env vars and cache paths
 
 Reference examples are in the `examples/` directory:
 

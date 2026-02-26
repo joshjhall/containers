@@ -74,6 +74,17 @@ Deployment and operational procedures:
   system
 - [Emergency Rollback](operations/rollback.md) - Rollback procedures
 
+### [Claude Code](claude-code/)
+
+Claude Code integration reference:
+
+- [Plugins & MCP Servers](claude-code/plugins-and-mcps.md) - Plugin registry,
+  MCP configuration, HTTP auth
+- [Skills & Agents](claude-code/skills-and-agents.md) - Pre-installed skills,
+  agents, codebase audit system
+- [Secrets & Setup](claude-code/secrets-and-setup.md) - 1Password conventions,
+  setup commands, authentication
+
 ### [Reference](reference/)
 
 Technical specifications and configuration:

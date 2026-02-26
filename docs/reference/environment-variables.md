@@ -420,11 +420,25 @@ list-features.sh --filter dev-tools
 
 ______________________________________________________________________
 
+## Claude Code Variables
+
+For Claude Code-specific environment variables (`CLAUDE_EXTRA_PLUGINS`,
+`CLAUDE_EXTRA_MCPS`, `CLAUDE_USER_MCPS`, `CLAUDE_CHANNEL`, `ANTHROPIC_MODEL`,
+`ANTHROPIC_AUTH_TOKEN`, `CLAUDE_AUTO_DETECT_MCPS`, `CLAUDE_MCP_AUTO_AUTH`,
+auth watcher config, etc.), see
+[Claude Code: Plugins & MCP Servers](../claude-code/plugins-and-mcps.md).
+
+For 1Password `OP_*_REF` / `OP_*_FILE_REF` conventions and setup command
+env vars (`GIT_USER_NAME`, `GIT_AUTH_SSH_KEY`, etc.), see
+[Claude Code: Secrets & Setup](../claude-code/secrets-and-setup.md).
+
+______________________________________________________________________
+
 ## Related Documentation
 
-- [CLAUDE.md](../CLAUDE.md) - Build arguments and common commands
-- [Dockerfile](../Dockerfile) - Complete list of build arguments with defaults
-- [Troubleshooting](troubleshooting.md) - Common issues with environment
+- [CLAUDE.md](../../CLAUDE.md) - Build arguments and common commands
+- [Dockerfile](../../Dockerfile) - Complete list of build arguments with defaults
+- [Troubleshooting](../troubleshooting.md) - Common issues with environment
   variables
 - [Testing Framework](../development/testing.md) - Test environment
   configuration
