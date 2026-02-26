@@ -19,6 +19,12 @@
 
 set -euo pipefail
 
+# Defensive check: ensure required dependencies are available
+if ! declare -f log_message >/dev/null 2>&1; then
+    echo "ERROR: install-github-release.sh requires feature-header.sh to be sourced first" >&2
+    return 1
+fi
+
 # ============================================================================
 # Main Installation Function
 # ============================================================================

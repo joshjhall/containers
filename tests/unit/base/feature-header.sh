@@ -35,8 +35,8 @@ teardown() {
     # Clean up test directory
     command rm -rf "$TEST_TEMP_DIR"
 
-    # Unset test variables
-    unset USERNAME USER_UID USER_GID HOME WORKING_DIR
+    # Unset test variables (including include guard so re-sourcing works)
+    unset USERNAME USER_UID USER_GID HOME WORKING_DIR _FEATURE_HEADER_LOADED
 }
 
 # Test: Environment variables are exported

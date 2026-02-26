@@ -18,6 +18,13 @@
 # This ensures feature scripts always use the correct UID/GID, even if the
 # base image already had a user with UID 1000.
 
+# Prevent multiple sourcing — re-executing re-registers traps and re-runs
+# OS detection unnecessarily
+if [ -n "${_FEATURE_HEADER_LOADED:-}" ]; then
+    return 0
+fi
+_FEATURE_HEADER_LOADED=1
+
 # ============================================================================
 # Environment Validation
 # ============================================================================
