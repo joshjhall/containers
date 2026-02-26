@@ -109,7 +109,10 @@ Use these agent names:
 - `audit-docs` — documentation scanner
 - `audit-ai-config` — AI tooling configuration scanner
 
-All scanners use `model: sonnet` and `tools: Read, Grep, Glob, Bash`.
+All scanners use `model: sonnet` and `tools: Read, Grep, Glob, Bash, Task`.
+Scanners with manifests exceeding 2000 source lines automatically fan out to
+batch sub-agents (model: haiku) — see each scanner's agent definition for
+details.
 
 Skip scanners not in the `categories` parameter.
 
@@ -145,11 +148,18 @@ Output Format section). Stop here.
    - Same file + same category → one issue
    - Same pattern across files → one issue (max 10 findings per issue)
    - Cross-scanner correlations → single merged issue
-1. **Search for existing issues** to avoid duplicates:
-   - GitHub: `gh issue list --state open --label "audit/{category}"`
-   - GitLab: `glab issue list --opened --label "audit/{category}"`
-1. **Create issues** using platform commands from `issue-templates.md`
-1. **Output summary**: List of created issues with URLs
+1. **Build issue payloads**: For each group, assemble the JSON payload described
+   in `issue-templates.md` (Issue-Writer Sub-Agent Protocol section)
+1. **Dispatch issue-writer sub-agents**: Send groups to `issue-writer` agents
+   via the Task tool (model: haiku). Each issue-writer receives one group and
+   handles duplicate detection + issue creation independently:
+   - Dispatch up to 10 issue-writers in parallel per message
+   - If more than 10 groups exist, send additional batches after the first
+     batch completes
+1. **Collect results**: Each issue-writer returns JSON with `action`
+   (`created`/`skipped`/`error`), `url`, and `reason`
+1. **Output summary**: List created issues with URLs, note any skipped
+   duplicates or errors
 
 ## When to Use
 

@@ -245,3 +245,32 @@ When acknowledgments are present, scanners add these fields:
 Re-raised findings (baseline exceeded or stale) appear in `findings` with
 `acknowledged: true`. Fully suppressed findings appear only in
 `acknowledged_findings`.
+
+______________________________________________________________________
+
+## Batch Sub-Agent Output
+
+When a scanner fans out to batch sub-agents (manifests >2000 source lines),
+each sub-agent returns the same JSON schema as the parent scanner.
+
+### Sub-Agent Conventions
+
+- Sub-agents use **temporary IDs**: `<scanner>-tmp-<NNN>` (e.g.,
+  `code-health-tmp-001`). These are never exposed outside the scanner
+- The parent scanner assigns **final sequential IDs** (`code-health-001`,
+  `code-health-002`, ...) after merging all sub-agent results
+- `summary` fields are re-computed by the parent from the merged findings
+  (sub-agent summary counts are discarded)
+
+### Merge Protocol
+
+The parent scanner (coordinator) performs these steps:
+
+1. **Concatenate** all `findings` arrays from sub-agents into one list
+1. **Concatenate** all `acknowledged_findings` arrays
+1. **Deduplicate within-scanner**: Same file + category + overlapping line
+   ranges → merge into one finding (keep broader range, combine evidence)
+1. **Re-sequence IDs**: Assign final `<scanner>-<NNN>` IDs in the order
+   findings appear (sorted by file path, then line number)
+1. **Recompute summary**: Count `files_scanned`, `total_findings`, and
+   `by_severity` from the merged findings list

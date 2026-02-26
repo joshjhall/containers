@@ -444,6 +444,7 @@ startup via `claude-setup`. Project-level `.claude/` configs merge with these
 | `audit-architecture` | Detects circular deps, coupling, bus-factor, layer violations  |
 | `audit-docs`         | Finds stale comments, missing API docs, outdated READMEs       |
 | `audit-ai-config`    | Checks skills, agents, CLAUDE.md, MCP configs, hooks quality   |
+| `issue-writer`       | Creates GitHub/GitLab issues from grouped audit findings       |
 
 Templates are staged at build time to `/etc/container/config/claude-templates/`
 and installed at runtime by `claude-setup`. All installations are idempotent.
@@ -454,8 +455,11 @@ To verify: `ls ~/.claude/skills/` and `ls ~/.claude/agents/`
 
 The `codebase-audit` skill provides a periodic codebase sweep that identifies
 tech debt, security issues, test gaps, architecture problems, and documentation
-staleness. It dispatches 6 scanner agents in parallel and creates actionable
-GitHub/GitLab issues for each group of findings.
+staleness. It dispatches 6 scanner agents in parallel. Each scanner automatically
+fans out to batch sub-agents (model: haiku) when the manifest exceeds 2000
+source lines, preventing context exhaustion on large codebases. After
+cross-scanner deduplication, the orchestrator spawns `issue-writer` sub-agents
+to create GitHub/GitLab issues in parallel.
 
 **Invoke**: `/codebase-audit` (or describe "run a codebase audit")
 

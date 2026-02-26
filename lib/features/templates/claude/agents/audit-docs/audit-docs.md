@@ -1,7 +1,7 @@
 ---
 name: audit-docs
 description: Identifies stale comments, missing API documentation, outdated READMEs, and misleading code examples. Used by the codebase-audit skill.
-tools: Read, Grep, Glob, Bash
+tools: Read, Grep, Glob, Bash, Task
 model: sonnet
 ---
 
@@ -69,6 +69,53 @@ When invoked, you receive a work manifest in the task prompt containing:
   - Copy-paste examples that would produce errors
 - Severity: high (example would error), medium (example uses deprecated API)
 - Evidence: the example, what's wrong with it, what the correct version would be
+
+## Batch Sub-Agent Dispatching
+
+When the manifest's total source lines exceed 2000, split files into batches of
+~2000 lines each and dispatch each batch as a Task sub-agent (model: haiku).
+
+1. **Estimate total lines**: Sum the line counts from the manifest (provided by
+   the orchestrator) or use `wc -l` on the file list
+1. **If \<=2000 lines**: Scan directly — no sub-agents needed
+1. **If >2000 lines**: Partition files into batches targeting ~2000 lines each
+   (never split a single file across batches)
+1. **Dispatch**: Send one Task call per batch using the sub-agent prompt template
+   below. Run all batches in parallel in a single message
+1. **Merge results**: Collect JSON from each sub-agent, concatenate `findings`
+   and `acknowledged_findings` arrays, sum `summary` counts
+1. **Deduplicate**: Within-scanner dedup — same file + category + overlapping
+   line ranges → merge into one finding (keep broader range, combine evidence)
+1. **Re-sequence IDs**: Replace sub-agent temporary IDs with final sequential
+   IDs (`docs-001`, `docs-002`, ...)
+
+## Sub-Agent Prompt Template
+
+Use this prompt when dispatching each batch sub-agent:
+
+````text
+You are a documentation batch scanner. Analyze ONLY the files listed below
+against the provided checklist. Return a JSON object in a ```json fence
+following the finding schema.
+
+Use temporary IDs starting from `docs-tmp-001`. The coordinator
+will assign final IDs.
+
+## Files to scan
+{batch_file_list}
+
+## Checklist
+{categories_and_checklist from this agent's Categories and Checklist section}
+
+## Context
+{context from manifest}
+
+## Severity threshold
+{severity_threshold}
+
+## Finding schema
+{finding_schema from finding-schema.md}
+````
 
 ## Inline Acknowledgment Handling
 

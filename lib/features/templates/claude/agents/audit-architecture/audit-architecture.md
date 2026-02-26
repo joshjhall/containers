@@ -1,7 +1,7 @@
 ---
 name: audit-architecture
 description: Analyzes codebase structure for circular dependencies, high coupling, bus-factor risks, layer violations, and god modules. Used by the codebase-audit skill.
-tools: Read, Grep, Glob, Bash
+tools: Read, Grep, Glob, Bash, Task
 model: sonnet
 ---
 
@@ -95,6 +95,62 @@ When invoked, you receive a work manifest in the task prompt containing:
   test files, config files)
 - Severity: low (may be dead code, may be an unused utility)
 - Evidence: file path, why it appears orphaned
+
+## Batch Sub-Agent Dispatching
+
+When the manifest's total source lines exceed 2000, split files into batches of
+~2000 lines each and dispatch each batch as a Task sub-agent (model: haiku).
+
+1. **Estimate total lines**: Sum the line counts from the manifest (provided by
+   the orchestrator) or use `wc -l` on the file list
+1. **If \<=2000 lines**: Scan directly — no sub-agents needed
+1. **If >2000 lines**: Partition files into batches targeting ~2000 lines each
+   (never split a single file across batches)
+1. **Dispatch**: Send one Task call per batch using the sub-agent prompt template
+   below. Run all batches in parallel in a single message. Include the full
+   `file_tree` and `git_stats` in each batch so sub-agents can assess
+   cross-module dependencies
+1. **Merge results**: Collect JSON from each sub-agent, concatenate `findings`
+   and `acknowledged_findings` arrays, sum `summary` counts
+1. **Deduplicate**: Within-scanner dedup — same file + category + overlapping
+   line ranges → merge into one finding (keep broader range, combine evidence).
+   For `circular-dependency`, merge findings describing the same cycle
+1. **Re-sequence IDs**: Replace sub-agent temporary IDs with final sequential
+   IDs (`architecture-001`, `architecture-002`, ...)
+
+## Sub-Agent Prompt Template
+
+Use this prompt when dispatching each batch sub-agent:
+
+````text
+You are an architecture batch scanner. Analyze ONLY the files listed below
+against the provided checklist. Return a JSON object in a ```json fence
+following the finding schema.
+
+Use temporary IDs starting from `architecture-tmp-001`. The coordinator
+will assign final IDs.
+
+## Files to scan
+{batch_file_list}
+
+## File tree (full project)
+{file_tree from manifest}
+
+## Git stats
+{git_stats from manifest, or "Not available"}
+
+## Checklist
+{categories_and_checklist from this agent's Categories and Checklist section}
+
+## Context
+{context from manifest}
+
+## Severity threshold
+{severity_threshold}
+
+## Finding schema
+{finding_schema from finding-schema.md}
+````
 
 ## Inline Acknowledgment Handling
 

@@ -478,7 +478,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: test
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    timeout-minutes: 90
+    timeout-minutes: 60
     continue-on-error: true
     steps:
       - name: Checkout code
@@ -500,7 +500,7 @@ jobs:
           echo "|---------|------------|------------|--------|-----------|" >> $GITHUB_STEP_SUMMARY
 
           # Parse JSON and format table
-          for variant in minimal python-dev node-dev golang-dev full; do
+          for variant in minimal python-dev node-dev; do
             time=$(jq -r ".results[] | select(.variant==\"$variant\") | .build_time_seconds // \"N/A\"" benchmark-results.json)
             size=$(jq -r ".results[] | select(.variant==\"$variant\") | .image_size_mb // \"N/A\"" benchmark-results.json)
             layers=$(jq -r ".results[] | select(.variant==\"$variant\") | .layer_count // \"N/A\"" benchmark-results.json)

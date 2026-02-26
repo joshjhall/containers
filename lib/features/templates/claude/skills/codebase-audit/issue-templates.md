@@ -153,6 +153,67 @@ If a matching issue exists (same category + overlapping files):
 
 ______________________________________________________________________
 
+## Issue-Writer Sub-Agent Protocol
+
+The orchestrator dispatches `issue-writer` sub-agents (model: haiku) to create
+issues in parallel. Each sub-agent receives a single issue group and handles
+duplicate detection and creation independently.
+
+### Input Format
+
+The orchestrator passes this JSON payload to each issue-writer via the Task
+prompt:
+
+```json
+{
+  "platform": "github | gitlab",
+  "group": {
+    "title": "Short issue title",
+    "category": "category-slug",
+    "scanner": "scanner-name",
+    "severity": "critical | high | medium | low",
+    "effort": "trivial | small | medium | large",
+    "findings": [
+      {
+        "id": "code-health-001",
+        "category": "file-length",
+        "severity": "high",
+        "title": "File exceeds 500 lines",
+        "file": "src/handlers/user.py",
+        "line_start": 1,
+        "line_end": 650,
+        "evidence": "650 non-blank lines",
+        "suggestion": "Split into focused modules"
+      }
+    ]
+  },
+  "issue_template": "<full Markdown template from Issue Template section>",
+  "labels": ["audit/code-health", "severity/high", "effort/small"]
+}
+```
+
+### Expected Output Format
+
+Each issue-writer returns:
+
+```json
+{
+  "action": "created | skipped | error",
+  "url": "https://github.com/owner/repo/issues/123",
+  "title": "Audit: category — title",
+  "reason": "Created new issue | Duplicate of #42 | gh issue create failed: ..."
+}
+```
+
+### Error Handling
+
+- Issue-writers must always return valid JSON, even on failure
+- On error, `action` is `"error"` and `reason` contains the error message
+- The orchestrator collects all results and reports errors in the final summary
+  without failing the entire audit
+
+______________________________________________________________________
+
 ## Dry-Run Output Format
 
 When `dry-run` is enabled, output a summary table instead of creating issues:

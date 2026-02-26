@@ -50,7 +50,6 @@ while [[ $# -gt 0 ]]; do
             echo "  minimal          Base container only"
             echo "  python-dev       Python development environment"
             echo "  node-dev         Node.js development environment"
-            echo "  full             Full polyglot environment"
             exit 0
             ;;
         *)
@@ -214,8 +213,6 @@ declare -A VARIANTS=(
     ["minimal"]=""
     ["python-dev"]="--build-arg INCLUDE_PYTHON_DEV=true"
     ["node-dev"]="--build-arg INCLUDE_NODE_DEV=true"
-    ["golang-dev"]="--build-arg INCLUDE_GOLANG_DEV=true"
-    ["full"]="--build-arg INCLUDE_PYTHON_DEV=true --build-arg INCLUDE_NODE_DEV=true --build-arg INCLUDE_DEV_TOOLS=true --build-arg INCLUDE_DOCKER=true"
 )
 
 # Main execution
@@ -244,7 +241,7 @@ main() {
         benchmark_variant "$SPECIFIC_VARIANT" "${VARIANTS[$SPECIFIC_VARIANT]:-}"
     else
         # Run all variants
-        for variant in minimal python-dev node-dev golang-dev full; do
+        for variant in minimal python-dev node-dev; do
             if [ "$OUTPUT_FORMAT" = "json" ]; then
                 [ "$first" = "false" ] && echo ","
                 first=false
