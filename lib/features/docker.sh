@@ -158,22 +158,8 @@ fi
 # ============================================================================
 log_message "Installing lazydocker (terminal UI for Docker)..."
 
-# Detect architecture
-ARCH=$(dpkg --print-architecture)
-
-# Map dpkg architecture to lazydocker naming
-case "$ARCH" in
-    amd64)
-        LAZYDOCKER_ARCH="x86_64"
-        ;;
-    arm64)
-        LAZYDOCKER_ARCH="arm64"
-        ;;
-    *)
-        log_error "Unsupported architecture for lazydocker: $ARCH"
-        exit 1
-        ;;
-esac
+# Detect architecture for lazydocker
+LAZYDOCKER_ARCH=$(map_arch "x86_64" "arm64")
 
 # Version is configurable via environment variable
 LAZYDOCKER_VERSION="${LAZYDOCKER_VERSION:-0.24.4}"
@@ -346,10 +332,6 @@ if [[ $- != *i* ]]; then
     return 0
 fi
 
-# Defensive programming - check for required commands
-_check_command() {
-    command -v "$1" >/dev/null 2>&1
-}
 
 # ----------------------------------------------------------------------------
 # Docker Aliases - Common container operations
@@ -468,8 +450,6 @@ docker-cleanup-volumes() {
 export DOCKER_CONFIG="${DOCKER_CONFIG:-/cache/docker}"
 export DOCKER_CLI_PLUGINS_PATH="/cache/docker/cli-plugins"
 
-# Clean up helper functions
-unset -f _check_command 2>/dev/null || true
 
 # Note: We leave set +u and set +e in place for interactive shells
 # to prevent errors with undefined variables or failed commands

@@ -367,10 +367,6 @@ if [[ $- != *i* ]]; then
     return 0
 fi
 
-# Defensive programming - check for required commands
-_check_command() {
-    command -v "$1" >/dev/null 2>&1
-}
 
 # Terraform plugin cache location (may be in /cache for volume persistence)
 export TF_PLUGIN_CACHE_DIR="${TF_PLUGIN_CACHE}"
@@ -472,8 +468,6 @@ tf-providers-check() {
     grep -h "required_providers" -A 20 *.tf 2>/dev/null | grep -E "^\s+version\s*=" | head -10 || echo "  (none found)"
 }
 
-# Clean up helper functions
-unset -f _check_command 2>/dev/null || true
 
 # Note: We leave set +u and set +e in place for interactive shells
 # to prevent errors with undefined variables or failed commands

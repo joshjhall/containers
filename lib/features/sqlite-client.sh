@@ -80,10 +80,6 @@ if [[ $- != *i* ]]; then
     return 0
 fi
 
-# Defensive programming - check for required commands
-_check_command() {
-    command -v "$1" >/dev/null 2>&1
-}
 
 # ----------------------------------------------------------------------------
 # SQLite Aliases - Common database operations
@@ -286,8 +282,6 @@ EOF
 # SQLite configuration
 export SQLITE_HISTORY="$HOME/.sqlite_history"
 
-# Clean up helper functions
-unset -f _check_command 2>/dev/null || true
 
 # Note: We leave set +u and set +e in place for interactive shells
 # to prevent errors with undefined variables or failed commands

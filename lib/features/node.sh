@@ -106,22 +106,9 @@ apt_install \
 log_message "Downloading and installing Node.js ${NODE_VERSION}..."
 
 # Determine architecture
-ARCH=$(dpkg --print-architecture)
-case "$ARCH" in
-    amd64)
-        NODE_ARCH="x64"
-        ;;
-    arm64)
-        NODE_ARCH="arm64"
-        ;;
-    *)
-        log_error "Unsupported architecture: $ARCH"
-        log_error "Node.js only supports amd64 (x64) and arm64"
-        exit 1
-        ;;
-esac
+NODE_ARCH=$(map_arch "x64" "arm64")
 
-log_message "Detected architecture: ${ARCH} (Node.js: ${NODE_ARCH})"
+log_message "Detected architecture: $(dpkg --print-architecture) (Node.js: ${NODE_ARCH})"
 
 BUILD_TEMP=$(create_secure_temp_dir)
 cd "$BUILD_TEMP"
@@ -245,10 +232,6 @@ if [[ $- != *i* ]]; then
     return 0
 fi
 
-# Defensive programming - check for required commands
-_check_command() {
-    command -v "$1" >/dev/null 2>&1
-}
 
 # Export paths and environment variables
 export NPM_CACHE_DIR="/cache/npm"
@@ -503,8 +486,6 @@ node-version() {
     echo "pnpm store: $pnpm_store"
 }
 
-# Clean up helper functions
-unset -f _check_command 2>/dev/null || true
 
 # Note: We leave set +u and set +e in place for interactive shells
 # to prevent errors with undefined variables or failed commands

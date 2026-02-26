@@ -280,10 +280,6 @@ if [[ $- != *i* ]]; then
     return 0
 fi
 
-# Defensive programming - check for required commands
-_check_command() {
-    command -v "$1" >/dev/null 2>&1
-}
 
 # Model storage location (may be in /cache for volume persistence)
 export OLLAMA_MODELS="${OLLAMA_MODELS_DIR}"
@@ -296,8 +292,6 @@ alias ollama-status='pgrep -x ollama > /dev/null && echo "Ollama is running" || 
 alias ollama-logs='tail -f \${LOG_FILE:-/var/log/ollama.log}'
 alias ollama-models='ollama list'
 
-# Clean up helper functions
-unset -f _check_command 2>/dev/null || true
 
 # Note: We leave set +u and set +e in place for interactive shells
 # to prevent errors with undefined variables or failed commands

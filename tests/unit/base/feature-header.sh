@@ -188,6 +188,94 @@ run_test_with_setup() {
     teardown
 }
 
+# Test: map_arch returns amd64 value when dpkg reports amd64
+test_map_arch_amd64() {
+    # Mock dpkg to return amd64
+    dpkg() { echo "amd64"; }
+    export -f dpkg
+
+    # Mock log_error (used by map_arch on unsupported arch)
+    log_error() { :; }
+    export -f log_error
+
+    # Source the feature header to get map_arch
+    source "$TEST_TEMP_DIR/feature-header-test.sh"
+
+    local result
+    result=$(map_arch "x64" "arm64")
+    assert_equals "x64" "$result" "map_arch returns amd64 value"
+
+    unset -f dpkg log_error
+}
+
+# Test: map_arch returns arm64 value when dpkg reports arm64
+test_map_arch_arm64() {
+    dpkg() { echo "arm64"; }
+    export -f dpkg
+
+    log_error() { :; }
+    export -f log_error
+
+    source "$TEST_TEMP_DIR/feature-header-test.sh"
+
+    local result
+    result=$(map_arch "x64" "arm64")
+    assert_equals "arm64" "$result" "map_arch returns arm64 value"
+
+    unset -f dpkg log_error
+}
+
+# Test: map_arch returns non-zero for unsupported architecture
+test_map_arch_unsupported() {
+    dpkg() { echo "s390x"; }
+    export -f dpkg
+
+    log_error() { :; }
+    export -f log_error
+
+    source "$TEST_TEMP_DIR/feature-header-test.sh"
+
+    local exit_code=0
+    map_arch "x64" "arm64" >/dev/null 2>&1 || exit_code=$?
+    assert_not_equals "0" "$exit_code" "map_arch fails on unsupported arch"
+
+    unset -f dpkg log_error
+}
+
+# Test: map_arch_or_skip returns empty string for unsupported architecture
+test_map_arch_or_skip_unsupported() {
+    dpkg() { echo "s390x"; }
+    export -f dpkg
+
+    log_error() { :; }
+    export -f log_error
+
+    source "$TEST_TEMP_DIR/feature-header-test.sh"
+
+    local result
+    result=$(map_arch_or_skip "x86_64" "arm64")
+    assert_empty "$result" "map_arch_or_skip returns empty for unsupported arch"
+
+    unset -f dpkg log_error
+}
+
+# Test: map_arch_or_skip returns correct values for supported architectures
+test_map_arch_or_skip_supported() {
+    dpkg() { echo "amd64"; }
+    export -f dpkg
+
+    log_error() { :; }
+    export -f log_error
+
+    source "$TEST_TEMP_DIR/feature-header-test.sh"
+
+    local result
+    result=$(map_arch_or_skip "x86_64" "aarch64")
+    assert_equals "x86_64" "$result" "map_arch_or_skip returns amd64 value"
+
+    unset -f dpkg log_error
+}
+
 # Run all tests
 run_test_with_setup test_environment_variables "Environment variables are exported"
 run_test_with_setup test_default_values "Default values are applied correctly"
@@ -195,6 +283,11 @@ run_test_with_setup test_logging_functions_available "Logging functions are avai
 run_test_with_setup test_write_bashrc_content "write_bashrc_content function works"
 run_test_with_setup test_error_handling "Error handling is properly configured"
 run_test_with_setup test_path_configuration "Paths are properly configured"
+run_test_with_setup test_map_arch_amd64 "map_arch returns correct value for amd64"
+run_test_with_setup test_map_arch_arm64 "map_arch returns correct value for arm64"
+run_test_with_setup test_map_arch_unsupported "map_arch fails on unsupported architecture"
+run_test_with_setup test_map_arch_or_skip_unsupported "map_arch_or_skip returns empty for unsupported arch"
+run_test_with_setup test_map_arch_or_skip_supported "map_arch_or_skip returns correct value for supported arch"
 
 # Generate test report
 generate_report

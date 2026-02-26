@@ -124,19 +124,7 @@ else
     log_message "Installing pixi version ${PIXI_VERSION}"
 
     # Determine platform and architecture
-    ARCH=$(dpkg --print-architecture)
-    case "$ARCH" in
-        amd64)
-            PIXI_PLATFORM="x86_64-unknown-linux-musl"
-            ;;
-        arm64)
-            PIXI_PLATFORM="aarch64-unknown-linux-musl"
-            ;;
-        *)
-            log_error "Unsupported architecture for pixi: $ARCH"
-            exit 1
-            ;;
-    esac
+    PIXI_PLATFORM=$(map_arch "x86_64-unknown-linux-musl" "aarch64-unknown-linux-musl")
 
     log_message "Installing pixi for platform: ${PIXI_PLATFORM}"
 
@@ -282,10 +270,6 @@ if [[ $- != *i* ]]; then
     return 0
 fi
 
-# Defensive programming - check for required commands
-_check_command() {
-    command -v "$1" >/dev/null 2>&1
-}
 
 # Mojo environment configuration
 export PIXI_CACHE_DIR="/cache/pixi"
@@ -314,8 +298,6 @@ mojo-add() {
     cd "${MOJO_PROJECT_DIR}" && pixi add "$@"
 }
 
-# Clean up helper functions
-unset -f _check_command 2>/dev/null || true
 
 # Note: We leave set +u and set +e in place for interactive shells
 # to prevent errors with undefined variables or failed commands

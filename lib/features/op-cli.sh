@@ -155,11 +155,6 @@ if [[ $- != *i* ]]; then
     return 0
 fi
 
-# Defensive programming - check for required commands
-_check_command() {
-    command -v "$1" >/dev/null 2>&1
-}
-
 # Cache and config directories
 export OP_CACHE_DIR="/cache/1password"
 export OP_CONFIG_DIR="/cache/1password/config"
@@ -303,7 +298,7 @@ op-exec() {
 # ----------------------------------------------------------------------------
 _op_load_secrets() {
     # Skip if op not available or no service account token
-    if ! _check_command op || [ -z "${OP_SERVICE_ACCOUNT_TOKEN:-}" ]; then
+    if ! command -v op >/dev/null 2>&1 || [ -z "${OP_SERVICE_ACCOUNT_TOKEN:-}" ]; then
         return 0
     fi
 
@@ -367,7 +362,7 @@ _op_load_secrets
 # a single "full name" field), try combining first name + last name.
 # Falls back to "Devcontainer" if nothing resolves.
 _op_resolve_git_identity() {
-    if ! _check_command op || [ -z "${OP_SERVICE_ACCOUNT_TOKEN:-}" ]; then
+    if ! command -v op >/dev/null 2>&1 || [ -z "${OP_SERVICE_ACCOUNT_TOKEN:-}" ]; then
         return 0
     fi
 
@@ -399,9 +394,6 @@ _op_resolve_git_identity() {
 }
 
 _op_resolve_git_identity
-
-# Clean up helper functions
-unset -f _check_command 2>/dev/null || true
 
 # Note: We leave set +u and set +e in place for interactive shells
 # to prevent errors with undefined variables or failed commands

@@ -104,19 +104,7 @@ log_command "Setting cache directory ownership" \
 log_message "Installing Rust toolchain..."
 
 # Determine rustup target triple based on architecture
-ARCH=$(dpkg --print-architecture)
-case "$ARCH" in
-    amd64)
-        RUSTUP_TARGET="x86_64-unknown-linux-gnu"
-        ;;
-    arm64)
-        RUSTUP_TARGET="aarch64-unknown-linux-gnu"
-        ;;
-    *)
-        log_error "Unsupported architecture: $ARCH"
-        exit 1
-        ;;
-esac
+RUSTUP_TARGET=$(map_arch "x86_64-unknown-linux-gnu" "aarch64-unknown-linux-gnu")
 
 log_message "Installing rustup for ${RUSTUP_TARGET}..."
 

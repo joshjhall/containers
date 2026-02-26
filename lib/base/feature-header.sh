@@ -188,6 +188,37 @@ create_symlink() {
     fi
 }
 
+# Map dpkg architecture to tool-specific name (exits on unsupported arch)
+# Usage: NODE_ARCH=$(map_arch "x64" "arm64")
+map_arch() {
+    local amd64_val="$1"
+    local arm64_val="$2"
+    local arch
+    arch=$(dpkg --print-architecture)
+    case "$arch" in
+        amd64) echo "$amd64_val" ;;
+        arm64) echo "$arm64_val" ;;
+        *)
+            log_error "Unsupported architecture: $arch"
+            return 1
+            ;;
+    esac
+}
+
+# Map dpkg architecture, returning empty string for unsupported (skip pattern)
+# Usage: TOOL_ARCH=$(map_arch_or_skip "x86_64" "arm64")
+map_arch_or_skip() {
+    local amd64_val="$1"
+    local arm64_val="$2"
+    local arch
+    arch=$(dpkg --print-architecture)
+    case "$arch" in
+        amd64) echo "$amd64_val" ;;
+        arm64) echo "$arm64_val" ;;
+        *)     echo "" ;;
+    esac
+}
+
 # ============================================================================
 # Interrupted Build Cleanup Handling
 # ============================================================================
