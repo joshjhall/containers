@@ -238,7 +238,8 @@ model selection.
 
 10 always-installed skills + 2 conditional, 11 agents (including 6 audit
 scanners and `issue-writer`). The `/codebase-audit` command dispatches scanners
-in parallel. See `docs/claude-code/skills-and-agents.md` for tables, audit
+in parallel, including file bloat detection for AI instruction files and
+documentation. See `docs/claude-code/skills-and-agents.md` for tables, audit
 parameters, depth modes, and inline suppression.
 
 ### Secrets & Setup Commands
