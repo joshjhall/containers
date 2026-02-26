@@ -248,6 +248,71 @@ test_verify_calculated_checksum_returns_2_for_binary_file() {
 }
 
 # ============================================================================
+# Functional Tests - verify_pinned_checksum()
+# ============================================================================
+
+test_verify_pinned_checksum_match() {
+    # Create a file and compute its real sha256sum, then populate checksums.json
+    # with the matching hash — verify_pinned_checksum should return 0.
+    echo "checksum match test content" > "$TEST_TEMP_DIR/match-test.tgz"
+    local real_hash
+    real_hash=$(sha256sum "$TEST_TEMP_DIR/match-test.tgz" | awk '{print $1}')
+
+    cat > "$TEST_TEMP_DIR/checksums.json" <<EOJSON
+{
+    "languages": {
+        "testlang": {
+            "versions": {
+                "1.0.0": {
+                    "sha256": "$real_hash"
+                }
+            }
+        }
+    },
+    "tools": {}
+}
+EOJSON
+
+    local exit_code=0
+    _run_checksum_subshell "
+        export CHECKSUMS_DB='$TEST_TEMP_DIR/checksums.json'
+        verify_pinned_checksum 'language' 'testlang' '1.0.0' '$TEST_TEMP_DIR/match-test.tgz'
+    " || exit_code=$?
+
+    assert_equals "0" "$exit_code" "verify_pinned_checksum returns 0 when checksum matches"
+}
+
+test_verify_pinned_checksum_mismatch() {
+    # Create a file but populate checksums.json with a WRONG hash —
+    # verify_pinned_checksum should return 1 (checksum mismatch).
+    echo "checksum mismatch test content" > "$TEST_TEMP_DIR/mismatch-test.tgz"
+    local wrong_hash="0000000000000000000000000000000000000000000000000000000000000000"
+
+    cat > "$TEST_TEMP_DIR/checksums.json" <<EOJSON
+{
+    "languages": {
+        "testlang": {
+            "versions": {
+                "2.0.0": {
+                    "sha256": "$wrong_hash"
+                }
+            }
+        }
+    },
+    "tools": {}
+}
+EOJSON
+
+    local exit_code=0
+    _run_checksum_subshell "
+        export CHECKSUMS_DB='$TEST_TEMP_DIR/checksums.json'
+        verify_pinned_checksum 'language' 'testlang' '2.0.0' '$TEST_TEMP_DIR/mismatch-test.tgz'
+    " || exit_code=$?
+
+    assert_equals "1" "$exit_code" "verify_pinned_checksum returns 1 when checksum does not match"
+}
+
+# ============================================================================
 # Static Analysis Tests - Tier Architecture
 # ============================================================================
 
@@ -408,6 +473,10 @@ run_test_with_setup test_lookup_pinned_checksum_skips_placeholder "lookup_pinned
 # verify_calculated_checksum
 run_test_with_setup test_verify_calculated_checksum_returns_2 "verify_calculated_checksum returns 2 (unverified/TOFU)"
 run_test_with_setup test_verify_calculated_checksum_returns_2_for_binary_file "verify_calculated_checksum returns 2 for binary files"
+
+# verify_pinned_checksum
+run_test_with_setup test_verify_pinned_checksum_match "verify_pinned_checksum returns 0 when checksum matches"
+run_test_with_setup test_verify_pinned_checksum_mismatch "verify_pinned_checksum returns 1 on checksum mismatch"
 
 # Tier architecture (static analysis)
 run_test_with_setup test_verify_download_skips_tier1_for_tools "verify_download skips tier 1 for tools"

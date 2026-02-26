@@ -529,6 +529,30 @@ test_network_failure_full_version_bypasses_network() {
 }
 
 # ============================================================================
+# Edge Case Tests (mocked, always run offline)
+# ============================================================================
+
+test_rust_stable_channel_returns_error() {
+    # "stable" is not a numeric version — it fails _is_full_version,
+    # _is_major_minor, and _is_major_only checks, so the resolver should
+    # return non-zero (no matching version pattern).
+    local exit_code=0
+    (
+        # Mock _curl_safe to return realistic GitHub API JSON
+        _curl_safe() {
+            cat <<'MOCK_JSON'
+[{"tag_name":"1.84.0"},{"tag_name":"1.83.0"},{"tag_name":"1.82.0"}]
+MOCK_JSON
+        }
+        export -f _curl_safe
+
+        resolve_rust_version "stable" 2>/dev/null
+    ) > /dev/null 2>&1 || exit_code=$?
+
+    assert_not_equals "0" "$exit_code" "resolve_rust_version rejects non-numeric channel name 'stable'"
+}
+
+# ============================================================================
 # Generic resolve_version Wrapper Tests
 # ============================================================================
 
@@ -694,6 +718,9 @@ run_test_with_setup test_kotlin_major_only_resolution "Kotlin major only resolut
 # Network failure tests (mocked, always run offline)
 run_test_with_setup test_network_failure_returns_error "Network failure returns error for partial version"
 run_test_with_setup test_network_failure_full_version_bypasses_network "Full version bypasses network even on failure"
+
+# Edge case tests (mocked, always run offline)
+run_test_with_setup test_rust_stable_channel_returns_error "Rust 'stable' channel returns error"
 
 # Wrapper function tests
 run_test_with_setup test_resolve_version_wrapper_python "Wrapper: resolve python version"
