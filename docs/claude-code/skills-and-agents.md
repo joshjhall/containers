@@ -84,7 +84,7 @@ to create GitHub/GitLab issues in parallel.
 | `audit-test-gaps`    | Untested APIs, error path tests, edge cases, assertions                          |
 | `audit-architecture` | Circular deps, coupling, bus factor, layer violations                            |
 | `audit-docs`         | Stale comments, missing API docs, outdated READMEs                               |
-| `audit-ai-config`    | Skill/agent quality, CLAUDE.md drift, MCP misconfig, hook safety                 |
+| `audit-ai-config`    | Skill/agent quality, CLAUDE.md drift, MCP misconfig, hook safety, file bloat     |
 
 ### Depth Modes
 

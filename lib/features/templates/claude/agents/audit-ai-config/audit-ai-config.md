@@ -98,6 +98,50 @@ When invoked, you receive a work manifest in the task prompt containing:
   medium (contradictions), low (minor inconsistencies)
 - Evidence: the conflicting items, where each is defined
 
+### ai-file-bloat
+
+AI instruction files are loaded into context windows and consume tokens on every
+conversation or dispatch. Oversized files waste context and risk hitting limits.
+
+| File Pattern              | Warning (medium) | High         | Rationale                   |
+| ------------------------- | ---------------- | ------------ | --------------------------- |
+| `CLAUDE.md` / `AGENTS.md` | >400 lines       | >600 lines   | Loaded every conversation   |
+| Skill `SKILL.md` files    | >300 lines       | >500 lines   | Loaded when skill activates |
+| Agent `.md` definitions   | >250 lines       | >400 lines   | Loaded per agent dispatch   |
+| `.claude.json`            | >200 entries     | >400 entries | Parsed on startup           |
+
+- AI instruction files exceeding line thresholds (numeric — supports
+  `baseline=` acknowledgment)
+- Content that could be decomposed into referenced sub-files (detailed tables,
+  lengthy examples, full env var listings)
+- Sections duplicating information available in `docs/` or other referenced files
+- Monolithic CLAUDE.md without pointers to detailed docs for reference-only
+  content
+- Severity: medium (over warning threshold), high (over high threshold)
+- Evidence: line count, identified sections that could be extracted
+- Suggestion: specific decomposition advice (e.g., "Move MCP server table to
+  docs/claude-code/plugins-and-mcps.md")
+
+### doc-file-bloat
+
+General documentation files are not auto-loaded into context, but oversized docs
+become hard to navigate and maintain. Files that grow too large should be split
+into focused sub-documents.
+
+| File Pattern                            | Warning (medium) | High       |
+| --------------------------------------- | ---------------- | ---------- |
+| Any `.md` in `docs/`                    | >500 lines       | >800 lines |
+| Root-level `.md` (README, CONTRIBUTING) | >500 lines       | >800 lines |
+| Example READMEs in `examples/`          | >400 lines       | >600 lines |
+
+- Documentation files exceeding line thresholds (numeric — supports `baseline=`)
+- Files that could be split into sub-documents by section (e.g., a 1400-line
+  troubleshooting.md into per-topic files)
+- Excessive inline code blocks that could be extracted to separate example files
+- Severity: medium (over warning threshold), high (over high threshold)
+- Evidence: line count, suggested split points
+- Suggestion: concrete decomposition recommendations
+
 ## Batch Sub-Agent Dispatching
 
 When the manifest's total source lines exceed 2000, split files into batches of
@@ -156,6 +200,8 @@ audit:acknowledge category=<slug> [date=YYYY-MM-DD] [baseline=<number>] [reason=
 Build a per-file acknowledgment map. When a finding matches an acknowledged
 entry (same file, same category, overlapping line range):
 
+- **Numeric categories** (`ai-file-bloat`, `doc-file-bloat`): Suppress only
+  if current measurement ≤ baseline value; re-raise if exceeded.
 - **Boolean categories** (`skill-quality`, `agent-quality`, `claude-md-drift`,
   `mcp-misconfiguration`, `hook-safety`, `config-inconsistency`): Suppress
   the finding entirely — move it to the `acknowledged_findings` array with

@@ -58,7 +58,7 @@ scanners based on classification:
 | Source files            | code-health, security, architecture |
 | Test files              | test-gaps only                      |
 | Config files            | security only                       |
-| Doc files               | docs only                           |
+| Doc files               | docs, ai-config                     |
 | AI Config files         | ai-config only                      |
 | Source + paired test    | test-gaps (paired)                  |
 | High-churn files (deep) | all scanners                        |

@@ -128,7 +128,7 @@ grouping and deduplication.
 ### ai-config
 
 `skill-quality`, `agent-quality`, `claude-md-drift`, `mcp-misconfiguration`,
-`hook-safety`, `config-inconsistency`
+`hook-safety`, `config-inconsistency`, `ai-file-bloat`, `doc-file-bloat`
 
 ______________________________________________________________________
 
@@ -194,7 +194,8 @@ Examples:
 1. **Suppress or re-raise**:
    - **Numeric categories** (those with measurable thresholds like
      `file-length`, `function-complexity`, `code-duplication`,
-     `low-assertion-density`): Suppress only if the current measurement is
+     `low-assertion-density`, `ai-file-bloat`, `doc-file-bloat`): Suppress
+     only if the current measurement is
      at or below the `baseline` value. If the measurement exceeds the
      baseline, re-raise with `acknowledged: true` and
      `acknowledged_baseline` set to the baseline value

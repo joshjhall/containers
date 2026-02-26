@@ -27,6 +27,9 @@ ______________________________________________________________________
 | high-coupling (arch)             | code-duplication (health)    | Cross-reference, keep separate |
 | claude-md-drift (ai-config)      | outdated-readme (docs)       | Merge into single issue        |
 | mcp-misconfiguration (ai-config) | hardcoded-secret (security)  | Merge into single issue        |
+| ai-file-bloat (ai-config)        | claude-md-drift (ai-config)  | Cross-reference, keep separate |
+| doc-file-bloat (ai-config)       | outdated-readme (docs)       | Cross-reference, keep separate |
+| doc-file-bloat (ai-config)       | stale-comment (docs)         | Cross-reference, keep separate |
 
 ### Deduplication
 
