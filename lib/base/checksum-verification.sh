@@ -31,6 +31,12 @@
 #   source /tmp/build-scripts/base/checksum-verification.sh
 #   verify_download "python" "3.12.7" "https://..." "/tmp/file.tgz"
 
+# Prevent multiple sourcing
+if [ -n "${_CHECKSUM_VERIFICATION_LOADED:-}" ]; then
+    return 0
+fi
+_CHECKSUM_VERIFICATION_LOADED=1
+
 set -euo pipefail
 
 # Source dependencies

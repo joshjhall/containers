@@ -41,6 +41,9 @@ setup() {
 teardown() {
     # Clean up test log directory
     command rm -rf "$TEST_LOG_DIR"
+
+    # Unset include guard so re-sourcing works across tests
+    unset _LOGGING_LOADED 2>/dev/null || true
 }
 
 # Test: log_feature_start creates log files

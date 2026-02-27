@@ -35,6 +35,9 @@ setup() {
 teardown() {
     # Cleanup
     command rm -rf "$TEST_TEMP_DIR" 2>/dev/null || true
+
+    # Unset include guard so re-sourcing works across tests
+    unset _LOGGING_LOADED 2>/dev/null || true
 }
 
 # ============================================================================

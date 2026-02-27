@@ -22,6 +22,12 @@
 #   0 if signature verified successfully
 #   1 if signature verification failed or unavailable
 
+# Prevent multiple sourcing
+if [ -n "${_SIGNATURE_VERIFY_LOADED:-}" ]; then
+    return 0
+fi
+_SIGNATURE_VERIFY_LOADED=1
+
 set -euo pipefail
 
 # Source logging utilities

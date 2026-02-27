@@ -21,26 +21,26 @@ if [ -f /opt/container-runtime/base/path-utils.sh ]; then
     source /opt/container-runtime/base/path-utils.sh
 fi
 
-# Security: Safe eval for tool initialization
-# Uses a blocklist (not allowlist) because inputs are complex, multi-line shell
-# code from tools like zoxide/direnv that changes between versions. Inputs are
-# NOT user-controlled; this is defense-in-depth against supply chain compromise.
-safe_eval() {
-    local output
-    if ! output=$("$@" 2>/dev/null); then
-        return 1
-    fi
+# Security: Safe eval for tool initialization — use canonical version from
+# logging.sh when available, otherwise define a minimal fallback.
+if ! type safe_eval >/dev/null 2>&1; then
+    safe_eval() {
+        local output
+        if ! output=$("$@" 2>/dev/null); then
+            return 1
+        fi
 
-    # Blocklist of dangerous patterns — defined once for maintainability
-    local _SAFE_EVAL_BLOCKLIST='rm -rf|curl.*bash|\bwget\b|;\s*rm|\$\(.*rm|exec\s+[^$]|/bin/sh.*-c|bash.*-c.*http|\bmkfifo\b|\bnc\b|\bncat\b|\bchmod\b.*\+s|\bpython[23]?\b.*-c|\bperl\b.*-e'
+        # Blocklist of dangerous patterns — defined once for maintainability
+        local _SAFE_EVAL_BLOCKLIST='rm -rf|curl.*bash|\bwget\b|;\s*rm|\$\(.*rm|exec\s+[^$]|/bin/sh.*-c|bash.*-c.*http|\bmkfifo\b|\bnc\b|\bncat\b|\bchmod\b.*\+s|\bpython[23]?\b.*-c|\bperl\b.*-e'
 
-    # Use 'command grep' to bypass any aliases (e.g., grep='rg' from dev-tools)
-    if echo "$output" | command grep -qE "$_SAFE_EVAL_BLOCKLIST"; then
-        echo "WARNING: Suspicious output detected, skipping initialization of: $*" >&2
-        return 1
-    fi
-    eval "$output"
-}
+        # Use 'command grep' to bypass any aliases (e.g., grep='rg' from dev-tools)
+        if echo "$output" | command grep -qE "$_SAFE_EVAL_BLOCKLIST"; then
+            echo "WARNING: Suspicious output detected, skipping initialization of: $*" >&2
+            return 1
+        fi
+        eval "$output"
+    }
+fi
 
 # Base paths
 export PATH="/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin:/sbin"

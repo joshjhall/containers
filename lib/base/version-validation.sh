@@ -14,6 +14,12 @@
 #   validate_semver "$PYTHON_VERSION" "PYTHON_VERSION" || exit 1
 #
 
+# Prevent multiple sourcing
+if [ -n "${_VERSION_VALIDATION_LOADED:-}" ]; then
+    return 0
+fi
+_VERSION_VALIDATION_LOADED=1
+
 # Source logging utilities if available
 if [ -f /tmp/build-scripts/base/logging.sh ]; then
     source /tmp/build-scripts/base/logging.sh

@@ -26,6 +26,12 @@
 #   This script should be sourced by feature scripts that download binaries.
 #   Checksums should be obtained from official sources and pinned in scripts.
 
+# Prevent multiple sourcing
+if [ -n "${_DOWNLOAD_VERIFY_LOADED:-}" ]; then
+    return 0
+fi
+_DOWNLOAD_VERIFY_LOADED=1
+
 set -euo pipefail
 
 # Color codes for output

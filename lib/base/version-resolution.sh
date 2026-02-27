@@ -9,6 +9,12 @@
 #   resolved=$(resolve_python_version "3.12")  # Returns "3.12.7"
 #   echo "$PYTHON_RESOLVED_VERSION"            # Exported variable
 
+# Prevent multiple sourcing
+if [ -n "${_VERSION_RESOLUTION_LOADED:-}" ]; then
+    return 0
+fi
+_VERSION_RESOLUTION_LOADED=1
+
 set -euo pipefail
 
 # Source logging utilities

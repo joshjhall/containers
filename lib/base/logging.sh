@@ -17,6 +17,12 @@
 #     export ENABLE_JSON_LOGGING=true
 #
 
+# Prevent multiple sourcing
+if [ -n "${_LOGGING_LOADED:-}" ]; then
+    return 0
+fi
+_LOGGING_LOADED=1
+
 set -euo pipefail
 
 # ============================================================================

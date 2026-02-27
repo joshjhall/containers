@@ -14,6 +14,12 @@
 #
 #   Then use existing logging functions - JSON logs are automatic
 
+# Prevent multiple sourcing
+if [ -n "${_JSON_LOGGING_LOADED:-}" ]; then
+    return 0
+fi
+_JSON_LOGGING_LOADED=1
+
 set -euo pipefail
 
 # ============================================================================

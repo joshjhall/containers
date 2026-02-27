@@ -9,6 +9,12 @@
 #   source /tmp/build-scripts/base/checksum-fetch.sh
 #   checksum=$(fetch_go_checksum "1.25.3" "amd64")
 
+# Prevent multiple sourcing
+if [ -n "${_CHECKSUM_FETCH_LOADED:-}" ]; then
+    return 0
+fi
+_CHECKSUM_FETCH_LOADED=1
+
 set -euo pipefail
 
 # Source retry utilities for rate limiting and backoff

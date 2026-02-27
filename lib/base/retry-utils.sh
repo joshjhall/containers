@@ -14,6 +14,12 @@
 #     retry_with_backoff curl https://example.com
 #     retry_command "description" command args...
 
+# Prevent multiple sourcing
+if [ -n "${_RETRY_UTILS_LOADED:-}" ]; then
+    return 0
+fi
+_RETRY_UTILS_LOADED=1
+
 set -euo pipefail
 
 # Source logging functions if available

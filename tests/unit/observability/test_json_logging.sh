@@ -145,8 +145,9 @@ test_json_log_command() {
 test_correlation_id_generation() {
     start_test "Correlation ID is generated and persists"
 
-    # Clear existing correlation ID
+    # Clear existing correlation ID and include guard so re-sourcing works
     unset BUILD_CORRELATION_ID
+    unset _JSON_LOGGING_LOADED 2>/dev/null || true
 
     # Source again to trigger generation
     ENABLE_JSON_LOGGING=true
@@ -168,8 +169,9 @@ test_correlation_id_generation() {
 test_json_logging_disabled() {
     start_test "JSON logging no-ops when disabled"
 
-    # Disable JSON logging
+    # Disable JSON logging and unset include guard so re-sourcing works
     export ENABLE_JSON_LOGGING=false
+    unset _JSON_LOGGING_LOADED 2>/dev/null || true
 
     # Re-source to get no-op functions
     # shellcheck source=lib/base/json-logging.sh

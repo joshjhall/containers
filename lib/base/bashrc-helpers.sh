@@ -7,6 +7,12 @@
 # - Standard headers/footers to prevent terminal errors
 # - Idempotent content management
 
+# Prevent multiple sourcing
+if [ -n "${_BASHRC_HELPERS_LOADED:-}" ]; then
+    return 0
+fi
+_BASHRC_HELPERS_LOADED=1
+
 # Function to add standard safety headers to bashrc.d scripts
 add_bashrc_safety_header() {
     command cat << 'BASHRC_SAFETY_HEADER'

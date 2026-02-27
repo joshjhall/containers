@@ -55,6 +55,9 @@ teardown() {
     unset RATE_LIMIT_HIT 2>/dev/null || true
     unset GITHUB_AUTH_HEADER 2>/dev/null || true
     unset BUILD_LOG_DIR 2>/dev/null || true
+
+    # Unset include guards so re-sourcing works across tests
+    unset _LOGGING_LOADED _VERSION_RESOLUTION_LOADED 2>/dev/null || true
 }
 
 # Wrapper to run tests with setup/teardown

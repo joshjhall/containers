@@ -16,6 +16,12 @@
 #     apt_install package1 package2  # Install packages with retries
 #
 
+# Prevent multiple sourcing
+if [ -n "${_APT_UTILS_LOADED:-}" ]; then
+    return 0
+fi
+_APT_UTILS_LOADED=1
+
 set -euo pipefail
 
 # Source logging functions if available

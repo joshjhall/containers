@@ -11,6 +11,12 @@
 #   error_checksum_mismatch "python" "$expected" "$actual"
 #   error_download_failed "https://example.com/file.tar.gz" "404"
 
+# Prevent multiple sourcing
+if [ -n "${_ERROR_MESSAGES_LOADED:-}" ]; then
+    return 0
+fi
+_ERROR_MESSAGES_LOADED=1
+
 set -euo pipefail
 
 # Source logging if available

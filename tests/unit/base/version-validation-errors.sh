@@ -53,6 +53,9 @@ teardown() {
 
     # Unset test variables
     unset TEST_TEMP_DIR 2>/dev/null || true
+
+    # Unset include guard so re-sourcing works across tests
+    unset _VERSION_VALIDATION_LOADED 2>/dev/null || true
 }
 
 # ============================================================================

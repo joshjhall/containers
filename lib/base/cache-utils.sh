@@ -20,6 +20,12 @@
 #   create_language_cache "pip"
 #   create_language_caches "npm" "yarn" "pnpm"
 
+# Prevent multiple sourcing
+if [ -n "${_CACHE_UTILS_LOADED:-}" ]; then
+    return 0
+fi
+_CACHE_UTILS_LOADED=1
+
 set -euo pipefail
 
 # Create a single cache directory with correct ownership
