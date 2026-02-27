@@ -211,8 +211,11 @@ log_message "Installing dive (Docker image layer analysis tool)..."
 # Set dive version (configurable via environment variable)
 DIVE_VERSION="${DIVE_VERSION:-0.13.1}"
 
+# Detect architecture for dive
+DIVE_ARCH=$(map_arch "amd64" "arm64")
+
 # Construct the dive package filename
-DIVE_PACKAGE="dive_${DIVE_VERSION}_linux_${ARCH}.deb"
+DIVE_PACKAGE="dive_${DIVE_VERSION}_linux_${DIVE_ARCH}.deb"
 DIVE_URL="https://github.com/wagoodman/dive/releases/download/v${DIVE_VERSION}/${DIVE_PACKAGE}"
 
 # Fetch checksum dynamically from GitHub releases
@@ -256,8 +259,11 @@ if ! command -v cosign &> /dev/null; then
     # Set cosign version
     COSIGN_VERSION="3.0.2"
 
+    # Detect architecture for cosign
+    COSIGN_ARCH=$(map_arch "amd64" "arm64")
+
     # Construct the cosign package filename
-    COSIGN_PACKAGE="cosign_${COSIGN_VERSION}_${ARCH}.deb"
+    COSIGN_PACKAGE="cosign_${COSIGN_VERSION}_${COSIGN_ARCH}.deb"
     COSIGN_URL="https://github.com/sigstore/cosign/releases/download/v${COSIGN_VERSION}/${COSIGN_PACKAGE}"
 
     # Fetch checksum dynamically from GitHub releases
