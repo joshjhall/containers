@@ -785,6 +785,203 @@ GUARD_EOF
     fi
 }
 
+# ============================================================================
+# Functional Tests - parse_bindfs_skip_paths
+# ============================================================================
+# Helper: extract and run parse_bindfs_skip_paths in a clean subshell.
+# The function uses declare -gA, so we must run it at top-level scope in the
+# subshell (not inside another function).
+_run_bindfs_parse_subshell() {
+    bash -c "$1" 2>/dev/null
+}
+
+# Extract the function body from entrypoint.sh for isolated testing
+_PARSE_BINDFS_FUNC=$(sed -n '/^parse_bindfs_skip_paths()/,/^}/p' "$PROJECT_ROOT/lib/runtime/entrypoint.sh")
+
+test_parse_bindfs_skip_paths_empty() {
+    local output
+    output=$(_run_bindfs_parse_subshell "
+        $_PARSE_BINDFS_FUNC
+        BINDFS_SKIP_PATHS=''
+        parse_bindfs_skip_paths
+        echo \"count=\${#BINDFS_SKIP_MAP[@]}\"
+    ")
+    assert_contains "$output" "count=0" "Empty BINDFS_SKIP_PATHS produces empty map"
+}
+
+test_parse_bindfs_skip_paths_single() {
+    local output
+    output=$(_run_bindfs_parse_subshell "
+        $_PARSE_BINDFS_FUNC
+        BINDFS_SKIP_PATHS='/cache'
+        parse_bindfs_skip_paths
+        echo \"count=\${#BINDFS_SKIP_MAP[@]}\"
+        [[ -n \"\${BINDFS_SKIP_MAP[/cache]+_}\" ]] && echo 'has=/cache'
+    ")
+    assert_contains "$output" "count=1" "Single path produces 1-element map"
+    assert_contains "$output" "has=/cache" "Map contains /cache"
+}
+
+test_parse_bindfs_skip_paths_multiple() {
+    local output
+    output=$(_run_bindfs_parse_subshell "
+        $_PARSE_BINDFS_FUNC
+        BINDFS_SKIP_PATHS='/cache,/tmp,/var'
+        parse_bindfs_skip_paths
+        echo \"count=\${#BINDFS_SKIP_MAP[@]}\"
+        [[ -n \"\${BINDFS_SKIP_MAP[/cache]+_}\" ]] && echo 'has=/cache'
+        [[ -n \"\${BINDFS_SKIP_MAP[/tmp]+_}\" ]] && echo 'has=/tmp'
+        [[ -n \"\${BINDFS_SKIP_MAP[/var]+_}\" ]] && echo 'has=/var'
+    ")
+    assert_contains "$output" "count=3" "Three paths produce 3-element map"
+    assert_contains "$output" "has=/cache" "Map contains /cache"
+    assert_contains "$output" "has=/tmp" "Map contains /tmp"
+    assert_contains "$output" "has=/var" "Map contains /var"
+}
+
+test_parse_bindfs_skip_paths_whitespace() {
+    local output
+    output=$(_run_bindfs_parse_subshell "
+        $_PARSE_BINDFS_FUNC
+        BINDFS_SKIP_PATHS='/cache , /tmp'
+        parse_bindfs_skip_paths
+        echo \"count=\${#BINDFS_SKIP_MAP[@]}\"
+        [[ -n \"\${BINDFS_SKIP_MAP[/cache]+_}\" ]] && echo 'has=/cache'
+        [[ -n \"\${BINDFS_SKIP_MAP[/tmp]+_}\" ]] && echo 'has=/tmp'
+    ")
+    assert_contains "$output" "count=2" "Whitespace-padded paths produce 2-element map"
+    assert_contains "$output" "has=/cache" "Map contains /cache (trimmed)"
+    assert_contains "$output" "has=/tmp" "Map contains /tmp (trimmed)"
+}
+
+# ============================================================================
+# Functional Tests - probe_mount_needs_fix
+# ============================================================================
+# Extract the probe function. It depends on BINDFS_SKIP_MAP (associative array).
+_PROBE_MOUNT_FUNC=$(sed -n '/^probe_mount_needs_fix()/,/^}/p' "$PROJECT_ROOT/lib/runtime/entrypoint.sh")
+
+# Helper to run probe tests in a subshell with mocked filesystem operations
+_run_probe_subshell() {
+    bash -c "$1" 2>/dev/null
+}
+
+test_probe_skips_fuse_mounts() {
+    local exit_code=0
+    _run_probe_subshell "
+        declare -gA BINDFS_SKIP_MAP=()
+        $_PROBE_MOUNT_FUNC
+        probe_mount_needs_fix '/workspace/project' 'fuse.bindfs' 'auto'
+    " || exit_code=$?
+    assert_not_equals "0" "$exit_code" "probe returns 1 (no fix needed) for fuse mounts"
+}
+
+test_probe_skips_listed_paths() {
+    local exit_code=0
+    _run_probe_subshell "
+        declare -gA BINDFS_SKIP_MAP=([/workspace/project]=1)
+        $_PROBE_MOUNT_FUNC
+        probe_mount_needs_fix '/workspace/project' 'ext4' 'auto'
+    " || exit_code=$?
+    assert_not_equals "0" "$exit_code" "probe returns 1 (no fix needed) for paths in skip map"
+}
+
+test_probe_true_mode_always_fixes() {
+    local exit_code=0
+    _run_probe_subshell "
+        declare -gA BINDFS_SKIP_MAP=()
+        $_PROBE_MOUNT_FUNC
+        probe_mount_needs_fix '/workspace/project' 'ext4' 'true'
+    " || exit_code=$?
+    assert_equals "0" "$exit_code" "probe returns 0 (fix needed) in 'true' mode for non-fuse"
+}
+
+test_probe_auto_mode_virtiofs() {
+    local exit_code=0
+    _run_probe_subshell "
+        declare -gA BINDFS_SKIP_MAP=()
+        $_PROBE_MOUNT_FUNC
+        probe_mount_needs_fix '/workspace/project' 'virtiofs' 'auto'
+    " || exit_code=$?
+    assert_equals "0" "$exit_code" "probe returns 0 (fix needed) for virtiofs in auto mode"
+}
+
+test_probe_auto_mode_normal_fs() {
+    # Mock touch/chmod/stat/rm so the permission probe succeeds (perms=755)
+    local exit_code=0
+    _run_probe_subshell "
+        declare -gA BINDFS_SKIP_MAP=()
+        $_PROBE_MOUNT_FUNC
+        # Override filesystem operations to simulate correct permissions
+        touch() { return 0; }
+        chmod() { return 0; }
+        stat() { echo '755'; }
+        rm() { return 0; }
+        export -f touch chmod stat rm
+        probe_mount_needs_fix '/workspace/project' 'ext4' 'auto'
+    " || exit_code=$?
+    assert_not_equals "0" "$exit_code" "probe returns 1 (no fix needed) when permissions are correct"
+}
+
+# ============================================================================
+# Functional Tests - apply_bindfs_overlay
+# ============================================================================
+# Extract the apply function. It depends on BINDFS_CAN_SUDO, USERNAME,
+# BINDFS_UID, BINDFS_GID, and calls run_privileged + bindfs.
+_APPLY_OVERLAY_FUNC=$(sed -n '/^apply_bindfs_overlay()/,/^}/p' "$PROJECT_ROOT/lib/runtime/entrypoint.sh")
+
+_run_apply_subshell() {
+    bash -c "$1" 2>/dev/null
+}
+
+test_apply_overlay_no_sudo() {
+    local exit_code=0
+    _run_apply_subshell "
+        run_privileged() { \"\$@\"; }
+        export -f run_privileged
+        $_APPLY_OVERLAY_FUNC
+        BINDFS_CAN_SUDO=false
+        USERNAME=testuser
+        BINDFS_UID=1000
+        BINDFS_GID=1000
+        apply_bindfs_overlay '/workspace/project'
+    " || exit_code=$?
+    assert_not_equals "0" "$exit_code" "apply returns 1 when BINDFS_CAN_SUDO=false"
+}
+
+test_apply_overlay_success() {
+    local exit_code=0
+    _run_apply_subshell "
+        # Mock run_privileged and bindfs to succeed
+        run_privileged() { \"\$@\"; }
+        bindfs() { return 0; }
+        export -f run_privileged bindfs
+        $_APPLY_OVERLAY_FUNC
+        BINDFS_CAN_SUDO=true
+        USERNAME=testuser
+        BINDFS_UID=1000
+        BINDFS_GID=1000
+        apply_bindfs_overlay '/workspace/project'
+    " || exit_code=$?
+    assert_equals "0" "$exit_code" "apply returns 0 when bindfs succeeds"
+}
+
+test_apply_overlay_failure() {
+    local exit_code=0
+    _run_apply_subshell "
+        # Mock run_privileged to pass through, bindfs to fail
+        run_privileged() { \"\$@\"; }
+        bindfs() { return 1; }
+        export -f run_privileged bindfs
+        $_APPLY_OVERLAY_FUNC
+        BINDFS_CAN_SUDO=true
+        USERNAME=testuser
+        BINDFS_UID=1000
+        BINDFS_GID=1000
+        apply_bindfs_overlay '/workspace/project'
+    " || exit_code=$?
+    assert_not_equals "0" "$exit_code" "apply returns 1 when bindfs fails"
+}
+
 # Run all tests
 run_test_with_setup test_sg_docker_uses_quoted_cmd "sg docker uses QUOTED_CMD (not \$*)"
 run_test_with_setup test_newgrp_docker_uses_quoted_cmd "newgrp docker uses QUOTED_CMD (not \$*)"
@@ -825,6 +1022,24 @@ run_test_with_setup test_exit_handler_logging "Exit handler logging messages"
 run_test_with_setup test_exit_handler_error_handling "Exit handler error handling"
 run_test_with_setup test_reentry_guard_skips_when_set "Re-entry guard skips startup when set"
 run_test_with_setup test_reentry_guard_runs_when_unset "Re-entry guard runs startup when unset"
+
+# Functional tests - parse_bindfs_skip_paths
+run_test_with_setup test_parse_bindfs_skip_paths_empty "parse_bindfs_skip_paths: empty input"
+run_test_with_setup test_parse_bindfs_skip_paths_single "parse_bindfs_skip_paths: single path"
+run_test_with_setup test_parse_bindfs_skip_paths_multiple "parse_bindfs_skip_paths: multiple paths"
+run_test_with_setup test_parse_bindfs_skip_paths_whitespace "parse_bindfs_skip_paths: whitespace trimming"
+
+# Functional tests - probe_mount_needs_fix
+run_test_with_setup test_probe_skips_fuse_mounts "probe_mount_needs_fix: skips fuse mounts"
+run_test_with_setup test_probe_skips_listed_paths "probe_mount_needs_fix: skips listed paths"
+run_test_with_setup test_probe_true_mode_always_fixes "probe_mount_needs_fix: true mode always fixes"
+run_test_with_setup test_probe_auto_mode_virtiofs "probe_mount_needs_fix: auto mode virtiofs"
+run_test_with_setup test_probe_auto_mode_normal_fs "probe_mount_needs_fix: auto mode normal fs"
+
+# Functional tests - apply_bindfs_overlay
+run_test_with_setup test_apply_overlay_no_sudo "apply_bindfs_overlay: no sudo access"
+run_test_with_setup test_apply_overlay_success "apply_bindfs_overlay: success"
+run_test_with_setup test_apply_overlay_failure "apply_bindfs_overlay: bindfs failure"
 
 # Generate test report
 generate_report

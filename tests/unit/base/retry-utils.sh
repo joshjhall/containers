@@ -58,154 +58,112 @@ test_script_exists() {
     assert_file_exists "$PROJECT_ROOT/lib/base/retry-utils.sh"
 }
 
-# Test: Functions are exported
-test_functions_exported() {
-    # Check if the script exports the required functions
-    if grep -q "export -f retry_with_backoff" "$PROJECT_ROOT/lib/base/retry-utils.sh"; then
-        assert_true true "retry_with_backoff function is exported"
-    else
-        assert_true false "retry_with_backoff function not exported"
-    fi
+# ============================================================================
+# Functional Tests - sourcing and configuration
+# ============================================================================
 
-    if grep -q "export -f retry_command" "$PROJECT_ROOT/lib/base/retry-utils.sh"; then
-        assert_true true "retry_command function is exported"
-    else
-        assert_true false "retry_command function not exported"
-    fi
+test_functions_available_after_source() {
+    # Source file in subshell, check all 3 functions exist via declare -f
+    local output
+    output=$(_run_retry_subshell "
+        declare -f retry_with_backoff >/dev/null && echo 'retry_with_backoff:ok'
+        declare -f retry_command >/dev/null && echo 'retry_command:ok'
+        declare -f retry_github_api >/dev/null && echo 'retry_github_api:ok'
+    ")
 
-    if grep -q "export -f retry_github_api" "$PROJECT_ROOT/lib/base/retry-utils.sh"; then
-        assert_true true "retry_github_api function is exported"
-    else
-        assert_true false "retry_github_api function not exported"
-    fi
+    assert_contains "$output" "retry_with_backoff:ok" "retry_with_backoff is available after source"
+    assert_contains "$output" "retry_command:ok" "retry_command is available after source"
+    assert_contains "$output" "retry_github_api:ok" "retry_github_api is available after source"
 }
 
-# Test: retry_with_backoff function exists
-test_retry_with_backoff_function() {
-    # Check that retry_with_backoff function is defined
-    if grep -q "^retry_with_backoff()" "$PROJECT_ROOT/lib/base/retry-utils.sh"; then
-        assert_true true "retry_with_backoff function is defined"
-    else
-        assert_true false "retry_with_backoff function not found"
-    fi
+test_configuration_defaults() {
+    # Source file, check default values of config variables
+    local output
+    output=$(_run_retry_subshell "
+        echo \"max=\$RETRY_MAX_ATTEMPTS\"
+        echo \"delay=\$RETRY_INITIAL_DELAY\"
+        echo \"maxdelay=\$RETRY_MAX_DELAY\"
+    ")
 
-    # Check for exponential backoff logic
-    if grep -q "delay=\$((delay \* 2))" "$PROJECT_ROOT/lib/base/retry-utils.sh"; then
-        assert_true true "Exponential backoff logic is present"
-    else
-        assert_true false "Exponential backoff logic not found"
-    fi
+    assert_contains "$output" "max=3" "RETRY_MAX_ATTEMPTS defaults to 3"
+    assert_contains "$output" "delay=2" "RETRY_INITIAL_DELAY defaults to 2"
+    assert_contains "$output" "maxdelay=30" "RETRY_MAX_DELAY defaults to 30"
 }
 
-# Test: retry_command function exists
-test_retry_command_function() {
-    # Check that retry_command function is defined
-    if grep -q "^retry_command()" "$PROJECT_ROOT/lib/base/retry-utils.sh"; then
-        assert_true true "retry_command function is defined"
-    else
-        assert_true false "retry_command function not found"
-    fi
+test_include_guard_prevents_double_source() {
+    # Source twice, verify no error (the _RETRY_UTILS_LOADED guard)
+    local exit_code=0
+    _run_retry_subshell "
+        source '$RETRY_SOURCE_FILE' >/dev/null 2>&1
+        echo 'second source ok'
+    " || exit_code=$?
 
-    # Check for logging integration
-    if grep -q "log_message" "$PROJECT_ROOT/lib/base/retry-utils.sh"; then
-        assert_true true "Logging integration is present"
-    else
-        assert_true false "Logging integration not found"
-    fi
+    assert_equals "0" "$exit_code" "Double-sourcing does not error"
 }
 
-# Test: retry_github_api function exists
-test_retry_github_api_function() {
-    # Check that retry_github_api function is defined
-    if grep -q "^retry_github_api()" "$PROJECT_ROOT/lib/base/retry-utils.sh"; then
-        assert_true true "retry_github_api function is defined"
-    else
-        assert_true false "retry_github_api function not found"
-    fi
+# ============================================================================
+# Functional Tests - retry_command()
+# ============================================================================
 
-    # Check for GitHub token support
-    if grep -q "GITHUB_TOKEN" "$PROJECT_ROOT/lib/base/retry-utils.sh"; then
-        assert_true true "GitHub token support is present"
-    else
-        assert_true false "GitHub token support not found"
-    fi
+test_retry_command_succeeds() {
+    local exit_code=0
+    _run_retry_subshell "
+        retry_command 'test op' true
+    " || exit_code=$?
 
-    # Check for rate limit detection
-    if grep -q "rate limit" "$PROJECT_ROOT/lib/base/retry-utils.sh"; then
-        assert_true true "Rate limit detection is present"
-    else
-        assert_true false "Rate limit detection not found"
-    fi
+    assert_equals "0" "$exit_code" "retry_command returns 0 when command succeeds"
 }
 
-# Test: Configuration variables
-test_configuration_variables() {
-    # Check for RETRY_MAX_ATTEMPTS
-    if grep -q "RETRY_MAX_ATTEMPTS" "$PROJECT_ROOT/lib/base/retry-utils.sh"; then
-        assert_true true "RETRY_MAX_ATTEMPTS configuration is present"
-    else
-        assert_true false "RETRY_MAX_ATTEMPTS configuration not found"
-    fi
+test_retry_command_fails() {
+    local exit_code=0
+    _run_retry_subshell "
+        export RETRY_MAX_ATTEMPTS=1
+        retry_command 'test op' false
+    " || exit_code=$?
 
-    # Check for RETRY_INITIAL_DELAY
-    if grep -q "RETRY_INITIAL_DELAY" "$PROJECT_ROOT/lib/base/retry-utils.sh"; then
-        assert_true true "RETRY_INITIAL_DELAY configuration is present"
-    else
-        assert_true false "RETRY_INITIAL_DELAY configuration not found"
-    fi
-
-    # Check for RETRY_MAX_DELAY
-    if grep -q "RETRY_MAX_DELAY" "$PROJECT_ROOT/lib/base/retry-utils.sh"; then
-        assert_true true "RETRY_MAX_DELAY configuration is present"
-    else
-        assert_true false "RETRY_MAX_DELAY configuration not found"
-    fi
+    assert_not_equals "0" "$exit_code" "retry_command returns non-zero when command fails"
 }
 
-# Test: Shellcheck compliance
-test_shellcheck_compliance() {
-    if command -v shellcheck >/dev/null 2>&1; then
-        if shellcheck "$PROJECT_ROOT/lib/base/retry-utils.sh" 2>&1 | grep -qE "SC[0-9]+ \((error|warning)\)"; then
-            assert_true false "Shellcheck found errors or warnings"
-        else
-            assert_true true "No shellcheck errors or warnings"
-        fi
-    else
-        skip_test "shellcheck not installed"
-    fi
+# ============================================================================
+# Functional Tests - retry_github_api()
+# ============================================================================
+
+test_retry_github_api_succeeds() {
+    # Mock curl that echoes JSON
+    local exit_code=0
+    local output
+    output=$(_run_retry_subshell "
+        curl() { echo '{\"tag_name\":\"v1.0\"}'; return 0; }
+        export -f curl
+        retry_github_api curl https://api.github.com/repos/test/test/releases/latest
+    ") || exit_code=$?
+
+    assert_equals "0" "$exit_code" "retry_github_api returns 0 on success"
+    assert_contains "$output" "v1.0" "retry_github_api outputs curl response"
 }
 
-# Test: Error handling with set -euo pipefail
-test_error_handling() {
-    # Check if set -euo pipefail is present
-    if grep -q "set -euo pipefail" "$PROJECT_ROOT/lib/base/retry-utils.sh"; then
-        assert_true true "Error handling with set -euo pipefail is present"
-    else
-        assert_true false "set -euo pipefail not found"
-    fi
-}
+test_retry_github_api_uses_token() {
+    # Set GITHUB_TOKEN, mock curl that checks for auth header
+    local exit_code=0
+    local output
+    output=$(_run_retry_subshell "
+        export GITHUB_TOKEN=test-token-123
+        curl() {
+            for arg in \"\$@\"; do
+                if [[ \"\$arg\" == *'token test-token-123'* ]]; then
+                    echo 'auth_header_found'
+                    return 0
+                fi
+            done
+            echo 'no_auth_header'
+            return 0
+        }
+        export -f curl
+        retry_github_api curl https://api.github.com/repos/test/test
+    ") || exit_code=$?
 
-# Test: Documentation comments
-test_documentation() {
-    # Check for function documentation
-    local doc_count
-    doc_count=$(grep -c "# ============================================================================" "$PROJECT_ROOT/lib/base/retry-utils.sh" || echo "0")
-
-    if [ "$doc_count" -ge 3 ]; then
-        assert_true true "Function documentation is present (found $doc_count sections)"
-    else
-        assert_true false "Insufficient function documentation"
-    fi
-}
-
-# Test: Logging.sh source check
-test_logging_source() {
-    # Check for conditional logging.sh source
-    if grep -q "source /tmp/build-scripts/base/logging.sh" "$PROJECT_ROOT/lib/base/retry-utils.sh"; then
-        assert_true true "Logging.sh source is present"
-    else
-        assert_true false "Logging.sh source not found"
-    fi
+    assert_equals "0" "$exit_code" "retry_github_api returns 0"
+    assert_contains "$output" "auth_header_found" "retry_github_api passes GITHUB_TOKEN as auth header"
 }
 
 # ============================================================================
@@ -268,23 +226,51 @@ test_retry_with_backoff_exit_code_propagation() {
     assert_equals "42" "$exit_code" "retry_with_backoff propagates the original exit code"
 }
 
+test_retry_respects_max_attempts() {
+    # Counter file tracks attempts, set max=3, fail all — verify exactly 3 attempts
+    local exit_code=0
+    _run_retry_subshell "
+        export RETRY_MAX_ATTEMPTS=3
+        COUNTER_FILE='$TEST_TEMP_DIR/attempt_count'
+        echo '0' > \"\$COUNTER_FILE\"
+        count_and_fail() {
+            local n
+            n=\$(cat \"\$COUNTER_FILE\")
+            n=\$((n + 1))
+            echo \"\$n\" > \"\$COUNTER_FILE\"
+            return 1
+        }
+        export -f count_and_fail
+        retry_with_backoff count_and_fail
+    " || exit_code=$?
+
+    local attempts
+    attempts=$(cat "$TEST_TEMP_DIR/attempt_count")
+    assert_equals "3" "$attempts" "retry_with_backoff makes exactly RETRY_MAX_ATTEMPTS attempts"
+}
+
 # Run all tests
 run_test test_script_exists "Script exists"
-run_test test_functions_exported "Functions are exported"
-run_test test_retry_with_backoff_function "retry_with_backoff function"
-run_test test_retry_command_function "retry_command function"
-run_test test_retry_github_api_function "retry_github_api function"
-run_test test_configuration_variables "Configuration variables"
-run_test test_shellcheck_compliance "Shellcheck compliance"
-run_test test_error_handling "Error handling"
-run_test test_documentation "Documentation comments"
-run_test test_logging_source "Logging.sh source check"
 
-# Functional tests
+# Functional tests - sourcing and configuration
+run_test_with_setup test_functions_available_after_source "Functions available after source"
+run_test_with_setup test_configuration_defaults "Configuration defaults"
+run_test_with_setup test_include_guard_prevents_double_source "Include guard prevents double source"
+
+# Functional tests - retry_command
+run_test_with_setup test_retry_command_succeeds "retry_command succeeds"
+run_test_with_setup test_retry_command_fails "retry_command fails"
+
+# Functional tests - retry_github_api
+run_test_with_setup test_retry_github_api_succeeds "retry_github_api succeeds"
+run_test_with_setup test_retry_github_api_uses_token "retry_github_api uses GITHUB_TOKEN"
+
+# Functional tests - retry_with_backoff
 run_test_with_setup test_retry_with_backoff_succeeds_immediately "retry_with_backoff succeeds immediately"
 run_test_with_setup test_retry_with_backoff_fails_then_succeeds "retry_with_backoff fails then succeeds"
 run_test_with_setup test_retry_with_backoff_all_attempts_fail "retry_with_backoff all attempts fail"
 run_test_with_setup test_retry_with_backoff_exit_code_propagation "retry_with_backoff exit code propagation"
+run_test_with_setup test_retry_respects_max_attempts "retry_with_backoff respects max attempts"
 
 # Generate test report
 generate_report
