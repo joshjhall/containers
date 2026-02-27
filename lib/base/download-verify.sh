@@ -68,7 +68,8 @@ download_and_verify() {
     # Download to temporary file with progress bar
     # Use --progress-bar for better visibility during long downloads
     # -L follows redirects, -f fails silently on HTTP errors
-    if ! command curl -L -f --progress-bar -o "$temp_file" "$url"; then
+    # --retry handles transient 5xx errors from upstream servers
+    if ! command curl -L -f --retry 3 --retry-delay 2 --retry-all-errors --progress-bar -o "$temp_file" "$url"; then
         echo -e "${RED}✗ Download failed${NC}" >&2
         # Trap will handle cleanup
         return 1

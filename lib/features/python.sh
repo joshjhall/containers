@@ -214,24 +214,17 @@ if [ "${CLEANUP_BUILD_DEPS}" = "true" ]; then
 
     # Remove build dependencies we installed earlier
     # Note: We keep wget and ca-certificates as they may be needed for runtime operations
+    # Build the package list conditionally (lzma/lzma-dev only exist on Debian 11-12)
+    _remove_pkgs=(
+        build-essential gdb lcov libbz2-dev libffi-dev libgdbm-dev
+        liblzma-dev libncurses5-dev libreadline-dev libsqlite3-dev
+        libssl-dev tk-dev uuid-dev zlib1g-dev
+    )
+    if ! is_debian_version 13; then
+        _remove_pkgs+=(lzma lzma-dev)
+    fi
     log_command "Removing build packages" \
-        apt-get remove --purge -y \
-            build-essential \
-            gdb \
-            lcov \
-            libbz2-dev \
-            libffi-dev \
-            libgdbm-dev \
-            liblzma-dev \
-            libncurses5-dev \
-            libreadline-dev \
-            libsqlite3-dev \
-            libssl-dev \
-            tk-dev \
-            uuid-dev \
-            zlib1g-dev \
-            lzma \
-            lzma-dev || true  # Don't fail if some packages aren't installed
+        apt-get remove --purge -y "${_remove_pkgs[@]}" || true
 
     # Now safe to remove orphaned dependencies (runtime libs are marked manual)
     log_command "Removing orphaned dependencies" \
