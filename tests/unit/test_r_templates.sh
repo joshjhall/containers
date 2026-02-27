@@ -20,7 +20,7 @@ test_suite "R Template System Tests"
 
 # Setup
 TEMPLATE_DIR="$PROJECT_ROOT/lib/features/templates/r"
-R_DEV_SH="$PROJECT_ROOT/lib/features/r-dev.sh"
+R_DEV_BASHRC="$PROJECT_ROOT/lib/features/lib/bashrc/r-dev.sh"
 
 # Test: Template file exists
 test_template_files_exist() {
@@ -37,20 +37,20 @@ test_template_content() {
 
 # Test: load_r_template function exists
 test_load_function_exists() {
-    assert_file_exists "$R_DEV_SH"
-    assert_file_contains "$R_DEV_SH" "^load_r_template()" "load_r_template function is defined"
-    assert_file_contains "$R_DEV_SH" "templates/r/" "Function references R templates directory"
+    assert_file_exists "$R_DEV_BASHRC"
+    assert_file_contains "$R_DEV_BASHRC" "^load_r_template()" "load_r_template function is defined"
+    assert_file_contains "$R_DEV_BASHRC" "templates/r/" "Function references R templates directory"
 }
 
 # Test: r-init-analysis function uses template loader
 test_init_analysis_uses_templates() {
-    assert_file_contains "$R_DEV_SH" "load_r_template.*analysis/analysis.Rmd.tmpl" "r-init-analysis uses template loader"
+    assert_file_contains "$R_DEV_BASHRC" "load_r_template.*analysis/analysis.Rmd.tmpl" "r-init-analysis uses template loader"
 }
 
 # Test: Function naming convention
 test_function_naming() {
-    assert_file_contains "$R_DEV_SH" "^r-init-package()" "r-init-package function exists"
-    assert_file_contains "$R_DEV_SH" "^r-init-analysis()" "r-init-analysis function exists"
+    assert_file_contains "$R_DEV_BASHRC" "^r-init-package()" "r-init-package function exists"
+    assert_file_contains "$R_DEV_BASHRC" "^r-init-analysis()" "r-init-analysis function exists"
 }
 
 # Test: Template loading simulation

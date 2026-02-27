@@ -264,38 +264,9 @@ EOF
     log_command "Creating bashrc.d directory" \
         mkdir -p /etc/bashrc.d
 
-    # Create system-wide Ollama configuration
-    write_bashrc_content /etc/bashrc.d/70-ollama.sh "Ollama configuration" << 'OLLAMA_BASHRC_EOF'
-# ----------------------------------------------------------------------------
-# Ollama Configuration and Helpers
-# ----------------------------------------------------------------------------
-
-# Error protection for interactive shells
-set +u  # Don't error on unset variables
-set +e  # Don't exit on errors
-
-# Check if we're in an interactive shell
-if [[ $- != *i* ]]; then
-    # Not interactive, skip loading
-    return 0
-fi
-
-
-# Model storage location (may be in /cache for volume persistence)
-export OLLAMA_MODELS="${OLLAMA_MODELS_DIR}"
-
-# Default host configuration
-export OLLAMA_HOST="\${OLLAMA_HOST:-0.0.0.0:11434}"
-
-# Helper aliases
-alias ollama-status='pgrep -x ollama > /dev/null && echo "Ollama is running" || echo "Ollama is not running"'
-alias ollama-logs='tail -f \${LOG_FILE:-/var/log/ollama.log}'
-alias ollama-models='ollama list'
-
-
-# Note: We leave set +u and set +e in place for interactive shells
-# to prevent errors with undefined variables or failed commands
-OLLAMA_BASHRC_EOF
+    # Create system-wide Ollama configuration (content in lib/bashrc/ollama.sh)
+    write_bashrc_content /etc/bashrc.d/70-ollama.sh "Ollama configuration" \
+        < /tmp/build-scripts/features/lib/bashrc/ollama.sh
 
     log_command "Setting Ollama bashrc script permissions" \
         chmod +x /etc/bashrc.d/70-ollama.sh

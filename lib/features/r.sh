@@ -264,35 +264,9 @@ log_message "Configuring system-wide R environment..."
 log_command "Creating bashrc.d directory" \
     mkdir -p /etc/bashrc.d
 
-# Create system-wide R configuration
-write_bashrc_content /etc/bashrc.d/40-r.sh "R environment configuration" << 'R_BASHRC_EOF'
-# ----------------------------------------------------------------------------
-# R environment configuration
-# ----------------------------------------------------------------------------
-
-# Error protection for interactive shells
-set +u  # Don't error on unset variables
-set +e  # Don't exit on errors
-
-# Check if we're in an interactive shell
-if [[ $- != *i* ]]; then
-    # Not interactive, skip loading
-    return 0
-fi
-
-
-# R environment configuration
-export R_LIBS_USER="/cache/r/library"
-export R_CACHE_DIR="/cache/r"
-
-# Use cache directory for temporary files
-export TMPDIR="${R_CACHE_DIR}/tmp"
-
-# R package installation settings
-export R_INSTALL_STAGED=FALSE  # Avoid permission issues
-export R_LIBS_SITE="${R_LIBS_USER}"
-
-R_BASHRC_EOF
+# Create system-wide R configuration (content in lib/bashrc/r-env.sh)
+write_bashrc_content /etc/bashrc.d/40-r.sh "R environment configuration" \
+    < /tmp/build-scripts/features/lib/bashrc/r-env.sh
 
 log_command "Setting R bashrc script permissions" \
     chmod +x /etc/bashrc.d/40-r.sh
@@ -302,84 +276,9 @@ log_command "Setting R bashrc script permissions" \
 # ============================================================================
 log_message "Setting up R aliases and helpers..."
 
-write_bashrc_content /etc/bashrc.d/40-r.sh "R aliases and helpers" << 'R_BASHRC_EOF'
-
-# ----------------------------------------------------------------------------
-# R Aliases
-# ----------------------------------------------------------------------------
-alias R='R --no-save'                    # Don't save workspace by default
-alias Rscript='Rscript --vanilla'        # Clean environment for scripts
-
-# ----------------------------------------------------------------------------
-# r-install - Install R packages easily
-#
-# Arguments:
-#   $@ - Package names to install
-#
-# Example:
-#   r-install ggplot2 dplyr tidyr
-# ----------------------------------------------------------------------------
-r-install() {
-    if [ $# -eq 0 ]; then
-        echo "Usage: r-install <package1> [package2] ..."
-        return 1
-    fi
-
-    echo "Installing R packages: $@"
-    Rscript -e "
-        packages <- commandArgs(trailingOnly = TRUE)
-        for (pkg in packages) {
-            if (!require(pkg, character.only = TRUE)) {
-                install.packages(pkg, repos = 'https://cloud.r-project.org/')
-            }
-        }
-    " "$@"
-}
-
-# ----------------------------------------------------------------------------
-# r-update - Update all installed R packages
-# ----------------------------------------------------------------------------
-r-update() {
-    echo "Updating all R packages..."
-    Rscript -e "update.packages(ask = FALSE, repos = 'https://cloud.r-project.org/')"
-}
-
-# ----------------------------------------------------------------------------
-# r-libs - List installed R packages
-# ----------------------------------------------------------------------------
-r-libs() {
-    Rscript -e "installed.packages()[,c('Package', 'Version')]" | column -t
-}
-
-# ----------------------------------------------------------------------------
-# r-search - Search for R packages on CRAN
-#
-# Arguments:
-#   $1 - Search term
-#
-# Example:
-#   r-search "machine learning"
-# ----------------------------------------------------------------------------
-r-search() {
-    if [ -z "$1" ]; then
-        echo "Usage: r-search <search-term>"
-        return 1
-    fi
-
-    echo "Searching CRAN for: $1"
-    Rscript -e "
-        if (!require('utils')) install.packages('utils')
-        available.packages(repos = 'https://cloud.r-project.org/')[
-            grep('$1', available.packages()[,'Package'], ignore.case = TRUE),
-            c('Package', 'Version')
-        ]
-    " | column -t
-}
-
-
-# Note: We leave set +u and set +e in place for interactive shells
-# to prevent errors with undefined variables or failed commands
-R_BASHRC_EOF
+# R aliases and helpers (content in lib/bashrc/r-aliases.sh)
+write_bashrc_content /etc/bashrc.d/40-r.sh "R aliases and helpers" \
+    < /tmp/build-scripts/features/lib/bashrc/r-aliases.sh
 
 # ============================================================================
 # Global R Configuration

@@ -210,17 +210,19 @@ test_op_ref_skip_when_set() {
 }
 
 test_op_ref_bashrc_contains_generic_loop() {
-    # Verify the op-cli.sh build script generates the generic _op_load_secrets function
+    # Verify the op-cli bashrc file contains the generic _op_load_secrets function
+    local op_cli_bashrc
+    op_cli_bashrc="$(dirname "${BASH_SOURCE[0]}")/../../../lib/features/lib/bashrc/op-cli.sh"
     local op_cli_script
     op_cli_script="$(dirname "${BASH_SOURCE[0]}")/../../../lib/features/op-cli.sh"
 
-    grep -q '_op_load_secrets' "$op_cli_script" \
-        && assert_true 0 "op-cli.sh contains _op_load_secrets function" \
-        || assert_true 1 "op-cli.sh missing _op_load_secrets function"
+    grep -q '_op_load_secrets' "$op_cli_bashrc" \
+        && assert_true 0 "op-cli bashrc contains _op_load_secrets function" \
+        || assert_true 1 "op-cli bashrc missing _op_load_secrets function"
 
-    grep -q 'compgen -v' "$op_cli_script" \
-        && assert_true 0 "op-cli.sh uses compgen -v for generic scanning" \
-        || assert_true 1 "op-cli.sh missing compgen -v"
+    grep -q 'compgen -v' "$op_cli_bashrc" \
+        && assert_true 0 "op-cli bashrc uses compgen -v for generic scanning" \
+        || assert_true 1 "op-cli bashrc missing compgen -v"
 
     grep -q '45-op-secrets.sh' "$op_cli_script" \
         && assert_true 0 "op-cli.sh creates 45-op-secrets.sh startup script" \
@@ -523,7 +525,7 @@ run_test test_op_ref_loop_excludes_file_ref_in_source "_REF loop excludes _FILE_
 
 # Test: op-env-safe must not use eval to run jq-generated export commands
 test_op_env_safe_no_eval_of_field_values() {
-    local source_file="$PROJECT_ROOT/lib/features/op-cli.sh"
+    local source_file="$PROJECT_ROOT/lib/features/lib/bashrc/op-cli.sh"
     # The old vulnerable pattern: jq produces 'export LABEL="VALUE"' and eval runs it
     if grep -A 20 'op-env-safe()' "$source_file" | grep -q 'eval "\$export_commands"'; then
         fail_test "op-env-safe still uses eval on jq-generated export commands (injection risk)"
@@ -534,7 +536,7 @@ test_op_env_safe_no_eval_of_field_values() {
 
 # Test: op-env-safe uses safe @tsv or direct export pattern
 test_op_env_safe_uses_safe_export() {
-    local source_file="$PROJECT_ROOT/lib/features/op-cli.sh"
+    local source_file="$PROJECT_ROOT/lib/features/lib/bashrc/op-cli.sh"
     # Search the full function body (up to 30 lines after the function definition)
     if grep -A 30 '^op-env-safe()' "$source_file" | grep -qE '@tsv|export "\$'; then
         pass_test "op-env-safe uses safe @tsv / direct export pattern"
@@ -545,7 +547,7 @@ test_op_env_safe_uses_safe_export() {
 
 # Test: op-env function uses @sh for safe escaping of values
 test_op_env_uses_safe_escaping() {
-    local source_file="$PROJECT_ROOT/lib/features/op-cli.sh"
+    local source_file="$PROJECT_ROOT/lib/features/lib/bashrc/op-cli.sh"
     # Search the full function body (up to 10 lines after the function definition)
     if grep -A 10 '^op-env()' "$source_file" | grep -q '@sh'; then
         pass_test "op-env uses jq @sh for safe value escaping"

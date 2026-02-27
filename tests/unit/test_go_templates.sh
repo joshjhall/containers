@@ -61,7 +61,7 @@ test_test_template_placeholder() {
     assert_file_contains "$TEMPLATE_DIR/lib/lib_test.go.tmpl" "__PROJECT__" "Test template has placeholder"
 }
 
-# Test: load_go_template function exists in golang.sh
+# Test: load_go_template function exists in golang.sh (build-time helper)
 test_load_function_exists() {
     local golang_sh="$PROJECT_ROOT/lib/features/golang.sh"
     assert_file_exists "$golang_sh"
@@ -69,15 +69,15 @@ test_load_function_exists() {
     assert_file_contains "$golang_sh" 'sed "s/__PROJECT__' "Function has placeholder substitution"
 }
 
-# Test: go-init uses templates
+# Test: go-init uses templates (in bashrc aliases file)
 test_go_init_uses_templates() {
-    local golang_sh="$PROJECT_ROOT/lib/features/golang.sh"
-    assert_file_contains "$golang_sh" "load_go_template.*gitignore.tmpl" "go-init uses gitignore template"
-    assert_file_contains "$golang_sh" "load_go_template.*Makefile.tmpl" "go-init uses Makefile template"
-    assert_file_contains "$golang_sh" "load_go_template.*cli/main.go.tmpl" "go-init uses CLI template"
-    assert_file_contains "$golang_sh" "load_go_template.*api/main.go.tmpl" "go-init uses API template"
-    assert_file_contains "$golang_sh" "load_go_template.*lib/lib.go.tmpl" "go-init uses lib template"
-    assert_file_contains "$golang_sh" "load_go_template.*lib/lib_test.go.tmpl" "go-init uses test template"
+    local golang_bashrc="$PROJECT_ROOT/lib/features/lib/bashrc/golang-aliases.sh"
+    assert_file_contains "$golang_bashrc" "load_go_template.*gitignore.tmpl" "go-init uses gitignore template"
+    assert_file_contains "$golang_bashrc" "load_go_template.*Makefile.tmpl" "go-init uses Makefile template"
+    assert_file_contains "$golang_bashrc" "load_go_template.*cli/main.go.tmpl" "go-init uses CLI template"
+    assert_file_contains "$golang_bashrc" "load_go_template.*api/main.go.tmpl" "go-init uses API template"
+    assert_file_contains "$golang_bashrc" "load_go_template.*lib/lib.go.tmpl" "go-init uses lib template"
+    assert_file_contains "$golang_bashrc" "load_go_template.*lib/lib_test.go.tmpl" "go-init uses test template"
 }
 
 # Test: Template loading without substitution

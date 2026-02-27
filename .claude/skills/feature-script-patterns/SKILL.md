@@ -58,9 +58,10 @@ create_cache_directories "/cache/tool" "/cache/tool-build"
 create_symlink "/opt/tool/bin/cmd" "/usr/local/bin/cmd" "description"
 
 # 9. Bashrc configuration (system-wide)
-write_bashrc_content /etc/bashrc.d/50-feature.sh "description" << 'EOF'
-# ... environment setup ...
-EOF
+# Content lives in lib/features/lib/bashrc/<feature>.sh (plain shell snippet, no shebang)
+# Feature script (content in lib/bashrc/feature.sh)
+write_bashrc_content /etc/bashrc.d/50-feature.sh "description" \
+    < /tmp/build-scripts/features/lib/bashrc/feature.sh
 
 # 10. Startup scripts
 cat > /etc/container/first-startup/30-feature-setup.sh << 'EOF'
@@ -110,7 +111,7 @@ log_feature_end
 | `create_cache_directories dir1 dir2`      | `cache-utils.sh`     | Create cache dirs with correct ownership |
 | `create_symlink target link "desc"`       | `feature-header.sh`  | Create verified symlink                  |
 | `create_secure_temp_dir`                  | `feature-header.sh`  | Create temp dir (auto-cleaned)           |
-| `write_bashrc_content path "desc"`        | `bashrc-helpers.sh`  | Write to bashrc.d (heredoc)              |
+| `write_bashrc_content path "desc" < file` | `bashrc-helpers.sh`  | Write to bashrc.d (file redirect)        |
 | `safe_add_to_path "/new/path"`            | `path-utils.sh`      | Add to PATH with validation              |
 | `verify_download type name ver file arch` | `download-verify.sh` | 4-tier checksum verification             |
 
@@ -118,6 +119,7 @@ log_feature_end
 
 - Cache dirs go under `/cache/<tool>` — enables volume mounting
 - Bashrc files use `50-<feature>.sh` naming in `/etc/bashrc.d/`
+- Bashrc content lives in `lib/features/lib/bashrc/<feature>.sh` — **never use heredocs**
 - Startup scripts use `30-<feature>-setup.sh` in `/etc/container/first-startup/`
 - Verification scripts go to `/usr/local/bin/test-<feature>`
 - Variables from `feature-header.sh`: `$USERNAME`, `$USER_UID`, `$USER_GID`, `$WORKING_DIR`

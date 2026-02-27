@@ -141,40 +141,9 @@ echo "=== Configuring system-wide Python dev environment ==="
 log_command "Creating bashrc.d directory" \
     mkdir -p /etc/bashrc.d
 
-# Create Python dev tools configuration
-write_bashrc_content /etc/bashrc.d/25-python-dev.sh "Python dev tools configuration" << 'PYTHON_DEV_BASHRC_EOF'
-# Python development tools configuration
-
-# Error protection for interactive shells
-set +u  # Don't error on unset variables
-set +e  # Don't exit on errors
-
-# Jupyter configuration
-export JUPYTER_CONFIG_DIR="${JUPYTER_CONFIG_DIR:-$HOME/.jupyter}"
-# Use new platformdirs to avoid deprecation warning
-export JUPYTER_PLATFORM_DIRS=1
-
-# IPython configuration
-export IPYTHONDIR="${IPYTHONDIR:-$HOME/.ipython}"
-
-# Pre-commit cache
-export PRE_COMMIT_HOME="${PRE_COMMIT_HOME:-$HOME/.cache/pre-commit}"
-
-# MyPy cache
-export MYPY_CACHE_DIR="${MYPY_CACHE_DIR:-$HOME/.mypy_cache}"
-
-# Black cache
-export BLACK_CACHE_DIR="${BLACK_CACHE_DIR:-$HOME/.cache/black}"
-
-# Pylint configuration
-export PYLINTHOME="${PYLINTHOME:-$HOME/.cache/pylint}"
-
-# Set Python development mode for better error messages
-export PYTHONDEVMODE=1
-
-# All Python development tools are installed globally via pip
-# They are available in /usr/local/bin alongside Python itself
-PYTHON_DEV_BASHRC_EOF
+# Create Python dev tools configuration (content in lib/bashrc/python-dev-config.sh)
+write_bashrc_content /etc/bashrc.d/25-python-dev.sh "Python dev tools configuration" \
+    < /tmp/build-scripts/features/lib/bashrc/python-dev-config.sh
 
 log_command "Setting Python dev bashrc script permissions" \
     chmod +x /etc/bashrc.d/25-python-dev.sh
@@ -184,89 +153,9 @@ log_command "Setting Python dev bashrc script permissions" \
 # ============================================================================
 log_message "Setting up Python development aliases..."
 
-write_bashrc_content /etc/bashrc.d/25-python-dev.sh "Python development aliases" << 'PYTHON_DEV_ALIASES_EOF'
-
-# Python development aliases
-alias fmt='black . && isort .'
-alias lint='flake8 && mypy . && pylint **/*.py'
-alias pyt='pytest'
-alias pytv='pytest -v'
-alias pytcov='pytest --cov=. --cov-report=html'
-alias notebook='jupyter notebook'
-alias lab='jupyter lab'
-alias ipy='ipython'
-
-# Smart wrapper functions that detect and use Poetry when available
-# These override the aliases when Poetry is detected
-_smart_pytest() {
-    if [ -f "pyproject.toml" ] && command -v poetry &> /dev/null && poetry env info --path &> /dev/null; then
-        poetry run pytest "$@"
-    else
-        command pytest "$@"
-    fi
-}
-
-_smart_pytest_verbose() {
-    if [ -f "pyproject.toml" ] && command -v poetry &> /dev/null && poetry env info --path &> /dev/null; then
-        poetry run pytest -v "$@"
-    else
-        command pytest -v "$@"
-    fi
-}
-
-_smart_pytest_coverage() {
-    if [ -f "pyproject.toml" ] && command -v poetry &> /dev/null && poetry env info --path &> /dev/null; then
-        poetry run pytest --cov=. --cov-report=html "$@"
-    else
-        command pytest --cov=. --cov-report=html "$@"
-    fi
-}
-
-_smart_format() {
-    if [ -f "pyproject.toml" ] && command -v poetry &> /dev/null && poetry env info --path &> /dev/null; then
-        poetry run black . && poetry run isort .
-    else
-        command black . && command isort .
-    fi
-}
-
-_smart_lint() {
-    if [ -f "pyproject.toml" ] && command -v poetry &> /dev/null && poetry env info --path &> /dev/null; then
-        poetry run flake8 && poetry run mypy . && poetry run pylint **/*.py
-    else
-        command flake8 && command mypy . && command pylint **/*.py
-    fi
-}
-
-_smart_ipython() {
-    if [ -f "pyproject.toml" ] && command -v poetry &> /dev/null && poetry env info --path &> /dev/null; then
-        poetry run ipython "$@"
-    else
-        command ipython "$@"
-    fi
-}
-
-# Override aliases with functions when in interactive mode
-# This allows the smart detection to work while keeping familiar command names
-if [[ $- == *i* ]]; then
-    function pyt() { _smart_pytest "$@"; }
-    function pytv() { _smart_pytest_verbose "$@"; }
-    function pytcov() { _smart_pytest_coverage "$@"; }
-    function fmt() { _smart_format "$@"; }
-    function lint() { _smart_lint "$@"; }
-    function ipy() { _smart_ipython "$@"; }
-fi
-
-# Pre-commit helpers
-alias pc='pre-commit'
-alias pcall='pre-commit run --all-files'
-alias pcinstall='pre-commit install'
-
-# Unified workflow aliases
-alias py-format-all='black . && isort .'
-alias py-lint-all='ruff check . && flake8 && mypy . && pylint **/*.py 2>/dev/null || true'
-alias py-security-check='bandit -r . && pip-audit'
-PYTHON_DEV_ALIASES_EOF
+# Python development aliases (content in lib/bashrc/python-dev-aliases.sh)
+write_bashrc_content /etc/bashrc.d/25-python-dev.sh "Python development aliases" \
+    < /tmp/build-scripts/features/lib/bashrc/python-dev-aliases.sh
 
 # ============================================================================
 # Python Language Server (for IDE support)

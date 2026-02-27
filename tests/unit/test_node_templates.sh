@@ -20,7 +20,7 @@ test_suite "Node.js Template System Tests"
 
 # Setup
 TEMPLATE_DIR="$PROJECT_ROOT/lib/features/templates/node"
-NODE_DEV_SH="$PROJECT_ROOT/lib/features/node-dev.sh"
+NODE_DEV_BASHRC="$PROJECT_ROOT/lib/features/lib/bashrc/node-dev.sh"
 NODE_ALIASES_BASHRC="$PROJECT_ROOT/lib/features/lib/bashrc/node-aliases.sh"
 
 # Test: Template files exist
@@ -59,11 +59,11 @@ test_code_templates_content() {
     assert_file_contains "$TEMPLATE_DIR/test/index.test.ts.tmpl" "describe" "Test template has test structure"
 }
 
-# Test: load_node_template function exists in node-dev.sh
+# Test: load_node_template function exists in node-dev bashrc
 test_load_function_exists_node_dev() {
-    assert_file_exists "$NODE_DEV_SH"
-    assert_file_contains "$NODE_DEV_SH" "^load_node_template()" "load_node_template function is defined in node-dev.sh"
-    assert_file_contains "$NODE_DEV_SH" 'sed "s/__PROJECT_NAME__' "node-dev.sh function has placeholder substitution"
+    assert_file_exists "$NODE_DEV_BASHRC"
+    assert_file_contains "$NODE_DEV_BASHRC" "^load_node_template()" "load_node_template function is defined in node-dev bashrc"
+    assert_file_contains "$NODE_DEV_BASHRC" 'sed "s/__PROJECT_NAME__' "node-dev bashrc function has placeholder substitution"
 }
 
 # Test: load_node_template function exists in node.sh
@@ -75,14 +75,14 @@ test_load_function_exists_node() {
 
 # Test: node-init uses templates
 test_node_init_uses_templates() {
-    assert_file_contains "$NODE_DEV_SH" "load_node_template.*config/tsconfig.json.tmpl" "node-init uses tsconfig template"
-    assert_file_contains "$NODE_DEV_SH" "load_node_template.*config/jest.config.js.tmpl" "node-init uses jest config template"
-    assert_file_contains "$NODE_DEV_SH" "load_node_template.*config/eslintrc.js.tmpl" "node-init uses eslintrc template"
-    assert_file_contains "$NODE_DEV_SH" "load_node_template.*config/prettierrc.tmpl" "node-init uses prettierrc template"
-    assert_file_contains "$NODE_DEV_SH" "load_node_template.*api/index.ts.tmpl" "node-init uses API template"
-    assert_file_contains "$NODE_DEV_SH" "load_node_template.*cli/index.ts.tmpl" "node-init uses CLI template"
-    assert_file_contains "$NODE_DEV_SH" "load_node_template.*lib/index.ts.tmpl" "node-init uses lib template"
-    assert_file_contains "$NODE_DEV_SH" "load_node_template.*test/index.test.ts.tmpl" "node-init uses test template"
+    assert_file_contains "$NODE_DEV_BASHRC" "load_node_template.*config/tsconfig.json.tmpl" "node-init uses tsconfig template"
+    assert_file_contains "$NODE_DEV_BASHRC" "load_node_template.*config/jest.config.js.tmpl" "node-init uses jest config template"
+    assert_file_contains "$NODE_DEV_BASHRC" "load_node_template.*config/eslintrc.js.tmpl" "node-init uses eslintrc template"
+    assert_file_contains "$NODE_DEV_BASHRC" "load_node_template.*config/prettierrc.tmpl" "node-init uses prettierrc template"
+    assert_file_contains "$NODE_DEV_BASHRC" "load_node_template.*api/index.ts.tmpl" "node-init uses API template"
+    assert_file_contains "$NODE_DEV_BASHRC" "load_node_template.*cli/index.ts.tmpl" "node-init uses CLI template"
+    assert_file_contains "$NODE_DEV_BASHRC" "load_node_template.*lib/index.ts.tmpl" "node-init uses lib template"
+    assert_file_contains "$NODE_DEV_BASHRC" "load_node_template.*test/index.test.ts.tmpl" "node-init uses test template"
 }
 
 # Test: Template loading without substitution

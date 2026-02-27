@@ -20,7 +20,7 @@ test_suite "Rust Template System Tests"
 
 # Setup
 TEMPLATE_DIR="$PROJECT_ROOT/lib/features/templates/rust"
-RUST_DEV_SH="$PROJECT_ROOT/lib/features/rust-dev.sh"
+RUST_DEV_BASHRC="$PROJECT_ROOT/lib/features/lib/bashrc/rust-dev.sh"
 
 # Test: Template files exist
 test_template_files_exist() {
@@ -44,21 +44,21 @@ test_justfile_template_content() {
 
 # Test: load_rust_template function exists
 test_load_function_exists() {
-    assert_file_exists "$RUST_DEV_SH"
-    assert_file_contains "$RUST_DEV_SH" "^load_rust_template()" "load_rust_template function is defined"
-    assert_file_contains "$RUST_DEV_SH" "templates/rust/" "Function references Rust templates directory"
+    assert_file_exists "$RUST_DEV_BASHRC"
+    assert_file_contains "$RUST_DEV_BASHRC" "^load_rust_template()" "load_rust_template function is defined"
+    assert_file_contains "$RUST_DEV_BASHRC" "templates/rust/" "Function references Rust templates directory"
 }
 
 # Test: Functions use template loader
 test_functions_use_templates() {
-    assert_file_contains "$RUST_DEV_SH" "load_rust_template.*treesitter/grammar.js.tmpl" "ts-init-grammar uses template loader"
-    assert_file_contains "$RUST_DEV_SH" "load_rust_template.*just/justfile.tmpl" "just-init uses template loader"
+    assert_file_contains "$RUST_DEV_BASHRC" "load_rust_template.*treesitter/grammar.js.tmpl" "ts-init-grammar uses template loader"
+    assert_file_contains "$RUST_DEV_BASHRC" "load_rust_template.*just/justfile.tmpl" "just-init uses template loader"
 }
 
 # Test: Function naming
 test_function_naming() {
-    assert_file_contains "$RUST_DEV_SH" "^ts-init-grammar()" "ts-init-grammar function exists"
-    assert_file_contains "$RUST_DEV_SH" "^just-init()" "just-init function exists"
+    assert_file_contains "$RUST_DEV_BASHRC" "^ts-init-grammar()" "ts-init-grammar function exists"
+    assert_file_contains "$RUST_DEV_BASHRC" "^just-init()" "just-init function exists"
 }
 
 # Test: Template loading without substitution (justfile)

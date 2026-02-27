@@ -392,26 +392,26 @@ test_cosign_installation_reference() {
 
 # Test: Docker helper functions - docker-clean
 test_docker_clean_function_definition() {
-    local source_file="$PROJECT_ROOT/lib/features/docker.sh"
-    assert_file_contains "$source_file" "docker-clean()" "docker.sh defines docker-clean function"
+    local bashrc_file="$PROJECT_ROOT/lib/features/lib/bashrc/docker.sh"
+    assert_file_contains "$bashrc_file" "docker-clean()" "docker bashrc defines docker-clean function"
 }
 
 # Test: Docker helper functions - docker-shell
 test_docker_shell_function_definition() {
-    local source_file="$PROJECT_ROOT/lib/features/docker.sh"
-    assert_file_contains "$source_file" "docker-shell()" "docker.sh defines docker-shell function"
+    local bashrc_file="$PROJECT_ROOT/lib/features/lib/bashrc/docker.sh"
+    assert_file_contains "$bashrc_file" "docker-shell()" "docker bashrc defines docker-shell function"
 }
 
 # Test: Cache directory env vars - DOCKER_CONFIG
 test_docker_config_env_var() {
-    local source_file="$PROJECT_ROOT/lib/features/docker.sh"
-    assert_file_contains "$source_file" "DOCKER_CONFIG" "docker.sh sets DOCKER_CONFIG env var"
+    local bashrc_file="$PROJECT_ROOT/lib/features/lib/bashrc/docker.sh"
+    assert_file_contains "$bashrc_file" "DOCKER_CONFIG" "docker bashrc sets DOCKER_CONFIG env var"
 }
 
 # Test: DOCKER_CLI_PLUGINS_PATH reference
 test_docker_cli_plugins_path() {
-    local source_file="$PROJECT_ROOT/lib/features/docker.sh"
-    assert_file_contains "$source_file" "DOCKER_CLI_PLUGINS_PATH" "docker.sh references DOCKER_CLI_PLUGINS_PATH"
+    local bashrc_file="$PROJECT_ROOT/lib/features/lib/bashrc/docker.sh"
+    assert_file_contains "$bashrc_file" "DOCKER_CLI_PLUGINS_PATH" "docker bashrc references DOCKER_CLI_PLUGINS_PATH"
 }
 
 # Test: Docker Compose plugin installation

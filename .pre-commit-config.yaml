@@ -105,6 +105,17 @@ repos:
         pass_filenames: false
         always_run: true
 
+      # Ban write_bashrc_content heredocs (use file redirect instead)
+      - id: no-bashrc-heredocs
+        name: Ban write_bashrc_content heredocs
+        entry: >-
+          bash -c 'if grep -rn "write_bashrc_content.*<<" lib/features/*.sh;
+          then echo "ERROR: Use file redirect instead of heredoc for write_bashrc_content";
+          exit 1; fi'
+        language: system
+        pass_filenames: false
+        files: ^lib/features/.*\.sh$
+
       # Fix shell script permissions (in git index, not just filesystem)
       - id: fix-shell-permissions
         name: Fix shell script permissions
