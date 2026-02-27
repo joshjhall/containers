@@ -136,3 +136,46 @@ version_matches() {
 
     return 1
 }
+
+# ============================================================================
+# Version Bumping
+# ============================================================================
+
+# bump_version - Increment a semantic version
+#
+# Arguments:
+#   $1 - Current version (X.Y.Z format)
+#   $2 - Bump type: major, minor, or patch
+#
+# Output:
+#   Prints the new version to stdout
+#
+# Description:
+#   Used by release.sh to calculate the next version number.
+bump_version() {
+    local current_version="$1"
+    local bump_type="$2"
+
+    IFS='.' read -r major minor patch <<< "$current_version"
+
+    case "$bump_type" in
+        major)
+            major=$((major + 1))
+            minor=0
+            patch=0
+            ;;
+        minor)
+            minor=$((minor + 1))
+            patch=0
+            ;;
+        patch)
+            patch=$((patch + 1))
+            ;;
+        *)
+            echo -e "${RED:-}Error: Invalid bump type${NC:-}" >&2
+            return 1
+            ;;
+    esac
+
+    echo "${major}.${minor}.${patch}"
+}

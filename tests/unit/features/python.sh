@@ -115,7 +115,7 @@ test_poetry_installation() {
 # Test: uv version format
 test_uv_version_format() {
     local version
-    version=$(grep "UV_VERSION=" "$PROJECT_ROOT/lib/features/python.sh" | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
+    version=$(grep "UV_VERSION=" "$PROJECT_ROOT/lib/features/lib/python/install-tools.sh" | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
 
     if [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
         assert_true true "UV_VERSION format is valid: $version"
@@ -126,13 +126,13 @@ test_uv_version_format() {
 
 # Test: uv installation
 test_uv_installation() {
-    if grep -q "UV_VERSION=" "$PROJECT_ROOT/lib/features/python.sh"; then
-        assert_true true "UV_VERSION is defined in python.sh"
+    if grep -q "UV_VERSION=" "$PROJECT_ROOT/lib/features/lib/python/install-tools.sh"; then
+        assert_true true "UV_VERSION is defined in install-tools.sh"
     else
-        assert_true false "UV_VERSION is not defined in python.sh"
+        assert_true false "UV_VERSION is not defined in install-tools.sh"
     fi
 
-    if grep -q "pip install.*uv==" "$PROJECT_ROOT/lib/features/python.sh"; then
+    if grep -q "pip install.*uv==" "$PROJECT_ROOT/lib/features/lib/python/install-tools.sh"; then
         assert_true true "uv is installed via pip"
     else
         assert_true false "uv pip install command not found"

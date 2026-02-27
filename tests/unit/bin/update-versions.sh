@@ -671,14 +671,14 @@ run_test test_mixed_valid_invalid_versions "Updates valid versions while rejecti
 # Test: krew update handler exists
 test_krew_update_handler() {
     # Check that update-versions.sh has krew update handling
-    if grep -q "krew)" "$PROJECT_ROOT/bin/update-versions.sh"; then
+    if grep -q "krew)" "$PROJECT_ROOT/bin/lib/update-versions/updaters.sh"; then
         assert_true true "update-versions.sh has krew update handler"
     else
         assert_true false "update-versions.sh missing krew update handler"
     fi
 
     # Check that it updates KREW_VERSION in Dockerfile
-    if grep -q "ARG KREW_VERSION=" "$PROJECT_ROOT/bin/update-versions.sh"; then
+    if grep -q "ARG KREW_VERSION=" "$PROJECT_ROOT/bin/lib/update-versions/updaters.sh"; then
         assert_true true "update-versions.sh updates KREW_VERSION"
     else
         assert_true false "update-versions.sh missing KREW_VERSION update"
@@ -688,14 +688,14 @@ test_krew_update_handler() {
 # Test: Helm update handler exists
 test_helm_update_handler() {
     # Check that update-versions.sh has Helm update handling
-    if grep -q "Helm)" "$PROJECT_ROOT/bin/update-versions.sh"; then
+    if grep -q "Helm)" "$PROJECT_ROOT/bin/lib/update-versions/updaters.sh"; then
         assert_true true "update-versions.sh has Helm update handler"
     else
         assert_true false "update-versions.sh missing Helm update handler"
     fi
 
     # Check that it updates HELM_VERSION in Dockerfile
-    if grep -q "ARG HELM_VERSION=" "$PROJECT_ROOT/bin/update-versions.sh"; then
+    if grep -q "ARG HELM_VERSION=" "$PROJECT_ROOT/bin/lib/update-versions/updaters.sh"; then
         assert_true true "update-versions.sh updates HELM_VERSION"
     else
         assert_true false "update-versions.sh missing HELM_VERSION update"

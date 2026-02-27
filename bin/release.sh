@@ -9,15 +9,20 @@ BLUE='\033[0;34m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-# Release automation flags
-AUTO_COMMIT=false
-AUTO_TAG=false
-AUTO_PUSH=false
-AUTO_GITHUB_RELEASE=false
+# Release automation flags (used by sourced git-automation.sh)
+export AUTO_COMMIT=false
+export AUTO_TAG=false
+export AUTO_PUSH=false
+export AUTO_GITHUB_RELEASE=false
 
 # Get the directory where this script is located
 BIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$BIN_DIR")"
+
+# Source shared utilities
+source "${BIN_DIR}/lib/version-utils.sh"
+source "${BIN_DIR}/lib/release/git-cliff.sh"
+source "${BIN_DIR}/lib/release/git-automation.sh"
 
 # Change to project root
 cd "$PROJECT_ROOT"
@@ -49,7 +54,7 @@ usage() {
     exit 1
 }
 
-# Function to validate version format
+# Function to validate version format (semver-strict for release)
 validate_version() {
     if ! echo "$1" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
         echo -e "${RED}Error: Invalid version format. Expected: X.Y.Z${NC}"
@@ -57,34 +62,7 @@ validate_version() {
     fi
 }
 
-# Function to bump version
-bump_version() {
-    local current_version="$1"
-    local bump_type="$2"
-
-    IFS='.' read -r major minor patch <<< "$current_version"
-
-    case "$bump_type" in
-        major)
-            major=$((major + 1))
-            minor=0
-            patch=0
-            ;;
-        minor)
-            minor=$((minor + 1))
-            patch=0
-            ;;
-        patch)
-            patch=$((patch + 1))
-            ;;
-        *)
-            echo -e "${RED}Error: Invalid bump type${NC}"
-            exit 1
-            ;;
-    esac
-
-    echo "${major}.${minor}.${patch}"
-}
+# bump_version() is sourced from bin/lib/version-utils.sh
 
 # Check if VERSION file exists
 if [ ! -f VERSION ]; then
@@ -184,64 +162,7 @@ if [ "$CURRENT_VERSION" = "$NEW_VERSION" ] && [ "$FORCE_UPDATE" = "false" ]; the
     exit 1
 fi
 
-# Function to install git-cliff if not available
-ensure_git_cliff() {
-    if command -v git-cliff &> /dev/null; then
-        return 0
-    fi
-
-    echo -e "${BLUE}git-cliff not found, installing...${NC}"
-
-    # Try to install via cargo if available
-    if command -v cargo &> /dev/null; then
-        cargo install git-cliff
-        return $?
-    fi
-
-    # Try to download pre-built binary
-    local os_type
-    os_type=$(uname -s | tr '[:upper:]' '[:lower:]')
-    local arch
-    arch=$(uname -m)
-    local version="2.8.0"
-
-    # Map architecture
-    case "$arch" in
-        x86_64) arch="x86_64" ;;
-        aarch64|arm64) arch="aarch64" ;;
-        *)
-            echo -e "${RED}Unsupported architecture: $arch${NC}"
-            return 1
-            ;;
-    esac
-
-    # Map OS
-    case "$os_type" in
-        linux) os_type="unknown-linux-gnu" ;;
-        darwin) os_type="apple-darwin" ;;
-        *)
-            echo -e "${RED}Unsupported OS: $os_type${NC}"
-            return 1
-            ;;
-    esac
-
-    local download_url="https://github.com/orhun/git-cliff/releases/download/v${version}/git-cliff-${version}-${arch}-${os_type}.tar.gz"
-    local temp_dir
-    temp_dir=$(mktemp -d)
-
-    echo "Downloading git-cliff from $download_url..."
-    if command curl -sL "$download_url" | tar xz -C "$temp_dir"; then
-        sudo command mv "$temp_dir/git-cliff-${version}/git-cliff" /usr/local/bin/
-        sudo chmod +x /usr/local/bin/git-cliff
-        command rm -rf "$temp_dir"
-        echo -e "${GREEN}✓${NC} git-cliff installed successfully"
-        return 0
-    else
-        command rm -rf "$temp_dir"
-        echo -e "${RED}Failed to install git-cliff${NC}"
-        return 1
-    fi
-}
+# ensure_git_cliff() is sourced from bin/lib/release/git-cliff.sh
 
 # Function to generate changelog
 generate_changelog() {
@@ -328,119 +249,5 @@ if [ "$SKIP_CHANGELOG" = "false" ]; then
 fi
 echo ""
 
-# Check if we're in a git repository
-if [ -d .git ]; then
-    # Check for uncommitted changes
-    if ! git diff --quiet || ! git diff --cached --quiet; then
-        echo -e "${YELLOW}Note: You have uncommitted changes${NC}"
-        echo ""
-    fi
-
-    # Auto-commit if requested
-    if [ "$AUTO_COMMIT" = "true" ]; then
-        echo ""
-        echo -e "${BLUE}Auto-committing changes...${NC}"
-        git add -A
-        git commit -m "chore(release): Release version $NEW_VERSION"
-        echo -e "${GREEN}✓${NC} Changes committed"
-    fi
-
-    # Reorder: push first, then tag (prevents tagging commits that fail validation)
-    if [ "$AUTO_PUSH" = "true" ]; then
-        echo ""
-        echo -e "${BLUE}Pushing changes to remote...${NC}"
-
-        # Get current branch
-        CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
-
-        # Push branch first (this runs pre-push validation hook)
-        if ! git push origin "$CURRENT_BRANCH"; then
-            echo -e "${RED}✗ Failed to push branch${NC}"
-            echo "Pre-push validation failed. Fix the issues and try again."
-            exit 1
-        fi
-        echo -e "${GREEN}✓${NC} Pushed branch: $CURRENT_BRANCH"
-
-        # Only create and push tag if branch push succeeded
-        if [ "$AUTO_TAG" = "true" ]; then
-            echo ""
-            echo -e "${BLUE}Creating git tag v$NEW_VERSION...${NC}"
-            git tag -a "v$NEW_VERSION" -m "Release version $NEW_VERSION"
-            echo -e "${GREEN}✓${NC} Tag created"
-
-            if ! git push origin "v$NEW_VERSION"; then
-                echo -e "${RED}✗ Failed to push tag${NC}"
-                exit 1
-            fi
-            echo -e "${GREEN}✓${NC} Pushed tag: v$NEW_VERSION"
-        fi
-    else
-        # Not auto-pushing - create tag locally if requested
-        if [ "$AUTO_TAG" = "true" ]; then
-            echo ""
-            echo -e "${BLUE}Creating git tag v$NEW_VERSION...${NC}"
-            git tag -a "v$NEW_VERSION" -m "Release version $NEW_VERSION"
-            echo -e "${GREEN}✓${NC} Tag created"
-        fi
-    fi
-
-    # Auto-create GitHub release if requested
-    if [ "$AUTO_GITHUB_RELEASE" = "true" ]; then
-        echo ""
-        echo -e "${BLUE}Creating GitHub release...${NC}"
-
-        # Check if gh is installed
-        if ! command -v gh >/dev/null 2>&1; then
-            echo -e "${YELLOW}Warning: gh CLI not found, skipping GitHub release${NC}"
-            echo "Install gh CLI: https://cli.github.com/"
-        else
-            # Switch to config auth if GITHUB_TOKEN is set
-            if [ -n "${GITHUB_TOKEN:-}" ]; then
-                unset GITHUB_TOKEN
-                gh auth switch 2>/dev/null || true
-            fi
-
-            # Generate release notes from CHANGELOG
-            RELEASE_NOTES=$(./bin/generate-release-notes.sh "$NEW_VERSION" 2>/dev/null || echo "See [CHANGELOG.md](https://github.com/joshjhall/containers/blob/v$NEW_VERSION/CHANGELOG.md) for details.")
-
-            # Create release
-            if gh release create "v$NEW_VERSION" \
-                --title "Release v$NEW_VERSION" \
-                --notes "$RELEASE_NOTES"; then
-                echo -e "${GREEN}✓${NC} GitHub release created: https://github.com/joshjhall/containers/releases/tag/v$NEW_VERSION"
-            else
-                echo -e "${YELLOW}Warning: Failed to create GitHub release${NC}"
-                echo "You can create it manually at: https://github.com/joshjhall/containers/releases/new?tag=v$NEW_VERSION"
-            fi
-        fi
-    fi
-
-    # Show next steps if not fully automated
-    if [ "$AUTO_COMMIT" = "false" ] || [ "$AUTO_TAG" = "false" ] || [ "$AUTO_PUSH" = "false" ]; then
-        echo ""
-        echo "To complete the release, run:"
-        if [ "$AUTO_COMMIT" = "false" ]; then
-            echo -e "  ${BLUE}git add -A${NC}"
-            echo -e "  ${BLUE}git commit -m \"chore(release): Release version $NEW_VERSION\"${NC}"
-        fi
-        if [ "$AUTO_TAG" = "false" ]; then
-            echo -e "  ${BLUE}git tag -a v$NEW_VERSION -m \"Release version $NEW_VERSION\"${NC}"
-        fi
-        if [ "$AUTO_PUSH" = "false" ]; then
-            CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
-            echo -e "  ${BLUE}git push origin $CURRENT_BRANCH${NC}"
-            echo -e "  ${BLUE}git push origin v$NEW_VERSION${NC}"
-        fi
-        if [ "$AUTO_GITHUB_RELEASE" = "false" ]; then
-            echo ""
-            echo "Or use automation flags:"
-            echo -e "  ${BLUE}$0 --full-auto $*${NC}  # Fully automated release"
-        fi
-        echo ""
-        echo "The tag push will trigger GitHub Actions to:"
-        echo "  - Build all container variants"
-        echo "  - Push images to ghcr.io/joshjhall/containers"
-    fi
-else
-    echo -e "${YELLOW}Not a git repository - manual commit required${NC}"
-fi
+# Perform git operations (commit, tag, push, GitHub release)
+perform_git_automation "$NEW_VERSION"

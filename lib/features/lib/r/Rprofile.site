@@ -1,0 +1,17 @@
+# System-wide R startup configuration
+local({
+    # Set default CRAN mirror
+    options(repos = c(CRAN = "https://cloud.r-project.org/"))
+
+    # Configure library paths
+    r_libs_user <- Sys.getenv("R_LIBS_USER", "/cache/r/library")
+    .libPaths(c(r_libs_user, .libPaths()))
+
+    # Set cache directory for downloaded packages
+    options(pkgType = "source")
+
+    # Suppress startup messages in non-interactive mode
+    if (!interactive()) {
+        options(warn = -1)
+    }
+})

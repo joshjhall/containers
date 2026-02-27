@@ -259,21 +259,21 @@ run_test_with_setup test_op_ref_bashrc_contains_generic_loop "OP_*_REF bashrc ge
 
 # Test: op-env-safe xtrace disable/restore pattern
 test_op_env_safe_xtrace_pattern() {
-    local source_file="$PROJECT_ROOT/lib/features/op-cli.sh"
-    assert_file_contains "$source_file" "set +x" "op-cli.sh disables xtrace to prevent secret exposure"
+    local source_file="$PROJECT_ROOT/lib/features/lib/op-cli/45-op-secrets.sh"
+    assert_file_contains "$source_file" "set +x" "45-op-secrets.sh disables xtrace to prevent secret exposure"
 }
 
 # Test: Git identity fallback with first/last name
 test_git_identity_fallback_first_last() {
-    local source_file="$PROJECT_ROOT/lib/features/op-cli.sh"
-    assert_file_contains "$source_file" "first name" "op-cli.sh handles 1Password Identity first name field"
-    assert_file_contains "$source_file" "last name" "op-cli.sh handles 1Password Identity last name field"
+    local source_file="$PROJECT_ROOT/lib/features/lib/op-cli/45-op-secrets.sh"
+    assert_file_contains "$source_file" "first name" "45-op-secrets.sh handles 1Password Identity first name field"
+    assert_file_contains "$source_file" "last name" "45-op-secrets.sh handles 1Password Identity last name field"
 }
 
 # Test: Skip-if-target-already-set logic
 test_skip_if_target_set_pattern() {
-    local source_file="$PROJECT_ROOT/lib/features/op-cli.sh"
-    assert_file_contains "$source_file" '${!_target_var:-}' "op-cli.sh uses indirect variable expansion for skip check"
+    local source_file="$PROJECT_ROOT/lib/features/lib/op-cli/45-op-secrets.sh"
+    assert_file_contains "$source_file" '${!_target_var:-}' "45-op-secrets.sh uses indirect variable expansion for skip check"
 }
 
 # Test: debsig-verify policy setup
@@ -291,14 +291,14 @@ test_op_gpg_key_handling() {
 
 # Test: OP_SERVICE_ACCOUNT_TOKEN reference
 test_op_service_account_token_ref() {
-    local source_file="$PROJECT_ROOT/lib/features/op-cli.sh"
-    assert_file_contains "$source_file" "OP_SERVICE_ACCOUNT_TOKEN" "op-cli.sh references OP_SERVICE_ACCOUNT_TOKEN"
+    local source_file="$PROJECT_ROOT/lib/features/lib/op-cli/45-op-secrets.sh"
+    assert_file_contains "$source_file" "OP_SERVICE_ACCOUNT_TOKEN" "45-op-secrets.sh references OP_SERVICE_ACCOUNT_TOKEN"
 }
 
 # Test: op read command pattern
 test_op_read_command_pattern() {
-    local source_file="$PROJECT_ROOT/lib/features/op-cli.sh"
-    assert_file_contains "$source_file" "op read" "op-cli.sh uses op read to retrieve secrets"
+    local source_file="$PROJECT_ROOT/lib/features/lib/op-cli/45-op-secrets.sh"
+    assert_file_contains "$source_file" "op read" "45-op-secrets.sh uses op read to retrieve secrets"
 }
 
 # Test: /etc/bashrc.d/ file creation
@@ -480,35 +480,25 @@ test_op_file_ref_excludes_from_ref_loop() {
 
 # Static analysis: _FILE_REF pattern in bashrc content
 test_op_file_ref_in_bashrc() {
-    local source_file="$PROJECT_ROOT/lib/features/op-cli.sh"
-    assert_file_contains "$source_file" "_FILE_REF" "op-cli.sh contains _FILE_REF pattern"
-    assert_file_contains "$source_file" "/dev/shm/" "op-cli.sh writes file secrets to /dev/shm"
-    assert_file_contains "$source_file" "chmod 600" "op-cli.sh sets 0600 permissions on secret files"
+    local source_file="$PROJECT_ROOT/lib/features/lib/op-cli/45-op-secrets.sh"
+    assert_file_contains "$source_file" "_FILE_REF" "45-op-secrets.sh contains _FILE_REF pattern"
+    assert_file_contains "$source_file" "/dev/shm/" "45-op-secrets.sh writes file secrets to /dev/shm"
+    assert_file_contains "$source_file" "chmod 600" "45-op-secrets.sh sets 0600 permissions on secret files"
 }
 
 # Static analysis: _FILE_REF pattern in startup script
 test_op_file_ref_in_startup_script() {
-    local source_file="$PROJECT_ROOT/lib/features/op-cli.sh"
-    # Verify the startup script heredoc section also contains _FILE_REF loop
-    # The startup script is between 'cat > /etc/container/startup/45-op-secrets.sh' and 'EOF'
-    # We grep for the _FILE_REF pattern appearing after 45-op-secrets.sh
-    grep -A 200 '45-op-secrets.sh' "$source_file" | grep -q '_FILE_REF' \
-        && assert_true 0 "45-op-secrets.sh heredoc contains _FILE_REF loop" \
-        || assert_true 1 "45-op-secrets.sh heredoc should contain _FILE_REF loop"
-
-    grep -A 200 '45-op-secrets.sh' "$source_file" | grep -q '/dev/shm/' \
-        && assert_true 0 "45-op-secrets.sh heredoc uses /dev/shm for file secrets" \
-        || assert_true 1 "45-op-secrets.sh heredoc should use /dev/shm"
-
-    grep -A 200 '45-op-secrets.sh' "$source_file" | grep -q 'chmod 600' \
-        && assert_true 0 "45-op-secrets.sh heredoc applies chmod 600" \
-        || assert_true 1 "45-op-secrets.sh heredoc should apply chmod 600"
+    local source_file="$PROJECT_ROOT/lib/features/lib/op-cli/45-op-secrets.sh"
+    # Verify the extracted startup script contains _FILE_REF loop
+    assert_file_contains "$source_file" "_FILE_REF" "45-op-secrets.sh contains _FILE_REF loop"
+    assert_file_contains "$source_file" "/dev/shm/" "45-op-secrets.sh uses /dev/shm for file secrets"
+    assert_file_contains "$source_file" "chmod 600" "45-op-secrets.sh applies chmod 600"
 }
 
 # Static analysis: _REF loop excludes _FILE_REF in source code
 test_op_ref_loop_excludes_file_ref_in_source() {
-    local source_file="$PROJECT_ROOT/lib/features/op-cli.sh"
-    assert_file_contains "$source_file" "grep -v '_FILE_REF" "op-cli.sh _REF loop excludes _FILE_REF variables"
+    local source_file="$PROJECT_ROOT/lib/features/lib/op-cli/45-op-secrets.sh"
+    assert_file_contains "$source_file" "grep -v '_FILE_REF" "45-op-secrets.sh _REF loop excludes _FILE_REF variables"
 }
 
 run_test_with_setup test_op_file_ref_pattern_matching "OP_*_FILE_REF pattern matching test"

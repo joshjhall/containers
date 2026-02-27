@@ -334,8 +334,9 @@ test_dynamic_checksum_fetching() {
         return
     fi
 
-    # Check for fetch_github_checksums_txt usage
-    if grep -q "fetch_github_checksums_txt" "$terraform_script"; then
+    # Check for fetch_github_checksums_txt usage (now in extracted install-tools.sh)
+    local install_tools="$PROJECT_ROOT/lib/features/lib/terraform/install-tools.sh"
+    if grep -q "fetch_github_checksums_txt" "$install_tools"; then
         assert_true true "Uses fetch_github_checksums_txt for dynamic fetching"
     else
         assert_true false "Does not use dynamic checksum fetching"
