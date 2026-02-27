@@ -192,95 +192,14 @@ write_bashrc_content /etc/bashrc.d/80-dev-tools.sh "dev tools bashrc configurati
 # ============================================================================
 # Binary Tool Installations
 # ============================================================================
+source /tmp/build-scripts/features/lib/dev-tools/install-binary-tools.sh
+
 log_message "Installing additional development tools..."
 
-# duf (modern disk usage utility)
-install_github_release "duf" "$DUF_VERSION" \
-    "https://github.com/muesli/duf/releases/download/v${DUF_VERSION}" \
-    "duf_${DUF_VERSION}_linux_amd64.deb" "duf_${DUF_VERSION}_linux_arm64.deb" \
-    "checksums_txt" "dpkg" \
-    || { log_feature_end; exit 1; }
+install_github_binary_tools
+install_entr
 
-# Install entr (file watcher) — source build, not a GitHub release binary
-log_message "Installing entr (file watcher)..."
-ENTR_TARBALL="entr-${ENTR_VERSION}.tar.gz"
-ENTR_URL="http://eradman.com/entrproject/code/${ENTR_TARBALL}"
-
-log_message "Calculating checksum for entr ${ENTR_VERSION}..."
-ENTR_CHECKSUM=$(calculate_checksum_sha256 "$ENTR_URL" 2>/dev/null)
-
-if [ -z "$ENTR_CHECKSUM" ]; then
-    log_error "Failed to calculate checksum for entr ${ENTR_VERSION}"
-    log_feature_end
-    exit 1
-fi
-
-log_message "Expected SHA256: ${ENTR_CHECKSUM}"
-
-BUILD_TEMP=$(create_secure_temp_dir)
-cd "$BUILD_TEMP"
-log_message "Downloading and verifying entr ${ENTR_VERSION}..."
-download_and_verify \
-    "$ENTR_URL" \
-    "$ENTR_CHECKSUM" \
-    "$ENTR_TARBALL"
-
-log_message "✓ entr v${ENTR_VERSION} verified successfully"
-
-log_command "Extracting entr source" \
-    tar -xzf "$ENTR_TARBALL"
-
-log_command "Building entr" \
-    bash -c "cd entr-${ENTR_VERSION} && ./configure && make && make install"
-
-cd /
-
-# Install fzf (fuzzy finder) — git clone with custom retry logic
 log_message "Installing fzf (fuzzy finder)..."
-
-install_fzf() {
-    local max_retries=3
-    local retry_delay=5
-    local i
-
-    for i in $(seq 1 $max_retries); do
-        log_message "Cloning fzf repository (attempt $i/$max_retries)..."
-        if log_command "Cloning fzf repository" \
-            git clone --depth 1 https://github.com/junegunn/fzf.git /opt/fzf; then
-            break
-        fi
-
-        if [ "$i" -lt "$max_retries" ]; then
-            log_warning "Failed to clone fzf repository, retrying in ${retry_delay}s..."
-            sleep $retry_delay
-            retry_delay=$((retry_delay * 2))
-        else
-            log_warning "Failed to clone fzf repository after $max_retries attempts"
-            return 1
-        fi
-    done
-
-    export FZF_NO_UPDATE_RC=1
-    retry_delay=5
-    for i in $(seq 1 $max_retries); do
-        log_message "Running fzf installer (attempt $i/$max_retries)..."
-        if log_command "Installing fzf" \
-            bash -c "cd /opt/fzf && ./install --bin"; then
-            log_message "fzf installed successfully"
-            return 0
-        fi
-
-        if [ "$i" -lt "$max_retries" ]; then
-            log_warning "fzf installer failed, retrying in ${retry_delay}s..."
-            sleep $retry_delay
-            retry_delay=$((retry_delay * 2))
-        fi
-    done
-
-    log_warning "Failed to install fzf after $max_retries attempts"
-    return 1
-}
-
 if ! install_fzf; then
     log_warning "fzf installation failed, continuing without fzf"
     log_warning "fzf will not be available in this container"
@@ -291,158 +210,22 @@ else
     fi
 fi
 
-# ============================================================================
-# Symlink Creation
-# ============================================================================
-log_message "Creating tool symlinks..."
-
-if command -v fdfind &> /dev/null && ! command -v fd &> /dev/null; then
-    create_symlink "$(which fdfind)" "/usr/local/bin/fd" "fd (find alternative)"
-fi
-
-if command -v batcat &> /dev/null && ! command -v bat &> /dev/null; then
-    create_symlink "$(which batcat)" "/usr/local/bin/bat" "bat (cat alternative)"
-fi
-
-if [ -f /opt/fzf/bin/fzf ]; then
-    create_symlink "/opt/fzf/bin/fzf" "/usr/local/bin/fzf" "fzf fuzzy finder"
-    if [ -f /opt/fzf/bin/fzf-tmux ]; then
-        create_symlink "/opt/fzf/bin/fzf-tmux" "/usr/local/bin/fzf-tmux" "fzf-tmux"
-    fi
-fi
-
-# direnv (direct binary, no published checksums)
-install_github_release "direnv" "$DIRENV_VERSION" \
-    "https://github.com/direnv/direnv/releases/download/v${DIRENV_VERSION}" \
-    "direnv.linux-amd64" "direnv.linux-arm64" \
-    "calculate" "binary" \
-    || { log_feature_end; exit 1; }
-
-# lazygit (tar with binary at top level)
-install_github_release "lazygit" "$LAZYGIT_VERSION" \
-    "https://github.com/jesseduffield/lazygit/releases/download/v${LAZYGIT_VERSION}" \
-    "lazygit_${LAZYGIT_VERSION}_linux_x86_64.tar.gz" \
-    "lazygit_${LAZYGIT_VERSION}_linux_arm64.tar.gz" \
-    "checksums_txt" "extract_flat:lazygit" \
-    || { log_feature_end; exit 1; }
-
-# delta (better git diffs — tar with binary in subdirectory, no published checksums)
-install_github_release "delta" "$DELTA_VERSION" \
-    "https://github.com/dandavison/delta/releases/download/${DELTA_VERSION}" \
-    "delta-${DELTA_VERSION}-x86_64-unknown-linux-gnu.tar.gz" \
-    "delta-${DELTA_VERSION}-aarch64-unknown-linux-gnu.tar.gz" \
-    "calculate" "extract:delta" \
-    || { log_feature_end; exit 1; }
-
-# mkcert (local HTTPS certificates, no published checksums)
-install_github_release "mkcert" "$MKCERT_VERSION" \
-    "https://github.com/FiloSottile/mkcert/releases/download/v${MKCERT_VERSION}" \
-    "mkcert-v${MKCERT_VERSION}-linux-amd64" "mkcert-v${MKCERT_VERSION}-linux-arm64" \
-    "calculate" "binary" \
-    || { log_feature_end; exit 1; }
-
-# act (GitHub Actions CLI)
-install_github_release "act" "$ACT_VERSION" \
-    "https://github.com/nektos/act/releases/download/v${ACT_VERSION}" \
-    "act_Linux_x86_64.tar.gz" "act_Linux_arm64.tar.gz" \
-    "checksums_txt" "extract_flat:act" \
-    || { log_feature_end; exit 1; }
-
-# git-cliff (automatic changelog generator, SHA512 checksums)
-install_github_release "git-cliff" "$GITCLIFF_VERSION" \
-    "https://github.com/orhun/git-cliff/releases/download/v${GITCLIFF_VERSION}" \
-    "git-cliff-${GITCLIFF_VERSION}-x86_64-unknown-linux-gnu.tar.gz" \
-    "git-cliff-${GITCLIFF_VERSION}-aarch64-unknown-linux-gnu.tar.gz" \
-    "sha512" "extract:git-cliff" \
-    || { log_feature_end; exit 1; }
-
-# glab (GitLab CLI — non-fatal, uses GitLab release URLs)
-install_github_release "glab" "$GLAB_VERSION" \
-    "https://gitlab.com/gitlab-org/cli/-/releases/v${GLAB_VERSION}/downloads" \
-    "glab_${GLAB_VERSION}_linux_amd64.deb" "glab_${GLAB_VERSION}_linux_arm64.deb" \
-    "checksums_txt" "dpkg" \
-    || log_warning "glab installation failed, continuing without glab"
-
-# biome (linting and formatting — non-standard tag format, no published checksums)
-install_github_release "biome" "$BIOME_VERSION" \
-    "https://github.com/biomejs/biome/releases/download/@biomejs/biome@${BIOME_VERSION}" \
-    "biome-linux-x64" "biome-linux-arm64" \
-    "calculate" "binary" \
-    || { log_feature_end; exit 1; }
-
-# taplo (TOML formatter/linter) — skip if already installed by rust-dev
-if ! command -v taplo &> /dev/null; then
-    install_github_release "taplo" "$TAPLO_VERSION" \
-        "https://github.com/tamasfe/taplo/releases/download/${TAPLO_VERSION}" \
-        "taplo-linux-x86_64.gz" "taplo-linux-aarch64.gz" \
-        "calculate" "gunzip" \
-        || { log_feature_end; exit 1; }
-else
-    log_message "taplo already installed (likely via rust-dev), skipping..."
-fi
+create_tool_symlinks
 
 # ============================================================================
 # Build-Time Configuration for Runtime
 # ============================================================================
-# Pass build-time feature flags to runtime startup scripts via config file
+source /tmp/build-scripts/features/lib/dev-tools/persist-feature-flags.sh
+
 log_message "Writing build configuration for runtime..."
-
-log_command "Creating container config directory" \
-    mkdir -p /etc/container/config
-
-cat > /etc/container/config/enabled-features.conf << FEATURES_EOF
-# Auto-generated at build time - DO NOT EDIT
-# This file passes build-time feature flags to runtime startup scripts
-INCLUDE_PYTHON_DEV=${INCLUDE_PYTHON_DEV:-false}
-INCLUDE_NODE_DEV=${INCLUDE_NODE_DEV:-false}
-INCLUDE_RUST_DEV=${INCLUDE_RUST_DEV:-false}
-INCLUDE_RUBY_DEV=${INCLUDE_RUBY_DEV:-false}
-INCLUDE_GOLANG_DEV=${INCLUDE_GOLANG_DEV:-false}
-INCLUDE_JAVA_DEV=${INCLUDE_JAVA_DEV:-false}
-INCLUDE_KOTLIN_DEV=${INCLUDE_KOTLIN_DEV:-false}
-INCLUDE_ANDROID_DEV=${INCLUDE_ANDROID_DEV:-false}
-
-# Extra plugins to install (comma-separated)
-# Can be overridden at runtime via environment variable
-CLAUDE_EXTRA_PLUGINS_DEFAULT="${CLAUDE_EXTRA_PLUGINS:-}"
-
-# Extra MCP servers to install (comma-separated)
-# Can be overridden at runtime via environment variable
-CLAUDE_EXTRA_MCPS_DEFAULT="${CLAUDE_EXTRA_MCPS:-}"
-
-# Support tool flags (for conditional skills/agents)
-INCLUDE_DOCKER=${INCLUDE_DOCKER:-false}
-INCLUDE_KUBERNETES=${INCLUDE_KUBERNETES:-false}
-INCLUDE_TERRAFORM=${INCLUDE_TERRAFORM:-false}
-INCLUDE_AWS=${INCLUDE_AWS:-false}
-INCLUDE_GCLOUD=${INCLUDE_GCLOUD:-false}
-INCLUDE_CLOUDFLARE=${INCLUDE_CLOUDFLARE:-false}
-FEATURES_EOF
-
-log_command "Setting config file permissions" \
-    chmod 644 /etc/container/config/enabled-features.conf
+persist_feature_flags
 
 # ============================================================================
 # Git Configuration
 # ============================================================================
 log_message "Configuring git to use delta..."
 
-command cat >> /etc/gitconfig << 'EOF'
-[core]
-    pager = delta
-[interactive]
-    diffFilter = delta --color-only
-[delta]
-    navigate = true
-    light = false
-    side-by-side = true
-    line-numbers = true
-    syntax-theme = Dracula
-[merge]
-    conflictstyle = diff3
-[diff]
-    colorMoved = default
-EOF
+command cat /tmp/build-scripts/features/lib/dev-tools/gitconfig-delta >> /etc/gitconfig
 
 # Add tool-specific configurations to bashrc.d (content in lib/bashrc/dev-tools-extras.sh)
 write_bashrc_content /etc/bashrc.d/80-dev-tools.sh "tool-specific configurations" \
@@ -472,67 +255,7 @@ log_command "Setting dev-tools bashrc script permissions" \
 # ============================================================================
 log_message "Creating dev tools verification script..."
 
-command cat > /usr/local/bin/test-dev-tools << 'EOF'
-#!/bin/bash
-echo "=== Development Tools Status ==="
-echo ""
-echo "Version Control:"
-for tool in git tig colordiff gh delta lazygit; do
-    if command -v $tool &> /dev/null; then
-        echo "  ✓ $tool is installed"
-    else
-        echo "  ✗ $tool is not found"
-    fi
-done
-
-echo ""
-echo "Search Tools:"
-for tool in rg fd ag ack; do
-    if command -v $tool &> /dev/null; then
-        echo "  ✓ $tool is installed"
-    else
-        echo "  ✗ $tool is not found"
-    fi
-done
-
-echo ""
-echo "Modern CLI Tools:"
-# Check for eza (preferred) or exa (fallback for older Debian)
-if command -v eza &> /dev/null; then
-    echo "  ✓ eza is installed"
-elif command -v exa &> /dev/null; then
-    echo "  ✓ exa is installed"
-else
-    echo "  ✗ eza/exa is not found"
-fi
-
-for tool in bat duf htop ncdu fzf; do
-    if command -v $tool &> /dev/null; then
-        echo "  ✓ $tool is installed"
-    else
-        echo "  ✗ $tool is not found"
-    fi
-done
-
-echo ""
-echo "Development Utilities:"
-for tool in direnv entr just mkcert act glab biome taplo; do
-    if command -v $tool &> /dev/null; then
-        echo "  ✓ $tool is installed"
-    else
-        echo "  ✗ $tool is not found"
-    fi
-done
-
-echo ""
-echo "Cache Configuration:"
-echo "  DEV_TOOLS_CACHE: ${DEV_TOOLS_CACHE:-/cache/dev-tools}"
-echo "  CAROOT: ${CAROOT:-/cache/dev-tools/mkcert-ca}"
-echo "  DIRENV_ALLOW_DIR: ${DIRENV_ALLOW_DIR:-/cache/dev-tools/direnv-allow}"
-EOF
-
-log_command "Setting test-dev-tools script permissions" \
-    chmod +x /usr/local/bin/test-dev-tools
+install -m 755 /tmp/build-scripts/features/lib/dev-tools/test-dev-tools.sh /usr/local/bin/test-dev-tools
 
 # Export directory paths for feature summary (also defined in bashrc for runtime)
 export DEV_TOOLS_CACHE="/cache/dev-tools"

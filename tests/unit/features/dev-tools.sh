@@ -476,45 +476,45 @@ run_test test_version_checksum_consistency "Version and checksum documentation i
 
 # Test: fzf retry mechanism
 test_fzf_retry_mechanism() {
-    local source_file="$PROJECT_ROOT/lib/features/dev-tools.sh"
-    assert_file_contains "$source_file" "retry" "dev-tools.sh contains retry logic"
-    assert_file_contains "$source_file" "max_retries" "dev-tools.sh defines max_retries for fzf"
+    local source_file="$PROJECT_ROOT/lib/features/lib/dev-tools/install-binary-tools.sh"
+    assert_file_contains "$source_file" "retry" "install-binary-tools.sh contains retry logic"
+    assert_file_contains "$source_file" "max_retries" "install-binary-tools.sh defines max_retries for fzf"
 }
 
 # Test: Architecture-specific binary selection
 test_arch_specific_binary_selection() {
-    local source_file="$PROJECT_ROOT/lib/features/dev-tools.sh"
-    assert_file_contains "$source_file" "amd64" "dev-tools.sh handles amd64 architecture"
-    assert_file_contains "$source_file" "arm64" "dev-tools.sh handles arm64 architecture"
+    local source_file="$PROJECT_ROOT/lib/features/lib/dev-tools/install-binary-tools.sh"
+    assert_file_contains "$source_file" "amd64" "install-binary-tools.sh handles amd64 architecture"
+    assert_file_contains "$source_file" "arm64" "install-binary-tools.sh handles arm64 architecture"
 }
 
 # Test: Git config block content - delta pager config
 test_git_delta_pager_config() {
-    local source_file="$PROJECT_ROOT/lib/features/dev-tools.sh"
-    assert_file_contains "$source_file" "pager = delta" "dev-tools.sh configures delta as git pager"
+    local source_file="$PROJECT_ROOT/lib/features/lib/dev-tools/gitconfig-delta"
+    assert_file_contains "$source_file" "pager = delta" "gitconfig-delta configures delta as git pager"
 }
 
 # Test: Symlink creation patterns for bat/fd alternatives
 test_symlink_creation_patterns() {
-    local source_file="$PROJECT_ROOT/lib/features/dev-tools.sh"
-    assert_file_contains "$source_file" "batcat" "dev-tools.sh references batcat for symlink creation"
-    assert_file_contains "$source_file" "fdfind" "dev-tools.sh references fdfind for symlink creation"
+    local source_file="$PROJECT_ROOT/lib/features/lib/dev-tools/install-binary-tools.sh"
+    assert_file_contains "$source_file" "batcat" "install-binary-tools.sh references batcat for symlink creation"
+    assert_file_contains "$source_file" "fdfind" "install-binary-tools.sh references fdfind for symlink creation"
 }
 
 # Test: entr build-from-source pattern
 test_entr_build_from_source() {
-    local source_file="$PROJECT_ROOT/lib/features/dev-tools.sh"
-    assert_file_contains "$source_file" "entr" "dev-tools.sh installs entr"
-    assert_file_contains "$source_file" "configure" "dev-tools.sh builds entr from source using configure"
-    assert_file_contains "$source_file" "make install" "dev-tools.sh builds entr from source using make install"
+    local source_file="$PROJECT_ROOT/lib/features/lib/dev-tools/install-binary-tools.sh"
+    assert_file_contains "$source_file" "entr" "install-binary-tools.sh installs entr"
+    assert_file_contains "$source_file" "configure" "install-binary-tools.sh builds entr from source using configure"
+    assert_file_contains "$source_file" "make install" "install-binary-tools.sh builds entr from source using make install"
 }
 
 # Test: Just version variable defined
 test_just_version_variable() {
-    local source_file="$PROJECT_ROOT/lib/features/dev-tools.sh"
-    # just is installed via rust-dev or apt, but referenced in dev-tools bashrc
-    # Check that just is referenced in the script
-    assert_file_contains "$source_file" "just" "dev-tools.sh references just"
+    local source_file="$PROJECT_ROOT/lib/features/lib/dev-tools/test-dev-tools.sh"
+    # just is installed via rust-dev or apt, but referenced in dev-tools verification
+    # Check that just is referenced in the verification script
+    assert_file_contains "$source_file" "just" "test-dev-tools.sh references just"
 }
 
 # Test: Biome version variable defined
@@ -557,7 +557,8 @@ test_delta_version_variable() {
 test_download_verify_sha256_pattern() {
     local source_file="$PROJECT_ROOT/lib/features/dev-tools.sh"
     assert_file_contains "$source_file" "source.*download-verify.sh" "dev-tools.sh sources download-verify.sh"
-    assert_file_contains "$source_file" "sha256" "dev-tools.sh uses sha256 checksum verification"
+    local binary_tools_file="$PROJECT_ROOT/lib/features/lib/dev-tools/install-binary-tools.sh"
+    assert_file_contains "$binary_tools_file" "sha256" "install-binary-tools.sh uses sha256 checksum verification"
 }
 
 # Test: Uses dpkg --print-architecture for architecture detection
