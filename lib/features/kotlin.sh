@@ -251,101 +251,16 @@ log_message "Creating Kotlin startup script..."
 log_command "Creating container startup directory" \
     mkdir -p /etc/container/first-startup
 
-command cat > /etc/container/first-startup/30-kotlin-setup.sh << 'EOF'
-#!/bin/bash
-# Kotlin development environment setup
-
-# Check for Kotlin projects
-if [ -f ${WORKING_DIR}/build.gradle.kts ]; then
-    echo "=== Kotlin Gradle Project Detected ==="
-    echo "Kotlin project with Gradle found. Common commands:"
-    echo "  gradle build        - Build project"
-    echo "  gradle test         - Run tests"
-    echo "  gradle run          - Run application"
-
-    if [ -x ${WORKING_DIR}/gradlew ]; then
-        echo ""
-        echo "Gradle wrapper available - use './gradlew' for consistent builds"
-    fi
-elif [ -f ${WORKING_DIR}/pom.xml ] && grep -q "kotlin" ${WORKING_DIR}/pom.xml 2>/dev/null; then
-    echo "=== Kotlin Maven Project Detected ==="
-    echo "Kotlin project with Maven found. Common commands:"
-    echo "  mvn compile         - Compile project"
-    echo "  mvn test            - Run tests"
-    echo "  mvn package         - Package application"
-fi
-
-# Display Kotlin environment
-echo ""
-kotlin-version 2>/dev/null || {
-    echo "Kotlin: $(kotlinc -version 2>&1)"
-}
-EOF
-
-log_command "Setting Kotlin startup script permissions" \
-    chmod +x /etc/container/first-startup/30-kotlin-setup.sh
+install -m 755 /tmp/build-scripts/features/lib/kotlin/30-kotlin-setup.sh \
+    /etc/container/first-startup/30-kotlin-setup.sh
 
 # ============================================================================
 # Verification Script
 # ============================================================================
 log_message "Creating Kotlin verification script..."
 
-command cat > /usr/local/bin/test-kotlin << 'EOF'
-#!/bin/bash
-echo "=== Kotlin Installation Status ==="
-if command -v kotlinc &> /dev/null; then
-    echo "✓ Kotlin is installed"
-    kotlinc -version 2>&1 | head -n 1 | command sed 's/^/  /'
-    echo "  KOTLIN_HOME: ${KOTLIN_HOME:-/opt/kotlin}"
-    echo "  Binary: $(which kotlinc)"
-else
-    echo "✗ Kotlin is not installed"
-fi
-
-echo ""
-echo "=== Kotlin Tools ==="
-for cmd in kotlin kotlinc kotlinc-native cinterop klib; do
-    if command -v $cmd &> /dev/null; then
-        echo "✓ $cmd is available"
-    else
-        echo "✗ $cmd is not found"
-    fi
-done
-
-echo ""
-echo "=== Java Environment ==="
-if command -v java &> /dev/null; then
-    java -version 2>&1 | head -n 1
-else
-    echo "Java not found (required for Kotlin/JVM)"
-fi
-
-echo ""
-echo "=== Quick Test ==="
-TEMP_DIR=$(mktemp -d)
-cd "$TEMP_DIR"
-echo 'fun main() { println("Kotlin works!") }' > test.kt
-if kotlinc test.kt -include-runtime -d test.jar 2>/dev/null; then
-    result=$(kotlin test.jar 2>/dev/null)
-    if [ "$result" = "Kotlin works!" ]; then
-        echo "✓ Kotlin compilation and execution works"
-    else
-        echo "✗ Kotlin execution failed"
-    fi
-else
-    echo "✗ Kotlin compilation failed"
-fi
-cd /
-command rm -rf "$TEMP_DIR"
-
-echo ""
-echo "=== Cache Directory ==="
-echo "Kotlin: ${KOTLIN_CACHE_DIR:-/cache/kotlin}"
-[ -d "${KOTLIN_CACHE_DIR:-/cache/kotlin}" ] && echo "  Directory exists"
-EOF
-
-log_command "Setting test-kotlin script permissions" \
-    chmod +x /usr/local/bin/test-kotlin
+install -m 755 /tmp/build-scripts/features/lib/kotlin/test-kotlin.sh \
+    /usr/local/bin/test-kotlin
 
 # ============================================================================
 # Final Verification

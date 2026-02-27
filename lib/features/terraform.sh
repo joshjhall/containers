@@ -135,196 +135,13 @@ apt_install terraform
 # ============================================================================
 log_message "Installing additional Terraform tools..."
 
-# Install Terragrunt (common Terraform wrapper)
-log_message "Installing Terragrunt ${TERRAGRUNT_VERSION}..."
-ARCH=$(dpkg --print-architecture)
+# Source tool installation functions
+source /tmp/build-scripts/features/lib/terraform/install-tools.sh
 
-if [ "$ARCH" = "amd64" ] || [ "$ARCH" = "arm64" ]; then
-    TERRAGRUNT_BINARY="terragrunt_linux_${ARCH}"
-    TERRAGRUNT_URL="https://github.com/gruntwork-io/terragrunt/releases/download/v${TERRAGRUNT_VERSION}/${TERRAGRUNT_BINARY}"
-
-    # Fetch checksum dynamically from GitHub releases
-    log_message "Fetching Terragrunt checksum from GitHub..."
-    TERRAGRUNT_CHECKSUMS_URL="https://github.com/gruntwork-io/terragrunt/releases/download/v${TERRAGRUNT_VERSION}/SHA256SUMS"
-
-    if ! TERRAGRUNT_CHECKSUM=$(fetch_github_checksums_txt "$TERRAGRUNT_CHECKSUMS_URL" "$TERRAGRUNT_BINARY" 2>/dev/null); then
-        log_error "Failed to fetch checksum for Terragrunt ${TERRAGRUNT_VERSION}"
-        log_error "Please verify version exists: https://github.com/gruntwork-io/terragrunt/releases/tag/v${TERRAGRUNT_VERSION}"
-        log_feature_end
-        exit 1
-    fi
-
-    log_message "Expected SHA256: ${TERRAGRUNT_CHECKSUM}"
-
-    # Download and verify Terragrunt with checksum verification
-    BUILD_TEMP=$(create_secure_temp_dir)
-    cd "$BUILD_TEMP"
-    log_message "Downloading and verifying Terragrunt..."
-    download_and_verify \
-        "$TERRAGRUNT_URL" \
-        "$TERRAGRUNT_CHECKSUM" \
-        "terragrunt"
-
-    log_message "✓ Terragrunt v${TERRAGRUNT_VERSION} verified successfully"
-
-    # Install the verified binary
-    log_command "Installing Terragrunt binary" \
-        command mv terragrunt /usr/local/bin/terragrunt
-
-    log_command "Setting Terragrunt permissions" \
-        chmod +x /usr/local/bin/terragrunt
-
-    cd /
-else
-    log_warning "Terragrunt not available for architecture $ARCH, skipping..."
-fi
-
-# ============================================================================
-# terraform-docs Installation
-# ============================================================================
-log_message "Installing terraform-docs ${TFDOCS_VERSION}..."
-
-# Detect architecture
-ARCH=$(dpkg --print-architecture)
-
-# Determine the correct archive filename
-TFDOCS_ARCHIVE="terraform-docs-v${TFDOCS_VERSION}-linux-${ARCH}.tar.gz"
-TFDOCS_URL="https://github.com/terraform-docs/terraform-docs/releases/download/v${TFDOCS_VERSION}/${TFDOCS_ARCHIVE}"
-
-log_message "Installing terraform-docs v${TFDOCS_VERSION} for ${ARCH}..."
-
-# Fetch checksum dynamically from GitHub releases
-log_message "Fetching terraform-docs checksum from GitHub..."
-TFDOCS_CHECKSUMS_URL="https://github.com/terraform-docs/terraform-docs/releases/download/v${TFDOCS_VERSION}/terraform-docs-v${TFDOCS_VERSION}.sha256sum"
-
-if ! TFDOCS_CHECKSUM=$(fetch_github_checksums_txt "$TFDOCS_CHECKSUMS_URL" "$TFDOCS_ARCHIVE" 2>/dev/null); then
-    log_error "Failed to fetch checksum for terraform-docs ${TFDOCS_VERSION}"
-    log_error "Please verify version exists: https://github.com/terraform-docs/terraform-docs/releases/tag/v${TFDOCS_VERSION}"
-    log_feature_end
-    exit 1
-fi
-
-log_message "Expected SHA256: ${TFDOCS_CHECKSUM}"
-
-# Download and extract with checksum verification
-BUILD_TEMP=$(create_secure_temp_dir)
-cd "$BUILD_TEMP"
-log_message "Downloading and verifying terraform-docs..."
-download_and_extract \
-    "$TFDOCS_URL" \
-    "$TFDOCS_CHECKSUM" \
-    "."
-
-# Install binary
-log_command "Installing terraform-docs binary" \
-    command mv ./terraform-docs /usr/local/bin/
-
-log_command "Setting terraform-docs permissions" \
-    chmod +x /usr/local/bin/terraform-docs
-
-log_message "✓ terraform-docs v${TFDOCS_VERSION} installed successfully"
-
-cd /
-
-# ============================================================================
-# tflint Installation
-# ============================================================================
-log_message "Installing tflint ${TFLINT_VERSION}..."
-
-# Determine the correct archive filename
-TFLINT_ARCHIVE="tflint_linux_${ARCH}.zip"
-TFLINT_URL="https://github.com/terraform-linters/tflint/releases/download/v${TFLINT_VERSION}/${TFLINT_ARCHIVE}"
-
-log_message "Installing tflint v${TFLINT_VERSION} for ${ARCH}..."
-
-# Fetch checksum dynamically from GitHub releases
-log_message "Fetching tflint checksum from GitHub..."
-TFLINT_CHECKSUMS_URL="https://github.com/terraform-linters/tflint/releases/download/v${TFLINT_VERSION}/checksums.txt"
-
-if ! TFLINT_CHECKSUM=$(fetch_github_checksums_txt "$TFLINT_CHECKSUMS_URL" "$TFLINT_ARCHIVE" 2>/dev/null); then
-    log_error "Failed to fetch checksum for tflint ${TFLINT_VERSION}"
-    log_error "Please verify version exists: https://github.com/terraform-linters/tflint/releases/tag/v${TFLINT_VERSION}"
-    log_feature_end
-    exit 1
-fi
-
-log_message "Expected SHA256: ${TFLINT_CHECKSUM}"
-
-# Download and verify with checksum
-BUILD_TEMP=$(create_secure_temp_dir)
-cd "$BUILD_TEMP"
-log_message "Downloading and verifying tflint..."
-download_and_verify \
-    "$TFLINT_URL" \
-    "$TFLINT_CHECKSUM" \
-    "$TFLINT_ARCHIVE"
-
-# Extract zip file
-log_command "Extracting tflint" \
-    unzip -o "$TFLINT_ARCHIVE"
-
-# Install binary
-log_command "Installing tflint binary" \
-    install -c -v ./tflint /usr/local/bin/
-
-log_message "✓ tflint v${TFLINT_VERSION} installed successfully"
-
-cd /
-
-# ============================================================================
-# Trivy Installation (Security Scanner)
-# ============================================================================
-# Note: tfsec has been deprecated and merged into Trivy.
-# See: https://github.com/aquasecurity/tfsec/discussions/1994
-log_message "Installing Trivy ${TRIVY_VERSION}..."
-
-# Determine the correct archive filename
-# Trivy uses Linux_64bit for amd64 and Linux_ARM64 for arm64
-if [ "$ARCH" = "amd64" ]; then
-    TRIVY_ARCH="64bit"
-elif [ "$ARCH" = "arm64" ]; then
-    TRIVY_ARCH="ARM64"
-else
-    log_warning "Trivy not available for architecture $ARCH, skipping..."
-    TRIVY_ARCH=""
-fi
-
-if [ -n "$TRIVY_ARCH" ]; then
-    TRIVY_ARCHIVE="trivy_${TRIVY_VERSION}_Linux-${TRIVY_ARCH}.tar.gz"
-    TRIVY_URL="https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/${TRIVY_ARCHIVE}"
-
-    log_message "Installing Trivy v${TRIVY_VERSION} for ${ARCH}..."
-
-    # Fetch checksum dynamically from GitHub releases
-    log_message "Fetching Trivy checksum from GitHub..."
-    TRIVY_CHECKSUMS_URL="https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_checksums.txt"
-
-    if ! TRIVY_CHECKSUM=$(fetch_github_checksums_txt "$TRIVY_CHECKSUMS_URL" "$TRIVY_ARCHIVE" 2>/dev/null); then
-        log_error "Failed to fetch checksum for Trivy ${TRIVY_VERSION}"
-        log_error "Please verify version exists: https://github.com/aquasecurity/trivy/releases/tag/v${TRIVY_VERSION}"
-        log_feature_end
-        exit 1
-    fi
-
-    log_message "Expected SHA256: ${TRIVY_CHECKSUM}"
-
-    # Download and extract with checksum verification
-    BUILD_TEMP=$(create_secure_temp_dir)
-    cd "$BUILD_TEMP"
-    log_message "Downloading and verifying Trivy..."
-    download_and_extract \
-        "$TRIVY_URL" \
-        "$TRIVY_CHECKSUM" \
-        "."
-
-    # Install binary
-    log_command "Installing Trivy binary" \
-        install -c -v -m 755 ./trivy /usr/local/bin/trivy
-
-    log_message "✓ Trivy v${TRIVY_VERSION} installed successfully"
-
-    cd /
-fi
+install_terragrunt
+install_terraform_docs
+install_tflint
+install_trivy
 
 # ============================================================================
 # Cache Configuration
@@ -338,9 +155,6 @@ log_message "Terraform plugin cache path: ${TF_PLUGIN_CACHE}"
 
 # Create plugin cache directory with correct ownership
 create_cache_directories "${TF_PLUGIN_CACHE}"
-create_cache_directories "${TF_PLUGIN_CACHE}"
-create_cache_directories "${TF_PLUGIN_CACHE}"
-    install -d -m 0755 -o "${USER_UID}" -g "${USER_GID}" "${TF_PLUGIN_CACHE}"
 
 # ============================================================================
 # Environment Configuration
@@ -367,110 +181,16 @@ log_message "Creating Terraform startup scripts..."
 log_command "Creating container startup directory" \
     mkdir -p /etc/container/first-startup
 
-command cat > /etc/container/first-startup/20-terraform-setup.sh << 'EOF'
-#!/bin/bash
-# Initialize Terraform if in a Terraform project
-if [ -f ${WORKING_DIR}/main.tf ] || [ -f ${WORKING_DIR}/terraform.tf ]; then
-    echo "=== Terraform Project Detected ==="
-    cd ${WORKING_DIR}
-
-    # Check if .terraform directory exists
-    if [ ! -d .terraform ]; then
-        echo "Running terraform init..."
-        terraform init || echo "Terraform init failed, continuing..."
-    fi
-
-    # Run validation
-    echo "Running terraform validate..."
-    terraform validate || echo "Terraform validation failed, continuing..."
-fi
-
-# Check for Terragrunt
-if [ -f ${WORKING_DIR}/terragrunt.hcl ]; then
-    echo "=== Terragrunt Project Detected ==="
-    echo "Run 'terragrunt init' to initialize"
-fi
-EOF
-
-log_command "Setting Terraform startup script permissions" \
-    chmod +x /etc/container/first-startup/20-terraform-setup.sh
+install -m 755 /tmp/build-scripts/features/lib/terraform/20-terraform-setup.sh \
+    /etc/container/first-startup/20-terraform-setup.sh
 
 # ============================================================================
 # Verification Script
 # ============================================================================
 log_message "Creating Terraform verification script..."
 
-command cat > /usr/local/bin/test-terraform << 'EOF'
-#!/bin/bash
-echo "=== Terraform Status ==="
-if command -v terraform &> /dev/null; then
-    echo "✓ Terraform is installed"
-    echo "  Version: $(terraform version -json 2>/dev/null | jq -r '.terraform_version' || terraform version | head -1)"
-    echo "  Binary: $(which terraform)"
-else
-    echo "✗ Terraform is not installed"
-    exit 1
-fi
-
-echo ""
-echo "=== Additional Tools ==="
-if command -v terragrunt &> /dev/null; then
-    echo "✓ Terragrunt is installed"
-    echo "  Version: $(terragrunt --version 2>&1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
-    echo "  Binary: $(which terragrunt)"
-else
-    echo "✗ Terragrunt is not installed"
-fi
-
-if command -v terraform-docs &> /dev/null; then
-    echo "✓ terraform-docs is installed"
-    echo "  Version: $(terraform-docs --version 2>&1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
-    echo "  Binary: $(which terraform-docs)"
-else
-    echo "✗ terraform-docs is not installed"
-fi
-
-if command -v tflint &> /dev/null; then
-    echo "✓ tflint is installed"
-    echo "  Version: $(tflint --version 2>&1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
-    echo "  Binary: $(which tflint)"
-else
-    echo "✗ tflint is not installed"
-fi
-
-if command -v trivy &> /dev/null; then
-    echo "✓ Trivy is installed (replaces deprecated tfsec)"
-    echo "  Version: $(trivy --version 2>&1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
-    echo "  Binary: $(which trivy)"
-    echo "  Usage: trivy fs . (for Terraform scanning)"
-else
-    echo "✗ Trivy is not installed"
-fi
-
-echo ""
-echo "=== Configuration ==="
-echo "  TF_PLUGIN_CACHE_DIR: ${TF_PLUGIN_CACHE_DIR:-/cache/terraform}"
-if [ -d "${TF_PLUGIN_CACHE_DIR:-/cache/terraform}" ]; then
-    echo "  ✓ Plugin cache directory exists"
-    # Count cached providers if any
-    provider_count=$(command find "${TF_PLUGIN_CACHE_DIR:-/cache/terraform}" -name "terraform-provider-*" 2>/dev/null | wc -l)
-    if [ $provider_count -gt 0 ]; then
-        echo "  Cached providers: $provider_count"
-    fi
-else
-    echo "  ✗ Plugin cache directory not found"
-fi
-
-# Check for .terraformrc
-if [ -f ~/.terraformrc ]; then
-    echo "  ✓ .terraformrc file exists"
-else
-    echo "  ✗ .terraformrc file not found"
-fi
-EOF
-
-log_command "Setting test-terraform permissions" \
-    chmod +x /usr/local/bin/test-terraform
+install -m 755 /tmp/build-scripts/features/lib/terraform/test-terraform.sh \
+    /usr/local/bin/test-terraform
 
 # ============================================================================
 # Final Verification

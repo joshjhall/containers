@@ -71,7 +71,7 @@ log_feature_start "Python" "${PYTHON_VERSION}"
 # ============================================================================
 # Determine if we should cleanup build dependencies after compilation
 # Only cleanup if neither dev-tools nor python-dev is enabled
-CLEANUP_BUILD_DEPS="false"
+export CLEANUP_BUILD_DEPS="false"  # Used by sourced cleanup-build-deps.sh
 if [ "${INCLUDE_DEV_TOOLS:-false}" != "true" ] && [ "${INCLUDE_PYTHON_DEV:-false}" != "true" ]; then
     CLEANUP_BUILD_DEPS="true"
     log_message "📦 Production build detected - build dependencies will be removed after compilation"
@@ -192,49 +192,8 @@ log_command "Cleaning up Python build directory" \
 log_command "Updating library cache" \
     ldconfig
 
-# ============================================================================
-# Clean Up Build Dependencies (Production Builds Only)
-# ============================================================================
-if [ "${CLEANUP_BUILD_DEPS}" = "true" ]; then
-    log_message "Removing build dependencies (production build)..."
-
-    # Mark runtime libraries as manually installed to prevent autoremove from removing them
-    log_command "Marking runtime libraries as manually installed" \
-        apt-mark manual \
-            libbz2-1.0 \
-            libffi8 \
-            libgdbm6 \
-            liblzma5 \
-            libncurses6 \
-            libncursesw6 \
-            libreadline8 \
-            libsqlite3-0 \
-            libssl3 \
-            zlib1g 2>/dev/null || true
-
-    # Remove build dependencies we installed earlier
-    # Note: We keep wget and ca-certificates as they may be needed for runtime operations
-    # Build the package list conditionally (lzma/lzma-dev only exist on Debian 11-12)
-    _remove_pkgs=(
-        build-essential gdb lcov libbz2-dev libffi-dev libgdbm-dev
-        liblzma-dev libncurses5-dev libreadline-dev libsqlite3-dev
-        libssl-dev tk-dev uuid-dev zlib1g-dev
-    )
-    if ! is_debian_version 13; then
-        _remove_pkgs+=(lzma lzma-dev)
-    fi
-    log_command "Removing build packages" \
-        apt-get remove --purge -y "${_remove_pkgs[@]}" || true
-
-    # Now safe to remove orphaned dependencies (runtime libs are marked manual)
-    log_command "Removing orphaned dependencies" \
-        apt-get autoremove -y
-
-    log_command "Cleaning apt cache" \
-        apt-get clean
-
-    log_message "✓ Build dependencies removed successfully"
-fi
+# Clean up build dependencies (production builds only)
+source /tmp/build-scripts/features/lib/python/cleanup-build-deps.sh
 
 # ============================================================================
 # Create symlinks for Python 3
@@ -330,52 +289,8 @@ if [ -d /tmp/python-project-files ] && [ -n "$(ls -A /tmp/python-project-files 2
         command rm -rf /tmp/python-project-files
 fi
 
-# ============================================================================
-# Install pipx and Poetry
-# ============================================================================
-log_message "Installing pipx and Poetry..."
-
-# Install pipx as the user
-log_command "Installing pipx" \
-    su - "${USERNAME}" -c "export PIP_CACHE_DIR='${PIP_CACHE_DIR}' && /usr/local/bin/python3 -m pip install --no-cache-dir pipx"
-
-# Ensure pipx bin directory is in PATH for build-time use (with security validation)
-safe_add_to_path "${PIPX_BIN_DIR}" || export PATH="${PIPX_BIN_DIR}:$PATH"
-
-# Use pipx to install Poetry with pinned version
-POETRY_VERSION="${POETRY_VERSION:-2.3.2}"
-log_command "Installing Poetry ${POETRY_VERSION} via pipx" \
-    su - "${USERNAME}" -c "
-    # Source path utilities for secure PATH management
-    if [ -f /tmp/build-scripts/base/path-utils.sh ]; then
-        source /tmp/build-scripts/base/path-utils.sh
-    fi
-
-    export PIPX_HOME='${PIPX_HOME}'
-    export PIPX_BIN_DIR='${PIPX_BIN_DIR}'
-
-    # Securely add to PATH
-    if command -v safe_add_to_path >/dev/null 2>&1; then
-        safe_add_to_path '${PIPX_BIN_DIR}' 2>/dev/null || export PATH='${PIPX_BIN_DIR}:$PATH'
-        safe_add_to_path '/usr/local/bin' 2>/dev/null || export PATH='/usr/local/bin:$PATH'
-    else
-        export PATH='${PIPX_BIN_DIR}:/usr/local/bin:$PATH'
-    fi
-
-    /usr/local/bin/python3 -m pipx install poetry==${POETRY_VERSION}
-
-    # Configure Poetry
-    ${PIPX_BIN_DIR}/poetry config virtualenvs.in-project true
-    ${PIPX_BIN_DIR}/poetry config cache-dir ${POETRY_CACHE_DIR}
-"
-
-# ============================================================================
-# Install uv (fast Python package manager)
-# ============================================================================
-UV_VERSION="${UV_VERSION:-0.10.5}"
-log_command "Installing uv ${UV_VERSION}" \
-    su - "${USERNAME}" -c "export PIP_CACHE_DIR='${PIP_CACHE_DIR}' && \
-    /usr/local/bin/python -m pip install --no-warn-script-location uv==${UV_VERSION}"
+# Install pipx, Poetry, and uv
+source /tmp/build-scripts/features/lib/python/install-tools.sh
 
 # ============================================================================
 # System-wide Configuration
@@ -408,83 +323,16 @@ log_message "Creating Python startup script..."
 log_command "Creating startup directory" \
     mkdir -p /etc/container/first-startup
 
-command cat > /etc/container/first-startup/10-poetry-install.sh << 'PYTHON_POETRY_EOF'
-#!/bin/bash
-# Source base utilities for secure PATH management
-if [ -f /opt/container-runtime/base/path-utils.sh ]; then
-    source /opt/container-runtime/base/path-utils.sh
-fi
-
-# Install Python dependencies if pyproject.toml exists
-if [ -n "${WORKING_DIR:-}" ] && [ -f "${WORKING_DIR}/pyproject.toml" ]; then
-    echo "Installing Poetry dependencies..."
-    cd "${WORKING_DIR}"
-    if command -v safe_add_to_path >/dev/null 2>&1; then
-        safe_add_to_path "/opt/pipx/bin" 2>/dev/null || export PATH="/opt/pipx/bin:$PATH"
-    else
-        export PATH="/opt/pipx/bin:$PATH"
-    fi
-    poetry install --no-interaction || echo "Poetry install failed, continuing..."
-fi
-
-# Install pip requirements if requirements.txt exists
-if [ -n "${WORKING_DIR:-}" ] && [ -f "${WORKING_DIR}/requirements.txt" ]; then
-    echo "Installing pip requirements..."
-    cd "${WORKING_DIR}"
-    python3 -m pip install -r requirements.txt || echo "pip install failed, continuing..."
-fi
-PYTHON_POETRY_EOF
-
-log_command "Setting startup script permissions" \
-    chmod +x /etc/container/first-startup/10-poetry-install.sh
+install -m 755 /tmp/build-scripts/features/lib/python/10-poetry-install.sh \
+    /etc/container/first-startup/10-poetry-install.sh
 
 # ============================================================================
 # Verification Script
 # ============================================================================
 log_message "Creating Python verification script..."
 
-command cat > /usr/local/bin/test-python << 'PYTHON_TEST_EOF'
-#!/bin/bash
-echo "=== Python Installation Status ==="
-if command -v python3 &> /dev/null; then
-    echo "✓ Python3 $(python3 --version) is installed"
-    echo "  Binary: $(which python3)"
-    echo "  Real path: $(readlink -f $(which python3))"
-else
-    echo "✗ Python3 is not installed"
-fi
-
-if command -v python &> /dev/null; then
-    echo "✓ Python symlink exists at $(which python)"
-fi
-
-echo ""
-echo "=== Python Package Managers ==="
-for cmd in pip pip3 pipx poetry uv; do
-    if command -v $cmd &> /dev/null; then
-        version=$($cmd --version 2>&1 | head -1)
-        echo "✓ $cmd: $version"
-    else
-        echo "✗ $cmd is not found"
-    fi
-done
-
-echo ""
-echo "=== Python Environment ==="
-echo "PIP_CACHE_DIR: ${PIP_CACHE_DIR:-not set}"
-echo "POETRY_CACHE_DIR: ${POETRY_CACHE_DIR:-not set}"
-echo "PIPX_HOME: ${PIPX_HOME:-not set}"
-
-echo ""
-echo "=== Installed Python Packages ==="
-pip list 2>/dev/null | head -10
-echo "..."
-total_packages=$(pip list 2>/dev/null | wc -l)
-echo "Total packages: $total_packages"
-PYTHON_TEST_EOF
-
-log_command "Setting test-python script permissions" \
-    chmod +x /usr/local/bin/test-python
+install -m 755 /tmp/build-scripts/features/lib/python/test-python.sh \
+    /usr/local/bin/test-python
 
 # ============================================================================
 # Final Verification

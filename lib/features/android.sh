@@ -330,118 +330,16 @@ log_message "Creating Android startup script..."
 log_command "Creating container startup directory" \
     mkdir -p /etc/container/first-startup
 
-command cat > /etc/container/first-startup/30-android-setup.sh << 'EOF'
-#!/bin/bash
-# Android SDK environment setup
-
-# Check for Android projects
-if [ -f ${WORKING_DIR}/build.gradle ] || [ -f ${WORKING_DIR}/build.gradle.kts ]; then
-    if grep -q "android" ${WORKING_DIR}/build.gradle* 2>/dev/null; then
-        echo "=== Android Project Detected ==="
-        echo "Android project found. Common commands:"
-        echo "  ./gradlew assembleDebug     - Build debug APK"
-        echo "  ./gradlew assembleRelease   - Build release APK"
-        echo "  ./gradlew test              - Run unit tests"
-        echo "  ./gradlew lint              - Run lint checks"
-        echo ""
-        echo "APKs will be in: app/build/outputs/apk/"
-    fi
-fi
-
-# Show Android environment
-android-version 2>/dev/null || {
-    echo "Android SDK: ${ANDROID_HOME:-/opt/android-sdk}"
-    sdkmanager --list_installed 2>/dev/null | head -10 || true
-}
-EOF
-
-log_command "Setting Android startup script permissions" \
-    chmod +x /etc/container/first-startup/30-android-setup.sh
+install -m 755 /tmp/build-scripts/features/lib/android/30-android-setup.sh \
+    /etc/container/first-startup/30-android-setup.sh
 
 # ============================================================================
 # Verification Script
 # ============================================================================
 log_message "Creating Android verification script..."
 
-command cat > /usr/local/bin/test-android << 'EOF'
-#!/bin/bash
-echo "=== Android SDK Installation Status ==="
-
-echo ""
-echo "=== SDK Location ==="
-echo "ANDROID_HOME: ${ANDROID_HOME:-/opt/android-sdk}"
-echo "ANDROID_SDK_ROOT: ${ANDROID_SDK_ROOT:-not set}"
-if [ -n "${ANDROID_NDK_HOME:-}" ]; then
-    echo "ANDROID_NDK_HOME: ${ANDROID_NDK_HOME}"
-fi
-
-echo ""
-echo "=== Command-line Tools ==="
-for cmd in sdkmanager avdmanager; do
-    if command -v $cmd &>/dev/null; then
-        echo "✓ $cmd is available"
-    else
-        echo "✗ $cmd is not found"
-    fi
-done
-
-echo ""
-echo "=== Platform Tools ==="
-for cmd in adb fastboot; do
-    if command -v $cmd &>/dev/null; then
-        echo "✓ $cmd is available"
-        case $cmd in
-            adb) adb version 2>&1 | head -1 | command sed 's/^/  /' ;;
-        esac
-    else
-        echo "✗ $cmd is not found"
-    fi
-done
-
-echo ""
-echo "=== Build Tools ==="
-for cmd in aapt aapt2 apksigner zipalign d8; do
-    if command -v $cmd &>/dev/null; then
-        echo "✓ $cmd is available"
-    else
-        echo "✗ $cmd is not found"
-    fi
-done
-
-echo ""
-echo "=== NDK Tools ==="
-for cmd in ndk-build; do
-    if command -v $cmd &>/dev/null; then
-        echo "✓ $cmd is available"
-    else
-        echo "- $cmd not installed (optional)"
-    fi
-done
-
-echo ""
-echo "=== Installed Platforms ==="
-ls -1 "${ANDROID_HOME:-/opt/android-sdk}/platforms/" 2>/dev/null || echo "None found"
-
-echo ""
-echo "=== Installed Build Tools ==="
-ls -1 "${ANDROID_HOME:-/opt/android-sdk}/build-tools/" 2>/dev/null || echo "None found"
-
-echo ""
-echo "=== Licenses ==="
-if [ -d "${ANDROID_HOME:-/opt/android-sdk}/licenses" ]; then
-    echo "✓ SDK licenses are accepted"
-else
-    echo "✗ SDK licenses directory not found"
-fi
-
-echo ""
-echo "=== Cache Directories ==="
-echo "SDK Cache: /cache/android-sdk"
-echo "Gradle Cache: /cache/android-gradle"
-EOF
-
-log_command "Setting test-android script permissions" \
-    chmod +x /usr/local/bin/test-android
+install -m 755 /tmp/build-scripts/features/lib/android/test-android.sh \
+    /usr/local/bin/test-android
 
 # ============================================================================
 # Fix Permissions

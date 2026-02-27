@@ -288,25 +288,8 @@ log_message "Creating global R configuration"
 # Create system-wide Rprofile
 log_command "Creating R config directory" \
     mkdir -p /etc/R
-command cat > /etc/R/Rprofile.site << 'EOF'
-# System-wide R startup configuration
-local({
-    # Set default CRAN mirror
-    options(repos = c(CRAN = "https://cloud.r-project.org/"))
-
-    # Configure library paths
-    r_libs_user <- Sys.getenv("R_LIBS_USER", "/cache/r/library")
-    .libPaths(c(r_libs_user, .libPaths()))
-
-    # Set cache directory for downloaded packages
-    options(pkgType = "source")
-
-    # Suppress startup messages in non-interactive mode
-    if (!interactive()) {
-        options(warn = -1)
-    }
-})
-EOF
+install -m 644 /tmp/build-scripts/features/lib/r/Rprofile.site \
+    /etc/R/Rprofile.site
 
 # Create system-wide Renviron
 command cat > /etc/R/Renviron.site << EOF
@@ -327,74 +310,16 @@ log_message "Creating R startup script"
 log_command "Creating container startup directory" \
     mkdir -p /etc/container/first-startup
 
-command cat > /etc/container/first-startup/10-r-setup.sh << 'EOF'
-#!/bin/bash
-# R development environment setup
-
-# Set up cache paths
-export R_LIBS_USER="/cache/r/library"
-export R_CACHE_DIR="/cache/r"
-export TMPDIR="${R_CACHE_DIR}/tmp"
-
-# Ensure directories exist with correct permissions
-for dir in "${R_LIBS_USER}" "${TMPDIR}"; do
-    if [ ! -d "${dir}" ]; then
-        mkdir -p "${dir}"
-    fi
-done
-
-# Check for R project files
-if [ -f ${WORKING_DIR}/*.Rproj ] || [ -f ${WORKING_DIR}/.Rprofile ]; then
-    echo "=== R Project Detected ==="
-    echo "R $(R --version | head -n 1) is installed"
-    echo "User library: ${R_LIBS_USER}"
-    echo "Project-specific packages can be installed with: r-install('package-name')"
-fi
-
-# Install project dependencies if packrat is used
-if [ -f ${WORKING_DIR}/packrat/packrat.lock ]; then
-    echo "Packrat detected, restoring packages..."
-    cd ${WORKING_DIR}
-    Rscript -e "if (!require('packrat')) install.packages('packrat'); packrat::restore()"
-fi
-
-# Install project dependencies if renv is used
-if [ -f ${WORKING_DIR}/renv.lock ]; then
-    echo "renv detected, restoring packages..."
-    cd ${WORKING_DIR}
-    Rscript -e "if (!require('renv')) install.packages('renv'); renv::restore()"
-fi
-EOF
-log_command "Setting R startup script permissions" \
-    chmod +x /etc/container/first-startup/10-r-setup.sh
+install -m 755 /tmp/build-scripts/features/lib/r/10-r-setup.sh \
+    /etc/container/first-startup/10-r-setup.sh
 
 # ============================================================================
 # Verification Script
 # ============================================================================
 log_message "Creating R verification script..."
 
-command cat > /usr/local/bin/test-r << 'EOF'
-#!/bin/bash
-echo "=== R Installation Status ==="
-if command -v R &> /dev/null; then
-    R --version | head -n 1
-    echo "R binary: $(which R)"
-    echo "R home: $(R RHOME)"
-    echo "R library paths:"
-    Rscript -e ".libPaths()" | command sed 's/^/  /'
-else
-    echo "✗ R is not installed"
-fi
-
-echo ""
-if command -v Rscript &> /dev/null; then
-    echo "✓ Rscript is available at $(which Rscript)"
-else
-    echo "✗ Rscript is not found"
-fi
-EOF
-log_command "Setting test-r script permissions" \
-    chmod +x /usr/local/bin/test-r
+install -m 755 /tmp/build-scripts/features/lib/r/test-r.sh \
+    /usr/local/bin/test-r
 
 # ============================================================================
 # Final Verification

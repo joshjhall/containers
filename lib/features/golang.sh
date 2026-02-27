@@ -274,98 +274,16 @@ echo "=== Creating Go startup script ==="
 log_command "Creating startup directory" \
     mkdir -p /etc/container/first-startup
 
-command cat > /etc/container/first-startup/30-go-setup.sh << 'EOF'
-#!/bin/bash
-# Go development environment setup
-
-# Source base utilities for secure PATH management
-if [ -f /opt/container-runtime/base/logging.sh ]; then
-    source /opt/container-runtime/base/logging.sh
-fi
-if [ -f /opt/container-runtime/base/path-utils.sh ]; then
-    source /opt/container-runtime/base/path-utils.sh
-fi
-
-# Set up Go environment
-export GOPATH="/cache/go"
-export GOCACHE="/cache/go-build"
-export GOMODCACHE="/cache/go-mod"
-
-# Add Go binaries to PATH with security validation
-if command -v safe_add_to_path >/dev/null 2>&1; then
-    safe_add_to_path "${GOPATH}/bin" 2>/dev/null || export PATH="${GOPATH}/bin:$PATH"
-    safe_add_to_path "/usr/local/go/bin" 2>/dev/null || export PATH="/usr/local/go/bin:$PATH"
-else
-    # Fallback if safe_add_to_path not available
-    export PATH="${GOPATH}/bin:/usr/local/go/bin:$PATH"
-fi
-
-# Check for Go projects (only if WORKING_DIR is set)
-if [ -n "${WORKING_DIR:-}" ] && [ -f "${WORKING_DIR}/go.mod" ]; then
-    echo "=== Go Project Detected ==="
-    echo "Go $(go version | awk '{print $3}') is installed"
-    echo "GOPATH: ${GOPATH}"
-    echo "Module: $(head -1 "${WORKING_DIR}/go.mod" | awk '{print $2}')"
-
-    cd "${WORKING_DIR}"
-
-    # Download dependencies
-    echo "Downloading Go module dependencies..."
-    go mod download || echo "Note: Some dependencies may have failed to download"
-
-    # Verify dependencies
-    if go mod verify &> /dev/null; then
-        echo "✓ All dependencies verified"
-    else
-        echo "⚠ Some dependencies could not be verified"
-    fi
-
-    echo ""
-    echo "Common commands:"
-    echo "  go build    - Build the project"
-    echo "  go test     - Run tests"
-    echo "  go run .    - Run the application"
-    echo "  go vet      - Run Go vet"
-fi
-
-# Show available Go tools
-if command -v go &> /dev/null; then
-    echo ""
-    echo "Go development tools:"
-    echo "  For development tools like gopls, dlv, golangci-lint,"
-    echo "  goimports, etc., enable the golang-dev feature."
-    echo ""
-    echo "Create new projects:"
-    echo "  go-init <module-name> [cli|lib|api]"
-fi
-EOF
-
-log_command "Setting startup script permissions" \
-    chmod +x /etc/container/first-startup/30-go-setup.sh
+install -m 755 /tmp/build-scripts/features/lib/golang/30-go-setup.sh \
+    /etc/container/first-startup/30-go-setup.sh
 
 # ============================================================================
 # Verification Script
 # ============================================================================
 log_message "Creating Go verification script..."
 
-command cat > /usr/local/bin/test-go << 'EOF'
-#!/bin/bash
-echo "=== Go Installation Status ==="
-if command -v go &> /dev/null; then
-    go version
-    echo "Go binary: $(which go)"
-    echo "GOROOT: ${GOROOT:-/usr/local/go}"
-    echo "GOPATH: ${GOPATH:-/cache/go}"
-    echo "GOCACHE: ${GOCACHE:-/cache/go-build}"
-    echo "GOMODCACHE: ${GOMODCACHE:-/cache/go-mod}"
-else
-    echo "✗ Go is not installed"
-fi
-
-EOF
-
-log_command "Setting test-go script permissions" \
-    chmod +x /usr/local/bin/test-go
+install -m 755 /tmp/build-scripts/features/lib/golang/test-go.sh \
+    /usr/local/bin/test-go
 
 # ============================================================================
 # Final Verification
