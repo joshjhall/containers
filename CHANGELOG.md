@@ -5,6 +5,54 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.15.2] - 2026-02-27
+
+### Added
+
+- Add audit-ai-config scanner and audit:acknowledge inline suppression (#80, #99)
+- Add batch sub-agents for scanners, issue-writer agent, and fix CI benchmark timeout (#79, #98)
+- Add ai-file-bloat and doc-file-bloat categories to audit-ai-config scanner
+- Add /next-issue skill for issue-driven development workflow
+
+### Changed
+
+- Remove dead _check_command code and add map_arch helper (#84)
+- Extract bashrc heredocs from oversized feature scripts (#81)
+- Split oversized files into focused modules (#81)
+- Extract 37 write_bashrc_content heredocs to lib/bashrc/ files (#100)
+- Extract write_bashrc_content heredocs to external bashrc files
+- Extract heredocs and large functions to sub-modules (#82)
+- Split dev-tools.sh and validate-config.sh into focused sub-modules (#92)
+
+### Documentation
+
+- Slim CLAUDE.md from 952 to 397 lines by migrating reference content
+
+### Fixed
+
+- Speed up slow unit tests that caused 70s+ of unnecessary wait
+- Resolve critical audit findings from codebase audit
+- Resolve remaining #85 dead code and naming drift items
+- Skip untracked .env files in security scanner (#77)
+- Replace SHA1 with SHA256 for Maven artifacts and gate TOFU downloads (#87)
+- Reduce function complexity in 4 high-branch functions (#83)
+- Repair broken links, stale versions, and hard-coded test counts (#97)
+- Add include guard to feature-header.sh and defensive check to install-github-release.sh (#93)
+- Python build on Debian 13 and add curl retry for transient failures
+- Add include guards to lib/base modules and deduplicate safe_eval (#94)
+- Unbound ARCH variable in docker.sh for dive and cosign installs
+- Use primary ghcr.io source for Trivy vulnerability DB
+
+### Miscellaneous
+
+- Sync AGENTS.md with CLAUDE.md
+
+### Testing
+
+- Add error path and edge case tests for checksum, retry, and version resolution (#90)
+- Add unit tests for install-github-release.sh and Claude startup scripts (#89)
+- Replace grep-only tests with functional tests (#91)
+
 ## [4.15.1] - 2026-02-25
 
 ### Added
@@ -60,6 +108,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Return exit code 2 for TOFU checksum fallback (#60)
 - Close input validation gaps in secrets and eval paths (#63)
 - Remove redundant OP_SERVICE_ACCOUNT_TOKEN from docker-compose
+- Remove `local` keyword used outside function in claude-setup
+- Run only changed-file tests in pre-push hook to prevent SSH timeout
 
 ### Miscellaneous
 
@@ -1050,6 +1100,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix prettier and markdownlint formatting in README
 - Format TLS documentation files
 
+[4.15.2]: https://github.com/joshjhall/containers/compare/v4.15.1...v4.15.2
 [4.15.1]: https://github.com/joshjhall/containers/compare/v4.15.0...v4.15.1
 [4.15.0]: https://github.com/joshjhall/containers/compare/v4.14.5...v4.15.0
 [4.14.5]: https://github.com/joshjhall/containers/compare/v4.14.4...v4.14.5
