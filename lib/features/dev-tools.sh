@@ -185,133 +185,9 @@ log_message "Configuring environment and aliases..."
 log_command "Creating bashrc.d directory" \
     mkdir -p /etc/bashrc.d
 
-# Create system-wide dev tools configuration
-write_bashrc_content /etc/bashrc.d/80-dev-tools.sh "dev tools bashrc configuration" << 'DEV_TOOLS_BASHRC_EOF'
-# ----------------------------------------------------------------------------
-# Development Tools Configuration and Helpers
-# ----------------------------------------------------------------------------
-
-# Error protection for interactive shells
-set +u  # Don't error on unset variables
-set +e  # Don't exit on errors
-
-# Check if we're in an interactive shell
-if [[ $- != *i* ]]; then
-    # Not interactive, skip loading
-    return 0
-fi
-
-
-# Override with modern tool aliases when available
-# Prefer eza (maintained) over exa (deprecated but still in older Debian)
-if command -v eza &> /dev/null; then
-    alias ls='eza'
-    alias ll='eza -l'
-    alias la='eza -la'
-    alias l='eza -F'
-    alias tree='eza --tree'
-elif command -v exa &> /dev/null; then
-    alias ls='exa'
-    alias ll='exa -l'
-    alias la='exa -la'
-    alias l='exa -F'
-    alias tree='exa --tree'
-fi
-
-if command -v batcat &> /dev/null; then
-    alias cat='batcat --style=plain'
-    alias bat='batcat'
-    alias less='batcat --paging=always'
-    export LESSOPEN="| /usr/bin/env batcat --color=always --style=plain %s 2>/dev/null"
-elif command -v bat &> /dev/null; then
-    alias cat='bat --style=plain'
-    alias less='bat --paging=always'
-    export LESSOPEN="| /usr/bin/env bat --color=always --style=plain %s 2>/dev/null"
-fi
-
-if command -v fdfind &> /dev/null; then
-    alias fd='fdfind'
-    alias find='fdfind'  # Direct override for muscle memory
-elif command -v fd &> /dev/null; then
-    alias find='fd'  # Direct override for muscle memory
-fi
-
-if command -v rg &> /dev/null; then
-    alias grep='rg'
-    alias egrep='rg'
-    alias fgrep='rg -F'
-fi
-
-if command -v duf &> /dev/null; then
-    alias df='duf'
-fi
-
-if command -v ncdu &> /dev/null; then
-    alias du='echo "Hint: Try ncdu for an interactive disk usage analyzer" && du'
-fi
-
-if command -v htop &> /dev/null; then
-    alias top='htop'
-fi
-
-# Git aliases with delta
-if command -v delta &> /dev/null; then
-    alias gd='git diff'
-    alias gdc='git diff --cached'
-    alias gdh='git diff HEAD'
-fi
-
-# GitHub CLI aliases
-if command -v gh &> /dev/null; then
-    alias ghpr='gh pr create'
-    alias ghprs='gh pr list'
-    alias ghprv='gh pr view'
-    alias ghprc='gh pr checks'
-    alias ghis='gh issue list'
-    alias ghiv='gh issue view'
-    alias ghruns='gh run list'
-    alias ghrunv='gh run view'
-fi
-
-# Additional modern tool shortcuts
-# (ipython alias moved to python-dev where ipython is actually installed)
-
-# Override basic tools with modern equivalents
-alias diff='colordiff' 2>/dev/null || true
-alias gitlog='tig' 2>/dev/null || true
-alias diskusage='ncdu' 2>/dev/null || true
-
-# Override lt alias to use eza/exa if available
-if command -v eza &> /dev/null; then
-    alias lt='eza -la --tree'
-elif command -v exa &> /dev/null; then
-    alias lt='exa -la --tree'
-fi
-
-# Entr helper functions
-if command -v entr &> /dev/null; then
-    # Watch and run tests
-    # Use 'command find' to bypass the find='fd' alias (fd has different syntax)
-    watch-test() {
-        command find . -name "*.py" -o -name "*.sh" | entr -c "$@"
-    }
-
-    # Watch and reload service
-    watch-reload() {
-        echo "$1" | entr -r "$@"
-    }
-
-    # Watch and run make
-    # Use 'command find' to bypass the find='fd' alias (fd has different syntax)
-    watch-make() {
-        command find . -name "*.c" -o -name "*.h" -o -name "Makefile" | entr -c make "$@"
-    }
-fi
-
-
-# Note: We leave set +u and set +e in place for interactive shells
-# to prevent errors with undefined variables or failed commands
-DEV_TOOLS_BASHRC_EOF
+# Create system-wide dev tools configuration (content in lib/bashrc/dev-tools.sh)
+write_bashrc_content /etc/bashrc.d/80-dev-tools.sh "dev tools bashrc configuration" \
+    < /tmp/build-scripts/features/lib/bashrc/dev-tools.sh
 
 # ============================================================================
 # Binary Tool Installations
@@ -568,110 +444,9 @@ command cat >> /etc/gitconfig << 'EOF'
     colorMoved = default
 EOF
 
-# Add tool-specific configurations to bashrc.d
-write_bashrc_content /etc/bashrc.d/80-dev-tools.sh "tool-specific configurations" << 'DEV_TOOLS_BASHRC_EOF'
-
-# fzf configuration
-if [ -f /opt/fzf/bin/fzf ]; then
-    # Source shell integration files if they exist
-    if [ -f /opt/fzf/shell/key-bindings.bash ]; then
-        source /opt/fzf/shell/key-bindings.bash 2>/dev/null || true
-    fi
-    if [ -f /opt/fzf/shell/completion.bash ]; then
-        source /opt/fzf/shell/completion.bash 2>/dev/null || true
-    fi
-
-    # Better fzf defaults
-    export FZF_DEFAULT_OPTS="--height 40% --layout=reverse --border --info=inline"
-
-    # Use fd for fzf if available
-    if command -v fd &> /dev/null; then
-        export FZF_DEFAULT_COMMAND='fd --type f --hidden --follow --exclude .git'
-        export FZF_CTRL_T_COMMAND="$FZF_DEFAULT_COMMAND"
-        export FZF_ALT_C_COMMAND='fd --type d --hidden --follow --exclude .git'
-    fi
-fi
-
-# direnv hook
-if command -v direnv &> /dev/null; then
-    safe_eval "direnv hook bash" direnv hook bash
-fi
-
-# lazygit alias
-if command -v lazygit &> /dev/null; then
-    alias lg='lazygit'
-    alias lzg='lazygit'
-fi
-
-# just aliases
-if command -v just &> /dev/null; then
-    alias j='just'
-    # just completion with validation
-    COMPLETION_FILE="/tmp/just-completion.$$.bash"
-    if just --completions bash > "$COMPLETION_FILE" 2>/dev/null; then
-        # Validate completion output before sourcing
-        # Use 'command grep' to bypass any aliases (e.g., grep='rg')
-        if [ -f "$COMPLETION_FILE" ] && \
-           [ "$(wc -c < "$COMPLETION_FILE")" -lt 100000 ] && \
-           ! command grep -qE '(rm -rf|curl.*bash|wget.*bash|eval.*\$)' "$COMPLETION_FILE"; then
-            # shellcheck disable=SC1090  # Dynamic source is validated
-            source "$COMPLETION_FILE"
-        fi
-    fi
-    command rm -f "$COMPLETION_FILE"
-fi
-
-# mkcert helpers
-if command -v mkcert &> /dev/null; then
-    alias mkcert-install='mkcert -install'
-    alias mkcert-uninstall='mkcert -uninstall'
-fi
-
-# Helper function for fzf git operations
-if command -v fzf &> /dev/null && command -v git &> /dev/null; then
-    # Git branch selector
-    # Use 'command grep' to bypass aliases for reliable filtering
-    fgb() {
-        git branch -a | command grep -v HEAD | fzf --preview 'git log --oneline --graph --date=short --color=always --pretty="format:%C(auto)%cd %h%d %s" $(echo {} | command sed "s/.* //")' | command sed "s/.* //"
-    }
-
-    # Git checkout with fzf
-    fco() {
-        local branch
-        branch=$(fgb)
-        [ -n "$branch" ] && git checkout "$branch"
-    }
-
-    # Git log browser
-    fgl() {
-        git log --graph --color=always --format="%C(auto)%h%d %s %C(black)%C(bold)%cr" "$@" |
-        fzf --ansi --no-sort --reverse --tiebreak=index --bind=ctrl-s:toggle-sort \
-            --bind "ctrl-m:execute:
-                (grep -o '[a-f0-9]\{7\}' | head -1 |
-                xargs -I % sh -c 'git show --color=always % | less -R') <<< '{}'"
-    }
-fi
-
-# GitHub Actions (act) aliases
-if command -v act &> /dev/null; then
-    alias act-list='act -l'
-    alias act-dry='act -n'
-    alias act-ci='act push'
-    alias act-pr='act pull_request'
-fi
-
-# GitLab CLI aliases
-if command -v glab &> /dev/null; then
-    alias gl='glab'
-    alias glmr='glab mr create'
-    alias glmrs='glab mr list'
-    alias glmrv='glab mr view'
-    alias glis='glab issue list'
-    alias gliv='glab issue view'
-    alias glpipe='glab pipeline list'
-    alias glci='glab ci view'
-fi
-DEV_TOOLS_BASHRC_EOF
+# Add tool-specific configurations to bashrc.d (content in lib/bashrc/dev-tools-extras.sh)
+write_bashrc_content /etc/bashrc.d/80-dev-tools.sh "tool-specific configurations" \
+    < /tmp/build-scripts/features/lib/bashrc/dev-tools-extras.sh
 
 # ============================================================================
 # Cache Configuration
@@ -684,23 +459,9 @@ DEV_TOOLS_CACHE="/cache/dev-tools"
 # Create cache directory using shared utility
 create_cache_directories "${DEV_TOOLS_CACHE}"
 
-# Configure tools to use cache where applicable
-write_bashrc_content /etc/bashrc.d/80-dev-tools.sh "cache configuration" << 'DEV_TOOLS_BASHRC_EOF'
-
-# Development tools cache configuration
-export DEV_TOOLS_CACHE="/cache/dev-tools"
-
-# mkcert CA root storage
-export CAROOT="${DEV_TOOLS_CACHE}/mkcert-ca"
-
-# direnv allow directory
-export DIRENV_ALLOW_DIR="${DEV_TOOLS_CACHE}/direnv-allow"
-
-# Claude Code LSP support
-# Enables Language Server Protocol integration for better code intelligence
-# LSP plugins are configured automatically on first container startup
-export ENABLE_LSP_TOOL=1
-DEV_TOOLS_BASHRC_EOF
+# Configure tools to use cache where applicable (content in lib/bashrc/dev-tools-cache.sh)
+write_bashrc_content /etc/bashrc.d/80-dev-tools.sh "cache configuration" \
+    < /tmp/build-scripts/features/lib/bashrc/dev-tools-cache.sh
 
 # Make bashrc.d script executable to match other scripts in the directory
 log_command "Setting dev-tools bashrc script permissions" \

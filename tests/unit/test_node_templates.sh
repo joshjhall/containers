@@ -21,7 +21,7 @@ test_suite "Node.js Template System Tests"
 # Setup
 TEMPLATE_DIR="$PROJECT_ROOT/lib/features/templates/node"
 NODE_DEV_SH="$PROJECT_ROOT/lib/features/node-dev.sh"
-NODE_SH="$PROJECT_ROOT/lib/features/node.sh"
+NODE_ALIASES_BASHRC="$PROJECT_ROOT/lib/features/lib/bashrc/node-aliases.sh"
 
 # Test: Template files exist
 test_template_files_exist() {
@@ -68,9 +68,9 @@ test_load_function_exists_node_dev() {
 
 # Test: load_node_template function exists in node.sh
 test_load_function_exists_node() {
-    assert_file_exists "$NODE_SH"
-    assert_file_contains "$NODE_SH" "^load_node_template()" "load_node_template function is defined in node.sh"
-    assert_file_contains "$NODE_SH" 'sed "s/__PROJECT_NAME__' "node.sh function has placeholder substitution"
+    assert_file_exists "$NODE_ALIASES_BASHRC"
+    assert_file_contains "$NODE_ALIASES_BASHRC" "^load_node_template()" "load_node_template function is defined in node bashrc"
+    assert_file_contains "$NODE_ALIASES_BASHRC" 'sed "s/__PROJECT_NAME__' "node bashrc function has placeholder substitution"
 }
 
 # Test: node-init uses templates

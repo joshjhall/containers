@@ -22,6 +22,7 @@ test_suite "Java Template System Tests"
 # Setup
 TEMPLATE_DIR="$PROJECT_ROOT/lib/features/templates/java"
 JAVA_DEV_SH="$PROJECT_ROOT/lib/features/java-dev.sh"
+JAVA_DEV_BASHRC="$PROJECT_ROOT/lib/features/lib/bashrc/java-dev.sh"
 
 # Test: Template files exist
 test_template_files_exist() {
@@ -55,14 +56,14 @@ test_spotbugs_template_content() {
 
 # Test: load_java_template function exists
 test_load_function_exists() {
-    assert_file_exists "$JAVA_DEV_SH"
-    assert_file_contains "$JAVA_DEV_SH" "^load_java_template()" "load_java_template function is defined"
-    assert_file_contains "$JAVA_DEV_SH" "templates/java/" "Function references Java templates directory"
+    assert_file_exists "$JAVA_DEV_BASHRC"
+    assert_file_contains "$JAVA_DEV_BASHRC" "^load_java_template()" "load_java_template function is defined"
+    assert_file_contains "$JAVA_DEV_BASHRC" "templates/java/" "Function references Java templates directory"
 }
 
 # Test: java-benchmark uses template loader
 test_benchmark_uses_templates() {
-    assert_file_contains "$JAVA_DEV_SH" "load_java_template.*benchmark/Benchmark.java.tmpl" "java-benchmark uses template loader"
+    assert_file_contains "$JAVA_DEV_BASHRC" "load_java_template.*benchmark/Benchmark.java.tmpl" "java-benchmark uses template loader"
 }
 
 # Test: Config templates use loader
