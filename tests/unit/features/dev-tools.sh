@@ -216,7 +216,7 @@ test_permissions_ownership() {
 # Test: System tools installation list
 test_system_tools_list() {
     # List of system tools that should be marked for installation
-    # Note: either exa (Debian 11/12) or eza (Debian 13+) will be installed
+    # Note: eza is installed on all Debian versions (apt on 13+, GitHub release on 11/12)
     local system_tools=(
         # Search and file tools
         "ripgrep"
@@ -233,7 +233,6 @@ test_system_tools_list() {
         "bat"
         "tmux"
         "eza"
-        "exa"
         # Network tools
         "netcat-openbsd"
         "dnsutils"

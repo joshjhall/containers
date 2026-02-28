@@ -19,7 +19,6 @@ fi
 # ----------------------------------------------------------------------------
 alias wr='wrangler'
 alias wrd='wrangler dev'
-alias wrp='wrangler publish'         # Deprecated, use deploy
 alias wrdeploy='wrangler deploy'
 alias wrlogs='wrangler tail'
 alias wrlogin='wrangler login'

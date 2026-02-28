@@ -6,7 +6,7 @@
 #   Includes modern CLI replacements, git helpers, monitoring tools, and more.
 #
 # Features:
-#   - Modern CLI replacements: eza/exa (ls), bat (cat), duf (df), fd (find), ripgrep (grep)
+#   - Modern CLI replacements: eza (ls), bat (cat), duf (df), fd (find), ripgrep (grep)
 #   - Git helpers: lazygit, delta (side-by-side diffs), git-cliff, tig, colordiff
 #   - Development utilities: direnv, entr, fzf (fuzzy finder), inotify-tools
 #   - Network tools: netcat-openbsd, dnsutils, iputils-ping, traceroute
@@ -65,6 +65,7 @@ ACT_VERSION="${ACT_VERSION:-0.2.84}"
 GITCLIFF_VERSION="${GITCLIFF_VERSION:-2.8.0}"
 BIOME_VERSION="${BIOME_VERSION:-2.4.4}"
 TAPLO_VERSION="${TAPLO_VERSION:-0.10.0}"
+EZA_VERSION="${EZA_VERSION:-0.23.4}"
 
 # ============================================================================
 # Repository Configuration
@@ -131,14 +132,18 @@ apt_install \
     tmux
 
 # Modern ls replacement - Debian version dependent
-# Debian 11/12: exa (deprecated upstream but only option)
-# Debian 13+: eza (maintained fork)
+# Debian 13+: eza available from apt
+# Debian 11/12: eza installed from GitHub release (exa is archived upstream)
 if is_debian_version 13; then
-    log_message "Installing eza (modern ls replacement)..."
+    log_message "Installing eza (modern ls replacement) from apt..."
     apt_install eza
 else
-    log_message "Installing exa (modern ls replacement)..."
-    apt_install exa
+    log_message "Installing eza (modern ls replacement) from GitHub release..."
+    install_github_release "eza" "$EZA_VERSION" \
+        "https://github.com/eza-community/eza/releases/download/v${EZA_VERSION}" \
+        "eza_x86_64-unknown-linux-gnu.tar.gz" \
+        "eza_aarch64-unknown-linux-gnu.tar.gz" \
+        "calculate" "extract_flat:eza"
 fi
 
 # Network debugging tools
@@ -265,10 +270,10 @@ export DIRENV_ALLOW_DIR="${DEV_TOOLS_CACHE}/direnv-allow"
 # Log feature summary
 log_feature_summary \
     --feature "Development Tools" \
-    --tools "gh,lazygit,delta,act,git-cliff,glab,biome,taplo,duf,entr,fzf,direnv,mkcert,jq,ripgrep,fd,bat,eza/exa,htop,ncdu" \
+    --tools "gh,lazygit,delta,act,git-cliff,glab,biome,taplo,duf,entr,fzf,direnv,mkcert,jq,ripgrep,fd,bat,eza,htop,ncdu" \
     --paths "${DEV_TOOLS_CACHE},/opt/fzf,${CAROOT}" \
     --env "DEV_TOOLS_CACHE,CAROOT,DIRENV_ALLOW_DIR,ENABLE_LSP_TOOL" \
-    --commands "gh,lazygit,delta,act,git-cliff,glab,biome,duf,entr,fzf,direnv,mkcert,jq,rg,fd,bat,eza/exa,htop,ncdu" \
+    --commands "gh,lazygit,delta,act,git-cliff,glab,biome,duf,entr,fzf,direnv,mkcert,jq,rg,fd,bat,eza,htop,ncdu" \
     --next-steps "Run 'test-dev-tools' to verify installation. Many modern CLI replacements are aliased (ls=eza, cat=bat, grep=rg, find=fd). Claude Code is installed separately by claude-code-setup.sh."
 
 # End logging
