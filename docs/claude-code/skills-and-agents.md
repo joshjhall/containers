@@ -10,7 +10,7 @@ installed to `~/.claude/skills/` and `~/.claude/agents/` on first container
 startup via `claude-setup`. Project-level `.claude/` configs merge with these
 (union semantics, project wins on name conflicts).
 
-### Skills (always installed — 12 skills)
+### Skills (always installed — 13 skills)
 
 | Skill                     | Purpose                                                                             |
 | ------------------------- | ----------------------------------------------------------------------------------- |
@@ -25,6 +25,7 @@ startup via `claude-setup`. Project-level `.claude/` configs merge with these
 | `skill-authoring`         | Skill/instruction writing, quality criteria, cross-tool patterns                    |
 | `agent-authoring`         | Agent/subagent design, tool scoping, model selection, prompt design                 |
 | `next-issue`              | Issue-driven dev: select by priority, plan; delegates shipping to `next-issue-ship` |
+| `codebase-audit`          | Periodic codebase sweep: tech debt, security, test gaps, architecture, docs         |
 | `next-issue-ship`         | Ship completed issue work: commit, PR/push, label issue, loop back                  |
 
 ### Conditional Skills

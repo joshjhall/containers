@@ -236,7 +236,7 @@ model selection.
 
 ### Skills & Agents
 
-12 always-installed skills + 2 conditional, 11 agents (including 6 audit
+13 always-installed skills + 2 conditional, 11 agents (including 6 audit
 scanners and `issue-writer`). The `/codebase-audit` command dispatches scanners
 in parallel, including file bloat detection for AI instruction files and
 documentation. Issue-driven development uses two skills: `/next-issue` selects
