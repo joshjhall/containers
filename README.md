@@ -135,26 +135,26 @@ All features are enabled via `INCLUDE_<FEATURE>=true` build arguments.
 
 ### Languages
 
-| Feature        | Build Arg                 | What's Included                              |
-| -------------- | ------------------------- | -------------------------------------------- |
-| **Python**     | `INCLUDE_PYTHON=true`     | Python 3.14+ from source, pip, pipx, uv      |
-| **Python Dev** | `INCLUDE_PYTHON_DEV=true` | + Poetry, black, ruff, mypy, pytest, jupyter |
-| **Node.js**    | `INCLUDE_NODE=true`       | Node 22 LTS, npm, yarn, pnpm                 |
-| **Node Dev**   | `INCLUDE_NODE_DEV=true`   | + TypeScript, ESLint, Jest, Vite, webpack    |
-| **Rust**       | `INCLUDE_RUST=true`       | Latest stable, cargo                         |
-| **Rust Dev**   | `INCLUDE_RUST_DEV=true`   | + clippy, rustfmt, cargo-watch, bacon        |
-| **Go**         | `INCLUDE_GOLANG=true`     | Latest with module support                   |
-| **Go Dev**     | `INCLUDE_GOLANG_DEV=true` | + delve, gopls, staticcheck                  |
-| **Ruby**       | `INCLUDE_RUBY=true`       | Ruby 3.3+, bundler                           |
-| **Ruby Dev**   | `INCLUDE_RUBY_DEV=true`   | + rubocop, solargraph                        |
-| **Java**       | `INCLUDE_JAVA=true`       | OpenJDK 21                                   |
-| **Java Dev**   | `INCLUDE_JAVA_DEV=true`   | + Maven, Gradle                              |
-| **R**          | `INCLUDE_R=true`          | R environment                                |
-| **R Dev**      | `INCLUDE_R_DEV=true`      | + tidyverse, devtools                        |
-| **Kotlin**     | `INCLUDE_KOTLIN=true`     | Kotlin compiler (auto-triggers Java)         |
-| **Kotlin Dev** | `INCLUDE_KOTLIN_DEV=true` | + ktlint, detekt, kotlin-language-server     |
-| **Mojo**       | `INCLUDE_MOJO=true`       | Mojo language runtime                        |
-| **Mojo Dev**   | `INCLUDE_MOJO_DEV=true`   | + Mojo development tools                     |
+| Feature        | Build Arg                 | What's Included                                 |
+| -------------- | ------------------------- | ----------------------------------------------- |
+| **Python**     | `INCLUDE_PYTHON=true`     | Python 3.14+ from source, pip, pipx, Poetry, uv |
+| **Python Dev** | `INCLUDE_PYTHON_DEV=true` | + black, ruff, mypy, pytest, jupyter            |
+| **Node.js**    | `INCLUDE_NODE=true`       | Node 22 LTS, npm, yarn, pnpm                    |
+| **Node Dev**   | `INCLUDE_NODE_DEV=true`   | + TypeScript, ESLint, Jest, Vite, webpack       |
+| **Rust**       | `INCLUDE_RUST=true`       | Latest stable, cargo                            |
+| **Rust Dev**   | `INCLUDE_RUST_DEV=true`   | + clippy, rustfmt, cargo-watch, bacon           |
+| **Go**         | `INCLUDE_GOLANG=true`     | Latest with module support                      |
+| **Go Dev**     | `INCLUDE_GOLANG_DEV=true` | + delve, gopls, staticcheck                     |
+| **Ruby**       | `INCLUDE_RUBY=true`       | Ruby 3.3+, bundler                              |
+| **Ruby Dev**   | `INCLUDE_RUBY_DEV=true`   | + rubocop, solargraph                           |
+| **Java**       | `INCLUDE_JAVA=true`       | OpenJDK 21                                      |
+| **Java Dev**   | `INCLUDE_JAVA_DEV=true`   | + Maven, Gradle                                 |
+| **R**          | `INCLUDE_R=true`          | R environment                                   |
+| **R Dev**      | `INCLUDE_R_DEV=true`      | + tidyverse, devtools                           |
+| **Kotlin**     | `INCLUDE_KOTLIN=true`     | Kotlin compiler (auto-triggers Java)            |
+| **Kotlin Dev** | `INCLUDE_KOTLIN_DEV=true` | + ktlint, detekt, kotlin-language-server        |
+| **Mojo**       | `INCLUDE_MOJO=true`       | Mojo language runtime                           |
+| **Mojo Dev**   | `INCLUDE_MOJO_DEV=true`   | + Mojo development tools                        |
 
 ### Mobile Development
 

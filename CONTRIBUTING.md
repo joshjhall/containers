@@ -411,9 +411,11 @@ For new features, add integration tests:
 # Create integration test
 tests/integration/builds/test_myfeature.sh
 
-# Test that feature builds and works
-docker build --build-arg INCLUDE_MYFEATURE=true -t test:myfeature .
-docker run --rm test:myfeature myfeature --version
+# Test using the integration test framework (preferred)
+./tests/run_integration_tests.sh myfeature
+
+# Or use the quick feature test script
+./tests/test_feature.sh myfeature
 ```
 
 Run integration tests:

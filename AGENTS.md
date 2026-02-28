@@ -108,8 +108,8 @@ The build context (`.`) **MUST** come at the very end:
 # ✓ CORRECT - context at the end
 docker build -f Dockerfile --build-arg PROJECT_PATH=. --build-arg PROJECT_NAME=test -t test:image .
 
-# ✗ WRONG - arguments after the context
-docker build -t test:image -f Dockerfile --build-arg PROJECT_PATH=. --build-arg PROJECT_NAME=test .
+# ✗ WRONG - context before flags (buildx may misinterpret)
+docker build . -f Dockerfile --build-arg PROJECT_PATH=. --build-arg PROJECT_NAME=test -t test:image
 
 # ✗ WRONG - using buildx explicitly may fail
 docker buildx build -t test:image -f Dockerfile --build-arg ARG=value .
