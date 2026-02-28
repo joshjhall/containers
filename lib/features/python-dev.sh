@@ -114,7 +114,7 @@ log_command "Installing Python development packages" \
 # ============================================================================
 log_message "Creating symlinks for Python development tools..."
 
-# Since we're installing directly from source, tools are in /usr/local/bin
+# Tools are installed as user, binaries are in ~/.local/bin
 # Check if any tools need alternative names
 PYTHON_BIN_DIR="/usr/local/bin"
 
@@ -173,7 +173,7 @@ log_command "Installing python-lsp-server with plugins" \
     python-lsp-ruff"
 
 # Verify LSP installation
-if command -v pylsp &>/dev/null; then
+if su - "${USERNAME}" -c "command -v pylsp" &>/dev/null; then
     log_message "Python LSP installed successfully"
 else
     log_warning "Python LSP installation could not be verified"
@@ -186,7 +186,7 @@ log_command "Installing pyright" \
     su - "${USERNAME}" -c "export PIP_CACHE_DIR='${PIP_CACHE_DIR}' && /usr/local/bin/python -m pip install --no-warn-script-location --prefer-binary pyright"
 
 # Verify pyright installation
-if command -v pyright &>/dev/null; then
+if su - "${USERNAME}" -c "command -v pyright" &>/dev/null; then
     log_message "Pyright installed successfully"
 else
     log_warning "Pyright installation could not be verified"
@@ -199,25 +199,25 @@ log_message "Verifying Python development tools installation..."
 
 # Check key tools
 log_command "Checking black version" \
-    /usr/local/bin/black --version || log_warning "black installation failed"
+    su - "${USERNAME}" -c "black --version" || log_warning "black installation failed"
 
 log_command "Checking pytest version" \
-    /usr/local/bin/pytest --version || log_warning "pytest installation failed"
+    su - "${USERNAME}" -c "pytest --version" || log_warning "pytest installation failed"
 
 log_command "Checking mypy version" \
-    /usr/local/bin/mypy --version || log_warning "mypy installation failed"
+    su - "${USERNAME}" -c "mypy --version" || log_warning "mypy installation failed"
 
 log_command "Checking jupyter version" \
-    /usr/local/bin/jupyter --version || log_warning "jupyter installation failed"
+    su - "${USERNAME}" -c "jupyter --version" || log_warning "jupyter installation failed"
 
 log_command "Checking ipython version" \
-    /usr/local/bin/ipython --version || log_warning "ipython installation failed"
+    su - "${USERNAME}" -c "ipython --version" || log_warning "ipython installation failed"
 
 log_command "Checking ruff version" \
-    /usr/local/bin/ruff --version || log_warning "ruff installation failed"
+    su - "${USERNAME}" -c "ruff --version" || log_warning "ruff installation failed"
 
 log_command "Checking pip-audit version" \
-    /usr/local/bin/pip-audit --version || log_warning "pip-audit installation failed"
+    su - "${USERNAME}" -c "pip-audit --version" || log_warning "pip-audit installation failed"
 
 # ============================================================================
 # Final ownership fix

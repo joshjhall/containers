@@ -349,7 +349,7 @@ log_command "Checking Poetry version" \
     ${PIPX_BIN_DIR}/poetry --version || log_warning "poetry not installed"
 
 log_command "Checking uv version" \
-    uv --version || log_warning "uv not installed"
+    su - "${USERNAME}" -c "uv --version" || log_warning "uv not installed"
 
 # ============================================================================
 # Final ownership fix
