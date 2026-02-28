@@ -12,7 +12,7 @@ Path: `.claude/memory/next-issue-state.md`
 
 ### Schema
 
-Write as YAML frontmatter followed by optional notes:
+Write as YAML frontmatter only (no body content):
 
 ```yaml
 ---
@@ -24,10 +24,6 @@ plan: "Validate session token expiry before granting access"
 started: "2026-02-27"
 platform: github
 ---
-
-## Notes
-
-Any free-form notes about progress, blockers, or decisions made.
 ```
 
 ### Fields
@@ -42,25 +38,20 @@ Any free-form notes about progress, blockers, or decisions made.
 | `started`  | yes      | ISO date when work began                             |
 | `platform` | yes      | `github` or `gitlab`                                 |
 
-### Commands
+### State Lifecycle
 
-**Write state** (use Write tool):
+**Write state** — use Write tool with the YAML frontmatter above.
 
-```text
-Write .claude/memory/next-issue-state.md with the YAML frontmatter above
-```
+**Clear state** — after successful ship, write empty content.
 
-**Read state** (use Read tool):
+**Stale state detection** — before offering to resume, validate:
 
-```text
-Read .claude/memory/next-issue-state.md
-```
-
-**Clear state** (after successful ship):
-
-```text
-Write .claude/memory/next-issue-state.md with empty content
-```
+1. Check if the issue is still open:
+   - GitHub: `gh issue view {N} --json state --jq .state`
+   - GitLab: `glab issue view {N}`
+1. Check if the branch exists: `git branch --list {branch}`
+1. If issue is closed or branch is gone → silently clear the file and
+   proceed to Phase 1 (don't ask the user about stale work)
 
 ______________________________________________________________________
 
@@ -186,6 +177,9 @@ consume those labels directly — no label mapping needed.
 
 ### Commit Message for Issue Closure
 
+**CRITICAL**: Every commit MUST include `Closes #{N}` in the body. Without
+this, the issue will not auto-close when the PR is merged.
+
 ```text
 {type}({scope}): {description}
 
@@ -196,3 +190,6 @@ Closes #{N}
 
 Where `{type}` matches the branch prefix (`fix` → `fix:`, `feature` → `feat:`,
 `refactor` → `refactor:`, etc.).
+
+**Verification**: After committing, run `git log -1 --format=%B` to confirm
+the `Closes #{N}` line is present. If missing, amend to add it.
