@@ -10,21 +10,22 @@ installed to `~/.claude/skills/` and `~/.claude/agents/` on first container
 startup via `claude-setup`. Project-level `.claude/` configs merge with these
 (union semantics, project wins on name conflicts).
 
-### Skills (always installed)
+### Skills (always installed — 12 skills)
 
-| Skill                     | Purpose                                                                |
-| ------------------------- | ---------------------------------------------------------------------- |
-| `container-environment`   | Dynamic - describes installed tools, cache paths, container patterns   |
-| `git-workflow`            | Git commit conventions, branch naming, PR workflow                     |
-| `testing-patterns`        | Test-first development, test framework patterns                        |
-| `code-quality`            | Linting, formatting, code review checklist                             |
-| `development-workflow`    | Phased feature development, task decomposition, scope control          |
-| `error-handling`          | Error hierarchy, validation, retry strategies, resilience patterns     |
-| `documentation-authoring` | Progressive documentation, writing standards, organization patterns    |
-| `shell-scripting`         | Shell naming conventions, namespace safety, testing, error handling    |
-| `skill-authoring`         | Skill/instruction writing, quality criteria, cross-tool patterns       |
-| `agent-authoring`         | Agent/subagent design, tool scoping, model selection, prompt design    |
-| `next-issue`              | Issue-driven dev: select by priority, plan, implement, ship PR, repeat |
+| Skill                     | Purpose                                                                             |
+| ------------------------- | ----------------------------------------------------------------------------------- |
+| `container-environment`   | Dynamic - describes installed tools, cache paths, container patterns                |
+| `git-workflow`            | Git commit conventions, branch naming, PR workflow                                  |
+| `testing-patterns`        | Test-first development, test framework patterns                                     |
+| `code-quality`            | Linting, formatting, code review checklist                                          |
+| `development-workflow`    | Phased feature development, task decomposition, scope control                       |
+| `error-handling`          | Error hierarchy, validation, retry strategies, resilience patterns                  |
+| `documentation-authoring` | Progressive documentation, writing standards, organization patterns                 |
+| `shell-scripting`         | Shell naming conventions, namespace safety, testing, error handling                 |
+| `skill-authoring`         | Skill/instruction writing, quality criteria, cross-tool patterns                    |
+| `agent-authoring`         | Agent/subagent design, tool scoping, model selection, prompt design                 |
+| `next-issue`              | Issue-driven dev: select by priority, plan; delegates shipping to `next-issue-ship` |
+| `next-issue-ship`         | Ship completed issue work: commit, PR/push, label issue, loop back                  |
 
 ### Conditional Skills
 

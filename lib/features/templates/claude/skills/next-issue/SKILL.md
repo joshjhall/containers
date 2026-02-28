@@ -1,5 +1,5 @@
 ---
-description: Issue-driven development workflow that picks the next issue by severity/effort priority, plans, implements, and ships a PR. Use when working through a backlog, picking up the next issue, or resuming in-progress work.
+description: Issue-driven development workflow that picks the next issue by severity/effort priority and creates an implementation plan. Use when working through a backlog, picking up the next issue, or resuming in-progress work. After implementation, use /next-issue-ship to deliver.
 ---
 
 # Next Issue
@@ -41,9 +41,12 @@ plan approval, use `ExitPlanMode` to begin implementation.
 1. **If a specific issue number was provided**: fetch that issue directly and
    skip the priority query
 1. **Otherwise query by priority** using the nested severity x effort loop
-   (see `state-format.md` for exact commands). Pick the first open, unassigned
-   issue returned
-1. **If no labeled issues found**: fall back to oldest open issue
+   (see `state-format.md` for exact commands). **Important**: all queries
+   MUST exclude issues with `status/pr-pending` or `status/commit-pending`
+   labels — see `state-format.md` for the exact `--search` / post-filter
+   syntax. Pick the first open, unassigned issue returned
+1. **If no labeled issues found**: fall back to oldest open issue (also
+   excluding `status/pr-pending` and `status/commit-pending`)
 1. Show the selected issue to the user — title, labels, body excerpt
 1. Ask: **Work on this issue?** (user can accept, skip to next, or pick
    a different one)
@@ -53,85 +56,27 @@ plan approval, use `ExitPlanMode` to begin implementation.
 ## Phase 2 — Plan
 
 1. Read the full issue body
+
 1. Explore the relevant code areas (use Grep/Glob/Read)
+
 1. **Assess scope** from labels:
+
    - `effort/trivial` or `effort/small`: Write a brief inline plan (3-5
      bullets) directly in the conversation
    - `effort/medium` or `effort/large`: Load `development-workflow`
      phase-details.md and create a thorough plan following its Phase 1-3
      structure
+
+1. **MANDATORY final step** — always append this verbatim as the last step
+   of the plan:
+
+   > **After all implementation and testing is complete**, invoke `/next-issue-ship`
+   > to commit, deliver, and close the issue.
+
 1. **Update state file** with `phase: plan` and a one-line plan summary
+
 1. **Exit plan mode** (call `ExitPlanMode` tool) — this presents the plan to
    the user for approval before implementation begins
-
-## Phase 3 — Implement
-
-1. Create a fresh branch from latest main:
-
-   ```bash
-   git fetch origin main
-   git checkout -b {prefix}/issue-{N}-{slug} origin/main
-   ```
-
-   (See `state-format.md` for prefix and slug derivation)
-
-1. Implement the changes following the approved plan
-
-1. Run tests — fix failures before proceeding
-
-1. **Update state file** with `phase: implement` and the branch name
-
-## Phase 4 — Ship
-
-1. Stage and commit. **CRITICAL**: The commit message MUST include
-   `Closes #{N}` (where N is the issue number) in the commit body to
-   auto-close the issue. Use this exact format:
-
-   ```text
-   {type}({scope}): {description}
-
-   {optional body explaining the change}
-
-   Closes #{N}
-   ```
-
-   Where `{type}` matches the branch prefix: `fix/` → `fix:`,
-   `feature/` → `feat:`, `docs/` → `docs:`, `test/` → `test:`,
-   `refactor/` → `refactor:`, `chore/` → `chore:`.
-
-1. **Verify** the commit message includes `Closes #{N}` before proceeding:
-   run `git log -1 --format=%B` and confirm the closure reference is present.
-   If missing, amend the commit to add it.
-
-1. Push the branch and create a PR:
-
-   - GitHub: `gh pr create --title "..." --body "..."`
-   - GitLab: `glab mr create --title "..." --description "..."`
-
-1. The PR body MUST also include `Closes #{N}`. Use this structure:
-
-   ```text
-   ## Summary
-   - {what changed and why}
-
-   ## Test plan
-   - {how this was tested}
-
-   Closes #{N}
-   ```
-
-1. Checkout main: `git checkout main`
-
-1. **Clear state file** (write empty content)
-
-1. Show the PR URL to the user
-
-## Phase 5 — Next
-
-Ask the user:
-
-- **Continue** — enter plan mode (`EnterPlanMode`) and loop back to Phase 1
-- **Stop** — end the session
 
 ## Platform Detection
 

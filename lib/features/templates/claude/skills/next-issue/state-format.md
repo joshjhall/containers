@@ -55,6 +55,21 @@ platform: github
 
 ______________________________________________________________________
 
+## Status Labels
+
+Two labels track in-flight work and prevent the same issue from being
+picked up twice:
+
+| Label                   | Set by                        | Meaning                                      |
+| ----------------------- | ----------------------------- | -------------------------------------------- |
+| `status/pr-pending`     | `/next-issue-ship` (Option 1) | A PR has been created; awaiting review/merge |
+| `status/commit-pending` | `/next-issue-ship` (Option 3) | Fix committed locally but not yet pushed     |
+
+Both labels are **excluded** from all priority queries (see below) so that
+in-progress issues are never re-selected.
+
+______________________________________________________________________
+
 ## Priority Ordering
 
 Query issues in this order — first match wins. This is a nested loop:
@@ -73,6 +88,7 @@ for severity in critical high medium low; do
       --label "effort/${effort}" \
       --state open \
       --assignee "" \
+      --search "-label:status/pr-pending -label:status/commit-pending" \
       --limit 1 \
       --json number,title,labels,body
   done
@@ -81,28 +97,46 @@ done
 
 ### GitLab (`glab`)
 
+GitLab's `glab issue list` does not support negative label filters natively.
+Fetch slightly more results and post-filter:
+
 ```bash
 for severity in critical high medium low; do
   for effort in trivial small medium large; do
+    # Fetch up to 5 and filter out status labels
     glab issue list \
       --label "severity/${severity}" \
       --label "effort/${effort}" \
       --not-assignee \
-      --per-page 1
+      --per-page 5 \
+    | while read -r line; do
+        # Skip issues with status/pr-pending or status/commit-pending labels
+        issue_num=$(echo "$line" | /usr/bin/awk '{print $1}')
+        labels=$(glab issue view "$issue_num" --output json | /usr/bin/grep -o '"status/[^"]*"')
+        if ! echo "$labels" | /usr/bin/grep -qE 'status/pr-pending|status/commit-pending'; then
+          echo "$line"
+          break
+        fi
+      done
   done
 done
 ```
 
 ### Fallback
 
-If no labeled issues match, fall back to the oldest open issue:
+If no labeled issues match, fall back to the oldest open issue (still
+excluding status labels):
 
 ```bash
 # GitHub
-gh issue list --state open --limit 1 --json number,title,labels,body
+gh issue list \
+  --state open \
+  --search "-label:status/pr-pending -label:status/commit-pending" \
+  --limit 1 \
+  --json number,title,labels,body
 
-# GitLab
-glab issue list --per-page 1
+# GitLab — fetch more and post-filter as above
+glab issue list --per-page 5
 ```
 
 ______________________________________________________________________

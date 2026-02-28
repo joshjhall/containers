@@ -236,15 +236,18 @@ model selection.
 
 ### Skills & Agents
 
-11 always-installed skills + 2 conditional, 11 agents (including 6 audit
+12 always-installed skills + 2 conditional, 11 agents (including 6 audit
 scanners and `issue-writer`). The `/codebase-audit` command dispatches scanners
 in parallel, including file bloat detection for AI instruction files and
-documentation. The `/next-issue` command automates issue-driven development:
-picks the next issue by severity/effort priority, plans, implements, and ships
-a PR. Auto-enters plan mode for issue selection and planning, exits for
-implementation. State persists to `.claude/memory/next-issue-state.md` for
-cross-window resume (stale state auto-detected and cleared). See `docs/claude-code/skills-and-agents.md` for tables, audit
-parameters, depth modes, and inline suppression.
+documentation. Issue-driven development uses two skills: `/next-issue` selects
+by severity/effort priority and creates an implementation plan (auto-enters
+plan mode), then `/next-issue-ship` handles committing, PR creation, issue
+labeling, and state cleanup after implementation. Issues tagged
+`status/pr-pending` or `status/commit-pending` are automatically excluded from
+selection. State persists to `.claude/memory/next-issue-state.md` for
+cross-window resume (stale state auto-detected and cleared). See
+`docs/claude-code/skills-and-agents.md` for tables, audit parameters, depth
+modes, and inline suppression.
 
 ### Secrets & Setup Commands
 
