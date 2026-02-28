@@ -85,6 +85,9 @@ source /tmp/build-scripts/base/checksum-fetch.sh
 
 # Source download verification utilities
 source /tmp/build-scripts/base/download-verify.sh
+
+# Source 4-tier checksum verification system
+source /tmp/build-scripts/base/checksum-verification.sh
 source /tmp/build-scripts/base/cache-utils.sh
 
 # Start logging
@@ -189,29 +192,47 @@ LAZYDOCKER_URL="https://github.com/jesseduffield/lazydocker/releases/download/v$
 
 log_message "Installing lazydocker v${LAZYDOCKER_VERSION} for ${LAZYDOCKER_ARCH}..."
 
-# Fetch checksum dynamically from GitHub releases
-log_message "Fetching lazydocker checksum from GitHub..."
-LAZYDOCKER_CHECKSUMS_URL="https://github.com/jesseduffield/lazydocker/releases/download/v${LAZYDOCKER_VERSION}/checksums.txt"
+# Register Tier 3 fetcher for lazydocker
+_fetch_lazydocker_checksum() {
+    local _ver="$1"
+    local _arch="$2"
+    local _lz_arch
+    case "$_arch" in
+        amd64) _lz_arch="x86_64" ;;
+        arm64) _lz_arch="arm64" ;;
+        *) _lz_arch="$_arch" ;;
+    esac
+    local _archive="lazydocker_${_ver}_Linux_${_lz_arch}.tar.gz"
+    local _url="https://github.com/jesseduffield/lazydocker/releases/download/v${_ver}/checksums.txt"
+    fetch_github_checksums_txt "$_url" "$_archive" 2>/dev/null
+}
+register_tool_checksum_fetcher "lazydocker" "_fetch_lazydocker_checksum"
 
-if ! LAZYDOCKER_CHECKSUM=$(fetch_github_checksums_txt "$LAZYDOCKER_CHECKSUMS_URL" "$LAZYDOCKER_ARCHIVE" 2>/dev/null); then
-    log_error "Failed to fetch checksum for lazydocker ${LAZYDOCKER_VERSION}"
-    log_error "Please verify version exists: https://github.com/jesseduffield/lazydocker/releases/tag/v${LAZYDOCKER_VERSION}"
+# Download lazydocker
+BUILD_TEMP=$(create_secure_temp_dir)
+cd "$BUILD_TEMP"
+log_message "Downloading lazydocker..."
+if ! command curl -L -f --retry 3 --retry-delay 2 --retry-all-errors --progress-bar -o "lazydocker.tar.gz" "$LAZYDOCKER_URL"; then
+    log_error "Failed to download lazydocker ${LAZYDOCKER_VERSION}"
+    cd /
     log_feature_end
     exit 1
 fi
 
-log_message "Expected SHA256: ${LAZYDOCKER_CHECKSUM}"
+# Run 4-tier verification
+verify_rc=0
+verify_download "tool" "lazydocker" "$LAZYDOCKER_VERSION" "lazydocker.tar.gz" "$(dpkg --print-architecture)" || verify_rc=$?
+if [ "$verify_rc" -eq 1 ]; then
+    log_error "Verification failed for lazydocker ${LAZYDOCKER_VERSION}"
+    cd /
+    log_feature_end
+    exit 1
+fi
 
-# Download and extract with checksum verification
-BUILD_TEMP=$(create_secure_temp_dir)
-cd "$BUILD_TEMP"
-log_message "Downloading and verifying lazydocker..."
-download_and_extract \
-    "$LAZYDOCKER_URL" \
-    "$LAZYDOCKER_CHECKSUM" \
-    "."
+# Extract and install
+log_command "Extracting lazydocker" \
+    tar -xzf lazydocker.tar.gz
 
-# Install binary
 log_command "Installing lazydocker binary" \
     command mv ./lazydocker /usr/local/bin/
 
@@ -239,27 +260,36 @@ DIVE_ARCH=$(map_arch "amd64" "arm64")
 DIVE_PACKAGE="dive_${DIVE_VERSION}_linux_${DIVE_ARCH}.deb"
 DIVE_URL="https://github.com/wagoodman/dive/releases/download/v${DIVE_VERSION}/${DIVE_PACKAGE}"
 
-# Fetch checksum dynamically from GitHub releases
-log_message "Fetching dive checksum from GitHub..."
-DIVE_CHECKSUMS_URL="https://github.com/wagoodman/dive/releases/download/v${DIVE_VERSION}/dive_${DIVE_VERSION}_checksums.txt"
+# Register Tier 3 fetcher for dive
+_fetch_dive_checksum() {
+    local _ver="$1"
+    local _arch="$2"
+    local _pkg="dive_${_ver}_linux_${_arch}.deb"
+    local _url="https://github.com/wagoodman/dive/releases/download/v${_ver}/dive_${_ver}_checksums.txt"
+    fetch_github_checksums_txt "$_url" "$_pkg" 2>/dev/null
+}
+register_tool_checksum_fetcher "dive" "_fetch_dive_checksum"
 
-if ! DIVE_CHECKSUM=$(fetch_github_checksums_txt "$DIVE_CHECKSUMS_URL" "$DIVE_PACKAGE" 2>/dev/null); then
-    log_error "Failed to fetch checksum for dive ${DIVE_VERSION}"
-    log_error "Please verify version exists: https://github.com/wagoodman/dive/releases/tag/v${DIVE_VERSION}"
+# Download dive
+BUILD_TEMP=$(create_secure_temp_dir)
+cd "$BUILD_TEMP"
+log_message "Downloading dive..."
+if ! command curl -L -f --retry 3 --retry-delay 2 --retry-all-errors --progress-bar -o "dive.deb" "$DIVE_URL"; then
+    log_error "Failed to download dive ${DIVE_VERSION}"
+    cd /
     log_feature_end
     exit 1
 fi
 
-log_message "Expected SHA256: ${DIVE_CHECKSUM}"
-
-# Download and verify dive with checksum verification
-BUILD_TEMP=$(create_secure_temp_dir)
-cd "$BUILD_TEMP"
-log_message "Downloading and verifying dive..."
-download_and_verify \
-    "$DIVE_URL" \
-    "$DIVE_CHECKSUM" \
-    "dive.deb"
+# Run 4-tier verification
+verify_rc=0
+verify_download "tool" "dive" "$DIVE_VERSION" "dive.deb" "$(dpkg --print-architecture)" || verify_rc=$?
+if [ "$verify_rc" -eq 1 ]; then
+    log_error "Verification failed for dive ${DIVE_VERSION}"
+    cd /
+    log_feature_end
+    exit 1
+fi
 
 log_message "✓ dive v${DIVE_VERSION} verified successfully"
 
@@ -287,27 +317,36 @@ if ! command -v cosign &> /dev/null; then
     COSIGN_PACKAGE="cosign_${COSIGN_VERSION}_${COSIGN_ARCH}.deb"
     COSIGN_URL="https://github.com/sigstore/cosign/releases/download/v${COSIGN_VERSION}/${COSIGN_PACKAGE}"
 
-    # Fetch checksum dynamically from GitHub releases
-    log_message "Fetching cosign checksum from GitHub..."
-    COSIGN_CHECKSUMS_URL="https://github.com/sigstore/cosign/releases/download/v${COSIGN_VERSION}/cosign_checksums.txt"
+    # Register Tier 3 fetcher for cosign
+    _fetch_cosign_checksum() {
+        local _ver="$1"
+        local _arch="$2"
+        local _pkg="cosign_${_ver}_${_arch}.deb"
+        local _url="https://github.com/sigstore/cosign/releases/download/v${_ver}/cosign_checksums.txt"
+        fetch_github_checksums_txt "$_url" "$_pkg" 2>/dev/null
+    }
+    register_tool_checksum_fetcher "cosign" "_fetch_cosign_checksum"
 
-    if ! COSIGN_CHECKSUM=$(fetch_github_checksums_txt "$COSIGN_CHECKSUMS_URL" "$COSIGN_PACKAGE" 2>/dev/null); then
-        log_error "Failed to fetch checksum for cosign ${COSIGN_VERSION}"
-        log_error "Please verify version exists: https://github.com/sigstore/cosign/releases/tag/v${COSIGN_VERSION}"
+    # Download cosign
+    BUILD_TEMP=$(create_secure_temp_dir)
+    cd "$BUILD_TEMP"
+    log_message "Downloading cosign..."
+    if ! command curl -L -f --retry 3 --retry-delay 2 --retry-all-errors --progress-bar -o "cosign.deb" "$COSIGN_URL"; then
+        log_error "Failed to download cosign ${COSIGN_VERSION}"
+        cd /
         log_feature_end
         exit 1
     fi
 
-    log_message "Expected SHA256: ${COSIGN_CHECKSUM}"
-
-    # Download and verify cosign with checksum verification
-    BUILD_TEMP=$(create_secure_temp_dir)
-    cd "$BUILD_TEMP"
-    log_message "Downloading and verifying cosign..."
-    download_and_verify \
-        "$COSIGN_URL" \
-        "$COSIGN_CHECKSUM" \
-        "cosign.deb"
+    # Run 4-tier verification
+    verify_rc=0
+    verify_download "tool" "cosign" "$COSIGN_VERSION" "cosign.deb" "$(dpkg --print-architecture)" || verify_rc=$?
+    if [ "$verify_rc" -eq 1 ]; then
+        log_error "Verification failed for cosign ${COSIGN_VERSION}"
+        cd /
+        log_feature_end
+        exit 1
+    fi
 
     log_message "✓ cosign v${COSIGN_VERSION} verified successfully"
 

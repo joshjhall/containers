@@ -35,6 +35,9 @@ source /tmp/build-scripts/base/download-verify.sh
 
 # Source checksum utilities for secure binary downloads
 source /tmp/build-scripts/base/checksum-fetch.sh
+
+# Source 4-tier checksum verification system
+source /tmp/build-scripts/base/checksum-verification.sh
 source /tmp/build-scripts/base/cache-utils.sh
 
 # Source apt utilities for reliable package installation
@@ -211,25 +214,26 @@ fi
 if [ -n "$CLOUDFLARED_DEB" ]; then
     CLOUDFLARED_URL="https://github.com/cloudflare/cloudflared/releases/download/${CLOUDFLARED_VERSION}/${CLOUDFLARED_DEB}"
 
-    # Calculate checksum from download (cloudflared doesn't publish checksums)
-    log_message "Calculating checksum for cloudflared ${CLOUDFLARED_VERSION}..."
-    if ! CLOUDFLARED_CHECKSUM=$(calculate_checksum_sha256 "$CLOUDFLARED_URL" 2>/dev/null); then
-        log_error "Failed to download and calculate checksum for cloudflared ${CLOUDFLARED_VERSION}"
-        log_error "Please verify version exists: https://github.com/cloudflare/cloudflared/releases/tag/${CLOUDFLARED_VERSION}"
+    # cloudflared doesn't publish checksums — TOFU with unified logging
+    BUILD_TEMP=$(create_secure_temp_dir)
+    cd "$BUILD_TEMP"
+    log_message "Downloading cloudflared for ${ARCH}..."
+    if ! command curl -L -f --retry 3 --retry-delay 2 --retry-all-errors --progress-bar -o "cloudflared.deb" "$CLOUDFLARED_URL"; then
+        log_error "Failed to download cloudflared ${CLOUDFLARED_VERSION}"
+        cd /
         log_feature_end
         exit 1
     fi
 
-    log_message "✓ Calculated checksum from download"
-
-    # Download and verify cloudflared
-    BUILD_TEMP=$(create_secure_temp_dir)
-    cd "$BUILD_TEMP"
-    log_message "Downloading and verifying cloudflared for ${ARCH}..."
-    download_and_verify \
-        "$CLOUDFLARED_URL" \
-        "${CLOUDFLARED_CHECKSUM}" \
-        "cloudflared.deb"
+    # Run 4-tier verification (TOFU — no published checksums)
+    verify_rc=0
+    verify_download "tool" "cloudflared" "$CLOUDFLARED_VERSION" "cloudflared.deb" "$ARCH" || verify_rc=$?
+    if [ "$verify_rc" -eq 1 ]; then
+        log_error "Verification failed for cloudflared ${CLOUDFLARED_VERSION}"
+        cd /
+        log_feature_end
+        exit 1
+    fi
 
     log_command "Installing cloudflared package" \
         dpkg -i cloudflared.deb

@@ -49,6 +49,9 @@ source /tmp/build-scripts/base/download-verify.sh
 # Source checksum utilities for secure binary downloads
 source /tmp/build-scripts/base/checksum-fetch.sh
 
+# Source 4-tier checksum verification system
+source /tmp/build-scripts/base/checksum-verification.sh
+
 # Start logging
 log_feature_start "Ollama"
 
@@ -90,28 +93,35 @@ fi
 OLLAMA_TARBALL="ollama-linux-${OLLAMA_ARCH}.tgz"
 OLLAMA_URL="https://github.com/ollama/ollama/releases/download/v${OLLAMA_VERSION}/${OLLAMA_TARBALL}"
 
-# Fetch checksum from GitHub releases
-log_message "Fetching Ollama checksum from GitHub..."
-OLLAMA_CHECKSUMS_URL="https://github.com/ollama/ollama/releases/download/v${OLLAMA_VERSION}/sha256sum.txt"
+# Register Tier 3 fetcher for Ollama (sha256sum.txt from GitHub releases)
+_fetch_ollama_checksum() {
+    local _ver="$1"
+    local _arch="$2"
+    local _tarball="ollama-linux-${_arch}.tgz"
+    local _url="https://github.com/ollama/ollama/releases/download/v${_ver}/sha256sum.txt"
+    # Ollama's sha256sum.txt uses "./" prefix
+    fetch_github_checksums_txt "$_url" "./${_tarball}" 2>/dev/null
+}
+register_tool_checksum_fetcher "ollama" "_fetch_ollama_checksum"
 
-# The sha256sum.txt format includes "./" prefix, so we need to match "./ollama-linux-${OLLAMA_ARCH}.tgz"
-if ! OLLAMA_CHECKSUM=$(fetch_github_checksums_txt "$OLLAMA_CHECKSUMS_URL" "./${OLLAMA_TARBALL}" 2>/dev/null); then
-    log_error "Failed to fetch checksum for Ollama ${OLLAMA_VERSION}"
-    log_error "Please verify version exists: https://github.com/ollama/ollama/releases/tag/v${OLLAMA_VERSION}"
+BUILD_TEMP=$(create_secure_temp_dir)
+
+# Download Ollama tarball
+log_message "Downloading Ollama..."
+if ! command curl -L -f --retry 3 --retry-delay 2 --retry-all-errors --progress-bar -o "${BUILD_TEMP}/ollama.tgz" "$OLLAMA_URL"; then
+    log_error "Failed to download Ollama ${OLLAMA_VERSION}"
     log_feature_end
     exit 1
 fi
 
-log_message "Expected SHA256: ${OLLAMA_CHECKSUM}"
-
-BUILD_TEMP=$(create_secure_temp_dir)
-
-# Download and verify Ollama tarball
-log_message "Downloading and verifying Ollama..."
-download_and_verify \
-    "$OLLAMA_URL" \
-    "$OLLAMA_CHECKSUM" \
-    "${BUILD_TEMP}/ollama.tgz"
+# Run 4-tier verification
+verify_rc=0
+verify_download "tool" "ollama" "$OLLAMA_VERSION" "${BUILD_TEMP}/ollama.tgz" "$OLLAMA_ARCH" || verify_rc=$?
+if [ "$verify_rc" -eq 1 ]; then
+    log_error "Verification failed for Ollama ${OLLAMA_VERSION}"
+    log_feature_end
+    exit 1
+fi
 
 log_message "✓ Ollama v${OLLAMA_VERSION} verified successfully"
 

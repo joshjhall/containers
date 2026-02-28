@@ -37,6 +37,9 @@ source /tmp/build-scripts/base/checksum-fetch.sh
 
 # Source download verification utilities
 source /tmp/build-scripts/base/download-verify.sh
+
+# Source 4-tier checksum verification system
+source /tmp/build-scripts/base/checksum-verification.sh
 source /tmp/build-scripts/base/cache-utils.sh
 
 # Start logging
@@ -131,26 +134,46 @@ else
     # Define download URLs
     PIXI_ARCHIVE="pixi-${PIXI_PLATFORM}.tar.gz"
     PIXI_URL="https://github.com/prefix-dev/pixi/releases/download/v${PIXI_VERSION}/${PIXI_ARCHIVE}"
-    PIXI_CHECKSUM_URL="${PIXI_URL}.sha256"
 
-    # Fetch SHA256 checksum from GitHub
-    log_message "Fetching pixi checksum from GitHub..."
-    if ! PIXI_CHECKSUM=$(fetch_github_sha256_file "$PIXI_CHECKSUM_URL" 2>/dev/null); then
-        log_error "Failed to fetch checksum for pixi ${PIXI_VERSION}"
-        log_error "URL: ${PIXI_CHECKSUM_URL}"
-        log_error "Please verify version exists: https://github.com/prefix-dev/pixi/releases/tag/v${PIXI_VERSION}"
+    # Register Tier 3 fetcher for pixi (published .sha256 file)
+    _fetch_pixi_checksum() {
+        local _ver="$1"
+        local _arch="$2"
+        local _plat
+        case "$_arch" in
+            amd64) _plat="x86_64-unknown-linux-musl" ;;
+            arm64) _plat="aarch64-unknown-linux-musl" ;;
+            *) _plat="$_arch" ;;
+        esac
+        local _url="https://github.com/prefix-dev/pixi/releases/download/v${_ver}/pixi-${_plat}.tar.gz.sha256"
+        fetch_github_sha256_file "$_url" 2>/dev/null
+    }
+    register_tool_checksum_fetcher "pixi" "_fetch_pixi_checksum"
+
+    # Download pixi archive
+    log_message "Downloading pixi..."
+    BUILD_TEMP=$(create_secure_temp_dir)
+    cd "$BUILD_TEMP"
+    if ! command curl -L -f --retry 3 --retry-delay 2 --retry-all-errors --progress-bar -o "pixi.tar.gz" "$PIXI_URL"; then
+        log_error "Failed to download pixi ${PIXI_VERSION}"
         log_feature_end
         exit 1
     fi
 
-    log_message "Expected SHA256: ${PIXI_CHECKSUM}"
+    # Run 4-tier verification
+    verify_rc=0
+    verify_download "tool" "pixi" "$PIXI_VERSION" "pixi.tar.gz" "$(dpkg --print-architecture)" || verify_rc=$?
+    if [ "$verify_rc" -eq 1 ]; then
+        log_error "Verification failed for pixi ${PIXI_VERSION}"
+        log_feature_end
+        exit 1
+    fi
 
-    # Download and verify pixi
-    log_message "Downloading and verifying pixi..."
-    download_and_extract \
-        "$PIXI_URL" \
-        "$PIXI_CHECKSUM" \
-        "${PIXI_HOME}"
+    # Extract verified archive
+    log_message "Extracting pixi..."
+    mkdir -p "${PIXI_HOME}"
+    tar -xzf "pixi.tar.gz" -C "${PIXI_HOME}"
+    cd /
 
     # The binary should now be in ${PIXI_HOME}/pixi
     if [ -f "${PIXI_HOME}/pixi" ]; then

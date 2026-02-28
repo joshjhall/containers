@@ -379,7 +379,7 @@ test_checksum_libraries_sourced() {
     fi
 }
 
-# Test: rust.sh fetches rustup checksum dynamically
+# Test: rust.sh uses register_tool_checksum_fetcher for rustup
 test_rustup_checksum_fetching() {
     local rust_script="$PROJECT_ROOT/lib/features/rust.sh"
 
@@ -388,15 +388,15 @@ test_rustup_checksum_fetching() {
         return
     fi
 
-    # Check for rustup checksum URL fetching
-    if command grep -q "RUSTUP_CHECKSUM_URL" "$rust_script"; then
-        assert_true true "Uses dynamic rustup checksum fetching"
+    # Check for register_tool_checksum_fetcher usage for rustup-init
+    if command grep -q 'register_tool_checksum_fetcher.*rustup' "$rust_script"; then
+        assert_true true "Uses register_tool_checksum_fetcher for rustup"
     else
-        assert_true false "Does not use dynamic checksum fetching"
+        assert_true false "Does not use register_tool_checksum_fetcher for rustup"
     fi
 }
 
-# Test: rust.sh uses download verification
+# Test: rust.sh uses verify_download
 test_download_verification() {
     local rust_script="$PROJECT_ROOT/lib/features/rust.sh"
 
@@ -405,11 +405,11 @@ test_download_verification() {
         return
     fi
 
-    # Check for download_and_verify usage
-    if command grep -q "download_and_verify" "$rust_script"; then
-        assert_true true "Uses checksum verification for downloads"
+    # Check for verify_download usage (4-tier verification)
+    if command grep -q "verify_download" "$rust_script"; then
+        assert_true true "Uses verify_download for checksum verification"
     else
-        assert_true false "Does not use checksum verification"
+        assert_true false "Does not use verify_download"
     fi
 }
 
@@ -427,7 +427,7 @@ run_test_with_setup test_rust_verification "Rust verification script works"
 
 # Checksum verification tests
 run_test test_checksum_libraries_sourced "Checksum libraries are sourced"
-run_test test_rustup_checksum_fetching "Rustup checksum fetching is used"
+run_test test_rustup_checksum_fetching "Rustup register_tool_checksum_fetcher is used"
 run_test test_download_verification "Download verification is used"
 
 # Generate test report

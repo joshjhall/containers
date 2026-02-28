@@ -4,8 +4,8 @@
 # Description:
 #   Provides a reusable function to install pre-built binaries from GitHub
 #   (or GitLab) releases. Handles architecture detection, checksum fetching,
-#   download verification, and post-processing (dpkg, tar extract, gunzip,
-#   or direct binary install).
+#   download verification via the 4-tier system, and post-processing (dpkg,
+#   tar extract, gunzip, or direct binary install).
 #
 # Usage:
 #   source /tmp/build-scripts/features/lib/install-github-release.sh
@@ -16,6 +16,7 @@
 #   - feature-header.sh must be sourced (for log_message, create_secure_temp_dir)
 #   - download-verify.sh must be sourced (for download_and_verify, download_and_extract)
 #   - checksum-fetch.sh must be sourced (for fetch_github_checksums_txt, etc.)
+#   - checksum-verification.sh must be sourced (for verify_download, register_tool_checksum_fetcher)
 
 set -euo pipefail
 
@@ -23,6 +24,11 @@ set -euo pipefail
 if ! declare -f log_message >/dev/null 2>&1; then
     echo "ERROR: install-github-release.sh requires feature-header.sh to be sourced first" >&2
     return 1
+fi
+
+# Source checksum verification system for 4-tier verify_download
+if [ -f /tmp/build-scripts/base/checksum-verification.sh ]; then
+    source /tmp/build-scripts/base/checksum-verification.sh
 fi
 
 # ============================================================================
@@ -89,35 +95,28 @@ install_github_release() {
 
     local file_url="${base_url}/${filename}"
 
-    # Fetch or calculate checksum
-    local checksum=""
+    # Register a Tier 3 fetcher based on checksum_type.
+    # The fetcher captures the URL/filename context from this call.
     case "$checksum_type" in
         checksums_txt)
-            log_message "Fetching ${tool_name} checksum..."
-            local checksums_url="${base_url}/checksums.txt"
-            if ! checksum=$(fetch_github_checksums_txt "$checksums_url" "$filename" 2>/dev/null); then
-                log_error "Failed to fetch checksum for ${tool_name} ${version}"
-                return 1
-            fi
+            # Fetcher: look up checksum from checksums.txt
+            local _cksum_url="${base_url}/checksums.txt"
+            local _cksum_filename="$filename"
+            eval "_fetch_${tool_name//[^a-zA-Z0-9_]/_}_checksum() {
+                fetch_github_checksums_txt '$_cksum_url' '$_cksum_filename' 2>/dev/null
+            }"
+            register_tool_checksum_fetcher "$tool_name" "_fetch_${tool_name//[^a-zA-Z0-9_]/_}_checksum"
             ;;
         sha512)
-            log_message "Fetching ${tool_name} SHA512 checksum..."
-            local sha512_url="${file_url}.sha512"
-            if ! checksum=$(fetch_github_sha512_file "$sha512_url" 2>/dev/null); then
-                log_error "Failed to fetch SHA512 checksum for ${tool_name} ${version}"
-                return 1
-            fi
-            if ! validate_checksum_format "$checksum" "sha512"; then
-                log_error "Invalid SHA512 checksum format for ${tool_name} ${version}"
-                return 1
-            fi
+            # Fetcher: look up SHA512 from individual .sha512 file
+            local _sha512_url="${file_url}.sha512"
+            eval "_fetch_${tool_name//[^a-zA-Z0-9_]/_}_checksum() {
+                fetch_github_sha512_file '$_sha512_url' 2>/dev/null
+            }"
+            register_tool_checksum_fetcher "$tool_name" "_fetch_${tool_name//[^a-zA-Z0-9_]/_}_checksum"
             ;;
         calculate)
-            log_message "Calculating checksum for ${tool_name} ${version}..."
-            if ! checksum=$(calculate_checksum_sha256 "$file_url" 2>/dev/null); then
-                log_error "Failed to calculate checksum for ${tool_name} ${version}"
-                return 1
-            fi
+            # No published checksums — don't register fetcher, will fall through to Tier 4
             ;;
         *)
             log_error "Unknown checksum type: ${checksum_type}"
@@ -125,29 +124,38 @@ install_github_release() {
             ;;
     esac
 
-    # For extract_flat, use download_and_extract directly (no temp dir needed)
-    if [[ "$install_type" == extract_flat:* ]]; then
-        local binary_name="${install_type#extract_flat:}"
-        log_message "Downloading and verifying ${tool_name} for ${arch}..."
-        download_and_extract \
-            "$file_url" \
-            "$checksum" \
-            "/usr/local/bin" \
-            "$binary_name"
-        log_message "✓ ${tool_name} ${version} installed successfully"
-        return 0
-    fi
-
-    # Download to temp directory
+    # Download file to temp location
     local build_temp
     build_temp=$(create_secure_temp_dir)
     cd "$build_temp"
 
     local local_file="${tool_name}-download"
-    log_message "Downloading and verifying ${tool_name} for ${arch}..."
-    if ! download_and_verify "$file_url" "$checksum" "$local_file"; then
+    log_message "Downloading ${tool_name} for ${arch}..."
+    if ! command curl -L -f --retry 3 --retry-delay 2 --retry-all-errors --progress-bar -o "$local_file" "$file_url"; then
+        log_error "Download failed for ${tool_name} ${version}"
         cd /
         return 1
+    fi
+
+    # Run 4-tier verification
+    local verify_rc=0
+    verify_download "tool" "$tool_name" "$version" "$local_file" "$arch" || verify_rc=$?
+
+    if [ "$verify_rc" -eq 1 ]; then
+        log_error "Verification failed for ${tool_name} ${version}"
+        cd /
+        return 1
+    fi
+    # verify_rc=0 (verified) or verify_rc=2 (TOFU, allowed by policy) — proceed
+
+    # For extract_flat, extract from the already-downloaded file
+    if [[ "$install_type" == extract_flat:* ]]; then
+        local binary_name="${install_type#extract_flat:}"
+        log_command "Extracting ${tool_name}" \
+            tar -xzf "$local_file" -C "/usr/local/bin" "$binary_name"
+        cd /
+        log_message "✓ ${tool_name} ${version} installed successfully"
+        return 0
     fi
 
     # Post-processing based on install type

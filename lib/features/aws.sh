@@ -54,6 +54,9 @@ source /tmp/build-scripts/base/download-verify.sh
 # Source checksum utilities for secure binary downloads
 source /tmp/build-scripts/base/checksum-fetch.sh
 
+# Source 4-tier checksum verification system
+source /tmp/build-scripts/base/checksum-verification.sh
+
 # Start logging
 log_feature_start "AWS CLI v2"
 
@@ -139,6 +142,12 @@ fi
 
 log_message "✓ AWS CLI v2 signature verified"
 
+# Run 4-tier verification for unified logging (GPG already verified above)
+# No fetcher registered — the GPG verification above is stronger than Tier 3
+verify_rc=0
+verify_download "tool" "aws-cli" "latest" "awscliv2.zip" "$ARCH" || verify_rc=$?
+# We don't fail on verify_rc since we already verified with GPG above
+
 log_command "Extracting AWS CLI v2" \
     unzip -q awscliv2.zip
 
@@ -164,24 +173,26 @@ else
 fi
 
 if [ -n "$SESSION_MANAGER_URL" ]; then
-    # Calculate checksum from download (Session Manager doesn't publish checksums)
-    log_message "Calculating checksum for Session Manager plugin..."
-    if ! SESSION_MANAGER_CHECKSUM=$(calculate_checksum_sha256 "$SESSION_MANAGER_URL" 2>/dev/null); then
-        log_error "Failed to download and calculate checksum for Session Manager plugin"
+    # Session Manager doesn't publish checksums — will be TOFU with unified logging
+    BUILD_TEMP=$(create_secure_temp_dir)
+    cd "$BUILD_TEMP"
+    log_message "Downloading Session Manager plugin for ${ARCH}..."
+    if ! command curl -L -f --retry 3 --retry-delay 2 --retry-all-errors --progress-bar -o "session-manager-plugin.deb" "$SESSION_MANAGER_URL"; then
+        log_error "Failed to download Session Manager plugin"
+        cd /
         log_feature_end
         exit 1
     fi
 
-    log_message "✓ Calculated checksum from download"
-
-    # Download and verify Session Manager plugin
-    BUILD_TEMP=$(create_secure_temp_dir)
-    cd "$BUILD_TEMP"
-    log_message "Downloading and verifying Session Manager plugin for ${ARCH}..."
-    download_and_verify \
-        "$SESSION_MANAGER_URL" \
-        "${SESSION_MANAGER_CHECKSUM}" \
-        "session-manager-plugin.deb"
+    # Run 4-tier verification (TOFU — no published checksums)
+    verify_rc=0
+    verify_download "tool" "session-manager-plugin" "latest" "session-manager-plugin.deb" "$ARCH" || verify_rc=$?
+    if [ "$verify_rc" -eq 1 ]; then
+        log_error "Verification failed for Session Manager plugin"
+        cd /
+        log_feature_end
+        exit 1
+    fi
 
     log_command "Installing Session Manager plugin" \
         dpkg -i session-manager-plugin.deb

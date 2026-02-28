@@ -330,15 +330,15 @@ test_dynamic_checksum_fetching() {
 test_download_verification() {
     local kubernetes_script="$PROJECT_ROOT/lib/features/kubernetes.sh"
 
-    # Check that download verification functions are used (not curl | tar)
-    if command grep -q "download_and_extract" "$kubernetes_script"; then
-        assert_true true "Uses download_and_extract for verification"
+    # Check that verify_download is used (4-tier verification system)
+    if command grep -q "verify_download" "$kubernetes_script"; then
+        assert_true true "Uses verify_download for verification"
     else
-        assert_true false "Doesn't use download_and_extract"
+        assert_true false "Doesn't use verify_download"
     fi
 
-    # kubernetes.sh uses download_and_extract for all tools (k9s, helm, krew)
-    # It doesn't use download_and_verify since helm calculates checksum inline
+    # kubernetes.sh uses verify_download for all tools (k9s, helm, krew, cosign)
+    # with register_tool_checksum_fetcher for Tier 3 checksum resolution
 }
 
 # Test: Script sources download-verify.sh

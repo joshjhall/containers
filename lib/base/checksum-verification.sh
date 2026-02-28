@@ -39,6 +39,13 @@ _CHECKSUM_VERIFICATION_LOADED=1
 
 set -euo pipefail
 
+# ============================================================================
+# Tool Tier 3 Fetcher Registry
+# ============================================================================
+# Associative array mapping tool names to fetcher function names.
+# Fetcher functions accept (version, arch) and echo a checksum string.
+declare -gA _TOOL_CHECKSUM_FETCHERS
+
 # Source dependencies
 if [ -f /tmp/build-scripts/base/logging.sh ]; then
     source /tmp/build-scripts/base/logging.sh
@@ -186,7 +193,94 @@ verify_pinned_checksum() {
 }
 
 # ============================================================================
-# TIER 3: Published Checksums from Official Sources
+# TIER 3: Tool Checksum Fetcher Registry
+# ============================================================================
+
+# register_tool_checksum_fetcher - Register a function to fetch checksums for a tool
+#
+# The registered function will be called as: fetcher_fn <version> <arch>
+# It must echo a checksum (SHA256 or SHA512) on success and return 0,
+# or return non-zero on failure.
+#
+# Arguments:
+#   $1 - Tool name (e.g., "lazydocker", "cosign", "rustup-init")
+#   $2 - Fetcher function name (must be callable)
+#
+# Example:
+#   _fetch_lazydocker_checksum() { fetch_github_checksums_txt "..." "$1"; }
+#   register_tool_checksum_fetcher "lazydocker" "_fetch_lazydocker_checksum"
+register_tool_checksum_fetcher() {
+    local name="$1"
+    local fetcher_fn="$2"
+    _TOOL_CHECKSUM_FETCHERS["$name"]="$fetcher_fn"
+}
+
+# verify_tool_published_checksum - Verify a tool download using a registered fetcher
+#
+# Looks up the registered fetcher for the given tool name, calls it to obtain
+# the expected checksum, then compares against the downloaded file.
+# Handles both SHA256 (64 hex chars) and SHA512 (128 hex chars).
+#
+# Arguments:
+#   $1 - Tool name
+#   $2 - Version
+#   $3 - Downloaded file path
+#   $4 - Architecture (optional, default: amd64)
+#
+# Returns:
+#   0 if verification succeeds
+#   1 if fetcher not registered or checksum fetch fails (fall through to next tier)
+#   2 if checksum was fetched but doesn't match (hard fail — possible tampering)
+verify_tool_published_checksum() {
+    local name="$1"
+    local version="$2"
+    local file="$3"
+    local arch="${4:-amd64}"
+
+    # Check if a fetcher is registered for this tool
+    if [ -z "${_TOOL_CHECKSUM_FETCHERS[$name]+x}" ]; then
+        log_message "   ⚠️  No Tier 3 fetcher registered for tool '$name'"
+        return 1
+    fi
+
+    local fetcher_fn="${_TOOL_CHECKSUM_FETCHERS[$name]}"
+
+    log_message "🌐 TIER 3: Fetching published checksum for tool '$name'"
+
+    local expected=""
+    if ! expected=$("$fetcher_fn" "$version" "$arch" 2>/dev/null) || [ -z "$expected" ]; then
+        log_message "   ⚠️  Published checksum not available for $name $version"
+        return 1
+    fi
+
+    log_message "   ✓ Retrieved checksum from publisher"
+
+    # Determine hash algorithm by length: 64=sha256, 128=sha512
+    local actual
+    local checksum_len="${#expected}"
+    if [ "$checksum_len" -eq 64 ]; then
+        actual=$(sha256sum "$file" | command awk '{print $1}')
+    elif [ "$checksum_len" -eq 128 ]; then
+        actual=$(sha512sum "$file" | command awk '{print $1}')
+    else
+        log_error "Invalid checksum length ($checksum_len) from fetcher for $name"
+        return 1
+    fi
+
+    if [ "${actual,,}" = "${expected,,}" ]; then
+        log_message "   ✅ TIER 3 VERIFICATION PASSED"
+        log_message "   Security: Downloaded from official source (MITM risk remains)"
+        return 0
+    else
+        log_error "Checksum mismatch!"
+        log_error "Expected: $expected"
+        log_error "Got:      $actual"
+        return 2
+    fi
+}
+
+# ============================================================================
+# TIER 3: Published Checksums from Official Sources (Languages)
 # ============================================================================
 
 # verify_published_checksum - Verify using Tier 3 published checksums
@@ -359,6 +453,15 @@ verify_download() {
         if verify_published_checksum "$name" "$version" "$file" "$arch"; then
             return 0
         fi
+    elif [ "$category" = "tool" ]; then
+        local _tool_t3_rc=0
+        verify_tool_published_checksum "$name" "$version" "$file" "$arch" || _tool_t3_rc=$?
+        if [ "$_tool_t3_rc" -eq 0 ]; then
+            return 0  # Tier 3 passed
+        elif [ "$_tool_t3_rc" -eq 2 ]; then
+            return 1  # Checksum mismatch — hard fail
+        fi
+        # _tool_t3_rc=1 means no fetcher or fetch failed — fall through to Tier 4
     fi
 
     # TIER 4: Calculated Checksum (Fallback)
@@ -379,5 +482,7 @@ export -f verify_download
 export -f verify_signature_tier
 export -f verify_pinned_checksum
 export -f verify_published_checksum
+export -f verify_tool_published_checksum
+export -f register_tool_checksum_fetcher
 export -f verify_calculated_checksum
 export -f lookup_pinned_checksum

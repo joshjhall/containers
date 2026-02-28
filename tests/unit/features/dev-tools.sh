@@ -343,17 +343,18 @@ test_checksum_variables_defined() {
         assert_true false "dev-tools.sh doesn't source checksum-fetch.sh"
     fi
 
-    # Should use dynamic fetching functions (directly or via helper)
-    if command grep -rq "fetch_github_checksums_txt" "$dev_tools_script" "$helper_script"; then
-        assert_true true "Uses fetch_github_checksums_txt for dynamic fetching"
+    # Should use dynamic fetching functions via helper (register_tool_checksum_fetcher)
+    if command grep -rq "register_tool_checksum_fetcher" "$helper_script"; then
+        assert_true true "Uses register_tool_checksum_fetcher for dynamic fetching"
     else
-        assert_true false "Doesn't use fetch_github_checksums_txt"
+        assert_true false "Doesn't use register_tool_checksum_fetcher"
     fi
 
-    if command grep -rq "calculate_checksum_sha256" "$dev_tools_script" "$helper_script"; then
-        assert_true true "Uses calculate_checksum_sha256 for checksum calculation"
+    # Should use verify_download for 4-tier verification
+    if command grep -rq "verify_download" "$helper_script"; then
+        assert_true true "Uses verify_download for checksum verification"
     else
-        assert_true false "Doesn't use calculate_checksum_sha256"
+        assert_true false "Doesn't use verify_download"
     fi
 
     if command grep -rq "fetch_github_sha512_file" "$dev_tools_script" "$helper_script"; then
@@ -389,17 +390,18 @@ test_download_verification_usage() {
     local dev_tools_script="$PROJECT_ROOT/lib/features/dev-tools.sh"
     local helper_script="$PROJECT_ROOT/lib/features/lib/install-github-release.sh"
 
-    # Check that download verification functions are used (directly or via helper)
-    if command grep -rq "download_and_extract" "$dev_tools_script" "$helper_script"; then
-        assert_true true "Uses download_and_extract for verification"
+    # Check that verify_download is used via the helper (4-tier verification)
+    if command grep -rq "verify_download" "$helper_script"; then
+        assert_true true "Uses verify_download for verification"
     else
-        assert_true false "Doesn't use download_and_extract"
+        assert_true false "Doesn't use verify_download"
     fi
 
-    if command grep -rq "download_and_verify" "$dev_tools_script" "$helper_script"; then
-        assert_true true "Uses download_and_verify for verification"
+    # Check that command curl is used for downloads
+    if command grep -rq "command curl" "$helper_script"; then
+        assert_true true "Uses command curl for downloads"
     else
-        assert_true false "Doesn't use download_and_verify"
+        assert_true false "Doesn't use command curl for downloads"
     fi
 }
 
@@ -552,12 +554,12 @@ test_delta_version_variable() {
     assert_file_contains "$source_file" "DELTA_VERSION=" "dev-tools.sh defines DELTA_VERSION"
 }
 
-# Test: Sources download-verify.sh with sha256 checksum pattern
+# Test: Sources download-verify.sh and uses checksum verification
 test_download_verify_sha256_pattern() {
     local source_file="$PROJECT_ROOT/lib/features/dev-tools.sh"
     assert_file_contains "$source_file" "source.*download-verify.sh" "dev-tools.sh sources download-verify.sh"
-    local binary_tools_file="$PROJECT_ROOT/lib/features/lib/dev-tools/install-binary-tools.sh"
-    assert_file_contains "$binary_tools_file" "sha256" "install-binary-tools.sh uses sha256 checksum verification"
+    local helper_file="$PROJECT_ROOT/lib/features/lib/install-github-release.sh"
+    assert_file_contains "$helper_file" "verify_download" "install-github-release.sh uses verify_download for checksum verification"
 }
 
 # Test: Uses dpkg --print-architecture for architecture detection

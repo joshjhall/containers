@@ -431,13 +431,20 @@ test_source_contains_require_verified_downloads() {
         "Source references REQUIRE_VERIFIED_DOWNLOADS env var"
 }
 
-test_tier3_skipped_for_tools() {
-    # Tier 3 (published checksums) is also gated by category = language
-    # The guard and function call are on separate lines, so verify both exist
+test_tier3_language_uses_published_checksum() {
+    # Tier 3 for language category uses verify_published_checksum
     assert_file_contains "$SOURCE_FILE" 'verify_published_checksum' \
-        "Source calls verify_published_checksum"
+        "Source calls verify_published_checksum for languages"
     assert_file_contains "$SOURCE_FILE" '"$category" = "language"' \
-        "Tier 3 is gated by category = language check"
+        "Language tier 3 is gated by category = language check"
+}
+
+test_tier3_tool_uses_tool_fetcher() {
+    # Tier 3 for tool category uses verify_tool_published_checksum
+    assert_file_contains "$SOURCE_FILE" 'verify_tool_published_checksum' \
+        "Source calls verify_tool_published_checksum for tools"
+    assert_file_contains "$SOURCE_FILE" '"$category" = "tool"' \
+        "Tool tier 3 is gated by category = tool check"
 }
 
 test_security_warning_in_tier4() {
@@ -448,6 +455,165 @@ test_security_warning_in_tier4() {
 test_tofu_warning_in_tier4() {
     assert_file_contains "$SOURCE_FILE" "TOFU" \
         "Tier 4 warns about Trust On First Use"
+}
+
+# ============================================================================
+# Functional Tests - Tool Tier 3 Fetcher Registry
+# ============================================================================
+
+test_defines_register_tool_checksum_fetcher() {
+    assert_file_contains "$SOURCE_FILE" "register_tool_checksum_fetcher()" \
+        "Script defines register_tool_checksum_fetcher function"
+}
+
+test_defines_verify_tool_published_checksum() {
+    assert_file_contains "$SOURCE_FILE" "verify_tool_published_checksum()" \
+        "Script defines verify_tool_published_checksum function"
+}
+
+test_exports_tool_tier3_functions() {
+    assert_file_contains "$SOURCE_FILE" "export -f register_tool_checksum_fetcher" \
+        "register_tool_checksum_fetcher is exported"
+    assert_file_contains "$SOURCE_FILE" "export -f verify_tool_published_checksum" \
+        "verify_tool_published_checksum is exported"
+}
+
+test_register_tool_fetcher_stores_correctly() {
+    # Register a fetcher and verify it's stored in the associative array
+    local exit_code=0
+    local result
+    result=$(_run_checksum_subshell "
+        _my_fetcher() { echo 'abc123'; }
+        register_tool_checksum_fetcher 'mytool' '_my_fetcher'
+        echo \"\${_TOOL_CHECKSUM_FETCHERS[mytool]}\"
+    ") || exit_code=$?
+
+    assert_equals "0" "$exit_code" "register_tool_checksum_fetcher succeeds"
+    assert_equals "_my_fetcher" "$result" "Fetcher function name is stored correctly"
+}
+
+test_verify_download_tool_tier3_passes() {
+    # Register a fetcher that returns the correct checksum for the test file
+    echo "tool tier 3 test content" > "$TEST_TEMP_DIR/tool-tier3.tgz"
+    local real_hash
+    real_hash=$(sha256sum "$TEST_TEMP_DIR/tool-tier3.tgz" | command awk '{print $1}')
+
+    # Create empty checksums.json so tier 2 fails
+    echo '{"languages":{},"tools":{}}' > "$TEST_TEMP_DIR/checksums.json"
+
+    local exit_code=0
+    _run_checksum_subshell "
+        export CHECKSUMS_DB='$TEST_TEMP_DIR/checksums.json'
+        _test_fetcher() { echo '$real_hash'; }
+        register_tool_checksum_fetcher 'test-tool' '_test_fetcher'
+        verify_download 'tool' 'test-tool' '1.0.0' '$TEST_TEMP_DIR/tool-tier3.tgz'
+    " || exit_code=$?
+
+    assert_equals "0" "$exit_code" "verify_download returns 0 when tool Tier 3 fetcher provides matching checksum"
+}
+
+test_verify_download_tool_tier3_mismatch() {
+    # Register a fetcher that returns a WRONG checksum
+    echo "tool tier 3 mismatch content" > "$TEST_TEMP_DIR/tool-mismatch.tgz"
+    local wrong_hash="0000000000000000000000000000000000000000000000000000000000000000"
+
+    # Create empty checksums.json so tier 2 fails
+    echo '{"languages":{},"tools":{}}' > "$TEST_TEMP_DIR/checksums.json"
+
+    local exit_code=0
+    _run_checksum_subshell "
+        export CHECKSUMS_DB='$TEST_TEMP_DIR/checksums.json'
+        _bad_fetcher() { echo '$wrong_hash'; }
+        register_tool_checksum_fetcher 'bad-tool' '_bad_fetcher'
+        verify_download 'tool' 'bad-tool' '1.0.0' '$TEST_TEMP_DIR/tool-mismatch.tgz'
+    " || exit_code=$?
+
+    assert_equals "1" "$exit_code" "verify_download returns 1 when tool Tier 3 checksum doesn't match"
+}
+
+test_verify_download_tool_no_fetcher_falls_to_tier4() {
+    # Tool with no registered fetcher should fall through to Tier 4 (TOFU)
+    echo "tool no fetcher content" > "$TEST_TEMP_DIR/tool-nofetcher.tgz"
+
+    # Create empty checksums.json so tier 2 fails
+    echo '{"languages":{},"tools":{}}' > "$TEST_TEMP_DIR/checksums.json"
+
+    local exit_code=0
+    _run_checksum_subshell "
+        export CHECKSUMS_DB='$TEST_TEMP_DIR/checksums.json'
+        verify_download 'tool' 'no-fetcher-tool' '1.0.0' '$TEST_TEMP_DIR/tool-nofetcher.tgz'
+    " || exit_code=$?
+
+    assert_equals "2" "$exit_code" "verify_download returns 2 (TOFU) when no fetcher registered for tool"
+}
+
+test_tier2_takes_priority_over_tool_tier3() {
+    # Tier 2 pinned checksum should be checked before Tier 3 fetcher
+    echo "tier 2 priority test" > "$TEST_TEMP_DIR/tier2-priority.tgz"
+    local real_hash
+    real_hash=$(sha256sum "$TEST_TEMP_DIR/tier2-priority.tgz" | command awk '{print $1}')
+
+    # Put the correct hash in checksums.json (Tier 2)
+    command cat > "$TEST_TEMP_DIR/checksums.json" <<EOJSON
+{
+    "languages": {},
+    "tools": {
+        "priority-tool": {
+            "versions": {
+                "1.0.0": {
+                    "sha256": "$real_hash"
+                }
+            }
+        }
+    }
+}
+EOJSON
+
+    local exit_code=0
+    _run_checksum_subshell "
+        export CHECKSUMS_DB='$TEST_TEMP_DIR/checksums.json'
+        # Register a fetcher that would FAIL if called (returns wrong hash)
+        _should_not_be_called() { echo '0000000000000000000000000000000000000000000000000000000000000000'; }
+        register_tool_checksum_fetcher 'priority-tool' '_should_not_be_called'
+        verify_download 'tool' 'priority-tool' '1.0.0' '$TEST_TEMP_DIR/tier2-priority.tgz'
+    " || exit_code=$?
+
+    assert_equals "0" "$exit_code" "Tier 2 pinned checksum takes priority over Tier 3 fetcher"
+}
+
+test_require_verified_downloads_blocks_tool_tofu() {
+    # REQUIRE_VERIFIED_DOWNLOADS=true should block tool TOFU just like language TOFU
+    echo "tool tofu blocked content" > "$TEST_TEMP_DIR/tool-blocked.tgz"
+
+    echo '{"languages":{},"tools":{}}' > "$TEST_TEMP_DIR/checksums.json"
+
+    local exit_code=0
+    _run_checksum_subshell "
+        export CHECKSUMS_DB='$TEST_TEMP_DIR/checksums.json'
+        export REQUIRE_VERIFIED_DOWNLOADS=true
+        verify_download 'tool' 'blocked-tool' '1.0.0' '$TEST_TEMP_DIR/tool-blocked.tgz'
+    " || exit_code=$?
+
+    assert_equals "1" "$exit_code" "REQUIRE_VERIFIED_DOWNLOADS=true blocks tool TOFU with exit 1"
+}
+
+test_verify_tool_published_checksum_sha512() {
+    # Test that SHA512 checksums (128 hex chars) work for tool Tier 3
+    echo "sha512 tool test content" > "$TEST_TEMP_DIR/tool-sha512.tgz"
+    local real_hash
+    real_hash=$(sha512sum "$TEST_TEMP_DIR/tool-sha512.tgz" | command awk '{print $1}')
+
+    echo '{"languages":{},"tools":{}}' > "$TEST_TEMP_DIR/checksums.json"
+
+    local exit_code=0
+    _run_checksum_subshell "
+        export CHECKSUMS_DB='$TEST_TEMP_DIR/checksums.json'
+        _sha512_fetcher() { echo '$real_hash'; }
+        register_tool_checksum_fetcher 'sha512-tool' '_sha512_fetcher'
+        verify_download 'tool' 'sha512-tool' '1.0.0' '$TEST_TEMP_DIR/tool-sha512.tgz'
+    " || exit_code=$?
+
+    assert_equals "0" "$exit_code" "Tool Tier 3 works with SHA512 checksums"
 }
 
 # ============================================================================
@@ -492,9 +658,22 @@ run_test_with_setup test_verify_download_returns_2_for_tofu "verify_download ret
 run_test_with_setup test_require_verified_downloads_blocks_tofu "REQUIRE_VERIFIED_DOWNLOADS blocks TOFU"
 run_test_with_setup test_production_mode_blocks_tofu "PRODUCTION_MODE blocks TOFU via default"
 run_test_with_setup test_source_contains_require_verified_downloads "Source contains REQUIRE_VERIFIED_DOWNLOADS"
-run_test_with_setup test_tier3_skipped_for_tools "Tier 3 only for language category"
+run_test_with_setup test_tier3_language_uses_published_checksum "Tier 3 for languages uses published checksum"
+run_test_with_setup test_tier3_tool_uses_tool_fetcher "Tier 3 for tools uses tool fetcher"
 run_test_with_setup test_security_warning_in_tier4 "Tier 4 includes security warning"
 run_test_with_setup test_tofu_warning_in_tier4 "Tier 4 warns about TOFU risk"
+
+# Tool Tier 3 fetcher registry
+run_test_with_setup test_defines_register_tool_checksum_fetcher "Defines register_tool_checksum_fetcher function"
+run_test_with_setup test_defines_verify_tool_published_checksum "Defines verify_tool_published_checksum function"
+run_test_with_setup test_exports_tool_tier3_functions "Tool Tier 3 functions are exported"
+run_test_with_setup test_register_tool_fetcher_stores_correctly "register_tool_checksum_fetcher stores fetcher correctly"
+run_test_with_setup test_verify_download_tool_tier3_passes "verify_download tool with matching Tier 3 fetcher passes"
+run_test_with_setup test_verify_download_tool_tier3_mismatch "verify_download tool with mismatching Tier 3 returns 1"
+run_test_with_setup test_verify_download_tool_no_fetcher_falls_to_tier4 "verify_download tool without fetcher falls to Tier 4"
+run_test_with_setup test_tier2_takes_priority_over_tool_tier3 "Tier 2 pinned checksum takes priority over Tier 3 fetcher"
+run_test_with_setup test_require_verified_downloads_blocks_tool_tofu "REQUIRE_VERIFIED_DOWNLOADS blocks tool TOFU"
+run_test_with_setup test_verify_tool_published_checksum_sha512 "Tool Tier 3 works with SHA512 checksums"
 
 # Generate test report
 generate_report

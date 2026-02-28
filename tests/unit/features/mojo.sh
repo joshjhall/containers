@@ -122,7 +122,7 @@ test_checksum_libraries_sourced() {
     fi
 }
 
-# Test: mojo.sh uses pixi checksum fetching
+# Test: mojo.sh uses register_tool_checksum_fetcher for pixi
 test_pixi_checksum_fetching() {
     local mojo_script="$PROJECT_ROOT/lib/features/mojo.sh"
 
@@ -131,15 +131,15 @@ test_pixi_checksum_fetching() {
         return
     fi
 
-    # Check for fetch_github_sha256_file usage for pixi
-    if command grep -q "fetch_github_sha256_file" "$mojo_script"; then
-        assert_true true "Uses dynamic pixi checksum fetching"
+    # Check for register_tool_checksum_fetcher usage for pixi
+    if command grep -q 'register_tool_checksum_fetcher.*pixi' "$mojo_script"; then
+        assert_true true "Uses register_tool_checksum_fetcher for pixi"
     else
-        assert_true false "Does not use dynamic checksum fetching"
+        assert_true false "Does not use register_tool_checksum_fetcher for pixi"
     fi
 }
 
-# Test: mojo.sh uses download verification
+# Test: mojo.sh uses verify_download
 test_download_verification() {
     local mojo_script="$PROJECT_ROOT/lib/features/mojo.sh"
 
@@ -148,11 +148,11 @@ test_download_verification() {
         return
     fi
 
-    # Check for download_and_extract usage
-    if command grep -q "download_and_extract" "$mojo_script"; then
-        assert_true true "Uses checksum verification for downloads"
+    # Check for verify_download usage (4-tier verification)
+    if command grep -q "verify_download" "$mojo_script"; then
+        assert_true true "Uses verify_download for checksum verification"
     else
-        assert_true false "Does not use checksum verification"
+        assert_true false "Does not use verify_download"
     fi
 }
 

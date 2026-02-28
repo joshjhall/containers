@@ -73,26 +73,45 @@ create_secure_temp_dir() {
 }
 export -f create_secure_temp_dir
 
-# Mock download_and_verify — creates a fake downloaded file
-download_and_verify() {
-    local url="$1" checksum="$2" local_file="$3"
-    echo "fake-binary-content" > "$local_file"
+# Create a mock curl binary that creates fake downloaded files
+# This is needed because the source uses 'command curl' which bypasses function mocks
+MOCK_BIN_DIR="$TEST_TEMP_DIR/mock-bin"
+mkdir -p "$MOCK_BIN_DIR"
+cat > "$MOCK_BIN_DIR/curl" << 'CURLEOF'
+#!/bin/bash
+outfile=""
+url=""
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -o) outfile="$2"; shift 2 ;;
+        -*) shift ;;
+        *) url="$1"; shift ;;
+    esac
+done
+if [ -n "$outfile" ]; then
+    echo "fake-binary-content" > "$outfile"
+    echo "URL=$url" >&2
+fi
+exit 0
+CURLEOF
+chmod +x "$MOCK_BIN_DIR/curl"
+export PATH="$MOCK_BIN_DIR:$PATH"
+
+# Mock verify_download — always succeeds
+verify_download() {
     return 0
 }
-export -f download_and_verify
+export -f verify_download
 
-# Mock download_and_extract — creates a fake binary in target dir
-# Redirects /usr/local/bin to TEST_TEMP_DIR like log_command does
-download_and_extract() {
-    local url="$1" checksum="$2" target_dir="$3" binary_name="$4"
-    target_dir="${target_dir//\/usr\/local\/bin/$TEST_TEMP_DIR\/usr-local-bin}"
-    mkdir -p "$target_dir"
-    echo "fake-extracted-binary" > "$target_dir/$binary_name"
+# Mock register_tool_checksum_fetcher — no-op
+# Also declare the associative array it may reference
+declare -gA _TOOL_CHECKSUM_FETCHERS 2>/dev/null || true
+register_tool_checksum_fetcher() {
     return 0
 }
-export -f download_and_extract
+export -f register_tool_checksum_fetcher
 
-# Mock checksum functions
+# Mock checksum functions (still used inside fetcher registration closures)
 fetch_github_checksums_txt() {
     echo "abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234"
     return 0
@@ -105,14 +124,44 @@ fetch_github_sha512_file() {
 }
 export -f fetch_github_sha512_file
 
-calculate_checksum_sha256() {
-    echo "abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234"
-    return 0
-}
-export -f calculate_checksum_sha256
-
 validate_checksum_format() { return 0; }
 export -f validate_checksum_format
+
+# Mock tar — handles -C flag for extract_flat, or creates fake extracted files
+tar() {
+    local target_dir=""
+    local binary_name=""
+    local i=0
+    local args=("$@")
+    while [ $i -lt ${#args[@]} ]; do
+        case "${args[$i]}" in
+            -C)
+                target_dir="${args[$((i+1))]}"
+                # The argument after target_dir is the binary name
+                if [ $((i+2)) -lt ${#args[@]} ]; then
+                    binary_name="${args[$((i+2))]}"
+                fi
+                i=$((i+3))
+                ;;
+            -*)
+                i=$((i+1))
+                ;;
+            *)
+                i=$((i+1))
+                ;;
+        esac
+    done
+    if [ -n "$target_dir" ] && [ -n "$binary_name" ]; then
+        mkdir -p "$target_dir"
+        echo "fake-extracted-binary" > "$target_dir/$binary_name"
+    else
+        # Simple extract: create binary in current directory
+        mkdir -p extracted
+        echo "fake-extracted-binary" > extracted/mytool
+    fi
+    return 0
+}
+export -f tar
 MOCK_EOF
 }
 
@@ -267,14 +316,6 @@ $(_mock_preamble)
 dpkg() { echo 'amd64'; }
 export -f dpkg
 
-# Override download_and_verify to print the URL it received
-download_and_verify() {
-    echo \"URL=\$1\" >&2
-    echo 'fake' > \"\$3\"
-    return 0
-}
-export -f download_and_verify
-
 source '$SOURCE_FILE' 2>/dev/null
 install_github_release 'tool' '1.0' 'http://example.com/releases' \
     'tool_amd64.tar.gz' 'tool_arm64.tar.gz' 'checksums_txt' 'binary'
@@ -290,13 +331,6 @@ test_arch_arm64_selects_correct_file() {
 $(_mock_preamble)
 dpkg() { echo 'arm64'; }
 export -f dpkg
-
-download_and_verify() {
-    echo \"URL=\$1\" >&2
-    echo 'fake' > \"\$3\"
-    return 0
-}
-export -f download_and_verify
 
 source '$SOURCE_FILE' 2>/dev/null
 install_github_release 'tool' '1.0' 'http://example.com/releases' \
@@ -332,15 +366,16 @@ test_checksum_checksums_txt_fetch_failure() {
 $(_mock_preamble)
 dpkg() { echo 'amd64'; }
 export -f dpkg
-fetch_github_checksums_txt() { return 1; }
-export -f fetch_github_checksums_txt
+# Override verify_download to simulate verification failure
+verify_download() { return 1; }
+export -f verify_download
 source '$SOURCE_FILE' 2>/dev/null
 install_github_release 'tool' '1.0' 'http://example.com' \
     'tool_amd64' 'tool_arm64' 'checksums_txt' 'binary'
 " 2>/dev/null || exit_code=$?
 
     assert_not_equals "0" "$exit_code" \
-        "checksums_txt fetch failure should return non-zero"
+        "checksums_txt verification failure should return non-zero"
 }
 
 test_checksum_sha512_success() {
@@ -364,15 +399,16 @@ test_checksum_sha512_fetch_failure() {
 $(_mock_preamble)
 dpkg() { echo 'amd64'; }
 export -f dpkg
-fetch_github_sha512_file() { return 1; }
-export -f fetch_github_sha512_file
+# Override verify_download to simulate verification failure
+verify_download() { return 1; }
+export -f verify_download
 source '$SOURCE_FILE' 2>/dev/null
 install_github_release 'tool' '1.0' 'http://example.com' \
     'tool_amd64' 'tool_arm64' 'sha512' 'binary'
 " 2>/dev/null || exit_code=$?
 
     assert_not_equals "0" "$exit_code" \
-        "sha512 fetch failure should return non-zero"
+        "sha512 verification failure should return non-zero"
 }
 
 test_checksum_sha512_validation_failure() {
@@ -381,8 +417,9 @@ test_checksum_sha512_validation_failure() {
 $(_mock_preamble)
 dpkg() { echo 'amd64'; }
 export -f dpkg
-validate_checksum_format() { return 1; }
-export -f validate_checksum_format
+# Override verify_download to simulate validation failure
+verify_download() { return 1; }
+export -f verify_download
 source '$SOURCE_FILE' 2>/dev/null
 install_github_release 'tool' '1.0' 'http://example.com' \
     'tool_amd64' 'tool_arm64' 'sha512' 'binary'
@@ -413,8 +450,9 @@ test_checksum_calculate_failure() {
 $(_mock_preamble)
 dpkg() { echo 'amd64'; }
 export -f dpkg
-calculate_checksum_sha256() { return 1; }
-export -f calculate_checksum_sha256
+# Override verify_download to simulate TOFU/calculation failure
+verify_download() { return 1; }
+export -f verify_download
 source '$SOURCE_FILE' 2>/dev/null
 install_github_release 'tool' '1.0' 'http://example.com' \
     'tool_amd64' 'tool_arm64' 'calculate' 'binary'
@@ -560,21 +598,25 @@ install_github_release 'mytool' '1.0' 'http://example.com' \
 # Functional Tests - Download failure
 # ============================================================================
 
-test_download_and_verify_failure() {
+test_download_failure() {
     local exit_code=0
     bash -c "
 $(_mock_preamble)
 dpkg() { echo 'amd64'; }
 export -f dpkg
-download_and_verify() { return 1; }
-export -f download_and_verify
+# Override mock curl binary to simulate download failure
+command cat > \"\$MOCK_BIN_DIR/curl\" << 'FAILCURL'
+#!/bin/bash
+exit 1
+FAILCURL
+chmod +x \"\$MOCK_BIN_DIR/curl\"
 source '$SOURCE_FILE' 2>/dev/null
 install_github_release 'mytool' '1.0' 'http://example.com' \
     'mytool_amd64' 'mytool_arm64' 'checksums_txt' 'binary'
 " 2>/dev/null || exit_code=$?
 
     assert_not_equals "0" "$exit_code" \
-        "download_and_verify failure should return non-zero"
+        "download failure should return non-zero"
 }
 
 # ============================================================================
@@ -622,7 +664,7 @@ run_test_with_setup test_install_gunzip "Install: gunzip type succeeds"
 run_test_with_setup test_install_unknown_type "Install: unknown type fails"
 
 # Download failure
-run_test_with_setup test_download_and_verify_failure "Download: verify failure propagates"
+run_test_with_setup test_download_failure "Download: failure propagates"
 
 # Generate test report
 generate_report

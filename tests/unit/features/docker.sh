@@ -274,18 +274,18 @@ test_docker_dive_checksum() {
         return
     fi
 
-    # Check for dive checksum fetching (look for DIVE_CHECKSUM variable)
-    if command grep -q "DIVE_CHECKSUM.*fetch_github_checksums_txt" "$docker_script"; then
-        assert_true true "docker.sh fetches dive checksum from GitHub"
+    # Check for dive checksum fetcher registration
+    if command grep -q 'register_tool_checksum_fetcher.*dive' "$docker_script"; then
+        assert_true true "docker.sh registers checksum fetcher for dive"
     else
-        assert_true false "docker.sh does not fetch dive checksum"
+        assert_true false "docker.sh does not register checksum fetcher for dive"
     fi
 
-    # Check for download_and_verify usage (matches "dive.deb")
-    if command grep -A5 "download_and_verify" "$docker_script" | command grep -q "dive.deb"; then
-        assert_true true "docker.sh uses download_and_verify for dive"
+    # Check for verify_download usage for dive
+    if command grep -q 'verify_download.*dive' "$docker_script"; then
+        assert_true true "docker.sh uses verify_download for dive"
     else
-        assert_true false "docker.sh does not use download_and_verify for dive"
+        assert_true false "docker.sh does not use verify_download for dive"
     fi
 }
 
@@ -322,18 +322,18 @@ test_docker_lazydocker_checksum() {
         return
     fi
 
-    # Check for lazydocker checksum fetching (look for LAZYDOCKER_CHECKSUM variable)
-    if command grep -q "LAZYDOCKER_CHECKSUM.*fetch_github_checksums_txt" "$docker_script"; then
-        assert_true true "docker.sh fetches lazydocker checksum from GitHub"
+    # Check for lazydocker checksum fetcher registration
+    if command grep -q 'register_tool_checksum_fetcher.*lazydocker' "$docker_script"; then
+        assert_true true "docker.sh registers checksum fetcher for lazydocker"
     else
-        assert_true false "docker.sh does not fetch lazydocker checksum"
+        assert_true false "docker.sh does not register checksum fetcher for lazydocker"
     fi
 
-    # Check for download_and_extract usage for lazydocker
-    if command grep -A5 "download_and_extract" "$docker_script" | command grep -q "LAZYDOCKER_URL"; then
-        assert_true true "docker.sh uses download_and_extract for lazydocker"
+    # Check for verify_download usage for lazydocker
+    if command grep -q 'verify_download.*lazydocker' "$docker_script"; then
+        assert_true true "docker.sh uses verify_download for lazydocker"
     else
-        assert_true false "docker.sh does not use download_and_extract for lazydocker"
+        assert_true false "docker.sh does not use verify_download for lazydocker"
     fi
 }
 

@@ -5,9 +5,14 @@
 #   TERRAGRUNT_VERSION, TFDOCS_VERSION, TFLINT_VERSION, TRIVY_VERSION
 #
 # Expected sourced utilities:
-#   checksum-fetch.sh, download-verify.sh, retry-utils.sh
+#   checksum-fetch.sh, download-verify.sh, retry-utils.sh, checksum-verification.sh
 #
 # Source this file from terraform.sh after Terraform is installed.
+
+# Source 4-tier checksum verification if not already loaded
+if [ -z "${_CHECKSUM_VERIFICATION_LOADED:-}" ]; then
+    source /tmp/build-scripts/base/checksum-verification.sh
+fi
 
 # ============================================================================
 # Terragrunt Installation
@@ -21,29 +26,35 @@ install_terragrunt() {
         local TERRAGRUNT_BINARY="terragrunt_linux_${ARCH}"
         local TERRAGRUNT_URL="https://github.com/gruntwork-io/terragrunt/releases/download/v${TERRAGRUNT_VERSION}/${TERRAGRUNT_BINARY}"
 
-        # Fetch checksum dynamically from GitHub releases
-        log_message "Fetching Terragrunt checksum from GitHub..."
-        local TERRAGRUNT_CHECKSUMS_URL="https://github.com/gruntwork-io/terragrunt/releases/download/v${TERRAGRUNT_VERSION}/SHA256SUMS"
+        # Register Tier 3 fetcher for terragrunt
+        _fetch_terragrunt_checksum() {
+            local _ver="$1"
+            local _arch="$2"
+            local _bin="terragrunt_linux_${_arch}"
+            local _url="https://github.com/gruntwork-io/terragrunt/releases/download/v${_ver}/SHA256SUMS"
+            fetch_github_checksums_txt "$_url" "$_bin" 2>/dev/null
+        }
+        register_tool_checksum_fetcher "terragrunt" "_fetch_terragrunt_checksum"
 
-        local TERRAGRUNT_CHECKSUM
-        if ! TERRAGRUNT_CHECKSUM=$(fetch_github_checksums_txt "$TERRAGRUNT_CHECKSUMS_URL" "$TERRAGRUNT_BINARY" 2>/dev/null); then
-            log_error "Failed to fetch checksum for Terragrunt ${TERRAGRUNT_VERSION}"
-            log_error "Please verify version exists: https://github.com/gruntwork-io/terragrunt/releases/tag/v${TERRAGRUNT_VERSION}"
-            log_feature_end
-            exit 1
-        fi
-
-        log_message "Expected SHA256: ${TERRAGRUNT_CHECKSUM}"
-
-        # Download and verify Terragrunt with checksum verification
+        # Download Terragrunt
         local BUILD_TEMP
         BUILD_TEMP=$(create_secure_temp_dir)
-        cd "$BUILD_TEMP" || return 1 || return 1
-        log_message "Downloading and verifying Terragrunt..."
-        download_and_verify \
-            "$TERRAGRUNT_URL" \
-            "$TERRAGRUNT_CHECKSUM" \
-            "terragrunt"
+        cd "$BUILD_TEMP" || return 1
+        log_message "Downloading Terragrunt..."
+        if ! command curl -L -f --retry 3 --retry-delay 2 --retry-all-errors --progress-bar -o "terragrunt" "$TERRAGRUNT_URL"; then
+            log_error "Failed to download Terragrunt ${TERRAGRUNT_VERSION}"
+            cd /
+            return 1
+        fi
+
+        # Run 4-tier verification
+        local verify_rc=0
+        verify_download "tool" "terragrunt" "$TERRAGRUNT_VERSION" "terragrunt" "$ARCH" || verify_rc=$?
+        if [ "$verify_rc" -eq 1 ]; then
+            log_error "Verification failed for Terragrunt ${TERRAGRUNT_VERSION}"
+            cd /
+            return 1
+        fi
 
         log_message "✓ Terragrunt v${TERRAGRUNT_VERSION} verified successfully"
 
@@ -78,31 +89,40 @@ install_terraform_docs() {
 
     log_message "Installing terraform-docs v${TFDOCS_VERSION} for ${ARCH}..."
 
-    # Fetch checksum dynamically from GitHub releases
-    log_message "Fetching terraform-docs checksum from GitHub..."
-    local TFDOCS_CHECKSUMS_URL="https://github.com/terraform-docs/terraform-docs/releases/download/v${TFDOCS_VERSION}/terraform-docs-v${TFDOCS_VERSION}.sha256sum"
+    # Register Tier 3 fetcher for terraform-docs
+    _fetch_terraform_docs_checksum() {
+        local _ver="$1"
+        local _arch="$2"
+        local _archive="terraform-docs-v${_ver}-linux-${_arch}.tar.gz"
+        local _url="https://github.com/terraform-docs/terraform-docs/releases/download/v${_ver}/terraform-docs-v${_ver}.sha256sum"
+        fetch_github_checksums_txt "$_url" "$_archive" 2>/dev/null
+    }
+    register_tool_checksum_fetcher "terraform-docs" "_fetch_terraform_docs_checksum"
 
-    local TFDOCS_CHECKSUM
-    if ! TFDOCS_CHECKSUM=$(fetch_github_checksums_txt "$TFDOCS_CHECKSUMS_URL" "$TFDOCS_ARCHIVE" 2>/dev/null); then
-        log_error "Failed to fetch checksum for terraform-docs ${TFDOCS_VERSION}"
-        log_error "Please verify version exists: https://github.com/terraform-docs/terraform-docs/releases/tag/v${TFDOCS_VERSION}"
-        log_feature_end
-        exit 1
-    fi
-
-    log_message "Expected SHA256: ${TFDOCS_CHECKSUM}"
-
-    # Download and extract with checksum verification
+    # Download terraform-docs
     local BUILD_TEMP
     BUILD_TEMP=$(create_secure_temp_dir)
     cd "$BUILD_TEMP" || return 1
-    log_message "Downloading and verifying terraform-docs..."
-    download_and_extract \
-        "$TFDOCS_URL" \
-        "$TFDOCS_CHECKSUM" \
-        "."
+    log_message "Downloading terraform-docs..."
+    if ! command curl -L -f --retry 3 --retry-delay 2 --retry-all-errors --progress-bar -o "terraform-docs.tar.gz" "$TFDOCS_URL"; then
+        log_error "Failed to download terraform-docs ${TFDOCS_VERSION}"
+        cd /
+        return 1
+    fi
 
-    # Install binary
+    # Run 4-tier verification
+    local verify_rc=0
+    verify_download "tool" "terraform-docs" "$TFDOCS_VERSION" "terraform-docs.tar.gz" "$ARCH" || verify_rc=$?
+    if [ "$verify_rc" -eq 1 ]; then
+        log_error "Verification failed for terraform-docs ${TFDOCS_VERSION}"
+        cd /
+        return 1
+    fi
+
+    # Extract and install
+    log_command "Extracting terraform-docs" \
+        tar -xzf terraform-docs.tar.gz
+
     log_command "Installing terraform-docs binary" \
         command mv ./terraform-docs /usr/local/bin/
 
@@ -132,29 +152,35 @@ install_tflint() {
 
     log_message "Installing tflint v${TFLINT_VERSION} for ${ARCH}..."
 
-    # Fetch checksum dynamically from GitHub releases
-    log_message "Fetching tflint checksum from GitHub..."
-    local TFLINT_CHECKSUMS_URL="https://github.com/terraform-linters/tflint/releases/download/v${TFLINT_VERSION}/checksums.txt"
+    # Register Tier 3 fetcher for tflint
+    _fetch_tflint_checksum() {
+        local _ver="$1"
+        local _arch="$2"
+        local _archive="tflint_linux_${_arch}.zip"
+        local _url="https://github.com/terraform-linters/tflint/releases/download/v${_ver}/checksums.txt"
+        fetch_github_checksums_txt "$_url" "$_archive" 2>/dev/null
+    }
+    register_tool_checksum_fetcher "tflint" "_fetch_tflint_checksum"
 
-    local TFLINT_CHECKSUM
-    if ! TFLINT_CHECKSUM=$(fetch_github_checksums_txt "$TFLINT_CHECKSUMS_URL" "$TFLINT_ARCHIVE" 2>/dev/null); then
-        log_error "Failed to fetch checksum for tflint ${TFLINT_VERSION}"
-        log_error "Please verify version exists: https://github.com/terraform-linters/tflint/releases/tag/v${TFLINT_VERSION}"
-        log_feature_end
-        exit 1
-    fi
-
-    log_message "Expected SHA256: ${TFLINT_CHECKSUM}"
-
-    # Download and verify with checksum
+    # Download tflint
     local BUILD_TEMP
     BUILD_TEMP=$(create_secure_temp_dir)
     cd "$BUILD_TEMP" || return 1
-    log_message "Downloading and verifying tflint..."
-    download_and_verify \
-        "$TFLINT_URL" \
-        "$TFLINT_CHECKSUM" \
-        "$TFLINT_ARCHIVE"
+    log_message "Downloading tflint..."
+    if ! command curl -L -f --retry 3 --retry-delay 2 --retry-all-errors --progress-bar -o "$TFLINT_ARCHIVE" "$TFLINT_URL"; then
+        log_error "Failed to download tflint ${TFLINT_VERSION}"
+        cd /
+        return 1
+    fi
+
+    # Run 4-tier verification
+    local verify_rc=0
+    verify_download "tool" "tflint" "$TFLINT_VERSION" "$TFLINT_ARCHIVE" "$ARCH" || verify_rc=$?
+    if [ "$verify_rc" -eq 1 ]; then
+        log_error "Verification failed for tflint ${TFLINT_VERSION}"
+        cd /
+        return 1
+    fi
 
     # Extract zip file
     log_command "Extracting tflint" \
@@ -190,31 +216,46 @@ install_trivy() {
 
     log_message "Installing Trivy v${TRIVY_VERSION} for $(dpkg --print-architecture)..."
 
-    # Fetch checksum dynamically from GitHub releases
-    log_message "Fetching Trivy checksum from GitHub..."
-    local TRIVY_CHECKSUMS_URL="https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_checksums.txt"
+    # Register Tier 3 fetcher for trivy
+    _fetch_trivy_checksum() {
+        local _ver="$1"
+        local _arch="$2"
+        local _trivy_arch
+        case "$_arch" in
+            amd64) _trivy_arch="64bit" ;;
+            arm64) _trivy_arch="ARM64" ;;
+            *) _trivy_arch="$_arch" ;;
+        esac
+        local _archive="trivy_${_ver}_Linux-${_trivy_arch}.tar.gz"
+        local _url="https://github.com/aquasecurity/trivy/releases/download/v${_ver}/trivy_${_ver}_checksums.txt"
+        fetch_github_checksums_txt "$_url" "$_archive" 2>/dev/null
+    }
+    register_tool_checksum_fetcher "trivy" "_fetch_trivy_checksum"
 
-    local TRIVY_CHECKSUM
-    if ! TRIVY_CHECKSUM=$(fetch_github_checksums_txt "$TRIVY_CHECKSUMS_URL" "$TRIVY_ARCHIVE" 2>/dev/null); then
-        log_error "Failed to fetch checksum for Trivy ${TRIVY_VERSION}"
-        log_error "Please verify version exists: https://github.com/aquasecurity/trivy/releases/tag/v${TRIVY_VERSION}"
-        log_feature_end
-        exit 1
-    fi
-
-    log_message "Expected SHA256: ${TRIVY_CHECKSUM}"
-
-    # Download and extract with checksum verification
+    # Download trivy
     local BUILD_TEMP
     BUILD_TEMP=$(create_secure_temp_dir)
     cd "$BUILD_TEMP" || return 1
-    log_message "Downloading and verifying Trivy..."
-    download_and_extract \
-        "$TRIVY_URL" \
-        "$TRIVY_CHECKSUM" \
-        "."
+    log_message "Downloading Trivy..."
+    if ! command curl -L -f --retry 3 --retry-delay 2 --retry-all-errors --progress-bar -o "trivy.tar.gz" "$TRIVY_URL"; then
+        log_error "Failed to download Trivy ${TRIVY_VERSION}"
+        cd /
+        return 1
+    fi
 
-    # Install binary
+    # Run 4-tier verification
+    local verify_rc=0
+    verify_download "tool" "trivy" "$TRIVY_VERSION" "trivy.tar.gz" "$(dpkg --print-architecture)" || verify_rc=$?
+    if [ "$verify_rc" -eq 1 ]; then
+        log_error "Verification failed for Trivy ${TRIVY_VERSION}"
+        cd /
+        return 1
+    fi
+
+    # Extract and install
+    log_command "Extracting Trivy" \
+        tar -xzf trivy.tar.gz
+
     log_command "Installing Trivy binary" \
         install -c -v -m 755 ./trivy /usr/local/bin/trivy
 

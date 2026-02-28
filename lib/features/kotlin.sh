@@ -55,6 +55,9 @@ source /tmp/build-scripts/base/cache-utils.sh
 # Source download utilities
 source /tmp/build-scripts/base/download-verify.sh
 
+# Source 4-tier checksum verification system
+source /tmp/build-scripts/base/checksum-verification.sh
+
 # Source path utilities for secure PATH management
 source /tmp/build-scripts/base/path-utils.sh
 
@@ -140,10 +143,18 @@ BUILD_TEMP=$(create_secure_temp_dir)
 cd "$BUILD_TEMP"
 
 log_message "Downloading Kotlin compiler from ${KOTLIN_URL}..."
-retry_with_backoff wget -q "${KOTLIN_URL}" -O kotlin-compiler.zip || {
+if ! command curl -L -f --retry 3 --retry-delay 2 --retry-all-errors --progress-bar -o "kotlin-compiler.zip" "${KOTLIN_URL}"; then
     log_error "Failed to download Kotlin compiler"
     exit 1
-}
+fi
+
+# Run 4-tier verification (TOFU — Kotlin doesn't publish checksums)
+verify_rc=0
+verify_download "tool" "kotlin-compiler" "$KOTLIN_VERSION" "kotlin-compiler.zip" "$ARCH" || verify_rc=$?
+if [ "$verify_rc" -eq 1 ]; then
+    log_error "Verification failed for Kotlin compiler ${KOTLIN_VERSION}"
+    exit 1
+fi
 
 # Extract Kotlin
 log_command "Extracting Kotlin compiler" \
@@ -164,14 +175,21 @@ if [ "$KOTLIN_NATIVE_AVAILABLE" = true ]; then
     KOTLIN_NATIVE_HOME="/opt/kotlin-native"
 
     # Try to download Kotlin/Native (may not be available for all versions)
-    if retry_with_backoff wget -q "${KOTLIN_NATIVE_URL}" -O kotlin-native.tar.gz 2>/dev/null; then
-        log_command "Creating Kotlin/Native directory" \
-            mkdir -p "${KOTLIN_NATIVE_HOME}"
+    if command curl -L -f --retry 3 --retry-delay 2 --retry-all-errors --progress-bar -o "kotlin-native.tar.gz" "${KOTLIN_NATIVE_URL}" 2>/dev/null; then
+        # Run 4-tier verification (TOFU — no published checksums)
+        verify_rc=0
+        verify_download "tool" "kotlin-native" "$KOTLIN_VERSION" "kotlin-native.tar.gz" "$ARCH" || verify_rc=$?
+        if [ "$verify_rc" -eq 1 ]; then
+            log_warning "Verification failed for Kotlin/Native, skipping"
+        else
+            log_command "Creating Kotlin/Native directory" \
+                mkdir -p "${KOTLIN_NATIVE_HOME}"
 
-        log_command "Extracting Kotlin/Native" \
-            tar -xzf kotlin-native.tar.gz --strip-components=1 -C "${KOTLIN_NATIVE_HOME}"
+            log_command "Extracting Kotlin/Native" \
+                tar -xzf kotlin-native.tar.gz --strip-components=1 -C "${KOTLIN_NATIVE_HOME}"
 
-        log_message "Kotlin/Native installed successfully"
+            log_message "Kotlin/Native installed successfully"
+        fi
     else
         log_warning "Kotlin/Native not available for version ${KOTLIN_VERSION} on ${KOTLIN_NATIVE_ARCH}"
         log_warning "Skipping Kotlin/Native installation"

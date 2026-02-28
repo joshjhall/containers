@@ -12,27 +12,31 @@ install_entr() {
     local ENTR_TARBALL="entr-${ENTR_VERSION}.tar.gz"
     local ENTR_URL="http://eradman.com/entrproject/code/${ENTR_TARBALL}"
 
-    log_message "Calculating checksum for entr ${ENTR_VERSION}..."
-    local ENTR_CHECKSUM
-    ENTR_CHECKSUM=$(calculate_checksum_sha256 "$ENTR_URL" 2>/dev/null)
-
-    if [ -z "$ENTR_CHECKSUM" ]; then
-        log_error "Failed to calculate checksum for entr ${ENTR_VERSION}"
-        return 1
-    fi
-
-    log_message "Expected SHA256: ${ENTR_CHECKSUM}"
+    # entr doesn't publish checksums — TOFU with unified logging
 
     local BUILD_TEMP
     BUILD_TEMP=$(create_secure_temp_dir)
     cd "$BUILD_TEMP" || exit 1
-    log_message "Downloading and verifying entr ${ENTR_VERSION}..."
-    download_and_verify \
-        "$ENTR_URL" \
-        "$ENTR_CHECKSUM" \
-        "$ENTR_TARBALL"
+    log_message "Downloading entr ${ENTR_VERSION}..."
+    if ! command curl -L -f --retry 3 --retry-delay 2 --retry-all-errors --progress-bar -o "$ENTR_TARBALL" "$ENTR_URL"; then
+        log_error "Failed to download entr ${ENTR_VERSION}"
+        cd /
+        return 1
+    fi
 
-    log_message "✓ entr v${ENTR_VERSION} verified successfully"
+    # Source checksum verification if available
+    if [ -f /tmp/build-scripts/base/checksum-verification.sh ]; then
+        source /tmp/build-scripts/base/checksum-verification.sh
+        local verify_rc=0
+        verify_download "tool" "entr" "$ENTR_VERSION" "$ENTR_TARBALL" "$(dpkg --print-architecture)" || verify_rc=$?
+        if [ "$verify_rc" -eq 1 ]; then
+            log_error "Verification failed for entr ${ENTR_VERSION}"
+            cd /
+            return 1
+        fi
+    fi
+
+    log_message "✓ entr v${ENTR_VERSION} downloaded successfully"
 
     log_command "Extracting entr source" \
         tar -xzf "$ENTR_TARBALL"

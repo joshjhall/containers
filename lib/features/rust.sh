@@ -46,6 +46,9 @@ source /tmp/build-scripts/base/checksum-fetch.sh
 
 # Source download verification utilities
 source /tmp/build-scripts/base/download-verify.sh
+
+# Source 4-tier checksum verification system
+source /tmp/build-scripts/base/checksum-verification.sh
 source /tmp/build-scripts/base/cache-utils.sh
 source /tmp/build-scripts/base/path-utils.sh
 
@@ -110,29 +113,41 @@ log_message "Installing rustup for ${RUSTUP_TARGET}..."
 
 # Define download URLs
 RUSTUP_URL="https://static.rust-lang.org/rustup/dist/${RUSTUP_TARGET}/rustup-init"
-RUSTUP_CHECKSUM_URL="${RUSTUP_URL}.sha256"
 
-# Fetch SHA256 checksum from official source
-log_message "Fetching rustup checksum from rust-lang.org..."
-if ! RUSTUP_CHECKSUM=$(command curl -fsSL "$RUSTUP_CHECKSUM_URL" 2>/dev/null); then
-    log_error "Failed to fetch checksum for rustup"
-    log_error "URL: ${RUSTUP_CHECKSUM_URL}"
+# Register Tier 3 fetcher for rustup-init (published checksum from rust-lang.org)
+_fetch_rustup_init_checksum() {
+    local _version="$1"
+    local _arch="$2"
+    local _target
+    case "$_arch" in
+        amd64) _target="x86_64-unknown-linux-gnu" ;;
+        arm64) _target="aarch64-unknown-linux-gnu" ;;
+        *) _target="$_arch" ;;
+    esac
+    local _url="https://static.rust-lang.org/rustup/dist/${_target}/rustup-init.sha256"
+    command curl -fsSL "$_url" 2>/dev/null | command awk '{print $1}'
+}
+register_tool_checksum_fetcher "rustup-init" "_fetch_rustup_init_checksum"
+
+# Download rustup-init
+BUILD_TEMP=$(create_secure_temp_dir)
+cd "$BUILD_TEMP"
+log_message "Downloading rustup-init..."
+if ! command curl -L -f --retry 3 --retry-delay 2 --retry-all-errors --progress-bar -o "rustup-init" "$RUSTUP_URL"; then
+    log_error "Failed to download rustup-init"
     log_feature_end
     exit 1
 fi
 
-# Extract just the checksum (rustup .sha256 files include path, format: "checksum *path/file")
-RUSTUP_CHECKSUM=$(echo "$RUSTUP_CHECKSUM" | command awk '{print $1}')
-log_message "Expected SHA256: ${RUSTUP_CHECKSUM}"
-
-# Download and verify rustup-init
-BUILD_TEMP=$(create_secure_temp_dir)
-cd "$BUILD_TEMP"
-log_message "Downloading and verifying rustup-init..."
-download_and_verify \
-    "$RUSTUP_URL" \
-    "$RUSTUP_CHECKSUM" \
-    "rustup-init"
+# Run 4-tier verification
+ARCH_DEB=$(dpkg --print-architecture)
+verify_rc=0
+verify_download "tool" "rustup-init" "$RUST_VERSION" "rustup-init" "$ARCH_DEB" || verify_rc=$?
+if [ "$verify_rc" -eq 1 ]; then
+    log_error "Verification failed for rustup-init"
+    log_feature_end
+    exit 1
+fi
 
 # Make executable
 log_command "Making rustup-init executable" \

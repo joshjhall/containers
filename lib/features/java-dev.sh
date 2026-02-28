@@ -38,6 +38,9 @@ source /tmp/build-scripts/base/download-verify.sh
 # Source checksum fetching utilities
 source /tmp/build-scripts/base/checksum-fetch.sh
 
+# Source 4-tier checksum verification system
+source /tmp/build-scripts/base/checksum-verification.sh
+
 # Source jdtls installation utilities
 source /tmp/build-scripts/features/lib/install-jdtls.sh
 
@@ -102,40 +105,32 @@ export SPRING_VERSION  # Export for use in shell functions
 # Build Maven Central URL
 SPRING_BASE_URL="https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-cli/${SPRING_VERSION}/spring-boot-cli-${SPRING_VERSION}-bin.tar.gz"
 
-# Fetch SHA256 checksum from Maven Central
-log_message "Fetching checksum for Spring Boot CLI ${SPRING_VERSION}..."
-if ! SPRING_CHECKSUM=$(fetch_maven_sha256 "${SPRING_BASE_URL}" 2>/dev/null); then
-    log_error "Failed to fetch SHA256 checksum for Spring Boot CLI ${SPRING_VERSION} from Maven Central"
-    log_error ""
-    log_error "This could mean:"
-    log_error "  - Maven Central is unreachable (network issue)"
-    log_error "  - Spring Boot CLI ${SPRING_VERSION} does not exist or is not published yet"
-    log_error ""
-    log_error "Please verify:"
-    log_error "  1. Network connectivity: curl -I https://repo.maven.apache.org"
-    log_error "  2. Version exists: ${SPRING_BASE_URL}"
-    log_feature_end
-    exit 1
-fi
+# Register Tier 3 fetcher for Spring Boot CLI (Maven Central SHA256)
+_fetch_spring_cli_checksum() {
+    local _ver="$1"
+    local _url="https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-cli/${_ver}/spring-boot-cli-${_ver}-bin.tar.gz"
+    fetch_maven_sha256 "$_url" 2>/dev/null
+}
+register_tool_checksum_fetcher "spring-boot-cli" "_fetch_spring_cli_checksum"
 
-log_message "✓ Fetched SHA256 checksum from Maven Central"
-
-# Validate checksum format
-if ! validate_checksum_format "$SPRING_CHECKSUM" "sha256"; then
-    log_error "Invalid SHA256 checksum format for Spring Boot CLI ${SPRING_VERSION}: ${SPRING_CHECKSUM}"
-    log_feature_end
-    exit 1
-fi
-
-# Download and verify Spring Boot CLI with checksum verification
+# Download Spring Boot CLI
 BUILD_TEMP=$(create_secure_temp_dir)
 cd "$BUILD_TEMP"
-log_message "Downloading and verifying Spring Boot CLI ${SPRING_VERSION}..."
-log_message "Using SHA256 checksum: ${SPRING_CHECKSUM}"
-download_and_verify \
-    "${SPRING_BASE_URL}" \
-    "${SPRING_CHECKSUM}" \
-    "spring-boot-cli.tar.gz"
+log_message "Downloading Spring Boot CLI ${SPRING_VERSION}..."
+if ! command curl -L -f --retry 3 --retry-delay 2 --retry-all-errors --progress-bar -o "spring-boot-cli.tar.gz" "${SPRING_BASE_URL}"; then
+    log_error "Failed to download Spring Boot CLI ${SPRING_VERSION}"
+    log_feature_end
+    exit 1
+fi
+
+# Run 4-tier verification
+verify_rc=0
+verify_download "tool" "spring-boot-cli" "$SPRING_VERSION" "spring-boot-cli.tar.gz" "$(dpkg --print-architecture)" || verify_rc=$?
+if [ "$verify_rc" -eq 1 ]; then
+    log_error "Verification failed for Spring Boot CLI ${SPRING_VERSION}"
+    log_feature_end
+    exit 1
+fi
 
 log_command "Extracting Spring Boot CLI" \
     tar -xzf spring-boot-cli.tar.gz -C "${TOOLS_DIR}"
@@ -154,27 +149,33 @@ JBANG_VERSION="${JBANG_VERSION:-0.137.0}"
 JBANG_TAR="jbang-${JBANG_VERSION}.tar"
 JBANG_URL="https://github.com/jbangdev/jbang/releases/download/v${JBANG_VERSION}/${JBANG_TAR}"
 
-# Fetch checksum from GitHub releases
-log_message "Fetching JBang checksum from GitHub..."
-JBANG_CHECKSUMS_URL="https://github.com/jbangdev/jbang/releases/download/v${JBANG_VERSION}/checksums_sha256.txt"
+# Register Tier 3 fetcher for JBang
+_fetch_jbang_checksum() {
+    local _ver="$1"
+    local _tar="jbang-${_ver}.tar"
+    local _url="https://github.com/jbangdev/jbang/releases/download/v${_ver}/checksums_sha256.txt"
+    fetch_github_checksums_txt "$_url" "$_tar" 2>/dev/null
+}
+register_tool_checksum_fetcher "jbang" "_fetch_jbang_checksum"
 
-if ! JBANG_CHECKSUM=$(fetch_github_checksums_txt "$JBANG_CHECKSUMS_URL" "$JBANG_TAR" 2>/dev/null); then
-    log_error "Failed to fetch checksum for JBang ${JBANG_VERSION}"
-    log_error "Please verify version exists: https://github.com/jbangdev/jbang/releases/tag/v${JBANG_VERSION}"
+# Download JBang tarball
+BUILD_TEMP=$(create_secure_temp_dir)
+cd "$BUILD_TEMP"
+log_message "Downloading JBang..."
+if ! command curl -L -f --retry 3 --retry-delay 2 --retry-all-errors --progress-bar -o "jbang.tar" "$JBANG_URL"; then
+    log_error "Failed to download JBang ${JBANG_VERSION}"
     log_feature_end
     exit 1
 fi
 
-log_message "Expected SHA256: ${JBANG_CHECKSUM}"
-
-# Download and verify JBang tarball
-BUILD_TEMP=$(create_secure_temp_dir)
-cd "$BUILD_TEMP"
-log_message "Downloading and verifying JBang..."
-download_and_verify \
-    "$JBANG_URL" \
-    "$JBANG_CHECKSUM" \
-    "jbang.tar"
+# Run 4-tier verification
+verify_rc=0
+verify_download "tool" "jbang" "$JBANG_VERSION" "jbang.tar" "$(dpkg --print-architecture)" || verify_rc=$?
+if [ "$verify_rc" -eq 1 ]; then
+    log_error "Verification failed for JBang ${JBANG_VERSION}"
+    log_feature_end
+    exit 1
+fi
 
 log_message "✓ JBang v${JBANG_VERSION} verified successfully"
 
@@ -199,18 +200,26 @@ if [ "$ARCH" = "amd64" ]; then
     MVND_VERSION="1.0.3"
     MVND_URL="https://github.com/apache/maven-mvnd/releases/download/${MVND_VERSION}/maven-mvnd-${MVND_VERSION}-linux-${ARCH}.tar.gz"
 
-    # Maven Daemon does not publish checksums, using calculated SHA256
-    # Calculated from: curl -fsSL "$MVND_URL" | sha256sum
-    MVND_CHECKSUM_AMD64="3ddd4741b0e70c245ed164b45774b72a19331294b2d6147570c8c5271a977e8c"
+    # Maven Daemon does not publish checksums — will be verified via Tier 2 (pinned) or Tier 4 (TOFU)
+    # No fetcher registered — falls through to TOFU with unified logging
 
     BUILD_TEMP=$(create_secure_temp_dir)
     cd "$BUILD_TEMP"
-    log_message "Downloading and verifying Maven Daemon ${MVND_VERSION}..."
-    log_message "Using calculated SHA256 checksum: ${MVND_CHECKSUM_AMD64}"
-    download_and_verify \
-        "${MVND_URL}" \
-        "${MVND_CHECKSUM_AMD64}" \
-        "mvnd.tar.gz"
+    log_message "Downloading Maven Daemon ${MVND_VERSION}..."
+    if ! command curl -L -f --retry 3 --retry-delay 2 --retry-all-errors --progress-bar -o "mvnd.tar.gz" "${MVND_URL}"; then
+        log_error "Failed to download Maven Daemon ${MVND_VERSION}"
+        log_feature_end
+        exit 1
+    fi
+
+    # Run 4-tier verification
+    verify_rc=0
+    verify_download "tool" "mvnd" "$MVND_VERSION" "mvnd.tar.gz" "$ARCH" || verify_rc=$?
+    if [ "$verify_rc" -eq 1 ]; then
+        log_error "Verification failed for Maven Daemon ${MVND_VERSION}"
+        log_feature_end
+        exit 1
+    fi
 
     log_command "Extracting Maven Daemon" \
         tar -xzf mvnd.tar.gz -C "${TOOLS_DIR}"
@@ -251,9 +260,18 @@ GJF_VERSION="${GJF_VERSION:-1.34.1}"
 JMH_VERSION="1.37"
 export JMH_VERSION  # Export for use in shell functions
 GJF_URL="https://github.com/google/google-java-format/releases/download/v${GJF_VERSION}/google-java-format-${GJF_VERSION}-all-deps.jar"
+# Google Java Format does not publish checksums — will be TOFU with unified logging
 if command wget -q --spider "${GJF_URL}" 2>/dev/null; then
-    log_command "Downloading Google Java Format ${GJF_VERSION}" \
-        command wget -q "${GJF_URL}" -O "${JARS_DIR}/google-java-format.jar"
+    log_message "Downloading Google Java Format ${GJF_VERSION}..."
+    if command curl -L -f --retry 3 --retry-delay 2 --retry-all-errors --progress-bar -o "${JARS_DIR}/google-java-format.jar" "${GJF_URL}"; then
+        # Run 4-tier verification (no fetcher registered — will be TOFU)
+        verify_rc=0
+        verify_download "tool" "google-java-format" "$GJF_VERSION" "${JARS_DIR}/google-java-format.jar" "$(dpkg --print-architecture)" || verify_rc=$?
+        if [ "$verify_rc" -eq 1 ]; then
+            log_warning "Verification failed for Google Java Format, removing..."
+            command rm -f "${JARS_DIR}/google-java-format.jar"
+        fi
+    fi
 
     # Create wrapper script
     command cat > /usr/local/bin/google-java-format << 'EOF'

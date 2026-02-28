@@ -58,6 +58,9 @@ source /tmp/build-scripts/base/download-verify.sh
 # Source checksum fetching utilities for dynamic checksum retrieval
 source /tmp/build-scripts/base/checksum-fetch.sh
 
+# Source 4-tier checksum verification system
+source /tmp/build-scripts/base/checksum-verification.sh
+
 # Source secure temp directory utilities
 
 # Source path utilities for secure PATH management
@@ -128,26 +131,47 @@ fi
 
 # Download and install k9s if supported architecture
 if [ -n "$K9S_FILENAME" ]; then
-    log_message "Fetching checksum for k9s ${K9S_VERSION} ${ARCH}..."
+    # Register Tier 3 fetcher for k9s
+    _fetch_k9s_checksum() {
+        local _ver="$1"
+        local _arch="$2"
+        local _k9s_arch
+        case "$_arch" in
+            amd64) _k9s_arch="amd64" ;;
+            arm64) _k9s_arch="arm64" ;;
+            *) _k9s_arch="$_arch" ;;
+        esac
+        local _fn="k9s_Linux_${_k9s_arch}.tar.gz"
+        local _url="https://github.com/derailed/k9s/releases/download/v${_ver}/checksums.sha256"
+        fetch_github_checksums_txt "$_url" "$_fn" 2>/dev/null
+    }
+    register_tool_checksum_fetcher "k9s" "_fetch_k9s_checksum"
 
-    # Fetch checksum dynamically from GitHub checksums.sha256 file
-    K9S_CHECKSUMS_URL="https://github.com/derailed/k9s/releases/download/v${K9S_VERSION}/checksums.sha256"
-    if ! K9S_CHECKSUM=$(fetch_github_checksums_txt "$K9S_CHECKSUMS_URL" "$K9S_FILENAME" 2>/dev/null); then
-        log_error "Failed to fetch checksum for k9s ${K9S_VERSION}"
-        log_error "Please verify version exists: https://github.com/derailed/k9s/releases/tag/v${K9S_VERSION}"
+    # Download k9s
+    BUILD_TEMP=$(create_secure_temp_dir)
+    cd "$BUILD_TEMP"
+    log_message "Downloading k9s for ${ARCH}..."
+    if ! command curl -L -f --retry 3 --retry-delay 2 --retry-all-errors --progress-bar -o "k9s.tar.gz" "https://github.com/derailed/k9s/releases/download/v${K9S_VERSION}/${K9S_FILENAME}"; then
+        log_error "Failed to download k9s ${K9S_VERSION}"
+        cd /
         log_feature_end
         exit 1
     fi
 
-    log_message "✓ Fetched checksum from GitHub"
+    # Run 4-tier verification
+    verify_rc=0
+    verify_download "tool" "k9s" "$K9S_VERSION" "k9s.tar.gz" "$ARCH" || verify_rc=$?
+    if [ "$verify_rc" -eq 1 ]; then
+        log_error "Verification failed for k9s ${K9S_VERSION}"
+        cd /
+        log_feature_end
+        exit 1
+    fi
 
-    # Download and verify k9s
-    log_message "Downloading and verifying k9s for ${ARCH}..."
-    download_and_extract \
-        "https://github.com/derailed/k9s/releases/download/v${K9S_VERSION}/${K9S_FILENAME}" \
-        "${K9S_CHECKSUM}" \
-        "/usr/local/bin" \
-        "k9s"
+    # Extract k9s binary
+    log_command "Extracting k9s" \
+        tar -xzf k9s.tar.gz -C /usr/local/bin k9s
+    cd /
 fi
 
 # Verify k9s installation
@@ -176,30 +200,42 @@ fi
 
 # Download and install Helm if supported architecture
 if [ -n "$HELM_FILENAME" ]; then
-    BUILD_TEMP=$(create_secure_temp_dir)
-    cd "$BUILD_TEMP"
-
     HELM_URL="https://get.helm.sh/${HELM_FILENAME}"
 
-    # Fetch published checksum from Helm's CDN
-    log_message "Fetching checksum for Helm ${HELM_VERSION} ${ARCH}..."
-    HELM_SHA256_URL="https://get.helm.sh/${HELM_FILENAME}.sha256sum"
-    if ! HELM_CHECKSUM=$(fetch_github_sha256_file "$HELM_SHA256_URL" 2>/dev/null); then
-        log_error "Failed to fetch checksum for Helm ${HELM_VERSION}"
-        log_error "Please verify version exists: https://github.com/helm/helm/releases/tag/v${HELM_VERSION}"
+    # Register Tier 3 fetcher for helm
+    _fetch_helm_checksum() {
+        local _ver="$1"
+        local _arch="$2"
+        local _fn="helm-v${_ver}-linux-${_arch}.tar.gz"
+        local _url="https://get.helm.sh/${_fn}.sha256sum"
+        fetch_github_sha256_file "$_url" 2>/dev/null
+    }
+    register_tool_checksum_fetcher "helm" "_fetch_helm_checksum"
+
+    # Download Helm
+    BUILD_TEMP=$(create_secure_temp_dir)
+    cd "$BUILD_TEMP"
+    log_message "Downloading Helm for ${ARCH}..."
+    if ! command curl -L -f --retry 3 --retry-delay 2 --retry-all-errors --progress-bar -o "helm.tar.gz" "$HELM_URL"; then
+        log_error "Failed to download Helm ${HELM_VERSION}"
+        cd /
         log_feature_end
         exit 1
     fi
 
-    log_message "✓ Fetched checksum from Helm CDN"
+    # Run 4-tier verification
+    verify_rc=0
+    verify_download "tool" "helm" "$HELM_VERSION" "helm.tar.gz" "$HELM_ARCH" || verify_rc=$?
+    if [ "$verify_rc" -eq 1 ]; then
+        log_error "Verification failed for Helm ${HELM_VERSION}"
+        cd /
+        log_feature_end
+        exit 1
+    fi
 
-    # Download and verify Helm
-    log_message "Downloading and verifying Helm for ${ARCH}..."
-    download_and_extract \
-        "$HELM_URL" \
-        "${HELM_CHECKSUM}" \
-        "." \
-        ""  # Extract all files
+    # Extract and install
+    log_command "Extracting Helm" \
+        tar -xzf helm.tar.gz
 
     # Move helm binary to /usr/local/bin
     if [ -f "${HELM_DIR}/helm" ]; then
@@ -207,6 +243,7 @@ if [ -n "$HELM_FILENAME" ]; then
             command mv "${HELM_DIR}/helm" /usr/local/bin/helm
     else
         log_error "Helm binary not found after extraction"
+        cd /
         log_feature_end
         exit 1
     fi
@@ -239,29 +276,40 @@ fi
 
 # Download and install krew if supported architecture
 if [ -n "$KREW_FILENAME" ]; then
+    # Register Tier 3 fetcher for krew
+    _fetch_krew_checksum() {
+        local _ver="$1"
+        local _arch="$2"
+        local _fn="krew-linux_${_arch}.tar.gz"
+        local _url="https://github.com/kubernetes-sigs/krew/releases/download/v${_ver}/${_fn}.sha256"
+        fetch_github_sha256_file "$_url" 2>/dev/null
+    }
+    register_tool_checksum_fetcher "krew" "_fetch_krew_checksum"
+
+    # Download krew
     BUILD_TEMP=$(create_secure_temp_dir)
     cd "$BUILD_TEMP"
-
-    log_message "Fetching checksum for krew ${KREW_VERSION} ${ARCH}..."
-
-    # Fetch checksum dynamically from GitHub individual .sha256 file
-    KREW_SHA256_URL="https://github.com/kubernetes-sigs/krew/releases/download/v${KREW_VERSION}/${KREW_FILENAME}.sha256"
-    if ! KREW_CHECKSUM=$(fetch_github_sha256_file "$KREW_SHA256_URL" 2>/dev/null); then
-        log_error "Failed to fetch checksum for krew ${KREW_VERSION}"
-        log_error "Please verify version exists: https://github.com/kubernetes-sigs/krew/releases/tag/v${KREW_VERSION}"
+    log_message "Downloading krew for ${ARCH}..."
+    if ! command curl -L -f --retry 3 --retry-delay 2 --retry-all-errors --progress-bar -o "krew.tar.gz" "https://github.com/kubernetes-sigs/krew/releases/download/v${KREW_VERSION}/${KREW_FILENAME}"; then
+        log_error "Failed to download krew ${KREW_VERSION}"
+        cd /
         log_feature_end
         exit 1
     fi
 
-    log_message "✓ Fetched checksum from GitHub"
+    # Run 4-tier verification
+    verify_rc=0
+    verify_download "tool" "krew" "$KREW_VERSION" "krew.tar.gz" "$KREW_ARCH" || verify_rc=$?
+    if [ "$verify_rc" -eq 1 ]; then
+        log_error "Verification failed for krew ${KREW_VERSION}"
+        cd /
+        log_feature_end
+        exit 1
+    fi
 
-    # Download and verify krew
-    log_message "Downloading and verifying krew for ${ARCH}..."
-    download_and_extract \
-        "https://github.com/kubernetes-sigs/krew/releases/download/v${KREW_VERSION}/${KREW_FILENAME}" \
-        "${KREW_CHECKSUM}" \
-        "." \
-        ""  # Extract all files
+    # Extract krew
+    log_command "Extracting krew" \
+        tar -xzf krew.tar.gz
 
     # Find and install krew binary
     for krew_binary in ./krew-linux_*; do
@@ -288,27 +336,38 @@ if ! command -v cosign &> /dev/null; then
     COSIGN_PACKAGE="cosign_${COSIGN_VERSION}_${ARCH}.deb"
     COSIGN_URL="https://github.com/sigstore/cosign/releases/download/v${COSIGN_VERSION}/${COSIGN_PACKAGE}"
 
-    # Fetch checksum dynamically from GitHub releases
-    log_message "Fetching cosign checksum from GitHub..."
-    COSIGN_CHECKSUMS_URL="https://github.com/sigstore/cosign/releases/download/v${COSIGN_VERSION}/cosign_checksums.txt"
+    # Register Tier 3 fetcher for cosign (if not already registered)
+    if [ -z "${_TOOL_CHECKSUM_FETCHERS[cosign]+x}" ]; then
+        _fetch_cosign_checksum() {
+            local _ver="$1"
+            local _arch="$2"
+            local _pkg="cosign_${_ver}_${_arch}.deb"
+            local _url="https://github.com/sigstore/cosign/releases/download/v${_ver}/cosign_checksums.txt"
+            fetch_github_checksums_txt "$_url" "$_pkg" 2>/dev/null
+        }
+        register_tool_checksum_fetcher "cosign" "_fetch_cosign_checksum"
+    fi
 
-    if ! COSIGN_CHECKSUM=$(fetch_github_checksums_txt "$COSIGN_CHECKSUMS_URL" "$COSIGN_PACKAGE" 2>/dev/null); then
-        log_error "Failed to fetch checksum for cosign ${COSIGN_VERSION}"
-        log_error "Please verify version exists: https://github.com/sigstore/cosign/releases/tag/v${COSIGN_VERSION}"
+    # Download cosign
+    BUILD_TEMP=$(create_secure_temp_dir)
+    cd "$BUILD_TEMP"
+    log_message "Downloading cosign..."
+    if ! command curl -L -f --retry 3 --retry-delay 2 --retry-all-errors --progress-bar -o "cosign.deb" "$COSIGN_URL"; then
+        log_error "Failed to download cosign ${COSIGN_VERSION}"
+        cd /
         log_feature_end
         exit 1
     fi
 
-    log_message "Expected SHA256: ${COSIGN_CHECKSUM}"
-
-    # Download and verify cosign with checksum verification
-    BUILD_TEMP=$(create_secure_temp_dir)
-    cd "$BUILD_TEMP"
-    log_message "Downloading and verifying cosign..."
-    download_and_verify \
-        "$COSIGN_URL" \
-        "$COSIGN_CHECKSUM" \
-        "cosign.deb"
+    # Run 4-tier verification
+    verify_rc=0
+    verify_download "tool" "cosign" "$COSIGN_VERSION" "cosign.deb" "$ARCH" || verify_rc=$?
+    if [ "$verify_rc" -eq 1 ]; then
+        log_error "Verification failed for cosign ${COSIGN_VERSION}"
+        cd /
+        log_feature_end
+        exit 1
+    fi
 
     log_message "✓ cosign v${COSIGN_VERSION} verified successfully"
 
