@@ -126,7 +126,7 @@ if command -v node &>/dev/null && command -v npm &>/dev/null; then
     EXTRA_MCPS_TO_INSTALL="${CLAUDE_EXTRA_MCPS:-}"
     if [ -n "$EXTRA_MCPS_TO_INSTALL" ]; then
         log_message "Installing extra MCP server packages..."
-        source /tmp/build-scripts/features/mcp-registry.sh
+        source /tmp/build-scripts/features/lib/claude/mcp-registry.sh
 
         IFS=',' read -ra EXTRA_MCP_LIST <<< "$EXTRA_MCPS_TO_INSTALL"
         for mcp_name in "${EXTRA_MCP_LIST[@]}"; do
@@ -170,7 +170,7 @@ if command -v node &>/dev/null && command -v npm &>/dev/null; then
     # Copy MCP registry to runtime config for use by claude-setup
     mkdir -p /etc/container/config
     log_command "Copying MCP registry to runtime config" \
-        cp /tmp/build-scripts/features/mcp-registry.sh /etc/container/config/mcp-registry.sh
+        cp /tmp/build-scripts/features/lib/claude/mcp-registry.sh /etc/container/config/mcp-registry.sh
     log_command "Setting MCP registry permissions" \
         chmod 644 /etc/container/config/mcp-registry.sh
 

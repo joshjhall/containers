@@ -18,8 +18,7 @@ install_entr() {
 
     if [ -z "$ENTR_CHECKSUM" ]; then
         log_error "Failed to calculate checksum for entr ${ENTR_VERSION}"
-        log_feature_end
-        exit 1
+        return 1
     fi
 
     log_message "Expected SHA256: ${ENTR_CHECKSUM}"
@@ -93,14 +92,14 @@ install_github_binary_tools() {
         "https://github.com/muesli/duf/releases/download/v${DUF_VERSION}" \
         "duf_${DUF_VERSION}_linux_amd64.deb" "duf_${DUF_VERSION}_linux_arm64.deb" \
         "checksums_txt" "dpkg" \
-        || { log_feature_end; exit 1; }
+        || return 1
 
     # direnv (direct binary, no published checksums)
     install_github_release "direnv" "$DIRENV_VERSION" \
         "https://github.com/direnv/direnv/releases/download/v${DIRENV_VERSION}" \
         "direnv.linux-amd64" "direnv.linux-arm64" \
         "calculate" "binary" \
-        || { log_feature_end; exit 1; }
+        || return 1
 
     # lazygit (tar with binary at top level)
     install_github_release "lazygit" "$LAZYGIT_VERSION" \
@@ -108,7 +107,7 @@ install_github_binary_tools() {
         "lazygit_${LAZYGIT_VERSION}_linux_x86_64.tar.gz" \
         "lazygit_${LAZYGIT_VERSION}_linux_arm64.tar.gz" \
         "checksums_txt" "extract_flat:lazygit" \
-        || { log_feature_end; exit 1; }
+        || return 1
 
     # delta (better git diffs — tar with binary in subdirectory, no published checksums)
     install_github_release "delta" "$DELTA_VERSION" \
@@ -116,21 +115,21 @@ install_github_binary_tools() {
         "delta-${DELTA_VERSION}-x86_64-unknown-linux-gnu.tar.gz" \
         "delta-${DELTA_VERSION}-aarch64-unknown-linux-gnu.tar.gz" \
         "calculate" "extract:delta" \
-        || { log_feature_end; exit 1; }
+        || return 1
 
     # mkcert (local HTTPS certificates, no published checksums)
     install_github_release "mkcert" "$MKCERT_VERSION" \
         "https://github.com/FiloSottile/mkcert/releases/download/v${MKCERT_VERSION}" \
         "mkcert-v${MKCERT_VERSION}-linux-amd64" "mkcert-v${MKCERT_VERSION}-linux-arm64" \
         "calculate" "binary" \
-        || { log_feature_end; exit 1; }
+        || return 1
 
     # act (GitHub Actions CLI)
     install_github_release "act" "$ACT_VERSION" \
         "https://github.com/nektos/act/releases/download/v${ACT_VERSION}" \
         "act_Linux_x86_64.tar.gz" "act_Linux_arm64.tar.gz" \
         "checksums_txt" "extract_flat:act" \
-        || { log_feature_end; exit 1; }
+        || return 1
 
     # git-cliff (automatic changelog generator, SHA512 checksums)
     install_github_release "git-cliff" "$GITCLIFF_VERSION" \
@@ -138,7 +137,7 @@ install_github_binary_tools() {
         "git-cliff-${GITCLIFF_VERSION}-x86_64-unknown-linux-gnu.tar.gz" \
         "git-cliff-${GITCLIFF_VERSION}-aarch64-unknown-linux-gnu.tar.gz" \
         "sha512" "extract:git-cliff" \
-        || { log_feature_end; exit 1; }
+        || return 1
 
     # glab (GitLab CLI — non-fatal, uses GitLab release URLs)
     install_github_release "glab" "$GLAB_VERSION" \
@@ -152,7 +151,7 @@ install_github_binary_tools() {
         "https://github.com/biomejs/biome/releases/download/@biomejs/biome@${BIOME_VERSION}" \
         "biome-linux-x64" "biome-linux-arm64" \
         "calculate" "binary" \
-        || { log_feature_end; exit 1; }
+        || return 1
 
     # taplo (TOML formatter/linter) — skip if already installed by rust-dev
     if ! command -v taplo &> /dev/null; then
@@ -160,7 +159,7 @@ install_github_binary_tools() {
             "https://github.com/tamasfe/taplo/releases/download/${TAPLO_VERSION}" \
             "taplo-linux-x86_64.gz" "taplo-linux-aarch64.gz" \
             "calculate" "gunzip" \
-            || { log_feature_end; exit 1; }
+            || return 1
     else
         log_message "taplo already installed (likely via rust-dev), skipping..."
     fi

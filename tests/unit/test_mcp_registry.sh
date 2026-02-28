@@ -20,7 +20,7 @@ init_test_framework
 test_suite "MCP Server Registry Tests"
 
 # Setup
-REGISTRY_FILE="$PROJECT_ROOT/lib/features/mcp-registry.sh"
+REGISTRY_FILE="$PROJECT_ROOT/lib/features/lib/claude/mcp-registry.sh"
 
 # Test: Registry file exists and is executable
 test_registry_file_exists() {

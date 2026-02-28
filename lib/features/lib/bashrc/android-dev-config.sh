@@ -11,6 +11,9 @@ if [[ $- != *i* ]]; then
 fi
 
 # Source base utilities
+if [ -f /opt/container-runtime/base/logging.sh ]; then
+    source /opt/container-runtime/base/logging.sh
+fi
 if [ -f /opt/container-runtime/base/path-utils.sh ]; then
     source /opt/container-runtime/base/path-utils.sh
 fi
