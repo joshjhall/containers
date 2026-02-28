@@ -88,6 +88,151 @@ test_sources_common_sh() {
 }
 
 # ============================================================================
+# Static Analysis Tests - Secret Leak Prevention
+# ============================================================================
+
+test_connect_item_search_no_log_leak() {
+    # The Connect item search log_warning must NOT include $item (raw API response)
+    local matches
+    matches=$(grep -c 'log_warning.*\$item[^_]' "$SOURCE_FILE" || true)
+
+    assert_equals "0" "$matches" \
+        "Connect item search should not log raw API response (\$item)"
+}
+
+test_connect_vault_list_no_log_leak() {
+    # The Connect vault list log_error must NOT include $vaults (bare variable, not $vaults_*)
+    local matches
+    matches=$(grep -cP 'log_error.*\$vaults\b' "$SOURCE_FILE" || true)
+
+    assert_equals "0" "$matches" \
+        "Connect vault list should not log raw vault response (\$vaults)"
+}
+
+test_cli_op_read_no_log_leak() {
+    # The CLI op read log_warning must NOT include $value
+    local matches
+    matches=$(grep -c 'log_warning.*\$value' "$SOURCE_FILE" || true)
+
+    assert_equals "0" "$matches" \
+        "CLI op read should not log secret value (\$value)"
+}
+
+test_cli_item_get_no_log_leak() {
+    # The CLI item get log_warning must NOT include $item_json
+    local matches
+    matches=$(grep -c 'log_warning.*\$item_json' "$SOURCE_FILE" || true)
+
+    assert_equals "0" "$matches" \
+        "CLI item get should not log item JSON (\$item_json)"
+}
+
+test_connect_item_search_uses_url_encode() {
+    assert_file_contains "$SOURCE_FILE" 'url_encode' \
+        "Connect item search should use url_encode for item names"
+}
+
+# ============================================================================
+# Functional Tests - Secret Leak Prevention (Mock-based)
+# ============================================================================
+
+test_connect_error_log_no_body_leak() {
+    # Mock curl to return a response with a "secret" body + non-200 status
+    cat > "$TEST_TEMP_DIR/bin/curl" << 'MOCK'
+#!/bin/sh
+# For health check, return 200
+case "$*" in
+    *"/health"*) echo "200"; exit 0 ;;
+esac
+# For vaults endpoint, return secret body with 403 status
+printf '{"secret":"TOP_SECRET_VAULT_DATA"}\n403'
+MOCK
+    chmod +x "$TEST_TEMP_DIR/bin/curl"
+
+    # Mock jq to be available
+    cp "$(command -v jq)" "$TEST_TEMP_DIR/bin/jq" 2>/dev/null || {
+        printf '#!/bin/sh\necho ""\n' > "$TEST_TEMP_DIR/bin/jq"
+        chmod +x "$TEST_TEMP_DIR/bin/jq"
+    }
+
+    local log_output
+    log_output=$(bash -c "
+        export PATH='$TEST_TEMP_DIR/bin:/usr/bin'
+        source '$SOURCE_FILE' 2>/dev/null
+        export OP_CONNECT_HOST='http://localhost:8080'
+        export OP_CONNECT_TOKEN='test-token'
+        export OP_VAULT='MyVault'
+        op_connect_load_secrets 2>&1
+    " 2>&1 || true)
+
+    # Verify the secret body text does NOT appear in log output
+    local leak_count
+    leak_count=$(echo "$log_output" | grep -c 'TOP_SECRET_VAULT_DATA' || true)
+
+    assert_equals "0" "$leak_count" \
+        "Connect error log should not contain API response body"
+}
+
+test_cli_op_read_error_no_secret_leak() {
+    # Mock op to output a secret value on stdout and fail
+    cat > "$TEST_TEMP_DIR/bin/op" << 'MOCK'
+#!/bin/sh
+case "$1" in
+    account) exit 0 ;;
+    read) echo "SUPER_SECRET_PASSWORD"; exit 1 ;;
+esac
+exit 1
+MOCK
+    chmod +x "$TEST_TEMP_DIR/bin/op"
+
+    local log_output
+    log_output=$(bash -c "
+        export PATH='$TEST_TEMP_DIR/bin:/usr/bin'
+        source '$SOURCE_FILE' 2>/dev/null
+        export OP_SERVICE_ACCOUNT_TOKEN='sa-token'
+        export OP_SECRET_REFERENCES='op://vault/item/password'
+        op_cli_load_secrets 2>&1
+    " 2>&1 || true)
+
+    local leak_count
+    leak_count=$(echo "$log_output" | grep -c 'SUPER_SECRET_PASSWORD' || true)
+
+    assert_equals "0" "$leak_count" \
+        "CLI op read error log should not contain secret value"
+}
+
+test_cli_item_get_error_no_json_leak() {
+    # Mock op to output JSON with secret fields and fail
+    cat > "$TEST_TEMP_DIR/bin/op" << 'MOCK'
+#!/bin/sh
+case "$1" in
+    account) exit 0 ;;
+    item)
+        echo '{"fields":[{"label":"password","value":"LEAKED_JSON_SECRET"}]}'
+        exit 1
+        ;;
+esac
+exit 1
+MOCK
+    chmod +x "$TEST_TEMP_DIR/bin/op"
+
+    local log_output
+    log_output=$(bash -c "
+        export PATH='$TEST_TEMP_DIR/bin:/usr/bin'
+        source '$SOURCE_FILE' 2>/dev/null
+        export OP_SERVICE_ACCOUNT_TOKEN='sa-token'
+        export OP_ITEM_NAMES='my-item'
+        op_cli_load_secrets 2>&1
+    " 2>&1 || true)
+
+    local leak_count
+    leak_count=$(echo "$log_output" | grep -c 'LEAKED_JSON_SECRET' || true)
+
+    assert_equals "0" "$leak_count" \
+        "CLI item get error log should not contain JSON field values"
+}
+
+# ============================================================================
 # Functional Tests - load_secrets_from_1password()
 # ============================================================================
 
@@ -356,6 +501,18 @@ run_test_with_setup test_defines_op_cli_load_secrets "Defines op_cli_load_secret
 run_test_with_setup test_defines_load_secrets_from_1password "Defines load_secrets_from_1password function"
 run_test_with_setup test_defines_op_health_check "Defines op_health_check function"
 run_test_with_setup test_sources_common_sh "Sources common.sh for logging and helpers"
+
+# Secret leak prevention - static analysis
+run_test_with_setup test_connect_item_search_no_log_leak "Connect item search does not log raw response"
+run_test_with_setup test_connect_vault_list_no_log_leak "Connect vault list does not log raw response"
+run_test_with_setup test_cli_op_read_no_log_leak "CLI op read does not log secret value"
+run_test_with_setup test_cli_item_get_no_log_leak "CLI item get does not log item JSON"
+run_test_with_setup test_connect_item_search_uses_url_encode "Connect item search uses url_encode"
+
+# Secret leak prevention - functional
+run_test_with_setup test_connect_error_log_no_body_leak "Connect error log does not leak response body"
+run_test_with_setup test_cli_op_read_error_no_secret_leak "CLI op read error does not leak secret"
+run_test_with_setup test_cli_item_get_error_no_json_leak "CLI item get error does not leak JSON fields"
 
 # load_secrets_from_1password
 run_test_with_setup test_load_secrets_disabled_by_default "Returns 0 when OP_ENABLED not set (disabled)"

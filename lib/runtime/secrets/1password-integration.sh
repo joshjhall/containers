@@ -80,13 +80,21 @@ op_connect_load_secrets() {
         # Vault name provided, need to lookup ID
         log_info "Looking up vault ID for: $vault_id"
 
-        local vaults
-        vaults=$(curl -s \
+        local vaults_response
+        vaults_response=$(curl -s -w '\n%{http_code}' \
             -H "Authorization: Bearer ${OP_CONNECT_TOKEN}" \
-            "${OP_CONNECT_HOST}/v1/vaults" 2>&1) || {
-            log_error "Failed to list vaults: $vaults"
+            "${OP_CONNECT_HOST}/v1/vaults" 2>/dev/null) || {
+            log_error "Failed to list vaults from Connect server"
             return 3
         }
+
+        local vaults_http_code="${vaults_response##*$'\n'}"
+        local vaults="${vaults_response%$'\n'*}"
+
+        if [[ "$vaults_http_code" -lt 200 || "$vaults_http_code" -ge 300 ]]; then
+            log_error "Failed to list vaults (HTTP $vaults_http_code)"
+            return 3
+        fi
 
         vault_id=$(echo "$vaults" | jq -r --arg name "$OP_VAULT" \
             '.[] | select(.name == $name) | .id' | head -n 1)
@@ -112,15 +120,26 @@ op_connect_load_secrets() {
 
             log_info "Retrieving item: $item_name"
 
-            # Get item from Connect API
+            # Get item from Connect API (URL-encode item name to prevent injection)
             local item
             local api_url="${OP_CONNECT_HOST}/v1/vaults/${vault_id}/items"
-            item=$(curl -s \
+            local encoded_name
+            encoded_name=$(url_encode "$item_name")
+            local item_response
+            item_response=$(curl -s -w '\n%{http_code}' \
                 -H "Authorization: Bearer ${OP_CONNECT_TOKEN}" \
-                "${api_url}?filter=title eq \"${item_name}\"" 2>&1) || {
-                log_warning "Failed to retrieve item '$item_name': $item"
+                "${api_url}?filter=title%20eq%20%22${encoded_name}%22" 2>/dev/null) || {
+                log_warning "Failed to retrieve item '$item_name'"
                 continue
             }
+
+            local item_http_code="${item_response##*$'\n'}"
+            item="${item_response%$'\n'*}"
+
+            if [[ "$item_http_code" -lt 200 || "$item_http_code" -ge 300 ]]; then
+                log_warning "Failed to retrieve item '$item_name' (HTTP $item_http_code)"
+                continue
+            fi
 
             # Extract first matching item
             local item_id
@@ -202,8 +221,8 @@ op_cli_load_secrets() {
 
             # Extract value using op read
             local value
-            value=$(op read "$ref" 2>&1) || {
-                log_warning "Failed to read secret reference '$ref': $value"
+            value=$(op read "$ref" 2>/dev/null) || {
+                log_warning "Failed to read secret reference '$ref'"
                 continue
             }
 
@@ -240,8 +259,8 @@ op_cli_load_secrets() {
             fi
 
             local item_json
-            item_json=$(op "${item_args[@]}" 2>&1) || {
-                log_warning "Failed to retrieve item '$item_name': $item_json"
+            item_json=$(op "${item_args[@]}" 2>/dev/null) || {
+                log_warning "Failed to retrieve item '$item_name'"
                 continue
             }
 
