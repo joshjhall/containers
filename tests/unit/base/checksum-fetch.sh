@@ -94,9 +94,9 @@ test_defines_fetch_maven_sha256() {
         "Script defines fetch_maven_sha256 function"
 }
 
-test_defines_fetch_maven_sha1() {
-    assert_file_contains "$SOURCE_FILE" "fetch_maven_sha1()" \
-        "Script defines fetch_maven_sha1 function"
+test_fetch_maven_sha1_removed() {
+    assert_file_not_contains "$SOURCE_FILE" "fetch_maven_sha1()" \
+        "fetch_maven_sha1 function has been removed (SHA-1 is broken)"
 }
 
 test_defines_validate_checksum_format() {
@@ -190,22 +190,13 @@ test_validate_checksum_format_sha512_invalid_short() {
     assert_equals "1" "$exit_code" "validate_checksum_format rejects 64-char string as SHA512"
 }
 
-test_validate_checksum_format_sha1_valid() {
+test_validate_checksum_format_sha1_rejected() {
     local valid_sha1="a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
 
     local exit_code=0
     _run_fetch_subshell "validate_checksum_format '$valid_sha1' 'sha1'" || exit_code=$?
 
-    assert_equals "0" "$exit_code" "validate_checksum_format accepts valid SHA1 (40 hex chars)"
-}
-
-test_validate_checksum_format_sha1_invalid() {
-    local bad_sha1="tooshort"
-
-    local exit_code=0
-    _run_fetch_subshell "validate_checksum_format '$bad_sha1' 'sha1'" || exit_code=$?
-
-    assert_equals "1" "$exit_code" "validate_checksum_format rejects invalid SHA1"
+    assert_equals "1" "$exit_code" "validate_checksum_format rejects SHA1 type (no longer supported)"
 }
 
 test_validate_checksum_format_unknown_type() {
@@ -414,7 +405,7 @@ run_test_with_setup test_defines_fetch_github_sha256_file "Defines fetch_github_
 run_test_with_setup test_defines_fetch_github_sha512_file "Defines fetch_github_sha512_file function"
 run_test_with_setup test_defines_fetch_ruby_checksum "Defines fetch_ruby_checksum function"
 run_test_with_setup test_defines_fetch_maven_sha256 "Defines fetch_maven_sha256 function"
-run_test_with_setup test_defines_fetch_maven_sha1 "Defines fetch_maven_sha1 function"
+run_test_with_setup test_fetch_maven_sha1_removed "fetch_maven_sha1 removed (SHA-1 broken)"
 run_test_with_setup test_defines_validate_checksum_format "Defines validate_checksum_format function"
 run_test_with_setup test_defines_is_partial_version "Defines _is_partial_version function"
 run_test_with_setup test_defines_calculate_checksum_sha256 "Defines calculate_checksum_sha256 function"
@@ -431,8 +422,7 @@ run_test_with_setup test_validate_checksum_format_sha256_invalid_short "SHA256 i
 run_test_with_setup test_validate_checksum_format_sha256_invalid_chars "SHA256 invalid: non-hex chars rejected"
 run_test_with_setup test_validate_checksum_format_sha512_valid "SHA512 valid: 128 hex chars accepted"
 run_test_with_setup test_validate_checksum_format_sha512_invalid_short "SHA512 invalid: 64-char string rejected"
-run_test_with_setup test_validate_checksum_format_sha1_valid "SHA1 valid: 40 hex chars accepted"
-run_test_with_setup test_validate_checksum_format_sha1_invalid "SHA1 invalid: short string rejected"
+run_test_with_setup test_validate_checksum_format_sha1_rejected "SHA1 type rejected (no longer supported)"
 run_test_with_setup test_validate_checksum_format_unknown_type "Unknown hash type rejected"
 run_test_with_setup test_validate_checksum_format_empty "Empty checksum rejected"
 

@@ -222,6 +222,38 @@ test_verify_checksum_sha512_logic() {
     fi
 }
 
+# Test: SHA-1 checksums are rejected
+test_sha1_rejected() {
+    # 40-character hex string (SHA-1 length)
+    local sha1_checksum="a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+
+    # Create a test file
+    local test_file="$TEST_TEMP_DIR/test-file.txt"
+    echo "test content" > "$test_file"
+
+    # Source and call verify_checksum with a SHA-1 checksum
+    local exit_code=0
+    local output
+    output=$(bash -c "
+        source '$PROJECT_ROOT/lib/base/download-verify.sh' 2>/dev/null
+        verify_checksum '$test_file' '$sha1_checksum'
+    " 2>&1) || exit_code=$?
+
+    assert_not_equals "0" "$exit_code" "verify_checksum rejects SHA-1 checksums"
+
+    if echo "$output" | grep -q "SHA-1 checksums are not supported"; then
+        assert_true true "Error message mentions SHA-1 is not supported"
+    else
+        assert_true false "Expected error message about SHA-1 not being supported"
+    fi
+
+    if echo "$output" | grep -q "SHA-256.*SHA-512\|SHA256.*SHA512"; then
+        assert_true true "Error message directs to SHA-256/SHA-512"
+    else
+        assert_true false "Expected error message to suggest SHA-256/SHA-512 alternatives"
+    fi
+}
+
 # Test: Script documentation mentions both SHA256 and SHA512
 test_script_documentation() {
     # Check header comments mention both hash types
@@ -252,6 +284,7 @@ run_test test_functions_exported "Required functions are exported"
 run_test test_required_commands_check "Script checks for required commands"
 run_test_with_setup test_verify_checksum_sha256_logic "Verify checksum SHA256 logic is correct"
 run_test_with_setup test_verify_checksum_sha512_logic "Verify checksum SHA512 logic is correct"
+run_test_with_setup test_sha1_rejected "SHA-1 checksums are rejected with helpful error"
 run_test test_script_documentation "Script documentation is comprehensive"
 
 # Generate test report
