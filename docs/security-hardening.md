@@ -138,7 +138,8 @@ hours
 
 - `lib/base/aliases.sh` (line 122)
 - `lib/runtime/setup-paths.sh` (line 32)
-- `lib/features/dev-tools.sh` (lines 897, 910)
+- `lib/base/aliases.sh` (line 145 — zoxide)
+- `lib/features/lib/bashrc/dev-tools-extras.sh` (lines 25, 37-39 — direnv, just)
 
 **Risk**: Command injection if tool outputs are compromised.
 
@@ -246,7 +247,7 @@ minutes
 
 **Affected Files**:
 
-- `lib/features/dev-tools.sh` (lines 793-808)
+- `lib/features/claude-code-setup.sh` (lines 41-43)
 
 **Risk**: Code execution from compromised download source. While installer
 claims internal verification, the installer script itself is not verified.
@@ -512,7 +513,7 @@ log_command "Creating Python cache directories with correct permissions" \
 **Affected Files**:
 
 - `lib/features/kubernetes.sh` (line 358)
-- `lib/features/dev-tools.sh` (line 910)
+- `lib/features/lib/bashrc/dev-tools-extras.sh` (lines 37-39)
 
 **Risk**: Command injection if tool outputs are compromised. Similar to eval but
 harder to defend against.

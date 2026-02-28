@@ -695,5 +695,5 @@ Install missing tools or disable the corresponding provider.
 ## Related Documentation
 
 - [Production Deployment Guide](../../docs/production-deployment.md)
-- [Environment Variables](../../docs/environment-variables.md)
+- [Environment Variables](../../docs/reference/environment-variables.md)
 - [Security Hardening](../../docs/security-hardening.md)

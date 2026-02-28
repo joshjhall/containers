@@ -1102,7 +1102,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for:
 - Code style guidelines
 - Pull request process
 
-See [.githooks/README.md](.githooks/README.md) for configuration options.
+See [.pre-commit-config.yaml](.pre-commit-config.yaml) for configuration options.
 
 ______________________________________________________________________
 

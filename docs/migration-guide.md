@@ -461,7 +461,7 @@ ERROR: failed to solve: failed to compute cache key
 1. Check docs:
 
    ```bash
-   cat containers/docs/environment-variables.md
+   cat containers/docs/reference/environment-variables.md
    ```
 
 ### Issue: Performance Regression

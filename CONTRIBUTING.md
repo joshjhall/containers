@@ -524,7 +524,7 @@ ______________________________________________________________________
 When adding new features:
 
 1. **Update README.md**: Add feature to the feature list
-1. **Update docs/environment-variables.md**: Document any new variables
+1. **Update docs/reference/environment-variables.md**: Document any new variables
 1. **Update examples/**: Add usage examples if applicable
 1. **Add inline comments**: Explain complex logic
 

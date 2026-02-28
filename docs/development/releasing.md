@@ -369,8 +369,8 @@ git push origin v4.5.1
 ### Related Security Documentation
 
 - [Security Policy](../SECURITY.md) - Vulnerability reporting
-- [Security Hardening Roadmap](./security-hardening.md) - Planned improvements
-- [Checksum Verification](./checksum-verification.md) - Implementation guide
+- [Security Hardening Roadmap](../security-hardening.md) - Planned improvements
+- [Checksum Verification](../reference/security-checksums.md) - Implementation guide
 - [Troubleshooting: Security Issues](./troubleshooting.md#security--download-issues)
 
 ## Troubleshooting
