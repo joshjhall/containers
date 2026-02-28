@@ -23,6 +23,7 @@ test_suite "Bindfs Feature Tests"
 # Setup
 FEATURE_FILE="$PROJECT_ROOT/lib/features/bindfs.sh"
 ENTRYPOINT_FILE="$PROJECT_ROOT/lib/runtime/entrypoint.sh"
+BINDFS_RUNTIME_FILE="$PROJECT_ROOT/lib/runtime/lib/setup-bindfs.sh"
 DOCKERFILE="$PROJECT_ROOT/Dockerfile"
 
 # Test: Feature script exists and is executable
@@ -84,72 +85,72 @@ test_feature_summary_includes_cron() {
     assert_file_contains "$FEATURE_FILE" "FUSE_CLEANUP_DISABLE" "Feature summary includes FUSE_CLEANUP_DISABLE env var"
 }
 
-# Test: Entrypoint contains bindfs overlay section
+# Test: Bindfs runtime sub-script contains bindfs overlay section
 test_entrypoint_has_bindfs_section() {
-    assert_file_contains "$ENTRYPOINT_FILE" "Bindfs Overlay" "Entrypoint has Bindfs Overlay section header"
-    assert_file_contains "$ENTRYPOINT_FILE" "BINDFS_ENABLED" "Entrypoint references BINDFS_ENABLED"
-    assert_file_contains "$ENTRYPOINT_FILE" "BINDFS_SKIP_PATHS" "Entrypoint references BINDFS_SKIP_PATHS"
+    assert_file_contains "$BINDFS_RUNTIME_FILE" "Bindfs Overlay" "Bindfs sub-script has Bindfs Overlay section header"
+    assert_file_contains "$BINDFS_RUNTIME_FILE" "BINDFS_ENABLED" "Bindfs sub-script references BINDFS_ENABLED"
+    assert_file_contains "$BINDFS_RUNTIME_FILE" "BINDFS_SKIP_PATHS" "Bindfs sub-script references BINDFS_SKIP_PATHS"
 }
 
-# Test: Entrypoint checks for bindfs binary
+# Test: Bindfs sub-script checks for bindfs binary
 test_entrypoint_checks_bindfs_binary() {
-    assert_file_contains "$ENTRYPOINT_FILE" "command -v bindfs" "Entrypoint checks for bindfs binary"
+    assert_file_contains "$BINDFS_RUNTIME_FILE" "command -v bindfs" "Bindfs sub-script checks for bindfs binary"
 }
 
-# Test: Entrypoint checks for /dev/fuse
+# Test: Bindfs sub-script checks for /dev/fuse
 test_entrypoint_checks_dev_fuse() {
-    assert_file_contains "$ENTRYPOINT_FILE" "/dev/fuse" "Entrypoint checks for /dev/fuse"
+    assert_file_contains "$BINDFS_RUNTIME_FILE" "/dev/fuse" "Bindfs sub-script checks for /dev/fuse"
 }
 
-# Test: Entrypoint uses findmnt to discover mounts (without --submounts)
+# Test: Bindfs sub-script uses findmnt to discover mounts (without --submounts)
 test_entrypoint_uses_findmnt() {
-    assert_file_contains "$ENTRYPOINT_FILE" "findmnt" "Entrypoint uses findmnt for mount discovery"
+    assert_file_contains "$BINDFS_RUNTIME_FILE" "findmnt" "Bindfs sub-script uses findmnt for mount discovery"
     # Must NOT use --submounts in the actual findmnt command
     # (fails when /workspace isn't itself a mount point)
-    assert_file_not_contains "$ENTRYPOINT_FILE" "findmnt.*--submounts" \
-        "Entrypoint does not use --submounts (breaks when /workspace is not a mount point)"
+    assert_file_not_contains "$BINDFS_RUNTIME_FILE" "findmnt.*--submounts" \
+        "Bindfs sub-script does not use --submounts (breaks when /workspace is not a mount point)"
     # Must grep for /workspace prefix to filter mounts
-    assert_file_contains "$ENTRYPOINT_FILE" "grep.*workspace" \
-        "Entrypoint filters findmnt output by /workspace prefix"
+    assert_file_contains "$BINDFS_RUNTIME_FILE" "grep.*workspace" \
+        "Bindfs sub-script filters findmnt output by /workspace prefix"
 }
 
-# Test: Entrypoint applies bindfs with correct options
+# Test: Bindfs sub-script applies bindfs with correct options
 test_entrypoint_bindfs_options() {
-    assert_file_contains "$ENTRYPOINT_FILE" "force-user" "Entrypoint uses --force-user"
-    assert_file_contains "$ENTRYPOINT_FILE" "force-group" "Entrypoint uses --force-group"
-    assert_file_contains "$ENTRYPOINT_FILE" "allow_other" "Entrypoint uses allow_other"
-    assert_file_contains "$ENTRYPOINT_FILE" "create-for-user" "Entrypoint uses --create-for-user"
-    assert_file_contains "$ENTRYPOINT_FILE" "create-for-group" "Entrypoint uses --create-for-group"
+    assert_file_contains "$BINDFS_RUNTIME_FILE" "force-user" "Bindfs sub-script uses --force-user"
+    assert_file_contains "$BINDFS_RUNTIME_FILE" "force-group" "Bindfs sub-script uses --force-group"
+    assert_file_contains "$BINDFS_RUNTIME_FILE" "allow_other" "Bindfs sub-script uses allow_other"
+    assert_file_contains "$BINDFS_RUNTIME_FILE" "create-for-user" "Bindfs sub-script uses --create-for-user"
+    assert_file_contains "$BINDFS_RUNTIME_FILE" "create-for-group" "Bindfs sub-script uses --create-for-group"
 }
 
-# Test: Entrypoint supports auto/true/false modes
+# Test: Bindfs sub-script supports auto/true/false modes
 test_entrypoint_bindfs_modes() {
-    assert_file_contains "$ENTRYPOINT_FILE" '"auto"' "Entrypoint supports auto mode"
-    assert_file_contains "$ENTRYPOINT_FILE" '"false"' "Entrypoint supports false mode"
-    assert_file_contains "$ENTRYPOINT_FILE" '"true"' "Entrypoint supports true mode"
+    assert_file_contains "$BINDFS_RUNTIME_FILE" '"auto"' "Bindfs sub-script supports auto mode"
+    assert_file_contains "$BINDFS_RUNTIME_FILE" '"false"' "Bindfs sub-script supports false mode"
+    assert_file_contains "$BINDFS_RUNTIME_FILE" '"true"' "Bindfs sub-script supports true mode"
 }
 
-# Test: Entrypoint probes permissions in auto mode
+# Test: Bindfs sub-script probes permissions in auto mode
 test_entrypoint_permission_probe() {
-    assert_file_contains "$ENTRYPOINT_FILE" "chmod 755" "Entrypoint probes with chmod 755"
-    assert_file_contains "$ENTRYPOINT_FILE" "bindfs-probe" "Entrypoint creates probe file"
+    assert_file_contains "$BINDFS_RUNTIME_FILE" "chmod 755" "Bindfs sub-script probes with chmod 755"
+    assert_file_contains "$BINDFS_RUNTIME_FILE" "bindfs-probe" "Bindfs sub-script creates probe file"
 }
 
-# Test: Entrypoint detects Docker Desktop filesystem types that fake permissions
+# Test: Bindfs sub-script detects Docker Desktop filesystem types that fake permissions
 test_entrypoint_detects_fake_fs_types() {
-    assert_file_contains "$ENTRYPOINT_FILE" "fakeowner" \
-        "Entrypoint detects fakeowner filesystem (Docker Desktop FUSE layer)"
-    assert_file_contains "$ENTRYPOINT_FILE" "virtiofs" \
-        "Entrypoint detects virtiofs filesystem (Docker Desktop 4.x+)"
-    assert_file_contains "$ENTRYPOINT_FILE" "grpcfuse" \
-        "Entrypoint detects grpcfuse filesystem (older Docker Desktop)"
-    assert_file_contains "$ENTRYPOINT_FILE" "osxfs" \
-        "Entrypoint detects osxfs filesystem (legacy macOS sharing)"
+    assert_file_contains "$BINDFS_RUNTIME_FILE" "fakeowner" \
+        "Bindfs sub-script detects fakeowner filesystem (Docker Desktop FUSE layer)"
+    assert_file_contains "$BINDFS_RUNTIME_FILE" "virtiofs" \
+        "Bindfs sub-script detects virtiofs filesystem (Docker Desktop 4.x+)"
+    assert_file_contains "$BINDFS_RUNTIME_FILE" "grpcfuse" \
+        "Bindfs sub-script detects grpcfuse filesystem (older Docker Desktop)"
+    assert_file_contains "$BINDFS_RUNTIME_FILE" "osxfs" \
+        "Bindfs sub-script detects osxfs filesystem (legacy macOS sharing)"
 }
 
-# Test: Entrypoint skips fuse mounts
+# Test: Bindfs sub-script skips fuse mounts
 test_entrypoint_skips_fuse() {
-    assert_file_contains "$ENTRYPOINT_FILE" "fuse" "Entrypoint checks for fuse fstype"
+    assert_file_contains "$BINDFS_RUNTIME_FILE" "fuse" "Bindfs sub-script checks for fuse fstype"
 }
 
 # Test: Entrypoint uses existing privilege escalation pattern
@@ -186,24 +187,24 @@ test_dockerfile_runs_bindfs_script() {
     assert_file_contains "$DOCKERFILE" "bindfs.sh" "Dockerfile runs bindfs.sh"
 }
 
-# Test: Entrypoint FUSE cleanup references cron job for ongoing cleanup
+# Test: Bindfs sub-script FUSE cleanup references cron job for ongoing cleanup
 test_entrypoint_fuse_cleanup_mentions_cron() {
-    assert_file_contains "$ENTRYPOINT_FILE" "boot-time" \
-        "Entrypoint FUSE cleanup section mentions boot-time"
-    assert_file_contains "$ENTRYPOINT_FILE" "fuse-cleanup-cron" \
-        "Entrypoint FUSE cleanup section references cron job"
+    assert_file_contains "$BINDFS_RUNTIME_FILE" "boot-time" \
+        "Bindfs sub-script FUSE cleanup section mentions boot-time"
+    assert_file_contains "$BINDFS_RUNTIME_FILE" "fuse-cleanup-cron" \
+        "Bindfs sub-script FUSE cleanup section references cron job"
 }
 
-# Test: Bindfs section is between cache fix and cron in entrypoint
+# Test: Entrypoint calls setup_bindfs_overlays between cache fix and cron
 test_entrypoint_section_ordering() {
-    # Get line numbers to verify ordering
-    local cache_line entrypoint_bindfs_line cron_line
-    cache_line=$(command grep -n "Cache Directory Permissions Fix" "$ENTRYPOINT_FILE" | command head -1 | command cut -d: -f1)
-    entrypoint_bindfs_line=$(command grep -n "Bindfs Overlay" "$ENTRYPOINT_FILE" | command head -1 | command cut -d: -f1)
+    # Verify the sequential initialization calls are in correct order
+    local cache_line bindfs_line cron_line
+    cache_line=$(command grep -n "fix_cache_permissions" "$ENTRYPOINT_FILE" | command head -1 | command cut -d: -f1)
+    bindfs_line=$(command grep -n "setup_bindfs_overlays" "$ENTRYPOINT_FILE" | command head -1 | command cut -d: -f1)
     cron_line=$(command grep -n "Cron Daemon Startup" "$ENTRYPOINT_FILE" | command head -1 | command cut -d: -f1)
 
-    assert_true [ "$cache_line" -lt "$entrypoint_bindfs_line" ] "Bindfs section comes after cache fix"
-    assert_true [ "$entrypoint_bindfs_line" -lt "$cron_line" ] "Bindfs section comes before cron startup"
+    assert_true [ "$cache_line" -lt "$bindfs_line" ] "Bindfs call comes after cache fix"
+    assert_true [ "$bindfs_line" -lt "$cron_line" ] "Bindfs call comes before cron startup"
 }
 
 # Run all tests

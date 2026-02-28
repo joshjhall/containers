@@ -440,7 +440,7 @@ run_test_with_setup() {
 
 # Test: Docker socket fix section exists
 test_docker_socket_fix_section() {
-    local script="$PROJECT_ROOT/lib/runtime/entrypoint.sh"
+    local script="$PROJECT_ROOT/lib/runtime/lib/fix-docker-socket.sh"
 
     # Check for Docker socket fix section
     if command grep -q "Docker Socket Access Fix" "$script"; then
@@ -452,7 +452,7 @@ test_docker_socket_fix_section() {
 
 # Test: Docker socket fix creates docker group
 test_docker_socket_creates_group() {
-    local script="$PROJECT_ROOT/lib/runtime/entrypoint.sh"
+    local script="$PROJECT_ROOT/lib/runtime/lib/fix-docker-socket.sh"
 
     if command grep -q "groupadd docker" "$script"; then
         assert_true true "Docker group creation is handled"
@@ -463,7 +463,7 @@ test_docker_socket_creates_group() {
 
 # Test: Docker socket fix sets correct permissions
 test_docker_socket_permissions() {
-    local script="$PROJECT_ROOT/lib/runtime/entrypoint.sh"
+    local script="$PROJECT_ROOT/lib/runtime/lib/fix-docker-socket.sh"
 
     # Check for chown to docker group
     if command grep -q "chown root:docker /var/run/docker.sock" "$script"; then
@@ -482,7 +482,7 @@ test_docker_socket_permissions() {
 
 # Test: Docker socket fix adds user to group
 test_docker_socket_user_group() {
-    local script="$PROJECT_ROOT/lib/runtime/entrypoint.sh"
+    local script="$PROJECT_ROOT/lib/runtime/lib/fix-docker-socket.sh"
 
     if command grep -q 'usermod -aG docker "\$USERNAME"' "$script"; then
         assert_true true "User added to docker group"
@@ -493,7 +493,7 @@ test_docker_socket_user_group() {
 
 # Test: Docker socket fix checks for existing access
 test_docker_socket_checks_access() {
-    local script="$PROJECT_ROOT/lib/runtime/entrypoint.sh"
+    local script="$PROJECT_ROOT/lib/runtime/lib/fix-docker-socket.sh"
 
     # Should check if user can already access before fixing
     if command grep -q "test -r /var/run/docker.sock" "$script"; then
@@ -505,7 +505,7 @@ test_docker_socket_checks_access() {
 
 # Test: Docker socket fix supports sudo for non-root
 test_docker_socket_sudo_support() {
-    local script="$PROJECT_ROOT/lib/runtime/entrypoint.sh"
+    local script="$PROJECT_ROOT/lib/runtime/lib/fix-docker-socket.sh"
 
     # Should have sudo support for non-root users
     if command grep -q "sudo -n true" "$script" && command grep -q "run_privileged" "$script"; then
@@ -795,8 +795,8 @@ _run_bindfs_parse_subshell() {
     bash -c "$1" 2>/dev/null
 }
 
-# Extract the function body from entrypoint.sh for isolated testing
-_PARSE_BINDFS_FUNC=$(sed -n '/^parse_bindfs_skip_paths()/,/^}/p' "$PROJECT_ROOT/lib/runtime/entrypoint.sh")
+# Extract the function body from setup-bindfs.sh for isolated testing
+_PARSE_BINDFS_FUNC=$(sed -n '/^parse_bindfs_skip_paths()/,/^}/p' "$PROJECT_ROOT/lib/runtime/lib/setup-bindfs.sh")
 
 test_parse_bindfs_skip_paths_empty() {
     local output
@@ -858,7 +858,7 @@ test_parse_bindfs_skip_paths_whitespace() {
 # Functional Tests - probe_mount_needs_fix
 # ============================================================================
 # Extract the probe function. It depends on BINDFS_SKIP_MAP (associative array).
-_PROBE_MOUNT_FUNC=$(sed -n '/^probe_mount_needs_fix()/,/^}/p' "$PROJECT_ROOT/lib/runtime/entrypoint.sh")
+_PROBE_MOUNT_FUNC=$(sed -n '/^probe_mount_needs_fix()/,/^}/p' "$PROJECT_ROOT/lib/runtime/lib/setup-bindfs.sh")
 
 # Helper to run probe tests in a subshell with mocked filesystem operations
 _run_probe_subshell() {
@@ -927,7 +927,7 @@ test_probe_auto_mode_normal_fs() {
 # ============================================================================
 # Extract the apply function. It depends on BINDFS_CAN_SUDO, USERNAME,
 # BINDFS_UID, BINDFS_GID, and calls run_privileged + bindfs.
-_APPLY_OVERLAY_FUNC=$(sed -n '/^apply_bindfs_overlay()/,/^}/p' "$PROJECT_ROOT/lib/runtime/entrypoint.sh")
+_APPLY_OVERLAY_FUNC=$(sed -n '/^apply_bindfs_overlay()/,/^}/p' "$PROJECT_ROOT/lib/runtime/lib/setup-bindfs.sh")
 
 _run_apply_subshell() {
     bash -c "$1" 2>/dev/null
