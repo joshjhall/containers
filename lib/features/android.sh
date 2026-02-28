@@ -87,7 +87,7 @@ if [ ! -f "/usr/lib/jvm/default-java/bin/java" ] && ! command -v java &>/dev/nul
     exit 1
 fi
 
-JAVA_VERSION_OUTPUT=$(java -version 2>&1 | head -n 1)
+JAVA_VERSION_OUTPUT=$(java -version 2>&1 | command head -n 1)
 log_message "Found Java: $JAVA_VERSION_OUTPUT"
 
 # Ensure JAVA_HOME is set
@@ -196,7 +196,7 @@ echo "y" | "$SDKMANAGER" --install "platform-tools" || true
 log_message "Installing SDK components for API levels: ${ANDROID_API_LEVELS}..."
 
 for API_LEVEL in "${API_LEVELS_ARRAY[@]}"; do
-    API_LEVEL=$(echo "$API_LEVEL" | tr -d ' ')  # Trim whitespace
+    API_LEVEL=$(echo "$API_LEVEL" | command tr -d ' ')  # Trim whitespace
 
     log_message "Installing components for API level ${API_LEVEL}..."
 
@@ -229,7 +229,7 @@ if echo "y" | "$SDKMANAGER" --install "ndk;${ANDROID_NDK_VERSION}" 2>/dev/null; 
 else
     log_warning "Failed to install NDK ${ANDROID_NDK_VERSION}, trying without version..."
     # Try to install latest NDK
-    LATEST_NDK=$("$SDKMANAGER" --list 2>/dev/null | grep "ndk;" | tail -1 | awk '{print $1}')
+    LATEST_NDK=$("$SDKMANAGER" --list 2>/dev/null | command grep "ndk;" | command tail -1 | command awk '{print $1}')
     if [ -n "$LATEST_NDK" ]; then
         echo "y" | "$SDKMANAGER" --install "$LATEST_NDK" || log_warning "Could not install NDK"
     fi
@@ -266,7 +266,7 @@ for cmd in adb fastboot; do
 done
 
 # Find and link build-tools (use highest version available)
-BUILD_TOOLS_DIR=$(command find "${ANDROID_SDK_ROOT}/build-tools/" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | sort -V | tail -1)
+BUILD_TOOLS_DIR=$(command find "${ANDROID_SDK_ROOT}/build-tools/" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | command sort -V | command tail -1)
 if [ -n "$BUILD_TOOLS_DIR" ] && [ -d "$BUILD_TOOLS_DIR" ]; then
     for cmd in aapt aapt2 apksigner zipalign d8 dexdump; do
         if [ -f "${BUILD_TOOLS_DIR}/${cmd}" ]; then

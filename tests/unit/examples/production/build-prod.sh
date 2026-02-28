@@ -30,7 +30,7 @@ test_script_exists() {
 # Test: Script has proper shebang
 test_shebang() {
     local first_line
-    first_line=$(head -n1 "$SCRIPT_PATH")
+    first_line=$(command head -n1 "$SCRIPT_PATH")
     assert_equals "#!/usr/bin/env bash" "$first_line" "Script shebang"
 }
 

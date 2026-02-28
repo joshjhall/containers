@@ -41,7 +41,7 @@ log_error() { log "${RED}ERROR${NC}" "$*"; }
 log_success() { log "${GREEN}SUCCESS${NC}" "$*"; }
 
 usage() {
-    cat << EOF
+    command cat << EOF
 Runtime Behavior Baseline Collection Script
 
 Usage:
@@ -287,7 +287,7 @@ generate_baseline_report() {
         }' > "$report_file"
 
     log_success "Baseline report generated: $report_file"
-    cat "$report_file"
+    command cat "$report_file"
 }
 
 # Generate Falco exception rules from baseline
@@ -306,7 +306,7 @@ generate_falco_tuning() {
     local namespace
     namespace=$(jq -r '.metadata.namespace' "$baseline_file")
 
-    cat > "$output_file" << EOF
+    command cat > "$output_file" << EOF
 # Falco Rule Tuning - Generated from Baseline
 #
 # Namespace: ${namespace}
@@ -360,7 +360,7 @@ generate_alert_rules() {
     warn_network=$(jq -r '.thresholds.network_events.warning' "$baseline_file")
     crit_network=$(jq -r '.thresholds.network_events.critical' "$baseline_file")
 
-    cat > "$output_file" << EOF
+    command cat > "$output_file" << EOF
 # Anomaly Detection Alert Rules - Generated from Baseline
 #
 # Namespace: ${namespace}

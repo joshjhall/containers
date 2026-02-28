@@ -104,7 +104,7 @@ get_debian_major_version() {
 
     # Method 3: Try lsb_release (if available)
     if command -v lsb_release >/dev/null 2>&1; then
-        version=$(lsb_release -sr 2>/dev/null | cut -d. -f1 || echo "")
+        version=$(lsb_release -sr 2>/dev/null | command cut -d. -f1 || echo "")
         if [[ "$version" =~ ^[0-9]+$ ]]; then
             echo "$version"
             return 0
@@ -294,7 +294,7 @@ apt_update() {
             echo ""
             echo "Current apt sources:"
             command cat /etc/apt/sources.list 2>/dev/null || echo "  No sources.list found"
-            ls /etc/apt/sources.list.d/*.list 2>/dev/null || echo "  No additional sources"
+            command ls /etc/apt/sources.list.d/*.list 2>/dev/null || echo "  No additional sources"
 
             return $exit_code
         fi

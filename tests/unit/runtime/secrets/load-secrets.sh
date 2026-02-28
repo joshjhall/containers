@@ -281,7 +281,7 @@ test_validate_rejects_backtick() {
 test_validate_rejects_pipe() {
     local exit_code=0
     _run_loader_subshell "
-        validate_provider_name 'docker|cat /etc/passwd' >/dev/null 2>&1
+        validate_provider_name 'docker|command cat /etc/passwd' >/dev/null 2>&1
     " || exit_code=$?
     assert_equals "1" "$exit_code" "Provider name with pipe is rejected"
 }

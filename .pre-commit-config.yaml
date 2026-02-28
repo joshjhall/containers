@@ -123,6 +123,15 @@ repos:
         language: script
         types: [shell]
 
+      # Enforce 'command' prefix on common commands (prevents alias interference)
+      - id: enforce-command-prefix
+        name: Enforce command prefix on shell builtins
+        entry: bin/enforce-command-prefix.sh
+        language: script
+        types: [shell]
+        files: ^(lib|bin|tests)/.*\.sh$
+        exclude: ^lib/features/lib/bashrc/
+
   # ==========================================================================
   # Pre-push hooks
   # ==========================================================================

@@ -71,7 +71,7 @@ test_sdkmanager() {
     local image="${IMAGE_TO_TEST:-test-android-$$}"
 
     # Test sdkmanager can list installed packages
-    assert_command_in_container "$image" "sdkmanager --list_installed 2>&1 | head -5" ""
+    assert_command_in_container "$image" "sdkmanager --list_installed 2>&1 | command head -5" ""
 }
 
 # Test: adb version

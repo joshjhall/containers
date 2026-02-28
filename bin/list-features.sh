@@ -51,7 +51,7 @@ fi
 # ============================================================================
 
 show_help() {
-    head -n 30 "$0" | grep "^#" | command sed 's/^# \?//'
+    command head -n 30 "$0" | command grep "^#" | command sed 's/^# \?//'
 }
 
 # Extract description from feature script
@@ -60,13 +60,13 @@ extract_description() {
     local desc=""
 
     # Look for "Description:" section in header
-    desc=$(awk '
+    desc=$(command awk '
         /^# Description:/ { found=1; next }
         found && /^#   / { gsub(/^#   /, ""); print; next }
         found && /^#$/ { next }
         found && /^# [A-Z]/ { exit }
         found { exit }
-    ' "$script" | tr '\n' ' ' | command sed 's/  */ /g; s/^ //; s/ $//')
+    ' "$script" | command tr '\n' ' ' | command sed 's/  */ /g; s/^ //; s/ $//')
 
     echo "$desc"
 }
@@ -77,12 +77,12 @@ extract_dependencies() {
     local deps=""
 
     # Look for "Note:" or "Dependencies:" mentioning required features
-    deps=$(awk '
+    deps=$(command awk '
         /^# (Note|Dependencies):/ { found=1; next }
         found && /^#   / { print; next }
         found && /^#$/ { next }
         found { exit }
-    ' "$script" | grep -i "requires\|depends" | command sed 's/^#   //; s/feature to be enabled.*//; s/Requires //; s/INCLUDE_//' | tr -d '.' | xargs)
+    ' "$script" | command grep -i "requires\|depends" | command sed 's/^#   //; s/feature to be enabled.*//; s/Requires //; s/INCLUDE_//' | command tr -d '.' | xargs)
 
     echo "$deps"
 }
@@ -176,12 +176,12 @@ for script in "$FEATURES_DIR"/*.sh; do
     dependencies=$(extract_dependencies "$script")
 
     # Determine build arg name
-    build_arg="INCLUDE_$(echo "$feature_name" | tr '[:lower:]' '[:upper:]' | tr '-' '_')"
+    build_arg="INCLUDE_$(echo "$feature_name" | command tr '[:lower:]' '[:upper:]' | command tr '-' '_')"
 
     # Determine version arg if applicable
     version_arg=""
     if [[ ! "$feature_name" =~ -dev$ ]] && [[ "$category" == "language" ]]; then
-        version_arg="$(echo "$feature_name" | tr '[:lower:]' '[:upper:]')_VERSION"
+        version_arg="$(echo "$feature_name" | command tr '[:lower:]' '[:upper:]')_VERSION"
     fi
 
     # Store feature info
@@ -189,7 +189,7 @@ for script in "$FEATURES_DIR"/*.sh; do
 done
 
 # Sort features by category then name
-mapfile -t FEATURES < <(printf '%s\n' "${FEATURES[@]}" | sort -t'|' -k3,3 -k1,1)
+mapfile -t FEATURES < <(printf '%s\n' "${FEATURES[@]}" | command sort -t'|' -k3,3 -k1,1)
 
 # Output based on format
 if [ "$OUTPUT_FORMAT" == "json" ]; then

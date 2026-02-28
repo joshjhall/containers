@@ -388,7 +388,7 @@ test_injection_backticks_node() {
 
 test_injection_pipe_rust() {
     local exit_code=0
-    _run_validation_subshell "validate_rust_version '1.84|cat /etc/passwd'" || exit_code=$?
+    _run_validation_subshell "validate_rust_version '1.84|command cat /etc/passwd'" || exit_code=$?
     assert_equals "1" "$exit_code" "validate_rust_version rejects pipe injection"
 }
 
@@ -400,7 +400,7 @@ test_injection_semicolon_ruby() {
 
 test_injection_ampersand_go() {
     local exit_code=0
-    _run_validation_subshell "validate_go_version '1.23&&cat /etc/passwd'" || exit_code=$?
+    _run_validation_subshell "validate_go_version '1.23&&command cat /etc/passwd'" || exit_code=$?
     assert_equals "1" "$exit_code" "validate_go_version rejects ampersand injection"
 }
 

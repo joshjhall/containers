@@ -24,13 +24,13 @@ test_version_parsing() {
     # Test Python version parsing
     local version="3.13.6"
     local major
-    major=$(echo "$version" | cut -d. -f1,2)
+    major=$(echo "$version" | command cut -d. -f1,2)
 
     assert_equals "3.13" "$major" "Python major version parsed correctly"
 
     # Test different versions
     version="3.12.1"
-    major=$(echo "$version" | cut -d. -f1,2)
+    major=$(echo "$version" | command cut -d. -f1,2)
     assert_equals "3.12" "$major" "Python 3.12 major version parsed correctly"
 }
 
@@ -115,7 +115,7 @@ test_poetry_installation() {
 # Test: uv version format
 test_uv_version_format() {
     local version
-    version=$(command grep "UV_VERSION=" "$PROJECT_ROOT/lib/features/lib/python/install-tools.sh" | head -1 | command grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
+    version=$(command grep "UV_VERSION=" "$PROJECT_ROOT/lib/features/lib/python/install-tools.sh" | command head -1 | command grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
 
     if [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
         assert_true true "UV_VERSION format is valid: $version"

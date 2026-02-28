@@ -62,7 +62,7 @@ collect_build_metrics() {
                 local duration="${BASH_REMATCH[4]}"
 
                 # Sanitize feature name for Prometheus label
-                feature=$(echo "$feature" | tr ' ' '_' | tr '[:upper:]' '[:lower:]' | tr -cd '[:alnum:]_-')
+                feature=$(echo "$feature" | command tr ' ' '_' | command tr '[:upper:]' '[:lower:]' | command tr -cd '[:alnum:]_-')
 
                 # Build duration metric
                 metrics+="# HELP container_build_duration_seconds Time taken to build container feature\n"
@@ -148,7 +148,7 @@ collect_runtime_metrics() {
         # Cache directory
         if [ -d "/cache" ]; then
             local cache_bytes
-            cache_bytes=$(du -sb /cache 2>/dev/null | awk '{print $1}' || echo "0")
+            cache_bytes=$(du -sb /cache 2>/dev/null | command awk '{print $1}' || echo "0")
             metrics+="# HELP container_disk_usage_bytes Disk space used by container directories\n"
             metrics+="# TYPE container_disk_usage_bytes gauge\n"
             metrics+="container_disk_usage_bytes{path=\"/cache\"} ${cache_bytes}\n"
@@ -157,14 +157,14 @@ collect_runtime_metrics() {
         # Workspace directory
         if [ -d "/workspace" ]; then
             local workspace_bytes
-            workspace_bytes=$(du -sb /workspace 2>/dev/null | awk '{print $1}' || echo "0")
+            workspace_bytes=$(du -sb /workspace 2>/dev/null | command awk '{print $1}' || echo "0")
             metrics+="container_disk_usage_bytes{path=\"/workspace\"} ${workspace_bytes}\n"
         fi
 
         # Log directory
         if [ -d "$BUILD_LOG_DIR" ]; then
             local logs_bytes
-            logs_bytes=$(du -sb "$BUILD_LOG_DIR" 2>/dev/null | awk '{print $1}' || echo "0")
+            logs_bytes=$(du -sb "$BUILD_LOG_DIR" 2>/dev/null | command awk '{print $1}' || echo "0")
             metrics+="container_disk_usage_bytes{path=\"${BUILD_LOG_DIR}\"} ${logs_bytes}\n"
         fi
     fi
@@ -199,7 +199,7 @@ collect_json_metrics() {
             status=$(echo "$entry" | jq -r '.status // "unknown"' 2>/dev/null || echo "unknown")
 
             # Sanitize feature name
-            feature=$(echo "$feature" | tr ' ' '_' | tr '[:upper:]' '[:lower:]' | tr -cd '[:alnum:]_-')
+            feature=$(echo "$feature" | command tr ' ' '_' | command tr '[:upper:]' '[:lower:]' | command tr -cd '[:alnum:]_-')
 
             # Add metric with json_source label to distinguish from text logs
             metrics+="# HELP container_build_json_duration_seconds Build duration from JSON logs\n"

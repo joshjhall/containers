@@ -2,7 +2,7 @@
 echo "=== Kotlin Installation Status ==="
 if command -v kotlinc &> /dev/null; then
     echo "✓ Kotlin is installed"
-    kotlinc -version 2>&1 | head -n 1 | command sed 's/^/  /'
+    kotlinc -version 2>&1 | command head -n 1 | command sed 's/^/  /'
     echo "  KOTLIN_HOME: ${KOTLIN_HOME:-/opt/kotlin}"
     echo "  Binary: $(which kotlinc)"
 else
@@ -22,7 +22,7 @@ done
 echo ""
 echo "=== Java Environment ==="
 if command -v java &> /dev/null; then
-    java -version 2>&1 | head -n 1
+    java -version 2>&1 | command head -n 1
 else
     echo "Java not found (required for Kotlin/JVM)"
 fi

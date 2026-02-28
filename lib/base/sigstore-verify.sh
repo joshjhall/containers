@@ -62,7 +62,7 @@ download_and_verify_kubectl_sigstore() {
     # Kubectl signature files are hosted alongside the binary
     # For example: https://dl.k8s.io/release/v1.28.0/bin/linux/amd64/kubectl.sig
     local base_url
-    base_url=$(dirname "$(grep -o 'https://dl.k8s.io/release/v[^/]*/bin/[^/]*/[^/]*' <<< "$file" 2>/dev/null || echo "")")
+    base_url=$(dirname "$(command grep -o 'https://dl.k8s.io/release/v[^/]*/bin/[^/]*/[^/]*' <<< "$file" 2>/dev/null || echo "")")
 
     if [ -z "$base_url" ]; then
         # Construct URL if not found in file path
@@ -108,7 +108,7 @@ download_and_verify_kubectl_sigstore() {
         --certificate "$cert_file" \
         --certificate-identity "krel-staging@k8s-releng-prod.iam.gserviceaccount.com" \
         --certificate-oidc-issuer "https://accounts.google.com" \
-        2>&1 | tee /tmp/cosign-verify.log; then
+        2>&1 | command tee /tmp/cosign-verify.log; then
 
         log_message "✓ kubectl Sigstore verification successful"
         command rm -f "$sig_file" "$cert_file" /tmp/cosign-verify.log
@@ -190,7 +190,7 @@ verify_sigstore_signature() {
     cosign_args+=(--certificate-identity "$cert_identity" --certificate-oidc-issuer "$oidc_issuer" "$file")
 
     # Single verification path
-    if cosign "${cosign_args[@]}" 2>&1 | tee /tmp/cosign-verify-output.txt | grep -q "Verified OK"; then
+    if cosign "${cosign_args[@]}" 2>&1 | command tee /tmp/cosign-verify-output.txt | command grep -q "Verified OK"; then
         log_message "✓ Sigstore signature verified successfully"
         log_message "  Cert Identity: $cert_identity"
         command rm -f /tmp/cosign-verify-output.txt

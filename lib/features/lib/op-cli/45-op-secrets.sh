@@ -29,10 +29,10 @@ command -v op >/dev/null 2>&1 || exit 0
 [ -z "${OP_SERVICE_ACCOUNT_TOKEN:-}" ] && exit 0
 
 # Disable xtrace to prevent secret exposure in logs
-_old_xtrace=$(set +o | grep xtrace)
+_old_xtrace=$(set +o | command grep xtrace)
 set +x
 
-for _ref_var in $(compgen -v | grep '^OP_.\+_REF$' | grep -v '_FILE_REF$'); do
+for _ref_var in $(compgen -v | command grep '^OP_.\+_REF$' | command grep -v '_FILE_REF$'); do
     _target_var="${_ref_var#OP_}"
     _target_var="${_target_var%_REF}"
     [ -z "$_target_var" ] && continue
@@ -46,7 +46,7 @@ for _ref_var in $(compgen -v | grep '^OP_.\+_REF$' | grep -v '_FILE_REF$'); do
 done
 
 # FILE_REF loop: fetch content, write to /dev/shm, export file path
-for _ref_var in $(compgen -v | grep '^OP_.\+_FILE_REF$'); do
+for _ref_var in $(compgen -v | command grep '^OP_.\+_FILE_REF$'); do
     _target_var="${_ref_var#OP_}"
     _target_var="${_target_var%_FILE_REF}"
     [ -z "$_target_var" ] && continue
@@ -56,7 +56,7 @@ for _ref_var in $(compgen -v | grep '^OP_.\+_FILE_REF$'); do
     [ -z "$_ref_value" ] && continue
     if _secret_value=$(op read "$_ref_value" 2>/dev/null); then
         # Derive filename: lowercase target var with dashes
-        _file_name=$(echo "$_target_var" | tr '[:upper:]_' '[:lower:]-')
+        _file_name=$(echo "$_target_var" | command tr '[:upper:]_' '[:lower:]-')
         # Derive extension from the URI's last path segment
         _uri_field="${_ref_value##*/}"
         case "$_uri_field" in

@@ -136,12 +136,12 @@ test_no_leading_trailing_blanks() {
 
     # Check that output doesn't start with a blank line
     local first_char
-    first_char=$(printf '%s' "$output" | head -c1)
+    first_char=$(printf '%s' "$output" | command head -c1)
     assert_not_equals "" "$first_char" "Output should not start with a blank line"
 
     # Check that output doesn't end with a blank line
     local last_line
-    last_line=$(printf '%s' "$output" | tail -n1)
+    last_line=$(printf '%s' "$output" | command tail -n1)
     assert_not_empty "$last_line" "Output should not end with a blank line"
 }
 

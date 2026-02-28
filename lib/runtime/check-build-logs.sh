@@ -159,7 +159,7 @@ case $ACTION in
     summary|errors|full)
         if [ -n "$FEATURE" ]; then
             # Show specific feature
-            feature_log=$(command find "$LOG_DIR" -name "*${FEATURE}*-install.log" 2>/dev/null | head -1)
+            feature_log=$(command find "$LOG_DIR" -name "*${FEATURE}*-install.log" 2>/dev/null | command head -1)
             if [ -n "$feature_log" ]; then
                 feature=$(basename "$feature_log" -install.log)
                 show_feature "$feature" "$ACTION"

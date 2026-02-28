@@ -63,7 +63,7 @@ log_message "Configuring /etc/fuse.conf..."
 # Enable user_allow_other so non-root users can use the allow_other mount option
 if [ -f /etc/fuse.conf ]; then
     if grep -q "^#user_allow_other" /etc/fuse.conf; then
-        sed -i 's/^#user_allow_other/user_allow_other/' /etc/fuse.conf
+        command sed -i 's/^#user_allow_other/user_allow_other/' /etc/fuse.conf
     elif ! grep -q "^user_allow_other" /etc/fuse.conf; then
         echo "user_allow_other" >> /etc/fuse.conf
     fi
@@ -79,7 +79,7 @@ log_message "  user_allow_other enabled in /etc/fuse.conf"
 log_message "Verifying bindfs installation..."
 
 if bindfs --version >/dev/null 2>&1; then
-    BINDFS_VER=$(bindfs --version 2>&1 | head -1)
+    BINDFS_VER=$(bindfs --version 2>&1 | command head -1)
     log_message "  $BINDFS_VER"
 else
     log_error "bindfs installation verification failed"

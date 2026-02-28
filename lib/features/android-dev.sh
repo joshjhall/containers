@@ -186,7 +186,7 @@ export ANDROID_KVM_AVAILABLE="$KVM_AVAILABLE"
 log_message "Installing system images and sources..."
 
 for API_LEVEL in "${API_LEVELS_ARRAY[@]}"; do
-    API_LEVEL=$(echo "$API_LEVEL" | tr -d ' ')  # Trim whitespace
+    API_LEVEL=$(echo "$API_LEVEL" | command tr -d ' ')  # Trim whitespace
 
     log_message "Installing system image and sources for API ${API_LEVEL}..."
 

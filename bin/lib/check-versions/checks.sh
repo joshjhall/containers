@@ -63,7 +63,7 @@ check_rust() {
     latest=$(fetch_url "https://api.github.com/repos/rust-lang/rust/releases" | jq -r '[.[] | select(.tag_name | test("^[0-9]+\\.[0-9]+\\.[0-9]+$"))] | .[0].tag_name' 2>/dev/null)
     if [ -z "$latest" ]; then
         # Fallback to forge.rust-lang.org
-        latest=$(fetch_url "https://forge.rust-lang.org/infra/channel-layout.html" | grep -oE 'stable.*?[0-9]+\.[0-9]+\.[0-9]+' | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
+        latest=$(fetch_url "https://forge.rust-lang.org/infra/channel-layout.html" | command grep -oE 'stable.*?[0-9]+\.[0-9]+\.[0-9]+' | command head -1 | command grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
     fi
     set_latest "Rust" "$latest"
     progress_done
@@ -99,7 +99,7 @@ check_r() {
 
     # Use CRAN sources page - more reliable than homepage or SVN
     # Parse the latest release tarball name
-    latest=$(fetch_url "https://cran.r-project.org/sources.html" 8 | grep -oE 'R-[0-9]+\.[0-9]+\.[0-9]+\.tar\.gz' | head -1 | command sed 's/R-//;s/\.tar\.gz//' 2>/dev/null)
+    latest=$(fetch_url "https://cran.r-project.org/sources.html" 8 | command grep -oE 'R-[0-9]+\.[0-9]+\.[0-9]+\.tar\.gz' | command head -1 | command sed 's/R-//;s/\.tar\.gz//' 2>/dev/null)
 
     # Mark as error if fetch failed
     if [ -z "$latest" ]; then
@@ -114,7 +114,7 @@ check_jdtls() {
     progress_msg "  jdtls..."
     # Get the latest jdtls version from Eclipse downloads
     local latest
-    latest=$(fetch_url "https://download.eclipse.org/jdtls/milestones/" 10 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | sort -V | tail -1 2>/dev/null)
+    latest=$(fetch_url "https://download.eclipse.org/jdtls/milestones/" 10 | command grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | command sort -V | command tail -1 2>/dev/null)
     if [ -z "$latest" ] || [ "$latest" = "null" ]; then
         set_latest "jdtls" "error"
     else
@@ -128,7 +128,7 @@ check_android_cmdline_tools() {
     # Get the latest cmdline-tools version from the Android Studio download page
     # The version is embedded in the download filename
     local latest
-    latest=$(fetch_url "https://developer.android.com/studio" 10 | grep -oE 'commandlinetools-linux-[0-9]+_latest\.zip' | head -1 | grep -oE '[0-9]+' 2>/dev/null)
+    latest=$(fetch_url "https://developer.android.com/studio" 10 | command grep -oE 'commandlinetools-linux-[0-9]+_latest\.zip' | command head -1 | command grep -oE '[0-9]+' 2>/dev/null)
     if [ -z "$latest" ] || [ "$latest" = "null" ]; then
         # Fallback: mark as needing manual check
         set_latest "android-cmdline-tools" "error"
@@ -143,7 +143,7 @@ check_android_ndk() {
     # Get the latest NDK version from the download page
     # NDK versions are like r27d, r29, etc. We need to map to the SDK manager format
     local ndk_release
-    ndk_release=$(fetch_url "https://developer.android.com/ndk/downloads" 10 | grep -oE 'android-ndk-r[0-9]+[a-z]?' | sort -V | tail -1 | grep -oE 'r[0-9]+[a-z]?' 2>/dev/null)
+    ndk_release=$(fetch_url "https://developer.android.com/ndk/downloads" 10 | command grep -oE 'android-ndk-r[0-9]+[a-z]?' | command sort -V | command tail -1 | command grep -oE 'r[0-9]+[a-z]?' 2>/dev/null)
 
     if [ -z "$ndk_release" ]; then
         set_latest "android-ndk" "error"
@@ -152,7 +152,7 @@ check_android_ndk() {
         # We can't easily get the full version, but we can check if major version matches
         # Extract major version (e.g., r29 -> 29)
         local major_ver
-        major_ver=$(echo "$ndk_release" | grep -oE '[0-9]+')
+        major_ver=$(echo "$ndk_release" | command grep -oE '[0-9]+')
 
         # Get the current major version from what's pinned
         local current=""
@@ -163,7 +163,7 @@ check_android_ndk() {
             fi
         done
         local current_major
-        current_major=$(echo "$current" | cut -d. -f1)
+        current_major=$(echo "$current" | command cut -d. -f1)
 
         # If major versions match, consider it current
         if [ "$major_ver" = "$current_major" ]; then
@@ -201,7 +201,7 @@ check_entr() {
     # entr uses a simple versioning on their website
     # We'll check the latest version from the downloads page
     local latest
-    latest=$(fetch_url "http://eradman.com/entrproject/" | grep -oE 'entr-[0-9]+\.[0-9]+\.tar\.gz' | head -1 | command sed 's/entr-//;s/\.tar\.gz//')
+    latest=$(fetch_url "http://eradman.com/entrproject/" | command grep -oE 'entr-[0-9]+\.[0-9]+\.tar\.gz' | command head -1 | command sed 's/entr-//;s/\.tar\.gz//')
 
     set_latest "entr" "$latest"
     progress_done

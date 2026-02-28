@@ -134,7 +134,7 @@ test_runtime_metrics() {
 
     # Uptime should be a number
     local uptime
-    uptime=$(echo "$metrics" | command grep "^container_uptime_seconds " | awk '{print $2}')
+    uptime=$(echo "$metrics" | command grep "^container_uptime_seconds " | command awk '{print $2}')
     if [[ "$uptime" =~ ^[0-9]+$ ]]; then
         assert_success "Uptime should be numeric"
     else
@@ -244,7 +244,7 @@ test_metrics_timestamp() {
 
     # Timestamp should be recent (within last minute)
     local timestamp
-    timestamp=$(echo "$metrics" | command grep "^container_metrics_scrape_timestamp_seconds" | awk '{print $2}')
+    timestamp=$(echo "$metrics" | command grep "^container_metrics_scrape_timestamp_seconds" | command awk '{print $2}')
     local now
     now=$(date +%s)
     local diff=$((now - timestamp))

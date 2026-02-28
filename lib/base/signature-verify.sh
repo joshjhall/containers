@@ -123,11 +123,11 @@ verify_signature() {
 
             if command -v cosign >/dev/null 2>&1; then
                 local cert_identity oidc_issuer
-                if ! cert_identity=$(get_python_release_manager "$version" | head -1); then
+                if ! cert_identity=$(get_python_release_manager "$version" | command head -1); then
                     log_warning "Could not determine release manager for Python ${version}"
                     log_message "Falling back to GPG verification"
                 else
-                    oidc_issuer=$(get_python_release_manager "$version" | tail -1)
+                    oidc_issuer=$(get_python_release_manager "$version" | command tail -1)
 
                     local sig_url cert_url
                     sig_url="https://www.python.org/ftp/python/${version}/$(basename "$file").sig"

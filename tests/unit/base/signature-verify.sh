@@ -31,9 +31,9 @@ test_python_3_11_release_manager() {
     local output
     output=$(get_python_release_manager "3.11.0")
     local cert_identity
-    cert_identity=$(echo "$output" | head -1)
+    cert_identity=$(echo "$output" | command head -1)
     local oidc_issuer
-    oidc_issuer=$(echo "$output" | tail -1)
+    oidc_issuer=$(echo "$output" | command tail -1)
 
     assert_equals "pablogsal@python.org" "$cert_identity" "Python 3.11 certificate identity"
     assert_equals "https://accounts.google.com" "$oidc_issuer" "Python 3.11 OIDC issuer"
@@ -44,9 +44,9 @@ test_python_3_12_release_manager() {
     local output
     output=$(get_python_release_manager "3.12.5")
     local cert_identity
-    cert_identity=$(echo "$output" | head -1)
+    cert_identity=$(echo "$output" | command head -1)
     local oidc_issuer
-    oidc_issuer=$(echo "$output" | tail -1)
+    oidc_issuer=$(echo "$output" | command tail -1)
 
     assert_equals "thomas@python.org" "$cert_identity" "Python 3.12 certificate identity"
     assert_equals "https://accounts.google.com" "$oidc_issuer" "Python 3.12 OIDC issuer"
@@ -57,9 +57,9 @@ test_python_3_13_release_manager() {
     local output
     output=$(get_python_release_manager "3.13.0")
     local cert_identity
-    cert_identity=$(echo "$output" | head -1)
+    cert_identity=$(echo "$output" | command head -1)
     local oidc_issuer
-    oidc_issuer=$(echo "$output" | tail -1)
+    oidc_issuer=$(echo "$output" | command tail -1)
 
     assert_equals "thomas@python.org" "$cert_identity" "Python 3.13 certificate identity"
     assert_equals "https://accounts.google.com" "$oidc_issuer" "Python 3.13 OIDC issuer"
@@ -70,9 +70,9 @@ test_python_3_10_release_manager() {
     local output
     output=$(get_python_release_manager "3.10.14")
     local cert_identity
-    cert_identity=$(echo "$output" | head -1)
+    cert_identity=$(echo "$output" | command head -1)
     local oidc_issuer
-    oidc_issuer=$(echo "$output" | tail -1)
+    oidc_issuer=$(echo "$output" | command tail -1)
 
     assert_equals "pablogsal@python.org" "$cert_identity" "Python 3.10 certificate identity"
     assert_equals "https://accounts.google.com" "$oidc_issuer" "Python 3.10 OIDC issuer"
@@ -83,9 +83,9 @@ test_python_3_9_release_manager() {
     local output
     output=$(get_python_release_manager "3.9.18")
     local cert_identity
-    cert_identity=$(echo "$output" | head -1)
+    cert_identity=$(echo "$output" | command head -1)
     local oidc_issuer
-    oidc_issuer=$(echo "$output" | tail -1)
+    oidc_issuer=$(echo "$output" | command tail -1)
 
     assert_equals "lukasz@langa.pl" "$cert_identity" "Python 3.9 certificate identity"
     assert_equals "https://github.com/login/oauth" "$oidc_issuer" "Python 3.9 OIDC issuer"
@@ -96,9 +96,9 @@ test_python_3_8_release_manager() {
     local output
     output=$(get_python_release_manager "3.8.18")
     local cert_identity
-    cert_identity=$(echo "$output" | head -1)
+    cert_identity=$(echo "$output" | command head -1)
     local oidc_issuer
-    oidc_issuer=$(echo "$output" | tail -1)
+    oidc_issuer=$(echo "$output" | command tail -1)
 
     assert_equals "lukasz@langa.pl" "$cert_identity" "Python 3.8 certificate identity"
     assert_equals "https://github.com/login/oauth" "$oidc_issuer" "Python 3.8 OIDC issuer"
@@ -109,9 +109,9 @@ test_python_3_14_release_manager() {
     local output
     output=$(get_python_release_manager "3.14.0")
     local cert_identity
-    cert_identity=$(echo "$output" | head -1)
+    cert_identity=$(echo "$output" | command head -1)
     local oidc_issuer
-    oidc_issuer=$(echo "$output" | tail -1)
+    oidc_issuer=$(echo "$output" | command tail -1)
 
     assert_equals "hugo@python.org" "$cert_identity" "Python 3.14 certificate identity"
     assert_equals "https://github.com/login/oauth" "$oidc_issuer" "Python 3.14 OIDC issuer"

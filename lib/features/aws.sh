@@ -111,8 +111,8 @@ log_command "Importing AWS public key from keyserver" \
 
 # Verify key fingerprint
 log_message "Verifying key fingerprint..."
-IMPORTED_FINGERPRINT=$(gpg --fingerprint "${AWS_CLI_KEY_ID}" 2>/dev/null | grep -oP '[A-Fa-f0-9]{4}( +[A-Fa-f0-9]{4}){9}' | tr -d ' ' | tr '[:lower:]' '[:upper:]')
-EXPECTED_FINGERPRINT=$(echo "${AWS_CLI_KEY_FINGERPRINT}" | tr -d ' ' | tr '[:lower:]' '[:upper:]')
+IMPORTED_FINGERPRINT=$(gpg --fingerprint "${AWS_CLI_KEY_ID}" 2>/dev/null | command grep -oP '[A-Fa-f0-9]{4}( +[A-Fa-f0-9]{4}){9}' | command tr -d ' ' | command tr '[:lower:]' '[:upper:]')
+EXPECTED_FINGERPRINT=$(echo "${AWS_CLI_KEY_FINGERPRINT}" | command tr -d ' ' | command tr '[:lower:]' '[:upper:]')
 
 if [ "$IMPORTED_FINGERPRINT" != "$EXPECTED_FINGERPRINT" ]; then
     log_error "GPG key fingerprint mismatch!"

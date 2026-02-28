@@ -5,7 +5,7 @@ set -euo pipefail
 
 fixed=0
 for f in "$@"; do
-    mode=$(git ls-files -s "$f" 2>/dev/null | cut -d' ' -f1)
+    mode=$(git ls-files -s "$f" 2>/dev/null | command cut -d' ' -f1)
     if [ "$mode" = "100644" ]; then
         git update-index --chmod=+x "$f"
         chmod +x "$f" 2>/dev/null || true

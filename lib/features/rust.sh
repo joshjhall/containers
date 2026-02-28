@@ -122,7 +122,7 @@ if ! RUSTUP_CHECKSUM=$(command curl -fsSL "$RUSTUP_CHECKSUM_URL" 2>/dev/null); t
 fi
 
 # Extract just the checksum (rustup .sha256 files include path, format: "checksum *path/file")
-RUSTUP_CHECKSUM=$(echo "$RUSTUP_CHECKSUM" | awk '{print $1}')
+RUSTUP_CHECKSUM=$(echo "$RUSTUP_CHECKSUM" | command awk '{print $1}')
 log_message "Expected SHA256: ${RUSTUP_CHECKSUM}"
 
 # Download and verify rustup-init

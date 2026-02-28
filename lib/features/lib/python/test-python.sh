@@ -16,7 +16,7 @@ echo ""
 echo "=== Python Package Managers ==="
 for cmd in pip pip3 pipx poetry uv; do
     if command -v $cmd &> /dev/null; then
-        version=$($cmd --version 2>&1 | head -1)
+        version=$($cmd --version 2>&1 | command head -1)
         echo "✓ $cmd: $version"
     else
         echo "✗ $cmd is not found"
@@ -31,7 +31,7 @@ echo "PIPX_HOME: ${PIPX_HOME:-not set}"
 
 echo ""
 echo "=== Installed Python Packages ==="
-pip list 2>/dev/null | head -10
+pip list 2>/dev/null | command head -10
 echo "..."
-total_packages=$(pip list 2>/dev/null | wc -l)
+total_packages=$(pip list 2>/dev/null | command wc -l)
 echo "Total packages: $total_packages"

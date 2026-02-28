@@ -96,7 +96,7 @@ load_secrets_from_aws() {
         log_error "Failed to retrieve secret from AWS Secrets Manager (check IAM permissions and region)"
 
         # Check for common authentication errors
-        if echo "$secret_response" | grep -q "UnrecognizedClientException\|InvalidClientTokenId\|AccessDenied"; then
+        if echo "$secret_response" | command grep -q "UnrecognizedClientException\|InvalidClientTokenId\|AccessDenied"; then
             log_error "Authentication failed. Check AWS credentials and IAM permissions."
             return 2
         fi

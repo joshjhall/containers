@@ -20,7 +20,7 @@ extract_version_from_line() {
     local ver
 
     # Extract the value after the = sign, removing quotes
-    ver=$(echo "$line" | cut -d= -f2 | tr -d '"')
+    ver=$(echo "$line" | command cut -d= -f2 | command tr -d '"')
 
     # If it's a parameter expansion like ${VAR:-default}, extract the default value
     if [[ "$ver" =~ \$\{[^:]*:-([^}]+)\} ]]; then
@@ -167,7 +167,7 @@ test_missing_env_file() {
 
     # Run script without .env file (strip ANSI colors)
     local output
-    output=$("$PROJECT_ROOT/bin/check-versions.sh" 2>&1 | command sed 's/\x1b\[[0-9;]*m//g' | head -10 || true)
+    output=$("$PROJECT_ROOT/bin/check-versions.sh" 2>&1 | command sed 's/\x1b\[[0-9;]*m//g' | command head -10 || true)
 
     # Check for warning about missing token
     if echo "$output" | command grep -q "Warning: No GITHUB_TOKEN set"; then
@@ -195,11 +195,11 @@ EOF
 
     # Check if versions can be extracted
     local python_ver
-    python_ver=$(command grep "^ARG PYTHON_VERSION=" "$test_dockerfile" | cut -d= -f2 | tr -d '"')
+    python_ver=$(command grep "^ARG PYTHON_VERSION=" "$test_dockerfile" | command cut -d= -f2 | command tr -d '"')
     assert_equals "3.13.6" "$python_ver" "Python version extracted correctly"
 
     local node_ver
-    node_ver=$(command grep "^ARG NODE_VERSION=" "$test_dockerfile" | cut -d= -f2 | tr -d '"')
+    node_ver=$(command grep "^ARG NODE_VERSION=" "$test_dockerfile" | command cut -d= -f2 | command tr -d '"')
     assert_equals "22" "$node_ver" "Node version extracted correctly"
 
     # Clean up
@@ -211,7 +211,7 @@ test_extract_feature_versions() {
     # Check if dev-tools.sh exists and has version definitions
     if [ -f "$PROJECT_ROOT/lib/features/dev-tools.sh" ]; then
         local lazygit_ver
-        lazygit_ver=$(command grep '^LAZYGIT_VERSION=' "$PROJECT_ROOT/lib/features/dev-tools.sh" | cut -d= -f2 | tr -d '"')
+        lazygit_ver=$(command grep '^LAZYGIT_VERSION=' "$PROJECT_ROOT/lib/features/dev-tools.sh" | command cut -d= -f2 | command tr -d '"')
         assert_not_empty "$lazygit_ver" "Lazygit version extracted from dev-tools.sh"
     else
         skip_test "dev-tools.sh not found"
@@ -236,7 +236,7 @@ test_json_output_format() {
         fi
     else
         # Fallback to text format check
-        output=$(timeout 5 "$PROJECT_ROOT/bin/check-versions.sh" 2>&1 | head -5 || true)
+        output=$(timeout 5 "$PROJECT_ROOT/bin/check-versions.sh" 2>&1 | command head -5 || true)
         if echo "$output" | command grep -q "Version Check Results\|Checking\|Scanning"; then
             assert_true true "Script produces formatted output"
         else
@@ -287,7 +287,7 @@ test_json_output_valid() {
     else
         # If JSON is invalid, show the error for debugging
         echo "Invalid JSON output:" >&2
-        echo "$output" | head -20 >&2
+        echo "$output" | command head -20 >&2
         assert_true false "Script failed to produce valid JSON (syntax error or malformed output)"
     fi
 }
@@ -326,14 +326,14 @@ test_extract_java_dev_versions() {
     if [ -f "$PROJECT_ROOT/lib/features/java-dev.sh" ]; then
         # Test both regular and indented versions
         local spring_ver
-        spring_ver=$(command grep '^SPRING_VERSION=' "$PROJECT_ROOT/lib/features/java-dev.sh" 2>/dev/null | cut -d= -f2 | tr -d '"')
+        spring_ver=$(command grep '^SPRING_VERSION=' "$PROJECT_ROOT/lib/features/java-dev.sh" 2>/dev/null | command cut -d= -f2 | command tr -d '"')
         local jbang_ver
-        jbang_ver=$(command grep '^JBANG_VERSION=' "$PROJECT_ROOT/lib/features/java-dev.sh" 2>/dev/null | cut -d= -f2 | tr -d '"')
+        jbang_ver=$(command grep '^JBANG_VERSION=' "$PROJECT_ROOT/lib/features/java-dev.sh" 2>/dev/null | command cut -d= -f2 | command tr -d '"')
         # MVND_VERSION is indented in the actual file
         local mvnd_ver
-        mvnd_ver=$(command grep 'MVND_VERSION=' "$PROJECT_ROOT/lib/features/java-dev.sh" 2>/dev/null | command sed 's/.*MVND_VERSION=//' | tr -d '"' | head -1)
+        mvnd_ver=$(command grep 'MVND_VERSION=' "$PROJECT_ROOT/lib/features/java-dev.sh" 2>/dev/null | command sed 's/.*MVND_VERSION=//' | command tr -d '"' | command head -1)
         local gjf_ver
-        gjf_ver=$(command grep '^GJF_VERSION=' "$PROJECT_ROOT/lib/features/java-dev.sh" 2>/dev/null | cut -d= -f2 | tr -d '"')
+        gjf_ver=$(command grep '^GJF_VERSION=' "$PROJECT_ROOT/lib/features/java-dev.sh" 2>/dev/null | command cut -d= -f2 | command tr -d '"')
 
         assert_not_empty "$spring_ver" "Spring Boot CLI version extracted"
         assert_not_empty "$jbang_ver" "JBang version extracted"
@@ -349,9 +349,9 @@ test_extract_duf_entr_versions() {
     # Check if dev-tools.sh has duf and entr version definitions
     if [ -f "$PROJECT_ROOT/lib/features/dev-tools.sh" ]; then
         local duf_ver
-        duf_ver=$(command grep '^DUF_VERSION=' "$PROJECT_ROOT/lib/features/dev-tools.sh" 2>/dev/null | cut -d= -f2 | tr -d '"')
+        duf_ver=$(command grep '^DUF_VERSION=' "$PROJECT_ROOT/lib/features/dev-tools.sh" 2>/dev/null | command cut -d= -f2 | command tr -d '"')
         local entr_ver
-        entr_ver=$(command grep '^ENTR_VERSION=' "$PROJECT_ROOT/lib/features/dev-tools.sh" 2>/dev/null | cut -d= -f2 | tr -d '"')
+        entr_ver=$(command grep '^ENTR_VERSION=' "$PROJECT_ROOT/lib/features/dev-tools.sh" 2>/dev/null | command cut -d= -f2 | command tr -d '"')
 
         assert_not_empty "$duf_ver" "duf version extracted from dev-tools.sh"
         assert_not_empty "$entr_ver" "entr version extracted from dev-tools.sh"
@@ -374,9 +374,9 @@ EOF
 
     # Check if indented versions can be extracted with proper pattern
     local some_ver
-    some_ver=$(command grep '^\s*SOME_VERSION=' "$test_script" 2>/dev/null | command sed 's/.*=//' | tr -d '"')
+    some_ver=$(command grep '^\s*SOME_VERSION=' "$test_script" 2>/dev/null | command sed 's/.*=//' | command tr -d '"')
     local another_ver
-    another_ver=$(command grep 'ANOTHER_VERSION=' "$test_script" 2>/dev/null | command sed 's/.*=//' | tr -d '"')
+    another_ver=$(command grep 'ANOTHER_VERSION=' "$test_script" 2>/dev/null | command sed 's/.*=//' | command tr -d '"')
 
     assert_equals "1.2.3" "$some_ver" "Indented version extracted correctly"
     assert_equals "4.5.6" "$another_ver" "Another indented version extracted correctly"
@@ -444,7 +444,7 @@ run_test test_extract_version_parameter_expansion "extract_version_from_line han
 test_extract_krew_version() {
     # Check if krew version can be extracted from Dockerfile
     local krew_ver
-    krew_ver=$(command grep "^ARG KREW_VERSION=" "$PROJECT_ROOT/Dockerfile" 2>/dev/null | cut -d= -f2 | tr -d '"')
+    krew_ver=$(command grep "^ARG KREW_VERSION=" "$PROJECT_ROOT/Dockerfile" 2>/dev/null | command cut -d= -f2 | command tr -d '"')
 
     assert_not_empty "$krew_ver" "krew version extracted from Dockerfile"
 

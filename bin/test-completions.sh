@@ -86,7 +86,7 @@ list_completions() {
     # Dynamic completions from bashrc.d
     if [ -d /etc/bashrc.d ]; then
         for file in /etc/bashrc.d/*; do
-            if [ -f "$file" ] && grep -q "completion" "$file" 2>/dev/null; then
+            if [ -f "$file" ] && command grep -q "completion" "$file" 2>/dev/null; then
                 echo "  - $(basename "$file") (dynamic)"
             fi
         done
@@ -143,7 +143,7 @@ test_tool_completion() {
 
     # Check for dangerous patterns (matches safe_eval blocklist from lib/base/logging.sh)
     local blocklist='rm -rf|curl.*bash|\bwget\b|;\s*rm|\$\(.*rm|exec\s+[^$]|/bin/sh.*-c|bash.*-c.*http|\bmkfifo\b|\bnc\b|\bncat\b|\bchmod\b.*\+s|\bpython[23]?\b.*-c|\bperl\b.*-e'
-    if echo "$completion_output" | grep -qE "$blocklist"; then
+    if echo "$completion_output" | command grep -qE "$blocklist"; then
         log_fail "$tool completion contains dangerous patterns"
         return 1
     fi

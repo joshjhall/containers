@@ -63,7 +63,7 @@ NODE_VERSION_OK=false
 
 if command -v node &> /dev/null; then
     NODE_INSTALLED=true
-    NODE_VERSION=$(node --version | grep -oE '[0-9]+' | head -1)
+    NODE_VERSION=$(node --version | command grep -oE '[0-9]+' | command head -1)
     log_message "Node.js already installed: $(node --version)"
 
     # Check if Node.js version meets Cloudflare requirements
@@ -154,7 +154,7 @@ export PATH="${NPM_PREFIX}/bin:$PATH"
 # Check if wrangler is already installed
 if command -v wrangler &> /dev/null; then
     log_message "✓ wrangler is already installed at $(which wrangler)"
-    log_message "  Version: $(wrangler --version 2>&1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || echo 'unknown')"
+    log_message "  Version: $(wrangler --version 2>&1 | command grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | command head -1 || echo 'unknown')"
 else
     log_message "wrangler not found - installing wrangler globally..."
 

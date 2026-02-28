@@ -62,7 +62,7 @@ install_jdtls() {
     # Fetch the directory listing to get the correct filename (timestamp varies per release)
     local base_url="https://download.eclipse.org/jdtls/milestones/${JDTLS_VERSION}"
     local filename
-    filename=$(curl -fsSL "${base_url}/" 2>/dev/null | grep -oE 'jdt-language-server-[0-9.]+-[0-9]+\.tar\.gz' | head -1)
+    filename=$(curl -fsSL "${base_url}/" 2>/dev/null | command grep -oE 'jdt-language-server-[0-9.]+-[0-9]+\.tar\.gz' | command head -1)
 
     if [ -z "$filename" ]; then
         log_warning "Could not find jdtls ${JDTLS_VERSION} download, skipping"

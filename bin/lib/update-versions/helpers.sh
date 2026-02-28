@@ -78,7 +78,7 @@ extract_checksum_from_file() {
 
     # Extract checksum (assumes format: "checksum  filename")
     local checksum
-    checksum=$(echo "$checksums" | grep -E "${pattern}$" | awk '{print $1}' | head -1)
+    checksum=$(echo "$checksums" | command grep -E "${pattern}$" | command awk '{print $1}' | command head -1)
 
     if [ -z "$checksum" ]; then
         log_error "Checksum not found for pattern: $pattern" >&2
@@ -146,7 +146,7 @@ fetch_github_individual_checksum() {
     fi
 
     # Output only the checksum (strip any whitespace/newlines)
-    echo "$checksum" | tr -d ' \n\r'
+    echo "$checksum" | command tr -d ' \n\r'
 }
 
 # ============================================================================
@@ -253,7 +253,7 @@ verify_checksum_update() {
     local expected_checksum="$3"
 
     local actual_checksum
-    actual_checksum=$(grep "^${variable_name}=" "$script_file" | cut -d'"' -f2)
+    actual_checksum=$(command grep "^${variable_name}=" "$script_file" | command cut -d'"' -f2)
 
     if [ "$actual_checksum" = "$expected_checksum" ]; then
         log_success "Verified ${variable_name} update"

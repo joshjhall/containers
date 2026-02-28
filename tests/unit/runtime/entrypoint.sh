@@ -82,7 +82,7 @@ test_first_startup_script_order() {
     # Check execution order
     if [ -f "$TEST_TEMP_DIR/order.txt" ]; then
         local order
-        order=$(command cat "$TEST_TEMP_DIR/order.txt" | tr '\n' ' ')
+        order=$(command cat "$TEST_TEMP_DIR/order.txt" | command tr '\n' ' ')
         assert_equals "10 20 30 " "$order" "Scripts executed in correct order"
     else
         assert_true false "Order tracking file not created"
@@ -106,7 +106,7 @@ test_every_boot_scripts() {
     # Check that scripts ran
     if [ -f "$TEST_TEMP_DIR/startup.log" ]; then
         local lines
-        lines=$(wc -l < "$TEST_TEMP_DIR/startup.log")
+        lines=$(command wc -l < "$TEST_TEMP_DIR/startup.log")
         assert_equals "2" "$lines" "Both startup scripts executed"
     else
         assert_true false "Startup log not created"
@@ -136,7 +136,7 @@ test_script_permissions() {
 test_user_context() {
     # Test UID detection
     local uid_1000
-    uid_1000=$(getent passwd 1000 2>/dev/null | cut -d: -f1 || echo "")
+    uid_1000=$(getent passwd 1000 2>/dev/null | command cut -d: -f1 || echo "")
 
     if [ -n "$uid_1000" ]; then
         assert_not_empty "$uid_1000" "User with UID 1000 can be detected"
@@ -181,9 +181,9 @@ test_empty_directory_handling() {
 
     # Test with empty directories
     local first_count
-    first_count=$(command find "$FIRST_STARTUP_DIR" -name "*.sh" -type f 2>/dev/null | wc -l)
+    first_count=$(command find "$FIRST_STARTUP_DIR" -name "*.sh" -type f 2>/dev/null | command wc -l)
     local startup_count
-    startup_count=$(command find "$STARTUP_DIR" -name "*.sh" -type f 2>/dev/null | wc -l)
+    startup_count=$(command find "$STARTUP_DIR" -name "*.sh" -type f 2>/dev/null | command wc -l)
 
     assert_equals "0" "$first_count" "Empty first-startup directory handled"
     assert_equals "0" "$startup_count" "Empty startup directory handled"
@@ -219,7 +219,7 @@ EOF
     # Check that execution continued after error
     if [ -f "$TEST_TEMP_DIR/continue.log" ]; then
         local content
-        content=$(command cat "$TEST_TEMP_DIR/continue.log" 2>/dev/null | tr -d '\n')
+        content=$(command cat "$TEST_TEMP_DIR/continue.log" 2>/dev/null | command tr -d '\n')
         if [ "$content" = "after-fail" ]; then
             assert_true true "Execution continued after script error"
         else
@@ -508,7 +508,7 @@ test_docker_socket_sudo_support() {
     local script="$PROJECT_ROOT/lib/runtime/entrypoint.sh"
 
     # Should have sudo support for non-root users
-    if command grep -q "sudo -n true" "$script" && grep -q "run_privileged" "$script"; then
+    if command grep -q "sudo -n true" "$script" && command grep -q "run_privileged" "$script"; then
         assert_true true "Sudo support for non-root users exists"
     else
         assert_true false "Sudo support not found"

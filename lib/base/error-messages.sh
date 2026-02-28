@@ -255,7 +255,7 @@ error_build_failed() {
     if [ -n "$log_file" ] && [ -f "$log_file" ]; then
         log_error "Check build log: $log_file"
         log_error "Last 10 lines of log:"
-        tail -10 "$log_file" | while read -r line; do
+        command tail -10 "$log_file" | while read -r line; do
             log_error "  $line"
         done
     fi

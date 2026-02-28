@@ -70,8 +70,8 @@ RESULTS_FILE="$RESULTS_DIR/benchmark-$TIMESTAMP.json"
 get_system_info() {
     local cpus memory_gb docker_ver
     cpus=$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 1)
-    memory_gb=$(free -g 2>/dev/null | awk '/Mem:/{print $2}')
-    docker_ver=$(docker --version 2>/dev/null | awk '{print $3}' | tr -d ',')
+    memory_gb=$(free -g 2>/dev/null | command awk '/Mem:/{print $2}')
+    docker_ver=$(docker --version 2>/dev/null | command awk '{print $3}' | command tr -d ',')
 
     # Validate all numeric values
     if [ -z "$cpus" ] || ! [[ "$cpus" =~ ^[0-9]+$ ]]; then
@@ -143,7 +143,7 @@ benchmark_variant() {
     if [ "$build_failed" = "false" ]; then
         # Use awk instead of bc for reliable numeric output
         # Validate inputs are numeric before calculation
-        build_time=$(awk "BEGIN {printf \"%.2f\", $end_time - $start_time}" 2>/dev/null)
+        build_time=$(command awk "BEGIN {printf \"%.2f\", $end_time - $start_time}" 2>/dev/null)
         # Ensure we have a valid number (not empty, not containing letters)
         if [ -z "$build_time" ] || ! [[ "$build_time" =~ ^[0-9.]+$ ]]; then
             build_time="0"
@@ -155,13 +155,13 @@ benchmark_variant() {
         if [ -z "$image_size" ] || ! [[ "$image_size" =~ ^[0-9]+$ ]]; then
             image_size="0"
         fi
-        image_size_mb=$(awk "BEGIN {printf \"%.2f\", $image_size / 1048576}" 2>/dev/null)
+        image_size_mb=$(command awk "BEGIN {printf \"%.2f\", $image_size / 1048576}" 2>/dev/null)
         if [ -z "$image_size_mb" ] || ! [[ "$image_size_mb" =~ ^[0-9.]+$ ]]; then
             image_size_mb="0"
         fi
 
         # Get layer count (strip whitespace from wc output)
-        layer_count=$(docker image history "$image_tag" --quiet 2>/dev/null | wc -l | tr -d ' ')
+        layer_count=$(docker image history "$image_tag" --quiet 2>/dev/null | command wc -l | command tr -d ' ')
         # Validate layer_count is numeric
         if [ -z "$layer_count" ] || ! [[ "$layer_count" =~ ^[0-9]+$ ]]; then
             layer_count="0"
@@ -178,7 +178,7 @@ benchmark_variant() {
             cached_steps=0
         fi
         if [ "$total_steps" -gt 0 ]; then
-            cache_rate=$(awk "BEGIN {printf \"%.2f\", $cached_steps * 100 / $total_steps}" 2>/dev/null)
+            cache_rate=$(command awk "BEGIN {printf \"%.2f\", $cached_steps * 100 / $total_steps}" 2>/dev/null)
             if [ -z "$cache_rate" ] || ! [[ "$cache_rate" =~ ^[0-9.]+$ ]]; then
                 cache_rate="0"
             fi

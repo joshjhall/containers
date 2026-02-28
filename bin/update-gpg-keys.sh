@@ -107,7 +107,7 @@ update_python_keys() {
 
     # Count keys
     local key_count
-    key_count=$(find "$keys_dir" -maxdepth 1 -name "*.asc" 2>/dev/null | wc -l)
+    key_count=$(command find "$keys_dir" -maxdepth 1 -name "*.asc" 2>/dev/null | command wc -l)
 
     # Clean up
     rm -rf "$temp_dir"
@@ -166,19 +166,19 @@ update_nodejs_keys() {
 
     # Count keys
     local total_keys
-    total_keys=$(GNUPGHOME="$temp_dir/release-keys/gpg" gpg --list-keys 2>/dev/null | grep -c "^pub" || echo "0")
+    total_keys=$(GNUPGHOME="$temp_dir/release-keys/gpg" gpg --list-keys 2>/dev/null | command grep -c "^pub" || echo "0")
     log_info "  Total keys in keyring: $total_keys"
     echo ""
 
     # List active releasers (from gpg-only-active-keys directory)
     log_info "Active releasers:"
     GNUPGHOME="$temp_dir/release-keys/gpg-only-active-keys" gpg --list-keys 2>/dev/null | \
-        grep "^uid" | sed 's/uid.*\] /  - /' | sort -u
+        command grep "^uid" | command sed 's/uid.*\] /  - /' | command sort -u
 
     # Generate metadata file
     local fetch_date
     fetch_date=$(date +%Y-%m-%d)
-    cat > "$metadata_file" << EOF
+    command cat > "$metadata_file" << EOF
 {
   "source": {
     "repository": "https://github.com/nodejs/release-keys",
@@ -267,7 +267,7 @@ update_hashicorp_keys() {
     log_info "Verifying key fingerprint..."
     local actual_fingerprint
     actual_fingerprint=$(gpg --with-colons --show-keys "$temp_dir/hashicorp.asc" 2>/dev/null | \
-        awk -F: '/^fpr:/ {print $10; exit}')
+        command awk -F: '/^fpr:/ {print $10; exit}')
 
     if [ "$actual_fingerprint" != "$expected_fingerprint" ]; then
         log_error "GPG key fingerprint mismatch!"
@@ -331,7 +331,7 @@ update_golang_keys() {
     log_info "Verifying key fingerprint..."
     local actual_fingerprint
     actual_fingerprint=$(gpg --with-colons --show-keys "$temp_dir/google-linux-signing-key.asc" 2>/dev/null | \
-        awk -F: '/^fpr:/ {print $10; exit}')
+        command awk -F: '/^fpr:/ {print $10; exit}')
 
     if [ "$actual_fingerprint" != "$expected_fingerprint" ]; then
         log_error "GPG key fingerprint mismatch!"

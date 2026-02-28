@@ -123,7 +123,7 @@ test_main_template_structure() {
     tff_temp_dir=$(mktemp -d)
 
     if cp "$TEMPLATE_DIR/src/main.mojo.tmpl" "$tff_temp_dir/main.mojo"; then
-        if command grep -q "fn main():" "$tff_temp_dir/main.mojo" && grep -q "Hello from Mojo" "$tff_temp_dir/main.mojo"; then
+        if command grep -q "fn main():" "$tff_temp_dir/main.mojo" && command grep -q "Hello from Mojo" "$tff_temp_dir/main.mojo"; then
             assert_true true "Main.mojo template has valid structure"
         else
             assert_true false "Main.mojo template missing required elements"
@@ -160,7 +160,7 @@ test_gitignore_python_support() {
     tff_temp_dir=$(mktemp -d)
 
     if cp "$TEMPLATE_DIR/project/gitignore.tmpl" "$tff_temp_dir/.gitignore"; then
-        if command grep -q "__pycache__" "$tff_temp_dir/.gitignore" && grep -q '\*.pyc' "$tff_temp_dir/.gitignore"; then
+        if command grep -q "__pycache__" "$tff_temp_dir/.gitignore" && command grep -q '\*.pyc' "$tff_temp_dir/.gitignore"; then
             assert_true true "Gitignore includes Python interop patterns"
         else
             assert_true false "Gitignore missing Python patterns"

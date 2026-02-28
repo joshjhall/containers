@@ -197,7 +197,7 @@ test_master_summary() {
     assert_file_exists "$master_summary"
 
     # Check that both features are in summary
-    if command grep -q "Test Feature 1" "$master_summary" && grep -q "Test Feature 2" "$master_summary"; then
+    if command grep -q "Test Feature 1" "$master_summary" && command grep -q "Test Feature 2" "$master_summary"; then
         assert_true true "Both features appear in master summary"
     else
         assert_true false "Features missing from master summary"
@@ -217,7 +217,7 @@ test_duration_calculation() {
     log_feature_end
 
     # Check that duration was recorded in summary file
-    if [ -f "$summary_file" ] && grep -q "Total Duration:" "$summary_file"; then
+    if [ -f "$summary_file" ] && command grep -q "Total Duration:" "$summary_file"; then
         assert_true true "Duration recorded in summary"
     else
         assert_true false "Duration not found in summary file: $summary_file"

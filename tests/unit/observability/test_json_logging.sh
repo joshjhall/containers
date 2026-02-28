@@ -59,7 +59,7 @@ test_json_log_init() {
     # Check first log entry exists and is valid JSON
     if command -v jq >/dev/null 2>&1; then
         local first_line
-        first_line=$(head -1 "$BUILD_LOG_DIR/json/test-feature.jsonl")
+        first_line=$(command head -1 "$BUILD_LOG_DIR/json/test-feature.jsonl")
 
         # Should be valid JSON
         echo "$first_line" | jq '.' >/dev/null 2>&1
@@ -85,7 +85,7 @@ test_json_log_event() {
 
     if command -v jq >/dev/null 2>&1; then
         local log_entry
-        log_entry=$(tail -1 "$CURRENT_JSON_LOG_FILE")
+        log_entry=$(command tail -1 "$CURRENT_JSON_LOG_FILE")
 
         # Validate JSON structure
         echo "$log_entry" | jq '.' >/dev/null 2>&1
@@ -125,7 +125,7 @@ test_json_log_command() {
 
     if command -v jq >/dev/null 2>&1; then
         local log_entry
-        log_entry=$(tail -1 "$CURRENT_JSON_LOG_FILE")
+        log_entry=$(command tail -1 "$CURRENT_JSON_LOG_FILE")
 
         local event_type command_num exit_code duration
         event_type=$(echo "$log_entry" | jq -r '.event_type')

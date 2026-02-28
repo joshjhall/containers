@@ -311,7 +311,7 @@ test_json_escape_exported() {
 test_audit_auth_uses_escape() {
     # Extract audit_auth function body and check for _json_escape usage
     local func_body
-    func_body=$(sed -n '/^audit_auth()/,/^}/p' "$EVENTS_FILE")
+    func_body=$(command sed -n '/^audit_auth()/,/^}/p' "$EVENTS_FILE")
     if echo "$func_body" | command grep -q '_json_escape'; then
         pass_test "audit_auth uses _json_escape for field escaping"
     else
@@ -322,7 +322,7 @@ test_audit_auth_uses_escape() {
 # Test: audit_authz uses _json_escape
 test_audit_authz_uses_escape() {
     local func_body
-    func_body=$(sed -n '/^audit_authz()/,/^}/p' "$EVENTS_FILE")
+    func_body=$(command sed -n '/^audit_authz()/,/^}/p' "$EVENTS_FILE")
     if echo "$func_body" | command grep -q '_json_escape'; then
         pass_test "audit_authz uses _json_escape for field escaping"
     else
@@ -333,7 +333,7 @@ test_audit_authz_uses_escape() {
 # Test: audit_data_access uses _json_escape
 test_audit_data_access_uses_escape() {
     local func_body
-    func_body=$(sed -n '/^audit_data_access()/,/^}/p' "$EVENTS_FILE")
+    func_body=$(command sed -n '/^audit_data_access()/,/^}/p' "$EVENTS_FILE")
     if echo "$func_body" | command grep -q '_json_escape'; then
         pass_test "audit_data_access uses _json_escape for field escaping"
     else
@@ -344,7 +344,7 @@ test_audit_data_access_uses_escape() {
 # Test: audit_config uses _json_escape
 test_audit_config_uses_escape() {
     local func_body
-    func_body=$(sed -n '/^audit_config()/,/^}/p' "$EVENTS_FILE")
+    func_body=$(command sed -n '/^audit_config()/,/^}/p' "$EVENTS_FILE")
     if echo "$func_body" | command grep -q '_json_escape'; then
         pass_test "audit_config uses _json_escape for field escaping"
     else
@@ -355,7 +355,7 @@ test_audit_config_uses_escape() {
 # Test: audit_security uses _json_escape
 test_audit_security_uses_escape() {
     local func_body
-    func_body=$(sed -n '/^audit_security()/,/^}/p' "$EVENTS_FILE")
+    func_body=$(command sed -n '/^audit_security()/,/^}/p' "$EVENTS_FILE")
     if echo "$func_body" | command grep -q '_json_escape'; then
         pass_test "audit_security uses _json_escape for field escaping"
     else
@@ -366,7 +366,7 @@ test_audit_security_uses_escape() {
 # Test: audit_network uses _json_escape
 test_audit_network_uses_escape() {
     local func_body
-    func_body=$(sed -n '/^audit_network()/,/^}/p' "$EVENTS_FILE")
+    func_body=$(command sed -n '/^audit_network()/,/^}/p' "$EVENTS_FILE")
     if echo "$func_body" | command grep -q '_json_escape'; then
         pass_test "audit_network uses _json_escape for field escaping"
     else
@@ -377,7 +377,7 @@ test_audit_network_uses_escape() {
 # Test: audit_file uses _json_escape
 test_audit_file_uses_escape() {
     local func_body
-    func_body=$(sed -n '/^audit_file()/,/^}/p' "$EVENTS_FILE")
+    func_body=$(command sed -n '/^audit_file()/,/^}/p' "$EVENTS_FILE")
     if echo "$func_body" | command grep -q '_json_escape'; then
         pass_test "audit_file uses _json_escape for field escaping"
     else
@@ -388,7 +388,7 @@ test_audit_file_uses_escape() {
 # Test: audit_process uses _json_escape
 test_audit_process_uses_escape() {
     local func_body
-    func_body=$(sed -n '/^audit_process()/,/^}/p' "$EVENTS_FILE")
+    func_body=$(command sed -n '/^audit_process()/,/^}/p' "$EVENTS_FILE")
     if echo "$func_body" | command grep -q '_json_escape'; then
         pass_test "audit_process uses _json_escape for field escaping"
     else
@@ -399,7 +399,7 @@ test_audit_process_uses_escape() {
 # Test: audit_compliance uses _json_escape
 test_audit_compliance_uses_escape() {
     local func_body
-    func_body=$(sed -n '/^audit_compliance()/,/^}/p' "$EVENTS_FILE")
+    func_body=$(command sed -n '/^audit_compliance()/,/^}/p' "$EVENTS_FILE")
     if echo "$func_body" | command grep -q '_json_escape'; then
         pass_test "audit_compliance uses _json_escape for field escaping"
     else
@@ -410,7 +410,7 @@ test_audit_compliance_uses_escape() {
 # Test: build_json_entry validates extra_data structure
 test_build_json_entry_validates_extra_data() {
     local func_body
-    func_body=$(sed -n '/^build_json_entry()/,/^}/p' "$SOURCE_FILE")
+    func_body=$(command sed -n '/^build_json_entry()/,/^}/p' "$SOURCE_FILE")
     if echo "$func_body" | command grep -qE '\{.*\}'; then
         pass_test "build_json_entry validates extra_data starts with { and ends with }"
     else
@@ -612,7 +612,7 @@ test_func_json_required_fields() {
     _reset_audit_logger
     audit_log "system" "info" "Field check" '{}'
     local last_line
-    last_line=$(tail -1 "$AUDIT_LOG_FILE")
+    last_line=$(command tail -1 "$AUDIT_LOG_FILE")
     if echo "$last_line" | command grep -q '"@timestamp"' && \
        echo "$last_line" | command grep -q '"event_id"' && \
        echo "$last_line" | command grep -q '"category"' && \

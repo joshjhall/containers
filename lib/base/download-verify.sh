@@ -97,9 +97,9 @@ download_and_verify() {
         # Determine hash type for error message
         local checksum_len="${#expected_checksum}"
         if [ "$checksum_len" -eq 64 ]; then
-            echo "  Got:      $(sha256sum "$temp_file" | cut -d' ' -f1)" >&2
+            echo "  Got:      $(sha256sum "$temp_file" | command cut -d' ' -f1)" >&2
         else
-            echo "  Got:      $(sha512sum "$temp_file" | cut -d' ' -f1)" >&2
+            echo "  Got:      $(sha512sum "$temp_file" | command cut -d' ' -f1)" >&2
         fi
         # Trap will handle cleanup
         return 1
@@ -211,10 +211,10 @@ verify_checksum() {
         return 1
     elif [ "$checksum_len" -eq 64 ]; then
         # SHA256 (64 hexadecimal characters)
-        actual_checksum=$(sha256sum "$file_path" | cut -d' ' -f1)
+        actual_checksum=$(sha256sum "$file_path" | command cut -d' ' -f1)
     elif [ "$checksum_len" -eq 128 ]; then
         # SHA512 (128 hexadecimal characters)
-        actual_checksum=$(sha512sum "$file_path" | cut -d' ' -f1)
+        actual_checksum=$(sha512sum "$file_path" | command cut -d' ' -f1)
     else
         echo -e "${RED}✗ Invalid checksum length: $checksum_len${NC}" >&2
         echo "  Expected 64 (SHA256) or 128 (SHA512) hex characters" >&2

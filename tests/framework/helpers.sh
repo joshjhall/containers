@@ -123,7 +123,7 @@ container_running() {
 # Get image size in MB
 get_image_size_mb() {
     local image="$1"
-    docker image inspect "$image" --format='{{.Size}}' | awk '{print int($1/1024/1024)}'
+    docker image inspect "$image" --format='{{.Size}}' | command awk '{print int($1/1024/1024)}'
 }
 
 # Wait for container to be ready (with timeout)

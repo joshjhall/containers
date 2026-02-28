@@ -258,7 +258,7 @@ assert_file_not_contains() {
         return 0
     else
         local tff_match
-        tff_match=$(command grep -n -- "$tff_pattern" "$tff_file" 2>/dev/null | head -1)
+        tff_match=$(command grep -n -- "$tff_pattern" "$tff_file" 2>/dev/null | command head -1)
         tf_fail_assertion \
             "File:     '$tff_file'" \
             "Pattern:  '$tff_pattern'" \

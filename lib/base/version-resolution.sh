@@ -97,11 +97,11 @@ _resolve_version_from_api() {
     fi
 
     if [ -n "$grep_pattern" ]; then
-        resolved=$(echo "$api_data" | grep -oP "$grep_pattern" || true)
+        resolved=$(echo "$api_data" | command grep -oP "$grep_pattern" || true)
         if [ -n "$sed_expr" ]; then
             resolved=$(echo "$resolved" | command sed "$sed_expr")
         fi
-        resolved=$(echo "$resolved" | sort -V | tail -1)
+        resolved=$(echo "$resolved" | command sort -V | command tail -1)
     fi
 
     if [ -n "$resolved" ]; then
@@ -210,12 +210,12 @@ resolve_java_version() {
 
     # Extract version_data.semver and find latest
     resolved=$(echo "$versions_json" | \
-        grep '"semver"' | \
+        command grep '"semver"' | \
         command sed 's/.*"semver": "//; s/".*//' | \
         command sed 's/+.*//' | \
-        grep "^${version}" | \
-        sort -V | \
-        tail -1)
+        command grep "^${version}" | \
+        command sort -V | \
+        command tail -1)
 
     if [ -n "$resolved" ]; then
         export JAVA_RESOLVED_VERSION="$resolved"

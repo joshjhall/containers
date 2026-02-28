@@ -91,7 +91,7 @@ check_core() {
     log_check "Checking core container health..."
 
     # Check if container is initialized
-    USERNAME=$(getent passwd 1000 | cut -d: -f1 || echo "")
+    USERNAME=$(getent passwd 1000 | command cut -d: -f1 || echo "")
     if [ -z "$USERNAME" ]; then
         log_fail "No user with UID 1000 found"
         return 1
@@ -129,7 +129,7 @@ check_python() {
     log_check "Checking Python..."
 
     if command -v python3 >/dev/null 2>&1; then
-        VERSION=$(python3 --version 2>&1 | awk '{print $2}')
+        VERSION=$(python3 --version 2>&1 | command awk '{print $2}')
         log_pass "Python installed: $VERSION"
 
         # Check pip
@@ -175,7 +175,7 @@ check_rust() {
     log_check "Checking Rust..."
 
     if command -v rustc >/dev/null 2>&1; then
-        VERSION=$(rustc --version | awk '{print $2}')
+        VERSION=$(rustc --version | command awk '{print $2}')
         log_pass "Rust installed: $VERSION"
 
         # Check cargo
@@ -198,7 +198,7 @@ check_golang() {
     log_check "Checking Go..."
 
     if command -v go >/dev/null 2>&1; then
-        VERSION=$(go version | awk '{print $3}')
+        VERSION=$(go version | command awk '{print $3}')
         log_pass "Go installed: $VERSION"
 
         # Check cache directories
@@ -214,7 +214,7 @@ check_ruby() {
     log_check "Checking Ruby..."
 
     if command -v ruby >/dev/null 2>&1; then
-        VERSION=$(ruby --version | awk '{print $2}')
+        VERSION=$(ruby --version | command awk '{print $2}')
         log_pass "Ruby installed: $VERSION"
 
         # Check gem
@@ -237,7 +237,7 @@ check_r() {
     log_check "Checking R..."
 
     if command -v R >/dev/null 2>&1; then
-        VERSION=$(R --version 2>&1 | head -1 | awk '{print $3}')
+        VERSION=$(R --version 2>&1 | command head -1 | command awk '{print $3}')
         log_pass "R installed: $VERSION"
 
         # Check Rscript
@@ -260,7 +260,7 @@ check_java() {
     log_check "Checking Java..."
 
     if command -v java >/dev/null 2>&1; then
-        VERSION=$(java -version 2>&1 | head -1 | awk -F '"' '{print $2}')
+        VERSION=$(java -version 2>&1 | command head -1 | command awk -F '"' '{print $2}')
         log_pass "Java installed: $VERSION"
 
         # Check cache directory
@@ -294,7 +294,7 @@ check_kubernetes() {
 
     FOUND=false
     if command -v kubectl >/dev/null 2>&1; then
-        VERSION=$(kubectl version --client --short 2>/dev/null | awk '{print $3}' || echo "unknown")
+        VERSION=$(kubectl version --client --short 2>/dev/null | command awk '{print $3}' || echo "unknown")
         log_pass "kubectl available: $VERSION"
         FOUND=true
     fi

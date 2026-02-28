@@ -25,7 +25,7 @@ ensure_git_cliff() {
 
     # Try to download pre-built binary
     local os_type
-    os_type=$(uname -s | tr '[:upper:]' '[:lower:]')
+    os_type=$(uname -s | command tr '[:upper:]' '[:lower:]')
     local arch
     arch=$(uname -m)
     local version="2.8.0"

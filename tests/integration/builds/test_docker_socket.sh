@@ -69,7 +69,7 @@ test_socket_permissions_fixed() {
         -v /var/run/docker.sock:/var/run/docker.sock \
         -e SKIP_CASE_CHECK=true \
         "$image" \
-        bash -c 'stat -c "%a %G" /var/run/docker.sock' 2>&1 | tail -1)
+        bash -c 'stat -c "%a %G" /var/run/docker.sock' 2>&1 | command tail -1)
 
     # Socket should be accessible - either 660 docker (our fix) or 666 (already open)
     # Both are acceptable as long as docker commands work
@@ -95,7 +95,7 @@ test_nonroot_docker_access() {
         -v /var/run/docker.sock:/var/run/docker.sock \
         -e SKIP_CASE_CHECK=true \
         "$image" \
-        bash -c 'docker version --format "{{.Client.Version}}"' 2>&1 | tail -1)
+        bash -c 'docker version --format "{{.Client.Version}}"' 2>&1 | command tail -1)
 
     local exit_code=$?
 
@@ -120,7 +120,7 @@ test_user_in_docker_group() {
         -v /var/run/docker.sock:/var/run/docker.sock \
         -e SKIP_CASE_CHECK=true \
         "$image" \
-        bash -c 'id -nG' 2>&1 | tail -1)
+        bash -c 'id -nG' 2>&1 | command tail -1)
 
     if [[ "$output" == *"docker"* ]]; then
         echo "User groups: $output"
@@ -176,7 +176,7 @@ test_socket_already_accessible() {
         -v /var/run/docker.sock:/var/run/docker.sock \
         -e SKIP_CASE_CHECK=true \
         "$image" \
-        bash -c 'echo "test passed"' 2>&1 | tail -1)
+        bash -c 'echo "test passed"' 2>&1 | command tail -1)
 
     if [[ "$output" == *"test passed"* ]]; then
         return 0

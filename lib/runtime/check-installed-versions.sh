@@ -65,7 +65,7 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         --help|-h)
-            head -n 20 "$0" | command grep "^#" | command sed 's/^# \?//'
+            command head -n 20 "$0" | command grep "^#" | command sed 's/^# \?//'
             exit 0
             ;;
         *)
@@ -131,9 +131,9 @@ check_version() {
     if command -v "$command" >/dev/null 2>&1; then
         local version
         if [ -n "$extract_pattern" ]; then
-            version=$("$command" "$version_flag" 2>&1 | command grep -oP "$extract_pattern" | head -1 || echo "error")
+            version=$("$command" "$version_flag" 2>&1 | command grep -oP "$extract_pattern" | command head -1 || echo "error")
         else
-            version=$("$command" "$version_flag" 2>&1 | head -1 || echo "error")
+            version=$("$command" "$version_flag" 2>&1 | command head -1 || echo "error")
         fi
 
         # Special handling for cargo subcommands that don't report version
@@ -390,17 +390,17 @@ run_section "Package Managers" "Programming Languages" \
 # --- Python Development Tools ---
 run_section "Python Development Tools" "Development Tools" \
     "black:black:--version:black, \K[0-9]+\.[0-9]+\.[0-9]+" \
-    "isort:isort:--version 2>&1 | grep 'VERSION':VERSION \K[0-9]+\.[0-9]+\.[0-9]+" \
+    "isort:isort:--version 2>&1 | command grep 'VERSION':VERSION \K[0-9]+\.[0-9]+\.[0-9]+" \
     "ruff:ruff:--version:ruff \K[0-9]+\.[0-9]+\.[0-9]+" \
     "flake8:flake8:--version:\K[0-9]+\.[0-9]+\.[0-9]+" \
     "mypy:mypy:--version:mypy \K[0-9]+\.[0-9]+\.[0-9]+" \
     "pylint:pylint:--version:pylint \K[0-9]+\.[0-9]+\.[0-9]+" \
     "pytest:pytest:--version:pytest \K[0-9]+\.[0-9]+\.[0-9]+" \
-    "tox:tox:--version 2>&1 | tail -1:\K[0-9]+\.[0-9]+\.[0-9]+" \
+    "tox:tox:--version 2>&1 | command tail -1:\K[0-9]+\.[0-9]+\.[0-9]+" \
     "pre-commit:pre-commit:--version:pre-commit \K[0-9]+\.[0-9]+\.[0-9]+" \
     "cookiecutter:cookiecutter:--version:Cookiecutter \K[0-9]+\.[0-9]+\.[0-9]+" \
     "sphinx:sphinx-build:--version:sphinx-build \K[0-9]+\.[0-9]+\.[0-9]+" \
-    "jupyter:jupyter:--version 2>&1 | grep 'jupyter_core':jupyter_core.*: \K[0-9]+\.[0-9]+\.[0-9]+" \
+    "jupyter:jupyter:--version 2>&1 | command grep 'jupyter_core':jupyter_core.*: \K[0-9]+\.[0-9]+\.[0-9]+" \
     "ipython:ipython:--version:\K[0-9]+\.[0-9]+\.[0-9]+" \
     "httpie:http:--version:\K[0-9]+\.[0-9]+\.[0-9]+" \
     "yq:yq:--version:yq \K[0-9]+\.[0-9]+\.[0-9]+"
@@ -409,9 +409,9 @@ run_section "Python Development Tools" "Development Tools" \
 run_section "Rust Development Tools" "Development Tools" \
     "tree-sitter:tree-sitter:--version:tree-sitter \K[0-9]+\.[0-9]+\.[0-9]+:crates:tree-sitter-cli" \
     "cargo-watch:cargo-watch:--version:cargo-watch \K[0-9]+\.[0-9]+\.[0-9]+:crates:cargo-watch" \
-    "cargo-edit:cargo:install --list | grep 'cargo-edit' | head -1:v\K[0-9]+\.[0-9]+\.[0-9]+:crates:cargo-edit" \
+    "cargo-edit:cargo:install --list | command grep 'cargo-edit' | command head -1:v\K[0-9]+\.[0-9]+\.[0-9]+:crates:cargo-edit" \
     "cargo-expand:cargo-expand:--version:cargo-expand \K[0-9]+\.[0-9]+\.[0-9]+:crates:cargo-expand" \
-    "cargo-outdated:cargo:install --list | grep 'cargo-outdated' | head -1:v\K[0-9]+\.[0-9]+\.[0-9]+:crates:cargo-outdated" \
+    "cargo-outdated:cargo:install --list | command grep 'cargo-outdated' | command head -1:v\K[0-9]+\.[0-9]+\.[0-9]+:crates:cargo-outdated" \
     "bacon:bacon:--version:bacon \K[0-9]+\.[0-9]+\.[0-9]+:crates:bacon" \
     "tokei:tokei:--version:tokei \K[0-9]+\.[0-9]+\.[0-9]+:crates:tokei" \
     "hyperfine:hyperfine:--version:hyperfine \K[0-9]+\.[0-9]+\.[0-9]+:crates:hyperfine" \

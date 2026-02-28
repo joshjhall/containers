@@ -118,7 +118,7 @@ fi
 
 # Count how many test files exist
 # shellcheck disable=SC2012
-file_count=$(ls -1 "${CHECK_PATH}/.case-test-${TIMESTAMP}"* 2>/dev/null | wc -l)
+file_count=$(command ls -1 "${CHECK_PATH}/.case-test-${TIMESTAMP}"* 2>/dev/null | command wc -l)
 
 # Determine case-sensitivity
 if [ "$file_count" -ge 2 ]; then

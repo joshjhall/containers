@@ -232,7 +232,7 @@ EOF
         }
 
         # Verify 2 pods are running
-        pod_count=\$(kubectl get pods -n staging -l app=devcontainer --no-headers | wc -l)
+        pod_count=\$(kubectl get pods -n staging -l app=devcontainer --no-headers | command wc -l)
         if [ \"\$pod_count\" -lt 2 ]; then
             echo \"Expected 2 pods, found \$pod_count\"
             exit 1
@@ -284,7 +284,7 @@ spec:
 EOF
 
         if ! command grep -q 'pvc-patch.yaml' kustomization.yaml; then
-            sed -i '/persistentvolumeclaim.yaml/d' kustomization.yaml
+            command sed -i '/persistentvolumeclaim.yaml/d' kustomization.yaml
             echo '  - pvc-patch.yaml' >> kustomization.yaml
         fi
 
@@ -303,7 +303,7 @@ EOF
         }
 
         # Verify 3 pods are running
-        pod_count=\$(kubectl get pods -n production -l app=devcontainer --field-selector=status.phase=Running --no-headers | wc -l)
+        pod_count=\$(kubectl get pods -n production -l app=devcontainer --field-selector=status.phase=Running --no-headers | command wc -l)
         if [ \"\$pod_count\" -lt 3 ]; then
             echo \"Expected 3 running pods, found \$pod_count\"
             kubectl get pods -n production -l app=devcontainer
@@ -322,7 +322,7 @@ test_network_policies() {
 
     docker exec "$container" sh -c "
         # Check network policies exist
-        policy_count=\$(kubectl get networkpolicy -n production --no-headers | wc -l)
+        policy_count=\$(kubectl get networkpolicy -n production --no-headers | command wc -l)
 
         if [ \"\$policy_count\" -lt 1 ]; then
             echo 'No network policies found'

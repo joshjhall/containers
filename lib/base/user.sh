@@ -44,8 +44,8 @@ else
     if ! getent group "${USERNAME}" > /dev/null 2>&1; then
         if getent group "${USER_GID}" > /dev/null 2>&1; then
             echo "GID ${USER_GID} already exists, finding a free GID..."
-            FREE_GID=$(awk -F: '$3>=1000 && $3<65534 {print $3}' /etc/group | sort -n | \
-                awk 'BEGIN{for(i=1;i<=NR;i++) gids[i]=0} {gids[$1]=1} END{for(i=1000;i<65534;i++) if(!gids[i]) {print i; exit}}')
+            FREE_GID=$(command awk -F: '$3>=1000 && $3<65534 {print $3}' /etc/group | command sort -n | \
+                command awk 'BEGIN{for(i=1;i<=NR;i++) gids[i]=0} {gids[$1]=1} END{for(i=1000;i<65534;i++) if(!gids[i]) {print i; exit}}')
             echo "Using GID: ${FREE_GID}"
             groupadd --gid "${FREE_GID}" "${USERNAME}"
             ACTUAL_GID=${FREE_GID}
@@ -54,7 +54,7 @@ else
             ACTUAL_GID=${USER_GID}
         fi
     else
-        ACTUAL_GID=$(getent group "${USERNAME}" | cut -d: -f3)
+        ACTUAL_GID=$(getent group "${USERNAME}" | command cut -d: -f3)
     fi
 fi
 
@@ -62,8 +62,8 @@ fi
 if [ "$USER_EXISTS" = false ]; then
     if id "${USER_UID}" > /dev/null 2>&1; then
         echo "UID ${USER_UID} already exists, finding a free UID..."
-        FREE_UID=$(awk -F: '$3>=1000 && $3<65534 {print $3}' /etc/passwd | sort -n | \
-            awk 'BEGIN{for(i=1;i<=NR;i++) uids[i]=0} {uids[$1]=1} END{for(i=1000;i<65534;i++) if(!uids[i]) {print i; exit}}')
+        FREE_UID=$(command awk -F: '$3>=1000 && $3<65534 {print $3}' /etc/passwd | command sort -n | \
+            command awk 'BEGIN{for(i=1;i<=NR;i++) uids[i]=0} {uids[$1]=1} END{for(i=1000;i<65534;i++) if(!uids[i]) {print i; exit}}')
         echo "Using UID: ${FREE_UID}"
         useradd --uid "${FREE_UID}" --gid "${ACTUAL_GID}" -m "${USERNAME}" --shell /bin/bash
         ACTUAL_UID=${FREE_UID}

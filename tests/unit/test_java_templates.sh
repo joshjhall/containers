@@ -106,7 +106,7 @@ test_config_templates_structure() {
 
     # Test checkstyle config
     if cp "$TEMPLATE_DIR/config/checkstyle.xml.tmpl" "$tff_temp_dir/checkstyle.xml"; then
-        if command grep -q "TreeWalker" "$tff_temp_dir/checkstyle.xml" && grep -q "LineLength" "$tff_temp_dir/checkstyle.xml"; then
+        if command grep -q "TreeWalker" "$tff_temp_dir/checkstyle.xml" && command grep -q "LineLength" "$tff_temp_dir/checkstyle.xml"; then
             assert_true true "Checkstyle config template has valid structure"
         else
             assert_true false "Checkstyle config template missing required elements"

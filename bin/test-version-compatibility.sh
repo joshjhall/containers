@@ -71,7 +71,7 @@ TESTS_FAILED=0
 # ============================================================================
 
 show_help() {
-    head -n 40 "$0" | grep '^#' | command sed 's/^# \?//'
+    command head -n 40 "$0" | command grep '^#' | command sed 's/^# \?//'
 }
 
 error() {
@@ -130,7 +130,7 @@ build_variant() {
         --build-arg PROJECT_NAME=test \
         "${build_args[@]}" \
         -t "$image_name" \
-        "$PROJECT_ROOT" 2>&1 | tee /tmp/version-compat-build.log; then
+        "$PROJECT_ROOT" 2>&1 | command tee /tmp/version-compat-build.log; then
         return 0
     else
         return 1
@@ -156,7 +156,7 @@ test_variant() {
     log_info "Running integration test for $variant"
 
     # Run the integration test
-    if "$test_script" 2>&1 | tee /tmp/version-compat-test.log; then
+    if "$test_script" 2>&1 | command tee /tmp/version-compat-test.log; then
         return 0
     else
         return 1
@@ -310,7 +310,7 @@ update_matrix() {
 
     # Create new entry
     local new_entry
-    new_entry=$(cat << EOF
+    new_entry=$(command cat << EOF
 {
   "variant": "$variant",
   "base_image": "${BASE_IMAGE:-debian:13-slim}",

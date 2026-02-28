@@ -436,7 +436,7 @@ test_version_checksum_consistency() {
 
     # Extract lazygit version from both variable and comment
     local version_var
-    version_var=$(command grep "^LAZYGIT_VERSION=" "$dev_tools_script" | cut -d'"' -f2)
+    version_var=$(command grep "^LAZYGIT_VERSION=" "$dev_tools_script" | command cut -d'"' -f2)
 
     if [ -n "$version_var" ]; then
         # Check that checksum comment references the same version

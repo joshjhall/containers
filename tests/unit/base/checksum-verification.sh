@@ -256,7 +256,7 @@ test_verify_pinned_checksum_match() {
     # with the matching hash — verify_pinned_checksum should return 0.
     echo "checksum match test content" > "$TEST_TEMP_DIR/match-test.tgz"
     local real_hash
-    real_hash=$(sha256sum "$TEST_TEMP_DIR/match-test.tgz" | awk '{print $1}')
+    real_hash=$(sha256sum "$TEST_TEMP_DIR/match-test.tgz" | command awk '{print $1}')
 
     command cat > "$TEST_TEMP_DIR/checksums.json" <<EOJSON
 {

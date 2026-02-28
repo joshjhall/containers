@@ -95,7 +95,7 @@ if [ -z "${FEATURE_MAP[$FEATURE]:-}" ]; then
     echo "Valid features:"
     for key in "${!FEATURE_MAP[@]}"; do
         echo "  - $key"
-    done | sort
+    done | command sort
     echo ""
     exit 1
 fi
@@ -140,7 +140,7 @@ else
     echo -e "${RED}✗ Build failed${NC}"
     echo ""
     echo "Last 50 lines of build log:"
-    tail -50 "$BUILD_LOG"
+    command tail -50 "$BUILD_LOG"
     echo ""
     echo "Full log saved to: $BUILD_LOG"
     exit 1
@@ -252,7 +252,7 @@ case "$FEATURE" in
 
     bindfs)
         if docker run --rm "$IMAGE_NAME" which bindfs > /dev/null 2>&1; then
-            VERSION=$(docker run --rm "$IMAGE_NAME" bindfs --version 2>&1 | head -1)
+            VERSION=$(docker run --rm "$IMAGE_NAME" bindfs --version 2>&1 | command head -1)
             echo -e "${GREEN}✓ bindfs installed: $VERSION${NC}"
         else
             echo -e "${RED}✗ bindfs not found${NC}"

@@ -259,7 +259,7 @@ test_auto_confirmation() {
 
     # Test that echo "y" would be accepted as confirmation
     local test_response
-    test_response=$(echo "y" | head -c1)
+    test_response=$(echo "y" | command head -c1)
 
     if [ "$test_response" = "y" ] || [ "$test_response" = "Y" ]; then
         assert_true true "Auto-confirmation would be accepted"

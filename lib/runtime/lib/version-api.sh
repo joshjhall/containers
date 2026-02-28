@@ -14,7 +14,7 @@ _vapi_grep() {
     if command -v ggrep &>/dev/null; then
         ggrep "$@"
     else
-        grep "$@"
+        command grep "$@"
     fi
 }
 
@@ -46,7 +46,7 @@ get_github_release() {
             echo "rate-limited"
             return
         fi
-        echo "$response" | jq -r ".[].name | select(. | test(\"${tag_pattern}\"))" | head -1 || echo "unknown"
+        echo "$response" | jq -r ".[].name | select(. | test(\"${tag_pattern}\"))" | command head -1 || echo "unknown"
     fi
 }
 
@@ -108,7 +108,7 @@ compare_version() {
         # This is a simple comparison - works for most semantic versions
         if command -v sort &>/dev/null; then
             local sorted
-            sorted=$(printf "%s\n%s" "$current" "$latest" | sort -V | tail -1)
+            sorted=$(printf "%s\n%s" "$current" "$latest" | command sort -V | command tail -1)
             if [ "$sorted" = "$current" ] && [ "$current" != "$latest" ]; then
                 echo "newer"
             else

@@ -25,7 +25,7 @@ for cmd in adb fastboot; do
     if command -v $cmd &>/dev/null; then
         echo "✓ $cmd is available"
         case $cmd in
-            adb) adb version 2>&1 | head -1 | command sed 's/^/  /' ;;
+            adb) adb version 2>&1 | command head -1 | command sed 's/^/  /' ;;
         esac
     else
         echo "✗ $cmd is not found"
@@ -54,11 +54,11 @@ done
 
 echo ""
 echo "=== Installed Platforms ==="
-ls -1 "${ANDROID_HOME:-/opt/android-sdk}/platforms/" 2>/dev/null || echo "None found"
+command ls -1 "${ANDROID_HOME:-/opt/android-sdk}/platforms/" 2>/dev/null || echo "None found"
 
 echo ""
 echo "=== Installed Build Tools ==="
-ls -1 "${ANDROID_HOME:-/opt/android-sdk}/build-tools/" 2>/dev/null || echo "None found"
+command ls -1 "${ANDROID_HOME:-/opt/android-sdk}/build-tools/" 2>/dev/null || echo "None found"
 
 echo ""
 echo "=== Licenses ==="

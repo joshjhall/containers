@@ -110,7 +110,7 @@ test_grammar_template_structure() {
     tff_temp_dir=$(mktemp -d)
 
     if sed "s/__LANG_NAME__/mylang/g" "$TEMPLATE_DIR/treesitter/grammar.js.tmpl" > "$tff_temp_dir/grammar.js"; then
-        if command grep -q "module.exports = grammar" "$tff_temp_dir/grammar.js" && grep -q "source_file" "$tff_temp_dir/grammar.js"; then
+        if command grep -q "module.exports = grammar" "$tff_temp_dir/grammar.js" && command grep -q "source_file" "$tff_temp_dir/grammar.js"; then
             assert_true true "Grammar template has valid structure"
         else
             assert_true false "Grammar template missing required fields"
@@ -128,7 +128,7 @@ test_justfile_template_structure() {
     tff_temp_dir=$(mktemp -d)
 
     if cp "$TEMPLATE_DIR/just/justfile.tmpl" "$tff_temp_dir/justfile"; then
-        if command grep -q "default:" "$tff_temp_dir/justfile" && grep -q "@just --list" "$tff_temp_dir/justfile"; then
+        if command grep -q "default:" "$tff_temp_dir/justfile" && command grep -q "@just --list" "$tff_temp_dir/justfile"; then
             assert_true true "Justfile template has valid structure"
         else
             assert_true false "Justfile template missing required elements"

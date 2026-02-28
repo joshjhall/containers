@@ -127,7 +127,7 @@ test_file_permissions() {
 
     # Test 1: No world-writable files in /usr
     local world_writable
-    world_writable=$(docker run --rm "$TEST_IMAGE" find /usr -type f -perm -0002 2>/dev/null | wc -l)
+    world_writable=$(docker run --rm "$TEST_IMAGE" find /usr -type f -perm -0002 2>/dev/null | command wc -l)
     if [[ "$world_writable" -eq 0 ]]; then
         log_test "No world-writable files in /usr"
     else
@@ -224,7 +224,7 @@ test_secret_protection() {
 
     # Test 2: No .env files with secrets
     local env_files
-    env_files=$(docker run --rm "$TEST_IMAGE" find /home -name ".env*" -type f 2>/dev/null | wc -l)
+    env_files=$(docker run --rm "$TEST_IMAGE" find /home -name ".env*" -type f 2>/dev/null | command wc -l)
     if [[ "$env_files" -eq 0 ]]; then
         log_test "No .env files in home directory"
     else
@@ -284,7 +284,7 @@ test_build_security() {
 
     # Test 1: No package manager cache
     local apt_cache
-    apt_cache=$(docker run --rm "$TEST_IMAGE" sh -c "du -s /var/lib/apt/lists 2>/dev/null || echo '0'" | awk '{print $1}')
+    apt_cache=$(docker run --rm "$TEST_IMAGE" sh -c "du -s /var/lib/apt/lists 2>/dev/null || echo '0'" | command awk '{print $1}')
     if [[ "$apt_cache" -lt 1000 ]]; then
         log_test "APT cache is cleaned"
     else
@@ -293,7 +293,7 @@ test_build_security() {
 
     # Test 2: No temporary build files
     local tmp_files
-    tmp_files=$(docker run --rm "$TEST_IMAGE" find /tmp -type f 2>/dev/null | wc -l)
+    tmp_files=$(docker run --rm "$TEST_IMAGE" find /tmp -type f 2>/dev/null | command wc -l)
     if [[ "$tmp_files" -lt 5 ]]; then
         log_test "Minimal temporary files in /tmp"
     else

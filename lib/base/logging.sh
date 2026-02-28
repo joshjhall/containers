@@ -67,7 +67,7 @@ _should_log() {
 _get_last_command_start_line() {
     local log_file="$1"
     local marker_line
-    marker_line=$(grep -n "^Executing: " "$log_file" | tail -1 | cut -d: -f1)
+    marker_line=$(command grep -n "^Executing: " "$log_file" | command tail -1 | command cut -d: -f1)
     echo $((marker_line + 1))
 }
 
@@ -76,7 +76,7 @@ _count_patterns_since() {
     local log_file="$1"
     local start_line="$2"
     local pattern="$3"
-    tail -n +"$start_line" "$log_file" | grep -cE "$pattern" 2>/dev/null || echo 0
+    command tail -n +"$start_line" "$log_file" | command grep -cE "$pattern" 2>/dev/null || echo 0
 }
 
 # Source JSON logging utilities if enabled
@@ -144,7 +144,7 @@ log_feature_start() {
 
     # Sanitize feature name for filename
     local safe_name
-    safe_name=$(echo "$feature_name" | tr '[:upper:]' '[:lower:]' | tr ' ' '-' | tr -cd '[:alnum:]-')
+    safe_name=$(echo "$feature_name" | command tr '[:upper:]' '[:lower:]' | command tr ' ' '-' | command tr -cd '[:alnum:]-')
 
     # Set up logging paths
     CURRENT_FEATURE="$feature_name"
@@ -164,7 +164,7 @@ log_feature_start() {
         echo "Start Time: $(date '+%Y-%m-%d %H:%M:%S')"
         echo "================================================================================"
         echo ""
-    } | tee "$CURRENT_LOG_FILE"
+    } | command tee "$CURRENT_LOG_FILE"
 
     # Clear error file
     true > "$CURRENT_ERROR_FILE"
@@ -206,7 +206,7 @@ log_command() {
         echo "[$(date '+%H:%M:%S')] COMMAND #$COMMAND_COUNT: $description"
         echo "Executing: $logged_cmd"
         echo "--------------------------------------------------------------------------------"
-    } | tee -a "$CURRENT_LOG_FILE"
+    } | command tee -a "$CURRENT_LOG_FILE"
 
     # Execute command and capture output
     local start_time
@@ -215,12 +215,12 @@ log_command() {
 
     # Run command with output capture, scrubbing secrets from output
     if command -v scrub_secrets >/dev/null 2>&1; then
-        if "$@" 2>&1 | scrub_secrets | tee -a "$CURRENT_LOG_FILE"; then
+        if "$@" 2>&1 | scrub_secrets | command tee -a "$CURRENT_LOG_FILE"; then
             exit_code=0
         else
             exit_code=$?
         fi
-    elif "$@" 2>&1 | tee -a "$CURRENT_LOG_FILE"; then
+    elif "$@" 2>&1 | command tee -a "$CURRENT_LOG_FILE"; then
         exit_code=0
     else
         exit_code=$?
@@ -234,7 +234,7 @@ log_command() {
     {
         echo "--------------------------------------------------------------------------------"
         echo "Exit code: $exit_code (Duration: ${duration}s)"
-    } | tee -a "$CURRENT_LOG_FILE"
+    } | command tee -a "$CURRENT_LOG_FILE"
 
     # Log to JSON if enabled
     if [ "${ENABLE_JSON_LOGGING:-false}" = "true" ] && command -v json_log_command >/dev/null 2>&1; then
@@ -250,18 +250,18 @@ log_command() {
         local warn_pattern="(WARNING|Warning|warning|WARN|Warn|warn)"
 
         # Append matching lines to error file
-        tail -n +"$start_line" "$CURRENT_LOG_FILE" | grep -E "$error_pattern" >> "$CURRENT_ERROR_FILE" 2>/dev/null || true
-        tail -n +"$start_line" "$CURRENT_LOG_FILE" | grep -E "$warn_pattern" >> "$CURRENT_ERROR_FILE" 2>/dev/null || true
+        command tail -n +"$start_line" "$CURRENT_LOG_FILE" | command grep -E "$error_pattern" >> "$CURRENT_ERROR_FILE" 2>/dev/null || true
+        command tail -n +"$start_line" "$CURRENT_LOG_FILE" | command grep -E "$warn_pattern" >> "$CURRENT_ERROR_FILE" 2>/dev/null || true
 
         # Count new errors and warnings
         local new_errors
         new_errors=$(_count_patterns_since "$CURRENT_LOG_FILE" "$start_line" "$error_pattern")
-        new_errors=$(echo "$new_errors" | tr -d '[:space:]')
+        new_errors=$(echo "$new_errors" | command tr -d '[:space:]')
         ERROR_COUNT=$((ERROR_COUNT + ${new_errors:-0}))
 
         local new_warnings
         new_warnings=$(_count_patterns_since "$CURRENT_LOG_FILE" "$start_line" "$warn_pattern")
-        new_warnings=$(echo "$new_warnings" | tr -d '[:space:]')
+        new_warnings=$(echo "$new_warnings" | command tr -d '[:space:]')
         WARNING_COUNT=$((WARNING_COUNT + ${new_warnings:-0}))
     fi
 
@@ -303,7 +303,7 @@ log_feature_end() {
 
         if [ -s "$CURRENT_ERROR_FILE" ]; then
             echo "--- First 10 Errors/Warnings ---"
-            head -10 "$CURRENT_ERROR_FILE"
+            command head -10 "$CURRENT_ERROR_FILE"
             echo ""
             echo "Full error log: $CURRENT_ERROR_FILE"
         else
@@ -313,7 +313,7 @@ log_feature_end() {
         echo ""
         echo "End Time: $(date '+%Y-%m-%d %H:%M:%S')"
         echo "================================================================================"
-    } | tee "$CURRENT_SUMMARY_FILE"
+    } | command tee "$CURRENT_SUMMARY_FILE"
 
     # Append summary to main log
     echo "" >> "$CURRENT_LOG_FILE"
@@ -367,7 +367,7 @@ log_message() {
     if [ -n "$CURRENT_LOG_FILE" ]; then
         {
             echo "[$(date '+%H:%M:%S')] $message"
-        } | tee -a "$CURRENT_LOG_FILE"
+        } | command tee -a "$CURRENT_LOG_FILE"
     else
         # Logging not initialized yet, just print to stdout
         echo "[$(date '+%H:%M:%S')] $message"
@@ -416,7 +416,7 @@ log_debug() {
     if [ -n "$CURRENT_LOG_FILE" ]; then
         {
             echo "[$(date '+%H:%M:%S')] DEBUG: $message"
-        } | tee -a "$CURRENT_LOG_FILE"
+        } | command tee -a "$CURRENT_LOG_FILE"
     else
         # Logging not initialized yet, just print to stdout
         echo "[$(date '+%H:%M:%S')] DEBUG: $message"
@@ -443,7 +443,7 @@ log_error() {
     if [ -n "$CURRENT_LOG_FILE" ] && [ -n "$CURRENT_ERROR_FILE" ]; then
         {
             echo "[$(date '+%H:%M:%S')] ERROR: $message"
-        } | tee -a "$CURRENT_LOG_FILE" >> "$CURRENT_ERROR_FILE"
+        } | command tee -a "$CURRENT_LOG_FILE" >> "$CURRENT_ERROR_FILE"
     else
         # Logging not initialized yet, just print to stderr
         echo "[$(date '+%H:%M:%S')] ERROR: $message" >&2
@@ -482,7 +482,7 @@ log_warning() {
     if [ -n "$CURRENT_LOG_FILE" ] && [ -n "$CURRENT_ERROR_FILE" ]; then
         {
             echo "[$(date '+%H:%M:%S')] WARNING: $message"
-        } | tee -a "$CURRENT_LOG_FILE" >> "$CURRENT_ERROR_FILE"
+        } | command tee -a "$CURRENT_LOG_FILE" >> "$CURRENT_ERROR_FILE"
     else
         # Logging not initialized yet, just print to stderr
         echo "[$(date '+%H:%M:%S')] WARNING: $message" >&2
@@ -665,10 +665,10 @@ log_feature_summary() {
         fi
 
         echo ""
-        echo "Run 'check-build-logs.sh $(echo "$feature" | tr '[:upper:]' '[:lower:]')' to review installation logs"
+        echo "Run 'check-build-logs.sh $(echo "$feature" | command tr '[:upper:]' '[:lower:]')' to review installation logs"
         echo "================================================================================"
         echo ""
-    } | tee -a "$CURRENT_LOG_FILE"
+    } | command tee -a "$CURRENT_LOG_FILE"
 }
 
 export -f log_feature_start

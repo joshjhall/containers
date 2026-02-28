@@ -66,12 +66,12 @@ cv_info() {
 }
 
 cv_error() {
-    echo -e "${CV_RED}✗${CV_NC} $*" | tee -a "$CV_ERRORS_FILE" >&2
+    echo -e "${CV_RED}✗${CV_NC} $*" | command tee -a "$CV_ERRORS_FILE" >&2
     CV_ERROR_COUNT=$((CV_ERROR_COUNT + 1))
 }
 
 cv_warning() {
-    echo -e "${CV_YELLOW}⚠${CV_NC} $*" | tee -a "$CV_WARNINGS_FILE" >&2
+    echo -e "${CV_YELLOW}⚠${CV_NC} $*" | command tee -a "$CV_WARNINGS_FILE" >&2
     CV_WARNING_COUNT=$((CV_WARNING_COUNT + 1))
 }
 

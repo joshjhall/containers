@@ -66,22 +66,22 @@ test_node_major_version_extraction() {
     # Test major version only
     NODE_VERSION="22"
     local major_version
-    major_version=$(echo "${NODE_VERSION}" | cut -d. -f1)
+    major_version=$(echo "${NODE_VERSION}" | command cut -d. -f1)
     assert_equals "22" "$major_version" "Major version extracted from '22'"
 
     # Test specific version
     NODE_VERSION="22.10.0"
-    major_version=$(echo "${NODE_VERSION}" | cut -d. -f1)
+    major_version=$(echo "${NODE_VERSION}" | command cut -d. -f1)
     assert_equals "22" "$major_version" "Major version extracted from '22.10.0'"
 
     # Test version with two parts
     NODE_VERSION="20.5"
-    major_version=$(echo "${NODE_VERSION}" | cut -d. -f1)
+    major_version=$(echo "${NODE_VERSION}" | command cut -d. -f1)
     assert_equals "20" "$major_version" "Major version extracted from '20.5'"
 
     # Test version comparison
     NODE_VERSION="18.19.1"
-    major_version=$(echo "${NODE_VERSION}" | cut -d. -f1)
+    major_version=$(echo "${NODE_VERSION}" | command cut -d. -f1)
     if [ "$major_version" -ge 18 ]; then
         assert_true true "Version 18.19.1 meets minimum requirement"
     else

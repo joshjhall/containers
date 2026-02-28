@@ -43,18 +43,18 @@ validate_version() {
     fi
 
     # Check for basic version format (should contain numbers)
-    if ! echo "$version" | grep -qE '[0-9]'; then
+    if ! echo "$version" | command grep -qE '[0-9]'; then
         return 1
     fi
 
     # Check for common version patterns
-    if echo "$version" | grep -qE '^[0-9]+(\.([0-9]+|[xX]))*([+-].*)?$|^[0-9]{4}-[0-9]{2}-[0-9]{2}'; then
+    if echo "$version" | command grep -qE '^[0-9]+(\.([0-9]+|[xX]))*([+-].*)?$|^[0-9]{4}-[0-9]{2}-[0-9]{2}'; then
         return 0
     fi
 
     # For some specific version formats that don't match the above
     # but are still valid (like some Java versions)
-    if echo "$version" | grep -qE '^[0-9]+[._][0-9]+'; then
+    if echo "$version" | command grep -qE '^[0-9]+[._][0-9]+'; then
         return 0
     fi
 

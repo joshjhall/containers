@@ -56,7 +56,7 @@ OUTPUT_JSON=false
 # ============================================================================
 
 show_help() {
-    head -n 30 "$0" | grep '^#' | command sed 's/^# \?//'
+    command head -n 30 "$0" | command grep '^#' | command sed 's/^# \?//'
 }
 
 error() {
@@ -75,7 +75,7 @@ usage_error() {
 bytes_to_human() {
     local bytes="$1"
     local mb
-    mb=$(awk "BEGIN {printf \"%.2f\", $bytes / 1024 / 1024}")
+    mb=$(command awk "BEGIN {printf \"%.2f\", $bytes / 1024 / 1024}")
     echo "${mb}MB"
 }
 
@@ -212,18 +212,18 @@ compare_against_baseline() {
 
     local baseline_size
     local baseline_time
-    baseline_size=$(echo "$baseline" | grep -o '"size_bytes": [0-9]*' | awk '{print $2}')
-    baseline_time=$(echo "$baseline" | grep -o '"build_time_seconds": [0-9]*' | awk '{print $2}')
+    baseline_size=$(echo "$baseline" | command grep -o '"size_bytes": [0-9]*' | command awk '{print $2}')
+    baseline_time=$(echo "$baseline" | command grep -o '"build_time_seconds": [0-9]*' | command awk '{print $2}')
 
     # Calculate differences
     local size_diff_bytes=$((current_size - baseline_size))
     local size_diff_mb
-    size_diff_mb=$(awk "BEGIN {printf \"%.2f\", $size_diff_bytes / 1024 / 1024}")
+    size_diff_mb=$(command awk "BEGIN {printf \"%.2f\", $size_diff_bytes / 1024 / 1024}")
 
     local time_diff_seconds=$((current_time - baseline_time))
     local time_diff_pct
     if [ "$baseline_time" -gt 0 ]; then
-        time_diff_pct=$(awk "BEGIN {printf \"%.2f\", ($time_diff_seconds * 100.0) / $baseline_time}")
+        time_diff_pct=$(command awk "BEGIN {printf \"%.2f\", ($time_diff_seconds * 100.0) / $baseline_time}")
     else
         time_diff_pct="0.00"
     fi

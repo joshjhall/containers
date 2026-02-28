@@ -18,5 +18,5 @@ fi
 # Show Android environment
 android-version 2>/dev/null || {
     echo "Android SDK: ${ANDROID_HOME:-/opt/android-sdk}"
-    sdkmanager --list_installed 2>/dev/null | head -10 || true
+    sdkmanager --list_installed 2>/dev/null | command head -10 || true
 }

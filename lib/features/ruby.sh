@@ -130,7 +130,7 @@ log_command "Setting cache directory ownership" \
 log_message "Downloading and building Ruby ${RUBY_VERSION}..."
 
 # Calculate Ruby major version for URL construction
-RUBY_MAJOR=$(echo "$RUBY_VERSION" | cut -d. -f1,2)
+RUBY_MAJOR=$(echo "$RUBY_VERSION" | command cut -d. -f1,2)
 
 BUILD_TEMP=$(create_secure_temp_dir)
 cd "$BUILD_TEMP"

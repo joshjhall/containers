@@ -38,7 +38,7 @@ fetch_maven_sha256() {
 
     # Fetch the .sha256 file
     local checksum
-    checksum=$(_curl_with_timeout -fsSL "$sha256_url" | awk '{print $1}' | head -1)
+    checksum=$(_curl_with_timeout -fsSL "$sha256_url" | command awk '{print $1}' | command head -1)
 
     if [ -n "$checksum" ] && [[ "$checksum" =~ ^[a-fA-F0-9]{64}$ ]]; then
         echo "$checksum"

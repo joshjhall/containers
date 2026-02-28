@@ -42,7 +42,7 @@ fi
 if [ "${ENABLE_JSON_LOGGING:-false}" = "true" ]; then
     if [ -z "${BUILD_CORRELATION_ID:-}" ]; then
         # Generate correlation ID: build-<timestamp>-<random>
-        BUILD_CORRELATION_ID="build-$(date +%s)-$(head /dev/urandom | tr -dc a-z0-9 | head -c 6)"
+        BUILD_CORRELATION_ID="build-$(date +%s)-$(command head /dev/urandom | command tr -dc a-z0-9 | command head -c 6)"
         export BUILD_CORRELATION_ID
     fi
 fi
@@ -98,7 +98,7 @@ json_log_init() {
 
     # Sanitize feature name for filename
     local safe_name
-    safe_name=$(echo "$feature_name" | tr '[:upper:]' '[:lower:]' | tr ' ' '-' | tr -cd '[:alnum:]-')
+    safe_name=$(echo "$feature_name" | command tr '[:upper:]' '[:lower:]' | command tr ' ' '-' | command tr -cd '[:alnum:]-')
 
     # Set JSON log file path
     CURRENT_JSON_LOG_FILE="$JSON_LOG_DIR/${safe_name}.jsonl"

@@ -345,7 +345,7 @@ generate_report() {
         fi
         echo "  Pass Rate:   ${pass_rate}%"
 
-    } | tee "$report_file"
+    } | command tee "$report_file"
 
     echo
     echo "Report saved to: $report_file"

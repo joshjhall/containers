@@ -127,9 +127,9 @@ if [ "$UPDATES_APPLIED" = true ] && [ "$DRY_RUN" = false ]; then
         echo -e "${BLUE}Updating Kubernetes tool checksums...${NC}"
 
         # Get current versions from Dockerfile
-        K9S_VER=$(grep "^ARG K9S_VERSION=" "$PROJECT_ROOT/Dockerfile" | cut -d= -f2 | tr -d '"')
-        KREW_VER=$(grep "^ARG KREW_VERSION=" "$PROJECT_ROOT/Dockerfile" | cut -d= -f2 | tr -d '"')
-        HELM_VER=$(grep "^ARG HELM_VERSION=" "$PROJECT_ROOT/Dockerfile" | cut -d= -f2 | tr -d '"')
+        K9S_VER=$(command grep "^ARG K9S_VERSION=" "$PROJECT_ROOT/Dockerfile" | command cut -d= -f2 | command tr -d '"')
+        KREW_VER=$(command grep "^ARG KREW_VERSION=" "$PROJECT_ROOT/Dockerfile" | command cut -d= -f2 | command tr -d '"')
+        HELM_VER=$(command grep "^ARG HELM_VERSION=" "$PROJECT_ROOT/Dockerfile" | command cut -d= -f2 | command tr -d '"')
 
         if [ -n "$K9S_VER" ] && [ -n "$KREW_VER" ] && [ -n "$HELM_VER" ]; then
             if "$BIN_DIR/lib/update-versions/kubernetes-checksums.sh" "$K9S_VER" "$KREW_VER" "$HELM_VER"; then

@@ -86,7 +86,7 @@ if [[ "$JAVA_VERSION" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
 fi
 
 # Extract major version for package name (apt uses major version)
-JAVA_MAJOR=$(echo "$JAVA_VERSION" | cut -d. -f1)
+JAVA_MAJOR=$(echo "$JAVA_VERSION" | command cut -d. -f1)
 
 # Note: Java is installed via Eclipse Temurin apt packages
 # Verification is handled by:
@@ -123,7 +123,7 @@ log_message "Adding Adoptium GPG key"
 retry_with_backoff wget -qO - https://packages.adoptium.net/artifactory/api/gpg/key/public | gpg --dearmor -o /usr/share/keyrings/adoptium.gpg
 
 log_command "Adding Adoptium repository" \
-    bash -c 'echo "deb [signed-by=/usr/share/keyrings/adoptium.gpg] https://packages.adoptium.net/artifactory/deb $(awk -F= '\''/^VERSION_CODENAME/{print$2}'\'' /etc/os-release) main" > /etc/apt/sources.list.d/adoptium.list'
+    bash -c 'echo "deb [signed-by=/usr/share/keyrings/adoptium.gpg] https://packages.adoptium.net/artifactory/deb $(command awk -F= '\''/^VERSION_CODENAME/{print$2}'\'' /etc/os-release) main" > /etc/apt/sources.list.d/adoptium.list'
 
 # Update package lists with Adoptium repository
 apt_update

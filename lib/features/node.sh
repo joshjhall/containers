@@ -75,7 +75,7 @@ fi
 log_feature_start "Node.js" "${NODE_VERSION}"
 
 # Extract major version for EOL check
-NODE_MAJOR_VERSION=$(echo "${NODE_VERSION}" | cut -d. -f1)
+NODE_MAJOR_VERSION=$(echo "${NODE_VERSION}" | command cut -d. -f1)
 
 # Ensure Node.js version is 18 or higher (16 EOL was April 2024)
 if [ "$NODE_MAJOR_VERSION" -lt 18 ]; then

@@ -308,7 +308,7 @@ cv_validate_compliance() {
 
     echo ""
     echo "================================================================"
-    echo "  Compliance Validation: $(echo "$mode" | tr '[:lower:]' '[:upper:]')"
+    echo "  Compliance Validation: $(echo "$mode" | command tr '[:lower:]' '[:upper:]')"
     echo "================================================================"
     echo ""
 
@@ -342,7 +342,7 @@ cv_validate_compliance() {
     echo "================================================================"
     echo "  Compliance Summary"
     echo "================================================================"
-    echo "  Framework: $(echo "$mode" | tr '[:lower:]' '[:upper:]')"
+    echo "  Framework: $(echo "$mode" | command tr '[:lower:]' '[:upper:]')"
     echo "  Total Checks: $CV_COMPLIANCE_CHECKS"
     echo -e "  ${CV_GREEN}Passed: $CV_COMPLIANCE_PASSED${CV_NC}"
 

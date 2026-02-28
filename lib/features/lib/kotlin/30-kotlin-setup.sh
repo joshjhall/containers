@@ -13,7 +13,7 @@ if [ -f ${WORKING_DIR}/build.gradle.kts ]; then
         echo ""
         echo "Gradle wrapper available - use './gradlew' for consistent builds"
     fi
-elif [ -f ${WORKING_DIR}/pom.xml ] && grep -q "kotlin" ${WORKING_DIR}/pom.xml 2>/dev/null; then
+elif [ -f ${WORKING_DIR}/pom.xml ] && command grep -q "kotlin" ${WORKING_DIR}/pom.xml 2>/dev/null; then
     echo "=== Kotlin Maven Project Detected ==="
     echo "Kotlin project with Maven found. Common commands:"
     echo "  mvn compile         - Compile project"

@@ -67,7 +67,7 @@ add_to_system_path() {
     # Use 'command grep' to bypass any aliases (e.g., grep='rg' from dev-tools)
     if [ -f "$environment_file" ] && command grep -q "^PATH=" "$environment_file"; then
         # Extract existing PATH
-        existing_path=$(command grep "^PATH=" "$environment_file" | cut -d'"' -f2)
+        existing_path=$(command grep "^PATH=" "$environment_file" | command cut -d'"' -f2)
 
         # Remove the PATH line from the file
         log_command "Removing existing PATH from /etc/environment" \

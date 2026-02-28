@@ -78,7 +78,7 @@ test_rmarkdown_structure() {
 
     if cp "$TEMPLATE_DIR/analysis/analysis.Rmd.tmpl" "$tff_temp_dir/analysis.Rmd"; then
         # Note: Using single backticks in grep pattern for R code chunk
-        if command grep -q '{r setup' "$tff_temp_dir/analysis.Rmd" && grep -q "## Introduction" "$tff_temp_dir/analysis.Rmd"; then
+        if command grep -q '{r setup' "$tff_temp_dir/analysis.Rmd" && command grep -q "## Introduction" "$tff_temp_dir/analysis.Rmd"; then
             assert_true true "R Markdown template has valid structure"
         else
             assert_true false "R Markdown template missing required elements"

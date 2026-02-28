@@ -105,8 +105,8 @@ if [[ "$GO_VERSION" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
 fi
 
 # Extract major.minor version for comparison
-GO_MAJOR=$(echo "$GO_VERSION" | cut -d. -f1)
-GO_MINOR=$(echo "$GO_VERSION" | cut -d. -f2)
+GO_MAJOR=$(echo "$GO_VERSION" | command cut -d. -f1)
+GO_MINOR=$(echo "$GO_VERSION" | command cut -d. -f2)
 
 # Start logging
 log_feature_start "Golang" "${GO_VERSION}"

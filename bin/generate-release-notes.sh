@@ -21,14 +21,14 @@ fi
 
 # Extract the section for this version
 # Look for ## [VERSION] and capture until next ## or end of file
-awk -v version="$VERSION" '
+command awk -v version="$VERSION" '
     /^## \['"$VERSION"'\]/ { found=1; next }
     found && /^## \[/ { exit }
     found { print }
 ' "$CHANGELOG" | command sed '1{/^$/d}' | command sed -e :a -e '/^\n*$/{$d;N;ba' -e '}'
 
 # If no content found, provide default message
-if [ "${PIPESTATUS[0]}" -ne 0 ] || [ -z "$(awk -v version="$VERSION" '/^## \['"$VERSION"'\]/ { found=1; next } found && /^## \[/ { exit } found { print }' "$CHANGELOG")" ]; then
+if [ "${PIPESTATUS[0]}" -ne 0 ] || [ -z "$(command awk -v version="$VERSION" '/^## \['"$VERSION"'\]/ { found=1; next } found && /^## \[/ { exit } found { print }' "$CHANGELOG")" ]; then
     command cat <<EOF
 ## Release v$VERSION
 

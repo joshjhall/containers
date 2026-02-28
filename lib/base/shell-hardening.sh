@@ -126,7 +126,7 @@ harden_service_users() {
     for user in "${SERVICE_USERS[@]}"; do
         if id "$user" &>/dev/null; then
             # Get current shell
-            current_shell=$(getent passwd "$user" | cut -d: -f7)
+            current_shell=$(getent passwd "$user" | command cut -d: -f7)
 
             # Skip if already nologin
             if [[ "$current_shell" == */nologin ]] || [[ "$current_shell" == */false ]]; then
@@ -151,7 +151,7 @@ verify_hardening() {
     # Check /etc/shells
     if [ "$RESTRICT_SHELLS" = "true" ]; then
         local shell_count
-        shell_count=$(grep -c "^/" /etc/shells 2>/dev/null || echo 0)
+        shell_count=$(command grep -c "^/" /etc/shells 2>/dev/null || echo 0)
         if [ "$shell_count" -gt 2 ]; then
             log_warning "More than 2 shells in /etc/shells: $shell_count"
             issues=$((issues + 1))
@@ -162,7 +162,7 @@ verify_hardening() {
     if [ "$PRODUCTION_MODE" = "true" ]; then
         for user in "${SERVICE_USERS[@]}"; do
             if id "$user" &>/dev/null; then
-                current_shell=$(getent passwd "$user" | cut -d: -f7)
+                current_shell=$(getent passwd "$user" | command cut -d: -f7)
                 if [[ "$current_shell" != */nologin ]] && [[ "$current_shell" != */false ]]; then
                     log_warning "Service user $user has shell: $current_shell"
                     issues=$((issues + 1))

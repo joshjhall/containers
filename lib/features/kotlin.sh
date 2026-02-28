@@ -95,7 +95,7 @@ if [ ! -f "/usr/lib/jvm/default-java/bin/java" ] && ! command -v java &>/dev/nul
     exit 1
 fi
 
-JAVA_VERSION_OUTPUT=$(java -version 2>&1 | head -n 1)
+JAVA_VERSION_OUTPUT=$(java -version 2>&1 | command head -n 1)
 log_message "Found Java: $JAVA_VERSION_OUTPUT"
 
 # ============================================================================

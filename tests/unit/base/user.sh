@@ -39,7 +39,7 @@ test_default_parameters() {
 # Test: UID/GID conflict detection logic
 test_uid_conflict_detection() {
     # Test the awk command for finding free UIDs
-    local free_uid_cmd='awk -F: '\''$3>=1000 && $3<65534 {print $3}'\'' /etc/passwd | sort -n | awk '\''BEGIN{for(i=1;i<=NR;i++) uids[i]=0} {uids[$1]=1} END{for(i=1000;i<65534;i++) if(!uids[i]) {print i; exit}}'\'''
+    local free_uid_cmd='awk -F: '\''$3>=1000 && $3<65534 {print $3}'\'' /etc/passwd | command sort -n | command awk '\''BEGIN{for(i=1;i<=NR;i++) uids[i]=0} {uids[$1]=1} END{for(i=1000;i<65534;i++) if(!uids[i]) {print i; exit}}'\'''
 
     # This should return a number (we can't test exact value as it depends on system)
     local result
@@ -55,7 +55,7 @@ test_uid_conflict_detection() {
 # Test: GID conflict detection logic
 test_gid_conflict_detection() {
     # Test the awk command for finding free GIDs
-    local free_gid_cmd='awk -F: '\''$3>=1000 && $3<65534 {print $3}'\'' /etc/group | sort -n | awk '\''BEGIN{for(i=1;i<=NR;i++) gids[i]=0} {gids[$1]=1} END{for(i=1000;i<65534;i++) if(!gids[i]) {print i; exit}}'\'''
+    local free_gid_cmd='awk -F: '\''$3>=1000 && $3<65534 {print $3}'\'' /etc/group | command sort -n | command awk '\''BEGIN{for(i=1;i<=NR;i++) gids[i]=0} {gids[$1]=1} END{for(i=1000;i<65534;i++) if(!gids[i]) {print i; exit}}'\'''
 
     # This should return a number
     local result

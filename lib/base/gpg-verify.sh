@@ -69,7 +69,7 @@ import_gpg_keys() {
         fi
 
         local key_count
-        key_count=$(gpg --list-keys 2>/dev/null | grep -c "^pub" || echo "0")
+        key_count=$(gpg --list-keys 2>/dev/null | command grep -c "^pub" || echo "0")
         log_message "Using keyring with ${key_count} GPG keys for ${language}"
         return 0
     fi
@@ -153,14 +153,14 @@ verify_gpg_signature() {
     # Verify the signature
     log_message "Verifying GPG signature for $(basename "$file")..."
 
-    if gpg --verify "$signature_file" "$file" 2>&1 | tee /tmp/gpg-verify-output.txt; then
+    if gpg --verify "$signature_file" "$file" 2>&1 | command tee /tmp/gpg-verify-output.txt; then
         # Check if verification was successful
         if grep -q "Good signature" /tmp/gpg-verify-output.txt; then
             log_message "GPG signature verified successfully"
 
             # Extract signer information
             local signer
-            signer=$(grep "Good signature from" /tmp/gpg-verify-output.txt | head -1)
+            signer=$(command grep "Good signature from" /tmp/gpg-verify-output.txt | command head -1)
             if [ -n "$signer" ]; then
                 log_message "  Signer: ${signer#*Good signature from }"
             fi
@@ -251,7 +251,7 @@ verify_file_against_shasums() {
 
     log_message "Extracting checksum for ${filename}..."
     local expected_checksum
-    expected_checksum=$(grep "${filename}" "$shasums_file" | awk '{print $1}')
+    expected_checksum=$(command grep "${filename}" "$shasums_file" | command awk '{print $1}')
 
     if [ -z "$expected_checksum" ]; then
         log_error "File ${filename} not found in $(basename "$shasums_file")"
@@ -262,7 +262,7 @@ verify_file_against_shasums() {
     log_message "Expected checksum: ${expected_checksum}"
 
     local actual_checksum
-    actual_checksum=$(sha256sum "$file" | awk '{print $1}')
+    actual_checksum=$(sha256sum "$file" | command awk '{print $1}')
     log_message "Actual checksum:   ${actual_checksum}"
 
     if [ "$actual_checksum" = "$expected_checksum" ]; then

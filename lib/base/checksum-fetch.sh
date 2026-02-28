@@ -53,7 +53,7 @@ _curl_with_timeout() {
 _is_partial_version() {
     local version="$1"
     local dot_count
-    dot_count=$(echo "$version" | grep -o '\.' | wc -l)
+    dot_count=$(echo "$version" | command grep -o '\.' | command wc -l)
     [ "$dot_count" -eq 1 ]
 }
 
@@ -101,9 +101,9 @@ fetch_github_checksums_txt() {
     # Fetch the checksums file and extract the line for our file
     local checksum
     checksum=$(_curl_with_retry_wrapper -fsSL "$checksums_url" | \
-        grep -F "$filename" | \
-        awk '{print $1}' | \
-        head -1)
+        command grep -F "$filename" | \
+        command awk '{print $1}' | \
+        command head -1)
 
     if [ -n "$checksum" ]; then
         echo "$checksum"
@@ -132,8 +132,8 @@ fetch_github_sha256_file() {
     # Fetch the .sha256 file and extract just the hash
     local checksum
     checksum=$(_curl_with_retry_wrapper -fsSL "$sha256_url" | \
-        awk '{print $1}' | \
-        head -1)
+        command awk '{print $1}' | \
+        command head -1)
 
     if [ -n "$checksum" ] && [[ "$checksum" =~ ^[a-fA-F0-9]{64}$ ]]; then
         echo "$checksum"
@@ -162,8 +162,8 @@ fetch_github_sha512_file() {
     # Fetch the .sha512 file and extract just the hash
     local checksum
     checksum=$(_curl_with_retry_wrapper -fsSL "$sha512_url" | \
-        awk '{print $1}' | \
-        head -1)
+        command awk '{print $1}' | \
+        command head -1)
 
     if [ -n "$checksum" ] && [[ "$checksum" =~ ^[a-fA-F0-9]{128}$ ]]; then
         echo "$checksum"
@@ -196,7 +196,7 @@ calculate_checksum_sha256() {
     local file_url="$1"
 
     local checksum
-    checksum=$(command curl --connect-timeout 10 --max-time 300 --retry 3 --retry-delay 2 --retry-all-errors -fsSL "$file_url" | sha256sum | awk '{print $1}')
+    checksum=$(command curl --connect-timeout 10 --max-time 300 --retry 3 --retry-delay 2 --retry-all-errors -fsSL "$file_url" | sha256sum | command awk '{print $1}')
 
     if [ -n "$checksum" ] && [[ "$checksum" =~ ^[a-fA-F0-9]{64}$ ]]; then
         echo "$checksum"

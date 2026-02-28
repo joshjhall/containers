@@ -74,7 +74,7 @@ HELM_VERSION="${HELM_VERSION:-3.19.0}"
 
 # Extract major.minor version from KUBECTL_VERSION for repository URL
 # This handles both "1.31" and "1.31.0" formats
-KUBECTL_MINOR_VERSION=$(echo "$KUBECTL_VERSION" | cut -d. -f1,2)
+KUBECTL_MINOR_VERSION=$(echo "$KUBECTL_VERSION" | command cut -d. -f1,2)
 
 # ============================================================================
 # Repository Configuration

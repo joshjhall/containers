@@ -93,7 +93,7 @@ if ! command -v kotlinc &>/dev/null; then
     exit 1
 fi
 
-KOTLIN_VERSION=$(kotlinc -version 2>&1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+KOTLIN_VERSION=$(kotlinc -version 2>&1 | command grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | command head -1)
 log_message "Found Kotlin: ${KOTLIN_VERSION}"
 
 # Check for Java installation

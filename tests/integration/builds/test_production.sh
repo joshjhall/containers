@@ -209,7 +209,7 @@ test_production_security() {
 
     # Verify user is non-root
     local uid
-    uid=$(docker run --rm "$image" id -u 2>/dev/null | tail -1)
+    uid=$(docker run --rm "$image" id -u 2>/dev/null | command tail -1)
     if [ "$uid" -eq 0 ]; then
         fail_test "Container should run as non-root user (uid: $uid)"
     fi

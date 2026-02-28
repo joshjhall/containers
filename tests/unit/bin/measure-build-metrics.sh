@@ -48,7 +48,7 @@ test_bytes_to_human() {
     bytes_to_human() {
         local bytes="$1"
         local mb
-        mb=$(awk "BEGIN {printf \"%.2f\", $bytes / 1024 / 1024}")
+        mb=$(command awk "BEGIN {printf \"%.2f\", $bytes / 1024 / 1024}")
         echo "${mb}MB"
     }
 
@@ -81,15 +81,15 @@ EOF
 
     # Verify JSON format
     local variant
-    variant=$(command grep -o '"variant": "[^"]*"' "$baseline_file" | cut -d'"' -f4)
+    variant=$(command grep -o '"variant": "[^"]*"' "$baseline_file" | command cut -d'"' -f4)
     assert_equals "$variant" "test-variant" "Variant name in JSON"
 
     local size
-    size=$(command grep -o '"size_bytes": [0-9]*' "$baseline_file" | awk '{print $2}')
+    size=$(command grep -o '"size_bytes": [0-9]*' "$baseline_file" | command awk '{print $2}')
     assert_equals "$size" "524288000" "Size in bytes in JSON"
 
     local time
-    time=$(command grep -o '"build_time_seconds": [0-9]*' "$baseline_file" | awk '{print $2}')
+    time=$(command grep -o '"build_time_seconds": [0-9]*' "$baseline_file" | command awk '{print $2}')
     assert_equals "$time" "120" "Build time in JSON"
 }
 
@@ -169,7 +169,7 @@ EOF
     local current_size=650000000  # +150MB
     local size_diff=$((current_size - baseline_size))
     local size_diff_mb
-    size_diff_mb=$(awk "BEGIN {printf \"%.2f\", $size_diff / 1024 / 1024}")
+    size_diff_mb=$(command awk "BEGIN {printf \"%.2f\", $size_diff / 1024 / 1024}")
 
     local threshold=100
 
@@ -187,7 +187,7 @@ test_regression_detection_size_acceptable() {
     local current_size=550000000  # +50MB (below 100MB threshold)
     local size_diff=$((current_size - baseline_size))
     local size_diff_mb
-    size_diff_mb=$(awk "BEGIN {printf \"%.2f\", $size_diff / 1024 / 1024}")
+    size_diff_mb=$(command awk "BEGIN {printf \"%.2f\", $size_diff / 1024 / 1024}")
 
     local threshold=100
 
@@ -206,7 +206,7 @@ test_regression_detection_time_increase() {
     local current_time=130
     local time_diff=$((current_time - baseline_time))
     local time_diff_pct
-    time_diff_pct=$(awk "BEGIN {printf \"%.2f\", ($time_diff * 100.0) / $baseline_time}")
+    time_diff_pct=$(command awk "BEGIN {printf \"%.2f\", ($time_diff * 100.0) / $baseline_time}")
 
     local threshold=20
 
@@ -225,7 +225,7 @@ test_regression_detection_time_acceptable() {
     local current_time=110
     local time_diff=$((current_time - baseline_time))
     local time_diff_pct
-    time_diff_pct=$(awk "BEGIN {printf \"%.2f\", ($time_diff * 100.0) / $baseline_time}")
+    time_diff_pct=$(command awk "BEGIN {printf \"%.2f\", ($time_diff * 100.0) / $baseline_time}")
 
     local threshold=20
 

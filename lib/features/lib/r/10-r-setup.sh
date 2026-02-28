@@ -16,7 +16,7 @@ done
 # Check for R project files
 if compgen -G "${WORKING_DIR}/*.Rproj" > /dev/null || [ -f "${WORKING_DIR}/.Rprofile" ]; then
     echo "=== R Project Detected ==="
-    echo "R $(R --version | head -n 1) is installed"
+    echo "R $(R --version | command head -n 1) is installed"
     echo "User library: ${R_LIBS_USER}"
     echo "Project-specific packages can be installed with: r-install('package-name')"
 fi

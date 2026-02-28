@@ -179,7 +179,7 @@ if [ "$(id -u)" -eq 0 ]; then
     RUNNING_AS_ROOT=true
     # Detect the non-root user in the container
     # The container should have a user with UID 1000 created during build
-    USERNAME=$(getent passwd 1000 | cut -d: -f1)
+    USERNAME=$(getent passwd 1000 | command cut -d: -f1)
     if [ -z "$USERNAME" ]; then
         echo "Error: No user with UID 1000 found in container"
         exit 1
@@ -492,7 +492,7 @@ if command -v bindfs >/dev/null 2>&1; then
                 if probe_mount_needs_fix "$mnt_target" "$mnt_fstype" "$BINDFS_ENABLED"; then
                     apply_bindfs_overlay "$mnt_target" && BINDFS_APPLIED=$((BINDFS_APPLIED + 1))
                 fi
-            done < <(findmnt -n -r -o TARGET,FSTYPE 2>/dev/null | grep -E '^/workspace(/| )' || true)
+            done < <(findmnt -n -r -o TARGET,FSTYPE 2>/dev/null | command grep -E '^/workspace(/| )' || true)
 
             if [ "$BINDFS_APPLIED" -gt 0 ]; then
                 echo "✓ Bindfs overlays applied ($BINDFS_APPLIED mount(s))"
@@ -634,7 +634,7 @@ fi
 QUOTED_CMD=""
 for arg in "$@"; do
     # Escape single quotes in the argument and wrap in single quotes
-    escaped_arg=$(printf '%s' "$arg" | sed "s/'/'\\\\''/g")
+    escaped_arg=$(printf '%s' "$arg" | command sed "s/'/'\\\\''/g")
     QUOTED_CMD="$QUOTED_CMD '${escaped_arg}'"
 done
 

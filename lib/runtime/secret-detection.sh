@@ -26,7 +26,7 @@ cv_detect_secrets() {
 
     # Check if variable name suggests it might contain a secret
     local var_lower
-    var_lower=$(echo "$var_name" | tr '[:upper:]' '[:lower:]')
+    var_lower=$(echo "$var_name" | command tr '[:upper:]' '[:lower:]')
 
     if [[ "$var_lower" =~ password|secret|token|apikey|api_key ]]; then
         # Check if value looks like a reference (e.g., ${SECRET} or /path/to/secret)

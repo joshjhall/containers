@@ -59,12 +59,12 @@ test_ruby_version_validation() {
 
     # Test major version extraction
     local major
-    major=$(echo "$version" | cut -d. -f1)
+    major=$(echo "$version" | command cut -d. -f1)
     assert_equals "3" "$major" "Major version extracted correctly"
 
     # Test minor version extraction
     local minor
-    minor=$(echo "$version" | cut -d. -f2)
+    minor=$(echo "$version" | command cut -d. -f2)
     assert_equals "4" "$minor" "Minor version extracted correctly"
 
     # Test version comparison

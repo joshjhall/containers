@@ -57,12 +57,12 @@ test_terraform_version_validation() {
 
     # Extract major version
     local major
-    major=$(echo "$version" | cut -d. -f1)
+    major=$(echo "$version" | command cut -d. -f1)
     assert_equals "1" "$major" "Major version extracted correctly"
 
     # Extract minor version
     local minor
-    minor=$(echo "$version" | cut -d. -f2)
+    minor=$(echo "$version" | command cut -d. -f2)
     assert_equals "10" "$minor" "Minor version extracted correctly"
 }
 

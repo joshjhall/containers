@@ -102,7 +102,7 @@ test_completion_size_validation() {
 
     local file="$TEST_TEMP_DIR/etc/bash_completion.d/test-tool"
     local size
-    size=$(wc -c < "$file")
+    size=$(command wc -c < "$file")
 
     # Check size is reasonable (less than 100KB)
     if [ "$size" -lt 100000 ]; then
@@ -193,7 +193,7 @@ EOF
     local result
     result=$(bash -c "
         source '$TEST_TEMP_DIR/etc/bash_completion.d/kubectl'
-        complete -p k kubectl 2>&1 | wc -l
+        complete -p k kubectl 2>&1 | command wc -l
     " 2>/dev/null || echo "0")
 
     if [ "$result" -eq 2 ]; then

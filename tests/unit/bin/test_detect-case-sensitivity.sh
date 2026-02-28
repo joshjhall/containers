@@ -149,7 +149,7 @@ test_cleanup_removes_test_files() {
 
     # Check that no .case-test files remain (using command find to avoid aliases)
     local test_files
-    test_files=$(command find "$TEST_DIR" -maxdepth 1 -name ".case-test-*" 2>/dev/null | wc -l)
+    test_files=$(command find "$TEST_DIR" -maxdepth 1 -name ".case-test-*" 2>/dev/null | command wc -l)
 
     assert_equals 0 "$test_files" "Test files should be cleaned up"
 }
@@ -169,7 +169,7 @@ test_cleanup_on_error() {
 
     # Check that no .case-test files remain (using command find to avoid aliases)
     local test_files
-    test_files=$(command find "$readonly_dir" -maxdepth 1 -name ".case-test-*" 2>/dev/null | wc -l)
+    test_files=$(command find "$readonly_dir" -maxdepth 1 -name ".case-test-*" 2>/dev/null | command wc -l)
 
     assert_equals 0 "$test_files" "Test files should be cleaned up even on error"
 }

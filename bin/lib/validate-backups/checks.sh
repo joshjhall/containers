@@ -45,7 +45,7 @@ verify_checksums() {
         log_warning "No checksum file found, generating checksums..."
 
         if command -v sha256sum &> /dev/null; then
-            find "$backup_dir" -type f ! -name "*.sha256" ! -name "*.md5" -exec sha256sum {} \; > "${backup_dir}/checksums.sha256"
+            command find "$backup_dir" -type f ! -name "*.sha256" ! -name "*.md5" -exec sha256sum {} \; > "${backup_dir}/checksums.sha256"
             checksum_file="${backup_dir}/checksums.sha256"
             log_success "Generated SHA256 checksums"
         else
@@ -88,13 +88,13 @@ verify_rpo() {
 
     if [[ "$BACKUP_PATH" == s3://* ]]; then
         # AWS S3
-        newest_backup=$(aws s3 ls "$BACKUP_PATH" --recursive | sort | tail -1 | awk '{print $1" "$2}')
+        newest_backup=$(aws s3 ls "$BACKUP_PATH" --recursive | command sort | command tail -1 | command awk '{print $1" "$2}')
     elif [[ "$BACKUP_PATH" == gs://* ]]; then
         # Google Cloud Storage
-        newest_backup=$(gsutil ls -l "$BACKUP_PATH/**" | sort -k2 | tail -2 | head -1 | awk '{print $2}')
+        newest_backup=$(gsutil ls -l "$BACKUP_PATH/**" | command sort -k2 | command tail -2 | command head -1 | command awk '{print $2}')
     else
         # Local filesystem
-        newest_backup=$(find "$BACKUP_PATH" -type f -printf '%T@ %Tc\n' | sort -n | tail -1 | cut -d' ' -f2-)
+        newest_backup=$(command find "$BACKUP_PATH" -type f -printf '%T@ %Tc\n' | command sort -n | command tail -1 | command cut -d' ' -f2-)
     fi
 
     if [ -z "$newest_backup" ]; then
@@ -198,14 +198,14 @@ verify_completeness() {
     local total_size=0
 
     if [[ "$BACKUP_PATH" == s3://* ]]; then
-        file_count=$(aws s3 ls "$BACKUP_PATH" --recursive | wc -l)
-        total_size=$(aws s3 ls "$BACKUP_PATH" --recursive --summarize | grep "Total Size" | awk '{print $3}')
+        file_count=$(aws s3 ls "$BACKUP_PATH" --recursive | command wc -l)
+        total_size=$(aws s3 ls "$BACKUP_PATH" --recursive --summarize | command grep "Total Size" | command awk '{print $3}')
     elif [[ "$BACKUP_PATH" == gs://* ]]; then
-        file_count=$(gsutil ls -r "$BACKUP_PATH/**" | wc -l)
-        total_size=$(gsutil du -s "$BACKUP_PATH" | awk '{print $1}')
+        file_count=$(gsutil ls -r "$BACKUP_PATH/**" | command wc -l)
+        total_size=$(gsutil du -s "$BACKUP_PATH" | command awk '{print $1}')
     else
-        file_count=$(find "$BACKUP_PATH" -type f | wc -l)
-        total_size=$(du -sb "$BACKUP_PATH" | awk '{print $1}')
+        file_count=$(command find "$BACKUP_PATH" -type f | command wc -l)
+        total_size=$(du -sb "$BACKUP_PATH" | command awk '{print $1}')
     fi
 
     if [ "$file_count" -eq 0 ]; then

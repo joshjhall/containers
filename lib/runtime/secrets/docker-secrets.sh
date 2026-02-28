@@ -44,7 +44,7 @@ docker_secrets_available() {
     # Check if secrets directory exists and is readable
     if [ -d "$secrets_dir" ] && [ -r "$secrets_dir" ]; then
         # Check if directory has any files (excluding . and ..)
-        if [ -n "$(ls -A "$secrets_dir" 2>/dev/null)" ]; then
+        if [ -n "$(command ls -A "$secrets_dir" 2>/dev/null)" ]; then
             return 0
         fi
     fi
@@ -183,7 +183,7 @@ docker_secrets_health_check() {
 
     if docker_secrets_available; then
         local count
-        count=$(command find "$secrets_dir" -maxdepth 1 -type f 2>/dev/null | wc -l)
+        count=$(command find "$secrets_dir" -maxdepth 1 -type f 2>/dev/null | command wc -l)
         log_info "Docker secrets available ($count secrets found)"
         return 0
     else

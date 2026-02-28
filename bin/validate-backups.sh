@@ -63,7 +63,7 @@ WARNINGS=0
 # ============================================================================
 
 usage() {
-    sed -n '1,/^$/p' "$0" | tail -n +2 | sed 's/^# //' | sed 's/^#//'
+    command sed -n '1,/^$/p' "$0" | command tail -n +2 | command sed 's/^# //' | command sed 's/^#//'
     exit 0
 }
 
@@ -190,7 +190,7 @@ output_json() {
         status="fail"
     fi
 
-    cat << EOF
+    command cat << EOF
 {
   "timestamp": "$(date -Iseconds)",
   "backup_path": "$BACKUP_PATH",

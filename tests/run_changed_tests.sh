@@ -77,7 +77,7 @@ map_to_test() {
         lib/features/lib/*)
             # Extract the subdirectory name (e.g. "claude" from lib/features/lib/claude/foo)
             local subdir
-            subdir=$(echo "$file" | sed 's|lib/features/lib/\([^/]*\)/.*|\1|')
+            subdir=$(echo "$file" | command sed 's|lib/features/lib/\([^/]*\)/.*|\1|')
             # First try exact basename match
             local base
             base=$(basename "$file")
@@ -173,7 +173,7 @@ if [ -z "$CHANGED_FILES" ]; then
 fi
 
 echo -e "${BLUE}Changed files:${NC}"
-echo "$CHANGED_FILES" | sort -u | while IFS= read -r f; do
+echo "$CHANGED_FILES" | command sort -u | while IFS= read -r f; do
     echo "  $f"
 done
 echo ""
@@ -193,7 +193,7 @@ while IFS= read -r file; do
     fi
 
     TEST_FILES_MAP["$result"]=1
-done < <(echo "$CHANGED_FILES" | sort -u)
+done < <(echo "$CHANGED_FILES" | command sort -u)
 
 # If foundational file changed, fall back to full suite
 if [ "$RUN_ALL" = true ]; then

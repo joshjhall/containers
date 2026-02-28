@@ -110,7 +110,7 @@ audit_init() {
 # Escape a string for safe inclusion in a JSON value.
 # Handles: backslash, double-quote, tab, newline, carriage return.
 _json_escape() {
-    printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g; s/\t/\\t/g; s/\n/\\n/g; s/\r/\\r/g'
+    printf '%s' "$1" | command sed 's/\\/\\\\/g; s/"/\\"/g; s/\t/\\t/g; s/\n/\\n/g; s/\r/\\r/g'
 }
 
 # ============================================================================
@@ -206,11 +206,11 @@ build_json_entry() {
     if [ -n "$extra_data" ] && [ "$extra_data" != "{}" ]; then
         # Validate structure: must start with { and end with }
         local trimmed
-        trimmed=$(echo "$extra_data" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+        trimmed=$(echo "$extra_data" | command sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
         if [[ "$trimmed" == "{"*"}" ]]; then
             # Strip outer braces and append
             local extra_content
-            extra_content=$(echo "$trimmed" | sed 's/^{//; s/}$//')
+            extra_content=$(echo "$trimmed" | command sed 's/^{//; s/}$//')
             if [ -n "$extra_content" ]; then
                 json+=",$extra_content"
             fi

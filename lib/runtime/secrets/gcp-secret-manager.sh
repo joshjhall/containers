@@ -62,9 +62,9 @@ gcp_authenticate() {
 
     # Otherwise, verify that some authentication is available
     log_info "Checking GCP authentication"
-    if gcloud auth list --filter=status:ACTIVE --format="value(account)" 2>/dev/null | head -n 1 | grep -q .; then
+    if gcloud auth list --filter=status:ACTIVE --format="value(account)" 2>/dev/null | command head -n 1 | command grep -q .; then
         local account
-        account=$(gcloud auth list --filter=status:ACTIVE --format="value(account)" | head -n 1)
+        account=$(gcloud auth list --filter=status:ACTIVE --format="value(account)" | command head -n 1)
         log_info "Using active GCP account: $account"
         return 0
     else

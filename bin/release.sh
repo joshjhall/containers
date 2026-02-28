@@ -56,7 +56,7 @@ usage() {
 
 # Function to validate version format (semver-strict for release)
 validate_version() {
-    if ! echo "$1" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+    if ! echo "$1" | command grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
         echo -e "${RED}Error: Invalid version format. Expected: X.Y.Z${NC}"
         exit 1
     fi
@@ -190,7 +190,7 @@ generate_changelog() {
         local tmp_file
         tmp_file=$(mktemp)
         # Remove trailing blank lines while preserving final newline
-        sed -e :a -e '/^\n*$/{$d;N;ba' -e '}' CHANGELOG.md > "$tmp_file" && mv "$tmp_file" CHANGELOG.md
+        command sed -e :a -e '/^\n*$/{$d;N;ba' -e '}' CHANGELOG.md > "$tmp_file" && mv "$tmp_file" CHANGELOG.md
         echo -e "${GREEN}✓${NC} Generated CHANGELOG.md"
         return 0
     else

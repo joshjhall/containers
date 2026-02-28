@@ -42,12 +42,12 @@ audit_rotate() {
 
         # Calculate checksum for integrity
         local checksum
-        checksum=$(sha256sum "${rotated_file}.gz" | cut -d' ' -f1)
+        checksum=$(sha256sum "${rotated_file}.gz" | command cut -d' ' -f1)
         echo "$checksum  ${rotated_file}.gz" >> "${AUDIT_LOG_FILE}.checksums"
 
         # Remove old logs beyond keep count
         # shellcheck disable=SC2012
-        command ls -t "${AUDIT_LOG_FILE}".*.gz 2>/dev/null | tail -n +$((keep_count + 1)) | xargs -r rm -f
+        command ls -t "${AUDIT_LOG_FILE}".*.gz 2>/dev/null | command tail -n +$((keep_count + 1)) | xargs -r rm -f
 
         audit_log "system" "info" "Audit log rotated" "{\"rotated_to\":\"${rotated_file}.gz\",\"checksum\":\"$checksum\"}"
     fi
@@ -65,12 +65,12 @@ audit_verify_integrity() {
     local failed=0
     while IFS= read -r line; do
         local expected_checksum file_path
-        expected_checksum=$(echo "$line" | cut -d' ' -f1)
-        file_path=$(echo "$line" | cut -d' ' -f3)
+        expected_checksum=$(echo "$line" | command cut -d' ' -f1)
+        file_path=$(echo "$line" | command cut -d' ' -f3)
 
         if [ -f "$file_path" ]; then
             local actual_checksum
-            actual_checksum=$(sha256sum "$file_path" | cut -d' ' -f1)
+            actual_checksum=$(sha256sum "$file_path" | command cut -d' ' -f1)
             if [ "$expected_checksum" != "$actual_checksum" ]; then
                 echo "INTEGRITY VIOLATION: $file_path"
                 audit_log "security" "critical" "Audit log integrity violation detected" "{\"file\":\"$file_path\"}"

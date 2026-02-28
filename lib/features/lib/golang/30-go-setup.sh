@@ -26,9 +26,9 @@ fi
 # Check for Go projects (only if WORKING_DIR is set)
 if [ -n "${WORKING_DIR:-}" ] && [ -f "${WORKING_DIR}/go.mod" ]; then
     echo "=== Go Project Detected ==="
-    echo "Go $(go version | awk '{print $3}') is installed"
+    echo "Go $(go version | command awk '{print $3}') is installed"
     echo "GOPATH: ${GOPATH}"
-    echo "Module: $(head -1 "${WORKING_DIR}/go.mod" | awk '{print $2}')"
+    echo "Module: $(command head -1 "${WORKING_DIR}/go.mod" | command awk '{print $2}')"
 
     cd "${WORKING_DIR}" || return
 

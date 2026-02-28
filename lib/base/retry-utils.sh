@@ -173,7 +173,7 @@ retry_github_api() {
         fi
 
         # Check if this is a rate limit error
-        if echo "$output" | grep -qi "rate limit\|403"; then
+        if echo "$output" | command grep -qi "rate limit\|403"; then
             echo "⚠ GitHub API rate limit detected on attempt $attempt/$max_attempts" >&2
             if [ -z "${GITHUB_TOKEN:-}" ]; then
                 echo "  Consider setting GITHUB_TOKEN to increase rate limits:" >&2

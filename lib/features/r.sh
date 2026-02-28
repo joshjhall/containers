@@ -47,7 +47,7 @@ validate_r_version "$R_VERSION" || {
 }
 
 # Extract major version for repository (R 4.x uses cran40)
-R_VERSION_MAJOR=$(echo "${R_VERSION}" | cut -d. -f1)
+R_VERSION_MAJOR=$(echo "${R_VERSION}" | command cut -d. -f1)
 R_VERSION_SHORT="${R_VERSION_MAJOR}0"
 
 # Start logging
@@ -129,7 +129,7 @@ apt_update
 
 # Install R with version pinning
 log_message "Installing R packages..."
-if apt-cache show r-base-core | grep -q "Version: ${R_VERSION}"; then
+if apt-cache show r-base-core | command grep -q "Version: ${R_VERSION}"; then
     # Install specific version if available
     log_message "Installing R version ${R_VERSION}..."
     if ! apt_install \
@@ -327,10 +327,10 @@ install -m 755 /tmp/build-scripts/features/lib/r/test-r.sh \
 log_message "Verifying R installation..."
 
 log_command "Checking R version" \
-    /usr/local/bin/R --version | head -n 1 || log_warning "R symlink not found"
+    /usr/local/bin/R --version | command head -n 1 || log_warning "R symlink not found"
 
 log_command "Checking Rscript version" \
-    /usr/local/bin/Rscript --version 2>&1 | head -n 1 || log_warning "Rscript symlink not found"
+    /usr/local/bin/Rscript --version 2>&1 | command head -n 1 || log_warning "Rscript symlink not found"
 
 # ============================================================================
 # Final ownership fix

@@ -35,7 +35,7 @@ NC='\033[0m'
 # =============================================================================
 
 usage() {
-    cat << EOF
+    command cat << EOF
 Usage: $0 <command> [options]
 
 Commands:
@@ -84,12 +84,12 @@ get_expected_versions() {
     fi
 
     # Extract ARG definitions with versions
-    grep -E "^ARG.*_VERSION=" "$dockerfile" | \
-        sed 's/ARG //' | \
-        sed 's/=/ /' | \
+    command grep -E "^ARG.*_VERSION=" "$dockerfile" | \
+        command sed 's/ARG //' | \
+        command sed 's/=/ /' | \
         while read -r name value; do
             # Remove quotes if present
-            value=$(echo "$value" | tr -d '"' | tr -d "'")
+            value=$(echo "$value" | command tr -d '"' | command tr -d "'")
             echo "$name $value"
         done
 }
@@ -116,17 +116,17 @@ generate_inventory() {
     # Language runtimes
     local python_version node_version go_version rust_version ruby_version java_version
 
-    python_version=$(docker run --rm "$container" python3 --version 2>/dev/null | awk '{print $2}' || echo "not installed")
-    node_version=$(docker run --rm "$container" node --version 2>/dev/null | tr -d 'v' || echo "not installed")
-    go_version=$(docker run --rm "$container" go version 2>/dev/null | awk '{print $3}' | tr -d 'go' || echo "not installed")
-    rust_version=$(docker run --rm "$container" rustc --version 2>/dev/null | awk '{print $2}' || echo "not installed")
-    ruby_version=$(docker run --rm "$container" ruby --version 2>/dev/null | awk '{print $2}' || echo "not installed")
-    java_version=$(docker run --rm "$container" java -version 2>&1 | head -1 | awk -F'"' '{print $2}' || echo "not installed")
+    python_version=$(docker run --rm "$container" python3 --version 2>/dev/null | command awk '{print $2}' || echo "not installed")
+    node_version=$(docker run --rm "$container" node --version 2>/dev/null | command tr -d 'v' || echo "not installed")
+    go_version=$(docker run --rm "$container" go version 2>/dev/null | command awk '{print $3}' | command tr -d 'go' || echo "not installed")
+    rust_version=$(docker run --rm "$container" rustc --version 2>/dev/null | command awk '{print $2}' || echo "not installed")
+    ruby_version=$(docker run --rm "$container" ruby --version 2>/dev/null | command awk '{print $2}' || echo "not installed")
+    java_version=$(docker run --rm "$container" java -version 2>&1 | command head -1 | command awk -F'"' '{print $2}' || echo "not installed")
 
     # Generate output based on format
     case "$format" in
         json)
-            cat << EOF
+            command cat << EOF
 {
   "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
   "image": "$1",
@@ -171,7 +171,7 @@ EOF
             printf "  %-15s %s\n" "Java:" "$java_version"
             echo ""
             echo "System Packages (first 20):"
-            echo "$dpkg_list" | head -20 | while read -r pkg ver; do
+            echo "$dpkg_list" | command head -20 | while read -r pkg ver; do
                 printf "  %-30s %s\n" "$pkg" "$ver"
             done
             ;;
@@ -209,8 +209,8 @@ detect_drift() {
     echo "Runtime Differences:"
     for runtime in python node go rust ruby java; do
         local v1 v2
-        v1=$(echo "$inv1" | grep "^$runtime," | cut -d',' -f2)
-        v2=$(echo "$inv2" | grep "^$runtime," | cut -d',' -f2)
+        v1=$(echo "$inv1" | command grep "^$runtime," | command cut -d',' -f2)
+        v2=$(echo "$inv2" | command grep "^$runtime," | command cut -d',' -f2)
 
         if [[ "$v1" != "$v2" ]]; then
             has_drift=true
@@ -286,7 +286,7 @@ show_expected() {
     get_expected_versions | while read -r name value; do
         # Clean up name for display
         local display_name
-        display_name=$(echo "$name" | sed 's/_VERSION$//' | tr '[:upper:]' '[:lower:]')
+        display_name=$(echo "$name" | command sed 's/_VERSION$//' | command tr '[:upper:]' '[:lower:]')
         printf "  %-20s %s\n" "$display_name:" "$value"
     done
 }

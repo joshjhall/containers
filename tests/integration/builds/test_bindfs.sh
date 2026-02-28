@@ -49,7 +49,7 @@ test_bindfs_build() {
 test_bindfs_version() {
     local image="${IMAGE_TO_TEST:-test-bindfs-$$}"
 
-    assert_command_in_container "$image" "bindfs --version 2>&1 | head -1" "bindfs"
+    assert_command_in_container "$image" "bindfs --version 2>&1 | command head -1" "bindfs"
 }
 
 # Test: /etc/fuse.conf has user_allow_other

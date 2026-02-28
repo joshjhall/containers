@@ -45,7 +45,7 @@ validate_provider_name() {
 
     # Trim leading/trailing whitespace
     local name
-    name="$(echo "$raw_name" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+    name="$(echo "$raw_name" | command sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
 
     # Reject empty names
     if [ -z "$name" ]; then

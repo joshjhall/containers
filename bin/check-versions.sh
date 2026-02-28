@@ -56,7 +56,7 @@ extract_version_from_line() {
     local ver
 
     # Extract the value after the = sign, removing quotes
-    ver=$(echo "$line" | cut -d= -f2 | tr -d '"')
+    ver=$(echo "$line" | command cut -d= -f2 | command tr -d '"')
 
     # If it's a parameter expansion like ${VAR:-default}, extract the default value
     if [[ "$ver" =~ \$\{[^:]*:-([^}]+)\} ]]; then
@@ -90,7 +90,7 @@ fi
 # Cache helper functions
 get_cache_file() {
     local url="$1"
-    echo "$CACHE_DIR/$(echo "$url" | sha256sum | cut -d' ' -f1)"
+    echo "$CACHE_DIR/$(echo "$url" | sha256sum | command cut -d' ' -f1)"
 }
 
 is_cache_valid() {
@@ -186,7 +186,7 @@ set_latest() {
 _add_dockerfile_version() {
     local arg_name="$1" tool_name="$2"
     local ver
-    ver=$(grep "^ARG ${arg_name}=" "$PROJECT_ROOT/Dockerfile" 2>/dev/null | cut -d= -f2 | tr -d '"')
+    ver=$(command grep "^ARG ${arg_name}=" "$PROJECT_ROOT/Dockerfile" 2>/dev/null | command cut -d= -f2 | command tr -d '"')
     [ -n "$ver" ] && add_tool "$tool_name" "$ver" "Dockerfile"
 }
 
@@ -197,7 +197,7 @@ _add_feature_version() {
     local full_path="$PROJECT_ROOT/lib/features/$file"
     [ -f "$full_path" ] || return 0
     local ver
-    ver=$(extract_version_from_line "$(grep "^${var_name}=" "$full_path" 2>/dev/null | head -1)")
+    ver=$(extract_version_from_line "$(command grep "^${var_name}=" "$full_path" 2>/dev/null | command head -1)")
     [ -n "$ver" ] && add_tool "$tool_name" "$ver" "$source_label"
 }
 
@@ -226,7 +226,7 @@ extract_all_versions() {
 
     # Helm: skip "latest" sentinel
     local ver
-    ver=$(grep "^ARG HELM_VERSION=" "$PROJECT_ROOT/Dockerfile" 2>/dev/null | cut -d= -f2 | tr -d '"')
+    ver=$(command grep "^ARG HELM_VERSION=" "$PROJECT_ROOT/Dockerfile" 2>/dev/null | command cut -d= -f2 | command tr -d '"')
     [ -n "$ver" ] && [ "$ver" != "latest" ] && add_tool "Helm" "$ver" "Dockerfile"
 
     # Terraform tools from Dockerfile
@@ -241,10 +241,10 @@ extract_all_versions() {
 
     # Python tools (use non-anchored grep for POETRY_VERSION/UV_VERSION)
     if [ -f "$PROJECT_ROOT/lib/features/python.sh" ]; then
-        ver=$(extract_version_from_line "$(grep "POETRY_VERSION=" "$PROJECT_ROOT/lib/features/python.sh" 2>/dev/null | head -1)")
+        ver=$(extract_version_from_line "$(command grep "POETRY_VERSION=" "$PROJECT_ROOT/lib/features/python.sh" 2>/dev/null | command head -1)")
         [ -n "$ver" ] && add_tool "Poetry" "$ver" "python.sh"
 
-        ver=$(extract_version_from_line "$(grep "UV_VERSION=" "$PROJECT_ROOT/lib/features/python.sh" 2>/dev/null | head -1)")
+        ver=$(extract_version_from_line "$(command grep "UV_VERSION=" "$PROJECT_ROOT/lib/features/python.sh" 2>/dev/null | command head -1)")
         [ -n "$ver" ] && add_tool "uv" "$ver" "python.sh"
     fi
 
@@ -271,7 +271,7 @@ extract_all_versions() {
 
     # jdtls from install-jdtls.sh (nested path, use inline)
     if [ -f "$PROJECT_ROOT/lib/features/lib/install-jdtls.sh" ]; then
-        ver=$(extract_version_from_line "$(grep "^JDTLS_VERSION=" "$PROJECT_ROOT/lib/features/lib/install-jdtls.sh" 2>/dev/null)")
+        ver=$(extract_version_from_line "$(command grep "^JDTLS_VERSION=" "$PROJECT_ROOT/lib/features/lib/install-jdtls.sh" 2>/dev/null)")
         [ -n "$ver" ] && add_tool "jdtls" "$ver" "install-jdtls.sh"
     fi
 
@@ -284,16 +284,16 @@ extract_all_versions() {
 
     # Base system tools from setup.sh (different base path, use inline)
     if [ -f "$PROJECT_ROOT/lib/base/setup.sh" ]; then
-        ver=$(extract_version_from_line "$(grep "^ZOXIDE_VERSION=" "$PROJECT_ROOT/lib/base/setup.sh" 2>/dev/null)")
+        ver=$(extract_version_from_line "$(command grep "^ZOXIDE_VERSION=" "$PROJECT_ROOT/lib/base/setup.sh" 2>/dev/null)")
         [ -n "$ver" ] && add_tool "zoxide" "$ver" "setup.sh"
 
-        ver=$(extract_version_from_line "$(grep "^COSIGN_VERSION=" "$PROJECT_ROOT/lib/base/setup.sh" 2>/dev/null)")
+        ver=$(extract_version_from_line "$(command grep "^COSIGN_VERSION=" "$PROJECT_ROOT/lib/base/setup.sh" 2>/dev/null)")
         [ -n "$ver" ] && add_tool "cosign" "$ver" "setup.sh"
     fi
 
     # GitHub Actions from workflows
     if [ -f "$PROJECT_ROOT/.github/workflows/ci.yml" ]; then
-        ver=$(grep "uses: aquasecurity/trivy-action@" "$PROJECT_ROOT/.github/workflows/ci.yml" 2>/dev/null | head -1 | command sed 's/.*@//' | tr -d ' ')
+        ver=$(command grep "uses: aquasecurity/trivy-action@" "$PROJECT_ROOT/.github/workflows/ci.yml" 2>/dev/null | command head -1 | command sed 's/.*@//' | command tr -d ' ')
         [ -n "$ver" ] && [ "$ver" != "master" ] && add_tool "trivy-action" "$ver" "ci.yml"
     fi
 }
@@ -327,7 +327,7 @@ main() {
             Node.js) check_nodejs ;;
             Go)
                 progress_msg "  Go..."
-                set_latest "Go" "$(fetch_url "https://go.dev/VERSION?m=text" | head -1 | command sed 's/^go//')"
+                set_latest "Go" "$(fetch_url "https://go.dev/VERSION?m=text" | command head -1 | command sed 's/^go//')"
                 progress_done
                 ;;
             Rust) check_rust ;;

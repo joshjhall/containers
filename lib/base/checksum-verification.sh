@@ -171,7 +171,7 @@ verify_pinned_checksum() {
     log_message "   ✓ Found pinned checksum in git-tracked database"
 
     local actual
-    actual=$(sha256sum "$file" | awk '{print $1}')
+    actual=$(sha256sum "$file" | command awk '{print $1}')
 
     if [ "$actual" = "$expected" ]; then
         log_message "   ✅ TIER 2 VERIFICATION PASSED"
@@ -215,7 +215,7 @@ verify_published_checksum() {
             log_message "   Checking python.org FTP directory..."
             # Python publishes SHA256 checksums on FTP
             local sha256_url="https://www.python.org/ftp/python/${version}/Python-${version}.tgz.sha256"
-            expected=$(command curl -fsSL "$sha256_url" 2>/dev/null | awk '{print $1}' || echo "")
+            expected=$(command curl -fsSL "$sha256_url" 2>/dev/null | command awk '{print $1}' || echo "")
             ;;
         ruby)
             log_message "   Checking ruby-lang.org downloads page..."
@@ -229,7 +229,7 @@ verify_published_checksum() {
             log_message "   Checking nodejs.org SHASUMS256.txt..."
             local filename="node-v${version}-linux-x64.tar.xz"
             local shasums_url="https://nodejs.org/dist/v${version}/SHASUMS256.txt"
-            expected=$(command curl -fsSL "$shasums_url" 2>/dev/null | grep "$filename" | awk '{print $1}' || echo "")
+            expected=$(command curl -fsSL "$shasums_url" 2>/dev/null | command grep "$filename" | command awk '{print $1}' || echo "")
             ;;
         *)
             log_message "   ⚠️  No published checksum method for $name"
@@ -245,7 +245,7 @@ verify_published_checksum() {
     log_message "   ✓ Retrieved checksum from official publisher"
 
     local actual
-    actual=$(sha256sum "$file" | awk '{print $1}')
+    actual=$(sha256sum "$file" | command awk '{print $1}')
 
     if [ "$actual" = "$expected" ]; then
         log_message "   ✅ TIER 3 VERIFICATION PASSED"
@@ -295,7 +295,7 @@ verify_calculated_checksum() {
     log_message ""
 
     local checksum
-    checksum=$(sha256sum "$file" | awk '{print $1}')
+    checksum=$(sha256sum "$file" | command awk '{print $1}')
 
     log_message "   Calculated SHA256: $checksum"
     log_message "   ⚠️  TIER 4: File integrity recorded (no external verification)"

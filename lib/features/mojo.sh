@@ -378,7 +378,7 @@ log_command "Setting final permissions on cache directories" \
 # Verify wrapper scripts are executable by all
 for script in /usr/local/bin/mojo /usr/local/bin/mojo-lsp-server /usr/local/bin/test-mojo /usr/local/bin/pixi; do
     if [ -f "$script" ] || [ -L "$script" ]; then
-        log_message "Checking $script permissions: $(ls -la $script)"
+        log_message "Checking $script permissions: $(command ls -la $script)"
     fi
 done
 

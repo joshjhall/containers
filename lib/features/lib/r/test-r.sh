@@ -1,7 +1,7 @@
 #!/bin/bash
 echo "=== R Installation Status ==="
 if command -v R &> /dev/null; then
-    R --version | head -n 1
+    R --version | command head -n 1
     echo "R binary: $(which R)"
     echo "R home: $(R RHOME)"
     echo "R library paths:"

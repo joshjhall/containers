@@ -126,7 +126,7 @@ update_checksum() {
         nodejs)
             local filename="node-v${version}-linux-x64.tar.xz"
             local shasums_url="https://nodejs.org/dist/v${version}/SHASUMS256.txt"
-            checksum=$(command curl -fsSL "$shasums_url" 2>/dev/null | grep "$filename" | awk '{print $1}' || echo "")
+            checksum=$(command curl -fsSL "$shasums_url" 2>/dev/null | command grep "$filename" | command awk '{print $1}' || echo "")
             url="https://nodejs.org/dist/v${version}/${filename}"
             ;;
         golang)
@@ -143,14 +143,14 @@ update_checksum() {
             else
                 # Fallback: parse downloads page
                 local major_minor
-                major_minor=$(echo "$version" | cut -d. -f1-2)
+                major_minor=$(echo "$version" | command cut -d. -f1-2)
                 checksum=$(command curl -fsSL "https://www.ruby-lang.org/en/downloads/" 2>/dev/null | \
-                    grep -A2 ">Ruby ${version}" | \
-                    grep -oP 'sha256: \K[a-f0-9]{64}' | \
-                    head -1 || echo "")
+                    command grep -A2 ">Ruby ${version}" | \
+                    command grep -oP 'sha256: \K[a-f0-9]{64}' | \
+                    command head -1 || echo "")
             fi
             local major_minor
-            major_minor=$(echo "$version" | cut -d. -f1-2)
+            major_minor=$(echo "$version" | command cut -d. -f1-2)
             url="https://cache.ruby-lang.org/pub/ruby/${major_minor}/ruby-${version}.tar.gz"
             ;;
         *)

@@ -32,7 +32,7 @@ __claude_auth_prompt_check() {
     local credentials_file="$HOME/.claude/.credentials.json"
     local config_file="$HOME/.claude.json"
 
-    if [ -f "$credentials_file" ] && grep -q '"claudeAiOauth"' "$credentials_file" 2>/dev/null; then
+    if [ -f "$credentials_file" ] && command grep -q '"claudeAiOauth"' "$credentials_file" 2>/dev/null; then
         echo ""
         echo "[claude] OAuth authentication detected! Running setup in background..."
         (claude-setup && touch "$marker_file") &>/dev/null &
@@ -40,7 +40,7 @@ __claude_auth_prompt_check() {
         return 0
     fi
 
-    if [ -f "$config_file" ] && grep -q '"oauthAccount"' "$config_file" 2>/dev/null; then
+    if [ -f "$config_file" ] && command grep -q '"oauthAccount"' "$config_file" 2>/dev/null; then
         echo ""
         echo "[claude] OAuth authentication detected! Running setup in background..."
         (claude-setup && touch "$marker_file") &>/dev/null &

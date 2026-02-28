@@ -65,7 +65,7 @@ test_auto_auth_skips_hardcoded_mcps() {
     # not for hardcoded MCPs like figma-desktop.
     # Verify the lines around figma-desktop don't reference inject_mcp_auth_header
     local figma_block
-    figma_block=$(command grep -A5 'figma-desktop' "$CLAUDE_SETUP_CMD" | head -6)
+    figma_block=$(command grep -A5 'figma-desktop' "$CLAUDE_SETUP_CMD" | command head -6)
     if echo "$figma_block" | command grep -q 'inject_mcp_auth_header'; then
         fail_test "figma-desktop should not have auto-injected auth headers"
     else

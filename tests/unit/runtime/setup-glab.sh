@@ -258,10 +258,10 @@ test_auth_no_token_leak() {
 
     # Verify the order: save comes before disable, which comes before auth
     local save_line disable_line auth_line restore_line
-    save_line=$(command grep -n '_xt=$(set +o | command grep xtrace)' "$SETUP_GLAB_SCRIPT" | head -1 | cut -d: -f1)
-    disable_line=$(command grep -n '{ set +x; } 2>/dev/null' "$SETUP_GLAB_SCRIPT" | head -1 | cut -d: -f1)
-    auth_line=$(command grep -n 'glab auth login' "$SETUP_GLAB_SCRIPT" | head -1 | cut -d: -f1)
-    restore_line=$(command grep -n 'eval "$_xt"' "$SETUP_GLAB_SCRIPT" | head -1 | cut -d: -f1)
+    save_line=$(command grep -n '_xt=$(set +o | command grep xtrace)' "$SETUP_GLAB_SCRIPT" | command head -1 | command cut -d: -f1)
+    disable_line=$(command grep -n '{ set +x; } 2>/dev/null' "$SETUP_GLAB_SCRIPT" | command head -1 | command cut -d: -f1)
+    auth_line=$(command grep -n 'glab auth login' "$SETUP_GLAB_SCRIPT" | command head -1 | command cut -d: -f1)
+    restore_line=$(command grep -n 'eval "$_xt"' "$SETUP_GLAB_SCRIPT" | command head -1 | command cut -d: -f1)
 
     # Verify correct ordering
     assert_true [ "$save_line" -lt "$disable_line" ] \

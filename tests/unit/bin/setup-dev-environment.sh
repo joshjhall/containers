@@ -39,7 +39,7 @@ test_precommit_has_shellcheck() {
 test_precommit_has_unit_tests() {
     local config_file="$PROJECT_ROOT/.pre-commit-config.yaml"
 
-    if command grep -q "unit-tests" "$config_file" && grep -q "pre-push" "$config_file"; then
+    if command grep -q "unit-tests" "$config_file" && command grep -q "pre-push" "$config_file"; then
         assert_true true "Pre-commit config includes unit tests on pre-push"
     else
         assert_true false "Pre-commit config missing unit tests on pre-push"
@@ -103,7 +103,7 @@ test_script_installs_prepush() {
 test_script_has_colors() {
     local script="$PROJECT_ROOT/bin/setup-dev-environment.sh"
 
-    if command grep -q "RED=" "$script" && grep -q "GREEN=" "$script"; then
+    if command grep -q "RED=" "$script" && command grep -q "GREEN=" "$script"; then
         assert_true true "Setup script defines color variables"
     else
         assert_true false "Setup script missing color variables"

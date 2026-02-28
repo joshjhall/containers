@@ -97,7 +97,7 @@ op_connect_load_secrets() {
         fi
 
         vault_id=$(echo "$vaults" | jq -r --arg name "$OP_VAULT" \
-            '.[] | select(.name == $name) | .id' | head -n 1)
+            '.[] | select(.name == $name) | .id' | command head -n 1)
 
         if [ -z "$vault_id" ]; then
             log_error "Vault '$OP_VAULT' not found"
@@ -228,7 +228,7 @@ op_cli_load_secrets() {
 
             # Extract field name from reference (op://vault/item/field)
             local field_name
-            field_name=$(echo "$ref" | awk -F'/' '{print $NF}')
+            field_name=$(echo "$ref" | command awk -F'/' '{print $NF}')
             field_name="${field_name// /_}"
             field_name="${field_name//[^a-zA-Z0-9_]/}"
             field_name="${field_name^^}"
