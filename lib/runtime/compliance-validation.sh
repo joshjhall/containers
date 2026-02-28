@@ -94,25 +94,25 @@ cv_check_audit_logging() {
     local requirement="$2"
 
     # Check if audit logging is enabled
-    if [ "${AUDIT_LOG_ENABLED:-false}" = "true" ] || [ -n "${AUDIT_LOG_PATH:-}" ]; then
+    if [ "${ENABLE_AUDIT_LOGGING:-false}" = "true" ] || [ -n "${AUDIT_LOG_FILE:-}" ]; then
         cv_compliance_check "Audit Logging" "pass" "$framework" "$requirement" \
             "Audit logging is enabled"
 
         # Check audit log destination
-        if [ -n "${AUDIT_LOG_PATH:-}" ]; then
-            if [ -d "$(dirname "${AUDIT_LOG_PATH}")" ]; then
+        if [ -n "${AUDIT_LOG_FILE:-}" ]; then
+            if [ -d "$(dirname "${AUDIT_LOG_FILE}")" ]; then
                 cv_compliance_check "Audit Log Path" "pass" "$framework" "$requirement" \
-                    "Audit log path is valid: $AUDIT_LOG_PATH"
+                    "Audit log path is valid: $AUDIT_LOG_FILE"
             else
                 cv_compliance_check "Audit Log Path" "fail" "$framework" "$requirement" \
                     "Audit log directory does not exist" \
-                    "Create directory: $(dirname "${AUDIT_LOG_PATH}")"
+                    "Create directory: $(dirname "${AUDIT_LOG_FILE}")"
             fi
         fi
     else
         cv_compliance_check "Audit Logging" "fail" "$framework" "$requirement" \
             "Audit logging is not enabled" \
-            "Set AUDIT_LOG_ENABLED=true and AUDIT_LOG_PATH=/path/to/audit.log"
+            "Set ENABLE_AUDIT_LOGGING=true and AUDIT_LOG_FILE=/path/to/audit.log"
     fi
 
     # Check log retention

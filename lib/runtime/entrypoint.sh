@@ -47,6 +47,12 @@ export ENTRYPOINT_ALREADY_RAN=true
 cleanup_on_exit() {
     local exit_code=$?
 
+    # Log shutdown event if audit logging was initialized
+    if declare -f audit_log >/dev/null 2>&1; then
+        audit_log "system" "info" "Container shutting down" \
+            "{\"stage\":\"shutdown\",\"exit_code\":$exit_code}" 2>/dev/null || true
+    fi
+
     echo "=== Container shutting down (exit code: $exit_code) ==="
 
     # Flush metrics if they exist
@@ -115,6 +121,17 @@ if [ -f "/opt/container-runtime/validate-config.sh" ]; then
         echo "Configuration validation failed. Container startup aborted."
         exit 1
     }
+fi
+
+# ============================================================================
+# Audit Logging Initialization
+# ============================================================================
+# Source the audit logger if available. The script auto-initializes on source
+# (creates log dir/file, writes init event) and has an internal
+# ENABLE_AUDIT_LOGGING != true guard, so sourcing when disabled is safe.
+if [ -f "/opt/container-runtime/audit-logger.sh" ]; then
+    # shellcheck source=/dev/null
+    source "/opt/container-runtime/audit-logger.sh"
 fi
 
 # ============================================================================
@@ -385,6 +402,12 @@ configure_docker_socket() {
 }
 configure_docker_socket "$@"
 
+# Audit: docker socket configuration complete
+if declare -f audit_log >/dev/null 2>&1; then
+    audit_log "configuration" "info" "Docker socket configuration complete" \
+        "{\"stage\":\"startup\",\"docker_socket_exists\":$([ -S /var/run/docker.sock ] && echo true || echo false)}" 2>/dev/null || true
+fi
+
 # ============================================================================
 # Cache Directory Permissions Fix
 # ============================================================================
@@ -565,6 +588,12 @@ if [ -d "$STARTUP_DIR" ]; then
     run_startup_scripts "$STARTUP_DIR" "startup"
 fi
 
+# Audit: startup scripts complete
+if declare -f audit_log >/dev/null 2>&1; then
+    audit_log "system" "info" "Startup scripts complete" \
+        "{\"stage\":\"startup\",\"first_run\":$([ -f "$FIRST_RUN_MARKER" ] && echo false || echo true)}" 2>/dev/null || true
+fi
+
 # ============================================================================
 # Startup Time Metrics
 # ============================================================================
@@ -593,6 +622,12 @@ echo "✓ Container initialized in ${STARTUP_DURATION}s"
 # ============================================================================
 # Execute the main command
 echo "=== Starting main process ==="
+
+# Audit: about to exec main process
+if declare -f audit_log >/dev/null 2>&1; then
+    audit_log "process" "info" "Executing main process" \
+        "{\"stage\":\"exec\",\"command\":\"$1\",\"startup_duration\":$STARTUP_DURATION}" 2>/dev/null || true
+fi
 
 # Build a properly quoted command string to handle arguments with spaces
 # Used by su -l, sg docker, and newgrp docker paths to prevent command injection

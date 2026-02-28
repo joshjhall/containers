@@ -428,5 +428,257 @@ run_test test_audit_process_uses_escape "audit_process uses _json_escape"
 run_test test_audit_compliance_uses_escape "audit_compliance uses _json_escape"
 run_test test_build_json_entry_validates_extra_data "build_json_entry validates extra_data structure"
 
+# ============================================================================
+# Batch 8: Functional Tests (source and execute audit-logger.sh)
+# ============================================================================
+
+# Source audit-logger.sh ONCE at global scope so that associative arrays
+# (LOG_LEVELS, EVENT_CATEGORIES) created via declare -A are not scoped to a
+# function and lost when the function returns.
+FUNC_TEST_BASE_DIR="$RESULTS_DIR/audit-logger-func-init-$$"
+mkdir -p "$FUNC_TEST_BASE_DIR"
+export AUDIT_INITIALIZED=false
+export ENABLE_AUDIT_LOGGING="true"
+export AUDIT_LOG_FILE="$FUNC_TEST_BASE_DIR/init-audit.log"
+export AUDIT_LOG_FORMAT="json"
+export AUDIT_LOG_LEVEL="info"
+export AUDIT_INCLUDE_PID="true"
+export AUDIT_INCLUDE_HOST="true"
+export AUDIT_STDOUT_COPY="false"
+# shellcheck source=/dev/null
+source "$SOURCE_FILE"
+rm -rf "$FUNC_TEST_BASE_DIR"
+
+# Helper: reset audit state for each functional test (does NOT re-source)
+_reset_audit_logger() {
+    export AUDIT_INITIALIZED=false
+    export ENABLE_AUDIT_LOGGING="true"
+    export TEST_TEMP_DIR="$RESULTS_DIR/audit-logger-func-test-$$-$RANDOM"
+    mkdir -p "$TEST_TEMP_DIR"
+    export AUDIT_LOG_FILE="$TEST_TEMP_DIR/test-audit.log"
+    export AUDIT_LOG_FORMAT="json"
+    export AUDIT_LOG_LEVEL="info"
+    export AUDIT_INCLUDE_PID="true"
+    export AUDIT_INCLUDE_HOST="true"
+    export AUDIT_STDOUT_COPY="false"
+    audit_init
+}
+
+# Cleanup helper for functional tests
+_cleanup_func_test() {
+    if [ -n "${TEST_TEMP_DIR:-}" ] && [ -d "$TEST_TEMP_DIR" ]; then
+        rm -rf "$TEST_TEMP_DIR"
+    fi
+}
+
+# Test: audit_init creates log directory and file
+test_func_audit_init_creates_files() {
+    _reset_audit_logger
+    if [ -f "$AUDIT_LOG_FILE" ]; then
+        pass_test "audit_init creates log directory and file"
+    else
+        fail_test "audit_init did not create log file at $AUDIT_LOG_FILE"
+    fi
+    _cleanup_func_test
+}
+
+# Test: audit_init writes initialization event
+test_func_audit_init_writes_event() {
+    _reset_audit_logger
+    if grep -q "Audit logging initialized" "$AUDIT_LOG_FILE" 2>/dev/null; then
+        pass_test "audit_init writes initialization event to log"
+    else
+        fail_test "audit_init did not write initialization event"
+    fi
+    _cleanup_func_test
+}
+
+# Test: audit_log writes JSON to log file
+test_func_audit_log_writes_json() {
+    _reset_audit_logger
+    audit_log "system" "info" "Test event" '{"test_key":"test_value"}'
+    if grep -q '"test_key":"test_value"' "$AUDIT_LOG_FILE" 2>/dev/null; then
+        pass_test "audit_log writes JSON to log file"
+    else
+        fail_test "audit_log did not write expected JSON"
+    fi
+    _cleanup_func_test
+}
+
+# Test: audit_log respects log level threshold filtering
+test_func_audit_log_level_filter() {
+    _reset_audit_logger
+    export AUDIT_LOG_LEVEL="error"
+    audit_log "system" "info" "Should be filtered"
+    if grep -q "Should be filtered" "$AUDIT_LOG_FILE" 2>/dev/null; then
+        fail_test "audit_log did not filter below-threshold event"
+    else
+        pass_test "audit_log respects log level threshold filtering"
+    fi
+    _cleanup_func_test
+}
+
+# Test: audit_log is a no-op when ENABLE_AUDIT_LOGGING=false
+test_func_audit_log_disabled() {
+    export AUDIT_INITIALIZED=false
+    export ENABLE_AUDIT_LOGGING="false"
+    export TEST_TEMP_DIR="$RESULTS_DIR/audit-logger-func-test-disabled-$$"
+    mkdir -p "$TEST_TEMP_DIR"
+    export AUDIT_LOG_FILE="$TEST_TEMP_DIR/test-audit.log"
+    # Call audit_init (should be no-op when disabled)
+    audit_init
+    audit_log "system" "info" "Should not appear"
+    if [ -f "$AUDIT_LOG_FILE" ]; then
+        fail_test "audit_log should not create log file when disabled"
+    else
+        pass_test "audit_log is a no-op when ENABLE_AUDIT_LOGGING=false"
+    fi
+    _cleanup_func_test
+}
+
+# Test: audit_auth writes authentication event with correct fields
+test_func_audit_auth() {
+    _reset_audit_logger
+    audit_auth "login" "testuser" "success" '{}'
+    if grep -q '"action":"login"' "$AUDIT_LOG_FILE" && \
+       grep -q '"user":"testuser"' "$AUDIT_LOG_FILE" && \
+       grep -q '"result":"success"' "$AUDIT_LOG_FILE"; then
+        pass_test "audit_auth writes authentication event with correct fields"
+    else
+        fail_test "audit_auth missing expected fields"
+    fi
+    _cleanup_func_test
+}
+
+# Test: audit_config writes configuration event
+test_func_audit_config() {
+    _reset_audit_logger
+    audit_config "docker" "modified" "admin" "old" "new"
+    if grep -q '"component":"docker"' "$AUDIT_LOG_FILE" && \
+       grep -q '"change_type":"modified"' "$AUDIT_LOG_FILE"; then
+        pass_test "audit_config writes configuration event"
+    else
+        fail_test "audit_config missing expected fields"
+    fi
+    _cleanup_func_test
+}
+
+# Test: audit_security writes security event
+test_func_audit_security() {
+    _reset_audit_logger
+    audit_security "anomaly" "high" "Suspicious activity" '{}'
+    if grep -q '"event_type":"anomaly"' "$AUDIT_LOG_FILE" && \
+       grep -q '"severity":"high"' "$AUDIT_LOG_FILE"; then
+        pass_test "audit_security writes security event"
+    else
+        fail_test "audit_security missing expected fields"
+    fi
+    _cleanup_func_test
+}
+
+# Test: audit_process writes process event
+test_func_audit_process() {
+    _reset_audit_logger
+    audit_process "started" "test-proc" "1234" "0" "testuser"
+    if grep -q '"event_type":"started"' "$AUDIT_LOG_FILE" && \
+       grep -q '"process_name":"test-proc"' "$AUDIT_LOG_FILE"; then
+        pass_test "audit_process writes process event"
+    else
+        fail_test "audit_process missing expected fields"
+    fi
+    _cleanup_func_test
+}
+
+# Test: audit_compliance writes compliance event
+test_func_audit_compliance() {
+    _reset_audit_logger
+    audit_compliance "soc2" "CC7.2" "compliant" '{}'
+    if grep -q '"framework":"soc2"' "$AUDIT_LOG_FILE" && \
+       grep -q '"requirement":"CC7.2"' "$AUDIT_LOG_FILE" && \
+       grep -q '"status":"compliant"' "$AUDIT_LOG_FILE"; then
+        pass_test "audit_compliance writes compliance event"
+    else
+        fail_test "audit_compliance missing expected fields"
+    fi
+    _cleanup_func_test
+}
+
+# Test: JSON output contains required fields
+test_func_json_required_fields() {
+    _reset_audit_logger
+    audit_log "system" "info" "Field check" '{}'
+    local last_line
+    last_line=$(tail -1 "$AUDIT_LOG_FILE")
+    if echo "$last_line" | grep -q '"@timestamp"' && \
+       echo "$last_line" | grep -q '"event_id"' && \
+       echo "$last_line" | grep -q '"category"' && \
+       echo "$last_line" | grep -q '"level"' && \
+       echo "$last_line" | grep -q '"message"'; then
+        pass_test "JSON output contains required fields (@timestamp, event_id, etc.)"
+    else
+        fail_test "JSON output missing required fields"
+    fi
+    _cleanup_func_test
+}
+
+# Test: _json_escape escapes special characters
+test_func_json_escape() {
+    _reset_audit_logger
+    local escaped
+    escaped=$(_json_escape 'hello "world" with\backslash')
+    if echo "$escaped" | grep -q '\\"world\\"' && \
+       echo "$escaped" | grep -q '\\\\backslash'; then
+        pass_test "_json_escape escapes special characters"
+    else
+        fail_test "_json_escape did not properly escape special characters: $escaped"
+    fi
+    _cleanup_func_test
+}
+
+# Test: AUDIT_STDOUT_COPY=true outputs to stdout
+test_func_stdout_copy() {
+    _reset_audit_logger
+    export AUDIT_STDOUT_COPY="true"
+    local stdout_output
+    stdout_output=$(audit_log "system" "info" "Stdout test" '{}')
+    if echo "$stdout_output" | grep -q '"message":"Stdout test"'; then
+        pass_test "AUDIT_STDOUT_COPY=true outputs to stdout"
+    else
+        fail_test "AUDIT_STDOUT_COPY=true did not output to stdout"
+    fi
+    _cleanup_func_test
+}
+
+# Test: get_retention_policy returns correct values per framework
+test_func_get_retention_policy() {
+    _reset_audit_logger
+    local soc2_days hipaa_days fedramp_days
+    soc2_days=$(get_retention_policy "soc2")
+    hipaa_days=$(get_retention_policy "hipaa")
+    fedramp_days=$(get_retention_policy "fedramp")
+    if [ "$soc2_days" = "365" ] && [ "$hipaa_days" = "2190" ] && [ "$fedramp_days" = "1095" ]; then
+        pass_test "get_retention_policy returns correct values per framework"
+    else
+        fail_test "get_retention_policy returned unexpected values: soc2=$soc2_days, hipaa=$hipaa_days, fedramp=$fedramp_days"
+    fi
+    _cleanup_func_test
+}
+
+# Run Batch 8 functional tests
+run_test test_func_audit_init_creates_files "audit_init creates log directory and file"
+run_test test_func_audit_init_writes_event "audit_init writes initialization event"
+run_test test_func_audit_log_writes_json "audit_log writes JSON to log file"
+run_test test_func_audit_log_level_filter "audit_log respects log level threshold filtering"
+run_test test_func_audit_log_disabled "audit_log is a no-op when ENABLE_AUDIT_LOGGING=false"
+run_test test_func_audit_auth "audit_auth writes authentication event with correct fields"
+run_test test_func_audit_config "audit_config writes configuration event"
+run_test test_func_audit_security "audit_security writes security event"
+run_test test_func_audit_process "audit_process writes process event"
+run_test test_func_audit_compliance "audit_compliance writes compliance event"
+run_test test_func_json_required_fields "JSON output contains required fields"
+run_test test_func_json_escape "_json_escape escapes special characters"
+run_test test_func_stdout_copy "AUDIT_STDOUT_COPY=true outputs to stdout"
+run_test test_func_get_retention_policy "get_retention_policy returns correct values per framework"
+
 # Generate report
 generate_report
