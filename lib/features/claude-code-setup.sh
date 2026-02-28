@@ -59,37 +59,25 @@ else
     USER_HOME="/home/$TARGET_USER"
 fi
 
-# Security Note: The Claude install script (https://claude.ai/install.sh) performs
-# checksum verification internally:
-# 1. Downloads manifest.json with expected SHA256 checksums
-# 2. Downloads the binary
-# 3. Verifies downloaded binary matches expected checksum using sha256sum
-# 4. Fails installation if verification fails
-#
-# Additionally, we verify the installer script itself before execution to ensure
-# the installer hasn't been compromised at the distribution point.
+# Security Note: The Claude install script (https://claude.ai/install.sh) is a
+# dynamic endpoint that changes with each release, so external checksum pinning
+# is impractical. Security relies on:
+# 1. TLS verification of the download from claude.ai
+# 2. The installer's own internal verification:
+#    a. Downloads manifest.json with expected SHA256 checksums
+#    b. Downloads the binary
+#    c. Verifies downloaded binary matches expected checksum using sha256sum
+#    d. Fails installation if verification fails
 
-# Download and verify Claude Code installer with checksum
+# Download Claude Code installer via TLS (no external checksum available)
 CLAUDE_INSTALLER_URL="https://claude.ai/install.sh"
-log_message "Calculating checksum for Claude Code installer..."
-CLAUDE_INSTALLER_CHECKSUM=$(calculate_checksum_sha256 "$CLAUDE_INSTALLER_URL" 2>/dev/null)
-
-if [ -z "$CLAUDE_INSTALLER_CHECKSUM" ]; then
-    log_warning "Failed to calculate checksum for Claude Code installer"
-    log_warning "Claude Code will not be available in this container"
+BUILD_TEMP=$(create_secure_temp_dir)
+log_message "Downloading Claude Code installer..."
+if _curl_with_retry_wrapper -fsSL "$CLAUDE_INSTALLER_URL" -o "${BUILD_TEMP}/claude-install.sh"; then
+    log_message "✓ Claude Code installer downloaded (verified via TLS + installer's internal binary checksum)"
 else
-    log_message "Expected SHA256: ${CLAUDE_INSTALLER_CHECKSUM}"
-
-    BUILD_TEMP=$(create_secure_temp_dir)
-    if download_and_verify \
-        "$CLAUDE_INSTALLER_URL" \
-        "$CLAUDE_INSTALLER_CHECKSUM" \
-        "${BUILD_TEMP}/claude-install.sh"; then
-        log_message "✓ Claude Code installer verified successfully"
-    else
-        log_warning "Failed to download or verify Claude Code installer"
-        log_warning "Claude Code will not be available in this container"
-    fi
+    log_warning "Failed to download Claude Code installer"
+    log_warning "Claude Code will not be available in this container"
 fi
 
 if [ -f "${BUILD_TEMP}/claude-install.sh" ]; then

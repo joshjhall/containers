@@ -211,19 +211,19 @@ if [ -n "$HELM_FILENAME" ]; then
     BUILD_TEMP=$(create_secure_temp_dir)
     cd "$BUILD_TEMP"
 
-    log_message "Calculating checksum for Helm ${HELM_VERSION} ${ARCH}..."
-    log_message "(Helm doesn't publish plain checksums, calculating on download)"
-
-    # Calculate checksum from download (Helm only has GPG-signed checksum files)
     HELM_URL="https://get.helm.sh/${HELM_FILENAME}"
-    if ! HELM_CHECKSUM=$(calculate_checksum_sha256 "$HELM_URL" 2>/dev/null); then
-        log_error "Failed to download and calculate checksum for Helm ${HELM_VERSION}"
+
+    # Fetch published checksum from Helm's CDN
+    log_message "Fetching checksum for Helm ${HELM_VERSION} ${ARCH}..."
+    HELM_SHA256_URL="https://get.helm.sh/${HELM_FILENAME}.sha256sum"
+    if ! HELM_CHECKSUM=$(fetch_github_sha256_file "$HELM_SHA256_URL" 2>/dev/null); then
+        log_error "Failed to fetch checksum for Helm ${HELM_VERSION}"
         log_error "Please verify version exists: https://github.com/helm/helm/releases/tag/v${HELM_VERSION}"
         log_feature_end
         exit 1
     fi
 
-    log_message "✓ Calculated checksum from download"
+    log_message "✓ Fetched checksum from Helm CDN"
 
     # Download and verify Helm
     log_message "Downloading and verifying Helm for ${ARCH}..."

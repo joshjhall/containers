@@ -301,12 +301,6 @@ test_dynamic_checksum_fetching() {
         assert_true false "Doesn't use fetch_github_checksums_txt"
     fi
 
-    if grep -q "calculate_checksum_sha256" "$kubernetes_script"; then
-        assert_true true "Uses calculate_checksum_sha256 for checksum calculation"
-    else
-        assert_true false "Doesn't use calculate_checksum_sha256"
-    fi
-
     if grep -q "fetch_github_sha256_file" "$kubernetes_script"; then
         assert_true true "Uses fetch_github_sha256_file for individual checksum files"
     else
