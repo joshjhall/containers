@@ -224,6 +224,38 @@ apt_retry() {
 }
 
 # ============================================================================
+# _apt_diagnose_network_failure - Print diagnostic info after apt update failure
+#
+# Checks DNS resolution, connectivity to common repositories, and lists
+# configured apt sources. Called from apt_update() on final failure.
+# ============================================================================
+_apt_diagnose_network_failure() {
+    echo ""
+    echo "=== Diagnostic Information ==="
+    echo "Network connectivity test:"
+    # Test DNS
+    if ! timeout 5 nslookup debian.org >/dev/null 2>&1; then
+        echo "  ✗ DNS resolution failed"
+    else
+        echo "  ✓ DNS resolution working"
+    fi
+
+    # Test connectivity to common package repositories
+    for host in deb.debian.org security.debian.org archive.ubuntu.com; do
+        if timeout 5 ping -c 1 "$host" >/dev/null 2>&1; then
+            echo "  ✓ Can reach $host"
+        else
+            echo "  ✗ Cannot reach $host"
+        fi
+    done
+
+    echo ""
+    echo "Current apt sources:"
+    command cat /etc/apt/sources.list 2>/dev/null || echo "  No sources.list found"
+    command ls /etc/apt/sources.list.d/*.list 2>/dev/null || echo "  No additional sources"
+}
+
+# ============================================================================
 # apt_update - Update package lists with retry logic
 #
 # Usage:
@@ -270,32 +302,7 @@ apt_update() {
             command rm -rf /var/lib/apt/lists/* || true
         else
             echo "✗ apt-get update failed after $APT_MAX_RETRIES attempts"
-
-            # Provide diagnostic information
-            echo ""
-            echo "=== Diagnostic Information ==="
-            echo "Network connectivity test:"
-            # Test DNS
-            if ! timeout 5 nslookup debian.org >/dev/null 2>&1; then
-                echo "  ✗ DNS resolution failed"
-            else
-                echo "  ✓ DNS resolution working"
-            fi
-
-            # Test connectivity to common package repositories
-            for host in deb.debian.org security.debian.org archive.ubuntu.com; do
-                if timeout 5 ping -c 1 "$host" >/dev/null 2>&1; then
-                    echo "  ✓ Can reach $host"
-                else
-                    echo "  ✗ Cannot reach $host"
-                fi
-            done
-
-            echo ""
-            echo "Current apt sources:"
-            command cat /etc/apt/sources.list 2>/dev/null || echo "  No sources.list found"
-            command ls /etc/apt/sources.list.d/*.list 2>/dev/null || echo "  No additional sources"
-
+            _apt_diagnose_network_failure
             return $exit_code
         fi
 
@@ -430,6 +437,7 @@ EOF
 }
 
 # Export functions for use by other scripts
+export -f _apt_diagnose_network_failure
 export -f apt_retry
 export -f apt_update
 export -f apt_install

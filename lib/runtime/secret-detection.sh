@@ -15,15 +15,6 @@ cv_detect_secrets() {
         return 0
     fi
 
-    # Patterns that suggest hardcoded secrets (reserved for future use)
-    # shellcheck disable=SC2034  # Reserved for future pattern matching
-    local secret_patterns=(
-        'password.*=.*[^$]'  # Hardcoded passwords
-        'secret.*=.*[^$]'    # Hardcoded secrets
-        'token.*=.*[^$]'     # Hardcoded tokens
-        'key.*=.*[^$]'       # Hardcoded keys (but not key paths)
-    )
-
     # Check if variable name suggests it might contain a secret
     local var_lower
     var_lower=$(echo "$var_name" | command tr '[:upper:]' '[:lower:]')

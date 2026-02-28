@@ -58,19 +58,19 @@ retry_with_backoff() {
     local delay="${RETRY_INITIAL_DELAY:-2}"
     local max_delay="${RETRY_MAX_DELAY:-30}"
     local attempt=1
-    local exitCode=0
+    local exit_code=0
 
     while [ $attempt -le "$max_attempts" ]; do
         # Try the command
         if "$@"; then
             return 0
         else
-            exitCode=$?
+            exit_code=$?
         fi
 
         # If this wasn't the last attempt, wait and retry
         if [ $attempt -lt "$max_attempts" ]; then
-            echo "⚠ Attempt $attempt/$max_attempts failed (exit code: $exitCode)" >&2
+            echo "⚠ Attempt $attempt/$max_attempts failed (exit code: $exit_code)" >&2
             echo "  Retrying in ${delay}s..." >&2
             sleep "$delay"
 
@@ -86,7 +86,7 @@ retry_with_backoff() {
         attempt=$((attempt + 1))
     done
 
-    return $exitCode
+    return $exit_code
 }
 
 # ============================================================================

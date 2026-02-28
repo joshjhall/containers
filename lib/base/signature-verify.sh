@@ -84,6 +84,60 @@ _verify_language_handler() {
 }
 
 # ============================================================================
+# _try_python_sigstore - Attempt Sigstore verification for Python 3.11.0+
+#
+# Arguments:
+#   $1 - File to verify
+#   $2 - Python version (e.g., "3.12.0")
+#
+# Returns:
+#   0 if Sigstore verification succeeded
+#   1 if verification failed or unavailable (caller should fall through to GPG)
+# ============================================================================
+_try_python_sigstore() {
+    local file="$1"
+    local version="$2"
+
+    local major minor
+    IFS='.' read -r major minor _ <<< "$version"
+
+    if [ "$major" -lt 3 ] || [ "$minor" -lt 11 ]; then
+        return 1
+    fi
+
+    log_message "Python ${version} supports Sigstore, trying Sigstore first..."
+
+    if ! command -v cosign >/dev/null 2>&1; then
+        log_message "Cosign not available, skipping Sigstore verification"
+        return 1
+    fi
+
+    local cert_identity oidc_issuer
+    if ! cert_identity=$(get_python_release_manager "$version" | command head -1); then
+        log_warning "Could not determine release manager for Python ${version}"
+        log_message "Falling back to GPG verification"
+        return 1
+    fi
+    oidc_issuer=$(get_python_release_manager "$version" | command tail -1)
+
+    local sig_url cert_url
+    sig_url="https://www.python.org/ftp/python/${version}/$(basename "$file").sig"
+    cert_url="https://www.python.org/ftp/python/${version}/$(basename "$file").crt"
+
+    log_message "Attempting Sigstore verification..."
+    log_message "  Certificate Identity: ${cert_identity}"
+    log_message "  OIDC Issuer: ${oidc_issuer}"
+
+    if download_and_verify_sigstore "$file" "$sig_url" "$cert_identity" "$oidc_issuer" "$cert_url"; then
+        log_message "✓ Sigstore verification successful"
+        return 0
+    else
+        log_warning "Sigstore verification failed, falling back to GPG"
+        return 1
+    fi
+}
+
+# ============================================================================
 # verify_signature - Unified signature verification (Sigstore + GPG)
 #
 # Automatically chooses the appropriate verification method based on:
@@ -115,38 +169,8 @@ verify_signature() {
 
     # Python-specific logic: Try Sigstore first for 3.11.0+, then fall through to GPG
     if [ "$language" = "python" ]; then
-        local major minor
-        IFS='.' read -r major minor _ <<< "$version"
-
-        if [ "$major" -ge 3 ] && [ "$minor" -ge 11 ]; then
-            log_message "Python ${version} supports Sigstore, trying Sigstore first..."
-
-            if command -v cosign >/dev/null 2>&1; then
-                local cert_identity oidc_issuer
-                if ! cert_identity=$(get_python_release_manager "$version" | command head -1); then
-                    log_warning "Could not determine release manager for Python ${version}"
-                    log_message "Falling back to GPG verification"
-                else
-                    oidc_issuer=$(get_python_release_manager "$version" | command tail -1)
-
-                    local sig_url cert_url
-                    sig_url="https://www.python.org/ftp/python/${version}/$(basename "$file").sig"
-                    cert_url="https://www.python.org/ftp/python/${version}/$(basename "$file").crt"
-
-                    log_message "Attempting Sigstore verification..."
-                    log_message "  Certificate Identity: ${cert_identity}"
-                    log_message "  OIDC Issuer: ${oidc_issuer}"
-
-                    if download_and_verify_sigstore "$file" "$sig_url" "$cert_identity" "$oidc_issuer" "$cert_url"; then
-                        log_message "✓ Sigstore verification successful"
-                        return 0
-                    else
-                        log_warning "Sigstore verification failed, falling back to GPG"
-                    fi
-                fi
-            else
-                log_message "Cosign not available, skipping Sigstore verification"
-            fi
+        if _try_python_sigstore "$file" "$version"; then
+            return 0
         fi
     fi
 
@@ -183,5 +207,6 @@ verify_signature() {
 }
 
 # Export dispatch functions
+export -f _try_python_sigstore
 export -f _verify_language_handler
 export -f verify_signature
