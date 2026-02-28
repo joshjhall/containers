@@ -115,20 +115,13 @@ apt_install \
 ARCH=$(dpkg --print-architecture)
 log_message "Detected architecture: $ARCH"
 
-case "$ARCH" in
-    amd64)
-        KOTLIN_NATIVE_ARCH="linux-x86_64"
-        KOTLIN_NATIVE_AVAILABLE=true
-        ;;
-    arm64)
-        KOTLIN_NATIVE_ARCH="linux-aarch64"
-        KOTLIN_NATIVE_AVAILABLE=true
-        ;;
-    *)
-        log_warning "Kotlin/Native not available for architecture: $ARCH"
-        KOTLIN_NATIVE_AVAILABLE=false
-        ;;
-esac
+KOTLIN_NATIVE_ARCH=$(map_arch_or_skip "linux-x86_64" "linux-aarch64")
+if [ -n "$KOTLIN_NATIVE_ARCH" ]; then
+    KOTLIN_NATIVE_AVAILABLE=true
+else
+    log_warning "Kotlin/Native not available for architecture: $ARCH"
+    KOTLIN_NATIVE_AVAILABLE=false
+fi
 
 # ============================================================================
 # Kotlin Compiler Installation

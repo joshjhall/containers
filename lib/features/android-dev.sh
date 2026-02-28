@@ -129,21 +129,14 @@ apt_install \
 ARCH=$(dpkg --print-architecture)
 log_message "Detected architecture: $ARCH"
 
-case "$ARCH" in
-    amd64)
-        SYSTEM_IMAGE_ABI="x86_64"
-        EMULATOR_SUPPORTED=true
-        ;;
-    arm64)
-        SYSTEM_IMAGE_ABI="arm64-v8a"
-        EMULATOR_SUPPORTED=true
-        ;;
-    *)
-        log_warning "Emulator may not be fully supported on architecture: $ARCH"
-        SYSTEM_IMAGE_ABI="x86_64"
-        EMULATOR_SUPPORTED=false
-        ;;
-esac
+SYSTEM_IMAGE_ABI=$(map_arch_or_skip "x86_64" "arm64-v8a")
+if [ -n "$SYSTEM_IMAGE_ABI" ]; then
+    EMULATOR_SUPPORTED=true
+else
+    log_warning "Emulator may not be fully supported on architecture: $ARCH"
+    SYSTEM_IMAGE_ABI="x86_64"
+    EMULATOR_SUPPORTED=false
+fi
 
 # ============================================================================
 # Check KVM Support

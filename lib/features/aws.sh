@@ -82,14 +82,11 @@ log_message "Installing AWS CLI v2..."
 
 # Detect architecture
 ARCH=$(dpkg --print-architecture)
-if [ "$ARCH" = "amd64" ]; then
-    AWS_CLI_URL="https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip"
-elif [ "$ARCH" = "arm64" ]; then
-    AWS_CLI_URL="https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip"
-else
+AWS_ARCH=$(map_arch "x86_64" "aarch64") || {
     log_warning "AWS CLI not available for architecture $ARCH"
     exit 1
-fi
+}
+AWS_CLI_URL="https://awscli.amazonaws.com/awscli-exe-linux-${AWS_ARCH}.zip"
 
 BUILD_TEMP=$(create_secure_temp_dir)
 cd "$BUILD_TEMP"
@@ -158,10 +155,9 @@ log_command "Cleaning up build directory" \
 log_message "Installing AWS Session Manager plugin..."
 
 # Download architecture-specific package
-if [ "$ARCH" = "amd64" ]; then
-    SESSION_MANAGER_URL="https://s3.amazonaws.com/session-manager-downloads/plugin/latest/ubuntu_64bit/session-manager-plugin.deb"
-elif [ "$ARCH" = "arm64" ]; then
-    SESSION_MANAGER_URL="https://s3.amazonaws.com/session-manager-downloads/plugin/latest/ubuntu_arm64/session-manager-plugin.deb"
+SM_DIR=$(map_arch_or_skip "ubuntu_64bit" "ubuntu_arm64")
+if [ -n "$SM_DIR" ]; then
+    SESSION_MANAGER_URL="https://s3.amazonaws.com/session-manager-downloads/plugin/latest/${SM_DIR}/session-manager-plugin.deb"
 else
     log_warning "Session Manager plugin not available for architecture $ARCH"
     SESSION_MANAGER_URL=""

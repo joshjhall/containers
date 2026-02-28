@@ -15,9 +15,9 @@
 install_terragrunt() {
     log_message "Installing Terragrunt ${TERRAGRUNT_VERSION}..."
     local ARCH
-    ARCH=$(dpkg --print-architecture)
+    ARCH=$(map_arch_or_skip "amd64" "arm64")
 
-    if [ "$ARCH" = "amd64" ] || [ "$ARCH" = "arm64" ]; then
+    if [ -n "$ARCH" ]; then
         local TERRAGRUNT_BINARY="terragrunt_linux_${ARCH}"
         local TERRAGRUNT_URL="https://github.com/gruntwork-io/terragrunt/releases/download/v${TERRAGRUNT_VERSION}/${TERRAGRUNT_BINARY}"
 
@@ -56,7 +56,7 @@ install_terragrunt() {
 
         cd /
     else
-        log_warning "Terragrunt not available for architecture $ARCH, skipping..."
+        log_warning "Terragrunt not available for architecture $(dpkg --print-architecture), skipping..."
     fi
 }
 
@@ -67,7 +67,12 @@ install_terraform_docs() {
     log_message "Installing terraform-docs ${TFDOCS_VERSION}..."
 
     local ARCH
-    ARCH=$(dpkg --print-architecture)
+    ARCH=$(map_arch_or_skip "amd64" "arm64")
+    if [ -z "$ARCH" ]; then
+        log_warning "terraform-docs not available for architecture $(dpkg --print-architecture), skipping..."
+        return 0
+    fi
+
     local TFDOCS_ARCHIVE="terraform-docs-v${TFDOCS_VERSION}-linux-${ARCH}.tar.gz"
     local TFDOCS_URL="https://github.com/terraform-docs/terraform-docs/releases/download/v${TFDOCS_VERSION}/${TFDOCS_ARCHIVE}"
 
@@ -116,7 +121,12 @@ install_tflint() {
     log_message "Installing tflint ${TFLINT_VERSION}..."
 
     local ARCH
-    ARCH=$(dpkg --print-architecture)
+    ARCH=$(map_arch_or_skip "amd64" "arm64")
+    if [ -z "$ARCH" ]; then
+        log_warning "tflint not available for architecture $(dpkg --print-architecture), skipping..."
+        return 0
+    fi
+
     local TFLINT_ARCHIVE="tflint_linux_${ARCH}.zip"
     local TFLINT_URL="https://github.com/terraform-linters/tflint/releases/download/v${TFLINT_VERSION}/${TFLINT_ARCHIVE}"
 
@@ -167,24 +177,18 @@ install_trivy() {
     # See: https://github.com/aquasecurity/tfsec/discussions/1994
     log_message "Installing Trivy ${TRIVY_VERSION}..."
 
-    local ARCH
-    ARCH=$(dpkg --print-architecture)
-    local TRIVY_ARCH=""
-
     # Trivy uses Linux_64bit for amd64 and Linux_ARM64 for arm64
-    if [ "$ARCH" = "amd64" ]; then
-        TRIVY_ARCH="64bit"
-    elif [ "$ARCH" = "arm64" ]; then
-        TRIVY_ARCH="ARM64"
-    else
-        log_warning "Trivy not available for architecture $ARCH, skipping..."
+    local TRIVY_ARCH
+    TRIVY_ARCH=$(map_arch_or_skip "64bit" "ARM64")
+    if [ -z "$TRIVY_ARCH" ]; then
+        log_warning "Trivy not available for architecture $(dpkg --print-architecture), skipping..."
         return 0
     fi
 
     local TRIVY_ARCHIVE="trivy_${TRIVY_VERSION}_Linux-${TRIVY_ARCH}.tar.gz"
     local TRIVY_URL="https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/${TRIVY_ARCHIVE}"
 
-    log_message "Installing Trivy v${TRIVY_VERSION} for ${ARCH}..."
+    log_message "Installing Trivy v${TRIVY_VERSION} for $(dpkg --print-architecture)..."
 
     # Fetch checksum dynamically from GitHub releases
     log_message "Fetching Trivy checksum from GitHub..."

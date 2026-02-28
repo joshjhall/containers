@@ -138,19 +138,14 @@ log_message "Installing k9s ${K9S_VERSION}..."
 # Detect architecture
 ARCH=$(dpkg --print-architecture)
 
-# Determine k9s filename and URL based on architecture
-case "$ARCH" in
-    amd64)
-        K9S_FILENAME="k9s_Linux_amd64.tar.gz"
-        ;;
-    arm64)
-        K9S_FILENAME="k9s_Linux_arm64.tar.gz"
-        ;;
-    *)
-        log_warning "k9s not available for architecture $ARCH, skipping..."
-        K9S_FILENAME=""
-        ;;
-esac
+# Determine k9s filename based on architecture
+K9S_ARCH=$(map_arch_or_skip "amd64" "arm64")
+if [ -n "$K9S_ARCH" ]; then
+    K9S_FILENAME="k9s_Linux_${K9S_ARCH}.tar.gz"
+else
+    log_warning "k9s not available for architecture $ARCH, skipping..."
+    K9S_FILENAME=""
+fi
 
 # Download and install k9s if supported architecture
 if [ -n "$K9S_FILENAME" ]; then
@@ -191,20 +186,14 @@ fi
 log_message "Installing Helm ${HELM_VERSION}..."
 
 # Determine Helm filename based on architecture
-case "$ARCH" in
-    amd64)
-        HELM_FILENAME="helm-v${HELM_VERSION}-linux-amd64.tar.gz"
-        HELM_DIR="linux-amd64"
-        ;;
-    arm64)
-        HELM_FILENAME="helm-v${HELM_VERSION}-linux-arm64.tar.gz"
-        HELM_DIR="linux-arm64"
-        ;;
-    *)
-        log_warning "Helm not available for architecture $ARCH, skipping..."
-        HELM_FILENAME=""
-        ;;
-esac
+HELM_ARCH=$(map_arch_or_skip "amd64" "arm64")
+if [ -n "$HELM_ARCH" ]; then
+    HELM_FILENAME="helm-v${HELM_VERSION}-linux-${HELM_ARCH}.tar.gz"
+    HELM_DIR="linux-${HELM_ARCH}"
+else
+    log_warning "Helm not available for architecture $ARCH, skipping..."
+    HELM_FILENAME=""
+fi
 
 # Download and install Helm if supported architecture
 if [ -n "$HELM_FILENAME" ]; then
@@ -261,18 +250,13 @@ fi
 log_message "Installing kubectl plugin manager (krew) ${KREW_VERSION}..."
 
 # Determine krew filename based on architecture
-case "$ARCH" in
-    amd64)
-        KREW_FILENAME="krew-linux_amd64.tar.gz"
-        ;;
-    arm64)
-        KREW_FILENAME="krew-linux_arm64.tar.gz"
-        ;;
-    *)
-        log_warning "krew not available for architecture $ARCH, skipping..."
-        KREW_FILENAME=""
-        ;;
-esac
+KREW_ARCH=$(map_arch_or_skip "amd64" "arm64")
+if [ -n "$KREW_ARCH" ]; then
+    KREW_FILENAME="krew-linux_${KREW_ARCH}.tar.gz"
+else
+    log_warning "krew not available for architecture $ARCH, skipping..."
+    KREW_FILENAME=""
+fi
 
 # Download and install krew if supported architecture
 if [ -n "$KREW_FILENAME" ]; then

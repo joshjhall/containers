@@ -77,15 +77,11 @@ log_message "Installing Ollama..."
 
 # Get latest Ollama version from GitHub
 OLLAMA_VERSION="0.12.10"  # Can be overridden with OLLAMA_VERSION build arg
-ARCH=$(dpkg --print-architecture)
 
 # Map Debian arch to Ollama arch
-if [ "$ARCH" = "amd64" ]; then
-    OLLAMA_ARCH="amd64"
-elif [ "$ARCH" = "arm64" ]; then
-    OLLAMA_ARCH="arm64"
-else
-    log_warning "Ollama not available for architecture $ARCH, skipping..."
+OLLAMA_ARCH=$(map_arch_or_skip "amd64" "arm64")
+if [ -z "$OLLAMA_ARCH" ]; then
+    log_warning "Ollama not available for architecture $(dpkg --print-architecture), skipping..."
     log_feature_end
     exit 0
 fi

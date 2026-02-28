@@ -200,10 +200,9 @@ log_message "Installing cloudflared (Cloudflare Tunnel)..."
 ARCH=$(dpkg --print-architecture)
 CLOUDFLARED_VERSION="2025.11.1"  # Can be overridden with CLOUDFLARED_VERSION build arg
 
-if [ "$ARCH" = "amd64" ]; then
-    CLOUDFLARED_DEB="cloudflared-linux-amd64.deb"
-elif [ "$ARCH" = "arm64" ]; then
-    CLOUDFLARED_DEB="cloudflared-linux-arm64.deb"
+CLOUDFLARED_ARCH=$(map_arch_or_skip "amd64" "arm64")
+if [ -n "$CLOUDFLARED_ARCH" ]; then
+    CLOUDFLARED_DEB="cloudflared-linux-${CLOUDFLARED_ARCH}.deb"
 else
     log_warning "cloudflared not available for architecture $ARCH, skipping..."
     CLOUDFLARED_DEB=""
