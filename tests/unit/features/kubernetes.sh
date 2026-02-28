@@ -283,6 +283,24 @@ EOF
     fi
 }
 
+# Test: Uses shared add_apt_repository_key function
+test_uses_add_apt_repository_key() {
+    local kubernetes_script="$PROJECT_ROOT/lib/features/kubernetes.sh"
+
+    if command grep -q "add_apt_repository_key" "$kubernetes_script"; then
+        assert_true true "kubernetes.sh uses add_apt_repository_key"
+    else
+        assert_true false "kubernetes.sh doesn't use add_apt_repository_key"
+    fi
+
+    # Should NOT have inline apt-key blocks anymore
+    if command grep -q "command -v apt-key" "$kubernetes_script"; then
+        assert_true false "kubernetes.sh still has inline apt-key block (should use add_apt_repository_key)"
+    else
+        assert_true true "No inline apt-key block remains"
+    fi
+}
+
 # Test: Dynamic checksum fetching is used
 test_dynamic_checksum_fetching() {
     local kubernetes_script="$PROJECT_ROOT/lib/features/kubernetes.sh"
@@ -355,6 +373,7 @@ run_test_with_setup test_k8s_environment "K8s environment variables"
 run_test_with_setup test_kubectl_completion "kubectl completion"
 run_test_with_setup test_manifest_files "Manifest files"
 run_test_with_setup test_k8s_verification "K8s verification script"
+run_test_with_setup test_uses_add_apt_repository_key "Uses shared add_apt_repository_key"
 run_test_with_setup test_dynamic_checksum_fetching "Dynamic checksum fetching"
 run_test_with_setup test_download_verification "Download verification functions"
 run_test_with_setup test_sources_download_verify "Sources download-verify.sh"

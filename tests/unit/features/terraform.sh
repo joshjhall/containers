@@ -298,6 +298,33 @@ run_test_with_setup() {
 }
 
 # ============================================================================
+# Repository Key Management Tests
+# ============================================================================
+
+# Test: terraform.sh uses shared add_apt_repository_key function
+test_uses_add_apt_repository_key() {
+    local terraform_script="$PROJECT_ROOT/lib/features/terraform.sh"
+
+    if ! [ -f "$terraform_script" ]; then
+        skip_test "terraform.sh not found"
+        return
+    fi
+
+    if command grep -q "add_apt_repository_key" "$terraform_script"; then
+        assert_true true "terraform.sh uses add_apt_repository_key"
+    else
+        assert_true false "terraform.sh doesn't use add_apt_repository_key"
+    fi
+
+    # Should NOT have inline apt-key blocks anymore
+    if command grep -q "command -v apt-key" "$terraform_script"; then
+        assert_true false "terraform.sh still has inline apt-key block (should use add_apt_repository_key)"
+    else
+        assert_true true "No inline apt-key block remains"
+    fi
+}
+
+# ============================================================================
 # Checksum Verification Tests
 # ============================================================================
 
@@ -377,6 +404,9 @@ run_test_with_setup test_provider_configuration "Provider configuration structur
 run_test_with_setup test_state_file_handling "State file handling"
 run_test_with_setup test_workspace_management "Workspace management"
 run_test_with_setup test_terraform_verification "Terraform verification script"
+
+# Repository key management tests
+run_test test_uses_add_apt_repository_key "Uses shared add_apt_repository_key"
 
 # Checksum verification tests
 run_test test_checksum_libraries_sourced "Checksum libraries are sourced"

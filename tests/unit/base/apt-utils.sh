@@ -202,6 +202,37 @@ test_package_name_validation() {
     fi
 }
 
+# Test: APT_ACQUIRE_TIMEOUT constant
+test_apt_acquire_timeout_constant() {
+    if command grep -q "APT_ACQUIRE_TIMEOUT:-30" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
+        assert_true true "APT_ACQUIRE_TIMEOUT default is 30"
+    else
+        assert_true false "APT_ACQUIRE_TIMEOUT default not set"
+    fi
+
+    # Verify hardcoded Timeout=30 is no longer used in function bodies
+    if command grep -q 'Timeout=30' "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
+        assert_true false "Hardcoded Timeout=30 still present (should use APT_ACQUIRE_TIMEOUT)"
+    else
+        assert_true true "No hardcoded Timeout=30 values remain"
+    fi
+}
+
+# Test: add_apt_repository_key function
+test_add_apt_repository_key_function() {
+    if command grep -q "^add_apt_repository_key()" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
+        assert_true true "add_apt_repository_key function is defined"
+    else
+        assert_true false "add_apt_repository_key function not found"
+    fi
+
+    if command grep -q "export -f add_apt_repository_key" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
+        assert_true true "add_apt_repository_key function is exported"
+    else
+        assert_true false "add_apt_repository_key function not exported"
+    fi
+}
+
 # Test: Debian version detection
 test_debian_version_detection() {
     # Check for get_debian_major_version function
@@ -278,6 +309,8 @@ run_test test_network_diagnostics "Network diagnostic tools"
 run_test test_environment_defaults "Environment variable defaults"
 run_test test_error_handling "Error handling configuration"
 run_test test_package_name_validation "Package name validation (security)"
+run_test test_apt_acquire_timeout_constant "APT_ACQUIRE_TIMEOUT constant"
+run_test test_add_apt_repository_key_function "add_apt_repository_key function"
 run_test test_debian_version_detection "Debian version detection with fallbacks"
 run_test test_is_debian_version "is_debian_version function"
 run_test test_apt_install_conditional "apt_install_conditional function"

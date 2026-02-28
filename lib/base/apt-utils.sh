@@ -35,6 +35,7 @@ fi
 APT_MAX_RETRIES="${APT_MAX_RETRIES:-3}"
 APT_RETRY_DELAY="${APT_RETRY_DELAY:-5}"
 APT_TIMEOUT="${APT_TIMEOUT:-300}"  # 5 minutes timeout for apt operations
+APT_ACQUIRE_TIMEOUT="${APT_ACQUIRE_TIMEOUT:-30}"  # Per-request acquire timeout
 APT_NETWORK_ERROR_CODE=100        # apt exit code for network/repository errors
 
 # ============================================================================
@@ -275,9 +276,9 @@ apt_update() {
 
         # Configure apt with timeout and retry options
         if timeout "$APT_TIMEOUT" apt-get update \
-            -o Acquire::http::Timeout=30 \
-            -o Acquire::https::Timeout=30 \
-            -o Acquire::ftp::Timeout=30 \
+            -o Acquire::http::Timeout=${APT_ACQUIRE_TIMEOUT} \
+            -o Acquire::https::Timeout=${APT_ACQUIRE_TIMEOUT} \
+            -o Acquire::ftp::Timeout=${APT_ACQUIRE_TIMEOUT} \
             -o Acquire::Retries=3 \
             -o APT::Update::Error-Mode=any; then
             echo "✓ Package lists updated successfully"
@@ -354,9 +355,9 @@ apt_install() {
         # Configure apt with timeout and retry options
         if DEBIAN_FRONTEND=noninteractive timeout "$APT_TIMEOUT" apt-get install -y \
             --no-install-recommends \
-            -o Acquire::http::Timeout=30 \
-            -o Acquire::https::Timeout=30 \
-            -o Acquire::ftp::Timeout=30 \
+            -o Acquire::http::Timeout=${APT_ACQUIRE_TIMEOUT} \
+            -o Acquire::https::Timeout=${APT_ACQUIRE_TIMEOUT} \
+            -o Acquire::ftp::Timeout=${APT_ACQUIRE_TIMEOUT} \
             -o Acquire::Retries=3 \
             -o Dpkg::Options::="--force-confdef" \
             -o Dpkg::Options::="--force-confold" \
@@ -420,21 +421,85 @@ configure_apt_mirrors() {
     fi
 
     # Add retry and timeout configurations to apt.conf.d
-    command cat > /etc/apt/apt.conf.d/99-retries << 'EOF'
+    command cat > /etc/apt/apt.conf.d/99-retries << EOF
 # Network timeout and retry configuration
-Acquire::http::Timeout "30";
-Acquire::https::Timeout "30";
-Acquire::ftp::Timeout "30";
+Acquire::http::Timeout "${APT_ACQUIRE_TIMEOUT}";
+Acquire::https::Timeout "${APT_ACQUIRE_TIMEOUT}";
+Acquire::ftp::Timeout "${APT_ACQUIRE_TIMEOUT}";
 Acquire::Retries "3";
 Acquire::Queue-Mode "host";
 APT::Update::Error-Mode "any";
 
 # Parallel downloads for better performance
-Acquire::Queue-Mode "host";
 Acquire::Languages "none";
 EOF
 
     echo "✓ apt configured with timeout and retry settings"
+}
+
+# ============================================================================
+# add_apt_repository_key - Add an apt repository with GPG key (Debian-version-aware)
+#
+# Handles both legacy apt-key (Debian 11/12) and modern signed-by (Debian 13+)
+# methods for adding GPG keys and apt repository sources.
+#
+# Arguments:
+#   $1 - tool_name:   Human-readable name for log messages (e.g., "Kubernetes")
+#   $2 - key_url:     URL to download the GPG key from
+#   $3 - keyring_path: Path to store the keyring (e.g., /usr/share/keyrings/foo.gpg)
+#   $4 - source_list:  Path to the sources.list.d file
+#   $5 - repo_line:    Full deb line including [signed-by=...] for modern method
+#   $6 - key_format:   "armored" (needs dearmor, default) or "binary" (raw .gpg)
+#
+# Usage:
+#   add_apt_repository_key "Kubernetes" \
+#       "https://pkgs.k8s.io/core:/stable:/v1.31/deb/Release.key" \
+#       "/usr/share/keyrings/kubernetes-apt-keyring.gpg" \
+#       "/etc/apt/sources.list.d/kubernetes.list" \
+#       "deb [signed-by=/usr/share/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.31/deb/ /"
+# ============================================================================
+add_apt_repository_key() {
+    local tool_name="$1"
+    local key_url="$2"
+    local keyring_path="$3"
+    local source_list="$4"
+    local repo_line="$5"
+    local key_format="${6:-armored}"  # "armored" (needs dearmor) or "binary"
+
+    if command -v apt-key >/dev/null 2>&1; then
+        # Legacy method for Debian 11/12
+        log_message "Using apt-key method (Debian 11/12)"
+        log_message "Adding ${tool_name} GPG key"
+        retry_with_backoff curl -fsSL "$key_url" | apt-key add -
+
+        # Strip signed-by from repo_line for legacy format
+        local legacy_line="$repo_line"
+        legacy_line=$(echo "$legacy_line" | command sed 's/ signed-by=[^ ]*//g')
+        # Clean up empty options brackets: "deb [ ] ..." -> "deb ..."
+        # and "deb [arch=amd64 ] ..." -> "deb [arch=amd64] ..."
+        legacy_line=$(echo "$legacy_line" | command sed 's/\[ *\] *//g; s/ *\] */] /g')
+
+        log_command "Adding ${tool_name} repository" \
+            bash -c "echo '${legacy_line}' > ${source_list}"
+    else
+        # Modern method for Debian 13+
+        log_message "Using signed-by method (Debian 13+)"
+        log_command "Creating keyrings directory" \
+            mkdir -p "$(dirname "$keyring_path")"
+
+        log_message "Adding ${tool_name} GPG key"
+        if [ "$key_format" = "armored" ]; then
+            retry_with_backoff curl -fsSL "$key_url" | gpg --dearmor -o "$keyring_path"
+        else
+            retry_with_backoff curl -fsSL "$key_url" -o "$keyring_path"
+        fi
+
+        log_command "Setting GPG key permissions" \
+            chmod 644 "$keyring_path"
+
+        log_command "Adding ${tool_name} repository" \
+            bash -c "echo '${repo_line}' > ${source_list}"
+    fi
 }
 
 # Export functions for use by other scripts
@@ -444,3 +509,4 @@ export -f apt_update
 export -f apt_install
 export -f apt_cleanup
 export -f configure_apt_mirrors
+export -f add_apt_repository_key

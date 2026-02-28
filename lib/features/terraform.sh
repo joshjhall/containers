@@ -98,30 +98,12 @@ log_message "Installing Terraform..."
 # GPG verification using HashiCorp's signing key and SHA256SUMS files.
 
 # Add HashiCorp GPG key and repository
-# Support both old (apt-key) and new (signed-by) methods for backwards compatibility
-# - Debian 11 (Bullseye) and 12 (Bookworm): apt-key still available
-# - Debian 13 (Trixie) and later: apt-key removed, use signed-by method
-
-if command -v apt-key >/dev/null 2>&1; then
-    # Old method for Debian 11/12 compatibility
-    log_message "Using apt-key method (Debian 11/12)"
-    log_message "Adding HashiCorp GPG key"
-    retry_with_backoff curl -fsSL https://apt.releases.hashicorp.com/gpg | apt-key add -
-
-    log_command "Adding HashiCorp repository" \
-        apt-add-repository "deb [arch=$(dpkg --print-architecture)] https://apt.releases.hashicorp.com $(lsb_release -cs) main"
-else
-    # New method for Debian 13+ (Trixie and later)
-    log_message "Using signed-by method (Debian 13+)"
-    log_message "Adding HashiCorp GPG key"
-    retry_with_backoff curl -fsSL https://apt.releases.hashicorp.com/gpg | gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
-
-    log_command "Setting GPG key permissions" \
-        chmod go+r /usr/share/keyrings/hashicorp-archive-keyring.gpg
-
-    log_command "Adding HashiCorp repository" \
-        bash -c 'echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" > /etc/apt/sources.list.d/hashicorp.list'
-fi
+# Uses add_apt_repository_key() for Debian version compatibility (apt-key vs signed-by)
+add_apt_repository_key "HashiCorp" \
+    "https://apt.releases.hashicorp.com/gpg" \
+    "/usr/share/keyrings/hashicorp-archive-keyring.gpg" \
+    "/etc/apt/sources.list.d/hashicorp.list" \
+    "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main"
 
 # Install Terraform
 # Update package lists with retry logic

@@ -245,6 +245,29 @@ EOF
     fi
 }
 
+# Test: gcloud.sh uses shared add_apt_repository_key function
+test_uses_add_apt_repository_key() {
+    local gcloud_script="$PROJECT_ROOT/lib/features/gcloud.sh"
+
+    if ! [ -f "$gcloud_script" ]; then
+        skip_test "gcloud.sh not found"
+        return
+    fi
+
+    if command grep -q "add_apt_repository_key" "$gcloud_script"; then
+        assert_true true "gcloud.sh uses add_apt_repository_key"
+    else
+        assert_true false "gcloud.sh doesn't use add_apt_repository_key"
+    fi
+
+    # Should NOT have inline apt-key blocks anymore
+    if command grep -q "command -v apt-key" "$gcloud_script"; then
+        assert_true false "gcloud.sh still has inline apt-key block (should use add_apt_repository_key)"
+    else
+        assert_true true "No inline apt-key block remains"
+    fi
+}
+
 # Run tests with setup/teardown
 run_test_with_setup() {
     local test_function="$1"
@@ -266,6 +289,9 @@ run_test_with_setup test_gcloud_completion "gcloud completion"
 run_test_with_setup test_cloud_build_config "Cloud Build configuration"
 run_test_with_setup test_firebase_cli "Firebase CLI"
 run_test_with_setup test_gcloud_verification "gcloud verification"
+
+# Repository key management tests
+run_test test_uses_add_apt_repository_key "Uses shared add_apt_repository_key"
 
 # Generate test report
 generate_report

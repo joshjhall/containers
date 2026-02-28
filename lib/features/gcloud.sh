@@ -58,31 +58,15 @@ apt_install python3 python3-crcmod apt-transport-https ca-certificates gnupg
 # ============================================================================
 log_message "Configuring Google Cloud repository..."
 
-# Import Google Cloud public key
-# Support both old (apt-key) and new (signed-by) methods for backwards compatibility
-# - Debian 11 (Bullseye) and 12 (Bookworm): apt-key still available
-# - Debian 13 (Trixie) and later: apt-key removed, use signed-by method
-
-if command -v apt-key >/dev/null 2>&1; then
-    # Old method for Debian 11/12 compatibility
-    log_message "Using apt-key method (Debian 11/12)"
-    log_command "Adding Google Cloud GPG key" \
-        bash -c "command curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key --keyring /usr/share/keyrings/cloud.google.gpg add -"
-
-    log_command "Adding Google Cloud SDK repository" \
-        bash -c "echo 'deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main' > /etc/apt/sources.list.d/google-cloud-sdk.list"
-else
-    # New method for Debian 13+ (Trixie and later)
-    log_message "Using signed-by method (Debian 13+)"
-    log_command "Adding Google Cloud GPG key" \
-        bash -c "command curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg > /usr/share/keyrings/cloud.google.gpg"
-
-    log_command "Setting GPG key permissions" \
-        chmod go+r /usr/share/keyrings/cloud.google.gpg
-
-    log_command "Adding Google Cloud SDK repository" \
-        bash -c "echo 'deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main' > /etc/apt/sources.list.d/google-cloud-sdk.list"
-fi
+# Import Google Cloud public key and configure repository
+# Uses add_apt_repository_key() for Debian version compatibility (apt-key vs signed-by)
+# Note: gcloud's key is already binary (.gpg format), so key_format is "binary"
+add_apt_repository_key "Google Cloud" \
+    "https://packages.cloud.google.com/apt/doc/apt-key.gpg" \
+    "/usr/share/keyrings/cloud.google.gpg" \
+    "/etc/apt/sources.list.d/google-cloud-sdk.list" \
+    "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" \
+    "binary"
 
 # ============================================================================
 # SDK Installation

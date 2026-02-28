@@ -82,35 +82,14 @@ KUBECTL_MINOR_VERSION=$(echo "$KUBECTL_VERSION" | command cut -d. -f1,2)
 log_message "Configuring Kubernetes repository..."
 
 # Configure official Kubernetes apt repository
-# Support both old (apt-key) and new (signed-by) methods for backwards compatibility
-# - Debian 11 (Bullseye) and 12 (Bookworm): apt-key still available
-# - Debian 13 (Trixie) and later: apt-key removed, use signed-by method
-
+# Uses add_apt_repository_key() for Debian version compatibility (apt-key vs signed-by)
 log_message "Setting up kubectl repository..."
 
-if command -v apt-key >/dev/null 2>&1; then
-    # Old method for Debian 11/12 compatibility
-    log_message "Using apt-key method (Debian 11/12)"
-    log_message "Adding Kubernetes GPG key"
-    retry_with_backoff curl -fsSL "https://pkgs.k8s.io/core:/stable:/v${KUBECTL_MINOR_VERSION}/deb/Release.key" | apt-key add -
-
-    log_command "Adding Kubernetes repository" \
-        bash -c "echo 'deb https://pkgs.k8s.io/core:/stable:/v${KUBECTL_MINOR_VERSION}/deb/ /' > /etc/apt/sources.list.d/kubernetes.list"
-else
-    # New method for Debian 13+ (Trixie and later)
-    log_message "Using signed-by method (Debian 13+)"
-    log_command "Creating keyrings directory" \
-        mkdir -p /etc/apt/keyrings
-
-    log_message "Adding Kubernetes GPG key"
-    retry_with_backoff curl -fsSL "https://pkgs.k8s.io/core:/stable:/v${KUBECTL_MINOR_VERSION}/deb/Release.key" | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
-
-    log_command "Setting GPG key permissions" \
-        chmod 644 /etc/apt/keyrings/kubernetes-apt-keyring.gpg
-
-    log_command "Adding Kubernetes repository" \
-        bash -c "echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v${KUBECTL_MINOR_VERSION}/deb/ /' > /etc/apt/sources.list.d/kubernetes.list"
-fi
+add_apt_repository_key "Kubernetes" \
+    "https://pkgs.k8s.io/core:/stable:/v${KUBECTL_MINOR_VERSION}/deb/Release.key" \
+    "/usr/share/keyrings/kubernetes-apt-keyring.gpg" \
+    "/etc/apt/sources.list.d/kubernetes.list" \
+    "deb [signed-by=/usr/share/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v${KUBECTL_MINOR_VERSION}/deb/ /"
 
 # Update package lists with retry logic
 apt_update
