@@ -87,6 +87,14 @@ cleanup() {
 
 trap cleanup EXIT
 
+# Run a command in the test image without entrypoint (for clean output capture).
+# Security tests check image properties, not runtime behavior, so the
+# entrypoint initialization is irrelevant and its stdout would pollute
+# captured output used in comparisons.
+run_in_image() {
+    docker run --rm --entrypoint "" "$TEST_IMAGE" "$@"
+}
+
 # =============================================================================
 # Test Functions
 # =============================================================================
@@ -97,7 +105,7 @@ test_non_root_user() {
 
     # Test 1: Container runs as non-root
     local user_id
-    user_id=$(docker run --rm "$TEST_IMAGE" id -u 2>/dev/null)
+    user_id=$(run_in_image id -u 2>/dev/null)
     if [[ "$user_id" != "0" ]]; then
         log_test "Container runs as non-root user (uid=$user_id)"
     else
@@ -105,7 +113,7 @@ test_non_root_user() {
     fi
 
     # Test 2: User has no passwordless sudo by default
-    if docker run --rm "$TEST_IMAGE" sudo -n true 2>/dev/null; then
+    if run_in_image sudo -n true 2>/dev/null; then
         log_test_fail "Passwordless sudo is enabled"
     else
         log_test "Passwordless sudo is disabled"
@@ -113,7 +121,7 @@ test_non_root_user() {
 
     # Test 3: Home directory ownership
     local home_owner
-    home_owner=$(docker run --rm "$TEST_IMAGE" stat -c '%U' /home/developer 2>/dev/null || echo "unknown")
+    home_owner=$(run_in_image stat -c '%U' /home/developer 2>/dev/null || echo "unknown")
     if [[ "$home_owner" == "developer" ]]; then
         log_test "Home directory owned by developer user"
     else
@@ -127,7 +135,7 @@ test_file_permissions() {
 
     # Test 1: No world-writable files in /usr
     local world_writable
-    world_writable=$(docker run --rm "$TEST_IMAGE" find /usr -type f -perm -0002 2>/dev/null | command wc -l)
+    world_writable=$(run_in_image find /usr -type f -perm -0002 2>/dev/null | command wc -l)
     if [[ "$world_writable" -eq 0 ]]; then
         log_test "No world-writable files in /usr"
     else
@@ -136,7 +144,7 @@ test_file_permissions() {
 
     # Test 2: Sensitive files have proper permissions
     local passwd_perms
-    passwd_perms=$(docker run --rm "$TEST_IMAGE" stat -c '%a' /etc/passwd 2>/dev/null)
+    passwd_perms=$(run_in_image stat -c '%a' /etc/passwd 2>/dev/null)
     if [[ "$passwd_perms" == "644" ]]; then
         log_test "/etc/passwd has correct permissions (644)"
     else
@@ -145,7 +153,7 @@ test_file_permissions() {
 
     # Test 3: Shadow file is not world-readable
     local shadow_perms
-    shadow_perms=$(docker run --rm "$TEST_IMAGE" stat -c '%a' /etc/shadow 2>/dev/null || echo "000")
+    shadow_perms=$(run_in_image stat -c '%a' /etc/shadow 2>/dev/null || echo "000")
     if [[ ! "$shadow_perms" =~ [4567]$ ]]; then
         log_test "/etc/shadow is not world-readable"
     else
@@ -158,14 +166,14 @@ test_capabilities() {
     log_info "Testing Linux capabilities..."
 
     # Test 1: Check if capsh is available
-    if ! docker run --rm "$TEST_IMAGE" which capsh > /dev/null 2>&1; then
+    if ! run_in_image which capsh > /dev/null 2>&1; then
         log_test_skip "capsh not available for capability testing"
         return
     fi
 
     # Test 2: No dangerous capabilities by default
     local caps
-    caps=$(docker run --rm "$TEST_IMAGE" capsh --print 2>/dev/null || echo "")
+    caps=$(run_in_image capsh --print 2>/dev/null || echo "")
 
     if [[ -z "$caps" ]]; then
         log_test_skip "Could not retrieve capability information"
@@ -194,7 +202,7 @@ test_network_security() {
 
     # Test 1: No listening services by default
     local listening
-    listening=$(docker run --rm "$TEST_IMAGE" sh -c "netstat -tlnp 2>/dev/null || ss -tlnp 2>/dev/null" | command grep -c LISTEN || echo "0")
+    listening=$(run_in_image sh -c "netstat -tlnp 2>/dev/null || ss -tlnp 2>/dev/null" | command grep -c LISTEN || echo "0")
     if [[ "$listening" -eq 0 ]]; then
         log_test "No listening services in container"
     else
@@ -202,7 +210,7 @@ test_network_security() {
     fi
 
     # Test 2: curl uses HTTPS by default (check CA certificates)
-    if docker run --rm "$TEST_IMAGE" test -f /etc/ssl/certs/ca-certificates.crt; then
+    if run_in_image test -f /etc/ssl/certs/ca-certificates.crt; then
         log_test "CA certificates are installed"
     else
         log_test_fail "CA certificates are not installed"
@@ -215,7 +223,7 @@ test_secret_protection() {
 
     # Test 1: No secrets in environment variables
     local env_secrets
-    env_secrets=$(docker run --rm "$TEST_IMAGE" env 2>/dev/null | command grep -iE '(password|secret|key|token|api_key)=' | command grep -v '^#' || echo "")
+    env_secrets=$(run_in_image env 2>/dev/null | command grep -iE '(password|secret|key|token|api_key)=' | command grep -v '^#' || echo "")
     if [[ -z "$env_secrets" ]]; then
         log_test "No secrets in environment variables"
     else
@@ -224,7 +232,7 @@ test_secret_protection() {
 
     # Test 2: No .env files with secrets
     local env_files
-    env_files=$(docker run --rm "$TEST_IMAGE" find /home -name ".env*" -type f 2>/dev/null | command wc -l)
+    env_files=$(run_in_image find /home -name ".env*" -type f 2>/dev/null | command wc -l)
     if [[ "$env_files" -eq 0 ]]; then
         log_test "No .env files in home directory"
     else
@@ -232,9 +240,9 @@ test_secret_protection() {
     fi
 
     # Test 3: SSH directory permissions (if exists)
-    if docker run --rm "$TEST_IMAGE" test -d /home/developer/.ssh 2>/dev/null; then
+    if run_in_image test -d /home/developer/.ssh 2>/dev/null; then
         local ssh_perms
-        ssh_perms=$(docker run --rm "$TEST_IMAGE" stat -c '%a' /home/developer/.ssh 2>/dev/null)
+        ssh_perms=$(run_in_image stat -c '%a' /home/developer/.ssh 2>/dev/null)
         if [[ "$ssh_perms" == "700" ]]; then
             log_test ".ssh directory has correct permissions (700)"
         else
@@ -284,7 +292,7 @@ test_build_security() {
 
     # Test 1: No package manager cache
     local apt_cache
-    apt_cache=$(docker run --rm "$TEST_IMAGE" sh -c "du -s /var/lib/apt/lists 2>/dev/null || echo '0'" | command awk '{print $1}')
+    apt_cache=$(run_in_image sh -c "du -s /var/lib/apt/lists 2>/dev/null || echo '0'" | command awk '{print $1}')
     if [[ "$apt_cache" -lt 1000 ]]; then
         log_test "APT cache is cleaned"
     else
@@ -293,7 +301,7 @@ test_build_security() {
 
     # Test 2: No temporary build files
     local tmp_files
-    tmp_files=$(docker run --rm "$TEST_IMAGE" find /tmp -type f 2>/dev/null | command wc -l)
+    tmp_files=$(run_in_image find /tmp -type f 2>/dev/null | command wc -l)
     if [[ "$tmp_files" -lt 5 ]]; then
         log_test "Minimal temporary files in /tmp"
     else
@@ -301,7 +309,7 @@ test_build_security() {
     fi
 
     # Test 3: Build scripts are cleaned up
-    if docker run --rm "$TEST_IMAGE" test -d /tmp/build-scripts 2>/dev/null; then
+    if run_in_image test -d /tmp/build-scripts 2>/dev/null; then
         log_test_fail "Build scripts not cleaned up (/tmp/build-scripts exists)"
     else
         log_test "Build scripts cleaned up"
