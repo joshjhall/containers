@@ -68,8 +68,14 @@ download_and_verify() {
     # This ensures cleanup even if curl/verification is interrupted with Ctrl+C
     trap 'command rm -f "$temp_file"' EXIT INT TERM
 
+    # Scrub URL in case it contains embedded credentials
+    local display_url="$url"
+    if command -v scrub_url >/dev/null 2>&1; then
+        display_url=$(scrub_url "$url")
+    fi
+
     echo "→ Downloading: $(basename "$output_path")"
-    echo "  URL: $url"
+    echo "  URL: $display_url"
 
     # Download to temporary file with progress bar
     # Use --progress-bar for better visibility during long downloads

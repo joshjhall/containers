@@ -17,6 +17,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+RESULTS_DIR="$PROJECT_ROOT/tests/results"
 
 # Colors for output
 RED='\033[0;31m'
@@ -344,6 +345,25 @@ main() {
     echo -e "  ${RED}Failed:${NC}  $TESTS_FAILED"
     echo -e "  ${YELLOW}Skipped:${NC} $TESTS_SKIPPED"
     echo ""
+
+    # Write results to file for CI artifact upload
+    mkdir -p "$RESULTS_DIR"
+    {
+        echo "Security Regression Test Results"
+        echo "================================"
+        echo "Date: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+        echo "Image: ${TEST_IMAGE:-built locally}"
+        echo ""
+        echo "Passed:  $TESTS_PASSED"
+        echo "Failed:  $TESTS_FAILED"
+        echo "Skipped: $TESTS_SKIPPED"
+        echo ""
+        if [[ "$TESTS_FAILED" -gt 0 ]]; then
+            echo "Result: FAIL"
+        else
+            echo "Result: PASS"
+        fi
+    } > "$RESULTS_DIR/security-test-results.txt"
 
     if [[ "$TESTS_FAILED" -gt 0 ]]; then
         log_error "Security tests failed!"

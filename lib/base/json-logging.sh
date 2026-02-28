@@ -62,6 +62,11 @@ export CURRENT_JSON_LOG_FILE=""
 json_escape() {
     local string="$1"
 
+    # Scrub secrets before JSON escaping — covers all JSON log paths
+    if command -v scrub_secrets >/dev/null 2>&1; then
+        string=$(scrub_secrets "$string")
+    fi
+
     # Escape backslashes first
     string="${string//\\/\\\\}"
 

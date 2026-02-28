@@ -336,6 +336,50 @@ jobs:
           docker run --rm test-debian-${{ matrix.debian.version }}:cloud terraform version
 
   # =====================================
+  # Security Tests
+  # =====================================
+  security-test:
+    name: Security Tests
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run security tests
+        env:
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          # Pull minimal image (security properties come from base layers)
+          SANITIZED_TAG="${TAG_NAME//\//-}"
+          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${SANITIZED_TAG}-minimal"
+
+          echo "Pulling image: $IMAGE"
+          docker pull "$IMAGE"
+
+          echo "Running security tests..."
+          ./tests/security/run_security_tests.sh "$IMAGE"
+
+      - name: Upload security test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-test-results
+          path: tests/results/security-test-results.txt
+          retention-days: 30
+
+  # =====================================
   # Security Scanning
   # =====================================
   security-scan:

@@ -162,6 +162,11 @@ retry_github_api() {
             output=$("$@" 2>&1) || exit_code=$?
         fi
 
+        # Scrub secrets from captured output before echoing
+        if command -v scrub_secrets >/dev/null 2>&1; then
+            output=$(scrub_secrets "$output")
+        fi
+
         if [ $exit_code -eq 0 ]; then
             echo "$output"
             return 0

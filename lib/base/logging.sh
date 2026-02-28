@@ -89,6 +89,14 @@ if [ "${ENABLE_JSON_LOGGING:-false}" = "true" ]; then
     fi
 fi
 
+# Source secret scrubbing utilities
+# shellcheck source=lib/base/secret-scrubbing.sh
+if [ -f "/tmp/build-scripts/base/secret-scrubbing.sh" ]; then
+    source "/tmp/build-scripts/base/secret-scrubbing.sh"
+elif [ -f "$(dirname "${BASH_SOURCE[0]}")/secret-scrubbing.sh" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/secret-scrubbing.sh"
+fi
+
 # Global variables for logging
 # Allow BUILD_LOG_DIR to be overridden (e.g., for tests)
 if [ -z "${BUILD_LOG_DIR:-}" ]; then
@@ -186,11 +194,17 @@ log_command() {
 
     COMMAND_COUNT=$((COMMAND_COUNT + 1))
 
+    # Scrub command text for logging (the command itself may contain secrets)
+    local logged_cmd="$*"
+    if command -v scrub_secrets >/dev/null 2>&1; then
+        logged_cmd=$(scrub_secrets "$logged_cmd")
+    fi
+
     # Log command start
     {
         echo ""
         echo "[$(date '+%H:%M:%S')] COMMAND #$COMMAND_COUNT: $description"
-        echo "Executing: $*"
+        echo "Executing: $logged_cmd"
         echo "--------------------------------------------------------------------------------"
     } | tee -a "$CURRENT_LOG_FILE"
 
@@ -199,8 +213,14 @@ log_command() {
     start_time=$(date +%s)
     local exit_code=0
 
-    # Run command with output capture
-    if "$@" 2>&1 | tee -a "$CURRENT_LOG_FILE"; then
+    # Run command with output capture, scrubbing secrets from output
+    if command -v scrub_secrets >/dev/null 2>&1; then
+        if "$@" 2>&1 | scrub_secrets | tee -a "$CURRENT_LOG_FILE"; then
+            exit_code=0
+        else
+            exit_code=$?
+        fi
+    elif "$@" 2>&1 | tee -a "$CURRENT_LOG_FILE"; then
         exit_code=0
     else
         exit_code=$?
@@ -338,6 +358,10 @@ log_message() {
     fi
 
     local message="$1"
+    # Scrub secrets from message before logging
+    if command -v scrub_secrets >/dev/null 2>&1; then
+        message=$(scrub_secrets "$message")
+    fi
 
     # Handle case where logging is not yet initialized
     if [ -n "$CURRENT_LOG_FILE" ]; then
@@ -383,6 +407,10 @@ log_debug() {
     fi
 
     local message="$1"
+    # Scrub secrets from message before logging
+    if command -v scrub_secrets >/dev/null 2>&1; then
+        message=$(scrub_secrets "$message")
+    fi
 
     # Handle case where logging is not yet initialized
     if [ -n "$CURRENT_LOG_FILE" ]; then
@@ -406,6 +434,10 @@ log_debug() {
 # ============================================================================
 log_error() {
     local message="$1"
+    # Scrub secrets from message before logging
+    if command -v scrub_secrets >/dev/null 2>&1; then
+        message=$(scrub_secrets "$message")
+    fi
 
     # Handle case where logging is not yet initialized
     if [ -n "$CURRENT_LOG_FILE" ] && [ -n "$CURRENT_ERROR_FILE" ]; then
@@ -441,6 +473,10 @@ log_warning() {
     fi
 
     local message="$1"
+    # Scrub secrets from message before logging
+    if command -v scrub_secrets >/dev/null 2>&1; then
+        message=$(scrub_secrets "$message")
+    fi
 
     # Handle case where logging is not yet initialized
     if [ -n "$CURRENT_LOG_FILE" ] && [ -n "$CURRENT_ERROR_FILE" ]; then

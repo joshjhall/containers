@@ -76,16 +76,32 @@ docker run -e OP_SERVICE_ACCOUNT_TOKEN=... ...
 \`\`\`
 ```
 
-1. **Consider Implementing Secret Scrubbing** (future enhancement):
+1. **Secret Scrubbing in Logs** (IMPLEMENTED):
+
+   Build logs are automatically scrubbed of sensitive data via
+   `lib/base/secret-scrubbing.sh`. The `scrub_secrets()` function is integrated
+   into all logging functions (`log_message`, `log_error`, `log_warning`,
+   `log_debug`, `log_command`) and JSON logging.
+
+   **Patterns scrubbed:**
+
+   - Authorization headers (Bearer, token, Basic)
+   - GitHub tokens (ghp\_, github_pat\_, gho\_, ghu\_, ghs\_, ghr\_)
+   - API keys with sk-/pk- prefix
+   - Known env var assignments (GITHUB_TOKEN, AWS_SECRET_ACCESS_KEY, etc.)
+   - Generic password=/secret=/api_key= pairs
+   - URLs with embedded credentials (user:pass@host)
+
+   **Opt-out** (for debugging): `DISABLE_SECRET_SCRUBBING=true`
 
    ```bash
-   # In logging functions, scrub common secret patterns
-   log_message() {
-    local message="$1"
-    # Scrub common secret patterns
-    message=$(echo "$message" | sed -E 's/(password|secret|key|token)=[^ ]+/\1=***REDACTED***/gi')
-    echo "[$(date +'%Y-%m-%d %H:%M:%S')] $message" | tee -a "$LOG_FILE"
-   }
+   # Usage in custom scripts
+   source /tmp/build-scripts/base/secret-scrubbing.sh
+   clean=$(scrub_secrets "GITHUB_TOKEN=ghp_abc123")
+   # Output: GITHUB_TOKEN=***REDACTED***
+
+   clean_url=$(scrub_url "https://user:pass@host.com")
+   # Output: https://***CREDENTIALS***@host.com
    ```
 
 ______________________________________________________________________
