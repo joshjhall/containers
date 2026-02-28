@@ -167,7 +167,8 @@ update_version() {
                     ;;
                 mvnd)
                     command sed -i "s/MVND_VERSION=\"\${MVND_VERSION:-[^}]*}\"/MVND_VERSION=\"\${MVND_VERSION:-$latest}\"/" "$script_path"
-                    command sed -i "s/^MVND_VERSION=\"[0-9][^\"]*\"/MVND_VERSION=\"\${MVND_VERSION:-$latest}\"/" "$script_path"
+                    # mvnd version may be indented (inside if block), so don't anchor to ^
+                    command sed -i "s/MVND_VERSION=\"[0-9][^\"]*\"/MVND_VERSION=\"$latest\"/" "$script_path"
                     ;;
                 google-java-format)
                     command sed -i "s/GJF_VERSION=\"\${GJF_VERSION:-[^}]*}\"/GJF_VERSION=\"\${GJF_VERSION:-$latest}\"/" "$script_path"

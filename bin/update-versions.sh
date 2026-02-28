@@ -110,40 +110,9 @@ done < <(echo "$OUTDATED" | jq -c '.[]')
 
 echo ""
 
-# Update checksums for tools that require it
-if [ "$UPDATES_APPLIED" = true ] && [ "$DRY_RUN" = false ]; then
-    # Check if any Kubernetes tools were updated
-    K8S_TOOLS_UPDATED=false
-    while IFS= read -r update; do
-        TOOL=$(echo "$update" | jq -r '.tool')
-        if [ "$TOOL" = "k9s" ] || [ "$TOOL" = "krew" ] || [ "$TOOL" = "Helm" ]; then
-            K8S_TOOLS_UPDATED=true
-            break
-        fi
-    done < <(echo "$OUTDATED" | jq -c '.[]')
-
-    # If Kubernetes tools were updated, update their checksums
-    if [ "$K8S_TOOLS_UPDATED" = true ]; then
-        echo -e "${BLUE}Updating Kubernetes tool checksums...${NC}"
-
-        # Get current versions from Dockerfile
-        K9S_VER=$(command grep "^ARG K9S_VERSION=" "$PROJECT_ROOT/Dockerfile" | command cut -d= -f2 | command tr -d '"')
-        KREW_VER=$(command grep "^ARG KREW_VERSION=" "$PROJECT_ROOT/Dockerfile" | command cut -d= -f2 | command tr -d '"')
-        HELM_VER=$(command grep "^ARG HELM_VERSION=" "$PROJECT_ROOT/Dockerfile" | command cut -d= -f2 | command tr -d '"')
-
-        if [ -n "$K9S_VER" ] && [ -n "$KREW_VER" ] && [ -n "$HELM_VER" ]; then
-            if "$BIN_DIR/lib/update-versions/kubernetes-checksums.sh" "$K9S_VER" "$KREW_VER" "$HELM_VER"; then
-                echo -e "${GREEN}✓ Kubernetes checksums updated${NC}"
-            else
-                echo -e "${RED}✗ Failed to update Kubernetes checksums${NC}"
-                echo -e "${YELLOW}Manual checksum update may be required${NC}"
-            fi
-        else
-            echo -e "${YELLOW}Warning: Could not determine all Kubernetes tool versions${NC}"
-        fi
-        echo ""
-    fi
-fi
+# Note: Kubernetes tools (k9s, krew, helm) use dynamic checksum fetching
+# at build time via register_tool_checksum_fetcher, so no static checksum
+# updates are needed here.
 
 # Handle commits and version bump
 if [ "$UPDATES_APPLIED" = true ] && [ "$DRY_RUN" = false ]; then
