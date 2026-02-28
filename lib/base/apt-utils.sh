@@ -275,17 +275,19 @@ apt_update() {
         echo "Updating package lists (attempt $attempt/$APT_MAX_RETRIES)..."
 
         # Configure apt with timeout and retry options
-        if timeout "$APT_TIMEOUT" apt-get update \
+        # Use || to capture the exit code without triggering set -e
+        local exit_code=0
+        timeout "$APT_TIMEOUT" apt-get update \
             -o Acquire::http::Timeout=${APT_ACQUIRE_TIMEOUT} \
             -o Acquire::https::Timeout=${APT_ACQUIRE_TIMEOUT} \
             -o Acquire::ftp::Timeout=${APT_ACQUIRE_TIMEOUT} \
             -o Acquire::Retries=3 \
-            -o APT::Update::Error-Mode=any; then
+            -o APT::Update::Error-Mode=any || exit_code=$?
+
+        if [ $exit_code -eq 0 ]; then
             echo "✓ Package lists updated successfully"
             return 0
         fi
-
-        local exit_code=$?
 
         if [ $attempt -lt "$APT_MAX_RETRIES" ]; then
             echo "⚠ apt-get update failed (exit code: $exit_code), retrying in ${delay}s..."

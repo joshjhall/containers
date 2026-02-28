@@ -85,7 +85,7 @@ apt_update
 
 # Install dependencies
 log_message "Installing required packages"
-apt_install gnupg software-properties-common
+apt_install gnupg
 
 # ============================================================================
 # Terraform Installation

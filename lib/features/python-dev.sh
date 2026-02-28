@@ -42,7 +42,6 @@ apt_update
 apt_install \
     python3-dev \
     python3-full \
-    python3-distutils \
     python3-venv \
     python3-tk \
     libpq-dev \
@@ -53,6 +52,9 @@ apt_install \
     libffi-dev \
     libjpeg-dev \
     zlib1g-dev
+
+# python3-distutils was removed in Debian 13 (merged into python3-stdlib-extensions)
+apt_install_conditional 11 12 python3-distutils
 
 # ============================================================================
 # Python Tool Installation
