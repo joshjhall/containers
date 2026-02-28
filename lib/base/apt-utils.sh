@@ -353,7 +353,9 @@ apt_install() {
         echo "Installing packages: ${packages[*]} (attempt $attempt/$APT_MAX_RETRIES)..."
 
         # Configure apt with timeout and retry options
-        if DEBIAN_FRONTEND=noninteractive timeout "$APT_TIMEOUT" apt-get install -y \
+        # Use || to capture the exit code without triggering set -e
+        local exit_code=0
+        DEBIAN_FRONTEND=noninteractive timeout "$APT_TIMEOUT" apt-get install -y \
             --no-install-recommends \
             -o Acquire::http::Timeout=${APT_ACQUIRE_TIMEOUT} \
             -o Acquire::https::Timeout=${APT_ACQUIRE_TIMEOUT} \
@@ -361,12 +363,12 @@ apt_install() {
             -o Acquire::Retries=3 \
             -o Dpkg::Options::="--force-confdef" \
             -o Dpkg::Options::="--force-confold" \
-            "${packages[@]}"; then
+            "${packages[@]}" || exit_code=$?
+
+        if [ $exit_code -eq 0 ]; then
             echo "✓ Packages installed successfully: ${packages[*]}"
             return 0
         fi
-
-        local exit_code=$?
 
         if [ $attempt -lt "$APT_MAX_RETRIES" ]; then
             echo "⚠ Package installation failed (exit code: $exit_code), retrying in ${delay}s..."
@@ -474,7 +476,9 @@ add_apt_repository_key() {
 
         # Strip signed-by from repo_line for legacy format
         local legacy_line="$repo_line"
-        legacy_line=$(echo "$legacy_line" | command sed 's/ signed-by=[^ ]*//g')
+        # Match optional leading space + signed-by= + value (stop at ] or space)
+        # Handles both "[signed-by=/path]" and "[arch=amd64 signed-by=/path]"
+        legacy_line=$(echo "$legacy_line" | command sed 's/ *signed-by=[^] ]*//g')
         # Clean up empty options brackets: "deb [ ] ..." -> "deb ..."
         # and "deb [arch=amd64 ] ..." -> "deb [arch=amd64] ..."
         legacy_line=$(echo "$legacy_line" | command sed 's/\[ *\] *//g; s/ *\] */] /g')
