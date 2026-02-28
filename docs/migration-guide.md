@@ -33,35 +33,35 @@ ______________________________________________________________________
 
 ## Current Version
 
-**Latest Stable**: v4.12.1 (2025-11-30)
+**Latest Stable**: v4.15.2
 
 Check your current version:
 
-````bash
+```bash
 # From your project root
 cat containers/VERSION
 
 # Or check git submodule commit
 cd containers && git describe --tags
-```text
+```
 
----
+______________________________________________________________________
 
 ## Upgrade Paths
 
 ### Recommended Upgrade Paths
 
 ```text
-v3.x → v4.0.0 → v4.12.x (current)
-v4.0.x → v4.12.x (direct upgrade)
-v4.1.x → v4.12.x (direct upgrade)
-v4.5.x → v4.12.x (direct upgrade)
+v3.x → v4.0.0 → v4.15.x (current)
+v4.0.x → v4.15.x (direct upgrade)
+v4.1.x → v4.15.x (direct upgrade)
+v4.5.x → v4.15.x (direct upgrade)
 ```
 
 **Best Practice**: Always upgrade through major versions sequentially (v3 → v4 →
 v5), not skipping major versions.
 
----
+______________________________________________________________________
 
 ## Breaking Changes by Version
 
@@ -72,17 +72,20 @@ v5), not skipping major versions.
 #### Breaking Changes
 
 1. **Debian Trixie (13) Support Added**
+
    - **Impact**: Builds on Debian 13 use new GPG key management
    - **Migration**: Automatic - scripts detect Debian version
    - **Action Required**: None if using default base images
 
 1. **apt-key Deprecation Handling**
+
    - **Impact**: Features using apt repositories (terraform, gcloud, kubernetes)
      changed
    - **Migration**: Automatic version detection
    - **Action Required**: Rebuild images if locked to old Debian versions
 
 1. **Python Installation Method Changed**
+
    - **Impact**: Switched from pyenv to direct source installation
    - **Migration**: Simplified installation, same user experience
    - **Action Required**: None - environment variables remain compatible
@@ -100,7 +103,7 @@ v5), not skipping major versions.
 - ❌ rbenv for Ruby (removed)
 - ❌ Legacy apt-key commands (automatic fallback)
 
----
+______________________________________________________________________
 
 ### v4.5.0 → v4.7.0 (Minor Upgrades)
 
@@ -119,7 +122,7 @@ v5), not skipping major versions.
 - **Optional**: Use new healthcheck features
 - **Recommended**: Review new security documentation
 
----
+______________________________________________________________________
 
 ## Migration Procedures
 
@@ -132,7 +135,7 @@ cd /path/to/your/project
 cd containers
 git describe --tags
 # Output: v4.5.0 (example)
-```text
+```
 
 #### Step 2: Review Release Notes
 
@@ -159,7 +162,7 @@ cd ..
 # Commit the submodule update
 git add containers
 git commit -m "chore: Upgrade container build system to v4.7.0"
-```text
+```
 
 #### Step 4: Rebuild Images
 
@@ -177,7 +180,7 @@ docker build -t myproject:dev \
 # Test the new image
 docker run --rm myproject:dev python3 --version
 docker run --rm myproject:dev node --version
-```text
+```
 
 #### Step 5: Update CI/CD (if applicable)
 
@@ -190,9 +193,9 @@ docker run --rm myproject:dev node --version
 
 - name: Build container
   run: docker build -t test:latest .
-```text
+```
 
----
+______________________________________________________________________
 
 ## Version-Specific Migration Instructions
 
@@ -215,7 +218,7 @@ FROM mcr.microsoft.com/devcontainers/base:bookworm
 
 # New (v4.0+)
 FROM mcr.microsoft.com/devcontainers/base:trixie
-```text
+```
 
 1. **Remove pyenv/rbenv References**
 
@@ -228,7 +231,7 @@ pyenv global 3.11.0
 
 # New - Direct installation
 python3 --version  # Already at specified version
-```text
+```
 
 1. **Update Build Arguments (if customized)**
 
@@ -245,7 +248,7 @@ docker run --rm myproject:test-v4 check-installed-versions.sh
 
 # Compare with v3.x image
 docker run --rm myproject:old check-installed-versions.sh
-```text
+```
 
 #### Known Issues and Solutions
 
@@ -257,11 +260,12 @@ docker run --rm myproject:old check-installed-versions.sh
 **Issue**: Python/Ruby version mismatch
 
 - **Cause**: Version pinning from pyenv era
+
 - **Solution**: Specify version via build args:
 
   ```bash
   docker build --build-arg PYTHON_VERSION=3.12.0 .
-````
+  ```
 
 ______________________________________________________________________
 
@@ -269,12 +273,12 @@ ______________________________________________________________________
 
 This is a **non-breaking upgrade**. Simply update the submodule:
 
-````bash
+```bash
 cd containers && git checkout v4.7.0 && cd ..
 git add containers
 git commit -m "chore: Update to v4.7.0"
 docker build --no-cache -t myproject:latest .
-```text
+```
 
 **Optional Enhancements to Adopt**:
 
@@ -284,7 +288,7 @@ docker build --no-cache -t myproject:latest .
 # Add to your Dockerfile
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s \
   CMD /usr/local/bin/healthcheck.sh --quick || exit 1
-```text
+```
 
 1. **Use Retry Configuration** (new in v4.7.0)
 
@@ -294,9 +298,9 @@ docker build \
   -e RETRY_MAX_ATTEMPTS=5 \
   -e RETRY_INITIAL_DELAY=1 \
   -t myproject:latest .
-```text
+```
 
----
+______________________________________________________________________
 
 ## Testing Your Migration
 
@@ -323,7 +327,7 @@ docker run --rm myproject:latest env | grep -E "(CACHE|VERSION|PATH)"
 # 5. Test development workflow
 docker run -it --rm -v "$(pwd):/workspace/project" myproject:latest bash
 # Inside container: run your normal dev commands
-```text
+```
 
 ### Integration Testing
 
@@ -335,7 +339,7 @@ docker run --rm -v "$(pwd):/workspace/project" \
 
 # Compare build times (optional)
 time docker build --no-cache -t myproject:test .
-```text
+```
 
 ### Smoke Tests
 
@@ -362,9 +366,9 @@ docker run --rm myproject:latest ls -la /cache
 docker run --rm myproject:latest healthcheck.sh --quick
 
 echo "All smoke tests passed!"
-```text
+```
 
----
+______________________________________________________________________
 
 ## Rollback Procedures
 
@@ -384,7 +388,7 @@ git commit -m "rollback: Revert to container system v4.5.0"
 
 # Rebuild with old version
 docker build --no-cache -t myproject:latest .
-```text
+```
 
 ### Emergency Rollback
 
@@ -396,7 +400,7 @@ rollback procedures including:
 - Recovery from failed builds
 - CI/CD rollback procedures
 
----
+______________________________________________________________________
 
 ## Common Migration Issues
 
@@ -406,7 +410,7 @@ rollback procedures including:
 
 ```text
 ERROR: failed to solve: failed to compute cache key
-```text
+```
 
 **Solutions**:
 
@@ -425,7 +429,7 @@ ERROR: failed to solve: failed to compute cache key
 
    ```bash
    ./containers/bin/list-features.sh
-````
+   ```
 
 1. Verify build arguments:
 
@@ -436,7 +440,7 @@ ERROR: failed to solve: failed to compute cache key
 1. Check feature dependencies:
 
    ```bash
-   cat containers/docs/feature-dependencies.md
+   cat containers/docs/reference/features.md
    ```
 
 ### Issue: Environment Variables Missing
@@ -485,7 +489,7 @@ ERROR: failed to solve: failed to compute cache key
 1. Review cache strategy:
 
    ```bash
-   cat containers/docs/cache-strategy.md
+   cat containers/docs/architecture/caching.md
    ```
 
 ______________________________________________________________________
@@ -583,22 +587,6 @@ ______________________________________________________________________
    - See [emergency-rollback.md](operations/rollback.md)
    - Pin to last known good version
    - Report issue after recovery
-
-______________________________________________________________________
-
-## Version History Reference
-
-| Version | Release Date | Type  | Notes                                            |
-| ------- | ------------ | ----- | ------------------------------------------------ |
-| v4.7.0  | 2025-11-11   | Minor | Health checks, retry logic, documentation        |
-| v4.5.0  | 2025-11-09   | Minor | Checksum verification, security improvements     |
-| v4.4.0  | 2025-XX-XX   | Minor | Feature additions                                |
-| v4.3.2  | 2025-XX-XX   | Patch | Bug fixes                                        |
-| v4.3.1  | 2025-XX-XX   | Patch | Bug fixes                                        |
-| v4.3.0  | 2025-XX-XX   | Minor | Feature additions                                |
-| v4.2.0  | 2025-XX-XX   | Minor | Feature additions                                |
-| v4.1.0  | 2025-XX-XX   | Minor | Feature additions                                |
-| v4.0.0  | 2024-XX-XX   | Major | **Breaking**: Debian Trixie, pyenv/rbenv removal |
 
 ______________________________________________________________________
 

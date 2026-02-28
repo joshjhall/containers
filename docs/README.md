@@ -238,4 +238,4 @@ See [Development/Code Style](development/code-style.md) for style conventions.
 
 ______________________________________________________________________
 
-**Last Updated**: 2025-11-16 **Documentation Structure Version**: 2.0
+**Documentation Structure Version**: 2.0

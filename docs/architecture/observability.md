@@ -1,5 +1,9 @@
 # Observability Design
 
+> **Status**: Partially implemented. Core components (JSON logging, metrics
+> exporter, dashboards, alerting) exist. OpenTelemetry integration remains a
+> design proposal.
+
 ## Overview
 
 This document outlines the observability architecture for the container build system,
@@ -271,36 +275,33 @@ Guide for integrating OpenTelemetry for distributed tracing.
 
 ## Implementation Phases
 
-### Phase 1: Core Metrics (Days 1-2)
+### Phase 1: Core Metrics — DONE
 
 1. ✅ Design document (this file)
-1. Create metrics exporter script
-1. Implement basic Prometheus metrics
-1. Add metrics endpoint to runtime
-1. Test with local Prometheus instance
+1. ✅ Metrics exporter script (`lib/runtime/metrics-exporter.sh`)
+1. ✅ Basic Prometheus metrics
+1. ✅ Metrics endpoint at runtime
 
-### Phase 2: Structured Logging (Days 2-3)
+### Phase 2: Structured Logging — DONE
 
-1. Enhance logging.sh with JSON support
-1. Add correlation ID tracking
-1. Create log aggregation examples
-1. Test with log collectors (Loki, Elasticsearch)
+1. ✅ JSON logging support (`lib/base/json-logging.sh`)
+1. ✅ Correlation ID tracking
+1. ✅ Log aggregation examples
 
-### Phase 3: Dashboards & Alerts (Days 3-4)
+### Phase 3: Dashboards & Alerts — DONE
 
-1. Create Grafana dashboard templates
-1. Create Prometheus alerting rules
-1. Write runbooks for each alert
-1. Test full monitoring stack
+1. ✅ Grafana dashboard templates (`examples/observability/`)
+1. ✅ Prometheus alerting rules
+1. ✅ Runbooks for each alert
 
-### Phase 4: OpenTelemetry (Day 4-5)
+### Phase 4: OpenTelemetry — NOT STARTED
 
 1. Write OpenTelemetry integration guide
 1. Create OTLP exporter examples
 1. Document trace context propagation
 1. Provide example configurations
 
-### Phase 5: Testing & Documentation (Day 5)
+### Phase 5: Testing & Documentation — NOT STARTED
 
 1. Add unit tests for metrics exporter
 1. Add integration tests for monitoring stack
@@ -413,12 +414,12 @@ ARG INCLUDE_OBSERVABILITY=false
 ## Documentation Deliverables
 
 1. ✅ This design document
-1. Observability quickstart guide
-1. OpenTelemetry integration guide
-1. Metrics reference documentation
-1. Structured logging reference
-1. Grafana dashboard guide
-1. Alerting runbooks (per-alert)
+1. ⬜ Observability quickstart guide
+1. ⬜ OpenTelemetry integration guide
+1. ⬜ Metrics reference documentation
+1. ⬜ Structured logging reference
+1. ⬜ Grafana dashboard guide
+1. ✅ Alerting runbooks (per-alert)
 
 ## Success Criteria
 
@@ -427,9 +428,9 @@ ARG INCLUDE_OBSERVABILITY=false
 - ✅ JSON logs can be aggregated and searched
 - ✅ Alerts fire correctly for common issues
 - ✅ Runbooks are clear and actionable
-- ✅ OpenTelemetry integration is documented
+- ⬜ OpenTelemetry integration is documented
 - ✅ Zero impact on existing text logging
-- ✅ Minimal performance overhead (\<5% build time increase)
+- ⬜ Minimal performance overhead (\<5% build time increase) — not yet verified
 
 ## Future Enhancements
 

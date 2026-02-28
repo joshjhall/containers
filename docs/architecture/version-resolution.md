@@ -162,10 +162,7 @@ All implementations tested with:
 1. **Partial version**: Verifies resolution to latest patch
 1. **Invalid version**: Verifies error handling
 
-Test results:
-
-- Ruby unit tests: 556/557 passing (99%)
-- Go unit tests: 546/547 passing (99%)
+Run `./tests/run_unit_tests.sh` to verify all tests pass.
 
 ## Related Documentation
 
