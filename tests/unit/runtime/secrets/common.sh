@@ -184,6 +184,37 @@ test_normalize_prefix_with_spaces_in_label() {
 }
 
 # ============================================================================
+# Functional Tests - url_encode()
+# ============================================================================
+
+test_url_encode_spaces() {
+    local result
+    result=$(_run_common_subshell "
+        url_encode 'hello world'
+    ")
+
+    assert_equals "hello%20world" "$result" "Spaces should be percent-encoded"
+}
+
+test_url_encode_special_chars() {
+    local result
+    result=$(_run_common_subshell "
+        url_encode 'a\"b&c=d'
+    ")
+
+    assert_equals "a%22b%26c%3Dd" "$result" "Quotes, ampersands, and equals should be encoded"
+}
+
+test_url_encode_safe_chars() {
+    local result
+    result=$(_run_common_subshell "
+        url_encode 'abc-123_XYZ'
+    ")
+
+    assert_equals "abc-123_XYZ" "$result" "Alphanumeric, hyphens, and underscores should be preserved"
+}
+
+# ============================================================================
 # Functional Tests - Inclusion Guard
 # ============================================================================
 
@@ -223,6 +254,11 @@ run_test_with_setup test_normalize_hyphens_to_underscores "Hyphens converted to 
 run_test_with_setup test_normalize_mixed_case_to_upper "Mixed case converted to upper"
 run_test_with_setup test_normalize_preserves_underscores "Existing underscores preserved"
 run_test_with_setup test_normalize_prefix_with_spaces_in_label "Prefix with spaces in label"
+
+# url_encode
+run_test_with_setup test_url_encode_spaces "url_encode encodes spaces"
+run_test_with_setup test_url_encode_special_chars "url_encode encodes special characters"
+run_test_with_setup test_url_encode_safe_chars "url_encode preserves safe characters"
 
 # Inclusion guard
 run_test_with_setup test_inclusion_guard_prevents_double_load "Double-sourcing is safe"

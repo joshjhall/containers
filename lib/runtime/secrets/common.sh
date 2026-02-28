@@ -47,3 +47,9 @@ normalize_env_var_name() {
     env_var="${env_var//[^a-zA-Z0-9_]/}"
     echo "${env_var^^}"
 }
+
+# URL-encode a string for safe use in query parameters.
+# Uses jq's @uri filter (jq is a verified dependency in the Connect path).
+url_encode() {
+    jq -rn --arg s "$1" '$s | @uri'
+}
