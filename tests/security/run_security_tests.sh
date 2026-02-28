@@ -47,17 +47,17 @@ log_error() {
 
 log_test() {
     echo -e "  ${GREEN}✓${NC} $1"
-    ((TESTS_PASSED++))
+    ((TESTS_PASSED++)) || true
 }
 
 log_test_fail() {
     echo -e "  ${RED}✗${NC} $1"
-    ((TESTS_FAILED++))
+    ((TESTS_FAILED++)) || true
 }
 
 log_test_skip() {
     echo -e "  ${YELLOW}○${NC} $1 (skipped)"
-    ((TESTS_SKIPPED++))
+    ((TESTS_SKIPPED++)) || true
 }
 
 # Build test image if not provided
