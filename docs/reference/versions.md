@@ -35,6 +35,9 @@ These are defined as build arguments in the Dockerfile:
 - `GLAB_VERSION="1.86.0"`
 - `DUF_VERSION="0.9.1"`
 - `ENTR_VERSION="5.7"`
+- `GITCLIFF_VERSION="2.8.0"`
+- `BIOME_VERSION="2.4.4"`
+- `TAPLO_VERSION="0.10.0"`
 
 ### lib/features/docker.sh
 
@@ -104,7 +107,7 @@ These tools get the latest version at build time, which is generally fine:
 
 ✅ **Shell script versions:**
 
-- lazygit, direnv, act, delta, glab, mkcert, duf, entr (dev-tools.sh)
+- lazygit, direnv, act, delta, glab, mkcert, duf, entr, git-cliff, biome, taplo (dev-tools.sh)
 - dive, lazydocker (docker.sh)
 - spring-boot-cli, jbang, mvnd, google-java-format (java-dev.sh)
 - Poetry (python.sh)
