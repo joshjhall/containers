@@ -11,14 +11,26 @@ at the start of every invocation.
 Accepts an optional issue number argument: `/next-issue 123` skips priority
 selection and targets that specific issue.
 
+**IMPORTANT — Plan mode**: Use the `EnterPlanMode` tool immediately at the
+start of every `/next-issue` invocation (before any other work). Phases 0-2
+are planning phases that only need read-only tools and Bash. After Phase 2
+plan approval, use `ExitPlanMode` to begin implementation.
+
 ## Phase 0 — Resume Check
 
+1. **Enter plan mode** (call `EnterPlanMode` tool)
 1. Read `.claude/memory/next-issue-state.md` (if it exists)
-1. If the file contains `phase:` and `issue:` fields, offer to resume:
-   - Show the issue number, title, current phase, and branch
-   - Ask: **Resume this work or start fresh?**
-   - If resume: jump to the recorded phase
-   - If fresh: clear the state file and proceed to Phase 1
+1. If the file contains `phase:` and `issue:` fields, **validate the state**:
+   - Check if the issue is still open (`gh issue view {N} --json state` or
+     `glab issue view {N}`)
+   - Check if the branch still exists (`git branch --list {branch}`)
+   - **If issue is closed or branch is missing**: the state is stale — silently
+     clear the file and proceed to Phase 1 (no need to ask the user)
+   - **If issue is still open and branch exists**: offer to resume:
+     - Show the issue number, title, current phase, and branch
+     - Ask: **Resume this work or start fresh?**
+     - If resume: jump to the recorded phase
+     - If fresh: clear the state file and proceed to Phase 1
 1. If no state file or it's empty: proceed to Phase 1
 
 ## Phase 1 — Select
@@ -48,8 +60,9 @@ selection and targets that specific issue.
    - `effort/medium` or `effort/large`: Load `development-workflow`
      phase-details.md and create a thorough plan following its Phase 1-3
      structure
-1. Present the plan to the user for approval
 1. **Update state file** with `phase: plan` and a one-line plan summary
+1. **Exit plan mode** (call `ExitPlanMode` tool) — this presents the plan to
+   the user for approval before implementation begins
 
 ## Phase 3 — Implement
 
@@ -70,22 +83,42 @@ selection and targets that specific issue.
 
 ## Phase 4 — Ship
 
-1. Stage and commit with a message that closes the issue:
+1. Stage and commit. **CRITICAL**: The commit message MUST include
+   `Closes #{N}` (where N is the issue number) in the commit body to
+   auto-close the issue. Use this exact format:
 
    ```text
-   {type}(scope): description
+   {type}({scope}): {description}
+
+   {optional body explaining the change}
 
    Closes #{N}
    ```
 
-   Follow `git-workflow` conventions for commit message format
+   Where `{type}` matches the branch prefix: `fix/` → `fix:`,
+   `feature/` → `feat:`, `docs/` → `docs:`, `test/` → `test:`,
+   `refactor/` → `refactor:`, `chore/` → `chore:`.
+
+1. **Verify** the commit message includes `Closes #{N}` before proceeding:
+   run `git log -1 --format=%B` and confirm the closure reference is present.
+   If missing, amend the commit to add it.
 
 1. Push the branch and create a PR:
 
    - GitHub: `gh pr create --title "..." --body "..."`
    - GitLab: `glab mr create --title "..." --description "..."`
 
-1. Include in the PR body: what changed, why, test plan, `Closes #{N}`
+1. The PR body MUST also include `Closes #{N}`. Use this structure:
+
+   ```text
+   ## Summary
+   - {what changed and why}
+
+   ## Test plan
+   - {how this was tested}
+
+   Closes #{N}
+   ```
 
 1. Checkout main: `git checkout main`
 
@@ -97,7 +130,7 @@ selection and targets that specific issue.
 
 Ask the user:
 
-- **Continue** — loop back to Phase 1 to pick the next issue
+- **Continue** — enter plan mode (`EnterPlanMode`) and loop back to Phase 1
 - **Stop** — end the session
 
 ## Platform Detection

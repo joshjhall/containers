@@ -241,8 +241,9 @@ scanners and `issue-writer`). The `/codebase-audit` command dispatches scanners
 in parallel, including file bloat detection for AI instruction files and
 documentation. The `/next-issue` command automates issue-driven development:
 picks the next issue by severity/effort priority, plans, implements, and ships
-a PR. State persists to `.claude/memory/next-issue-state.md` for cross-window
-resume. See `docs/claude-code/skills-and-agents.md` for tables, audit
+a PR. Auto-enters plan mode for issue selection and planning, exits for
+implementation. State persists to `.claude/memory/next-issue-state.md` for
+cross-window resume (stale state auto-detected and cleared). See `docs/claude-code/skills-and-agents.md` for tables, audit
 parameters, depth modes, and inline suppression.
 
 ### Secrets & Setup Commands

@@ -117,6 +117,9 @@ source "${_VALIDATE_CONFIG_DIR}/secret-detection.sh"
 # Custom Validation Rules
 # ============================================================================
 
+# Trusted directory prefix for custom validation rules
+readonly CV_TRUSTED_RULES_DIR="/etc/container/"
+
 # Load and execute custom validation rules from file
 cv_load_custom_rules() {
     local rules_file="${VALIDATE_CONFIG_RULES:-}"
@@ -125,16 +128,46 @@ cv_load_custom_rules() {
         return 0
     fi
 
+    # Require absolute path
+    if [[ "$rules_file" != /* ]]; then
+        cv_error "Custom validation rules path must be absolute: $rules_file"
+        return 1
+    fi
+
     if [ ! -f "$rules_file" ]; then
         cv_warning "Custom validation rules file not found: $rules_file"
         return 0
     fi
 
-    cv_info "Loading custom validation rules from: $rules_file"
+    # Canonicalize path to resolve symlinks and ../ traversal
+    local resolved_path
+    resolved_path="$(realpath --canonicalize-existing "$rules_file" 2>/dev/null)" || {
+        cv_error "Cannot resolve custom validation rules path: $rules_file"
+        return 1
+    }
 
-    # Source the rules file in a safe manner
+    # Verify path is within trusted directory
+    if [[ "$resolved_path" != "${CV_TRUSTED_RULES_DIR}"* ]]; then
+        cv_error "Custom validation rules must be under ${CV_TRUSTED_RULES_DIR}: $resolved_path"
+        return 1
+    fi
+
+    # Verify file is owned by root
+    local file_owner
+    file_owner="$(stat -c '%u' "$resolved_path" 2>/dev/null)" || {
+        cv_error "Cannot check ownership of custom validation rules: $resolved_path"
+        return 1
+    }
+    if [ "$file_owner" != "0" ]; then
+        cv_error "Custom validation rules must be owned by root (uid 0): $resolved_path (owner: $file_owner)"
+        return 1
+    fi
+
+    cv_info "Loading custom validation rules from: $resolved_path"
+
+    # Source the rules file
     # shellcheck source=/dev/null
-    source "$rules_file" || {
+    source "$resolved_path" || {
         cv_error "Failed to load custom validation rules"
         return 1
     }
