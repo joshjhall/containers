@@ -575,6 +575,35 @@ test_newgrp_docker_uses_quoted_cmd() {
     fi
 }
 
+# Test: su -l uses QUOTED_PWD (not raw $(pwd)) to prevent injection via crafted directories
+test_su_l_uses_quoted_pwd() {
+    local script="$PROJECT_ROOT/lib/runtime/entrypoint.sh"
+
+    # su -l ... -c must use ${QUOTED_PWD}, not raw $(pwd)
+    if command grep -q 'cd '\''${QUOTED_PWD}'\''' "$script"; then
+        assert_true true "su -l path uses QUOTED_PWD for cd"
+    else
+        assert_true false "su -l path does not use QUOTED_PWD — command injection risk via crafted directory names"
+    fi
+}
+
+# Test: No raw $(pwd) in exec/su/sg/newgrp command strings (prevents injection)
+test_no_raw_pwd_in_exec() {
+    local script="$PROJECT_ROOT/lib/runtime/entrypoint.sh"
+
+    # Search for $(pwd) inside command strings passed to su/sg/newgrp
+    # These should all use QUOTED_PWD instead
+    local raw_pwd_count
+    raw_pwd_count=$(command grep -E '(exec su|exec sg|exec newgrp)' "$script" \
+        | command grep -c '\$(pwd)' || true)
+
+    if [ "$raw_pwd_count" -eq 0 ]; then
+        assert_true true "No raw \$(pwd) found in exec su/sg/newgrp command strings"
+    else
+        assert_true false "Found $raw_pwd_count raw \$(pwd) in exec command strings — use QUOTED_PWD instead"
+    fi
+}
+
 # Test: No unquoted $* in any exec context (prevents command injection)
 test_no_unquoted_dollar_star_in_exec() {
     local script="$PROJECT_ROOT/lib/runtime/entrypoint.sh"
@@ -986,6 +1015,8 @@ test_apply_overlay_failure() {
 run_test_with_setup test_sg_docker_uses_quoted_cmd "sg docker uses QUOTED_CMD (not \$*)"
 run_test_with_setup test_newgrp_docker_uses_quoted_cmd "newgrp docker uses QUOTED_CMD (not \$*)"
 run_test_with_setup test_no_unquoted_dollar_star_in_exec "No unquoted \$* in exec contexts"
+run_test_with_setup test_su_l_uses_quoted_pwd "su -l uses QUOTED_PWD (not raw \$(pwd))"
+run_test_with_setup test_no_raw_pwd_in_exec "No raw \$(pwd) in exec su/sg/newgrp strings"
 run_test_with_setup test_path_traversal_guard_exists "Path traversal guard has all checks"
 run_test_with_setup test_su_script_uses_quoting "su -c bash uses quoted script path"
 run_test_with_setup test_su_touch_marker_uses_quoting "su -c touch uses quoted marker path"

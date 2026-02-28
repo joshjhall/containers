@@ -382,12 +382,14 @@ for arg in "$@"; do
     escaped_arg=$(printf '%s' "$arg" | command sed "s/'/'\\\\''/g")
     QUOTED_CMD="$QUOTED_CMD '${escaped_arg}'"
 done
+# Escape pwd the same way we escape command arguments (prevents injection via crafted directory names)
+QUOTED_PWD=$(printf '%s' "$(pwd)" | command sed "s/'/'\\\\''/g")
 
 if [ "$RUNNING_AS_ROOT" = "true" ]; then
     # Drop privileges to non-root user for main process
     # Using 'su -l' ensures a fresh login that picks up updated group memberships
     # from /etc/group (including any groups added for Docker socket access)
-    exec su -l "$USERNAME" -c "cd '$(pwd)' && exec $QUOTED_CMD"
+    exec su -l "$USERNAME" -c "cd '${QUOTED_PWD}' && exec $QUOTED_CMD"
 elif [ "${DOCKER_SOCKET_CONFIGURED:-false}" = "true" ] && getent group docker >/dev/null 2>&1; then
     # We configured docker socket access but need new group membership
     # Use sg to run command with docker group, or newgrp if sg unavailable
