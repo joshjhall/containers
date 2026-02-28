@@ -156,7 +156,7 @@ verify_gpg_signature() {
     if gpg --verify "$signature_file" "$file" 2>&1 | tee /tmp/gpg-verify-output.txt; then
         # Check if verification was successful
         if grep -q "Good signature" /tmp/gpg-verify-output.txt; then
-            log_message "✓ GPG signature verified successfully"
+            log_message "GPG signature verified successfully"
 
             # Extract signer information
             local signer
@@ -266,7 +266,7 @@ verify_file_against_shasums() {
     log_message "Actual checksum:   ${actual_checksum}"
 
     if [ "$actual_checksum" = "$expected_checksum" ]; then
-        log_message "✓ Checksum verification passed"
+        log_message "Checksum verification passed"
         command rm -f "$shasums_file" "$signature_file"
         return 0
     else
@@ -279,191 +279,15 @@ verify_file_against_shasums() {
 }
 
 # ============================================================================
-# download_and_verify_nodejs_gpg - Node.js-specific GPG verification
-#
-# Node.js uses a SHASUMS256.txt file with a GPG signature, rather than
-# per-file signatures. This function:
-#   1. Downloads SHASUMS256.txt and its signature (.sig or .asc)
-#   2. Verifies the GPG signature of SHASUMS256.txt
-#   3. Extracts the checksum for the specific file
-#   4. Verifies the file checksum matches
-#
-# Arguments:
-#   $1 - File to verify (e.g., "node-v20.18.0-linux-x64.tar.xz")
-#   $2 - Node.js version (e.g., "20.18.0")
-#
-# Returns:
-#   0 on successful verification, 1 on failure
-#
-# Example:
-#   download_and_verify_nodejs_gpg "node-v20.18.0-linux-x64.tar.xz" "20.18.0"
+# Source sub-modules
 # ============================================================================
-download_and_verify_nodejs_gpg() {
-    local file="$1"
-    local version="$2"
-    local filename
-    filename=$(basename "$file")
-
-    # Node.js SHASUMS256.txt URL
-    local shasums_url="https://nodejs.org/dist/v${version}/SHASUMS256.txt"
-    local shasums_file="${file%/*}/SHASUMS256.txt"
-
-    log_message "Downloading Node.js checksums file..."
-    if ! command curl -fsSL -o "$shasums_file" "$shasums_url" 2>/dev/null; then
-        log_warning "Failed to download SHASUMS256.txt from ${shasums_url}"
-        return 1
-    fi
-
-    # Try .sig first (binary signature), then .asc (ASCII-armored)
-    local signature_file=""
-    local sig_url=""
-
-    for ext in sig asc; do
-        sig_url="${shasums_url}.${ext}"
-        signature_file="${shasums_file}.${ext}"
-
-        log_message "Attempting to download SHASUMS256.txt.${ext}..."
-        if command curl -fsSL -o "$signature_file" "$sig_url" 2>/dev/null; then
-            log_message "✓ Downloaded SHASUMS256.txt.${ext}"
-            break
-        else
-            log_message "  SHASUMS256.txt.${ext} not available"
-            signature_file=""
-        fi
-    done
-
-    if [ -z "$signature_file" ] || [ ! -f "$signature_file" ]; then
-        log_warning "Failed to download Node.js GPG signature (.sig or .asc)"
-        command rm -f "$shasums_file"
-        return 1
-    fi
-
-    # Verify the GPG signature of SHASUMS256.txt
-    log_message "Verifying GPG signature of SHASUMS256.txt..."
-    if ! verify_gpg_signature "$shasums_file" "$signature_file" "nodejs"; then
-        log_error "GPG signature verification failed for SHASUMS256.txt"
-        command rm -f "$shasums_file" "$signature_file"
-        return 1
-    fi
-
-    log_message "✓ GPG signature verified successfully"
-
-    verify_file_against_shasums "$file" "$shasums_file" "$signature_file"
-}
-
-# ============================================================================
-# download_and_verify_terraform_gpg - Terraform-specific GPG verification
-#
-# HashiCorp uses a signed SHA256SUMS file pattern for verification:
-#   1. Downloads terraform_<version>_SHA256SUMS and its signature (.sig)
-#   2. Verifies the GPG signature of SHA256SUMS using HashiCorp's GPG key
-#   3. Extracts the checksum for the specific file
-#   4. Verifies the file checksum matches
-#
-# Arguments:
-#   $1 - File to verify (e.g., "terraform_1.10.0_linux_amd64.zip")
-#   $2 - Terraform version (e.g., "1.10.0")
-#
-# Returns:
-#   0 on successful verification, 1 on failure
-#
-# Example:
-#   download_and_verify_terraform_gpg "terraform_1.10.0_linux_amd64.zip" "1.10.0"
-# ============================================================================
-download_and_verify_terraform_gpg() {
-    local file="$1"
-    local version="$2"
-    local filename
-    filename=$(basename "$file")
-
-    # Terraform SHA256SUMS URL
-    local shasums_url="https://releases.hashicorp.com/terraform/${version}/terraform_${version}_SHA256SUMS"
-    local shasums_file="${file%/*}/terraform_${version}_SHA256SUMS"
-
-    log_message "Downloading Terraform checksums file..."
-    if ! command curl -fsSL -o "$shasums_file" "$shasums_url" 2>/dev/null; then
-        log_warning "Failed to download SHA256SUMS from ${shasums_url}"
-        return 1
-    fi
-
-    # Download GPG signature (.sig file)
-    local sig_url="${shasums_url}.sig"
-    local signature_file="${shasums_file}.sig"
-
-    log_message "Downloading GPG signature..."
-    if ! command curl -fsSL -o "$signature_file" "$sig_url" 2>/dev/null; then
-        log_warning "Failed to download GPG signature from ${sig_url}"
-        command rm -f "$shasums_file"
-        return 1
-    fi
-
-    log_message "✓ Downloaded SHA256SUMS and signature"
-
-    # Verify the GPG signature of SHA256SUMS
-    log_message "Verifying GPG signature of SHA256SUMS..."
-    if ! verify_gpg_signature "$shasums_file" "$signature_file" "hashicorp"; then
-        log_error "GPG signature verification failed for SHA256SUMS"
-        command rm -f "$shasums_file" "$signature_file"
-        return 1
-    fi
-
-    log_message "✓ GPG signature verified successfully"
-
-    verify_file_against_shasums "$file" "$shasums_file" "$signature_file"
-}
-
-# ============================================================================
-# download_and_verify_golang_gpg - Go-specific GPG verification
-#
-# Go releases include .asc signature files that can be verified using
-# Google's Linux Packages Signing Key.
-#
-# Arguments:
-#   $1 - File to verify (e.g., "go1.23.4.linux-amd64.tar.gz")
-#   $2 - Go version (e.g., "1.23.4")
-#
-# Returns:
-#   0 on successful verification, 1 on failure
-#
-# Example:
-#   download_and_verify_golang_gpg "go1.23.4.linux-amd64.tar.gz" "1.23.4"
-# ============================================================================
-download_and_verify_golang_gpg() {
-    local file="$1"
-    local version="$2"
-    local filename
-    filename=$(basename "$file")
-
-    # Go signature URL
-    local sig_url="https://go.dev/dl/${filename}.asc"
-    local signature_file="${file}.asc"
-
-    log_message "Downloading Go GPG signature..."
-    if ! command curl -fsSL -o "$signature_file" "$sig_url" 2>/dev/null; then
-        log_warning "Failed to download GPG signature from ${sig_url}"
-        return 1
-    fi
-
-    log_message "✓ Downloaded GPG signature"
-
-    # Verify the GPG signature
-    log_message "Verifying GPG signature..."
-    if ! verify_gpg_signature "$file" "$signature_file" "golang"; then
-        log_error "GPG signature verification failed"
-        command rm -f "$signature_file"
-        return 1
-    fi
-
-    log_message "✓ GPG signature verified successfully"
-    command rm -f "$signature_file"
-    return 0
-}
+_GPG_VERIFY_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${_GPG_VERIFY_DIR}/gpg-verify-nodejs.sh"
+source "${_GPG_VERIFY_DIR}/gpg-verify-terraform.sh"
+source "${_GPG_VERIFY_DIR}/gpg-verify-golang.sh"
 
 # Export all functions
 export -f import_gpg_keys
 export -f verify_gpg_signature
 export -f download_and_verify_gpg
 export -f verify_file_against_shasums
-export -f download_and_verify_nodejs_gpg
-export -f download_and_verify_terraform_gpg
-export -f download_and_verify_golang_gpg

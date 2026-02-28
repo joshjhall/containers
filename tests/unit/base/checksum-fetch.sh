@@ -16,6 +16,11 @@ test_suite "Checksum Fetch Tests"
 # Source file under test
 SOURCE_FILE="$PROJECT_ROOT/lib/base/checksum-fetch.sh"
 
+# Sub-module files (for static analysis tests that check specific function locations)
+GO_FILE="$PROJECT_ROOT/lib/base/checksum-fetch-go.sh"
+RUBY_FILE="$PROJECT_ROOT/lib/base/checksum-fetch-ruby.sh"
+MAVEN_FILE="$PROJECT_ROOT/lib/base/checksum-fetch-maven.sh"
+
 # Setup function - runs before each test
 setup() {
     local unique_id
@@ -65,7 +70,7 @@ test_strict_mode() {
 }
 
 test_defines_fetch_go_checksum() {
-    assert_file_contains "$SOURCE_FILE" "fetch_go_checksum()" \
+    assert_file_contains "$GO_FILE" "fetch_go_checksum()" \
         "Script defines fetch_go_checksum function"
 }
 
@@ -85,12 +90,12 @@ test_defines_fetch_github_sha512_file() {
 }
 
 test_defines_fetch_ruby_checksum() {
-    assert_file_contains "$SOURCE_FILE" "fetch_ruby_checksum()" \
+    assert_file_contains "$RUBY_FILE" "fetch_ruby_checksum()" \
         "Script defines fetch_ruby_checksum function"
 }
 
 test_defines_fetch_maven_sha256() {
-    assert_file_contains "$SOURCE_FILE" "fetch_maven_sha256()" \
+    assert_file_contains "$MAVEN_FILE" "fetch_maven_sha256()" \
         "Script defines fetch_maven_sha256 function"
 }
 
@@ -119,12 +124,12 @@ test_defines_calculate_checksum_sha256() {
 # ============================================================================
 
 test_go_url_pattern() {
-    assert_file_contains "$SOURCE_FILE" "https://go.dev/dl/" \
+    assert_file_contains "$GO_FILE" "https://go.dev/dl/" \
         "Go checksum fetching uses go.dev URL"
 }
 
 test_ruby_url_pattern() {
-    assert_file_contains "$SOURCE_FILE" "https://www.ruby-lang.org" \
+    assert_file_contains "$RUBY_FILE" "https://www.ruby-lang.org" \
         "Ruby checksum fetching uses ruby-lang.org URL"
 }
 
@@ -347,7 +352,7 @@ MOCK_HTML
 # ============================================================================
 
 test_exports_fetch_go_checksum() {
-    assert_file_contains "$SOURCE_FILE" "export -f fetch_go_checksum" \
+    assert_file_contains "$GO_FILE" "export -f fetch_go_checksum" \
         "fetch_go_checksum is exported"
 }
 
@@ -367,7 +372,7 @@ test_exports_fetch_github_sha512_file() {
 }
 
 test_exports_fetch_ruby_checksum() {
-    assert_file_contains "$SOURCE_FILE" "export -f fetch_ruby_checksum" \
+    assert_file_contains "$RUBY_FILE" "export -f fetch_ruby_checksum" \
         "fetch_ruby_checksum is exported"
 }
 
@@ -377,7 +382,7 @@ test_exports_validate_checksum_format() {
 }
 
 test_exports_fetch_maven_sha256() {
-    assert_file_contains "$SOURCE_FILE" "export -f fetch_maven_sha256" \
+    assert_file_contains "$MAVEN_FILE" "export -f fetch_maven_sha256" \
         "fetch_maven_sha256 is exported"
 }
 

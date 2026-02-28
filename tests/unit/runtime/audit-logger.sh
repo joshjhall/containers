@@ -173,64 +173,68 @@ run_test test_retention_docs "Retention requirements documented"
 
 SOURCE_FILE="$PROJECT_ROOT/lib/runtime/audit-logger.sh"
 
+# Sub-module files (for static analysis tests that check specific function locations)
+EVENTS_FILE="$PROJECT_ROOT/lib/runtime/audit-logger-events.sh"
+MAINTENANCE_FILE="$PROJECT_ROOT/lib/runtime/audit-logger-maintenance.sh"
+
 # Test: defines audit_auth function
 test_audit_auth_func() {
-    assert_file_contains "$SOURCE_FILE" "audit_auth()" "audit-logger.sh defines audit_auth function"
+    assert_file_contains "$EVENTS_FILE" "audit_auth()" "audit-logger-events.sh defines audit_auth function"
 }
 
 # Test: defines audit_authz function
 test_audit_authz_func() {
-    assert_file_contains "$SOURCE_FILE" "audit_authz()" "audit-logger.sh defines audit_authz function"
+    assert_file_contains "$EVENTS_FILE" "audit_authz()" "audit-logger-events.sh defines audit_authz function"
 }
 
 # Test: defines audit_data_access function
 test_audit_data_access_func() {
-    assert_file_contains "$SOURCE_FILE" "audit_data_access()" "audit-logger.sh defines audit_data_access function"
+    assert_file_contains "$EVENTS_FILE" "audit_data_access()" "audit-logger-events.sh defines audit_data_access function"
 }
 
 # Test: defines audit_config function
 test_audit_config_func() {
-    assert_file_contains "$SOURCE_FILE" "audit_config()" "audit-logger.sh defines audit_config function"
+    assert_file_contains "$EVENTS_FILE" "audit_config()" "audit-logger-events.sh defines audit_config function"
 }
 
 # Test: defines audit_security function
 test_audit_security_func() {
-    assert_file_contains "$SOURCE_FILE" "audit_security()" "audit-logger.sh defines audit_security function"
+    assert_file_contains "$EVENTS_FILE" "audit_security()" "audit-logger-events.sh defines audit_security function"
 }
 
 # Test: defines audit_network function
 test_audit_network_func() {
-    assert_file_contains "$SOURCE_FILE" "audit_network()" "audit-logger.sh defines audit_network function"
+    assert_file_contains "$EVENTS_FILE" "audit_network()" "audit-logger-events.sh defines audit_network function"
 }
 
 # Test: defines audit_file function
 test_audit_file_func() {
-    assert_file_contains "$SOURCE_FILE" "audit_file()" "audit-logger.sh defines audit_file function"
+    assert_file_contains "$EVENTS_FILE" "audit_file()" "audit-logger-events.sh defines audit_file function"
 }
 
 # Test: defines audit_process function
 test_audit_process_func() {
-    assert_file_contains "$SOURCE_FILE" "audit_process()" "audit-logger.sh defines audit_process function"
+    assert_file_contains "$EVENTS_FILE" "audit_process()" "audit-logger-events.sh defines audit_process function"
 }
 
 # Test: defines audit_compliance function
 test_audit_compliance_func() {
-    assert_file_contains "$SOURCE_FILE" "audit_compliance()" "audit-logger.sh defines audit_compliance function"
+    assert_file_contains "$EVENTS_FILE" "audit_compliance()" "audit-logger-events.sh defines audit_compliance function"
 }
 
 # Test: defines audit_rotate function
 test_audit_rotate_func() {
-    assert_file_contains "$SOURCE_FILE" "audit_rotate()" "audit-logger.sh defines audit_rotate function"
+    assert_file_contains "$MAINTENANCE_FILE" "audit_rotate()" "audit-logger-maintenance.sh defines audit_rotate function"
 }
 
 # Test: defines audit_verify_integrity function
 test_audit_verify_integrity_func() {
-    assert_file_contains "$SOURCE_FILE" "audit_verify_integrity()" "audit-logger.sh defines audit_verify_integrity function"
+    assert_file_contains "$MAINTENANCE_FILE" "audit_verify_integrity()" "audit-logger-maintenance.sh defines audit_verify_integrity function"
 }
 
 # Test: defines get_retention_policy function
 test_get_retention_policy_func() {
-    assert_file_contains "$SOURCE_FILE" "get_retention_policy()" "audit-logger.sh defines get_retention_policy function"
+    assert_file_contains "$MAINTENANCE_FILE" "get_retention_policy()" "audit-logger-maintenance.sh defines get_retention_policy function"
 }
 
 # Test: defines build_json_entry function
@@ -240,18 +244,18 @@ test_build_json_entry_func() {
 
 # Test: Log rotation size-based trigger
 test_log_rotation_size_trigger() {
-    assert_file_contains "$SOURCE_FILE" "stat" "audit-logger.sh checks file size via stat"
-    assert_file_contains "$SOURCE_FILE" "max_size" "audit-logger.sh uses max_size for rotation threshold"
+    assert_file_contains "$MAINTENANCE_FILE" "stat" "audit-logger-maintenance.sh checks file size via stat"
+    assert_file_contains "$MAINTENANCE_FILE" "max_size" "audit-logger-maintenance.sh uses max_size for rotation threshold"
 }
 
 # Test: Log rotation compression
 test_log_rotation_compression() {
-    assert_file_contains "$SOURCE_FILE" "gzip" "audit-logger.sh compresses rotated logs with gzip"
+    assert_file_contains "$MAINTENANCE_FILE" "gzip" "audit-logger-maintenance.sh compresses rotated logs with gzip"
 }
 
 # Test: Integrity verification with sha256sum
 test_integrity_sha256sum() {
-    assert_file_contains "$SOURCE_FILE" "sha256sum" "audit-logger.sh uses sha256sum for integrity verification"
+    assert_file_contains "$MAINTENANCE_FILE" "sha256sum" "audit-logger-maintenance.sh uses sha256sum for integrity verification"
 }
 
 # Test: UUID generation
@@ -263,7 +267,7 @@ test_uuid_generation() {
 # Test: Functions exported for use in other scripts
 test_functions_exported() {
     assert_file_contains "$SOURCE_FILE" "export -f audit_log" "audit-logger.sh exports audit_log function"
-    assert_file_contains "$SOURCE_FILE" "export -f audit_security" "audit-logger.sh exports audit_security function"
+    assert_file_contains "$EVENTS_FILE" "export -f audit_security" "audit-logger-events.sh exports audit_security function"
     assert_file_contains "$SOURCE_FILE" "export -f audit_init" "audit-logger.sh exports audit_init function"
 }
 
@@ -307,7 +311,7 @@ test_json_escape_exported() {
 test_audit_auth_uses_escape() {
     # Extract audit_auth function body and check for _json_escape usage
     local func_body
-    func_body=$(sed -n '/^audit_auth()/,/^}/p' "$SOURCE_FILE")
+    func_body=$(sed -n '/^audit_auth()/,/^}/p' "$EVENTS_FILE")
     if echo "$func_body" | grep -q '_json_escape'; then
         pass_test "audit_auth uses _json_escape for field escaping"
     else
@@ -318,7 +322,7 @@ test_audit_auth_uses_escape() {
 # Test: audit_authz uses _json_escape
 test_audit_authz_uses_escape() {
     local func_body
-    func_body=$(sed -n '/^audit_authz()/,/^}/p' "$SOURCE_FILE")
+    func_body=$(sed -n '/^audit_authz()/,/^}/p' "$EVENTS_FILE")
     if echo "$func_body" | grep -q '_json_escape'; then
         pass_test "audit_authz uses _json_escape for field escaping"
     else
@@ -329,7 +333,7 @@ test_audit_authz_uses_escape() {
 # Test: audit_data_access uses _json_escape
 test_audit_data_access_uses_escape() {
     local func_body
-    func_body=$(sed -n '/^audit_data_access()/,/^}/p' "$SOURCE_FILE")
+    func_body=$(sed -n '/^audit_data_access()/,/^}/p' "$EVENTS_FILE")
     if echo "$func_body" | grep -q '_json_escape'; then
         pass_test "audit_data_access uses _json_escape for field escaping"
     else
@@ -340,7 +344,7 @@ test_audit_data_access_uses_escape() {
 # Test: audit_config uses _json_escape
 test_audit_config_uses_escape() {
     local func_body
-    func_body=$(sed -n '/^audit_config()/,/^}/p' "$SOURCE_FILE")
+    func_body=$(sed -n '/^audit_config()/,/^}/p' "$EVENTS_FILE")
     if echo "$func_body" | grep -q '_json_escape'; then
         pass_test "audit_config uses _json_escape for field escaping"
     else
@@ -351,7 +355,7 @@ test_audit_config_uses_escape() {
 # Test: audit_security uses _json_escape
 test_audit_security_uses_escape() {
     local func_body
-    func_body=$(sed -n '/^audit_security()/,/^}/p' "$SOURCE_FILE")
+    func_body=$(sed -n '/^audit_security()/,/^}/p' "$EVENTS_FILE")
     if echo "$func_body" | grep -q '_json_escape'; then
         pass_test "audit_security uses _json_escape for field escaping"
     else
@@ -362,7 +366,7 @@ test_audit_security_uses_escape() {
 # Test: audit_network uses _json_escape
 test_audit_network_uses_escape() {
     local func_body
-    func_body=$(sed -n '/^audit_network()/,/^}/p' "$SOURCE_FILE")
+    func_body=$(sed -n '/^audit_network()/,/^}/p' "$EVENTS_FILE")
     if echo "$func_body" | grep -q '_json_escape'; then
         pass_test "audit_network uses _json_escape for field escaping"
     else
@@ -373,7 +377,7 @@ test_audit_network_uses_escape() {
 # Test: audit_file uses _json_escape
 test_audit_file_uses_escape() {
     local func_body
-    func_body=$(sed -n '/^audit_file()/,/^}/p' "$SOURCE_FILE")
+    func_body=$(sed -n '/^audit_file()/,/^}/p' "$EVENTS_FILE")
     if echo "$func_body" | grep -q '_json_escape'; then
         pass_test "audit_file uses _json_escape for field escaping"
     else
@@ -384,7 +388,7 @@ test_audit_file_uses_escape() {
 # Test: audit_process uses _json_escape
 test_audit_process_uses_escape() {
     local func_body
-    func_body=$(sed -n '/^audit_process()/,/^}/p' "$SOURCE_FILE")
+    func_body=$(sed -n '/^audit_process()/,/^}/p' "$EVENTS_FILE")
     if echo "$func_body" | grep -q '_json_escape'; then
         pass_test "audit_process uses _json_escape for field escaping"
     else
@@ -395,7 +399,7 @@ test_audit_process_uses_escape() {
 # Test: audit_compliance uses _json_escape
 test_audit_compliance_uses_escape() {
     local func_body
-    func_body=$(sed -n '/^audit_compliance()/,/^}/p' "$SOURCE_FILE")
+    func_body=$(sed -n '/^audit_compliance()/,/^}/p' "$EVENTS_FILE")
     if echo "$func_body" | grep -q '_json_escape'; then
         pass_test "audit_compliance uses _json_escape for field escaping"
     else
