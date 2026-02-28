@@ -19,6 +19,7 @@ Thumbs.db
 !.vscode/settings.json
 !.vscode/extensions.json
 .claude/settings.local.json
+.claude/memory
 *.swp
 *.swo
 *~
