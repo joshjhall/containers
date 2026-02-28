@@ -208,7 +208,7 @@ test_license_acceptance() {
 
     # Check license hash format (40 char hex)
     local license_content
-    license_content=$(cat "$licenses_dir/android-sdk-license")
+    license_content=$(command cat "$licenses_dir/android-sdk-license")
     if [[ "$license_content" =~ ^[0-9a-f]{40}$ ]]; then
         assert_true true "License hash format is valid"
     else
@@ -233,25 +233,25 @@ export PATH="$ANDROID_HOME/platform-tools:$PATH"
 EOF
 
     # Check environment variables
-    if grep -q "export ANDROID_HOME=" "$bashrc_file"; then
+    if command grep -q "export ANDROID_HOME=" "$bashrc_file"; then
         assert_true true "ANDROID_HOME is exported"
     else
         assert_true false "ANDROID_HOME is not exported"
     fi
 
-    if grep -q "export ANDROID_SDK_ROOT=" "$bashrc_file"; then
+    if command grep -q "export ANDROID_SDK_ROOT=" "$bashrc_file"; then
         assert_true true "ANDROID_SDK_ROOT is exported"
     else
         assert_true false "ANDROID_SDK_ROOT is not exported"
     fi
 
-    if grep -q "export ANDROID_NDK_HOME=" "$bashrc_file"; then
+    if command grep -q "export ANDROID_NDK_HOME=" "$bashrc_file"; then
         assert_true true "ANDROID_NDK_HOME is exported"
     else
         assert_true false "ANDROID_NDK_HOME is not exported"
     fi
 
-    if grep -q 'PATH.*platform-tools' "$bashrc_file"; then
+    if command grep -q 'PATH.*platform-tools' "$bashrc_file"; then
         assert_true true "PATH includes platform-tools"
     else
         assert_true false "PATH doesn't include platform-tools"
@@ -277,13 +277,13 @@ alias adbshell='adb shell'
 EOF
 
     # Check aliases
-    if grep -q "alias sdk='sdkmanager'" "$bashrc_file"; then
+    if command grep -q "alias sdk='sdkmanager'" "$bashrc_file"; then
         assert_true true "sdkmanager alias defined"
     else
         assert_true false "sdkmanager alias not defined"
     fi
 
-    if grep -q "alias adbdev='adb devices'" "$bashrc_file"; then
+    if command grep -q "alias adbdev='adb devices'" "$bashrc_file"; then
         assert_true true "adb devices alias defined"
     else
         assert_true false "adb devices alias not defined"
@@ -429,13 +429,13 @@ android-sdk-install() {
 EOF
 
     # Check helpers
-    if grep -q "android-version()" "$bashrc_file"; then
+    if command grep -q "android-version()" "$bashrc_file"; then
         assert_true true "android-version helper defined"
     else
         assert_true false "android-version helper not defined"
     fi
 
-    if grep -q "android-sdk-install()" "$bashrc_file"; then
+    if command grep -q "android-sdk-install()" "$bashrc_file"; then
         assert_true true "android-sdk-install helper defined"
     else
         assert_true false "android-sdk-install helper not defined"

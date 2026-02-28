@@ -34,7 +34,7 @@ METRICS_FILE="${METRICS_FILE:-}"
 if [ ! -f /tmp/container-start-time ]; then
     date +%s > /tmp/container-start-time
 fi
-CONTAINER_START_TIME=$(cat /tmp/container-start-time)
+CONTAINER_START_TIME=$(command cat /tmp/container-start-time)
 
 # ============================================================================
 # collect_build_metrics - Extract metrics from build logs
@@ -250,7 +250,7 @@ serve_http() {
             generate_metrics > /tmp/metrics.prom
 
             # Serve with socat (TCP server that responds to HTTP requests)
-            echo -e "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\n$(cat /tmp/metrics.prom)" | \
+            echo -e "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\n$(command cat /tmp/metrics.prom)" | \
                 socat -T 1 TCP-LISTEN:"${port}",reuseaddr,fork STDIO &
 
             sleep "$METRICS_REFRESH_INTERVAL"
@@ -263,7 +263,7 @@ serve_http() {
 
             # Note: This is a simple implementation, may not work with all nc versions
             while true; do
-                (echo -e "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\n"; cat /tmp/metrics.prom) | \
+                (echo -e "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\n"; command cat /tmp/metrics.prom) | \
                     nc -l -p "${port}" -q 1 || break
                 sleep 0.1
             done &

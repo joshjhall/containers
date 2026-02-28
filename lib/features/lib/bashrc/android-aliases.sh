@@ -35,7 +35,7 @@ android-version() {
 
     echo ""
     echo "=== Build Tools ==="
-    ls -1 "${ANDROID_HOME:-/opt/android-sdk}/build-tools/" 2>/dev/null || echo "None installed"
+    command ls -1 "${ANDROID_HOME:-/opt/android-sdk}/build-tools/" 2>/dev/null || echo "None installed"
 
     echo ""
     echo "=== Platform Tools ==="

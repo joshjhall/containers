@@ -134,13 +134,13 @@ EOF
     assert_file_exists "$test_bashrc"
 
     # Check content
-    if grep -q "Test Section" "$test_bashrc"; then
+    if command grep -q "Test Section" "$test_bashrc"; then
         assert_true true "Section header written"
     else
         assert_true false "Section header not found"
     fi
 
-    if grep -q "Test content" "$test_bashrc"; then
+    if command grep -q "Test content" "$test_bashrc"; then
         assert_true true "Content written correctly"
     else
         assert_true false "Content not found"

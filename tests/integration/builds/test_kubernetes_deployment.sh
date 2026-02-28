@@ -144,7 +144,7 @@ test_development_deployment() {
 
         # Update kustomization to use our test image
         cd overlays/development
-        cat > image-patch.yaml << 'EOF'
+        command cat > image-patch.yaml << 'EOF'
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
@@ -155,7 +155,7 @@ images:
 EOF
 
         # Add image patch to kustomization
-        if ! grep -q 'image-patch.yaml' kustomization.yaml; then
+        if ! command grep -q 'image-patch.yaml' kustomization.yaml; then
             echo '  - image-patch.yaml' >> kustomization.yaml
         fi
 
@@ -206,7 +206,7 @@ test_staging_deployment() {
         cd /workspace/examples/kubernetes/overlays/staging
 
         # Update image reference
-        cat > image-patch.yaml << 'EOF'
+        command cat > image-patch.yaml << 'EOF'
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
@@ -216,7 +216,7 @@ images:
     newTag: latest
 EOF
 
-        if ! grep -q 'image-patch.yaml' kustomization.yaml; then
+        if ! command grep -q 'image-patch.yaml' kustomization.yaml; then
             echo '  - image-patch.yaml' >> kustomization.yaml
         fi
 
@@ -254,7 +254,7 @@ test_production_deployment() {
         cd /workspace/examples/kubernetes/overlays/production
 
         # Update image reference
-        cat > image-patch.yaml << 'EOF'
+        command cat > image-patch.yaml << 'EOF'
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
@@ -264,12 +264,12 @@ images:
     newTag: latest
 EOF
 
-        if ! grep -q 'image-patch.yaml' kustomization.yaml; then
+        if ! command grep -q 'image-patch.yaml' kustomization.yaml; then
             echo '  - image-patch.yaml' >> kustomization.yaml
         fi
 
         # Production needs persistent volume, update to use hostPath for testing
-        cat > pvc-patch.yaml << 'EOF'
+        command cat > pvc-patch.yaml << 'EOF'
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -283,7 +283,7 @@ spec:
   storageClassName: standard
 EOF
 
-        if ! grep -q 'pvc-patch.yaml' kustomization.yaml; then
+        if ! command grep -q 'pvc-patch.yaml' kustomization.yaml; then
             sed -i '/persistentvolumeclaim.yaml/d' kustomization.yaml
             echo '  - pvc-patch.yaml' >> kustomization.yaml
         fi

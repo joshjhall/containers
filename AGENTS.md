@@ -343,6 +343,40 @@ else
 fi
 ```
 
+### Shell Command Safety: Always Use Full Paths
+
+**NEVER use bare commands** like `ls`, `cat`, `grep`, `sed`, `awk`, `head`,
+`tail`, `find`, `sort`, `wc`, `tr`, `cut`, `tee`, or `echo` in scripts and
+tests. These commands are often aliased (e.g., `ls` to `ls --color=auto`,
+`grep` to `grep --color=auto`) and aliases can change output format, add
+unexpected flags, or break parsing.
+
+**Always use the full path** from `command -v` or a known system path:
+
+```bash
+# CORRECT - full paths, immune to aliases
+/usr/bin/ls /some/dir
+/usr/bin/grep -q "pattern" file
+/usr/bin/cat /etc/os-release
+/usr/bin/find /path -name "*.sh"
+/usr/bin/wc -l < file
+/usr/bin/sort < file
+
+# ALSO CORRECT - command builtin bypasses aliases
+command ls /some/dir
+command grep -q "pattern" file
+
+# WRONG - bare commands may be aliased
+ls /some/dir
+grep -q "pattern" file
+cat /etc/os-release
+```
+
+**Priority**: This is critical for runtime scripts (`lib/runtime/`) that run
+in interactive shells where aliases are loaded. It is also important for build
+scripts (`lib/base/`, `lib/features/`) and test scripts (`tests/`) as a
+general defensive practice.
+
 ### Key Differences by Version
 
 - **Debian 11/12**: Uses legacy `apt-key` for repository GPG keys

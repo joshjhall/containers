@@ -28,14 +28,14 @@ test_configuration() {
     local config_file="$TEST_TEMP_DIR/config.conf"
     echo "test=true" > "$config_file"
     assert_file_exists "$config_file"
-    grep -q "test=true" "$config_file" && assert_true true "Config valid" || assert_true false "Config invalid"
+    command grep -q "test=true" "$config_file" && assert_true true "Config valid" || assert_true false "Config invalid"
 }
 
 test_environment() {
     local env_file="$TEST_TEMP_DIR/env.sh"
     echo "export TEST_VAR=value" > "$env_file"
     assert_file_exists "$env_file"
-    grep -q "export TEST_VAR" "$env_file" && assert_true true "Env var set" || assert_true false "Env var not set"
+    command grep -q "export TEST_VAR" "$env_file" && assert_true true "Env var set" || assert_true false "Env var not set"
 }
 
 test_permissions() {
@@ -49,7 +49,7 @@ test_aliases() {
     local alias_file="$TEST_TEMP_DIR/aliases.sh"
     echo "alias test='echo test'" > "$alias_file"
     assert_file_exists "$alias_file"
-    grep -q "alias test=" "$alias_file" && assert_true true "Alias defined" || assert_true false "Alias not defined"
+    command grep -q "alias test=" "$alias_file" && assert_true true "Alias defined" || assert_true false "Alias not defined"
 }
 
 test_dependencies() {
@@ -108,14 +108,14 @@ test_checksum_libraries_sourced() {
     fi
 
     # Check for checksum-fetch.sh
-    if grep -q "source.*checksum-fetch.sh" "$mojo_script"; then
+    if command grep -q "source.*checksum-fetch.sh" "$mojo_script"; then
         assert_true true "checksum-fetch.sh library is sourced"
     else
         assert_true false "checksum-fetch.sh library not sourced"
     fi
 
     # Check for download-verify.sh
-    if grep -q "source.*download-verify.sh" "$mojo_script"; then
+    if command grep -q "source.*download-verify.sh" "$mojo_script"; then
         assert_true true "download-verify.sh library is sourced"
     else
         assert_true false "download-verify.sh library not sourced"
@@ -132,7 +132,7 @@ test_pixi_checksum_fetching() {
     fi
 
     # Check for fetch_github_sha256_file usage for pixi
-    if grep -q "fetch_github_sha256_file" "$mojo_script"; then
+    if command grep -q "fetch_github_sha256_file" "$mojo_script"; then
         assert_true true "Uses dynamic pixi checksum fetching"
     else
         assert_true false "Does not use dynamic checksum fetching"
@@ -149,7 +149,7 @@ test_download_verification() {
     fi
 
     # Check for download_and_extract usage
-    if grep -q "download_and_extract" "$mojo_script"; then
+    if command grep -q "download_and_extract" "$mojo_script"; then
         assert_true true "Uses checksum verification for downloads"
     else
         assert_true false "Does not use checksum verification"

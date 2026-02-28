@@ -55,7 +55,7 @@ _create_mock_gcloud() {
     local project_id="${1:-test-project}"
     local exit_code="${2:-0}"
 
-    cat > "$TEST_TEMP_DIR/bin/gcloud" << MOCK
+    command cat > "$TEST_TEMP_DIR/bin/gcloud" << MOCK
 #!/bin/bash
 if [[ "\$*" == *"config get-value project"* ]]; then
     echo "$project_id"
@@ -182,7 +182,7 @@ test_project_id_from_gcloud_config() {
 
 test_project_id_missing_returns_error() {
     # Create mock gcloud that returns empty for project
-    cat > "$TEST_TEMP_DIR/bin/gcloud" << 'MOCK'
+    command cat > "$TEST_TEMP_DIR/bin/gcloud" << 'MOCK'
 #!/bin/bash
 if [[ "$*" == *"config get-value project"* ]]; then
     echo ""

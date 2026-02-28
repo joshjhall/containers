@@ -189,7 +189,7 @@ if [ -d /tmp/build-scripts/features/templates/claude ]; then
     mkdir -p /etc/container/config/claude-templates
     cp -r /tmp/build-scripts/features/templates/claude/* /etc/container/config/claude-templates/
     chmod -R 644 /etc/container/config/claude-templates/
-    find /etc/container/config/claude-templates -type d -exec chmod 755 {} \;
+    command find /etc/container/config/claude-templates -type d -exec chmod 755 {} \;
     log_message "Skill and agent templates staged to /etc/container/config/claude-templates/"
 else
     log_warning "No skill/agent templates found at /tmp/build-scripts/features/templates/claude"

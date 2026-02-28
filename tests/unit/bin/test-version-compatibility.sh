@@ -218,7 +218,7 @@ test_matrix_entry_format() {
     local versions_json='{"python": "3.13.0"}'
 
     local entry
-    entry=$(cat << EOF
+    entry=$(command cat << EOF
 {
   "variant": "$variant",
   "base_image": "$base_image",
@@ -302,7 +302,7 @@ test_test_counters() {
 test_update_matrix_jq_available() {
     # Test that jq is used for matrix updates
     local script_content
-    script_content=$(cat "$PROJECT_ROOT/bin/test-version-compatibility.sh")
+    script_content=$(command cat "$PROJECT_ROOT/bin/test-version-compatibility.sh")
 
     assert_contains "$script_content" "command -v jq" "Should check for jq availability"
     assert_contains "$script_content" "updated_matrix=\$(jq" "Should use jq for JSON manipulation"
@@ -311,7 +311,7 @@ test_update_matrix_jq_available() {
 test_update_matrix_entry_replacement() {
     # Test that update_matrix can replace existing entries
     local script_content
-    script_content=$(cat "$PROJECT_ROOT/bin/test-version-compatibility.sh")
+    script_content=$(command cat "$PROJECT_ROOT/bin/test-version-compatibility.sh")
 
     assert_contains "$script_content" "new_entry.variant" "Should check for existing variants"
     assert_contains "$script_content" "tested_combinations" "Should update tested_combinations"
@@ -320,7 +320,7 @@ test_update_matrix_entry_replacement() {
 test_update_matrix_language_versions() {
     # Test that update_matrix updates language_versions
     local script_content
-    script_content=$(cat "$PROJECT_ROOT/bin/test-version-compatibility.sh")
+    script_content=$(command cat "$PROJECT_ROOT/bin/test-version-compatibility.sh")
 
     assert_contains "$script_content" "language_versions" "Should update language_versions"
     assert_contains "$script_content" ".current" "Should update current version"
@@ -330,7 +330,7 @@ test_update_matrix_language_versions() {
 test_update_matrix_fallback() {
     # Test that update_matrix falls back to JSONL without jq
     local script_content
-    script_content=$(cat "$PROJECT_ROOT/bin/test-version-compatibility.sh")
+    script_content=$(command cat "$PROJECT_ROOT/bin/test-version-compatibility.sh")
 
     assert_contains "$script_content" "falling back to JSONL" "Should fall back without jq"
     assert_contains "$script_content" "version-compat-results.jsonl" "Should use JSONL fallback"
@@ -339,7 +339,7 @@ test_update_matrix_fallback() {
 test_update_matrix_timestamp() {
     # Test that update_matrix updates timestamp
     local script_content
-    script_content=$(cat "$PROJECT_ROOT/bin/test-version-compatibility.sh")
+    script_content=$(command cat "$PROJECT_ROOT/bin/test-version-compatibility.sh")
 
     assert_contains "$script_content" "last_updated" "Should update last_updated timestamp"
 }

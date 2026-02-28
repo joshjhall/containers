@@ -180,19 +180,19 @@ export PATH="$KOTLIN_NATIVE_HOME/bin:$PATH"
 EOF
 
     # Check environment variables
-    if grep -q "export KOTLIN_HOME=" "$bashrc_file"; then
+    if command grep -q "export KOTLIN_HOME=" "$bashrc_file"; then
         assert_true true "KOTLIN_HOME is exported"
     else
         assert_true false "KOTLIN_HOME is not exported"
     fi
 
-    if grep -q 'PATH.*KOTLIN_HOME/bin' "$bashrc_file"; then
+    if command grep -q 'PATH.*KOTLIN_HOME/bin' "$bashrc_file"; then
         assert_true true "PATH includes Kotlin bin directory"
     else
         assert_true false "PATH doesn't include Kotlin bin directory"
     fi
 
-    if grep -q "export KOTLIN_NATIVE_HOME=" "$bashrc_file"; then
+    if command grep -q "export KOTLIN_NATIVE_HOME=" "$bashrc_file"; then
         assert_true true "KOTLIN_NATIVE_HOME is exported"
     else
         assert_true false "KOTLIN_NATIVE_HOME is not exported"
@@ -223,26 +223,26 @@ kt-run() {
 EOF
 
     # Check common aliases
-    if grep -q "alias kc='kotlinc'" "$bashrc_file"; then
+    if command grep -q "alias kc='kotlinc'" "$bashrc_file"; then
         assert_true true "kotlinc alias defined"
     else
         assert_true false "kotlinc alias not defined"
     fi
 
-    if grep -q "alias kt='kotlin'" "$bashrc_file"; then
+    if command grep -q "alias kt='kotlin'" "$bashrc_file"; then
         assert_true true "kotlin alias defined"
     else
         assert_true false "kotlin alias not defined"
     fi
 
     # Check helper functions
-    if grep -q "kt-compile()" "$bashrc_file"; then
+    if command grep -q "kt-compile()" "$bashrc_file"; then
         assert_true true "kt-compile helper defined"
     else
         assert_true false "kt-compile helper not defined"
     fi
 
-    if grep -q "kt-run()" "$bashrc_file"; then
+    if command grep -q "kt-run()" "$bashrc_file"; then
         assert_true true "kt-run helper defined"
     else
         assert_true false "kt-run helper not defined"

@@ -50,13 +50,13 @@ EOF
     # Check that aliases were written
     assert_file_exists "$TEST_BASHRC"
 
-    if grep -q "alias ll='ls -alF'" "$TEST_BASHRC"; then
+    if command grep -q "alias ll='ls -alF'" "$TEST_BASHRC"; then
         assert_true true "ll alias written to bashrc"
     else
         assert_true false "ll alias not found in bashrc"
     fi
 
-    if grep -q "alias la='ls -A'" "$TEST_BASHRC"; then
+    if command grep -q "alias la='ls -A'" "$TEST_BASHRC"; then
         assert_true true "la alias written to bashrc"
     else
         assert_true false "la alias not found in bashrc"
@@ -73,13 +73,13 @@ alias ....='cd ../../..'
 EOF
 
     # Check navigation aliases
-    if grep -q "alias \.\.='cd \.\.'" "$TEST_BASHRC"; then
+    if command grep -q "alias \.\.='cd \.\.'" "$TEST_BASHRC"; then
         assert_true true "Parent directory alias (..) written"
     else
         assert_true false "Parent directory alias not found"
     fi
 
-    if grep -q "alias \.\.\.='cd \.\./\.\.'" "$TEST_BASHRC"; then
+    if command grep -q "alias \.\.\.='cd \.\./\.\.'" "$TEST_BASHRC"; then
         assert_true true "Two-level parent alias (...) written"
     else
         assert_true false "Two-level parent alias not found"
@@ -96,19 +96,19 @@ alias mv='mv -i'
 EOF
 
     # Check safety aliases
-    if grep -q "alias rm='command rm -i'" "$TEST_BASHRC"; then
+    if command grep -q "alias rm='command rm -i'" "$TEST_BASHRC"; then
         assert_true true "Safe rm alias written"
     else
         assert_true false "Safe rm alias not found"
     fi
 
-    if grep -q "alias cp='cp -i'" "$TEST_BASHRC"; then
+    if command grep -q "alias cp='cp -i'" "$TEST_BASHRC"; then
         assert_true true "Safe cp alias written"
     else
         assert_true false "Safe cp alias not found"
     fi
 
-    if grep -q "alias mv='mv -i'" "$TEST_BASHRC"; then
+    if command grep -q "alias mv='mv -i'" "$TEST_BASHRC"; then
         assert_true true "Safe mv alias written"
     else
         assert_true false "Safe mv alias not found"
@@ -129,7 +129,7 @@ EOF
 
     # Check git aliases
     for alias_cmd in "g='git'" "gs='git status'" "gd='git diff'"; do
-        if grep -q "alias $alias_cmd" "$TEST_BASHRC"; then
+        if command grep -q "alias $alias_cmd" "$TEST_BASHRC"; then
             assert_true true "Git alias '$alias_cmd' written"
         else
             assert_true false "Git alias '$alias_cmd' not found"
@@ -150,13 +150,13 @@ export HISTCONTROL=ignoreboth:erasedups
 EOF
 
     # Check environment variables
-    if grep -q "export TERM=xterm-256color" "$TEST_BASHRC"; then
+    if command grep -q "export TERM=xterm-256color" "$TEST_BASHRC"; then
         assert_true true "TERM environment variable set"
     else
         assert_true false "TERM environment variable not found"
     fi
 
-    if grep -q "export HISTSIZE=10000" "$TEST_BASHRC"; then
+    if command grep -q "export HISTSIZE=10000" "$TEST_BASHRC"; then
         assert_true true "HISTSIZE environment variable set"
     else
         assert_true false "HISTSIZE environment variable not found"
@@ -174,13 +174,13 @@ shopt -s autocd 2>/dev/null || true
 EOF
 
     # Check shell options
-    if grep -q "shopt -s histappend" "$TEST_BASHRC"; then
+    if command grep -q "shopt -s histappend" "$TEST_BASHRC"; then
         assert_true true "histappend shell option set"
     else
         assert_true false "histappend shell option not found"
     fi
 
-    if grep -q "shopt -s checkwinsize" "$TEST_BASHRC"; then
+    if command grep -q "shopt -s checkwinsize" "$TEST_BASHRC"; then
         assert_true true "checkwinsize shell option set"
     else
         assert_true false "checkwinsize shell option not found"
@@ -196,17 +196,17 @@ alias hgrep='history | grep'
 alias j='jobs -l'
 alias which='type -a'
 alias path='echo -e ${PATH//:/\\n}'
-alias psg='ps aux | grep -v grep | grep -i'
+alias psg='ps aux | command grep -v grep | command grep -i'
 EOF
 
     # Check productivity aliases
-    if grep -q "alias h='history'" "$TEST_BASHRC"; then
+    if command grep -q "alias h='history'" "$TEST_BASHRC"; then
         assert_true true "History alias written"
     else
         assert_true false "History alias not found"
     fi
 
-    if grep -q "alias psg=" "$TEST_BASHRC"; then
+    if command grep -q "alias psg=" "$TEST_BASHRC"; then
         assert_true true "Process grep alias written"
     else
         assert_true false "Process grep alias not found"

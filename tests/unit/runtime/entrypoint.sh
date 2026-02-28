@@ -82,7 +82,7 @@ test_first_startup_script_order() {
     # Check execution order
     if [ -f "$TEST_TEMP_DIR/order.txt" ]; then
         local order
-        order=$(cat "$TEST_TEMP_DIR/order.txt" | tr '\n' ' ')
+        order=$(command cat "$TEST_TEMP_DIR/order.txt" | tr '\n' ' ')
         assert_equals "10 20 30 " "$order" "Scripts executed in correct order"
     else
         assert_true false "Order tracking file not created"
@@ -219,7 +219,7 @@ EOF
     # Check that execution continued after error
     if [ -f "$TEST_TEMP_DIR/continue.log" ]; then
         local content
-        content=$(cat "$TEST_TEMP_DIR/continue.log" 2>/dev/null | tr -d '\n')
+        content=$(command cat "$TEST_TEMP_DIR/continue.log" 2>/dev/null | tr -d '\n')
         if [ "$content" = "after-fail" ]; then
             assert_true true "Execution continued after script error"
         else
@@ -245,7 +245,7 @@ test_environment_preservation() {
     # Check environment was preserved
     if [ -f "$TEST_TEMP_DIR/env.txt" ]; then
         local value
-        value=$(cat "$TEST_TEMP_DIR/env.txt")
+        value=$(command cat "$TEST_TEMP_DIR/env.txt")
         assert_equals "preserved" "$value" "Environment variable preserved"
     else
         assert_true false "Environment check failed"
@@ -257,19 +257,19 @@ test_environment_preservation() {
 # Test: Startup time tracking variables
 test_startup_time_tracking() {
     # Check that entrypoint.sh contains startup time tracking
-    if grep -q "STARTUP_BEGIN_TIME=\$(date +%s)" "$PROJECT_ROOT/lib/runtime/entrypoint.sh"; then
+    if command grep -q "STARTUP_BEGIN_TIME=\$(date +%s)" "$PROJECT_ROOT/lib/runtime/entrypoint.sh"; then
         assert_true true "Startup begin time is tracked"
     else
         assert_true false "Startup begin time tracking not found"
     fi
 
-    if grep -q "STARTUP_END_TIME=\$(date +%s)" "$PROJECT_ROOT/lib/runtime/entrypoint.sh"; then
+    if command grep -q "STARTUP_END_TIME=\$(date +%s)" "$PROJECT_ROOT/lib/runtime/entrypoint.sh"; then
         assert_true true "Startup end time is tracked"
     else
         assert_true false "Startup end time tracking not found"
     fi
 
-    if grep -q "STARTUP_DURATION=\$((STARTUP_END_TIME - STARTUP_BEGIN_TIME))" "$PROJECT_ROOT/lib/runtime/entrypoint.sh"; then
+    if command grep -q "STARTUP_DURATION=\$((STARTUP_END_TIME - STARTUP_BEGIN_TIME))" "$PROJECT_ROOT/lib/runtime/entrypoint.sh"; then
         assert_true true "Startup duration is calculated"
     else
         assert_true false "Startup duration calculation not found"
@@ -279,20 +279,20 @@ test_startup_time_tracking() {
 # Test: Startup metrics file creation
 test_startup_metrics_file() {
     # Check that entrypoint.sh creates metrics directory
-    if grep -q "METRICS_DIR=\"/tmp/container-metrics\"" "$PROJECT_ROOT/lib/runtime/entrypoint.sh"; then
+    if command grep -q "METRICS_DIR=\"/tmp/container-metrics\"" "$PROJECT_ROOT/lib/runtime/entrypoint.sh"; then
         assert_true true "Metrics directory is defined"
     else
         assert_true false "Metrics directory not defined"
     fi
 
-    if grep -q "mkdir -p \"\$METRICS_DIR\"" "$PROJECT_ROOT/lib/runtime/entrypoint.sh"; then
+    if command grep -q "mkdir -p \"\$METRICS_DIR\"" "$PROJECT_ROOT/lib/runtime/entrypoint.sh"; then
         assert_true true "Metrics directory is created"
     else
         assert_true false "Metrics directory creation not found"
     fi
 
     # Check that startup metrics are written
-    if grep -q "startup-metrics.txt" "$PROJECT_ROOT/lib/runtime/entrypoint.sh"; then
+    if command grep -q "startup-metrics.txt" "$PROJECT_ROOT/lib/runtime/entrypoint.sh"; then
         assert_true true "Startup metrics file is created"
     else
         assert_true false "Startup metrics file creation not found"
@@ -302,21 +302,21 @@ test_startup_metrics_file() {
 # Test: Startup metrics Prometheus format
 test_startup_metrics_format() {
     # Check for Prometheus HELP comment
-    if grep -q "# HELP container_startup_seconds" "$PROJECT_ROOT/lib/runtime/entrypoint.sh"; then
+    if command grep -q "# HELP container_startup_seconds" "$PROJECT_ROOT/lib/runtime/entrypoint.sh"; then
         assert_true true "Prometheus HELP comment present"
     else
         assert_true false "Prometheus HELP comment missing"
     fi
 
     # Check for Prometheus TYPE comment
-    if grep -q "# TYPE container_startup_seconds gauge" "$PROJECT_ROOT/lib/runtime/entrypoint.sh"; then
+    if command grep -q "# TYPE container_startup_seconds gauge" "$PROJECT_ROOT/lib/runtime/entrypoint.sh"; then
         assert_true true "Prometheus TYPE comment present"
     else
         assert_true false "Prometheus TYPE comment missing"
     fi
 
     # Check for metric output
-    if grep -q "container_startup_seconds \$STARTUP_DURATION" "$PROJECT_ROOT/lib/runtime/entrypoint.sh"; then
+    if command grep -q "container_startup_seconds \$STARTUP_DURATION" "$PROJECT_ROOT/lib/runtime/entrypoint.sh"; then
         assert_true true "Prometheus metric value output present"
     else
         assert_true false "Prometheus metric value output missing"
@@ -343,7 +343,7 @@ test_startup_duration_calculation() {
 # Test: Startup metrics output message
 test_startup_metrics_output() {
     # Check that entrypoint.sh outputs startup time
-    if grep -q "Container initialized in" "$PROJECT_ROOT/lib/runtime/entrypoint.sh"; then
+    if command grep -q "Container initialized in" "$PROJECT_ROOT/lib/runtime/entrypoint.sh"; then
         assert_true true "Startup time is displayed to user"
     else
         assert_true false "Startup time display not found"
@@ -353,21 +353,21 @@ test_startup_metrics_output() {
 # Test: Exit handler function exists
 test_exit_handler_function() {
     # Check that cleanup_on_exit function is defined
-    if grep -q "^cleanup_on_exit()" "$PROJECT_ROOT/lib/runtime/entrypoint.sh"; then
+    if command grep -q "^cleanup_on_exit()" "$PROJECT_ROOT/lib/runtime/entrypoint.sh"; then
         assert_true true "cleanup_on_exit function is defined"
     else
         assert_true false "cleanup_on_exit function not found"
     fi
 
     # Check that function captures exit code
-    if grep -q "local exit_code=\$?" "$PROJECT_ROOT/lib/runtime/entrypoint.sh"; then
+    if command grep -q "local exit_code=\$?" "$PROJECT_ROOT/lib/runtime/entrypoint.sh"; then
         assert_true true "Exit code is captured"
     else
         assert_true false "Exit code capture not found"
     fi
 
     # Check that exit code is preserved
-    if grep -q "exit \$exit_code" "$PROJECT_ROOT/lib/runtime/entrypoint.sh"; then
+    if command grep -q "exit \$exit_code" "$PROJECT_ROOT/lib/runtime/entrypoint.sh"; then
         assert_true true "Exit code is preserved"
     else
         assert_true false "Exit code preservation not found"
@@ -377,7 +377,7 @@ test_exit_handler_function() {
 # Test: Trap handlers are configured
 test_trap_handlers() {
     # Check for trap handler setup
-    if grep -q "trap cleanup_on_exit EXIT TERM INT" "$PROJECT_ROOT/lib/runtime/entrypoint.sh"; then
+    if command grep -q "trap cleanup_on_exit EXIT TERM INT" "$PROJECT_ROOT/lib/runtime/entrypoint.sh"; then
         assert_true true "Trap handlers are configured for EXIT TERM INT"
     else
         assert_true false "Trap handlers not configured"
@@ -387,14 +387,14 @@ test_trap_handlers() {
 # Test: Exit handler metrics cleanup
 test_exit_handler_metrics_cleanup() {
     # Check that metrics directory is checked
-    if grep -q "METRICS_DIR=" "$PROJECT_ROOT/lib/runtime/entrypoint.sh"; then
+    if command grep -q "METRICS_DIR=" "$PROJECT_ROOT/lib/runtime/entrypoint.sh"; then
         assert_true true "Metrics directory is defined in cleanup"
     else
         assert_true false "Metrics directory not defined in cleanup"
     fi
 
     # Check for sync command to flush metrics
-    if grep -q "sync" "$PROJECT_ROOT/lib/runtime/entrypoint.sh"; then
+    if command grep -q "sync" "$PROJECT_ROOT/lib/runtime/entrypoint.sh"; then
         assert_true true "Sync command is used to flush data"
     else
         assert_true false "Sync command not found"
@@ -404,14 +404,14 @@ test_exit_handler_metrics_cleanup() {
 # Test: Exit handler logging
 test_exit_handler_logging() {
     # Check for shutdown message
-    if grep -q "Container shutting down" "$PROJECT_ROOT/lib/runtime/entrypoint.sh"; then
+    if command grep -q "Container shutting down" "$PROJECT_ROOT/lib/runtime/entrypoint.sh"; then
         assert_true true "Shutdown message is logged"
     else
         assert_true false "Shutdown message not found"
     fi
 
     # Check for completion message
-    if grep -q "Shutdown complete" "$PROJECT_ROOT/lib/runtime/entrypoint.sh"; then
+    if command grep -q "Shutdown complete" "$PROJECT_ROOT/lib/runtime/entrypoint.sh"; then
         assert_true true "Completion message is logged"
     else
         assert_true false "Completion message not found"
@@ -421,7 +421,7 @@ test_exit_handler_logging() {
 # Test: Exit handler error handling
 test_exit_handler_error_handling() {
     # Check that sync errors are handled gracefully
-    if grep -q "sync.*|| true" "$PROJECT_ROOT/lib/runtime/entrypoint.sh"; then
+    if command grep -q "sync.*|| true" "$PROJECT_ROOT/lib/runtime/entrypoint.sh"; then
         assert_true true "Sync errors are handled gracefully"
     else
         assert_true false "Sync error handling not found"
@@ -443,7 +443,7 @@ test_docker_socket_fix_section() {
     local script="$PROJECT_ROOT/lib/runtime/entrypoint.sh"
 
     # Check for Docker socket fix section
-    if grep -q "Docker Socket Access Fix" "$script"; then
+    if command grep -q "Docker Socket Access Fix" "$script"; then
         assert_true true "Docker socket fix section exists"
     else
         assert_true false "Docker socket fix section not found"
@@ -454,7 +454,7 @@ test_docker_socket_fix_section() {
 test_docker_socket_creates_group() {
     local script="$PROJECT_ROOT/lib/runtime/entrypoint.sh"
 
-    if grep -q "groupadd docker" "$script"; then
+    if command grep -q "groupadd docker" "$script"; then
         assert_true true "Docker group creation is handled"
     else
         assert_true false "Docker group creation not found"
@@ -466,14 +466,14 @@ test_docker_socket_permissions() {
     local script="$PROJECT_ROOT/lib/runtime/entrypoint.sh"
 
     # Check for chown to docker group
-    if grep -q "chown root:docker /var/run/docker.sock" "$script"; then
+    if command grep -q "chown root:docker /var/run/docker.sock" "$script"; then
         assert_true true "Socket ownership set to root:docker"
     else
         assert_true false "Socket ownership change not found"
     fi
 
     # Check for 660 permissions
-    if grep -q "chmod 660 /var/run/docker.sock" "$script"; then
+    if command grep -q "chmod 660 /var/run/docker.sock" "$script"; then
         assert_true true "Socket permissions set to 660"
     else
         assert_true false "Socket permissions not set to 660"
@@ -484,7 +484,7 @@ test_docker_socket_permissions() {
 test_docker_socket_user_group() {
     local script="$PROJECT_ROOT/lib/runtime/entrypoint.sh"
 
-    if grep -q 'usermod -aG docker "\$USERNAME"' "$script"; then
+    if command grep -q 'usermod -aG docker "\$USERNAME"' "$script"; then
         assert_true true "User added to docker group"
     else
         assert_true false "User not added to docker group"
@@ -496,7 +496,7 @@ test_docker_socket_checks_access() {
     local script="$PROJECT_ROOT/lib/runtime/entrypoint.sh"
 
     # Should check if user can already access before fixing
-    if grep -q "test -r /var/run/docker.sock" "$script"; then
+    if command grep -q "test -r /var/run/docker.sock" "$script"; then
         assert_true true "Socket access check exists"
     else
         assert_true false "Socket access check not found"
@@ -508,7 +508,7 @@ test_docker_socket_sudo_support() {
     local script="$PROJECT_ROOT/lib/runtime/entrypoint.sh"
 
     # Should have sudo support for non-root users
-    if grep -q "sudo -n true" "$script" && grep -q "run_privileged" "$script"; then
+    if command grep -q "sudo -n true" "$script" && grep -q "run_privileged" "$script"; then
         assert_true true "Sudo support for non-root users exists"
     else
         assert_true false "Sudo support not found"
@@ -520,7 +520,7 @@ test_reentry_guard() {
     local script="$PROJECT_ROOT/lib/runtime/entrypoint.sh"
 
     # Should have a guard to prevent re-entry
-    if grep -q "ENTRYPOINT_ALREADY_RAN" "$script"; then
+    if command grep -q "ENTRYPOINT_ALREADY_RAN" "$script"; then
         assert_true true "Re-entry guard exists"
     else
         assert_true false "Re-entry guard not found"
@@ -532,7 +532,7 @@ test_privilege_drop() {
     local script="$PROJECT_ROOT/lib/runtime/entrypoint.sh"
 
     # Should use su -l for login shell to pick up new groups
-    if grep -q 'su -l "\$USERNAME"' "$script"; then
+    if command grep -q 'su -l "\$USERNAME"' "$script"; then
         assert_true true "Privilege drop uses su -l for login shell"
     else
         assert_true false "Privilege drop with su -l not found"
@@ -544,7 +544,7 @@ test_main_process_exec() {
     local script="$PROJECT_ROOT/lib/runtime/entrypoint.sh"
 
     # Should have exec for main process
-    if grep -q 'exec.*"\$@"' "$script" || grep -q 'exec su -l' "$script"; then
+    if command grep -q 'exec.*"\$@"' "$script" || command grep -q 'exec su -l' "$script"; then
         assert_true true "Main process uses exec"
     else
         assert_true false "Main process exec not found"
@@ -556,7 +556,7 @@ test_sg_docker_uses_quoted_cmd() {
     local script="$PROJECT_ROOT/lib/runtime/entrypoint.sh"
 
     # sg docker -c must use $QUOTED_CMD, not $*
-    if grep -q 'exec sg docker -c "exec \$QUOTED_CMD"' "$script"; then
+    if command grep -q 'exec sg docker -c "exec \$QUOTED_CMD"' "$script"; then
         assert_true true "sg docker path uses QUOTED_CMD"
     else
         assert_true false "sg docker path does not use QUOTED_CMD — command injection risk"
@@ -568,7 +568,7 @@ test_newgrp_docker_uses_quoted_cmd() {
     local script="$PROJECT_ROOT/lib/runtime/entrypoint.sh"
 
     # newgrp docker must use $QUOTED_CMD, not $*
-    if grep -q 'exec newgrp docker <<< "exec \$QUOTED_CMD"' "$script"; then
+    if command grep -q 'exec newgrp docker <<< "exec \$QUOTED_CMD"' "$script"; then
         assert_true true "newgrp docker path uses QUOTED_CMD"
     else
         assert_true false "newgrp docker path does not use QUOTED_CMD — command injection risk"
@@ -581,7 +581,7 @@ test_no_unquoted_dollar_star_in_exec() {
 
     # Search for lines that use $* (unquoted word-split expansion) in exec
     # This pattern is dangerous because it allows command injection
-    if grep -E 'exec .* \$\*' "$script" | grep -v '^[[:space:]]*#' | grep -q .; then
+    if command grep -E 'exec .* \$\*' "$script" | command grep -v '^[[:space:]]*#' | command grep -q .; then
         assert_true false "Found unquoted \$* in exec context — command injection risk"
     else
         assert_true true "No unquoted \$* found in exec contexts"
@@ -595,25 +595,25 @@ test_path_traversal_guard_exists() {
     # Verify all four components of the path traversal guard exist:
     # 1. realpath resolution
     local has_realpath=false
-    if grep -q 'script_realpath=\$(realpath' "$script"; then
+    if command grep -q 'script_realpath=\$(realpath' "$script"; then
         has_realpath=true
     fi
 
     # 2. Starts-with directory check (matches $dir or $*DIR variables)
     local has_prefix_check=false
-    if grep -q 'script_realpath" == "\$' "$script"; then
+    if command grep -q 'script_realpath" == "\$' "$script"; then
         has_prefix_check=true
     fi
 
     # 3. Double-dot rejection (source uses =~ \.\. regex)
     local has_dotdot_check=false
-    if grep -q 'script_realpath.*=~.*\\\.\\\.' "$script"; then
+    if command grep -q 'script_realpath.*=~.*\\\.\\\.' "$script"; then
         has_dotdot_check=true
     fi
 
     # 4. Not-the-directory-itself check
     local has_dir_check=false
-    if grep -q 'script_realpath" != "\$' "$script"; then
+    if command grep -q 'script_realpath" != "\$' "$script"; then
         has_dir_check=true
     fi
 
@@ -633,9 +633,9 @@ test_su_script_uses_quoting() {
     # Correct: su "${USERNAME}" -c "bash '$script'"
     # Wrong:   su "${USERNAME}" -c "bash $script"
     local unquoted_count
-    unquoted_count=$(grep -c "bash \\\$script\"" "$script" || true)
+    unquoted_count=$(command grep -c "bash \\\$script\"" "$script" || true)
     local quoted_count
-    quoted_count=$(grep -c "bash '\\\$script'" "$script" || true)
+    quoted_count=$(command grep -c "bash '\\\$script'" "$script" || true)
 
     if [ "$unquoted_count" -eq 0 ] && [ "$quoted_count" -ge 1 ]; then
         assert_true true "All su -c bash invocations use quoted script path ($quoted_count found)"
@@ -648,7 +648,7 @@ test_su_script_uses_quoting() {
 test_run_startup_scripts_function() {
     local script="$PROJECT_ROOT/lib/runtime/entrypoint.sh"
 
-    if grep -q '^run_startup_scripts()' "$script"; then
+    if command grep -q '^run_startup_scripts()' "$script"; then
         assert_true true "run_startup_scripts function is defined"
     else
         assert_true false "run_startup_scripts function not found"
@@ -662,10 +662,10 @@ test_run_startup_scripts_called() {
     local first_startup=false
     local every_boot=false
 
-    if grep -q 'run_startup_scripts "\$FIRST_STARTUP_DIR" "first-startup"' "$script"; then
+    if command grep -q 'run_startup_scripts "\$FIRST_STARTUP_DIR" "first-startup"' "$script"; then
         first_startup=true
     fi
-    if grep -q 'run_startup_scripts "\$STARTUP_DIR" "startup"' "$script"; then
+    if command grep -q 'run_startup_scripts "\$STARTUP_DIR" "startup"' "$script"; then
         every_boot=true
     fi
 
@@ -682,7 +682,7 @@ test_no_duplicate_privilege_helpers() {
 
     # Should have exactly one run_privileged() definition
     local count
-    count=$(grep -c '^run_privileged()' "$script" || true)
+    count=$(command grep -c '^run_privileged()' "$script" || true)
 
     if [ "$count" -eq 1 ]; then
         assert_true true "Exactly one run_privileged() definition found"
@@ -692,7 +692,7 @@ test_no_duplicate_privilege_helpers() {
 
     # Should have no cache_run_privileged or bindfs_run_privileged
     local stale
-    stale=$(grep -c 'cache_run_privileged\|bindfs_run_privileged' "$script" || true)
+    stale=$(command grep -c 'cache_run_privileged\|bindfs_run_privileged' "$script" || true)
 
     if [ "$stale" -eq 0 ]; then
         assert_true true "No stale privilege helper functions remain"
@@ -707,7 +707,7 @@ test_su_touch_marker_uses_quoting() {
 
     # Correct: su "${USERNAME}" -c "touch '$FIRST_RUN_MARKER'"
     # Wrong:   su "${USERNAME}" -c "touch $FIRST_RUN_MARKER"
-    if grep -q "touch '\\\$FIRST_RUN_MARKER'" "$script"; then
+    if command grep -q "touch '\\\$FIRST_RUN_MARKER'" "$script"; then
         assert_true true "su -c touch uses quoted FIRST_RUN_MARKER"
     else
         assert_true false "su -c touch does not quote FIRST_RUN_MARKER"
@@ -724,7 +724,7 @@ test_reentry_guard_skips_when_set() {
     # If the guard triggers, exec runs the command immediately (no startup).
     # If the guard doesn't trigger, a marker file is created (simulating startup).
     local guard_script="$TEST_TEMP_DIR/reentry-test.sh"
-    cat > "$guard_script" << 'GUARD_EOF'
+    command cat > "$guard_script" << 'GUARD_EOF'
 #!/bin/bash
 # Re-entry guard (same logic as entrypoint.sh:36-40)
 if [ "${ENTRYPOINT_ALREADY_RAN:-}" = "true" ]; then
@@ -757,7 +757,7 @@ GUARD_EOF
 # Functional test: re-entry guard runs startup when ENTRYPOINT_ALREADY_RAN is unset
 test_reentry_guard_runs_when_unset() {
     local guard_script="$TEST_TEMP_DIR/reentry-test.sh"
-    cat > "$guard_script" << 'GUARD_EOF'
+    command cat > "$guard_script" << 'GUARD_EOF'
 #!/bin/bash
 if [ "${ENTRYPOINT_ALREADY_RAN:-}" = "true" ]; then
     exec "$@"

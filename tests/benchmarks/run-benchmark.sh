@@ -168,8 +168,8 @@ benchmark_variant() {
         fi
 
         # Check cache utilization
-        total_steps=$(echo "$build_output" | grep -c "^#[0-9]" || echo 0)
-        cached_steps=$(echo "$build_output" | grep -c "CACHED" || echo 0)
+        total_steps=$(echo "$build_output" | command grep -c "^#[0-9]" || echo 0)
+        cached_steps=$(echo "$build_output" | command grep -c "CACHED" || echo 0)
         # Validate step counts are numeric
         if [ -z "$total_steps" ] || ! [[ "$total_steps" =~ ^[0-9]+$ ]]; then
             total_steps=0

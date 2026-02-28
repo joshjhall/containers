@@ -129,19 +129,19 @@ EOF
     assert_file_exists "$bashrc_file"
 
     # Check for essential aliases
-    if grep -q "alias d='docker'" "$bashrc_file"; then
+    if command grep -q "alias d='docker'" "$bashrc_file"; then
         assert_true true "Docker alias 'd' is defined"
     else
         assert_true false "Docker alias 'd' not found"
     fi
 
-    if grep -q "alias dc='docker compose'" "$bashrc_file"; then
+    if command grep -q "alias dc='docker compose'" "$bashrc_file"; then
         assert_true true "Docker Compose alias is defined"
     else
         assert_true false "Docker Compose alias not found"
     fi
 
-    if grep -q "docker-clean" "$bashrc_file"; then
+    if command grep -q "docker-clean" "$bashrc_file"; then
         assert_true true "docker-clean function is defined"
     else
         assert_true false "docker-clean function not found"
@@ -238,13 +238,13 @@ EOF
     assert_file_exists "$test_script"
 
     # Check script content
-    if grep -q "Docker CLI Status" "$test_script"; then
+    if command grep -q "Docker CLI Status" "$test_script"; then
         assert_true true "Verification script checks Docker CLI"
     else
         assert_true false "Verification script missing CLI check"
     fi
 
-    if grep -q "Docker Socket Status" "$test_script"; then
+    if command grep -q "Docker Socket Status" "$test_script"; then
         assert_true true "Verification script checks socket"
     else
         assert_true false "Verification script missing socket check"
@@ -275,14 +275,14 @@ test_docker_dive_checksum() {
     fi
 
     # Check for dive checksum fetching (look for DIVE_CHECKSUM variable)
-    if grep -q "DIVE_CHECKSUM.*fetch_github_checksums_txt" "$docker_script"; then
+    if command grep -q "DIVE_CHECKSUM.*fetch_github_checksums_txt" "$docker_script"; then
         assert_true true "docker.sh fetches dive checksum from GitHub"
     else
         assert_true false "docker.sh does not fetch dive checksum"
     fi
 
     # Check for download_and_verify usage (matches "dive.deb")
-    if grep -A5 "download_and_verify" "$docker_script" | grep -q "dive.deb"; then
+    if command grep -A5 "download_and_verify" "$docker_script" | command grep -q "dive.deb"; then
         assert_true true "docker.sh uses download_and_verify for dive"
     else
         assert_true false "docker.sh does not use download_and_verify for dive"
@@ -299,14 +299,14 @@ test_docker_sources_libraries() {
     fi
 
     # Check for download-verify.sh
-    if grep -q "source.*download-verify.sh" "$docker_script"; then
+    if command grep -q "source.*download-verify.sh" "$docker_script"; then
         assert_true true "docker.sh sources download-verify.sh"
     else
         assert_true false "docker.sh does not source download-verify.sh"
     fi
 
     # Check for checksum-fetch.sh
-    if grep -q "source.*checksum-fetch.sh" "$docker_script"; then
+    if command grep -q "source.*checksum-fetch.sh" "$docker_script"; then
         assert_true true "docker.sh sources checksum-fetch.sh"
     else
         assert_true false "docker.sh does not source checksum-fetch.sh"
@@ -323,14 +323,14 @@ test_docker_lazydocker_checksum() {
     fi
 
     # Check for lazydocker checksum fetching (look for LAZYDOCKER_CHECKSUM variable)
-    if grep -q "LAZYDOCKER_CHECKSUM.*fetch_github_checksums_txt" "$docker_script"; then
+    if command grep -q "LAZYDOCKER_CHECKSUM.*fetch_github_checksums_txt" "$docker_script"; then
         assert_true true "docker.sh fetches lazydocker checksum from GitHub"
     else
         assert_true false "docker.sh does not fetch lazydocker checksum"
     fi
 
     # Check for download_and_extract usage for lazydocker
-    if grep -A5 "download_and_extract" "$docker_script" | grep -q "LAZYDOCKER_URL"; then
+    if command grep -A5 "download_and_extract" "$docker_script" | command grep -q "LAZYDOCKER_URL"; then
         assert_true true "docker.sh uses download_and_extract for lazydocker"
     else
         assert_true false "docker.sh does not use download_and_extract for lazydocker"

@@ -238,9 +238,9 @@ for test_file in "${TEST_FILES[@]}"; do
     chmod +x "$test_file"
 
     if output=$("$test_file" 2>&1); then
-        suite_passed=$(echo "$output" | grep -o "Passed:[[:space:]]*[0-9]*" | grep -o "[0-9]*" || echo "0")
-        suite_failed=$(echo "$output" | grep -o "Failed:[[:space:]]*[0-9]*" | grep -o "[0-9]*" || echo "0")
-        suite_skipped=$(echo "$output" | grep -o "Skipped:[[:space:]]*[0-9]*" | grep -o "[0-9]*" || echo "0")
+        suite_passed=$(echo "$output" | command grep -o "Passed:[[:space:]]*[0-9]*" | command grep -o "[0-9]*" || echo "0")
+        suite_failed=$(echo "$output" | command grep -o "Failed:[[:space:]]*[0-9]*" | command grep -o "[0-9]*" || echo "0")
+        suite_skipped=$(echo "$output" | command grep -o "Skipped:[[:space:]]*[0-9]*" | command grep -o "[0-9]*" || echo "0")
         suite_total=$((suite_passed + suite_failed + suite_skipped))
 
         TOTAL_TESTS=$((TOTAL_TESTS + suite_total))

@@ -102,7 +102,7 @@ EOF
     assert_file_exists "$terraformrc"
 
     # Check plugin cache configuration
-    if grep -q "plugin_cache_dir" "$terraformrc"; then
+    if command grep -q "plugin_cache_dir" "$terraformrc"; then
         assert_true true "Plugin cache is configured"
     else
         assert_true false "Plugin cache is not configured"
@@ -121,13 +121,13 @@ export TERRAFORM_WORKSPACE="default"
 EOF
 
     # Check environment variables
-    if grep -q "export TF_PLUGIN_CACHE_DIR=" "$bashrc_file"; then
+    if command grep -q "export TF_PLUGIN_CACHE_DIR=" "$bashrc_file"; then
         assert_true true "TF_PLUGIN_CACHE_DIR is exported"
     else
         assert_true false "TF_PLUGIN_CACHE_DIR is not exported"
     fi
 
-    if grep -q "export TF_CLI_CONFIG_FILE=" "$bashrc_file"; then
+    if command grep -q "export TF_CLI_CONFIG_FILE=" "$bashrc_file"; then
         assert_true true "TF_CLI_CONFIG_FILE is exported"
     else
         assert_true false "TF_CLI_CONFIG_FILE is not exported"
@@ -153,13 +153,13 @@ alias tfw='terraform workspace'
 EOF
 
     # Check aliases
-    if grep -q "alias tf='terraform'" "$bashrc_file"; then
+    if command grep -q "alias tf='terraform'" "$bashrc_file"; then
         assert_true true "terraform alias defined"
     else
         assert_true false "terraform alias not defined"
     fi
 
-    if grep -q "alias tfp='terraform plan'" "$bashrc_file"; then
+    if command grep -q "alias tfp='terraform plan'" "$bashrc_file"; then
         assert_true true "terraform plan alias defined"
     else
         assert_true false "terraform plan alias not defined"
@@ -196,7 +196,7 @@ EOF
     assert_file_exists "$project_dir/variables.tf"
 
     # Check Terraform version requirement
-    if grep -q "required_version" "$project_dir/main.tf"; then
+    if command grep -q "required_version" "$project_dir/main.tf"; then
         assert_true true "Terraform version requirement specified"
     else
         assert_true false "Terraform version requirement missing"
@@ -240,7 +240,7 @@ EOF
     assert_file_exists "$project_dir/terraform.tfstate"
 
     # Check state file version
-    if grep -q '"version": 4' "$project_dir/terraform.tfstate"; then
+    if command grep -q '"version": 4' "$project_dir/terraform.tfstate"; then
         assert_true true "State file version is correct"
     else
         assert_true false "State file version is incorrect"
@@ -259,7 +259,7 @@ test_workspace_management() {
 
     # Check current workspace
     local current_workspace
-    current_workspace=$(cat "$workspaces_dir/current")
+    current_workspace=$(command cat "$workspaces_dir/current")
     assert_equals "development" "$current_workspace" "Current workspace is development"
 }
 
@@ -311,14 +311,14 @@ test_checksum_libraries_sourced() {
     fi
 
     # Check for checksum-fetch.sh
-    if grep -q "source.*checksum-fetch.sh" "$terraform_script"; then
+    if command grep -q "source.*checksum-fetch.sh" "$terraform_script"; then
         assert_true true "checksum-fetch.sh library is sourced"
     else
         assert_true false "checksum-fetch.sh library not sourced"
     fi
 
     # Check for download-verify.sh
-    if grep -q "source.*download-verify.sh" "$terraform_script"; then
+    if command grep -q "source.*download-verify.sh" "$terraform_script"; then
         assert_true true "download-verify.sh library is sourced"
     else
         assert_true false "download-verify.sh library not sourced"
@@ -336,7 +336,7 @@ test_dynamic_checksum_fetching() {
 
     # Check for fetch_github_checksums_txt usage (now in extracted install-tools.sh)
     local install_tools="$PROJECT_ROOT/lib/features/lib/terraform/install-tools.sh"
-    if grep -q "fetch_github_checksums_txt" "$install_tools"; then
+    if command grep -q "fetch_github_checksums_txt" "$install_tools"; then
         assert_true true "Uses fetch_github_checksums_txt for dynamic fetching"
     else
         assert_true false "Does not use dynamic checksum fetching"
@@ -354,8 +354,8 @@ test_download_verification() {
 
     # Check for download_and_extract or download_and_verify usage
     local uses_verification=false
-    if grep -q "download_and_extract" "$terraform_script" || \
-       grep -q "download_and_verify" "$terraform_script"; then
+    if command grep -q "download_and_extract" "$terraform_script" || \
+       command grep -q "download_and_verify" "$terraform_script"; then
         uses_verification=true
     fi
 

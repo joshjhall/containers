@@ -22,21 +22,21 @@ test_script_exists() {
 # Test: Package management commands
 test_package_commands() {
     # Test that apt-utils is sourced
-    if grep -q "source /tmp/build-scripts/base/apt-utils.sh" "$PROJECT_ROOT/lib/base/setup.sh"; then
+    if command grep -q "source /tmp/build-scripts/base/apt-utils.sh" "$PROJECT_ROOT/lib/base/setup.sh"; then
         assert_true true "apt-utils.sh is sourced for reliable package management"
     else
         assert_true false "apt-utils.sh not sourced"
     fi
 
     # Test that apt_update is used instead of direct apt-get update
-    if grep -q "apt_update" "$PROJECT_ROOT/lib/base/setup.sh"; then
+    if command grep -q "apt_update" "$PROJECT_ROOT/lib/base/setup.sh"; then
         assert_true true "Using apt_update function from apt-utils"
     else
         assert_true false "Not using apt_update function"
     fi
 
     # Test that apt_install is used for package installation
-    if grep -q "apt_install" "$PROJECT_ROOT/lib/base/setup.sh"; then
+    if command grep -q "apt_install" "$PROJECT_ROOT/lib/base/setup.sh"; then
         assert_true true "Using apt_install function from apt-utils"
     else
         assert_true false "Not using apt_install function"
@@ -119,7 +119,7 @@ test_sudo_setup() {
 # Test: Cache cleanup commands
 test_cache_cleanup() {
     # Test that apt_cleanup is used
-    if grep -q "apt_cleanup" "$PROJECT_ROOT/lib/base/setup.sh"; then
+    if command grep -q "apt_cleanup" "$PROJECT_ROOT/lib/base/setup.sh"; then
         assert_true true "Using apt_cleanup function from apt-utils"
     else
         assert_true false "Not using apt_cleanup function"
@@ -136,7 +136,7 @@ test_cache_cleanup() {
 test_error_handling() {
     # Test that script uses strict error handling
     if [ -f "$PROJECT_ROOT/lib/base/setup.sh" ]; then
-        if grep -q "set -euo pipefail" "$PROJECT_ROOT/lib/base/setup.sh"; then
+        if command grep -q "set -euo pipefail" "$PROJECT_ROOT/lib/base/setup.sh"; then
             assert_true true "Strict error handling enabled"
         else
             # Some base scripts might use different error handling

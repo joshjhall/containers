@@ -51,7 +51,7 @@ main() {
 
     # Authenticate (pipe token via stdin to avoid exposing it in process listings)
     _info "authenticating gh CLI"
-    local _xt; _xt=$(set +o | grep xtrace)
+    local _xt; _xt=$(set +o | command grep xtrace)
     { set +x; } 2>/dev/null
     printf '%s' "$token" | gh auth login --with-token 2>&1
     eval "$_xt"
@@ -69,8 +69,8 @@ main() {
 
 _persist_token() {
     local marker="# setup-gh: GITHUB_TOKEN"
-    if ! grep -qF "$marker" "${HOME}/.bashrc" 2>/dev/null; then
-        cat >> "${HOME}/.bashrc" <<'BASHRC'
+    if ! command grep -qF "$marker" "${HOME}/.bashrc" 2>/dev/null; then
+        command cat >> "${HOME}/.bashrc" <<'BASHRC'
 
 # setup-gh: GITHUB_TOKEN
 if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then

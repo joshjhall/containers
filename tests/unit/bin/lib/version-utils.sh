@@ -225,7 +225,7 @@ test_script_sources_cleanly() {
     source "$PROJECT_ROOT/bin/lib/common.sh"
 
     # Source the script in a subshell to catch any errors
-    if (source "$PROJECT_ROOT/bin/lib/version-utils.sh" 2>&1 | grep -qi "error"); then
+    if (source "$PROJECT_ROOT/bin/lib/version-utils.sh" 2>&1 | command grep -qi "error"); then
         assert_true false "version-utils.sh has sourcing errors"
     else
         assert_true true "version-utils.sh sources without errors"

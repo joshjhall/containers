@@ -115,7 +115,7 @@ test_poetry_installation() {
 # Test: uv version format
 test_uv_version_format() {
     local version
-    version=$(grep "UV_VERSION=" "$PROJECT_ROOT/lib/features/lib/python/install-tools.sh" | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
+    version=$(command grep "UV_VERSION=" "$PROJECT_ROOT/lib/features/lib/python/install-tools.sh" | head -1 | command grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
 
     if [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
         assert_true true "UV_VERSION format is valid: $version"
@@ -126,13 +126,13 @@ test_uv_version_format() {
 
 # Test: uv installation
 test_uv_installation() {
-    if grep -q "UV_VERSION=" "$PROJECT_ROOT/lib/features/lib/python/install-tools.sh"; then
+    if command grep -q "UV_VERSION=" "$PROJECT_ROOT/lib/features/lib/python/install-tools.sh"; then
         assert_true true "UV_VERSION is defined in install-tools.sh"
     else
         assert_true false "UV_VERSION is not defined in install-tools.sh"
     fi
 
-    if grep -q "pip install.*uv==" "$PROJECT_ROOT/lib/features/lib/python/install-tools.sh"; then
+    if command grep -q "pip install.*uv==" "$PROJECT_ROOT/lib/features/lib/python/install-tools.sh"; then
         assert_true true "uv is installed via pip"
     else
         assert_true false "uv pip install command not found"
@@ -210,14 +210,14 @@ test_python_verification() {
 # Test: Feature header integration
 test_feature_header() {
     # Test that the script sources the feature header
-    if grep -q "source /tmp/build-scripts/base/feature-header.sh" "$PROJECT_ROOT/lib/features/python.sh"; then
+    if command grep -q "source /tmp/build-scripts/base/feature-header.sh" "$PROJECT_ROOT/lib/features/python.sh"; then
         assert_true true "Feature header is sourced"
     else
         assert_true false "Feature header not sourced"
     fi
 
     # Test logging integration
-    if grep -q "log_feature_start" "$PROJECT_ROOT/lib/features/python.sh"; then
+    if command grep -q "log_feature_start" "$PROJECT_ROOT/lib/features/python.sh"; then
         assert_true true "Logging integration present"
     else
         assert_true false "Logging integration missing"
@@ -227,7 +227,7 @@ test_feature_header() {
 # Test: Error handling patterns
 test_error_handling() {
     # Test that script uses set -euo pipefail
-    if grep -q "set -euo pipefail" "$PROJECT_ROOT/lib/features/python.sh"; then
+    if command grep -q "set -euo pipefail" "$PROJECT_ROOT/lib/features/python.sh"; then
         assert_true true "Strict error handling enabled"
     else
         assert_true false "Strict error handling not enabled"
@@ -237,14 +237,14 @@ test_error_handling() {
 # Test: Package installation commands
 test_package_commands() {
     # Test that apt-utils is sourced
-    if grep -q "source /tmp/build-scripts/base/apt-utils.sh" "$PROJECT_ROOT/lib/features/python.sh"; then
+    if command grep -q "source /tmp/build-scripts/base/apt-utils.sh" "$PROJECT_ROOT/lib/features/python.sh"; then
         assert_true true "apt-utils.sh is sourced for reliable package management"
     else
         assert_true false "apt-utils.sh not sourced"
     fi
 
     # Test that apt_install is used for package installation
-    if grep -q "apt_install" "$PROJECT_ROOT/lib/features/python.sh"; then
+    if command grep -q "apt_install" "$PROJECT_ROOT/lib/features/python.sh"; then
         assert_true true "Using apt_install function from apt-utils"
     else
         assert_true false "Not using apt_install function"

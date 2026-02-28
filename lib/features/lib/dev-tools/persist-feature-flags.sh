@@ -8,7 +8,7 @@ persist_feature_flags() {
     log_command "Creating container config directory" \
         mkdir -p /etc/container/config
 
-    cat > /etc/container/config/enabled-features.conf << FEATURES_EOF
+    command cat > /etc/container/config/enabled-features.conf << FEATURES_EOF
 # Auto-generated at build time - DO NOT EDIT
 # This file passes build-time feature flags to runtime startup scripts
 INCLUDE_PYTHON_DEV=${INCLUDE_PYTHON_DEV:-false}

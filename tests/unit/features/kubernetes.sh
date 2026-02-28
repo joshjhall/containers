@@ -103,7 +103,7 @@ EOF
     assert_file_exists "$kubeconfig"
 
     # Check kubeconfig structure
-    if grep -q "apiVersion: v1" "$kubeconfig"; then
+    if command grep -q "apiVersion: v1" "$kubeconfig"; then
         assert_true true "kubeconfig has correct API version"
     else
         assert_true false "kubeconfig missing API version"
@@ -150,13 +150,13 @@ alias kexec='kubectl exec -it'
 EOF
 
     # Check aliases
-    if grep -q "alias k='kubectl'" "$bashrc_file"; then
+    if command grep -q "alias k='kubectl'" "$bashrc_file"; then
         assert_true true "kubectl alias defined"
     else
         assert_true false "kubectl alias not defined"
     fi
 
-    if grep -q "alias kgp='kubectl get pods'" "$bashrc_file"; then
+    if command grep -q "alias kgp='kubectl get pods'" "$bashrc_file"; then
         assert_true true "get pods alias defined"
     else
         assert_true false "get pods alias not defined"
@@ -181,7 +181,7 @@ EOF
     assert_file_exists "$helm_dir/repositories.yaml"
 
     # Check repository configuration
-    if grep -q "charts.helm.sh/stable" "$helm_dir/repositories.yaml"; then
+    if command grep -q "charts.helm.sh/stable" "$helm_dir/repositories.yaml"; then
         assert_true true "Stable repo configured"
     else
         assert_true false "Stable repo not configured"
@@ -200,13 +200,13 @@ export HELM_HOME="$HOME/.helm"
 EOF
 
     # Check environment variables
-    if grep -q "export KUBECONFIG=" "$bashrc_file"; then
+    if command grep -q "export KUBECONFIG=" "$bashrc_file"; then
         assert_true true "KUBECONFIG is exported"
     else
         assert_true false "KUBECONFIG is not exported"
     fi
 
-    if grep -q "export HELM_HOME=" "$bashrc_file"; then
+    if command grep -q "export HELM_HOME=" "$bashrc_file"; then
         assert_true true "HELM_HOME is exported"
     else
         assert_true false "HELM_HOME is not exported"
@@ -224,7 +224,7 @@ complete -F __start_kubectl k
 EOF
 
     # Check completion setup
-    if grep -q "kubectl completion bash" "$bashrc_file"; then
+    if command grep -q "kubectl completion bash" "$bashrc_file"; then
         assert_true true "kubectl completion configured"
     else
         assert_true false "kubectl completion not configured"
@@ -252,7 +252,7 @@ EOF
     assert_file_exists "$project_dir/deployment.yaml"
 
     # Check manifest structure
-    if grep -q "kind: Deployment" "$project_dir/deployment.yaml"; then
+    if command grep -q "kind: Deployment" "$project_dir/deployment.yaml"; then
         assert_true true "Deployment manifest valid"
     else
         assert_true false "Deployment manifest invalid"
@@ -288,20 +288,20 @@ test_dynamic_checksum_fetching() {
     local kubernetes_script="$PROJECT_ROOT/lib/features/kubernetes.sh"
 
     # Should source checksum-fetch.sh for dynamic fetching
-    if grep -q "source.*checksum-fetch.sh" "$kubernetes_script"; then
+    if command grep -q "source.*checksum-fetch.sh" "$kubernetes_script"; then
         assert_true true "kubernetes.sh sources checksum-fetch.sh for dynamic fetching"
     else
         assert_true false "kubernetes.sh doesn't source checksum-fetch.sh"
     fi
 
     # Should use dynamic fetching functions (not hardcoded checksums)
-    if grep -q "fetch_github_checksums_txt" "$kubernetes_script"; then
+    if command grep -q "fetch_github_checksums_txt" "$kubernetes_script"; then
         assert_true true "Uses fetch_github_checksums_txt for dynamic fetching"
     else
         assert_true false "Doesn't use fetch_github_checksums_txt"
     fi
 
-    if grep -q "fetch_github_sha256_file" "$kubernetes_script"; then
+    if command grep -q "fetch_github_sha256_file" "$kubernetes_script"; then
         assert_true true "Uses fetch_github_sha256_file for individual checksum files"
     else
         assert_true false "Doesn't use fetch_github_sha256_file"
@@ -313,7 +313,7 @@ test_download_verification() {
     local kubernetes_script="$PROJECT_ROOT/lib/features/kubernetes.sh"
 
     # Check that download verification functions are used (not curl | tar)
-    if grep -q "download_and_extract" "$kubernetes_script"; then
+    if command grep -q "download_and_extract" "$kubernetes_script"; then
         assert_true true "Uses download_and_extract for verification"
     else
         assert_true false "Doesn't use download_and_extract"
@@ -327,7 +327,7 @@ test_download_verification() {
 test_sources_download_verify() {
     local kubernetes_script="$PROJECT_ROOT/lib/features/kubernetes.sh"
 
-    if grep -q "source.*download-verify.sh" "$kubernetes_script"; then
+    if command grep -q "source.*download-verify.sh" "$kubernetes_script"; then
         assert_true true "kubernetes.sh sources download-verify.sh"
     else
         assert_true false "kubernetes.sh doesn't source download-verify.sh"

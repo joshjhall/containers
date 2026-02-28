@@ -60,7 +60,7 @@ test_bashrc_d_directory_created() {
 # Test: Sourcing added to bash.bashrc
 test_bashrc_sourcing_added() {
     # Simulate adding sourcing to bash.bashrc
-    if ! grep -q "/etc/bashrc.d" "$MOCK_BASHRC" 2>/dev/null; then
+    if ! command grep -q "/etc/bashrc.d" "$MOCK_BASHRC" 2>/dev/null; then
         command cat >> "$MOCK_BASHRC" << 'EOF'
 
 # Source all scripts in /etc/bashrc.d
@@ -73,14 +73,14 @@ EOF
     fi
 
     # Check that sourcing was added
-    if grep -q "/etc/bashrc.d" "$MOCK_BASHRC"; then
+    if command grep -q "/etc/bashrc.d" "$MOCK_BASHRC"; then
         assert_true true "Sourcing added to bash.bashrc"
     else
         assert_true false "Sourcing not added to bash.bashrc"
     fi
 
     # Check for loop structure
-    if grep -q "for f in /etc/bashrc.d/\*.sh" "$MOCK_BASHRC"; then
+    if command grep -q "for f in /etc/bashrc.d/\*.sh" "$MOCK_BASHRC"; then
         assert_true true "For loop structure correct"
     else
         assert_true false "For loop structure incorrect"
@@ -108,14 +108,14 @@ EOF
     assert_file_exists "$bash_env"
 
     # Check shebang
-    if head -n1 "$bash_env" | grep -q "#!/bin/bash"; then
+    if head -n1 "$bash_env" | command grep -q "#!/bin/bash"; then
         assert_true true "bash_env has shebang"
     else
         assert_true false "bash_env missing shebang"
     fi
 
     # Check error handling (|| true)
-    if grep -q "|| true" "$bash_env"; then
+    if command grep -q "|| true" "$bash_env"; then
         assert_true true "bash_env has error handling"
     else
         assert_true false "bash_env missing error handling"
@@ -159,14 +159,14 @@ EOF
     assert_file_exists "$base_paths"
 
     # Check PATH export
-    if grep -q 'export PATH="/usr/local/sbin' "$base_paths"; then
+    if command grep -q 'export PATH="/usr/local/sbin' "$base_paths"; then
         assert_true true "Base PATH is set"
     else
         assert_true false "Base PATH not set"
     fi
 
     # Check HOME/.local/bin addition
-    if grep -q 'HOME/.local/bin' "$base_paths"; then
+    if command grep -q 'HOME/.local/bin' "$base_paths"; then
         assert_true true "User local bin added to PATH"
     else
         assert_true false "User local bin not added to PATH"
@@ -218,10 +218,10 @@ fi
 EOF
 
     local line_count_before
-    line_count_before=$(grep -c "/etc/bashrc.d" "$MOCK_BASHRC")
+    line_count_before=$(command grep -c "/etc/bashrc.d" "$MOCK_BASHRC")
 
     # Try to add again (should skip if already present)
-    if ! grep -q "/etc/bashrc.d" "$MOCK_BASHRC" 2>/dev/null; then
+    if ! command grep -q "/etc/bashrc.d" "$MOCK_BASHRC" 2>/dev/null; then
         command cat >> "$MOCK_BASHRC" << 'EOF'
 # Source all scripts in /etc/bashrc.d
 if [ -d /etc/bashrc.d ]; then
@@ -233,7 +233,7 @@ EOF
     fi
 
     local line_count_after
-    line_count_after=$(grep -c "/etc/bashrc.d" "$MOCK_BASHRC")
+    line_count_after=$(command grep -c "/etc/bashrc.d" "$MOCK_BASHRC")
 
     assert_equals "$line_count_before" "$line_count_after" "Sourcing not duplicated"
 }

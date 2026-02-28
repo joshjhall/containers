@@ -55,7 +55,7 @@ test_help_output() {
 # ============================================================================
 test_json_output() {
     local script_content
-    script_content=$(cat "$INVENTORY_SCRIPT")
+    script_content=$(command cat "$INVENTORY_SCRIPT")
 
     assert_contains "$script_content" "json" "Should support JSON output"
 }
@@ -65,7 +65,7 @@ test_json_output() {
 # ============================================================================
 test_component_listing() {
     local script_content
-    script_content=$(cat "$INVENTORY_SCRIPT")
+    script_content=$(command cat "$INVENTORY_SCRIPT")
 
     assert_contains "$script_content" "inventory" "Should have component listing functionality"
 }

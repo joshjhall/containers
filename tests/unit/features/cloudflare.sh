@@ -28,14 +28,14 @@ test_configuration() {
     local config_file="$TEST_TEMP_DIR/config.conf"
     echo "test=true" > "$config_file"
     assert_file_exists "$config_file"
-    grep -q "test=true" "$config_file" && assert_true true "Config valid" || assert_true false "Config invalid"
+    command grep -q "test=true" "$config_file" && assert_true true "Config valid" || assert_true false "Config invalid"
 }
 
 test_environment() {
     local env_file="$TEST_TEMP_DIR/env.sh"
     echo "export TEST_VAR=value" > "$env_file"
     assert_file_exists "$env_file"
-    grep -q "export TEST_VAR" "$env_file" && assert_true true "Env var set" || assert_true false "Env var not set"
+    command grep -q "export TEST_VAR" "$env_file" && assert_true true "Env var set" || assert_true false "Env var not set"
 }
 
 test_permissions() {
@@ -49,7 +49,7 @@ test_aliases() {
     local alias_file="$TEST_TEMP_DIR/aliases.sh"
     echo "alias test='echo test'" > "$alias_file"
     assert_file_exists "$alias_file"
-    grep -q "alias test=" "$alias_file" && assert_true true "Alias defined" || assert_true false "Alias not defined"
+    command grep -q "alias test=" "$alias_file" && assert_true true "Alias defined" || assert_true false "Alias not defined"
 }
 
 test_dependencies() {
@@ -119,14 +119,14 @@ test_no_curl_pipe_bash() {
     fi
 
     # Check for curl | bash pattern (should NOT exist)
-    if grep -E "curl.*\|.*bash" "$cloudflare_script" >/dev/null 2>&1; then
+    if command grep -E "curl.*\|.*bash" "$cloudflare_script" >/dev/null 2>&1; then
         assert_true false "CRITICAL: cloudflare.sh contains 'curl | bash' pattern"
     else
         assert_true true "cloudflare.sh does not use 'curl | bash' pattern"
     fi
 
     # Check for wget | bash pattern (should NOT exist)
-    if grep -E "wget.*\|.*bash" "$cloudflare_script" >/dev/null 2>&1; then
+    if command grep -E "wget.*\|.*bash" "$cloudflare_script" >/dev/null 2>&1; then
         assert_true false "CRITICAL: cloudflare.sh contains 'wget | bash' pattern"
     else
         assert_true true "cloudflare.sh does not use 'wget | bash' pattern"
@@ -143,21 +143,21 @@ test_manual_repository_setup() {
     fi
 
     # Check for manual repository setup (should exist)
-    if grep -q "deb \[signed-by=" "$cloudflare_script"; then
+    if command grep -q "deb \[signed-by=" "$cloudflare_script"; then
         assert_true true "cloudflare.sh uses signed-by directive for repository"
     else
         assert_true false "cloudflare.sh does not use signed-by directive"
     fi
 
     # Check for GPG key download
-    if grep -q "nodesource.*gpg.key" "$cloudflare_script"; then
+    if command grep -q "nodesource.*gpg.key" "$cloudflare_script"; then
         assert_true true "cloudflare.sh downloads GPG key separately"
     else
         assert_true false "cloudflare.sh does not download GPG key separately"
     fi
 
     # Check for gpg --dearmor usage
-    if grep -q "gpg --dearmor" "$cloudflare_script"; then
+    if command grep -q "gpg --dearmor" "$cloudflare_script"; then
         assert_true true "cloudflare.sh converts GPG key to binary format"
     else
         assert_true false "cloudflare.sh does not convert GPG key"
@@ -174,14 +174,14 @@ test_repository_sources_list() {
     fi
 
     # Check for sources.list.d usage
-    if grep -q "/etc/apt/sources.list.d/nodesource.list" "$cloudflare_script"; then
+    if command grep -q "/etc/apt/sources.list.d/nodesource.list" "$cloudflare_script"; then
         assert_true true "cloudflare.sh adds repository to sources.list.d"
     else
         assert_true false "cloudflare.sh does not add repository to sources.list.d"
     fi
 
     # Check for keyring path
-    if grep -q "/usr/share/keyrings/nodesource.gpg" "$cloudflare_script"; then
+    if command grep -q "/usr/share/keyrings/nodesource.gpg" "$cloudflare_script"; then
         assert_true true "cloudflare.sh stores GPG key in /usr/share/keyrings"
     else
         assert_true false "cloudflare.sh does not use /usr/share/keyrings"

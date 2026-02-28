@@ -164,7 +164,7 @@ install_github_release() {
                 tar -xzf "$local_file"
             # Find the binary (may be in a subdirectory)
             local found_binary
-            found_binary=$(find . -name "$binary_name" -type f | head -1)
+            found_binary=$(command find . -name "$binary_name" -type f | head -1)
             if [ -z "$found_binary" ]; then
                 log_error "Binary '${binary_name}' not found after extracting ${tool_name}"
                 cd /
@@ -184,7 +184,7 @@ install_github_release() {
                 gunzip "$local_file"
             # After gunzip, the file loses the extension — find the decompressed file
             local decompressed
-            decompressed=$(find . -maxdepth 1 -type f ! -name "*.gz" | head -1)
+            decompressed=$(command find . -maxdepth 1 -type f ! -name "*.gz" | head -1)
             if [ -z "$decompressed" ]; then
                 log_error "Decompressed file not found for ${tool_name}"
                 cd /

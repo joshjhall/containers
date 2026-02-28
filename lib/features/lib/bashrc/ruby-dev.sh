@@ -49,7 +49,7 @@ alias bundle-security='bundle-audit check --update'
 # Helper functions
 # Run tests for modified files only
 rspec-changed() {
-    git diff --name-only --diff-filter=AM | grep '_spec.rb$' | xargs bundle exec rspec
+    git diff --name-only --diff-filter=AM | command grep '_spec.rb$' | xargs bundle exec rspec
 }
 
 # Profile Ruby code

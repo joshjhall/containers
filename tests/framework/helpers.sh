@@ -117,7 +117,7 @@ image_exists() {
 # Check if container is running
 container_running() {
     local container="$1"
-    docker ps --format '{{.Names}}' | grep -q "^${container}$"
+    docker ps --format '{{.Names}}' | command grep -q "^${container}$"
 }
 
 # Get image size in MB

@@ -306,7 +306,7 @@ test_fetch_go_checksum_extracts_from_html() {
 
         # Override AFTER sourcing to return mock HTML
         _curl_with_timeout() {
-            cat <<'MOCK_HTML'
+            command cat <<'MOCK_HTML'
 <tr class=\"\"><td><a href=\"/dl/go1.23.0.linux-amd64.tar.gz\">go1.23.0.linux-amd64.tar.gz</a></td>
 <td>Archive</td>
 <td>Linux</td>
@@ -332,7 +332,7 @@ test_fetch_ruby_checksum_extracts_from_html() {
 
         # Override AFTER sourcing to return mock HTML
         _curl_with_timeout() {
-            cat <<'MOCK_HTML'
+            command cat <<'MOCK_HTML'
 <li>
 <a href=\"/en/news/2024/12/25/ruby-3-4-1-released/\">Ruby 3.4.1 Released</a>
 >Ruby 3.4.1

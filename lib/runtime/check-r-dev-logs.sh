@@ -80,8 +80,8 @@ case $ACTION in
             if [ -s "$ERROR_LOG" ]; then
                 command cat "$ERROR_LOG"
                 echo ""
-                echo "Total errors: $(grep -c -i "error" "$ERROR_LOG" 2>/dev/null || echo "0")"
-                echo "Total warnings: $(grep -c -i "warning" "$ERROR_LOG" 2>/dev/null || echo "0")"
+                echo "Total errors: $(command grep -c -i "error" "$ERROR_LOG" 2>/dev/null || echo "0")"
+                echo "Total warnings: $(command grep -c -i "warning" "$ERROR_LOG" 2>/dev/null || echo "0")"
             else
                 echo "No errors or warnings found!"
             fi

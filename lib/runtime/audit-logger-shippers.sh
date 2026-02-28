@@ -20,7 +20,7 @@ _AUDIT_LOGGER_SHIPPERS_LOADED=1
 
 # Get log shipper configuration for different backends
 get_fluentd_config() {
-    cat << 'EOF'
+    command cat << 'EOF'
 <source>
   @type tail
   path /var/log/audit/container-audit.log
@@ -50,7 +50,7 @@ EOF
 
 # Get CloudWatch Logs agent configuration
 get_cloudwatch_config() {
-    cat << 'EOF'
+    command cat << 'EOF'
 {
   "logs": {
     "logs_collected": {
@@ -73,7 +73,7 @@ EOF
 
 # Get Grafana Loki configuration (Promtail)
 get_loki_config() {
-    cat << 'EOF'
+    command cat << 'EOF'
 server:
   http_listen_port: 9080
   grpc_listen_port: 0

@@ -58,7 +58,7 @@ test_syntax_valid() {
 # ============================================================================
 test_functions_defined() {
     local script_content
-    script_content=$(cat "$SHELL_HARDENING")
+    script_content=$(command cat "$SHELL_HARDENING")
 
     # Check for key functions
     assert_contains "$script_content" "restrict_shells()" "Should define restrict_shells function"
@@ -71,7 +71,7 @@ test_functions_defined() {
 # ============================================================================
 test_config_defaults() {
     local script_content
-    script_content=$(cat "$SHELL_HARDENING")
+    script_content=$(command cat "$SHELL_HARDENING")
 
     assert_contains "$script_content" 'RESTRICT_SHELLS="${RESTRICT_SHELLS:-' "Should have RESTRICT_SHELLS default"
     assert_contains "$script_content" 'PRODUCTION_MODE="${PRODUCTION_MODE:-' "Should have PRODUCTION_MODE default"
@@ -82,7 +82,7 @@ test_config_defaults() {
 # ============================================================================
 test_service_users_list() {
     local script_content
-    script_content=$(cat "$SHELL_HARDENING")
+    script_content=$(command cat "$SHELL_HARDENING")
 
     # Check for common service users
     assert_contains "$script_content" "www-data" "Should include www-data"
@@ -95,7 +95,7 @@ test_service_users_list() {
 # ============================================================================
 test_compliance_docs() {
     local script_content
-    script_content=$(cat "$SHELL_HARDENING")
+    script_content=$(command cat "$SHELL_HARDENING")
 
     assert_contains "$script_content" "CIS Docker Benchmark" "Should reference CIS benchmarks"
     assert_contains "$script_content" "NIST 800-53" "Should reference NIST standards"
@@ -107,7 +107,7 @@ test_compliance_docs() {
 # ============================================================================
 test_restricted_shells_format() {
     local script_content
-    script_content=$(cat "$SHELL_HARDENING")
+    script_content=$(command cat "$SHELL_HARDENING")
 
     # Should only allow bash
     assert_contains "$script_content" "/bin/bash" "Should allow /bin/bash"
@@ -119,7 +119,7 @@ test_restricted_shells_format() {
 # ============================================================================
 test_backup_mechanism() {
     local script_content
-    script_content=$(cat "$SHELL_HARDENING")
+    script_content=$(command cat "$SHELL_HARDENING")
 
     assert_contains "$script_content" "shells.bak" "Should create backup of /etc/shells"
 }
@@ -129,7 +129,7 @@ test_backup_mechanism() {
 # ============================================================================
 test_bash_verification() {
     local script_content
-    script_content=$(cat "$SHELL_HARDENING")
+    script_content=$(command cat "$SHELL_HARDENING")
 
     assert_contains "$script_content" "bash not found" "Should check for bash existence"
     assert_contains "$script_content" "restoring original" "Should restore on failure"

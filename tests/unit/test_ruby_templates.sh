@@ -59,7 +59,7 @@ test_rspec_config_loading() {
     tff_temp_dir=$(mktemp -d)
 
     if cp "$TEMPLATE_DIR/config/rspec.tmpl" "$tff_temp_dir/.rspec"; then
-        if grep -q -- "--require spec_helper" "$tff_temp_dir/.rspec" && grep -q -- "--color" "$tff_temp_dir/.rspec"; then
+        if command grep -q -- "--require spec_helper" "$tff_temp_dir/.rspec" && grep -q -- "--color" "$tff_temp_dir/.rspec"; then
             assert_true true "RSpec config template loads correctly"
         else
             assert_true false "RSpec config template content invalid"
@@ -77,7 +77,7 @@ test_rubocop_config_loading() {
     tff_temp_dir=$(mktemp -d)
 
     if cp "$TEMPLATE_DIR/config/rubocop.yml.tmpl" "$tff_temp_dir/.rubocop.yml"; then
-        if grep -q "AllCops:" "$tff_temp_dir/.rubocop.yml" && grep -q "Metrics/MethodLength" "$tff_temp_dir/.rubocop.yml"; then
+        if command grep -q "AllCops:" "$tff_temp_dir/.rubocop.yml" && grep -q "Metrics/MethodLength" "$tff_temp_dir/.rubocop.yml"; then
             assert_true true "Rubocop config template loads correctly"
         else
             assert_true false "Rubocop config template content invalid"

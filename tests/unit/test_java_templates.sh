@@ -80,14 +80,14 @@ test_benchmark_substitution() {
     tff_temp_dir=$(mktemp -d)
 
     if sed "s/__CLASS_NAME__/MyBenchmark/g" "$TEMPLATE_DIR/benchmark/Benchmark.java.tmpl" > "$tff_temp_dir/MyBenchmark.java"; then
-        if grep -q "public class MyBenchmark" "$tff_temp_dir/MyBenchmark.java"; then
+        if command grep -q "public class MyBenchmark" "$tff_temp_dir/MyBenchmark.java"; then
             assert_true true "Benchmark template substitution works correctly"
         else
             assert_true false "Class name not substituted in benchmark"
         fi
 
         # Verify placeholder was removed
-        if grep -q "__CLASS_NAME__" "$tff_temp_dir/MyBenchmark.java"; then
+        if command grep -q "__CLASS_NAME__" "$tff_temp_dir/MyBenchmark.java"; then
             assert_true false "Placeholder still present after substitution"
         else
             assert_true true "All placeholders substituted in benchmark"
@@ -106,7 +106,7 @@ test_config_templates_structure() {
 
     # Test checkstyle config
     if cp "$TEMPLATE_DIR/config/checkstyle.xml.tmpl" "$tff_temp_dir/checkstyle.xml"; then
-        if grep -q "TreeWalker" "$tff_temp_dir/checkstyle.xml" && grep -q "LineLength" "$tff_temp_dir/checkstyle.xml"; then
+        if command grep -q "TreeWalker" "$tff_temp_dir/checkstyle.xml" && grep -q "LineLength" "$tff_temp_dir/checkstyle.xml"; then
             assert_true true "Checkstyle config template has valid structure"
         else
             assert_true false "Checkstyle config template missing required elements"
@@ -117,7 +117,7 @@ test_config_templates_structure() {
 
     # Test PMD ruleset
     if cp "$TEMPLATE_DIR/config/pmd-ruleset.xml.tmpl" "$tff_temp_dir/pmd-ruleset.xml"; then
-        if grep -q "category/java/bestpractices.xml" "$tff_temp_dir/pmd-ruleset.xml"; then
+        if command grep -q "category/java/bestpractices.xml" "$tff_temp_dir/pmd-ruleset.xml"; then
             assert_true true "PMD ruleset template has valid structure"
         else
             assert_true false "PMD ruleset template missing required elements"
@@ -128,7 +128,7 @@ test_config_templates_structure() {
 
     # Test SpotBugs filter
     if cp "$TEMPLATE_DIR/config/spotbugs-exclude.xml.tmpl" "$tff_temp_dir/spotbugs-exclude.xml"; then
-        if grep -q "FindBugsFilter" "$tff_temp_dir/spotbugs-exclude.xml"; then
+        if command grep -q "FindBugsFilter" "$tff_temp_dir/spotbugs-exclude.xml"; then
             assert_true true "SpotBugs filter template has valid structure"
         else
             assert_true false "SpotBugs filter template missing required elements"

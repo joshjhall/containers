@@ -28,14 +28,14 @@ test_configuration() {
     local config_file="$TEST_TEMP_DIR/config.conf"
     echo "test=true" > "$config_file"
     assert_file_exists "$config_file"
-    grep -q "test=true" "$config_file" && assert_true true "Config valid" || assert_true false "Config invalid"
+    command grep -q "test=true" "$config_file" && assert_true true "Config valid" || assert_true false "Config invalid"
 }
 
 test_environment() {
     local env_file="$TEST_TEMP_DIR/env.sh"
     echo "export TEST_VAR=value" > "$env_file"
     assert_file_exists "$env_file"
-    grep -q "export TEST_VAR" "$env_file" && assert_true true "Env var set" || assert_true false "Env var not set"
+    command grep -q "export TEST_VAR" "$env_file" && assert_true true "Env var set" || assert_true false "Env var not set"
 }
 
 test_permissions() {
@@ -49,7 +49,7 @@ test_aliases() {
     local alias_file="$TEST_TEMP_DIR/aliases.sh"
     echo "alias test='echo test'" > "$alias_file"
     assert_file_exists "$alias_file"
-    grep -q "alias test=" "$alias_file" && assert_true true "Alias defined" || assert_true false "Alias not defined"
+    command grep -q "alias test=" "$alias_file" && assert_true true "Alias defined" || assert_true false "Alias not defined"
 }
 
 test_dependencies() {
@@ -118,30 +118,30 @@ test_op_ref_pattern_matching() {
     export GITHUB_TOKEN_REF="missing-op-prefix"
 
     local matches
-    matches=$(compgen -v | grep '^OP_.\+_REF$' || true)
+    matches=$(compgen -v | command grep '^OP_.\+_REF$' || true)
 
-    echo "$matches" | grep -q "OP_GITHUB_TOKEN_REF" \
+    echo "$matches" | command grep -q "OP_GITHUB_TOKEN_REF" \
         && assert_true 0 "OP_GITHUB_TOKEN_REF matches pattern" \
         || assert_true 1 "OP_GITHUB_TOKEN_REF should match pattern"
 
-    echo "$matches" | grep -q "OP_KAGI_API_KEY_REF" \
+    echo "$matches" | command grep -q "OP_KAGI_API_KEY_REF" \
         && assert_true 0 "OP_KAGI_API_KEY_REF matches pattern" \
         || assert_true 1 "OP_KAGI_API_KEY_REF should match pattern"
 
-    echo "$matches" | grep -q "OP_MY_PROJECT_SECRET_REF" \
+    echo "$matches" | command grep -q "OP_MY_PROJECT_SECRET_REF" \
         && assert_true 0 "OP_MY_PROJECT_SECRET_REF matches pattern" \
         || assert_true 1 "OP_MY_PROJECT_SECRET_REF should match pattern"
 
     # Should NOT match
-    echo "$matches" | grep -q "OP_SERVICE_ACCOUNT_TOKEN" \
+    echo "$matches" | command grep -q "OP_SERVICE_ACCOUNT_TOKEN" \
         && assert_true 1 "OP_SERVICE_ACCOUNT_TOKEN should not match" \
         || assert_true 0 "OP_SERVICE_ACCOUNT_TOKEN excluded from pattern"
 
-    echo "$matches" | grep -q '^OP_REF$' \
+    echo "$matches" | command grep -q '^OP_REF$' \
         && assert_true 1 "OP_REF should not match (no middle)" \
         || assert_true 0 "OP_REF excluded from pattern"
 
-    echo "$matches" | grep -q '^GITHUB_TOKEN_REF$' \
+    echo "$matches" | command grep -q '^GITHUB_TOKEN_REF$' \
         && assert_true 1 "GITHUB_TOKEN_REF should not match (no OP_ prefix)" \
         || assert_true 0 "GITHUB_TOKEN_REF excluded from pattern"
 
@@ -216,24 +216,24 @@ test_op_ref_bashrc_contains_generic_loop() {
     local op_cli_script
     op_cli_script="$(dirname "${BASH_SOURCE[0]}")/../../../lib/features/op-cli.sh"
 
-    grep -q '_op_load_secrets' "$op_cli_bashrc" \
+    command grep -q '_op_load_secrets' "$op_cli_bashrc" \
         && assert_true 0 "op-cli bashrc contains _op_load_secrets function" \
         || assert_true 1 "op-cli bashrc missing _op_load_secrets function"
 
-    grep -q 'compgen -v' "$op_cli_bashrc" \
+    command grep -q 'compgen -v' "$op_cli_bashrc" \
         && assert_true 0 "op-cli bashrc uses compgen -v for generic scanning" \
         || assert_true 1 "op-cli bashrc missing compgen -v"
 
-    grep -q '45-op-secrets.sh' "$op_cli_script" \
+    command grep -q '45-op-secrets.sh' "$op_cli_script" \
         && assert_true 0 "op-cli.sh creates 45-op-secrets.sh startup script" \
         || assert_true 1 "op-cli.sh missing 45-op-secrets.sh reference"
 
     # Ensure old hardcoded references are removed
-    grep -q '_op_load_mcp_tokens' "$op_cli_script" \
+    command grep -q '_op_load_mcp_tokens' "$op_cli_script" \
         && assert_true 1 "Old _op_load_mcp_tokens should be removed" \
         || assert_true 0 "Old _op_load_mcp_tokens removed"
 
-    grep -q '45-op-mcp-tokens.sh' "$op_cli_script" \
+    command grep -q '45-op-mcp-tokens.sh' "$op_cli_script" \
         && assert_true 1 "Old 45-op-mcp-tokens.sh should be removed" \
         || assert_true 0 "Old 45-op-mcp-tokens.sh removed"
 }
@@ -370,22 +370,22 @@ test_op_file_ref_pattern_matching() {
     export OP_SERVICE_ACCOUNT_TOKEN="ops_xxx"
 
     local matches
-    matches=$(compgen -v | grep '^OP_.\+_FILE_REF$' || true)
+    matches=$(compgen -v | command grep '^OP_.\+_FILE_REF$' || true)
 
-    echo "$matches" | grep -q "OP_GOOGLE_APPLICATION_CREDENTIALS_FILE_REF" \
+    echo "$matches" | command grep -q "OP_GOOGLE_APPLICATION_CREDENTIALS_FILE_REF" \
         && assert_true 0 "OP_GOOGLE_APPLICATION_CREDENTIALS_FILE_REF matches _FILE_REF pattern" \
         || assert_true 1 "OP_GOOGLE_APPLICATION_CREDENTIALS_FILE_REF should match _FILE_REF pattern"
 
-    echo "$matches" | grep -q "OP_MY_CERT_FILE_REF" \
+    echo "$matches" | command grep -q "OP_MY_CERT_FILE_REF" \
         && assert_true 0 "OP_MY_CERT_FILE_REF matches _FILE_REF pattern" \
         || assert_true 1 "OP_MY_CERT_FILE_REF should match _FILE_REF pattern"
 
     # Should NOT match
-    echo "$matches" | grep -q "OP_GITHUB_TOKEN_REF" \
+    echo "$matches" | command grep -q "OP_GITHUB_TOKEN_REF" \
         && assert_true 1 "OP_GITHUB_TOKEN_REF should not match _FILE_REF pattern" \
         || assert_true 0 "OP_GITHUB_TOKEN_REF excluded from _FILE_REF pattern"
 
-    echo "$matches" | grep -q "OP_SERVICE_ACCOUNT_TOKEN" \
+    echo "$matches" | command grep -q "OP_SERVICE_ACCOUNT_TOKEN" \
         && assert_true 1 "OP_SERVICE_ACCOUNT_TOKEN should not match _FILE_REF pattern" \
         || assert_true 0 "OP_SERVICE_ACCOUNT_TOKEN excluded from _FILE_REF pattern"
 
@@ -464,13 +464,13 @@ test_op_file_ref_excludes_from_ref_loop() {
     export OP_GITHUB_TOKEN_REF="op://Vault/GitHub/token"
 
     local ref_matches
-    ref_matches=$(compgen -v | grep '^OP_.\+_REF$' | grep -v '_FILE_REF$' || true)
+    ref_matches=$(compgen -v | command grep '^OP_.\+_REF$' | command grep -v '_FILE_REF$' || true)
 
-    echo "$ref_matches" | grep -q "OP_GITHUB_TOKEN_REF" \
+    echo "$ref_matches" | command grep -q "OP_GITHUB_TOKEN_REF" \
         && assert_true 0 "OP_GITHUB_TOKEN_REF still matches _REF pattern" \
         || assert_true 1 "OP_GITHUB_TOKEN_REF should match _REF pattern"
 
-    echo "$ref_matches" | grep -q "OP_GOOGLE_APPLICATION_CREDENTIALS_FILE_REF" \
+    echo "$ref_matches" | command grep -q "OP_GOOGLE_APPLICATION_CREDENTIALS_FILE_REF" \
         && assert_true 1 "_FILE_REF var should be excluded from _REF loop" \
         || assert_true 0 "_FILE_REF var correctly excluded from _REF loop"
 
@@ -517,7 +517,7 @@ run_test test_op_ref_loop_excludes_file_ref_in_source "_REF loop excludes _FILE_
 test_op_env_safe_no_eval_of_field_values() {
     local source_file="$PROJECT_ROOT/lib/features/lib/bashrc/op-cli.sh"
     # The old vulnerable pattern: jq produces 'export LABEL="VALUE"' and eval runs it
-    if grep -A 20 'op-env-safe()' "$source_file" | grep -q 'eval "\$export_commands"'; then
+    if command grep -A 20 'op-env-safe()' "$source_file" | command grep -q 'eval "\$export_commands"'; then
         fail_test "op-env-safe still uses eval on jq-generated export commands (injection risk)"
     else
         pass_test "op-env-safe does not eval jq-generated export commands"
@@ -528,7 +528,7 @@ test_op_env_safe_no_eval_of_field_values() {
 test_op_env_safe_uses_safe_export() {
     local source_file="$PROJECT_ROOT/lib/features/lib/bashrc/op-cli.sh"
     # Search the full function body (up to 30 lines after the function definition)
-    if grep -A 30 '^op-env-safe()' "$source_file" | grep -qE '@tsv|export "\$'; then
+    if command grep -A 30 '^op-env-safe()' "$source_file" | command grep -qE '@tsv|export "\$'; then
         pass_test "op-env-safe uses safe @tsv / direct export pattern"
     else
         fail_test "op-env-safe should use @tsv or direct export pattern"
@@ -539,7 +539,7 @@ test_op_env_safe_uses_safe_export() {
 test_op_env_uses_safe_escaping() {
     local source_file="$PROJECT_ROOT/lib/features/lib/bashrc/op-cli.sh"
     # Search the full function body (up to 10 lines after the function definition)
-    if grep -A 10 '^op-env()' "$source_file" | grep -q '@sh'; then
+    if command grep -A 10 '^op-env()' "$source_file" | command grep -q '@sh'; then
         pass_test "op-env uses jq @sh for safe value escaping"
     else
         fail_test "op-env should use jq @sh for safe value escaping"

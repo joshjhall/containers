@@ -81,15 +81,15 @@ EOF
 
     # Verify JSON format
     local variant
-    variant=$(grep -o '"variant": "[^"]*"' "$baseline_file" | cut -d'"' -f4)
+    variant=$(command grep -o '"variant": "[^"]*"' "$baseline_file" | cut -d'"' -f4)
     assert_equals "$variant" "test-variant" "Variant name in JSON"
 
     local size
-    size=$(grep -o '"size_bytes": [0-9]*' "$baseline_file" | awk '{print $2}')
+    size=$(command grep -o '"size_bytes": [0-9]*' "$baseline_file" | awk '{print $2}')
     assert_equals "$size" "524288000" "Size in bytes in JSON"
 
     local time
-    time=$(grep -o '"build_time_seconds": [0-9]*' "$baseline_file" | awk '{print $2}')
+    time=$(command grep -o '"build_time_seconds": [0-9]*' "$baseline_file" | awk '{print $2}')
     assert_equals "$time" "120" "Build time in JSON"
 }
 
@@ -259,7 +259,7 @@ test_json_output_format() {
 
     # Create JSON output
     local json
-    json=$(cat << EOF
+    json=$(command cat << EOF
 {
   "variant": "$variant",
   "size_bytes": $size_bytes,

@@ -94,7 +94,7 @@ test_sources_common_sh() {
 test_connect_item_search_no_log_leak() {
     # The Connect item search log_warning must NOT include $item (raw API response)
     local matches
-    matches=$(grep -c 'log_warning.*\$item[^_]' "$SOURCE_FILE" || true)
+    matches=$(command grep -c 'log_warning.*\$item[^_]' "$SOURCE_FILE" || true)
 
     assert_equals "0" "$matches" \
         "Connect item search should not log raw API response (\$item)"
@@ -103,7 +103,7 @@ test_connect_item_search_no_log_leak() {
 test_connect_vault_list_no_log_leak() {
     # The Connect vault list log_error must NOT include $vaults (bare variable, not $vaults_*)
     local matches
-    matches=$(grep -cP 'log_error.*\$vaults\b' "$SOURCE_FILE" || true)
+    matches=$(command grep -cP 'log_error.*\$vaults\b' "$SOURCE_FILE" || true)
 
     assert_equals "0" "$matches" \
         "Connect vault list should not log raw vault response (\$vaults)"
@@ -112,7 +112,7 @@ test_connect_vault_list_no_log_leak() {
 test_cli_op_read_no_log_leak() {
     # The CLI op read log_warning must NOT include $value
     local matches
-    matches=$(grep -c 'log_warning.*\$value' "$SOURCE_FILE" || true)
+    matches=$(command grep -c 'log_warning.*\$value' "$SOURCE_FILE" || true)
 
     assert_equals "0" "$matches" \
         "CLI op read should not log secret value (\$value)"
@@ -121,7 +121,7 @@ test_cli_op_read_no_log_leak() {
 test_cli_item_get_no_log_leak() {
     # The CLI item get log_warning must NOT include $item_json
     local matches
-    matches=$(grep -c 'log_warning.*\$item_json' "$SOURCE_FILE" || true)
+    matches=$(command grep -c 'log_warning.*\$item_json' "$SOURCE_FILE" || true)
 
     assert_equals "0" "$matches" \
         "CLI item get should not log item JSON (\$item_json)"
@@ -138,7 +138,7 @@ test_connect_item_search_uses_url_encode() {
 
 test_connect_error_log_no_body_leak() {
     # Mock curl to return a response with a "secret" body + non-200 status
-    cat > "$TEST_TEMP_DIR/bin/curl" << 'MOCK'
+    command cat > "$TEST_TEMP_DIR/bin/curl" << 'MOCK'
 #!/bin/sh
 # For health check, return 200
 case "$*" in
@@ -167,7 +167,7 @@ MOCK
 
     # Verify the secret body text does NOT appear in log output
     local leak_count
-    leak_count=$(echo "$log_output" | grep -c 'TOP_SECRET_VAULT_DATA' || true)
+    leak_count=$(echo "$log_output" | command grep -c 'TOP_SECRET_VAULT_DATA' || true)
 
     assert_equals "0" "$leak_count" \
         "Connect error log should not contain API response body"
@@ -175,7 +175,7 @@ MOCK
 
 test_cli_op_read_error_no_secret_leak() {
     # Mock op to output a secret value on stdout and fail
-    cat > "$TEST_TEMP_DIR/bin/op" << 'MOCK'
+    command cat > "$TEST_TEMP_DIR/bin/op" << 'MOCK'
 #!/bin/sh
 case "$1" in
     account) exit 0 ;;
@@ -195,7 +195,7 @@ MOCK
     " 2>&1 || true)
 
     local leak_count
-    leak_count=$(echo "$log_output" | grep -c 'SUPER_SECRET_PASSWORD' || true)
+    leak_count=$(echo "$log_output" | command grep -c 'SUPER_SECRET_PASSWORD' || true)
 
     assert_equals "0" "$leak_count" \
         "CLI op read error log should not contain secret value"
@@ -203,7 +203,7 @@ MOCK
 
 test_cli_item_get_error_no_json_leak() {
     # Mock op to output JSON with secret fields and fail
-    cat > "$TEST_TEMP_DIR/bin/op" << 'MOCK'
+    command cat > "$TEST_TEMP_DIR/bin/op" << 'MOCK'
 #!/bin/sh
 case "$1" in
     account) exit 0 ;;
@@ -226,7 +226,7 @@ MOCK
     " 2>&1 || true)
 
     local leak_count
-    leak_count=$(echo "$log_output" | grep -c 'LEAKED_JSON_SECRET' || true)
+    leak_count=$(echo "$log_output" | command grep -c 'LEAKED_JSON_SECRET' || true)
 
     assert_equals "0" "$leak_count" \
         "CLI item get error log should not contain JSON field values"

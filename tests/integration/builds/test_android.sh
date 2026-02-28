@@ -173,7 +173,7 @@ test_android_dev_build() {
 
     # Verify system images are installed
     echo -n "  Checking system images... "
-    if docker run --rm "$image" bash -c "sdkmanager --list_installed 2>&1 | grep -q 'system-images'"; then
+    if docker run --rm "$image" bash -c "sdkmanager --list_installed 2>&1 | command grep -q 'system-images'"; then
         echo -e "${TEST_COLOR_PASS}PASS${TEST_COLOR_RESET}"
     else
         echo -e "${TEST_COLOR_SKIP}SKIP${TEST_COLOR_RESET}"

@@ -190,7 +190,7 @@ test_retry_with_backoff_fails_then_succeeds() {
         echo '0' > \"\$COUNTER_FILE\"
         my_cmd() {
             local n
-            n=\$(cat \"\$COUNTER_FILE\")
+            n=\$(command cat \"\$COUNTER_FILE\")
             n=\$((n + 1))
             echo \"\$n\" > \"\$COUNTER_FILE\"
             [ \"\$n\" -ge 2 ] && return 0 || return 1
@@ -235,7 +235,7 @@ test_retry_respects_max_attempts() {
         echo '0' > \"\$COUNTER_FILE\"
         count_and_fail() {
             local n
-            n=\$(cat \"\$COUNTER_FILE\")
+            n=\$(command cat \"\$COUNTER_FILE\")
             n=\$((n + 1))
             echo \"\$n\" > \"\$COUNTER_FILE\"
             return 1
@@ -245,7 +245,7 @@ test_retry_respects_max_attempts() {
     " || exit_code=$?
 
     local attempts
-    attempts=$(cat "$TEST_TEMP_DIR/attempt_count")
+    attempts=$(command cat "$TEST_TEMP_DIR/attempt_count")
     assert_equals "3" "$attempts" "retry_with_backoff makes exactly RETRY_MAX_ATTEMPTS attempts"
 }
 

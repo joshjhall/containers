@@ -36,7 +36,7 @@ alias bench='hyperfine'
 
 # Cargo sweep aliases
 alias sweep='cargo-sweep sweep --time 14'
-alias sweep-all='find "${WORKING_DIR:-/workspace}" -name "Cargo.toml" -exec dirname {} \; | xargs -I{} cargo-sweep sweep --time 14 {}'
+alias sweep-all='command find "${WORKING_DIR:-/workspace}" -name "Cargo.toml" -exec dirname {} \; | xargs -I{} cargo-sweep sweep --time 14 {}'
 
 # Unified workflow aliases
 alias rust-lint-all='cargo clippy --all-targets --all-features'

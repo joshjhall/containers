@@ -18,10 +18,10 @@ fi
 # Wrapper: inject token from secure file into claude process only
 claude() {
     local _old_xtrace
-    _old_xtrace=$(set +o | grep xtrace)
+    _old_xtrace=$(set +o | command grep xtrace)
     set +x
     local _token
-    _token=$(cat /dev/shm/anthropic-auth-token 2>/dev/null) || true
+    _token=$(command cat /dev/shm/anthropic-auth-token 2>/dev/null) || true
     eval "$_old_xtrace"
     if [ -n "$_token" ]; then
         ANTHROPIC_AUTH_TOKEN="$_token" command claude "$@"

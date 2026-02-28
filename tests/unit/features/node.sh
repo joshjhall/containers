@@ -157,13 +157,13 @@ EOF
     assert_file_exists "$npmrc_file"
 
     # Check cache configuration
-    if grep -q "cache=/cache/npm" "$npmrc_file"; then
+    if command grep -q "cache=/cache/npm" "$npmrc_file"; then
         assert_true true "NPM cache directory is configured"
     else
         assert_true false "NPM cache directory not configured"
     fi
 
-    if grep -q "prefix=" "$npmrc_file"; then
+    if command grep -q "prefix=" "$npmrc_file"; then
         assert_true true "NPM prefix is configured"
     else
         assert_true false "NPM prefix not configured"
@@ -189,20 +189,20 @@ EOF
     assert_file_exists "$bashrc_file"
 
     # Check environment variables
-    if grep -q "NODE_PATH=" "$bashrc_file"; then
+    if command grep -q "NODE_PATH=" "$bashrc_file"; then
         assert_true true "NODE_PATH is exported"
     else
         assert_true false "NODE_PATH not found"
     fi
 
-    if grep -q "NPM_CONFIG_CACHE=" "$bashrc_file"; then
+    if command grep -q "NPM_CONFIG_CACHE=" "$bashrc_file"; then
         assert_true true "NPM cache config is exported"
     else
         assert_true false "NPM cache config not found"
     fi
 
     # Check aliases
-    if grep -q "alias npm-list" "$bashrc_file"; then
+    if command grep -q "alias npm-list" "$bashrc_file"; then
         assert_true true "npm-list alias is defined"
     else
         assert_true false "npm-list alias not found"
@@ -277,13 +277,13 @@ EOF
     assert_file_exists "$test_script"
 
     # Check verification content
-    if grep -q "node --version" "$test_script"; then
+    if command grep -q "node --version" "$test_script"; then
         assert_true true "Script checks Node version"
     else
         assert_true false "Script doesn't check Node version"
     fi
 
-    if grep -q "npm --version" "$test_script"; then
+    if command grep -q "npm --version" "$test_script"; then
         assert_true true "Script checks NPM version"
     else
         assert_true false "Script doesn't check NPM version"
@@ -368,14 +368,14 @@ test_no_curl_pipe_bash() {
     fi
 
     # Check for curl | bash pattern (should NOT exist)
-    if grep -E "curl.*\|.*bash" "$node_script" >/dev/null 2>&1; then
+    if command grep -E "curl.*\|.*bash" "$node_script" >/dev/null 2>&1; then
         assert_true false "CRITICAL: node.sh contains 'curl | bash' pattern"
     else
         assert_true true "node.sh does not use 'curl | bash' pattern"
     fi
 
     # Check for wget | bash pattern (should NOT exist)
-    if grep -E "wget.*\|.*bash" "$node_script" >/dev/null 2>&1; then
+    if command grep -E "wget.*\|.*bash" "$node_script" >/dev/null 2>&1; then
         assert_true false "CRITICAL: node.sh contains 'wget | bash' pattern"
     else
         assert_true true "node.sh does not use 'wget | bash' pattern"
@@ -392,14 +392,14 @@ test_manual_repository_setup() {
     fi
 
     # Check for 4-tier verification system (replaced repository setup)
-    if grep -q "checksum-verification.sh" "$node_script"; then
+    if command grep -q "checksum-verification.sh" "$node_script"; then
         assert_true true "node.sh sources 4-tier checksum verification system"
     else
         assert_true false "node.sh does not source checksum-verification.sh"
     fi
 
     # Check for verify_download usage
-    if grep -q "verify_download" "$node_script"; then
+    if command grep -q "verify_download" "$node_script"; then
         assert_true true "node.sh uses verify_download for binary verification"
     else
         assert_true false "node.sh does not use verify_download"
@@ -416,14 +416,14 @@ test_repository_sources_list() {
     fi
 
     # Check that repository setup is NOT used (direct binary download instead)
-    if grep -q "/etc/apt/sources.list.d/nodesource.list" "$node_script"; then
+    if command grep -q "/etc/apt/sources.list.d/nodesource.list" "$node_script"; then
         assert_true false "node.sh should not use repository setup (uses direct download)"
     else
         assert_true true "node.sh correctly uses direct binary download (no repository)"
     fi
 
     # Check that Node.js is downloaded from dist URLs
-    if grep -q "nodejs.org/dist" "$node_script"; then
+    if command grep -q "nodejs.org/dist" "$node_script"; then
         assert_true true "node.sh downloads from nodejs.org/dist"
     else
         assert_true false "node.sh does not download from official dist URL"

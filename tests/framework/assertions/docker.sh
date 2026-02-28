@@ -44,7 +44,7 @@ assert_container_running() {
     local container="$1"
     local message="${2:-Container $container should be running}"
 
-    if docker ps --format '{{.Names}}' | grep -q "^${container}$"; then
+    if docker ps --format '{{.Names}}' | command grep -q "^${container}$"; then
         return 0
     else
         tf_fail_assertion "$message" \
@@ -57,7 +57,7 @@ assert_container_not_running() {
     local container="$1"
     local message="${2:-Container $container should not be running}"
 
-    if ! docker ps --format '{{.Names}}' | grep -q "^${container}$"; then
+    if ! docker ps --format '{{.Names}}' | command grep -q "^${container}$"; then
         return 0
     else
         tf_fail_assertion "$message" \

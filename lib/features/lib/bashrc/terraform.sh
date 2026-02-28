@@ -105,12 +105,12 @@ tf-providers-check() {
         return 1
     fi
     echo "Locked providers in .terraform.lock.hcl:"
-    grep -E "^\s+version\s*=" .terraform.lock.hcl | sed 's/.*= "//; s/"//' | while read version; do
+    command grep -E "^\s+version\s*=" .terraform.lock.hcl | sed 's/.*= "//; s/"//' | while read version; do
         echo "  $version"
     done
     echo ""
     echo "Provider constraints in configuration:"
-    grep -h "required_providers" -A 20 *.tf 2>/dev/null | grep -E "^\s+version\s*=" | head -10 || echo "  (none found)"
+    command grep -h "required_providers" -A 20 *.tf 2>/dev/null | command grep -E "^\s+version\s*=" | head -10 || echo "  (none found)"
 }
 
 

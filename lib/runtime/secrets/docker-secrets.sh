@@ -110,7 +110,7 @@ load_secrets_from_docker() {
         # Load all secrets from directory
         while IFS= read -r -d '' secret_file; do
             secret_files+=("$secret_file")
-        done < <(find "$secrets_dir" -maxdepth 1 -type f -print0 2>/dev/null)
+        done < <(command find "$secrets_dir" -maxdepth 1 -type f -print0 2>/dev/null)
     fi
 
     # Load each secret
@@ -137,7 +137,7 @@ load_secrets_from_docker() {
 
         # Read secret value
         local secret_value
-        secret_value=$(cat "$secret_file")
+        secret_value=$(command cat "$secret_file")
 
         if [ -z "$secret_value" ]; then
             log_warning "Secret '$secret_name' is empty, skipping"
@@ -183,7 +183,7 @@ docker_secrets_health_check() {
 
     if docker_secrets_available; then
         local count
-        count=$(find "$secrets_dir" -maxdepth 1 -type f 2>/dev/null | wc -l)
+        count=$(command find "$secrets_dir" -maxdepth 1 -type f 2>/dev/null | wc -l)
         log_info "Docker secrets available ($count secrets found)"
         return 0
     else

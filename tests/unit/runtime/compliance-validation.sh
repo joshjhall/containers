@@ -458,7 +458,7 @@ test_generate_report_writes_file() {
     assert_true [ -f "$tmpdir/report.txt" ] "Report file should be created"
 
     local content
-    content=$(cat "$tmpdir/report.txt")
+    content=$(command cat "$tmpdir/report.txt")
     assert_contains "$content" "Compliance Validation Report" "Report should have header"
     assert_contains "$content" "Total Checks: 3" "Report should show total checks"
     assert_contains "$content" "Passed: 2" "Report should show passed count"

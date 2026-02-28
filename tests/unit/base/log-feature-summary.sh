@@ -144,7 +144,7 @@ test_summary_writes_to_log_file() {
     assert_file_exists "$CURRENT_LOG_FILE" "Log file should exist"
 
     local log_content
-    log_content=$(cat "$CURRENT_LOG_FILE" 2>/dev/null || echo "")
+    log_content=$(command cat "$CURRENT_LOG_FILE" 2>/dev/null || echo "")
 
     # The function uses tee -a, so content should be in the file
     if [ -n "$log_content" ]; then

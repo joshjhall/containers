@@ -119,7 +119,7 @@ test_lookup_pinned_checksum_missing_db() {
 test_lookup_pinned_checksum_valid_language() {
     # Create a valid checksums.json with a known checksum
     local expected_hash="a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
-    cat > "$TEST_TEMP_DIR/checksums.json" <<EOF
+    command cat > "$TEST_TEMP_DIR/checksums.json" <<EOF
 {
     "languages": {
         "python": {
@@ -145,7 +145,7 @@ EOF
 
 test_lookup_pinned_checksum_valid_tool() {
     local expected_hash="f1e2d3c4b5a6f1e2d3c4b5a6f1e2d3c4b5a6f1e2d3c4b5a6f1e2d3c4b5a6f1e2"
-    cat > "$TEST_TEMP_DIR/checksums.json" <<EOF
+    command cat > "$TEST_TEMP_DIR/checksums.json" <<EOF
 {
     "languages": {},
     "tools": {
@@ -170,7 +170,7 @@ EOF
 }
 
 test_lookup_pinned_checksum_unknown_version() {
-    cat > "$TEST_TEMP_DIR/checksums.json" <<EOF
+    command cat > "$TEST_TEMP_DIR/checksums.json" <<EOF
 {
     "languages": {
         "python": {
@@ -195,7 +195,7 @@ EOF
 }
 
 test_lookup_pinned_checksum_skips_placeholder() {
-    cat > "$TEST_TEMP_DIR/checksums.json" <<EOF
+    command cat > "$TEST_TEMP_DIR/checksums.json" <<EOF
 {
     "languages": {
         "python": {
@@ -258,7 +258,7 @@ test_verify_pinned_checksum_match() {
     local real_hash
     real_hash=$(sha256sum "$TEST_TEMP_DIR/match-test.tgz" | awk '{print $1}')
 
-    cat > "$TEST_TEMP_DIR/checksums.json" <<EOJSON
+    command cat > "$TEST_TEMP_DIR/checksums.json" <<EOJSON
 {
     "languages": {
         "testlang": {
@@ -288,7 +288,7 @@ test_verify_pinned_checksum_mismatch() {
     echo "checksum mismatch test content" > "$TEST_TEMP_DIR/mismatch-test.tgz"
     local wrong_hash="0000000000000000000000000000000000000000000000000000000000000000"
 
-    cat > "$TEST_TEMP_DIR/checksums.json" <<EOJSON
+    command cat > "$TEST_TEMP_DIR/checksums.json" <<EOJSON
 {
     "languages": {
         "testlang": {

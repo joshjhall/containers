@@ -56,7 +56,7 @@ test_keybindings_script_format() {
 
     if [ -f "$script" ]; then
         # Check for proper shebang
-        if head -1 "$script" | grep -q "#!/bin/bash"; then
+        if head -1 "$script" | command grep -q "#!/bin/bash"; then
             assert_true true "Script has proper shebang"
         else
             assert_true false "Script missing or has incorrect shebang"
@@ -76,14 +76,14 @@ test_keybindings_sources_headers() {
     fi
 
     # Check for feature-header.sh
-    if grep -q "source.*feature-header.sh" "$script"; then
+    if command grep -q "source.*feature-header.sh" "$script"; then
         assert_true true "Script sources feature-header.sh"
     else
         assert_true false "Script does not source feature-header.sh"
     fi
 
     # Check for bashrc-helpers.sh
-    if grep -q "source.*bashrc-helpers.sh" "$script"; then
+    if command grep -q "source.*bashrc-helpers.sh" "$script"; then
         assert_true true "Script sources bashrc-helpers.sh"
     else
         assert_true false "Script does not source bashrc-helpers.sh"
@@ -107,19 +107,19 @@ EOF
     assert_file_exists "$inputrc_file"
 
     # Check for essential settings
-    if grep -q "completion-ignore-case on" "$inputrc_file"; then
+    if command grep -q "completion-ignore-case on" "$inputrc_file"; then
         assert_true true "Case-insensitive completion enabled"
     else
         assert_true false "Case-insensitive completion not found"
     fi
 
-    if grep -q "show-all-if-ambiguous on" "$inputrc_file"; then
+    if command grep -q "show-all-if-ambiguous on" "$inputrc_file"; then
         assert_true true "Show-all-if-ambiguous enabled"
     else
         assert_true false "Show-all-if-ambiguous not found"
     fi
 
-    if grep -q "editing-mode emacs" "$inputrc_file"; then
+    if command grep -q "editing-mode emacs" "$inputrc_file"; then
         assert_true true "Emacs editing mode set"
     else
         assert_true false "Emacs editing mode not found"
@@ -142,26 +142,26 @@ test_iterm_keybindings() {
 EOF
 
     # Check for Meta+f/b bindings (standard readline word movement)
-    if grep -q '\\ef.*forward-word' "$inputrc_file"; then
+    if command grep -q '\\ef.*forward-word' "$inputrc_file"; then
         assert_true true "Meta+f (forward-word) binding present"
     else
         assert_true false "Meta+f binding not found"
     fi
 
-    if grep -q '\\eb.*backward-word' "$inputrc_file"; then
+    if command grep -q '\\eb.*backward-word' "$inputrc_file"; then
         assert_true true "Meta+b (backward-word) binding present"
     else
         assert_true false "Meta+b binding not found"
     fi
 
     # Check for iTerm2-specific sequences
-    if grep -q '\\e\[1;3C.*forward-word' "$inputrc_file"; then
+    if command grep -q '\\e\[1;3C.*forward-word' "$inputrc_file"; then
         assert_true true "iTerm2 Option+Right binding present"
     else
         assert_true false "iTerm2 Option+Right binding not found"
     fi
 
-    if grep -q '\\e\[1;3D.*backward-word' "$inputrc_file"; then
+    if command grep -q '\\e\[1;3D.*backward-word' "$inputrc_file"; then
         assert_true true "iTerm2 Option+Left binding present"
     else
         assert_true false "iTerm2 Option+Left binding not found"
@@ -178,13 +178,13 @@ test_xterm_keybindings_in_script() {
     fi
 
     # Check for xterm Ctrl+Arrow sequences
-    if grep -q '\\e\[1;5C.*forward-word' "$script"; then
+    if command grep -q '\\e\[1;5C.*forward-word' "$script"; then
         assert_true true "xterm Ctrl+Right binding in script"
     else
         assert_true false "xterm Ctrl+Right binding not found in script"
     fi
 
-    if grep -q '\\e\[1;5D.*backward-word' "$script"; then
+    if command grep -q '\\e\[1;5D.*backward-word' "$script"; then
         assert_true true "xterm Ctrl+Left binding in script"
     else
         assert_true false "xterm Ctrl+Left binding not found in script"
@@ -201,26 +201,26 @@ test_profile_selection() {
     fi
 
     # Check for KEYBINDING_PROFILE variable usage
-    if grep -q 'KEYBINDING_PROFILE.*:-iterm' "$script"; then
+    if command grep -q 'KEYBINDING_PROFILE.*:-iterm' "$script"; then
         assert_true true "KEYBINDING_PROFILE defaults to iterm"
     else
         assert_true false "KEYBINDING_PROFILE default not found"
     fi
 
     # Check for case statement with profiles
-    if grep -q 'iterm|macos)' "$script"; then
+    if command grep -q 'iterm|macos)' "$script"; then
         assert_true true "iTerm/macOS profile case exists"
     else
         assert_true false "iTerm/macOS profile case not found"
     fi
 
-    if grep -q 'xterm|linux)' "$script"; then
+    if command grep -q 'xterm|linux)' "$script"; then
         assert_true true "xterm/Linux profile case exists"
     else
         assert_true false "xterm/Linux profile case not found"
     fi
 
-    if grep -q 'minimal|none)' "$script"; then
+    if command grep -q 'minimal|none)' "$script"; then
         assert_true true "Minimal profile case exists"
     else
         assert_true false "Minimal profile case not found"
@@ -246,21 +246,21 @@ EOF
     assert_file_exists "$bashrc_file"
 
     # Check for interactive shell check
-    if grep -q '\$- != \*i\*' "$bashrc_file"; then
+    if command grep -q '\$- != \*i\*' "$bashrc_file"; then
         assert_true true "Interactive shell check present"
     else
         assert_true false "Interactive shell check not found"
     fi
 
     # Check for inputrc loading
-    if grep -q 'bind -f /etc/inputrc' "$bashrc_file"; then
+    if command grep -q 'bind -f /etc/inputrc' "$bashrc_file"; then
         assert_true true "Inputrc loading command present"
     else
         assert_true false "Inputrc loading command not found"
     fi
 
     # Check for stty -ixon (disable flow control)
-    if grep -q 'stty -ixon' "$bashrc_file"; then
+    if command grep -q 'stty -ixon' "$bashrc_file"; then
         assert_true true "Flow control disabled (stty -ixon)"
     else
         assert_true false "Flow control disable not found"
@@ -281,7 +281,7 @@ EOF
     assert_file_exists "$user_inputrc"
 
     # Check for system inputrc include
-    if grep -q '\$include /etc/inputrc' "$user_inputrc"; then
+    if command grep -q '\$include /etc/inputrc' "$user_inputrc"; then
         assert_true true "User inputrc includes system inputrc"
     else
         assert_true false "User inputrc missing system include"
@@ -307,13 +307,13 @@ EOF
     assert_file_exists "$test_script"
 
     # Check for essential content
-    if grep -q "KEYBINDING_PROFILE" "$test_script"; then
+    if command grep -q "KEYBINDING_PROFILE" "$test_script"; then
         assert_true true "Verification script shows profile"
     else
         assert_true false "Verification script missing profile display"
     fi
 
-    if grep -q "/etc/inputrc" "$test_script"; then
+    if command grep -q "/etc/inputrc" "$test_script"; then
         assert_true true "Verification script checks inputrc"
     else
         assert_true false "Verification script missing inputrc check"
@@ -337,31 +337,31 @@ test_standard_bindings() {
     fi
 
     # Check for standard Ctrl bindings
-    if grep -q '\\C-a.*beginning-of-line' "$script"; then
+    if command grep -q '\\C-a.*beginning-of-line' "$script"; then
         assert_true true "Ctrl+A binding present"
     else
         assert_true false "Ctrl+A binding not found"
     fi
 
-    if grep -q '\\C-e.*end-of-line' "$script"; then
+    if command grep -q '\\C-e.*end-of-line' "$script"; then
         assert_true true "Ctrl+E binding present"
     else
         assert_true false "Ctrl+E binding not found"
     fi
 
-    if grep -q '\\C-u.*unix-line-discard' "$script"; then
+    if command grep -q '\\C-u.*unix-line-discard' "$script"; then
         assert_true true "Ctrl+U binding present"
     else
         assert_true false "Ctrl+U binding not found"
     fi
 
-    if grep -q '\\C-k.*kill-line' "$script"; then
+    if command grep -q '\\C-k.*kill-line' "$script"; then
         assert_true true "Ctrl+K binding present"
     else
         assert_true false "Ctrl+K binding not found"
     fi
 
-    if grep -q '\\C-r.*reverse-search-history' "$script"; then
+    if command grep -q '\\C-r.*reverse-search-history' "$script"; then
         assert_true true "Ctrl+R binding present"
     else
         assert_true false "Ctrl+R binding not found"
@@ -378,14 +378,14 @@ test_word_deletion_bindings() {
     fi
 
     # Check for backward-kill-word binding
-    if grep -q 'backward-kill-word' "$script"; then
+    if command grep -q 'backward-kill-word' "$script"; then
         assert_true true "backward-kill-word binding present"
     else
         assert_true false "backward-kill-word binding not found"
     fi
 
     # Check for kill-word binding
-    if grep -q '\\ed.*kill-word' "$script"; then
+    if command grep -q '\\ed.*kill-word' "$script"; then
         assert_true true "Meta+d kill-word binding present"
     else
         assert_true false "Meta+d kill-word binding not found"
@@ -402,14 +402,14 @@ test_history_search_bindings() {
     fi
 
     # Check for history-search-backward
-    if grep -q 'history-search-backward' "$script"; then
+    if command grep -q 'history-search-backward' "$script"; then
         assert_true true "history-search-backward binding present"
     else
         assert_true false "history-search-backward binding not found"
     fi
 
     # Check for history-search-forward
-    if grep -q 'history-search-forward' "$script"; then
+    if command grep -q 'history-search-forward' "$script"; then
         assert_true true "history-search-forward binding present"
     else
         assert_true false "history-search-forward binding not found"
@@ -426,21 +426,21 @@ test_dockerfile_integration() {
     fi
 
     # Check for INCLUDE_KEYBINDINGS build arg
-    if grep -q 'ARG INCLUDE_KEYBINDINGS' "$dockerfile"; then
+    if command grep -q 'ARG INCLUDE_KEYBINDINGS' "$dockerfile"; then
         assert_true true "INCLUDE_KEYBINDINGS build arg present"
     else
         assert_true false "INCLUDE_KEYBINDINGS build arg not found"
     fi
 
     # Check for KEYBINDING_PROFILE build arg
-    if grep -q 'ARG KEYBINDING_PROFILE' "$dockerfile"; then
+    if command grep -q 'ARG KEYBINDING_PROFILE' "$dockerfile"; then
         assert_true true "KEYBINDING_PROFILE build arg present"
     else
         assert_true false "KEYBINDING_PROFILE build arg not found"
     fi
 
     # Check for keybindings.sh invocation
-    if grep -q 'keybindings.sh' "$dockerfile"; then
+    if command grep -q 'keybindings.sh' "$dockerfile"; then
         assert_true true "keybindings.sh invoked in Dockerfile"
     else
         assert_true false "keybindings.sh not invoked in Dockerfile"

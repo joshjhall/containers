@@ -331,7 +331,7 @@ WORKING_DIR="${WORKING_DIR:-/workspace}"
 # Only sweep if we have Rust projects in the workspace
 if [ -d "$WORKING_DIR" ]; then
     # Find all directories with Cargo.toml and sweep them
-    find "$WORKING_DIR" -name "Cargo.toml" -type f 2>/dev/null | while read -r cargo_file; do
+    command find "$WORKING_DIR" -name "Cargo.toml" -type f 2>/dev/null | while read -r cargo_file; do
         project_dir=$(dirname "$cargo_file")
         if [ -d "$project_dir/target" ]; then
             logger -t cargo-sweep "Cleaning artifacts older than ${SWEEP_DAYS} days in $project_dir"

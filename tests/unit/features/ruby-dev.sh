@@ -81,7 +81,7 @@ EOF
     assert_file_exists "$rubocop_yml"
 
     # Check configuration
-    if grep -q "TargetRubyVersion: 3.3" "$rubocop_yml"; then
+    if command grep -q "TargetRubyVersion: 3.3" "$rubocop_yml"; then
         assert_true true "Rubocop targets Ruby 3.3"
     else
         assert_true false "Rubocop Ruby version not set"
@@ -104,7 +104,7 @@ EOF
     assert_file_exists "$solargraph_yml"
 
     # Check configuration
-    if grep -q 'include:' "$solargraph_yml"; then
+    if command grep -q 'include:' "$solargraph_yml"; then
         assert_true true "Solargraph include patterns set"
     else
         assert_true false "Solargraph include patterns not set"
@@ -143,7 +143,7 @@ EOF
     assert_file_exists "$rspec_file"
 
     # Check configuration
-    if grep -q "\-\-format documentation" "$rspec_file"; then
+    if command grep -q "\-\-format documentation" "$rspec_file"; then
         assert_true true "RSpec documentation format enabled"
     else
         assert_true false "RSpec documentation format not enabled"
@@ -165,7 +165,7 @@ EOF
     assert_file_exists "$guardfile"
 
     # Check configuration
-    if grep -q "guard :rspec" "$guardfile"; then
+    if command grep -q "guard :rspec" "$guardfile"; then
         assert_true true "Guard RSpec configured"
     else
         assert_true false "Guard RSpec not configured"
@@ -185,7 +185,7 @@ alias grd='guard'
 EOF
 
     # Check aliases
-    if grep -q "alias rbc='rubocop'" "$bashrc_file"; then
+    if command grep -q "alias rbc='rubocop'" "$bashrc_file"; then
         assert_true true "rubocop alias defined"
     else
         assert_true false "rubocop alias not defined"
@@ -205,7 +205,7 @@ EOF
     assert_file_exists "$pryrc"
 
     # Check configuration
-    if grep -q "Pry.config.editor" "$pryrc"; then
+    if command grep -q "Pry.config.editor" "$pryrc"; then
         assert_true true "Pry editor configured"
     else
         assert_true false "Pry editor not configured"

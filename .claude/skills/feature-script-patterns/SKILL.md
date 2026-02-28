@@ -115,6 +115,27 @@ log_feature_end
 | `safe_add_to_path "/new/path"`            | `path-utils.sh`      | Add to PATH with validation              |
 | `verify_download type name ver file arch` | `download-verify.sh` | 4-tier checksum verification             |
 
+## Shell Command Safety
+
+**NEVER use bare commands** like `ls`, `cat`, `grep`, `sed`, `awk`, `head`,
+`tail`, `find`, `sort`, `wc`, `tr`, `cut`, `tee`, or `echo` in scripts.
+These commands are often aliased (e.g., `ls` to `ls --color=auto`, `grep` to
+`grep --color=auto`) and aliases can change output format, add unexpected
+flags, or break parsing.
+
+Use full paths or the `command` builtin:
+
+```bash
+# CORRECT
+/usr/bin/grep -q "pattern" file
+/usr/bin/find /path -name "*.sh"
+command cat /etc/os-release
+
+# WRONG — bare commands may be aliased
+grep -q "pattern" file
+cat /etc/os-release
+```
+
 ## Conventions
 
 - Cache dirs go under `/cache/<tool>` — enables volume mounting

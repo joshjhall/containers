@@ -39,7 +39,7 @@ if command -v kubectl &> /dev/null; then
         # Validate completion output before sourcing
         if [ -f "$COMPLETION_FILE" ] && \
            [ "$(wc -c < "$COMPLETION_FILE")" -lt 100000 ] && \
-           ! grep -qE '(rm -rf|curl.*bash|wget.*bash|eval.*\$)' "$COMPLETION_FILE"; then
+           ! command grep -qE '(rm -rf|curl.*bash|wget.*bash|eval.*\$)' "$COMPLETION_FILE"; then
             # shellcheck disable=SC1090  # Dynamic source is validated
             source "$COMPLETION_FILE"
             complete -F __start_kubectl k
@@ -115,7 +115,7 @@ k-shell() {
 
     # If exact pod name not found, try to find a matching pod
     if ! kubectl get pod "$pod" &>/dev/null; then
-        pod=$(kubectl get pods --no-headers | grep "$pod" | head -n1 | awk '{print $1}')
+        pod=$(kubectl get pods --no-headers | command grep "$pod" | head -n1 | awk '{print $1}')
         if [ -z "$pod" ]; then
             echo "No pod matching '$1' found"
             return 1

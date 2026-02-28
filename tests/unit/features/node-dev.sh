@@ -88,7 +88,7 @@ EOF
     assert_file_exists "$tsconfig"
 
     # Check configuration
-    if grep -q '"strict": true' "$tsconfig"; then
+    if command grep -q '"strict": true' "$tsconfig"; then
         assert_true true "TypeScript strict mode enabled"
     else
         assert_true false "TypeScript strict mode not enabled"
@@ -116,7 +116,7 @@ EOF
     assert_file_exists "$eslintrc"
 
     # Check configuration
-    if grep -q '"eslint:recommended"' "$eslintrc"; then
+    if command grep -q '"eslint:recommended"' "$eslintrc"; then
         assert_true true "ESLint recommended rules enabled"
     else
         assert_true false "ESLint recommended rules not enabled"
@@ -140,7 +140,7 @@ EOF
     assert_file_exists "$prettierrc"
 
     # Check configuration
-    if grep -q '"singleQuote": true' "$prettierrc"; then
+    if command grep -q '"singleQuote": true' "$prettierrc"; then
         assert_true true "Prettier single quotes enabled"
     else
         assert_true false "Prettier single quotes not enabled"
@@ -163,7 +163,7 @@ EOF
     assert_file_exists "$jestconfig"
 
     # Check configuration
-    if grep -q "testEnvironment: 'node'" "$jestconfig"; then
+    if command grep -q "testEnvironment: 'node'" "$jestconfig"; then
         assert_true true "Jest node environment configured"
     else
         assert_true false "Jest node environment not configured"
@@ -186,7 +186,7 @@ EOF
     assert_file_exists "$nodemon_json"
 
     # Check configuration
-    if grep -q '"exec": "ts-node"' "$nodemon_json"; then
+    if command grep -q '"exec": "ts-node"' "$nodemon_json"; then
         assert_true true "Nodemon uses ts-node"
     else
         assert_true false "Nodemon doesn't use ts-node"
@@ -213,7 +213,7 @@ EOF
     assert_file_exists "$package_json"
 
     # Check scripts
-    if grep -q '"dev": "nodemon"' "$package_json"; then
+    if command grep -q '"dev": "nodemon"' "$package_json"; then
         assert_true true "Dev script configured"
     else
         assert_true false "Dev script not configured"
@@ -235,7 +235,7 @@ alias tsn='npx ts-node'
 EOF
 
     # Check aliases
-    if grep -q "alias nrd='npm run dev'" "$bashrc_file"; then
+    if command grep -q "alias nrd='npm run dev'" "$bashrc_file"; then
         assert_true true "npm run dev alias defined"
     else
         assert_true false "npm run dev alias not defined"

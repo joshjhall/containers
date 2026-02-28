@@ -80,14 +80,14 @@ test_readme_loading_with_substitution() {
     tff_temp_dir=$(mktemp -d)
 
     if sed "s/__PROJECT_NAME__/my-mojo-app/g" "$TEMPLATE_DIR/project/README.md.tmpl" > "$tff_temp_dir/README.md"; then
-        if grep -q "# my-mojo-app" "$tff_temp_dir/README.md"; then
+        if command grep -q "# my-mojo-app" "$tff_temp_dir/README.md"; then
             assert_true true "README template substitution works correctly"
         else
             assert_true false "Placeholder not substituted in README"
         fi
 
         # Verify placeholder was removed
-        if grep -q "__PROJECT_NAME__" "$tff_temp_dir/README.md"; then
+        if command grep -q "__PROJECT_NAME__" "$tff_temp_dir/README.md"; then
             assert_true false "Placeholder still present after substitution"
         else
             assert_true true "All placeholders substituted in README"
@@ -105,7 +105,7 @@ test_gitignore_loading_no_substitution() {
     tff_temp_dir=$(mktemp -d)
 
     if cp "$TEMPLATE_DIR/project/gitignore.tmpl" "$tff_temp_dir/.gitignore"; then
-        if grep -q '\*.mojopkg' "$tff_temp_dir/.gitignore"; then
+        if command grep -q '\*.mojopkg' "$tff_temp_dir/.gitignore"; then
             assert_true true "Gitignore template loads without substitution"
         else
             assert_true false "Gitignore template content invalid"
@@ -123,7 +123,7 @@ test_main_template_structure() {
     tff_temp_dir=$(mktemp -d)
 
     if cp "$TEMPLATE_DIR/src/main.mojo.tmpl" "$tff_temp_dir/main.mojo"; then
-        if grep -q "fn main():" "$tff_temp_dir/main.mojo" && grep -q "Hello from Mojo" "$tff_temp_dir/main.mojo"; then
+        if command grep -q "fn main():" "$tff_temp_dir/main.mojo" && grep -q "Hello from Mojo" "$tff_temp_dir/main.mojo"; then
             assert_true true "Main.mojo template has valid structure"
         else
             assert_true false "Main.mojo template missing required elements"
@@ -141,8 +141,8 @@ test_test_template_structure() {
     tff_temp_dir=$(mktemp -d)
 
     if cp "$TEMPLATE_DIR/tests/test_main.mojo.tmpl" "$tff_temp_dir/test_main.mojo"; then
-        if grep -q "from testing import assert_equal" "$tff_temp_dir/test_main.mojo" && \
-           grep -q "fn test_basic():" "$tff_temp_dir/test_main.mojo"; then
+        if command grep -q "from testing import assert_equal" "$tff_temp_dir/test_main.mojo" && \
+           command grep -q "fn test_basic():" "$tff_temp_dir/test_main.mojo"; then
             assert_true true "Test template has valid structure"
         else
             assert_true false "Test template missing required elements"
@@ -160,7 +160,7 @@ test_gitignore_python_support() {
     tff_temp_dir=$(mktemp -d)
 
     if cp "$TEMPLATE_DIR/project/gitignore.tmpl" "$tff_temp_dir/.gitignore"; then
-        if grep -q "__pycache__" "$tff_temp_dir/.gitignore" && grep -q '\*.pyc' "$tff_temp_dir/.gitignore"; then
+        if command grep -q "__pycache__" "$tff_temp_dir/.gitignore" && grep -q '\*.pyc' "$tff_temp_dir/.gitignore"; then
             assert_true true "Gitignore includes Python interop patterns"
         else
             assert_true false "Gitignore missing Python patterns"
@@ -178,9 +178,9 @@ test_readme_project_structure() {
     tff_temp_dir=$(mktemp -d)
 
     if sed "s/__PROJECT_NAME__/my-mojo-app/g" "$TEMPLATE_DIR/project/README.md.tmpl" > "$tff_temp_dir/README.md"; then
-        if grep -q "## Structure" "$tff_temp_dir/README.md" && \
-           grep -q "src/.*Source code" "$tff_temp_dir/README.md" && \
-           grep -q "tests/.*Test files" "$tff_temp_dir/README.md"; then
+        if command grep -q "## Structure" "$tff_temp_dir/README.md" && \
+           command grep -q "src/.*Source code" "$tff_temp_dir/README.md" && \
+           command grep -q "tests/.*Test files" "$tff_temp_dir/README.md"; then
             assert_true true "README includes project structure"
         else
             assert_true false "README missing structure section"

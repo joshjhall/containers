@@ -55,7 +55,7 @@ _create_mock_aws() {
     local response="${1:-}"
     local exit_code="${2:-0}"
 
-    cat > "$TEST_TEMP_DIR/bin/aws" << MOCK
+    command cat > "$TEST_TEMP_DIR/bin/aws" << MOCK
 #!/bin/bash
 if [[ "\$1" == "sts" ]]; then
     exit $exit_code
@@ -75,7 +75,7 @@ MOCK
 
 # Helper: create mock jq
 _create_mock_jq() {
-    cat > "$TEST_TEMP_DIR/bin/jq" << 'MOCK'
+    command cat > "$TEST_TEMP_DIR/bin/jq" << 'MOCK'
 #!/bin/bash
 # Simple jq mock - pass through or extract specific fields
 if [[ "$1" == "-r" ]]; then
@@ -84,19 +84,19 @@ fi
 if [[ "$1" == "-e" ]]; then
     shift
     # Check if input is valid JSON
-    cat > /dev/null
+    command cat > /dev/null
     exit 0
 fi
 # For to_entries parsing, output key=value pairs
 input=$(cat)
 if [[ "$1" == *"to_entries"* ]]; then
-    echo "$input" | grep -oP '"(\w+)"\s*:\s*"([^"]*)"' | sed 's/"\([^"]*\)"\s*:\s*"\([^"]*\)"/\1=\2/' || true
+    echo "$input" | command grep -oP '"(\w+)"\s*:\s*"([^"]*)"' | sed 's/"\([^"]*\)"\s*:\s*"\([^"]*\)"/\1=\2/' || true
 elif [[ "$1" == *"SecretString"* ]]; then
-    echo "$input" | grep -oP '"SecretString"\s*:\s*"([^"]*)"' | sed 's/"SecretString"\s*:\s*"\([^"]*\)"/\1/' || true
+    echo "$input" | command grep -oP '"SecretString"\s*:\s*"([^"]*)"' | sed 's/"SecretString"\s*:\s*"\([^"]*\)"/\1/' || true
 elif [[ "$1" == *"SecretBinary"* ]]; then
-    echo "$input" | grep -oP '"SecretBinary"\s*:\s*"([^"]*)"' | sed 's/"SecretBinary"\s*:\s*"\([^"]*\)"/\1/' || true
+    echo "$input" | command grep -oP '"SecretBinary"\s*:\s*"([^"]*)"' | sed 's/"SecretBinary"\s*:\s*"\([^"]*\)"/\1/' || true
 else
-    cat > /dev/null
+    command cat > /dev/null
 fi
 MOCK
     chmod +x "$TEST_TEMP_DIR/bin/jq"

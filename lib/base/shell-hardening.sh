@@ -77,7 +77,7 @@ restrict_shells() {
     fi
 
     # Create new restricted shells file
-    cat > /etc/shells << 'EOF'
+    command cat > /etc/shells << 'EOF'
 # /etc/shells: valid login shells
 # Restricted for security - only bash allowed
 # See CIS Docker Benchmark 4.1, NIST 800-53 AC-6

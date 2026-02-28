@@ -54,7 +54,7 @@ _run_azure_subshell() {
 _create_mock_az() {
     local exit_code="${1:-0}"
 
-    cat > "$TEST_TEMP_DIR/bin/az" << MOCK
+    command cat > "$TEST_TEMP_DIR/bin/az" << MOCK
 #!/bin/bash
 if [[ "\$*" == *"account show"* ]]; then
     echo '{"name":"test-subscription"}'

@@ -86,14 +86,14 @@ EOF
     fi
 
     # Check for idempotent check (pgrep)
-    if grep -q "pgrep" "$startup_script"; then
+    if command grep -q "pgrep" "$startup_script"; then
         assert_true true "Startup script checks if cron is already running"
     else
         assert_true false "Startup script missing idempotent check"
     fi
 
     # Check script mentions entrypoint handles startup
-    if grep -q "entrypoint" "$startup_script"; then
+    if command grep -q "entrypoint" "$startup_script"; then
         assert_true true "Startup script documents entrypoint handles cron"
     else
         assert_true false "Startup script should mention entrypoint"
@@ -126,21 +126,21 @@ EOF
     assert_file_exists "$env_file"
 
     # Check for PATH export
-    if grep -q "export PATH=" "$env_file"; then
+    if command grep -q "export PATH=" "$env_file"; then
         assert_true true "Environment file exports PATH"
     else
         assert_true false "Environment file missing PATH export"
     fi
 
     # Check for CARGO_HOME setup
-    if grep -q "CARGO_HOME" "$env_file"; then
+    if command grep -q "CARGO_HOME" "$env_file"; then
         assert_true true "Environment file includes Rust environment"
     else
         assert_true false "Environment file missing Rust environment"
     fi
 
     # Check for WORKING_DIR
-    if grep -q "WORKING_DIR" "$env_file"; then
+    if command grep -q "WORKING_DIR" "$env_file"; then
         assert_true true "Environment file includes WORKING_DIR"
     else
         assert_true false "Environment file missing WORKING_DIR"
@@ -168,7 +168,7 @@ alias cron-list='crontab -l 2>/dev/null || echo "No crontab for current user"'
 alias cron-edit='crontab -e'
 
 # List system cron jobs
-alias cron-system='ls -la /etc/cron.d/ 2>/dev/null'
+alias cron-system='command ls -la /etc/cron.d/ 2>/dev/null'
 
 # Show cron daemon status
 alias cron-status='pgrep -x cron > /dev/null && echo "cron: running" || echo "cron: not running"'
@@ -178,14 +178,14 @@ EOF
     assert_file_exists "$bashrc_file"
 
     # Check for cron-list alias
-    if grep -q "alias cron-list=" "$bashrc_file"; then
+    if command grep -q "alias cron-list=" "$bashrc_file"; then
         assert_true true "Bashrc includes cron-list alias"
     else
         assert_true false "Bashrc missing cron-list alias"
     fi
 
     # Check for cron-status alias
-    if grep -q "alias cron-status=" "$bashrc_file"; then
+    if command grep -q "alias cron-status=" "$bashrc_file"; then
         assert_true true "Bashrc includes cron-status alias"
     else
         assert_true false "Bashrc missing cron-status alias"
@@ -228,7 +228,7 @@ EOF
     fi
 
     # Check for daemon status check
-    if grep -q "pgrep" "$test_script"; then
+    if command grep -q "pgrep" "$test_script"; then
         assert_true true "Test script checks daemon status"
     else
         assert_true false "Test script missing daemon status check"

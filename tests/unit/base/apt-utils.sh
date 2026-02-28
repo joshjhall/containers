@@ -19,19 +19,19 @@ test_script_exists() {
 # Test: Functions are exported
 test_functions_exported() {
     # Check if the script exports the required functions
-    if grep -q "export -f apt_update" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
+    if command grep -q "export -f apt_update" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
         assert_true true "apt_update function is exported"
     else
         assert_true false "apt_update function not exported"
     fi
 
-    if grep -q "export -f apt_install" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
+    if command grep -q "export -f apt_install" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
         assert_true true "apt_install function is exported"
     else
         assert_true false "apt_install function not exported"
     fi
 
-    if grep -q "export -f apt_cleanup" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
+    if command grep -q "export -f apt_cleanup" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
         assert_true true "apt_cleanup function is exported"
     else
         assert_true false "apt_cleanup function not exported"
@@ -41,14 +41,14 @@ test_functions_exported() {
 # Test: apt_update function exists
 test_apt_update_function() {
     # Check that apt_update function is defined
-    if grep -q "^apt_update()" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
+    if command grep -q "^apt_update()" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
         assert_true true "apt_update function is defined"
     else
         assert_true false "apt_update function not found"
     fi
 
     # Check for retry logic
-    if grep -q "APT_MAX_RETRIES" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
+    if command grep -q "APT_MAX_RETRIES" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
         assert_true true "Retry logic with APT_MAX_RETRIES is present"
     else
         assert_true false "Retry logic not found"
@@ -58,14 +58,14 @@ test_apt_update_function() {
 # Test: apt_install function exists
 test_apt_install_function() {
     # Check that apt_install function is defined
-    if grep -q "^apt_install()" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
+    if command grep -q "^apt_install()" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
         assert_true true "apt_install function is defined"
     else
         assert_true false "apt_install function not found"
     fi
 
     # Check for --no-install-recommends flag
-    if grep -q "\-\-no-install-recommends" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
+    if command grep -q "\-\-no-install-recommends" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
         assert_true true "Using --no-install-recommends for minimal installs"
     else
         assert_true false "Not using --no-install-recommends flag"
@@ -75,21 +75,21 @@ test_apt_install_function() {
 # Test: apt_cleanup function exists
 test_apt_cleanup_function() {
     # Check that apt_cleanup function is defined
-    if grep -q "^apt_cleanup()\|^apt_cleanup ()" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
+    if command grep -q "^apt_cleanup()\|^apt_cleanup ()" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
         assert_true true "apt_cleanup function is defined"
     else
         assert_true false "apt_cleanup function not found"
     fi
 
     # Check for clean command (autoremove is not in apt_cleanup)
-    if grep -q "apt-get clean" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
+    if command grep -q "apt-get clean" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
         assert_true true "apt_cleanup includes clean command"
     else
         assert_true false "apt_cleanup missing clean command"
     fi
 
     # Check for clean
-    if grep -q "apt-get clean" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
+    if command grep -q "apt-get clean" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
         assert_true true "apt_cleanup includes clean"
     else
         assert_true false "apt_cleanup missing clean"
@@ -99,14 +99,14 @@ test_apt_cleanup_function() {
 # Test: apt_retry function exists
 test_apt_retry_function() {
     # Check that apt_retry function is defined
-    if grep -q "^apt_retry()\|^apt_retry ()" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
+    if command grep -q "^apt_retry()\|^apt_retry ()" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
         assert_true true "apt_retry function is defined"
     else
         assert_true false "apt_retry function not found"
     fi
 
     # Check for exponential backoff
-    if grep -q "sleep.*delay" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
+    if command grep -q "sleep.*delay" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
         assert_true true "Retry includes delay/backoff logic"
     else
         assert_true false "Retry missing delay/backoff logic"
@@ -116,13 +116,13 @@ test_apt_retry_function() {
 # Test: Timeout configuration
 test_timeout_configuration() {
     # Check for timeout settings
-    if grep -q "Acquire::http::Timeout" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
+    if command grep -q "Acquire::http::Timeout" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
         assert_true true "HTTP timeout is configured"
     else
         assert_true false "HTTP timeout not configured"
     fi
 
-    if grep -q "Acquire::https::Timeout" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
+    if command grep -q "Acquire::https::Timeout" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
         assert_true true "HTTPS timeout is configured"
     else
         assert_true false "HTTPS timeout not configured"
@@ -132,13 +132,13 @@ test_timeout_configuration() {
 # Test: Network diagnostics
 test_network_diagnostics() {
     # Check for diagnostic commands on failure
-    if grep -q "nslookup" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
+    if command grep -q "nslookup" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
         assert_true true "DNS diagnostics included"
     else
         assert_true false "DNS diagnostics missing"
     fi
 
-    if grep -q "ping" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
+    if command grep -q "ping" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
         assert_true true "Network connectivity test included"
     else
         assert_true false "Network connectivity test missing"
@@ -148,19 +148,19 @@ test_network_diagnostics() {
 # Test: Environment variable defaults
 test_environment_defaults() {
     # Check for default values
-    if grep -q "APT_MAX_RETRIES:-3" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
+    if command grep -q "APT_MAX_RETRIES:-3" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
         assert_true true "Default max retries is 3"
     else
         assert_true false "Default max retries not set"
     fi
 
-    if grep -q "APT_RETRY_DELAY:-5" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
+    if command grep -q "APT_RETRY_DELAY:-5" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
         assert_true true "Default retry delay is 5 seconds"
     else
         assert_true false "Default retry delay not set"
     fi
 
-    if grep -q "APT_TIMEOUT:-300" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
+    if command grep -q "APT_TIMEOUT:-300" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
         assert_true true "Default timeout is 300 seconds"
     else
         assert_true false "Default timeout not set"
@@ -170,7 +170,7 @@ test_environment_defaults() {
 # Test: Error handling
 test_error_handling() {
     # Check for proper error handling
-    if grep -q "set -euo pipefail" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
+    if command grep -q "set -euo pipefail" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
         assert_true true "Strict error handling enabled"
     else
         # Some scripts might use different error handling
@@ -181,21 +181,21 @@ test_error_handling() {
 # Test: Package name validation (security)
 test_package_name_validation() {
     # Check for package name validation regex
-    if grep -q "Invalid package name" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
+    if command grep -q "Invalid package name" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
         assert_true true "Package name validation is present"
     else
         assert_true false "Package name validation missing"
     fi
 
     # Check for validation regex pattern
-    if grep -q "\[\[.*=\~.*\]\]" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
+    if command grep -q "\[\[.*=\~.*\]\]" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
         assert_true true "Regex validation pattern present"
     else
         assert_true false "Regex validation pattern missing"
     fi
 
     # Check that version specifications are supported (=, <, >, *)
-    if grep -q "=.*<.*>.*\*" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
+    if command grep -q "=.*<.*>.*\*" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
         assert_true true "Version specification characters are supported"
     else
         assert_true false "Version specification characters missing"
@@ -205,41 +205,41 @@ test_package_name_validation() {
 # Test: Debian version detection
 test_debian_version_detection() {
     # Check for get_debian_major_version function
-    if grep -q "^get_debian_major_version()" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
+    if command grep -q "^get_debian_major_version()" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
         assert_true true "get_debian_major_version function is defined"
     else
         assert_true false "get_debian_major_version function not found"
     fi
 
     # Check for /etc/os-release support (method 1)
-    if grep -q "/etc/os-release" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
+    if command grep -q "/etc/os-release" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
         assert_true true "Supports /etc/os-release detection"
     else
         assert_true false "Missing /etc/os-release detection"
     fi
 
     # Check for /etc/debian_version support (method 2)
-    if grep -q "/etc/debian_version" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
+    if command grep -q "/etc/debian_version" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
         assert_true true "Supports /etc/debian_version fallback"
     else
         assert_true false "Missing /etc/debian_version fallback"
     fi
 
     # Check for lsb_release support (method 3)
-    if grep -q "lsb_release" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
+    if command grep -q "lsb_release" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
         assert_true true "Supports lsb_release fallback"
     else
         assert_true false "Missing lsb_release fallback"
     fi
 
     # Check for codename mapping
-    if grep -q "trixie.*13" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
+    if command grep -q "trixie.*13" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
         assert_true true "Maps trixie codename to version 13"
     else
         assert_true false "Missing trixie codename mapping"
     fi
 
-    if grep -q "bookworm.*12" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
+    if command grep -q "bookworm.*12" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
         assert_true true "Maps bookworm codename to version 12"
     else
         assert_true false "Missing bookworm codename mapping"
@@ -249,7 +249,7 @@ test_debian_version_detection() {
 # Test: is_debian_version function
 test_is_debian_version() {
     # Check for is_debian_version function
-    if grep -q "^is_debian_version()" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
+    if command grep -q "^is_debian_version()" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
         assert_true true "is_debian_version function is defined"
     else
         assert_true false "is_debian_version function not found"
@@ -259,7 +259,7 @@ test_is_debian_version() {
 # Test: apt_install_conditional function
 test_apt_install_conditional() {
     # Check for apt_install_conditional function
-    if grep -q "^apt_install_conditional()" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
+    if command grep -q "^apt_install_conditional()" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
         assert_true true "apt_install_conditional function is defined"
     else
         assert_true false "apt_install_conditional function not found"

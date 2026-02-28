@@ -146,7 +146,7 @@ audit_log() {
 
     # Generate unique event ID
     local event_id
-    event_id=$(cat /proc/sys/kernel/random/uuid 2>/dev/null || echo "$(date +%s)-$$-$RANDOM")
+    event_id=$(command cat /proc/sys/kernel/random/uuid 2>/dev/null || echo "$(date +%s)-$$-$RANDOM")
 
     # Get category code
     local category_code="${EVENT_CATEGORIES[$category]:-UNKNOWN}"

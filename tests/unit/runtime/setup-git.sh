@@ -70,7 +70,7 @@ test_write_key_uses_indirection() {
 
 # Test: _write_key saves xtrace state
 test_write_key_saves_xtrace() {
-    assert_file_contains "$SETUP_GIT_SCRIPT" 'set +o | grep xtrace' \
+    assert_file_contains "$SETUP_GIT_SCRIPT" 'set +o | command grep xtrace' \
         "_write_key should save xtrace state"
 }
 
@@ -170,7 +170,7 @@ MOCK_SSH_KEY_FOOTER"
 
     # Check content
     local actual_content
-    actual_content=$(cat "$key_path")
+    actual_content=$(command cat "$key_path")
     assert_equals "$key_content" "$actual_content" "Key content should match"
 
     # Check permissions (600)

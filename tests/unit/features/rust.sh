@@ -139,7 +139,7 @@ EOF
     assert_file_exists "$cargo_config"
 
     # Check cache directories are configured
-    if grep -q "/cache/cargo/target" "$cargo_config"; then
+    if command grep -q "/cache/cargo/target" "$cargo_config"; then
         assert_true true "Target directory uses cache"
     else
         assert_true false "Target directory doesn't use cache"
@@ -194,25 +194,25 @@ export RUST_BACKTRACE=1
 EOF
 
     # Check environment variables
-    if grep -q "export CARGO_HOME=" "$bashrc_file"; then
+    if command grep -q "export CARGO_HOME=" "$bashrc_file"; then
         assert_true true "CARGO_HOME is exported"
     else
         assert_true false "CARGO_HOME is not exported"
     fi
 
-    if grep -q "export RUSTUP_HOME=" "$bashrc_file"; then
+    if command grep -q "export RUSTUP_HOME=" "$bashrc_file"; then
         assert_true true "RUSTUP_HOME is exported"
     else
         assert_true false "RUSTUP_HOME is not exported"
     fi
 
-    if grep -q 'PATH.*CARGO_HOME/bin' "$bashrc_file"; then
+    if command grep -q 'PATH.*CARGO_HOME/bin' "$bashrc_file"; then
         assert_true true "PATH includes Cargo bin directory"
     else
         assert_true false "PATH doesn't include Cargo bin directory"
     fi
 
-    if grep -q "export RUST_BACKTRACE=1" "$bashrc_file"; then
+    if command grep -q "export RUST_BACKTRACE=1" "$bashrc_file"; then
         assert_true true "RUST_BACKTRACE is enabled"
     else
         assert_true false "RUST_BACKTRACE is not enabled"
@@ -240,19 +240,19 @@ alias ci='cargo install'
 EOF
 
     # Check common aliases
-    if grep -q "alias cb='cargo build'" "$bashrc_file"; then
+    if command grep -q "alias cb='cargo build'" "$bashrc_file"; then
         assert_true true "cargo build alias defined"
     else
         assert_true false "cargo build alias not defined"
     fi
 
-    if grep -q "alias ct='cargo test'" "$bashrc_file"; then
+    if command grep -q "alias ct='cargo test'" "$bashrc_file"; then
         assert_true true "cargo test alias defined"
     else
         assert_true false "cargo test alias not defined"
     fi
 
-    if grep -q "alias ccl='cargo clippy'" "$bashrc_file"; then
+    if command grep -q "alias ccl='cargo clippy'" "$bashrc_file"; then
         assert_true true "cargo clippy alias defined"
     else
         assert_true false "cargo clippy alias not defined"
@@ -278,13 +278,13 @@ EOF
     assert_file_exists "$project_dir/Cargo.toml"
 
     # Check if Cargo.toml can be parsed
-    if grep -q '\[package\]' "$project_dir/Cargo.toml"; then
+    if command grep -q '\[package\]' "$project_dir/Cargo.toml"; then
         assert_true true "Cargo.toml has package section"
     else
         assert_true false "Cargo.toml missing package section"
     fi
 
-    if grep -q 'edition = "2021"' "$project_dir/Cargo.toml"; then
+    if command grep -q 'edition = "2021"' "$project_dir/Cargo.toml"; then
         assert_true true "Cargo.toml uses 2021 edition"
     else
         assert_true false "Cargo.toml doesn't use 2021 edition"
@@ -365,14 +365,14 @@ test_checksum_libraries_sourced() {
     fi
 
     # Check for checksum-fetch.sh
-    if grep -q "source.*checksum-fetch.sh" "$rust_script"; then
+    if command grep -q "source.*checksum-fetch.sh" "$rust_script"; then
         assert_true true "checksum-fetch.sh library is sourced"
     else
         assert_true false "checksum-fetch.sh library not sourced"
     fi
 
     # Check for download-verify.sh
-    if grep -q "source.*download-verify.sh" "$rust_script"; then
+    if command grep -q "source.*download-verify.sh" "$rust_script"; then
         assert_true true "download-verify.sh library is sourced"
     else
         assert_true false "download-verify.sh library not sourced"
@@ -389,7 +389,7 @@ test_rustup_checksum_fetching() {
     fi
 
     # Check for rustup checksum URL fetching
-    if grep -q "RUSTUP_CHECKSUM_URL" "$rust_script"; then
+    if command grep -q "RUSTUP_CHECKSUM_URL" "$rust_script"; then
         assert_true true "Uses dynamic rustup checksum fetching"
     else
         assert_true false "Does not use dynamic checksum fetching"
@@ -406,7 +406,7 @@ test_download_verification() {
     fi
 
     # Check for download_and_verify usage
-    if grep -q "download_and_verify" "$rust_script"; then
+    if command grep -q "download_and_verify" "$rust_script"; then
         assert_true true "Uses checksum verification for downloads"
     else
         assert_true false "Does not use checksum verification"

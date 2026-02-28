@@ -97,7 +97,7 @@ EOF
     assert_file_exists "$redis_conf"
 
     # Check configuration
-    if grep -q "historyfile" "$redis_conf"; then
+    if command grep -q "historyfile" "$redis_conf"; then
         assert_true true "History file configured"
     else
         assert_true false "History file not configured"
@@ -118,13 +118,13 @@ alias rkeys='redis-cli keys "*"'
 EOF
 
     # Check aliases
-    if grep -q "alias rcli=" "$bashrc_file"; then
+    if command grep -q "alias rcli=" "$bashrc_file"; then
         assert_true true "redis-cli alias defined"
     else
         assert_true false "redis-cli alias not defined"
     fi
 
-    if grep -q "alias rmon=" "$bashrc_file"; then
+    if command grep -q "alias rmon=" "$bashrc_file"; then
         assert_true true "monitor alias defined"
     else
         assert_true false "monitor alias not defined"
@@ -182,7 +182,7 @@ export REDISCLI_AUTH=""
 EOF
 
     # Check environment variables
-    if grep -q "export REDISCLI_HISTFILE=" "$bashrc_file"; then
+    if command grep -q "export REDISCLI_HISTFILE=" "$bashrc_file"; then
         assert_true true "History file env var set"
     else
         assert_true false "History file env var not set"

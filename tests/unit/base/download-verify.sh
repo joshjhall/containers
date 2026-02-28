@@ -151,22 +151,22 @@ test_mixed_case_checksums() {
 # Test: Download verify script exports functions
 test_functions_exported() {
     # Check if the script defines the expected functions
-    if grep -q "^download_and_verify()" "$PROJECT_ROOT/lib/base/download-verify.sh" || \
-       grep -q "^download_and_verify ()" "$PROJECT_ROOT/lib/base/download-verify.sh"; then
+    if command grep -q "^download_and_verify()" "$PROJECT_ROOT/lib/base/download-verify.sh" || \
+       command grep -q "^download_and_verify ()" "$PROJECT_ROOT/lib/base/download-verify.sh"; then
         assert_true true "download_and_verify function is defined"
     else
         assert_true false "download_and_verify function not found"
     fi
 
-    if grep -q "^verify_checksum()" "$PROJECT_ROOT/lib/base/download-verify.sh" || \
-       grep -q "^verify_checksum ()" "$PROJECT_ROOT/lib/base/download-verify.sh"; then
+    if command grep -q "^verify_checksum()" "$PROJECT_ROOT/lib/base/download-verify.sh" || \
+       command grep -q "^verify_checksum ()" "$PROJECT_ROOT/lib/base/download-verify.sh"; then
         assert_true true "verify_checksum function is defined"
     else
         assert_true false "verify_checksum function not found"
     fi
 
-    if grep -q "^download_and_extract()" "$PROJECT_ROOT/lib/base/download-verify.sh" || \
-       grep -q "^download_and_extract ()" "$PROJECT_ROOT/lib/base/download-verify.sh"; then
+    if command grep -q "^download_and_extract()" "$PROJECT_ROOT/lib/base/download-verify.sh" || \
+       command grep -q "^download_and_extract ()" "$PROJECT_ROOT/lib/base/download-verify.sh"; then
         assert_true true "download_and_extract function is defined"
     else
         assert_true false "download_and_extract function not found"
@@ -176,14 +176,14 @@ test_functions_exported() {
 # Test: Script checks for required commands
 test_required_commands_check() {
     # Script should check for sha256sum
-    if grep -q "sha256sum" "$PROJECT_ROOT/lib/base/download-verify.sh"; then
+    if command grep -q "sha256sum" "$PROJECT_ROOT/lib/base/download-verify.sh"; then
         assert_true true "Script checks for sha256sum"
     else
         assert_true false "Script doesn't check for sha256sum"
     fi
 
     # Script should check for sha512sum
-    if grep -q "sha512sum" "$PROJECT_ROOT/lib/base/download-verify.sh"; then
+    if command grep -q "sha512sum" "$PROJECT_ROOT/lib/base/download-verify.sh"; then
         assert_true true "Script checks for sha512sum"
     else
         assert_true false "Script doesn't check for sha512sum"
@@ -241,13 +241,13 @@ test_sha1_rejected() {
 
     assert_not_equals "0" "$exit_code" "verify_checksum rejects SHA-1 checksums"
 
-    if echo "$output" | grep -q "SHA-1 checksums are not supported"; then
+    if echo "$output" | command grep -q "SHA-1 checksums are not supported"; then
         assert_true true "Error message mentions SHA-1 is not supported"
     else
         assert_true false "Expected error message about SHA-1 not being supported"
     fi
 
-    if echo "$output" | grep -q "SHA-256.*SHA-512\|SHA256.*SHA512"; then
+    if echo "$output" | command grep -q "SHA-256.*SHA-512\|SHA256.*SHA512"; then
         assert_true true "Error message directs to SHA-256/SHA-512"
     else
         assert_true false "Expected error message to suggest SHA-256/SHA-512 alternatives"
@@ -257,7 +257,7 @@ test_sha1_rejected() {
 # Test: Script documentation mentions both SHA256 and SHA512
 test_script_documentation() {
     # Check header comments mention both hash types
-    if head -30 "$PROJECT_ROOT/lib/base/download-verify.sh" | grep -qi "SHA256\|SHA512"; then
+    if head -30 "$PROJECT_ROOT/lib/base/download-verify.sh" | command grep -qi "SHA256\|SHA512"; then
         assert_true true "Script documentation mentions hash types"
     else
         assert_true false "Script documentation should mention hash types"

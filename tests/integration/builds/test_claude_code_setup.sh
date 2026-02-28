@@ -352,7 +352,7 @@ test_claude_channel_default() {
         "$BUILD_CONTEXT" 2>&1)
 
     # Check if the build output mentions the correct default channel
-    if echo "$BUILD_OUTPUT" | grep -q "channel: latest"; then
+    if echo "$BUILD_OUTPUT" | command grep -q "channel: latest"; then
         echo "✓ CLAUDE_CHANNEL defaults to 'latest'"
     else
         # Also check the feature script itself

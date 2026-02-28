@@ -86,13 +86,13 @@ EOF
     assert_file_exists "$psqlrc"
 
     # Check configuration
-    if grep -q "ON_ERROR_ROLLBACK" "$psqlrc"; then
+    if command grep -q "ON_ERROR_ROLLBACK" "$psqlrc"; then
         assert_true true "Rollback on error configured"
     else
         assert_true false "Rollback on error not configured"
     fi
 
-    if grep -q "\\timing" "$psqlrc"; then
+    if command grep -q "\\timing" "$psqlrc"; then
         assert_true true "Query timing enabled"
     else
         assert_true false "Query timing not enabled"
@@ -122,13 +122,13 @@ EOF
     assert_file_exists "$pg_service"
 
     # Check services
-    if grep -q "\[development\]" "$pg_service"; then
+    if command grep -q "\[development\]" "$pg_service"; then
         assert_true true "Development service defined"
     else
         assert_true false "Development service not defined"
     fi
 
-    if grep -q "sslmode=require" "$pg_service"; then
+    if command grep -q "sslmode=require" "$pg_service"; then
         assert_true true "SSL mode configured for production"
     else
         assert_true false "SSL mode not configured"
@@ -148,13 +148,13 @@ export PSQL_HISTORY="$HOME/.psql_history"
 EOF
 
     # Check environment variables
-    if grep -q "export PGUSER=" "$bashrc_file"; then
+    if command grep -q "export PGUSER=" "$bashrc_file"; then
         assert_true true "PGUSER is exported"
     else
         assert_true false "PGUSER is not exported"
     fi
 
-    if grep -q "export PGCONNECT_TIMEOUT=" "$bashrc_file"; then
+    if command grep -q "export PGCONNECT_TIMEOUT=" "$bashrc_file"; then
         assert_true true "Connection timeout configured"
     else
         assert_true false "Connection timeout not configured"
@@ -177,13 +177,13 @@ alias pgtables='psql -c "\dt"'
 EOF
 
     # Check aliases
-    if grep -q "alias pglocal=" "$bashrc_file"; then
+    if command grep -q "alias pglocal=" "$bashrc_file"; then
         assert_true true "pglocal alias defined"
     else
         assert_true false "pglocal alias not defined"
     fi
 
-    if grep -q "alias pgdump=" "$bashrc_file"; then
+    if command grep -q "alias pgdump=" "$bashrc_file"; then
         assert_true true "pgdump alias defined"
     else
         assert_true false "pgdump alias not defined"

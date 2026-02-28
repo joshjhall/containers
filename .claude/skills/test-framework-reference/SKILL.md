@@ -144,6 +144,28 @@ generate_report
 | `get_image_size_mb "$img"`                       | Image size in MB                          |
 | `wait_for_container "$name" timeout "check_cmd"` | Wait for ready                            |
 
+## Shell Command Safety
+
+**NEVER use bare commands** like `ls`, `cat`, `grep`, `sed`, `awk`, `head`,
+`tail`, `find`, `sort`, `wc`, `tr`, `cut`, `tee`, or `echo` in test scripts.
+These commands are often aliased and aliases can change output format or break
+parsing.
+
+Use full paths or the `command` builtin:
+
+```bash
+# CORRECT
+/usr/bin/grep -q "pattern" "$file"
+command wc -l < "$file"
+
+# WRONG — bare commands may be aliased
+grep -q "pattern" "$file"
+wc -l < "$file"
+```
+
+Note: the test framework assertions (e.g., `assert_file_contains`) already
+handle this internally — prefer using assertions over raw commands.
+
 ## Conventions
 
 - Unit tests: `tests/unit/<category>/<feature>.sh`

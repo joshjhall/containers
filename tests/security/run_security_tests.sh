@@ -177,7 +177,7 @@ test_capabilities() {
     local has_dangerous=false
 
     for cap in "${dangerous_caps[@]}"; do
-        if echo "$caps" | grep -qi "$cap"; then
+        if echo "$caps" | command grep -qi "$cap"; then
             has_dangerous=true
             log_test_fail "Container has dangerous capability: $cap"
         fi
@@ -194,7 +194,7 @@ test_network_security() {
 
     # Test 1: No listening services by default
     local listening
-    listening=$(docker run --rm "$TEST_IMAGE" sh -c "netstat -tlnp 2>/dev/null || ss -tlnp 2>/dev/null" | grep -c LISTEN || echo "0")
+    listening=$(docker run --rm "$TEST_IMAGE" sh -c "netstat -tlnp 2>/dev/null || ss -tlnp 2>/dev/null" | command grep -c LISTEN || echo "0")
     if [[ "$listening" -eq 0 ]]; then
         log_test "No listening services in container"
     else
@@ -215,7 +215,7 @@ test_secret_protection() {
 
     # Test 1: No secrets in environment variables
     local env_secrets
-    env_secrets=$(docker run --rm "$TEST_IMAGE" env 2>/dev/null | grep -iE '(password|secret|key|token|api_key)=' | grep -v '^#' || echo "")
+    env_secrets=$(docker run --rm "$TEST_IMAGE" env 2>/dev/null | command grep -iE '(password|secret|key|token|api_key)=' | command grep -v '^#' || echo "")
     if [[ -z "$env_secrets" ]]; then
         log_test "No secrets in environment variables"
     else

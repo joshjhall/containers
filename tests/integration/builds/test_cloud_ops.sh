@@ -133,7 +133,7 @@ test_kubectl_functionality() {
 
     # kubectl can output in different formats (yaml, json) without needing a cluster
     # This verifies kubectl is functional beyond just --version
-    assert_command_in_container "$image" "kubectl version --client --output=yaml 2>/dev/null | grep -q 'clientVersion' && echo ok" "ok"
+    assert_command_in_container "$image" "kubectl version --client --output=yaml 2>/dev/null | command grep -q 'clientVersion' && echo ok" "ok"
 }
 
 # Test: Cache directories configured

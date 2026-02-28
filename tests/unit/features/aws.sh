@@ -93,13 +93,13 @@ EOF
     assert_file_exists "$credentials_file"
 
     # Check profiles exist
-    if grep -q "\[default\]" "$credentials_file"; then
+    if command grep -q "\[default\]" "$credentials_file"; then
         assert_true true "Default profile exists"
     else
         assert_true false "Default profile missing"
     fi
 
-    if grep -q "\[production\]" "$credentials_file"; then
+    if command grep -q "\[production\]" "$credentials_file"; then
         assert_true true "Production profile exists"
     else
         assert_true false "Production profile missing"
@@ -125,13 +125,13 @@ EOF
     assert_file_exists "$config_file"
 
     # Check configuration
-    if grep -q "region = us-east-1" "$config_file"; then
+    if command grep -q "region = us-east-1" "$config_file"; then
         assert_true true "Default region configured"
     else
         assert_true false "Default region not configured"
     fi
 
-    if grep -q "output = json" "$config_file"; then
+    if command grep -q "output = json" "$config_file"; then
         assert_true true "Output format configured"
     else
         assert_true false "Output format not configured"
@@ -151,13 +151,13 @@ export AWS_PAGER=""
 EOF
 
     # Check environment variables
-    if grep -q "export AWS_CONFIG_FILE=" "$bashrc_file"; then
+    if command grep -q "export AWS_CONFIG_FILE=" "$bashrc_file"; then
         assert_true true "AWS_CONFIG_FILE is exported"
     else
         assert_true false "AWS_CONFIG_FILE is not exported"
     fi
 
-    if grep -q "export AWS_DEFAULT_REGION=" "$bashrc_file"; then
+    if command grep -q "export AWS_DEFAULT_REGION=" "$bashrc_file"; then
         assert_true true "AWS_DEFAULT_REGION is exported"
     else
         assert_true false "AWS_DEFAULT_REGION is not exported"
@@ -180,13 +180,13 @@ alias awssm='aws ssm'
 EOF
 
     # Check aliases
-    if grep -q "alias awsp='aws --profile'" "$bashrc_file"; then
+    if command grep -q "alias awsp='aws --profile'" "$bashrc_file"; then
         assert_true true "AWS profile alias defined"
     else
         assert_true false "AWS profile alias not defined"
     fi
 
-    if grep -q "alias awsl='aws s3 ls'" "$bashrc_file"; then
+    if command grep -q "alias awsl='aws s3 ls'" "$bashrc_file"; then
         assert_true true "S3 list alias defined"
     else
         assert_true false "S3 list alias not defined"
@@ -214,7 +214,7 @@ complete -C aws_completer aws
 EOF
 
     # Check completion setup
-    if grep -q "complete -C aws_completer aws" "$bashrc_file"; then
+    if command grep -q "complete -C aws_completer aws" "$bashrc_file"; then
         assert_true true "AWS completion configured"
     else
         assert_true false "AWS completion not configured"
@@ -285,14 +285,14 @@ test_aws_gpg_verification() {
     fi
 
     # Check for GPG signature verification
-    if grep -q "gpg --verify" "$aws_script"; then
+    if command grep -q "gpg --verify" "$aws_script"; then
         assert_true true "aws.sh uses GPG signature verification"
     else
         assert_true false "aws.sh does not use GPG signature verification"
     fi
 
     # Check for .sig file download
-    if grep -q ".sig" "$aws_script"; then
+    if command grep -q ".sig" "$aws_script"; then
         assert_true true "aws.sh downloads GPG signature file"
     else
         assert_true false "aws.sh does not download GPG signature file"
@@ -309,14 +309,14 @@ test_aws_gpg_key_fingerprint() {
     fi
 
     # Check for AWS CLI key ID
-    if grep -q "AWS_CLI_KEY_ID" "$aws_script"; then
+    if command grep -q "AWS_CLI_KEY_ID" "$aws_script"; then
         assert_true true "aws.sh defines AWS CLI GPG key ID"
     else
         assert_true false "aws.sh does not define AWS CLI GPG key ID"
     fi
 
     # Check for fingerprint verification
-    if grep -q "AWS_CLI_KEY_FINGERPRINT" "$aws_script"; then
+    if command grep -q "AWS_CLI_KEY_FINGERPRINT" "$aws_script"; then
         assert_true true "aws.sh verifies GPG key fingerprint"
     else
         assert_true false "aws.sh does not verify GPG key fingerprint"
@@ -333,7 +333,7 @@ test_gpg_installed() {
     fi
 
     # Check that GPG is installed via apt_install
-    if grep -q "gpg" "$aws_script"; then
+    if command grep -q "gpg" "$aws_script"; then
         assert_true true "aws.sh ensures GPG is installed"
     else
         assert_true false "aws.sh does not ensure GPG is installed"

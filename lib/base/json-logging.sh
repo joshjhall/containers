@@ -138,7 +138,7 @@ json_log_event() {
 
     # Build JSON log entry
     local json_entry
-    json_entry=$(cat <<EOF
+    json_entry=$(command cat <<EOF
 {"timestamp":"$timestamp","level":"$level","correlation_id":"${BUILD_CORRELATION_ID}","event_type":"$event_type","feature":"${CURRENT_FEATURE:-unknown}","message":"$(json_escape "$message")","metadata":$metadata}
 EOF
 )
@@ -170,7 +170,7 @@ json_log_command() {
     [ "$exit_code" -ne 0 ] && level="ERROR"
 
     local metadata
-    metadata=$(cat <<EOF
+    metadata=$(command cat <<EOF
 {"command_num":$command_num,"exit_code":$exit_code,"duration_seconds":$duration,"success":$([ "$exit_code" -eq 0 ] && echo "true" || echo "false")}
 EOF
 )
@@ -192,7 +192,7 @@ json_log_error() {
     local message="$1"
 
     local metadata
-    metadata=$(cat <<EOF
+    metadata=$(command cat <<EOF
 {"error_count":${ERROR_COUNT:-0}}
 EOF
 )
@@ -214,7 +214,7 @@ json_log_warning() {
     local message="$1"
 
     local metadata
-    metadata=$(cat <<EOF
+    metadata=$(command cat <<EOF
 {"warning_count":${WARNING_COUNT:-0}}
 EOF
 )
@@ -236,7 +236,7 @@ json_log_feature_end() {
     local duration="$1"
 
     local metadata
-    metadata=$(cat <<EOF
+    metadata=$(command cat <<EOF
 {"duration_seconds":$duration,"commands_executed":${COMMAND_COUNT:-0},"errors":${ERROR_COUNT:-0},"warnings":${WARNING_COUNT:-0},"status":"$([ "${ERROR_COUNT:-0}" -eq 0 ] && echo "success" || echo "failed")"}
 EOF
 )
@@ -252,7 +252,7 @@ EOF
         timestamp=$(date -u +"%Y-%m-%dT%H:%M:%S.%3NZ" 2>/dev/null || date -u +"%Y-%m-%dT%H:%M:%SZ")
 
         local summary_entry
-        summary_entry=$(cat <<EOF
+        summary_entry=$(command cat <<EOF
 {"timestamp":"$timestamp","correlation_id":"${BUILD_CORRELATION_ID}","feature":"${CURRENT_FEATURE}","duration_seconds":$duration,"commands":${COMMAND_COUNT:-0},"errors":${ERROR_COUNT:-0},"warnings":${WARNING_COUNT:-0},"status":"$([ "${ERROR_COUNT:-0}" -eq 0 ] && echo "success" || echo "failed")"}
 EOF
 )
@@ -278,7 +278,7 @@ json_log_build_metadata() {
     timestamp=$(date -u +"%Y-%m-%dT%H:%M:%S.%3NZ" 2>/dev/null || date -u +"%Y-%m-%dT%H:%M:%SZ")
 
     # Write metadata file (single JSON object, not JSONL)
-    cat > "$metadata_file" <<EOF
+    command cat > "$metadata_file" <<EOF
 {
   "correlation_id": "${BUILD_CORRELATION_ID}",
   "timestamp": "$timestamp",

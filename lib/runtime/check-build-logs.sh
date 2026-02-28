@@ -181,7 +181,7 @@ case $ACTION in
                     feature=$(echo "$feature" | xargs)
                     status=$(echo "$status" | xargs)
 
-                    if echo "$status" | grep -q "0 errors"; then
+                    if echo "$status" | command grep -q "0 errors"; then
                         printf "%-20s ${GREEN}✓ %s${NC}\n" "$feature" "$status"
                     else
                         printf "%-20s ${RED}✗ %s${NC}\n" "$feature" "$status"

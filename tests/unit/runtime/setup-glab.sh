@@ -62,7 +62,7 @@ test_no_unconditional_set_x() {
 
 # Test: Auth block saves xtrace state
 test_auth_block_saves_xtrace() {
-    assert_file_contains "$SETUP_GLAB_SCRIPT" 'set +o | grep xtrace' \
+    assert_file_contains "$SETUP_GLAB_SCRIPT" 'set +o | command grep xtrace' \
         "Auth block should save xtrace state"
 }
 
@@ -220,7 +220,7 @@ test_persist_token_idempotent() {
     )
 
     local marker_count
-    marker_count=$(grep -c "# setup-glab: GITLAB_TOKEN" "$TEST_HOME/.bashrc" || echo "0")
+    marker_count=$(command grep -c "# setup-glab: GITLAB_TOKEN" "$TEST_HOME/.bashrc" || echo "0")
     assert_equals "1" "$marker_count" "Marker should appear exactly once after two calls"
 }
 
@@ -248,20 +248,20 @@ test_persist_token_uses_gitlab_host() {
 # Test: Auth block does not leak token in xtrace
 test_auth_no_token_leak() {
     local script_content
-    script_content=$(cat "$SETUP_GLAB_SCRIPT")
+    script_content=$(command cat "$SETUP_GLAB_SCRIPT")
 
     # Check the pattern exists: _xt save, set +x, glab auth login, eval restore
-    assert_contains "$script_content" '_xt=$(set +o | grep xtrace)' \
+    assert_contains "$script_content" '_xt=$(set +o | command grep xtrace)' \
         "Should save xtrace state before auth"
     assert_contains "$script_content" '{ set +x; } 2>/dev/null' \
         "Should disable xtrace before auth"
 
     # Verify the order: save comes before disable, which comes before auth
     local save_line disable_line auth_line restore_line
-    save_line=$(grep -n '_xt=$(set +o | grep xtrace)' "$SETUP_GLAB_SCRIPT" | head -1 | cut -d: -f1)
-    disable_line=$(grep -n '{ set +x; } 2>/dev/null' "$SETUP_GLAB_SCRIPT" | head -1 | cut -d: -f1)
-    auth_line=$(grep -n 'glab auth login' "$SETUP_GLAB_SCRIPT" | head -1 | cut -d: -f1)
-    restore_line=$(grep -n 'eval "$_xt"' "$SETUP_GLAB_SCRIPT" | head -1 | cut -d: -f1)
+    save_line=$(command grep -n '_xt=$(set +o | command grep xtrace)' "$SETUP_GLAB_SCRIPT" | head -1 | cut -d: -f1)
+    disable_line=$(command grep -n '{ set +x; } 2>/dev/null' "$SETUP_GLAB_SCRIPT" | head -1 | cut -d: -f1)
+    auth_line=$(command grep -n 'glab auth login' "$SETUP_GLAB_SCRIPT" | head -1 | cut -d: -f1)
+    restore_line=$(command grep -n 'eval "$_xt"' "$SETUP_GLAB_SCRIPT" | head -1 | cut -d: -f1)
 
     # Verify correct ordering
     assert_true [ "$save_line" -lt "$disable_line" ] \

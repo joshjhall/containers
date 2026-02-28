@@ -54,7 +54,7 @@ main() {
 
     # Authenticate (pipe token via stdin to avoid exposing it in process listings)
     _info "authenticating glab CLI (host: ${host})"
-    local _xt; _xt=$(set +o | grep xtrace)
+    local _xt; _xt=$(set +o | command grep xtrace)
     { set +x; } 2>/dev/null
     printf '%s' "$token" | glab auth login --hostname "$host" --stdin 2>&1
     eval "$_xt"
@@ -73,8 +73,8 @@ main() {
 _persist_token() {
     local host="${GITLAB_HOST:-gitlab.com}"
     local marker="# setup-glab: GITLAB_TOKEN"
-    if ! grep -qF "$marker" "${HOME}/.bashrc" 2>/dev/null; then
-        cat >> "${HOME}/.bashrc" <<'BASHRC'
+    if ! command grep -qF "$marker" "${HOME}/.bashrc" 2>/dev/null; then
+        command cat >> "${HOME}/.bashrc" <<'BASHRC'
 
 # setup-glab: GITLAB_TOKEN
 if [ -z "${GITLAB_TOKEN:-}" ] && command -v glab >/dev/null 2>&1 && glab auth status >/dev/null 2>&1; then

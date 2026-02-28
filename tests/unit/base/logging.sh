@@ -92,14 +92,14 @@ test_log_command() {
     log_command "Testing echo command" echo "Hello, World!"
 
     # Check that command was logged
-    if grep -q "Testing echo command" "$CURRENT_LOG_FILE"; then
+    if command grep -q "Testing echo command" "$CURRENT_LOG_FILE"; then
         assert_true true "Command description logged"
     else
         assert_true false "Command description not found in log"
     fi
 
     # Check that output was captured
-    if grep -q "Hello, World!" "$CURRENT_LOG_FILE"; then
+    if command grep -q "Hello, World!" "$CURRENT_LOG_FILE"; then
         assert_true true "Command output logged"
     else
         assert_true false "Command output not found in log"
@@ -120,7 +120,7 @@ test_log_command_failure() {
     log_command "Testing false command" false || true
 
     # Check that error was logged
-    if grep -q "Exit code: 1" "$CURRENT_LOG_FILE"; then
+    if command grep -q "Exit code: 1" "$CURRENT_LOG_FILE"; then
         assert_true true "Error exit code logged"
     else
         assert_true false "Error exit code not found in log"
@@ -139,7 +139,7 @@ test_log_message() {
     log_message "This is a test message"
 
     # Check that message was logged
-    if grep -q "This is a test message" "$CURRENT_LOG_FILE"; then
+    if command grep -q "This is a test message" "$CURRENT_LOG_FILE"; then
         assert_true true "Message logged successfully"
     else
         assert_true false "Message not found in log"
@@ -154,7 +154,7 @@ test_log_error() {
     log_error "This is an error message"
 
     # Check that error was logged to error file
-    if grep -q "This is an error message" "$CURRENT_ERROR_FILE"; then
+    if command grep -q "This is an error message" "$CURRENT_ERROR_FILE"; then
         assert_true true "Error logged to error file"
     else
         assert_true false "Error not found in error file"
@@ -172,7 +172,7 @@ test_log_warning() {
     log_warning "This is a warning message"
 
     # Check that warning was logged
-    if grep -q "WARNING: This is a warning message" "$CURRENT_LOG_FILE"; then
+    if command grep -q "WARNING: This is a warning message" "$CURRENT_LOG_FILE"; then
         assert_true true "Warning logged successfully"
     else
         assert_true false "Warning not found in log"
@@ -197,7 +197,7 @@ test_master_summary() {
     assert_file_exists "$master_summary"
 
     # Check that both features are in summary
-    if grep -q "Test Feature 1" "$master_summary" && grep -q "Test Feature 2" "$master_summary"; then
+    if command grep -q "Test Feature 1" "$master_summary" && grep -q "Test Feature 2" "$master_summary"; then
         assert_true true "Both features appear in master summary"
     else
         assert_true false "Features missing from master summary"

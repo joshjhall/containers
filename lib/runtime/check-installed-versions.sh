@@ -65,7 +65,7 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         --help|-h)
-            head -n 20 "$0" | grep "^#" | command sed 's/^# \?//'
+            head -n 20 "$0" | command grep "^#" | command sed 's/^# \?//'
             exit 0
             ;;
         *)
@@ -131,7 +131,7 @@ check_version() {
     if command -v "$command" >/dev/null 2>&1; then
         local version
         if [ -n "$extract_pattern" ]; then
-            version=$("$command" "$version_flag" 2>&1 | grep -oP "$extract_pattern" | head -1 || echo "error")
+            version=$("$command" "$version_flag" 2>&1 | command grep -oP "$extract_pattern" | head -1 || echo "error")
         else
             version=$("$command" "$version_flag" 2>&1 | head -1 || echo "error")
         fi
@@ -567,7 +567,7 @@ else
     fi
 
     # Check if any rate limiting occurred
-    if printf '%s\n' "${LATEST_VERSIONS[@]}" | grep -q "rate-limited"; then
+    if printf '%s\n' "${LATEST_VERSIONS[@]}" | command grep -q "rate-limited"; then
         echo
         echo -e "${YELLOW}Warning: GitHub API rate limit exceeded.${NC}"
         echo "Some version checks could not be completed."

@@ -26,7 +26,7 @@ CLAUDE_SETUP_CMD="$PROJECT_ROOT/lib/features/lib/claude/claude-setup"
 test_mcp_servers_removed_from_dockerfile() {
     assert_file_exists "$DOCKERFILE"
 
-    if grep -q 'INCLUDE_MCP_SERVERS' "$DOCKERFILE"; then
+    if command grep -q 'INCLUDE_MCP_SERVERS' "$DOCKERFILE"; then
         fail_test "INCLUDE_MCP_SERVERS still present in Dockerfile"
     else
         pass_test "INCLUDE_MCP_SERVERS removed from Dockerfile"
@@ -111,7 +111,7 @@ test_mcp_servers_removed_from_compose() {
     local compose_file="$PROJECT_ROOT/.devcontainer/docker-compose.yml"
     assert_file_exists "$compose_file"
 
-    if grep -q 'INCLUDE_MCP_SERVERS' "$compose_file"; then
+    if command grep -q 'INCLUDE_MCP_SERVERS' "$compose_file"; then
         fail_test "INCLUDE_MCP_SERVERS still present in docker-compose.yml"
     else
         pass_test "INCLUDE_MCP_SERVERS removed from docker-compose.yml"

@@ -47,7 +47,7 @@ audit_rotate() {
 
         # Remove old logs beyond keep count
         # shellcheck disable=SC2012
-        ls -t "${AUDIT_LOG_FILE}".*.gz 2>/dev/null | tail -n +$((keep_count + 1)) | xargs -r rm -f
+        command ls -t "${AUDIT_LOG_FILE}".*.gz 2>/dev/null | tail -n +$((keep_count + 1)) | xargs -r rm -f
 
         audit_log "system" "info" "Audit log rotated" "{\"rotated_to\":\"${rotated_file}.gz\",\"checksum\":\"$checksum\"}"
     fi

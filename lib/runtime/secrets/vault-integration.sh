@@ -105,7 +105,7 @@ vault_auth_kubernetes() {
 
     # Read JWT token
     local jwt
-    jwt=$(cat "$jwt_path")
+    jwt=$(command cat "$jwt_path")
 
     # Login with Kubernetes auth
     local response

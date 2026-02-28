@@ -266,7 +266,7 @@ for cmd in adb fastboot; do
 done
 
 # Find and link build-tools (use highest version available)
-BUILD_TOOLS_DIR=$(find "${ANDROID_SDK_ROOT}/build-tools/" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | sort -V | tail -1)
+BUILD_TOOLS_DIR=$(command find "${ANDROID_SDK_ROOT}/build-tools/" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | sort -V | tail -1)
 if [ -n "$BUILD_TOOLS_DIR" ] && [ -d "$BUILD_TOOLS_DIR" ]; then
     for cmd in aapt aapt2 apksigner zipalign d8 dexdump; do
         if [ -f "${BUILD_TOOLS_DIR}/${cmd}" ]; then

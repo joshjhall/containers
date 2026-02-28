@@ -178,19 +178,19 @@ export PATH="$ANDROID_HOME/emulator:$PATH"
 EOF
 
     # Check environment variables
-    if grep -q "export ANDROID_AVD_HOME=" "$bashrc_file"; then
+    if command grep -q "export ANDROID_AVD_HOME=" "$bashrc_file"; then
         assert_true true "ANDROID_AVD_HOME is exported"
     else
         assert_true false "ANDROID_AVD_HOME is not exported"
     fi
 
-    if grep -q "export ANDROID_EMULATOR_HOME=" "$bashrc_file"; then
+    if command grep -q "export ANDROID_EMULATOR_HOME=" "$bashrc_file"; then
         assert_true true "ANDROID_EMULATOR_HOME is exported"
     else
         assert_true false "ANDROID_EMULATOR_HOME is not exported"
     fi
 
-    if grep -q 'PATH.*emulator' "$bashrc_file"; then
+    if command grep -q 'PATH.*emulator' "$bashrc_file"; then
         assert_true true "PATH includes emulator directory"
     else
         assert_true false "PATH doesn't include emulator directory"
@@ -210,13 +210,13 @@ alias emkill='adb emu kill'
 EOF
 
     # Check aliases
-    if grep -q "alias avdlist='avdmanager list avd'" "$bashrc_file"; then
+    if command grep -q "alias avdlist='avdmanager list avd'" "$bashrc_file"; then
         assert_true true "avdlist alias defined"
     else
         assert_true false "avdlist alias not defined"
     fi
 
-    if grep -q "alias emlist='emulator -list-avds'" "$bashrc_file"; then
+    if command grep -q "alias emlist='emulator -list-avds'" "$bashrc_file"; then
         assert_true true "emlist alias defined"
     else
         assert_true false "emlist alias not defined"
@@ -257,26 +257,26 @@ avd-delete() {
 EOF
 
     # Check helpers
-    if grep -q "avd-create()" "$bashrc_file"; then
+    if command grep -q "avd-create()" "$bashrc_file"; then
         assert_true true "avd-create helper defined"
     else
         assert_true false "avd-create helper not defined"
     fi
 
-    if grep -q "avd-start()" "$bashrc_file"; then
+    if command grep -q "avd-start()" "$bashrc_file"; then
         assert_true true "avd-start helper defined"
     else
         assert_true false "avd-start helper not defined"
     fi
 
-    if grep -q "avd-delete()" "$bashrc_file"; then
+    if command grep -q "avd-delete()" "$bashrc_file"; then
         assert_true true "avd-delete helper defined"
     else
         assert_true false "avd-delete helper not defined"
     fi
 
     # Check headless mode support
-    if grep -q "\-no-window" "$bashrc_file"; then
+    if command grep -q "\-no-window" "$bashrc_file"; then
         assert_true true "Headless mode is supported"
     else
         assert_true false "Headless mode not configured"
@@ -311,13 +311,13 @@ check-kvm() {
 EOF
 
     # Check KVM detection helper
-    if grep -q "check-kvm()" "$bashrc_file"; then
+    if command grep -q "check-kvm()" "$bashrc_file"; then
         assert_true true "check-kvm helper defined"
     else
         assert_true false "check-kvm helper not defined"
     fi
 
-    if grep -q "/dev/kvm" "$bashrc_file"; then
+    if command grep -q "/dev/kvm" "$bashrc_file"; then
         assert_true true "KVM device check is included"
     else
         assert_true false "KVM device check is missing"
@@ -358,13 +358,13 @@ adb-logcat-app() {
 EOF
 
     # Check logcat helpers
-    if grep -q "adb-logcat()" "$bashrc_file"; then
+    if command grep -q "adb-logcat()" "$bashrc_file"; then
         assert_true true "adb-logcat helper defined"
     else
         assert_true false "adb-logcat helper not defined"
     fi
 
-    if grep -q "adb-logcat-app()" "$bashrc_file"; then
+    if command grep -q "adb-logcat-app()" "$bashrc_file"; then
         assert_true true "adb-logcat-app helper defined"
     else
         assert_true false "adb-logcat-app helper not defined"
@@ -427,7 +427,7 @@ fi
 echo ""
 echo "=== System Images ==="
 if [ -d "${ANDROID_HOME}/system-images" ]; then
-    find "${ANDROID_HOME}/system-images" -maxdepth 3 -type d 2>/dev/null | head -10
+    command find "${ANDROID_HOME}/system-images" -maxdepth 3 -type d 2>/dev/null | head -10
 else
     echo "No system images found"
 fi
@@ -467,7 +467,7 @@ emulator-ci-start() {
     echo "Waiting for emulator to boot (timeout: ${timeout}s)..."
     local count=0
     while [ $count -lt $timeout ]; do
-        if adb shell getprop sys.boot_completed 2>/dev/null | grep -q "1"; then
+        if adb shell getprop sys.boot_completed 2>/dev/null | command grep -q "1"; then
             echo "Emulator booted successfully"
             return 0
         fi
@@ -481,13 +481,13 @@ emulator-ci-start() {
 EOF
 
     # Check CI/CD helper
-    if grep -q "emulator-ci-start()" "$bashrc_file"; then
+    if command grep -q "emulator-ci-start()" "$bashrc_file"; then
         assert_true true "emulator-ci-start helper defined"
     else
         assert_true false "emulator-ci-start helper not defined"
     fi
 
-    if grep -q "gpu swiftshader_indirect" "$bashrc_file"; then
+    if command grep -q "gpu swiftshader_indirect" "$bashrc_file"; then
         assert_true true "Software rendering configured for CI"
     else
         assert_true false "Software rendering not configured"

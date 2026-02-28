@@ -14,7 +14,7 @@ if [ -f "$MARKER_FILE" ]; then
 fi
 
 # Skip if watcher already running
-if [ -f "$WATCHER_PID_FILE" ] && kill -0 "$(cat "$WATCHER_PID_FILE")" 2>/dev/null; then
+if [ -f "$WATCHER_PID_FILE" ] && kill -0 "$(command cat "$WATCHER_PID_FILE")" 2>/dev/null; then
     exit 0
 fi
 
@@ -27,4 +27,4 @@ fi
 echo "[startup] Starting Claude authentication watcher in background..."
 nohup claude-auth-watcher > /tmp/claude-auth-watcher.log 2>&1 &
 echo $! > "$WATCHER_PID_FILE"
-echo "[startup] Watcher started (PID: $(cat "$WATCHER_PID_FILE"))"
+echo "[startup] Watcher started (PID: $(command cat "$WATCHER_PID_FILE"))"

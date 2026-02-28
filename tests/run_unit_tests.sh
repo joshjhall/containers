@@ -54,9 +54,9 @@ for test_file in $UNIT_TEST_FILES; do
     # Run the test and capture output
     if output=$("$test_file" 2>&1); then
         # Parse test results from output
-        suite_passed=$(echo "$output" | grep -o "Passed:[[:space:]]*[0-9]*" | grep -o "[0-9]*" || echo "0")
-        suite_failed=$(echo "$output" | grep -o "Failed:[[:space:]]*[0-9]*" | grep -o "[0-9]*" || echo "0")
-        suite_skipped=$(echo "$output" | grep -o "Skipped:[[:space:]]*[0-9]*" | grep -o "[0-9]*" || echo "0")
+        suite_passed=$(echo "$output" | command grep -o "Passed:[[:space:]]*[0-9]*" | command grep -o "[0-9]*" || echo "0")
+        suite_failed=$(echo "$output" | command grep -o "Failed:[[:space:]]*[0-9]*" | command grep -o "[0-9]*" || echo "0")
+        suite_skipped=$(echo "$output" | command grep -o "Skipped:[[:space:]]*[0-9]*" | command grep -o "[0-9]*" || echo "0")
         suite_total=$((suite_passed + suite_failed + suite_skipped))
 
         # Update totals
@@ -116,7 +116,7 @@ fi
 REPORT_FILE="$TESTS_DIR/results/unit-test-summary-$(date +%Y%m%d-%H%M%S).txt"
 mkdir -p "$(dirname "$REPORT_FILE")"
 
-cat > "$REPORT_FILE" <<EOF
+command cat > "$REPORT_FILE" <<EOF
 Container Build System - Unit Test Summary
 ==========================================
 Date: $(date)

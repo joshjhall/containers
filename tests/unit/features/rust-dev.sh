@@ -97,7 +97,7 @@ EOF
     assert_file_exists "$clippy_toml"
 
     # Check configuration
-    if grep -q "allow-unwrap-in-tests = true" "$clippy_toml"; then
+    if command grep -q "allow-unwrap-in-tests = true" "$clippy_toml"; then
         assert_true true "Clippy allows unwrap in tests"
     else
         assert_true false "Clippy doesn't allow unwrap in tests"
@@ -120,7 +120,7 @@ EOF
     assert_file_exists "$bacon_toml"
 
     # Check configuration
-    if grep -q 'command = \["cargo", "check"' "$bacon_toml"; then
+    if command grep -q 'command = \["cargo", "check"' "$bacon_toml"; then
         assert_true true "Bacon check job configured"
     else
         assert_true false "Bacon check job not configured"
@@ -142,7 +142,7 @@ EOF
     assert_file_exists "$rustfmt_toml"
 
     # Check configuration
-    if grep -q "max_width = 100" "$rustfmt_toml"; then
+    if command grep -q "max_width = 100" "$rustfmt_toml"; then
         assert_true true "rustfmt max width configured"
     else
         assert_true false "rustfmt max width not configured"
@@ -204,7 +204,7 @@ alias bcn='bacon'
 EOF
 
     # Check aliases
-    if grep -q "alias cw='cargo watch'" "$bashrc_file"; then
+    if command grep -q "alias cw='cargo watch'" "$bashrc_file"; then
         assert_true true "cargo watch alias defined"
     else
         assert_true false "cargo watch alias not defined"
@@ -264,14 +264,14 @@ alias sweep-all='find "${WORKING_DIR:-/workspace}" -name "Cargo.toml" -exec dirn
 EOF
 
     # Check sweep alias
-    if grep -q "alias sweep='cargo-sweep sweep --time 14'" "$bashrc_file"; then
+    if command grep -q "alias sweep='cargo-sweep sweep --time 14'" "$bashrc_file"; then
         assert_true true "cargo-sweep alias defined"
     else
         assert_true false "cargo-sweep alias not defined"
     fi
 
     # Check sweep-all alias
-    if grep -q "alias sweep-all=" "$bashrc_file"; then
+    if command grep -q "alias sweep-all=" "$bashrc_file"; then
         assert_true true "sweep-all alias defined"
     else
         assert_true false "sweep-all alias not defined"
@@ -333,28 +333,28 @@ EOF
     fi
 
     # Check cron job has correct schedule (every 6 hours)
-    if grep -q "0 \*/6 \* \* \*" "$cron_job"; then
+    if command grep -q "0 \*/6 \* \* \*" "$cron_job"; then
         assert_true true "Cron job runs every 6 hours"
     else
         assert_true false "Cron job schedule is incorrect"
     fi
 
     # Check for CARGO_SWEEP_DISABLE check in wrapper
-    if grep -q "CARGO_SWEEP_DISABLE" "$wrapper_script"; then
+    if command grep -q "CARGO_SWEEP_DISABLE" "$wrapper_script"; then
         assert_true true "Wrapper script has disable option"
     else
         assert_true false "Wrapper script missing disable option"
     fi
 
     # Check for default sweep age (14 days)
-    if grep -q "CARGO_SWEEP_DAYS:-14" "$wrapper_script"; then
+    if command grep -q "CARGO_SWEEP_DAYS:-14" "$wrapper_script"; then
         assert_true true "Wrapper script has 14-day default threshold"
     else
         assert_true false "Wrapper script missing default threshold"
     fi
 
     # Check wrapper sources cron-env
-    if grep -q "cron-env" "$wrapper_script"; then
+    if command grep -q "cron-env" "$wrapper_script"; then
         assert_true true "Wrapper script sources cron environment"
     else
         assert_true false "Wrapper script doesn't source cron environment"

@@ -215,7 +215,7 @@ go-check-deps() {
     govulncheck ./...
 
     echo -e "\nChecking for outdated dependencies..."
-    go list -u -m all | grep '\['
+    go list -u -m all | command grep '\['
 
     echo -e "\nDependency graph:"
     goda graph "..." | head -20

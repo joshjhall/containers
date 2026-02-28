@@ -47,7 +47,7 @@ run_test_with_setup() {
 # Provides all the mock functions that install_github_release depends on.
 # Caller appends the actual test commands.
 _mock_preamble() {
-    cat <<'MOCK_EOF'
+    command cat <<'MOCK_EOF'
 set -euo pipefail
 
 # Mock logging functions

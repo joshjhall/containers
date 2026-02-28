@@ -28,14 +28,14 @@ test_configuration() {
     local config_file="$TEST_TEMP_DIR/config.conf"
     echo "test=true" > "$config_file"
     assert_file_exists "$config_file"
-    grep -q "test=true" "$config_file" && assert_true true "Config valid" || assert_true false "Config invalid"
+    command grep -q "test=true" "$config_file" && assert_true true "Config valid" || assert_true false "Config invalid"
 }
 
 test_environment() {
     local env_file="$TEST_TEMP_DIR/env.sh"
     echo "export TEST_VAR=value" > "$env_file"
     assert_file_exists "$env_file"
-    grep -q "export TEST_VAR" "$env_file" && assert_true true "Env var set" || assert_true false "Env var not set"
+    command grep -q "export TEST_VAR" "$env_file" && assert_true true "Env var set" || assert_true false "Env var not set"
 }
 
 test_permissions() {
@@ -49,7 +49,7 @@ test_aliases() {
     local alias_file="$TEST_TEMP_DIR/aliases.sh"
     echo "alias test='echo test'" > "$alias_file"
     assert_file_exists "$alias_file"
-    grep -q "alias test=" "$alias_file" && assert_true true "Alias defined" || assert_true false "Alias not defined"
+    command grep -q "alias test=" "$alias_file" && assert_true true "Alias defined" || assert_true false "Alias not defined"
 }
 
 test_dependencies() {

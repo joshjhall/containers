@@ -73,7 +73,7 @@ test_first_startup_calls_claude_setup() {
     local marker="$TEST_TEMP_DIR/claude-setup-called"
 
     # Create a mock claude-setup that writes args to a marker file
-    cat > "$TEST_TEMP_DIR/bin/claude-setup" <<EOF
+    command cat > "$TEST_TEMP_DIR/bin/claude-setup" <<EOF
 #!/bin/bash
 echo "\$@" > "$marker"
 EOF
@@ -90,7 +90,7 @@ EOF
     assert_file_exists "$marker" \
         "claude-setup should have been called"
     local args
-    args=$(cat "$marker")
+    args=$(command cat "$marker")
     assert_contains "$args" "--force" \
         "claude-setup should be called with --force"
 }
@@ -171,12 +171,12 @@ test_auth_watcher_skips_when_pid_running() {
 
     # Write a wrapper that uses a custom PID file path
     local wrapper="$TEST_TEMP_DIR/test-watcher.sh"
-    cat > "$wrapper" <<WEOF
+    command cat > "$wrapper" <<WEOF
 #!/bin/bash
 MARKER_FILE="\$HOME/.claude/.container-setup-complete"
 WATCHER_PID_FILE="$TEST_TEMP_DIR/watcher.pid"
 if [ -f "\$MARKER_FILE" ]; then exit 0; fi
-if [ -f "\$WATCHER_PID_FILE" ] && kill -0 "\$(cat "\$WATCHER_PID_FILE")" 2>/dev/null; then
+if [ -f "\$WATCHER_PID_FILE" ] && kill -0 "\$(command cat "\$WATCHER_PID_FILE")" 2>/dev/null; then
     exit 0
 fi
 # Reached launch section — means the checks didn't skip
@@ -198,7 +198,7 @@ test_auth_watcher_launches_watcher() {
     mkdir -p "$fake_home/.claude"
 
     # Create a mock claude-auth-watcher that just sleeps
-    cat > "$TEST_TEMP_DIR/bin/claude-auth-watcher" <<'SCRIPT'
+    command cat > "$TEST_TEMP_DIR/bin/claude-auth-watcher" <<'SCRIPT'
 #!/bin/bash
 sleep 300
 SCRIPT
@@ -219,7 +219,7 @@ SCRIPT
     # Verify PID file was created and contains a valid PID
     if [ -f "/tmp/claude-auth-watcher.pid" ]; then
         local watcher_pid
-        watcher_pid=$(cat /tmp/claude-auth-watcher.pid)
+        watcher_pid=$(command cat /tmp/claude-auth-watcher.pid)
         _CLEANUP_PIDS+=("$watcher_pid")
 
         assert_matches "$watcher_pid" "^[0-9]+$" \

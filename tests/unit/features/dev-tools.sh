@@ -166,21 +166,21 @@ source <(just --completions bash)
 EOF
 
     # Check aliases
-    if grep -q "alias lg='lazygit'" "$bashrc_file"; then
+    if command grep -q "alias lg='lazygit'" "$bashrc_file"; then
         assert_true true "lazygit alias configured"
     else
         assert_true false "lazygit alias not configured"
     fi
 
     # Check direnv hook
-    if grep -q "direnv hook bash" "$bashrc_file"; then
+    if command grep -q "direnv hook bash" "$bashrc_file"; then
         assert_true true "direnv hook configured"
     else
         assert_true false "direnv hook not configured"
     fi
 
     # Check modern CLI replacements
-    if grep -q "alias cat='bat'" "$bashrc_file"; then
+    if command grep -q "alias cat='bat'" "$bashrc_file"; then
         assert_true true "Modern CLI replacements configured"
     else
         assert_true false "Modern CLI replacements not configured"
@@ -338,26 +338,26 @@ test_checksum_variables_defined() {
     local helper_script="$PROJECT_ROOT/lib/features/lib/install-github-release.sh"
 
     # Should source checksum-fetch.sh for dynamic fetching
-    if grep -q "source.*checksum-fetch.sh" "$dev_tools_script"; then
+    if command grep -q "source.*checksum-fetch.sh" "$dev_tools_script"; then
         assert_true true "dev-tools.sh sources checksum-fetch.sh for dynamic fetching"
     else
         assert_true false "dev-tools.sh doesn't source checksum-fetch.sh"
     fi
 
     # Should use dynamic fetching functions (directly or via helper)
-    if grep -rq "fetch_github_checksums_txt" "$dev_tools_script" "$helper_script"; then
+    if command grep -rq "fetch_github_checksums_txt" "$dev_tools_script" "$helper_script"; then
         assert_true true "Uses fetch_github_checksums_txt for dynamic fetching"
     else
         assert_true false "Doesn't use fetch_github_checksums_txt"
     fi
 
-    if grep -rq "calculate_checksum_sha256" "$dev_tools_script" "$helper_script"; then
+    if command grep -rq "calculate_checksum_sha256" "$dev_tools_script" "$helper_script"; then
         assert_true true "Uses calculate_checksum_sha256 for checksum calculation"
     else
         assert_true false "Doesn't use calculate_checksum_sha256"
     fi
 
-    if grep -rq "fetch_github_sha512_file" "$dev_tools_script" "$helper_script"; then
+    if command grep -rq "fetch_github_sha512_file" "$dev_tools_script" "$helper_script"; then
         assert_true true "Uses fetch_github_sha512_file for SHA512 fetching"
     else
         assert_true false "Doesn't use fetch_github_sha512_file"
@@ -369,7 +369,7 @@ test_checksum_format_validation() {
     local dev_tools_script="$PROJECT_ROOT/lib/features/dev-tools.sh"
 
     # Check that validate_checksum_format is called for SHA256
-    if grep -q "validate_checksum_format.*sha256" "$dev_tools_script"; then
+    if command grep -q "validate_checksum_format.*sha256" "$dev_tools_script"; then
         assert_true true "SHA256 checksum validation is used"
     else
         # Dynamic fetching validates inline, may not always call validate function
@@ -377,7 +377,7 @@ test_checksum_format_validation() {
     fi
 
     # Check that validate_checksum_format is called for SHA512
-    if grep -q "validate_checksum_format.*sha512" "$dev_tools_script"; then
+    if command grep -q "validate_checksum_format.*sha512" "$dev_tools_script"; then
         assert_true true "SHA512 checksum validation is used"
     else
         # Dynamic fetching validates inline, may not always call validate function
@@ -391,13 +391,13 @@ test_download_verification_usage() {
     local helper_script="$PROJECT_ROOT/lib/features/lib/install-github-release.sh"
 
     # Check that download verification functions are used (directly or via helper)
-    if grep -rq "download_and_extract" "$dev_tools_script" "$helper_script"; then
+    if command grep -rq "download_and_extract" "$dev_tools_script" "$helper_script"; then
         assert_true true "Uses download_and_extract for verification"
     else
         assert_true false "Doesn't use download_and_extract"
     fi
 
-    if grep -rq "download_and_verify" "$dev_tools_script" "$helper_script"; then
+    if command grep -rq "download_and_verify" "$dev_tools_script" "$helper_script"; then
         assert_true true "Uses download_and_verify for verification"
     else
         assert_true false "Doesn't use download_and_verify"
@@ -408,7 +408,7 @@ test_download_verification_usage() {
 test_sources_download_verify() {
     local dev_tools_script="$PROJECT_ROOT/lib/features/dev-tools.sh"
 
-    if grep -q "source.*download-verify.sh" "$dev_tools_script"; then
+    if command grep -q "source.*download-verify.sh" "$dev_tools_script"; then
         assert_true true "dev-tools.sh sources download-verify.sh"
     else
         assert_true false "dev-tools.sh doesn't source download-verify.sh"
@@ -421,9 +421,9 @@ test_checksum_verification_date() {
 
     # With dynamic fetching, checksums are fetched at build time from upstream
     # Check that this approach is documented
-    if grep -q "fetch.*checksum" "$dev_tools_script" || \
-       grep -q "Dynamic.*checksum" "$dev_tools_script" || \
-       grep -q "Fetching checksum" "$dev_tools_script"; then
+    if command grep -q "fetch.*checksum" "$dev_tools_script" || \
+       command grep -q "Dynamic.*checksum" "$dev_tools_script" || \
+       command grep -q "Fetching checksum" "$dev_tools_script"; then
         assert_true true "Dynamic checksum fetching is used"
     else
         assert_true false "Checksum verification date is not documented"
@@ -436,12 +436,12 @@ test_version_checksum_consistency() {
 
     # Extract lazygit version from both variable and comment
     local version_var
-    version_var=$(grep "^LAZYGIT_VERSION=" "$dev_tools_script" | cut -d'"' -f2)
+    version_var=$(command grep "^LAZYGIT_VERSION=" "$dev_tools_script" | cut -d'"' -f2)
 
     if [ -n "$version_var" ]; then
         # Check that checksum comment references the same version
-        if grep "lazygit.*releases/tag/v$version_var" "$dev_tools_script" > /dev/null 2>&1 || \
-           grep "LAZYGIT.*$version_var" "$dev_tools_script" > /dev/null 2>&1; then
+        if command grep "lazygit.*releases/tag/v$version_var" "$dev_tools_script" > /dev/null 2>&1 || \
+           command grep "LAZYGIT.*$version_var" "$dev_tools_script" > /dev/null 2>&1; then
             assert_true true "lazygit version matches checksum documentation"
         else
             # Version might be referenced differently, accept if version variable exists

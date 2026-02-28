@@ -606,7 +606,7 @@ test_custom_rules_valid_file() {
     setup_custom_rules
     mkdir -p /etc/container 2>/dev/null || true
     local rules_file="/etc/container/test-valid-$$.sh"
-    cat > "$rules_file" 2>/dev/null <<'RULES'
+    command cat > "$rules_file" 2>/dev/null <<'RULES'
 cv_custom_validations() {
     return 0
 }

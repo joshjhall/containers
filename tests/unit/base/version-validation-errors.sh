@@ -448,12 +448,12 @@ test_injection_with_dollar_parens() {
 
 test_injection_with_pipes() {
     local output
-    output=$(validate_semver "1.2.3 | cat /etc/passwd" "TEST_VERSION" 2>&1 || true)
+    output=$(validate_semver "1.2.3 | command cat /etc/passwd" "TEST_VERSION" 2>&1 || true)
 
     assert_contains "$output" "Invalid TEST_VERSION format" \
         "Pipe injection attempt produces error message"
 
-    if validate_semver "1.2.3 | cat /etc/passwd" "TEST_VERSION" 2>/dev/null; then
+    if validate_semver "1.2.3 | command cat /etc/passwd" "TEST_VERSION" 2>/dev/null; then
         fail_test "validate_semver should block pipe injection"
     fi
 }

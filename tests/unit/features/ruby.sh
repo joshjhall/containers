@@ -125,7 +125,7 @@ EOF
     assert_file_exists "$gem_config"
 
     # Check no-document flag
-    if grep -q "gem: --no-document" "$gem_config"; then
+    if command grep -q "gem: --no-document" "$gem_config"; then
         assert_true true "Gem configured to skip documentation"
     else
         assert_true false "Gem not configured to skip documentation"
@@ -153,14 +153,14 @@ EOF
     assert_dir_exists "$cache_dir"
 
     # Check cache path configuration
-    if grep -q 'BUNDLE_PATH: "/cache/bundle"' "$bundle_config"; then
+    if command grep -q 'BUNDLE_PATH: "/cache/bundle"' "$bundle_config"; then
         assert_true true "Bundle uses cache directory"
     else
         assert_true false "Bundle doesn't use cache directory"
     fi
 
     # Check parallel jobs
-    if grep -q 'BUNDLE_JOBS: "4"' "$bundle_config"; then
+    if command grep -q 'BUNDLE_JOBS: "4"' "$bundle_config"; then
         assert_true true "Bundle configured for parallel jobs"
     else
         assert_true false "Bundle not configured for parallel jobs"
@@ -181,19 +181,19 @@ export GEM_PATH="$GEM_HOME"
 EOF
 
     # Check environment variables - should NOT have rbenv
-    if grep -q "RBENV_ROOT" "$bashrc_file"; then
+    if command grep -q "RBENV_ROOT" "$bashrc_file"; then
         assert_true false "Should not reference RBENV_ROOT (rbenv removed in v4.0)"
     else
         assert_true true "No rbenv references (correct for v4.0+)"
     fi
 
-    if grep -q "export BUNDLE_PATH=" "$bashrc_file"; then
+    if command grep -q "export BUNDLE_PATH=" "$bashrc_file"; then
         assert_true true "BUNDLE_PATH is exported"
     else
         assert_true false "BUNDLE_PATH is not exported"
     fi
 
-    if grep -q "export GEM_HOME=" "$bashrc_file"; then
+    if command grep -q "export GEM_HOME=" "$bashrc_file"; then
         assert_true true "GEM_HOME is exported"
     else
         assert_true false "GEM_HOME is not exported"
@@ -218,13 +218,13 @@ alias bert='bundle exec rake test'
 EOF
 
     # Check common aliases
-    if grep -q "alias be='bundle exec'" "$bashrc_file"; then
+    if command grep -q "alias be='bundle exec'" "$bashrc_file"; then
         assert_true true "bundle exec alias defined"
     else
         assert_true false "bundle exec alias not defined"
     fi
 
-    if grep -q "alias bi='bundle install'" "$bashrc_file"; then
+    if command grep -q "alias bi='bundle install'" "$bashrc_file"; then
         assert_true true "bundle install alias defined"
     else
         assert_true false "bundle install alias not defined"
@@ -255,14 +255,14 @@ EOF
     assert_file_exists "$project_dir/Gemfile"
 
     # Check Ruby version specification
-    if grep -q "ruby '3.4.7'" "$project_dir/Gemfile"; then
+    if command grep -q "ruby '3.4.7'" "$project_dir/Gemfile"; then
         assert_true true "Gemfile specifies Ruby version"
     else
         assert_true false "Gemfile doesn't specify Ruby version"
     fi
 
     # Check gem groups
-    if grep -q "group :development, :test do" "$project_dir/Gemfile"; then
+    if command grep -q "group :development, :test do" "$project_dir/Gemfile"; then
         assert_true true "Gemfile has development/test group"
     else
         assert_true false "Gemfile missing development/test group"
@@ -318,7 +318,7 @@ EOF
     fi
 
     # Check script doesn't reference rbenv
-    if grep -q "rbenv" "$test_script" && ! grep -q "without rbenv" "$test_script"; then
+    if command grep -q "rbenv" "$test_script" && ! command grep -q "without rbenv" "$test_script"; then
         assert_true false "Verification script should not use rbenv"
     else
         assert_true true "Verification script correctly avoids rbenv"
@@ -360,14 +360,14 @@ test_checksum_libraries_sourced() {
     fi
 
     # Check that checksum-fetch.sh is sourced
-    if grep -q "source.*checksum-fetch.sh" "$ruby_script"; then
+    if command grep -q "source.*checksum-fetch.sh" "$ruby_script"; then
         assert_true true "ruby.sh sources checksum-fetch.sh library"
     else
         assert_true false "ruby.sh does not source checksum-fetch.sh library"
     fi
 
     # Check that download-verify.sh is sourced
-    if grep -q "source.*download-verify.sh" "$ruby_script"; then
+    if command grep -q "source.*download-verify.sh" "$ruby_script"; then
         assert_true true "ruby.sh sources download-verify.sh library"
     else
         assert_true false "ruby.sh does not source download-verify.sh library"
@@ -384,14 +384,14 @@ test_fetch_ruby_checksum_usage() {
     fi
 
     # Check for 4-tier checksum verification system
-    if grep -q "checksum-verification.sh" "$ruby_script"; then
+    if command grep -q "checksum-verification.sh" "$ruby_script"; then
         assert_true true "ruby.sh sources 4-tier checksum verification system"
     else
         assert_true false "ruby.sh does not source checksum-verification.sh"
     fi
 
     # Check for version resolution (partial version support)
-    if grep -q "resolve_ruby_version" "$ruby_script"; then
+    if command grep -q "resolve_ruby_version" "$ruby_script"; then
         assert_true true "ruby.sh uses version resolution for partial versions"
     else
         assert_true false "ruby.sh does not use resolve_ruby_version"
@@ -408,7 +408,7 @@ test_download_verification() {
     fi
 
     # Check for verify_download usage (4-tier verification)
-    if grep -q "verify_download" "$ruby_script"; then
+    if command grep -q "verify_download" "$ruby_script"; then
         assert_true true "ruby.sh uses verify_download for 4-tier checksum verification"
     else
         assert_true false "ruby.sh does not use verify_download"
@@ -425,12 +425,12 @@ test_no_rbenv_usage() {
     fi
 
     # Should only have comments mentioning rbenv is not used
-    if grep -q "without rbenv" "$ruby_script" || grep -q "not.*rbenv" "$ruby_script"; then
+    if command grep -q "without rbenv" "$ruby_script" || command grep -q "not.*rbenv" "$ruby_script"; then
         assert_true true "ruby.sh correctly notes rbenv is not used"
     fi
 
     # Should not have actual rbenv commands
-    if grep -qE "^\s*(rbenv|RBENV_ROOT)" "$ruby_script"; then
+    if command grep -qE "^\s*(rbenv|RBENV_ROOT)" "$ruby_script"; then
         assert_true false "ruby.sh should not use rbenv commands"
     else
         assert_true true "ruby.sh does not use rbenv commands"

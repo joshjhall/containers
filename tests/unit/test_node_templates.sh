@@ -91,7 +91,7 @@ test_template_loading_no_substitution() {
     tff_temp_dir=$(mktemp -d)
 
     if cp "$TEMPLATE_DIR/common/gitignore.tmpl" "$tff_temp_dir/gitignore"; then
-        if grep -q 'node_modules/' "$tff_temp_dir/gitignore"; then
+        if command grep -q 'node_modules/' "$tff_temp_dir/gitignore"; then
             assert_true true "Template loads without substitution"
         else
             assert_true false "Template content invalid"
@@ -109,14 +109,14 @@ test_template_loading_with_substitution() {
     tff_temp_dir=$(mktemp -d)
 
     if sed "s/__PROJECT_NAME__/testproject/g" "$TEMPLATE_DIR/cli/index.ts.tmpl" > "$tff_temp_dir/index.ts"; then
-        if grep -q "testproject" "$tff_temp_dir/index.ts"; then
+        if command grep -q "testproject" "$tff_temp_dir/index.ts"; then
             assert_true true "Template substitution works correctly"
         else
             assert_true false "Placeholder not substituted"
         fi
 
         # Verify placeholder was removed
-        if grep -q "__PROJECT_NAME__" "$tff_temp_dir/index.ts"; then
+        if command grep -q "__PROJECT_NAME__" "$tff_temp_dir/index.ts"; then
             assert_true false "Placeholder still present after substitution"
         else
             assert_true true "All placeholders substituted"

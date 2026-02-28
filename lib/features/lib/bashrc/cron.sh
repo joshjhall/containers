@@ -37,7 +37,7 @@ alias cron-status='pgrep -x cron > /dev/null && echo "cron: running" || echo "cr
 cron-logs() {
     local lines="${1:-20}"
     if [ -f /var/log/syslog ]; then
-        grep -i cron /var/log/syslog | tail -n "$lines"
+        command grep -i cron /var/log/syslog | tail -n "$lines"
     elif [ -f /var/log/cron.log ]; then
         tail -n "$lines" /var/log/cron.log
     else

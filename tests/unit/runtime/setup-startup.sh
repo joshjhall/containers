@@ -133,7 +133,7 @@ EOF
     assert_file_exists "$env_script"
 
     # Check environment variables
-    if grep -q "export CONTAINER_STARTED" "$env_script"; then
+    if command grep -q "export CONTAINER_STARTED" "$env_script"; then
         assert_true true "Container started flag set"
     else
         assert_true false "Container started flag not set"
@@ -159,7 +159,7 @@ EOF
     assert_file_exists "$git_script"
 
     # Check git detection logic
-    if grep -q "if \[ -d.*\.git" "$git_script"; then
+    if command grep -q "if \[ -d.*\.git" "$git_script"; then
         assert_true true "Git detection logic present"
     else
         assert_true false "Git detection logic missing"
@@ -188,7 +188,7 @@ EOF
     assert_file_exists "$detect_script"
 
     # Check detection patterns
-    if grep -q "package.json" "$detect_script"; then
+    if command grep -q "package.json" "$detect_script"; then
         assert_true true "Node.js detection present"
     else
         assert_true false "Node.js detection missing"
@@ -212,7 +212,7 @@ EOF
     assert_file_exists "$ssh_script"
 
     # Check SSH agent setup
-    if grep -q "ssh-agent" "$ssh_script"; then
+    if command grep -q "ssh-agent" "$ssh_script"; then
         assert_true true "SSH agent setup present"
     else
         assert_true false "SSH agent setup missing"
@@ -227,7 +227,7 @@ test_banner_display() {
     # Create banner script
     command cat > "$banner_script" << 'EOF'
 #!/bin/bash
-cat << 'BANNER'
+command cat << 'BANNER'
 =====================================
    Development Container Ready
 =====================================
@@ -238,7 +238,7 @@ EOF
     assert_file_exists "$banner_script"
 
     # Check banner content
-    if grep -q "Development Container Ready" "$banner_script"; then
+    if command grep -q "Development Container Ready" "$banner_script"; then
         assert_true true "Banner message present"
     else
         assert_true false "Banner message missing"
@@ -256,7 +256,7 @@ echo "Startup scripts:"
 for dir in /etc/container/first-startup /etc/container/startup; do
     if [ -d "$dir" ]; then
         echo "  $dir:"
-        ls -la "$dir"/*.sh 2>/dev/null || echo "    No scripts found"
+        command ls -la "$dir"/*.sh 2>/dev/null || echo "    No scripts found"
     fi
 done
 EOF

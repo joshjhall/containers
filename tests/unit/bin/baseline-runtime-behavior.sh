@@ -58,7 +58,7 @@ test_help_output() {
 # ============================================================================
 test_config_defaults() {
     local script_content
-    script_content=$(cat "$BASELINE_SCRIPT")
+    script_content=$(command cat "$BASELINE_SCRIPT")
 
     assert_contains "$script_content" 'BASELINE_DURATION=' "Should have BASELINE_DURATION"
     assert_contains "$script_content" 'OUTPUT_DIR=' "Should have OUTPUT_DIR"
@@ -70,7 +70,7 @@ test_config_defaults() {
 # ============================================================================
 test_compliance_docs() {
     local script_content
-    script_content=$(cat "$BASELINE_SCRIPT")
+    script_content=$(command cat "$BASELINE_SCRIPT")
 
     assert_contains "$script_content" "FedRAMP" "Should reference FedRAMP"
     assert_contains "$script_content" "CMMC" "Should reference CMMC"
@@ -82,7 +82,7 @@ test_compliance_docs() {
 # ============================================================================
 test_required_functions() {
     local script_content
-    script_content=$(cat "$BASELINE_SCRIPT")
+    script_content=$(command cat "$BASELINE_SCRIPT")
 
     assert_contains "$script_content" "usage()" "Should define usage function"
     assert_contains "$script_content" "log_info()" "Should define log_info function"

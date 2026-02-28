@@ -21,10 +21,10 @@ _warn()  { printf '[setup-git] WARN: %s\n' "$*" >&2; }
 _write_key() {
     local path="$1" var_name="$2"
     # Save xtrace state and disable it to avoid leaking key material
-    local _xt; _xt=$(set +o | grep xtrace)
+    local _xt; _xt=$(set +o | command grep xtrace)
     { set +x; } 2>/dev/null
     local content="${!var_name}"
-    if [ -f "$path" ] && [ "$(cat "$path")" = "$content" ]; then
+    if [ -f "$path" ] && [ "$(command cat "$path")" = "$content" ]; then
         eval "$_xt"
         return 1
     fi
@@ -96,7 +96,7 @@ ensure_ssh_agent() {
     _info "starting ssh-agent"
     eval "$(ssh-agent -s)" >/dev/null 2>&1
     # Persist for future shells
-    cat > "$agent_env" <<EOF
+    command cat > "$agent_env" <<EOF
 SSH_AUTH_SOCK=${SSH_AUTH_SOCK}; export SSH_AUTH_SOCK;
 SSH_AGENT_PID=${SSH_AGENT_PID:-}; export SSH_AGENT_PID;
 EOF
@@ -112,14 +112,14 @@ setup_ssh_keepalive() {
     mkdir -p "${HOME}/.ssh"
 
     # Skip if keep-alive is already configured for github.com
-    if [ -f "$ssh_config" ] && grep -q 'Host github.com' "$ssh_config" 2>/dev/null; then
-        if grep -A5 'Host github.com' "$ssh_config" | grep -q 'ServerAliveInterval' 2>/dev/null; then
+    if [ -f "$ssh_config" ] && command grep -q 'Host github.com' "$ssh_config" 2>/dev/null; then
+        if command grep -A5 'Host github.com' "$ssh_config" | command grep -q 'ServerAliveInterval' 2>/dev/null; then
             _skip "SSH keep-alive already configured"
             return 0
         fi
     fi
 
-    cat >> "$ssh_config" <<'SSHEOF'
+    command cat >> "$ssh_config" <<'SSHEOF'
 
 # Keep-alive for Git hosting providers (prevents timeout on long pushes)
 Host github.com gitlab.com
@@ -148,7 +148,7 @@ setup_auth_key() {
     local key_fp
     key_fp=$(ssh-keygen -lf "$key_path" 2>/dev/null | awk '{print $2}') || true
     if [ -n "$key_fp" ]; then
-        if ! ssh-add -l 2>/dev/null | grep -qF "$key_fp"; then
+        if ! ssh-add -l 2>/dev/null | command grep -qF "$key_fp"; then
             ssh-add "$key_path" 2>/dev/null
             _ok "auth key added to ssh-agent"
         else
@@ -203,7 +203,7 @@ setup_signing_key() {
     local key_fp
     key_fp=$(ssh-keygen -lf "$priv" 2>/dev/null | awk '{print $2}') || true
     if [ -n "$key_fp" ]; then
-        if ! ssh-add -l 2>/dev/null | grep -qF "$key_fp"; then
+        if ! ssh-add -l 2>/dev/null | command grep -qF "$key_fp"; then
             ssh-add "$priv" 2>/dev/null
             _ok "signing key added to ssh-agent"
         else

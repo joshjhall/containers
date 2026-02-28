@@ -140,7 +140,7 @@ EOF
     assert_dir_exists "$maven_cache"
 
     # Check cache configuration
-    if grep -q "/cache/maven" "$maven_settings"; then
+    if command grep -q "/cache/maven" "$maven_settings"; then
         assert_true true "Maven uses cache directory"
     else
         assert_true false "Maven doesn't use cache directory"
@@ -168,14 +168,14 @@ EOF
     assert_dir_exists "$gradle_cache"
 
     # Check caching enabled
-    if grep -q "org.gradle.caching=true" "$gradle_props"; then
+    if command grep -q "org.gradle.caching=true" "$gradle_props"; then
         assert_true true "Gradle caching is enabled"
     else
         assert_true false "Gradle caching is not enabled"
     fi
 
     # Check daemon enabled
-    if grep -q "org.gradle.daemon=true" "$gradle_props"; then
+    if command grep -q "org.gradle.daemon=true" "$gradle_props"; then
         assert_true true "Gradle daemon is enabled"
     else
         assert_true false "Gradle daemon is not enabled"
@@ -196,25 +196,25 @@ export _JAVA_OPTIONS="-Djava.awt.headless=true"
 EOF
 
     # Check environment variables
-    if grep -q "export JAVA_HOME=" "$bashrc_file"; then
+    if command grep -q "export JAVA_HOME=" "$bashrc_file"; then
         assert_true true "JAVA_HOME is exported"
     else
         assert_true false "JAVA_HOME is not exported"
     fi
 
-    if grep -q 'PATH.*JAVA_HOME/bin' "$bashrc_file"; then
+    if command grep -q 'PATH.*JAVA_HOME/bin' "$bashrc_file"; then
         assert_true true "PATH includes Java bin directory"
     else
         assert_true false "PATH doesn't include Java bin directory"
     fi
 
-    if grep -q "export MAVEN_OPTS=" "$bashrc_file"; then
+    if command grep -q "export MAVEN_OPTS=" "$bashrc_file"; then
         assert_true true "MAVEN_OPTS is configured"
     else
         assert_true false "MAVEN_OPTS is not configured"
     fi
 
-    if grep -q "Djava.awt.headless=true" "$bashrc_file"; then
+    if command grep -q "Djava.awt.headless=true" "$bashrc_file"; then
         assert_true true "Headless mode is configured"
     else
         assert_true false "Headless mode is not configured"
@@ -242,19 +242,19 @@ alias gwt='./gradlew test'
 EOF
 
     # Check common aliases
-    if grep -q "alias jv='java -version'" "$bashrc_file"; then
+    if command grep -q "alias jv='java -version'" "$bashrc_file"; then
         assert_true true "java version alias defined"
     else
         assert_true false "java version alias not defined"
     fi
 
-    if grep -q "alias mvni='mvn install'" "$bashrc_file"; then
+    if command grep -q "alias mvni='mvn install'" "$bashrc_file"; then
         assert_true true "maven install alias defined"
     else
         assert_true false "maven install alias not defined"
     fi
 
-    if grep -q "alias gw='./gradlew'" "$bashrc_file"; then
+    if command grep -q "alias gw='./gradlew'" "$bashrc_file"; then
         assert_true true "gradlew alias defined"
     else
         assert_true false "gradlew alias not defined"
@@ -298,14 +298,14 @@ EOF
     assert_file_exists "$project_dir/build.gradle"
 
     # Check Maven configuration
-    if grep -q "<maven.compiler.source>21</maven.compiler.source>" "$project_dir/pom.xml"; then
+    if command grep -q "<maven.compiler.source>21</maven.compiler.source>" "$project_dir/pom.xml"; then
         assert_true true "Maven project uses Java 21"
     else
         assert_true false "Maven project doesn't specify Java 21"
     fi
 
     # Check Gradle configuration
-    if grep -q "JavaLanguageVersion.of(21)" "$project_dir/build.gradle"; then
+    if command grep -q "JavaLanguageVersion.of(21)" "$project_dir/build.gradle"; then
         assert_true true "Gradle project uses Java 21"
     else
         assert_true false "Gradle project doesn't specify Java 21"

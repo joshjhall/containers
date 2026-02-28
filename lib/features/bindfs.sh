@@ -140,7 +140,7 @@ while IFS= read -r mnt_target; do
             fuser "$hidden_file" >/dev/null 2>&1 && continue
         fi
         rm -f "$hidden_file" 2>/dev/null && cleaned=$((cleaned + 1))
-    done < <(find "$mnt_target" -maxdepth 3 -name '.fuse_hidden*' -print0 2>/dev/null)
+    done < <(command find "$mnt_target" -maxdepth 3 -name '.fuse_hidden*' -print0 2>/dev/null)
 done <<< "$fuse_mounts"
 
 if [ "$cleaned" -gt 0 ]; then

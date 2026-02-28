@@ -82,7 +82,7 @@ install_jdtls() {
         rm -f /tmp/jdtls.tar.gz
 
         # Create wrapper script for easier invocation
-        cat > "${JDTLS_HOME}/bin/jdtls" << 'WRAPPER'
+        command cat > "${JDTLS_HOME}/bin/jdtls" << 'WRAPPER'
 #!/bin/bash
 # Eclipse JDT Language Server wrapper script
 #
@@ -93,7 +93,7 @@ JDTLS_HOME="/opt/jdtls"
 JDTLS_DATA_DIR="${JDTLS_DATA_DIR:-/cache/jdtls}"
 
 # Find the launcher jar
-LAUNCHER=$(find "${JDTLS_HOME}/plugins" -name 'org.eclipse.equinox.launcher_*.jar' | head -1)
+LAUNCHER=$(command find "${JDTLS_HOME}/plugins" -name 'org.eclipse.equinox.launcher_*.jar' | head -1)
 
 if [ -z "$LAUNCHER" ]; then
     echo "Error: Could not find jdtls launcher jar" >&2
@@ -166,13 +166,13 @@ configure_jdtls_env() {
 
     # Add to bashrc.d if not already present
     if [ ! -f /etc/bashrc.d/60-jdtls.sh ]; then
-        cat > /etc/bashrc.d/60-jdtls.sh << 'BASHRC'
+        command cat > /etc/bashrc.d/60-jdtls.sh << 'BASHRC'
 # Eclipse JDT Language Server environment
 export JDTLS_HOME="/opt/jdtls"
 export JDTLS_DATA_DIR="${JDTLS_DATA_DIR:-/cache/jdtls}"
 
 # Alias for version check
-alias jdtls-version='java -jar $(find /opt/jdtls/plugins -name "org.eclipse.jdt.ls.core_*.jar" | head -1) --version 2>/dev/null || echo "jdtls installed at /opt/jdtls"'
+alias jdtls-version='java -jar $(command find /opt/jdtls/plugins -name "org.eclipse.jdt.ls.core_*.jar" | head -1) --version 2>/dev/null || echo "jdtls installed at /opt/jdtls"'
 BASHRC
         log_message "Created jdtls shell configuration"
     fi

@@ -65,8 +65,8 @@ test_auto_auth_skips_hardcoded_mcps() {
     # not for hardcoded MCPs like figma-desktop.
     # Verify the lines around figma-desktop don't reference inject_mcp_auth_header
     local figma_block
-    figma_block=$(grep -A5 'figma-desktop' "$CLAUDE_SETUP_CMD" | head -6)
-    if echo "$figma_block" | grep -q 'inject_mcp_auth_header'; then
+    figma_block=$(command grep -A5 'figma-desktop' "$CLAUDE_SETUP_CMD" | head -6)
+    if echo "$figma_block" | command grep -q 'inject_mcp_auth_header'; then
         fail_test "figma-desktop should not have auto-injected auth headers"
     else
         pass_test "figma-desktop does not auto-inject auth headers"
@@ -194,7 +194,7 @@ _run_mcp_header_test() {
 
     # Write the function definitions and test body to a temp script.
     # Using a quoted heredoc ('FUNC_EOF') to prevent variable expansion.
-    cat > "$script_file" << 'FUNC_EOF'
+    command cat > "$script_file" << 'FUNC_EOF'
 #!/bin/bash
 set -euo pipefail
 
@@ -253,7 +253,7 @@ inject_mcp_auth_header() {
 FUNC_EOF
 
     # Append the test body (unquoted heredoc so caller's body is written as-is)
-    cat >> "$script_file" << TEST_EOF
+    command cat >> "$script_file" << TEST_EOF
 $test_body
 TEST_EOF
 

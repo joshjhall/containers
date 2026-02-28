@@ -213,7 +213,7 @@ test_gpg_uses_mktemp() {
 test_gpg_main_defaults_to_all() {
     # Verify the default behavior in the script logic
     local script_content
-    script_content=$(cat "$SOURCE_FILE")
+    script_content=$(command cat "$SOURCE_FILE")
 
     # Check for the logic that sets all languages when no args
     assert_contains "$script_content" 'languages=("python" "nodejs" "hashicorp" "golang")' \

@@ -177,7 +177,7 @@ test_dockerfile_cron_bindfs_trigger() {
     # Extract the cron RUN block and verify INCLUDE_BINDFS is in its condition
     local cron_block
     cron_block=$(sed -n '/INCLUDE_CRON/,/cron\.sh/p' "$DOCKERFILE")
-    assert_true echo "$cron_block" | grep -q 'INCLUDE_BINDFS' \
+    assert_true echo "$cron_block" | command grep -q 'INCLUDE_BINDFS' \
         "Dockerfile cron auto-trigger condition includes INCLUDE_BINDFS"
 }
 
@@ -198,9 +198,9 @@ test_entrypoint_fuse_cleanup_mentions_cron() {
 test_entrypoint_section_ordering() {
     # Get line numbers to verify ordering
     local cache_line entrypoint_bindfs_line cron_line
-    cache_line=$(grep -n "Cache Directory Permissions Fix" "$ENTRYPOINT_FILE" | head -1 | cut -d: -f1)
-    entrypoint_bindfs_line=$(grep -n "Bindfs Overlay" "$ENTRYPOINT_FILE" | head -1 | cut -d: -f1)
-    cron_line=$(grep -n "Cron Daemon Startup" "$ENTRYPOINT_FILE" | head -1 | cut -d: -f1)
+    cache_line=$(command grep -n "Cache Directory Permissions Fix" "$ENTRYPOINT_FILE" | head -1 | cut -d: -f1)
+    entrypoint_bindfs_line=$(command grep -n "Bindfs Overlay" "$ENTRYPOINT_FILE" | head -1 | cut -d: -f1)
+    cron_line=$(command grep -n "Cron Daemon Startup" "$ENTRYPOINT_FILE" | head -1 | cut -d: -f1)
 
     assert_true [ "$cache_line" -lt "$entrypoint_bindfs_line" ] "Bindfs section comes after cache fix"
     assert_true [ "$entrypoint_bindfs_line" -lt "$cron_line" ] "Bindfs section comes before cron startup"

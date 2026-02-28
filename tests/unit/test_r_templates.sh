@@ -59,7 +59,7 @@ test_template_loading() {
     tff_temp_dir=$(mktemp -d)
 
     if cp "$TEMPLATE_DIR/analysis/analysis.Rmd.tmpl" "$tff_temp_dir/analysis.Rmd"; then
-        if grep -q 'title: "Analysis"' "$tff_temp_dir/analysis.Rmd"; then
+        if command grep -q 'title: "Analysis"' "$tff_temp_dir/analysis.Rmd"; then
             assert_true true "Template loads successfully"
         else
             assert_true false "Template content invalid"
@@ -78,7 +78,7 @@ test_rmarkdown_structure() {
 
     if cp "$TEMPLATE_DIR/analysis/analysis.Rmd.tmpl" "$tff_temp_dir/analysis.Rmd"; then
         # Note: Using single backticks in grep pattern for R code chunk
-        if grep -q '{r setup' "$tff_temp_dir/analysis.Rmd" && grep -q "## Introduction" "$tff_temp_dir/analysis.Rmd"; then
+        if command grep -q '{r setup' "$tff_temp_dir/analysis.Rmd" && grep -q "## Introduction" "$tff_temp_dir/analysis.Rmd"; then
             assert_true true "R Markdown template has valid structure"
         else
             assert_true false "R Markdown template missing required elements"
@@ -96,7 +96,7 @@ test_inline_r_evaluation() {
     tff_temp_dir=$(mktemp -d)
 
     if cp "$TEMPLATE_DIR/analysis/analysis.Rmd.tmpl" "$tff_temp_dir/analysis.Rmd"; then
-        if grep -q "Sys.Date()" "$tff_temp_dir/analysis.Rmd"; then
+        if command grep -q "Sys.Date()" "$tff_temp_dir/analysis.Rmd"; then
             assert_true true "Template includes inline R evaluation"
         else
             assert_true false "Template missing inline R evaluation"

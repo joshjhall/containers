@@ -422,7 +422,7 @@ fix_cache_permissions() {
     [ -d "/cache" ] || return 0
 
     # Check if we need to fix permissions (any root-owned files in /cache)
-    if ! find /cache -user root -print -quit 2>/dev/null | grep -q .; then
+    if ! command find /cache -user root -print -quit 2>/dev/null | command grep -q .; then
         return 0
     fi
 
@@ -527,7 +527,7 @@ while IFS= read -r -d '' _hidden_file; do
         fuser "$_hidden_file" >/dev/null 2>&1 && continue
     fi
     rm -f "$_hidden_file" 2>/dev/null && _fuse_cleaned=$((_fuse_cleaned + 1))
-done < <(find /workspace -maxdepth 3 -name '.fuse_hidden*' -print0 2>/dev/null)
+done < <(command find /workspace -maxdepth 3 -name '.fuse_hidden*' -print0 2>/dev/null)
 if [ "$_fuse_cleaned" -gt 0 ]; then
     echo "🧹 Cleaned up $_fuse_cleaned stale .fuse_hidden file(s)"
 fi

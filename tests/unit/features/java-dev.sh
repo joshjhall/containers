@@ -128,7 +128,7 @@ EOF
     assert_file_exists "$checkstyle_xml"
 
     # Check configuration
-    if grep -q "JavadocMethod" "$checkstyle_xml"; then
+    if command grep -q "JavadocMethod" "$checkstyle_xml"; then
         assert_true true "CheckStyle Javadoc check enabled"
     else
         assert_true false "CheckStyle Javadoc check not enabled"
@@ -151,7 +151,7 @@ EOF
     assert_file_exists "$spotbugs_xml"
 
     # Check configuration
-    if grep -q "Test" "$spotbugs_xml"; then
+    if command grep -q "Test" "$spotbugs_xml"; then
         assert_true true "SpotBugs excludes test classes"
     else
         assert_true false "SpotBugs doesn't exclude test classes"
@@ -171,7 +171,7 @@ EOF
     assert_file_exists "$junit_platform"
 
     # Check configuration
-    if grep -q "parallel.enabled=true" "$junit_platform"; then
+    if command grep -q "parallel.enabled=true" "$junit_platform"; then
         assert_true true "JUnit parallel execution enabled"
     else
         assert_true false "JUnit parallel execution not enabled"
@@ -190,7 +190,7 @@ alias sboot='spring boot'
 EOF
 
     # Check aliases
-    if grep -q "alias mvnw='./mvnw'" "$bashrc_file"; then
+    if command grep -q "alias mvnw='./mvnw'" "$bashrc_file"; then
         assert_true true "Maven wrapper alias defined"
     else
         assert_true false "Maven wrapper alias not defined"
@@ -256,14 +256,14 @@ test_java_dev_spring_boot_checksum() {
     fi
 
     # Check for SHA256 checksum fetching
-    if grep -q "fetch_maven_sha256" "$java_dev_script"; then
+    if command grep -q "fetch_maven_sha256" "$java_dev_script"; then
         assert_true true "java-dev.sh fetches Spring Boot CLI SHA256 checksum from Maven Central"
     else
         assert_true false "java-dev.sh does not fetch Spring Boot CLI SHA256 checksum"
     fi
 
     # Check for download_and_verify usage (matches "/tmp/spring-boot-cli.tar.gz")
-    if grep -A5 "download_and_verify" "$java_dev_script" | grep -q "spring-boot-cli.tar.gz"; then
+    if command grep -A5 "download_and_verify" "$java_dev_script" | command grep -q "spring-boot-cli.tar.gz"; then
         assert_true true "java-dev.sh uses download_and_verify for Spring Boot CLI"
     else
         assert_true false "java-dev.sh does not use download_and_verify for Spring Boot CLI"
@@ -280,14 +280,14 @@ test_java_dev_maven_daemon_checksum() {
     fi
 
     # Check for hardcoded checksum (Maven Daemon doesn't publish checksums)
-    if grep -q "MVND_CHECKSUM_AMD64" "$java_dev_script"; then
+    if command grep -q "MVND_CHECKSUM_AMD64" "$java_dev_script"; then
         assert_true true "java-dev.sh defines Maven Daemon checksum"
     else
         assert_true false "java-dev.sh does not define Maven Daemon checksum"
     fi
 
     # Check for download_and_verify usage (matches "/tmp/mvnd.tar.gz")
-    if grep -A5 "download_and_verify" "$java_dev_script" | grep -q "mvnd.tar.gz"; then
+    if command grep -A5 "download_and_verify" "$java_dev_script" | command grep -q "mvnd.tar.gz"; then
         assert_true true "java-dev.sh uses download_and_verify for Maven Daemon"
     else
         assert_true false "java-dev.sh does not use download_and_verify for Maven Daemon"
@@ -304,14 +304,14 @@ test_java_dev_sources_libraries() {
     fi
 
     # Check for download-verify.sh
-    if grep -q "source.*download-verify.sh" "$java_dev_script"; then
+    if command grep -q "source.*download-verify.sh" "$java_dev_script"; then
         assert_true true "java-dev.sh sources download-verify.sh"
     else
         assert_true false "java-dev.sh does not source download-verify.sh"
     fi
 
     # Check for checksum-fetch.sh
-    if grep -q "source.*checksum-fetch.sh" "$java_dev_script"; then
+    if command grep -q "source.*checksum-fetch.sh" "$java_dev_script"; then
         assert_true true "java-dev.sh sources checksum-fetch.sh"
     else
         assert_true false "java-dev.sh does not source checksum-fetch.sh"
@@ -328,7 +328,7 @@ test_maven_daemon_architecture_check() {
     fi
 
     # Check that Maven Daemon only installs on amd64 (not arm64)
-    if grep -A2 "Maven Daemon" "$java_dev_script" | grep -q 'if \[ "$ARCH" = "amd64" \]'; then
+    if command grep -A2 "Maven Daemon" "$java_dev_script" | command grep -q 'if \[ "$ARCH" = "amd64" \]'; then
         assert_true true "java-dev.sh only installs Maven Daemon on amd64"
     else
         assert_true false "java-dev.sh has incorrect Maven Daemon architecture check"

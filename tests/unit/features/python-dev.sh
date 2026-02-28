@@ -83,7 +83,7 @@ EOF
     assert_file_exists "$poetry_config"
 
     # Check configuration
-    if grep -q "in-project = true" "$poetry_config"; then
+    if command grep -q "in-project = true" "$poetry_config"; then
         assert_true true "Poetry venv in-project enabled"
     else
         assert_true false "Poetry venv in-project not enabled"
@@ -104,7 +104,7 @@ EOF
     assert_file_exists "$ruff_config"
 
     # Check configuration
-    if grep -q "line-length = 88" "$ruff_config"; then
+    if command grep -q "line-length = 88" "$ruff_config"; then
         assert_true true "Ruff line length configured"
     else
         assert_true false "Ruff line length not configured"
@@ -125,7 +125,7 @@ EOF
     assert_file_exists "$black_config"
 
     # Check configuration
-    if grep -q "line-length = 88" "$black_config"; then
+    if command grep -q "line-length = 88" "$black_config"; then
         assert_true true "Black line length configured"
     else
         assert_true false "Black line length not configured"
@@ -148,7 +148,7 @@ EOF
     assert_file_exists "$pytest_ini"
 
     # Check configuration
-    if grep -q "testpaths = tests" "$pytest_ini"; then
+    if command grep -q "testpaths = tests" "$pytest_ini"; then
         assert_true true "Pytest test paths configured"
     else
         assert_true false "Pytest test paths not configured"
@@ -175,7 +175,7 @@ EOF
     assert_file_exists "$precommit_config"
 
     # Check hooks
-    if grep -q "id: ruff" "$precommit_config"; then
+    if command grep -q "id: ruff" "$precommit_config"; then
         assert_true true "Ruff pre-commit hook configured"
     else
         assert_true false "Ruff pre-commit hook not configured"
@@ -212,7 +212,7 @@ alias myp='mypy'
 EOF
 
     # Check aliases
-    if grep -q "alias pyt='pytest'" "$bashrc_file"; then
+    if command grep -q "alias pyt='pytest'" "$bashrc_file"; then
         assert_true true "pytest alias defined"
     else
         assert_true false "pytest alias not defined"

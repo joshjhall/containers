@@ -85,7 +85,7 @@ EOF
     assert_file_exists "$gopls_config"
 
     # Check configuration
-    if grep -q "gofumpt: true" "$gopls_config"; then
+    if command grep -q "gofumpt: true" "$gopls_config"; then
         assert_true true "gofumpt formatting enabled"
     else
         assert_true false "gofumpt formatting not enabled"
@@ -111,7 +111,7 @@ EOF
     assert_file_exists "$config_file"
 
     # Check linters
-    if grep -q "gosec" "$config_file"; then
+    if command grep -q "gosec" "$config_file"; then
         assert_true true "gosec linter enabled"
     else
         assert_true false "gosec linter not enabled"
@@ -154,7 +154,7 @@ EOF
     assert_file_exists "$air_config"
 
     # Check configuration
-    if grep -q 'include_ext = \["go"' "$air_config"; then
+    if command grep -q 'include_ext = \["go"' "$air_config"; then
         assert_true true "Air watches Go files"
     else
         assert_true false "Air doesn't watch Go files"
@@ -179,7 +179,7 @@ EOF
     assert_file_exists "$workspace_file"
 
     # Check workspace
-    if grep -q "use (" "$workspace_file"; then
+    if command grep -q "use (" "$workspace_file"; then
         assert_true true "Go workspace configured"
     else
         assert_true false "Go workspace not configured"
@@ -207,7 +207,7 @@ EOF
     assert_file_exists "$makefile"
 
     # Check targets
-    if grep -q "golangci-lint run" "$makefile"; then
+    if command grep -q "golangci-lint run" "$makefile"; then
         assert_true true "Lint target uses golangci-lint"
     else
         assert_true false "Lint target doesn't use golangci-lint"
@@ -228,7 +228,7 @@ alias gair='air'
 EOF
 
     # Check aliases
-    if grep -q "alias glt='golangci-lint run'" "$bashrc_file"; then
+    if command grep -q "alias glt='golangci-lint run'" "$bashrc_file"; then
         assert_true true "golangci-lint alias defined"
     else
         assert_true false "golangci-lint alias not defined"

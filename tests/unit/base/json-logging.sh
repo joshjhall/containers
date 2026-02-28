@@ -224,7 +224,7 @@ test_json_log_event_writes_to_file() {
         export CURRENT_JSON_LOG_FILE='$TEST_TEMP_DIR/json/test.jsonl'
         mkdir -p '$TEST_TEMP_DIR/json'
         json_log_event 'INFO' 'test_event' 'test message'
-        cat '$TEST_TEMP_DIR/json/test.jsonl'
+        command cat '$TEST_TEMP_DIR/json/test.jsonl'
     " 2>/dev/null)
 
     assert_contains "$output" '"level":"INFO"' \
@@ -245,7 +245,7 @@ test_json_log_command_includes_duration() {
         export CURRENT_JSON_LOG_FILE='$TEST_TEMP_DIR/json/cmd.jsonl'
         mkdir -p '$TEST_TEMP_DIR/json'
         json_log_command 'Installing deps' 1 0 5
-        cat '$TEST_TEMP_DIR/json/cmd.jsonl'
+        command cat '$TEST_TEMP_DIR/json/cmd.jsonl'
     " 2>/dev/null)
 
     assert_contains "$output" '"duration_seconds":5' \
@@ -264,7 +264,7 @@ test_json_log_command_error_level_on_nonzero_exit() {
         export CURRENT_JSON_LOG_FILE='$TEST_TEMP_DIR/json/err.jsonl'
         mkdir -p '$TEST_TEMP_DIR/json'
         json_log_command 'Failing command' 2 1 3
-        cat '$TEST_TEMP_DIR/json/err.jsonl'
+        command cat '$TEST_TEMP_DIR/json/err.jsonl'
     " 2>/dev/null)
 
     assert_contains "$output" '"level":"ERROR"' \

@@ -16,7 +16,7 @@ test_suite "Update Versions Tests"
 test_help_output() {
     output=$("$PROJECT_ROOT/bin/update-versions.sh" --help 2>&1 || true)
 
-    if echo "$output" | grep -q "Usage:"; then
+    if echo "$output" | command grep -q "Usage:"; then
         return 0
     else
         return 1
@@ -55,7 +55,7 @@ EOF
     output=$(PROJECT_ROOT_OVERRIDE="$test_dir" "$PROJECT_ROOT/bin/update-versions.sh" --dry-run --input test.json 2>&1)
 
     # Check that file wasn't modified
-    if grep -q "ARG PYTHON_VERSION=3.13.0" Dockerfile && echo "$output" | grep -q "DRY RUN"; then
+    if command grep -q "ARG PYTHON_VERSION=3.13.0" Dockerfile && echo "$output" | command grep -q "DRY RUN"; then
         command rm -rf "$test_dir"
         return 0
     else
@@ -113,7 +113,7 @@ EOF
     PROJECT_ROOT_OVERRIDE="$test_dir" "$PROJECT_ROOT/bin/update-versions.sh" --no-commit --no-bump --input test.json >/dev/null 2>&1
 
     # Check that file was modified
-    if grep -q "ARG PYTHON_VERSION=3.13.6" Dockerfile; then
+    if command grep -q "ARG PYTHON_VERSION=3.13.6" Dockerfile; then
         command rm -rf "$test_dir"
         return 0
     else
@@ -146,7 +146,7 @@ EOF
     cd "$test_dir"
     output=$(PROJECT_ROOT_OVERRIDE="$test_dir" "$PROJECT_ROOT/bin/update-versions.sh" --no-bump --input test.json 2>&1)
 
-    if echo "$output" | grep -q "All versions are up to date"; then
+    if echo "$output" | command grep -q "All versions are up to date"; then
         command rm -rf "$test_dir"
         return 0
     else
@@ -159,7 +159,7 @@ EOF
 test_invalid_input() {
     output=$("$PROJECT_ROOT/bin/update-versions.sh" --input /nonexistent/file.json 2>&1 || true)
 
-    if echo "$output" | grep -q "Error: Input file not found"; then
+    if echo "$output" | command grep -q "Error: Input file not found"; then
         return 0
     else
         return 1
@@ -214,7 +214,7 @@ EOF
     PROJECT_ROOT_OVERRIDE="$test_dir" "$PROJECT_ROOT/bin/update-versions.sh" --no-commit --no-bump --input test.json >/dev/null 2>&1
 
     # Check that file was modified
-    if grep -q 'LAZYGIT_VERSION="0.54.2"' lib/features/dev-tools.sh; then
+    if command grep -q 'LAZYGIT_VERSION="0.54.2"' lib/features/dev-tools.sh; then
         command rm -rf "$test_dir"
         return 0
     else
@@ -295,16 +295,16 @@ EOF
 
     # Check that all Java tools were updated
     local all_updated=true
-    if ! grep -q 'SPRING_VERSION="3.5.4"' lib/features/java-dev.sh; then
+    if ! command grep -q 'SPRING_VERSION="3.5.4"' lib/features/java-dev.sh; then
         all_updated=false
     fi
-    if ! grep -q 'JBANG_VERSION="0.129.0"' lib/features/java-dev.sh; then
+    if ! command grep -q 'JBANG_VERSION="0.129.0"' lib/features/java-dev.sh; then
         all_updated=false
     fi
-    if ! grep -q 'MVND_VERSION="1.0.3"' lib/features/java-dev.sh; then
+    if ! command grep -q 'MVND_VERSION="1.0.3"' lib/features/java-dev.sh; then
         all_updated=false
     fi
-    if ! grep -q 'GJF_VERSION="1.28.0"' lib/features/java-dev.sh; then
+    if ! command grep -q 'GJF_VERSION="1.28.0"' lib/features/java-dev.sh; then
         all_updated=false
     fi
 
@@ -373,10 +373,10 @@ EOF
 
     # Check that both tools were updated
     local all_updated=true
-    if ! grep -q 'DUF_VERSION="0.8.1"' lib/features/dev-tools.sh; then
+    if ! command grep -q 'DUF_VERSION="0.8.1"' lib/features/dev-tools.sh; then
         all_updated=false
     fi
-    if ! grep -q 'ENTR_VERSION="5.7"' lib/features/dev-tools.sh; then
+    if ! command grep -q 'ENTR_VERSION="5.7"' lib/features/dev-tools.sh; then
         all_updated=false
     fi
 
@@ -461,26 +461,26 @@ EOF
     local success=true
 
     # Check output contains error messages
-    if ! echo "$output" | grep -q "Invalid version format"; then
+    if ! echo "$output" | command grep -q "Invalid version format"; then
         success=false
     fi
 
     # Check that no invalid versions were written to Dockerfile
-    if grep -q "null\|undefined\|error" Dockerfile; then
+    if command grep -q "null\|undefined\|error" Dockerfile; then
         success=false
     fi
 
     # Check original versions are still there
-    if ! grep -q "ARG PYTHON_VERSION=3.13.0" Dockerfile; then
+    if ! command grep -q "ARG PYTHON_VERSION=3.13.0" Dockerfile; then
         success=false
     fi
-    if ! grep -q "ARG NODE_VERSION=22.10.0" Dockerfile; then
+    if ! command grep -q "ARG NODE_VERSION=22.10.0" Dockerfile; then
         success=false
     fi
-    if ! grep -q "ARG GO_VERSION=1.22.3" Dockerfile; then
+    if ! command grep -q "ARG GO_VERSION=1.22.3" Dockerfile; then
         success=false
     fi
-    if ! grep -q "ARG RUST_VERSION=1.80.0" Dockerfile; then
+    if ! command grep -q "ARG RUST_VERSION=1.80.0" Dockerfile; then
         success=false
     fi
 
@@ -557,22 +557,22 @@ EOF
     local success=true
 
     # Python should be updated (valid)
-    if ! grep -q "ARG PYTHON_VERSION=3.13.6" Dockerfile; then
+    if ! command grep -q "ARG PYTHON_VERSION=3.13.6" Dockerfile; then
         success=false
     fi
 
     # Node.js should NOT be updated (invalid)
-    if ! grep -q "ARG NODE_VERSION=22.10.0" Dockerfile; then
+    if ! command grep -q "ARG NODE_VERSION=22.10.0" Dockerfile; then
         success=false
     fi
 
     # Go should be updated (valid)
-    if ! grep -q "ARG GO_VERSION=1.25.0" Dockerfile; then
+    if ! command grep -q "ARG GO_VERSION=1.25.0" Dockerfile; then
         success=false
     fi
 
     # Check that "null" was not written
-    if grep -q "null" Dockerfile; then
+    if command grep -q "null" Dockerfile; then
         success=false
     fi
 
@@ -638,7 +638,7 @@ EOF
 
     # Check that zoxide was updated
     local updated=false
-    if grep -q 'ZOXIDE_VERSION="0.9.8"' lib/base/setup.sh; then
+    if command grep -q 'ZOXIDE_VERSION="0.9.8"' lib/base/setup.sh; then
         updated=true
     fi
 
@@ -671,14 +671,14 @@ run_test test_mixed_valid_invalid_versions "Updates valid versions while rejecti
 # Test: krew update handler exists
 test_krew_update_handler() {
     # Check that update-versions.sh has krew update handling
-    if grep -q "krew)" "$PROJECT_ROOT/bin/lib/update-versions/updaters.sh"; then
+    if command grep -q "krew)" "$PROJECT_ROOT/bin/lib/update-versions/updaters.sh"; then
         assert_true true "update-versions.sh has krew update handler"
     else
         assert_true false "update-versions.sh missing krew update handler"
     fi
 
     # Check that it updates KREW_VERSION in Dockerfile
-    if grep -q "ARG KREW_VERSION=" "$PROJECT_ROOT/bin/lib/update-versions/updaters.sh"; then
+    if command grep -q "ARG KREW_VERSION=" "$PROJECT_ROOT/bin/lib/update-versions/updaters.sh"; then
         assert_true true "update-versions.sh updates KREW_VERSION"
     else
         assert_true false "update-versions.sh missing KREW_VERSION update"
@@ -688,14 +688,14 @@ test_krew_update_handler() {
 # Test: Helm update handler exists
 test_helm_update_handler() {
     # Check that update-versions.sh has Helm update handling
-    if grep -q "Helm)" "$PROJECT_ROOT/bin/lib/update-versions/updaters.sh"; then
+    if command grep -q "Helm)" "$PROJECT_ROOT/bin/lib/update-versions/updaters.sh"; then
         assert_true true "update-versions.sh has Helm update handler"
     else
         assert_true false "update-versions.sh missing Helm update handler"
     fi
 
     # Check that it updates HELM_VERSION in Dockerfile
-    if grep -q "ARG HELM_VERSION=" "$PROJECT_ROOT/bin/lib/update-versions/updaters.sh"; then
+    if command grep -q "ARG HELM_VERSION=" "$PROJECT_ROOT/bin/lib/update-versions/updaters.sh"; then
         assert_true true "update-versions.sh updates HELM_VERSION"
     else
         assert_true false "update-versions.sh missing HELM_VERSION update"

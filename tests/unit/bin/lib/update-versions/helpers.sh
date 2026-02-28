@@ -21,7 +21,7 @@ test_script_sources_cleanly() {
     source "$PROJECT_ROOT/bin/lib/version-utils.sh"
 
     # Source the script in a subshell to catch any errors
-    if (source "$PROJECT_ROOT/bin/lib/update-versions/helpers.sh" 2>&1 | grep -qi "error\|fail"); then
+    if (source "$PROJECT_ROOT/bin/lib/update-versions/helpers.sh" 2>&1 | command grep -qi "error\|fail"); then
         assert_true false "helpers.sh has sourcing errors"
     else
         assert_true true "helpers.sh sources without errors"
@@ -73,7 +73,7 @@ EOF
 
     if update_checksum_variable "$test_file" "K9S_AMD64_SHA256" "$new_checksum" 2>/dev/null; then
         # Verify the update
-        if grep -q "K9S_AMD64_SHA256=\"$new_checksum\"" "$test_file"; then
+        if command grep -q "K9S_AMD64_SHA256=\"$new_checksum\"" "$test_file"; then
             assert_true true "update_checksum_variable successfully updated checksum"
         else
             assert_true false "Checksum was not updated in file"
@@ -138,7 +138,7 @@ EOF
     # Update comment
     if update_version_comment "$test_file" "# Verified on:" "2025-11-07" 2>/dev/null; then
         # Verify the update
-        if grep -q "# Verified on: 2025-11-07" "$test_file"; then
+        if command grep -q "# Verified on: 2025-11-07" "$test_file"; then
             assert_true true "update_version_comment successfully updated comment"
         else
             assert_true false "Comment was not updated in file"

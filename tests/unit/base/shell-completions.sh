@@ -119,7 +119,7 @@ test_completion_security_validation() {
     local file="$TEST_TEMP_DIR/etc/bash_completion.d/safe-tool"
 
     # Check for dangerous patterns
-    if grep -qE '(rm -rf|curl.*bash|wget.*bash|eval.*\$)' "$file"; then
+    if command grep -qE '(rm -rf|curl.*bash|wget.*bash|eval.*\$)' "$file"; then
         assert_true false "Completion script contains dangerous patterns"
     else
         assert_true true "Completion script passes security check"

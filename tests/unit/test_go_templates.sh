@@ -87,7 +87,7 @@ test_template_loading_no_substitution() {
 
     # Simulate template loading
     if cp "$TEMPLATE_DIR/common/gitignore.tmpl" "$tff_temp_dir/gitignore"; then
-        if grep -q '\*.exe' "$tff_temp_dir/gitignore"; then
+        if command grep -q '\*.exe' "$tff_temp_dir/gitignore"; then
             assert_true true "Template loads without substitution"
         else
             assert_true false "Template content invalid"
@@ -107,14 +107,14 @@ test_template_loading_with_substitution() {
 
     # Simulate template loading with placeholder substitution
     if sed "s/__PROJECT__/testproject/g" "$TEMPLATE_DIR/lib/lib.go.tmpl" > "$tff_temp_dir/lib.go"; then
-        if grep -q "package testproject" "$tff_temp_dir/lib.go"; then
+        if command grep -q "package testproject" "$tff_temp_dir/lib.go"; then
             assert_true true "Template substitution works correctly"
         else
             assert_true false "Placeholder not substituted"
         fi
 
         # Verify placeholder was removed
-        if grep -q "__PROJECT__" "$tff_temp_dir/lib.go"; then
+        if command grep -q "__PROJECT__" "$tff_temp_dir/lib.go"; then
             assert_true false "Placeholder still present after substitution"
         else
             assert_true true "All placeholders substituted"

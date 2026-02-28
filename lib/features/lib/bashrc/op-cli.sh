@@ -70,7 +70,7 @@ op-env() {
 # ----------------------------------------------------------------------------
 op-env-safe() {
     # Disable command echoing to prevent exposure in logs
-    local old_x_state=$(set +o | grep xtrace)
+    local old_x_state=$(set +o | command grep xtrace)
     set +x
 
     if [ -z "$1" ]; then
@@ -162,11 +162,11 @@ _op_load_secrets() {
 
     # Disable xtrace to prevent token exposure in logs
     local _old_xtrace
-    _old_xtrace=$(set +o | grep xtrace)
+    _old_xtrace=$(set +o | command grep xtrace)
     set +x
 
     local _ref_var _target_var _ref_value _secret_value
-    for _ref_var in $(compgen -v | grep '^OP_.\+_REF$' | grep -v '_FILE_REF$'); do
+    for _ref_var in $(compgen -v | command grep '^OP_.\+_REF$' | command grep -v '_FILE_REF$'); do
         _target_var="${_ref_var#OP_}"
         _target_var="${_target_var%_REF}"
         [ -z "$_target_var" ] && continue
@@ -181,7 +181,7 @@ _op_load_secrets() {
 
     # FILE_REF loop: fetch content, write to /dev/shm, export file path
     local _file_name _uri_field _file_ext _file_path
-    for _ref_var in $(compgen -v | grep '^OP_.\+_FILE_REF$'); do
+    for _ref_var in $(compgen -v | command grep '^OP_.\+_FILE_REF$'); do
         _target_var="${_ref_var#OP_}"
         _target_var="${_target_var%_FILE_REF}"
         [ -z "$_target_var" ] && continue
@@ -225,7 +225,7 @@ _op_resolve_git_identity() {
     fi
 
     local _old_xtrace
-    _old_xtrace=$(set +o | grep xtrace)
+    _old_xtrace=$(set +o | command grep xtrace)
     set +x
 
     # Resolve GIT_USER_NAME: try custom "full name" field, then first+last

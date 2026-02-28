@@ -21,7 +21,7 @@ mkdir -p "$BUILD_LOG_DIR"
 # Create mock du to avoid slow FUSE filesystem scans (du -sb /workspace takes 25s+)
 MOCK_BIN_DIR="/tmp/test-metrics-mock-$$"
 mkdir -p "$MOCK_BIN_DIR"
-cat > "$MOCK_BIN_DIR/du" << 'MOCK'
+command cat > "$MOCK_BIN_DIR/du" << 'MOCK'
 #!/bin/bash
 # Mock du to avoid slow FUSE filesystem scans in tests
 echo "1024	${@: -1}"
@@ -30,7 +30,7 @@ chmod +x "$MOCK_BIN_DIR/du"
 
 # Create mock build logs
 setup_mock_logs() {
-    cat > "$BUILD_LOG_DIR/master-summary.log" <<EOF
+    command cat > "$BUILD_LOG_DIR/master-summary.log" <<EOF
 Python: 0 errors, 2 warnings (145s)
 Node.js: 0 errors, 0 warnings (89s)
 Rust: 1 errors, 3 warnings (234s)
@@ -71,15 +71,15 @@ test_prometheus_format() {
     metrics=$(BASH_ENV='' PATH="$MOCK_BIN_DIR:$PATH" "$PROJECT_ROOT/lib/runtime/metrics-exporter.sh")
 
     # Should contain HELP comments
-    echo "$metrics" | grep -q "^# HELP"
+    echo "$metrics" | command grep -q "^# HELP"
     assert_success "Should contain HELP comments"
 
     # Should contain TYPE comments
-    echo "$metrics" | grep -q "^# TYPE"
+    echo "$metrics" | command grep -q "^# TYPE"
     assert_success "Should contain TYPE comments"
 
     # Should contain actual metrics (not just comments)
-    echo "$metrics" | grep -qE "^[a-z_]+ "
+    echo "$metrics" | command grep -qE "^[a-z_]+ "
     assert_success "Should contain metric lines"
 
     pass_test
@@ -94,26 +94,26 @@ test_build_metrics() {
     metrics=$(BASH_ENV='' PATH="$MOCK_BIN_DIR:$PATH" "$PROJECT_ROOT/lib/runtime/metrics-exporter.sh")
 
     # Should contain build duration metrics
-    echo "$metrics" | grep -q "container_build_duration_seconds"
+    echo "$metrics" | command grep -q "container_build_duration_seconds"
     assert_success "Should contain build duration metrics"
 
     # Should contain error metrics
-    echo "$metrics" | grep -q "container_build_errors_total"
+    echo "$metrics" | command grep -q "container_build_errors_total"
     assert_success "Should contain error metrics"
 
     # Should contain warning metrics
-    echo "$metrics" | grep -q "container_build_warnings_total"
+    echo "$metrics" | command grep -q "container_build_warnings_total"
     assert_success "Should contain warning metrics"
 
     # Check Python metrics (0 errors, 145s)
-    echo "$metrics" | grep -q 'container_build_duration_seconds{feature="python"'
+    echo "$metrics" | command grep -q 'container_build_duration_seconds{feature="python"'
     assert_success "Should have Python metrics"
 
-    echo "$metrics" | grep -q 'container_build_errors_total{feature="python"} 0'
+    echo "$metrics" | command grep -q 'container_build_errors_total{feature="python"} 0'
     assert_success "Should record 0 errors for Python"
 
     # Check Rust metrics (1 error, 234s)
-    echo "$metrics" | grep -q 'container_build_errors_total{feature="rust"} 1'
+    echo "$metrics" | command grep -q 'container_build_errors_total{feature="rust"} 1'
     assert_success "Should record 1 error for Rust"
 
     pass_test
@@ -129,12 +129,12 @@ test_runtime_metrics() {
     metrics=$(BASH_ENV='' PATH="$MOCK_BIN_DIR:$PATH" "$PROJECT_ROOT/lib/runtime/metrics-exporter.sh")
 
     # Should contain uptime metric
-    echo "$metrics" | grep -q "container_uptime_seconds"
+    echo "$metrics" | command grep -q "container_uptime_seconds"
     assert_success "Should contain uptime metric"
 
     # Uptime should be a number
     local uptime
-    uptime=$(echo "$metrics" | grep "^container_uptime_seconds " | awk '{print $2}')
+    uptime=$(echo "$metrics" | command grep "^container_uptime_seconds " | awk '{print $2}')
     if [[ "$uptime" =~ ^[0-9]+$ ]]; then
         assert_success "Uptime should be numeric"
     else
@@ -168,7 +168,7 @@ test_feature_count() {
     metrics=$(BASH_ENV='' PATH="$MOCK_BIN_DIR:$PATH" "$PROJECT_ROOT/lib/runtime/metrics-exporter.sh")
 
     # Should count 3 features from mock logs
-    echo "$metrics" | grep -q "container_features_installed 3"
+    echo "$metrics" | command grep -q "container_features_installed 3"
     assert_success "Should count 3 installed features"
 
     pass_test
@@ -183,11 +183,11 @@ test_aggregate_errors() {
     metrics=$(BASH_ENV='' PATH="$MOCK_BIN_DIR:$PATH" "$PROJECT_ROOT/lib/runtime/metrics-exporter.sh")
 
     # Total errors: Python(0) + Node(0) + Rust(1) = 1
-    echo "$metrics" | grep -q "container_build_errors_total_all 1"
+    echo "$metrics" | command grep -q "container_build_errors_total_all 1"
     assert_success "Should aggregate to 1 total error"
 
     # Total warnings: Python(2) + Node(0) + Rust(3) = 5
-    echo "$metrics" | grep -q "container_build_warnings_total_all 5"
+    echo "$metrics" | command grep -q "container_build_warnings_total_all 5"
     assert_success "Should aggregate to 5 total warnings"
 
     pass_test
@@ -202,11 +202,11 @@ test_status_labels() {
     metrics=$(BASH_ENV='' PATH="$MOCK_BIN_DIR:$PATH" "$PROJECT_ROOT/lib/runtime/metrics-exporter.sh")
 
     # Python and Node should have status="success" (0 errors)
-    echo "$metrics" | grep -q 'status="success"'
+    echo "$metrics" | command grep -q 'status="success"'
     assert_success "Should have success status for error-free builds"
 
     # Rust should have status="failed" (1 error)
-    echo "$metrics" | grep -q 'status="failed"'
+    echo "$metrics" | command grep -q 'status="failed"'
     assert_success "Should have failed status for builds with errors"
 
     pass_test
@@ -239,12 +239,12 @@ test_metrics_timestamp() {
     metrics=$(BASH_ENV='' PATH="$MOCK_BIN_DIR:$PATH" "$PROJECT_ROOT/lib/runtime/metrics-exporter.sh")
 
     # Should have scrape timestamp
-    echo "$metrics" | grep -q "container_metrics_scrape_timestamp_seconds"
+    echo "$metrics" | command grep -q "container_metrics_scrape_timestamp_seconds"
     assert_success "Should include scrape timestamp"
 
     # Timestamp should be recent (within last minute)
     local timestamp
-    timestamp=$(echo "$metrics" | grep "^container_metrics_scrape_timestamp_seconds" | awk '{print $2}')
+    timestamp=$(echo "$metrics" | command grep "^container_metrics_scrape_timestamp_seconds" | awk '{print $2}')
     local now
     now=$(date +%s)
     local diff=$((now - timestamp))

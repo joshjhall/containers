@@ -104,7 +104,7 @@ EOF
     assert_file_exists "$config_file"
 
     # Check configuration
-    if grep -q "project = my-project" "$config_file"; then
+    if command grep -q "project = my-project" "$config_file"; then
         assert_true true "Default project configured"
     else
         assert_true false "Default project not configured"
@@ -142,7 +142,7 @@ alias gcr='gcloud container images'
 EOF
 
     # Check aliases
-    if grep -q "alias gc='gcloud'" "$bashrc_file"; then
+    if command grep -q "alias gc='gcloud'" "$bashrc_file"; then
         assert_true true "gcloud alias defined"
     else
         assert_true false "gcloud alias not defined"
@@ -160,7 +160,7 @@ export CLOUDSDK_CONFIG="$HOME/.config/gcloud"
 EOF
 
     # Check environment variables
-    if grep -q "export CLOUDSDK_CONFIG=" "$bashrc_file"; then
+    if command grep -q "export CLOUDSDK_CONFIG=" "$bashrc_file"; then
         assert_true true "CLOUDSDK_CONFIG is exported"
     else
         assert_true false "CLOUDSDK_CONFIG is not exported"
@@ -177,7 +177,7 @@ source /usr/share/google-cloud-sdk/completion.bash.inc
 EOF
 
     # Check completion setup
-    if grep -q "completion.bash.inc" "$bashrc_file"; then
+    if command grep -q "completion.bash.inc" "$bashrc_file"; then
         assert_true true "gcloud completion configured"
     else
         assert_true false "gcloud completion not configured"
@@ -198,7 +198,7 @@ EOF
     assert_file_exists "$cloudbuild_yaml"
 
     # Check configuration
-    if grep -q "gcr.io/cloud-builders/docker" "$cloudbuild_yaml"; then
+    if command grep -q "gcr.io/cloud-builders/docker" "$cloudbuild_yaml"; then
         assert_true true "Cloud Build uses docker builder"
     else
         assert_true false "Cloud Build doesn't use docker builder"

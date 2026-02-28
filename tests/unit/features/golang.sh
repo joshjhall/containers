@@ -134,26 +134,26 @@ export GO111MODULE=on
 EOF
 
     # Check environment variables
-    if grep -q "export GOROOT=" "$bashrc_file"; then
+    if command grep -q "export GOROOT=" "$bashrc_file"; then
         assert_true true "GOROOT is exported"
     else
         assert_true false "GOROOT is not exported"
     fi
 
-    if grep -q "export GOPATH=" "$bashrc_file"; then
+    if command grep -q "export GOPATH=" "$bashrc_file"; then
         assert_true true "GOPATH is exported"
     else
         assert_true false "GOPATH is not exported"
     fi
 
-    if grep -q "export GO111MODULE=on" "$bashrc_file"; then
+    if command grep -q "export GO111MODULE=on" "$bashrc_file"; then
         assert_true true "GO111MODULE is enabled"
     else
         assert_true false "GO111MODULE is not enabled"
     fi
 
     # Check PATH includes Go directories
-    if grep -q 'PATH.*GOROOT/bin.*GOPATH/bin' "$bashrc_file"; then
+    if command grep -q 'PATH.*GOROOT/bin.*GOPATH/bin' "$bashrc_file"; then
         assert_true true "PATH includes Go binary directories"
     else
         assert_true false "PATH doesn't include Go directories"
@@ -210,13 +210,13 @@ alias govet='go vet ./...'
 EOF
 
     # Check aliases
-    if grep -q "alias gotest=" "$bashrc_file"; then
+    if command grep -q "alias gotest=" "$bashrc_file"; then
         assert_true true "gotest alias defined"
     else
         assert_true false "gotest alias not defined"
     fi
 
-    if grep -q "alias gomod=" "$bashrc_file"; then
+    if command grep -q "alias gomod=" "$bashrc_file"; then
         assert_true true "gomod alias defined"
     else
         assert_true false "gomod alias not defined"
@@ -269,13 +269,13 @@ export GOSUMDB="${GOSUMDB:-sum.golang.org}"
 EOF
 
     # Check proxy settings
-    if grep -q "export GOPROXY=" "$bashrc_file"; then
+    if command grep -q "export GOPROXY=" "$bashrc_file"; then
         assert_true true "GOPROXY is configured"
     else
         assert_true false "GOPROXY is not configured"
     fi
 
-    if grep -q "export GOSUMDB=" "$bashrc_file"; then
+    if command grep -q "export GOSUMDB=" "$bashrc_file"; then
         assert_true true "GOSUMDB is configured"
     else
         assert_true false "GOSUMDB is not configured"
@@ -313,14 +313,14 @@ test_dynamic_checksum_fetching() {
     local golang_script="$PROJECT_ROOT/lib/features/golang.sh"
 
     # Should source checksum-fetch.sh for dynamic fetching
-    if grep -q "source.*checksum-fetch.sh" "$golang_script"; then
+    if command grep -q "source.*checksum-fetch.sh" "$golang_script"; then
         assert_true true "golang.sh sources checksum-fetch.sh for dynamic fetching"
     else
         assert_true false "golang.sh doesn't source checksum-fetch.sh"
     fi
 
     # Should use 4-tier verification system
-    if grep -q "checksum-verification.sh" "$golang_script"; then
+    if command grep -q "checksum-verification.sh" "$golang_script"; then
         assert_true true "Sources 4-tier checksum verification system"
     else
         assert_true false "Doesn't source checksum-verification.sh"
@@ -332,7 +332,7 @@ test_download_verification() {
     local golang_script="$PROJECT_ROOT/lib/features/golang.sh"
 
     # Check that 4-tier verification is used (not curl | tar)
-    if grep -q "verify_download" "$golang_script"; then
+    if command grep -q "verify_download" "$golang_script"; then
         assert_true true "Uses verify_download for 4-tier checksum verification"
     else
         assert_true false "Doesn't use verify_download"
@@ -343,7 +343,7 @@ test_download_verification() {
 test_sources_download_verify() {
     local golang_script="$PROJECT_ROOT/lib/features/golang.sh"
 
-    if grep -q "source.*download-verify.sh" "$golang_script"; then
+    if command grep -q "source.*download-verify.sh" "$golang_script"; then
         assert_true true "golang.sh sources download-verify.sh"
     else
         assert_true false "golang.sh doesn't source download-verify.sh"

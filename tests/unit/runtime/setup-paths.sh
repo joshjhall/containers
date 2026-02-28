@@ -112,7 +112,7 @@ test_path_deduplication() {
 
     # Count occurrences of /usr/bin
     local count
-    count=$(echo "$unique_path" | tr ':' '\n' | grep -c "^/usr/bin$")
+    count=$(echo "$unique_path" | tr ':' '\n' | command grep -c "^/usr/bin$")
 
     assert_equals "1" "$count" "Duplicates removed from PATH"
 }
@@ -193,7 +193,7 @@ EOF
     assert_file_exists "$export_file"
 
     # Check PATH is exported
-    if grep -q "export PATH=" "$export_file"; then
+    if command grep -q "export PATH=" "$export_file"; then
         assert_true true "PATH is exported"
     else
         assert_true false "PATH is not exported"

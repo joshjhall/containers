@@ -55,7 +55,7 @@ test_help_output() {
 # ============================================================================
 test_config_variables() {
     local script_content
-    script_content=$(cat "$VALIDATE_SCRIPT")
+    script_content=$(command cat "$VALIDATE_SCRIPT")
 
     # Should have configurable options
     assert_contains "$script_content" "BACKUP" "Should reference backup operations"
@@ -66,7 +66,7 @@ test_config_variables() {
 # ============================================================================
 test_backup_validation() {
     local script_content
-    script_content=$(cat "$VALIDATE_SCRIPT")
+    script_content=$(command cat "$VALIDATE_SCRIPT")
 
     assert_contains "$script_content" "validate" "Should have validation functionality"
 }

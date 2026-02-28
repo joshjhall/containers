@@ -217,7 +217,7 @@ assert_file_contains() {
         return 1
     fi
 
-    if grep -q -- "$tff_pattern" "$tff_file" 2>/dev/null; then
+    if command grep -q -- "$tff_pattern" "$tff_file" 2>/dev/null; then
         return 0
     else
         tf_fail_assertion \
@@ -254,11 +254,11 @@ assert_file_not_contains() {
         return 1
     fi
 
-    if ! grep -q -- "$tff_pattern" "$tff_file" 2>/dev/null; then
+    if ! command grep -q -- "$tff_pattern" "$tff_file" 2>/dev/null; then
         return 0
     else
         local tff_match
-        tff_match=$(grep -n -- "$tff_pattern" "$tff_file" 2>/dev/null | head -1)
+        tff_match=$(command grep -n -- "$tff_pattern" "$tff_file" 2>/dev/null | head -1)
         tf_fail_assertion \
             "File:     '$tff_file'" \
             "Pattern:  '$tff_pattern'" \

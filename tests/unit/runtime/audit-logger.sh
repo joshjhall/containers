@@ -60,7 +60,7 @@ test_syntax_valid() {
 # ============================================================================
 test_core_functions() {
     local script_content
-    script_content=$(cat "$AUDIT_LOGGER")
+    script_content=$(command cat "$AUDIT_LOGGER")
 
     assert_contains "$script_content" "audit_log()" "Should define audit_log function"
     assert_contains "$script_content" "audit_init()" "Should define audit_init function"
@@ -71,7 +71,7 @@ test_core_functions() {
 # ============================================================================
 test_config_variables() {
     local script_content
-    script_content=$(cat "$AUDIT_LOGGER")
+    script_content=$(command cat "$AUDIT_LOGGER")
 
     assert_contains "$script_content" 'ENABLE_AUDIT_LOGGING=' "Should have ENABLE_AUDIT_LOGGING"
     assert_contains "$script_content" 'AUDIT_LOG_FILE=' "Should have AUDIT_LOG_FILE"
@@ -84,7 +84,7 @@ test_config_variables() {
 # ============================================================================
 test_log_levels() {
     local script_content
-    script_content=$(cat "$AUDIT_LOGGER")
+    script_content=$(command cat "$AUDIT_LOGGER")
 
     assert_contains "$script_content" '"debug"' "Should have debug level"
     assert_contains "$script_content" '"info"' "Should have info level"
@@ -98,7 +98,7 @@ test_log_levels() {
 # ============================================================================
 test_event_categories() {
     local script_content
-    script_content=$(cat "$AUDIT_LOGGER")
+    script_content=$(command cat "$AUDIT_LOGGER")
 
     assert_contains "$script_content" '"authentication"' "Should have authentication category"
     assert_contains "$script_content" '"authorization"' "Should have authorization category"
@@ -112,7 +112,7 @@ test_event_categories() {
 # ============================================================================
 test_compliance_docs() {
     local script_content
-    script_content=$(cat "$AUDIT_LOGGER")
+    script_content=$(command cat "$AUDIT_LOGGER")
 
     assert_contains "$script_content" "SOC 2" "Should reference SOC 2"
     assert_contains "$script_content" "HIPAA" "Should reference HIPAA"
@@ -127,7 +127,7 @@ test_compliance_docs() {
 # ============================================================================
 test_json_format() {
     local script_content
-    script_content=$(cat "$AUDIT_LOGGER")
+    script_content=$(command cat "$AUDIT_LOGGER")
 
     assert_contains "$script_content" "json" "Should support JSON format"
 }
@@ -137,7 +137,7 @@ test_json_format() {
 # ============================================================================
 test_secure_permissions() {
     local script_content
-    script_content=$(cat "$AUDIT_LOGGER")
+    script_content=$(command cat "$AUDIT_LOGGER")
 
     assert_contains "$script_content" "chmod 750" "Should set secure dir permissions"
     assert_contains "$script_content" "chmod 640" "Should set secure file permissions"
@@ -148,7 +148,7 @@ test_secure_permissions() {
 # ============================================================================
 test_retention_docs() {
     local script_content
-    script_content=$(cat "$AUDIT_LOGGER")
+    script_content=$(command cat "$AUDIT_LOGGER")
 
     assert_contains "$script_content" "12 months" "Should document SOC 2 retention"
     assert_contains "$script_content" "6 years" "Should document HIPAA retention"
@@ -312,7 +312,7 @@ test_audit_auth_uses_escape() {
     # Extract audit_auth function body and check for _json_escape usage
     local func_body
     func_body=$(sed -n '/^audit_auth()/,/^}/p' "$EVENTS_FILE")
-    if echo "$func_body" | grep -q '_json_escape'; then
+    if echo "$func_body" | command grep -q '_json_escape'; then
         pass_test "audit_auth uses _json_escape for field escaping"
     else
         fail_test "audit_auth does not use _json_escape"
@@ -323,7 +323,7 @@ test_audit_auth_uses_escape() {
 test_audit_authz_uses_escape() {
     local func_body
     func_body=$(sed -n '/^audit_authz()/,/^}/p' "$EVENTS_FILE")
-    if echo "$func_body" | grep -q '_json_escape'; then
+    if echo "$func_body" | command grep -q '_json_escape'; then
         pass_test "audit_authz uses _json_escape for field escaping"
     else
         fail_test "audit_authz does not use _json_escape"
@@ -334,7 +334,7 @@ test_audit_authz_uses_escape() {
 test_audit_data_access_uses_escape() {
     local func_body
     func_body=$(sed -n '/^audit_data_access()/,/^}/p' "$EVENTS_FILE")
-    if echo "$func_body" | grep -q '_json_escape'; then
+    if echo "$func_body" | command grep -q '_json_escape'; then
         pass_test "audit_data_access uses _json_escape for field escaping"
     else
         fail_test "audit_data_access does not use _json_escape"
@@ -345,7 +345,7 @@ test_audit_data_access_uses_escape() {
 test_audit_config_uses_escape() {
     local func_body
     func_body=$(sed -n '/^audit_config()/,/^}/p' "$EVENTS_FILE")
-    if echo "$func_body" | grep -q '_json_escape'; then
+    if echo "$func_body" | command grep -q '_json_escape'; then
         pass_test "audit_config uses _json_escape for field escaping"
     else
         fail_test "audit_config does not use _json_escape"
@@ -356,7 +356,7 @@ test_audit_config_uses_escape() {
 test_audit_security_uses_escape() {
     local func_body
     func_body=$(sed -n '/^audit_security()/,/^}/p' "$EVENTS_FILE")
-    if echo "$func_body" | grep -q '_json_escape'; then
+    if echo "$func_body" | command grep -q '_json_escape'; then
         pass_test "audit_security uses _json_escape for field escaping"
     else
         fail_test "audit_security does not use _json_escape"
@@ -367,7 +367,7 @@ test_audit_security_uses_escape() {
 test_audit_network_uses_escape() {
     local func_body
     func_body=$(sed -n '/^audit_network()/,/^}/p' "$EVENTS_FILE")
-    if echo "$func_body" | grep -q '_json_escape'; then
+    if echo "$func_body" | command grep -q '_json_escape'; then
         pass_test "audit_network uses _json_escape for field escaping"
     else
         fail_test "audit_network does not use _json_escape"
@@ -378,7 +378,7 @@ test_audit_network_uses_escape() {
 test_audit_file_uses_escape() {
     local func_body
     func_body=$(sed -n '/^audit_file()/,/^}/p' "$EVENTS_FILE")
-    if echo "$func_body" | grep -q '_json_escape'; then
+    if echo "$func_body" | command grep -q '_json_escape'; then
         pass_test "audit_file uses _json_escape for field escaping"
     else
         fail_test "audit_file does not use _json_escape"
@@ -389,7 +389,7 @@ test_audit_file_uses_escape() {
 test_audit_process_uses_escape() {
     local func_body
     func_body=$(sed -n '/^audit_process()/,/^}/p' "$EVENTS_FILE")
-    if echo "$func_body" | grep -q '_json_escape'; then
+    if echo "$func_body" | command grep -q '_json_escape'; then
         pass_test "audit_process uses _json_escape for field escaping"
     else
         fail_test "audit_process does not use _json_escape"
@@ -400,7 +400,7 @@ test_audit_process_uses_escape() {
 test_audit_compliance_uses_escape() {
     local func_body
     func_body=$(sed -n '/^audit_compliance()/,/^}/p' "$EVENTS_FILE")
-    if echo "$func_body" | grep -q '_json_escape'; then
+    if echo "$func_body" | command grep -q '_json_escape'; then
         pass_test "audit_compliance uses _json_escape for field escaping"
     else
         fail_test "audit_compliance does not use _json_escape"
@@ -411,7 +411,7 @@ test_audit_compliance_uses_escape() {
 test_build_json_entry_validates_extra_data() {
     local func_body
     func_body=$(sed -n '/^build_json_entry()/,/^}/p' "$SOURCE_FILE")
-    if echo "$func_body" | grep -qE '\{.*\}'; then
+    if echo "$func_body" | command grep -qE '\{.*\}'; then
         pass_test "build_json_entry validates extra_data starts with { and ends with }"
     else
         fail_test "build_json_entry does not validate extra_data structure"
@@ -489,7 +489,7 @@ test_func_audit_init_creates_files() {
 # Test: audit_init writes initialization event
 test_func_audit_init_writes_event() {
     _reset_audit_logger
-    if grep -q "Audit logging initialized" "$AUDIT_LOG_FILE" 2>/dev/null; then
+    if command grep -q "Audit logging initialized" "$AUDIT_LOG_FILE" 2>/dev/null; then
         pass_test "audit_init writes initialization event to log"
     else
         fail_test "audit_init did not write initialization event"
@@ -501,7 +501,7 @@ test_func_audit_init_writes_event() {
 test_func_audit_log_writes_json() {
     _reset_audit_logger
     audit_log "system" "info" "Test event" '{"test_key":"test_value"}'
-    if grep -q '"test_key":"test_value"' "$AUDIT_LOG_FILE" 2>/dev/null; then
+    if command grep -q '"test_key":"test_value"' "$AUDIT_LOG_FILE" 2>/dev/null; then
         pass_test "audit_log writes JSON to log file"
     else
         fail_test "audit_log did not write expected JSON"
@@ -514,7 +514,7 @@ test_func_audit_log_level_filter() {
     _reset_audit_logger
     export AUDIT_LOG_LEVEL="error"
     audit_log "system" "info" "Should be filtered"
-    if grep -q "Should be filtered" "$AUDIT_LOG_FILE" 2>/dev/null; then
+    if command grep -q "Should be filtered" "$AUDIT_LOG_FILE" 2>/dev/null; then
         fail_test "audit_log did not filter below-threshold event"
     else
         pass_test "audit_log respects log level threshold filtering"
@@ -544,9 +544,9 @@ test_func_audit_log_disabled() {
 test_func_audit_auth() {
     _reset_audit_logger
     audit_auth "login" "testuser" "success" '{}'
-    if grep -q '"action":"login"' "$AUDIT_LOG_FILE" && \
-       grep -q '"user":"testuser"' "$AUDIT_LOG_FILE" && \
-       grep -q '"result":"success"' "$AUDIT_LOG_FILE"; then
+    if command grep -q '"action":"login"' "$AUDIT_LOG_FILE" && \
+       command grep -q '"user":"testuser"' "$AUDIT_LOG_FILE" && \
+       command grep -q '"result":"success"' "$AUDIT_LOG_FILE"; then
         pass_test "audit_auth writes authentication event with correct fields"
     else
         fail_test "audit_auth missing expected fields"
@@ -558,8 +558,8 @@ test_func_audit_auth() {
 test_func_audit_config() {
     _reset_audit_logger
     audit_config "docker" "modified" "admin" "old" "new"
-    if grep -q '"component":"docker"' "$AUDIT_LOG_FILE" && \
-       grep -q '"change_type":"modified"' "$AUDIT_LOG_FILE"; then
+    if command grep -q '"component":"docker"' "$AUDIT_LOG_FILE" && \
+       command grep -q '"change_type":"modified"' "$AUDIT_LOG_FILE"; then
         pass_test "audit_config writes configuration event"
     else
         fail_test "audit_config missing expected fields"
@@ -571,8 +571,8 @@ test_func_audit_config() {
 test_func_audit_security() {
     _reset_audit_logger
     audit_security "anomaly" "high" "Suspicious activity" '{}'
-    if grep -q '"event_type":"anomaly"' "$AUDIT_LOG_FILE" && \
-       grep -q '"severity":"high"' "$AUDIT_LOG_FILE"; then
+    if command grep -q '"event_type":"anomaly"' "$AUDIT_LOG_FILE" && \
+       command grep -q '"severity":"high"' "$AUDIT_LOG_FILE"; then
         pass_test "audit_security writes security event"
     else
         fail_test "audit_security missing expected fields"
@@ -584,8 +584,8 @@ test_func_audit_security() {
 test_func_audit_process() {
     _reset_audit_logger
     audit_process "started" "test-proc" "1234" "0" "testuser"
-    if grep -q '"event_type":"started"' "$AUDIT_LOG_FILE" && \
-       grep -q '"process_name":"test-proc"' "$AUDIT_LOG_FILE"; then
+    if command grep -q '"event_type":"started"' "$AUDIT_LOG_FILE" && \
+       command grep -q '"process_name":"test-proc"' "$AUDIT_LOG_FILE"; then
         pass_test "audit_process writes process event"
     else
         fail_test "audit_process missing expected fields"
@@ -597,9 +597,9 @@ test_func_audit_process() {
 test_func_audit_compliance() {
     _reset_audit_logger
     audit_compliance "soc2" "CC7.2" "compliant" '{}'
-    if grep -q '"framework":"soc2"' "$AUDIT_LOG_FILE" && \
-       grep -q '"requirement":"CC7.2"' "$AUDIT_LOG_FILE" && \
-       grep -q '"status":"compliant"' "$AUDIT_LOG_FILE"; then
+    if command grep -q '"framework":"soc2"' "$AUDIT_LOG_FILE" && \
+       command grep -q '"requirement":"CC7.2"' "$AUDIT_LOG_FILE" && \
+       command grep -q '"status":"compliant"' "$AUDIT_LOG_FILE"; then
         pass_test "audit_compliance writes compliance event"
     else
         fail_test "audit_compliance missing expected fields"
@@ -613,11 +613,11 @@ test_func_json_required_fields() {
     audit_log "system" "info" "Field check" '{}'
     local last_line
     last_line=$(tail -1 "$AUDIT_LOG_FILE")
-    if echo "$last_line" | grep -q '"@timestamp"' && \
-       echo "$last_line" | grep -q '"event_id"' && \
-       echo "$last_line" | grep -q '"category"' && \
-       echo "$last_line" | grep -q '"level"' && \
-       echo "$last_line" | grep -q '"message"'; then
+    if echo "$last_line" | command grep -q '"@timestamp"' && \
+       echo "$last_line" | command grep -q '"event_id"' && \
+       echo "$last_line" | command grep -q '"category"' && \
+       echo "$last_line" | command grep -q '"level"' && \
+       echo "$last_line" | command grep -q '"message"'; then
         pass_test "JSON output contains required fields (@timestamp, event_id, etc.)"
     else
         fail_test "JSON output missing required fields"
@@ -630,8 +630,8 @@ test_func_json_escape() {
     _reset_audit_logger
     local escaped
     escaped=$(_json_escape 'hello "world" with\backslash')
-    if echo "$escaped" | grep -q '\\"world\\"' && \
-       echo "$escaped" | grep -q '\\\\backslash'; then
+    if echo "$escaped" | command grep -q '\\"world\\"' && \
+       echo "$escaped" | command grep -q '\\\\backslash'; then
         pass_test "_json_escape escapes special characters"
     else
         fail_test "_json_escape did not properly escape special characters: $escaped"
@@ -645,7 +645,7 @@ test_func_stdout_copy() {
     export AUDIT_STDOUT_COPY="true"
     local stdout_output
     stdout_output=$(audit_log "system" "info" "Stdout test" '{}')
-    if echo "$stdout_output" | grep -q '"message":"Stdout test"'; then
+    if echo "$stdout_output" | command grep -q '"message":"Stdout test"'; then
         pass_test "AUDIT_STDOUT_COPY=true outputs to stdout"
     else
         fail_test "AUDIT_STDOUT_COPY=true did not output to stdout"

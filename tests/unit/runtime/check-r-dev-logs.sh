@@ -35,7 +35,7 @@ test_error_handling() {
     local error_log="$TEST_TEMP_DIR/error.log"
     echo "Error: test" > "$error_log"
     assert_file_exists "$error_log"
-    grep -q "Error" "$error_log" && assert_true true "Error logged" || assert_true false "Error not logged"
+    command grep -q "Error" "$error_log" && assert_true true "Error logged" || assert_true false "Error not logged"
 }
 
 test_permissions() {
@@ -56,7 +56,7 @@ test_environment_variables() {
     local env_file="$TEST_TEMP_DIR/env.sh"
     echo "export TEST_VAR=123" > "$env_file"
     assert_file_exists "$env_file"
-    grep -q "export TEST_VAR" "$env_file" && assert_true true "Env var exported" || assert_true false "Env var not exported"
+    command grep -q "export TEST_VAR" "$env_file" && assert_true true "Env var exported" || assert_true false "Env var not exported"
 }
 
 test_command_execution() {
@@ -71,14 +71,14 @@ test_logging() {
     local log_file="$TEST_TEMP_DIR/app.log"
     echo "[INFO] Test log entry" > "$log_file"
     assert_file_exists "$log_file"
-    grep -q "\[INFO\]" "$log_file" && assert_true true "Log entry found" || assert_true false "Log entry not found"
+    command grep -q "\[INFO\]" "$log_file" && assert_true true "Log entry found" || assert_true false "Log entry not found"
 }
 
 test_configuration() {
     local config_file="$TEST_TEMP_DIR/config.conf"
     echo "setting=value" > "$config_file"
     assert_file_exists "$config_file"
-    grep -q "setting=value" "$config_file" && assert_true true "Config valid" || assert_true false "Config invalid"
+    command grep -q "setting=value" "$config_file" && assert_true true "Config valid" || assert_true false "Config invalid"
 }
 
 test_validation() {

@@ -63,13 +63,13 @@ my-custom-server: python server.py - running'
 _match_plugin_in_list() {
     local plugin_name="$1"
     local list_output="$2"
-    echo "$list_output" | grep -qE "^[[:space:]]*❯ ${plugin_name}@" 2>/dev/null
+    echo "$list_output" | command grep -qE "^[[:space:]]*❯ ${plugin_name}@" 2>/dev/null
 }
 
 _match_mcp_server_in_list() {
     local server_name="$1"
     local list_output="$2"
-    echo "$list_output" | grep -qE "^${server_name}:" 2>/dev/null
+    echo "$list_output" | command grep -qE "^${server_name}:" 2>/dev/null
 }
 
 _parse_git_remote_host() {
@@ -441,7 +441,7 @@ _is_valid_channel() {
 
 test_channel_validation_exists() {
     # Static check: the source file must contain the case guard
-    if grep -q 'Invalid CLAUDE_CHANNEL' "$CLAUDE_CODE_SETUP_SRC"; then
+    if command grep -q 'Invalid CLAUDE_CHANNEL' "$CLAUDE_CODE_SETUP_SRC"; then
         pass_test "Source contains CLAUDE_CHANNEL validation guard"
     else
         fail_test "Source is missing CLAUDE_CHANNEL validation guard"
@@ -488,7 +488,7 @@ _is_valid_npm_package_name() {
 
 test_mcp_passthrough_validation_exists() {
     # Static check: the claude-setup command must contain the npm package name regex guard
-    if grep -q '\^[@a-zA-Z0-9\]' "$CLAUDE_SETUP_CMD_SRC"; then
+    if command grep -q '\^[@a-zA-Z0-9\]' "$CLAUDE_SETUP_CMD_SRC"; then
         pass_test "Source contains npm package name validation guard"
     else
         fail_test "Source is missing npm package name validation guard"
@@ -520,7 +520,7 @@ test_invalid_npm_names_rejected() {
         ""
         '`id`'
         "; echo pwned"
-        '| cat /etc/passwd'
+        '| command cat /etc/passwd'
     )
     local failures=0
     for name in "${adversarial_values[@]}"; do
@@ -539,7 +539,7 @@ test_invalid_npm_names_rejected() {
 test_no_export_anthropic_auth_token() {
     # Source MUST NOT export ANTHROPIC_AUTH_TOKEN to the shell environment
     # Check the feature script and all extracted files
-    if grep -rqE '^\s*export\s+ANTHROPIC_AUTH_TOKEN' "$CLAUDE_CODE_SETUP_SRC" "$CLAUDE_LIB_DIR"/; then
+    if command grep -rqE '^\s*export\s+ANTHROPIC_AUTH_TOKEN' "$CLAUDE_CODE_SETUP_SRC" "$CLAUDE_LIB_DIR"/; then
         fail_test "Source still contains 'export ANTHROPIC_AUTH_TOKEN' (security issue #62)"
     else
         pass_test "No 'export ANTHROPIC_AUTH_TOKEN' found in source"
@@ -548,7 +548,7 @@ test_no_export_anthropic_auth_token() {
 
 test_uses_secure_token_file() {
     # Source MUST use /dev/shm for token storage
-    if grep -rq '/dev/shm/anthropic-auth-token' "$CLAUDE_SETUP_CMD_SRC" "$CLAUDE_AUTH_WATCHER_SRC" "$CLAUDE_ENV_SRC"; then
+    if command grep -rq '/dev/shm/anthropic-auth-token' "$CLAUDE_SETUP_CMD_SRC" "$CLAUDE_AUTH_WATCHER_SRC" "$CLAUDE_ENV_SRC"; then
         pass_test "Source uses /dev/shm/anthropic-auth-token for secure storage"
     else
         fail_test "Source is missing /dev/shm/anthropic-auth-token secure storage"
@@ -557,7 +557,7 @@ test_uses_secure_token_file() {
 
 test_store_anthropic_token_helper_exists() {
     # Source MUST define the _store_anthropic_token helper
-    if grep -q '_store_anthropic_token()' "$CLAUDE_SETUP_CMD_SRC"; then
+    if command grep -q '_store_anthropic_token()' "$CLAUDE_SETUP_CMD_SRC"; then
         pass_test "Source defines _store_anthropic_token helper"
     else
         fail_test "Source is missing _store_anthropic_token helper"
@@ -566,7 +566,7 @@ test_store_anthropic_token_helper_exists() {
 
 test_claude_env_contains_wrapper() {
     # The 95-claude-env.sh file MUST contain a claude() wrapper function
-    if grep -q 'claude()' "$CLAUDE_ENV_SRC"; then
+    if command grep -q 'claude()' "$CLAUDE_ENV_SRC"; then
         pass_test "Source contains claude() wrapper function"
     else
         fail_test "Source is missing claude() wrapper function in 95-claude-env.sh"
@@ -575,7 +575,7 @@ test_claude_env_contains_wrapper() {
 
 test_claude_env_unsets_token() {
     # The 95-claude-env.sh file MUST unset ANTHROPIC_AUTH_TOKEN from env
-    if grep -q 'unset ANTHROPIC_AUTH_TOKEN' "$CLAUDE_ENV_SRC"; then
+    if command grep -q 'unset ANTHROPIC_AUTH_TOKEN' "$CLAUDE_ENV_SRC"; then
         pass_test "Source unsets ANTHROPIC_AUTH_TOKEN from environment"
     else
         fail_test "Source does not unset ANTHROPIC_AUTH_TOKEN from environment"
@@ -584,7 +584,7 @@ test_claude_env_unsets_token() {
 
 test_mcp_auto_auth_checks_file() {
     # MCP auto-auth MUST check the secure token file
-    if grep -q '\-s /dev/shm/anthropic-auth-token' "$CLAUDE_SETUP_CMD_SRC"; then
+    if command grep -q '\-s /dev/shm/anthropic-auth-token' "$CLAUDE_SETUP_CMD_SRC"; then
         pass_test "MCP auto-auth checks /dev/shm/anthropic-auth-token file"
     else
         fail_test "MCP auto-auth does not check /dev/shm/anthropic-auth-token file"
@@ -593,7 +593,7 @@ test_mcp_auto_auth_checks_file() {
 
 test_auth_watcher_uses_secure_storage() {
     # Auth watcher MUST use _store_token (inlined helper)
-    if grep -q '_store_token' "$CLAUDE_AUTH_WATCHER_SRC"; then
+    if command grep -q '_store_token' "$CLAUDE_AUTH_WATCHER_SRC"; then
         pass_test "Auth watcher uses _store_token for secure storage"
     else
         fail_test "Auth watcher does not use _store_token"

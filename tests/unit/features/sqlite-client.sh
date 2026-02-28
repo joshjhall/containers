@@ -75,13 +75,13 @@ EOF
     assert_file_exists "$sqliterc"
 
     # Check configuration
-    if grep -q ".headers on" "$sqliterc"; then
+    if command grep -q ".headers on" "$sqliterc"; then
         assert_true true "Headers enabled"
     else
         assert_true false "Headers not enabled"
     fi
 
-    if grep -q ".timer on" "$sqliterc"; then
+    if command grep -q ".timer on" "$sqliterc"; then
         assert_true true "Timer enabled"
     else
         assert_true false "Timer not enabled"
@@ -101,7 +101,7 @@ alias sqjson='sqlite3 -json'
 EOF
 
     # Check aliases
-    if grep -q "alias sq='sqlite3'" "$bashrc_file"; then
+    if command grep -q "alias sq='sqlite3'" "$bashrc_file"; then
         assert_true true "sqlite3 alias defined"
     else
         assert_true false "sqlite3 alias not defined"
@@ -161,7 +161,7 @@ export SQLITE_HISTORY="$HOME/.sqlite_history"
 EOF
 
     # Check environment variables
-    if grep -q "export SQLITE_HISTORY=" "$bashrc_file"; then
+    if command grep -q "export SQLITE_HISTORY=" "$bashrc_file"; then
         assert_true true "History file env var set"
     else
         assert_true false "History file env var not set"

@@ -125,7 +125,7 @@ test_version_file_check() {
 
     # Test reading version from file
     local version
-    version=$(cat "$TEST_VERSION_FILE")
+    version=$(command cat "$TEST_VERSION_FILE")
     assert_equals "1.0.0" "$version" "Version read from file"
 }
 
@@ -143,7 +143,7 @@ EOF
     assert_file_exists "$TEST_CHANGELOG_FILE"
 
     # Check if Unreleased section exists
-    if grep -q "## \[Unreleased\]" "$TEST_CHANGELOG_FILE"; then
+    if command grep -q "## \[Unreleased\]" "$TEST_CHANGELOG_FILE"; then
         assert_true true "Unreleased section found in changelog"
     else
         assert_true false "Unreleased section not found in changelog"
@@ -230,19 +230,19 @@ test_cancellation_message() {
     output=$(echo "n" | "$PROJECT_ROOT/bin/release.sh" patch 2>&1 || true)
 
     # Check for the helpful messages
-    if echo "$output" | grep -q "Release cancelled"; then
+    if echo "$output" | command grep -q "Release cancelled"; then
         assert_true true "Shows cancellation message"
     else
         assert_true false "Missing cancellation message"
     fi
 
-    if echo "$output" | grep -q "echo 'y' |"; then
+    if echo "$output" | command grep -q "echo 'y' |"; then
         assert_true true "Shows echo 'y' automation example"
     else
         assert_true false "Missing echo 'y' automation example"
     fi
 
-    if echo "$output" | grep -q "yes |"; then
+    if echo "$output" | command grep -q "yes |"; then
         assert_true true "Shows yes command automation example"
     else
         assert_true false "Missing yes command automation example"

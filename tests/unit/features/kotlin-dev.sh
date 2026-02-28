@@ -137,7 +137,7 @@ EOF
     fi
 
     # Check wrapper script content
-    if grep -q "java -jar" "$detekt_bin"; then
+    if command grep -q "java -jar" "$detekt_bin"; then
         assert_true true "detekt wrapper uses java -jar"
     else
         assert_true false "detekt wrapper doesn't use java -jar"
@@ -186,13 +186,13 @@ export KLS_HOME="/opt/kotlin-language-server/server"
 EOF
 
     # Check environment variables
-    if grep -q "export DETEKT_HOME=" "$bashrc_file"; then
+    if command grep -q "export DETEKT_HOME=" "$bashrc_file"; then
         assert_true true "DETEKT_HOME is exported"
     else
         assert_true false "DETEKT_HOME is not exported"
     fi
 
-    if grep -q "export KLS_HOME=" "$bashrc_file"; then
+    if command grep -q "export KLS_HOME=" "$bashrc_file"; then
         assert_true true "KLS_HOME is exported"
     else
         assert_true false "KLS_HOME is not exported"
@@ -216,19 +216,19 @@ alias dktcheck='detekt --build-upon-default-config'
 EOF
 
     # Check aliases
-    if grep -q "alias ktf='ktlint -F'" "$bashrc_file"; then
+    if command grep -q "alias ktf='ktlint -F'" "$bashrc_file"; then
         assert_true true "ktlint format alias defined"
     else
         assert_true false "ktlint format alias not defined"
     fi
 
-    if grep -q "alias ktcheck='ktlint'" "$bashrc_file"; then
+    if command grep -q "alias ktcheck='ktlint'" "$bashrc_file"; then
         assert_true true "ktlint check alias defined"
     else
         assert_true false "ktlint check alias not defined"
     fi
 
-    if grep -q "alias dkt='detekt'" "$bashrc_file"; then
+    if command grep -q "alias dkt='detekt'" "$bashrc_file"; then
         assert_true true "detekt alias defined"
     else
         assert_true false "detekt alias not defined"
@@ -269,19 +269,19 @@ kotlin-dev-version() {
 EOF
 
     # Check helper functions
-    if grep -q "ktlint-all()" "$bashrc_file"; then
+    if command grep -q "ktlint-all()" "$bashrc_file"; then
         assert_true true "ktlint-all helper defined"
     else
         assert_true false "ktlint-all helper not defined"
     fi
 
-    if grep -q "detekt-report()" "$bashrc_file"; then
+    if command grep -q "detekt-report()" "$bashrc_file"; then
         assert_true true "detekt-report helper defined"
     else
         assert_true false "detekt-report helper not defined"
     fi
 
-    if grep -q "kotlin-dev-version()" "$bashrc_file"; then
+    if command grep -q "kotlin-dev-version()" "$bashrc_file"; then
         assert_true true "kotlin-dev-version helper defined"
     else
         assert_true false "kotlin-dev-version helper not defined"
@@ -299,7 +299,7 @@ test_claude_lsp_integration() {
 
 if command -v claude &>/dev/null && [ "${ENABLE_LSP_TOOL:-0}" = "1" ]; then
     if command -v kotlin-language-server &>/dev/null; then
-        if ! claude plugin list 2>/dev/null | grep -q "kotlin"; then
+        if ! claude plugin list 2>/dev/null | command grep -q "kotlin"; then
             echo "Installing Kotlin LSP plugin for Claude Code..."
             claude plugin add kotlin-language-server@claude-code-lsps 2>/dev/null || true
         fi
@@ -317,7 +317,7 @@ EOF
     fi
 
     # Check script content
-    if grep -q "kotlin-language-server@claude-code-lsps" "$lsp_setup"; then
+    if command grep -q "kotlin-language-server@claude-code-lsps" "$lsp_setup"; then
         assert_true true "LSP plugin reference is correct"
     else
         assert_true false "LSP plugin reference is missing"
@@ -407,7 +407,7 @@ kt-init-project() {
 
     # Create .editorconfig for ktlint
     if [ ! -f ".editorconfig" ]; then
-        cat > .editorconfig << 'EDITORCONFIG'
+        command cat > .editorconfig << 'EDITORCONFIG'
 root = true
 
 [*]
@@ -431,13 +431,13 @@ EDITORCONFIG
 EOF
 
     # Check helper function
-    if grep -q "kt-init-project()" "$bashrc_file"; then
+    if command grep -q "kt-init-project()" "$bashrc_file"; then
         assert_true true "kt-init-project helper defined"
     else
         assert_true false "kt-init-project helper not defined"
     fi
 
-    if grep -q "ktlint_official" "$bashrc_file"; then
+    if command grep -q "ktlint_official" "$bashrc_file"; then
         assert_true true "editorconfig includes ktlint style"
     else
         assert_true false "editorconfig doesn't include ktlint style"

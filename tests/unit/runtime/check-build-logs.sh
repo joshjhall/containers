@@ -92,13 +92,13 @@ EOF
     assert_file_exists "$summary_log"
 
     # Check summary content
-    if grep -q "Container Build Summary" "$summary_log"; then
+    if command grep -q "Container Build Summary" "$summary_log"; then
         assert_true true "Summary has header"
     else
         assert_true false "Summary missing header"
     fi
 
-    if grep -q "Features installed:" "$summary_log"; then
+    if command grep -q "Features installed:" "$summary_log"; then
         assert_true true "Summary lists features"
     else
         assert_true false "Summary doesn't list features"
@@ -136,14 +136,14 @@ test_log_search() {
 EOF
 
     # Test searching for errors
-    if grep -q "ERROR" "$test_log"; then
+    if command grep -q "ERROR" "$test_log"; then
         assert_true true "Can find ERROR entries"
     else
         assert_true false "Cannot find ERROR entries"
     fi
 
     # Test searching for warnings
-    if grep -q "WARNING" "$test_log"; then
+    if command grep -q "WARNING" "$test_log"; then
         assert_true true "Can find WARNING entries"
     else
         assert_true false "Cannot find WARNING entries"
@@ -164,12 +164,12 @@ test_log_listing() {
 
     # Count logs in features
     local feature_count
-    feature_count=$(ls -1 "$BUILD_LOG_DIR/features" | wc -l)
+    feature_count=$(command ls -1 "$BUILD_LOG_DIR/features" | wc -l)
     assert_equals "3" "$feature_count" "Three feature logs exist"
 
     # Count logs in base
     local base_count
-    base_count=$(ls -1 "$BUILD_LOG_DIR/base" | wc -l)
+    base_count=$(command ls -1 "$BUILD_LOG_DIR/base" | wc -l)
     assert_equals "1" "$base_count" "One base log exists"
 }
 
@@ -185,7 +185,7 @@ test_log_timestamps() {
 EOF
 
     # Check timestamp format
-    if grep -E '\[20[0-9]{2}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}\]' "$test_log"; then
+    if command grep -E '\[20[0-9]{2}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}\]' "$test_log"; then
         assert_true true "Timestamps follow expected format"
     else
         assert_true false "Timestamps don't follow expected format"
@@ -206,14 +206,14 @@ EOF
 EOF
 
     # Check for errors in failure log
-    if grep -E "(ERROR|FATAL)" "$BUILD_LOG_DIR/failure.log"; then
+    if command grep -E "(ERROR|FATAL)" "$BUILD_LOG_DIR/failure.log"; then
         assert_true true "Errors detected in failure log"
     else
         assert_true false "Errors not detected in failure log"
     fi
 
     # Check for no errors in success log
-    if ! grep -E "(ERROR|FATAL)" "$BUILD_LOG_DIR/success.log"; then
+    if ! command grep -E "(ERROR|FATAL)" "$BUILD_LOG_DIR/success.log"; then
         assert_true true "No errors in success log"
     else
         assert_true false "Unexpected errors in success log"
@@ -261,13 +261,13 @@ EOF
     assert_file_exists "$script_output"
 
     # Check usage content
-    if grep -q "Usage:" "$script_output"; then
+    if command grep -q "Usage:" "$script_output"; then
         assert_true true "Usage information present"
     else
         assert_true false "Usage information missing"
     fi
 
-    if grep -q "Available logs:" "$script_output"; then
+    if command grep -q "Available logs:" "$script_output"; then
         assert_true true "Available logs listed"
     else
         assert_true false "Available logs not listed"

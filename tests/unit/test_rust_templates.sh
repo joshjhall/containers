@@ -67,7 +67,7 @@ test_justfile_loading_no_substitution() {
     tff_temp_dir=$(mktemp -d)
 
     if cp "$TEMPLATE_DIR/just/justfile.tmpl" "$tff_temp_dir/justfile"; then
-        if grep -q "cargo build" "$tff_temp_dir/justfile"; then
+        if command grep -q "cargo build" "$tff_temp_dir/justfile"; then
             assert_true true "Justfile template loads without substitution"
         else
             assert_true false "Justfile template content invalid"
@@ -85,14 +85,14 @@ test_grammar_loading_with_substitution() {
     tff_temp_dir=$(mktemp -d)
 
     if sed "s/__LANG_NAME__/mylang/g" "$TEMPLATE_DIR/treesitter/grammar.js.tmpl" > "$tff_temp_dir/grammar.js"; then
-        if grep -q "name: 'mylang'" "$tff_temp_dir/grammar.js"; then
+        if command grep -q "name: 'mylang'" "$tff_temp_dir/grammar.js"; then
             assert_true true "Grammar template substitution works correctly"
         else
             assert_true false "Placeholder not substituted in grammar.js"
         fi
 
         # Verify placeholder was removed
-        if grep -q "__LANG_NAME__" "$tff_temp_dir/grammar.js"; then
+        if command grep -q "__LANG_NAME__" "$tff_temp_dir/grammar.js"; then
             assert_true false "Placeholder still present after substitution"
         else
             assert_true true "All placeholders substituted in grammar.js"
@@ -110,7 +110,7 @@ test_grammar_template_structure() {
     tff_temp_dir=$(mktemp -d)
 
     if sed "s/__LANG_NAME__/mylang/g" "$TEMPLATE_DIR/treesitter/grammar.js.tmpl" > "$tff_temp_dir/grammar.js"; then
-        if grep -q "module.exports = grammar" "$tff_temp_dir/grammar.js" && grep -q "source_file" "$tff_temp_dir/grammar.js"; then
+        if command grep -q "module.exports = grammar" "$tff_temp_dir/grammar.js" && grep -q "source_file" "$tff_temp_dir/grammar.js"; then
             assert_true true "Grammar template has valid structure"
         else
             assert_true false "Grammar template missing required fields"
@@ -128,7 +128,7 @@ test_justfile_template_structure() {
     tff_temp_dir=$(mktemp -d)
 
     if cp "$TEMPLATE_DIR/just/justfile.tmpl" "$tff_temp_dir/justfile"; then
-        if grep -q "default:" "$tff_temp_dir/justfile" && grep -q "@just --list" "$tff_temp_dir/justfile"; then
+        if command grep -q "default:" "$tff_temp_dir/justfile" && grep -q "@just --list" "$tff_temp_dir/justfile"; then
             assert_true true "Justfile template has valid structure"
         else
             assert_true false "Justfile template missing required elements"
@@ -146,9 +146,9 @@ test_justfile_rust_commands() {
     tff_temp_dir=$(mktemp -d)
 
     if cp "$TEMPLATE_DIR/just/justfile.tmpl" "$tff_temp_dir/justfile"; then
-        if grep -q "cargo build" "$tff_temp_dir/justfile" && \
-           grep -q "cargo test" "$tff_temp_dir/justfile" && \
-           grep -q "cargo clippy" "$tff_temp_dir/justfile"; then
+        if command grep -q "cargo build" "$tff_temp_dir/justfile" && \
+           command grep -q "cargo test" "$tff_temp_dir/justfile" && \
+           command grep -q "cargo clippy" "$tff_temp_dir/justfile"; then
             assert_true true "Justfile includes common Rust commands"
         else
             assert_true false "Justfile missing expected Rust commands"

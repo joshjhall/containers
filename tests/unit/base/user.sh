@@ -25,7 +25,7 @@ test_default_parameters() {
     local temp_script="$RESULTS_DIR/user-test.sh"
 
     # Extract just the parameter defaults from the script
-    grep -E "^(USERNAME|USER_UID|USER_GID|PROJECT_NAME|WORKING_DIR)=" "$PROJECT_ROOT/lib/base/user.sh" > "$temp_script"
+    command grep -E "^(USERNAME|USER_UID|USER_GID|PROJECT_NAME|WORKING_DIR)=" "$PROJECT_ROOT/lib/base/user.sh" > "$temp_script"
     source "$temp_script"
 
     # Test default values are set correctly
