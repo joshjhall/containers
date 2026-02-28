@@ -485,6 +485,151 @@ test_detect_secrets_non_secret_var() {
 }
 
 # ============================================================================
+# Custom Rules Path Validation Tests
+# ============================================================================
+
+# Temp directory for custom rules tests
+_CUSTOM_RULES_TMPDIR=""
+
+setup_custom_rules() {
+    setup
+    _CUSTOM_RULES_TMPDIR="$(mktemp -d)"
+    unset VALIDATE_CONFIG_RULES 2>/dev/null || true
+}
+
+teardown_custom_rules() {
+    unset VALIDATE_CONFIG_RULES 2>/dev/null || true
+    if [ -n "$_CUSTOM_RULES_TMPDIR" ] && [ -d "$_CUSTOM_RULES_TMPDIR" ]; then
+        rm -rf "$_CUSTOM_RULES_TMPDIR"
+    fi
+    teardown
+}
+
+test_custom_rules_empty_var() {
+    setup_custom_rules
+    export VALIDATE_CONFIG_RULES=""
+
+    cv_load_custom_rules >/dev/null 2>&1
+    assert_equals 0 "$CV_ERROR_COUNT" "Empty VALIDATE_CONFIG_RULES should succeed silently"
+    teardown_custom_rules
+}
+
+test_custom_rules_relative_path_rejected() {
+    setup_custom_rules
+    export VALIDATE_CONFIG_RULES="relative/path/rules.sh"
+
+    if cv_load_custom_rules >/dev/null 2>&1; then
+        fail "Relative path should be rejected"
+    else
+        assert_equals 1 "$CV_ERROR_COUNT" "Should have 1 error for relative path"
+    fi
+    teardown_custom_rules
+}
+
+test_custom_rules_nonexistent_file() {
+    setup_custom_rules
+    export VALIDATE_CONFIG_RULES="/etc/container/nonexistent-rules.sh"
+
+    cv_load_custom_rules >/dev/null 2>&1
+    assert_equals 0 "$CV_ERROR_COUNT" "Nonexistent file should warn, not error"
+    assert_equals 1 "$CV_WARNING_COUNT" "Should have 1 warning for missing file"
+    teardown_custom_rules
+}
+
+test_custom_rules_outside_trusted_dir() {
+    setup_custom_rules
+    local untrusted_file="${_CUSTOM_RULES_TMPDIR}/evil-rules.sh"
+    echo '# malicious' > "$untrusted_file"
+    export VALIDATE_CONFIG_RULES="$untrusted_file"
+
+    if cv_load_custom_rules >/dev/null 2>&1; then
+        fail "File outside trusted dir should be rejected"
+    else
+        assert_equals 1 "$CV_ERROR_COUNT" "Should have 1 error for untrusted path"
+    fi
+    teardown_custom_rules
+}
+
+test_custom_rules_symlink_escape() {
+    setup_custom_rules
+    local target_file="${_CUSTOM_RULES_TMPDIR}/evil-payload.sh"
+    echo '# malicious payload' > "$target_file"
+
+    # Create /etc/container if it doesn't exist (for the symlink test)
+    mkdir -p /etc/container 2>/dev/null || true
+    local symlink_path="/etc/container/test-symlink-$$.sh"
+    ln -sf "$target_file" "$symlink_path" 2>/dev/null || {
+        # If we can't create symlinks in /etc/container, skip gracefully
+        teardown_custom_rules
+        return 0
+    }
+    export VALIDATE_CONFIG_RULES="$symlink_path"
+
+    if cv_load_custom_rules >/dev/null 2>&1; then
+        fail "Symlink escaping trusted dir should be rejected"
+    else
+        assert_equals 1 "$CV_ERROR_COUNT" "Should have 1 error for symlink escape"
+    fi
+
+    rm -f "$symlink_path" 2>/dev/null || true
+    teardown_custom_rules
+}
+
+test_custom_rules_non_root_owned() {
+    setup_custom_rules
+    mkdir -p /etc/container 2>/dev/null || true
+    local rules_file="/etc/container/test-nonroot-$$.sh"
+    echo '# non-root rules' > "$rules_file" 2>/dev/null || {
+        teardown_custom_rules
+        return 0
+    }
+    # Change ownership to non-root if possible
+    chown "$(id -u)" "$rules_file" 2>/dev/null || {
+        # If running as root, uid is 0 so ownership check passes — skip test
+        rm -f "$rules_file" 2>/dev/null || true
+        teardown_custom_rules
+        return 0
+    }
+    export VALIDATE_CONFIG_RULES="$rules_file"
+
+    if cv_load_custom_rules >/dev/null 2>&1; then
+        fail "Non-root-owned file should be rejected"
+    else
+        assert_equals 1 "$CV_ERROR_COUNT" "Should have 1 error for non-root ownership"
+    fi
+
+    rm -f "$rules_file" 2>/dev/null || true
+    teardown_custom_rules
+}
+
+test_custom_rules_valid_file() {
+    setup_custom_rules
+    mkdir -p /etc/container 2>/dev/null || true
+    local rules_file="/etc/container/test-valid-$$.sh"
+    cat > "$rules_file" 2>/dev/null <<'RULES'
+cv_custom_validations() {
+    return 0
+}
+RULES
+    # Ensure root ownership
+    chown 0:0 "$rules_file" 2>/dev/null || {
+        rm -f "$rules_file" 2>/dev/null || true
+        teardown_custom_rules
+        return 0
+    }
+    export VALIDATE_CONFIG_RULES="$rules_file"
+
+    if cv_load_custom_rules >/dev/null 2>&1; then
+        assert_equals 0 "$CV_ERROR_COUNT" "Valid rules file should have no errors"
+    else
+        fail "Valid rules file under /etc/container/ owned by root should be sourced"
+    fi
+
+    rm -f "$rules_file" 2>/dev/null || true
+    teardown_custom_rules
+}
+
+# ============================================================================
 # Run Tests
 # ============================================================================
 
@@ -524,6 +669,13 @@ run_test test_detect_secrets_api_key_long "Secret detection: plaintext"
 run_test test_detect_secrets_reference "Secret detection: reference"
 run_test test_detect_secrets_file_path "Secret detection: file path"
 run_test test_detect_secrets_non_secret_var "Secret detection: non-secret var"
+run_test test_custom_rules_empty_var "Custom rules: empty var"
+run_test test_custom_rules_relative_path_rejected "Custom rules: relative path rejected"
+run_test test_custom_rules_nonexistent_file "Custom rules: nonexistent file"
+run_test test_custom_rules_outside_trusted_dir "Custom rules: outside trusted dir"
+run_test test_custom_rules_symlink_escape "Custom rules: symlink escape"
+run_test test_custom_rules_non_root_owned "Custom rules: non-root owned"
+run_test test_custom_rules_valid_file "Custom rules: valid file"
 
 # Generate test report
 generate_report
