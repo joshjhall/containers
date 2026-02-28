@@ -32,6 +32,16 @@ Design decisions and technical analysis:
 - [Architecture Review](architecture/review.md) - System architecture and design
   patterns
 - [Caching Strategy](architecture/caching.md) - BuildKit cache optimization
+  - [BuildKit Cache Mounts](architecture/caching/buildkit-cache-mounts.md) -
+    Build-time vs runtime caches
+  - [Language Caches](architecture/caching/language-caches.md) - Per-language
+    cache directories and structure
+  - [Runtime Volumes](architecture/caching/runtime-volumes.md) - Persistent
+    volume mounts
+  - [Invalidation & Best Practices](architecture/caching/invalidation-and-best-practices.md) -
+    Cache management
+  - [Troubleshooting & Advanced](architecture/caching/troubleshooting-and-advanced.md) -
+    Cache issues and advanced topics
 - [Observability Design](architecture/observability.md) - Metrics, logging, and
   monitoring
 - [Version Resolution](architecture/version-resolution.md) - Partial version
@@ -99,10 +109,50 @@ Technical specifications and configuration:
 - [Security Checksums](reference/security-checksums.md) - Checksum verification
   system
 
+### [Security](security/)
+
+Security audit findings and hardening:
+
+- [High & Medium Severity](security/high-and-medium-severity.md) - Critical
+  security fixes
+- [Low Severity](security/low-severity.md) - Lower priority hardening
+- [Best Practices](security/best-practices.md) - Informational security
+  improvements
+- [Implementation & Testing](security/implementation-and-testing.md) - Phase
+  tracking and test strategy
+
+### [Production](production/)
+
+Production deployment guides:
+
+- [Security Hardening](production/security-hardening.md) - Production security
+  configuration
+- [Image Optimization](production/image-optimization.md) - Multi-stage builds
+  and size reduction
+- [Runtime & Resources](production/runtime-and-resources.md) - Config validation
+  and resource limits
+- [Secrets & Health](production/secrets-and-health.md) - Secrets management and
+  health checks
+- [Deployment Platforms](production/deployment-platforms.md) - K8s, ECS, Docker
+  Compose
+
 ### [Troubleshooting](troubleshooting/)
 
-Platform-specific troubleshooting:
+Common issues and platform-specific troubleshooting:
 
+- [Build Issues](troubleshooting/build-issues.md) - Build failures and Buildx
+  differences
+- [Debian Compatibility](troubleshooting/debian-compatibility.md) - apt-key
+  deprecation and Trixie
+- [Runtime Issues](troubleshooting/runtime-issues.md) - PATH, permissions,
+  bindfs/FUSE
+- [Network Issues](troubleshooting/network-issues.md) - Downloads, proxies,
+  checksum verification
+- [Feature-Specific Issues](troubleshooting/feature-specific-issues.md) -
+  Python, Node.js, Rust, Docker, K8s
+- [CI/CD Issues](troubleshooting/ci-cd-issues.md) - Test failures, timeouts,
+  scanning
+- [Debugging Tools](troubleshooting/debugging-tools.md) - Built-in diagnostics
 - [Case-Sensitive Filesystems](troubleshooting/case-sensitive-filesystems.md) -
   Linux container filesystem issues
 - [Docker for Mac](troubleshooting/docker-mac-case-sensitivity.md) -
