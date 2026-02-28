@@ -148,6 +148,53 @@ test_http_server_options() {
 }
 
 # ============================================================================
+# Functional Tests
+# ============================================================================
+
+# Test: collect_build_metrics parses master-summary.log correctly
+test_collect_build_metrics_parses_summary_log() {
+    # Create mock build log directory with summary
+    local mock_log_dir="$TEST_TEMP_DIR/build-logs"
+    mkdir -p "$mock_log_dir"
+    echo "Python: 0 errors, 1 warnings (2.5s)" > "$mock_log_dir/master-summary.log"
+
+    # Source and call collect_build_metrics in a subshell
+    local output
+    output=$(bash -c "
+        export BUILD_LOG_DIR='$mock_log_dir'
+        # Create a mock container-start-time to prevent writes to /tmp
+        mkdir -p '$TEST_TEMP_DIR/tmp'
+        echo '1700000000' > '$TEST_TEMP_DIR/tmp/container-start-time'
+        # Override the /tmp path by sourcing with the variable already set
+        CONTAINER_START_TIME=1700000000
+        source '$SOURCE_FILE' 2>/dev/null
+        collect_build_metrics
+    " 2>/dev/null)
+
+    assert_contains "$output" 'container_build_duration_seconds{feature="python"' \
+        "Output should contain build duration metric for python"
+    assert_contains "$output" "2.5" \
+        "Output should contain duration value 2.5"
+    assert_contains "$output" "container_features_installed 1" \
+        "Output should report 1 feature installed"
+}
+
+# Test: collect_build_metrics handles missing log directory gracefully
+test_collect_build_metrics_handles_missing_log_dir() {
+    local exit_code=0
+    local output
+    output=$(bash -c "
+        export BUILD_LOG_DIR='$TEST_TEMP_DIR/nonexistent-dir'
+        CONTAINER_START_TIME=1700000000
+        source '$SOURCE_FILE' 2>/dev/null
+        collect_build_metrics
+    " 2>/dev/null) || exit_code=$?
+
+    assert_equals "0" "$exit_code" "Should return 0 for missing log directory"
+    assert_empty "$output" "Should produce no output for missing log directory"
+}
+
+# ============================================================================
 # Run tests
 # ============================================================================
 
@@ -179,6 +226,10 @@ run_test test_scrape_timestamp_metric "container_metrics_scrape_timestamp_second
 run_test test_bash_source_guard "BASH_SOURCE guard for direct execution"
 run_test test_help_flag_handling "--help flag handling"
 run_test test_http_server_options "socat and nc as HTTP server options"
+
+# Functional tests
+run_test_with_setup test_collect_build_metrics_parses_summary_log "collect_build_metrics parses summary log"
+run_test_with_setup test_collect_build_metrics_handles_missing_log_dir "collect_build_metrics handles missing log dir"
 
 # Generate test report
 generate_report

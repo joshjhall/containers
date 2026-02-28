@@ -630,6 +630,42 @@ RULES
 }
 
 # ============================================================================
+# Path Validation - File Not Directory
+# ============================================================================
+
+test_validate_path_file_not_directory() {
+    local tmpfile
+    tmpfile=$(mktemp)
+    export TEST_PATH="$tmpfile"
+
+    cv_validate_path TEST_PATH true true >/dev/null 2>&1
+    local result=$?
+
+    rm -f "$tmpfile"
+
+    assert_not_equals "0" "$result" "cv_validate_path should fail when file is not a directory"
+    assert_greater_or_equal "$CV_ERROR_COUNT" 1 "Should have at least 1 error for file-not-directory"
+}
+
+# ============================================================================
+# Secret Detection - TOKEN and PASSWORD Patterns
+# ============================================================================
+
+test_detect_secrets_token_pattern() {
+    export GITHUB_TOKEN="this-is-a-long-token-value-here"
+
+    cv_detect_secrets GITHUB_TOKEN >/dev/null 2>&1
+    assert_greater_than "$CV_WARNING_COUNT" 0 "Should warn about TOKEN pattern with plaintext value"
+}
+
+test_detect_secrets_password_pattern() {
+    export DB_PASSWORD="supersecretpassword123"
+
+    cv_detect_secrets DB_PASSWORD >/dev/null 2>&1
+    assert_greater_than "$CV_WARNING_COUNT" 0 "Should warn about PASSWORD pattern with plaintext value"
+}
+
+# ============================================================================
 # Run Tests
 # ============================================================================
 
@@ -676,6 +712,9 @@ run_test test_custom_rules_outside_trusted_dir "Custom rules: outside trusted di
 run_test test_custom_rules_symlink_escape "Custom rules: symlink escape"
 run_test test_custom_rules_non_root_owned "Custom rules: non-root owned"
 run_test test_custom_rules_valid_file "Custom rules: valid file"
+run_test test_validate_path_file_not_directory "Path validation: file not directory"
+run_test test_detect_secrets_token_pattern "Secret detection: TOKEN pattern"
+run_test test_detect_secrets_password_pattern "Secret detection: PASSWORD pattern"
 
 # Generate test report
 generate_report

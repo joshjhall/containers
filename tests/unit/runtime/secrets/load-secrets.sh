@@ -361,6 +361,36 @@ test_fail_on_error_returns_exit_code_2() {
 }
 
 # ============================================================================
+# Functional Tests - check_all_providers_health()
+# ============================================================================
+
+test_check_all_providers_health_no_providers() {
+    local exit_code=0
+    _run_loader_subshell "
+        # Mock source_provider to always fail (no providers available)
+        source_provider() { return 1; }
+        check_all_providers_health >/dev/null 2>&1
+    " || exit_code=$?
+
+    assert_equals "0" "$exit_code" "check_all_providers_health returns 0 even with no providers"
+}
+
+test_check_all_providers_health_with_healthy_provider() {
+    local exit_code=0
+    _run_loader_subshell "
+        # Mock source_provider: succeed only for docker
+        source_provider() {
+            [ \"\$1\" = 'docker' ] && return 0 || return 1
+        }
+        # Define a healthy docker provider
+        docker_secrets_health_check() { return 0; }
+        check_all_providers_health >/dev/null 2>&1
+    " || exit_code=$?
+
+    assert_equals "0" "$exit_code" "check_all_providers_health returns 0 with healthy provider"
+}
+
+# ============================================================================
 # Run all tests
 # ============================================================================
 
@@ -411,6 +441,10 @@ run_test_with_setup test_invalid_provider_skipped_without_fail_on_error "Invalid
 run_test_with_setup test_fail_on_error_documented "FAIL_ON_ERROR is documented"
 run_test_with_setup test_fail_on_error_exit_code "FAIL_ON_ERROR returns exit code 2"
 run_test_with_setup test_fail_on_error_returns_exit_code_2 "FAIL_ON_ERROR actually returns exit code 2"
+
+# Health checks
+run_test_with_setup test_check_all_providers_health_no_providers "check_all_providers_health with no providers"
+run_test_with_setup test_check_all_providers_health_with_healthy_provider "check_all_providers_health with healthy provider"
 
 # Generate test report
 generate_report

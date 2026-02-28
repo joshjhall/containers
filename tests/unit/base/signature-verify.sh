@@ -164,6 +164,29 @@ test_verify_sigstore_signature_exists() {
     fi
 }
 
+# ============================================================================
+# Functional Tests - Dispatch Logic
+# ============================================================================
+
+# Test: get_python_release_manager returns expected identity for 3.12.x
+test_get_python_release_manager_returns_identity() {
+    local output
+    output=$(get_python_release_manager "3.12.5")
+    local cert_identity
+    cert_identity=$(echo "$output" | command head -1)
+
+    assert_contains "$cert_identity" "thomas@python.org" \
+        "Python 3.12 release manager identity should contain thomas@python.org"
+}
+
+# Test: _verify_language_handler returns 2 for unknown language
+test_verify_language_handler_returns_2_for_unknown() {
+    local exit_code=0
+    _verify_language_handler "unknown_lang" "/dev/null" "1.0.0" >/dev/null 2>&1 || exit_code=$?
+
+    assert_equals "2" "$exit_code" "_verify_language_handler returns 2 for unhandled language"
+}
+
 # Run all tests
 run_test test_get_python_release_manager_exists "get_python_release_manager function exists"
 run_test test_python_3_11_release_manager "Python 3.11 release manager mapping"
@@ -178,6 +201,8 @@ run_test test_python_2_version "Python 2.x returns error"
 run_test test_verify_signature_exists "verify_signature function exists"
 run_test test_download_and_verify_sigstore_exists "download_and_verify_sigstore function exists"
 run_test test_verify_sigstore_signature_exists "verify_sigstore_signature function exists"
+run_test test_get_python_release_manager_returns_identity "get_python_release_manager returns identity"
+run_test test_verify_language_handler_returns_2_for_unknown "_verify_language_handler returns 2 for unknown"
 
 # Generate test report
 generate_report

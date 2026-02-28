@@ -297,6 +297,49 @@ test_apt_install_conditional() {
     fi
 }
 
+# ============================================================================
+# Functional Tests - Debian Version Detection
+# ============================================================================
+
+# Test: get_debian_major_version returns a numeric value on this system
+test_get_debian_major_version_returns_number() {
+    # Source the script in a subshell to avoid side effects
+    local output
+    output=$(bash -c "
+        _APT_UTILS_LOADED=''
+        source '$PROJECT_ROOT/lib/base/apt-utils.sh' 2>/dev/null
+        get_debian_major_version
+    " 2>/dev/null)
+
+    # Output should be a number (e.g., 11, 12, 13)
+    assert_matches "$output" "^[0-9]+$" "get_debian_major_version returns a numeric value"
+}
+
+# Test: is_debian_version matches the current system version
+test_is_debian_version_matches_current() {
+    local exit_code=0
+    bash -c "
+        _APT_UTILS_LOADED=''
+        source '$PROJECT_ROOT/lib/base/apt-utils.sh' 2>/dev/null
+        current=\$(get_debian_major_version)
+        is_debian_version \"\$current\"
+    " 2>/dev/null || exit_code=$?
+
+    assert_equals "0" "$exit_code" "is_debian_version matches current system version"
+}
+
+# Test: is_debian_version rejects a version that doesn't exist
+test_is_debian_version_rejects_wrong() {
+    local exit_code=0
+    bash -c "
+        _APT_UTILS_LOADED=''
+        source '$PROJECT_ROOT/lib/base/apt-utils.sh' 2>/dev/null
+        is_debian_version 99
+    " 2>/dev/null || exit_code=$?
+
+    assert_equals "1" "$exit_code" "is_debian_version rejects version 99"
+}
+
 # Run all tests
 run_test test_script_exists "APT utilities script exists"
 run_test test_functions_exported "Functions are exported"
@@ -314,6 +357,11 @@ run_test test_add_apt_repository_key_function "add_apt_repository_key function"
 run_test test_debian_version_detection "Debian version detection with fallbacks"
 run_test test_is_debian_version "is_debian_version function"
 run_test test_apt_install_conditional "apt_install_conditional function"
+
+# Functional tests
+run_test test_get_debian_major_version_returns_number "get_debian_major_version returns a number"
+run_test test_is_debian_version_matches_current "is_debian_version matches current version"
+run_test test_is_debian_version_rejects_wrong "is_debian_version rejects version 99"
 
 # Generate test report
 generate_report

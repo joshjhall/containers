@@ -264,6 +264,72 @@ test_script_documentation() {
     fi
 }
 
+# ============================================================================
+# Functional Tests - verify_checksum and download_and_verify
+# ============================================================================
+
+# Test: verify_checksum rejects SHA-1 length checksums
+test_verify_checksum_rejects_sha1_length() {
+    local test_file="$TEST_TEMP_DIR/sha1-test.txt"
+    echo "test content for sha1 rejection" > "$test_file"
+
+    # Generate a 40-char hex string (SHA-1 length)
+    local sha1_hash="da39a3ee5e6b4b0d3255bfef95601890afd80709"
+
+    local exit_code=0
+    local output
+    output=$(bash -c "
+        _DOWNLOAD_VERIFY_LOADED=''
+        source '$PROJECT_ROOT/lib/base/download-verify.sh' 2>/dev/null
+        verify_checksum '$test_file' '$sha1_hash'
+    " 2>&1) || exit_code=$?
+
+    assert_not_equals "0" "$exit_code" "verify_checksum should reject SHA-1 checksums"
+    assert_contains "$output" "SHA-1" "Error should mention SHA-1"
+}
+
+# Test: download_and_verify succeeds with valid SHA256 and mock curl
+test_download_and_verify_succeeds_with_valid_sha256() {
+    # Create a source file with known content
+    local source_file="$TEST_TEMP_DIR/source-payload.bin"
+    echo "known test payload content" > "$source_file"
+
+    # Compute SHA256 using the real binary (setup() may override sha256sum in PATH)
+    local sha256
+    sha256=$(/usr/bin/sha256sum "$source_file" | command cut -d' ' -f1)
+
+    local output_file="$TEST_TEMP_DIR/downloaded-output.bin"
+
+    # Create a mock curl that copies the source file to the -o target
+    local mock_bin="$TEST_TEMP_DIR/mock-bin"
+    mkdir -p "$mock_bin"
+    command cat > "$mock_bin/curl" <<MOCK
+#!/bin/bash
+outfile=""
+while [[ \$# -gt 0 ]]; do
+    case "\$1" in
+        -o) outfile="\$2"; shift 2 ;;
+        *) shift ;;
+    esac
+done
+if [ -n "\$outfile" ]; then
+    /usr/bin/cp '$source_file' "\$outfile"
+fi
+MOCK
+    chmod +x "$mock_bin/curl"
+
+    local exit_code=0
+    bash --norc --noprofile -c "
+        export PATH='$mock_bin':/usr/bin:/bin
+        _DOWNLOAD_VERIFY_LOADED=''
+        source '$PROJECT_ROOT/lib/base/download-verify.sh' 2>/dev/null
+        download_and_verify 'http://fake.example.com/file.bin' '$sha256' '$output_file'
+    " >/dev/null 2>&1 || exit_code=$?
+
+    assert_equals "0" "$exit_code" "download_and_verify should succeed with valid SHA256"
+    assert_file_exists "$output_file" "Output file should exist after successful download"
+}
+
 # Run tests with setup/teardown
 run_test_with_setup() {
     local test_function="$1"
@@ -286,6 +352,8 @@ run_test_with_setup test_verify_checksum_sha256_logic "Verify checksum SHA256 lo
 run_test_with_setup test_verify_checksum_sha512_logic "Verify checksum SHA512 logic is correct"
 run_test_with_setup test_sha1_rejected "SHA-1 checksums are rejected with helpful error"
 run_test test_script_documentation "Script documentation is comprehensive"
+run_test_with_setup test_verify_checksum_rejects_sha1_length "verify_checksum rejects SHA-1 length hash"
+run_test_with_setup test_download_and_verify_succeeds_with_valid_sha256 "download_and_verify succeeds with valid SHA256"
 
 # Generate test report
 generate_report
