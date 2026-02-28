@@ -35,6 +35,34 @@ set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 
 # ============================================================================
+# Provider Name Validation
+# ============================================================================
+
+# Validate a provider name to prevent env var injection.
+# Trims whitespace and rejects names not matching [a-z0-9-].
+validate_provider_name() {
+    local raw_name="$1"
+
+    # Trim leading/trailing whitespace
+    local name
+    name="$(echo "$raw_name" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+
+    # Reject empty names
+    if [ -z "$name" ]; then
+        log_error "Empty provider name in SECRET_LOADER_PRIORITY"
+        return 1
+    fi
+
+    # Only allow lowercase alphanumeric and hyphens
+    if [[ ! "$name" =~ ^[a-z0-9-]+$ ]]; then
+        log_error "Invalid provider name '$name': must contain only [a-z0-9-]"
+        return 1
+    fi
+
+    return 0
+}
+
+# ============================================================================
 # Secret Provider Registry
 # ============================================================================
 
@@ -72,7 +100,7 @@ source_provider() {
             script_mapping="docker-secrets.sh"
             ;;
         *)
-            log_warning "Unknown secret provider: $provider"
+            log_error "Unknown secret provider: $provider"
             return 1
             ;;
     esac
@@ -117,7 +145,7 @@ load_provider_secrets() {
             function_name="load_secrets_from_docker"
             ;;
         *)
-            log_warning "Unknown provider: $provider"
+            log_error "Unknown provider: $provider"
             return 1
             ;;
     esac
@@ -170,9 +198,15 @@ load_all_secrets() {
     local successful_providers=0
     local failed_providers=0
 
-    # Source all provider scripts
+    # Source all provider scripts (validate names first)
     for provider in "${providers[@]}"; do
         if [ -n "$provider" ]; then
+            if ! validate_provider_name "$provider"; then
+                if [ "$fail_on_error" = "true" ]; then
+                    return 2
+                fi
+                continue
+            fi
             source_provider "$provider" || true
         fi
     done
@@ -180,6 +214,13 @@ load_all_secrets() {
     # Load secrets from each provider
     for provider in "${providers[@]}"; do
         if [ -z "$provider" ]; then
+            continue
+        fi
+
+        if ! validate_provider_name "$provider"; then
+            if [ "$fail_on_error" = "true" ]; then
+                return 2
+            fi
             continue
         fi
 

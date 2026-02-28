@@ -199,6 +199,131 @@ test_function_name_mapping() {
 }
 
 # ============================================================================
+# Functional Tests - validate_provider_name()
+# ============================================================================
+
+test_defines_validate_provider_name() {
+    assert_file_contains "$SOURCE_FILE" "validate_provider_name()" \
+        "Script defines validate_provider_name function"
+}
+
+test_validate_valid_provider_names() {
+    local exit_code=0
+    _run_loader_subshell "
+        validate_provider_name 'docker' >/dev/null 2>&1
+    " || exit_code=$?
+    assert_equals "0" "$exit_code" "docker is a valid provider name"
+
+    exit_code=0
+    _run_loader_subshell "
+        validate_provider_name '1password' >/dev/null 2>&1
+    " || exit_code=$?
+    assert_equals "0" "$exit_code" "1password is a valid provider name"
+
+    exit_code=0
+    _run_loader_subshell "
+        validate_provider_name 'aws-secrets' >/dev/null 2>&1
+    " || exit_code=$?
+    assert_equals "0" "$exit_code" "aws-secrets is a valid provider name"
+}
+
+test_validate_rejects_empty_name() {
+    local exit_code=0
+    _run_loader_subshell "
+        validate_provider_name '' >/dev/null 2>&1
+    " || exit_code=$?
+    assert_equals "1" "$exit_code" "Empty provider name is rejected"
+}
+
+test_validate_rejects_whitespace_only() {
+    local exit_code=0
+    _run_loader_subshell "
+        validate_provider_name '   ' >/dev/null 2>&1
+    " || exit_code=$?
+    assert_equals "1" "$exit_code" "Whitespace-only provider name is rejected"
+}
+
+test_validate_rejects_leading_trailing_whitespace() {
+    local exit_code=0
+    _run_loader_subshell "
+        validate_provider_name '  docker  ' >/dev/null 2>&1
+    " || exit_code=$?
+    # After trimming, 'docker' is valid — but the raw name contains spaces,
+    # and trimming happens before the regex check. 'docker' passes [a-z0-9-].
+    # The function trims first, then validates the trimmed result.
+    assert_equals "0" "$exit_code" "Trimmed provider name passes validation"
+}
+
+test_validate_rejects_semicolon() {
+    local exit_code=0
+    _run_loader_subshell "
+        validate_provider_name 'docker;rm -rf /' >/dev/null 2>&1
+    " || exit_code=$?
+    assert_equals "1" "$exit_code" "Provider name with semicolon is rejected"
+}
+
+test_validate_rejects_dollar_sign() {
+    local exit_code=0
+    _run_loader_subshell "
+        validate_provider_name '\$(whoami)' >/dev/null 2>&1
+    " || exit_code=$?
+    assert_equals "1" "$exit_code" "Provider name with \$ is rejected"
+}
+
+test_validate_rejects_backtick() {
+    local exit_code=0
+    _run_loader_subshell "
+        validate_provider_name '\`id\`' >/dev/null 2>&1
+    " || exit_code=$?
+    assert_equals "1" "$exit_code" "Provider name with backtick is rejected"
+}
+
+test_validate_rejects_pipe() {
+    local exit_code=0
+    _run_loader_subshell "
+        validate_provider_name 'docker|cat /etc/passwd' >/dev/null 2>&1
+    " || exit_code=$?
+    assert_equals "1" "$exit_code" "Provider name with pipe is rejected"
+}
+
+test_validate_rejects_uppercase() {
+    local exit_code=0
+    _run_loader_subshell "
+        validate_provider_name 'Docker' >/dev/null 2>&1
+    " || exit_code=$?
+    assert_equals "1" "$exit_code" "Provider name with uppercase is rejected"
+}
+
+test_invalid_provider_fails_load_all_secrets() {
+    local exit_code=0
+    _run_loader_subshell "
+        export SECRET_LOADER_ENABLED='true'
+        export SECRET_LOADER_FAIL_ON_ERROR='true'
+        export SECRET_LOADER_PRIORITY='docker;\$(whoami)'
+
+        load_all_secrets >/dev/null 2>&1
+    " || exit_code=$?
+    assert_equals "2" "$exit_code" \
+        "load_all_secrets returns 2 for invalid provider name with fail_on_error=true"
+}
+
+test_invalid_provider_skipped_without_fail_on_error() {
+    local exit_code=0
+    _run_loader_subshell "
+        source_provider() { return 0; }
+        load_secrets_from_docker() { return 0; }
+
+        export SECRET_LOADER_ENABLED='true'
+        export SECRET_LOADER_FAIL_ON_ERROR='false'
+        export SECRET_LOADER_PRIORITY='docker;\$(whoami),docker'
+
+        load_all_secrets >/dev/null 2>&1
+    " || exit_code=$?
+    assert_equals "0" "$exit_code" \
+        "load_all_secrets skips invalid provider and continues when fail_on_error=false"
+}
+
+# ============================================================================
 # Functional Tests - Fail on Error
 # ============================================================================
 
@@ -267,6 +392,20 @@ run_test_with_setup test_source_provider_aliases "Provider aliases are mapped"
 # Load provider secrets
 run_test_with_setup test_load_unknown_provider "Error for unknown provider in load"
 run_test_with_setup test_function_name_mapping "Function name mappings"
+
+# Provider name validation
+run_test_with_setup test_defines_validate_provider_name "Defines validate_provider_name function"
+run_test_with_setup test_validate_valid_provider_names "Valid provider names pass validation"
+run_test_with_setup test_validate_rejects_empty_name "Empty provider name rejected"
+run_test_with_setup test_validate_rejects_whitespace_only "Whitespace-only provider name rejected"
+run_test_with_setup test_validate_rejects_leading_trailing_whitespace "Trimmed provider name passes"
+run_test_with_setup test_validate_rejects_semicolon "Semicolon in provider name rejected"
+run_test_with_setup test_validate_rejects_dollar_sign "Dollar sign in provider name rejected"
+run_test_with_setup test_validate_rejects_backtick "Backtick in provider name rejected"
+run_test_with_setup test_validate_rejects_pipe "Pipe in provider name rejected"
+run_test_with_setup test_validate_rejects_uppercase "Uppercase in provider name rejected"
+run_test_with_setup test_invalid_provider_fails_load_all_secrets "Invalid provider fails load_all_secrets with fail_on_error"
+run_test_with_setup test_invalid_provider_skipped_without_fail_on_error "Invalid provider skipped without fail_on_error"
 
 # Fail on error
 run_test_with_setup test_fail_on_error_documented "FAIL_ON_ERROR is documented"
