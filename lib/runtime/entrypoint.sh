@@ -93,6 +93,8 @@ STARTUP_BEGIN_TIME=$(date +%s)
 # - Fails gracefully if ulimit command is not available or restricted
 
 # File descriptors (open files)
+# Default 4096: 4x the typical Linux default (1024); accommodates dev tooling
+# (LSP servers, file watchers, test runners) without being excessive
 FILE_DESCRIPTOR_LIMIT="${FILE_DESCRIPTOR_LIMIT:-4096}"
 ulimit -n "$FILE_DESCRIPTOR_LIMIT" 2>/dev/null || {
     echo "⚠️  Warning: Could not set file descriptor limit to $FILE_DESCRIPTOR_LIMIT"
@@ -100,6 +102,8 @@ ulimit -n "$FILE_DESCRIPTOR_LIMIT" 2>/dev/null || {
 }
 
 # Max user processes (prevent fork bombs)
+# Default 2048: generous ceiling for dev containers; prevents accidental fork
+# bombs while allowing parallel test runners and build tools
 MAX_USER_PROCESSES="${MAX_USER_PROCESSES:-2048}"
 ulimit -u "$MAX_USER_PROCESSES" 2>/dev/null || {
     echo "⚠️  Warning: Could not set max user processes limit to $MAX_USER_PROCESSES"
@@ -178,10 +182,10 @@ fi
 if [ "$(id -u)" -eq 0 ]; then
     RUNNING_AS_ROOT=true
     # Detect the non-root user in the container
-    # The container should have a user with UID 1000 created during build
-    USERNAME=$(getent passwd 1000 | command cut -d: -f1)
+    # The container should have a user with the build-time UID (default 1000)
+    USERNAME=$(getent passwd "${CONTAINER_UID:-1000}" | command cut -d: -f1)
     if [ -z "$USERNAME" ]; then
-        echo "Error: No user with UID 1000 found in container"
+        echo "Error: No user with UID ${CONTAINER_UID:-1000} found in container (set CONTAINER_UID to override)"
         exit 1
     fi
 else

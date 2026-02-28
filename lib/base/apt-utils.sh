@@ -35,6 +35,7 @@ fi
 APT_MAX_RETRIES="${APT_MAX_RETRIES:-3}"
 APT_RETRY_DELAY="${APT_RETRY_DELAY:-5}"
 APT_TIMEOUT="${APT_TIMEOUT:-300}"  # 5 minutes timeout for apt operations
+APT_NETWORK_ERROR_CODE=100        # apt exit code for network/repository errors
 
 # ============================================================================
 # Debian Version Detection
@@ -289,7 +290,7 @@ apt_update() {
             echo "⚠ apt-get update failed (exit code: $exit_code), retrying in ${delay}s..."
 
             # Check for specific network errors
-            if [ $exit_code -eq 100 ]; then
+            if [ $exit_code -eq $APT_NETWORK_ERROR_CODE ]; then
                 echo "  Network connectivity issue detected, waiting longer..."
                 delay=$((delay * 2))  # Double the delay for network issues
             fi
@@ -370,7 +371,7 @@ apt_install() {
             echo "⚠ Package installation failed (exit code: $exit_code), retrying in ${delay}s..."
 
             # Check for specific errors
-            if [ $exit_code -eq 100 ]; then
+            if [ $exit_code -eq $APT_NETWORK_ERROR_CODE ]; then
                 echo "  Network connectivity issue detected"
                 # Try to update package lists before retry
                 echo "  Attempting to refresh package lists..."

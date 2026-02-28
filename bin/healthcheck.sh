@@ -91,9 +91,9 @@ check_core() {
     log_check "Checking core container health..."
 
     # Check if container is initialized
-    USERNAME=$(getent passwd 1000 | command cut -d: -f1 || echo "")
+    USERNAME=$(getent passwd "${CONTAINER_UID:-1000}" | command cut -d: -f1 || echo "")
     if [ -z "$USERNAME" ]; then
-        log_fail "No user with UID 1000 found"
+        log_fail "No user with UID ${CONTAINER_UID:-1000} found (set CONTAINER_UID to override)"
         return 1
     fi
     log_pass "Container user: $USERNAME"
