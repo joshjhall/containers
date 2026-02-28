@@ -432,5 +432,32 @@ run_test test_docker_config_env_var "DOCKER_CONFIG env var set"
 run_test test_docker_cli_plugins_path "DOCKER_CLI_PLUGINS_PATH referenced"
 run_test test_docker_compose_plugin_install "Docker Compose plugin installation"
 
+# ============================================================================
+# GPG Key Fingerprint Verification Tests
+# ============================================================================
+
+# Test: Docker GPG key fingerprint constant is defined
+test_docker_gpg_fingerprint_defined() {
+    local source_file="$PROJECT_ROOT/lib/features/docker.sh"
+    assert_file_contains "$source_file" "DOCKER_GPG_FINGERPRINT" "docker.sh defines DOCKER_GPG_FINGERPRINT constant"
+}
+
+# Test: Docker GPG key fingerprint mismatch error handling
+test_docker_gpg_fingerprint_mismatch_handling() {
+    local source_file="$PROJECT_ROOT/lib/features/docker.sh"
+    assert_file_contains "$source_file" "fingerprint mismatch" "docker.sh handles GPG key fingerprint mismatch"
+}
+
+# Test: Docker GPG key verification uses keyring file directly
+test_docker_gpg_keyring_verification() {
+    local source_file="$PROJECT_ROOT/lib/features/docker.sh"
+    assert_file_contains "$source_file" "no-default-keyring" "docker.sh queries keyring file directly for fingerprint"
+}
+
+# Run GPG fingerprint verification tests
+run_test test_docker_gpg_fingerprint_defined "Docker GPG fingerprint constant defined"
+run_test test_docker_gpg_fingerprint_mismatch_handling "Docker GPG fingerprint mismatch handling"
+run_test test_docker_gpg_keyring_verification "Docker GPG keyring verification method"
+
 # Generate test report
 generate_report

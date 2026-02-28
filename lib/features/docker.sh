@@ -102,6 +102,27 @@ log_command "Creating keyrings directory" \
 log_message "Adding Docker GPG key"
 retry_with_backoff curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
 
+# Docker GPG key fingerprint
+# Source: https://docs.docker.com/engine/install/debian/#install-using-the-repository
+DOCKER_GPG_FINGERPRINT="9DC8 5822 9FC7 DD38 854A E2D8 8D81 803C 0EBF CD88"
+
+log_message "Verifying Docker GPG key fingerprint..."
+IMPORTED_FINGERPRINT=$(gpg --no-default-keyring \
+    --keyring /etc/apt/keyrings/docker.gpg \
+    --list-keys --with-colons 2>/dev/null \
+    | command grep '^fpr:' | command head -1 | command cut -d: -f10)
+EXPECTED_FINGERPRINT=$(echo "${DOCKER_GPG_FINGERPRINT}" | command tr -d ' ')
+
+if [ "$IMPORTED_FINGERPRINT" != "$EXPECTED_FINGERPRINT" ]; then
+    log_error "Docker GPG key fingerprint mismatch!"
+    log_error "Expected: ${EXPECTED_FINGERPRINT}"
+    log_error "Got:      ${IMPORTED_FINGERPRINT}"
+    command rm -f /etc/apt/keyrings/docker.gpg
+    exit 1
+fi
+
+log_message "✓ Docker GPG key fingerprint verified"
+
 log_command "Setting Docker GPG key permissions" \
     chmod a+r /etc/apt/keyrings/docker.gpg
 
