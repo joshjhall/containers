@@ -5,6 +5,71 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.15.3] - 2026-03-01
+
+### Added
+
+- Wire audit-logger.sh into container startup and fix env var mismatch (#109)
+- Add secret scrubbing in logs and CI/CD security testing (#130)
+- Add enforce-command-prefix pre-commit hook and fix 454 bare commands
+- Split next-issue into planning and shipping skills
+
+### Changed
+
+- Split 3 oversized shell scripts into focused sub-modules (#111)
+- Replace duplicated arch detection with map_arch helpers (#110)
+- Extract entrypoint.sh god module into focused sub-scripts (#108)
+- Deduplicate apt-key blocks across feature scripts
+- Migrate all feature scripts to 4-tier verify_download
+
+### Documentation
+
+- Update AGENTS.md next-issue skill description
+- Split 4 large documentation files into focused sub-documents (#124)
+- Fix stale versions, progress trackers, and broken references
+- Fix placeholder date for v4.0.0 in migration guide
+- Add git-cliff, biome, taplo to version inventory
+- Add missing codebase-audit to skill count and table
+- Fix misleading examples and feature descriptions
+
+### Fixed
+
+- Prevent secret value exposure in 1Password integration logs
+- Improve next-issue workflow with auto plan mode, stale state detection, and commit enforcement
+- Harden custom validation rules path sourcing
+- Update stale references from dev-tools.sh refactor and doc reorganization
+- Harden secret loader against env var injection (#106)
+- Remove SHA-1 support from download verification (#105)
+- Remove TOFU self-checksum for Claude Code and Helm (#104)
+- Prefix bare commands with `command` to prevent alias hijacking
+- Guard arithmetic increments against set -e in security tests
+- Escape $(pwd) in su -l privilege-drop to prevent command injection
+- Resolve inconsistent patterns in sub-modules
+- Rename camelCase var, remove dead code, extract helpers
+- Replace magic numbers with named constants
+- Remove deprecated wrp alias and replace exa with eza
+- Harden zoxide download and fix security test stdout pollution
+- Verify Docker GPG key fingerprint after import
+- Fix remaining security test assertions for listening services and tmp files
+- Run version checks as developer user for correct PATH
+- Fix check-versions.sh set -e crash and update outdated deps
+- Fix signed-by stripping and apt_install exit code on Debian 11/12
+- Fix apt_update exit code, python3-distutils on Debian 13, remove unused dep
+- Fix VERSION_CODENAME expansion in CRAN repository URL
+- Switch Trivy install from GitHub releases to APT repository
+- Install Trivy via APT in security scan workflow
+- Handle unmapped files in changed-test runner
+
+### Miscellaneous
+
+- Add .claude/memory to .gitignore
+
+### Testing
+
+- Add unit tests for generate-release-notes.sh and fix-shell-permissions.sh (#117)
+- Add unit tests for compliance-validation.sh (#116)
+- Add functional tests to 7 static-only test files
+
 ## [4.15.2] - 2026-02-27
 
 ### Added
@@ -1100,6 +1165,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix prettier and markdownlint formatting in README
 - Format TLS documentation files
 
+[4.15.3]: https://github.com/joshjhall/containers/compare/v4.15.2...v4.15.3
 [4.15.2]: https://github.com/joshjhall/containers/compare/v4.15.1...v4.15.2
 [4.15.1]: https://github.com/joshjhall/containers/compare/v4.15.0...v4.15.1
 [4.15.0]: https://github.com/joshjhall/containers/compare/v4.14.5...v4.15.0
