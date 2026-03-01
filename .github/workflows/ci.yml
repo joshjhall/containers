@@ -438,6 +438,16 @@ jobs:
           docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.sanitized }}-${{ matrix.variant }}
           df -h
 
+      - name: Install Trivy via APT
+        run: |
+          # Install Trivy from official APT repository (GitHub releases are no longer available)
+          sudo apt-get install -y wget apt-transport-https gnupg
+          wget -qO - https://get.trivy.dev/deb/public.key | sudo gpg --dearmor -o /usr/share/keyrings/trivy.gpg
+          echo "deb [signed-by=/usr/share/keyrings/trivy.gpg] https://get.trivy.dev/deb generic main" | sudo tee /etc/apt/sources.list.d/trivy.list
+          sudo apt-get update
+          sudo apt-get install -y trivy
+          trivy --version
+
       - name: Scan filesystem for misconfigurations
         uses: aquasecurity/trivy-action@0.34.1
         with:
@@ -447,6 +457,7 @@ jobs:
           scanners: 'misconfig,secret'
           severity: 'CRITICAL,HIGH,MEDIUM'
           exit-code: '1'
+          skip-setup-trivy: 'true'
         continue-on-error: true
 
       - name: Scan Dockerfile for issues
@@ -456,6 +467,7 @@ jobs:
           scan-ref: './Dockerfile'
           format: 'table'
           severity: 'CRITICAL,HIGH'
+          skip-setup-trivy: 'true'
         continue-on-error: true
 
       - name: Run Trivy vulnerability scanner (CRITICAL - blocking)
@@ -467,6 +479,7 @@ jobs:
           severity: 'CRITICAL'
           exit-code: '1'
           ignore-unfixed: true
+          skip-setup-trivy: 'true'
         # Critical vulnerabilities with fixes available will fail the build
         # Note: secrets are checked in filesystem scan with continue-on-error
 
@@ -478,6 +491,7 @@ jobs:
           format: 'sarif'
           output: 'trivy-results-${{ matrix.variant }}.sarif'
           severity: 'CRITICAL,HIGH'
+          skip-setup-trivy: 'true'
 
       - name: Upload Trivy results to GitHub Security
         uses: github/codeql-action/upload-sarif@v4
@@ -493,6 +507,7 @@ jobs:
           image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.sanitized }}-${{ matrix.variant }}
           format: 'cyclonedx'
           output: 'sbom-${{ matrix.variant }}.json'
+          skip-setup-trivy: 'true'
 
       - name: Run Trivy for detailed report
         uses: aquasecurity/trivy-action@0.34.1
@@ -501,6 +516,7 @@ jobs:
           image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.sanitized }}-${{ matrix.variant }}
           format: 'table'
           severity: 'CRITICAL,HIGH,MEDIUM'
+          skip-setup-trivy: 'true'
 
       - name: Upload Trivy scan results
         uses: actions/upload-artifact@v4
