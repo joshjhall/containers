@@ -185,6 +185,8 @@ declare -A TEST_FILES_MAP  # associative array for deduplication
 while IFS= read -r file; do
     [ -z "$file" ] && continue
     result=$(map_to_test "$file")
+    # Skip files with no mapped test (empty result or whitespace-only)
+    result=$(echo "$result" | command xargs)  # trim whitespace
     [ -z "$result" ] && continue
 
     if [ "$result" = "ALL" ]; then
@@ -205,11 +207,16 @@ fi
 # Collect deduplicated test files
 TEST_FILES=()
 for tf in "${!TEST_FILES_MAP[@]}"; do
+    # Skip empty keys (defensive - should not happen)
+    [ -z "$tf" ] && continue
+    [ ! -f "$tf" ] && continue
     TEST_FILES+=("$tf")
 done
 
-# Sort for deterministic order
-mapfile -t TEST_FILES < <(printf '%s\n' "${TEST_FILES[@]}" | sort)
+# Sort for deterministic order (guard against empty array producing a blank line)
+if [ ${#TEST_FILES[@]} -gt 0 ]; then
+    mapfile -t TEST_FILES < <(printf '%s\n' "${TEST_FILES[@]}" | sort)
+fi
 
 if [ ${#TEST_FILES[@]} -eq 0 ]; then
     echo -e "${GREEN}No unit tests match the changed files — nothing to run.${NC}"
