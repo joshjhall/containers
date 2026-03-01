@@ -28,6 +28,9 @@ CLAUDE_EXTRA_PLUGINS_DEFAULT="${CLAUDE_EXTRA_PLUGINS:-}"
 # Can be overridden at runtime via environment variable
 CLAUDE_EXTRA_MCPS_DEFAULT="${CLAUDE_EXTRA_MCPS:-}"
 
+# Dev tools flag (for project health check and conditional startup scripts)
+INCLUDE_DEV_TOOLS=${INCLUDE_DEV_TOOLS:-false}
+
 # Support tool flags (for conditional skills/agents)
 INCLUDE_DOCKER=${INCLUDE_DOCKER:-false}
 INCLUDE_KUBERNETES=${INCLUDE_KUBERNETES:-false}

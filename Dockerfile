@@ -548,6 +548,12 @@ RUN if [ -f /opt/container-runtime/check-build-logs.sh ]; then \
     chmod 755 /usr/local/bin/check-build-logs.sh; \
     fi
 
+# Install project health check startup script
+RUN if [ -f /opt/container-runtime/40-project-health-check.sh ]; then \
+    cp /opt/container-runtime/40-project-health-check.sh /etc/container/startup/40-project-health-check.sh && \
+    chmod 755 /etc/container/startup/40-project-health-check.sh; \
+    fi
+
 # Install secret loading startup script
 RUN if [ -f /opt/container-runtime/secrets/50-load-secrets.sh ]; then \
     cp /opt/container-runtime/secrets/50-load-secrets.sh /etc/container/startup/50-load-secrets.sh && \
