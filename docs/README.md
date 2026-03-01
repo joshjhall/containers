@@ -70,6 +70,13 @@ Contributor and development guides:
 
 Runtime monitoring and observability:
 
+- [Observability Overview](observability/README.md) - Hub index and quick links
+- [Quickstart Guide](observability/quickstart.md) - Get observability running
+  in 5 minutes
+- [Metrics Reference](observability/metrics-reference.md) - All Prometheus
+  metrics exposed by the container
+- [Structured Logging Reference](observability/structured-logging-reference.md) -
+  JSON log format and field descriptions
 - [OpenTelemetry Integration](observability/opentelemetry-integration.md) -
   Complete OTel setup
 - [Testing Strategy](observability/testing-strategy.md) - Observability testing
