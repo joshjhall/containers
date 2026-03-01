@@ -119,9 +119,10 @@ if [ ! -f /usr/share/keyrings/r-project-archive-keyring.gpg ]; then
     exit 1
 fi
 
-# Add R repository for Debian with signed-by option (dynamically detect codename)
+# Add R repository for Debian with signed-by option
+# VERSION_CODENAME is available from /etc/os-release (sourced by feature-header.sh)
 log_command "Adding R repository" \
-    bash -c "echo 'deb [signed-by=/usr/share/keyrings/r-project-archive-keyring.gpg] https://cloud.r-project.org/bin/linux/debian $(. /etc/os-release && echo \"\$VERSION_CODENAME\")-cran${R_VERSION_SHORT}/' > /etc/apt/sources.list.d/r-cran.list"
+    bash -c "echo 'deb [signed-by=/usr/share/keyrings/r-project-archive-keyring.gpg] https://cloud.r-project.org/bin/linux/debian ${VERSION_CODENAME}-cran${R_VERSION_SHORT}/' > /etc/apt/sources.list.d/r-cran.list"
 
 # Update and install specific R version
 # Update package lists with R repository
