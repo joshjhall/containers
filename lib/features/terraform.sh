@@ -73,7 +73,7 @@ log_feature_start "Terraform"
 TERRAGRUNT_VERSION="${TERRAGRUNT_VERSION:-0.93.0}"
 TFDOCS_VERSION="${TFDOCS_VERSION:-0.20.0}"
 TFLINT_VERSION="${TFLINT_VERSION:-0.59.1}"
-TRIVY_VERSION="${TRIVY_VERSION:-0.69.1}"
+# Note: Trivy is installed via APT repository (no version pinning needed)
 
 # ============================================================================
 # Dependencies Installation

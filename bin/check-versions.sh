@@ -235,8 +235,7 @@ extract_all_versions() {
     _add_dockerfile_version TFDOCS_VERSION "terraform-docs"
     _add_dockerfile_version TFLINT_VERSION "tflint"
 
-    # Trivy from terraform.sh (replaces deprecated tfsec)
-    _add_feature_version TRIVY_VERSION "Trivy" "terraform.sh"
+    # Trivy is installed via APT (no pinned version to track)
 
     _add_dockerfile_version PIXI_VERSION "pixi"
 
@@ -353,7 +352,7 @@ main() {
             Terragrunt) check_github_release "Terragrunt" "gruntwork-io/terragrunt" ;;
             terraform-docs) check_github_release "terraform-docs" "terraform-docs/terraform-docs" ;;
             tflint) check_github_release "tflint" "terraform-linters/tflint" ;;
-            Trivy) check_github_release "Trivy" "aquasecurity/trivy" ;;
+            Trivy) ;; # Trivy is installed via APT (no GitHub release to check)
             pixi) check_github_release "pixi" "prefix-dev/pixi" ;;
             Poetry) check_github_release "Poetry" "python-poetry/poetry" ;;
             uv) check_github_release "uv" "astral-sh/uv" ;;

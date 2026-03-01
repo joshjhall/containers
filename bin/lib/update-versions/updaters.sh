@@ -223,9 +223,7 @@ update_version() {
                     command sed -i "s/^JDTLS_VERSION=\"[0-9][^\"]*\"/JDTLS_VERSION=\"\${JDTLS_VERSION:-$latest}\"/" "$script_path"
                     ;;
                 Trivy)
-                    command sed -i "s/TRIVY_VERSION=\"\${TRIVY_VERSION:-[^}]*}\"/TRIVY_VERSION=\"\${TRIVY_VERSION:-$latest}\"/" "$script_path"
-                    command sed -i "s/^TRIVY_VERSION=\"[0-9][^\"]*\"/TRIVY_VERSION=\"\${TRIVY_VERSION:-$latest}\"/" "$script_path"
-                    ;;
+                    ;; # Trivy is installed via APT (no version to update in script)
                 *)
                     echo -e "${YELLOW}    Warning: Unknown shell script tool: $tool${NC}"
                     ;;

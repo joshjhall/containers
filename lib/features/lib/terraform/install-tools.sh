@@ -2,10 +2,11 @@
 # Terraform companion tool installations: Terragrunt, terraform-docs, tflint, Trivy
 #
 # Expected variables from parent script:
-#   TERRAGRUNT_VERSION, TFDOCS_VERSION, TFLINT_VERSION, TRIVY_VERSION
+#   TERRAGRUNT_VERSION, TFDOCS_VERSION, TFLINT_VERSION
 #
 # Expected sourced utilities:
 #   checksum-fetch.sh, download-verify.sh, retry-utils.sh, checksum-verification.sh
+#   apt-utils.sh (for Trivy APT installation)
 #
 # Source this file from terraform.sh after Terraform is installed.
 
@@ -196,70 +197,32 @@ install_tflint() {
 }
 
 # ============================================================================
-# Trivy Installation (Security Scanner)
+# Trivy Installation (Security Scanner) - via APT repository
 # ============================================================================
 install_trivy() {
     # Note: tfsec has been deprecated and merged into Trivy.
     # See: https://github.com/aquasecurity/tfsec/discussions/1994
-    log_message "Installing Trivy ${TRIVY_VERSION}..."
+    # Trivy is installed via the official APT repository at get.trivy.dev
+    # (GitHub binary releases are no longer available)
+    log_message "Installing Trivy via APT repository..."
 
-    # Trivy uses Linux_64bit for amd64 and Linux_ARM64 for arm64
-    local TRIVY_ARCH
-    TRIVY_ARCH=$(map_arch_or_skip "64bit" "ARM64")
-    if [ -z "$TRIVY_ARCH" ]; then
-        log_warning "Trivy not available for architecture $(dpkg --print-architecture), skipping..."
-        return 0
-    fi
+    # Add Trivy GPG key and repository
+    add_apt_repository_key "Trivy" \
+        "https://get.trivy.dev/deb/public.key" \
+        "/usr/share/keyrings/trivy.gpg" \
+        "/etc/apt/sources.list.d/trivy.list" \
+        "deb [signed-by=/usr/share/keyrings/trivy.gpg] https://get.trivy.dev/deb generic main"
 
-    local TRIVY_ARCHIVE="trivy_${TRIVY_VERSION}_Linux-${TRIVY_ARCH}.tar.gz"
-    local TRIVY_URL="https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/${TRIVY_ARCHIVE}"
+    # Update package lists with new repository
+    apt_update
 
-    log_message "Installing Trivy v${TRIVY_VERSION} for $(dpkg --print-architecture)..."
+    # Install Trivy
+    apt_install trivy
 
-    # Register Tier 3 fetcher for trivy
-    _fetch_trivy_checksum() {
-        local _ver="$1"
-        local _arch="$2"
-        local _trivy_arch
-        case "$_arch" in
-            amd64) _trivy_arch="64bit" ;;
-            arm64) _trivy_arch="ARM64" ;;
-            *) _trivy_arch="$_arch" ;;
-        esac
-        local _archive="trivy_${_ver}_Linux-${_trivy_arch}.tar.gz"
-        local _url="https://github.com/aquasecurity/trivy/releases/download/v${_ver}/trivy_${_ver}_checksums.txt"
-        fetch_github_checksums_txt "$_url" "$_archive" 2>/dev/null
-    }
-    register_tool_checksum_fetcher "trivy" "_fetch_trivy_checksum"
-
-    # Download trivy
-    local BUILD_TEMP
-    BUILD_TEMP=$(create_secure_temp_dir)
-    cd "$BUILD_TEMP" || return 1
-    log_message "Downloading Trivy..."
-    if ! command curl -L -f --retry 3 --retry-delay 2 --retry-all-errors --progress-bar -o "trivy.tar.gz" "$TRIVY_URL"; then
-        log_error "Failed to download Trivy ${TRIVY_VERSION}"
-        cd /
+    if command -v trivy &> /dev/null; then
+        log_message "✓ Trivy installed successfully via APT"
+    else
+        log_error "Trivy installation failed"
         return 1
     fi
-
-    # Run 4-tier verification
-    local verify_rc=0
-    verify_download "tool" "trivy" "$TRIVY_VERSION" "trivy.tar.gz" "$(dpkg --print-architecture)" || verify_rc=$?
-    if [ "$verify_rc" -eq 1 ]; then
-        log_error "Verification failed for Trivy ${TRIVY_VERSION}"
-        cd /
-        return 1
-    fi
-
-    # Extract and install
-    log_command "Extracting Trivy" \
-        tar -xzf trivy.tar.gz
-
-    log_command "Installing Trivy binary" \
-        install -c -v -m 755 ./trivy /usr/local/bin/trivy
-
-    log_message "✓ Trivy v${TRIVY_VERSION} installed successfully"
-
-    cd /
 }
