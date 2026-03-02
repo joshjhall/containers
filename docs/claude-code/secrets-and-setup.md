@@ -84,6 +84,68 @@ services:
 Secrets are loaded automatically on shell initialization and container startup.
 Direct env vars always win (if `<NAME>` is already set, the OP ref is skipped).
 
+## Runtime `.env.secrets` Loading
+
+`OP_SERVICE_ACCOUNT_TOKEN` (and any other sensitive values) can be kept out of
+docker-compose `env_file` blocks to prevent `docker compose config` from
+exposing them in plaintext. Instead, place them in a `.env.secrets` file that
+is sourced at runtime by the container's shell initialization.
+
+### How it works
+
+The container sources the **first** `.env.secrets` file it finds, in this order:
+
+| Priority | Location             | Use case                                   |
+| -------- | -------------------- | ------------------------------------------ |
+| 1        | `$ENV_SECRETS_FILE`  | Explicit path override                     |
+| 2        | `$HOME/.env.secrets` | User-level secrets, shared across projects |
+| 3        | `$PWD/.env.secrets`  | Project-level secrets (container WORKDIR)  |
+
+Only the first match is sourced (no stacking). All variables in the file are
+auto-exported (`set -a`), so you don't need `export` in the file itself.
+
+### Loading paths
+
+- **Interactive shells**: `65-env-secrets.sh` runs in `/etc/bashrc.d/` before
+  `70-1password.sh`, so `OP_SERVICE_ACCOUNT_TOKEN` is available when the
+  1Password integration initializes.
+- **Container startup**: `45-op-secrets.sh` sources `.env.secrets` before
+  checking for `OP_SERVICE_ACCOUNT_TOKEN`, ensuring background processes and
+  non-interactive shells also have access.
+
+### Security
+
+- `xtrace` is disabled during sourcing to prevent tokens from appearing in
+  debug output (`set -x` logs).
+- An idempotency guard (`_ENV_SECRETS_LOADED`) prevents double-sourcing in
+  nested shells.
+
+### Example usage
+
+```bash
+# .env.secrets (gitignored, never committed)
+OP_SERVICE_ACCOUNT_TOKEN=ops_your_token_here
+MY_OTHER_SECRET=supersecret
+```
+
+```yaml
+# docker-compose.yml — no OP_SERVICE_ACCOUNT_TOKEN here
+services:
+  dev:
+    environment:
+      - OP_GITHUB_TOKEN_REF=op://Development/GitHub-PAT/credential
+    # The token is loaded from .env.secrets at container startup
+```
+
+To use a custom path, set `ENV_SECRETS_FILE` in your docker-compose environment:
+
+```yaml
+services:
+  dev:
+    environment:
+      - ENV_SECRETS_FILE=/run/secrets/env-secrets
+```
+
 ## Container Setup Commands
 
 Three setup commands are installed to `/usr/local/bin/` and available in PATH:

@@ -258,9 +258,10 @@ These variables can be set when running containers (via `docker run -e`):
 
 ### 1Password Integration
 
-| Variable                   | Description                                          |
-| -------------------------- | ---------------------------------------------------- |
-| `OP_SERVICE_ACCOUNT_TOKEN` | 1Password service account token for automated access |
+| Variable                   | Description                                                         |
+| -------------------------- | ------------------------------------------------------------------- |
+| `OP_SERVICE_ACCOUNT_TOKEN` | 1Password service account token for automated access                |
+| `ENV_SECRETS_FILE`         | Custom path to `.env.secrets` file (overrides default search order) |
 
 ### Retry Configuration
 
