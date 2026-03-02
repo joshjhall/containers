@@ -127,10 +127,10 @@ check_gitignore() {
 
     # Unconditional entries (always needed)
     append_missing_entries "$gitignore" "Environment and OS files" \
-        ".env" \
-        ".env.local" \
-        ".env.*.local" \
-        "!.env.example" \
+        "**/.env" \
+        "**/.env.*" \
+        "!**/.env.example" \
+        "!**/.env.*.example" \
         ".DS_Store" \
         "Thumbs.db"
 
@@ -177,9 +177,10 @@ check_dockerignore() {
 
     append_missing_entries "$dockerignore" "Build context exclusions" \
         ".git/" \
-        ".env" \
-        ".env.local" \
-        ".env.*.local" \
+        "**/.env" \
+        "**/.env.*" \
+        "!**/.env.example" \
+        "!**/.env.*.example" \
         ".claude/"
 }
 
