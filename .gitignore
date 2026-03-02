@@ -130,9 +130,13 @@ terraform.tfvars
 
 # Environment files with secrets (but NOT examples/env/ which contains templates)
 .env
+.env.*
 .env.local
 .env.*.local
+.env.secrets
 !.env.example
+!.env.*.example
+!.env.secrets.example
 !examples/env/
 !examples/env/**
 
@@ -161,3 +165,7 @@ pids/
 # Local development overrides
 local/
 .local/
+
+# Added by devcontainer health check
+# Claude Code local state
+.claude/memory/
