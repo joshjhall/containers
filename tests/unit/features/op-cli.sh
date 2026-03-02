@@ -550,4 +550,103 @@ run_test test_op_env_safe_no_eval_of_field_values "op-env-safe: No eval of field
 run_test test_op_env_safe_uses_safe_export "op-env-safe: Uses safe @tsv / direct export pattern"
 run_test test_op_env_uses_safe_escaping "op-env: Uses @sh for safe value escaping"
 
+# ============================================================================
+# .env.secrets Loader Tests
+# ============================================================================
+
+# Static: 65-env-secrets.sh is referenced in op-cli.sh
+test_env_secrets_referenced_in_op_cli() {
+    local source_file="$PROJECT_ROOT/lib/features/op-cli.sh"
+    assert_file_contains "$source_file" "65-env-secrets.sh" "op-cli.sh installs 65-env-secrets.sh"
+}
+
+# Static: env-secrets.sh contains ENV_SECRETS_FILE check
+test_env_secrets_has_env_secrets_file_check() {
+    local source_file="$PROJECT_ROOT/lib/features/lib/bashrc/env-secrets.sh"
+    assert_file_contains "$source_file" "ENV_SECRETS_FILE" "env-secrets.sh checks ENV_SECRETS_FILE"
+}
+
+# Static: env-secrets.sh checks $HOME/.env.secrets
+test_env_secrets_checks_home() {
+    local source_file="$PROJECT_ROOT/lib/features/lib/bashrc/env-secrets.sh"
+    assert_file_contains "$source_file" 'HOME.*\.env\.secrets' "env-secrets.sh checks \$HOME/.env.secrets"
+}
+
+# Static: env-secrets.sh checks $PWD/.env.secrets
+test_env_secrets_checks_pwd() {
+    local source_file="$PROJECT_ROOT/lib/features/lib/bashrc/env-secrets.sh"
+    assert_file_contains "$source_file" 'PWD.*\.env\.secrets' "env-secrets.sh checks \$PWD/.env.secrets"
+}
+
+# Static: env-secrets.sh contains _ENV_SECRETS_LOADED guard
+test_env_secrets_has_idempotency_guard() {
+    local source_file="$PROJECT_ROOT/lib/features/lib/bashrc/env-secrets.sh"
+    assert_file_contains "$source_file" "_ENV_SECRETS_LOADED" "env-secrets.sh has _ENV_SECRETS_LOADED idempotency guard"
+}
+
+# Static: env-secrets.sh disables xtrace
+test_env_secrets_disables_xtrace() {
+    local source_file="$PROJECT_ROOT/lib/features/lib/bashrc/env-secrets.sh"
+    assert_file_contains "$source_file" "set +x" "env-secrets.sh disables xtrace to prevent token exposure"
+}
+
+# Static: 45-op-secrets.sh sources .env.secrets before OP_SERVICE_ACCOUNT_TOKEN check
+test_env_secrets_in_startup_before_op_check() {
+    local source_file="$PROJECT_ROOT/lib/features/lib/op-cli/45-op-secrets.sh"
+    # .env.secrets sourcing must appear before the OP_SERVICE_ACCOUNT_TOKEN guard
+    # (skip comment lines — only match the actual code check)
+    local secrets_line op_token_line
+    secrets_line=$(command grep -n '\.env\.secrets' "$source_file" | command head -1 | command cut -d: -f1)
+    op_token_line=$(command grep -n '^\[.*OP_SERVICE_ACCOUNT_TOKEN' "$source_file" | command head -1 | command cut -d: -f1)
+    if [ -n "$secrets_line" ] && [ -n "$op_token_line" ] && [ "$secrets_line" -lt "$op_token_line" ]; then
+        assert_true 0 "45-op-secrets.sh sources .env.secrets before OP_SERVICE_ACCOUNT_TOKEN check"
+    else
+        assert_true 1 "45-op-secrets.sh must source .env.secrets before OP_SERVICE_ACCOUNT_TOKEN check"
+    fi
+}
+
+# Static: env-secrets.sh uses set -a / set +a for auto-export
+test_env_secrets_uses_auto_export() {
+    local source_file="$PROJECT_ROOT/lib/features/lib/bashrc/env-secrets.sh"
+    assert_file_contains "$source_file" "set -a" "env-secrets.sh uses set -a for auto-export"
+    assert_file_contains "$source_file" "set +a" "env-secrets.sh uses set +a to restore"
+}
+
+# Functional: sourcing a test .env.secrets file exports variables correctly
+test_env_secrets_functional_sourcing() {
+    local test_dir="$TEST_TEMP_DIR/env-secrets-test"
+    mkdir -p "$test_dir"
+
+    # Create a test .env.secrets file
+    echo 'TEST_SECRET_VAR=hello_from_secrets' > "$test_dir/.env.secrets"
+    echo 'ANOTHER_SECRET=world' >> "$test_dir/.env.secrets"
+
+    # Simulate what the loader does: set -a, source, set +a
+    (
+        set -a
+        . "$test_dir/.env.secrets"
+        set +a
+        [ "$TEST_SECRET_VAR" = "hello_from_secrets" ] && exit 0 || exit 1
+    )
+    assert_true $? "Sourcing .env.secrets with set -a exports TEST_SECRET_VAR"
+
+    (
+        set -a
+        . "$test_dir/.env.secrets"
+        set +a
+        [ "$ANOTHER_SECRET" = "world" ] && exit 0 || exit 1
+    )
+    assert_true $? "Sourcing .env.secrets with set -a exports ANOTHER_SECRET"
+}
+
+run_test test_env_secrets_referenced_in_op_cli "env-secrets: 65-env-secrets.sh referenced in op-cli.sh"
+run_test test_env_secrets_has_env_secrets_file_check "env-secrets: ENV_SECRETS_FILE check present"
+run_test test_env_secrets_checks_home "env-secrets: \$HOME/.env.secrets check present"
+run_test test_env_secrets_checks_pwd "env-secrets: \$PWD/.env.secrets check present"
+run_test test_env_secrets_has_idempotency_guard "env-secrets: _ENV_SECRETS_LOADED idempotency guard"
+run_test test_env_secrets_disables_xtrace "env-secrets: xtrace disabled during sourcing"
+run_test test_env_secrets_in_startup_before_op_check "env-secrets: startup script sources before OP token check"
+run_test test_env_secrets_uses_auto_export "env-secrets: uses set -a / set +a for auto-export"
+run_test_with_setup test_env_secrets_functional_sourcing "env-secrets: functional sourcing exports variables"
+
 generate_report
