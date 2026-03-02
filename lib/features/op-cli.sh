@@ -139,6 +139,13 @@ log_message "Configuring system-wide 1Password environment..."
 log_command "Creating bashrc.d directory" \
     mkdir -p /etc/bashrc.d
 
+# Create environment secrets loader (runs before 1Password integration)
+write_bashrc_content /etc/bashrc.d/65-env-secrets.sh "Environment secrets loader" \
+    < /tmp/build-scripts/features/lib/bashrc/env-secrets.sh
+
+log_command "Setting env-secrets bashrc script permissions" \
+    chmod +x /etc/bashrc.d/65-env-secrets.sh
+
 # Create system-wide 1Password configuration (content in lib/bashrc/op-cli.sh)
 write_bashrc_content /etc/bashrc.d/70-1password.sh "1Password CLI configuration" \
     < /tmp/build-scripts/features/lib/bashrc/op-cli.sh

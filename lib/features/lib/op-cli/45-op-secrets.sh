@@ -25,6 +25,22 @@ set +e  # Don't exit on errors
 # Skip if op not available
 command -v op >/dev/null 2>&1 || exit 0
 
+# Source .env.secrets if available (runtime secrets not in docker-compose env_file)
+_secrets_file=""
+if [ -n "${ENV_SECRETS_FILE:-}" ] && [ -f "${ENV_SECRETS_FILE}" ]; then
+    _secrets_file="${ENV_SECRETS_FILE}"
+elif [ -n "${HOME:-}" ] && [ -f "${HOME}/.env.secrets" ]; then
+    _secrets_file="${HOME}/.env.secrets"
+elif [ -f "${PWD}/.env.secrets" ]; then
+    _secrets_file="${PWD}/.env.secrets"
+fi
+if [ -n "$_secrets_file" ]; then
+    set -a
+    . "$_secrets_file"
+    set +a
+fi
+unset _secrets_file
+
 # Skip if no service account token configured
 [ -z "${OP_SERVICE_ACCOUNT_TOKEN:-}" ] && exit 0
 
