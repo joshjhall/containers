@@ -340,3 +340,9 @@ security-scan-*.txt
 !bin/
 !tests/
 !examples/
+
+# Added by devcontainer health check
+# Build context exclusions
+.env.local
+.env.*.local
+.claude/
