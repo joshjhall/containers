@@ -649,4 +649,169 @@ run_test test_env_secrets_in_startup_before_op_check "env-secrets: startup scrip
 run_test test_env_secrets_uses_auto_export "env-secrets: uses set -a / set +a for auto-export"
 run_test_with_setup test_env_secrets_functional_sourcing "env-secrets: functional sourcing exports variables"
 
+# ============================================================================
+# Secret Cache Tests
+# ============================================================================
+
+# Static: bashrc references op-secrets-cache
+test_cache_bashrc_references_cache_file() {
+    local source_file="$PROJECT_ROOT/lib/features/lib/bashrc/op-cli.sh"
+    assert_file_contains "$source_file" "op-secrets-cache" "bashrc op-cli.sh references op-secrets-cache"
+}
+
+# Static: 45-op-secrets.sh writes cache
+test_cache_startup_writes_cache() {
+    local source_file="$PROJECT_ROOT/lib/features/lib/op-cli/45-op-secrets.sh"
+    assert_file_contains "$source_file" "op-secrets-cache" "45-op-secrets.sh writes op-secrets-cache"
+}
+
+# Static: cache has chmod 600
+test_cache_permissions_bashrc() {
+    local source_file="$PROJECT_ROOT/lib/features/lib/bashrc/op-cli.sh"
+    # The _op_write_cache function must set 0600 on the cache file
+    if command grep -A 30 '_op_write_cache()' "$source_file" | command grep -q 'chmod 600'; then
+        pass_test "bashrc _op_write_cache sets chmod 600 on cache"
+    else
+        fail_test "bashrc _op_write_cache should set chmod 600 on cache"
+    fi
+}
+
+test_cache_permissions_startup() {
+    local source_file="$PROJECT_ROOT/lib/features/lib/op-cli/45-op-secrets.sh"
+    # The cache write block must include chmod 600 on _cache_tmp
+    if command grep -q 'chmod 600 "\$_cache_tmp"' "$source_file"; then
+        pass_test "45-op-secrets.sh sets chmod 600 on cache"
+    else
+        fail_test "45-op-secrets.sh should set chmod 600 on cache"
+    fi
+}
+
+# Static: cache read checks ownership (-O)
+test_cache_ownership_check() {
+    local source_file="$PROJECT_ROOT/lib/features/lib/bashrc/op-cli.sh"
+    if command grep -Fq '[ -O ' "$source_file"; then
+        pass_test "bashrc checks cache file ownership with -O"
+    else
+        fail_test "bashrc should check cache file ownership with -O"
+    fi
+}
+
+# Static: atomic write pattern (.tmp + mv)
+test_cache_atomic_write_bashrc() {
+    local source_file="$PROJECT_ROOT/lib/features/lib/bashrc/op-cli.sh"
+    if command grep -Fq '.tmp.$$' "$source_file"; then
+        pass_test "bashrc uses .tmp.\$\$ for atomic cache write"
+    else
+        fail_test "bashrc should use .tmp.\$\$ for atomic cache write"
+    fi
+    if command grep -A 30 '_op_write_cache()' "$source_file" | command grep -q 'mv .*_cache_tmp.*_OP_SECRETS_CACHE'; then
+        pass_test "bashrc _op_write_cache uses mv for atomic rename"
+    else
+        fail_test "bashrc _op_write_cache should use mv for atomic rename"
+    fi
+}
+
+test_cache_atomic_write_startup() {
+    local source_file="$PROJECT_ROOT/lib/features/lib/op-cli/45-op-secrets.sh"
+    if command grep -Fq '.tmp.$$' "$source_file"; then
+        pass_test "45-op-secrets.sh uses .tmp.\$\$ for atomic cache write"
+    else
+        fail_test "45-op-secrets.sh should use .tmp.\$\$ for atomic cache write"
+    fi
+    if command grep -q 'mv .*_cache_tmp.*_cache_file' "$source_file"; then
+        pass_test "45-op-secrets.sh uses mv for atomic rename"
+    else
+        fail_test "45-op-secrets.sh should use mv for atomic rename"
+    fi
+}
+
+# Functional: printf '%q' escapes values with special characters
+test_cache_printf_q_escaping() {
+    local val_with_spaces="hello world"
+    local val_with_quotes='say "hi"'
+    local val_with_dollar='cost=$100'
+    local val_with_newline=$'line1\nline2'
+
+    local escaped
+    escaped=$(printf '%q' "$val_with_spaces")
+    [ "$escaped" != "$val_with_spaces" ] \
+        && assert_true 0 "printf %q escapes spaces" \
+        || assert_true 1 "printf %q should escape spaces"
+
+    escaped=$(printf '%q' "$val_with_quotes")
+    [ "$escaped" != "$val_with_quotes" ] \
+        && assert_true 0 "printf %q escapes quotes" \
+        || assert_true 1 "printf %q should escape quotes"
+
+    escaped=$(printf '%q' "$val_with_dollar")
+    [ "$escaped" != "$val_with_dollar" ] \
+        && assert_true 0 "printf %q escapes dollar signs" \
+        || assert_true 1 "printf %q should escape dollar signs"
+
+    escaped=$(printf '%q' "$val_with_newline")
+    [ "$escaped" != "$val_with_newline" ] \
+        && assert_true 0 "printf %q escapes newlines" \
+        || assert_true 1 "printf %q should escape newlines"
+}
+
+# Functional: sourcing a mock cache file exports variables
+test_cache_functional_sourcing() {
+    local test_cache="$TEST_TEMP_DIR/mock-op-secrets-cache"
+
+    # Build a mock cache using the same printf '%q' pattern
+    {
+        printf 'export %s=%q\n' "MOCK_TOKEN" "abc123"
+        printf 'export %s=%q\n' "MOCK_SPECIAL" 'val with "quotes" and $dollar'
+        printf 'export %s=%q\n' "GIT_USER_NAME" "Test User"
+        printf 'export %s=%q\n' "GIT_USER_EMAIL" "test@example.com"
+    } > "$test_cache"
+    chmod 600 "$test_cache"
+
+    # Source in a subshell and verify exports
+    (
+        . "$test_cache"
+        [ "$MOCK_TOKEN" = "abc123" ] || exit 1
+        [ "$MOCK_SPECIAL" = 'val with "quotes" and $dollar' ] || exit 2
+        [ "$GIT_USER_NAME" = "Test User" ] || exit 3
+        [ "$GIT_USER_EMAIL" = "test@example.com" ] || exit 4
+        exit 0
+    )
+    local rc=$?
+    if [ "$rc" -eq 0 ]; then
+        pass_test "Sourcing mock cache correctly exports all variables"
+    else
+        fail_test "Sourcing mock cache failed (exit code $rc)"
+    fi
+}
+
+# Static: bashrc _op_resolve_git_identity has early return when both vars set
+test_cache_git_identity_early_return() {
+    local source_file="$PROJECT_ROOT/lib/features/lib/bashrc/op-cli.sh"
+    if command grep -A 10 '_op_resolve_git_identity()' "$source_file" | command grep -q 'GIT_USER_NAME.*GIT_USER_EMAIL'; then
+        pass_test "bashrc _op_resolve_git_identity has early return for cached vars"
+    else
+        fail_test "bashrc _op_resolve_git_identity should check both GIT_USER_NAME and GIT_USER_EMAIL"
+    fi
+}
+
+# Static: cache file path is in /dev/shm (tmpfs, cleared on restart)
+test_cache_uses_dev_shm() {
+    local bashrc_file="$PROJECT_ROOT/lib/features/lib/bashrc/op-cli.sh"
+    local startup_file="$PROJECT_ROOT/lib/features/lib/op-cli/45-op-secrets.sh"
+    assert_file_contains "$bashrc_file" '/dev/shm/op-secrets-cache' "bashrc cache path is /dev/shm/op-secrets-cache"
+    assert_file_contains "$startup_file" '/dev/shm/op-secrets-cache' "startup cache path is /dev/shm/op-secrets-cache"
+}
+
+run_test test_cache_bashrc_references_cache_file "Cache: bashrc references op-secrets-cache"
+run_test test_cache_startup_writes_cache "Cache: 45-op-secrets.sh writes cache"
+run_test test_cache_permissions_bashrc "Cache: bashrc sets chmod 600"
+run_test test_cache_permissions_startup "Cache: startup sets chmod 600"
+run_test test_cache_ownership_check "Cache: bashrc checks ownership with -O"
+run_test test_cache_atomic_write_bashrc "Cache: bashrc atomic write (.tmp + mv)"
+run_test test_cache_atomic_write_startup "Cache: startup atomic write (.tmp + mv)"
+run_test_with_setup test_cache_printf_q_escaping "Cache: printf %q escapes special characters"
+run_test_with_setup test_cache_functional_sourcing "Cache: sourcing mock cache exports variables"
+run_test test_cache_git_identity_early_return "Cache: git identity early return when cached"
+run_test test_cache_uses_dev_shm "Cache: uses /dev/shm (tmpfs)"
+
 generate_report

@@ -84,6 +84,18 @@ services:
 Secrets are loaded automatically on shell initialization and container startup.
 Direct env vars always win (if `<NAME>` is already set, the OP ref is skipped).
 
+### Caching
+
+Resolved secrets are cached to `/dev/shm/op-secrets-cache` after the first
+resolution (whether during container startup or the first interactive shell).
+Subsequent shells source the cache file instead of making `op read` API calls,
+making shell startup instant.
+
+- **Container restart** clears the cache automatically (`/dev/shm/` is tmpfs)
+- **Manual invalidation**: `rm /dev/shm/op-secrets-cache` — the next shell will
+  re-resolve all secrets from 1Password
+- The cache file is `chmod 600` and ownership-checked before sourcing
+
 ## Runtime `.env.secrets` Loading
 
 `OP_SERVICE_ACCOUNT_TOKEN` (and any other sensitive values) can be kept out of

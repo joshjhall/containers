@@ -101,6 +101,31 @@ fi
 [ -z "${GIT_USER_NAME:-}" ] && export GIT_USER_NAME="Devcontainer"
 [ -z "${GIT_USER_EMAIL:-}" ] && export GIT_USER_EMAIL="devcontainer@localhost"
 
+# Write secrets cache for interactive shells
+_cache_file="/dev/shm/op-secrets-cache"
+_cache_tmp="${_cache_file}.tmp.$$"
+{
+    for _ref_var in $(compgen -v | command grep '^OP_.\+_REF$' | command grep -v '_FILE_REF$'); do
+        _target_var="${_ref_var#OP_}"
+        _target_var="${_target_var%_REF}"
+        [ -z "$_target_var" ] && continue
+        [ -z "${!_target_var:-}" ] && continue
+        printf 'export %s=%q\n' "$_target_var" "${!_target_var}"
+    done
+    for _ref_var in $(compgen -v | command grep '^OP_.\+_FILE_REF$'); do
+        _target_var="${_ref_var#OP_}"
+        _target_var="${_target_var%_FILE_REF}"
+        [ -z "$_target_var" ] && continue
+        [ -z "${!_target_var:-}" ] && continue
+        printf 'export %s=%q\n' "$_target_var" "${!_target_var}"
+    done
+    printf 'export GIT_USER_NAME=%q\n' "${GIT_USER_NAME:-Devcontainer}"
+    printf 'export GIT_USER_EMAIL=%q\n' "${GIT_USER_EMAIL:-devcontainer@localhost}"
+} > "$_cache_tmp"
+chmod 600 "$_cache_tmp"
+mv "$_cache_tmp" "$_cache_file"
+unset _cache_file _cache_tmp
+
 # Restore xtrace state
 eval "$_old_xtrace"
 

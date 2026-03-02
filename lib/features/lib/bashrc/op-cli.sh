@@ -154,6 +154,8 @@ op-exec() {
 # - Direct env var always wins (if <NAME> is already set, OP ref is skipped)
 # - Fails silently if OP is unavailable or unauthenticated
 # ----------------------------------------------------------------------------
+_OP_SECRETS_CACHE="/dev/shm/op-secrets-cache"
+
 _op_load_secrets() {
     # Skip if op not available or no service account token
     if ! command -v op >/dev/null 2>&1 || [ -z "${OP_SERVICE_ACCOUNT_TOKEN:-}" ]; then
@@ -164,6 +166,13 @@ _op_load_secrets() {
     local _old_xtrace
     _old_xtrace=$(set +o | command grep xtrace)
     set +x
+
+    # Cache hit → source and return
+    if [ -f "$_OP_SECRETS_CACHE" ] && [ -O "$_OP_SECRETS_CACHE" ]; then
+        . "$_OP_SECRETS_CACHE"
+        eval "$_old_xtrace"
+        return 0
+    fi
 
     local _ref_var _target_var _ref_value _secret_value
     for _ref_var in $(compgen -v | command grep '^OP_.\+_REF$' | command grep -v '_FILE_REF$'); do
@@ -224,6 +233,11 @@ _op_resolve_git_identity() {
         return 0
     fi
 
+    # Skip entirely if both are already set (e.g. from cache)
+    if [ -n "${GIT_USER_NAME:-}" ] && [ -n "${GIT_USER_EMAIL:-}" ]; then
+        return 0
+    fi
+
     local _old_xtrace
     _old_xtrace=$(set +o | command grep xtrace)
     set +x
@@ -252,6 +266,40 @@ _op_resolve_git_identity() {
 }
 
 _op_resolve_git_identity
+
+# Write cache only if it doesn't exist yet (cache miss path)
+_op_write_cache() {
+    [ -z "${OP_SERVICE_ACCOUNT_TOKEN:-}" ] && return 0
+    local _cache_tmp="${_OP_SECRETS_CACHE}.tmp.$$"
+    local _old_xtrace
+    _old_xtrace=$(set +o | command grep xtrace)
+    set +x
+    {
+        local _ref_var _target_var
+        for _ref_var in $(compgen -v | command grep '^OP_.\+_REF$' | command grep -v '_FILE_REF$'); do
+            _target_var="${_ref_var#OP_}"
+            _target_var="${_target_var%_REF}"
+            [ -z "$_target_var" ] && continue
+            [ -z "${!_target_var:-}" ] && continue
+            printf 'export %s=%q\n' "$_target_var" "${!_target_var}"
+        done
+        for _ref_var in $(compgen -v | command grep '^OP_.\+_FILE_REF$'); do
+            _target_var="${_ref_var#OP_}"
+            _target_var="${_target_var%_FILE_REF}"
+            [ -z "$_target_var" ] && continue
+            [ -z "${!_target_var:-}" ] && continue
+            printf 'export %s=%q\n' "$_target_var" "${!_target_var}"
+        done
+        printf 'export GIT_USER_NAME=%q\n' "${GIT_USER_NAME:-}"
+        printf 'export GIT_USER_EMAIL=%q\n' "${GIT_USER_EMAIL:-}"
+    } > "$_cache_tmp"
+    chmod 600 "$_cache_tmp"
+    mv "$_cache_tmp" "$_OP_SECRETS_CACHE"
+    eval "$_old_xtrace"
+}
+if [ ! -f "$_OP_SECRETS_CACHE" ]; then
+    _op_write_cache
+fi
 
 # Note: We leave set +u and set +e in place for interactive shells
 # to prevent errors with undefined variables or failed commands
