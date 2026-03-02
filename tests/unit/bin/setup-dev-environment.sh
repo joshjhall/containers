@@ -70,7 +70,7 @@ test_precommit_prevents_env_commit() {
 
 # Test: .gitignore contains .env
 test_gitignore_has_env() {
-    if command grep -q "^\.env$" "$PROJECT_ROOT/.gitignore"; then
+    if command grep -qF "**/.env" "$PROJECT_ROOT/.gitignore"; then
         assert_true true ".gitignore contains .env entry"
     else
         assert_true false ".gitignore missing .env entry"

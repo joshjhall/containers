@@ -98,7 +98,7 @@ test_appends_to_existing_gitignore() {
     echo "node_modules/" > "$PROJECT_ROOT/.gitignore"
     run_health_check
     assert_file_contains "$PROJECT_ROOT/.gitignore" "node_modules/" "Should preserve existing content"
-    assert_file_contains "$PROJECT_ROOT/.gitignore" "^\.env$" "Should add .env entry"
+    assert_file_contains "$PROJECT_ROOT/.gitignore" "^\*\*/\.env$" "Should add **/.env entry"
 }
 
 # ============================================================================
@@ -107,14 +107,14 @@ test_appends_to_existing_gitignore() {
 
 test_unconditional_env_entries() {
     run_health_check
-    assert_file_contains "$PROJECT_ROOT/.gitignore" "^\.env$" ".env should be present"
-    assert_file_contains "$PROJECT_ROOT/.gitignore" "^\.env\.local$" ".env.local should be present"
-    assert_file_contains "$PROJECT_ROOT/.gitignore" "^\.env\.\*\.local$" ".env.*.local should be present"
+    assert_file_contains "$PROJECT_ROOT/.gitignore" "^\*\*/\.env$" "**/.env should be present"
+    assert_file_contains "$PROJECT_ROOT/.gitignore" "^\*\*/\.env\.\*$" "**/.env.* should be present"
 }
 
 test_unconditional_negation_entry() {
     run_health_check
-    assert_file_contains "$PROJECT_ROOT/.gitignore" "^!\.env\.example$" "!.env.example should be present"
+    assert_file_contains "$PROJECT_ROOT/.gitignore" "^!\*\*/\.env\.example$" "!**/.env.example should be present"
+    assert_file_contains "$PROJECT_ROOT/.gitignore" "^!\*\*/\.env\.\*\.example$" "!**/.env.*.example should be present"
 }
 
 test_unconditional_os_entries() {
@@ -131,10 +131,10 @@ test_idempotent_no_duplicates() {
     run_health_check
     run_health_check
 
-    # Count occurrences of .env (exact line)
+    # Count occurrences of **/.env (exact line)
     local count
-    count=$(/usr/bin/grep -cFx ".env" "$PROJECT_ROOT/.gitignore")
-    assert_equals "1" "$count" ".env should appear exactly once"
+    count=$(/usr/bin/grep -cFx "**/.env" "$PROJECT_ROOT/.gitignore")
+    assert_equals "1" "$count" "**/.env should appear exactly once"
 }
 
 test_idempotent_negation_no_duplicates() {
@@ -142,17 +142,17 @@ test_idempotent_negation_no_duplicates() {
     run_health_check
 
     local count
-    count=$(/usr/bin/grep -cFx '!.env.example' "$PROJECT_ROOT/.gitignore")
-    assert_equals "1" "$count" "!.env.example should appear exactly once"
+    count=$(/usr/bin/grep -cFx '!**/.env.example' "$PROJECT_ROOT/.gitignore")
+    assert_equals "1" "$count" "!**/.env.example should appear exactly once"
 }
 
 test_existing_entry_not_duplicated() {
-    echo ".env" > "$PROJECT_ROOT/.gitignore"
+    echo "**/.env" > "$PROJECT_ROOT/.gitignore"
     run_health_check
 
     local count
-    count=$(/usr/bin/grep -cFx ".env" "$PROJECT_ROOT/.gitignore")
-    assert_equals "1" "$count" "Pre-existing .env should not be duplicated"
+    count=$(/usr/bin/grep -cFx "**/.env" "$PROJECT_ROOT/.gitignore")
+    assert_equals "1" "$count" "Pre-existing **/.env should not be duplicated"
 }
 
 # ============================================================================
@@ -226,7 +226,7 @@ test_dockerignore_entries() {
     /usr/bin/touch "$PROJECT_ROOT/Dockerfile"
     run_health_check
     assert_file_contains "$PROJECT_ROOT/.dockerignore" "^\.git/$" ".git/ should be in .dockerignore"
-    assert_file_contains "$PROJECT_ROOT/.dockerignore" "^\.env$" ".env should be in .dockerignore"
+    assert_file_contains "$PROJECT_ROOT/.dockerignore" "^\*\*/\.env$" "**/.env should be in .dockerignore"
     assert_file_contains "$PROJECT_ROOT/.dockerignore" "^\.claude/$" ".claude/ should be in .dockerignore"
 }
 
@@ -235,7 +235,7 @@ test_dockerignore_appends_missing() {
     echo ".git/" > "$PROJECT_ROOT/.dockerignore"
     run_health_check
 
-    assert_file_contains "$PROJECT_ROOT/.dockerignore" "^\.env$" "Should add missing .env"
+    assert_file_contains "$PROJECT_ROOT/.dockerignore" "^\*\*/\.env$" "Should add missing **/.env"
     local count
     count=$(/usr/bin/grep -cFx ".git/" "$PROJECT_ROOT/.dockerignore")
     assert_equals "1" "$count" ".git/ should not be duplicated"
@@ -266,18 +266,18 @@ test_no_trailing_newline_handled() {
 
     # First line should still be intact
     assert_file_contains "$PROJECT_ROOT/.gitignore" "^existing-entry$" "Existing content should be preserved"
-    assert_file_contains "$PROJECT_ROOT/.gitignore" "^\.env$" "New entries should be added"
+    assert_file_contains "$PROJECT_ROOT/.gitignore" "^\*\*/\.env$" "New entries should be added"
 }
 
 test_partial_match_not_false_positive() {
-    # .env.production is NOT the same as .env
+    # .env.production is NOT the same as **/.env
     echo ".env.production" > "$PROJECT_ROOT/.gitignore"
     run_health_check
 
-    # .env should still be added (not a false positive from .env.production)
+    # **/.env should still be added (not a false positive from .env.production)
     local count
-    count=$(/usr/bin/grep -cFx ".env" "$PROJECT_ROOT/.gitignore")
-    assert_equals "1" "$count" ".env should be added despite .env.production existing"
+    count=$(/usr/bin/grep -cFx "**/.env" "$PROJECT_ROOT/.gitignore")
+    assert_equals "1" "$count" "**/.env should be added despite .env.production existing"
 }
 
 # ============================================================================
