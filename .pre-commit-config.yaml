@@ -153,6 +153,14 @@ repos:
         always_run: true
         stages: [pre-push]
 
+      - id: yamllint-all
+        name: Lint all YAML files
+        entry: yamllint -c .yamllint.yml
+        language: system
+        types: [yaml]
+        always_run: true
+        stages: [pre-push]
+
 # CI configuration - run these hooks in CI
 ci:
   autofix_prs: false
