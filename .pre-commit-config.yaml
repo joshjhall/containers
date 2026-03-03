@@ -158,7 +158,6 @@ repos:
         entry: yamllint -c .yamllint.yml
         language: system
         types: [yaml]
-        always_run: true
         stages: [pre-push]
 
 # CI configuration - run these hooks in CI

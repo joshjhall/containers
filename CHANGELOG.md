@@ -5,20 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.15.6] - 2026-03-03
+
+### Added
+
+- Add host-side .env.init resolution and container-side cleanup
+
+### Miscellaneous
+
+- Add yamllint to dev env, remove redundant YAML tests
+
 ## [4.15.5] - 2026-03-02
 
 ### Added
 
 - Add runtime .env.secrets loader for secure token delivery
+- Cache 1Password secret resolution to /dev/shm
 
 ### Documentation
 
 - Document .env.secrets loading and ENV_SECRETS_FILE variable
 
+### Fixed
+
+- Update health check tests for recursive .env glob patterns
+
 ### Miscellaneous
 
 - Add .env.secrets to gitignore and update example files
 - Remove githistory extension, update dockerignore exclusions
+- Simplify .env gitignore patterns to use recursive globs
 
 ### Testing
 
@@ -1194,6 +1210,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix prettier and markdownlint formatting in README
 - Format TLS documentation files
 
+[4.15.6]: https://github.com/joshjhall/containers/compare/v4.15.5...v4.15.6
 [4.15.5]: https://github.com/joshjhall/containers/compare/v4.15.4...v4.15.5
 [4.15.4]: https://github.com/joshjhall/containers/compare/v4.15.3...v4.15.4
 [4.15.3]: https://github.com/joshjhall/containers/compare/v4.15.2...v4.15.3
