@@ -554,6 +554,12 @@ RUN if [ -f /opt/container-runtime/40-project-health-check.sh ]; then \
     chmod 755 /etc/container/startup/40-project-health-check.sh; \
     fi
 
+# Install init-env cleanup startup script
+RUN if [ -f /opt/container-runtime/05-cleanup-init-env.sh ]; then \
+    cp /opt/container-runtime/05-cleanup-init-env.sh /etc/container/startup/05-cleanup-init-env.sh && \
+    chmod 755 /etc/container/startup/05-cleanup-init-env.sh; \
+    fi
+
 # Install secret loading startup script
 RUN if [ -f /opt/container-runtime/secrets/50-load-secrets.sh ]; then \
     cp /opt/container-runtime/secrets/50-load-secrets.sh /etc/container/startup/50-load-secrets.sh && \
