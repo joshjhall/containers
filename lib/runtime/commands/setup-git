@@ -38,10 +38,16 @@ _write_key() {
     { set +x; } 2>/dev/null
     local content="${!var_name}"
     if [ -f "$path" ] && [ "$(command cat "$path")" = "$content" ]; then
+        # Content unchanged — still enforce permissions in case they drifted
+        chmod 600 "$path"
         eval "$_xt"
         return 1
     fi
-    printf '%s\n' "$content" > "$path"
+    # Restrictive umask prevents brief window of permissive default permissions
+    (
+        umask 077
+        printf '%s\n' "$content" > "$path"
+    )
     chmod 600 "$path"
     eval "$_xt"
     return 0
