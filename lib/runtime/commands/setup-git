@@ -73,15 +73,9 @@ ensure_ssh_agent() {
     mkdir -p "${HOME}/.ssh"
     chmod 700 "${HOME}/.ssh"
 
-    # Already running?
-    if [ -n "${SSH_AUTH_SOCK:-}" ] && [ -S "${SSH_AUTH_SOCK}" ]; then
-        # Verify agent is alive
-        if ssh-add -l >/dev/null 2>&1 || [ $? -eq 1 ]; then
-            return 0
-        fi
-    fi
-
-    # Try loading persisted agent
+    # Always prefer our own persisted agent — ignore externally-provided
+    # SSH_AUTH_SOCK (e.g. VS Code's forwarded agent) which can be cycled
+    # at any time, losing our added keys.
     if [ -f "$agent_env" ]; then
         # shellcheck disable=SC1090
         source "$agent_env" >/dev/null 2>&1 || true

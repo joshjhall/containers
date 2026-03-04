@@ -178,12 +178,17 @@ add_node_modules_to_path() {
     fi
 }
 
-# SSH agent persistence
+# SSH agent persistence — always use container-local agent
 if [ -f ~/.ssh/agent.env ]; then
     . ~/.ssh/agent.env >/dev/null
-    if ! ps -p $SSH_AGENT_PID >/dev/null 2>&1; then
+    if ! ps -p "${SSH_AGENT_PID:-0}" >/dev/null 2>&1; then
         ssh-agent -s > ~/.ssh/agent.env
         . ~/.ssh/agent.env >/dev/null
+        # Re-add on-disk keys to the new agent
+        for _key in ~/.ssh/git_auth_key ~/.ssh/git_signing_key; do
+            [ -f "$_key" ] && ssh-add "$_key" 2>/dev/null || true
+        done
+        unset _key
     fi
     export SSH_AUTH_SOCK SSH_AGENT_PID
 fi

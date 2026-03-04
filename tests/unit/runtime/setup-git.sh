@@ -350,6 +350,42 @@ test_main_calls_all_steps() {
 }
 
 # ---------------------------------------------------------------------------
+# SSH agent: container-local agent preference (VS Code forwarded agent fix)
+# ---------------------------------------------------------------------------
+
+# Test: ensure_ssh_agent does NOT have bare SSH_AUTH_SOCK check before agent.env
+test_no_bare_ssh_auth_sock_check() {
+    # The old pattern was: check SSH_AUTH_SOCK first, return if alive.
+    # This caused VS Code's forwarded agent to be accepted, skipping agent.env.
+    # The fix removes that first check so agent.env is always the first priority.
+    assert_file_not_contains "$SETUP_GIT_SCRIPT" '# Already running?' \
+        "ensure_ssh_agent should not have the old 'Already running?' check"
+}
+
+# Test: ensure_ssh_agent sources agent.env as the first priority
+test_agent_env_is_first_priority() {
+    # After mkdir/chmod, the very first conditional code should be the agent.env check,
+    # not a bare SSH_AUTH_SOCK test. Compare only non-comment lines.
+    local func_body
+    func_body=$(command sed -n '/^ensure_ssh_agent()/,/^}/p' "$SETUP_GIT_SCRIPT" | command grep -v '^\s*#')
+
+    # Find line numbers of key patterns within code-only lines
+    local agent_env_line ssh_sock_line
+    agent_env_line=$(echo "$func_body" | command grep -n 'if \[ -f "$agent_env" \]' | command head -1 | command cut -d: -f1)
+    ssh_sock_line=$(echo "$func_body" | command grep -n 'SSH_AUTH_SOCK' | command head -1 | command cut -d: -f1)
+
+    # agent.env check should appear at or before the first SSH_AUTH_SOCK reference in code
+    assert_true "[ -n '$agent_env_line' ] && [ -n '$ssh_sock_line' ] && [ '$agent_env_line' -le '$ssh_sock_line' ]" \
+        "agent.env check should appear before first SSH_AUTH_SOCK reference in code"
+}
+
+# Test: comment documents intent to ignore external agents
+test_ignore_external_agent_comment() {
+    assert_file_contains "$SETUP_GIT_SCRIPT" 'ignore externally-provided' \
+        "ensure_ssh_agent should document intent to ignore external agents"
+}
+
+# ---------------------------------------------------------------------------
 # Run all tests
 # ---------------------------------------------------------------------------
 run_test_with_setup test_strict_mode "Script uses set -euo pipefail"
@@ -378,6 +414,9 @@ run_test_with_setup test_ssh_agent_creates_ssh_dir "SSH agent creates .ssh direc
 run_test_with_setup test_key_file_permissions "Key files have 600 permissions"
 run_test_with_setup test_signing_configures_gpg_format "Signing key configures gpg.format ssh"
 run_test_with_setup test_main_calls_all_steps "Main function calls all setup steps"
+run_test_with_setup test_no_bare_ssh_auth_sock_check "ensure_ssh_agent does not accept external SSH_AUTH_SOCK"
+run_test_with_setup test_agent_env_is_first_priority "ensure_ssh_agent checks agent.env before SSH_AUTH_SOCK"
+run_test_with_setup test_ignore_external_agent_comment "ensure_ssh_agent documents intent to ignore external agents"
 
 # Generate test report
 generate_report
