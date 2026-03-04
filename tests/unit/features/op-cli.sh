@@ -814,4 +814,59 @@ run_test_with_setup test_cache_functional_sourcing "Cache: sourcing mock cache e
 run_test test_cache_git_identity_early_return "Cache: git identity early return when cached"
 run_test test_cache_uses_dev_shm "Cache: uses /dev/shm (tmpfs)"
 
+# ============================================================================
+# OP Secrets Cache Loader (66-op-secrets-cache.sh) Tests
+# ============================================================================
+
+# Static: op-secrets-cache.sh source file exists
+test_op_secrets_cache_file_exists() {
+    local source_file="$PROJECT_ROOT/lib/features/lib/bashrc/op-secrets-cache.sh"
+    assert_file_exists "$source_file"
+}
+
+# Static: op-secrets-cache.sh does NOT have interactive-shell guard
+test_op_secrets_cache_no_interactive_guard() {
+    local source_file="$PROJECT_ROOT/lib/features/lib/bashrc/op-secrets-cache.sh"
+    if command grep -q '\$- != \*i\*' "$source_file" || command grep -q 'if \[\[ \$-' "$source_file"; then
+        fail_test "op-secrets-cache.sh must NOT have interactive-shell guard"
+    else
+        pass_test "op-secrets-cache.sh has no interactive-shell guard (loads in all shells)"
+    fi
+}
+
+# Static: op-secrets-cache.sh checks file ownership with -O
+test_op_secrets_cache_ownership_check() {
+    local source_file="$PROJECT_ROOT/lib/features/lib/bashrc/op-secrets-cache.sh"
+    if command grep -Fq '[ -O ' "$source_file" || command grep -Fq '[ -O "' "$source_file"; then
+        pass_test "op-secrets-cache.sh checks file ownership with -O"
+    else
+        fail_test "op-secrets-cache.sh should check file ownership with -O"
+    fi
+}
+
+# Static: op-secrets-cache.sh disables xtrace before sourcing
+test_op_secrets_cache_disables_xtrace() {
+    local source_file="$PROJECT_ROOT/lib/features/lib/bashrc/op-secrets-cache.sh"
+    assert_file_contains "$source_file" "set +x" "op-secrets-cache.sh disables xtrace before sourcing cache"
+}
+
+# Static: op-cli.sh installs 66-op-secrets-cache.sh
+test_op_secrets_cache_installed_by_op_cli() {
+    local source_file="$PROJECT_ROOT/lib/features/op-cli.sh"
+    assert_file_contains "$source_file" "66-op-secrets-cache.sh" "op-cli.sh installs 66-op-secrets-cache.sh"
+}
+
+# Static: op-secrets-cache.sh references the correct cache path
+test_op_secrets_cache_correct_path() {
+    local source_file="$PROJECT_ROOT/lib/features/lib/bashrc/op-secrets-cache.sh"
+    assert_file_contains "$source_file" "/dev/shm/op-secrets-cache" "op-secrets-cache.sh uses /dev/shm/op-secrets-cache path"
+}
+
+run_test test_op_secrets_cache_file_exists "OP secrets cache: source file exists"
+run_test test_op_secrets_cache_no_interactive_guard "OP secrets cache: no interactive-shell guard"
+run_test test_op_secrets_cache_ownership_check "OP secrets cache: checks file ownership with -O"
+run_test test_op_secrets_cache_disables_xtrace "OP secrets cache: disables xtrace"
+run_test test_op_secrets_cache_installed_by_op_cli "OP secrets cache: installed by op-cli.sh"
+run_test test_op_secrets_cache_correct_path "OP secrets cache: correct cache path"
+
 generate_report

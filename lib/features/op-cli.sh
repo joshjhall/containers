@@ -146,6 +146,13 @@ write_bashrc_content /etc/bashrc.d/65-env-secrets.sh "Environment secrets loader
 log_command "Setting env-secrets bashrc script permissions" \
     chmod +x /etc/bashrc.d/65-env-secrets.sh
 
+# Create OP secrets cache loader (runs in ALL shells, including non-interactive)
+write_bashrc_content /etc/bashrc.d/66-op-secrets-cache.sh "OP secrets cache loader" \
+    < /tmp/build-scripts/features/lib/bashrc/op-secrets-cache.sh
+
+log_command "Setting op-secrets-cache bashrc script permissions" \
+    chmod +x /etc/bashrc.d/66-op-secrets-cache.sh
+
 # Create system-wide 1Password configuration (content in lib/bashrc/op-cli.sh)
 write_bashrc_content /etc/bashrc.d/70-1password.sh "1Password CLI configuration" \
     < /tmp/build-scripts/features/lib/bashrc/op-cli.sh
