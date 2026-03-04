@@ -168,9 +168,16 @@ Three setup commands are installed to `/usr/local/bin/` and available in PATH:
 | `setup-gh`   | Authenticate GitHub CLI (`gh`)                 |
 | `setup-glab` | Authenticate GitLab CLI (`glab`)               |
 
-All commands are idempotent (safe to run multiple times), OP-agnostic (they
-only read direct env vars -- OP ref resolution happens before they run), and
-graceful (missing tools or tokens result in a skip, not an error).
+All commands are idempotent (safe to run multiple times), OP-aware (they
+auto-source `/dev/shm/op-secrets-cache` if present, so OP-resolved secrets are
+available even when `BASH_ENV` is not honored), and graceful (missing tools or
+tokens result in a skip, not an error).
+
+This means `postStartCommand` in devcontainers needs no manual cache sourcing:
+
+```json
+"postStartCommand": "setup-git && setup-gh"
+```
 
 ### Direct Environment Variables (for non-OP users)
 

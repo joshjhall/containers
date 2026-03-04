@@ -414,6 +414,38 @@ run_test_with_setup test_ssh_agent_creates_ssh_dir "SSH agent creates .ssh direc
 run_test_with_setup test_key_file_permissions "Key files have 600 permissions"
 run_test_with_setup test_signing_configures_gpg_format "Signing key configures gpg.format ssh"
 run_test_with_setup test_main_calls_all_steps "Main function calls all setup steps"
+# ---------------------------------------------------------------------------
+# OP secrets cache sourcing
+# ---------------------------------------------------------------------------
+
+# Test: Script sources OP secrets cache
+test_op_cache_sourced() {
+    assert_file_contains "$SETUP_GIT_SCRIPT" '/dev/shm/op-secrets-cache' \
+        "setup-git should reference the OP secrets cache path"
+}
+
+# Test: OP cache block checks file ownership
+test_op_cache_ownership_check() {
+    assert_file_contains "$SETUP_GIT_SCRIPT" '[ -O "$_OP_CACHE" ]' \
+        "OP cache sourcing should verify file ownership"
+}
+
+# Test: OP cache block suppresses xtrace
+test_op_cache_xtrace_suppression() {
+    # Verify the cache block has its own xtrace save/restore
+    local cache_block
+    cache_block=$(command sed -n '/^_OP_CACHE=/,/^unset _OP_CACHE/p' "$SETUP_GIT_SCRIPT")
+    assert_contains "$cache_block" '_xt_cache=$(set +o | command grep xtrace)' \
+        "OP cache block should save xtrace state"
+    assert_contains "$cache_block" '{ set +x; } 2>/dev/null' \
+        "OP cache block should suppress xtrace"
+    assert_contains "$cache_block" 'eval "$_xt_cache"' \
+        "OP cache block should restore xtrace state"
+}
+
+run_test_with_setup test_op_cache_sourced "Script sources OP secrets cache"
+run_test_with_setup test_op_cache_ownership_check "OP cache block checks file ownership"
+run_test_with_setup test_op_cache_xtrace_suppression "OP cache block suppresses xtrace"
 run_test_with_setup test_no_bare_ssh_auth_sock_check "ensure_ssh_agent does not accept external SSH_AUTH_SOCK"
 run_test_with_setup test_agent_env_is_first_priority "ensure_ssh_agent checks agent.env before SSH_AUTH_SOCK"
 run_test_with_setup test_ignore_external_agent_comment "ensure_ssh_agent documents intent to ignore external agents"

@@ -258,10 +258,16 @@ test_auth_no_token_leak() {
 
     # Verify the order: save comes before disable, which comes before auth
     local save_line disable_line auth_line restore_line
-    save_line=$(command grep -n '_xt=$(set +o | command grep xtrace)' "$SETUP_GLAB_SCRIPT" | command head -1 | command cut -d: -f1)
-    disable_line=$(command grep -n '{ set +x; } 2>/dev/null' "$SETUP_GLAB_SCRIPT" | command head -1 | command cut -d: -f1)
+    # Use main() as anchor to skip the OP cache block which also has xtrace patterns
+    local main_line
+    main_line=$(command grep -n '^main()' "$SETUP_GLAB_SCRIPT" | command head -1 | command cut -d: -f1)
+    save_line=$(command sed -n "${main_line},\$p" "$SETUP_GLAB_SCRIPT" | command grep -n '_xt=$(set +o | command grep xtrace)' | command head -1 | command cut -d: -f1)
+    save_line=$((main_line + save_line - 1))
+    disable_line=$(command sed -n "${main_line},\$p" "$SETUP_GLAB_SCRIPT" | command grep -n '{ set +x; } 2>/dev/null' | command head -1 | command cut -d: -f1)
+    disable_line=$((main_line + disable_line - 1))
     auth_line=$(command grep -n 'glab auth login' "$SETUP_GLAB_SCRIPT" | command head -1 | command cut -d: -f1)
-    restore_line=$(command grep -n 'eval "$_xt"' "$SETUP_GLAB_SCRIPT" | command head -1 | command cut -d: -f1)
+    restore_line=$(command sed -n "${main_line},\$p" "$SETUP_GLAB_SCRIPT" | command grep -n 'eval "$_xt"' | command head -1 | command cut -d: -f1)
+    restore_line=$((main_line + restore_line - 1))
 
     # Verify correct ordering
     assert_true [ "$save_line" -lt "$disable_line" ] \
@@ -305,6 +311,38 @@ run_test_with_setup test_persist_token_marker "_persist_token uses marker to avo
 run_test_with_setup test_persist_token_writes_bashrc "_persist_token writes to bashrc"
 run_test_with_setup test_persist_token_idempotent "_persist_token is idempotent"
 run_test_with_setup test_persist_token_uses_gitlab_host "_persist_token bashrc references GITLAB_HOST"
+
+# ---------------------------------------------------------------------------
+# OP secrets cache sourcing
+# ---------------------------------------------------------------------------
+
+# Test: Script sources OP secrets cache
+test_op_cache_sourced() {
+    assert_file_contains "$SETUP_GLAB_SCRIPT" '/dev/shm/op-secrets-cache' \
+        "setup-glab should reference the OP secrets cache path"
+}
+
+# Test: OP cache block checks file ownership
+test_op_cache_ownership_check() {
+    assert_file_contains "$SETUP_GLAB_SCRIPT" '[ -O "$_OP_CACHE" ]' \
+        "OP cache sourcing should verify file ownership"
+}
+
+# Test: OP cache block suppresses xtrace
+test_op_cache_xtrace_suppression() {
+    local cache_block
+    cache_block=$(command sed -n '/^_OP_CACHE=/,/^unset _OP_CACHE/p' "$SETUP_GLAB_SCRIPT")
+    assert_contains "$cache_block" '_xt_cache=$(set +o | command grep xtrace)' \
+        "OP cache block should save xtrace state"
+    assert_contains "$cache_block" '{ set +x; } 2>/dev/null' \
+        "OP cache block should suppress xtrace"
+    assert_contains "$cache_block" 'eval "$_xt_cache"' \
+        "OP cache block should restore xtrace state"
+}
+
+run_test_with_setup test_op_cache_sourced "Script sources OP secrets cache"
+run_test_with_setup test_op_cache_ownership_check "OP cache block checks file ownership"
+run_test_with_setup test_op_cache_xtrace_suppression "OP cache block suppresses xtrace"
 run_test_with_setup test_auth_no_token_leak "Auth block does not leak token in xtrace"
 run_test_with_setup test_verification_after_auth "Verification step after authentication"
 
