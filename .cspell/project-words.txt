@@ -537,6 +537,7 @@ bers
 beru
 bestpractices
 bierner
+bindfs
 bindgen
 binutils
 Binutils
@@ -565,6 +566,7 @@ CMDLINE
 codellama
 colordiff
 conflictstyle
+containerenv
 cookiecutter
 covermode
 coverprofile
@@ -582,12 +584,18 @@ detekt
 DETEKT
 dexdump
 dktcheck
+dmypy
+ehthumbs
+encryptable
+eslintcache
 fastboot
 gclean
+gemset
 getprop
 HAXM
 heredocs
 hookify
+htmlcov
 idempotently
 inotifywait
 inputrc
@@ -629,11 +637,16 @@ libxtst
 logcat
 modelcontextprotocol
 mohsen
+netrc
 nohup
+pids
 playstore
 Playstore
+pytype
 retryable
 rubout
+Ruserdata
+sarif
 screencap
 sdkinstalled
 sdklist
@@ -647,6 +660,7 @@ swiftshader
 taplo
 TAPLO
 tempjar
+tfvars
 tibble
 tidyr
 tidyverse
@@ -693,6 +707,7 @@ wrwhoami
 wttr
 xclip
 xdist
+yardoc
 yourorg
 yourpassword
 yrun
