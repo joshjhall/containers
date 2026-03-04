@@ -26,6 +26,7 @@ set +e  # Don't exit on errors
 command -v op >/dev/null 2>&1 || exit 0
 
 # Source .env.secrets if available (runtime secrets not in docker-compose env_file)
+# Search order: explicit path > $HOME > $PWD > /workspace subdirectories
 _secrets_file=""
 if [ -n "${ENV_SECRETS_FILE:-}" ] && [ -f "${ENV_SECRETS_FILE}" ]; then
     _secrets_file="${ENV_SECRETS_FILE}"
@@ -33,6 +34,15 @@ elif [ -n "${HOME:-}" ] && [ -f "${HOME}/.env.secrets" ]; then
     _secrets_file="${HOME}/.env.secrets"
 elif [ -f "${PWD}/.env.secrets" ]; then
     _secrets_file="${PWD}/.env.secrets"
+elif [ -d "/workspace" ]; then
+    # During entrypoint startup, $PWD may not be the project directory.
+    # Search /workspace subdirectories as a fallback.
+    for _ws_dir in /workspace/*/; do
+        if [ -f "${_ws_dir}.env.secrets" ]; then
+            _secrets_file="${_ws_dir}.env.secrets"
+            break
+        fi
+    done
 fi
 if [ -n "$_secrets_file" ]; then
     set -a

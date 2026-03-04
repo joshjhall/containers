@@ -107,11 +107,12 @@ is sourced at runtime by the container's shell initialization.
 
 The container sources the **first** `.env.secrets` file it finds, in this order:
 
-| Priority | Location             | Use case                                   |
-| -------- | -------------------- | ------------------------------------------ |
-| 1        | `$ENV_SECRETS_FILE`  | Explicit path override                     |
-| 2        | `$HOME/.env.secrets` | User-level secrets, shared across projects |
-| 3        | `$PWD/.env.secrets`  | Project-level secrets (container WORKDIR)  |
+| Priority | Location                    | Use case                                                |
+| -------- | --------------------------- | ------------------------------------------------------- |
+| 1        | `$ENV_SECRETS_FILE`         | Explicit path override                                  |
+| 2        | `$HOME/.env.secrets`        | User-level secrets, shared across projects              |
+| 3        | `$PWD/.env.secrets`         | Project-level secrets (container WORKDIR)               |
+| 4        | `/workspace/*/.env.secrets` | Workspace mount fallback (first match under /workspace) |
 
 Only the first match is sourced (no stacking). All variables in the file are
 auto-exported (`set -a`), so you don't need `export` in the file itself.

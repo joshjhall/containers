@@ -649,6 +649,21 @@ run_test test_env_secrets_in_startup_before_op_check "env-secrets: startup scrip
 run_test test_env_secrets_uses_auto_export "env-secrets: uses set -a / set +a for auto-export"
 run_test_with_setup test_env_secrets_functional_sourcing "env-secrets: functional sourcing exports variables"
 
+# Static: 45-op-secrets.sh has /workspace fallback search
+test_env_secrets_startup_has_workspace_fallback() {
+    local source_file="$PROJECT_ROOT/lib/features/lib/op-cli/45-op-secrets.sh"
+    assert_file_contains "$source_file" '/workspace/\*/' "45-op-secrets.sh has /workspace fallback search"
+}
+
+# Static: env-secrets.sh has /workspace fallback search
+test_env_secrets_bashrc_has_workspace_fallback() {
+    local source_file="$PROJECT_ROOT/lib/features/lib/bashrc/env-secrets.sh"
+    assert_file_contains "$source_file" '/workspace/\*/' "env-secrets.sh has /workspace fallback search"
+}
+
+run_test test_env_secrets_startup_has_workspace_fallback "env-secrets: startup script has /workspace fallback"
+run_test test_env_secrets_bashrc_has_workspace_fallback "env-secrets: bashrc script has /workspace fallback"
+
 # ============================================================================
 # Secret Cache Tests
 # ============================================================================

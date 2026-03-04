@@ -9,6 +9,7 @@
 #   1. $ENV_SECRETS_FILE  — explicit path override
 #   2. $HOME/.env.secrets — user-level secrets
 #   3. $PWD/.env.secrets  — project-level secrets (container WORKDIR)
+#   4. /workspace/*/.env.secrets — workspace mount fallback
 # ----------------------------------------------------------------------------
 
 # Error protection for interactive shells
@@ -31,6 +32,7 @@ _env_secrets_old_xtrace=$(set +o | command grep xtrace)
 set +x
 
 # Find the first matching .env.secrets file
+# Search order: explicit path > $HOME > $PWD > /workspace subdirectories
 _env_secrets_file=""
 if [ -n "${ENV_SECRETS_FILE:-}" ] && [ -f "${ENV_SECRETS_FILE}" ]; then
     _env_secrets_file="${ENV_SECRETS_FILE}"
@@ -38,6 +40,15 @@ elif [ -n "${HOME:-}" ] && [ -f "${HOME}/.env.secrets" ]; then
     _env_secrets_file="${HOME}/.env.secrets"
 elif [ -f "${PWD}/.env.secrets" ]; then
     _env_secrets_file="${PWD}/.env.secrets"
+elif [ -d "/workspace" ]; then
+    # During entrypoint startup, $PWD may not be the project directory.
+    # Search /workspace subdirectories as a fallback.
+    for _ws_dir in /workspace/*/; do
+        if [ -f "${_ws_dir}.env.secrets" ]; then
+            _env_secrets_file="${_ws_dir}.env.secrets"
+            break
+        fi
+    done
 fi
 
 # Source it with auto-export so users don't need 'export' in their file
