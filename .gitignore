@@ -1,6 +1,9 @@
 # Container Build System .gitignore
 
-# OS generated files
+# ============================================================================
+# OS GENERATED FILES
+# ============================================================================
+
 .DS_Store
 .DS_Store?
 ._*
@@ -9,17 +12,22 @@
 ehthumbs.db
 Thumbs.db
 
-# FUSE filesystem artifacts (created by bindfs overlays when a file is deleted
-# while still open — FUSE defers removal by renaming to .fuse_hiddenXXXX)
+# ============================================================================
+# FUSE FILESYSTEM ARTIFACTS
+# ============================================================================
+
+# Created by bindfs overlays when a file is deleted while still open —
+# FUSE defers removal by renaming to .fuse_hiddenXXXX
 .fuse_hidden*
 
-# Editor directories and files
+# ============================================================================
+# EDITOR DIRECTORIES AND FILES
+# ============================================================================
+
 .idea/
 .vscode/*
 !.vscode/settings.json
 !.vscode/extensions.json
-.claude/settings.local.json
-.claude/memory
 *.swp
 *.swo
 *~
@@ -30,12 +38,25 @@ Thumbs.db
 .settings/
 *.sublime-workspace
 
-# Docker build artifacts
+# ============================================================================
+# CLAUDE LOCAL STATE
+# ============================================================================
+
+.claude/settings.local.json
+.claude/memory/
+
+# ============================================================================
+# DOCKER BUILD ARTIFACTS
+# ============================================================================
+
 .dockerignore.local
 docker-compose.override.yml
 docker-compose.local.yml
 
-# Build and temporary files
+# ============================================================================
+# BUILD AND TEMPORARY FILES
+# ============================================================================
+
 *.log
 *.pid
 *.seed
@@ -45,7 +66,10 @@ temp/
 tmp/
 results/
 
-# Test artifacts
+# ============================================================================
+# TEST ARTIFACTS
+# ============================================================================
+
 tests/results/
 coverage/
 .coverage
@@ -53,9 +77,17 @@ htmlcov/
 .pytest_cache/
 .tox/
 
-# Cache directories (if mounted locally for testing)
+# ============================================================================
+# CACHE DIRECTORIES
+# ============================================================================
+
+# If mounted locally for testing
 .cache/
 cache/
+
+# ============================================================================
+# LANGUAGE-SPECIFIC EXCLUDES
+# ============================================================================
 
 # Python
 __pycache__/
@@ -87,7 +119,6 @@ Cargo.lock
 *.exe
 *.exe~
 *.dll
-*.so
 *.dylib
 *.test
 *.out
@@ -110,9 +141,6 @@ doc/
 *.jar
 *.war
 *.ear
-*.zip
-*.tar.gz
-*.rar
 hs_err_pid*
 
 # R
@@ -120,7 +148,10 @@ hs_err_pid*
 .RData
 .Ruserdata
 
-# Terraform
+# ============================================================================
+# TERRAFORM
+# ============================================================================
+
 *.tfstate
 *.tfstate.*
 .terraform/
@@ -128,14 +159,22 @@ hs_err_pid*
 terraform.tfvars
 *.tfvars
 
-# Environment files (secrets) — .env and .env.* in any directory
+# ============================================================================
+# ENVIRONMENT FILES (SECRETS)
+# ============================================================================
+
+# .env and .env.* in any directory
 # Exception: .env.example and .env.*.example are allowed
+.env
 **/.env
 **/.env.*
 !**/.env.example
 !**/.env.*.example
 
-# Backup files
+# ============================================================================
+# BACKUP FILES
+# ============================================================================
+
 *.bak
 *.backup
 *.backup-*
@@ -144,23 +183,30 @@ terraform.tfvars
 # Checksum database backups (created by bin/update-checksums.sh)
 lib/checksums.json.backup-*
 
-# Archive files (unless intentionally added)
+# ============================================================================
+# ARCHIVE FILES
+# ============================================================================
+
+# Unless intentionally added
 *.tar
 *.gz
 *.tgz
 *.bz2
 *.xz
 *.7z
+*.zip
 *.rar
 
-# Runtime and process files
+# ============================================================================
+# RUNTIME AND PROCESS FILES
+# ============================================================================
+
 pids/
 *.sock
 
-# Local development overrides
+# ============================================================================
+# LOCAL DEVELOPMENT OVERRIDES
+# ============================================================================
+
 local/
 .local/
-
-# Added by devcontainer health check
-# Claude Code local state
-.claude/memory/

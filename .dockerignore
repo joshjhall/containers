@@ -9,6 +9,10 @@
 .env
 .env.*
 !.env.example
+**/.env
+**/.env.*
+!**/.env.example
+!**/.env.*.example
 
 # SSH and GPG keys
 .ssh/
@@ -58,7 +62,9 @@ op-session-*
 
 # GitHub configuration
 .github/
-.git/
+
+# Claude Code local state
+.claude/
 
 # Editor and IDE
 .vscode/
@@ -96,9 +102,7 @@ junit.xml
 dist/
 build/
 *.egg-info/
-target/
 out/
-bin/
 obj/
 
 # Logs and temporary files
@@ -114,11 +118,6 @@ logs/
 # Cache directories
 .cache/
 cache/
-__pycache__/
-*.py[cod]
-*$py.class
-node_modules/
-.npm
 .yarn/
 .pnpm-store/
 
@@ -161,7 +160,6 @@ Cargo.lock
 *.exe
 *.exe~
 *.dll
-*.so
 *.dylib
 *.test
 *.out
@@ -207,7 +205,6 @@ terraform.tfvars
 *.tfvars
 
 # Kubernetes
-kubeconfig
 *.kubeconfig
 *-kubeconfig.yaml
 
@@ -271,7 +268,6 @@ Desktop.ini
 $RECYCLE.BIN/
 
 # Linux
-*~
 .directory
 .Trash-*
 
@@ -283,8 +279,6 @@ $RECYCLE.BIN/
 *.backup
 *.old
 *.orig
-*.swp
-*.swo
 
 # Archive files (unless intentionally needed)
 # *.tar
@@ -340,9 +334,3 @@ security-scan-*.txt
 !bin/
 !tests/
 !examples/
-
-# Added by devcontainer health check
-# Build context exclusions
-.env.local
-.env.*.local
-.claude/
