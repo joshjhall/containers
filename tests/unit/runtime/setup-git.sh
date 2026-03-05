@@ -443,32 +443,19 @@ run_test_with_setup test_key_file_permissions "Key files have 600 permissions"
 run_test_with_setup test_signing_configures_gpg_format "Signing key configures gpg.format ssh"
 run_test_with_setup test_main_calls_all_steps "Main function calls all setup steps"
 # ---------------------------------------------------------------------------
-# OP secrets cache sourcing
+# OP secrets cache sourcing (via _wait-for-op-cache helper)
 # ---------------------------------------------------------------------------
 
-# Test: Script sources OP secrets cache
-test_op_cache_sourced() {
-    assert_file_contains "$SETUP_GIT_SCRIPT" '/dev/shm/op-secrets-cache' \
-        "setup-git should reference the OP secrets cache path"
+# Test: Script sources _wait-for-op-cache helper
+test_sources_wait_for_op_cache() {
+    assert_file_contains "$SETUP_GIT_SCRIPT" '_wait-for-op-cache' \
+        "setup-git should source _wait-for-op-cache helper"
 }
 
-# Test: OP cache block checks file ownership
-test_op_cache_ownership_check() {
-    assert_file_contains "$SETUP_GIT_SCRIPT" '[ -O "$_OP_CACHE" ]' \
-        "OP cache sourcing should verify file ownership"
-}
-
-# Test: OP cache block suppresses xtrace
-test_op_cache_xtrace_suppression() {
-    # Verify the cache block has its own xtrace save/restore
-    local cache_block
-    cache_block=$(command sed -n '/^_OP_CACHE=/,/^unset _OP_CACHE/p' "$SETUP_GIT_SCRIPT")
-    assert_contains "$cache_block" '_xt_cache=$(set +o | command grep xtrace)' \
-        "OP cache block should save xtrace state"
-    assert_contains "$cache_block" '{ set +x; } 2>/dev/null' \
-        "OP cache block should suppress xtrace"
-    assert_contains "$cache_block" 'eval "$_xt_cache"' \
-        "OP cache block should restore xtrace state"
+# Test: Script does NOT contain inline OP cache block (regression guard)
+test_no_inline_op_cache() {
+    assert_file_not_contains "$SETUP_GIT_SCRIPT" '/dev/shm/op-secrets-cache' \
+        "setup-git should NOT contain inline /dev/shm/op-secrets-cache reference"
 }
 
 # ---------------------------------------------------------------------------
@@ -598,9 +585,8 @@ run_test_with_setup test_identity_validates_email "setup_identity validates emai
 run_test_with_setup test_auth_key_validates_key "setup_auth_key validates SSH key"
 run_test_with_setup test_signing_key_validates_key "setup_signing_key validates SSH key"
 
-run_test_with_setup test_op_cache_sourced "Script sources OP secrets cache"
-run_test_with_setup test_op_cache_ownership_check "OP cache block checks file ownership"
-run_test_with_setup test_op_cache_xtrace_suppression "OP cache block suppresses xtrace"
+run_test_with_setup test_sources_wait_for_op_cache "Script sources _wait-for-op-cache helper"
+run_test_with_setup test_no_inline_op_cache "No inline OP cache block (regression guard)"
 run_test_with_setup test_no_bare_ssh_auth_sock_check "ensure_ssh_agent does not accept external SSH_AUTH_SOCK"
 run_test_with_setup test_agent_env_is_first_priority "ensure_ssh_agent checks agent.env before SSH_AUTH_SOCK"
 run_test_with_setup test_ignore_external_agent_comment "ensure_ssh_agent documents intent to ignore external agents"

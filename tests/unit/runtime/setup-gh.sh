@@ -259,31 +259,19 @@ run_test_with_setup test_persist_token_writes_bashrc "_persist_token writes to b
 run_test_with_setup test_persist_token_idempotent "_persist_token is idempotent"
 
 # ---------------------------------------------------------------------------
-# OP secrets cache sourcing
+# OP secrets cache sourcing (via _wait-for-op-cache helper)
 # ---------------------------------------------------------------------------
 
-# Test: Script sources OP secrets cache
-test_op_cache_sourced() {
-    assert_file_contains "$SETUP_GH_SCRIPT" '/dev/shm/op-secrets-cache' \
-        "setup-gh should reference the OP secrets cache path"
+# Test: Script sources _wait-for-op-cache helper
+test_sources_wait_for_op_cache() {
+    assert_file_contains "$SETUP_GH_SCRIPT" '_wait-for-op-cache' \
+        "setup-gh should source _wait-for-op-cache helper"
 }
 
-# Test: OP cache block checks file ownership
-test_op_cache_ownership_check() {
-    assert_file_contains "$SETUP_GH_SCRIPT" '[ -O "$_OP_CACHE" ]' \
-        "OP cache sourcing should verify file ownership"
-}
-
-# Test: OP cache block suppresses xtrace
-test_op_cache_xtrace_suppression() {
-    local cache_block
-    cache_block=$(command sed -n '/^_OP_CACHE=/,/^unset _OP_CACHE/p' "$SETUP_GH_SCRIPT")
-    assert_contains "$cache_block" '_xt_cache=$(set +o | command grep xtrace)' \
-        "OP cache block should save xtrace state"
-    assert_contains "$cache_block" '{ set +x; } 2>/dev/null' \
-        "OP cache block should suppress xtrace"
-    assert_contains "$cache_block" 'eval "$_xt_cache"' \
-        "OP cache block should restore xtrace state"
+# Test: Script does NOT contain inline OP cache block (regression guard)
+test_no_inline_op_cache() {
+    assert_file_not_contains "$SETUP_GH_SCRIPT" '/dev/shm/op-secrets-cache' \
+        "setup-gh should NOT contain inline /dev/shm/op-secrets-cache reference"
 }
 
 # ---------------------------------------------------------------------------
@@ -360,9 +348,8 @@ run_test_with_setup test_validate_token_rejects_short "_validate_token rejects s
 run_test_with_setup test_validate_token_rejects_control_chars "_validate_token rejects control characters"
 run_test_with_setup test_main_validates_token "main validates token before auth"
 
-run_test_with_setup test_op_cache_sourced "Script sources OP secrets cache"
-run_test_with_setup test_op_cache_ownership_check "OP cache block checks file ownership"
-run_test_with_setup test_op_cache_xtrace_suppression "OP cache block suppresses xtrace"
+run_test_with_setup test_sources_wait_for_op_cache "Script sources _wait-for-op-cache helper"
+run_test_with_setup test_no_inline_op_cache "No inline OP cache block (regression guard)"
 run_test_with_setup test_auth_no_token_leak "Auth block does not leak token in xtrace"
 run_test_with_setup test_verification_after_auth "Verification step after authentication"
 

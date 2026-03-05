@@ -528,11 +528,14 @@ RUN chmod 755 /usr/local/bin/test-completions
 COPY bin/detect-case-sensitivity.sh /usr/local/bin/detect-case-sensitivity.sh
 RUN chmod 755 /usr/local/bin/detect-case-sensitivity.sh
 
-# Copy setup commands (available as setup-git, setup-gh, setup-glab in PATH)
+# Copy setup commands and sourceable helpers
+COPY lib/runtime/commands/_source-env-secrets /usr/local/bin/_source-env-secrets
+COPY lib/runtime/commands/_wait-for-op-cache /usr/local/bin/_wait-for-op-cache
 COPY lib/runtime/commands/setup-git /usr/local/bin/setup-git
 COPY lib/runtime/commands/setup-gh /usr/local/bin/setup-gh
 COPY lib/runtime/commands/setup-glab /usr/local/bin/setup-glab
-RUN chmod 755 /usr/local/bin/setup-git /usr/local/bin/setup-gh /usr/local/bin/setup-glab
+RUN chmod 755 /usr/local/bin/_source-env-secrets /usr/local/bin/_wait-for-op-cache \
+    /usr/local/bin/setup-git /usr/local/bin/setup-gh /usr/local/bin/setup-glab
 
 # Clean up build scripts but keep runtime scripts and base utilities
 RUN cp -r /tmp/build-scripts/runtime /opt/container-runtime && \

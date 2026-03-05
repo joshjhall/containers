@@ -1,0 +1,71 @@
+#!/bin/bash
+# Sourceable helper: waits for the OP secrets cache to become available.
+#
+# Used by setup-git, setup-gh, setup-glab so that secrets resolved by
+# the entrypoint's 45-op-secrets.sh are available even when the setup
+# command runs before the entrypoint finishes (race condition with
+# postStartCommand on containers with many OP refs).
+#
+# Logic:
+#   1. Fast path: cache already exists → source immediately
+#   2. If missing, check preconditions (op installed, OP_*_REF vars, SA token)
+#   3. If all met: poll up to 60s for the cache to appear
+#   4. Source with xtrace protection and ownership check
+
+# Idempotency — don't re-wait/source if already loaded in this shell
+[ -n "${_OP_CACHE_LOADED:-}" ] && return 0
+
+_OP_CACHE="/dev/shm/op-secrets-cache"
+
+# Fast path: cache already exists
+if [ -f "$_OP_CACHE" ] && [ -O "$_OP_CACHE" ]; then
+    _woc_xt=$(set +o | command grep xtrace)
+    { set +x; } 2>/dev/null
+    . "$_OP_CACHE"
+    eval "$_woc_xt"
+    unset _woc_xt
+    _OP_CACHE_LOADED=1
+    unset _OP_CACHE
+    return 0
+fi
+
+# Check preconditions before waiting:
+#   1. op CLI is installed
+#   2. At least one OP_*_REF variable exists in the environment
+#   3. OP_SERVICE_ACCOUNT_TOKEN is set (needed for op read)
+_woc_should_wait=false
+if command -v op >/dev/null 2>&1; then
+    if compgen -v | command grep -q '^OP_.\+_REF$'; then
+        if [ -n "${OP_SERVICE_ACCOUNT_TOKEN:-}" ]; then
+            _woc_should_wait=true
+        fi
+    fi
+fi
+
+if [ "$_woc_should_wait" = true ]; then
+    _woc_elapsed=0
+    _woc_timeout=60
+    printf '[wait-for-op-cache] waiting for OP secrets cache (up to %ds)...\n' "$_woc_timeout" >&2
+    while [ "$_woc_elapsed" -lt "$_woc_timeout" ]; do
+        if [ -f "$_OP_CACHE" ]; then
+            break
+        fi
+        /usr/bin/sleep 1
+        _woc_elapsed=$((_woc_elapsed + 1))
+    done
+
+    if [ -f "$_OP_CACHE" ] && [ -O "$_OP_CACHE" ]; then
+        printf '[wait-for-op-cache] cache ready after %ds\n' "$_woc_elapsed" >&2
+        _woc_xt=$(set +o | command grep xtrace)
+        { set +x; } 2>/dev/null
+        . "$_OP_CACHE"
+        eval "$_woc_xt"
+        unset _woc_xt
+        _OP_CACHE_LOADED=1
+    else
+        printf '[wait-for-op-cache] cache not available after %ds — continuing without it\n' "$_woc_timeout" >&2
+    fi
+    unset _woc_elapsed _woc_timeout
+fi
+
+unset _woc_should_wait _OP_CACHE
