@@ -4,6 +4,21 @@ Detailed reference for 1Password secret loading, container setup commands, and
 Claude Code authentication. For a quick overview, see
 [CLAUDE.md](../../CLAUDE.md#claude-code-integrations).
 
+## How Secrets Flow Into the Container
+
+There are two independent resolution phases. Both use the same `OP_*_REF`
+naming convention but run at different times:
+
+| Phase | When | Script | What it does |
+| ----- | ---- | ------ | ------------ |
+| **Host-side** (optional) | `initializeCommand`, before container starts | `host/init-env.sh` | Reads `.env.init`, resolves `OP_*_REF` via host `op` CLI, writes `.devcontainer/.env` for Docker Compose `env_file` |
+| **Container startup** | Every container create/start (entrypoint) | `lib/features/lib/op-cli/45-op-secrets.sh` | Scans env for `OP_*_REF` / `OP_*_FILE_REF`, calls `op read`, exports resolved values, writes cache to `/dev/shm/op-secrets-cache` |
+| **Interactive shell** | Every new bash session | `lib/features/lib/bashrc/65-env-secrets.sh` then `70-1password.sh` (op-cli.sh) | Sources `.env.secrets`, then loads secrets from cache (or re-fetches on cache miss) |
+
+After startup, `05-cleanup-init-env.sh` shreds `.devcontainer/.env` so
+resolved secrets don't persist on disk. From that point on, secrets exist only
+in process environment and `/dev/shm/` (RAM-backed tmpfs).
+
 ## Automatic Secret Loading from 1Password (`OP_*_REF` convention)
 
 When `INCLUDE_OP=true`, any environment variable matching `OP_<NAME>_REF` is
@@ -25,6 +40,10 @@ automatically resolved from 1Password and exported as `<NAME>`. This is generic
 **Field names** depend on your 1Password item type: API_CREDENTIAL items use
 `credential`, LOGIN items use `password`, SSH_KEY items use `private key`, etc.
 Check your item in 1Password to find the correct field name.
+
+**Precedence**: Direct env vars always win — if `<NAME>` is already set, the
+`OP_*_REF` is skipped. If an `op read` call fails, that variable is silently
+skipped and remaining refs continue to resolve.
 
 ## File-Based Secrets (`OP_*_FILE_REF` convention)
 
@@ -61,6 +80,10 @@ OP_GOOGLE_APPLICATION_CREDENTIALS_FILE_REF=op://Development/GCP Service Account/
 OP_GOOGLE_APPLICATION_CREDENTIALS_FILE_REF=op://Development/GCP Credentials/sa-key.json
 ```
 
+**Note**: `OP_*_FILE_REF` is only supported inside the container (container-side
+resolution). It is **not** supported in `.env.init` (host-side resolution) —
+`init-env.sh` will warn and skip any `FILE_REF` entries.
+
 **Git identity fallback**: If `OP_GIT_USER_NAME_REF` points to a 1Password
 Identity item (which has separate `first name`/`last name` fields instead of
 `full name`), the system automatically combines them. If nothing resolves,
@@ -72,17 +95,14 @@ defaults to `Devcontainer` / `devcontainer@localhost`.
 services:
   dev:
     environment:
-      - OP_SERVICE_ACCOUNT_TOKEN=${OP_SERVICE_ACCOUNT_TOKEN}
       - OP_GITHUB_TOKEN_REF=op://Development/GitHub-PAT/credential
       - OP_GOOGLE_APPLICATION_CREDENTIALS_FILE_REF=op://Development/GCP Service Account/sa-key.json
       - OP_GIT_USER_NAME_REF=op://Development/Git-Config/full name
       - OP_GIT_USER_EMAIL_REF=op://Development/Git-Config/email
       - OP_GIT_AUTH_SSH_KEY_REF=op://Development/Git-Auth-Key/private key
       - OP_GIT_SIGNING_SSH_KEY_REF=op://Development/Git-Signing-Key/private key
+    # OP_SERVICE_ACCOUNT_TOKEN loaded from .env.secrets at runtime (see below)
 ```
-
-Secrets are loaded automatically on shell initialization and container startup.
-Direct env vars always win (if `<NAME>` is already set, the OP ref is skipped).
 
 ### Caching
 
@@ -94,7 +114,42 @@ making shell startup instant.
 - **Container restart** clears the cache automatically (`/dev/shm/` is tmpfs)
 - **Manual invalidation**: `rm /dev/shm/op-secrets-cache` — the next shell will
   re-resolve all secrets from 1Password
-- The cache file is `chmod 600` and ownership-checked before sourcing
+- The cache file is `chmod 600` and ownership-checked before sourcing — if the
+  file is not owned by the current user, it is skipped and secrets are
+  re-fetched from 1Password
+
+### 1Password CLI Configuration
+
+The interactive shell loader sets these environment variables for the `op` CLI:
+
+| Variable                     | Value                    | Purpose                       |
+| ---------------------------- | ------------------------ | ----------------------------- |
+| `OP_CACHE_DIR`               | `/cache/1password`       | CLI cache directory           |
+| `OP_CONFIG_DIR`              | `/cache/1password/config`| CLI config directory          |
+| `OP_BIOMETRIC_UNLOCK_ENABLED`| `true`                   | Enable biometric unlock       |
+
+## Host-Side Resolution (`.env.init`)
+
+For values needed by Docker Compose *before* the container starts (e.g.,
+`POSTGRES_PASSWORD` for the postgres service), use `.env.init` with
+`host/init-env.sh`:
+
+1. Copy `.env.init.example` to `.env.init` at the project root
+2. `init-env.sh` runs during `initializeCommand` (before container starts)
+3. It resolves `OP_*_REF` entries using the host's `op` CLI and writes the
+   result to `.devcontainer/.env` (chmod 600)
+4. Docker Compose picks up `.devcontainer/.env` via `env_file`
+5. On container boot, `05-cleanup-init-env.sh` shreds `.devcontainer/.env`
+
+```bash
+# .env.init — host-side resolution only
+OP_POSTGRES_PASSWORD_REF=op://Vault/Postgres/password  # → POSTGRES_PASSWORD in .devcontainer/.env
+POSTGRES_DB=assembli_dev                                # → passed through as-is
+```
+
+**Limitations**: `OP_*_FILE_REF` is not supported in `.env.init` (no `/dev/shm`
+on the host). `OP_SERVICE_ACCOUNT_TOKEN` must be in `.env.secrets` or the
+host environment — not in `.env.init` itself.
 
 ## Runtime `.env.secrets` Loading
 
@@ -118,12 +173,14 @@ auto-exported (`set -a`), so you don't need `export` in the file itself.
 
 ### Loading paths
 
-- **Interactive shells**: `65-env-secrets.sh` runs in `/etc/bashrc.d/` before
-  `70-1password.sh`, so `OP_SERVICE_ACCOUNT_TOKEN` is available when the
-  1Password integration initializes.
-- **Container startup**: `45-op-secrets.sh` sources `.env.secrets` before
-  checking for `OP_SERVICE_ACCOUNT_TOKEN`, ensuring background processes and
-  non-interactive shells also have access.
+Both the container startup script and the interactive shell loader source
+`.env.secrets` before checking for `OP_SERVICE_ACCOUNT_TOKEN`:
+
+- **Container startup** (`45-op-secrets.sh`): ensures background processes and
+  non-interactive shells have access
+- **Interactive shell** (`65-env-secrets.sh`): runs in `/etc/bashrc.d/` before
+  `70-1password.sh` (the OP secret loader), with an idempotency guard
+  (`_ENV_SECRETS_LOADED`) to prevent double-sourcing in nested shells
 
 ### Security
 
@@ -137,7 +194,6 @@ auto-exported (`set -a`), so you don't need `export` in the file itself.
 ```bash
 # .env.secrets (gitignored, never committed)
 OP_SERVICE_ACCOUNT_TOKEN=ops_your_token_here
-MY_OTHER_SECRET=supersecret
 ```
 
 ```yaml
@@ -162,15 +218,43 @@ services:
 
 Three setup commands are installed to `/usr/local/bin/` and available in PATH:
 
-| Command      | Purpose                                        |
-| ------------ | ---------------------------------------------- |
-| `setup-git`  | Git identity, SSH agent, auth key, signing key |
-| `setup-gh`   | Authenticate GitHub CLI (`gh`)                 |
-| `setup-glab` | Authenticate GitLab CLI (`glab`)               |
+| Command      | Purpose                                                      |
+| ------------ | ------------------------------------------------------------ |
+| `setup-git`  | Git identity, SSH agent, SSH keep-alive, auth key, signing key |
+| `setup-gh`   | Authenticate GitHub CLI (`gh`) and persist token             |
+| `setup-glab` | Authenticate GitLab CLI (`glab`) and persist token           |
 
 All commands are idempotent (safe to run multiple times), OP-agnostic (they
-only read direct env vars -- OP ref resolution happens before they run), and
+only read direct env vars — OP ref resolution happens before they run), and
 graceful (missing tools or tokens result in a skip, not an error).
+
+### `setup-git` Details
+
+Runs five steps in order:
+
+1. **Git identity**: Sets `user.name` and `user.email` from `GIT_USER_NAME` /
+   `GIT_USER_EMAIL` (falls back to `Devcontainer` / `devcontainer@localhost`)
+2. **SSH agent**: Starts `ssh-agent` if not running, persists socket info to
+   `~/.ssh/agent.env` for future shells
+3. **SSH keep-alive**: Adds `ServerAliveInterval 60` / `ServerAliveCountMax 10`
+   to `~/.ssh/config` for `github.com` and `gitlab.com` (prevents timeout on
+   long pushes)
+4. **Auth SSH key**: Writes `GIT_AUTH_SSH_KEY` to `~/.ssh/git_auth_key` and
+   adds it to the agent
+5. **Signing SSH key**: Writes `GIT_SIGNING_SSH_KEY` to
+   `~/.ssh/git_signing_key`, derives the public key, configures
+   `gpg.format=ssh` / `commit.gpgsign=true` / `tag.gpgsign=true`, and creates
+   `~/.ssh/allowed_signers`
+
+### `setup-gh` / `setup-glab` Details
+
+- Authenticate via `gh auth login --with-token` / `glab auth login --stdin`
+  (token piped via stdin to avoid process listing exposure)
+- Persist a bashrc snippet that re-derives `GITHUB_TOKEN` / `GITLAB_TOKEN`
+  from the CLI's auth store on subsequent shells (so the env var is always
+  available even without OP refs)
+- `setup-glab` supports `GITLAB_HOST` for self-hosted GitLab instances
+  (default: `gitlab.com`)
 
 ### Direct Environment Variables (for non-OP users)
 
@@ -186,6 +270,63 @@ graceful (missing tools or tokens result in a skip, not an error).
 
 Source: `lib/runtime/commands/setup-git`, `lib/runtime/commands/setup-gh`,
 `lib/runtime/commands/setup-glab`.
+
+## Interactive 1Password Helper Functions
+
+Available in interactive shells when `INCLUDE_OP=true`:
+
+### `op-env-safe` (recommended)
+
+Load all concealed/notes fields from a 1Password item as environment variables:
+
+```bash
+op-env-safe Development/API-Keys
+echo "$API_KEY"  # now available
+```
+
+Exports variables directly without `eval`. Disables xtrace during execution.
+
+### `op-exec`
+
+Execute a command with secrets loaded from a 1Password item:
+
+```bash
+op-exec Development/API-Keys npm run deploy
+```
+
+Uses `op-env-safe` internally.
+
+### `op-env` (use with caution)
+
+```bash
+eval $(op-env Development/API-Keys)
+```
+
+Uses `eval` — secrets may appear in command history and process listings.
+Prefer `op-env-safe` instead.
+
+### Shell Aliases
+
+| Alias | Expands to       |
+| ----- | ---------------- |
+| `ops` | `op signin`      |
+| `opl` | `op vault list`  |
+| `opg` | `op item get`    |
+| `opi` | `op inject`      |
+
+## Security Summary
+
+- **Secrets never touch disk** — stored in `/dev/shm/` (tmpfs) and process
+  environment only
+- **Re-fetched on every container start** — values stay current with the vault
+- **`.devcontainer/.env` shredded on boot** — host-side resolved file removed
+  by `05-cleanup-init-env.sh` after Docker Compose injects it
+- **xtrace disabled** during all secret operations to prevent exposure in
+  `set -x` debug output
+- **Cache file ownership-checked** — `/dev/shm/op-secrets-cache` is skipped if
+  not owned by the current user
+- **Token piped via stdin** — `setup-gh` / `setup-glab` avoid exposing tokens
+  in process listings
 
 ## Claude Code Authentication
 
