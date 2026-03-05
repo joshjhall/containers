@@ -307,10 +307,34 @@ test_auth_key_skips_when_unset() {
         "setup_auth_key should check if GIT_AUTH_SSH_KEY is set"
 }
 
-# Test: Signing key skips when GIT_SIGNING_SSH_KEY is unset
-test_signing_key_skips_when_unset() {
+# Test: Signing key checks if GIT_SIGNING_SSH_KEY is set
+test_signing_key_checks_env_var() {
     assert_file_contains "$SETUP_GIT_SCRIPT" 'GIT_SIGNING_SSH_KEY:-' \
         "setup_signing_key should check if GIT_SIGNING_SSH_KEY is set"
+}
+
+# Test: Signing key falls back to SSH agent when env var unset
+test_signing_key_agent_fallback() {
+    assert_file_contains "$SETUP_GIT_SCRIPT" 'ssh-add -L' \
+        "setup_signing_key should check SSH agent for keys when env var unset"
+}
+
+# Test: _clear_signing_config function is defined
+test_clear_signing_config_defined() {
+    assert_file_contains "$SETUP_GIT_SCRIPT" '_clear_signing_config()' \
+        "_clear_signing_config function should be defined"
+}
+
+# Test: Stale signing config is cleared when no key available
+test_stale_signing_config_cleared() {
+    assert_file_contains "$SETUP_GIT_SCRIPT" 'cleared stale signing configuration' \
+        "Should clear stale signing config when no key available"
+}
+
+# Test: _configure_signing helper is defined
+test_configure_signing_defined() {
+    assert_file_contains "$SETUP_GIT_SCRIPT" '_configure_signing()' \
+        "_configure_signing function should be defined"
 }
 
 # Test: SSH agent creates .ssh directory
@@ -409,7 +433,11 @@ run_test_with_setup test_write_key_no_secret_in_trace "_write_key does not leak 
 run_test_with_setup test_identity_defaults "Identity defaults to Devcontainer when vars unset"
 run_test_with_setup test_identity_sets_git_config "Identity sets git config user.name and user.email"
 run_test_with_setup test_auth_key_skips_when_unset "Auth key skips when GIT_AUTH_SSH_KEY unset"
-run_test_with_setup test_signing_key_skips_when_unset "Signing key skips when GIT_SIGNING_SSH_KEY unset"
+run_test_with_setup test_signing_key_checks_env_var "Signing key checks if GIT_SIGNING_SSH_KEY is set"
+run_test_with_setup test_signing_key_agent_fallback "Signing key falls back to SSH agent"
+run_test_with_setup test_clear_signing_config_defined "_clear_signing_config function is defined"
+run_test_with_setup test_stale_signing_config_cleared "Stale signing config cleared when no key"
+run_test_with_setup test_configure_signing_defined "_configure_signing helper is defined"
 run_test_with_setup test_ssh_agent_creates_ssh_dir "SSH agent creates .ssh directory with correct permissions"
 run_test_with_setup test_key_file_permissions "Key files have 600 permissions"
 run_test_with_setup test_signing_configures_gpg_format "Signing key configures gpg.format ssh"
