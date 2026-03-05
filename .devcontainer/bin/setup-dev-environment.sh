@@ -14,7 +14,7 @@ echo ""
 
 # Get the directory where this script is located
 BIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(dirname "$BIN_DIR")"
+PROJECT_ROOT="$(dirname "$(dirname "$BIN_DIR")")"
 
 cd "$PROJECT_ROOT"
 

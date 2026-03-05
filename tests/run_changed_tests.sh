@@ -152,6 +152,17 @@ map_to_test() {
             fi
             return
             ;;
+
+        # .devcontainer/bin/foo.sh → tests/unit/.devcontainer/bin/foo.sh
+        .devcontainer/bin/*.sh)
+            local base
+            base=$(basename "$file")
+            local test_path="${TESTS_DIR}/unit/.devcontainer/bin/${base}"
+            if [ -f "$test_path" ]; then
+                echo "$test_path"
+            fi
+            return
+            ;;
     esac
 
     # No mapping found — no tests to run for this file

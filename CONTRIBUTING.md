@@ -37,7 +37,7 @@ ______________________________________________________________________
 1. Run the development environment setup:
 
    ```bash
-   ./bin/setup-dev-environment.sh
+   ./.devcontainer/bin/setup-dev-environment.sh
    ```
 
    This will:

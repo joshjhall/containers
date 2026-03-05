@@ -5,7 +5,7 @@
 set -euo pipefail
 
 # Source test framework
-source "$(dirname "${BASH_SOURCE[0]}")/../../framework.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/../../../framework.sh"
 
 # Initialize test framework
 init_test_framework
@@ -15,8 +15,8 @@ test_suite "Bin Setup Dev Environment Tests"
 
 # Test: Script exists and is executable
 test_script_exists() {
-    assert_file_exists "$PROJECT_ROOT/bin/setup-dev-environment.sh"
-    assert_executable "$PROJECT_ROOT/bin/setup-dev-environment.sh"
+    assert_file_exists "$PROJECT_ROOT/.devcontainer/bin/setup-dev-environment.sh"
+    assert_executable "$PROJECT_ROOT/.devcontainer/bin/setup-dev-environment.sh"
 }
 
 # Test: Pre-commit config exists
@@ -79,7 +79,7 @@ test_gitignore_has_env() {
 
 # Test: Setup script uses pre-commit install
 test_script_uses_precommit_install() {
-    local script="$PROJECT_ROOT/bin/setup-dev-environment.sh"
+    local script="$PROJECT_ROOT/.devcontainer/bin/setup-dev-environment.sh"
 
     if command grep -q "pre-commit install" "$script"; then
         assert_true true "Setup script uses pre-commit install"
@@ -90,7 +90,7 @@ test_script_uses_precommit_install() {
 
 # Test: Setup script installs pre-push hooks
 test_script_installs_prepush() {
-    local script="$PROJECT_ROOT/bin/setup-dev-environment.sh"
+    local script="$PROJECT_ROOT/.devcontainer/bin/setup-dev-environment.sh"
 
     if command grep -q "pre-push" "$script"; then
         assert_true true "Setup script installs pre-push hooks"
@@ -101,7 +101,7 @@ test_script_installs_prepush() {
 
 # Test: Setup script has color variables defined
 test_script_has_colors() {
-    local script="$PROJECT_ROOT/bin/setup-dev-environment.sh"
+    local script="$PROJECT_ROOT/.devcontainer/bin/setup-dev-environment.sh"
 
     if command grep -q "RED=" "$script" && command grep -q "GREEN=" "$script"; then
         assert_true true "Setup script defines color variables"
@@ -112,7 +112,7 @@ test_script_has_colors() {
 
 # Test: Setup script checks .gitignore
 test_script_checks_gitignore() {
-    local script="$PROJECT_ROOT/bin/setup-dev-environment.sh"
+    local script="$PROJECT_ROOT/.devcontainer/bin/setup-dev-environment.sh"
 
     if command grep -q "grep.*gitignore" "$script"; then
         assert_true true "Setup script checks .gitignore"
@@ -123,7 +123,7 @@ test_script_checks_gitignore() {
 
 # Test: Setup script has tool checking function
 test_script_has_tool_checker() {
-    local script="$PROJECT_ROOT/bin/setup-dev-environment.sh"
+    local script="$PROJECT_ROOT/.devcontainer/bin/setup-dev-environment.sh"
 
     if command grep -q "check_tool()" "$script"; then
         assert_true true "Setup script has check_tool function"
@@ -134,7 +134,7 @@ test_script_has_tool_checker() {
 
 # Test: Setup script checks for shellcheck
 test_script_checks_shellcheck() {
-    local script="$PROJECT_ROOT/bin/setup-dev-environment.sh"
+    local script="$PROJECT_ROOT/.devcontainer/bin/setup-dev-environment.sh"
 
     if command grep -q 'check_tool.*shellcheck' "$script"; then
         assert_true true "Setup script checks for shellcheck"
@@ -145,7 +145,7 @@ test_script_checks_shellcheck() {
 
 # Test: Setup script checks for docker
 test_script_checks_docker() {
-    local script="$PROJECT_ROOT/bin/setup-dev-environment.sh"
+    local script="$PROJECT_ROOT/.devcontainer/bin/setup-dev-environment.sh"
 
     if command grep -q 'check_tool.*docker' "$script"; then
         assert_true true "Setup script checks for docker"
@@ -156,7 +156,7 @@ test_script_checks_docker() {
 
 # Test: Setup script checks for pre-commit
 test_script_checks_precommit() {
-    local script="$PROJECT_ROOT/bin/setup-dev-environment.sh"
+    local script="$PROJECT_ROOT/.devcontainer/bin/setup-dev-environment.sh"
 
     if command grep -q 'check_tool.*pre-commit' "$script"; then
         assert_true true "Setup script checks for pre-commit"
@@ -167,7 +167,7 @@ test_script_checks_precommit() {
 
 # Test: Setup script checks git user configuration
 test_script_checks_git_config() {
-    local script="$PROJECT_ROOT/bin/setup-dev-environment.sh"
+    local script="$PROJECT_ROOT/.devcontainer/bin/setup-dev-environment.sh"
 
     if command grep -q "git config user.name" "$script" || command grep -q "git config user.email" "$script"; then
         assert_true true "Setup script checks git user configuration"
