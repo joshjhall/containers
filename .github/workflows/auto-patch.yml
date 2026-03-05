@@ -9,6 +9,9 @@ on:
     workflows: ["CI/CD Pipeline"]
     types: [completed]
     branches: ['auto-patch/**']
+  pull_request:
+    types: [closed]
+    branches: [main]
 
 env:
   REGISTRY: ghcr.io
@@ -287,10 +290,10 @@ jobs:
             https://api.pushover.net/1/messages.json
 
   # =====================================
-  # Auto-Merge After CI Success
+  # Create PR After CI Success
   # =====================================
   auto-merge:
-    name: Auto-Merge Patch Release
+    name: Create PR for Patch Release
     runs-on: ubuntu-latest
     if: |
       github.event_name == 'workflow_run' &&
@@ -299,6 +302,7 @@ jobs:
     permissions:
       contents: write
       packages: read
+      pull-requests: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -308,8 +312,9 @@ jobs:
 
       - name: Get patch branch info
         id: branch_info
+        env:
+          BRANCH_NAME: ${{ github.event.workflow_run.head_branch }}
         run: |
-          BRANCH_NAME="${{ github.event.workflow_run.head_branch }}"
           echo "branch=$BRANCH_NAME" >> $GITHUB_OUTPUT
 
           # Extract version changes from the branch
@@ -325,6 +330,13 @@ jobs:
           echo "commit_message<<EOF" >> $GITHUB_OUTPUT
           echo "$COMMIT_MSG" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
+
+          # Detect GPG key changes from commit message
+          if echo "$COMMIT_MSG" | grep -q "GPG Key Changes Detected"; then
+            echo "gpg_keys_changed=true" >> $GITHUB_OUTPUT
+          else
+            echo "gpg_keys_changed=false" >> $GITHUB_OUTPUT
+          fi
 
       - name: Update compatibility matrix with test results
         run: |
@@ -401,40 +413,152 @@ jobs:
             git config user.email "github-actions[bot]@users.noreply.github.com"
             git add version-compatibility-matrix.json
             git commit -m "chore: Update compatibility matrix with passing test results" || echo "No matrix changes to commit"
+            git push origin "${{ steps.branch_info.outputs.branch }}"
             echo "Compatibility matrix updated with test results"
           else
             echo "Warning: version-compatibility-matrix.json not found"
           fi
 
-      - name: Merge to main
+      - name: Create pull request
+        id: create_pr
+        env:
+          GH_TOKEN: ${{ secrets.AUTO_PATCH_TOKEN }}
+          BRANCH_NAME: ${{ steps.branch_info.outputs.branch }}
+          VERSION: ${{ steps.branch_info.outputs.version }}
+          COMMIT_MSG: ${{ steps.branch_info.outputs.commit_message }}
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          PR_TITLE="chore: automated patch release v${VERSION}"
 
-          # Checkout main and merge
-          git checkout main
-          git merge --no-ff "${{ steps.branch_info.outputs.branch }}" -m "Merge automated patch release: ${{ steps.branch_info.outputs.branch }}"
+          PR_BODY="## Automated Patch Release v${VERSION}
 
-          # Push to main
-          git push origin main
+          ${COMMIT_MSG}
+
+          ---
+          All CI tests have passed. This PR was created by the automated patch release system."
+
+          PR_URL=$(gh pr create \
+            --base main \
+            --head "$BRANCH_NAME" \
+            --title "$PR_TITLE" \
+            --body "$PR_BODY")
+
+          echo "pr_url=$PR_URL" >> $GITHUB_OUTPUT
+          echo "Created PR: $PR_URL"
+
+      - name: Add hold label for GPG key changes
+        if: steps.branch_info.outputs.gpg_keys_changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.AUTO_PATCH_TOKEN }}
+        run: |
+          # Create the label if it doesn't exist
+          gh label create "hold/review-required" \
+            --description "Blocks auto-merge — requires explicit human review" \
+            --color "D93F0B" \
+            --force
+
+          gh pr edit "${{ steps.create_pr.outputs.pr_url }}" \
+            --add-label "hold/review-required"
+
+          gh pr comment "${{ steps.create_pr.outputs.pr_url }}" \
+            --body "⚠️ **GPG Key Changes Detected** — auto-merge disabled.
+
+          This release includes changes to GPG signing keys which require manual review.
+          Remove the \`hold/review-required\` label after verifying the key changes are legitimate."
+
+          echo "GPG key changes detected — PR held for manual review"
+
+      - name: Enable auto-merge (no GPG key changes)
+        if: steps.branch_info.outputs.gpg_keys_changed != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.AUTO_PATCH_TOKEN }}
+        run: |
+          gh pr merge "${{ steps.create_pr.outputs.pr_url }}" \
+            --auto \
+            --merge \
+            --subject "Merge automated patch release: ${{ steps.branch_info.outputs.branch }}"
+
+          echo "Auto-merge enabled — PR will merge when branch protection requirements are met"
+
+      - name: Send failure notification
+        if: failure()
+        env:
+          VERSION: ${{ steps.branch_info.outputs.version }}
+          BRANCH: ${{ steps.branch_info.outputs.branch }}
+        run: |
+          curl -s \
+            --form-string "token=${{ secrets.PUSHOVER_TOKEN }}" \
+            --form-string "user=${{ secrets.PUSHOVER_USER }}" \
+            --form-string "title=❌ Patch Release v${VERSION} PR Creation Failed" \
+            --form-string "message=Automated patch release failed during PR creation:
+
+          Version: v${VERSION}
+          Branch: ${BRANCH}
+
+          The branch has been preserved for manual review.
+
+          Check workflow: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            --form-string "priority=1" \
+            --form-string "sound=persistent" \
+            https://api.pushover.net/1/messages.json
+
+  # =====================================
+  # Post-Merge: Tag, Cleanup, Notify
+  # =====================================
+  post-merge:
+    name: Post-Merge Tag and Cleanup
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.merged == true &&
+      startsWith(github.event.pull_request.head.ref, 'auto-patch/')
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.AUTO_PATCH_TOKEN }}
+
+      - name: Get release info
+        id: release_info
+        env:
+          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: |
+          echo "branch=$PR_HEAD_REF" >> $GITHUB_OUTPUT
+
+          # Get current version from VERSION file (now on main after merge)
+          CURRENT_VERSION=$(cat VERSION)
+          echo "version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+
+          # Get the merge commit message
+          COMMIT_MSG=$(git log -1 --pretty=%B)
+          echo "commit_message<<EOF" >> $GITHUB_OUTPUT
+          echo "$COMMIT_MSG" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Create and push version tag
+        env:
+          VERSION: ${{ steps.release_info.outputs.version }}
         run: |
-          VERSION="${{ steps.branch_info.outputs.version }}"
           git tag -a "v${VERSION}" -m "Automated patch release v${VERSION}"
           git push origin "v${VERSION}"
 
           echo "Tag pushed. CI workflow will create GitHub release automatically."
 
       - name: Delete auto-patch branch
+        env:
+          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
         run: |
-          git push origin --delete "${{ steps.branch_info.outputs.branch }}"
+          git push origin --delete "$PR_HEAD_REF" || echo "Branch already deleted"
 
       - name: Send success notification
         if: success()
+        env:
+          VERSION: ${{ steps.release_info.outputs.version }}
+          BRANCH: ${{ steps.release_info.outputs.branch }}
+          COMMIT_MSG: ${{ steps.release_info.outputs.commit_message }}
         run: |
-          VERSION="${{ steps.branch_info.outputs.version }}"
-
           curl -s \
             --form-string "token=${{ secrets.PUSHOVER_TOKEN }}" \
             --form-string "user=${{ secrets.PUSHOVER_USER }}" \
@@ -442,31 +566,30 @@ jobs:
             --form-string "message=Automated patch release succeeded:
 
           Version: v${VERSION}
-          Branch: ${{ steps.branch_info.outputs.branch }}
+          Branch: ${BRANCH}
 
           Changes:
-          ${{ steps.branch_info.outputs.commit_message }}
+          ${COMMIT_MSG}
 
-          All tests passed and changes have been merged to main." \
+          All tests passed and changes have been merged to main via PR." \
             --form-string "priority=0" \
             --form-string "sound=pushover" \
             https://api.pushover.net/1/messages.json
 
       - name: Send failure notification
         if: failure()
+        env:
+          VERSION: ${{ steps.release_info.outputs.version }}
+          BRANCH: ${{ steps.release_info.outputs.branch }}
         run: |
-          VERSION="${{ steps.branch_info.outputs.version }}"
-
           curl -s \
             --form-string "token=${{ secrets.PUSHOVER_TOKEN }}" \
             --form-string "user=${{ secrets.PUSHOVER_USER }}" \
-            --form-string "title=❌ Patch Release v${VERSION} Failed" \
-            --form-string "message=Automated patch release failed during merge:
+            --form-string "title=❌ Patch Release v${VERSION} Post-Merge Failed" \
+            --form-string "message=Post-merge steps failed (tag creation or cleanup):
 
           Version: v${VERSION}
-          Branch: ${{ steps.branch_info.outputs.branch }}
-
-          The branch has been preserved for manual review.
+          Branch: ${BRANCH}
 
           Check workflow: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
             --form-string "priority=1" \
