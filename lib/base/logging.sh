@@ -654,6 +654,20 @@ log_feature_summary() {
             for var in "${ENV_ARRAY[@]}"; do
                 # Try to get the value
                 value="${!var:-<not set>}"
+                # Mask secret values to avoid exposing them in build logs
+                local _upper_var
+                _upper_var=$(printf '%s' "$var" | command tr '[:lower:]' '[:upper:]')
+                case "$_upper_var" in
+                    *_TOKEN|*_SECRET|*_PASSWORD|*_KEY|*_CREDENTIAL*)
+                        if [ "$value" != "<not set>" ]; then
+                            if [ "${#value}" -ge 8 ]; then
+                                value="${value:0:4}****"
+                            else
+                                value="****"
+                            fi
+                        fi
+                        ;;
+                esac
                 echo "  - $var=$value"
             done
         fi

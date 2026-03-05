@@ -500,8 +500,8 @@ test_func_audit_init_writes_event() {
 # Test: audit_log writes JSON to log file
 test_func_audit_log_writes_json() {
     _reset_audit_logger
-    audit_log "system" "info" "Test event" '{"test_key":"test_value"}'
-    if command grep -q '"test_key":"test_value"' "$AUDIT_LOG_FILE" 2>/dev/null; then
+    audit_log "system" "info" "Test event" '{"test_field":"test_value"}'
+    if command grep -q '"test_field":"test_value"' "$AUDIT_LOG_FILE" 2>/dev/null; then
         pass_test "audit_log writes JSON to log file"
     else
         fail_test "audit_log did not write expected JSON"
@@ -667,6 +667,105 @@ test_func_get_retention_policy() {
     fi
     _cleanup_func_test
 }
+
+# ============================================================================
+# Batch 8b: Secret Masking Tests
+# ============================================================================
+
+# Test: _is_secret_key identifies secret patterns
+test_func_is_secret_key() {
+    _reset_audit_logger
+    local pass=true
+    _is_secret_key "API_TOKEN" || pass=false
+    _is_secret_key "AWS_SECRET" || pass=false
+    _is_secret_key "DB_PASSWORD" || pass=false
+    _is_secret_key "MY_API_KEY" || pass=false
+    _is_secret_key "AWS_CREDENTIAL_ID" || pass=false
+    ! _is_secret_key "USERNAME" || pass=false
+    ! _is_secret_key "HOME" || pass=false
+    ! _is_secret_key "LOG_LEVEL" || pass=false
+    if [ "$pass" = true ]; then
+        pass_test "_is_secret_key correctly identifies secret and non-secret keys"
+    else
+        fail_test "_is_secret_key misidentified a key"
+    fi
+    _cleanup_func_test
+}
+
+# Test: _mask_secret_value masks long values (first 4 chars + ****)
+test_func_mask_long_value() {
+    _reset_audit_logger
+    local result
+    result=$(_mask_secret_value "API_TOKEN" "mysupersecret123")
+    if [ "$result" = "mysu****" ]; then
+        pass_test "_mask_secret_value masks long values correctly"
+    else
+        fail_test "_mask_secret_value returned '$result' instead of 'mysu****'"
+    fi
+    _cleanup_func_test
+}
+
+# Test: _mask_secret_value masks short values with ****
+test_func_mask_short_value() {
+    _reset_audit_logger
+    local result
+    result=$(_mask_secret_value "API_TOKEN" "short")
+    if [ "$result" = "****" ]; then
+        pass_test "_mask_secret_value masks short values as ****"
+    else
+        fail_test "_mask_secret_value returned '$result' instead of '****'"
+    fi
+    _cleanup_func_test
+}
+
+# Test: _mask_secret_value passes through non-secret values
+test_func_mask_passthrough() {
+    _reset_audit_logger
+    local result
+    result=$(_mask_secret_value "USERNAME" "admin")
+    if [ "$result" = "admin" ]; then
+        pass_test "_mask_secret_value passes through non-secret values"
+    else
+        fail_test "_mask_secret_value returned '$result' instead of 'admin'"
+    fi
+    _cleanup_func_test
+}
+
+# Test: _sanitize_json_secrets masks secret values in JSON
+test_func_sanitize_json() {
+    _reset_audit_logger
+    local result
+    result=$(_sanitize_json_secrets '{"user":"admin","api_key":"supersecretkey123","host":"localhost"}')
+    if echo "$result" | command grep -qF '"user":"admin"' && \
+       echo "$result" | command grep -qF '"api_key":"supe****"' && \
+       echo "$result" | command grep -qF '"host":"localhost"'; then
+        pass_test "_sanitize_json_secrets masks only secret keys in JSON"
+    else
+        fail_test "_sanitize_json_secrets returned: $result"
+    fi
+    _cleanup_func_test
+}
+
+# Test: audit_log masks secrets in extra_data before writing
+test_func_audit_log_masks_secrets() {
+    _reset_audit_logger
+    audit_log "system" "info" "Secret test" '{"auth_token":"verylongsecrettoken"}'
+    if command grep -qF '"auth_token":"very****"' "$AUDIT_LOG_FILE" 2>/dev/null; then
+        pass_test "audit_log masks secret values in extra_data"
+    else
+        local content
+        content=$(command tail -1 "$AUDIT_LOG_FILE" 2>/dev/null)
+        fail_test "audit_log did not mask secret in extra_data. Last line: $content"
+    fi
+    _cleanup_func_test
+}
+
+run_test test_func_is_secret_key "_is_secret_key identifies secret patterns"
+run_test test_func_mask_long_value "_mask_secret_value masks long values"
+run_test test_func_mask_short_value "_mask_secret_value masks short values"
+run_test test_func_mask_passthrough "_mask_secret_value passes through non-secrets"
+run_test test_func_sanitize_json "_sanitize_json_secrets masks secrets in JSON"
+run_test test_func_audit_log_masks_secrets "audit_log masks secrets in extra_data"
 
 # Run Batch 8 functional tests
 run_test test_func_audit_init_creates_files "audit_init creates log directory and file"

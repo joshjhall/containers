@@ -178,6 +178,20 @@ test_summary_includes_check_build_logs_command() {
     assert_contains "$output" "check-build-logs.sh docker" "Should include check-build-logs command with lowercase feature name"
 }
 
+test_summary_masks_secret_env_vars() {
+    # Test that secret env vars are masked in output
+    export MY_API_TOKEN="supersecrettoken123"
+    export MY_PASSWORD="shortpw"
+
+    local output
+    output=$(log_feature_summary \
+        --feature "Test" \
+        --env "MY_API_TOKEN,MY_PASSWORD" 2>&1)
+
+    assert_contains "$output" "MY_API_TOKEN=supe****" "Should mask long secret (first 4 + ****)"
+    assert_contains "$output" "MY_PASSWORD=****" "Should mask short secret as ****"
+}
+
 test_summary_unknown_argument_warning() {
     # Test that unknown arguments generate warnings
     local output
@@ -201,6 +215,7 @@ run_test_with_setup test_summary_with_unset_env_var "Summary with unset environm
 run_test_with_setup test_summary_writes_to_log_file "Summary writes to log file"
 run_test_with_setup test_summary_formats_paths_as_list "Summary formats paths as list"
 run_test_with_setup test_summary_includes_check_build_logs_command "Summary includes check-build-logs command"
+run_test_with_setup test_summary_masks_secret_env_vars "Summary masks secret environment variables"
 run_test_with_setup test_summary_unknown_argument_warning "Summary handles unknown arguments"
 
 # Generate test report

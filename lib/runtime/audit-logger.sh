@@ -104,6 +104,76 @@ audit_init() {
 }
 
 # ============================================================================
+# Secret Masking Helpers
+# ============================================================================
+
+# Check if a key name matches secret patterns (case-insensitive).
+# Returns 0 (true) if the key looks like a secret, 1 otherwise.
+_is_secret_key() {
+    local key="$1"
+    local upper_key
+    upper_key=$(printf '%s' "$key" | command tr '[:lower:]' '[:upper:]')
+    case "$upper_key" in
+        *_TOKEN|*_SECRET|*_PASSWORD|*_KEY|*_CREDENTIAL*)
+            return 0 ;;
+        *)
+            return 1 ;;
+    esac
+}
+
+# Mask a secret value: show first 4 chars + **** if length >= 8, else ****.
+_mask_secret_value() {
+    local key="$1"
+    local value="$2"
+    if _is_secret_key "$key"; then
+        if [ "${#value}" -ge 8 ]; then
+            printf '%s' "${value:0:4}****"
+        else
+            printf '%s' "****"
+        fi
+    else
+        printf '%s' "$value"
+    fi
+}
+
+# Scan a JSON string for "key":"value" pairs where the key matches secret
+# patterns, and mask the values. Uses bash pattern matching (no jq dependency).
+_sanitize_json_secrets() {
+    local json="$1"
+    local result=""
+    local remaining="$json"
+
+    # Walk through the string finding "key":"value" pairs
+    while [[ "$remaining" =~ \"([^\"]+)\":\"([^\"]*)\" ]]; do
+        local full_match="${BASH_REMATCH[0]}"
+        local key="${BASH_REMATCH[1]}"
+        local value="${BASH_REMATCH[2]}"
+
+        # Find position of this match and grab everything before it
+        local before="${remaining%%"$full_match"*}"
+        result+="$before"
+
+        # Check if this key is a secret
+        if _is_secret_key "$key"; then
+            if [ "${#value}" -ge 8 ]; then
+                result+="\"$key\":\"${value:0:4}****\""
+            else
+                result+="\"$key\":\"****\""
+            fi
+        else
+            result+="$full_match"
+        fi
+
+        # Advance past the match
+        remaining="${remaining#*"$full_match"}"
+    done
+
+    # Append any remaining text
+    result+="$remaining"
+    printf '%s' "$result"
+}
+
+# ============================================================================
 # JSON Escaping Helper
 # ============================================================================
 
@@ -139,6 +209,9 @@ audit_log() {
     if [ "$level_num" -lt "$threshold_num" ]; then
         return 0
     fi
+
+    # Sanitize secrets in extra_data and message
+    extra_data=$(_sanitize_json_secrets "$extra_data")
 
     # Generate timestamp (ISO 8601)
     local timestamp
@@ -231,6 +304,9 @@ source "${_AUDIT_LOGGER_DIR}/audit-logger-maintenance.sh"
 
 # Export functions for use in other scripts
 export -f _json_escape
+export -f _is_secret_key
+export -f _mask_secret_value
+export -f _sanitize_json_secrets
 export -f audit_log
 export -f audit_init
 
