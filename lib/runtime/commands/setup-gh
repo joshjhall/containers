@@ -12,6 +12,26 @@ set -euo pipefail
 _info()  { printf '[setup-gh] %s\n' "$*" >&2; }
 _ok()    { printf '[setup-gh] OK: %s\n' "$*" >&2; }
 _skip()  { printf '[setup-gh] skip: %s\n' "$*" >&2; }
+_warn()  { printf '[setup-gh] WARN: %s\n' "$*" >&2; }
+
+# ---------------------------------------------------------------------------
+# Input validation
+# ---------------------------------------------------------------------------
+_validate_token() {
+    local val="$1" name="$2"
+    # Must be at least 4 characters
+    if [ "${#val}" -lt 4 ]; then
+        _warn "${name} is too short (less than 4 characters) — skipping"
+        return 1
+    fi
+    # Must contain only printable ASCII (no control chars, no newlines)
+    case "$val" in
+        *[[:cntrl:]]*)
+            _warn "${name} contains control characters — skipping"
+            return 1 ;;
+    esac
+    return 0
+}
 
 # ---------------------------------------------------------------------------
 # Source OP secrets cache (makes scripts work without pre-sourced environment)
@@ -61,6 +81,9 @@ main() {
     # Sanitize token (strip whitespace)
     local token
     token=$(printf '%s' "$GITHUB_TOKEN" | tr -d '[:space:]')
+
+    # Validate token format
+    _validate_token "$token" "GITHUB_TOKEN" || return 0
 
     # Authenticate (pipe token via stdin to avoid exposing it in process listings)
     _info "authenticating gh CLI"

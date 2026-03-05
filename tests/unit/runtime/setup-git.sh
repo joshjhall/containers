@@ -443,6 +443,133 @@ test_op_cache_xtrace_suppression() {
         "OP cache block should restore xtrace state"
 }
 
+# ---------------------------------------------------------------------------
+# Input validation tests
+# ---------------------------------------------------------------------------
+
+# Test: _validate_email function is defined
+test_validate_email_defined() {
+    assert_file_contains "$SETUP_GIT_SCRIPT" '_validate_email()' \
+        "_validate_email function should be defined"
+}
+
+# Test: _validate_ssh_key function is defined
+test_validate_ssh_key_defined() {
+    assert_file_contains "$SETUP_GIT_SCRIPT" '_validate_ssh_key()' \
+        "_validate_ssh_key function should be defined"
+}
+
+# Test: _validate_email accepts valid email
+test_validate_email_accepts_valid() {
+    local func_script="$TEST_TEMP_DIR/func.sh"
+    # Extract helpers and validation functions
+    command sed -n '1,/^# ---.*Source OP/p' "$SETUP_GIT_SCRIPT" | command head -n -1 > "$func_script"
+
+    local exit_code=0
+    (
+        set -euo pipefail
+        source "$func_script"
+        _validate_email "user@example.com" "TEST_EMAIL"
+    ) 2>/dev/null || exit_code=$?
+
+    assert_equals "0" "$exit_code" "_validate_email should accept user@example.com"
+}
+
+# Test: _validate_email rejects email without @
+test_validate_email_rejects_no_at() {
+    local func_script="$TEST_TEMP_DIR/func.sh"
+    command sed -n '1,/^# ---.*Source OP/p' "$SETUP_GIT_SCRIPT" | command head -n -1 > "$func_script"
+
+    local exit_code=0
+    (
+        set -euo pipefail
+        source "$func_script"
+        _validate_email "nope" "TEST_EMAIL"
+    ) 2>/dev/null || exit_code=$?
+
+    assert_equals "1" "$exit_code" "_validate_email should reject 'nope'"
+}
+
+# Test: _validate_email rejects bare @
+test_validate_email_rejects_bare_at() {
+    local func_script="$TEST_TEMP_DIR/func.sh"
+    command sed -n '1,/^# ---.*Source OP/p' "$SETUP_GIT_SCRIPT" | command head -n -1 > "$func_script"
+
+    local exit_code=0
+    (
+        set -euo pipefail
+        source "$func_script"
+        _validate_email "@domain" "TEST_EMAIL"
+    ) 2>/dev/null || exit_code=$?
+
+    assert_equals "1" "$exit_code" "_validate_email should reject '@domain' (empty local part)"
+}
+
+# Test: _validate_ssh_key accepts PEM key
+test_validate_ssh_key_accepts_pem() {
+    local func_script="$TEST_TEMP_DIR/func.sh"
+    command sed -n '1,/^# ---.*Source OP/p' "$SETUP_GIT_SCRIPT" | command head -n -1 > "$func_script"
+
+    # Build the PEM header dynamically to avoid triggering secret scanners
+    local pem_header="-----BEGIN "
+    local mock_key="${pem_header}TEST KEY-----
+mock-content
+-----END TEST KEY-----"
+
+    local exit_code=0
+    (
+        set -euo pipefail
+        source "$func_script"
+        _validate_ssh_key "$mock_key" "TEST_KEY"
+    ) 2>/dev/null || exit_code=$?
+
+    assert_equals "0" "$exit_code" "_validate_ssh_key should accept PEM-formatted key"
+}
+
+# Test: _validate_ssh_key rejects non-PEM content
+test_validate_ssh_key_rejects_non_pem() {
+    local func_script="$TEST_TEMP_DIR/func.sh"
+    command sed -n '1,/^# ---.*Source OP/p' "$SETUP_GIT_SCRIPT" | command head -n -1 > "$func_script"
+
+    local exit_code=0
+    (
+        set -euo pipefail
+        source "$func_script"
+        _validate_ssh_key "not-a-key" "TEST_KEY"
+    ) 2>/dev/null || exit_code=$?
+
+    assert_equals "1" "$exit_code" "_validate_ssh_key should reject non-PEM content"
+}
+
+# Test: setup_identity calls _validate_email
+test_identity_validates_email() {
+    assert_file_contains "$SETUP_GIT_SCRIPT" '_validate_email "$email" "GIT_USER_EMAIL"' \
+        "setup_identity should validate GIT_USER_EMAIL"
+}
+
+# Test: setup_auth_key calls _validate_ssh_key
+test_auth_key_validates_key() {
+    assert_file_contains "$SETUP_GIT_SCRIPT" '_validate_ssh_key "$GIT_AUTH_SSH_KEY" "GIT_AUTH_SSH_KEY"' \
+        "setup_auth_key should validate GIT_AUTH_SSH_KEY"
+}
+
+# Test: setup_signing_key calls _validate_ssh_key
+test_signing_key_validates_key() {
+    assert_file_contains "$SETUP_GIT_SCRIPT" '_validate_ssh_key "$GIT_SIGNING_SSH_KEY" "GIT_SIGNING_SSH_KEY"' \
+        "setup_signing_key should validate GIT_SIGNING_SSH_KEY"
+}
+
+run_test_with_setup test_validate_email_defined "_validate_email function is defined"
+run_test_with_setup test_validate_ssh_key_defined "_validate_ssh_key function is defined"
+run_test_with_setup test_validate_email_accepts_valid "_validate_email accepts valid email"
+run_test_with_setup test_validate_email_rejects_no_at "_validate_email rejects email without @"
+run_test_with_setup test_validate_email_rejects_bare_at "_validate_email rejects bare @"
+run_test_with_setup test_validate_ssh_key_accepts_pem "_validate_ssh_key accepts PEM key"
+run_test_with_setup test_validate_ssh_key_rejects_non_pem "_validate_ssh_key rejects non-PEM content"
+run_test_with_setup test_identity_validates_email "setup_identity validates email"
+run_test_with_setup test_auth_key_validates_key "setup_auth_key validates SSH key"
+run_test_with_setup test_signing_key_validates_key "setup_signing_key validates SSH key"
+
 run_test_with_setup test_op_cache_sourced "Script sources OP secrets cache"
 run_test_with_setup test_op_cache_ownership_check "OP cache block checks file ownership"
 run_test_with_setup test_op_cache_xtrace_suppression "OP cache block suppresses xtrace"

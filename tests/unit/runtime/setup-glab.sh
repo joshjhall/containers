@@ -340,6 +340,142 @@ test_op_cache_xtrace_suppression() {
         "OP cache block should restore xtrace state"
 }
 
+# ---------------------------------------------------------------------------
+# Input validation tests
+# ---------------------------------------------------------------------------
+
+# Test: _warn helper is defined
+test_warn_defined() {
+    assert_file_contains "$SETUP_GLAB_SCRIPT" '_warn()' \
+        "_warn helper should be defined"
+}
+
+# Test: _validate_token function is defined
+test_validate_token_defined() {
+    assert_file_contains "$SETUP_GLAB_SCRIPT" '_validate_token()' \
+        "_validate_token function should be defined"
+}
+
+# Test: _validate_hostname function is defined
+test_validate_hostname_defined() {
+    assert_file_contains "$SETUP_GLAB_SCRIPT" '_validate_hostname()' \
+        "_validate_hostname function should be defined"
+}
+
+# Test: _validate_token accepts valid token
+test_validate_token_accepts_valid() {
+    local func_script="$TEST_TEMP_DIR/func.sh"
+    command sed -n '1,/^# ---.*Source OP/p' "$SETUP_GLAB_SCRIPT" | command head -n -1 > "$func_script"
+
+    local exit_code=0
+    (
+        set -euo pipefail
+        source "$func_script"
+        _validate_token "glpat-abcdef123456" "GITLAB_TOKEN"
+    ) 2>/dev/null || exit_code=$?
+
+    assert_equals "0" "$exit_code" "_validate_token should accept a valid token"
+}
+
+# Test: _validate_token rejects short token
+test_validate_token_rejects_short() {
+    local func_script="$TEST_TEMP_DIR/func.sh"
+    command sed -n '1,/^# ---.*Source OP/p' "$SETUP_GLAB_SCRIPT" | command head -n -1 > "$func_script"
+
+    local exit_code=0
+    (
+        set -euo pipefail
+        source "$func_script"
+        _validate_token "ab" "GITLAB_TOKEN"
+    ) 2>/dev/null || exit_code=$?
+
+    assert_equals "1" "$exit_code" "_validate_token should reject token shorter than 4 chars"
+}
+
+# Test: _validate_token rejects token with control characters
+test_validate_token_rejects_control_chars() {
+    local func_script="$TEST_TEMP_DIR/func.sh"
+    command sed -n '1,/^# ---.*Source OP/p' "$SETUP_GLAB_SCRIPT" | command head -n -1 > "$func_script"
+
+    local exit_code=0
+    (
+        set -euo pipefail
+        source "$func_script"
+        _validate_token $'glpat-\nmalicious' "GITLAB_TOKEN"
+    ) 2>/dev/null || exit_code=$?
+
+    assert_equals "1" "$exit_code" "_validate_token should reject token with newlines"
+}
+
+# Test: _validate_hostname accepts valid hostname
+test_validate_hostname_accepts_valid() {
+    local func_script="$TEST_TEMP_DIR/func.sh"
+    command sed -n '1,/^# ---.*Source OP/p' "$SETUP_GLAB_SCRIPT" | command head -n -1 > "$func_script"
+
+    local exit_code=0
+    (
+        set -euo pipefail
+        source "$func_script"
+        _validate_hostname "gitlab.example.com" "GITLAB_HOST"
+    ) 2>/dev/null || exit_code=$?
+
+    assert_equals "0" "$exit_code" "_validate_hostname should accept gitlab.example.com"
+}
+
+# Test: _validate_hostname rejects hostname with slashes
+test_validate_hostname_rejects_slashes() {
+    local func_script="$TEST_TEMP_DIR/func.sh"
+    command sed -n '1,/^# ---.*Source OP/p' "$SETUP_GLAB_SCRIPT" | command head -n -1 > "$func_script"
+
+    local exit_code=0
+    (
+        set -euo pipefail
+        source "$func_script"
+        _validate_hostname "https://gitlab.com/path" "GITLAB_HOST"
+    ) 2>/dev/null || exit_code=$?
+
+    assert_equals "1" "$exit_code" "_validate_hostname should reject hostname with slashes"
+}
+
+# Test: _validate_hostname rejects hostname with spaces
+test_validate_hostname_rejects_spaces() {
+    local func_script="$TEST_TEMP_DIR/func.sh"
+    command sed -n '1,/^# ---.*Source OP/p' "$SETUP_GLAB_SCRIPT" | command head -n -1 > "$func_script"
+
+    local exit_code=0
+    (
+        set -euo pipefail
+        source "$func_script"
+        _validate_hostname "gitlab .com" "GITLAB_HOST"
+    ) 2>/dev/null || exit_code=$?
+
+    assert_equals "1" "$exit_code" "_validate_hostname should reject hostname with spaces"
+}
+
+# Test: main calls _validate_token before auth
+test_main_validates_token() {
+    assert_file_contains "$SETUP_GLAB_SCRIPT" '_validate_token "$token" "GITLAB_TOKEN"' \
+        "main should validate token before authenticating"
+}
+
+# Test: main calls _validate_hostname
+test_main_validates_hostname() {
+    assert_file_contains "$SETUP_GLAB_SCRIPT" '_validate_hostname "$host" "GITLAB_HOST"' \
+        "main should validate hostname"
+}
+
+run_test_with_setup test_warn_defined "_warn helper is defined"
+run_test_with_setup test_validate_token_defined "_validate_token function is defined"
+run_test_with_setup test_validate_hostname_defined "_validate_hostname function is defined"
+run_test_with_setup test_validate_token_accepts_valid "_validate_token accepts valid token"
+run_test_with_setup test_validate_token_rejects_short "_validate_token rejects short token"
+run_test_with_setup test_validate_token_rejects_control_chars "_validate_token rejects control characters"
+run_test_with_setup test_validate_hostname_accepts_valid "_validate_hostname accepts valid hostname"
+run_test_with_setup test_validate_hostname_rejects_slashes "_validate_hostname rejects hostname with slashes"
+run_test_with_setup test_validate_hostname_rejects_spaces "_validate_hostname rejects hostname with spaces"
+run_test_with_setup test_main_validates_token "main validates token before auth"
+run_test_with_setup test_main_validates_hostname "main validates hostname"
+
 run_test_with_setup test_op_cache_sourced "Script sources OP secrets cache"
 run_test_with_setup test_op_cache_ownership_check "OP cache block checks file ownership"
 run_test_with_setup test_op_cache_xtrace_suppression "OP cache block suppresses xtrace"

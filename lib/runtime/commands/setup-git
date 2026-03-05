@@ -18,6 +18,27 @@ _skip()  { printf '[setup-git] skip: %s\n' "$*" >&2; }
 _warn()  { printf '[setup-git] WARN: %s\n' "$*" >&2; }
 
 # ---------------------------------------------------------------------------
+# Input validation
+# ---------------------------------------------------------------------------
+_validate_email() {
+    local val="$1" name="$2"
+    case "$val" in
+        ?*@?*) return 0 ;;
+    esac
+    _warn "${name} does not look like a valid email (missing user@domain) — using fallback"
+    return 1
+}
+
+_validate_ssh_key() {
+    local val="$1" name="$2"
+    case "$val" in
+        "-----BEGIN "*)  return 0 ;;
+    esac
+    _warn "${name} does not look like a PEM-encoded key (missing -----BEGIN header) — skipping"
+    return 1
+}
+
+# ---------------------------------------------------------------------------
 # Source OP secrets cache (makes scripts work without pre-sourced environment)
 # ---------------------------------------------------------------------------
 _OP_CACHE="/dev/shm/op-secrets-cache"
@@ -63,6 +84,11 @@ setup_identity() {
     # These are intentionally obvious so users notice and fix their config.
     local name="${GIT_USER_NAME:-Devcontainer}"
     local email="${GIT_USER_EMAIL:-devcontainer@localhost}"
+
+    # Validate email — fall back to default if malformed
+    if [ -n "${GIT_USER_EMAIL:-}" ] && ! _validate_email "$email" "GIT_USER_EMAIL"; then
+        email="devcontainer@localhost"
+    fi
 
     local current
     current=$(git config --global user.name 2>/dev/null || true)
@@ -148,6 +174,7 @@ SSHEOF
 # ---------------------------------------------------------------------------
 setup_auth_key() {
     [ -n "${GIT_AUTH_SSH_KEY:-}" ] || return 0
+    _validate_ssh_key "$GIT_AUTH_SSH_KEY" "GIT_AUTH_SSH_KEY" || return 0
 
     local key_path="${HOME}/.ssh/git_auth_key"
 
@@ -175,6 +202,7 @@ setup_auth_key() {
 # ---------------------------------------------------------------------------
 setup_signing_key() {
     [ -n "${GIT_SIGNING_SSH_KEY:-}" ] || return 0
+    _validate_ssh_key "$GIT_SIGNING_SSH_KEY" "GIT_SIGNING_SSH_KEY" || return 0
 
     local priv="${HOME}/.ssh/git_signing_key"
     local pub="${priv}.pub"
