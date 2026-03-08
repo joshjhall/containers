@@ -623,7 +623,9 @@ export -f log_info
 export -f log_debug
 export -f log_error
 export -f log_warning
-export -f safe_eval
+if declare -f safe_eval >/dev/null 2>&1; then
+    export -f safe_eval
+fi
 export -f _get_log_level_num
 export -f _should_log
 export -f _get_last_command_start_line
