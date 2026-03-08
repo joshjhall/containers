@@ -537,11 +537,9 @@ COPY lib/runtime/commands/setup-glab /usr/local/bin/setup-glab
 RUN chmod 755 /usr/local/bin/_source-env-secrets /usr/local/bin/_wait-for-op-cache \
     /usr/local/bin/setup-git /usr/local/bin/setup-gh /usr/local/bin/setup-glab
 
-# Clean up build scripts but keep runtime scripts and base utilities
+# Clean up build scripts but keep runtime scripts and shared utilities
 RUN cp -r /tmp/build-scripts/runtime /opt/container-runtime && \
-    mkdir -p /opt/container-runtime/base && \
-    cp /tmp/build-scripts/base/path-utils.sh /opt/container-runtime/base/ && \
-    cp /tmp/build-scripts/base/logging.sh /opt/container-runtime/base/ && \
+    cp -r /tmp/build-scripts/shared /opt/container-runtime/shared && \
     chmod -R +rx /opt/container-runtime && \
     rm -rf /tmp/build-scripts
 

@@ -4,6 +4,12 @@
 # This script provides consistent logging functionality across all feature
 # installations, capturing output, errors, and generating summaries.
 #
+# It sources shared/logging.sh for core functions (_get_log_level_num,
+# _should_log, log_message, log_info, log_debug, log_error, log_warning)
+# and extends them with build-specific features: file-based logging,
+# feature start/end, command logging, counters, JSON output, and secret
+# scrubbing.
+#
 # Usage:
 #   Source this file in your feature script:
 #     source /tmp/build-scripts/base/logging.sh
@@ -25,43 +31,13 @@ _LOGGING_LOADED=1
 
 set -euo pipefail
 
-# ============================================================================
-# Log Level Configuration
-# ============================================================================
-# Levels: ERROR (0), WARN (1), INFO (2), DEBUG (3)
-# Default: INFO - shows errors, warnings, and informational messages
-#
-# Usage:
-#   LOG_LEVEL=ERROR   # Only errors
-#   LOG_LEVEL=WARN    # Errors + warnings
-#   LOG_LEVEL=INFO    # Normal verbosity (default)
-#   LOG_LEVEL=DEBUG   # Full verbosity
-# ============================================================================
-
-# Numeric log levels
-export LOG_LEVEL_ERROR=0
-export LOG_LEVEL_WARN=1
-export LOG_LEVEL_INFO=2
-export LOG_LEVEL_DEBUG=3
-
-# Convert string log level to numeric
-_get_log_level_num() {
-    case "${LOG_LEVEL:-INFO}" in
-        ERROR|error|0) echo $LOG_LEVEL_ERROR ;;
-        WARN|warn|WARNING|warning|1) echo $LOG_LEVEL_WARN ;;
-        INFO|info|2) echo $LOG_LEVEL_INFO ;;
-        DEBUG|debug|3) echo $LOG_LEVEL_DEBUG ;;
-        *) echo $LOG_LEVEL_INFO ;; # Default for invalid values
-    esac
-}
-
-# Check if a message at given level should be logged
-_should_log() {
-    local level=$1
-    local current
-    current=$(_get_log_level_num)
-    [ "$level" -le "$current" ]
-}
+# Source shared logging (core log level system and basic log functions)
+# shellcheck source=lib/shared/logging.sh
+if [ -f "/tmp/build-scripts/shared/logging.sh" ]; then
+    source "/tmp/build-scripts/shared/logging.sh"
+elif [ -f "$(dirname "${BASH_SOURCE[0]}")/../shared/logging.sh" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/../shared/logging.sh"
+fi
 
 # Get line number after last "Executing:" marker in a log file
 _get_last_command_start_line() {
@@ -496,60 +472,13 @@ log_warning() {
     fi
 }
 
-# ============================================================================
-# safe_eval - Safely evaluate command output with validation
-#
-# This function mitigates command injection risks when using eval with tool
-# initialization commands (e.g., rbenv init, direnv hook, zoxide init).
-#
-# Arguments:
-#   $1 - Description of command (e.g., "zoxide init bash")
-#   $@ - The command to execute
-#
-# Returns:
-#   0 - Command executed successfully
-#   1 - Command failed or suspicious output detected
-#
-# Example:
-#   safe_eval "zoxide init bash" zoxide init bash
-#   safe_eval "direnv hook" direnv hook bash
-# ============================================================================
-safe_eval() {
-    local description="$1"
-    shift
-    local output
-    local exit_code=0
-
-    # Try to execute the command and capture output
-    if ! output=$("$@" 2>/dev/null); then
-        log_warning "Failed to initialize $description"
-        return 1
-    fi
-
-    # Blocklist of dangerous patterns — defined once for maintainability.
-    # Uses a blocklist (not allowlist) because inputs are complex, multi-line
-    # shell code from tools like zoxide/direnv that changes between versions.
-    # Inputs are NOT user-controlled; this is defense-in-depth against supply
-    # chain compromise.
-    local _SAFE_EVAL_BLOCKLIST='rm -rf|curl.*bash|\bwget\b|;\s*rm|\$\(.*rm|exec\s+[^$]|/bin/sh.*-c|bash.*-c.*http|\bmkfifo\b|\bnc\b|\bncat\b|\bchmod\b.*\+s|\bpython[23]?\b.*-c|\bperl\b.*-e'
-
-    # Use 'command grep' to bypass any aliases (e.g., grep='rg' from dev-tools)
-    if echo "$output" | command grep -qE "$_SAFE_EVAL_BLOCKLIST"; then
-        log_error "SECURITY: Suspicious output from $description, skipping initialization"
-        log_error "This may indicate a compromised tool or supply chain attack"
-        return 1
-    fi
-
-    # Output looks safe, evaluate it
-    eval "$output" || exit_code=$?
-
-    if [ $exit_code -ne 0 ]; then
-        log_warning "$description initialization completed with non-zero exit code: $exit_code"
-        return $exit_code
-    fi
-
-    return 0
-}
+# Source shared safe_eval function
+# shellcheck source=lib/shared/safe-eval.sh
+if [ -f "/tmp/build-scripts/shared/safe-eval.sh" ]; then
+    source "/tmp/build-scripts/shared/safe-eval.sh"
+elif [ -f "$(dirname "${BASH_SOURCE[0]}")/../shared/safe-eval.sh" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/../shared/safe-eval.sh"
+fi
 
 # Export functions for use in feature scripts
 # ============================================================================

@@ -19,9 +19,9 @@ _SECRETS_COMMON_LOADED=true
 
 # Source logging utilities from runtime path, or define stubs
 _secrets_source_logging() {
-    if [ -f "/opt/container-runtime/base/logging.sh" ]; then
+    if [ -f "/opt/container-runtime/shared/logging.sh" ]; then
         # shellcheck source=/dev/null
-        source "/opt/container-runtime/base/logging.sh"
+        source "/opt/container-runtime/shared/logging.sh"
     else
         # Fallback logging functions
         log_info() { echo "[INFO] $*"; }

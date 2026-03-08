@@ -11,11 +11,11 @@ if [[ $- != *i* ]]; then
 fi
 
 # Source base utilities
-if [ -f /opt/container-runtime/base/logging.sh ]; then
-    source /opt/container-runtime/base/logging.sh
+if [ -f /opt/container-runtime/shared/logging.sh ]; then
+    source /opt/container-runtime/shared/logging.sh
 fi
-if [ -f /opt/container-runtime/base/path-utils.sh ]; then
-    source /opt/container-runtime/base/path-utils.sh
+if [ -f /opt/container-runtime/shared/path-utils.sh ]; then
+    source /opt/container-runtime/shared/path-utils.sh
 fi
 
 # Add emulator to PATH

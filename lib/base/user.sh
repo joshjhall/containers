@@ -163,8 +163,8 @@ fi
 command cat >> /home/"${USERNAME}"/.bashrc << 'EOF'
 
 # Source base utilities for secure PATH management
-if [ -f /opt/container-runtime/base/path-utils.sh ]; then
-    source /opt/container-runtime/base/path-utils.sh
+if [ -f /opt/container-runtime/shared/path-utils.sh ]; then
+    source /opt/container-runtime/shared/path-utils.sh
 fi
 
 # Node modules in PATH helper

@@ -1,7 +1,7 @@
 #!/bin/bash
 # Source base utilities for secure PATH management
-if [ -f /opt/container-runtime/base/path-utils.sh ]; then
-    source /opt/container-runtime/base/path-utils.sh
+if [ -f /opt/container-runtime/shared/path-utils.sh ]; then
+    source /opt/container-runtime/shared/path-utils.sh
 fi
 
 # Install Python dependencies if pyproject.toml exists

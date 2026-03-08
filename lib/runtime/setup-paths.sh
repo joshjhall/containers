@@ -13,12 +13,15 @@ mkdir -p /etc/bashrc.d
 command cat > /etc/bashrc.d/10-tool-paths.sh << 'EOF'
 # Comprehensive PATH setup for all installed tools
 
-# Source base utilities for secure PATH management
-if [ -f /opt/container-runtime/base/logging.sh ]; then
-    source /opt/container-runtime/base/logging.sh
+# Source shared utilities for secure PATH management
+if [ -f /opt/container-runtime/shared/logging.sh ]; then
+    source /opt/container-runtime/shared/logging.sh
 fi
-if [ -f /opt/container-runtime/base/path-utils.sh ]; then
-    source /opt/container-runtime/base/path-utils.sh
+if [ -f /opt/container-runtime/shared/safe-eval.sh ]; then
+    source /opt/container-runtime/shared/safe-eval.sh
+fi
+if [ -f /opt/container-runtime/shared/path-utils.sh ]; then
+    source /opt/container-runtime/shared/path-utils.sh
 fi
 
 # Security: Safe eval for tool initialization — use canonical version from
