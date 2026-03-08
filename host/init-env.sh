@@ -178,7 +178,7 @@ if [ "$NEED_OP" = "true" ]; then
                 case "$stripped_s" in
                     ""|\#*) continue ;;
                     OP_SERVICE_ACCOUNT_TOKEN=*)
-                        eval "export $stripped_s"
+                        export OP_SERVICE_ACCOUNT_TOKEN="${stripped_s#OP_SERVICE_ACCOUNT_TOKEN=}"
                         _LOADED_SA_TOKEN=true
                         break
                         ;;
