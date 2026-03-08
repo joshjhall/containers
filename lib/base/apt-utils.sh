@@ -192,12 +192,42 @@ apt_install_conditional() {
 # apt_retry - Generic retry wrapper for any apt command
 #
 # Usage:
-#   apt_retry <command>
+#   apt_retry [--retry-hook <func>] [--failure-hook <func>] [--] <command...>
+#
+# Options:
+#   --retry-hook <func>   Function called between retries with exit code arg
+#   --failure-hook <func> Function called after all retries exhausted with exit code arg
+#   --                    Separates options from the command
 #
 # Example:
 #   apt_retry apt-get upgrade -y
+#   apt_retry --retry-hook my_cleanup --failure-hook my_diagnose -- apt-get update
 # ============================================================================
 apt_retry() {
+    local retry_hook=""
+    local failure_hook=""
+
+    # Parse optional flags
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --retry-hook)
+                retry_hook="$2"
+                shift 2
+                ;;
+            --failure-hook)
+                failure_hook="$2"
+                shift 2
+                ;;
+            --)
+                shift
+                break
+                ;;
+            *)
+                break
+                ;;
+        esac
+    done
+
     local attempt=1
     local delay="$APT_RETRY_DELAY"
     local cmd_array=("$@")
@@ -205,19 +235,33 @@ apt_retry() {
     while [ $attempt -le "$APT_MAX_RETRIES" ]; do
         echo "Running: ${cmd_array[*]} (attempt $attempt/$APT_MAX_RETRIES)..."
 
-        if timeout "$APT_TIMEOUT" "${cmd_array[@]}"; then
+        # Use || to capture the exit code without triggering set -e
+        local exit_code=0
+        timeout "$APT_TIMEOUT" "${cmd_array[@]}" || exit_code=$?
+
+        if [ $exit_code -eq 0 ]; then
             echo "✓ Command succeeded: ${cmd_array[*]}"
             return 0
         fi
 
-        local exit_code=$?
-
         if [ $attempt -lt "$APT_MAX_RETRIES" ]; then
             echo "⚠ Command failed (exit code: $exit_code), retrying in ${delay}s..."
+
+            # Call retry hook if provided
+            if [ -n "$retry_hook" ]; then
+                "$retry_hook" "$exit_code" || true
+            fi
+
             sleep "$delay"
             delay=$((delay * 2))  # Exponential backoff
         else
             echo "✗ Command failed after $APT_MAX_RETRIES attempts: ${cmd_array[*]}"
+
+            # Call failure hook if provided
+            if [ -n "$failure_hook" ]; then
+                "$failure_hook" "$exit_code" || true
+            fi
+
             return $exit_code
         fi
 
@@ -258,6 +302,26 @@ _apt_diagnose_network_failure() {
 }
 
 # ============================================================================
+# _apt_update_on_retry - Hook called between apt_update retries
+#
+# Logs network errors and cleans apt cache before retry.
+#
+# Arguments:
+#   $1 - exit code from the failed attempt
+# ============================================================================
+_apt_update_on_retry() {
+    local exit_code="$1"
+
+    if [ "$exit_code" -eq "$APT_NETWORK_ERROR_CODE" ]; then
+        echo "  Network connectivity issue detected"
+    fi
+
+    # Clean apt cache before retry
+    apt-get clean || true
+    command rm -rf /var/lib/apt/lists/* || true
+}
+
+# ============================================================================
 # apt_update - Update package lists with retry logic
 #
 # Usage:
@@ -268,50 +332,34 @@ _apt_diagnose_network_failure() {
 #   APT_RETRY_DELAY - Initial delay between retries in seconds (default: 5)
 # ============================================================================
 apt_update() {
-    local attempt=1
-    local delay="$APT_RETRY_DELAY"
-
-    while [ $attempt -le "$APT_MAX_RETRIES" ]; do
-        echo "Updating package lists (attempt $attempt/$APT_MAX_RETRIES)..."
-
-        # Configure apt with timeout and retry options
-        # Use || to capture the exit code without triggering set -e
-        local exit_code=0
-        timeout "$APT_TIMEOUT" apt-get update \
+    apt_retry \
+        --retry-hook _apt_update_on_retry \
+        --failure-hook _apt_diagnose_network_failure \
+        -- \
+        apt-get update \
             -o Acquire::http::Timeout=${APT_ACQUIRE_TIMEOUT} \
             -o Acquire::https::Timeout=${APT_ACQUIRE_TIMEOUT} \
             -o Acquire::ftp::Timeout=${APT_ACQUIRE_TIMEOUT} \
             -o Acquire::Retries=3 \
-            -o APT::Update::Error-Mode=any || exit_code=$?
+            -o APT::Update::Error-Mode=any
+}
 
-        if [ $exit_code -eq 0 ]; then
-            echo "✓ Package lists updated successfully"
-            return 0
-        fi
+# ============================================================================
+# _apt_install_on_retry - Hook called between apt_install retries
+#
+# Logs network errors and refreshes package lists on network failure.
+#
+# Arguments:
+#   $1 - exit code from the failed attempt
+# ============================================================================
+_apt_install_on_retry() {
+    local exit_code="$1"
 
-        if [ $attempt -lt "$APT_MAX_RETRIES" ]; then
-            echo "⚠ apt-get update failed (exit code: $exit_code), retrying in ${delay}s..."
-
-            # Check for specific network errors
-            if [ $exit_code -eq $APT_NETWORK_ERROR_CODE ]; then
-                echo "  Network connectivity issue detected, waiting longer..."
-                delay=$((delay * 2))  # Double the delay for network issues
-            fi
-
-            sleep "$delay"
-            delay=$((delay * 2))  # Exponential backoff
-
-            # Try to clean apt cache before retry
-            apt-get clean || true
-            command rm -rf /var/lib/apt/lists/* || true
-        else
-            echo "✗ apt-get update failed after $APT_MAX_RETRIES attempts"
-            _apt_diagnose_network_failure
-            return $exit_code
-        fi
-
-        attempt=$((attempt + 1))
-    done
+    if [ "$exit_code" -eq "$APT_NETWORK_ERROR_CODE" ]; then
+        echo "  Network connectivity issue detected"
+        echo "  Attempting to refresh package lists..."
+        apt-get update -qq || true
+    fi
 }
 
 # ============================================================================
@@ -347,52 +395,17 @@ apt_install() {
         fi
     done
 
-    local packages=("$@")
-    local attempt=1
-    local delay="$APT_RETRY_DELAY"
-
-    while [ $attempt -le "$APT_MAX_RETRIES" ]; do
-        echo "Installing packages: ${packages[*]} (attempt $attempt/$APT_MAX_RETRIES)..."
-
-        # Configure apt with timeout and retry options
-        # Use || to capture the exit code without triggering set -e
-        local exit_code=0
-        DEBIAN_FRONTEND=noninteractive timeout "$APT_TIMEOUT" apt-get install -y \
-            --no-install-recommends \
+    DEBIAN_FRONTEND=noninteractive apt_retry \
+        --retry-hook _apt_install_on_retry \
+        -- \
+        apt-get install -y --no-install-recommends \
             -o Acquire::http::Timeout=${APT_ACQUIRE_TIMEOUT} \
             -o Acquire::https::Timeout=${APT_ACQUIRE_TIMEOUT} \
             -o Acquire::ftp::Timeout=${APT_ACQUIRE_TIMEOUT} \
             -o Acquire::Retries=3 \
             -o Dpkg::Options::="--force-confdef" \
             -o Dpkg::Options::="--force-confold" \
-            "${packages[@]}" || exit_code=$?
-
-        if [ $exit_code -eq 0 ]; then
-            echo "✓ Packages installed successfully: ${packages[*]}"
-            return 0
-        fi
-
-        if [ $attempt -lt "$APT_MAX_RETRIES" ]; then
-            echo "⚠ Package installation failed (exit code: $exit_code), retrying in ${delay}s..."
-
-            # Check for specific errors
-            if [ $exit_code -eq $APT_NETWORK_ERROR_CODE ]; then
-                echo "  Network connectivity issue detected"
-                # Try to update package lists before retry
-                echo "  Attempting to refresh package lists..."
-                apt-get update -qq || true
-            fi
-
-            sleep "$delay"
-            delay=$((delay * 2))  # Exponential backoff
-        else
-            echo "✗ Package installation failed after $APT_MAX_RETRIES attempts"
-            echo "  Failed packages: ${packages[*]}"
-            return $exit_code
-        fi
-
-        attempt=$((attempt + 1))
-    done
+            "$@"
 }
 
 # ============================================================================
@@ -510,6 +523,8 @@ add_apt_repository_key() {
 
 # Export functions for use by other scripts
 export -f _apt_diagnose_network_failure
+export -f _apt_update_on_retry
+export -f _apt_install_on_retry
 export -f apt_retry
 export -f apt_update
 export -f apt_install

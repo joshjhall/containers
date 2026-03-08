@@ -113,6 +113,132 @@ test_apt_retry_function() {
     fi
 }
 
+# Test: apt_retry supports --retry-hook and --failure-hook flags
+test_apt_retry_hook_support() {
+    # Check for --retry-hook support
+    if command grep -q "\-\-retry-hook" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
+        assert_true true "apt_retry supports --retry-hook flag"
+    else
+        assert_true false "apt_retry missing --retry-hook flag"
+    fi
+
+    # Check for --failure-hook support
+    if command grep -q "\-\-failure-hook" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
+        assert_true true "apt_retry supports --failure-hook flag"
+    else
+        assert_true false "apt_retry missing --failure-hook flag"
+    fi
+
+    # Check that hooks are called as function names (no eval)
+    if command grep -q '"$retry_hook"' "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
+        assert_true true "retry_hook called safely as function reference"
+    else
+        assert_true false "retry_hook not called as function reference"
+    fi
+
+    if command grep -q '"$failure_hook"' "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
+        assert_true true "failure_hook called safely as function reference"
+    else
+        assert_true false "failure_hook not called as function reference"
+    fi
+}
+
+# Test: apt_update delegates to apt_retry
+test_apt_update_delegates_to_apt_retry() {
+    # apt_update should call apt_retry instead of having its own retry loop
+    if command grep -A5 "^apt_update()" "$PROJECT_ROOT/lib/base/apt-utils.sh" | command grep -q "apt_retry"; then
+        assert_true true "apt_update delegates to apt_retry"
+    else
+        assert_true false "apt_update does not delegate to apt_retry"
+    fi
+
+    # apt_update should NOT have its own while loop
+    local update_body
+    update_body=$(command sed -n '/^apt_update()/,/^}/p' "$PROJECT_ROOT/lib/base/apt-utils.sh")
+    if echo "$update_body" | command grep -q "while.*attempt"; then
+        assert_true false "apt_update still has its own retry loop (should use apt_retry)"
+    else
+        assert_true true "apt_update does not have a duplicate retry loop"
+    fi
+}
+
+# Test: apt_install delegates to apt_retry
+test_apt_install_delegates_to_apt_retry() {
+    # apt_install should call apt_retry
+    local install_body
+    install_body=$(command sed -n '/^apt_install()/,/^}/p' "$PROJECT_ROOT/lib/base/apt-utils.sh")
+    if echo "$install_body" | command grep -q "apt_retry"; then
+        assert_true true "apt_install delegates to apt_retry"
+    else
+        assert_true false "apt_install does not delegate to apt_retry"
+    fi
+
+    # apt_install should NOT have its own while loop
+    if echo "$install_body" | command grep -q "while.*attempt"; then
+        assert_true false "apt_install still has its own retry loop (should use apt_retry)"
+    else
+        assert_true true "apt_install does not have a duplicate retry loop"
+    fi
+}
+
+# Test: No double-backoff bug in apt_update
+test_no_double_backoff_in_apt_update() {
+    # The old bug: apt_update doubled delay twice on network errors (4x instead of 2x)
+    # With the refactoring, apt_update no longer manages delay at all — apt_retry does
+    local update_body
+    update_body=$(command sed -n '/^apt_update()/,/^}/p' "$PROJECT_ROOT/lib/base/apt-utils.sh")
+    local delay_count
+    delay_count=$(echo "$update_body" | command grep -c 'delay=.*delay.*2' || true)
+    if [ "$delay_count" -eq 0 ]; then
+        assert_true true "apt_update has no delay management (handled by apt_retry)"
+    else
+        assert_true false "apt_update still manages delay directly ($delay_count occurrences)"
+    fi
+}
+
+# Test: _apt_update_on_retry helper function exists and is exported
+test_apt_update_on_retry_helper() {
+    if command grep -q "^_apt_update_on_retry()" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
+        assert_true true "_apt_update_on_retry function is defined"
+    else
+        assert_true false "_apt_update_on_retry function not found"
+    fi
+
+    if command grep -q "export -f _apt_update_on_retry" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
+        assert_true true "_apt_update_on_retry function is exported"
+    else
+        assert_true false "_apt_update_on_retry function not exported"
+    fi
+}
+
+# Test: _apt_install_on_retry helper function exists and is exported
+test_apt_install_on_retry_helper() {
+    if command grep -q "^_apt_install_on_retry()" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
+        assert_true true "_apt_install_on_retry function is defined"
+    else
+        assert_true false "_apt_install_on_retry function not found"
+    fi
+
+    if command grep -q "export -f _apt_install_on_retry" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
+        assert_true true "_apt_install_on_retry function is exported"
+    else
+        assert_true false "_apt_install_on_retry function not exported"
+    fi
+}
+
+# Test: apt_retry only has a single backoff increment per retry
+test_apt_retry_single_backoff() {
+    local retry_body
+    retry_body=$(command sed -n '/^apt_retry()/,/^}/p' "$PROJECT_ROOT/lib/base/apt-utils.sh")
+    local backoff_count
+    backoff_count=$(echo "$retry_body" | command grep -c 'delay=.*delay.*2' || true)
+    if [ "$backoff_count" -eq 1 ]; then
+        assert_true true "apt_retry has exactly one backoff increment per retry"
+    else
+        assert_true false "apt_retry has $backoff_count backoff increments (expected 1)"
+    fi
+}
+
 # Test: Timeout configuration
 test_timeout_configuration() {
     # Check for timeout settings
@@ -347,6 +473,13 @@ run_test test_apt_update_function "apt_update function validation"
 run_test test_apt_install_function "apt_install function validation"
 run_test test_apt_cleanup_function "apt_cleanup function validation"
 run_test test_apt_retry_function "apt_retry function validation"
+run_test test_apt_retry_hook_support "apt_retry hook flag support"
+run_test test_apt_retry_single_backoff "apt_retry single backoff per retry"
+run_test test_apt_update_delegates_to_apt_retry "apt_update delegates to apt_retry"
+run_test test_apt_install_delegates_to_apt_retry "apt_install delegates to apt_retry"
+run_test test_no_double_backoff_in_apt_update "No double-backoff bug in apt_update"
+run_test test_apt_update_on_retry_helper "_apt_update_on_retry helper function"
+run_test test_apt_install_on_retry_helper "_apt_install_on_retry helper function"
 run_test test_timeout_configuration "Timeout configuration"
 run_test test_network_diagnostics "Network diagnostic tools"
 run_test test_environment_defaults "Environment variable defaults"
