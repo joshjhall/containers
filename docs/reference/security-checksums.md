@@ -26,7 +26,7 @@ When downloading language runtimes, the system tries verification methods **in
 order from strongest to weakest**, automatically falling back to the next tier
 if a stronger method isn't available:
 
-````text
+```text
 TIER 1: Cryptographic Signatures (GPG + Sigstore) ← BEST
     ↓ (if unavailable)
 TIER 2: Pinned Checksums (lib/checksums.json) ← GOOD
@@ -34,7 +34,7 @@ TIER 2: Pinned Checksums (lib/checksums.json) ← GOOD
 TIER 3: Published Checksums (from official source) ← ACCEPTABLE
     ↓ (if unavailable)
 TIER 4: Calculated Checksums (TOFU fallback) ← LAST RESORT
-```text
+```
 
 ### Tier 1: Cryptographic Signatures (BEST)
 
@@ -57,7 +57,7 @@ TIER 4: Calculated Checksums (TOFU fallback) ← LAST RESORT
 # lib/base/signature-verify.sh handles this automatically
 verify_signature "Python-3.12.7.tar.gz" "python" "3.12.7"
 # → Downloads .asc file, verifies with GPG keys from lib/gpg-keys/python/
-```text
+```
 
 **Why This is Better Than Checksums**: A checksum only tells you the file hasn't
 been corrupted. A cryptographic signature proves the file was created by someone
@@ -90,7 +90,7 @@ checksums are auditable, reviewed in PRs, version-controlled **Available For**:
     }
   }
 }
-```text
+```
 
 **Database Growth Strategy**:
 
@@ -109,7 +109,7 @@ checksums are auditable, reviewed in PRs, version-controlled **Available For**:
 
 # Test without making changes
 ./bin/update-checksums.sh --dry-run
-```text
+```
 
 The `bin/update-checksums.sh` script:
 
@@ -132,7 +132,7 @@ files
 # Node.js publishes SHASUMS256.txt for each version
 curl -fsSL "https://nodejs.org/dist/v22.12.0/SHASUMS256.txt" | \
   grep "node-v22.12.0-linux-x64.tar.xz" | awk '{print $1}'
-```text
+```
 
 ### Tier 4: Calculated Checksums (FALLBACK)
 
@@ -156,7 +156,7 @@ when no other verification method is available
    ║                                                            ║
    ║ Risk: Vulnerable to man-in-the-middle attacks.            ║
    ╚════════════════════════════════════════════════════════════╝
-```text
+```
 
 ### Language-by-Language Verification Matrix
 
@@ -212,16 +212,16 @@ source /tmp/build-scripts/base/checksum-verification.sh
 
 # Verify a language runtime download (tries all tiers automatically)
 verify_download "language" "nodejs" "22.12.0" "/tmp/node.tar.xz"
-```text
+```
 
 The system automatically:
 
 1. Tries GPG/Sigstore signature verification (if available)
-2. Falls back to pinned checksums from lib/checksums.json
-3. Falls back to published checksums from official source
-4. Falls back to calculated checksum (with security warning)
+1. Falls back to pinned checksums from lib/checksums.json
+1. Falls back to published checksums from official source
+1. Falls back to calculated checksum (with security warning)
 
----
+______________________________________________________________________
 
 ## ✅ Original Checksum Verification (November 2025)
 
@@ -236,7 +236,7 @@ downloads now verified.
 - Phases 10-13: Extended audit items (additional unverified downloads)
 - Bug fix: Fixed pre-existing heredoc bug in java-dev.sh
 
----
+______________________________________________________________________
 
 ## Implementation Guide for New Tools
 
@@ -253,7 +253,7 @@ source /tmp/build-scripts/base/download-verify.sh
 
 # Source checksum fetching utilities
 source /tmp/build-scripts/base/checksum-fetch.sh
-```text
+```
 
 ### 2. Choose Verification Method
 
@@ -261,7 +261,7 @@ source /tmp/build-scripts/base/checksum-fetch.sh
 
 If the project publishes checksums on GitHub releases:
 
-```bash
+````bash
 TOOL_VERSION="1.2.3"
 TOOL_TARBALL="tool-${TOOL_VERSION}.tar.gz"
 TOOL_URL="https://github.com/org/tool/releases/download/v${TOOL_VERSION}/${TOOL_TARBALL}"
@@ -279,7 +279,6 @@ fi
 
 # Download and verify
 download_and_verify "$TOOL_URL" "$TOOL_CHECKSUM" "$TOOL_TARBALL"
-````
 
 #### Option B: Calculated Checksums (FALLBACK)
 
@@ -302,13 +301,13 @@ log_message "Expected SHA256: ${TOOL_CHECKSUM}"
 
 # Download and verify (downloads again with verification)
 download_and_verify "$TOOL_URL" "$TOOL_CHECKSUM" "tool.tar.gz"
-```
+````
 
 #### Option C: Internal Verification
 
 If the install script performs its own verification, document it clearly:
 
-````bash
+```bash
 # Security Note: The tool install script performs checksum verification internally:
 # 1. Downloads manifest with expected checksums
 # 2. Downloads the binary
@@ -317,7 +316,7 @@ If the install script performs its own verification, document it clearly:
 # This makes it safe to use.
 
 curl -fsSL 'https://example.com/install.sh' | bash
-```text
+```
 
 ### 3. Common Checksum File Patterns
 
@@ -346,7 +345,7 @@ releases:
 - Download and execute without verification
 - Continue on verification failure
 
----
+______________________________________________________________________
 
 ## Priority Classification
 
@@ -373,7 +372,7 @@ These download binaries directly without verification.
 | `dev-tools.sh`  | 569-611 | mkcert binary               | ✅ **DONE** | Calculated checksum at build time               |
 | `aws.sh`        | 172-198 | Session Manager plugin .deb | ✅ **DONE** | Calculated checksum at build time               |
 
----
+______________________________________________________________________
 
 ## Implementation Strategy
 
@@ -382,10 +381,12 @@ These download binaries directly without verification.
 **Priority**: Start here - quick wins
 
 1. **terragrunt** - Publishes SHA256SUMS file
+
    - Easy fix using fetch_github_checksums_txt()
    - Start with this one
 
-2. Then check and fix others that publish checksums:
+1. Then check and fix others that publish checksums:
+
    - cloudflared
    - duf
    - direnv
@@ -397,10 +398,12 @@ These download binaries directly without verification.
 **Priority**: After Phase 10
 
 1. **ollama.sh** - Official installer
+
    - May need to extract binary download from script and verify directly
    - Or accept risk for official installer with warning
 
-2. **claude.ai install.sh** - Claude Code installer
+1. **claude.ai install.sh** - Claude Code installer
+
    - Similar approach to Ollama
    - Has error handling, optional tool
 
@@ -413,27 +416,30 @@ These download binaries directly without verification.
    - May not have checksums available
    - Consider calculated checksum approach
 
----
+______________________________________________________________________
 
 ## Checksum Sources Quick Reference
 
 ### Where to Find Official Checksums
 
 1. **GitHub Releases** - Most common patterns:
+
    - `SHA256SUMS` or `SHA256SUMS.txt`
    - `checksums.txt`
    - `*.sha256` files alongside binaries
 
-2. **Official Websites**:
+1. **Official Websites**:
+
    - Check project documentation
    - Look for "verify" or "install" pages
 
-3. **If No Checksums Available**:
+1. **If No Checksums Available**:
+
    - Use calculated checksums as fallback
    - Document this in code comments
    - Less secure but better than nothing
 
----
+______________________________________________________________________
 
 ## Progress Tracking
 
@@ -455,7 +461,7 @@ These download binaries directly without verification.
   - [x] get-pip.py - Calculated checksum at build time
   - [x] entr - Calculated checksum at build time
 
----
+______________________________________________________________________
 
 ## Notes
 
@@ -470,16 +476,19 @@ These download binaries directly without verification.
 **Security Approaches Used**:
 
 1. **Published Checksums** (9 tools): `fetch_github_checksums_txt()` or similar
+
    - terragrunt, duf, glab, JBang, ollama, and others
 
-2. **Calculated Checksums** (7 tools): `calculate_checksum_sha256()`
+1. **Calculated Checksums** (7 tools): `calculate_checksum_sha256()`
+
    - Downloads once to calculate SHA256
    - Downloads again with `download_and_verify()` to validate
    - Protects against tampering between downloads
    - Works with version variables - no hardcoded checksums
    - direnv, mkcert, cloudflared, AWS Session Manager, Python, get-pip.py, entr
 
-3. **Internal Verification** (1 tool):
+1. **Internal Verification** (1 tool):
+
    - Claude install script performs its own SHA256 verification
 
 **Final Security Posture**:
@@ -492,4 +501,3 @@ These download binaries directly without verification.
 
 **Bug Fixes**: Fixed pre-existing heredoc bug in java-dev.sh:270 that caused
 unbound variable error with `set -euo pipefail`.
-````

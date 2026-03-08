@@ -189,7 +189,6 @@ find /var/log/container-build -type f -mtime +7 -delete
 
 ```bash
 # Commands to run
-````
 
 ### Common Causes
 
@@ -203,7 +202,7 @@ find /var/log/container-build -type f -mtime +7 -delete
 
 ```bash
 # Immediate mitigation steps
-```
+````
 
 ### Permanent Fix
 

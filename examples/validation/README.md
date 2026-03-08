@@ -21,13 +21,13 @@ The configuration validation framework provides:
 
 Set the `VALIDATE_CONFIG` environment variable to enable validation:
 
-````yaml
+```yaml
 # docker-compose.yml
 services:
   app:
     environment:
       - VALIDATE_CONFIG=true
-```text
+```
 
 ### Basic Usage
 
@@ -45,7 +45,7 @@ docker run -e VALIDATE_CONFIG=true \
   -e REDIS_URL="$REDIS_URL" \
   -e PORT="$PORT" \
   myapp:latest
-```text
+```
 
 ## Configuration Options
 
@@ -91,7 +91,7 @@ cv_custom_validations() {
             "Set FEATURE_X_CONFIG when ENABLE_FEATURE_X is true"
     fi
 }
-```text
+```
 
 Then use it in your container:
 
@@ -104,7 +104,7 @@ services:
       - VALIDATE_CONFIG_RULES=/app/config/validation-rules.sh
     volumes:
       - ./validation-rules.sh:/app/config/validation-rules.sh:ro
-```text
+```
 
 ## Examples
 
@@ -120,7 +120,7 @@ See `web-app-validation.sh` for a complete web application validation example:
 
 ```bash
 docker-compose -f docker-compose.web-app.yml up
-```text
+```
 
 ### Example 2: API Service
 
@@ -133,7 +133,7 @@ See `api-service-validation.sh` for an API service validation example:
 
 ```bash
 docker-compose -f docker-compose.api-service.yml up
-```text
+```
 
 ### Example 3: Worker Service
 
@@ -145,7 +145,7 @@ See `worker-validation.sh` for a background worker validation example:
 
 ```bash
 docker-compose -f docker-compose.worker.yml up
-```text
+```
 
 ## Validation Functions
 
@@ -155,7 +155,7 @@ The framework provides these validation functions:
 
 ```bash
 cv_require_var VAR_NAME "Description" "Remediation hint"
-```text
+```
 
 ### URL Validation
 
@@ -167,7 +167,7 @@ cv_validate_url DATABASE_URL
 cv_validate_url DATABASE_URL "postgresql"
 cv_validate_url REDIS_URL "redis"
 cv_validate_url API_ENDPOINT "https"
-```text
+```
 
 ### Path Validation
 
@@ -180,35 +180,35 @@ cv_validate_path DATA_DIR true
 
 # Must exist and be a directory
 cv_validate_path LOG_DIR true true
-```text
+```
 
 ### Port Validation
 
 ```bash
 cv_validate_port PORT
 cv_validate_port REDIS_PORT
-```text
+```
 
 ### Email Validation
 
 ```bash
 cv_validate_email ADMIN_EMAIL
 cv_validate_email SUPPORT_EMAIL
-```text
+```
 
 ### Boolean Validation
 
 ```bash
 cv_validate_boolean ENABLE_DEBUG
 cv_validate_boolean USE_SSL
-```text
+```
 
 ### Secret Detection
 
 ```bash
 cv_detect_secrets API_KEY
 cv_detect_secrets DATABASE_PASSWORD
-```text
+```
 
 ## Error Handling
 
@@ -238,7 +238,7 @@ When validation fails, the container will not start and will display:
 ⚠ Warnings: 1
 
 Configuration validation failed. Please fix the errors above.
-```text
+```
 
 ## Best Practices
 
@@ -266,7 +266,8 @@ Instead of plaintext secrets, use:
    secrets:
      api_key:
        external: true
-````
+
+   ```
 
 1. **Kubernetes secrets**:
 
@@ -317,7 +318,7 @@ Use application health checks and readiness probes for runtime validation.
 
 If you get warnings for legitimate non-secret values:
 
-````bash
+```bash
 # Add to custom validation rules
 cv_custom_validations() {
     # Skip secret detection for specific variables
@@ -325,7 +326,7 @@ cv_custom_validations() {
         cv_success "Variable set: MY_VAR (secret check skipped)"
     fi
 }
-```text
+```
 
 ### Disable validation temporarily
 
@@ -337,7 +338,7 @@ docker run -e VALIDATE_CONFIG=false myapp:latest
 
 # Or override entrypoint
 docker run --entrypoint /bin/bash myapp:latest
-```text
+```
 
 ## See Also
 
@@ -345,4 +346,3 @@ docker run --entrypoint /bin/bash myapp:latest
 - [Runtime Configuration Guide](../../docs/configuration.md)
 - [Secret Management Guide](../../docs/security/secret-management.md)
 - [Production Deployment Guide](../production/README.md)
-````

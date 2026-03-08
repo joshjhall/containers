@@ -13,7 +13,7 @@ Releases are managed through the `bin/release.sh` script, which automates:
 
 ## Quick Start
 
-````bash
+```bash
 # Patch release (4.0.0 -> 4.0.1)
 ./bin/release.sh patch
 
@@ -25,7 +25,7 @@ Releases are managed through the `bin/release.sh` script, which automates:
 
 # Specific version
 ./bin/release.sh 4.1.0
-```text
+```
 
 ## Release Script Options
 
@@ -41,7 +41,7 @@ Examples:
   ./bin/release.sh patch                    # Bump patch version
   ./bin/release.sh --non-interactive minor  # Run without prompts
   ./bin/release.sh --skip-changelog 4.1.0   # Manual changelog
-```text
+```
 
 ## What Gets Updated
 
@@ -72,7 +72,7 @@ fix: Fix bug in golang-dev
 docs: Update README
 ci: Enable all test variants
 chore: Update dependencies
-```text
+```
 
 ### Manual CHANGELOG Edits
 
@@ -93,7 +93,7 @@ script, git-cliff will:
 
 # Review the changes
 git diff
-```text
+```
 
 ### 2. Commit and Tag
 
@@ -104,7 +104,7 @@ git commit -m "chore(release): Release version 4.0.1"
 
 # Create annotated tag
 git tag -a v4.0.1 -m "Release version 4.0.1"
-```text
+```
 
 ### 3. Push to GitHub
 
@@ -114,13 +114,14 @@ git push origin main
 
 # Push tag (triggers CI/CD release workflow)
 git push origin v4.0.1
-```text
+```
 
 ### 4. CI/CD Automation
 
 When you push a tag (e.g., `v4.0.1`), GitHub Actions will:
 
 1. **Build all container variants**:
+
    - minimal
    - python-dev
    - node-dev
@@ -129,6 +130,7 @@ When you push a tag (e.g., `v4.0.1`), GitHub Actions will:
    - rust-golang
 
 1. **Push images to GitHub Container Registry**:
+
    - `ghcr.io/joshjhall/containers:minimal-v4.0.1`
    - `ghcr.io/joshjhall/containers:python-dev-v4.0.1`
    - `ghcr.io/joshjhall/containers:node-dev-v4.0.1`
@@ -137,6 +139,7 @@ When you push a tag (e.g., `v4.0.1`), GitHub Actions will:
    - `ghcr.io/joshjhall/containers:rust-golang-v4.0.1`
 
 1. **Create GitHub Release**:
+
    - Extracts release notes from CHANGELOG.md
    - Attaches build artifacts
    - Links to container images
@@ -170,7 +173,7 @@ sudo mv git-cliff-*/git-cliff /usr/local/bin/
 
 # Using Homebrew (macOS)
 brew install git-cliff
-```text
+```
 
 ## Manual CHANGELOG Updates
 
@@ -184,7 +187,7 @@ If you prefer to update the changelog manually:
 vim CHANGELOG.md
 
 # Then commit and tag as usual
-```text
+```
 
 ## CI/CD Integration
 
@@ -193,7 +196,7 @@ For automated releases from CI/CD:
 ```bash
 # Non-interactive mode (no prompts)
 ./bin/release.sh --non-interactive patch
-```text
+```
 
 This is useful for:
 
@@ -223,7 +226,7 @@ git tag -a v4.0.1 -m "Hotfix version 4.0.1"
 # Push to trigger release
 git push origin main
 git push origin v4.0.1
-```text
+```
 
 ## Security Releases
 
@@ -251,13 +254,14 @@ Create a security-focused release when:
 
 # Example: v4.5.0 added comprehensive checksum verification
 ./bin/release.sh minor
-```text
+```
 
 ### Document Security Work
 
 When creating a security release:
 
 1. **Reference security documentation**:
+
    - Link to `docs/security-hardening.md` for roadmap items
    - Update `docs/reference/security-checksums.md` if adding verification
    - Document in CHANGELOG.md under "Security" or "Added" sections
@@ -275,7 +279,8 @@ When creating a security release:
 
    - Add SECURITY.md with vulnerability reporting procedures
    - Update checksum verification inventory
-````
+
+   ```
 
 1. **Security release commit message**:
 
@@ -314,7 +319,7 @@ Version 4.5.0 demonstrates a comprehensive security release:
 
 **How it was released**:
 
-````bash
+```bash
 # After completing all security work
 ./bin/release.sh minor  # 4.4.0 -> 4.5.0
 
@@ -329,7 +334,7 @@ git commit -m "chore(release): Release version 4.5.0"
 git tag -a v4.5.0 -m "Release version 4.5.0 - Complete supply chain security"
 git push origin main
 git push origin v4.5.0
-```text
+```
 
 **CHANGELOG.md automatically captured**:
 
@@ -364,7 +369,7 @@ git tag -a v4.5.1 -m "Security hotfix version 4.5.1"
 # Push immediately
 git push origin main
 git push origin v4.5.1
-```text
+```
 
 ### Related Security Documentation
 
@@ -385,14 +390,14 @@ cargo install git-cliff
 
 # Or skip changelog generation
 ./bin/release.sh --skip-changelog patch
-```text
+```
 
 ### Version Already Exists
 
 ```bash
 # Force update (use with caution)
 ./bin/release.sh --force 4.0.1
-```text
+```
 
 ### Uncommitted Changes
 
@@ -407,7 +412,7 @@ git stash
 
 # Apply stash after
 git stash pop
-```text
+```
 
 ## Related Documentation
 
@@ -416,4 +421,3 @@ git stash pop
 - [Keep a Changelog](https://keepachangelog.com/) - Changelog format
 - [Semantic Versioning](https://semver.org/) - Version numbering
 - [git-cliff Documentation](https://git-cliff.org/) - Changelog generation tool
-````

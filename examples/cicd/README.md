@@ -98,13 +98,13 @@ Runs on every push and pull request:
 
 **Trigger:**
 
-````yaml
+```yaml
 on:
   push:
     branches: [main, develop]
   pull_request:
     branches: [main]
-```text
+```
 
 **Matrix builds:**
 
@@ -115,7 +115,7 @@ strategy:
       - name: minimal
       - name: python-dev
       - name: node-dev
-```text
+```
 
 #### Deploy to Staging (`deploy-staging.yml`)
 
@@ -134,7 +134,7 @@ on:
     workflows: ['Build and Test']
     types: [completed]
     branches: [main]
-```text
+```
 
 **Environment:**
 
@@ -142,7 +142,7 @@ on:
 environment:
   name: staging
   url: https://staging.example.com
-```text
+```
 
 #### Deploy to Production (`deploy-production.yml`)
 
@@ -162,14 +162,14 @@ on:
     inputs:
       image_tag: ...
       deployment_strategy: ...
-```text
+```
 
 **Manual approval:**
 
 ```yaml
 environment:
   name: production # Requires approval in GitHub settings
-```text
+```
 
 #### Rollback (`rollback.yml`)
 
@@ -199,7 +199,7 @@ cat ~/.kube/config | base64 -w 0
 # Add to GitHub: Settings → Secrets → Actions → New repository secret
 # Name: KUBE_CONFIG_STAGING
 # Value: <paste base64 output>
-```text
+```
 
 #### Environment Protection
 
@@ -218,7 +218,8 @@ Configure production environment protection:
 
    ```bash
    cp examples/cicd/gitlab-ci/.gitlab-ci.yml .
-````
+
+   ```
 
 1. Configure CI/CD variables in GitLab:
 
@@ -229,9 +230,9 @@ Configure production environment protection:
 
 ### Pipeline Stages
 
-````text
-test → build → security-scan → deploy-staging → deploy-production
 ```text
+test → build → security-scan → deploy-staging → deploy-production
+```
 
 ### Features
 
@@ -267,7 +268,8 @@ Ensure runners have:
 
    ```bash
    cp examples/cicd/jenkins/Jenkinsfile .
-````
+
+   ```
 
 1. Create Jenkins credentials:
 
@@ -285,7 +287,7 @@ Ensure runners have:
 
 ### Pipeline Structure
 
-````groovy
+```groovy
 pipeline {
     stages {
         Test (parallel: Unit Tests, Code Quality)
@@ -295,7 +297,7 @@ pipeline {
         Deploy to Production (manual approval)
     }
 }
-```text
+```
 
 ### Parameters
 
@@ -307,7 +309,7 @@ parameters {
     choice(name: 'VARIANT', ...)
     booleanParam(name: 'RUN_SECURITY_SCAN', ...)
 }
-```text
+```
 
 ### Required Plugins
 
@@ -348,7 +350,7 @@ parameters {
 ./deployment-strategies/blue-green-deployment.sh \
     ghcr.io/myorg/app:v1.2.3 \
     production
-```text
+```
 
 **Variables:**
 
@@ -364,7 +366,7 @@ KEEP_OLD=false \
 ./deployment-strategies/blue-green-deployment.sh \
     ghcr.io/myorg/app:v1.2.3 \
     production
-```text
+```
 
 ### Canary Deployment
 
@@ -389,7 +391,7 @@ KEEP_OLD=false \
     ghcr.io/myorg/app:v1.2.3 \
     production \
     10  # 10% traffic to canary
-```text
+```
 
 **Variables:**
 
@@ -407,7 +409,7 @@ AUTO_ROLLBACK=true \
     ghcr.io/myorg/app:v1.2.3 \
     production \
     10
-```text
+```
 
 ## Quick Start
 
@@ -431,7 +433,7 @@ cp examples/cicd/gitlab-ci/.gitlab-ci.yml .
 
 # For Jenkins
 cp examples/cicd/jenkins/Jenkinsfile .
-```text
+```
 
 ### 3. Customize
 
@@ -463,21 +465,25 @@ Start with a pull request or feature branch:
 ### Security
 
 1. **Never commit secrets**
+
    - Use CI/CD platform secret management
    - Rotate credentials regularly
    - Use least-privilege service accounts
 
 1. **Scan for vulnerabilities**
+
    - Run Trivy on every build
    - Fail builds on CRITICAL vulnerabilities
    - Review and patch HIGH vulnerabilities
 
 1. **Sign and verify images**
+
    - Use Cosign for image signing
    - Verify signatures before deployment
    - Use SBOM (Software Bill of Materials)
 
 1. **Use minimal base images**
+
    - Prefer slim/distroless images
    - Remove unnecessary packages
    - Keep images updated
@@ -485,21 +491,25 @@ Start with a pull request or feature branch:
 ### Deployment
 
 1. **Test thoroughly**
+
    - Unit tests before build
    - Integration tests after build
    - Smoke tests after deployment
 
 1. **Use staging environments**
+
    - Mirror production configuration
    - Test deployments in staging first
    - Validate with production-like data
 
 1. **Implement progressive delivery**
+
    - Start with canary deployments
    - Gradually increase traffic
    - Monitor metrics continuously
 
 1. **Have rollback procedures**
+
    - Document rollback steps
    - Test rollback regularly
    - Keep previous versions available
@@ -507,18 +517,21 @@ Start with a pull request or feature branch:
 ### Monitoring
 
 1. **Track key metrics**
+
    - Deployment frequency
    - Lead time for changes
    - Mean time to recovery
    - Change failure rate
 
 1. **Set up alerts**
+
    - Deployment failures
    - High error rates
    - Resource exhaustion
    - Security vulnerabilities
 
 1. **Log everything**
+
    - Structured logging (JSON)
    - Centralized log aggregation
    - Retention policies
@@ -538,7 +551,7 @@ docker system prune -af
 
 # GitLab CI: Increase runner disk space or enable cleanup
 # Jenkins: Configure disk cleanup plugin
-```text
+```
 
 **Problem**: Build args not being recognized
 
@@ -552,7 +565,7 @@ ARG INCLUDE_PYTHON_DEV=false
 # Pass with --build-arg:
 --build-arg PROJECT_NAME=myproject
 --build-arg INCLUDE_PYTHON_DEV=true
-```text
+```
 
 ### Deployment Failures
 
@@ -569,7 +582,7 @@ kubectl config get-contexts
 
 # Ensure service account has proper RBAC:
 kubectl auth can-i create deployments --namespace=production
-```text
+```
 
 **Problem**: Pods stuck in "ImagePullBackOff"
 
@@ -584,7 +597,7 @@ kubectl get secret regcred -n production -o yaml
 
 # Check pod events:
 kubectl describe pod <pod-name> -n production
-```text
+```
 
 ### Rollback Issues
 
@@ -598,7 +611,7 @@ kubectl rollout history deployment/myapp -n production
 
 # Rollback to specific revision:
 kubectl rollout undo deployment/myapp -n production --to-revision=2
-```text
+```
 
 **Problem**: Traffic not switching during blue-green
 
@@ -614,7 +627,7 @@ kubectl get pods -n production --show-labels
 # Manually patch service:
 kubectl patch service myapp -n production \
     -p '{"spec":{"selector":{"deployment":"green"}}}'
-```text
+```
 
 ## Additional Resources
 
@@ -636,4 +649,3 @@ For issues and questions:
 
 This project is licensed under the MIT License - see the
 [LICENSE](../../LICENSE) file for details.
-````

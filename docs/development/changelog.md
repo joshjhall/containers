@@ -14,13 +14,13 @@ The CHANGELOG.md is automatically generated using
 We follow the [Conventional Commits](https://www.conventionalcommits.org/)
 specification. Each commit message should be structured as:
 
-````text
+```text
 <type>: <description>
 
 [optional body]
 
 [optional footer(s)]
-```text
+```
 
 ### Commit Types
 
@@ -73,7 +73,7 @@ fix: Prevent command injection in version validation
 Add input sanitization to validate_version() function.
 
 security: Addresses CVE-2024-XXXXX
-```text
+```
 
 ### Breaking Changes
 
@@ -91,7 +91,7 @@ feat: Redesign caching strategy
 
 BREAKING CHANGE: Cache directory structure has changed.
 Mount points must be updated in docker-compose.yml.
-```text
+```
 
 Breaking changes appear with `[**BREAKING**]` tag in CHANGELOG.
 
@@ -120,14 +120,14 @@ The CHANGELOG is automatically generated during the release process:
 
 # Manual generation (for testing)
 git-cliff --tag v4.8.0 --output CHANGELOG.md
-```text
+```
 
 The `bin/release.sh` script:
 
 1. Determines the next version number
-2. Updates VERSION file and other version references
-3. Generates CHANGELOG.md using git-cliff
-4. Creates a git tag with the version
+1. Updates VERSION file and other version references
+1. Generates CHANGELOG.md using git-cliff
+1. Creates a git tag with the version
 
 ## Best Practices
 
@@ -158,7 +158,7 @@ fix: Use install command for atomic sudo file creation
 
 # Documentation improvement
 docs: Update roadmap with Option C: Reliability completion
-```text
+```
 
 ### Poor Examples (Don't do this)
 
@@ -174,7 +174,7 @@ fixed: Fixed the bug
 
 # Mixed concerns
 feat: Add feature X, fix bug Y, update docs
-```text
+```
 
 ## Testing Your Commits
 
@@ -183,7 +183,7 @@ Before committing, you can preview how your commit will appear in the CHANGELOG:
 ```bash
 # View what the next CHANGELOG would look like
 git-cliff --unreleased
-```text
+```
 
 ## Further Reading
 
@@ -191,4 +191,3 @@ git-cliff --unreleased
 - [Keep a Changelog](https://keepachangelog.com/)
 - [Semantic Versioning](https://semver.org/)
 - [git-cliff Documentation](https://git-cliff.org/docs/)
-````
