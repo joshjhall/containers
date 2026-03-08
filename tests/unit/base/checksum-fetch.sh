@@ -348,6 +348,68 @@ MOCK_HTML
 }
 
 # ============================================================================
+# Functional Tests - fetch_maven_sha256()
+# ============================================================================
+
+test_fetch_maven_sha256_curl_failure() {
+    local exit_code=0
+    local result
+    result=$(bash -c "
+        retry_github_api() { \"\$@\"; }
+        export -f retry_github_api
+        source '$SOURCE_FILE' >/dev/null 2>&1
+
+        # Override AFTER sourcing so it takes effect
+        _curl_with_timeout() { return 1; }
+
+        fetch_maven_sha256 'https://repo.maven.apache.org/maven2/org/example/artifact-1.0.jar'
+    " 2>/dev/null) || exit_code=$?
+
+    assert_not_equals "0" "$exit_code" "fetch_maven_sha256 returns non-zero on curl failure"
+    assert_empty "$result" "fetch_maven_sha256 returns empty output on curl failure"
+}
+
+test_fetch_maven_sha256_url_construction() {
+    # Verify that the source constructs the URL by appending .sha256
+    assert_file_contains "$MAVEN_FILE" '${base_url}.sha256' \
+        "fetch_maven_sha256 appends .sha256 to artifact URL"
+}
+
+test_fetch_maven_sha256_validates_format() {
+    local valid_sha256="a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+    local result
+    result=$(bash -c "
+        retry_github_api() { \"\$@\"; }
+        export -f retry_github_api
+        source '$SOURCE_FILE' >/dev/null 2>&1
+
+        # Override to return a valid SHA256
+        _curl_with_timeout() { echo '$valid_sha256'; }
+
+        fetch_maven_sha256 'https://repo.maven.apache.org/maven2/org/example/artifact-1.0.jar'
+    " 2>/dev/null)
+
+    assert_equals "$valid_sha256" "$result" "fetch_maven_sha256 returns valid SHA256 hash"
+}
+
+test_fetch_maven_sha256_rejects_invalid() {
+    local exit_code=0
+    local result
+    result=$(bash -c "
+        retry_github_api() { \"\$@\"; }
+        export -f retry_github_api
+        source '$SOURCE_FILE' >/dev/null 2>&1
+
+        # Override to return invalid (too short) content
+        _curl_with_timeout() { echo 'not-a-valid-hash'; }
+
+        fetch_maven_sha256 'https://repo.maven.apache.org/maven2/org/example/artifact-1.0.jar'
+    " 2>/dev/null) || exit_code=$?
+
+    assert_not_equals "0" "$exit_code" "fetch_maven_sha256 rejects invalid hash format"
+}
+
+# ============================================================================
 # Static Analysis - Export checks
 # ============================================================================
 
@@ -444,6 +506,12 @@ run_test_with_setup test_fetch_ruby_checksum_curl_failure "Ruby checksum: curl f
 # Mock HTML extraction tests (mocked, always run offline)
 run_test_with_setup test_fetch_go_checksum_extracts_from_html "Go checksum: extracts hash from HTML"
 run_test_with_setup test_fetch_ruby_checksum_extracts_from_html "Ruby checksum: extracts hash from HTML"
+
+# Maven functional tests
+run_test_with_setup test_fetch_maven_sha256_curl_failure "Maven SHA256: curl failure returns error"
+run_test_with_setup test_fetch_maven_sha256_url_construction "Maven SHA256: appends .sha256 to URL"
+run_test_with_setup test_fetch_maven_sha256_validates_format "Maven SHA256: validates 64-char hex format"
+run_test_with_setup test_fetch_maven_sha256_rejects_invalid "Maven SHA256: rejects invalid format"
 
 # Export checks
 run_test_with_setup test_exports_fetch_go_checksum "Exports fetch_go_checksum"
