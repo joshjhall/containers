@@ -16,6 +16,8 @@ set -euo pipefail
 
 # Source apt utilities for reliable package installation
 source /tmp/build-scripts/base/apt-utils.sh
+# Source download verification for checksum-verified downloads
+source /tmp/build-scripts/base/download-verify.sh
 
 # ============================================================================
 # System Updates
@@ -82,30 +84,38 @@ echo "$TZ" > /etc/timezone
 echo "=== Installing zoxide ==="
 ARCH=$(dpkg --print-architecture)
 ZOXIDE_VERSION="0.9.9"
-cd /tmp
+# Tier 2 pinned SHA256 checksums from official release tarballs
+ZOXIDE_SHA256_AMD64="4ff057d3c4d957946937274c2b8be7af2a9bbae7f90a1b5e9baaa7cb65a20caa"
+ZOXIDE_SHA256_ARM64="96e6ea2e47a71db42cb7ad5a36e9209c8cb3708f8ae00f6945573d0d93315cb0"
 if [ "$ARCH" = "amd64" ]; then
-    command curl -fsSL "https://github.com/ajeetdsouza/zoxide/releases/download/v${ZOXIDE_VERSION}/zoxide-${ZOXIDE_VERSION}-x86_64-unknown-linux-musl.tar.gz" | tar xz
+    ZOXIDE_URL="https://github.com/ajeetdsouza/zoxide/releases/download/v${ZOXIDE_VERSION}/zoxide-${ZOXIDE_VERSION}-x86_64-unknown-linux-musl.tar.gz"
+    ZOXIDE_SHA256="$ZOXIDE_SHA256_AMD64"
 elif [ "$ARCH" = "arm64" ]; then
-    command curl -fsSL "https://github.com/ajeetdsouza/zoxide/releases/download/v${ZOXIDE_VERSION}/zoxide-${ZOXIDE_VERSION}-aarch64-unknown-linux-musl.tar.gz" | tar xz
+    ZOXIDE_URL="https://github.com/ajeetdsouza/zoxide/releases/download/v${ZOXIDE_VERSION}/zoxide-${ZOXIDE_VERSION}-aarch64-unknown-linux-musl.tar.gz"
+    ZOXIDE_SHA256="$ZOXIDE_SHA256_ARM64"
 fi
-command mv zoxide /usr/local/bin/
+download_and_extract "$ZOXIDE_URL" "$ZOXIDE_SHA256" "/tmp" "zoxide"
+command mv /tmp/zoxide /usr/local/bin/
 chmod +x /usr/local/bin/zoxide
-cd /
 
 # ============================================================================
 # Cosign Installation - Sigstore signature verification
 # ============================================================================
 echo "=== Installing cosign ==="
 COSIGN_VERSION="${COSIGN_VERSION:-3.0.5}"
-cd /tmp
+# Tier 2 pinned SHA256 checksums from official cosign_checksums.txt
+COSIGN_SHA256_AMD64="db15cc99e6e4837daabab023742aaddc3841ce57f193d11b7c3e06c8003642b2"
+COSIGN_SHA256_ARM64="d098f3168ae4b3aa70b4ca78947329b953272b487727d1722cb3cb098a1a20ab"
 if [ "$ARCH" = "amd64" ]; then
-    command curl -fsSL "https://github.com/sigstore/cosign/releases/download/v${COSIGN_VERSION}/cosign-linux-amd64" -o cosign
+    COSIGN_URL="https://github.com/sigstore/cosign/releases/download/v${COSIGN_VERSION}/cosign-linux-amd64"
+    COSIGN_SHA256="$COSIGN_SHA256_AMD64"
 elif [ "$ARCH" = "arm64" ]; then
-    command curl -fsSL "https://github.com/sigstore/cosign/releases/download/v${COSIGN_VERSION}/cosign-linux-arm64" -o cosign
+    COSIGN_URL="https://github.com/sigstore/cosign/releases/download/v${COSIGN_VERSION}/cosign-linux-arm64"
+    COSIGN_SHA256="$COSIGN_SHA256_ARM64"
 fi
-command mv cosign /usr/local/bin/
+download_and_verify "$COSIGN_URL" "$COSIGN_SHA256" "/tmp/cosign"
+command mv /tmp/cosign /usr/local/bin/
 chmod +x /usr/local/bin/cosign
-cd /
 
 # Note: Python packages are installed via system packages to comply with PEP 668
 # pipx will be used for installing Python applications in isolated environments

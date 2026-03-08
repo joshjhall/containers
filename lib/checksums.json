@@ -78,7 +78,36 @@
       "versions": {}
     }
   },
-  "tools": {},
+  "tools": {
+    "zoxide": {
+      "version": "0.9.9",
+      "checksums": {
+        "amd64": {
+          "sha256": "4ff057d3c4d957946937274c2b8be7af2a9bbae7f90a1b5e9baaa7cb65a20caa",
+          "url": "https://github.com/ajeetdsouza/zoxide/releases/download/v0.9.9/zoxide-0.9.9-x86_64-unknown-linux-musl.tar.gz"
+        },
+        "arm64": {
+          "sha256": "96e6ea2e47a71db42cb7ad5a36e9209c8cb3708f8ae00f6945573d0d93315cb0",
+          "url": "https://github.com/ajeetdsouza/zoxide/releases/download/v0.9.9/zoxide-0.9.9-aarch64-unknown-linux-musl.tar.gz"
+        }
+      },
+      "added": "2026-03-08"
+    },
+    "cosign": {
+      "version": "3.0.5",
+      "checksums": {
+        "amd64": {
+          "sha256": "db15cc99e6e4837daabab023742aaddc3841ce57f193d11b7c3e06c8003642b2",
+          "url": "https://github.com/sigstore/cosign/releases/download/v3.0.5/cosign-linux-amd64"
+        },
+        "arm64": {
+          "sha256": "d098f3168ae4b3aa70b4ca78947329b953272b487727d1722cb3cb098a1a20ab",
+          "url": "https://github.com/sigstore/cosign/releases/download/v3.0.5/cosign-linux-arm64"
+        }
+      },
+      "added": "2026-03-08"
+    }
+  },
   "metadata": {
     "generated": "2025-11-14T22:30:00Z",
     "description": "Pinned checksums for language runtime downloads",
