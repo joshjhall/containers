@@ -28,6 +28,7 @@ fi
 # logging.sh when available, otherwise define a minimal fallback.
 if ! type safe_eval >/dev/null 2>&1; then
     safe_eval() {
+        local _desc="$1"; shift
         local output
         if ! output=$("$@" 2>/dev/null); then
             return 1
@@ -38,9 +39,10 @@ if ! type safe_eval >/dev/null 2>&1; then
 
         # Use 'command grep' to bypass any aliases (e.g., grep='rg' from dev-tools)
         if echo "$output" | command grep -qE "$_SAFE_EVAL_BLOCKLIST"; then
-            echo "WARNING: Suspicious output detected, skipping initialization of: $*" >&2
+            echo "WARNING: Suspicious output detected, skipping initialization of: $_desc ($*)" >&2
             return 1
         fi
+        # NOTE: eval is intentional — this function wraps eval with blocklist validation
         eval "$output"
     }
 fi

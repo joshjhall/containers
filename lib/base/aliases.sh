@@ -28,22 +28,33 @@ command cat >> /etc/bash.bashrc << 'EOF'
 # Uses a blocklist (not allowlist) because inputs are complex, multi-line shell
 # code from tools like zoxide/direnv that changes between versions. Inputs are
 # NOT user-controlled; this is defense-in-depth against supply chain compromise.
-safe_eval() {
-    local output
-    if ! output=$("$@" 2>/dev/null); then
-        return 1
+# Source canonical safe_eval if not already loaded
+if ! type safe_eval >/dev/null 2>&1; then
+    if [ -f /opt/container-runtime/shared/safe-eval.sh ]; then
+        source /opt/container-runtime/shared/safe-eval.sh
     fi
+fi
+# Minimal fallback if canonical version still unavailable
+if ! type safe_eval >/dev/null 2>&1; then
+    safe_eval() {
+        local _desc="$1"; shift
+        local output
+        if ! output=$("$@" 2>/dev/null); then
+            return 1
+        fi
 
-    # Blocklist of dangerous patterns — defined once for maintainability
-    local _SAFE_EVAL_BLOCKLIST='rm -rf|curl.*bash|\bwget\b|;\s*rm|\$\(.*rm|exec\s+[^$]|/bin/sh.*-c|bash.*-c.*http|\bmkfifo\b|\bnc\b|\bncat\b|\bchmod\b.*\+s|\bpython[23]?\b.*-c|\bperl\b.*-e'
+        # Blocklist of dangerous patterns — defined once for maintainability
+        local _SAFE_EVAL_BLOCKLIST='rm -rf|curl.*bash|\bwget\b|;\s*rm|\$\(.*rm|exec\s+[^$]|/bin/sh.*-c|bash.*-c.*http|\bmkfifo\b|\bnc\b|\bncat\b|\bchmod\b.*\+s|\bpython[23]?\b.*-c|\bperl\b.*-e'
 
-    # Use 'command grep' to bypass any aliases (e.g., grep='rg' from dev-tools)
-    if echo "$output" | command grep -qE "$_SAFE_EVAL_BLOCKLIST"; then
-        echo "WARNING: Suspicious output detected, skipping initialization of: $*" >&2
-        return 1
-    fi
-    eval "$output"
-}
+        # Use 'command grep' to bypass any aliases (e.g., grep='rg' from dev-tools)
+        if echo "$output" | command grep -qE "$_SAFE_EVAL_BLOCKLIST"; then
+            echo "WARNING: Suspicious output detected, skipping initialization of: $_desc ($*)" >&2
+            return 1
+        fi
+        # NOTE: eval is intentional — this function wraps eval with blocklist validation
+        eval "$output"
+    }
+fi
 
 # ----------------------------------------------------------------------------
 # File and Directory Navigation
@@ -142,7 +153,7 @@ fi
 # Zoxide Integration - Smarter directory navigation
 # ----------------------------------------------------------------------------
 if command -v zoxide &> /dev/null; then
-    safe_eval zoxide init bash
+    safe_eval "zoxide init bash" zoxide init bash
     # Override cd with zoxide
     alias cd='z'
     alias cdi='zi'  # Interactive selection
