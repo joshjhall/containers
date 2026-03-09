@@ -39,6 +39,14 @@ _CHECKSUM_VERIFICATION_LOADED=1
 
 set -euo pipefail
 
+# Source export utilities
+# shellcheck source=lib/shared/export-utils.sh
+if [ -f "/tmp/build-scripts/shared/export-utils.sh" ]; then
+    source "/tmp/build-scripts/shared/export-utils.sh"
+elif [ -f "$(dirname "${BASH_SOURCE[0]}")/../shared/export-utils.sh" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/../shared/export-utils.sh"
+fi
+
 # ============================================================================
 # Tool Tier 3 Fetcher Registry
 # ============================================================================
@@ -478,11 +486,6 @@ verify_download() {
 }
 
 # Export functions for use in feature scripts
-export -f verify_download
-export -f verify_signature_tier
-export -f verify_pinned_checksum
-export -f verify_published_checksum
-export -f verify_tool_published_checksum
-export -f register_tool_checksum_fetcher
-export -f verify_calculated_checksum
-export -f lookup_pinned_checksum
+protected_export verify_download verify_signature_tier verify_pinned_checksum
+protected_export verify_published_checksum verify_tool_published_checksum
+protected_export register_tool_checksum_fetcher verify_calculated_checksum lookup_pinned_checksum

@@ -17,6 +17,14 @@ _VERSION_RESOLUTION_LOADED=1
 
 set -euo pipefail
 
+# Source export utilities
+# shellcheck source=lib/shared/export-utils.sh
+if [ -f "/tmp/build-scripts/shared/export-utils.sh" ]; then
+    source "/tmp/build-scripts/shared/export-utils.sh"
+elif [ -f "$(dirname "${BASH_SOURCE[0]}")/../shared/export-utils.sh" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/../shared/export-utils.sh"
+fi
+
 # Source logging utilities
 if [ -f /tmp/build-scripts/base/logging.sh ]; then
     source /tmp/build-scripts/base/logging.sh
@@ -332,11 +340,6 @@ resolve_version() {
 }
 
 # Export functions for use in feature scripts
-export -f resolve_python_version
-export -f resolve_node_version
-export -f resolve_rust_version
-export -f resolve_java_version
-export -f resolve_ruby_version
-export -f resolve_go_version
-export -f resolve_kotlin_version
-export -f resolve_version
+protected_export resolve_python_version resolve_node_version resolve_rust_version
+protected_export resolve_java_version resolve_ruby_version resolve_go_version
+protected_export resolve_kotlin_version resolve_version

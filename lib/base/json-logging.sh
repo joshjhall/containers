@@ -22,6 +22,14 @@ _JSON_LOGGING_LOADED=1
 
 set -euo pipefail
 
+# Source export utilities
+# shellcheck source=lib/shared/export-utils.sh
+if [ -f "/tmp/build-scripts/shared/export-utils.sh" ]; then
+    source "/tmp/build-scripts/shared/export-utils.sh"
+elif [ -f "$(dirname "${BASH_SOURCE[0]}")/../shared/export-utils.sh" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/../shared/export-utils.sh"
+fi
+
 # ============================================================================
 # Configuration
 # ============================================================================
@@ -305,11 +313,5 @@ EOF
 }
 
 # Export functions for use in other scripts
-export -f json_escape
-export -f json_log_init
-export -f json_log_event
-export -f json_log_command
-export -f json_log_error
-export -f json_log_warning
-export -f json_log_feature_end
-export -f json_log_build_metadata
+protected_export json_escape json_log_init json_log_event json_log_command
+protected_export json_log_error json_log_warning json_log_feature_end json_log_build_metadata

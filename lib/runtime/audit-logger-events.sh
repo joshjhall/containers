@@ -14,6 +14,16 @@ if [ -n "${_AUDIT_LOGGER_EVENTS_LOADED:-}" ]; then
 fi
 _AUDIT_LOGGER_EVENTS_LOADED=1
 
+# Source export utilities
+# shellcheck source=lib/shared/export-utils.sh
+if [ -f "/tmp/build-scripts/shared/export-utils.sh" ]; then
+    source "/tmp/build-scripts/shared/export-utils.sh"
+elif [ -f "$(dirname "${BASH_SOURCE[0]}")/../shared/export-utils.sh" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/../shared/export-utils.sh"
+elif [ -f "/opt/container-runtime/shared/export-utils.sh" ]; then
+    source "/opt/container-runtime/shared/export-utils.sh"
+fi
+
 # ============================================================================
 # Specialized Audit Functions
 # ============================================================================
@@ -197,5 +207,5 @@ audit_compliance() {
 }
 
 # Export functions for use in other scripts
-export -f audit_auth audit_authz audit_data_access audit_config
-export -f audit_security audit_network audit_file audit_process audit_compliance
+protected_export audit_auth audit_authz audit_data_access audit_config
+protected_export audit_security audit_network audit_file audit_process audit_compliance

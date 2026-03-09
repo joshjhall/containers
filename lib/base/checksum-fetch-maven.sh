@@ -14,6 +14,14 @@ if [ -n "${_CHECKSUM_FETCH_MAVEN_LOADED:-}" ]; then
 fi
 _CHECKSUM_FETCH_MAVEN_LOADED=1
 
+# Source export utilities
+# shellcheck source=lib/shared/export-utils.sh
+if [ -f "/tmp/build-scripts/shared/export-utils.sh" ]; then
+    source "/tmp/build-scripts/shared/export-utils.sh"
+elif [ -f "$(dirname "${BASH_SOURCE[0]}")/../shared/export-utils.sh" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/../shared/export-utils.sh"
+fi
+
 # ============================================================================
 # Maven Central Checksum Fetching
 # ============================================================================
@@ -49,4 +57,4 @@ fetch_maven_sha256() {
 }
 
 # Export functions for use in other scripts
-export -f fetch_maven_sha256
+protected_export fetch_maven_sha256

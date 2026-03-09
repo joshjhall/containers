@@ -414,37 +414,37 @@ test_fetch_maven_sha256_rejects_invalid() {
 # ============================================================================
 
 test_exports_fetch_go_checksum() {
-    assert_file_contains "$GO_FILE" "export -f fetch_go_checksum" \
+    assert_file_contains "$GO_FILE" "protected_export.*fetch_go_checksum" \
         "fetch_go_checksum is exported"
 }
 
 test_exports_fetch_github_checksums_txt() {
-    assert_file_contains "$SOURCE_FILE" "export -f fetch_github_checksums_txt" \
+    assert_file_contains "$SOURCE_FILE" "protected_export.*fetch_github_checksums_txt" \
         "fetch_github_checksums_txt is exported"
 }
 
 test_exports_fetch_github_sha256_file() {
-    assert_file_contains "$SOURCE_FILE" "export -f fetch_github_sha256_file" \
+    assert_file_contains "$SOURCE_FILE" "protected_export.*fetch_github_sha256_file" \
         "fetch_github_sha256_file is exported"
 }
 
 test_exports_fetch_github_sha512_file() {
-    assert_file_contains "$SOURCE_FILE" "export -f fetch_github_sha512_file" \
+    assert_file_contains "$SOURCE_FILE" "protected_export.*fetch_github_sha512_file" \
         "fetch_github_sha512_file is exported"
 }
 
 test_exports_fetch_ruby_checksum() {
-    assert_file_contains "$RUBY_FILE" "export -f fetch_ruby_checksum" \
+    assert_file_contains "$RUBY_FILE" "protected_export.*fetch_ruby_checksum" \
         "fetch_ruby_checksum is exported"
 }
 
 test_exports_validate_checksum_format() {
-    assert_file_contains "$SOURCE_FILE" "export -f validate_checksum_format" \
+    assert_file_contains "$SOURCE_FILE" "protected_export.*validate_checksum_format" \
         "validate_checksum_format is exported"
 }
 
 test_exports_fetch_maven_sha256() {
-    assert_file_contains "$MAVEN_FILE" "export -f fetch_maven_sha256" \
+    assert_file_contains "$MAVEN_FILE" "protected_export.*fetch_maven_sha256" \
         "fetch_maven_sha256 is exported"
 }
 

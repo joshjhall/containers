@@ -40,6 +40,16 @@
 
 set -eo pipefail
 
+# Source export utilities
+# shellcheck source=lib/shared/export-utils.sh
+if [ -f "/tmp/build-scripts/shared/export-utils.sh" ]; then
+    source "/tmp/build-scripts/shared/export-utils.sh"
+elif [ -f "$(dirname "${BASH_SOURCE[0]}")/../shared/export-utils.sh" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/../shared/export-utils.sh"
+elif [ -f "/opt/container-runtime/shared/export-utils.sh" ]; then
+    source "/opt/container-runtime/shared/export-utils.sh"
+fi
+
 # ============================================================================
 # Configuration
 # ============================================================================
@@ -303,12 +313,8 @@ source "${_AUDIT_LOGGER_DIR}/audit-logger-shippers.sh"
 source "${_AUDIT_LOGGER_DIR}/audit-logger-maintenance.sh"
 
 # Export functions for use in other scripts
-export -f _json_escape
-export -f _is_secret_key
-export -f _mask_secret_value
-export -f _sanitize_json_secrets
-export -f audit_log
-export -f audit_init
+protected_export _json_escape _is_secret_key _mask_secret_value _sanitize_json_secrets
+protected_export audit_log audit_init
 
 # ============================================================================
 # Auto-initialization

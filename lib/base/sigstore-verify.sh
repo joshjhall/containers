@@ -21,6 +21,14 @@ _SIGSTORE_VERIFY_LOADED=1
 
 set -euo pipefail
 
+# Source export utilities
+# shellcheck source=lib/shared/export-utils.sh
+if [ -f "/tmp/build-scripts/shared/export-utils.sh" ]; then
+    source "/tmp/build-scripts/shared/export-utils.sh"
+elif [ -f "$(dirname "${BASH_SOURCE[0]}")/../shared/export-utils.sh" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/../shared/export-utils.sh"
+fi
+
 # Source logging utilities
 if [ -f /tmp/build-scripts/base/logging.sh ]; then
     source /tmp/build-scripts/base/logging.sh
@@ -342,7 +350,5 @@ download_and_verify_sigstore() {
 }
 
 # Export all functions
-export -f download_and_verify_kubectl_sigstore
-export -f verify_sigstore_signature
-export -f get_python_release_manager
-export -f download_and_verify_sigstore
+protected_export download_and_verify_kubectl_sigstore verify_sigstore_signature
+protected_export get_python_release_manager download_and_verify_sigstore

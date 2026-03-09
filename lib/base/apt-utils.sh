@@ -24,6 +24,14 @@ _APT_UTILS_LOADED=1
 
 set -euo pipefail
 
+# Source export utilities
+# shellcheck source=lib/shared/export-utils.sh
+if [ -f "/tmp/build-scripts/shared/export-utils.sh" ]; then
+    source "/tmp/build-scripts/shared/export-utils.sh"
+elif [ -f "$(dirname "${BASH_SOURCE[0]}")/../shared/export-utils.sh" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/../shared/export-utils.sh"
+fi
+
 # Source logging functions if available
 if [ -f /tmp/build-scripts/base/logging.sh ]; then
     source /tmp/build-scripts/base/logging.sh
@@ -522,12 +530,6 @@ add_apt_repository_key() {
 }
 
 # Export functions for use by other scripts
-export -f _apt_diagnose_network_failure
-export -f _apt_update_on_retry
-export -f _apt_install_on_retry
-export -f apt_retry
-export -f apt_update
-export -f apt_install
-export -f apt_cleanup
-export -f configure_apt_mirrors
-export -f add_apt_repository_key
+protected_export _apt_diagnose_network_failure _apt_update_on_retry _apt_install_on_retry
+protected_export apt_retry apt_update apt_install apt_cleanup
+protected_export configure_apt_mirrors add_apt_repository_key

@@ -28,6 +28,14 @@ _CACHE_UTILS_LOADED=1
 
 set -euo pipefail
 
+# Source export utilities
+# shellcheck source=lib/shared/export-utils.sh
+if [ -f "/tmp/build-scripts/shared/export-utils.sh" ]; then
+    source "/tmp/build-scripts/shared/export-utils.sh"
+elif [ -f "$(dirname "${BASH_SOURCE[0]}")/../shared/export-utils.sh" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/../shared/export-utils.sh"
+fi
+
 # Create a single cache directory with correct ownership
 # Args:
 #   $1: cache_name - Name of the cache (e.g., "pip", "npm")
@@ -109,6 +117,4 @@ create_cache_directories() {
 }
 
 # Export functions for use in feature scripts
-export -f create_language_cache
-export -f create_language_caches
-export -f create_cache_directories
+protected_export create_language_cache create_language_caches create_cache_directories

@@ -44,22 +44,22 @@ run_test_with_setup() {
 # ============================================================================
 
 test_exports_verify_sigstore_signature() {
-    assert_file_contains "$SOURCE_FILE" "export -f verify_sigstore_signature" \
+    assert_file_contains "$SOURCE_FILE" "protected_export.*verify_sigstore_signature" \
         "verify_sigstore_signature is exported"
 }
 
 test_exports_download_and_verify_sigstore() {
-    assert_file_contains "$SOURCE_FILE" "export -f download_and_verify_sigstore" \
+    assert_file_contains "$SOURCE_FILE" "protected_export.*download_and_verify_sigstore" \
         "download_and_verify_sigstore is exported"
 }
 
 test_exports_download_and_verify_kubectl_sigstore() {
-    assert_file_contains "$SOURCE_FILE" "export -f download_and_verify_kubectl_sigstore" \
+    assert_file_contains "$SOURCE_FILE" "protected_export.*download_and_verify_kubectl_sigstore" \
         "download_and_verify_kubectl_sigstore is exported"
 }
 
 test_exports_get_python_release_manager() {
-    assert_file_contains "$SOURCE_FILE" "export -f get_python_release_manager" \
+    assert_file_contains "$SOURCE_FILE" "protected_export.*get_python_release_manager" \
         "get_python_release_manager is exported"
 }
 

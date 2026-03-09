@@ -14,6 +14,16 @@ if [ -n "${_SHARED_PATH_UTILS_LOADED:-}" ]; then
 fi
 _SHARED_PATH_UTILS_LOADED=1
 
+# Source export utilities
+# shellcheck source=lib/shared/export-utils.sh
+if [ -f "/tmp/build-scripts/shared/export-utils.sh" ]; then
+    source "/tmp/build-scripts/shared/export-utils.sh"
+elif [ -f "$(dirname "${BASH_SOURCE[0]}")/export-utils.sh" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/export-utils.sh"
+elif [ -f "/opt/container-runtime/shared/export-utils.sh" ]; then
+    source "/opt/container-runtime/shared/export-utils.sh"
+fi
+
 # ============================================================================
 # safe_add_to_path - Securely add directory to runtime PATH with validation
 # ============================================================================
@@ -84,4 +94,4 @@ safe_add_to_path() {
 }
 
 # Export function
-export -f safe_add_to_path
+protected_export safe_add_to_path

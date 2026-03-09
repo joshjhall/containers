@@ -13,6 +13,14 @@ if [ -n "${_BASHRC_HELPERS_LOADED:-}" ]; then
 fi
 _BASHRC_HELPERS_LOADED=1
 
+# Source export utilities
+# shellcheck source=lib/shared/export-utils.sh
+if [ -f "/tmp/build-scripts/shared/export-utils.sh" ]; then
+    source "/tmp/build-scripts/shared/export-utils.sh"
+elif [ -f "$(dirname "${BASH_SOURCE[0]}")/../shared/export-utils.sh" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/../shared/export-utils.sh"
+fi
+
 # Function to add standard safety headers to bashrc.d scripts
 add_bashrc_safety_header() {
     command cat << 'BASHRC_SAFETY_HEADER'
@@ -216,7 +224,5 @@ update_bashrc_content() {
 }
 
 # Export functions for use in feature scripts
-export -f write_bashrc_content
-export -f update_bashrc_content
-export -f add_bashrc_safety_header
-export -f add_bashrc_safety_footer
+protected_export write_bashrc_content update_bashrc_content
+protected_export add_bashrc_safety_header add_bashrc_safety_footer

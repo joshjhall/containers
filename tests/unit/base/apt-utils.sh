@@ -19,19 +19,19 @@ test_script_exists() {
 # Test: Functions are exported
 test_functions_exported() {
     # Check if the script exports the required functions
-    if command grep -q "export -f apt_update" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
+    if command grep -q "protected_export.*apt_update" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
         assert_true true "apt_update function is exported"
     else
         assert_true false "apt_update function not exported"
     fi
 
-    if command grep -q "export -f apt_install" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
+    if command grep -q "protected_export.*apt_install" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
         assert_true true "apt_install function is exported"
     else
         assert_true false "apt_install function not exported"
     fi
 
-    if command grep -q "export -f apt_cleanup" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
+    if command grep -q "protected_export.*apt_cleanup" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
         assert_true true "apt_cleanup function is exported"
     else
         assert_true false "apt_cleanup function not exported"
@@ -204,7 +204,7 @@ test_apt_update_on_retry_helper() {
         assert_true false "_apt_update_on_retry function not found"
     fi
 
-    if command grep -q "export -f _apt_update_on_retry" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
+    if command grep -q "protected_export.*_apt_update_on_retry" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
         assert_true true "_apt_update_on_retry function is exported"
     else
         assert_true false "_apt_update_on_retry function not exported"
@@ -219,7 +219,7 @@ test_apt_install_on_retry_helper() {
         assert_true false "_apt_install_on_retry function not found"
     fi
 
-    if command grep -q "export -f _apt_install_on_retry" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
+    if command grep -q "protected_export.*_apt_install_on_retry" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
         assert_true true "_apt_install_on_retry function is exported"
     else
         assert_true false "_apt_install_on_retry function not exported"
@@ -352,7 +352,7 @@ test_add_apt_repository_key_function() {
         assert_true false "add_apt_repository_key function not found"
     fi
 
-    if command grep -q "export -f add_apt_repository_key" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
+    if command grep -q "protected_export.*add_apt_repository_key" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
         assert_true true "add_apt_repository_key function is exported"
     else
         assert_true false "add_apt_repository_key function not exported"

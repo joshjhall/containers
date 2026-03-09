@@ -14,6 +14,16 @@ if [ -n "${_SHARED_SAFE_EVAL_LOADED:-}" ]; then
 fi
 _SHARED_SAFE_EVAL_LOADED=1
 
+# Source export utilities
+# shellcheck source=lib/shared/export-utils.sh
+if [ -f "/tmp/build-scripts/shared/export-utils.sh" ]; then
+    source "/tmp/build-scripts/shared/export-utils.sh"
+elif [ -f "$(dirname "${BASH_SOURCE[0]}")/export-utils.sh" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/export-utils.sh"
+elif [ -f "/opt/container-runtime/shared/export-utils.sh" ]; then
+    source "/opt/container-runtime/shared/export-utils.sh"
+fi
+
 # ============================================================================
 # safe_eval - Safely evaluate command output with validation
 #
@@ -70,4 +80,4 @@ safe_eval() {
 }
 
 # Export function
-export -f safe_eval
+protected_export safe_eval

@@ -77,17 +77,17 @@ test_defines_create_cache_directories() {
 }
 
 test_exports_create_language_cache() {
-    assert_file_contains "$SOURCE_FILE" "export -f create_language_cache" \
+    assert_file_contains "$SOURCE_FILE" "protected_export.*create_language_cache" \
         "create_language_cache is exported"
 }
 
 test_exports_create_language_caches() {
-    assert_file_contains "$SOURCE_FILE" "export -f create_language_caches" \
+    assert_file_contains "$SOURCE_FILE" "protected_export.*create_language_caches" \
         "create_language_caches is exported"
 }
 
 test_exports_create_cache_directories() {
-    assert_file_contains "$SOURCE_FILE" "export -f create_cache_directories" \
+    assert_file_contains "$SOURCE_FILE" "protected_export.*create_cache_directories" \
         "create_cache_directories is exported"
 }
 

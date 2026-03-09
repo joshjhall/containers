@@ -14,6 +14,14 @@ if [ -n "${_CHECKSUM_FETCH_RUBY_LOADED:-}" ]; then
 fi
 _CHECKSUM_FETCH_RUBY_LOADED=1
 
+# Source export utilities
+# shellcheck source=lib/shared/export-utils.sh
+if [ -f "/tmp/build-scripts/shared/export-utils.sh" ]; then
+    source "/tmp/build-scripts/shared/export-utils.sh"
+elif [ -f "$(dirname "${BASH_SOURCE[0]}")/../shared/export-utils.sh" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/../shared/export-utils.sh"
+fi
+
 # ============================================================================
 # Ruby Checksum Fetching
 # ============================================================================
@@ -83,4 +91,4 @@ fetch_ruby_checksum() {
 }
 
 # Export functions for use in other scripts
-export -f fetch_ruby_checksum
+protected_export fetch_ruby_checksum

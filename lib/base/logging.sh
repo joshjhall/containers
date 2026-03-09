@@ -31,6 +31,14 @@ _LOGGING_LOADED=1
 
 set -euo pipefail
 
+# Source export utilities
+# shellcheck source=lib/shared/export-utils.sh
+if [ -f "/tmp/build-scripts/shared/export-utils.sh" ]; then
+    source "/tmp/build-scripts/shared/export-utils.sh"
+elif [ -f "$(dirname "${BASH_SOURCE[0]}")/../shared/export-utils.sh" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/../shared/export-utils.sh"
+fi
+
 # Source shared logging (core log level system and basic log functions)
 # shellcheck source=lib/shared/logging.sh
 if [ -f "/tmp/build-scripts/shared/logging.sh" ]; then
@@ -614,19 +622,7 @@ log_feature_summary() {
     } | command tee -a "$CURRENT_LOG_FILE"
 }
 
-export -f log_feature_start
-export -f log_command
-export -f log_feature_end
-export -f log_feature_summary
-export -f log_message
-export -f log_info
-export -f log_debug
-export -f log_error
-export -f log_warning
-if declare -f safe_eval >/dev/null 2>&1; then
-    export -f safe_eval
-fi
-export -f _get_log_level_num
-export -f _should_log
-export -f _get_last_command_start_line
-export -f _count_patterns_since
+protected_export log_feature_start log_command log_feature_end log_feature_summary
+protected_export log_message log_info log_debug log_error log_warning
+protected_export safe_eval _get_log_level_num _should_log
+protected_export _get_last_command_start_line _count_patterns_since

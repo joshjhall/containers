@@ -19,6 +19,14 @@ _ERROR_MESSAGES_LOADED=1
 
 set -euo pipefail
 
+# Source export utilities
+# shellcheck source=lib/shared/export-utils.sh
+if [ -f "/tmp/build-scripts/shared/export-utils.sh" ]; then
+    source "/tmp/build-scripts/shared/export-utils.sh"
+elif [ -f "$(dirname "${BASH_SOURCE[0]}")/../shared/export-utils.sh" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/../shared/export-utils.sh"
+fi
+
 # Source logging if available
 if [ -f "/tmp/build-scripts/base/logging.sh" ]; then
     # shellcheck source=lib/base/logging.sh
@@ -284,27 +292,11 @@ error_verification_failed() {
 # Export Functions
 # ============================================================================
 
-export -f error_package_not_found
-export -f error_dependency_failed
-export -f error_command_not_found
-export -f error_download_failed
-export -f error_connection_timeout
-export -f error_certificate_error
-export -f error_checksum_mismatch
-export -f error_gpg_verification_failed
-export -f error_gpg_key_not_found
-export -f error_sigstore_verification_failed
-export -f error_version_not_found
-export -f error_unsupported_version
-export -f error_architecture_not_supported
-export -f error_os_not_supported
-export -f error_file_not_found
-export -f error_directory_not_found
-export -f error_permission_denied
-export -f error_disk_space
-export -f error_invalid_config
-export -f error_missing_env_var
-export -f error_invalid_env_var
-export -f error_build_failed
-export -f error_installation_failed
-export -f error_verification_failed
+protected_export error_package_not_found error_dependency_failed error_command_not_found
+protected_export error_download_failed error_connection_timeout error_certificate_error
+protected_export error_checksum_mismatch error_gpg_verification_failed error_gpg_key_not_found
+protected_export error_sigstore_verification_failed error_version_not_found error_unsupported_version
+protected_export error_architecture_not_supported error_os_not_supported
+protected_export error_file_not_found error_directory_not_found error_permission_denied error_disk_space
+protected_export error_invalid_config error_missing_env_var error_invalid_env_var
+protected_export error_build_failed error_installation_failed error_verification_failed

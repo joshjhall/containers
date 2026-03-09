@@ -17,6 +17,14 @@ _CHECKSUM_FETCH_LOADED=1
 
 set -euo pipefail
 
+# Source export utilities
+# shellcheck source=lib/shared/export-utils.sh
+if [ -f "/tmp/build-scripts/shared/export-utils.sh" ]; then
+    source "/tmp/build-scripts/shared/export-utils.sh"
+elif [ -f "$(dirname "${BASH_SOURCE[0]}")/../shared/export-utils.sh" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/../shared/export-utils.sh"
+fi
+
 # Source retry utilities for rate limiting and backoff
 if [ -f /tmp/build-scripts/base/retry-utils.sh ]; then
     source /tmp/build-scripts/base/retry-utils.sh
@@ -244,8 +252,5 @@ source "${_CHECKSUM_FETCH_DIR}/checksum-fetch-ruby.sh"
 source "${_CHECKSUM_FETCH_DIR}/checksum-fetch-maven.sh"
 
 # Export functions for use in other scripts
-export -f fetch_github_checksums_txt
-export -f fetch_github_sha256_file
-export -f fetch_github_sha512_file
-export -f calculate_checksum_sha256
-export -f validate_checksum_format
+protected_export fetch_github_checksums_txt fetch_github_sha256_file fetch_github_sha512_file
+protected_export calculate_checksum_sha256 validate_checksum_format

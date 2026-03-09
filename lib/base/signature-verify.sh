@@ -30,6 +30,14 @@ _SIGNATURE_VERIFY_LOADED=1
 
 set -euo pipefail
 
+# Source export utilities
+# shellcheck source=lib/shared/export-utils.sh
+if [ -f "/tmp/build-scripts/shared/export-utils.sh" ]; then
+    source "/tmp/build-scripts/shared/export-utils.sh"
+elif [ -f "$(dirname "${BASH_SOURCE[0]}")/../shared/export-utils.sh" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/../shared/export-utils.sh"
+fi
+
 # Source logging utilities
 if [ -f /tmp/build-scripts/base/logging.sh ]; then
     source /tmp/build-scripts/base/logging.sh
@@ -207,6 +215,4 @@ verify_signature() {
 }
 
 # Export dispatch functions
-export -f _try_python_sigstore
-export -f _verify_language_handler
-export -f verify_signature
+protected_export _try_python_sigstore _verify_language_handler verify_signature

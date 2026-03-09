@@ -27,6 +27,14 @@ _SECRET_SCRUBBING_LOADED=1
 
 set -euo pipefail
 
+# Source export utilities
+# shellcheck source=lib/shared/export-utils.sh
+if [ -f "/tmp/build-scripts/shared/export-utils.sh" ]; then
+    source "/tmp/build-scripts/shared/export-utils.sh"
+elif [ -f "$(dirname "${BASH_SOURCE[0]}")/../shared/export-utils.sh" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/../shared/export-utils.sh"
+fi
+
 # ============================================================================
 # scrub_secrets - Remove sensitive data from text
 #
@@ -127,5 +135,4 @@ scrub_url() {
 }
 
 # Export functions for use in other scripts
-export -f scrub_secrets
-export -f scrub_url
+protected_export scrub_secrets scrub_url

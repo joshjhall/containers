@@ -66,9 +66,9 @@ test_scrub_url_defined() {
 test_functions_exported() {
     local content
     content=$(command cat "$SOURCE_FILE")
-    assert_contains "$content" "export -f scrub_secrets" \
+    assert_matches "$content" "protected_export.*scrub_secrets" \
         "scrub_secrets is exported"
-    assert_contains "$content" "export -f scrub_url" \
+    assert_matches "$content" "protected_export.*scrub_url" \
         "scrub_url is exported"
 }
 

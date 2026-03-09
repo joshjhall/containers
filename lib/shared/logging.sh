@@ -24,6 +24,16 @@ if [ -n "${_SHARED_LOGGING_LOADED:-}" ]; then
 fi
 _SHARED_LOGGING_LOADED=1
 
+# Source export utilities
+# shellcheck source=lib/shared/export-utils.sh
+if [ -f "/tmp/build-scripts/shared/export-utils.sh" ]; then
+    source "/tmp/build-scripts/shared/export-utils.sh"
+elif [ -f "$(dirname "${BASH_SOURCE[0]}")/export-utils.sh" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/export-utils.sh"
+elif [ -f "/opt/container-runtime/shared/export-utils.sh" ]; then
+    source "/opt/container-runtime/shared/export-utils.sh"
+fi
+
 # ============================================================================
 # Log Level Configuration
 # ============================================================================
@@ -100,10 +110,4 @@ log_warning() {
 }
 
 # Export functions
-export -f _get_log_level_num
-export -f _should_log
-export -f log_message
-export -f log_info
-export -f log_debug
-export -f log_error
-export -f log_warning
+protected_export _get_log_level_num _should_log log_message log_info log_debug log_error log_warning

@@ -186,53 +186,53 @@ test_defines_error_verification_failed() {
 # ============================================================================
 
 test_exports_all_functions() {
-    assert_file_contains "$SOURCE_FILE" "export -f error_package_not_found" \
+    assert_file_contains "$SOURCE_FILE" "protected_export.*error_package_not_found" \
         "error_package_not_found is exported"
-    assert_file_contains "$SOURCE_FILE" "export -f error_dependency_failed" \
+    assert_file_contains "$SOURCE_FILE" "protected_export.*error_dependency_failed" \
         "error_dependency_failed is exported"
-    assert_file_contains "$SOURCE_FILE" "export -f error_command_not_found" \
+    assert_file_contains "$SOURCE_FILE" "protected_export.*error_command_not_found" \
         "error_command_not_found is exported"
-    assert_file_contains "$SOURCE_FILE" "export -f error_download_failed" \
+    assert_file_contains "$SOURCE_FILE" "protected_export.*error_download_failed" \
         "error_download_failed is exported"
-    assert_file_contains "$SOURCE_FILE" "export -f error_connection_timeout" \
+    assert_file_contains "$SOURCE_FILE" "protected_export.*error_connection_timeout" \
         "error_connection_timeout is exported"
-    assert_file_contains "$SOURCE_FILE" "export -f error_certificate_error" \
+    assert_file_contains "$SOURCE_FILE" "protected_export.*error_certificate_error" \
         "error_certificate_error is exported"
-    assert_file_contains "$SOURCE_FILE" "export -f error_checksum_mismatch" \
+    assert_file_contains "$SOURCE_FILE" "protected_export.*error_checksum_mismatch" \
         "error_checksum_mismatch is exported"
-    assert_file_contains "$SOURCE_FILE" "export -f error_gpg_verification_failed" \
+    assert_file_contains "$SOURCE_FILE" "protected_export.*error_gpg_verification_failed" \
         "error_gpg_verification_failed is exported"
-    assert_file_contains "$SOURCE_FILE" "export -f error_gpg_key_not_found" \
+    assert_file_contains "$SOURCE_FILE" "protected_export.*error_gpg_key_not_found" \
         "error_gpg_key_not_found is exported"
-    assert_file_contains "$SOURCE_FILE" "export -f error_sigstore_verification_failed" \
+    assert_file_contains "$SOURCE_FILE" "protected_export.*error_sigstore_verification_failed" \
         "error_sigstore_verification_failed is exported"
-    assert_file_contains "$SOURCE_FILE" "export -f error_version_not_found" \
+    assert_file_contains "$SOURCE_FILE" "protected_export.*error_version_not_found" \
         "error_version_not_found is exported"
-    assert_file_contains "$SOURCE_FILE" "export -f error_unsupported_version" \
+    assert_file_contains "$SOURCE_FILE" "protected_export.*error_unsupported_version" \
         "error_unsupported_version is exported"
-    assert_file_contains "$SOURCE_FILE" "export -f error_architecture_not_supported" \
+    assert_file_contains "$SOURCE_FILE" "protected_export.*error_architecture_not_supported" \
         "error_architecture_not_supported is exported"
-    assert_file_contains "$SOURCE_FILE" "export -f error_os_not_supported" \
+    assert_file_contains "$SOURCE_FILE" "protected_export.*error_os_not_supported" \
         "error_os_not_supported is exported"
-    assert_file_contains "$SOURCE_FILE" "export -f error_file_not_found" \
+    assert_file_contains "$SOURCE_FILE" "protected_export.*error_file_not_found" \
         "error_file_not_found is exported"
-    assert_file_contains "$SOURCE_FILE" "export -f error_directory_not_found" \
+    assert_file_contains "$SOURCE_FILE" "protected_export.*error_directory_not_found" \
         "error_directory_not_found is exported"
-    assert_file_contains "$SOURCE_FILE" "export -f error_permission_denied" \
+    assert_file_contains "$SOURCE_FILE" "protected_export.*error_permission_denied" \
         "error_permission_denied is exported"
-    assert_file_contains "$SOURCE_FILE" "export -f error_disk_space" \
+    assert_file_contains "$SOURCE_FILE" "protected_export.*error_disk_space" \
         "error_disk_space is exported"
-    assert_file_contains "$SOURCE_FILE" "export -f error_invalid_config" \
+    assert_file_contains "$SOURCE_FILE" "protected_export.*error_invalid_config" \
         "error_invalid_config is exported"
-    assert_file_contains "$SOURCE_FILE" "export -f error_missing_env_var" \
+    assert_file_contains "$SOURCE_FILE" "protected_export.*error_missing_env_var" \
         "error_missing_env_var is exported"
-    assert_file_contains "$SOURCE_FILE" "export -f error_invalid_env_var" \
+    assert_file_contains "$SOURCE_FILE" "protected_export.*error_invalid_env_var" \
         "error_invalid_env_var is exported"
-    assert_file_contains "$SOURCE_FILE" "export -f error_build_failed" \
+    assert_file_contains "$SOURCE_FILE" "protected_export.*error_build_failed" \
         "error_build_failed is exported"
-    assert_file_contains "$SOURCE_FILE" "export -f error_installation_failed" \
+    assert_file_contains "$SOURCE_FILE" "protected_export.*error_installation_failed" \
         "error_installation_failed is exported"
-    assert_file_contains "$SOURCE_FILE" "export -f error_verification_failed" \
+    assert_file_contains "$SOURCE_FILE" "protected_export.*error_verification_failed" \
         "error_verification_failed is exported"
 }
 

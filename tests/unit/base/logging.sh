@@ -30,6 +30,9 @@ setup() {
     unset ERROR_COUNT 2>/dev/null || true
     unset WARNING_COUNT 2>/dev/null || true
 
+    # Source export utilities (needed before sourcing logging from temp dir)
+    source "$PROJECT_ROOT/lib/shared/export-utils.sh"
+
     # Create a modified version of logging.sh for testing
     command sed 's|/var/log/container-build|'"$TEST_LOG_DIR"'|g' "$PROJECT_ROOT/lib/base/logging.sh" > "$TEST_LOG_DIR/logging-test.sh"
 
@@ -42,8 +45,10 @@ teardown() {
     # Clean up test log directory
     command rm -rf "$TEST_LOG_DIR"
 
-    # Unset include guard so re-sourcing works across tests
+    # Unset include guards so re-sourcing works across tests
     unset _LOGGING_LOADED 2>/dev/null || true
+    unset _SHARED_LOGGING_LOADED 2>/dev/null || true
+    unset _SHARED_EXPORT_UTILS_LOADED 2>/dev/null || true
 }
 
 # Test: log_feature_start creates log files

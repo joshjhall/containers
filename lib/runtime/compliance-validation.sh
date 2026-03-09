@@ -8,6 +8,16 @@
 #   source /opt/container-runtime/compliance-validation.sh
 #   cv_validate_compliance
 
+# Source export utilities
+# shellcheck source=lib/shared/export-utils.sh
+if [ -f "/tmp/build-scripts/shared/export-utils.sh" ]; then
+    source "/tmp/build-scripts/shared/export-utils.sh"
+elif [ -f "$(dirname "${BASH_SOURCE[0]}")/../shared/export-utils.sh" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/../shared/export-utils.sh"
+elif [ -f "/opt/container-runtime/shared/export-utils.sh" ]; then
+    source "/opt/container-runtime/shared/export-utils.sh"
+fi
+
 # ============================================================================
 # Compliance Mode Validation
 # ============================================================================
@@ -357,5 +367,4 @@ cv_validate_compliance() {
 }
 
 # Export compliance functions
-export -f cv_compliance_check
-export -f cv_validate_compliance
+protected_export cv_compliance_check cv_validate_compliance

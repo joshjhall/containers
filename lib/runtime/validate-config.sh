@@ -30,6 +30,16 @@
 
 set -eo pipefail
 
+# Source export utilities
+# shellcheck source=lib/shared/export-utils.sh
+if [ -f "/tmp/build-scripts/shared/export-utils.sh" ]; then
+    source "/tmp/build-scripts/shared/export-utils.sh"
+elif [ -f "$(dirname "${BASH_SOURCE[0]}")/../shared/export-utils.sh" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/../shared/export-utils.sh"
+elif [ -f "/opt/container-runtime/shared/export-utils.sh" ]; then
+    source "/opt/container-runtime/shared/export-utils.sh"
+fi
+
 # ============================================================================
 # Configuration
 # ============================================================================
@@ -302,16 +312,7 @@ validate_configuration() {
 }
 
 # Export functions for use in custom rules files
-export -f cv_require_var
-export -f cv_validate_url
-export -f cv_validate_path
-export -f cv_validate_port
-export -f cv_validate_email
-export -f cv_validate_boolean
-export -f cv_detect_secrets
-export -f cv_error
-export -f cv_warning
-export -f cv_success
-export -f cv_info
-export -f cv_compliance_check
-export -f cv_validate_compliance
+protected_export cv_require_var cv_validate_url cv_validate_path cv_validate_port
+protected_export cv_validate_email cv_validate_boolean cv_detect_secrets
+protected_export cv_error cv_warning cv_success cv_info
+protected_export cv_compliance_check cv_validate_compliance

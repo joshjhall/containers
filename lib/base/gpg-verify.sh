@@ -22,6 +22,14 @@ _GPG_VERIFY_LOADED=1
 
 set -euo pipefail
 
+# Source export utilities
+# shellcheck source=lib/shared/export-utils.sh
+if [ -f "/tmp/build-scripts/shared/export-utils.sh" ]; then
+    source "/tmp/build-scripts/shared/export-utils.sh"
+elif [ -f "$(dirname "${BASH_SOURCE[0]}")/../shared/export-utils.sh" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/../shared/export-utils.sh"
+fi
+
 # Source logging utilities
 if [ -f /tmp/build-scripts/base/logging.sh ]; then
     source /tmp/build-scripts/base/logging.sh
@@ -287,7 +295,4 @@ source "${_GPG_VERIFY_DIR}/gpg-verify-terraform.sh"
 source "${_GPG_VERIFY_DIR}/gpg-verify-golang.sh"
 
 # Export all functions
-export -f import_gpg_keys
-export -f verify_gpg_signature
-export -f download_and_verify_gpg
-export -f verify_file_against_shasums
+protected_export import_gpg_keys verify_gpg_signature download_and_verify_gpg verify_file_against_shasums

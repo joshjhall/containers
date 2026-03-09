@@ -266,9 +266,9 @@ test_uuid_generation() {
 
 # Test: Functions exported for use in other scripts
 test_functions_exported() {
-    assert_file_contains "$SOURCE_FILE" "export -f audit_log" "audit-logger.sh exports audit_log function"
-    assert_file_contains "$EVENTS_FILE" "export -f audit_security" "audit-logger-events.sh exports audit_security function"
-    assert_file_contains "$SOURCE_FILE" "export -f audit_init" "audit-logger.sh exports audit_init function"
+    assert_file_contains "$SOURCE_FILE" "protected_export.*audit_log" "audit-logger.sh exports audit_log function"
+    assert_file_contains "$EVENTS_FILE" "protected_export.*audit_security" "audit-logger-events.sh exports audit_security function"
+    assert_file_contains "$SOURCE_FILE" "protected_export.*audit_init" "audit-logger.sh exports audit_init function"
 }
 
 # Run Batch 6 audit-logger tests
@@ -303,7 +303,7 @@ test_json_escape_defined() {
 
 # Test: _json_escape is exported
 test_json_escape_exported() {
-    assert_file_contains "$SOURCE_FILE" "export -f _json_escape" \
+    assert_file_contains "$SOURCE_FILE" "protected_export.*_json_escape" \
         "audit-logger.sh should export _json_escape function"
 }
 

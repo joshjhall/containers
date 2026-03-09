@@ -24,6 +24,14 @@ readonly PATH_UTILS_LOADED=1
 
 set -euo pipefail
 
+# Source export utilities
+# shellcheck source=lib/shared/export-utils.sh
+if [ -f "/tmp/build-scripts/shared/export-utils.sh" ]; then
+    source "/tmp/build-scripts/shared/export-utils.sh"
+elif [ -f "$(dirname "${BASH_SOURCE[0]}")/../shared/export-utils.sh" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/../shared/export-utils.sh"
+fi
+
 # Source shared path utilities (safe_add_to_path)
 # shellcheck source=lib/shared/path-utils.sh
 if [ -f "/tmp/build-scripts/shared/path-utils.sh" ]; then
@@ -105,4 +113,4 @@ add_to_system_path() {
 }
 
 # Export function for use in feature scripts
-export -f add_to_system_path
+protected_export add_to_system_path

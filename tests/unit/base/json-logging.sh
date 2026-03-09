@@ -102,42 +102,42 @@ test_defines_json_log_build_metadata() {
 }
 
 test_exports_json_escape() {
-    assert_file_contains "$SOURCE_FILE" "export -f json_escape" \
+    assert_file_contains "$SOURCE_FILE" "protected_export.*json_escape" \
         "json_escape is exported"
 }
 
 test_exports_json_log_init() {
-    assert_file_contains "$SOURCE_FILE" "export -f json_log_init" \
+    assert_file_contains "$SOURCE_FILE" "protected_export.*json_log_init" \
         "json_log_init is exported"
 }
 
 test_exports_json_log_event() {
-    assert_file_contains "$SOURCE_FILE" "export -f json_log_event" \
+    assert_file_contains "$SOURCE_FILE" "protected_export.*json_log_event" \
         "json_log_event is exported"
 }
 
 test_exports_json_log_command() {
-    assert_file_contains "$SOURCE_FILE" "export -f json_log_command" \
+    assert_file_contains "$SOURCE_FILE" "protected_export.*json_log_command" \
         "json_log_command is exported"
 }
 
 test_exports_json_log_error() {
-    assert_file_contains "$SOURCE_FILE" "export -f json_log_error" \
+    assert_file_contains "$SOURCE_FILE" "protected_export.*json_log_error" \
         "json_log_error is exported"
 }
 
 test_exports_json_log_warning() {
-    assert_file_contains "$SOURCE_FILE" "export -f json_log_warning" \
+    assert_file_contains "$SOURCE_FILE" "protected_export.*json_log_warning" \
         "json_log_warning is exported"
 }
 
 test_exports_json_log_feature_end() {
-    assert_file_contains "$SOURCE_FILE" "export -f json_log_feature_end" \
+    assert_file_contains "$SOURCE_FILE" "protected_export.*json_log_feature_end" \
         "json_log_feature_end is exported"
 }
 
 test_exports_json_log_build_metadata() {
-    assert_file_contains "$SOURCE_FILE" "export -f json_log_build_metadata" \
+    assert_file_contains "$SOURCE_FILE" "protected_export.*json_log_build_metadata" \
         "json_log_build_metadata is exported"
 }
 

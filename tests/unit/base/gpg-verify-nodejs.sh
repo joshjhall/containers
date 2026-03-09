@@ -46,7 +46,7 @@ run_test_with_setup() {
 
 # Test: function exists and is exported
 test_exports_download_and_verify_nodejs_gpg() {
-    assert_file_contains "$SOURCE_FILE" "export -f download_and_verify_nodejs_gpg" \
+    assert_file_contains "$SOURCE_FILE" "protected_export.*download_and_verify_nodejs_gpg" \
         "download_and_verify_nodejs_gpg is exported"
 }
 

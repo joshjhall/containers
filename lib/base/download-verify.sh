@@ -34,6 +34,14 @@ _DOWNLOAD_VERIFY_LOADED=1
 
 set -euo pipefail
 
+# Source export utilities
+# shellcheck source=lib/shared/export-utils.sh
+if [ -f "/tmp/build-scripts/shared/export-utils.sh" ]; then
+    source "/tmp/build-scripts/shared/export-utils.sh"
+elif [ -f "$(dirname "${BASH_SOURCE[0]}")/../shared/export-utils.sh" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/../shared/export-utils.sh"
+fi
+
 # Color codes for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -247,6 +255,4 @@ if ! command -v sha512sum >/dev/null 2>&1; then
 fi
 
 # Export functions for use in other scripts
-export -f download_and_verify
-export -f download_and_extract
-export -f verify_checksum
+protected_export download_and_verify download_and_extract verify_checksum

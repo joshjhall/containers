@@ -79,22 +79,22 @@ test_import_gpg_keys_with_empty_keys_dir() {
 # ============================================================================
 
 test_exports_import_gpg_keys() {
-    assert_file_contains "$SOURCE_FILE" "export -f import_gpg_keys" \
+    assert_file_contains "$SOURCE_FILE" "protected_export.*import_gpg_keys" \
         "import_gpg_keys is exported"
 }
 
 test_exports_verify_gpg_signature() {
-    assert_file_contains "$SOURCE_FILE" "export -f verify_gpg_signature" \
+    assert_file_contains "$SOURCE_FILE" "protected_export.*verify_gpg_signature" \
         "verify_gpg_signature is exported"
 }
 
 test_exports_download_and_verify_gpg() {
-    assert_file_contains "$SOURCE_FILE" "export -f download_and_verify_gpg" \
+    assert_file_contains "$SOURCE_FILE" "protected_export.*download_and_verify_gpg" \
         "download_and_verify_gpg is exported"
 }
 
 test_exports_verify_file_against_shasums() {
-    assert_file_contains "$SOURCE_FILE" "export -f verify_file_against_shasums" \
+    assert_file_contains "$SOURCE_FILE" "protected_export.*verify_file_against_shasums" \
         "verify_file_against_shasums is exported"
 }
 

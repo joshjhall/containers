@@ -22,6 +22,14 @@ _RETRY_UTILS_LOADED=1
 
 set -euo pipefail
 
+# Source export utilities
+# shellcheck source=lib/shared/export-utils.sh
+if [ -f "/tmp/build-scripts/shared/export-utils.sh" ]; then
+    source "/tmp/build-scripts/shared/export-utils.sh"
+elif [ -f "$(dirname "${BASH_SOURCE[0]}")/../shared/export-utils.sh" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/../shared/export-utils.sh"
+fi
+
 # Source logging functions if available
 if [ -f /tmp/build-scripts/base/logging.sh ]; then
     source /tmp/build-scripts/base/logging.sh
@@ -197,6 +205,4 @@ retry_github_api() {
 }
 
 # Export functions for use by other scripts
-export -f retry_with_backoff
-export -f retry_command
-export -f retry_github_api
+protected_export retry_with_backoff retry_command retry_github_api

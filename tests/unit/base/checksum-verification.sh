@@ -355,17 +355,17 @@ test_checksum_format_64_hex_chars() {
 }
 
 test_exports_all_functions() {
-    assert_file_contains "$SOURCE_FILE" "export -f verify_download" \
+    assert_file_contains "$SOURCE_FILE" "protected_export.*verify_download" \
         "verify_download is exported"
-    assert_file_contains "$SOURCE_FILE" "export -f verify_signature_tier" \
+    assert_file_contains "$SOURCE_FILE" "protected_export.*verify_signature_tier" \
         "verify_signature_tier is exported"
-    assert_file_contains "$SOURCE_FILE" "export -f verify_pinned_checksum" \
+    assert_file_contains "$SOURCE_FILE" "protected_export.*verify_pinned_checksum" \
         "verify_pinned_checksum is exported"
-    assert_file_contains "$SOURCE_FILE" "export -f verify_published_checksum" \
+    assert_file_contains "$SOURCE_FILE" "protected_export.*verify_published_checksum" \
         "verify_published_checksum is exported"
-    assert_file_contains "$SOURCE_FILE" "export -f verify_calculated_checksum" \
+    assert_file_contains "$SOURCE_FILE" "protected_export.*verify_calculated_checksum" \
         "verify_calculated_checksum is exported"
-    assert_file_contains "$SOURCE_FILE" "export -f lookup_pinned_checksum" \
+    assert_file_contains "$SOURCE_FILE" "protected_export.*lookup_pinned_checksum" \
         "lookup_pinned_checksum is exported"
 }
 
@@ -472,9 +472,9 @@ test_defines_verify_tool_published_checksum() {
 }
 
 test_exports_tool_tier3_functions() {
-    assert_file_contains "$SOURCE_FILE" "export -f register_tool_checksum_fetcher" \
+    assert_file_contains "$SOURCE_FILE" "protected_export.*register_tool_checksum_fetcher" \
         "register_tool_checksum_fetcher is exported"
-    assert_file_contains "$SOURCE_FILE" "export -f verify_tool_published_checksum" \
+    assert_file_contains "$SOURCE_FILE" "protected_export.*verify_tool_published_checksum" \
         "verify_tool_published_checksum is exported"
 }
 
