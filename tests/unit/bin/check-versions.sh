@@ -310,14 +310,14 @@ test_script_syntax() {
 test_exit_code_current() {
     # This would require mocking all API calls, so we'll test the logic
     # by checking if the script exits with 0 when no outdated versions
-    assert_true true "Exit code test placeholder (requires full mocking)"
+    skip_test "Requires full API mocking"
 }
 
 # Test: Exit code when versions are outdated
 test_exit_code_outdated() {
     # The script should exit with 1 when outdated versions are found
     # This is tested in integration tests with actual API calls
-    assert_true true "Exit code test placeholder (requires full mocking)"
+    skip_test "Requires full API mocking"
 }
 
 # Test: Script extracts Java dev tool versions
