@@ -204,26 +204,10 @@ When `INCLUDE_DEV_TOOLS=true`, the container installs Claude Code CLI.
 
 ### LSP Servers (installed with `*_dev` features)
 
-Language server protocol servers are installed automatically with their
-respective language development features. This enables IDE features like
-code completion, go-to-definition, and diagnostics for any IDE (VSCode,
-Cursor, Neovim, etc.):
-
-| Feature               | LSP Server                                                 |
-| --------------------- | ---------------------------------------------------------- |
-| `INCLUDE_PYTHON_DEV`  | `python-lsp-server` with black and ruff plugins, `pyright` |
-| `INCLUDE_NODE_DEV`    | `typescript-language-server`                               |
-| `INCLUDE_R_DEV`       | `languageserver`                                           |
-| `INCLUDE_GOLANG_DEV`  | `gopls`                                                    |
-| `INCLUDE_RUBY_DEV`    | `solargraph`                                               |
-| `INCLUDE_RUST_DEV`    | `rust-analyzer`                                            |
-| `INCLUDE_KOTLIN_DEV`  | `kotlin-language-server`, `jdtls`                          |
-| `INCLUDE_JAVA_DEV`    | `jdtls` (Eclipse JDT Language Server)                      |
-| `INCLUDE_ANDROID_DEV` | `jdtls` (Eclipse JDT Language Server)                      |
-| `INCLUDE_DEV_TOOLS`\* | `bash-language-server` (requires Node.js)                  |
-
-\*`bash-language-server` is installed when both `INCLUDE_DEV_TOOLS=true` and Node.js
-is available (`INCLUDE_NODE=true` or `INCLUDE_NODE_DEV=true`).
+Each `INCLUDE_*_DEV` feature auto-installs its LSP server: Python→`python-lsp-server`+`pyright`,
+Node→`typescript-language-server`, R→`languageserver`, Go→`gopls`, Ruby→`solargraph`,
+Rust→`rust-analyzer`, Kotlin→`kotlin-language-server`+`jdtls`, Java/Android→`jdtls`.
+`bash-language-server` is added when `DEV_TOOLS=true` and Node.js is available.
 
 ### Plugins & MCP Servers
 
@@ -236,18 +220,10 @@ model selection.
 
 ### Skills & Agents
 
-13 always-installed skills + 2 conditional, 11 agents (including 6 audit
-scanners and `issue-writer`). The `/codebase-audit` command dispatches scanners
-in parallel, including file bloat detection for AI instruction files and
-documentation. Issue-driven development uses two skills: `/next-issue` selects
-by severity/effort priority and creates an implementation plan (auto-enters
-plan mode), then `/next-issue-ship` handles committing, PR creation, issue
-labeling, and state cleanup after implementation. Issues tagged
-`status/pr-pending` or `status/commit-pending` are automatically excluded from
-selection. State persists to `.claude/memory/next-issue-state.md` for
-cross-window resume (stale state auto-detected and cleared). See
-`docs/claude-code/skills-and-agents.md` for tables, audit parameters, depth
-modes, and inline suppression.
+15 skills (13 always + 2 conditional) and 11 agents. Key capabilities:
+`/codebase-audit` (parallel scanners), `/next-issue` + `/next-issue-ship`
+(issue-driven development with auto-labeling and state persistence). See
+`docs/claude-code/skills-and-agents.md` for full details.
 
 ### Secrets & Setup Commands
 
@@ -257,17 +233,12 @@ Three setup commands: `setup-git`, `setup-gh`, `setup-glab`. See
 `docs/claude-code/secrets-and-setup.md` for variable tables, docker-compose
 examples, and git identity fallback.
 
-### Authentication
+### Authentication & Environment
 
-Two methods: **Interactive OAuth** (`claude` opens browser) or **Token-based**
-(`ANTHROPIC_AUTH_TOKEN` for proxy setups). After authenticating, the background
-`claude-auth-watcher` auto-configures plugins within 30-60s. Manual fallback:
-run `claude-setup`. Verify with `claude plugin list` / `claude mcp list`.
-
-**Environment variable**: `ENABLE_LSP_TOOL=1` is set in the shell environment.
-
-**Build-time configuration**: Feature flags are persisted to
-`/etc/container/config/enabled-features.conf` for use by startup scripts.
+Auth via **Interactive OAuth** or **Token-based** (`ANTHROPIC_AUTH_TOKEN`).
+`claude-auth-watcher` auto-configures plugins; manual fallback: `claude-setup`.
+`ENABLE_LSP_TOOL=1` is set in the shell. Feature flags persist to
+`/etc/container/config/enabled-features.conf`.
 
 ## Cache Management
 
@@ -302,15 +273,10 @@ services:
 
 ## Cross-Platform Development
 
-**Case-sensitive filesystems**: The container auto-detects case-insensitive
-mounts and warns. Set `SKIP_CASE_CHECK=true` to suppress. See
-`docs/troubleshooting/case-sensitive-filesystems.md`.
-
-**Bindfs (macOS / VirtioFS)**: Auto-applies a FUSE permission overlay when
-broken permissions are detected on `/workspace` bind mounts. Requires
-`--cap-add SYS_ADMIN --device /dev/fuse` at runtime. Controls:
-`BINDFS_ENABLED` (`auto`/`true`/`false`), `BINDFS_SKIP_PATHS`,
-`FUSE_CLEANUP_DISABLE`. Add `.fuse_hidden*` to project `.gitignore`. See
+Auto-detects case-insensitive mounts (suppress with `SKIP_CASE_CHECK=true`).
+Bindfs auto-applies FUSE permission overlay on macOS/VirtioFS — requires
+`--cap-add SYS_ADMIN --device /dev/fuse`. Add `.fuse_hidden*` to `.gitignore`.
+See `docs/troubleshooting/case-sensitive-filesystems.md` and
 `docs/troubleshooting/docker-mac-case-sensitivity.md`.
 
 ## Debian Version Compatibility
@@ -420,20 +386,8 @@ build, test, and publish. See `docs/development/releasing.md` for full details.
 
 ## Documentation Resources
 
-Detailed documentation is available in the `docs/` directory:
-
-- `docs/claude-code/` - Plugins, MCP servers, skills, agents, secrets, setup
-- `docs/architecture/caching.md` - Cache strategy and optimization
-- `docs/security-hardening.md` - Security configuration and best practices
-- `docs/troubleshooting.md` - Common issues and solutions
-- `docs/troubleshooting/case-sensitive-filesystems.md` - Filesystem issues
-- `docs/operations/automated-releases.md` - How the auto-patch system works
-- `docs/development/releasing.md` - Release process and versioning
-- `docs/development/testing.md` - Test framework details
-- `docs/reference/versions.md` - Which tools are pinned vs. latest
-- `docs/reference/environment-variables.md` - All env vars and cache paths
-
-Reference examples are in the `examples/` directory:
-
-- `examples/env/*.env` - Environment variable examples for each feature
-- `examples/contexts/` - Docker Compose patterns
+Detailed docs in `docs/`: `claude-code/` (plugins, MCPs, skills, agents,
+secrets), `architecture/caching.md`, `security-hardening.md`,
+`troubleshooting.md`, `development/` (releasing, testing), `reference/`
+(versions, environment variables), `operations/automated-releases.md`.
+Examples in `examples/env/*.env` and `examples/contexts/`.
