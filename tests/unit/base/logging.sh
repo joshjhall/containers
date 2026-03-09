@@ -30,8 +30,10 @@ setup() {
     unset ERROR_COUNT 2>/dev/null || true
     unset WARNING_COUNT 2>/dev/null || true
 
-    # Source export utilities (needed before sourcing logging from temp dir)
+    # Source shared dependencies (needed before sourcing logging from temp dir,
+    # since the copied script's relative paths won't resolve from the temp dir)
     source "$PROJECT_ROOT/lib/shared/export-utils.sh"
+    source "$PROJECT_ROOT/lib/shared/logging.sh"
 
     # Create a modified version of logging.sh for testing
     command sed 's|/var/log/container-build|'"$TEST_LOG_DIR"'|g' "$PROJECT_ROOT/lib/base/logging.sh" > "$TEST_LOG_DIR/logging-test.sh"
