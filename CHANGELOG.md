@@ -5,6 +5,56 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.15.7] - 2026-03-09
+
+### Added
+
+- Add OP secrets cache loader for non-interactive shells
+- Auto-source OP secrets cache for postStartCommand compatibility
+
+### Changed
+
+- Move setup-dev-environment.sh to .devcontainer/bin/
+- Extract shared utilities from build-time modules
+- Consolidate retry logic into apt_retry with hook support
+
+### Documentation
+
+- Fix broken markdown rendering from mismatched fences
+- Trim CLAUDE.md/AGENTS.md bloat below 400-line threshold
+- Fix broken tables, stale defaults, and add missing variables
+
+### Fixed
+
+- Prefer container-local agent over VS Code forwarded agent
+- Search /workspace for .env.secrets when $PWD misses it
+- Enforce SSH key permissions on every invocation
+- Add input validation for env vars in setup-git/gh/glab
+- Replace direct merge with PR-based flow
+- Auto-source .env.secrets in non-interactive shells
+- Mask secrets in audit log and build summary output
+- Handle stale signing keys when GIT_SIGNING_SSH_KEY unset
+- Copy helpers to /usr/local/bin and wait for OP cache
+- Run biome format after GPG key updates to fix CI
+- Eliminate eval injection in init-env.sh secret loading
+- Add checksum verification to setup.sh downloads
+- Guard safe_eval export for missing shared module
+- Add protected_export utility to guard all export -f calls
+- Consolidate duplicated safe_eval implementations
+- Source shared/logging.sh before temp-dir logging copy
+
+### Miscellaneous
+
+- Organize .gitignore and .dockerignore, remove duplicates
+- Add new terms to cspell project dictionary
+- Add new terms to cspell project dictionary
+- Update 7 outdated tool versions
+
+### Testing
+
+- Add unit tests for checksum verification modules
+- Replace placeholder tests with skip annotations
+
 ## [4.15.6] - 2026-03-03
 
 ### Added
@@ -1210,6 +1260,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix prettier and markdownlint formatting in README
 - Format TLS documentation files
 
+[4.15.7]: https://github.com/joshjhall/containers/compare/v4.15.6...v4.15.7
 [4.15.6]: https://github.com/joshjhall/containers/compare/v4.15.5...v4.15.6
 [4.15.5]: https://github.com/joshjhall/containers/compare/v4.15.4...v4.15.5
 [4.15.4]: https://github.com/joshjhall/containers/compare/v4.15.3...v4.15.4
