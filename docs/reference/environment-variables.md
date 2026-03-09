@@ -66,39 +66,64 @@ docker build --build-arg LOG_LEVEL=DEBUG -t myimage .
 
 All features are disabled by default. Set to `true` to enable:
 
-**Languages:** | Variable | Description | |----------|-------------| |
-`INCLUDE_PYTHON` | Install Python runtime | | `INCLUDE_NODE` | Install Node.js
-runtime | | `INCLUDE_RUST` | Install Rust runtime | | `INCLUDE_RUBY` | Install
-Ruby runtime | | `INCLUDE_R` | Install R statistical environment | |
-`INCLUDE_GOLANG` | Install Go runtime | | `INCLUDE_JAVA` | Install Java JDK | |
-`INCLUDE_MOJO` | Install Mojo language |
+**Languages:**
 
-**Development Tools:** | Variable | Description | |----------|-------------| |
-`INCLUDE_PYTHON_DEV` | Install Python dev tools (pytest, black, mypy, etc.) | |
-`INCLUDE_NODE_DEV` | Install Node.js dev tools (TypeScript, Jest, etc.) | |
-`INCLUDE_RUST_DEV` | Install Rust dev tools (rust-analyzer, clippy, etc.) | |
-`INCLUDE_RUBY_DEV` | Install Ruby dev tools (rubocop, pry, etc.) | |
-`INCLUDE_R_DEV` | Install R dev tools (devtools, tidyverse, etc.) | |
-`INCLUDE_GOLANG_DEV` | Install Go dev tools (gopls, delve, etc.) | |
-`INCLUDE_JAVA_DEV` | Install Java dev tools (Spring, JBang, etc.) | |
-`INCLUDE_MOJO_DEV` | Install Mojo dev tools | | `INCLUDE_DEV_TOOLS` | Install
-general dev tools (gh, lazygit, fzf, etc.) |
+| Variable          | Description                              |
+| ----------------- | ---------------------------------------- |
+| `INCLUDE_PYTHON`  | Install Python runtime                   |
+| `INCLUDE_NODE`    | Install Node.js runtime                  |
+| `INCLUDE_RUST`    | Install Rust runtime                     |
+| `INCLUDE_RUBY`    | Install Ruby runtime                     |
+| `INCLUDE_R`       | Install R statistical environment        |
+| `INCLUDE_GOLANG`  | Install Go runtime                       |
+| `INCLUDE_JAVA`    | Install Java JDK                         |
+| `INCLUDE_MOJO`    | Install Mojo language                    |
+| `INCLUDE_KOTLIN`  | Install Kotlin (auto-triggers Java)      |
+| `INCLUDE_ANDROID` | Install Android SDK (auto-triggers Java) |
 
-**Cloud & Infrastructure:** | Variable | Description |
-|----------|-------------| | `INCLUDE_AWS` | Install AWS CLI and tools | |
-`INCLUDE_GCLOUD` | Install Google Cloud SDK | | `INCLUDE_CLOUDFLARE` | Install
-Cloudflare tools (wrangler) | | `INCLUDE_KUBERNETES` | Install kubectl, k9s,
-helm | | `INCLUDE_TERRAFORM` | Install Terraform and related tools |
+**Development Tools:**
 
-**Database Clients:** | Variable | Description | |----------|-------------| |
-`INCLUDE_POSTGRES_CLIENT` | Install PostgreSQL client (psql) | |
-`INCLUDE_REDIS_CLIENT` | Install Redis client (redis-cli) | |
-`INCLUDE_SQLITE_CLIENT` | Install SQLite client (sqlite3) |
+| Variable              | Description                                          |
+| --------------------- | ---------------------------------------------------- |
+| `INCLUDE_PYTHON_DEV`  | Install Python dev tools (pytest, black, mypy, etc.) |
+| `INCLUDE_NODE_DEV`    | Install Node.js dev tools (TypeScript, Jest, etc.)   |
+| `INCLUDE_RUST_DEV`    | Install Rust dev tools (rust-analyzer, clippy, etc.) |
+| `INCLUDE_RUBY_DEV`    | Install Ruby dev tools (rubocop, pry, etc.)          |
+| `INCLUDE_R_DEV`       | Install R dev tools (devtools, tidyverse, etc.)      |
+| `INCLUDE_GOLANG_DEV`  | Install Go dev tools (gopls, delve, etc.)            |
+| `INCLUDE_JAVA_DEV`    | Install Java dev tools (Spring, JBang, etc.)         |
+| `INCLUDE_MOJO_DEV`    | Install Mojo dev tools                               |
+| `INCLUDE_KOTLIN_DEV`  | Install Kotlin dev tools (kotlin-language-server)    |
+| `INCLUDE_ANDROID_DEV` | Install Android dev tools (emulator, NDK)            |
+| `INCLUDE_DEV_TOOLS`   | Install general dev tools (gh, lazygit, fzf, etc.)   |
 
-**Other Tools:** | Variable | Description | |----------|-------------| |
-`INCLUDE_DOCKER` | Install Docker CLI tools | | `INCLUDE_OP` | Install
-1Password CLI | | `INCLUDE_OLLAMA` | Install Ollama for local LLMs | |
-`INCLUDE_BINDFS` | Install bindfs FUSE overlay for VirtioFS permission fixes |
+**Cloud & Infrastructure:**
+
+| Variable             | Description                         |
+| -------------------- | ----------------------------------- |
+| `INCLUDE_AWS`        | Install AWS CLI and tools           |
+| `INCLUDE_GCLOUD`     | Install Google Cloud SDK            |
+| `INCLUDE_CLOUDFLARE` | Install Cloudflare tools (wrangler) |
+| `INCLUDE_KUBERNETES` | Install kubectl, k9s, helm          |
+| `INCLUDE_TERRAFORM`  | Install Terraform and related tools |
+
+**Database Clients:**
+
+| Variable                  | Description                      |
+| ------------------------- | -------------------------------- |
+| `INCLUDE_POSTGRES_CLIENT` | Install PostgreSQL client (psql) |
+| `INCLUDE_REDIS_CLIENT`    | Install Redis client (redis-cli) |
+| `INCLUDE_SQLITE_CLIENT`   | Install SQLite client (sqlite3)  |
+
+**Other Tools:**
+
+| Variable         | Description                                               |
+| ---------------- | --------------------------------------------------------- |
+| `INCLUDE_DOCKER` | Install Docker CLI tools                                  |
+| `INCLUDE_OP`     | Install 1Password CLI                                     |
+| `INCLUDE_OLLAMA` | Install Ollama for local LLMs                             |
+| `INCLUDE_BINDFS` | Install bindfs FUSE overlay for VirtioFS permission fixes |
+| `INCLUDE_CRON`   | Install cron daemon (auto-triggered by some features)     |
 
 ______________________________________________________________________
 
@@ -110,12 +135,46 @@ Control which version of each language to install:
 | ---------------- | -------- | --------------------------------------- |
 | `PYTHON_VERSION` | `3.14.3` | Python version to install from source   |
 | `NODE_VERSION`   | `22`     | Node.js major version (from NodeSource) |
-| `RUST_VERSION`   | `1.93.1` | Rust toolchain version                  |
+| `RUST_VERSION`   | `1.94.0` | Rust toolchain version                  |
 | `RUBY_VERSION`   | `4.0.1`  | Ruby version to install from source     |
 | `R_VERSION`      | `4.5.2`  | R version from CRAN repositories        |
-| `GO_VERSION`     | `1.26.0` | Go version to install                   |
+| `GO_VERSION`     | `1.26.1` | Go version to install                   |
 | `JAVA_VERSION`   | `21`     | Java JDK version (Temurin)              |
+| `KOTLIN_VERSION` | `2.3.10` | Kotlin compiler version                 |
 | `MOJO_VERSION`   | `25.4`   | Mojo version via pixi                   |
+
+### Android Versions
+
+| Variable                        | Default         | Description                              |
+| ------------------------------- | --------------- | ---------------------------------------- |
+| `ANDROID_CMDLINE_TOOLS_VERSION` | `14742923`      | Android command-line tools package build |
+| `ANDROID_API_LEVELS`            | `34,35`         | Comma-separated Android API levels       |
+| `ANDROID_NDK_VERSION`           | `29.0.14206865` | Android NDK version                      |
+
+### Tool Versions
+
+| Variable             | Default   | Description                                         |
+| -------------------- | --------- | --------------------------------------------------- |
+| `PIXI_VERSION`       | `0.65.0`  | Pixi package manager version (for Mojo)             |
+| `KUBECTL_VERSION`    | `1.33.9`  | kubectl CLI version                                 |
+| `K9S_VERSION`        | `0.50.18` | k9s terminal UI version                             |
+| `KREW_VERSION`       | `0.5.0`   | Krew kubectl plugin manager version                 |
+| `HELM_VERSION`       | `4.1.1`   | Helm package manager version                        |
+| `TERRAGRUNT_VERSION` | `0.99.4`  | Terragrunt version                                  |
+| `TFDOCS_VERSION`     | `0.21.0`  | terraform-docs version                              |
+| `TFLINT_VERSION`     | `0.61.0`  | TFLint version                                      |
+| `CLAUDE_CHANNEL`     | `latest`  | Claude Code release channel                         |
+| `KEYBINDING_PROFILE` | `iterm`   | Terminal keybinding profile (iterm, xterm, minimal) |
+
+### Security & Logging Flags
+
+| Variable                     | Default | Description                                                         |
+| ---------------------------- | ------- | ------------------------------------------------------------------- |
+| `PRODUCTION_MODE`            | `false` | Enable production hardening (nologin for service users)             |
+| `RESTRICT_SHELLS`            | `true`  | Limit `/etc/shells` to bash only                                    |
+| `REQUIRE_VERIFIED_DOWNLOADS` | `false` | Block Tier 4 TOFU checksum fallback (defaults to `PRODUCTION_MODE`) |
+| `ENABLE_JSON_LOGGING`        | `false` | Emit structured JSON log output                                     |
+| `ENABLE_AUDIT_LOGGING`       | `false` | Enable audit logging for security events                            |
 
 > **Note**: The Dockerfile is the authoritative source for default versions.
 > These values drift with automated patch releases — check the `ARG` declarations
@@ -201,6 +260,27 @@ All cache directories are located under `/cache` for persistence across builds:
 | `CAROOT`           | `/cache/dev-tools/mkcert-ca`    | mkcert CA certificates     |
 | `DIRENV_ALLOW_DIR` | `/cache/dev-tools/direnv-allow` | direnv allowed directories |
 
+### Mojo / Pixi
+
+| Variable         | Default               | Description            |
+| ---------------- | --------------------- | ---------------------- |
+| `PIXI_CACHE_DIR` | `/cache/pixi`         | Pixi package cache     |
+| `MOJO_PROJECT`   | `/cache/mojo/project` | Mojo project workspace |
+
+### Kotlin / Android
+
+| Variable                | Default              | Description                      |
+| ----------------------- | -------------------- | -------------------------------- |
+| `JDTLS_DATA_DIR`        | `/cache/jdtls`       | Eclipse JDT Language Server data |
+| `ANDROID_AVD_HOME`      | `/cache/android-avd` | Android Virtual Device home      |
+| `ANDROID_EMULATOR_HOME` | `/cache/android-avd` | Android emulator home            |
+
+### Terraform
+
+| Variable              | Default            | Description            |
+| --------------------- | ------------------ | ---------------------- |
+| `TF_PLUGIN_CACHE_DIR` | `/cache/terraform` | Terraform plugin cache |
+
 ______________________________________________________________________
 
 ## Feature-Specific Variables
@@ -263,13 +343,36 @@ These variables can be set when running containers (via `docker run -e`):
 | `OP_SERVICE_ACCOUNT_TOKEN` | 1Password service account token for automated access                |
 | `ENV_SECRETS_FILE`         | Custom path to `.env.secrets` file (overrides default search order) |
 
+### Resource Limits
+
+| Variable                | Default | Description                                    |
+| ----------------------- | ------- | ---------------------------------------------- |
+| `FILE_DESCRIPTOR_LIMIT` | `4096`  | Maximum open file descriptors (ulimit -n)      |
+| `MAX_USER_PROCESSES`    | `2048`  | Maximum user processes (ulimit -u)             |
+| `CORE_DUMP_SIZE`        | `0`     | Core dump size limit (ulimit -c, 0 = disabled) |
+
+### Container Identity
+
+| Variable        | Default                  | Description                                      |
+| --------------- | ------------------------ | ------------------------------------------------ |
+| `CONTAINER_UID` | `1000`                   | UID to look up for the container user at runtime |
+| `METRICS_DIR`   | `/tmp/container-metrics` | Directory for startup metrics                    |
+
+### Filesystem & Platform
+
+| Variable               | Default | Description                                        |
+| ---------------------- | ------- | -------------------------------------------------- |
+| `SKIP_CASE_CHECK`      | `false` | Skip case-insensitive filesystem detection warning |
+| `FUSE_CLEANUP_DISABLE` | `false` | Disable periodic `.fuse_hidden*` file cleanup      |
+
 ### Retry Configuration
 
-| Variable              | Default | Description                                   |
-| --------------------- | ------- | --------------------------------------------- |
-| `RETRY_MAX_ATTEMPTS`  | `3`     | Maximum retry attempts for network operations |
-| `RETRY_INITIAL_DELAY` | `2`     | Initial delay between retries (seconds)       |
-| `RETRY_MAX_DELAY`     | `30`    | Maximum delay between retries (seconds)       |
+| Variable              | Default | Description                                        |
+| --------------------- | ------- | -------------------------------------------------- |
+| `RETRY_MAX_ATTEMPTS`  | `3`     | Maximum retry attempts for network operations      |
+| `RETRY_INITIAL_DELAY` | `2`     | Initial delay between retries (seconds)            |
+| `RETRY_MAX_DELAY`     | `30`    | Maximum delay between retries (seconds)            |
+| `APT_RETRY_DELAY`     | `5`     | Initial delay between apt retry attempts (seconds) |
 
 ### Logging
 
