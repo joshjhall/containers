@@ -326,61 +326,9 @@ fi
 # ============================================================================
 # Cosign Installation (for kubectl Sigstore verification)
 # ============================================================================
-if ! command -v cosign &> /dev/null; then
-    log_message "Installing cosign (kubectl binary and container image verification)..."
-
-    # Set cosign version
-    COSIGN_VERSION="3.0.2"
-
-    # Construct the cosign package filename
-    COSIGN_PACKAGE="cosign_${COSIGN_VERSION}_${ARCH}.deb"
-    COSIGN_URL="https://github.com/sigstore/cosign/releases/download/v${COSIGN_VERSION}/${COSIGN_PACKAGE}"
-
-    # Register Tier 3 fetcher for cosign (if not already registered)
-    if [ -z "${_TOOL_CHECKSUM_FETCHERS[cosign]+x}" ]; then
-        _fetch_cosign_checksum() {
-            local _ver="$1"
-            local _arch="$2"
-            local _pkg="cosign_${_ver}_${_arch}.deb"
-            local _url="https://github.com/sigstore/cosign/releases/download/v${_ver}/cosign_checksums.txt"
-            fetch_github_checksums_txt "$_url" "$_pkg" 2>/dev/null
-        }
-        register_tool_checksum_fetcher "cosign" "_fetch_cosign_checksum"
-    fi
-
-    # Download cosign
-    BUILD_TEMP=$(create_secure_temp_dir)
-    cd "$BUILD_TEMP"
-    log_message "Downloading cosign..."
-    if ! command curl -L -f --retry 3 --retry-delay 2 --retry-all-errors --progress-bar -o "cosign.deb" "$COSIGN_URL"; then
-        log_error "Failed to download cosign ${COSIGN_VERSION}"
-        cd /
-        log_feature_end
-        exit 1
-    fi
-
-    # Run 4-tier verification
-    verify_rc=0
-    verify_download "tool" "cosign" "$COSIGN_VERSION" "cosign.deb" "$ARCH" || verify_rc=$?
-    if [ "$verify_rc" -eq 1 ]; then
-        log_error "Verification failed for cosign ${COSIGN_VERSION}"
-        cd /
-        log_feature_end
-        exit 1
-    fi
-
-    log_message "✓ cosign v${COSIGN_VERSION} verified successfully"
-
-    # Install the verified package
-    log_command "Installing cosign package" \
-        dpkg -i cosign.deb
-
-    cd /
-    log_command "Cleaning up build directory" \
-        command rm -rf "$BUILD_TEMP"
-else
-    log_message "cosign already installed (likely from docker feature), skipping..."
-fi
+# shellcheck source=lib/base/cosign-install.sh
+source /tmp/build-scripts/base/cosign-install.sh
+install_cosign || { log_feature_end; exit 1; }
 
 # ============================================================================
 # Environment Configuration
