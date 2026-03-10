@@ -617,6 +617,93 @@ test_verify_tool_published_checksum_sha512() {
 }
 
 # ============================================================================
+# Functional Tests - TOFU Tracking & Summary
+# ============================================================================
+
+test_defines_print_tofu_summary() {
+    assert_file_contains "$SOURCE_FILE" "print_tofu_summary()" \
+        "Script defines print_tofu_summary function"
+}
+
+test_exports_print_tofu_summary() {
+    assert_file_contains "$SOURCE_FILE" "protected_export.*print_tofu_summary" \
+        "print_tofu_summary is exported"
+}
+
+test_tofu_event_tracking_on_tier4() {
+    # When verify_download falls to Tier 4, it should log to tofu-downloads.log
+    echo "tofu tracking test content" > "$TEST_TEMP_DIR/track-tofu.tgz"
+    echo '{"languages":{},"tools":{}}' > "$TEST_TEMP_DIR/checksums.json"
+
+    local exit_code=0
+    _run_checksum_subshell "
+        export CHECKSUMS_DB='$TEST_TEMP_DIR/checksums.json'
+        export BUILD_LOG_DIR='$TEST_TEMP_DIR'
+        verify_download 'language' 'test-lang' '1.2.3' '$TEST_TEMP_DIR/track-tofu.tgz'
+    " || exit_code=$?
+
+    assert_equals "2" "$exit_code" "verify_download returns 2 for TOFU"
+
+    local tofu_log="$TEST_TEMP_DIR/tofu-downloads.log"
+    assert_file_exists "$tofu_log" "TOFU log file is created"
+    assert_file_contains "$tofu_log" "test-lang 1.2.3" "TOFU log contains download entry"
+}
+
+test_tofu_event_not_tracked_when_blocked() {
+    # When REQUIRE_VERIFIED_DOWNLOADS=true, TOFU is blocked and should NOT log
+    echo "blocked tofu no-track content" > "$TEST_TEMP_DIR/blocked-track.tgz"
+    echo '{"languages":{},"tools":{}}' > "$TEST_TEMP_DIR/checksums.json"
+
+    local exit_code=0
+    _run_checksum_subshell "
+        export CHECKSUMS_DB='$TEST_TEMP_DIR/checksums.json'
+        export BUILD_LOG_DIR='$TEST_TEMP_DIR'
+        export REQUIRE_VERIFIED_DOWNLOADS=true
+        verify_download 'language' 'blocked-lang' '2.0.0' '$TEST_TEMP_DIR/blocked-track.tgz'
+    " || exit_code=$?
+
+    assert_equals "1" "$exit_code" "TOFU blocked with exit 1"
+
+    local tofu_log="$TEST_TEMP_DIR/tofu-downloads.log"
+    if [ -f "$tofu_log" ]; then
+        local match_count
+        match_count=$(/usr/bin/grep -c "blocked-lang" "$tofu_log" 2>/dev/null || echo "0")
+        assert_equals "0" "$match_count" "Blocked TOFU should not be logged"
+    fi
+}
+
+test_print_tofu_summary_empty_log() {
+    # When no TOFU events, summary should print nothing (returns 0 silently)
+    local exit_code=0
+    _run_checksum_subshell "
+        export BUILD_LOG_DIR='$TEST_TEMP_DIR'
+        print_tofu_summary
+    " || exit_code=$?
+
+    assert_equals "0" "$exit_code" "print_tofu_summary returns 0 with no TOFU events"
+}
+
+test_print_tofu_summary_with_events() {
+    # Create a TOFU log with entries, summary should return 0
+    mkdir -p "$TEST_TEMP_DIR"
+    echo "test-tool 1.0.0" > "$TEST_TEMP_DIR/tofu-downloads.log"
+    echo "other-tool 2.0.0" >> "$TEST_TEMP_DIR/tofu-downloads.log"
+
+    local exit_code=0
+    _run_checksum_subshell "
+        export BUILD_LOG_DIR='$TEST_TEMP_DIR'
+        print_tofu_summary
+    " || exit_code=$?
+
+    assert_equals "0" "$exit_code" "print_tofu_summary returns 0 with TOFU events"
+}
+
+test_source_contains_tofu_log_tracking() {
+    assert_file_contains "$SOURCE_FILE" "tofu-downloads.log" \
+        "Source references tofu-downloads.log for TOFU event tracking"
+}
+
+# ============================================================================
 # Run all tests
 # ============================================================================
 
@@ -674,6 +761,15 @@ run_test_with_setup test_verify_download_tool_no_fetcher_falls_to_tier4 "verify_
 run_test_with_setup test_tier2_takes_priority_over_tool_tier3 "Tier 2 pinned checksum takes priority over Tier 3 fetcher"
 run_test_with_setup test_require_verified_downloads_blocks_tool_tofu "REQUIRE_VERIFIED_DOWNLOADS blocks tool TOFU"
 run_test_with_setup test_verify_tool_published_checksum_sha512 "Tool Tier 3 works with SHA512 checksums"
+
+# TOFU tracking & summary
+run_test_with_setup test_defines_print_tofu_summary "Defines print_tofu_summary function"
+run_test_with_setup test_exports_print_tofu_summary "print_tofu_summary is exported"
+run_test_with_setup test_tofu_event_tracking_on_tier4 "TOFU event is tracked in log on Tier 4 fallback"
+run_test_with_setup test_tofu_event_not_tracked_when_blocked "TOFU event is not tracked when blocked by policy"
+run_test_with_setup test_print_tofu_summary_empty_log "print_tofu_summary silent with no events"
+run_test_with_setup test_print_tofu_summary_with_events "print_tofu_summary works with events"
+run_test_with_setup test_source_contains_tofu_log_tracking "Source contains TOFU log tracking"
 
 # Generate test report
 generate_report

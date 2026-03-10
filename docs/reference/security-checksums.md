@@ -12,6 +12,36 @@
 
 ______________________________________________________________________
 
+## Production Recommendations
+
+**For production and CI builds**, explicitly block Tier 4 TOFU fallback to
+ensure all downloads are cryptographically verified or use pinned checksums:
+
+```bash
+# Option 1: Block TOFU specifically
+docker build \
+  --build-arg REQUIRE_VERIFIED_DOWNLOADS=true \
+  -f containers/Dockerfile .
+
+# Option 2: Enable full production mode (implies REQUIRE_VERIFIED_DOWNLOADS=true)
+docker build \
+  --build-arg PRODUCTION_MODE=true \
+  -f containers/Dockerfile .
+```
+
+**Why this matters**: By default, the build system allows Tier 4 TOFU (Trust On
+First Use) as a fallback when no stronger verification is available. While
+per-download warnings are emitted and an aggregate summary is printed at the end
+of the build, TOFU downloads are vulnerable to man-in-the-middle attacks. For
+production images, enforce verified downloads to guarantee supply chain
+integrity.
+
+**Build summary**: At the end of every build, a TOFU summary is printed listing
+any downloads that fell back to Tier 4. If no TOFU events occurred, the summary
+is silently skipped.
+
+______________________________________________________________________
+
 ## 🔐 4-Tier Progressive Verification System (November 2025)
 
 **Status**: ✅ COMPLETE - Infrastructure & Database Delivered **Date

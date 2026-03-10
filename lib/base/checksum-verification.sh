@@ -482,10 +482,54 @@ verify_download() {
         return 1
     fi
 
+    # Track TOFU event for build summary
+    local tofu_log="${BUILD_LOG_DIR:-/tmp/container-build}/tofu-downloads.log"
+    echo "${name} ${version}" >> "$tofu_log" 2>/dev/null || true
+
     return "$tier4_rc"
+}
+
+# print_tofu_summary - Print aggregate summary of TOFU downloads at end of build
+#
+# Checks the TOFU log file and prints a warning box if any Tier 4 downloads occurred.
+# Call this at the end of the build to give users visibility into TOFU events.
+#
+# Returns:
+#   0 always (informational only)
+print_tofu_summary() {
+    local tofu_log="${BUILD_LOG_DIR:-/tmp/container-build}/tofu-downloads.log"
+
+    if [ ! -f "$tofu_log" ] || [ ! -s "$tofu_log" ]; then
+        return 0
+    fi
+
+    local count
+    count=$(/usr/bin/wc -l < "$tofu_log")
+
+    log_message ""
+    log_message "╔════════════════════════════════════════════════════════════════╗"
+    log_message "║              TOFU DOWNLOAD SUMMARY ($count download(s))              ║"
+    log_message "╠════════════════════════════════════════════════════════════════╣"
+    log_message "║ The following downloads used Tier 4 TOFU (Trust On First Use) ║"
+    log_message "║ and were NOT cryptographically verified:                      ║"
+    log_message "║                                                              ║"
+    while IFS= read -r line; do
+        /usr/bin/printf "║   - %-56s ║\n" "$line" >&2 2>/dev/null || log_message "║   - $line"
+    done < "$tofu_log"
+    log_message "║                                                              ║"
+    log_message "║ For production builds, set:                                  ║"
+    log_message "║   --build-arg REQUIRE_VERIFIED_DOWNLOADS=true                ║"
+    log_message "║   --build-arg PRODUCTION_MODE=true                           ║"
+    log_message "║                                                              ║"
+    log_message "║ To fix: add pinned checksums to lib/checksums.json           ║"
+    log_message "╚════════════════════════════════════════════════════════════════╝"
+    log_message ""
+
+    return 0
 }
 
 # Export functions for use in feature scripts
 protected_export verify_download verify_signature_tier verify_pinned_checksum
 protected_export verify_published_checksum verify_tool_published_checksum
 protected_export register_tool_checksum_fetcher verify_calculated_checksum lookup_pinned_checksum
+protected_export print_tofu_summary

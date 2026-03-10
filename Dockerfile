@@ -71,6 +71,7 @@ ARG PRODUCTION_MODE=false
 # enforcing at least Tier 2 pinned checksums for all downloads.
 # Defaults to the value of PRODUCTION_MODE when not explicitly set.
 ARG REQUIRE_VERIFIED_DOWNLOADS=false
+ENV REQUIRE_VERIFIED_DOWNLOADS=${REQUIRE_VERIFIED_DOWNLOADS}
 
 # Build output verbosity
 # Values: ERROR (0), WARN (1), INFO (2), DEBUG (3)
@@ -536,6 +537,11 @@ COPY lib/runtime/commands/setup-gh /usr/local/bin/setup-gh
 COPY lib/runtime/commands/setup-glab /usr/local/bin/setup-glab
 RUN chmod 755 /usr/local/bin/_source-env-secrets /usr/local/bin/_wait-for-op-cache \
     /usr/local/bin/setup-git /usr/local/bin/setup-gh /usr/local/bin/setup-glab
+
+# Print TOFU download summary (if any Tier 4 fallbacks occurred during build)
+RUN /bin/bash -c 'source /tmp/build-scripts/base/logging.sh && \
+    source /tmp/build-scripts/base/checksum-verification.sh && \
+    print_tofu_summary' 2>&1 || true
 
 # Clean up build scripts but keep runtime scripts and shared utilities
 RUN cp -r /tmp/build-scripts/runtime /opt/container-runtime && \
