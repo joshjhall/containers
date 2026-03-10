@@ -442,10 +442,21 @@ Follow these conventions:
 1. **Indentation**: 4 spaces (no tabs)
 1. **Line length**: Maximum 100 characters
 1. **Variable naming**:
-   - `UPPERCASE_WITH_UNDERSCORES` for constants/environment variables
-   - `lowercase_with_underscores` for local variables
-1. **Function naming**: `verb_noun` pattern (e.g., `install_python`,
-   `fetch_checksum`)
+   - `UPPERCASE_WITH_UNDERSCORES` for constants, environment variables, and
+     exported values
+   - `lowercase_with_underscores` for local variables (inside functions, use
+     `local` keyword) and script-scope flags/options that are not exported
+   - `PREFIX_UPPERCASE` with a module prefix for module-scoped state in sourced
+     libraries (e.g., `CV_ERROR_COUNT`, `VA_CACHE_DIR`) — this avoids
+     collisions when multiple scripts are sourced into the same shell
+   - `_MODULE_PATH_LOADED` pattern for include guards that prevent multiple
+     sourcing (e.g., `_COSIGN_INSTALL_LOADED`)
+1. **Function naming**:
+   - `verb_noun` pattern for public functions (e.g., `install_python`,
+     `fetch_checksum`)
+   - `_verb_noun` prefix (leading underscore) for private/internal helper
+     functions not intended for external callers (e.g., `_fetch_cosign_checksum`,
+     `_resolve_version`)
 
 ### Example
 

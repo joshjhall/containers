@@ -49,15 +49,15 @@ install_cosign() {
     log_message "Installing cosign (container image signing and verification)..."
 
     # Set cosign version
-    local COSIGN_VERSION="3.0.2"
+    local cosign_version="3.0.2"
 
     # Detect architecture for cosign
-    local COSIGN_ARCH
-    COSIGN_ARCH=$(map_arch "amd64" "arm64")
+    local cosign_arch
+    cosign_arch=$(map_arch "amd64" "arm64")
 
     # Construct the cosign package filename
-    local COSIGN_PACKAGE="cosign_${COSIGN_VERSION}_${COSIGN_ARCH}.deb"
-    local COSIGN_URL="https://github.com/sigstore/cosign/releases/download/v${COSIGN_VERSION}/${COSIGN_PACKAGE}"
+    local cosign_package="cosign_${cosign_version}_${cosign_arch}.deb"
+    local cosign_url="https://github.com/sigstore/cosign/releases/download/v${cosign_version}/${cosign_package}"
 
     # Register Tier 3 fetcher for cosign (if not already registered)
     if [ -z "${_TOOL_CHECKSUM_FETCHERS[cosign]+x}" ]; then
@@ -72,28 +72,28 @@ install_cosign() {
     fi
 
     # Download cosign
-    local BUILD_TEMP
-    BUILD_TEMP=$(create_secure_temp_dir)
-    cd "$BUILD_TEMP" || return 1
+    local build_temp
+    build_temp=$(create_secure_temp_dir)
+    cd "$build_temp" || return 1
     log_message "Downloading cosign..."
-    if ! command curl -L -f --retry 3 --retry-delay 2 --retry-all-errors --progress-bar -o "cosign.deb" "$COSIGN_URL"; then
-        log_error "Failed to download cosign ${COSIGN_VERSION}"
+    if ! command curl -L -f --retry 3 --retry-delay 2 --retry-all-errors --progress-bar -o "cosign.deb" "$cosign_url"; then
+        log_error "Failed to download cosign ${cosign_version}"
         cd /
-        command rm -rf "$BUILD_TEMP"
+        command rm -rf "$build_temp"
         return 1
     fi
 
     # Run 4-tier verification
     local verify_rc=0
-    verify_download "tool" "cosign" "$COSIGN_VERSION" "cosign.deb" "$COSIGN_ARCH" || verify_rc=$?
+    verify_download "tool" "cosign" "$cosign_version" "cosign.deb" "$cosign_arch" || verify_rc=$?
     if [ "$verify_rc" -eq 1 ]; then
-        log_error "Verification failed for cosign ${COSIGN_VERSION}"
+        log_error "Verification failed for cosign ${cosign_version}"
         cd /
-        command rm -rf "$BUILD_TEMP"
+        command rm -rf "$build_temp"
         return 1
     fi
 
-    log_message "✓ cosign v${COSIGN_VERSION} verified successfully"
+    log_message "✓ cosign v${cosign_version} verified successfully"
 
     # Install the verified package
     log_command "Installing cosign package" \
@@ -101,7 +101,7 @@ install_cosign() {
 
     cd /
     log_command "Cleaning up build directory" \
-        command rm -rf "$BUILD_TEMP"
+        command rm -rf "$build_temp"
 }
 
 # Export function for use in other scripts

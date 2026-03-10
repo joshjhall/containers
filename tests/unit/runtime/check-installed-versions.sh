@@ -137,25 +137,25 @@ test_civ_should_display_section_func() {
 # Test: --filter flag handling
 test_civ_filter_flag() {
     assert_file_contains "$SOURCE_FILE" "--filter" "check-installed-versions.sh supports --filter flag"
-    assert_file_contains "$SOURCE_FILE" "FILTER_CATEGORY" "check-installed-versions.sh uses FILTER_CATEGORY variable"
+    assert_file_contains "$SOURCE_FILE" "filter_category" "check-installed-versions.sh uses filter_category variable"
 }
 
 # Test: --compare flag handling
 test_civ_compare_flag() {
     assert_file_contains "$SOURCE_FILE" "--compare" "check-installed-versions.sh supports --compare flag"
-    assert_file_contains "$SOURCE_FILE" "COMPARE_MODE" "check-installed-versions.sh uses COMPARE_MODE variable"
+    assert_file_contains "$SOURCE_FILE" "compare_mode" "check-installed-versions.sh uses compare_mode variable"
 }
 
 # Test: --all flag handling
 test_civ_all_flag() {
     assert_file_contains "$SOURCE_FILE" "--all" "check-installed-versions.sh supports --all flag"
-    assert_file_contains "$SOURCE_FILE" "SHOW_ALL" "check-installed-versions.sh uses SHOW_ALL variable"
+    assert_file_contains "$SOURCE_FILE" "show_all" "check-installed-versions.sh uses show_all variable"
 }
 
 # Test: --json output format
 test_civ_json_output() {
     assert_file_contains "$SOURCE_FILE" "--json" "check-installed-versions.sh supports --json output"
-    assert_file_contains "$SOURCE_FILE" "OUTPUT_FORMAT" "check-installed-versions.sh uses OUTPUT_FORMAT variable"
+    assert_file_contains "$SOURCE_FILE" "output_format" "check-installed-versions.sh uses output_format variable"
 }
 
 # Test: Version extraction regex patterns

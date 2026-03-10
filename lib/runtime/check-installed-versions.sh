@@ -41,27 +41,27 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Parse command line options
-SHOW_ALL=false
-OUTPUT_FORMAT="text"
-FILTER_CATEGORY=""
-COMPARE_MODE=false
+show_all=false
+output_format="text"
+filter_category=""
+compare_mode=false
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --all)
-            SHOW_ALL=true
+            show_all=true
             shift
             ;;
         --json)
-            OUTPUT_FORMAT="json"
+            output_format="json"
             shift
             ;;
         --filter)
-            FILTER_CATEGORY="$2"
+            filter_category="$2"
             shift 2
             ;;
         --compare)
-            COMPARE_MODE=true
+            compare_mode=true
             shift
             ;;
         --help|-h)
@@ -90,10 +90,10 @@ should_display_section() {
     local section="$1"
 
     # If no filter, show everything
-    [ -z "$FILTER_CATEGORY" ] && return 0
+    [ -z "$filter_category" ] && return 0
 
     # Map filter categories to sections
-    case "$FILTER_CATEGORY" in
+    case "$filter_category" in
         language)
             [[ "$section" == "Programming Languages" ]]
             ;;
@@ -197,17 +197,17 @@ print_result() {
     local latest="$3"
     local status="$4"
 
-    if [ "$OUTPUT_FORMAT" = "json" ]; then
+    if [ "$output_format" = "json" ]; then
         return
     fi
 
     # Skip missing tools unless --all flag is set
-    if [ "$status" = "missing" ] && [ "$SHOW_ALL" = false ]; then
+    if [ "$status" = "missing" ] && [ "$show_all" = false ]; then
         return
     fi
 
     # In compare mode, only show tools with version differences
-    if [ "$COMPARE_MODE" = true ]; then
+    if [ "$compare_mode" = true ]; then
         if [ "$status" != "outdated" ] && [ "$status" != "newer" ]; then
             return
         fi
@@ -267,7 +267,7 @@ run_section() {
     done
 
     # Print section header and results
-    if [ "$OUTPUT_FORMAT" != "json" ] && should_display_section "$section_filter"; then
+    if [ "$output_format" != "json" ] && should_display_section "$section_filter"; then
         echo "$section_name:"
         printf '%0.s=' $(seq 1 ${#section_name})
         echo
@@ -299,7 +299,7 @@ run_r_section() {
         tool_names+=("$name")
     done
 
-    if [ "$OUTPUT_FORMAT" != "json" ] && should_display_section "$section_filter"; then
+    if [ "$output_format" != "json" ] && should_display_section "$section_filter"; then
         echo "$section_name:"
         printf '%0.s=' $(seq 1 ${#section_name})
         echo
@@ -351,14 +351,14 @@ check_r_package() {
 # Version Checks
 # ============================================================================
 
-if [ "$OUTPUT_FORMAT" != "json" ]; then
+if [ "$output_format" != "json" ]; then
     echo "Checking installed versions in container..."
     if [ -n "${GITHUB_TOKEN:-}" ]; then
         echo "Using GitHub token for API authentication"
     else
         echo "No GitHub token found. To avoid rate limits, set GITHUB_TOKEN in .env file"
     fi
-    if [ "$COMPARE_MODE" = true ]; then
+    if [ "$compare_mode" = true ]; then
         echo "Compare mode: Showing only tools with version differences"
     fi
     echo
@@ -491,7 +491,7 @@ run_section "Database Tools" "Database Tools" \
 # Output Results
 # ============================================================================
 
-if [ "$OUTPUT_FORMAT" = "json" ]; then
+if [ "$output_format" = "json" ]; then
     # JSON output
     echo "{"
     echo '  "results": ['
@@ -500,12 +500,12 @@ if [ "$OUTPUT_FORMAT" = "json" ]; then
         tool_status="${VERSION_STATUS[$tool]}"
 
         # Skip missing tools unless --all flag is set
-        if [ "$tool_status" = "missing" ] && [ "$SHOW_ALL" = false ]; then
+        if [ "$tool_status" = "missing" ] && [ "$show_all" = false ]; then
             continue
         fi
 
         # In compare mode, only show tools with version differences
-        if [ "$COMPARE_MODE" = true ]; then
+        if [ "$compare_mode" = true ]; then
             if [ "$tool_status" != "outdated" ] && [ "$tool_status" != "newer" ]; then
                 continue
             fi
@@ -548,7 +548,7 @@ else
 
     echo -e "  Total tools checked: ${total_count}"
 
-    if [ "$SHOW_ALL" = true ]; then
+    if [ "$show_all" = true ]; then
         echo -e "  Installed: ${GREEN}${installed_count}${NC}"
         echo -e "  Missing: ${RED}${missing_count}${NC}"
     else
