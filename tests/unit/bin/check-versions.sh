@@ -252,11 +252,11 @@ test_json_output_valid() {
     local exit_code=0
 
     # Capture output and exit code separately (timeout returns 124 on timeout)
-    output=$(timeout 10 "$PROJECT_ROOT/bin/check-versions.sh" --json --no-cache 2>&1) || exit_code=$?
+    output=$(timeout 30 "$PROJECT_ROOT/bin/check-versions.sh" --json --no-cache 2>&1) || exit_code=$?
 
     # If timeout occurred (exit code 124), skip this test - network too slow in CI
     if [ "$exit_code" -eq 124 ]; then
-        skip_test "Script timed out (10s) - network conditions too slow for full version check"
+        skip_test "Script timed out (30s) - network conditions too slow for full version check"
         return
     fi
 
@@ -304,20 +304,6 @@ test_script_syntax() {
         echo "$errors" >&2
         assert_true false "Script contains bash syntax errors"
     fi
-}
-
-# Test: Exit code when versions are current
-test_exit_code_current() {
-    # This would require mocking all API calls, so we'll test the logic
-    # by checking if the script exits with 0 when no outdated versions
-    skip_test "Requires full API mocking"
-}
-
-# Test: Exit code when versions are outdated
-test_exit_code_outdated() {
-    # The script should exit with 1 when outdated versions are found
-    # This is tested in integration tests with actual API calls
-    skip_test "Requires full API mocking"
 }
 
 # Test: Script extracts Java dev tool versions
