@@ -108,7 +108,7 @@ check_prerequisites() {
     fi
 
     # Check Prometheus connectivity
-    if ! curl -s "${PROMETHEUS_URL}/api/v1/status/runtimeinfo" > /dev/null; then
+    if ! curl -sf "${PROMETHEUS_URL}/api/v1/status/runtimeinfo" > /dev/null; then
         log_warn "Cannot connect to Prometheus at ${PROMETHEUS_URL}"
     fi
 
@@ -126,7 +126,7 @@ prometheus_query() {
     local query="$1"
     local duration="${2:-$BASELINE_DURATION}"
 
-    curl -s -G "${PROMETHEUS_URL}/api/v1/query" \
+    curl -sf -G "${PROMETHEUS_URL}/api/v1/query" \
         --data-urlencode "query=${query}[${duration}]" | \
         jq -r '.data.result'
 }
@@ -134,7 +134,7 @@ prometheus_query() {
 prometheus_query_instant() {
     local query="$1"
 
-    curl -s -G "${PROMETHEUS_URL}/api/v1/query" \
+    curl -sf -G "${PROMETHEUS_URL}/api/v1/query" \
         --data-urlencode "query=${query}" | \
         jq -r '.data.result'
 }

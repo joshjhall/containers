@@ -55,7 +55,7 @@ ensure_git_cliff() {
     temp_dir=$(mktemp -d)
 
     echo "Downloading git-cliff from $download_url..."
-    if command curl -sL "$download_url" | tar xz -C "$temp_dir"; then
+    if command curl -sfL "$download_url" | tar xz -C "$temp_dir"; then
         sudo command mv "$temp_dir/git-cliff-${version}/git-cliff" /usr/local/bin/
         sudo chmod +x /usr/local/bin/git-cliff
         command rm -rf "$temp_dir"

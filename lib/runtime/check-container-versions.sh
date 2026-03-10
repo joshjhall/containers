@@ -73,16 +73,16 @@ source "${SCRIPT_DIR}/lib/version-api.sh"
 # Get latest Python version
 get_latest_python() {
     # Use Python's official JSON API endpoint
-    command curl -s https://endoflife.date/api/python.json | jq -r '.[] | select(.latest) | .latest' | command head -1 || echo "unknown"
+    command curl -sf https://endoflife.date/api/python.json | jq -r '.[] | select(.latest) | .latest' | command head -1 || echo "unknown"
 }
 
 # Get latest Ruby version
 get_latest_ruby() {
     local response
     if [ -n "${GITHUB_TOKEN:-}" ]; then
-        response=$(command curl -s -H "Authorization: token $GITHUB_TOKEN" https://api.github.com/repos/ruby/ruby/releases)
+        response=$(command curl -sf -H "Authorization: token $GITHUB_TOKEN" https://api.github.com/repos/ruby/ruby/releases)
     else
-        response=$(command curl -s https://api.github.com/repos/ruby/ruby/releases)
+        response=$(command curl -sf https://api.github.com/repos/ruby/ruby/releases)
     fi
 
     if echo "$response" | ggrep -q "rate limit exceeded"; then
@@ -94,25 +94,25 @@ get_latest_ruby() {
 
 # Get latest Node.js LTS version
 get_latest_node() {
-    command curl -s https://nodejs.org/dist/index.json | jq -r '.[] | select(.lts != false) | .version' | command head -1 | command sed 's/^v//' | command cut -d. -f1 || echo "unknown"
+    command curl -sf https://nodejs.org/dist/index.json | jq -r '.[] | select(.lts != false) | .version' | command head -1 | command sed 's/^v//' | command cut -d. -f1 || echo "unknown"
 }
 
 # Get latest Go version
 get_latest_go() {
-    command curl -s https://go.dev/VERSION?m=text | command head -1 | command sed 's/^go//' || echo "unknown"
+    command curl -sf https://go.dev/VERSION?m=text | command head -1 | command sed 's/^go//' || echo "unknown"
 }
 
 # Get latest Rust stable version
 get_latest_rust() {
     # Try to get the latest stable version from the Rust release API
     local version
-    version=$(command curl -s https://api.github.com/repos/rust-lang/rust/releases | jq -r '.[] | select(.prerelease == false) | .tag_name' | command head -1 | command sed 's/^v//')
+    version=$(command curl -sf https://api.github.com/repos/rust-lang/rust/releases | jq -r '.[] | select(.prerelease == false) | .tag_name' | command head -1 | command sed 's/^v//')
 
     if [ -n "$version" ] && [ "$version" != "null" ]; then
         echo "$version"
     else
         # Fallback: try forge.rust-lang.org
-        version=$(command curl -s https://forge.rust-lang.org/infra/channel-layout.html | ggrep -oP 'stable.*?rustc \K[0-9]+\.[0-9]+\.[0-9]+' | command head -1)
+        version=$(command curl -sf https://forge.rust-lang.org/infra/channel-layout.html | ggrep -oP 'stable.*?rustc \K[0-9]+\.[0-9]+\.[0-9]+' | command head -1)
         if [ -n "$version" ]; then
             echo "$version"
         else
@@ -335,7 +335,7 @@ if [ -f "$FEATURES_DIR/dev-tools.sh" ]; then
     # glab
     current=$(extract_version "$FEATURES_DIR/dev-tools.sh" 'GLAB_VERSION="\K[^"]+')
     # GitLab CLI is hosted on GitLab, not GitHub - use GitLab API
-    latest=$(command curl -s "https://gitlab.com/api/v4/projects/gitlab-org%2Fcli/releases" | jq -r '.[0].tag_name' | command sed 's/^v//' || echo "unknown")
+    latest=$(command curl -sf "https://gitlab.com/api/v4/projects/gitlab-org%2Fcli/releases" | jq -r '.[0].tag_name' | command sed 's/^v//' || echo "unknown")
     status=$(compare_version "$current" "$latest")
     CURRENT_VERSIONS["glab"]="$current"
     LATEST_VERSIONS["glab"]="$latest"
@@ -395,7 +395,7 @@ if [ -f "$FEATURES_DIR/kubernetes.sh" ]; then
     # kubectl
     current=$(extract_version "$FEATURES_DIR/kubernetes.sh" 'KUBECTL_VERSION="?\$\{KUBECTL_VERSION:-\K[^"}]+')
     # kubectl returns the full version, but we track major.minor
-    latest=$(command curl -Ls https://dl.k8s.io/release/stable.txt | command sed 's/^v//' | command cut -d. -f1,2 || echo "unknown")
+    latest=$(command curl -Lsf https://dl.k8s.io/release/stable.txt | command sed 's/^v//' | command cut -d. -f1,2 || echo "unknown")
     status=$(compare_version "$current" "$latest")
     CURRENT_VERSIONS["kubectl"]="$current"
     LATEST_VERSIONS["kubectl"]="$latest"

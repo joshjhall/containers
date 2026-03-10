@@ -127,10 +127,10 @@ log_message "✓ AWS CLI GPG key verified"
 # Download and Verify AWS CLI v2
 # ============================================================================
 log_command "Downloading AWS CLI v2" \
-    command curl -sL "$AWS_CLI_URL" -o "awscliv2.zip"
+    command curl -sfL "$AWS_CLI_URL" -o "awscliv2.zip"
 
 log_command "Downloading AWS CLI v2 signature" \
-    command curl -sL "${AWS_CLI_URL}.sig" -o "awscliv2.sig"
+    command curl -sfL "${AWS_CLI_URL}.sig" -o "awscliv2.sig"
 
 log_message "Verifying GPG signature..."
 if ! gpg --verify awscliv2.sig awscliv2.zip 2>/dev/null; then

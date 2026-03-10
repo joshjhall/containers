@@ -123,9 +123,9 @@ fetch_url() {
     # Use both --connect-timeout and --max-time to prevent hanging
     local response
     if [ -n "$GITHUB_TOKEN" ] && [[ "$url" == *"api.github.com"* ]]; then
-        response=$(command curl -s --connect-timeout 5 --max-time "$timeout" -H "Authorization: token $GITHUB_TOKEN" "$url" 2>/dev/null || echo "")
+        response=$(command curl -sf --connect-timeout 5 --max-time "$timeout" -H "Authorization: token $GITHUB_TOKEN" "$url" 2>/dev/null || echo "")
     else
-        response=$(command curl -s --connect-timeout 5 --max-time "$timeout" "$url" 2>/dev/null || echo "")
+        response=$(command curl -sf --connect-timeout 5 --max-time "$timeout" "$url" 2>/dev/null || echo "")
     fi
 
     # Cache the response if not empty

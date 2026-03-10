@@ -100,7 +100,7 @@ test_kind_cluster_creation() {
     # Install kind inside the container
     docker exec "$container" sh -c "
         # Download kind binary
-        curl -Lo /usr/local/bin/kind https://kind.sigs.k8s.io/dl/v0.20.0/kind-linux-amd64
+        curl -fLo /usr/local/bin/kind https://kind.sigs.k8s.io/dl/v0.20.0/kind-linux-amd64
         chmod +x /usr/local/bin/kind
 
         # Verify kind works

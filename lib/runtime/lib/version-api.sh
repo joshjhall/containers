@@ -26,9 +26,9 @@ get_github_release() {
 
     if [ -z "$tag_pattern" ]; then
         if [ -n "${GITHUB_TOKEN:-}" ]; then
-            response=$(command curl -s -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com/repos/${repo}/releases/latest")
+            response=$(command curl -sf -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com/repos/${repo}/releases/latest")
         else
-            response=$(command curl -s "https://api.github.com/repos/${repo}/releases/latest")
+            response=$(command curl -sf "https://api.github.com/repos/${repo}/releases/latest")
         fi
         # Check if we got rate limited
         if echo "$response" | _vapi_grep -q "rate limit exceeded"; then
@@ -38,9 +38,9 @@ get_github_release() {
         echo "$response" | _vapi_grep -oP '"tag_name": "\K[^"]+' || echo "unknown"
     else
         if [ -n "${GITHUB_TOKEN:-}" ]; then
-            response=$(command curl -s -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com/repos/${repo}/tags")
+            response=$(command curl -sf -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com/repos/${repo}/tags")
         else
-            response=$(command curl -s "https://api.github.com/repos/${repo}/tags")
+            response=$(command curl -sf "https://api.github.com/repos/${repo}/tags")
         fi
         if echo "$response" | _vapi_grep -q "rate limit exceeded"; then
             echo "rate-limited"
@@ -54,7 +54,7 @@ get_github_release() {
 get_pypi_version() {
     local package="$1"
     local response
-    if response=$(command curl -s "https://pypi.org/pypi/${package}/json"); then
+    if response=$(command curl -sf "https://pypi.org/pypi/${package}/json"); then
         echo "$response" | jq -r '.info.version' 2>/dev/null || echo "unknown"
     else
         echo "unknown"
@@ -65,7 +65,7 @@ get_pypi_version() {
 get_crates_version() {
     local package="$1"
     local response
-    if response=$(command curl -s "https://crates.io/api/v1/crates/${package}"); then
+    if response=$(command curl -sf "https://crates.io/api/v1/crates/${package}"); then
         echo "$response" | jq -r '.crate.max_version' 2>/dev/null || echo "unknown"
     else
         echo "unknown"
@@ -76,7 +76,7 @@ get_crates_version() {
 get_rubygems_version() {
     local gem="$1"
     local response
-    if response=$(command curl -s "https://rubygems.org/api/v1/gems/${gem}.json"); then
+    if response=$(command curl -sf "https://rubygems.org/api/v1/gems/${gem}.json"); then
         echo "$response" | jq -r '.version' 2>/dev/null || echo "unknown"
     else
         echo "unknown"
@@ -87,7 +87,7 @@ get_rubygems_version() {
 get_cran_version() {
     local package="$1"
     local response
-    if response=$(command curl -s "https://crandb.r-pkg.org/${package}"); then
+    if response=$(command curl -sf "https://crandb.r-pkg.org/${package}"); then
         echo "$response" | jq -r '.Version // .version // "unknown"' 2>/dev/null || echo "unknown"
     else
         echo "unknown"
