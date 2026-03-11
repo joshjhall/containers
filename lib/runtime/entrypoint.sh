@@ -40,43 +40,15 @@ fi
 export ENTRYPOINT_ALREADY_RAN=true
 
 # ============================================================================
-# Exit Handler - Graceful Shutdown
+# Source Sub-Modules
 # ============================================================================
-# Cleanup function called on container exit/termination
-# Ensures proper cleanup of resources, metrics, and logs
-cleanup_on_exit() {
-    local exit_code=$?
+_RUNTIME_LIB="/opt/container-runtime/lib"
 
-    # Log shutdown event if audit logging was initialized
-    if declare -f audit_log >/dev/null 2>&1; then
-        audit_log "system" "info" "Container shutting down" \
-            "{\"stage\":\"shutdown\",\"exit_code\":$exit_code}" 2>/dev/null || true
-    fi
-
-    echo "=== Container shutting down (exit code: $exit_code) ==="
-
-    # Flush metrics if they exist
-    METRICS_DIR="/tmp/container-metrics"
-    if [ -d "$METRICS_DIR" ]; then
-        # Ensure all metrics are written to disk
-        sync 2>/dev/null || true
-        echo "✓ Metrics flushed"
-    fi
-
-    # Sync any pending filesystem writes
-    sync 2>/dev/null || true
-
-    echo "✓ Shutdown complete"
-
-    # Preserve original exit code
-    exit $exit_code
-}
-
-# Set up trap handlers for graceful shutdown
-# EXIT: Normal script exit
-# TERM: Termination signal (docker stop)
-# INT: Interrupt signal (Ctrl+C)
-trap cleanup_on_exit EXIT TERM INT
+# Exit handlers (cleanup_on_exit, trap setup)
+if [ -f "$_RUNTIME_LIB/exit-handlers.sh" ]; then
+    # shellcheck source=/dev/null
+    source "$_RUNTIME_LIB/exit-handlers.sh"
+fi
 
 # ============================================================================
 # Startup Time Tracking
@@ -87,32 +59,11 @@ STARTUP_BEGIN_TIME=$(date +%s)
 # ============================================================================
 # Resource Limits
 # ============================================================================
-# Set file descriptor limits to prevent resource exhaustion
-# - Prevents accidental fork bombs and file descriptor leaks
-# - Configurable via environment variables
-# - Fails gracefully if ulimit command is not available or restricted
-
-# File descriptors (open files)
-# Default 4096: 4x the typical Linux default (1024); accommodates dev tooling
-# (LSP servers, file watchers, test runners) without being excessive
-FILE_DESCRIPTOR_LIMIT="${FILE_DESCRIPTOR_LIMIT:-4096}"
-ulimit -n "$FILE_DESCRIPTOR_LIMIT" 2>/dev/null || {
-    echo "⚠️  Warning: Could not set file descriptor limit to $FILE_DESCRIPTOR_LIMIT"
-    echo "   Current limit: $(ulimit -n 2>/dev/null || echo 'unknown')"
-}
-
-# Max user processes (prevent fork bombs)
-# Default 2048: generous ceiling for dev containers; prevents accidental fork
-# bombs while allowing parallel test runners and build tools
-MAX_USER_PROCESSES="${MAX_USER_PROCESSES:-2048}"
-ulimit -u "$MAX_USER_PROCESSES" 2>/dev/null || {
-    echo "⚠️  Warning: Could not set max user processes limit to $MAX_USER_PROCESSES"
-    echo "   Current limit: $(ulimit -u 2>/dev/null || echo 'unknown')"
-}
-
-# Core dump size (disabled by default for security)
-CORE_DUMP_SIZE="${CORE_DUMP_SIZE:-0}"
-ulimit -c "$CORE_DUMP_SIZE" 2>/dev/null || true
+# Source resource limits (ulimit configuration)
+if [ -f "$_RUNTIME_LIB/resource-limits.sh" ]; then
+    # shellcheck source=/dev/null
+    source "$_RUNTIME_LIB/resource-limits.sh"
+fi
 
 # ============================================================================
 # Configuration Validation
@@ -141,41 +92,11 @@ fi
 # ============================================================================
 # Case-Sensitivity Detection
 # ============================================================================
-# Detect case-insensitive filesystems and warn users (opt-out via SKIP_CASE_CHECK=true)
-if [ "${SKIP_CASE_CHECK:-false}" != "true" ] && [ -f "/usr/local/bin/detect-case-sensitivity.sh" ]; then
-    # Check if /workspace exists and is writable
-    if [ -d "/workspace" ] && [ -w "/workspace" ]; then
-        # Run detection in quiet mode, capture exit code
-        if ! QUIET=true /usr/local/bin/detect-case-sensitivity.sh /workspace; then
-            # Case-insensitive filesystem detected
-            echo ""
-            echo "======================================================================"
-            echo "  ⚠ Case-Insensitive Filesystem Detected"
-            echo "======================================================================"
-            echo ""
-            echo "The /workspace directory is mounted from a case-insensitive filesystem."
-            echo "This can cause issues with:"
-            echo "  - Git case-only renames (e.g., README.md → readme.md)"
-            echo "  - Case-sensitive imports (Python, Go, etc.)"
-            echo "  - Build tools expecting exact case matches"
-            echo ""
-            echo "Platform: Likely macOS or Windows host"
-            echo "Container: Linux (expects case-sensitive filesystems)"
-            echo ""
-            echo "Recommendations:"
-            echo "  1. Use case-sensitive APFS volume (macOS)"
-            echo "  2. Use WSL2 filesystem (Windows)"
-            echo "  3. Use Docker volumes instead of bind mounts"
-            echo "  4. Follow strict naming conventions"
-            echo ""
-            echo "For detailed solutions, see:"
-            echo "  docs/troubleshooting/case-sensitive-filesystems.md"
-            echo ""
-            echo "To disable this check, set: SKIP_CASE_CHECK=true"
-            echo "======================================================================"
-            echo ""
-        fi
-    fi
+# Source and run case-sensitivity check
+if [ -f "$_RUNTIME_LIB/case-sensitivity-check.sh" ]; then
+    # shellcheck source=/dev/null
+    source "$_RUNTIME_LIB/case-sensitivity-check.sh"
+    check_case_sensitivity
 fi
 
 # Check if we're running as root
@@ -246,11 +167,8 @@ run_startup_scripts() {
 }
 
 # ============================================================================
-# Source Sub-Modules
+# Source Concern-Specific Sub-Modules
 # ============================================================================
-# Load concern-specific sub-scripts from lib/ directory. Each provides
-# function definitions; orchestration calls follow below.
-_RUNTIME_LIB="/opt/container-runtime/lib"
 if [ -f "$_RUNTIME_LIB/fix-docker-socket.sh" ]; then
     # shellcheck source=/dev/null
     source "$_RUNTIME_LIB/fix-docker-socket.sh"

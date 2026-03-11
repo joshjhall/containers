@@ -38,6 +38,10 @@ setup() {
     # Create a modified version of logging.sh for testing
     command sed 's|/var/log/container-build|'"$TEST_LOG_DIR"'|g' "$PROJECT_ROOT/lib/base/logging.sh" > "$TEST_LOG_DIR/logging-test.sh"
 
+    # Copy sub-modules to the test directory so relative sourcing works
+    command cp "$PROJECT_ROOT/lib/base/feature-logging.sh" "$TEST_LOG_DIR/feature-logging.sh"
+    command cp "$PROJECT_ROOT/lib/base/message-logging.sh" "$TEST_LOG_DIR/message-logging.sh"
+
     # Source the modified version
     source "$TEST_LOG_DIR/logging-test.sh"
 }
@@ -51,6 +55,8 @@ teardown() {
     unset _LOGGING_LOADED 2>/dev/null || true
     unset _SHARED_LOGGING_LOADED 2>/dev/null || true
     unset _SHARED_EXPORT_UTILS_LOADED 2>/dev/null || true
+    unset _FEATURE_LOGGING_LOADED 2>/dev/null || true
+    unset _MESSAGE_LOGGING_LOADED 2>/dev/null || true
 }
 
 # Test: log_feature_start creates log files

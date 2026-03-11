@@ -47,22 +47,6 @@ elif [ -f "$(dirname "${BASH_SOURCE[0]}")/../shared/logging.sh" ]; then
     source "$(dirname "${BASH_SOURCE[0]}")/../shared/logging.sh"
 fi
 
-# Get line number after last "Executing:" marker in a log file
-_get_last_command_start_line() {
-    local log_file="$1"
-    local marker_line
-    marker_line=$(command grep -n "^Executing: " "$log_file" | command tail -1 | command cut -d: -f1)
-    echo $((marker_line + 1))
-}
-
-# Count pattern matches in log output since a given line
-_count_patterns_since() {
-    local log_file="$1"
-    local start_line="$2"
-    local pattern="$3"
-    command tail -n +"$start_line" "$log_file" | command grep -cE "$pattern" 2>/dev/null || echo 0
-}
-
 # Source JSON logging utilities if enabled
 if [ "${ENABLE_JSON_LOGGING:-false}" = "true" ]; then
     # shellcheck source=lib/base/json-logging.sh
@@ -81,7 +65,9 @@ elif [ -f "$(dirname "${BASH_SOURCE[0]}")/secret-scrubbing.sh" ]; then
     source "$(dirname "${BASH_SOURCE[0]}")/secret-scrubbing.sh"
 fi
 
-# Global variables for logging
+# ============================================================================
+# Log Directory Initialization
+# ============================================================================
 # Allow BUILD_LOG_DIR to be overridden (e.g., for tests)
 if [ -z "${BUILD_LOG_DIR:-}" ]; then
     # Try /var/log/container-build first (for root or proper permissions)
@@ -103,382 +89,24 @@ else
     }
 fi
 
-export CURRENT_FEATURE=""
-export CURRENT_LOG_FILE=""
-export CURRENT_ERROR_FILE=""
-export CURRENT_SUMMARY_FILE=""
-export FEATURE_START_TIME=""
-export COMMAND_COUNT=0
-export ERROR_COUNT=0
-export WARNING_COUNT=0
-
 # ============================================================================
-# log_feature_start - Initialize logging for a feature installation
-#
-# Arguments:
-#   $1 - Feature name (e.g., "Python", "Node.js", "Rust")
-#   $2 - Version (optional, e.g., "3.13.5")
-#
-# Example:
-#   log_feature_start "Python" "3.13.5"
+# Source Sub-Modules
 # ============================================================================
-log_feature_start() {
-    local feature_name="$1"
-    local version="${2:-}"
+# Feature lifecycle logging (log_feature_start, log_command, log_feature_end)
+# shellcheck source=lib/base/feature-logging.sh
+if [ -f "/tmp/build-scripts/base/feature-logging.sh" ]; then
+    source "/tmp/build-scripts/base/feature-logging.sh"
+elif [ -f "$(dirname "${BASH_SOURCE[0]}")/feature-logging.sh" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/feature-logging.sh"
+fi
 
-    # Sanitize feature name for filename
-    local safe_name
-    safe_name=$(echo "$feature_name" | command tr '[:upper:]' '[:lower:]' | command tr ' ' '-' | command tr -cd '[:alnum:]-')
-
-    # Set up logging paths
-    CURRENT_FEATURE="$feature_name"
-    CURRENT_LOG_FILE="$BUILD_LOG_DIR/${safe_name}-install.log"
-    CURRENT_ERROR_FILE="$BUILD_LOG_DIR/${safe_name}-errors.log"
-    CURRENT_SUMMARY_FILE="$BUILD_LOG_DIR/${safe_name}-summary.log"
-    FEATURE_START_TIME=$(date +%s)
-    COMMAND_COUNT=0
-    ERROR_COUNT=0
-    WARNING_COUNT=0
-
-    # Initialize log files
-    {
-        echo "================================================================================"
-        echo "Feature Installation Log: $feature_name"
-        [ -n "$version" ] && echo "Version: $version"
-        echo "Start Time: $(date '+%Y-%m-%d %H:%M:%S')"
-        echo "================================================================================"
-        echo ""
-    } | command tee "$CURRENT_LOG_FILE"
-
-    # Clear error file
-    true > "$CURRENT_ERROR_FILE"
-
-    # Initialize JSON logging if enabled
-    if [ "${ENABLE_JSON_LOGGING:-false}" = "true" ] && command -v json_log_init >/dev/null 2>&1; then
-        json_log_init "$feature_name" "$version"
-    fi
-
-    # Show on console
-    echo "=== Installing $feature_name${version:+ version $version} ==="
-}
-
-# ============================================================================
-# log_command - Execute and log a command
-#
-# Arguments:
-#   $1 - Description of what the command does
-#   $@ - The command to execute
-#
-# Example:
-#   log_command "Installing system dependencies" apt-get install -y build-essential
-# ============================================================================
-log_command() {
-    local description="$1"
-    shift
-
-    COMMAND_COUNT=$((COMMAND_COUNT + 1))
-
-    # Scrub command text for logging (the command itself may contain secrets)
-    local logged_cmd="$*"
-    if command -v scrub_secrets >/dev/null 2>&1; then
-        logged_cmd=$(scrub_secrets "$logged_cmd")
-    fi
-
-    # Log command start
-    {
-        echo ""
-        echo "[$(date '+%H:%M:%S')] COMMAND #$COMMAND_COUNT: $description"
-        echo "Executing: $logged_cmd"
-        echo "--------------------------------------------------------------------------------"
-    } | command tee -a "$CURRENT_LOG_FILE"
-
-    # Execute command and capture output
-    local start_time
-    start_time=$(date +%s)
-    local exit_code=0
-
-    # Run command with output capture, scrubbing secrets from output
-    if command -v scrub_secrets >/dev/null 2>&1; then
-        if "$@" 2>&1 | scrub_secrets | command tee -a "$CURRENT_LOG_FILE"; then
-            exit_code=0
-        else
-            exit_code=$?
-        fi
-    elif "$@" 2>&1 | command tee -a "$CURRENT_LOG_FILE"; then
-        exit_code=0
-    else
-        exit_code=$?
-    fi
-
-    local end_time
-    end_time=$(date +%s)
-    local duration=$((end_time - start_time))
-
-    # Log command result
-    {
-        echo "--------------------------------------------------------------------------------"
-        echo "Exit code: $exit_code (Duration: ${duration}s)"
-    } | command tee -a "$CURRENT_LOG_FILE"
-
-    # Log to JSON if enabled
-    if [ "${ENABLE_JSON_LOGGING:-false}" = "true" ] && command -v json_log_command >/dev/null 2>&1; then
-        json_log_command "$description" "$COMMAND_COUNT" "$exit_code" "$duration"
-    fi
-
-    # Extract any errors or warnings from the last command output
-    if [ -f "$CURRENT_LOG_FILE" ]; then
-        local start_line
-        start_line=$(_get_last_command_start_line "$CURRENT_LOG_FILE")
-
-        local error_pattern="(ERROR|Error|error|FAILED|Failed|failed|FATAL|Fatal|fatal)"
-        local warn_pattern="(WARNING|Warning|warning|WARN|Warn|warn)"
-
-        # Append matching lines to error file
-        command tail -n +"$start_line" "$CURRENT_LOG_FILE" | command grep -E "$error_pattern" >> "$CURRENT_ERROR_FILE" 2>/dev/null || true
-        command tail -n +"$start_line" "$CURRENT_LOG_FILE" | command grep -E "$warn_pattern" >> "$CURRENT_ERROR_FILE" 2>/dev/null || true
-
-        # Count new errors and warnings
-        local new_errors
-        new_errors=$(_count_patterns_since "$CURRENT_LOG_FILE" "$start_line" "$error_pattern")
-        new_errors=$(echo "$new_errors" | command tr -d '[:space:]')
-        ERROR_COUNT=$((ERROR_COUNT + ${new_errors:-0}))
-
-        local new_warnings
-        new_warnings=$(_count_patterns_since "$CURRENT_LOG_FILE" "$start_line" "$warn_pattern")
-        new_warnings=$(echo "$new_warnings" | command tr -d '[:space:]')
-        WARNING_COUNT=$((WARNING_COUNT + ${new_warnings:-0}))
-    fi
-
-    # Show status on console
-    if [ $exit_code -eq 0 ]; then
-        echo "✓ $description completed successfully"
-    else
-        echo "✗ $description failed with exit code $exit_code"
-    fi
-
-    return $exit_code
-}
-
-# ============================================================================
-# log_feature_end - Finalize logging and generate summary
-#
-# Arguments:
-#   None
-#
-# Example:
-#   log_feature_end
-# ============================================================================
-log_feature_end() {
-    local end_time
-    end_time=$(date +%s)
-    local total_duration=$((end_time - FEATURE_START_TIME))
-
-    # Generate summary
-    {
-        echo "================================================================================"
-        echo "Installation Summary: $CURRENT_FEATURE"
-        echo "================================================================================"
-        echo ""
-        echo "Total Duration: ${total_duration} seconds"
-        echo "Commands Executed: $COMMAND_COUNT"
-        echo "Errors Found: $ERROR_COUNT"
-        echo "Warnings Found: $WARNING_COUNT"
-        echo ""
-
-        if [ -s "$CURRENT_ERROR_FILE" ]; then
-            echo "--- First 10 Errors/Warnings ---"
-            command head -10 "$CURRENT_ERROR_FILE"
-            echo ""
-            echo "Full error log: $CURRENT_ERROR_FILE"
-        else
-            echo "No errors or warnings detected!"
-        fi
-
-        echo ""
-        echo "End Time: $(date '+%Y-%m-%d %H:%M:%S')"
-        echo "================================================================================"
-    } | command tee "$CURRENT_SUMMARY_FILE"
-
-    # Append summary to main log
-    echo "" >> "$CURRENT_LOG_FILE"
-    command cat "$CURRENT_SUMMARY_FILE" >> "$CURRENT_LOG_FILE"
-
-    # Create a master summary file
-    {
-        echo "$CURRENT_FEATURE: $ERROR_COUNT errors, $WARNING_COUNT warnings (${total_duration}s)"
-    } >> "$BUILD_LOG_DIR/master-summary.log"
-
-    # Log feature completion to JSON if enabled
-    if [ "${ENABLE_JSON_LOGGING:-false}" = "true" ] && command -v json_log_feature_end >/dev/null 2>&1; then
-        json_log_feature_end "$total_duration"
-    fi
-
-    # Show summary on console
-    echo ""
-    echo "=== $CURRENT_FEATURE installation complete ==="
-    echo "Errors: $ERROR_COUNT, Warnings: $WARNING_COUNT"
-    echo "Full log: $CURRENT_LOG_FILE"
-
-    # Reset variables
-    CURRENT_FEATURE=""
-    CURRENT_LOG_FILE=""
-    CURRENT_ERROR_FILE=""
-    CURRENT_SUMMARY_FILE=""
-}
-
-# ============================================================================
-# log_message - Log a simple message (INFO level)
-#
-# Arguments:
-#   $1 - Message to log
-#
-# Example:
-#   log_message "Creating cache directories..."
-# ============================================================================
-log_message() {
-    # Respect LOG_LEVEL
-    if ! _should_log $LOG_LEVEL_INFO; then
-        return 0
-    fi
-
-    local message="$1"
-    # Scrub secrets from message before logging
-    if command -v scrub_secrets >/dev/null 2>&1; then
-        message=$(scrub_secrets "$message")
-    fi
-
-    # Handle case where logging is not yet initialized
-    if [ -n "$CURRENT_LOG_FILE" ]; then
-        {
-            echo "[$(date '+%H:%M:%S')] $message"
-        } | command tee -a "$CURRENT_LOG_FILE"
-    else
-        # Logging not initialized yet, just print to stdout
-        echo "[$(date '+%H:%M:%S')] $message"
-    fi
-}
-
-# ============================================================================
-# log_info - Log an informational message (INFO level)
-#
-# Explicit INFO level logging. Same as log_message but clearer intent.
-#
-# Arguments:
-#   $1 - Message to log
-#
-# Example:
-#   log_info "Starting installation..."
-# ============================================================================
-log_info() {
-    log_message "$1"
-}
-
-# ============================================================================
-# log_debug - Log a debug message (DEBUG level)
-#
-# Only shown when LOG_LEVEL=DEBUG. Use for detailed troubleshooting info.
-#
-# Arguments:
-#   $1 - Message to log
-#
-# Example:
-#   log_debug "Checking path: $path"
-# ============================================================================
-log_debug() {
-    # Respect LOG_LEVEL
-    if ! _should_log $LOG_LEVEL_DEBUG; then
-        return 0
-    fi
-
-    local message="$1"
-    # Scrub secrets from message before logging
-    if command -v scrub_secrets >/dev/null 2>&1; then
-        message=$(scrub_secrets "$message")
-    fi
-
-    # Handle case where logging is not yet initialized
-    if [ -n "$CURRENT_LOG_FILE" ]; then
-        {
-            echo "[$(date '+%H:%M:%S')] DEBUG: $message"
-        } | command tee -a "$CURRENT_LOG_FILE"
-    else
-        # Logging not initialized yet, just print to stdout
-        echo "[$(date '+%H:%M:%S')] DEBUG: $message"
-    fi
-}
-
-# ============================================================================
-# log_error - Log an error message
-#
-# Arguments:
-#   $1 - Error message
-#
-# Example:
-#   log_error "Failed to download package"
-# ============================================================================
-log_error() {
-    local message="$1"
-    # Scrub secrets from message before logging
-    if command -v scrub_secrets >/dev/null 2>&1; then
-        message=$(scrub_secrets "$message")
-    fi
-
-    # Handle case where logging is not yet initialized
-    if [ -n "$CURRENT_LOG_FILE" ] && [ -n "$CURRENT_ERROR_FILE" ]; then
-        {
-            echo "[$(date '+%H:%M:%S')] ERROR: $message"
-        } | command tee -a "$CURRENT_LOG_FILE" >> "$CURRENT_ERROR_FILE"
-    else
-        # Logging not initialized yet, just print to stderr
-        echo "[$(date '+%H:%M:%S')] ERROR: $message" >&2
-    fi
-
-    ERROR_COUNT=$((ERROR_COUNT + 1))
-
-    # Log to JSON if enabled
-    if [ "${ENABLE_JSON_LOGGING:-false}" = "true" ] && command -v json_log_error >/dev/null 2>&1; then
-        json_log_error "$message"
-    fi
-}
-
-# ============================================================================
-# log_warning - Log a warning message (WARN level)
-#
-# Arguments:
-#   $1 - Warning message
-#
-# Example:
-#   log_warning "Package version might be outdated"
-# ============================================================================
-log_warning() {
-    # Respect LOG_LEVEL
-    if ! _should_log $LOG_LEVEL_WARN; then
-        return 0
-    fi
-
-    local message="$1"
-    # Scrub secrets from message before logging
-    if command -v scrub_secrets >/dev/null 2>&1; then
-        message=$(scrub_secrets "$message")
-    fi
-
-    # Handle case where logging is not yet initialized
-    if [ -n "$CURRENT_LOG_FILE" ] && [ -n "$CURRENT_ERROR_FILE" ]; then
-        {
-            echo "[$(date '+%H:%M:%S')] WARNING: $message"
-        } | command tee -a "$CURRENT_LOG_FILE" >> "$CURRENT_ERROR_FILE"
-    else
-        # Logging not initialized yet, just print to stderr
-        echo "[$(date '+%H:%M:%S')] WARNING: $message" >&2
-    fi
-
-    WARNING_COUNT=$((WARNING_COUNT + 1))
-
-    # Log to JSON if enabled
-    if [ "${ENABLE_JSON_LOGGING:-false}" = "true" ] && command -v json_log_warning >/dev/null 2>&1; then
-        json_log_warning "$message"
-    fi
-}
+# Message logging (log_message, log_info, log_debug, log_error, log_warning)
+# shellcheck source=lib/base/message-logging.sh
+if [ -f "/tmp/build-scripts/base/message-logging.sh" ]; then
+    source "/tmp/build-scripts/base/message-logging.sh"
+elif [ -f "$(dirname "${BASH_SOURCE[0]}")/message-logging.sh" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/message-logging.sh"
+fi
 
 # Source shared safe_eval function
 # shellcheck source=lib/shared/safe-eval.sh
@@ -488,7 +116,6 @@ elif [ -f "$(dirname "${BASH_SOURCE[0]}")/../shared/safe-eval.sh" ]; then
     source "$(dirname "${BASH_SOURCE[0]}")/../shared/safe-eval.sh"
 fi
 
-# Export functions for use in feature scripts
 # ============================================================================
 # log_feature_summary - Output user-friendly configuration summary
 #
@@ -622,6 +249,9 @@ log_feature_summary() {
     } | command tee -a "$CURRENT_LOG_FILE"
 }
 
+# ============================================================================
+# Export Declarations
+# ============================================================================
 protected_export log_feature_start log_command log_feature_end log_feature_summary
 protected_export log_message log_info log_debug log_error log_warning
 protected_export safe_eval _get_log_level_num _should_log

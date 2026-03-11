@@ -352,22 +352,25 @@ test_startup_metrics_output() {
 
 # Test: Exit handler function exists
 test_exit_handler_function() {
+    # cleanup_on_exit is defined in the exit-handlers.sh sub-module
+    local exit_handler="$PROJECT_ROOT/lib/runtime/lib/exit-handlers.sh"
+
     # Check that cleanup_on_exit function is defined
-    if command grep -q "^cleanup_on_exit()" "$PROJECT_ROOT/lib/runtime/entrypoint.sh"; then
+    if command grep -q "^cleanup_on_exit()" "$exit_handler"; then
         assert_true true "cleanup_on_exit function is defined"
     else
         assert_true false "cleanup_on_exit function not found"
     fi
 
     # Check that function captures exit code
-    if command grep -q "local exit_code=\$?" "$PROJECT_ROOT/lib/runtime/entrypoint.sh"; then
+    if command grep -q "local exit_code=\$?" "$exit_handler"; then
         assert_true true "Exit code is captured"
     else
         assert_true false "Exit code capture not found"
     fi
 
     # Check that exit code is preserved
-    if command grep -q "exit \$exit_code" "$PROJECT_ROOT/lib/runtime/entrypoint.sh"; then
+    if command grep -q "exit \$exit_code" "$exit_handler"; then
         assert_true true "Exit code is preserved"
     else
         assert_true false "Exit code preservation not found"
@@ -376,8 +379,10 @@ test_exit_handler_function() {
 
 # Test: Trap handlers are configured
 test_trap_handlers() {
-    # Check for trap handler setup
-    if command grep -q "trap cleanup_on_exit EXIT TERM INT" "$PROJECT_ROOT/lib/runtime/entrypoint.sh"; then
+    # Trap setup is in the exit-handlers.sh sub-module
+    local exit_handler="$PROJECT_ROOT/lib/runtime/lib/exit-handlers.sh"
+
+    if command grep -q "trap cleanup_on_exit EXIT TERM INT" "$exit_handler"; then
         assert_true true "Trap handlers are configured for EXIT TERM INT"
     else
         assert_true false "Trap handlers not configured"
@@ -386,15 +391,18 @@ test_trap_handlers() {
 
 # Test: Exit handler metrics cleanup
 test_exit_handler_metrics_cleanup() {
+    # Exit handler is in the exit-handlers.sh sub-module
+    local exit_handler="$PROJECT_ROOT/lib/runtime/lib/exit-handlers.sh"
+
     # Check that metrics directory is checked
-    if command grep -q "METRICS_DIR=" "$PROJECT_ROOT/lib/runtime/entrypoint.sh"; then
+    if command grep -q "METRICS_DIR=" "$exit_handler"; then
         assert_true true "Metrics directory is defined in cleanup"
     else
         assert_true false "Metrics directory not defined in cleanup"
     fi
 
     # Check for sync command to flush metrics
-    if command grep -q "sync" "$PROJECT_ROOT/lib/runtime/entrypoint.sh"; then
+    if command grep -q "sync" "$exit_handler"; then
         assert_true true "Sync command is used to flush data"
     else
         assert_true false "Sync command not found"
@@ -403,15 +411,18 @@ test_exit_handler_metrics_cleanup() {
 
 # Test: Exit handler logging
 test_exit_handler_logging() {
+    # Exit handler is in the exit-handlers.sh sub-module
+    local exit_handler="$PROJECT_ROOT/lib/runtime/lib/exit-handlers.sh"
+
     # Check for shutdown message
-    if command grep -q "Container shutting down" "$PROJECT_ROOT/lib/runtime/entrypoint.sh"; then
+    if command grep -q "Container shutting down" "$exit_handler"; then
         assert_true true "Shutdown message is logged"
     else
         assert_true false "Shutdown message not found"
     fi
 
     # Check for completion message
-    if command grep -q "Shutdown complete" "$PROJECT_ROOT/lib/runtime/entrypoint.sh"; then
+    if command grep -q "Shutdown complete" "$exit_handler"; then
         assert_true true "Completion message is logged"
     else
         assert_true false "Completion message not found"
@@ -420,8 +431,11 @@ test_exit_handler_logging() {
 
 # Test: Exit handler error handling
 test_exit_handler_error_handling() {
+    # Exit handler is in the exit-handlers.sh sub-module
+    local exit_handler="$PROJECT_ROOT/lib/runtime/lib/exit-handlers.sh"
+
     # Check that sync errors are handled gracefully
-    if command grep -q "sync.*|| true" "$PROJECT_ROOT/lib/runtime/entrypoint.sh"; then
+    if command grep -q "sync.*|| true" "$exit_handler"; then
         assert_true true "Sync errors are handled gracefully"
     else
         assert_true false "Sync error handling not found"
