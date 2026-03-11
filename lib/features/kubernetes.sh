@@ -70,10 +70,10 @@ source /tmp/build-scripts/base/path-utils.sh
 log_feature_start "Kubernetes Tools"
 
 # Version configuration
-KUBECTL_VERSION="${KUBECTL_VERSION:-1.33}"  # Can be major.minor or major.minor.patch
-K9S_VERSION="${K9S_VERSION:-0.50.16}"
-KREW_VERSION="${KREW_VERSION:-0.4.5}"
-HELM_VERSION="${HELM_VERSION:-3.19.0}"
+KUBECTL_VERSION="${KUBECTL_VERSION:-1.33.9}"  # Can be major.minor or major.minor.patch
+K9S_VERSION="${K9S_VERSION:-0.50.18}"
+KREW_VERSION="${KREW_VERSION:-0.5.0}"
+HELM_VERSION="${HELM_VERSION:-4.1.1}"
 
 # Extract major.minor version from KUBECTL_VERSION for repository URL
 # This handles both "1.31" and "1.31.0" formats

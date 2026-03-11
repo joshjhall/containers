@@ -43,59 +43,93 @@ update_version() {
             case "$tool" in
                 Python)
                     command sed -i "s/^ARG PYTHON_VERSION=.*/ARG PYTHON_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
+                    # Also update the fallback default in python.sh
+                    command sed -i "s/PYTHON_VERSION=\"\${PYTHON_VERSION:-[^}]*}\"/PYTHON_VERSION=\"\${PYTHON_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/python.sh"
                     ;;
                 Node.js)
                     command sed -i "s/^ARG NODE_VERSION=.*/ARG NODE_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
+                    # Also update the fallback default in node.sh
+                    command sed -i "s/NODE_VERSION=\"\${NODE_VERSION:-[^}]*}\"/NODE_VERSION=\"\${NODE_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/node.sh"
                     ;;
                 Go)
                     command sed -i "s/^ARG GO_VERSION=.*/ARG GO_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
+                    # Also update the fallback default in golang.sh
+                    command sed -i "s/GO_VERSION=\"\${GO_VERSION:-[^}]*}\"/GO_VERSION=\"\${GO_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/golang.sh"
                     ;;
                 Rust)
                     command sed -i "s/^ARG RUST_VERSION=.*/ARG RUST_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
+                    # Also update the fallback default in rust.sh
+                    command sed -i "s/RUST_VERSION=\"\${RUST_VERSION:-[^}]*}\"/RUST_VERSION=\"\${RUST_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/rust.sh"
                     ;;
                 Ruby)
                     command sed -i "s/^ARG RUBY_VERSION=.*/ARG RUBY_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
                     # Also update the fallback default in ruby.sh
-                    command sed -i "s/RUBY_VERSION=\"\${RUBY_VERSION:-.*}\"/RUBY_VERSION=\"\${RUBY_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/ruby.sh"
+                    command sed -i "s/RUBY_VERSION=\"\${RUBY_VERSION:-[^}]*}\"/RUBY_VERSION=\"\${RUBY_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/ruby.sh"
                     ;;
                 Java)
                     command sed -i "s/^ARG JAVA_VERSION=.*/ARG JAVA_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
+                    # Also update the fallback default in java.sh
+                    command sed -i "s/JAVA_VERSION=\"\${JAVA_VERSION:-[^}]*}\"/JAVA_VERSION=\"\${JAVA_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/java.sh"
                     ;;
                 R)
                     command sed -i "s/^ARG R_VERSION=.*/ARG R_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
+                    # Also update the fallback default in r.sh
+                    command sed -i "s/R_VERSION=\"\${R_VERSION:-[^}]*}\"/R_VERSION=\"\${R_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/r.sh"
                     ;;
                 Kotlin)
                     command sed -i "s/^ARG KOTLIN_VERSION=.*/ARG KOTLIN_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
+                    # Also update the fallback default in kotlin.sh
+                    command sed -i "s/KOTLIN_VERSION=\"\${KOTLIN_VERSION:-[^}]*}\"/KOTLIN_VERSION=\"\${KOTLIN_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/kotlin.sh"
                     ;;
                 android-cmdline-tools)
                     command sed -i "s/^ARG ANDROID_CMDLINE_TOOLS_VERSION=.*/ARG ANDROID_CMDLINE_TOOLS_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
+                    # Also update the fallback default in android.sh
+                    command sed -i "s/ANDROID_CMDLINE_TOOLS_VERSION=\"\${ANDROID_CMDLINE_TOOLS_VERSION:-[^}]*}\"/ANDROID_CMDLINE_TOOLS_VERSION=\"\${ANDROID_CMDLINE_TOOLS_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/android.sh"
                     ;;
                 android-ndk)
                     command sed -i "s/^ARG ANDROID_NDK_VERSION=.*/ARG ANDROID_NDK_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
+                    # Also update the fallback default in android.sh
+                    command sed -i "s/ANDROID_NDK_VERSION=\"\${ANDROID_NDK_VERSION:-[^}]*}\"/ANDROID_NDK_VERSION=\"\${ANDROID_NDK_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/android.sh"
                     ;;
                 kubectl)
                     command sed -i "s/^ARG KUBECTL_VERSION=.*/ARG KUBECTL_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
+                    # Also update the fallback default in kubernetes.sh
+                    command sed -i "s/KUBECTL_VERSION=\"\${KUBECTL_VERSION:-[^}]*}\"/KUBECTL_VERSION=\"\${KUBECTL_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/kubernetes.sh"
                     ;;
                 k9s)
                     command sed -i "s/^ARG K9S_VERSION=.*/ARG K9S_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
+                    # Also update the fallback default in kubernetes.sh
+                    command sed -i "s/K9S_VERSION=\"\${K9S_VERSION:-[^}]*}\"/K9S_VERSION=\"\${K9S_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/kubernetes.sh"
                     ;;
                 krew)
                     command sed -i "s/^ARG KREW_VERSION=.*/ARG KREW_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
+                    # Also update the fallback default in kubernetes.sh
+                    command sed -i "s/KREW_VERSION=\"\${KREW_VERSION:-[^}]*}\"/KREW_VERSION=\"\${KREW_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/kubernetes.sh"
                     ;;
                 Helm)
                     command sed -i "s/^ARG HELM_VERSION=.*/ARG HELM_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
+                    # Also update the fallback default in kubernetes.sh
+                    command sed -i "s/HELM_VERSION=\"\${HELM_VERSION:-[^}]*}\"/HELM_VERSION=\"\${HELM_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/kubernetes.sh"
                     ;;
                 Terragrunt)
                     command sed -i "s/^ARG TERRAGRUNT_VERSION=.*/ARG TERRAGRUNT_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
+                    # Also update the fallback default in terraform.sh
+                    command sed -i "s/TERRAGRUNT_VERSION=\"\${TERRAGRUNT_VERSION:-[^}]*}\"/TERRAGRUNT_VERSION=\"\${TERRAGRUNT_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/terraform.sh"
                     ;;
                 terraform-docs)
                     command sed -i "s/^ARG TFDOCS_VERSION=.*/ARG TFDOCS_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
+                    # Also update the fallback default in terraform.sh
+                    command sed -i "s/TFDOCS_VERSION=\"\${TFDOCS_VERSION:-[^}]*}\"/TFDOCS_VERSION=\"\${TFDOCS_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/terraform.sh"
                     ;;
                 tflint)
                     command sed -i "s/^ARG TFLINT_VERSION=.*/ARG TFLINT_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
+                    # Also update the fallback default in terraform.sh
+                    command sed -i "s/TFLINT_VERSION=\"\${TFLINT_VERSION:-[^}]*}\"/TFLINT_VERSION=\"\${TFLINT_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/terraform.sh"
                     ;;
                 pixi)
                     command sed -i "s/^ARG PIXI_VERSION=.*/ARG PIXI_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
+                    # Also update the fallback default in mojo.sh
+                    command sed -i "s/PIXI_VERSION=\"\${PIXI_VERSION:-[^}]*}\"/PIXI_VERSION=\"\${PIXI_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/mojo.sh"
                     ;;
                 *)
                     echo -e "${YELLOW}    Warning: Unknown Dockerfile tool: $tool${NC}"
