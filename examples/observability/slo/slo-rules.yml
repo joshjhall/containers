@@ -1,0 +1,294 @@
+# SLO Recording Rules and Error Budget Alerts
+#
+# Implements multi-window, multi-burn-rate alerting based on the
+# Google SRE book pattern (Chapter 5: Alerting on SLOs).
+#
+# SLO Targets (customize in the recording rules below):
+#   - Container availability: 99.9% (43.2 min/month error budget)
+#   - Build success rate: 99.5% (3.6 hours/month error budget)
+#   - Healthcheck latency: 99% within 5s (7.2 hours/month error budget)
+#
+# Load this file in Prometheus configuration:
+#   rule_files:
+#     - "slo-rules.yml"
+
+groups:
+  # ============================================================================
+  # SLI Recording Rules
+  # ============================================================================
+  - name: sli_recording
+    interval: 30s
+    rules:
+      # Container availability SLI (ratio of healthy checks to total checks)
+      - record: sli:container_availability:ratio_rate5m
+        expr: |
+          avg_over_time(container_healthcheck_status[5m])
+
+      - record: sli:container_availability:ratio_rate30m
+        expr: |
+          avg_over_time(container_healthcheck_status[30m])
+
+      - record: sli:container_availability:ratio_rate1h
+        expr: |
+          avg_over_time(container_healthcheck_status[1h])
+
+      - record: sli:container_availability:ratio_rate6h
+        expr: |
+          avg_over_time(container_healthcheck_status[6h])
+
+      - record: sli:container_availability:ratio_rate1d
+        expr: |
+          avg_over_time(container_healthcheck_status[1d])
+
+      - record: sli:container_availability:ratio_rate3d
+        expr: |
+          avg_over_time(container_healthcheck_status[3d])
+
+      # Build success SLI (ratio of successful builds)
+      - record: sli:build_success:ratio_rate1h
+        expr: |
+          1 - (
+            sum(rate(container_build_errors_total[1h]))
+            /
+            clamp_min(sum(rate(container_build_errors_total[1h])) + sum(rate(container_build_duration_seconds_count[1h])), 1)
+          )
+
+      - record: sli:build_success:ratio_rate6h
+        expr: |
+          1 - (
+            sum(rate(container_build_errors_total[6h]))
+            /
+            clamp_min(sum(rate(container_build_errors_total[6h])) + sum(rate(container_build_duration_seconds_count[6h])), 1)
+          )
+
+      - record: sli:build_success:ratio_rate1d
+        expr: |
+          1 - (
+            sum(rate(container_build_errors_total[1d]))
+            /
+            clamp_min(sum(rate(container_build_errors_total[1d])) + sum(rate(container_build_duration_seconds_count[1d])), 1)
+          )
+
+      - record: sli:build_success:ratio_rate3d
+        expr: |
+          1 - (
+            sum(rate(container_build_errors_total[3d]))
+            /
+            clamp_min(sum(rate(container_build_errors_total[3d])) + sum(rate(container_build_duration_seconds_count[3d])), 1)
+          )
+
+      # Healthcheck latency SLI (ratio under 5s threshold)
+      - record: sli:healthcheck_latency:ratio_rate5m
+        expr: |
+          (
+            sum(rate(container_healthcheck_duration_seconds_bucket{le="5"}[5m]))
+            /
+            clamp_min(sum(rate(container_healthcheck_duration_seconds_count[5m])), 1)
+          )
+
+      - record: sli:healthcheck_latency:ratio_rate1h
+        expr: |
+          (
+            sum(rate(container_healthcheck_duration_seconds_bucket{le="5"}[1h]))
+            /
+            clamp_min(sum(rate(container_healthcheck_duration_seconds_count[1h])), 1)
+          )
+
+      - record: sli:healthcheck_latency:ratio_rate6h
+        expr: |
+          (
+            sum(rate(container_healthcheck_duration_seconds_bucket{le="5"}[6h]))
+            /
+            clamp_min(sum(rate(container_healthcheck_duration_seconds_count[6h])), 1)
+          )
+
+  # ============================================================================
+  # Error Budget Recording Rules
+  # ============================================================================
+  - name: error_budget_recording
+    interval: 60s
+    rules:
+      # Error budget remaining (30-day window)
+      # Budget = 1 - ((1 - SLI_over_period) / (1 - SLO_target))
+      - record: error_budget:container_availability:remaining
+        expr: |
+          1 - (
+            (1 - avg_over_time(container_healthcheck_status[30d]))
+            /
+            (1 - 0.999)
+          )
+
+      - record: error_budget:build_success:remaining
+        expr: |
+          1 - (
+            (1 - sli:build_success:ratio_rate1d)
+            /
+            (1 - 0.995)
+          )
+
+  # ============================================================================
+  # Multi-Window, Multi-Burn-Rate Alerts
+  # ============================================================================
+  # Burn rate = how fast the error budget is being consumed relative to the
+  # SLO period (30 days). A burn rate of 1 means the budget runs out exactly
+  # at the end of the period. Higher burn rates trigger faster alerts.
+  #
+  # Windows and burn rates (from Google SRE):
+  #   - 14.4x burn rate, 5m/1h windows  -> 2% budget in 1h   (page)
+  #   - 6x burn rate,    30m/6h windows  -> 5% budget in 6h   (page)
+  #   - 1x burn rate,    6h/3d windows   -> 10% budget in 3d  (ticket)
+  - name: slo_burn_rate_alerts
+    interval: 30s
+    rules:
+      # --- Container Availability SLO: 99.9% ---
+
+      # Fast burn: 14.4x in short window (page immediately)
+      - alert: SLOAvailabilityBurnRateCritical
+        expr: |
+          (
+            sli:container_availability:ratio_rate5m < (1 - 14.4 * 0.001)
+            and
+            sli:container_availability:ratio_rate1h < (1 - 14.4 * 0.001)
+          )
+        for: 2m
+        labels:
+          severity: critical
+          component: slo
+          slo: container-availability
+        annotations:
+          summary: "Container availability SLO burning error budget too fast"
+          description: >-
+            Container availability is consuming error budget at 14.4x the
+            sustainable rate. At this rate, the 30-day error budget will be
+            exhausted in ~2 days. Current 5m availability:
+            {{ $value | humanizePercentage }}.
+          runbook_url: "https://github.com/yourorg/containers/blob/main/docs/observability/runbooks/container-unhealthy.md"
+
+      # Medium burn: 6x over longer window (page)
+      - alert: SLOAvailabilityBurnRateHigh
+        expr: |
+          (
+            sli:container_availability:ratio_rate30m < (1 - 6 * 0.001)
+            and
+            sli:container_availability:ratio_rate6h < (1 - 6 * 0.001)
+          )
+        for: 5m
+        labels:
+          severity: critical
+          component: slo
+          slo: container-availability
+        annotations:
+          summary: "Container availability SLO burn rate elevated"
+          description: >-
+            Container availability error budget burn rate is 6x sustainable.
+            At this rate, the 30-day budget will be exhausted in ~5 days.
+          runbook_url: "https://github.com/yourorg/containers/blob/main/docs/observability/runbooks/container-unhealthy.md"
+
+      # Slow burn: 1x over multi-day window (ticket)
+      - alert: SLOAvailabilityBurnRateSlow
+        expr: |
+          (
+            sli:container_availability:ratio_rate6h < (1 - 1 * 0.001)
+            and
+            sli:container_availability:ratio_rate3d < (1 - 1 * 0.001)
+          )
+        for: 30m
+        labels:
+          severity: warning
+          component: slo
+          slo: container-availability
+        annotations:
+          summary: "Container availability SLO slowly degrading"
+          description: >-
+            Container availability is steadily consuming error budget.
+            At this rate, the budget will be exhausted before the 30-day
+            window ends.
+          runbook_url: "https://github.com/yourorg/containers/blob/main/docs/observability/runbooks/container-unhealthy.md"
+
+      # --- Build Success SLO: 99.5% ---
+
+      # Fast burn: 14.4x
+      - alert: SLOBuildSuccessBurnRateCritical
+        expr: |
+          (
+            sli:build_success:ratio_rate1h < (1 - 14.4 * 0.005)
+            and
+            sli:build_success:ratio_rate6h < (1 - 14.4 * 0.005)
+          )
+        for: 5m
+        labels:
+          severity: critical
+          component: slo
+          slo: build-success
+        annotations:
+          summary: "Build success SLO burning error budget too fast"
+          description: >-
+            Build success rate is consuming error budget at 14.4x the
+            sustainable rate. Current 1h success rate:
+            {{ $value | humanizePercentage }}.
+          runbook_url: "https://github.com/yourorg/containers/blob/main/docs/observability/runbooks/build-failed.md"
+
+      # Slow burn: 1x
+      - alert: SLOBuildSuccessBurnRateSlow
+        expr: |
+          (
+            sli:build_success:ratio_rate1d < (1 - 1 * 0.005)
+            and
+            sli:build_success:ratio_rate3d < (1 - 1 * 0.005)
+          )
+        for: 1h
+        labels:
+          severity: warning
+          component: slo
+          slo: build-success
+        annotations:
+          summary: "Build success SLO slowly degrading"
+          description: >-
+            Build success rate is steadily consuming error budget over the
+            past 3 days.
+          runbook_url: "https://github.com/yourorg/containers/blob/main/docs/observability/runbooks/build-failed.md"
+
+      # --- Error Budget Exhaustion ---
+
+      - alert: ErrorBudgetAvailabilityExhausted
+        expr: error_budget:container_availability:remaining < 0
+        for: 5m
+        labels:
+          severity: critical
+          component: slo
+          slo: container-availability
+        annotations:
+          summary: "Container availability error budget exhausted"
+          description: >-
+            The 30-day error budget for container availability (99.9% SLO)
+            has been fully consumed. All availability incidents are now
+            exceeding the SLO target. Prioritize reliability work.
+          runbook_url: "https://github.com/yourorg/containers/blob/main/docs/observability/runbooks/container-unhealthy.md"
+
+      - alert: ErrorBudgetAvailabilityLow
+        expr: error_budget:container_availability:remaining < 0.2
+        for: 30m
+        labels:
+          severity: warning
+          component: slo
+          slo: container-availability
+        annotations:
+          summary: "Container availability error budget below 20%"
+          description: >-
+            Only {{ $value | humanizePercentage }} of the 30-day error budget
+            remains. Consider reducing change velocity and focusing on
+            reliability improvements.
+
+      - alert: ErrorBudgetBuildExhausted
+        expr: error_budget:build_success:remaining < 0
+        for: 5m
+        labels:
+          severity: critical
+          component: slo
+          slo: build-success
+        annotations:
+          summary: "Build success error budget exhausted"
+          description: >-
+            The 30-day error budget for build success (99.5% SLO) has been
+            fully consumed. Investigate systemic build failures.
+          runbook_url: "https://github.com/yourorg/containers/blob/main/docs/observability/runbooks/build-failed.md"

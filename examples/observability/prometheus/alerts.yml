@@ -273,37 +273,114 @@ groups:
             https://github.com/yourorg/containers/blob/main/docs/
             observability/runbooks/fleet-build-failure-rate.md
 
+  # ============================================================================
+  # Production Alerts
+  # ============================================================================
+  - name: container_production
+    interval: 30s
+    rules:
+      - alert: ContainerOOMKilled
+        expr: |
+          increase(container_oom_kills_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: critical
+          component: runtime
+        annotations:
+          summary: "Container killed by OOM"
+          description: >-
+            Container {{ $labels.instance }} was killed due to out-of-memory.
+            Increase memory limits or investigate memory leaks.
+          runbook_url: "https://github.com/yourorg/containers/blob/main/docs/observability/runbooks/container-unhealthy.md"
+
+      - alert: HighContainerErrorRate
+        expr: |
+          (
+            rate(container_errors_total[5m])
+            /
+            clamp_min(rate(container_requests_total[5m]), 1)
+          ) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+          component: runtime
+        annotations:
+          summary: "High container error rate"
+          description: >-
+            Container {{ $labels.instance }} error rate is
+            {{ $value | humanizePercentage }} (threshold: 5%).
+            Investigate application logs for recurring errors.
+          runbook_url: "https://github.com/yourorg/containers/blob/main/docs/observability/runbooks/container-unhealthy.md"
+
+      - alert: HighAuthFailureRate
+        expr: |
+          (
+            rate(container_auth_failures_total[10m])
+            /
+            clamp_min(rate(container_auth_attempts_total[10m]), 1)
+          ) > 0.3
+        for: 5m
+        labels:
+          severity: critical
+          component: security
+        annotations:
+          summary: "High authentication failure rate"
+          description: >-
+            Authentication failure rate is {{ $value | humanizePercentage }}
+            (threshold: 30%). This may indicate a brute-force attack or
+            misconfigured credentials.
+          runbook_url: "https://github.com/yourorg/containers/blob/main/docs/observability/runbooks/container-unhealthy.md"
+
+      - alert: SecurityPolicyViolation
+        expr: container_security_violations_total > 0
+        for: 1m
+        labels:
+          severity: critical
+          component: security
+        annotations:
+          summary: "Security policy violation detected"
+          description: >-
+            {{ $value }} security policy violations detected on
+            {{ $labels.instance }}. Review audit logs immediately.
+          runbook_url: "https://github.com/yourorg/containers/blob/main/docs/observability/runbooks/container-unhealthy.md"
+
+      - alert: CertificateExpiringSoon
+        expr: |
+          (
+            container_certificate_expiry_seconds - time()
+          ) < 604800
+        for: 1h
+        labels:
+          severity: warning
+          component: security
+        annotations:
+          summary: "TLS certificate expiring soon"
+          description: >-
+            Certificate for {{ $labels.domain }} on {{ $labels.instance }}
+            expires in {{ $value | humanizeDuration }}. Renew before expiry
+            to avoid service disruption.
+          runbook_url: "https://github.com/yourorg/containers/blob/main/docs/observability/runbooks/container-unhealthy.md"
+
+      - alert: HighRequestLatencyP95
+        expr: |
+          histogram_quantile(0.95,
+            rate(container_request_duration_seconds_bucket[5m])
+          ) > 5
+        for: 10m
+        labels:
+          severity: warning
+          component: performance
+        annotations:
+          summary: "High P95 request latency"
+          description: >-
+            P95 request latency is {{ $value }}s (threshold: 5s) on
+            {{ $labels.instance }}. Investigate slow endpoints or
+            resource contention.
+          runbook_url: "https://github.com/yourorg/containers/blob/main/docs/observability/runbooks/healthcheck-slow.md"
+
 # ============================================================================
-# Alert Routing Examples (for Alertmanager)
+# Alert Routing
 # ============================================================================
-# Add to alertmanager.yml:
-#
-# route:
-#   group_by: ['alertname', 'component']
-#   group_wait: 10s
-#   group_interval: 10s
-#   repeat_interval: 12h
-#   receiver: 'default'
-#   routes:
-#     - match:
-#         severity: critical
-#       receiver: 'pagerduty'
-#       continue: true
-#     - match:
-#         severity: warning
-#       receiver: 'slack'
-#     - match:
-#         severity: info
-#       receiver: 'email'
-#
-# receivers:
-#   - name: 'default'
-#     email_configs:
-#       - to: 'team@example.com'
-#   - name: 'slack'
-#     slack_configs:
-#       - channel: '#container-alerts'
-#         api_url: 'https://hooks.slack.com/services/...'
-#   - name: 'pagerduty'
-#     pagerduty_configs:
-#       - service_key: 'your-pagerduty-key'
+# Alertmanager routing is configured in alertmanager/config.yml.
+# See examples/observability/alertmanager/config.yml for the full
+# route tree, receivers, and inhibition rules.

@@ -29,12 +29,34 @@ services:
       - "--storage.tsdb.retention.time=15d"
       - "--web.console.libraries=/usr/share/prometheus/console_libraries"
       - "--web.console.templates=/usr/share/prometheus/consoles"
+      - "--web.external-url=http://localhost:9090"
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - ./slo/slo-rules.yml:/etc/prometheus/slo-rules.yml:ro
       - prometheus-data:/prometheus
+    depends_on:
+      - alertmanager
     ports:
       - "9090:9090"
+    networks:
+      - observability
+    restart: unless-stopped
+
+  # ============================================================================
+  # Alert Management
+  # ============================================================================
+  alertmanager:
+    image: prom/alertmanager:latest
+    container_name: alertmanager
+    command:
+      - "--config.file=/etc/alertmanager/config.yml"
+      - "--storage.path=/alertmanager"
+    volumes:
+      - ./alertmanager/config.yml:/etc/alertmanager/config.yml:ro
+      - alertmanager-data:/alertmanager
+    ports:
+      - "9093:9093"
     networks:
       - observability
     restart: unless-stopped
@@ -187,6 +209,7 @@ networks:
 
 volumes:
   prometheus-data:
+  alertmanager-data:
   grafana-data:
   loki-data:
   container-workspace:

@@ -9,16 +9,17 @@ global:
     cluster: "dev"
     monitor: "container-observability"
 
-# Alertmanager configuration (optional)
-# alerting:
-#   alertmanagers:
-#     - static_configs:
-#         - targets:
-#             - alertmanager:9093
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - alertmanager:9093
 
-# Load alerting rules
+# Load alerting rules and SLO recording rules
 rule_files:
   - "/etc/prometheus/alerts.yml"
+  - "/etc/prometheus/slo-rules.yml"
 
 scrape_configs:
   # Prometheus self-monitoring
