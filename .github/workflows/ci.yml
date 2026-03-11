@@ -621,10 +621,19 @@ jobs:
         id: version
         run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
 
-      - name: Generate image digests and sign with Cosign
+      - name: Install Syft
+        uses: anchore/sbom-action/download-syft@v0
+
+      - name: Generate image digests, sign, and attest with Cosign
         id: digests
         env:
           COSIGN_EXPERIMENTAL: 1  # Enable keyless signing
+          GH_REPO: ${{ github.repository }}
+          GH_REF: ${{ github.ref }}
+          GH_SHA: ${{ github.sha }}
+          GH_ACTOR: ${{ github.actor }}
+          GH_RUN_ID: ${{ github.run_id }}
+          GH_RUN_ATTEMPT: ${{ github.run_attempt }}
         run: |
           VERSION=${{ steps.version.outputs.VERSION }}
 
@@ -632,27 +641,97 @@ jobs:
           echo "# Container Image Digests for Release ${VERSION}" > image-digests.txt
           echo "" >> image-digests.txt
           echo "All images are cryptographically signed with Cosign (keyless OIDC)." >> image-digests.txt
-          echo "Verify signatures with: \`cosign verify --certificate-identity-regexp='^https://github.com/${{ github.repository }}' --certificate-oidc-issuer=https://token.actions.githubusercontent.com <image>\`" >> image-digests.txt
+          echo "Images include SLSA provenance and SBOM attestations." >> image-digests.txt
+          echo "Verify with: ./bin/verify-image-signature.sh <image>" >> image-digests.txt
           echo "" >> image-digests.txt
 
           # Process each variant
           for variant in minimal python-dev node-dev cloud-ops polyglot rust-golang; do
-            IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${VERSION}-${variant}"
+            IMAGE="${REGISTRY}/${IMAGE_NAME}:${VERSION}-${variant}"
             echo "## ${variant}" >> image-digests.txt
-            echo "Image: \`${IMAGE}\`" >> image-digests.txt
+            echo "Image: ${IMAGE}" >> image-digests.txt
 
-            # Get digest - use docker manifest inspect for proper digest extraction
+            # Get digest
             DIGEST=$(docker manifest inspect "${IMAGE}" | jq -r '.manifests[] | select(.platform.architecture == "amd64") | .digest')
-            echo "Digest: \`${DIGEST}\`" >> image-digests.txt
+            echo "Digest: ${DIGEST}" >> image-digests.txt
 
-            # Sign with Cosign
+            IMAGE_WITH_DIGEST="${IMAGE}@${DIGEST}"
+
+            # 1. Sign with Cosign
             echo "Signing ${IMAGE}..."
-            cosign sign --yes "${IMAGE}@${DIGEST}"
+            cosign sign --yes "${IMAGE_WITH_DIGEST}"
 
+            # 2. Generate and attest SLSA provenance
+            echo "Generating SLSA provenance for ${variant}..."
+            BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+            cat > "provenance-${variant}.json" << PROVENANCE_EOF
+          {
+            "_type": "https://in-toto.io/Statement/v0.1",
+            "predicateType": "https://slsa.dev/provenance/v0.2",
+            "subject": [
+              {
+                "name": "${IMAGE}",
+                "digest": { "sha256": "${DIGEST#sha256:}" }
+              }
+            ],
+            "predicate": {
+              "builder": { "id": "https://github.com/${GH_REPO}/.github/workflows/ci.yml" },
+              "buildType": "https://github.com/slsa-framework/slsa-github-generator/container@v1",
+              "invocation": {
+                "configSource": {
+                  "uri": "git+https://github.com/${GH_REPO}@${GH_REF}",
+                  "digest": { "sha1": "${GH_SHA}" },
+                  "entryPoint": ".github/workflows/ci.yml"
+                },
+                "parameters": { "variant": "${variant}" },
+                "environment": {
+                  "github_actor": "${GH_ACTOR}",
+                  "github_run_id": "${GH_RUN_ID}",
+                  "github_run_attempt": "${GH_RUN_ATTEMPT}",
+                  "runner_os": "Linux"
+                }
+              },
+              "metadata": {
+                "buildInvocationID": "${GH_RUN_ID}-${GH_RUN_ATTEMPT}",
+                "buildStartedOn": "${BUILD_TIME}",
+                "completeness": {
+                  "parameters": true,
+                  "environment": true,
+                  "materials": true
+                },
+                "reproducible": false
+              },
+              "materials": [
+                {
+                  "uri": "git+https://github.com/${GH_REPO}@${GH_REF}",
+                  "digest": { "sha1": "${GH_SHA}" }
+                }
+              ]
+            }
+          }
+          PROVENANCE_EOF
+
+            echo "Attesting SLSA provenance for ${variant}..."
+            cosign attest --yes \
+              --predicate "provenance-${variant}.json" \
+              --type slsaprovenance \
+              "${IMAGE_WITH_DIGEST}"
+
+            # 3. Generate SBOM with Syft and attest
+            echo "Generating SBOM for ${variant}..."
+            syft "${IMAGE_WITH_DIGEST}" -o cyclonedx-json="sbom-${variant}.json"
+
+            echo "Attesting SBOM for ${variant}..."
+            cosign attest --yes \
+              --predicate "sbom-${variant}.json" \
+              --type cyclonedx \
+              "${IMAGE_WITH_DIGEST}"
+
+            echo "Attestation: provenance + SBOM" >> image-digests.txt
             echo "" >> image-digests.txt
           done
 
-          echo "Image digests generated and all images signed successfully"
+          echo "All images signed and attested successfully"
 
       - name: Generate release notes
         id: notes

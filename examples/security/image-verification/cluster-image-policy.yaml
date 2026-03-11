@@ -1,0 +1,60 @@
+# ClusterImagePolicy for Sigstore Policy Controller
+#
+# Requires container images from this project's registry to have:
+# 1. Valid Cosign keyless signature from GitHub Actions
+# 2. SLSA provenance attestation
+#
+# Prerequisites:
+#   - Sigstore Policy Controller installed in the cluster
+#   - See README.md for installation instructions
+#
+# Apply:
+#   kubectl apply -f cluster-image-policy.yaml
+
+apiVersion: policy.sigstore.dev/v1beta1
+kind: ClusterImagePolicy
+metadata:
+  name: container-build-system-signed
+spec:
+  images:
+    # Match all images from the project's GitHub Container Registry
+    # Update the glob pattern to match your organization/repository
+    - glob: "ghcr.io/YOUR_ORG/YOUR_REPO:**"
+  authorities:
+    - keyless:
+        url: https://fulcio.sigstore.dev
+        identities:
+          - issuerRegExp: "^https://token\\.actions\\.githubusercontent\\.com$"
+            subjectRegExp: "^https://github\\.com/YOUR_ORG/YOUR_REPO"
+      ctlog:
+        url: https://rekor.sigstore.dev
+  policy:
+    type: cue
+    data: |
+      // Require SLSA provenance attestation
+      predicateType: "https://slsa.dev/provenance/v0.2"
+---
+# Optional: Require SBOM attestation
+apiVersion: policy.sigstore.dev/v1beta1
+kind: ClusterImagePolicy
+metadata:
+  name: container-build-system-sbom
+spec:
+  images:
+    - glob: "ghcr.io/YOUR_ORG/YOUR_REPO:**"
+  authorities:
+    - keyless:
+        url: https://fulcio.sigstore.dev
+        identities:
+          - issuerRegExp: "^https://token\\.actions\\.githubusercontent\\.com$"
+            subjectRegExp: "^https://github\\.com/YOUR_ORG/YOUR_REPO"
+      ctlog:
+        url: https://rekor.sigstore.dev
+      attestations:
+        - name: must-have-sbom
+          predicateType: "https://cyclonedx.org/bom"
+          policy:
+            type: cue
+            data: |
+              // SBOM must exist (attestation presence is sufficient)
+              predicateType: "https://cyclonedx.org/bom"

@@ -1,0 +1,38 @@
+# Cosign Policy File for Local Verification
+#
+# Used with `cosign verify --policy` for local image verification.
+# This policy ensures images are signed by the project's GitHub Actions
+# workflow using keyless OIDC signing.
+#
+# Usage:
+#   cosign verify \
+#     --certificate-identity-regexp='^https://github.com/YOUR_ORG/YOUR_REPO' \
+#     --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
+#     ghcr.io/YOUR_ORG/YOUR_REPO:tag
+#
+# For attestation verification:
+#   cosign verify-attestation \
+#     --certificate-identity-regexp='^https://github.com/YOUR_ORG/YOUR_REPO' \
+#     --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
+#     --type=slsaprovenance \
+#     ghcr.io/YOUR_ORG/YOUR_REPO:tag
+
+# Trusted identities for keyless verification
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cosign-verification-policy
+data:
+  # OIDC issuer for GitHub Actions
+  issuer: "https://token.actions.githubusercontent.com"
+
+  # Certificate identity pattern (GitHub Actions workflow)
+  # Update to match your organization and repository
+  identity-regexp: "^https://github.com/YOUR_ORG/YOUR_REPO"
+
+  # Required attestation types
+  attestations: |
+    - predicateType: https://slsa.dev/provenance/v0.2
+      required: true
+    - predicateType: https://cyclonedx.org/bom
+      required: true
