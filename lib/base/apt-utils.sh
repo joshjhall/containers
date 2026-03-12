@@ -365,7 +365,9 @@ _apt_install_on_retry() {
 
     if [ "$exit_code" -eq "$APT_NETWORK_ERROR_CODE" ]; then
         echo "  Network connectivity issue detected"
-        echo "  Attempting to refresh package lists..."
+        echo "  Cleaning apt cache and refreshing package lists..."
+        apt-get clean || true
+        command rm -rf /var/cache/apt/archives/partial/* || true
         apt-get update -qq || true
     fi
 }
@@ -406,7 +408,7 @@ apt_install() {
     DEBIAN_FRONTEND=noninteractive apt_retry \
         --retry-hook _apt_install_on_retry \
         -- \
-        apt-get install -y --no-install-recommends \
+        apt-get install -y --no-install-recommends --fix-missing \
             -o Acquire::http::Timeout=${APT_ACQUIRE_TIMEOUT} \
             -o Acquire::https::Timeout=${APT_ACQUIRE_TIMEOUT} \
             -o Acquire::ftp::Timeout=${APT_ACQUIRE_TIMEOUT} \
