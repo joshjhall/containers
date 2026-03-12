@@ -154,7 +154,14 @@ _install_r_from_cran() {
             r-recommended || return 1
 }
 
-if ! _install_r_from_cran; then
+# Temporarily disable set -e so the fallback path can execute if CRAN fails.
+# set -e exits at the first failed command in the call chain (inside apt_retry),
+# preventing the function from returning non-zero to the if-! check.
+set +e
+_install_r_from_cran
+_cran_exit_code=$?
+set -e
+if [ "$_cran_exit_code" -ne 0 ]; then
     log_warning "CRAN repository install failed (mirror sync issue?), falling back to Debian packages"
     # Remove CRAN source to avoid broken mirror, clean up any broken state
     command rm -f /etc/apt/sources.list.d/r-cran.list
