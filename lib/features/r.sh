@@ -130,23 +130,42 @@ apt_update
 
 # Install R with version pinning
 log_message "Installing R packages..."
-if apt-cache show r-base-core | command grep -q "Version: ${R_VERSION}"; then
-    # Install specific version if available
-    log_message "Installing R version ${R_VERSION}..."
-    if ! apt_install \
-            r-base-core="${R_VERSION}"-* \
-            r-base-dev="${R_VERSION}"-* \
-            r-recommended="${R_VERSION}"-*; then
-        log_warning "Exact version ${R_VERSION} not found, installing latest available"
-        log_message "Installing latest R version..."
-        apt_install \
-                r-base \
-                r-base-dev \
-                r-recommended
+
+# _install_r_from_cran - Attempt to install R from CRAN repository
+# Returns 0 on success, 1 on failure
+_install_r_from_cran() {
+    if apt-cache show r-base-core | command grep -q "Version: ${R_VERSION}"; then
+        # Install specific version if available
+        log_message "Installing R version ${R_VERSION}..."
+        if apt_install \
+                r-base-core="${R_VERSION}"-* \
+                r-base-dev="${R_VERSION}"-* \
+                r-recommended="${R_VERSION}"-*; then
+            return 0
+        fi
+        log_warning "Exact version ${R_VERSION} not found, trying latest from CRAN..."
     fi
-else
-    log_warning "Version ${R_VERSION} not available, installing latest from repository"
-    log_message "Installing latest R version from repository..."
+    log_message "Installing latest R version from CRAN repository..."
+    apt_install \
+            r-base \
+            r-base-dev \
+            r-recommended
+}
+
+if ! _install_r_from_cran; then
+    log_warning "CRAN repository install failed (mirror sync issue?), falling back to Debian packages"
+    # Remove CRAN source to avoid broken mirror, clean up any broken state
+    command rm -f /etc/apt/sources.list.d/r-cran.list
+    dpkg --configure -a 2>/dev/null || true
+    DEBIAN_FRONTEND=noninteractive apt-get --fix-broken install -y 2>/dev/null || true
+    # Purge any half-installed R packages so we start fresh
+    dpkg -l | command grep -E '^i[UFH].*\br-' | command awk '{print $2}' | while read -r pkg; do
+        dpkg --purge --force-remove-reinstreq "$pkg" 2>/dev/null || true
+    done
+    dpkg --configure -a 2>/dev/null || true
+    apt-get clean || true
+    apt_update
+    log_message "Installing R from Debian repositories..."
     apt_install \
             r-base \
             r-base-dev \
