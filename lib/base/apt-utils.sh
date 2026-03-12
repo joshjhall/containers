@@ -365,9 +365,14 @@ _apt_install_on_retry() {
 
     if [ "$exit_code" -eq "$APT_NETWORK_ERROR_CODE" ]; then
         echo "  Network connectivity issue detected"
-        echo "  Cleaning apt cache and refreshing package lists..."
+        echo "  Recovering dpkg and apt state before retry..."
+        # Fix any half-configured packages from the failed attempt
+        dpkg --configure -a 2>/dev/null || true
+        DEBIAN_FRONTEND=noninteractive apt-get --fix-broken install -y 2>/dev/null || true
+        # Clean cached archives so stale/mismatched files are re-fetched
         apt-get clean || true
         command rm -rf /var/cache/apt/archives/partial/* || true
+        # Refresh package lists to pick up any mirror sync changes
         apt-get update -qq || true
     fi
 }
