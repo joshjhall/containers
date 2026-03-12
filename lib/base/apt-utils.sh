@@ -368,12 +368,15 @@ _apt_install_on_retry() {
         echo "  Recovering dpkg and apt state before retry..."
         # Fix any half-configured packages from the failed attempt
         dpkg --configure -a 2>/dev/null || true
-        # Try to fix broken dependencies; if this fails (e.g. mirror still broken),
-        # remove all half-installed packages so the next attempt starts clean
-        if ! DEBIAN_FRONTEND=noninteractive apt-get --fix-broken install -y 2>/dev/null; then
-            echo "  fix-broken failed, removing half-installed packages..."
-            # Get list of packages in broken state and purge them
-            dpkg --audit 2>/dev/null | command grep -oP '^\S+' | while read -r pkg; do
+        # Purge packages stuck in broken state so the next retry starts clean.
+        # Do NOT run apt-get --fix-broken install here: it can pull packages
+        # from alternative sources (e.g. Debian when CRAN was intended),
+        # creating a mixed-source state with unresolvable dependencies.
+        # || true makes pipeline set -e/pipefail safe when grep finds no matches.
+        _broken_pkgs=$(dpkg --audit 2>/dev/null | command grep -oP '^\S+' || true)
+        if [ -n "$_broken_pkgs" ]; then
+            echo "  Removing half-installed packages..."
+            echo "$_broken_pkgs" | while read -r pkg; do
                 dpkg --purge --force-remove-reinstreq "$pkg" 2>/dev/null || true
             done
             dpkg --configure -a 2>/dev/null || true

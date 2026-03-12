@@ -163,14 +163,19 @@ _cran_exit_code=$?
 set -e
 if [ "$_cran_exit_code" -ne 0 ]; then
     log_warning "CRAN repository install failed (mirror sync issue?), falling back to Debian packages"
-    # Remove CRAN source to avoid broken mirror, clean up any broken state
+    # Remove CRAN source to prevent any further pulls from broken mirror
     command rm -f /etc/apt/sources.list.d/r-cran.list
+    # Fix dpkg state enough to run purge commands
     dpkg --configure -a 2>/dev/null || true
-    DEBIAN_FRONTEND=noninteractive apt-get --fix-broken install -y 2>/dev/null || true
-    # Purge any half-installed R packages so we start fresh
-    dpkg -l | command grep -E '^i[UFH].*\br-' | command awk '{print $2}' | while read -r pkg; do
-        dpkg --purge --force-remove-reinstreq "$pkg" 2>/dev/null || true
-    done
+    # Purge ALL R packages (fully-installed and broken) so Debian reinstall starts clean.
+    # || true at end makes pipeline set -e/pipefail safe when grep finds no matches.
+    _r_pkgs=$(dpkg -l 2>/dev/null | command grep -E '^(ii|i[UFH]).*\b(r-base|r-cran|r-recommended)' | command awk '{print $2}' || true)
+    if [ -n "$_r_pkgs" ]; then
+        log_message "Purging R packages from failed CRAN install..."
+        echo "$_r_pkgs" | while read -r pkg; do
+            dpkg --purge --force-remove-reinstreq "$pkg" 2>/dev/null || true
+        done
+    fi
     dpkg --configure -a 2>/dev/null || true
     apt-get clean || true
     apt_update
