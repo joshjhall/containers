@@ -133,8 +133,10 @@ log_message "Installing R packages..."
 
 # _install_r_from_cran - Attempt to install R from CRAN repository
 # Returns 0 on success, 1 on failure
+# Note: explicit || return 1 needed because set -e does not propagate
+# failure from functions called in an if-condition context reliably.
 _install_r_from_cran() {
-    if apt-cache show r-base-core | command grep -q "Version: ${R_VERSION}"; then
+    if apt-cache show r-base-core 2>/dev/null | command grep -q "Version: ${R_VERSION}"; then
         # Install specific version if available
         log_message "Installing R version ${R_VERSION}..."
         if apt_install \
@@ -149,7 +151,7 @@ _install_r_from_cran() {
     apt_install \
             r-base \
             r-base-dev \
-            r-recommended
+            r-recommended || return 1
 }
 
 if ! _install_r_from_cran; then
