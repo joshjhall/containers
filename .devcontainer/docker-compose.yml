@@ -19,6 +19,8 @@ services:
         INCLUDE_DOCKER: "true"
         # Python needed for pre-commit framework and linting tools
         INCLUDE_PYTHON: "true"
+        # Go needed for igor (project scaffolding CLI)
+        INCLUDE_GOLANG_DEV: "true"
       cache_from:
         - type=local,src=/tmp/.buildx-cache
       cache_to:
