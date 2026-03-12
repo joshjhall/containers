@@ -10,7 +10,7 @@ When `INCLUDE_DEV_TOOLS=true`, Claude Code plugins and LSP support are
 automatically configured on first container startup via
 `/etc/container/first-startup/30-claude-code-setup.sh`.
 
-### Core Plugins (always installed)
+### Core Plugins (default set)
 
 - `commit-commands` - Git commit helpers
 - `frontend-design` - Interface design assistance
@@ -23,6 +23,30 @@ automatically configured on first container startup via
 - `hookify` - Hook creation helpers
 - `claude-code-setup` - Project setup assistance
 - `feature-dev` - Feature development workflow
+
+### Overriding Core Plugins
+
+Use `CLAUDE_PLUGINS` to replace the default plugin set entirely:
+
+```bash
+# Install only specific core plugins (replaces all 11 defaults)
+docker build --build-arg CLAUDE_PLUGINS="commit-commands,context7,code-review" ...
+
+# Install no core plugins (LSP and extra plugins still work)
+docker build --build-arg CLAUDE_PLUGINS="" ...
+
+# At runtime (overrides build-time value)
+docker run -e CLAUDE_PLUGINS="commit-commands,context7" ...
+```
+
+| `CLAUDE_PLUGINS` | Behavior                      |
+| ---------------- | ----------------------------- |
+| Unset (default)  | All 11 core plugins installed |
+| Set to list      | Only listed plugins installed |
+| Set to `""`      | No core plugins installed     |
+
+`CLAUDE_EXTRA_PLUGINS` remains additive on top of whatever `CLAUDE_PLUGINS`
+resolves to. LSP plugins remain tied to `INCLUDE_*_DEV` flags.
 
 ### Language-specific LSP Plugins (based on build flags)
 
@@ -150,11 +174,36 @@ Core MCP servers are automatically installed when Node.js is available
 MCP configuration is created on first container startup via
 `/etc/container/first-startup/30-claude-code-setup.sh`:
 
-- **Always** configures filesystem MCP server for `/workspace`
-- **Always** configures Figma desktop MCP (`http://host.docker.internal:3845/mcp`)
+- **By default** configures filesystem MCP server for `/workspace`
+- **By default** configures Figma desktop MCP (`http://host.docker.internal:3845/mcp`)
 - **Auth-conditional** — plugin installation requires prior authentication
   (gracefully skips with instructions if unauthenticated)
 - **Is idempotent** - checks existing config before adding
+
+### Overriding Default MCPs
+
+Use `CLAUDE_MCPS` to replace the default MCP set entirely:
+
+```bash
+# Only filesystem MCP (no figma-desktop)
+docker build --build-arg CLAUDE_MCPS="filesystem" ...
+
+# No default MCPs at all
+docker build --build-arg CLAUDE_MCPS="" ...
+
+# At runtime (overrides build-time value)
+docker run -e CLAUDE_MCPS="filesystem" ...
+```
+
+| `CLAUDE_MCPS`   | Behavior                                  |
+| --------------- | ----------------------------------------- |
+| Unset (default) | `filesystem` + `figma-desktop` configured |
+| Set to list     | Only listed MCPs configured               |
+| Set to `""`     | No default MCPs configured                |
+
+`CLAUDE_EXTRA_MCPS` remains additive on top of whatever `CLAUDE_MCPS`
+resolves to. Auto-detection of GitHub/GitLab MCPs still works unless
+`CLAUDE_MCPS=""` and `CLAUDE_AUTO_DETECT_MCPS=false`.
 
 **GitHub/GitLab MCPs** are auto-detected from git remotes when the corresponding
 token is set (`GITHUB_TOKEN` / `GITLAB_TOKEN`). They can also be added

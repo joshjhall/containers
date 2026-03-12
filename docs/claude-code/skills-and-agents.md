@@ -54,6 +54,52 @@ startup via `claude-setup`. Project-level `.claude/` configs merge with these
 Templates are staged at build time to `/etc/container/config/claude-templates/`
 and installed at runtime by `claude-setup`. All installations are idempotent.
 
+### Overriding Skills
+
+Use `CLAUDE_SKILLS` to replace the default skill set:
+
+```bash
+# Install only specific skills
+docker build --build-arg CLAUDE_SKILLS="git-workflow,code-quality" ...
+
+# No static skills (container-environment is always installed)
+docker build --build-arg CLAUDE_SKILLS="" ...
+
+# At runtime (overrides build-time value)
+docker run -e CLAUDE_SKILLS="git-workflow,testing-patterns" ...
+```
+
+| `CLAUDE_SKILLS` | Behavior                                        |
+| --------------- | ----------------------------------------------- |
+| Unset (default) | All 13 static skills installed                  |
+| Set to list     | Only listed skills installed                    |
+| Set to `""`     | No static skills (only `container-environment`) |
+
+- `container-environment` always installs (dynamically generated)
+- Conditional skills (`docker-development`, `cloud-infrastructure`) require
+  both the feature flag AND presence in `CLAUDE_SKILLS` (or `CLAUDE_SKILLS` unset)
+
+### Overriding Agents
+
+Use `CLAUDE_AGENTS` to replace the default agent set:
+
+```bash
+# Install only specific agents
+docker build --build-arg CLAUDE_AGENTS="debugger,code-reviewer" ...
+
+# No agents
+docker build --build-arg CLAUDE_AGENTS="" ...
+
+# At runtime (overrides build-time value)
+docker run -e CLAUDE_AGENTS="debugger,test-writer" ...
+```
+
+| `CLAUDE_AGENTS` | Behavior                     |
+| --------------- | ---------------------------- |
+| Unset (default) | All 11 agents installed      |
+| Set to list     | Only listed agents installed |
+| Set to `""`     | No agents installed          |
+
 To verify: `ls ~/.claude/skills/` and `ls ~/.claude/agents/`
 
 ## Codebase Audit System

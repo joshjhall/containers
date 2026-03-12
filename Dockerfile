@@ -442,6 +442,12 @@ ARG CLAUDE_EXTRA_PLUGINS=""
 ARG CLAUDE_EXTRA_MCPS=""
 # Claude Code release channel: latest (default) or stable
 ARG CLAUDE_CHANNEL=latest
+# Component override lists — define the FULL set of components to install
+# When unset (default), all defaults are installed. Set to empty "" to install none.
+ARG CLAUDE_PLUGINS
+ARG CLAUDE_MCPS
+ARG CLAUDE_AGENTS
+ARG CLAUDE_SKILLS
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     if [ "${INCLUDE_DEV_TOOLS}" = "true" ]; then \
@@ -455,6 +461,10 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     INCLUDE_ANDROID_DEV=${INCLUDE_ANDROID_DEV} \
     CLAUDE_EXTRA_PLUGINS=${CLAUDE_EXTRA_PLUGINS} \
     CLAUDE_EXTRA_MCPS=${CLAUDE_EXTRA_MCPS} \
+    CLAUDE_PLUGINS="${CLAUDE_PLUGINS}" \
+    CLAUDE_MCPS="${CLAUDE_MCPS}" \
+    CLAUDE_AGENTS="${CLAUDE_AGENTS}" \
+    CLAUDE_SKILLS="${CLAUDE_SKILLS}" \
     INCLUDE_DOCKER=${INCLUDE_DOCKER} \
     INCLUDE_KUBERNETES=${INCLUDE_KUBERNETES} \
     INCLUDE_TERRAFORM=${INCLUDE_TERRAFORM} \
@@ -495,6 +505,10 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     INCLUDE_KOTLIN_DEV=${INCLUDE_KOTLIN_DEV} \
     CLAUDE_EXTRA_PLUGINS=${CLAUDE_EXTRA_PLUGINS} \
     CLAUDE_EXTRA_MCPS=${CLAUDE_EXTRA_MCPS} \
+    CLAUDE_PLUGINS="${CLAUDE_PLUGINS}" \
+    CLAUDE_MCPS="${CLAUDE_MCPS}" \
+    CLAUDE_AGENTS="${CLAUDE_AGENTS}" \
+    CLAUDE_SKILLS="${CLAUDE_SKILLS}" \
     CLAUDE_CHANNEL=${CLAUDE_CHANNEL} \
     /tmp/build-scripts/features/claude-code-setup.sh; \
     fi

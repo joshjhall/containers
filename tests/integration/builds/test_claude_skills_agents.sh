@@ -231,16 +231,71 @@ test_claude_setup_verify_output() {
         "found"
 }
 
+# Test: Override vars persisted in enabled-features.conf
+test_override_vars_persisted() {
+    local image="test-skills-override-persist-$$"
+
+    assert_build_succeeds "Dockerfile" \
+        --build-arg PROJECT_PATH=. \
+        --build-arg PROJECT_NAME=test-override-persist \
+        --build-arg INCLUDE_DEV_TOOLS=true \
+        --build-arg INCLUDE_NODE=true \
+        --build-arg "CLAUDE_SKILLS=git-workflow,code-quality" \
+        --build-arg "CLAUDE_AGENTS=debugger" \
+        -t "$image"
+
+    # Verify override vars are persisted
+    assert_command_in_container "$image" \
+        "grep 'CLAUDE_SKILLS_DEFAULT=git-workflow,code-quality' /etc/container/config/enabled-features.conf && echo 'found'" \
+        "found"
+
+    assert_command_in_container "$image" \
+        "grep 'CLAUDE_AGENTS_DEFAULT=debugger' /etc/container/config/enabled-features.conf && echo 'found'" \
+        "found"
+
+    # Unset vars should get __UNSET__ sentinel
+    assert_command_in_container "$image" \
+        "grep 'CLAUDE_PLUGINS_DEFAULT=__UNSET__' /etc/container/config/enabled-features.conf && echo 'found'" \
+        "found"
+
+    assert_command_in_container "$image" \
+        "grep 'CLAUDE_MCPS_DEFAULT=__UNSET__' /etc/container/config/enabled-features.conf && echo 'found'" \
+        "found"
+}
+
+# Test: claude-setup contains override helper functions
+test_claude_setup_has_override_helpers() {
+    local image="${IMAGE_TO_TEST:-test-skills-agents-$$}"
+
+    assert_command_in_container "$image" \
+        "grep -q '_resolve_override_list' /usr/local/bin/claude-setup && echo 'found'" \
+        "found"
+
+    assert_command_in_container "$image" \
+        "grep -q '_is_in_list' /usr/local/bin/claude-setup && echo 'found'" \
+        "found"
+
+    assert_command_in_container "$image" \
+        "grep -q 'CLAUDE_PLUGINS' /usr/local/bin/claude-setup && echo 'found'" \
+        "found"
+
+    assert_command_in_container "$image" \
+        "grep -q 'CLAUDE_AGENTS' /usr/local/bin/claude-setup && echo 'found'" \
+        "found"
+}
+
 # Run all tests
 run_test test_templates_staged "Skill/agent templates staged at build time"
 run_test test_agent_frontmatter "Agent templates have correct frontmatter"
 run_test test_skill_frontmatter "Skill templates have correct frontmatter"
 run_test test_claude_setup_has_skills_section "claude-setup has skills installation section"
 run_test test_claude_setup_verify_output "claude-setup verify output lists skills and agents"
+run_test test_claude_setup_has_override_helpers "claude-setup has component override helpers"
 
 # Skip tests that require building new images if using pre-built image
 if [ -z "${IMAGE_TO_TEST:-}" ]; then
     run_test test_features_config_cloud_flags "enabled-features.conf contains cloud/docker flags"
+    run_test test_override_vars_persisted "Override vars persisted in enabled-features.conf"
 fi
 
 # Generate test report

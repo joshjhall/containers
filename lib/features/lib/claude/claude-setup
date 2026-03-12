@@ -126,6 +126,60 @@ echo "=== Claude Code Setup ==="
 echo ""
 
 # ============================================================================
+# Component Override Helpers
+# ============================================================================
+
+# Resolve a component override list from runtime env, build-time default, or fallback.
+# Uses __UNSET__ sentinel to distinguish "not specified" from "set to empty".
+# Usage: _resolve_override_list "CLAUDE_PLUGINS" "default1,default2"
+# Output: the resolved list string (may be empty)
+# Returns: 0 if an explicit override is active, 1 if using defaults
+_resolve_override_list() {
+    local var_name="$1"
+    local defaults="$2"
+    local default_var="${var_name}_DEFAULT"
+
+    # Runtime env var takes priority
+    local runtime_val="${!var_name:-}"
+    local default_val="${!default_var:-}"
+
+    # Check if runtime env var is explicitly set (even to empty)
+    if [ -n "${!var_name+x}" ]; then
+        echo "$runtime_val"
+        return 0
+    fi
+
+    # Check build-time default (sentinel means "not specified at build time")
+    if [ "$default_val" != "__UNSET__" ]; then
+        echo "$default_val"
+        return 0
+    fi
+
+    # Neither set — use built-in defaults
+    echo "$defaults"
+    return 1
+}
+
+# Check if a name is in a comma-separated list (exact match).
+# Usage: _is_in_list "name" "a,b,name,c" → returns 0
+_is_in_list() {
+    local needle="$1"
+    local haystack="$2"
+
+    [ -z "$haystack" ] && return 1
+    [ -z "$needle" ] && return 1
+
+    local IFS=','
+    local item
+    for item in $haystack; do
+        # Trim whitespace
+        item=$(echo "$item" | xargs)
+        [ "$item" = "$needle" ] && return 0
+    done
+    return 1
+}
+
+# ============================================================================
 # Plugin Installation Logic
 # ============================================================================
 # --force mode: skip plugins if unauthenticated (MCP/skills setup only)
@@ -258,19 +312,21 @@ elif is_claude_authenticated; then
         echo ""
     fi
 
-    # Core Plugins (Always Installed)
+    # Core Plugins (configurable via CLAUDE_PLUGINS)
+    DEFAULT_PLUGINS="commit-commands,frontend-design,code-simplifier,context7,security-guidance,claude-md-management,pr-review-toolkit,code-review,hookify,claude-code-setup,feature-dev"
+    PLUGIN_LIST=$(_resolve_override_list "CLAUDE_PLUGINS" "$DEFAULT_PLUGINS")
+    PLUGIN_LIST_IS_OVERRIDE=$?
+
     echo "Core plugins:"
-    install_plugin "commit-commands" || true
-    install_plugin "frontend-design" || true
-    install_plugin "code-simplifier" || true
-    install_plugin "context7" || true
-    install_plugin "security-guidance" || true
-    install_plugin "claude-md-management" || true
-    install_plugin "pr-review-toolkit" || true
-    install_plugin "code-review" || true
-    install_plugin "hookify" || true
-    install_plugin "claude-code-setup" || true
-    install_plugin "feature-dev" || true
+    if [ -n "$PLUGIN_LIST" ]; then
+        IFS=',' read -ra CORE_PLUGINS <<< "$PLUGIN_LIST"
+        for plugin in "${CORE_PLUGINS[@]}"; do
+            plugin=$(echo "$plugin" | xargs)
+            [ -n "$plugin" ] && { install_plugin "$plugin" || true; }
+        done
+    else
+        echo "    (none — CLAUDE_PLUGINS set to empty)"
+    fi
 
     # Language-Specific LSP Plugins (Based on Build Flags)
     echo ""
@@ -560,11 +616,40 @@ configure_mcp_list() {
     echo ""
 }
 
-# Filesystem MCP (always)
-add_mcp_server "filesystem" -t stdio "filesystem" -- npx -y @modelcontextprotocol/server-filesystem /workspace || true
+# Default MCP servers (configurable via CLAUDE_MCPS)
+MCP_REGISTRY="/etc/container/config/mcp-registry.sh"
+DEFAULT_MCPS="filesystem,figma-desktop"
+MCP_LIST=$(_resolve_override_list "CLAUDE_MCPS" "$DEFAULT_MCPS")
 
-# Figma desktop MCP (always - connects to Figma desktop app via Docker host)
-add_mcp_server "figma-desktop" -t http "figma-desktop" "http://host.docker.internal:3845/mcp" || true
+# Install default MCPs (or overridden list)
+# Special-case filesystem and figma-desktop; others go through configure_mcp_list
+_install_default_mcp() {
+    local mcp_name="$1"
+    case "$mcp_name" in
+        filesystem)
+            add_mcp_server "filesystem" -t stdio "filesystem" -- npx -y @modelcontextprotocol/server-filesystem /workspace || true
+            ;;
+        figma-desktop)
+            add_mcp_server "figma-desktop" -t http "figma-desktop" "http://host.docker.internal:3845/mcp" || true
+            ;;
+        *)
+            # Delegate to configure_mcp_list for registry/passthrough resolution
+            configure_mcp_list "$mcp_name" "Default MCP server"
+            ;;
+    esac
+}
+
+echo "Default MCP servers:"
+if [ -n "$MCP_LIST" ]; then
+    IFS=',' read -ra DEFAULT_MCP_ITEMS <<< "$MCP_LIST"
+    for mcp_item in "${DEFAULT_MCP_ITEMS[@]}"; do
+        mcp_item=$(echo "$mcp_item" | xargs)
+        [ -n "$mcp_item" ] && _install_default_mcp "$mcp_item"
+    done
+else
+    echo "    (none — CLAUDE_MCPS set to empty)"
+fi
+echo ""
 
 # ============================================================================
 # Extra MCP Servers (from CLAUDE_EXTRA_MCPS)
@@ -572,7 +657,6 @@ add_mcp_server "figma-desktop" -t http "figma-desktop" "http://host.docker.inter
 # GitHub and GitLab MCPs are now optional - add them via CLAUDE_EXTRA_MCPS.
 # Example: CLAUDE_EXTRA_MCPS="github,kagi,memory"
 # Unknown names are passed through as npx -y <package>.
-MCP_REGISTRY="/etc/container/config/mcp-registry.sh"
 EXTRA_MCPS_TO_CONFIGURE="${CLAUDE_EXTRA_MCPS:-${CLAUDE_EXTRA_MCPS_DEFAULT:-}}"
 configure_mcp_list "$EXTRA_MCPS_TO_CONFIGURE" "Extra MCP servers (CLAUDE_EXTRA_MCPS)"
 
@@ -650,7 +734,13 @@ if [ -d "$TEMPLATES_DIR" ]; then
     echo "Installing skills and agents..."
     echo ""
 
-    # --- Static Skills ---
+    # --- Resolve skill list ---
+    # Default static skills (excluding container-environment which always installs,
+    # and conditional skills docker-development/cloud-infrastructure)
+    DEFAULT_SKILLS="git-workflow,testing-patterns,code-quality,development-workflow,error-handling,documentation-authoring,shell-scripting,skill-authoring,agent-authoring,next-issue,codebase-audit,next-issue-ship,feature-script-patterns,test-framework-reference"
+    SKILL_LIST=$(_resolve_override_list "CLAUDE_SKILLS" "$DEFAULT_SKILLS")
+    SKILL_LIST_IS_OVERRIDE=$?
+
     echo "Skills:"
     if [ -d "$TEMPLATES_DIR/skills" ]; then
         for skill_dir in "$TEMPLATES_DIR/skills"/*/; do
@@ -661,6 +751,11 @@ if [ -d "$TEMPLATES_DIR" ]; then
             [ "$skill_name" = "container-environment" ] && continue
             [ "$skill_name" = "docker-development" ] && continue
             [ "$skill_name" = "cloud-infrastructure" ] && continue
+
+            # If CLAUDE_SKILLS is set, only install skills in the list
+            if [ $SKILL_LIST_IS_OVERRIDE -eq 0 ] && ! _is_in_list "$skill_name" "$SKILL_LIST"; then
+                continue
+            fi
 
             target_dir="$CLAUDE_DIR/skills/$skill_name"
             if [ -d "$target_dir" ]; then
@@ -673,7 +768,7 @@ if [ -d "$TEMPLATES_DIR" ]; then
         done
     fi
 
-    # --- Dynamic: container-environment skill ---
+    # --- Dynamic: container-environment skill (always installed) ---
     target_dir="$CLAUDE_DIR/skills/container-environment"
     if [ -d "$target_dir" ]; then
         echo "    ✓ container-environment (already installed)"
@@ -735,7 +830,9 @@ SKILL_HEADER
     fi
 
     # --- Conditional: docker-development skill ---
-    if [ "${INCLUDE_DOCKER:-false}" = "true" ]; then
+    # Requires INCLUDE_DOCKER=true AND (CLAUDE_SKILLS unset OR docker-development in list)
+    if [ "${INCLUDE_DOCKER:-false}" = "true" ] && \
+       { [ $SKILL_LIST_IS_OVERRIDE -ne 0 ] || _is_in_list "docker-development" "$SKILL_LIST"; }; then
         target_dir="$CLAUDE_DIR/skills/docker-development"
         if [ -d "$target_dir" ]; then
             echo "    ✓ docker-development (already installed)"
@@ -754,7 +851,9 @@ SKILL_HEADER
     [ "${INCLUDE_GCLOUD:-false}" = "true" ] && HAS_CLOUD=true
     [ "${INCLUDE_CLOUDFLARE:-false}" = "true" ] && HAS_CLOUD=true
 
-    if [ "$HAS_CLOUD" = "true" ]; then
+    # Requires cloud flags AND (CLAUDE_SKILLS unset OR cloud-infrastructure in list)
+    if [ "$HAS_CLOUD" = "true" ] && \
+       { [ $SKILL_LIST_IS_OVERRIDE -ne 0 ] || _is_in_list "cloud-infrastructure" "$SKILL_LIST"; }; then
         target_dir="$CLAUDE_DIR/skills/cloud-infrastructure"
         if [ -d "$target_dir" ]; then
             echo "    ✓ cloud-infrastructure (already installed)"
@@ -786,13 +885,22 @@ CLOUD_HEADER
         fi
     fi
 
-    # --- Agents ---
+    # --- Agents (configurable via CLAUDE_AGENTS) ---
+    DEFAULT_AGENTS="code-reviewer,test-writer,refactorer,debugger,audit-code-health,audit-security,audit-test-gaps,audit-architecture,audit-docs,audit-ai-config,issue-writer"
+    AGENT_LIST=$(_resolve_override_list "CLAUDE_AGENTS" "$DEFAULT_AGENTS")
+    AGENT_LIST_IS_OVERRIDE=$?
+
     echo ""
     echo "Agents:"
     if [ -d "$TEMPLATES_DIR/agents" ]; then
         for agent_dir in "$TEMPLATES_DIR/agents"/*/; do
             [ -d "$agent_dir" ] || continue
             agent_name=$(basename "$agent_dir")
+
+            # If CLAUDE_AGENTS is set, only install agents in the list
+            if [ $AGENT_LIST_IS_OVERRIDE -eq 0 ] && ! _is_in_list "$agent_name" "$AGENT_LIST"; then
+                continue
+            fi
 
             target_dir="$CLAUDE_DIR/agents/$agent_name"
             if [ -d "$target_dir" ]; then

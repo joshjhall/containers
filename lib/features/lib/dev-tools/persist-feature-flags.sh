@@ -28,6 +28,16 @@ CLAUDE_EXTRA_PLUGINS_DEFAULT="${CLAUDE_EXTRA_PLUGINS:-}"
 # Can be overridden at runtime via environment variable
 CLAUDE_EXTRA_MCPS_DEFAULT="${CLAUDE_EXTRA_MCPS:-}"
 
+# Component override lists (comma-separated)
+# When set, these define the FULL set of components to install (replacing defaults).
+# When unset (__UNSET__ sentinel), all defaults are installed.
+# When empty string, no defaults are installed.
+# Can be overridden at runtime via environment variable.
+CLAUDE_PLUGINS_DEFAULT="${CLAUDE_PLUGINS:-__UNSET__}"
+CLAUDE_MCPS_DEFAULT="${CLAUDE_MCPS:-__UNSET__}"
+CLAUDE_AGENTS_DEFAULT="${CLAUDE_AGENTS:-__UNSET__}"
+CLAUDE_SKILLS_DEFAULT="${CLAUDE_SKILLS:-__UNSET__}"
+
 # Dev tools flag (for project health check and conditional startup scripts)
 INCLUDE_DEV_TOOLS=${INCLUDE_DEV_TOOLS:-false}
 

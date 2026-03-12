@@ -420,6 +420,239 @@ test_plugin_marketplace_variation() {
 }
 
 # ============================================================================
+# Component Override Helper Tests
+# ============================================================================
+
+# Mirror the helpers from claude-setup for testing
+_is_in_list() {
+    local needle="$1"
+    local haystack="$2"
+
+    [ -z "$haystack" ] && return 1
+    [ -z "$needle" ] && return 1
+
+    local IFS=','
+    local item
+    for item in $haystack; do
+        item=$(echo "$item" | xargs)
+        [ "$item" = "$needle" ] && return 0
+    done
+    return 1
+}
+
+_resolve_override_list() {
+    local var_name="$1"
+    local defaults="$2"
+    local default_var="${var_name}_DEFAULT"
+
+    local runtime_val="${!var_name:-}"
+    local default_val="${!default_var:-}"
+
+    if [ -n "${!var_name+x}" ]; then
+        echo "$runtime_val"
+        return 0
+    fi
+
+    if [ "$default_val" != "__UNSET__" ]; then
+        echo "$default_val"
+        return 0
+    fi
+
+    echo "$defaults"
+    return 1
+}
+
+# --- _is_in_list tests ---
+
+test_is_in_list_exact_match() {
+    if _is_in_list "debugger" "code-reviewer,test-writer,debugger"; then
+        pass_test "Exact match found in list"
+    else
+        fail_test "Should find exact match in list"
+    fi
+}
+
+test_is_in_list_first_item() {
+    if _is_in_list "code-reviewer" "code-reviewer,test-writer,debugger"; then
+        pass_test "First item found in list"
+    else
+        fail_test "Should find first item in list"
+    fi
+}
+
+test_is_in_list_last_item() {
+    if _is_in_list "debugger" "code-reviewer,debugger"; then
+        pass_test "Last item found in list"
+    else
+        fail_test "Should find last item in list"
+    fi
+}
+
+test_is_in_list_single_item() {
+    if _is_in_list "debugger" "debugger"; then
+        pass_test "Single item list match"
+    else
+        fail_test "Should match single item list"
+    fi
+}
+
+test_is_in_list_no_partial_match() {
+    if _is_in_list "debug" "code-reviewer,debugger"; then
+        fail_test "Should NOT match partial name"
+    else
+        pass_test "Correctly rejects partial match"
+    fi
+}
+
+test_is_in_list_no_match() {
+    if _is_in_list "nonexistent" "code-reviewer,debugger"; then
+        fail_test "Should NOT match nonexistent item"
+    else
+        pass_test "Correctly rejects nonexistent item"
+    fi
+}
+
+test_is_in_list_empty_list() {
+    if _is_in_list "debugger" ""; then
+        fail_test "Should NOT match in empty list"
+    else
+        pass_test "Correctly handles empty list"
+    fi
+}
+
+test_is_in_list_empty_needle() {
+    if _is_in_list "" "code-reviewer,debugger"; then
+        fail_test "Should NOT match empty needle"
+    else
+        pass_test "Correctly rejects empty needle"
+    fi
+}
+
+test_is_in_list_whitespace_tolerance() {
+    if _is_in_list "debugger" "code-reviewer , debugger , test-writer"; then
+        pass_test "Handles whitespace around items"
+    else
+        fail_test "Should handle whitespace around items"
+    fi
+}
+
+# --- _resolve_override_list tests ---
+
+test_resolve_unset_returns_defaults() {
+    # Neither runtime nor build-time var set
+    unset TEST_VAR TEST_VAR_DEFAULT 2>/dev/null || true
+    TEST_VAR_DEFAULT="__UNSET__"
+    local result
+    result=$(_resolve_override_list "TEST_VAR" "a,b,c")
+    local rc=$?
+    assert_equals "$result" "a,b,c" "Unset vars return defaults"
+    assert_equals "$rc" "1" "Return code 1 when using defaults"
+    unset TEST_VAR_DEFAULT
+}
+
+test_resolve_runtime_override() {
+    TEST_VAR="x,y"
+    TEST_VAR_DEFAULT="__UNSET__"
+    local result
+    result=$(_resolve_override_list "TEST_VAR" "a,b,c")
+    local rc=$?
+    assert_equals "$result" "x,y" "Runtime var overrides defaults"
+    assert_equals "$rc" "0" "Return code 0 when override active"
+    unset TEST_VAR TEST_VAR_DEFAULT
+}
+
+test_resolve_runtime_empty_override() {
+    # shellcheck disable=SC2034  # TEST_VAR used indirectly via _resolve_override_list
+    TEST_VAR=""
+    TEST_VAR_DEFAULT="__UNSET__"
+    local result
+    result=$(_resolve_override_list "TEST_VAR" "a,b,c")
+    local rc=$?
+    assert_equals "$result" "" "Empty runtime var returns empty"
+    assert_equals "$rc" "0" "Return code 0 when override active (empty)"
+    unset TEST_VAR TEST_VAR_DEFAULT
+}
+
+test_resolve_buildtime_default() {
+    unset TEST_VAR 2>/dev/null || true
+    TEST_VAR_DEFAULT="p,q"
+    local result
+    result=$(_resolve_override_list "TEST_VAR" "a,b,c")
+    local rc=$?
+    assert_equals "$result" "p,q" "Build-time default overrides built-in defaults"
+    assert_equals "$rc" "0" "Return code 0 when build-time override active"
+    unset TEST_VAR_DEFAULT
+}
+
+test_resolve_buildtime_empty_default() {
+    unset TEST_VAR 2>/dev/null || true
+    # shellcheck disable=SC2034  # TEST_VAR_DEFAULT used indirectly via _resolve_override_list
+    TEST_VAR_DEFAULT=""
+    local result
+    result=$(_resolve_override_list "TEST_VAR" "a,b,c")
+    local rc=$?
+    assert_equals "$result" "" "Empty build-time default returns empty"
+    assert_equals "$rc" "0" "Return code 0 when build-time override active (empty)"
+    unset TEST_VAR_DEFAULT
+}
+
+# --- Sentinel detection in persisted config ---
+
+test_sentinel_in_persist_script() {
+    local persist_src
+    persist_src="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../lib/features/lib/dev-tools" && pwd)/persist-feature-flags.sh"
+    if command grep -q '__UNSET__' "$persist_src"; then
+        pass_test "persist-feature-flags.sh contains __UNSET__ sentinel"
+    else
+        fail_test "persist-feature-flags.sh missing __UNSET__ sentinel"
+    fi
+}
+
+test_persist_script_has_all_override_vars() {
+    local persist_src
+    persist_src="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../lib/features/lib/dev-tools" && pwd)/persist-feature-flags.sh"
+    local failures=0
+    for var in CLAUDE_PLUGINS_DEFAULT CLAUDE_MCPS_DEFAULT CLAUDE_AGENTS_DEFAULT CLAUDE_SKILLS_DEFAULT; do
+        if ! command grep -q "$var" "$persist_src"; then
+            echo "  FAIL: $var not found in persist-feature-flags.sh" >&2
+            failures=$((failures + 1))
+        fi
+    done
+    assert_equals "$failures" "0" "All 4 override _DEFAULT vars in persist script"
+}
+
+# --- Source file pattern checks ---
+
+test_claude_setup_has_resolve_override() {
+    if command grep -q '_resolve_override_list' "$CLAUDE_SETUP_CMD_SRC"; then
+        pass_test "claude-setup contains _resolve_override_list helper"
+    else
+        fail_test "claude-setup missing _resolve_override_list helper"
+    fi
+}
+
+test_claude_setup_has_is_in_list() {
+    if command grep -q '_is_in_list' "$CLAUDE_SETUP_CMD_SRC"; then
+        pass_test "claude-setup contains _is_in_list helper"
+    else
+        fail_test "claude-setup missing _is_in_list helper"
+    fi
+}
+
+test_dockerfile_has_override_args() {
+    local dockerfile
+    dockerfile="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../" && pwd)/Dockerfile"
+    local failures=0
+    for arg in CLAUDE_PLUGINS CLAUDE_MCPS CLAUDE_AGENTS CLAUDE_SKILLS; do
+        if ! command grep -q "ARG $arg" "$dockerfile"; then
+            echo "  FAIL: ARG $arg not found in Dockerfile" >&2
+            failures=$((failures + 1))
+        fi
+    done
+    assert_equals "$failures" "0" "All 4 override ARGs in Dockerfile"
+}
+
+# ============================================================================
 # CLAUDE_CHANNEL Validation Tests
 # ============================================================================
 
@@ -603,6 +836,30 @@ test_auth_watcher_uses_secure_storage() {
 # ============================================================================
 # Run Tests
 # ============================================================================
+
+# Component override helper tests
+run_test test_is_in_list_exact_match "List helper: Exact match"
+run_test test_is_in_list_first_item "List helper: First item"
+run_test test_is_in_list_last_item "List helper: Last item"
+run_test test_is_in_list_single_item "List helper: Single item"
+run_test test_is_in_list_no_partial_match "List helper: No partial match"
+run_test test_is_in_list_no_match "List helper: No match"
+run_test test_is_in_list_empty_list "List helper: Empty list"
+run_test test_is_in_list_empty_needle "List helper: Empty needle"
+run_test test_is_in_list_whitespace_tolerance "List helper: Whitespace tolerance"
+
+run_test test_resolve_unset_returns_defaults "Resolve: Unset returns defaults"
+run_test test_resolve_runtime_override "Resolve: Runtime override"
+run_test test_resolve_runtime_empty_override "Resolve: Runtime empty override"
+run_test test_resolve_buildtime_default "Resolve: Build-time default"
+run_test test_resolve_buildtime_empty_default "Resolve: Build-time empty default"
+
+run_test test_sentinel_in_persist_script "Persist: __UNSET__ sentinel present"
+run_test test_persist_script_has_all_override_vars "Persist: All 4 override vars present"
+
+run_test test_claude_setup_has_resolve_override "Source: _resolve_override_list in claude-setup"
+run_test test_claude_setup_has_is_in_list "Source: _is_in_list in claude-setup"
+run_test test_dockerfile_has_override_args "Source: Override ARGs in Dockerfile"
 
 # Secure token storage tests (Issue #62)
 run_test test_no_export_anthropic_auth_token "Security: No export ANTHROPIC_AUTH_TOKEN"
