@@ -13,7 +13,7 @@ this skill. The state file written by `/next-issue` must exist.
 
 ## Step 1 — Read State
 
-1. Read `.claude/memory/next-issue-state.md`
+1. Read `.claude/memory/tmp/next-issue-state.md`
 
 1. Extract: `issue` (number), `title`, `platform` (`github` or `gitlab`),
    `branch` (if set)
@@ -130,7 +130,7 @@ Use `AskUserQuestion` to present three options:
 
 1. **Checkout main**: `git checkout main`
 
-1. **Clear state file** (write empty content to `.claude/memory/next-issue-state.md`)
+1. **Clear state file** (write empty content to `.claude/memory/tmp/next-issue-state.md`)
 
 1. **Show the PR/MR URL** to the user
 

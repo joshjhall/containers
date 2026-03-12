@@ -8,7 +8,7 @@ ______________________________________________________________________
 
 ## State File
 
-Path: `.claude/memory/next-issue-state.md`
+Path: `.claude/memory/tmp/next-issue-state.md`
 
 ### Schema
 

@@ -179,7 +179,7 @@ INCLUDE_DEV_TOOLS=true
 EOF
     run_health_check
     assert_file_contains "$PROJECT_ROOT/.gitignore" "^\.claude/settings\.local\.json$" ".claude/settings.local.json should be added"
-    assert_file_contains "$PROJECT_ROOT/.gitignore" "^\.claude/memory/$" ".claude/memory/ should be added"
+    assert_file_contains "$PROJECT_ROOT/.gitignore" "^\.claude/memory/tmp/$" ".claude/memory/tmp/ should be added"
 }
 
 test_claude_entries_not_added_without_dev_tools() {

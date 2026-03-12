@@ -729,7 +729,7 @@ if [ -d "$TEMPLATES_DIR" ]; then
     # --- Resolve skill list ---
     # Default static skills (excluding container-environment which always installs,
     # and conditional skills docker-development/cloud-infrastructure)
-    DEFAULT_SKILLS="git-workflow,testing-patterns,code-quality,development-workflow,error-handling,documentation-authoring,shell-scripting,skill-authoring,agent-authoring,next-issue,codebase-audit,next-issue-ship,feature-script-patterns,test-framework-reference"
+    DEFAULT_SKILLS="git-workflow,testing-patterns,code-quality,development-workflow,error-handling,documentation-authoring,shell-scripting,skill-authoring,agent-authoring,next-issue,codebase-audit,next-issue-ship,feature-script-patterns,test-framework-reference,memory-conventions"
     SKILL_LIST=$(_resolve_override_list "CLAUDE_SKILLS" "$DEFAULT_SKILLS")
     SKILL_LIST_IS_OVERRIDE=$?
 

@@ -10,7 +10,7 @@ installed to `~/.claude/skills/` and `~/.claude/agents/` on first container
 startup via `claude-setup`. Project-level `.claude/` configs merge with these
 (union semantics, project wins on name conflicts).
 
-### Skills (always installed — 13 skills)
+### Skills (always installed — 14 skills)
 
 | Skill                     | Purpose                                                                             |
 | ------------------------- | ----------------------------------------------------------------------------------- |
@@ -27,6 +27,7 @@ startup via `claude-setup`. Project-level `.claude/` configs merge with these
 | `next-issue`              | Issue-driven dev: select by priority, plan; delegates shipping to `next-issue-ship` |
 | `codebase-audit`          | Periodic codebase sweep: tech debt, security, test gaps, architecture, docs         |
 | `next-issue-ship`         | Ship completed issue work: commit, PR/push, label issue, loop back                  |
+| `memory-conventions`      | Two-tier memory conventions: long-term (committed) vs short-term (gitignored)       |
 
 ### Conditional Skills
 
@@ -71,7 +72,7 @@ docker run -e CLAUDE_SKILLS="git-workflow,testing-patterns" ...
 
 | `CLAUDE_SKILLS` | Behavior                                        |
 | --------------- | ----------------------------------------------- |
-| Unset (default) | All 13 static skills installed                  |
+| Unset (default) | All 14 static skills installed                  |
 | Set to list     | Only listed skills installed                    |
 | Set to `""`     | No static skills (only `container-environment`) |
 

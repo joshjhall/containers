@@ -144,7 +144,7 @@ check_gitignore() {
     if [ "$HAVE_DEV_TOOLS" = "true" ]; then
         append_missing_entries "$gitignore" "Claude Code local state" \
             ".claude/settings.local.json" \
-            ".claude/memory/"
+            ".claude/memory/tmp/"
     fi
 }
 

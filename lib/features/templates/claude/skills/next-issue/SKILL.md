@@ -19,7 +19,7 @@ plan approval, use `ExitPlanMode` to begin implementation.
 ## Phase 0 — Resume Check
 
 1. **Enter plan mode** (call `EnterPlanMode` tool)
-1. Read `.claude/memory/next-issue-state.md` (if it exists)
+1. Read `.claude/memory/tmp/next-issue-state.md` (if it exists)
 1. If the file contains `phase:` and `issue:` fields, **validate the state**:
    - Check if the issue is still open (`gh issue view {N} --json state` or
      `glab issue view {N}`)

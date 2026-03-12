@@ -221,12 +221,21 @@ model selection.
 
 ### Skills & Agents
 
-15 skills (13 always + 2 conditional) and 11 agents. Key capabilities:
+16 skills (14 always + 2 conditional) and 11 agents. Key capabilities:
 `/codebase-audit` (parallel scanners), `/next-issue` + `/next-issue-ship`
 (issue-driven development with auto-labeling and state persistence). Override
 defaults via `CLAUDE_SKILLS` and `CLAUDE_AGENTS` (replaces full set). Add
 extras via `CLAUDE_EXTRA_SKILLS` and `CLAUDE_EXTRA_AGENTS`. See
 `docs/claude-code/skills-and-agents.md` for full details.
+
+### Memory System
+
+Two-tier memory under `.claude/memory/`:
+
+- Long-term (committed): `.claude/memory/*.md` — team knowledge, architecture decisions
+- Short-term (gitignored): `.claude/memory/tmp/` — ephemeral session state
+
+See `docs/claude-code/memory-system.md` for conventions.
 
 ### Secrets & Setup Commands
 
