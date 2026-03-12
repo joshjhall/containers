@@ -421,19 +421,14 @@ test_setup_op_resolution() {
         "uses op read"
 }
 
-# Test: claude-setup contains user MCP support
-test_user_mcps_in_setup() {
+# Test: CLAUDE_USER_MCPS removed from claude-setup (deprecated)
+test_user_mcps_deprecated() {
     local image="${IMAGE_TO_TEST:-test-claude-code-setup-$$}"
 
-    # Verify claude-setup has CLAUDE_USER_MCPS support
+    # Verify CLAUDE_USER_MCPS is NOT in claude-setup
     assert_command_in_container "$image" \
-        "grep -q 'CLAUDE_USER_MCPS' /usr/local/bin/claude-setup && echo 'has user mcps'" \
-        "has user mcps"
-
-    # Verify configure_mcp_list function exists
-    assert_command_in_container "$image" \
-        "grep -q 'configure_mcp_list' /usr/local/bin/claude-setup && echo 'has configure func'" \
-        "has configure func"
+        "! grep -q 'CLAUDE_USER_MCPS' /usr/local/bin/claude-setup && echo 'user mcps removed'" \
+        "user mcps removed"
 }
 
 # Test: claude-setup contains MCP passthrough logic
@@ -516,7 +511,7 @@ run_test test_watcher_token_support "claude-auth-watcher ANTHROPIC_AUTH_TOKEN su
 run_test test_bashrc_hook_token_support "bashrc hook ANTHROPIC_AUTH_TOKEN support"
 run_test test_watcher_op_resolution "claude-auth-watcher OP ref resolution"
 run_test test_setup_op_resolution "claude-setup OP ref resolution"
-run_test test_user_mcps_in_setup "claude-setup contains user MCP support"
+run_test test_user_mcps_deprecated "CLAUDE_USER_MCPS deprecated from claude-setup"
 run_test test_mcp_passthrough_logic "claude-setup contains MCP passthrough logic"
 run_test test_http_mcp_auth_injection "HTTP MCP auth injection helpers exist"
 run_test test_pipe_delimited_headers "Pipe-delimited header support"

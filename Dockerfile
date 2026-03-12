@@ -440,6 +440,10 @@ ARG INCLUDE_DEV_TOOLS=false
 ARG CLAUDE_EXTRA_PLUGINS=""
 # Extra MCP servers to install (comma-separated, e.g., "brave-search,memory,fetch")
 ARG CLAUDE_EXTRA_MCPS=""
+# Extra skills to install (comma-separated, additive, e.g., "my-skill")
+ARG CLAUDE_EXTRA_SKILLS=""
+# Extra agents to install (comma-separated, additive, e.g., "my-agent")
+ARG CLAUDE_EXTRA_AGENTS=""
 # Claude Code release channel: latest (default) or stable
 ARG CLAUDE_CHANNEL=latest
 # Component override lists — define the FULL set of components to install
@@ -461,6 +465,8 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     INCLUDE_ANDROID_DEV=${INCLUDE_ANDROID_DEV} \
     CLAUDE_EXTRA_PLUGINS=${CLAUDE_EXTRA_PLUGINS} \
     CLAUDE_EXTRA_MCPS=${CLAUDE_EXTRA_MCPS} \
+    CLAUDE_EXTRA_SKILLS=${CLAUDE_EXTRA_SKILLS} \
+    CLAUDE_EXTRA_AGENTS=${CLAUDE_EXTRA_AGENTS} \
     CLAUDE_PLUGINS="${CLAUDE_PLUGINS}" \
     CLAUDE_MCPS="${CLAUDE_MCPS}" \
     CLAUDE_AGENTS="${CLAUDE_AGENTS}" \
@@ -505,6 +511,8 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     INCLUDE_KOTLIN_DEV=${INCLUDE_KOTLIN_DEV} \
     CLAUDE_EXTRA_PLUGINS=${CLAUDE_EXTRA_PLUGINS} \
     CLAUDE_EXTRA_MCPS=${CLAUDE_EXTRA_MCPS} \
+    CLAUDE_EXTRA_SKILLS=${CLAUDE_EXTRA_SKILLS} \
+    CLAUDE_EXTRA_AGENTS=${CLAUDE_EXTRA_AGENTS} \
     CLAUDE_PLUGINS="${CLAUDE_PLUGINS}" \
     CLAUDE_MCPS="${CLAUDE_MCPS}" \
     CLAUDE_AGENTS="${CLAUDE_AGENTS}" \

@@ -660,14 +660,6 @@ echo ""
 EXTRA_MCPS_TO_CONFIGURE="${CLAUDE_EXTRA_MCPS:-${CLAUDE_EXTRA_MCPS_DEFAULT:-}}"
 configure_mcp_list "$EXTRA_MCPS_TO_CONFIGURE" "Extra MCP servers (CLAUDE_EXTRA_MCPS)"
 
-# ============================================================================
-# User MCP Servers (from CLAUDE_USER_MCPS - runtime-only, personal additions)
-# ============================================================================
-# Personal MCP additions via .env without modifying shared config.
-# Known names resolved via registry; unknown names passed to npx -y <package>.
-# Example: CLAUDE_USER_MCPS="my-custom-server,@myorg/mcp-internal"
-USER_MCPS="${CLAUDE_USER_MCPS:-}"
-configure_mcp_list "$USER_MCPS" "User MCP servers (CLAUDE_USER_MCPS)"
 
 # ============================================================================
 # Auto-detect GitHub/GitLab MCP from git remotes
@@ -764,6 +756,29 @@ if [ -d "$TEMPLATES_DIR" ]; then
                 mkdir -p "$target_dir"
                 cp "$skill_dir"/* "$target_dir/"
                 echo "    ✓ $skill_name installed"
+            fi
+        done
+    fi
+
+    # Extra Skills (from CLAUDE_EXTRA_SKILLS - additive)
+    EXTRA_SKILLS="${CLAUDE_EXTRA_SKILLS:-${CLAUDE_EXTRA_SKILLS_DEFAULT:-}}"
+    if [ -n "$EXTRA_SKILLS" ]; then
+        echo ""
+        echo "Extra skills (CLAUDE_EXTRA_SKILLS):"
+        IFS=',' read -ra EXTRA_SKILL_LIST <<< "$EXTRA_SKILLS"
+        for skill_name in "${EXTRA_SKILL_LIST[@]}"; do
+            skill_name=$(echo "$skill_name" | xargs)
+            [ -z "$skill_name" ] && continue
+            skill_dir="$TEMPLATES_DIR/skills/$skill_name"
+            target_dir="$CLAUDE_DIR/skills/$skill_name"
+            if [ -d "$target_dir" ]; then
+                echo "    ✓ $skill_name (already installed)"
+            elif [ -d "$skill_dir" ]; then
+                mkdir -p "$target_dir"
+                cp "$skill_dir"/* "$target_dir/"
+                echo "    ✓ $skill_name installed"
+            else
+                echo "    ⚠ $skill_name not found in templates"
             fi
         done
     fi
@@ -909,6 +924,29 @@ CLOUD_HEADER
                 mkdir -p "$target_dir"
                 cp "$agent_dir"/* "$target_dir/"
                 echo "    ✓ $agent_name installed"
+            fi
+        done
+    fi
+
+    # Extra Agents (from CLAUDE_EXTRA_AGENTS - additive)
+    EXTRA_AGENTS="${CLAUDE_EXTRA_AGENTS:-${CLAUDE_EXTRA_AGENTS_DEFAULT:-}}"
+    if [ -n "$EXTRA_AGENTS" ]; then
+        echo ""
+        echo "Extra agents (CLAUDE_EXTRA_AGENTS):"
+        IFS=',' read -ra EXTRA_AGENT_LIST <<< "$EXTRA_AGENTS"
+        for agent_name in "${EXTRA_AGENT_LIST[@]}"; do
+            agent_name=$(echo "$agent_name" | xargs)
+            [ -z "$agent_name" ] && continue
+            agent_dir="$TEMPLATES_DIR/agents/$agent_name"
+            target_dir="$CLAUDE_DIR/agents/$agent_name"
+            if [ -d "$target_dir" ]; then
+                echo "    ✓ $agent_name (already installed)"
+            elif [ -d "$agent_dir" ]; then
+                mkdir -p "$target_dir"
+                cp "$agent_dir"/* "$target_dir/"
+                echo "    ✓ $agent_name installed"
+            else
+                echo "    ⚠ $agent_name not found in templates"
             fi
         done
     fi

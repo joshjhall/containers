@@ -102,7 +102,7 @@ Registered short names:
 
 ### Entry Formats
 
-Both `CLAUDE_EXTRA_MCPS` and `CLAUDE_USER_MCPS` support four entry formats:
+`CLAUDE_EXTRA_MCPS` supports four entry formats:
 
 | Format                   | Example                                            | Behavior                             |
 | ------------------------ | -------------------------------------------------- | ------------------------------------ |
@@ -110,16 +110,6 @@ Both `CLAUDE_EXTRA_MCPS` and `CLAUDE_USER_MCPS` support four entry formats:
 | npm package              | `@myorg/mcp-internal`                              | Passed through as `npx -y <package>` |
 | `name=url`               | `my-api=http://localhost:8080/mcp`                 | Added as HTTP MCP server             |
 | `name=url\|Header:Value` | `api=http://host/mcp\|Authorization:Bearer ${TOK}` | HTTP MCP with custom headers         |
-
-### Personal MCP Servers
-
-Use `CLAUDE_USER_MCPS` for personal MCP additions without modifying shared team
-config. Runtime-only (no build-time default):
-
-```bash
-# In your personal .env file
-CLAUDE_USER_MCPS=@myorg/mcp-internal,my-api=http://localhost:8080/mcp
-```
 
 ### GitHub/GitLab Auto-detection
 
@@ -134,8 +124,8 @@ CLAUDE_AUTO_DETECT_MCPS=false
 
 ### HTTP MCP Authentication
 
-When `ANTHROPIC_AUTH_TOKEN` is set, HTTP MCP servers from `CLAUDE_EXTRA_MCPS` /
-`CLAUDE_USER_MCPS` automatically receive an
+When `ANTHROPIC_AUTH_TOKEN` is set, HTTP MCP servers from `CLAUDE_EXTRA_MCPS`
+automatically receive an
 `Authorization: Bearer ${ANTHROPIC_AUTH_TOKEN}` header (env var reference, not a
 literal value). This enables LiteLLM proxy setups where the same token
 authenticates both the API and MCP endpoints.

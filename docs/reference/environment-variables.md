@@ -527,7 +527,8 @@ ______________________________________________________________________
 ## Claude Code Variables
 
 For Claude Code-specific environment variables (`CLAUDE_EXTRA_PLUGINS`,
-`CLAUDE_EXTRA_MCPS`, `CLAUDE_USER_MCPS`, `CLAUDE_CHANNEL`, `ANTHROPIC_MODEL`,
+`CLAUDE_EXTRA_MCPS`, `CLAUDE_EXTRA_SKILLS`, `CLAUDE_EXTRA_AGENTS`,
+`CLAUDE_CHANNEL`, `ANTHROPIC_MODEL`,
 `ANTHROPIC_AUTH_TOKEN`, `CLAUDE_AUTO_DETECT_MCPS`, `CLAUDE_MCP_AUTO_AUTH`,
 auth watcher config, etc.), see
 [Claude Code: Plugins & MCP Servers](../claude-code/plugins-and-mcps.md).

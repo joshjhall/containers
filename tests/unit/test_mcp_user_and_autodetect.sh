@@ -15,7 +15,7 @@ source "$SCRIPT_DIR/../framework.sh"
 init_test_framework
 
 # Test suite
-test_suite "MCP User MCPs and Auto-detect Tests"
+test_suite "MCP Extra MCPs and Auto-detect Tests"
 
 # Setup
 DOCKERFILE="$PROJECT_ROOT/Dockerfile"
@@ -33,11 +33,14 @@ test_mcp_servers_removed_from_dockerfile() {
     fi
 }
 
-# Test: CLAUDE_USER_MCPS referenced in claude-setup command
-test_user_mcps_in_setup() {
+# Test: CLAUDE_USER_MCPS removed from claude-setup (deprecated)
+test_user_mcps_deprecated() {
     assert_file_exists "$CLAUDE_SETUP_CMD"
-    assert_file_contains "$CLAUDE_SETUP_CMD" "CLAUDE_USER_MCPS" \
-        "claude-setup references CLAUDE_USER_MCPS"
+    if command grep -q 'CLAUDE_USER_MCPS' "$CLAUDE_SETUP_CMD"; then
+        fail_test "CLAUDE_USER_MCPS still present in claude-setup (deprecated)"
+    else
+        pass_test "CLAUDE_USER_MCPS removed from claude-setup"
+    fi
 }
 
 # Test: CLAUDE_AUTO_DETECT_MCPS referenced in claude-setup command
@@ -149,7 +152,7 @@ test_derive_name_deeply_scoped() {
 
 # Run all tests
 run_test test_mcp_servers_removed_from_dockerfile "INCLUDE_MCP_SERVERS removed from Dockerfile"
-run_test test_user_mcps_in_setup "CLAUDE_USER_MCPS in claude-setup"
+run_test test_user_mcps_deprecated "CLAUDE_USER_MCPS deprecated from claude-setup"
 run_test test_auto_detect_mcps_in_setup "CLAUDE_AUTO_DETECT_MCPS in claude-setup"
 run_test test_derive_mcp_name_function_exists "derive_mcp_name_from_package function exists"
 run_test test_configure_mcp_list_function_exists "configure_mcp_list function exists"

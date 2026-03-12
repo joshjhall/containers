@@ -28,6 +28,14 @@ CLAUDE_EXTRA_PLUGINS_DEFAULT="${CLAUDE_EXTRA_PLUGINS:-}"
 # Can be overridden at runtime via environment variable
 CLAUDE_EXTRA_MCPS_DEFAULT="${CLAUDE_EXTRA_MCPS:-}"
 
+# Extra skills to install (comma-separated)
+# Can be overridden at runtime via environment variable
+CLAUDE_EXTRA_SKILLS_DEFAULT="${CLAUDE_EXTRA_SKILLS:-}"
+
+# Extra agents to install (comma-separated)
+# Can be overridden at runtime via environment variable
+CLAUDE_EXTRA_AGENTS_DEFAULT="${CLAUDE_EXTRA_AGENTS:-}"
+
 # Component override lists (comma-separated)
 # When set, these define the FULL set of components to install (replacing defaults).
 # When unset (__UNSET__ sentinel), all defaults are installed.

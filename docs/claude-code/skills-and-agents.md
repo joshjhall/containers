@@ -79,6 +79,20 @@ docker run -e CLAUDE_SKILLS="git-workflow,testing-patterns" ...
 - Conditional skills (`docker-development`, `cloud-infrastructure`) require
   both the feature flag AND presence in `CLAUDE_SKILLS` (or `CLAUDE_SKILLS` unset)
 
+### Extra Skills
+
+Use `CLAUDE_EXTRA_SKILLS` to add skills on top of the default or overridden set:
+
+```bash
+# In your personal .env file
+CLAUDE_EXTRA_SKILLS=my-custom-skill
+
+# Or at build time
+docker build --build-arg CLAUDE_EXTRA_SKILLS="my-custom-skill" ...
+```
+
+Skills must exist in the templates directory (`/etc/container/config/claude-templates/skills/`).
+
 ### Overriding Agents
 
 Use `CLAUDE_AGENTS` to replace the default agent set:
@@ -99,6 +113,20 @@ docker run -e CLAUDE_AGENTS="debugger,test-writer" ...
 | Unset (default) | All 11 agents installed      |
 | Set to list     | Only listed agents installed |
 | Set to `""`     | No agents installed          |
+
+### Extra Agents
+
+Use `CLAUDE_EXTRA_AGENTS` to add agents on top of the default or overridden set:
+
+```bash
+# In your personal .env file
+CLAUDE_EXTRA_AGENTS=my-custom-agent
+
+# Or at build time
+docker build --build-arg CLAUDE_EXTRA_AGENTS="my-custom-agent" ...
+```
+
+Agents must exist in the templates directory (`/etc/container/config/claude-templates/agents/`).
 
 To verify: `ls ~/.claude/skills/` and `ls ~/.claude/agents/`
 
