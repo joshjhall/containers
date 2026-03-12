@@ -1,6 +1,6 @@
 # Custom dictionary for rust-core project
-cweill
 coreutils
+cweill
 Daemonless
 dandavison
 Darchetype
@@ -679,6 +679,7 @@ libxtst
 logcat
 lukasz
 Łukasz
+MCPS
 mdformat
 Michaël
 misconfig
@@ -693,6 +694,7 @@ Playstore
 pubring
 pymarkdown
 pytype
+refactorer
 retryable
 rubout
 runtimeinfo
