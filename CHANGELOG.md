@@ -5,6 +5,53 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.15.8] - 2026-03-13
+
+### Added
+
+- Add Alertmanager routing, runbooks, and SLO tracking
+- Add SLSA provenance and SBOM attestation to CI pipeline
+- Add configurable component installation via override env vars
+- Unify component config pattern with EXTRA_SKILLS/EXTRA_AGENTS
+- Add two-tier memory system (long-term + short-term)
+- Add Go dev tools for igor development
+
+### Changed
+
+- Extract shared cosign install helper
+- Fix inconsistent variable naming in runtime and base scripts
+- Extract modules from oversized files
+
+### Documentation
+
+- Add component override vars to dev-tools.env example
+- Move overrides to docker-compose, unify CLAUDE_EXTRA_* in .env
+- Update secrets-and-setup reference with full resolution flow
+- Add missing runner scripts to test-framework-reference
+
+### Fixed
+
+- Add --fail flag to curl commands to detect HTTP errors
+- Add TOFU download tracking and build summary
+- Sync stale feature script fallbacks and prevent drift
+- Improve retry resilience for mirror sync failures
+- Recover dpkg state between install retries
+- Fall back to Debian R packages when CRAN mirror is broken
+- Ensure CRAN fallback triggers despite set -e
+- Disable set -e around CRAN install to enable fallback
+- Make CRAN fallback survive set -e and avoid mixed-source state
+- Purge all R packages atomically with --force-depends
+- Resolve_override_list return code kills script under set -e
+- Lowercase audit issue title prefix for consistency
+- Background 1Password loading for non-interactive shells
+- PRODUCTION_MODE=true now correctly blocks TOFU downloads
+
+### Testing
+
+- Add functional integration tests
+- Remove permanently skipped tests, fix timeout
+- Add comprehensive tests and API docs for high fan-in modules
+
 ## [4.15.7] - 2026-03-09
 
 ### Added
@@ -1260,6 +1307,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix prettier and markdownlint formatting in README
 - Format TLS documentation files
 
+[4.15.8]: https://github.com/joshjhall/containers/compare/v4.15.7...v4.15.8
 [4.15.7]: https://github.com/joshjhall/containers/compare/v4.15.6...v4.15.7
 [4.15.6]: https://github.com/joshjhall/containers/compare/v4.15.5...v4.15.6
 [4.15.5]: https://github.com/joshjhall/containers/compare/v4.15.4...v4.15.5
