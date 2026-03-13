@@ -239,11 +239,14 @@ See `docs/claude-code/memory-system.md` for conventions.
 
 ### Secrets & Setup Commands
 
-When `INCLUDE_OP=true`, `OP_<NAME>_REF` env vars auto-resolve from 1Password.
-`OP_<NAME>_FILE_REF` writes content to `/dev/shm/` and exports the file path.
-Three setup commands: `setup-git`, `setup-gh`, `setup-glab`. See
-`docs/claude-code/secrets-and-setup.md` for variable tables, docker-compose
-examples, and git identity fallback.
+When `INCLUDE_OP=true`, `OP_<NAME>_REF` env vars are read from 1Password via
+`op read` on every container create/start and exported as `<NAME>` (e.g.,
+`OP_GITHUB_TOKEN_REF` → `GITHUB_TOKEN`). `OP_<NAME>_FILE_REF` writes content
+to `/dev/shm/` (in-memory tmpfs) and exports the file path. Secrets never
+touch disk and are re-fetched from the vault each startup. Three setup
+commands: `setup-git`, `setup-gh`, `setup-glab`. See
+`docs/claude-code/secrets-and-setup.md` for the full convention, variable
+tables, caching, docker-compose examples, and git identity fallback.
 
 ### Authentication & Environment
 
