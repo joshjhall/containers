@@ -476,7 +476,11 @@ verify_download() {
     local tier4_rc=0
     verify_calculated_checksum "$file" || tier4_rc=$?
 
-    if [ "${REQUIRE_VERIFIED_DOWNLOADS:-${PRODUCTION_MODE:-false}}" = "true" ]; then
+    local _rvd="${REQUIRE_VERIFIED_DOWNLOADS:-}"
+    if [ "$_rvd" != "true" ] && [ "$_rvd" != "false" ]; then
+        _rvd="${PRODUCTION_MODE:-false}"
+    fi
+    if [ "$_rvd" = "true" ]; then
         log_error "REQUIRE_VERIFIED_DOWNLOADS is enabled — Tier 4 TOFU fallback is not allowed"
         log_error "Add a pinned checksum to lib/checksums.json for $name $version"
         return 1

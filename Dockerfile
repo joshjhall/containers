@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 # Universal Container Build System
-# Version: 4.15.7
+# Version: 4.15.8
 # Supports multiple contexts: devcontainer, agents, CI/CD, production
 
 # ============================================================================
@@ -70,7 +70,7 @@ ARG PRODUCTION_MODE=false
 # When true, Tier 4 TOFU (Trust On First Use) checksum fallback is blocked,
 # enforcing at least Tier 2 pinned checksums for all downloads.
 # Defaults to the value of PRODUCTION_MODE when not explicitly set.
-ARG REQUIRE_VERIFIED_DOWNLOADS=false
+ARG REQUIRE_VERIFIED_DOWNLOADS=
 ENV REQUIRE_VERIFIED_DOWNLOADS=${REQUIRE_VERIFIED_DOWNLOADS}
 
 # Build output verbosity

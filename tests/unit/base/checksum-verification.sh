@@ -419,6 +419,7 @@ test_production_mode_blocks_tofu() {
     local exit_code=0
     _run_checksum_subshell "
         export CHECKSUMS_DB='$TEST_TEMP_DIR/checksums.json'
+        unset REQUIRE_VERIFIED_DOWNLOADS
         export PRODUCTION_MODE=true
         verify_download 'language' 'unknown-lang' '0.0.0' '$TEST_TEMP_DIR/prod-tofu.tgz'
     " || exit_code=$?
