@@ -163,6 +163,12 @@ map_to_test() {
             fi
             return
             ;;
+
+        # cmd/igor/*.go → run Go tests via go test
+        cmd/igor/*.go)
+            echo "GO_TEST"
+            return
+            ;;
     esac
 
     # No mapping found — no tests to run for this file
@@ -215,6 +221,13 @@ if [ "$RUN_ALL" = true ]; then
     exec "$TESTS_DIR/run_unit_tests.sh"
 fi
 
+# Handle Go tests if igor files changed
+RUN_GO_TESTS=false
+if [[ -v "TEST_FILES_MAP[GO_TEST]" ]]; then
+    RUN_GO_TESTS=true
+    unset 'TEST_FILES_MAP[GO_TEST]'
+fi
+
 # Collect deduplicated test files
 TEST_FILES=()
 for tf in "${!TEST_FILES_MAP[@]}"; do
@@ -229,15 +242,20 @@ if [ ${#TEST_FILES[@]} -gt 0 ]; then
     mapfile -t TEST_FILES < <(printf '%s\n' "${TEST_FILES[@]}" | sort)
 fi
 
-if [ ${#TEST_FILES[@]} -eq 0 ]; then
+if [ ${#TEST_FILES[@]} -eq 0 ] && [ "$RUN_GO_TESTS" = false ]; then
     echo -e "${GREEN}No unit tests match the changed files — nothing to run.${NC}"
     exit 0
 fi
 
-echo -e "${BLUE}Tests to run (${#TEST_FILES[@]}):${NC}"
-for tf in "${TEST_FILES[@]}"; do
-    echo "  - $(basename "$tf")"
-done
+if [ ${#TEST_FILES[@]} -gt 0 ]; then
+    echo -e "${BLUE}Tests to run (${#TEST_FILES[@]}):${NC}"
+    for tf in "${TEST_FILES[@]}"; do
+        echo "  - $(basename "$tf")"
+    done
+fi
+if [ "$RUN_GO_TESTS" = true ]; then
+    echo -e "${BLUE}Go tests: cmd/igor${NC}"
+fi
 echo ""
 
 # ---------------------------------------------------------------------------
@@ -280,6 +298,24 @@ for test_file in "${TEST_FILES[@]}"; do
     fi
     echo ""
 done
+
+# ---------------------------------------------------------------------------
+# Run Go tests if igor files changed
+# ---------------------------------------------------------------------------
+if [ "$RUN_GO_TESTS" = true ]; then
+    echo -e "${BLUE}Running Go tests (cmd/igor)...${NC}"
+    if (cd "${PROJECT_ROOT}/cmd/igor" && go test ./... 2>&1); then
+        echo -e "  ${GREEN}✓ PASS${NC} (go test)"
+        TOTAL_TESTS=$((TOTAL_TESTS + 1))
+        TOTAL_PASSED=$((TOTAL_PASSED + 1))
+    else
+        echo -e "  ${RED}✗ FAIL${NC} (go test)"
+        FAILED_SUITES+=("go-test-igor")
+        TOTAL_TESTS=$((TOTAL_TESTS + 1))
+        TOTAL_FAILED=$((TOTAL_FAILED + 1))
+    fi
+    echo ""
+fi
 
 # ---------------------------------------------------------------------------
 # Summary (no report file written)
