@@ -158,7 +158,7 @@ func NewRegistry() *Registry {
 	r.add(&Feature{
 		ID: "android", BuildArg: "INCLUDE_ANDROID",
 		DisplayName: "Android", Description: "Android SDK (auto-installs Java)",
-		Category: CategoryLanguage,
+		Category:     CategoryLanguage,
 		EnvFile:      "android.env",
 		Requires:     []string{"java"},
 		CacheVolumes: []string{"android-cache:/cache/android-sdk", "gradle-cache:/cache/gradle"},

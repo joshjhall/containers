@@ -24,8 +24,8 @@ func TestRenderer_MinimalPython(t *testing.T) {
 
 	ctx := NewRenderContext(
 		config.ProjectConfig{
-			Name:     "myapp",
-			Username: "developer",
+			Name:      "myapp",
+			Username:  "developer",
 			BaseImage: "debian:trixie-slim",
 		},
 		"containers",
