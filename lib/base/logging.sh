@@ -22,6 +22,16 @@
 #   Enable JSON logging (optional):
 #     export ENABLE_JSON_LOGGING=true
 #
+# API Contract (see docs/architecture/god-modules.md for full details):
+#   Feature lifecycle: log_feature_start, log_command, log_feature_end,
+#                      log_feature_summary
+#   Message logging:   log_message, log_info, log_debug, log_error, log_warning
+#   Utilities:         safe_eval, _get_log_level_num, _should_log
+#   State variables:   CURRENT_FEATURE, CURRENT_LOG_FILE, CURRENT_ERROR_FILE,
+#                      CURRENT_SUMMARY_FILE, COMMAND_COUNT, ERROR_COUNT,
+#                      WARNING_COUNT, BUILD_LOG_DIR
+#   Include guard:     _LOGGING_LOADED
+#
 
 # Prevent multiple sourcing
 if [ -n "${_LOGGING_LOADED:-}" ]; then

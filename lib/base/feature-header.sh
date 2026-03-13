@@ -17,6 +17,14 @@
 #
 # This ensures feature scripts always use the correct UID/GID, even if the
 # base image already had a user with UID 1000.
+#
+# API Contract (see docs/architecture/god-modules.md for full details):
+#   Exported vars: DEBIAN_VERSION, UBUNTU_VERSION, USERNAME, USER_UID,
+#                  USER_GID, WORKING_DIR
+#   Sub-modules:   arch-utils.sh, cleanup-handler.sh, logging.sh, bashrc-helpers.sh
+#   Functions:     create_symlink(target, link_name, [description])
+#                  create_secure_temp_dir() -> path
+#   Include guard: _FEATURE_HEADER_LOADED
 
 # Prevent multiple sourcing — re-executing re-registers traps and re-runs
 # OS detection unnecessarily
