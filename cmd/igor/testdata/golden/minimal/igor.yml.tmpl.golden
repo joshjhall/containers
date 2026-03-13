@@ -1,0 +1,14 @@
+# Igor configuration — tracks feature selections and generated files
+# Regenerate with: igor update
+
+schema_version: 1
+containers_dir: containers
+project:
+  name: myapp
+  username: developer
+  base_image: debian:trixie-slim
+features:
+  - python
+  - python_dev
+versions:
+  PYTHON_VERSION: "3.14.0"
