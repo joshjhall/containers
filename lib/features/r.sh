@@ -168,13 +168,13 @@ if [ "$_cran_exit_code" -ne 0 ]; then
     # Fix dpkg state enough to run purge commands
     dpkg --configure -a 2>/dev/null || true
     # Purge ALL R packages (fully-installed and broken) so Debian reinstall starts clean.
+    # Must remove everything in one dpkg call so dependency ordering is handled atomically.
     # || true at end makes pipeline set -e/pipefail safe when grep finds no matches.
-    _r_pkgs=$(dpkg -l 2>/dev/null | command grep -E '^(ii|i[UFH]).*\b(r-base|r-cran|r-recommended)' | command awk '{print $2}' || true)
+    _r_pkgs=$(dpkg -l 2>/dev/null | command grep -E '^(ii|i[UFH])' | command awk '{print $2}' | command grep -E '^(r-base|r-cran-|r-recommended)' || true)
     if [ -n "$_r_pkgs" ]; then
         log_message "Purging R packages from failed CRAN install..."
-        echo "$_r_pkgs" | while read -r pkg; do
-            dpkg --purge --force-remove-reinstreq "$pkg" 2>/dev/null || true
-        done
+        # shellcheck disable=SC2086
+        dpkg --purge --force-depends --force-remove-reinstreq $_r_pkgs 2>/dev/null || true
     fi
     dpkg --configure -a 2>/dev/null || true
     apt-get clean || true

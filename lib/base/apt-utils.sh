@@ -376,9 +376,9 @@ _apt_install_on_retry() {
         _broken_pkgs=$(dpkg --audit 2>/dev/null | command grep -oP '^\S+' || true)
         if [ -n "$_broken_pkgs" ]; then
             echo "  Removing half-installed packages..."
-            echo "$_broken_pkgs" | while read -r pkg; do
-                dpkg --purge --force-remove-reinstreq "$pkg" 2>/dev/null || true
-            done
+            # Single dpkg call with --force-depends handles circular deps atomically
+            # shellcheck disable=SC2086
+            dpkg --purge --force-depends --force-remove-reinstreq $_broken_pkgs 2>/dev/null || true
             dpkg --configure -a 2>/dev/null || true
         fi
         # Clean cached archives so stale/mismatched files are re-fetched
