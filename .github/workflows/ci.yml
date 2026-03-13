@@ -666,48 +666,38 @@ jobs:
             BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)
             cat > "provenance-${variant}.json" << PROVENANCE_EOF
           {
-            "_type": "https://in-toto.io/Statement/v0.1",
-            "predicateType": "https://slsa.dev/provenance/v0.2",
-            "subject": [
-              {
-                "name": "${IMAGE}",
-                "digest": { "sha256": "${DIGEST#sha256:}" }
+            "builder": { "id": "https://github.com/${GH_REPO}/.github/workflows/ci.yml" },
+            "buildType": "https://github.com/slsa-framework/slsa-github-generator/container@v1",
+            "invocation": {
+              "configSource": {
+                "uri": "git+https://github.com/${GH_REPO}@${GH_REF}",
+                "digest": { "sha1": "${GH_SHA}" },
+                "entryPoint": ".github/workflows/ci.yml"
+              },
+              "parameters": { "variant": "${variant}" },
+              "environment": {
+                "github_actor": "${GH_ACTOR}",
+                "github_run_id": "${GH_RUN_ID}",
+                "github_run_attempt": "${GH_RUN_ATTEMPT}",
+                "runner_os": "Linux"
               }
-            ],
-            "predicate": {
-              "builder": { "id": "https://github.com/${GH_REPO}/.github/workflows/ci.yml" },
-              "buildType": "https://github.com/slsa-framework/slsa-github-generator/container@v1",
-              "invocation": {
-                "configSource": {
-                  "uri": "git+https://github.com/${GH_REPO}@${GH_REF}",
-                  "digest": { "sha1": "${GH_SHA}" },
-                  "entryPoint": ".github/workflows/ci.yml"
-                },
-                "parameters": { "variant": "${variant}" },
-                "environment": {
-                  "github_actor": "${GH_ACTOR}",
-                  "github_run_id": "${GH_RUN_ID}",
-                  "github_run_attempt": "${GH_RUN_ATTEMPT}",
-                  "runner_os": "Linux"
-                }
+            },
+            "metadata": {
+              "buildInvocationID": "${GH_RUN_ID}-${GH_RUN_ATTEMPT}",
+              "buildStartedOn": "${BUILD_TIME}",
+              "completeness": {
+                "parameters": true,
+                "environment": true,
+                "materials": true
               },
-              "metadata": {
-                "buildInvocationID": "${GH_RUN_ID}-${GH_RUN_ATTEMPT}",
-                "buildStartedOn": "${BUILD_TIME}",
-                "completeness": {
-                  "parameters": true,
-                  "environment": true,
-                  "materials": true
-                },
-                "reproducible": false
-              },
-              "materials": [
-                {
-                  "uri": "git+https://github.com/${GH_REPO}@${GH_REF}",
-                  "digest": { "sha1": "${GH_SHA}" }
-                }
-              ]
-            }
+              "reproducible": false
+            },
+            "materials": [
+              {
+                "uri": "git+https://github.com/${GH_REPO}@${GH_REF}",
+                "digest": { "sha1": "${GH_SHA}" }
+              }
+            ]
           }
           PROVENANCE_EOF
 
