@@ -45,7 +45,7 @@ Return a single JSON object:
 {
   "action": "created | skipped",
   "url": "https://github.com/owner/repo/issues/123",
-  "title": "Audit: category — title",
+  "title": "audit: category — title",
   "reason": "Created new issue | Duplicate of #42"
 }
 ```
@@ -63,7 +63,7 @@ If issue creation fails (e.g., `gh` not authenticated, network error):
 {
   "action": "error",
   "url": "",
-  "title": "Audit: category — title",
+  "title": "audit: category — title",
   "reason": "gh issue create failed: <error message>"
 }
 ```

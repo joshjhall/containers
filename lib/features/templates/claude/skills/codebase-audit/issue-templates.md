@@ -111,7 +111,7 @@ ______________________________________________________________________
 
 ```bash
 gh issue create \
-  --title "Audit: {category} — {title}" \
+  --title "audit: {category} — {title}" \
   --body "$(cat <<'EOF'
 {issue body from template}
 EOF
@@ -123,7 +123,7 @@ EOF
 
 ```bash
 glab issue create \
-  --title "Audit: {category} — {title}" \
+  --title "audit: {category} — {title}" \
   --description "$(cat <<'EOF'
 {issue body from template}
 EOF
@@ -203,7 +203,7 @@ Each issue-writer returns:
 {
   "action": "created | skipped | error",
   "url": "https://github.com/owner/repo/issues/123",
-  "title": "Audit: category — title",
+  "title": "audit: category — title",
   "reason": "Created new issue | Duplicate of #42 | gh issue create failed: ..."
 }
 ```
@@ -249,8 +249,8 @@ When `dry-run` is enabled, output a summary table instead of creating issues:
 
 | # | Title | Labels | Findings |
 |---|-------|--------|----------|
-| 1 | Audit: security — Hardcoded secrets | audit/security, severity/critical | sec-001 |
-| 2 | Audit: code-health — Oversized files | audit/code-health, severity/high | ch-001, ch-003 |
+| 1 | audit: security — Hardcoded secrets | audit/security, severity/critical | sec-001 |
+| 2 | audit: code-health — Oversized files | audit/code-health, severity/high | ch-001, ch-003 |
 ...
 
 ### Acknowledged Findings ({M} suppressed)
