@@ -7,10 +7,12 @@ description: Custom test framework API and patterns for tests/. Use when writing
 ## Running Tests
 
 ```bash
-./tests/run_all.sh              # Unit + integration
-./tests/run_unit_tests.sh       # Unit only (no Docker)
+./tests/run_all.sh                         # Unit + integration
+./tests/run_unit_tests.sh                  # Unit only (no Docker)
 ./tests/run_integration_tests.sh           # All integration tests
 ./tests/run_integration_tests.sh python_dev # Single integration test
+./tests/run_changed_tests.sh               # Tests for changed files only (pre-push)
+./tests/run_test.sh unit/features/python.sh # Run a single test file
 ./tests/test_feature.sh golang             # Quick feature test
 ```
 
