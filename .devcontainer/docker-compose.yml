@@ -35,8 +35,8 @@ services:
       - CLAUDE_MCPS=filesystem
       # Core plugins (unset = all 11 defaults)
       # - CLAUDE_PLUGINS=commit-commands,context7,code-review,pr-review-toolkit,feature-dev,hookify,claude-code-setup
-      # Skills (unset = all 13 static skills)
-      # - CLAUDE_SKILLS=git-workflow,code-quality,shell-scripting,testing-patterns,development-workflow,feature-script-patterns,test-framework-reference,skill-authoring,agent-authoring,documentation-authoring,next-issue,next-issue-ship,codebase-audit,error-handling
+      # Skills (unset = all 13 static template skills + container-environment)
+      # - CLAUDE_SKILLS=git-workflow,code-quality,shell-scripting,testing-patterns,development-workflow,skill-authoring,agent-authoring,documentation-authoring,next-issue,next-issue-ship,codebase-audit,error-handling,memory-conventions
       # Agents (unset = all 11 agents)
       # - CLAUDE_AGENTS=debugger,code-reviewer,test-writer,refactorer,audit-code-health,audit-security,audit-test-gaps,audit-architecture,audit-docs,audit-ai-config,issue-writer
       # Use tini as init system for proper zombie process reaping

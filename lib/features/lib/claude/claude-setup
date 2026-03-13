@@ -314,8 +314,13 @@ elif is_claude_authenticated; then
 
     # Core Plugins (configurable via CLAUDE_PLUGINS)
     DEFAULT_PLUGINS="commit-commands,frontend-design,code-simplifier,context7,security-guidance,claude-md-management,pr-review-toolkit,code-review,hookify,claude-code-setup,feature-dev"
-    PLUGIN_LIST=$(_resolve_override_list "CLAUDE_PLUGINS" "$DEFAULT_PLUGINS")
-    PLUGIN_LIST_IS_OVERRIDE=$?
+    # Use if-else to capture return code safely under set -e
+    # (_resolve_override_list returns 1 for "using defaults", which set -e would treat as failure)
+    if PLUGIN_LIST=$(_resolve_override_list "CLAUDE_PLUGINS" "$DEFAULT_PLUGINS"); then
+        PLUGIN_LIST_IS_OVERRIDE=0
+    else
+        PLUGIN_LIST_IS_OVERRIDE=1
+    fi
 
     echo "Core plugins:"
     if [ -n "$PLUGIN_LIST" ]; then
@@ -619,7 +624,12 @@ configure_mcp_list() {
 # Default MCP servers (configurable via CLAUDE_MCPS)
 MCP_REGISTRY="/etc/container/config/mcp-registry.sh"
 DEFAULT_MCPS="filesystem,figma-desktop"
-MCP_LIST=$(_resolve_override_list "CLAUDE_MCPS" "$DEFAULT_MCPS")
+# Use if-else to safely capture return code under set -e
+if MCP_LIST=$(_resolve_override_list "CLAUDE_MCPS" "$DEFAULT_MCPS"); then
+    MCP_LIST_IS_OVERRIDE=0
+else
+    MCP_LIST_IS_OVERRIDE=1
+fi
 
 # Install default MCPs (or overridden list)
 # Special-case filesystem and figma-desktop; others go through configure_mcp_list
@@ -727,11 +737,17 @@ if [ -d "$TEMPLATES_DIR" ]; then
     echo ""
 
     # --- Resolve skill list ---
-    # Default static skills (excluding container-environment which always installs,
-    # and conditional skills docker-development/cloud-infrastructure)
-    DEFAULT_SKILLS="git-workflow,testing-patterns,code-quality,development-workflow,error-handling,documentation-authoring,shell-scripting,skill-authoring,agent-authoring,next-issue,codebase-audit,next-issue-ship,feature-script-patterns,test-framework-reference,memory-conventions"
-    SKILL_LIST=$(_resolve_override_list "CLAUDE_SKILLS" "$DEFAULT_SKILLS")
-    SKILL_LIST_IS_OVERRIDE=$?
+    # Default static skills (13 template-based skills).
+    # Excludes: container-environment (always installs dynamically),
+    # conditional skills (docker-development, cloud-infrastructure),
+    # and project-level .claude/skills/ (always available via repo).
+    DEFAULT_SKILLS="git-workflow,testing-patterns,code-quality,development-workflow,error-handling,documentation-authoring,shell-scripting,skill-authoring,agent-authoring,next-issue,codebase-audit,next-issue-ship,memory-conventions"
+    # Use if-else to capture return code safely under set -e
+    if SKILL_LIST=$(_resolve_override_list "CLAUDE_SKILLS" "$DEFAULT_SKILLS"); then
+        SKILL_LIST_IS_OVERRIDE=0
+    else
+        SKILL_LIST_IS_OVERRIDE=1
+    fi
 
     echo "Skills:"
     if [ -d "$TEMPLATES_DIR/skills" ]; then
@@ -902,8 +918,12 @@ CLOUD_HEADER
 
     # --- Agents (configurable via CLAUDE_AGENTS) ---
     DEFAULT_AGENTS="code-reviewer,test-writer,refactorer,debugger,audit-code-health,audit-security,audit-test-gaps,audit-architecture,audit-docs,audit-ai-config,issue-writer"
-    AGENT_LIST=$(_resolve_override_list "CLAUDE_AGENTS" "$DEFAULT_AGENTS")
-    AGENT_LIST_IS_OVERRIDE=$?
+    # Use if-else to capture return code safely under set -e
+    if AGENT_LIST=$(_resolve_override_list "CLAUDE_AGENTS" "$DEFAULT_AGENTS"); then
+        AGENT_LIST_IS_OVERRIDE=0
+    else
+        AGENT_LIST_IS_OVERRIDE=1
+    fi
 
     echo ""
     echo "Agents:"

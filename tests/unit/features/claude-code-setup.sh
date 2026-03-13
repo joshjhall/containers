@@ -542,9 +542,13 @@ test_resolve_unset_returns_defaults() {
     # Neither runtime nor build-time var set
     unset TEST_VAR TEST_VAR_DEFAULT 2>/dev/null || true
     TEST_VAR_DEFAULT="__UNSET__"
-    local result
-    result=$(_resolve_override_list "TEST_VAR" "a,b,c")
-    local rc=$?
+    local result rc
+    # Use if-else to safely capture return code under set -e
+    if result=$(_resolve_override_list "TEST_VAR" "a,b,c"); then
+        rc=0
+    else
+        rc=1
+    fi
     assert_equals "$result" "a,b,c" "Unset vars return defaults"
     assert_equals "$rc" "1" "Return code 1 when using defaults"
     unset TEST_VAR_DEFAULT
@@ -553,9 +557,12 @@ test_resolve_unset_returns_defaults() {
 test_resolve_runtime_override() {
     TEST_VAR="x,y"
     TEST_VAR_DEFAULT="__UNSET__"
-    local result
-    result=$(_resolve_override_list "TEST_VAR" "a,b,c")
-    local rc=$?
+    local result rc
+    if result=$(_resolve_override_list "TEST_VAR" "a,b,c"); then
+        rc=0
+    else
+        rc=1
+    fi
     assert_equals "$result" "x,y" "Runtime var overrides defaults"
     assert_equals "$rc" "0" "Return code 0 when override active"
     unset TEST_VAR TEST_VAR_DEFAULT
@@ -565,9 +572,12 @@ test_resolve_runtime_empty_override() {
     # shellcheck disable=SC2034  # TEST_VAR used indirectly via _resolve_override_list
     TEST_VAR=""
     TEST_VAR_DEFAULT="__UNSET__"
-    local result
-    result=$(_resolve_override_list "TEST_VAR" "a,b,c")
-    local rc=$?
+    local result rc
+    if result=$(_resolve_override_list "TEST_VAR" "a,b,c"); then
+        rc=0
+    else
+        rc=1
+    fi
     assert_equals "$result" "" "Empty runtime var returns empty"
     assert_equals "$rc" "0" "Return code 0 when override active (empty)"
     unset TEST_VAR TEST_VAR_DEFAULT
@@ -576,9 +586,12 @@ test_resolve_runtime_empty_override() {
 test_resolve_buildtime_default() {
     unset TEST_VAR 2>/dev/null || true
     TEST_VAR_DEFAULT="p,q"
-    local result
-    result=$(_resolve_override_list "TEST_VAR" "a,b,c")
-    local rc=$?
+    local result rc
+    if result=$(_resolve_override_list "TEST_VAR" "a,b,c"); then
+        rc=0
+    else
+        rc=1
+    fi
     assert_equals "$result" "p,q" "Build-time default overrides built-in defaults"
     assert_equals "$rc" "0" "Return code 0 when build-time override active"
     unset TEST_VAR_DEFAULT
@@ -588,9 +601,12 @@ test_resolve_buildtime_empty_default() {
     unset TEST_VAR 2>/dev/null || true
     # shellcheck disable=SC2034  # TEST_VAR_DEFAULT used indirectly via _resolve_override_list
     TEST_VAR_DEFAULT=""
-    local result
-    result=$(_resolve_override_list "TEST_VAR" "a,b,c")
-    local rc=$?
+    local result rc
+    if result=$(_resolve_override_list "TEST_VAR" "a,b,c"); then
+        rc=0
+    else
+        rc=1
+    fi
     assert_equals "$result" "" "Empty build-time default returns empty"
     assert_equals "$rc" "0" "Return code 0 when build-time override active (empty)"
     unset TEST_VAR_DEFAULT
