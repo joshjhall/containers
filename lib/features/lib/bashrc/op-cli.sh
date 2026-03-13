@@ -7,18 +7,199 @@
 set +u  # Don't error on unset variables
 set +e  # Don't exit on errors
 
-# Check if we're in an interactive shell
-if [[ $- != *i* ]]; then
-    # Not interactive, skip loading
-    return 0
-fi
-
 # Cache and config directories
 export OP_CACHE_DIR="/cache/1password"
 export OP_CONFIG_DIR="/cache/1password/config"
 
 # Biometric unlock (when available)
 export OP_BIOMETRIC_UNLOCK_ENABLED=true
+
+# ----------------------------------------------------------------------------
+# Automatic Secret Loading from 1Password (OP_*_REF / OP_*_FILE_REF)
+# ----------------------------------------------------------------------------
+# Scans the environment for variables matching OP_<NAME>_REF and populates
+# <NAME> from 1Password. Also handles OP_<NAME>_FILE_REF for file-based
+# secrets (content written to /dev/shm, env var set to the file path).
+# Requires OP_SERVICE_ACCOUNT_TOKEN to be set.
+#
+# Convention:
+#   OP_<NAME>_REF=op://vault/item/field       →  exports <NAME>=<secret_value>
+#   OP_<NAME>_FILE_REF=op://vault/item/file   →  writes to /dev/shm, exports <NAME>=<path>
+#
+# Examples:
+#   OP_GITHUB_TOKEN_REF=op://Dev/GitHub-PAT/token   → GITHUB_TOKEN
+#   OP_KAGI_API_KEY_REF=op://Dev/Kagi/api-key       → KAGI_API_KEY
+#   OP_MY_SECRET_REF=op://Vault/Item/field           → MY_SECRET
+#   OP_GOOGLE_APPLICATION_CREDENTIALS_FILE_REF=op://Dev/GCP/sa-key.json
+#       → GOOGLE_APPLICATION_CREDENTIALS=/dev/shm/google-application-credentials.json
+#
+# - Direct env var always wins (if <NAME> is already set, OP ref is skipped)
+# - Fails silently if OP is unavailable or unauthenticated
+# ----------------------------------------------------------------------------
+_OP_SECRETS_CACHE="/dev/shm/op-secrets-cache"
+
+_op_load_secrets() {
+    # Skip if op not available or no service account token
+    if ! command -v op >/dev/null 2>&1 || [ -z "${OP_SERVICE_ACCOUNT_TOKEN:-}" ]; then
+        return 0
+    fi
+
+    # Disable xtrace to prevent token exposure in logs
+    local _old_xtrace
+    _old_xtrace=$(set +o | command grep xtrace)
+    set +x
+
+    # Cache hit → source and return
+    if [ -f "$_OP_SECRETS_CACHE" ] && [ -O "$_OP_SECRETS_CACHE" ]; then
+        . "$_OP_SECRETS_CACHE"
+        eval "$_old_xtrace"
+        return 0
+    fi
+
+    local _ref_var _target_var _ref_value _secret_value
+    for _ref_var in $(compgen -v | command grep '^OP_.\+_REF$' | command grep -v '_FILE_REF$'); do
+        _target_var="${_ref_var#OP_}"
+        _target_var="${_target_var%_REF}"
+        [ -z "$_target_var" ] && continue
+        # Skip if target variable is already set
+        [ -n "${!_target_var:-}" ] && continue
+        _ref_value="${!_ref_var:-}"
+        [ -z "$_ref_value" ] && continue
+        if _secret_value=$(op read "$_ref_value" 2>/dev/null); then
+            export "${_target_var}=${_secret_value}"
+        fi
+    done
+
+    # FILE_REF loop: fetch content, write to /dev/shm, export file path
+    local _file_name _uri_field _file_ext _file_path
+    for _ref_var in $(compgen -v | command grep '^OP_.\+_FILE_REF$'); do
+        _target_var="${_ref_var#OP_}"
+        _target_var="${_target_var%_FILE_REF}"
+        [ -z "$_target_var" ] && continue
+        # Skip if target variable is already set
+        [ -n "${!_target_var:-}" ] && continue
+        _ref_value="${!_ref_var:-}"
+        [ -z "$_ref_value" ] && continue
+        if _secret_value=$(op read "$_ref_value" 2>/dev/null); then
+            # Derive filename: lowercase target var with dashes
+            _file_name=$(echo "$_target_var" | tr '[:upper:]_' '[:lower:]-')
+            # Derive extension from the URI's last path segment
+            _uri_field="${_ref_value##*/}"
+            case "$_uri_field" in
+                *.*) _file_ext=".${_uri_field##*.}" ;;
+                *)   _file_ext="" ;;
+            esac
+            _file_path="/dev/shm/${_file_name}${_file_ext}"
+            printf '%s' "$_secret_value" > "$_file_path"
+            chmod 600 "$_file_path"
+            export "${_target_var}=${_file_path}"
+        fi
+    done
+
+    # Restore xtrace state
+    eval "$_old_xtrace"
+}
+
+# ----------------------------------------------------------------------------
+# Smart Git Identity Resolution
+# ----------------------------------------------------------------------------
+# If GIT_USER_NAME wasn't resolved by _op_load_secrets (e.g., the referenced
+# item is a 1Password Identity with separate first/last name fields instead of
+# a single "full name" field), try combining first name + last name.
+# Falls back to "Devcontainer" if nothing resolves.
+_op_resolve_git_identity() {
+    if ! command -v op >/dev/null 2>&1 || [ -z "${OP_SERVICE_ACCOUNT_TOKEN:-}" ]; then
+        return 0
+    fi
+
+    # Skip entirely if both are already set (e.g. from cache)
+    if [ -n "${GIT_USER_NAME:-}" ] && [ -n "${GIT_USER_EMAIL:-}" ]; then
+        return 0
+    fi
+
+    local _old_xtrace
+    _old_xtrace=$(set +o | command grep xtrace)
+    set +x
+
+    # Resolve GIT_USER_NAME: try custom "full name" field, then first+last
+    if [ -z "${GIT_USER_NAME:-}" ] && [ -n "${OP_GIT_USER_NAME_REF:-}" ]; then
+        local _base_path="${OP_GIT_USER_NAME_REF%/*}"
+        local _first _last
+        _first=$(op read "${_base_path}/first name" 2>/dev/null) || true
+        _last=$(op read "${_base_path}/last name" 2>/dev/null) || true
+        if [ -n "${_first}" ] || [ -n "${_last}" ]; then
+            local _full_name="${_first}${_first:+ }${_last}"
+            export GIT_USER_NAME="$_full_name"
+        fi
+    fi
+
+    # Apply defaults so git operations never fail
+    if [ -z "${GIT_USER_NAME:-}" ]; then
+        export GIT_USER_NAME="Devcontainer"
+    fi
+    if [ -z "${GIT_USER_EMAIL:-}" ]; then
+        export GIT_USER_EMAIL="devcontainer@localhost"
+    fi
+
+    eval "$_old_xtrace"
+}
+
+# Write cache only if it doesn't exist yet (cache miss path)
+_op_write_cache() {
+    [ -z "${OP_SERVICE_ACCOUNT_TOKEN:-}" ] && return 0
+    local _cache_tmp="${_OP_SECRETS_CACHE}.tmp.$$"
+    local _old_xtrace
+    _old_xtrace=$(set +o | command grep xtrace)
+    set +x
+    {
+        local _ref_var _target_var
+        for _ref_var in $(compgen -v | command grep '^OP_.\+_REF$' | command grep -v '_FILE_REF$'); do
+            _target_var="${_ref_var#OP_}"
+            _target_var="${_target_var%_REF}"
+            [ -z "$_target_var" ] && continue
+            [ -z "${!_target_var:-}" ] && continue
+            printf 'export %s=%q\n' "$_target_var" "${!_target_var}"
+        done
+        for _ref_var in $(compgen -v | command grep '^OP_.\+_FILE_REF$'); do
+            _target_var="${_ref_var#OP_}"
+            _target_var="${_target_var%_FILE_REF}"
+            [ -z "$_target_var" ] && continue
+            [ -z "${!_target_var:-}" ] && continue
+            printf 'export %s=%q\n' "$_target_var" "${!_target_var}"
+        done
+        printf 'export GIT_USER_NAME=%q\n' "${GIT_USER_NAME:-}"
+        printf 'export GIT_USER_EMAIL=%q\n' "${GIT_USER_EMAIL:-}"
+    } > "$_cache_tmp"
+    chmod 600 "$_cache_tmp"
+    mv "$_cache_tmp" "$_OP_SECRETS_CACHE"
+    eval "$_old_xtrace"
+}
+
+# ----------------------------------------------------------------------------
+# Shell initialization: non-interactive vs interactive
+# ----------------------------------------------------------------------------
+if [[ $- != *i* ]]; then
+    # Non-interactive (e.g. VS Code userEnvProbe): background the slow work
+    # so the env probe completes fast while secrets resolve asynchronously
+    (
+        _op_load_secrets
+        _op_resolve_git_identity
+        if [ ! -f "$_OP_SECRETS_CACHE" ]; then
+            _op_write_cache
+        fi
+    ) &
+    disown
+    return 0
+fi
+
+# ----------------------------------------------------------------------------
+# Interactive shell: load secrets synchronously, define aliases & helpers
+# ----------------------------------------------------------------------------
+_op_load_secrets
+_op_resolve_git_identity
+if [ ! -f "$_OP_SECRETS_CACHE" ]; then
+    _op_write_cache
+fi
 
 # ----------------------------------------------------------------------------
 # 1Password Aliases
@@ -131,175 +312,6 @@ op-exec() {
     op-env-safe "$item" || return 1
     "$@"
 }
-
-# ----------------------------------------------------------------------------
-# Automatic Secret Loading from 1Password (OP_*_REF / OP_*_FILE_REF)
-# ----------------------------------------------------------------------------
-# Scans the environment for variables matching OP_<NAME>_REF and populates
-# <NAME> from 1Password. Also handles OP_<NAME>_FILE_REF for file-based
-# secrets (content written to /dev/shm, env var set to the file path).
-# Requires OP_SERVICE_ACCOUNT_TOKEN to be set.
-#
-# Convention:
-#   OP_<NAME>_REF=op://vault/item/field       →  exports <NAME>=<secret_value>
-#   OP_<NAME>_FILE_REF=op://vault/item/file   →  writes to /dev/shm, exports <NAME>=<path>
-#
-# Examples:
-#   OP_GITHUB_TOKEN_REF=op://Dev/GitHub-PAT/token   → GITHUB_TOKEN
-#   OP_KAGI_API_KEY_REF=op://Dev/Kagi/api-key       → KAGI_API_KEY
-#   OP_MY_SECRET_REF=op://Vault/Item/field           → MY_SECRET
-#   OP_GOOGLE_APPLICATION_CREDENTIALS_FILE_REF=op://Dev/GCP/sa-key.json
-#       → GOOGLE_APPLICATION_CREDENTIALS=/dev/shm/google-application-credentials.json
-#
-# - Direct env var always wins (if <NAME> is already set, OP ref is skipped)
-# - Fails silently if OP is unavailable or unauthenticated
-# ----------------------------------------------------------------------------
-_OP_SECRETS_CACHE="/dev/shm/op-secrets-cache"
-
-_op_load_secrets() {
-    # Skip if op not available or no service account token
-    if ! command -v op >/dev/null 2>&1 || [ -z "${OP_SERVICE_ACCOUNT_TOKEN:-}" ]; then
-        return 0
-    fi
-
-    # Disable xtrace to prevent token exposure in logs
-    local _old_xtrace
-    _old_xtrace=$(set +o | command grep xtrace)
-    set +x
-
-    # Cache hit → source and return
-    if [ -f "$_OP_SECRETS_CACHE" ] && [ -O "$_OP_SECRETS_CACHE" ]; then
-        . "$_OP_SECRETS_CACHE"
-        eval "$_old_xtrace"
-        return 0
-    fi
-
-    local _ref_var _target_var _ref_value _secret_value
-    for _ref_var in $(compgen -v | command grep '^OP_.\+_REF$' | command grep -v '_FILE_REF$'); do
-        _target_var="${_ref_var#OP_}"
-        _target_var="${_target_var%_REF}"
-        [ -z "$_target_var" ] && continue
-        # Skip if target variable is already set
-        [ -n "${!_target_var:-}" ] && continue
-        _ref_value="${!_ref_var:-}"
-        [ -z "$_ref_value" ] && continue
-        if _secret_value=$(op read "$_ref_value" 2>/dev/null); then
-            export "${_target_var}=${_secret_value}"
-        fi
-    done
-
-    # FILE_REF loop: fetch content, write to /dev/shm, export file path
-    local _file_name _uri_field _file_ext _file_path
-    for _ref_var in $(compgen -v | command grep '^OP_.\+_FILE_REF$'); do
-        _target_var="${_ref_var#OP_}"
-        _target_var="${_target_var%_FILE_REF}"
-        [ -z "$_target_var" ] && continue
-        # Skip if target variable is already set
-        [ -n "${!_target_var:-}" ] && continue
-        _ref_value="${!_ref_var:-}"
-        [ -z "$_ref_value" ] && continue
-        if _secret_value=$(op read "$_ref_value" 2>/dev/null); then
-            # Derive filename: lowercase target var with dashes
-            _file_name=$(echo "$_target_var" | tr '[:upper:]_' '[:lower:]-')
-            # Derive extension from the URI's last path segment
-            _uri_field="${_ref_value##*/}"
-            case "$_uri_field" in
-                *.*) _file_ext=".${_uri_field##*.}" ;;
-                *)   _file_ext="" ;;
-            esac
-            _file_path="/dev/shm/${_file_name}${_file_ext}"
-            printf '%s' "$_secret_value" > "$_file_path"
-            chmod 600 "$_file_path"
-            export "${_target_var}=${_file_path}"
-        fi
-    done
-
-    # Restore xtrace state
-    eval "$_old_xtrace"
-}
-
-# Automatically load secrets on shell initialization
-_op_load_secrets
-
-# ----------------------------------------------------------------------------
-# Smart Git Identity Resolution
-# ----------------------------------------------------------------------------
-# If GIT_USER_NAME wasn't resolved by _op_load_secrets (e.g., the referenced
-# item is a 1Password Identity with separate first/last name fields instead of
-# a single "full name" field), try combining first name + last name.
-# Falls back to "Devcontainer" if nothing resolves.
-_op_resolve_git_identity() {
-    if ! command -v op >/dev/null 2>&1 || [ -z "${OP_SERVICE_ACCOUNT_TOKEN:-}" ]; then
-        return 0
-    fi
-
-    # Skip entirely if both are already set (e.g. from cache)
-    if [ -n "${GIT_USER_NAME:-}" ] && [ -n "${GIT_USER_EMAIL:-}" ]; then
-        return 0
-    fi
-
-    local _old_xtrace
-    _old_xtrace=$(set +o | command grep xtrace)
-    set +x
-
-    # Resolve GIT_USER_NAME: try custom "full name" field, then first+last
-    if [ -z "${GIT_USER_NAME:-}" ] && [ -n "${OP_GIT_USER_NAME_REF:-}" ]; then
-        local _base_path="${OP_GIT_USER_NAME_REF%/*}"
-        local _first _last
-        _first=$(op read "${_base_path}/first name" 2>/dev/null) || true
-        _last=$(op read "${_base_path}/last name" 2>/dev/null) || true
-        if [ -n "${_first}" ] || [ -n "${_last}" ]; then
-            local _full_name="${_first}${_first:+ }${_last}"
-            export GIT_USER_NAME="$_full_name"
-        fi
-    fi
-
-    # Apply defaults so git operations never fail
-    if [ -z "${GIT_USER_NAME:-}" ]; then
-        export GIT_USER_NAME="Devcontainer"
-    fi
-    if [ -z "${GIT_USER_EMAIL:-}" ]; then
-        export GIT_USER_EMAIL="devcontainer@localhost"
-    fi
-
-    eval "$_old_xtrace"
-}
-
-_op_resolve_git_identity
-
-# Write cache only if it doesn't exist yet (cache miss path)
-_op_write_cache() {
-    [ -z "${OP_SERVICE_ACCOUNT_TOKEN:-}" ] && return 0
-    local _cache_tmp="${_OP_SECRETS_CACHE}.tmp.$$"
-    local _old_xtrace
-    _old_xtrace=$(set +o | command grep xtrace)
-    set +x
-    {
-        local _ref_var _target_var
-        for _ref_var in $(compgen -v | command grep '^OP_.\+_REF$' | command grep -v '_FILE_REF$'); do
-            _target_var="${_ref_var#OP_}"
-            _target_var="${_target_var%_REF}"
-            [ -z "$_target_var" ] && continue
-            [ -z "${!_target_var:-}" ] && continue
-            printf 'export %s=%q\n' "$_target_var" "${!_target_var}"
-        done
-        for _ref_var in $(compgen -v | command grep '^OP_.\+_FILE_REF$'); do
-            _target_var="${_ref_var#OP_}"
-            _target_var="${_target_var%_FILE_REF}"
-            [ -z "$_target_var" ] && continue
-            [ -z "${!_target_var:-}" ] && continue
-            printf 'export %s=%q\n' "$_target_var" "${!_target_var}"
-        done
-        printf 'export GIT_USER_NAME=%q\n' "${GIT_USER_NAME:-}"
-        printf 'export GIT_USER_EMAIL=%q\n' "${GIT_USER_EMAIL:-}"
-    } > "$_cache_tmp"
-    chmod 600 "$_cache_tmp"
-    mv "$_cache_tmp" "$_OP_SECRETS_CACHE"
-    eval "$_old_xtrace"
-}
-if [ ! -f "$_OP_SECRETS_CACHE" ]; then
-    _op_write_cache
-fi
 
 # Note: We leave set +u and set +e in place for interactive shells
 # to prevent errors with undefined variables or failed commands
