@@ -731,12 +731,15 @@ jobs:
             syft "${IMAGE_WITH_DIGEST}" -o cyclonedx-json="sbom-${variant}.json"
 
             echo "Attesting SBOM for ${variant}..."
-            retry cosign attest --yes \
+            if retry cosign attest --yes \
               --predicate "sbom-${variant}.json" \
               --type cyclonedx \
-              "${IMAGE_WITH_DIGEST}"
-
-            echo "Attestation: provenance + SBOM" >> image-digests.txt
+              "${IMAGE_WITH_DIGEST}"; then
+              echo "Attestation: provenance + SBOM" >> image-digests.txt
+            else
+              echo "⚠️ SBOM attestation failed for ${variant} (likely payload too large for rekor)" >&2
+              echo "Attestation: provenance only (SBOM attestation failed)" >> image-digests.txt
+            fi
             echo "" >> image-digests.txt
           done
 

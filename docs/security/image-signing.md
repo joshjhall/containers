@@ -155,6 +155,12 @@ For trusted registry enforcement, see
 - Attestations are added during the release job. Verify the release workflow
   completed without errors in GitHub Actions.
 - Use `cosign tree <image>` to inspect what's attached to an image.
+- **SBOM attestation is best-effort.** Very large images (e.g., `cloud-ops`
+  with K8s, Terraform, AWS, GCloud, and Cloudflare tools) produce SBOMs that
+  may exceed the Rekor transparency log entry size limit. In this case, the
+  image will still have a valid signature and SLSA provenance attestation, but
+  the SBOM attestation will be missing. The SBOM itself is still uploaded as a
+  release artifact.
 
 ### Rekor transparency log lookup
 
