@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 
 	"github.com/spf13/cobra"
 
@@ -158,11 +159,12 @@ func runInit(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("writing files: %w", err)
 	}
 
-	// Save state to .igor.yml
+	// Save state to .igor.yml (sorted for stable git diffs)
 	explicitList := make([]string, 0, len(sel.Explicit))
 	for id := range sel.Explicit {
 		explicitList = append(explicitList, id)
 	}
+	sort.Strings(explicitList)
 
 	state := &igorconfig.IgorConfig{
 		SchemaVersion: 1,

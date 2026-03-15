@@ -112,7 +112,6 @@ func TestRenderer_FullStack(t *testing.T) {
 		t.Fatalf("NewRenderer: %v", err)
 	}
 
-	// Just verify all templates render without error
 	templates := []string{
 		"docker-compose.yml.tmpl",
 		"devcontainer.json.tmpl",
@@ -129,6 +128,23 @@ func TestRenderer_FullStack(t *testing.T) {
 			}
 			if output == "" {
 				t.Errorf("Render(%s) produced empty output", tmpl)
+			}
+
+			// Golden file comparison (same pattern as minimal)
+			goldenPath := filepath.Join(testdataDir(), "golden", "fullstack", tmpl+".golden")
+			if os.Getenv("UPDATE_GOLDEN") == "1" {
+				os.MkdirAll(filepath.Dir(goldenPath), 0755)
+				os.WriteFile(goldenPath, []byte(output), 0644)
+				return
+			}
+
+			golden, err := os.ReadFile(goldenPath)
+			if err != nil {
+				t.Logf("No golden file at %s (run with UPDATE_GOLDEN=1 to create)", goldenPath)
+				return
+			}
+			if output != string(golden) {
+				t.Errorf("Render(%s) output differs from golden.\nGot:\n%s\nWant:\n%s", tmpl, output, string(golden))
 			}
 		})
 	}
