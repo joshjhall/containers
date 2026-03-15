@@ -637,6 +637,25 @@ jobs:
         run: |
           VERSION=${{ steps.version.outputs.VERSION }}
 
+          # Retry wrapper for cosign commands (sigstore can have transient failures)
+          retry() {
+            local max_attempts=5
+            local delay=15
+            local attempt=1
+            while [ $attempt -le $max_attempts ]; do
+              echo "Attempt $attempt/$max_attempts: $*"
+              if "$@"; then
+                return 0
+              fi
+              echo "Attempt $attempt failed. Waiting ${delay}s before retry..."
+              sleep $delay
+              delay=$((delay * 2))
+              attempt=$((attempt + 1))
+            done
+            echo "All $max_attempts attempts failed for: $*"
+            return 1
+          }
+
           # Generate digest file
           echo "# Container Image Digests for Release ${VERSION}" > image-digests.txt
           echo "" >> image-digests.txt
@@ -659,7 +678,7 @@ jobs:
 
             # 1. Sign with Cosign
             echo "Signing ${IMAGE}..."
-            cosign sign --yes "${IMAGE_WITH_DIGEST}"
+            retry cosign sign --yes "${IMAGE_WITH_DIGEST}"
 
             # 2. Generate and attest SLSA provenance
             echo "Generating SLSA provenance for ${variant}..."
@@ -702,7 +721,7 @@ jobs:
           PROVENANCE_EOF
 
             echo "Attesting SLSA provenance for ${variant}..."
-            cosign attest --yes \
+            retry cosign attest --yes \
               --predicate "provenance-${variant}.json" \
               --type slsaprovenance \
               "${IMAGE_WITH_DIGEST}"
@@ -712,7 +731,7 @@ jobs:
             syft "${IMAGE_WITH_DIGEST}" -o cyclonedx-json="sbom-${variant}.json"
 
             echo "Attesting SBOM for ${variant}..."
-            cosign attest --yes \
+            retry cosign attest --yes \
               --predicate "sbom-${variant}.json" \
               --type cyclonedx \
               "${IMAGE_WITH_DIGEST}"
