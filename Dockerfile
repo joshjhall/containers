@@ -192,7 +192,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 # R Statistical Computing
 ARG INCLUDE_R=false
 ARG INCLUDE_R_DEV=false
-ARG R_VERSION=4.5.2
+ARG R_VERSION=4.5.3
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     if [ "${INCLUDE_R}" = "true" ] || [ "${INCLUDE_R_DEV}" = "true" ]; then \
@@ -323,7 +323,7 @@ ARG INCLUDE_KUBERNETES=false
 ARG KUBECTL_VERSION=1.33.9
 ARG K9S_VERSION=0.50.18
 ARG KREW_VERSION=0.5.0
-ARG HELM_VERSION=4.1.1
+ARG HELM_VERSION=4.1.3
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     if [ "${INCLUDE_KUBERNETES}" = "true" ]; then \

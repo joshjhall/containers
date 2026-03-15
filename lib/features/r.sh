@@ -38,7 +38,7 @@ source /tmp/build-scripts/base/cache-utils.sh
 # ============================================================================
 # Version Configuration
 # ============================================================================
-R_VERSION="${R_VERSION:-4.5.2}"
+R_VERSION="${R_VERSION:-4.5.3}"
 
 # Validate R version format to prevent shell injection
 validate_r_version "$R_VERSION" || {
