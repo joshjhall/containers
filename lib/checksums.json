@@ -93,6 +93,15 @@
       },
       "added": "2026-03-08"
     },
+    "entr": {
+      "versions": {
+        "5.8": {
+          "sha256": "dc9a2bdc556b2be900c1d8cdf432de26492de5af3ffade000d4bfd97f3122bfb",
+          "url": "https://eradman.com/entrproject/code/entr-5.8.tar.gz",
+          "added": "2026-03-15"
+        }
+      }
+    },
     "cosign": {
       "version": "3.0.5",
       "checksums": {

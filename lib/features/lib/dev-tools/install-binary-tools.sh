@@ -10,9 +10,7 @@
 install_entr() {
     log_message "Installing entr (file watcher)..."
     local ENTR_TARBALL="entr-${ENTR_VERSION}.tar.gz"
-    local ENTR_URL="http://eradman.com/entrproject/code/${ENTR_TARBALL}"
-
-    # entr doesn't publish checksums — TOFU with unified logging
+    local ENTR_URL="https://eradman.com/entrproject/code/${ENTR_TARBALL}"
 
     local BUILD_TEMP
     BUILD_TEMP=$(create_secure_temp_dir)
