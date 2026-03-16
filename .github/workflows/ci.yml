@@ -73,6 +73,7 @@ jobs:
     steps:
       - name: Disable CRLF conversion
         if: runner.os == 'Windows'
+        working-directory: .
         run: git config --global core.autocrlf false
 
       - name: Checkout code
