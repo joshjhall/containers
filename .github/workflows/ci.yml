@@ -84,6 +84,7 @@ jobs:
         run: go vet ./...
 
       - name: Check gofmt
+        shell: bash
         run: |
           UNFMT=$(gofmt -l .)
           if [ -n "$UNFMT" ]; then
