@@ -2,6 +2,7 @@ package wizard
 
 import (
 	"fmt"
+	"sort"
 
 	"github.com/charmbracelet/huh"
 	"github.com/joshjhall/containers/cmd/igor/internal/feature"
@@ -30,44 +31,19 @@ func RunWizard(reg *feature.Registry, defaults WizardDefaults) (*WizardResult, e
 		Versions:      make(map[string]string),
 	}
 
-	// Step 1: Project info
-	if err := runProjectStep(result); err != nil {
-		return nil, err
-	}
+	// Build option lists upfront
+	langOptions := buildLangOptions(reg)
+	devToolOptions := buildDevToolOptions(reg)
+	cloudOptions := buildCloudOptions(reg)
+	toolOptions := buildToolOptions(reg)
 
-	// Step 2: Languages
-	if err := runLanguageStep(reg, result); err != nil {
-		return nil, err
-	}
+	var selectedLangs []string
+	var selectedDev []string
+	var selectedCloud []string
+	var selectedTools []string
 
-	// Step 3: Cloud & infra
-	if err := runCloudStep(reg, result); err != nil {
-		return nil, err
-	}
-
-	// Step 4: Tools
-	if err := runToolStep(reg, result); err != nil {
-		return nil, err
-	}
-
-	// Step 5: Review
-	if err := runReviewStep(reg, result); err != nil {
-		return nil, err
-	}
-
-	return result, nil
-}
-
-// WizardDefaults provides pre-filled values for the wizard.
-type WizardDefaults struct {
-	ProjectName   string
-	Username      string
-	BaseImage     string
-	ContainersDir string
-}
-
-func runProjectStep(result *WizardResult) error {
-	form := huh.NewForm(
+	// Single form — all groups enable back navigation between steps
+	mainForm := huh.NewForm(
 		huh.NewGroup(
 			huh.NewInput().
 				Title("Project name").
@@ -86,9 +62,9 @@ func runProjectStep(result *WizardResult) error {
 			huh.NewSelect[string]().
 				Title("Base image").
 				Options(
-					huh.NewOption("Debian Trixie (13) — latest", "debian:trixie-slim"),
-					huh.NewOption("Debian Bookworm (12) — stable", "debian:bookworm-slim"),
-					huh.NewOption("Debian Bullseye (11) — legacy", "debian:bullseye-slim"),
+					huh.NewOption("Debian Trixie (13) — stable", "debian:trixie-slim"),
+					huh.NewOption("Debian Bookworm (12) — oldstable", "debian:bookworm-slim"),
+					huh.NewOption("Debian Bullseye (11) — EOL", "debian:bullseye-slim"),
 				).
 				Value(&result.BaseImage),
 			huh.NewInput().
@@ -96,77 +72,23 @@ func runProjectStep(result *WizardResult) error {
 				Description("Relative path from project root to containers/").
 				Value(&result.ContainersDir),
 		).Title("Project Configuration"),
-	)
-	return form.Run()
-}
 
-func runLanguageStep(reg *feature.Registry, result *WizardResult) error {
-	langs := reg.Languages()
-
-	// Filter to just the main language features (no android/kotlin for simplicity in base list)
-	var langOptions []huh.Option[string]
-	for _, f := range langs {
-		langOptions = append(langOptions, huh.NewOption(
-			fmt.Sprintf("%s — %s", f.DisplayName, f.Description),
-			f.ID,
-		))
-	}
-
-	var selectedLangs []string
-	form := huh.NewForm(
 		huh.NewGroup(
 			huh.NewMultiSelect[string]().
 				Title("Languages & Runtimes").
-				Description("Select languages to include (dev tools added automatically)").
+				Description("Select base language runtimes to include").
 				Options(langOptions...).
 				Value(&selectedLangs),
 		).Title("Language Selection"),
-	)
 
-	if err := form.Run(); err != nil {
-		return err
-	}
+		huh.NewGroup(
+			huh.NewMultiSelect[string]().
+				Title("Dev Tools").
+				Description("LSP, formatters, linters — each includes its base language runtime automatically").
+				Options(devToolOptions...).
+				Value(&selectedDev),
+		).Title("Dev Tools"),
 
-	// For each selected language, ask about dev tools
-	for _, langID := range selectedLangs {
-		result.Features[langID] = true
-
-		devID := langID + "_dev"
-		devFeature := reg.Get(devID)
-		if devFeature != nil {
-			var includeDev bool
-			devForm := huh.NewForm(
-				huh.NewGroup(
-					huh.NewConfirm().
-						Title(fmt.Sprintf("Include %s?", devFeature.DisplayName)).
-						Description(devFeature.Description).
-						Value(&includeDev),
-				),
-			)
-			if err := devForm.Run(); err != nil {
-				return err
-			}
-			if includeDev {
-				result.DevFeatures[devID] = true
-			}
-		}
-	}
-
-	return nil
-}
-
-func runCloudStep(reg *feature.Registry, result *WizardResult) error {
-	cloudFeatures := reg.ByCategory(feature.CategoryCloud)
-	var cloudOptions []huh.Option[string]
-	for _, f := range cloudFeatures {
-		cloudOptions = append(cloudOptions, huh.NewOption(
-			fmt.Sprintf("%s — %s", f.DisplayName, f.Description),
-			f.ID,
-		))
-	}
-
-	var selectedCloud []string
-	form := huh.NewForm(
 		huh.NewGroup(
 			huh.NewMultiSelect[string]().
 				Title("Cloud & Infrastructure").
@@ -174,37 +96,7 @@ func runCloudStep(reg *feature.Registry, result *WizardResult) error {
 				Options(cloudOptions...).
 				Value(&selectedCloud),
 		).Title("Cloud & Infrastructure"),
-	)
 
-	if err := form.Run(); err != nil {
-		return err
-	}
-
-	for _, id := range selectedCloud {
-		result.Features[id] = true
-	}
-	return nil
-}
-
-func runToolStep(reg *feature.Registry, result *WizardResult) error {
-	// Combine tools + database + AI categories
-	var toolOptions []huh.Option[string]
-
-	for _, cat := range []feature.Category{feature.CategoryTool, feature.CategoryDatabase, feature.CategoryAI} {
-		for _, f := range reg.ByCategory(cat) {
-			// Skip internal auto-resolved features
-			if f.ID == "cron" || f.ID == "bindfs" {
-				continue
-			}
-			toolOptions = append(toolOptions, huh.NewOption(
-				fmt.Sprintf("%s — %s", f.DisplayName, f.Description),
-				f.ID,
-			))
-		}
-	}
-
-	var selectedTools []string
-	form := huh.NewForm(
 		huh.NewGroup(
 			huh.NewMultiSelect[string]().
 				Title("Tools & Services").
@@ -214,14 +106,89 @@ func runToolStep(reg *feature.Registry, result *WizardResult) error {
 		).Title("Tools & Services"),
 	)
 
-	if err := form.Run(); err != nil {
-		return err
+	if err := mainForm.Run(); err != nil {
+		return nil, err
 	}
 
+	// Record selections
+	for _, id := range selectedLangs {
+		result.Features[id] = true
+	}
+	for _, id := range selectedDev {
+		result.DevFeatures[id] = true
+	}
+	for _, id := range selectedCloud {
+		result.Features[id] = true
+	}
 	for _, id := range selectedTools {
 		result.Features[id] = true
 	}
-	return nil
+
+	// Review step
+	if err := runReviewStep(reg, result); err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}
+
+// WizardDefaults provides pre-filled values for the wizard.
+type WizardDefaults struct {
+	ProjectName   string
+	Username      string
+	BaseImage     string
+	ContainersDir string
+}
+
+func buildLangOptions(reg *feature.Registry) []huh.Option[string] {
+	var opts []huh.Option[string]
+	for _, f := range reg.Languages() {
+		opts = append(opts, huh.NewOption(
+			fmt.Sprintf("%s — %s", f.DisplayName, f.Description),
+			f.ID,
+		))
+	}
+	return opts
+}
+
+func buildDevToolOptions(reg *feature.Registry) []huh.Option[string] {
+	var opts []huh.Option[string]
+	for _, f := range reg.ByCategory(feature.CategoryLanguage) {
+		if f.IsDev {
+			opts = append(opts, huh.NewOption(
+				fmt.Sprintf("%s — %s", f.DisplayName, f.Description),
+				f.ID,
+			))
+		}
+	}
+	return opts
+}
+
+func buildCloudOptions(reg *feature.Registry) []huh.Option[string] {
+	var opts []huh.Option[string]
+	for _, f := range reg.ByCategory(feature.CategoryCloud) {
+		opts = append(opts, huh.NewOption(
+			fmt.Sprintf("%s — %s", f.DisplayName, f.Description),
+			f.ID,
+		))
+	}
+	return opts
+}
+
+func buildToolOptions(reg *feature.Registry) []huh.Option[string] {
+	var opts []huh.Option[string]
+	for _, cat := range []feature.Category{feature.CategoryTool, feature.CategoryDatabase, feature.CategoryAI} {
+		for _, f := range reg.ByCategory(cat) {
+			if f.ID == "cron" || f.ID == "bindfs" {
+				continue
+			}
+			opts = append(opts, huh.NewOption(
+				fmt.Sprintf("%s — %s", f.DisplayName, f.Description),
+				f.ID,
+			))
+		}
+	}
+	return opts
 }
 
 func runReviewStep(reg *feature.Registry, result *WizardResult) error {
@@ -244,7 +211,8 @@ func runReviewStep(reg *feature.Registry, result *WizardResult) error {
 	review += fmt.Sprintf("  Path:    %s\n\n", result.ContainersDir)
 
 	review += subtitleStyle.Render("Selected features:") + "\n"
-	for id := range sel.Explicit {
+	explicitIDs := sortedKeys(sel.Explicit)
+	for _, id := range explicitIDs {
 		f := reg.Get(id)
 		if f != nil {
 			review += fmt.Sprintf("  + %s\n", f.DisplayName)
@@ -252,7 +220,8 @@ func runReviewStep(reg *feature.Registry, result *WizardResult) error {
 	}
 	if len(sel.Auto) > 0 {
 		review += "\n" + autoDepStyle.Render("Auto-resolved dependencies:") + "\n"
-		for id := range sel.Auto {
+		autoIDs := sortedKeys(sel.Auto)
+		for _, id := range autoIDs {
 			f := reg.Get(id)
 			if f != nil {
 				review += fmt.Sprintf("  ~ %s\n", f.DisplayName)
@@ -272,8 +241,12 @@ func runReviewStep(reg *feature.Registry, result *WizardResult) error {
 	var confirmed bool
 	form := huh.NewForm(
 		huh.NewGroup(
-			huh.NewConfirm().
+			huh.NewSelect[bool]().
 				Title("Generate these files?").
+				Options(
+					huh.NewOption("Yes, generate files", true),
+					huh.NewOption("No, cancel", false),
+				).
 				Value(&confirmed),
 		),
 	)
@@ -287,4 +260,13 @@ func runReviewStep(reg *feature.Registry, result *WizardResult) error {
 	}
 
 	return nil
+}
+
+func sortedKeys(m map[string]bool) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
 }
