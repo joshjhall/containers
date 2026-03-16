@@ -262,11 +262,11 @@ test_java_dev_spring_boot_checksum() {
         assert_true false "java-dev.sh does not register checksum fetcher for Spring Boot CLI"
     fi
 
-    # Check for verify_download usage for spring-boot-cli
-    if command grep -q 'verify_download.*spring-boot-cli' "$java_dev_script"; then
-        assert_true true "java-dev.sh uses verify_download for Spring Boot CLI"
+    # Check for _download_and_verify_tool usage for spring-boot-cli
+    if command grep -q '_download_and_verify_tool.*spring-boot-cli' "$java_dev_script"; then
+        assert_true true "java-dev.sh uses _download_and_verify_tool for Spring Boot CLI"
     else
-        assert_true false "java-dev.sh does not use verify_download for Spring Boot CLI"
+        assert_true false "java-dev.sh does not use _download_and_verify_tool for Spring Boot CLI"
     fi
 }
 
@@ -280,11 +280,11 @@ test_java_dev_maven_daemon_checksum() {
     fi
 
     # Maven Daemon does not publish checksums — falls through to Tier 4 TOFU
-    # Check for verify_download usage for mvnd
-    if command grep -q 'verify_download.*mvnd' "$java_dev_script"; then
-        assert_true true "java-dev.sh uses verify_download for Maven Daemon"
+    # Check for _download_and_verify_tool usage for mvnd
+    if command grep -q '_download_and_verify_tool.*mvnd' "$java_dev_script"; then
+        assert_true true "java-dev.sh uses _download_and_verify_tool for Maven Daemon"
     else
-        assert_true false "java-dev.sh does not use verify_download for Maven Daemon"
+        assert_true false "java-dev.sh does not use _download_and_verify_tool for Maven Daemon"
     fi
 
     # Check that Maven Daemon download exists
@@ -336,6 +336,54 @@ test_maven_daemon_architecture_check() {
     fi
 }
 
+# Test: MVND_VERSION uses override pattern
+test_mvnd_version_override_pattern() {
+    local java_dev_script="$PROJECT_ROOT/lib/features/java-dev.sh"
+
+    if ! [ -f "$java_dev_script" ]; then
+        skip_test "java-dev.sh not found"
+        return
+    fi
+
+    if command grep -q 'MVND_VERSION="${MVND_VERSION:-' "$java_dev_script"; then
+        assert_true true "MVND_VERSION uses override pattern"
+    else
+        assert_true false "MVND_VERSION does not use override pattern"
+    fi
+}
+
+# Test: JMH_VERSION is not exported (phantom removed)
+test_no_jmh_version_export() {
+    local java_dev_script="$PROJECT_ROOT/lib/features/java-dev.sh"
+
+    if ! [ -f "$java_dev_script" ]; then
+        skip_test "java-dev.sh not found"
+        return
+    fi
+
+    if command grep -q 'export JMH_VERSION' "$java_dev_script"; then
+        assert_true false "java-dev.sh still exports JMH_VERSION (should be removed)"
+    else
+        assert_true true "java-dev.sh does not export JMH_VERSION"
+    fi
+}
+
+# Test: _download_and_verify_tool helper function exists
+test_download_helper_exists() {
+    local java_dev_script="$PROJECT_ROOT/lib/features/java-dev.sh"
+
+    if ! [ -f "$java_dev_script" ]; then
+        skip_test "java-dev.sh not found"
+        return
+    fi
+
+    if command grep -q '_download_and_verify_tool()' "$java_dev_script"; then
+        assert_true true "_download_and_verify_tool helper function exists"
+    else
+        assert_true false "_download_and_verify_tool helper function not found"
+    fi
+}
+
 # Run all tests
 run_test_with_setup test_maven_installation "Maven installation"
 run_test_with_setup test_gradle_installation "Gradle installation"
@@ -353,6 +401,9 @@ run_test test_java_dev_spring_boot_checksum "java-dev.sh verifies Spring Boot CL
 run_test test_java_dev_maven_daemon_checksum "java-dev.sh verifies Maven Daemon checksum"
 run_test test_java_dev_sources_libraries "java-dev.sh sources verification libraries"
 run_test test_maven_daemon_architecture_check "Maven Daemon only installs on amd64"
+run_test test_mvnd_version_override_pattern "MVND_VERSION uses override pattern"
+run_test test_no_jmh_version_export "JMH_VERSION is not exported"
+run_test test_download_helper_exists "_download_and_verify_tool helper exists"
 
 # Generate test report
 generate_report

@@ -16,7 +16,6 @@
 #   - JBang: Java scripting and single-file execution
 #   - SDKMAN!: Java SDK version management
 #   - Lombok: Boilerplate code reduction
-#   - JMH: Java Microbenchmark Harness
 #
 # Requirements:
 #   - Java must be installed (via INCLUDE_JAVA=true)
@@ -94,6 +93,27 @@ TOOLS_DIR="/opt/java-tools"
 log_command "Creating tools directory" \
     mkdir -p "${TOOLS_DIR}/bin"
 
+# Helper: download a file to a secure temp dir and run 4-tier verification.
+# Sets BUILD_TEMP for the caller. Returns 1 on download or verification failure.
+_download_and_verify_tool() {
+    local tool_name="$1" version="$2" url="$3" output_file="$4"
+    BUILD_TEMP=$(create_secure_temp_dir)
+    cd "$BUILD_TEMP"
+    log_message "Downloading ${tool_name} ${version}..."
+    if ! command curl -L -f --retry 3 --retry-delay 2 --retry-all-errors \
+         --progress-bar -o "$output_file" "$url"; then
+        log_error "Failed to download ${tool_name} ${version}"
+        return 1
+    fi
+    local verify_rc=0
+    verify_download "tool" "$tool_name" "$version" "$output_file" \
+        "$(dpkg --print-architecture)" || verify_rc=$?
+    if [ "$verify_rc" -eq 1 ]; then
+        log_error "Verification failed for ${tool_name} ${version}"
+        return 1
+    fi
+}
+
 # ============================================================================
 # Spring Boot CLI
 # ============================================================================
@@ -113,21 +133,7 @@ _fetch_spring_cli_checksum() {
 }
 register_tool_checksum_fetcher "spring-boot-cli" "_fetch_spring_cli_checksum"
 
-# Download Spring Boot CLI
-BUILD_TEMP=$(create_secure_temp_dir)
-cd "$BUILD_TEMP"
-log_message "Downloading Spring Boot CLI ${SPRING_VERSION}..."
-if ! command curl -L -f --retry 3 --retry-delay 2 --retry-all-errors --progress-bar -o "spring-boot-cli.tar.gz" "${SPRING_BASE_URL}"; then
-    log_error "Failed to download Spring Boot CLI ${SPRING_VERSION}"
-    log_feature_end
-    exit 1
-fi
-
-# Run 4-tier verification
-verify_rc=0
-verify_download "tool" "spring-boot-cli" "$SPRING_VERSION" "spring-boot-cli.tar.gz" "$(dpkg --print-architecture)" || verify_rc=$?
-if [ "$verify_rc" -eq 1 ]; then
-    log_error "Verification failed for Spring Boot CLI ${SPRING_VERSION}"
+if ! _download_and_verify_tool "spring-boot-cli" "$SPRING_VERSION" "$SPRING_BASE_URL" "spring-boot-cli.tar.gz"; then
     log_feature_end
     exit 1
 fi
@@ -158,21 +164,7 @@ _fetch_jbang_checksum() {
 }
 register_tool_checksum_fetcher "jbang" "_fetch_jbang_checksum"
 
-# Download JBang tarball
-BUILD_TEMP=$(create_secure_temp_dir)
-cd "$BUILD_TEMP"
-log_message "Downloading JBang..."
-if ! command curl -L -f --retry 3 --retry-delay 2 --retry-all-errors --progress-bar -o "jbang.tar" "$JBANG_URL"; then
-    log_error "Failed to download JBang ${JBANG_VERSION}"
-    log_feature_end
-    exit 1
-fi
-
-# Run 4-tier verification
-verify_rc=0
-verify_download "tool" "jbang" "$JBANG_VERSION" "jbang.tar" "$(dpkg --print-architecture)" || verify_rc=$?
-if [ "$verify_rc" -eq 1 ]; then
-    log_error "Verification failed for JBang ${JBANG_VERSION}"
+if ! _download_and_verify_tool "jbang" "$JBANG_VERSION" "$JBANG_URL" "jbang.tar"; then
     log_feature_end
     exit 1
 fi
@@ -197,26 +189,13 @@ ARCH=$(dpkg --print-architecture)
 if [ "$ARCH" = "amd64" ]; then
     log_message "Installing Maven Daemon for ${ARCH}..."
 
-    MVND_VERSION="1.0.3"
+    MVND_VERSION="${MVND_VERSION:-1.0.3}"
     MVND_URL="https://github.com/apache/maven-mvnd/releases/download/${MVND_VERSION}/maven-mvnd-${MVND_VERSION}-linux-${ARCH}.tar.gz"
 
     # Maven Daemon does not publish checksums — will be verified via Tier 2 (pinned) or Tier 4 (TOFU)
     # No fetcher registered — falls through to TOFU with unified logging
 
-    BUILD_TEMP=$(create_secure_temp_dir)
-    cd "$BUILD_TEMP"
-    log_message "Downloading Maven Daemon ${MVND_VERSION}..."
-    if ! command curl -L -f --retry 3 --retry-delay 2 --retry-all-errors --progress-bar -o "mvnd.tar.gz" "${MVND_URL}"; then
-        log_error "Failed to download Maven Daemon ${MVND_VERSION}"
-        log_feature_end
-        exit 1
-    fi
-
-    # Run 4-tier verification
-    verify_rc=0
-    verify_download "tool" "mvnd" "$MVND_VERSION" "mvnd.tar.gz" "$ARCH" || verify_rc=$?
-    if [ "$verify_rc" -eq 1 ]; then
-        log_error "Verification failed for Maven Daemon ${MVND_VERSION}"
+    if ! _download_and_verify_tool "mvnd" "$MVND_VERSION" "$MVND_URL" "mvnd.tar.gz"; then
         log_feature_end
         exit 1
     fi
@@ -256,21 +235,13 @@ log_message "Installing Google Java Format..."
 
 GJF_VERSION="${GJF_VERSION:-1.35.0}"
 
-# JMH version for benchmarking
-JMH_VERSION="1.37"
-export JMH_VERSION  # Export for use in shell functions
 GJF_URL="https://github.com/google/google-java-format/releases/download/v${GJF_VERSION}/google-java-format-${GJF_VERSION}-all-deps.jar"
 # Google Java Format does not publish checksums — will be TOFU with unified logging
 if command wget -q --spider "${GJF_URL}" 2>/dev/null; then
-    log_message "Downloading Google Java Format ${GJF_VERSION}..."
-    if command curl -L -f --retry 3 --retry-delay 2 --retry-all-errors --progress-bar -o "${JARS_DIR}/google-java-format.jar" "${GJF_URL}"; then
-        # Run 4-tier verification (no fetcher registered — will be TOFU)
-        verify_rc=0
-        verify_download "tool" "google-java-format" "$GJF_VERSION" "${JARS_DIR}/google-java-format.jar" "$(dpkg --print-architecture)" || verify_rc=$?
-        if [ "$verify_rc" -eq 1 ]; then
-            log_warning "Verification failed for Google Java Format, removing..."
-            command rm -f "${JARS_DIR}/google-java-format.jar"
-        fi
+    if _download_and_verify_tool "google-java-format" "$GJF_VERSION" "$GJF_URL" "google-java-format.jar"; then
+        command cp "$BUILD_TEMP/google-java-format.jar" "${JARS_DIR}/google-java-format.jar"
+    else
+        log_warning "Google Java Format download or verification failed, skipping..."
     fi
 
     # Create wrapper script
@@ -352,7 +323,7 @@ if command -v java &> /dev/null; then
     echo "  Spring Boot CLI: spring"
     echo "  JBang: jbang"
     echo "  Maven Daemon: mvnd"
-    echo "  Code Quality: spotbugs, pmd, checkstyle"
+    echo "  Code Quality: google-java-format (via Maven plugins: spotbugs, pmd, checkstyle)"
     echo "  Formatting: google-java-format"
     echo "  Release: jreleaser"
     echo ""
@@ -434,7 +405,7 @@ done
 # Check code quality tools
 echo ""
 echo "Code quality tools:"
-for tool in spotbugs pmd cpd checkstyle google-java-format; do
+for tool in google-java-format; do
     if command -v $tool &> /dev/null; then
         echo "✓ $tool is installed"
     else
@@ -472,8 +443,6 @@ echo ""
 echo "Code quality:"
 echo "  java-quality-check        - Run all quality tools"
 echo "  java-format-all           - Format all Java files"
-echo "  pmd-java                  - Run PMD analysis"
-echo "  cpd-java                  - Detect copy-paste"
 echo ""
 echo "Build tools:"
 echo "  mvnd                      - Fast Maven builds"
@@ -503,9 +472,6 @@ log_command "Checking JBang" \
 log_command "Checking Maven Daemon" \
     /usr/local/bin/mvnd --version || log_warning "Maven Daemon not installed"
 
-log_command "Checking SpotBugs" \
-    /usr/local/bin/spotbugs -version || log_warning "SpotBugs not installed"
-
 # Log feature summary
 # Export directory paths for feature summary
 export TOOLS_DIR="/opt/java-tools"
@@ -516,7 +482,7 @@ log_feature_summary \
     --feature "Java Development Tools" \
     --tools "spring,jbang,mvnd,google-java-format,jreleaser" \
     --paths "${TOOLS_DIR},${JARS_DIR},${TEMPLATES_DIR}" \
-    --env "SPRING_VERSION,JMH_VERSION" \
+    --env "SPRING_VERSION" \
     --commands "spring,jbang,mvnd,google-java-format,spring-init-web,spring-init-api,jbang-init,java-format-all,java-quality-check" \
     --next-steps "Run 'test-java-dev' to check installed tools. Run 'java-dev-help' for available commands. Use spring-init-web/api to create projects."
 
