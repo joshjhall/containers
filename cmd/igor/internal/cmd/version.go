@@ -12,11 +12,18 @@ import (
 // Version is set at build time via -ldflags.
 var Version = "dev"
 
+// BuildTime is set at build time via -ldflags. Falls back to runtime detection.
+var BuildTime = ""
+
 var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Print igor and containers version",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		fmt.Printf("igor %s\n", Version)
+		if BuildTime != "" {
+			fmt.Printf("igor %s (built %s)\n", Version, BuildTime)
+		} else {
+			fmt.Printf("igor %s\n", Version)
+		}
 
 		// Try to read containers VERSION file
 		containersVersion := detectContainersVersion()
