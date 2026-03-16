@@ -295,11 +295,11 @@ if [ -d "$TEMPLATES_DIR" ]; then
     echo ""
 
     # --- Resolve skill list ---
-    # Default static skills (13 template-based skills).
+    # Default static skills (14 template-based skills).
     # Excludes: container-environment (always installs dynamically),
     # conditional skills (docker-development, cloud-infrastructure),
     # and project-level .claude/skills/ (always available via repo).
-    DEFAULT_SKILLS="git-workflow,testing-patterns,code-quality,development-workflow,error-handling,documentation-authoring,shell-scripting,skill-authoring,agent-authoring,next-issue,codebase-audit,next-issue-ship,memory-conventions"
+    DEFAULT_SKILLS="git-workflow,testing-patterns,code-quality,development-workflow,error-handling,documentation-authoring,shell-scripting,skill-authoring,agent-authoring,next-issue,codebase-audit,next-issue-ship,memory-conventions,orchestrate"
     # Use if-else to capture return code safely under set -e
     if SKILL_LIST=$(_resolve_override_list "CLAUDE_SKILLS" "$DEFAULT_SKILLS"); then
         SKILL_LIST_IS_OVERRIDE=0
