@@ -20,6 +20,7 @@ repos:
         exclude: ^(\.devcontainer/devcontainer\.json|\.vscode/)
       - id: check-added-large-files
         args: [--maxkb=500]
+        exclude: ^bin/igor$
       - id: check-merge-conflict
       # Note: check-executables-have-shebangs and check-shebang-scripts-are-executable
       # are disabled because mounted filesystems (devcontainers, Docker volumes) may
@@ -178,6 +179,14 @@ repos:
         language: system
         pass_filenames: false
         always_run: true
+        stages: [pre-push]
+
+      - id: build-igor
+        name: Build igor binary
+        entry: bash -c 'cd cmd/igor && CGO_ENABLED=0 go build -trimpath -o ../../bin/igor . && git add bin/igor'
+        language: system
+        pass_filenames: false
+        files: ^cmd/igor/.*\.go$
         stages: [pre-push]
 
       - id: yamllint-all
