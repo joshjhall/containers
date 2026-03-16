@@ -128,3 +128,32 @@ func TestWriteFiles_HashDeterministic(t *testing.T) {
 		t.Errorf("hashes differ across runs: %q vs %q", hashes1[path], hashes2[path])
 	}
 }
+
+func TestHashContent(t *testing.T) {
+	content := "hello world"
+	hash := HashContent(content)
+
+	wantHash := fmt.Sprintf("%x", sha256.Sum256([]byte(content)))
+	if hash != wantHash {
+		t.Errorf("HashContent = %q, want %q", hash, wantHash)
+	}
+}
+
+func TestHashContent_MatchesWriteFiles(t *testing.T) {
+	tmpDir := t.TempDir()
+	content := "matching hash test"
+
+	directHash := HashContent(content)
+
+	entries := []FileEntry{
+		{Path: filepath.Join(tmpDir, "match.txt"), Content: content},
+	}
+	hashes, err := WriteFiles(entries)
+	if err != nil {
+		t.Fatalf("WriteFiles: %v", err)
+	}
+
+	if hashes[entries[0].Path] != directHash {
+		t.Errorf("WriteFiles hash = %q, HashContent = %q", hashes[entries[0].Path], directHash)
+	}
+}

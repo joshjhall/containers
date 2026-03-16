@@ -7,6 +7,12 @@ import (
 	"path/filepath"
 )
 
+// HashContent returns the hex-encoded SHA-256 hash of content.
+func HashContent(content string) string {
+	hash := sha256.Sum256([]byte(content))
+	return fmt.Sprintf("%x", hash)
+}
+
 // WriteFiles writes the planned files, creating directories as needed.
 // It returns a map of relative path → SHA-256 hash.
 func WriteFiles(entries []FileEntry) (map[string]string, error) {
@@ -22,8 +28,7 @@ func WriteFiles(entries []FileEntry) (map[string]string, error) {
 			return nil, fmt.Errorf("writing %s: %w", e.Path, err)
 		}
 
-		hash := sha256.Sum256([]byte(e.Content))
-		hashes[e.Path] = fmt.Sprintf("%x", hash)
+		hashes[e.Path] = HashContent(e.Content)
 	}
 
 	return hashes, nil
