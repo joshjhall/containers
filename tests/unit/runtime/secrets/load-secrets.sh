@@ -375,6 +375,33 @@ test_check_all_providers_health_no_providers() {
     assert_equals "0" "$exit_code" "check_all_providers_health returns 0 even with no providers"
 }
 
+# ============================================================================
+# Functional Tests - Second-loop validation in load_all_secrets()
+# ============================================================================
+
+test_invalid_provider_second_in_list_fails_load_all_secrets() {
+    # The first provider 'docker' passes validation in both loops.
+    # The second provider 'bad;injection' passes the first loop's source_provider
+    # (because source_provider is mocked to succeed) but fails validate_provider_name
+    # in the second loop (line 220-222).
+    local exit_code=0
+    _run_loader_subshell "
+        # Mock source_provider so the first loop doesn't fail on unknown providers
+        source_provider() { return 0; }
+        # Mock docker loader so it succeeds
+        load_secrets_from_docker() { return 0; }
+
+        export SECRET_LOADER_ENABLED='true'
+        export SECRET_LOADER_FAIL_ON_ERROR='true'
+        export SECRET_LOADER_PRIORITY='docker,bad;injection'
+
+        load_all_secrets >/dev/null 2>&1
+    " || exit_code=$?
+
+    assert_equals "2" "$exit_code" \
+        "load_all_secrets returns 2 when second provider fails validation in second loop"
+}
+
 test_check_all_providers_health_with_healthy_provider() {
     local exit_code=0
     _run_loader_subshell "
@@ -445,6 +472,10 @@ run_test_with_setup test_fail_on_error_returns_exit_code_2 "FAIL_ON_ERROR actual
 # Health checks
 run_test_with_setup test_check_all_providers_health_no_providers "check_all_providers_health with no providers"
 run_test_with_setup test_check_all_providers_health_with_healthy_provider "check_all_providers_health with healthy provider"
+
+# Second-loop validation
+run_test_with_setup test_invalid_provider_second_in_list_fails_load_all_secrets \
+    "Invalid provider second in list fails in second validation loop"
 
 # Generate test report
 generate_report

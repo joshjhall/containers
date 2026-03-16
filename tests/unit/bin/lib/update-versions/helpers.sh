@@ -196,6 +196,99 @@ test_helper_functions_defined() {
     fi
 }
 
+# ============================================================================
+# Test: update_checksum_variable rejects invalid checksums
+# ============================================================================
+
+test_update_checksum_rejects_short_hash() {
+    source "$PROJECT_ROOT/bin/lib/common.sh"
+    source "$PROJECT_ROOT/bin/lib/version-utils.sh"
+    source "$PROJECT_ROOT/bin/lib/update-versions/helpers.sh"
+
+    local test_file="$RESULTS_DIR/test_reject_short.sh"
+    command cat > "$test_file" <<'EOF'
+#!/bin/bash
+MY_SHA256="old_value"
+EOF
+
+    # 32-char hex string (MD5 length) — should be rejected
+    local short_hash="abcdef0123456789abcdef0123456789"
+    local exit_code=0
+    update_checksum_variable "$test_file" "MY_SHA256" "$short_hash" 2>/dev/null || exit_code=$?
+
+    assert_equals "1" "$exit_code" \
+        "update_checksum_variable should reject 32-char (MD5-length) hash"
+    command rm -f "$test_file"
+}
+
+test_update_checksum_rejects_non_hex() {
+    source "$PROJECT_ROOT/bin/lib/common.sh"
+    source "$PROJECT_ROOT/bin/lib/version-utils.sh"
+    source "$PROJECT_ROOT/bin/lib/update-versions/helpers.sh"
+
+    local test_file="$RESULTS_DIR/test_reject_nonhex.sh"
+    command cat > "$test_file" <<'EOF'
+#!/bin/bash
+MY_SHA256="old_value"
+EOF
+
+    # 64-char string but with non-hex characters
+    local non_hex="zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+    local exit_code=0
+    update_checksum_variable "$test_file" "MY_SHA256" "$non_hex" 2>/dev/null || exit_code=$?
+
+    assert_equals "1" "$exit_code" \
+        "update_checksum_variable should reject non-hex 64-char string"
+    command rm -f "$test_file"
+}
+
+test_update_checksum_rejects_empty() {
+    source "$PROJECT_ROOT/bin/lib/common.sh"
+    source "$PROJECT_ROOT/bin/lib/version-utils.sh"
+    source "$PROJECT_ROOT/bin/lib/update-versions/helpers.sh"
+
+    local test_file="$RESULTS_DIR/test_reject_empty.sh"
+    command cat > "$test_file" <<'EOF'
+#!/bin/bash
+MY_SHA256="old_value"
+EOF
+
+    local exit_code=0
+    update_checksum_variable "$test_file" "MY_SHA256" "" 2>/dev/null || exit_code=$?
+
+    assert_equals "1" "$exit_code" \
+        "update_checksum_variable should reject empty checksum"
+    command rm -f "$test_file"
+}
+
+test_update_checksum_accepts_sha512() {
+    source "$PROJECT_ROOT/bin/lib/common.sh"
+    source "$PROJECT_ROOT/bin/lib/version-utils.sh"
+    source "$PROJECT_ROOT/bin/lib/update-versions/helpers.sh"
+
+    local test_file="$RESULTS_DIR/test_accept_sha512.sh"
+    command cat > "$test_file" <<'EOF'
+#!/bin/bash
+MY_SHA512="old_value"
+EOF
+
+    # Valid 128-char hex string (SHA-512)
+    local sha512="cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e"
+    local exit_code=0
+    update_checksum_variable "$test_file" "MY_SHA512" "$sha512" 2>/dev/null || exit_code=$?
+
+    assert_equals "0" "$exit_code" \
+        "update_checksum_variable should accept valid SHA-512 (128-char hex)"
+
+    # Verify the file was actually updated
+    if command grep -q "MY_SHA512=\"$sha512\"" "$test_file"; then
+        pass_test "SHA-512 checksum was written to file"
+    else
+        fail_test "SHA-512 checksum was not written to file"
+    fi
+    command rm -f "$test_file"
+}
+
 # Run tests
 run_test test_script_sources_cleanly "Script sources without errors"
 run_test test_extract_checksum_from_file "extract_checksum_from_file works correctly"
@@ -204,6 +297,12 @@ run_test test_verify_checksum_update "verify_checksum_update validates correctly
 run_test test_update_version_comment "update_version_comment updates comments"
 run_test test_required_commands_available "Required commands are available"
 run_test test_helper_functions_defined "Helper functions are defined"
+
+# Invalid checksum rejection
+run_test test_update_checksum_rejects_short_hash "update_checksum_variable rejects short (MD5-length) hash"
+run_test test_update_checksum_rejects_non_hex "update_checksum_variable rejects non-hex characters"
+run_test test_update_checksum_rejects_empty "update_checksum_variable rejects empty checksum"
+run_test test_update_checksum_accepts_sha512 "update_checksum_variable accepts valid SHA-512"
 
 # Generate test report
 generate_report
