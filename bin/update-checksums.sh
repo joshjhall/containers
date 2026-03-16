@@ -42,7 +42,7 @@ while [[ $# -gt 0 ]]; do
         --help)
             echo "Usage: $0 [OPTIONS]"
             echo
-            echo "Update lib/checksums.json with checksums for language versions"
+            echo "Update lib/checksums.json with checksums for languages and tools"
             echo
             echo "Options:"
             echo "  --versions-json FILE  Use check-versions.sh JSON output to add new versions"
@@ -200,8 +200,122 @@ update_checksum() {
     fi
 }
 
-# Process existing versions in checksums.json
-echo -e "${BLUE}Checking existing versions for missing checksums...${NC}"
+# ---------------------------------------------------------------------------
+# Tool checksum registry
+# ---------------------------------------------------------------------------
+# Each entry: "tool_name|version_var|feature_script|url_template"
+# - version_var: shell variable name in the feature script (e.g., ENTR_VERSION)
+# - feature_script: path relative to PROJECT_ROOT (e.g., lib/features/dev-tools.sh)
+# - url_template: download URL with {VERSION} placeholder
+#
+# To add a new tool, append an entry here. The script will:
+# 1. Extract the current version from the feature script
+# 2. Check if a checksum already exists in checksums.json
+# 3. If not, download the file and compute sha256
+TOOL_CHECKSUM_REGISTRY=(
+    "entr|ENTR_VERSION|lib/features/dev-tools.sh|https://eradman.com/entrproject/code/entr-{VERSION}.tar.gz"
+)
+
+# Extract a tool version from its feature script
+extract_tool_version() {
+    local var_name="$1"
+    local script_path="$2"
+    local full_path="$PROJECT_ROOT/$script_path"
+
+    if [ ! -f "$full_path" ]; then
+        return 1
+    fi
+
+    # Match both VAR="value" and VAR="${VAR:-value}" patterns
+    local version
+    version=$(command grep -E "^${var_name}=\"?\\\$\{${var_name}:-[^}]+\}" "$full_path" 2>/dev/null \
+        | command sed -E "s/.*:-([^}]+)\}.*/\1/" | command head -1)
+
+    if [ -z "$version" ]; then
+        version=$(command grep -E "^${var_name}=" "$full_path" 2>/dev/null \
+            | command sed -E "s/^${var_name}=\"?([^\"]+)\"?/\1/" | command head -1)
+    fi
+
+    if [ -n "$version" ]; then
+        echo "$version"
+        return 0
+    fi
+    return 1
+}
+
+# Fetch and update checksum for a tool version by downloading and computing sha256
+update_tool_checksum() {
+    local tool="$1"
+    local version="$2"
+    local url="$3"
+
+    # Check if checksum already exists
+    local current_checksum
+    current_checksum=$(jq -r ".tools.\"${tool}\".versions.\"${version}\".sha256 // empty" "$CHECKSUMS_FILE" 2>/dev/null || echo "")
+
+    if [ -n "$current_checksum" ] && \
+       [ "$current_checksum" != "null" ] && \
+       [ "$current_checksum" != "placeholder_to_be_added" ] && \
+       [ "$current_checksum" != "MANUAL_VERIFICATION_NEEDED" ]; then
+        echo -e "  ${tool} ${version}: already has checksum, skipping"
+        return 0
+    fi
+
+    echo -e "${BLUE}  Fetching checksum for ${tool} ${version}...${NC}"
+
+    # Download file and compute sha256
+    local tmp_download
+    tmp_download=$(mktemp)
+    if ! command curl -fsSL --retry 3 --retry-delay 2 -o "$tmp_download" "$url" 2>/dev/null; then
+        echo -e "${RED}    ✗ Failed to download ${url}${NC}"
+        command rm -f "$tmp_download"
+        ((FAILED_COUNT++))
+        return 1
+    fi
+
+    local checksum
+    checksum=$(command sha256sum "$tmp_download" | command awk '{print $1}')
+    command rm -f "$tmp_download"
+
+    # Validate checksum format
+    if ! [[ "$checksum" =~ ^[a-fA-F0-9]{64}$ ]]; then
+        echo -e "${RED}    ✗ Invalid checksum format: $checksum${NC}"
+        ((FAILED_COUNT++))
+        return 1
+    fi
+
+    echo -e "${GREEN}    ✓ $checksum${NC}"
+
+    if [ "$DRY_RUN" = true ]; then
+        echo -e "${YELLOW}    [DRY RUN] Would update checksums.json${NC}"
+        ((UPDATED_COUNT++))
+        return 0
+    fi
+
+    # Ensure the tool entry has a versions object, then add the version
+    local tmp_file
+    tmp_file=$(mktemp)
+    jq ".tools.\"${tool}\".versions.\"${version}\" = {
+            \"sha256\": \"${checksum}\",
+            \"url\": \"${url}\",
+            \"added\": \"$(date -u +%Y-%m-%d)\"
+        }" "$CHECKSUMS_FILE" > "$tmp_file"
+
+    if jq empty "$tmp_file" 2>/dev/null; then
+        command mv "$tmp_file" "$CHECKSUMS_FILE"
+        ((UPDATED_COUNT++))
+    else
+        echo -e "${RED}    ✗ Failed to update JSON (invalid output)${NC}"
+        command rm "$tmp_file"
+        ((FAILED_COUNT++))
+        return 1
+    fi
+}
+
+# ---------------------------------------------------------------------------
+# Process existing language versions in checksums.json
+# ---------------------------------------------------------------------------
+echo -e "${BLUE}Checking existing language versions for missing checksums...${NC}"
 
 for language in nodejs golang ruby; do
     # Get all versions for this language
@@ -217,6 +331,29 @@ for language in nodejs golang ruby; do
         checksum=$(jq -r ".languages.${language}.versions.\"${version}\".sha256" "$CHECKSUMS_FILE")
         update_checksum "$language" "$version" "$checksum"
     done <<< "$versions"
+done
+
+# ---------------------------------------------------------------------------
+# Process tool checksums from registry
+# ---------------------------------------------------------------------------
+echo
+echo -e "${BLUE}Checking tool versions for missing checksums...${NC}"
+
+for entry in "${TOOL_CHECKSUM_REGISTRY[@]}"; do
+    IFS='|' read -r tool var_name script_path url_template <<< "$entry"
+
+    # Extract current version from feature script
+    local_version=$(extract_tool_version "$var_name" "$script_path" 2>/dev/null || echo "")
+    if [ -z "$local_version" ]; then
+        echo -e "${YELLOW}  ${tool}: could not extract version from ${script_path}, skipping${NC}"
+        continue
+    fi
+
+    # Build the download URL
+    local_url="${url_template//\{VERSION\}/$local_version}"
+
+    echo -e "${BLUE}${tool}:${NC}"
+    update_tool_checksum "$tool" "$local_version" "$local_url"
 done
 
 # Update metadata

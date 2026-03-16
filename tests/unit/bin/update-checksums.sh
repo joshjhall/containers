@@ -166,6 +166,52 @@ test_checksums_skips_valid() {
 }
 
 # ---------------------------------------------------------------------------
+# Static analysis tests: Tool checksum support
+# ---------------------------------------------------------------------------
+
+# Test: Defines TOOL_CHECKSUM_REGISTRY
+test_checksums_tool_registry() {
+    assert_file_contains "$SOURCE_FILE" "TOOL_CHECKSUM_REGISTRY" \
+        "Should define TOOL_CHECKSUM_REGISTRY array"
+}
+
+# Test: Registry contains entr entry
+test_checksums_tool_registry_has_entr() {
+    assert_file_contains "$SOURCE_FILE" "entr|ENTR_VERSION" \
+        "TOOL_CHECKSUM_REGISTRY should contain entr entry"
+}
+
+# Test: Defines extract_tool_version function
+test_checksums_defines_extract_tool_version() {
+    assert_file_contains "$SOURCE_FILE" "extract_tool_version()" \
+        "Should define extract_tool_version function"
+}
+
+# Test: Defines update_tool_checksum function
+test_checksums_defines_update_tool_checksum() {
+    assert_file_contains "$SOURCE_FILE" "update_tool_checksum()" \
+        "Should define update_tool_checksum function"
+}
+
+# Test: Tool checksum uses download-and-hash approach
+test_checksums_tool_download_and_hash() {
+    assert_file_contains "$SOURCE_FILE" "sha256sum" \
+        "Should compute sha256 by downloading tool files"
+}
+
+# Test: Tool checksum writes to tools.versions path
+test_checksums_tool_versions_path() {
+    assert_file_contains "$SOURCE_FILE" 'tools.*tool.*versions' \
+        "Should write tool checksums to tools.<name>.versions.<version> path"
+}
+
+# Test: URL template uses VERSION placeholder
+test_checksums_url_template_placeholder() {
+    assert_file_contains "$SOURCE_FILE" "{VERSION}" \
+        "URL templates should use {VERSION} placeholder"
+}
+
+# ---------------------------------------------------------------------------
 # Functional tests
 # ---------------------------------------------------------------------------
 
@@ -203,6 +249,13 @@ run_test_with_setup test_checksums_validates_json "Validates JSON with jq empty"
 run_test_with_setup test_checksums_updated_count "Tracks UPDATED_COUNT counter"
 run_test_with_setup test_checksums_failed_count "Tracks FAILED_COUNT counter"
 run_test_with_setup test_checksums_skips_valid "Skips already-valid checksums"
+run_test_with_setup test_checksums_tool_registry "Defines TOOL_CHECKSUM_REGISTRY array"
+run_test_with_setup test_checksums_tool_registry_has_entr "Registry contains entr entry"
+run_test_with_setup test_checksums_defines_extract_tool_version "Defines extract_tool_version function"
+run_test_with_setup test_checksums_defines_update_tool_checksum "Defines update_tool_checksum function"
+run_test_with_setup test_checksums_tool_download_and_hash "Tool checksums use download-and-hash"
+run_test_with_setup test_checksums_tool_versions_path "Tool checksums write to versions path"
+run_test_with_setup test_checksums_url_template_placeholder "URL templates use VERSION placeholder"
 run_test_with_setup test_checksums_script_syntax "Script has valid bash syntax"
 
 # Generate test report

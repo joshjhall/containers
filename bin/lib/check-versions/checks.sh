@@ -201,7 +201,7 @@ check_entr() {
     # entr uses a simple versioning on their website
     # We'll check the latest version from the downloads page
     local latest
-    latest=$(fetch_url "http://eradman.com/entrproject/" | command grep -oE 'entr-[0-9]+\.[0-9]+\.tar\.gz' | command head -1 | command sed 's/entr-//;s/\.tar\.gz//')
+    latest=$(fetch_url "https://eradman.com/entrproject/" | command grep -oE 'entr-[0-9]+\.[0-9]+\.tar\.gz' | command head -1 | command sed 's/entr-//;s/\.tar\.gz//')
 
     set_latest "entr" "$latest"
     progress_done
