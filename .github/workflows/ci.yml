@@ -61,8 +61,12 @@ jobs:
   # Go Tests (igor)
   # =====================================
   go-test:
-    name: Go Tests (igor)
-    runs-on: ubuntu-latest
+    name: Go Tests (igor) — ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
     defaults:
       run:
         working-directory: cmd/igor
@@ -92,7 +96,7 @@ jobs:
         run: go test -race ./...
 
       - name: Verify build
-        run: go build -o /dev/null .
+        run: go build -o igor_test_bin .
 
   # =====================================
   # Build Stage
