@@ -71,6 +71,10 @@ jobs:
       run:
         working-directory: cmd/igor
     steps:
+      - name: Disable CRLF conversion
+        if: runner.os == 'Windows'
+        run: git config --global core.autocrlf false
+
       - name: Checkout code
         uses: actions/checkout@v4
 
