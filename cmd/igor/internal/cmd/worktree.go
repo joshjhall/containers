@@ -130,9 +130,12 @@ func createWorktree(w io.Writer, mainRepo, worktreeDir, repoName, agentSuffix st
 		return fmt.Errorf("creating worktree at %s: %w", worktreeDir, err)
 	}
 
-	// Rewrite worktree .git file for container paths
+	// Rewrite worktree .git file for container paths.
+	// Remove first to avoid "Access is denied" on Windows where git may
+	// create the file with read-only attributes.
+	worktreeGitFile := filepath.Join(worktreeDir, ".git")
 	worktreeGitContent := fmt.Sprintf("gitdir: %s/worktrees/%s-%s\n", gitDir, repoName, agentSuffix)
-	if err := os.WriteFile(filepath.Join(worktreeDir, ".git"), []byte(worktreeGitContent), 0644); err != nil {
+	if err := overwriteFile(worktreeGitFile, []byte(worktreeGitContent)); err != nil {
 		return fmt.Errorf("rewriting worktree .git: %w", err)
 	}
 
@@ -140,7 +143,7 @@ func createWorktree(w io.Writer, mainRepo, worktreeDir, repoName, agentSuffix st
 	worktreeLink := filepath.Join(gitDir, "worktrees", repoName+"-"+agentSuffix, "gitdir")
 	base := filepath.Dir(mainRepo)
 	newGitdir := filepath.Join(base, repoName+"-"+agentSuffix, ".git") + "\n"
-	if err := os.WriteFile(worktreeLink, []byte(newGitdir), 0644); err != nil {
+	if err := overwriteFile(worktreeLink, []byte(newGitdir)); err != nil {
 		return fmt.Errorf("rewriting gitdir in %s: %w", worktreeLink, err)
 	}
 
@@ -154,6 +157,14 @@ func runGit(dir string, args ...string) (string, error) {
 	cmd.Dir = dir
 	out, err := cmd.CombinedOutput()
 	return strings.TrimSpace(string(out)), err
+}
+
+// overwriteFile removes the target file then writes new content.
+// This avoids "Access is denied" errors on Windows where git may create
+// files with read-only attributes that os.WriteFile cannot truncate.
+func overwriteFile(path string, data []byte) error {
+	os.Remove(path) // ignore error — file may not exist
+	return os.WriteFile(path, data, 0644)
 }
 
 // resolveGitDir returns the path to the .git directory for a repo.
