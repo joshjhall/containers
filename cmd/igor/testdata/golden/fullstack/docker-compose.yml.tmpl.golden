@@ -12,27 +12,28 @@ services:
         - PROJECT_NAME=fullstack
         - USERNAME=dev
         - BASE_IMAGE=debian:bookworm-slim
-        - INCLUDE_PYTHON=true
+        # Languages
+        - INCLUDE_PYTHON_DEV=true  # includes Python runtime
         - PYTHON_VERSION=3.14.0
-        - INCLUDE_PYTHON_DEV=true
-        - INCLUDE_NODE=true
+        - INCLUDE_NODE_DEV=true  # includes Node.js runtime
         - NODE_VERSION=22.12.0
-        - INCLUDE_NODE_DEV=true
-        - INCLUDE_RUST=true
+        - INCLUDE_RUST_DEV=true  # includes Rust runtime
         - RUST_VERSION=1.83.0
-        - INCLUDE_RUST_DEV=true
-        - INCLUDE_GOLANG=true
+        - INCLUDE_GOLANG_DEV=true  # includes Go runtime
         - GO_VERSION=1.23.4
-        - INCLUDE_GOLANG_DEV=true
+        # Tools
         - INCLUDE_DEV_TOOLS=true
         - INCLUDE_DOCKER=true
         - INCLUDE_OP=true
         - INCLUDE_CRON=true
         - INCLUDE_BINDFS=true
+        # AI/ML
         - INCLUDE_OLLAMA=true
+        # Cloud
         - INCLUDE_KUBERNETES=true
         - INCLUDE_TERRAFORM=true
         - INCLUDE_AWS=true
+        # Database
         - INCLUDE_POSTGRES_CLIENT=true
         - INCLUDE_REDIS_CLIENT=true
     env_file:

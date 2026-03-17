@@ -12,9 +12,9 @@ services:
         - PROJECT_NAME=myapp
         - USERNAME=developer
         - BASE_IMAGE=debian:trixie-slim
-        - INCLUDE_PYTHON=true
+        # Languages
+        - INCLUDE_PYTHON_DEV=true  # includes Python runtime
         - PYTHON_VERSION=3.14.0
-        - INCLUDE_PYTHON_DEV=true
     env_file:
       - path: .env
         required: false

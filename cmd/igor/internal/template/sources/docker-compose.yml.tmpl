@@ -13,12 +13,14 @@ services:
         - PROJECT_NAME={{ .Project.Name }}
         - USERNAME={{ .Project.Username }}
         - BASE_IMAGE={{ .Project.BaseImage }}
-{{- range .EnabledFeatures }}
-        - {{ .BuildArg }}=true
-{{- if .VersionArg }}
-{{- $ver := index $.Versions .VersionArg }}
-{{- if $ver }}
-        - {{ .VersionArg }}={{ $ver }}
+{{- $groups := groupedBuildArgs . }}
+{{- range $groups }}
+        # {{ .Label }}
+{{- range .Args }}
+{{- if .Comment }}
+        - {{ .Line }}  # {{ .Comment }}
+{{- else }}
+        - {{ .Line }}
 {{- end }}
 {{- end }}
 {{- end }}
