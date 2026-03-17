@@ -88,6 +88,94 @@ install_fzf() {
     return 1
 }
 
+install_uv() {
+    # Skip if uv is already installed (e.g., by python-dev via pip)
+    if command -v uv &> /dev/null; then
+        log_message "uv already installed (likely via python-dev), skipping..."
+        return 0
+    fi
+
+    log_message "Installing uv ${UV_VERSION}..."
+
+    # Architecture detection
+    local arch
+    arch=$(dpkg --print-architecture)
+    local filename
+    case "$arch" in
+        amd64) filename="uv-x86_64-unknown-linux-gnu.tar.gz" ;;
+        arm64) filename="uv-aarch64-unknown-linux-gnu.tar.gz" ;;
+        *)
+            log_warning "uv not available for architecture ${arch}, skipping..."
+            return 1
+            ;;
+    esac
+
+    local base_url="https://github.com/astral-sh/uv/releases/download/${UV_VERSION}"
+    local file_url="${base_url}/${filename}"
+
+    # Register Tier 3 SHA256 fetcher
+    local _sha256_url="${file_url}.sha256"
+    eval "_fetch_uv_checksum() {
+        fetch_github_sha256_file '$_sha256_url' 2>/dev/null
+    }"
+    register_tool_checksum_fetcher "uv" "_fetch_uv_checksum"
+
+    # Download to temp location
+    local build_temp
+    build_temp=$(create_secure_temp_dir)
+    cd "$build_temp" || exit 1
+
+    local local_file="uv-download"
+    log_message "Downloading uv for ${arch}..."
+    if ! command curl -L -f --retry 3 --retry-delay 2 --retry-all-errors --progress-bar -o "$local_file" "$file_url"; then
+        log_error "Download failed for uv ${UV_VERSION}"
+        cd /
+        return 1
+    fi
+
+    # Run 4-tier verification
+    local verify_rc=0
+    verify_download "tool" "uv" "$UV_VERSION" "$local_file" "$arch" || verify_rc=$?
+
+    if [ "$verify_rc" -eq 1 ]; then
+        log_error "Verification failed for uv ${UV_VERSION}"
+        cd /
+        return 1
+    fi
+
+    # Extract both uv and uvx binaries
+    log_command "Extracting uv" \
+        tar -xzf "$local_file"
+
+    # Find and install both binaries from the extracted directory
+    local found_uv
+    found_uv=$(command find . -name "uv" -type f | command head -1)
+    local found_uvx
+    found_uvx=$(command find . -name "uvx" -type f | command head -1)
+
+    if [ -z "$found_uv" ]; then
+        log_error "Binary 'uv' not found after extracting"
+        cd /
+        return 1
+    fi
+
+    log_command "Installing uv binary" \
+        command mv "$found_uv" "/usr/local/bin/uv"
+    log_command "Setting uv permissions" \
+        chmod +x "/usr/local/bin/uv"
+
+    if [ -n "$found_uvx" ]; then
+        log_command "Installing uvx binary" \
+            command mv "$found_uvx" "/usr/local/bin/uvx"
+        log_command "Setting uvx permissions" \
+            chmod +x "/usr/local/bin/uvx"
+    fi
+
+    cd /
+    log_message "✓ uv ${UV_VERSION} installed successfully"
+    return 0
+}
+
 install_github_binary_tools() {
     # duf (modern disk usage utility)
     install_github_release "duf" "$DUF_VERSION" \
@@ -165,6 +253,9 @@ install_github_binary_tools() {
     else
         log_message "taplo already installed (likely via rust-dev), skipping..."
     fi
+
+    # uv (Python package installer) — skip if already installed by python-dev
+    install_uv || return 1
 }
 
 create_tool_symlinks() {
