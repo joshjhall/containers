@@ -183,7 +183,7 @@ repos:
 
       - id: build-igor
         name: Build igor binary
-        entry: bash -c 'cd cmd/igor && CGO_ENABLED=0 go build -trimpath -o ../../bin/igor . && git add bin/igor'
+        entry: bash -c 'cd cmd/igor && CGO_ENABLED=0 go build -trimpath -o ../../bin/igor . && cd ../.. && git add bin/igor'
         language: system
         pass_filenames: false
         files: ^cmd/igor/.*\.go$
