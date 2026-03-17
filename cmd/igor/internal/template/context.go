@@ -35,6 +35,14 @@ type RenderContext struct {
 
 	// NeedsDocker is true when docker feature is selected.
 	NeedsDocker bool
+
+	// Agents holds optional agent/worktree settings.
+	Agents config.AgentConfig
+}
+
+// HasAgents returns true when agents config has been explicitly set.
+func (rc *RenderContext) HasAgents() bool {
+	return !rc.Agents.IsZero()
 }
 
 // NewRenderContext builds a RenderContext from resolved selection and config.
@@ -44,6 +52,7 @@ func NewRenderContext(
 	sel *feature.Selection,
 	reg *feature.Registry,
 	versions map[string]string,
+	agents config.AgentConfig,
 ) *RenderContext {
 	ctx := &RenderContext{
 		Project:       proj,
@@ -52,6 +61,7 @@ func NewRenderContext(
 		Versions:      versions,
 		NeedsBindfs:   sel.Has("bindfs"),
 		NeedsDocker:   sel.Has("docker"),
+		Agents:        agents,
 	}
 
 	// Collect enabled features in registry order.
@@ -71,6 +81,12 @@ func NewRenderContext(
 				ctx.CacheVolumes = append(ctx.CacheVolumes, v)
 			}
 		}
+	}
+
+	// Auto-derive agent shared volumes from enabled features when not explicitly set.
+	if !agents.IsZero() && len(agents.SharedVolumes) == 0 && len(ctx.CacheVolumes) > 0 {
+		ctx.Agents.SharedVolumes = make([]string, len(ctx.CacheVolumes))
+		copy(ctx.Agents.SharedVolumes, ctx.CacheVolumes)
 	}
 
 	// Collect VS Code extensions (deduplicated, sorted).

@@ -107,7 +107,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 	}
 
 	// Build render context
-	ctx := igortemplate.NewRenderContext(proj, containersDir, sel, reg, versions)
+	ctx := igortemplate.NewRenderContext(proj, containersDir, sel, reg, versions, igorconfig.AgentConfig{})
 
 	// Render templates
 	renderer, err := igortemplate.NewRenderer()

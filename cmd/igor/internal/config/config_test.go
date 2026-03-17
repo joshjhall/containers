@@ -78,6 +78,94 @@ func TestLoad_Fullstack(t *testing.T) {
 	}
 }
 
+func TestLoad_WithAgents(t *testing.T) {
+	cfg, err := Load(filepath.Join(testdataDir(), "agents.igor.yml"))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	if cfg.Agents.Max != 3 {
+		t.Errorf("Agents.Max = %d, want 3", cfg.Agents.Max)
+	}
+	if cfg.Agents.Username != "worker" {
+		t.Errorf("Agents.Username = %q, want %q", cfg.Agents.Username, "worker")
+	}
+	if cfg.Agents.Network != "myapp-dev-network" {
+		t.Errorf("Agents.Network = %q, want %q", cfg.Agents.Network, "myapp-dev-network")
+	}
+	if cfg.Agents.ImageTag != "v2.0" {
+		t.Errorf("Agents.ImageTag = %q, want %q", cfg.Agents.ImageTag, "v2.0")
+	}
+
+	wantVols := []string{"pip-cache:/cache/pip", "npm-cache:/cache/npm"}
+	if len(cfg.Agents.SharedVolumes) != len(wantVols) {
+		t.Fatalf("SharedVolumes length = %d, want %d", len(cfg.Agents.SharedVolumes), len(wantVols))
+	}
+	for i, v := range wantVols {
+		if cfg.Agents.SharedVolumes[i] != v {
+			t.Errorf("SharedVolumes[%d] = %q, want %q", i, cfg.Agents.SharedVolumes[i], v)
+		}
+	}
+
+	wantRepos := []string{"myapp", "myapp-frontend"}
+	if len(cfg.Agents.Repos) != len(wantRepos) {
+		t.Fatalf("Repos length = %d, want %d", len(cfg.Agents.Repos), len(wantRepos))
+	}
+	for i, r := range wantRepos {
+		if cfg.Agents.Repos[i] != r {
+			t.Errorf("Repos[%d] = %q, want %q", i, cfg.Agents.Repos[i], r)
+		}
+	}
+}
+
+func TestLoad_WithoutAgents(t *testing.T) {
+	cfg, err := Load(filepath.Join(testdataDir(), "minimal.igor.yml"))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	if !cfg.Agents.IsZero() {
+		t.Errorf("Agents should be zero-value for minimal config, got %+v", cfg.Agents)
+	}
+}
+
+func TestAgentDefaults(t *testing.T) {
+	cacheVols := []string{"pip-cache:/cache/pip", "npm-cache:/cache/npm"}
+	defaults := AgentDefaults("myproject", cacheVols)
+
+	if defaults.Max != 5 {
+		t.Errorf("Max = %d, want 5", defaults.Max)
+	}
+	if defaults.Username != "agent" {
+		t.Errorf("Username = %q, want %q", defaults.Username, "agent")
+	}
+	if defaults.Network != "myproject-network" {
+		t.Errorf("Network = %q, want %q", defaults.Network, "myproject-network")
+	}
+	if defaults.ImageTag != "latest" {
+		t.Errorf("ImageTag = %q, want %q", defaults.ImageTag, "latest")
+	}
+	if len(defaults.SharedVolumes) != len(cacheVols) {
+		t.Fatalf("SharedVolumes length = %d, want %d", len(defaults.SharedVolumes), len(cacheVols))
+	}
+	for i, v := range cacheVols {
+		if defaults.SharedVolumes[i] != v {
+			t.Errorf("SharedVolumes[%d] = %q, want %q", i, defaults.SharedVolumes[i], v)
+		}
+	}
+	if len(defaults.Repos) != 0 {
+		t.Errorf("Repos length = %d, want 0", len(defaults.Repos))
+	}
+}
+
+func TestAgentDefaults_NilCacheVolumes(t *testing.T) {
+	defaults := AgentDefaults("proj", nil)
+
+	if defaults.SharedVolumes != nil {
+		t.Errorf("SharedVolumes = %v, want nil", defaults.SharedVolumes)
+	}
+}
+
 func TestSave_Roundtrip(t *testing.T) {
 	original := &IgorConfig{
 		SchemaVersion: 1,
@@ -95,6 +183,14 @@ func TestSave_Roundtrip(t *testing.T) {
 		Generated: map[string]string{
 			".devcontainer/docker-compose.yml": "abc123",
 			".igor.yml":                        "def456",
+		},
+		Agents: AgentConfig{
+			Max:           3,
+			Username:      "worker",
+			Network:       "roundtrip-network",
+			ImageTag:      "v1.0",
+			SharedVolumes: []string{"pip-cache:/cache/pip"},
+			Repos:         []string{"myrepo"},
 		},
 	}
 
@@ -144,6 +240,35 @@ func TestSave_Roundtrip(t *testing.T) {
 	for k, v := range original.Generated {
 		if reloaded.Generated[k] != v {
 			t.Errorf("Generated[%q] = %q, want %q", k, reloaded.Generated[k], v)
+		}
+	}
+
+	if reloaded.Agents.Max != original.Agents.Max {
+		t.Errorf("Agents.Max = %d, want %d", reloaded.Agents.Max, original.Agents.Max)
+	}
+	if reloaded.Agents.Username != original.Agents.Username {
+		t.Errorf("Agents.Username = %q, want %q", reloaded.Agents.Username, original.Agents.Username)
+	}
+	if reloaded.Agents.Network != original.Agents.Network {
+		t.Errorf("Agents.Network = %q, want %q", reloaded.Agents.Network, original.Agents.Network)
+	}
+	if reloaded.Agents.ImageTag != original.Agents.ImageTag {
+		t.Errorf("Agents.ImageTag = %q, want %q", reloaded.Agents.ImageTag, original.Agents.ImageTag)
+	}
+	if len(reloaded.Agents.SharedVolumes) != len(original.Agents.SharedVolumes) {
+		t.Fatalf("Agents.SharedVolumes length = %d, want %d", len(reloaded.Agents.SharedVolumes), len(original.Agents.SharedVolumes))
+	}
+	for i, v := range original.Agents.SharedVolumes {
+		if reloaded.Agents.SharedVolumes[i] != v {
+			t.Errorf("Agents.SharedVolumes[%d] = %q, want %q", i, reloaded.Agents.SharedVolumes[i], v)
+		}
+	}
+	if len(reloaded.Agents.Repos) != len(original.Agents.Repos) {
+		t.Fatalf("Agents.Repos length = %d, want %d", len(reloaded.Agents.Repos), len(original.Agents.Repos))
+	}
+	for i, r := range original.Agents.Repos {
+		if reloaded.Agents.Repos[i] != r {
+			t.Errorf("Agents.Repos[%d] = %q, want %q", i, reloaded.Agents.Repos[i], r)
 		}
 	}
 }

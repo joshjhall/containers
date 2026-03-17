@@ -31,6 +31,7 @@ func TestRenderer_MinimalPython(t *testing.T) {
 		"containers",
 		sel, reg,
 		map[string]string{"PYTHON_VERSION": "3.14.0"},
+		config.AgentConfig{},
 	)
 
 	renderer, err := NewRenderer()
@@ -105,6 +106,7 @@ func TestRenderer_FullStack(t *testing.T) {
 			"RUST_VERSION":   "1.83.0",
 			"GO_VERSION":     "1.23.4",
 		},
+		config.AgentConfig{},
 	)
 
 	renderer, err := NewRenderer()
@@ -156,7 +158,7 @@ func TestRenderer_DockerCompose_BindfsCapabilities(t *testing.T) {
 
 	ctx := NewRenderContext(
 		config.ProjectConfig{Name: "test", Username: "dev", BaseImage: "debian:trixie-slim"},
-		"containers", sel, reg, nil,
+		"containers", sel, reg, nil, config.AgentConfig{},
 	)
 
 	renderer, err := NewRenderer()
@@ -184,7 +186,7 @@ func TestRenderer_DockerCompose_DockerSocket(t *testing.T) {
 
 	ctx := NewRenderContext(
 		config.ProjectConfig{Name: "test", Username: "dev", BaseImage: "debian:trixie-slim"},
-		"containers", sel, reg, nil,
+		"containers", sel, reg, nil, config.AgentConfig{},
 	)
 
 	renderer, err := NewRenderer()
@@ -208,7 +210,7 @@ func TestRenderer_NoDockerSocket_WhenNotSelected(t *testing.T) {
 
 	ctx := NewRenderContext(
 		config.ProjectConfig{Name: "test", Username: "dev", BaseImage: "debian:trixie-slim"},
-		"containers", sel, reg, nil,
+		"containers", sel, reg, nil, config.AgentConfig{},
 	)
 
 	renderer, err := NewRenderer()
@@ -223,6 +225,45 @@ func TestRenderer_NoDockerSocket_WhenNotSelected(t *testing.T) {
 
 	if contains(output, "docker.sock") {
 		t.Error("docker-compose should NOT mount Docker socket when docker feature is not selected")
+	}
+}
+
+func TestRenderContext_AgentsSharedVolumes_AutoDerived(t *testing.T) {
+	reg := feature.NewRegistry()
+	sel := feature.Resolve(map[string]bool{"python": true, "node": true}, reg)
+
+	// Agents config with no SharedVolumes — should auto-derive from features.
+	agents := config.AgentConfig{Max: 3, Username: "agent", Network: "net", ImageTag: "latest"}
+	ctx := NewRenderContext(
+		config.ProjectConfig{Name: "test", Username: "dev", BaseImage: "debian:trixie-slim"},
+		"containers", sel, reg, nil, agents,
+	)
+
+	if len(ctx.Agents.SharedVolumes) == 0 {
+		t.Fatal("Agents.SharedVolumes should be auto-derived from feature cache volumes")
+	}
+	// Python provides pip-cache + poetry-cache, Node provides npm-cache.
+	if len(ctx.Agents.SharedVolumes) != len(ctx.CacheVolumes) {
+		t.Errorf("Agents.SharedVolumes length = %d, want %d (same as CacheVolumes)", len(ctx.Agents.SharedVolumes), len(ctx.CacheVolumes))
+	}
+}
+
+func TestRenderContext_AgentsSharedVolumes_ExplicitPreserved(t *testing.T) {
+	reg := feature.NewRegistry()
+	sel := feature.Resolve(map[string]bool{"python": true, "node": true}, reg)
+
+	// Agents config with explicit SharedVolumes — should NOT be overwritten.
+	agents := config.AgentConfig{
+		Max: 3, Username: "agent", Network: "net", ImageTag: "latest",
+		SharedVolumes: []string{"custom-vol:/custom"},
+	}
+	ctx := NewRenderContext(
+		config.ProjectConfig{Name: "test", Username: "dev", BaseImage: "debian:trixie-slim"},
+		"containers", sel, reg, nil, agents,
+	)
+
+	if len(ctx.Agents.SharedVolumes) != 1 || ctx.Agents.SharedVolumes[0] != "custom-vol:/custom" {
+		t.Errorf("Agents.SharedVolumes = %v, want [custom-vol:/custom]", ctx.Agents.SharedVolumes)
 	}
 }
 

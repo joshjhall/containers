@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 
 	"gopkg.in/yaml.v3"
@@ -28,6 +29,41 @@ type IgorConfig struct {
 
 	// Generated tracks generated file paths and their SHA-256 hashes.
 	Generated map[string]string `yaml:"generated,omitempty"`
+
+	// Agents holds optional agent/worktree settings.
+	Agents AgentConfig `yaml:"agents,omitempty"`
+}
+
+// AgentConfig holds optional agent/worktree settings.
+type AgentConfig struct {
+	Max           int      `yaml:"max,omitempty"`
+	Username      string   `yaml:"username,omitempty"`
+	Network       string   `yaml:"network,omitempty"`
+	ImageTag      string   `yaml:"image_tag,omitempty"`
+	SharedVolumes []string `yaml:"shared_volumes,omitempty"`
+	Repos         []string `yaml:"repos,omitempty"`
+}
+
+// IsZero returns true when no agent fields have been explicitly set.
+func (a AgentConfig) IsZero() bool {
+	return a.Max == 0 && a.Username == "" && a.Network == "" &&
+		a.ImageTag == "" && len(a.SharedVolumes) == 0 && len(a.Repos) == 0
+}
+
+// AgentDefaults returns an AgentConfig with zero-value fields filled with
+// sensible defaults derived from the project name and cache volumes.
+func AgentDefaults(projectName string, cacheVolumes []string) AgentConfig {
+	ac := AgentConfig{
+		Max:      5,
+		Username: "agent",
+		Network:  fmt.Sprintf("%s-network", projectName),
+		ImageTag: "latest",
+	}
+	if len(cacheVolumes) > 0 {
+		ac.SharedVolumes = make([]string, len(cacheVolumes))
+		copy(ac.SharedVolumes, cacheVolumes)
+	}
+	return ac
 }
 
 // ProjectConfig holds project-level configuration.

@@ -138,7 +138,7 @@ func runAdd(cmd *cobra.Command, args []string) error {
 	if containersDir == "" {
 		containersDir = "containers"
 	}
-	ctx := igortemplate.NewRenderContext(cfg.Project, containersDir, sel, reg, versions)
+	ctx := igortemplate.NewRenderContext(cfg.Project, containersDir, sel, reg, versions, cfg.Agents)
 
 	// 9. Render templates
 	renderer, err := igortemplate.NewRenderer()

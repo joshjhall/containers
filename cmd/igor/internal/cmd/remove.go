@@ -200,7 +200,7 @@ func runRemove(cmd *cobra.Command, args []string) error {
 	if containersDir == "" {
 		containersDir = "containers"
 	}
-	ctx := igortemplate.NewRenderContext(cfg.Project, containersDir, newSel, reg, versions)
+	ctx := igortemplate.NewRenderContext(cfg.Project, containersDir, newSel, reg, versions, cfg.Agents)
 
 	// 11. Render templates
 	renderer, err := igortemplate.NewRenderer()

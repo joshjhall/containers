@@ -20,3 +20,22 @@ versions:
   {{ $key }}: "{{ $val }}"
 {{- end }}
 {{- end }}
+{{- if .HasAgents }}
+agents:
+  max: {{ .Agents.Max }}
+  username: {{ .Agents.Username }}
+  network: {{ .Agents.Network }}
+  image_tag: {{ .Agents.ImageTag }}
+{{- if .Agents.SharedVolumes }}
+  shared_volumes:
+{{- range .Agents.SharedVolumes }}
+    - {{ . }}
+{{- end }}
+{{- end }}
+{{- if .Agents.Repos }}
+  repos:
+{{- range .Agents.Repos }}
+    - {{ . }}
+{{- end }}
+{{- end }}
+{{- end }}
