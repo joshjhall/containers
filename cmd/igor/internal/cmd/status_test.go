@@ -108,7 +108,7 @@ func TestStatus_ShowsFeatures(t *testing.T) {
 		t.Error("output should contain 'python_dev'")
 	}
 	// Should show version for python
-	if !strings.Contains(out, "3.14.0") {
+	if !strings.Contains(out, "3.14") {
 		t.Error("output should show python version")
 	}
 }

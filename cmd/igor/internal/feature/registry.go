@@ -16,8 +16,8 @@ func NewRegistry() *Registry {
 	// === Languages ===
 	r.add(&Feature{
 		ID: "python", BuildArg: "INCLUDE_PYTHON",
-		DisplayName: "Python", Description: "Python runtime",
-		Category: CategoryLanguage, VersionArg: "PYTHON_VERSION", DefaultVersion: "3.14.0",
+		DisplayName: "Python", Description: "Python runtime (auto-resolves to latest patch)",
+		Category: CategoryLanguage, VersionArg: "PYTHON_VERSION", DefaultVersion: "3.14",
 		EnvFile:      "python.env",
 		CacheVolumes: []string{"pip-cache:/cache/pip", "poetry-cache:/cache/poetry"},
 	})
@@ -32,8 +32,8 @@ func NewRegistry() *Registry {
 
 	r.add(&Feature{
 		ID: "node", BuildArg: "INCLUDE_NODE",
-		DisplayName: "Node.js", Description: "Node.js runtime",
-		Category: CategoryLanguage, VersionArg: "NODE_VERSION", DefaultVersion: "22.12.0",
+		DisplayName: "Node.js", Description: "Node.js runtime (auto-resolves to latest patch)",
+		Category: CategoryLanguage, VersionArg: "NODE_VERSION", DefaultVersion: "22",
 		EnvFile:      "node.env",
 		CacheVolumes: []string{"npm-cache:/cache/npm"},
 	})
@@ -48,8 +48,8 @@ func NewRegistry() *Registry {
 
 	r.add(&Feature{
 		ID: "rust", BuildArg: "INCLUDE_RUST",
-		DisplayName: "Rust", Description: "Rust toolchain",
-		Category: CategoryLanguage, VersionArg: "RUST_VERSION", DefaultVersion: "1.83.0",
+		DisplayName: "Rust", Description: "Rust toolchain (auto-resolves to latest patch)",
+		Category: CategoryLanguage, VersionArg: "RUST_VERSION", DefaultVersion: "1.83",
 		EnvFile:      "rust.env",
 		CacheVolumes: []string{"cargo-cache:/cache/cargo", "rustup-cache:/cache/rustup"},
 	})
@@ -64,8 +64,8 @@ func NewRegistry() *Registry {
 
 	r.add(&Feature{
 		ID: "golang", BuildArg: "INCLUDE_GOLANG",
-		DisplayName: "Go", Description: "Go toolchain",
-		Category: CategoryLanguage, VersionArg: "GO_VERSION", DefaultVersion: "1.23.4",
+		DisplayName: "Go", Description: "Go toolchain (auto-resolves to latest patch)",
+		Category: CategoryLanguage, VersionArg: "GO_VERSION", DefaultVersion: "1.23",
 		EnvFile:      "golang.env",
 		CacheVolumes: []string{"go-cache:/cache/go"},
 	})
@@ -80,8 +80,8 @@ func NewRegistry() *Registry {
 
 	r.add(&Feature{
 		ID: "ruby", BuildArg: "INCLUDE_RUBY",
-		DisplayName: "Ruby", Description: "Ruby runtime",
-		Category: CategoryLanguage, VersionArg: "RUBY_VERSION", DefaultVersion: "3.4.1",
+		DisplayName: "Ruby", Description: "Ruby runtime (auto-resolves to latest patch)",
+		Category: CategoryLanguage, VersionArg: "RUBY_VERSION", DefaultVersion: "3.4",
 		EnvFile:      "ruby.env",
 		CacheVolumes: []string{"bundle-cache:/cache/bundle"},
 	})
@@ -111,8 +111,8 @@ func NewRegistry() *Registry {
 
 	r.add(&Feature{
 		ID: "r", BuildArg: "INCLUDE_R",
-		DisplayName: "R", Description: "R statistical computing",
-		Category: CategoryLanguage, VersionArg: "R_VERSION", DefaultVersion: "4.4.2",
+		DisplayName: "R", Description: "R statistical computing (auto-resolves to latest patch)",
+		Category: CategoryLanguage, VersionArg: "R_VERSION", DefaultVersion: "4.4",
 		EnvFile: "r.env",
 	})
 	r.add(&Feature{
@@ -140,8 +140,8 @@ func NewRegistry() *Registry {
 
 	r.add(&Feature{
 		ID: "kotlin", BuildArg: "INCLUDE_KOTLIN",
-		DisplayName: "Kotlin", Description: "Kotlin programming language (auto-installs Java)",
-		Category: CategoryLanguage, VersionArg: "KOTLIN_VERSION", DefaultVersion: "2.3.0",
+		DisplayName: "Kotlin", Description: "Kotlin programming language (auto-installs Java, auto-resolves to latest patch)",
+		Category: CategoryLanguage, VersionArg: "KOTLIN_VERSION", DefaultVersion: "2.3",
 		EnvFile:      "kotlin.env",
 		Requires:     []string{"java"},
 		CacheVolumes: []string{"kotlin-cache:/cache/kotlin"},

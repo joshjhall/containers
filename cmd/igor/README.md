@@ -182,8 +182,8 @@ features:
 
 # Version overrides (optional — defaults come from the feature registry)
 versions:
-  PYTHON_VERSION: "3.14.0"
-  NODE_VERSION: "22.12.0"
+  PYTHON_VERSION: "3.14"
+  NODE_VERSION: "22"
 
 # Tracks generated file paths and their SHA-256 hashes (managed by igor)
 generated:
@@ -203,7 +203,7 @@ generated:
 | `project.base_image`  | string            | Debian base image for the build.                            |
 | `project.working_dir` | string            | Optional workspace directory override.                      |
 | `features`            | []string          | List of explicitly selected feature IDs.                    |
-| `versions`            | map[string]string | Version arg overrides (e.g., `PYTHON_VERSION: "3.14.0"`).   |
+| `versions`            | map[string]string | Version arg overrides (e.g., `PYTHON_VERSION: "3.14"`).     |
 | `generated`           | map[string]string | SHA-256 hashes of generated files (managed by igor).        |
 
 ## Feature Reference
@@ -214,28 +214,28 @@ generated:
 
 ### Languages
 
-| ID            | Display Name | Description                                         | Version Arg      | Default Version | Requires      |
-| ------------- | ------------ | --------------------------------------------------- | ---------------- | --------------- | ------------- |
-| `python`      | Python       | Python runtime                                      | `PYTHON_VERSION` | 3.14.0          | —             |
-| `python_dev`  | Python Dev   | Python development tools (linters, formatters, LSP) | —                | —               | python        |
-| `node`        | Node.js      | Node.js runtime                                     | `NODE_VERSION`   | 22.12.0         | —             |
-| `node_dev`    | Node.js Dev  | Node.js development tools (LSP, debug)              | —                | —               | node          |
-| `rust`        | Rust         | Rust toolchain                                      | `RUST_VERSION`   | 1.83.0          | —             |
-| `rust_dev`    | Rust Dev     | Rust development tools (rust-analyzer, clippy)      | —                | —               | rust, cron    |
-| `golang`      | Go           | Go toolchain                                        | `GO_VERSION`     | 1.23.4          | —             |
-| `golang_dev`  | Go Dev       | Go development tools (gopls, dlv)                   | —                | —               | golang        |
-| `ruby`        | Ruby         | Ruby runtime                                        | `RUBY_VERSION`   | 3.4.1           | —             |
-| `ruby_dev`    | Ruby Dev     | Ruby development tools (solargraph, rubocop)        | —                | —               | ruby          |
-| `java`        | Java         | Java JDK                                            | `JAVA_VERSION`   | 21              | —             |
-| `java_dev`    | Java Dev     | Java development tools (jdtls)                      | —                | —               | java          |
-| `r`           | R            | R statistical computing                             | `R_VERSION`      | 4.4.2           | —             |
-| `r_dev`       | R Dev        | R development tools (languageserver)                | —                | —               | r             |
-| `mojo`        | Mojo         | Mojo programming language                           | `MOJO_VERSION`   | 25.4            | —             |
-| `mojo_dev`    | Mojo Dev     | Mojo development tools                              | —                | —               | mojo          |
-| `kotlin`      | Kotlin       | Kotlin programming language (auto-installs Java)    | `KOTLIN_VERSION` | 2.3.0           | java          |
-| `kotlin_dev`  | Kotlin Dev   | Kotlin development tools (kotlin-language-server)   | —                | —               | kotlin, java  |
-| `android`     | Android      | Android SDK (auto-installs Java)                    | —                | —               | java          |
-| `android_dev` | Android Dev  | Android emulator and system images                  | —                | —               | android, java |
+| ID            | Display Name | Description                                                                     | Version Arg      | Default Version | Requires      |
+| ------------- | ------------ | ------------------------------------------------------------------------------- | ---------------- | --------------- | ------------- |
+| `python`      | Python       | Python runtime (auto-resolves to latest patch)                                  | `PYTHON_VERSION` | 3.14            | —             |
+| `python_dev`  | Python Dev   | Python development tools (linters, formatters, LSP)                             | —                | —               | python        |
+| `node`        | Node.js      | Node.js runtime (auto-resolves to latest patch)                                 | `NODE_VERSION`   | 22              | —             |
+| `node_dev`    | Node.js Dev  | Node.js development tools (LSP, debug)                                          | —                | —               | node          |
+| `rust`        | Rust         | Rust toolchain (auto-resolves to latest patch)                                  | `RUST_VERSION`   | 1.83            | —             |
+| `rust_dev`    | Rust Dev     | Rust development tools (rust-analyzer, clippy)                                  | —                | —               | rust, cron    |
+| `golang`      | Go           | Go toolchain (auto-resolves to latest patch)                                    | `GO_VERSION`     | 1.23            | —             |
+| `golang_dev`  | Go Dev       | Go development tools (gopls, dlv)                                               | —                | —               | golang        |
+| `ruby`        | Ruby         | Ruby runtime (auto-resolves to latest patch)                                    | `RUBY_VERSION`   | 3.4             | —             |
+| `ruby_dev`    | Ruby Dev     | Ruby development tools (solargraph, rubocop)                                    | —                | —               | ruby          |
+| `java`        | Java         | Java JDK                                                                        | `JAVA_VERSION`   | 21              | —             |
+| `java_dev`    | Java Dev     | Java development tools (jdtls)                                                  | —                | —               | java          |
+| `r`           | R            | R statistical computing (auto-resolves to latest patch)                         | `R_VERSION`      | 4.4             | —             |
+| `r_dev`       | R Dev        | R development tools (languageserver)                                            | —                | —               | r             |
+| `mojo`        | Mojo         | Mojo programming language                                                       | `MOJO_VERSION`   | 25.4            | —             |
+| `mojo_dev`    | Mojo Dev     | Mojo development tools                                                          | —                | —               | mojo          |
+| `kotlin`      | Kotlin       | Kotlin programming language (auto-installs Java, auto-resolves to latest patch) | `KOTLIN_VERSION` | 2.3             | java          |
+| `kotlin_dev`  | Kotlin Dev   | Kotlin development tools (kotlin-language-server)                               | —                | —               | kotlin, java  |
+| `android`     | Android      | Android SDK (auto-installs Java)                                                | —                | —               | java          |
+| `android_dev` | Android Dev  | Android emulator and system images                                              | —                | —               | android, java |
 
 ### Tools
 

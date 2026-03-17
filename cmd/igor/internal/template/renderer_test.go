@@ -30,7 +30,7 @@ func TestRenderer_MinimalPython(t *testing.T) {
 		},
 		"containers",
 		sel, reg,
-		map[string]string{"PYTHON_VERSION": "3.14.0"},
+		map[string]string{"PYTHON_VERSION": "3.14"},
 		config.AgentConfig{},
 	)
 
@@ -101,10 +101,10 @@ func TestRenderer_FullStack(t *testing.T) {
 		"containers",
 		sel, reg,
 		map[string]string{
-			"PYTHON_VERSION": "3.14.0",
-			"NODE_VERSION":   "22.12.0",
-			"RUST_VERSION":   "1.83.0",
-			"GO_VERSION":     "1.23.4",
+			"PYTHON_VERSION": "3.14",
+			"NODE_VERSION":   "22",
+			"RUST_VERSION":   "1.83",
+			"GO_VERSION":     "1.23",
 		},
 		config.AgentConfig{},
 	)

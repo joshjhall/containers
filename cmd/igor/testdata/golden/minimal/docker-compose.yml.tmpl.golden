@@ -14,7 +14,7 @@ services:
         - BASE_IMAGE=debian:trixie-slim
         # Languages
         - INCLUDE_PYTHON_DEV=true  # includes Python runtime
-        - PYTHON_VERSION=3.14.0
+        - PYTHON_VERSION=3.14
     env_file:
       - path: .env
         required: false
