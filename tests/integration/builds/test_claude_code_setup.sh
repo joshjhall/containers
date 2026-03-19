@@ -481,6 +481,21 @@ test_pipe_delimited_headers() {
         "has jq injection"
 }
 
+# Test: Auto memory directory persisted in settings.json
+test_auto_memory_directory() {
+    local image="${IMAGE_TO_TEST:-test-claude-code-setup-$$}"
+
+    # Verify settings.json exists
+    assert_command_in_container "$image" \
+        "test -f /home/developer/.claude/settings.json && echo 'exists'" \
+        "exists"
+
+    # Verify autoMemoryDirectory is set to WORKING_DIR/.claude/memory
+    assert_command_in_container "$image" \
+        "jq -r '.autoMemoryDirectory' /home/developer/.claude/settings.json" \
+        "/workspace/test-claude-code-setup/.claude/memory"
+}
+
 # Test: claude-setup contains auto-detect logic
 test_auto_detect_logic() {
     local image="${IMAGE_TO_TEST:-test-claude-code-setup-$$}"
@@ -515,6 +530,7 @@ run_test test_user_mcps_deprecated "CLAUDE_USER_MCPS deprecated from claude-setu
 run_test test_mcp_passthrough_logic "claude-setup contains MCP passthrough logic"
 run_test test_http_mcp_auth_injection "HTTP MCP auth injection helpers exist"
 run_test test_pipe_delimited_headers "Pipe-delimited header support"
+run_test test_auto_memory_directory "Auto memory directory persisted in settings.json"
 run_test test_auto_detect_logic "claude-setup contains auto-detect logic"
 
 # Skip tests that require building new images if using pre-built image

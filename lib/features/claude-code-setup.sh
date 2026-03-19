@@ -97,6 +97,35 @@ if [ -f "${BUILD_TEMP}/claude-install.sh" ]; then
 fi
 
 # ============================================================================
+# Configure Auto Memory Directory
+# ============================================================================
+# Persist Claude Code auto memory to the project directory so it survives
+# container rebuilds. The default (~/.claude/projects/<hash>/memory/) is
+# ephemeral and lost when the container image is rebuilt.
+log_message "Configuring auto memory directory..."
+
+CLAUDE_SETTINGS_DIR="$USER_HOME/.claude"
+CLAUDE_SETTINGS_FILE="$CLAUDE_SETTINGS_DIR/settings.json"
+AUTO_MEMORY_DIR="${WORKING_DIR}/.claude/memory"
+
+mkdir -p "$CLAUDE_SETTINGS_DIR"
+
+if [ -f "$CLAUDE_SETTINGS_FILE" ]; then
+    # Merge into existing settings.json
+    /usr/bin/jq --arg dir "$AUTO_MEMORY_DIR" '.autoMemoryDirectory = $dir' \
+        "$CLAUDE_SETTINGS_FILE" > "${CLAUDE_SETTINGS_FILE}.tmp" && \
+        mv "${CLAUDE_SETTINGS_FILE}.tmp" "$CLAUDE_SETTINGS_FILE"
+    log_message "Merged autoMemoryDirectory into existing settings.json"
+else
+    # Create new settings.json
+    printf '{"autoMemoryDirectory": "%s"}\n' "$AUTO_MEMORY_DIR" > "$CLAUDE_SETTINGS_FILE"
+    log_message "Created settings.json with autoMemoryDirectory"
+fi
+
+chown -R "$TARGET_USER:$TARGET_USER" "$CLAUDE_SETTINGS_DIR"
+log_message "Auto memory directory set to $AUTO_MEMORY_DIR"
+
+# ============================================================================
 # MCP Servers and Bash LSP
 # ============================================================================
 # MCP servers require Node.js - install if available
@@ -261,7 +290,7 @@ fi
 log_feature_summary \
     --feature "Claude Code Setup" \
     --tools "claude,claude-setup,claude-auth-watcher,bash-language-server" \
-    --paths "/usr/local/bin/claude,/usr/local/bin/claude-setup,/usr/local/bin/claude-auth-watcher,/etc/container/first-startup/30-claude-code-setup.sh,/etc/container/startup/35-claude-auth-watcher.sh" \
+    --paths "/usr/local/bin/claude,/usr/local/bin/claude-setup,/usr/local/bin/claude-auth-watcher,/etc/container/first-startup/30-claude-code-setup.sh,/etc/container/startup/35-claude-auth-watcher.sh,~/.claude/settings.json" \
     --env "ENABLE_LSP_TOOL,ANTHROPIC_AUTH_TOKEN,ANTHROPIC_MODEL,CLAUDE_CHANNEL,CLAUDE_EXTRA_PLUGINS,CLAUDE_EXTRA_MCPS,CLAUDE_EXTRA_SKILLS,CLAUDE_EXTRA_AGENTS,CLAUDE_AUTO_DETECT_MCPS,CLAUDE_MCP_AUTO_AUTH,CLAUDE_AUTH_WATCHER_TIMEOUT,CLAUDE_PLUGINS,CLAUDE_MCPS,CLAUDE_AGENTS,CLAUDE_SKILLS" \
     --commands "claude,claude-setup,claude-auth-watcher" \
     --next-steps "Run 'claude' to authenticate. Setup runs automatically after auth (via watcher). Manual: 'claude-setup'."
