@@ -13,8 +13,9 @@ init_test_framework
 # Test suite
 test_suite "Checksum Verification Tests"
 
-# Source file under test
+# Source files under test
 SOURCE_FILE="$PROJECT_ROOT/lib/base/checksum-verification.sh"
+TIER4_SOURCE_FILE="$PROJECT_ROOT/lib/base/checksum-tier4.sh"
 
 # Setup function - runs before each test
 setup() {
@@ -58,6 +59,7 @@ _run_checksum_subshell() {
         export -f log_message log_error log_info log_warn
         export -f verify_signature fetch_ruby_checksum fetch_go_checksum
         export CHECKSUMS_DB='${TEST_TEMP_DIR}/checksums.json'
+        source '$TIER4_SOURCE_FILE' >/dev/null 2>&1
         source '$SOURCE_FILE' >/dev/null 2>&1
         $1
     " 2>/dev/null
@@ -92,8 +94,8 @@ test_defines_verify_published_checksum() {
 }
 
 test_defines_verify_calculated_checksum() {
-    assert_file_contains "$SOURCE_FILE" "verify_calculated_checksum()" \
-        "Script defines verify_calculated_checksum function"
+    assert_file_contains "$TIER4_SOURCE_FILE" "verify_calculated_checksum()" \
+        "Tier 4 module defines verify_calculated_checksum function"
 }
 
 test_defines_verify_download() {
@@ -425,8 +427,8 @@ test_exports_all_functions() {
         "verify_pinned_checksum is exported"
     assert_file_contains "$SOURCE_FILE" "protected_export.*verify_published_checksum" \
         "verify_published_checksum is exported"
-    assert_file_contains "$SOURCE_FILE" "protected_export.*verify_calculated_checksum" \
-        "verify_calculated_checksum is exported"
+    assert_file_contains "$TIER4_SOURCE_FILE" "protected_export.*verify_calculated_checksum" \
+        "verify_calculated_checksum is exported (in checksum-tier4.sh)"
     assert_file_contains "$SOURCE_FILE" "protected_export.*lookup_pinned_checksum" \
         "lookup_pinned_checksum is exported"
 }
@@ -511,7 +513,7 @@ test_tier3_tool_uses_tool_fetcher() {
 }
 
 test_security_warning_in_tier4() {
-    assert_file_contains "$SOURCE_FILE" "SECURITY WARNING" \
+    assert_file_contains "$TIER4_SOURCE_FILE" "SECURITY WARNING" \
         "Tier 4 includes a security warning about TOFU risk"
 }
 
@@ -684,13 +686,13 @@ test_verify_tool_published_checksum_sha512() {
 # ============================================================================
 
 test_defines_print_tofu_summary() {
-    assert_file_contains "$SOURCE_FILE" "print_tofu_summary()" \
-        "Script defines print_tofu_summary function"
+    assert_file_contains "$TIER4_SOURCE_FILE" "print_tofu_summary()" \
+        "Tier 4 module defines print_tofu_summary function"
 }
 
 test_exports_print_tofu_summary() {
-    assert_file_contains "$SOURCE_FILE" "protected_export.*print_tofu_summary" \
-        "print_tofu_summary is exported"
+    assert_file_contains "$TIER4_SOURCE_FILE" "protected_export.*print_tofu_summary" \
+        "print_tofu_summary is exported (in checksum-tier4.sh)"
 }
 
 test_tofu_event_tracking_on_tier4() {
