@@ -1,18 +1,21 @@
 ---
-description: Multi-agent orchestration for parallel worktree workflows. Check agent branch status, merge agent commits into current branch. Use when coordinating 2-5 agents working in separate worktrees, reviewing agent progress, or integrating agent work.
+description: Multi-agent orchestration for parallel worktree workflows. Check agent status, merge agent commits, review merged work, and sync agent branches. Use when coordinating 2-5 agents working in separate worktrees, reviewing agent progress, or integrating agent work.
 ---
 
 # Orchestrate
 
 **Companion file**: See `merge-protocol.md` in this skill directory for sync
-point tracking, conflict resolution decision tree, test runner detection, and
-squash vs merge tradeoffs. Load it when performing a merge (Phase 2).
+point tracking, conflict resolution decision tree, test runner detection,
+squash vs merge tradeoffs, review dispatch protocol, and sync protocol. Load it
+when performing a merge (Phase 2), review (Phase 3), or sync (Phase 4).
 
 **Invocation patterns:**
 
 - `/orchestrate` or `/orchestrate status` → Phase 1 (agent status)
 - `/orchestrate merge <N>` or `/orchestrate merge <branch>` → Phase 2 (merge one agent)
 - `/orchestrate merge all` → Phase 2 for all agents with pending commits
+- `/orchestrate review` → Phase 3 (review latest merge)
+- `/orchestrate sync` → Phase 4 (sync orchestrator into agent branches)
 
 ## Phase 1 — Agent Status
 
@@ -114,10 +117,130 @@ Load `merge-protocol.md` before starting.
 
 1. **Report**: Show final merge result with commit hash and summary.
 
+## Phase 3 — Review
+
+Load `merge-protocol.md` before starting (Review Protocol section).
+
+1. **Identify the latest merge commit**:
+
+   ```bash
+   MERGE_COMMIT=$(git log -1 --merges --format='%H')
+   ```
+
+   If no merge commit is found, inform the user and stop.
+
+1. **Show merge summary**:
+
+   ```bash
+   git log -1 --format='%h %s (%cr)' "$MERGE_COMMIT"
+   git diff --stat "${MERGE_COMMIT}^1" "${MERGE_COMMIT}"
+   ```
+
+1. **Dispatch `code-reviewer` agent** on the merge diff:
+
+   - Scope the review to only files changed in the merge commit
+   - Pass the diff via `git diff "${MERGE_COMMIT}^1" "${MERGE_COMMIT}"`
+   - Collect findings: bugs, security issues, performance, style
+
+1. **Optionally dispatch `test-writer` agent** if:
+
+   - code-reviewer identified missing test coverage, OR
+   - New public APIs were introduced without corresponding tests
+
+1. **Apply corrections** in a single commit:
+
+   ```text
+   fix(review): {summary of corrections}
+
+   {bullet list of changes made}
+
+   Reviewed-by: orchestrate Phase 3
+   ```
+
+   If no corrections are needed, skip the commit.
+
+1. **Run tests** (see `merge-protocol.md` for test runner detection):
+
+   Report test results. If tests fail, warn the user but do not auto-revert.
+
+1. **Report** a summary table:
+
+   ```text
+   # Review Summary
+
+   | Category       | Findings | Auto-Fixed | Flagged |
+   |----------------|----------|------------|---------|
+   | Bugs           | 1        | 1          | 0       |
+   | Security       | 0        | 0          | 0       |
+   | Performance    | 1        | 0          | 1       |
+   | Style          | 2        | 2          | 0       |
+   | Test coverage  | 1        | 1          | 0       |
+
+   Correction commit: abc1234
+   Tests: ✓ passing
+   ```
+
+## Phase 4 — Sync
+
+Load `merge-protocol.md` before starting (Sync Protocol section).
+
+1. **Record the current branch** (orchestrator branch):
+
+   ```bash
+   ORCH_BRANCH=$(git branch --show-current)
+   ```
+
+1. **Discover agent branches**:
+
+   ```bash
+   git branch --list 'agent*' | /usr/bin/sort
+   ```
+
+   If no agent branches found, inform the user and stop.
+
+1. **For each agent branch** (in order: agent01, agent02, ...):
+
+   ```bash
+   git checkout <agent-branch>
+   git merge "$ORCH_BRANCH" -m "sync: merge orchestrator updates"
+   ```
+
+   - **If merge succeeds**: verify merge-base advanced, continue
+   - **If conflicts**: `git merge --abort`, log the skip, continue to next
+
+1. **Return to orchestrator branch**:
+
+   ```bash
+   git checkout "$ORCH_BRANCH"
+   ```
+
+1. **Update issue labels** — for issues associated with successfully synced
+   agents, remove `status/commit-pending`:
+
+   - GitHub: `gh issue edit {N} --remove-label "status/commit-pending"`
+   - GitLab: `glab issue update {N} --unlabel "status/commit-pending"`
+
+1. **Report** a sync summary table:
+
+   ```text
+   # Sync Summary
+
+   | # | Branch   | Status    | New Merge Base |
+   |---|----------|-----------|----------------|
+   | 1 | agent01  | ✓ synced  | abc1234        |
+   | 2 | agent02  | ✗ skipped | (conflicts)    |
+   | 3 | agent03  | ✓ synced  | def5678        |
+   ```
+
+   If any branches were skipped, note they will pick up changes on the next
+   sync cycle.
+
 ## When to Use
 
 - Checking progress of parallel agents working in worktrees
 - Integrating completed agent work into the main development branch
+- Reviewing merged agent work for correctness and quality
+- Syncing agent branches with the latest orchestrator state
 - Coordinating multi-agent workflows (2-5 agents)
 - After agents signal completion (e.g., via `status/commit-pending` label)
 

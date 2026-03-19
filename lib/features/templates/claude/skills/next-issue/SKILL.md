@@ -16,6 +16,22 @@ start of every `/next-issue` invocation (before any other work). Phases 0-2
 are planning phases that only need read-only tools and Bash. After Phase 2
 plan approval, use `ExitPlanMode` to begin implementation.
 
+## Agent Worktree Mode
+
+Before starting Phase 0, check if the current branch is an agent worktree:
+
+```bash
+CURRENT_BRANCH=$(git branch --show-current)
+```
+
+If `$CURRENT_BRANCH` matches `^agent` (e.g., `agent01`, `agent02`):
+
+- Inform the user: "Running in agent worktree mode on branch `{branch}`.
+  Commits will stay local — the orchestrator handles delivery."
+- Note that `/next-issue-ship` will auto-select commit-only mode (Option 3)
+
+Proceed with Phase 0 as normal regardless of mode.
+
 ## Phase 0 — Resume Check
 
 1. **Enter plan mode** (call `EnterPlanMode` tool)
@@ -72,6 +88,11 @@ plan approval, use `ExitPlanMode` to begin implementation.
 
    > **After all implementation and testing is complete**, invoke `/next-issue-ship`
    > to commit, deliver, and close the issue.
+
+   If in agent worktree mode, also append:
+
+   > Agent worktree mode: `/next-issue-ship` will auto-select commit-only
+   > (Option 3). The orchestrator handles PR creation and delivery.
 
 1. **Update state file** with `phase: plan` and a one-line plan summary
 

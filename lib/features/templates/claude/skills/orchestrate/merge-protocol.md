@@ -1,7 +1,8 @@
 # Orchestrate — Merge Protocol
 
-Reference companion for `SKILL.md`. Load this when performing a merge (Phase 2)
-for sync point tracking, conflict resolution, and test runner detection.
+Reference companion for `SKILL.md`. Load this when performing a merge (Phase 2),
+review (Phase 3), or sync (Phase 4) for sync point tracking, conflict
+resolution, test runner detection, review dispatch, and branch synchronization.
 
 ______________________________________________________________________
 
@@ -145,3 +146,127 @@ ______________________________________________________________________
 
 The user can request squash via `/orchestrate merge <N> --squash` or by asking
 for a squash merge in natural language.
+
+______________________________________________________________________
+
+## Review Protocol
+
+After merging agent work (Phase 2), Phase 3 reviews the merged changes for
+correctness and quality.
+
+### Review Scope
+
+Review **only the merge commit diff** — not the entire file:
+
+```bash
+# For the most recent merge commit
+MERGE_COMMIT=$(git log -1 --merges --format='%H')
+
+# Diff of just the merge commit (changes introduced by the merge)
+git diff "${MERGE_COMMIT}^1" "${MERGE_COMMIT}"
+
+# Files changed in the merge
+git diff --name-only "${MERGE_COMMIT}^1" "${MERGE_COMMIT}"
+```
+
+### Agent Dispatch Order
+
+1. **`code-reviewer` agent** — always dispatched first. Reviews the merge diff
+   for bugs, security issues, performance problems, and style violations.
+1. **`test-writer` agent** — dispatched only if code-reviewer findings indicate
+   missing test coverage or if new public APIs were introduced without tests.
+
+### Correction Commit Convention
+
+All review fixes go into a **single correction commit** per review cycle:
+
+```text
+fix(review): {summary of corrections}
+
+{bullet list of changes made}
+
+Reviewed-by: orchestrate Phase 3
+```
+
+- One commit per review — do not create multiple fixup commits
+- The `Reviewed-by` trailer provides traceability
+
+### What NOT to Auto-Fix
+
+Review should flag but **not automatically change**:
+
+- **Architectural changes** — restructuring modules, changing abstractions
+- **API deletions** — removing public interfaces or exported symbols
+- **Dependency changes** — adding, removing, or upgrading dependencies
+- **Configuration changes** — altering build configs, CI pipelines, env vars
+
+These require user confirmation before modification.
+
+______________________________________________________________________
+
+## Sync Protocol
+
+Phase 4 pushes the latest orchestrator state into all agent branches so they
+start their next task from a consistent baseline.
+
+### Sync Direction
+
+**Orchestrator → agent branches** (one-way). The orchestrator branch is the
+source of truth after merges and reviews.
+
+### Merge Order
+
+Sync agents sequentially in natural order:
+
+```bash
+# agent01, agent02, agent03, ...
+for branch in $(git branch --list 'agent*' | /usr/bin/sort); do
+    # sync logic per branch
+done
+```
+
+### Conflict Handling
+
+Attempt an auto-merge. If conflicts arise, **abort and skip** that branch:
+
+```bash
+git checkout <agent-branch>
+git merge <orchestrator-branch> -m "sync: merge orchestrator updates"
+
+# If conflicts:
+git merge --abort
+# Log the skip, continue to next agent
+```
+
+Skipped agents will pick up changes on their next `/orchestrate sync` or when
+the orchestrator merges their work (Phase 2) and syncs again.
+
+### Post-Sync Verification
+
+After syncing each branch, verify the merge-base advanced:
+
+```bash
+# Merge-base should now equal or be ahead of the previous merge-base
+NEW_BASE=$(git merge-base <orchestrator-branch> <agent-branch>)
+```
+
+### Label Cleanup
+
+After a successful sync, remove `status/commit-pending` labels from issues
+associated with synced agent branches (the work has been fully integrated):
+
+```bash
+# GitHub
+gh issue edit {N} --remove-label "status/commit-pending"
+
+# GitLab
+glab issue update {N} --unlabel "status/commit-pending"
+```
+
+### Return to Orchestrator
+
+Always return to the orchestrator branch after sync completes:
+
+```bash
+git checkout <orchestrator-branch>
+```

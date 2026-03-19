@@ -35,6 +35,22 @@ Use the `platform` field from the state file. If missing, detect from
 | `github.com` or `ghe.`    | GitHub   | `gh`   |
 | `gitlab.com` or `gitlab.` | GitLab   | `glab` |
 
+## Step 2.5 — Agent Worktree Detection
+
+Check if the current branch is an agent worktree:
+
+```bash
+CURRENT_BRANCH=$(git branch --show-current)
+```
+
+If `$CURRENT_BRANCH` matches `^agent` (e.g., `agent01`, `agent02`):
+
+- **Skip Step 3** (do not ask the user for shipping mode)
+- **Go directly to Option 3** (commit only, no push)
+- Agents never create PRs or push — the orchestrator owns delivery
+
+If the branch does not match `^agent`, proceed to Step 3 as normal.
+
 ## Step 3 — Choose Shipping Mode
 
 Use `AskUserQuestion` to present three options:
@@ -161,8 +177,12 @@ Use `AskUserQuestion` to present three options:
    - GitHub: `gh issue edit {N} --add-label "status/commit-pending"`
    - GitLab: `glab issue update {N} --label "status/commit-pending"`
 1. **Comment on the issue** with the commit SHA:
-   - GitHub: `gh issue comment {N} --body "Fix committed locally (not yet pushed). Commit: {sha}"`
-   - GitLab: `glab issue note {N} --message "Fix committed locally (not yet pushed). Commit: {sha}"`
+   - **Agent mode** (branch matches `^agent`):
+     - GitHub: `gh issue comment {N} --body "Agent {branch} committed fix. Ready for orchestrator review. Commit: {sha}"`
+     - GitLab: `glab issue note {N} --message "Agent {branch} committed fix. Ready for orchestrator review. Commit: {sha}"`
+   - **Normal mode**:
+     - GitHub: `gh issue comment {N} --body "Fix committed locally (not yet pushed). Commit: {sha}"`
+     - GitLab: `glab issue note {N} --message "Fix committed locally (not yet pushed). Commit: {sha}"`
 1. **Clear state file**
 1. Tell the user the commit is local and needs to be pushed later
 
@@ -172,3 +192,7 @@ After shipping, ask the user with `AskUserQuestion`:
 
 - **Pick next issue** — invoke `/next-issue` to select and plan the next one
 - **Stop** — end the session
+
+**Agent worktree mode**: When running on an agent branch (`^agent`), this
+behavior persists across invocations — `/next-issue-ship` will always
+auto-select commit-only mode (Option 3) without prompting.

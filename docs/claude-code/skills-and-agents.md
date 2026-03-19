@@ -28,7 +28,7 @@ startup via `claude-setup`. Project-level `.claude/` configs merge with these
 | `codebase-audit`          | Periodic codebase sweep: tech debt, security, test gaps, architecture, docs         |
 | `next-issue-ship`         | Ship completed issue work: commit, PR/push, label issue, loop back                  |
 | `memory-conventions`      | Two-tier memory conventions: long-term (committed) vs short-term (gitignored)       |
-| `orchestrate`             | Multi-agent orchestration: check agent status, merge agent commits                  |
+| `orchestrate`             | Multi-agent orchestration: status, merge, review, and sync agent commits            |
 
 ### Conditional Skills
 
