@@ -43,11 +43,12 @@ fi
 #   $3 - base_url:      URL prefix up to the filename
 #   $4 - amd64_file:    Filename for amd64 architecture
 #   $5 - arm64_file:    Filename for arm64 architecture
-#   $6 - checksum_type: One of: checksums_txt, sha512, calculate
+#   $6 - checksum_type: One of: checksums_txt, sha256, sha512, calculate
 #   $7 - install_type:  One of: binary, extract:<binary_name>, dpkg, gunzip
 #
 # Checksum types:
 #   checksums_txt - Fetch from checksums.txt alongside release
+#   sha256        - Fetch from individual .sha256 file
 #   sha512        - Fetch from individual .sha512 file
 #   calculate     - Download and calculate SHA256 (no published checksums)
 #
@@ -104,6 +105,14 @@ install_github_release() {
             local _cksum_filename="$filename"
             eval "_fetch_${tool_name//[^a-zA-Z0-9_]/_}_checksum() {
                 fetch_github_checksums_txt '$_cksum_url' '$_cksum_filename' 2>/dev/null
+            }"
+            register_tool_checksum_fetcher "$tool_name" "_fetch_${tool_name//[^a-zA-Z0-9_]/_}_checksum"
+            ;;
+        sha256)
+            # Fetcher: look up SHA256 from individual .sha256 file
+            local _sha256_url="${file_url}.sha256"
+            eval "_fetch_${tool_name//[^a-zA-Z0-9_]/_}_checksum() {
+                fetch_github_sha256_file '$_sha256_url' 2>/dev/null
             }"
             register_tool_checksum_fetcher "$tool_name" "_fetch_${tool_name//[^a-zA-Z0-9_]/_}_checksum"
             ;;

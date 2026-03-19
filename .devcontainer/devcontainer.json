@@ -33,7 +33,8 @@
         "ms-vscode.makefile-tools",
         "streetsidesoftware.code-spell-checker",
         "usernamehw.errorlens",
-        "wayou.vscode-todo-highlight"
+        "wayou.vscode-todo-highlight",
+        "golang.Go"
       ],
 
       "settings": {

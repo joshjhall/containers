@@ -130,6 +130,7 @@ lookup_pinned_checksum() {
     local type="$1"
     local name="$2"
     local version="$3"
+    local arch="${4:-}"
 
     if [ ! -f "$CHECKSUMS_DB" ]; then
         return 1
@@ -137,11 +138,17 @@ lookup_pinned_checksum() {
 
     # Use jq if available, otherwise grep
     if command -v jq >/dev/null 2>&1; then
-        local checksum
+        local checksum=""
         if [ "$type" = "language" ]; then
             checksum=$(jq -r ".languages.\"${name}\".versions.\"${version}\".sha256 // empty" "$CHECKSUMS_DB" 2>/dev/null || echo "")
         else
-            checksum=$(jq -r ".tools.\"${name}\".versions.\"${version}\".sha256 // empty" "$CHECKSUMS_DB" 2>/dev/null || echo "")
+            # For tools, try arch-specific lookup first, then arch-independent
+            if [ -n "$arch" ]; then
+                checksum=$(jq -r ".tools.\"${name}\".versions.\"${version}\".checksums.\"${arch}\".sha256 // empty" "$CHECKSUMS_DB" 2>/dev/null || echo "")
+            fi
+            if [ -z "$checksum" ] || [ "$checksum" = "null" ]; then
+                checksum=$(jq -r ".tools.\"${name}\".versions.\"${version}\".sha256 // empty" "$CHECKSUMS_DB" 2>/dev/null || echo "")
+            fi
         fi
 
         if [ -n "$checksum" ] && [ "$checksum" != "null" ] && [ "$checksum" != "placeholder_actual_checksum_needed" ]; then
@@ -160,6 +167,7 @@ lookup_pinned_checksum() {
 #   $2 - Name (e.g., "python", "nodejs")
 #   $3 - Version
 #   $4 - Downloaded file path
+#   $5 - Architecture (optional, e.g., "amd64", "arm64")
 #
 # Returns:
 #   0 if verification succeeds
@@ -169,11 +177,12 @@ verify_pinned_checksum() {
     local name="$2"
     local version="$3"
     local file="$4"
+    local arch="${5:-}"
 
     log_message "📌 TIER 2: Checking pinned checksums database"
 
     local expected
-    expected=$(lookup_pinned_checksum "$type" "$name" "$version")
+    expected=$(lookup_pinned_checksum "$type" "$name" "$version" "$arch")
 
     if [ -z "$expected" ]; then
         log_message "   ⚠️  Version $version not found in checksums.json"
@@ -452,7 +461,7 @@ verify_download() {
     fi
 
     # TIER 2: Pinned Checksums
-    if verify_pinned_checksum "$category" "$name" "$version" "$file"; then
+    if verify_pinned_checksum "$category" "$name" "$version" "$file" "$arch"; then
         return 0
     fi
 

@@ -29,6 +29,33 @@ Key directories:
 - `tests/`: Test framework and test suites
 - `examples/`: Docker Compose configurations and environment examples
 
+## Igor Setup Wizard
+
+Igor (`cmd/igor/`) scaffolds devcontainer configurations via a TUI wizard.
+
+### Building and Testing
+
+```bash
+cd cmd/igor && go build -o igor .
+cd cmd/igor && go test -race ./...
+```
+
+### Key Directories
+
+- `cmd/igor/internal/cmd/` — CLI commands (init, version)
+- `cmd/igor/internal/feature/` — Feature registry and dependency resolution
+- `cmd/igor/internal/template/sources/` — Output templates
+- `cmd/igor/internal/config/` — .igor.yml schema
+- `cmd/igor/internal/wizard/` — TUI form
+- `cmd/igor/testdata/` — Test configs and golden files
+
+### Adding a New Feature to Igor
+
+1. Add Feature struct to `internal/feature/registry.go`
+1. Set Requires/ImpliedBy if needed
+1. Add template conditionals in `internal/template/sources/`
+1. Update golden files: `go test ./... -update` (if supported) or manually
+
 ## Common Commands
 
 ### Building Containers
@@ -221,7 +248,7 @@ model selection.
 
 ### Skills & Agents
 
-16 skills (14 always + 2 conditional) and 11 agents. Key capabilities:
+17 skills (15 always + 2 conditional) and 11 agents. Key capabilities:
 `/codebase-audit` (parallel scanners), `/next-issue` + `/next-issue-ship`
 (issue-driven development with auto-labeling and state persistence). Override
 defaults via `CLAUDE_SKILLS` and `CLAUDE_AGENTS` (replaces full set). Add

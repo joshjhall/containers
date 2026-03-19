@@ -11,6 +11,15 @@ the right documentation for your needs.
 1. [CLAUDE.md](../CLAUDE.md) - Working with the codebase
 1. [Troubleshooting](troubleshooting.md) - Common issues and solutions
 
+## Project Setup
+
+### [Igor Setup Wizard](igor/)
+
+- [Getting Started](igor/getting-started.md) — First-time project setup
+- [Feature Reference](igor/feature-reference.md) — All features and dependencies
+- [Templates](igor/templates.md) — Template system and customization
+- See also: [cmd/igor/README.md](../cmd/igor/README.md) — Installation and usage
+
 ## User Documentation
 
 Essential guides for building and using containers:

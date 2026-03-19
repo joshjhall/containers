@@ -491,6 +491,119 @@ test_health_check_cli_branch() {
 }
 
 # ============================================================================
+# Functional Tests - op_connect_load_secrets() HTTP error paths
+# ============================================================================
+
+test_connect_health_check_non_200() {
+    # Mock curl: health endpoint returns 503
+    command cat > "$TEST_TEMP_DIR/bin/curl" << 'MOCK'
+#!/bin/sh
+# curl -s -w "%{http_code}" -o /dev/null URL
+# The -o /dev/null suppresses body, -w writes the code to stdout
+for arg in "$@"; do
+    case "$arg" in
+        */health*) echo "503"; exit 0 ;;
+    esac
+done
+echo "000"; exit 1
+MOCK
+    chmod +x "$TEST_TEMP_DIR/bin/curl"
+
+    # Provide a stub jq so the "command -v jq" check passes
+    printf '#!/bin/sh\ncat\n' > "$TEST_TEMP_DIR/bin/jq"
+    chmod +x "$TEST_TEMP_DIR/bin/jq"
+
+    local exit_code=0
+    bash -c "
+        export PATH='$TEST_TEMP_DIR/bin:/usr/bin'
+        source '$SOURCE_FILE' 2>/dev/null
+        export OP_CONNECT_HOST='http://localhost:8080'
+        export OP_CONNECT_TOKEN='test-token'
+        op_connect_load_secrets >/dev/null 2>&1
+    " 2>/dev/null || exit_code=$?
+
+    assert_equals "2" "$exit_code" \
+        "Should return exit code 2 when health check returns non-200"
+}
+
+test_connect_vault_list_403() {
+    # Mock curl: health returns 200, vault list returns 403
+    command cat > "$TEST_TEMP_DIR/bin/curl" << 'MOCK'
+#!/bin/sh
+for arg in "$@"; do
+    case "$arg" in
+        */health*)
+            # health check uses -w "%{http_code}" -o /dev/null
+            echo "200"; exit 0 ;;
+        */v1/vaults*)
+            # vault list uses -w '\n%{http_code}' (body + newline + code)
+            printf '{"error":"forbidden"}\n403'
+            exit 0 ;;
+    esac
+done
+echo "000"; exit 1
+MOCK
+    chmod +x "$TEST_TEMP_DIR/bin/curl"
+
+    # Provide real jq if available, else a stub
+    cp "$(command -v jq)" "$TEST_TEMP_DIR/bin/jq" 2>/dev/null || {
+        printf '#!/bin/sh\necho ""\n' > "$TEST_TEMP_DIR/bin/jq"
+        chmod +x "$TEST_TEMP_DIR/bin/jq"
+    }
+
+    local exit_code=0
+    bash -c "
+        export PATH='$TEST_TEMP_DIR/bin:/usr/bin'
+        source '$SOURCE_FILE' 2>/dev/null
+        export OP_CONNECT_HOST='http://localhost:8080'
+        export OP_CONNECT_TOKEN='test-token'
+        export OP_VAULT='MyVault'
+        op_connect_load_secrets >/dev/null 2>&1
+    " 2>/dev/null || exit_code=$?
+
+    assert_equals "3" "$exit_code" \
+        "Should return exit code 3 when vault list returns 403"
+}
+
+test_connect_vault_name_not_found() {
+    # Mock curl: health 200, vault list 200 with a different vault name
+    command cat > "$TEST_TEMP_DIR/bin/curl" << 'MOCK'
+#!/bin/sh
+for arg in "$@"; do
+    case "$arg" in
+        */health*)
+            echo "200"; exit 0 ;;
+        */v1/vaults*)
+            printf '[{"name":"OtherVault","id":"abc123def456ghi789jklmnop"}]\n200'
+            exit 0 ;;
+    esac
+done
+echo "000"; exit 1
+MOCK
+    chmod +x "$TEST_TEMP_DIR/bin/curl"
+
+    # Need real jq for JSON parsing
+    cp "$(command -v jq)" "$TEST_TEMP_DIR/bin/jq" 2>/dev/null || {
+        # Skip if jq not available
+        pass_test "Skipped: jq not available on host"
+        return 0
+    }
+
+    local exit_code=0
+    bash -c "
+        export PATH='$TEST_TEMP_DIR/bin:/usr/bin'
+        source '$SOURCE_FILE' 2>/dev/null
+        export OP_CONNECT_HOST='http://localhost:8080'
+        export OP_CONNECT_TOKEN='test-token'
+        export OP_VAULT='NonExistent'
+        op_connect_load_secrets >/dev/null 2>&1
+    " 2>/dev/null || exit_code=$?
+
+    assert_equals "3" "$exit_code" \
+        "Should return exit code 3 when vault name is not found"
+}
+
+# ============================================================================
 # Run all tests
 # ============================================================================
 
@@ -540,6 +653,11 @@ run_test_with_setup test_health_check_disabled "Health check returns 0 when disa
 run_test_with_setup test_health_check_no_connect_no_cli "Health check returns 1 when no methods available"
 run_test_with_setup test_health_check_connect_branch "Health check passes via Connect server"
 run_test_with_setup test_health_check_cli_branch "Health check passes via CLI authentication"
+
+# Connect HTTP error paths
+run_test_with_setup test_connect_health_check_non_200 "Connect returns 2 on non-200 health check"
+run_test_with_setup test_connect_vault_list_403 "Connect returns 3 on vault list 403"
+run_test_with_setup test_connect_vault_name_not_found "Connect returns 3 when vault name not found"
 
 # Generate test report
 generate_report

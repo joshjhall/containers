@@ -51,7 +51,20 @@ git submodule add https://github.com/joshjhall/containers.git containers
 git submodule update --init --recursive
 ```
 
-1. Build your container using the Dockerfile from the submodule:
+1. **Recommended: Use Igor**
+
+```bash
+cd containers/cmd/igor && go build -o igor . && cd ../..
+./containers/cmd/igor/igor init
+```
+
+Igor's interactive wizard guides you through selecting languages, tools, and
+cloud providers, then generates all necessary devcontainer configuration files
+(docker-compose.yml, devcontainer.json, .env, and more).
+
+See [cmd/igor/README.md](cmd/igor/README.md) for full documentation.
+
+1. **Manual Setup** — build your container using the Dockerfile from the submodule:
 
 ```bash
 # Build from project root (recommended)

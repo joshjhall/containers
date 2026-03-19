@@ -166,6 +166,106 @@ test_checksums_skips_valid() {
 }
 
 # ---------------------------------------------------------------------------
+# Static analysis tests: Tool checksum support
+# ---------------------------------------------------------------------------
+
+# Test: Defines TOOL_CHECKSUM_REGISTRY_NOARCH
+test_checksums_tool_registry_noarch() {
+    assert_file_contains "$SOURCE_FILE" "TOOL_CHECKSUM_REGISTRY_NOARCH" \
+        "Should define TOOL_CHECKSUM_REGISTRY_NOARCH array"
+}
+
+# Test: Defines TOOL_CHECKSUM_REGISTRY_ARCH
+test_checksums_tool_registry_arch() {
+    assert_file_contains "$SOURCE_FILE" "TOOL_CHECKSUM_REGISTRY_ARCH" \
+        "Should define TOOL_CHECKSUM_REGISTRY_ARCH array"
+}
+
+# Test: Noarch registry contains entr entry
+test_checksums_tool_registry_has_entr() {
+    assert_file_contains "$SOURCE_FILE" "entr|ENTR_VERSION" \
+        "TOOL_CHECKSUM_REGISTRY_NOARCH should contain entr entry"
+}
+
+# Test: Noarch registry contains kotlin-compiler
+test_checksums_tool_registry_has_kotlin() {
+    assert_file_contains "$SOURCE_FILE" "kotlin-compiler|KOTLIN_VERSION" \
+        "TOOL_CHECKSUM_REGISTRY_NOARCH should contain kotlin-compiler entry"
+}
+
+# Test: Noarch registry contains spring-boot-cli
+test_checksums_tool_registry_has_spring() {
+    assert_file_contains "$SOURCE_FILE" "spring-boot-cli|SPRING_VERSION" \
+        "TOOL_CHECKSUM_REGISTRY_NOARCH should contain spring-boot-cli entry"
+}
+
+# Test: Noarch registry contains jbang
+test_checksums_tool_registry_has_jbang() {
+    assert_file_contains "$SOURCE_FILE" "jbang|JBANG_VERSION" \
+        "TOOL_CHECKSUM_REGISTRY_NOARCH should contain jbang entry"
+}
+
+# Test: Arch registry contains direnv
+test_checksums_tool_registry_has_direnv() {
+    assert_file_contains "$SOURCE_FILE" "direnv|DIRENV_VERSION" \
+        "TOOL_CHECKSUM_REGISTRY_ARCH should contain direnv entry"
+}
+
+# Test: Arch registry contains biome
+test_checksums_tool_registry_has_biome() {
+    assert_file_contains "$SOURCE_FILE" "biome|BIOME_VERSION" \
+        "TOOL_CHECKSUM_REGISTRY_ARCH should contain biome entry"
+}
+
+# Test: Arch registry contains cloudflared
+test_checksums_tool_registry_has_cloudflared() {
+    assert_file_contains "$SOURCE_FILE" "cloudflared|CLOUDFLARED_VERSION" \
+        "TOOL_CHECKSUM_REGISTRY_ARCH should contain cloudflared entry"
+}
+
+# Test: Defines extract_tool_version function
+test_checksums_defines_extract_tool_version() {
+    assert_file_contains "$SOURCE_FILE" "extract_tool_version()" \
+        "Should define extract_tool_version function"
+}
+
+# Test: Defines update_tool_checksum function
+test_checksums_defines_update_tool_checksum() {
+    assert_file_contains "$SOURCE_FILE" "update_tool_checksum()" \
+        "Should define update_tool_checksum function"
+}
+
+# Test: Defines update_tool_checksum_arch function
+test_checksums_defines_update_tool_checksum_arch() {
+    assert_file_contains "$SOURCE_FILE" "update_tool_checksum_arch()" \
+        "Should define update_tool_checksum_arch function"
+}
+
+# Test: Tool checksum uses download-and-hash approach
+test_checksums_tool_download_and_hash() {
+    assert_file_contains "$SOURCE_FILE" "sha256sum" \
+        "Should compute sha256 by downloading tool files"
+}
+
+# Test: Tool checksum writes to tools.versions path
+test_checksums_tool_versions_path() {
+    assert_file_contains "$SOURCE_FILE" 'tools.*tool.*versions' \
+        "Should write tool checksums to tools.<name>.versions.<version> path"
+}
+
+# Test: Arch-dependent tools write per-arch checksums
+test_checksums_arch_per_arch_checksums() {
+    assert_file_contains "$SOURCE_FILE" 'checksums.*amd64.*sha256' \
+        "Should write per-arch checksums for architecture-dependent tools"
+}
+
+# Test: URL template uses VERSION placeholder
+test_checksums_url_template_placeholder() {
+    assert_file_contains "$SOURCE_FILE" "{VERSION}" \
+        "URL templates should use {VERSION} placeholder"
+}
+
+# ---------------------------------------------------------------------------
 # Functional tests
 # ---------------------------------------------------------------------------
 
@@ -203,6 +303,22 @@ run_test_with_setup test_checksums_validates_json "Validates JSON with jq empty"
 run_test_with_setup test_checksums_updated_count "Tracks UPDATED_COUNT counter"
 run_test_with_setup test_checksums_failed_count "Tracks FAILED_COUNT counter"
 run_test_with_setup test_checksums_skips_valid "Skips already-valid checksums"
+run_test_with_setup test_checksums_tool_registry_noarch "Defines TOOL_CHECKSUM_REGISTRY_NOARCH array"
+run_test_with_setup test_checksums_tool_registry_arch "Defines TOOL_CHECKSUM_REGISTRY_ARCH array"
+run_test_with_setup test_checksums_tool_registry_has_entr "Noarch registry contains entr"
+run_test_with_setup test_checksums_tool_registry_has_kotlin "Noarch registry contains kotlin-compiler"
+run_test_with_setup test_checksums_tool_registry_has_spring "Noarch registry contains spring-boot-cli"
+run_test_with_setup test_checksums_tool_registry_has_jbang "Noarch registry contains jbang"
+run_test_with_setup test_checksums_tool_registry_has_direnv "Arch registry contains direnv"
+run_test_with_setup test_checksums_tool_registry_has_biome "Arch registry contains biome"
+run_test_with_setup test_checksums_tool_registry_has_cloudflared "Arch registry contains cloudflared"
+run_test_with_setup test_checksums_defines_extract_tool_version "Defines extract_tool_version function"
+run_test_with_setup test_checksums_defines_update_tool_checksum "Defines update_tool_checksum function"
+run_test_with_setup test_checksums_defines_update_tool_checksum_arch "Defines update_tool_checksum_arch function"
+run_test_with_setup test_checksums_tool_download_and_hash "Tool checksums use download-and-hash"
+run_test_with_setup test_checksums_tool_versions_path "Tool checksums write to versions path"
+run_test_with_setup test_checksums_arch_per_arch_checksums "Arch tools write per-arch checksums"
+run_test_with_setup test_checksums_url_template_placeholder "URL templates use VERSION placeholder"
 run_test_with_setup test_checksums_script_syntax "Script has valid bash syntax"
 
 # Generate test report

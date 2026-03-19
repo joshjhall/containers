@@ -259,6 +259,7 @@ extract_all_versions() {
     _add_feature_version ENTR_VERSION "entr" "dev-tools.sh"
     _add_feature_version BIOME_VERSION "biome" "dev-tools.sh"
     _add_feature_version TAPLO_VERSION "taplo" "dev-tools.sh"
+    _add_feature_version UV_VERSION "uv" "dev-tools.sh"
 
     # Docker tools from docker.sh
     _add_feature_version DIVE_VERSION "dive" "docker.sh"

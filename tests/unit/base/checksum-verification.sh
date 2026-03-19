@@ -219,6 +219,68 @@ EOF
     assert_equals "1" "$exit_code" "lookup_pinned_checksum rejects placeholder checksums"
 }
 
+test_lookup_pinned_checksum_arch_specific() {
+    local expected_amd64="aaaa000000000000000000000000000000000000000000000000000000000001"
+    local expected_arm64="bbbb000000000000000000000000000000000000000000000000000000000002"
+    command cat > "$TEST_TEMP_DIR/checksums.json" <<EOF
+{
+    "languages": {},
+    "tools": {
+        "direnv": {
+            "versions": {
+                "2.37.1": {
+                    "checksums": {
+                        "amd64": { "sha256": "$expected_amd64" },
+                        "arm64": { "sha256": "$expected_arm64" }
+                    }
+                }
+            }
+        }
+    }
+}
+EOF
+
+    local result_amd64
+    result_amd64=$(_run_checksum_subshell "
+        export CHECKSUMS_DB='$TEST_TEMP_DIR/checksums.json'
+        lookup_pinned_checksum 'tool' 'direnv' '2.37.1' 'amd64'
+    ")
+    assert_equals "$expected_amd64" "$result_amd64" "lookup_pinned_checksum returns amd64 hash"
+
+    local result_arm64
+    result_arm64=$(_run_checksum_subshell "
+        export CHECKSUMS_DB='$TEST_TEMP_DIR/checksums.json'
+        lookup_pinned_checksum 'tool' 'direnv' '2.37.1' 'arm64'
+    ")
+    assert_equals "$expected_arm64" "$result_arm64" "lookup_pinned_checksum returns arm64 hash"
+}
+
+test_lookup_pinned_checksum_arch_fallback_to_noarch() {
+    # When arch is specified but only a flat sha256 exists, fall back to it
+    local expected_hash="cccc000000000000000000000000000000000000000000000000000000000003"
+    command cat > "$TEST_TEMP_DIR/checksums.json" <<EOF
+{
+    "languages": {},
+    "tools": {
+        "entr": {
+            "versions": {
+                "5.8": {
+                    "sha256": "$expected_hash"
+                }
+            }
+        }
+    }
+}
+EOF
+
+    local result
+    result=$(_run_checksum_subshell "
+        export CHECKSUMS_DB='$TEST_TEMP_DIR/checksums.json'
+        lookup_pinned_checksum 'tool' 'entr' '5.8' 'amd64'
+    ")
+    assert_equals "$expected_hash" "$result" "lookup_pinned_checksum falls back to arch-independent hash"
+}
+
 # ============================================================================
 # Functional Tests - verify_calculated_checksum()
 # ============================================================================
@@ -723,6 +785,8 @@ run_test_with_setup test_lookup_pinned_checksum_valid_language "lookup_pinned_ch
 run_test_with_setup test_lookup_pinned_checksum_valid_tool "lookup_pinned_checksum returns hash for known tool version"
 run_test_with_setup test_lookup_pinned_checksum_unknown_version "lookup_pinned_checksum returns 1 for unknown version"
 run_test_with_setup test_lookup_pinned_checksum_skips_placeholder "lookup_pinned_checksum rejects placeholder checksums"
+run_test_with_setup test_lookup_pinned_checksum_arch_specific "lookup_pinned_checksum returns arch-specific hash"
+run_test_with_setup test_lookup_pinned_checksum_arch_fallback_to_noarch "lookup_pinned_checksum falls back to arch-independent hash"
 
 # verify_calculated_checksum
 run_test_with_setup test_verify_calculated_checksum_returns_2 "verify_calculated_checksum returns 2 (unverified/TOFU)"
