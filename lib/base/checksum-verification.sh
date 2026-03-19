@@ -51,7 +51,7 @@ fi
 # Tool Tier 3 Fetcher Registry
 # ============================================================================
 # Associative array mapping tool names to fetcher function names.
-# Fetcher functions accept (version, arch) and echo a checksum string.
+# Fetcher functions accept (version, arch, tool_name) and echo a checksum string.
 declare -gA _TOOL_CHECKSUM_FETCHERS
 
 # Source dependencies
@@ -226,7 +226,7 @@ verify_pinned_checksum() {
 
 # register_tool_checksum_fetcher - Register a function to fetch checksums for a tool
 #
-# The registered function will be called as: fetcher_fn <version> <arch>
+# The registered function will be called as: fetcher_fn <version> <arch> <tool_name>
 # It must echo a checksum (SHA256 or SHA512) on success and return 0,
 # or return non-zero on failure.
 #
@@ -276,7 +276,7 @@ verify_tool_published_checksum() {
     log_message "🌐 TIER 3: Fetching published checksum for tool '$name'"
 
     local expected=""
-    if ! expected=$("$fetcher_fn" "$version" "$arch" 2>/dev/null) || [ -z "$expected" ]; then
+    if ! expected=$("$fetcher_fn" "$version" "$arch" "$name" 2>/dev/null) || [ -z "$expected" ]; then
         log_message "   ⚠️  Published checksum not available for $name $version"
         return 1
     fi

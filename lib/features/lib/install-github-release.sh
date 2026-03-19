@@ -20,6 +20,11 @@
 
 set -euo pipefail
 
+# Per-tool fetcher data arrays (used by _github_release_checksum_fetcher)
+declare -gA _TOOL_FETCHER_TYPES      # tool_name -> checksums_txt|sha256|sha512
+declare -gA _TOOL_FETCHER_URLS       # tool_name -> URL to fetch checksum from
+declare -gA _TOOL_FETCHER_FILENAMES  # tool_name -> filename to match in checksums.txt
+
 # Defensive check: ensure required dependencies are available
 if ! declare -f log_message >/dev/null 2>&1; then
     echo "ERROR: install-github-release.sh requires feature-header.sh to be sourced first" >&2
@@ -30,6 +35,35 @@ fi
 if [ -f /tmp/build-scripts/base/checksum-verification.sh ]; then
     source /tmp/build-scripts/base/checksum-verification.sh
 fi
+
+# ============================================================================
+# Generic Checksum Fetcher (replaces per-tool eval'd closures)
+# ============================================================================
+
+# _github_release_checksum_fetcher - Dispatch fetcher using per-tool data arrays
+#
+# Arguments:
+#   $1 - version (unused, passed by verify_tool_published_checksum)
+#   $2 - arch (unused, passed by verify_tool_published_checksum)
+#   $3 - tool_name (used to look up URL/filename in global arrays)
+#
+_github_release_checksum_fetcher() {
+    local tool_name="$3"
+    local _type="${_TOOL_FETCHER_TYPES[$tool_name]:-}"
+    case "$_type" in
+        checksums_txt)
+            fetch_github_checksums_txt "${_TOOL_FETCHER_URLS[$tool_name]}" \
+                "${_TOOL_FETCHER_FILENAMES[$tool_name]}" 2>/dev/null
+            ;;
+        sha256)
+            fetch_github_sha256_file "${_TOOL_FETCHER_URLS[$tool_name]}" 2>/dev/null
+            ;;
+        sha512)
+            fetch_github_sha512_file "${_TOOL_FETCHER_URLS[$tool_name]}" 2>/dev/null
+            ;;
+    esac
+}
+export -f _github_release_checksum_fetcher
 
 # ============================================================================
 # Main Installation Function
@@ -100,29 +134,20 @@ install_github_release() {
     # The fetcher captures the URL/filename context from this call.
     case "$checksum_type" in
         checksums_txt)
-            # Fetcher: look up checksum from checksums.txt
-            local _cksum_url="${base_url}/checksums.txt"
-            local _cksum_filename="$filename"
-            eval "_fetch_${tool_name//[^a-zA-Z0-9_]/_}_checksum() {
-                fetch_github_checksums_txt '$_cksum_url' '$_cksum_filename' 2>/dev/null
-            }"
-            register_tool_checksum_fetcher "$tool_name" "_fetch_${tool_name//[^a-zA-Z0-9_]/_}_checksum"
+            _TOOL_FETCHER_TYPES["$tool_name"]="checksums_txt"
+            _TOOL_FETCHER_URLS["$tool_name"]="${base_url}/checksums.txt"
+            _TOOL_FETCHER_FILENAMES["$tool_name"]="$filename"
+            register_tool_checksum_fetcher "$tool_name" "_github_release_checksum_fetcher"
             ;;
         sha256)
-            # Fetcher: look up SHA256 from individual .sha256 file
-            local _sha256_url="${file_url}.sha256"
-            eval "_fetch_${tool_name//[^a-zA-Z0-9_]/_}_checksum() {
-                fetch_github_sha256_file '$_sha256_url' 2>/dev/null
-            }"
-            register_tool_checksum_fetcher "$tool_name" "_fetch_${tool_name//[^a-zA-Z0-9_]/_}_checksum"
+            _TOOL_FETCHER_TYPES["$tool_name"]="sha256"
+            _TOOL_FETCHER_URLS["$tool_name"]="${file_url}.sha256"
+            register_tool_checksum_fetcher "$tool_name" "_github_release_checksum_fetcher"
             ;;
         sha512)
-            # Fetcher: look up SHA512 from individual .sha512 file
-            local _sha512_url="${file_url}.sha512"
-            eval "_fetch_${tool_name//[^a-zA-Z0-9_]/_}_checksum() {
-                fetch_github_sha512_file '$_sha512_url' 2>/dev/null
-            }"
-            register_tool_checksum_fetcher "$tool_name" "_fetch_${tool_name//[^a-zA-Z0-9_]/_}_checksum"
+            _TOOL_FETCHER_TYPES["$tool_name"]="sha512"
+            _TOOL_FETCHER_URLS["$tool_name"]="${file_url}.sha512"
+            register_tool_checksum_fetcher "$tool_name" "_github_release_checksum_fetcher"
             ;;
         calculate)
             # No published checksums — don't register fetcher, will fall through to Tier 4
