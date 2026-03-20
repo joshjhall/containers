@@ -35,6 +35,21 @@ set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 
 # ============================================================================
+# Internal Helpers
+# ============================================================================
+
+# Extract a safe, truncated error message from a Vault JSON response.
+# Never logs raw response — only the .errors[] field, capped at 80 chars.
+_safe_vault_error() {
+    local response="$1"
+    local err
+    err=$(printf '%s' "$response" | command jq -r '.errors[0] // empty' 2>/dev/null) || true
+    if [ -n "$err" ]; then
+        printf '%s' "${err:0:80}"
+    fi
+}
+
+# ============================================================================
 # Vault Authentication Functions
 # ============================================================================
 
@@ -72,7 +87,9 @@ vault_auth_approle() {
     response=$(vault write -format=json auth/approle/login \
         role_id="${VAULT_ROLE_ID}" \
         secret_id="${VAULT_SECRET_ID}" 2>&1) || {
-        log_error "AppRole authentication failed: $response"
+        local _vault_err
+        _vault_err=$(_safe_vault_error "$response")
+        log_error "AppRole authentication failed${_vault_err:+ ($_vault_err)}"
         return 2
     }
 
@@ -112,7 +129,9 @@ vault_auth_kubernetes() {
     response=$(vault write -format=json auth/kubernetes/login \
         role="${VAULT_K8S_ROLE}" \
         jwt="$jwt" 2>&1) || {
-        log_error "Kubernetes authentication failed: $response"
+        local _vault_err
+        _vault_err=$(_safe_vault_error "$response")
+        log_error "Kubernetes authentication failed${_vault_err:+ ($_vault_err)}"
         return 2
     }
 
@@ -194,7 +213,9 @@ load_secrets_from_vault() {
 
     local secrets_json
     secrets_json=$(vault kv get -format=json "$VAULT_SECRET_PATH" 2>&1) || {
-        log_error "Failed to retrieve secrets from Vault: $secrets_json"
+        local _vault_err
+        _vault_err=$(_safe_vault_error "$secrets_json")
+        log_error "Failed to retrieve secrets from Vault${_vault_err:+ ($_vault_err)}"
         return 3
     }
 

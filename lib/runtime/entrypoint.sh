@@ -293,7 +293,7 @@ echo "=== Starting main process ==="
 # Audit: about to exec main process
 if declare -f audit_log >/dev/null 2>&1; then
     audit_log "process" "info" "Executing main process" \
-        "{\"stage\":\"exec\",\"command\":\"$1\",\"startup_duration\":$STARTUP_DURATION}" 2>/dev/null || true
+        "{\"stage\":\"exec\",\"command\":\"$(basename "${1:-unknown}")\",\"startup_duration\":$STARTUP_DURATION}" 2>/dev/null || true
 fi
 
 # Build a properly quoted command string to handle arguments with spaces

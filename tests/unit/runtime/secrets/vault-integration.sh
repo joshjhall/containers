@@ -60,6 +60,30 @@ test_strict_mode() {
     assert_file_contains "$SOURCE_FILE" "set -euo pipefail" "Script uses strict mode"
 }
 
+test_defines_safe_vault_error() {
+    assert_file_contains "$SOURCE_FILE" "_safe_vault_error()" \
+        "Script defines _safe_vault_error helper"
+}
+
+test_no_raw_response_in_log_error() {
+    local matches
+    matches=$(/usr/bin/grep -c 'log_error.*\$response' "$SOURCE_FILE" 2>/dev/null) || true
+    assert_equals "0" "$matches" "No raw \$response in log_error calls"
+}
+
+test_no_raw_secrets_json_in_log_error() {
+    local matches
+    matches=$(/usr/bin/grep -c 'log_error.*\$secrets_json' "$SOURCE_FILE" 2>/dev/null) || true
+    assert_equals "0" "$matches" "No raw \$secrets_json in log_error calls"
+}
+
+test_entrypoint_no_raw_command_in_audit() {
+    local entrypoint_file="$PROJECT_ROOT/lib/runtime/entrypoint.sh"
+    local matches
+    matches=$(/usr/bin/grep -c '"command":"\$1"' "$entrypoint_file" 2>/dev/null) || true
+    assert_equals "0" "$matches" "Entrypoint does not log raw \$1 in audit command field"
+}
+
 test_defines_vault_auth_token() {
     assert_file_contains "$SOURCE_FILE" "vault_auth_token()" \
         "Script defines vault_auth_token function"
@@ -402,6 +426,10 @@ test_health_check_returns_1_when_addr_not_set() {
 
 # Static analysis
 run_test_with_setup test_strict_mode "Script uses strict mode"
+run_test_with_setup test_defines_safe_vault_error "Defines _safe_vault_error helper"
+run_test_with_setup test_no_raw_response_in_log_error "No raw \$response in log_error calls"
+run_test_with_setup test_no_raw_secrets_json_in_log_error "No raw \$secrets_json in log_error calls"
+run_test_with_setup test_entrypoint_no_raw_command_in_audit "Entrypoint does not log raw \$1 in audit"
 run_test_with_setup test_defines_vault_auth_token "Defines vault_auth_token function"
 run_test_with_setup test_defines_vault_auth_approle "Defines vault_auth_approle function"
 run_test_with_setup test_defines_vault_auth_kubernetes "Defines vault_auth_kubernetes function"
