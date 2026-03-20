@@ -63,6 +63,15 @@ test_get_cloudwatch_config_contains_audit_path() {
     assert_contains "$output" "/var/log/audit/container-audit.log" "CloudWatch config contains audit log path"
 }
 
+test_get_cloudwatch_config_contains_log_group_name() {
+    unset _AUDIT_LOGGER_SHIPPERS_LOADED
+    source "$PROJECT_ROOT/lib/runtime/audit-logger-shippers.sh"
+
+    local output
+    output=$(get_cloudwatch_config)
+    assert_contains "$output" "log_group_name" "CloudWatch config contains log_group_name key"
+}
+
 # ============================================================================
 # Test: get_loki_config function
 # ============================================================================
@@ -100,6 +109,7 @@ run_test test_get_fluentd_config_contains_audit_path "Fluentd config contains au
 run_test test_get_fluentd_config_contains_match "Fluentd config contains match block"
 run_test test_get_cloudwatch_config_is_json "CloudWatch config is JSON"
 run_test test_get_cloudwatch_config_contains_audit_path "CloudWatch config contains audit log path"
+run_test test_get_cloudwatch_config_contains_log_group_name "CloudWatch config contains log_group_name"
 run_test test_get_loki_config_contains_scrape_configs "Loki config contains scrape_configs"
 run_test test_get_loki_config_contains_pipeline_stages "Loki config contains pipeline_stages"
 run_test test_get_loki_config_contains_labels "Loki config contains level and category labels"
