@@ -158,6 +158,72 @@ log_feature_summary \
 log_feature_end
 ```
 
+> **Reference implementation**: `lib/features/golang.sh` is a well-structured
+> example that demonstrates version resolution, checksum verification, cache
+> setup, environment configuration, and summary logging.
+
+### Available Utility Modules
+
+Feature scripts source modules from `lib/base/`. Here is the full set of
+commonly used utilities:
+
+| Module                     | Purpose                                                       | When to Use                                                      |
+| -------------------------- | ------------------------------------------------------------- | ---------------------------------------------------------------- |
+| `feature-header.sh`        | User/OS context, includes logging, arch-utils, cleanup        | **Always** — source first in every feature script                |
+| `logging.sh`               | `log_message`, `log_error`, `log_feature_start/end`           | Included by `feature-header.sh` — no separate source needed      |
+| `apt-utils.sh`             | Debian version-aware `apt_install`, `apt_install_conditional` | Installing system packages                                       |
+| `version-validation.sh`    | `validate_version_format`                                     | Validating user-supplied version strings                         |
+| `version-resolution.sh`    | Partial→full version resolution (e.g., `3.12` → `3.12.7`)     | Languages with flexible version inputs                           |
+| `download-verify.sh`       | `download_and_verify` curl wrapper with retries               | Downloading any file from the internet                           |
+| `checksum-verification.sh` | `verify_download` — 4-tier progressive verification           | After downloading binaries (see guidance below)                  |
+| `checksum-fetch.sh`        | `fetch_github_sha256_file`, `fetch_github_checksums_txt`      | Tier 3 fetchers for published checksums                          |
+| `cache-utils.sh`           | `setup_cache_dir`                                             | Creating `/cache/<tool>` directories with proper ownership       |
+| `path-utils.sh`            | `add_to_path`, secure PATH management                         | Adding directories to PATH                                       |
+| `arch-utils.sh`            | `map_arch`, `map_arch_or_skip`                                | Mapping CPU architecture names (included by `feature-header.sh`) |
+| `bashrc-helpers.sh`        | `write_bashrc_content`                                        | Writing persistent shell configuration                           |
+| `retry-utils.sh`           | `retry_with_backoff`                                          | Retrying flaky network operations                                |
+| `cleanup-handler.sh`       | `register_cleanup`, temp dir auto-cleanup                     | Managing temporary files (included by `feature-header.sh`)       |
+| `error-messages.sh`        | Standardized error message formatting                         | Providing actionable error output                                |
+| `shell-hardening.sh`       | Shell security hardening utilities                            | Hardening interactive shell settings                             |
+
+### Which Modules Do I Need?
+
+| Task                                | Modules to Source                                              |
+| ----------------------------------- | -------------------------------------------------------------- |
+| Minimal feature (apt packages only) | `feature-header.sh` + `apt-utils.sh`                           |
+| Download a binary with verification | Above + `download-verify.sh` + `checksum-verification.sh`      |
+| Language with version resolution    | Above + `version-validation.sh` + `version-resolution.sh`      |
+| Tool from GitHub releases           | Above + `checksum-fetch.sh` (for `fetch_github_checksums_txt`) |
+| Feature needing a cache directory   | Add `cache-utils.sh`                                           |
+
+### Checksum Verification Guidance
+
+When your feature downloads binaries, use the 4-tier verification system. The
+tier you target depends on what the publisher provides:
+
+| Situation                                        | Tier   | What to Do                                                           |
+| ------------------------------------------------ | ------ | -------------------------------------------------------------------- |
+| Publisher signs releases (GPG/Sigstore)          | Tier 1 | Add a `gpg-verify-*.sh` or Sigstore handler in `signature-verify.sh` |
+| Checksums can be pinned in advance               | Tier 2 | Add entry to `lib/checksums.json` (auto-updated weekly)              |
+| Publisher hosts checksums (e.g., `.sha256` file) | Tier 3 | Register a fetcher with `register_tool_checksum_fetcher`             |
+| None of the above                                | Tier 4 | Automatic TOFU fallback (logs a warning)                             |
+
+See [Checksum Verification Architecture](docs/architecture/checksum-verification.md)
+for the full module hierarchy and API contract.
+
+### Cache Directory Convention
+
+All persistent caches live under `/cache/<toolname>`:
+
+```bash
+# Standard pattern for setting up a cache directory
+source /tmp/build-scripts/base/cache-utils.sh
+setup_cache_dir "/cache/mytool" "${USER_UID}" "${USER_GID}"
+```
+
+Mount `/cache` as a Docker volume for persistence across container rebuilds.
+See [Caching Strategy](docs/architecture/caching.md) for details.
+
 ______________________________________________________________________
 
 ## Error Handling
@@ -371,6 +437,25 @@ ______________________________________________________________________
 
 ## Testing Requirements
 
+### Which Test Command Should I Use?
+
+```text
+What are you testing?
+│
+├─ A function in lib/base/ or bin/?
+│  └─ Unit test: ./tests/run_unit_tests.sh
+│
+├─ A feature installation (lib/features/*.sh)?
+│  ├─ Quick smoke test: ./tests/test_feature.sh <feature>
+│  └─ Full integration: ./tests/run_integration_tests.sh <feature>
+│
+├─ Everything before a PR?
+│  └─ Full suite: ./tests/run_all.sh
+│
+└─ Don't have Docker installed?
+   └─ Unit tests only: SKIP_DOCKER_CHECK=true ./tests/run_unit_tests.sh
+```
+
 ### Unit Tests
 
 All new scripts in `bin/` and `lib/` MUST have unit tests:
@@ -403,6 +488,25 @@ Run unit tests before committing:
 ./tests/run_unit_tests.sh
 ```
 
+**Without Docker**: Unit tests don't require Docker. If Docker is not
+installed, set `SKIP_DOCKER_CHECK=true` to skip the Docker availability check
+in the test framework:
+
+```bash
+SKIP_DOCKER_CHECK=true ./tests/run_unit_tests.sh
+```
+
+### Test File Naming Convention
+
+Test files mirror the `lib/` directory structure:
+
+| Source File                         | Unit Test File                             |
+| ----------------------------------- | ------------------------------------------ |
+| `lib/base/checksum-verification.sh` | `tests/unit/base/checksum-verification.sh` |
+| `lib/base/logging.sh`               | `tests/unit/base/logging.sh`               |
+| `lib/features/golang.sh`            | `tests/unit/features/golang.sh`            |
+| `bin/check-versions.sh`             | `tests/unit/bin/check-versions.sh`         |
+
 ### Integration Tests
 
 For new features, add integration tests:
@@ -423,6 +527,48 @@ Run integration tests:
 ```bash
 ./tests/run_integration_tests.sh myfeature
 ```
+
+### How to Add a Test for a New Feature
+
+1. **Create the unit test** at `tests/unit/features/<feature>.sh`:
+
+   ```bash
+   source "$(dirname "${BASH_SOURCE[0]}")/../../framework.sh"
+   init_test_framework
+   test_suite "MyFeature Tests"
+
+   test_version_validation() {
+       # Test that version validation works for your feature
+       assert_equals "expected" "$(my_function 'input')" "Description"
+   }
+
+   run_test_suite
+   ```
+
+1. **Create the integration test** at
+   `tests/integration/builds/test_myfeature.sh`. Look at existing tests
+   (e.g., `test_python_dev.sh`, `test_rust_golang.sh`) for the pattern — they
+   build a container with specific `INCLUDE_*` flags and assert expected
+   binaries exist inside.
+
+1. **Run your tests**:
+
+   ```bash
+   # Unit tests (fast, no Docker)
+   SKIP_DOCKER_CHECK=true ./tests/run_unit_tests.sh
+
+   # Integration test (requires Docker)
+   ./tests/run_integration_tests.sh myfeature
+
+   # Quick smoke test (requires Docker)
+   ./tests/test_feature.sh myfeature
+   ```
+
+1. **Verify the full suite** passes before submitting:
+
+   ```bash
+   ./tests/run_all.sh
+   ```
 
 ### Test Coverage Expectations
 
