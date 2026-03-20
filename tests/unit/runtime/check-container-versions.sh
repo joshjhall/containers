@@ -112,6 +112,7 @@ run_test_with_setup test_validation "Validation test"
 # ============================================================================
 
 SOURCE_FILE="$PROJECT_ROOT/lib/runtime/check-container-versions.sh"
+SHARED_LIB="$PROJECT_ROOT/lib/runtime/lib/version-api.sh"
 
 # Test: set -euo pipefail
 test_cv_strict_mode() {
@@ -123,30 +124,29 @@ test_cv_get_github_release_func() {
     assert_file_contains "$SOURCE_FILE" "version-api.sh" "check-versions.sh sources shared version-api.sh"
 }
 
-# Test: defines get_latest_python function
+# Test: get_latest_python lives in shared lib
 test_cv_get_latest_python_func() {
-    assert_file_contains "$SOURCE_FILE" "get_latest_python()" "check-versions.sh defines get_latest_python function"
+    assert_file_contains "$SHARED_LIB" "get_latest_python()" "version-api.sh defines get_latest_python function"
 }
 
-# Test: defines get_latest_node function
+# Test: get_latest_node lives in shared lib
 test_cv_get_latest_node_func() {
-    assert_file_contains "$SOURCE_FILE" "get_latest_node()" "check-versions.sh defines get_latest_node function"
+    assert_file_contains "$SHARED_LIB" "get_latest_node()" "version-api.sh defines get_latest_node function"
 }
 
-# Test: defines get_latest_go function
+# Test: get_latest_go lives in shared lib
 test_cv_get_latest_go_func() {
-    assert_file_contains "$SOURCE_FILE" "get_latest_go()" "check-versions.sh defines get_latest_go function"
+    assert_file_contains "$SHARED_LIB" "get_latest_go()" "version-api.sh defines get_latest_go function"
 }
 
 # Test: compare_version available via shared version-api.sh
 test_cv_compare_version_func() {
-    local shared_lib="$PROJECT_ROOT/lib/runtime/lib/version-api.sh"
-    assert_file_contains "$shared_lib" "compare_version()" "version-api.sh defines compare_version function"
+    assert_file_contains "$SHARED_LIB" "compare_version()" "version-api.sh defines compare_version function"
 }
 
-# Test: defines extract_version function
+# Test: extract_version lives in shared lib
 test_cv_extract_version_func() {
-    assert_file_contains "$SOURCE_FILE" "extract_version()" "check-versions.sh defines extract_version function"
+    assert_file_contains "$SHARED_LIB" "extract_version()" "version-api.sh defines extract_version function"
 }
 
 # Test: defines print_result function
@@ -161,8 +161,7 @@ test_cv_rate_limit_detection() {
 
 # Test: Version comparison with sort -V (in shared version-api.sh)
 test_cv_sort_version_comparison() {
-    local shared_lib="$PROJECT_ROOT/lib/runtime/lib/version-api.sh"
-    assert_file_contains "$shared_lib" "sort -V" "version-api.sh uses sort -V for version comparison"
+    assert_file_contains "$SHARED_LIB" "sort -V" "version-api.sh uses sort -V for version comparison"
 }
 
 # Test: JSON output format handling
@@ -178,18 +177,64 @@ test_cv_color_variables() {
     assert_file_contains "$SOURCE_FILE" "NC=" "check-versions.sh defines NC (no color) variable"
 }
 
+# Test: check_tool helper defined in SOURCE_FILE
+test_cv_check_tool_helper() {
+    assert_file_contains "$SOURCE_FILE" "check_tool()" "check-versions.sh defines check_tool helper function"
+}
+
+# Test: no bare ggrep in SOURCE_FILE
+test_cv_no_bare_ggrep() {
+    assert_file_not_contains "$SOURCE_FILE" "ggrep" "check-versions.sh has no bare ggrep calls"
+}
+
+# Test: no hardcoded 1.88.0 fallback in SOURCE_FILE or SHARED_LIB
+test_cv_no_hardcoded_rust_fallback() {
+    assert_file_not_contains "$SOURCE_FILE" "1.88.0" "check-versions.sh has no hardcoded Rust fallback"
+    assert_file_not_contains "$SHARED_LIB" "1.88.0" "version-api.sh has no hardcoded Rust fallback"
+}
+
+# Test: while arg parsing in SOURCE_FILE
+test_cv_while_arg_parsing() {
+    assert_file_contains "$SOURCE_FILE" 'while \[\[ \$# -gt 0 \]\]' "check-versions.sh uses while loop arg parsing"
+}
+
+# Test: get_latest_ruby, get_latest_rust, get_latest_java_lts, get_latest_mojo in shared lib
+test_cv_migrated_functions_in_shared_lib() {
+    assert_file_contains "$SHARED_LIB" "get_latest_ruby()" "version-api.sh defines get_latest_ruby function"
+    assert_file_contains "$SHARED_LIB" "get_latest_rust()" "version-api.sh defines get_latest_rust function"
+    assert_file_contains "$SHARED_LIB" "get_latest_java_lts()" "version-api.sh defines get_latest_java_lts function"
+    assert_file_contains "$SHARED_LIB" "get_latest_mojo()" "version-api.sh defines get_latest_mojo function"
+}
+
+# Test: extract_version in shared lib
+test_cv_extract_version_in_shared_lib() {
+    assert_file_contains "$SHARED_LIB" "extract_version()" "version-api.sh defines extract_version function"
+}
+
+# Test: Rust fallback uses "unknown" in shared lib
+test_cv_rust_fallback_unknown() {
+    assert_file_contains "$SHARED_LIB" 'echo "unknown"' "version-api.sh Rust fallback uses unknown"
+}
+
 # Run Batch 6 check-versions tests
 run_test test_cv_strict_mode "check-versions.sh uses set -euo pipefail"
 run_test test_cv_get_github_release_func "Defines get_github_release function"
-run_test test_cv_get_latest_python_func "Defines get_latest_python function"
-run_test test_cv_get_latest_node_func "Defines get_latest_node function"
-run_test test_cv_get_latest_go_func "Defines get_latest_go function"
+run_test test_cv_get_latest_python_func "get_latest_python in shared lib"
+run_test test_cv_get_latest_node_func "get_latest_node in shared lib"
+run_test test_cv_get_latest_go_func "get_latest_go in shared lib"
 run_test test_cv_compare_version_func "Defines compare_version function"
-run_test test_cv_extract_version_func "Defines extract_version function"
+run_test test_cv_extract_version_func "extract_version in shared lib"
 run_test test_cv_print_result_func "Defines print_result function"
 run_test test_cv_rate_limit_detection "GitHub API rate limiting detection"
 run_test test_cv_sort_version_comparison "Version comparison with sort -V"
 run_test test_cv_json_output_flag "JSON output format supported"
 run_test test_cv_color_variables "Color output variables defined"
+run_test test_cv_check_tool_helper "check_tool helper defined"
+run_test test_cv_no_bare_ggrep "No bare ggrep in check-versions.sh"
+run_test test_cv_no_hardcoded_rust_fallback "No hardcoded Rust 1.88.0 fallback"
+run_test test_cv_while_arg_parsing "While-loop arg parsing"
+run_test test_cv_migrated_functions_in_shared_lib "Migrated functions in shared lib"
+run_test test_cv_extract_version_in_shared_lib "extract_version in shared lib"
+run_test test_cv_rust_fallback_unknown "Rust fallback uses unknown"
 
 generate_report

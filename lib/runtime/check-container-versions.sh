@@ -44,8 +44,18 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# Output format
-OUTPUT_FORMAT="${1:-text}"
+# Parse arguments
+output_format="text"
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --json) output_format="json"; shift ;;
+        --help|-h)
+            command head -n 16 "$0" | command grep "^#" | command sed 's/^# \?//'
+            exit 0
+            ;;
+        *) echo "Unknown option: $1" >&2; exit 1 ;;
+    esac
+done
 
 # Arrays to store results
 declare -A CURRENT_VERSIONS
@@ -60,93 +70,9 @@ FEATURES_DIR="${SCRIPT_DIR}/../features"
 # Helper Functions
 # ============================================================================
 
-# Check if command exists
-# shellcheck disable=SC2317  # Function is called dynamically
-command_exists() {
-    command -v "$1" >/dev/null 2>&1
-}
-
 # Source shared version API functions
 # shellcheck source=lib/runtime/lib/version-api.sh
 source "${SCRIPT_DIR}/lib/version-api.sh"
-
-# Get latest Python version
-get_latest_python() {
-    # Use Python's official JSON API endpoint
-    command curl -sf https://endoflife.date/api/python.json | jq -r '.[] | select(.latest) | .latest' | command head -1 || echo "unknown"
-}
-
-# Get latest Ruby version
-get_latest_ruby() {
-    local response
-    if [ -n "${GITHUB_TOKEN:-}" ]; then
-        response=$(command curl -sf -H "Authorization: token $GITHUB_TOKEN" https://api.github.com/repos/ruby/ruby/releases)
-    else
-        response=$(command curl -sf https://api.github.com/repos/ruby/ruby/releases)
-    fi
-
-    if echo "$response" | ggrep -q "rate limit exceeded"; then
-        echo "rate-limited"
-        return
-    fi
-    echo "$response" | jq -r '.[].tag_name | select(startswith("v"))' | command head -1 | command sed 's/^v//' | command tr '_' '.' || echo "unknown"
-}
-
-# Get latest Node.js LTS version
-get_latest_node() {
-    command curl -sf https://nodejs.org/dist/index.json | jq -r '.[] | select(.lts != false) | .version' | command head -1 | command sed 's/^v//' | command cut -d. -f1 || echo "unknown"
-}
-
-# Get latest Go version
-get_latest_go() {
-    command curl -sf https://go.dev/VERSION?m=text | command head -1 | command sed 's/^go//' || echo "unknown"
-}
-
-# Get latest Rust stable version
-get_latest_rust() {
-    # Try to get the latest stable version from the Rust release API
-    local version
-    version=$(command curl -sf https://api.github.com/repos/rust-lang/rust/releases | jq -r '.[] | select(.prerelease == false) | .tag_name' | command head -1 | command sed 's/^v//')
-
-    if [ -n "$version" ] && [ "$version" != "null" ]; then
-        echo "$version"
-    else
-        # Fallback: try forge.rust-lang.org
-        version=$(command curl -sf https://forge.rust-lang.org/infra/channel-layout.html | ggrep -oP 'stable.*?rustc \K[0-9]+\.[0-9]+\.[0-9]+' | command head -1)
-        if [ -n "$version" ]; then
-            echo "$version"
-        else
-            echo "1.88.0"  # Fallback to known version
-        fi
-    fi
-}
-
-# Get latest Java LTS version
-get_latest_java_lts() {
-    # OpenJDK doesn't have a simple API, so we'll check for known LTS versions
-    echo "21"  # As of 2024, Java 21 is the latest LTS
-}
-
-# Get latest Mojo version
-get_latest_mojo() {
-    # Mojo uses YY.M format (e.g., 25.3, 25.4)
-    # Since Mojo's versioning follows YY.M and we're in July 2025,
-    # we expect versions like 25.3, 25.4, 25.5, etc.
-    #
-    # Note: Mojo doesn't have a simple API for latest version yet
-    # This is a placeholder that should be updated when Modular provides
-    # a proper API endpoint or when we find a reliable source
-    #
-    # For now, we'll use a reasonable estimate based on their release cadence
-    echo "25.4"  # Update this manually based on Mojo releases
-}
-
-# Extract version from script
-extract_version() {
-    local file="$1"
-    local pattern="$2"
-    ggrep -oP "${pattern}" "$file" | command head -1 || echo "not found"
-}
 
 # Print result
 print_result() {
@@ -155,7 +81,7 @@ print_result() {
     local latest="$3"
     local status="$4"
 
-    if [ "$OUTPUT_FORMAT" = "--json" ]; then
+    if [ "$output_format" = "json" ]; then
         return  # JSON output handled separately
     fi
 
@@ -179,6 +105,45 @@ print_result() {
     printf "%-25s %-15s %-15s ${status_color}%-12s${NC}\n" "$name" "$current" "$latest" "$status_text"
 }
 
+# Check a version-pinned tool against its latest release
+check_tool() {
+    local key="$1" print_name="$2" file="$3" pattern="$4" getter_fn="$5"
+    shift 5
+    [ -f "$file" ] || return 0
+    local current latest status
+    current=$(extract_version "$file" "$pattern")
+    if [ "$current" = "latest" ]; then
+        latest="latest"; status="up-to-date"
+    else
+        latest=$("$getter_fn" "$@")
+        status=$(compare_version "$current" "$latest")
+    fi
+    CURRENT_VERSIONS["$key"]="$current"
+    LATEST_VERSIONS["$key"]="$latest"
+    VERSION_STATUS["$key"]="$status"
+    print_result "$print_name" "$current" "$latest" "$status"
+}
+
+# Thin wrapper: GitHub release with v-prefix stripped
+# shellcheck disable=SC2317  # Called dynamically via check_tool
+_get_github_release_stripped() {
+    get_github_release "$1" "${2:-}" | command sed 's/^v//'
+}
+
+# Thin wrapper: kubectl latest stable
+# shellcheck disable=SC2317  # Called dynamically via check_tool
+_get_latest_kubectl() {
+    command curl -Lsf https://dl.k8s.io/release/stable.txt \
+        | command sed 's/^v//' | command cut -d. -f1,2 || echo "unknown"
+}
+
+# Thin wrapper: glab latest from GitLab API
+# shellcheck disable=SC2317  # Called dynamically via check_tool
+_get_latest_glab() {
+    command curl -sf "https://gitlab.com/api/v4/projects/gitlab-org%2Fcli/releases" \
+        | jq -r '.[0].tag_name' | command sed 's/^v//' || echo "unknown"
+}
+
 # ============================================================================
 # Version Checks
 # ============================================================================
@@ -192,253 +157,68 @@ fi
 echo
 
 # Header
-if [ "$OUTPUT_FORMAT" != "--json" ]; then
+if [ "$output_format" != "json" ]; then
     printf "%-25s %-15s %-15s %-12s\n" "TOOL" "CURRENT" "LATEST" "STATUS"
     printf "%-25s %-15s %-15s %-12s\n" "----" "-------" "------" "------"
 fi
 
-# Check Python
-if [ -f "$FEATURES_DIR/python.sh" ]; then
-    current=$(extract_version "$FEATURES_DIR/python.sh" 'PYTHON_VERSION="?\$\{PYTHON_VERSION:-\K[^"}]+')
-    latest=$(get_latest_python)
-    status=$(compare_version "$current" "$latest")
-    CURRENT_VERSIONS["Python"]="$current"
-    LATEST_VERSIONS["Python"]="$latest"
-    VERSION_STATUS["Python"]="$status"
-    print_result "Python" "$current" "$latest" "$status"
-fi
-
-# Check Ruby
-if [ -f "$FEATURES_DIR/ruby.sh" ]; then
-    current=$(extract_version "$FEATURES_DIR/ruby.sh" 'RUBY_VERSION="?\$\{RUBY_VERSION:-\K[^"}]+')
-    latest=$(get_latest_ruby)
-    status=$(compare_version "$current" "$latest")
-    CURRENT_VERSIONS["Ruby"]="$current"
-    LATEST_VERSIONS["Ruby"]="$latest"
-    VERSION_STATUS["Ruby"]="$status"
-    print_result "Ruby" "$current" "$latest" "$status"
-fi
-
-# Check Node.js
-if [ -f "$FEATURES_DIR/node.sh" ]; then
-    current=$(extract_version "$FEATURES_DIR/node.sh" 'NODE_VERSION="?\$\{NODE_VERSION:-\K[^"}]+')
-    latest=$(get_latest_node)
-    status=$(compare_version "$current" "$latest")
-    CURRENT_VERSIONS["Node.js"]="$current"
-    LATEST_VERSIONS["Node.js"]="$latest"
-    VERSION_STATUS["Node.js"]="$status"
-    print_result "Node.js" "$current" "$latest" "$status"
-fi
-
-# Check Go
-if [ -f "$FEATURES_DIR/golang.sh" ]; then
-    current=$(extract_version "$FEATURES_DIR/golang.sh" 'GO_VERSION="?\$\{GO_VERSION:-\K[^"}]+')
-    latest=$(get_latest_go)
-    status=$(compare_version "$current" "$latest")
-    CURRENT_VERSIONS["Go"]="$current"
-    LATEST_VERSIONS["Go"]="$latest"
-    VERSION_STATUS["Go"]="$status"
-    print_result "Go" "$current" "$latest" "$status"
-fi
-
-# Check Rust
-if [ -f "$FEATURES_DIR/rust.sh" ]; then
-    current=$(extract_version "$FEATURES_DIR/rust.sh" 'RUST_VERSION="?\$\{RUST_VERSION:-\K[^"}]+')
-    latest=$(get_latest_rust)
-    status=$(compare_version "$current" "$latest")
-    CURRENT_VERSIONS["Rust"]="$current"
-    LATEST_VERSIONS["Rust"]="$latest"
-    VERSION_STATUS["Rust"]="$status"
-    print_result "Rust" "$current" "$latest" "$status"
-fi
-
-# Check Java
-if [ -f "$FEATURES_DIR/java.sh" ]; then
-    current=$(extract_version "$FEATURES_DIR/java.sh" 'JAVA_VERSION="?\$\{JAVA_VERSION:-\K[^"}]+')
-    latest=$(get_latest_java_lts)
-    status=$(compare_version "$current" "$latest")
-    CURRENT_VERSIONS["Java"]="$current"
-    LATEST_VERSIONS["Java"]="$latest"
-    VERSION_STATUS["Java"]="$status"
-    print_result "Java (LTS)" "$current" "$latest" "$status"
-fi
-
-# Check Mojo
-if [ -f "$FEATURES_DIR/mojo.sh" ]; then
-    current=$(extract_version "$FEATURES_DIR/mojo.sh" 'MOJO_VERSION="?\$\{MOJO_VERSION:-\K[^"}]+')
-    latest=$(get_latest_mojo)
-    status=$(compare_version "$current" "$latest")
-    CURRENT_VERSIONS["Mojo"]="$current"
-    LATEST_VERSIONS["Mojo"]="$latest"
-    VERSION_STATUS["Mojo"]="$status"
-    print_result "Mojo" "$current" "$latest" "$status"
-fi
+# Languages
+check_tool "Python"  "Python"     "$FEATURES_DIR/python.sh"  'PYTHON_VERSION="?\$\{PYTHON_VERSION:-\K[^"}]+' get_latest_python
+check_tool "Ruby"    "Ruby"       "$FEATURES_DIR/ruby.sh"    'RUBY_VERSION="?\$\{RUBY_VERSION:-\K[^"}]+'   get_latest_ruby
+check_tool "Node.js" "Node.js"    "$FEATURES_DIR/node.sh"    'NODE_VERSION="?\$\{NODE_VERSION:-\K[^"}]+'   get_latest_node
+check_tool "Go"      "Go"         "$FEATURES_DIR/golang.sh"  'GO_VERSION="?\$\{GO_VERSION:-\K[^"}]+'       get_latest_go
+check_tool "Rust"    "Rust"       "$FEATURES_DIR/rust.sh"    'RUST_VERSION="?\$\{RUST_VERSION:-\K[^"}]+'   get_latest_rust
+check_tool "Java"    "Java (LTS)" "$FEATURES_DIR/java.sh"    'JAVA_VERSION="?\$\{JAVA_VERSION:-\K[^"}]+'   get_latest_java_lts
+check_tool "Mojo"    "Mojo"       "$FEATURES_DIR/mojo.sh"    'MOJO_VERSION="?\$\{MOJO_VERSION:-\K[^"}]+'   get_latest_mojo
 
 # ============================================================================
 # Development Tools Checks
 # ============================================================================
 
-if [ "$OUTPUT_FORMAT" != "--json" ]; then
+if [ "$output_format" != "json" ]; then
     echo
     echo "Development Tools:"
     printf "%-25s %-15s %-15s %-12s\n" "TOOL" "CURRENT" "LATEST" "STATUS"
     printf "%-25s %-15s %-15s %-12s\n" "----" "-------" "------" "------"
 fi
 
-# Check dev-tools.sh
 if [ -f "$FEATURES_DIR/dev-tools.sh" ]; then
-    # direnv
-    current=$(extract_version "$FEATURES_DIR/dev-tools.sh" 'DIRENV_VERSION="\K[^"]+')
-    latest=$(get_github_release "direnv/direnv" | command sed 's/^v//')
-    status=$(compare_version "$current" "$latest")
-    CURRENT_VERSIONS["direnv"]="$current"
-    LATEST_VERSIONS["direnv"]="$latest"
-    VERSION_STATUS["direnv"]="$status"
-    print_result "direnv" "$current" "$latest" "$status"
-
-    # lazygit
-    current=$(extract_version "$FEATURES_DIR/dev-tools.sh" 'LAZYGIT_VERSION="\K[^"]+')
-    latest=$(get_github_release "jesseduffield/lazygit" | command sed 's/^v//')
-    status=$(compare_version "$current" "$latest")
-    CURRENT_VERSIONS["lazygit"]="$current"
-    LATEST_VERSIONS["lazygit"]="$latest"
-    VERSION_STATUS["lazygit"]="$status"
-    print_result "lazygit" "$current" "$latest" "$status"
-
-    # delta
-    current=$(extract_version "$FEATURES_DIR/dev-tools.sh" 'DELTA_VERSION="\K[^"]+')
-    latest=$(get_github_release "dandavison/delta" | command sed 's/^v//')
-    status=$(compare_version "$current" "$latest")
-    CURRENT_VERSIONS["delta"]="$current"
-    LATEST_VERSIONS["delta"]="$latest"
-    VERSION_STATUS["delta"]="$status"
-    print_result "delta" "$current" "$latest" "$status"
-
-    # mkcert
-    current=$(extract_version "$FEATURES_DIR/dev-tools.sh" 'MKCERT_VERSION="\K[^"]+')
-    latest=$(get_github_release "FiloSottile/mkcert" | command sed 's/^v//')
-    status=$(compare_version "$current" "$latest")
-    CURRENT_VERSIONS["mkcert"]="$current"
-    LATEST_VERSIONS["mkcert"]="$latest"
-    VERSION_STATUS["mkcert"]="$status"
-    print_result "mkcert" "$current" "$latest" "$status"
-
-    # act
-    current=$(extract_version "$FEATURES_DIR/dev-tools.sh" 'ACT_VERSION="\K[^"]+')
-    latest=$(get_github_release "nektos/act" | command sed 's/^v//')
-    status=$(compare_version "$current" "$latest")
-    CURRENT_VERSIONS["act"]="$current"
-    LATEST_VERSIONS["act"]="$latest"
-    VERSION_STATUS["act"]="$status"
-    print_result "act" "$current" "$latest" "$status"
-
-    # glab
-    current=$(extract_version "$FEATURES_DIR/dev-tools.sh" 'GLAB_VERSION="\K[^"]+')
-    # GitLab CLI is hosted on GitLab, not GitHub - use GitLab API
-    latest=$(command curl -sf "https://gitlab.com/api/v4/projects/gitlab-org%2Fcli/releases" | jq -r '.[0].tag_name' | command sed 's/^v//' || echo "unknown")
-    status=$(compare_version "$current" "$latest")
-    CURRENT_VERSIONS["glab"]="$current"
-    LATEST_VERSIONS["glab"]="$latest"
-    VERSION_STATUS["glab"]="$status"
-    print_result "glab" "$current" "$latest" "$status"
+    check_tool "direnv"  "direnv"  "$FEATURES_DIR/dev-tools.sh" 'DIRENV_VERSION="\K[^"]+'  _get_github_release_stripped "direnv/direnv"
+    check_tool "lazygit" "lazygit" "$FEATURES_DIR/dev-tools.sh" 'LAZYGIT_VERSION="\K[^"]+' _get_github_release_stripped "jesseduffield/lazygit"
+    check_tool "delta"   "delta"   "$FEATURES_DIR/dev-tools.sh" 'DELTA_VERSION="\K[^"]+'   _get_github_release_stripped "dandavison/delta"
+    check_tool "mkcert"  "mkcert"  "$FEATURES_DIR/dev-tools.sh" 'MKCERT_VERSION="\K[^"]+'  _get_github_release_stripped "FiloSottile/mkcert"
+    check_tool "act"     "act"     "$FEATURES_DIR/dev-tools.sh" 'ACT_VERSION="\K[^"]+'     _get_github_release_stripped "nektos/act"
+    check_tool "glab"    "glab"    "$FEATURES_DIR/dev-tools.sh" 'GLAB_VERSION="\K[^"]+'    _get_latest_glab
 fi
 
 # ============================================================================
 # Cloud Tools Checks
 # ============================================================================
 
-if [ "$OUTPUT_FORMAT" != "--json" ]; then
+if [ "$output_format" != "json" ]; then
     echo
     echo "Cloud & Infrastructure Tools:"
     printf "%-25s %-15s %-15s %-12s\n" "TOOL" "CURRENT" "LATEST" "STATUS"
     printf "%-25s %-15s %-15s %-12s\n" "----" "-------" "------" "------"
 fi
 
-# Check terraform.sh
 if [ -f "$FEATURES_DIR/terraform.sh" ]; then
-    # Terraform version
-    current=$(extract_version "$FEATURES_DIR/terraform.sh" 'TERRAFORM_VERSION="?\K[^"]+')
-    if [ "$current" = "latest" ]; then
-        # Terraform is installed via APT, so we show "latest"
-        latest="latest"
-        status="up-to-date"
-    else
-        latest=$(get_github_release "hashicorp/terraform" | command sed 's/^v//')
-        status=$(compare_version "$current" "$latest")
-    fi
-    CURRENT_VERSIONS["Terraform"]="$current"
-    LATEST_VERSIONS["Terraform"]="$latest"
-    VERSION_STATUS["Terraform"]="$status"
-    print_result "Terraform" "$current" "$latest" "$status"
-
-    # Terragrunt version
-    current=$(extract_version "$FEATURES_DIR/terraform.sh" 'TERRAGRUNT_VERSION="?\$\{TERRAGRUNT_VERSION:-\K[^"}]+')
-    latest=$(get_github_release "gruntwork-io/terragrunt" | command sed 's/^v//')
-    status=$(compare_version "$current" "$latest")
-    CURRENT_VERSIONS["Terragrunt"]="$current"
-    LATEST_VERSIONS["Terragrunt"]="$latest"
-    VERSION_STATUS["Terragrunt"]="$status"
-    print_result "Terragrunt" "$current" "$latest" "$status"
-
-    # terraform-docs version
-    current=$(extract_version "$FEATURES_DIR/terraform.sh" 'TFDOCS_VERSION="?\$\{TFDOCS_VERSION:-\K[^"}]+')
-    latest=$(get_github_release "terraform-docs/terraform-docs" | command sed 's/^v//')
-    status=$(compare_version "$current" "$latest")
-    CURRENT_VERSIONS["terraform-docs"]="$current"
-    LATEST_VERSIONS["terraform-docs"]="$latest"
-    VERSION_STATUS["terraform-docs"]="$status"
-    print_result "terraform-docs" "$current" "$latest" "$status"
+    check_tool "Terraform"     "Terraform"     "$FEATURES_DIR/terraform.sh" 'TERRAFORM_VERSION="?\K[^"]+'                         _get_github_release_stripped "hashicorp/terraform"
+    check_tool "Terragrunt"    "Terragrunt"    "$FEATURES_DIR/terraform.sh" 'TERRAGRUNT_VERSION="?\$\{TERRAGRUNT_VERSION:-\K[^"}]+' _get_github_release_stripped "gruntwork-io/terragrunt"
+    check_tool "terraform-docs" "terraform-docs" "$FEATURES_DIR/terraform.sh" 'TFDOCS_VERSION="?\$\{TFDOCS_VERSION:-\K[^"}]+'       _get_github_release_stripped "terraform-docs/terraform-docs"
 fi
 
-# Check kubernetes.sh
 if [ -f "$FEATURES_DIR/kubernetes.sh" ]; then
-    # kubectl
-    current=$(extract_version "$FEATURES_DIR/kubernetes.sh" 'KUBECTL_VERSION="?\$\{KUBECTL_VERSION:-\K[^"}]+')
-    # kubectl returns the full version, but we track major.minor
-    latest=$(command curl -Lsf https://dl.k8s.io/release/stable.txt | command sed 's/^v//' | command cut -d. -f1,2 || echo "unknown")
-    status=$(compare_version "$current" "$latest")
-    CURRENT_VERSIONS["kubectl"]="$current"
-    LATEST_VERSIONS["kubectl"]="$latest"
-    VERSION_STATUS["kubectl"]="$status"
-    print_result "kubectl" "$current" "$latest" "$status"
-
-    # k9s
-    current=$(extract_version "$FEATURES_DIR/kubernetes.sh" 'K9S_VERSION="?\$\{K9S_VERSION:-\K[^"}]+')
-    latest=$(get_github_release "derailed/k9s" | command sed 's/^v//')
-    status=$(compare_version "$current" "$latest")
-    CURRENT_VERSIONS["k9s"]="$current"
-    LATEST_VERSIONS["k9s"]="$latest"
-    VERSION_STATUS["k9s"]="$status"
-    print_result "k9s" "$current" "$latest" "$status"
-
-    # krew
-    current=$(extract_version "$FEATURES_DIR/kubernetes.sh" 'KREW_VERSION="?\$\{KREW_VERSION:-\K[^"}]+')
-    latest=$(get_github_release "kubernetes-sigs/krew" | command sed 's/^v//')
-    status=$(compare_version "$current" "$latest")
-    CURRENT_VERSIONS["krew"]="$current"
-    LATEST_VERSIONS["krew"]="$latest"
-    VERSION_STATUS["krew"]="$status"
-    print_result "krew" "$current" "$latest" "$status"
-
-    # helm
-    current=$(extract_version "$FEATURES_DIR/kubernetes.sh" 'HELM_VERSION="?\$\{HELM_VERSION:-\K[^"}]+')
-    if [ "$current" = "latest" ]; then
-        latest="latest"
-        status="up-to-date"
-    else
-        latest=$(get_github_release "helm/helm" | command sed 's/^v//')
-        status=$(compare_version "$current" "$latest")
-    fi
-    CURRENT_VERSIONS["Helm"]="$current"
-    LATEST_VERSIONS["Helm"]="$latest"
-    VERSION_STATUS["Helm"]="$status"
-    print_result "Helm" "$current" "$latest" "$status"
+    check_tool "kubectl" "kubectl" "$FEATURES_DIR/kubernetes.sh" 'KUBECTL_VERSION="?\$\{KUBECTL_VERSION:-\K[^"}]+' _get_latest_kubectl
+    check_tool "k9s"     "k9s"     "$FEATURES_DIR/kubernetes.sh" 'K9S_VERSION="?\$\{K9S_VERSION:-\K[^"}]+'        _get_github_release_stripped "derailed/k9s"
+    check_tool "krew"    "krew"    "$FEATURES_DIR/kubernetes.sh" 'KREW_VERSION="?\$\{KREW_VERSION:-\K[^"}]+'       _get_github_release_stripped "kubernetes-sigs/krew"
+    check_tool "Helm"    "Helm"    "$FEATURES_DIR/kubernetes.sh" 'HELM_VERSION="?\$\{HELM_VERSION:-\K[^"}]+'       _get_github_release_stripped "helm/helm"
 fi
 
 # ============================================================================
 # Development Tools (Informational Only - Not Pinned)
 # ============================================================================
-if [ "$OUTPUT_FORMAT" != "--json" ]; then
+if [ "$output_format" != "json" ]; then
     echo
     echo "================================================================================"
     echo "Development Tools (Informational Only - Not Pinned)"
@@ -452,7 +232,6 @@ if [ "$OUTPUT_FORMAT" != "--json" ]; then
     printf "%-25s %-15s\n" "----" "----------------"
 fi
 
-# Function to get PyPI package latest version
 # Python dev tools (informational only)
 python_dev_tools=(
     "black"
@@ -474,12 +253,12 @@ python_dev_tools=(
 
 for tool in "${python_dev_tools[@]}"; do
     latest=$(get_pypi_version "$tool")
-    if [ "$OUTPUT_FORMAT" != "--json" ]; then
+    if [ "$output_format" != "json" ]; then
         printf "%-25s ${BLUE}%-15s${NC}\n" "$tool" "$latest"
     fi
 done
 
-if [ "$OUTPUT_FORMAT" != "--json" ]; then
+if [ "$output_format" != "json" ]; then
     echo
     echo "Rust Development Tools:"
     printf "%-25s %-15s\n" "TOOL" "LATEST AVAILABLE"
@@ -503,12 +282,12 @@ rust_dev_tools=(
 
 for tool in "${rust_dev_tools[@]}"; do
     latest=$(get_crates_version "$tool")
-    if [ "$OUTPUT_FORMAT" != "--json" ]; then
+    if [ "$output_format" != "json" ]; then
         printf "%-25s ${BLUE}%-15s${NC}\n" "$tool" "$latest"
     fi
 done
 
-if [ "$OUTPUT_FORMAT" != "--json" ]; then
+if [ "$output_format" != "json" ]; then
     echo
     echo "Ruby Development Tools:"
     printf "%-25s %-15s\n" "TOOL" "LATEST AVAILABLE"
@@ -529,12 +308,12 @@ ruby_dev_tools=(
 
 for tool in "${ruby_dev_tools[@]}"; do
     latest=$(get_rubygems_version "$tool")
-    if [ "$OUTPUT_FORMAT" != "--json" ]; then
+    if [ "$output_format" != "json" ]; then
         printf "%-25s ${BLUE}%-15s${NC}\n" "$tool" "$latest"
     fi
 done
 
-if [ "$OUTPUT_FORMAT" != "--json" ]; then
+if [ "$output_format" != "json" ]; then
     echo
     echo "R Development Tools:"
     printf "%-25s %-15s\n" "TOOL" "LATEST AVAILABLE"
@@ -561,12 +340,12 @@ r_dev_tools=(
 
 for tool in "${r_dev_tools[@]}"; do
     latest=$(get_cran_version "$tool")
-    if [ "$OUTPUT_FORMAT" != "--json" ]; then
+    if [ "$output_format" != "json" ]; then
         printf "%-25s ${BLUE}%-15s${NC}\n" "$tool" "$latest"
     fi
 done
 
-if [ "$OUTPUT_FORMAT" != "--json" ]; then
+if [ "$output_format" != "json" ]; then
     echo
     echo "--------------------------------------------------------------------------------"
     echo "Note: These tools are NOT version-pinned in the build scripts."
@@ -579,7 +358,7 @@ fi
 # Summary
 # ============================================================================
 
-if [ "$OUTPUT_FORMAT" != "--json" ]; then
+if [ "$output_format" != "json" ]; then
     echo
     echo "Summary:"
 
@@ -587,9 +366,6 @@ if [ "$OUTPUT_FORMAT" != "--json" ]; then
     uptodate_count=0
     newer_count=0
     unknown_count=0
-
-    # Debug: check array size
-    # echo "Debug: VERSION_STATUS has ${#VERSION_STATUS[@]} elements"
 
     for tool in "${!VERSION_STATUS[@]}"; do
         case "${VERSION_STATUS[$tool]}" in
@@ -611,7 +387,7 @@ if [ "$OUTPUT_FORMAT" != "--json" ]; then
     fi
 
     # Check if any rate limiting occurred
-    if printf '%s\n' "${LATEST_VERSIONS[@]}" | ggrep -q "rate-limited"; then
+    if printf '%s\n' "${LATEST_VERSIONS[@]}" | _vapi_grep -q "rate-limited"; then
         echo
         echo -e "${YELLOW}Warning: GitHub API rate limit exceeded.${NC}"
         echo "Some version checks could not be completed."

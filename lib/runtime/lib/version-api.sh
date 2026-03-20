@@ -94,6 +94,84 @@ get_cran_version() {
     fi
 }
 
+# Get latest Python version
+get_latest_python() {
+    # Use Python's official JSON API endpoint
+    command curl -sf https://endoflife.date/api/python.json | jq -r '.[] | select(.latest) | .latest' | command head -1 || echo "unknown"
+}
+
+# Get latest Ruby version
+get_latest_ruby() {
+    local response
+    if [ -n "${GITHUB_TOKEN:-}" ]; then
+        response=$(command curl -sf -H "Authorization: token $GITHUB_TOKEN" https://api.github.com/repos/ruby/ruby/releases)
+    else
+        response=$(command curl -sf https://api.github.com/repos/ruby/ruby/releases)
+    fi
+
+    if echo "$response" | _vapi_grep -q "rate limit exceeded"; then
+        echo "rate-limited"
+        return
+    fi
+    echo "$response" | jq -r '.[].tag_name | select(startswith("v"))' | command head -1 | command sed 's/^v//' | command tr '_' '.' || echo "unknown"
+}
+
+# Get latest Node.js LTS version
+get_latest_node() {
+    command curl -sf https://nodejs.org/dist/index.json | jq -r '.[] | select(.lts != false) | .version' | command head -1 | command sed 's/^v//' | command cut -d. -f1 || echo "unknown"
+}
+
+# Get latest Go version
+get_latest_go() {
+    command curl -sf https://go.dev/VERSION?m=text | command head -1 | command sed 's/^go//' || echo "unknown"
+}
+
+# Get latest Rust stable version
+get_latest_rust() {
+    # Try to get the latest stable version from the Rust release API
+    local version
+    version=$(command curl -sf https://api.github.com/repos/rust-lang/rust/releases | jq -r '.[] | select(.prerelease == false) | .tag_name' | command head -1 | command sed 's/^v//')
+
+    if [ -n "$version" ] && [ "$version" != "null" ]; then
+        echo "$version"
+    else
+        # Fallback: try forge.rust-lang.org
+        version=$(command curl -sf https://forge.rust-lang.org/infra/channel-layout.html | _vapi_grep -oP 'stable.*?rustc \K[0-9]+\.[0-9]+\.[0-9]+' | command head -1)
+        if [ -n "$version" ]; then
+            echo "$version"
+        else
+            echo "unknown"
+        fi
+    fi
+}
+
+# Get latest Java LTS version
+get_latest_java_lts() {
+    # OpenJDK doesn't have a simple API, so we'll check for known LTS versions
+    echo "21"  # As of 2024, Java 21 is the latest LTS
+}
+
+# Get latest Mojo version
+get_latest_mojo() {
+    # Mojo uses YY.M format (e.g., 25.3, 25.4)
+    # Since Mojo's versioning follows YY.M and we're in July 2025,
+    # we expect versions like 25.3, 25.4, 25.5, etc.
+    #
+    # Note: Mojo doesn't have a simple API for latest version yet
+    # This is a placeholder that should be updated when Modular provides
+    # a proper API endpoint or when we find a reliable source
+    #
+    # For now, we'll use a reasonable estimate based on their release cadence
+    echo "25.4"  # Update this manually based on Mojo releases
+}
+
+# Extract version from script
+extract_version() {
+    local file="$1"
+    local pattern="$2"
+    _vapi_grep -oP "${pattern}" "$file" | command head -1 || echo "not found"
+}
+
 # Compare versions
 compare_version() {
     local current="$1"
