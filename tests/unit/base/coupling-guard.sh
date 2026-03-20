@@ -64,11 +64,18 @@ test_feature_header_submodules_exist() {
     assert_file_exists "$PROJECT_ROOT/lib/base/feature-utils.sh"
 }
 
+test_apt_utils_submodules_exist() {
+    # Verify that apt-utils.sh sub-modules exist
+    assert_file_exists "$PROJECT_ROOT/lib/base/debian-version.sh"
+    assert_file_exists "$PROJECT_ROOT/lib/base/apt-repository.sh"
+}
+
 # Run all tests
 run_test test_feature_header_fan_in "feature-header.sh fan-in within expected range"
 run_test test_logging_fan_in "logging.sh fan-in within expected range"
 run_test test_logging_submodules_exist "logging.sh sub-modules all exist"
 run_test test_feature_header_submodules_exist "feature-header.sh sub-modules all exist"
+run_test test_apt_utils_submodules_exist "apt-utils.sh sub-modules all exist"
 
 # Generate test report
 generate_report

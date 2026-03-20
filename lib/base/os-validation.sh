@@ -11,6 +11,14 @@ if [ -n "${_OS_VALIDATION_LOADED:-}" ]; then
 fi
 _OS_VALIDATION_LOADED=1
 
+# Source shared Debian version detection
+# shellcheck source=lib/base/debian-version.sh
+if [ -f "/tmp/build-scripts/base/debian-version.sh" ]; then
+    source "/tmp/build-scripts/base/debian-version.sh"
+elif [ -f "$(dirname "${BASH_SOURCE[0]}")/debian-version.sh" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/debian-version.sh"
+fi
+
 # ============================================================================
 # Bash Version Check
 # ============================================================================
@@ -50,8 +58,7 @@ fi
 
 # Detect Debian/Ubuntu version for logging and export for feature scripts
 if [ "${ID}" = "debian" ]; then
-    # Extract major version number
-    DEBIAN_VERSION="${VERSION_ID%%.*}"
+    DEBIAN_VERSION="$(get_debian_major_version)"
     export DEBIAN_VERSION
     echo "Detected Debian ${VERSION_ID} (${VERSION_CODENAME:-unknown})"
 

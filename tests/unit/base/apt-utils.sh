@@ -16,6 +16,27 @@ test_script_exists() {
     assert_file_exists "$PROJECT_ROOT/lib/base/apt-utils.sh"
 }
 
+# Test: Sub-module files exist
+test_submodules_exist() {
+    assert_file_exists "$PROJECT_ROOT/lib/base/debian-version.sh"
+    assert_file_exists "$PROJECT_ROOT/lib/base/apt-repository.sh"
+}
+
+# Test: apt-utils.sh sources both sub-modules
+test_sources_submodules() {
+    if command grep -q "debian-version.sh" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
+        assert_true true "apt-utils.sh sources debian-version.sh"
+    else
+        assert_true false "apt-utils.sh does not source debian-version.sh"
+    fi
+
+    if command grep -q "apt-repository.sh" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
+        assert_true true "apt-utils.sh sources apt-repository.sh"
+    else
+        assert_true false "apt-utils.sh does not source apt-repository.sh"
+    fi
+}
+
 # Test: Functions are exported
 test_functions_exported() {
     # Check if the script exports the required functions
@@ -344,72 +365,84 @@ test_apt_acquire_timeout_constant() {
     fi
 }
 
-# Test: add_apt_repository_key function
+# Test: add_apt_repository_key function (now in apt-repository.sh sub-module)
 test_add_apt_repository_key_function() {
-    if command grep -q "^add_apt_repository_key()" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
-        assert_true true "add_apt_repository_key function is defined"
+    if command grep -q "^add_apt_repository_key()" "$PROJECT_ROOT/lib/base/apt-repository.sh"; then
+        assert_true true "add_apt_repository_key function is defined in apt-repository.sh"
     else
-        assert_true false "add_apt_repository_key function not found"
+        assert_true false "add_apt_repository_key function not found in apt-repository.sh"
     fi
 
-    if command grep -q "protected_export.*add_apt_repository_key" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
+    if command grep -q "protected_export.*add_apt_repository_key" "$PROJECT_ROOT/lib/base/apt-repository.sh"; then
         assert_true true "add_apt_repository_key function is exported"
     else
         assert_true false "add_apt_repository_key function not exported"
     fi
+
+    # Bug fix: uses is_debian_version for branching instead of deprecated command -v apt-key
+    if command grep -q "is_debian_version" "$PROJECT_ROOT/lib/base/apt-repository.sh"; then
+        assert_true true "add_apt_repository_key uses is_debian_version for branching"
+    else
+        assert_true false "add_apt_repository_key does not use is_debian_version"
+    fi
+
+    if command grep -q "command -v apt-key" "$PROJECT_ROOT/lib/base/apt-repository.sh"; then
+        assert_true false "add_apt_repository_key still uses deprecated command -v apt-key check"
+    else
+        assert_true true "add_apt_repository_key does not use deprecated command -v apt-key check"
+    fi
 }
 
-# Test: Debian version detection
+# Test: Debian version detection (now in debian-version.sh sub-module)
 test_debian_version_detection() {
-    # Check for get_debian_major_version function
-    if command grep -q "^get_debian_major_version()" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
-        assert_true true "get_debian_major_version function is defined"
+    # Check for get_debian_major_version function in sub-module
+    if command grep -q "^get_debian_major_version()" "$PROJECT_ROOT/lib/base/debian-version.sh"; then
+        assert_true true "get_debian_major_version function is defined in debian-version.sh"
     else
-        assert_true false "get_debian_major_version function not found"
+        assert_true false "get_debian_major_version function not found in debian-version.sh"
     fi
 
     # Check for /etc/os-release support (method 1)
-    if command grep -q "/etc/os-release" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
+    if command grep -q "/etc/os-release" "$PROJECT_ROOT/lib/base/debian-version.sh"; then
         assert_true true "Supports /etc/os-release detection"
     else
         assert_true false "Missing /etc/os-release detection"
     fi
 
     # Check for /etc/debian_version support (method 2)
-    if command grep -q "/etc/debian_version" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
+    if command grep -q "/etc/debian_version" "$PROJECT_ROOT/lib/base/debian-version.sh"; then
         assert_true true "Supports /etc/debian_version fallback"
     else
         assert_true false "Missing /etc/debian_version fallback"
     fi
 
     # Check for lsb_release support (method 3)
-    if command grep -q "lsb_release" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
+    if command grep -q "lsb_release" "$PROJECT_ROOT/lib/base/debian-version.sh"; then
         assert_true true "Supports lsb_release fallback"
     else
         assert_true false "Missing lsb_release fallback"
     fi
 
     # Check for codename mapping
-    if command grep -q "trixie.*13" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
+    if command grep -q "trixie.*13" "$PROJECT_ROOT/lib/base/debian-version.sh"; then
         assert_true true "Maps trixie codename to version 13"
     else
         assert_true false "Missing trixie codename mapping"
     fi
 
-    if command grep -q "bookworm.*12" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
+    if command grep -q "bookworm.*12" "$PROJECT_ROOT/lib/base/debian-version.sh"; then
         assert_true true "Maps bookworm codename to version 12"
     else
         assert_true false "Missing bookworm codename mapping"
     fi
 }
 
-# Test: is_debian_version function
+# Test: is_debian_version function (now in debian-version.sh sub-module)
 test_is_debian_version() {
-    # Check for is_debian_version function
-    if command grep -q "^is_debian_version()" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
-        assert_true true "is_debian_version function is defined"
+    if command grep -q "^is_debian_version()" "$PROJECT_ROOT/lib/base/debian-version.sh"; then
+        assert_true true "is_debian_version function is defined in debian-version.sh"
     else
-        assert_true false "is_debian_version function not found"
+        assert_true false "is_debian_version function not found in debian-version.sh"
     fi
 }
 
@@ -420,6 +453,36 @@ test_apt_install_conditional() {
         assert_true true "apt_install_conditional function is defined"
     else
         assert_true false "apt_install_conditional function not found"
+    fi
+}
+
+# Test: _fix_dpkg_state helper function exists
+test_fix_dpkg_state_helper() {
+    if command grep -q "^_fix_dpkg_state()" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
+        assert_true true "_fix_dpkg_state function is defined"
+    else
+        assert_true false "_fix_dpkg_state function not found"
+    fi
+
+    if command grep -q "protected_export.*_fix_dpkg_state" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
+        assert_true true "_fix_dpkg_state function is exported"
+    else
+        assert_true false "_fix_dpkg_state function not exported"
+    fi
+}
+
+# Test: _clean_apt_cache helper function exists
+test_clean_apt_cache_helper() {
+    if command grep -q "^_clean_apt_cache()" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
+        assert_true true "_clean_apt_cache function is defined"
+    else
+        assert_true false "_clean_apt_cache function not found"
+    fi
+
+    if command grep -q "protected_export.*_clean_apt_cache" "$PROJECT_ROOT/lib/base/apt-utils.sh"; then
+        assert_true true "_clean_apt_cache function is exported"
+    else
+        assert_true false "_clean_apt_cache function not exported"
     fi
 }
 
@@ -468,6 +531,8 @@ test_is_debian_version_rejects_wrong() {
 
 # Run all tests
 run_test test_script_exists "APT utilities script exists"
+run_test test_submodules_exist "Sub-module files exist"
+run_test test_sources_submodules "apt-utils.sh sources sub-modules"
 run_test test_functions_exported "Functions are exported"
 run_test test_apt_update_function "apt_update function validation"
 run_test test_apt_install_function "apt_install function validation"
@@ -490,6 +555,8 @@ run_test test_add_apt_repository_key_function "add_apt_repository_key function"
 run_test test_debian_version_detection "Debian version detection with fallbacks"
 run_test test_is_debian_version "is_debian_version function"
 run_test test_apt_install_conditional "apt_install_conditional function"
+run_test test_fix_dpkg_state_helper "_fix_dpkg_state helper function"
+run_test test_clean_apt_cache_helper "_clean_apt_cache helper function"
 
 # Functional tests
 run_test test_get_debian_major_version_returns_number "get_debian_major_version returns a number"

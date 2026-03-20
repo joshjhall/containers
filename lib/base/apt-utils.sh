@@ -7,6 +7,10 @@
 # - Network timeout configuration
 # - Mirror fallback support
 #
+# Sub-modules (sourced automatically):
+# - debian-version.sh: Debian version detection (get_debian_major_version, is_debian_version)
+# - apt-repository.sh: GPG key and repository management (add_apt_repository_key)
+#
 # Usage:
 #   Source this file in your feature script:
 #     source /tmp/build-scripts/base/apt-utils.sh
@@ -37,6 +41,22 @@ if [ -f /tmp/build-scripts/base/logging.sh ]; then
     source /tmp/build-scripts/base/logging.sh
 fi
 
+# Debian version detection (get_debian_major_version, is_debian_version)
+# shellcheck source=lib/base/debian-version.sh
+if [ -f "/tmp/build-scripts/base/debian-version.sh" ]; then
+    source "/tmp/build-scripts/base/debian-version.sh"
+elif [ -f "$(dirname "${BASH_SOURCE[0]}")/debian-version.sh" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/debian-version.sh"
+fi
+
+# GPG key and repository management (add_apt_repository_key)
+# shellcheck source=lib/base/apt-repository.sh
+if [ -f "/tmp/build-scripts/base/apt-repository.sh" ]; then
+    source "/tmp/build-scripts/base/apt-repository.sh"
+elif [ -f "$(dirname "${BASH_SOURCE[0]}")/apt-repository.sh" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/apt-repository.sh"
+fi
+
 # ============================================================================
 # Configuration
 # ============================================================================
@@ -45,123 +65,6 @@ APT_RETRY_DELAY="${APT_RETRY_DELAY:-5}"
 APT_TIMEOUT="${APT_TIMEOUT:-300}"  # 5 minutes timeout for apt operations
 APT_ACQUIRE_TIMEOUT="${APT_ACQUIRE_TIMEOUT:-30}"  # Per-request acquire timeout
 APT_NETWORK_ERROR_CODE=100        # apt exit code for network/repository errors
-
-# ============================================================================
-# Debian Version Detection
-# ============================================================================
-
-# get_debian_major_version - Get the major Debian version number
-#
-# Uses multiple fallback methods for robustness:
-#   1. /etc/os-release (preferred - standard)
-#   2. /etc/debian_version (fallback)
-#   3. lsb_release command (if available)
-#
-# Returns:
-#   The major version number (e.g., "11", "12", "13")
-#   Returns "unknown" if version cannot be determined
-#
-# Example:
-#   DEBIAN_VERSION=$(get_debian_major_version)
-#   if [ "$DEBIAN_VERSION" = "13" ]; then
-#       # Trixie-specific code
-#   fi
-get_debian_major_version() {
-    local version=""
-
-    # Method 1: Try /etc/os-release (most reliable)
-    if [ -f /etc/os-release ]; then
-        # shellcheck disable=SC1091
-        source /etc/os-release 2>/dev/null || true
-        if [ -n "${VERSION_ID:-}" ]; then
-            # Extract major version (handles "12", "12.5", etc.)
-            version="${VERSION_ID%%.*}"
-            echo "$version"
-            return 0
-        elif [ -n "${VERSION_CODENAME:-}" ]; then
-            # Map codename to version
-            case "$VERSION_CODENAME" in
-                trixie) echo "13"; return 0 ;;
-                bookworm) echo "12"; return 0 ;;
-                bullseye) echo "11"; return 0 ;;
-            esac
-        fi
-    fi
-
-    # Method 2: Try /etc/debian_version (fallback)
-    if [ -f /etc/debian_version ]; then
-        version=$(command cat /etc/debian_version 2>/dev/null || echo "")
-        if [ -n "$version" ]; then
-            # Extract major version number (handles both "12.5" and "trixie/sid")
-            if [[ "$version" =~ ^[0-9]+\. ]]; then
-                echo "${version%%.*}"
-                return 0
-            elif [[ "$version" =~ ^[0-9]+$ ]]; then
-                echo "$version"
-                return 0
-            elif [[ "$version" == *"trixie"* ]] || [[ "$version" == *"sid"* ]]; then
-                echo "13"
-                return 0
-            elif [[ "$version" == *"bookworm"* ]]; then
-                echo "12"
-                return 0
-            elif [[ "$version" == *"bullseye"* ]]; then
-                echo "11"
-                return 0
-            fi
-        fi
-    fi
-
-    # Method 3: Try lsb_release (if available)
-    if command -v lsb_release >/dev/null 2>&1; then
-        version=$(lsb_release -sr 2>/dev/null | command cut -d. -f1 || echo "")
-        if [[ "$version" =~ ^[0-9]+$ ]]; then
-            echo "$version"
-            return 0
-        fi
-        # Try codename if numeric version not available
-        local codename
-        codename=$(lsb_release -sc 2>/dev/null || echo "")
-        case "$codename" in
-            trixie) echo "13"; return 0 ;;
-            bookworm) echo "12"; return 0 ;;
-            bullseye) echo "11"; return 0 ;;
-        esac
-    fi
-
-    # All methods failed
-    echo "unknown"
-    return 1
-}
-
-# is_debian_version - Check if running specific Debian version or newer
-#
-# Usage:
-#   is_debian_version <min_version>
-#
-# Returns:
-#   0 if current version >= min_version
-#   1 otherwise
-#
-# Example:
-#   if is_debian_version 13; then
-#       echo "Running Debian 13 or newer"
-#   fi
-is_debian_version() {
-    local min_version="$1"
-    local current_version
-    current_version=$(get_debian_major_version)
-
-    if [ "$current_version" = "unknown" ]; then
-        return 1
-    fi
-
-    if [ "$current_version" -ge "$min_version" ]; then
-        return 0
-    else
-        return 1
-    fi
-}
 
 # apt_install_conditional - Install packages based on Debian version
 #
@@ -353,9 +256,39 @@ apt_update() {
 }
 
 # ============================================================================
+# _fix_dpkg_state - Fix half-configured packages from a failed apt install
+#
+# Runs dpkg --configure -a, then identifies and purges packages stuck in a
+# broken state. Does NOT run apt-get --fix-broken install: it can pull packages
+# from alternative sources (e.g. Debian when CRAN was intended), creating a
+# mixed-source state with unresolvable dependencies.
+# ============================================================================
+_fix_dpkg_state() {
+    dpkg --configure -a 2>/dev/null || true
+    # || true makes pipeline set -e/pipefail safe when grep finds no matches.
+    _broken_pkgs=$(dpkg --audit 2>/dev/null | command grep -oP '^\S+' || true)
+    if [ -n "$_broken_pkgs" ]; then
+        echo "  Removing half-installed packages..."
+        # Single dpkg call with --force-depends handles circular deps atomically
+        # shellcheck disable=SC2086
+        dpkg --purge --force-depends --force-remove-reinstreq $_broken_pkgs 2>/dev/null || true
+        dpkg --configure -a 2>/dev/null || true
+    fi
+}
+
+# ============================================================================
+# _clean_apt_cache - Clean cached archives so stale/mismatched files are re-fetched
+# ============================================================================
+_clean_apt_cache() {
+    apt-get clean || true
+    command rm -rf /var/cache/apt/archives/partial/* || true
+}
+
+# ============================================================================
 # _apt_install_on_retry - Hook called between apt_install retries
 #
-# Logs network errors and refreshes package lists on network failure.
+# Logs network errors, recovers dpkg state, cleans apt cache, and refreshes
+# package lists on network failure.
 #
 # Arguments:
 #   $1 - exit code from the failed attempt
@@ -366,24 +299,8 @@ _apt_install_on_retry() {
     if [ "$exit_code" -eq "$APT_NETWORK_ERROR_CODE" ]; then
         echo "  Network connectivity issue detected"
         echo "  Recovering dpkg and apt state before retry..."
-        # Fix any half-configured packages from the failed attempt
-        dpkg --configure -a 2>/dev/null || true
-        # Purge packages stuck in broken state so the next retry starts clean.
-        # Do NOT run apt-get --fix-broken install here: it can pull packages
-        # from alternative sources (e.g. Debian when CRAN was intended),
-        # creating a mixed-source state with unresolvable dependencies.
-        # || true makes pipeline set -e/pipefail safe when grep finds no matches.
-        _broken_pkgs=$(dpkg --audit 2>/dev/null | command grep -oP '^\S+' || true)
-        if [ -n "$_broken_pkgs" ]; then
-            echo "  Removing half-installed packages..."
-            # Single dpkg call with --force-depends handles circular deps atomically
-            # shellcheck disable=SC2086
-            dpkg --purge --force-depends --force-remove-reinstreq $_broken_pkgs 2>/dev/null || true
-            dpkg --configure -a 2>/dev/null || true
-        fi
-        # Clean cached archives so stale/mismatched files are re-fetched
-        apt-get clean || true
-        command rm -rf /var/cache/apt/archives/partial/* || true
+        _fix_dpkg_state
+        _clean_apt_cache
         # Refresh package lists to pick up any mirror sync changes
         apt-get update -qq || true
     fi
@@ -481,74 +398,8 @@ EOF
     echo "✓ apt configured with timeout and retry settings"
 }
 
-# ============================================================================
-# add_apt_repository_key - Add an apt repository with GPG key (Debian-version-aware)
-#
-# Handles both legacy apt-key (Debian 11/12) and modern signed-by (Debian 13+)
-# methods for adding GPG keys and apt repository sources.
-#
-# Arguments:
-#   $1 - tool_name:   Human-readable name for log messages (e.g., "Kubernetes")
-#   $2 - key_url:     URL to download the GPG key from
-#   $3 - keyring_path: Path to store the keyring (e.g., /usr/share/keyrings/foo.gpg)
-#   $4 - source_list:  Path to the sources.list.d file
-#   $5 - repo_line:    Full deb line including [signed-by=...] for modern method
-#   $6 - key_format:   "armored" (needs dearmor, default) or "binary" (raw .gpg)
-#
-# Usage:
-#   add_apt_repository_key "Kubernetes" \
-#       "https://pkgs.k8s.io/core:/stable:/v1.31/deb/Release.key" \
-#       "/usr/share/keyrings/kubernetes-apt-keyring.gpg" \
-#       "/etc/apt/sources.list.d/kubernetes.list" \
-#       "deb [signed-by=/usr/share/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.31/deb/ /"
-# ============================================================================
-add_apt_repository_key() {
-    local tool_name="$1"
-    local key_url="$2"
-    local keyring_path="$3"
-    local source_list="$4"
-    local repo_line="$5"
-    local key_format="${6:-armored}"  # "armored" (needs dearmor) or "binary"
-
-    if command -v apt-key >/dev/null 2>&1; then
-        # Legacy method for Debian 11/12
-        log_message "Using apt-key method (Debian 11/12)"
-        log_message "Adding ${tool_name} GPG key"
-        retry_with_backoff curl -fsSL "$key_url" | apt-key add -
-
-        # Strip signed-by from repo_line for legacy format
-        local legacy_line="$repo_line"
-        # Match optional leading space + signed-by= + value (stop at ] or space)
-        # Handles both "[signed-by=/path]" and "[arch=amd64 signed-by=/path]"
-        legacy_line=$(echo "$legacy_line" | command sed 's/ *signed-by=[^] ]*//g')
-        # Clean up empty options brackets: "deb [ ] ..." -> "deb ..."
-        # and "deb [arch=amd64 ] ..." -> "deb [arch=amd64] ..."
-        legacy_line=$(echo "$legacy_line" | command sed 's/\[ *\] *//g; s/ *\] */] /g')
-
-        log_command "Adding ${tool_name} repository" \
-            bash -c "echo '${legacy_line}' > ${source_list}"
-    else
-        # Modern method for Debian 13+
-        log_message "Using signed-by method (Debian 13+)"
-        log_command "Creating keyrings directory" \
-            mkdir -p "$(dirname "$keyring_path")"
-
-        log_message "Adding ${tool_name} GPG key"
-        if [ "$key_format" = "armored" ]; then
-            retry_with_backoff curl -fsSL "$key_url" | gpg --dearmor -o "$keyring_path"
-        else
-            retry_with_backoff curl -fsSL "$key_url" -o "$keyring_path"
-        fi
-
-        log_command "Setting GPG key permissions" \
-            chmod 644 "$keyring_path"
-
-        log_command "Adding ${tool_name} repository" \
-            bash -c "echo '${repo_line}' > ${source_list}"
-    fi
-}
-
 # Export functions for use by other scripts
-protected_export _apt_diagnose_network_failure _apt_update_on_retry _apt_install_on_retry
+protected_export _apt_diagnose_network_failure _apt_update_on_retry
+protected_export _fix_dpkg_state _clean_apt_cache _apt_install_on_retry
 protected_export apt_retry apt_update apt_install apt_cleanup
-protected_export configure_apt_mirrors add_apt_repository_key
+protected_export configure_apt_mirrors apt_install_conditional

@@ -29,6 +29,7 @@ setup() {
     # Copy feature-header.sh and its sub-modules to the test directory
     command cp "$PROJECT_ROOT/lib/base/feature-header.sh" "$TEST_TEMP_DIR/feature-header-test.sh"
     command cp "$PROJECT_ROOT/lib/base/os-validation.sh" "$TEST_TEMP_DIR/os-validation.sh"
+    command cp "$PROJECT_ROOT/lib/base/debian-version.sh" "$TEST_TEMP_DIR/debian-version.sh"
     command cp "$PROJECT_ROOT/lib/base/user-env.sh" "$TEST_TEMP_DIR/user-env.sh"
     command cp "$PROJECT_ROOT/lib/base/arch-utils.sh" "$TEST_TEMP_DIR/arch-utils.sh"
     command cp "$PROJECT_ROOT/lib/base/cleanup-handler.sh" "$TEST_TEMP_DIR/cleanup-handler.sh"
@@ -58,7 +59,7 @@ teardown() {
 
     # Unset include guards so re-sourcing works across tests
     unset USERNAME USER_UID USER_GID HOME WORKING_DIR _FEATURE_HEADER_LOADED
-    unset _OS_VALIDATION_LOADED _USER_ENV_LOADED _FEATURE_UTILS_LOADED
+    unset _OS_VALIDATION_LOADED _DEBIAN_VERSION_LOADED _USER_ENV_LOADED _FEATURE_UTILS_LOADED
     unset _ARCH_UTILS_LOADED _CLEANUP_HANDLER_LOADED
     unset _LOGGING_LOADED _SHARED_LOGGING_LOADED _SHARED_EXPORT_UTILS_LOADED
     unset _FEATURE_LOGGING_LOADED _MESSAGE_LOGGING_LOADED
