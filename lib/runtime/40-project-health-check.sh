@@ -36,11 +36,8 @@ fi
 
 if [ -z "${HAVE_DEV_TOOLS+x}" ]; then
     HAVE_DEV_TOOLS=false
-    if [ -f "$ENABLED_FEATURES_FILE" ]; then
-        eval "$(/usr/bin/grep -E '^INCLUDE_DEV_TOOLS=' "$ENABLED_FEATURES_FILE" 2>/dev/null || true)"
-        if [ "${INCLUDE_DEV_TOOLS:-false}" = "true" ]; then
-            HAVE_DEV_TOOLS=true
-        fi
+    if [ -f "$ENABLED_FEATURES_FILE" ] && /usr/bin/grep -qE '^INCLUDE_DEV_TOOLS=true$' "$ENABLED_FEATURES_FILE" 2>/dev/null; then
+        HAVE_DEV_TOOLS=true
     fi
 fi
 
