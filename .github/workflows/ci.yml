@@ -526,6 +526,7 @@ jobs:
           severity: 'CRITICAL'
           exit-code: '1'
           ignore-unfixed: true
+          trivyignores: '.trivyignore'
           skip-setup-trivy: 'true'
         # Critical vulnerabilities with fixes available will fail the build
         # Note: secrets are checked in filesystem scan with continue-on-error
