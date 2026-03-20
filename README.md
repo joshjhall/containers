@@ -30,7 +30,7 @@ full-featured development environments using a single, configurable Dockerfile.
 - 🔒 **Security Hardened**: Non-root users, input validation, checksum
   verification, secure temp files, rate limiting
 - 🌍 **Multi-Purpose**: Development, CI/CD, production, and agent containers
-- 📦 **28 Feature Modules**: Python, Node.js, Rust, Go, Ruby, Java, R, and 100+
+- 📦 **34 Feature Modules**: Python, Node.js, Rust, Go, Ruby, Java, R, and 100+
   tools
 - ☁️ **Cloud Ready**: AWS, GCP, Kubernetes, Terraform integrations
 - 🐧 **Debian Compatible**: Supports Debian 11 (Bullseye), 12 (Bookworm), and 13
@@ -158,7 +158,7 @@ All features are enabled via `INCLUDE_<FEATURE>=true` build arguments.
 | **Rust Dev**   | `INCLUDE_RUST_DEV=true`   | + clippy, rustfmt, cargo-watch, bacon           |
 | **Go**         | `INCLUDE_GOLANG=true`     | Latest with module support                      |
 | **Go Dev**     | `INCLUDE_GOLANG_DEV=true` | + delve, gopls, staticcheck                     |
-| **Ruby**       | `INCLUDE_RUBY=true`       | Ruby 3.3+, bundler                              |
+| **Ruby**       | `INCLUDE_RUBY=true`       | Ruby 4.0+, bundler                              |
 | **Ruby Dev**   | `INCLUDE_RUBY_DEV=true`   | + rubocop, solargraph                           |
 | **Java**       | `INCLUDE_JAVA=true`       | OpenJDK 21                                      |
 | **Java Dev**   | `INCLUDE_JAVA_DEV=true`   | + Maven, Gradle                                 |

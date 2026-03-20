@@ -51,7 +51,7 @@ still run, missing features will not be available.
 
    # Check specific feature
    check-build-logs.sh python-dev
-   check-build-logs.sh node-dev
+   check-build-logs.sh nodejs-dev
    ```
 
 1. **Verify feature availability**:

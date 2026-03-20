@@ -33,14 +33,20 @@ Releases are managed through the `bin/release.sh` script, which automates:
 ./bin/release.sh [OPTIONS] [major|minor|patch|VERSION]
 
 Options:
-  --force              Force version update even if same
-  --skip-changelog     Skip CHANGELOG.md generation
-  --non-interactive    Skip confirmation prompts (for CI/CD)
+  --force                Force version update even if same
+  --skip-changelog       Skip CHANGELOG.md generation
+  --non-interactive      Skip confirmation prompts (for CI/CD)
+  --auto-commit          Automatically commit changes
+  --auto-tag             Automatically create git tag
+  --auto-push            Automatically push to remote
+  --auto-github-release  Automatically create GitHub release
+  --full-auto            Enable all auto flags (commit, tag, push, release)
 
 Examples:
   ./bin/release.sh patch                    # Bump patch version
   ./bin/release.sh --non-interactive minor  # Run without prompts
   ./bin/release.sh --skip-changelog 4.1.0   # Manual changelog
+  ./bin/release.sh --full-auto minor        # Complete automated release
 ```
 
 ## What Gets Updated

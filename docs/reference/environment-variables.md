@@ -209,10 +209,10 @@ All cache directories are located under `/cache` for persistence across builds:
 
 ### Rust
 
-| Variable      | Default        | Description                 |
-| ------------- | -------------- | --------------------------- |
-| `CARGO_HOME`  | `/cache/cargo` | Cargo packages and registry |
-| `RUSTUP_HOME` | `/opt/rustup`  | Rustup installation         |
+| Variable      | Default         | Description                 |
+| ------------- | --------------- | --------------------------- |
+| `CARGO_HOME`  | `/cache/cargo`  | Cargo packages and registry |
+| `RUSTUP_HOME` | `/cache/rustup` | Rustup installation         |
 
 ### Go
 
