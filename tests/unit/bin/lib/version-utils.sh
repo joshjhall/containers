@@ -232,6 +232,157 @@ test_script_sources_cleanly() {
     fi
 }
 
+# ============================================================================
+# Test: bump_version function
+# ============================================================================
+test_bump_version_patch() {
+    source "$PROJECT_ROOT/bin/lib/version-utils.sh"
+
+    local result
+    result=$(bump_version "1.2.3" "patch")
+    assert_equals "1.2.4" "$result" "bump_version patch increments patch"
+}
+
+test_bump_version_minor() {
+    source "$PROJECT_ROOT/bin/lib/version-utils.sh"
+
+    local result
+    result=$(bump_version "1.2.3" "minor")
+    assert_equals "1.3.0" "$result" "bump_version minor increments minor and resets patch"
+}
+
+test_bump_version_major() {
+    source "$PROJECT_ROOT/bin/lib/version-utils.sh"
+
+    local result
+    result=$(bump_version "1.2.3" "major")
+    assert_equals "2.0.0" "$result" "bump_version major increments major and resets minor+patch"
+}
+
+test_bump_version_zeros() {
+    source "$PROJECT_ROOT/bin/lib/version-utils.sh"
+
+    local result
+    result=$(bump_version "0.0.0" "patch")
+    assert_equals "0.0.1" "$result" "bump_version patch from 0.0.0 gives 0.0.1"
+}
+
+test_bump_version_large() {
+    source "$PROJECT_ROOT/bin/lib/version-utils.sh"
+
+    local result
+    result=$(bump_version "99.99.99" "patch")
+    assert_equals "99.99.100" "$result" "bump_version handles large numbers"
+}
+
+test_bump_version_minor_resets_patch() {
+    source "$PROJECT_ROOT/bin/lib/version-utils.sh"
+
+    local result
+    result=$(bump_version "5.3.17" "minor")
+    assert_equals "5.4.0" "$result" "bump_version minor resets patch to 0"
+}
+
+test_bump_version_major_resets_both() {
+    source "$PROJECT_ROOT/bin/lib/version-utils.sh"
+
+    local result
+    result=$(bump_version "5.3.17" "major")
+    assert_equals "6.0.0" "$result" "bump_version major resets minor and patch to 0"
+}
+
+test_bump_version_invalid_type() {
+    source "$PROJECT_ROOT/bin/lib/version-utils.sh"
+
+    if bump_version "1.2.3" "invalid" 2>/dev/null; then
+        assert_true false "bump_version should reject invalid bump type"
+    else
+        assert_true true "bump_version correctly rejects invalid bump type"
+    fi
+}
+
+# ============================================================================
+# Test: validate_sha512 function
+# ============================================================================
+test_validate_sha512_valid() {
+    source "$PROJECT_ROOT/bin/lib/version-utils.sh"
+
+    # Valid SHA512 (128 hex characters)
+    local valid_sha
+    valid_sha="$(printf '%0128d' 0 | command tr '0' 'a')"
+
+    if validate_sha512 "$valid_sha"; then
+        assert_true true "validate_sha512 accepts valid 128-character hex"
+    else
+        assert_true false "validate_sha512 rejected valid SHA512"
+    fi
+}
+
+test_validate_sha512_uppercase() {
+    source "$PROJECT_ROOT/bin/lib/version-utils.sh"
+
+    # Valid SHA512 uppercase (128 hex characters)
+    local valid_sha
+    valid_sha="$(printf '%0128d' 0 | command tr '0' 'A')"
+
+    if validate_sha512 "$valid_sha"; then
+        assert_true true "validate_sha512 accepts uppercase hex"
+    else
+        assert_true false "validate_sha512 rejected uppercase SHA512"
+    fi
+}
+
+test_validate_sha512_too_short() {
+    source "$PROJECT_ROOT/bin/lib/version-utils.sh"
+
+    # SHA256 length (64 chars) — too short for SHA512
+    local short_sha="bda09dc030a08987fe2b3bed678b15b52f23d6705e872d561932d4ca07db7818"
+
+    if validate_sha512 "$short_sha"; then
+        assert_true false "validate_sha512 should reject 64-character string"
+    else
+        assert_true true "validate_sha512 correctly rejects SHA256-length string"
+    fi
+}
+
+test_validate_sha512_too_long() {
+    source "$PROJECT_ROOT/bin/lib/version-utils.sh"
+
+    # 129 hex characters — too long
+    local long_sha
+    long_sha="$(printf '%0129d' 0 | command tr '0' 'a')"
+
+    if validate_sha512 "$long_sha"; then
+        assert_true false "validate_sha512 should reject 129-character string"
+    else
+        assert_true true "validate_sha512 correctly rejects too-long string"
+    fi
+}
+
+test_validate_sha512_non_hex() {
+    source "$PROJECT_ROOT/bin/lib/version-utils.sh"
+
+    # 128 non-hex characters
+    local non_hex
+    non_hex="$(printf '%0128d' 0 | command tr '0' 'z')"
+
+    if validate_sha512 "$non_hex"; then
+        assert_true false "validate_sha512 should reject non-hex characters"
+    else
+        assert_true true "validate_sha512 correctly rejects non-hex"
+    fi
+}
+
+test_validate_sha512_empty() {
+    source "$PROJECT_ROOT/bin/lib/version-utils.sh"
+
+    if validate_sha512 ""; then
+        assert_true false "validate_sha512 should reject empty string"
+    else
+        assert_true true "validate_sha512 correctly rejects empty string"
+    fi
+}
+
 # Run tests
 run_test test_validate_version_valid "validate_version accepts valid versions"
 run_test test_validate_version_invalid "validate_version rejects invalid versions"
@@ -242,6 +393,20 @@ run_test test_version_matches_exact "version_matches handles exact matches"
 run_test test_version_matches_partial "version_matches handles partial matches"
 run_test test_version_matches_different "version_matches rejects different versions"
 run_test test_script_sources_cleanly "Script sources without errors"
+run_test test_bump_version_patch "bump_version patch increments patch"
+run_test test_bump_version_minor "bump_version minor increments minor"
+run_test test_bump_version_major "bump_version major increments major"
+run_test test_bump_version_zeros "bump_version handles 0.0.0"
+run_test test_bump_version_large "bump_version handles large numbers"
+run_test test_bump_version_minor_resets_patch "bump_version minor resets patch"
+run_test test_bump_version_major_resets_both "bump_version major resets minor and patch"
+run_test test_bump_version_invalid_type "bump_version rejects invalid bump type"
+run_test test_validate_sha512_valid "validate_sha512 accepts valid SHA512"
+run_test test_validate_sha512_uppercase "validate_sha512 accepts uppercase hex"
+run_test test_validate_sha512_too_short "validate_sha512 rejects SHA256-length string"
+run_test test_validate_sha512_too_long "validate_sha512 rejects too-long string"
+run_test test_validate_sha512_non_hex "validate_sha512 rejects non-hex characters"
+run_test test_validate_sha512_empty "validate_sha512 rejects empty string"
 
 # Generate test report
 generate_report
