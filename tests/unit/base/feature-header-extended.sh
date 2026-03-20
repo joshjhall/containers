@@ -28,8 +28,11 @@ setup() {
 
     # Copy feature-header.sh and its sub-modules to the test directory
     command cp "$PROJECT_ROOT/lib/base/feature-header.sh" "$TEST_TEMP_DIR/feature-header-test.sh"
+    command cp "$PROJECT_ROOT/lib/base/os-validation.sh" "$TEST_TEMP_DIR/os-validation.sh"
+    command cp "$PROJECT_ROOT/lib/base/user-env.sh" "$TEST_TEMP_DIR/user-env.sh"
     command cp "$PROJECT_ROOT/lib/base/arch-utils.sh" "$TEST_TEMP_DIR/arch-utils.sh"
     command cp "$PROJECT_ROOT/lib/base/cleanup-handler.sh" "$TEST_TEMP_DIR/cleanup-handler.sh"
+    command cp "$PROJECT_ROOT/lib/base/feature-utils.sh" "$TEST_TEMP_DIR/feature-utils.sh"
 
     # Copy logging and bashrc sub-modules
     command cp "$PROJECT_ROOT/lib/base/logging.sh" "$TEST_TEMP_DIR/logging.sh"
@@ -37,7 +40,7 @@ setup() {
     command cp "$PROJECT_ROOT/lib/base/message-logging.sh" "$TEST_TEMP_DIR/message-logging.sh"
     command cp "$PROJECT_ROOT/lib/base/bashrc-helpers.sh" "$TEST_TEMP_DIR/bashrc-helpers.sh"
 
-    # Patch feature-header to source logging.sh via relative path
+    # Patch feature-header to source logging.sh and bashrc-helpers.sh via relative path
     # (original checks /tmp/build-scripts/base/ which doesn't exist in test env)
     command sed -i 's|if \[ -f /tmp/build-scripts/base/logging.sh \]; then|if [ -f "$(dirname "${BASH_SOURCE[0]}")/logging.sh" ]; then|' "$TEST_TEMP_DIR/feature-header-test.sh"
     command sed -i 's|source /tmp/build-scripts/base/logging.sh|source "$(dirname "${BASH_SOURCE[0]}")/logging.sh"|' "$TEST_TEMP_DIR/feature-header-test.sh"
@@ -55,6 +58,7 @@ teardown() {
 
     # Unset include guards so re-sourcing works across tests
     unset USERNAME USER_UID USER_GID HOME WORKING_DIR _FEATURE_HEADER_LOADED
+    unset _OS_VALIDATION_LOADED _USER_ENV_LOADED _FEATURE_UTILS_LOADED
     unset _ARCH_UTILS_LOADED _CLEANUP_HANDLER_LOADED
     unset _LOGGING_LOADED _SHARED_LOGGING_LOADED _SHARED_EXPORT_UTILS_LOADED
     unset _FEATURE_LOGGING_LOADED _MESSAGE_LOGGING_LOADED
@@ -184,7 +188,8 @@ test_create_secure_temp_dir_returns_valid_dir() {
 
 test_build_env_uid_priority() {
     # Unset guards and user vars so re-sourcing processes them
-    unset _FEATURE_HEADER_LOADED _ARCH_UTILS_LOADED _CLEANUP_HANDLER_LOADED
+    unset _FEATURE_HEADER_LOADED _OS_VALIDATION_LOADED _USER_ENV_LOADED _FEATURE_UTILS_LOADED
+    unset _ARCH_UTILS_LOADED _CLEANUP_HANDLER_LOADED
 
     # Create a mock /tmp/build-env with a custom UID
     local mock_build_env="$TEST_TEMP_DIR/mock-build-env"
@@ -195,8 +200,8 @@ USERNAME=testuser
 WORKING_DIR=/workspace/test
 ENVEOF
 
-    # Patch the feature header to use our mock build-env
-    command sed -i "s|/tmp/build-env|${mock_build_env}|g" "$TEST_TEMP_DIR/feature-header-test.sh"
+    # Patch user-env.sh (where build-env sourcing now lives) to use our mock
+    command sed -i "s|/tmp/build-env|${mock_build_env}|g" "$TEST_TEMP_DIR/user-env.sh"
 
     # Unset to let feature-header set them from build-env
     unset USER_UID USER_GID

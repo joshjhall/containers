@@ -57,8 +57,11 @@ test_logging_submodules_exist() {
 
 test_feature_header_submodules_exist() {
     # Verify that feature-header.sh sources its sub-modules
+    assert_file_exists "$PROJECT_ROOT/lib/base/os-validation.sh"
+    assert_file_exists "$PROJECT_ROOT/lib/base/user-env.sh"
     assert_file_exists "$PROJECT_ROOT/lib/base/arch-utils.sh"
     assert_file_exists "$PROJECT_ROOT/lib/base/cleanup-handler.sh"
+    assert_file_exists "$PROJECT_ROOT/lib/base/feature-utils.sh"
 }
 
 # Run all tests

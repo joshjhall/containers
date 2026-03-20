@@ -28,8 +28,11 @@ setup() {
 
     # Create a test version of feature-header.sh and its sub-modules
     command cp "$PROJECT_ROOT/lib/base/feature-header.sh" "$TEST_TEMP_DIR/feature-header-test.sh"
+    command cp "$PROJECT_ROOT/lib/base/os-validation.sh" "$TEST_TEMP_DIR/os-validation.sh"
+    command cp "$PROJECT_ROOT/lib/base/user-env.sh" "$TEST_TEMP_DIR/user-env.sh"
     command cp "$PROJECT_ROOT/lib/base/arch-utils.sh" "$TEST_TEMP_DIR/arch-utils.sh"
     command cp "$PROJECT_ROOT/lib/base/cleanup-handler.sh" "$TEST_TEMP_DIR/cleanup-handler.sh"
+    command cp "$PROJECT_ROOT/lib/base/feature-utils.sh" "$TEST_TEMP_DIR/feature-utils.sh"
 }
 
 # Teardown function - runs after each test
@@ -39,6 +42,7 @@ teardown() {
 
     # Unset test variables (including include guards so re-sourcing works)
     unset USERNAME USER_UID USER_GID HOME WORKING_DIR _FEATURE_HEADER_LOADED
+    unset _OS_VALIDATION_LOADED _USER_ENV_LOADED _FEATURE_UTILS_LOADED
     unset _ARCH_UTILS_LOADED _CLEANUP_HANDLER_LOADED
 }
 

@@ -37,12 +37,15 @@ _FEATURE_HEADER_LOADED=1  # Prevents re-execution when sourced multiple times
 
 ### Sourced Sub-Modules
 
-| Module               | Functions Provided                                               |
+| Module               | Functions / Exports Provided                                     |
 | -------------------- | ---------------------------------------------------------------- |
+| `os-validation.sh`   | `DEBIAN_VERSION`, `UBUNTU_VERSION` (Bash/OS validation)          |
+| `user-env.sh`        | `USERNAME`, `USER_UID`, `USER_GID`, `WORKING_DIR`                |
 | `arch-utils.sh`      | `map_arch`, `map_arch_or_skip`                                   |
 | `cleanup-handler.sh` | `cleanup_on_interrupt`, `register_cleanup`, `unregister_cleanup` |
 | `logging.sh`         | Full logging system (see below)                                  |
 | `bashrc-helpers.sh`  | `write_bashrc_content`                                           |
+| `feature-utils.sh`   | `create_symlink`, `create_secure_temp_dir`                       |
 
 ### Functions
 
