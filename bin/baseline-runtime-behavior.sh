@@ -26,6 +26,9 @@ BASELINE_DURATION="${BASELINE_DURATION:-30d}"
 OUTPUT_DIR="${OUTPUT_DIR:-/tmp/baseline}"
 PROMETHEUS_URL="${PROMETHEUS_URL:-http://prometheus.monitoring.svc.cluster.local:9090}"
 FALCO_NAMESPACE="${FALCO_NAMESPACE:-falco-system}"
+WARN_SIGMA="${WARN_SIGMA:-2}"
+CRIT_SIGMA="${CRIT_SIGMA:-3}"
+RATE_WINDOW_SECONDS="${RATE_WINDOW_SECONDS:-300}"
 
 # Colors
 RED='\033[0;31m'
@@ -262,6 +265,8 @@ generate_baseline_report() {
         --argjson network "$network_stats" \
         --argjson file "$file_stats" \
         --argjson security "$security_stats" \
+        --argjson warn_sigma "$WARN_SIGMA" \
+        --argjson crit_sigma "$CRIT_SIGMA" \
         '{
             "metadata": {
                 "namespace": $ns,
@@ -277,16 +282,16 @@ generate_baseline_report() {
             },
             "thresholds": {
                 "process_executions": {
-                    "warning": (($process.process_executions.mean + $process.process_executions.stddev * 2) | floor),
-                    "critical": (($process.process_executions.mean + $process.process_executions.stddev * 3) | floor)
+                    "warning": (($process.process_executions.mean + $process.process_executions.stddev * $warn_sigma) | floor),
+                    "critical": (($process.process_executions.mean + $process.process_executions.stddev * $crit_sigma) | floor)
                 },
                 "network_events": {
-                    "warning": (($network.network_events.mean + $network.network_events.stddev * 2) | floor),
-                    "critical": (($network.network_events.mean + $network.network_events.stddev * 3) | floor)
+                    "warning": (($network.network_events.mean + $network.network_events.stddev * $warn_sigma) | floor),
+                    "critical": (($network.network_events.mean + $network.network_events.stddev * $crit_sigma) | floor)
                 },
                 "file_access": {
-                    "warning": (($file.file_access.mean + $file.file_access.stddev * 2) | floor),
-                    "critical": (($file.file_access.mean + $file.file_access.stddev * 3) | floor)
+                    "warning": (($file.file_access.mean + $file.file_access.stddev * $warn_sigma) | floor),
+                    "critical": (($file.file_access.mean + $file.file_access.stddev * $crit_sigma) | floor)
                 }
             }
         }' > "$report_file"

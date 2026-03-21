@@ -37,8 +37,8 @@ compare_to_baseline() {
 
     # Get current event rates
     local current_process current_network
-    current_process=$(prometheus_query_instant "sum(rate(falco_events{k8s_ns_name=\"${namespace}\", rule=~\".*process.*\"}[5m])) * 300" | jq -r '.[0].value[1] // 0')
-    current_network=$(prometheus_query_instant "sum(rate(falco_events{k8s_ns_name=\"${namespace}\", rule=~\".*network.*\"}[5m])) * 300" | jq -r '.[0].value[1] // 0')
+    current_process=$(prometheus_query_instant "sum(rate(falco_events{k8s_ns_name=\"${namespace}\", rule=~\".*process.*\"}[5m])) * ${RATE_WINDOW_SECONDS:-300}" | jq -r '.[0].value[1] // 0')
+    current_network=$(prometheus_query_instant "sum(rate(falco_events{k8s_ns_name=\"${namespace}\", rule=~\".*network.*\"}[5m])) * ${RATE_WINDOW_SECONDS:-300}" | jq -r '.[0].value[1] // 0')
 
     local warn_process crit_process warn_network crit_network
     warn_process=$(jq -r '.thresholds.process_executions.warning' "$baseline_file")

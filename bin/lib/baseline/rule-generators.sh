@@ -108,7 +108,7 @@ spec:
       rules:
         - alert: AnomalousProcessExecution
           expr: |
-            sum(rate(falco_events{k8s_ns_name="${namespace}", rule=~".*process.*|.*exec.*"}[5m])) * 300 > ${warn_process}
+            sum(rate(falco_events{k8s_ns_name="${namespace}", rule=~".*process.*|.*exec.*"}[5m])) * ${RATE_WINDOW_SECONDS:-300} > ${warn_process}
           for: 5m
           labels:
             severity: warning
@@ -120,7 +120,7 @@ spec:
 
         - alert: CriticalProcessAnomaly
           expr: |
-            sum(rate(falco_events{k8s_ns_name="${namespace}", rule=~".*process.*|.*exec.*"}[5m])) * 300 > ${crit_process}
+            sum(rate(falco_events{k8s_ns_name="${namespace}", rule=~".*process.*|.*exec.*"}[5m])) * ${RATE_WINDOW_SECONDS:-300} > ${crit_process}
           for: 2m
           labels:
             severity: critical
@@ -132,7 +132,7 @@ spec:
 
         - alert: AnomalousNetworkActivity
           expr: |
-            sum(rate(falco_events{k8s_ns_name="${namespace}", rule=~".*network.*|.*connection.*"}[5m])) * 300 > ${warn_network}
+            sum(rate(falco_events{k8s_ns_name="${namespace}", rule=~".*network.*|.*connection.*"}[5m])) * ${RATE_WINDOW_SECONDS:-300} > ${warn_network}
           for: 5m
           labels:
             severity: warning
@@ -144,7 +144,7 @@ spec:
 
         - alert: CriticalNetworkAnomaly
           expr: |
-            sum(rate(falco_events{k8s_ns_name="${namespace}", rule=~".*network.*|.*connection.*"}[5m])) * 300 > ${crit_network}
+            sum(rate(falco_events{k8s_ns_name="${namespace}", rule=~".*network.*|.*connection.*"}[5m])) * ${RATE_WINDOW_SECONDS:-300} > ${crit_network}
           for: 2m
           labels:
             severity: critical
