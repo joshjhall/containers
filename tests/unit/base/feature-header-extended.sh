@@ -28,6 +28,7 @@ setup() {
 
     # Copy feature-header.sh and its sub-modules to the test directory
     command cp "$PROJECT_ROOT/lib/base/feature-header.sh" "$TEST_TEMP_DIR/feature-header-test.sh"
+    command cp "$PROJECT_ROOT/lib/base/feature-header-bootstrap.sh" "$TEST_TEMP_DIR/feature-header-bootstrap.sh"
     command cp "$PROJECT_ROOT/lib/base/os-validation.sh" "$TEST_TEMP_DIR/os-validation.sh"
     command cp "$PROJECT_ROOT/lib/base/debian-version.sh" "$TEST_TEMP_DIR/debian-version.sh"
     command cp "$PROJECT_ROOT/lib/base/user-env.sh" "$TEST_TEMP_DIR/user-env.sh"
@@ -41,12 +42,15 @@ setup() {
     command cp "$PROJECT_ROOT/lib/base/message-logging.sh" "$TEST_TEMP_DIR/message-logging.sh"
     command cp "$PROJECT_ROOT/lib/base/bashrc-helpers.sh" "$TEST_TEMP_DIR/bashrc-helpers.sh"
 
-    # Patch feature-header to source logging.sh and bashrc-helpers.sh via relative path
+    # Patch feature-header to resolve bootstrap via test directory path
+    command sed -i 's|/tmp/build-scripts/base/feature-header-bootstrap.sh|'"$TEST_TEMP_DIR"'/feature-header-bootstrap.sh|g' "$TEST_TEMP_DIR/feature-header-test.sh"
+
+    # Patch bootstrap to source logging.sh and bashrc-helpers.sh via relative path
     # (original checks /tmp/build-scripts/base/ which doesn't exist in test env)
-    command sed -i 's|if \[ -f /tmp/build-scripts/base/logging.sh \]; then|if [ -f "$(dirname "${BASH_SOURCE[0]}")/logging.sh" ]; then|' "$TEST_TEMP_DIR/feature-header-test.sh"
-    command sed -i 's|source /tmp/build-scripts/base/logging.sh|source "$(dirname "${BASH_SOURCE[0]}")/logging.sh"|' "$TEST_TEMP_DIR/feature-header-test.sh"
-    command sed -i 's|if \[ -f /tmp/build-scripts/base/bashrc-helpers.sh \]; then|if [ -f "$(dirname "${BASH_SOURCE[0]}")/bashrc-helpers.sh" ]; then|' "$TEST_TEMP_DIR/feature-header-test.sh"
-    command sed -i 's|source /tmp/build-scripts/base/bashrc-helpers.sh|source "$(dirname "${BASH_SOURCE[0]}")/bashrc-helpers.sh"|' "$TEST_TEMP_DIR/feature-header-test.sh"
+    command sed -i 's|if \[ -f /tmp/build-scripts/base/logging.sh \]; then|if [ -f "$(dirname "${BASH_SOURCE[0]}")/logging.sh" ]; then|' "$TEST_TEMP_DIR/feature-header-bootstrap.sh"
+    command sed -i 's|source /tmp/build-scripts/base/logging.sh|source "$(dirname "${BASH_SOURCE[0]}")/logging.sh"|' "$TEST_TEMP_DIR/feature-header-bootstrap.sh"
+    command sed -i 's|if \[ -f /tmp/build-scripts/base/bashrc-helpers.sh \]; then|if [ -f "$(dirname "${BASH_SOURCE[0]}")/bashrc-helpers.sh" ]; then|' "$TEST_TEMP_DIR/feature-header-bootstrap.sh"
+    command sed -i 's|source /tmp/build-scripts/base/bashrc-helpers.sh|source "$(dirname "${BASH_SOURCE[0]}")/bashrc-helpers.sh"|' "$TEST_TEMP_DIR/feature-header-bootstrap.sh"
 
     # Pre-source shared dependencies (needed by logging.sh)
     source "$PROJECT_ROOT/lib/shared/export-utils.sh"
@@ -59,6 +63,7 @@ teardown() {
 
     # Unset include guards so re-sourcing works across tests
     unset USERNAME USER_UID USER_GID HOME WORKING_DIR _FEATURE_HEADER_LOADED
+    unset _FEATURE_HEADER_BOOTSTRAP_LOADED
     unset _OS_VALIDATION_LOADED _DEBIAN_VERSION_LOADED _USER_ENV_LOADED _FEATURE_UTILS_LOADED
     unset _ARCH_UTILS_LOADED _CLEANUP_HANDLER_LOADED
     unset _LOGGING_LOADED _SHARED_LOGGING_LOADED _SHARED_EXPORT_UTILS_LOADED

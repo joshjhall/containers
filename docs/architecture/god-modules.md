@@ -13,10 +13,53 @@ High fan-in is acceptable for infrastructure modules when:
 - Test coverage protects against regressions
 - The module is decomposed into sub-modules where appropriate
 
+## feature-header-bootstrap.sh API Contract
+
+**Location**: `lib/base/feature-header-bootstrap.sh`
+**Fan-in**: ~10 dependents (simple feature scripts + feature-header.sh)
+
+The bootstrap header provides the minimal set of sub-modules needed by most
+feature scripts: OS validation, user identity, logging, and bashrc helpers.
+Simple features that don't use architecture mapping, cleanup handlers, or
+feature utilities should source this instead of the full `feature-header.sh`.
+
+### Include Guard
+
+```bash
+_FEATURE_HEADER_BOOTSTRAP_LOADED=1
+```
+
+### Sourced Sub-Modules
+
+| Module              | Functions / Exports Provided                                                         |
+| ------------------- | ------------------------------------------------------------------------------------ |
+| `os-validation.sh`  | `DEBIAN_VERSION`, `UBUNTU_VERSION` (Bash/OS validation; sources `debian-version.sh`) |
+| `user-env.sh`       | `USERNAME`, `USER_UID`, `USER_GID`, `WORKING_DIR`                                    |
+| `logging.sh`        | Full logging system (see below)                                                      |
+| `bashrc-helpers.sh` | `write_bashrc_content`                                                               |
+
+### When to Use Bootstrap vs Full Header
+
+Use **bootstrap** when your feature script only needs:
+
+- OS detection variables (`DEBIAN_VERSION`, `UBUNTU_VERSION`)
+- User identity variables (`USERNAME`, `USER_UID`, `USER_GID`, `WORKING_DIR`)
+- Logging functions (`log_message`, `log_error`, `log_feature_start`, etc.)
+- Bashrc helpers (`write_bashrc_content`)
+
+Use **full header** when your feature also needs:
+
+- `map_arch` / `map_arch_or_skip` (architecture mapping)
+- `register_cleanup` / `unregister_cleanup` / `cleanup_on_interrupt`
+- `create_symlink` / `create_secure_temp_dir`
+
 ## feature-header.sh API Contract
 
 **Location**: `lib/base/feature-header.sh`
-**Fan-in**: ~42 dependents (all feature scripts in `lib/features/`)
+**Fan-in**: ~33 dependents (feature scripts that need optional modules)
+
+Composes `feature-header-bootstrap.sh` plus three optional modules:
+`arch-utils.sh`, `cleanup-handler.sh`, and `feature-utils.sh`.
 
 ### Include Guard
 
@@ -37,15 +80,12 @@ _FEATURE_HEADER_LOADED=1  # Prevents re-execution when sourced multiple times
 
 ### Sourced Sub-Modules
 
-| Module               | Functions / Exports Provided                                                         |
-| -------------------- | ------------------------------------------------------------------------------------ |
-| `os-validation.sh`   | `DEBIAN_VERSION`, `UBUNTU_VERSION` (Bash/OS validation; sources `debian-version.sh`) |
-| `user-env.sh`        | `USERNAME`, `USER_UID`, `USER_GID`, `WORKING_DIR`                                    |
-| `arch-utils.sh`      | `map_arch`, `map_arch_or_skip`                                                       |
-| `cleanup-handler.sh` | `cleanup_on_interrupt`, `register_cleanup`, `unregister_cleanup`                     |
-| `logging.sh`         | Full logging system (see below)                                                      |
-| `bashrc-helpers.sh`  | `write_bashrc_content`                                                               |
-| `feature-utils.sh`   | `create_symlink`, `create_secure_temp_dir`                                           |
+| Module                        | Functions / Exports Provided                                       |
+| ----------------------------- | ------------------------------------------------------------------ |
+| `feature-header-bootstrap.sh` | Bootstrap layer (os-validation, user-env, logging, bashrc-helpers) |
+| `arch-utils.sh`               | `map_arch`, `map_arch_or_skip`                                     |
+| `cleanup-handler.sh`          | `cleanup_on_interrupt`, `register_cleanup`, `unregister_cleanup`   |
+| `feature-utils.sh`            | `create_symlink`, `create_secure_temp_dir`                         |
 
 ### Functions
 
@@ -156,21 +196,27 @@ safe_eval <command_string>  # Evaluate a command string safely
 
 Measured by `tests/unit/base/coupling-guard.sh`:
 
-| Module              | Dependents | Expected Range | Category                            |
-| ------------------- | ---------- | -------------- | ----------------------------------- |
-| `feature-header.sh` | ~42        | 30–55          | Feature scripts, base modules       |
-| `logging.sh`        | ~32        | 25–45          | Via feature-header.sh, base modules |
+| Module                        | Dependents | Expected Range | Category                              |
+| ----------------------------- | ---------- | -------------- | ------------------------------------- |
+| `feature-header.sh`           | ~33        | 25–50          | Complex feature scripts, base modules |
+| `feature-header-bootstrap.sh` | ~10        | 8–20           | Simple features + feature-header.sh   |
+| `logging.sh`                  | ~32        | 25–45          | Via feature-header.sh, base modules   |
 
 ### Dependent Categories
 
 **feature-header.sh** dependents:
 
-- `lib/features/*.sh` — all feature installation scripts (~35)
-- `lib/base/*.sh` — base modules that need user/OS context (~7)
+- `lib/features/*.sh` — feature scripts needing arch-utils, cleanup, or feature-utils (~26)
+- `lib/base/*.sh` — base modules that need the full API (~7)
+
+**feature-header-bootstrap.sh** dependents:
+
+- `lib/features/*.sh` — simple feature scripts (9 migrated: keybindings, cron, bindfs, redis-client, postgres-client, sqlite-client, op-cli, gcloud, mojo-dev)
+- `lib/base/feature-header.sh` — the full header composes bootstrap
 
 **logging.sh** dependents:
 
-- Indirectly via `feature-header.sh` (all feature scripts)
+- Indirectly via `feature-header-bootstrap.sh` and `feature-header.sh` (all feature scripts)
 - Directly by `lib/base/` modules that need logging before feature-header
 
 ### When to Investigate

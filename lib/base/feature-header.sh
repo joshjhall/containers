@@ -2,15 +2,20 @@
 # Standard header for feature scripts
 # Source this at the beginning of each feature script to get consistent user handling
 #
-# This is a composition layer that sources sub-modules in dependency order.
+# This is a composition layer that sources the bootstrap header (os-validation,
+# user-env, logging, bashrc-helpers) plus optional modules (arch-utils,
+# cleanup-handler, feature-utils) in dependency order.
 # See docs/architecture/god-modules.md for the full API contract.
+#
+# For simple features that only need the bootstrap layer, source
+# feature-header-bootstrap.sh instead to reduce coupling.
 #
 # API Contract:
 #   Exported vars: DEBIAN_VERSION, UBUNTU_VERSION, USERNAME, USER_UID,
 #                  USER_GID, WORKING_DIR
-#   Sub-modules:   os-validation.sh, user-env.sh, arch-utils.sh,
-#                  cleanup-handler.sh, logging.sh, bashrc-helpers.sh,
-#                  feature-utils.sh
+#   Sub-modules:   feature-header-bootstrap.sh (os-validation, user-env,
+#                  logging, bashrc-helpers), arch-utils.sh,
+#                  cleanup-handler.sh, feature-utils.sh
 #   Functions:     create_symlink(target, link_name, [description])
 #                  create_secure_temp_dir() -> path
 #   Include guard: _FEATURE_HEADER_LOADED
@@ -23,36 +28,19 @@ fi
 _FEATURE_HEADER_LOADED=1
 
 # ============================================================================
-# Source Sub-Modules (dependency order)
+# Bootstrap Layer (os-validation, user-env, logging, bashrc-helpers)
 # ============================================================================
 
-# OS validation: Bash version check, Debian/Ubuntu detection
-# shellcheck source=lib/base/os-validation.sh
-if [ -f "/tmp/build-scripts/base/os-validation.sh" ]; then
-    source "/tmp/build-scripts/base/os-validation.sh"
-elif [ -f "$(dirname "${BASH_SOURCE[0]}")/os-validation.sh" ]; then
-    source "$(dirname "${BASH_SOURCE[0]}")/os-validation.sh"
+# shellcheck source=lib/base/feature-header-bootstrap.sh
+if [ -f "/tmp/build-scripts/base/feature-header-bootstrap.sh" ]; then
+    source "/tmp/build-scripts/base/feature-header-bootstrap.sh"
+elif [ -f "$(dirname "${BASH_SOURCE[0]}")/feature-header-bootstrap.sh" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/feature-header-bootstrap.sh"
 fi
 
-# User identity: USERNAME, USER_UID, USER_GID, WORKING_DIR
-# shellcheck source=lib/base/user-env.sh
-if [ -f "/tmp/build-scripts/base/user-env.sh" ]; then
-    source "/tmp/build-scripts/base/user-env.sh"
-elif [ -f "$(dirname "${BASH_SOURCE[0]}")/user-env.sh" ]; then
-    source "$(dirname "${BASH_SOURCE[0]}")/user-env.sh"
-fi
-
-# Logging support
-# shellcheck source=lib/base/logging.sh
-if [ -f /tmp/build-scripts/base/logging.sh ]; then
-    source /tmp/build-scripts/base/logging.sh
-fi
-
-# Bashrc helper functions
-# shellcheck source=lib/base/bashrc-helpers.sh
-if [ -f /tmp/build-scripts/base/bashrc-helpers.sh ]; then
-    source /tmp/build-scripts/base/bashrc-helpers.sh
-fi
+# ============================================================================
+# Optional Modules (arch-utils, cleanup-handler, feature-utils)
+# ============================================================================
 
 # Architecture mapping (map_arch, map_arch_or_skip)
 # shellcheck source=lib/base/arch-utils.sh

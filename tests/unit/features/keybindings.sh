@@ -75,11 +75,11 @@ test_keybindings_sources_headers() {
         return
     fi
 
-    # Check for feature-header.sh
-    if command grep -q "source.*feature-header.sh" "$script"; then
-        assert_true true "Script sources feature-header.sh"
+    # Check for feature-header.sh or feature-header-bootstrap.sh
+    if command grep -q "source.*feature-header.*\.sh" "$script"; then
+        assert_true true "Script sources feature-header or bootstrap"
     else
-        assert_true false "Script does not source feature-header.sh"
+        assert_true false "Script does not source feature-header or bootstrap"
     fi
 
     # Check for bashrc-helpers.sh

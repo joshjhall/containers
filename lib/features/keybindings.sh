@@ -48,7 +48,7 @@
 set -euo pipefail
 
 # Source standard feature header for user handling
-source /tmp/build-scripts/base/feature-header.sh
+source /tmp/build-scripts/base/feature-header-bootstrap.sh
 
 # Source bashrc helpers for configuration
 source /tmp/build-scripts/base/bashrc-helpers.sh

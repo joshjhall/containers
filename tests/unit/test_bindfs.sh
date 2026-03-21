@@ -34,7 +34,7 @@ test_feature_script_exists() {
 
 # Test: Feature script sources correct headers
 test_feature_script_headers() {
-    assert_file_contains "$FEATURE_FILE" "feature-header.sh" "Sources feature-header.sh"
+    assert_file_contains "$FEATURE_FILE" "feature-header-bootstrap.sh" "Sources feature-header-bootstrap.sh"
     assert_file_contains "$FEATURE_FILE" "apt-utils.sh" "Sources apt-utils.sh"
 }
 
