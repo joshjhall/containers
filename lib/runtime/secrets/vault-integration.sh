@@ -234,14 +234,15 @@ load_secrets_from_vault() {
     local prefix="${VAULT_SECRET_PREFIX:-}"
     local count=0
 
-    while IFS='=' read -r key value; do
+    while IFS= read -r -d '' key && IFS= read -r -d '' value; do
         if [ -n "$key" ] && [ -n "$value" ]; then
-            local env_var="${prefix}${key}"
+            local env_var
+            env_var=$(normalize_env_var_name "$prefix" "$key")
             export "${env_var}=${value}"
             count=$((count + 1))
             log_info "Loaded secret: $env_var"
         fi
-    done < <(echo "$secrets_json" | jq -r "$data_path | to_entries[] | \"\(.key)=\(.value)\"")
+    done < <(echo "$secrets_json" | jq -j "$data_path | to_entries[] | .key, \"\u0000\", .value, \"\u0000\"")
 
     log_info "Successfully loaded $count secrets from Vault"
     return 0

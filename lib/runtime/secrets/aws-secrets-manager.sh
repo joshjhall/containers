@@ -128,14 +128,15 @@ load_secrets_from_aws() {
     # Try to parse as JSON first
     if echo "$secret_string" | jq -e . > /dev/null 2>&1; then
         # Secret is JSON - export each key-value pair
-        while IFS='=' read -r key value; do
+        while IFS= read -r -d '' key && IFS= read -r -d '' value; do
             if [ -n "$key" ] && [ -n "$value" ]; then
-                local env_var="${prefix}${key}"
+                local env_var
+                env_var=$(normalize_env_var_name "$prefix" "$key")
                 export "${env_var}=${value}"
                 count=$((count + 1))
                 log_info "Loaded secret: $env_var"
             fi
-        done < <(echo "$secret_string" | jq -r 'to_entries[] | "\(.key)=\(.value)"')
+        done < <(echo "$secret_string" | jq -j 'to_entries[] | .key, "\u0000", .value, "\u0000"')
     else
         # Secret is plain text - export as single variable
         local env_var="${prefix}SECRET"

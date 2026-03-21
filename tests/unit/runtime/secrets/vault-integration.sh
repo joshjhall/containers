@@ -104,6 +104,16 @@ test_defines_load_secrets_from_vault() {
         "Script defines load_secrets_from_vault function"
 }
 
+test_uses_normalize_env_var_name() {
+    assert_file_contains "$SOURCE_FILE" "normalize_env_var_name" \
+        "Script uses normalize_env_var_name for key validation"
+}
+
+test_uses_null_delimited_jq_output() {
+    assert_file_contains "$SOURCE_FILE" 'jq -j' \
+        "Script uses null-delimited jq output for safe parsing"
+}
+
 # ============================================================================
 # Functional Tests - load_secrets_from_vault()
 # ============================================================================
@@ -434,6 +444,8 @@ run_test_with_setup test_defines_vault_auth_token "Defines vault_auth_token func
 run_test_with_setup test_defines_vault_auth_approle "Defines vault_auth_approle function"
 run_test_with_setup test_defines_vault_auth_kubernetes "Defines vault_auth_kubernetes function"
 run_test_with_setup test_defines_load_secrets_from_vault "Defines load_secrets_from_vault function"
+run_test_with_setup test_uses_normalize_env_var_name "Uses normalize_env_var_name for key validation"
+run_test_with_setup test_uses_null_delimited_jq_output "Uses null-delimited jq output"
 
 # load_secrets_from_vault
 run_test_with_setup test_load_returns_0_when_disabled "Returns 0 when VAULT_ENABLED not true"
