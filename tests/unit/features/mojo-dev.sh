@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Unit tests for lib/features/mojo-dev.sh
+# Content-based tests that verify the source script structure
 
 set -euo pipefail
 
@@ -7,102 +8,84 @@ source "$(dirname "${BASH_SOURCE[0]}")/../../framework.sh"
 init_test_framework
 test_suite "mojo-dev Feature Tests"
 
-setup() {
-    export TEST_TEMP_DIR="$RESULTS_DIR/test-mojo-dev"
-    mkdir -p "$TEST_TEMP_DIR"
+# Path to script under test
+SOURCE_FILE="$PROJECT_ROOT/lib/features/mojo-dev.sh"
+
+# ============================================================================
+# Script Structure Tests
+# ============================================================================
+
+test_script_exists_and_executable() {
+    assert_file_exists "$SOURCE_FILE"
+    [ -x "$SOURCE_FILE" ] \
+        && assert_true 0 "mojo-dev.sh is executable" \
+        || assert_true 1 "mojo-dev.sh should be executable"
 }
 
-teardown() {
-    [ -n "${TEST_TEMP_DIR:-}" ] && command rm -rf "$TEST_TEMP_DIR"
+test_uses_strict_mode() {
+    assert_file_contains "$SOURCE_FILE" "set -euo pipefail" \
+        "mojo-dev.sh uses strict mode"
 }
 
-test_installation() {
-    local bin_file="$TEST_TEMP_DIR/usr/local/bin/test-binary"
-    mkdir -p "$(dirname "$bin_file")"
-    touch "$bin_file" && chmod +x "$bin_file"
-    assert_file_exists "$bin_file"
-    [ -x "$bin_file" ] && assert_true true "Binary is executable" || assert_true false "Binary not executable"
+test_sources_feature_header_bootstrap() {
+    assert_file_contains "$SOURCE_FILE" "source.*feature-header-bootstrap.sh" \
+        "mojo-dev.sh sources feature-header-bootstrap.sh"
 }
 
-test_configuration() {
-    local config_file="$TEST_TEMP_DIR/config.conf"
-    echo "test=true" > "$config_file"
-    assert_file_exists "$config_file"
-    command grep -q "test=true" "$config_file" && assert_true true "Config valid" || assert_true false "Config invalid"
+test_log_feature_start() {
+    assert_file_contains "$SOURCE_FILE" 'log_feature_start "Mojo Development Tools"' \
+        "mojo-dev.sh logs feature start with correct name"
 }
 
-test_environment() {
-    local env_file="$TEST_TEMP_DIR/env.sh"
-    echo "export TEST_VAR=value" > "$env_file"
-    assert_file_exists "$env_file"
-    command grep -q "export TEST_VAR" "$env_file" && assert_true true "Env var set" || assert_true false "Env var not set"
+test_sources_apt_utils() {
+    assert_file_contains "$SOURCE_FILE" "source.*apt-utils.sh" \
+        "mojo-dev.sh sources apt-utils.sh"
 }
 
-test_permissions() {
-    local test_dir="$TEST_TEMP_DIR/test-dir"
-    mkdir -p "$test_dir"
-    assert_dir_exists "$test_dir"
-    [ -w "$test_dir" ] && assert_true true "Directory writable" || assert_true false "Directory not writable"
+# ============================================================================
+# Prerequisites Tests
+# ============================================================================
+
+test_prerequisite_check_for_mojo() {
+    assert_file_contains "$SOURCE_FILE" "/usr/local/bin/mojo" \
+        "mojo-dev.sh checks for mojo binary"
+    assert_file_contains "$SOURCE_FILE" "INCLUDE_MOJO" \
+        "mojo-dev.sh references INCLUDE_MOJO requirement"
 }
 
-test_aliases() {
-    local alias_file="$TEST_TEMP_DIR/aliases.sh"
-    echo "alias test='echo test'" > "$alias_file"
-    assert_file_exists "$alias_file"
-    command grep -q "alias test=" "$alias_file" && assert_true true "Alias defined" || assert_true false "Alias not defined"
+# ============================================================================
+# Installation Tests
+# ============================================================================
+
+test_installs_lldb_debugger() {
+    assert_file_contains "$SOURCE_FILE" "lldb" \
+        "mojo-dev.sh installs lldb debugger"
 }
 
-test_dependencies() {
-    local deps_file="$TEST_TEMP_DIR/deps.txt"
-    echo "dependency1" > "$deps_file"
-    assert_file_exists "$deps_file"
-    [ -s "$deps_file" ] && assert_true true "Dependencies listed" || assert_true false "No dependencies"
+test_python_interop_packages() {
+    assert_file_contains "$SOURCE_FILE" "numpy" \
+        "mojo-dev.sh installs numpy for Python interop"
+    assert_file_contains "$SOURCE_FILE" "matplotlib" \
+        "mojo-dev.sh installs matplotlib for Python interop"
 }
 
-test_cache_directory() {
-    local cache_dir="$TEST_TEMP_DIR/cache"
-    mkdir -p "$cache_dir"
-    assert_dir_exists "$cache_dir"
+# ============================================================================
+# Configuration Tests
+# ============================================================================
+
+test_bashrc_config() {
+    assert_file_contains "$SOURCE_FILE" "65-mojo-dev.sh" \
+        "mojo-dev.sh creates 65-mojo-dev.sh bashrc config"
 }
 
-test_user_config() {
-    local user_config="$TEST_TEMP_DIR/home/user/.config"
-    mkdir -p "$user_config"
-    assert_dir_exists "$user_config"
-}
-
-test_startup_script() {
-    local startup_script="$TEST_TEMP_DIR/startup.sh"
-    echo "#\!/bin/bash" > "$startup_script"
-    chmod +x "$startup_script"
-    assert_file_exists "$startup_script"
-    [ -x "$startup_script" ] && assert_true true "Script executable" || assert_true false "Script not executable"
-}
-
-test_verification() {
-    local verify_script="$TEST_TEMP_DIR/verify.sh"
-    echo "#\!/bin/bash" > "$verify_script"
-    echo "echo 'Verification complete'" >> "$verify_script"
-    chmod +x "$verify_script"
-    assert_file_exists "$verify_script"
-    [ -x "$verify_script" ] && assert_true true "Verification script ready" || assert_true false "Verification script not ready"
-}
-
-run_test_with_setup() {
-    setup
-    run_test "$1" "$2"
-    teardown
-}
-
-run_test_with_setup test_installation "Installation test"
-run_test_with_setup test_configuration "Configuration test"
-run_test_with_setup test_environment "Environment test"
-run_test_with_setup test_permissions "Permissions test"
-run_test_with_setup test_aliases "Aliases test"
-run_test_with_setup test_dependencies "Dependencies test"
-run_test_with_setup test_cache_directory "Cache directory test"
-run_test_with_setup test_user_config "User config test"
-run_test_with_setup test_startup_script "Startup script test"
-run_test_with_setup test_verification "Verification test"
+run_test test_script_exists_and_executable "Script exists and is executable"
+run_test test_uses_strict_mode "Uses set -euo pipefail"
+run_test test_sources_feature_header_bootstrap "Sources feature-header-bootstrap.sh"
+run_test test_log_feature_start "Logs feature start with correct name"
+run_test test_sources_apt_utils "Sources apt-utils.sh"
+run_test test_prerequisite_check_for_mojo "Prerequisite check for mojo binary"
+run_test test_installs_lldb_debugger "Installs lldb debugger"
+run_test test_python_interop_packages "Python interop packages (numpy, matplotlib)"
+run_test test_bashrc_config "Bashrc config (65-mojo-dev.sh)"
 
 generate_report

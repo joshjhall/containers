@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Unit tests for lib/features/op-cli.sh
+# Content-based tests + functional tests for OP_*_REF patterns
 
 set -euo pipefail
 
@@ -16,83 +17,89 @@ teardown() {
     [ -n "${TEST_TEMP_DIR:-}" ] && command rm -rf "$TEST_TEMP_DIR"
 }
 
-test_installation() {
-    local bin_file="$TEST_TEMP_DIR/usr/local/bin/test-binary"
-    mkdir -p "$(dirname "$bin_file")"
-    touch "$bin_file" && chmod +x "$bin_file"
-    assert_file_exists "$bin_file"
-    [ -x "$bin_file" ] && assert_true true "Binary is executable" || assert_true false "Binary not executable"
-}
-
-test_configuration() {
-    local config_file="$TEST_TEMP_DIR/config.conf"
-    echo "test=true" > "$config_file"
-    assert_file_exists "$config_file"
-    command grep -q "test=true" "$config_file" && assert_true true "Config valid" || assert_true false "Config invalid"
-}
-
-test_environment() {
-    local env_file="$TEST_TEMP_DIR/env.sh"
-    echo "export TEST_VAR=value" > "$env_file"
-    assert_file_exists "$env_file"
-    command grep -q "export TEST_VAR" "$env_file" && assert_true true "Env var set" || assert_true false "Env var not set"
-}
-
-test_permissions() {
-    local test_dir="$TEST_TEMP_DIR/test-dir"
-    mkdir -p "$test_dir"
-    assert_dir_exists "$test_dir"
-    [ -w "$test_dir" ] && assert_true true "Directory writable" || assert_true false "Directory not writable"
-}
-
-test_aliases() {
-    local alias_file="$TEST_TEMP_DIR/aliases.sh"
-    echo "alias test='echo test'" > "$alias_file"
-    assert_file_exists "$alias_file"
-    command grep -q "alias test=" "$alias_file" && assert_true true "Alias defined" || assert_true false "Alias not defined"
-}
-
-test_dependencies() {
-    local deps_file="$TEST_TEMP_DIR/deps.txt"
-    echo "dependency1" > "$deps_file"
-    assert_file_exists "$deps_file"
-    [ -s "$deps_file" ] && assert_true true "Dependencies listed" || assert_true false "No dependencies"
-}
-
-test_cache_directory() {
-    local cache_dir="$TEST_TEMP_DIR/cache"
-    mkdir -p "$cache_dir"
-    assert_dir_exists "$cache_dir"
-}
-
-test_user_config() {
-    local user_config="$TEST_TEMP_DIR/home/user/.config"
-    mkdir -p "$user_config"
-    assert_dir_exists "$user_config"
-}
-
-test_startup_script() {
-    local startup_script="$TEST_TEMP_DIR/startup.sh"
-    echo "#\!/bin/bash" > "$startup_script"
-    chmod +x "$startup_script"
-    assert_file_exists "$startup_script"
-    [ -x "$startup_script" ] && assert_true true "Script executable" || assert_true false "Script not executable"
-}
-
-test_verification() {
-    local verify_script="$TEST_TEMP_DIR/verify.sh"
-    echo "#\!/bin/bash" > "$verify_script"
-    echo "echo 'Verification complete'" >> "$verify_script"
-    chmod +x "$verify_script"
-    assert_file_exists "$verify_script"
-    [ -x "$verify_script" ] && assert_true true "Verification script ready" || assert_true false "Verification script not ready"
-}
-
 run_test_with_setup() {
     setup
     run_test "$1" "$2"
     teardown
 }
+
+# Path to script under test
+SOURCE_FILE="$PROJECT_ROOT/lib/features/op-cli.sh"
+
+# ============================================================================
+# Script Structure Tests (content-based, no setup needed)
+# ============================================================================
+
+test_script_exists_and_executable() {
+    assert_file_exists "$SOURCE_FILE"
+    [ -x "$SOURCE_FILE" ] \
+        && assert_true 0 "op-cli.sh is executable" \
+        || assert_true 1 "op-cli.sh should be executable"
+}
+
+test_uses_strict_mode() {
+    assert_file_contains "$SOURCE_FILE" "set -euo pipefail" \
+        "op-cli.sh uses strict mode"
+}
+
+test_sources_feature_header_bootstrap() {
+    assert_file_contains "$SOURCE_FILE" "source.*feature-header-bootstrap.sh" \
+        "op-cli.sh sources feature-header-bootstrap.sh"
+}
+
+test_log_feature_start() {
+    assert_file_contains "$SOURCE_FILE" 'log_feature_start "1Password CLI"' \
+        "op-cli.sh logs feature start with correct name"
+}
+
+test_sources_apt_utils() {
+    assert_file_contains "$SOURCE_FILE" "source.*apt-utils.sh" \
+        "op-cli.sh sources apt-utils.sh"
+}
+
+test_sources_retry_utils() {
+    assert_file_contains "$SOURCE_FILE" "source.*retry-utils.sh" \
+        "op-cli.sh sources retry-utils.sh"
+}
+
+test_gpg_debsig_verification() {
+    assert_file_contains "$SOURCE_FILE" "gpg" \
+        "op-cli.sh handles GPG keys"
+    assert_file_contains "$SOURCE_FILE" "debsig" \
+        "op-cli.sh configures debsig verification"
+}
+
+test_architecture_detection() {
+    assert_file_contains "$SOURCE_FILE" "amd64" \
+        "op-cli.sh handles amd64 architecture"
+    assert_file_contains "$SOURCE_FILE" "arm64" \
+        "op-cli.sh handles arm64 architecture"
+}
+
+test_package_reference() {
+    assert_file_contains "$SOURCE_FILE" "1password-cli" \
+        "op-cli.sh references 1password-cli package"
+}
+
+test_bashrc_file_creation() {
+    assert_file_contains "$SOURCE_FILE" "65-env-secrets.sh" \
+        "op-cli.sh installs 65-env-secrets.sh"
+    assert_file_contains "$SOURCE_FILE" "66-op-secrets-cache.sh" \
+        "op-cli.sh installs 66-op-secrets-cache.sh"
+    assert_file_contains "$SOURCE_FILE" "70-1password.sh" \
+        "op-cli.sh installs 70-1password.sh"
+}
+
+run_test test_script_exists_and_executable "Script exists and is executable"
+run_test test_uses_strict_mode "Uses set -euo pipefail"
+run_test test_sources_feature_header_bootstrap "Sources feature-header-bootstrap.sh"
+run_test test_log_feature_start "Logs feature start with correct name"
+run_test test_sources_apt_utils "Sources apt-utils.sh"
+run_test test_sources_retry_utils "Sources retry-utils.sh"
+run_test test_gpg_debsig_verification "GPG/debsig verification patterns"
+run_test test_architecture_detection "Architecture detection (amd64, arm64)"
+run_test test_package_reference "Package reference (1password-cli)"
+run_test test_bashrc_file_creation "Bashrc file creation (65/66/70)"
 
 # ============================================================================
 # OP_*_REF Pattern Tests
@@ -238,16 +245,6 @@ test_op_ref_bashrc_contains_generic_loop() {
         || assert_true 0 "Old 45-op-mcp-tokens.sh removed"
 }
 
-run_test_with_setup test_installation "Installation test"
-run_test_with_setup test_configuration "Configuration test"
-run_test_with_setup test_environment "Environment test"
-run_test_with_setup test_permissions "Permissions test"
-run_test_with_setup test_aliases "Aliases test"
-run_test_with_setup test_dependencies "Dependencies test"
-run_test_with_setup test_cache_directory "Cache directory test"
-run_test_with_setup test_user_config "User config test"
-run_test_with_setup test_startup_script "Startup script test"
-run_test_with_setup test_verification "Verification test"
 run_test_with_setup test_op_ref_pattern_matching "OP_*_REF pattern matching test"
 run_test_with_setup test_op_ref_target_derivation "OP_*_REF target derivation test"
 run_test_with_setup test_op_ref_skip_when_set "OP_*_REF skip when target set test"

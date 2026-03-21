@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Unit tests for lib/features/mojo.sh
+# Content-based tests + checksum verification tests
 
 set -euo pipefail
 
@@ -7,165 +8,157 @@ source "$(dirname "${BASH_SOURCE[0]}")/../../framework.sh"
 init_test_framework
 test_suite "mojo Feature Tests"
 
-setup() {
-    export TEST_TEMP_DIR="$RESULTS_DIR/test-mojo"
-    mkdir -p "$TEST_TEMP_DIR"
+# Path to script under test
+SOURCE_FILE="$PROJECT_ROOT/lib/features/mojo.sh"
+
+# ============================================================================
+# Script Structure Tests
+# ============================================================================
+
+test_script_exists_and_executable() {
+    assert_file_exists "$SOURCE_FILE"
+    [ -x "$SOURCE_FILE" ] \
+        && assert_true 0 "mojo.sh is executable" \
+        || assert_true 1 "mojo.sh should be executable"
 }
 
-teardown() {
-    [ -n "${TEST_TEMP_DIR:-}" ] && command rm -rf "$TEST_TEMP_DIR"
+test_uses_strict_mode() {
+    assert_file_contains "$SOURCE_FILE" "set -euo pipefail" \
+        "mojo.sh uses strict mode"
 }
 
-test_installation() {
-    local bin_file="$TEST_TEMP_DIR/usr/local/bin/test-binary"
-    mkdir -p "$(dirname "$bin_file")"
-    touch "$bin_file" && chmod +x "$bin_file"
-    assert_file_exists "$bin_file"
-    [ -x "$bin_file" ] && assert_true true "Binary is executable" || assert_true false "Binary not executable"
+test_sources_feature_header() {
+    assert_file_contains "$SOURCE_FILE" "source.*feature-header.sh" \
+        "mojo.sh sources feature-header.sh"
 }
 
-test_configuration() {
-    local config_file="$TEST_TEMP_DIR/config.conf"
-    echo "test=true" > "$config_file"
-    assert_file_exists "$config_file"
-    command grep -q "test=true" "$config_file" && assert_true true "Config valid" || assert_true false "Config invalid"
-}
-
-test_environment() {
-    local env_file="$TEST_TEMP_DIR/env.sh"
-    echo "export TEST_VAR=value" > "$env_file"
-    assert_file_exists "$env_file"
-    command grep -q "export TEST_VAR" "$env_file" && assert_true true "Env var set" || assert_true false "Env var not set"
-}
-
-test_permissions() {
-    local test_dir="$TEST_TEMP_DIR/test-dir"
-    mkdir -p "$test_dir"
-    assert_dir_exists "$test_dir"
-    [ -w "$test_dir" ] && assert_true true "Directory writable" || assert_true false "Directory not writable"
-}
-
-test_aliases() {
-    local alias_file="$TEST_TEMP_DIR/aliases.sh"
-    echo "alias test='echo test'" > "$alias_file"
-    assert_file_exists "$alias_file"
-    command grep -q "alias test=" "$alias_file" && assert_true true "Alias defined" || assert_true false "Alias not defined"
-}
-
-test_dependencies() {
-    local deps_file="$TEST_TEMP_DIR/deps.txt"
-    echo "dependency1" > "$deps_file"
-    assert_file_exists "$deps_file"
-    [ -s "$deps_file" ] && assert_true true "Dependencies listed" || assert_true false "No dependencies"
-}
-
-test_cache_directory() {
-    local cache_dir="$TEST_TEMP_DIR/cache"
-    mkdir -p "$cache_dir"
-    assert_dir_exists "$cache_dir"
-}
-
-test_user_config() {
-    local user_config="$TEST_TEMP_DIR/home/user/.config"
-    mkdir -p "$user_config"
-    assert_dir_exists "$user_config"
-}
-
-test_startup_script() {
-    local startup_script="$TEST_TEMP_DIR/startup.sh"
-    echo "#\!/bin/bash" > "$startup_script"
-    chmod +x "$startup_script"
-    assert_file_exists "$startup_script"
-    [ -x "$startup_script" ] && assert_true true "Script executable" || assert_true false "Script not executable"
-}
-
-test_verification() {
-    local verify_script="$TEST_TEMP_DIR/verify.sh"
-    echo "#\!/bin/bash" > "$verify_script"
-    echo "echo 'Verification complete'" >> "$verify_script"
-    chmod +x "$verify_script"
-    assert_file_exists "$verify_script"
-    [ -x "$verify_script" ] && assert_true true "Verification script ready" || assert_true false "Verification script not ready"
-}
-
-run_test_with_setup() {
-    setup
-    run_test "$1" "$2"
-    teardown
+test_log_feature_start() {
+    assert_file_contains "$SOURCE_FILE" 'log_feature_start "Mojo"' \
+        "mojo.sh logs feature start with correct name"
 }
 
 # ============================================================================
-# Checksum Verification Tests
+# Download & Verification Tests
 # ============================================================================
 
-# Test: mojo.sh sources checksum libraries
+test_sources_checksum_fetch() {
+    assert_file_contains "$SOURCE_FILE" "source.*checksum-fetch.sh" \
+        "mojo.sh sources checksum-fetch.sh"
+}
+
+test_sources_download_verify() {
+    assert_file_contains "$SOURCE_FILE" "source.*download-verify.sh" \
+        "mojo.sh sources download-verify.sh"
+}
+
+test_sources_checksum_verification() {
+    assert_file_contains "$SOURCE_FILE" "source.*checksum-verification.sh" \
+        "mojo.sh sources checksum-verification.sh"
+}
+
+test_sources_cache_utils() {
+    assert_file_contains "$SOURCE_FILE" "source.*cache-utils.sh" \
+        "mojo.sh sources cache-utils.sh"
+}
+
+test_architecture_check() {
+    assert_file_contains "$SOURCE_FILE" "amd64" \
+        "mojo.sh checks for amd64 architecture"
+}
+
+# ============================================================================
+# Pixi Installation Tests
+# ============================================================================
+
+test_pixi_installation() {
+    assert_file_contains "$SOURCE_FILE" "PIXI_HOME" \
+        "mojo.sh configures PIXI_HOME for pixi installation"
+}
+
+# ============================================================================
+# Configuration Tests
+# ============================================================================
+
+test_cache_directories() {
+    assert_file_contains "$SOURCE_FILE" "/cache/pixi" \
+        "mojo.sh configures /cache/pixi directory"
+    assert_file_contains "$SOURCE_FILE" "/cache/mojo" \
+        "mojo.sh configures /cache/mojo directory"
+}
+
+test_wrapper_scripts() {
+    assert_file_contains "$SOURCE_FILE" "/usr/local/bin/mojo" \
+        "mojo.sh creates /usr/local/bin/mojo wrapper script"
+}
+
+test_bashrc_config() {
+    assert_file_contains "$SOURCE_FILE" "60-mojo.sh" \
+        "mojo.sh creates 60-mojo.sh bashrc config"
+}
+
+# ============================================================================
+# Checksum Verification Tests (preserved from original)
+# ============================================================================
+
 test_checksum_libraries_sourced() {
-    local mojo_script="$PROJECT_ROOT/lib/features/mojo.sh"
-
-    if ! [ -f "$mojo_script" ]; then
+    if ! [ -f "$SOURCE_FILE" ]; then
         skip_test "mojo.sh not found"
         return
     fi
 
-    # Check for checksum-fetch.sh
-    if command grep -q "source.*checksum-fetch.sh" "$mojo_script"; then
+    if command grep -q "source.*checksum-fetch.sh" "$SOURCE_FILE"; then
         assert_true true "checksum-fetch.sh library is sourced"
     else
         assert_true false "checksum-fetch.sh library not sourced"
     fi
 
-    # Check for download-verify.sh
-    if command grep -q "source.*download-verify.sh" "$mojo_script"; then
+    if command grep -q "source.*download-verify.sh" "$SOURCE_FILE"; then
         assert_true true "download-verify.sh library is sourced"
     else
         assert_true false "download-verify.sh library not sourced"
     fi
 }
 
-# Test: mojo.sh uses register_tool_checksum_fetcher for pixi
 test_pixi_checksum_fetching() {
-    local mojo_script="$PROJECT_ROOT/lib/features/mojo.sh"
-
-    if ! [ -f "$mojo_script" ]; then
+    if ! [ -f "$SOURCE_FILE" ]; then
         skip_test "mojo.sh not found"
         return
     fi
 
-    # Check for register_tool_checksum_fetcher usage for pixi
-    if command grep -q 'register_tool_checksum_fetcher.*pixi' "$mojo_script"; then
+    if command grep -q 'register_tool_checksum_fetcher.*pixi' "$SOURCE_FILE"; then
         assert_true true "Uses register_tool_checksum_fetcher for pixi"
     else
         assert_true false "Does not use register_tool_checksum_fetcher for pixi"
     fi
 }
 
-# Test: mojo.sh uses verify_download
 test_download_verification() {
-    local mojo_script="$PROJECT_ROOT/lib/features/mojo.sh"
-
-    if ! [ -f "$mojo_script" ]; then
+    if ! [ -f "$SOURCE_FILE" ]; then
         skip_test "mojo.sh not found"
         return
     fi
 
-    # Check for verify_download usage (4-tier verification)
-    if command grep -q "verify_download" "$mojo_script"; then
+    if command grep -q "verify_download" "$SOURCE_FILE"; then
         assert_true true "Uses verify_download for checksum verification"
     else
         assert_true false "Does not use verify_download"
     fi
 }
 
-run_test_with_setup test_installation "Installation test"
-run_test_with_setup test_configuration "Configuration test"
-run_test_with_setup test_environment "Environment test"
-run_test_with_setup test_permissions "Permissions test"
-run_test_with_setup test_aliases "Aliases test"
-run_test_with_setup test_dependencies "Dependencies test"
-run_test_with_setup test_cache_directory "Cache directory test"
-run_test_with_setup test_user_config "User config test"
-run_test_with_setup test_startup_script "Startup script test"
-run_test_with_setup test_verification "Verification test"
+# Content-based tests
+run_test test_script_exists_and_executable "Script exists and is executable"
+run_test test_uses_strict_mode "Uses set -euo pipefail"
+run_test test_sources_feature_header "Sources feature-header.sh"
+run_test test_log_feature_start "Logs feature start with correct name"
+run_test test_sources_checksum_fetch "Sources checksum-fetch.sh"
+run_test test_sources_download_verify "Sources download-verify.sh"
+run_test test_sources_checksum_verification "Sources checksum-verification.sh"
+run_test test_sources_cache_utils "Sources cache-utils.sh"
+run_test test_architecture_check "Architecture check (amd64)"
+run_test test_pixi_installation "Pixi installation (PIXI_HOME)"
+run_test test_cache_directories "Cache directories (/cache/pixi, /cache/mojo)"
+run_test test_wrapper_scripts "Wrapper scripts (/usr/local/bin/mojo)"
+run_test test_bashrc_config "Bashrc config (60-mojo.sh)"
 
 # Checksum verification tests
 run_test test_checksum_libraries_sourced "Checksum libraries are sourced"
