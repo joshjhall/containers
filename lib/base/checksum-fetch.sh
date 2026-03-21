@@ -25,6 +25,18 @@ elif [ -f "$(dirname "${BASH_SOURCE[0]}")/../shared/export-utils.sh" ]; then
     source "$(dirname "${BASH_SOURCE[0]}")/../shared/export-utils.sh"
 fi
 
+# Source dependencies
+if [ -f /tmp/build-scripts/base/logging.sh ]; then
+    source /tmp/build-scripts/base/logging.sh
+fi
+
+# ============================================================================
+# Tool Tier 3 Fetcher Registry
+# ============================================================================
+# Associative array mapping tool names to fetcher function names.
+# Fetcher functions accept (version, arch, tool_name) and echo a checksum string.
+declare -gA _TOOL_CHECKSUM_FETCHERS
+
 # Source retry utilities for rate limiting and backoff
 if [ -f /tmp/build-scripts/base/retry-utils.sh ]; then
     source /tmp/build-scripts/base/retry-utils.sh
@@ -251,6 +263,94 @@ source "${_CHECKSUM_FETCH_DIR}/checksum-fetch-go.sh"
 source "${_CHECKSUM_FETCH_DIR}/checksum-fetch-ruby.sh"
 source "${_CHECKSUM_FETCH_DIR}/checksum-fetch-maven.sh"
 
+# ============================================================================
+# Tool Tier 3 Fetcher Functions
+# ============================================================================
+
+# register_tool_checksum_fetcher - Register a function to fetch checksums for a tool
+#
+# The registered function will be called as: fetcher_fn <version> <arch> <tool_name>
+# It must echo a checksum (SHA256 or SHA512) on success and return 0,
+# or return non-zero on failure.
+#
+# Arguments:
+#   $1 - Tool name (e.g., "lazydocker", "cosign", "rustup-init")
+#   $2 - Fetcher function name (must be callable)
+#
+# Example:
+#   _fetch_lazydocker_checksum() { fetch_github_checksums_txt "..." "$1"; }
+#   register_tool_checksum_fetcher "lazydocker" "_fetch_lazydocker_checksum"
+register_tool_checksum_fetcher() {
+    local name="$1"
+    local fetcher_fn="$2"
+    _TOOL_CHECKSUM_FETCHERS["$name"]="$fetcher_fn"
+}
+
+# verify_tool_published_checksum - Verify a tool download using a registered fetcher
+#
+# Looks up the registered fetcher for the given tool name, calls it to obtain
+# the expected checksum, then compares against the downloaded file.
+# Handles both SHA256 (64 hex chars) and SHA512 (128 hex chars).
+#
+# Arguments:
+#   $1 - Tool name
+#   $2 - Version
+#   $3 - Downloaded file path
+#   $4 - Architecture (optional, default: amd64)
+#
+# Returns:
+#   0 if verification succeeds
+#   1 if fetcher not registered or checksum fetch fails (fall through to next tier)
+#   2 if checksum was fetched but doesn't match (hard fail — possible tampering)
+verify_tool_published_checksum() {
+    local name="$1"
+    local version="$2"
+    local file="$3"
+    local arch="${4:-amd64}"
+
+    # Check if a fetcher is registered for this tool
+    if [ -z "${_TOOL_CHECKSUM_FETCHERS[$name]+x}" ]; then
+        log_message "   ⚠️  No Tier 3 fetcher registered for tool '$name'"
+        return 1
+    fi
+
+    local fetcher_fn="${_TOOL_CHECKSUM_FETCHERS[$name]}"
+
+    log_message "🌐 TIER 3: Fetching published checksum for tool '$name'"
+
+    local expected=""
+    if ! expected=$("$fetcher_fn" "$version" "$arch" "$name" 2>/dev/null) || [ -z "$expected" ]; then
+        log_message "   ⚠️  Published checksum not available for $name $version"
+        return 1
+    fi
+
+    log_message "   ✓ Retrieved checksum from publisher"
+
+    # Determine hash algorithm by length: 64=sha256, 128=sha512
+    local actual
+    local checksum_len="${#expected}"
+    if [ "$checksum_len" -eq 64 ]; then
+        actual=$(sha256sum "$file" | command awk '{print $1}')
+    elif [ "$checksum_len" -eq 128 ]; then
+        actual=$(sha512sum "$file" | command awk '{print $1}')
+    else
+        log_error "Invalid checksum length ($checksum_len) from fetcher for $name"
+        return 1
+    fi
+
+    if [ "${actual,,}" = "${expected,,}" ]; then
+        log_message "   ✅ TIER 3 VERIFICATION PASSED"
+        log_message "   Security: Downloaded from official source (MITM risk remains)"
+        return 0
+    else
+        log_error "Checksum mismatch!"
+        log_error "Expected: $expected"
+        log_error "Got:      $actual"
+        return 2
+    fi
+}
+
 # Export functions for use in other scripts
 protected_export fetch_github_checksums_txt fetch_github_sha256_file fetch_github_sha512_file
 protected_export calculate_checksum_sha256 validate_checksum_format
+protected_export register_tool_checksum_fetcher verify_tool_published_checksum

@@ -47,16 +47,13 @@ elif [ -f "$(dirname "${BASH_SOURCE[0]}")/../shared/export-utils.sh" ]; then
     source "$(dirname "${BASH_SOURCE[0]}")/../shared/export-utils.sh"
 fi
 
-# ============================================================================
-# Tool Tier 3 Fetcher Registry
-# ============================================================================
-# Associative array mapping tool names to fetcher function names.
-# Fetcher functions accept (version, arch, tool_name) and echo a checksum string.
-declare -gA _TOOL_CHECKSUM_FETCHERS
-
 # Source dependencies
 if [ -f /tmp/build-scripts/base/logging.sh ]; then
     source /tmp/build-scripts/base/logging.sh
+fi
+
+if [ -f /tmp/build-scripts/base/checksum-pinned.sh ]; then
+    source /tmp/build-scripts/base/checksum-pinned.sh
 fi
 
 if [ -f /tmp/build-scripts/base/checksum-fetch.sh ]; then
@@ -67,9 +64,6 @@ fi
 if [ -f /tmp/build-scripts/base/checksum-tier4.sh ]; then
     source /tmp/build-scripts/base/checksum-tier4.sh
 fi
-
-# Path to pinned checksums database
-CHECKSUMS_DB="/tmp/build-scripts/checksums.json"
 
 # ============================================================================
 # TIER 1: Signature Verification (GPG + Sigstore via signature-verify.sh)
@@ -121,190 +115,6 @@ verify_signature_tier() {
 
     # Signature verification unavailable or failed - fall back to Tier 2
     return 1
-}
-
-# ============================================================================
-# TIER 2: Pinned Checksums from lib/checksums.json
-# ============================================================================
-
-# lookup_pinned_checksum - Look up checksum from checksums.json
-#
-# Arguments:
-#   $1 - Type: "language" or "tool"
-#   $2 - Name (e.g., "python", "nodejs", "gh")
-#   $3 - Version (e.g., "3.12.7", "2.60.1")
-#
-# Returns:
-#   Checksum string if found
-#   Empty string if not found
-lookup_pinned_checksum() {
-    local type="$1"
-    local name="$2"
-    local version="$3"
-    local arch="${4:-}"
-
-    if [ ! -f "$CHECKSUMS_DB" ]; then
-        return 1
-    fi
-
-    # Use jq if available, otherwise grep
-    if command -v jq >/dev/null 2>&1; then
-        local checksum=""
-        if [ "$type" = "language" ]; then
-            checksum=$(jq -r ".languages.\"${name}\".versions.\"${version}\".sha256 // empty" "$CHECKSUMS_DB" 2>/dev/null || echo "")
-        else
-            # For tools, try arch-specific lookup first, then arch-independent
-            if [ -n "$arch" ]; then
-                checksum=$(jq -r ".tools.\"${name}\".versions.\"${version}\".checksums.\"${arch}\".sha256 // empty" "$CHECKSUMS_DB" 2>/dev/null || echo "")
-            fi
-            if [ -z "$checksum" ] || [ "$checksum" = "null" ]; then
-                checksum=$(jq -r ".tools.\"${name}\".versions.\"${version}\".sha256 // empty" "$CHECKSUMS_DB" 2>/dev/null || echo "")
-            fi
-        fi
-
-        if [ -n "$checksum" ] && [ "$checksum" != "null" ] && [ "$checksum" != "placeholder_actual_checksum_needed" ]; then
-            echo "$checksum"
-            return 0
-        fi
-    fi
-
-    return 1
-}
-
-# verify_pinned_checksum - Verify using Tier 2 pinned checksums
-#
-# Arguments:
-#   $1 - Type: "language" or "tool"
-#   $2 - Name (e.g., "python", "nodejs")
-#   $3 - Version
-#   $4 - Downloaded file path
-#   $5 - Architecture (optional, e.g., "amd64", "arm64")
-#
-# Returns:
-#   0 if verification succeeds
-#   1 if checksum not found or verification fails
-verify_pinned_checksum() {
-    local type="$1"
-    local name="$2"
-    local version="$3"
-    local file="$4"
-    local arch="${5:-}"
-
-    log_message "📌 TIER 2: Checking pinned checksums database"
-
-    local expected
-    expected=$(lookup_pinned_checksum "$type" "$name" "$version" "$arch")
-
-    if [ -z "$expected" ]; then
-        log_message "   ⚠️  Version $version not found in checksums.json"
-        if [ "$type" = "language" ]; then
-            log_message "   💡 TIP: Use partial version (e.g., '${version%.*}') for latest patch with pinned checksum"
-        fi
-        return 1
-    fi
-
-    log_message "   ✓ Found pinned checksum in git-tracked database"
-
-    local actual
-    actual=$(sha256sum "$file" | command awk '{print $1}')
-
-    if [ "$actual" = "$expected" ]; then
-        log_message "   ✅ TIER 2 VERIFICATION PASSED"
-        log_message "   Security: Git-tracked checksum, auditable and reviewed"
-        return 0
-    else
-        log_error "Checksum mismatch!"
-        log_error "Expected: $expected"
-        log_error "Got:      $actual"
-        return 1
-    fi
-}
-
-# ============================================================================
-# TIER 3: Tool Checksum Fetcher Registry
-# ============================================================================
-
-# register_tool_checksum_fetcher - Register a function to fetch checksums for a tool
-#
-# The registered function will be called as: fetcher_fn <version> <arch> <tool_name>
-# It must echo a checksum (SHA256 or SHA512) on success and return 0,
-# or return non-zero on failure.
-#
-# Arguments:
-#   $1 - Tool name (e.g., "lazydocker", "cosign", "rustup-init")
-#   $2 - Fetcher function name (must be callable)
-#
-# Example:
-#   _fetch_lazydocker_checksum() { fetch_github_checksums_txt "..." "$1"; }
-#   register_tool_checksum_fetcher "lazydocker" "_fetch_lazydocker_checksum"
-register_tool_checksum_fetcher() {
-    local name="$1"
-    local fetcher_fn="$2"
-    _TOOL_CHECKSUM_FETCHERS["$name"]="$fetcher_fn"
-}
-
-# verify_tool_published_checksum - Verify a tool download using a registered fetcher
-#
-# Looks up the registered fetcher for the given tool name, calls it to obtain
-# the expected checksum, then compares against the downloaded file.
-# Handles both SHA256 (64 hex chars) and SHA512 (128 hex chars).
-#
-# Arguments:
-#   $1 - Tool name
-#   $2 - Version
-#   $3 - Downloaded file path
-#   $4 - Architecture (optional, default: amd64)
-#
-# Returns:
-#   0 if verification succeeds
-#   1 if fetcher not registered or checksum fetch fails (fall through to next tier)
-#   2 if checksum was fetched but doesn't match (hard fail — possible tampering)
-verify_tool_published_checksum() {
-    local name="$1"
-    local version="$2"
-    local file="$3"
-    local arch="${4:-amd64}"
-
-    # Check if a fetcher is registered for this tool
-    if [ -z "${_TOOL_CHECKSUM_FETCHERS[$name]+x}" ]; then
-        log_message "   ⚠️  No Tier 3 fetcher registered for tool '$name'"
-        return 1
-    fi
-
-    local fetcher_fn="${_TOOL_CHECKSUM_FETCHERS[$name]}"
-
-    log_message "🌐 TIER 3: Fetching published checksum for tool '$name'"
-
-    local expected=""
-    if ! expected=$("$fetcher_fn" "$version" "$arch" "$name" 2>/dev/null) || [ -z "$expected" ]; then
-        log_message "   ⚠️  Published checksum not available for $name $version"
-        return 1
-    fi
-
-    log_message "   ✓ Retrieved checksum from publisher"
-
-    # Determine hash algorithm by length: 64=sha256, 128=sha512
-    local actual
-    local checksum_len="${#expected}"
-    if [ "$checksum_len" -eq 64 ]; then
-        actual=$(sha256sum "$file" | command awk '{print $1}')
-    elif [ "$checksum_len" -eq 128 ]; then
-        actual=$(sha512sum "$file" | command awk '{print $1}')
-    else
-        log_error "Invalid checksum length ($checksum_len) from fetcher for $name"
-        return 1
-    fi
-
-    if [ "${actual,,}" = "${expected,,}" ]; then
-        log_message "   ✅ TIER 3 VERIFICATION PASSED"
-        log_message "   Security: Downloaded from official source (MITM risk remains)"
-        return 0
-    else
-        log_error "Checksum mismatch!"
-        log_error "Expected: $expected"
-        log_error "Got:      $actual"
-        return 2
-    fi
 }
 
 # ============================================================================
@@ -475,6 +285,6 @@ verify_download() {
 
 # Export functions for use in feature scripts
 # Note: verify_calculated_checksum and print_tofu_summary are exported by checksum-tier4.sh
-protected_export verify_download verify_signature_tier verify_pinned_checksum
-protected_export verify_published_checksum verify_tool_published_checksum
-protected_export register_tool_checksum_fetcher lookup_pinned_checksum
+# Note: lookup_pinned_checksum and verify_pinned_checksum are exported by checksum-pinned.sh
+# Note: register_tool_checksum_fetcher and verify_tool_published_checksum are exported by checksum-fetch.sh
+protected_export verify_download verify_signature_tier verify_published_checksum

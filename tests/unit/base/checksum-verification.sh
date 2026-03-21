@@ -16,6 +16,8 @@ test_suite "Checksum Verification Tests"
 # Source files under test
 SOURCE_FILE="$PROJECT_ROOT/lib/base/checksum-verification.sh"
 TIER4_SOURCE_FILE="$PROJECT_ROOT/lib/base/checksum-tier4.sh"
+PINNED_SOURCE_FILE="$PROJECT_ROOT/lib/base/checksum-pinned.sh"
+FETCH_SOURCE_FILE="$PROJECT_ROOT/lib/base/checksum-fetch.sh"
 
 # Setup function - runs before each test
 setup() {
@@ -60,6 +62,8 @@ _run_checksum_subshell() {
         export -f verify_signature fetch_ruby_checksum fetch_go_checksum
         export CHECKSUMS_DB='${TEST_TEMP_DIR}/checksums.json'
         source '$TIER4_SOURCE_FILE' >/dev/null 2>&1
+        source '$PINNED_SOURCE_FILE' >/dev/null 2>&1
+        source '$FETCH_SOURCE_FILE' >/dev/null 2>&1
         source '$SOURCE_FILE' >/dev/null 2>&1
         $1
     " 2>/dev/null
@@ -79,12 +83,12 @@ test_defines_verify_signature_tier() {
 }
 
 test_defines_lookup_pinned_checksum() {
-    assert_file_contains "$SOURCE_FILE" "lookup_pinned_checksum()" \
+    assert_file_contains "$PINNED_SOURCE_FILE" "lookup_pinned_checksum()" \
         "Script defines lookup_pinned_checksum function"
 }
 
 test_defines_verify_pinned_checksum() {
-    assert_file_contains "$SOURCE_FILE" "verify_pinned_checksum()" \
+    assert_file_contains "$PINNED_SOURCE_FILE" "verify_pinned_checksum()" \
         "Script defines verify_pinned_checksum function"
 }
 
@@ -393,7 +397,7 @@ test_tier_fallback_order_tier1_before_tier2() {
 }
 
 test_tier_fallback_order_tier2_before_tier3() {
-    assert_file_contains "$SOURCE_FILE" "TIER 2.*Pinned" \
+    assert_file_contains "$PINNED_SOURCE_FILE" "TIER 2.*Pinned" \
         "Source contains Tier 2 pinned checksums section"
 }
 
@@ -423,14 +427,14 @@ test_exports_all_functions() {
         "verify_download is exported"
     assert_file_contains "$SOURCE_FILE" "protected_export.*verify_signature_tier" \
         "verify_signature_tier is exported"
-    assert_file_contains "$SOURCE_FILE" "protected_export.*verify_pinned_checksum" \
-        "verify_pinned_checksum is exported"
+    assert_file_contains "$PINNED_SOURCE_FILE" "protected_export.*verify_pinned_checksum" \
+        "verify_pinned_checksum is exported (in checksum-pinned.sh)"
     assert_file_contains "$SOURCE_FILE" "protected_export.*verify_published_checksum" \
         "verify_published_checksum is exported"
     assert_file_contains "$TIER4_SOURCE_FILE" "protected_export.*verify_calculated_checksum" \
         "verify_calculated_checksum is exported (in checksum-tier4.sh)"
-    assert_file_contains "$SOURCE_FILE" "protected_export.*lookup_pinned_checksum" \
-        "lookup_pinned_checksum is exported"
+    assert_file_contains "$PINNED_SOURCE_FILE" "protected_export.*lookup_pinned_checksum" \
+        "lookup_pinned_checksum is exported (in checksum-pinned.sh)"
 }
 
 test_verify_download_returns_2_for_tofu() {
@@ -527,19 +531,19 @@ test_tofu_warning_in_tier4() {
 # ============================================================================
 
 test_defines_register_tool_checksum_fetcher() {
-    assert_file_contains "$SOURCE_FILE" "register_tool_checksum_fetcher()" \
+    assert_file_contains "$FETCH_SOURCE_FILE" "register_tool_checksum_fetcher()" \
         "Script defines register_tool_checksum_fetcher function"
 }
 
 test_defines_verify_tool_published_checksum() {
-    assert_file_contains "$SOURCE_FILE" "verify_tool_published_checksum()" \
+    assert_file_contains "$FETCH_SOURCE_FILE" "verify_tool_published_checksum()" \
         "Script defines verify_tool_published_checksum function"
 }
 
 test_exports_tool_tier3_functions() {
-    assert_file_contains "$SOURCE_FILE" "protected_export.*register_tool_checksum_fetcher" \
+    assert_file_contains "$FETCH_SOURCE_FILE" "protected_export.*register_tool_checksum_fetcher" \
         "register_tool_checksum_fetcher is exported"
-    assert_file_contains "$SOURCE_FILE" "protected_export.*verify_tool_published_checksum" \
+    assert_file_contains "$FETCH_SOURCE_FILE" "protected_export.*verify_tool_published_checksum" \
         "verify_tool_published_checksum is exported"
 }
 
@@ -769,6 +773,24 @@ test_source_contains_tofu_log_tracking() {
 }
 
 # ============================================================================
+# Static Analysis Tests - Module Extraction
+# ============================================================================
+
+test_pinned_file_exists() {
+    assert_file_exists "$PINNED_SOURCE_FILE" "checksum-pinned.sh exists"
+}
+
+test_fetch_file_has_tool_registry() {
+    assert_file_contains "$FETCH_SOURCE_FILE" "_TOOL_CHECKSUM_FETCHERS" \
+        "checksum-fetch.sh defines _TOOL_CHECKSUM_FETCHERS registry"
+}
+
+test_verification_sources_pinned() {
+    assert_file_contains "$SOURCE_FILE" "checksum-pinned.sh" \
+        "checksum-verification.sh sources checksum-pinned.sh"
+}
+
+# ============================================================================
 # Run all tests
 # ============================================================================
 
@@ -837,6 +859,11 @@ run_test_with_setup test_tofu_event_not_tracked_when_blocked "TOFU event is not 
 run_test_with_setup test_print_tofu_summary_empty_log "print_tofu_summary silent with no events"
 run_test_with_setup test_print_tofu_summary_with_events "print_tofu_summary works with events"
 run_test_with_setup test_source_contains_tofu_log_tracking "Source contains TOFU log tracking"
+
+# Module extraction
+run_test_with_setup test_pinned_file_exists "checksum-pinned.sh exists"
+run_test_with_setup test_fetch_file_has_tool_registry "checksum-fetch.sh has tool registry"
+run_test_with_setup test_verification_sources_pinned "checksum-verification.sh sources checksum-pinned.sh"
 
 # Generate test report
 generate_report
