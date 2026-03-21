@@ -170,6 +170,12 @@ test_civ_summary_statistics() {
 }
 
 # Run Batch 6 check-installed-versions tests
+test_civ_print_section_results_func() {
+    assert_file_contains "$SOURCE_FILE" "_print_section_results()" \
+        "Defines _print_section_results helper"
+}
+
+run_test test_civ_print_section_results_func "Defines _print_section_results helper"
 run_test test_civ_strict_mode "check-installed-versions.sh uses set -euo pipefail"
 run_test test_civ_check_version_func "Defines check_version function"
 run_test test_civ_compare_version_func "Defines compare_version function"

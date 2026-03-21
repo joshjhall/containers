@@ -53,6 +53,13 @@ source /tmp/build-scripts/base/path-utils.sh
 # Source version validation utilities
 source /tmp/build-scripts/base/version-validation.sh
 
+# Source checksum and verification utilities
+source /tmp/build-scripts/base/checksum-fetch.sh
+source /tmp/build-scripts/base/checksum-verification.sh
+
+# Source GitHub release installer
+source /tmp/build-scripts/features/lib/install-github-release.sh
+
 # Source jdtls installation utilities
 source /tmp/build-scripts/features/lib/install-jdtls.sh
 
@@ -122,79 +129,43 @@ log_message "Detected architecture: $ARCH"
 # ============================================================================
 # ktlint Installation
 # ============================================================================
-log_message "Installing ktlint ${KTLINT_VERSION}..."
-
-KTLINT_URL="https://github.com/pinterest/ktlint/releases/download/${KTLINT_VERSION}/ktlint"
-
-BUILD_TEMP=$(create_secure_temp_dir)
-cd "$BUILD_TEMP"
-
-log_message "Downloading ktlint..."
-if retry_with_backoff wget -q "${KTLINT_URL}" -O ktlint; then
-    chmod +x ktlint
-    log_command "Installing ktlint" \
-        mv ktlint /usr/local/bin/ktlint
-    log_message "ktlint installed successfully"
-else
-    log_warning "Failed to download ktlint, skipping"
-fi
+install_github_release "ktlint" "$KTLINT_VERSION" \
+    "https://github.com/pinterest/ktlint/releases/download/${KTLINT_VERSION}" \
+    "ktlint" "ktlint" \
+    "calculate" "binary"
 
 # ============================================================================
 # detekt Installation
 # ============================================================================
-log_message "Installing detekt ${DETEKT_VERSION}..."
+install_github_release "detekt" "$DETEKT_VERSION" \
+    "https://github.com/detekt/detekt/releases/download/v${DETEKT_VERSION}" \
+    "detekt-cli-${DETEKT_VERSION}.zip" "detekt-cli-${DETEKT_VERSION}.zip" \
+    "calculate" "zip_to:/opt"
 
-DETEKT_URL="https://github.com/detekt/detekt/releases/download/v${DETEKT_VERSION}/detekt-cli-${DETEKT_VERSION}.zip"
-
-log_message "Downloading detekt..."
-if retry_with_backoff wget -q "${DETEKT_URL}" -O detekt.zip; then
-    log_command "Extracting detekt" \
-        unzip -q detekt.zip
-
-    log_command "Installing detekt" \
-        mv "detekt-cli-${DETEKT_VERSION}" /opt/detekt
-
-    # Create wrapper script for detekt
-    command cat > /usr/local/bin/detekt << 'DETEKT_WRAPPER'
-#!/bin/bash
-# detekt wrapper script
-DETEKT_HOME="/opt/detekt"
-exec java -jar "${DETEKT_HOME}/lib/detekt-cli-${DETEKT_VERSION}-all.jar" "$@"
-DETEKT_WRAPPER
-
-    # Replace version placeholder
-    command sed -i "s/\${DETEKT_VERSION}/${DETEKT_VERSION}/g" /usr/local/bin/detekt
-    chmod +x /usr/local/bin/detekt
-
-    log_message "detekt installed successfully"
-else
-    log_warning "Failed to download detekt, skipping"
+# Rename to standard location
+if [ -d "/opt/detekt-cli-${DETEKT_VERSION}" ]; then
+    log_command "Renaming detekt directory" \
+        mv "/opt/detekt-cli-${DETEKT_VERSION}" /opt/detekt
 fi
+
+# Create wrapper script for detekt
+command cat > /usr/local/bin/detekt << DETEKT_WRAPPER
+#!/bin/bash
+DETEKT_HOME="/opt/detekt"
+exec java -jar "\${DETEKT_HOME}/lib/detekt-cli-${DETEKT_VERSION}-all.jar" "\$@"
+DETEKT_WRAPPER
+chmod +x /usr/local/bin/detekt
 
 # ============================================================================
 # Kotlin Language Server Installation
 # ============================================================================
-log_message "Installing Kotlin Language Server ${KLS_VERSION}..."
+install_github_release "kotlin-language-server" "$KLS_VERSION" \
+    "https://github.com/fwcd/kotlin-language-server/releases/download/${KLS_VERSION}" \
+    "server.zip" "server.zip" \
+    "calculate" "zip_to:/opt/kotlin-language-server"
 
-KLS_URL="https://github.com/fwcd/kotlin-language-server/releases/download/${KLS_VERSION}/server.zip"
-
-log_message "Downloading kotlin-language-server..."
-if retry_with_backoff wget -q "${KLS_URL}" -O kls.zip; then
-    log_command "Extracting kotlin-language-server" \
-        unzip -q kls.zip -d /opt/kotlin-language-server
-
-    # Create symlink
-    create_symlink "/opt/kotlin-language-server/server/bin/kotlin-language-server" \
-        "/usr/local/bin/kotlin-language-server" "Kotlin Language Server"
-
-    log_message "kotlin-language-server installed successfully"
-else
-    log_warning "Failed to download kotlin-language-server, skipping"
-fi
-
-# Clean up temp directory
-cd /
-rm -rf "$BUILD_TEMP"
+create_symlink "/opt/kotlin-language-server/server/bin/kotlin-language-server" \
+    "/usr/local/bin/kotlin-language-server" "Kotlin Language Server"
 
 # ============================================================================
 # System-wide Environment Configuration

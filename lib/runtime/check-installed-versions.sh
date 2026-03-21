@@ -245,6 +245,32 @@ print_result() {
     printf "%-25s %-20s %-20s ${status_color}%-12s${NC}\n" "$name" "$installed" "$latest" "$status_text"
 }
 
+# Print section header and results for a list of tools.
+# Arguments:
+#   $1 - Section display name
+#   $2 - Section filter name for should_display_section
+#   $@ - Remaining args are tool names to display
+_print_section_results() {
+    local section_name="$1"
+    local section_filter="$2"
+    shift 2
+    local tool_names=("$@")
+
+    if [ "$output_format" != "json" ] && should_display_section "$section_filter"; then
+        echo "$section_name:"
+        printf '%0.s=' $(seq 1 ${#section_name})
+        echo
+        printf "%-25s %-20s %-20s %-12s\n" "TOOL" "INSTALLED" "LATEST" "STATUS"
+        printf "%-25s %-20s %-20s %-12s\n" "----" "---------" "------" "------"
+        for name in "${tool_names[@]}"; do
+            if [ -n "${INSTALLED_VERSIONS[$name]:-}" ]; then
+                print_result "$name" "${INSTALLED_VERSIONS[$name]}" "${LATEST_VERSIONS[$name]:-}" "${VERSION_STATUS[$name]}"
+            fi
+        done
+        echo
+    fi
+}
+
 # Run a section: check versions and print results for a list of tools.
 # Each entry in the tools array is: "name:cmd:flag:pattern[:getter[:getter_args]]"
 # Arguments:
@@ -267,20 +293,7 @@ run_section() {
     done
 
     # Print section header and results
-    if [ "$output_format" != "json" ] && should_display_section "$section_filter"; then
-        echo "$section_name:"
-        printf '%0.s=' $(seq 1 ${#section_name})
-        echo
-        printf "%-25s %-20s %-20s %-12s\n" "TOOL" "INSTALLED" "LATEST" "STATUS"
-        printf "%-25s %-20s %-20s %-12s\n" "----" "---------" "------" "------"
-
-        for name in "${tool_names[@]}"; do
-            if [ -n "${INSTALLED_VERSIONS[$name]:-}" ]; then
-                print_result "$name" "${INSTALLED_VERSIONS[$name]}" "${LATEST_VERSIONS[$name]:-}" "${VERSION_STATUS[$name]}"
-            fi
-        done
-        echo
-    fi
+    _print_section_results "$section_name" "$section_filter" "${tool_names[@]}"
 }
 
 # Run a section for R packages using check_r_package instead of check_version.
@@ -299,20 +312,7 @@ run_r_section() {
         tool_names+=("$name")
     done
 
-    if [ "$output_format" != "json" ] && should_display_section "$section_filter"; then
-        echo "$section_name:"
-        printf '%0.s=' $(seq 1 ${#section_name})
-        echo
-        printf "%-25s %-20s %-20s %-12s\n" "TOOL" "INSTALLED" "LATEST" "STATUS"
-        printf "%-25s %-20s %-20s %-12s\n" "----" "---------" "------" "------"
-
-        for name in "${tool_names[@]}"; do
-            if [ -n "${INSTALLED_VERSIONS[$name]:-}" ]; then
-                print_result "$name" "${INSTALLED_VERSIONS[$name]}" "${LATEST_VERSIONS[$name]:-}" "${VERSION_STATUS[$name]}"
-            fi
-        done
-        echo
-    fi
+    _print_section_results "$section_name" "$section_filter" "${tool_names[@]}"
 }
 
 # Check R dev tools - using Rscript to check package versions

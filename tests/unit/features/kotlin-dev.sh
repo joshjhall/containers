@@ -454,7 +454,47 @@ run_test_with_setup() {
     teardown
 }
 
+# ============================================================================
+# Static Analysis Tests — Verification Pipeline
+# ============================================================================
+
+test_kotlin_sources_verification() {
+    local script="$PROJECT_ROOT/lib/features/kotlin-dev.sh"
+    assert_file_contains "$script" "install-github-release.sh" \
+        "kotlin-dev.sh sources install-github-release.sh"
+}
+
+test_kotlin_ktlint_verified() {
+    local script="$PROJECT_ROOT/lib/features/kotlin-dev.sh"
+    assert_file_contains "$script" 'install_github_release.*ktlint' \
+        "kotlin-dev.sh uses install_github_release for ktlint"
+}
+
+test_kotlin_detekt_verified() {
+    local script="$PROJECT_ROOT/lib/features/kotlin-dev.sh"
+    assert_file_contains "$script" 'install_github_release.*detekt' \
+        "kotlin-dev.sh uses install_github_release for detekt"
+}
+
+test_kotlin_kls_verified() {
+    local script="$PROJECT_ROOT/lib/features/kotlin-dev.sh"
+    assert_file_contains "$script" 'install_github_release.*kotlin-language-server' \
+        "kotlin-dev.sh uses install_github_release for kotlin-language-server"
+}
+
+test_kotlin_no_unverified_wget() {
+    local script="$PROJECT_ROOT/lib/features/kotlin-dev.sh"
+    local matches
+    matches=$(/usr/bin/grep -c 'retry_with_backoff wget' "$script" 2>/dev/null) || true
+    assert_equals "0" "$matches" "kotlin-dev.sh has no unverified wget downloads"
+}
+
 # Run all tests
+run_test_with_setup test_kotlin_sources_verification "kotlin-dev.sh sources install-github-release.sh"
+run_test_with_setup test_kotlin_ktlint_verified "kotlin-dev.sh uses install_github_release for ktlint"
+run_test_with_setup test_kotlin_detekt_verified "kotlin-dev.sh uses install_github_release for detekt"
+run_test_with_setup test_kotlin_kls_verified "kotlin-dev.sh uses install_github_release for kotlin-language-server"
+run_test_with_setup test_kotlin_no_unverified_wget "kotlin-dev.sh has no unverified wget downloads"
 run_test_with_setup test_ktlint_version_validation "ktlint version validation works"
 run_test_with_setup test_detekt_version_validation "detekt version validation works"
 run_test_with_setup test_kls_version_validation "KLS version validation works"

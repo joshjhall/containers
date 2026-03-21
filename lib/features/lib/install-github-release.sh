@@ -90,6 +90,7 @@ export -f _github_release_checksum_fetcher
 #   binary              - Direct binary: mv to /usr/local/bin, chmod +x
 #   extract:<name>      - Tar extract, find <name> binary, mv to /usr/local/bin
 #   extract_flat:<name> - Tar extract specific file directly to /usr/local/bin
+#   zip_to:<dir>        - Unzip to specified directory
 #   dpkg                - Install .deb package via dpkg -i
 #   gunzip              - Decompress .gz, mv to /usr/local/bin, chmod +x
 #
@@ -216,6 +217,11 @@ install_github_release() {
                 command mv "$found_binary" "/usr/local/bin/${binary_name}"
             log_command "Setting ${tool_name} permissions" \
                 chmod +x "/usr/local/bin/${binary_name}"
+            ;;
+        zip_to:*)
+            local extract_dir="${install_type#zip_to:}"
+            log_command "Extracting ${tool_name}" \
+                unzip -q "$local_file" -d "$extract_dir"
             ;;
         dpkg)
             log_command "Installing ${tool_name} package" \

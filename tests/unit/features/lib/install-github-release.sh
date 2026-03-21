@@ -249,6 +249,11 @@ test_static_install_type_dpkg() {
         "Script handles dpkg install type"
 }
 
+test_static_install_type_zip_to() {
+    assert_file_contains "$SOURCE_FILE" 'zip_to:\*)' \
+        "Script handles zip_to install type"
+}
+
 test_static_install_type_gunzip() {
     assert_file_contains "$SOURCE_FILE" "gunzip)" \
         "Script handles gunzip install type"
@@ -632,6 +637,7 @@ run_test_with_setup test_static_install_type_binary "Static: handles binary inst
 run_test_with_setup test_static_install_type_extract "Static: handles extract install type"
 run_test_with_setup test_static_install_type_extract_flat "Static: handles extract_flat install type"
 run_test_with_setup test_static_install_type_dpkg "Static: handles dpkg install type"
+run_test_with_setup test_static_install_type_zip_to "Static: handles zip_to install type"
 run_test_with_setup test_static_install_type_gunzip "Static: handles gunzip install type"
 run_test_with_setup test_static_checksum_type_checksums_txt "Static: handles checksums_txt checksum type"
 run_test_with_setup test_static_checksum_type_sha512 "Static: handles sha512 checksum type"
