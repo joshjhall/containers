@@ -276,6 +276,69 @@ EOF
     fi
 }
 
+# ============================================================================
+# Test: Extracted heredoc files exist
+# ============================================================================
+
+test_golang_startup_script_exists() {
+    local script_file="$PROJECT_ROOT/lib/features/lib/golang/35-golang-dev-setup.sh"
+    assert_file_exists "$script_file" "35-golang-dev-setup.sh should exist as external file"
+}
+
+test_golang_golangci_config_exists() {
+    local config_file="$PROJECT_ROOT/lib/features/lib/golang/golangci.yml"
+    assert_file_exists "$config_file" "golangci.yml template should exist"
+
+    local content
+    content=$(command cat "$config_file")
+    assert_contains "$content" "linters:" "golangci.yml should contain linters section"
+}
+
+test_golang_air_config_exists() {
+    local config_file="$PROJECT_ROOT/lib/features/lib/golang/air.toml"
+    assert_file_exists "$config_file" "air.toml template should exist"
+
+    local content
+    content=$(command cat "$config_file")
+    assert_contains "$content" "[build]" "air.toml should contain build section"
+}
+
+test_golang_verification_script_exists() {
+    local script_file="$PROJECT_ROOT/lib/features/lib/golang/test-golang-dev.sh"
+    assert_file_exists "$script_file" "test-golang-dev.sh should exist as external file"
+
+    local content
+    content=$(command cat "$script_file")
+    assert_contains "$content" "Go Development Tools Status" "Verification script should have status header"
+}
+
+test_golang_no_large_heredocs() {
+    local feature_script="$PROJECT_ROOT/lib/features/golang-dev.sh"
+    local in_heredoc=false
+    local heredoc_lines=0
+    local max_heredoc=0
+
+    while IFS= read -r line; do
+        if [[ "$line" =~ ^[^#]*\<\<[[:space:]]*\'?EOF\'?$ ]] || [[ "$line" =~ ^[^#]*\<\<[[:space:]]*\'?HEREDOC\'?$ ]]; then
+            in_heredoc=true
+            heredoc_lines=0
+        elif [[ "$in_heredoc" == true ]] && [[ "$line" =~ ^EOF$ ]] || [[ "$line" =~ ^HEREDOC$ ]]; then
+            in_heredoc=false
+            if [[ $heredoc_lines -gt $max_heredoc ]]; then
+                max_heredoc=$heredoc_lines
+            fi
+        elif [[ "$in_heredoc" == true ]]; then
+            heredoc_lines=$((heredoc_lines + 1))
+        fi
+    done < "$feature_script"
+
+    if [[ $max_heredoc -le 10 ]]; then
+        pass_test "No heredocs over 10 lines (max: $max_heredoc)"
+    else
+        fail_test "Found heredoc with $max_heredoc lines (max allowed: 10)"
+    fi
+}
+
 # Run tests with setup/teardown
 run_test_with_setup() {
     local test_function="$1"
@@ -297,6 +360,11 @@ run_test_with_setup test_go_makefile "Makefile for Go"
 run_test_with_setup test_go_dev_aliases "Go dev aliases"
 run_test_with_setup test_protobuf_support "Protocol buffers support"
 run_test_with_setup test_golang_dev_verification "Golang dev verification"
+run_test_with_setup test_golang_startup_script_exists "Golang startup script extracted"
+run_test_with_setup test_golang_golangci_config_exists "Golang golangci config extracted"
+run_test_with_setup test_golang_air_config_exists "Golang air config extracted"
+run_test_with_setup test_golang_verification_script_exists "Golang verification script extracted"
+run_test_with_setup test_golang_no_large_heredocs "No large heredocs in golang-dev.sh"
 
 # Generate test report
 generate_report

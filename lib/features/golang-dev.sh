@@ -253,48 +253,8 @@ log_message "Creating golang-dev startup script..."
 log_command "Creating container startup directory" \
     mkdir -p /etc/container/first-startup
 
-command cat > /etc/container/first-startup/35-golang-dev-setup.sh << EOF
-#!/bin/bash
-# Go development tools configuration
-if command -v go &> /dev/null; then
-    echo "=== Go Development Tools ==="
-
-    # Check for .golangci.yml
-    if [ -f ${WORKING_DIR}/.golangci.yml ] || [ -f ${WORKING_DIR}/.golangci.yaml ]; then
-        echo "golangci-lint configuration detected"
-        echo "Run 'golangci-lint run' to lint your code"
-    fi
-
-    # Check for Makefile
-    if [ -f ${WORKING_DIR}/Makefile ]; then
-        if grep -q "test:" ${WORKING_DIR}/Makefile 2>/dev/null; then
-            echo "Makefile with test target detected"
-            echo "Run 'make test' to run tests"
-        fi
-    fi
-
-    # Check for .goreleaser.yml
-    if [ -f ${WORKING_DIR}/.goreleaser.yml ] || [ -f ${WORKING_DIR}/.goreleaser.yaml ]; then
-        echo "GoReleaser configuration detected"
-        echo "Run 'goreleaser check' to validate config"
-    fi
-
-    # Show available dev tools
-    echo ""
-    echo "Go development tools available:"
-    echo "  Linting: golangci-lint, staticcheck, gosec, revive, errcheck"
-    echo "  Testing: gotests, mockgen, richgo, benchstat"
-    echo "  Analysis: go-callvis, goda, govulncheck"
-    echo "  Workflow: air (live reload), goreleaser, ko"
-    echo ""
-    echo "Helpful commands:"
-    echo "  go-lint-all         - Run all linters"
-    echo "  go-test-coverage    - Generate coverage report"
-    echo "  go-generate-tests   - Generate test files"
-    echo "  go-visualize        - Visualize code structure"
-    echo "  go-live            - Run with live reload"
-fi
-EOF
+command cp /tmp/build-scripts/features/lib/golang/35-golang-dev-setup.sh \
+    /etc/container/first-startup/35-golang-dev-setup.sh
 
 log_command "Setting golang-dev startup script permissions" \
     chmod +x /etc/container/first-startup/35-golang-dev-setup.sh
@@ -309,158 +269,20 @@ log_command "Creating go-dev-templates directory" \
     mkdir -p /etc/go-dev-templates
 
 # Default .golangci.yml
-command cat > /etc/go-dev-templates/.golangci.yml << 'EOF'
-linters:
-  enable:
-    - gofmt
-    - golint
-    - govet
-    - errcheck
-    - staticcheck
-    - ineffassign
-    - goconst
-    - gocyclo
-    - misspell
-    - unparam
-    - nakedret
-    - prealloc
-    - scopelint
-    - gocritic
-    - gochecknoinits
-    - gochecknoglobals
-    - gosec
-
-linters-settings:
-  gocyclo:
-    min-complexity: 15
-  goconst:
-    min-len: 3
-    min-occurrences: 3
-  misspell:
-    locale: US
-
-issues:
-  exclude-rules:
-    - path: _test\.go
-      linters:
-        - gocyclo
-        - errcheck
-        - gosec
-EOF
+command cp /tmp/build-scripts/features/lib/golang/golangci.yml \
+    /etc/go-dev-templates/.golangci.yml
 
 # Default .air.toml
-command cat > /etc/go-dev-templates/.air.toml << 'EOF'
-root = "."
-testdata_dir = "testdata"
-tmp_dir = "tmp"
-
-[build]
-  cmd = "go build -o ./tmp/main ."
-  bin = "tmp/main"
-  full_bin = "./tmp/main"
-  include_ext = ["go", "tpl", "tmpl", "html"]
-  exclude_dir = ["assets", "tmp", "vendor", "testdata"]
-  include_dir = []
-  exclude_file = []
-  delay = 1000
-  stop_on_error = false
-  log = "build-errors.log"
-  send_interrupt = false
-  kill_delay = "0s"
-
-[color]
-  main = "magenta"
-  watcher = "cyan"
-  build = "yellow"
-  runner = "green"
-  app = ""
-
-[log]
-  time = false
-
-[misc]
-  clean_on_exit = true
-EOF
+command cp /tmp/build-scripts/features/lib/golang/air.toml \
+    /etc/go-dev-templates/.air.toml
 
 # ============================================================================
 # Verification Script
 # ============================================================================
 log_message "Creating golang-dev verification script..."
 
-command cat > /usr/local/bin/test-golang-dev << 'EOF'
-#!/bin/bash
-echo "=== Go Development Tools Status ==="
-
-# Check core development tools
-echo ""
-echo "Core development tools:"
-for tool in gopls dlv golangci-lint goimports gomodifytags impl goplay; do
-    if command -v $tool &> /dev/null; then
-        echo "✓ $tool is installed"
-    else
-        echo "✗ $tool is not found"
-    fi
-done
-
-# Check linting tools
-echo ""
-echo "Linting tools:"
-for tool in staticcheck gosec revive errcheck ineffassign gocritic gocyclo gocognit goconst godot; do
-    if command -v $tool &> /dev/null; then
-        echo "✓ $tool is installed"
-    else
-        echo "✗ $tool is not found"
-    fi
-done
-
-# Check testing tools
-echo ""
-echo "Testing tools:"
-for tool in gotests mockgen richgo benchstat govulncheck stress; do
-    if command -v $tool &> /dev/null; then
-        echo "✓ $tool is installed"
-    else
-        echo "✗ $tool is not found"
-    fi
-done
-
-# Check workflow tools
-echo ""
-echo "Workflow tools:"
-for tool in air goreleaser ko swag wire godoc; do
-    if command -v $tool &> /dev/null; then
-        echo "✓ $tool is installed"
-    else
-        echo "✗ $tool is not found"
-    fi
-done
-
-# Check analysis tools
-echo ""
-echo "Analysis tools:"
-for tool in go-callvis goda; do
-    if command -v $tool &> /dev/null; then
-        echo "✓ $tool is installed"
-    else
-        echo "✗ $tool is not found"
-    fi
-done
-
-# Check protobuf tools
-echo ""
-echo "Protobuf tools:"
-for tool in protoc-gen-go protoc-gen-go-grpc; do
-    if command -v $tool &> /dev/null; then
-        echo "✓ $tool is installed"
-    else
-        echo "✗ $tool is not found"
-    fi
-done
-
-echo ""
-echo "Run 'go-lint-all' to run all linters"
-echo "Run 'go-test-coverage' to generate coverage report"
-EOF
+command cp /tmp/build-scripts/features/lib/golang/test-golang-dev.sh \
+    /usr/local/bin/test-golang-dev
 
 log_command "Setting test-golang-dev script permissions" \
     chmod +x /usr/local/bin/test-golang-dev
