@@ -171,6 +171,17 @@ cv_load_custom_rules() {
         return 1
     fi
 
+    # Verify file is not group/other writable
+    local file_mode
+    file_mode="$(command stat -c '%a' "$resolved_path" 2>/dev/null)" || {
+        cv_error "Cannot check permissions of custom validation rules: $resolved_path"
+        return 1
+    }
+    if [ $(( 8#$file_mode & 8#022 )) -ne 0 ]; then
+        cv_error "Custom validation rules must not be group/other writable: $resolved_path (mode: $file_mode)"
+        return 1
+    fi
+
     cv_info "Loading custom validation rules from: $resolved_path"
 
     # Source the rules file

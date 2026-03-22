@@ -602,6 +602,37 @@ test_custom_rules_non_root_owned() {
     teardown_custom_rules
 }
 
+test_custom_rules_world_writable() {
+    setup_custom_rules
+    mkdir -p /etc/container 2>/dev/null || true
+    local rules_file="/etc/container/test-writable-$$.sh"
+    echo '# world-writable rules' > "$rules_file" 2>/dev/null || {
+        teardown_custom_rules
+        return 0
+    }
+    # Ensure root ownership but world-writable permissions
+    chown 0:0 "$rules_file" 2>/dev/null || {
+        rm -f "$rules_file" 2>/dev/null || true
+        teardown_custom_rules
+        return 0
+    }
+    chmod 666 "$rules_file" 2>/dev/null || {
+        rm -f "$rules_file" 2>/dev/null || true
+        teardown_custom_rules
+        return 0
+    }
+    export VALIDATE_CONFIG_RULES="$rules_file"
+
+    if cv_load_custom_rules >/dev/null 2>&1; then
+        fail "World-writable file should be rejected"
+    else
+        assert_equals 1 "$CV_ERROR_COUNT" "Should have 1 error for world-writable permissions"
+    fi
+
+    rm -f "$rules_file" 2>/dev/null || true
+    teardown_custom_rules
+}
+
 test_custom_rules_valid_file() {
     setup_custom_rules
     mkdir -p /etc/container 2>/dev/null || true
@@ -611,12 +642,13 @@ cv_custom_validations() {
     return 0
 }
 RULES
-    # Ensure root ownership
+    # Ensure root ownership and restrictive permissions
     chown 0:0 "$rules_file" 2>/dev/null || {
         rm -f "$rules_file" 2>/dev/null || true
         teardown_custom_rules
         return 0
     }
+    chmod 644 "$rules_file" 2>/dev/null
     export VALIDATE_CONFIG_RULES="$rules_file"
 
     if cv_load_custom_rules >/dev/null 2>&1; then
@@ -711,6 +743,7 @@ run_test test_custom_rules_nonexistent_file "Custom rules: nonexistent file"
 run_test test_custom_rules_outside_trusted_dir "Custom rules: outside trusted dir"
 run_test test_custom_rules_symlink_escape "Custom rules: symlink escape"
 run_test test_custom_rules_non_root_owned "Custom rules: non-root owned"
+run_test test_custom_rules_world_writable "Custom rules: world-writable rejected"
 run_test test_custom_rules_valid_file "Custom rules: valid file"
 run_test test_validate_path_file_not_directory "Path validation: file not directory"
 run_test test_detect_secrets_token_pattern "Secret detection: TOKEN pattern"
