@@ -179,6 +179,64 @@ _is_in_list() {
     return 1
 }
 
+# Temp file for cross-subshell communication of resolution source.
+# Written by _resolve_override_list_or_file, read by callers after $() capture.
+_RESOLVED_FROM_FILE=$(mktemp 2>/dev/null || echo "/tmp/.resolved-from-$$")
+
+# Resolve a component list from a JSON file, env var, or built-in defaults.
+# Checks ${var_name}_FILE (runtime) then ${var_name}_FILE_DEFAULT (build-time).
+# If a valid JSON array file is found, outputs it and writes "file" to _RESOLVED_FROM_FILE.
+# Otherwise falls through to _resolve_override_list and writes "env" or "default".
+# Usage: result=$(_resolve_override_list_or_file "CLAUDE_PLUGINS" "default1,default2")
+#        RESOLVED_FROM=$(cat "$_RESOLVED_FROM_FILE")
+# Output: resolved list (JSON array if from file, CSV otherwise)
+# Returns: 0 if override active, 1 if using built-in defaults
+_resolve_override_list_or_file() {
+    local var_name="$1"
+    local defaults="$2"
+    local file_var="${var_name}_FILE"
+    local file_default_var="${var_name}_FILE_DEFAULT"
+
+    # Check runtime file var, then build-time file default
+    local file_path="${!file_var:-${!file_default_var:-}}"
+
+    if [ -n "$file_path" ]; then
+        if [ ! -f "$file_path" ]; then
+            echo "  ⚠ ${file_var}=${file_path} not found, falling through to env var" >&2
+        elif ! command jq -e 'type == "array"' "$file_path" >/dev/null 2>&1; then
+            echo "  ⚠ ${file_var}=${file_path} is not a valid JSON array, falling through" >&2
+        else
+            # File valid — warn if env var also set
+            if [ -n "${!var_name+x}" ]; then
+                echo "  ⚠ ${var_name} ignored — ${file_var} takes precedence" >&2
+            fi
+            command cat "$file_path"
+            echo "file" > "$_RESOLVED_FROM_FILE"
+            return 0
+        fi
+    fi
+
+    # Fall through to existing env var logic
+    local result
+    local rc=0
+    result=$(_resolve_override_list "$var_name" "$defaults") || rc=$?
+    echo "$result"
+    if [ $rc -eq 0 ]; then
+        echo "env" > "$_RESOLVED_FROM_FILE"
+    else
+        echo "default" > "$_RESOLVED_FROM_FILE"
+    fi
+    return $rc
+}
+
+# Convert a JSON array to comma-separated values for backward compat.
+# Handles both plain strings and objects with a "name" field.
+# Usage: _file_json_to_csv '["a","b",{"name":"c"}]'
+# Output: a,b,c
+_file_json_to_csv() {
+    command jq -r 'map(if type == "string" then . else .name // empty end) | join(",")' <<< "$1"
+}
+
 # ============================================================================
 # Plugin Installation Logic
 # ============================================================================
@@ -301,10 +359,16 @@ if [ -d "$TEMPLATES_DIR" ]; then
     # and project-level .claude/skills/ (always available via repo).
     DEFAULT_SKILLS="git-workflow,testing-patterns,code-quality,development-workflow,error-handling,documentation-authoring,shell-scripting,skill-authoring,agent-authoring,next-issue,codebase-audit,next-issue-ship,memory-conventions,orchestrate"
     # Use if-else to capture return code safely under set -e
-    if SKILL_LIST=$(_resolve_override_list "CLAUDE_SKILLS" "$DEFAULT_SKILLS"); then
+    if SKILL_RESULT=$(_resolve_override_list_or_file "CLAUDE_SKILLS" "$DEFAULT_SKILLS"); then
         SKILL_LIST_IS_OVERRIDE=0
     else
         SKILL_LIST_IS_OVERRIDE=1
+    fi
+    RESOLVED_FROM=$(cat "$_RESOLVED_FROM_FILE")
+    if [ "$RESOLVED_FROM" = "file" ]; then
+        SKILL_LIST=$(_file_json_to_csv "$SKILL_RESULT")
+    else
+        SKILL_LIST="$SKILL_RESULT"
     fi
 
     echo "Skills:"
@@ -334,8 +398,14 @@ if [ -d "$TEMPLATES_DIR" ]; then
         done
     fi
 
-    # Extra Skills (from CLAUDE_EXTRA_SKILLS - additive)
-    EXTRA_SKILLS="${CLAUDE_EXTRA_SKILLS:-${CLAUDE_EXTRA_SKILLS_DEFAULT:-}}"
+    # Extra Skills (from CLAUDE_EXTRA_SKILLS - additive, supports _FILE)
+    EXTRA_SKILLS_FILE="${CLAUDE_EXTRA_SKILLS_FILE:-${CLAUDE_EXTRA_SKILLS_FILE_DEFAULT:-}}"
+    if [ -n "$EXTRA_SKILLS_FILE" ] && [ -f "$EXTRA_SKILLS_FILE" ] && \
+       command jq -e 'type == "array"' "$EXTRA_SKILLS_FILE" >/dev/null 2>&1; then
+        EXTRA_SKILLS=$(_file_json_to_csv "$(command cat "$EXTRA_SKILLS_FILE")")
+    else
+        EXTRA_SKILLS="${CLAUDE_EXTRA_SKILLS:-${CLAUDE_EXTRA_SKILLS_DEFAULT:-}}"
+    fi
     if [ -n "$EXTRA_SKILLS" ]; then
         echo ""
         echo "Extra skills (CLAUDE_EXTRA_SKILLS):"
@@ -477,10 +547,16 @@ CLOUD_HEADER
     # --- Agents (configurable via CLAUDE_AGENTS) ---
     DEFAULT_AGENTS="code-reviewer,test-writer,refactorer,debugger,audit-code-health,audit-security,audit-test-gaps,audit-architecture,audit-docs,audit-ai-config,issue-writer"
     # Use if-else to capture return code safely under set -e
-    if AGENT_LIST=$(_resolve_override_list "CLAUDE_AGENTS" "$DEFAULT_AGENTS"); then
+    if AGENT_RESULT=$(_resolve_override_list_or_file "CLAUDE_AGENTS" "$DEFAULT_AGENTS"); then
         AGENT_LIST_IS_OVERRIDE=0
     else
         AGENT_LIST_IS_OVERRIDE=1
+    fi
+    RESOLVED_FROM=$(cat "$_RESOLVED_FROM_FILE")
+    if [ "$RESOLVED_FROM" = "file" ]; then
+        AGENT_LIST=$(_file_json_to_csv "$AGENT_RESULT")
+    else
+        AGENT_LIST="$AGENT_RESULT"
     fi
 
     echo ""
@@ -506,8 +582,14 @@ CLOUD_HEADER
         done
     fi
 
-    # Extra Agents (from CLAUDE_EXTRA_AGENTS - additive)
-    EXTRA_AGENTS="${CLAUDE_EXTRA_AGENTS:-${CLAUDE_EXTRA_AGENTS_DEFAULT:-}}"
+    # Extra Agents (from CLAUDE_EXTRA_AGENTS - additive, supports _FILE)
+    EXTRA_AGENTS_FILE="${CLAUDE_EXTRA_AGENTS_FILE:-${CLAUDE_EXTRA_AGENTS_FILE_DEFAULT:-}}"
+    if [ -n "$EXTRA_AGENTS_FILE" ] && [ -f "$EXTRA_AGENTS_FILE" ] && \
+       command jq -e 'type == "array"' "$EXTRA_AGENTS_FILE" >/dev/null 2>&1; then
+        EXTRA_AGENTS=$(_file_json_to_csv "$(command cat "$EXTRA_AGENTS_FILE")")
+    else
+        EXTRA_AGENTS="${CLAUDE_EXTRA_AGENTS:-${CLAUDE_EXTRA_AGENTS_DEFAULT:-}}"
+    fi
     if [ -n "$EXTRA_AGENTS" ]; then
         echo ""
         echo "Extra agents (CLAUDE_EXTRA_AGENTS):"
@@ -564,10 +646,16 @@ elif is_claude_authenticated; then
     DEFAULT_PLUGINS="commit-commands,frontend-design,code-simplifier,context7,security-guidance,claude-md-management,pr-review-toolkit,code-review,hookify,claude-code-setup,feature-dev"
     # Use if-else to capture return code safely under set -e
     # (_resolve_override_list returns 1 for "using defaults", which set -e would treat as failure)
-    if PLUGIN_LIST=$(_resolve_override_list "CLAUDE_PLUGINS" "$DEFAULT_PLUGINS"); then
+    if PLUGIN_RESULT=$(_resolve_override_list_or_file "CLAUDE_PLUGINS" "$DEFAULT_PLUGINS"); then
         PLUGIN_LIST_IS_OVERRIDE=0
     else
         PLUGIN_LIST_IS_OVERRIDE=1
+    fi
+    RESOLVED_FROM=$(cat "$_RESOLVED_FROM_FILE")
+    if [ "$RESOLVED_FROM" = "file" ]; then
+        PLUGIN_LIST=$(_file_json_to_csv "$PLUGIN_RESULT")
+    else
+        PLUGIN_LIST="$PLUGIN_RESULT"
     fi
 
     echo "Core plugins:"
@@ -589,9 +677,15 @@ elif is_claude_authenticated; then
     [ "${INCLUDE_NODE_DEV:-false}" = "true" ] && { install_plugin "typescript-lsp" || true; }
     [ "${INCLUDE_KOTLIN_DEV:-false}" = "true" ] && { install_plugin "kotlin-lsp" || true; }
 
-    # Extra Plugins (From Environment Variable)
+    # Extra Plugins (From Environment Variable, supports _FILE)
     # CLAUDE_EXTRA_PLUGINS can be set at build time or runtime
-    EXTRA_PLUGINS_TO_INSTALL="${CLAUDE_EXTRA_PLUGINS:-${CLAUDE_EXTRA_PLUGINS_DEFAULT:-}}"
+    EXTRA_PLUGINS_FILE="${CLAUDE_EXTRA_PLUGINS_FILE:-${CLAUDE_EXTRA_PLUGINS_FILE_DEFAULT:-}}"
+    if [ -n "$EXTRA_PLUGINS_FILE" ] && [ -f "$EXTRA_PLUGINS_FILE" ] && \
+       command jq -e 'type == "array"' "$EXTRA_PLUGINS_FILE" >/dev/null 2>&1; then
+        EXTRA_PLUGINS_TO_INSTALL=$(_file_json_to_csv "$(command cat "$EXTRA_PLUGINS_FILE")")
+    else
+        EXTRA_PLUGINS_TO_INSTALL="${CLAUDE_EXTRA_PLUGINS:-${CLAUDE_EXTRA_PLUGINS_DEFAULT:-}}"
+    fi
     if [ -n "$EXTRA_PLUGINS_TO_INSTALL" ]; then
         echo ""
         echo "Extra plugins (CLAUDE_EXTRA_PLUGINS):"
@@ -758,6 +852,90 @@ derive_mcp_name_from_package() {
 }
 
 # ============================================================================
+# MCP Helper: Configure a single MCP from a JSON object
+# ============================================================================
+# Handles object entries from JSON config files:
+#   {"name":"myserver","type":"http","url":"https://...","headers":{"Auth":"Bearer tok"}}
+#   {"name":"myserver","type":"stdio","command":"npx","args":["-y","@pkg/server"]}
+configure_mcp_from_json_object() {
+    local json="$1"
+    local name type url command_bin
+    name=$(echo "$json" | command jq -r '.name // empty')
+    type=$(echo "$json" | command jq -r '.type // "stdio"')
+
+    if [ -z "$name" ]; then
+        echo "  ⚠ Skipping MCP object with no 'name' field"
+        return 1
+    fi
+
+    if [ "$type" = "http" ]; then
+        url=$(echo "$json" | command jq -r '.url // empty')
+        if [ -z "$url" ]; then
+            echo "  ⚠ HTTP MCP '$name' missing 'url'"
+            return 1
+        fi
+        # Normalize URL: ensure trailing slash
+        [[ "$url" != */ ]] && url="${url}/"
+        # Validate URL scheme
+        if [[ "$url" =~ ^https:// ]]; then
+            : # HTTPS always allowed
+        elif [[ "$url" =~ ^http://(localhost|127\.0\.0\.1|\[::1\]|host\.docker\.internal)(:|/) ]]; then
+            : # HTTP allowed for localhost only
+        else
+            echo "  ⚠ Skipping HTTP MCP '$name': URL must be https:// or http://localhost"
+            return 1
+        fi
+        echo "  - HTTP MCP (JSON): $name -> $url"
+        add_mcp_server "$name" -t http "$name" "$url" || true
+
+        # Inject headers from JSON object
+        local headers_json
+        headers_json=$(echo "$json" | command jq -c '.headers // empty')
+        if [ -n "$headers_json" ] && [ "$headers_json" != "null" ] && [ "$headers_json" != "" ]; then
+            local key val has_auth=false
+            while IFS=$'\t' read -r key val; do
+                [ -z "$key" ] && continue
+                local tmp_file
+                tmp_file=$(mktemp)
+                if command jq --arg name "$name" --arg key "$key" --arg val "$val" \
+                    '.mcpServers[$name].headers[$key] = $val' \
+                    ~/.claude.json > "$tmp_file" 2>/dev/null; then
+                    mv "$tmp_file" ~/.claude.json
+                else
+                    rm -f "$tmp_file"
+                fi
+                [[ "${key,,}" == "authorization" ]] && has_auth=true
+            done < <(echo "$headers_json" | command jq -r 'to_entries[] | [.key, .value] | @tsv')
+
+            if [ "$has_auth" = "false" ] && \
+               [ "${CLAUDE_MCP_AUTO_AUTH:-true}" != "false" ] && \
+               { [ -n "${ANTHROPIC_AUTH_TOKEN:-}" ] || [ -s /dev/shm/anthropic-auth-token ]; }; then
+                inject_mcp_auth_header "$name"
+            fi
+        else
+            # No explicit headers — auto-inject auth if available
+            if [ "${CLAUDE_MCP_AUTO_AUTH:-true}" != "false" ] && \
+               { [ -n "${ANTHROPIC_AUTH_TOKEN:-}" ] || [ -s /dev/shm/anthropic-auth-token ]; }; then
+                inject_mcp_auth_header "$name"
+            fi
+        fi
+    else
+        # stdio type
+        command_bin=$(echo "$json" | command jq -r '.command // empty')
+        if [ -z "$command_bin" ]; then
+            echo "  ⚠ stdio MCP '$name' missing 'command'"
+            return 1
+        fi
+        local -a args_array=()
+        while IFS= read -r arg; do
+            [ -n "$arg" ] && args_array+=("$arg")
+        done < <(echo "$json" | command jq -r '.args[]? // empty')
+        echo "  - stdio MCP (JSON): $name -> $command_bin ${args_array[*]}"
+        add_mcp_server "$name" -t stdio "$name" -- "$command_bin" "${args_array[@]}" || true
+    fi
+}
+
+# ============================================================================
 # MCP Helper: Configure a comma-separated list of MCPs (registry + passthrough)
 # ============================================================================
 configure_mcp_list() {
@@ -767,6 +945,30 @@ configure_mcp_list() {
     [ -z "$mcp_list" ] && return 0
 
     echo "Configuring ${label}..."
+
+    # Handle JSON array input (from _FILE config)
+    if [[ "$mcp_list" == "["* ]]; then
+        local item_count
+        item_count=$(echo "$mcp_list" | command jq 'length' 2>/dev/null) || item_count=0
+        local i=0
+        while [ $i -lt "$item_count" ]; do
+            local item_json item_type
+            item_json=$(echo "$mcp_list" | command jq -c ".[$i]")
+            item_type=$(echo "$item_json" | command jq -r 'type')
+            if [ "$item_type" = "string" ]; then
+                # String entry: treat as registry name or name=url|headers (same as CSV)
+                local item_str
+                item_str=$(echo "$item_json" | command jq -r '.')
+                configure_mcp_list "$item_str" "$label"
+            elif [ "$item_type" = "object" ]; then
+                configure_mcp_from_json_object "$item_json"
+            else
+                echo "  ⚠ Skipping MCP entry at index $i: unsupported type '$item_type'"
+            fi
+            i=$((i + 1))
+        done
+        return 0
+    fi
 
     local registry="$MCP_REGISTRY"
     local has_registry=false
@@ -873,11 +1075,12 @@ configure_mcp_list() {
 MCP_REGISTRY="/etc/container/config/mcp-registry.sh"
 DEFAULT_MCPS="filesystem,figma-desktop"
 # Use if-else to safely capture return code under set -e
-if MCP_LIST=$(_resolve_override_list "CLAUDE_MCPS" "$DEFAULT_MCPS"); then
+if MCP_RESULT=$(_resolve_override_list_or_file "CLAUDE_MCPS" "$DEFAULT_MCPS"); then
     MCP_LIST_IS_OVERRIDE=0
 else
     MCP_LIST_IS_OVERRIDE=1
 fi
+RESOLVED_FROM=$(cat "$_RESOLVED_FROM_FILE")
 
 # Install default MCPs (or overridden list)
 # Special-case filesystem and figma-desktop; others go through configure_mcp_list
@@ -898,14 +1101,25 @@ _install_default_mcp() {
 }
 
 echo "Default MCP servers:"
-if [ -n "$MCP_LIST" ]; then
-    IFS=',' read -ra DEFAULT_MCP_ITEMS <<< "$MCP_LIST"
-    for mcp_item in "${DEFAULT_MCP_ITEMS[@]}"; do
-        mcp_item=$(echo "$mcp_item" | xargs)
-        [ -n "$mcp_item" ] && _install_default_mcp "$mcp_item"
-    done
+if [ "$RESOLVED_FROM" = "file" ]; then
+    # JSON array from file — pass directly to configure_mcp_list (handles objects)
+    MCP_LIST="$MCP_RESULT"
+    if [ -n "$MCP_LIST" ] && [ "$MCP_LIST" != "[]" ]; then
+        configure_mcp_list "$MCP_LIST" "Default MCP servers"
+    else
+        echo "    (none — CLAUDE_MCPS_FILE contains empty array)"
+    fi
 else
-    echo "    (none — CLAUDE_MCPS set to empty)"
+    MCP_LIST="$MCP_RESULT"
+    if [ -n "$MCP_LIST" ]; then
+        IFS=',' read -ra DEFAULT_MCP_ITEMS <<< "$MCP_LIST"
+        for mcp_item in "${DEFAULT_MCP_ITEMS[@]}"; do
+            mcp_item=$(echo "$mcp_item" | xargs)
+            [ -n "$mcp_item" ] && _install_default_mcp "$mcp_item"
+        done
+    else
+        echo "    (none — CLAUDE_MCPS set to empty)"
+    fi
 fi
 echo ""
 
@@ -915,7 +1129,14 @@ echo ""
 # GitHub and GitLab MCPs are now optional - add them via CLAUDE_EXTRA_MCPS.
 # Example: CLAUDE_EXTRA_MCPS="github,kagi,memory"
 # Unknown names are passed through as npx -y <package>.
-EXTRA_MCPS_TO_CONFIGURE="${CLAUDE_EXTRA_MCPS:-${CLAUDE_EXTRA_MCPS_DEFAULT:-}}"
+# Supports _FILE for JSON config
+EXTRA_MCPS_FILE="${CLAUDE_EXTRA_MCPS_FILE:-${CLAUDE_EXTRA_MCPS_FILE_DEFAULT:-}}"
+if [ -n "$EXTRA_MCPS_FILE" ] && [ -f "$EXTRA_MCPS_FILE" ] && \
+   command jq -e 'type == "array"' "$EXTRA_MCPS_FILE" >/dev/null 2>&1; then
+    EXTRA_MCPS_TO_CONFIGURE=$(command cat "$EXTRA_MCPS_FILE")
+else
+    EXTRA_MCPS_TO_CONFIGURE="${CLAUDE_EXTRA_MCPS:-${CLAUDE_EXTRA_MCPS_DEFAULT:-}}"
+fi
 configure_mcp_list "$EXTRA_MCPS_TO_CONFIGURE" "Extra MCP servers (CLAUDE_EXTRA_MCPS)"
 
 

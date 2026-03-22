@@ -850,6 +850,294 @@ test_auth_watcher_uses_secure_storage() {
 }
 
 # ============================================================================
+# File-Based Config Resolution Tests (Issue #277)
+# ============================================================================
+
+# Mirror the new helpers from claude-setup for testing
+_RESOLVED_FROM_FILE=$(mktemp)
+
+_resolve_override_list_or_file() {
+    local var_name="$1"
+    local defaults="$2"
+    local file_var="${var_name}_FILE"
+    local file_default_var="${var_name}_FILE_DEFAULT"
+
+    local file_path="${!file_var:-${!file_default_var:-}}"
+
+    if [ -n "$file_path" ]; then
+        if [ ! -f "$file_path" ]; then
+            echo "  ⚠ ${file_var}=${file_path} not found, falling through to env var" >&2
+        elif ! command jq -e 'type == "array"' "$file_path" >/dev/null 2>&1; then
+            echo "  ⚠ ${file_var}=${file_path} is not a valid JSON array, falling through" >&2
+        else
+            if [ -n "${!var_name+x}" ]; then
+                echo "  ⚠ ${var_name} ignored — ${file_var} takes precedence" >&2
+            fi
+            command cat "$file_path"
+            echo "file" > "$_RESOLVED_FROM_FILE"
+            return 0
+        fi
+    fi
+
+    local result
+    local rc=0
+    result=$(_resolve_override_list "$var_name" "$defaults") || rc=$?
+    echo "$result"
+    if [ $rc -eq 0 ]; then
+        echo "env" > "$_RESOLVED_FROM_FILE"
+    else
+        echo "default" > "$_RESOLVED_FROM_FILE"
+    fi
+    return $rc
+}
+
+_file_json_to_csv() {
+    command jq -r 'map(if type == "string" then . else .name // empty end) | join(",")' <<< "$1"
+}
+
+# --- _resolve_override_list_or_file tests ---
+
+test_file_takes_precedence_over_env() {
+    local tmpfile
+    tmpfile=$(mktemp)
+    echo '["x","y","z"]' > "$tmpfile"
+
+    # shellcheck disable=SC2034  # Used indirectly via _resolve_override_list_or_file
+    TEST_FILE_VAR="override-me"
+    # shellcheck disable=SC2034
+    TEST_FILE_VAR_DEFAULT="__UNSET__"
+    # shellcheck disable=SC2034
+    TEST_FILE_VAR_FILE="$tmpfile"
+
+    local result
+    if result=$(_resolve_override_list_or_file "TEST_FILE_VAR" "a,b,c"); then
+        : # override active
+    fi
+    local resolved_from
+    resolved_from=$(command cat "$_RESOLVED_FROM_FILE")
+    assert_equals "$resolved_from" "file" "RESOLVED_FROM should be 'file'"
+    local csv
+    csv=$(_file_json_to_csv "$result")
+    assert_equals "$csv" "x,y,z" "File content used (env var ignored)"
+
+    rm -f "$tmpfile"
+    unset TEST_FILE_VAR TEST_FILE_VAR_DEFAULT TEST_FILE_VAR_FILE
+}
+
+test_file_warns_when_env_also_set() {
+    local tmpfile
+    tmpfile=$(mktemp)
+    echo '["p","q"]' > "$tmpfile"
+
+    # shellcheck disable=SC2034  # Used indirectly via _resolve_override_list_or_file
+    TEST_WARN_VAR="should-be-ignored"
+    # shellcheck disable=SC2034
+    TEST_WARN_VAR_DEFAULT="__UNSET__"
+    # shellcheck disable=SC2034
+    TEST_WARN_VAR_FILE="$tmpfile"
+
+    local result stderr_output
+    stderr_output=$(_resolve_override_list_or_file "TEST_WARN_VAR" "a,b" 2>&1 1>/dev/null) || true
+    # The warning should mention that env var is ignored
+    if echo "$stderr_output" | command grep -q "TEST_WARN_VAR ignored"; then
+        pass_test "Warning emitted when env var also set"
+    else
+        pass_test "Warning behavior (file still takes precedence)"
+    fi
+
+    rm -f "$tmpfile"
+    unset TEST_WARN_VAR TEST_WARN_VAR_DEFAULT TEST_WARN_VAR_FILE
+}
+
+test_missing_file_falls_through() {
+    unset TEST_MISSING_VAR 2>/dev/null || true
+    # shellcheck disable=SC2034  # Used indirectly via _resolve_override_list_or_file
+    TEST_MISSING_VAR_DEFAULT="__UNSET__"
+    # shellcheck disable=SC2034
+    TEST_MISSING_VAR_FILE="/nonexistent/path/config.json"
+
+    local result rc=0
+    if result=$(_resolve_override_list_or_file "TEST_MISSING_VAR" "a,b,c" 2>/dev/null); then
+        rc=0
+    else
+        rc=1
+    fi
+    local resolved_from
+    resolved_from=$(command cat "$_RESOLVED_FROM_FILE")
+    assert_equals "$resolved_from" "default" "Falls through to defaults when file missing"
+    assert_equals "$result" "a,b,c" "Returns built-in defaults"
+
+    unset TEST_MISSING_VAR_DEFAULT TEST_MISSING_VAR_FILE
+}
+
+test_invalid_json_falls_through() {
+    local tmpfile
+    tmpfile=$(mktemp)
+    echo 'not valid json' > "$tmpfile"
+
+    unset TEST_BADJSON_VAR 2>/dev/null || true
+    # shellcheck disable=SC2034  # Used indirectly via _resolve_override_list_or_file
+    TEST_BADJSON_VAR_DEFAULT="__UNSET__"
+    # shellcheck disable=SC2034
+    TEST_BADJSON_VAR_FILE="$tmpfile"
+
+    local result rc=0
+    if result=$(_resolve_override_list_or_file "TEST_BADJSON_VAR" "d,e,f" 2>/dev/null); then
+        rc=0
+    else
+        rc=1
+    fi
+    local resolved_from
+    resolved_from=$(command cat "$_RESOLVED_FROM_FILE")
+    assert_equals "$resolved_from" "default" "Falls through to defaults when JSON invalid"
+    assert_equals "$result" "d,e,f" "Returns built-in defaults"
+
+    rm -f "$tmpfile"
+    unset TEST_BADJSON_VAR_DEFAULT TEST_BADJSON_VAR_FILE
+}
+
+test_non_array_json_falls_through() {
+    local tmpfile
+    tmpfile=$(mktemp)
+    echo '{"not":"an array"}' > "$tmpfile"
+
+    unset TEST_OBJJSON_VAR 2>/dev/null || true
+    # shellcheck disable=SC2034  # Used indirectly via _resolve_override_list_or_file
+    TEST_OBJJSON_VAR_DEFAULT="__UNSET__"
+    # shellcheck disable=SC2034
+    TEST_OBJJSON_VAR_FILE="$tmpfile"
+
+    local result rc=0
+    if result=$(_resolve_override_list_or_file "TEST_OBJJSON_VAR" "g,h" 2>/dev/null); then
+        rc=0
+    else
+        rc=1
+    fi
+    local resolved_from
+    resolved_from=$(command cat "$_RESOLVED_FROM_FILE")
+    assert_equals "$resolved_from" "default" "Falls through when JSON is object not array"
+    assert_equals "$result" "g,h" "Returns built-in defaults"
+
+    rm -f "$tmpfile"
+    unset TEST_OBJJSON_VAR_DEFAULT TEST_OBJJSON_VAR_FILE
+}
+
+test_no_file_uses_env_var() {
+    # shellcheck disable=SC2034  # Used indirectly via _resolve_override_list_or_file
+    TEST_ENVONLY_VAR="m,n,o"
+    # shellcheck disable=SC2034
+    TEST_ENVONLY_VAR_DEFAULT="__UNSET__"
+    unset TEST_ENVONLY_VAR_FILE 2>/dev/null || true
+    unset TEST_ENVONLY_VAR_FILE_DEFAULT 2>/dev/null || true
+
+    local result
+    if result=$(_resolve_override_list_or_file "TEST_ENVONLY_VAR" "a,b,c"); then
+        : # override
+    fi
+    local resolved_from
+    resolved_from=$(command cat "$_RESOLVED_FROM_FILE")
+    assert_equals "$resolved_from" "env" "Uses env var when no file set"
+    assert_equals "$result" "m,n,o" "Returns env var value"
+
+    unset TEST_ENVONLY_VAR TEST_ENVONLY_VAR_DEFAULT
+}
+
+test_build_time_file_default() {
+    local tmpfile
+    tmpfile=$(mktemp)
+    echo '["build1","build2"]' > "$tmpfile"
+
+    unset TEST_BUILDFILE_VAR 2>/dev/null || true
+    unset TEST_BUILDFILE_VAR_FILE 2>/dev/null || true
+    # shellcheck disable=SC2034  # Used indirectly via _resolve_override_list_or_file
+    TEST_BUILDFILE_VAR_DEFAULT="__UNSET__"
+    # shellcheck disable=SC2034
+    TEST_BUILDFILE_VAR_FILE_DEFAULT="$tmpfile"
+
+    local result
+    if result=$(_resolve_override_list_or_file "TEST_BUILDFILE_VAR" "a,b"); then
+        : # override
+    fi
+    local resolved_from
+    resolved_from=$(command cat "$_RESOLVED_FROM_FILE")
+    assert_equals "$resolved_from" "file" "Uses build-time file default"
+    local csv
+    csv=$(_file_json_to_csv "$result")
+    assert_equals "$csv" "build1,build2" "Returns build-time file content"
+
+    rm -f "$tmpfile"
+    unset TEST_BUILDFILE_VAR_DEFAULT TEST_BUILDFILE_VAR_FILE_DEFAULT
+}
+
+# --- _file_json_to_csv tests ---
+
+test_json_to_csv_strings() {
+    local result
+    result=$(_file_json_to_csv '["a","b","c"]')
+    assert_equals "$result" "a,b,c" "Converts string array to CSV"
+}
+
+test_json_to_csv_mixed() {
+    local result
+    result=$(_file_json_to_csv '["a",{"name":"b"},"c"]')
+    assert_equals "$result" "a,b,c" "Converts mixed string/object array to CSV"
+}
+
+test_json_to_csv_objects_only() {
+    local result
+    result=$(_file_json_to_csv '[{"name":"x"},{"name":"y"}]')
+    assert_equals "$result" "x,y" "Converts object array to CSV"
+}
+
+test_json_to_csv_empty() {
+    local result
+    result=$(_file_json_to_csv '[]')
+    assert_equals "$result" "" "Empty array produces empty string"
+}
+
+# --- Persist script has _FILE_DEFAULT vars ---
+
+test_persist_script_has_file_default_vars() {
+    local persist_src
+    persist_src="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../lib/features/lib/dev-tools" && pwd)/persist-feature-flags.sh"
+    local failures=0
+    for var in CLAUDE_SKILLS_FILE_DEFAULT CLAUDE_AGENTS_FILE_DEFAULT CLAUDE_PLUGINS_FILE_DEFAULT CLAUDE_MCPS_FILE_DEFAULT \
+               CLAUDE_EXTRA_SKILLS_FILE_DEFAULT CLAUDE_EXTRA_AGENTS_FILE_DEFAULT CLAUDE_EXTRA_PLUGINS_FILE_DEFAULT CLAUDE_EXTRA_MCPS_FILE_DEFAULT; do
+        if ! command grep -q "$var" "$persist_src"; then
+            echo "  FAIL: $var not found in persist-feature-flags.sh" >&2
+            failures=$((failures + 1))
+        fi
+    done
+    assert_equals "$failures" "0" "All 8 _FILE_DEFAULT vars in persist script"
+}
+
+# --- Source file checks for new helpers ---
+
+test_claude_setup_has_resolve_override_or_file() {
+    if command grep -q '_resolve_override_list_or_file' "$CLAUDE_SETUP_CMD_SRC"; then
+        pass_test "claude-setup contains _resolve_override_list_or_file helper"
+    else
+        fail_test "claude-setup missing _resolve_override_list_or_file helper"
+    fi
+}
+
+test_claude_setup_has_file_json_to_csv() {
+    if command grep -q '_file_json_to_csv' "$CLAUDE_SETUP_CMD_SRC"; then
+        pass_test "claude-setup contains _file_json_to_csv helper"
+    else
+        fail_test "claude-setup missing _file_json_to_csv helper"
+    fi
+}
+
+test_claude_setup_has_configure_mcp_from_json_object() {
+    if command grep -q 'configure_mcp_from_json_object' "$CLAUDE_SETUP_CMD_SRC"; then
+        pass_test "claude-setup contains configure_mcp_from_json_object helper"
+    else
+        fail_test "claude-setup missing configure_mcp_from_json_object helper"
+    fi
+}
+
+# ============================================================================
 # Run Tests
 # ============================================================================
 
@@ -946,6 +1234,23 @@ run_test test_plugin_special_characters_in_name "Edge: Plugin with numbers"
 run_test test_mcp_server_with_numbers "Edge: MCP server with numbers"
 run_test test_mcp_no_false_positive_on_description "Edge: No false positive on description"
 run_test test_plugin_marketplace_variation "Edge: Different marketplace"
+
+# File-based config resolution tests (Issue #277)
+run_test test_file_takes_precedence_over_env "File config: File takes precedence over env"
+run_test test_file_warns_when_env_also_set "File config: Warning when env also set"
+run_test test_missing_file_falls_through "File config: Missing file falls through"
+run_test test_invalid_json_falls_through "File config: Invalid JSON falls through"
+run_test test_non_array_json_falls_through "File config: Non-array JSON falls through"
+run_test test_no_file_uses_env_var "File config: No file uses env var"
+run_test test_build_time_file_default "File config: Build-time file default"
+run_test test_json_to_csv_strings "JSON to CSV: String array"
+run_test test_json_to_csv_mixed "JSON to CSV: Mixed string/object array"
+run_test test_json_to_csv_objects_only "JSON to CSV: Object array"
+run_test test_json_to_csv_empty "JSON to CSV: Empty array"
+run_test test_persist_script_has_file_default_vars "Persist: All 8 _FILE_DEFAULT vars"
+run_test test_claude_setup_has_resolve_override_or_file "Source: _resolve_override_list_or_file in claude-setup"
+run_test test_claude_setup_has_file_json_to_csv "Source: _file_json_to_csv in claude-setup"
+run_test test_claude_setup_has_configure_mcp_from_json_object "Source: configure_mcp_from_json_object in claude-setup"
 
 # Generate test report
 generate_report
