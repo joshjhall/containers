@@ -296,15 +296,18 @@ load_java_config_template() {
 
 # Checkstyle configuration from template
 log_message "Creating checkstyle.xml from template"
-load_java_config_template "config/checkstyle.xml.tmpl" > "${TEMPLATES_DIR}/checkstyle.xml"
+load_java_config_template "config/checkstyle.xml.tmpl" > "${TEMPLATES_DIR}/checkstyle.xml" \
+    || log_warning "Template missing: checkstyle.xml.tmpl"
 
 # PMD ruleset from template
 log_message "Creating pmd-ruleset.xml from template"
-load_java_config_template "config/pmd-ruleset.xml.tmpl" > "${TEMPLATES_DIR}/pmd-ruleset.xml"
+load_java_config_template "config/pmd-ruleset.xml.tmpl" > "${TEMPLATES_DIR}/pmd-ruleset.xml" \
+    || log_warning "Template missing: pmd-ruleset.xml.tmpl"
 
 # SpotBugs exclude filter from template
 log_message "Creating spotbugs-exclude.xml from template"
-load_java_config_template "config/spotbugs-exclude.xml.tmpl" > "${TEMPLATES_DIR}/spotbugs-exclude.xml"
+load_java_config_template "config/spotbugs-exclude.xml.tmpl" > "${TEMPLATES_DIR}/spotbugs-exclude.xml" \
+    || log_warning "Template missing: spotbugs-exclude.xml.tmpl"
 
 
 # ============================================================================

@@ -164,11 +164,13 @@ load_ruby_config_template() {
 
 # RSpec configuration from template
 log_message "Creating .rspec from template"
-load_ruby_config_template "config/rspec.tmpl" > /etc/ruby-dev-templates/.rspec
+load_ruby_config_template "config/rspec.tmpl" > /etc/ruby-dev-templates/.rspec \
+    || log_warning "Template missing: rspec.tmpl"
 
 # Rubocop configuration from template
 log_message "Creating .rubocop.yml from template"
-load_ruby_config_template "config/rubocop.yml.tmpl" > /etc/ruby-dev-templates/.rubocop.yml
+load_ruby_config_template "config/rubocop.yml.tmpl" > /etc/ruby-dev-templates/.rubocop.yml \
+    || log_warning "Template missing: rubocop.yml.tmpl"
 
 # ============================================================================
 # Container Startup Scripts
