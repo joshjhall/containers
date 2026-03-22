@@ -215,6 +215,13 @@ test_version_matches_different() {
     else
         assert_true true "version_matches correctly rejects 3.12 vs 3.13.6"
     fi
+
+    # Single-digit boundary: '2' must not match '20.0.0'
+    if version_matches "2" "20.0.0"; then
+        assert_true false "version_matches should reject 2 vs 20.0.0"
+    else
+        assert_true true "version_matches correctly rejects 2 vs 20.0.0"
+    fi
 }
 
 # ============================================================================

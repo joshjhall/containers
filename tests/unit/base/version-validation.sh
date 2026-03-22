@@ -130,6 +130,24 @@ test_semver_rejects_single_number() {
     assert_equals "1" "$exit_code" "validate_semver rejects single number"
 }
 
+test_semver_rejects_leading_space() {
+    local exit_code=0
+    _run_validation_subshell "validate_semver ' 3.12.7' 'TEST_VERSION'" || exit_code=$?
+    assert_equals "1" "$exit_code" "validate_semver rejects leading space"
+}
+
+test_semver_rejects_trailing_space() {
+    local exit_code=0
+    _run_validation_subshell "validate_semver '3.12.7 ' 'TEST_VERSION'" || exit_code=$?
+    assert_equals "1" "$exit_code" "validate_semver rejects trailing space"
+}
+
+test_semver_accepts_leading_zero() {
+    local exit_code=0
+    _run_validation_subshell "validate_semver '03.12.7' 'TEST_VERSION'" || exit_code=$?
+    assert_equals "0" "$exit_code" "validate_semver accepts leading zero"
+}
+
 # ============================================================================
 # Functional Tests - validate_python_version()
 # ============================================================================
@@ -430,6 +448,9 @@ run_test_with_setup test_semver_rejects_partial_xy "validate_semver rejects X.Y"
 run_test_with_setup test_semver_rejects_empty "validate_semver rejects empty"
 run_test_with_setup test_semver_rejects_alpha "validate_semver rejects alphabetic"
 run_test_with_setup test_semver_rejects_single_number "validate_semver rejects single number"
+run_test_with_setup test_semver_rejects_leading_space "validate_semver rejects leading space"
+run_test_with_setup test_semver_rejects_trailing_space "validate_semver rejects trailing space"
+run_test_with_setup test_semver_accepts_leading_zero "validate_semver accepts leading zero"
 
 # validate_python_version
 run_test_with_setup test_python_version_major_only "Python accepts major only"

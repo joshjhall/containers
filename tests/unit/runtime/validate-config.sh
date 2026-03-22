@@ -178,6 +178,18 @@ test_validate_url_empty() {
     assert_equals 1 "$CV_WARNING_COUNT" "Should have 1 warning line"
 }
 
+test_validate_url_scheme_with_regex_metachar() {
+
+    export TEST_URL="postgresql://example.com:5432/db"
+
+    if cv_validate_url TEST_URL "p.*gres" >/dev/null 2>&1; then
+        fail "cv_validate_url should reject regex metachar scheme 'p.*gres'"
+    else
+        assert_equals 3 "$CV_ERROR_COUNT" "Should have 3 error lines"
+        return 0
+    fi
+}
+
 # ============================================================================
 # Port Validation Tests
 # ============================================================================
@@ -712,6 +724,7 @@ run_test test_validate_url_valid_redis "URL validation: Redis"
 run_test test_validate_url_invalid_no_scheme "URL validation: no scheme"
 run_test test_validate_url_wrong_scheme "URL validation: wrong scheme"
 run_test test_validate_url_empty "URL validation: empty"
+run_test test_validate_url_scheme_with_regex_metachar "URL validation: regex metachar in scheme"
 run_test test_validate_port_valid "Port validation: valid port"
 run_test test_validate_port_min "Port validation: minimum (1)"
 run_test test_validate_port_max "Port validation: maximum (65535)"
