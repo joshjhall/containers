@@ -61,11 +61,6 @@ test_sources_cache_utils() {
         "mojo.sh sources cache-utils.sh"
 }
 
-test_architecture_check() {
-    assert_file_contains "$SOURCE_FILE" "amd64" \
-        "mojo.sh checks for amd64 architecture"
-}
-
 # ============================================================================
 # Pixi Installation Tests
 # ============================================================================
@@ -154,7 +149,6 @@ run_test test_sources_checksum_fetch "Sources checksum-fetch.sh"
 run_test test_sources_download_verify "Sources download-verify.sh"
 run_test test_sources_checksum_verification "Sources checksum-verification.sh"
 run_test test_sources_cache_utils "Sources cache-utils.sh"
-run_test test_architecture_check "Architecture check (amd64)"
 run_test test_pixi_installation "Pixi installation (PIXI_HOME)"
 run_test test_cache_directories "Cache directories (/cache/pixi, /cache/mojo)"
 run_test test_wrapper_scripts "Wrapper scripts (/usr/local/bin/mojo)"

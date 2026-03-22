@@ -17,7 +17,7 @@
 #   - MOJO_VERSION: Version to install (default: latest nightly)
 #
 # Requirements:
-#   - x86_64/amd64 architecture (ARM support limited)
+#   - x86_64/amd64 or aarch64/arm64 architecture
 #   - Linux (Debian/Ubuntu based)
 #
 # Note:
@@ -44,21 +44,6 @@ source /tmp/build-scripts/base/cache-utils.sh
 
 # Start logging
 log_feature_start "Mojo"
-
-# ============================================================================
-# Architecture Check
-# ============================================================================
-log_message "Checking system requirements for Mojo..."
-
-# Check architecture - Mojo currently requires x86_64
-ARCH=$(dpkg --print-architecture)
-if [ "$ARCH" != "amd64" ]; then
-    log_warning "Mojo currently only supports x86_64/amd64 architecture"
-    log_warning "Current architecture: $ARCH"
-    log_warning "Skipping Mojo installation on this architecture"
-    log_feature_end
-    exit 0
-fi
 
 # ============================================================================
 # OS Version Check

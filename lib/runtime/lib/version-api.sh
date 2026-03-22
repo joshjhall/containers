@@ -147,22 +147,21 @@ get_latest_rust() {
 
 # Get latest Java LTS version
 get_latest_java_lts() {
-    # OpenJDK doesn't have a simple API, so we'll check for known LTS versions
-    echo "21"  # As of 2024, Java 21 is the latest LTS
+    # Query Adoptium for available LTS releases, pick the highest
+    local lts
+    lts=$(command curl -sf "https://api.adoptium.net/v3/info/available_releases" \
+        | jq -r '.available_lts_releases | command sort | last' 2>/dev/null)
+    if [ -n "$lts" ] && [ "$lts" != "null" ]; then
+        echo "$lts"
+    else
+        echo "unknown"
+    fi
 }
 
 # Get latest Mojo version
 get_latest_mojo() {
-    # Mojo uses YY.M format (e.g., 25.3, 25.4)
-    # Since Mojo's versioning follows YY.M and we're in July 2025,
-    # we expect versions like 25.3, 25.4, 25.5, etc.
-    #
-    # Note: Mojo doesn't have a simple API for latest version yet
-    # This is a placeholder that should be updated when Modular provides
-    # a proper API endpoint or when we find a reliable source
-    #
-    # For now, we'll use a reasonable estimate based on their release cadence
-    echo "25.4"  # Update this manually based on Mojo releases
+    # Mojo versions track the modular package on PyPI
+    get_pypi_version "modular"
 }
 
 # Extract version from script
