@@ -123,7 +123,7 @@ else
     log_message "Installing pixi to ${PIXI_HOME}"
 
     # Pixi version (default to latest if not specified)
-    PIXI_VERSION="${PIXI_VERSION:-0.65.0}"
+    PIXI_VERSION="${PIXI_VERSION:-0.66.0}"
     log_message "Installing pixi version ${PIXI_VERSION}"
 
     # Determine platform and architecture

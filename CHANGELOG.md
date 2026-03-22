@@ -5,7 +5,101 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [4.15.8] - 2026-03-13
+## [4.15.9] - 2026-03-22
+
+### Added
+
+- MVP Go TUI wizard for scaffolding devcontainer configs
+- Map cmd/igor Go files to go test in changed-test runner
+- Show build timestamp in dev version output
+- Extend update-checksums.sh to handle tool checksums
+- Arch-aware checksum lookup and full tool registry
+- Add `igor update` subcommand
+- Add `igor features` subcommand
+- Add `igor status` subcommand
+- Add `igor add <feature>` subcommand
+- Add `/orchestrate` skill for multi-agent coordination
+- Add `igor remove <feature>` subcommand
+- Add agent configuration schema to .igor.yml (#269)
+- Add `igor worktree create` subcommand
+- Install uv/uvx with INCLUDE_DEV_TOOLS
+- Add `igor agent` container lifecycle commands
+- Group and annotate docker-compose build args (#227)
+- Default to major.minor versions, omit patch
+- Persist auto memory to project directory
+- Add review and sync phases to orchestration skill
+
+### CI/CD
+
+- Add Go test job for vet, fmt, test, and build
+- Add macOS and Windows to Go test matrix
+
+### Changed
+
+- Consolidate wizard into single form with back navigation
+- Deduplicate downloads, remove phantom JMH, fix dead refs
+- Extract Tier 4 TOFU into checksum-tier4.sh, lazy-load signature-verify
+- Replace eval with associative arrays in install-github-release.sh
+- Decompose feature-header.sh into sub-modules
+- Decompose apt-utils.sh into sub-modules
+- Deduplicate check-container-versions.sh with check_tool helper
+- Replace unverified wget downloads with install_github_release
+- Extract modules from 3 oversized scripts to under 500 lines
+- Extract pinned checksums and tool registry from god-module
+- Decouple feature-header.sh into bootstrap + full layers
+- Extract magic sigma thresholds and rate-window constant
+
+### Documentation
+
+- Add documentation and usage guides for igor
+- Add checksum architecture doc and expand contributor guides
+- Fix stale versions, paths, and examples across 6 files
+- Document path conventions and auto-init side effect
+- Reduce CLAUDE.md bloat and fix symlink direction
+
+### Fixed
+
+- Install skills/agents before plugins to avoid auth blocking
+- Add missing config files for devcontainer example
+- Switch entr download to HTTPS and add pinned checksum
+- Use bash shell for gofmt check on Windows
+- Disable CRLF conversion for Windows Go tests
+- Override working-directory for pre-checkout CRLF step
+- Fix build-igor pre-push hook working directory
+- Fix Windows "Access is denied" in worktree create
+- Scrub credentials from vault/audit log output
+- Suppress cosign CVE-2026-33186 in Trivy blocking scan
+- Replace eval with direct grep -q in feature detection
+- Validate key names and use null-delimited jq in AWS/Vault
+- Guard template-loader calls against missing templates
+- Remove build-time path probes from runtime scripts
+- Validate write permissions on custom rules files
+- Replace eval xtrace restore with boolean flag
+
+### Miscellaneous
+
+- Ignore .lock files in .claude directory
+- Add Go extension to devcontainer and VS Code recommendations
+- Add baseline SHA-256 checksums for 10 tools
+- Build and commit igor binary via pre-push hook
+
+### Testing
+
+- Add comprehensive tests and fix feature list ordering
+- Add functional tests for 4 untested error-recovery paths
+- Add tests for 9 public APIs with zero coverage
+- Add CloudWatch log_group_name assertion to shippers tests
+- Add unit tests for supply-chain security scripts
+- Add tests for version-api.sh and cosign-install.sh
+- Add functional tests for safe_eval() blocklist
+- Replace boilerplate tests with content-based assertions
+- Add unit tests for 4 untested runtime lib/ scripts
+
+### Style
+
+- Apply gofmt formatting to Go source files
+
+## [4.15.8] - 2026-03-15
 
 ### Added
 
@@ -45,6 +139,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Lowercase audit issue title prefix for consistency
 - Background 1Password loading for non-interactive shells
 - PRODUCTION_MODE=true now correctly blocks TOFU downloads
+- Pass only predicate body to cosign attest
+- Fix auto-patch biome linting and add cosign retry logic
+- Make SBOM attestation best-effort for large images
 
 ### Testing
 
@@ -1307,6 +1404,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix prettier and markdownlint formatting in README
 - Format TLS documentation files
 
+[4.15.9]: https://github.com/joshjhall/containers/compare/v4.15.8...v4.15.9
 [4.15.8]: https://github.com/joshjhall/containers/compare/v4.15.7...v4.15.8
 [4.15.7]: https://github.com/joshjhall/containers/compare/v4.15.6...v4.15.7
 [4.15.6]: https://github.com/joshjhall/containers/compare/v4.15.5...v4.15.6

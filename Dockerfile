@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 # Universal Container Build System
-# Version: 4.15.8
+# Version: 4.15.9
 # Supports multiple contexts: devcontainer, agents, CI/CD, production
 
 # ============================================================================
@@ -183,7 +183,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 # Ruby + Ruby development tools
 ARG INCLUDE_RUBY=false
 ARG INCLUDE_RUBY_DEV=false
-ARG RUBY_VERSION=4.0.1
+ARG RUBY_VERSION=4.0.2
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     if [ "${INCLUDE_RUBY}" = "true" ] || [ "${INCLUDE_RUBY_DEV}" = "true" ]; then \
@@ -211,7 +211,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 ARG INCLUDE_MOJO=false
 ARG INCLUDE_MOJO_DEV=false
 ARG MOJO_VERSION=25.4
-ARG PIXI_VERSION=0.65.0
+ARG PIXI_VERSION=0.66.0
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     if [ "${INCLUDE_MOJO}" = "true" ] || [ "${INCLUDE_MOJO_DEV}" = "true" ]; then \
@@ -240,7 +240,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     fi
 
 # Kotlin (Java auto-triggered above)
-ARG KOTLIN_VERSION=2.3.10
+ARG KOTLIN_VERSION=2.3.20
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     if [ "${INCLUDE_KOTLIN}" = "true" ] || [ "${INCLUDE_KOTLIN_DEV}" = "true" ]; then \
@@ -320,7 +320,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 
 # Kubernetes tools
 ARG INCLUDE_KUBERNETES=false
-ARG KUBECTL_VERSION=1.33.9
+ARG KUBECTL_VERSION=1.33.10
 ARG K9S_VERSION=0.50.18
 ARG KREW_VERSION=0.5.0
 ARG HELM_VERSION=4.1.3

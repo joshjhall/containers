@@ -122,6 +122,11 @@
           "sha256": "c8d546f9ff433b529fb0ad43feceb39831040cae2ca8d17e7df46364368c9a9e",
           "url": "https://github.com/JetBrains/kotlin/releases/download/v2.3.10/kotlin-compiler-2.3.10.zip",
           "added": "2026-03-16"
+        },
+        "2.3.20": {
+          "sha256": "222ba516cdc4052ce0be9d2ec6adf3c5c64fc53156d7dd91d1f5317809431b98",
+          "url": "https://github.com/JetBrains/kotlin/releases/download/v2.3.20/kotlin-compiler-2.3.20.zip",
+          "added": "2026-03-22"
         }
       }
     },
@@ -131,6 +136,11 @@
           "sha256": "c23198b768b25631ffd79076daa31a9c456dd7ae2df9511d296a504563b47549",
           "url": "https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-cli/4.0.3/spring-boot-cli-4.0.3-bin.tar.gz",
           "added": "2026-03-16"
+        },
+        "3.5.12": {
+          "sha256": "fa3fe22cd9baabcf6b876f3bf9524337a03359d073ab2422c8e42252702870b6",
+          "url": "https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-cli/3.5.12/spring-boot-cli-3.5.12-bin.tar.gz",
+          "added": "2026-03-22"
         }
       }
     },
