@@ -162,6 +162,8 @@ fi
 # Add useful helper functions to user's bashrc
 command cat >> /home/"${USERNAME}"/.bashrc << 'EOF'
 
+# NOTE: /opt/container-runtime/shared/ is intentional — this block is appended to
+# .bashrc and runs at container startup, not during the Docker build.
 # Source base utilities for secure PATH management
 if [ -f /opt/container-runtime/shared/path-utils.sh ]; then
     source /opt/container-runtime/shared/path-utils.sh

@@ -53,6 +53,9 @@ if command -v write_bashrc_content &>/dev/null; then
 # Base PATH setup
 # This is sourced by both interactive and non-interactive shells
 
+# NOTE: /opt/container-runtime/shared/ is intentional here — this heredoc produces
+# a shell snippet that runs at container startup, not during the Docker build.
+# Do NOT change to /tmp/build-scripts/ (which only exists at build time).
 # Source path utilities for secure PATH management
 if [ -f /opt/container-runtime/shared/logging.sh ]; then
     source /opt/container-runtime/shared/logging.sh
@@ -80,6 +83,9 @@ else
 # Base PATH setup
 # This is sourced by both interactive and non-interactive shells
 
+# NOTE: /opt/container-runtime/shared/ is intentional here — this heredoc produces
+# a shell snippet that runs at container startup, not during the Docker build.
+# Do NOT change to /tmp/build-scripts/ (which only exists at build time).
 # Source path utilities for secure PATH management
 if [ -f /opt/container-runtime/shared/logging.sh ]; then
     source /opt/container-runtime/shared/logging.sh

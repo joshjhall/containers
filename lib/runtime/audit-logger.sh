@@ -317,8 +317,13 @@ protected_export _json_escape _is_secret_key _mask_secret_value _sanitize_json_s
 protected_export audit_log audit_init
 
 # ============================================================================
-# Auto-initialization
+# Auto-initialization (INTENTIONAL SIDE EFFECT)
 # ============================================================================
+# Convention exception: this module auto-initializes on source rather than
+# requiring an explicit init call. This is by design — audit logging must be
+# available immediately when any script sources this file, before the caller
+# has a chance to call audit_init manually. The entrypoint relies on this
+# behavior. See: lib/runtime/entrypoint-*.sh
 
 # Initialize on source if not already done
 if [ "${AUDIT_INITIALIZED:-false}" != "true" ]; then
