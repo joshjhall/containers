@@ -25,10 +25,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-NC='\033[0m'
+# shellcheck source=lib/shared/colors.sh
+source "$PROJECT_ROOT/lib/shared/colors.sh"
 
 # =============================================================================
 # Helper Functions
@@ -62,7 +60,7 @@ log_info() {
     echo -e "${GREEN}[INFO]${NC} $1" >&2
 }
 
-log_warn() {
+log_warning() {
     echo -e "${YELLOW}[WARN]${NC} $1" >&2
 }
 
@@ -232,7 +230,7 @@ detect_drift() {
 
     # Summary
     if [[ "$has_drift" == "true" ]]; then
-        log_warn "Version drift detected between images"
+        log_warning "Version drift detected between images"
         return 1
     else
         log_info "No significant version drift detected"

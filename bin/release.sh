@@ -2,13 +2,6 @@
 # Release management script for Container Build System
 set -euo pipefail
 
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-BLUE='\033[0;34m'
-YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
-
 # Release automation flags (used by sourced git-automation.sh)
 export AUTO_COMMIT=false
 export AUTO_TAG=false
@@ -18,6 +11,10 @@ export AUTO_GITHUB_RELEASE=false
 # Get the directory where this script is located
 BIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$BIN_DIR")"
+
+# Colors for output
+# shellcheck source=lib/shared/colors.sh
+source "$PROJECT_ROOT/lib/shared/colors.sh"
 
 # Source shared utilities
 source "${BIN_DIR}/lib/version-utils.sh"

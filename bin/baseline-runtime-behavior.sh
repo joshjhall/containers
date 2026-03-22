@@ -31,11 +31,9 @@ CRIT_SIGMA="${CRIT_SIGMA:-3}"
 RATE_WINDOW_SECONDS="${RATE_WINDOW_SECONDS:-300}"
 
 # Colors
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m'
+# shellcheck source=lib/shared/colors.sh
+source "${SCRIPT_DIR}/../lib/shared/colors.sh" 2>/dev/null \
+    || { RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; BLUE='\033[0;34m'; NC='\033[0m'; }
 
 log() {
     local level="$1"
@@ -44,7 +42,7 @@ log() {
 }
 
 log_info() { log "${BLUE}INFO${NC}" "$*"; }
-log_warn() { log "${YELLOW}WARN${NC}" "$*"; }
+log_warning() { log "${YELLOW}WARN${NC}" "$*"; }
 log_error() { log "${RED}ERROR${NC}" "$*"; }
 log_success() { log "${GREEN}SUCCESS${NC}" "$*"; }
 
@@ -117,7 +115,7 @@ check_prerequisites() {
 
     # Check Prometheus connectivity
     if ! curl -sf "${PROMETHEUS_URL}/api/v1/status/runtimeinfo" > /dev/null; then
-        log_warn "Cannot connect to Prometheus at ${PROMETHEUS_URL}"
+        log_warning "Cannot connect to Prometheus at ${PROMETHEUS_URL}"
     fi
 
     # Check Falco is running

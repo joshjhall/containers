@@ -43,9 +43,14 @@ elif [ -f "$(dirname "${BASH_SOURCE[0]}")/../shared/export-utils.sh" ]; then
 fi
 
 # Color codes for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-NC='\033[0m' # No Color
+# shellcheck source=lib/shared/colors.sh
+if [ -f "/tmp/build-scripts/shared/colors.sh" ]; then
+    source "/tmp/build-scripts/shared/colors.sh"
+elif [ -f "$(dirname "${BASH_SOURCE[0]}")/../shared/colors.sh" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/../shared/colors.sh"
+else
+    RED='\033[0;31m'; GREEN='\033[0;32m'; NC='\033[0m'
+fi
 
 # ============================================================================
 # Core Download and Verification Functions

@@ -2,19 +2,16 @@
 # Setup development environment for container build system
 set -euo pipefail
 
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-BLUE='\033[0;34m'
-YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
-
-echo -e "${BLUE}=== Container Build System - Development Environment Setup ===${NC}"
-echo ""
-
 # Get the directory where this script is located
 BIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$(dirname "$BIN_DIR")")"
+
+# Colors for output
+# shellcheck source=lib/shared/colors.sh
+source "$PROJECT_ROOT/lib/shared/colors.sh"
+
+echo -e "${BLUE}=== Container Build System - Development Environment Setup ===${NC}"
+echo ""
 
 cd "$PROJECT_ROOT"
 

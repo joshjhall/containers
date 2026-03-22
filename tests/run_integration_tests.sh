@@ -14,15 +14,13 @@
 
 set -euo pipefail
 
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
-
 # Get script directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+
+# Colors for output
+# shellcheck source=lib/shared/colors.sh
+source "$PROJECT_ROOT/lib/shared/colors.sh"
 
 # Export project root for tests
 export PROJECT_ROOT

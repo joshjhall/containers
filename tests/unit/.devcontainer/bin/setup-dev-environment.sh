@@ -99,12 +99,12 @@ test_script_installs_prepush() {
     fi
 }
 
-# Test: Setup script has color variables defined
+# Test: Setup script has color variables (sourced or defined)
 test_script_has_colors() {
     local script="$PROJECT_ROOT/.devcontainer/bin/setup-dev-environment.sh"
 
-    if command grep -q "RED=" "$script" && command grep -q "GREEN=" "$script"; then
-        assert_true true "Setup script defines color variables"
+    if command grep -q "colors.sh" "$script" || { command grep -q "RED=" "$script" && command grep -q "GREEN=" "$script"; }; then
+        assert_true true "Setup script sources or defines color variables"
     else
         assert_true false "Setup script missing color variables"
     fi
