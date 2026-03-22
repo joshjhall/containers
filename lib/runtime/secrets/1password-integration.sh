@@ -160,7 +160,7 @@ op_connect_load_secrets() {
             }
 
             # Extract fields and export as environment variables
-            while IFS='=' read -r field_label field_value; do
+            while IFS=$'\t' read -r field_label field_value; do
                 if [ -n "$field_label" ] && [ -n "$field_value" ]; then
                     local env_var
                     env_var=$(normalize_env_var_name "$prefix" "$field_label")
@@ -169,7 +169,7 @@ op_connect_load_secrets() {
                     count=$((count + 1))
                     log_info "Loaded secret: $env_var"
                 fi
-            done < <(echo "$item_details" | jq -r '.fields[] | select(.value != null) | "\(.label)=\(.value)"')
+            done < <(echo "$item_details" | jq -r '.fields[] | select(.value != null) | [.label, .value] | @tsv')
         done
 
         log_info "Successfully loaded $count secret(s) from 1Password Connect"
@@ -266,7 +266,7 @@ op_cli_load_secrets() {
 
             # Extract fields and export as environment variables
             if command -v jq > /dev/null 2>&1; then
-                while IFS='=' read -r field_label field_value; do
+                while IFS=$'\t' read -r field_label field_value; do
                     if [ -n "$field_label" ] && [ -n "$field_value" ]; then
                         local env_var
                         env_var=$(normalize_env_var_name "$prefix" "$field_label")
@@ -275,7 +275,7 @@ op_cli_load_secrets() {
                         count=$((count + 1))
                         log_info "Loaded secret: $env_var"
                     fi
-                done < <(echo "$item_json" | jq -r '.fields[]? | select(.value != null and .value != "") | "\(.label)=\(.value)"')
+                done < <(echo "$item_json" | jq -r '.fields[]? | select(.value != null and .value != "") | [.label, .value] | @tsv')
             else
                 log_warning "jq not found, cannot parse item fields"
             fi

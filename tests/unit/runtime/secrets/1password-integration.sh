@@ -604,6 +604,40 @@ MOCK
 }
 
 # ============================================================================
+# Functional Tests - Tab-delimited field parsing (no truncation on '=')
+# ============================================================================
+
+test_connect_tsv_delimiter() {
+    # Verify Connect path uses @tsv format, not "label=value"
+    assert_file_contains "$SOURCE_FILE" '@tsv' \
+        "Source should use jq @tsv for tab-delimited field output"
+    assert_file_contains "$SOURCE_FILE" "IFS=\$'\\\\t'" \
+        "Source should use IFS=tab for reading field pairs"
+}
+
+test_cli_tsv_delimiter() {
+    # Verify CLI path does NOT use the old '=' delimiter format
+    local old_pattern_count
+    old_pattern_count=$(command grep -c 'IFS=.=.' "$SOURCE_FILE" || true)
+    assert_equals "0" "$old_pattern_count" \
+        "Source should not contain IFS='=' (truncates values with = characters)"
+}
+
+test_tsv_parsing_preserves_equals_in_values() {
+    # Simulate tab-delimited parsing of a value containing '=' characters
+    local field_label="" field_value=""
+    local tsv_line
+    tsv_line=$(printf 'api_key\tsk_live_abc123=xyz=789')
+
+    IFS=$'\t' read -r field_label field_value <<< "$tsv_line"
+
+    assert_equals "api_key" "$field_label" \
+        "Tab-delimited parsing should extract label correctly"
+    assert_equals "sk_live_abc123=xyz=789" "$field_value" \
+        "Tab-delimited parsing should preserve = characters in value"
+}
+
+# ============================================================================
 # Run all tests
 # ============================================================================
 
@@ -658,6 +692,11 @@ run_test_with_setup test_health_check_cli_branch "Health check passes via CLI au
 run_test_with_setup test_connect_health_check_non_200 "Connect returns 2 on non-200 health check"
 run_test_with_setup test_connect_vault_list_403 "Connect returns 3 on vault list 403"
 run_test_with_setup test_connect_vault_name_not_found "Connect returns 3 when vault name not found"
+
+# Field parsing uses tab-delimited format to preserve values with '='
+run_test_with_setup test_connect_tsv_delimiter "Connect uses @tsv not IFS='=' for field parsing"
+run_test_with_setup test_cli_tsv_delimiter "CLI uses @tsv not IFS='=' for field parsing"
+run_test_with_setup test_tsv_parsing_preserves_equals_in_values "Tab-delimited parsing preserves = in secret values"
 
 # Generate test report
 generate_report
