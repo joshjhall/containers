@@ -410,7 +410,7 @@ func TestAgentStart_WithPerAgentDB(t *testing.T) {
 		if len(args) >= 2 && args[0] == "network" && args[1] == "inspect" {
 			return "ok", nil
 		}
-		if args[0] == "run" && strings.Contains(joined, "sleep infinity") {
+		if args[0] == "run" && strings.Contains(joined, "agent-entrypoint.sh") {
 			agentCreated = true
 			return "abc123", nil
 		}

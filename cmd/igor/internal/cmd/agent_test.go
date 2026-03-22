@@ -412,8 +412,8 @@ func TestAgentStart_NewContainer(t *testing.T) {
 	if !mock.hasCall(filepath.Join(baseDir, "myproject-agent01")) {
 		t.Error("expected worktree volume mount")
 	}
-	if !mock.hasCall("sleep infinity") {
-		t.Error("expected sleep infinity command")
+	if !mock.hasCall("/opt/agent-scripts/agent-entrypoint.sh") {
+		t.Error("expected agent-entrypoint.sh command")
 	}
 }
 
@@ -738,5 +738,104 @@ func TestLoadAgentContext_CustomConfig(t *testing.T) {
 	}
 	if len(ctx.repos) != 2 {
 		t.Errorf("repos = %v, want [myapp shared-lib]", ctx.repos)
+	}
+}
+
+// --- Connect tests ---
+
+func TestAgentConnect_AlreadyReady(t *testing.T) {
+	cfg := &igorconfig.IgorConfig{
+		SchemaVersion: 1,
+		ContainersDir: "containers",
+		Project:       igorconfig.ProjectConfig{Name: "myproject", Username: "dev"},
+	}
+	mock, _ := setupAgentTest(t, cfg)
+
+	mock.runFunc = func(args ...string) (string, error) {
+		joined := strings.Join(args, " ")
+		if strings.Contains(joined, "inspect") && strings.Contains(joined, "Running") {
+			return "true", nil
+		}
+		if strings.Contains(joined, "test -f") {
+			return "", nil // marker exists
+		}
+		return "", nil
+	}
+
+	// connect uses Passthrough which is interactive — we just verify it doesn't error.
+	_, err := executeAgentCmd(t, mock, "connect", "--timeout", "2", "1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !mock.hasCall("test -f") {
+		t.Error("expected readiness marker check")
+	}
+}
+
+func TestAgentConnect_Timeout(t *testing.T) {
+	cfg := &igorconfig.IgorConfig{
+		SchemaVersion: 1,
+		ContainersDir: "containers",
+		Project:       igorconfig.ProjectConfig{Name: "myproject", Username: "dev"},
+	}
+	mock, _ := setupAgentTest(t, cfg)
+
+	mock.matchResults["inspect -f"] = mockResult{output: "", err: fmt.Errorf("not found")}
+
+	_, err := executeAgentCmd(t, mock, "connect", "--timeout", "1", "1")
+	if err == nil {
+		t.Fatal("expected timeout error")
+	}
+	if !strings.Contains(err.Error(), "timeout") {
+		t.Errorf("error should mention timeout, got: %v", err)
+	}
+}
+
+// --- Agent start script mounting tests ---
+
+func TestAgentStart_MountsScripts(t *testing.T) {
+	cfg := &igorconfig.IgorConfig{
+		SchemaVersion: 1,
+		ContainersDir: "containers",
+		Project:       igorconfig.ProjectConfig{Name: "myproject", Username: "dev"},
+		Features:      []string{"python"},
+	}
+	mock, _ := setupAgentTest(t, cfg)
+
+	mock.matchResults["inspect -f"] = mockResult{output: "", err: fmt.Errorf("not found")}
+	mock.matchResults["image inspect"] = mockResult{output: "ok", err: nil}
+	mock.matchResults["network inspect"] = mockResult{output: "ok", err: nil}
+
+	out, err := executeAgentCmd(t, mock, "start", "1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(out, "started") {
+		t.Errorf("expected 'started', got: %s", out)
+	}
+
+	// Verify script volume mount.
+	if !mock.hasCall("/opt/agent-scripts:ro") {
+		t.Error("expected /opt/agent-scripts:ro volume mount")
+	}
+
+	// Verify entrypoint command.
+	if !mock.hasCall("/opt/agent-scripts/agent-entrypoint.sh") {
+		t.Error("expected entrypoint command")
+	}
+
+	// Verify PROJECT_NAME env var.
+	if !mock.hasCall("PROJECT_NAME=myproject") {
+		t.Error("expected PROJECT_NAME env var")
+	}
+
+	// Verify AGENT_REPOS env var.
+	if !mock.hasCall("AGENT_REPOS=myproject") {
+		t.Error("expected AGENT_REPOS env var")
+	}
+
+	// Should NOT have sleep infinity anymore.
+	if mock.hasCall("sleep infinity") {
+		t.Error("should not use sleep infinity with entrypoint")
 	}
 }
