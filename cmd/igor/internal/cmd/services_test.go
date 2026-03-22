@@ -23,6 +23,7 @@ func executeServicesCmd(t *testing.T, mock *mockDocker, args ...string) (string,
 	defer rootCmd.SetOut(nil)
 
 	configFile = ""
+	servicesStopClean = false
 
 	origOverride := servicesDockerOverride
 	servicesDockerOverride = mock
@@ -258,6 +259,30 @@ func TestServicesStop_NotRunning(t *testing.T) {
 	}
 	if !strings.Contains(out, "not running") {
 		t.Errorf("expected 'not running', got: %s", out)
+	}
+}
+
+func TestServicesStop_WithClean(t *testing.T) {
+	cfg := serviceTestConfig()
+	mock, _ := setupServiceTest(t, cfg)
+
+	mock.matchResults["inspect -f"] = mockResult{output: "true", err: nil}
+
+	out, err := executeServicesCmd(t, mock, "stop", "--clean", "postgres")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(out, "stopped") {
+		t.Errorf("expected 'stopped', got: %s", out)
+	}
+	if !strings.Contains(out, "removed") {
+		t.Errorf("expected 'removed', got: %s", out)
+	}
+	if !mock.hasCall("stop myproject-postgres") {
+		t.Error("expected docker stop call")
+	}
+	if !mock.hasCall("rm -v myproject-postgres") {
+		t.Error("expected docker rm -v call")
 	}
 }
 

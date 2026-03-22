@@ -6,15 +6,20 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var servicesStopClean bool
+
 var servicesStopCmd = &cobra.Command{
 	Use:   "stop [name]",
 	Short: "Stop service containers",
-	Long:  `Stop all service containers, or a specific one by name.`,
-	Args:  cobra.MaximumNArgs(1),
-	RunE:  runServicesStop,
+	Long: `Stop all service containers, or a specific one by name.
+
+Use --clean to also remove the container and its data volumes.`,
+	Args: cobra.MaximumNArgs(1),
+	RunE: runServicesStop,
 }
 
 func init() {
+	servicesStopCmd.Flags().BoolVar(&servicesStopClean, "clean", false, "also remove container and data volumes")
 	servicesCmd.AddCommand(servicesStopCmd)
 }
 
@@ -55,5 +60,14 @@ func stopService(w interface{ Write([]byte) (int, error) }, ctx *serviceContext,
 		return fmt.Errorf("stopping %s: %w", cname, err)
 	}
 	fmt.Fprintf(w, "%s stopped\n", cname)
+
+	if servicesStopClean {
+		fmt.Fprintf(w, "Removing %s and its volumes ...\n", cname)
+		if _, err := ctx.docker.Run("rm", "-v", cname); err != nil {
+			return fmt.Errorf("removing %s: %w", cname, err)
+		}
+		fmt.Fprintf(w, "%s removed\n", cname)
+	}
+
 	return nil
 }
