@@ -32,6 +32,27 @@ type IgorConfig struct {
 
 	// Agents holds optional agent/worktree settings.
 	Agents AgentConfig `yaml:"agents,omitempty"`
+
+	// Services maps service names to their configuration.
+	Services map[string]ServiceConfig `yaml:"services,omitempty"`
+}
+
+// ServiceConfig describes a service container (e.g., postgres, redis).
+type ServiceConfig struct {
+	// Image is the Docker image (e.g. "postgres:16").
+	Image string `yaml:"image"`
+
+	// Environment is a list of env vars for the service container.
+	Environment []string `yaml:"environment,omitempty"`
+
+	// Volumes is a list of volume mounts for the service container.
+	Volumes []string `yaml:"volumes,omitempty"`
+
+	// Port is the container port the service listens on (used for health checks).
+	Port int `yaml:"port,omitempty"`
+
+	// PerAgentDB when true triggers per-agent database creation and DATABASE_URL injection.
+	PerAgentDB bool `yaml:"per_agent_db,omitempty"`
 }
 
 // AgentConfig holds optional agent/worktree settings.

@@ -119,6 +119,14 @@ func runAgentStart(cmd *cobra.Command, args []string) error {
 		dockerArgs = append(dockerArgs, "-v", vol)
 	}
 
+	// Inject per-agent database environment variables.
+	for svcName, svc := range ctx.cfg.Services {
+		if svc.PerAgentDB && svc.Port > 0 {
+			dbURL := perAgentDBURL(ctx.project, n, svcName, svc)
+			dockerArgs = append(dockerArgs, "-e", "DATABASE_URL="+dbURL)
+		}
+	}
+
 	// Image and command.
 	dockerArgs = append(dockerArgs, ctx.imageName+":"+ctx.imageTag, "sleep", "infinity")
 
@@ -128,5 +136,13 @@ func runAgentStart(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("creating container %s: %s", name, strings.TrimSpace(out))
 	}
 	fmt.Fprintf(w, "%s started\n", name)
+
+	// Provision per-agent databases (best-effort — service may not be running).
+	if len(ctx.cfg.Services) > 0 {
+		if dbErr := provisionPerAgentDBs(ctx.docker, ctx.project, n, ctx.cfg.Services); dbErr != nil {
+			fmt.Fprintf(w, "  ⚠ database provisioning: %v\n", dbErr)
+		}
+	}
+
 	return nil
 }

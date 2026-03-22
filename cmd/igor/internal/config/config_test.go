@@ -273,6 +273,61 @@ func TestSave_Roundtrip(t *testing.T) {
 	}
 }
 
+func TestLoad_WithServices(t *testing.T) {
+	cfg, err := Load(filepath.Join(testdataDir(), "services.igor.yml"))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	if len(cfg.Services) != 2 {
+		t.Fatalf("Services length = %d, want 2", len(cfg.Services))
+	}
+
+	pg, ok := cfg.Services["postgres"]
+	if !ok {
+		t.Fatal("missing 'postgres' service")
+	}
+	if pg.Image != "postgres:16" {
+		t.Errorf("postgres.Image = %q, want %q", pg.Image, "postgres:16")
+	}
+	if pg.Port != 5432 {
+		t.Errorf("postgres.Port = %d, want 5432", pg.Port)
+	}
+	if !pg.PerAgentDB {
+		t.Error("postgres.PerAgentDB should be true")
+	}
+	if len(pg.Environment) != 2 {
+		t.Errorf("postgres.Environment length = %d, want 2", len(pg.Environment))
+	}
+	if len(pg.Volumes) != 1 {
+		t.Errorf("postgres.Volumes length = %d, want 1", len(pg.Volumes))
+	}
+
+	redis, ok := cfg.Services["redis"]
+	if !ok {
+		t.Fatal("missing 'redis' service")
+	}
+	if redis.Image != "redis:7" {
+		t.Errorf("redis.Image = %q, want %q", redis.Image, "redis:7")
+	}
+	if redis.Port != 6379 {
+		t.Errorf("redis.Port = %d, want 6379", redis.Port)
+	}
+	if redis.PerAgentDB {
+		t.Error("redis.PerAgentDB should be false")
+	}
+}
+
+func TestLoad_WithoutServices(t *testing.T) {
+	cfg, err := Load(filepath.Join(testdataDir(), "minimal.igor.yml"))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if len(cfg.Services) != 0 {
+		t.Errorf("Services should be empty for minimal config, got %d", len(cfg.Services))
+	}
+}
+
 func TestLoad_NonexistentFile(t *testing.T) {
 	_, err := Load("/nonexistent/path/to/.igor.yml")
 	if err == nil {
