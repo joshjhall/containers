@@ -322,6 +322,65 @@ MOCK_HTML
     assert_equals "$expected_hash" "$result" "fetch_go_checksum extracts correct hash from HTML"
 }
 
+# ============================================================================
+# Functional Tests - fetch_go_checksum() partial version multi-match
+# ============================================================================
+
+test_fetch_go_checksum_partial_version_selects_highest() {
+    local expected_hash="cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    local result
+    local exit_code=0
+    result=$(bash -c "
+        retry_github_api() { \"\$@\"; }
+        export -f retry_github_api
+        source '$SOURCE_FILE' >/dev/null 2>&1
+
+        # Override AFTER sourcing to return mock HTML with multiple versions
+        _curl_with_timeout() {
+            command cat <<'MOCK_HTML'
+<tr class=\"\"><td><a href=\"/dl/go1.23.0.linux-amd64.tar.gz\">go1.23.0.linux-amd64.tar.gz</a></td>
+<td>Archive</td><td>Linux</td><td>x86-64</td><td>65MB</td>
+<td><tt>aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa</tt></td></tr>
+<tr class=\"\"><td><a href=\"/dl/go1.23.2.linux-amd64.tar.gz\">go1.23.2.linux-amd64.tar.gz</a></td>
+<td>Archive</td><td>Linux</td><td>x86-64</td><td>65MB</td>
+<td><tt>bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb</tt></td></tr>
+<tr class=\"\"><td><a href=\"/dl/go1.23.5.linux-amd64.tar.gz\">go1.23.5.linux-amd64.tar.gz</a></td>
+<td>Archive</td><td>Linux</td><td>x86-64</td><td>65MB</td>
+<td><tt>cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc</tt></td></tr>
+MOCK_HTML
+        }
+
+        fetch_go_checksum '1.23' 'amd64'
+    " 2>/dev/null) || exit_code=$?
+
+    assert_equals "0" "$exit_code" "fetch_go_checksum partial version returns success"
+    assert_equals "$expected_hash" "$result" "fetch_go_checksum partial version selects highest (1.23.5)"
+}
+
+test_fetch_go_checksum_partial_version_no_match() {
+    local exit_code=0
+    local result
+    result=$(bash -c "
+        retry_github_api() { \"\$@\"; }
+        export -f retry_github_api
+        source '$SOURCE_FILE' >/dev/null 2>&1
+
+        # Override AFTER sourcing - HTML has only 1.22.x, not 1.99.x
+        _curl_with_timeout() {
+            command cat <<'MOCK_HTML'
+<tr class=\"\"><td><a href=\"/dl/go1.22.0.linux-amd64.tar.gz\">go1.22.0.linux-amd64.tar.gz</a></td>
+<td>Archive</td><td>Linux</td><td>x86-64</td><td>65MB</td>
+<td><tt>aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa</tt></td></tr>
+MOCK_HTML
+        }
+
+        fetch_go_checksum '1.99' 'amd64'
+    " 2>/dev/null) || exit_code=$?
+
+    assert_not_equals "0" "$exit_code" "fetch_go_checksum returns non-zero for unmatched partial version"
+    assert_empty "$result" "fetch_go_checksum returns empty output for unmatched partial version"
+}
+
 test_fetch_ruby_checksum_extracts_from_html() {
     local expected_hash="b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b200"
     local result

@@ -29,9 +29,9 @@ parse_bindfs_skip_paths() {
         local _skip_arr _skip_path
         IFS=',' read -ra _skip_arr <<< "$BINDFS_SKIP_PATHS"
         for _skip_path in "${_skip_arr[@]}"; do
-            # Trim whitespace
-            _skip_path="${_skip_path## }"
-            _skip_path="${_skip_path%% }"
+            # Trim leading and trailing whitespace (spaces and tabs)
+            _skip_path="${_skip_path#"${_skip_path%%[! $'\t']*}"}"
+            _skip_path="${_skip_path%"${_skip_path##*[! $'\t']}"}"
             [ -n "$_skip_path" ] && BINDFS_SKIP_MAP["$_skip_path"]=1
         done
     fi

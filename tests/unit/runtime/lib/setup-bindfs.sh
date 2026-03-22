@@ -165,6 +165,60 @@ test_parse_skip_paths_empty() {
     assert_equals "0" "$?" "parse_bindfs_skip_paths handles empty BINDFS_SKIP_PATHS"
 }
 
+test_parse_skip_paths_multiple_spaces() {
+    (
+        source "$SOURCE_FILE"
+
+        export BINDFS_SKIP_PATHS="  /cache  ,   /tmp   "
+        parse_bindfs_skip_paths
+
+        [ -n "${BINDFS_SKIP_MAP[/cache]+_}" ] || exit 1
+        [ -n "${BINDFS_SKIP_MAP[/tmp]+_}" ] || exit 1
+        [ "${#BINDFS_SKIP_MAP[@]}" -eq 2 ] || exit 1
+    )
+    assert_equals "0" "$?" "parse_bindfs_skip_paths trims multiple leading/trailing spaces"
+}
+
+test_parse_skip_paths_tabs() {
+    (
+        source "$SOURCE_FILE"
+
+        export BINDFS_SKIP_PATHS=$'\t/cache\t,\t/tmp'
+        parse_bindfs_skip_paths
+
+        [ -n "${BINDFS_SKIP_MAP[/cache]+_}" ] || exit 1
+        [ -n "${BINDFS_SKIP_MAP[/tmp]+_}" ] || exit 1
+        [ "${#BINDFS_SKIP_MAP[@]}" -eq 2 ] || exit 1
+    )
+    assert_equals "0" "$?" "parse_bindfs_skip_paths trims tab characters"
+}
+
+test_parse_skip_paths_mixed_whitespace() {
+    (
+        source "$SOURCE_FILE"
+
+        export BINDFS_SKIP_PATHS=$' \t /cache \t , \t /var \t '
+        parse_bindfs_skip_paths
+
+        [ -n "${BINDFS_SKIP_MAP[/cache]+_}" ] || exit 1
+        [ -n "${BINDFS_SKIP_MAP[/var]+_}" ] || exit 1
+        [ "${#BINDFS_SKIP_MAP[@]}" -eq 2 ] || exit 1
+    )
+    assert_equals "0" "$?" "parse_bindfs_skip_paths trims mixed spaces and tabs"
+}
+
+test_parse_skip_paths_whitespace_only_fields() {
+    (
+        source "$SOURCE_FILE"
+
+        export BINDFS_SKIP_PATHS=$'  , \t ,  '
+        parse_bindfs_skip_paths
+
+        [ "${#BINDFS_SKIP_MAP[@]}" -eq 0 ] || exit 1
+    )
+    assert_equals "0" "$?" "parse_bindfs_skip_paths ignores whitespace-only fields"
+}
+
 test_probe_fuse_fstype_skipped() {
     (
         source "$SOURCE_FILE"
