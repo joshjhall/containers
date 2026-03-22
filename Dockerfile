@@ -525,10 +525,10 @@ RUN if [ "${INCLUDE_KEYBINDINGS}" = "true" ]; then \
     fi
 
 # Set up startup script system
-RUN /tmp/build-scripts/runtime/setup-startup.sh
+RUN /tmp/build-scripts/base/setup-startup.sh
 
 # Set up comprehensive PATH configuration
-RUN /tmp/build-scripts/runtime/setup-paths.sh
+RUN /tmp/build-scripts/base/setup-paths.sh
 
 # Copy entrypoint script
 COPY lib/runtime/entrypoint.sh /usr/local/bin/entrypoint

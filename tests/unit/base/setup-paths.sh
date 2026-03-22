@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Unit tests for lib/runtime/setup-paths.sh
+# Unit tests for lib/base/setup-paths.sh
 # Tests PATH setup and management
 
 set -euo pipefail
@@ -257,7 +257,7 @@ run_test_with_setup() {
 # safe_eval blocklist tests
 # ============================================================================
 
-SETUP_PATHS_SOURCE="$PROJECT_ROOT/lib/runtime/setup-paths.sh"
+SETUP_PATHS_SOURCE="$PROJECT_ROOT/lib/base/setup-paths.sh"
 
 # Test: safe_eval defines _SAFE_EVAL_BLOCKLIST variable
 test_safe_eval_blocklist_defined() {

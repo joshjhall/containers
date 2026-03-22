@@ -60,6 +60,9 @@ Dockerfile
 │   ├── cache-utils.sh                /cache directory setup
 │   ├── path-utils.sh                 Secure PATH management
 │   │
+│   ├── setup-paths.sh               PATH and env initialization (build-time)
+│   ├── setup-startup.sh             Startup directory structure (build-time)
+│   │
 │   └── checksum-verification.sh ◄─── Sourced by ~20 download features
 │       ├── checksum-tier4.sh            TOFU fallback
 │       ├── checksum-fetch.sh            Published checksum fetchers
@@ -77,8 +80,6 @@ RUNTIME LAYER
 ═════════════════════════════════════════════════════════════════
 
 lib/runtime/entrypoint.sh             Container startup (PID 1 via tini)
-├── setup-paths.sh                    PATH and env initialization
-├── setup-startup.sh                  Feature-specific startup hooks
 ├── validate-config.sh                Configuration validation
 ├── check-build-logs.sh               Build log inspection tool
 ├── check-installed-versions.sh       Version reporting tool

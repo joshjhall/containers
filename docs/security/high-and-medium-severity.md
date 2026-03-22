@@ -82,7 +82,7 @@ hours
 **Affected Files**:
 
 - `lib/base/aliases.sh` (line 122)
-- `lib/runtime/setup-paths.sh` (line 32)
+- `lib/base/setup-paths.sh` (line 32)
 - `lib/base/aliases.sh` (line 145 — zoxide)
 - `lib/features/lib/bashrc/dev-tools-extras.sh` (lines 25, 37-39 — direnv, just)
 

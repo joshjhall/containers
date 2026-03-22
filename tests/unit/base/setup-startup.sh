@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Unit tests for lib/runtime/setup-startup.sh
+# Unit tests for lib/base/setup-startup.sh
 # Tests container startup scripts and initialization
 
 set -euo pipefail
