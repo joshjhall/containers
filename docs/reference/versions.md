@@ -3,6 +3,10 @@
 This document lists all manually pinned versions in the container build system
 that need tracking and updating.
 
+> **Note:** The Dockerfile is the authoritative source for version values.
+> This document may lag behind — run `./bin/check-versions.sh` for current
+> versions.
+
 ## Dockerfile ARG Versions
 
 These are defined as build arguments in the Dockerfile:
@@ -11,7 +15,7 @@ These are defined as build arguments in the Dockerfile:
 - `NODE_VERSION` (currently 22)
 - `RUST_VERSION` (currently 1.94.0)
 - `RUBY_VERSION` (currently 4.0.1)
-- `R_VERSION` (currently 4.5.2)
+- `R_VERSION` (currently 4.5.3)
 - `GO_VERSION` (currently 1.26.1)
 - `MOJO_VERSION` (currently 25.4)
 - `JAVA_VERSION` (currently 21)
@@ -19,9 +23,11 @@ These are defined as build arguments in the Dockerfile:
 - `KUBECTL_VERSION` (currently 1.33.9)
 - `K9S_VERSION` (currently 0.50.18)
 - `KREW_VERSION` (currently 0.5.0)
-- `HELM_VERSION` (currently 4.1.1)
+- `HELM_VERSION` (currently 4.1.3)
 - `TERRAGRUNT_VERSION` (currently 0.99.4)
 - `TFDOCS_VERSION` (currently 0.21.0)
+- `PIXI_VERSION` (currently 0.65.0)
+- `TFLINT_VERSION` (currently 0.61.0)
 
 ## Shell Script Hardcoded Versions
 
@@ -119,7 +125,7 @@ These tools get the latest version at build time, which is generally fine:
 - All Dockerfile ARG versions are pinned and tracked
 - All shell script tool installations use version variables
 - Poetry is pinned to a specific version (2.3.2)
-- Helm is pinned to a specific version (4.1.1)
+- Helm is pinned to a specific version (4.1.3)
 - duf and entr have version variables (0.9.1 and 5.7)
 
 ✅ **Automated version management:**

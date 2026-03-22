@@ -10,7 +10,7 @@ installed to `~/.claude/skills/` and `~/.claude/agents/` on first container
 startup via `claude-setup`. Project-level `.claude/` configs merge with these
 (union semantics, project wins on name conflicts).
 
-### Skills (always installed — 15 skills)
+### Skills (always installed — 14 static + 1 dynamic)
 
 | Skill                     | Purpose                                                                             |
 | ------------------------- | ----------------------------------------------------------------------------------- |
