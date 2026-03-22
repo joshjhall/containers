@@ -365,6 +365,38 @@ test_partial_match_safety_skeleton() {
 }
 
 # ============================================================================
+# 1Password / GitLab Token Tests
+# ============================================================================
+
+test_ops_token_scrub() {
+    local input="Logged ops_abc123XYZ"
+    local result
+    result=$(scrub_secrets "$input")
+    assert_contains "$result" "***OP_TOKEN_REDACTED***" \
+        "ops_ token is scrubbed"
+    assert_not_contains "$result" "ops_abc123XYZ" \
+        "Original ops_ token is removed"
+}
+
+test_glpat_token_scrub() {
+    local input="Using glpat-xxxxxxxxxxxxxxxxxxxx"
+    local result
+    result=$(scrub_secrets "$input")
+    assert_contains "$result" "***GITLAB_TOKEN_REDACTED***" \
+        "glpat- token is scrubbed"
+    assert_not_contains "$result" "glpat-xxxxxxxxxxxxxxxxxxxx" \
+        "Original glpat- token is removed"
+}
+
+test_glpat_short_no_match() {
+    local input="glpat-short"
+    local result
+    result=$(scrub_secrets "$input")
+    assert_contains "$result" "glpat-short" \
+        "Short glpat- string (< 20 chars) passes through unchanged"
+}
+
+# ============================================================================
 # Opt-out Test
 # ============================================================================
 
@@ -411,6 +443,9 @@ run_test_with_setup test_gho_token_scrub "gho_ token is scrubbed"
 run_test_with_setup test_ghu_token_scrub "ghu_ token is scrubbed"
 run_test_with_setup test_ghs_token_scrub "ghs_ token is scrubbed"
 run_test_with_setup test_ghr_token_scrub "ghr_ token is scrubbed"
+run_test_with_setup test_ops_token_scrub "ops_ token is scrubbed"
+run_test_with_setup test_glpat_token_scrub "glpat- token is scrubbed"
+run_test_with_setup test_glpat_short_no_match "Short glpat- string passes through"
 
 # API key tests
 run_test_with_setup test_sk_api_key_scrub "sk- API key is scrubbed"

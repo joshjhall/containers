@@ -285,10 +285,10 @@ test_startup_metrics_file() {
         assert_true false "Metrics directory not defined"
     fi
 
-    if command grep -q "mkdir -p \"\$METRICS_DIR\"" "$PROJECT_ROOT/lib/runtime/entrypoint.sh"; then
-        assert_true true "Metrics directory is created"
+    if command grep -q 'install -d -m 0750' "$PROJECT_ROOT/lib/runtime/entrypoint.sh"; then
+        assert_true true "Metrics directory is created with restricted permissions"
     else
-        assert_true false "Metrics directory creation not found"
+        assert_true false "Metrics directory creation with install -d -m 0750 not found"
     fi
 
     # Check that startup metrics are written

@@ -271,8 +271,7 @@ STARTUP_DURATION=$((STARTUP_END_TIME - STARTUP_BEGIN_TIME))
 # Create metrics directory if it doesn't exist
 # Use a subdir under /tmp that we can control permissions for
 METRICS_DIR="/tmp/container-metrics"
-mkdir -p "$METRICS_DIR" 2>/dev/null || true
-chmod 1777 "$METRICS_DIR" 2>/dev/null || true
+command install -d -m 0750 -o "${USERNAME}" "$METRICS_DIR" 2>/dev/null || true
 
 # Write startup metrics (Prometheus format)
 # Fail gracefully if we can't write metrics (non-critical)

@@ -82,6 +82,8 @@ scrub_secrets() {
         s|ghu_[A-Za-z0-9_]{1,}|***GITHUB_TOKEN_REDACTED***|g
         s|ghs_[A-Za-z0-9_]{1,}|***GITHUB_TOKEN_REDACTED***|g
         s|ghr_[A-Za-z0-9_]{1,}|***GITHUB_TOKEN_REDACTED***|g
+        s|ops_[A-Za-z0-9_]{1,}|***OP_TOKEN_REDACTED***|g
+        s|glpat-[A-Za-z0-9_-]{20,}|***GITLAB_TOKEN_REDACTED***|g
         s|sk-[A-Za-z0-9_-]{20,}|***API_KEY_REDACTED***|g
         s|pk-[A-Za-z0-9_-]{20,}|***API_KEY_REDACTED***|g
         s|(GITHUB_TOKEN=)[^[:space:]"'"'"']+|\1***REDACTED***|g
