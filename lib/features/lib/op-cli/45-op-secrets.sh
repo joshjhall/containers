@@ -55,7 +55,8 @@ unset _secrets_file
 [ -z "${OP_SERVICE_ACCOUNT_TOKEN:-}" ] && exit 0
 
 # Disable xtrace to prevent secret exposure in logs
-_old_xtrace=$(set +o | command grep xtrace)
+_xtrace_was_on=false
+[[ $- == *x* ]] && _xtrace_was_on=true
 set +x
 
 for _ref_var in $(compgen -v | command grep '^OP_.\+_REF$' | command grep -v '_FILE_REF$'); do
@@ -137,6 +138,7 @@ mv "$_cache_tmp" "$_cache_file"
 unset _cache_file _cache_tmp
 
 # Restore xtrace state
-eval "$_old_xtrace"
+if [ "$_xtrace_was_on" = true ]; then set -x; fi
+unset _xtrace_was_on
 
 exit 0

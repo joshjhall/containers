@@ -106,9 +106,11 @@ test_xtrace_disabled_during_processing() {
 }
 
 test_xtrace_restored_after_processing() {
-    # Must restore xtrace state after processing
-    assert_file_contains "$SOURCE_FILE" 'eval "\$_old_xtrace"' \
-        "Xtrace state restored after processing"
+    # Must restore xtrace state via boolean flag (no eval)
+    assert_file_contains "$SOURCE_FILE" '_xtrace_was_on=false' \
+        "Xtrace state captured via boolean flag"
+    assert_file_contains "$SOURCE_FILE" 'if \[ "\$_xtrace_was_on" = true \]; then set -x; fi' \
+        "Xtrace state restored via boolean flag"
 }
 
 # ============================================================================
