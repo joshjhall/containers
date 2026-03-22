@@ -243,7 +243,7 @@ All cache directories are located under `/cache` for persistence across builds:
 
 | Variable      | Default            | Description       |
 | ------------- | ------------------ | ----------------- |
-| `R_LIBS_USER` | `/cache/R/library` | R package library |
+| `R_LIBS_USER` | `/cache/r/library` | R package library |
 
 ### Docker
 

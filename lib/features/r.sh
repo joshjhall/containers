@@ -375,9 +375,9 @@ log_command "Final ownership fix for R cache directories" \
 
 # Log feature summary
 # Export directory paths for feature summary (also defined in bashrc for runtime)
-export R_CACHE_DIR="/cache/R"
-export R_LIBS_SITE="/cache/R/library"
-export R_LIBS_USER="/cache/R/user-library"
+export R_CACHE_DIR="/cache/r"
+export R_LIBS_SITE="/cache/r/library"
+export R_LIBS_USER="/cache/r/library"
 
 log_feature_summary \
     --feature "R" \

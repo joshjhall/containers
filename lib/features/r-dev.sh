@@ -379,8 +379,8 @@ log_command "Final ownership fix for R cache directories" \
 
 # Log feature summary
 # Export directory paths for feature summary (also defined in parent r.sh)
-export R_LIBS_SITE="/cache/R/library"
-export R_LIBS_USER="/cache/R/user-library"
+export R_LIBS_SITE="/cache/r/library"
+export R_LIBS_USER="/cache/r/library"
 
 log_feature_summary \
     --feature "R Development Tools" \
