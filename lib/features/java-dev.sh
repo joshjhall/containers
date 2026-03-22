@@ -119,7 +119,7 @@ _download_and_verify_tool() {
 # ============================================================================
 log_message "Installing Spring Boot CLI..."
 
-SPRING_VERSION="${SPRING_VERSION:-4.0.3}"
+SPRING_VERSION="${SPRING_VERSION:-4.0.4}"
 export SPRING_VERSION  # Export for use in shell functions
 
 # Build Maven Central URL
@@ -189,7 +189,7 @@ ARCH=$(dpkg --print-architecture)
 if [ "$ARCH" = "amd64" ]; then
     log_message "Installing Maven Daemon for ${ARCH}..."
 
-    MVND_VERSION="${MVND_VERSION:-1.0.3}"
+    MVND_VERSION="${MVND_VERSION:-1.0.5}"
     MVND_URL="https://github.com/apache/maven-mvnd/releases/download/${MVND_VERSION}/maven-mvnd-${MVND_VERSION}-linux-${ARCH}.tar.gz"
 
     # Maven Daemon does not publish checksums — will be verified via Tier 2 (pinned) or Tier 4 (TOFU)

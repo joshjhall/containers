@@ -148,13 +148,11 @@ check_android_ndk() {
     if [ -z "$ndk_release" ]; then
         set_latest "android-ndk" "error"
     else
-        # NDK version format in SDK manager is like "29.0.14206865"
-        # We can't easily get the full version, but we can check if major version matches
-        # Extract major version (e.g., r29 -> 29)
+        # Extract major version (e.g., r29 -> 29, r30 -> 30)
         local major_ver
         major_ver=$(echo "$ndk_release" | command grep -oE '[0-9]+')
 
-        # Get the current major version from what's pinned
+        # Get the current version from what's pinned (format: "29.0.14206865")
         local current=""
         for i in "${!TOOLS[@]}"; do
             if [ "${TOOLS[$i]}" = "android-ndk" ]; then
@@ -169,8 +167,23 @@ check_android_ndk() {
         if [ "$major_ver" = "$current_major" ]; then
             set_latest "android-ndk" "$current"
         else
-            # Different major version - report the release name for reference
-            set_latest "android-ndk" "${major_ver}.x.x ($ndk_release)"
+            # Different major version available. Try to resolve the full SDK version
+            # from the Android SDK repository XML.
+            local full_version=""
+            local repo_xml
+            repo_xml=$(fetch_url "https://dl.google.com/android/repository/repository2-3.xml" 15)
+            if [ -n "$repo_xml" ]; then
+                # Extract the latest revision for this NDK major version
+                # NDK packages are listed as ndk;MAJOR.MINOR.BUILD in the XML
+                full_version=$(echo "$repo_xml" | command grep -oE "${major_ver}\.[0-9]+\.[0-9]+" | command sort -V | command tail -1 2>/dev/null)
+            fi
+
+            if [ -n "$full_version" ]; then
+                set_latest "android-ndk" "$full_version"
+            else
+                # Fallback: report as MAJOR.0.0 (valid version format for updater)
+                set_latest "android-ndk" "${major_ver}.0.0"
+            fi
         fi
     fi
     progress_done
@@ -182,6 +195,45 @@ check_github_release() {
     progress_msg "  $tool..."
     local latest
     latest=$(fetch_url "https://api.github.com/repos/$repo/releases/latest" | jq -r '.tag_name // "null"' 2>/dev/null | command sed 's/^v//')
+    set_latest "$tool" "$latest"
+    progress_done
+}
+
+# Like check_github_release but stays on the same major version track.
+# Prevents downgrades when a repo has multiple active release tracks
+# (e.g., spring-boot 3.x and 4.x both receive releases).
+check_github_release_major_track() {
+    local tool="$1"
+    local repo="$2"
+    progress_msg "  $tool..."
+
+    # Get the current major version
+    local current=""
+    for i in "${!TOOLS[@]}"; do
+        if [ "${TOOLS[$i]}" = "$tool" ]; then
+            current="${CURRENT_VERSIONS[$i]}"
+            break
+        fi
+    done
+
+    local current_major=""
+    if [[ "$current" =~ ^([0-9]+)\. ]]; then
+        current_major="${BASH_REMATCH[1]}"
+    fi
+
+    local latest=""
+    if [ -n "$current_major" ]; then
+        # Fetch releases list and find latest on the same major track
+        latest=$(fetch_url "https://api.github.com/repos/$repo/releases" | \
+            jq -r "[.[] | select(.prerelease == false) | select(.tag_name | test(\"^v?${current_major}\\\\.\"))] | .[0].tag_name // \"null\"" 2>/dev/null | \
+            command sed 's/^v//')
+    fi
+
+    # Fallback to latest release if major track lookup failed
+    if [ -z "$latest" ] || [ "$latest" = "null" ]; then
+        latest=$(fetch_url "https://api.github.com/repos/$repo/releases/latest" | jq -r '.tag_name // "null"' 2>/dev/null | command sed 's/^v//')
+    fi
+
     set_latest "$tool" "$latest"
     progress_done
 }

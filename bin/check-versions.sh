@@ -365,7 +365,7 @@ main() {
             dive) check_github_release "dive" "wagoodman/dive" ;;
             mkcert) check_github_release "mkcert" "FiloSottile/mkcert" ;;
             glab) check_gitlab_release "glab" "gitlab-org%2Fcli" ;;
-            spring-boot-cli) check_github_release "spring-boot-cli" "spring-projects/spring-boot" ;;
+            spring-boot-cli) check_github_release_major_track "spring-boot-cli" "spring-projects/spring-boot" ;;
             jbang) check_github_release "jbang" "jbangdev/jbang" ;;
             mvnd) check_github_release "mvnd" "apache/maven-mvnd" ;;
             google-java-format) check_github_release "google-java-format" "google/google-java-format" ;;

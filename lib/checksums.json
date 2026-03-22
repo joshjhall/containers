@@ -122,6 +122,11 @@
           "sha256": "c8d546f9ff433b529fb0ad43feceb39831040cae2ca8d17e7df46364368c9a9e",
           "url": "https://github.com/JetBrains/kotlin/releases/download/v2.3.10/kotlin-compiler-2.3.10.zip",
           "added": "2026-03-16"
+        },
+        "2.3.20": {
+          "sha256": "222ba516cdc4052ce0be9d2ec6adf3c5c64fc53156d7dd91d1f5317809431b98",
+          "url": "https://github.com/JetBrains/kotlin/releases/download/v2.3.20/kotlin-compiler-2.3.20.zip",
+          "added": "2026-03-22"
         }
       }
     },
@@ -174,6 +179,19 @@
             }
           },
           "added": "2026-03-16"
+        },
+        "0.19.1": {
+          "checksums": {
+            "amd64": {
+              "sha256": "b21fd5c32da694085f1bc1ab2daa81c01c48efaf5ce3137ba23102b824304c71",
+              "url": "https://github.com/dandavison/delta/releases/download/0.19.1/delta-0.19.1-x86_64-unknown-linux-gnu.tar.gz"
+            },
+            "arm64": {
+              "sha256": "81cc5a2067762a5e1f3bc4dd12b01229dc134ec22221cb94062ce1fed769d26f",
+              "url": "https://github.com/dandavison/delta/releases/download/0.19.1/delta-0.19.1-aarch64-unknown-linux-gnu.tar.gz"
+            }
+          },
+          "added": "2026-03-22"
         }
       }
     },
@@ -208,6 +226,19 @@
             }
           },
           "added": "2026-03-16"
+        },
+        "2.4.8": {
+          "checksums": {
+            "amd64": {
+              "sha256": "bab205dea2d2432638e01fb41d136d6ccb26dd07e543d2f40d20b7b1e55be263",
+              "url": "https://github.com/biomejs/biome/releases/download/@biomejs/biome@2.4.8/biome-linux-x64"
+            },
+            "arm64": {
+              "sha256": "e39df3a09697f43dc8d78989d7819029c4a7ddc45bca2b268403843575154f86",
+              "url": "https://github.com/biomejs/biome/releases/download/@biomejs/biome@2.4.8/biome-linux-arm64"
+            }
+          },
+          "added": "2026-03-22"
         }
       }
     },
@@ -264,7 +295,7 @@
     }
   },
   "metadata": {
-    "generated": "2026-03-16T05:03:06Z",
+    "generated": "2026-03-22T16:13:39Z",
     "description": "Pinned checksums for language runtime downloads",
     "note": "This file is automatically updated by check-versions.sh and should grow over time. Old checksums are never deleted to strengthen security for older versions and enable reproducible builds."
   }
