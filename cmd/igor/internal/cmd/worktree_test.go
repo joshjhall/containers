@@ -339,3 +339,59 @@ func TestWorktreeCreate_MissingSiblingRepo(t *testing.T) {
 		t.Error("primary worktree directory should exist")
 	}
 }
+
+// --- detectWorktreeMounts tests ---
+
+func TestDetectWorktreeMounts(t *testing.T) {
+	baseDir := t.TempDir()
+
+	// Create some fake worktree directories.
+	os.MkdirAll(filepath.Join(baseDir, "myapp-agent01"), 0755)
+	os.MkdirAll(filepath.Join(baseDir, "myapp-agent03"), 0755)
+
+	mounts := detectWorktreeMounts([]string{"myapp"}, 5, baseDir)
+
+	if len(mounts) != 2 {
+		t.Fatalf("expected 2 mounts, got %d: %v", len(mounts), mounts)
+	}
+	if !strings.Contains(mounts[0], "myapp-agent01") {
+		t.Errorf("expected agent01 mount, got: %s", mounts[0])
+	}
+	if !strings.Contains(mounts[1], "myapp-agent03") {
+		t.Errorf("expected agent03 mount, got: %s", mounts[1])
+	}
+}
+
+func TestDetectWorktreeMounts_NoWorktrees(t *testing.T) {
+	baseDir := t.TempDir()
+	mounts := detectWorktreeMounts([]string{"myapp"}, 5, baseDir)
+	if len(mounts) != 0 {
+		t.Errorf("expected 0 mounts, got %d: %v", len(mounts), mounts)
+	}
+}
+
+func TestDetectWorktreeMounts_MultiRepo(t *testing.T) {
+	baseDir := t.TempDir()
+
+	os.MkdirAll(filepath.Join(baseDir, "app-agent01"), 0755)
+	os.MkdirAll(filepath.Join(baseDir, "lib-agent01"), 0755)
+
+	mounts := detectWorktreeMounts([]string{"app", "lib"}, 3, baseDir)
+
+	if len(mounts) != 2 {
+		t.Fatalf("expected 2 mounts, got %d: %v", len(mounts), mounts)
+	}
+}
+
+// --- worktree remove tests ---
+
+func executeWorktreeRemove(t *testing.T, args ...string) (string, error) {
+	t.Helper()
+	var buf bytes.Buffer
+	rootCmd.SetOut(&buf)
+	defer rootCmd.SetOut(nil)
+
+	rootCmd.SetArgs(append([]string{"worktree", "remove"}, args...))
+	err := rootCmd.Execute()
+	return buf.String(), err
+}

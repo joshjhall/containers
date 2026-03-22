@@ -35,6 +35,10 @@ services:
     volumes:
       # Source code
       - ../:/workspace/{{ .Project.Name }}:cached
+{{- range .WorktreeMounts }}
+      # Agent worktree
+      - {{ . }}
+{{- end }}
 {{- if .NeedsDocker }}
       # Docker socket
       - /var/run/docker.sock:/var/run/docker.sock

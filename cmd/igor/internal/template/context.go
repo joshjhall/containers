@@ -38,6 +38,10 @@ type RenderContext struct {
 
 	// Agents holds optional agent/worktree settings.
 	Agents config.AgentConfig
+
+	// WorktreeMounts lists volume mount specs for agent worktrees.
+	// Format: "../<repo>-agentNN:/workspace/<repo>-agentNN"
+	WorktreeMounts []string
 }
 
 // HasAgents returns true when agents config has been explicitly set.
