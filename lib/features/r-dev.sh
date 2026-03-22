@@ -88,6 +88,16 @@ log_message "Preparing R package installation..."
 export R_LIBS_USER="/cache/r/library"
 export R_LIBS_SITE="/cache/r/library"
 
+# Ensure Renviron.site has our library paths (may have been overwritten by
+# apt operations between the r.sh and r-dev.sh build layers)
+command cat > /etc/R/Renviron.site << 'RENVIRON_SITE'
+R_LIBS_USER=/cache/r/library
+R_LIBS_SITE=/cache/r/library
+R_MAX_NUM_DLLS=150
+R_INSTALL_STAGED=FALSE
+TMPDIR=/cache/r/tmp
+RENVIRON_SITE
+
 BUILD_TEMP=$(create_secure_temp_dir)
 
 # Create installation script
@@ -350,7 +360,7 @@ log_command "Installing R languageserver" \
     su - "${USERNAME}" -c "export R_LIBS_USER='${R_LIBS_USER}' R_LIBS_SITE='${R_LIBS_SITE}' && /usr/local/bin/Rscript -e \"install.packages('languageserver', repos='https://cloud.r-project.org/', quiet=TRUE)\""
 
 # Verify LSP installation
-if /usr/local/bin/Rscript -e "library(languageserver)" &>/dev/null; then
+if R_LIBS_USER="${R_LIBS_USER}" /usr/local/bin/Rscript -e "library(languageserver)" &>/dev/null; then
     log_message "R LSP installed successfully"
 else
     log_warning "R LSP installation could not be verified"
@@ -362,13 +372,13 @@ fi
 log_message "Verifying key R development tools..."
 
 log_command "Checking devtools version" \
-    /usr/local/bin/Rscript -e "packageVersion('devtools')" || log_warning "devtools not installed"
+    env R_LIBS_USER="${R_LIBS_USER}" /usr/local/bin/Rscript -e "packageVersion('devtools')" || log_warning "devtools not installed"
 
 log_command "Checking tidyverse version" \
-    /usr/local/bin/Rscript -e "packageVersion('tidyverse')" || log_warning "tidyverse not installed"
+    env R_LIBS_USER="${R_LIBS_USER}" /usr/local/bin/Rscript -e "packageVersion('tidyverse')" || log_warning "tidyverse not installed"
 
 log_command "Checking rmarkdown version" \
-    /usr/local/bin/Rscript -e "packageVersion('rmarkdown')" || log_warning "rmarkdown not installed"
+    env R_LIBS_USER="${R_LIBS_USER}" /usr/local/bin/Rscript -e "packageVersion('rmarkdown')" || log_warning "rmarkdown not installed"
 
 # ============================================================================
 # Final ownership fix
