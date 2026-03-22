@@ -26,7 +26,7 @@ These are defined as build arguments in the Dockerfile:
 - `HELM_VERSION` (currently 4.1.3)
 - `TERRAGRUNT_VERSION` (currently 0.99.4)
 - `TFDOCS_VERSION` (currently 0.21.0)
-- `PIXI_VERSION` (currently 0.65.0)
+- `PIXI_VERSION` (currently 0.66.0)
 - `TFLINT_VERSION` (currently 0.61.0)
 
 ## Shell Script Hardcoded Versions
