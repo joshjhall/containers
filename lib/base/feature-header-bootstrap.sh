@@ -55,3 +55,18 @@ fi
 if [ -f /tmp/build-scripts/base/bashrc-helpers.sh ]; then
     source /tmp/build-scripts/base/bashrc-helpers.sh
 fi
+
+# Check that a prerequisite binary exists, or exit with a clear error.
+# Usage: require_feature_binary "/usr/local/bin/mojo" "INCLUDE_MOJO"
+require_feature_binary() {
+    local binary_path="$1"
+    local feature_name="$2"
+    if [ ! -f "$binary_path" ]; then
+        local binary_name
+        binary_name=$(/usr/bin/basename "$binary_path")
+        log_error "${binary_name} not found at ${binary_path}"
+        log_error "The ${feature_name} feature must be enabled first"
+        log_feature_end
+        exit 1
+    fi
+}

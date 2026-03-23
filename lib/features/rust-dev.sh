@@ -66,15 +66,7 @@ log_feature_start "Rust Development Tools"
 # ============================================================================
 # Prerequisites Check
 # ============================================================================
-log_message "Checking prerequisites..."
-
-# Check if Rust/Cargo is available
-if [ ! -f "/usr/local/bin/cargo" ]; then
-    log_error "cargo not found at /usr/local/bin/cargo"
-    log_error "The INCLUDE_RUST feature must be enabled before rust-dev tools can be installed"
-    log_feature_end
-    exit 1
-fi
+require_feature_binary "/usr/local/bin/cargo" "INCLUDE_RUST"
 
 # ============================================================================
 # System Dependencies
@@ -388,6 +380,4 @@ log_feature_summary \
 # End logging
 log_feature_end
 
-echo ""
-echo "Run 'test-rust-dev' to check installed tools"
-echo "Run 'check-build-logs.sh rust-development-tools' to review installation logs"
+log_feature_instructions "test-rust-dev" "rust-development-tools"

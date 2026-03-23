@@ -103,6 +103,18 @@ verify_download() {
 }
 export -f verify_download
 
+# Mock verify_download_or_fail — wraps verify_download like the real implementation
+verify_download_or_fail() {
+    local category="$1" name="$2" version="$3" file="$4" arch="${5:-amd64}"
+    local verify_rc=0
+    verify_download "$category" "$name" "$version" "$file" "$arch" || verify_rc=$?
+    if [ "$verify_rc" -eq 1 ]; then
+        return 1
+    fi
+    return 0
+}
+export -f verify_download_or_fail
+
 # Mock register_tool_checksum_fetcher — no-op
 # Also declare the associative array it may reference
 declare -gA _TOOL_CHECKSUM_FETCHERS 2>/dev/null || true

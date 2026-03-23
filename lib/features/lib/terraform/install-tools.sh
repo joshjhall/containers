@@ -49,13 +49,7 @@ install_terragrunt() {
         fi
 
         # Run 4-tier verification
-        local verify_rc=0
-        verify_download "tool" "terragrunt" "$TERRAGRUNT_VERSION" "terragrunt" "$ARCH" || verify_rc=$?
-        if [ "$verify_rc" -eq 1 ]; then
-            log_error "Verification failed for Terragrunt ${TERRAGRUNT_VERSION}"
-            cd /
-            return 1
-        fi
+        verify_download_or_fail "tool" "terragrunt" "$TERRAGRUNT_VERSION" "terragrunt" "$ARCH" || { cd /; return 1; }
 
         log_message "✓ Terragrunt v${TERRAGRUNT_VERSION} verified successfully"
 
@@ -112,13 +106,7 @@ install_terraform_docs() {
     fi
 
     # Run 4-tier verification
-    local verify_rc=0
-    verify_download "tool" "terraform-docs" "$TFDOCS_VERSION" "terraform-docs.tar.gz" "$ARCH" || verify_rc=$?
-    if [ "$verify_rc" -eq 1 ]; then
-        log_error "Verification failed for terraform-docs ${TFDOCS_VERSION}"
-        cd /
-        return 1
-    fi
+    verify_download_or_fail "tool" "terraform-docs" "$TFDOCS_VERSION" "terraform-docs.tar.gz" "$ARCH" || { cd /; return 1; }
 
     # Extract and install
     log_command "Extracting terraform-docs" \
@@ -175,13 +163,7 @@ install_tflint() {
     fi
 
     # Run 4-tier verification
-    local verify_rc=0
-    verify_download "tool" "tflint" "$TFLINT_VERSION" "$TFLINT_ARCHIVE" "$ARCH" || verify_rc=$?
-    if [ "$verify_rc" -eq 1 ]; then
-        log_error "Verification failed for tflint ${TFLINT_VERSION}"
-        cd /
-        return 1
-    fi
+    verify_download_or_fail "tool" "tflint" "$TFLINT_VERSION" "$TFLINT_ARCHIVE" "$ARCH" || { cd /; return 1; }
 
     # Extract zip file
     log_command "Extracting tflint" \

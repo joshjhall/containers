@@ -159,14 +159,7 @@ if [ -n "$K9S_FILENAME" ]; then
     fi
 
     # Run 4-tier verification
-    verify_rc=0
-    verify_download "tool" "k9s" "$K9S_VERSION" "k9s.tar.gz" "$ARCH" || verify_rc=$?
-    if [ "$verify_rc" -eq 1 ]; then
-        log_error "Verification failed for k9s ${K9S_VERSION}"
-        cd /
-        log_feature_end
-        exit 1
-    fi
+    verify_download_or_fail "tool" "k9s" "$K9S_VERSION" "k9s.tar.gz" "$ARCH" || { cd /; log_feature_end; exit 1; }
 
     # Extract k9s binary
     log_command "Extracting k9s" \
@@ -224,14 +217,7 @@ if [ -n "$HELM_FILENAME" ]; then
     fi
 
     # Run 4-tier verification
-    verify_rc=0
-    verify_download "tool" "helm" "$HELM_VERSION" "helm.tar.gz" "$HELM_ARCH" || verify_rc=$?
-    if [ "$verify_rc" -eq 1 ]; then
-        log_error "Verification failed for Helm ${HELM_VERSION}"
-        cd /
-        log_feature_end
-        exit 1
-    fi
+    verify_download_or_fail "tool" "helm" "$HELM_VERSION" "helm.tar.gz" "$HELM_ARCH" || { cd /; log_feature_end; exit 1; }
 
     # Extract and install
     log_command "Extracting Helm" \
@@ -298,14 +284,7 @@ if [ -n "$KREW_FILENAME" ]; then
     fi
 
     # Run 4-tier verification
-    verify_rc=0
-    verify_download "tool" "krew" "$KREW_VERSION" "krew.tar.gz" "$KREW_ARCH" || verify_rc=$?
-    if [ "$verify_rc" -eq 1 ]; then
-        log_error "Verification failed for krew ${KREW_VERSION}"
-        cd /
-        log_feature_end
-        exit 1
-    fi
+    verify_download_or_fail "tool" "krew" "$KREW_VERSION" "krew.tar.gz" "$KREW_ARCH" || { cd /; log_feature_end; exit 1; }
 
     # Extract krew
     log_command "Extracting krew" \
@@ -487,6 +466,4 @@ echo "  kubectl: ${KUBECTL_VERSION} (via APT)"
 echo "  k9s: ${K9S_VERSION}"
 echo "  helm: $(helm version --short 2>/dev/null || echo 'installed')"
 echo "  krew: ${KREW_VERSION}"
-echo ""
-echo "Run 'test-kubernetes' to verify installation"
-echo "Run 'check-build-logs.sh kubernetes-tools' to review installation logs"
+log_feature_instructions "test-kubernetes" "kubernetes-tools"

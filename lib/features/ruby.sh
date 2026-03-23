@@ -151,15 +151,7 @@ fi
 # Verify using 4-tier system (GPG → Pinned → Published → Calculated)
 # This will try each tier in order and log which method succeeded
 # Exit codes: 0=verified, 1=failed, 2=unverified (TOFU fallback)
-_verify_rc=0
-verify_download "language" "ruby" "$RUBY_VERSION" "$RUBY_TARBALL" || _verify_rc=$?
-if [ "$_verify_rc" -eq 1 ]; then
-    log_error "Checksum verification failed for Ruby ${RUBY_VERSION}"
-    log_feature_end
-    exit 1
-elif [ "$_verify_rc" -eq 2 ]; then
-    log_warning "Download accepted without external verification (TOFU)"
-fi
+verify_download_or_fail "language" "ruby" "$RUBY_VERSION" "$RUBY_TARBALL" || { log_feature_end; exit 1; }
 
 log_command "Extracting Ruby source" \
     tar -xzf "${RUBY_TARBALL}"
@@ -391,5 +383,4 @@ log_feature_end
 
 echo ""
 echo "Ruby is installed directly without rbenv"
-echo "Run 'test-ruby' to verify Ruby installation"
-echo "Run 'check-build-logs.sh ruby' to review installation logs"
+log_feature_instructions "test-ruby" "ruby"

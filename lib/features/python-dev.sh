@@ -57,18 +57,13 @@ apt_install \
 apt_install_conditional 11 12 python3-distutils
 
 # ============================================================================
+# Prerequisites Check
+# ============================================================================
+require_feature_binary "/usr/local/bin/python" "INCLUDE_PYTHON"
+
+# ============================================================================
 # Python Tool Installation
 # ============================================================================
-log_message "Checking prerequisites..."
-
-# Check if Python is available
-if [ ! -f "/usr/local/bin/python" ]; then
-    log_error "Python not found at /usr/local/bin/python"
-    log_error "The INCLUDE_PYTHON feature must be enabled first"
-    log_feature_end
-    exit 1
-fi
-
 # Install Python tools globally via pip
 # Since we're in a container, global installation is appropriate
 log_message "Installing development tools..."
@@ -243,5 +238,4 @@ log_feature_summary \
 # End logging
 log_feature_end
 
-echo ""
-echo "Run 'check-build-logs.sh python-development-tools' to review installation logs"
+log_feature_instructions "test-python-dev" "python-development-tools"

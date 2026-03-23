@@ -259,10 +259,20 @@ log_feature_summary() {
     } | command tee -a "$CURRENT_LOG_FILE"
 }
 
+# Print standard post-install instructions for a feature.
+# Usage: log_feature_instructions "test-golang" "golang"
+log_feature_instructions() {
+    local test_cmd="$1"
+    local log_slug="$2"
+    echo ""
+    echo "Run '${test_cmd}' to verify installation"
+    echo "Run 'check-build-logs.sh ${log_slug}' to review installation logs"
+}
+
 # ============================================================================
 # Export Declarations
 # ============================================================================
-protected_export log_feature_start log_command log_feature_end log_feature_summary
+protected_export log_feature_start log_command log_feature_end log_feature_summary log_feature_instructions
 protected_export log_message log_info log_debug log_error log_warning
 protected_export safe_eval _get_log_level_num _should_log
 protected_export _get_last_command_start_line _count_patterns_since

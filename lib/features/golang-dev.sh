@@ -68,15 +68,7 @@ log_feature_start "Golang Development Tools"
 # ============================================================================
 # Prerequisites Check
 # ============================================================================
-log_message "Checking prerequisites..."
-
-# Check if Go is available
-if [ ! -f "/usr/local/bin/go" ]; then
-    log_error "go not found at /usr/local/bin/go"
-    log_error "The INCLUDE_GOLANG feature must be enabled before golang-dev tools can be installed"
-    log_feature_end
-    exit 1
-fi
+require_feature_binary "/usr/local/bin/go" "INCLUDE_GOLANG"
 
 # ============================================================================
 # System Dependencies
@@ -321,6 +313,4 @@ log_feature_summary \
 # End logging
 log_feature_end
 
-echo ""
-echo "Run 'test-golang-dev' to check installed tools"
-echo "Run 'check-build-logs.sh golang-development-tools' to review installation logs"
+log_feature_instructions "test-golang-dev" "golang-development-tools"

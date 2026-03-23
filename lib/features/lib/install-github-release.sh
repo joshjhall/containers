@@ -173,15 +173,8 @@ install_github_release() {
     fi
 
     # Run 4-tier verification
-    local verify_rc=0
-    verify_download "tool" "$tool_name" "$version" "$local_file" "$arch" || verify_rc=$?
-
-    if [ "$verify_rc" -eq 1 ]; then
-        log_error "Verification failed for ${tool_name} ${version}"
-        cd /
-        return 1
-    fi
-    # verify_rc=0 (verified) or verify_rc=2 (TOFU, allowed by policy) — proceed
+    # Returns 0 on success (Tier 1-3 or Tier 4 TOFU accepted), 1 on hard failure
+    verify_download_or_fail "tool" "$tool_name" "$version" "$local_file" "$arch" || { cd /; return 1; }
 
     # For extract_flat, extract from the already-downloaded file
     if [[ "$install_type" == extract_flat:* ]]; then

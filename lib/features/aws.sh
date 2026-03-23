@@ -144,9 +144,8 @@ log_message "✓ AWS CLI v2 signature verified"
 
 # Run 4-tier verification for unified logging (GPG already verified above)
 # No fetcher registered — the GPG verification above is stronger than Tier 3
-verify_rc=0
-verify_download "tool" "aws-cli" "latest" "awscliv2.zip" "$ARCH" || verify_rc=$?
-# We don't fail on verify_rc since we already verified with GPG above
+# Non-fatal: GPG signature above is the primary verification
+verify_download "tool" "aws-cli" "latest" "awscliv2.zip" "$ARCH" || true
 
 log_command "Extracting AWS CLI v2" \
     unzip -q awscliv2.zip
@@ -185,14 +184,7 @@ if [ -n "$SESSION_MANAGER_URL" ]; then
     fi
 
     # Run 4-tier verification (TOFU — no published checksums)
-    verify_rc=0
-    verify_download "tool" "session-manager-plugin" "latest" "session-manager-plugin.deb" "$ARCH" || verify_rc=$?
-    if [ "$verify_rc" -eq 1 ]; then
-        log_error "Verification failed for Session Manager plugin"
-        cd /
-        log_feature_end
-        exit 1
-    fi
+    verify_download_or_fail "tool" "session-manager-plugin" "latest" "session-manager-plugin.deb" "$ARCH" || { cd /; log_feature_end; exit 1; }
 
     log_command "Installing Session Manager plugin" \
         dpkg -i session-manager-plugin.deb
@@ -333,6 +325,4 @@ log_feature_summary \
 # End logging
 log_feature_end
 
-echo ""
-echo "Run 'test-aws' to verify installation"
-echo "Run 'check-build-logs.sh aws' to review installation logs"
+log_feature_instructions "test-aws" "aws"

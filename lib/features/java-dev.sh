@@ -49,23 +49,8 @@ log_feature_start "Java Development Tools"
 # ============================================================================
 # Prerequisites Check
 # ============================================================================
-log_message "Checking prerequisites..."
-
-# Check if Java is available
-if [ ! -f "/usr/local/bin/java" ]; then
-    log_error "Java not found at /usr/local/bin/java"
-    log_error "The INCLUDE_JAVA feature must be enabled before java-dev tools can be installed"
-    log_feature_end
-    exit 1
-fi
-
-# Check if Maven is available
-if [ ! -f "/usr/local/bin/mvn" ]; then
-    log_error "Maven not found at /usr/local/bin/mvn"
-    log_error "The INCLUDE_JAVA feature must be enabled first"
-    log_feature_end
-    exit 1
-fi
+require_feature_binary "/usr/local/bin/java" "INCLUDE_JAVA"
+require_feature_binary "/usr/local/bin/mvn" "INCLUDE_JAVA"
 
 # ============================================================================
 # System Dependencies
@@ -105,13 +90,8 @@ _download_and_verify_tool() {
         log_error "Failed to download ${tool_name} ${version}"
         return 1
     fi
-    local verify_rc=0
-    verify_download "tool" "$tool_name" "$version" "$output_file" \
-        "$(dpkg --print-architecture)" || verify_rc=$?
-    if [ "$verify_rc" -eq 1 ]; then
-        log_error "Verification failed for ${tool_name} ${version}"
-        return 1
-    fi
+    verify_download_or_fail "tool" "$tool_name" "$version" "$output_file" \
+        "$(dpkg --print-architecture)" || return 1
 }
 
 # ============================================================================
@@ -492,7 +472,4 @@ log_feature_summary \
 # End logging
 log_feature_end
 
-echo ""
-echo "Run 'test-java-dev' to check installed tools"
-echo "Run 'java-dev-help' to see available commands"
-echo "Run 'check-build-logs.sh java-development-tools' to review installation logs"
+log_feature_instructions "test-java-dev" "java-development-tools"

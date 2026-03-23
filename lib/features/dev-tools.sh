@@ -280,6 +280,4 @@ log_feature_summary \
 # End logging
 log_feature_end
 
-echo ""
-echo "Run 'test-dev-tools' to verify installation"
-echo "Run 'check-build-logs.sh development-tools' to review installation logs"
+log_feature_instructions "test-dev-tools" "development-tools"

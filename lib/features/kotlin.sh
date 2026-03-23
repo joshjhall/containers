@@ -149,12 +149,7 @@ if ! command curl -L -f --retry 3 --retry-delay 2 --retry-all-errors --progress-
 fi
 
 # Run 4-tier verification (TOFU — Kotlin doesn't publish checksums)
-verify_rc=0
-verify_download "tool" "kotlin-compiler" "$KOTLIN_VERSION" "kotlin-compiler.zip" "$ARCH" || verify_rc=$?
-if [ "$verify_rc" -eq 1 ]; then
-    log_error "Verification failed for Kotlin compiler ${KOTLIN_VERSION}"
-    exit 1
-fi
+verify_download_or_fail "tool" "kotlin-compiler" "$KOTLIN_VERSION" "kotlin-compiler.zip" "$ARCH" || exit 1
 
 # Extract Kotlin
 log_command "Extracting Kotlin compiler" \
@@ -314,6 +309,4 @@ log_feature_summary \
 # End logging
 log_feature_end
 
-echo ""
-echo "Run 'test-kotlin' to verify Kotlin installation"
-echo "Run 'check-build-logs.sh kotlin' to review installation logs"
+log_feature_instructions "test-kotlin" "kotlin"

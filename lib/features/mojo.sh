@@ -146,13 +146,7 @@ else
     fi
 
     # Run 4-tier verification
-    verify_rc=0
-    verify_download "tool" "pixi" "$PIXI_VERSION" "pixi.tar.gz" "$(dpkg --print-architecture)" || verify_rc=$?
-    if [ "$verify_rc" -eq 1 ]; then
-        log_error "Verification failed for pixi ${PIXI_VERSION}"
-        log_feature_end
-        exit 1
-    fi
+    verify_download_or_fail "tool" "pixi" "$PIXI_VERSION" "pixi.tar.gz" "$(dpkg --print-architecture)" || { log_feature_end; exit 1; }
 
     # Extract verified archive
     log_message "Extracting pixi..."
@@ -414,6 +408,5 @@ log_feature_summary \
 log_feature_end
 
 echo ""
-echo "Run 'test-mojo' to verify installation"
 echo "Run 'mojo' to start the Mojo REPL"
-echo "Run 'check-build-logs.sh mojo' to review installation logs"
+log_feature_instructions "test-mojo" "mojo"

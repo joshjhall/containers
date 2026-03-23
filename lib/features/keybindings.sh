@@ -383,5 +383,4 @@ log_feature_end
 
 echo ""
 echo "Keybinding profile: ${KEYBINDING_PROFILE}"
-echo "Run 'test-keybindings' to verify configuration and see available shortcuts"
-echo "Run 'check-build-logs.sh keybindings' to review installation logs"
+log_feature_instructions "test-keybindings" "keybindings"

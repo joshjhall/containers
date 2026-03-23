@@ -283,8 +283,22 @@ verify_download() {
     return "$tier4_rc"
 }
 
+# Wrapper: verify_download that returns 1 on verification failure.
+# Returns 0 on success (Tier 1-3 or Tier 4 TOFU accepted), 1 on hard failure.
+# Usage: verify_download_or_fail "language" "python" "$VER" "$file" || { log_feature_end; exit 1; }
+verify_download_or_fail() {
+    local category="$1" name="$2" version="$3" file="$4" arch="${5:-amd64}"
+    local verify_rc=0
+    verify_download "$category" "$name" "$version" "$file" "$arch" || verify_rc=$?
+    if [ "$verify_rc" -eq 1 ]; then
+        log_error "Checksum verification failed for ${name} ${version}"
+        return 1
+    fi
+    return 0
+}
+
 # Export functions for use in feature scripts
 # Note: verify_calculated_checksum and print_tofu_summary are exported by checksum-tier4.sh
 # Note: lookup_pinned_checksum and verify_pinned_checksum are exported by checksum-pinned.sh
 # Note: register_tool_checksum_fetcher and verify_tool_published_checksum are exported by checksum-fetch.sh
-protected_export verify_download verify_signature_tier verify_published_checksum
+protected_export verify_download verify_download_or_fail verify_signature_tier verify_published_checksum

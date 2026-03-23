@@ -38,23 +38,8 @@ log_feature_start "Node.js Development Tools"
 # ============================================================================
 # Prerequisites Check
 # ============================================================================
-log_message "Checking prerequisites..."
-
-# Check if Node.js is available
-if [ ! -f "/usr/local/bin/node" ]; then
-    log_error "Node.js not found at /usr/local/bin/node"
-    log_error "The INCLUDE_NODE feature must be enabled before node-dev tools can be installed"
-    log_feature_end
-    exit 1
-fi
-
-# Check if npm is available
-if [ ! -f "/usr/local/bin/npm" ]; then
-    log_error "npm not found at /usr/local/bin/npm"
-    log_error "The INCLUDE_NODE feature must be enabled first"
-    log_feature_end
-    exit 1
-fi
+require_feature_binary "/usr/local/bin/node" "INCLUDE_NODE"
+require_feature_binary "/usr/local/bin/npm" "INCLUDE_NODE"
 
 # ============================================================================
 # System Dependencies
@@ -392,6 +377,4 @@ log_feature_summary \
 # End logging
 log_feature_end
 
-echo ""
-echo "Run 'test-node-dev' to check installed tools"
-echo "Run 'check-build-logs.sh node-development-tools' to review installation logs"
+log_feature_instructions "test-node-dev" "node-development-tools"

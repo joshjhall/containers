@@ -220,14 +220,7 @@ if ! command curl -L -f --retry 3 --retry-delay 2 --retry-all-errors --progress-
 fi
 
 # Run 4-tier verification
-verify_rc=0
-verify_download "tool" "lazydocker" "$LAZYDOCKER_VERSION" "lazydocker.tar.gz" "$(dpkg --print-architecture)" || verify_rc=$?
-if [ "$verify_rc" -eq 1 ]; then
-    log_error "Verification failed for lazydocker ${LAZYDOCKER_VERSION}"
-    cd /
-    log_feature_end
-    exit 1
-fi
+verify_download_or_fail "tool" "lazydocker" "$LAZYDOCKER_VERSION" "lazydocker.tar.gz" "$(dpkg --print-architecture)" || { cd /; log_feature_end; exit 1; }
 
 # Extract and install
 log_command "Extracting lazydocker" \
@@ -282,14 +275,7 @@ if ! command curl -L -f --retry 3 --retry-delay 2 --retry-all-errors --progress-
 fi
 
 # Run 4-tier verification
-verify_rc=0
-verify_download "tool" "dive" "$DIVE_VERSION" "dive.deb" "$(dpkg --print-architecture)" || verify_rc=$?
-if [ "$verify_rc" -eq 1 ]; then
-    log_error "Verification failed for dive ${DIVE_VERSION}"
-    cd /
-    log_feature_end
-    exit 1
-fi
+verify_download_or_fail "tool" "dive" "$DIVE_VERSION" "dive.deb" "$(dpkg --print-architecture)" || { cd /; log_feature_end; exit 1; }
 
 log_message "✓ dive v${DIVE_VERSION} verified successfully"
 

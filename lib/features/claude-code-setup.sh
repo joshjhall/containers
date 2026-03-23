@@ -298,6 +298,4 @@ log_feature_summary \
 # End logging
 log_feature_end
 
-echo ""
-echo "Run 'claude' to authenticate, then 'claude-setup' to install plugins"
-echo "Run 'check-build-logs.sh claude-code-setup' to review installation logs"
+log_feature_instructions "claude" "claude-code-setup"

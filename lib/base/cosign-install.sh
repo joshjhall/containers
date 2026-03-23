@@ -84,14 +84,7 @@ install_cosign() {
     fi
 
     # Run 4-tier verification
-    local verify_rc=0
-    verify_download "tool" "cosign" "$cosign_version" "cosign.deb" "$cosign_arch" || verify_rc=$?
-    if [ "$verify_rc" -eq 1 ]; then
-        log_error "Verification failed for cosign ${cosign_version}"
-        cd /
-        command rm -rf "$build_temp"
-        return 1
-    fi
+    verify_download_or_fail "tool" "cosign" "$cosign_version" "cosign.deb" "$cosign_arch" || { cd /; command rm -rf "$build_temp"; return 1; }
 
     log_message "✓ cosign v${cosign_version} verified successfully"
 

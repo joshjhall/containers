@@ -25,13 +25,7 @@ install_entr() {
     # Source checksum verification if available
     if [ -f /tmp/build-scripts/base/checksum-verification.sh ]; then
         source /tmp/build-scripts/base/checksum-verification.sh
-        local verify_rc=0
-        verify_download "tool" "entr" "$ENTR_VERSION" "$ENTR_TARBALL" "$(dpkg --print-architecture)" || verify_rc=$?
-        if [ "$verify_rc" -eq 1 ]; then
-            log_error "Verification failed for entr ${ENTR_VERSION}"
-            cd /
-            return 1
-        fi
+        verify_download_or_fail "tool" "entr" "$ENTR_VERSION" "$ENTR_TARBALL" "$(dpkg --print-architecture)" || { cd /; return 1; }
     fi
 
     log_message "✓ entr v${ENTR_VERSION} downloaded successfully"
@@ -134,14 +128,7 @@ install_uv() {
     fi
 
     # Run 4-tier verification
-    local verify_rc=0
-    verify_download "tool" "uv" "$UV_VERSION" "$local_file" "$arch" || verify_rc=$?
-
-    if [ "$verify_rc" -eq 1 ]; then
-        log_error "Verification failed for uv ${UV_VERSION}"
-        cd /
-        return 1
-    fi
+    verify_download_or_fail "tool" "uv" "$UV_VERSION" "$local_file" "$arch" || { cd /; return 1; }
 
     # Extract both uv and uvx binaries
     log_command "Extracting uv" \

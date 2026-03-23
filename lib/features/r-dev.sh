@@ -31,23 +31,8 @@ log_feature_start "R Development Tools"
 # ============================================================================
 # Prerequisites Check
 # ============================================================================
-log_message "Checking prerequisites..."
-
-# Check if R is available
-if [ ! -f "/usr/local/bin/R" ]; then
-    log_error "R not found at /usr/local/bin/R"
-    log_error "The INCLUDE_R feature must be enabled before r-dev tools can be installed"
-    log_feature_end
-    exit 1
-fi
-
-# Check if Rscript is available
-if [ ! -f "/usr/local/bin/Rscript" ]; then
-    log_error "Rscript not found at /usr/local/bin/Rscript"
-    log_error "The INCLUDE_R feature must be enabled first"
-    log_feature_end
-    exit 1
-fi
+require_feature_binary "/usr/local/bin/R" "INCLUDE_R"
+require_feature_binary "/usr/local/bin/Rscript" "INCLUDE_R"
 
 # ============================================================================
 # System Dependencies
@@ -404,6 +389,4 @@ log_feature_summary \
 # End logging
 log_feature_end
 
-echo ""
-echo "Run 'test-r-dev' to check installed tools"
-echo "Run 'check-build-logs.sh r-dev' to review installation logs and errors"
+log_feature_instructions "test-r-dev" "r-dev"

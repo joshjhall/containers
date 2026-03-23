@@ -80,13 +80,7 @@ install_jdtls() {
         # Source checksum verification if available
         if [ -f /tmp/build-scripts/base/checksum-verification.sh ]; then
             source /tmp/build-scripts/base/checksum-verification.sh
-            local _jdtls_verify_rc=0
-            verify_download "tool" "jdtls" "$JDTLS_VERSION" "/tmp/jdtls.tar.gz" "$(dpkg --print-architecture 2>/dev/null || echo 'amd64')" || _jdtls_verify_rc=$?
-            if [ "$_jdtls_verify_rc" -eq 1 ]; then
-                log_warning "Verification failed for jdtls, skipping"
-                rm -f /tmp/jdtls.tar.gz
-                return 1
-            fi
+            verify_download_or_fail "tool" "jdtls" "$JDTLS_VERSION" "/tmp/jdtls.tar.gz" "$(dpkg --print-architecture 2>/dev/null || echo 'amd64')" || { rm -f /tmp/jdtls.tar.gz; return 1; }
         fi
         log_message "Extracting jdtls to ${JDTLS_HOME}..."
         tar -xzf /tmp/jdtls.tar.gz -C "${JDTLS_HOME}"

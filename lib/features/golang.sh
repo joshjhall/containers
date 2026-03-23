@@ -186,15 +186,7 @@ fi
 # Verify using 4-tier system (GPG → Pinned → Published → Calculated)
 # This will try each tier in order and log which method succeeded
 # Exit codes: 0=verified, 1=failed, 2=unverified (TOFU fallback)
-_verify_rc=0
-verify_download "language" "go" "$GO_VERSION" "$GO_TARBALL" "$GO_ARCH" || _verify_rc=$?
-if [ "$_verify_rc" -eq 1 ]; then
-    log_error "Checksum verification failed for Go ${GO_VERSION}"
-    log_feature_end
-    exit 1
-elif [ "$_verify_rc" -eq 2 ]; then
-    log_warning "Download accepted without external verification (TOFU)"
-fi
+verify_download_or_fail "language" "go" "$GO_VERSION" "$GO_TARBALL" "$GO_ARCH" || { log_feature_end; exit 1; }
 
 # Extract Go to /usr/local
 log_command "Extracting Go to /usr/local" \
@@ -316,6 +308,4 @@ echo "Cache directories configured:"
 echo "  GOPATH: ${GOPATH}"
 echo "  GOCACHE: ${GOCACHE}"
 echo "  GOMODCACHE: ${GOMODCACHE}"
-echo ""
-echo "Run 'test-go' to verify Go installation"
-echo "Run 'check-build-logs.sh golang' to review installation logs"
+log_feature_instructions "test-go" "golang"

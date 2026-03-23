@@ -442,6 +442,4 @@ log_feature_summary \
 # End logging
 log_feature_end
 
-echo ""
-echo "Run 'test-java' to verify Java installation"
-echo "Run 'check-build-logs.sh java' to review installation logs"
+log_feature_instructions "test-java" "java"

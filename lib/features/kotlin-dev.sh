@@ -302,6 +302,4 @@ log_feature_summary \
 # End logging
 log_feature_end
 
-echo ""
-echo "Run 'test-kotlin-dev' to verify Kotlin dev tools installation"
-echo "Run 'check-build-logs.sh kotlin-dev' to review installation logs"
+log_feature_instructions "test-kotlin-dev" "kotlin-dev"

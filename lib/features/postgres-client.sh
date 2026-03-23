@@ -184,6 +184,4 @@ log_feature_summary \
 # End logging
 log_feature_end
 
-echo ""
-echo "Run 'test-postgres' to verify installation"
-echo "Run 'check-build-logs.sh postgresql-client' to review installation logs"
+log_feature_instructions "test-postgres" "postgresql-client"

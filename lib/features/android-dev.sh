@@ -418,6 +418,4 @@ log_feature_summary \
 # End logging
 log_feature_end
 
-echo ""
-echo "Run 'test-android-dev' to verify Android dev tools installation"
-echo "Run 'check-build-logs.sh android-dev' to review installation logs"
+log_feature_instructions "test-android-dev" "android-dev"

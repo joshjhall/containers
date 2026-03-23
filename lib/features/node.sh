@@ -129,15 +129,7 @@ fi
 # Verify using 4-tier system (GPG → Pinned → Published → Calculated)
 # This will try each tier in order and log which method succeeded
 # Exit codes: 0=verified, 1=failed, 2=unverified (TOFU fallback)
-_verify_rc=0
-verify_download "language" "nodejs" "$NODE_VERSION" "$NODE_TARBALL" "$NODE_ARCH" || _verify_rc=$?
-if [ "$_verify_rc" -eq 1 ]; then
-    log_error "Checksum verification failed for Node.js ${NODE_VERSION}"
-    log_feature_end
-    exit 1
-elif [ "$_verify_rc" -eq 2 ]; then
-    log_warning "Download accepted without external verification (TOFU)"
-fi
+verify_download_or_fail "language" "nodejs" "$NODE_VERSION" "$NODE_TARBALL" "$NODE_ARCH" || { log_feature_end; exit 1; }
 
 log_command "Extracting Node.js to /usr/local" \
     tar -xJf "$NODE_TARBALL" --strip-components=1 -C /usr/local
@@ -423,6 +415,4 @@ log_feature_summary \
 # End logging
 log_feature_end
 
-echo ""
-echo "Run 'test-node' to verify Node.js installation"
-echo "Run 'check-build-logs.sh node' to review installation logs"
+log_feature_instructions "test-node" "node"

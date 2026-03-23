@@ -34,23 +34,8 @@ log_feature_start "Ruby Development Tools"
 # ============================================================================
 # Prerequisites Check
 # ============================================================================
-log_message "Checking prerequisites..."
-
-# Check if Ruby is available
-if [ ! -f "/usr/local/bin/ruby" ]; then
-    log_error "Ruby not found at /usr/local/bin/ruby"
-    log_error "The INCLUDE_RUBY feature must be enabled before ruby-dev tools can be installed"
-    log_feature_end
-    exit 1
-fi
-
-# Check if gem is available
-if [ ! -f "/usr/local/bin/gem" ]; then
-    log_error "gem not found at /usr/local/bin/gem"
-    log_error "The INCLUDE_RUBY feature must be enabled first"
-    log_feature_end
-    exit 1
-fi
+require_feature_binary "/usr/local/bin/ruby" "INCLUDE_RUBY"
+require_feature_binary "/usr/local/bin/gem" "INCLUDE_RUBY"
 
 # ============================================================================
 # System Dependencies
@@ -268,5 +253,4 @@ log_feature_summary \
 # End logging
 log_feature_end
 
-echo ""
-echo "Run 'check-build-logs.sh ruby-development-tools' to review installation logs"
+log_feature_instructions "test-ruby-dev" "ruby-development-tools"

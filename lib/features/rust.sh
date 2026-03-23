@@ -141,13 +141,7 @@ fi
 
 # Run 4-tier verification
 ARCH_DEB=$(dpkg --print-architecture)
-verify_rc=0
-verify_download "tool" "rustup-init" "$RUST_VERSION" "rustup-init" "$ARCH_DEB" || verify_rc=$?
-if [ "$verify_rc" -eq 1 ]; then
-    log_error "Verification failed for rustup-init"
-    log_feature_end
-    exit 1
-fi
+verify_download_or_fail "tool" "rustup-init" "$RUST_VERSION" "rustup-init" "$ARCH_DEB" || { log_feature_end; exit 1; }
 
 # Make executable
 log_command "Making rustup-init executable" \
@@ -270,4 +264,4 @@ echo "    Toolchain: ${RUST_VERSION}"
 echo "    CARGO_HOME: ${CARGO_HOME}"
 echo "    RUSTUP_HOME: ${RUSTUP_HOME}"
 echo "    Tools installed: cargo-watch, mdBook suite"
-echo "Run 'check-build-logs.sh rust' to review installation logs"
+log_feature_instructions "test-rust" "rust"

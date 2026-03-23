@@ -115,13 +115,7 @@ if ! command curl -L -f --retry 3 --retry-delay 2 --retry-all-errors --progress-
 fi
 
 # Run 4-tier verification
-verify_rc=0
-verify_download "tool" "ollama" "$OLLAMA_VERSION" "${BUILD_TEMP}/ollama.tgz" "$OLLAMA_ARCH" || verify_rc=$?
-if [ "$verify_rc" -eq 1 ]; then
-    log_error "Verification failed for Ollama ${OLLAMA_VERSION}"
-    log_feature_end
-    exit 1
-fi
+verify_download_or_fail "tool" "ollama" "$OLLAMA_VERSION" "${BUILD_TEMP}/ollama.tgz" "$OLLAMA_ARCH" || { log_feature_end; exit 1; }
 
 log_message "✓ Ollama v${OLLAMA_VERSION} verified successfully"
 
@@ -359,7 +353,6 @@ log_feature_summary \
 log_feature_end
 
 echo ""
-echo "Run 'test-ollama' to verify installation"
 echo "Run 'start-ollama' to start the service"
 echo "Run 'ollama-pull-defaults' to download starter models"
-echo "Run 'check-build-logs.sh ollama' to review installation logs"
+log_feature_instructions "test-ollama" "ollama"

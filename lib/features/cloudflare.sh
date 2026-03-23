@@ -226,14 +226,7 @@ if [ -n "$CLOUDFLARED_DEB" ]; then
     fi
 
     # Run 4-tier verification (TOFU — no published checksums)
-    verify_rc=0
-    verify_download "tool" "cloudflared" "$CLOUDFLARED_VERSION" "cloudflared.deb" "$ARCH" || verify_rc=$?
-    if [ "$verify_rc" -eq 1 ]; then
-        log_error "Verification failed for cloudflared ${CLOUDFLARED_VERSION}"
-        cd /
-        log_feature_end
-        exit 1
-    fi
+    verify_download_or_fail "tool" "cloudflared" "$CLOUDFLARED_VERSION" "cloudflared.deb" "$ARCH" || { cd /; log_feature_end; exit 1; }
 
     log_command "Installing cloudflared package" \
         dpkg -i cloudflared.deb
@@ -410,6 +403,4 @@ log_feature_summary \
 # End logging
 log_feature_end
 
-echo ""
-echo "Run 'test-cloudflare' to verify installation"
-echo "Run 'check-build-logs.sh cloudflare' to review installation logs"
+log_feature_instructions "test-cloudflare" "cloudflare"
