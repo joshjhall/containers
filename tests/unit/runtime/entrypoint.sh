@@ -34,6 +34,10 @@ setup() {
 
     # Mock first-run marker
     export FIRST_RUN_MARKER="$TEST_HOME/.container-initialized"
+
+    # Variables needed by the real run_startup_scripts function
+    export RUNNING_AS_ROOT=false
+    export USERNAME="testuser"
 }
 
 # Teardown function - runs after each test
@@ -42,8 +46,15 @@ teardown() {
     command rm -rf "$TEST_TEMP_DIR"
 
     # Unset test variables
-    unset TEST_USERNAME TEST_HOME FIRST_STARTUP_DIR STARTUP_DIR FIRST_RUN_MARKER 2>/dev/null || true
+    unset TEST_USERNAME TEST_HOME FIRST_STARTUP_DIR STARTUP_DIR FIRST_RUN_MARKER RUNNING_AS_ROOT USERNAME 2>/dev/null || true
 }
+
+# Extract run_startup_scripts from the real entrypoint.sh for isolated testing.
+# This replaces re-implemented for loops in tests with the actual production logic.
+# Uses the same sed -n extraction pattern as parse_bindfs_skip_paths (line 842).
+_RUN_STARTUP_SCRIPTS_FILE="$RESULTS_DIR/_run_startup_scripts.sh"
+command sed -n '/^run_startup_scripts()/,/^}/p' "$PROJECT_ROOT/lib/runtime/entrypoint.sh" > "$_RUN_STARTUP_SCRIPTS_FILE"
+source "$_RUN_STARTUP_SCRIPTS_FILE"
 
 # Test: First-run detection
 test_first_run_detection() {
@@ -67,17 +78,12 @@ test_first_run_detection() {
 # Test: First-startup script execution order
 test_first_startup_script_order() {
     # Create numbered scripts
-    echo 'echo "10" >> '$TEST_TEMP_DIR'/order.txt' > "$FIRST_STARTUP_DIR/10-first.sh"
-    echo 'echo "20" >> '$TEST_TEMP_DIR'/order.txt' > "$FIRST_STARTUP_DIR/20-second.sh"
-    echo 'echo "30" >> '$TEST_TEMP_DIR'/order.txt' > "$FIRST_STARTUP_DIR/30-third.sh"
-    chmod +x "$FIRST_STARTUP_DIR"/*.sh
+    echo 'echo "10" >> '"$TEST_TEMP_DIR"'/order.txt' > "$FIRST_STARTUP_DIR/10-first.sh"
+    echo 'echo "20" >> '"$TEST_TEMP_DIR"'/order.txt' > "$FIRST_STARTUP_DIR/20-second.sh"
+    echo 'echo "30" >> '"$TEST_TEMP_DIR"'/order.txt' > "$FIRST_STARTUP_DIR/30-third.sh"
 
-    # Simulate script execution in order
-    for script in "$FIRST_STARTUP_DIR"/*.sh; do
-        if [ -f "$script" ]; then
-            bash "$script"
-        fi
-    done
+    # Use the real run_startup_scripts function (extracted from entrypoint.sh)
+    run_startup_scripts "$FIRST_STARTUP_DIR" "first-startup" >/dev/null 2>&1
 
     # Check execution order
     if [ -f "$TEST_TEMP_DIR/order.txt" ]; then
@@ -92,16 +98,11 @@ test_first_startup_script_order() {
 # Test: Every-boot script execution
 test_every_boot_scripts() {
     # Create startup scripts
-    echo 'echo "startup1" >> '$TEST_TEMP_DIR'/startup.log' > "$STARTUP_DIR/10-startup1.sh"
-    echo 'echo "startup2" >> '$TEST_TEMP_DIR'/startup.log' > "$STARTUP_DIR/20-startup2.sh"
-    chmod +x "$STARTUP_DIR"/*.sh
+    echo 'echo "startup1" >> '"$TEST_TEMP_DIR"'/startup.log' > "$STARTUP_DIR/10-startup1.sh"
+    echo 'echo "startup2" >> '"$TEST_TEMP_DIR"'/startup.log' > "$STARTUP_DIR/20-startup2.sh"
 
-    # Execute startup scripts
-    for script in "$STARTUP_DIR"/*.sh; do
-        if [ -f "$script" ]; then
-            bash "$script"
-        fi
-    done
+    # Use the real run_startup_scripts function
+    run_startup_scripts "$STARTUP_DIR" "startup" >/dev/null 2>&1
 
     # Check that scripts ran
     if [ -f "$TEST_TEMP_DIR/startup.log" ]; then
@@ -113,23 +114,25 @@ test_every_boot_scripts() {
     fi
 }
 
-# Test: Script permission handling
+# Test: Script permission handling (real function runs .sh files, skips non-.sh and symlinks)
 test_script_permissions() {
-    # Create scripts with different permissions
-    echo 'echo "executable"' > "$STARTUP_DIR/10-exec.sh"
-    echo 'echo "not-executable"' > "$STARTUP_DIR/20-noexec.txt"
-    chmod +x "$STARTUP_DIR/10-exec.sh"
-    chmod -x "$STARTUP_DIR/20-noexec.txt"
+    # Create .sh file, non-.sh file, and a symlink
+    echo 'echo "sh-ran" >> '"$TEST_TEMP_DIR"'/perm.log' > "$STARTUP_DIR/10-script.sh"
+    echo 'echo "txt-ran" >> '"$TEST_TEMP_DIR"'/perm.log' > "$STARTUP_DIR/20-other.txt"
+    # Symlinks are skipped by run_startup_scripts (security: path traversal prevention)
+    ln -s "$STARTUP_DIR/10-script.sh" "$STARTUP_DIR/30-link.sh"
 
-    # Check executable .sh file detection
-    local exec_count=0
-    for script in "$STARTUP_DIR"/*.sh; do
-        if [ -f "$script" ] && [ -x "$script" ]; then
-            exec_count=$((exec_count + 1))
-        fi
-    done
+    # Use the real run_startup_scripts function
+    run_startup_scripts "$STARTUP_DIR" "startup" >/dev/null 2>&1
 
-    assert_equals "1" "$exec_count" "Only executable scripts counted"
+    # Only non-symlink .sh files should have been executed
+    if [ -f "$TEST_TEMP_DIR/perm.log" ]; then
+        local lines
+        lines=$(command wc -l < "$TEST_TEMP_DIR/perm.log")
+        assert_equals "1" "$lines" "Only non-symlink .sh files executed"
+    else
+        assert_true false "Permission log not created (no .sh file was executed)"
+    fi
 }
 
 # Test: User context switching
@@ -176,17 +179,17 @@ test_first_run_marker_creation() {
 # Test: Empty directory handling
 test_empty_directory_handling() {
     # Remove all scripts
-    command rm -f "$FIRST_STARTUP_DIR"/*.sh
-    command rm -f "$STARTUP_DIR"/*.sh
+    command rm -f "$FIRST_STARTUP_DIR"/*.sh 2>/dev/null || true
+    command rm -f "$STARTUP_DIR"/*.sh 2>/dev/null || true
 
-    # Test with empty directories
-    local first_count
-    first_count=$(command find "$FIRST_STARTUP_DIR" -name "*.sh" -type f 2>/dev/null | command wc -l)
-    local startup_count
-    startup_count=$(command find "$STARTUP_DIR" -name "*.sh" -type f 2>/dev/null | command wc -l)
+    # Real function should handle empty directories gracefully
+    local exit_code=0
+    run_startup_scripts "$FIRST_STARTUP_DIR" "first-startup" >/dev/null 2>&1 || exit_code=$?
+    assert_equals "0" "$exit_code" "Empty first-startup directory handled"
 
-    assert_equals "0" "$first_count" "Empty first-startup directory handled"
-    assert_equals "0" "$startup_count" "Empty startup directory handled"
+    exit_code=0
+    run_startup_scripts "$STARTUP_DIR" "startup" >/dev/null 2>&1 || exit_code=$?
+    assert_equals "0" "$exit_code" "Empty startup directory handled"
 }
 
 # Test: Script error handling
@@ -198,20 +201,13 @@ exit 1
 EOF
 
     # Create script that should run after failure
-    # Use cat with variable substitution to pass TEST_TEMP_DIR into the script
     command cat > "$STARTUP_DIR/20-continue.sh" << EOF
 #!/bin/bash
 echo "after-fail" > "${TEST_TEMP_DIR}/continue.log"
 EOF
 
-    chmod +x "$STARTUP_DIR"/*.sh
-
-    # Execute with error handling (ensure both scripts run)
-    for script in "$STARTUP_DIR"/*.sh; do
-        if [ -f "$script" ] && [ -x "$script" ]; then
-            bash "$script" 2>/dev/null || true  # Continue on error
-        fi
-    done
+    # Real run_startup_scripts continues past failed scripts (has || { warning } handler)
+    run_startup_scripts "$STARTUP_DIR" "startup" >/dev/null 2>&1
 
     # Give filesystem a moment to sync
     sync 2>/dev/null || true
@@ -236,13 +232,12 @@ test_environment_preservation() {
     export TEST_ENV_VAR="preserved"
 
     # Create script that checks environment
-    echo 'echo "$TEST_ENV_VAR" > '$TEST_TEMP_DIR'/env.txt' > "$STARTUP_DIR/10-env.sh"
-    chmod +x "$STARTUP_DIR/10-env.sh"
+    echo 'echo "$TEST_ENV_VAR" > '"$TEST_TEMP_DIR"'/env.txt' > "$STARTUP_DIR/10-env.sh"
 
-    # Execute script
-    bash "$STARTUP_DIR/10-env.sh"
+    # Use the real run_startup_scripts function
+    run_startup_scripts "$STARTUP_DIR" "startup" >/dev/null 2>&1
 
-    # Check environment was preserved
+    # Check environment was preserved through real function's bash invocation
     if [ -f "$TEST_TEMP_DIR/env.txt" ]; then
         local value
         value=$(command cat "$TEST_TEMP_DIR/env.txt")
