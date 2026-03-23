@@ -57,6 +57,7 @@ apt_update
 
 log_message "Installing R package build dependencies"
 apt_install \
+    cmake \
     libgit2-dev \
     libssh2-1-dev \
     libgmp-dev \
@@ -182,17 +183,6 @@ EOF
 # Run the installation script as the user
 log_command "Installing R development packages (this may take 25-30 minutes due to tidyverse)" \
     su - "${USERNAME}" -c "export R_LIBS_USER='${R_LIBS_USER}' R_LIBS_SITE='${R_LIBS_SITE}' && /usr/local/bin/Rscript '${BUILD_TEMP}/install_r_dev_tools.R'"
-
-# Debug: verify packages are at expected location after install
-log_message "Verifying R package installation location..."
-log_message "Contents of /cache/r/library:"
-/usr/bin/ls /cache/r/library/ 2>&1 | /usr/bin/head -20 || log_warning "/cache/r/library is empty or missing"
-log_message "R .libPaths() with explicit R_LIBS_USER:"
-R_LIBS_USER="/cache/r/library" /usr/local/bin/Rscript -e ".libPaths()" 2>&1 || true
-log_message "R .libPaths() without explicit R_LIBS_USER:"
-/usr/local/bin/Rscript -e ".libPaths()" 2>&1 || true
-log_message "Renviron.site contents:"
-/usr/bin/cat /etc/R/Renviron.site 2>&1 || true
 
 # ============================================================================
 # Shell Aliases and Functions
