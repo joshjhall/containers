@@ -236,11 +236,12 @@ load_secrets_from_vault() {
 
     while IFS= read -r -d '' key && IFS= read -r -d '' value; do
         if [ -n "$key" ] && [ -n "$value" ]; then
-            local env_var
-            env_var=$(normalize_env_var_name "$prefix" "$key")
-            export "${env_var}=${value}"
-            count=$((count + 1))
-            log_info "Loaded secret: $env_var"
+            if safe_export_secret "$prefix" "$key" "$value"; then
+                count=$((count + 1))
+                local env_var
+                env_var=$(normalize_env_var_name "$prefix" "$key")
+                log_info "Loaded secret: $env_var"
+            fi
         fi
     done < <(echo "$secrets_json" | jq -j "$data_path | to_entries[] | .key, \"\u0000\", .value, \"\u0000\"")
 

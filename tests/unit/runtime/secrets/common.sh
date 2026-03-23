@@ -215,6 +215,155 @@ test_url_encode_safe_chars() {
 }
 
 # ============================================================================
+# Functional Tests - is_protected_env_var()
+# ============================================================================
+
+test_protected_path() {
+    local result
+    result=$(_run_common_subshell "
+        is_protected_env_var 'PATH' && echo 'protected' || echo 'safe'
+    ")
+    assert_equals "protected" "$result" "PATH should be protected"
+}
+
+test_protected_ld_preload() {
+    local result
+    result=$(_run_common_subshell "
+        is_protected_env_var 'LD_PRELOAD' && echo 'protected' || echo 'safe'
+    ")
+    assert_equals "protected" "$result" "LD_PRELOAD should be protected"
+}
+
+test_protected_ifs() {
+    local result
+    result=$(_run_common_subshell "
+        is_protected_env_var 'IFS' && echo 'protected' || echo 'safe'
+    ")
+    assert_equals "protected" "$result" "IFS should be protected"
+}
+
+test_protected_bash_env() {
+    local result
+    result=$(_run_common_subshell "
+        is_protected_env_var 'BASH_ENV' && echo 'protected' || echo 'safe'
+    ")
+    assert_equals "protected" "$result" "BASH_ENV should be protected"
+}
+
+test_protected_vault_token() {
+    local result
+    result=$(_run_common_subshell "
+        is_protected_env_var 'VAULT_TOKEN' && echo 'protected' || echo 'safe'
+    ")
+    assert_equals "protected" "$result" "VAULT_TOKEN should be protected"
+}
+
+test_protected_op_service_account_token() {
+    local result
+    result=$(_run_common_subshell "
+        is_protected_env_var 'OP_SERVICE_ACCOUNT_TOKEN' && echo 'protected' || echo 'safe'
+    ")
+    assert_equals "protected" "$result" "OP_SERVICE_ACCOUNT_TOKEN should be protected"
+}
+
+test_safe_database_url() {
+    local result
+    result=$(_run_common_subshell "
+        is_protected_env_var 'DATABASE_URL' && echo 'protected' || echo 'safe'
+    ")
+    assert_equals "safe" "$result" "DATABASE_URL should be safe"
+}
+
+test_safe_api_key() {
+    local result
+    result=$(_run_common_subshell "
+        is_protected_env_var 'API_KEY' && echo 'protected' || echo 'safe'
+    ")
+    assert_equals "safe" "$result" "API_KEY should be safe"
+}
+
+test_safe_my_secret() {
+    local result
+    result=$(_run_common_subshell "
+        is_protected_env_var 'MY_SECRET' && echo 'protected' || echo 'safe'
+    ")
+    assert_equals "safe" "$result" "MY_SECRET should be safe"
+}
+
+test_protected_digit_leading_name() {
+    local result
+    result=$(_run_common_subshell "
+        is_protected_env_var '123BAD' && echo 'protected' || echo 'safe'
+    ")
+    assert_equals "protected" "$result" "Digit-leading names should be protected"
+}
+
+# ============================================================================
+# Functional Tests - safe_export_secret()
+# ============================================================================
+
+test_safe_export_normal_secret() {
+    local result
+    result=$(bash -c "
+        source '$SOURCE_FILE' >/dev/null 2>&1
+        safe_export_secret '' 'db_password' 'secret123'
+        echo \$DB_PASSWORD
+    " 2>/dev/null)
+    assert_equals "secret123" "$result" "Normal secret should be exported"
+}
+
+test_safe_export_blocks_path() {
+    local result
+    result=$(bash -c "
+        source '$SOURCE_FILE' >/dev/null 2>&1
+        OLD_PATH=\"\$PATH\"
+        safe_export_secret '' 'path' 'malicious' 2>/dev/null
+        if [ \"\$PATH\" = \"\$OLD_PATH\" ]; then echo 'blocked'; else echo 'overwritten'; fi
+    " 2>/dev/null)
+    assert_equals "blocked" "$result" "PATH should not be overwritten"
+}
+
+test_safe_export_blocks_normalized_ld_preload() {
+    local result
+    result=$(bash -c "
+        source '$SOURCE_FILE' >/dev/null 2>&1
+        safe_export_secret '' 'ld preload' '/tmp/evil.so' 2>/dev/null
+        echo \${LD_PRELOAD:-unset}
+    " 2>/dev/null)
+    assert_equals "unset" "$result" "Label 'ld preload' normalizes to LD_PRELOAD and should be blocked"
+}
+
+test_safe_export_returns_failure_for_protected() {
+    local result
+    result=$(bash -c "
+        source '$SOURCE_FILE' >/dev/null 2>&1
+        safe_export_secret '' 'path' 'malicious' 2>/dev/null
+        echo \$?
+    ")
+    assert_equals "1" "$result" "safe_export_secret should return 1 for protected vars"
+}
+
+test_safe_export_returns_success_for_normal() {
+    local result
+    result=$(bash -c "
+        source '$SOURCE_FILE' >/dev/null 2>&1
+        safe_export_secret '' 'api_token' 'tok123' 2>/dev/null
+        echo \$?
+    ")
+    assert_equals "0" "$result" "safe_export_secret should return 0 for normal vars"
+}
+
+test_safe_export_with_prefix() {
+    local result
+    result=$(bash -c "
+        source '$SOURCE_FILE' >/dev/null 2>&1
+        safe_export_secret 'APP_' 'token' 'mytoken' 2>/dev/null
+        echo \$APP_TOKEN
+    " 2>/dev/null)
+    assert_equals "mytoken" "$result" "Prefixed secret should be exported correctly"
+}
+
+# ============================================================================
 # Functional Tests - Inclusion Guard
 # ============================================================================
 
@@ -259,6 +408,26 @@ run_test_with_setup test_normalize_prefix_with_spaces_in_label "Prefix with spac
 run_test_with_setup test_url_encode_spaces "url_encode encodes spaces"
 run_test_with_setup test_url_encode_special_chars "url_encode encodes special characters"
 run_test_with_setup test_url_encode_safe_chars "url_encode preserves safe characters"
+
+# is_protected_env_var
+run_test_with_setup test_protected_path "PATH is protected"
+run_test_with_setup test_protected_ld_preload "LD_PRELOAD is protected"
+run_test_with_setup test_protected_ifs "IFS is protected"
+run_test_with_setup test_protected_bash_env "BASH_ENV is protected"
+run_test_with_setup test_protected_vault_token "VAULT_TOKEN is protected"
+run_test_with_setup test_protected_op_service_account_token "OP_SERVICE_ACCOUNT_TOKEN is protected"
+run_test_with_setup test_safe_database_url "DATABASE_URL is safe"
+run_test_with_setup test_safe_api_key "API_KEY is safe"
+run_test_with_setup test_safe_my_secret "MY_SECRET is safe"
+run_test_with_setup test_protected_digit_leading_name "Digit-leading names are protected"
+
+# safe_export_secret
+run_test_with_setup test_safe_export_normal_secret "safe_export_secret exports normal secret"
+run_test_with_setup test_safe_export_blocks_path "safe_export_secret blocks PATH"
+run_test_with_setup test_safe_export_blocks_normalized_ld_preload "safe_export_secret blocks normalized LD_PRELOAD"
+run_test_with_setup test_safe_export_returns_failure_for_protected "safe_export_secret returns 1 for protected"
+run_test_with_setup test_safe_export_returns_success_for_normal "safe_export_secret returns 0 for normal"
+run_test_with_setup test_safe_export_with_prefix "safe_export_secret with prefix"
 
 # Inclusion guard
 run_test_with_setup test_inclusion_guard_prevents_double_load "Double-sourcing is safe"

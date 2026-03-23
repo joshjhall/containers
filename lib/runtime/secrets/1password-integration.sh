@@ -162,12 +162,12 @@ op_connect_load_secrets() {
             # Extract fields and export as environment variables
             while IFS=$'\t' read -r field_label field_value; do
                 if [ -n "$field_label" ] && [ -n "$field_value" ]; then
-                    local env_var
-                    env_var=$(normalize_env_var_name "$prefix" "$field_label")
-
-                    export "${env_var}=${field_value}"
-                    count=$((count + 1))
-                    log_info "Loaded secret: $env_var"
+                    if safe_export_secret "$prefix" "$field_label" "$field_value"; then
+                        count=$((count + 1))
+                        local env_var
+                        env_var=$(normalize_env_var_name "$prefix" "$field_label")
+                        log_info "Loaded secret: $env_var"
+                    fi
                 fi
             done < <(echo "$item_details" | jq -r '.fields[] | select(.value != null) | [.label, .value] | @tsv')
         done
@@ -227,16 +227,15 @@ op_cli_load_secrets() {
             }
 
             # Extract field name from reference (op://vault/item/field)
-            local field_name
-            field_name=$(echo "$ref" | command awk -F'/' '{print $NF}')
-            field_name="${field_name// /_}"
-            field_name="${field_name//[^a-zA-Z0-9_]/}"
-            field_name="${field_name^^}"
+            local field_label
+            field_label=$(echo "$ref" | command awk -F'/' '{print $NF}')
 
-            local env_var="${prefix}${field_name}"
-            export "${env_var}=${value}"
-            count=$((count + 1))
-            log_info "Loaded secret: $env_var"
+            if safe_export_secret "$prefix" "$field_label" "$value"; then
+                count=$((count + 1))
+                local env_var
+                env_var=$(normalize_env_var_name "$prefix" "$field_label")
+                log_info "Loaded secret: $env_var"
+            fi
         done
     fi
 
@@ -268,12 +267,12 @@ op_cli_load_secrets() {
             if command -v jq > /dev/null 2>&1; then
                 while IFS=$'\t' read -r field_label field_value; do
                     if [ -n "$field_label" ] && [ -n "$field_value" ]; then
-                        local env_var
-                        env_var=$(normalize_env_var_name "$prefix" "$field_label")
-
-                        export "${env_var}=${field_value}"
-                        count=$((count + 1))
-                        log_info "Loaded secret: $env_var"
+                        if safe_export_secret "$prefix" "$field_label" "$field_value"; then
+                            count=$((count + 1))
+                            local env_var
+                            env_var=$(normalize_env_var_name "$prefix" "$field_label")
+                            log_info "Loaded secret: $env_var"
+                        fi
                     fi
                 done < <(echo "$item_json" | jq -r '.fields[]? | select(.value != null and .value != "") | [.label, .value] | @tsv')
             else

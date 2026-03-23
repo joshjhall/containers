@@ -130,11 +130,12 @@ load_secrets_from_aws() {
         # Secret is JSON - export each key-value pair
         while IFS= read -r -d '' key && IFS= read -r -d '' value; do
             if [ -n "$key" ] && [ -n "$value" ]; then
-                local env_var
-                env_var=$(normalize_env_var_name "$prefix" "$key")
-                export "${env_var}=${value}"
-                count=$((count + 1))
-                log_info "Loaded secret: $env_var"
+                if safe_export_secret "$prefix" "$key" "$value"; then
+                    count=$((count + 1))
+                    local env_var
+                    env_var=$(normalize_env_var_name "$prefix" "$key")
+                    log_info "Loaded secret: $env_var"
+                fi
             fi
         done < <(echo "$secret_string" | jq -j 'to_entries[] | .key, "\u0000", .value, "\u0000"')
     else
@@ -144,9 +145,13 @@ load_secrets_from_aws() {
             env_var="${AWS_SECRET_ENV_VAR}"
         fi
 
-        export "${env_var}=${secret_string}"
-        count=1
-        log_info "Loaded secret: $env_var (plain text)"
+        if is_protected_env_var "$env_var"; then
+            log_warning "Skipping protected env var: $env_var"
+        else
+            export "${env_var}=${secret_string}"
+            count=1
+            log_info "Loaded secret: $env_var (plain text)"
+        fi
     fi
 
     log_info "Successfully loaded $count secret(s) from AWS Secrets Manager"

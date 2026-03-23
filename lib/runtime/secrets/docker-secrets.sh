@@ -157,7 +157,11 @@ load_secrets_from_docker() {
         # Add prefix
         env_var_name="${prefix}${env_var_name}"
 
-        # Export as environment variable
+        # Export as environment variable (check denylist first)
+        if is_protected_env_var "$env_var_name"; then
+            log_warning "Skipping protected env var: $env_var_name (from secret: $secret_name)"
+            continue
+        fi
         export "${env_var_name}=${secret_value}"
         count=$((count + 1))
         log_info "Loaded secret: $env_var_name"

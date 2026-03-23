@@ -176,6 +176,10 @@ load_secrets_from_azure() {
         local env_var_name="${prefix}${secret_name//-/_}"
         env_var_name="${env_var_name^^}"  # Convert to uppercase
 
+        if is_protected_env_var "$env_var_name"; then
+            log_warning "Skipping protected env var: $env_var_name (from secret: $secret_name)"
+            continue
+        fi
         export "${env_var_name}=${secret_value}"
         count=$((count + 1))
         log_info "Loaded secret: $env_var_name"
