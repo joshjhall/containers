@@ -13,12 +13,19 @@ this skill. The state file written by `/next-issue` must exist.
 
 ## Step 1 — Read State
 
-1. Read `.claude/memory/tmp/next-issue-state.md`
+1. **Discover the current state file**:
+
+   - List all per-issue state files: `ls .claude/memory/tmp/next-issue-*.md 2>/dev/null`
+   - **If multiple files exist**: list them and ask which issue to ship
+   - **If exactly one file**: use it
+   - **If none exist**: check for legacy `.claude/memory/tmp/next-issue-state.md` —
+     if found, read its `issue:` field, rename to `.claude/memory/tmp/next-issue-{N}.md`,
+     then use it
 
 1. Extract: `issue` (number), `title`, `platform` (`github` or `gitlab`),
    `branch` (if set)
 
-1. If the state file is missing or empty, tell the user:
+1. If no state file is found, tell the user:
 
    > No in-progress issue found. Run `/next-issue` first to select and plan
    > an issue.
@@ -134,10 +141,10 @@ Use `AskUserQuestion` to present three options:
        --description "## Summary\n- {what changed and why}\n\n## Test plan\n- {how this was tested}\n\nCloses #{N}"
      ```
 
-1. **Label the issue** `status/pr-pending`:
+1. **Label the issue** `status/pr-pending` and remove `status/in-progress`:
 
-   - GitHub: `gh issue edit {N} --add-label "status/pr-pending"`
-   - GitLab: `glab issue update {N} --label "status/pr-pending"`
+   - GitHub: `gh issue edit {N} --add-label "status/pr-pending" --remove-label "status/in-progress"`
+   - GitLab: `glab issue update {N} --label "status/pr-pending" --unlabel "status/in-progress"`
 
 1. **Comment on the issue**:
 
@@ -146,7 +153,7 @@ Use `AskUserQuestion` to present three options:
 
 1. **Checkout main**: `git checkout main`
 
-1. **Clear state file** (write empty content to `.claude/memory/tmp/next-issue-state.md`)
+1. **Delete state file** (remove `.claude/memory/tmp/next-issue-{N}.md`)
 
 1. **Show the PR/MR URL** to the user
 
@@ -164,7 +171,12 @@ Use `AskUserQuestion` to present three options:
    git push origin main
    ```
 
-1. **Clear state file** (the `Closes` keyword auto-closes the issue on push)
+1. **Remove `status/in-progress` label**:
+
+   - GitHub: `gh issue edit {N} --remove-label "status/in-progress"`
+   - GitLab: `glab issue update {N} --unlabel "status/in-progress"`
+
+1. **Delete state file** (the `Closes` keyword auto-closes the issue on push)
 
 1. Tell the user the issue will auto-close when the push is processed
 
@@ -173,9 +185,9 @@ Use `AskUserQuestion` to present three options:
 1. **Stage and commit** with `Closes #{N}` in the body (same format as above)
 1. **Verify** the commit message includes `Closes #{N}`
 1. **Do NOT push**
-1. **Label the issue** `status/commit-pending`:
-   - GitHub: `gh issue edit {N} --add-label "status/commit-pending"`
-   - GitLab: `glab issue update {N} --label "status/commit-pending"`
+1. **Label the issue** `status/commit-pending` and remove `status/in-progress`:
+   - GitHub: `gh issue edit {N} --add-label "status/commit-pending" --remove-label "status/in-progress"`
+   - GitLab: `glab issue update {N} --label "status/commit-pending" --unlabel "status/in-progress"`
 1. **Comment on the issue** with the commit SHA:
    - **Agent mode** (branch matches `^agent`):
      - GitHub: `gh issue comment {N} --body "Agent {branch} committed fix. Ready for orchestrator review. Commit: {sha}"`
@@ -183,7 +195,7 @@ Use `AskUserQuestion` to present three options:
    - **Normal mode**:
      - GitHub: `gh issue comment {N} --body "Fix committed locally (not yet pushed). Commit: {sha}"`
      - GitLab: `glab issue note {N} --message "Fix committed locally (not yet pushed). Commit: {sha}"`
-1. **Clear state file**
+1. **Delete state file** (remove `.claude/memory/tmp/next-issue-{N}.md`)
 1. Tell the user the commit is local and needs to be pushed later
 
 ## Step 5 — Continue?

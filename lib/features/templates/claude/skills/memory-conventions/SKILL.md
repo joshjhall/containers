@@ -25,7 +25,7 @@ These files are committed and shared across the team.
 
 Store ephemeral per-session state:
 
-- Workflow tracking (e.g., `next-issue-state.md`)
+- Workflow tracking (e.g., `next-issue-101.md` for issue #101)
 - Temporary analysis or debug notes
 - State that survives context resets but not rebuilds
 
@@ -33,12 +33,12 @@ This directory is gitignored — nothing here is committed.
 
 ## Decision Guide
 
-| Information type              | Tier       | Example path                             |
-| ----------------------------- | ---------- | ---------------------------------------- |
-| "We chose X because Y"        | Long-term  | `.claude/memory/architecture-auth.md`    |
-| "Currently working on #101"   | Short-term | `.claude/memory/tmp/next-issue-state.md` |
-| "API naming convention"       | Long-term  | `.claude/memory/conventions-api.md`      |
-| "Debug session scratch notes" | Short-term | `.claude/memory/tmp/debug-session.md`    |
+| Information type              | Tier       | Example path                           |
+| ----------------------------- | ---------- | -------------------------------------- |
+| "We chose X because Y"        | Long-term  | `.claude/memory/architecture-auth.md`  |
+| "Currently working on #101"   | Short-term | `.claude/memory/tmp/next-issue-101.md` |
+| "API naming convention"       | Long-term  | `.claude/memory/conventions-api.md`    |
+| "Debug session scratch notes" | Short-term | `.claude/memory/tmp/debug-session.md`  |
 
 ## Do NOT Store
 

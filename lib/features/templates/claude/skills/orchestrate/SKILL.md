@@ -45,8 +45,9 @@ when performing a merge (Phase 2), review (Phase 3), or sync (Phase 4).
 1. **Check for associated issues** (optional — skip if `gh`/`glab` unavailable):
 
    ```bash
-   # Look for issues with status/commit-pending label assigned to this work
+   # Look for issues with in-flight status labels assigned to this work
    gh issue list --label "status/commit-pending" --state open --json number,title,assignees
+   gh issue list --label "status/in-progress" --state open --json number,title,assignees
    ```
 
 1. **Output a status table**:
@@ -215,10 +216,10 @@ Load `merge-protocol.md` before starting (Sync Protocol section).
    ```
 
 1. **Update issue labels** — for issues associated with successfully synced
-   agents, remove `status/commit-pending`:
+   agents, remove in-flight status labels:
 
-   - GitHub: `gh issue edit {N} --remove-label "status/commit-pending"`
-   - GitLab: `glab issue update {N} --unlabel "status/commit-pending"`
+   - GitHub: `gh issue edit {N} --remove-label "status/commit-pending" --remove-label "status/in-progress"`
+   - GitLab: `glab issue update {N} --unlabel "status/commit-pending" --unlabel "status/in-progress"`
 
 1. **Report** a sync summary table:
 

@@ -42,7 +42,7 @@ per-session state. Use this tier for:
 ### Examples
 
 ```text
-.claude/memory/tmp/next-issue-state.md  # Current issue workflow state
+.claude/memory/tmp/next-issue-101.md    # Issue #101 workflow state (per-issue)
 .claude/memory/tmp/debug-session.md     # Temporary debugging notes
 ```
 

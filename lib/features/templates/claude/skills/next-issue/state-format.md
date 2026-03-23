@@ -8,7 +8,16 @@ ______________________________________________________________________
 
 ## State File
 
-Path: `.claude/memory/tmp/next-issue-state.md`
+Path: `.claude/memory/tmp/next-issue-{N}.md`
+
+Where `{N}` is the issue number (e.g., `next-issue-101.md` for issue #101).
+
+### Backward Compatibility
+
+If the legacy singleton file `.claude/memory/tmp/next-issue-state.md` exists,
+read its `issue:` field, rename it to `.claude/memory/tmp/next-issue-{N}.md`
+using that issue number, then proceed normally. This migration happens once
+automatically.
 
 ### Schema
 
@@ -16,6 +25,7 @@ Write as YAML frontmatter only (no body content):
 
 ```yaml
 ---
+# File: .claude/memory/tmp/next-issue-101.md
 issue: 101
 title: "Fix critical auth bypass in session handler"
 phase: implement
@@ -42,7 +52,17 @@ platform: github
 
 **Write state** — use Write tool with the YAML frontmatter above.
 
-**Clear state** — after successful ship, write empty content.
+**Clear state** — after successful ship, delete the per-issue state file
+(`.claude/memory/tmp/next-issue-{N}.md`).
+
+**Discovery** — to find all active state files:
+
+```bash
+ls .claude/memory/tmp/next-issue-*.md 2>/dev/null
+```
+
+This returns all in-progress issue state files. Used by Phase 0 for resume
+disambiguation when multiple agents are working in parallel.
 
 **Stale state detection** — before offering to resume, validate:
 
@@ -50,23 +70,24 @@ platform: github
    - GitHub: `gh issue view {N} --json state --jq .state`
    - GitLab: `glab issue view {N}`
 1. Check if the branch exists: `git branch --list {branch}`
-1. If issue is closed or branch is gone → silently clear the file and
+1. If issue is closed or branch is gone → silently delete the state file and
    proceed to Phase 1 (don't ask the user about stale work)
 
 ______________________________________________________________________
 
 ## Status Labels
 
-Two labels track in-flight work and prevent the same issue from being
+Three labels track in-flight work and prevent the same issue from being
 picked up twice:
 
-| Label                   | Set by                        | Meaning                                      |
-| ----------------------- | ----------------------------- | -------------------------------------------- |
-| `status/pr-pending`     | `/next-issue-ship` (Option 1) | A PR has been created; awaiting review/merge |
-| `status/commit-pending` | `/next-issue-ship` (Option 3) | Fix committed locally but not yet pushed     |
+| Label                   | Set by                        | Meaning                                               |
+| ----------------------- | ----------------------------- | ----------------------------------------------------- |
+| `status/in-progress`    | `/next-issue` (Phase 1)       | An agent has selected this issue and is working on it |
+| `status/pr-pending`     | `/next-issue-ship` (Option 1) | A PR has been created; awaiting review/merge          |
+| `status/commit-pending` | `/next-issue-ship` (Option 3) | Fix committed locally but not yet pushed              |
 
-Both labels are **excluded** from all priority queries (see below) so that
-in-progress issues are never re-selected.
+All three labels are **excluded** from all priority queries (see below) so
+that in-progress issues are never re-selected.
 
 ______________________________________________________________________
 
@@ -88,7 +109,7 @@ for severity in critical high medium low; do
       --label "effort/${effort}" \
       --state open \
       --assignee "" \
-      --search "-label:status/pr-pending -label:status/commit-pending" \
+      --search "-label:status/in-progress -label:status/pr-pending -label:status/commit-pending" \
       --limit 1 \
       --json number,title,labels,body
   done
@@ -110,10 +131,10 @@ for severity in critical high medium low; do
       --not-assignee \
       --per-page 5 \
     | while read -r line; do
-        # Skip issues with status/pr-pending or status/commit-pending labels
+        # Skip issues with status/in-progress, status/pr-pending, or status/commit-pending labels
         issue_num=$(echo "$line" | /usr/bin/awk '{print $1}')
         labels=$(glab issue view "$issue_num" --output json | /usr/bin/grep -o '"status/[^"]*"')
-        if ! echo "$labels" | /usr/bin/grep -qE 'status/pr-pending|status/commit-pending'; then
+        if ! echo "$labels" | /usr/bin/grep -qE 'status/in-progress|status/pr-pending|status/commit-pending'; then
           echo "$line"
           break
         fi
@@ -131,7 +152,7 @@ excluding status labels):
 # GitHub
 gh issue list \
   --state open \
-  --search "-label:status/pr-pending -label:status/commit-pending" \
+  --search "-label:status/in-progress -label:status/pr-pending -label:status/commit-pending" \
   --limit 1 \
   --json number,title,labels,body
 

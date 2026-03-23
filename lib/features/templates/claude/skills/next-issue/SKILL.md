@@ -30,24 +30,51 @@ If `$CURRENT_BRANCH` matches `^agent` (e.g., `agent01`, `agent02`):
   Commits will stay local — the orchestrator handles delivery."
 - Note that `/next-issue-ship` will auto-select commit-only mode (Option 3)
 
+**Note on state isolation**: In agent worktree mode, each worktree has its own
+working directory, so per-issue state files are naturally isolated per agent.
+No disambiguation is needed.
+
 Proceed with Phase 0 as normal regardless of mode.
 
 ## Phase 0 — Resume Check
 
 1. **Enter plan mode** (call `EnterPlanMode` tool)
-1. Read `.claude/memory/tmp/next-issue-state.md` (if it exists)
-1. If the file contains `phase:` and `issue:` fields, **validate the state**:
-   - Check if the issue is still open (`gh issue view {N} --json state` or
-     `glab issue view {N}`)
-   - Check if the branch still exists (`git branch --list {branch}`)
-   - **If issue is closed or branch is missing**: the state is stale — silently
-     clear the file and proceed to Phase 1 (no need to ask the user)
-   - **If issue is still open and branch exists**: offer to resume:
-     - Show the issue number, title, current phase, and branch
-     - Ask: **Resume this work or start fresh?**
-     - If resume: jump to the recorded phase
-     - If fresh: clear the state file and proceed to Phase 1
-1. If no state file or it's empty: proceed to Phase 1
+
+1. **Backward compatibility**: If the legacy singleton file
+   `.claude/memory/tmp/next-issue-state.md` exists, read its `issue:` field
+   and rename it to `.claude/memory/tmp/next-issue-{N}.md` (where `{N}` is
+   the issue number). This migration happens once automatically.
+
+1. **Discover state files**: List all per-issue state files:
+
+   ```bash
+   ls .claude/memory/tmp/next-issue-*.md 2>/dev/null
+   ```
+
+1. **If multiple state files exist** (parallel agents scenario):
+
+   - List all active issues with their number, title, phase, and branch
+   - Ask: **Which issue to resume, or start fresh?**
+   - If the user picks one: validate and resume that issue (see below)
+   - If start fresh: proceed to Phase 1
+
+1. **If exactly one state file exists**: validate and offer to resume (see below)
+
+1. **If no state files exist**: proceed to Phase 1
+
+**Validation** (for a single state file or user-selected file):
+
+- Read the file and extract `phase:`, `issue:`, `branch:` fields
+- Check if the issue is still open (`gh issue view {N} --json state` or
+  `glab issue view {N}`)
+- Check if the branch still exists (`git branch --list {branch}`)
+- **If issue is closed or branch is missing**: the state is stale — silently
+  delete the state file and proceed to Phase 1 (no need to ask the user)
+- **If issue is still open and branch exists**: offer to resume:
+  - Show the issue number, title, current phase, and branch
+  - Ask: **Resume this work or start fresh?**
+  - If resume: jump to the recorded phase
+  - If fresh: delete the state file and proceed to Phase 1
 
 ## Phase 1 — Select
 
@@ -58,16 +85,22 @@ Proceed with Phase 0 as normal regardless of mode.
    skip the priority query
 1. **Otherwise query by priority** using the nested severity x effort loop
    (see `state-format.md` for exact commands). **Important**: all queries
-   MUST exclude issues with `status/pr-pending` or `status/commit-pending`
-   labels — see `state-format.md` for the exact `--search` / post-filter
-   syntax. Pick the first open, unassigned issue returned
+   MUST exclude issues with `status/in-progress`, `status/pr-pending`, or
+   `status/commit-pending` labels — see `state-format.md` for the exact
+   `--search` / post-filter syntax. Pick the first open, unassigned issue
+   returned
 1. **If no labeled issues found**: fall back to oldest open issue (also
-   excluding `status/pr-pending` and `status/commit-pending`)
+   excluding `status/in-progress`, `status/pr-pending`, and
+   `status/commit-pending`)
 1. Show the selected issue to the user — title, labels, body excerpt
 1. Ask: **Work on this issue?** (user can accept, skip to next, or pick
    a different one)
 1. Assign the issue to yourself
-1. **Write state file** with `phase: select`, issue number, title, platform
+1. **Label the issue** `status/in-progress`:
+   - GitHub: `gh issue edit {N} --add-label "status/in-progress"`
+   - GitLab: `glab issue update {N} --label "status/in-progress"`
+1. **Write state file** to `.claude/memory/tmp/next-issue-{N}.md` with
+   `phase: select`, issue number, title, platform
 
 ## Phase 2 — Plan
 

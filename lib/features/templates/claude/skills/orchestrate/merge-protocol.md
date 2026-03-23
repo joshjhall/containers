@@ -252,15 +252,15 @@ NEW_BASE=$(git merge-base <orchestrator-branch> <agent-branch>)
 
 ### Label Cleanup
 
-After a successful sync, remove `status/commit-pending` labels from issues
+After a successful sync, remove in-flight status labels from issues
 associated with synced agent branches (the work has been fully integrated):
 
 ```bash
 # GitHub
-gh issue edit {N} --remove-label "status/commit-pending"
+gh issue edit {N} --remove-label "status/commit-pending" --remove-label "status/in-progress"
 
 # GitLab
-glab issue update {N} --unlabel "status/commit-pending"
+glab issue update {N} --unlabel "status/commit-pending" --unlabel "status/in-progress"
 ```
 
 ### Return to Orchestrator
