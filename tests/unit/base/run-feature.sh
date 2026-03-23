@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Unit tests for lib/base/run-feature.sh
-# Tests the feature script wrapper functionality
+# Tests the feature script wrapper by running a modified copy of the real script.
 
 set -euo pipefail
 
@@ -13,236 +13,194 @@ init_test_framework
 # Test suite
 test_suite "Run Feature Wrapper Tests"
 
+# Path to the source script under test
+SOURCE_SCRIPT="$PROJECT_ROOT/lib/base/run-feature.sh"
+
 # Setup function - runs before each test
 setup() {
-    # Create temporary directory for testing
-    export TEST_TEMP_DIR="$RESULTS_DIR/test-run-feature"
+    local unique_id
+    unique_id="$$-$(date +%s%N 2>/dev/null || date +%s)"
+    export TEST_TEMP_DIR="$RESULTS_DIR/test-run-feature-$unique_id"
     mkdir -p "$TEST_TEMP_DIR"
 
-    # Create mock feature script
-    export MOCK_FEATURE="$TEST_TEMP_DIR/test-feature.sh"
+    # Create a modified copy of the real script that:
+    #   1. Replaces /tmp/build-env with $TEST_TEMP_DIR/build-env so tests
+    #      never touch the real /tmp/build-env
+    #   2. Replaces `exec` with plain invocation so the test process is not
+    #      replaced and we can capture output
+    export WRAPPER_SCRIPT="$TEST_TEMP_DIR/run-feature-testable.sh"
+    command sed \
+        -e "s|/tmp/build-env|\$TEST_TEMP_DIR/build-env|g" \
+        -e "s|exec \"\$FEATURE_SCRIPT\"|\"\$FEATURE_SCRIPT\"|g" \
+        "$SOURCE_SCRIPT" > "$WRAPPER_SCRIPT"
+    chmod +x "$WRAPPER_SCRIPT"
+
+    # Create the standard mock feature script that prints its received args
+    export MOCK_FEATURE="$TEST_TEMP_DIR/feature.sh"
     command cat > "$MOCK_FEATURE" << 'EOF'
 #!/bin/bash
-echo "USERNAME=$1"
-echo "UID=$2"
-echo "GID=$3"
+echo "ARG1=${1:-<unset>}"
+echo "ARG2=${2:-<unset>}"
+echo "ARG3=${3:-<unset>}"
+echo "ARGC=$#"
 EOF
     chmod +x "$MOCK_FEATURE"
-
-    # Create mock build-env file
-    export MOCK_BUILD_ENV="$TEST_TEMP_DIR/build-env"
 }
 
 # Teardown function - runs after each test
 teardown() {
-    # Clean up test directory
     if [ -n "${TEST_TEMP_DIR:-}" ]; then
         command rm -rf "$TEST_TEMP_DIR"
     fi
-
-    # Unset test variables
-    unset MOCK_FEATURE MOCK_BUILD_ENV 2>/dev/null || true
+    unset WRAPPER_SCRIPT MOCK_FEATURE 2>/dev/null || true
 }
 
-# Test: Script passes arguments to feature script
-test_argument_passing() {
-    # Simulate the wrapper script behavior
-    local feature_script="$MOCK_FEATURE"
-    local username="testuser"
-    local uid="1000"
-    local gid="1000"
+# ============================================================================
+# Static / filesystem tests
+# ============================================================================
 
-    # Execute the mock feature script directly
-        local output
-    output=$("$feature_script" "$username" "$uid" "$gid")
-
-    # Check output
-    if [[ "$output" == *"USERNAME=testuser"* ]]; then
-        assert_true true "Username passed correctly"
-    else
-        assert_true false "Username not passed correctly"
+# Test 1: Source script exists and is executable
+test_source_script_exists_and_is_executable() {
+    if [ ! -f "$SOURCE_SCRIPT" ]; then
+        assert_true false "Source script $SOURCE_SCRIPT not found"
+        return
     fi
+    assert_true true "Source script exists"
 
-    if [[ "$output" == *"UID=1000"* ]]; then
-        assert_true true "UID passed correctly"
-    else
-        assert_true false "UID not passed correctly"
+    if [ ! -x "$SOURCE_SCRIPT" ]; then
+        assert_true false "Source script $SOURCE_SCRIPT is not executable"
+        return
     fi
-
-    if [[ "$output" == *"GID=1000"* ]]; then
-        assert_true true "GID passed correctly"
-    else
-        assert_true false "GID not passed correctly"
-    fi
+    assert_true true "Source script is executable"
 }
 
-# Test: Build-env file overrides UID/GID
-test_build_env_override() {
-    # Create build-env file
-    command cat > "$MOCK_BUILD_ENV" << 'EOF'
+# ============================================================================
+# With build-env present
+# ============================================================================
+
+# Test 2: ACTUAL_UID and ACTUAL_GID from build-env override the passed-in args
+test_build_env_uid_gid_override_passed_args() {
+    command cat > "$TEST_TEMP_DIR/build-env" << 'EOF'
 ACTUAL_UID=2000
-ACTUAL_GID=2000
+ACTUAL_GID=3000
 EOF
 
-    # Simulate sourcing build-env and using actual values
-    source "$MOCK_BUILD_ENV"
-
-    # Check that ACTUAL_UID and ACTUAL_GID are set
-    assert_equals "2000" "$ACTUAL_UID" "ACTUAL_UID is set from build-env"
-    assert_equals "2000" "$ACTUAL_GID" "ACTUAL_GID is set from build-env"
-
-    # Simulate wrapper logic
-    local username="testuser"
-    local provided_uid="1000"
-    local provided_gid="1000"
-
-    # Use actual values if build-env exists
-    local final_uid="${ACTUAL_UID:-$provided_uid}"
-    local final_gid="${ACTUAL_GID:-$provided_gid}"
-
-    assert_equals "2000" "$final_uid" "UID overridden by build-env"
-    assert_equals "2000" "$final_gid" "GID overridden by build-env"
-
-    unset ACTUAL_UID ACTUAL_GID
-}
-
-# Test: Fallback when build-env doesn't exist
-test_fallback_without_build_env() {
-    # Ensure build-env doesn't exist
-    command rm -f "$MOCK_BUILD_ENV"
-
-    # Simulate wrapper behavior without build-env
-    local username="testuser"
-    local uid="1500"
-    local gid="1500"
-
-    # Since build-env doesn't exist, use passed values
     local output
-    output=$("$MOCK_FEATURE" "$username" "$uid" "$gid")
+    output=$(TEST_TEMP_DIR="$TEST_TEMP_DIR" bash "$WRAPPER_SCRIPT" \
+        "$MOCK_FEATURE" "testuser" "1000" "1001")
 
-    if [[ "$output" == *"UID=1500"* ]]; then
-        assert_true true "Fallback UID used when build-env missing"
-    else
-        assert_true false "Fallback UID not used"
-    fi
-
-    if [[ "$output" == *"GID=1500"* ]]; then
-        assert_true true "Fallback GID used when build-env missing"
-    else
-        assert_true false "Fallback GID not used"
-    fi
+    assert_contains "$output" "ARG2=2000" "ACTUAL_UID from build-env overrides passed UID"
+    assert_contains "$output" "ARG3=3000" "ACTUAL_GID from build-env overrides passed GID"
 }
 
-# Test: Script handles missing arguments gracefully
-test_missing_arguments() {
-    # Test with only feature script argument
-    local feature_script="$MOCK_FEATURE"
-
-    # Create a wrapper function that handles missing args
-    run_feature_wrapper() {
-        local script="$1"
-        shift
-        local username="${1:-developer}"
-        local uid="${2:-1000}"
-        local gid="${3:-1000}"
-        "$script" "$username" "$uid" "$gid"
-    }
-
-    # Test with missing arguments
-    local output
-    output=$(run_feature_wrapper "$feature_script")
-
-    if [[ "$output" == *"USERNAME=developer"* ]]; then
-        assert_true true "Default username used when missing"
-    else
-        assert_true false "Default username not used"
-    fi
-
-    if [[ "$output" == *"UID=1000"* ]]; then
-        assert_true true "Default UID used when missing"
-    else
-        assert_true false "Default UID not used"
-    fi
-}
-
-# Test: Script preserves additional arguments
-test_additional_arguments() {
-    # Create feature script that accepts extra args
-    command cat > "$MOCK_FEATURE" << 'EOF'
-#!/bin/bash
-echo "USERNAME=$1"
-echo "UID=$2"
-echo "GID=$3"
-echo "EXTRA=${4:-none}"
+# Test 3: USERNAME from positional arg is passed through to the feature script
+test_build_env_username_passed_through() {
+    command cat > "$TEST_TEMP_DIR/build-env" << 'EOF'
+ACTUAL_UID=500
+ACTUAL_GID=500
 EOF
-    chmod +x "$MOCK_FEATURE"
 
-    # Test with extra arguments
     local output
-    output=$("$MOCK_FEATURE" "user" "1000" "1000" "extra-arg")
+    output=$(TEST_TEMP_DIR="$TEST_TEMP_DIR" bash "$WRAPPER_SCRIPT" \
+        "$MOCK_FEATURE" "myuser" "1000" "1001")
 
-    if [[ "$output" == *"EXTRA=extra-arg"* ]]; then
-        assert_true true "Additional arguments preserved"
-    else
-        assert_true false "Additional arguments not preserved"
-    fi
+    assert_contains "$output" "ARG1=myuser" "Username from positional arg is passed to feature script"
 }
 
-# Test: Script handles spaces in arguments
-test_spaces_in_arguments() {
-    # Create feature script that handles spaces
-    command cat > "$MOCK_FEATURE" << 'EOF'
-#!/bin/bash
-echo "USERNAME=[$1]"
+# Test 4: Default USERNAME is "developer" when no positional arg given after shift
+test_build_env_default_username_is_developer() {
+    command cat > "$TEST_TEMP_DIR/build-env" << 'EOF'
+ACTUAL_UID=500
+ACTUAL_GID=500
 EOF
-    chmod +x "$MOCK_FEATURE"
 
-    # Test with username containing spaces
+    # After the wrapper shifts $1 (the feature script), there are no remaining
+    # args, so USERNAME should default to "developer"
     local output
-    output=$("$MOCK_FEATURE" "test user" "1000" "1000")
+    output=$(TEST_TEMP_DIR="$TEST_TEMP_DIR" bash "$WRAPPER_SCRIPT" "$MOCK_FEATURE")
 
-    if [[ "$output" == *"USERNAME=[test user]"* ]]; then
-        assert_true true "Spaces in arguments handled correctly"
-    else
-        assert_true false "Spaces in arguments not handled"
-    fi
+    assert_contains "$output" "ARG1=developer" "Default USERNAME is developer when no arg provided"
 }
 
-# Test: Script execution permissions
-test_script_execution() {
-    # Check that feature script is executable
-    if [ -x "$MOCK_FEATURE" ]; then
-        assert_true true "Feature script is executable"
-    else
-        assert_true false "Feature script is not executable"
-    fi
+# ============================================================================
+# Without build-env
+# ============================================================================
 
-    # Test that script can be executed
-    if "$MOCK_FEATURE" "test" "1000" "1000" >/dev/null 2>&1; then
-        assert_true true "Feature script executes successfully"
-    else
-        assert_true false "Feature script execution failed"
-    fi
+# Test 5: All args pass through unchanged when build-env is absent
+test_no_build_env_all_args_pass_through() {
+    # Ensure no build-env exists
+    command rm -f "$TEST_TEMP_DIR/build-env"
+
+    local output
+    output=$(TEST_TEMP_DIR="$TEST_TEMP_DIR" bash "$WRAPPER_SCRIPT" \
+        "$MOCK_FEATURE" "alice" "4000" "5000")
+
+    assert_contains "$output" "ARG1=alice" "Username passed through without build-env"
+    assert_contains "$output" "ARG2=4000" "UID passed through without build-env"
+    assert_contains "$output" "ARG3=5000" "GID passed through without build-env"
 }
 
-# Run tests with setup/teardown
+# Test 6: Feature script receives the correct argument count without build-env
+test_no_build_env_correct_arg_count() {
+    command rm -f "$TEST_TEMP_DIR/build-env"
+
+    local output
+    output=$(TEST_TEMP_DIR="$TEST_TEMP_DIR" bash "$WRAPPER_SCRIPT" \
+        "$MOCK_FEATURE" "bob" "100" "200")
+
+    assert_contains "$output" "ARGC=3" "Feature script receives exactly 3 args without build-env"
+}
+
+# ============================================================================
+# Edge cases
+# ============================================================================
+
+# Test 7: build-env with only ACTUAL_UID set — GID falls back to the passed value
+test_build_env_only_actual_uid_gid_falls_back() {
+    # build-env has ACTUAL_UID but no ACTUAL_GID
+    command cat > "$TEST_TEMP_DIR/build-env" << 'EOF'
+ACTUAL_UID=7777
+EOF
+
+    local output
+    output=$(TEST_TEMP_DIR="$TEST_TEMP_DIR" bash "$WRAPPER_SCRIPT" \
+        "$MOCK_FEATURE" "carol" "1000" "9999")
+
+    assert_contains "$output" "ARG2=7777" "ACTUAL_UID from build-env is used"
+    assert_contains "$output" "ARG3=9999" "GID falls back to passed value when ACTUAL_GID absent"
+}
+
+# ============================================================================
+# Run all tests
+# ============================================================================
 run_test_with_setup() {
     local test_function="$1"
     local test_description="$2"
-
     setup
     run_test "$test_function" "$test_description"
     teardown
 }
 
-# Run all tests
-run_test_with_setup test_argument_passing "Arguments passed to feature script"
-run_test_with_setup test_build_env_override "Build-env file overrides UID/GID"
-run_test_with_setup test_fallback_without_build_env "Fallback when build-env missing"
-run_test_with_setup test_missing_arguments "Missing arguments handled gracefully"
-run_test_with_setup test_additional_arguments "Additional arguments preserved"
-run_test_with_setup test_spaces_in_arguments "Spaces in arguments handled"
-run_test_with_setup test_script_execution "Script execution permissions work"
+run_test_with_setup test_source_script_exists_and_is_executable \
+    "Source script exists and is executable"
+
+run_test_with_setup test_build_env_uid_gid_override_passed_args \
+    "build-env ACTUAL_UID/ACTUAL_GID override passed-in args"
+
+run_test_with_setup test_build_env_username_passed_through \
+    "build-env present: USERNAME positional arg passed through"
+
+run_test_with_setup test_build_env_default_username_is_developer \
+    "build-env present: default USERNAME is developer when omitted"
+
+run_test_with_setup test_no_build_env_all_args_pass_through \
+    "no build-env: all args pass through unchanged"
+
+run_test_with_setup test_no_build_env_correct_arg_count \
+    "no build-env: feature script receives correct arg count"
+
+run_test_with_setup test_build_env_only_actual_uid_gid_falls_back \
+    "build-env with only ACTUAL_UID: GID falls back to passed value"
 
 # Generate test report
 generate_report

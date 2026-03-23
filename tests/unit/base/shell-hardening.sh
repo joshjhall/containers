@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Unit tests for lib/base/shell-hardening.sh
-# Tests shell hardening security functions
+# Tests shell hardening security functions behaviorally via subshells with
+# a modified copy of the source that redirects /etc/shells to a temp directory.
 
 set -euo pipefail
 
@@ -13,256 +14,365 @@ init_test_framework
 # Test suite
 test_suite "Shell Hardening Tests"
 
-# Path to script under test
-SHELL_HARDENING="$(dirname "${BASH_SOURCE[0]}")/../../../lib/base/shell-hardening.sh"
+# Absolute path to script under test
+SHELL_HARDENING="$PROJECT_ROOT/lib/base/shell-hardening.sh"
 
-# Setup - create temp environment
+# ============================================================================
+# Setup / Teardown
+# ============================================================================
+
 setup() {
-    export TEST_TEMP_DIR="$RESULTS_DIR/shell-hardening-test"
-    mkdir -p "$TEST_TEMP_DIR"
+    local unique_id
+    unique_id="$$-$(date +%s%N 2>/dev/null || date +%s)"
+    export TEST_TEMP_DIR="$RESULTS_DIR/shell-hardening-$unique_id"
+    mkdir -p "$TEST_TEMP_DIR/etc"
+
+    # Build a patched copy of the source that replaces the /etc/shells path with
+    # $TEST_TEMP_DIR/etc/shells and removes the auto-invocation of main so that
+    # sourcing the script only defines functions without executing them.
+    export PATCHED_SCRIPT="$TEST_TEMP_DIR/shell-hardening-patched.sh"
+    command sed \
+        -e "s|/etc/shells|$TEST_TEMP_DIR/etc/shells|g" \
+        -e 's|^main "\$@".*||' \
+        "$SHELL_HARDENING" > "$PATCHED_SCRIPT"
 }
 
-# Teardown
 teardown() {
-    if [ -n "${TEST_TEMP_DIR:-}" ]; then
-        rm -rf "$TEST_TEMP_DIR"
+    if [ -n "${TEST_TEMP_DIR:-}" ] && [ -d "$TEST_TEMP_DIR" ]; then
+        command rm -rf "$TEST_TEMP_DIR"
     fi
+    unset TEST_TEMP_DIR PATCHED_SCRIPT 2>/dev/null || true
+}
+
+run_test_with_setup() {
+    local test_function="$1"
+    local test_description="$2"
+    setup
+    run_test "$test_function" "$test_description"
+    teardown
 }
 
 # ============================================================================
-# Test: Script exists and is executable
+# Helper: inline restrict_shells logic bound to TEST_TEMP_DIR
+#
+# Rather than patching bash-binary paths in the source (fragile due to sed
+# ordering), we define restrict_shells inline in the subshell using the exact
+# same logic as the source but with all paths pointing to TEST_TEMP_DIR.
+# Tests can control whether bash "exists" by creating/omitting the fake binary.
 # ============================================================================
-test_script_exists() {
-    assert_file_exists "$SHELL_HARDENING" "shell-hardening.sh should exist"
-
-    if [ -x "$SHELL_HARDENING" ]; then
-        pass_test "shell-hardening.sh is executable"
-    else
-        fail_test "shell-hardening.sh is not executable"
-    fi
-}
-
-# ============================================================================
-# Test: Script has valid syntax
-# ============================================================================
-test_syntax_valid() {
-    if bash -n "$SHELL_HARDENING" 2>&1; then
-        pass_test "Script has valid bash syntax"
-    else
-        fail_test "Script has syntax errors"
-    fi
-}
-
-# ============================================================================
-# Test: Required functions are defined
-# ============================================================================
-test_functions_defined() {
-    local script_content
-    script_content=$(command cat "$SHELL_HARDENING")
-
-    # Check for key functions
-    assert_contains "$script_content" "restrict_shells()" "Should define restrict_shells function"
-    assert_contains "$script_content" "harden_service_users()" "Should define harden_service_users function"
-    assert_contains "$script_content" "log_message()" "Should define log_message function"
-}
-
-# ============================================================================
-# Test: Configuration variables have defaults
-# ============================================================================
-test_config_defaults() {
-    local script_content
-    script_content=$(command cat "$SHELL_HARDENING")
-
-    assert_contains "$script_content" 'RESTRICT_SHELLS="${RESTRICT_SHELLS:-' "Should have RESTRICT_SHELLS default"
-    assert_contains "$script_content" 'PRODUCTION_MODE="${PRODUCTION_MODE:-' "Should have PRODUCTION_MODE default"
-}
-
-# ============================================================================
-# Test: Service users list is comprehensive
-# ============================================================================
-test_service_users_list() {
-    local script_content
-    script_content=$(command cat "$SHELL_HARDENING")
-
-    # Check for common service users
-    assert_contains "$script_content" "www-data" "Should include www-data"
-    assert_contains "$script_content" "nobody" "Should include nobody"
-    assert_contains "$script_content" "_apt" "Should include _apt"
-}
-
-# ============================================================================
-# Test: Compliance documentation present
-# ============================================================================
-test_compliance_docs() {
-    local script_content
-    script_content=$(command cat "$SHELL_HARDENING")
-
-    assert_contains "$script_content" "CIS Docker Benchmark" "Should reference CIS benchmarks"
-    assert_contains "$script_content" "NIST 800-53" "Should reference NIST standards"
-    assert_contains "$script_content" "PCI DSS" "Should reference PCI DSS"
-}
-
-# ============================================================================
-# Test: Restricted shells file format
-# ============================================================================
-test_restricted_shells_format() {
-    local script_content
-    script_content=$(command cat "$SHELL_HARDENING")
-
-    # Should only allow bash
-    assert_contains "$script_content" "/bin/bash" "Should allow /bin/bash"
-    assert_contains "$script_content" "/usr/bin/bash" "Should allow /usr/bin/bash"
-}
-
-# ============================================================================
-# Test: Backup mechanism exists
-# ============================================================================
-test_backup_mechanism() {
-    local script_content
-    script_content=$(command cat "$SHELL_HARDENING")
-
-    assert_contains "$script_content" "shells.bak" "Should create backup of /etc/shells"
-}
-
-# ============================================================================
-# Test: Error handling for missing bash
-# ============================================================================
-test_bash_verification() {
-    local script_content
-    script_content=$(command cat "$SHELL_HARDENING")
-
-    assert_contains "$script_content" "bash not found" "Should check for bash existence"
-    assert_contains "$script_content" "restoring original" "Should restore on failure"
-}
-
-# ============================================================================
-# Functional Test: restrict_shells restores backup when bash is missing
-# ============================================================================
-
-# Helper: build a patched copy of restrict_shells that operates on temp paths
-_run_shell_hardening_subshell() {
-    local temp_dir="$TEST_TEMP_DIR"
+_run_restrict_shells_subshell() {
+    local temp_dir="$1"     # TEST_TEMP_DIR value
+    local extra_setup="$2"  # shell code run before calling restrict_shells
     bash -c "
-        # Define log helpers (the real script defines these at top level)
         log_message() { echo \"  [shell-hardening] \$*\"; }
         log_warning() { echo \"  [shell-hardening] WARNING: \$*\" >&2; }
-
-        # Source the real script in a way that captures the function body,
-        # then redefine restrict_shells with temp paths.
-        RESTRICT_SHELLS=true
 
         restrict_shells() {
             if [ \"\$RESTRICT_SHELLS\" != \"true\" ]; then
                 log_message \"Shell restriction disabled\"
                 return 0
             fi
-            log_message \"Restricting /etc/shells to bash only...\"
-            # Backup original
+
+            log_message \"Restricting shells file to bash only...\"
+
             if [ -f '$temp_dir/etc/shells' ]; then
                 cp '$temp_dir/etc/shells' '$temp_dir/etc/shells.bak'
             fi
-            # Create new restricted shells file
+
             command cat > '$temp_dir/etc/shells' << 'INNER_EOF'
 # /etc/shells: valid login shells
+# Restricted for security - only bash allowed
 /bin/bash
 /usr/bin/bash
 INNER_EOF
-            # Verify bash exists (using temp paths)
+
             if [ ! -x '$temp_dir/bin/bash' ] && [ ! -x '$temp_dir/usr/bin/bash' ]; then
-                log_warning \"bash not found, restoring original /etc/shells\"
+                log_warning \"bash not found, restoring original shells file\"
                 if [ -f '$temp_dir/etc/shells.bak' ]; then
                     mv '$temp_dir/etc/shells.bak' '$temp_dir/etc/shells'
                 fi
                 return 1
             fi
-            # Remove backup
+
             rm -f '$temp_dir/etc/shells.bak'
-            log_message \"Restricted /etc/shells to bash only\"
+            log_message \"Restricted shells file to bash only\"
             return 0
         }
 
-        $1
-    " 2>&1
+        $extra_setup
+        restrict_shells
+    " 2>/dev/null
 }
 
-test_restrict_shells_restores_backup_when_bash_missing() {
-    setup
-    # Create temp /etc/shells with original content; do NOT create bin/bash
-    mkdir -p "$TEST_TEMP_DIR/etc"
-    echo "/bin/bash
-/bin/sh
-/bin/dash" > "$TEST_TEMP_DIR/etc/shells"
-    local original_content
-    original_content=$(command cat "$TEST_TEMP_DIR/etc/shells")
+# ============================================================================
+# Static tests — no subshell needed
+# ============================================================================
 
-    local exit_code=0
-    _run_shell_hardening_subshell "
-        restrict_shells >/dev/null 2>&1
-    " >/dev/null 2>&1 || exit_code=$?
+# Test 1: Script exists and is executable
+test_script_exists_and_is_executable() {
+    assert_file_exists "$SHELL_HARDENING" "shell-hardening.sh should exist"
+    assert_executable "$SHELL_HARDENING" "shell-hardening.sh should be executable"
+}
 
-    # Should return 1 (bash not found)
-    assert_equals "1" "$exit_code" \
-        "restrict_shells should return 1 when bash is missing"
-
-    # Original /etc/shells should be restored from backup
-    local restored_content
-    restored_content=$(command cat "$TEST_TEMP_DIR/etc/shells")
-    assert_equals "$original_content" "$restored_content" \
-        "Original /etc/shells should be restored from backup"
-
-    # Backup file should not remain
-    if [ -f "$TEST_TEMP_DIR/etc/shells.bak" ]; then
-        fail_test "shells.bak should not remain after restore"
+# Test 2: Defines restrict_shells function
+test_defines_restrict_shells() {
+    if command grep -q '^restrict_shells()' "$SHELL_HARDENING"; then
+        assert_true 0 "restrict_shells() function is defined"
     else
-        pass_test "shells.bak was consumed by restore"
+        assert_true 1 "restrict_shells() function is not defined"
     fi
-    teardown
 }
 
-test_restrict_shells_succeeds_when_bash_exists() {
-    setup
-    mkdir -p "$TEST_TEMP_DIR/etc"
+# Test 3: Defines harden_service_users function
+test_defines_harden_service_users() {
+    if command grep -q '^harden_service_users()' "$SHELL_HARDENING"; then
+        assert_true 0 "harden_service_users() function is defined"
+    else
+        assert_true 1 "harden_service_users() function is not defined"
+    fi
+}
+
+# Test 4: Defines verify_hardening function
+test_defines_verify_hardening() {
+    if command grep -q '^verify_hardening()' "$SHELL_HARDENING"; then
+        assert_true 0 "verify_hardening() function is defined"
+    else
+        assert_true 1 "verify_hardening() function is not defined"
+    fi
+}
+
+# ============================================================================
+# restrict_shells() behavioral tests
+# ============================================================================
+
+# Test 5: RESTRICT_SHELLS=true rewrites /etc/shells to contain only bash paths
+test_restrict_shells_rewrites_to_bash_only() {
+    printf '/bin/sh\n/bin/bash\n/usr/bin/bash\n/bin/dash\n/bin/zsh\n' \
+        > "$TEST_TEMP_DIR/etc/shells"
+
+    # Create a fake bash binary so the existence check passes
     mkdir -p "$TEST_TEMP_DIR/bin"
-    echo "/bin/bash
-/bin/sh
-/bin/dash" > "$TEST_TEMP_DIR/etc/shells"
-    # Create a fake executable bash
     printf '#!/bin/sh\ntrue\n' > "$TEST_TEMP_DIR/bin/bash"
     chmod +x "$TEST_TEMP_DIR/bin/bash"
 
     local exit_code=0
-    _run_shell_hardening_subshell "
-        restrict_shells >/dev/null 2>&1
-    " >/dev/null 2>&1 || exit_code=$?
+    _run_restrict_shells_subshell "$TEST_TEMP_DIR" "RESTRICT_SHELLS=true" \
+        || exit_code=$?
 
     assert_equals "0" "$exit_code" \
-        "restrict_shells should return 0 when bash exists"
+        "restrict_shells returns 0 when bash exists"
 
-    # Backup should have been cleaned up
-    if [ -f "$TEST_TEMP_DIR/etc/shells.bak" ]; then
-        fail_test "shells.bak should be removed on success"
-    else
-        pass_test "shells.bak cleaned up on success"
-    fi
-    teardown
+    local shells_lines
+    shells_lines=$(command grep '^/' "$TEST_TEMP_DIR/etc/shells" 2>/dev/null || true)
+    assert_contains "$shells_lines" "/bin/bash" \
+        "/etc/shells should list /bin/bash after restriction"
+    assert_not_contains "$shells_lines" "/bin/zsh" \
+        "/etc/shells should not list /bin/zsh after restriction"
+    assert_not_contains "$shells_lines" "/bin/dash" \
+        "/etc/shells should not list /bin/dash after restriction"
 }
 
-# Run tests
-run_test test_script_exists "Script exists and is executable"
-run_test test_syntax_valid "Script syntax is valid"
-run_test test_functions_defined "Required functions are defined"
-run_test test_config_defaults "Configuration defaults are set"
-run_test test_service_users_list "Service users list is comprehensive"
-run_test test_compliance_docs "Compliance documentation present"
-run_test test_restricted_shells_format "Restricted shells format correct"
-run_test test_backup_mechanism "Backup mechanism exists"
-run_test test_bash_verification "Bash verification exists"
+# Test 6: RESTRICT_SHELLS=true cleans up backup on success
+test_restrict_shells_cleans_up_backup_on_success() {
+    printf '/bin/bash\n' > "$TEST_TEMP_DIR/etc/shells"
 
-# Functional tests - restrict_shells error recovery
-run_test test_restrict_shells_restores_backup_when_bash_missing \
-    "restrict_shells restores backup when bash is missing"
-run_test test_restrict_shells_succeeds_when_bash_exists \
-    "restrict_shells succeeds when bash exists"
+    mkdir -p "$TEST_TEMP_DIR/bin"
+    printf '#!/bin/sh\ntrue\n' > "$TEST_TEMP_DIR/bin/bash"
+    chmod +x "$TEST_TEMP_DIR/bin/bash"
+
+    _run_restrict_shells_subshell "$TEST_TEMP_DIR" "RESTRICT_SHELLS=true" \
+        >/dev/null 2>&1 || true
+
+    assert_file_not_exists "$TEST_TEMP_DIR/etc/shells.bak" \
+        "Backup file should be removed after successful restrict_shells"
+}
+
+# Test 7: RESTRICT_SHELLS=false is a no-op (returns 0, does not modify /etc/shells)
+test_restrict_shells_noop_when_disabled() {
+    local original_content='/bin/sh
+/bin/bash
+/bin/dash'
+    printf '%s\n' "$original_content" > "$TEST_TEMP_DIR/etc/shells"
+
+    local exit_code=0
+    bash -c "
+        RESTRICT_SHELLS=false
+        source '$PATCHED_SCRIPT' >/dev/null 2>&1
+        restrict_shells >/dev/null 2>&1
+    " 2>/dev/null || exit_code=$?
+
+    assert_equals "0" "$exit_code" \
+        "restrict_shells returns 0 when RESTRICT_SHELLS=false"
+
+    local actual_content
+    actual_content=$(command cat "$TEST_TEMP_DIR/etc/shells")
+    assert_equals "$original_content" "$actual_content" \
+        "/etc/shells should be unchanged when RESTRICT_SHELLS=false"
+}
+
+# Test 8: Restore on failure — when bash executables don't exist, backup is restored
+test_restrict_shells_restores_backup_when_bash_missing() {
+    local original_content='/bin/sh
+/bin/bash
+/bin/dash'
+    printf '%s\n' "$original_content" > "$TEST_TEMP_DIR/etc/shells"
+
+    # Do NOT create $TEST_TEMP_DIR/bin/bash or $TEST_TEMP_DIR/usr/bin/bash so
+    # the function's existence check fails and it must restore from backup.
+
+    local exit_code=0
+    _run_restrict_shells_subshell "$TEST_TEMP_DIR" "RESTRICT_SHELLS=true" \
+        || exit_code=$?
+
+    assert_equals "1" "$exit_code" \
+        "restrict_shells returns 1 when bash executables are missing"
+
+    local restored_content
+    restored_content=$(command cat "$TEST_TEMP_DIR/etc/shells")
+    assert_equals "$original_content" "$restored_content" \
+        "/etc/shells should be restored to original content when bash is missing"
+
+    assert_file_not_exists "$TEST_TEMP_DIR/etc/shells.bak" \
+        "Backup file should not remain after it was consumed by restore"
+}
+
+# ============================================================================
+# harden_service_users() behavioral tests
+# ============================================================================
+
+# Test 9: PRODUCTION_MODE=false is a no-op, returns 0
+test_harden_service_users_noop_when_not_production() {
+    local exit_code=0
+    bash -c "
+        PRODUCTION_MODE=false
+        source '$PATCHED_SCRIPT' >/dev/null 2>&1
+        harden_service_users >/dev/null 2>&1
+    " 2>/dev/null || exit_code=$?
+
+    assert_equals "0" "$exit_code" \
+        "harden_service_users returns 0 when PRODUCTION_MODE=false"
+}
+
+# Test 10: PRODUCTION_MODE=true with no service users present returns 0
+#
+# Mocks id() to return 1 so no service user in the SERVICE_USERS array is
+# considered to exist, causing the loop body to be skipped entirely.
+# nologin is read from the real system path (which is present on this host),
+# so the existence check passes and the function reaches return 0.
+test_harden_service_users_returns_0_when_no_service_users_exist() {
+    local exit_code=0
+    bash -c "
+        PRODUCTION_MODE=true
+        id() { return 1; }
+        export -f id
+        source '$PATCHED_SCRIPT' >/dev/null 2>&1
+        harden_service_users >/dev/null 2>&1
+    " 2>/dev/null || exit_code=$?
+
+    assert_equals "0" "$exit_code" \
+        "harden_service_users returns 0 in PRODUCTION_MODE=true when no service users exist"
+}
+
+# ============================================================================
+# verify_hardening() behavioral tests
+# ============================================================================
+
+# Test 11: verify_hardening always returns 0, even when /etc/shells has issues
+test_verify_hardening_always_returns_0() {
+    # Populate /etc/shells with more than 2 entries to trigger the warning branch
+    printf '/bin/sh\n/bin/bash\n/bin/dash\n/bin/zsh\n/bin/ksh\n' \
+        > "$TEST_TEMP_DIR/etc/shells"
+
+    local exit_code=0
+    bash -c "
+        RESTRICT_SHELLS=true
+        PRODUCTION_MODE=false
+        id() { return 1; }
+        getent() { return 1; }
+        export -f id getent
+        source '$PATCHED_SCRIPT' >/dev/null 2>&1
+        verify_hardening >/dev/null 2>&1
+    " 2>/dev/null || exit_code=$?
+
+    assert_equals "0" "$exit_code" \
+        "verify_hardening returns 0 even when /etc/shells has more than 2 shells"
+}
+
+# ============================================================================
+# print_summary() behavioral tests
+# ============================================================================
+
+# Test 12: print_summary output contains RESTRICT_SHELLS value
+test_print_summary_contains_restrict_shells() {
+    local output
+    output=$(bash -c "
+        RESTRICT_SHELLS=true
+        PRODUCTION_MODE=false
+        source '$PATCHED_SCRIPT' >/dev/null 2>&1
+        print_summary
+    " 2>/dev/null)
+
+    assert_contains "$output" "RESTRICT_SHELLS" \
+        "print_summary output should contain RESTRICT_SHELLS label"
+    assert_contains "$output" "true" \
+        "print_summary output should show RESTRICT_SHELLS value"
+}
+
+# Test 13: print_summary output contains PRODUCTION_MODE value
+test_print_summary_contains_production_mode() {
+    local output
+    output=$(bash -c "
+        RESTRICT_SHELLS=false
+        PRODUCTION_MODE=true
+        source '$PATCHED_SCRIPT' >/dev/null 2>&1
+        print_summary
+    " 2>/dev/null)
+
+    assert_contains "$output" "PRODUCTION_MODE" \
+        "print_summary output should contain PRODUCTION_MODE label"
+    assert_contains "$output" "true" \
+        "print_summary output should show PRODUCTION_MODE value"
+}
+
+# ============================================================================
+# Run all tests
+# ============================================================================
+
+# Static tests (no setup/teardown needed — just read the file)
+run_test test_script_exists_and_is_executable \
+    "Script exists and is executable"
+run_test test_defines_restrict_shells \
+    "Defines restrict_shells function"
+run_test test_defines_harden_service_users \
+    "Defines harden_service_users function"
+run_test test_defines_verify_hardening \
+    "Defines verify_hardening function"
+
+# restrict_shells() behavioral
+run_test_with_setup test_restrict_shells_rewrites_to_bash_only \
+    "restrict_shells rewrites /etc/shells to bash paths only"
+run_test_with_setup test_restrict_shells_cleans_up_backup_on_success \
+    "restrict_shells cleans up backup on success"
+run_test_with_setup test_restrict_shells_noop_when_disabled \
+    "restrict_shells is a no-op when RESTRICT_SHELLS=false"
+run_test_with_setup test_restrict_shells_restores_backup_when_bash_missing \
+    "restrict_shells restores backup and returns 1 when bash is missing"
+
+# harden_service_users() behavioral
+run_test_with_setup test_harden_service_users_noop_when_not_production \
+    "harden_service_users is a no-op when PRODUCTION_MODE=false"
+run_test_with_setup test_harden_service_users_returns_0_when_no_service_users_exist \
+    "harden_service_users returns 0 in production mode when no service users exist"
+
+# verify_hardening() behavioral
+run_test_with_setup test_verify_hardening_always_returns_0 \
+    "verify_hardening always returns 0"
+
+# print_summary() behavioral
+run_test_with_setup test_print_summary_contains_restrict_shells \
+    "print_summary output contains RESTRICT_SHELLS value"
+run_test_with_setup test_print_summary_contains_production_mode \
+    "print_summary output contains PRODUCTION_MODE value"
 
 # Generate report
 generate_report

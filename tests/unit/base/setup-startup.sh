@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Unit tests for lib/base/setup-startup.sh
-# Tests container startup scripts and initialization
+# Verifies that the script creates the expected directory structure under
+# /etc/container and /etc/healthcheck.d with 755 permissions, and that
+# it emits the expected output banners.
 
 set -euo pipefail
 
@@ -13,286 +15,174 @@ init_test_framework
 # Test suite
 test_suite "Setup Startup Tests"
 
-# Setup function - runs before each test
+# Absolute path to the source script under test
+SOURCE_SCRIPT="$PROJECT_ROOT/lib/base/setup-startup.sh"
+
+# Setup function - runs before each test.
+# Creates a temp dir and a patched copy of the script that writes to
+# TEST_TEMP_DIR/etc/ instead of /etc/ so tests can run without root.
 setup() {
-    # Create temporary directory for testing
-    export TEST_TEMP_DIR="$RESULTS_DIR/test-setup-startup"
+    local unique_id
+    unique_id="$$-$(date +%s%N)"
+    export TEST_TEMP_DIR="$RESULTS_DIR/test-setup-startup-$unique_id"
     mkdir -p "$TEST_TEMP_DIR"
 
-    # Mock environment
-    export WORKING_DIR="/workspace/project"
-    export HOME="/home/testuser"
-
-    # Create mock directories
-    mkdir -p "$TEST_TEMP_DIR/etc/container/first-startup"
-    mkdir -p "$TEST_TEMP_DIR/etc/container/startup"
-    mkdir -p "$TEST_TEMP_DIR/workspace/project"
+    # Build a patched copy: replace every /etc/ reference with the sandbox path
+    export PATCHED_SCRIPT="$TEST_TEMP_DIR/setup-startup-patched.sh"
+    command sed "s|/etc/|$TEST_TEMP_DIR/etc/|g" "$SOURCE_SCRIPT" > "$PATCHED_SCRIPT"
+    chmod +x "$PATCHED_SCRIPT"
 }
 
 # Teardown function - runs after each test
 teardown() {
-    # Clean up test directory
     if [ -n "${TEST_TEMP_DIR:-}" ]; then
         command rm -rf "$TEST_TEMP_DIR"
     fi
-
-    # Unset test variables
-    unset WORKING_DIR HOME 2>/dev/null || true
-}
-
-# Test: Startup directory structure
-test_startup_directories() {
-    local first_startup="$TEST_TEMP_DIR/etc/container/first-startup"
-    local startup="$TEST_TEMP_DIR/etc/container/startup"
-
-    assert_dir_exists "$first_startup"
-    assert_dir_exists "$startup"
-}
-
-# Test: First startup scripts
-test_first_startup_scripts() {
-    local first_startup="$TEST_TEMP_DIR/etc/container/first-startup"
-
-    # Create mock startup scripts
-    command cat > "$first_startup/10-welcome.sh" << 'EOF'
-#!/bin/bash
-echo "Welcome to the development container!"
-EOF
-
-    command cat > "$first_startup/20-git-setup.sh" << 'EOF'
-#!/bin/bash
-git config --global init.defaultBranch main
-EOF
-
-    chmod +x "$first_startup"/*.sh
-
-    # Check scripts exist and are executable
-    for script in "$first_startup"/*.sh; do
-        if [ -x "$script" ]; then
-            assert_true true "$(basename $script) is executable"
-        else
-            assert_true false "$(basename $script) is not executable"
-        fi
-    done
-}
-
-# Test: Startup script ordering
-test_script_ordering() {
-    local startup="$TEST_TEMP_DIR/etc/container/startup"
-
-    # Create scripts with numeric prefixes
-    touch "$startup/10-first.sh"
-    touch "$startup/20-second.sh"
-    touch "$startup/30-third.sh"
-
-    # List scripts in order
-    local scripts
-    mapfile -t scripts < <(ls "$startup"/*.sh 2>/dev/null | sort)
-
-    # Check ordering
-    if [[ "${scripts[0]}" == *"10-first.sh" ]]; then
-        assert_true true "Scripts ordered correctly"
-    else
-        assert_true false "Scripts not ordered correctly"
-    fi
-}
-
-# Test: First run marker
-test_first_run_marker() {
-    local marker_file="$TEST_TEMP_DIR/home/testuser/.container-initialized"
-
-    # Test marker doesn't exist initially
-    if [ ! -f "$marker_file" ]; then
-        assert_true true "First run marker doesn't exist initially"
-    else
-        assert_true false "First run marker exists unexpectedly"
-    fi
-
-    # Create marker
-    mkdir -p "$(dirname "$marker_file")"
-    touch "$marker_file"
-
-    # Test marker exists after creation
-    assert_file_exists "$marker_file"
-}
-
-# Test: Environment setup script
-test_environment_setup() {
-    local env_script="$TEST_TEMP_DIR/etc/container/startup/00-env.sh"
-    mkdir -p "$(dirname "$env_script")"
-
-    # Create environment setup
-    command cat > "$env_script" << 'EOF'
-#!/bin/bash
-export CONTAINER_STARTED="true"
-export WORKING_DIR="/workspace/project"
-export TERM="xterm-256color"
-EOF
-    chmod +x "$env_script"
-
-    assert_file_exists "$env_script"
-
-    # Check environment variables
-    if command grep -q "export CONTAINER_STARTED" "$env_script"; then
-        assert_true true "Container started flag set"
-    else
-        assert_true false "Container started flag not set"
-    fi
-}
-
-# Test: Git repository detection
-test_git_detection() {
-    local git_script="$TEST_TEMP_DIR/etc/container/first-startup/15-git-detect.sh"
-    mkdir -p "$(dirname "$git_script")"
-
-    # Create git detection script
-    command cat > "$git_script" << 'EOF'
-#!/bin/bash
-if [ -d "${WORKING_DIR}/.git" ]; then
-    echo "Git repository detected"
-    cd "${WORKING_DIR}"
-    git status
-fi
-EOF
-    chmod +x "$git_script"
-
-    assert_file_exists "$git_script"
-
-    # Check git detection logic
-    if command grep -q "if \[ -d.*\.git" "$git_script"; then
-        assert_true true "Git detection logic present"
-    else
-        assert_true false "Git detection logic missing"
-    fi
-}
-
-# Test: Project type detection
-test_project_detection() {
-    local detect_script="$TEST_TEMP_DIR/etc/container/first-startup/25-detect-project.sh"
-    mkdir -p "$(dirname "$detect_script")"
-
-    # Create project detection script
-    command cat > "$detect_script" << 'EOF'
-#!/bin/bash
-cd "${WORKING_DIR}"
-if [ -f "package.json" ]; then
-    echo "Node.js project detected"
-elif [ -f "requirements.txt" ] || [ -f "pyproject.toml" ]; then
-    echo "Python project detected"
-elif [ -f "go.mod" ]; then
-    echo "Go project detected"
-fi
-EOF
-    chmod +x "$detect_script"
-
-    assert_file_exists "$detect_script"
-
-    # Check detection patterns
-    if command grep -q "package.json" "$detect_script"; then
-        assert_true true "Node.js detection present"
-    else
-        assert_true false "Node.js detection missing"
-    fi
-}
-
-# Test: SSH agent setup
-test_ssh_agent_setup() {
-    local ssh_script="$TEST_TEMP_DIR/etc/container/startup/05-ssh-agent.sh"
-    mkdir -p "$(dirname "$ssh_script")"
-
-    # Create SSH agent script
-    command cat > "$ssh_script" << 'EOF'
-#!/bin/bash
-if [ -z "$SSH_AUTH_SOCK" ]; then
-    eval $(ssh-agent -s)
-fi
-EOF
-    chmod +x "$ssh_script"
-
-    assert_file_exists "$ssh_script"
-
-    # Check SSH agent setup
-    if command grep -q "ssh-agent" "$ssh_script"; then
-        assert_true true "SSH agent setup present"
-    else
-        assert_true false "SSH agent setup missing"
-    fi
-}
-
-# Test: Banner display
-test_banner_display() {
-    local banner_script="$TEST_TEMP_DIR/etc/container/first-startup/00-banner.sh"
-    mkdir -p "$(dirname "$banner_script")"
-
-    # Create banner script
-    command cat > "$banner_script" << 'EOF'
-#!/bin/bash
-command cat << 'BANNER'
-=====================================
-   Development Container Ready
-=====================================
-BANNER
-EOF
-    chmod +x "$banner_script"
-
-    assert_file_exists "$banner_script"
-
-    # Check banner content
-    if command grep -q "Development Container Ready" "$banner_script"; then
-        assert_true true "Banner message present"
-    else
-        assert_true false "Banner message missing"
-    fi
-}
-
-# Test: Verification script
-test_startup_verification() {
-    local test_script="$TEST_TEMP_DIR/test-startup.sh"
-
-    # Create verification script
-    command cat > "$test_script" << 'EOF'
-#!/bin/bash
-echo "Startup scripts:"
-for dir in /etc/container/first-startup /etc/container/startup; do
-    if [ -d "$dir" ]; then
-        echo "  $dir:"
-        command ls -la "$dir"/*.sh 2>/dev/null || echo "    No scripts found"
-    fi
-done
-EOF
-    chmod +x "$test_script"
-
-    assert_file_exists "$test_script"
-
-    # Check script is executable
-    if [ -x "$test_script" ]; then
-        assert_true true "Verification script is executable"
-    else
-        assert_true false "Verification script is not executable"
-    fi
+    unset PATCHED_SCRIPT 2>/dev/null || true
 }
 
 # Run tests with setup/teardown
 run_test_with_setup() {
     local test_function="$1"
     local test_description="$2"
-
     setup
     run_test "$test_function" "$test_description"
     teardown
 }
 
+# ---------------------------------------------------------------------------
+# Test: source script exists and is executable
+# ---------------------------------------------------------------------------
+test_source_script_is_executable() {
+    assert_file_exists "$SOURCE_SCRIPT" \
+        "lib/base/setup-startup.sh should exist"
+    assert_executable "$SOURCE_SCRIPT" \
+        "lib/base/setup-startup.sh should be executable"
+}
+
+# ---------------------------------------------------------------------------
+# Test: /etc/container/first-startup is created
+# ---------------------------------------------------------------------------
+test_creates_first_startup_directory() {
+    bash "$PATCHED_SCRIPT" >/dev/null 2>&1
+    assert_dir_exists "$TEST_TEMP_DIR/etc/container/first-startup" \
+        "first-startup directory should be created"
+}
+
+# ---------------------------------------------------------------------------
+# Test: /etc/container/startup is created
+# ---------------------------------------------------------------------------
+test_creates_startup_directory() {
+    bash "$PATCHED_SCRIPT" >/dev/null 2>&1
+    assert_dir_exists "$TEST_TEMP_DIR/etc/container/startup" \
+        "startup directory should be created"
+}
+
+# ---------------------------------------------------------------------------
+# Test: /etc/healthcheck.d is created
+# ---------------------------------------------------------------------------
+test_creates_healthcheck_directory() {
+    bash "$PATCHED_SCRIPT" >/dev/null 2>&1
+    assert_dir_exists "$TEST_TEMP_DIR/etc/healthcheck.d" \
+        "healthcheck.d directory should be created"
+}
+
+# ---------------------------------------------------------------------------
+# Test: all four directories have 755 permissions
+# ---------------------------------------------------------------------------
+test_directories_have_755_permissions() {
+    bash "$PATCHED_SCRIPT" >/dev/null 2>&1
+
+    local dirs=(
+        "$TEST_TEMP_DIR/etc/container"
+        "$TEST_TEMP_DIR/etc/container/first-startup"
+        "$TEST_TEMP_DIR/etc/container/startup"
+        "$TEST_TEMP_DIR/etc/healthcheck.d"
+    )
+
+    for dir in "${dirs[@]}"; do
+        local perms
+        perms=$(/usr/bin/stat -c '%a' "$dir" 2>/dev/null)
+        assert_equals "755" "$perms" \
+            "Directory $dir should have 755 permissions (got: $perms)"
+    done
+}
+
+# ---------------------------------------------------------------------------
+# Test: script outputs the setup banner
+# ---------------------------------------------------------------------------
+test_outputs_setup_banner() {
+    local output
+    output=$(bash "$PATCHED_SCRIPT" 2>&1)
+    assert_contains "$output" "=== Setting up startup script system ===" \
+        "Output should contain setup banner"
+}
+
+# ---------------------------------------------------------------------------
+# Test: script outputs the configured banner
+# ---------------------------------------------------------------------------
+test_outputs_configured_banner() {
+    local output
+    output=$(bash "$PATCHED_SCRIPT" 2>&1)
+    assert_contains "$output" "=== Startup system configured ===" \
+        "Output should contain configured banner"
+}
+
+# ---------------------------------------------------------------------------
+# Test: script is idempotent — running twice does not fail
+# ---------------------------------------------------------------------------
+test_idempotent_second_run_succeeds() {
+    local exit_code=0
+    bash "$PATCHED_SCRIPT" >/dev/null 2>&1
+    bash "$PATCHED_SCRIPT" >/dev/null 2>&1 || exit_code=$?
+    assert_equals "0" "$exit_code" \
+        "Second run of script should exit 0 (idempotent)"
+}
+
+# ---------------------------------------------------------------------------
+# Test: directories still have 755 permissions after second run
+# ---------------------------------------------------------------------------
+test_idempotent_permissions_preserved() {
+    bash "$PATCHED_SCRIPT" >/dev/null 2>&1
+    # Alter one permission, then re-run; the script should restore it
+    chmod 700 "$TEST_TEMP_DIR/etc/container/startup"
+    bash "$PATCHED_SCRIPT" >/dev/null 2>&1
+
+    local perms
+    perms=$(/usr/bin/stat -c '%a' "$TEST_TEMP_DIR/etc/container/startup" 2>/dev/null)
+    assert_equals "755" "$perms" \
+        "Permissions should be restored to 755 on second run"
+}
+
+# ---------------------------------------------------------------------------
 # Run all tests
-run_test_with_setup test_startup_directories "Startup directory structure"
-run_test_with_setup test_first_startup_scripts "First startup scripts"
-run_test_with_setup test_script_ordering "Script execution ordering"
-run_test_with_setup test_first_run_marker "First run marker"
-run_test_with_setup test_environment_setup "Environment setup script"
-run_test_with_setup test_git_detection "Git repository detection"
-run_test_with_setup test_project_detection "Project type detection"
-run_test_with_setup test_ssh_agent_setup "SSH agent setup"
-run_test_with_setup test_banner_display "Banner display"
-run_test_with_setup test_startup_verification "Startup verification"
+# ---------------------------------------------------------------------------
+run_test_with_setup test_source_script_is_executable \
+    "Source script exists and is executable"
+
+run_test_with_setup test_creates_first_startup_directory \
+    "Creates /etc/container/first-startup directory"
+
+run_test_with_setup test_creates_startup_directory \
+    "Creates /etc/container/startup directory"
+
+run_test_with_setup test_creates_healthcheck_directory \
+    "Creates /etc/healthcheck.d directory"
+
+run_test_with_setup test_directories_have_755_permissions \
+    "All directories have 755 permissions"
+
+run_test_with_setup test_outputs_setup_banner \
+    "Outputs setup banner"
+
+run_test_with_setup test_outputs_configured_banner \
+    "Outputs configured banner"
+
+run_test_with_setup test_idempotent_second_run_succeeds \
+    "Idempotent — second run exits 0"
+
+run_test_with_setup test_idempotent_permissions_preserved \
+    "Idempotent — permissions restored on second run"
 
 # Generate test report
 generate_report
