@@ -5,6 +5,49 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.15.10] - 2026-03-23
+
+### Added
+
+- Support file-based JSON config for skills, agents, plugins, and MCPs
+- Per-agent database isolation
+- Add --clean flag to services stop
+- Agent connect spinner and init/start lifecycle scripts
+- Auto-update compose file with worktree volume mounts
+- Support parallel agents with per-issue state files
+
+### Changed
+
+- Create shared colors module and standardize log_warning naming
+- Move build-time scripts from lib/runtime/ to lib/base/
+- Deduplicate 3 boilerplate patterns across feature scripts
+
+### Documentation
+
+- Fix stale PIXI_VERSION in versions.md
+
+### Fixed
+
+- Replace stale version stubs with live API calls and remove amd64 gate
+- Correct uppercase /cache/R/ paths in feature summaries and docs
+- Fix whitespace trimming and add edge case tests
+- Use tab-delimited jq output to prevent truncating values with '='
+- Ensure R_LIBS_USER is set for package verification
+- Add ops_/glpat- scrub patterns and restrict metrics dir perms
+- Add cmake dependency for R fs package 2.0.0
+- Add denylist to prevent env var overwrites of PATH/LD_PRELOAD
+- Pin Tier 2 checksums for ktlint, detekt, and KLS
+
+### Testing
+
+- Add whitespace version, URL regex metachar, and version_matches boundary tests
+- Add unit tests and improve entrypoint test sourcing
+- Rewrite 3 false-coverage tests to exercise actual source code
+
+### Debug
+
+- Add diagnostic logging for R library path resolution
+
 ## [4.15.9] - 2026-03-22
 
 ### Added
@@ -84,6 +127,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add baseline SHA-256 checksums for 10 tools
 - Build and commit igor binary via pre-push hook
 - Update dependency versions
+- Release patch version with dependency updates
 
 ### Testing
 
@@ -1406,6 +1450,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix prettier and markdownlint formatting in README
 - Format TLS documentation files
 
+[4.15.10]: https://github.com/joshjhall/containers/compare/v4.15.9...v4.15.10
 [4.15.9]: https://github.com/joshjhall/containers/compare/v4.15.8...v4.15.9
 [4.15.8]: https://github.com/joshjhall/containers/compare/v4.15.7...v4.15.8
 [4.15.7]: https://github.com/joshjhall/containers/compare/v4.15.6...v4.15.7
