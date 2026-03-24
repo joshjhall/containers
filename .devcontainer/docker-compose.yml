@@ -41,9 +41,11 @@ services:
       # - CLAUDE_SKILLS=git-workflow,code-quality,shell-scripting,testing-patterns,development-workflow,skill-authoring,agent-authoring,documentation-authoring,next-issue,next-issue-ship,codebase-audit,error-handling,memory-conventions
       # Agents (unset = all 11 agents)
       # - CLAUDE_AGENTS=debugger,code-reviewer,test-writer,refactorer,audit-code-health,audit-security,audit-test-gaps,audit-architecture,audit-docs,audit-ai-config,issue-writer
-      # Use tini as init system for proper zombie process reaping
-      # This is a belt-and-suspenders approach - the Dockerfile also includes tini,
-      # but init: true ensures proper PID 1 behavior even if command overrides entrypoint
+      # Default memory path
+      - MEMORY_FILE_PATH=/workspace/containers/.claude/memory
+    # Use tini as init system for proper zombie process reaping
+    # This is a belt-and-suspenders approach - the Dockerfile also includes tini,
+    # but init: true ensures proper PID 1 behavior even if command overrides entrypoint
     init: true
     # Required for bindfs FUSE overlay (fixes macOS VirtioFS permission issues)
     cap_add:
