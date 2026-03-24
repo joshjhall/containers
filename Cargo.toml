@@ -1,0 +1,33 @@
+[workspace]
+resolver = "3"
+members = ["crates/stibbons", "crates/containers-common"]
+
+[workspace.package]
+edition = "2024"
+rust-version = "1.94"
+license = "MIT"
+repository = "https://github.com/joshjhall/containers"
+
+[workspace.dependencies]
+# Internal crates
+containers-common = { path = "crates/containers-common" }
+
+# Octarine foundation
+octarine = { git = "ssh://git@github.com/joshjhall/octarine.git", branch = "main", features = ["full"] }
+
+# Shared dependencies (version-aligned with octarine's workspace.dependencies)
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+thiserror = "2"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+all = "warn"
+pedantic = "warn"
+nursery = "warn"

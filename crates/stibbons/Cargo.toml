@@ -1,0 +1,18 @@
+[package]
+name = "stibbons"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Host orchestrator for the containers build system (replaces igor)"
+
+[lints]
+workspace = true
+
+[dependencies]
+containers-common = { workspace = true }
+octarine = { workspace = true }
+clap = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
