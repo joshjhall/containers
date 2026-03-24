@@ -13,7 +13,7 @@ repository = "https://github.com/joshjhall/containers"
 containers-common = { path = "crates/containers-common" }
 
 # Octarine foundation
-octarine = { git = "ssh://git@github.com/joshjhall/octarine.git", branch = "main", features = ["full"] }
+octarine = { git = "https://github.com/joshjhall/octarine.git", branch = "main", features = ["full"] }
 
 # Shared dependencies (version-aligned with octarine's workspace.dependencies)
 clap = { version = "4", features = ["derive"] }

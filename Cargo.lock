@@ -1563,7 +1563,7 @@ dependencies = [
 [[package]]
 name = "octarine"
 version = "0.2.0"
-source = "git+ssh://git@github.com/joshjhall/octarine.git?branch=main#d6ddb738911662894c8259094ea91b1f4f918e2a"
+source = "git+https://github.com/joshjhall/octarine.git?branch=main#d6ddb738911662894c8259094ea91b1f4f918e2a"
 dependencies = [
  "aes-gcm",
  "argon2",
@@ -1621,7 +1621,7 @@ dependencies = [
 [[package]]
 name = "octarine-derive"
 version = "0.1.0"
-source = "git+ssh://git@github.com/joshjhall/octarine.git?branch=main#d6ddb738911662894c8259094ea91b1f4f918e2a"
+source = "git+https://github.com/joshjhall/octarine.git?branch=main#d6ddb738911662894c8259094ea91b1f4f918e2a"
 dependencies = [
  "darling 0.23.0",
  "proc-macro2",
