@@ -71,12 +71,14 @@ test_service_account_token_exits_zero() {
 # Error Path 3: op read failure handled gracefully
 # ============================================================================
 
-test_op_read_in_conditional() {
-    # op read must be inside an if conditional, not bare (failure handled)
-    if command grep -q 'if _secret_value=\$(op read' "$SOURCE_FILE"; then
-        pass_test "op read is inside if conditional (failure handled gracefully)"
+test_op_read_failure_handled() {
+    # op read failures must be handled gracefully — either via if-conditional
+    # or by running in a subshell that writes to a temp file (empty = failure).
+    if command grep -q 'if _secret_value=\$(op read' "$SOURCE_FILE" \
+       || command grep -q '( op read .* > ' "$SOURCE_FILE"; then
+        pass_test "op read failure is handled gracefully (subshell or conditional)"
     else
-        fail_test "op read should be inside if conditional, not bare"
+        fail_test "op read should handle failure gracefully"
     fi
 }
 
@@ -86,14 +88,18 @@ test_op_read_stderr_suppressed() {
         "op read stderr is suppressed (2>/dev/null)"
 }
 
-test_file_ref_op_read_in_conditional() {
-    # FILE_REF loop also uses conditional op read
-    # There should be at least 2 'if _secret_value=$(op read' lines (REF + FILE_REF)
+test_file_ref_op_read_failure_handled() {
+    # Both REF and FILE_REF loops must handle op read failure gracefully.
+    # With parallel fetches, this means at least 2 subshell op read patterns.
     local count
-    count=$(command grep -c 'if _secret_value=\$(op read' "$SOURCE_FILE" || true)
+    count=$(command grep -c '( op read .* > ' "$SOURCE_FILE" || true)
+    if [ "$count" -eq 0 ]; then
+        # Fallback: check for conditional pattern (sequential approach)
+        count=$(command grep -c 'if _secret_value=\$(op read' "$SOURCE_FILE" || true)
+    fi
     [ "$count" -ge 2 ] \
-        && assert_true 0 "Both REF and FILE_REF loops use conditional op read (found $count)" \
-        || assert_true 1 "Expected at least 2 conditional op read patterns, found $count"
+        && assert_true 0 "Both REF and FILE_REF loops handle op read failure (found $count patterns)" \
+        || assert_true 1 "Expected at least 2 op read failure-handling patterns, found $count"
 }
 
 # ============================================================================
@@ -150,9 +156,9 @@ run_test test_op_binary_guard "Error path 1: checks for op binary"
 run_test test_op_binary_guard_exits_zero "Error path 1: exits 0 when op not found"
 run_test test_service_account_token_guard "Error path 2: checks OP_SERVICE_ACCOUNT_TOKEN"
 run_test test_service_account_token_exits_zero "Error path 2: exits 0 when token empty"
-run_test test_op_read_in_conditional "Error path 3: op read in if conditional"
+run_test test_op_read_failure_handled "Error path 3: op read failure handled gracefully"
 run_test test_op_read_stderr_suppressed "Error path 3: op read stderr suppressed"
-run_test test_file_ref_op_read_in_conditional "Error path 3: FILE_REF loop also uses conditional op read"
+run_test test_file_ref_op_read_failure_handled "Error path 3: FILE_REF loop also handles op read failure"
 run_test test_xtrace_disabled_during_processing "Xtrace disabled during secret processing"
 run_test test_xtrace_restored_after_processing "Xtrace restored after processing"
 run_test test_cache_atomic_write "Cache written atomically (.tmp + mv)"

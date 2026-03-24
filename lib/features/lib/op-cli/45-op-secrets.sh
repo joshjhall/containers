@@ -59,39 +59,77 @@ _xtrace_was_on=false
 [[ $- == *x* ]] && _xtrace_was_on=true
 set +x
 
+# Fetch all secrets in parallel using temp files on /dev/shm (RAM-backed).
+# Each op read runs as a background job; we wait for all to finish, then
+# read results back. This turns N sequential network round-trips into one
+# parallel batch (~0.8s total instead of N × 0.8s).
+
+_op_tmp_dir=$(mktemp -d /dev/shm/op-fetch.XXXXXX)
+chmod 700 "$_op_tmp_dir"
+
+# Launch parallel fetches for OP_*_REF (non-FILE) variables
 for _ref_var in $(compgen -v | command grep '^OP_.\+_REF$' | command grep -v '_FILE_REF$'); do
     _target_var="${_ref_var#OP_}"
     _target_var="${_target_var%_REF}"
     [ -z "$_target_var" ] && continue
-    # Skip if target variable is already set
     [ -n "${!_target_var:-}" ] && continue
     _ref_value="${!_ref_var:-}"
     [ -z "$_ref_value" ] && continue
-    if _secret_value=$(op read "$_ref_value" 2>/dev/null); then
-        export "${_target_var}=${_secret_value}"
-    fi
+    # Background: fetch secret and write to temp file
+    ( op read "$_ref_value" 2>/dev/null > "${_op_tmp_dir}/ref_${_target_var}" ) &
 done
 
-# FILE_REF loop: fetch content, write to /dev/shm, export file path
+# Launch parallel fetches for OP_*_FILE_REF variables
 for _ref_var in $(compgen -v | command grep '^OP_.\+_FILE_REF$'); do
     _target_var="${_ref_var#OP_}"
     _target_var="${_target_var%_FILE_REF}"
     [ -z "$_target_var" ] && continue
-    # Skip if target variable is already set
     [ -n "${!_target_var:-}" ] && continue
     _ref_value="${!_ref_var:-}"
     [ -z "$_ref_value" ] && continue
-    if _secret_value=$(op read "$_ref_value" 2>/dev/null); then
-        # Derive filename: lowercase target var with dashes
+    ( op read "$_ref_value" 2>/dev/null > "${_op_tmp_dir}/fileref_${_target_var}_${_ref_value##*/}" ) &
+done
+
+# Launch parallel git identity fetch if needed
+if [ -z "${GIT_USER_NAME:-}" ] && [ -n "${OP_GIT_USER_NAME_REF:-}" ]; then
+    _base_path="${OP_GIT_USER_NAME_REF%/*}"
+    ( op read "${_base_path}/first name" 2>/dev/null > "${_op_tmp_dir}/git_first" ) &
+    ( op read "${_base_path}/last name" 2>/dev/null > "${_op_tmp_dir}/git_last" ) &
+fi
+
+# Wait for ALL parallel fetches to complete
+wait
+
+# Collect results: OP_*_REF → export as env vars
+for _ref_var in $(compgen -v | command grep '^OP_.\+_REF$' | command grep -v '_FILE_REF$'); do
+    _target_var="${_ref_var#OP_}"
+    _target_var="${_target_var%_REF}"
+    [ -z "$_target_var" ] && continue
+    [ -n "${!_target_var:-}" ] && continue
+    _result_file="${_op_tmp_dir}/ref_${_target_var}"
+    if [ -s "$_result_file" ]; then
+        export "${_target_var}=$(command cat "$_result_file")"
+    fi
+done
+
+# Collect results: OP_*_FILE_REF → write to /dev/shm, export file path
+for _ref_var in $(compgen -v | command grep '^OP_.\+_FILE_REF$'); do
+    _target_var="${_ref_var#OP_}"
+    _target_var="${_target_var%_FILE_REF}"
+    [ -z "$_target_var" ] && continue
+    [ -n "${!_target_var:-}" ] && continue
+    _ref_value="${!_ref_var:-}"
+    [ -z "$_ref_value" ] && continue
+    _result_file="${_op_tmp_dir}/fileref_${_target_var}_${_ref_value##*/}"
+    if [ -s "$_result_file" ]; then
         _file_name=$(echo "$_target_var" | command tr '[:upper:]_' '[:lower:]-')
-        # Derive extension from the URI's last path segment
         _uri_field="${_ref_value##*/}"
         case "$_uri_field" in
             *.*) _file_ext=".${_uri_field##*.}" ;;
             *)   _file_ext="" ;;
         esac
         _file_path="/dev/shm/${_file_name}${_file_ext}"
-        printf '%s' "$_secret_value" > "$_file_path"
+        command cat "$_result_file" > "$_file_path"
         chmod 600 "$_file_path"
         export "${_target_var}=${_file_path}"
     fi
@@ -100,13 +138,16 @@ done
 # Smart Git Identity Resolution: if GIT_USER_NAME wasn't resolved (e.g.,
 # Identity item with separate first/last fields), try combining them.
 if [ -z "${GIT_USER_NAME:-}" ] && [ -n "${OP_GIT_USER_NAME_REF:-}" ]; then
-    _base_path="${OP_GIT_USER_NAME_REF%/*}"
-    _first=$(op read "${_base_path}/first name" 2>/dev/null) || true
-    _last=$(op read "${_base_path}/last name" 2>/dev/null) || true
+    _first="" _last=""
+    [ -s "${_op_tmp_dir}/git_first" ] && _first=$(command cat "${_op_tmp_dir}/git_first")
+    [ -s "${_op_tmp_dir}/git_last" ] && _last=$(command cat "${_op_tmp_dir}/git_last")
     if [ -n "${_first}" ] || [ -n "${_last}" ]; then
         export GIT_USER_NAME="${_first}${_first:+ }${_last}"
     fi
 fi
+
+# Clean up temp files
+rm -rf "$_op_tmp_dir"
 
 # Apply defaults so git operations never fail
 [ -z "${GIT_USER_NAME:-}" ] && export GIT_USER_NAME="Devcontainer"

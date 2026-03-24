@@ -56,45 +56,74 @@ _op_load_secrets() {
         return 0
     fi
 
-    local _ref_var _target_var _ref_value _secret_value
+    # Fetch all secrets in parallel (cache-miss path).
+    # Each op read runs as a background job with results written to temp files.
+    local _op_tmp_dir _ref_var _target_var _ref_value _result_file
+    _op_tmp_dir=$(mktemp -d /dev/shm/op-fetch.XXXXXX)
+    chmod 700 "$_op_tmp_dir"
+
+    # Launch parallel fetches for OP_*_REF variables
     for _ref_var in $(compgen -v | command grep '^OP_.\+_REF$' | command grep -v '_FILE_REF$'); do
         _target_var="${_ref_var#OP_}"
         _target_var="${_target_var%_REF}"
         [ -z "$_target_var" ] && continue
-        # Skip if target variable is already set
         [ -n "${!_target_var:-}" ] && continue
         _ref_value="${!_ref_var:-}"
         [ -z "$_ref_value" ] && continue
-        if _secret_value=$(op read "$_ref_value" 2>/dev/null); then
-            export "${_target_var}=${_secret_value}"
+        ( op read "$_ref_value" 2>/dev/null > "${_op_tmp_dir}/ref_${_target_var}" ) &
+    done
+
+    # Launch parallel fetches for OP_*_FILE_REF variables
+    for _ref_var in $(compgen -v | command grep '^OP_.\+_FILE_REF$'); do
+        _target_var="${_ref_var#OP_}"
+        _target_var="${_target_var%_FILE_REF}"
+        [ -z "$_target_var" ] && continue
+        [ -n "${!_target_var:-}" ] && continue
+        _ref_value="${!_ref_var:-}"
+        [ -z "$_ref_value" ] && continue
+        ( op read "$_ref_value" 2>/dev/null > "${_op_tmp_dir}/fileref_${_target_var}_${_ref_value##*/}" ) &
+    done
+
+    # Wait for all parallel fetches
+    wait
+
+    # Collect OP_*_REF results
+    for _ref_var in $(compgen -v | command grep '^OP_.\+_REF$' | command grep -v '_FILE_REF$'); do
+        _target_var="${_ref_var#OP_}"
+        _target_var="${_target_var%_REF}"
+        [ -z "$_target_var" ] && continue
+        [ -n "${!_target_var:-}" ] && continue
+        _result_file="${_op_tmp_dir}/ref_${_target_var}"
+        if [ -s "$_result_file" ]; then
+            export "${_target_var}=$(command cat "$_result_file")"
         fi
     done
 
-    # FILE_REF loop: fetch content, write to /dev/shm, export file path
+    # Collect FILE_REF results → write to /dev/shm, export file path
     local _file_name _uri_field _file_ext _file_path
     for _ref_var in $(compgen -v | command grep '^OP_.\+_FILE_REF$'); do
         _target_var="${_ref_var#OP_}"
         _target_var="${_target_var%_FILE_REF}"
         [ -z "$_target_var" ] && continue
-        # Skip if target variable is already set
         [ -n "${!_target_var:-}" ] && continue
         _ref_value="${!_ref_var:-}"
         [ -z "$_ref_value" ] && continue
-        if _secret_value=$(op read "$_ref_value" 2>/dev/null); then
-            # Derive filename: lowercase target var with dashes
+        _result_file="${_op_tmp_dir}/fileref_${_target_var}_${_ref_value##*/}"
+        if [ -s "$_result_file" ]; then
             _file_name=$(echo "$_target_var" | tr '[:upper:]_' '[:lower:]-')
-            # Derive extension from the URI's last path segment
             _uri_field="${_ref_value##*/}"
             case "$_uri_field" in
                 *.*) _file_ext=".${_uri_field##*.}" ;;
                 *)   _file_ext="" ;;
             esac
             _file_path="/dev/shm/${_file_name}${_file_ext}"
-            printf '%s' "$_secret_value" > "$_file_path"
+            command cat "$_result_file" > "$_file_path"
             chmod 600 "$_file_path"
             export "${_target_var}=${_file_path}"
         fi
     done
+
+    rm -rf "$_op_tmp_dir"
 
     # Restore xtrace state
     eval "$_old_xtrace"
@@ -124,9 +153,16 @@ _op_resolve_git_identity() {
     # Resolve GIT_USER_NAME: try custom "full name" field, then first+last
     if [ -z "${GIT_USER_NAME:-}" ] && [ -n "${OP_GIT_USER_NAME_REF:-}" ]; then
         local _base_path="${OP_GIT_USER_NAME_REF%/*}"
-        local _first _last
-        _first=$(op read "${_base_path}/first name" 2>/dev/null) || true
-        _last=$(op read "${_base_path}/last name" 2>/dev/null) || true
+        local _git_tmp_dir _first _last
+        _git_tmp_dir=$(mktemp -d /dev/shm/op-git.XXXXXX)
+        chmod 700 "$_git_tmp_dir"
+        ( op read "${_base_path}/first name" 2>/dev/null > "${_git_tmp_dir}/first" ) &
+        ( op read "${_base_path}/last name" 2>/dev/null > "${_git_tmp_dir}/last" ) &
+        wait
+        _first="" _last=""
+        [ -s "${_git_tmp_dir}/first" ] && _first=$(command cat "${_git_tmp_dir}/first")
+        [ -s "${_git_tmp_dir}/last" ] && _last=$(command cat "${_git_tmp_dir}/last")
+        rm -rf "$_git_tmp_dir"
         if [ -n "${_first}" ] || [ -n "${_last}" ]; then
             local _full_name="${_first}${_first:+ }${_last}"
             export GIT_USER_NAME="$_full_name"

@@ -69,7 +69,8 @@ test_first_startup_uses_force_flag() {
 # ============================================================================
 
 test_first_startup_calls_claude_setup() {
-    # When claude-setup is available, it should be called with --force
+    # When claude-setup is available, it should be launched in the background
+    # with --force. The mock writes args to a marker file.
     local marker="$TEST_TEMP_DIR/claude-setup-called"
 
     # Create a mock claude-setup that writes args to a marker file
@@ -86,9 +87,17 @@ EOF
         bash "$FIRST_STARTUP" 2>/dev/null || exit_code=$?
 
     assert_equals "0" "$exit_code" \
-        "first-startup should exit 0 when claude-setup succeeds"
+        "first-startup should exit 0 when claude-setup is backgrounded"
+
+    # Wait briefly for the background process to complete (mock is instant)
+    local waited=0
+    while [ ! -f "$marker" ] && [ "$waited" -lt 5 ]; do
+        sleep 0.1
+        waited=$((waited + 1))
+    done
+
     assert_file_exists "$marker" \
-        "claude-setup should have been called"
+        "claude-setup should have been called (background)"
     local args
     args=$(command cat "$marker")
     assert_contains "$args" "--force" \
