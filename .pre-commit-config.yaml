@@ -113,6 +113,25 @@ repos:
         files: ^cmd/igor/.*\.go$
 
   # ==========================================================================
+  # Rust linting (stibbons)
+  # ==========================================================================
+  - repo: local
+    hooks:
+      - id: cargo-fmt-check
+        name: cargo fmt check (stibbons)
+        entry: cargo fmt --check
+        language: system
+        pass_filenames: false
+        files: ^(crates/.*\.rs|\.rustfmt\.toml|Cargo\.toml)$
+
+      - id: cargo-clippy
+        name: cargo clippy (stibbons)
+        entry: cargo clippy --workspace -- -D warnings
+        language: system
+        pass_filenames: false
+        files: ^(crates/.*\.rs|Cargo\.toml)$
+
+  # ==========================================================================
   # Custom local hooks
   # ==========================================================================
   - repo: local
@@ -171,6 +190,14 @@ repos:
         language: system
         pass_filenames: false
         files: ^cmd/igor/.*\.go$
+        stages: [pre-push]
+
+      - id: cargo-test
+        name: Run Rust tests (stibbons)
+        entry: cargo test --workspace
+        language: system
+        pass_filenames: false
+        files: ^(crates/.*\.rs|Cargo\.toml)$
         stages: [pre-push]
 
       - id: docker-compose-validate

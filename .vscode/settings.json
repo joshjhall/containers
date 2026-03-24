@@ -16,6 +16,14 @@
     "source.fixAll.ruff": "explicit"
   },
 
+  // Rust settings
+  "[rust]": {
+    "editor.defaultFormatter": "rust-lang.rust-analyzer",
+    "editor.formatOnSave": true
+  },
+  "rust-analyzer.check.command": "clippy",
+  "rust-analyzer.check.extraArgs": ["--", "-D", "warnings"],
+
   // cSpell settings - use external configuration file
   "cSpell.useGitignore": true,
   "cSpell.import": ["./cspell.json"],

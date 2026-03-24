@@ -1,4 +1,4 @@
-# Custom dictionary for rust-core project
+# Custom dictionary for containers project
 coreutils
 cweill
 Daemonless
@@ -349,6 +349,7 @@ numpy
 observability
 ofabry
 ollama
+octarine
 oneline
 ONEPASSWORD
 openpgp
@@ -480,6 +481,7 @@ sslmode
 stackprof
 startswith
 staticcheck
+stibbons
 stringr
 subdirs
 subshell
