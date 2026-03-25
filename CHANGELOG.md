@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.15.11] - 2026-03-25
+
+### Fixed
+
+- Add MEMORY_FILE_PATH env var and fix comment indentation
+- Skip issues with status/on-hold label
+- Measure production code only for file-length thresholds
+- Exclude git submodules from codebase-audit scans
+
+### Improved
+
+- Parallelize op read calls and background claude-setup
+
 ## [4.15.10] - 2026-03-23
 
 ### Added
@@ -1450,6 +1463,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix prettier and markdownlint formatting in README
 - Format TLS documentation files
 
+[4.15.11]: https://github.com/joshjhall/containers/compare/v4.15.10...v4.15.11
 [4.15.10]: https://github.com/joshjhall/containers/compare/v4.15.9...v4.15.10
 [4.15.9]: https://github.com/joshjhall/containers/compare/v4.15.8...v4.15.9
 [4.15.8]: https://github.com/joshjhall/containers/compare/v4.15.7...v4.15.8
