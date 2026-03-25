@@ -85,13 +85,13 @@ Proceed with Phase 0 as normal regardless of mode.
    skip the priority query
 1. **Otherwise query by priority** using the nested severity x effort loop
    (see `state-format.md` for exact commands). **Important**: all queries
-   MUST exclude issues with `status/in-progress`, `status/pr-pending`, or
-   `status/commit-pending` labels — see `state-format.md` for the exact
+   MUST exclude issues with `status/in-progress`, `status/pr-pending`,
+   `status/commit-pending`, or `status/on-hold` labels — see `state-format.md` for the exact
    `--search` / post-filter syntax. Pick the first open, unassigned issue
    returned
 1. **If no labeled issues found**: fall back to oldest open issue (also
-   excluding `status/in-progress`, `status/pr-pending`, and
-   `status/commit-pending`)
+   excluding `status/in-progress`, `status/pr-pending`,
+   `status/commit-pending`, and `status/on-hold`)
 1. Show the selected issue to the user — title, labels, body excerpt
 1. Ask: **Work on this issue?** (user can accept, skip to next, or pick
    a different one)

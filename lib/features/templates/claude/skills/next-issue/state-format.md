@@ -77,7 +77,7 @@ ______________________________________________________________________
 
 ## Status Labels
 
-Three labels track in-flight work and prevent the same issue from being
+Four labels track in-flight work and prevent the same issue from being
 picked up twice:
 
 | Label                   | Set by                        | Meaning                                               |
@@ -85,8 +85,9 @@ picked up twice:
 | `status/in-progress`    | `/next-issue` (Phase 1)       | An agent has selected this issue and is working on it |
 | `status/pr-pending`     | `/next-issue-ship` (Option 1) | A PR has been created; awaiting review/merge          |
 | `status/commit-pending` | `/next-issue-ship` (Option 3) | Fix committed locally but not yet pushed              |
+| `status/on-hold`        | Manual                        | Issue intentionally deferred; not ready to work on    |
 
-All three labels are **excluded** from all priority queries (see below) so
+All four labels are **excluded** from all priority queries (see below) so
 that in-progress issues are never re-selected.
 
 ______________________________________________________________________
@@ -109,7 +110,7 @@ for severity in critical high medium low; do
       --label "effort/${effort}" \
       --state open \
       --assignee "" \
-      --search "-label:status/in-progress -label:status/pr-pending -label:status/commit-pending" \
+      --search "-label:status/in-progress -label:status/pr-pending -label:status/commit-pending -label:status/on-hold" \
       --limit 1 \
       --json number,title,labels,body
   done
@@ -131,10 +132,10 @@ for severity in critical high medium low; do
       --not-assignee \
       --per-page 5 \
     | while read -r line; do
-        # Skip issues with status/in-progress, status/pr-pending, or status/commit-pending labels
+        # Skip issues with status/in-progress, status/pr-pending, status/commit-pending, or status/on-hold labels
         issue_num=$(echo "$line" | /usr/bin/awk '{print $1}')
         labels=$(glab issue view "$issue_num" --output json | /usr/bin/grep -o '"status/[^"]*"')
-        if ! echo "$labels" | /usr/bin/grep -qE 'status/in-progress|status/pr-pending|status/commit-pending'; then
+        if ! echo "$labels" | /usr/bin/grep -qE 'status/in-progress|status/pr-pending|status/commit-pending|status/on-hold'; then
           echo "$line"
           break
         fi
@@ -152,7 +153,7 @@ excluding status labels):
 # GitHub
 gh issue list \
   --state open \
-  --search "-label:status/in-progress -label:status/pr-pending -label:status/commit-pending" \
+  --search "-label:status/in-progress -label:status/pr-pending -label:status/commit-pending -label:status/on-hold" \
   --limit 1 \
   --json number,title,labels,body
 
