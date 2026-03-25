@@ -25,10 +25,24 @@ When invoked, you receive a work manifest in the task prompt containing:
 
 ### file-length
 
-- Count non-blank lines per file
-- Warning (medium): >300 non-blank lines
-- High: >500 non-blank lines
-- Evidence: line count, function count, class count
+- Count **production code lines only** — exclude blank lines, comment-only
+  lines, and inline test blocks. Use language-aware filtering:
+  - **Rust**: exclude everything from `#[cfg(test)]` to end of file; exclude
+    `//`, `///`, `//!`, `/* */` comment lines
+  - **Python**: exclude everything from `if __name__` test guard to end of
+    file; exclude `#` comment lines and docstring-only lines
+  - **JS/TS**: exclude `describe(` / `it(` / `test(` blocks (detect by
+    scanning for top-level test framework calls); exclude `//` and `/* */`
+    comment lines
+  - **Go**: exclude `func Test` / `func Benchmark` functions to end of their
+    closing brace; exclude `//` comment lines
+  - **Shell**: exclude lines after `# --- tests ---` or similar test markers;
+    exclude `#` comment lines
+  - **Other languages**: exclude blank and comment-only lines at minimum
+- Warning (medium): >300 production code lines
+- High: >500 production code lines
+- Evidence: production code line count, total line count, function count,
+  class count, what was excluded (e.g., "excluded 280 test lines, 45 comment lines")
 
 ### function-complexity
 
@@ -179,7 +193,8 @@ array for any suppressed acknowledged findings.
 - When uncertain whether something is dead code, use severity `low` and note
   the uncertainty in the description
 - Do not flag test files for naming conventions (test names are often verbose)
-- Count non-blank, non-comment lines for file length metrics
+- Count production code lines only for file length metrics (see file-length
+  category for language-specific exclusion rules)
 - For duplication, compare within the scanned batch and note cross-file matches
 - If a file batch is empty or contains only non-source files, return zero
   findings with the correct `files_scanned` count

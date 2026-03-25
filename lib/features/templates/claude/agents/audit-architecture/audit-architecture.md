@@ -83,10 +83,18 @@ When invoked, you receive a work manifest in the task prompt containing:
   - High line count AND high fan-in AND multiple unrelated categories
     of functionality
   - Classes with many methods spanning different concerns
-- Warning (medium): file with >300 lines AND >5 incoming dependencies
-  AND multiple distinct concerns
-- High: file with >500 lines AND >10 incoming dependencies
-- Evidence: line count, dependency count, list of concerns identified
+- **Measure production code lines only** — exclude blank lines, comment-only
+  lines, and inline test blocks (same rules as `audit-code-health` file-length):
+  - Rust: exclude `#[cfg(test)]` blocks and comment lines
+  - Python: exclude `if __name__` test guards and comment lines
+  - JS/TS: exclude `describe(`/`test(` blocks and comment lines
+  - Go: exclude `func Test`/`func Benchmark` blocks and comment lines
+  - Other languages: exclude blank and comment-only lines at minimum
+- Warning (medium): file with >300 production code lines AND >5 incoming
+  dependencies AND multiple distinct concerns
+- High: file with >500 production code lines AND >10 incoming dependencies
+- Evidence: production code line count, total line count, dependency count,
+  list of concerns identified
 
 ### orphaned-file
 
