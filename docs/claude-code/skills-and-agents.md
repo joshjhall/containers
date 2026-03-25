@@ -56,6 +56,40 @@ startup via `claude-setup`. Project-level `.claude/` configs merge with these
 Templates are staged at build time to `/etc/container/config/claude-templates/`
 and installed at runtime by `claude-setup`. All installations are idempotent.
 
+### Skill Metadata (metadata.yml)
+
+Each skill directory includes a `metadata.yml` file that provides
+machine-readable metadata for tooling (label sync, CI, documentation
+generators). This file is informational — it does not change skill behavior at
+runtime.
+
+**Schema:**
+
+```yaml
+name: my-skill          # Skill name (matches directory name)
+version: "1.0"          # Schema version
+
+labels:                 # Labels the skill creates/requires on issues
+  - name: status/in-progress
+    color: "0E8A16"
+    description: An agent is working on this issue
+
+required_tools:         # CLI tools the skill invokes
+  - name: gh
+    purpose: GitHub issue listing, labeling, PR creation
+    install_hint: "Included with INCLUDE_DEV_TOOLS=true"
+
+required_permissions:   # Auth scopes needed
+  - provider: github
+    scopes: [repo]
+    notes: "gh auth login with 'repo' scope minimum"
+
+required_mcps: []       # MCP servers the skill uses
+```
+
+Skills without labels, tools, or permissions use empty arrays. See the
+`skill-authoring` skill for authoring guidelines.
+
 ### Overriding Skills
 
 Use `CLAUDE_SKILLS` to replace the default skill set:

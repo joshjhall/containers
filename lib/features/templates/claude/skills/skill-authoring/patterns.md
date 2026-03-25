@@ -35,6 +35,51 @@ description: <What it does and when to use it — include key trigger terms>
 
 ______________________________________________________________________
 
+## Metadata Template (metadata.yml)
+
+Every skill directory should include a `metadata.yml` alongside SKILL.md:
+
+```yaml
+name: my-skill
+version: "1.0"
+
+# Labels this skill creates or requires on GitHub/GitLab issues
+labels:
+  - name: status/in-progress
+    color: "0E8A16"
+    description: An agent is working on this issue
+
+# CLI tools the skill invokes (must be installed for the skill to work)
+required_tools:
+  - name: gh
+    purpose: GitHub issue listing, labeling, PR creation
+    install_hint: "Included with INCLUDE_DEV_TOOLS=true"
+
+# Auth permissions needed by the skill's tool invocations
+required_permissions:
+  - provider: github
+    scopes:
+      - repo
+    notes: "gh auth login with 'repo' scope minimum"
+
+# MCP servers the skill uses (if any)
+required_mcps: []
+```
+
+For skills that don't use labels, tools, or permissions, use empty arrays:
+
+```yaml
+name: my-simple-skill
+version: "1.0"
+
+labels: []
+required_tools: []
+required_permissions: []
+required_mcps: []
+```
+
+______________________________________________________________________
+
 ## Description Field — Good vs Bad
 
 | Quality | Description                                                                                                                     | Problem / Strength                   |
@@ -105,6 +150,8 @@ Before shipping a skill, verify each item:
 - [ ] No nested companion chains (one level max from SKILL.md)
 - [ ] Anti-patterns include positive alternatives, not just negatives
 - [ ] At least one good/bad example pair for the primary use case
+- [ ] `metadata.yml` exists with at least `name` and `version`
+- [ ] `metadata.yml` lists all labels, tools, and permissions the skill uses
 
 ______________________________________________________________________
 

@@ -1,0 +1,13 @@
+name: docker-development
+version: "1.0"
+
+labels: []
+
+required_tools:
+  - name: docker
+    purpose: Container builds, image management
+    install_hint: "Included with INCLUDE_DOCKER=true"
+
+required_permissions: []
+
+required_mcps: []

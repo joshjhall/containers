@@ -75,6 +75,18 @@ description: Test-first development patterns and framework conventions. Use when
 - Missing verification steps (how to confirm the skill worked)
 - Deeply nested companion files referencing other companion files
 
+## Metadata File (metadata.yml)
+
+Every skill directory should include a `metadata.yml` alongside SKILL.md.
+This provides machine-readable metadata for tooling (label sync, CI,
+documentation generators).
+
+- **Required fields**: `name`, `version`
+- **Optional fields**: `labels`, `required_tools`, `required_permissions`,
+  `required_mcps` — use empty arrays (`[]`) when not applicable
+- This file is informational — it does not change skill behavior at runtime
+- See `patterns.md` for the full schema and an example
+
 ## Companion Files
 
 - Use when SKILL.md would exceed ~120 lines
