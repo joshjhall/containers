@@ -27,6 +27,12 @@ Follow these steps in order. Do not skip steps.
 ### Step 1: Map the Codebase
 
 1. Run `Glob("**/*")` to get the full file tree within `scope`
+1. **Exclude git submodules**: Run `git submodule status --recursive` via Bash.
+   If any submodules are detected, extract their paths and remove all files
+   under those directories from the file tree. This prevents filing findings
+   against code that belongs to a different repository. Log excluded submodule
+   paths so the user knows they were skipped (e.g.,
+   "Excluded submodule: containers/")
 1. Run `wc -l` via Bash on source files to get line counts
 1. Classify files into categories by extension and path:
 
