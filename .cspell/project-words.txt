@@ -347,9 +347,9 @@ nullglob
 nullvalue
 numpy
 observability
+octarine
 ofabry
 ollama
-octarine
 oneline
 ONEPASSWORD
 openpgp
@@ -405,6 +405,7 @@ PYTHONHOME
 pythonpath
 pytv
 Rakefile
+ratatui
 Ranke
 rbca
 rbuild
