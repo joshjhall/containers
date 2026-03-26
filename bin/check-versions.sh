@@ -259,6 +259,7 @@ extract_all_versions() {
     _add_feature_version ENTR_VERSION "entr" "dev-tools.sh"
     _add_feature_version BIOME_VERSION "biome" "dev-tools.sh"
     _add_feature_version TAPLO_VERSION "taplo" "dev-tools.sh"
+    _add_feature_version JUST_VERSION "just" "dev-tools.sh"
     _add_feature_version UV_VERSION "uv" "dev-tools.sh"
 
     # Docker tools from docker.sh
@@ -374,6 +375,7 @@ main() {
             entr) check_entr ;;
             biome) check_biome ;;
             taplo) check_github_release "taplo" "tamasfe/taplo" ;;
+            just) check_github_release "just" "casey/just" ;;
             cargo-release) check_crates_io "cargo-release" ;;
             zoxide) check_github_release "zoxide" "ajeetdsouza/zoxide" ;;
             cosign) check_github_release "cosign" "sigstore/cosign" ;;

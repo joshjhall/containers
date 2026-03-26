@@ -241,6 +241,18 @@ install_github_binary_tools() {
         log_message "taplo already installed (likely via rust-dev), skipping..."
     fi
 
+    # just (command runner) — skip if already installed (e.g., by rust-dev via cargo)
+    if ! command -v just &> /dev/null; then
+        install_github_release "just" "$JUST_VERSION" \
+            "https://github.com/casey/just/releases/download/${JUST_VERSION}" \
+            "just-${JUST_VERSION}-x86_64-unknown-linux-musl.tar.gz" \
+            "just-${JUST_VERSION}-aarch64-unknown-linux-musl.tar.gz" \
+            "calculate" "extract_flat:just" \
+            || return 1
+    else
+        log_message "just already installed (likely via rust-dev), skipping..."
+    fi
+
     # uv (Python package installer) — skip if already installed by python-dev
     install_uv || return 1
 }
