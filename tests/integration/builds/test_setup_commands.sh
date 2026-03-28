@@ -236,6 +236,24 @@ test_setup_git_auth_key() {
     local perms
     perms=$(docker exec "$c" stat -c '%a' /home/developer/.ssh/git_auth_key)
     assert_equals "600" "$perms" "Auth key should have 600 permissions"
+
+    # core.sshCommand should be set for VS Code compatibility
+    local ssh_cmd
+    ssh_cmd=$(docker exec "$c" git config --global core.sshCommand)
+    assert_contains "$ssh_cmd" "git_auth_key" "core.sshCommand should reference auth key"
+    assert_contains "$ssh_cmd" "IdentitiesOnly" "core.sshCommand should use IdentitiesOnly"
+}
+
+test_setup_git_no_auth_key_no_ssh_command() {
+    local c="setup-git-nosshcmd-$$"
+    _start_container "$c" "$MINIMAL_IMAGE"
+
+    docker exec "$c" setup-git 2>&1
+
+    # core.sshCommand should NOT be set when no auth key is provided
+    local rc=0
+    docker exec "$c" git config --global core.sshCommand >/dev/null 2>&1 || rc=$?
+    assert_exit_code 1 "$rc" "core.sshCommand should not be set without auth key"
 }
 
 test_setup_git_signing_key() {
@@ -463,7 +481,7 @@ test_setup_glab_bashrc_idempotent() {
 run_test test_build_minimal_image "Build minimal image for setup command tests"
 run_test test_build_devtools_image "Build dev-tools image for setup command tests"
 
-# setup-git tests (9 tests)
+# setup-git tests (10 tests)
 run_test test_setup_git_default_identity "setup-git: default identity (Devcontainer)"
 run_test test_setup_git_custom_identity "setup-git: custom identity via env vars"
 run_test test_setup_git_invalid_email_fallback "setup-git: invalid email falls back to default"
@@ -471,6 +489,7 @@ run_test test_setup_git_ssh_agent_started "setup-git: SSH agent started with soc
 run_test test_setup_git_ssh_keepalive "setup-git: SSH keepalive for github/gitlab"
 run_test test_setup_git_ssh_keepalive_idempotent "setup-git: SSH keepalive idempotent"
 run_test test_setup_git_auth_key "setup-git: auth key written with 600 perms"
+run_test test_setup_git_no_auth_key_no_ssh_command "setup-git: no core.sshCommand without auth key"
 run_test test_setup_git_signing_key "setup-git: signing key configures gpg.format=ssh"
 run_test test_setup_git_idempotent "setup-git: second run says already configured"
 

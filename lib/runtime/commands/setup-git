@@ -192,6 +192,11 @@ setup_auth_key() {
             _skip "auth key already in ssh-agent"
         fi
     fi
+
+    # Set core.sshCommand so VS Code's git extension (which does not inherit
+    # the terminal SSH agent) uses the provisioned key directly.
+    git config --global core.sshCommand "ssh -i ${key_path} -o IdentitiesOnly=yes"
+    _ok "core.sshCommand configured for VS Code compatibility"
 }
 
 # ---------------------------------------------------------------------------
