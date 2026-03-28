@@ -1,0 +1,1 @@
+- [v5 Architecture](v5-architecture.md) — Three executables (stibbons/igor/luggage), manifest-driven installs, multi-distro support
