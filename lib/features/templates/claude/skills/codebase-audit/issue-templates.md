@@ -19,17 +19,18 @@ ______________________________________________________________________
 
 ### Cross-Scanner Correlation Rules
 
-| Scanner A Finding                | Scanner B Finding            | Action                         |
-| -------------------------------- | ---------------------------- | ------------------------------ |
-| dead-code (code-health)          | orphaned-file (architecture) | Merge into single issue        |
-| any (security)                   | untested-\* (test-gaps)      | Bump severity, note in issue   |
-| stale-comment (docs)             | deprecated-api (code-health) | Merge into single issue        |
-| high-coupling (arch)             | code-duplication (health)    | Cross-reference, keep separate |
-| claude-md-drift (ai-config)      | outdated-readme (docs)       | Merge into single issue        |
-| mcp-misconfiguration (ai-config) | hardcoded-secret (security)  | Merge into single issue        |
-| ai-file-bloat (ai-config)        | claude-md-drift (ai-config)  | Cross-reference, keep separate |
-| doc-file-bloat (ai-config)       | outdated-readme (docs)       | Cross-reference, keep separate |
-| doc-file-bloat (ai-config)       | stale-comment (docs)         | Cross-reference, keep separate |
+| Scanner A Finding                | Scanner B Finding              | Action                         |
+| -------------------------------- | ------------------------------ | ------------------------------ |
+| dead-code (code-health)          | orphaned-file (architecture)   | Merge into single issue        |
+| any (security)                   | untested-\* (test-gaps)        | Bump severity, note in issue   |
+| stale-comment (docs)             | deprecated-api (code-health)   | Merge into single issue        |
+| high-coupling (arch)             | code-duplication (health)      | Cross-reference, keep separate |
+| claude-md-drift (ai-config)      | outdated-readme (docs)         | Merge into single issue        |
+| mcp-misconfiguration (ai-config) | hardcoded-secret (security)    | Merge into single issue        |
+| ai-file-bloat (ai-config)        | claude-md-drift (ai-config)    | Cross-reference, keep separate |
+| doc-file-bloat (ai-config)       | outdated-readme (docs)         | Cross-reference, keep separate |
+| doc-file-bloat (ai-config)       | stale-comment (docs)           | Cross-reference, keep separate |
+| any (project scanner)            | any (other scanner), same file | Cross-reference, keep separate |
 
 ### Deduplication
 
@@ -76,14 +77,15 @@ ______________________________________________________________________
 
 ### Category Labels
 
-| Label                | Applied When                       |
-| -------------------- | ---------------------------------- |
-| `audit/code-health`  | Findings from code-health scanner  |
-| `audit/security`     | Findings from security scanner     |
-| `audit/test-gaps`    | Findings from test-gaps scanner    |
-| `audit/architecture` | Findings from architecture scanner |
-| `audit/docs`         | Findings from docs scanner         |
-| `audit/ai-config`    | Findings from ai-config scanner    |
+| Label                | Applied When                                            |
+| -------------------- | ------------------------------------------------------- |
+| `audit/code-health`  | Findings from code-health scanner                       |
+| `audit/security`     | Findings from security scanner                          |
+| `audit/test-gaps`    | Findings from test-gaps scanner                         |
+| `audit/architecture` | Findings from architecture scanner                      |
+| `audit/docs`         | Findings from docs scanner                              |
+| `audit/ai-config`    | Findings from ai-config scanner                         |
+| `audit/<name>`       | Project-scanner label (auto-derived, created on-demand) |
 
 ### Severity Labels
 
@@ -191,9 +193,15 @@ prompt:
     ]
   },
   "issue_template": "<full Markdown template from Issue Template section>",
-  "labels": ["audit/code-health", "severity/high", "effort/small"]
+  "labels": ["audit/code-health", "severity/high", "effort/small"],
+  "create_label": false
 }
 ```
+
+When `create_label` is `true` (used for project-scanner labels not in
+metadata.yml), the issue-writer creates the label before filing:
+`gh label create <label> --color 1D76DB --force` (GitHub) or
+`glab label create <label> --color '#1D76DB'` (GitLab).
 
 ### Expected Output Format
 

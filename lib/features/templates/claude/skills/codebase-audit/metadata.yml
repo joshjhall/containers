@@ -1,6 +1,8 @@
 name: codebase-audit
 version: "1.0"
 
+# Built-in audit labels. Project-level audit agents get labels created
+# dynamically by the issue-writer sub-agent (audit/<agent-name>).
 labels:
   - name: audit/code-health
     color: "BFD4F2"

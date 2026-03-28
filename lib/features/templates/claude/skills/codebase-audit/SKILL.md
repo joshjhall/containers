@@ -12,13 +12,13 @@ Load both when running an audit.
 
 Accept these from the user's invocation (all optional):
 
-| Parameter            | Default     | Description                                                       |
-| -------------------- | ----------- | ----------------------------------------------------------------- |
-| `scope`              | entire repo | Directory or glob pattern to limit the scan                       |
-| `categories`         | all six     | Scanner names to run (comma-separated)                            |
-| `depth`              | `standard`  | `quick`: last 50 commits; `standard`: full; `deep`: + git history |
-| `severity-threshold` | `medium`    | Minimum severity to report                                        |
-| `dry-run`            | `false`     | Output findings report without creating issues                    |
+| Parameter            | Default        | Description                                                       |
+| -------------------- | -------------- | ----------------------------------------------------------------- |
+| `scope`              | entire repo    | Directory or glob pattern to limit the scan                       |
+| `categories`         | all discovered | Scanner names to run (comma-separated)                            |
+| `depth`              | `standard`     | `quick`: last 50 commits; `standard`: full; `deep`: + git history |
+| `severity-threshold` | `medium`       | Minimum severity to report                                        |
+| `dry-run`            | `false`        | Output findings report without creating issues                    |
 
 ## Orchestration Protocol
 
@@ -53,6 +53,13 @@ Follow these steps in order. Do not skip steps.
 1. Detect platform (GitHub or GitLab) from `git remote -v`
 1. For `quick` depth: run `git log --oneline -50 --name-only` to limit to
    recently changed files. For `deep` depth: run `git log --format='%aN' --name-only` for contributor stats per file
+1. **Discover project-level audit agents**: Glob for
+   `.claude/agents/audit-*/audit-*.md` in the project root. For each match,
+   read the YAML frontmatter to extract `name` and `description`. Build a
+   `project_scanners` list. If a project agent shares a name with a built-in
+   scanner, the project agent takes precedence (log: "Project agent overrides
+   built-in: {name}"). Log each discovered agent (e.g., "Discovered project
+   agent: audit-perf-regression"). If no matches, proceed with built-ins only
 
 ### Step 2: Build Work Manifest
 
@@ -68,6 +75,7 @@ scanners based on classification:
 | AI Config files         | ai-config only                      |
 | Source + paired test    | test-gaps (paired)                  |
 | High-churn files (deep) | all scanners                        |
+| All files (per scope)   | project agents (self-filtering)     |
 
 Build a manifest object for each scanner:
 
@@ -97,23 +105,29 @@ fields instead of a flat `files` list.
 For `architecture`, include `file_tree` and `git_stats` (if available from
 deep mode) in addition to `files`.
 
+For project-level agents, build a manifest with `files` set to all classified
+files within scope and include the agent's `description` under a
+`routing_hint` field. The agent self-filters to relevant files. Use the same
+`thresholds` and `context` as built-in scanners.
+
 ### Step 3: Dispatch Scanners in Parallel
 
-Send **a single message** with up to 6 `Task` tool calls (one per scanner).
-Each task prompt must include:
+Send **a single message** with one `Task` tool call per active scanner. If
+total scanners exceed 6, dispatch in batches of 6. Each task prompt must
+include:
 
 1. The scanner's manifest (from Step 2)
 1. The full finding schema (from `finding-schema.md`)
 1. The severity threshold
 
-Use these agent names:
+Use the active scanner list assembled in Step 1:
 
-- `audit-code-health` — code health scanner
-- `audit-security` — security scanner
-- `audit-test-gaps` — test gaps scanner
-- `audit-architecture` — architecture scanner
-- `audit-docs` — documentation scanner
-- `audit-ai-config` — AI tooling configuration scanner
+**Built-in scanners** (unless overridden by a project agent of the same name):
+audit-code-health, audit-security, audit-test-gaps, audit-architecture,
+audit-docs, audit-ai-config
+
+**Project scanners** (discovered from `.claude/agents/audit-*`):
+Include all project agents from the `project_scanners` list.
 
 All scanners use `model: sonnet` and `tools: Read, Grep, Glob, Bash, Task`.
 Scanners with manifests exceeding 2000 source lines automatically fan out to
@@ -135,6 +149,9 @@ After all scanners return:
    - Stale comment (docs) + deprecated API (code-health) → merge
    - CLAUDE.md drift (ai-config) + outdated README (docs) → merge
    - MCP misconfiguration (ai-config) + hardcoded secret (security) → merge
+   - Any project-scanner finding + any other scanner finding on same file →
+     cross-reference note only (do not merge). Predefined merge rules apply
+     only between built-in scanner pairs
 1. **Aggregate acknowledged findings**: Collect `acknowledged_findings` arrays
    from all scanners into a unified list for the final report
 1. **Filter**: Remove findings below `severity-threshold`
@@ -155,7 +172,10 @@ Output Format section). Stop here.
    - Same pattern across files → one issue (max 10 findings per issue)
    - Cross-scanner correlations → single merged issue
 1. **Build issue payloads**: For each group, assemble the JSON payload described
-   in `issue-templates.md` (Issue-Writer Sub-Agent Protocol section)
+   in `issue-templates.md` (Issue-Writer Sub-Agent Protocol section). For
+   project-scanner findings, derive the category label as
+   `audit/<scanner-name-without-audit-prefix>` (e.g., `audit-perf-regression`
+   → `audit/perf-regression`) and set `create_label: true` in the payload
 1. **Dispatch issue-writer sub-agents**: Send groups to `issue-writer` agents
    via the Task tool (model: haiku). Each issue-writer receives one group and
    handles duplicate detection + issue creation independently:

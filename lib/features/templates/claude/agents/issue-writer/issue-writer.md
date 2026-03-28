@@ -23,6 +23,7 @@ You receive a JSON payload in the task prompt containing:
   - `findings`: array of finding objects (following the finding schema)
 - `issue_template`: the Markdown template to use for the issue body
 - `labels`: array of label strings to apply
+- `create_label`: boolean — when `true`, create the category label before filing
 
 ## Workflow
 
@@ -31,6 +32,9 @@ You receive a JSON payload in the task prompt containing:
    - GitHub: `gh issue list --state open --label "audit/{category}" --search "{primary_file}" --json number,title`
    - GitLab: `glab issue list --opened --label "audit/{category}" --search "{primary_file}"`
 1. **If duplicate found**: Return a skip result (do not create)
+1. **If `create_label` is true**: Create the category label before filing:
+   - GitHub: `gh label create "<category-label>" --color 1D76DB --force`
+   - GitLab: `glab label create "<category-label>" --color '#1D76DB'`
 1. **If no duplicate**: Render the issue body from the template and findings,
    then create the issue:
    - GitHub: `gh issue create --title "..." --body "..." --label "..."`
