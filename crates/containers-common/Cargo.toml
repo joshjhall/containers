@@ -11,6 +11,7 @@ description = "Shared types and state contracts for the containers build system"
 workspace = true
 
 [dependencies]
+indexmap = { workspace = true }
 serde = { workspace = true }
 
 [dev-dependencies]

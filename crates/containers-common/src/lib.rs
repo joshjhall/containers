@@ -1,5 +1,7 @@
 //! Shared types and state contracts for the containers build system.
 
+pub mod feature;
+
 /// Library version (tracks workspace, not container system version).
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
