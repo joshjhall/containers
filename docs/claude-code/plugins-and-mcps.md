@@ -230,14 +230,16 @@ Use `ANTHROPIC_MODEL` to set the default model:
 
 ```bash
 # Set default model at runtime (docker-compose.yml or .env)
-ANTHROPIC_MODEL=claude-opus-4-6              # Claude Opus 4.6 (most capable)
+ANTHROPIC_MODEL=claude-opus-4-6[1m]          # Claude Opus 4.6 with 1M context (most capable)
+ANTHROPIC_MODEL=claude-opus-4-6              # Claude Opus 4.6 with 200k context
 ANTHROPIC_MODEL=claude-sonnet-4-6            # Claude Sonnet 4.6 (balanced)
 ANTHROPIC_MODEL=claude-sonnet-4-5-20250929   # Claude Sonnet 4.5 (specific version)
 ANTHROPIC_MODEL=claude-haiku-4-5-20251001    # Claude Haiku 4.5 (fastest)
 ```
 
-**Note**: Use full model IDs (e.g., `claude-opus-4-6`), not aliases like `opus`
-or `sonnet`.
+**Note**: Use full model IDs (e.g., `claude-opus-4-6[1m]`), not aliases like
+`opus` or `sonnet`. The `[1m]` suffix selects the 1M token context window
+variant.
 
 ## Auth Watcher Configuration
 

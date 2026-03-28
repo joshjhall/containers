@@ -1,7 +1,7 @@
 #!/bin/bash
 # Claude Code CLI environment configuration
 
-# Export ANTHROPIC_MODEL if set (values: opus, sonnet, haiku)
+# Export ANTHROPIC_MODEL if set (e.g. claude-opus-4-6[1m], claude-sonnet-4-6)
 # This sets the default model for the Claude Code CLI
 if [ -n "${ANTHROPIC_MODEL:-}" ]; then
     export ANTHROPIC_MODEL
