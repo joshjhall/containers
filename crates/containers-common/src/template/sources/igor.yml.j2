@@ -1,0 +1,38 @@
+# Igor configuration — tracks feature selections and generated files
+# Regenerate with: igor update
+
+schema_version: 1
+containers_dir: {{ containers_dir }}
+project:
+  name: {{ project_name }}
+  username: {{ username }}
+  base_image: {{ base_image }}
+features:
+{%- for feat in explicit_features %}
+  - {{ feat }}
+{%- endfor %}
+{%- if versions %}
+versions:
+{%- for v in versions %}
+  {{ v.key }}: "{{ v.val }}"
+{%- endfor %}
+{%- endif %}
+{%- if has_agents %}
+agents:
+  max: {{ agents.max }}
+  username: {{ agents.username }}
+  network: {{ agents.network }}
+  image_tag: {{ agents.image_tag }}
+{%- if agents.shared_volumes %}
+  shared_volumes:
+{%- for vol in agents.shared_volumes %}
+    - {{ vol }}
+{%- endfor %}
+{%- endif %}
+{%- if agents.repos %}
+  repos:
+{%- for repo in agents.repos %}
+    - {{ repo }}
+{%- endfor %}
+{%- endif %}
+{%- endif %}

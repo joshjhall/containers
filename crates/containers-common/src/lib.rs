@@ -2,6 +2,7 @@
 
 pub mod config;
 pub mod feature;
+pub mod template;
 
 /// Library version (tracks workspace, not container system version).
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
