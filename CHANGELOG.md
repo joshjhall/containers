@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.15.13] - 2026-03-29
+
+### Added
+
+- Auto-discover project-level audit agents in codebase-audit
+- Add /file-issue skill for structured issue creation
+
+### Documentation
+
+- Document [1m] suffix for 1M context window model selection
+
+### Fixed
+
+- Set core.sshCommand globally so VS Code git GUI works with provisioned SSH keys
+- Stop ignoring examples/env/ directory
+- Expand trap variables at definition time to avoid unbound errors
+
 ## [4.15.12] - 2026-03-26
 
 ### Added
@@ -1470,6 +1487,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix prettier and markdownlint formatting in README
 - Format TLS documentation files
 
+[4.15.13]: https://github.com/joshjhall/containers/compare/v4.15.12...v4.15.13
 [4.15.12]: https://github.com/joshjhall/containers/compare/v4.15.11...v4.15.12
 [4.15.11]: https://github.com/joshjhall/containers/compare/v4.15.10...v4.15.11
 [4.15.10]: https://github.com/joshjhall/containers/compare/v4.15.9...v4.15.10
