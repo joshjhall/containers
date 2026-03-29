@@ -1,0 +1,20 @@
+schema_version: 1
+containers_dir: containers
+project:
+  name: myapp
+  username: developer
+  base_image: "debian:trixie-slim"
+features:
+  - python
+  - python_dev
+agents:
+  max: 3
+  username: worker
+  network: myapp-dev-network
+  image_tag: v2.0
+  shared_volumes:
+    - pip-cache:/cache/pip
+    - npm-cache:/cache/npm
+  repos:
+    - myapp
+    - myapp-frontend

@@ -14,5 +14,8 @@ workspace = true
 indexmap = { workspace = true }
 serde = { workspace = true }
 
+serde_yaml = { workspace = true }
+
 [dev-dependencies]
 serde_json = { workspace = true }
+tempfile = { workspace = true }
