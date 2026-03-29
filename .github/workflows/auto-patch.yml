@@ -446,14 +446,21 @@ jobs:
           ---
           All CI tests have passed. This PR was created by the automated patch release system."
 
-          PR_URL=$(gh pr create \
-            --base main \
-            --head "$BRANCH_NAME" \
-            --title "$PR_TITLE" \
-            --body "$PR_BODY")
+          # Check if a PR already exists for this branch
+          EXISTING_PR=$(gh pr list --head "$BRANCH_NAME" --json number,url --jq '.[0].url // empty')
+          if [ -n "$EXISTING_PR" ]; then
+            echo "PR already exists: $EXISTING_PR"
+            echo "pr_url=$EXISTING_PR" >> $GITHUB_OUTPUT
+          else
+            PR_URL=$(gh pr create \
+              --base main \
+              --head "$BRANCH_NAME" \
+              --title "$PR_TITLE" \
+              --body "$PR_BODY")
 
-          echo "pr_url=$PR_URL" >> $GITHUB_OUTPUT
-          echo "Created PR: $PR_URL"
+            echo "pr_url=$PR_URL" >> $GITHUB_OUTPUT
+            echo "Created PR: $PR_URL"
+          fi
 
       - name: Add hold label for GPG key changes
         if: steps.branch_info.outputs.gpg_keys_changed == 'true'
