@@ -628,15 +628,31 @@ jobs:
     permissions:
       contents: read
     steps:
+      - name: Check if branch still exists
+        id: branch_check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH_NAME: ${{ github.event.workflow_run.head_branch }}
+        run: |
+          if gh api "repos/${{ github.repository }}/branches/${BRANCH_NAME}" --silent 2>/dev/null; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "Branch ${BRANCH_NAME} no longer exists — skipping notification"
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Checkout code
+        if: steps.branch_check.outputs.exists == 'true'
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.workflow_run.head_branch }}
 
       - name: Get version and changes
+        if: steps.branch_check.outputs.exists == 'true'
         id: info
+        env:
+          BRANCH_NAME: ${{ github.event.workflow_run.head_branch }}
         run: |
-          BRANCH_NAME="${{ github.event.workflow_run.head_branch }}"
           echo "branch=$BRANCH_NAME" >> $GITHUB_OUTPUT
 
           # Get current version from VERSION file
@@ -650,6 +666,7 @@ jobs:
           echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Send failure notification
+        if: steps.branch_check.outputs.exists == 'true'
         run: |
           VERSION="${{ steps.info.outputs.version }}"
 
