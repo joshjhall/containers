@@ -23,6 +23,7 @@ minijinja = { version = "2", features = ["builtins"] }
 serde_yaml = "0.9"
 tokio = { version = "1", features = ["full"] }
 indexmap = { version = "2", features = ["serde"] }
+inquire = "0.7"
 tempfile = "3"
 thiserror = "2"
 tracing = "0.1"

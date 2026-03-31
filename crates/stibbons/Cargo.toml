@@ -15,4 +15,5 @@ containers-common = { workspace = true }
 octarine = { workspace = true }
 clap = { workspace = true }
 tracing = { workspace = true }
+inquire = { workspace = true }
 tracing-subscriber = { workspace = true }
