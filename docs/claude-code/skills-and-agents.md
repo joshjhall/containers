@@ -10,7 +10,7 @@ installed to `~/.claude/skills/` and `~/.claude/agents/` on first container
 startup via `claude-setup`. Project-level `.claude/` configs merge with these
 (union semantics, project wins on name conflicts).
 
-### Skills (always installed — 15 static + 1 dynamic)
+### Skills (always installed — 20 static + 1 dynamic)
 
 | Skill                     | Purpose                                                                             |
 | ------------------------- | ----------------------------------------------------------------------------------- |
@@ -30,6 +30,11 @@ startup via `claude-setup`. Project-level `.claude/` configs merge with these
 | `next-issue-ship`         | Ship completed issue work: commit, PR/push, label issue, loop back                  |
 | `memory-conventions`      | Two-tier memory conventions: long-term (committed) vs short-term (gitignored)       |
 | `orchestrate`             | Multi-agent orchestration: status, merge, review, and sync agent commits            |
+| `check-docs-staleness`    | Detects stale comments, outdated references, expired dates in docs                  |
+| `check-docs-deadlinks`    | Validates internal and external links in documentation                              |
+| `check-docs-organization` | Checks doc structure, missing READMEs, file consistency                             |
+| `check-docs-examples`     | Validates code examples against actual source code                                  |
+| `check-docs-missing-api`  | Detects undocumented public APIs and functions across languages                     |
 
 ### Conditional Skills
 
@@ -40,22 +45,23 @@ startup via `claude-setup`. Project-level `.claude/` configs merge with these
 
 ### Agents (always installed)
 
-| Agent                | Purpose                                                         |
-| -------------------- | --------------------------------------------------------------- |
-| `code-reviewer`      | Reviews code for bugs, security, performance, style             |
-| `test-writer`        | Generates tests for existing code, detects framework            |
-| `refactorer`         | Refactors code while preserving behavior                        |
-| `debugger`           | Systematic debugging for errors, test failures, runtime issues  |
-| `audit-code-health`  | Scans for file length, complexity, duplication, dead code       |
-| `audit-security`     | Scans for OWASP patterns, secrets, crypto, validation issues    |
-| `audit-test-gaps`    | Identifies untested APIs, missing error/edge tests              |
-| `audit-architecture` | Detects circular deps, coupling, bus-factor, layer violations   |
-| `audit-docs`         | Finds stale comments, missing API docs, outdated READMEs        |
-| `audit-ai-config`    | Checks skills, agents, CLAUDE.md, MCP configs, hooks quality    |
-| `issue-writer`       | Creates GitHub/GitLab issues from grouped audit findings        |
-| `issue-filer`        | Creates structured issues with auto-labeling from user requests |
-| `skill-author`       | Writes and reviews skills following quality patterns (opus)     |
-| `agent-author`       | Writes and reviews agents following quality patterns (opus)     |
+| Agent                | Purpose                                                                     |
+| -------------------- | --------------------------------------------------------------------------- |
+| `code-reviewer`      | Reviews code for bugs, security, performance, style                         |
+| `test-writer`        | Generates tests for existing code, detects framework                        |
+| `refactorer`         | Refactors code while preserving behavior                                    |
+| `debugger`           | Systematic debugging for errors, test failures, runtime issues              |
+| `audit-code-health`  | Scans for file length, complexity, duplication, dead code                   |
+| `audit-security`     | Scans for OWASP patterns, secrets, crypto, validation issues                |
+| `audit-test-gaps`    | Identifies untested APIs, missing error/edge tests                          |
+| `audit-architecture` | Detects circular deps, coupling, bus-factor, layer violations               |
+| `audit-docs`         | Finds stale comments, missing API docs, outdated READMEs                    |
+| `audit-ai-config`    | Checks skills, agents, CLAUDE.md, MCP configs, hooks quality                |
+| `issue-writer`       | Creates GitHub/GitLab issues from grouped audit findings                    |
+| `issue-filer`        | Creates structured issues with auto-labeling from user requests             |
+| `skill-author`       | Writes and reviews skills following quality patterns (opus)                 |
+| `agent-author`       | Writes and reviews agents following quality patterns (opus)                 |
+| `checker`            | Unified checker for audit/review: discovers check-\* skills, pre-scan + LLM |
 
 The `skill-author` and `agent-author` agents use `model: opus` because
 authoring quality compounds — a poorly-written skill or agent degrades all
@@ -115,7 +121,7 @@ docker run -e CLAUDE_SKILLS="git-workflow,testing-patterns" ...
 
 | `CLAUDE_SKILLS` | Behavior                                        |
 | --------------- | ----------------------------------------------- |
-| Unset (default) | All 14 static skills installed                  |
+| Unset (default) | All 20 static skills installed                  |
 | Set to list     | Only listed skills installed                    |
 | Set to `""`     | No static skills (only `container-environment`) |
 
@@ -154,7 +160,7 @@ docker run -e CLAUDE_AGENTS="debugger,test-writer" ...
 
 | `CLAUDE_AGENTS` | Behavior                     |
 | --------------- | ---------------------------- |
-| Unset (default) | All 14 agents installed      |
+| Unset (default) | All 15 agents installed      |
 | Set to list     | Only listed agents installed |
 | Set to `""`     | No agents installed          |
 
@@ -231,3 +237,113 @@ Acknowledgments older than 12 months auto-expire.
 - `skills/codebase-audit/SKILL.md` — orchestration protocol
 - `skills/codebase-audit/finding-schema.md` — JSON contract for scanner output
 - `skills/codebase-audit/issue-templates.md` — issue grouping and creation rules
+
+## Unified check-\* Skill Architecture
+
+The check-\* skills are a new architecture that decomposes monolithic audit
+agents into focused, reusable detection units. Each skill combines deterministic
+pre-scan (regex/scripts) with LLM judgment, and works in both audit
+(scope=codebase) and review (scope=diff) modes via the unified `checker` agent.
+
+### Skill Structure
+
+Each check-\* skill has 5 files:
+
+| File             | Purpose                                               |
+| ---------------- | ----------------------------------------------------- |
+| `SKILL.md`       | LLM instructions for judgment calls                   |
+| `patterns.sh`    | Deterministic pre-scan (regex/scripts, runs first)    |
+| `thresholds.yml` | Configurable thresholds and severity mappings         |
+| `contract.md`    | Versioned output format (subset of finding-schema.md) |
+| `metadata.yml`   | Standard skill metadata                               |
+
+### 3-Pass Execution Model
+
+The `checker` agent runs analysis in three composable passes:
+
+1. **Pass 1 (Deterministic)**: Run each skill's `patterns.sh` — produces
+   findings with certainty `HIGH` and method `deterministic`
+1. **Pass 2 (Heuristic)**: Pass pre-scan results + file context to skill's
+   `SKILL.md` — LLM confirms/dismisses/adds findings with certainty `MEDIUM`
+1. **Pass 3 (Judgment)**: Deeper LLM analysis for ambiguous cases — produces
+   findings with certainty `LOW`
+
+Each pass feeds the next. Deterministic hits are validated by heuristic
+analysis, and ambiguous cases get deeper judgment.
+
+### Multi-Signal Certainty
+
+Findings carry a `certainty` object:
+
+```json
+{
+  "level": "HIGH",
+  "support": 2,
+  "confidence": 0.95,
+  "method": "deterministic"
+}
+```
+
+- `level`: HIGH (regex match), MEDIUM (heuristic + LLM), LOW (LLM only)
+- `support`: number of evidence signals corroborating the finding
+- `confidence`: 0.0-1.0 reliability score
+- `method`: detection method used
+
+### Audit Trail
+
+Every checker run records execution metadata:
+
+```json
+{
+  "check_run": {
+    "scope": "codebase",
+    "skills_executed": ["check-docs-staleness", "check-docs-deadlinks"],
+    "pass_stats": {
+      "deterministic_hits": 42,
+      "deterministic_confirmed": 15,
+      "heuristic_findings": 8,
+      "judgment_findings": 2
+    }
+  }
+}
+```
+
+### Versioned Skill Interfaces
+
+Each skill's `contract.md` includes a version field with backward-compatibility
+guarantees, enabling skills to evolve independently without breaking the
+checker agent.
+
+### Project-Level Extensibility
+
+Projects can add custom check-\* skills at `.claude/skills/check-*/`:
+
+```text
+.claude/skills/check-api-design/
+    SKILL.md
+    patterns.sh
+    thresholds.yml
+    contract.md
+    metadata.yml
+```
+
+Both the auditor and reviewer discover project-level skills automatically.
+
+### Current check-docs-\* Skills
+
+| Skill                     | Categories                                                                            |
+| ------------------------- | ------------------------------------------------------------------------------------- |
+| `check-docs-staleness`    | `stale-comment`, `outdated-reference`, `expired-date`                                 |
+| `check-docs-deadlinks`    | `broken-relative-link`, `broken-anchor`, `suspicious-external-link`                   |
+| `check-docs-organization` | `missing-root-doc`, `missing-dir-readme`, `inconsistent-structure`, `doc-duplication` |
+| `check-docs-examples`     | `broken-example`, `deprecated-example`, `incomplete-example`                          |
+| `check-docs-missing-api`  | `undocumented-public-api`, `undocumented-complex-function`                            |
+
+### Migration from audit-\* Agents
+
+The check-\* architecture incrementally replaces audit-\* agents. During
+migration, the checker agent discovers both old `audit-*` agents and new
+`check-*` skills. When a check-\* skill exists for a domain, it takes
+precedence over the corresponding audit-\* agent. Currently only the docs
+domain has been migrated; remaining domains (security, code-health, test-gaps,
+architecture, ai-config) will follow.
