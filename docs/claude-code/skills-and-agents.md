@@ -10,7 +10,7 @@ installed to `~/.claude/skills/` and `~/.claude/agents/` on first container
 startup via `claude-setup`. Project-level `.claude/` configs merge with these
 (union semantics, project wins on name conflicts).
 
-### Skills (always installed — 20 static + 1 dynamic)
+### Skills (always installed — 27 static + 1 dynamic)
 
 | Skill                     | Purpose                                                                             |
 | ------------------------- | ----------------------------------------------------------------------------------- |
@@ -35,6 +35,13 @@ startup via `claude-setup`. Project-level `.claude/` configs merge with these
 | `check-docs-organization` | Checks doc structure, missing READMEs, file consistency                             |
 | `check-docs-examples`     | Validates code examples against actual source code                                  |
 | `check-docs-missing-api`  | Detects undocumented public APIs and functions across languages                     |
+| `loop-make-it-work`       | Implementation loop: end-to-end happy path functionality, no stubs                  |
+| `loop-make-it-right`      | Implementation loop: refactoring for clarity, conventions, architecture             |
+| `loop-make-it-secure`     | Implementation loop: security hardening (injection, secrets, OWASP)                 |
+| `loop-make-it-tested`     | Implementation loop: comprehensive test coverage for changed code                   |
+| `loop-make-it-documented` | Implementation loop: public API docs, design decisions, README updates              |
+| `context-security`        | Context: activates security-focused skills across pipeline phases                   |
+| `context-data-storage`    | Context: activates data storage-focused skills across pipeline phases               |
 
 ### Conditional Skills
 
@@ -121,7 +128,7 @@ docker run -e CLAUDE_SKILLS="git-workflow,testing-patterns" ...
 
 | `CLAUDE_SKILLS` | Behavior                                        |
 | --------------- | ----------------------------------------------- |
-| Unset (default) | All 20 static skills installed                  |
+| Unset (default) | All 27 static skills installed                  |
 | Set to list     | Only listed skills installed                    |
 | Set to `""`     | No static skills (only `container-environment`) |
 
@@ -347,3 +354,126 @@ migration, the checker agent discovers both old `audit-*` agents and new
 precedence over the corresponding audit-\* agent. Currently only the docs
 domain has been migrated; remaining domains (security, code-health, test-gaps,
 architecture, ai-config) will follow.
+
+## Implementation Loops (loop-\* skills)
+
+Implementation loop skills mirror the check-\* 5-file architecture but serve a
+different purpose: while check-\* skills **report findings**, loop-\* skills
+**apply fixes** and produce completion reports. Each loop corresponds to a
+phase from the `development-workflow` skill and references its detailed
+checklists rather than duplicating them.
+
+### Skill Structure
+
+Each loop-\* skill has 5 files:
+
+| File             | Purpose                                                  |
+| ---------------- | -------------------------------------------------------- |
+| `SKILL.md`       | Loop instructions, exit criteria, commit conventions     |
+| `patterns.sh`    | Deterministic pre-scan for blockers/issues               |
+| `thresholds.yml` | Configurable thresholds and severity mappings            |
+| `contract.md`    | Loop completion report format (change log, not findings) |
+| `metadata.yml`   | Standard skill metadata                                  |
+
+### Loop Execution Model
+
+Each loop runs sequentially during the implementation phase:
+
+1. **Pre-scan**: Run `patterns.sh` on changed files to identify blockers
+1. **Implement**: Apply fixes guided by the skill's instructions
+1. **Verify**: Run test suite, then re-run `patterns.sh`
+1. **Commit**: Atomic commit with convention `loop({name}): {description}`
+
+### Core Loops (always run)
+
+| Loop                 | Phase ref | Focus                                   |
+| -------------------- | --------- | --------------------------------------- |
+| `loop-make-it-work`  | Phase 1   | End-to-end happy path, no stubs         |
+| `loop-make-it-right` | Phase 2   | Refactoring for clarity and conventions |
+
+### Context-Activated Loops
+
+| Loop                      | Phase ref | Activated by contexts                      |
+| ------------------------- | --------- | ------------------------------------------ |
+| `loop-make-it-secure`     | Phase 4   | `context-security`, `context-data-storage` |
+| `loop-make-it-tested`     | Phase 8   | Always (but context shapes focus)          |
+| `loop-make-it-documented` | Phase 9   | Always (but context shapes focus)          |
+
+### Completion Report
+
+Unlike check-\* findings, loop reports track what was changed:
+
+```json
+{
+  "loop": "loop-make-it-work",
+  "status": "complete",
+  "changes": [{"category": "functionality-added", "file": "src/handler.py", "description": "..."}],
+  "blockers_resolved": [...],
+  "blockers_remaining": [],
+  "tests_passing": true,
+  "commit": "loop(make-it-work): implement request handler"
+}
+```
+
+### Project-Level Loops
+
+Projects can add custom loop skills at `.claude/skills/loop-*/` following the
+same 5-file structure. These are discovered and sequenced by the pipeline
+orchestrator alongside container-provided loops.
+
+## Contexts (context-\* skills)
+
+Contexts are named bundles that map skills to pipeline phases. When a context
+is active, it injects domain-specific expertise into planning, implementation,
+review, testing, and documentation phases.
+
+### Context Structure
+
+Each context skill has 3 files:
+
+| File           | Purpose                                            |
+| -------------- | -------------------------------------------------- |
+| `SKILL.md`     | Human-readable description and activation triggers |
+| `context.yml`  | Machine-readable phase-to-skill mapping            |
+| `metadata.yml` | Standard skill metadata with `context/*` label     |
+
+### context.yml Schema
+
+```yaml
+name: security
+description: "Authentication, authorization, secrets concerns"
+phases:
+  plan:
+    - skill: loop-make-it-secure
+      mode: guidance
+      focus: "Plan must address auth model, trust boundaries"
+  implement:
+    - loop: loop-make-it-secure
+      order: after-core
+  review:
+    - skill: check-sec-injection    # future check-* skills
+      status: planned
+  test:
+    - skill: loop-make-it-tested
+      focus: "Include injection tests"
+  docs:
+    - skill: loop-make-it-documented
+      focus: "Document security decisions"
+```
+
+### Discovery Locations
+
+Contexts are discovered from two locations (project wins on conflicts):
+
+1. **Global** (container-provided): `~/.claude/skills/context-*/`
+1. **Project** (repo-specific): `.claude/skills/context-*/`
+
+### Available Contexts
+
+| Context                | Focus                                               |
+| ---------------------- | --------------------------------------------------- |
+| `context-security`     | Auth, secrets, input validation, OWASP              |
+| `context-data-storage` | Databases, SQL, ORM, migrations, query optimization |
+
+Additional contexts (gui, api-design, observability, infrastructure) will be
+added in future releases.
