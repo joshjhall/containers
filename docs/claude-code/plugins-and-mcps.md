@@ -69,6 +69,25 @@ docker build --build-arg CLAUDE_EXTRA_PLUGINS="stripe,posthog,vercel" ...
 docker run -e CLAUDE_EXTRA_PLUGINS="stripe,posthog" ...
 ```
 
+### AgentSys Plugins
+
+When `INCLUDE_DEV_TOOLS=true` and Node.js is available, the `agentsys` CLI is
+installed at build time. At first startup, `claude-setup` automatically
+installs the **deslop** plugin for AI slop detection:
+
+- **deslop** — Detects AI-generated artifacts in code: leftover debug
+  statements, verbose docstrings, hedging language ("might", "could
+  potentially"), buzzword inflation ("enterprise-grade", "robust"), placeholder
+  text, and empty error handlers. Uses 60+ regex patterns with zero LLM cost
+  for initial detection.
+
+Deslop installs to `~/.claude/plugins/marketplaces/agentsys/` — a separate
+namespace from the core Anthropic marketplace plugins. No conflicts with
+existing plugins, skills, or agents.
+
+After installation, use the `/deslop` command in Claude Code to scan for AI
+slop in your codebase.
+
 ## MCP Server Configuration
 
 ### Extra MCP Servers

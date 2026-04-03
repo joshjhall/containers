@@ -696,6 +696,19 @@ elif is_claude_authenticated; then
         done
     fi
 
+    # AgentSys deslop plugin (AI slop detection)
+    # Installs to ~/.claude/plugins/marketplaces/agentsys/ — separate namespace
+    if command -v agentsys &>/dev/null; then
+        echo "AgentSys plugins:"
+        echo "  - Installing deslop (AI slop detection)..."
+        if agentsys install deslop --tool claude --no-strip >/dev/null 2>&1; then
+            echo "    ✓ deslop installed"
+        else
+            echo "    ⚠ deslop installation failed (non-critical)"
+        fi
+        echo ""
+    fi
+
     echo ""
 else
     echo "Claude Code not authenticated."

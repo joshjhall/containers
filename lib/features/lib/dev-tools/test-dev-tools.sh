@@ -41,7 +41,7 @@ done
 
 echo ""
 echo "Development Utilities:"
-for tool in direnv entr just mkcert act glab biome taplo uv uvx agnix; do
+for tool in direnv entr just mkcert act glab biome taplo uv uvx agnix agentsys; do
     if command -v $tool &> /dev/null; then
         echo "  ✓ $tool is installed"
     else

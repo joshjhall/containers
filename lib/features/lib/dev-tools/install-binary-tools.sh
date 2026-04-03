@@ -267,6 +267,18 @@ install_github_binary_tools() {
     else
         log_message "agnix skipped (requires Node.js/npm)"
     fi
+
+    # agentsys (AI plugin marketplace) — requires Node.js/npm
+    if command -v npm &> /dev/null; then
+        log_message "Installing agentsys (AI plugin marketplace)..."
+        if npm install -g agentsys@latest 2>/dev/null; then
+            log_message "✓ agentsys installed successfully"
+        else
+            log_warning "agentsys installation failed, continuing without agentsys"
+        fi
+    else
+        log_message "agentsys skipped (requires Node.js/npm)"
+    fi
 }
 
 create_tool_symlinks() {
