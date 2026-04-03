@@ -592,5 +592,17 @@ run_test test_download_verify_sha256_pattern "Download verification uses sha256 
 run_test test_dpkg_architecture_detection "Uses dpkg --print-architecture for arch detection"
 run_test test_claude_code_reference "References Claude Code CLI"
 
+# ============================================================================
+# Batch 7: agnix installation
+# ============================================================================
+
+# Test: agnix installation present in binary tools script
+test_agnix_installation() {
+    local source_file="$PROJECT_ROOT/lib/features/lib/dev-tools/install-binary-tools.sh"
+    assert_file_contains "$source_file" "agnix" "install-binary-tools.sh installs agnix"
+}
+
+run_test test_agnix_installation "agnix installation present in binary tools"
+
 # Generate test report
 generate_report

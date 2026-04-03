@@ -255,6 +255,18 @@ install_github_binary_tools() {
 
     # uv (Python package installer) — skip if already installed by python-dev
     install_uv || return 1
+
+    # agnix (AI config linter) — requires Node.js/npm
+    if command -v npm &> /dev/null; then
+        log_message "Installing agnix (AI config linter)..."
+        if npm install -g agnix@latest 2>/dev/null; then
+            log_message "✓ agnix installed successfully"
+        else
+            log_warning "agnix installation failed, continuing without agnix"
+        fi
+    else
+        log_message "agnix skipped (requires Node.js/npm)"
+    fi
 }
 
 create_tool_symlinks() {
