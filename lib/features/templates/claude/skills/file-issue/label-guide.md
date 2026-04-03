@@ -92,15 +92,40 @@ Owned by: `/next-issue`, `/next-issue-ship`. Do not apply from `/file-issue`.
 Owned by: `/codebase-audit`. Only apply from `/file-issue` when the user
 explicitly states the issue originates from an audit finding.
 
+### Certainty Labels (namespace: `certainty/`)
+
+Owned by: `/codebase-audit` (via scanner agents). Orthogonal to severity —
+a `severity/critical` finding can be `certainty/medium` if detected
+heuristically rather than deterministically.
+
+| Label                | Detection Method    | Action                | Example                     |
+| -------------------- | ------------------- | --------------------- | --------------------------- |
+| `certainty/critical` | Exact pattern match | Auto-fix with warning | Hardcoded API key in source |
+| `certainty/high`     | Deterministic rule  | Auto-fix              | Empty catch block           |
+| `certainty/medium`   | Heuristic + LLM     | Flag for human review | Function complexity warning |
+| `certainty/low`      | LLM judgment only   | Report only           | Possible over-engineering   |
+
+**Rule**: Derive from the detection method. Regex/AST match → high or
+critical. LLM-assisted → medium or low. When uncertain, default to
+`certainty/medium`.
+
+Color: `D4A017` (gold) for all certainty labels.
+
+**Creation commands** (idempotent):
+
+- GitHub: `gh label create "certainty/<level>" --color D4A017 --force`
+- GitLab: `glab label create "certainty/<level>" --color '#D4A017'`
+
 ______________________________________________________________________
 
 ## Auto-Detection Summary
 
-| Namespace     | Detection Method                                 |
-| ------------- | ------------------------------------------------ |
-| `type/*`      | Ask user (required)                              |
-| `severity/*`  | Ask user, default `medium`                       |
-| `effort/*`    | Count files/directories, user can override       |
-| `component/*` | Derive from file paths in Affected Files section |
-| `audit/*`     | Only if user says issue is from an audit finding |
-| `status/*`    | Never — managed by other skills                  |
+| Namespace     | Detection Method                                   |
+| ------------- | -------------------------------------------------- |
+| `type/*`      | Ask user (required)                                |
+| `severity/*`  | Ask user, default `medium`                         |
+| `effort/*`    | Count files/directories, user can override         |
+| `component/*` | Derive from file paths in Affected Files section   |
+| `audit/*`     | Only if user says issue is from an audit finding   |
+| `certainty/*` | From detection method (regex=high, LLM=medium/low) |
+| `status/*`    | Never — managed by other skills                    |

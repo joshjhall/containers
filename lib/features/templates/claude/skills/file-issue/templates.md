@@ -124,6 +124,61 @@ When an issue lists 9+ files or 4+ directories, add a scope warning:
 
 ______________________________________________________________________
 
+## Evaluation-Sourced Template
+
+For issues originating from evaluation reports (e.g., agentsys evaluation,
+issue #304). Insert these sections after "Proposed Solution":
+
+```markdown
+## Evaluation Source
+
+- **Report**: {path to evaluation document or issue number}
+- **Section**: {specific section or recommendation ID, e.g., "R4: Parallelize code-reviewer"}
+- **Disposition**: {Adopt | Adapt | Build | Skip}
+
+## Current State
+
+{What our system does now in the area this recommendation addresses}
+
+## Target State
+
+{What the system should do after implementing this recommendation}
+```
+
+Use when: the issue directly implements a recommendation from an evaluation
+or benchmarking exercise. The Evaluation Source section creates traceability
+from issue back to the analysis that motivated it.
+
+______________________________________________________________________
+
+## Foundational Dependency Template
+
+For issues that block multiple follow-up issues. Insert these sections after
+"Acceptance Criteria":
+
+```markdown
+## Blocked Issues
+
+This issue is **foundational** — the following issues depend on its
+deliverables:
+
+- #{N1} — {title} (depends on: {specific deliverable})
+- #{N2} — {title} (depends on: {specific deliverable})
+
+## Deliverables
+
+Concrete outputs that downstream issues depend on:
+
+- [ ] {Deliverable 1 — what it is and where it lives}
+- [ ] {Deliverable 2}
+```
+
+Use when: an issue's completion is a prerequisite for 2+ other issues.
+The Blocked Issues section makes the dependency graph explicit so agents
+can prioritize correctly.
+
+______________________________________________________________________
+
 ## Agent Parsing Notes
 
 Agents consuming these issues (e.g., `/next-issue` Phase 2) can rely on:
@@ -135,3 +190,7 @@ Agents consuming these issues (e.g., `/next-issue` Phase 2) can rely on:
 - **Context** contains `#N` issue references — extract related issues
 - H2 headers are stable anchors: `## Summary`, `## Problem`,
   `## Proposed Solution`, `## Acceptance Criteria`, `## Affected Files`
+- **Evaluation Source** uses `**Report**:`, `**Section**:`, `**Disposition**:`
+  markers — extract evaluation traceability
+- **Blocked Issues** uses `- #N` references — extract dependency graph
+- **Deliverables** uses `- [ ]` checkbox format — track foundational outputs

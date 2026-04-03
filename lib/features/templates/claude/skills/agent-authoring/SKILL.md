@@ -65,14 +65,52 @@ Start restrictive, expand as needed. Every unnecessary tool is a risk.
 
 ## Model Selection
 
-Match the model to the task's complexity and frequency:
+Match the model to the task's complexity. **Quality compounds** — bad
+exploration produces bad plans produces bad implementation. Use opus when
+errors propagate downstream.
 
-| Model     | Use when                                        | Trade-off             |
-| --------- | ----------------------------------------------- | --------------------- |
-| `haiku`   | Fast lookups, simple checks, high-frequency ops | Fastest, cheapest     |
-| `sonnet`  | Balanced analysis, code review, most agents     | Good quality + speed  |
-| `opus`    | Complex reasoning, architecture, orchestration  | Most capable, slowest |
-| `inherit` | Same model as the conversation (default)        | Context-dependent     |
+| Model     | Use when                                        | Rationale                                 |
+| --------- | ----------------------------------------------- | ----------------------------------------- |
+| `haiku`   | Fast lookups, simple checks, high-frequency ops | Mechanical work, no judgment calls        |
+| `sonnet`  | Pattern matching, code review, most agents      | Good quality for structured tasks         |
+| `opus`    | Reasoning-critical, architecture, quality audit | Errors propagate — quality compounds here |
+| `inherit` | Same model as the conversation (default)        | Let the caller decide                     |
+
+Default to `sonnet` unless the agent performs reasoning-critical work where
+quality compounds (use `opus`) or purely mechanical work (use `haiku`). See
+`patterns.md` — **Model Tiering Guide** for the full decision framework.
+
+## MUST NOT Restrictions
+
+Document workflow-level prohibitions in the agent's system prompt. Format:
+`MUST NOT` + verb + rationale. These prevent agents from overstepping scope.
+
+Examples:
+
+- Review agents MUST NOT edit files (they observe and report)
+- Implementation agents MUST NOT create PRs or push (the ship skill does that)
+- Audit agents MUST NOT auto-fix unless certainty >= HIGH
+
+See `patterns.md` — **Safety Constraints Template** for a copy-pasteable block.
+
+## Safety Constraints
+
+For every tool in the `tools:` list, document WHY it is granted. For every
+tool deliberately excluded, document WHY it is denied. This rationale helps
+reviewers verify the agent's access is intentional, not accidental.
+
+## Prose Trimming
+
+Remove anything the model already knows or the code already enforces. Apply
+the deletion test: if removing a line changes no agent behavior, delete it.
+Agent prompts that restate model knowledge waste context tokens and dilute
+the instructions that actually matter.
+
+## Orchestrator Extension
+
+See `patterns.md` — **Orchestrator Extension Patterns** section. Load it when
+building an agent that participates in a multi-agent pipeline (e.g., audit
+scanners for `codebase-audit`, sub-reviewers for `code-reviewer`).
 
 ## Core Principles
 

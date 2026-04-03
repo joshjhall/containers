@@ -95,6 +95,49 @@ documentation generators).
 - Include checklists, decision tables, and worked examples
 - SKILL.md must say when to load the companion (not just that it exists)
 
+## Token Efficiency
+
+Every sentence must add information Claude cannot derive from the codebase,
+git history, or its own training data.
+
+- **Deletion test**: if removing a line changes no agent behavior, delete it
+- Prefer structured directives (tables, bullets) over narrative prose
+- Move reference material to companion files — SKILL.md is for directives
+- Measure: a well-trimmed skill is 40-80% shorter than its first draft
+
+## Certainty Grading
+
+For skills that produce actionable findings (audits, reviews, linters), grade
+each finding by detection confidence:
+
+| Level    | Detection Method    | Action                | Example                    |
+| -------- | ------------------- | --------------------- | -------------------------- |
+| CRITICAL | Exact pattern match | Auto-fix with warning | Hardcoded secret in source |
+| HIGH     | Deterministic rule  | Auto-fix              | Empty catch block          |
+| MEDIUM   | Heuristic + context | Flag for human review | Function too complex       |
+| LOW      | LLM judgment only   | Report only           | Possible over-engineering  |
+
+Not all skills need certainty grading — skip for skills that provide guidance
+rather than findings (e.g., `git-workflow`, `documentation-authoring`).
+
+## Code-Based Enforcement
+
+When a skill detects problems, prefer deterministic detection over LLM:
+
+1. **Phase 1 (regex/AST)**: Zero LLM cost, 100% reliable for known patterns
+1. **Phase 2 (context-aware LLM)**: For judgment calls — complexity, design
+   quality, over-engineering
+1. **Phase 3 (external tools)**: CLI tools (`eslint`, `pylint`, `jscpd`) when
+   available in the environment
+
+Reserve LLM analysis for findings that genuinely require reasoning.
+
+## Orchestrator Extension
+
+See `patterns.md` — **Orchestrator Extension Patterns** section. Load it when
+building a skill that integrates with `codebase-audit`, `next-issue`, or any
+multi-agent pipeline.
+
 ## Validation
 
 Before shipping a skill, verify:

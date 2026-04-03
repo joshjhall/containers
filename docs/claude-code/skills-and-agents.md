@@ -40,19 +40,26 @@ startup via `claude-setup`. Project-level `.claude/` configs merge with these
 
 ### Agents (always installed)
 
-| Agent                | Purpose                                                        |
-| -------------------- | -------------------------------------------------------------- |
-| `code-reviewer`      | Reviews code for bugs, security, performance, style            |
-| `test-writer`        | Generates tests for existing code, detects framework           |
-| `refactorer`         | Refactors code while preserving behavior                       |
-| `debugger`           | Systematic debugging for errors, test failures, runtime issues |
-| `audit-code-health`  | Scans for file length, complexity, duplication, dead code      |
-| `audit-security`     | Scans for OWASP patterns, secrets, crypto, validation issues   |
-| `audit-test-gaps`    | Identifies untested APIs, missing error/edge tests             |
-| `audit-architecture` | Detects circular deps, coupling, bus-factor, layer violations  |
-| `audit-docs`         | Finds stale comments, missing API docs, outdated READMEs       |
-| `audit-ai-config`    | Checks skills, agents, CLAUDE.md, MCP configs, hooks quality   |
-| `issue-writer`       | Creates GitHub/GitLab issues from grouped audit findings       |
+| Agent                | Purpose                                                         |
+| -------------------- | --------------------------------------------------------------- |
+| `code-reviewer`      | Reviews code for bugs, security, performance, style             |
+| `test-writer`        | Generates tests for existing code, detects framework            |
+| `refactorer`         | Refactors code while preserving behavior                        |
+| `debugger`           | Systematic debugging for errors, test failures, runtime issues  |
+| `audit-code-health`  | Scans for file length, complexity, duplication, dead code       |
+| `audit-security`     | Scans for OWASP patterns, secrets, crypto, validation issues    |
+| `audit-test-gaps`    | Identifies untested APIs, missing error/edge tests              |
+| `audit-architecture` | Detects circular deps, coupling, bus-factor, layer violations   |
+| `audit-docs`         | Finds stale comments, missing API docs, outdated READMEs        |
+| `audit-ai-config`    | Checks skills, agents, CLAUDE.md, MCP configs, hooks quality    |
+| `issue-writer`       | Creates GitHub/GitLab issues from grouped audit findings        |
+| `issue-filer`        | Creates structured issues with auto-labeling from user requests |
+| `skill-author`       | Writes and reviews skills following quality patterns (opus)     |
+| `agent-author`       | Writes and reviews agents following quality patterns (opus)     |
+
+The `skill-author` and `agent-author` agents use `model: opus` because
+authoring quality compounds — a poorly-written skill or agent degrades all
+downstream interactions across every conversation that loads it.
 
 Templates are staged at build time to `/etc/container/config/claude-templates/`
 and installed at runtime by `claude-setup`. All installations are idempotent.
@@ -147,7 +154,7 @@ docker run -e CLAUDE_AGENTS="debugger,test-writer" ...
 
 | `CLAUDE_AGENTS` | Behavior                     |
 | --------------- | ---------------------------- |
-| Unset (default) | All 11 agents installed      |
+| Unset (default) | All 14 agents installed      |
 | Set to list     | Only listed agents installed |
 | Set to `""`     | No agents installed          |
 

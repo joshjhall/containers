@@ -545,7 +545,7 @@ CLOUD_HEADER
     fi
 
     # --- Agents (configurable via CLAUDE_AGENTS) ---
-    DEFAULT_AGENTS="code-reviewer,test-writer,refactorer,debugger,audit-code-health,audit-security,audit-test-gaps,audit-architecture,audit-docs,audit-ai-config,issue-writer"
+    DEFAULT_AGENTS="code-reviewer,test-writer,refactorer,debugger,audit-code-health,audit-security,audit-test-gaps,audit-architecture,audit-docs,audit-ai-config,issue-writer,issue-filer,skill-author,agent-author"
     # Use if-else to capture return code safely under set -e
     if AGENT_RESULT=$(_resolve_override_list_or_file "CLAUDE_AGENTS" "$DEFAULT_AGENTS"); then
         AGENT_LIST_IS_OVERRIDE=0

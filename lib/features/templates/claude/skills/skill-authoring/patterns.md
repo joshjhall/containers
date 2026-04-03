@@ -152,6 +152,8 @@ Before shipping a skill, verify each item:
 - [ ] At least one good/bad example pair for the primary use case
 - [ ] `metadata.yml` exists with at least `name` and `version`
 - [ ] `metadata.yml` lists all labels, tools, and permissions the skill uses
+- [ ] Token efficiency: no line removable without behavior change
+- [ ] Prompt quality: passes 16-pattern checklist (see below)
 
 ______________________________________________________________________
 
@@ -192,3 +194,74 @@ When adapting a Claude skill to another tool:
 1. Adjust file paths if the tool uses different conventions
 1. For single-file formats (Windsurf), merge companion content inline
    and cut aggressively for length
+
+______________________________________________________________________
+
+## Prompt Quality Patterns
+
+16-pattern checklist for skill quality. Each pattern maps to a finding from
+the agentsys evaluation (#304). Use during skill review or creation.
+
+| #   | Pattern                | Criterion                                                                                  |
+| --- | ---------------------- | ------------------------------------------------------------------------------------------ |
+| 1   | Clarity                | Each instruction has a single unambiguous interpretation                                   |
+| 2   | Structure              | H2 sections, numbered workflows, bullet checklists — scannable in 10 seconds               |
+| 3   | Examples               | At least one concrete good/bad pair for the primary use case                               |
+| 4   | Context / WHY          | Non-obvious rules include rationale so the agent can judge edge cases                      |
+| 5   | Output format          | Skills producing output specify exact structure (JSON schema, severity tiers, etc.)        |
+| 6   | Anti-patterns          | Every "don't" has a positive alternative showing what to do instead                        |
+| 7   | Token efficiency       | No line removable without changing agent behavior (see SKILL.md § Token Efficiency)        |
+| 8   | Certainty grading      | Finding-producing skills grade by detection confidence (CRITICAL/HIGH/MEDIUM/LOW)          |
+| 9   | Code-based enforcement | Deterministic detection preferred over LLM where patterns are known                        |
+| 10  | Progressive disclosure | Core rules in SKILL.md, reference details in companions                                    |
+| 11  | Trigger terms          | `description:` field includes WHAT + WHEN + domain-specific keywords                       |
+| 12  | Scope boundaries       | "When to Use" and "When NOT to Use" sections prevent false triggers and missed activations |
+| 13  | Verification steps     | Skill includes how to confirm it worked (cold-start test, trigger test)                    |
+| 14  | Model awareness        | Instructions appropriate for the target model tier (don't over-specify for opus)           |
+| 15  | Idempotency            | Running the skill twice on the same input produces the same result                         |
+| 16  | Composability          | Output is consumable by downstream skills, agents, or orchestrators                        |
+
+______________________________________________________________________
+
+## Orchestrator Extension Patterns
+
+When building a skill that plugs into an existing orchestrator, follow these
+patterns. Each orchestrator has its own discovery mechanism, contracts, and
+naming conventions.
+
+### Pattern 1: Scanner Discovery (`codebase-audit`)
+
+The `codebase-audit` orchestrator discovers scanner agents by globbing
+`.claude/agents/audit-*/audit-*.md`. To create a new scanner:
+
+- **Naming**: directory and file must match `audit-<name>/audit-<name>.md`
+- **Frontmatter**: `name` and `description` are read by the orchestrator for
+  routing decisions
+- **Output contract**: return JSON matching `finding-schema.md` (scanner,
+  summary, findings array with id/category/severity/file/evidence/suggestion)
+- **Categories**: use `<scanner-name>/<category>` slugs (e.g.,
+  `audit-docker/missing-healthcheck`)
+- **Labels**: the orchestrator creates `audit/<category>` labels automatically
+- **Model**: use `sonnet` for primary scanner, `haiku` for batch sub-agents
+
+### Pattern 2: State Handoff (`next-issue` → `next-issue-ship`)
+
+Skills that chain across invocations use YAML-frontmatter state files:
+
+- **Path**: `.claude/memory/tmp/next-issue-{N}.md`
+- **Schema**: YAML frontmatter with `issue`, `title`, `phase`, `branch`,
+  `plan`, `started`, `platform` fields
+- **Protocol**: the upstream skill writes the state file; the downstream skill
+  reads and validates it; the downstream skill deletes it after completion
+- **Validation**: check that the referenced issue is still open and the branch
+  still exists before resuming
+
+### Pattern 3: Parallel Dispatch (future `code-reviewer` #315)
+
+Orchestrators that fan out to parallel sub-agents:
+
+- **Dispatch**: one `Task` tool call per sub-agent, all in a single message
+- **Input**: each sub-agent receives a manifest (file list + context)
+- **Output**: structured JSON that the orchestrator can merge/deduplicate
+- **Deduplication**: same file + same category + overlapping lines → merge
+- **Aggregation**: cross-agent correlation rules merge related findings
