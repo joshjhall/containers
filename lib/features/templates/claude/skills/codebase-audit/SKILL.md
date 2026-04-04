@@ -187,6 +187,53 @@ Output Format section). Stop here.
 1. **Output summary**: List created issues with URLs, note any skipped
    duplicates or errors
 
+## Auto-Fix (Opt-In)
+
+When invoked with `--auto-fix` or when the user confirms, the pipeline can
+automatically fix CRITICAL and HIGH certainty findings with trivial or small
+effort.
+
+**Eligibility**: `certainty.level` in (`CRITICAL`, `HIGH`) AND `effort` in
+(`trivial`, `small`).
+
+### Auto-Fix Workflow
+
+1. **Filter eligible findings** from the aggregated results
+
+1. **Group by file** to minimize edit conflicts
+
+1. **For each group**, dispatch the `refactorer` agent with:
+
+   - The finding's `file`, `line_start`/`line_end`, `description`, `suggestion`
+   - Instruction: apply the suggestion, preserve surrounding code
+
+1. **Re-scan** modified files with the original scanner to verify the fix
+   resolved the finding without introducing new ones
+
+1. **Report** results:
+
+   ```text
+   ## Auto-Fix Results
+
+   | Finding ID         | Category         | Certainty | Status      |
+   |--------------------|------------------|-----------|-------------|
+   | security-001       | hardcoded-secret | CRITICAL  | ✓ fixed     |
+   | code-health-003    | unused-import    | HIGH      | ✓ fixed     |
+   | code-health-007    | dead-code        | MEDIUM    | — skipped   |
+   | architecture-002   | bus-factor       | MEDIUM    | — flagged   |
+
+   Auto-fixed: 2 | Flagged for review: 1 | Report only: 1
+   ```
+
+### Safety
+
+- CRITICAL fixes (secrets, injection) add a warning comment explaining
+  what was changed and why
+- Never auto-fix MEDIUM or LOW certainty — these require human judgment
+- If re-scan shows new findings after fix, revert the fix and flag for
+  human review
+- Auto-fix never modifies test files
+
 ## When to Use
 
 - Quarterly codebase health reviews

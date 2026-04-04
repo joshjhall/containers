@@ -23,6 +23,32 @@ When invoked, you receive a work manifest in the task prompt containing:
 1. Track findings with sequential IDs (`ai-config-001`, `ai-config-002`, ...)
 1. Return a single JSON result following the finding schema (see task prompt)
 
+## Certainty Assignment
+
+Every finding MUST include a `certainty` object.
+
+| Category               | Expected Level | Confidence | Method        | Rationale                             |
+| ---------------------- | -------------- | ---------- | ------------- | ------------------------------------- |
+| `config-inconsistency` | HIGH           | ≥0.9       | deterministic | Diff between config and actual state  |
+| `mcp-misconfiguration` | HIGH           | ≥0.9       | deterministic | Invalid server name or missing config |
+| `hook-safety`          | HIGH           | ≥0.9       | heuristic     | Unsafe patterns in hook commands      |
+| `claude-md-drift`      | MEDIUM         | 0.7-0.9    | heuristic     | CLAUDE.md claims vs codebase reality  |
+| `ai-file-bloat`        | HIGH           | ≥0.9       | deterministic | Numeric line count threshold          |
+| `doc-file-bloat`       | HIGH           | ≥0.9       | deterministic | Numeric line count threshold          |
+| `skill-quality`        | LOW            | 0.5-0.7    | llm           | Quality assessment is subjective      |
+| `agent-quality`        | LOW            | 0.5-0.7    | llm           | Quality assessment is subjective      |
+
+```json
+{
+  "certainty": {
+    "level": "HIGH",
+    "support": 1,
+    "confidence": 0.92,
+    "method": "deterministic"
+  }
+}
+```
+
 ## Categories and Checklist
 
 ### skill-quality

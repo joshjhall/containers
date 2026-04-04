@@ -205,15 +205,20 @@ to create GitHub/GitLab issues in parallel.
 
 **Invoke**: `/codebase-audit` (or describe "run a codebase audit")
 
+All findings include a `certainty` object (CRITICAL/HIGH/MEDIUM/LOW) grading
+detection confidence. With `--auto-fix`, CRITICAL and HIGH certainty findings
+with trivial/small effort are automatically resolved by the `refactorer` agent.
+
 ### Parameters
 
-| Parameter            | Default     | Description                           |
-| -------------------- | ----------- | ------------------------------------- |
-| `scope`              | entire repo | Directory or glob to limit the scan   |
-| `categories`         | all six     | Scanner names to run                  |
-| `depth`              | `standard`  | `quick`, `standard`, or `deep`        |
-| `severity-threshold` | `medium`    | Minimum severity to report            |
-| `dry-run`            | `false`     | Output report without creating issues |
+| Parameter            | Default     | Description                               |
+| -------------------- | ----------- | ----------------------------------------- |
+| `scope`              | entire repo | Directory or glob to limit the scan       |
+| `categories`         | all six     | Scanner names to run                      |
+| `depth`              | `standard`  | `quick`, `standard`, or `deep`            |
+| `severity-threshold` | `medium`    | Minimum severity to report                |
+| `--auto-fix`         | off         | Auto-fix CRITICAL/HIGH certainty findings |
+| `dry-run`            | `false`     | Output report without creating issues     |
 
 ### Scanners (dispatched in parallel via Task tool)
 

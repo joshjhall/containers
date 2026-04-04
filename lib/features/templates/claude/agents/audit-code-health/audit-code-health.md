@@ -21,6 +21,34 @@ When invoked, you receive a work manifest in the task prompt containing:
 1. Track findings with sequential IDs (`code-health-001`, `code-health-002`, ...)
 1. Return a single JSON result following the finding schema (see task prompt)
 
+## Certainty Assignment
+
+Every finding MUST include a `certainty` object. Assign based on how the
+finding was detected:
+
+| Category              | Expected Level | Confidence | Method        | Rationale                              |
+| --------------------- | -------------- | ---------- | ------------- | -------------------------------------- |
+| `file-length`         | HIGH           | ≥0.9       | deterministic | Numeric line count, objective          |
+| `function-complexity` | HIGH           | ≥0.9       | deterministic | Cyclomatic complexity count            |
+| `code-duplication`    | HIGH           | ≥0.9       | deterministic | Token/line similarity ratio            |
+| `magic-numbers`       | HIGH           | ≥0.9       | deterministic | Literal detection in non-const context |
+| `unused-import`       | HIGH           | ≥0.9       | deterministic | Import with no reference in file       |
+| `tech-debt-marker`    | HIGH           | ≥0.9       | deterministic | TODO/FIXME/HACK comment match          |
+| `deprecated-api`      | MEDIUM         | 0.7-0.9    | heuristic     | API name match + context check         |
+| `dead-code`           | MEDIUM         | 0.7-0.9    | heuristic     | Unreachable path analysis              |
+| `naming-drift`        | LOW            | 0.5-0.7    | llm           | Style consistency is subjective        |
+
+```json
+{
+  "certainty": {
+    "level": "HIGH",
+    "support": 1,
+    "confidence": 0.95,
+    "method": "deterministic"
+  }
+}
+```
+
 ## Categories and Checklist
 
 ### file-length

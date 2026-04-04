@@ -21,6 +21,33 @@ When invoked, you receive a work manifest in the task prompt containing:
 1. Track findings with sequential IDs (`security-001`, `security-002`, ...)
 1. Return a single JSON result following the finding schema (see task prompt)
 
+## Certainty Assignment
+
+Every finding MUST include a `certainty` object. Security findings use
+CRITICAL for high-impact threats that warrant immediate auto-fix with warning.
+
+| Category             | Expected Level | Confidence | Method        | Rationale                             |
+| -------------------- | -------------- | ---------- | ------------- | ------------------------------------- |
+| `hardcoded-secret`   | CRITICAL       | ≥0.9       | deterministic | Regex match on known secret patterns  |
+| `injection`          | CRITICAL       | ≥0.9       | deterministic | Unsanitized input in query/command    |
+| `xss`                | CRITICAL       | ≥0.9       | deterministic | Unescaped output in HTML context      |
+| `auth-bypass`        | HIGH           | ≥0.9       | heuristic     | Missing auth check on protected route |
+| `data-exposure`      | HIGH           | 0.7-0.9    | heuristic     | Sensitive data in logs/responses      |
+| `insecure-crypto`    | HIGH           | ≥0.9       | deterministic | Known weak algorithm (MD5, SHA1, DES) |
+| `missing-validation` | MEDIUM         | 0.7-0.9    | heuristic     | Input boundary without validation     |
+| `dependency-cve`     | MEDIUM         | 0.7-0.9    | heuristic     | Known CVE, needs version context      |
+
+```json
+{
+  "certainty": {
+    "level": "CRITICAL",
+    "support": 2,
+    "confidence": 0.98,
+    "method": "deterministic"
+  }
+}
+```
+
 ## Categories and Checklist
 
 ### hardcoded-secret

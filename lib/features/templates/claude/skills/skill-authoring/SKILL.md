@@ -117,6 +117,23 @@ each finding by detection confidence:
 | MEDIUM   | Heuristic + context | Flag for human review | Function too complex       |
 | LOW      | LLM judgment only   | Report only           | Possible over-engineering  |
 
+The certainty object JSON structure (required on all findings):
+
+```json
+{
+  "certainty": {
+    "level": "HIGH",
+    "support": 1,
+    "confidence": 0.95,
+    "method": "deterministic"
+  }
+}
+```
+
+Fields: `level` (CRITICAL/HIGH/MEDIUM/LOW), `support` (evidence count),
+`confidence` (0.0-1.0), `method` (deterministic/heuristic/llm). See
+`codebase-audit/finding-schema.md` for the full schema.
+
 Not all skills need certainty grading — skip for skills that provide guidance
 rather than findings (e.g., `git-workflow`, `documentation-authoring`).
 

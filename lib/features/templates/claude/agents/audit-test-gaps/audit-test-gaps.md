@@ -24,6 +24,29 @@ When invoked, you receive a work manifest in the task prompt containing:
 1. Track findings with sequential IDs (`test-gaps-001`, `test-gaps-002`, ...)
 1. Return a single JSON result following the finding schema (see task prompt)
 
+## Certainty Assignment
+
+Every finding MUST include a `certainty` object.
+
+| Category                  | Expected Level | Confidence | Method        | Rationale                               |
+| ------------------------- | -------------- | ---------- | ------------- | --------------------------------------- |
+| `untested-public-api`     | HIGH           | ≥0.9       | deterministic | Exported symbol with no test file ref   |
+| `missing-error-path-test` | MEDIUM         | 0.7-0.9    | heuristic     | Error path exists but no test covers it |
+| `low-assertion-density`   | HIGH           | ≥0.9       | deterministic | Numeric ratio of assertions to lines    |
+| `test-quality`            | LOW            | 0.5-0.7    | llm           | Quality assessment is subjective        |
+| `missing-edge-case`       | LOW            | 0.5-0.7    | llm           | Requires domain judgment                |
+
+```json
+{
+  "certainty": {
+    "level": "HIGH",
+    "support": 1,
+    "confidence": 0.92,
+    "method": "deterministic"
+  }
+}
+```
+
 ## Categories and Checklist
 
 ### untested-public-api

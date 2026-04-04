@@ -26,6 +26,31 @@ When invoked, you receive a work manifest in the task prompt containing:
 1. Track findings with sequential IDs (`architecture-001`, `architecture-002`, ...)
 1. Return a single JSON result following the finding schema (see task prompt)
 
+## Certainty Assignment
+
+Every finding MUST include a `certainty` object.
+
+| Category               | Expected Level | Confidence | Method        | Rationale                                |
+| ---------------------- | -------------- | ---------- | ------------- | ---------------------------------------- |
+| `circular-dependency`  | HIGH           | ≥0.9       | deterministic | Import graph cycle detection             |
+| `high-coupling`        | MEDIUM         | 0.7-0.9    | heuristic     | Import count + fan-out analysis          |
+| `layer-violation`      | MEDIUM         | 0.7-0.9    | heuristic     | Directory convention inference           |
+| `bus-factor`           | MEDIUM         | 0.7-0.9    | heuristic     | Git stats (single-author threshold)      |
+| `god-module`           | HIGH           | ≥0.9       | deterministic | Export count + line count thresholds     |
+| `orphaned-file`        | MEDIUM         | 0.7-0.9    | heuristic     | No imports found but may be entry point  |
+| `inconsistent-pattern` | LOW            | 0.5-0.7    | llm           | Design pattern consistency is subjective |
+
+```json
+{
+  "certainty": {
+    "level": "HIGH",
+    "support": 1,
+    "confidence": 0.95,
+    "method": "deterministic"
+  }
+}
+```
+
 ## Categories and Checklist
 
 ### circular-dependency

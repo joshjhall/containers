@@ -29,7 +29,13 @@ ______________________________________________________________________
       "suggestion": "Actionable recommendation to resolve",
       "effort": "trivial | small | medium | large",
       "tags": ["maintainability"],
-      "related_files": ["path/to/related.ext"]
+      "related_files": ["path/to/related.ext"],
+      "certainty": {
+        "level": "HIGH",
+        "support": 1,
+        "confidence": 0.95,
+        "method": "deterministic"
+      }
     }
   ]
 }
@@ -72,16 +78,16 @@ ______________________________________________________________________
 | `effort`        | string   | yes      | One of: `trivial`, `small`, `medium`, `large`                       |
 | `tags`          | string[] | yes      | Relevant tags (e.g., `maintainability`, `security`)                 |
 | `related_files` | string[] | yes      | Other files involved (empty array if none)                          |
-| `certainty`     | object   | no       | Multi-signal certainty grading (check-\* skills only, see below)    |
+| `certainty`     | object   | yes      | Multi-signal certainty grading (see Certainty Grading below)        |
 | `pre_scan`      | boolean  | no       | `true` if initially detected by deterministic pre-scan              |
 | `skill`         | string   | no       | Name of the check-\* skill that produced this finding               |
 
 ______________________________________________________________________
 
-## Certainty Grading (check-\* skills)
+## Certainty Grading
 
-New check-\* skills emit a `certainty` object on each finding. Old audit-\*
-agents do not — the field is optional for backward compatibility.
+Every finding MUST include a `certainty` object. All scanners — both check-\*
+skills and audit-\* agents — assign certainty based on detection method.
 
 ### Certainty Object
 
@@ -96,18 +102,25 @@ agents do not — the field is optional for backward compatibility.
 
 | Field        | Type   | Description                                          |
 | ------------ | ------ | ---------------------------------------------------- |
-| `level`      | string | `HIGH`, `MEDIUM`, or `LOW`                           |
+| `level`      | string | `CRITICAL`, `HIGH`, `MEDIUM`, or `LOW`               |
 | `support`    | int    | Number of evidence signals supporting this finding   |
 | `confidence` | float  | 0.0-1.0 reliability score                            |
 | `method`     | string | `deterministic` (patterns.sh), `heuristic`, or `llm` |
 
 ### Level Definitions
 
-| Level  | Detection Method            | Meaning                                 |
-| ------ | --------------------------- | --------------------------------------- |
-| HIGH   | Deterministic (patterns.sh) | Regex/script match, very likely correct |
-| MEDIUM | Heuristic + LLM context     | Pattern + reasoning, likely correct     |
-| LOW    | LLM judgment only           | Requires human verification             |
+| Level    | Detection Method            | Meaning                                            | Action             |
+| -------- | --------------------------- | -------------------------------------------------- | ------------------ |
+| CRITICAL | Deterministic (security)    | Security threat (secrets, injection) — high impact | Auto-fix + warning |
+| HIGH     | Deterministic (patterns.sh) | Definite problem, safe to fix automatically        | Auto-fix           |
+| MEDIUM   | Heuristic + LLM context     | Probable issue, needs context to confirm           | Flag for review    |
+| LOW      | LLM judgment only           | Possible concern, requires human verification      | Report only        |
+
+### Auto-Fix Eligibility
+
+Findings with certainty `CRITICAL` or `HIGH` and effort `trivial` or `small`
+are eligible for auto-fix when `/codebase-audit --auto-fix` is enabled. See
+the Auto-Fix section in `SKILL.md`.
 
 ## Check Run Audit Trail
 

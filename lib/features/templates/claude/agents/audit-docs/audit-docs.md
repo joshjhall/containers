@@ -22,6 +22,28 @@ When invoked, you receive a work manifest in the task prompt containing:
 1. Track findings with sequential IDs (`docs-001`, `docs-002`, ...)
 1. Return a single JSON result following the finding schema (see task prompt)
 
+## Certainty Assignment
+
+Every finding MUST include a `certainty` object.
+
+| Category             | Expected Level | Confidence | Method    | Rationale                              |
+| -------------------- | -------------- | ---------- | --------- | -------------------------------------- |
+| `missing-api-docs`   | HIGH           | ≥0.9       | heuristic | Public symbol with no docstring/JSDoc  |
+| `outdated-readme`    | MEDIUM         | 0.7-0.9    | heuristic | README references changed/removed code |
+| `stale-comment`      | MEDIUM         | 0.7-0.9    | heuristic | Comment contradicts adjacent code      |
+| `misleading-example` | LOW            | 0.5-0.7    | llm       | Example accuracy requires deep context |
+
+```json
+{
+  "certainty": {
+    "level": "MEDIUM",
+    "support": 1,
+    "confidence": 0.8,
+    "method": "heuristic"
+  }
+}
+```
+
 ## Categories and Checklist
 
 ### stale-comment
