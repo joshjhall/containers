@@ -430,6 +430,8 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 # ============================================================================
 
 # General development tools
+# Skip LSP server installation (for headless agent containers)
+ARG SKIP_LSP_INSTALL=false
 ARG INCLUDE_DEV_TOOLS=false
 # Extra Claude Code plugins to install (comma-separated, e.g., "stripe,posthog,vercel")
 ARG CLAUDE_EXTRA_PLUGINS=""
@@ -472,6 +474,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     INCLUDE_AWS=${INCLUDE_AWS} \
     INCLUDE_GCLOUD=${INCLUDE_GCLOUD} \
     INCLUDE_CLOUDFLARE=${INCLUDE_CLOUDFLARE} \
+    SKIP_LSP_INSTALL=${SKIP_LSP_INSTALL} \
     /tmp/build-scripts/features/dev-tools.sh; \
     fi
 
@@ -513,6 +516,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     CLAUDE_AGENTS="${CLAUDE_AGENTS}" \
     CLAUDE_SKILLS="${CLAUDE_SKILLS}" \
     CLAUDE_CHANNEL=${CLAUDE_CHANNEL} \
+    SKIP_LSP_INSTALL=${SKIP_LSP_INSTALL} \
     /tmp/build-scripts/features/claude-code-setup.sh; \
     fi
 

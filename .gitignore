@@ -46,6 +46,7 @@ Thumbs.db
 .claude/memory/tmp/
 .claude/plans/
 .claude/*.lock
+.worktrees/
 
 # ============================================================================
 # DOCKER BUILD ARTIFACTS
@@ -213,3 +214,4 @@ pids/
 
 local/
 .local/
+ai/

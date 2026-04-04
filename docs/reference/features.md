@@ -82,11 +82,11 @@ These features have no dependencies and can be installed independently:
 
 ### Claude Code / MCP Servers
 
-| Component       | Requires | Notes                                             |
-| --------------- | -------- | ------------------------------------------------- |
-| Claude Code CLI | (none)   | Installed with `INCLUDE_DEV_TOOLS=true`           |
-| MCP Servers     | `node`   | Auto-installed when Node.js available             |
-| LSP Plugins     | (varies) | Language-specific, based on enabled `*_dev` flags |
+| Component       | Requires | Notes                                                                        |
+| --------------- | -------- | ---------------------------------------------------------------------------- |
+| Claude Code CLI | (none)   | Installed with `INCLUDE_DEV_TOOLS=true`                                      |
+| MCP Servers     | `node`   | Auto-installed when Node.js available                                        |
+| LSP Plugins     | (varies) | Language-specific, based on `*_dev` flags; skip with `SKIP_LSP_INSTALL=true` |
 
 For full Claude Code support with MCP servers:
 

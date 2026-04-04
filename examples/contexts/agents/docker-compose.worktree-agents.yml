@@ -1,0 +1,130 @@
+# Worktree Agent Configuration
+# Reference template for container agents that run Claude Code in isolated
+# worktrees. The /provision-agent skill generates a project-specific version
+# of this file at .worktrees/docker-compose.agents.yml.
+#
+# Architecture:
+#   - Each agent runs in its own container with its own git worktree
+#   - Claude Code runs in a named tmux session (human can attach directly)
+#   - Orchestrator coordinates via /orchestrate skill and status files
+#   - Shared .worktrees/.status/ directory for agent state coordination
+#
+# Usage:
+#   # Preferred: use /provision-agent or /orchestrate spawn
+#   # Manual: docker compose -f docker-compose.worktree-agents.yml up -d agent01
+#
+# Human interaction:
+#   docker exec -it project-agent01-1 tmux attach -t claude
+
+x-common-build-args: &common-build-args
+  BASE_IMAGE: mcr.microsoft.com/devcontainers/base:trixie
+  USERNAME: vscode
+  PROJECT_NAME: project
+  PROJECT_PATH: .
+  INCLUDE_DEV_TOOLS: "true"
+  INCLUDE_PYTHON: "true"
+  INCLUDE_PYTHON_DEV: "true"
+  INCLUDE_NODE: "true"
+  INCLUDE_NODE_DEV: "true"
+  # Agent-specific: skip LSP servers (no IDE in headless containers)
+  SKIP_LSP_INSTALL: "true"
+
+x-agent-common: &agent-common
+  build:
+    context: ../..
+    dockerfile: containers/Dockerfile
+    args:
+      <<: *common-build-args
+  init: true
+  restart: unless-stopped
+  deploy:
+    resources:
+      limits:
+        cpus: "2"
+        memory: 4G
+      reservations:
+        cpus: "0.5"
+        memory: 1G
+  environment:
+    AGENT_MODE: headless
+  volumes:
+    - agent-status:/workspace/.worktrees/.status
+  command: ["sleep", "infinity"]
+
+services:
+  # Agent 01 — independent container with its own worktree
+  agent01:
+    <<: *agent-common
+    container_name: project-agent01
+    environment:
+      AGENT_ID: agent01
+      AGENT_MODE: headless
+    volumes:
+      - ../../:/workspace/project:ro
+      - agent01-worktree:/workspace/project-worktree
+      - agent-status:/workspace/.worktrees/.status
+    working_dir: /workspace/project-worktree
+
+  # Agent 02
+  agent02:
+    <<: *agent-common
+    container_name: project-agent02
+    environment:
+      AGENT_ID: agent02
+      AGENT_MODE: headless
+    volumes:
+      - ../../:/workspace/project:ro
+      - agent02-worktree:/workspace/project-worktree
+      - agent-status:/workspace/.worktrees/.status
+    working_dir: /workspace/project-worktree
+
+  # Agent 03
+  agent03:
+    <<: *agent-common
+    container_name: project-agent03
+    environment:
+      AGENT_ID: agent03
+      AGENT_MODE: headless
+    volumes:
+      - ../../:/workspace/project:ro
+      - agent03-worktree:/workspace/project-worktree
+      - agent-status:/workspace/.worktrees/.status
+    working_dir: /workspace/project-worktree
+
+  # Supporting services — shared across agents
+
+  # PostgreSQL with per-agent databases
+  postgres:
+    image: pgvector/pgvector:pg17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: dev
+      POSTGRES_PASSWORD: dev
+      POSTGRES_MULTIPLE_DATABASES: "app_agent01,app_agent02,app_agent03"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dev"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis — agents use DB numbers for isolation (agent01=1, agent02=2, etc.)
+  redis:
+    image: redis:8-alpine
+    restart: unless-stopped
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  agent01-worktree:
+  agent02-worktree:
+  agent03-worktree:
+  agent-status:
+  postgres-data:
+  redis-data:

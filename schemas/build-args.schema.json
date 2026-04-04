@@ -219,6 +219,11 @@
       "description": "Install general development tools (git, make, etc.)",
       "default": false
     },
+    "SKIP_LSP_INSTALL": {
+      "type": "boolean",
+      "description": "Skip LSP server installation in dev feature scripts and Claude plugins. Use for headless agent containers that don't need IDE support.",
+      "default": false
+    },
     "INCLUDE_DOCKER": {
       "type": "boolean",
       "description": "Install Docker CLI tools",

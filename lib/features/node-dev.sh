@@ -322,19 +322,24 @@ log_command "Setting node-dev-list script permissions" \
 
 # ============================================================================
 # TypeScript Language Server (for IDE support)
+# Skipped when SKIP_LSP_INSTALL=true (headless agent containers)
 # ============================================================================
-log_message "Installing TypeScript language server for IDE support..."
+if [ "${SKIP_LSP_INSTALL}" != "true" ]; then
+    log_message "Installing TypeScript language server for IDE support..."
 
-# typescript-language-server: LSP wrapper for TypeScript's tsserver
-# Note: typescript is already installed above, just need the LSP wrapper
-log_command "Installing typescript-language-server" \
-    npm_install_as_user typescript-language-server
+    # typescript-language-server: LSP wrapper for TypeScript's tsserver
+    # Note: typescript is already installed above, just need the LSP wrapper
+    log_command "Installing typescript-language-server" \
+        npm_install_as_user typescript-language-server
 
-# Verify LSP installation
-if command -v typescript-language-server &>/dev/null; then
-    log_message "TypeScript LSP installed successfully"
+    # Verify LSP installation
+    if command -v typescript-language-server &>/dev/null; then
+        log_message "TypeScript LSP installed successfully"
+    else
+        log_warning "TypeScript LSP installation could not be verified"
+    fi
 else
-    log_warning "TypeScript LSP installation could not be verified"
+    log_message "Skipping TypeScript language server (SKIP_LSP_INSTALL=true)"
 fi
 
 # ============================================================================

@@ -300,12 +300,17 @@ log_command "Setting Android dev startup script permissions" \
 
 # ============================================================================
 # Eclipse JDT Language Server (jdtls)
+# Skipped when SKIP_LSP_INSTALL=true (headless agent containers)
 # ============================================================================
-# Install jdtls for Java/Kotlin IDE support in Android projects
-# This is installed idempotently - skipped if already present
-log_message "Installing Eclipse JDT Language Server for Android development..."
-install_jdtls
-configure_jdtls_env
+if [ "${SKIP_LSP_INSTALL}" != "true" ]; then
+    # Install jdtls for Java/Kotlin IDE support in Android projects
+    # This is installed idempotently - skipped if already present
+    log_message "Installing Eclipse JDT Language Server for Android development..."
+    install_jdtls
+    configure_jdtls_env
+else
+    log_message "Skipping Eclipse JDT Language Server (SKIP_LSP_INSTALL=true)"
+fi
 
 # ============================================================================
 # Verification Script

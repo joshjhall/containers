@@ -29,7 +29,12 @@ startup via `claude-setup`. Project-level `.claude/` configs merge with these
 | `codebase-audit`          | Periodic codebase sweep: tech debt, security, test gaps, architecture, docs         |
 | `next-issue-ship`         | Ship completed issue work: commit, PR/push, label issue, loop back                  |
 | `memory-conventions`      | Two-tier memory conventions: long-term (committed) vs short-term (gitignored)       |
-| `orchestrate`             | Multi-agent orchestration: status, merge, review, and sync agent commits            |
+| `orchestrate`             | Multi-agent orchestration: mode selection, status, merge, review, sync, spawn       |
+| `provision-agent`         | Provision headless agent containers from devcontainer config with tmux sessions     |
+| `rebase-lockfile`         | Resolve lock file conflicts by regenerating (package-lock, Cargo.lock, etc.)        |
+| `rebase-generated`        | Resolve generated file conflicts by re-running generators                           |
+| `rebase-imports`          | Resolve import ordering conflicts by combining, deduplicating, sorting              |
+| `rebase-version`          | Resolve version number conflicts by taking the higher version                       |
 | `check-docs-staleness`    | Detects stale comments, outdated references, expired dates in docs                  |
 | `check-docs-deadlinks`    | Validates internal and external links in documentation                              |
 | `check-docs-organization` | Checks doc structure, missing READMEs, file consistency                             |
@@ -69,6 +74,7 @@ startup via `claude-setup`. Project-level `.claude/` configs merge with these
 | `skill-author`       | Writes and reviews skills following quality patterns (opus)                 |
 | `agent-author`       | Writes and reviews agents following quality patterns (opus)                 |
 | `checker`            | Unified checker for audit/review: discovers check-\* skills, pre-scan + LLM |
+| `rebase-agent`       | Automated conflict resolution for lockfiles, imports, versions, generated   |
 
 The `skill-author` and `agent-author` agents use `model: opus` because
 authoring quality compounds — a poorly-written skill or agent degrades all
@@ -509,3 +515,54 @@ The `/orchestrate` skill also suggests resets after merge and sync operations.
 State files from earlier versions (YAML frontmatter `.md`) are automatically
 migrated to JSON `.json` format during Phase 0 discovery. No manual
 intervention needed.
+
+## Execution Mode Selection
+
+The `/orchestrate mode` command recommends an execution mode for the next task
+based on effort, session load, container availability, and batch size.
+
+| Mode | Name               | When to Use                                        |
+| ---- | ------------------ | -------------------------------------------------- |
+| 1a   | Current branch     | Trivial fixes, single-file changes                 |
+| 1b   | New branch         | Focused work needing clean diff, `effort/small`    |
+| 2    | Ephemeral worktree | Parallel tangent, 2-3 concurrent tasks             |
+| 3    | Container agent    | Deep parallelization, batch processing, 3-5 agents |
+
+Mode recommendations are advisory — the user always chooses. See
+`orchestrate/mode-protocol.md` for the full decision tree.
+
+## Container Agent Orchestration
+
+Container agents run Claude Code in isolated headless containers, each with
+its own git worktree. This enables true parallel processing without shared
+process space.
+
+### Key Components
+
+- **`/provision-agent`** — generates docker-compose from devcontainer config,
+  creates worktrees, starts containers with tmux-attached Claude sessions
+- **`/orchestrate spawn`** — provisions agents and assigns issues from the
+  priority queue
+- **`SKIP_LSP_INSTALL=true`** — build arg for lean agent containers (no LSP
+  servers, ~200MB smaller)
+- **Status files** — `.worktrees/.status/agent{N}.json` for coordination
+- **`rebase-agent`** — automated conflict resolution for trivial merge conflicts
+
+### Human Interaction
+
+Each agent's Claude Code runs in a named tmux session. Attach directly:
+
+```bash
+docker exec -it project-agent01-1 tmux attach -t claude
+```
+
+### Rebase Agent
+
+The `rebase-agent` handles trivial merge conflicts automatically during
+`/orchestrate merge` and `/orchestrate sync`:
+
+- Lock files → regenerate from manifest
+- Generated files → re-run generator
+- Import ordering → combine, deduplicate, sort
+- Version numbers → take higher version
+- Non-trivial conflicts → escalate to human

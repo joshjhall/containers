@@ -158,14 +158,19 @@ chmod +x /usr/local/bin/detekt
 
 # ============================================================================
 # Kotlin Language Server Installation
+# Skipped when SKIP_LSP_INSTALL=true (headless agent containers)
 # ============================================================================
-install_github_release "kotlin-language-server" "$KLS_VERSION" \
-    "https://github.com/fwcd/kotlin-language-server/releases/download/${KLS_VERSION}" \
-    "server.zip" "server.zip" \
-    "calculate" "zip_to:/opt/kotlin-language-server"
+if [ "${SKIP_LSP_INSTALL}" != "true" ]; then
+    install_github_release "kotlin-language-server" "$KLS_VERSION" \
+        "https://github.com/fwcd/kotlin-language-server/releases/download/${KLS_VERSION}" \
+        "server.zip" "server.zip" \
+        "calculate" "zip_to:/opt/kotlin-language-server"
 
-create_symlink "/opt/kotlin-language-server/server/bin/kotlin-language-server" \
-    "/usr/local/bin/kotlin-language-server" "Kotlin Language Server"
+    create_symlink "/opt/kotlin-language-server/server/bin/kotlin-language-server" \
+        "/usr/local/bin/kotlin-language-server" "Kotlin Language Server"
+else
+    log_message "Skipping Kotlin language server (SKIP_LSP_INSTALL=true)"
+fi
 
 # ============================================================================
 # System-wide Environment Configuration
