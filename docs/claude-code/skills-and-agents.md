@@ -477,3 +477,35 @@ Contexts are discovered from two locations (project wins on conflicts):
 
 Additional contexts (gui, api-design, observability, infrastructure) will be
 added in future releases.
+
+## Pipeline State & Context Resets
+
+The `/next-issue` pipeline uses JSON state files for cross-phase continuity.
+State files persist at `.claude/memory/tmp/next-issue-{N}.json` and carry a
+`checkpoint` object that captures key decisions, modified/planned files,
+warnings, and the next action — enabling safe `/clear` resets between phases.
+
+### State File Format
+
+JSON with schema validation (`schemas/next-issue-state.schema.json` in the
+`next-issue` skill directory). Version 2 format replaces the earlier YAML
+frontmatter `.md` format. Legacy `.md` files are auto-migrated on first
+encounter.
+
+### Reset Points
+
+The pipeline suggests context resets at natural phase boundaries:
+
+| Phase Boundary      | Mode     | Description                                          |
+| ------------------- | -------- | ---------------------------------------------------- |
+| After plan approval | Suggest  | Exploration context is stale for implementation      |
+| Between impl. loops | Auto     | Each loop runs as a separate Task (natural boundary) |
+| After ship          | Required | Clean slate for next issue                           |
+
+The `/orchestrate` skill also suggests resets after merge and sync operations.
+
+### Backward Compatibility
+
+State files from earlier versions (YAML frontmatter `.md`) are automatically
+migrated to JSON `.json` format during Phase 0 discovery. No manual
+intervention needed.

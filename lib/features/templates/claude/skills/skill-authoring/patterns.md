@@ -246,13 +246,16 @@ The `codebase-audit` orchestrator discovers scanner agents by globbing
 
 ### Pattern 2: State Handoff (`next-issue` → `next-issue-ship`)
 
-Skills that chain across invocations use YAML-frontmatter state files:
+Skills that chain across invocations use JSON state files with schema:
 
-- **Path**: `.claude/memory/tmp/next-issue-{N}.md`
-- **Schema**: YAML frontmatter with `issue`, `title`, `phase`, `branch`,
-  `plan`, `started`, `platform` fields
+- **Path**: `.claude/memory/tmp/next-issue-{N}.json`
+- **Schema**: JSON (version 2) with `issue`, `title`, `phase`, `branch`,
+  `plan`, `started`, `platform` fields, plus optional `checkpoint` object
+  for context handoff across `/clear` resets
 - **Protocol**: the upstream skill writes the state file; the downstream skill
   reads and validates it; the downstream skill deletes it after completion
+- **Checkpoint**: write `key_decisions`, `files_modified`, `files_planned`,
+  `warnings`, and `next_action` before phase transitions
 - **Validation**: check that the referenced issue is still open and the branch
   still exists before resuming
 

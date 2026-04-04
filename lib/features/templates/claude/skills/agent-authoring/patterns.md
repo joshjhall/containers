@@ -374,9 +374,11 @@ frontmatter to build its scanner list. To create a new scanner:
 
 Agents that participate in the issue pipeline:
 
-- Read/write state files at `.claude/memory/tmp/next-issue-{N}.md`
-- YAML frontmatter schema: `issue`, `title`, `phase`, `branch`, `plan`,
-  `started`, `platform`
+- Read/write state files at `.claude/memory/tmp/next-issue-{N}.json`
+- JSON schema (version 2): `issue`, `title`, `phase`, `branch`, `plan`,
+  `started`, `platform`, plus optional `checkpoint` object for context handoff
+- Write `checkpoint` before phase transitions to preserve key decisions,
+  modified/planned files, warnings, and next action across `/clear` resets
 - Validate state before acting (issue still open, branch still exists)
 - Delete state file after successful completion
 

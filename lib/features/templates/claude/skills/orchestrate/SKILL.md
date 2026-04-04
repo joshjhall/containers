@@ -118,6 +118,13 @@ Load `merge-protocol.md` before starting.
 
 1. **Report**: Show final merge result with commit hash and summary.
 
+1. **Suggest context reset** — after reporting the merge result:
+
+   > Merge complete. If context is large from the diff review, consider
+   > `/clear` — the merge is committed and the next operation starts fresh.
+
+   This is advisory — continue normally if the user declines.
+
 ## Phase 3 — Review
 
 Load `merge-protocol.md` before starting (Review Protocol section).
@@ -235,6 +242,13 @@ Load `merge-protocol.md` before starting (Sync Protocol section).
 
    If any branches were skipped, note they will pick up changes on the next
    sync cycle.
+
+1. **Suggest context reset** — after reporting the sync summary:
+
+   > Sync complete. Consider `/clear` if context is large — sync output is
+   > mechanical and not needed for subsequent operations.
+
+   This is advisory — continue normally if the user declines.
 
 ## When to Use
 

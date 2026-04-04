@@ -15,12 +15,15 @@ this skill. The state file written by `/next-issue` must exist.
 
 1. **Discover the current state file**:
 
-   - List all per-issue state files: `ls .claude/memory/tmp/next-issue-*.md 2>/dev/null`
+   - List JSON state files: `ls .claude/memory/tmp/next-issue-*.json 2>/dev/null`
    - **If multiple files exist**: list them and ask which issue to ship
    - **If exactly one file**: use it
-   - **If none exist**: check for legacy `.claude/memory/tmp/next-issue-state.md` —
-     if found, read its `issue:` field, rename to `.claude/memory/tmp/next-issue-{N}.md`,
-     then use it
+   - **If none exist**: check for legacy `.md` files:
+     - `ls .claude/memory/tmp/next-issue-*.md 2>/dev/null`
+     - If found, migrate to `.json`: read YAML frontmatter fields, write `.json`
+       with those fields plus `"version": 2`, delete the `.md` file
+     - Also check for `.claude/memory/tmp/next-issue-state.md` (legacy singleton)
+       — read its `issue:` field, migrate to `.claude/memory/tmp/next-issue-{N}.json`
 
 1. Extract: `issue` (number), `title`, `platform` (`github` or `gitlab`),
    `branch` (if set)
@@ -153,7 +156,7 @@ Use `AskUserQuestion` to present three options:
 
 1. **Checkout main**: `git checkout main`
 
-1. **Delete state file** (remove `.claude/memory/tmp/next-issue-{N}.md`)
+1. **Delete state file** (remove `.claude/memory/tmp/next-issue-{N}.json`)
 
 1. **Show the PR/MR URL** to the user
 
@@ -176,7 +179,8 @@ Use `AskUserQuestion` to present three options:
    - GitHub: `gh issue edit {N} --remove-label "status/in-progress"`
    - GitLab: `glab issue update {N} --unlabel "status/in-progress"`
 
-1. **Delete state file** (the `Closes` keyword auto-closes the issue on push)
+1. **Delete state file** (remove `.claude/memory/tmp/next-issue-{N}.json`;
+   the `Closes` keyword auto-closes the issue on push)
 
 1. Tell the user the issue will auto-close when the push is processed
 
@@ -195,12 +199,17 @@ Use `AskUserQuestion` to present three options:
    - **Normal mode**:
      - GitHub: `gh issue comment {N} --body "Fix committed locally (not yet pushed). Commit: {sha}"`
      - GitLab: `glab issue note {N} --message "Fix committed locally (not yet pushed). Commit: {sha}"`
-1. **Delete state file** (remove `.claude/memory/tmp/next-issue-{N}.md`)
+1. **Delete state file** (remove `.claude/memory/tmp/next-issue-{N}.json`)
 1. Tell the user the commit is local and needs to be pushed later
 
-## Step 5 — Continue?
+## Step 5 — Context Reset & Continue
 
-After shipping, ask the user with `AskUserQuestion`:
+After shipping, tell the user:
+
+> Issue #{N} shipped. Run `/clear` to start fresh, then `/next-issue` to
+> pick up the next issue.
+
+Then ask with `AskUserQuestion`:
 
 - **Pick next issue** — invoke `/next-issue` to select and plan the next one
 - **Stop** — end the session
