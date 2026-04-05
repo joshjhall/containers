@@ -76,9 +76,20 @@ startup via `claude-setup`. Project-level `.claude/` configs merge with these
 | `checker`            | Unified checker for audit/review: discovers check-\* skills, pre-scan + LLM |
 | `rebase-agent`       | Automated conflict resolution for lockfiles, imports, versions, generated   |
 
-The `skill-author` and `agent-author` agents use `model: opus` because
-authoring quality compounds — a poorly-written skill or agent degrades all
-downstream interactions across every conversation that loads it.
+Five agents use `model: opus` because their output quality compounds
+downstream:
+
+- `debugger` — root cause analysis requires deep reasoning; a shallow
+  diagnosis wastes the user's time on wrong fixes
+- `audit-architecture` — architectural findings inform refactoring
+  priorities; missed patterns propagate as tech debt
+- `audit-ai-config` — agent/skill quality analysis affects every
+  conversation that loads the audited artifacts
+- `skill-author`, `agent-author` — a poorly-written skill or agent
+  degrades all downstream interactions
+
+The `issue-writer` agent uses `model: haiku` for mechanical structured
+output (formatting findings into issues). All other agents use `model: sonnet` for pattern matching and structured generation tasks.
 
 Templates are staged at build time to `/etc/container/config/claude-templates/`
 and installed at runtime by `claude-setup`. All installations are idempotent.
