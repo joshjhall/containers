@@ -246,12 +246,79 @@ Before executing the chosen shipping mode, run these safety checks:
        --description "## Summary\n- {what changed and why}\n\n## Test plan\n- {how this was tested}\n\nCloses #{N}"
      ```
 
+1. **Monitor CI and remediate failures** (advisory, max 3 iterations):
+
+   Before labeling the issue, optionally monitor CI checks and auto-fix
+   failures. Ask the user:
+
+   - **Wait for CI** — monitor checks and auto-fix failures if possible
+   - **Skip CI monitoring** — proceed to labeling immediately
+
+   If the user chooses to wait:
+
+   a. **Poll for check completion**:
+
+   - GitHub: `gh pr checks {pr_number} --json name,state,conclusion`
+     (poll every 30 seconds until no checks have `state: "pending"`)
+   - GitLab: `glab ci status` (check for completion)
+
+   b. **If all checks pass**: inform the user and proceed to labeling
+
+   c. **If checks fail** (iteration \<= 3):
+
+   - Identify the failing check name and run ID:
+
+     ```bash
+     gh pr checks {pr_number} --json name,state,conclusion,link \
+       | jq '[.[] | select(.conclusion == "failure")]'
+     ```
+
+   - Fetch failing check logs:
+
+     ```bash
+     gh run view {run_id} --log-failed 2>&1 | tail -200
+     ```
+
+   - Dispatch the `ci-fixer` agent with the failure logs, check name,
+     PR number, and current iteration number
+
+   - **If ci-fixer returns `"fixed"`**:
+
+     - Stage the changed files
+     - Commit: `fix(ci): {summary from ci-fixer}`
+     - Push: `git push`
+     - Increment iteration counter
+     - Go back to (a) to re-check
+
+   - **If ci-fixer returns `"unfixable"`**:
+
+     - Inform the user: "CI failure appears to be {failure_type} —
+       {summary}. Requires manual intervention."
+     - Ask: **Fix manually now, or ship with failing CI?**
+     - If fix manually: pause for user to fix, then go back to (a)
+     - If ship anyway: proceed to labeling
+
+   d. **After 3 failed remediation attempts**: stop auto-fixing and inform
+   the user: "CI has failed 3 remediation attempts. Manual intervention
+   needed." Ask whether to ship with failing CI or stop.
+
+   **Graceful degradation**: If `gh pr checks` is unavailable or errors,
+   skip CI monitoring with a note and proceed to labeling. CI monitoring
+   never blocks shipping.
+
 1. **Label the issue** `status/pr-pending` and remove `status/in-progress`:
 
    - GitHub: `gh issue edit {N} --add-label "status/pr-pending" --remove-label "status/in-progress"`
    - GitLab: `glab issue update {N} --label "status/pr-pending" --unlabel "status/in-progress"`
 
 1. **Comment on the issue**:
+
+   If CI remediation was performed, include a summary in the comment:
+
+   - GitHub: `gh issue comment {N} --body "Fix submitted in PR #{pr_number}. CI remediation: {N} fix(es) applied automatically."`
+   - GitLab: `glab issue note {N} --message "Fix submitted in MR !{mr_number}. CI remediation: {N} fix(es) applied automatically."`
+
+   If no CI remediation was needed or CI was skipped:
 
    - GitHub: `gh issue comment {N} --body "Fix submitted in PR #{pr_number}"`
    - GitLab: `glab issue note {N} --message "Fix submitted in MR !{mr_number}"`

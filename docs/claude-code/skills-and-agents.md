@@ -75,6 +75,7 @@ startup via `claude-setup`. Project-level `.claude/` configs merge with these
 | `agent-author`       | Writes and reviews agents following quality patterns (opus)                 |
 | `checker`            | Unified checker for audit/review: discovers check-\* skills, pre-scan + LLM |
 | `rebase-agent`       | Automated conflict resolution for lockfiles, imports, versions, generated   |
+| `ci-fixer`           | Diagnoses CI failures from logs and applies targeted fixes (sonnet)         |
 
 Five agents use `model: opus` because their output quality compounds
 downstream:
@@ -184,7 +185,7 @@ docker run -e CLAUDE_AGENTS="debugger,test-writer" ...
 
 | `CLAUDE_AGENTS` | Behavior                     |
 | --------------- | ---------------------------- |
-| Unset (default) | All 15 agents installed      |
+| Unset (default) | All 17 agents installed      |
 | Set to list     | Only listed agents installed |
 | Set to `""`     | No agents installed          |
 
@@ -609,12 +610,13 @@ derived from its role:
 
 Pre-condition checks at key workflow boundaries prevent skipping critical steps:
 
-| Gate                    | Location           | Mode     | What it checks                                   |
-| ----------------------- | ------------------ | -------- | ------------------------------------------------ |
-| Pre-ship test gate      | `/next-issue-ship` | Blocking | Test suite passes before PR creation             |
-| Pre-review quality gate | `/next-issue-ship` | Advisory | Deslop patterns, debug stmts, test coverage gaps |
-| Scanner completion gate | `/codebase-audit`  | Partial  | All scanners returned valid JSON                 |
-| Finding schema gate     | `/codebase-audit`  | Blocking | Findings conform to schema                       |
+| Gate                    | Location           | Mode     | What it checks                                    |
+| ----------------------- | ------------------ | -------- | ------------------------------------------------- |
+| Pre-ship test gate      | `/next-issue-ship` | Blocking | Test suite passes before PR creation              |
+| Pre-review quality gate | `/next-issue-ship` | Advisory | Deslop patterns, debug stmts, test coverage gaps  |
+| CI remediation gate     | `/next-issue-ship` | Advisory | CI checks pass after PR (max 3 auto-fix attempts) |
+| Scanner completion gate | `/codebase-audit`  | Partial  | All scanners returned valid JSON                  |
+| Finding schema gate     | `/codebase-audit`  | Blocking | Findings conform to schema                        |
 
 **Blocking** gates prevent the workflow from proceeding. **Advisory** gates
 warn but allow proceeding (set `PRE_REVIEW_STRICT=true` to make them blocking
