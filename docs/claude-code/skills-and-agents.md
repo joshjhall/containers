@@ -40,6 +40,7 @@ startup via `claude-setup`. Project-level `.claude/` configs merge with these
 | `check-docs-organization` | Checks doc structure, missing READMEs, file consistency                             |
 | `check-docs-examples`     | Validates code examples against actual source code                                  |
 | `check-docs-missing-api`  | Detects undocumented public APIs and functions across languages                     |
+| `check-ai-config`         | Validates agent/skill frontmatter, file bloat, MCP configs, hook safety             |
 | `loop-make-it-work`       | Implementation loop: end-to-end happy path functionality, no stubs                  |
 | `loop-make-it-right`      | Implementation loop: refactoring for clarity, conventions, architecture             |
 | `loop-make-it-secure`     | Implementation loop: security hardening (injection, secrets, OWASP)                 |
@@ -146,7 +147,7 @@ docker run -e CLAUDE_SKILLS="git-workflow,testing-patterns" ...
 
 | `CLAUDE_SKILLS` | Behavior                                        |
 | --------------- | ----------------------------------------------- |
-| Unset (default) | All 27 static skills installed                  |
+| Unset (default) | All 28 static skills installed                  |
 | Set to list     | Only listed skills installed                    |
 | Set to `""`     | No static skills (only `container-environment`) |
 

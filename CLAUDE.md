@@ -214,7 +214,7 @@ model selection.
 
 ### Skills & Agents
 
-35 skills (33 always + 2 conditional) and 17 agents. Key capabilities:
+36 skills (34 always + 2 conditional) and 17 agents. Key capabilities:
 `/codebase-audit` (parallel scanners), `/next-issue` + `/next-issue-ship`
 (issue-driven development with auto-labeling and state persistence). Override
 defaults via `CLAUDE_SKILLS` and `CLAUDE_AGENTS` (replaces full set). Add
