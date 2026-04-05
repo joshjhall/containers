@@ -110,6 +110,45 @@ files within scope and include the agent's `description` under a
 `routing_hint` field. The agent self-filters to relevant files. Use the same
 `thresholds` and `context` as built-in scanners.
 
+### Step 2.5: Deterministic Pre-Scan
+
+Before dispatching LLM scanners, run deterministic pattern detection to catch
+regex-matchable findings at zero LLM cost.
+
+1. **Discover check-\* skills with patterns.sh**: Glob for
+   `~/.claude/skills/check-*/patterns.sh` (user-level) and
+   `.claude/skills/check-*/patterns.sh` (project-level)
+
+1. **For each patterns.sh found**: Write the file manifest (one path per line)
+   to a temp file, then run:
+
+   ```bash
+   bash <skill-dir>/patterns.sh <tempfile>
+   ```
+
+1. **Parse TSV output**: Each line is
+   `file\tline\tcategory\tevidence\tcertainty`. Collect findings with certainty
+   `HIGH` and method `deterministic`.
+
+1. **Map findings to scanner domains**: Match check-\* skill names to audit
+   agent domains (e.g., `check-security` → `audit-security`,
+   `check-code-health` → `audit-code-health`). Unmatched findings go into a
+   standalone `pre-scan` findings group.
+
+1. **Include pre-scan findings in scanner manifests**: When dispatching each
+   audit agent in Step 3, include the relevant pre-scan findings in the task
+   prompt under a `## Pre-Scan Findings` section. Instruct the agent: "These
+   patterns were already detected deterministically. Skip re-detecting them.
+   Focus on context-dependent analysis that regex cannot do."
+
+1. **Add pre-scan findings to final output**: Deterministic findings with HIGH
+   certainty go directly into the aggregated findings (Step 4) without needing
+   LLM confirmation.
+
+If no check-\* skills with patterns.sh are found, skip this step silently.
+If a patterns.sh exits non-zero, log the error and continue with remaining
+skills.
+
 ### Step 3: Dispatch Scanners in Parallel
 
 Send **a single message** with one `Task` tool call per active scanner. If
