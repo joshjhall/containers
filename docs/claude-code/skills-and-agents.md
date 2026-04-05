@@ -59,7 +59,7 @@ startup via `claude-setup`. Project-level `.claude/` configs merge with these
 
 | Agent                | Purpose                                                                     |
 | -------------------- | --------------------------------------------------------------------------- |
-| `code-reviewer`      | Reviews code for bugs, security, performance, style                         |
+| `code-reviewer`      | Orchestrates parallel sub-reviewers for security, bugs, performance, style  |
 | `test-writer`        | Generates tests for existing code, detects framework                        |
 | `refactorer`         | Refactors code while preserving behavior                                    |
 | `debugger`           | Systematic debugging for errors, test failures, runtime issues              |

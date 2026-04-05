@@ -286,15 +286,16 @@ implementation. Use opus where errors propagate downstream.
 
 ### Real Examples from Our System
 
-| Agent                | Model  | Rationale                                                   |
-| -------------------- | ------ | ----------------------------------------------------------- |
-| `issue-writer`       | haiku  | Mechanical: renders template + calls CLI                    |
-| `code-reviewer`      | sonnet | Pattern matching against known code quality issues          |
-| `test-writer`        | sonnet | Structured generation following test framework patterns     |
-| `audit-architecture` | sonnet | Pattern detection, but consider opus for complex codebases  |
-| `debugger`           | sonnet | Consider opus — root cause analysis benefits from reasoning |
-| `skill-author`       | opus   | Quality compounds: bad skill → bad behavior across all uses |
-| `agent-author`       | opus   | Quality compounds: bad agent → bad output across all uses   |
+| Agent                | Model  | Rationale                                                        |
+| -------------------- | ------ | ---------------------------------------------------------------- |
+| `issue-writer`       | haiku  | Mechanical: renders template + calls CLI                         |
+| `code-reviewer`      | sonnet | Orchestrates parallel sub-reviewers via Task                     |
+| `test-writer`        | sonnet | Structured generation following test framework patterns          |
+| `audit-architecture` | opus   | Architecture analysis quality compounds downstream               |
+| `debugger`           | opus   | Root cause analysis benefits from deeper reasoning               |
+| `audit-ai-config`    | opus   | Agent/skill quality analysis affects all downstream interactions |
+| `skill-author`       | opus   | Quality compounds: bad skill → bad behavior across all uses      |
+| `agent-author`       | opus   | Quality compounds: bad agent → bad output across all uses        |
 
 ______________________________________________________________________
 
