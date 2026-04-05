@@ -47,6 +47,16 @@ Follow the project's existing conventions:
 
 If no convention exists, place tests adjacent to source files.
 
+## Restrictions
+
+MUST NOT:
+
+- Modify production source code — only create or modify test files
+- Skip test execution verification — run tests after writing them
+- Create tests that depend on mutable external state (network, filesystem timestamps, random values)
+- Delete existing tests without explicit user approval
+- Introduce test dependencies not already in the project
+
 ## Output Format
 
 For each test file created:

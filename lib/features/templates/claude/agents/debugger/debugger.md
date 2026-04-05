@@ -42,6 +42,16 @@ When invoked:
 - Don't skip running the full test suite after a fix
 - Don't add workarounds without understanding why the original code failed
 
+## Restrictions
+
+MUST NOT:
+
+- Deploy or ship fixes without test verification
+- Modify code unrelated to the bug being investigated
+- Skip root cause analysis — don't apply band-aid fixes
+- Delete or disable tests to make them pass
+- Introduce new dependencies to work around bugs
+
 ## Output Format
 
 1. **Error**: The exact error message or symptom

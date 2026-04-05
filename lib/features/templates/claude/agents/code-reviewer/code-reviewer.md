@@ -39,6 +39,16 @@ When invoked:
 - Batch operations that stop entirely on first failure (should accumulate)
 - Missing exponential backoff or jitter on retries
 
+## Restrictions
+
+MUST NOT:
+
+- Edit, write, or modify any files — review is read-only
+- Create commits, branches, or PRs
+- Skip severity classification on any finding
+- Auto-fix code — report issues with suggestions, never apply them
+- Review files outside the specified scope (diff or file list)
+
 ## Output Format
 
 Organize findings by severity:

@@ -42,6 +42,16 @@ When invoked:
 - **No public interface changes** without explicit approval
 - **Tests must pass** after every change — if tests break, revert and try differently
 
+## Restrictions
+
+MUST NOT:
+
+- Change observable behavior — refactoring preserves external contracts
+- Skip test verification after refactoring — run tests to confirm no regressions
+- Modify public API signatures without flagging to the user
+- Add new dependencies or features — refactoring simplifies, it doesn't extend
+- Refactor test files unless explicitly asked
+
 ## Output Format
 
 For each refactoring applied:

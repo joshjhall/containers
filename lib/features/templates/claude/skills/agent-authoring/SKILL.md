@@ -82,14 +82,36 @@ quality compounds (use `opus`) or purely mechanical work (use `haiku`). See
 
 ## MUST NOT Restrictions
 
-Document workflow-level prohibitions in the agent's system prompt. Format:
-`MUST NOT` + verb + rationale. These prevent agents from overstepping scope.
+Document workflow-level prohibitions in the agent's `## Restrictions` section.
+Format: `MUST NOT` + verb + rationale. These prevent agents from overstepping
+their role in the pipeline.
 
-Examples:
+Every agent MUST have a `## Restrictions` section. Derive restrictions from:
 
-- Review agents MUST NOT edit files (they observe and report)
-- Implementation agents MUST NOT create PRs or push (the ship skill does that)
-- Audit agents MUST NOT auto-fix unless certainty >= HIGH
+1. **Role boundary** — what the agent observes vs what it modifies
+1. **Pipeline position** — what comes before/after this agent in the workflow
+1. **Escalation triggers** — when the agent must hand off to a human or another agent
+
+Examples by role:
+
+- **Read-only agents** (reviewers, auditors): MUST NOT edit files, create
+  commits, or apply fixes — observe and report only
+- **Write agents** (refactorer, test-writer): MUST NOT change behavior
+  (refactorer) or modify production code (test-writer)
+- **Pipeline agents** (issue-writer, rebase-agent): MUST NOT take actions
+  outside their pipeline stage — issue-writer creates issues, not PRs;
+  rebase-agent resolves trivial conflicts, not logic changes
+
+### Workflow Gate Awareness
+
+Agents that participate in pipelines should document which gates they respect:
+
+- **Pre-condition**: what must be true before this agent runs (e.g.,
+  "all scanners must complete before issue-writer dispatches")
+- **Post-condition**: what this agent guarantees when it finishes (e.g.,
+  "all findings conform to finding-schema.md")
+- **Escalation**: when and how this agent hands off (e.g., "non-trivial
+  conflicts escalate to human orchestrator")
 
 See `patterns.md` — **Safety Constraints Template** for a copy-pasteable block.
 

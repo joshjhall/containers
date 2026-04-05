@@ -137,6 +137,31 @@ Fields: `level` (CRITICAL/HIGH/MEDIUM/LOW), `support` (evidence count),
 Not all skills need certainty grading — skip for skills that provide guidance
 rather than findings (e.g., `git-workflow`, `documentation-authoring`).
 
+## Workflow Safety
+
+For skills with multi-step workflows (pipelines, audit flows, shipping
+processes), add safety assertions at phase boundaries:
+
+1. **Gate assertions** — pre-condition checks that must pass before advancing:
+
+   - Pre-ship: test suite passes before PR creation
+   - Pre-dispatch: inputs validated before fanning out to sub-agents
+   - Pre-aggregation: all sub-tasks completed before merging results
+
+1. **Blocking vs advisory gates**:
+
+   - **Blocking**: the workflow MUST NOT proceed if the gate fails (e.g.,
+     tests must pass before PR creation)
+   - **Advisory**: warn the user but allow them to proceed (e.g., tests
+     should pass before commit-only shipping)
+
+1. **MUST NOT restrictions** — document what the skill must never do,
+   following the same pattern as agent restrictions. See
+   `agent-authoring/SKILL.md` § MUST NOT Restrictions for the template.
+
+Not all skills need workflow gates — skip for simple skills that don't have
+multi-step workflows.
+
 ## Code-Based Enforcement
 
 When a skill detects problems, prefer deterministic detection over LLM:

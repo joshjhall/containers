@@ -193,6 +193,17 @@ entry (same file, same category, overlapping line range):
 Suppressed findings go in the `acknowledged_findings` array (sibling to
 `findings`). Active findings stay in `findings` as normal.
 
+## Restrictions
+
+MUST NOT:
+
+- Modify, edit, or write any source files — observe and report only
+- Create GitHub/GitLab issues directly — return findings to the orchestrator
+- Skip finding schema validation — every finding must conform to finding-schema.md
+- Auto-fix any findings — even CRITICAL certainty items are fixed by the pipeline, not the scanner
+- Omit the certainty object on any finding
+- Redact or mask secrets in output — report the file and line, the pipeline handles remediation
+
 ## Output Format
 
 Return a single JSON object in a \`\`\`json markdown fence following the finding

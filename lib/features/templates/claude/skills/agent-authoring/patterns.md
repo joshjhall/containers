@@ -248,7 +248,7 @@ the agentsys evaluation (#304). Use during agent review or creation.
 | 1   | Model assignment        | Model tier matches task complexity (see Model Tiering Guide below)                  |
 | 2   | Tool scoping            | Minimum viable tools — every tool has a documented rationale                        |
 | 3   | Workflow enforcement    | Numbered steps with no ambiguous branching                                          |
-| 4   | Safety constraints      | Explicit MUST NOT restrictions with rationale for each                              |
+| 4   | Safety constraints      | `## Restrictions` section with MUST NOT rules, tool rationale, and workflow gates   |
 | 5   | Output schema           | Structured output format specified (JSON, severity tiers, sections)                 |
 | 6   | Idempotency             | Same input produces same output on repeated invocation                              |
 | 7   | Error boundaries        | Agent handles errors gracefully and returns structured error responses              |

@@ -80,6 +80,39 @@ Use `AskUserQuestion` to present three options:
 > Commit on the current branch but do not push. Adds `status/commit-pending`
 > label so the issue is not re-selected.
 
+## Step 3.5 — Pre-Ship Validation
+
+Before executing the chosen shipping mode, run these safety checks:
+
+1. **Run test suite** — auto-detect the project's test runner (see
+   `orchestrate/merge-protocol.md` § Test Runner Detection for the detection
+   order: `package.json` → `pyproject.toml` → `go.mod` → `Cargo.toml` →
+   `Gemfile` → `Makefile` → `build.gradle`).
+
+   - If tests **pass**: proceed to Step 4
+   - If tests **fail**:
+     - Show the failure summary to the user
+     - Ask: **Fix failures now, or ship anyway?**
+     - **Option 1 (Branch + PR)**: test failure is **blocking** — do NOT
+       create a PR with failing tests. The user must fix first or switch to
+       Option 3 (commit only)
+     - **Option 2/3**: test failure is **advisory** — warn but allow commit
+   - If **no test runner detected**: skip this check and note it in the output
+
+1. **Verify git status** — check for untracked files that look like they
+   should be staged (new source files, new test files). Warn if found.
+
+1. **Check branch freshness** (Option 1 only) — if on a feature branch,
+   check if main has advanced:
+
+   ```bash
+   git fetch origin main
+   git rev-list --count HEAD..origin/main
+   ```
+
+   If count > 0, warn: "Main has {N} new commits since this branch was
+   created. Consider rebasing before PR."
+
 ## Step 4 — Execute
 
 ### Option 1 — Branch + PR

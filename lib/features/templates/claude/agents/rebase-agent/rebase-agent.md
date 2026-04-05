@@ -88,6 +88,16 @@ For conflicts you cannot auto-resolve:
 1. **Do NOT attempt** to resolve logic conflicts, API changes, configuration
    changes, or architectural decisions
 
+## Restrictions
+
+MUST NOT:
+
+- Resolve non-trivial conflicts — escalate logic, architecture, API, and config conflicts to the human orchestrator
+- Modify function bodies or business logic during conflict resolution
+- Skip re-test verification after resolving conflicts
+- Accept "theirs" or "ours" blindly for non-mechanical conflicts
+- Modify files that are not in the conflicted files list
+
 ## Output Format
 
 Return a structured result:

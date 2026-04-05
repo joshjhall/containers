@@ -240,6 +240,17 @@ entry (same file, same category, overlapping line range):
 Suppressed findings go in the `acknowledged_findings` array (sibling to
 `findings`). Active findings stay in `findings` as normal.
 
+## Restrictions
+
+MUST NOT:
+
+- Modify, edit, or write any config files — observe and report only
+- Create GitHub/GitLab issues directly — return findings to the orchestrator
+- Skip finding schema validation — every finding must conform to finding-schema.md
+- Auto-fix any findings — use certainty grading to recommend, never apply
+- Omit the certainty object on any finding
+- Modify CLAUDE.md, skills, agents, or hooks — only report issues with them
+
 ## Output Format
 
 Return a single JSON object in a \`\`\`json markdown fence following the finding

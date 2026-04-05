@@ -571,3 +571,38 @@ The `rebase-agent` handles trivial merge conflicts automatically during
 - Import ordering → combine, deduplicate, sort
 - Version numbers → take higher version
 - Non-trivial conflicts → escalate to human
+
+## Safety Model
+
+Three layers of safety protect agent pipelines:
+
+### Tool Scoping
+
+Each agent's `tools:` frontmatter restricts what actions it can take. Read-only
+agents (reviewers, auditors) get Read/Grep/Glob/Bash. Write agents (refactorer,
+test-writer) additionally get Edit/Write. Every tool grant has a documented
+rationale.
+
+### MUST NOT Restrictions
+
+Every agent has a `## Restrictions` section with explicit MUST NOT rules
+derived from its role:
+
+- **Audit agents**: MUST NOT modify files, create issues directly, or auto-fix
+- **Review agents**: MUST NOT edit files or create commits
+- **Write agents**: MUST NOT change observable behavior (refactorer) or modify
+  production code (test-writer)
+- **Pipeline agents**: MUST NOT take actions outside their pipeline stage
+
+### Workflow Gate Assertions
+
+Pre-condition checks at key workflow boundaries prevent skipping critical steps:
+
+| Gate                    | Location           | Mode     | What it checks                       |
+| ----------------------- | ------------------ | -------- | ------------------------------------ |
+| Pre-ship test gate      | `/next-issue-ship` | Blocking | Test suite passes before PR creation |
+| Scanner completion gate | `/codebase-audit`  | Partial  | All scanners returned valid JSON     |
+| Finding schema gate     | `/codebase-audit`  | Blocking | Findings conform to schema           |
+
+**Blocking** gates prevent the workflow from proceeding. **Partial** gates
+allow proceeding with successful results when some components fail.

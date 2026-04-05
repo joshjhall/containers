@@ -136,6 +136,39 @@ details.
 
 Skip scanners not in the `categories` parameter.
 
+### Step 3.5: Verify Scanner Completion
+
+Before proceeding to aggregation, validate all scanner results:
+
+1. **Check completion** — verify all dispatched scanner Tasks completed
+   (no timeouts or crashes). If a scanner timed out or errored:
+
+   - Log which scanner failed and why
+   - Proceed with partial results from successful scanners
+   - Note the incomplete scan in the final summary
+
+1. **Validate output** — for each scanner result:
+
+   - Verify the response contains parseable JSON in a \`\`\`json fence
+   - Check the `scanner` field matches the expected scanner name
+   - Verify `findings` is an array (even if empty)
+   - Verify each finding has the required fields per `finding-schema.md`
+     (including the `certainty` object)
+   - If validation fails: discard the malformed result and log the error
+
+1. **Report** scanner status before proceeding:
+
+   ```text
+   Scanner completion: 6/6 succeeded
+   ```
+
+   Or if partial:
+
+   ```text
+   Scanner completion: 5/6 succeeded (audit-architecture: timeout)
+   Proceeding with partial results.
+   ```
+
 ### Step 4: Aggregate and Deduplicate
 
 After all scanners return:

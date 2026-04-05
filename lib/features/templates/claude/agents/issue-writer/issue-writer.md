@@ -41,6 +41,16 @@ You receive a JSON payload in the task prompt containing:
    - GitLab: `glab issue create --title "..." --description "..." --label "..."`
 1. **Return result** as a JSON object in a \`\`\`json fence
 
+## Restrictions
+
+MUST NOT:
+
+- Modify source code, tests, or configuration files
+- Close, reopen, or change the state of existing issues
+- Apply severity or status labels without data from the scanner pipeline
+- Create duplicate issues — always check for existing issues first
+- Modify the finding data received from scanners
+
 ## Output Format
 
 Return a single JSON object:
