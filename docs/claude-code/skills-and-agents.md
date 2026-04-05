@@ -10,7 +10,7 @@ installed to `~/.claude/skills/` and `~/.claude/agents/` on first container
 startup via `claude-setup`. Project-level `.claude/` configs merge with these
 (union semantics, project wins on name conflicts).
 
-### Skills (always installed — 27 static + 1 dynamic)
+### Skills (always installed — 36 static + 1 dynamic)
 
 | Skill                     | Purpose                                                                             |
 | ------------------------- | ----------------------------------------------------------------------------------- |
@@ -41,6 +41,9 @@ startup via `claude-setup`. Project-level `.claude/` configs merge with these
 | `check-docs-examples`     | Validates code examples against actual source code                                  |
 | `check-docs-missing-api`  | Detects undocumented public APIs and functions across languages                     |
 | `check-ai-config`         | Validates agent/skill frontmatter, file bloat, MCP configs, hook safety             |
+| `check-code-health`       | Detects file length, complexity, duplication, dead code, naming issues              |
+| `check-security`          | Scans for hardcoded secrets, injection risks, XSS patterns, insecure crypto         |
+| `drift-detect`            | Compares planned files and acceptance criteria against actual implementation        |
 | `loop-make-it-work`       | Implementation loop: end-to-end happy path functionality, no stubs                  |
 | `loop-make-it-right`      | Implementation loop: refactoring for clarity, conventions, architecture             |
 | `loop-make-it-secure`     | Implementation loop: security hardening (injection, secrets, OWASP)                 |
@@ -147,7 +150,7 @@ docker run -e CLAUDE_SKILLS="git-workflow,testing-patterns" ...
 
 | `CLAUDE_SKILLS` | Behavior                                        |
 | --------------- | ----------------------------------------------- |
-| Unset (default) | All 28 static skills installed                  |
+| Unset (default) | All 37 always-installed skills installed        |
 | Set to list     | Only listed skills installed                    |
 | Set to `""`     | No static skills (only `container-environment`) |
 
@@ -375,9 +378,23 @@ Both the auditor and reviewer discover project-level skills automatically.
 The check-\* architecture incrementally replaces audit-\* agents. During
 migration, the checker agent discovers both old `audit-*` agents and new
 `check-*` skills. When a check-\* skill exists for a domain, it takes
-precedence over the corresponding audit-\* agent. Currently only the docs
-domain has been migrated; remaining domains (security, code-health, test-gaps,
-architecture, ai-config) will follow.
+precedence over the corresponding audit-\* agent.
+
+**Migration status:**
+
+| Domain       | check-\* skill(s)      | Status             |
+| ------------ | ---------------------- | ------------------ |
+| docs         | 5 check-docs-\* skills | Fully migrated     |
+| security     | `check-security`       | Partially migrated |
+| code-health  | `check-code-health`    | Partially migrated |
+| ai-config    | `check-ai-config`      | Partially migrated |
+| test-gaps    | none                   | Not started        |
+| architecture | none                   | Not started        |
+
+Partially migrated domains have check-\* skills covering a subset of the
+categories handled by the corresponding audit-\* agent. Both systems coexist
+during migration — the checker agent uses check-\* skills where available and
+falls back to audit-\* agents for uncovered domains.
 
 ## Implementation Loops (loop-\* skills)
 
