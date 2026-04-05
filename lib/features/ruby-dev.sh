@@ -19,6 +19,9 @@
 #
 set -euo pipefail
 
+# Default SKIP_LSP_INSTALL if not passed from Dockerfile ARG
+SKIP_LSP_INSTALL="${SKIP_LSP_INSTALL:-false}"
+
 # Source standard feature header for user handling
 source /tmp/build-scripts/base/feature-header.sh
 

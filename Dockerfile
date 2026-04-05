@@ -368,12 +368,12 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     if [ "${INCLUDE_PYTHON_DEV}" = "true" ]; then \
-    /tmp/build-scripts/features/python-dev.sh; \
+    SKIP_LSP_INSTALL=${SKIP_LSP_INSTALL} /tmp/build-scripts/features/python-dev.sh; \
     fi
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     if [ "${INCLUDE_NODE_DEV}" = "true" ]; then \
-    /tmp/build-scripts/features/node-dev.sh; \
+    SKIP_LSP_INSTALL=${SKIP_LSP_INSTALL} /tmp/build-scripts/features/node-dev.sh; \
     fi
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
@@ -383,7 +383,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     if [ "${INCLUDE_RUBY_DEV}" = "true" ]; then \
-    /tmp/build-scripts/features/ruby-dev.sh; \
+    SKIP_LSP_INSTALL=${SKIP_LSP_INSTALL} /tmp/build-scripts/features/ruby-dev.sh; \
     fi
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
@@ -393,7 +393,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     if [ "${INCLUDE_GOLANG_DEV}" = "true" ]; then \
-    /tmp/build-scripts/features/golang-dev.sh; \
+    SKIP_LSP_INSTALL=${SKIP_LSP_INSTALL} /tmp/build-scripts/features/golang-dev.sh; \
     fi
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
@@ -413,12 +413,12 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     if [ "${INCLUDE_KOTLIN_DEV}" = "true" ]; then \
-    /tmp/build-scripts/features/kotlin-dev.sh; \
+    SKIP_LSP_INSTALL=${SKIP_LSP_INSTALL} /tmp/build-scripts/features/kotlin-dev.sh; \
     fi
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     if [ "${INCLUDE_ANDROID_DEV}" = "true" ]; then \
-    ANDROID_API_LEVELS=${ANDROID_API_LEVELS} /tmp/build-scripts/features/android-dev.sh; \
+    SKIP_LSP_INSTALL=${SKIP_LSP_INSTALL} ANDROID_API_LEVELS=${ANDROID_API_LEVELS} /tmp/build-scripts/features/android-dev.sh; \
     fi
 
 # ============================================================================
