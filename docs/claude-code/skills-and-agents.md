@@ -27,7 +27,7 @@ startup via `claude-setup`. Project-level `.claude/` configs merge with these
 | `file-issue`              | Structured issue creation with auto-labeling, scope enforcement, update mode        |
 | `next-issue`              | Issue-driven dev: select by priority, plan; delegates shipping to `next-issue-ship` |
 | `codebase-audit`          | Periodic codebase sweep: tech debt, security, test gaps, architecture, docs         |
-| `next-issue-ship`         | Ship completed issue work: commit, PR/push, label issue, loop back                  |
+| `next-issue-ship`         | Ship completed issue work: pre-review gates, commit, PR/push, label, loop back      |
 | `memory-conventions`      | Two-tier memory conventions: long-term (committed) vs short-term (gitignored)       |
 | `orchestrate`             | Multi-agent orchestration: mode selection, status, merge, review, sync, spawn       |
 | `provision-agent`         | Provision headless agent containers from devcontainer config with tmux sessions     |
@@ -609,11 +609,14 @@ derived from its role:
 
 Pre-condition checks at key workflow boundaries prevent skipping critical steps:
 
-| Gate                    | Location           | Mode     | What it checks                       |
-| ----------------------- | ------------------ | -------- | ------------------------------------ |
-| Pre-ship test gate      | `/next-issue-ship` | Blocking | Test suite passes before PR creation |
-| Scanner completion gate | `/codebase-audit`  | Partial  | All scanners returned valid JSON     |
-| Finding schema gate     | `/codebase-audit`  | Blocking | Findings conform to schema           |
+| Gate                    | Location           | Mode     | What it checks                                   |
+| ----------------------- | ------------------ | -------- | ------------------------------------------------ |
+| Pre-ship test gate      | `/next-issue-ship` | Blocking | Test suite passes before PR creation             |
+| Pre-review quality gate | `/next-issue-ship` | Advisory | Deslop patterns, debug stmts, test coverage gaps |
+| Scanner completion gate | `/codebase-audit`  | Partial  | All scanners returned valid JSON                 |
+| Finding schema gate     | `/codebase-audit`  | Blocking | Findings conform to schema                       |
 
-**Blocking** gates prevent the workflow from proceeding. **Partial** gates
-allow proceeding with successful results when some components fail.
+**Blocking** gates prevent the workflow from proceeding. **Advisory** gates
+warn but allow proceeding (set `PRE_REVIEW_STRICT=true` to make them blocking
+for PRs). **Partial** gates allow proceeding with successful results when some
+components fail.

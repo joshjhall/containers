@@ -127,6 +127,61 @@ Before executing the chosen shipping mode, run these safety checks:
 
    This check is advisory — the user can always choose to ship anyway.
 
+1. **Pre-review gates** (advisory by default) — run deterministic quality
+   scanning on changed files to catch mechanical issues before review:
+
+   a. Generate file list from the diff:
+
+   ```bash
+   git diff --name-only origin/main...HEAD > /tmp/pre-review-files.txt
+   ```
+
+   b. Run the pre-review scanner (locate `pre-review-gates.sh` in the same
+   directory as this skill file):
+
+   ```bash
+   bash pre-review-gates.sh /tmp/pre-review-files.txt
+   ```
+
+   c. Parse TSV output — each line: `file\tline\tcategory\tevidence\tcertainty`
+
+   **Categories detected:**
+
+   | Category              | What it catches                                  | Certainty |
+   | --------------------- | ------------------------------------------------ | --------- |
+   | `ai-slop`             | Hedging phrases, buzzword inflation, filler text | HIGH      |
+   | `debug-statement`     | print(), console.log, debugger, breakpoint       | HIGH      |
+   | `missing-test-file`   | Source files with no corresponding test file     | HIGH      |
+   | `untested-public-api` | Public functions not referenced in any test file | HIGH      |
+
+   **Handling findings:**
+
+   - **No findings**: proceed silently to Step 4
+   - **Findings exist (advisory mode — the default)**:
+     - Show a summary table: category, count, top examples
+     - For HIGH certainty `ai-slop` or `debug-statement` findings: offer to
+       auto-fix (remove debug lines, trim AI slop phrases) before committing
+     - For `missing-test-file` / `untested-public-api`: note these in the PR
+       description (Option 1) so reviewers are aware
+     - Proceed to Step 4 regardless of findings
+   - **Strict mode** (`PRE_REVIEW_STRICT=true` in environment):
+     - HIGH certainty findings **block Option 1** (PR creation) — the user
+       must fix them or explicitly choose "ship anyway"
+     - Options 2/3 remain advisory (warn only)
+
+   **PR description integration** (Option 1 only): if findings remain after
+   auto-fix, append a "Pre-review findings" section to the PR body:
+
+   ```markdown
+   ## Pre-review findings
+   - 2x debug-statement (src/handler.py:42, src/utils.py:18)
+   - 1x missing-test-file (src/new_module.py)
+   ```
+
+   **Graceful degradation**: if `pre-review-gates.sh` is not found or fails
+   to execute, skip this check with a note: "Pre-review gates skipped
+   (scanner not available)." Never block shipping due to scanner errors.
+
 ## Step 4 — Execute
 
 ### Option 1 — Branch + PR
