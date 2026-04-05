@@ -113,6 +113,20 @@ Before executing the chosen shipping mode, run these safety checks:
    If count > 0, warn: "Main has {N} new commits since this branch was
    created. Consider rebasing before PR."
 
+1. **Check for plan drift** (optional) — fetch the issue body and check for
+   "Affected Files" or "Acceptance Criteria" sections. If either exists,
+   run drift analysis (see `drift-detect` skill for full workflow):
+
+   - Compare planned files from the issue against actual files from
+     `git diff --name-only origin/main...HEAD`
+   - Check acceptance criteria checkboxes for unaddressed items
+   - **If HIGH-severity drift found**: warn and ask — "Fix drift now,
+     ship anyway, or skip?"
+   - **If only MEDIUM/LOW drift**: show summary, proceed automatically
+   - **If no plan sections found in issue**: skip this check silently
+
+   This check is advisory — the user can always choose to ship anyway.
+
 ## Step 4 — Execute
 
 ### Option 1 — Branch + PR
