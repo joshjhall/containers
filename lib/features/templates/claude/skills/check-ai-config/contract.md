@@ -31,6 +31,7 @@ Each finding extends the standard finding-schema.md:
   "category": "agent-frontmatter",
   "severity": "high",
   "title": "Missing required frontmatter field: model",
+  "description": "Agent definition is missing the required 'model' frontmatter field. Without a model specification, the agent will use the default model which may not be appropriate for its task complexity.",
   "file": "agents/my-agent/my-agent.md",
   "line_start": 1,
   "line_end": 1,
@@ -38,6 +39,7 @@ Each finding extends the standard finding-schema.md:
   "suggestion": "Add 'model: sonnet' (or opus/haiku) to frontmatter",
   "effort": "trivial",
   "tags": ["ai-config"],
+  "related_files": [],
   "certainty": {
     "level": "HIGH",
     "support": 1,

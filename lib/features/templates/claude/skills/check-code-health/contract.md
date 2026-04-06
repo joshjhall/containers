@@ -28,6 +28,7 @@ Each finding extends the standard finding-schema.md:
   "category": "debug-statement",
   "severity": "medium",
   "title": "Debug print statement in production code",
+  "description": "A debug print/console.log statement was found in production code. Debug statements clutter output, may leak sensitive data, and indicate incomplete development cleanup.",
   "file": "src/handler.py",
   "line_start": 42,
   "line_end": 42,
@@ -35,6 +36,7 @@ Each finding extends the standard finding-schema.md:
   "suggestion": "Remove debug statement or replace with proper logging",
   "effort": "trivial",
   "tags": ["maintainability"],
+  "related_files": [],
   "certainty": {
     "level": "HIGH",
     "support": 1,

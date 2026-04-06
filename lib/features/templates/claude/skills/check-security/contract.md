@@ -29,6 +29,7 @@ Each finding extends the standard finding-schema.md:
   "category": "hardcoded-secret",
   "severity": "critical",
   "title": "AWS access key detected",
+  "description": "An AWS access key ID matching the AKIA prefix pattern was found hardcoded in source code. Hardcoded credentials are a critical security risk — they persist in version history and can be extracted by anyone with repository access.",
   "file": "src/config.py",
   "line_start": 42,
   "line_end": 42,
@@ -36,6 +37,7 @@ Each finding extends the standard finding-schema.md:
   "suggestion": "Move credential to environment variable or secrets manager",
   "effort": "trivial",
   "tags": ["security"],
+  "related_files": [],
   "certainty": {
     "level": "CRITICAL",
     "support": 1,
