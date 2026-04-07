@@ -3,6 +3,7 @@ name: rebase-agent
 description: Automated conflict resolution for trivial merge conflicts. Handles lockfiles, generated files, import ordering, and version numbers. Escalates non-trivial conflicts to the human orchestrator.
 tools: Read, Edit, Bash, Grep, Glob
 model: sonnet
+skills: []
 ---
 
 # Rebase Agent
@@ -97,6 +98,16 @@ MUST NOT:
 - Skip re-test verification after resolving conflicts
 - Accept "theirs" or "ours" blindly for non-mechanical conflicts
 - Modify files that are not in the conflicted files list
+
+## Tool Rationale
+
+| Tool | Purpose                                    | Why granted                                 |
+| ---- | ------------------------------------------ | ------------------------------------------- |
+| Read | Read conflicted files and conflict markers | Identify conflict type and resolution       |
+| Edit | Resolve conflicts, merge import blocks     | Apply resolution strategies                 |
+| Bash | Run git commands, regeneration commands    | Regenerate lockfiles, verify resolution     |
+| Grep | Identify conflict markers and patterns     | Classify conflict type                      |
+| Glob | Find lockfiles and generated files         | Discover files matching resolution patterns |
 
 ## Output Format
 

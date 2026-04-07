@@ -158,6 +158,34 @@ test_agent_restrictions_section() {
     done
 }
 
+# Test: Every agent has skills field in frontmatter
+test_agent_skills_field() {
+    local agent_dir
+    for agent_dir in "$AGENTS_DIR"/*/; do
+        local agent_name
+        agent_name="$(/usr/bin/basename "$agent_dir")"
+        local agent_file="$agent_dir/${agent_name}.md"
+        [ -f "$agent_file" ] || continue
+
+        assert_true "command grep -q '^skills:' '$agent_file'" \
+            "Agent $agent_name: missing 'skills' field in frontmatter"
+    done
+}
+
+# Test: Every agent has a Tool Rationale section
+test_agent_tool_rationale_section() {
+    local agent_dir
+    for agent_dir in "$AGENTS_DIR"/*/; do
+        local agent_name
+        agent_name="$(/usr/bin/basename "$agent_dir")"
+        local agent_file="$agent_dir/${agent_name}.md"
+        [ -f "$agent_file" ] || continue
+
+        assert_true "command grep -q '## Tool Rationale' '$agent_file'" \
+            "Agent $agent_name: missing '## Tool Rationale' section"
+    done
+}
+
 # --- Skill Tests ---
 
 # Test: Every skill directory has SKILL.md
@@ -313,6 +341,8 @@ run_test test_agent_frontmatter_fields "Every agent has required frontmatter fie
 run_test test_agent_model_values "Agent model values are valid (opus/sonnet/haiku)"
 run_test test_agent_tool_values "Agent tool values are from valid set"
 run_test test_agent_restrictions_section "Every agent has Restrictions section"
+run_test test_agent_skills_field "Every agent has 'skills' field in frontmatter"
+run_test test_agent_tool_rationale_section "Every agent has Tool Rationale section"
 run_test test_skill_files_exist "Every skill has SKILL.md"
 run_test test_skill_frontmatter "Every skill has description in frontmatter"
 run_test test_skill_metadata_exists "Every skill has metadata.yml"

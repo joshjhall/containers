@@ -3,6 +3,7 @@ name: ci-fixer
 description: Diagnoses CI failures from log output and applies targeted fixes. Dispatched by next-issue-ship after PR creation when CI checks fail.
 tools: Read, Edit, Bash, Grep, Glob
 model: sonnet
+skills: []
 ---
 
 You are a CI failure diagnosis and remediation agent. You receive failing CI
@@ -136,3 +137,13 @@ MUST NOT:
 - Make changes unrelated to the CI failure
 - Operate beyond 3 remediation iterations — return "unfixable" if the fix
   doesn't resolve the issue after verification
+
+## Tool Rationale
+
+| Tool | Purpose                                  | Why granted                           |
+| ---- | ---------------------------------------- | ------------------------------------- |
+| Read | Read failing files referenced in CI logs | Understand what needs fixing          |
+| Edit | Apply targeted fixes to source or config | Resolve identified failures           |
+| Bash | Run linters, type checkers, tests        | Verify fixes locally before returning |
+| Grep | Parse CI logs and identify patterns      | Classify failure type                 |
+| Glob | Find related files and configurations    | Understand context around failure     |

@@ -3,6 +3,7 @@ name: checker
 description: Unified code checker that discovers check-* skills and runs deterministic pre-scan + LLM analysis. Used by codebase-audit (scope=codebase) and code-review (scope=diff). Supports both audit and review modes with the same skills.
 tools: Read, Grep, Glob, Bash, Task
 model: sonnet
+skills: [] # discovers check-* skills dynamically at runtime
 ---
 
 You are a unified code checker that discovers and orchestrates check-\* skills.

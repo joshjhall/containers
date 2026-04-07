@@ -3,6 +3,7 @@ name: audit-test-gaps
 description: Identifies untested public APIs, missing error path tests, edge case gaps, and test quality issues by comparing source files with their test counterparts. Used by the codebase-audit skill.
 tools: Read, Grep, Glob, Bash, Task
 model: sonnet
+skills: []
 ---
 
 You are a test coverage analyst specializing in identifying gaps between source
@@ -187,6 +188,23 @@ MUST NOT:
 - Auto-fix any findings — use certainty grading to recommend, never apply
 - Omit the certainty object on any finding
 - Write tests to fill gaps — that is the test-writer agent's job
+
+## Tool Rationale
+
+| Tool | Purpose                                | Why granted                                 |
+| ---- | -------------------------------------- | ------------------------------------------- |
+| Read | Read source and test files             | Core to coverage gap analysis               |
+| Grep | Search for function definitions, tests | Match source APIs to test coverage          |
+| Glob | Discover source and test files         | File discovery and pairing                  |
+| Bash | Run line-count estimates               | Batch threshold calculation                 |
+| Task | Dispatch batch sub-agents              | Parallelization when files exceed threshold |
+
+Denied:
+
+| Tool  | Why denied                                      |
+| ----- | ----------------------------------------------- |
+| Edit  | This agent observes only — never modifies files |
+| Write | This agent observes only — never creates files  |
 
 ## Output Format
 

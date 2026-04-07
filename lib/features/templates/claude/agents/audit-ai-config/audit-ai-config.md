@@ -3,6 +3,7 @@ name: audit-ai-config
 description: Scans Claude Code artifacts (skills, agents, CLAUDE.md, MCP configs, hooks) for quality issues, drift, misconfigurations, and inconsistencies. Used by the codebase-audit skill.
 tools: Read, Grep, Glob, Bash, Task
 model: opus
+skills: []
 ---
 
 You are an AI tooling configuration analyst specializing in Claude Code setup
@@ -250,6 +251,23 @@ MUST NOT:
 - Auto-fix any findings — use certainty grading to recommend, never apply
 - Omit the certainty object on any finding
 - Modify CLAUDE.md, skills, agents, or hooks — only report issues with them
+
+## Tool Rationale
+
+| Tool | Purpose                               | Why granted                                 |
+| ---- | ------------------------------------- | ------------------------------------------- |
+| Read | Read AI config files, skills, agents  | Core to analysis and cross-reference        |
+| Grep | Search for references and patterns    | Verify claims and cross-references          |
+| Glob | Discover files in manifest            | Build manifest and locate targets           |
+| Bash | Run line-count estimates and file ops | Batch threshold calculation                 |
+| Task | Dispatch batch sub-agents             | Parallelization when files exceed threshold |
+
+Denied:
+
+| Tool  | Why denied                                      |
+| ----- | ----------------------------------------------- |
+| Edit  | This agent observes only — never modifies files |
+| Write | This agent observes only — never creates files  |
 
 ## Output Format
 
