@@ -396,6 +396,9 @@ categories handled by the corresponding audit-\* agent. Both systems coexist
 during migration — the checker agent uses check-\* skills where available and
 falls back to audit-\* agents for uncovered domains.
 
+For detailed category-level gap analysis, completion criteria, and deprecation
+timeline, see [check-migration-status.md](check-migration-status.md).
+
 ## Implementation Loops (loop-\* skills)
 
 Implementation loop skills mirror the check-\* 5-file architecture but serve a
