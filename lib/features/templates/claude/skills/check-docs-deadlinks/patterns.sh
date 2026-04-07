@@ -23,7 +23,7 @@ while IFS= read -r file; do
 
     # --- Category: broken-relative-link ---
     # Match markdown links: [text](relative/path) — exclude URLs, anchors-only, and images
-    /usr/bin/grep -nE '\[([^\]]*)\]\(([^)]+)\)' "$file" 2>/dev/null | \
+    /usr/bin/grep -nE '\[([^]]*)\]\(([^)]+)\)' "$file" 2>/dev/null | \
         while IFS=: read -r line_num content; do
             # Extract the link target
             target=$(/usr/bin/echo "$content" | /usr/bin/grep -oE '\]\([^)]+\)' | /usr/bin/head -1 | /usr/bin/sed 's/^](//' | /usr/bin/sed 's/)$//')
@@ -50,7 +50,7 @@ while IFS= read -r file; do
 
     # --- Category: broken-anchor ---
     # Match same-file anchor links: [text](#heading)
-    /usr/bin/grep -nE '\[([^\]]*)\]\(#([^)]+)\)' "$file" 2>/dev/null | \
+    /usr/bin/grep -nE '\[([^]]*)\]\(#([^)]+)\)' "$file" 2>/dev/null | \
         while IFS=: read -r line_num content; do
             anchor=$(/usr/bin/echo "$content" | /usr/bin/grep -oE '\]\(#[^)]+\)' | /usr/bin/head -1 | /usr/bin/sed 's/^](#//' | /usr/bin/sed 's/)$//')
             [ -z "$anchor" ] && continue

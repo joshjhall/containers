@@ -1,5 +1,5 @@
 # Deadlinks Fixture
 
-See this old API reference: [deprecated API](https://api.example.com/deprecated/v1/endpoint)
+See [this guide](nonexistent-file.md) for more details.
 
-This URL has sunset indicators: [sunset notice](https://example.com/sunset-notice/old-feature)
+See this old API reference: [deprecated API](https://api.example.com/deprecated/v1/endpoint)

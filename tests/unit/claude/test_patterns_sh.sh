@@ -141,16 +141,13 @@ run_test test_check_docs_staleness "check-docs-staleness detects expired dates"
 # 4. check-docs-deadlinks
 # ===========================================================================
 test_check_docs_deadlinks() {
-    # Note: broken-relative-link and broken-anchor categories use a regex with
-    # [^\]] in ERE which doesn't match in GNU grep 3.11. Testing the
-    # suspicious-external-link category instead, which works correctly.
     run_patterns_test \
         "$SKILLS_DIR/check-docs-deadlinks/patterns.sh" \
         "$FIXTURES_DIR/docs_deadlinks_fixture.md" \
-        "suspicious-external-link" \
+        "broken-relative-link" \
         "check-docs-deadlinks"
 }
-run_test test_check_docs_deadlinks "check-docs-deadlinks detects suspicious external links"
+run_test test_check_docs_deadlinks "check-docs-deadlinks detects broken relative links"
 
 # ===========================================================================
 # 5. check-docs-examples
