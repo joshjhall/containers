@@ -297,6 +297,28 @@ implementation. Use opus where errors propagate downstream.
 | `skill-author`       | opus   | Quality compounds: bad skill → bad behavior across all uses      |
 | `agent-author`       | opus   | Quality compounds: bad agent → bad output across all uses        |
 
+### Model Tier and Deterministic Coverage
+
+As `patterns.sh` deterministic coverage increases for a checker domain, the
+LLM's role shrinks to residual heuristic and judgment categories. This shifts
+the model tier needed:
+
+| Deterministic Coverage | Recommended Tier | Rationale                                      |
+| ---------------------- | ---------------- | ---------------------------------------------- |
+| 100%                   | haiku            | LLM confirms/dismisses pre-scan results only   |
+| > 75%                  | sonnet           | LLM handles a few heuristic categories         |
+| < 50%                  | opus             | LLM performs most reasoning; quality compounds |
+
+Use `bin/check-patterns-coverage.sh` to measure current coverage per domain.
+As of initial measurement: 22/28 categories (78%) are covered by patterns.sh.
+Four domains have 100% deterministic coverage (security, code-health,
+deadlinks, staleness) and could potentially downgrade to haiku for the LLM
+confirmation pass.
+
+**Deferral note**: Do not change model tiers until check-\* skill migration is
+complete. Coverage improvements from discrete code candidates (#338) may shift
+several more categories to deterministic, enabling broader tier downgrades.
+
 ______________________________________________________________________
 
 ## Safety Constraints Template
