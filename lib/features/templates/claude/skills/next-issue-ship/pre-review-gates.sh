@@ -22,6 +22,86 @@ if [ ! -f "$FILE_LIST" ]; then
 fi
 
 # =============================================================================
+# Test-skip policy: gitignore-style patterns for files that don't need tests.
+# Uses git check-ignore as the matching engine for full gitignore semantics
+# (globs, ** recursion, ! negation, order-of-application).
+#
+# Defaults: test-skip-patterns.default (colocated with this script)
+# Project overrides: .claude/pre-review.yml → test_skip_patterns section
+# =============================================================================
+
+SCRIPT_DIR="$(/usr/bin/dirname "$(/usr/bin/readlink -f "${BASH_SOURCE[0]}")")"
+_SKIP_POLICY_REPO=""
+_SKIP_POLICY_LOADED=false
+_PROJECT_ROOT=""
+
+# load_test_skip_policy — Merge default + project patterns into a temp git repo.
+# Called once lazily on first is_test_skipped() call.
+load_test_skip_policy() {
+    $_SKIP_POLICY_LOADED && return
+
+    _SKIP_POLICY_REPO=$(/usr/bin/mktemp -d)
+    /usr/bin/git init -q "$_SKIP_POLICY_REPO" 2>/dev/null
+
+    local merged="${_SKIP_POLICY_REPO}/merged-patterns"
+    /usr/bin/touch "$merged"
+
+    # 1. Load defaults (colocated with this script)
+    local defaults="${SCRIPT_DIR}/test-skip-patterns.default"
+    if [ -f "$defaults" ]; then
+        /usr/bin/cat "$defaults" >> "$merged"
+        /usr/bin/printf '\n' >> "$merged"
+    fi
+
+    # 2. Load project overrides from .claude/pre-review.yml
+    _PROJECT_ROOT=$(/usr/bin/git rev-parse --show-toplevel 2>/dev/null || /usr/bin/pwd)
+    local project_root="$_PROJECT_ROOT"
+    local project_config="${project_root}/.claude/pre-review.yml"
+
+    if [ -f "$project_config" ]; then
+        # Extract lines between "test_skip_patterns:" and the next top-level
+        # key (or EOF). Strip YAML list prefix ("  - ") and quotes.
+        /usr/bin/sed -n '/^test_skip_patterns:/,/^[a-zA-Z_]/{/^test_skip_patterns:/d;/^[a-zA-Z_]/d;p}' \
+            "$project_config" 2>/dev/null | \
+            /usr/bin/sed 's/^[[:space:]]*-[[:space:]]*//' | \
+            /usr/bin/sed 's/^["'\'']//' | /usr/bin/sed 's/["'\'']\s*$//' | \
+            /usr/bin/sed '/^$/d' >> "$merged"
+        /usr/bin/printf '\n' >> "$merged"
+    fi
+
+    # Symlink as .git/info/exclude so git check-ignore uses our patterns
+    /usr/bin/ln -sf "$merged" "${_SKIP_POLICY_REPO}/.git/info/exclude"
+
+    _SKIP_POLICY_LOADED=true
+}
+
+# is_test_skipped FILE — returns 0 if the file matches skip patterns
+is_test_skipped() {
+    load_test_skip_policy
+
+    local file="$1"
+    # Convert to project-relative path so gitignore patterns like
+    # "src/critical/*.css" and "!config/**/*.rb" work correctly.
+    local relpath="$file"
+    if [ -n "$_PROJECT_ROOT" ] && [ "$_PROJECT_ROOT" != "." ]; then
+        relpath="${file#"${_PROJECT_ROOT}/"}"
+    fi
+    # Fallback: strip leading / for any remaining absolute paths
+    case "$relpath" in
+        /*) relpath="${relpath#/}" ;;
+    esac
+    /usr/bin/git -C "$_SKIP_POLICY_REPO" check-ignore -q --no-index "$relpath" 2>/dev/null
+}
+
+# Cleanup temp repo on exit
+cleanup_skip_policy() {
+    if [ -n "$_SKIP_POLICY_REPO" ]; then
+        /usr/bin/rm -rf "$_SKIP_POLICY_REPO"
+    fi
+}
+trap cleanup_skip_policy EXIT
+
+# =============================================================================
 # Category: ai-slop
 # Detects AI-generated artifacts: hedging phrases, buzzword inflation,
 # verbose filler, placeholder text. Subset of deslop's 60+ patterns.
@@ -159,11 +239,15 @@ scan_debug_statements() {
 scan_missing_tests() {
     local file="$1"
 
-    # Skip test files, non-source files, configs
+    # Skip test files themselves
     case "$file" in
         *test*|*spec*|*__pycache__*) return ;;
-        *.lock|*lock.json|*go.sum|*.md|*.txt|*.json|*.yaml|*.yml|*.toml|*.ini|*.cfg|*.conf|*.sh) return ;;
     esac
+
+    # Check against configurable skip policy (gitignore-style patterns)
+    if is_test_skipped "$file"; then
+        return
+    fi
 
     local basename dirname name_no_ext ext
     basename=$(/usr/bin/basename "$file")
@@ -171,7 +255,7 @@ scan_missing_tests() {
     name_no_ext="${basename%.*}"
     ext="${basename##*.}"
 
-    local has_test=false
+    # For known source extensions, check for test files (HIGH if missing)
     case "$ext" in
         py)
             for test_path in \
@@ -179,10 +263,7 @@ scan_missing_tests() {
                 "${dirname}/tests/test_${name_no_ext}.py" \
                 "${dirname}/../tests/test_${name_no_ext}.py" \
                 "${dirname}/${name_no_ext}_test.py"; do
-                if [ -f "$test_path" ]; then
-                    has_test=true
-                    break
-                fi
+                [ -f "$test_path" ] && return
             done
             ;;
         ts|js|tsx|jsx)
@@ -191,32 +272,33 @@ scan_missing_tests() {
                     "${dirname}/${name_no_ext}.${suffix}.${ext}" \
                     "${dirname}/__tests__/${name_no_ext}.${suffix}.${ext}" \
                     "${dirname}/../__tests__/${name_no_ext}.${suffix}.${ext}"; do
-                    if [ -f "$test_path" ]; then
-                        has_test=true
-                        break 2
-                    fi
+                    [ -f "$test_path" ] && return
                 done
             done
             ;;
         go)
-            if [ -f "${dirname}/${name_no_ext}_test.go" ]; then
-                has_test=true
-            fi
+            [ -f "${dirname}/${name_no_ext}_test.go" ] && return
             ;;
         rs)
-            if /usr/bin/grep -q '#\[cfg(test)\]' "$file" 2>/dev/null; then
-                has_test=true
-            elif [ -d "${dirname}/../tests" ]; then
-                has_test=true
-            fi
+            /usr/bin/grep -q '#\[cfg(test)\]' "$file" 2>/dev/null && return
+            [ -d "${dirname}/../tests" ] && return
+            ;;
+        rb|java|kt)
+            # Known source extensions — no test lookup implemented yet, but
+            # these are real source files so flag as HIGH
+            ;;
+        *)
+            # Unknown extension not in skip policy — warn at MEDIUM
+            /usr/bin/printf '%s\t%s\t%s\t%s\t%s\n' \
+                "$file" "1" "missing-test-file" \
+                "Unknown file type — verify if tests are needed: ${basename}" "MEDIUM"
+            return
             ;;
     esac
 
-    if [ "$has_test" = "false" ]; then
-        /usr/bin/printf '%s\t%s\t%s\t%s\t%s\n' \
-            "$file" "1" "missing-test-file" \
-            "No test file found for ${basename}" "HIGH"
-    fi
+    /usr/bin/printf '%s\t%s\t%s\t%s\t%s\n' \
+        "$file" "1" "missing-test-file" \
+        "No test file found for ${basename}" "HIGH"
 }
 
 # =============================================================================
@@ -227,11 +309,15 @@ scan_missing_tests() {
 scan_untested_public_api() {
     local file="$1"
 
-    # Only check source files (not tests, configs, docs)
+    # Skip test files
     case "$file" in
         *test*|*spec*|*__pycache__*) return ;;
-        *.lock|*lock.json|*go.sum|*.md|*.txt|*.json|*.yaml|*.yml|*.toml|*.ini|*.cfg|*.conf|*.sh) return ;;
     esac
+
+    # Check against configurable skip policy
+    if is_test_skipped "$file"; then
+        return
+    fi
 
     local basename dirname name_no_ext ext
     basename=$(/usr/bin/basename "$file")
@@ -306,4 +392,4 @@ while IFS= read -r file; do
     scan_missing_tests "$file"
     scan_untested_public_api "$file"
 
-done < "$FILE_LIST"
+done < "$FILE_LIST" || true
