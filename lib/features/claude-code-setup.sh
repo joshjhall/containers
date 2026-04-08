@@ -97,33 +97,50 @@ if [ -f "${BUILD_TEMP}/claude-install.sh" ]; then
 fi
 
 # ============================================================================
-# Configure Auto Memory Directory
+# Configure Claude Code Settings (memory, permissions)
 # ============================================================================
-# Persist Claude Code auto memory to the project directory so it survives
-# container rebuilds. The default (~/.claude/projects/<hash>/memory/) is
-# ephemeral and lost when the container image is rebuilt.
-log_message "Configuring auto memory directory..."
+# - Persist auto memory to the project directory so it survives container
+#   rebuilds (the default ~/.claude/projects/<hash>/memory/ is ephemeral)
+# - Pre-allow Read access to skills, agents, and memory paths so users aren't
+#   constantly prompted for permission in the container
+log_message "Configuring Claude Code settings..."
 
 CLAUDE_SETTINGS_DIR="$USER_HOME/.claude"
 CLAUDE_SETTINGS_FILE="$CLAUDE_SETTINGS_DIR/settings.json"
 AUTO_MEMORY_DIR="${WORKING_DIR}/.claude/memory"
 
+# Permission entries to auto-allow reading skills, agents, and memory files.
+# Covers both user-level (~/.claude/) and project-level (.claude/) paths.
+DEFAULT_PERMISSIONS='[
+  "Read(~/.claude/skills/**)",
+  "Read(~/.claude/agents/**)",
+  "Read(~/.claude/memory/**)",
+  "Read(.claude/skills/**)",
+  "Read(.claude/agents/**)",
+  "Read(.claude/memory/**)"
+]'
+
 mkdir -p "$CLAUDE_SETTINGS_DIR"
 
 if [ -f "$CLAUDE_SETTINGS_FILE" ]; then
-    # Merge into existing settings.json
-    /usr/bin/jq --arg dir "$AUTO_MEMORY_DIR" '.autoMemoryDirectory = $dir' \
-        "$CLAUDE_SETTINGS_FILE" > "${CLAUDE_SETTINGS_FILE}.tmp" && \
+    # Merge into existing settings.json (preserves existing permissions via unique)
+    /usr/bin/jq --arg dir "$AUTO_MEMORY_DIR" --argjson perms "$DEFAULT_PERMISSIONS" '
+        .autoMemoryDirectory = $dir
+        | .permissions.allow = ((.permissions.allow // []) + $perms | unique)
+    ' "$CLAUDE_SETTINGS_FILE" > "${CLAUDE_SETTINGS_FILE}.tmp" && \
         mv "${CLAUDE_SETTINGS_FILE}.tmp" "$CLAUDE_SETTINGS_FILE"
-    log_message "Merged autoMemoryDirectory into existing settings.json"
+    log_message "Merged settings into existing settings.json"
 else
-    # Create new settings.json
-    printf '{"autoMemoryDirectory": "%s"}\n' "$AUTO_MEMORY_DIR" > "$CLAUDE_SETTINGS_FILE"
-    log_message "Created settings.json with autoMemoryDirectory"
+    # Create new settings.json with autoMemoryDirectory and default permissions
+    /usr/bin/jq -n --arg dir "$AUTO_MEMORY_DIR" --argjson perms "$DEFAULT_PERMISSIONS" \
+        '{autoMemoryDirectory: $dir, permissions: {allow: $perms}}' \
+        > "$CLAUDE_SETTINGS_FILE"
+    log_message "Created settings.json with autoMemoryDirectory and default permissions"
 fi
 
 chown -R "$TARGET_USER:$TARGET_USER" "$CLAUDE_SETTINGS_DIR"
 log_message "Auto memory directory set to $AUTO_MEMORY_DIR"
+log_message "Default read permissions configured for skills, agents, and memory paths"
 
 # ============================================================================
 # MCP Servers and Bash LSP

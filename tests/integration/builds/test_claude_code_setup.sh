@@ -496,6 +496,26 @@ test_auto_memory_directory() {
         "/workspace/test-claude-code-setup/.claude/memory"
 }
 
+# Test: Default read permissions for skills, agents, memory in settings.json
+test_default_read_permissions() {
+    local image="${IMAGE_TO_TEST:-test-claude-code-setup-$$}"
+
+    # Verify permissions.allow array exists and has 6 entries
+    assert_command_in_container "$image" \
+        "/usr/bin/jq -r '.permissions.allow | length' /home/developer/.claude/settings.json" \
+        "6"
+
+    # Verify user-level skill permission
+    assert_command_in_container "$image" \
+        "/usr/bin/jq -e '.permissions.allow | index(\"Read(~/.claude/skills/**)\") != null' /home/developer/.claude/settings.json && echo 'found'" \
+        "found"
+
+    # Verify project-level agent permission
+    assert_command_in_container "$image" \
+        "/usr/bin/jq -e '.permissions.allow | index(\"Read(.claude/agents/**)\") != null' /home/developer/.claude/settings.json && echo 'found'" \
+        "found"
+}
+
 # Test: claude-setup contains auto-detect logic
 test_auto_detect_logic() {
     local image="${IMAGE_TO_TEST:-test-claude-code-setup-$$}"
@@ -531,6 +551,7 @@ run_test test_mcp_passthrough_logic "claude-setup contains MCP passthrough logic
 run_test test_http_mcp_auth_injection "HTTP MCP auth injection helpers exist"
 run_test test_pipe_delimited_headers "Pipe-delimited header support"
 run_test test_auto_memory_directory "Auto memory directory persisted in settings.json"
+run_test test_default_read_permissions "Default read permissions in settings.json"
 run_test test_auto_detect_logic "claude-setup contains auto-detect logic"
 
 # Skip tests that require building new images if using pre-built image
