@@ -122,6 +122,15 @@ You receive a prompt containing:
 - Do not manually reformat — let the tool do it
 - Verify no semantic changes were introduced
 
+## Error Handling
+
+- **Verification command not found**: return `"status": "unfixable"` with
+  the missing command name and suggested install instructions
+- **Verification times out**: return `"status": "unfixable"` with timeout
+  context and the command that hung
+- **Fix resolves one error but introduces another**: report partial progress
+  with both the resolved and new errors, count toward the 3-iteration cap
+
 ## Restrictions
 
 MUST NOT:

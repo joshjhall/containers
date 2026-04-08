@@ -89,6 +89,15 @@ For conflicts you cannot auto-resolve:
 1. **Do NOT attempt** to resolve logic conflicts, API changes, configuration
    changes, or architectural decisions
 
+## Error Handling
+
+- **Package manager fails during lockfile regeneration**: mark the file as
+  escalated (not resolved), include the error output in the escalation report
+- **Malformed conflict markers**: escalate the file to the human orchestrator
+  with the raw content and a note that markers could not be parsed
+- **`git checkout` failure**: stop resolution for that file, report the error,
+  do not attempt further operations on the file
+
 ## Restrictions
 
 MUST NOT:

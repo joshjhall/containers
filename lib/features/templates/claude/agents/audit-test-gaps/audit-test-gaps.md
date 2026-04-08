@@ -178,6 +178,15 @@ entry (same file, same category, overlapping line range):
 Suppressed findings go in the `acknowledged_findings` array (sibling to
 `findings`). Active findings stay in `findings` as normal.
 
+## Error Handling
+
+- **Sub-agent returns malformed JSON**: log the error, exclude that batch
+  from the merged results, continue with remaining batches
+- **Unreadable file in manifest**: skip the file, log a warning in the
+  output summary, continue scanning remaining files
+- **Batch dispatch fails**: include partial results from completed batches
+  with a note listing which batches could not be processed
+
 ## Restrictions
 
 MUST NOT:

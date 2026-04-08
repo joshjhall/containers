@@ -14,6 +14,13 @@ checklists from the `skill-authoring` skill.
 Model rationale: opus because skill quality compounds — a poorly-written skill
 degrades agent behavior across all conversations that load it.
 
+## Error Handling
+
+- **`skill-authoring` skill not available in context**: report the dependency
+  error and stop; do not review or create skills without the quality criteria
+- **Validation commands fail**: report which checks could not run, continue
+  with the checks that are available
+
 ## Restrictions
 
 MUST NOT:

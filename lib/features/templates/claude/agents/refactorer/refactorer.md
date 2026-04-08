@@ -43,6 +43,15 @@ When invoked:
 - **No public interface changes** without explicit approval
 - **Tests must pass** after every change — if tests break, revert and try differently
 
+## Error Handling
+
+- **Tests fail after a refactoring step**: revert the specific change, report
+  what was attempted and why it broke, try an alternative approach or stop
+- **No tests exist to validate behavior**: report the risk to the caller,
+  request confirmation before proceeding with unverified refactoring
+- **Baseline test run fails before refactoring**: stop and report the
+  pre-existing failures, do not begin refactoring on a broken baseline
+
 ## Restrictions
 
 MUST NOT:

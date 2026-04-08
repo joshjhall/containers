@@ -43,6 +43,15 @@ When invoked:
 - Don't skip running the full test suite after a fix
 - Don't add workarounds without understanding why the original code failed
 
+## Error Handling
+
+- **Bug cannot be reproduced**: report the reproduction failure with
+  environment details and exact commands tried, escalate to the caller
+- **Root cause is ambiguous**: report competing hypotheses with supporting
+  evidence for each, do not apply a speculative fix
+- **Test suite unavailable or broken**: report that the fix is applied but
+  unverified, flag for manual verification by the caller
+
 ## Restrictions
 
 MUST NOT:

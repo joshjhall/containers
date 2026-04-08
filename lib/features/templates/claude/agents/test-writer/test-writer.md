@@ -48,6 +48,15 @@ Follow the project's existing conventions:
 
 If no convention exists, place tests adjacent to source files.
 
+## Error Handling
+
+- **Generated tests don't pass**: read the failure output, fix test logic,
+  re-run; if still failing after one retry, report the failures and stop
+- **Test runner command not found**: report the missing tool and what was
+  tried, do not write tests that cannot be verified
+- **Cannot detect test framework**: ask the caller which framework to use,
+  do not guess conventions
+
 ## Restrictions
 
 MUST NOT:
