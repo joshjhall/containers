@@ -392,7 +392,7 @@ if [ -d "$TEMPLATES_DIR" ]; then
                 echo "    ✓ $skill_name (already installed)"
             else
                 mkdir -p "$target_dir"
-                cp "$skill_dir"/* "$target_dir/"
+                cp -r "$skill_dir"/* "$target_dir/"
                 echo "    ✓ $skill_name installed"
             fi
         done
@@ -419,7 +419,7 @@ if [ -d "$TEMPLATES_DIR" ]; then
                 echo "    ✓ $skill_name (already installed)"
             elif [ -d "$skill_dir" ]; then
                 mkdir -p "$target_dir"
-                cp "$skill_dir"/* "$target_dir/"
+                cp -r "$skill_dir"/* "$target_dir/"
                 echo "    ✓ $skill_name installed"
             else
                 echo "    ⚠ $skill_name not found in templates"
@@ -497,7 +497,7 @@ SKILL_HEADER
             echo "    ✓ docker-development (already installed)"
         else
             mkdir -p "$target_dir"
-            cp "$TEMPLATES_DIR/skills/docker-development/"* "$target_dir/"
+            cp -r "$TEMPLATES_DIR/skills/docker-development/"* "$target_dir/"
             echo "    ✓ docker-development installed"
         fi
     fi
@@ -576,7 +576,7 @@ CLOUD_HEADER
                 echo "    ✓ $agent_name (already installed)"
             else
                 mkdir -p "$target_dir"
-                cp "$agent_dir"/* "$target_dir/"
+                cp -r "$agent_dir"/* "$target_dir/"
                 echo "    ✓ $agent_name installed"
             fi
         done
@@ -603,7 +603,7 @@ CLOUD_HEADER
                 echo "    ✓ $agent_name (already installed)"
             elif [ -d "$agent_dir" ]; then
                 mkdir -p "$target_dir"
-                cp "$agent_dir"/* "$target_dir/"
+                cp -r "$agent_dir"/* "$target_dir/"
                 echo "    ✓ $agent_name installed"
             else
                 echo "    ⚠ $agent_name not found in templates"
