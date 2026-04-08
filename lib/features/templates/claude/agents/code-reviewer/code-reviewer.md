@@ -73,21 +73,44 @@ For each sub-reviewer, construct a task prompt containing:
 1. The list of changed files with their contents
 1. The git diff output for context
 
+Sub-reviewer Task dispatches inherit the agent's `model: sonnet` tier. State
+this explicitly in each Task prompt to prevent drift.
+
 Instruct each sub-reviewer to return a JSON array of findings using this
-schema:
+schema (aligned with `finding-schema.md`):
 
 ```json
 [
   {
-    "severity": "critical|warning|suggestion",
+    "severity": "critical|high|medium|low",
     "file": "path/to/file",
-    "line": 42,
+    "line_start": 42,
+    "line_end": 42,
     "category": "security|bug|performance|style",
-    "issue": "Description of the issue",
-    "fix": "Recommended fix"
+    "title": "Short description (under 80 chars)",
+    "description": "Detailed explanation with context",
+    "suggestion": "Actionable fix recommendation",
+    "effort": "trivial|small|medium|large",
+    "tags": [],
+    "related_files": [],
+    "certainty": {
+      "level": "HIGH|MEDIUM|LOW",
+      "support": 1,
+      "confidence": 0.9,
+      "method": "llm"
+    }
   }
 ]
 ```
+
+Severity rubric for sub-reviewers:
+
+| Level      | Meaning                                        |
+| ---------- | ---------------------------------------------- |
+| `critical` | Actively causing harm or exploitable now       |
+| `high`     | Will cause problems under normal use           |
+| `medium`   | Increases maintenance burden or technical debt |
+| `low`      | Best-practice improvement, no immediate impact |
 
 ### Step 4: Dispatch Conditional Specialists
 
@@ -102,30 +125,99 @@ other, but after Step 3 completes so you have the file manifest ready).
 These use the same JSON finding schema with `category` set to `database`
 or `devops`.
 
-### Step 5: Merge and Deduplicate
+### Step 5: Scan for Inline Acknowledgments
+
+Before merging findings, scan all changed files for `audit:acknowledge`
+comments and build a per-file suppression map.
+
+**Comment syntax** (can appear in any language's comment style):
+
+```text
+audit:acknowledge category=<slug> [date=YYYY-MM-DD] [baseline=<number>] [reason="..."]
+```
+
+Where `<slug>` matches a sub-reviewer category: `security`, `bug`,
+`performance`, `style`, `database`, `devops`.
+
+**Suppression rules**:
+
+1. **Parse**: For each changed file, search for `audit:acknowledge` comments
+   and build a map keyed by `(category, line_number)`
+1. **Match**: When a finding's `file` + `category` matches an acknowledgment
+   and the acknowledgment line is within 5 lines of the finding's `line_start`,
+   the finding is a candidate for suppression
+1. **Suppress or re-raise**:
+   - All code-reviewer categories are **boolean** (no numeric thresholds):
+     suppress entirely and move to `acknowledged_findings`
+   - **Stale acknowledgments**: if `date` is present and older than 12 months,
+     re-raise the finding with `acknowledged: true` and a note that the
+     acknowledgment has expired
+
+Apply the suppression map to all sub-reviewer findings before proceeding to
+the merge step.
+
+### Step 6: Merge and Deduplicate
 
 1. Collect JSON arrays from all sub-reviewers
 1. If a sub-reviewer fails or returns malformed output, log the error and
    continue with findings from the remaining reviewers
-1. Deduplicate: if two findings reference the same file AND overlapping
-   lines (within 3 lines) AND similar issue text, keep the one with higher
-   severity
-1. Sort by severity: critical first, then warning, then suggestion
+1. **Within-reviewer dedup**: if two findings from the same reviewer reference
+   the same file + same category + overlapping line range (within 3 lines),
+   merge into one finding — keep the broader line range, combine evidence
+   into `description`, keep the higher severity and highest certainty
+1. **Cross-reviewer correlation**: if findings from different reviewers
+   reference the same file + overlapping lines, add `related_findings`
+   cross-references (array of related finding IDs) but do NOT merge them
+1. **Re-sequence IDs**: assign `code-reviewer-<NNN>` IDs (zero-padded, e.g.,
+   `code-reviewer-001`) in order sorted by file path then line number
+1. **Sort**: by severity (`critical` first), then effort (`trivial` first)
 
-### Step 6: Output
+### Step 7: Output
 
-Present merged findings in human-readable format organized by severity:
+Return a single JSON object in a \`\`\`json markdown fence matching the
+`finding-schema.md` top-level structure:
 
-- **Critical** (must fix): Bugs, security vulnerabilities, data loss risks
-- **Warning** (should fix): Performance issues, error handling gaps, maintainability concerns
-- **Suggestion** (consider): Style improvements, minor readability enhancements
+```json
+{
+  "scanner": "code-reviewer",
+  "summary": {
+    "files_scanned": 0,
+    "total_findings": 0,
+    "by_severity": {"critical": 0, "high": 0, "medium": 0, "low": 0}
+  },
+  "findings": [ ... ],
+  "acknowledged_findings": [ ... ]
+}
+```
 
-For each finding include: file and line, issue description, and recommended fix.
+Each finding in the `findings` array includes all fields from the sub-reviewer
+schema plus:
+
+- `id`: assigned in Step 6 (`code-reviewer-<NNN>`)
+- `reviewer`: name of the sub-reviewer that produced it (`security`, `bug`,
+  `performance`, `style`, `database`, `devops`)
+- `related_findings`: array of related finding IDs from cross-reviewer
+  correlation (empty array if none)
+
+Re-raised findings (stale acknowledgments) appear in `findings` with
+`acknowledged: true` and `acknowledged_date` set. Fully suppressed findings
+appear only in `acknowledged_findings`.
+
+Recompute `summary` counts from the final merged `findings` array (not from
+sub-reviewer counts).
+
+**After the JSON block**, add a brief human-readable summary so direct callers
+get a quick overview:
+
+```text
+Review complete: {total} findings ({critical} critical, {high} high, {medium} medium, {low} low), {ack} acknowledged.
+```
 
 Skip findings that are purely stylistic preferences with no impact on correctness.
 Focus on issues that could cause bugs, security vulnerabilities, or maintenance problems.
 
-If no findings across all reviewers, state that the changes look clean.
+If no findings across all reviewers, return the JSON structure with an empty
+`findings` array and state that the changes look clean.
 
 ______________________________________________________________________
 
@@ -152,7 +244,9 @@ Check for:
 - SSRF (server-side request forgery)
 - Insecure cryptographic usage (weak algorithms, hardcoded IVs/salts)
 
-Set `category` to `security` on all findings. Return a JSON array of findings.
+Set `category` to `security` on all findings. For each finding, provide
+`title`, `description`, `suggestion`, `effort`, `tags`, `related_files`, and
+`certainty` per the schema in Step 3. Return a JSON array of findings.
 Return an empty array `[]` if no issues found.
 
 ### Bug Reviewer
@@ -184,7 +278,9 @@ Concurrency Red Flags — flag every occurrence:
 - Batch operations that stop entirely on first failure (should accumulate)
 - Missing exponential backoff or jitter on retries
 
-Set `category` to `bug` on all findings. Return a JSON array of findings.
+Set `category` to `bug` on all findings. For each finding, provide `title`,
+`description`, `suggestion`, `effort`, `tags`, `related_files`, and
+`certainty` per the schema in Step 3. Return a JSON array of findings.
 Return an empty array `[]` if no issues found.
 
 ### Performance Reviewer
@@ -203,7 +299,9 @@ Check for:
 - Unnecessary re-renders or recomputations (frontend)
 - Missing pagination on unbounded queries
 
-Set `category` to `performance` on all findings. Return a JSON array of findings.
+Set `category` to `performance` on all findings. For each finding, provide
+`title`, `description`, `suggestion`, `effort`, `tags`, `related_files`, and
+`certainty` per the schema in Step 3. Return a JSON array of findings.
 Return an empty array `[]` if no issues found.
 
 ### Style Reviewer
@@ -222,6 +320,8 @@ Check for:
 
 Only flag style issues that impact maintainability or could lead to bugs.
 Skip purely cosmetic preferences. Set `category` to `style` on all findings.
+For each finding, provide `title`, `description`, `suggestion`, `effort`,
+`tags`, `related_files`, and `certainty` per the schema in Step 3.
 Return a JSON array of findings. Return an empty array `[]` if no issues found.
 
 ### Database Specialist
@@ -239,7 +339,9 @@ Check for:
 - Raw SQL without parameterized queries (injection risk)
 - Missing foreign key constraints or cascading delete risks
 
-Set `category` to `database` on all findings. Return a JSON array of findings.
+Set `category` to `database` on all findings. For each finding, provide
+`title`, `description`, `suggestion`, `effort`, `tags`, `related_files`, and
+`certainty` per the schema in Step 3. Return a JSON array of findings.
 Return an empty array `[]` if no issues found.
 
 ### DevOps Specialist
@@ -258,5 +360,7 @@ Check for:
 - CI pipeline inefficiencies (missing caching, unnecessary sequential steps)
 - Missing `.dockerignore` entries for sensitive or large files
 
-Set `category` to `devops` on all findings. Return a JSON array of findings.
+Set `category` to `devops` on all findings. For each finding, provide
+`title`, `description`, `suggestion`, `effort`, `tags`, `related_files`, and
+`certainty` per the schema in Step 3. Return a JSON array of findings.
 Return an empty array `[]` if no issues found.
