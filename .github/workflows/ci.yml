@@ -58,6 +58,46 @@ jobs:
           retention-days: 7
 
   # =====================================
+  # Lint AI Templates (agent/skill structural integrity)
+  # =====================================
+  lint-ai-templates:
+    name: Lint AI Templates
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for template changes
+        id: filter
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            CHANGED=$(git diff --name-only origin/${{ github.base_ref }}...HEAD -- \
+              'lib/features/templates/claude/' \
+              'docs/claude-code/skills-and-agents.md' 2>/dev/null | head -1)
+            if [ -n "$CHANGED" ]; then
+              echo "templates_changed=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "templates_changed=false" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            # On push to main, always run
+            echo "templates_changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run structural lint
+        if: steps.filter.outputs.templates_changed == 'true'
+        run: |
+          echo "Running agent/skill structural lint..."
+          chmod +x tests/unit/claude/lint_skills_agents.sh
+          ./tests/unit/claude/lint_skills_agents.sh
+
+      - name: Skip (no template changes)
+        if: steps.filter.outputs.templates_changed == 'false'
+        run: echo "No agent/skill template changes detected — skipping lint."
+
+  # =====================================
   # Go Tests (igor)
   # =====================================
   go-test:
