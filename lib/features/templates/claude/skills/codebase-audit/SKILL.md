@@ -168,7 +168,8 @@ audit-docs, audit-ai-config
 **Project scanners** (discovered from `.claude/agents/audit-*`):
 Include all project agents from the `project_scanners` list.
 
-All scanners use `model: sonnet` and `tools: Read, Grep, Glob, Bash, Task`.
+Scanners use the model declared in their agent frontmatter
+(`sonnet` or `opus` depending on task complexity) and `tools: Read, Grep, Glob, Bash, Task`.
 Scanners with manifests exceeding 2000 source lines automatically fan out to
 batch sub-agents (model: haiku) — see each scanner's agent definition for
 details.
