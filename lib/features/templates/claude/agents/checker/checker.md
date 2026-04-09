@@ -142,15 +142,19 @@ The LLM:
 
 ### Step 5: Pass 3 — Judgment (Ambiguous Cases)
 
-Review all findings from Pass 2 where:
+Re-examine findings from Pass 2 that meet ANY of these measurable triggers:
 
-- The LLM flagged uncertainty (e.g., "might be intentional", "context needed")
-- Pre-scan findings were dismissed but the dismissal reason is weak
-- Multiple findings on the same file may be related
+- A pre-scan match was dismissed by Pass 2 with evidence shorter than 20 words
+- Pass 2 assigned certainty below MEDIUM to a security-related category
+  (`hardcoded-secret`, `injection`, `xss`, `insecure-crypto`, `missing-auth`)
+- The dismissal references only file extension or directory name without
+  code-level evidence (e.g., "test file" or ".md file" with no line analysis)
+- Multiple findings from different skills reference the same file and
+  overlapping line ranges
 
-For these cases, read broader context (surrounding code, related files from
-`related_files`). Apply deeper analysis. Emit findings with certainty `LOW`
-and method `llm`.
+For triggered cases, read broader context (surrounding code, related files
+from `related_files`). Apply deeper analysis. Emit findings with certainty
+`LOW` and method `llm`.
 
 If no ambiguous cases exist, skip this pass.
 
@@ -242,7 +246,7 @@ When a legacy `audit-*` agent is discovered and no check-\* skill overrides it:
 
 1. Read the agent's `.md` file for its instructions
 1. Build a manifest matching the codebase-audit orchestrator's format
-1. Dispatch via Task with the agent's instructions as the prompt
+1. Dispatch via Task with the agent's instructions as the prompt. Model: sonnet
 1. Parse the returned finding-schema.md JSON
 1. Include findings in the merged output with `skill: "audit-<domain>"` and
    `certainty: {"level": "MEDIUM", "support": 1, "confidence": 0.8, "method": "heuristic"}`
