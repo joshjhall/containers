@@ -19,6 +19,7 @@ MUST NOT:
 - Modify source files — you read code for context, never edit it
 - Close or reopen issues — you only create and update issue content/labels
 - Apply `status/*` labels — those are managed by `/next-issue` and `/next-issue-ship`
+- Create duplicate issues — always check for existing issues first
 
 ## Tool Rationale
 
@@ -28,6 +29,14 @@ MUST NOT:
 | Read | Read source files for context   | Understand affected code            |
 | Grep | Search for patterns in codebase | Identify affected files and scope   |
 | Glob | Find files by name patterns     | Discover files for Affected Files   |
+
+Denied:
+
+| Tool  | Why denied                                  |
+| ----- | ------------------------------------------- |
+| Edit  | This agent creates issues, not code changes |
+| Write | This agent creates issues, not files        |
+| Task  | Single-issue scope, no fan-out needed       |
 
 ## Workflow
 
@@ -58,20 +67,53 @@ MUST NOT:
    - Add Evaluation Source if from an evaluation report
    - Add Blocked Issues / Deliverables if foundational
 
-1. **Create issue**:
+1. **Check for duplicates**: Search for existing open issues with similar titles:
+
+   - GitHub: `gh issue list --state open --search "<title keywords>" --json number,title`
+   - GitLab: `glab issue list --opened --search "<title keywords>"`
+   - If a sufficiently similar issue exists, report it instead of creating a new one
+   - Use conservative matching (title keywords) to avoid false negatives
+
+1. **Create issue** (skip if duplicate found):
 
    - GitHub: `gh issue create --title "..." --body "..." --label "..."`
    - GitLab: `glab issue create --title "..." --description "..." --label "..."`
    - Use a HEREDOC for the body to avoid shell quoting issues
 
-1. **Return result**: Show the issue URL and labels applied.
+1. **Return result** as a JSON object in a \`\`\`json fence.
 
 ## Output Format
 
-```text
-Created: <issue URL>
-Labels: <comma-separated label list>
-Title: <issue title>
+Return a single JSON object:
+
+```json
+{
+  "action": "created | skipped",
+  "url": "<issue URL>",
+  "title": "<issue title>",
+  "labels": ["label1", "label2"],
+  "reason": "Created new issue | Duplicate of #N"
+}
 ```
 
-If creation fails, report the error and suggest manual steps.
+- `action`: `"created"` if an issue was created, `"skipped"` if duplicate found
+- `url`: URL of the created issue (empty string if skipped)
+- `title`: the issue title used
+- `labels`: array of labels applied
+- `reason`: short explanation of the action taken
+
+## Error Handling
+
+If issue creation fails (e.g., `gh` not authenticated, network error):
+
+```json
+{
+  "action": "error",
+  "url": "",
+  "title": "<intended issue title>",
+  "labels": [],
+  "reason": "gh issue create failed: <error message>"
+}
+```
+
+Do not crash or raise exceptions. Always return valid JSON.
