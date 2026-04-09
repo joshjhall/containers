@@ -102,7 +102,7 @@ chmod +x /usr/local/bin/zoxide
 # Cosign Installation - Sigstore signature verification
 # ============================================================================
 echo "=== Installing cosign ==="
-COSIGN_VERSION="${COSIGN_VERSION:-3.0.5}"
+COSIGN_VERSION="${COSIGN_VERSION:-3.0.6}"
 # Tier 2 pinned SHA256 checksums from official cosign_checksums.txt
 COSIGN_SHA256_AMD64="db15cc99e6e4837daabab023742aaddc3841ce57f193d11b7c3e06c8003642b2"
 COSIGN_SHA256_ARM64="d098f3168ae4b3aa70b4ca78947329b953272b487727d1722cb3cb098a1a20ab"

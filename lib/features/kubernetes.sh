@@ -73,7 +73,7 @@ log_feature_start "Kubernetes Tools"
 KUBECTL_VERSION="${KUBECTL_VERSION:-1.33.10}"  # Can be major.minor or major.minor.patch
 K9S_VERSION="${K9S_VERSION:-0.50.18}"
 KREW_VERSION="${KREW_VERSION:-0.5.0}"
-HELM_VERSION="${HELM_VERSION:-4.1.3}"
+HELM_VERSION="${HELM_VERSION:-4.1.4}"
 
 # Extract major.minor version from KUBECTL_VERSION for repository URL
 # This handles both "1.31" and "1.31.0" formats

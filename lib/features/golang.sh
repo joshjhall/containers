@@ -84,7 +84,7 @@ load_go_template() {
 # ============================================================================
 # Version Configuration
 # ============================================================================
-GO_VERSION="${GO_VERSION:-1.26.1}"
+GO_VERSION="${GO_VERSION:-1.26.2}"
 
 # Validate Go version format to prevent shell injection
 validate_go_version "$GO_VERSION" || {
