@@ -16,13 +16,13 @@ don't require human judgment.
 
 When dispatched, you receive a list of conflicted files. Classify each:
 
-| Conflict Type      | Action       | Skill to Load         |
-| ------------------ | ------------ | --------------------- |
-| Lock files         | Auto-resolve | `rebase-lockfile`     |
-| Generated files    | Auto-resolve | `rebase-generated`    |
-| Import ordering    | Auto-resolve | `rebase-imports`      |
-| Version files      | Auto-resolve | `rebase-version`      |
-| Logic/architecture | **Escalate** | (none — human needed) |
+| Conflict Type      | Action       |
+| ------------------ | ------------ |
+| Lock files         | Auto-resolve |
+| Generated files    | Auto-resolve |
+| Import ordering    | Auto-resolve |
+| Version files      | Auto-resolve |
+| Logic/architecture | **Escalate** |
 
 ## Resolution Workflow
 
@@ -117,6 +117,13 @@ MUST NOT:
 | Bash | Run git commands, regeneration commands    | Regenerate lockfiles, verify resolution     |
 | Grep | Identify conflict markers and patterns     | Classify conflict type                      |
 | Glob | Find lockfiles and generated files         | Discover files matching resolution patterns |
+
+Denied:
+
+| Tool      | Why denied                                                   |
+| --------- | ------------------------------------------------------------ |
+| ~~Write~~ | Agent modifies existing files (Edit), never creates new ones |
+| ~~Task~~  | Conflict count is typically small, no fan-out needed         |
 
 ## Output Format
 
