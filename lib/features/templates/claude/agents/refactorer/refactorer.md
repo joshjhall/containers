@@ -14,7 +14,7 @@ When invoked:
 1. Run existing tests to establish a passing baseline
 1. Identify refactoring opportunities against the checklist below
 1. Apply changes incrementally — one refactoring at a time
-1. Run tests after each change to verify behavior is preserved
+1. Run tests after each change — if tests break, revert the change and try a different approach
 1. Summarize all changes made
 
 ## Refactoring Checklist
@@ -36,13 +36,6 @@ When invoked:
 - God objects/functions that know about everything
 - Stringly-typed data that should be enums or typed objects
 
-## Guardrails
-
-- **No functional changes** — refactoring must not alter observable behavior
-- **No new dependencies** — don't introduce libraries to simplify existing code
-- **No public interface changes** without explicit approval
-- **Tests must pass** after every change — if tests break, revert and try differently
-
 ## Error Handling
 
 - **Tests fail after a refactoring step**: revert the specific change, report
@@ -51,6 +44,12 @@ When invoked:
   request confirmation before proceeding with unverified refactoring
 - **Baseline test run fails before refactoring**: stop and report the
   pre-existing failures, do not begin refactoring on a broken baseline
+
+## Scope
+
+- Focus on the files the user specified
+- If scope is ambiguous, ask the caller which files to focus on
+- Limit to 10 files per invocation — report remaining files for follow-up
 
 ## Restrictions
 
