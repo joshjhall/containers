@@ -118,15 +118,6 @@ target/
 # See: https://doc.rust-lang.org/cargo/faq.html#why-have-cargolock-in-version-control
 **/*.rs.bk
 
-# Go
-*.exe
-*.exe~
-*.dll
-*.dylib
-*.test
-*.out
-vendor/
-
 # Ruby
 *.gem
 *.rbc
@@ -213,3 +204,4 @@ pids/
 
 local/
 .local/
+ai/

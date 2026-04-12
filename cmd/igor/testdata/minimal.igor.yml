@@ -1,9 +1,0 @@
-schema_version: 1
-containers_dir: containers
-project:
-  name: myapp
-  username: developer
-  base_image: "debian:trixie-slim"
-features:
-  - python
-  - python_dev

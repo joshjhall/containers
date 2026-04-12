@@ -2522,6 +2522,7 @@ dependencies = [
  "containers-common",
  "inquire",
  "octarine",
+ "sha2",
  "tracing",
  "tracing-subscriber",
 ]

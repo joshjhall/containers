@@ -35,8 +35,6 @@ v5 is built around three compiled Rust executables in a Cargo workspace:
 
 ### Legacy Code (being ported)
 
-- `cmd/igor/` — Go implementation of the setup wizard (v4). Being ported
-  to Rust as stibbons. Reference for feature registry, templates, config.
 - `lib/base/` — System setup, user creation, logging utilities
 - `lib/features/` — Bash feature installation scripts (being replaced by
   luggage manifests)
@@ -71,15 +69,6 @@ cargo fmt --all
 1. Set `requires` / `implied_by` if needed
 1. Add template conditionals (when template system is ported)
 1. Update golden files if applicable
-
-### Go Legacy (cmd/igor/)
-
-Still used as reference. Build and test with:
-
-```bash
-cd cmd/igor && go build -o igor .
-cd cmd/igor && go test -race ./...
-```
 
 ## Common Commands
 
