@@ -446,14 +446,21 @@ jobs:
           ---
           All CI tests have passed. This PR was created by the automated patch release system."
 
-          PR_URL=$(gh pr create \
-            --base main \
-            --head "$BRANCH_NAME" \
-            --title "$PR_TITLE" \
-            --body "$PR_BODY")
+          # Check if a PR already exists for this branch
+          EXISTING_PR=$(gh pr list --head "$BRANCH_NAME" --json number,url --jq '.[0].url // empty')
+          if [ -n "$EXISTING_PR" ]; then
+            echo "PR already exists: $EXISTING_PR"
+            echo "pr_url=$EXISTING_PR" >> $GITHUB_OUTPUT
+          else
+            PR_URL=$(gh pr create \
+              --base main \
+              --head "$BRANCH_NAME" \
+              --title "$PR_TITLE" \
+              --body "$PR_BODY")
 
-          echo "pr_url=$PR_URL" >> $GITHUB_OUTPUT
-          echo "Created PR: $PR_URL"
+            echo "pr_url=$PR_URL" >> $GITHUB_OUTPUT
+            echo "Created PR: $PR_URL"
+          fi
 
       - name: Add hold label for GPG key changes
         if: steps.branch_info.outputs.gpg_keys_changed == 'true'
@@ -551,6 +558,8 @@ jobs:
         env:
           VERSION: ${{ steps.release_info.outputs.version }}
         run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
           git tag -a "v${VERSION}" -m "Automated patch release v${VERSION}"
           git push origin "v${VERSION}"
 
@@ -619,15 +628,31 @@ jobs:
     permissions:
       contents: read
     steps:
+      - name: Check if branch still exists
+        id: branch_check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH_NAME: ${{ github.event.workflow_run.head_branch }}
+        run: |
+          if gh api "repos/${{ github.repository }}/branches/${BRANCH_NAME}" --silent 2>/dev/null; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "Branch ${BRANCH_NAME} no longer exists — skipping notification"
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Checkout code
+        if: steps.branch_check.outputs.exists == 'true'
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.workflow_run.head_branch }}
 
       - name: Get version and changes
+        if: steps.branch_check.outputs.exists == 'true'
         id: info
+        env:
+          BRANCH_NAME: ${{ github.event.workflow_run.head_branch }}
         run: |
-          BRANCH_NAME="${{ github.event.workflow_run.head_branch }}"
           echo "branch=$BRANCH_NAME" >> $GITHUB_OUTPUT
 
           # Get current version from VERSION file
@@ -641,6 +666,7 @@ jobs:
           echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Send failure notification
+        if: steps.branch_check.outputs.exists == 'true'
         run: |
           VERSION="${{ steps.info.outputs.version }}"
 

@@ -163,6 +163,11 @@
           "sha256": "c23198b768b25631ffd79076daa31a9c456dd7ae2df9511d296a504563b47549",
           "url": "https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-cli/4.0.3/spring-boot-cli-4.0.3-bin.tar.gz",
           "added": "2026-03-16"
+        },
+        "4.0.5": {
+          "sha256": "7ed664f2e716e7c23c53b7edf5670c708ebee4ea63489033f9e7c3aff655d58c",
+          "url": "https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-cli/4.0.5/spring-boot-cli-4.0.5-bin.tar.gz",
+          "added": "2026-03-29"
         }
       }
     },
@@ -219,6 +224,19 @@
             }
           },
           "added": "2026-03-22"
+        },
+        "0.19.2": {
+          "checksums": {
+            "amd64": {
+              "sha256": "8e695c5f586a8c53d6c3b01be0b4a422ed218bfed2a56191caebe373a1c18ab2",
+              "url": "https://github.com/dandavison/delta/releases/download/0.19.2/delta-0.19.2-x86_64-unknown-linux-gnu.tar.gz"
+            },
+            "arm64": {
+              "sha256": "0bfce159a5cddd5feb3d6db4a616d883ff51253ce08ac7ec11cb1d208cfaab9e",
+              "url": "https://github.com/dandavison/delta/releases/download/0.19.2/delta-0.19.2-aarch64-unknown-linux-gnu.tar.gz"
+            }
+          },
+          "added": "2026-03-29"
         }
       }
     },
@@ -266,6 +284,32 @@
             }
           },
           "added": "2026-03-22"
+        },
+        "2.4.9": {
+          "checksums": {
+            "amd64": {
+              "sha256": "209550f80e5443011de329f658f86f496008a82e081626349cfe1dddd6156425",
+              "url": "https://github.com/biomejs/biome/releases/download/@biomejs/biome@2.4.9/biome-linux-x64"
+            },
+            "arm64": {
+              "sha256": "3f4516bfddca114ee5c727f7614803eb7a566991ddb8ca1bb9ebe1eb8c36bfe7",
+              "url": "https://github.com/biomejs/biome/releases/download/@biomejs/biome@2.4.9/biome-linux-arm64"
+            }
+          },
+          "added": "2026-03-29"
+        },
+        "2.4.11": {
+          "checksums": {
+            "amd64": {
+              "sha256": "e96cb8bc743df1fbd3ecaa2f18c1dd1a7d33ff73859e65a646a7d3808c837dd5",
+              "url": "https://github.com/biomejs/biome/releases/download/@biomejs/biome@2.4.11/biome-linux-x64"
+            },
+            "arm64": {
+              "sha256": "80619897f3d0ca35e7b17413ea17f7bbaadf36393b7afdf64e66b0a52dd21991",
+              "url": "https://github.com/biomejs/biome/releases/download/@biomejs/biome@2.4.11/biome-linux-arm64"
+            }
+          },
+          "added": "2026-04-12"
         }
       }
     },
@@ -322,7 +366,7 @@
     }
   },
   "metadata": {
-    "generated": "2026-03-22T16:13:39Z",
+    "generated": "2026-04-12T03:03:37Z",
     "description": "Pinned checksums for language runtime downloads",
     "note": "This file is automatically updated by check-versions.sh and should grow over time. Old checksums are never deleted to strengthen security for older versions and enable reproducible builds."
   }

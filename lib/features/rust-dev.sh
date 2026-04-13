@@ -134,8 +134,13 @@ log_command "Installing tokei" \
 log_command "Installing hyperfine" \
     su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/cargo install hyperfine"
 
-log_command "Installing just" \
-    su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/cargo install just"
+# Skip if already installed by dev-tools
+if ! command -v just &> /dev/null; then
+    log_command "Installing just" \
+        su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/cargo install just"
+else
+    log_message "just already installed, skipping..."
+fi
 
 log_command "Installing sccache" \
     su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/cargo install sccache"

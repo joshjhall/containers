@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 # Universal Container Build System
-# Version: 4.15.10
+# Version: 4.16.1
 # Supports multiple contexts: devcontainer, agents, CI/CD, production
 
 # ============================================================================
@@ -138,7 +138,7 @@ RUN RESTRICT_SHELLS=${RESTRICT_SHELLS} \
 
 ARG INCLUDE_PYTHON=false
 ARG INCLUDE_PYTHON_DEV=false
-ARG PYTHON_VERSION=3.14.3
+ARG PYTHON_VERSION=3.14.4
 
 # Handle optional Python project files only if Python is being installed
 # Copy to temp location first since we're running as root and user doesn't exist yet
@@ -174,7 +174,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 # Rust + Rust development tools
 ARG INCLUDE_RUST=false
 ARG INCLUDE_RUST_DEV=false
-ARG RUST_VERSION=1.94.0
+ARG RUST_VERSION=1.94.1
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     if [ "${INCLUDE_RUST}" = "true" ] || [ "${INCLUDE_RUST_DEV}" = "true" ]; then \
@@ -201,7 +201,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 # Go + Go development tools
 ARG INCLUDE_GOLANG=false
 ARG INCLUDE_GOLANG_DEV=false
-ARG GO_VERSION=1.26.1
+ARG GO_VERSION=1.26.2
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     if [ "${INCLUDE_GOLANG}" = "true" ] || [ "${INCLUDE_GOLANG_DEV}" = "true" ]; then \
@@ -211,7 +211,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 ARG INCLUDE_MOJO=false
 ARG INCLUDE_MOJO_DEV=false
 ARG MOJO_VERSION=25.4
-ARG PIXI_VERSION=0.66.0
+ARG PIXI_VERSION=0.67.0
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     if [ "${INCLUDE_MOJO}" = "true" ] || [ "${INCLUDE_MOJO_DEV}" = "true" ]; then \
@@ -318,7 +318,7 @@ ARG INCLUDE_KUBERNETES=false
 ARG KUBECTL_VERSION=1.33.10
 ARG K9S_VERSION=0.50.18
 ARG KREW_VERSION=0.5.0
-ARG HELM_VERSION=4.1.3
+ARG HELM_VERSION=4.1.4
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     if [ "${INCLUDE_KUBERNETES}" = "true" ]; then \
@@ -334,8 +334,8 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     fi
 # Terraform
 ARG INCLUDE_TERRAFORM=false
-ARG TERRAGRUNT_VERSION=0.99.4
-ARG TFDOCS_VERSION=0.21.0
+ARG TERRAGRUNT_VERSION=1.0.0
+ARG TFDOCS_VERSION=0.22.0
 ARG TFLINT_VERSION=0.61.0
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
@@ -368,12 +368,12 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     if [ "${INCLUDE_PYTHON_DEV}" = "true" ]; then \
-    /tmp/build-scripts/features/python-dev.sh; \
+    SKIP_LSP_INSTALL=${SKIP_LSP_INSTALL} /tmp/build-scripts/features/python-dev.sh; \
     fi
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     if [ "${INCLUDE_NODE_DEV}" = "true" ]; then \
-    /tmp/build-scripts/features/node-dev.sh; \
+    SKIP_LSP_INSTALL=${SKIP_LSP_INSTALL} /tmp/build-scripts/features/node-dev.sh; \
     fi
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
@@ -383,7 +383,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     if [ "${INCLUDE_RUBY_DEV}" = "true" ]; then \
-    /tmp/build-scripts/features/ruby-dev.sh; \
+    SKIP_LSP_INSTALL=${SKIP_LSP_INSTALL} /tmp/build-scripts/features/ruby-dev.sh; \
     fi
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
@@ -393,7 +393,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     if [ "${INCLUDE_GOLANG_DEV}" = "true" ]; then \
-    /tmp/build-scripts/features/golang-dev.sh; \
+    SKIP_LSP_INSTALL=${SKIP_LSP_INSTALL} /tmp/build-scripts/features/golang-dev.sh; \
     fi
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
@@ -413,12 +413,12 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     if [ "${INCLUDE_KOTLIN_DEV}" = "true" ]; then \
-    /tmp/build-scripts/features/kotlin-dev.sh; \
+    SKIP_LSP_INSTALL=${SKIP_LSP_INSTALL} /tmp/build-scripts/features/kotlin-dev.sh; \
     fi
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     if [ "${INCLUDE_ANDROID_DEV}" = "true" ]; then \
-    ANDROID_API_LEVELS=${ANDROID_API_LEVELS} /tmp/build-scripts/features/android-dev.sh; \
+    SKIP_LSP_INSTALL=${SKIP_LSP_INSTALL} ANDROID_API_LEVELS=${ANDROID_API_LEVELS} /tmp/build-scripts/features/android-dev.sh; \
     fi
 
 # ============================================================================
@@ -430,6 +430,8 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 # ============================================================================
 
 # General development tools
+# Skip LSP server installation (for headless agent containers)
+ARG SKIP_LSP_INSTALL=false
 ARG INCLUDE_DEV_TOOLS=false
 # Extra Claude Code plugins to install (comma-separated, e.g., "stripe,posthog,vercel")
 ARG CLAUDE_EXTRA_PLUGINS=""
@@ -472,6 +474,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     INCLUDE_AWS=${INCLUDE_AWS} \
     INCLUDE_GCLOUD=${INCLUDE_GCLOUD} \
     INCLUDE_CLOUDFLARE=${INCLUDE_CLOUDFLARE} \
+    SKIP_LSP_INSTALL=${SKIP_LSP_INSTALL} \
     /tmp/build-scripts/features/dev-tools.sh; \
     fi
 
@@ -513,6 +516,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     CLAUDE_AGENTS="${CLAUDE_AGENTS}" \
     CLAUDE_SKILLS="${CLAUDE_SKILLS}" \
     CLAUDE_CHANNEL=${CLAUDE_CHANNEL} \
+    SKIP_LSP_INSTALL=${SKIP_LSP_INSTALL} \
     /tmp/build-scripts/features/claude-code-setup.sh; \
     fi
 

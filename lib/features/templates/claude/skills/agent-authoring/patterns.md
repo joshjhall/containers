@@ -201,6 +201,10 @@ Before shipping an agent, verify each item:
 - [ ] No fundamentals the model already knows
 - [ ] Red flags / checklists use specific items, not vague goals
 - [ ] Agent tested with a real task to verify delegation triggers
+- [ ] MUST NOT restrictions documented for workflow-level safety
+- [ ] Tool rationale documented (why each tool is granted or excluded)
+- [ ] Prose trimming verified: no line removable without behavior change
+- [ ] Agent quality: passes 14-pattern checklist (see below)
 
 ______________________________________________________________________
 
@@ -231,3 +235,182 @@ Agent definitions follow conventions that map across tools:
 1. Adapt frontmatter to the target tool's metadata format
 1. For AGENTS.md (always loaded), move trigger context into prose
    since there's no description field for selective loading
+
+______________________________________________________________________
+
+## Agent Quality Patterns
+
+14-pattern checklist for agent quality. Each pattern maps to a finding from
+the agentsys evaluation (#304). Use during agent review or creation.
+
+| #   | Pattern                 | Criterion                                                                           |
+| --- | ----------------------- | ----------------------------------------------------------------------------------- |
+| 1   | Model assignment        | Model tier matches task complexity (see Model Tiering Guide below)                  |
+| 2   | Tool scoping            | Minimum viable tools — every tool has a documented rationale                        |
+| 3   | Workflow enforcement    | Numbered steps with no ambiguous branching                                          |
+| 4   | Safety constraints      | `## Restrictions` section with MUST NOT rules, tool rationale, and workflow gates   |
+| 5   | Output schema           | Structured output format specified (JSON, severity tiers, sections)                 |
+| 6   | Idempotency             | Same input produces same output on repeated invocation                              |
+| 7   | Error boundaries        | Agent handles errors gracefully and returns structured error responses              |
+| 8   | Batch strategy          | Large inputs define fan-out behavior (when/how to spawn sub-agents)                 |
+| 9   | Description quality     | WHAT + WHEN + trigger terms in description field                                    |
+| 10  | Prose density           | No line removable without changing agent behavior (deletion test)                   |
+| 11  | Checklist specificity   | Red flags are concrete items, not vague goals                                       |
+| 12  | Context isolation       | Agent output stays in its own window; only summary returns to caller                |
+| 13  | Composability           | Output is consumable by downstream agents or orchestrators                          |
+| 14  | Acknowledgment handling | Audit/review agents support inline suppression comments (e.g., `audit:acknowledge`) |
+
+______________________________________________________________________
+
+## Model Tiering Guide
+
+Decision framework for choosing the right model tier. Key principle from the
+agentsys evaluation: **quality compounds** — bad exploration → bad plan → bad
+implementation. Use opus where errors propagate downstream.
+
+### Decision Criteria
+
+| Criterion            | → haiku          | → sonnet              | → opus                    |
+| -------------------- | ---------------- | --------------------- | ------------------------- |
+| Error propagation    | Errors are local | Errors are noticeable | Errors cascade downstream |
+| Task structure       | Mechanical/rote  | Pattern-matching      | Requires reasoning        |
+| Quality compounding  | No               | Moderate              | High                      |
+| Invocation frequency | Very high        | Normal                | Low-moderate              |
+
+### Decision Tree
+
+1. Does the agent produce output that other agents consume? → Lean toward opus
+1. Is the task mechanical (copy, format, look up)? → Use haiku
+1. Is the task pattern-matching (review, scan, classify)? → Use sonnet
+1. Does the agent make architectural or design decisions? → Use opus
+
+### Real Examples from Our System
+
+| Agent                | Model  | Rationale                                                        |
+| -------------------- | ------ | ---------------------------------------------------------------- |
+| `issue-writer`       | haiku  | Mechanical: renders template + calls CLI                         |
+| `code-reviewer`      | sonnet | Orchestrates parallel sub-reviewers via Task                     |
+| `test-writer`        | sonnet | Structured generation following test framework patterns          |
+| `audit-architecture` | opus   | Architecture analysis quality compounds downstream               |
+| `debugger`           | opus   | Root cause analysis benefits from deeper reasoning               |
+| `audit-ai-config`    | opus   | Agent/skill quality analysis affects all downstream interactions |
+| `skill-author`       | opus   | Quality compounds: bad skill → bad behavior across all uses      |
+| `agent-author`       | opus   | Quality compounds: bad agent → bad output across all uses        |
+
+### Model Tier and Deterministic Coverage
+
+As `patterns.sh` deterministic coverage increases for a checker domain, the
+LLM's role shrinks to residual heuristic and judgment categories. This shifts
+the model tier needed:
+
+| Deterministic Coverage | Recommended Tier | Rationale                                      |
+| ---------------------- | ---------------- | ---------------------------------------------- |
+| 100%                   | haiku            | LLM confirms/dismisses pre-scan results only   |
+| > 75%                  | sonnet           | LLM handles a few heuristic categories         |
+| < 50%                  | opus             | LLM performs most reasoning; quality compounds |
+
+Use `bin/check-patterns-coverage.sh` to measure current coverage per domain.
+As of initial measurement: 22/28 categories (78%) are covered by patterns.sh.
+Four domains have 100% deterministic coverage (security, code-health,
+deadlinks, staleness) and could potentially downgrade to haiku for the LLM
+confirmation pass.
+
+**Deferral note**: Do not change model tiers until check-\* skill migration is
+complete. Coverage improvements from discrete code candidates (#338) may shift
+several more categories to deterministic, enabling broader tier downgrades.
+
+______________________________________________________________________
+
+## Safety Constraints Template
+
+Copy-pasteable block for documenting MUST NOT restrictions and tool rationale
+in an agent definition. Insert after the role statement in the system prompt.
+
+```markdown
+## Restrictions
+
+MUST NOT:
+- <verb> — <rationale>
+- <verb> — <rationale>
+
+## Tool Rationale
+
+| Tool   | Purpose                             | Why granted                        |
+| ------ | ----------------------------------- | ---------------------------------- |
+| Read   | Read source files for analysis      | Core to the review workflow        |
+| Grep   | Search for patterns across codebase | Needed for finding occurrences     |
+| Glob   | Find files by name patterns         | Needed for file discovery          |
+| Bash   | Run CLI commands (gh, glab, git)    | Platform interaction required      |
+| ~~Edit~~ | ~~Modify files~~                | Denied: this agent observes only   |
+| ~~Write~~ | ~~Create files~~               | Denied: this agent observes only   |
+```
+
+**Worked example** (from `audit-security`):
+
+```markdown
+## Restrictions
+
+MUST NOT:
+- Edit or write source files — you observe and report, never modify code
+- Auto-fix findings below HIGH certainty — flag for human review instead
+- Skip manifest files in scanning — config files often contain secrets
+
+## Tool Rationale
+
+| Tool | Purpose                           | Why granted                           |
+| ---- | --------------------------------- | ------------------------------------- |
+| Read | Read source files for analysis    | Core to security scanning             |
+| Grep | Search for secret patterns        | Regex-based detection (Phase 1)       |
+| Glob | Find config/env files             | Discovery of files to scan            |
+| Bash | Run external tools if available   | Phase 3 detection (eslint, etc.)      |
+| Task | Fan out to batch sub-agents       | Large manifests need parallel scanning |
+```
+
+______________________________________________________________________
+
+## Orchestrator Extension Patterns
+
+When building an agent that plugs into an existing orchestrator, follow the
+orchestrator's discovery mechanism, contracts, and naming conventions.
+
+### Pattern 1: Scanner Agent for `codebase-audit`
+
+The orchestrator globs `.claude/agents/audit-*/audit-*.md` and reads
+frontmatter to build its scanner list. To create a new scanner:
+
+1. **Name**: `audit-<domain>` (e.g., `audit-docker`, `audit-perf`)
+1. **Directory**: `.claude/agents/audit-<domain>/audit-<domain>.md`
+1. **Frontmatter**: `name` and `description` must be present (orchestrator
+   reads these for routing)
+1. **Model**: `sonnet` for the primary scanner; `haiku` for batch sub-agents
+   dispatched via `Task` tool for manifests > 2000 lines
+1. **Output**: JSON matching `finding-schema.md` — fields: `scanner`,
+   `summary` (files_scanned, total_findings, by_severity), `findings` array
+   (id, category, severity, title, description, file, line_start, line_end,
+   evidence, suggestion, effort, tags, related_files), `acknowledged_findings`
+1. **Categories**: `<scanner-name>/<slug>` format (e.g., `audit-docker/no-healthcheck`)
+1. **Labels**: orchestrator auto-creates `audit/<category>` labels
+1. **Override**: if your agent shares a name with a built-in scanner, the
+   project-level agent takes precedence
+
+### Pattern 2: Pipeline Agent for `next-issue` Chain
+
+Agents that participate in the issue pipeline:
+
+- Read/write state files at `.claude/memory/tmp/next-issue-{N}.json`
+- JSON schema (version 2): `issue`, `title`, `phase`, `branch`, `plan`,
+  `started`, `platform`, plus optional `checkpoint` object for context handoff
+- Write `checkpoint` before phase transitions to preserve key decisions,
+  modified/planned files, warnings, and next action across `/clear` resets
+- Validate state before acting (issue still open, branch still exists)
+- Delete state file after successful completion
+
+### Pattern 3: Parallel Sub-Agent for Coordinator Dispatch
+
+Agents dispatched in parallel by a coordinator (e.g., future `code-reviewer`
+per #315):
+
+- Receive a manifest (file list + context) as the task prompt
+- Return structured JSON that the coordinator can merge/deduplicate
+- Handle errors gracefully — return `"action": "error"` instead of crashing
+- Keep output within the coordinator's expected schema

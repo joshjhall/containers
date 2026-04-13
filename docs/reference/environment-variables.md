@@ -96,6 +96,7 @@ All features are disabled by default. Set to `true` to enable:
 | `INCLUDE_KOTLIN_DEV`  | Install Kotlin dev tools (kotlin-language-server)    |
 | `INCLUDE_ANDROID_DEV` | Install Android dev tools (emulator, NDK)            |
 | `INCLUDE_DEV_TOOLS`   | Install general dev tools (gh, lazygit, fzf, etc.)   |
+| `SKIP_LSP_INSTALL`    | Skip LSP server installation (for headless agents)   |
 
 **Cloud & Infrastructure:**
 

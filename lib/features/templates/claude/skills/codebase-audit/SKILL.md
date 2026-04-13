@@ -12,13 +12,13 @@ Load both when running an audit.
 
 Accept these from the user's invocation (all optional):
 
-| Parameter            | Default     | Description                                                       |
-| -------------------- | ----------- | ----------------------------------------------------------------- |
-| `scope`              | entire repo | Directory or glob pattern to limit the scan                       |
-| `categories`         | all six     | Scanner names to run (comma-separated)                            |
-| `depth`              | `standard`  | `quick`: last 50 commits; `standard`: full; `deep`: + git history |
-| `severity-threshold` | `medium`    | Minimum severity to report                                        |
-| `dry-run`            | `false`     | Output findings report without creating issues                    |
+| Parameter            | Default        | Description                                                       |
+| -------------------- | -------------- | ----------------------------------------------------------------- |
+| `scope`              | entire repo    | Directory or glob pattern to limit the scan                       |
+| `categories`         | all discovered | Scanner names to run (comma-separated)                            |
+| `depth`              | `standard`     | `quick`: last 50 commits; `standard`: full; `deep`: + git history |
+| `severity-threshold` | `medium`       | Minimum severity to report                                        |
+| `dry-run`            | `false`        | Output findings report without creating issues                    |
 
 ## Orchestration Protocol
 
@@ -27,6 +27,12 @@ Follow these steps in order. Do not skip steps.
 ### Step 1: Map the Codebase
 
 1. Run `Glob("**/*")` to get the full file tree within `scope`
+1. **Exclude git submodules**: Run `git submodule status --recursive` via Bash.
+   If any submodules are detected, extract their paths and remove all files
+   under those directories from the file tree. This prevents filing findings
+   against code that belongs to a different repository. Log excluded submodule
+   paths so the user knows they were skipped (e.g.,
+   "Excluded submodule: containers/")
 1. Run `wc -l` via Bash on source files to get line counts
 1. Classify files into categories by extension and path:
 
@@ -47,6 +53,13 @@ Follow these steps in order. Do not skip steps.
 1. Detect platform (GitHub or GitLab) from `git remote -v`
 1. For `quick` depth: run `git log --oneline -50 --name-only` to limit to
    recently changed files. For `deep` depth: run `git log --format='%aN' --name-only` for contributor stats per file
+1. **Discover project-level audit agents**: Glob for
+   `.claude/agents/audit-*/audit-*.md` in the project root. For each match,
+   read the YAML frontmatter to extract `name` and `description`. Build a
+   `project_scanners` list. If a project agent shares a name with a built-in
+   scanner, the project agent takes precedence (log: "Project agent overrides
+   built-in: {name}"). Log each discovered agent (e.g., "Discovered project
+   agent: audit-perf-regression"). If no matches, proceed with built-ins only
 
 ### Step 2: Build Work Manifest
 
@@ -62,6 +75,7 @@ scanners based on classification:
 | AI Config files         | ai-config only                      |
 | Source + paired test    | test-gaps (paired)                  |
 | High-churn files (deep) | all scanners                        |
+| All files (per scope)   | project agents (self-filtering)     |
 
 Build a manifest object for each scanner:
 
@@ -91,30 +105,109 @@ fields instead of a flat `files` list.
 For `architecture`, include `file_tree` and `git_stats` (if available from
 deep mode) in addition to `files`.
 
+For project-level agents, build a manifest with `files` set to all classified
+files within scope and include the agent's `description` under a
+`routing_hint` field. The agent self-filters to relevant files. Use the same
+`thresholds` and `context` as built-in scanners.
+
+### Step 2.5: Deterministic Pre-Scan
+
+Before dispatching LLM scanners, run deterministic pattern detection to catch
+regex-matchable findings at zero LLM cost.
+
+1. **Discover check-\* skills with patterns.sh**: Glob for
+   `~/.claude/skills/check-*/patterns.sh` (user-level) and
+   `.claude/skills/check-*/patterns.sh` (project-level)
+
+1. **For each patterns.sh found**: Write the file manifest (one path per line)
+   to a temp file, then run:
+
+   ```bash
+   bash <skill-dir>/patterns.sh <tempfile>
+   ```
+
+1. **Parse TSV output**: Each line is
+   `file\tline\tcategory\tevidence\tcertainty`. Collect findings with certainty
+   `HIGH` and method `deterministic`.
+
+1. **Map findings to scanner domains**: Match check-\* skill names to audit
+   agent domains (e.g., `check-security` → `audit-security`,
+   `check-code-health` → `audit-code-health`). Unmatched findings go into a
+   standalone `pre-scan` findings group.
+
+1. **Include pre-scan findings in scanner manifests**: When dispatching each
+   audit agent in Step 3, include the relevant pre-scan findings in the task
+   prompt under a `## Pre-Scan Findings` section. Instruct the agent: "These
+   patterns were already detected deterministically. Skip re-detecting them.
+   Focus on context-dependent analysis that regex cannot do."
+
+1. **Add pre-scan findings to final output**: Deterministic findings with HIGH
+   certainty go directly into the aggregated findings (Step 4) without needing
+   LLM confirmation.
+
+If no check-\* skills with patterns.sh are found, skip this step silently.
+If a patterns.sh exits non-zero, log the error and continue with remaining
+skills.
+
 ### Step 3: Dispatch Scanners in Parallel
 
-Send **a single message** with up to 6 `Task` tool calls (one per scanner).
-Each task prompt must include:
+Send **a single message** with one `Task` tool call per active scanner. If
+total scanners exceed 6, dispatch in batches of 6. Each task prompt must
+include:
 
 1. The scanner's manifest (from Step 2)
 1. The full finding schema (from `finding-schema.md`)
 1. The severity threshold
 
-Use these agent names:
+Use the active scanner list assembled in Step 1:
 
-- `audit-code-health` — code health scanner
-- `audit-security` — security scanner
-- `audit-test-gaps` — test gaps scanner
-- `audit-architecture` — architecture scanner
-- `audit-docs` — documentation scanner
-- `audit-ai-config` — AI tooling configuration scanner
+**Built-in scanners** (unless overridden by a project agent of the same name):
+audit-code-health, audit-security, audit-test-gaps, audit-architecture,
+audit-docs, audit-ai-config
 
-All scanners use `model: sonnet` and `tools: Read, Grep, Glob, Bash, Task`.
+**Project scanners** (discovered from `.claude/agents/audit-*`):
+Include all project agents from the `project_scanners` list.
+
+Scanners use the model declared in their agent frontmatter
+(`sonnet` or `opus` depending on task complexity) and `tools: Read, Grep, Glob, Bash, Task`.
 Scanners with manifests exceeding 2000 source lines automatically fan out to
 batch sub-agents (model: haiku) — see each scanner's agent definition for
 details.
 
 Skip scanners not in the `categories` parameter.
+
+### Step 3.5: Verify Scanner Completion
+
+Before proceeding to aggregation, validate all scanner results:
+
+1. **Check completion** — verify all dispatched scanner Tasks completed
+   (no timeouts or crashes). If a scanner timed out or errored:
+
+   - Log which scanner failed and why
+   - Proceed with partial results from successful scanners
+   - Note the incomplete scan in the final summary
+
+1. **Validate output** — for each scanner result:
+
+   - Verify the response contains parseable JSON in a \`\`\`json fence
+   - Check the `scanner` field matches the expected scanner name
+   - Verify `findings` is an array (even if empty)
+   - Verify each finding has the required fields per `finding-schema.md`
+     (including the `certainty` object)
+   - If validation fails: discard the malformed result and log the error
+
+1. **Report** scanner status before proceeding:
+
+   ```text
+   Scanner completion: 6/6 succeeded
+   ```
+
+   Or if partial:
+
+   ```text
+   Scanner completion: 5/6 succeeded (audit-architecture: timeout)
+   Proceeding with partial results.
+   ```
 
 ### Step 4: Aggregate and Deduplicate
 
@@ -129,6 +222,9 @@ After all scanners return:
    - Stale comment (docs) + deprecated API (code-health) → merge
    - CLAUDE.md drift (ai-config) + outdated README (docs) → merge
    - MCP misconfiguration (ai-config) + hardcoded secret (security) → merge
+   - Any project-scanner finding + any other scanner finding on same file →
+     cross-reference note only (do not merge). Predefined merge rules apply
+     only between built-in scanner pairs
 1. **Aggregate acknowledged findings**: Collect `acknowledged_findings` arrays
    from all scanners into a unified list for the final report
 1. **Filter**: Remove findings below `severity-threshold`
@@ -149,7 +245,10 @@ Output Format section). Stop here.
    - Same pattern across files → one issue (max 10 findings per issue)
    - Cross-scanner correlations → single merged issue
 1. **Build issue payloads**: For each group, assemble the JSON payload described
-   in `issue-templates.md` (Issue-Writer Sub-Agent Protocol section)
+   in `issue-templates.md` (Issue-Writer Sub-Agent Protocol section). For
+   project-scanner findings, derive the category label as
+   `audit/<scanner-name-without-audit-prefix>` (e.g., `audit-perf-regression`
+   → `audit/perf-regression`) and set `create_label: true` in the payload
 1. **Dispatch issue-writer sub-agents**: Send groups to `issue-writer` agents
    via the Task tool (model: haiku). Each issue-writer receives one group and
    handles duplicate detection + issue creation independently:
@@ -160,6 +259,53 @@ Output Format section). Stop here.
    (`created`/`skipped`/`error`), `url`, and `reason`
 1. **Output summary**: List created issues with URLs, note any skipped
    duplicates or errors
+
+## Auto-Fix (Opt-In)
+
+When invoked with `--auto-fix` or when the user confirms, the pipeline can
+automatically fix CRITICAL and HIGH certainty findings with trivial or small
+effort.
+
+**Eligibility**: `certainty.level` in (`CRITICAL`, `HIGH`) AND `effort` in
+(`trivial`, `small`).
+
+### Auto-Fix Workflow
+
+1. **Filter eligible findings** from the aggregated results
+
+1. **Group by file** to minimize edit conflicts
+
+1. **For each group**, dispatch the `refactorer` agent with:
+
+   - The finding's `file`, `line_start`/`line_end`, `description`, `suggestion`
+   - Instruction: apply the suggestion, preserve surrounding code
+
+1. **Re-scan** modified files with the original scanner to verify the fix
+   resolved the finding without introducing new ones
+
+1. **Report** results:
+
+   ```text
+   ## Auto-Fix Results
+
+   | Finding ID         | Category         | Certainty | Status      |
+   |--------------------|------------------|-----------|-------------|
+   | security-001       | hardcoded-secret | CRITICAL  | ✓ fixed     |
+   | code-health-003    | unused-import    | HIGH      | ✓ fixed     |
+   | code-health-007    | dead-code        | MEDIUM    | — skipped   |
+   | architecture-002   | bus-factor       | MEDIUM    | — flagged   |
+
+   Auto-fixed: 2 | Flagged for review: 1 | Report only: 1
+   ```
+
+### Safety
+
+- CRITICAL fixes (secrets, injection) add a warning comment explaining
+  what was changed and why
+- Never auto-fix MEDIUM or LOW certainty — these require human judgment
+- If re-scan shows new findings after fix, revert the fix and flag for
+  human review
+- Auto-fix never modifies test files
 
 ## When to Use
 

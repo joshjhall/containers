@@ -87,6 +87,10 @@ These tools get the latest version at build time, which is generally fine:
 - @playwright/test
 - (and many more dev tools)
 
+### Via npm install -g (in dev-tools.sh, requires Node.js)
+
+- agnix (AI config linter)
+
 ### Via gem install (in ruby-dev.sh)
 
 - bundler

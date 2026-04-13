@@ -29,7 +29,13 @@ ______________________________________________________________________
       "suggestion": "Actionable recommendation to resolve",
       "effort": "trivial | small | medium | large",
       "tags": ["maintainability"],
-      "related_files": ["path/to/related.ext"]
+      "related_files": ["path/to/related.ext"],
+      "certainty": {
+        "level": "HIGH",
+        "support": 1,
+        "confidence": 0.95,
+        "method": "deterministic"
+      }
     }
   ]
 }
@@ -72,6 +78,83 @@ ______________________________________________________________________
 | `effort`        | string   | yes      | One of: `trivial`, `small`, `medium`, `large`                       |
 | `tags`          | string[] | yes      | Relevant tags (e.g., `maintainability`, `security`)                 |
 | `related_files` | string[] | yes      | Other files involved (empty array if none)                          |
+| `certainty`     | object   | yes      | Multi-signal certainty grading (see Certainty Grading below)        |
+| `pre_scan`      | boolean  | no       | `true` if initially detected by deterministic pre-scan              |
+| `skill`         | string   | no       | Name of the check-\* skill that produced this finding               |
+
+______________________________________________________________________
+
+## Certainty Grading
+
+Every finding MUST include a `certainty` object. All scanners — both check-\*
+skills and audit-\* agents — assign certainty based on detection method.
+
+### Certainty Object
+
+```json
+{
+  "level": "HIGH",
+  "support": 1,
+  "confidence": 0.95,
+  "method": "deterministic"
+}
+```
+
+| Field        | Type   | Description                                          |
+| ------------ | ------ | ---------------------------------------------------- |
+| `level`      | string | `CRITICAL`, `HIGH`, `MEDIUM`, or `LOW`               |
+| `support`    | int    | Number of evidence signals supporting this finding   |
+| `confidence` | float  | 0.0-1.0 reliability score                            |
+| `method`     | string | `deterministic` (patterns.sh), `heuristic`, or `llm` |
+
+### Level Definitions
+
+| Level    | Detection Method            | Meaning                                            | Action             |
+| -------- | --------------------------- | -------------------------------------------------- | ------------------ |
+| CRITICAL | Deterministic (security)    | Security threat (secrets, injection) — high impact | Auto-fix + warning |
+| HIGH     | Deterministic (patterns.sh) | Definite problem, safe to fix automatically        | Auto-fix           |
+| MEDIUM   | Heuristic + LLM context     | Probable issue, needs context to confirm           | Flag for review    |
+| LOW      | LLM judgment only           | Possible concern, requires human verification      | Report only        |
+
+### Auto-Fix Eligibility
+
+Findings with certainty `CRITICAL` or `HIGH` and effort `trivial` or `small`
+are eligible for auto-fix when `/codebase-audit --auto-fix` is enabled. See
+the Auto-Fix section in `SKILL.md`.
+
+## Check Run Audit Trail
+
+When the unified `checker` agent produces findings, it includes a `check_run`
+object at the top level (sibling to `findings`):
+
+```json
+{
+  "check_run": {
+    "scope": "codebase",
+    "skills_executed": ["check-docs-staleness", "check-docs-deadlinks"],
+    "skills_skipped": [],
+    "legacy_agents_used": [],
+    "timestamp": "2026-04-03T14:30:00Z",
+    "timing_ms": {
+      "discovery": 50,
+      "pass1_deterministic": 200,
+      "pass2_heuristic": 3000,
+      "pass3_judgment": 500,
+      "merge": 100,
+      "total": 3850
+    },
+    "pass_stats": {
+      "deterministic_hits": 42,
+      "deterministic_confirmed": 15,
+      "deterministic_dismissed": 27,
+      "heuristic_findings": 8,
+      "judgment_findings": 2
+    },
+    "parallelized": false,
+    "files_in_scope": 150
+  }
+}
+```
 
 ______________________________________________________________________
 
@@ -124,6 +207,17 @@ grouping and deduplication.
 ### docs
 
 `stale-comment`, `missing-api-docs`, `outdated-readme`, `misleading-example`
+
+### check-docs-\* (unified check skills)
+
+These categories are produced by the `checker` agent using check-\* skills.
+They replace and expand on the `docs` scanner categories above.
+
+- **check-docs-staleness**: `stale-comment`, `outdated-reference`, `expired-date`
+- **check-docs-deadlinks**: `broken-relative-link`, `broken-anchor`, `suspicious-external-link`
+- **check-docs-organization**: `missing-root-doc`, `missing-dir-readme`, `inconsistent-structure`, `doc-duplication`
+- **check-docs-examples**: `broken-example`, `deprecated-example`, `incomplete-example`
+- **check-docs-missing-api**: `undocumented-public-api`, `undocumented-complex-function`
 
 ### ai-config
 

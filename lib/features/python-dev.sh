@@ -21,6 +21,9 @@
 #
 set -euo pipefail
 
+# Default SKIP_LSP_INSTALL if not passed from Dockerfile ARG
+SKIP_LSP_INSTALL="${SKIP_LSP_INSTALL:-false}"
+
 # Source standard feature header for user handling
 source /tmp/build-scripts/base/feature-header.sh
 
@@ -156,37 +159,42 @@ write_bashrc_content /etc/bashrc.d/25-python-dev.sh "Python development aliases"
 
 # ============================================================================
 # Python Language Server (for IDE support)
+# Skipped when SKIP_LSP_INSTALL=true (headless agent containers)
 # ============================================================================
-log_message "Installing Python language server for IDE support..."
+if [ "${SKIP_LSP_INSTALL}" != "true" ]; then
+    log_message "Installing Python language server for IDE support..."
 
-# Install python-lsp-server with formatting and linting plugins
-# - python-lsp-server: Core LSP implementation
-# - python-lsp-black: Black formatter integration
-# - python-lsp-ruff: Ruff linter integration (fast, replaces flake8/isort)
-log_command "Installing python-lsp-server with plugins" \
-    su - "${USERNAME}" -c "export PIP_CACHE_DIR='${PIP_CACHE_DIR}' && /usr/local/bin/python -m pip install --no-warn-script-location --prefer-binary \
-    python-lsp-server \
-    python-lsp-black \
-    python-lsp-ruff"
+    # Install python-lsp-server with formatting and linting plugins
+    # - python-lsp-server: Core LSP implementation
+    # - python-lsp-black: Black formatter integration
+    # - python-lsp-ruff: Ruff linter integration (fast, replaces flake8/isort)
+    log_command "Installing python-lsp-server with plugins" \
+        su - "${USERNAME}" -c "export PIP_CACHE_DIR='${PIP_CACHE_DIR}' && /usr/local/bin/python -m pip install --no-warn-script-location --prefer-binary \
+        python-lsp-server \
+        python-lsp-black \
+        python-lsp-ruff"
 
-# Verify LSP installation
-if su - "${USERNAME}" -c "command -v pylsp" &>/dev/null; then
-    log_message "Python LSP installed successfully"
+    # Verify LSP installation
+    if su - "${USERNAME}" -c "command -v pylsp" &>/dev/null; then
+        log_message "Python LSP installed successfully"
+    else
+        log_warning "Python LSP installation could not be verified"
+    fi
+
+    # Install pyright (type checker and language server)
+    # Required by the pyright-lsp Claude Code plugin for type checking integration.
+    # The pip package is a wrapper that bundles the pyright Node.js binary.
+    log_command "Installing pyright" \
+        su - "${USERNAME}" -c "export PIP_CACHE_DIR='${PIP_CACHE_DIR}' && /usr/local/bin/python -m pip install --no-warn-script-location --prefer-binary pyright"
+
+    # Verify pyright installation
+    if su - "${USERNAME}" -c "command -v pyright" &>/dev/null; then
+        log_message "Pyright installed successfully"
+    else
+        log_warning "Pyright installation could not be verified"
+    fi
 else
-    log_warning "Python LSP installation could not be verified"
-fi
-
-# Install pyright (type checker and language server)
-# Required by the pyright-lsp Claude Code plugin for type checking integration.
-# The pip package is a wrapper that bundles the pyright Node.js binary.
-log_command "Installing pyright" \
-    su - "${USERNAME}" -c "export PIP_CACHE_DIR='${PIP_CACHE_DIR}' && /usr/local/bin/python -m pip install --no-warn-script-location --prefer-binary pyright"
-
-# Verify pyright installation
-if su - "${USERNAME}" -c "command -v pyright" &>/dev/null; then
-    log_message "Pyright installed successfully"
-else
-    log_warning "Pyright installation could not be verified"
+    log_message "Skipping Python language server (SKIP_LSP_INSTALL=true)"
 fi
 
 # ============================================================================

@@ -69,6 +69,25 @@ docker build --build-arg CLAUDE_EXTRA_PLUGINS="stripe,posthog,vercel" ...
 docker run -e CLAUDE_EXTRA_PLUGINS="stripe,posthog" ...
 ```
 
+### AgentSys Plugins
+
+When `INCLUDE_DEV_TOOLS=true` and Node.js is available, the `agentsys` CLI is
+installed at build time. At first startup, `claude-setup` automatically
+installs the **deslop** plugin for AI slop detection:
+
+- **deslop** — Detects AI-generated artifacts in code: leftover debug
+  statements, verbose docstrings, hedging language ("might", "could
+  potentially"), buzzword inflation ("enterprise-grade", "robust"), placeholder
+  text, and empty error handlers. Uses 60+ regex patterns with zero LLM cost
+  for initial detection.
+
+Deslop installs to `~/.claude/plugins/marketplaces/agentsys/` — a separate
+namespace from the core Anthropic marketplace plugins. No conflicts with
+existing plugins, skills, or agents.
+
+After installation, use the `/deslop` command in Claude Code to scan for AI
+slop in your codebase.
+
 ## MCP Server Configuration
 
 ### Extra MCP Servers
@@ -230,14 +249,16 @@ Use `ANTHROPIC_MODEL` to set the default model:
 
 ```bash
 # Set default model at runtime (docker-compose.yml or .env)
-ANTHROPIC_MODEL=claude-opus-4-6              # Claude Opus 4.6 (most capable)
+ANTHROPIC_MODEL=claude-opus-4-6[1m]          # Claude Opus 4.6 with 1M context (most capable)
+ANTHROPIC_MODEL=claude-opus-4-6              # Claude Opus 4.6 with 200k context
 ANTHROPIC_MODEL=claude-sonnet-4-6            # Claude Sonnet 4.6 (balanced)
 ANTHROPIC_MODEL=claude-sonnet-4-5-20250929   # Claude Sonnet 4.5 (specific version)
 ANTHROPIC_MODEL=claude-haiku-4-5-20251001    # Claude Haiku 4.5 (fastest)
 ```
 
-**Note**: Use full model IDs (e.g., `claude-opus-4-6`), not aliases like `opus`
-or `sonnet`.
+**Note**: Use full model IDs (e.g., `claude-opus-4-6[1m]`), not aliases like
+`opus` or `sonnet`. The `[1m]` suffix selects the 1M token context window
+variant.
 
 ## Auth Watcher Configuration
 

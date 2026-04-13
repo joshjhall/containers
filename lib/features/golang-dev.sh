@@ -53,6 +53,9 @@
 #
 set -euo pipefail
 
+# Default SKIP_LSP_INSTALL if not passed from Dockerfile ARG
+SKIP_LSP_INSTALL="${SKIP_LSP_INSTALL:-false}"
+
 # Source standard feature header for user handling
 source /tmp/build-scripts/base/feature-header.sh
 
@@ -108,8 +111,12 @@ export PATH="${GOPATH}/bin:$PATH"
 
 # Core development tools
 log_message "Installing core development tools..."
-log_command "Installing gopls (language server)" \
-    /usr/local/bin/go install golang.org/x/tools/gopls@latest || true
+if [ "${SKIP_LSP_INSTALL}" != "true" ]; then
+    log_command "Installing gopls (language server)" \
+        /usr/local/bin/go install golang.org/x/tools/gopls@latest || true
+else
+    log_message "Skipping gopls (SKIP_LSP_INSTALL=true)"
+fi
 log_command "Installing delve debugger" \
     /usr/local/bin/go install github.com/go-delve/delve/cmd/dlv@latest || true
 log_command "Installing golangci-lint" \

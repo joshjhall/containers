@@ -65,14 +65,74 @@ Start restrictive, expand as needed. Every unnecessary tool is a risk.
 
 ## Model Selection
 
-Match the model to the task's complexity and frequency:
+Match the model to the task's complexity. **Quality compounds** — bad
+exploration produces bad plans produces bad implementation. Use opus when
+errors propagate downstream.
 
-| Model     | Use when                                        | Trade-off             |
-| --------- | ----------------------------------------------- | --------------------- |
-| `haiku`   | Fast lookups, simple checks, high-frequency ops | Fastest, cheapest     |
-| `sonnet`  | Balanced analysis, code review, most agents     | Good quality + speed  |
-| `opus`    | Complex reasoning, architecture, orchestration  | Most capable, slowest |
-| `inherit` | Same model as the conversation (default)        | Context-dependent     |
+| Model     | Use when                                        | Rationale                                 |
+| --------- | ----------------------------------------------- | ----------------------------------------- |
+| `haiku`   | Fast lookups, simple checks, high-frequency ops | Mechanical work, no judgment calls        |
+| `sonnet`  | Pattern matching, code review, most agents      | Good quality for structured tasks         |
+| `opus`    | Reasoning-critical, architecture, quality audit | Errors propagate — quality compounds here |
+| `inherit` | Same model as the conversation (default)        | Let the caller decide                     |
+
+Default to `sonnet` unless the agent performs reasoning-critical work where
+quality compounds (use `opus`) or purely mechanical work (use `haiku`). See
+`patterns.md` — **Model Tiering Guide** for the full decision framework.
+
+## MUST NOT Restrictions
+
+Document workflow-level prohibitions in the agent's `## Restrictions` section.
+Format: `MUST NOT` + verb + rationale. These prevent agents from overstepping
+their role in the pipeline.
+
+Every agent MUST have a `## Restrictions` section. Derive restrictions from:
+
+1. **Role boundary** — what the agent observes vs what it modifies
+1. **Pipeline position** — what comes before/after this agent in the workflow
+1. **Escalation triggers** — when the agent must hand off to a human or another agent
+
+Examples by role:
+
+- **Read-only agents** (reviewers, auditors): MUST NOT edit files, create
+  commits, or apply fixes — observe and report only
+- **Write agents** (refactorer, test-writer): MUST NOT change behavior
+  (refactorer) or modify production code (test-writer)
+- **Pipeline agents** (issue-writer, rebase-agent): MUST NOT take actions
+  outside their pipeline stage — issue-writer creates issues, not PRs;
+  rebase-agent resolves trivial conflicts, not logic changes
+
+### Workflow Gate Awareness
+
+Agents that participate in pipelines should document which gates they respect:
+
+- **Pre-condition**: what must be true before this agent runs (e.g.,
+  "all scanners must complete before issue-writer dispatches")
+- **Post-condition**: what this agent guarantees when it finishes (e.g.,
+  "all findings conform to finding-schema.md")
+- **Escalation**: when and how this agent hands off (e.g., "non-trivial
+  conflicts escalate to human orchestrator")
+
+See `patterns.md` — **Safety Constraints Template** for a copy-pasteable block.
+
+## Safety Constraints
+
+For every tool in the `tools:` list, document WHY it is granted. For every
+tool deliberately excluded, document WHY it is denied. This rationale helps
+reviewers verify the agent's access is intentional, not accidental.
+
+## Prose Trimming
+
+Remove anything the model already knows or the code already enforces. Apply
+the deletion test: if removing a line changes no agent behavior, delete it.
+Agent prompts that restate model knowledge waste context tokens and dilute
+the instructions that actually matter.
+
+## Orchestrator Extension
+
+See `patterns.md` — **Orchestrator Extension Patterns** section. Load it when
+building an agent that participates in a multi-agent pipeline (e.g., audit
+scanners for `codebase-audit`, sub-reviewers for `code-reviewer`).
 
 ## Core Principles
 

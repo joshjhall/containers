@@ -79,7 +79,10 @@ download_and_verify() {
 
     # Set up trap to clean up temp file on exit or interruption
     # This ensures cleanup even if curl/verification is interrupted with Ctrl+C
-    trap 'command rm -f "$temp_file"' EXIT INT TERM
+    # Note: use double quotes so $temp_file is expanded at trap-set time,
+    # since it's a local variable that goes out of scope when the function returns.
+    # shellcheck disable=SC2064
+    trap "command rm -f '${temp_file}'" EXIT INT TERM
 
     # Scrub URL in case it contains embedded credentials
     local display_url="$url"
@@ -153,8 +156,10 @@ download_and_extract() {
     local temp_tarball="/tmp/download-verify-$$.tar.gz"
 
     # Set up trap to clean up temp tarball on exit or interruption
-    # Note: download_and_verify has its own trap for the .tmp file
-    trap 'command rm -f "$temp_tarball"' EXIT INT TERM
+    # Note: use double quotes so $temp_tarball is expanded at trap-set time,
+    # since it's a local variable that goes out of scope when the function returns.
+    # shellcheck disable=SC2064
+    trap "command rm -f '${temp_tarball}'" EXIT INT TERM
 
     # Download and verify tarball
     if ! download_and_verify "$url" "$expected_sha256" "$temp_tarball"; then

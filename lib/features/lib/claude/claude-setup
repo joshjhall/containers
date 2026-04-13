@@ -353,11 +353,11 @@ if [ -d "$TEMPLATES_DIR" ]; then
     echo ""
 
     # --- Resolve skill list ---
-    # Default static skills (14 template-based skills).
+    # Default static skills (27 template-based skills).
     # Excludes: container-environment (always installs dynamically),
     # conditional skills (docker-development, cloud-infrastructure),
     # and project-level .claude/skills/ (always available via repo).
-    DEFAULT_SKILLS="git-workflow,testing-patterns,code-quality,development-workflow,error-handling,documentation-authoring,shell-scripting,skill-authoring,agent-authoring,next-issue,codebase-audit,next-issue-ship,memory-conventions,orchestrate"
+    DEFAULT_SKILLS="git-workflow,testing-patterns,code-quality,development-workflow,error-handling,documentation-authoring,shell-scripting,skill-authoring,agent-authoring,file-issue,next-issue,codebase-audit,next-issue-ship,memory-conventions,orchestrate,provision-agent,rebase-lockfile,rebase-generated,rebase-imports,rebase-version,check-docs-staleness,check-docs-deadlinks,check-docs-organization,check-docs-examples,check-docs-missing-api,loop-make-it-work,loop-make-it-right,loop-make-it-secure,loop-make-it-tested,loop-make-it-documented,context-security,context-data-storage,drift-detect,check-security,check-code-health,check-ai-config"
     # Use if-else to capture return code safely under set -e
     if SKILL_RESULT=$(_resolve_override_list_or_file "CLAUDE_SKILLS" "$DEFAULT_SKILLS"); then
         SKILL_LIST_IS_OVERRIDE=0
@@ -392,7 +392,7 @@ if [ -d "$TEMPLATES_DIR" ]; then
                 echo "    ✓ $skill_name (already installed)"
             else
                 mkdir -p "$target_dir"
-                cp "$skill_dir"/* "$target_dir/"
+                cp -r "$skill_dir"/* "$target_dir/"
                 echo "    ✓ $skill_name installed"
             fi
         done
@@ -419,7 +419,7 @@ if [ -d "$TEMPLATES_DIR" ]; then
                 echo "    ✓ $skill_name (already installed)"
             elif [ -d "$skill_dir" ]; then
                 mkdir -p "$target_dir"
-                cp "$skill_dir"/* "$target_dir/"
+                cp -r "$skill_dir"/* "$target_dir/"
                 echo "    ✓ $skill_name installed"
             else
                 echo "    ⚠ $skill_name not found in templates"
@@ -497,7 +497,7 @@ SKILL_HEADER
             echo "    ✓ docker-development (already installed)"
         else
             mkdir -p "$target_dir"
-            cp "$TEMPLATES_DIR/skills/docker-development/"* "$target_dir/"
+            cp -r "$TEMPLATES_DIR/skills/docker-development/"* "$target_dir/"
             echo "    ✓ docker-development installed"
         fi
     fi
@@ -545,7 +545,7 @@ CLOUD_HEADER
     fi
 
     # --- Agents (configurable via CLAUDE_AGENTS) ---
-    DEFAULT_AGENTS="code-reviewer,test-writer,refactorer,debugger,audit-code-health,audit-security,audit-test-gaps,audit-architecture,audit-docs,audit-ai-config,issue-writer"
+    DEFAULT_AGENTS="code-reviewer,test-writer,refactorer,debugger,audit-code-health,audit-security,audit-test-gaps,audit-architecture,audit-docs,audit-ai-config,issue-writer,issue-filer,skill-author,agent-author,checker,rebase-agent,ci-fixer"
     # Use if-else to capture return code safely under set -e
     if AGENT_RESULT=$(_resolve_override_list_or_file "CLAUDE_AGENTS" "$DEFAULT_AGENTS"); then
         AGENT_LIST_IS_OVERRIDE=0
@@ -576,7 +576,7 @@ CLOUD_HEADER
                 echo "    ✓ $agent_name (already installed)"
             else
                 mkdir -p "$target_dir"
-                cp "$agent_dir"/* "$target_dir/"
+                cp -r "$agent_dir"/* "$target_dir/"
                 echo "    ✓ $agent_name installed"
             fi
         done
@@ -603,7 +603,7 @@ CLOUD_HEADER
                 echo "    ✓ $agent_name (already installed)"
             elif [ -d "$agent_dir" ]; then
                 mkdir -p "$target_dir"
-                cp "$agent_dir"/* "$target_dir/"
+                cp -r "$agent_dir"/* "$target_dir/"
                 echo "    ✓ $agent_name installed"
             else
                 echo "    ⚠ $agent_name not found in templates"
@@ -670,12 +670,17 @@ elif is_claude_authenticated; then
     fi
 
     # Language-Specific LSP Plugins (Based on Build Flags)
+    # Skipped when SKIP_LSP_INSTALL=true (headless agent containers)
     echo ""
-    echo "Language LSP plugins:"
-    [ "${INCLUDE_RUST_DEV:-false}" = "true" ] && { install_plugin "rust-analyzer-lsp" || true; }
-    [ "${INCLUDE_PYTHON_DEV:-false}" = "true" ] && { install_plugin "pyright-lsp" || true; }
-    [ "${INCLUDE_NODE_DEV:-false}" = "true" ] && { install_plugin "typescript-lsp" || true; }
-    [ "${INCLUDE_KOTLIN_DEV:-false}" = "true" ] && { install_plugin "kotlin-lsp" || true; }
+    if [ "${SKIP_LSP_INSTALL:-false}" != "true" ]; then
+        echo "Language LSP plugins:"
+        [ "${INCLUDE_RUST_DEV:-false}" = "true" ] && { install_plugin "rust-analyzer-lsp" || true; }
+        [ "${INCLUDE_PYTHON_DEV:-false}" = "true" ] && { install_plugin "pyright-lsp" || true; }
+        [ "${INCLUDE_NODE_DEV:-false}" = "true" ] && { install_plugin "typescript-lsp" || true; }
+        [ "${INCLUDE_KOTLIN_DEV:-false}" = "true" ] && { install_plugin "kotlin-lsp" || true; }
+    else
+        echo "Language LSP plugins: skipped (SKIP_LSP_INSTALL=true)"
+    fi
 
     # Extra Plugins (From Environment Variable, supports _FILE)
     # CLAUDE_EXTRA_PLUGINS can be set at build time or runtime
@@ -694,6 +699,19 @@ elif is_claude_authenticated; then
             plugin=$(echo "$plugin" | xargs)  # Trim whitespace
             [ -n "$plugin" ] && { install_plugin "$plugin" || true; }
         done
+    fi
+
+    # AgentSys deslop plugin (AI slop detection)
+    # Installs to ~/.claude/plugins/marketplaces/agentsys/ — separate namespace
+    if command -v agentsys &>/dev/null; then
+        echo "AgentSys plugins:"
+        echo "  - Installing deslop (AI slop detection)..."
+        if agentsys install deslop --tool claude --no-strip >/dev/null 2>&1; then
+            echo "    ✓ deslop installed"
+        else
+            echo "    ⚠ deslop installation failed (non-critical)"
+        fi
+        echo ""
     fi
 
     echo ""

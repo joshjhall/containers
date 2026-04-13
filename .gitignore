@@ -46,6 +46,7 @@ Thumbs.db
 .claude/memory/tmp/
 .claude/plans/
 .claude/*.lock
+.worktrees/
 
 # ============================================================================
 # DOCKER BUILD ARTIFACTS
@@ -97,10 +98,11 @@ __pycache__/
 *$py.class
 *.so
 .Python
-env/
+/env/
 venv/
-ENV/
+/ENV/
 .venv/
+!examples/env/
 pip-log.txt
 pip-delete-this-directory.txt
 

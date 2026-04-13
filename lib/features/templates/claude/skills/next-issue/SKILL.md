@@ -5,8 +5,9 @@ description: Issue-driven development workflow that picks the next issue by seve
 # Next Issue
 
 **Companion file**: See `state-format.md` in this skill directory for the state
-file schema, priority ordering commands, and branch naming convention. Load it
-at the start of every invocation.
+file schema (JSON), priority ordering commands, branch naming convention,
+checkpoint structure, and reset points. Load it at the start of every
+invocation.
 
 Accepts an optional issue number argument: `/next-issue 123` skips priority
 selection and targets that specific issue.
@@ -40,15 +41,19 @@ Proceed with Phase 0 as normal regardless of mode.
 
 1. **Enter plan mode** (call `EnterPlanMode` tool)
 
-1. **Backward compatibility**: If the legacy singleton file
-   `.claude/memory/tmp/next-issue-state.md` exists, read its `issue:` field
-   and rename it to `.claude/memory/tmp/next-issue-{N}.md` (where `{N}` is
-   the issue number). This migration happens once automatically.
+1. **Legacy migration** — run in order:
 
-1. **Discover state files**: List all per-issue state files:
+   a. If `.claude/memory/tmp/next-issue-state.md` exists (legacy singleton),
+   read its `issue:` field, rename to `.claude/memory/tmp/next-issue-{N}.md`
+
+   b. If any `.claude/memory/tmp/next-issue-*.md` files exist (YAML format),
+   migrate each to `.json`: read the YAML frontmatter fields, write a new
+   `.json` file with those fields plus `"version": 2`, delete the `.md` file
+
+1. **Discover state files**:
 
    ```bash
-   ls .claude/memory/tmp/next-issue-*.md 2>/dev/null
+   ls .claude/memory/tmp/next-issue-*.json 2>/dev/null
    ```
 
 1. **If multiple state files exist** (parallel agents scenario):
@@ -64,7 +69,7 @@ Proceed with Phase 0 as normal regardless of mode.
 
 **Validation** (for a single state file or user-selected file):
 
-- Read the file and extract `phase:`, `issue:`, `branch:` fields
+- Read the `.json` file and extract `phase`, `issue`, `branch` fields
 - Check if the issue is still open (`gh issue view {N} --json state` or
   `glab issue view {N}`)
 - Check if the branch still exists (`git branch --list {branch}`)
@@ -72,6 +77,8 @@ Proceed with Phase 0 as normal regardless of mode.
   delete the state file and proceed to Phase 1 (no need to ask the user)
 - **If issue is still open and branch exists**: offer to resume:
   - Show the issue number, title, current phase, and branch
+  - **If the state file has a `checkpoint` object**: show `key_decisions` and
+    `next_action` so the user has context for the decision
   - Ask: **Resume this work or start fresh?**
   - If resume: jump to the recorded phase
   - If fresh: delete the state file and proceed to Phase 1
@@ -79,28 +86,48 @@ Proceed with Phase 0 as normal regardless of mode.
 ## Phase 1 — Select
 
 1. **Detect platform** from `git remote -v`:
+
    - `github.com` or `ghe.` → GitHub (`gh`)
    - `gitlab.com` or `gitlab.` → GitLab (`glab`)
+
 1. **If a specific issue number was provided**: fetch that issue directly and
    skip the priority query
+
 1. **Otherwise query by priority** using the nested severity x effort loop
    (see `state-format.md` for exact commands). **Important**: all queries
-   MUST exclude issues with `status/in-progress`, `status/pr-pending`, or
-   `status/commit-pending` labels — see `state-format.md` for the exact
+   MUST exclude issues with `status/in-progress`, `status/pr-pending`,
+   `status/commit-pending`, or `status/on-hold` labels — see `state-format.md` for the exact
    `--search` / post-filter syntax. Pick the first open, unassigned issue
    returned
+
 1. **If no labeled issues found**: fall back to oldest open issue (also
-   excluding `status/in-progress`, `status/pr-pending`, and
-   `status/commit-pending`)
+   excluding `status/in-progress`, `status/pr-pending`,
+   `status/commit-pending`, and `status/on-hold`)
+
 1. Show the selected issue to the user — title, labels, body excerpt
+
 1. Ask: **Work on this issue?** (user can accept, skip to next, or pick
    a different one)
+
 1. Assign the issue to yourself
+
 1. **Label the issue** `status/in-progress`:
+
    - GitHub: `gh issue edit {N} --add-label "status/in-progress"`
    - GitLab: `glab issue update {N} --label "status/in-progress"`
-1. **Write state file** to `.claude/memory/tmp/next-issue-{N}.md` with
-   `phase: select`, issue number, title, platform
+
+1. **Write state file** to `.claude/memory/tmp/next-issue-{N}.json`:
+
+   ```json
+   {
+     "version": 2,
+     "issue": {N},
+     "title": "{title}",
+     "phase": "select",
+     "started": "{YYYY-MM-DD}",
+     "platform": "{github|gitlab}"
+   }
+   ```
 
 ## Phase 2 — Plan
 
@@ -127,10 +154,40 @@ Proceed with Phase 0 as normal regardless of mode.
    > Agent worktree mode: `/next-issue-ship` will auto-select commit-only
    > (Option 3). The orchestrator handles PR creation and delivery.
 
-1. **Update state file** with `phase: plan` and a one-line plan summary
+1. **Update state file** — write the full JSON with `phase: "plan"`, a
+   one-line `plan` summary, and the `checkpoint` object:
+
+   ```json
+   {
+     "version": 2,
+     "issue": {N},
+     "title": "{title}",
+     "phase": "plan",
+     "branch": "{branch}",
+     "plan": "{one-line summary}",
+     "started": "{date}",
+     "platform": "{platform}",
+     "checkpoint": {
+       "completed_phase": "plan",
+       "key_decisions": ["{non-obvious choice 1}", "{non-obvious choice 2}"],
+       "files_modified": [],
+       "files_planned": ["{file1}", "{file2}"],
+       "warnings": ["{anything the implementation phase should know}"],
+       "next_action": "Begin implementation"
+     }
+   }
+   ```
 
 1. **Exit plan mode** (call `ExitPlanMode` tool) — this presents the plan to
    the user for approval before implementation begins
+
+1. **Suggest context reset** — after plan approval, tell the user:
+
+   > Planning phase complete. Context can be safely cleared — state saved to
+   > `.claude/memory/tmp/next-issue-{N}.json`. Run `/clear` then `/next-issue`
+   > to resume from implementation.
+
+   This is advisory — continue normally if the user declines.
 
 ## Platform Detection
 

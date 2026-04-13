@@ -22,6 +22,8 @@
 #   - Process management: supervisor
 #   - Linting/Formatting: biome (fast linter/formatter for JS/TS/JSON/CSS)
 #   - TOML tools: taplo (TOML formatter and linter)
+#   - AI tools: agnix (AI agent config linter, requires Node.js),
+#               agentsys (AI plugin marketplace, requires Node.js)
 #
 # Note: Claude Code CLI, plugins, and MCP servers are now installed by
 #       claude-code-setup.sh which runs after this script.
@@ -58,15 +60,16 @@ DUF_VERSION="${DUF_VERSION:-0.9.1}"
 DIRENV_VERSION="${DIRENV_VERSION:-2.37.1}"
 ENTR_VERSION="${ENTR_VERSION:-5.8}"
 MKCERT_VERSION="${MKCERT_VERSION:-1.4.4}"
-GLAB_VERSION="${GLAB_VERSION:-1.89.0}"
-LAZYGIT_VERSION="${LAZYGIT_VERSION:-0.60.0}"
-DELTA_VERSION="${DELTA_VERSION:-0.19.1}"
-ACT_VERSION="${ACT_VERSION:-0.2.84}"
+GLAB_VERSION="${GLAB_VERSION:-1.92.1}"
+LAZYGIT_VERSION="${LAZYGIT_VERSION:-0.61.0}"
+DELTA_VERSION="${DELTA_VERSION:-0.19.2}"
+ACT_VERSION="${ACT_VERSION:-0.2.87}"
 GITCLIFF_VERSION="${GITCLIFF_VERSION:-2.8.0}"
-BIOME_VERSION="${BIOME_VERSION:-2.4.8}"
+BIOME_VERSION="${BIOME_VERSION:-2.4.11}"
 TAPLO_VERSION="${TAPLO_VERSION:-0.10.0}"
+JUST_VERSION="${JUST_VERSION:-1.48.0}"
 EZA_VERSION="${EZA_VERSION:-0.23.4}"
-UV_VERSION="${UV_VERSION:-0.10.12}"
+UV_VERSION="${UV_VERSION:-0.11.6}"
 
 # ============================================================================
 # Repository Configuration
@@ -271,10 +274,10 @@ export DIRENV_ALLOW_DIR="${DEV_TOOLS_CACHE}/direnv-allow"
 # Log feature summary
 log_feature_summary \
     --feature "Development Tools" \
-    --tools "gh,lazygit,delta,act,git-cliff,glab,biome,taplo,uv,duf,entr,fzf,direnv,mkcert,jq,ripgrep,fd,bat,eza,htop,ncdu" \
+    --tools "gh,lazygit,delta,act,git-cliff,glab,biome,taplo,uv,duf,entr,fzf,direnv,mkcert,jq,ripgrep,fd,bat,eza,htop,ncdu,agnix,agentsys" \
     --paths "${DEV_TOOLS_CACHE},/opt/fzf,${CAROOT}" \
     --env "DEV_TOOLS_CACHE,CAROOT,DIRENV_ALLOW_DIR,ENABLE_LSP_TOOL" \
-    --commands "gh,lazygit,delta,act,git-cliff,glab,biome,uv,uvx,duf,entr,fzf,direnv,mkcert,jq,rg,fd,bat,eza,htop,ncdu" \
+    --commands "gh,lazygit,delta,act,git-cliff,glab,biome,uv,uvx,duf,entr,fzf,direnv,mkcert,jq,rg,fd,bat,eza,htop,ncdu,agnix,agentsys" \
     --next-steps "Run 'test-dev-tools' to verify installation. Many modern CLI replacements are aliased (ls=eza, cat=bat, grep=rg, find=fd). Claude Code is installed separately by claude-code-setup.sh."
 
 # End logging

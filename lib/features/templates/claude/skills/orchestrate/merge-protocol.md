@@ -49,14 +49,27 @@ When `git merge` reports conflicts:
 
 1. **Resolution strategy by conflict type**:
 
-   | Conflict Type                  | Action                                                           |
-   | ------------------------------ | ---------------------------------------------------------------- |
-   | Both sides added imports       | Combine both import sets, deduplicate, sort                      |
-   | Whitespace / formatting only   | Accept agent's version (`git checkout --theirs <file>`)          |
-   | Same function modified         | Show both versions to user, ask which to keep or how to merge    |
-   | New file vs new file           | Show both, ask user — usually keep both with renamed paths       |
-   | Deletion vs modification       | Ask user — deletion usually wins unless modification is critical |
-   | Lock files (package-lock, etc) | Regenerate: accept one side, then re-run the package manager     |
+   Trivial conflicts can be auto-resolved by dispatching the `rebase-agent`:
+
+   | Conflict Type                   | Action                                                      | Agent                           |
+   | ------------------------------- | ----------------------------------------------------------- | ------------------------------- |
+   | Lock files (package-lock, etc)  | Regenerate: accept one side, re-run package manager         | rebase-agent (rebase-lockfile)  |
+   | Generated files (\*.pb.go, etc) | Accept one side, re-run generator                           | rebase-agent (rebase-generated) |
+   | Both sides added imports        | Combine both import sets, deduplicate, sort                 | rebase-agent (rebase-imports)   |
+   | Version number conflicts        | Take the higher version                                     | rebase-agent (rebase-version)   |
+   | Whitespace / formatting only    | Accept agent's version (`git checkout --theirs <file>`)     | rebase-agent                    |
+   | Same function modified          | **Escalate** — show both versions to user, ask for guidance | (human)                         |
+   | New file vs new file            | **Escalate** — show both, ask user                          | (human)                         |
+   | Deletion vs modification        | **Escalate** — ask user                                     | (human)                         |
+
+   To dispatch the rebase-agent for trivial conflicts:
+
+   ```text
+   Agent tool: rebase-agent
+   Prompt: "Resolve the following merge conflicts. Conflicted files: {file_list}.
+   For each file, classify the conflict and apply the appropriate strategy.
+   Escalate non-trivial conflicts."
+   ```
 
 1. **After resolving all conflicts**:
 
@@ -270,3 +283,39 @@ Always return to the orchestrator branch after sync completes:
 ```bash
 git checkout <orchestrator-branch>
 ```
+
+______________________________________________________________________
+
+## Agent Checkpoint Context
+
+When reviewing agent work after a `/clear`, the orchestrator can read the
+agent's checkpoint from their JSON state file for context. This is especially
+useful when the agent's conversation history is no longer available.
+
+### Reading Agent Checkpoints
+
+Agent state files live in the agent's worktree at
+`.claude/memory/tmp/next-issue-{N}.json`. After merging an agent's work, check
+if a state file exists with checkpoint data:
+
+```bash
+# From the agent's worktree directory
+cat .claude/memory/tmp/next-issue-*.json 2>/dev/null
+```
+
+The `checkpoint` object contains:
+
+- `key_decisions` — non-obvious choices the agent made (context for review)
+- `files_modified` — what the agent changed (scope for review)
+- `files_planned` — what the agent intended to change (completeness check)
+- `warnings` — things the agent flagged for attention
+- `next_action` — what the agent expected to happen next
+
+### Using Checkpoint in Review
+
+When dispatching the `code-reviewer` agent in Phase 3, include relevant
+checkpoint context in the review prompt:
+
+- Pass `key_decisions` so the reviewer understands design choices
+- Pass `warnings` so the reviewer checks flagged concerns
+- Compare `files_planned` vs `files_modified` to verify completeness

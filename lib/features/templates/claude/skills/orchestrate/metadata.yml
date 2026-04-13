@@ -1,0 +1,13 @@
+name: orchestrate
+version: "1.0"
+
+labels: []
+
+required_tools:
+  - name: git
+    purpose: Branch management, worktree operations, merging
+    install_hint: "Included in base image"
+
+required_permissions: []
+
+required_mcps: []

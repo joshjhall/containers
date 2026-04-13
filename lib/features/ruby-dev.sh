@@ -19,6 +19,9 @@
 #
 set -euo pipefail
 
+# Default SKIP_LSP_INSTALL if not passed from Dockerfile ARG
+SKIP_LSP_INSTALL="${SKIP_LSP_INSTALL:-false}"
+
 # Source standard feature header for user handling
 source /tmp/build-scripts/base/feature-header.sh
 
@@ -86,8 +89,14 @@ log_command "Installing documentation tools" \
     gem_install_as_user yard yard-junk rdoc
 
 # Development utilities
-log_command "Installing development utilities" \
-    gem_install_as_user bundler-audit license_finder solargraph prettier_print
+if [ "${SKIP_LSP_INSTALL}" != "true" ]; then
+    log_command "Installing development utilities" \
+        gem_install_as_user bundler-audit license_finder solargraph prettier_print
+else
+    log_message "Skipping solargraph (SKIP_LSP_INSTALL=true)"
+    log_command "Installing development utilities (without LSP)" \
+        gem_install_as_user bundler-audit license_finder prettier_print
+fi
 
 # Rails and web development (optional but common)
 log_command "Installing Rails development tools" \

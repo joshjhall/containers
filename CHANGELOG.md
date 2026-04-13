@@ -5,6 +5,111 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.16.0] - 2026-04-09
+
+### Added
+
+- Upgrade authoring skills with agentsys best practices and create authoring agents
+- Add agnix AI config linter to INCLUDE_DEV_TOOLS
+- Install agentsys deslop plugin for AI slop detection
+- Add unified check-* skill architecture with checker agent
+- Add loop-* implementation loops and context-* pipeline skills
+- Add JSON state files with checkpoint and context reset points
+- Add two-tier worktree system with execution mode selection
+- Add certainty grading to all audit findings
+- Add workflow-level safety assertions for agent pipelines
+- Add drift-detect skill for plan vs implementation comparison
+- Adopt 3-tier model assignment (opus/sonnet/haiku)
+- Parallelize code-reviewer into specialized sub-agents
+- Add deterministic pre-scan layer to audit pipeline
+- Add pre-review gates to next-issue-ship workflow
+- Add CI remediation capability to ship workflow
+- Add check-ai-config skill with deterministic pre-scan
+- Add structural lint and fix doc count discrepancies
+- Add JSON schemas and contract validation tests
+- Add patterns.sh coverage analysis and model tier rationale
+- Pre-allow Read permissions for skills, agents, and memory
+
+### Changed
+
+- Standardize frontmatter and section structure
+- Add error boundaries for failure scenarios across 7 agents
+- Structured JSON output and acknowledgment handling for code-reviewer
+- Add idempotency and batch scoping to test-writer
+- Deduplicate guardrails/restrictions and add scoping in refactorer
+- Replace vague Pass 3 criteria with measurable triggers
+
+### Documentation
+
+- Add agentsys evaluation report with follow-up issues
+- Add check-* migration status and file remaining migration issues
+- Fix incorrect model tier claim in SKILL.md
+
+### Fixed
+
+- Set git identity before creating annotated tag in auto-patch
+- Guard against duplicate PR creation in auto-patch workflow
+- Skip failure notification when auto-patch branch is already deleted
+- Default SKIP_LSP_INSTALL in dev feature scripts
+- Fix ERE regex in check-docs-deadlinks patterns.sh
+- Use cp -r for template installation to handle subdirectories
+- Add duplicate detection and JSON output to issue-filer
+- Remove phantom skill references and add denied tool docs in rebase-agent
+- Update cosign SHA256 checksums for v3.0.6
+
+### Miscellaneous
+
+- Add dedicated lint job for agent/skill template integrity
+- Bump 13 tool versions to latest
+
+### Testing
+
+- Add golden fixture tests for patterns.sh and pre-review-gates
+- Add integration workflow tests for checker agent
+
+## [4.15.13] - 2026-03-29
+
+### Added
+
+- Auto-discover project-level audit agents in codebase-audit
+- Add /file-issue skill for structured issue creation
+
+### Documentation
+
+- Document [1m] suffix for 1M context window model selection
+
+### Fixed
+
+- Set core.sshCommand globally so VS Code git GUI works with provisioned SSH keys
+- Stop ignoring examples/env/ directory
+- Expand trap variables at definition time to avoid unbound errors
+
+### Miscellaneous
+
+- Automated version updates to v4.15.13
+- Update compatibility matrix with passing test results
+- Update compatibility matrix with passing test results
+
+## [4.15.12] - 2026-03-26
+
+### Added
+
+- Add metadata.yml schema for skill directories
+- Install just command runner via pre-built binary
+
+## [4.15.11] - 2026-03-25
+
+### Fixed
+
+- Add MEMORY_FILE_PATH env var and fix comment indentation
+- Skip issues with status/on-hold label
+- Measure production code only for file-length thresholds
+- Exclude git submodules from codebase-audit scans
+
+### Improved
+
+- Parallelize op read calls and background claude-setup
+
 ## [4.15.10] - 2026-03-23
 
 ### Added
@@ -1450,6 +1555,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix prettier and markdownlint formatting in README
 - Format TLS documentation files
 
+[4.16.0]: https://github.com/joshjhall/containers/compare/v4.15.13...v4.16.0
+[4.15.13]: https://github.com/joshjhall/containers/compare/v4.15.12...v4.15.13
+[4.15.12]: https://github.com/joshjhall/containers/compare/v4.15.11...v4.15.12
+[4.15.11]: https://github.com/joshjhall/containers/compare/v4.15.10...v4.15.11
 [4.15.10]: https://github.com/joshjhall/containers/compare/v4.15.9...v4.15.10
 [4.15.9]: https://github.com/joshjhall/containers/compare/v4.15.8...v4.15.9
 [4.15.8]: https://github.com/joshjhall/containers/compare/v4.15.7...v4.15.8
