@@ -159,7 +159,7 @@ build:node-dev:
 # =====================================
 security-scan:minimal:
   stage: security-scan
-  image: aquasec/trivy:latest
+  image: ghcr.io/aquasecurity/trivy:latest
   script:
     - trivy image --severity CRITICAL,HIGH $IMAGE_NAME:$CI_COMMIT_REF_SLUG-minimal
   dependencies:
@@ -171,7 +171,7 @@ security-scan:minimal:
 
 security-scan:python-dev:
   stage: security-scan
-  image: aquasec/trivy:latest
+  image: ghcr.io/aquasecurity/trivy:latest
   script:
     - trivy image --severity CRITICAL,HIGH $IMAGE_NAME:$CI_COMMIT_REF_SLUG-python-dev
   dependencies:
