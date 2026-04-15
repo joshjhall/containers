@@ -40,6 +40,9 @@ jobs:
           toolchain: "1.94"
           components: rustfmt, clippy
 
+      - name: Force HTTPS for git dependencies
+        run: git config --global url."https://github.com/".insteadOf "ssh://git@github.com/"
+
       - name: Run linting (pre-commit)
         run: |
           echo "Running all linters via pre-commit (single source of truth)..."
@@ -110,6 +113,8 @@ jobs:
   rust-test:
     name: Rust Tests (stibbons) — ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
+    # Windows blocked on octarine Windows support — tracked separately
+    continue-on-error: ${{ matrix.os == 'windows-latest' }}
     strategy:
       fail-fast: false
       matrix:
