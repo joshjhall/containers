@@ -113,8 +113,6 @@ jobs:
   rust-test:
     name: Rust Tests (stibbons) — ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
-    # Windows blocked on octarine Windows support — tracked separately
-    continue-on-error: ${{ matrix.os == 'windows-latest' }}
     strategy:
       fail-fast: false
       matrix:
