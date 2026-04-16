@@ -151,7 +151,7 @@ if [ -n "$K9S_FILENAME" ]; then
     BUILD_TEMP=$(create_secure_temp_dir)
     cd "$BUILD_TEMP"
     log_message "Downloading k9s for ${ARCH}..."
-    if ! command curl -L -f --retry 3 --retry-delay 2 --retry-all-errors --progress-bar -o "k9s.tar.gz" "https://github.com/derailed/k9s/releases/download/v${K9S_VERSION}/${K9S_FILENAME}"; then
+    if ! command curl -L -f --retry 8 --retry-delay 10 --retry-all-errors --progress-bar -o "k9s.tar.gz" "https://github.com/derailed/k9s/releases/download/v${K9S_VERSION}/${K9S_FILENAME}"; then
         log_error "Failed to download k9s ${K9S_VERSION}"
         cd /
         log_feature_end
@@ -209,7 +209,7 @@ if [ -n "$HELM_FILENAME" ]; then
     BUILD_TEMP=$(create_secure_temp_dir)
     cd "$BUILD_TEMP"
     log_message "Downloading Helm for ${ARCH}..."
-    if ! command curl -L -f --retry 3 --retry-delay 2 --retry-all-errors --progress-bar -o "helm.tar.gz" "$HELM_URL"; then
+    if ! command curl -L -f --retry 8 --retry-delay 10 --retry-all-errors --progress-bar -o "helm.tar.gz" "$HELM_URL"; then
         log_error "Failed to download Helm ${HELM_VERSION}"
         cd /
         log_feature_end
@@ -276,7 +276,7 @@ if [ -n "$KREW_FILENAME" ]; then
     BUILD_TEMP=$(create_secure_temp_dir)
     cd "$BUILD_TEMP"
     log_message "Downloading krew for ${ARCH}..."
-    if ! command curl -L -f --retry 3 --retry-delay 2 --retry-all-errors --progress-bar -o "krew.tar.gz" "https://github.com/kubernetes-sigs/krew/releases/download/v${KREW_VERSION}/${KREW_FILENAME}"; then
+    if ! command curl -L -f --retry 8 --retry-delay 10 --retry-all-errors --progress-bar -o "krew.tar.gz" "https://github.com/kubernetes-sigs/krew/releases/download/v${KREW_VERSION}/${KREW_FILENAME}"; then
         log_error "Failed to download krew ${KREW_VERSION}"
         cd /
         log_feature_end

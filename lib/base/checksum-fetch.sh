@@ -57,7 +57,7 @@ fi
 #
 # Note: Internal function, not exported
 _curl_with_timeout() {
-    command curl --connect-timeout 10 --max-time 30 --retry 3 --retry-delay 2 --retry-all-errors "$@"
+    command curl --connect-timeout 10 --max-time 30 --retry 8 --retry-delay 10 --retry-all-errors "$@"
 }
 
 # _is_partial_version - Check if version string is partial (e.g., "1.23" vs "1.23.0")
@@ -216,7 +216,7 @@ calculate_checksum_sha256() {
     local file_url="$1"
 
     local checksum
-    checksum=$(command curl --connect-timeout 10 --max-time 300 --retry 3 --retry-delay 2 --retry-all-errors -fsSL "$file_url" | sha256sum | command awk '{print $1}')
+    checksum=$(command curl --connect-timeout 10 --max-time 300 --retry 8 --retry-delay 10 --retry-all-errors -fsSL "$file_url" | sha256sum | command awk '{print $1}')
 
     if [ -n "$checksum" ] && [[ "$checksum" =~ ^[a-fA-F0-9]{64}$ ]]; then
         echo "$checksum"

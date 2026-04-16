@@ -143,7 +143,7 @@ BUILD_TEMP=$(create_secure_temp_dir)
 cd "$BUILD_TEMP"
 
 log_message "Downloading Kotlin compiler from ${KOTLIN_URL}..."
-if ! command curl -L -f --retry 3 --retry-delay 2 --retry-all-errors --progress-bar -o "kotlin-compiler.zip" "${KOTLIN_URL}"; then
+if ! command curl -L -f --retry 8 --retry-delay 10 --retry-all-errors --progress-bar -o "kotlin-compiler.zip" "${KOTLIN_URL}"; then
     log_error "Failed to download Kotlin compiler"
     exit 1
 fi
@@ -170,7 +170,7 @@ if [ "$KOTLIN_NATIVE_AVAILABLE" = true ]; then
     KOTLIN_NATIVE_HOME="/opt/kotlin-native"
 
     # Try to download Kotlin/Native (may not be available for all versions)
-    if command curl -L -f --retry 3 --retry-delay 2 --retry-all-errors --progress-bar -o "kotlin-native.tar.gz" "${KOTLIN_NATIVE_URL}" 2>/dev/null; then
+    if command curl -L -f --retry 8 --retry-delay 10 --retry-all-errors --progress-bar -o "kotlin-native.tar.gz" "${KOTLIN_NATIVE_URL}" 2>/dev/null; then
         # Run 4-tier verification (TOFU — no published checksums)
         verify_rc=0
         verify_download "tool" "kotlin-native" "$KOTLIN_VERSION" "kotlin-native.tar.gz" "$ARCH" || verify_rc=$?

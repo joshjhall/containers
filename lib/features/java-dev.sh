@@ -85,7 +85,7 @@ _download_and_verify_tool() {
     BUILD_TEMP=$(create_secure_temp_dir)
     cd "$BUILD_TEMP"
     log_message "Downloading ${tool_name} ${version}..."
-    if ! command curl -L -f --retry 3 --retry-delay 2 --retry-all-errors \
+    if ! command curl -L -f --retry 8 --retry-delay 10 --retry-all-errors \
          --progress-bar -o "$output_file" "$url"; then
         log_error "Failed to download ${tool_name} ${version}"
         return 1

@@ -133,7 +133,7 @@ register_tool_checksum_fetcher "rustup-init" "_fetch_rustup_init_checksum"
 BUILD_TEMP=$(create_secure_temp_dir)
 cd "$BUILD_TEMP"
 log_message "Downloading rustup-init..."
-if ! command curl -L -f --retry 3 --retry-delay 2 --retry-all-errors --progress-bar -o "rustup-init" "$RUSTUP_URL"; then
+if ! command curl -L -f --retry 8 --retry-delay 10 --retry-all-errors --progress-bar -o "rustup-init" "$RUSTUP_URL"; then
     log_error "Failed to download rustup-init"
     log_feature_end
     exit 1
