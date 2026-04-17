@@ -328,6 +328,15 @@ install_github_binary_tools() {
         "calculate" "extract:hyperfine" \
         || return 1
 
+    # vale (Go prose linter — no published checksums, single static binary at tar root)
+    # Note: repo moved from errata-ai/vale to vale-cli/vale (2024 org rename)
+    install_github_release "vale" "$VALE_VERSION" \
+        "https://github.com/vale-cli/vale/releases/download/v${VALE_VERSION}" \
+        "vale_${VALE_VERSION}_Linux_64-bit.tar.gz" \
+        "vale_${VALE_VERSION}_Linux_arm64.tar.gz" \
+        "calculate" "extract:vale" \
+        || return 1
+
     # agnix (AI config linter) — requires Node.js/npm
     if command -v npm &> /dev/null; then
         log_message "Installing agnix (AI config linter)..."

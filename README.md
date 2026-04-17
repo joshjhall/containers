@@ -329,6 +329,10 @@ just lint        # every lefthook pre-commit hook on all files
 just install-hooks  # lefthook install (pre-commit + pre-push)
 ```
 
+**Prose linting**: run `vale sync` once in a dev-tools container to fetch
+the styles declared in `.vale.ini`. The pre-commit `vale` hook is
+warn-only and skips silently until styles are synced.
+
 ______________________________________________________________________
 
 ## License

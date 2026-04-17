@@ -90,6 +90,17 @@ pre-commit:
         - "tests/results/**"
       run: uvx pymarkdownlnt --config .pymarkdown.json scan {staged_files}
 
+    # Prose linting — warn-only. Skips until `vale sync` has fetched styles.
+    vale:
+      glob: "*.md"
+      exclude:
+        - "CHANGELOG.md"
+        - "tests/results/**"
+      skip:
+        - run: "! command -v vale >/dev/null 2>&1"
+        - run: "[ ! -d .vale/styles/write-good ]"
+      run: vale --no-wrap {staged_files} || true
+
     # --- JSON linting with Biome ---
 
     biome-json:
