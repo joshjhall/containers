@@ -265,6 +265,7 @@ extract_all_versions() {
     _add_feature_version GITLEAKS_VERSION "gitleaks" "dev-tools.sh"
     _add_feature_version MADO_VERSION "mado" "dev-tools.sh"
     _add_feature_version DPRINT_VERSION "dprint" "dev-tools.sh"
+    _add_feature_version OSV_SCANNER_VERSION "osv-scanner" "dev-tools.sh"
 
     # Docker tools from docker.sh
     _add_feature_version DIVE_VERSION "dive" "docker.sh"
@@ -384,6 +385,7 @@ main() {
             gitleaks) check_github_release "gitleaks" "gitleaks/gitleaks" ;;
             mado) check_github_release "mado" "akiomik/mado" ;;
             dprint) check_github_release "dprint" "dprint/dprint" ;;
+            osv-scanner) check_github_release "osv-scanner" "google/osv-scanner" ;;
             cargo-release) check_crates_io "cargo-release" ;;
             zoxide) check_github_release "zoxide" "ajeetdsouza/zoxide" ;;
             cosign) check_github_release "cosign" "sigstore/cosign" ;;

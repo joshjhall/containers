@@ -288,6 +288,14 @@ install_github_binary_tools() {
         "calculate" "zip_to:/usr/local/bin" \
         || return 1
 
+    # osv-scanner (dependency CVE scanner — Go binary, bare binary assets)
+    install_github_release "osv-scanner" "$OSV_SCANNER_VERSION" \
+        "https://github.com/google/osv-scanner/releases/download/v${OSV_SCANNER_VERSION}" \
+        "osv-scanner_linux_amd64" \
+        "osv-scanner_linux_arm64" \
+        "calculate" "binary" \
+        || return 1
+
     # agnix (AI config linter) — requires Node.js/npm
     if command -v npm &> /dev/null; then
         log_message "Installing agnix (AI config linter)..."

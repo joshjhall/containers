@@ -152,3 +152,12 @@ pre-push:
     yamllint-all:
       glob: "*.{yml,yaml}"
       run: yamllint -c .yamllint.yml {all_files}
+
+    # --- Dependency CVE scanning ---
+
+    osv-scanner:
+      # osv-scanner is shipped by the dev-tools feature; skip gracefully
+      # if running outside a dev-tools container.
+      skip:
+        - run: "! command -v osv-scanner >/dev/null 2>&1"
+      run: osv-scanner --lockfile Cargo.lock

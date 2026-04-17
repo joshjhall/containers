@@ -667,6 +667,22 @@ test_dprint_installation() {
 run_test test_mado_version_variable "mado version variable defined in dev-tools.sh"
 run_test test_mado_installation "mado installation present in binary tools"
 run_test test_dprint_version_variable "dprint version variable defined in dev-tools.sh"
+
+# Test: osv-scanner version variable defined in dev-tools.sh
+test_osv_scanner_version_variable() {
+    local source_file="$PROJECT_ROOT/lib/features/dev-tools.sh"
+    assert_file_contains "$source_file" "OSV_SCANNER_VERSION=" "dev-tools.sh defines OSV_SCANNER_VERSION"
+}
+
+# Test: osv-scanner installation present in binary tools script
+test_osv_scanner_installation() {
+    local source_file="$PROJECT_ROOT/lib/features/lib/dev-tools/install-binary-tools.sh"
+    assert_file_contains "$source_file" "google/osv-scanner" "install-binary-tools.sh installs osv-scanner from google/osv-scanner"
+    assert_file_contains "$source_file" "osv-scanner_linux_amd64" "install-binary-tools.sh uses correct amd64 asset name"
+}
+
+run_test test_osv_scanner_version_variable "osv-scanner version variable defined in dev-tools.sh"
+run_test test_osv_scanner_installation "osv-scanner installation present in binary tools"
 run_test test_dprint_installation "dprint installation present in binary tools"
 
 # Generate test report
