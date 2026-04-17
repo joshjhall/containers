@@ -232,6 +232,10 @@ update_version() {
                     command sed -i "s/TAPLO_VERSION=\"\${TAPLO_VERSION:-[^}]*}\"/TAPLO_VERSION=\"\${TAPLO_VERSION:-$latest}\"/" "$script_path"
                     command sed -i "s/^TAPLO_VERSION=\"[0-9][^\"]*\"/TAPLO_VERSION=\"\${TAPLO_VERSION:-$latest}\"/" "$script_path"
                     ;;
+                lefthook)
+                    command sed -i "s/LEFTHOOK_VERSION=\"\${LEFTHOOK_VERSION:-[^}]*}\"/LEFTHOOK_VERSION=\"\${LEFTHOOK_VERSION:-$latest}\"/" "$script_path"
+                    command sed -i "s/^LEFTHOOK_VERSION=\"[0-9][^\"]*\"/LEFTHOOK_VERSION=\"\${LEFTHOOK_VERSION:-$latest}\"/" "$script_path"
+                    ;;
                 Poetry)
                     command sed -i "s/POETRY_VERSION=\"\${POETRY_VERSION:-[^}]*}\"/POETRY_VERSION=\"\${POETRY_VERSION:-$latest}\"/" "$script_path"
                     command sed -i "s/^POETRY_VERSION=\"[0-9][^\"]*\"/POETRY_VERSION=\"\${POETRY_VERSION:-$latest}\"/" "$script_path"

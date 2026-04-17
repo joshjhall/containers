@@ -4,7 +4,7 @@
 # Functions:
 #   install_entr        — build entr from source tarball
 #   install_fzf         — git clone fzf with retry logic
-#   install_github_binary_tools — all install_github_release calls
+#   install_github_binary_tools — all install_github_release calls (includes lefthook)
 #   create_tool_symlinks — fd/bat/fzf symlinks
 
 install_entr() {
@@ -255,6 +255,14 @@ install_github_binary_tools() {
 
     # uv (Python package installer) — skip if already installed by python-dev
     install_uv || return 1
+
+    # lefthook (git hook manager — gzipped binary, Go-based, no runtime deps)
+    install_github_release "lefthook" "$LEFTHOOK_VERSION" \
+        "https://github.com/evilmartians/lefthook/releases/download/v${LEFTHOOK_VERSION}" \
+        "lefthook_${LEFTHOOK_VERSION}_Linux_x86_64.gz" \
+        "lefthook_${LEFTHOOK_VERSION}_Linux_aarch64.gz" \
+        "calculate" "gunzip" \
+        || return 1
 
     # agnix (AI config linter) — requires Node.js/npm
     if command -v npm &> /dev/null; then

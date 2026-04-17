@@ -81,6 +81,7 @@ test_binary_tool_installations() {
         "glab"
         "mkcert"
         "biome"
+        "lefthook"
     )
 
     # Simulate tool installation
@@ -603,6 +604,22 @@ test_agnix_installation() {
 }
 
 run_test test_agnix_installation "agnix installation present in binary tools"
+
+# Test: lefthook version variable defined in dev-tools.sh
+test_lefthook_version_variable() {
+    local source_file="$PROJECT_ROOT/lib/features/dev-tools.sh"
+    assert_file_contains "$source_file" "LEFTHOOK_VERSION=" "dev-tools.sh defines LEFTHOOK_VERSION"
+}
+
+# Test: lefthook installation present in binary tools script
+test_lefthook_installation() {
+    local source_file="$PROJECT_ROOT/lib/features/lib/dev-tools/install-binary-tools.sh"
+    assert_file_contains "$source_file" "evilmartians/lefthook" "install-binary-tools.sh installs lefthook from evilmartians"
+    assert_file_contains "$source_file" "lefthook_\${LEFTHOOK_VERSION}_Linux_x86_64.gz" "install-binary-tools.sh uses correct amd64 asset name"
+}
+
+run_test test_lefthook_version_variable "lefthook version variable defined in dev-tools.sh"
+run_test test_lefthook_installation "lefthook installation present in binary tools"
 
 # Generate test report
 generate_report
