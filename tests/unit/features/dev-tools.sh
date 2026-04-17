@@ -235,7 +235,6 @@ test_system_tools_list() {
         "unzip"
         # Terminal and monitoring
         "htop"
-        "ncdu"
         "bat"
         "tmux"
         "eza"
@@ -703,6 +702,22 @@ test_sd_installation() {
 
 run_test test_sd_version_variable "sd version variable defined in dev-tools.sh"
 run_test test_sd_installation "sd installation present in binary tools"
+
+# Test: dua-cli version variable defined in dev-tools.sh
+test_dua_version_variable() {
+    local source_file="$PROJECT_ROOT/lib/features/dev-tools.sh"
+    assert_file_contains "$source_file" "DUA_VERSION=" "dev-tools.sh defines DUA_VERSION"
+}
+
+# Test: dua-cli installation present in binary tools script
+test_dua_installation() {
+    local source_file="$PROJECT_ROOT/lib/features/lib/dev-tools/install-binary-tools.sh"
+    assert_file_contains "$source_file" "Byron/dua-cli" "install-binary-tools.sh installs dua-cli from Byron/dua-cli"
+    assert_file_contains "$source_file" "dua-v\${DUA_VERSION}-x86_64-unknown-linux-musl.tar.gz" "install-binary-tools.sh uses correct amd64 asset name"
+}
+
+run_test test_dua_version_variable "dua-cli version variable defined in dev-tools.sh"
+run_test test_dua_installation "dua-cli installation present in binary tools"
 
 # Generate test report
 generate_report

@@ -61,8 +61,8 @@ if command -v duf &> /dev/null; then
     alias df='duf'
 fi
 
-if command -v ncdu &> /dev/null; then
-    alias du='echo "Hint: Try ncdu for an interactive disk usage analyzer" && du'
+if command -v dua &> /dev/null; then
+    alias ncdu='dua i'
 fi
 
 if command -v htop &> /dev/null; then
@@ -94,7 +94,7 @@ fi
 # Override basic tools with modern equivalents
 alias diff='colordiff' 2>/dev/null || true
 alias gitlog='tig' 2>/dev/null || true
-alias diskusage='ncdu' 2>/dev/null || true
+alias diskusage='dua i' 2>/dev/null || true
 
 # Override lt alias to use eza/exa if available
 if command -v eza &> /dev/null; then
