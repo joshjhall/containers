@@ -34,7 +34,7 @@ jobs:
           export SKIP_DOCKER_CHECK=true
           ./tests/run_unit_tests.sh
 
-      - name: Install Rust toolchain (for pre-commit hooks)
+      - name: Install Rust toolchain (for cargo-fmt / cargo-clippy hooks)
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: "1.94"
@@ -43,12 +43,30 @@ jobs:
       - name: Force HTTPS for git dependencies
         run: git config --global url."https://github.com/".insteadOf "ssh://git@github.com/"
 
-      - name: Run linting (pre-commit)
+      - name: Install lint toolchain (lefthook + hook binaries)
         run: |
-          echo "Running all linters via pre-commit (single source of truth)..."
-          pip install pre-commit
+          # Pin lefthook to the version baked into the dev-tools feature
+          LEFTHOOK_VERSION=$(grep -oP 'LEFTHOOK_VERSION:-\K[0-9.]+' lib/features/dev-tools.sh)
+          curl -fsSL "https://github.com/evilmartians/lefthook/releases/download/v${LEFTHOOK_VERSION}/lefthook_${LEFTHOOK_VERSION}_Linux_x86_64.gz" \
+            | gunzip > /tmp/lefthook
+          chmod +x /tmp/lefthook
+          sudo mv /tmp/lefthook /usr/local/bin/lefthook
+          lefthook version
+
+          # shellcheck + yamllint come from the runner's apt repo
+          sudo apt-get update
+          sudo apt-get install -y shellcheck yamllint
+
+          # uv bootstraps all uvx-based hooks (pre-commit-hooks, mdformat, pymarkdownlnt)
+          pip install uv
+
+          # Biome — version pulled from biome.json schema (matches feature behavior)
           npm install -g @biomejs/biome@$(grep -o '"https://biomejs.dev/schemas/[^"]*"' biome.json | grep -o '[0-9]\+\.[0-9]\+\.[0-9]\+')
-          pre-commit run --all-files
+
+      - name: Run linting (lefthook)
+        run: |
+          echo "Running all linters via lefthook (single source of truth)..."
+          lefthook run pre-commit --all-files
 
       - name: Run secret scanning with Gitleaks
         uses: gitleaks/gitleaks-action@v2
