@@ -17,13 +17,19 @@ pre-commit:
 
     trailing-whitespace:
       glob: "*"
-      exclude: "^tests/results/"
+      exclude:
+        - "tests/results/**"
+        - "bin/igor"
+        - "lib/gpg-keys/**"
       run: uvx --from pre-commit-hooks trailing-whitespace-fixer {staged_files}
       stage_fixed: true
 
     end-of-file-fixer:
       glob: "*"
-      exclude: "^tests/results/"
+      exclude:
+        - "tests/results/**"
+        - "bin/igor"
+        - "lib/gpg-keys/**"
       run: uvx --from pre-commit-hooks end-of-file-fixer {staged_files}
       stage_fixed: true
 
@@ -33,52 +39,65 @@ pre-commit:
 
     check-json:
       glob: "*.json"
-      exclude: "^(\\.devcontainer/devcontainer\\.json|\\.vscode/)"
+      exclude:
+        - ".devcontainer/devcontainer.json"
+        - ".vscode/**"
       run: uvx --from pre-commit-hooks check-json {staged_files}
 
     check-added-large-files:
-      exclude: "^bin/igor$"
+      exclude:
+        - "bin/igor"
       run: uvx --from pre-commit-hooks check-added-large-files --maxkb=500 {staged_files}
 
     check-merge-conflict:
       run: uvx --from pre-commit-hooks check-merge-conflict {staged_files}
 
     detect-private-key:
-      exclude: "^lib/gpg-keys/"
+      exclude:
+        - "lib/gpg-keys/**"
       run: uvx --from pre-commit-hooks detect-private-key {staged_files}
 
     # --- Shell linting (direct binary from dev-tools) ---
 
     shellcheck:
       glob: "*.sh"
-      exclude: "^tests/results/"
+      exclude:
+        - "tests/results/**"
       run: shellcheck --severity=warning {staged_files}
 
     # --- YAML linting ---
 
     yamllint:
       glob: "*.{yml,yaml}"
-      exclude: "^tests/results/"
+      exclude:
+        - "tests/results/**"
       run: yamllint -c .yamllint.yml {staged_files}
 
     # --- Markdown formatting and linting ---
 
     mdformat:
       glob: "*.md"
-      exclude: "^(CHANGELOG\\.md|tests/results/)"
+      exclude:
+        - "CHANGELOG.md"
+        - "tests/results/**"
       run: uvx --with mdformat-gfm --with mdformat-frontmatter --with mdformat-tables mdformat {staged_files}
       stage_fixed: true
 
     pymarkdown:
       glob: "*.md"
-      exclude: "^(CHANGELOG\\.md|tests/results/)"
+      exclude:
+        - "CHANGELOG.md"
+        - "tests/results/**"
       run: uvx pymarkdownlnt --config .pymarkdown.json scan {staged_files}
 
     # --- JSON linting with Biome ---
 
     biome-json:
       glob: "*.json"
-      exclude: "^(tests/results/|\\.vscode/|\\.devcontainer/)"
+      exclude:
+        - "tests/results/**"
+        - ".vscode/**"
+        - ".devcontainer/**"
       run: biome check --write {staged_files}
       stage_fixed: true
 
@@ -125,7 +144,8 @@ pre-commit:
 
     enforce-command-prefix:
       glob: "{lib,bin,tests}/**/*.sh"
-      exclude: "^lib/features/lib/bashrc/"
+      exclude:
+        - "lib/features/lib/bashrc/**"
       run: bin/enforce-command-prefix.sh {staged_files}
       stage_fixed: true
 
