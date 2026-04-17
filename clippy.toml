@@ -1,0 +1,3 @@
+# Clippy configuration for the containers workspace
+# Workspace-level lints are in Cargo.toml [workspace.lints.clippy]
+msrv = "1.94"

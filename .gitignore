@@ -116,17 +116,9 @@ yarn-error.log*
 
 # Rust
 target/
-Cargo.lock
+# Note: Cargo.lock IS committed for workspaces with binaries (stibbons).
+# See: https://doc.rust-lang.org/cargo/faq.html#why-have-cargolock-in-version-control
 **/*.rs.bk
-
-# Go
-*.exe
-*.exe~
-*.dll
-*.dylib
-*.test
-*.out
-vendor/
 
 # Ruby
 *.gem

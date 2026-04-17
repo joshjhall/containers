@@ -1,0 +1,22 @@
+[package]
+name = "containers-common"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Shared types and state contracts for the containers build system"
+
+[lints]
+workspace = true
+
+[dependencies]
+indexmap = { workspace = true }
+serde = { workspace = true }
+
+minijinja = { workspace = true }
+serde_yaml = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+tempfile = { workspace = true }

@@ -16,7 +16,7 @@ install_entr() {
     BUILD_TEMP=$(create_secure_temp_dir)
     cd "$BUILD_TEMP" || exit 1
     log_message "Downloading entr ${ENTR_VERSION}..."
-    if ! command curl -L -f --retry 3 --retry-delay 2 --retry-all-errors --progress-bar -o "$ENTR_TARBALL" "$ENTR_URL"; then
+    if ! command curl -L -f --retry 8 --retry-delay 10 --retry-all-errors --progress-bar -o "$ENTR_TARBALL" "$ENTR_URL"; then
         log_error "Failed to download entr ${ENTR_VERSION}"
         cd /
         return 1
@@ -121,7 +121,7 @@ install_uv() {
 
     local local_file="uv-download"
     log_message "Downloading uv for ${arch}..."
-    if ! command curl -L -f --retry 3 --retry-delay 2 --retry-all-errors --progress-bar -o "$local_file" "$file_url"; then
+    if ! command curl -L -f --retry 8 --retry-delay 10 --retry-all-errors --progress-bar -o "$local_file" "$file_url"; then
         log_error "Download failed for uv ${UV_VERSION}"
         cd /
         return 1

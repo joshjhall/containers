@@ -166,7 +166,7 @@ install_github_release() {
 
     local local_file="${tool_name}-download"
     log_message "Downloading ${tool_name} for ${arch}..."
-    if ! command curl -L -f --retry 3 --retry-delay 2 --retry-all-errors --progress-bar -o "$local_file" "$file_url"; then
+    if ! command curl -L -f --retry 8 --retry-delay 10 --retry-all-errors --progress-bar -o "$local_file" "$file_url"; then
         log_error "Download failed for ${tool_name} ${version}"
         cd /
         return 1

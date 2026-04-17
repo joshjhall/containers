@@ -161,9 +161,8 @@ map_to_test() {
             return
             ;;
 
-        # cmd/igor/*.go → run Go tests via go test
+        # cmd/igor/ was removed in v5 — skip Go tests
         cmd/igor/*.go)
-            echo "GO_TEST"
             return
             ;;
     esac
@@ -297,11 +296,11 @@ for test_file in "${TEST_FILES[@]}"; do
 done
 
 # ---------------------------------------------------------------------------
-# Run Go tests if igor files changed
+# Run Go tests if igor files changed (skip if cmd/igor/ no longer exists)
 # ---------------------------------------------------------------------------
-if [ "$RUN_GO_TESTS" = true ]; then
+if [ "$RUN_GO_TESTS" = true ] && [ -d "${PROJECT_ROOT}/cmd/igor" ]; then
     echo -e "${BLUE}Running Go tests (cmd/igor)...${NC}"
-    if (cd "${PROJECT_ROOT}/cmd/igor" && go test ./... 2>&1); then
+    if (cd "${PROJECT_ROOT}/cmd/igor" && command go test ./... 2>&1); then
         echo -e "  ${GREEN}✓ PASS${NC} (go test)"
         TOTAL_TESTS=$((TOTAL_TESTS + 1))
         TOTAL_PASSED=$((TOTAL_PASSED + 1))

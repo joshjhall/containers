@@ -139,7 +139,7 @@ else
     log_message "Downloading pixi..."
     BUILD_TEMP=$(create_secure_temp_dir)
     cd "$BUILD_TEMP"
-    if ! command curl -L -f --retry 3 --retry-delay 2 --retry-all-errors --progress-bar -o "pixi.tar.gz" "$PIXI_URL"; then
+    if ! command curl -L -f --retry 8 --retry-delay 10 --retry-all-errors --progress-bar -o "pixi.tar.gz" "$PIXI_URL"; then
         log_error "Failed to download pixi ${PIXI_VERSION}"
         log_feature_end
         exit 1

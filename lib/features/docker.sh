@@ -212,7 +212,7 @@ register_tool_checksum_fetcher "lazydocker" "_fetch_lazydocker_checksum"
 BUILD_TEMP=$(create_secure_temp_dir)
 cd "$BUILD_TEMP"
 log_message "Downloading lazydocker..."
-if ! command curl -L -f --retry 3 --retry-delay 2 --retry-all-errors --progress-bar -o "lazydocker.tar.gz" "$LAZYDOCKER_URL"; then
+if ! command curl -L -f --retry 8 --retry-delay 10 --retry-all-errors --progress-bar -o "lazydocker.tar.gz" "$LAZYDOCKER_URL"; then
     log_error "Failed to download lazydocker ${LAZYDOCKER_VERSION}"
     cd /
     log_feature_end
@@ -267,7 +267,7 @@ register_tool_checksum_fetcher "dive" "_fetch_dive_checksum"
 BUILD_TEMP=$(create_secure_temp_dir)
 cd "$BUILD_TEMP"
 log_message "Downloading dive..."
-if ! command curl -L -f --retry 3 --retry-delay 2 --retry-all-errors --progress-bar -o "dive.deb" "$DIVE_URL"; then
+if ! command curl -L -f --retry 8 --retry-delay 10 --retry-all-errors --progress-bar -o "dive.deb" "$DIVE_URL"; then
     log_error "Failed to download dive ${DIVE_VERSION}"
     cd /
     log_feature_end

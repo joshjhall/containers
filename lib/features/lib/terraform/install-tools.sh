@@ -42,7 +42,7 @@ install_terragrunt() {
         BUILD_TEMP=$(create_secure_temp_dir)
         cd "$BUILD_TEMP" || return 1
         log_message "Downloading Terragrunt..."
-        if ! command curl -L -f --retry 3 --retry-delay 2 --retry-all-errors --progress-bar -o "terragrunt" "$TERRAGRUNT_URL"; then
+        if ! command curl -L -f --retry 8 --retry-delay 10 --retry-all-errors --progress-bar -o "terragrunt" "$TERRAGRUNT_URL"; then
             log_error "Failed to download Terragrunt ${TERRAGRUNT_VERSION}"
             cd /
             return 1
@@ -99,7 +99,7 @@ install_terraform_docs() {
     BUILD_TEMP=$(create_secure_temp_dir)
     cd "$BUILD_TEMP" || return 1
     log_message "Downloading terraform-docs..."
-    if ! command curl -L -f --retry 3 --retry-delay 2 --retry-all-errors --progress-bar -o "terraform-docs.tar.gz" "$TFDOCS_URL"; then
+    if ! command curl -L -f --retry 8 --retry-delay 10 --retry-all-errors --progress-bar -o "terraform-docs.tar.gz" "$TFDOCS_URL"; then
         log_error "Failed to download terraform-docs ${TFDOCS_VERSION}"
         cd /
         return 1
@@ -156,7 +156,7 @@ install_tflint() {
     BUILD_TEMP=$(create_secure_temp_dir)
     cd "$BUILD_TEMP" || return 1
     log_message "Downloading tflint..."
-    if ! command curl -L -f --retry 3 --retry-delay 2 --retry-all-errors --progress-bar -o "$TFLINT_ARCHIVE" "$TFLINT_URL"; then
+    if ! command curl -L -f --retry 8 --retry-delay 10 --retry-all-errors --progress-bar -o "$TFLINT_ARCHIVE" "$TFLINT_URL"; then
         log_error "Failed to download tflint ${TFLINT_VERSION}"
         cd /
         return 1

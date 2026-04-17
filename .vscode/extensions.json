@@ -10,6 +10,7 @@
     "streetsidesoftware.code-spell-checker",
     "usernamehw.errorlens",
     "wayou.vscode-todo-highlight",
-    "golang.go"
+    "golang.go",
+    "rust-lang.rust-analyzer"
   ]
 }

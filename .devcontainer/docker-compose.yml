@@ -19,10 +19,8 @@ services:
         INCLUDE_DOCKER: "true"
         # Python needed for pre-commit framework and linting tools
         INCLUDE_PYTHON: "true"
-        # Rust needed for igor (project scaffolding CLI) and luggage (containers runtime and install management)
+        # Rust needed for stibbons (project scaffolding CLI) and luggage (containers runtime and install management)
         INCLUDE_RUST_DEV: "true"
-        # Go needed for igor (project scaffolding CLI) (to be deprecated after rust rewrite)
-        INCLUDE_GOLANG_DEV: "true"
       cache_from:
         - type=local,src=/tmp/.buildx-cache
       cache_to:

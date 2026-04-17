@@ -5,56 +5,70 @@ code in this repository.
 
 ## Container Build System Overview
 
-This is a modular container build system designed to be used as a git submodule
-across multiple projects. It provides a universal Dockerfile that creates
-purpose-specific containers through build arguments, from minimal environments
-to full development containers.
+This is a modular container build system that creates purpose-specific
+containers — from minimal agent images to full development environments —
+across multiple Linux distributions. v5 is a major rewrite replacing the
+git-submodule + bash-script approach with three compiled Rust executables
+and manifest-driven installs.
 
 ## Architecture
 
-The system follows a modular architecture:
+v5 is built around three compiled Rust executables in a Cargo workspace:
 
-- **Base setup**: Core system configuration and user management
-- **Feature scripts**: Individual installations for languages and tools
-- **Runtime scripts**: Container initialization and environment setup
-- **Caching strategy**: BuildKit cache mounts for efficient rebuilds
+### Three Executables
 
-Key directories:
+- **stibbons** (`crates/stibbons/`) — Host + container CLI/TUI for project
+  setup, configuration, worktree/agent management. The primary user-facing
+  tool. Installable via Homebrew, apt, cargo. Planned alias: `cbs`.
+- **igor** (`crates/igor/` — planned) — Container-only runtime manager.
+  Handles 1Password secret resolution, post-create/post-start hooks,
+  Claude Code setup, git identity, and service health checks.
+- **luggage** (`crates/luggage/` — planned) — Build engine. Manifest-driven
+  feature installation across the matrix of distro x distro version x
+  feature x feature version. Not user-facing.
 
-- `lib/base/`: System setup, user creation, logging utilities
-- `lib/features/`: Optional feature installations (languages, tools)
-- `lib/runtime/`: Container runtime initialization
-- `bin/`: Version management scripts (check-versions.sh, update-versions.sh,
-  release.sh)
-- `tests/`: Test framework and test suites
-- `examples/`: Docker Compose configurations and environment examples
+### Shared Crate
 
-## Igor Setup Wizard
+- **containers-common** (`crates/containers-common/`) — Shared types:
+  feature registry, dependency resolution, configuration schema, version
+  types. Used by all three executables.
 
-Igor (`cmd/igor/`) scaffolds devcontainer configurations via a TUI wizard.
+### Legacy Code (being ported)
 
-### Building and Testing
+- `lib/base/` — System setup, user creation, logging utilities
+- `lib/features/` — Bash feature installation scripts (being replaced by
+  luggage manifests)
+- `lib/runtime/` — Container runtime initialization (being replaced by igor)
+
+### Other Key Directories
+
+- `bin/` — Version management scripts (check-versions.sh, release.sh)
+- `tests/` — Test framework and test suites
+- `examples/` — Docker Compose configurations and environment examples
+- `docs/` — Documentation
+
+## Cargo Workspace
 
 ```bash
-cd cmd/igor && go build -o igor .
-cd cmd/igor && go test -race ./...
+# Build all crates
+cargo build --workspace
+
+# Run all Rust tests
+cargo test --workspace
+
+# Check linting (pedantic + nursery)
+cargo clippy --workspace -- -D warnings
+
+# Format
+cargo fmt --all
 ```
 
-### Key Directories
+### Adding a New Feature
 
-- `cmd/igor/internal/cmd/` — CLI commands (init, version)
-- `cmd/igor/internal/feature/` — Feature registry and dependency resolution
-- `cmd/igor/internal/template/sources/` — Output templates
-- `cmd/igor/internal/config/` — .igor.yml schema
-- `cmd/igor/internal/wizard/` — TUI form
-- `cmd/igor/testdata/` — Test configs and golden files
-
-### Adding a New Feature to Igor
-
-1. Add Feature struct to `internal/feature/registry.go`
-1. Set Requires/ImpliedBy if needed
-1. Add template conditionals in `internal/template/sources/`
-1. Update golden files: `go test ./... -update` (if supported) or manually
+1. Add Feature struct to `crates/containers-common/src/feature/registry.rs`
+1. Set `requires` / `implied_by` if needed
+1. Add template conditionals (when template system is ported)
+1. Update golden files if applicable
 
 ## Common Commands
 
@@ -178,16 +192,24 @@ See `docs/reference/features.md` for the full dependency graph and
 `docs/reference/environment-variables.md` for all build args, version pins,
 and cache paths.
 
-## Integration as Git Submodule
+## Project Integration
 
-This container system is designed to be used as a git submodule:
+### v5 approach (CLI-based)
 
-1. Projects add this repository as a submodule (typically at `containers/`)
-1. Build commands reference the Dockerfile from the submodule:
-   `-f containers/Dockerfile`
-1. The build context is the project root (where you run `docker build .`)
-1. The Dockerfile assumes it's in `containers/` and project files are in the
-   parent directory
+Projects use the `stibbons` CLI to generate and manage container configuration.
+No git submodule required:
+
+1. Install stibbons via Homebrew, apt, or cargo
+1. Run `stibbons init` in the project root
+1. Build with the generated docker-compose.yml
+1. Update with `stibbons update` when features or versions change
+
+### v4 approach (git submodule — still supported)
+
+Projects can still add this repository as a submodule at `containers/`:
+
+1. Build commands reference the Dockerfile: `-f containers/Dockerfile`
+1. The build context is the project root
 1. Different environments are created by varying the build arguments
 1. For standalone testing, use `PROJECT_PATH=.` to indicate no parent project
 
@@ -287,7 +309,13 @@ Bindfs auto-applies FUSE permission overlay on macOS/VirtioFS — requires
 See `docs/troubleshooting/case-sensitive-filesystems.md` and
 `docs/troubleshooting/docker-mac-case-sensitivity.md`.
 
-## Debian Version Compatibility
+## Multi-Distro Support
+
+v5 targets multiple distributions: Debian (11/12/13), Alpine, RHEL/UBI, and
+Ubuntu, with more planned. The `luggage` build engine adapts package names,
+install commands, and version constraints per distro automatically.
+
+### Debian Version Compatibility (current)
 
 Supports Debian 11 (Bullseye), 12 (Bookworm), and 13 (Trixie) with automatic
 detection. See `docs/troubleshooting/debian-compatibility.md` for version

@@ -1,0 +1,2 @@
+- [v5 Architecture](v5-architecture.md) — Three executables (stibbons/igor/luggage), manifest-driven installs, multi-distro support
+- [Octarine Windows](octarine-windows.md) — Octarine doesn't compile on Windows yet, blocks stibbons Windows CI

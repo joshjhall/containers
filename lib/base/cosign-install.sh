@@ -76,7 +76,7 @@ install_cosign() {
     build_temp=$(create_secure_temp_dir)
     cd "$build_temp" || return 1
     log_message "Downloading cosign..."
-    if ! command curl -L -f --retry 3 --retry-delay 2 --retry-all-errors --progress-bar -o "cosign.deb" "$cosign_url"; then
+    if ! command curl -L -f --retry 8 --retry-delay 10 --retry-all-errors --progress-bar -o "cosign.deb" "$cosign_url"; then
         log_error "Failed to download cosign ${cosign_version}"
         cd /
         command rm -rf "$build_temp"

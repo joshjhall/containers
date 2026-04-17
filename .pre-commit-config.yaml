@@ -94,23 +94,23 @@ repos:
       - id: gitleaks
 
   # ==========================================================================
-  # Go linting (igor)
+  # Rust linting (stibbons)
   # ==========================================================================
   - repo: local
     hooks:
-      - id: go-vet
-        name: go vet (igor)
-        entry: bash -c 'cd cmd/igor && go vet ./...'
+      - id: cargo-fmt-check
+        name: cargo fmt check (stibbons)
+        entry: cargo fmt --check
         language: system
         pass_filenames: false
-        files: ^cmd/igor/.*\.go$
+        files: ^(crates/.*\.rs|\.rustfmt\.toml|Cargo\.toml)$
 
-      - id: go-fmt-check
-        name: gofmt check (igor)
-        entry: bash -c 'UNFMT=$(gofmt -l cmd/igor/); if [ -n "$UNFMT" ]; then echo "Files need gofmt:"; echo "$UNFMT"; exit 1; fi'
+      - id: cargo-clippy
+        name: cargo clippy (stibbons)
+        entry: cargo clippy --workspace -- -D warnings
         language: system
         pass_filenames: false
-        files: ^cmd/igor/.*\.go$
+        files: ^(crates/.*\.rs|Cargo\.toml)$
 
   # ==========================================================================
   # Custom local hooks
@@ -165,12 +165,12 @@ repos:
         always_run: true
         stages: [pre-push]
 
-      - id: go-test
-        name: Run Go tests (igor)
-        entry: bash -c 'cd cmd/igor && go test ./...'
+      - id: cargo-test
+        name: Run Rust tests (stibbons)
+        entry: cargo test --workspace
         language: system
         pass_filenames: false
-        files: ^cmd/igor/.*\.go$
+        files: ^(crates/.*\.rs|Cargo\.toml)$
         stages: [pre-push]
 
       - id: docker-compose-validate
@@ -179,14 +179,6 @@ repos:
         language: system
         pass_filenames: false
         always_run: true
-        stages: [pre-push]
-
-      - id: build-igor
-        name: Build igor binary
-        entry: bash -c 'cd cmd/igor && CGO_ENABLED=0 go build -trimpath -o ../../bin/igor . && cd ../.. && git add bin/igor'
-        language: system
-        pass_filenames: false
-        files: ^cmd/igor/.*\.go$
         stages: [pre-push]
 
       - id: yamllint-all

@@ -1,4 +1,4 @@
-# Custom dictionary for rust-core project
+# Custom dictionary for containers project
 coreutils
 cweill
 Daemonless
@@ -347,6 +347,7 @@ nullglob
 nullvalue
 numpy
 observability
+octarine
 ofabry
 ollama
 oneline
@@ -404,6 +405,7 @@ PYTHONHOME
 pythonpath
 pytv
 Rakefile
+ratatui
 Ranke
 rbca
 rbuild
@@ -480,6 +482,7 @@ sslmode
 stackprof
 startswith
 staticcheck
+stibbons
 stringr
 subdirs
 subshell

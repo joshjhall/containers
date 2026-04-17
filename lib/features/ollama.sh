@@ -108,7 +108,7 @@ BUILD_TEMP=$(create_secure_temp_dir)
 
 # Download Ollama tarball
 log_message "Downloading Ollama..."
-if ! command curl -L -f --retry 3 --retry-delay 2 --retry-all-errors --progress-bar -o "${BUILD_TEMP}/ollama.tgz" "$OLLAMA_URL"; then
+if ! command curl -L -f --retry 8 --retry-delay 10 --retry-all-errors --progress-bar -o "${BUILD_TEMP}/ollama.tgz" "$OLLAMA_URL"; then
     log_error "Failed to download Ollama ${OLLAMA_VERSION}"
     log_feature_end
     exit 1
