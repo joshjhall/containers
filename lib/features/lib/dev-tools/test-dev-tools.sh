@@ -31,7 +31,7 @@ else
     echo "  ✗ eza/exa is not found"
 fi
 
-for tool in bat duf htop ncdu fzf; do
+for tool in bat duf htop dua fzf; do
     if command -v $tool &> /dev/null; then
         echo "  ✓ $tool is installed"
     else

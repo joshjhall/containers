@@ -207,3 +207,10 @@ pids/
 local/
 .local/
 ai/
+
+# ============================================================================
+# VALE (PROSE LINTER)
+# ============================================================================
+
+# Styles are fetched by `vale sync` based on .vale.ini — not vendored.
+.vale/styles/

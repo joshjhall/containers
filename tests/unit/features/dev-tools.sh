@@ -81,6 +81,11 @@ test_binary_tool_installations() {
         "glab"
         "mkcert"
         "biome"
+        "lefthook"
+        "mado"
+        "dprint"
+        "yq"
+        "sd"
     )
 
     # Simulate tool installation
@@ -111,6 +116,7 @@ test_tool_versions() {
         "ACT_VERSION=0.2.80"
         "GLAB_VERSION=1.65.0"
         "BIOME_VERSION=1.9.4"
+        "YQ_VERSION=4.53.2"
     )
 
     # Check version format
@@ -229,7 +235,6 @@ test_system_tools_list() {
         "unzip"
         # Terminal and monitoring
         "htop"
-        "ncdu"
         "bat"
         "tmux"
         "eza"
@@ -603,6 +608,148 @@ test_agnix_installation() {
 }
 
 run_test test_agnix_installation "agnix installation present in binary tools"
+
+# Test: lefthook version variable defined in dev-tools.sh
+test_lefthook_version_variable() {
+    local source_file="$PROJECT_ROOT/lib/features/dev-tools.sh"
+    assert_file_contains "$source_file" "LEFTHOOK_VERSION=" "dev-tools.sh defines LEFTHOOK_VERSION"
+}
+
+# Test: lefthook installation present in binary tools script
+test_lefthook_installation() {
+    local source_file="$PROJECT_ROOT/lib/features/lib/dev-tools/install-binary-tools.sh"
+    assert_file_contains "$source_file" "evilmartians/lefthook" "install-binary-tools.sh installs lefthook from evilmartians"
+    assert_file_contains "$source_file" "lefthook_\${LEFTHOOK_VERSION}_Linux_x86_64.gz" "install-binary-tools.sh uses correct amd64 asset name"
+}
+
+# Test: gitleaks version variable defined in dev-tools.sh
+test_gitleaks_version_variable() {
+    local source_file="$PROJECT_ROOT/lib/features/dev-tools.sh"
+    assert_file_contains "$source_file" "GITLEAKS_VERSION=" "dev-tools.sh defines GITLEAKS_VERSION"
+}
+
+# Test: gitleaks installation present in binary tools script
+test_gitleaks_installation() {
+    local source_file="$PROJECT_ROOT/lib/features/lib/dev-tools/install-binary-tools.sh"
+    assert_file_contains "$source_file" "gitleaks/gitleaks" "install-binary-tools.sh installs gitleaks from gitleaks/gitleaks"
+    assert_file_contains "$source_file" "gitleaks_\${GITLEAKS_VERSION}_linux_x64.tar.gz" "install-binary-tools.sh uses correct amd64 asset name"
+}
+
+run_test test_lefthook_version_variable "lefthook version variable defined in dev-tools.sh"
+run_test test_lefthook_installation "lefthook installation present in binary tools"
+run_test test_gitleaks_version_variable "gitleaks version variable defined in dev-tools.sh"
+run_test test_gitleaks_installation "gitleaks installation present in binary tools"
+
+# Test: mado version variable defined in dev-tools.sh
+test_mado_version_variable() {
+    local source_file="$PROJECT_ROOT/lib/features/dev-tools.sh"
+    assert_file_contains "$source_file" "MADO_VERSION=" "dev-tools.sh defines MADO_VERSION"
+}
+
+# Test: mado installation present in binary tools script
+test_mado_installation() {
+    local source_file="$PROJECT_ROOT/lib/features/lib/dev-tools/install-binary-tools.sh"
+    assert_file_contains "$source_file" "akiomik/mado" "install-binary-tools.sh installs mado from akiomik"
+    assert_file_contains "$source_file" "mado-Linux-gnu-x86_64.tar.gz" "install-binary-tools.sh uses correct amd64 asset name"
+}
+
+# Test: dprint version variable defined in dev-tools.sh
+test_dprint_version_variable() {
+    local source_file="$PROJECT_ROOT/lib/features/dev-tools.sh"
+    assert_file_contains "$source_file" "DPRINT_VERSION=" "dev-tools.sh defines DPRINT_VERSION"
+}
+
+# Test: dprint installation present in binary tools script
+test_dprint_installation() {
+    local source_file="$PROJECT_ROOT/lib/features/lib/dev-tools/install-binary-tools.sh"
+    assert_file_contains "$source_file" "dprint/dprint" "install-binary-tools.sh installs dprint from dprint/dprint"
+    assert_file_contains "$source_file" "dprint-x86_64-unknown-linux-gnu.zip" "install-binary-tools.sh uses correct amd64 asset name"
+}
+
+run_test test_mado_version_variable "mado version variable defined in dev-tools.sh"
+run_test test_mado_installation "mado installation present in binary tools"
+run_test test_dprint_version_variable "dprint version variable defined in dev-tools.sh"
+
+# Test: osv-scanner version variable defined in dev-tools.sh
+test_osv_scanner_version_variable() {
+    local source_file="$PROJECT_ROOT/lib/features/dev-tools.sh"
+    assert_file_contains "$source_file" "OSV_SCANNER_VERSION=" "dev-tools.sh defines OSV_SCANNER_VERSION"
+}
+
+# Test: osv-scanner installation present in binary tools script
+test_osv_scanner_installation() {
+    local source_file="$PROJECT_ROOT/lib/features/lib/dev-tools/install-binary-tools.sh"
+    assert_file_contains "$source_file" "google/osv-scanner" "install-binary-tools.sh installs osv-scanner from google/osv-scanner"
+    assert_file_contains "$source_file" "osv-scanner_linux_amd64" "install-binary-tools.sh uses correct amd64 asset name"
+}
+
+run_test test_osv_scanner_version_variable "osv-scanner version variable defined in dev-tools.sh"
+run_test test_osv_scanner_installation "osv-scanner installation present in binary tools"
+run_test test_dprint_installation "dprint installation present in binary tools"
+
+# Test: sd version variable defined in dev-tools.sh
+test_sd_version_variable() {
+    local source_file="$PROJECT_ROOT/lib/features/dev-tools.sh"
+    assert_file_contains "$source_file" "SD_VERSION=" "dev-tools.sh defines SD_VERSION"
+}
+
+# Test: sd installation present in binary tools script
+test_sd_installation() {
+    local source_file="$PROJECT_ROOT/lib/features/lib/dev-tools/install-binary-tools.sh"
+    assert_file_contains "$source_file" "chmln/sd" "install-binary-tools.sh installs sd from chmln/sd"
+    assert_file_contains "$source_file" "sd-v\${SD_VERSION}-x86_64-unknown-linux-musl.tar.gz" "install-binary-tools.sh uses correct amd64 asset name"
+}
+
+run_test test_sd_version_variable "sd version variable defined in dev-tools.sh"
+run_test test_sd_installation "sd installation present in binary tools"
+
+# Test: dua-cli version variable defined in dev-tools.sh
+test_dua_version_variable() {
+    local source_file="$PROJECT_ROOT/lib/features/dev-tools.sh"
+    assert_file_contains "$source_file" "DUA_VERSION=" "dev-tools.sh defines DUA_VERSION"
+}
+
+# Test: dua-cli installation present in binary tools script
+test_dua_installation() {
+    local source_file="$PROJECT_ROOT/lib/features/lib/dev-tools/install-binary-tools.sh"
+    assert_file_contains "$source_file" "Byron/dua-cli" "install-binary-tools.sh installs dua-cli from Byron/dua-cli"
+    assert_file_contains "$source_file" "dua-v\${DUA_VERSION}-x86_64-unknown-linux-musl.tar.gz" "install-binary-tools.sh uses correct amd64 asset name"
+}
+
+run_test test_dua_version_variable "dua-cli version variable defined in dev-tools.sh"
+run_test test_dua_installation "dua-cli installation present in binary tools"
+
+# Test: hyperfine version variable defined in dev-tools.sh
+test_hyperfine_version_variable() {
+    local source_file="$PROJECT_ROOT/lib/features/dev-tools.sh"
+    assert_file_contains "$source_file" "HYPERFINE_VERSION=" "dev-tools.sh defines HYPERFINE_VERSION"
+}
+
+# Test: hyperfine installation present in binary tools script
+test_hyperfine_installation() {
+    local source_file="$PROJECT_ROOT/lib/features/lib/dev-tools/install-binary-tools.sh"
+    assert_file_contains "$source_file" "sharkdp/hyperfine" "install-binary-tools.sh installs hyperfine from sharkdp/hyperfine"
+    assert_file_contains "$source_file" "hyperfine-v\${HYPERFINE_VERSION}-x86_64-unknown-linux-musl.tar.gz" "install-binary-tools.sh uses correct amd64 asset name"
+}
+
+run_test test_hyperfine_version_variable "hyperfine version variable defined in dev-tools.sh"
+run_test test_hyperfine_installation "hyperfine installation present in binary tools"
+
+# Test: vale version variable defined in dev-tools.sh
+test_vale_version_variable() {
+    local source_file="$PROJECT_ROOT/lib/features/dev-tools.sh"
+    assert_file_contains "$source_file" "VALE_VERSION=" "dev-tools.sh defines VALE_VERSION"
+}
+
+# Test: vale installation present in binary tools script
+test_vale_installation() {
+    local source_file="$PROJECT_ROOT/lib/features/lib/dev-tools/install-binary-tools.sh"
+    assert_file_contains "$source_file" "vale-cli/vale" "install-binary-tools.sh installs vale from vale-cli/vale"
+    assert_file_contains "$source_file" "vale_\${VALE_VERSION}_Linux_64-bit.tar.gz" "install-binary-tools.sh uses correct amd64 asset name"
+}
+
+run_test test_vale_version_variable "vale version variable defined in dev-tools.sh"
+run_test test_vale_installation "vale installation present in binary tools"
 
 # Generate test report
 generate_report

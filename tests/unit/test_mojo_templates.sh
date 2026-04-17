@@ -79,7 +79,7 @@ test_readme_loading_with_substitution() {
     local tff_temp_dir
     tff_temp_dir=$(mktemp -d)
 
-    if sed "s/__PROJECT_NAME__/my-mojo-app/g" "$TEMPLATE_DIR/project/README.md.tmpl" > "$tff_temp_dir/README.md"; then
+    if command sed "s/__PROJECT_NAME__/my-mojo-app/g" "$TEMPLATE_DIR/project/README.md.tmpl" > "$tff_temp_dir/README.md"; then
         if command grep -q "# my-mojo-app" "$tff_temp_dir/README.md"; then
             assert_true true "README template substitution works correctly"
         else
@@ -177,7 +177,7 @@ test_readme_project_structure() {
     local tff_temp_dir
     tff_temp_dir=$(mktemp -d)
 
-    if sed "s/__PROJECT_NAME__/my-mojo-app/g" "$TEMPLATE_DIR/project/README.md.tmpl" > "$tff_temp_dir/README.md"; then
+    if command sed "s/__PROJECT_NAME__/my-mojo-app/g" "$TEMPLATE_DIR/project/README.md.tmpl" > "$tff_temp_dir/README.md"; then
         if command grep -q "## Structure" "$tff_temp_dir/README.md" && \
            command grep -q "src/.*Source code" "$tff_temp_dir/README.md" && \
            command grep -q "tests/.*Test files" "$tff_temp_dir/README.md"; then

@@ -258,18 +258,14 @@ v5 improves the testing story with faster, more isolated test execution:
 - **Integration tests** — Full container builds with feature combinations
 - **Rust tests** — `cargo test --workspace` for all compiled components
 
+Common tasks are wired into the `justfile` — run `just` to list all recipes.
+
 ```bash
-# Run all tests
-./tests/run_all.sh
-
-# Test a single feature in isolation (fast)
-./tests/test_feature.sh python-dev
-
-# Run Rust workspace tests
-cargo test --workspace
-
-# Run integration tests (requires Docker)
-./tests/run_integration_tests.sh
+just test-all                    # everything (requires Docker)
+just test                        # unit + rust + lints (no Docker)
+just test-feature python-dev     # test one feature in isolation
+just test-rust                   # cargo test --workspace
+just test-integration            # full integration suite
 ```
 
 ______________________________________________________________________
@@ -327,15 +323,15 @@ primarily Rust — contributions to any of the three crates (stibbons, igor,
 luggage) are welcome.
 
 ```bash
-# Build all crates
-cargo build --workspace
-
-# Run all tests
-cargo test --workspace
-
-# Check linting
-cargo clippy --workspace -- -D warnings
+just build       # cargo build --workspace
+just test        # full pre-commit test suite
+just lint        # every lefthook pre-commit hook on all files
+just install-hooks  # lefthook install (pre-commit + pre-push)
 ```
+
+**Prose linting**: run `vale sync` once in a dev-tools container to fetch
+the styles declared in `.vale.ini`. The pre-commit `vale` hook is
+warn-only and skips silently until styles are synced.
 
 ______________________________________________________________________
 

@@ -311,7 +311,7 @@ echo "Configuration Files:"
 
 echo ""
 echo "Readline Settings:"
-bind -v 2>/dev/null | grep -E "(completion-ignore-case|show-all-if-ambiguous|editing-mode)" | sed 's/^/  /'
+bind -v 2>/dev/null | grep -E "(completion-ignore-case|show-all-if-ambiguous|editing-mode)" | command sed 's/^/  /'
 
 echo ""
 case "${KEYBINDING_PROFILE:-iterm}" in

@@ -15,26 +15,19 @@ echo ""
 
 cd "$PROJECT_ROOT"
 
-# 1. Install pre-commit hooks
-echo -e "${BLUE}[1/4] Installing pre-commit hooks...${NC}"
+# 1. Install lefthook git hooks
+echo -e "${BLUE}[1/4] Installing lefthook git hooks...${NC}"
 
-if command -v pre-commit &> /dev/null; then
-    # Install commit and push hooks
-    if pre-commit install --install-hooks > /dev/null 2>&1; then
-        echo -e "${GREEN}✓${NC} pre-commit hooks installed"
+if command -v lefthook &> /dev/null; then
+    if lefthook install > /dev/null 2>&1; then
+        echo -e "${GREEN}✓${NC} lefthook hooks installed (pre-commit + pre-push)"
     else
-        echo -e "${YELLOW}⚠${NC}  Failed to install pre-commit hooks"
-    fi
-
-    if pre-commit install --hook-type pre-push > /dev/null 2>&1; then
-        echo -e "${GREEN}✓${NC} pre-push hooks installed"
-    else
-        echo -e "${YELLOW}⚠${NC}  Failed to install pre-push hooks"
+        echo -e "${YELLOW}⚠${NC}  Failed to install lefthook hooks"
     fi
 else
-    echo -e "${YELLOW}⚠${NC}  pre-commit not found"
-    echo "  Install with: pip install pre-commit"
-    echo "  Then re-run this script"
+    echo -e "${YELLOW}⚠${NC}  lefthook not found"
+    echo "  lefthook ships with INCLUDE_DEV_TOOLS=true."
+    echo "  Rebuild the container or install manually, then re-run this script."
 fi
 
 # 2. Verify .env is not committed
@@ -83,7 +76,7 @@ check_tool "docker" "https://docs.docker.com/get-docker/"
 check_tool "gh" "https://cli.github.com/"
 check_tool "jq" "apt-get install jq (or brew install jq)"
 check_tool "git-cliff" "cargo install git-cliff (optional, for changelogs)"
-check_tool "pre-commit" "pip install pre-commit"
+check_tool "lefthook" "included in dev-tools feature"
 check_tool "biome" "included in dev-tools feature"
 
 # 4. Check git configuration
@@ -106,7 +99,7 @@ echo "  1. Run tests: ./tests/run_all.sh"
 echo "  2. Build a container: docker build -t test:minimal --build-arg PROJECT_NAME=test --build-arg PROJECT_PATH=. ."
 echo "  3. See docs/README.md for more information"
 echo ""
-echo "Git hooks are now active (via pre-commit framework):"
+echo "Git hooks are now active (via lefthook):"
 echo ""
 echo "Pre-commit hook (runs on: git commit):"
 echo "  - Trailing whitespace and EOF fixes"

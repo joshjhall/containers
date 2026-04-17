@@ -11,6 +11,19 @@ state cleanup.
 **Prerequisite**: Implementation and testing must be complete before invoking
 this skill. The state file written by `/next-issue` must exist.
 
+## Environment Variables
+
+Two env vars toggle non-default behavior; both are opt-in:
+
+- `AUTOMERGE=1` — in Option 1 (Branch + PR), queue the PR for GitHub's
+  native auto-merge via `gh pr merge --auto --squash --delete-branch`
+  immediately after PR creation and exit, skipping the CI-wait loop.
+  GitHub only. Skipped for `severity/critical` issues. Falls through to
+  the normal CI-wait loop if `gh pr merge --auto` fails (e.g., auto-merge
+  not enabled on the repo). See Option 1 "Auto-merge fast path" below.
+- `PRE_REVIEW_STRICT=true` — pre-review gates (Step 3.5) block Option 1 PR
+  creation on HIGH certainty findings instead of warning only.
+
 ## Step 1 — Read State
 
 1. **Discover the current state file**:
@@ -245,6 +258,55 @@ Before executing the chosen shipping mode, run these safety checks:
      glab mr create --title "{type}({scope}): {description}" \
        --description "## Summary\n- {what changed and why}\n\n## Test plan\n- {how this was tested}\n\nCloses #{N}"
      ```
+
+1. **Auto-merge fast path** (if `AUTOMERGE=1`):
+
+   When `AUTOMERGE=1` is set in the environment, hand the PR off to
+   GitHub's native auto-merge and skip the CI-wait loop below. This is
+   intended for routine low-risk issues where "wait for checks, then merge"
+   is pure overhead.
+
+   **Skip conditions** (fall through to the CI-wait loop instead):
+
+   - Platform is not GitHub — the toggle is GitHub-only
+   - Issue carries `severity/critical` — print
+     `"auto-merge skipped (severity/critical)"` and continue
+   - `gh pr merge --auto` exits non-zero (e.g., auto-merge not enabled on
+     the repo) — log the error output and continue
+
+   Otherwise:
+
+   ```bash
+   gh pr merge "$PR_NUM" --auto --squash --delete-branch
+   ```
+
+   On success, do the Option 1 cleanup inline and exit the skill:
+
+   a. Update the state file `.claude/memory/tmp/next-issue-{N}.json` so
+   `"phase"` is `"auto-merge-queued"` (preserves an audit trail if any
+   step after this fails before the file is deleted)
+   b. Label the issue `status/pr-pending` and remove `status/in-progress`:
+
+   ```bash
+   gh issue edit {N} --add-label "status/pr-pending" --remove-label "status/in-progress"
+   ```
+
+   c. Comment on the issue:
+
+   ```bash
+   gh issue comment {N} --body "Fix submitted in PR #{pr_number}. Queued for auto-merge (squash + delete-branch)."
+   ```
+
+   d. `git checkout main`
+   e. Delete the state file (`.claude/memory/tmp/next-issue-{N}.json`)
+   f. Show the PR URL to the user
+   g. **Exit** — do not proceed to the CI-wait loop, labeling, or any other
+   subsequent step in this option
+
+   **Squash-by-default rationale**: `/next-issue` PRs are single-issue,
+   single-deliverable units; squash keeps history linear and the merged
+   commit still references the issue. Users who want merge-commits can
+   run Option 1 without `AUTOMERGE=1`.
 
 1. **Monitor CI and remediate failures** (advisory, max 3 iterations):
 

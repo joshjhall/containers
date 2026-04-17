@@ -78,11 +78,12 @@ ______________________________________________________________________
 
 ### 4. Security Tools
 
-| Tool     | Current Version | Purpose                | Verification |
-| -------- | --------------- | ---------------------- | ------------ |
-| cosign   | 2.x             | Sigstore verification  | Checksum     |
-| trivy    | (CI only)       | Vulnerability scanning | N/A          |
-| gitleaks | (CI only)       | Secret detection       | N/A          |
+| Tool        | Current Version | Purpose                  | Verification    |
+| ----------- | --------------- | ------------------------ | --------------- |
+| cosign      | 2.x             | Sigstore verification    | Checksum        |
+| trivy       | (CI only)       | Vulnerability scanning   | N/A             |
+| gitleaks    | (CI only)       | Secret detection         | N/A             |
+| osv-scanner | 2.x             | CVE scanning (lockfiles) | Checksum (TOFU) |
 
 ______________________________________________________________________
 

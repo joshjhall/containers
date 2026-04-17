@@ -339,10 +339,16 @@ These variables can be set when running containers (via `docker run -e`):
 
 ### 1Password Integration
 
-| Variable                   | Description                                                         |
-| -------------------------- | ------------------------------------------------------------------- |
-| `OP_SERVICE_ACCOUNT_TOKEN` | 1Password service account token for automated access                |
-| `ENV_SECRETS_FILE`         | Custom path to `.env.secrets` file (overrides default search order) |
+| Variable                         | Default                          | Description                                                         |
+| -------------------------------- | -------------------------------- | ------------------------------------------------------------------- |
+| `OP_SERVICE_ACCOUNT_TOKEN`       | —                                | 1Password service account token for automated access                |
+| `ENV_SECRETS_FILE`               | —                                | Custom path to `.env.secrets` file (overrides default search order) |
+| `OP_SECRET_CACHE_DIR`            | `/cache/1password/secrets`       | Per-ref cache dir (must be tmpfs-backed; see secrets-and-setup.md)  |
+| `OP_SECRET_CACHE_FALLBACK_DIR`   | `/dev/shm/op-secrets-persistent` | Degraded fallback when primary isn't tmpfs                          |
+| `OP_SECRET_CACHE_TTL`            | `1800`                           | Cache TTL in seconds (30 min); `0` disables caching                 |
+| `OP_SECRET_CACHE_MAX_CONCURRENT` | `4`                              | Cap on concurrent `op read` calls                                   |
+| `OP_READ_MAX_ATTEMPTS`           | `3`                              | Retries per ref on detected 1Password throttle                      |
+| `OP_READ_RETRY_DELAY`            | `1`                              | Initial retry backoff in seconds (doubles per attempt)              |
 
 ### Resource Limits
 

@@ -261,6 +261,16 @@ extract_all_versions() {
     _add_feature_version TAPLO_VERSION "taplo" "dev-tools.sh"
     _add_feature_version JUST_VERSION "just" "dev-tools.sh"
     _add_feature_version UV_VERSION "uv" "dev-tools.sh"
+    _add_feature_version LEFTHOOK_VERSION "lefthook" "dev-tools.sh"
+    _add_feature_version GITLEAKS_VERSION "gitleaks" "dev-tools.sh"
+    _add_feature_version MADO_VERSION "mado" "dev-tools.sh"
+    _add_feature_version DPRINT_VERSION "dprint" "dev-tools.sh"
+    _add_feature_version OSV_SCANNER_VERSION "osv-scanner" "dev-tools.sh"
+    _add_feature_version YQ_VERSION "yq" "dev-tools.sh"
+    _add_feature_version SD_VERSION "sd" "dev-tools.sh"
+    _add_feature_version DUA_VERSION "dua" "dev-tools.sh"
+    _add_feature_version HYPERFINE_VERSION "hyperfine" "dev-tools.sh"
+    _add_feature_version VALE_VERSION "vale" "dev-tools.sh"
 
     # Docker tools from docker.sh
     _add_feature_version DIVE_VERSION "dive" "docker.sh"
@@ -376,6 +386,16 @@ main() {
             biome) check_biome ;;
             taplo) check_github_release "taplo" "tamasfe/taplo" ;;
             just) check_github_release "just" "casey/just" ;;
+            lefthook) check_github_release "lefthook" "evilmartians/lefthook" ;;
+            gitleaks) check_github_release "gitleaks" "gitleaks/gitleaks" ;;
+            mado) check_github_release "mado" "akiomik/mado" ;;
+            dprint) check_github_release "dprint" "dprint/dprint" ;;
+            osv-scanner) check_github_release "osv-scanner" "google/osv-scanner" ;;
+            yq) check_github_release "yq" "mikefarah/yq" ;;
+            sd) check_github_release "sd" "chmln/sd" ;;
+            dua) check_github_release "dua" "Byron/dua-cli" ;;
+            hyperfine) check_github_release "hyperfine" "sharkdp/hyperfine" ;;
+            vale) check_github_release "vale" "vale-cli/vale" ;;
             cargo-release) check_crates_io "cargo-release" ;;
             zoxide) check_github_release "zoxide" "ajeetdsouza/zoxide" ;;
             cosign) check_github_release "cosign" "sigstore/cosign" ;;

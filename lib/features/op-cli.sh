@@ -122,13 +122,13 @@ log_message "Configuring 1Password cache directories..."
 # 1Password CLI stores configuration and cache data
 OP_CACHE_DIR="/cache/1password"
 OP_CONFIG_DIR="/cache/1password/config"
+OP_SECRET_CACHE_DIR="/cache/1password/secrets"
 
-# Create cache directories with correct ownership and permissions
-# Note: config directory needs mode 0700 for security, so not using shared utility
-# Use install -d for atomic directory creation with ownership
-# Note: config directory needs mode 700 for security requirements
+# Create cache directories with correct ownership and permissions.
+# config/ and secrets/ need mode 0700 for security (resolved-secret storage),
+# so they're not using the shared 0755 utility.
 log_command "Creating 1Password cache directories with ownership" \
-    bash -c "install -d -m 0755 -o '${USER_UID}' -g '${USER_GID}' '${OP_CACHE_DIR}' && install -d -m 0700 -o '${USER_UID}' -g '${USER_GID}' '${OP_CONFIG_DIR}'"
+    bash -c "install -d -m 0755 -o '${USER_UID}' -g '${USER_GID}' '${OP_CACHE_DIR}' && install -d -m 0700 -o '${USER_UID}' -g '${USER_GID}' '${OP_CONFIG_DIR}' && install -d -m 0700 -o '${USER_UID}' -g '${USER_GID}' '${OP_SECRET_CACHE_DIR}'"
 
 # ============================================================================
 # System-wide Environment Configuration

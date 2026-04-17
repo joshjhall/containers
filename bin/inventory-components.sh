@@ -139,7 +139,7 @@ generate_inventory() {
   "system_packages": [
 $(echo "$dpkg_list" | head -50 | while read -r pkg ver; do
     echo "    {\"name\": \"$pkg\", \"version\": \"$ver\"},"
-done | sed '$ s/,$//')
+done | command sed '$ s/,$//')
   ]
 }
 EOF

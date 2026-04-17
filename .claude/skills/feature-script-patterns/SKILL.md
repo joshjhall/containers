@@ -146,6 +146,48 @@ cat /etc/os-release
 - Variables from `feature-header.sh`: `$USERNAME`, `$USER_UID`, `$USER_GID`, `$WORKING_DIR`
 - Bashrc scripts must start with `set +u` and `set +e` for interactive shell safety
 
+## Adding a New Feature (End-to-End Checklist)
+
+Adding a feature is more than writing a bash script. Touch each of these:
+
+### Always required
+
+1. **Install script** — `lib/features/<name>.sh` (this skill covers it) or, for a
+   dev-tool bundled into `dev-tools`, add an install function in
+   `lib/features/lib/dev-tools/install-binary-tools.sh` and a version pin +
+   summary entry in `lib/features/dev-tools.sh`.
+1. **Version management** — these four places all need entries for any
+   auto-updatable tool:
+   - `bin/check-versions.sh` — `_add_feature_version <VAR> "<tool>" "<script>.sh"`
+     plus a `check_github_release` case branch for the weekly check.
+   - `bin/lib/update-versions/updaters.sh` — `sed` case branch so
+     `release.sh` can bump the pin in-place.
+   - `bin/update-checksums.sh` — entry in `TOOL_CHECKSUM_REGISTRY_ARCH` (or
+     the non-arch variant) so checksums refresh on version bumps.
+1. **Rust feature registry** — `crates/containers-common/src/feature/registry.rs`
+   gets a `Feature { … }` entry (unless it's bundled into an existing feature
+   like `dev_tools`). Update the `registry_has_N_features` test count.
+1. **Unit test** — `tests/unit/features/<name>.sh` (new) or extend the
+   parent feature's test (e.g., `tests/unit/features/dev-tools.sh`). See
+   `test-framework-reference` skill.
+
+### Sometimes required
+
+- **Dockerfile** — add `ARG INCLUDE_<NAME>=false` + conditional `RUN`
+  block ONLY for standalone features. Dev-tools bundled tools don't need
+  this — `dev-tools.sh` reads its own version defaults.
+- **Integration test** — `tests/integration/builds/test_<name>.sh` when the
+  feature has meaningful runtime behavior to verify.
+- **Docs** — `docs/reference/features.md` for standalone features.
+
+### Verification
+
+```bash
+bash tests/unit/features/<name>.sh        # unit tests pass
+./bin/check-versions.sh 2>&1 | grep <name> # version checker picks it up
+cargo test --workspace                     # registry test passes (if added)
+```
+
 ## When NOT to Use
 
 - Modifying `lib/base/` scripts (different conventions, no feature-header)

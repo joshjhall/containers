@@ -108,7 +108,7 @@ test_template_loading_with_substitution() {
     local tff_temp_dir
     tff_temp_dir=$(mktemp -d)
 
-    if sed "s/__PROJECT_NAME__/testproject/g" "$TEMPLATE_DIR/cli/index.ts.tmpl" > "$tff_temp_dir/index.ts"; then
+    if command sed "s/__PROJECT_NAME__/testproject/g" "$TEMPLATE_DIR/cli/index.ts.tmpl" > "$tff_temp_dir/index.ts"; then
         if command grep -q "testproject" "$tff_temp_dir/index.ts"; then
             assert_true true "Template substitution works correctly"
         else

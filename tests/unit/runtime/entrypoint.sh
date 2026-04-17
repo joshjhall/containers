@@ -834,7 +834,7 @@ _run_bindfs_parse_subshell() {
 }
 
 # Extract the function body from setup-bindfs.sh for isolated testing
-_PARSE_BINDFS_FUNC=$(sed -n '/^parse_bindfs_skip_paths()/,/^}/p' "$PROJECT_ROOT/lib/runtime/lib/setup-bindfs.sh")
+_PARSE_BINDFS_FUNC=$(command sed -n '/^parse_bindfs_skip_paths()/,/^}/p' "$PROJECT_ROOT/lib/runtime/lib/setup-bindfs.sh")
 
 test_parse_bindfs_skip_paths_empty() {
     local output
@@ -896,7 +896,7 @@ test_parse_bindfs_skip_paths_whitespace() {
 # Functional Tests - probe_mount_needs_fix
 # ============================================================================
 # Extract the probe function. It depends on BINDFS_SKIP_MAP (associative array).
-_PROBE_MOUNT_FUNC=$(sed -n '/^probe_mount_needs_fix()/,/^}/p' "$PROJECT_ROOT/lib/runtime/lib/setup-bindfs.sh")
+_PROBE_MOUNT_FUNC=$(command sed -n '/^probe_mount_needs_fix()/,/^}/p' "$PROJECT_ROOT/lib/runtime/lib/setup-bindfs.sh")
 
 # Helper to run probe tests in a subshell with mocked filesystem operations
 _run_probe_subshell() {
@@ -965,7 +965,7 @@ test_probe_auto_mode_normal_fs() {
 # ============================================================================
 # Extract the apply function. It depends on BINDFS_CAN_SUDO, USERNAME,
 # BINDFS_UID, BINDFS_GID, and calls run_privileged + bindfs.
-_APPLY_OVERLAY_FUNC=$(sed -n '/^apply_bindfs_overlay()/,/^}/p' "$PROJECT_ROOT/lib/runtime/lib/setup-bindfs.sh")
+_APPLY_OVERLAY_FUNC=$(command sed -n '/^apply_bindfs_overlay()/,/^}/p' "$PROJECT_ROOT/lib/runtime/lib/setup-bindfs.sh")
 
 _run_apply_subshell() {
     bash -c "$1" 2>/dev/null

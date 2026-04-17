@@ -4,7 +4,7 @@
 # Functions:
 #   install_entr        — build entr from source tarball
 #   install_fzf         — git clone fzf with retry logic
-#   install_github_binary_tools — all install_github_release calls
+#   install_github_binary_tools — all install_github_release calls (includes lefthook)
 #   create_tool_symlinks — fd/bat/fzf symlinks
 
 install_entr() {
@@ -255,6 +255,87 @@ install_github_binary_tools() {
 
     # uv (Python package installer) — skip if already installed by python-dev
     install_uv || return 1
+
+    # lefthook (git hook manager — gzipped binary, Go-based, no runtime deps)
+    install_github_release "lefthook" "$LEFTHOOK_VERSION" \
+        "https://github.com/evilmartians/lefthook/releases/download/v${LEFTHOOK_VERSION}" \
+        "lefthook_${LEFTHOOK_VERSION}_Linux_x86_64.gz" \
+        "lefthook_${LEFTHOOK_VERSION}_Linux_aarch64.gz" \
+        "calculate" "gunzip" \
+        || return 1
+
+    # gitleaks (secret scanner — Go binary, called by lefthook pre-commit hook)
+    install_github_release "gitleaks" "$GITLEAKS_VERSION" \
+        "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}" \
+        "gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
+        "gitleaks_${GITLEAKS_VERSION}_linux_arm64.tar.gz" \
+        "calculate" "extract_flat:gitleaks" \
+        || return 1
+
+    # mado (markdown linter — Rust, replaces pymarkdown)
+    install_github_release "mado" "$MADO_VERSION" \
+        "https://github.com/akiomik/mado/releases/download/v${MADO_VERSION}" \
+        "mado-Linux-gnu-x86_64.tar.gz" \
+        "mado-Linux-gnu-arm64.tar.gz" \
+        "sha256" "extract_flat:mado" \
+        || return 1
+
+    # dprint (polyglot formatter — Rust, replaces mdformat for markdown)
+    install_github_release "dprint" "$DPRINT_VERSION" \
+        "https://github.com/dprint/dprint/releases/download/${DPRINT_VERSION}" \
+        "dprint-x86_64-unknown-linux-gnu.zip" \
+        "dprint-aarch64-unknown-linux-gnu.zip" \
+        "calculate" "zip_to:/usr/local/bin" \
+        || return 1
+
+    # osv-scanner (dependency CVE scanner — Go binary, bare binary assets)
+    install_github_release "osv-scanner" "$OSV_SCANNER_VERSION" \
+        "https://github.com/google/osv-scanner/releases/download/v${OSV_SCANNER_VERSION}" \
+        "osv-scanner_linux_amd64" \
+        "osv-scanner_linux_arm64" \
+        "calculate" "binary" \
+        || return 1
+
+    # yq (YAML query/edit tool — Go binary, bare binary assets)
+    install_github_release "yq" "$YQ_VERSION" \
+        "https://github.com/mikefarah/yq/releases/download/v${YQ_VERSION}" \
+        "yq_linux_amd64" \
+        "yq_linux_arm64" \
+        "calculate" "binary" \
+        || return 1
+
+    # sd (Rust sed alternative — no published checksums, musl builds for both archs)
+    install_github_release "sd" "$SD_VERSION" \
+        "https://github.com/chmln/sd/releases/download/v${SD_VERSION}" \
+        "sd-v${SD_VERSION}-x86_64-unknown-linux-musl.tar.gz" \
+        "sd-v${SD_VERSION}-aarch64-unknown-linux-musl.tar.gz" \
+        "calculate" "extract:sd" \
+        || return 1
+
+    # dua-cli (Rust disk usage analyzer — no published checksums, musl builds for both archs)
+    install_github_release "dua" "$DUA_VERSION" \
+        "https://github.com/Byron/dua-cli/releases/download/v${DUA_VERSION}" \
+        "dua-v${DUA_VERSION}-x86_64-unknown-linux-musl.tar.gz" \
+        "dua-v${DUA_VERSION}-aarch64-unknown-linux-musl.tar.gz" \
+        "calculate" "extract:dua" \
+        || return 1
+
+    # hyperfine (Rust benchmarking CLI — no aarch64 musl build, fall back to gnu)
+    install_github_release "hyperfine" "$HYPERFINE_VERSION" \
+        "https://github.com/sharkdp/hyperfine/releases/download/v${HYPERFINE_VERSION}" \
+        "hyperfine-v${HYPERFINE_VERSION}-x86_64-unknown-linux-musl.tar.gz" \
+        "hyperfine-v${HYPERFINE_VERSION}-aarch64-unknown-linux-gnu.tar.gz" \
+        "calculate" "extract:hyperfine" \
+        || return 1
+
+    # vale (Go prose linter — no published checksums, single static binary at tar root)
+    # Note: repo moved from errata-ai/vale to vale-cli/vale (2024 org rename)
+    install_github_release "vale" "$VALE_VERSION" \
+        "https://github.com/vale-cli/vale/releases/download/v${VALE_VERSION}" \
+        "vale_${VALE_VERSION}_Linux_64-bit.tar.gz" \
+        "vale_${VALE_VERSION}_Linux_arm64.tar.gz" \
+        "calculate" "extract:vale" \
+        || return 1
 
     # agnix (AI config linter) — requires Node.js/npm
     if command -v npm &> /dev/null; then

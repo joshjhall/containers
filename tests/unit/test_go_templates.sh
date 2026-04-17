@@ -106,7 +106,7 @@ test_template_loading_with_substitution() {
     tff_temp_dir=$(mktemp -d)
 
     # Simulate template loading with placeholder substitution
-    if sed "s/__PROJECT__/testproject/g" "$TEMPLATE_DIR/lib/lib.go.tmpl" > "$tff_temp_dir/lib.go"; then
+    if command sed "s/__PROJECT__/testproject/g" "$TEMPLATE_DIR/lib/lib.go.tmpl" > "$tff_temp_dir/lib.go"; then
         if command grep -q "package testproject" "$tff_temp_dir/lib.go"; then
             assert_true true "Template substitution works correctly"
         else
