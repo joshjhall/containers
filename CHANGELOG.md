@@ -12,8 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Upgrade authoring skills with agentsys best practices and create authoring agents
 - Add agnix AI config linter to INCLUDE_DEV_TOOLS
 - Install agentsys deslop plugin for AI slop detection
-- Add unified check-* skill architecture with checker agent
-- Add loop-* implementation loops and context-* pipeline skills
+- Add unified check-\* skill architecture with checker agent
+- Add loop-\* implementation loops and context-\* pipeline skills
 - Add JSON state files with checkpoint and context reset points
 - Add two-tier worktree system with execution mode selection
 - Add certainty grading to all audit findings
@@ -42,7 +42,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Documentation
 
 - Add agentsys evaluation report with follow-up issues
-- Add check-* migration status and file remaining migration issues
+- Add check-\* migration status and file remaining migration issues
 - Fix incorrect model tier claim in SKILL.md
 
 ### Fixed
@@ -138,7 +138,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix whitespace trimming and add edge case tests
 - Use tab-delimited jq output to prevent truncating values with '='
 - Ensure R_LIBS_USER is set for package verification
-- Add ops_/glpat- scrub patterns and restrict metrics dir perms
+- Add ops\_/glpat- scrub patterns and restrict metrics dir perms
 - Add cmake dependency for R fs package 2.0.0
 - Add denylist to prevent env var overwrites of PATH/LD_PRELOAD
 - Pin Tier 2 checksums for ktlint, detekt, and KLS
@@ -270,7 +270,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Documentation
 
 - Add component override vars to dev-tools.env example
-- Move overrides to docker-compose, unify CLAUDE_EXTRA_* in .env
+- Move overrides to docker-compose, unify CLAUDE_EXTRA\_\* in .env
 - Update secrets-and-setup reference with full resolution flow
 - Add missing runner scripts to test-framework-reference
 
@@ -471,7 +471,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Remove dead _check_command code and add map_arch helper (#84)
+- Remove dead \_check_command code and add map_arch helper (#84)
 - Extract bashrc heredocs from oversized feature scripts (#81)
 - Split oversized files into focused modules (#81)
 - Extract 37 write_bashrc_content heredocs to lib/bashrc/ files (#100)
@@ -513,7 +513,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Add uv package manager to base Python feature
-- Add OP_*_FILE_REF convention for file-based secrets
+- Add OP\_\*\_FILE_REF convention for file-based secrets
 - Add feature script for FUSE overlay installation
 - Add entrypoint auto-detection and FUSE overlay logic
 - Add Dockerfile build arg with DEV_TOOLS auto-trigger
@@ -589,7 +589,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Install skills and agents at build/runtime
 - Add Kagi MCP and package type support
 - Handle non-npm MCP packages at build time
-- Generic OP_*_REF secret loading convention
+- Generic OP\_\*\_REF secret loading convention
 - Add setup-git, setup-gh, setup-glab container commands
 - Update setup commands and add unit tests
 - Update and add Claude skills, agents, and templates
@@ -605,8 +605,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Documentation
 
 - Document pre-installed skills and agents
-- Document generic OP_*_REF secret loading convention
-- Document container setup commands and git OP_*_REF vars
+- Document generic OP\_\*\_REF secret loading convention
+- Document container setup commands and git OP\_\*\_REF vars
 
 ### Fixed
 
@@ -631,7 +631,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add tests for MCP registry and extra MCPs
 - Add integration tests for skills and agents
 - Add Kagi MCP tests and documentation
-- Add OP_*_REF tests and clean up docker-compose env vars
+- Add OP\_\*\_REF tests and clean up docker-compose env vars
 - Add unit tests for secrets management (167 tests)
 - Add unit tests for checksum and version validation (114 tests)
 - Add unit tests for error messages, cache utils, JSON logging (79 tests)
@@ -1084,7 +1084,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add comprehensive build metrics tracking system
 - Add comprehensive version compatibility testing system
 - Add production container examples and fix logging initialization
-- Replace Docker socket auto-fix with secure group-based access [**BREAKING**]
+- Replace Docker socket auto-fix with secure group-based access \[**BREAKING**\]
 - Add 4-tier checksum verification system with version resolution
 - Add unified signature verification system with GPG + Sigstore support
 - Integrate GPG/Sigstore signature verification into 4-tier checksum system
@@ -1497,6 +1497,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add Docker socket security warnings (Issue #12)
 - Change ENABLE_PASSWORDLESS_SUDO default to false
 - Fix remaining linting issues for clean pre-commit
+- Fix CRITICAL command injection vulnerability in version checking
+- Add container image digests and Cosign signing
+- Add optional passwordless sudo control
+- Add safe_eval wrapper for tool initialization
+- Add path validation for startup scripts
+- Add checksum verification for Claude Code installer
+- Add version validation to prevent shell injection
+- Add safer 1Password credential handling (Issue #6)
+- Implement atomic cache directory creation (#8)
+- Validate completion outputs before sourcing (#9)
+- Sanitize user function inputs to prevent injection (#10)
+- Add secure temp directory pattern - Batch 1 (#13)
+- Secure temp directories - Batch 2 (#13)
+- Secure temp directories - Batch 3 Final (#13)
+- Add comprehensive credential leak prevention system
 
 ### Testing
 
@@ -1528,24 +1543,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add helpful error message when release is cancelled
 - Add VS Code workspace settings and improve gitignore
 
-### Security
-
-- Fix CRITICAL command injection vulnerability in version checking
-- Add container image digests and Cosign signing
-- Add optional passwordless sudo control
-- Add safe_eval wrapper for tool initialization
-- Add path validation for startup scripts
-- Add checksum verification for Claude Code installer
-- Add version validation to prevent shell injection
-- Add safer 1Password credential handling (Issue #6)
-- Implement atomic cache directory creation (#8)
-- Validate completion outputs before sourcing (#9)
-- Sanitize user function inputs to prevent injection (#10)
-- Add secure temp directory pattern - Batch 1 (#13)
-- Secure temp directories - Batch 2 (#13)
-- Secure temp directories - Batch 3 Final (#13)
-- Add comprehensive credential leak prevention system
-
 ### Style
 
 - Apply prettier formatting to all files
@@ -1555,41 +1552,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix prettier and markdownlint formatting in README
 - Format TLS documentation files
 
-[4.16.0]: https://github.com/joshjhall/containers/compare/v4.15.13...v4.16.0
-[4.15.13]: https://github.com/joshjhall/containers/compare/v4.15.12...v4.15.13
-[4.15.12]: https://github.com/joshjhall/containers/compare/v4.15.11...v4.15.12
-[4.15.11]: https://github.com/joshjhall/containers/compare/v4.15.10...v4.15.11
-[4.15.10]: https://github.com/joshjhall/containers/compare/v4.15.9...v4.15.10
-[4.15.9]: https://github.com/joshjhall/containers/compare/v4.15.8...v4.15.9
-[4.15.8]: https://github.com/joshjhall/containers/compare/v4.15.7...v4.15.8
-[4.15.7]: https://github.com/joshjhall/containers/compare/v4.15.6...v4.15.7
-[4.15.6]: https://github.com/joshjhall/containers/compare/v4.15.5...v4.15.6
-[4.15.5]: https://github.com/joshjhall/containers/compare/v4.15.4...v4.15.5
-[4.15.4]: https://github.com/joshjhall/containers/compare/v4.15.3...v4.15.4
-[4.15.3]: https://github.com/joshjhall/containers/compare/v4.15.2...v4.15.3
-[4.15.2]: https://github.com/joshjhall/containers/compare/v4.15.1...v4.15.2
-[4.15.1]: https://github.com/joshjhall/containers/compare/v4.15.0...v4.15.1
-[4.15.0]: https://github.com/joshjhall/containers/compare/v4.14.5...v4.15.0
-[4.14.5]: https://github.com/joshjhall/containers/compare/v4.14.4...v4.14.5
-[4.14.4]: https://github.com/joshjhall/containers/compare/v4.14.3...v4.14.4
-[4.14.3]: https://github.com/joshjhall/containers/compare/v4.14.2...v4.14.3
-[4.14.2]: https://github.com/joshjhall/containers/compare/v4.14.1...v4.14.2
-[4.14.1]: https://github.com/joshjhall/containers/compare/v4.14.0...v4.14.1
-[4.14.0]: https://github.com/joshjhall/containers/compare/v4.13.4...v4.14.0
-[4.13.4]: https://github.com/joshjhall/containers/compare/v4.13.3...v4.13.4
-[4.13.3]: https://github.com/joshjhall/containers/compare/v4.13.2...v4.13.3
-[4.13.2]: https://github.com/joshjhall/containers/compare/v4.13.1...v4.13.2
-[4.13.1]: https://github.com/joshjhall/containers/compare/v4.13.0...v4.13.1
-[4.13.0]: https://github.com/joshjhall/containers/compare/v4.12.8...v4.13.0
-[4.12.8]: https://github.com/joshjhall/containers/compare/v4.12.7...v4.12.8
-[4.12.7]: https://github.com/joshjhall/containers/compare/v4.12.6...v4.12.7
-[4.12.6]: https://github.com/joshjhall/containers/compare/v4.12.5...v4.12.6
-[4.12.5]: https://github.com/joshjhall/containers/compare/v4.12.4...v4.12.5
-[4.12.4]: https://github.com/joshjhall/containers/compare/v4.12.3...v4.12.4
-[4.12.3]: https://github.com/joshjhall/containers/compare/v4.12.2...v4.12.3
-[4.12.2]: https://github.com/joshjhall/containers/compare/v4.12.1...v4.12.2
-[4.12.1]: https://github.com/joshjhall/containers/compare/v4.12.0...v4.12.1
-[4.12.0]: https://github.com/joshjhall/containers/compare/v4.11.0...v4.12.0
-[4.11.0]: https://github.com/joshjhall/containers/compare/v4.10.1...v4.11.0
-[4.10.1]: https://github.com/joshjhall/containers/compare/v4.10.0...v4.10.1
 [4.10.0]: https://github.com/joshjhall/containers/compare/v4.9.2...v4.10.0
+[4.10.1]: https://github.com/joshjhall/containers/compare/v4.10.0...v4.10.1
+[4.11.0]: https://github.com/joshjhall/containers/compare/v4.10.1...v4.11.0
+[4.12.0]: https://github.com/joshjhall/containers/compare/v4.11.0...v4.12.0
+[4.12.1]: https://github.com/joshjhall/containers/compare/v4.12.0...v4.12.1
+[4.12.2]: https://github.com/joshjhall/containers/compare/v4.12.1...v4.12.2
+[4.12.3]: https://github.com/joshjhall/containers/compare/v4.12.2...v4.12.3
+[4.12.4]: https://github.com/joshjhall/containers/compare/v4.12.3...v4.12.4
+[4.12.5]: https://github.com/joshjhall/containers/compare/v4.12.4...v4.12.5
+[4.12.6]: https://github.com/joshjhall/containers/compare/v4.12.5...v4.12.6
+[4.12.7]: https://github.com/joshjhall/containers/compare/v4.12.6...v4.12.7
+[4.12.8]: https://github.com/joshjhall/containers/compare/v4.12.7...v4.12.8
+[4.13.0]: https://github.com/joshjhall/containers/compare/v4.12.8...v4.13.0
+[4.13.1]: https://github.com/joshjhall/containers/compare/v4.13.0...v4.13.1
+[4.13.2]: https://github.com/joshjhall/containers/compare/v4.13.1...v4.13.2
+[4.13.3]: https://github.com/joshjhall/containers/compare/v4.13.2...v4.13.3
+[4.13.4]: https://github.com/joshjhall/containers/compare/v4.13.3...v4.13.4
+[4.14.0]: https://github.com/joshjhall/containers/compare/v4.13.4...v4.14.0
+[4.14.1]: https://github.com/joshjhall/containers/compare/v4.14.0...v4.14.1
+[4.14.2]: https://github.com/joshjhall/containers/compare/v4.14.1...v4.14.2
+[4.14.3]: https://github.com/joshjhall/containers/compare/v4.14.2...v4.14.3
+[4.14.4]: https://github.com/joshjhall/containers/compare/v4.14.3...v4.14.4
+[4.14.5]: https://github.com/joshjhall/containers/compare/v4.14.4...v4.14.5
+[4.15.0]: https://github.com/joshjhall/containers/compare/v4.14.5...v4.15.0
+[4.15.1]: https://github.com/joshjhall/containers/compare/v4.15.0...v4.15.1
+[4.15.10]: https://github.com/joshjhall/containers/compare/v4.15.9...v4.15.10
+[4.15.11]: https://github.com/joshjhall/containers/compare/v4.15.10...v4.15.11
+[4.15.12]: https://github.com/joshjhall/containers/compare/v4.15.11...v4.15.12
+[4.15.13]: https://github.com/joshjhall/containers/compare/v4.15.12...v4.15.13
+[4.15.2]: https://github.com/joshjhall/containers/compare/v4.15.1...v4.15.2
+[4.15.3]: https://github.com/joshjhall/containers/compare/v4.15.2...v4.15.3
+[4.15.4]: https://github.com/joshjhall/containers/compare/v4.15.3...v4.15.4
+[4.15.5]: https://github.com/joshjhall/containers/compare/v4.15.4...v4.15.5
+[4.15.6]: https://github.com/joshjhall/containers/compare/v4.15.5...v4.15.6
+[4.15.7]: https://github.com/joshjhall/containers/compare/v4.15.6...v4.15.7
+[4.15.8]: https://github.com/joshjhall/containers/compare/v4.15.7...v4.15.8
+[4.15.9]: https://github.com/joshjhall/containers/compare/v4.15.8...v4.15.9
+[4.16.0]: https://github.com/joshjhall/containers/compare/v4.15.13...v4.16.0
