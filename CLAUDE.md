@@ -47,21 +47,25 @@ v5 is built around three compiled Rust executables in a Cargo workspace:
 - `examples/` — Docker Compose configurations and environment examples
 - `docs/` — Documentation
 
-## Cargo Workspace
+## Common commands
+
+All common tasks are wired into the `justfile`. Run `just` to list recipes.
+Prefer these over direct cargo/shell invocations — they stay in sync with CI.
 
 ```bash
-# Build all crates
-cargo build --workspace
-
-# Run all Rust tests
-cargo test --workspace
-
-# Check linting (pedantic + nursery)
-cargo clippy --workspace -- -D warnings
-
-# Format
-cargo fmt --all
+just               # list recipes
+just test          # full pre-commit test suite (no Docker)
+just test-all      # test + integration (requires Docker)
+just lint          # run every lefthook pre-commit hook on all files
+just fmt           # cargo fmt --all
+just build         # cargo build --workspace
+just check-versions
+just install-hooks # lefthook install
 ```
+
+The raw commands these wrap — useful when debugging or when `just` isn't available:
+`cargo build --workspace`, `cargo test --workspace`,
+`cargo clippy --workspace -- -D warnings`, `cargo fmt --all`.
 
 ### Adding a New Feature
 
@@ -106,23 +110,18 @@ docker build -t test:minimal \
 ### Testing
 
 ```bash
-# Run all tests (unit + integration)
-./tests/run_all.sh
-
-# Run unit tests only (no Docker required)
-./tests/run_unit_tests.sh
-
-# Run integration tests (requires Docker)
-./tests/run_integration_tests.sh
-
-# Run specific integration test
-./tests/run_integration_tests.sh python_dev
-
-# Quick feature test (for development - tests one feature in isolation)
-./tests/test_feature.sh golang
-./tests/test_feature.sh python-dev
-./tests/test_feature.sh kubernetes
+just test-all                          # unit + integration
+just test                              # unit only (no Docker)
+just test-integration                  # integration only (requires Docker)
+just test-integration-one python_dev   # single integration test
+just test-feature golang               # quick single-feature test in isolation
+just test-feature python-dev
+just test-feature kubernetes
 ```
+
+Underlying scripts (for reference): `./tests/run_all.sh`,
+`./tests/run_unit_tests.sh`, `./tests/run_integration_tests.sh`,
+`./tests/test_feature.sh`.
 
 #### IMPORTANT: Testing Docker Builds Manually
 
@@ -344,17 +343,17 @@ tests as a general defensive practice.
 
 Weekly auto-patch runs Sundays at 2am UTC (`auto-patch/YYYYMMDD-HHMMSS`
 branches). Don't manually edit `auto-patch/*` branches. Manual check:
-`./bin/check-versions.sh` (add `--json` for automation). See
-`docs/operations/automated-releases.md`.
+`just check-versions` (underlying script: `./bin/check-versions.sh`; add
+`--json` for automation). See `docs/operations/automated-releases.md`.
 
 ## Release Process
 
 **ALWAYS use the release script** — never manually edit the VERSION file.
 
 ```bash
-./bin/release.sh --non-interactive patch   # bug fix (4.3.2 -> 4.3.3)
-./bin/release.sh --non-interactive minor   # new feature (4.3.2 -> 4.4.0)
-./bin/release.sh --non-interactive major   # breaking change (4.3.2 -> 5.0.0)
+just release-patch   # bug fix (4.3.2 -> 4.3.3)
+just release-minor   # new feature (4.3.2 -> 4.4.0)
+just release-major   # breaking change (4.3.2 -> 5.0.0)
 ```
 
 The script updates VERSION, Dockerfile, test framework version, and generates
