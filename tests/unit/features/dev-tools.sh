@@ -82,6 +82,8 @@ test_binary_tool_installations() {
         "mkcert"
         "biome"
         "lefthook"
+        "mado"
+        "dprint"
     )
 
     # Simulate tool installation
@@ -635,6 +637,37 @@ run_test test_lefthook_version_variable "lefthook version variable defined in de
 run_test test_lefthook_installation "lefthook installation present in binary tools"
 run_test test_gitleaks_version_variable "gitleaks version variable defined in dev-tools.sh"
 run_test test_gitleaks_installation "gitleaks installation present in binary tools"
+
+# Test: mado version variable defined in dev-tools.sh
+test_mado_version_variable() {
+    local source_file="$PROJECT_ROOT/lib/features/dev-tools.sh"
+    assert_file_contains "$source_file" "MADO_VERSION=" "dev-tools.sh defines MADO_VERSION"
+}
+
+# Test: mado installation present in binary tools script
+test_mado_installation() {
+    local source_file="$PROJECT_ROOT/lib/features/lib/dev-tools/install-binary-tools.sh"
+    assert_file_contains "$source_file" "akiomik/mado" "install-binary-tools.sh installs mado from akiomik"
+    assert_file_contains "$source_file" "mado-Linux-gnu-x86_64.tar.gz" "install-binary-tools.sh uses correct amd64 asset name"
+}
+
+# Test: dprint version variable defined in dev-tools.sh
+test_dprint_version_variable() {
+    local source_file="$PROJECT_ROOT/lib/features/dev-tools.sh"
+    assert_file_contains "$source_file" "DPRINT_VERSION=" "dev-tools.sh defines DPRINT_VERSION"
+}
+
+# Test: dprint installation present in binary tools script
+test_dprint_installation() {
+    local source_file="$PROJECT_ROOT/lib/features/lib/dev-tools/install-binary-tools.sh"
+    assert_file_contains "$source_file" "dprint/dprint" "install-binary-tools.sh installs dprint from dprint/dprint"
+    assert_file_contains "$source_file" "dprint-x86_64-unknown-linux-gnu.zip" "install-binary-tools.sh uses correct amd64 asset name"
+}
+
+run_test test_mado_version_variable "mado version variable defined in dev-tools.sh"
+run_test test_mado_installation "mado installation present in binary tools"
+run_test test_dprint_version_variable "dprint version variable defined in dev-tools.sh"
+run_test test_dprint_installation "dprint installation present in binary tools"
 
 # Generate test report
 generate_report

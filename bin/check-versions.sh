@@ -263,6 +263,8 @@ extract_all_versions() {
     _add_feature_version UV_VERSION "uv" "dev-tools.sh"
     _add_feature_version LEFTHOOK_VERSION "lefthook" "dev-tools.sh"
     _add_feature_version GITLEAKS_VERSION "gitleaks" "dev-tools.sh"
+    _add_feature_version MADO_VERSION "mado" "dev-tools.sh"
+    _add_feature_version DPRINT_VERSION "dprint" "dev-tools.sh"
 
     # Docker tools from docker.sh
     _add_feature_version DIVE_VERSION "dive" "docker.sh"
@@ -380,6 +382,8 @@ main() {
             just) check_github_release "just" "casey/just" ;;
             lefthook) check_github_release "lefthook" "evilmartians/lefthook" ;;
             gitleaks) check_github_release "gitleaks" "gitleaks/gitleaks" ;;
+            mado) check_github_release "mado" "akiomik/mado" ;;
+            dprint) check_github_release "dprint" "dprint/dprint" ;;
             cargo-release) check_crates_io "cargo-release" ;;
             zoxide) check_github_release "zoxide" "ajeetdsouza/zoxide" ;;
             cosign) check_github_release "cosign" "sigstore/cosign" ;;

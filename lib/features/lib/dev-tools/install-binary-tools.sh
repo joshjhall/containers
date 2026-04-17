@@ -272,6 +272,22 @@ install_github_binary_tools() {
         "calculate" "extract_flat:gitleaks" \
         || return 1
 
+    # mado (markdown linter — Rust, replaces pymarkdown)
+    install_github_release "mado" "$MADO_VERSION" \
+        "https://github.com/akiomik/mado/releases/download/v${MADO_VERSION}" \
+        "mado-Linux-gnu-x86_64.tar.gz" \
+        "mado-Linux-gnu-arm64.tar.gz" \
+        "sha256" "extract_flat:mado" \
+        || return 1
+
+    # dprint (polyglot formatter — Rust, replaces mdformat for markdown)
+    install_github_release "dprint" "$DPRINT_VERSION" \
+        "https://github.com/dprint/dprint/releases/download/${DPRINT_VERSION}" \
+        "dprint-x86_64-unknown-linux-gnu.zip" \
+        "dprint-aarch64-unknown-linux-gnu.zip" \
+        "calculate" "zip_to:/usr/local/bin" \
+        || return 1
+
     # agnix (AI config linter) — requires Node.js/npm
     if command -v npm &> /dev/null; then
         log_message "Installing agnix (AI config linter)..."
