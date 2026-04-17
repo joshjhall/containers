@@ -233,6 +233,7 @@ TOOL_CHECKSUM_REGISTRY_ARCH=(
     "mado|MADO_VERSION|lib/features/dev-tools.sh|https://github.com/akiomik/mado/releases/download/v{VERSION}/mado-Linux-gnu-x86_64.tar.gz|https://github.com/akiomik/mado/releases/download/v{VERSION}/mado-Linux-gnu-arm64.tar.gz"
     "dprint|DPRINT_VERSION|lib/features/dev-tools.sh|https://github.com/dprint/dprint/releases/download/{VERSION}/dprint-x86_64-unknown-linux-gnu.zip|https://github.com/dprint/dprint/releases/download/{VERSION}/dprint-aarch64-unknown-linux-gnu.zip"
     "osv-scanner|OSV_SCANNER_VERSION|lib/features/dev-tools.sh|https://github.com/google/osv-scanner/releases/download/v{VERSION}/osv-scanner_linux_amd64|https://github.com/google/osv-scanner/releases/download/v{VERSION}/osv-scanner_linux_arm64"
+    "yq|YQ_VERSION|lib/features/dev-tools.sh|https://github.com/mikefarah/yq/releases/download/v{VERSION}/yq_linux_amd64|https://github.com/mikefarah/yq/releases/download/v{VERSION}/yq_linux_arm64"
     "eza|EZA_VERSION|lib/features/dev-tools.sh|https://github.com/eza-community/eza/releases/download/v{VERSION}/eza_x86_64-unknown-linux-gnu.tar.gz|https://github.com/eza-community/eza/releases/download/v{VERSION}/eza_aarch64-unknown-linux-gnu.tar.gz"
     "cloudflared|CLOUDFLARED_VERSION|lib/features/cloudflare.sh|https://github.com/cloudflare/cloudflared/releases/download/{VERSION}/cloudflared-linux-amd64.deb|https://github.com/cloudflare/cloudflared/releases/download/{VERSION}/cloudflared-linux-arm64.deb"
 )

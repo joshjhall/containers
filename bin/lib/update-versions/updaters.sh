@@ -252,6 +252,10 @@ update_version() {
                     command sed -i "s/OSV_SCANNER_VERSION=\"\${OSV_SCANNER_VERSION:-[^}]*}\"/OSV_SCANNER_VERSION=\"\${OSV_SCANNER_VERSION:-$latest}\"/" "$script_path"
                     command sed -i "s/^OSV_SCANNER_VERSION=\"[0-9][^\"]*\"/OSV_SCANNER_VERSION=\"\${OSV_SCANNER_VERSION:-$latest}\"/" "$script_path"
                     ;;
+                yq)
+                    command sed -i "s/YQ_VERSION=\"\${YQ_VERSION:-[^}]*}\"/YQ_VERSION=\"\${YQ_VERSION:-$latest}\"/" "$script_path"
+                    command sed -i "s/^YQ_VERSION=\"[0-9][^\"]*\"/YQ_VERSION=\"\${YQ_VERSION:-$latest}\"/" "$script_path"
+                    ;;
                 Poetry)
                     command sed -i "s/POETRY_VERSION=\"\${POETRY_VERSION:-[^}]*}\"/POETRY_VERSION=\"\${POETRY_VERSION:-$latest}\"/" "$script_path"
                     command sed -i "s/^POETRY_VERSION=\"[0-9][^\"]*\"/POETRY_VERSION=\"\${POETRY_VERSION:-$latest}\"/" "$script_path"

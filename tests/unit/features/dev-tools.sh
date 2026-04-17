@@ -84,6 +84,7 @@ test_binary_tool_installations() {
         "lefthook"
         "mado"
         "dprint"
+        "yq"
     )
 
     # Simulate tool installation
@@ -114,6 +115,7 @@ test_tool_versions() {
         "ACT_VERSION=0.2.80"
         "GLAB_VERSION=1.65.0"
         "BIOME_VERSION=1.9.4"
+        "YQ_VERSION=4.53.2"
     )
 
     # Check version format

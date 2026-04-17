@@ -296,6 +296,14 @@ install_github_binary_tools() {
         "calculate" "binary" \
         || return 1
 
+    # yq (YAML query/edit tool — Go binary, bare binary assets)
+    install_github_release "yq" "$YQ_VERSION" \
+        "https://github.com/mikefarah/yq/releases/download/v${YQ_VERSION}" \
+        "yq_linux_amd64" \
+        "yq_linux_arm64" \
+        "calculate" "binary" \
+        || return 1
+
     # agnix (AI config linter) — requires Node.js/npm
     if command -v npm &> /dev/null; then
         log_message "Installing agnix (AI config linter)..."
