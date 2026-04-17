@@ -106,17 +106,78 @@ services:
 
 ### Caching
 
-Resolved secrets are cached to `/dev/shm/op-secrets-cache` after the first
-resolution (whether during container startup or the first interactive shell).
-Subsequent shells source the cache file instead of making `op read` API calls,
-making shell startup instant.
+Two caches work together. Both keep resolved secrets in tmpfs — secrets
+resolved from 1Password are **never written to persistent disk**.
 
-- **Container restart** clears the cache automatically (`/dev/shm/` is tmpfs)
-- **Manual invalidation**: `rm /dev/shm/op-secrets-cache` — the next shell will
-  re-resolve all secrets from 1Password
-- The cache file is `chmod 600` and ownership-checked before sourcing — if the
-  file is not owned by the current user, it is skipped and secrets are
-  re-fetched from 1Password
+**Interactive-shell cache** (`/dev/shm/op-secrets-cache`)
+
+A single file containing all resolved exports, sourced by interactive shells
+and setup commands so they don't need to re-run `op read`. Cleared on container
+restart (tmpfs). `chmod 600`, ownership-checked before sourcing. Manual
+invalidation: `rm /dev/shm/op-secrets-cache`.
+
+**Per-ref persistent cache** (`/cache/1password/secrets/`, tmpfs-backed volume)
+
+Upstream `op read` calls for `OP_*_REF` / `OP_*_FILE_REF` vars short-circuit
+through a TTL-gated cache at `/cache/1password/secrets/<sha256-of-ref>`. This
+is what prevents 1Password service-account rate-throttling across container
+restarts, parallel agents, and frequent worktree recreation.
+
+**The cache must be tmpfs-backed.** Resolved secrets should never land on
+persistent storage. Mount a tmpfs-backed docker volume at the cache path:
+
+```yaml
+volumes:
+  op-secret-cache:
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: "size=16m,mode=700"
+
+services:
+  dev:
+    volumes:
+      - op-secret-cache:/cache/1password/secrets
+```
+
+This gives you: secrets live in host kernel memory only, survive `docker restart` and `docker-compose down && up` (the named volume persists across
+container recreate), and are wiped on host reboot. 16 MiB is plenty for
+hundreds of cached refs; `mode=700` matches the script's permissioning.
+
+On container startup `45-op-secrets.sh` verifies the cache directory is
+tmpfs-backed (`stat -f -c %T`). If it isn't, the script **falls back to
+`/dev/shm/op-secrets-persistent/`** (still tmpfs, still off disk) and emits a
+one-shot warning on stderr explaining the downgrade. In degraded mode the cache
+is cleared on container restart, so the rate-throttle benefit is lost but no
+secrets are written to disk.
+
+**Tunables** (all optional):
+
+| Variable                         | Default                          | Purpose                                           |
+| -------------------------------- | -------------------------------- | ------------------------------------------------- |
+| `OP_SECRET_CACHE_DIR`            | `/cache/1password/secrets`       | Primary cache path (must be tmpfs-backed)         |
+| `OP_SECRET_CACHE_FALLBACK_DIR`   | `/dev/shm/op-secrets-persistent` | Fallback when primary isn't tmpfs                 |
+| `OP_SECRET_CACHE_TTL`            | `1800` (30 min)                  | Cache freshness in seconds; `0` disables caching  |
+| `OP_SECRET_CACHE_MAX_CONCURRENT` | `4`                              | Concurrent `op read` cap (protects against burst) |
+| `OP_READ_MAX_ATTEMPTS`           | `3`                              | Retries per ref on detected throttle              |
+| `OP_READ_RETRY_DELAY`            | `1`                              | Initial backoff in seconds (doubles per retry)    |
+
+**Invalidation**
+
+- **Per-ref**: `rm /cache/1password/secrets/<hash>` — next fetch re-reads from
+  1Password. The hash is `sha256` of the exact ref URL.
+- **Whole cache**: `rm -rf /cache/1password/secrets/*` — same effect, all refs.
+- **Disable**: `OP_SECRET_CACHE_TTL=0` in the container env.
+- **Automatic**: TTL expiry (mtime-based) re-fetches on next startup.
+
+**Trust model**
+
+The cache is a container-local tmpfs volume — not shared across developer
+machines, not backed up, not written to disk. A threat actor who already has
+code-execution inside the container can read the cache, process environment,
+and anything else the user has access to; the cache doesn't change that. A
+threat actor with disk/backup access cannot read the cache because it never
+touches disk.
 
 ### 1Password CLI Configuration
 
