@@ -76,6 +76,7 @@ MADO_VERSION="${MADO_VERSION:-0.3.0}"
 DPRINT_VERSION="${DPRINT_VERSION:-0.54.0}"
 OSV_SCANNER_VERSION="${OSV_SCANNER_VERSION:-2.3.5}"
 YQ_VERSION="${YQ_VERSION:-4.53.2}"
+SD_VERSION="${SD_VERSION:-1.1.0}"
 
 # ============================================================================
 # Repository Configuration

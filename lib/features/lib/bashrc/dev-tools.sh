@@ -53,6 +53,10 @@ if command -v rg &> /dev/null; then
     alias fgrep='rg -F'
 fi
 
+if command -v sd &> /dev/null; then
+    alias sed='sd'
+fi
+
 if command -v duf &> /dev/null; then
     alias df='duf'
 fi

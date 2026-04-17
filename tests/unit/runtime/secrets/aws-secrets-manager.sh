@@ -90,11 +90,11 @@ fi
 # For to_entries parsing, output key=value pairs
 input=$(cat)
 if [[ "$1" == *"to_entries"* ]]; then
-    echo "$input" | command grep -oP '"(\w+)"\s*:\s*"([^"]*)"' | sed 's/"\([^"]*\)"\s*:\s*"\([^"]*\)"/\1=\2/' || true
+    echo "$input" | command grep -oP '"(\w+)"\s*:\s*"([^"]*)"' | command sed 's/"\([^"]*\)"\s*:\s*"\([^"]*\)"/\1=\2/' || true
 elif [[ "$1" == *"SecretString"* ]]; then
-    echo "$input" | command grep -oP '"SecretString"\s*:\s*"([^"]*)"' | sed 's/"SecretString"\s*:\s*"\([^"]*\)"/\1/' || true
+    echo "$input" | command grep -oP '"SecretString"\s*:\s*"([^"]*)"' | command sed 's/"SecretString"\s*:\s*"\([^"]*\)"/\1/' || true
 elif [[ "$1" == *"SecretBinary"* ]]; then
-    echo "$input" | command grep -oP '"SecretBinary"\s*:\s*"([^"]*)"' | sed 's/"SecretBinary"\s*:\s*"\([^"]*\)"/\1/' || true
+    echo "$input" | command grep -oP '"SecretBinary"\s*:\s*"([^"]*)"' | command sed 's/"SecretBinary"\s*:\s*"\([^"]*\)"/\1/' || true
 else
     command cat > /dev/null
 fi

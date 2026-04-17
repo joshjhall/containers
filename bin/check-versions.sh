@@ -267,6 +267,7 @@ extract_all_versions() {
     _add_feature_version DPRINT_VERSION "dprint" "dev-tools.sh"
     _add_feature_version OSV_SCANNER_VERSION "osv-scanner" "dev-tools.sh"
     _add_feature_version YQ_VERSION "yq" "dev-tools.sh"
+    _add_feature_version SD_VERSION "sd" "dev-tools.sh"
 
     # Docker tools from docker.sh
     _add_feature_version DIVE_VERSION "dive" "docker.sh"
@@ -388,6 +389,7 @@ main() {
             dprint) check_github_release "dprint" "dprint/dprint" ;;
             osv-scanner) check_github_release "osv-scanner" "google/osv-scanner" ;;
             yq) check_github_release "yq" "mikefarah/yq" ;;
+            sd) check_github_release "sd" "chmln/sd" ;;
             cargo-release) check_crates_io "cargo-release" ;;
             zoxide) check_github_release "zoxide" "ajeetdsouza/zoxide" ;;
             cosign) check_github_release "cosign" "sigstore/cosign" ;;

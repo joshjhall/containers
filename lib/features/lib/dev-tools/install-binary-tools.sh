@@ -304,6 +304,14 @@ install_github_binary_tools() {
         "calculate" "binary" \
         || return 1
 
+    # sd (Rust sed alternative — no published checksums, musl builds for both archs)
+    install_github_release "sd" "$SD_VERSION" \
+        "https://github.com/chmln/sd/releases/download/v${SD_VERSION}" \
+        "sd-v${SD_VERSION}-x86_64-unknown-linux-musl.tar.gz" \
+        "sd-v${SD_VERSION}-aarch64-unknown-linux-musl.tar.gz" \
+        "calculate" "extract:sd" \
+        || return 1
+
     # agnix (AI config linter) — requires Node.js/npm
     if command -v npm &> /dev/null; then
         log_message "Installing agnix (AI config linter)..."

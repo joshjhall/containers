@@ -85,6 +85,7 @@ test_binary_tool_installations() {
         "mado"
         "dprint"
         "yq"
+        "sd"
     )
 
     # Simulate tool installation
@@ -686,6 +687,22 @@ test_osv_scanner_installation() {
 run_test test_osv_scanner_version_variable "osv-scanner version variable defined in dev-tools.sh"
 run_test test_osv_scanner_installation "osv-scanner installation present in binary tools"
 run_test test_dprint_installation "dprint installation present in binary tools"
+
+# Test: sd version variable defined in dev-tools.sh
+test_sd_version_variable() {
+    local source_file="$PROJECT_ROOT/lib/features/dev-tools.sh"
+    assert_file_contains "$source_file" "SD_VERSION=" "dev-tools.sh defines SD_VERSION"
+}
+
+# Test: sd installation present in binary tools script
+test_sd_installation() {
+    local source_file="$PROJECT_ROOT/lib/features/lib/dev-tools/install-binary-tools.sh"
+    assert_file_contains "$source_file" "chmln/sd" "install-binary-tools.sh installs sd from chmln/sd"
+    assert_file_contains "$source_file" "sd-v\${SD_VERSION}-x86_64-unknown-linux-musl.tar.gz" "install-binary-tools.sh uses correct amd64 asset name"
+}
+
+run_test test_sd_version_variable "sd version variable defined in dev-tools.sh"
+run_test test_sd_installation "sd installation present in binary tools"
 
 # Generate test report
 generate_report
