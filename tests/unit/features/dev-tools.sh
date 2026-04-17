@@ -618,8 +618,23 @@ test_lefthook_installation() {
     assert_file_contains "$source_file" "lefthook_\${LEFTHOOK_VERSION}_Linux_x86_64.gz" "install-binary-tools.sh uses correct amd64 asset name"
 }
 
+# Test: gitleaks version variable defined in dev-tools.sh
+test_gitleaks_version_variable() {
+    local source_file="$PROJECT_ROOT/lib/features/dev-tools.sh"
+    assert_file_contains "$source_file" "GITLEAKS_VERSION=" "dev-tools.sh defines GITLEAKS_VERSION"
+}
+
+# Test: gitleaks installation present in binary tools script
+test_gitleaks_installation() {
+    local source_file="$PROJECT_ROOT/lib/features/lib/dev-tools/install-binary-tools.sh"
+    assert_file_contains "$source_file" "gitleaks/gitleaks" "install-binary-tools.sh installs gitleaks from gitleaks/gitleaks"
+    assert_file_contains "$source_file" "gitleaks_\${GITLEAKS_VERSION}_linux_x64.tar.gz" "install-binary-tools.sh uses correct amd64 asset name"
+}
+
 run_test test_lefthook_version_variable "lefthook version variable defined in dev-tools.sh"
 run_test test_lefthook_installation "lefthook installation present in binary tools"
+run_test test_gitleaks_version_variable "gitleaks version variable defined in dev-tools.sh"
+run_test test_gitleaks_installation "gitleaks installation present in binary tools"
 
 # Generate test report
 generate_report

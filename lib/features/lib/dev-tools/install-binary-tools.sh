@@ -264,6 +264,14 @@ install_github_binary_tools() {
         "calculate" "gunzip" \
         || return 1
 
+    # gitleaks (secret scanner — Go binary, called by lefthook pre-commit hook)
+    install_github_release "gitleaks" "$GITLEAKS_VERSION" \
+        "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}" \
+        "gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
+        "gitleaks_${GITLEAKS_VERSION}_linux_arm64.tar.gz" \
+        "calculate" "extract_flat:gitleaks" \
+        || return 1
+
     # agnix (AI config linter) — requires Node.js/npm
     if command -v npm &> /dev/null; then
         log_message "Installing agnix (AI config linter)..."

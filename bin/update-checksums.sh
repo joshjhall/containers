@@ -229,6 +229,7 @@ TOOL_CHECKSUM_REGISTRY_ARCH=(
     "biome|BIOME_VERSION|lib/features/dev-tools.sh|https://github.com/biomejs/biome/releases/download/@biomejs/biome@{VERSION}/biome-linux-x64|https://github.com/biomejs/biome/releases/download/@biomejs/biome@{VERSION}/biome-linux-arm64"
     "taplo|TAPLO_VERSION|lib/features/dev-tools.sh|https://github.com/tamasfe/taplo/releases/download/{VERSION}/taplo-linux-x86_64.gz|https://github.com/tamasfe/taplo/releases/download/{VERSION}/taplo-linux-aarch64.gz"
     "lefthook|LEFTHOOK_VERSION|lib/features/dev-tools.sh|https://github.com/evilmartians/lefthook/releases/download/v{VERSION}/lefthook_{VERSION}_Linux_x86_64.gz|https://github.com/evilmartians/lefthook/releases/download/v{VERSION}/lefthook_{VERSION}_Linux_aarch64.gz"
+    "gitleaks|GITLEAKS_VERSION|lib/features/dev-tools.sh|https://github.com/gitleaks/gitleaks/releases/download/v{VERSION}/gitleaks_{VERSION}_linux_x64.tar.gz|https://github.com/gitleaks/gitleaks/releases/download/v{VERSION}/gitleaks_{VERSION}_linux_arm64.tar.gz"
     "eza|EZA_VERSION|lib/features/dev-tools.sh|https://github.com/eza-community/eza/releases/download/v{VERSION}/eza_x86_64-unknown-linux-gnu.tar.gz|https://github.com/eza-community/eza/releases/download/v{VERSION}/eza_aarch64-unknown-linux-gnu.tar.gz"
     "cloudflared|CLOUDFLARED_VERSION|lib/features/cloudflare.sh|https://github.com/cloudflare/cloudflared/releases/download/{VERSION}/cloudflared-linux-amd64.deb|https://github.com/cloudflare/cloudflared/releases/download/{VERSION}/cloudflared-linux-arm64.deb"
 )

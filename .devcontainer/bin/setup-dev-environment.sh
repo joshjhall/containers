@@ -15,26 +15,19 @@ echo ""
 
 cd "$PROJECT_ROOT"
 
-# 1. Install pre-commit hooks
-echo -e "${BLUE}[1/4] Installing pre-commit hooks...${NC}"
+# 1. Install lefthook git hooks
+echo -e "${BLUE}[1/4] Installing lefthook git hooks...${NC}"
 
-if command -v pre-commit &> /dev/null; then
-    # Install commit and push hooks
-    if pre-commit install --install-hooks > /dev/null 2>&1; then
-        echo -e "${GREEN}✓${NC} pre-commit hooks installed"
+if command -v lefthook &> /dev/null; then
+    if lefthook install > /dev/null 2>&1; then
+        echo -e "${GREEN}✓${NC} lefthook hooks installed (pre-commit + pre-push)"
     else
-        echo -e "${YELLOW}⚠${NC}  Failed to install pre-commit hooks"
-    fi
-
-    if pre-commit install --hook-type pre-push > /dev/null 2>&1; then
-        echo -e "${GREEN}✓${NC} pre-push hooks installed"
-    else
-        echo -e "${YELLOW}⚠${NC}  Failed to install pre-push hooks"
+        echo -e "${YELLOW}⚠${NC}  Failed to install lefthook hooks"
     fi
 else
-    echo -e "${YELLOW}⚠${NC}  pre-commit not found"
-    echo "  Install with: pip install pre-commit"
-    echo "  Then re-run this script"
+    echo -e "${YELLOW}⚠${NC}  lefthook not found"
+    echo "  lefthook ships with INCLUDE_DEV_TOOLS=true."
+    echo "  Rebuild the container or install manually, then re-run this script."
 fi
 
 # 2. Verify .env is not committed
