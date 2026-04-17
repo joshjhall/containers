@@ -78,6 +78,7 @@ OSV_SCANNER_VERSION="${OSV_SCANNER_VERSION:-2.3.5}"
 YQ_VERSION="${YQ_VERSION:-4.53.2}"
 SD_VERSION="${SD_VERSION:-1.1.0}"
 DUA_VERSION="${DUA_VERSION:-2.34.0}"
+HYPERFINE_VERSION="${HYPERFINE_VERSION:-1.20.0}"
 
 # ============================================================================
 # Repository Configuration

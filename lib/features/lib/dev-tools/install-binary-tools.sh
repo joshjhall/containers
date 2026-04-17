@@ -320,6 +320,14 @@ install_github_binary_tools() {
         "calculate" "extract:dua" \
         || return 1
 
+    # hyperfine (Rust benchmarking CLI — no aarch64 musl build, fall back to gnu)
+    install_github_release "hyperfine" "$HYPERFINE_VERSION" \
+        "https://github.com/sharkdp/hyperfine/releases/download/v${HYPERFINE_VERSION}" \
+        "hyperfine-v${HYPERFINE_VERSION}-x86_64-unknown-linux-musl.tar.gz" \
+        "hyperfine-v${HYPERFINE_VERSION}-aarch64-unknown-linux-gnu.tar.gz" \
+        "calculate" "extract:hyperfine" \
+        || return 1
+
     # agnix (AI config linter) — requires Node.js/npm
     if command -v npm &> /dev/null; then
         log_message "Installing agnix (AI config linter)..."

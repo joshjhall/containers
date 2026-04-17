@@ -719,5 +719,21 @@ test_dua_installation() {
 run_test test_dua_version_variable "dua-cli version variable defined in dev-tools.sh"
 run_test test_dua_installation "dua-cli installation present in binary tools"
 
+# Test: hyperfine version variable defined in dev-tools.sh
+test_hyperfine_version_variable() {
+    local source_file="$PROJECT_ROOT/lib/features/dev-tools.sh"
+    assert_file_contains "$source_file" "HYPERFINE_VERSION=" "dev-tools.sh defines HYPERFINE_VERSION"
+}
+
+# Test: hyperfine installation present in binary tools script
+test_hyperfine_installation() {
+    local source_file="$PROJECT_ROOT/lib/features/lib/dev-tools/install-binary-tools.sh"
+    assert_file_contains "$source_file" "sharkdp/hyperfine" "install-binary-tools.sh installs hyperfine from sharkdp/hyperfine"
+    assert_file_contains "$source_file" "hyperfine-v\${HYPERFINE_VERSION}-x86_64-unknown-linux-musl.tar.gz" "install-binary-tools.sh uses correct amd64 asset name"
+}
+
+run_test test_hyperfine_version_variable "hyperfine version variable defined in dev-tools.sh"
+run_test test_hyperfine_installation "hyperfine installation present in binary tools"
+
 # Generate test report
 generate_report
