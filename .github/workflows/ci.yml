@@ -57,9 +57,6 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y shellcheck yamllint
 
-          # uv bootstraps all uvx-based hooks (pre-commit-hooks, mdformat, pymarkdownlnt)
-          pip install uv
-
           # Biome — version pulled from biome.json schema (matches feature behavior)
           npm install -g @biomejs/biome@$(grep -o '"https://biomejs.dev/schemas/[^"]*"' biome.json | grep -o '[0-9]\+\.[0-9]\+\.[0-9]\+')
 
