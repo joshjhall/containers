@@ -60,6 +60,19 @@ jobs:
           # Biome — version pulled from biome.json schema (matches feature behavior)
           npm install -g @biomejs/biome@$(grep -o '"https://biomejs.dev/schemas/[^"]*"' biome.json | grep -o '[0-9]\+\.[0-9]\+\.[0-9]\+')
 
+          # mado — markdown linter (version pinned in dev-tools.sh)
+          MADO_VERSION=$(grep -oP 'MADO_VERSION:-\K[0-9.]+' lib/features/dev-tools.sh)
+          curl -fsSL "https://github.com/akiomik/mado/releases/download/v${MADO_VERSION}/mado-Linux-gnu-x86_64.tar.gz" \
+            | sudo tar -xz -C /usr/local/bin mado
+          mado --version
+
+          # dprint — polyglot formatter (version pinned in dev-tools.sh; release tag has no `v` prefix)
+          DPRINT_VERSION=$(grep -oP 'DPRINT_VERSION:-\K[0-9.]+' lib/features/dev-tools.sh)
+          curl -fsSL -o /tmp/dprint.zip "https://github.com/dprint/dprint/releases/download/${DPRINT_VERSION}/dprint-x86_64-unknown-linux-gnu.zip"
+          sudo unzip -o /tmp/dprint.zip -d /usr/local/bin dprint
+          rm /tmp/dprint.zip
+          dprint --version
+
       - name: Run linting (lefthook)
         run: |
           echo "Running all linters via lefthook (single source of truth)..."
