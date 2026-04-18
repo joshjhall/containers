@@ -125,7 +125,7 @@ test_lookup_pinned_checksum_missing_db() {
 test_lookup_pinned_checksum_valid_language() {
     # Create a valid checksums.json with a known checksum
     local expected_hash="a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
-    command cat > "$TEST_TEMP_DIR/checksums.json" <<EOF
+    command cat >"$TEST_TEMP_DIR/checksums.json" <<EOF
 {
     "languages": {
         "python": {
@@ -151,7 +151,7 @@ EOF
 
 test_lookup_pinned_checksum_valid_tool() {
     local expected_hash="f1e2d3c4b5a6f1e2d3c4b5a6f1e2d3c4b5a6f1e2d3c4b5a6f1e2d3c4b5a6f1e2"
-    command cat > "$TEST_TEMP_DIR/checksums.json" <<EOF
+    command cat >"$TEST_TEMP_DIR/checksums.json" <<EOF
 {
     "languages": {},
     "tools": {
@@ -176,7 +176,7 @@ EOF
 }
 
 test_lookup_pinned_checksum_unknown_version() {
-    command cat > "$TEST_TEMP_DIR/checksums.json" <<EOF
+    command cat >"$TEST_TEMP_DIR/checksums.json" <<EOF
 {
     "languages": {
         "python": {
@@ -201,7 +201,7 @@ EOF
 }
 
 test_lookup_pinned_checksum_skips_placeholder() {
-    command cat > "$TEST_TEMP_DIR/checksums.json" <<EOF
+    command cat >"$TEST_TEMP_DIR/checksums.json" <<EOF
 {
     "languages": {
         "python": {
@@ -228,7 +228,7 @@ EOF
 test_lookup_pinned_checksum_arch_specific() {
     local expected_amd64="aaaa000000000000000000000000000000000000000000000000000000000001"
     local expected_arm64="bbbb000000000000000000000000000000000000000000000000000000000002"
-    command cat > "$TEST_TEMP_DIR/checksums.json" <<EOF
+    command cat >"$TEST_TEMP_DIR/checksums.json" <<EOF
 {
     "languages": {},
     "tools": {
@@ -264,7 +264,7 @@ EOF
 test_lookup_pinned_checksum_arch_fallback_to_noarch() {
     # When arch is specified but only a flat sha256 exists, fall back to it
     local expected_hash="cccc000000000000000000000000000000000000000000000000000000000003"
-    command cat > "$TEST_TEMP_DIR/checksums.json" <<EOF
+    command cat >"$TEST_TEMP_DIR/checksums.json" <<EOF
 {
     "languages": {},
     "tools": {
@@ -293,7 +293,7 @@ EOF
 
 test_verify_calculated_checksum_returns_2() {
     # Create a test file to calculate checksum for
-    echo "test file content" > "$TEST_TEMP_DIR/testfile.tgz"
+    echo "test file content" >"$TEST_TEMP_DIR/testfile.tgz"
 
     local exit_code=0
     _run_checksum_subshell "
@@ -322,11 +322,11 @@ test_verify_calculated_checksum_returns_2_for_binary_file() {
 test_verify_pinned_checksum_match() {
     # Create a file and compute its real sha256sum, then populate checksums.json
     # with the matching hash — verify_pinned_checksum should return 0.
-    echo "checksum match test content" > "$TEST_TEMP_DIR/match-test.tgz"
+    echo "checksum match test content" >"$TEST_TEMP_DIR/match-test.tgz"
     local real_hash
     real_hash=$(sha256sum "$TEST_TEMP_DIR/match-test.tgz" | command awk '{print $1}')
 
-    command cat > "$TEST_TEMP_DIR/checksums.json" <<EOJSON
+    command cat >"$TEST_TEMP_DIR/checksums.json" <<EOJSON
 {
     "languages": {
         "testlang": {
@@ -353,10 +353,10 @@ EOJSON
 test_verify_pinned_checksum_mismatch() {
     # Create a file but populate checksums.json with a WRONG hash —
     # verify_pinned_checksum should return 1 (checksum mismatch).
-    echo "checksum mismatch test content" > "$TEST_TEMP_DIR/mismatch-test.tgz"
+    echo "checksum mismatch test content" >"$TEST_TEMP_DIR/mismatch-test.tgz"
     local wrong_hash="0000000000000000000000000000000000000000000000000000000000000000"
 
-    command cat > "$TEST_TEMP_DIR/checksums.json" <<EOJSON
+    command cat >"$TEST_TEMP_DIR/checksums.json" <<EOJSON
 {
     "languages": {
         "testlang": {
@@ -440,10 +440,10 @@ test_exports_all_functions() {
 test_verify_download_returns_2_for_tofu() {
     # verify_download returns 2 (not 0) when falling back to tier 4 TOFU
     # This lets callers distinguish verified (0), failed (1), and unverified (2)
-    echo "test content for tofu" > "$TEST_TEMP_DIR/tofu-test.tgz"
+    echo "test content for tofu" >"$TEST_TEMP_DIR/tofu-test.tgz"
 
     # Create empty checksums.json so tier 2 fails
-    echo '{"languages":{},"tools":{}}' > "$TEST_TEMP_DIR/checksums.json"
+    echo '{"languages":{},"tools":{}}' >"$TEST_TEMP_DIR/checksums.json"
 
     local exit_code=0
     _run_checksum_subshell "
@@ -462,10 +462,10 @@ test_verify_download_calls_calculated_checksum_fallback() {
 
 test_require_verified_downloads_blocks_tofu() {
     # When REQUIRE_VERIFIED_DOWNLOADS=true, tier 4 returns 1 (hard fail)
-    echo "test content for blocked tofu" > "$TEST_TEMP_DIR/blocked-tofu.tgz"
+    echo "test content for blocked tofu" >"$TEST_TEMP_DIR/blocked-tofu.tgz"
 
     # Create empty checksums.json so tier 2 fails
-    echo '{"languages":{},"tools":{}}' > "$TEST_TEMP_DIR/checksums.json"
+    echo '{"languages":{},"tools":{}}' >"$TEST_TEMP_DIR/checksums.json"
 
     local exit_code=0
     _run_checksum_subshell "
@@ -479,10 +479,10 @@ test_require_verified_downloads_blocks_tofu() {
 
 test_production_mode_blocks_tofu() {
     # When PRODUCTION_MODE=true (and REQUIRE_VERIFIED_DOWNLOADS unset), tier 4 returns 1
-    echo "test content for prod tofu" > "$TEST_TEMP_DIR/prod-tofu.tgz"
+    echo "test content for prod tofu" >"$TEST_TEMP_DIR/prod-tofu.tgz"
 
     # Create empty checksums.json so tier 2 fails
-    echo '{"languages":{},"tools":{}}' > "$TEST_TEMP_DIR/checksums.json"
+    echo '{"languages":{},"tools":{}}' >"$TEST_TEMP_DIR/checksums.json"
 
     local exit_code=0
     _run_checksum_subshell "
@@ -563,12 +563,12 @@ test_register_tool_fetcher_stores_correctly() {
 
 test_verify_download_tool_tier3_passes() {
     # Register a fetcher that returns the correct checksum for the test file
-    echo "tool tier 3 test content" > "$TEST_TEMP_DIR/tool-tier3.tgz"
+    echo "tool tier 3 test content" >"$TEST_TEMP_DIR/tool-tier3.tgz"
     local real_hash
     real_hash=$(sha256sum "$TEST_TEMP_DIR/tool-tier3.tgz" | command awk '{print $1}')
 
     # Create empty checksums.json so tier 2 fails
-    echo '{"languages":{},"tools":{}}' > "$TEST_TEMP_DIR/checksums.json"
+    echo '{"languages":{},"tools":{}}' >"$TEST_TEMP_DIR/checksums.json"
 
     local exit_code=0
     _run_checksum_subshell "
@@ -583,11 +583,11 @@ test_verify_download_tool_tier3_passes() {
 
 test_verify_download_tool_tier3_mismatch() {
     # Register a fetcher that returns a WRONG checksum
-    echo "tool tier 3 mismatch content" > "$TEST_TEMP_DIR/tool-mismatch.tgz"
+    echo "tool tier 3 mismatch content" >"$TEST_TEMP_DIR/tool-mismatch.tgz"
     local wrong_hash="0000000000000000000000000000000000000000000000000000000000000000"
 
     # Create empty checksums.json so tier 2 fails
-    echo '{"languages":{},"tools":{}}' > "$TEST_TEMP_DIR/checksums.json"
+    echo '{"languages":{},"tools":{}}' >"$TEST_TEMP_DIR/checksums.json"
 
     local exit_code=0
     _run_checksum_subshell "
@@ -602,10 +602,10 @@ test_verify_download_tool_tier3_mismatch() {
 
 test_verify_download_tool_no_fetcher_falls_to_tier4() {
     # Tool with no registered fetcher should fall through to Tier 4 (TOFU)
-    echo "tool no fetcher content" > "$TEST_TEMP_DIR/tool-nofetcher.tgz"
+    echo "tool no fetcher content" >"$TEST_TEMP_DIR/tool-nofetcher.tgz"
 
     # Create empty checksums.json so tier 2 fails
-    echo '{"languages":{},"tools":{}}' > "$TEST_TEMP_DIR/checksums.json"
+    echo '{"languages":{},"tools":{}}' >"$TEST_TEMP_DIR/checksums.json"
 
     local exit_code=0
     _run_checksum_subshell "
@@ -618,12 +618,12 @@ test_verify_download_tool_no_fetcher_falls_to_tier4() {
 
 test_tier2_takes_priority_over_tool_tier3() {
     # Tier 2 pinned checksum should be checked before Tier 3 fetcher
-    echo "tier 2 priority test" > "$TEST_TEMP_DIR/tier2-priority.tgz"
+    echo "tier 2 priority test" >"$TEST_TEMP_DIR/tier2-priority.tgz"
     local real_hash
     real_hash=$(sha256sum "$TEST_TEMP_DIR/tier2-priority.tgz" | command awk '{print $1}')
 
     # Put the correct hash in checksums.json (Tier 2)
-    command cat > "$TEST_TEMP_DIR/checksums.json" <<EOJSON
+    command cat >"$TEST_TEMP_DIR/checksums.json" <<EOJSON
 {
     "languages": {},
     "tools": {
@@ -652,9 +652,9 @@ EOJSON
 
 test_require_verified_downloads_blocks_tool_tofu() {
     # REQUIRE_VERIFIED_DOWNLOADS=true should block tool TOFU just like language TOFU
-    echo "tool tofu blocked content" > "$TEST_TEMP_DIR/tool-blocked.tgz"
+    echo "tool tofu blocked content" >"$TEST_TEMP_DIR/tool-blocked.tgz"
 
-    echo '{"languages":{},"tools":{}}' > "$TEST_TEMP_DIR/checksums.json"
+    echo '{"languages":{},"tools":{}}' >"$TEST_TEMP_DIR/checksums.json"
 
     local exit_code=0
     _run_checksum_subshell "
@@ -668,11 +668,11 @@ test_require_verified_downloads_blocks_tool_tofu() {
 
 test_verify_tool_published_checksum_sha512() {
     # Test that SHA512 checksums (128 hex chars) work for tool Tier 3
-    echo "sha512 tool test content" > "$TEST_TEMP_DIR/tool-sha512.tgz"
+    echo "sha512 tool test content" >"$TEST_TEMP_DIR/tool-sha512.tgz"
     local real_hash
     real_hash=$(sha512sum "$TEST_TEMP_DIR/tool-sha512.tgz" | command awk '{print $1}')
 
-    echo '{"languages":{},"tools":{}}' > "$TEST_TEMP_DIR/checksums.json"
+    echo '{"languages":{},"tools":{}}' >"$TEST_TEMP_DIR/checksums.json"
 
     local exit_code=0
     _run_checksum_subshell "
@@ -701,8 +701,8 @@ test_exports_print_tofu_summary() {
 
 test_tofu_event_tracking_on_tier4() {
     # When verify_download falls to Tier 4, it should log to tofu-downloads.log
-    echo "tofu tracking test content" > "$TEST_TEMP_DIR/track-tofu.tgz"
-    echo '{"languages":{},"tools":{}}' > "$TEST_TEMP_DIR/checksums.json"
+    echo "tofu tracking test content" >"$TEST_TEMP_DIR/track-tofu.tgz"
+    echo '{"languages":{},"tools":{}}' >"$TEST_TEMP_DIR/checksums.json"
 
     local exit_code=0
     _run_checksum_subshell "
@@ -720,8 +720,8 @@ test_tofu_event_tracking_on_tier4() {
 
 test_tofu_event_not_tracked_when_blocked() {
     # When REQUIRE_VERIFIED_DOWNLOADS=true, TOFU is blocked and should NOT log
-    echo "blocked tofu no-track content" > "$TEST_TEMP_DIR/blocked-track.tgz"
-    echo '{"languages":{},"tools":{}}' > "$TEST_TEMP_DIR/checksums.json"
+    echo "blocked tofu no-track content" >"$TEST_TEMP_DIR/blocked-track.tgz"
+    echo '{"languages":{},"tools":{}}' >"$TEST_TEMP_DIR/checksums.json"
 
     local exit_code=0
     _run_checksum_subshell "
@@ -755,8 +755,8 @@ test_print_tofu_summary_empty_log() {
 test_print_tofu_summary_with_events() {
     # Create a TOFU log with entries, summary should return 0
     mkdir -p "$TEST_TEMP_DIR"
-    echo "test-tool 1.0.0" > "$TEST_TEMP_DIR/tofu-downloads.log"
-    echo "other-tool 2.0.0" >> "$TEST_TEMP_DIR/tofu-downloads.log"
+    echo "test-tool 1.0.0" >"$TEST_TEMP_DIR/tofu-downloads.log"
+    echo "other-tool 2.0.0" >>"$TEST_TEMP_DIR/tofu-downloads.log"
 
     local exit_code=0
     _run_checksum_subshell "

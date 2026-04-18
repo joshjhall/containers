@@ -3,15 +3,14 @@
 # ----------------------------------------------------------------------------
 
 # Error protection for interactive shells
-set +u  # Don't error on unset variables
-set +e  # Don't exit on errors
+set +u # Don't error on unset variables
+set +e # Don't exit on errors
 
 # Check if we're in an interactive shell
 if [[ $- != *i* ]]; then
     # Not interactive, skip loading
     return 0
 fi
-
 
 # RSpec configuration
 export SPEC_OPTS="--format documentation --color"
@@ -57,7 +56,6 @@ ruby-profile() {
     ruby -r stackprof -e "StackProf.run(mode: :cpu, out: 'tmp/stackprof.dump') { load '$1' }"
     stackprof tmp/stackprof.dump
 }
-
 
 # Note: We leave set +u and set +e in place for interactive shells
 # to prevent errors with undefined variables or failed commands

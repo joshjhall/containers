@@ -230,7 +230,7 @@ update_version_comment() {
         return 0
     else
         log_warning "Could not update verification date (may not exist)"
-        return 0  # Non-fatal
+        return 0 # Non-fatal
     fi
 }
 

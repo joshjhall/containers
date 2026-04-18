@@ -177,7 +177,7 @@ cv_load_custom_rules() {
         cv_error "Cannot check permissions of custom validation rules: $resolved_path"
         return 1
     }
-    if [ $(( 8#$file_mode & 8#022 )) -ne 0 ]; then
+    if [ $((8#$file_mode & 8#022)) -ne 0 ]; then
         cv_error "Custom validation rules must not be group/other writable: $resolved_path (mode: $file_mode)"
         return 1
     fi
@@ -219,7 +219,8 @@ _run_builtin_validations() {
     local entry var scheme
 
     for entry in "${url_checks[@]}"; do
-        var="${entry%%:*}"; scheme="${entry#*:}"
+        var="${entry%%:*}"
+        scheme="${entry#*:}"
         [ -n "${!var:-}" ] && cv_validate_url "$var" "$scheme"
     done
     for var in "${port_checks[@]}"; do
@@ -242,8 +243,8 @@ validate_configuration() {
     # Reset counters
     CV_ERROR_COUNT=0
     CV_WARNING_COUNT=0
-    : > "$CV_ERRORS_FILE"
-    : > "$CV_WARNINGS_FILE"
+    : >"$CV_ERRORS_FILE"
+    : >"$CV_WARNINGS_FILE"
 
     # Built-in URL/port validations
     _run_builtin_validations

@@ -29,7 +29,7 @@ setup() {
 
     # Build a patched copy: replace every /etc/ reference with the sandbox path
     export PATCHED_SCRIPT="$TEST_TEMP_DIR/setup-startup-patched.sh"
-    command sed "s|/etc/|$TEST_TEMP_DIR/etc/|g" "$SOURCE_SCRIPT" > "$PATCHED_SCRIPT"
+    command sed "s|/etc/|$TEST_TEMP_DIR/etc/|g" "$SOURCE_SCRIPT" >"$PATCHED_SCRIPT"
     chmod +x "$PATCHED_SCRIPT"
 }
 

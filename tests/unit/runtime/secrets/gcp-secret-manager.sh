@@ -30,8 +30,8 @@ teardown() {
         command rm -rf "$TEST_TEMP_DIR"
     fi
     unset GCP_SECRETS_ENABLED GCP_PROJECT_ID GCP_SECRET_PREFIX GCP_SECRET_NAMES \
-          GCP_SECRET_VERSION GCP_SERVICE_ACCOUNT_KEY CLOUDSDK_CORE_PROJECT \
-          TEST_TEMP_DIR 2>/dev/null || true
+        GCP_SECRET_VERSION GCP_SERVICE_ACCOUNT_KEY CLOUDSDK_CORE_PROJECT \
+        TEST_TEMP_DIR 2>/dev/null || true
 }
 
 run_test_with_setup() {
@@ -55,7 +55,7 @@ _create_mock_gcloud() {
     local project_id="${1:-test-project}"
     local exit_code="${2:-0}"
 
-    command cat > "$TEST_TEMP_DIR/bin/gcloud" << MOCK
+    command cat >"$TEST_TEMP_DIR/bin/gcloud" <<MOCK
 #!/bin/bash
 if [[ "\$*" == *"config get-value project"* ]]; then
     echo "$project_id"
@@ -182,7 +182,7 @@ test_project_id_from_gcloud_config() {
 
 test_project_id_missing_returns_error() {
     # Create mock gcloud that returns empty for project
-    command cat > "$TEST_TEMP_DIR/bin/gcloud" << 'MOCK'
+    command cat >"$TEST_TEMP_DIR/bin/gcloud" <<'MOCK'
 #!/bin/bash
 if [[ "$*" == *"config get-value project"* ]]; then
     echo ""

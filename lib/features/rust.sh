@@ -141,7 +141,10 @@ fi
 
 # Run 4-tier verification
 ARCH_DEB=$(dpkg --print-architecture)
-verify_download_or_fail "tool" "rustup-init" "$RUST_VERSION" "rustup-init" "$ARCH_DEB" || { log_feature_end; exit 1; }
+verify_download_or_fail "tool" "rustup-init" "$RUST_VERSION" "rustup-init" "$ARCH_DEB" || {
+    log_feature_end
+    exit 1
+}
 
 # Make executable
 log_command "Making rustup-init executable" \
@@ -226,7 +229,7 @@ log_command "Creating bashrc.d directory" \
 
 # Create Rust configuration (content in lib/bashrc/rust.sh)
 write_bashrc_content /etc/bashrc.d/30-rust.sh "Rust configuration" \
-    < /tmp/build-scripts/features/lib/bashrc/rust.sh
+    </tmp/build-scripts/features/lib/bashrc/rust.sh
 
 log_command "Setting Rust bashrc script permissions" \
     chmod +x /etc/bashrc.d/30-rust.sh

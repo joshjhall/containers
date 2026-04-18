@@ -41,8 +41,8 @@ configure_docker_socket() {
         fi
 
         # Change socket ownership to root:docker with 660 permissions
-        if ! run_privileged chown root:docker /var/run/docker.sock 2>/dev/null || \
-           ! run_privileged chmod 660 /var/run/docker.sock 2>/dev/null; then
+        if ! run_privileged chown root:docker /var/run/docker.sock 2>/dev/null ||
+            ! run_privileged chmod 660 /var/run/docker.sock 2>/dev/null; then
             echo "⚠️  Warning: Could not change Docker socket ownership/permissions"
         fi
 

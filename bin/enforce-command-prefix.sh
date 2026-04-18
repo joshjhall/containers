@@ -57,7 +57,10 @@ for file in "$@"; do
 
         # Skip lines with inline suppression marker
         case "$line" in
-            *"$SUPPRESS_MARKER"*) printf '%s\n' "$line"; continue ;;
+            *"$SUPPRESS_MARKER"*)
+                printf '%s\n' "$line"
+                continue
+                ;;
         esac
 
         # --- Apply fixes ---
@@ -96,7 +99,7 @@ for file in "$@"; do
         fi
 
         printf '%s\n' "$newline"
-    done < "$file" > "$tmpfile"
+    done <"$file" >"$tmpfile"
 
     if [ "$changed" -eq 1 ]; then
         chmod --reference="$file" "$tmpfile" 2>/dev/null || true

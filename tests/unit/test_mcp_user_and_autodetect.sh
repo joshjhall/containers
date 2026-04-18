@@ -128,7 +128,10 @@ test_mcp_servers_removed_from_compose() {
 # Functional test: scoped npm package derives last segment
 test_derive_name_scoped_package() {
     # The function is: echo "${pkg##*/}"
-    derive_mcp_name_from_package() { local pkg="$1"; echo "${pkg##*/}"; }
+    derive_mcp_name_from_package() {
+        local pkg="$1"
+        echo "${pkg##*/}"
+    }
     local result
     result=$(derive_mcp_name_from_package "@foo/bar-server")
     assert_equals "bar-server" "$result" "Scoped package @foo/bar-server → bar-server"
@@ -136,7 +139,10 @@ test_derive_name_scoped_package() {
 
 # Functional test: unscoped package returns itself
 test_derive_name_unscoped_package() {
-    derive_mcp_name_from_package() { local pkg="$1"; echo "${pkg##*/}"; }
+    derive_mcp_name_from_package() {
+        local pkg="$1"
+        echo "${pkg##*/}"
+    }
     local result
     result=$(derive_mcp_name_from_package "simple-pkg")
     assert_equals "simple-pkg" "$result" "Unscoped package simple-pkg → simple-pkg"
@@ -144,7 +150,10 @@ test_derive_name_unscoped_package() {
 
 # Functional test: deeply scoped path derives last segment
 test_derive_name_deeply_scoped() {
-    derive_mcp_name_from_package() { local pkg="$1"; echo "${pkg##*/}"; }
+    derive_mcp_name_from_package() {
+        local pkg="$1"
+        echo "${pkg##*/}"
+    }
     local result
     result=$(derive_mcp_name_from_package "@org/sub/deep")
     assert_equals "deep" "$result" "Deeply scoped @org/sub/deep → deep"

@@ -64,7 +64,7 @@ test_default_skips_gitkeep() {
     proj=$(setup_project)
     /usr/bin/mkdir -p "${proj}/src/drafts"
     /usr/bin/touch "${proj}/src/drafts/.gitkeep"
-    /usr/bin/printf '%s\n' "${proj}/src/drafts/.gitkeep" > "${proj}/filelist.txt"
+    /usr/bin/printf '%s\n' "${proj}/src/drafts/.gitkeep" >"${proj}/filelist.txt"
 
     run_gates "$proj" "${proj}/filelist.txt"
     assert_equals "0" "$TEST_EXIT_CODE" "exit code"
@@ -79,7 +79,7 @@ test_default_skips_mdx() {
     proj=$(setup_project)
     /usr/bin/mkdir -p "${proj}/src/content"
     /usr/bin/touch "${proj}/src/content/post.mdx"
-    /usr/bin/printf '%s\n' "${proj}/src/content/post.mdx" > "${proj}/filelist.txt"
+    /usr/bin/printf '%s\n' "${proj}/src/content/post.mdx" >"${proj}/filelist.txt"
 
     run_gates "$proj" "${proj}/filelist.txt"
     assert_equals "0" "$TEST_EXIT_CODE" "exit code"
@@ -93,8 +93,8 @@ test_default_skips_css() {
     local proj
     proj=$(setup_project)
     /usr/bin/mkdir -p "${proj}/src"
-    /usr/bin/printf 'body {}' > "${proj}/src/style.css"
-    /usr/bin/printf '%s\n' "${proj}/src/style.css" > "${proj}/filelist.txt"
+    /usr/bin/printf 'body {}' >"${proj}/src/style.css"
+    /usr/bin/printf '%s\n' "${proj}/src/style.css" >"${proj}/filelist.txt"
 
     run_gates "$proj" "${proj}/filelist.txt"
     assert_equals "0" "$TEST_EXIT_CODE" "exit code"
@@ -108,8 +108,8 @@ test_default_skips_json() {
     local proj
     proj=$(setup_project)
     /usr/bin/mkdir -p "${proj}/src"
-    /usr/bin/printf '{}' > "${proj}/src/config.json"
-    /usr/bin/printf '%s\n' "${proj}/src/config.json" > "${proj}/filelist.txt"
+    /usr/bin/printf '{}' >"${proj}/src/config.json"
+    /usr/bin/printf '%s\n' "${proj}/src/config.json" >"${proj}/filelist.txt"
 
     run_gates "$proj" "${proj}/filelist.txt"
     assert_equals "0" "$TEST_EXIT_CODE" "exit code"
@@ -126,8 +126,8 @@ test_python_missing_test_high() {
     local proj
     proj=$(setup_project)
     /usr/bin/mkdir -p "${proj}/src"
-    /usr/bin/printf 'def hello():\n    return "world"\n' > "${proj}/src/app.py"
-    /usr/bin/printf '%s\n' "${proj}/src/app.py" > "${proj}/filelist.txt"
+    /usr/bin/printf 'def hello():\n    return "world"\n' >"${proj}/src/app.py"
+    /usr/bin/printf '%s\n' "${proj}/src/app.py" >"${proj}/filelist.txt"
 
     run_gates "$proj" "${proj}/filelist.txt"
     assert_equals "0" "$TEST_EXIT_CODE" "exit code"
@@ -147,8 +147,8 @@ test_unknown_extension_medium() {
     local proj
     proj=$(setup_project)
     /usr/bin/mkdir -p "${proj}/src"
-    /usr/bin/printf 'content' > "${proj}/src/data.xyz"
-    /usr/bin/printf '%s\n' "${proj}/src/data.xyz" > "${proj}/filelist.txt"
+    /usr/bin/printf 'content' >"${proj}/src/data.xyz"
+    /usr/bin/printf '%s\n' "${proj}/src/data.xyz" >"${proj}/filelist.txt"
 
     run_gates "$proj" "${proj}/filelist.txt"
     assert_equals "0" "$TEST_EXIT_CODE" "exit code"
@@ -168,14 +168,14 @@ test_project_override_skip() {
     local proj
     proj=$(setup_project)
     /usr/bin/mkdir -p "${proj}/src" "${proj}/.claude"
-    /usr/bin/printf 'content' > "${proj}/src/data.xyz"
+    /usr/bin/printf 'content' >"${proj}/src/data.xyz"
 
-    /usr/bin/cat > "${proj}/.claude/pre-review.yml" << 'EOF'
+    /usr/bin/cat >"${proj}/.claude/pre-review.yml" <<'EOF'
 test_skip_patterns:
   - "*.xyz"
 EOF
 
-    /usr/bin/printf '%s\n' "${proj}/src/data.xyz" > "${proj}/filelist.txt"
+    /usr/bin/printf '%s\n' "${proj}/src/data.xyz" >"${proj}/filelist.txt"
 
     run_gates "$proj" "${proj}/filelist.txt"
     assert_equals "0" "$TEST_EXIT_CODE" "exit code"
@@ -193,15 +193,15 @@ test_negation_override() {
     proj=$(setup_project)
     /usr/bin/mkdir -p "${proj}/src/normal" "${proj}/src/critical" "${proj}/.claude"
 
-    /usr/bin/printf 'body {}' > "${proj}/src/normal/style.css"
-    /usr/bin/printf 'body {}' > "${proj}/src/critical/app.css"
+    /usr/bin/printf 'body {}' >"${proj}/src/normal/style.css"
+    /usr/bin/printf 'body {}' >"${proj}/src/critical/app.css"
 
-    /usr/bin/cat > "${proj}/.claude/pre-review.yml" << 'EOF'
+    /usr/bin/cat >"${proj}/.claude/pre-review.yml" <<'EOF'
 test_skip_patterns:
   - "!src/critical/*.css"
 EOF
 
-    /usr/bin/printf '%s\n' "${proj}/src/normal/style.css" "${proj}/src/critical/app.css" > "${proj}/filelist.txt"
+    /usr/bin/printf '%s\n' "${proj}/src/normal/style.css" "${proj}/src/critical/app.css" >"${proj}/filelist.txt"
 
     run_gates "$proj" "${proj}/filelist.txt"
     assert_equals "0" "$TEST_EXIT_CODE" "exit code"
@@ -226,10 +226,10 @@ test_path_glob_skip() {
     proj=$(setup_project)
     /usr/bin/mkdir -p "${proj}/db" "${proj}/app/models"
 
-    /usr/bin/printf 'ActiveRecord::Schema.define {}' > "${proj}/db/schema.rb"
-    /usr/bin/printf 'class User; end' > "${proj}/app/models/user.rb"
+    /usr/bin/printf 'ActiveRecord::Schema.define {}' >"${proj}/db/schema.rb"
+    /usr/bin/printf 'class User; end' >"${proj}/app/models/user.rb"
 
-    /usr/bin/printf '%s\n' "${proj}/db/schema.rb" "${proj}/app/models/user.rb" > "${proj}/filelist.txt"
+    /usr/bin/printf '%s\n' "${proj}/db/schema.rb" "${proj}/app/models/user.rb" >"${proj}/filelist.txt"
 
     run_gates "$proj" "${proj}/filelist.txt"
     assert_equals "0" "$TEST_EXIT_CODE" "exit code"
@@ -254,8 +254,8 @@ test_migration_skip() {
     proj=$(setup_project)
     /usr/bin/mkdir -p "${proj}/app/migrations"
 
-    /usr/bin/printf 'class Migration: pass' > "${proj}/app/migrations/001_init.py"
-    /usr/bin/printf '%s\n' "${proj}/app/migrations/001_init.py" > "${proj}/filelist.txt"
+    /usr/bin/printf 'class Migration: pass' >"${proj}/app/migrations/001_init.py"
+    /usr/bin/printf '%s\n' "${proj}/app/migrations/001_init.py" >"${proj}/filelist.txt"
 
     run_gates "$proj" "${proj}/filelist.txt"
     assert_equals "0" "$TEST_EXIT_CODE" "exit code"
@@ -289,7 +289,7 @@ test_edge_no_project_config() {
     proj=$(setup_project)
     /usr/bin/mkdir -p "${proj}/src"
     /usr/bin/touch "${proj}/src/.gitkeep"
-    /usr/bin/printf '%s\n' "${proj}/src/.gitkeep" > "${proj}/filelist.txt"
+    /usr/bin/printf '%s\n' "${proj}/src/.gitkeep" >"${proj}/filelist.txt"
 
     # No .claude/pre-review.yml exists
     run_gates "$proj" "${proj}/filelist.txt"
@@ -312,7 +312,7 @@ test_default_skips_config_files() {
     /usr/bin/touch "${proj}/src/notes.txt"
     for f in "${proj}/src/app.yml" "${proj}/src/data.toml" "${proj}/src/notes.txt"; do
         echo "$f"
-    done > "${proj}/filelist.txt"
+    done >"${proj}/filelist.txt"
 
     run_gates "$proj" "${proj}/filelist.txt"
     assert_equals "0" "$TEST_EXIT_CODE" "exit code"

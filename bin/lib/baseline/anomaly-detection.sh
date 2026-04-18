@@ -55,9 +55,9 @@ compare_to_baseline() {
     echo "  Warning Threshold: ${warn_process}"
     echo "  Critical Threshold: ${crit_process}"
 
-    if (( $(echo "$current_process > $crit_process" | bc -l) )); then
+    if (($(echo "$current_process > $crit_process" | bc -l))); then
         log_error "  Status: CRITICAL - Process execution rate exceeds critical threshold"
-    elif (( $(echo "$current_process > $warn_process" | bc -l) )); then
+    elif (($(echo "$current_process > $warn_process" | bc -l))); then
         log_warn "  Status: WARNING - Process execution rate exceeds warning threshold"
     else
         log_success "  Status: NORMAL"
@@ -69,9 +69,9 @@ compare_to_baseline() {
     echo "  Warning Threshold: ${warn_network}"
     echo "  Critical Threshold: ${crit_network}"
 
-    if (( $(echo "$current_network > $crit_network" | bc -l) )); then
+    if (($(echo "$current_network > $crit_network" | bc -l))); then
         log_error "  Status: CRITICAL - Network event rate exceeds critical threshold"
-    elif (( $(echo "$current_network > $warn_network" | bc -l) )); then
+    elif (($(echo "$current_network > $warn_network" | bc -l))); then
         log_warn "  Status: WARNING - Network event rate exceeds warning threshold"
     else
         log_success "  Status: NORMAL"

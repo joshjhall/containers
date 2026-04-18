@@ -49,9 +49,9 @@ extract_json_from_markdown() {
 # Looks for backtick-wrapped slugs in table rows
 extract_contract_categories() {
     local file="$1"
-    command grep -oP '`\K[a-z][a-z0-9-]+(?=`)' "$file" \
-        | command grep -v '^version$\|^deterministic$\|^heuristic$\|^llm$\|^finding-schema\|^compatible' \
-        | command sort -u
+    command grep -oP '`\K[a-z][a-z0-9-]+(?=`)' "$file" |
+        command grep -v '^version$\|^deterministic$\|^heuristic$\|^llm$\|^finding-schema\|^compatible' |
+        command sort -u
 }
 
 # Extract category slugs from a patterns.sh script
@@ -59,9 +59,9 @@ extract_patterns_categories() {
     local file="$1"
     # Categories appear as quoted strings in printf/echo statements as the 3rd TSV field
     # Look for category-like strings (lowercase with hyphens) in quoted context
-    command grep -oP '"[a-z][a-z0-9]+-[a-z][a-z0-9-]*"' "$file" \
-        | command sed 's/"//g' \
-        | command sort -u
+    command grep -oP '"[a-z][a-z0-9]+-[a-z][a-z0-9-]*"' "$file" |
+        command sed 's/"//g' |
+        command sort -u
 }
 
 # Required fields for a finding (from finding-schema.md)
@@ -113,7 +113,7 @@ test_check_contract_json_valid() {
         # Validate it's parseable JSON
         local tmpfile
         tmpfile="$(/usr/bin/mktemp)"
-        echo "$json" > "$tmpfile"
+        echo "$json" >"$tmpfile"
         assert_true "jq empty '$tmpfile' 2>/dev/null" \
             "check-* skill $skill_name: contract.md JSON is not valid"
         /usr/bin/rm -f "$tmpfile"
@@ -136,7 +136,7 @@ test_check_contract_required_fields() {
 
         local tmpfile
         tmpfile="$(/usr/bin/mktemp)"
-        echo "$json" > "$tmpfile"
+        echo "$json" >"$tmpfile"
 
         # Check each required field exists in the JSON
         local field
@@ -165,7 +165,7 @@ test_check_contract_enum_values() {
 
         local tmpfile
         tmpfile="$(/usr/bin/mktemp)"
-        echo "$json" > "$tmpfile"
+        echo "$json" >"$tmpfile"
 
         # Validate severity enum
         local severity
@@ -244,7 +244,7 @@ test_loop_contract_json_valid() {
 
         local tmpfile
         tmpfile="$(/usr/bin/mktemp)"
-        echo "$json" > "$tmpfile"
+        echo "$json" >"$tmpfile"
         assert_true "jq empty '$tmpfile' 2>/dev/null" \
             "loop-* skill $skill_name: contract.md JSON is not valid"
         /usr/bin/rm -f "$tmpfile"
@@ -267,7 +267,7 @@ test_loop_contract_required_fields() {
 
         local tmpfile
         tmpfile="$(/usr/bin/mktemp)"
-        echo "$json" > "$tmpfile"
+        echo "$json" >"$tmpfile"
 
         local field
         for field in $LOOP_REQUIRED_FIELDS; do
@@ -324,7 +324,7 @@ test_category_cross_check() {
             [ -z "$cat" ] && continue
             assert_true "echo '$contract_cats' | command grep -qF '$cat'" \
                 "check-* skill $skill_name: patterns.sh outputs category '$cat' not declared in contract.md"
-        done <<< "$patterns_cats"
+        done <<<"$patterns_cats"
     done
 }
 

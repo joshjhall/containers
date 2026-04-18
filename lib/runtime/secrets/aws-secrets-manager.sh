@@ -57,13 +57,13 @@ load_secrets_from_aws() {
     fi
 
     # Check if AWS CLI is available
-    if ! command -v aws > /dev/null 2>&1; then
+    if ! command -v aws >/dev/null 2>&1; then
         log_error "AWS CLI not found. Install AWS CLI to use Secrets Manager integration."
         return 1
     fi
 
     # Check if jq is available (needed for JSON parsing)
-    if ! command -v jq > /dev/null 2>&1; then
+    if ! command -v jq >/dev/null 2>&1; then
         log_error "jq not found. Install jq to use Secrets Manager integration."
         return 1
     fi
@@ -126,7 +126,7 @@ load_secrets_from_aws() {
     local count=0
 
     # Try to parse as JSON first
-    if echo "$secret_string" | jq -e . > /dev/null 2>&1; then
+    if echo "$secret_string" | jq -e . >/dev/null 2>&1; then
         # Secret is JSON - export each key-value pair
         while IFS= read -r -d '' key && IFS= read -r -d '' value; do
             if [ -n "$key" ] && [ -n "$value" ]; then
@@ -175,13 +175,13 @@ aws_secrets_health_check() {
 
     log_info "Checking AWS Secrets Manager access"
 
-    if ! command -v aws > /dev/null 2>&1; then
+    if ! command -v aws >/dev/null 2>&1; then
         log_warning "AWS CLI not found"
         return 1
     fi
 
     # Try to get caller identity to verify authentication
-    if aws sts get-caller-identity > /dev/null 2>&1; then
+    if aws sts get-caller-identity >/dev/null 2>&1; then
         log_info "AWS authentication successful"
         return 0
     else

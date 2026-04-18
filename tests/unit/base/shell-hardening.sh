@@ -34,7 +34,7 @@ setup() {
     command sed \
         -e "s|/etc/shells|$TEST_TEMP_DIR/etc/shells|g" \
         -e 's|^main "\$@".*||' \
-        "$SHELL_HARDENING" > "$PATCHED_SCRIPT"
+        "$SHELL_HARDENING" >"$PATCHED_SCRIPT"
 }
 
 teardown() {
@@ -61,8 +61,8 @@ run_test_with_setup() {
 # Tests can control whether bash "exists" by creating/omitting the fake binary.
 # ============================================================================
 _run_restrict_shells_subshell() {
-    local temp_dir="$1"     # TEST_TEMP_DIR value
-    local extra_setup="$2"  # shell code run before calling restrict_shells
+    local temp_dir="$1"    # TEST_TEMP_DIR value
+    local extra_setup="$2" # shell code run before calling restrict_shells
     bash -c "
         log_message() { echo \"  [shell-hardening] \$*\"; }
         log_warning() { echo \"  [shell-hardening] WARNING: \$*\" >&2; }
@@ -148,16 +148,16 @@ test_defines_verify_hardening() {
 # Test 5: RESTRICT_SHELLS=true rewrites /etc/shells to contain only bash paths
 test_restrict_shells_rewrites_to_bash_only() {
     printf '/bin/sh\n/bin/bash\n/usr/bin/bash\n/bin/dash\n/bin/zsh\n' \
-        > "$TEST_TEMP_DIR/etc/shells"
+        >"$TEST_TEMP_DIR/etc/shells"
 
     # Create a fake bash binary so the existence check passes
     mkdir -p "$TEST_TEMP_DIR/bin"
-    printf '#!/bin/sh\ntrue\n' > "$TEST_TEMP_DIR/bin/bash"
+    printf '#!/bin/sh\ntrue\n' >"$TEST_TEMP_DIR/bin/bash"
     chmod +x "$TEST_TEMP_DIR/bin/bash"
 
     local exit_code=0
-    _run_restrict_shells_subshell "$TEST_TEMP_DIR" "RESTRICT_SHELLS=true" \
-        || exit_code=$?
+    _run_restrict_shells_subshell "$TEST_TEMP_DIR" "RESTRICT_SHELLS=true" ||
+        exit_code=$?
 
     assert_equals "0" "$exit_code" \
         "restrict_shells returns 0 when bash exists"
@@ -174,10 +174,10 @@ test_restrict_shells_rewrites_to_bash_only() {
 
 # Test 6: RESTRICT_SHELLS=true cleans up backup on success
 test_restrict_shells_cleans_up_backup_on_success() {
-    printf '/bin/bash\n' > "$TEST_TEMP_DIR/etc/shells"
+    printf '/bin/bash\n' >"$TEST_TEMP_DIR/etc/shells"
 
     mkdir -p "$TEST_TEMP_DIR/bin"
-    printf '#!/bin/sh\ntrue\n' > "$TEST_TEMP_DIR/bin/bash"
+    printf '#!/bin/sh\ntrue\n' >"$TEST_TEMP_DIR/bin/bash"
     chmod +x "$TEST_TEMP_DIR/bin/bash"
 
     _run_restrict_shells_subshell "$TEST_TEMP_DIR" "RESTRICT_SHELLS=true" \
@@ -192,7 +192,7 @@ test_restrict_shells_noop_when_disabled() {
     local original_content='/bin/sh
 /bin/bash
 /bin/dash'
-    printf '%s\n' "$original_content" > "$TEST_TEMP_DIR/etc/shells"
+    printf '%s\n' "$original_content" >"$TEST_TEMP_DIR/etc/shells"
 
     local exit_code=0
     bash -c "
@@ -215,14 +215,14 @@ test_restrict_shells_restores_backup_when_bash_missing() {
     local original_content='/bin/sh
 /bin/bash
 /bin/dash'
-    printf '%s\n' "$original_content" > "$TEST_TEMP_DIR/etc/shells"
+    printf '%s\n' "$original_content" >"$TEST_TEMP_DIR/etc/shells"
 
     # Do NOT create $TEST_TEMP_DIR/bin/bash or $TEST_TEMP_DIR/usr/bin/bash so
     # the function's existence check fails and it must restore from backup.
 
     local exit_code=0
-    _run_restrict_shells_subshell "$TEST_TEMP_DIR" "RESTRICT_SHELLS=true" \
-        || exit_code=$?
+    _run_restrict_shells_subshell "$TEST_TEMP_DIR" "RESTRICT_SHELLS=true" ||
+        exit_code=$?
 
     assert_equals "1" "$exit_code" \
         "restrict_shells returns 1 when bash executables are missing"
@@ -281,7 +281,7 @@ test_harden_service_users_returns_0_when_no_service_users_exist() {
 test_verify_hardening_always_returns_0() {
     # Populate /etc/shells with more than 2 entries to trigger the warning branch
     printf '/bin/sh\n/bin/bash\n/bin/dash\n/bin/zsh\n/bin/ksh\n' \
-        > "$TEST_TEMP_DIR/etc/shells"
+        >"$TEST_TEMP_DIR/etc/shells"
 
     local exit_code=0
     bash -c "

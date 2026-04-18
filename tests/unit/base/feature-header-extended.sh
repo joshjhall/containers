@@ -104,7 +104,7 @@ test_create_symlink_valid_target() {
 
     # Create a target file
     local target="$TEST_TEMP_DIR/target-bin"
-    echo '#!/bin/bash' > "$target"
+    echo '#!/bin/bash' >"$target"
 
     # Create symlink
     local link="$TEST_TEMP_DIR/link-bin"
@@ -199,7 +199,7 @@ test_build_env_uid_priority() {
 
     # Create a mock /tmp/build-env with a custom UID
     local mock_build_env="$TEST_TEMP_DIR/mock-build-env"
-    command cat > "$mock_build_env" << 'ENVEOF'
+    command cat >"$mock_build_env" <<'ENVEOF'
 ACTUAL_UID=1234
 ACTUAL_GID=5678
 USERNAME=testuser

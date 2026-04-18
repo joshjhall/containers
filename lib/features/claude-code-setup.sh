@@ -45,9 +45,11 @@ log_message "Installing Claude Code CLI..."
 # Claude Code release channel (stable or latest)
 CLAUDE_CHANNEL="${CLAUDE_CHANNEL:-latest}"
 case "$CLAUDE_CHANNEL" in
-    latest|stable) ;;
-    *) log_error "Invalid CLAUDE_CHANNEL: '$CLAUDE_CHANNEL' (must be 'latest' or 'stable')"
-       exit 1 ;;
+    latest | stable) ;;
+    *)
+        log_error "Invalid CLAUDE_CHANNEL: '$CLAUDE_CHANNEL' (must be 'latest' or 'stable')"
+        exit 1
+        ;;
 esac
 log_message "Using Claude Code channel: ${CLAUDE_CHANNEL}"
 
@@ -85,9 +87,9 @@ if [ -f "${BUILD_TEMP}/claude-install.sh" ]; then
     # Pass the channel (stable or latest) to the installer
     log_command "Installing Claude Code for user $TARGET_USER (channel: ${CLAUDE_CHANNEL})" \
         su -c "cd '$USER_HOME' && bash ${BUILD_TEMP}/claude-install.sh ${CLAUDE_CHANNEL}" "$TARGET_USER" || {
-            log_warning "Claude Code installation failed"
-            log_warning "Claude Code will not be available in this container"
-        }
+        log_warning "Claude Code installation failed"
+        log_warning "Claude Code will not be available in this container"
+    }
 
     # Create system-wide symlink if installation succeeded
     if [ -f "$USER_HOME/.local/bin/claude" ]; then
@@ -127,14 +129,14 @@ if [ -f "$CLAUDE_SETTINGS_FILE" ]; then
     /usr/bin/jq --arg dir "$AUTO_MEMORY_DIR" --argjson perms "$DEFAULT_PERMISSIONS" '
         .autoMemoryDirectory = $dir
         | .permissions.allow = ((.permissions.allow // []) + $perms | unique)
-    ' "$CLAUDE_SETTINGS_FILE" > "${CLAUDE_SETTINGS_FILE}.tmp" && \
+    ' "$CLAUDE_SETTINGS_FILE" >"${CLAUDE_SETTINGS_FILE}.tmp" &&
         mv "${CLAUDE_SETTINGS_FILE}.tmp" "$CLAUDE_SETTINGS_FILE"
     log_message "Merged settings into existing settings.json"
 else
     # Create new settings.json with autoMemoryDirectory and default permissions
     /usr/bin/jq -n --arg dir "$AUTO_MEMORY_DIR" --argjson perms "$DEFAULT_PERMISSIONS" \
         '{autoMemoryDirectory: $dir, permissions: {allow: $perms}}' \
-        > "$CLAUDE_SETTINGS_FILE"
+        >"$CLAUDE_SETTINGS_FILE"
     log_message "Created settings.json with autoMemoryDirectory and default permissions"
 fi
 
@@ -174,9 +176,9 @@ if command -v node &>/dev/null && command -v npm &>/dev/null; then
         log_message "Installing extra MCP server packages..."
         source /tmp/build-scripts/features/lib/claude/mcp-registry.sh
 
-        IFS=',' read -ra EXTRA_MCP_LIST <<< "$EXTRA_MCPS_TO_INSTALL"
+        IFS=',' read -ra EXTRA_MCP_LIST <<<"$EXTRA_MCPS_TO_INSTALL"
         for mcp_name in "${EXTRA_MCP_LIST[@]}"; do
-            mcp_name=$(echo "$mcp_name" | xargs)  # Trim whitespace
+            mcp_name=$(echo "$mcp_name" | xargs) # Trim whitespace
             [ -z "$mcp_name" ] && continue
 
             if ! mcp_registry_is_registered "$mcp_name"; then
@@ -297,7 +299,7 @@ install -m 755 /tmp/build-scripts/features/lib/claude/95-claude-env.sh \
 # Install inotify-tools for efficient file watching (if apt available)
 if command -v apt-get &>/dev/null; then
     log_message "Installing inotify-tools for efficient authentication detection..."
-    apt-get update -qq && apt-get install -y -qq inotify-tools 2>/dev/null || \
+    apt-get update -qq && apt-get install -y -qq inotify-tools 2>/dev/null ||
         log_warning "Could not install inotify-tools (watcher will use polling)"
 fi
 

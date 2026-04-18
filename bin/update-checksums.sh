@@ -109,10 +109,10 @@ update_checksum() {
     local current_checksum="$3"
 
     # Skip if checksum already exists and is valid
-    if [ -n "$current_checksum" ] && \
-       [ "$current_checksum" != "null" ] && \
-       [ "$current_checksum" != "placeholder_to_be_added" ] && \
-       [ "$current_checksum" != "MANUAL_VERIFICATION_NEEDED" ]; then
+    if [ -n "$current_checksum" ] &&
+        [ "$current_checksum" != "null" ] &&
+        [ "$current_checksum" != "placeholder_to_be_added" ] &&
+        [ "$current_checksum" != "MANUAL_VERIFICATION_NEEDED" ]; then
         return 0
     fi
 
@@ -144,9 +144,9 @@ update_checksum() {
                 # Fallback: parse downloads page
                 local major_minor
                 major_minor=$(echo "$version" | command cut -d. -f1-2)
-                checksum=$(command curl -fsSL "https://www.ruby-lang.org/en/downloads/" 2>/dev/null | \
-                    command grep -A2 ">Ruby ${version}" | \
-                    command grep -oP 'sha256: \K[a-f0-9]{64}' | \
+                checksum=$(command curl -fsSL "https://www.ruby-lang.org/en/downloads/" 2>/dev/null |
+                    command grep -A2 ">Ruby ${version}" |
+                    command grep -oP 'sha256: \K[a-f0-9]{64}' |
                     command head -1 || echo "")
             fi
             local major_minor
@@ -187,7 +187,7 @@ update_checksum() {
         .languages.${language}.versions.\"${version}\".url = \"${url}\" | \
         .languages.${language}.versions.\"${version}\".added = \"$(date -u +%Y-%m-%d)\" | \
         del(.languages.${language}.versions.\"${version}\".note)" \
-        "$CHECKSUMS_FILE" > "$tmp_file"
+        "$CHECKSUMS_FILE" >"$tmp_file"
 
     if jq empty "$tmp_file" 2>/dev/null; then
         command mv "$tmp_file" "$CHECKSUMS_FILE"
@@ -250,12 +250,12 @@ extract_tool_version() {
 
     # Match both VAR="value" and VAR="${VAR:-value}" patterns
     local version
-    version=$(command grep -E "^${var_name}=\"?\\\$\{${var_name}:-[^}]+\}" "$full_path" 2>/dev/null \
-        | command sed -E "s/.*:-([^}]+)\}.*/\1/" | command head -1)
+    version=$(command grep -E "^${var_name}=\"?\\\$\{${var_name}:-[^}]+\}" "$full_path" 2>/dev/null |
+        command sed -E "s/.*:-([^}]+)\}.*/\1/" | command head -1)
 
     if [ -z "$version" ]; then
-        version=$(command grep -E "^${var_name}=" "$full_path" 2>/dev/null \
-            | command sed -E "s/^${var_name}=\"?([^\"]+)\"?.*/\1/" | command head -1)
+        version=$(command grep -E "^${var_name}=" "$full_path" 2>/dev/null |
+            command sed -E "s/^${var_name}=\"?([^\"]+)\"?.*/\1/" | command head -1)
     fi
 
     if [ -n "$version" ]; then
@@ -298,10 +298,10 @@ update_tool_checksum() {
     local current_checksum
     current_checksum=$(jq -r ".tools.\"${tool}\".versions.\"${version}\".sha256 // empty" "$CHECKSUMS_FILE" 2>/dev/null || echo "")
 
-    if [ -n "$current_checksum" ] && \
-       [ "$current_checksum" != "null" ] && \
-       [ "$current_checksum" != "placeholder_to_be_added" ] && \
-       [ "$current_checksum" != "MANUAL_VERIFICATION_NEEDED" ]; then
+    if [ -n "$current_checksum" ] &&
+        [ "$current_checksum" != "null" ] &&
+        [ "$current_checksum" != "placeholder_to_be_added" ] &&
+        [ "$current_checksum" != "MANUAL_VERIFICATION_NEEDED" ]; then
         echo -e "  ${tool} ${version}: already has checksum, skipping"
         return 0
     fi
@@ -329,7 +329,7 @@ update_tool_checksum() {
             \"sha256\": \"${checksum}\",
             \"url\": \"${url}\",
             \"added\": \"$(date -u +%Y-%m-%d)\"
-        }" "$CHECKSUMS_FILE" > "$tmp_file"
+        }" "$CHECKSUMS_FILE" >"$tmp_file"
 
     if jq empty "$tmp_file" 2>/dev/null; then
         command mv "$tmp_file" "$CHECKSUMS_FILE"
@@ -355,12 +355,12 @@ update_tool_checksum_arch() {
     arm64_checksum=$(jq -r ".tools.\"${tool}\".versions.\"${version}\".checksums.arm64.sha256 // empty" "$CHECKSUMS_FILE" 2>/dev/null || echo "")
 
     local needs_amd64=true needs_arm64=true
-    if [ -n "$amd64_checksum" ] && [ "$amd64_checksum" != "null" ] && \
-       [ "$amd64_checksum" != "placeholder_to_be_added" ]; then
+    if [ -n "$amd64_checksum" ] && [ "$amd64_checksum" != "null" ] &&
+        [ "$amd64_checksum" != "placeholder_to_be_added" ]; then
         needs_amd64=false
     fi
-    if [ -n "$arm64_checksum" ] && [ "$arm64_checksum" != "null" ] && \
-       [ "$arm64_checksum" != "placeholder_to_be_added" ]; then
+    if [ -n "$arm64_checksum" ] && [ "$arm64_checksum" != "null" ] &&
+        [ "$arm64_checksum" != "placeholder_to_be_added" ]; then
         needs_arm64=false
     fi
 
@@ -419,7 +419,7 @@ update_tool_checksum_arch() {
                 }
             },
             \"added\": \"$(date -u +%Y-%m-%d)\"
-        }" "$CHECKSUMS_FILE" > "$tmp_file"
+        }" "$CHECKSUMS_FILE" >"$tmp_file"
 
     if jq empty "$tmp_file" 2>/dev/null; then
         command mv "$tmp_file" "$CHECKSUMS_FILE"
@@ -450,7 +450,7 @@ for language in nodejs golang ruby; do
     while IFS= read -r version; do
         checksum=$(jq -r ".languages.${language}.versions.\"${version}\".sha256" "$CHECKSUMS_FILE")
         update_checksum "$language" "$version" "$checksum"
-    done <<< "$versions"
+    done <<<"$versions"
 done
 
 # ---------------------------------------------------------------------------
@@ -461,7 +461,7 @@ echo -e "${BLUE}Checking tool versions for missing checksums...${NC}"
 
 # Architecture-independent tools
 for entry in "${TOOL_CHECKSUM_REGISTRY_NOARCH[@]}"; do
-    IFS='|' read -r tool var_name script_path url_template <<< "$entry"
+    IFS='|' read -r tool var_name script_path url_template <<<"$entry"
 
     local_version=$(extract_tool_version "$var_name" "$script_path" 2>/dev/null || echo "")
     if [ -z "$local_version" ]; then
@@ -477,7 +477,7 @@ done
 
 # Architecture-dependent tools
 for entry in "${TOOL_CHECKSUM_REGISTRY_ARCH[@]}"; do
-    IFS='|' read -r tool var_name script_path amd64_template arm64_template <<< "$entry"
+    IFS='|' read -r tool var_name script_path amd64_template arm64_template <<<"$entry"
 
     local_version=$(extract_tool_version "$var_name" "$script_path" 2>/dev/null || echo "")
     if [ -z "$local_version" ]; then
@@ -495,7 +495,7 @@ done
 # Update metadata
 if [ "$DRY_RUN" = false ] && [ "$UPDATED_COUNT" -gt 0 ]; then
     tmp_file=$(mktemp)
-    jq ".metadata.generated = \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"" "$CHECKSUMS_FILE" > "$tmp_file"
+    jq ".metadata.generated = \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"" "$CHECKSUMS_FILE" >"$tmp_file"
     command mv "$tmp_file" "$CHECKSUMS_FILE"
 fi
 

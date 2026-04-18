@@ -53,13 +53,13 @@ test_bytes_to_human() {
     }
 
     local result
-    result=$(bytes_to_human 1048576)  # 1MB in bytes
+    result=$(bytes_to_human 1048576) # 1MB in bytes
     assert_equals "$result" "1.00MB" "1MB conversion"
 
-    result=$(bytes_to_human 104857600)  # 100MB in bytes
+    result=$(bytes_to_human 104857600) # 100MB in bytes
     assert_equals "$result" "100.00MB" "100MB conversion"
 
-    result=$(bytes_to_human 1073741824)  # 1GB in bytes
+    result=$(bytes_to_human 1073741824) # 1GB in bytes
     assert_equals "$result" "1024.00MB" "1GB conversion"
 }
 
@@ -67,7 +67,7 @@ test_baseline_json_format() {
     # Create a test baseline file
     local baseline_file="$TEST_BASELINE_DIR/test-variant.json"
 
-    command cat > "$baseline_file" << 'EOF'
+    command cat >"$baseline_file" <<'EOF'
 {
   "variant": "test-variant",
   "timestamp": "2025-11-12_01:00:00",
@@ -156,7 +156,7 @@ test_get_build_args_python_dev() {
 test_regression_detection_size_increase() {
     # Create a baseline
     local baseline_file="$TEST_BASELINE_DIR/test.json"
-    command cat > "$baseline_file" << 'EOF'
+    command cat >"$baseline_file" <<'EOF'
 {
   "variant": "test",
   "size_bytes": 500000000,
@@ -166,7 +166,7 @@ EOF
 
     # Current metrics show size increase of 150MB (exceeds 100MB threshold)
     local baseline_size=500000000
-    local current_size=650000000  # +150MB
+    local current_size=650000000 # +150MB
     local size_diff=$((current_size - baseline_size))
     local size_diff_mb
     size_diff_mb=$(command awk "BEGIN {printf \"%.2f\", $size_diff / 1024 / 1024}")
@@ -184,7 +184,7 @@ EOF
 test_regression_detection_size_acceptable() {
     # Create a baseline
     local baseline_size=500000000
-    local current_size=550000000  # +50MB (below 100MB threshold)
+    local current_size=550000000 # +50MB (below 100MB threshold)
     local size_diff=$((current_size - baseline_size))
     local size_diff_mb
     size_diff_mb=$(command awk "BEGIN {printf \"%.2f\", $size_diff / 1024 / 1024}")
@@ -240,7 +240,7 @@ test_regression_detection_time_acceptable() {
 test_regression_detection_improvement() {
     # Test that improvements (decreases) don't trigger regressions
     local baseline_size=500000000
-    local current_size=400000000  # -100MB (improvement)
+    local current_size=400000000 # -100MB (improvement)
     local size_diff=$((current_size - baseline_size))
 
     # Should be negative, indicating improvement
@@ -259,14 +259,15 @@ test_json_output_format() {
 
     # Create JSON output
     local json
-    json=$(command cat << EOF
+    json=$(
+        command cat <<EOF
 {
   "variant": "$variant",
   "size_bytes": $size_bytes,
   "build_time_seconds": $build_time
 }
 EOF
-)
+    )
 
     # Verify JSON is valid (contains expected fields)
     assert_contains "$json" '"variant": "test-variant"' "JSON contains variant"
@@ -280,7 +281,7 @@ test_variant_validation() {
         local variant="$1"
 
         case "$variant" in
-            minimal|python-dev|node-dev|rust-golang|cloud-ops|polyglot)
+            minimal | python-dev | node-dev | rust-golang | cloud-ops | polyglot)
                 echo "valid"
                 ;;
             *)

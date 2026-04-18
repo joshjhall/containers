@@ -172,13 +172,13 @@ update_nodejs_keys() {
 
     # List active releasers (from gpg-only-active-keys directory)
     log_info "Active releasers:"
-    GNUPGHOME="$temp_dir/release-keys/gpg-only-active-keys" gpg --list-keys 2>/dev/null | \
+    GNUPGHOME="$temp_dir/release-keys/gpg-only-active-keys" gpg --list-keys 2>/dev/null |
         command grep "^uid" | command sed 's/uid.*\] /  - /' | command sort -u
 
     # Generate metadata file
     local fetch_date
     fetch_date=$(date +%Y-%m-%d)
-    command cat > "$metadata_file" << EOF
+    command cat >"$metadata_file" <<EOF
 {
   "source": {
     "repository": "https://github.com/nodejs/release-keys",
@@ -266,7 +266,7 @@ update_hashicorp_keys() {
     # Verify the fingerprint matches the expected value
     log_info "Verifying key fingerprint..."
     local actual_fingerprint
-    actual_fingerprint=$(gpg --with-colons --show-keys "$temp_dir/hashicorp.asc" 2>/dev/null | \
+    actual_fingerprint=$(gpg --with-colons --show-keys "$temp_dir/hashicorp.asc" 2>/dev/null |
         command awk -F: '/^fpr:/ {print $10; exit}')
 
     if [ "$actual_fingerprint" != "$expected_fingerprint" ]; then
@@ -330,7 +330,7 @@ update_golang_keys() {
     # Verify the fingerprint matches the expected value
     log_info "Verifying key fingerprint..."
     local actual_fingerprint
-    actual_fingerprint=$(gpg --with-colons --show-keys "$temp_dir/google-linux-signing-key.asc" 2>/dev/null | \
+    actual_fingerprint=$(gpg --with-colons --show-keys "$temp_dir/google-linux-signing-key.asc" 2>/dev/null |
         command awk -F: '/^fpr:/ {print $10; exit}')
 
     if [ "$actual_fingerprint" != "$expected_fingerprint" ]; then

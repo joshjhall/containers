@@ -239,7 +239,7 @@ log_command "Creating bashrc.d directory" \
 
 # Add golang-dev aliases and helpers (content in lib/bashrc/golang-dev.sh)
 write_bashrc_content /etc/bashrc.d/55-golang-dev.sh "Go development tools configuration" \
-    < /tmp/build-scripts/features/lib/bashrc/golang-dev.sh
+    </tmp/build-scripts/features/lib/bashrc/golang-dev.sh
 
 log_command "Setting golang-dev bashrc script permissions" \
     chmod +x /etc/bashrc.d/55-golang-dev.sh

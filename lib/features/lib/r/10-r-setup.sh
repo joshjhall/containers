@@ -14,7 +14,7 @@ for dir in "${R_LIBS_USER}" "${TMPDIR}"; do
 done
 
 # Check for R project files
-if compgen -G "${WORKING_DIR}/*.Rproj" > /dev/null || [ -f "${WORKING_DIR}/.Rprofile" ]; then
+if compgen -G "${WORKING_DIR}/*.Rproj" >/dev/null || [ -f "${WORKING_DIR}/.Rprofile" ]; then
     echo "=== R Project Detected ==="
     echo "R $(R --version | command head -n 1) is installed"
     echo "User library: ${R_LIBS_USER}"

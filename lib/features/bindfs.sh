@@ -65,10 +65,10 @@ if [ -f /etc/fuse.conf ]; then
     if grep -q "^#user_allow_other" /etc/fuse.conf; then
         command sed -i 's/^#user_allow_other/user_allow_other/' /etc/fuse.conf
     elif ! grep -q "^user_allow_other" /etc/fuse.conf; then
-        echo "user_allow_other" >> /etc/fuse.conf
+        echo "user_allow_other" >>/etc/fuse.conf
     fi
 else
-    echo "user_allow_other" > /etc/fuse.conf
+    echo "user_allow_other" >/etc/fuse.conf
 fi
 
 log_message "  user_allow_other enabled in /etc/fuse.conf"
@@ -106,7 +106,7 @@ log_message "Creating FUSE hidden file cleanup cron job..."
 mkdir -p /etc/cron.d
 
 # Create the wrapper script that cron will execute
-command cat > /usr/local/bin/fuse-cleanup-cron << 'FUSE_CLEANUP_EOF'
+command cat >/usr/local/bin/fuse-cleanup-cron <<'FUSE_CLEANUP_EOF'
 #!/bin/bash
 # Wrapper script for FUSE hidden file cleanup cron job
 # Sources container environment and cleans stale .fuse_hidden* files
@@ -153,7 +153,7 @@ chmod +x /usr/local/bin/fuse-cleanup-cron
 # Create the cron job in /etc/cron.d/
 # Runs every 10 minutes
 # Note: USERNAME is substituted at build time
-command cat > /etc/cron.d/fuse-cleanup << CRON_EOF
+command cat >/etc/cron.d/fuse-cleanup <<CRON_EOF
 # FUSE hidden file cleanup - remove stale .fuse_hidden* files
 # Runs every 10 minutes
 # Configuration via environment variables:

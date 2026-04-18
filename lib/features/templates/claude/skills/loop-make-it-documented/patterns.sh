@@ -26,7 +26,7 @@ while IFS= read -r file; do
 
     # Skip test files and non-source files
     case "$file" in
-        *test*|*spec*|*__pycache__*|*.md|*.yml|*.yaml|*.json|*.toml|*.lock) continue ;;
+        *test* | *spec* | *__pycache__* | *.md | *.yml | *.yaml | *.json | *.toml | *.lock) continue ;;
     esac
 
     basename=$(/usr/bin/basename "$file")
@@ -59,9 +59,9 @@ while IFS= read -r file; do
                 }
             ' "$file" 2>/dev/null || true
             ;;
-        ts|js|tsx|jsx)
+        ts | js | tsx | jsx)
             # --- TypeScript/JavaScript: exported functions without JSDoc ---
-            /usr/bin/grep -n '^export\s\+\(async\s\+\)\?function\s\+\w\+\|^export\s\+\(default\s\+\)\?class\s\+\w\+' "$file" 2>/dev/null | \
+            /usr/bin/grep -n '^export\s\+\(async\s\+\)\?function\s\+\w\+\|^export\s\+\(default\s\+\)\?class\s\+\w\+' "$file" 2>/dev/null |
                 while IFS=: read -r line_num content; do
                     # Check if preceded by JSDoc comment (/** ... */)
                     prev_line=$((line_num - 1))
@@ -82,7 +82,7 @@ while IFS= read -r file; do
             ;;
         go)
             # --- Go: exported functions without GoDoc comments ---
-            /usr/bin/grep -n '^func [A-Z][a-zA-Z0-9]*\(' "$file" 2>/dev/null | \
+            /usr/bin/grep -n '^func [A-Z][a-zA-Z0-9]*\(' "$file" 2>/dev/null |
                 while IFS=: read -r line_num content; do
                     func_name=$(/usr/bin/printf '%s' "$content" | /usr/bin/sed 's/^func \([A-Z][a-zA-Z0-9]*\).*/\1/')
                     prev_line=$((line_num - 1))
@@ -97,9 +97,9 @@ while IFS= read -r file; do
                     fi
                 done || true
             ;;
-        sh|bash)
+        sh | bash)
             # --- Shell: functions without usage comment ---
-            /usr/bin/grep -n '^\w\+()' "$file" 2>/dev/null | \
+            /usr/bin/grep -n '^\w\+()' "$file" 2>/dev/null |
                 while IFS=: read -r line_num content; do
                     prev_line=$((line_num - 1))
                     if [ "$prev_line" -gt 0 ]; then
@@ -115,4 +115,4 @@ while IFS= read -r file; do
             ;;
     esac
 
-done < "$FILE_LIST"
+done <"$FILE_LIST"

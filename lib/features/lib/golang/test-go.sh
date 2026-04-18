@@ -1,6 +1,6 @@
 #!/bin/bash
 echo "=== Go Installation Status ==="
-if command -v go &> /dev/null; then
+if command -v go &>/dev/null; then
     go version
     echo "Go binary: $(which go)"
     echo "GOROOT: ${GOROOT:-/usr/local/go}"

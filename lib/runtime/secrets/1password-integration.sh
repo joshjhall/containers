@@ -44,19 +44,19 @@ source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 # Load secrets from 1Password Connect Server
 op_connect_load_secrets() {
     if [ -z "${OP_CONNECT_HOST:-}" ] || [ -z "${OP_CONNECT_TOKEN:-}" ]; then
-        return 1  # Connect not configured
+        return 1 # Connect not configured
     fi
 
     log_info "Using 1Password Connect Server at $OP_CONNECT_HOST"
 
     # Check if curl is available
-    if ! command -v curl > /dev/null 2>&1; then
+    if ! command -v curl >/dev/null 2>&1; then
         log_error "curl not found. Install curl to use 1Password Connect."
         return 1
     fi
 
     # Check if jq is available
-    if ! command -v jq > /dev/null 2>&1; then
+    if ! command -v jq >/dev/null 2>&1; then
         log_error "jq not found. Install jq to use 1Password Connect."
         return 1
     fi
@@ -112,7 +112,7 @@ op_connect_load_secrets() {
         local prefix="${OP_SECRET_PREFIX:-}"
         local count=0
 
-        IFS=',' read -ra item_names <<< "$OP_ITEM_NAMES"
+        IFS=',' read -ra item_names <<<"$OP_ITEM_NAMES"
         for item_name in "${item_names[@]}"; do
             if [ -z "$item_name" ]; then
                 continue
@@ -187,7 +187,7 @@ op_connect_load_secrets() {
 # Load secrets using 1Password CLI
 op_cli_load_secrets() {
     # Check if op CLI is available
-    if ! command -v op > /dev/null 2>&1; then
+    if ! command -v op >/dev/null 2>&1; then
         log_error "1Password CLI not found. Install 'op' to use 1Password integration."
         return 1
     fi
@@ -198,7 +198,7 @@ op_cli_load_secrets() {
         export OP_SERVICE_ACCOUNT_TOKEN
     else
         # Check if already signed in
-        if ! op account get > /dev/null 2>&1; then
+        if ! op account get >/dev/null 2>&1; then
             log_error "Not authenticated with 1Password CLI. Set OP_SERVICE_ACCOUNT_TOKEN or run 'op signin'"
             return 2
         fi
@@ -211,7 +211,7 @@ op_cli_load_secrets() {
     if [ -n "${OP_SECRET_REFERENCES:-}" ]; then
         log_info "Loading secrets using secret references"
 
-        IFS=',' read -ra references <<< "$OP_SECRET_REFERENCES"
+        IFS=',' read -ra references <<<"$OP_SECRET_REFERENCES"
         for ref in "${references[@]}"; do
             if [ -z "$ref" ]; then
                 continue
@@ -243,7 +243,7 @@ op_cli_load_secrets() {
     if [ -n "${OP_ITEM_NAMES:-}" ]; then
         log_info "Loading secrets from items: $OP_ITEM_NAMES"
 
-        IFS=',' read -ra item_names <<< "$OP_ITEM_NAMES"
+        IFS=',' read -ra item_names <<<"$OP_ITEM_NAMES"
         for item_name in "${item_names[@]}"; do
             if [ -z "$item_name" ]; then
                 continue
@@ -264,7 +264,7 @@ op_cli_load_secrets() {
             }
 
             # Extract fields and export as environment variables
-            if command -v jq > /dev/null 2>&1; then
+            if command -v jq >/dev/null 2>&1; then
                 while IFS=$'\t' read -r field_label field_value; do
                     if [ -n "$field_label" ] && [ -n "$field_value" ]; then
                         if safe_export_secret "$prefix" "$field_label" "$field_value"; then
@@ -327,7 +327,7 @@ op_health_check() {
 
     # Check Connect Server
     if [ -n "${OP_CONNECT_HOST:-}" ] && [ -n "${OP_CONNECT_TOKEN:-}" ]; then
-        if command -v curl > /dev/null 2>&1; then
+        if command -v curl >/dev/null 2>&1; then
             local health
             health=$(curl -s -w "%{http_code}" -o /dev/null \
                 "${OP_CONNECT_HOST}/health" 2>&1 || echo "000")
@@ -340,8 +340,8 @@ op_health_check() {
     fi
 
     # Check CLI
-    if command -v op > /dev/null 2>&1; then
-        if op account get > /dev/null 2>&1; then
+    if command -v op >/dev/null 2>&1; then
+        if op account get >/dev/null 2>&1; then
             log_info "1Password CLI is authenticated"
             return 0
         fi

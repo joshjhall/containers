@@ -22,8 +22,8 @@ get_changed_files() {
 
     local remote_head
     remote_head=$(git rev-parse --verify "${remote}/HEAD" 2>/dev/null ||
-                  git rev-parse --verify "${remote}/main" 2>/dev/null ||
-                  git rev-parse --verify "${remote}/master" 2>/dev/null || true)
+        git rev-parse --verify "${remote}/main" 2>/dev/null ||
+        git rev-parse --verify "${remote}/master" 2>/dev/null || true)
 
     if [ -n "$remote_head" ]; then
         git diff --name-only "$remote_head"...HEAD 2>/dev/null || true
@@ -44,7 +44,7 @@ map_to_test() {
 
     case "$file" in
         # Foundational files — signal to run ALL tests
-        tests/framework.sh|tests/framework/*|Dockerfile)
+        tests/framework.sh | tests/framework/* | Dockerfile)
             echo "ALL"
             return
             ;;
@@ -193,13 +193,13 @@ echo ""
 
 # Map changed files to test files
 RUN_ALL=false
-declare -A TEST_FILES_MAP  # associative array for deduplication
+declare -A TEST_FILES_MAP # associative array for deduplication
 
 while IFS= read -r file; do
     [ -z "$file" ] && continue
     result=$(map_to_test "$file")
     # Skip files with no mapped test (empty result or whitespace-only)
-    result=$(echo "$result" | command xargs)  # trim whitespace
+    result=$(echo "$result" | command xargs) # trim whitespace
     [ -z "$result" ] && continue
 
     if [ "$result" = "ALL" ]; then
@@ -328,7 +328,7 @@ fi
 echo -e "  Skipped: ${YELLOW}$TOTAL_SKIPPED${NC}"
 
 if [ "$TOTAL_TESTS" -gt 0 ]; then
-    PASS_RATE=$(( (TOTAL_PASSED * 100) / TOTAL_TESTS ))
+    PASS_RATE=$(((TOTAL_PASSED * 100) / TOTAL_TESTS))
     echo "  Pass Rate: $PASS_RATE%"
 fi
 echo ""

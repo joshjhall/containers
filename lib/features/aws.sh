@@ -71,12 +71,12 @@ apt_update
 # Install required system packages with retry logic
 log_message "Installing required packages..."
 apt_install \
-        unzip \
-        groff \
-        less \
-        gpg \
-        curl \
-        ca-certificates
+    unzip \
+    groff \
+    less \
+    gpg \
+    curl \
+    ca-certificates
 
 # ============================================================================
 # AWS CLI v2 Installation
@@ -106,7 +106,7 @@ AWS_CLI_KEY_FINGERPRINT="FB5D B77F D5C1 18B8 0511  ADA8 A631 0ACC 4672 475C"
 
 # Import AWS public key from keyserver
 log_command "Importing AWS public key from keyserver" \
-    gpg --keyserver hkps://keyserver.ubuntu.com --recv-keys "${AWS_CLI_KEY_ID}" || \
+    gpg --keyserver hkps://keyserver.ubuntu.com --recv-keys "${AWS_CLI_KEY_ID}" ||
     gpg --keyserver hkps://keys.openpgp.org --recv-keys "${AWS_CLI_KEY_ID}"
 
 # Verify key fingerprint
@@ -184,7 +184,11 @@ if [ -n "$SESSION_MANAGER_URL" ]; then
     fi
 
     # Run 4-tier verification (TOFU — no published checksums)
-    verify_download_or_fail "tool" "session-manager-plugin" "latest" "session-manager-plugin.deb" "$ARCH" || { cd /; log_feature_end; exit 1; }
+    verify_download_or_fail "tool" "session-manager-plugin" "latest" "session-manager-plugin.deb" "$ARCH" || {
+        cd /
+        log_feature_end
+        exit 1
+    }
 
     log_command "Installing Session Manager plugin" \
         dpkg -i session-manager-plugin.deb
@@ -205,7 +209,7 @@ log_command "Creating bashrc.d directory" \
 
 # Create system-wide AWS configuration (content in lib/bashrc/aws.sh)
 write_bashrc_content /etc/bashrc.d/50-aws.sh "AWS CLI configuration" \
-    < /tmp/build-scripts/features/lib/bashrc/aws.sh
+    </tmp/build-scripts/features/lib/bashrc/aws.sh
 
 log_command "Setting AWS bashrc script permissions" \
     chmod +x /etc/bashrc.d/50-aws.sh
@@ -219,7 +223,7 @@ log_message "Creating AWS startup scripts..."
 log_command "Creating container startup directory" \
     mkdir -p /etc/container/first-startup
 
-command cat > /etc/container/first-startup/20-aws-setup.sh << EOF
+command cat >/etc/container/first-startup/20-aws-setup.sh <<EOF
 #!/bin/bash
 # Check for AWS credentials
 if [ ! -f ~/.aws/credentials ] && [ -f ${WORKING_DIR}/.aws/credentials ]; then
@@ -249,7 +253,7 @@ log_command "Setting AWS startup script permissions" \
 # ============================================================================
 log_message "Creating AWS verification script..."
 
-command cat > /usr/local/bin/test-aws << 'EOF'
+command cat >/usr/local/bin/test-aws <<'EOF'
 #!/bin/bash
 echo "=== AWS CLI Status ==="
 if command -v aws &> /dev/null; then
@@ -308,7 +312,7 @@ log_message "Verifying AWS CLI installation..."
 log_command "Checking AWS CLI version" \
     aws --version || log_warning "AWS CLI not installed properly"
 
-if command -v session-manager-plugin &> /dev/null; then
+if command -v session-manager-plugin &>/dev/null; then
     log_command "Checking Session Manager plugin" \
         session-manager-plugin || log_warning "Session Manager plugin verification failed"
 fi

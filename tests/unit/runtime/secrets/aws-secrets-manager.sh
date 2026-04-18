@@ -30,8 +30,8 @@ teardown() {
         command rm -rf "$TEST_TEMP_DIR"
     fi
     unset AWS_SECRETS_ENABLED AWS_SECRET_NAME AWS_REGION AWS_SECRET_PREFIX \
-          AWS_SECRET_VERSION_ID AWS_SECRET_VERSION_STAGE AWS_SECRET_ENV_VAR \
-          TEST_TEMP_DIR 2>/dev/null || true
+        AWS_SECRET_VERSION_ID AWS_SECRET_VERSION_STAGE AWS_SECRET_ENV_VAR \
+        TEST_TEMP_DIR 2>/dev/null || true
 }
 
 run_test_with_setup() {
@@ -55,7 +55,7 @@ _create_mock_aws() {
     local response="${1:-}"
     local exit_code="${2:-0}"
 
-    command cat > "$TEST_TEMP_DIR/bin/aws" << MOCK
+    command cat >"$TEST_TEMP_DIR/bin/aws" <<MOCK
 #!/bin/bash
 if [[ "\$1" == "sts" ]]; then
     exit $exit_code
@@ -75,7 +75,7 @@ MOCK
 
 # Helper: create mock jq
 _create_mock_jq() {
-    command cat > "$TEST_TEMP_DIR/bin/jq" << 'MOCK'
+    command cat >"$TEST_TEMP_DIR/bin/jq" <<'MOCK'
 #!/bin/bash
 # Simple jq mock - pass through or extract specific fields
 if [[ "$1" == "-r" ]]; then

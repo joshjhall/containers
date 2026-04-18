@@ -71,7 +71,7 @@ log_feature_start "Python" "${PYTHON_VERSION}"
 # ============================================================================
 # Determine if we should cleanup build dependencies after compilation
 # Only cleanup if neither dev-tools nor python-dev is enabled
-export CLEANUP_BUILD_DEPS="false"  # Used by sourced cleanup-build-deps.sh
+export CLEANUP_BUILD_DEPS="false" # Used by sourced cleanup-build-deps.sh
 if [ "${INCLUDE_DEV_TOOLS:-false}" != "true" ] && [ "${INCLUDE_PYTHON_DEV:-false}" != "true" ]; then
     CLEANUP_BUILD_DEPS="true"
     log_message "📦 Production build detected - build dependencies will be removed after compilation"
@@ -142,7 +142,7 @@ PYTHON_URL="https://www.python.org/ftp/python/${PYTHON_VERSION}/${PYTHON_TARBALL
 log_message "Downloading Python ${PYTHON_VERSION}..."
 if ! command curl -fsSL "$PYTHON_URL" -o "$PYTHON_TARBALL"; then
     log_error "Failed to download Python ${PYTHON_VERSION}"
-    log_error "Please verify version exists: https://www.python.org/downloads/release/python-${PYTHON_VERSION//.}"
+    log_error "Please verify version exists: https://www.python.org/downloads/release/python-${PYTHON_VERSION//./}"
     log_feature_end
     exit 1
 fi
@@ -150,7 +150,10 @@ fi
 # Verify using 4-tier system (GPG → Pinned → Published → Calculated)
 # This will try each tier in order and log which method succeeded
 # Exit codes: 0=verified, 1=failed, 2=unverified (TOFU fallback)
-verify_download_or_fail "language" "python" "$PYTHON_VERSION" "$PYTHON_TARBALL" || { log_feature_end; exit 1; }
+verify_download_or_fail "language" "python" "$PYTHON_VERSION" "$PYTHON_TARBALL" || {
+    log_feature_end
+    exit 1
+}
 
 log_command "Extracting Python source" \
     tar -xzf "$PYTHON_TARBALL"
@@ -295,7 +298,7 @@ log_command "Creating bashrc.d directory" \
 
 # Create Python configuration (content in lib/bashrc/python.sh)
 write_bashrc_content /etc/bashrc.d/20-python.sh "Python configuration" \
-    < /tmp/build-scripts/features/lib/bashrc/python.sh
+    </tmp/build-scripts/features/lib/bashrc/python.sh
 
 log_command "Setting Python bashrc script permissions" \
     chmod +x /etc/bashrc.d/20-python.sh

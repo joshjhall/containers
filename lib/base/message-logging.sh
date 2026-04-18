@@ -122,7 +122,7 @@ log_error() {
     if [ -n "$CURRENT_LOG_FILE" ] && [ -n "$CURRENT_ERROR_FILE" ]; then
         {
             echo "[$(date '+%H:%M:%S')] ERROR: $message"
-        } | command tee -a "$CURRENT_LOG_FILE" >> "$CURRENT_ERROR_FILE"
+        } | command tee -a "$CURRENT_LOG_FILE" >>"$CURRENT_ERROR_FILE"
     else
         # Logging not initialized yet, just print to stderr
         echo "[$(date '+%H:%M:%S')] ERROR: $message" >&2
@@ -161,7 +161,7 @@ log_warning() {
     if [ -n "$CURRENT_LOG_FILE" ] && [ -n "$CURRENT_ERROR_FILE" ]; then
         {
             echo "[$(date '+%H:%M:%S')] WARNING: $message"
-        } | command tee -a "$CURRENT_LOG_FILE" >> "$CURRENT_ERROR_FILE"
+        } | command tee -a "$CURRENT_LOG_FILE" >>"$CURRENT_ERROR_FILE"
     else
         # Logging not initialized yet, just print to stderr
         echo "[$(date '+%H:%M:%S')] WARNING: $message" >&2

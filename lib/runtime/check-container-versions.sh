@@ -32,26 +32,38 @@ fi
 # Source .env file if it exists (for GITHUB_TOKEN)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [ -f "$SCRIPT_DIR/.env" ]; then
-    set -a  # Automatically export all variables
+    set -a # Automatically export all variables
     source "$SCRIPT_DIR/.env"
-    set +a  # Turn off automatic export
+    set +a # Turn off automatic export
 fi
 
 # Color codes for output
 # shellcheck source=lib/shared/colors.sh
-source "/opt/container-runtime/shared/colors.sh" 2>/dev/null \
-    || { RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; BLUE='\033[0;34m'; NC='\033[0m'; }
+source "/opt/container-runtime/shared/colors.sh" 2>/dev/null ||
+    {
+        RED='\033[0;31m'
+        GREEN='\033[0;32m'
+        YELLOW='\033[1;33m'
+        BLUE='\033[0;34m'
+        NC='\033[0m'
+    }
 
 # Parse arguments
 output_format="text"
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --json) output_format="json"; shift ;;
-        --help|-h)
+        --json)
+            output_format="json"
+            shift
+            ;;
+        --help | -h)
             command head -n 16 "$0" | command grep "^#" | command sed 's/^# \?//'
             exit 0
             ;;
-        *) echo "Unknown option: $1" >&2; exit 1 ;;
+        *)
+            echo "Unknown option: $1" >&2
+            exit 1
+            ;;
     esac
 done
 
@@ -80,7 +92,7 @@ print_result() {
     local status="$4"
 
     if [ "$output_format" = "json" ]; then
-        return  # JSON output handled separately
+        return # JSON output handled separately
     fi
 
     local status_color
@@ -111,7 +123,8 @@ check_tool() {
     local current latest status
     current=$(extract_version "$file" "$pattern")
     if [ "$current" = "latest" ]; then
-        latest="latest"; status="up-to-date"
+        latest="latest"
+        status="up-to-date"
     else
         latest=$("$getter_fn" "$@")
         status=$(compare_version "$current" "$latest")
@@ -131,15 +144,15 @@ _get_github_release_stripped() {
 # Thin wrapper: kubectl latest stable
 # shellcheck disable=SC2317  # Called dynamically via check_tool
 _get_latest_kubectl() {
-    command curl -Lsf https://dl.k8s.io/release/stable.txt \
-        | command sed 's/^v//' | command cut -d. -f1,2 || echo "unknown"
+    command curl -Lsf https://dl.k8s.io/release/stable.txt |
+        command sed 's/^v//' | command cut -d. -f1,2 || echo "unknown"
 }
 
 # Thin wrapper: glab latest from GitLab API
 # shellcheck disable=SC2317  # Called dynamically via check_tool
 _get_latest_glab() {
-    command curl -sf "https://gitlab.com/api/v4/projects/gitlab-org%2Fcli/releases" \
-        | jq -r '.[0].tag_name' | command sed 's/^v//' || echo "unknown"
+    command curl -sf "https://gitlab.com/api/v4/projects/gitlab-org%2Fcli/releases" |
+        jq -r '.[0].tag_name' | command sed 's/^v//' || echo "unknown"
 }
 
 # ============================================================================
@@ -161,13 +174,13 @@ if [ "$output_format" != "json" ]; then
 fi
 
 # Languages
-check_tool "Python"  "Python"     "$FEATURES_DIR/python.sh"  'PYTHON_VERSION="?\$\{PYTHON_VERSION:-\K[^"}]+' get_latest_python
-check_tool "Ruby"    "Ruby"       "$FEATURES_DIR/ruby.sh"    'RUBY_VERSION="?\$\{RUBY_VERSION:-\K[^"}]+'   get_latest_ruby
-check_tool "Node.js" "Node.js"    "$FEATURES_DIR/node.sh"    'NODE_VERSION="?\$\{NODE_VERSION:-\K[^"}]+'   get_latest_node
-check_tool "Go"      "Go"         "$FEATURES_DIR/golang.sh"  'GO_VERSION="?\$\{GO_VERSION:-\K[^"}]+'       get_latest_go
-check_tool "Rust"    "Rust"       "$FEATURES_DIR/rust.sh"    'RUST_VERSION="?\$\{RUST_VERSION:-\K[^"}]+'   get_latest_rust
-check_tool "Java"    "Java (LTS)" "$FEATURES_DIR/java.sh"    'JAVA_VERSION="?\$\{JAVA_VERSION:-\K[^"}]+'   get_latest_java_lts
-check_tool "Mojo"    "Mojo"       "$FEATURES_DIR/mojo.sh"    'MOJO_VERSION="?\$\{MOJO_VERSION:-\K[^"}]+'   get_latest_mojo
+check_tool "Python" "Python" "$FEATURES_DIR/python.sh" 'PYTHON_VERSION="?\$\{PYTHON_VERSION:-\K[^"}]+' get_latest_python
+check_tool "Ruby" "Ruby" "$FEATURES_DIR/ruby.sh" 'RUBY_VERSION="?\$\{RUBY_VERSION:-\K[^"}]+' get_latest_ruby
+check_tool "Node.js" "Node.js" "$FEATURES_DIR/node.sh" 'NODE_VERSION="?\$\{NODE_VERSION:-\K[^"}]+' get_latest_node
+check_tool "Go" "Go" "$FEATURES_DIR/golang.sh" 'GO_VERSION="?\$\{GO_VERSION:-\K[^"}]+' get_latest_go
+check_tool "Rust" "Rust" "$FEATURES_DIR/rust.sh" 'RUST_VERSION="?\$\{RUST_VERSION:-\K[^"}]+' get_latest_rust
+check_tool "Java" "Java (LTS)" "$FEATURES_DIR/java.sh" 'JAVA_VERSION="?\$\{JAVA_VERSION:-\K[^"}]+' get_latest_java_lts
+check_tool "Mojo" "Mojo" "$FEATURES_DIR/mojo.sh" 'MOJO_VERSION="?\$\{MOJO_VERSION:-\K[^"}]+' get_latest_mojo
 
 # ============================================================================
 # Development Tools Checks
@@ -181,12 +194,12 @@ if [ "$output_format" != "json" ]; then
 fi
 
 if [ -f "$FEATURES_DIR/dev-tools.sh" ]; then
-    check_tool "direnv"  "direnv"  "$FEATURES_DIR/dev-tools.sh" 'DIRENV_VERSION="\K[^"]+'  _get_github_release_stripped "direnv/direnv"
+    check_tool "direnv" "direnv" "$FEATURES_DIR/dev-tools.sh" 'DIRENV_VERSION="\K[^"]+' _get_github_release_stripped "direnv/direnv"
     check_tool "lazygit" "lazygit" "$FEATURES_DIR/dev-tools.sh" 'LAZYGIT_VERSION="\K[^"]+' _get_github_release_stripped "jesseduffield/lazygit"
-    check_tool "delta"   "delta"   "$FEATURES_DIR/dev-tools.sh" 'DELTA_VERSION="\K[^"]+'   _get_github_release_stripped "dandavison/delta"
-    check_tool "mkcert"  "mkcert"  "$FEATURES_DIR/dev-tools.sh" 'MKCERT_VERSION="\K[^"]+'  _get_github_release_stripped "FiloSottile/mkcert"
-    check_tool "act"     "act"     "$FEATURES_DIR/dev-tools.sh" 'ACT_VERSION="\K[^"]+'     _get_github_release_stripped "nektos/act"
-    check_tool "glab"    "glab"    "$FEATURES_DIR/dev-tools.sh" 'GLAB_VERSION="\K[^"]+'    _get_latest_glab
+    check_tool "delta" "delta" "$FEATURES_DIR/dev-tools.sh" 'DELTA_VERSION="\K[^"]+' _get_github_release_stripped "dandavison/delta"
+    check_tool "mkcert" "mkcert" "$FEATURES_DIR/dev-tools.sh" 'MKCERT_VERSION="\K[^"]+' _get_github_release_stripped "FiloSottile/mkcert"
+    check_tool "act" "act" "$FEATURES_DIR/dev-tools.sh" 'ACT_VERSION="\K[^"]+' _get_github_release_stripped "nektos/act"
+    check_tool "glab" "glab" "$FEATURES_DIR/dev-tools.sh" 'GLAB_VERSION="\K[^"]+' _get_latest_glab
 fi
 
 # ============================================================================
@@ -201,16 +214,16 @@ if [ "$output_format" != "json" ]; then
 fi
 
 if [ -f "$FEATURES_DIR/terraform.sh" ]; then
-    check_tool "Terraform"     "Terraform"     "$FEATURES_DIR/terraform.sh" 'TERRAFORM_VERSION="?\K[^"]+'                         _get_github_release_stripped "hashicorp/terraform"
-    check_tool "Terragrunt"    "Terragrunt"    "$FEATURES_DIR/terraform.sh" 'TERRAGRUNT_VERSION="?\$\{TERRAGRUNT_VERSION:-\K[^"}]+' _get_github_release_stripped "gruntwork-io/terragrunt"
-    check_tool "terraform-docs" "terraform-docs" "$FEATURES_DIR/terraform.sh" 'TFDOCS_VERSION="?\$\{TFDOCS_VERSION:-\K[^"}]+'       _get_github_release_stripped "terraform-docs/terraform-docs"
+    check_tool "Terraform" "Terraform" "$FEATURES_DIR/terraform.sh" 'TERRAFORM_VERSION="?\K[^"]+' _get_github_release_stripped "hashicorp/terraform"
+    check_tool "Terragrunt" "Terragrunt" "$FEATURES_DIR/terraform.sh" 'TERRAGRUNT_VERSION="?\$\{TERRAGRUNT_VERSION:-\K[^"}]+' _get_github_release_stripped "gruntwork-io/terragrunt"
+    check_tool "terraform-docs" "terraform-docs" "$FEATURES_DIR/terraform.sh" 'TFDOCS_VERSION="?\$\{TFDOCS_VERSION:-\K[^"}]+' _get_github_release_stripped "terraform-docs/terraform-docs"
 fi
 
 if [ -f "$FEATURES_DIR/kubernetes.sh" ]; then
     check_tool "kubectl" "kubectl" "$FEATURES_DIR/kubernetes.sh" 'KUBECTL_VERSION="?\$\{KUBECTL_VERSION:-\K[^"}]+' _get_latest_kubectl
-    check_tool "k9s"     "k9s"     "$FEATURES_DIR/kubernetes.sh" 'K9S_VERSION="?\$\{K9S_VERSION:-\K[^"}]+'        _get_github_release_stripped "derailed/k9s"
-    check_tool "krew"    "krew"    "$FEATURES_DIR/kubernetes.sh" 'KREW_VERSION="?\$\{KREW_VERSION:-\K[^"}]+'       _get_github_release_stripped "kubernetes-sigs/krew"
-    check_tool "Helm"    "Helm"    "$FEATURES_DIR/kubernetes.sh" 'HELM_VERSION="?\$\{HELM_VERSION:-\K[^"}]+'       _get_github_release_stripped "helm/helm"
+    check_tool "k9s" "k9s" "$FEATURES_DIR/kubernetes.sh" 'K9S_VERSION="?\$\{K9S_VERSION:-\K[^"}]+' _get_github_release_stripped "derailed/k9s"
+    check_tool "krew" "krew" "$FEATURES_DIR/kubernetes.sh" 'KREW_VERSION="?\$\{KREW_VERSION:-\K[^"}]+' _get_github_release_stripped "kubernetes-sigs/krew"
+    check_tool "Helm" "Helm" "$FEATURES_DIR/kubernetes.sh" 'HELM_VERSION="?\$\{HELM_VERSION:-\K[^"}]+' _get_github_release_stripped "helm/helm"
 fi
 
 # ============================================================================

@@ -33,7 +33,7 @@ source "$PROJECT_ROOT/lib/shared/colors.sh"
 # =============================================================================
 
 usage() {
-    command cat << EOF
+    command cat <<EOF
 Usage: $0 <command> [options]
 
 Commands:
@@ -82,9 +82,9 @@ get_expected_versions() {
     fi
 
     # Extract ARG definitions with versions
-    command grep -E "^ARG.*_VERSION=" "$dockerfile" | \
-        command sed 's/ARG //' | \
-        command sed 's/=/ /' | \
+    command grep -E "^ARG.*_VERSION=" "$dockerfile" |
+        command sed 's/ARG //' |
+        command sed 's/=/ /' |
         while read -r name value; do
             # Remove quotes if present
             value=$(echo "$value" | command tr -d '"' | command tr -d "'")
@@ -124,7 +124,7 @@ generate_inventory() {
     # Generate output based on format
     case "$format" in
         json)
-            command cat << EOF
+            command cat <<EOF
 {
   "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
   "image": "$1",
@@ -138,8 +138,8 @@ generate_inventory() {
   },
   "system_packages": [
 $(echo "$dpkg_list" | head -50 | while read -r pkg ver; do
-    echo "    {\"name\": \"$pkg\", \"version\": \"$ver\"},"
-done | command sed '$ s/,$//')
+                echo "    {\"name\": \"$pkg\", \"version\": \"$ver\"},"
+            done | command sed '$ s/,$//')
   ]
 }
 EOF
@@ -311,11 +311,11 @@ main() {
 
             while [[ $# -gt 0 ]]; do
                 case "$1" in
-                    -f|--format)
+                    -f | --format)
                         format="$2"
                         shift 2
                         ;;
-                    -o|--output)
+                    -o | --output)
                         output="$2"
                         shift 2
                         ;;
@@ -326,7 +326,7 @@ main() {
             done
 
             if [[ -n "$output" ]]; then
-                generate_inventory "$container" "$format" > "$output"
+                generate_inventory "$container" "$format" >"$output"
                 log_info "Inventory written to: $output"
             else
                 generate_inventory "$container" "$format"
@@ -363,7 +363,7 @@ main() {
 
             while [[ $# -gt 0 ]]; do
                 case "$1" in
-                    -o|--output)
+                    -o | --output)
                         output="$2"
                         shift 2
                         ;;
@@ -380,7 +380,7 @@ main() {
             show_expected
             ;;
 
-        -h|--help|help)
+        -h | --help | help)
             usage
             ;;
 

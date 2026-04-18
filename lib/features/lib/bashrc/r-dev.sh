@@ -3,15 +3,14 @@
 # ----------------------------------------------------------------------------
 
 # Error protection for interactive shells
-set +u  # Don't error on unset variables
-set +e  # Don't exit on errors
+set +u # Don't error on unset variables
+set +e # Don't exit on errors
 
 # Check if we're in an interactive shell
 if [[ $- != *i* ]]; then
     # Not interactive, skip loading
     return 0
 fi
-
 
 # ----------------------------------------------------------------------------
 # R Development Tool Aliases
@@ -133,7 +132,7 @@ r-init-analysis() {
     "
 
     # Create initial analysis template using template loader
-    load_r_template "analysis/analysis.Rmd.tmpl" > "${proj_name}/analysis.Rmd"
+    load_r_template "analysis/analysis.Rmd.tmpl" >"${proj_name}/analysis.Rmd"
 }
 
 # ----------------------------------------------------------------------------
@@ -237,7 +236,7 @@ r-benchmark() {
     for expr in "$@"; do
         exprs="${exprs}${expr} = { $expr },"
     done
-    exprs="${exprs%,}"  # Remove trailing comma
+    exprs="${exprs%,}" # Remove trailing comma
 
     Rscript -e "
     library(bench)
@@ -278,7 +277,6 @@ r-deps() {
         "
     fi
 }
-
 
 # Note: We leave set +u and set +e in place for interactive shells
 # to prevent errors with undefined variables or failed commands

@@ -45,7 +45,7 @@ if [ $# -eq 0 ]; then
 fi
 
 FEATURE="$1"
-shift  # Remove feature name, leaving optional build args
+shift # Remove feature name, leaving optional build args
 
 # Collect any additional build args
 EXTRA_BUILD_ARGS=()
@@ -107,13 +107,13 @@ echo "Image: $IMAGE_NAME"
 echo ""
 
 # Check if Docker is available
-if ! command -v docker &> /dev/null; then
+if ! command -v docker &>/dev/null; then
     echo -e "${RED}Error: Docker is not available${NC}"
     exit 1
 fi
 
 # Check if Docker daemon is running
-if ! docker info &> /dev/null; then
+if ! docker info &>/dev/null; then
     echo -e "${RED}Error: Docker daemon is not running${NC}"
     exit 1
 fi
@@ -131,7 +131,7 @@ if docker build \
     --build-arg "${BUILD_ARG}=true" \
     "${EXTRA_BUILD_ARGS[@]}" \
     -t "$IMAGE_NAME" \
-    "$PROJECT_ROOT" > "$BUILD_LOG" 2>&1; then
+    "$PROJECT_ROOT" >"$BUILD_LOG" 2>&1; then
     echo -e "${GREEN}✓ Build successful${NC}"
 else
     echo -e "${RED}✗ Build failed${NC}"
@@ -150,8 +150,8 @@ echo -e "${BLUE}Verifying $FEATURE installation...${NC}"
 
 # Run basic verification based on feature type
 case "$FEATURE" in
-    golang|golang-dev)
-        if docker run --rm "$IMAGE_NAME" which go > /dev/null 2>&1; then
+    golang | golang-dev)
+        if docker run --rm "$IMAGE_NAME" which go >/dev/null 2>&1; then
             VERSION=$(docker run --rm "$IMAGE_NAME" go version)
             echo -e "${GREEN}✓ Go installed: $VERSION${NC}"
         else
@@ -160,8 +160,8 @@ case "$FEATURE" in
         fi
         ;;
 
-    python|python-dev)
-        if docker run --rm "$IMAGE_NAME" which python3 > /dev/null 2>&1; then
+    python | python-dev)
+        if docker run --rm "$IMAGE_NAME" which python3 >/dev/null 2>&1; then
             VERSION=$(docker run --rm "$IMAGE_NAME" python3 --version)
             echo -e "${GREEN}✓ Python installed: $VERSION${NC}"
         else
@@ -170,8 +170,8 @@ case "$FEATURE" in
         fi
         ;;
 
-    node|node-dev)
-        if docker run --rm "$IMAGE_NAME" which node > /dev/null 2>&1; then
+    node | node-dev)
+        if docker run --rm "$IMAGE_NAME" which node >/dev/null 2>&1; then
             VERSION=$(docker run --rm "$IMAGE_NAME" node --version)
             echo -e "${GREEN}✓ Node installed: $VERSION${NC}"
         else
@@ -180,8 +180,8 @@ case "$FEATURE" in
         fi
         ;;
 
-    rust|rust-dev)
-        if docker run --rm "$IMAGE_NAME" which rustc > /dev/null 2>&1; then
+    rust | rust-dev)
+        if docker run --rm "$IMAGE_NAME" which rustc >/dev/null 2>&1; then
             VERSION=$(docker run --rm "$IMAGE_NAME" rustc --version)
             echo -e "${GREEN}✓ Rust installed: $VERSION${NC}"
         else
@@ -191,7 +191,7 @@ case "$FEATURE" in
         ;;
 
     kubernetes)
-        if docker run --rm "$IMAGE_NAME" which kubectl > /dev/null 2>&1; then
+        if docker run --rm "$IMAGE_NAME" which kubectl >/dev/null 2>&1; then
             VERSION=$(docker run --rm "$IMAGE_NAME" kubectl version --client --short 2>/dev/null || docker run --rm "$IMAGE_NAME" kubectl version --client)
             echo -e "${GREEN}✓ kubectl installed: $VERSION${NC}"
         else
@@ -204,7 +204,7 @@ case "$FEATURE" in
         TOOLS=("lazygit" "delta" "act" "git-cliff")
         ALL_FOUND=true
         for tool in "${TOOLS[@]}"; do
-            if docker run --rm "$IMAGE_NAME" which "$tool" > /dev/null 2>&1; then
+            if docker run --rm "$IMAGE_NAME" which "$tool" >/dev/null 2>&1; then
                 echo -e "${GREEN}✓ $tool installed${NC}"
             else
                 echo -e "${RED}✗ $tool not found${NC}"
@@ -217,7 +217,7 @@ case "$FEATURE" in
         ;;
 
     docker)
-        if docker run --rm "$IMAGE_NAME" which docker > /dev/null 2>&1; then
+        if docker run --rm "$IMAGE_NAME" which docker >/dev/null 2>&1; then
             VERSION=$(docker run --rm "$IMAGE_NAME" docker --version)
             echo -e "${GREEN}✓ Docker installed: $VERSION${NC}"
         else
@@ -239,7 +239,7 @@ case "$FEATURE" in
             echo -e "${RED}✗ /etc/bashrc.d/10-keybindings.sh not found${NC}"
             exit 1
         fi
-        if docker run --rm "$IMAGE_NAME" which test-keybindings > /dev/null 2>&1; then
+        if docker run --rm "$IMAGE_NAME" which test-keybindings >/dev/null 2>&1; then
             echo -e "${GREEN}✓ test-keybindings command available${NC}"
         else
             echo -e "${RED}✗ test-keybindings command not found${NC}"
@@ -248,14 +248,14 @@ case "$FEATURE" in
         ;;
 
     bindfs)
-        if docker run --rm "$IMAGE_NAME" which bindfs > /dev/null 2>&1; then
+        if docker run --rm "$IMAGE_NAME" which bindfs >/dev/null 2>&1; then
             VERSION=$(docker run --rm "$IMAGE_NAME" bindfs --version 2>&1 | command head -1)
             echo -e "${GREEN}✓ bindfs installed: $VERSION${NC}"
         else
             echo -e "${RED}✗ bindfs not found${NC}"
             exit 1
         fi
-        if docker run --rm "$IMAGE_NAME" which fusermount3 > /dev/null 2>&1; then
+        if docker run --rm "$IMAGE_NAME" which fusermount3 >/dev/null 2>&1; then
             echo -e "${GREEN}✓ fusermount3 available${NC}"
         else
             echo -e "${RED}✗ fusermount3 not found${NC}"

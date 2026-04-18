@@ -44,8 +44,8 @@ verify_checksums() {
         # Generate checksums if not present
         log_warning "No checksum file found, generating checksums..."
 
-        if command -v sha256sum &> /dev/null; then
-            command find "$backup_dir" -type f ! -name "*.sha256" ! -name "*.md5" -exec sha256sum {} \; > "${backup_dir}/checksums.sha256"
+        if command -v sha256sum &>/dev/null; then
+            command find "$backup_dir" -type f ! -name "*.sha256" ! -name "*.md5" -exec sha256sum {} \; >"${backup_dir}/checksums.sha256"
             checksum_file="${backup_dir}/checksums.sha256"
             log_success "Generated SHA256 checksums"
         else
@@ -70,7 +70,7 @@ verify_checksums() {
 
     cd "$backup_dir" || return 1
 
-    if $checksum_tool -c "$(basename "$checksum_file")" > /dev/null 2>&1; then
+    if $checksum_tool -c "$(basename "$checksum_file")" >/dev/null 2>&1; then
         log_success "All checksums verified successfully"
         return 0
     else

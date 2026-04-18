@@ -30,8 +30,8 @@ teardown() {
         command rm -rf "$TEST_TEMP_DIR"
     fi
     unset AZURE_KEYVAULT_ENABLED AZURE_KEYVAULT_NAME AZURE_KEYVAULT_URL \
-          AZURE_SECRET_PREFIX AZURE_SECRET_NAMES AZURE_TENANT_ID \
-          AZURE_CLIENT_ID AZURE_CLIENT_SECRET TEST_TEMP_DIR 2>/dev/null || true
+        AZURE_SECRET_PREFIX AZURE_SECRET_NAMES AZURE_TENANT_ID \
+        AZURE_CLIENT_ID AZURE_CLIENT_SECRET TEST_TEMP_DIR 2>/dev/null || true
 }
 
 run_test_with_setup() {
@@ -54,7 +54,7 @@ _run_azure_subshell() {
 _create_mock_az() {
     local exit_code="${1:-0}"
 
-    command cat > "$TEST_TEMP_DIR/bin/az" << MOCK
+    command cat >"$TEST_TEMP_DIR/bin/az" <<MOCK
 #!/bin/bash
 if [[ "\$*" == *"account show"* ]]; then
     echo '{"name":"test-subscription"}'

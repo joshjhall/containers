@@ -149,7 +149,7 @@ log_command "Creating bashrc.d directory" \
 
 # Create system-wide Terraform configuration (content in lib/bashrc/terraform.sh)
 write_bashrc_content /etc/bashrc.d/55-terraform.sh "Terraform configuration" \
-    < /tmp/build-scripts/features/lib/bashrc/terraform.sh
+    </tmp/build-scripts/features/lib/bashrc/terraform.sh
 
 log_command "Setting Terraform bashrc script permissions" \
     chmod +x /etc/bashrc.d/55-terraform.sh
@@ -182,22 +182,22 @@ log_message "Verifying Terraform installation..."
 log_command "Checking Terraform version" \
     terraform version || log_warning "Terraform not installed properly"
 
-if command -v terragrunt &> /dev/null; then
+if command -v terragrunt &>/dev/null; then
     log_command "Checking Terragrunt version" \
         terragrunt --version || log_warning "Terragrunt version check failed"
 fi
 
-if command -v terraform-docs &> /dev/null; then
+if command -v terraform-docs &>/dev/null; then
     log_command "Checking terraform-docs version" \
         terraform-docs --version || log_warning "terraform-docs version check failed"
 fi
 
-if command -v tflint &> /dev/null; then
+if command -v tflint &>/dev/null; then
     log_command "Checking tflint version" \
         tflint --version || log_warning "tflint version check failed"
 fi
 
-if command -v trivy &> /dev/null; then
+if command -v trivy &>/dev/null; then
     log_command "Checking Trivy version" \
         trivy --version || log_warning "Trivy version check failed"
 fi

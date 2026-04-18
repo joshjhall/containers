@@ -45,7 +45,7 @@ validate_tsv_output() {
             fail_test "$context: line $line_num has $field_count columns, expected 5"
             return 1
         fi
-    done <<< "$output"
+    done <<<"$output"
 
     return 0
 }
@@ -88,7 +88,7 @@ run_patterns_test() {
 
     # Create file list
     local file_list="${tmpdir}/filelist.txt"
-    /usr/bin/printf '%s\n' "${tmpdir}/${clean_name}" > "$file_list"
+    /usr/bin/printf '%s\n' "${tmpdir}/${clean_name}" >"$file_list"
 
     # Run the script
     local output exit_code
@@ -192,7 +192,7 @@ test_check_docs_organization() {
     # Create a dummy file list (script uses git root, not file list contents,
     # for org checks — but it still needs a valid file list argument)
     local file_list="${tmpdir}/filelist.txt"
-    /usr/bin/printf '%s\n' "${noreadme_dir}/file1.py" > "$file_list"
+    /usr/bin/printf '%s\n' "${noreadme_dir}/file1.py" >"$file_list"
 
     # Create minimal git repo so git rev-parse works
     (cd "$tmpdir" && /usr/bin/git init -q 2>/dev/null)
@@ -223,7 +223,7 @@ test_check_ai_config() {
     /usr/bin/cp "$FIXTURES_DIR/ai_config_agent_fixture.md" "${agent_dir}/broken-agent.md"
 
     local file_list="${tmpdir}/filelist.txt"
-    /usr/bin/printf '%s\n' "${agent_dir}/broken-agent.md" > "$file_list"
+    /usr/bin/printf '%s\n' "${agent_dir}/broken-agent.md" >"$file_list"
 
     local output exit_code
     output=$("$SKILLS_DIR/check-ai-config/patterns.sh" "$file_list" 2>/dev/null) && exit_code=0 || exit_code=$?
@@ -336,7 +336,7 @@ run_test test_edge_empty_file_list "Empty file list produces no output"
 test_edge_nonexistent_file() {
     local tmpdir
     tmpdir=$(/usr/bin/mktemp -d)
-    /usr/bin/printf '%s\n' "/nonexistent/path/foo.py" > "${tmpdir}/filelist.txt"
+    /usr/bin/printf '%s\n' "/nonexistent/path/foo.py" >"${tmpdir}/filelist.txt"
 
     local output exit_code
     output=$("$SKILLS_DIR/check-code-health/patterns.sh" "${tmpdir}/filelist.txt" 2>/dev/null) && exit_code=0 || exit_code=$?
@@ -355,8 +355,8 @@ test_edge_binary_file() {
     local tmpdir
     tmpdir=$(/usr/bin/mktemp -d)
     # Create a small binary file
-    /usr/bin/printf '\x00\x01\x02\x03\x04\x05' > "${tmpdir}/binary.py"
-    /usr/bin/printf '%s\n' "${tmpdir}/binary.py" > "${tmpdir}/filelist.txt"
+    /usr/bin/printf '\x00\x01\x02\x03\x04\x05' >"${tmpdir}/binary.py"
+    /usr/bin/printf '%s\n' "${tmpdir}/binary.py" >"${tmpdir}/filelist.txt"
 
     local output exit_code
     output=$("$SKILLS_DIR/check-code-health/patterns.sh" "${tmpdir}/filelist.txt" 2>/dev/null) && exit_code=0 || exit_code=$?

@@ -4,8 +4,8 @@
 # ----------------------------------------------------------------------------
 
 # Error protection for interactive shells
-set +u  # Don't error on unset variables
-set +e  # Don't exit on errors
+set +u # Don't error on unset variables
+set +e # Don't exit on errors
 
 # ----------------------------------------------------------------------------
 # Aliases
@@ -133,37 +133,37 @@ node-init() {
         ts-jest
 
     # Create tsconfig.json
-    load_node_template "config/tsconfig.json.tmpl" > tsconfig.json
+    load_node_template "config/tsconfig.json.tmpl" >tsconfig.json
 
     # Create jest.config.js
-    load_node_template "config/jest.config.js.tmpl" > jest.config.js
+    load_node_template "config/jest.config.js.tmpl" >jest.config.js
 
     # Create .eslintrc.js
-    load_node_template "config/eslintrc.js.tmpl" > .eslintrc.js
+    load_node_template "config/eslintrc.js.tmpl" >.eslintrc.js
 
     # Create .prettierrc
-    load_node_template "config/prettierrc.tmpl" > .prettierrc
+    load_node_template "config/prettierrc.tmpl" >.prettierrc
 
     # Create type-specific files
     case "$project_type" in
         api)
             npm install express cors helmet morgan compression
             npm install --save-dev @types/express @types/cors @types/morgan @types/compression
-            load_node_template "api/index.ts.tmpl" > src/index.ts
+            load_node_template "api/index.ts.tmpl" >src/index.ts
             ;;
         cli)
             npm install commander chalk ora
             npm install --save-dev @types/node
-            load_node_template "cli/index.ts.tmpl" "$project_name" > src/index.ts
+            load_node_template "cli/index.ts.tmpl" "$project_name" >src/index.ts
             chmod +x src/index.ts
             ;;
         web)
             npm install --save-dev vite @vitejs/plugin-react
-            load_node_template "config/vite.config.ts.tmpl" > vite.config.ts
+            load_node_template "config/vite.config.ts.tmpl" >vite.config.ts
             ;;
         *)
             # Default library setup
-            load_node_template "lib/index.ts.tmpl" > src/index.ts
+            load_node_template "lib/index.ts.tmpl" >src/index.ts
             ;;
     esac
 
@@ -180,7 +180,7 @@ node-init() {
     npm pkg set scripts.format:check="prettier --check 'src/**/*.ts'"
 
     # Create initial test
-    load_node_template "test/index.test.ts.tmpl" > tests/index.test.ts
+    load_node_template "test/index.test.ts.tmpl" >tests/index.test.ts
 
     echo "Project $project_name created successfully!"
     echo ""
@@ -242,7 +242,7 @@ node-deps-security() {
     echo "=== Checking for security vulnerabilities ==="
     npm audit
 
-    if command -v snyk &> /dev/null; then
+    if command -v snyk &>/dev/null; then
         echo ""
         echo "Running Snyk security scan..."
         snyk test

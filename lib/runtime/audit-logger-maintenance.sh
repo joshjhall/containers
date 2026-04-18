@@ -51,7 +51,7 @@ audit_rotate() {
         # Calculate checksum for integrity
         local checksum
         checksum=$(sha256sum "${rotated_file}.gz" | command cut -d' ' -f1)
-        echo "$checksum  ${rotated_file}.gz" >> "${AUDIT_LOG_FILE}.checksums"
+        echo "$checksum  ${rotated_file}.gz" >>"${AUDIT_LOG_FILE}.checksums"
 
         # Remove old logs beyond keep count
         # shellcheck disable=SC2012
@@ -85,7 +85,7 @@ audit_verify_integrity() {
                 failed=1
             fi
         fi
-    done < "$checksum_file"
+    done <"$checksum_file"
 
     return $failed
 }
@@ -96,22 +96,22 @@ get_retention_policy() {
 
     case "$framework" in
         soc2)
-            echo "365"  # 12 months
+            echo "365" # 12 months
             ;;
         hipaa)
             echo "2190" # 6 years
             ;;
         pci)
-            echo "365"  # 1 year (90 days immediately available)
+            echo "365" # 1 year (90 days immediately available)
             ;;
         gdpr)
-            echo "0"    # As long as necessary (application-defined)
+            echo "0" # As long as necessary (application-defined)
             ;;
         fedramp)
             echo "1095" # 3 years
             ;;
         *)
-            echo "365"  # Default: 1 year
+            echo "365" # Default: 1 year
             ;;
     esac
 }

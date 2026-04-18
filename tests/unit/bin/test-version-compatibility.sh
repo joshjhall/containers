@@ -218,7 +218,8 @@ test_matrix_entry_format() {
     local versions_json='{"python": "3.13.0"}'
 
     local entry
-    entry=$(command cat << EOF
+    entry=$(
+        command cat <<EOF
 {
   "variant": "$variant",
   "base_image": "$base_image",
@@ -226,7 +227,7 @@ test_matrix_entry_format() {
   "status": "$status"
 }
 EOF
-)
+    )
 
     assert_contains "$entry" '"variant": "python-dev"' "Entry contains variant"
     assert_contains "$entry" '"status": "passing"' "Entry contains status"

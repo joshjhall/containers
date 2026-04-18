@@ -50,7 +50,7 @@ teardown() {
 
     # Unset test variables
     unset ANDROID_CMDLINE_TOOLS_VERSION ANDROID_API_LEVELS ANDROID_NDK_VERSION \
-          USERNAME USER_UID USER_GID HOME 2>/dev/null || true
+        USERNAME USER_UID USER_GID HOME 2>/dev/null || true
 }
 
 # Test: Android API level validation
@@ -200,8 +200,8 @@ test_license_acceptance() {
     mkdir -p "$licenses_dir"
 
     # Create mock license files
-    echo "24333f8a63b6825ea9c5514f83c2829b004d1fee" > "$licenses_dir/android-sdk-license"
-    echo "84831b9409646a918e30573bab4c9c91346d8abd" > "$licenses_dir/android-sdk-preview-license"
+    echo "24333f8a63b6825ea9c5514f83c2829b004d1fee" >"$licenses_dir/android-sdk-license"
+    echo "84831b9409646a918e30573bab4c9c91346d8abd" >"$licenses_dir/android-sdk-preview-license"
 
     assert_file_exists "$licenses_dir/android-sdk-license"
     assert_file_exists "$licenses_dir/android-sdk-preview-license"
@@ -221,7 +221,7 @@ test_android_environment_variables() {
     local bashrc_file="$TEST_TEMP_DIR/etc/bashrc.d/50-android.sh"
 
     # Create mock bashrc content
-    command cat > "$bashrc_file" << 'EOF'
+    command cat >"$bashrc_file" <<'EOF'
 export ANDROID_HOME="/opt/android-sdk"
 export ANDROID_SDK_ROOT="/opt/android-sdk"
 export ANDROID_NDK_HOME="/opt/android-sdk/ndk/27.2.12479018"
@@ -263,7 +263,7 @@ test_android_aliases() {
     local bashrc_file="$TEST_TEMP_DIR/etc/bashrc.d/50-android.sh"
 
     # Create bashrc with aliases
-    command cat > "$bashrc_file" << 'EOF'
+    command cat >"$bashrc_file" <<'EOF'
 # Android SDK shortcuts
 alias sdk='sdkmanager'
 alias sdklist='sdkmanager --list'
@@ -318,7 +318,7 @@ test_java_prerequisite() {
     # Android requires Java, verify the check pattern
     local test_script="$TEST_TEMP_DIR/check-java.sh"
 
-    command cat > "$test_script" << 'EOF'
+    command cat >"$test_script" <<'EOF'
 #!/bin/bash
 if ! command -v java &>/dev/null; then
     echo "Java is required but not installed"
@@ -349,7 +349,7 @@ test_api_level_parsing() {
     local api_levels="34,35"
 
     # Parse comma-separated levels
-    IFS=',' read -ra levels <<< "$api_levels"
+    IFS=',' read -ra levels <<<"$api_levels"
 
     assert_equals "2" "${#levels[@]}" "Should have 2 API levels"
     assert_equals "34" "${levels[0]}" "First level should be 34"
@@ -361,7 +361,7 @@ test_android_verification() {
     local test_script="$TEST_TEMP_DIR/test-android.sh"
 
     # Create verification script
-    command cat > "$test_script" << 'EOF'
+    command cat >"$test_script" <<'EOF'
 #!/bin/bash
 echo "=== Android SDK Status ==="
 
@@ -408,7 +408,7 @@ test_android_helpers() {
     local bashrc_file="$TEST_TEMP_DIR/etc/bashrc.d/50-android.sh"
 
     # Create bashrc with helpers
-    command cat > "$bashrc_file" << 'EOF'
+    command cat >"$bashrc_file" <<'EOF'
 android-version() {
     echo "=== Android SDK Status ==="
     echo "ANDROID_HOME: ${ANDROID_HOME:-not set}"

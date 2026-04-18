@@ -52,7 +52,7 @@ teardown() {
 _create_skill() {
     local name="$1"
     mkdir -p "$FAKE_TEMPLATES/skills/$name"
-    command cat > "$FAKE_TEMPLATES/skills/$name/SKILL.md" <<EOF
+    command cat >"$FAKE_TEMPLATES/skills/$name/SKILL.md" <<EOF
 ---
 description: "Test skill $name"
 ---
@@ -65,20 +65,20 @@ _create_skill_with_subdir() {
     local name="$1"
     local subdir="${2:-schemas}"
     mkdir -p "$FAKE_TEMPLATES/skills/$name/$subdir"
-    command cat > "$FAKE_TEMPLATES/skills/$name/SKILL.md" <<EOF
+    command cat >"$FAKE_TEMPLATES/skills/$name/SKILL.md" <<EOF
 ---
 description: "Test skill $name"
 ---
 # $name
 EOF
-    echo '{}' > "$FAKE_TEMPLATES/skills/$name/$subdir/example.json"
+    echo '{}' >"$FAKE_TEMPLATES/skills/$name/$subdir/example.json"
 }
 
 # Helper: create a minimal agent template
 _create_agent() {
     local name="$1"
     mkdir -p "$FAKE_TEMPLATES/agents/$name"
-    command cat > "$FAKE_TEMPLATES/agents/$name/$name.md" <<EOF
+    command cat >"$FAKE_TEMPLATES/agents/$name/$name.md" <<EOF
 ---
 name: $name
 description: "Test agent $name"
@@ -91,7 +91,7 @@ EOF
 # This extracts the relevant logic without needing the claude CLI, auth checks,
 # plugin installation, or MCP configuration.
 _build_installer() {
-    command cat > "$TEST_TEMP_DIR/installer.sh" <<'INSTALLER'
+    command cat >"$TEST_TEMP_DIR/installer.sh" <<'INSTALLER'
 #!/bin/bash
 set -euo pipefail
 
@@ -269,7 +269,7 @@ test_already_installed_skills_skipped() {
     _build_installer
 
     # First run
-    bash "$TEST_TEMP_DIR/installer.sh" "$FAKE_TEMPLATES" "$FAKE_HOME/.claude" "$FAKE_FEATURES" > /dev/null
+    bash "$TEST_TEMP_DIR/installer.sh" "$FAKE_TEMPLATES" "$FAKE_HOME/.claude" "$FAKE_FEATURES" >/dev/null
 
     # Second run
     local output
@@ -286,7 +286,7 @@ test_already_installed_agents_skipped() {
     _build_installer
 
     # First run
-    bash "$TEST_TEMP_DIR/installer.sh" "$FAKE_TEMPLATES" "$FAKE_HOME/.claude" "$FAKE_FEATURES" > /dev/null
+    bash "$TEST_TEMP_DIR/installer.sh" "$FAKE_TEMPLATES" "$FAKE_HOME/.claude" "$FAKE_FEATURES" >/dev/null
 
     # Second run
     local output

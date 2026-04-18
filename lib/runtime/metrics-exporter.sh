@@ -32,7 +32,7 @@ METRICS_FILE="${METRICS_FILE:-}"
 
 # Container start time (for uptime calculation)
 if [ ! -f /tmp/container-start-time ]; then
-    date +%s > /tmp/container-start-time
+    date +%s >/tmp/container-start-time
 fi
 CONTAINER_START_TIME=$(command cat /tmp/container-start-time)
 
@@ -83,7 +83,7 @@ collect_build_metrics() {
                 total_errors=$((total_errors + errors))
                 total_warnings=$((total_warnings + warnings))
             fi
-        done < "$BUILD_LOG_DIR/master-summary.log"
+        done <"$BUILD_LOG_DIR/master-summary.log"
 
         # Total features installed
         metrics+="# HELP container_features_installed Total number of features installed\n"
@@ -205,7 +205,7 @@ collect_json_metrics() {
             metrics+="# HELP container_build_json_duration_seconds Build duration from JSON logs\n"
             metrics+="# TYPE container_build_json_duration_seconds gauge\n"
             metrics+="container_build_json_duration_seconds{feature=\"${feature}\",status=\"${status}\"} ${duration}\n"
-        done < "$json_summary"
+        done <"$json_summary"
     fi
 
     echo -e "$metrics"
@@ -247,10 +247,10 @@ serve_http() {
         echo "Using socat as HTTP server"
         while true; do
             # Generate metrics and store temporarily
-            generate_metrics > /tmp/metrics.prom
+            generate_metrics >/tmp/metrics.prom
 
             # Serve with socat (TCP server that responds to HTTP requests)
-            echo -e "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\n$(command cat /tmp/metrics.prom)" | \
+            echo -e "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\n$(command cat /tmp/metrics.prom)" |
                 socat -T 1 TCP-LISTEN:"${port}",reuseaddr,fork STDIO &
 
             sleep "$METRICS_REFRESH_INTERVAL"
@@ -259,11 +259,14 @@ serve_http() {
     elif command -v nc >/dev/null 2>&1; then
         echo "Using nc (netcat) as HTTP server"
         while true; do
-            generate_metrics > /tmp/metrics.prom
+            generate_metrics >/tmp/metrics.prom
 
             # Note: This is a simple implementation, may not work with all nc versions
             while true; do
-                (echo -e "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\n"; command cat /tmp/metrics.prom) | \
+                (
+                    echo -e "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\n"
+                    command cat /tmp/metrics.prom
+                ) |
                     nc -l -p "${port}" -q 1 || break
                 sleep 0.1
             done &
@@ -291,7 +294,7 @@ serve_file() {
     echo ""
 
     while true; do
-        generate_metrics > "${file}.tmp"
+        generate_metrics >"${file}.tmp"
         mv "${file}.tmp" "${file}"
         sleep "$METRICS_REFRESH_INTERVAL"
     done

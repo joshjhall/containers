@@ -54,7 +54,7 @@ echo -e "${BLUE}Step 1: Deploying canary version...${NC}"
 MAIN_REPLICAS=$(kubectl get deployment "$DEPLOYMENT_MAIN" -n "$NAMESPACE" \
     -o jsonpath='{.spec.replicas}' 2>/dev/null || echo "3")
 
-CANARY_REPLICAS=$(( (MAIN_REPLICAS * CANARY_PERCENTAGE + 99) / 100 ))
+CANARY_REPLICAS=$(((MAIN_REPLICAS * CANARY_PERCENTAGE + 99) / 100))
 if [ "$CANARY_REPLICAS" -lt 1 ]; then
     CANARY_REPLICAS=1
 fi
@@ -63,7 +63,7 @@ echo "Main replicas: $MAIN_REPLICAS"
 echo "Canary replicas: $CANARY_REPLICAS"
 
 # Create canary deployment
-command cat > /tmp/deployment-canary.yaml << EOF
+command cat >/tmp/deployment-canary.yaml <<EOF
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -168,7 +168,7 @@ echo ""
 echo -e "${BLUE}Step 3: Monitoring canary deployment...${NC}"
 echo ""
 
-MONITORING_DURATION="${MONITORING_DURATION:-300}"  # 5 minutes
+MONITORING_DURATION="${MONITORING_DURATION:-300}" # 5 minutes
 echo "Monitoring for ${MONITORING_DURATION} seconds..."
 echo "Press Ctrl+C to stop early and proceed to next step"
 
@@ -223,8 +223,8 @@ echo -e "${BLUE}Step 4: Analyzing canary metrics...${NC}"
 
 # Get canary pod restart count
 CANARY_RESTARTS=$(kubectl get pods -n "$NAMESPACE" -l "app=devcontainer,variant=canary" \
-    -o jsonpath='{range .items[*]}{.status.containerStatuses[0].restartCount}{"\n"}{end}' \
-    | awk '{s+=$1} END {print s}')
+    -o jsonpath='{range .items[*]}{.status.containerStatuses[0].restartCount}{"\n"}{end}' |
+    awk '{s+=$1} END {print s}')
 
 echo "Total canary restarts: ${CANARY_RESTARTS:-0}"
 
@@ -273,7 +273,7 @@ if [ "${AUTO_PROMOTE:-false}" != "true" ]; then
         1)
             PROMOTE=true
             ;;
-        2|3)
+        2 | 3)
             echo "Increasing canary traffic not fully implemented in this example"
             echo "Requires service mesh or manual replica adjustment"
             exit 0

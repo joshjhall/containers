@@ -38,7 +38,7 @@ while [[ $# -gt 0 ]]; do
             SPECIFIC_FEATURE="$2"
             shift 2
             ;;
-        --help|-h)
+        --help | -h)
             echo "Usage: $0 [--quick] [--verbose] [--feature NAME]"
             echo ""
             echo "Options:"
@@ -378,12 +378,12 @@ if [ -n "$SPECIFIC_FEATURE" ]; then
         python) check_python ;;
         node) check_node ;;
         rust) check_rust ;;
-        go|golang) check_golang ;;
+        go | golang) check_golang ;;
         ruby) check_ruby ;;
         r) check_r ;;
         java) check_java ;;
         docker) check_docker ;;
-        kubernetes|k8s) check_kubernetes ;;
+        kubernetes | k8s) check_kubernetes ;;
         custom) run_custom_checks ;;
         *)
             echo "Unknown feature: $SPECIFIC_FEATURE"

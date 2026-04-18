@@ -47,7 +47,7 @@ teardown() {
 
     # Unset test variables
     unset ANDROID_API_LEVELS ANDROID_HOME ANDROID_SDK_ROOT \
-          USERNAME USER_UID USER_GID HOME 2>/dev/null || true
+        USERNAME USER_UID USER_GID HOME 2>/dev/null || true
 }
 
 # Test: Android SDK prerequisite check
@@ -55,7 +55,7 @@ test_android_sdk_prerequisite() {
     # android-dev requires android.sh installation
     local test_script="$TEST_TEMP_DIR/check-android.sh"
 
-    command cat > "$test_script" << 'EOF'
+    command cat >"$test_script" <<'EOF'
 #!/bin/bash
 if [ -z "${ANDROID_HOME:-}" ]; then
     echo "ANDROID_HOME is not set"
@@ -170,7 +170,7 @@ test_android_dev_environment() {
     local bashrc_file="$TEST_TEMP_DIR/etc/bashrc.d/55-android-dev.sh"
 
     # Create mock bashrc content
-    command cat > "$bashrc_file" << 'EOF'
+    command cat >"$bashrc_file" <<'EOF'
 export ANDROID_AVD_HOME="/cache/android-avd"
 export ANDROID_EMULATOR_HOME="/cache/android-avd"
 export ANDROID_EMULATOR_USE_SYSTEM_LIBS=1
@@ -202,7 +202,7 @@ test_emulator_aliases() {
     local bashrc_file="$TEST_TEMP_DIR/etc/bashrc.d/55-android-dev.sh"
 
     # Create bashrc with aliases
-    command cat > "$bashrc_file" << 'EOF'
+    command cat >"$bashrc_file" <<'EOF'
 # Emulator shortcuts
 alias avdlist='avdmanager list avd'
 alias emlist='emulator -list-avds'
@@ -228,7 +228,7 @@ test_avd_helpers() {
     local bashrc_file="$TEST_TEMP_DIR/etc/bashrc.d/55-android-dev.sh"
 
     # Create bashrc with AVD helpers
-    command cat > "$bashrc_file" << 'EOF'
+    command cat >"$bashrc_file" <<'EOF'
 avd-create() {
     local name="${1:-test-avd}"
     local api_level="${2:-34}"
@@ -288,7 +288,7 @@ test_kvm_detection() {
     local bashrc_file="$TEST_TEMP_DIR/etc/bashrc.d/55-android-dev.sh"
 
     # Create bashrc with KVM check
-    command cat > "$bashrc_file" << 'EOF'
+    command cat >"$bashrc_file" <<'EOF'
 check-kvm() {
     echo "=== KVM Support Check ==="
 
@@ -329,7 +329,7 @@ test_logcat_helpers() {
     local bashrc_file="$TEST_TEMP_DIR/etc/bashrc.d/55-android-dev.sh"
 
     # Create bashrc with logcat helpers
-    command cat > "$bashrc_file" << 'EOF'
+    command cat >"$bashrc_file" <<'EOF'
 adb-logcat() {
     local filter="${1:-*:V}"
     adb logcat "$filter"
@@ -395,7 +395,7 @@ test_android_dev_verification() {
     local test_script="$TEST_TEMP_DIR/test-android-dev.sh"
 
     # Create verification script
-    command cat > "$test_script" << 'EOF'
+    command cat >"$test_script" <<'EOF'
 #!/bin/bash
 echo "=== Android Development Tools Status ==="
 
@@ -456,7 +456,7 @@ test_cicd_configuration() {
     local bashrc_file="$TEST_TEMP_DIR/etc/bashrc.d/55-android-dev.sh"
 
     # Create bashrc with CI/CD helper
-    command cat > "$bashrc_file" << 'EOF'
+    command cat >"$bashrc_file" <<'EOF'
 emulator-ci-start() {
     local avd_name="${1:-test-avd}"
     local timeout="${2:-120}"

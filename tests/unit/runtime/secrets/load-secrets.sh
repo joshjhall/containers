@@ -30,7 +30,7 @@ teardown() {
         command rm -rf "$TEST_TEMP_DIR"
     fi
     unset SECRET_LOADER_ENABLED SECRET_LOADER_PRIORITY SECRET_LOADER_FAIL_ON_ERROR \
-          TEST_TEMP_DIR 2>/dev/null || true
+        TEST_TEMP_DIR 2>/dev/null || true
 }
 
 run_test_with_setup() {

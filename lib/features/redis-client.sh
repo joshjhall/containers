@@ -61,7 +61,7 @@ log_command "Creating bashrc.d directory" \
 
 # Create system-wide Redis configuration (content in lib/bashrc/redis-client.sh)
 write_bashrc_content /etc/bashrc.d/60-redis.sh "Redis client configuration" \
-    < /tmp/build-scripts/features/lib/bashrc/redis-client.sh
+    </tmp/build-scripts/features/lib/bashrc/redis-client.sh
 
 log_command "Setting Redis bashrc script permissions" \
     chmod +x /etc/bashrc.d/60-redis.sh
@@ -103,7 +103,7 @@ log_message "Creating Redis startup script..."
 log_command "Creating container startup directory" \
     mkdir -p /etc/container/first-startup
 
-command cat > /etc/container/first-startup/20-redis-setup.sh << 'EOF'
+command cat >/etc/container/first-startup/20-redis-setup.sh <<'EOF'
 #!/bin/bash
 # Redis client configuration
 if [ ! -f ~/.redisclirc ] && [ -f ~/.rediscli.template ]; then
@@ -139,7 +139,7 @@ log_command "Setting Redis startup script permissions" \
 # ============================================================================
 log_message "Creating Redis verification script..."
 
-command cat > /usr/local/bin/test-redis << 'EOF'
+command cat >/usr/local/bin/test-redis <<'EOF'
 #!/bin/bash
 echo "=== Redis Client Status ==="
 if command -v redis-cli &> /dev/null; then

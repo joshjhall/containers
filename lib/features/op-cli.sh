@@ -58,7 +58,7 @@ case ${ARCH} in
     amd64)
         OP_ARCH="amd64"
         ;;
-    arm64|aarch64)
+    arm64 | aarch64)
         OP_ARCH="arm64"
         ;;
     armhf)
@@ -78,7 +78,7 @@ log_message "Configuring 1Password repository..."
 
 # Add 1Password GPG key for package verification
 log_message "Adding 1Password GPG key"
-retry_with_backoff curl -sS https://downloads.1password.com/linux/keys/1password.asc | \
+retry_with_backoff curl -sS https://downloads.1password.com/linux/keys/1password.asc |
     gpg --dearmor --output /usr/share/keyrings/1password-archive-keyring.gpg
 
 # Add 1Password repository
@@ -98,7 +98,7 @@ retry_with_backoff curl -sS https://downloads.1password.com/linux/debian/debsig/
 log_command "Creating debsig keyrings directory" \
     mkdir -p /usr/share/debsig/keyrings/AC2D62742012EA22
 log_message "Adding 1Password debsig GPG key"
-retry_with_backoff curl -sS https://downloads.1password.com/linux/keys/1password.asc | \
+retry_with_backoff curl -sS https://downloads.1password.com/linux/keys/1password.asc |
     gpg --dearmor --output /usr/share/debsig/keyrings/AC2D62742012EA22/debsig.gpg
 
 # ============================================================================
@@ -141,21 +141,21 @@ log_command "Creating bashrc.d directory" \
 
 # Create environment secrets loader (runs before 1Password integration)
 write_bashrc_content /etc/bashrc.d/65-env-secrets.sh "Environment secrets loader" \
-    < /tmp/build-scripts/features/lib/bashrc/env-secrets.sh
+    </tmp/build-scripts/features/lib/bashrc/env-secrets.sh
 
 log_command "Setting env-secrets bashrc script permissions" \
     chmod +x /etc/bashrc.d/65-env-secrets.sh
 
 # Create OP secrets cache loader (runs in ALL shells, including non-interactive)
 write_bashrc_content /etc/bashrc.d/66-op-secrets-cache.sh "OP secrets cache loader" \
-    < /tmp/build-scripts/features/lib/bashrc/op-secrets-cache.sh
+    </tmp/build-scripts/features/lib/bashrc/op-secrets-cache.sh
 
 log_command "Setting op-secrets-cache bashrc script permissions" \
     chmod +x /etc/bashrc.d/66-op-secrets-cache.sh
 
 # Create system-wide 1Password configuration (content in lib/bashrc/op-cli.sh)
 write_bashrc_content /etc/bashrc.d/70-1password.sh "1Password CLI configuration" \
-    < /tmp/build-scripts/features/lib/bashrc/op-cli.sh
+    </tmp/build-scripts/features/lib/bashrc/op-cli.sh
 
 log_command "Setting 1Password bashrc script permissions" \
     chmod +x /etc/bashrc.d/70-1password.sh
@@ -198,7 +198,7 @@ install -m 755 /tmp/build-scripts/features/lib/op-cli/test-1password.sh \
 log_message "Verifying 1Password CLI installation..."
 
 # Verify installation
-if command -v op &> /dev/null; then
+if command -v op &>/dev/null; then
     log_command "Checking 1Password CLI version" \
         op --version
 else

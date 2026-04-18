@@ -87,7 +87,7 @@ is_rate_limited() {
 
 # Helper function to check if network is available
 check_network() {
-    if ! curl -s --connect-timeout 5 https://www.google.com > /dev/null 2>&1; then
+    if ! curl -s --connect-timeout 5 https://www.google.com >/dev/null 2>&1; then
         return 1
     fi
     return 0
@@ -512,7 +512,7 @@ test_network_failure_returns_error() {
         export -f _curl_safe
 
         resolve_python_version "3.12" 2>/dev/null
-    ) > /dev/null 2>&1 || exit_code=$?
+    ) >/dev/null 2>&1 || exit_code=$?
 
     assert_not_equals "0" "$exit_code" "Partial version resolution fails when network is unavailable"
 }
@@ -550,7 +550,7 @@ MOCK_JSON
         export -f _curl_safe
 
         resolve_rust_version "stable" 2>/dev/null
-    ) > /dev/null 2>&1 || exit_code=$?
+    ) >/dev/null 2>&1 || exit_code=$?
 
     assert_not_equals "0" "$exit_code" "resolve_rust_version rejects non-numeric channel name 'stable'"
 }

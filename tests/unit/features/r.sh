@@ -17,9 +17,9 @@ SOURCE_FILE="$PROJECT_ROOT/lib/features/r.sh"
 
 test_script_exists_and_executable() {
     assert_file_exists "$SOURCE_FILE"
-    [ -x "$SOURCE_FILE" ] \
-        && assert_true 0 "r.sh is executable" \
-        || assert_true 1 "r.sh should be executable"
+    [ -x "$SOURCE_FILE" ] &&
+        assert_true 0 "r.sh is executable" ||
+        assert_true 1 "r.sh should be executable"
 }
 
 test_uses_strict_mode() {

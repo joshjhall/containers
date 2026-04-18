@@ -27,7 +27,7 @@ parse_bindfs_skip_paths() {
     declare -gA BINDFS_SKIP_MAP=()
     if [ -n "${BINDFS_SKIP_PATHS:-}" ]; then
         local _skip_arr _skip_path
-        IFS=',' read -ra _skip_arr <<< "$BINDFS_SKIP_PATHS"
+        IFS=',' read -ra _skip_arr <<<"$BINDFS_SKIP_PATHS"
         for _skip_path in "${_skip_arr[@]}"; do
             # Trim leading and trailing whitespace (spaces and tabs)
             _skip_path="${_skip_path#"${_skip_path%%[! $'\t']*}"}"
@@ -67,7 +67,7 @@ probe_mount_needs_fix() {
     # Auto mode: probe permissions before applying
     # Check 1: filesystem type indicates permission faking
     case "$mnt_fstype" in
-        fakeowner|virtiofs|grpcfuse|osxfs)
+        fakeowner | virtiofs | grpcfuse | osxfs)
             return 0
             ;;
     esac

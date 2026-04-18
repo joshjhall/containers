@@ -43,7 +43,7 @@ cv_validate_url() {
 # Validate file/directory path
 cv_validate_path() {
     local var_name="$1"
-    local must_exist="${2:-false}" # true if path must exist
+    local must_exist="${2:-false}"  # true if path must exist
     local must_be_dir="${3:-false}" # true if must be directory
     local value="${!var_name:-}"
 

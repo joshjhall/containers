@@ -20,7 +20,7 @@ fi
 # ============================================================================
 # Shell Aliases and Environment Setup
 # ============================================================================
-command cat >> /etc/bash.bashrc << 'EOF'
+command cat >>/etc/bash.bashrc <<'EOF'
 
 # ----------------------------------------------------------------------------
 # Security: Safe eval for tool initialization
@@ -129,7 +129,7 @@ EOF
 # ============================================================================
 # Bash-Specific Configuration
 # ============================================================================
-command cat >> /etc/bash.bashrc << 'EOF'
+command cat >>/etc/bash.bashrc <<'EOF'
 
 # ----------------------------------------------------------------------------
 # Shell Options - Improve bash behavior

@@ -152,7 +152,7 @@ if [ -d "/opt/detekt-cli-${DETEKT_VERSION}" ]; then
 fi
 
 # Create wrapper script for detekt
-command cat > /usr/local/bin/detekt << DETEKT_WRAPPER
+command cat >/usr/local/bin/detekt <<DETEKT_WRAPPER
 #!/bin/bash
 DETEKT_HOME="/opt/detekt"
 exec java -jar "\${DETEKT_HOME}/lib/detekt-cli-${DETEKT_VERSION}-all.jar" "\$@"
@@ -185,7 +185,7 @@ log_command "Creating bashrc.d directory" \
 
 # Kotlin dev tools configuration (content in lib/bashrc/kotlin-dev-config.sh)
 write_bashrc_content /etc/bashrc.d/55-kotlin-dev.sh "Kotlin dev tools configuration" \
-    < /tmp/build-scripts/features/lib/bashrc/kotlin-dev-config.sh
+    </tmp/build-scripts/features/lib/bashrc/kotlin-dev-config.sh
 
 log_command "Setting Kotlin dev bashrc permissions" \
     chmod +x /etc/bashrc.d/55-kotlin-dev.sh
@@ -197,7 +197,7 @@ log_message "Setting up Kotlin dev aliases and helpers..."
 
 # Kotlin dev aliases and helpers (content in lib/bashrc/kotlin-dev-aliases.sh)
 write_bashrc_content /etc/bashrc.d/55-kotlin-dev.sh "Kotlin dev aliases and helpers" \
-    < /tmp/build-scripts/features/lib/bashrc/kotlin-dev-aliases.sh
+    </tmp/build-scripts/features/lib/bashrc/kotlin-dev-aliases.sh
 
 # ============================================================================
 # Eclipse JDT Language Server (jdtls)
@@ -213,7 +213,7 @@ configure_jdtls_env
 # ============================================================================
 log_message "Creating Kotlin dev tools verification script..."
 
-command cat > /usr/local/bin/test-kotlin-dev << 'EOF'
+command cat >/usr/local/bin/test-kotlin-dev <<'EOF'
 #!/bin/bash
 echo "=== Kotlin Development Tools Status ==="
 

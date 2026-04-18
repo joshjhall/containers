@@ -42,9 +42,9 @@ get_frontmatter_field() {
     local file="$1"
     local field="$2"
     # Read between --- delimiters, find the field
-    /usr/bin/sed -n '/^---$/,/^---$/p' "$file" \
-        | command grep "^${field}:" \
-        | command sed "s/^${field}:[[:space:]]*//"
+    /usr/bin/sed -n '/^---$/,/^---$/p' "$file" |
+        command grep "^${field}:" |
+        command sed "s/^${field}:[[:space:]]*//"
 }
 
 # Check if a value is in a space-separated list
@@ -140,7 +140,7 @@ test_agent_tool_values() {
                     assert_true false "Agent $agent_name: invalid tool '$tool' (expected: $VALID_TOOLS)"
                 fi
             done
-        done <<< "$tools_val"
+        done <<<"$tools_val"
     done
 }
 

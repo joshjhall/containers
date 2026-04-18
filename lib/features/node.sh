@@ -129,7 +129,10 @@ fi
 # Verify using 4-tier system (GPG → Pinned → Published → Calculated)
 # This will try each tier in order and log which method succeeded
 # Exit codes: 0=verified, 1=failed, 2=unverified (TOFU fallback)
-verify_download_or_fail "language" "nodejs" "$NODE_VERSION" "$NODE_TARBALL" "$NODE_ARCH" || { log_feature_end; exit 1; }
+verify_download_or_fail "language" "nodejs" "$NODE_VERSION" "$NODE_TARBALL" "$NODE_ARCH" || {
+    log_feature_end
+    exit 1
+}
 
 log_command "Extracting Node.js to /usr/local" \
     tar -xJf "$NODE_TARBALL" --strip-components=1 -C /usr/local
@@ -210,7 +213,7 @@ log_command "Creating bashrc.d directory" \
 
 # Create system-wide Node.js configuration (content in lib/bashrc/node-config.sh)
 write_bashrc_content /etc/bashrc.d/30-node.sh "Node.js configuration" \
-    < /tmp/build-scripts/features/lib/bashrc/node-config.sh
+    </tmp/build-scripts/features/lib/bashrc/node-config.sh
 
 log_command "Setting Node.js bashrc script permissions" \
     chmod +x /etc/bashrc.d/30-node.sh
@@ -222,7 +225,7 @@ log_message "Setting up Node.js aliases and helpers..."
 
 # Add Node.js aliases and helpers (content in lib/bashrc/node-aliases.sh)
 write_bashrc_content /etc/bashrc.d/30-node.sh "Node.js aliases" \
-    < /tmp/build-scripts/features/lib/bashrc/node-aliases.sh
+    </tmp/build-scripts/features/lib/bashrc/node-aliases.sh
 
 # ============================================================================
 # Global Package Manager Configuration
@@ -265,7 +268,7 @@ log_message "Creating Node.js startup script..."
 log_command "Creating container startup directory" \
     mkdir -p /etc/container/first-startup
 
-command cat > /etc/container/first-startup/20-node-setup.sh << 'EOF'
+command cat >/etc/container/first-startup/20-node-setup.sh <<'EOF'
 #!/bin/bash
 # Node.js development environment setup
 
@@ -333,7 +336,7 @@ log_command "Setting Node.js startup script permissions" \
 # ============================================================================
 log_message "Creating Node.js verification script..."
 
-command cat > /usr/local/bin/test-node << 'EOF'
+command cat >/usr/local/bin/test-node <<'EOF'
 #!/bin/bash
 echo "=== Node.js Installation Status ==="
 if command -v node &> /dev/null; then

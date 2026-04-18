@@ -49,7 +49,10 @@ install_terragrunt() {
         fi
 
         # Run 4-tier verification
-        verify_download_or_fail "tool" "terragrunt" "$TERRAGRUNT_VERSION" "terragrunt" "$ARCH" || { cd /; return 1; }
+        verify_download_or_fail "tool" "terragrunt" "$TERRAGRUNT_VERSION" "terragrunt" "$ARCH" || {
+            cd /
+            return 1
+        }
 
         log_message "✓ Terragrunt v${TERRAGRUNT_VERSION} verified successfully"
 
@@ -106,7 +109,10 @@ install_terraform_docs() {
     fi
 
     # Run 4-tier verification
-    verify_download_or_fail "tool" "terraform-docs" "$TFDOCS_VERSION" "terraform-docs.tar.gz" "$ARCH" || { cd /; return 1; }
+    verify_download_or_fail "tool" "terraform-docs" "$TFDOCS_VERSION" "terraform-docs.tar.gz" "$ARCH" || {
+        cd /
+        return 1
+    }
 
     # Extract and install
     log_command "Extracting terraform-docs" \
@@ -163,7 +169,10 @@ install_tflint() {
     fi
 
     # Run 4-tier verification
-    verify_download_or_fail "tool" "tflint" "$TFLINT_VERSION" "$TFLINT_ARCHIVE" "$ARCH" || { cd /; return 1; }
+    verify_download_or_fail "tool" "tflint" "$TFLINT_VERSION" "$TFLINT_ARCHIVE" "$ARCH" || {
+        cd /
+        return 1
+    }
 
     # Extract zip file
     log_command "Extracting tflint" \
@@ -201,7 +210,7 @@ install_trivy() {
     # Install Trivy
     apt_install trivy
 
-    if command -v trivy &> /dev/null; then
+    if command -v trivy &>/dev/null; then
         log_message "✓ Trivy installed successfully via APT"
     else
         log_error "Trivy installation failed"

@@ -49,7 +49,7 @@ test_cron_startup_script() {
     local startup_script="$startup_dir/05-cron.sh"
 
     # Create startup script matching actual cron.sh output
-    command cat > "$startup_script" << 'EOF'
+    command cat >"$startup_script" <<'EOF'
 #!/bin/bash
 # Cron daemon status check
 #
@@ -105,7 +105,7 @@ test_cron_env_file() {
     local env_file="$TEST_TEMP_DIR/etc/container/cron-env"
 
     # Create environment file matching actual cron.sh output
-    command cat > "$env_file" << 'EOF'
+    command cat >"$env_file" <<'EOF'
 #!/bin/bash
 # Cron Environment File
 # Source this file at the start of cron job scripts
@@ -152,7 +152,7 @@ test_cron_bashrc() {
     local bashrc_file="$TEST_TEMP_DIR/etc/bashrc.d/10-cron.sh"
 
     # Create bashrc file matching actual cron.sh output
-    command cat > "$bashrc_file" << 'EOF'
+    command cat >"$bashrc_file" <<'EOF'
 # Cron Aliases and Functions
 set +u
 set +e
@@ -197,7 +197,7 @@ test_cron_verification_script() {
     local test_script="$TEST_TEMP_DIR/usr/local/bin/test-cron"
 
     # Create test script matching actual cron.sh output
-    command cat > "$test_script" << 'EOF'
+    command cat >"$test_script" <<'EOF'
 #!/bin/bash
 echo "=== Cron Status ==="
 
@@ -240,8 +240,8 @@ test_cron_startup_order() {
     local startup_script="$TEST_TEMP_DIR/etc/container/startup/05-cron.sh"
 
     # Create the script
-    echo "#!/bin/bash" > "$startup_script"
-    echo "# Cron startup" >> "$startup_script"
+    echo "#!/bin/bash" >"$startup_script"
+    echo "# Cron startup" >>"$startup_script"
     chmod +x "$startup_script"
 
     # Extract the number from the filename

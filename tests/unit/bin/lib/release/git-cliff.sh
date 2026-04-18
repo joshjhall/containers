@@ -29,8 +29,8 @@ test_ensure_git_cliff_already_installed() {
     # Create a mock git-cliff in PATH
     local mock_bin="$TEST_TEMP_DIR/bin"
     mkdir -p "$mock_bin"
-    echo '#!/bin/bash' > "$mock_bin/git-cliff"
-    echo 'echo "git-cliff 2.8.0"' >> "$mock_bin/git-cliff"
+    echo '#!/bin/bash' >"$mock_bin/git-cliff"
+    echo 'echo "git-cliff 2.8.0"' >>"$mock_bin/git-cliff"
     chmod +x "$mock_bin/git-cliff"
 
     # Run with mock in PATH
@@ -51,8 +51,8 @@ test_ensure_git_cliff_installs_via_cargo() {
     # Create mock cargo and ensure no git-cliff in PATH
     local mock_bin="$TEST_TEMP_DIR/bin"
     mkdir -p "$mock_bin"
-    echo '#!/bin/bash' > "$mock_bin/cargo"
-    echo 'echo "CARGO_INSTALL_CALLED $@" > '"$TEST_TEMP_DIR/cargo_log"'' >> "$mock_bin/cargo"
+    echo '#!/bin/bash' >"$mock_bin/cargo"
+    echo 'echo "CARGO_INSTALL_CALLED $@" > '"$TEST_TEMP_DIR/cargo_log"'' >>"$mock_bin/cargo"
     chmod +x "$mock_bin/cargo"
 
     # Run with mock cargo and no git-cliff
@@ -160,12 +160,12 @@ test_ensure_git_cliff_download_failure() {
     local mock_bin="$TEST_TEMP_DIR/bin"
     mkdir -p "$mock_bin"
 
-    echo '#!/bin/bash' > "$mock_bin/curl"
-    echo 'exit 1' >> "$mock_bin/curl"
+    echo '#!/bin/bash' >"$mock_bin/curl"
+    echo 'exit 1' >>"$mock_bin/curl"
     chmod +x "$mock_bin/curl"
 
-    echo '#!/bin/bash' > "$mock_bin/uname"
-    /usr/bin/cat >> "$mock_bin/uname" <<'SCRIPT'
+    echo '#!/bin/bash' >"$mock_bin/uname"
+    /usr/bin/cat >>"$mock_bin/uname" <<'SCRIPT'
 case "$1" in
     -s) echo "Linux" ;;
     -m) echo "x86_64" ;;
@@ -174,9 +174,9 @@ esac
 SCRIPT
     chmod +x "$mock_bin/uname"
 
-    echo '#!/bin/bash' > "$mock_bin/mktemp"
-    echo "echo $TEST_TEMP_DIR/cliff-dl" >> "$mock_bin/mktemp"
-    echo "mkdir -p $TEST_TEMP_DIR/cliff-dl" >> "$mock_bin/mktemp"
+    echo '#!/bin/bash' >"$mock_bin/mktemp"
+    echo "echo $TEST_TEMP_DIR/cliff-dl" >>"$mock_bin/mktemp"
+    echo "mkdir -p $TEST_TEMP_DIR/cliff-dl" >>"$mock_bin/mktemp"
     chmod +x "$mock_bin/mktemp"
 
     local exit_code=0

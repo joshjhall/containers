@@ -27,14 +27,14 @@ export PROJECT_ROOT
 export CONTAINERS_DIR="$PROJECT_ROOT"
 
 # Check if Docker is available
-if ! command -v docker &> /dev/null; then
+if ! command -v docker &>/dev/null; then
     echo -e "${RED}Error: Docker is not available${NC}"
     echo "Integration tests require Docker to build and run containers"
     exit 1
 fi
 
 # Check if Docker daemon is running
-if ! docker info &> /dev/null; then
+if ! docker info &>/dev/null; then
     echo -e "${RED}Error: Docker daemon is not running${NC}"
     exit 1
 fi

@@ -66,7 +66,7 @@ source /tmp/build-scripts/features/lib/install-jdtls.sh
 ANDROID_API_LEVELS="${ANDROID_API_LEVELS:-34,35}"
 
 # Parse API levels into array
-IFS=',' read -ra API_LEVELS_ARRAY <<< "$ANDROID_API_LEVELS"
+IFS=',' read -ra API_LEVELS_ARRAY <<<"$ANDROID_API_LEVELS"
 
 # Start logging
 log_feature_start "Android Dev Tools" "APIs=${ANDROID_API_LEVELS}"
@@ -182,7 +182,7 @@ export ANDROID_KVM_AVAILABLE="$KVM_AVAILABLE"
 log_message "Installing system images and sources..."
 
 for API_LEVEL in "${API_LEVELS_ARRAY[@]}"; do
-    API_LEVEL=$(echo "$API_LEVEL" | command tr -d ' ')  # Trim whitespace
+    API_LEVEL=$(echo "$API_LEVEL" | command tr -d ' ') # Trim whitespace
 
     log_message "Installing system image and sources for API ${API_LEVEL}..."
 
@@ -200,13 +200,13 @@ for API_LEVEL in "${API_LEVELS_ARRAY[@]}"; do
         else
             # Try default system image
             SYSTEM_IMAGE="system-images;android-${API_LEVEL};default;${SYSTEM_IMAGE_ABI}"
-            echo "y" | "$SDKMANAGER" --install "$SYSTEM_IMAGE" 2>/dev/null || \
+            echo "y" | "$SDKMANAGER" --install "$SYSTEM_IMAGE" 2>/dev/null ||
                 log_warning "Could not install system image for API ${API_LEVEL}"
         fi
     fi
 
     # Install sources for debugging
-    echo "y" | "$SDKMANAGER" --install "sources;android-${API_LEVEL}" 2>/dev/null || \
+    echo "y" | "$SDKMANAGER" --install "sources;android-${API_LEVEL}" 2>/dev/null ||
         log_warning "Could not install sources for API ${API_LEVEL}"
 done
 
@@ -253,7 +253,7 @@ log_command "Creating bashrc.d directory" \
 
 # Android dev tools configuration (content in lib/bashrc/android-dev-config.sh)
 write_bashrc_content /etc/bashrc.d/55-android-dev.sh "Android dev tools configuration" \
-    < /tmp/build-scripts/features/lib/bashrc/android-dev-config.sh
+    </tmp/build-scripts/features/lib/bashrc/android-dev-config.sh
 
 log_command "Setting Android dev bashrc permissions" \
     chmod +x /etc/bashrc.d/55-android-dev.sh
@@ -265,14 +265,14 @@ log_message "Setting up Android dev aliases and helpers..."
 
 # Android dev aliases and helpers (content in lib/bashrc/android-dev-aliases.sh)
 write_bashrc_content /etc/bashrc.d/55-android-dev.sh "Android dev aliases and helpers" \
-    < /tmp/build-scripts/features/lib/bashrc/android-dev-aliases.sh
+    </tmp/build-scripts/features/lib/bashrc/android-dev-aliases.sh
 
 # ============================================================================
 # Container Startup Scripts
 # ============================================================================
 log_message "Creating Android dev startup script..."
 
-command cat > /etc/container/first-startup/31-android-dev-setup.sh << 'EOF'
+command cat >/etc/container/first-startup/31-android-dev-setup.sh <<'EOF'
 #!/bin/bash
 # Android development environment setup
 
@@ -320,7 +320,7 @@ fi
 # ============================================================================
 log_message "Creating Android dev verification script..."
 
-command cat > /usr/local/bin/test-android-dev << 'EOF'
+command cat >/usr/local/bin/test-android-dev <<'EOF'
 #!/bin/bash
 echo "=== Android Development Tools Status ==="
 

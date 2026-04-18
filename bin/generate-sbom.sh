@@ -30,23 +30,23 @@ IMAGE_REF=""
 # Parse arguments
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --format|-f)
+        --format | -f)
             FORMAT="$2"
             shift 2
             ;;
-        --output-dir|-o)
+        --output-dir | -o)
             OUTPUT_DIR="$2"
             shift 2
             ;;
-        --scan|-s)
+        --scan | -s)
             SCAN_VULNS=true
             shift
             ;;
-        --verbose|-v)
+        --verbose | -v)
             VERBOSE=true
             shift
             ;;
-        --help|-h)
+        --help | -h)
             echo "Usage: $0 [OPTIONS] <image-ref>"
             echo ""
             echo "Generate SBOM for a container image."
@@ -123,7 +123,7 @@ generate_table() {
 
     # Show summary
     local pkg_count
-    pkg_count=$(/usr/bin/wc -l < "$output_file")
+    pkg_count=$(/usr/bin/wc -l <"$output_file")
     echo "  Packages found: $((pkg_count - 1))"
 }
 
@@ -143,7 +143,7 @@ scan_vulnerabilities() {
     local vuln_file="${OUTPUT_DIR}/vulnerabilities-${SAFE_NAME}.txt"
     echo ""
     echo "Scanning SBOM for vulnerabilities..."
-    grype "sbom:${sbom_file}" -o table > "$vuln_file" 2>&1 || true
+    grype "sbom:${sbom_file}" -o table >"$vuln_file" 2>&1 || true
     echo "  Written to: ${vuln_file}"
 
     # Show summary
@@ -164,10 +164,10 @@ echo "Output directory: ${OUTPUT_DIR}"
 echo ""
 
 case "$FORMAT" in
-    spdx-json|spdx)
+    spdx-json | spdx)
         generate_spdx
         ;;
-    cyclonedx-json|cyclonedx)
+    cyclonedx-json | cyclonedx)
         generate_cyclonedx
         ;;
     table)

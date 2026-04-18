@@ -117,7 +117,7 @@ init_test_framework() {
 
     # Set up test environment
     export TEST_MODE=1
-    export LOG_LEVEL="${LOG_LEVEL:-1}"  # WARN level by default in tests
+    export LOG_LEVEL="${LOG_LEVEL:-1}" # WARN level by default in tests
 
     # Timestamp for this test run
     export TEST_RUN_ID

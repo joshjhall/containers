@@ -75,7 +75,7 @@ mcp_registry_get_package_type() {
         kagi)
             echo "uvx"
             ;;
-        brave-search|fetch|memory|sequential-thinking|git|github|gitlab|sentry|perplexity)
+        brave-search | fetch | memory | sequential-thinking | git | github | gitlab | sentry | perplexity)
             echo "npm"
             ;;
         *)

@@ -121,7 +121,7 @@ test_verify_gpg_signature_missing_target() {
 
 # Test: verify_gpg_signature returns 1 when signature file doesn't exist
 test_verify_gpg_signature_missing_sig() {
-    echo "test content" > "$TEST_TEMP_DIR/testfile.tar.gz"
+    echo "test content" >"$TEST_TEMP_DIR/testfile.tar.gz"
 
     local exit_code=0
     bash -c "
@@ -144,7 +144,7 @@ test_verify_gpg_signature_missing_sig() {
 
 # Test: download_and_verify_gpg returns 1 when no signature URL provided
 test_download_and_verify_gpg_no_url() {
-    echo "test content" > "$TEST_TEMP_DIR/testfile.tar.gz"
+    echo "test content" >"$TEST_TEMP_DIR/testfile.tar.gz"
 
     local exit_code=0
     bash -c "
@@ -162,7 +162,7 @@ test_download_and_verify_gpg_no_url() {
 
 # Test: download_and_verify_gpg returns 1 when curl fails
 test_download_and_verify_gpg_curl_failure() {
-    echo "test content" > "$TEST_TEMP_DIR/testfile.tar.gz"
+    echo "test content" >"$TEST_TEMP_DIR/testfile.tar.gz"
 
     local exit_code=0
     bash -c "
@@ -189,15 +189,15 @@ test_download_and_verify_gpg_curl_failure() {
 # Test: verify_file_against_shasums returns 0 on matching checksum
 test_verify_file_against_shasums_match() {
     # Create a test file with known content
-    echo "hello world" > "$TEST_TEMP_DIR/testfile.bin"
+    echo "hello world" >"$TEST_TEMP_DIR/testfile.bin"
     # Compute its real sha256sum
     local real_checksum
     real_checksum=$(sha256sum "$TEST_TEMP_DIR/testfile.bin" | command awk '{print $1}')
 
     # Create a SHASUMS file with the correct checksum
-    echo "$real_checksum  testfile.bin" > "$TEST_TEMP_DIR/SHASUMS256.txt"
+    echo "$real_checksum  testfile.bin" >"$TEST_TEMP_DIR/SHASUMS256.txt"
     # Create a dummy signature file (will be cleaned up by the function)
-    echo "dummy sig" > "$TEST_TEMP_DIR/SHASUMS256.txt.sig"
+    echo "dummy sig" >"$TEST_TEMP_DIR/SHASUMS256.txt.sig"
 
     local exit_code=0
     bash -c "
@@ -217,11 +217,11 @@ test_verify_file_against_shasums_match() {
 
 # Test: verify_file_against_shasums returns 1 on mismatched checksum
 test_verify_file_against_shasums_mismatch() {
-    echo "hello world" > "$TEST_TEMP_DIR/testfile.bin"
+    echo "hello world" >"$TEST_TEMP_DIR/testfile.bin"
 
     # Create a SHASUMS file with a WRONG checksum
-    echo "0000000000000000000000000000000000000000000000000000000000000000  testfile.bin" > "$TEST_TEMP_DIR/SHASUMS256.txt"
-    echo "dummy sig" > "$TEST_TEMP_DIR/SHASUMS256.txt.sig"
+    echo "0000000000000000000000000000000000000000000000000000000000000000  testfile.bin" >"$TEST_TEMP_DIR/SHASUMS256.txt"
+    echo "dummy sig" >"$TEST_TEMP_DIR/SHASUMS256.txt.sig"
 
     local exit_code=0
     bash -c "
@@ -241,11 +241,11 @@ test_verify_file_against_shasums_mismatch() {
 
 # Test: verify_file_against_shasums returns 1 when filename not in shasums file
 test_verify_file_against_shasums_missing_entry() {
-    echo "hello world" > "$TEST_TEMP_DIR/testfile.bin"
+    echo "hello world" >"$TEST_TEMP_DIR/testfile.bin"
 
     # Create a SHASUMS file that doesn't include our file
-    echo "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890  otherfile.bin" > "$TEST_TEMP_DIR/SHASUMS256.txt"
-    echo "dummy sig" > "$TEST_TEMP_DIR/SHASUMS256.txt.sig"
+    echo "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890  otherfile.bin" >"$TEST_TEMP_DIR/SHASUMS256.txt"
+    echo "dummy sig" >"$TEST_TEMP_DIR/SHASUMS256.txt.sig"
 
     local exit_code=0
     bash -c "
@@ -272,7 +272,7 @@ test_import_gpg_keys_keyring_dir_format_detected() {
     # Create a keyring directory structure matching Node.js style
     mkdir -p "$TEST_TEMP_DIR/keyring/testlang/keyring"
     # Create a fake pubring.kbx (gpg will fail, but the path detection should work)
-    echo "fake keyring" > "$TEST_TEMP_DIR/keyring/testlang/keyring/pubring.kbx"
+    echo "fake keyring" >"$TEST_TEMP_DIR/keyring/testlang/keyring/pubring.kbx"
 
     # The test checks that the code attempts the keyring path (it will fail
     # because gpg can't read a fake keyring, but it should get past the path check)

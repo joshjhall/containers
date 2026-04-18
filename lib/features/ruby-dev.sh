@@ -54,7 +54,7 @@ apt_install \
     libpq-dev \
     libmariadb-dev \
     libsqlite3-dev \
-    nodejs  # Some tools need a JS runtime
+    nodejs # Some tools need a JS runtime
 
 # ============================================================================
 # Ruby Development Tools Installation
@@ -129,7 +129,7 @@ log_command "Creating bashrc.d directory" \
 
 # Create Ruby dev tools configuration (content in lib/bashrc/ruby-dev.sh)
 write_bashrc_content /etc/bashrc.d/45-ruby-dev.sh "Ruby development tools configuration" \
-    < /tmp/build-scripts/features/lib/bashrc/ruby-dev.sh
+    </tmp/build-scripts/features/lib/bashrc/ruby-dev.sh
 
 log_command "Setting Ruby dev bashrc script permissions" \
     chmod +x /etc/bashrc.d/45-ruby-dev.sh
@@ -158,13 +158,13 @@ load_ruby_config_template() {
 
 # RSpec configuration from template
 log_message "Creating .rspec from template"
-load_ruby_config_template "config/rspec.tmpl" > /etc/ruby-dev-templates/.rspec \
-    || log_warning "Template missing: rspec.tmpl"
+load_ruby_config_template "config/rspec.tmpl" >/etc/ruby-dev-templates/.rspec ||
+    log_warning "Template missing: rspec.tmpl"
 
 # Rubocop configuration from template
 log_message "Creating .rubocop.yml from template"
-load_ruby_config_template "config/rubocop.yml.tmpl" > /etc/ruby-dev-templates/.rubocop.yml \
-    || log_warning "Template missing: rubocop.yml.tmpl"
+load_ruby_config_template "config/rubocop.yml.tmpl" >/etc/ruby-dev-templates/.rubocop.yml ||
+    log_warning "Template missing: rubocop.yml.tmpl"
 
 # ============================================================================
 # Container Startup Scripts
@@ -174,7 +174,7 @@ echo "=== Creating ruby-dev startup script ==="
 log_command "Creating startup directory" \
     mkdir -p /etc/container/first-startup
 
-command cat > /etc/container/first-startup/20-ruby-dev-setup.sh << 'EOF'
+command cat >/etc/container/first-startup/20-ruby-dev-setup.sh <<'EOF'
 #!/bin/bash
 # Ruby development tools configuration
 if command -v ruby &> /dev/null; then

@@ -44,6 +44,6 @@ map_arch_or_skip() {
     case "$arch" in
         amd64) echo "$amd64_val" ;;
         arm64) echo "$arm64_val" ;;
-        *)     echo "" ;;
+        *) echo "" ;;
     esac
 }

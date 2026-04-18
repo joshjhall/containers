@@ -28,9 +28,9 @@ fi
 
 # Authentication events
 audit_auth() {
-    local action="$1"      # login, logout, failed_login, mfa_challenge
+    local action="$1" # login, logout, failed_login, mfa_challenge
     local user="$2"
-    local result="$3"      # success, failure
+    local result="$3" # success, failure
     local details="$4"
 
     local extra_data
@@ -48,10 +48,10 @@ audit_auth() {
 
 # Authorization/access control events
 audit_authz() {
-    local resource="$1"    # Resource being accessed
-    local action="$2"      # read, write, delete, execute
+    local resource="$1" # Resource being accessed
+    local action="$2"   # read, write, delete, execute
     local user="$3"
-    local result="$4"      # granted, denied
+    local result="$4" # granted, denied
     local reason="$5"
 
     local extra_data
@@ -69,8 +69,8 @@ audit_authz() {
 
 # Data access events (for sensitive data tracking)
 audit_data_access() {
-    local data_type="$1"   # pii, phi, financial, credentials
-    local operation="$2"   # read, write, delete, export
+    local data_type="$1" # pii, phi, financial, credentials
+    local operation="$2" # read, write, delete, export
     local user="$3"
     local record_count="$4"
     local purpose="$5"
@@ -111,10 +111,10 @@ audit_config() {
 
 # Security events (anomalies, violations, incidents)
 audit_security() {
-    local event_type="$1"  # anomaly, violation, incident, threat
-    local severity="$2"    # low, medium, high, critical
+    local event_type="$1" # anomaly, violation, incident, threat
+    local severity="$2"   # low, medium, high, critical
     local description="$3"
-    local indicators="$4"  # JSON object with IOCs
+    local indicators="$4" # JSON object with IOCs
 
     local extra_data
     extra_data="{\"event_type\":\"$(_json_escape "$event_type")\",\"severity\":\"$(_json_escape "$severity")\""
@@ -131,8 +131,8 @@ audit_security() {
 
 # Network events
 audit_network() {
-    local event_type="$1"  # connection, blocked, dns, tls
-    local direction="$2"   # inbound, outbound
+    local event_type="$1" # connection, blocked, dns, tls
+    local direction="$2"  # inbound, outbound
     local src_ip="$3"
     local dst_ip="$4"
     local dst_port="$5"
@@ -151,7 +151,7 @@ audit_network() {
 
 # File integrity events
 audit_file() {
-    local event_type="$1"  # created, modified, deleted, permission_change
+    local event_type="$1" # created, modified, deleted, permission_change
     local file_path="$2"
     local user="$3"
     local checksum="$4"
@@ -168,7 +168,7 @@ audit_file() {
 
 # Process events
 audit_process() {
-    local event_type="$1"  # started, stopped, killed, crashed
+    local event_type="$1" # started, stopped, killed, crashed
     local process_name="$2"
     local pid="$3"
     local exit_code="$4"

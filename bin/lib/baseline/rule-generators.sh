@@ -34,7 +34,7 @@ generate_falco_tuning() {
     local namespace
     namespace=$(jq -r '.metadata.namespace' "$baseline_file")
 
-    command cat > "$output_file" << EOF
+    command cat >"$output_file" <<EOF
 # Falco Rule Tuning - Generated from Baseline
 #
 # Namespace: ${namespace}
@@ -88,7 +88,7 @@ generate_alert_rules() {
     warn_network=$(jq -r '.thresholds.network_events.warning' "$baseline_file")
     crit_network=$(jq -r '.thresholds.network_events.critical' "$baseline_file")
 
-    command cat > "$output_file" << EOF
+    command cat >"$output_file" <<EOF
 # Anomaly Detection Alert Rules - Generated from Baseline
 #
 # Namespace: ${namespace}

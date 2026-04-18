@@ -49,7 +49,7 @@ while IFS= read -r file; do
 
     # --- Category: expired-date ---
     # Match YYYY-MM-DD and YYYY/MM/DD patterns
-    /usr/bin/grep -nE '\b(20[0-9]{2})[-/](0[1-9]|1[0-2])[-/](0[1-9]|[12][0-9]|3[01])\b' "$file" 2>/dev/null | \
+    /usr/bin/grep -nE '\b(20[0-9]{2})[-/](0[1-9]|1[0-2])[-/](0[1-9]|[12][0-9]|3[01])\b' "$file" 2>/dev/null |
         while IFS=: read -r line_num content; do
             # Extract year and month from the match
             year=$(/usr/bin/echo "$content" | /usr/bin/grep -oE '20[0-9]{2}' | /usr/bin/head -1)
@@ -69,7 +69,7 @@ while IFS= read -r file; do
 
     # --- Category: outdated-reference ---
     # Version references (vN.N.N or N.N.N patterns in doc context)
-    /usr/bin/grep -nE '\bv?[0-9]+\.[0-9]+\.[0-9]+\b' "$file" 2>/dev/null | \
+    /usr/bin/grep -nE '\bv?[0-9]+\.[0-9]+\.[0-9]+\b' "$file" 2>/dev/null |
         while IFS=: read -r line_num content; do
             # Skip lines that are clearly changelog entries or release notes
             case "$content" in
@@ -85,7 +85,7 @@ while IFS= read -r file; do
 
     # --- Category: stale-comment ---
     # Staleness markers: TODO/FIXME/HACK combined with staleness keywords
-    /usr/bin/grep -niE '(TODO|FIXME|XXX|HACK|WORKAROUND).*(updat|outdat|stale|obsolete|deprecat|remov|old |was )' "$file" 2>/dev/null | \
+    /usr/bin/grep -niE '(TODO|FIXME|XXX|HACK|WORKAROUND).*(updat|outdat|stale|obsolete|deprecat|remov|old |was )' "$file" 2>/dev/null |
         while IFS=: read -r line_num content; do
             evidence=$(/usr/bin/printf '%.80s' "$content")
             /usr/bin/printf '%s\t%s\t%s\t%s\t%s\n' \
@@ -95,8 +95,8 @@ while IFS= read -r file; do
 
     # --- Category: outdated-reference ---
     # Broken-looking URLs (common patterns for dead links in docs)
-    /usr/bin/grep -nE 'https?://[^ )>"]+' "$file" 2>/dev/null | \
-        /usr/bin/grep -iE '(deprecated|removed|old|legacy|archive|sunset)' | \
+    /usr/bin/grep -nE 'https?://[^ )>"]+' "$file" 2>/dev/null |
+        /usr/bin/grep -iE '(deprecated|removed|old|legacy|archive|sunset)' |
         while IFS=: read -r line_num content; do
             evidence=$(/usr/bin/printf '%.80s' "$content")
             /usr/bin/printf '%s\t%s\t%s\t%s\t%s\n' \
@@ -104,4 +104,4 @@ while IFS= read -r file; do
                 "URL with deprecation indicators: ${evidence}" "HIGH"
         done || true
 
-done < "$FILE_LIST"
+done <"$FILE_LIST"

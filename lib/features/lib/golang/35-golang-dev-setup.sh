@@ -1,6 +1,6 @@
 #!/bin/bash
 # Go development tools configuration
-if command -v go &> /dev/null; then
+if command -v go &>/dev/null; then
     echo "=== Go Development Tools ==="
 
     # Check for .golangci.yml

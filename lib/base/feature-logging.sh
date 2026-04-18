@@ -87,7 +87,7 @@ log_feature_start() {
     } | command tee "$CURRENT_LOG_FILE"
 
     # Clear error file
-    true > "$CURRENT_ERROR_FILE"
+    true >"$CURRENT_ERROR_FILE"
 
     # Initialize JSON logging if enabled
     if [ "${ENABLE_JSON_LOGGING:-false}" = "true" ] && command -v json_log_init >/dev/null 2>&1; then
@@ -170,8 +170,8 @@ log_command() {
         local warn_pattern="(WARNING|Warning|warning|WARN|Warn|warn)"
 
         # Append matching lines to error file
-        command tail -n +"$start_line" "$CURRENT_LOG_FILE" | command grep -E "$error_pattern" >> "$CURRENT_ERROR_FILE" 2>/dev/null || true
-        command tail -n +"$start_line" "$CURRENT_LOG_FILE" | command grep -E "$warn_pattern" >> "$CURRENT_ERROR_FILE" 2>/dev/null || true
+        command tail -n +"$start_line" "$CURRENT_LOG_FILE" | command grep -E "$error_pattern" >>"$CURRENT_ERROR_FILE" 2>/dev/null || true
+        command tail -n +"$start_line" "$CURRENT_LOG_FILE" | command grep -E "$warn_pattern" >>"$CURRENT_ERROR_FILE" 2>/dev/null || true
 
         # Count new errors and warnings
         local new_errors
@@ -236,13 +236,13 @@ log_feature_end() {
     } | command tee "$CURRENT_SUMMARY_FILE"
 
     # Append summary to main log
-    echo "" >> "$CURRENT_LOG_FILE"
-    command cat "$CURRENT_SUMMARY_FILE" >> "$CURRENT_LOG_FILE"
+    echo "" >>"$CURRENT_LOG_FILE"
+    command cat "$CURRENT_SUMMARY_FILE" >>"$CURRENT_LOG_FILE"
 
     # Create a master summary file
     {
         echo "$CURRENT_FEATURE: $ERROR_COUNT errors, $WARNING_COUNT warnings (${total_duration}s)"
-    } >> "$BUILD_LOG_DIR/master-summary.log"
+    } >>"$BUILD_LOG_DIR/master-summary.log"
 
     # Log feature completion to JSON if enabled
     if [ "${ENABLE_JSON_LOGGING:-false}" = "true" ] && command -v json_log_feature_end >/dev/null 2>&1; then

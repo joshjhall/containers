@@ -11,14 +11,14 @@
 
 # Function to install git-cliff if not available
 ensure_git_cliff() {
-    if command -v git-cliff &> /dev/null; then
+    if command -v git-cliff &>/dev/null; then
         return 0
     fi
 
     echo -e "${BLUE}git-cliff not found, installing...${NC}"
 
     # Try to install via cargo if available
-    if command -v cargo &> /dev/null; then
+    if command -v cargo &>/dev/null; then
         cargo install git-cliff
         return $?
     fi
@@ -33,7 +33,7 @@ ensure_git_cliff() {
     # Map architecture
     case "$arch" in
         x86_64) arch="x86_64" ;;
-        aarch64|arm64) arch="aarch64" ;;
+        aarch64 | arm64) arch="aarch64" ;;
         *)
             echo -e "${RED}Unsupported architecture: $arch${NC}"
             return 1

@@ -3,8 +3,8 @@
 # ----------------------------------------------------------------------------
 
 # Error protection for interactive shells
-set +u  # Don't error on unset variables
-set +e  # Don't exit on errors
+set +u # Don't error on unset variables
+set +e # Don't exit on errors
 
 # Check if we're in an interactive shell
 if [[ $- != *i* ]]; then
@@ -12,16 +12,15 @@ if [[ $- != *i* ]]; then
     return 0
 fi
 
-
 # ----------------------------------------------------------------------------
 # SQLite Aliases - Common database operations
 # ----------------------------------------------------------------------------
 alias sqlite='sqlite3'
 alias sqlite-version='sqlite3 --version'
-alias sqlite-memory='sqlite3 :memory:'  # Start with in-memory database
-alias sqlite-csv='sqlite3 -csv'         # CSV output mode
-alias sqlite-json='sqlite3 -json'       # JSON output mode
-alias sqlite-pretty='sqlite3 -column -header'  # Pretty table output
+alias sqlite-memory='sqlite3 :memory:'        # Start with in-memory database
+alias sqlite-csv='sqlite3 -csv'               # CSV output mode
+alias sqlite-json='sqlite3 -json'             # JSON output mode
+alias sqlite-pretty='sqlite3 -column -header' # Pretty table output
 
 # ----------------------------------------------------------------------------
 # sqlite-create - Create a new SQLite database with basic structure
@@ -46,7 +45,7 @@ sqlite-create() {
     fi
 
     echo "Creating SQLite database: $dbfile"
-    sqlite3 "$dbfile" << 'SQL'
+    sqlite3 "$dbfile" <<'SQL'
 -- Enable foreign keys
 PRAGMA foreign_keys = ON;
 
@@ -124,7 +123,7 @@ sqlite-export-csv() {
     fi
 
     echo "Exporting to $output..."
-    sqlite3 -csv -header "$database" "$query" > "$output" && echo "Export complete: $output"
+    sqlite3 -csv -header "$database" "$query" >"$output" && echo "Export complete: $output"
 }
 
 # ----------------------------------------------------------------------------
@@ -154,7 +153,7 @@ sqlite-import-csv() {
     fi
 
     echo "Importing '$csvfile' into table '$table'..."
-    sqlite3 "$database" << EOF
+    sqlite3 "$database" <<EOF
 .mode csv
 .import "$csvfile" "$table"
 SELECT COUNT(*) || ' rows imported' FROM "$table";
@@ -186,7 +185,7 @@ sqlite-analyze() {
     echo "Analyzing database: $database"
     echo "=============================="
 
-    sqlite3 -column -header "$database" << 'EOF'
+    sqlite3 -column -header "$database" <<'EOF'
 -- File size
 SELECT 'File size' as metric,
        printf('%.2f MB', page_count * page_size / 1024.0 / 1024.0) as value
@@ -213,7 +212,6 @@ EOF
 
 # SQLite configuration
 export SQLITE_HISTORY="$HOME/.sqlite_history"
-
 
 # Note: We leave set +u and set +e in place for interactive shells
 # to prevent errors with undefined variables or failed commands

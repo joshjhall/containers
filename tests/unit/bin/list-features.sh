@@ -175,12 +175,12 @@ test_category_assignment() {
 
 # Setup function
 setup() {
-    :  # No setup needed
+    : # No setup needed
 }
 
 # Teardown function
 teardown() {
-    :  # No teardown needed
+    : # No teardown needed
 }
 
 # Run test with setup/teardown

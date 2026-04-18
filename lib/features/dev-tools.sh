@@ -212,7 +212,7 @@ log_command "Creating bashrc.d directory" \
 
 # Create system-wide dev tools configuration (content in lib/bashrc/dev-tools.sh)
 write_bashrc_content /etc/bashrc.d/80-dev-tools.sh "dev tools bashrc configuration" \
-    < /tmp/build-scripts/features/lib/bashrc/dev-tools.sh
+    </tmp/build-scripts/features/lib/bashrc/dev-tools.sh
 
 # ============================================================================
 # Binary Tool Installations
@@ -250,11 +250,11 @@ persist_feature_flags
 # ============================================================================
 log_message "Configuring git to use delta..."
 
-command cat /tmp/build-scripts/features/lib/dev-tools/gitconfig-delta >> /etc/gitconfig
+command cat /tmp/build-scripts/features/lib/dev-tools/gitconfig-delta >>/etc/gitconfig
 
 # Add tool-specific configurations to bashrc.d (content in lib/bashrc/dev-tools-extras.sh)
 write_bashrc_content /etc/bashrc.d/80-dev-tools.sh "tool-specific configurations" \
-    < /tmp/build-scripts/features/lib/bashrc/dev-tools-extras.sh
+    </tmp/build-scripts/features/lib/bashrc/dev-tools-extras.sh
 
 # ============================================================================
 # Cache Configuration
@@ -269,7 +269,7 @@ create_cache_directories "${DEV_TOOLS_CACHE}"
 
 # Configure tools to use cache where applicable (content in lib/bashrc/dev-tools-cache.sh)
 write_bashrc_content /etc/bashrc.d/80-dev-tools.sh "cache configuration" \
-    < /tmp/build-scripts/features/lib/bashrc/dev-tools-cache.sh
+    </tmp/build-scripts/features/lib/bashrc/dev-tools-cache.sh
 
 # Make bashrc.d script executable to match other scripts in the directory
 log_command "Setting dev-tools bashrc script permissions" \

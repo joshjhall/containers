@@ -94,9 +94,9 @@ load_secrets_from_docker() {
     local secret_files=()
     if [ -n "${DOCKER_SECRET_NAMES:-}" ]; then
         # Specific secrets requested
-        IFS=',' read -ra secret_names <<< "$DOCKER_SECRET_NAMES"
+        IFS=',' read -ra secret_names <<<"$DOCKER_SECRET_NAMES"
         for secret_name in "${secret_names[@]}"; do
-            secret_name=$(echo "$secret_name" | xargs)  # Trim whitespace
+            secret_name=$(echo "$secret_name" | xargs) # Trim whitespace
             if [ -n "$secret_name" ]; then
                 # Validate secret name to prevent path traversal
                 if ! [[ "$secret_name" =~ ^[a-zA-Z0-9._-]+$ ]]; then

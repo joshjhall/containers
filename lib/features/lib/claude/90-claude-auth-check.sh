@@ -17,7 +17,7 @@ __claude_auth_prompt_check() {
     [ -f "$marker_file" ] && return 0
 
     # Increment counter and check every 5th prompt
-    __CLAUDE_AUTH_CHECK_COUNTER=$(( (__CLAUDE_AUTH_CHECK_COUNTER + 1) % 5 ))
+    __CLAUDE_AUTH_CHECK_COUNTER=$(((__CLAUDE_AUTH_CHECK_COUNTER + 1) % 5))
     [ "$__CLAUDE_AUTH_CHECK_COUNTER" -ne 0 ] && return 0
 
     # Check for authentication (token or OAuth)

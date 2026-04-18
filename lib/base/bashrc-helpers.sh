@@ -23,7 +23,7 @@ fi
 
 # Function to add standard safety headers to bashrc.d scripts
 add_bashrc_safety_header() {
-    command cat << 'BASHRC_SAFETY_HEADER'
+    command cat <<'BASHRC_SAFETY_HEADER'
 # Error protection for interactive shells
 set +u  # Don't error on unset variables
 set +e  # Don't exit on errors
@@ -38,7 +38,7 @@ BASHRC_SAFETY_HEADER
 
 # Function to add standard safety footer to bashrc.d scripts
 add_bashrc_safety_footer() {
-    command cat << 'BASHRC_SAFETY_FOOTER'
+    command cat <<'BASHRC_SAFETY_FOOTER'
 # Note: We leave set +u and set +e in place for interactive shells
 # to prevent errors with undefined variables or failed commands
 BASHRC_SAFETY_FOOTER
@@ -98,14 +98,14 @@ write_bashrc_content() {
     if [ -f "$filepath" ] && grep -q "^${start_marker}$" "$filepath" 2>/dev/null; then
         echo "✓ Content '$description' already exists in $filepath (skipping)"
         # Consume the heredoc input to prevent it from going to stdout
-        $cat_cmd > /dev/null
+        $cat_cmd >/dev/null
         return 0
     fi
 
     # Capture content to temp file
     local tmpfile
     tmpfile=$(mktemp)
-    $cat_cmd > "$tmpfile" || {
+    $cat_cmd >"$tmpfile" || {
         echo "✗ Failed to capture content for $filepath" >&2
         command rm -f "$tmpfile"
         return 1
@@ -125,8 +125,8 @@ write_bashrc_content() {
         echo "$start_marker"
         $cat_cmd "$tmpfile"
         echo "$end_marker"
-        echo ""  # Blank line for readability
-    } > "$marked_content"
+        echo "" # Blank line for readability
+    } >"$marked_content"
 
     # Clean up input temp file
     command rm -f "$tmpfile"
@@ -144,7 +144,7 @@ write_bashrc_content() {
         echo "✓ Created $description at $filepath"
     else
         # Append to existing file
-        $cat_cmd "$marked_content" >> "$filepath" || {
+        $cat_cmd "$marked_content" >>"$filepath" || {
             echo "✗ Failed to append to $filepath" >&2
             command rm -f "$marked_content"
             return 1
@@ -184,7 +184,7 @@ update_bashrc_content() {
     # Capture new content
     local tmpfile
     tmpfile=$(mktemp)
-    command cat > "$tmpfile" || {
+    command cat >"$tmpfile" || {
         echo "✗ Failed to capture content for $filepath" >&2
         command rm -f "$tmpfile"
         return 1
@@ -208,7 +208,7 @@ update_bashrc_content() {
             next
         }
         printing { print }
-    ' "$filepath" > "$newfile"
+    ' "$filepath" >"$newfile"
 
     # Atomic replace
     chmod 755 "$newfile"

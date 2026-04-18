@@ -59,7 +59,7 @@ test_no_args_exits_0() {
 # Test: Already executable file → exit 0 (no fix needed)
 test_already_executable_exits_0() {
     # Create a script and add it with executable permission
-    echo '#!/bin/bash' > "$TEST_REPO/already-exec.sh"
+    echo '#!/bin/bash' >"$TEST_REPO/already-exec.sh"
     chmod +x "$TEST_REPO/already-exec.sh"
     git -C "$TEST_REPO" add "$TEST_REPO/already-exec.sh"
     git -C "$TEST_REPO" update-index --chmod=+x "$TEST_REPO/already-exec.sh"
@@ -74,7 +74,7 @@ test_already_executable_exits_0() {
 # Test: Non-executable .sh file → outputs "Fixed" and exits 1
 test_non_executable_outputs_fixed() {
     # Create a script and add it WITHOUT executable permission
-    echo '#!/bin/bash' > "$TEST_REPO/needs-fix.sh"
+    echo '#!/bin/bash' >"$TEST_REPO/needs-fix.sh"
     chmod 644 "$TEST_REPO/needs-fix.sh"
     git -C "$TEST_REPO" add "$TEST_REPO/needs-fix.sh"
 
@@ -90,7 +90,7 @@ test_non_executable_outputs_fixed() {
 # Test: File not in git index → exit 0 (nothing to fix)
 test_file_not_in_index_exits_0() {
     # Create a file but don't git-add it
-    echo '#!/bin/bash' > "$TEST_REPO/untracked.sh"
+    echo '#!/bin/bash' >"$TEST_REPO/untracked.sh"
 
     local exit_code=0
     local output
@@ -102,12 +102,12 @@ test_file_not_in_index_exits_0() {
 # Test: Exit code is 1 when files were fixed (pre-commit convention)
 test_exit_code_1_when_fixed() {
     # Add multiple files: one needs fixing, one is fine
-    echo '#!/bin/bash' > "$TEST_REPO/ok.sh"
+    echo '#!/bin/bash' >"$TEST_REPO/ok.sh"
     chmod +x "$TEST_REPO/ok.sh"
     git -C "$TEST_REPO" add "$TEST_REPO/ok.sh"
     git -C "$TEST_REPO" update-index --chmod=+x "$TEST_REPO/ok.sh"
 
-    echo '#!/bin/bash' > "$TEST_REPO/bad.sh"
+    echo '#!/bin/bash' >"$TEST_REPO/bad.sh"
     chmod 644 "$TEST_REPO/bad.sh"
     git -C "$TEST_REPO" add "$TEST_REPO/bad.sh"
 

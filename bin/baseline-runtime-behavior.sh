@@ -32,8 +32,14 @@ RATE_WINDOW_SECONDS="${RATE_WINDOW_SECONDS:-300}"
 
 # Colors
 # shellcheck source=lib/shared/colors.sh
-source "${SCRIPT_DIR}/../lib/shared/colors.sh" 2>/dev/null \
-    || { RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; BLUE='\033[0;34m'; NC='\033[0m'; }
+source "${SCRIPT_DIR}/../lib/shared/colors.sh" 2>/dev/null ||
+    {
+        RED='\033[0;31m'
+        GREEN='\033[0;32m'
+        YELLOW='\033[1;33m'
+        BLUE='\033[0;34m'
+        NC='\033[0m'
+    }
 
 log() {
     local level="$1"
@@ -47,7 +53,7 @@ log_error() { log "${RED}ERROR${NC}" "$*"; }
 log_success() { log "${GREEN}SUCCESS${NC}" "$*"; }
 
 usage() {
-    command cat << EOF
+    command cat <<EOF
 Runtime Behavior Baseline Collection Script
 
 Usage:
@@ -96,15 +102,15 @@ check_prerequisites() {
 
     local missing=()
 
-    if ! command -v kubectl &> /dev/null; then
+    if ! command -v kubectl &>/dev/null; then
         missing+=("kubectl")
     fi
 
-    if ! command -v jq &> /dev/null; then
+    if ! command -v jq &>/dev/null; then
         missing+=("jq")
     fi
 
-    if ! command -v curl &> /dev/null; then
+    if ! command -v curl &>/dev/null; then
         missing+=("curl")
     fi
 
@@ -114,12 +120,12 @@ check_prerequisites() {
     fi
 
     # Check Prometheus connectivity
-    if ! curl -sf "${PROMETHEUS_URL}/api/v1/status/runtimeinfo" > /dev/null; then
+    if ! curl -sf "${PROMETHEUS_URL}/api/v1/status/runtimeinfo" >/dev/null; then
         log_warning "Cannot connect to Prometheus at ${PROMETHEUS_URL}"
     fi
 
     # Check Falco is running
-    if ! kubectl get daemonset -n "$FALCO_NAMESPACE" -l app.kubernetes.io/name=falco &> /dev/null; then
+    if ! kubectl get daemonset -n "$FALCO_NAMESPACE" -l app.kubernetes.io/name=falco &>/dev/null; then
         log_error "Falco not found in namespace $FALCO_NAMESPACE"
         exit 1
     fi
@@ -133,7 +139,7 @@ prometheus_query() {
     local duration="${2:-$BASELINE_DURATION}"
 
     curl -sf -G "${PROMETHEUS_URL}/api/v1/query" \
-        --data-urlencode "query=${query}[${duration}]" | \
+        --data-urlencode "query=${query}[${duration}]" |
         jq -r '.data.result'
 }
 
@@ -141,7 +147,7 @@ prometheus_query_instant() {
     local query="$1"
 
     curl -sf -G "${PROMETHEUS_URL}/api/v1/query" \
-        --data-urlencode "query=${query}" | \
+        --data-urlencode "query=${query}" |
         jq -r '.data.result'
 }
 
@@ -155,7 +161,7 @@ collect_process_baseline() {
     # Query Falco metrics for process executions
     local query="sum by (k8s_pod_name, rule) (increase(falco_events{k8s_ns_name=\"${namespace}\", rule=~\".*process.*|.*exec.*\"}[${BASELINE_DURATION}]))"
 
-    prometheus_query_instant "$query" > "$output_file"
+    prometheus_query_instant "$query" >"$output_file"
 
     log_info "Process baseline saved to: $output_file"
 }
@@ -170,7 +176,7 @@ collect_network_baseline() {
     # Network connection patterns
     local query="sum by (k8s_pod_name, rule) (increase(falco_events{k8s_ns_name=\"${namespace}\", rule=~\".*network.*|.*connection.*|.*socket.*\"}[${BASELINE_DURATION}]))"
 
-    prometheus_query_instant "$query" > "$output_file"
+    prometheus_query_instant "$query" >"$output_file"
 
     log_info "Network baseline saved to: $output_file"
 }
@@ -185,7 +191,7 @@ collect_file_baseline() {
     # File access patterns
     local query="sum by (k8s_pod_name, rule) (increase(falco_events{k8s_ns_name=\"${namespace}\", rule=~\".*file.*|.*read.*|.*write.*|.*modify.*\"}[${BASELINE_DURATION}]))"
 
-    prometheus_query_instant "$query" > "$output_file"
+    prometheus_query_instant "$query" >"$output_file"
 
     log_info "File baseline saved to: $output_file"
 }
@@ -200,7 +206,7 @@ collect_security_baseline() {
     # All security events by priority
     local query="sum by (priority, rule) (increase(falco_events{k8s_ns_name=\"${namespace}\"}[${BASELINE_DURATION}]))"
 
-    prometheus_query_instant "$query" > "$output_file"
+    prometheus_query_instant "$query" >"$output_file"
 
     log_info "Security baseline saved to: $output_file"
 }
@@ -292,7 +298,7 @@ generate_baseline_report() {
                     "critical": (($file.file_access.mean + $file.file_access.stddev * $crit_sigma) | floor)
                 }
             }
-        }' > "$report_file"
+        }' >"$report_file"
 
     log_success "Baseline report generated: $report_file"
     command cat "$report_file"
@@ -308,7 +314,7 @@ start_baseline() {
     mkdir -p "$OUTPUT_DIR"
 
     # Record start time
-    date -u +%Y-%m-%dT%H:%M:%SZ > "${OUTPUT_DIR}/baseline_start"
+    date -u +%Y-%m-%dT%H:%M:%SZ >"${OUTPUT_DIR}/baseline_start"
 
     for ns in "${namespaces[@]}"; do
         collect_process_baseline "$ns"
@@ -376,15 +382,15 @@ COMPARE_FILE=""
 
 while [[ $# -gt 0 ]]; do
     case $1 in
-        -d|--duration)
+        -d | --duration)
             BASELINE_DURATION="$2"
             shift 2
             ;;
-        -n|--namespace)
-            IFS=',' read -ra NAMESPACES <<< "$2"
+        -n | --namespace)
+            IFS=',' read -ra NAMESPACES <<<"$2"
             shift 2
             ;;
-        -o|--output)
+        -o | --output)
             OUTPUT_DIR="$2"
             shift 2
             ;;
@@ -417,7 +423,7 @@ while [[ $# -gt 0 ]]; do
             COMPARE_FILE="$2"
             shift 2
             ;;
-        -h|--help)
+        -h | --help)
             usage
             ;;
         *)

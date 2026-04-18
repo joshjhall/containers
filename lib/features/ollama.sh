@@ -79,7 +79,7 @@ log_command "Setting model directory ownership" \
 log_message "Installing Ollama..."
 
 # Get latest Ollama version from GitHub
-OLLAMA_VERSION="0.12.10"  # Can be overridden with OLLAMA_VERSION build arg
+OLLAMA_VERSION="0.12.10" # Can be overridden with OLLAMA_VERSION build arg
 
 # Map Debian arch to Ollama arch
 OLLAMA_ARCH=$(map_arch_or_skip "amd64" "arm64")
@@ -115,7 +115,10 @@ if ! command curl -L -f --retry 8 --retry-delay 10 --retry-all-errors --progress
 fi
 
 # Run 4-tier verification
-verify_download_or_fail "tool" "ollama" "$OLLAMA_VERSION" "${BUILD_TEMP}/ollama.tgz" "$OLLAMA_ARCH" || { log_feature_end; exit 1; }
+verify_download_or_fail "tool" "ollama" "$OLLAMA_VERSION" "${BUILD_TEMP}/ollama.tgz" "$OLLAMA_ARCH" || {
+    log_feature_end
+    exit 1
+}
 
 log_message "✓ Ollama v${OLLAMA_VERSION} verified successfully"
 
@@ -141,7 +144,7 @@ if command -v ollama >/dev/null 2>&1; then
     log_message "Creating Ollama helper scripts..."
 
     # Create a helper script to start Ollama in the background
-    command cat > /usr/local/bin/start-ollama << 'EOF'
+    command cat >/usr/local/bin/start-ollama <<'EOF'
 #!/bin/bash
 # Start Ollama service in the background
 
@@ -195,7 +198,7 @@ EOF
         chmod +x /usr/local/bin/start-ollama
 
     # Create a helper script to pull common models
-    command cat > /usr/local/bin/ollama-pull-defaults << 'EOF'
+    command cat >/usr/local/bin/ollama-pull-defaults <<'EOF'
 #!/bin/bash
 # Pull commonly used models for development
 echo "=== Pulling default Ollama models ==="
@@ -236,7 +239,7 @@ EOF
         mkdir -p /etc/container/startup
 
     # Create startup script to start Ollama service (runs every container start)
-    command cat > /etc/container/startup/20-ollama-start.sh << 'EOF'
+    command cat >/etc/container/startup/20-ollama-start.sh <<'EOF'
 #!/bin/bash
 # Start Ollama service if available
 if command -v ollama &> /dev/null; then
@@ -266,7 +269,7 @@ EOF
 
     # Create system-wide Ollama configuration (content in lib/bashrc/ollama.sh)
     write_bashrc_content /etc/bashrc.d/70-ollama.sh "Ollama configuration" \
-        < /tmp/build-scripts/features/lib/bashrc/ollama.sh
+        </tmp/build-scripts/features/lib/bashrc/ollama.sh
 
     log_command "Setting Ollama bashrc script permissions" \
         chmod +x /etc/bashrc.d/70-ollama.sh
@@ -276,7 +279,7 @@ EOF
     # ============================================================================
     log_message "Creating Ollama verification script..."
 
-    command cat > /usr/local/bin/test-ollama << 'EOF'
+    command cat >/usr/local/bin/test-ollama <<'EOF'
 #!/bin/bash
 echo "=== Ollama Status ==="
 if command -v ollama &> /dev/null; then

@@ -172,7 +172,7 @@ test_kotlin_environment_variables() {
     local bashrc_file="$TEST_TEMP_DIR/etc/bashrc.d/50-kotlin.sh"
 
     # Create mock bashrc content
-    command cat > "$bashrc_file" << 'EOF'
+    command cat >"$bashrc_file" <<'EOF'
 export KOTLIN_HOME="/opt/kotlin"
 export KOTLIN_NATIVE_HOME="/opt/kotlin-native"
 export PATH="$KOTLIN_HOME/bin:$PATH"
@@ -204,7 +204,7 @@ test_kotlin_aliases_helpers() {
     local bashrc_file="$TEST_TEMP_DIR/etc/bashrc.d/50-kotlin.sh"
 
     # Create bashrc with aliases
-    command cat > "$bashrc_file" << 'EOF'
+    command cat >"$bashrc_file" <<'EOF'
 # Kotlin aliases
 alias kc='kotlinc'
 alias kt='kotlin'
@@ -254,7 +254,7 @@ test_java_prerequisite() {
     # Kotlin requires Java, so we verify the check pattern
     local test_script="$TEST_TEMP_DIR/check-java.sh"
 
-    command cat > "$test_script" << 'EOF'
+    command cat >"$test_script" <<'EOF'
 #!/bin/bash
 if ! command -v java &>/dev/null; then
     echo "Java is required but not installed"
@@ -279,7 +279,7 @@ test_kotlin_verification() {
     local test_script="$TEST_TEMP_DIR/test-kotlin.sh"
 
     # Create verification script
-    command cat > "$test_script" << 'EOF'
+    command cat >"$test_script" <<'EOF'
 #!/bin/bash
 echo "=== Kotlin Installation Status ==="
 

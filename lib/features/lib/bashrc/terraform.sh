@@ -3,15 +3,14 @@
 # ----------------------------------------------------------------------------
 
 # Error protection for interactive shells
-set +u  # Don't error on unset variables
-set +e  # Don't exit on errors
+set +u # Don't error on unset variables
+set +e # Don't exit on errors
 
 # Check if we're in an interactive shell
 if [[ $- != *i* ]]; then
     # Not interactive, skip loading
     return 0
 fi
-
 
 # Terraform plugin cache location (may be in /cache for volume persistence)
 export TF_PLUGIN_CACHE_DIR="${TF_PLUGIN_CACHE}"
@@ -35,7 +34,7 @@ alias tga='terragrunt apply'
 alias tgd='terragrunt destroy'
 
 # Terraform auto-completion
-if command -v terraform &> /dev/null; then
+if command -v terraform &>/dev/null; then
     complete -C /usr/bin/terraform terraform
     complete -C /usr/bin/terraform tf
 fi
@@ -112,7 +111,6 @@ tf-providers-check() {
     echo "Provider constraints in configuration:"
     command grep -h "required_providers" -A 20 *.tf 2>/dev/null | command grep -E "^\s+version\s*=" | command head -10 || echo "  (none found)"
 }
-
 
 # Note: We leave set +u and set +e in place for interactive shells
 # to prevent errors with undefined variables or failed commands

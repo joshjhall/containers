@@ -120,7 +120,7 @@ while [[ $# -gt 0 ]]; do
             NON_INTERACTIVE=true
             shift
             ;;
-        -h|--help)
+        -h | --help)
             usage
             ;;
         *)
@@ -187,7 +187,7 @@ generate_changelog() {
         local tmp_file
         tmp_file=$(mktemp)
         # Remove trailing blank lines while preserving final newline
-        command sed -e :a -e '/^\n*$/{$d;N;ba' -e '}' CHANGELOG.md > "$tmp_file" && mv "$tmp_file" CHANGELOG.md
+        command sed -e :a -e '/^\n*$/{$d;N;ba' -e '}' CHANGELOG.md >"$tmp_file" && mv "$tmp_file" CHANGELOG.md
         echo -e "${GREEN}✓${NC} Generated CHANGELOG.md"
         return 0
     else
@@ -215,7 +215,7 @@ if [ "$NON_INTERACTIVE" = "false" ]; then
 fi
 
 # Update VERSION file
-echo "$NEW_VERSION" > VERSION
+echo "$NEW_VERSION" >VERSION
 echo -e "${GREEN}✓${NC} Updated VERSION file"
 
 # Update Dockerfile version

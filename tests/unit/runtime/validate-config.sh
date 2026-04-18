@@ -31,10 +31,10 @@ setup() {
 
     # Truncate error/warning files
     if [ -n "${CV_ERRORS_FILE:-}" ] && [ -f "$CV_ERRORS_FILE" ]; then
-        : > "$CV_ERRORS_FILE"
+        : >"$CV_ERRORS_FILE"
     fi
     if [ -n "${CV_WARNINGS_FILE:-}" ] && [ -f "$CV_WARNINGS_FILE" ]; then
-        : > "$CV_WARNINGS_FILE"
+        : >"$CV_WARNINGS_FILE"
     fi
 
     # Clear test environment variables
@@ -551,7 +551,7 @@ test_custom_rules_nonexistent_file() {
 test_custom_rules_outside_trusted_dir() {
     setup_custom_rules
     local untrusted_file="${_CUSTOM_RULES_TMPDIR}/evil-rules.sh"
-    echo '# malicious' > "$untrusted_file"
+    echo '# malicious' >"$untrusted_file"
     export VALIDATE_CONFIG_RULES="$untrusted_file"
 
     if cv_load_custom_rules >/dev/null 2>&1; then
@@ -565,7 +565,7 @@ test_custom_rules_outside_trusted_dir() {
 test_custom_rules_symlink_escape() {
     setup_custom_rules
     local target_file="${_CUSTOM_RULES_TMPDIR}/evil-payload.sh"
-    echo '# malicious payload' > "$target_file"
+    echo '# malicious payload' >"$target_file"
 
     # Create /etc/container if it doesn't exist (for the symlink test)
     mkdir -p /etc/container 2>/dev/null || true
@@ -591,7 +591,7 @@ test_custom_rules_non_root_owned() {
     setup_custom_rules
     mkdir -p /etc/container 2>/dev/null || true
     local rules_file="/etc/container/test-nonroot-$$.sh"
-    echo '# non-root rules' > "$rules_file" 2>/dev/null || {
+    echo '# non-root rules' >"$rules_file" 2>/dev/null || {
         teardown_custom_rules
         return 0
     }
@@ -618,7 +618,7 @@ test_custom_rules_world_writable() {
     setup_custom_rules
     mkdir -p /etc/container 2>/dev/null || true
     local rules_file="/etc/container/test-writable-$$.sh"
-    echo '# world-writable rules' > "$rules_file" 2>/dev/null || {
+    echo '# world-writable rules' >"$rules_file" 2>/dev/null || {
         teardown_custom_rules
         return 0
     }
@@ -649,7 +649,7 @@ test_custom_rules_valid_file() {
     setup_custom_rules
     mkdir -p /etc/container 2>/dev/null || true
     local rules_file="/etc/container/test-valid-$$.sh"
-    command cat > "$rules_file" 2>/dev/null <<'RULES'
+    command cat >"$rules_file" 2>/dev/null <<'RULES'
 cv_custom_validations() {
     return 0
 }

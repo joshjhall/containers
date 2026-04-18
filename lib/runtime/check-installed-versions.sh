@@ -28,15 +28,21 @@ set -euo pipefail
 # Source .env file if it exists (for GITHUB_TOKEN and other config)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [ -f "$SCRIPT_DIR/.env" ]; then
-    set -a  # Automatically export all variables
+    set -a # Automatically export all variables
     source "$SCRIPT_DIR/.env"
-    set +a  # Turn off automatic export
+    set +a # Turn off automatic export
 fi
 
 # Color codes for output
 # shellcheck source=lib/shared/colors.sh
-source "/opt/container-runtime/shared/colors.sh" 2>/dev/null \
-    || { RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; BLUE='\033[0;34m'; NC='\033[0m'; }
+source "/opt/container-runtime/shared/colors.sh" 2>/dev/null ||
+    {
+        RED='\033[0;31m'
+        GREEN='\033[0;32m'
+        YELLOW='\033[1;33m'
+        BLUE='\033[0;34m'
+        NC='\033[0m'
+    }
 
 # Parse command line options
 show_all=false
@@ -62,7 +68,7 @@ while [[ $# -gt 0 ]]; do
             compare_mode=true
             shift
             ;;
-        --help|-h)
+        --help | -h)
             command head -n 20 "$0" | command grep "^#" | command sed 's/^# \?//'
             exit 0
             ;;
@@ -285,7 +291,7 @@ run_section() {
 
     # Check all tools
     for entry in "${tools[@]}"; do
-        IFS=':' read -r name cmd flag pattern getter getter_args <<< "$entry"
+        IFS=':' read -r name cmd flag pattern getter getter_args <<<"$entry"
         check_version "$name" "$cmd" "$flag" "$pattern" "${getter:-}" "${getter_args:-}"
         tool_names+=("$name")
     done
@@ -305,7 +311,7 @@ run_r_section() {
     local tool_names=()
 
     for entry in "${tools[@]}"; do
-        IFS=':' read -r name package <<< "$entry"
+        IFS=':' read -r name package <<<"$entry"
         check_r_package "$name" "$package"
         tool_names+=("$name")
     done

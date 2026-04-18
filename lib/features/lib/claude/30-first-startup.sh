@@ -21,9 +21,9 @@ set -euo pipefail
 # Run claude-setup in the background to avoid blocking container startup (~48s).
 # The auth-watcher will also detect authentication and run setup if this
 # initial attempt fails (e.g. not yet authenticated).
-if command -v claude-setup &> /dev/null; then
+if command -v claude-setup &>/dev/null; then
     (
-        claude-setup --force > /tmp/claude-first-setup.log 2>&1 || true
+        claude-setup --force >/tmp/claude-first-setup.log 2>&1 || true
     ) &
     disown
     echo "[first-startup] claude-setup launched in background (PID: $!)"

@@ -544,9 +544,9 @@ test_func_audit_log_disabled() {
 test_func_audit_auth() {
     _reset_audit_logger
     audit_auth "login" "testuser" "success" '{}'
-    if command grep -q '"action":"login"' "$AUDIT_LOG_FILE" && \
-       command grep -q '"user":"testuser"' "$AUDIT_LOG_FILE" && \
-       command grep -q '"result":"success"' "$AUDIT_LOG_FILE"; then
+    if command grep -q '"action":"login"' "$AUDIT_LOG_FILE" &&
+        command grep -q '"user":"testuser"' "$AUDIT_LOG_FILE" &&
+        command grep -q '"result":"success"' "$AUDIT_LOG_FILE"; then
         pass_test "audit_auth writes authentication event with correct fields"
     else
         fail_test "audit_auth missing expected fields"
@@ -558,8 +558,8 @@ test_func_audit_auth() {
 test_func_audit_config() {
     _reset_audit_logger
     audit_config "docker" "modified" "admin" "old" "new"
-    if command grep -q '"component":"docker"' "$AUDIT_LOG_FILE" && \
-       command grep -q '"change_type":"modified"' "$AUDIT_LOG_FILE"; then
+    if command grep -q '"component":"docker"' "$AUDIT_LOG_FILE" &&
+        command grep -q '"change_type":"modified"' "$AUDIT_LOG_FILE"; then
         pass_test "audit_config writes configuration event"
     else
         fail_test "audit_config missing expected fields"
@@ -571,8 +571,8 @@ test_func_audit_config() {
 test_func_audit_security() {
     _reset_audit_logger
     audit_security "anomaly" "high" "Suspicious activity" '{}'
-    if command grep -q '"event_type":"anomaly"' "$AUDIT_LOG_FILE" && \
-       command grep -q '"severity":"high"' "$AUDIT_LOG_FILE"; then
+    if command grep -q '"event_type":"anomaly"' "$AUDIT_LOG_FILE" &&
+        command grep -q '"severity":"high"' "$AUDIT_LOG_FILE"; then
         pass_test "audit_security writes security event"
     else
         fail_test "audit_security missing expected fields"
@@ -584,8 +584,8 @@ test_func_audit_security() {
 test_func_audit_process() {
     _reset_audit_logger
     audit_process "started" "test-proc" "1234" "0" "testuser"
-    if command grep -q '"event_type":"started"' "$AUDIT_LOG_FILE" && \
-       command grep -q '"process_name":"test-proc"' "$AUDIT_LOG_FILE"; then
+    if command grep -q '"event_type":"started"' "$AUDIT_LOG_FILE" &&
+        command grep -q '"process_name":"test-proc"' "$AUDIT_LOG_FILE"; then
         pass_test "audit_process writes process event"
     else
         fail_test "audit_process missing expected fields"
@@ -597,9 +597,9 @@ test_func_audit_process() {
 test_func_audit_compliance() {
     _reset_audit_logger
     audit_compliance "soc2" "CC7.2" "compliant" '{}'
-    if command grep -q '"framework":"soc2"' "$AUDIT_LOG_FILE" && \
-       command grep -q '"requirement":"CC7.2"' "$AUDIT_LOG_FILE" && \
-       command grep -q '"status":"compliant"' "$AUDIT_LOG_FILE"; then
+    if command grep -q '"framework":"soc2"' "$AUDIT_LOG_FILE" &&
+        command grep -q '"requirement":"CC7.2"' "$AUDIT_LOG_FILE" &&
+        command grep -q '"status":"compliant"' "$AUDIT_LOG_FILE"; then
         pass_test "audit_compliance writes compliance event"
     else
         fail_test "audit_compliance missing expected fields"
@@ -613,11 +613,11 @@ test_func_json_required_fields() {
     audit_log "system" "info" "Field check" '{}'
     local last_line
     last_line=$(command tail -1 "$AUDIT_LOG_FILE")
-    if echo "$last_line" | command grep -q '"@timestamp"' && \
-       echo "$last_line" | command grep -q '"event_id"' && \
-       echo "$last_line" | command grep -q '"category"' && \
-       echo "$last_line" | command grep -q '"level"' && \
-       echo "$last_line" | command grep -q '"message"'; then
+    if echo "$last_line" | command grep -q '"@timestamp"' &&
+        echo "$last_line" | command grep -q '"event_id"' &&
+        echo "$last_line" | command grep -q '"category"' &&
+        echo "$last_line" | command grep -q '"level"' &&
+        echo "$last_line" | command grep -q '"message"'; then
         pass_test "JSON output contains required fields (@timestamp, event_id, etc.)"
     else
         fail_test "JSON output missing required fields"
@@ -630,8 +630,8 @@ test_func_json_escape() {
     _reset_audit_logger
     local escaped
     escaped=$(_json_escape 'hello "world" with\backslash')
-    if echo "$escaped" | command grep -q '\\"world\\"' && \
-       echo "$escaped" | command grep -q '\\\\backslash'; then
+    if echo "$escaped" | command grep -q '\\"world\\"' &&
+        echo "$escaped" | command grep -q '\\\\backslash'; then
         pass_test "_json_escape escapes special characters"
     else
         fail_test "_json_escape did not properly escape special characters: $escaped"
@@ -736,9 +736,9 @@ test_func_sanitize_json() {
     _reset_audit_logger
     local result
     result=$(_sanitize_json_secrets '{"user":"admin","api_key":"supersecretkey123","host":"localhost"}')
-    if echo "$result" | command grep -qF '"user":"admin"' && \
-       echo "$result" | command grep -qF '"api_key":"supe****"' && \
-       echo "$result" | command grep -qF '"host":"localhost"'; then
+    if echo "$result" | command grep -qF '"user":"admin"' &&
+        echo "$result" | command grep -qF '"api_key":"supe****"' &&
+        echo "$result" | command grep -qF '"host":"localhost"'; then
         pass_test "_sanitize_json_secrets masks only secret keys in JSON"
     else
         fail_test "_sanitize_json_secrets returned: $result"

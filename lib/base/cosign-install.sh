@@ -41,7 +41,7 @@ fi
 # Requires: feature-header.sh, checksum-fetch.sh, checksum-verification.sh
 #   to be sourced by the calling feature script.
 install_cosign() {
-    if command -v cosign &> /dev/null; then
+    if command -v cosign &>/dev/null; then
         log_message "cosign already installed, skipping..."
         return 0
     fi
@@ -84,7 +84,11 @@ install_cosign() {
     fi
 
     # Run 4-tier verification
-    verify_download_or_fail "tool" "cosign" "$cosign_version" "cosign.deb" "$cosign_arch" || { cd /; command rm -rf "$build_temp"; return 1; }
+    verify_download_or_fail "tool" "cosign" "$cosign_version" "cosign.deb" "$cosign_arch" || {
+        cd /
+        command rm -rf "$build_temp"
+        return 1
+    }
 
     log_message "✓ cosign v${cosign_version} verified successfully"
 

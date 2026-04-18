@@ -1,6 +1,6 @@
 #!/bin/bash
 echo "=== R Installation Status ==="
-if command -v R &> /dev/null; then
+if command -v R &>/dev/null; then
     R --version | command head -n 1
     echo "R binary: $(which R)"
     echo "R home: $(R RHOME)"
@@ -11,7 +11,7 @@ else
 fi
 
 echo ""
-if command -v Rscript &> /dev/null; then
+if command -v Rscript &>/dev/null; then
     echo "✓ Rscript is available at $(which Rscript)"
 else
     echo "✗ Rscript is not found"

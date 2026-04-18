@@ -66,7 +66,7 @@ log_command "Creating bashrc.d directory" \
 
 # Create system-wide SQLite configuration (content in lib/bashrc/sqlite-client.sh)
 write_bashrc_content /etc/bashrc.d/60-sqlite.sh "SQLite client configuration" \
-    < /tmp/build-scripts/features/lib/bashrc/sqlite-client.sh
+    </tmp/build-scripts/features/lib/bashrc/sqlite-client.sh
 
 log_command "Setting SQLite bashrc script permissions" \
     chmod +x /etc/bashrc.d/60-sqlite.sh
@@ -80,7 +80,7 @@ log_message "Creating SQLite startup script..."
 log_command "Creating container startup directory" \
     mkdir -p /etc/container/first-startup
 
-command cat > /etc/container/first-startup/20-sqlite-setup.sh << 'EOF'
+command cat >/etc/container/first-startup/20-sqlite-setup.sh <<'EOF'
 #!/bin/bash
 # SQLite client configuration
 echo "=== SQLite Configuration ==="
@@ -113,7 +113,7 @@ log_command "Setting SQLite startup script permissions" \
 # ============================================================================
 log_message "Creating SQLite verification script..."
 
-command cat > /usr/local/bin/test-sqlite << 'EOF'
+command cat >/usr/local/bin/test-sqlite <<'EOF'
 #!/bin/bash
 echo "=== SQLite Client Status ==="
 if command -v sqlite3 &> /dev/null; then

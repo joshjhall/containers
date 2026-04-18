@@ -156,7 +156,7 @@ test_collect_build_metrics_parses_summary_log() {
     # Create mock build log directory with summary
     local mock_log_dir="$TEST_TEMP_DIR/build-logs"
     mkdir -p "$mock_log_dir"
-    echo "Python: 0 errors, 1 warnings (2.5s)" > "$mock_log_dir/master-summary.log"
+    echo "Python: 0 errors, 1 warnings (2.5s)" >"$mock_log_dir/master-summary.log"
 
     # Source and call collect_build_metrics in a subshell
     local output

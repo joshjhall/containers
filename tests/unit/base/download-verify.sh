@@ -25,12 +25,12 @@ setup() {
 
     # Create mock binaries
     mkdir -p "$TEST_TEMP_DIR/bin"
-    echo '#!/bin/bash' > "$TEST_TEMP_DIR/bin/sha256sum"
-    echo 'echo "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  $1"' >> "$TEST_TEMP_DIR/bin/sha256sum"
+    echo '#!/bin/bash' >"$TEST_TEMP_DIR/bin/sha256sum"
+    echo 'echo "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  $1"' >>"$TEST_TEMP_DIR/bin/sha256sum"
     chmod +x "$TEST_TEMP_DIR/bin/sha256sum"
 
-    echo '#!/bin/bash' > "$TEST_TEMP_DIR/bin/sha512sum"
-    echo 'echo "cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e  $1"' >> "$TEST_TEMP_DIR/bin/sha512sum"
+    echo '#!/bin/bash' >"$TEST_TEMP_DIR/bin/sha512sum"
+    echo 'echo "cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e  $1"' >>"$TEST_TEMP_DIR/bin/sha512sum"
     chmod +x "$TEST_TEMP_DIR/bin/sha512sum"
 }
 
@@ -151,22 +151,22 @@ test_mixed_case_checksums() {
 # Test: Download verify script exports functions
 test_functions_exported() {
     # Check if the script defines the expected functions
-    if command grep -q "^download_and_verify()" "$PROJECT_ROOT/lib/base/download-verify.sh" || \
-       command grep -q "^download_and_verify ()" "$PROJECT_ROOT/lib/base/download-verify.sh"; then
+    if command grep -q "^download_and_verify()" "$PROJECT_ROOT/lib/base/download-verify.sh" ||
+        command grep -q "^download_and_verify ()" "$PROJECT_ROOT/lib/base/download-verify.sh"; then
         assert_true true "download_and_verify function is defined"
     else
         assert_true false "download_and_verify function not found"
     fi
 
-    if command grep -q "^verify_checksum()" "$PROJECT_ROOT/lib/base/download-verify.sh" || \
-       command grep -q "^verify_checksum ()" "$PROJECT_ROOT/lib/base/download-verify.sh"; then
+    if command grep -q "^verify_checksum()" "$PROJECT_ROOT/lib/base/download-verify.sh" ||
+        command grep -q "^verify_checksum ()" "$PROJECT_ROOT/lib/base/download-verify.sh"; then
         assert_true true "verify_checksum function is defined"
     else
         assert_true false "verify_checksum function not found"
     fi
 
-    if command grep -q "^download_and_extract()" "$PROJECT_ROOT/lib/base/download-verify.sh" || \
-       command grep -q "^download_and_extract ()" "$PROJECT_ROOT/lib/base/download-verify.sh"; then
+    if command grep -q "^download_and_extract()" "$PROJECT_ROOT/lib/base/download-verify.sh" ||
+        command grep -q "^download_and_extract ()" "$PROJECT_ROOT/lib/base/download-verify.sh"; then
         assert_true true "download_and_extract function is defined"
     else
         assert_true false "download_and_extract function not found"
@@ -194,7 +194,7 @@ test_required_commands_check() {
 test_verify_checksum_sha256_logic() {
     # Create test file
     local test_file="$TEST_TEMP_DIR/test-file.txt"
-    echo "test content" > "$test_file"
+    echo "test content" >"$test_file"
 
     # SHA256 length is 64
     local checksum_len=64
@@ -210,7 +210,7 @@ test_verify_checksum_sha256_logic() {
 test_verify_checksum_sha512_logic() {
     # Create test file
     local test_file="$TEST_TEMP_DIR/test-file.txt"
-    echo "test content" > "$test_file"
+    echo "test content" >"$test_file"
 
     # SHA512 length is 128
     local checksum_len=128
@@ -229,7 +229,7 @@ test_sha1_rejected() {
 
     # Create a test file
     local test_file="$TEST_TEMP_DIR/test-file.txt"
-    echo "test content" > "$test_file"
+    echo "test content" >"$test_file"
 
     # Source and call verify_checksum with a SHA-1 checksum
     local exit_code=0
@@ -271,7 +271,7 @@ test_script_documentation() {
 # Test: verify_checksum rejects SHA-1 length checksums
 test_verify_checksum_rejects_sha1_length() {
     local test_file="$TEST_TEMP_DIR/sha1-test.txt"
-    echo "test content for sha1 rejection" > "$test_file"
+    echo "test content for sha1 rejection" >"$test_file"
 
     # Generate a 40-char hex string (SHA-1 length)
     local sha1_hash="da39a3ee5e6b4b0d3255bfef95601890afd80709"
@@ -292,7 +292,7 @@ test_verify_checksum_rejects_sha1_length() {
 test_download_and_verify_succeeds_with_valid_sha256() {
     # Create a source file with known content
     local source_file="$TEST_TEMP_DIR/source-payload.bin"
-    echo "known test payload content" > "$source_file"
+    echo "known test payload content" >"$source_file"
 
     # Compute SHA256 using the real binary (setup() may override sha256sum in PATH)
     local sha256
@@ -303,7 +303,7 @@ test_download_and_verify_succeeds_with_valid_sha256() {
     # Create a mock curl that copies the source file to the -o target
     local mock_bin="$TEST_TEMP_DIR/mock-bin"
     mkdir -p "$mock_bin"
-    command cat > "$mock_bin/curl" <<MOCK
+    command cat >"$mock_bin/curl" <<MOCK
 #!/bin/bash
 outfile=""
 while [[ \$# -gt 0 ]]; do

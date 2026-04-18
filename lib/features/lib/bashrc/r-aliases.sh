@@ -1,9 +1,8 @@
-
 # ----------------------------------------------------------------------------
 # R Aliases
 # ----------------------------------------------------------------------------
-alias R='R --no-save'                    # Don't save workspace by default
-alias Rscript='Rscript --vanilla'        # Clean environment for scripts
+alias R='R --no-save'             # Don't save workspace by default
+alias Rscript='Rscript --vanilla' # Clean environment for scripts
 
 # ----------------------------------------------------------------------------
 # r-install - Install R packages easily
@@ -70,7 +69,6 @@ r-search() {
         ]
     " | column -t
 }
-
 
 # Note: We leave set +u and set +e in place for interactive shells
 # to prevent errors with undefined variables or failed commands

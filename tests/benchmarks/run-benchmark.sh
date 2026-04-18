@@ -38,7 +38,7 @@ while [[ $# -gt 0 ]]; do
             NO_CACHE=true
             shift
             ;;
-        --help|-h)
+        --help | -h)
             echo "Usage: $0 [OPTIONS] [VARIANT]"
             echo ""
             echo "Options:"

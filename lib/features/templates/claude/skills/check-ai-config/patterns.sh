@@ -37,10 +37,10 @@ DOC_HIGH=${DOC_HIGH:-800}
 # =============================================================================
 get_frontmatter() {
     local file="$1" key="$2"
-    /usr/bin/sed -n '/^---$/,/^---$/p' "$file" 2>/dev/null | \
-        /usr/bin/grep -E "^${key}:" | \
-        /usr/bin/sed "s/^${key}:[[:space:]]*//" | \
-        /usr/bin/sed 's/^["'\'']//' | /usr/bin/sed 's/["'\'']\s*$//' | \
+    /usr/bin/sed -n '/^---$/,/^---$/p' "$file" 2>/dev/null |
+        /usr/bin/grep -E "^${key}:" |
+        /usr/bin/sed "s/^${key}:[[:space:]]*//" |
+        /usr/bin/sed 's/^["'\'']//' | /usr/bin/sed 's/["'\'']\s*$//' |
         /usr/bin/head -1
 }
 
@@ -183,12 +183,12 @@ check_ai_file_bloat() {
     local basename lines threshold_warn threshold_high file_type
 
     basename=$(/usr/bin/basename "$file")
-    lines=$(/usr/bin/wc -l < "$file" 2>/dev/null) || return
-    lines=$((lines + 0))  # ensure numeric
+    lines=$(/usr/bin/wc -l <"$file" 2>/dev/null) || return
+    lines=$((lines + 0)) # ensure numeric
 
     # Determine file type and thresholds
     case "$file" in
-        */CLAUDE.md|*/AGENTS.md)
+        */CLAUDE.md | */AGENTS.md)
             threshold_warn=$CLAUDE_MD_WARN
             threshold_high=$CLAUDE_MD_HIGH
             file_type="CLAUDE.md"
@@ -237,8 +237,8 @@ check_mcp_config() {
     esac
 
     # Check for http:// URLs (except localhost exceptions)
-    /usr/bin/grep -nE '"http://' "$file" 2>/dev/null | \
-        /usr/bin/grep -vE '(localhost|127\.0\.0\.1|host\.docker\.internal)' | \
+    /usr/bin/grep -nE '"http://' "$file" 2>/dev/null |
+        /usr/bin/grep -vE '(localhost|127\.0\.0\.1|host\.docker\.internal)' |
         while IFS=: read -r line_num content; do
             evidence=$(/usr/bin/printf '%.80s' "$content")
             /usr/bin/printf '%s\t%s\t%s\t%s\t%s\n' \
@@ -257,12 +257,12 @@ check_hook_safety() {
 
     # Check JSON config files and shell scripts that could be hooks
     case "$file" in
-        *.json|*.sh) ;;
+        *.json | *.sh) ;;
         *) return ;;
     esac
 
     # Destructive commands without guards
-    /usr/bin/grep -nE '(rm\s+-rf\s|git\s+reset\s+--hard|git\s+clean\s+-fd|docker\s+system\s+prune)' "$file" 2>/dev/null | \
+    /usr/bin/grep -nE '(rm\s+-rf\s|git\s+reset\s+--hard|git\s+clean\s+-fd|docker\s+system\s+prune)' "$file" 2>/dev/null |
         while IFS=: read -r line_num content; do
             evidence=$(/usr/bin/printf '%.80s' "$content")
             /usr/bin/printf '%s\t%s\t%s\t%s\t%s\n' \
@@ -271,7 +271,7 @@ check_hook_safety() {
         done || true
 
     # Secret leaks — echoing env vars with secret-like names
-    /usr/bin/grep -nE '(echo|printf).*\$(ANTHROPIC_|GITHUB_TOKEN|GITLAB_TOKEN|API_KEY|SECRET|PASSWORD|OP_.*_REF)' "$file" 2>/dev/null | \
+    /usr/bin/grep -nE '(echo|printf).*\$(ANTHROPIC_|GITHUB_TOKEN|GITLAB_TOKEN|API_KEY|SECRET|PASSWORD|OP_.*_REF)' "$file" 2>/dev/null |
         while IFS=: read -r line_num content; do
             evidence=$(/usr/bin/printf '%.80s' "$content")
             /usr/bin/printf '%s\t%s\t%s\t%s\t%s\n' \
@@ -293,4 +293,4 @@ while IFS= read -r file; do
     check_mcp_config "$file"
     check_hook_safety "$file"
 
-done < "$FILE_LIST"
+done <"$FILE_LIST"

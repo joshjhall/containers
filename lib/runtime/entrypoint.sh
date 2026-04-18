@@ -143,10 +143,10 @@ run_startup_scripts() {
             # 3. Verify no .. components remain (paranoid check)
             # 4. Verify not the directory itself (must be file within)
             script_realpath=$(realpath "$script" 2>/dev/null || echo "")
-            if [ -n "$script_realpath" ] && \
-               [[ "$script_realpath" == "$dir"/* ]] && \
-               [[ ! "$script_realpath" =~ \.\. ]] && \
-               [ "$script_realpath" != "$dir" ]; then
+            if [ -n "$script_realpath" ] &&
+                [[ "$script_realpath" == "$dir"/* ]] &&
+                [[ ! "$script_realpath" =~ \.\. ]] &&
+                [ "$script_realpath" != "$dir" ]; then
                 echo "Running ${label} script: $(basename "$script")"
                 if [ "$RUNNING_AS_ROOT" = "true" ]; then
                     # Running as root, use su to switch to non-root user
@@ -205,17 +205,17 @@ setup_bindfs_overlays
 # ============================================================================
 # Start cron daemon if installed (requires root privileges)
 # This runs before dropping to non-root user so no sudo is needed
-if command -v cron &> /dev/null; then
-    if ! pgrep -x "cron" > /dev/null 2>&1; then
+if command -v cron &>/dev/null; then
+    if ! pgrep -x "cron" >/dev/null 2>&1; then
         echo "🔧 Starting cron daemon..."
         if [ "$RUNNING_AS_ROOT" = "true" ]; then
             # Start cron directly as root
-            if command -v service &> /dev/null; then
-                service cron start > /dev/null 2>&1 || cron
+            if command -v service &>/dev/null; then
+                service cron start >/dev/null 2>&1 || cron
             else
                 cron
             fi
-            if pgrep -x "cron" > /dev/null 2>&1; then
+            if pgrep -x "cron" >/dev/null 2>&1; then
                 echo "✓ Cron daemon started"
             else
                 echo "⚠️  Warning: Cron daemon may not have started"
@@ -279,7 +279,7 @@ command install -d -m 0750 -o "${USERNAME}" "$METRICS_DIR" 2>/dev/null || true
     echo "# HELP container_startup_seconds Time taken for container initialization in seconds"
     echo "# TYPE container_startup_seconds gauge"
     echo "container_startup_seconds $STARTUP_DURATION"
-} > "$METRICS_DIR/startup-metrics.txt" 2>/dev/null || true
+} >"$METRICS_DIR/startup-metrics.txt" 2>/dev/null || true
 
 echo "✓ Container initialized in ${STARTUP_DURATION}s"
 
@@ -318,7 +318,7 @@ elif [ "${DOCKER_SOCKET_CONFIGURED:-false}" = "true" ] && getent group docker >/
         exec sg docker -c "exec $QUOTED_CMD"
     else
         # Fallback: newgrp replaces shell, so we exec into a new shell with docker group
-        exec newgrp docker <<< "exec $QUOTED_CMD"
+        exec newgrp docker <<<"exec $QUOTED_CMD"
     fi
 else
     exec "$@"

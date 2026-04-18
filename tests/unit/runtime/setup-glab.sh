@@ -189,7 +189,7 @@ test_persist_token_marker() {
 # Test: _persist_token writes to bashrc
 test_persist_token_writes_bashrc() {
     local func_script="$TEST_TEMP_DIR/func.sh"
-    command sed -n '/^_persist_token()/,/^}/p' "$SETUP_GLAB_SCRIPT" > "$func_script"
+    command sed -n '/^_persist_token()/,/^}/p' "$SETUP_GLAB_SCRIPT" >"$func_script"
 
     (
         set -euo pipefail
@@ -208,7 +208,7 @@ test_persist_token_writes_bashrc() {
 # Test: _persist_token is idempotent (no duplicates)
 test_persist_token_idempotent() {
     local func_script="$TEST_TEMP_DIR/func.sh"
-    command sed -n '/^_persist_token()/,/^}/p' "$SETUP_GLAB_SCRIPT" > "$func_script"
+    command sed -n '/^_persist_token()/,/^}/p' "$SETUP_GLAB_SCRIPT" >"$func_script"
 
     (
         set -euo pipefail
@@ -227,7 +227,7 @@ test_persist_token_idempotent() {
 # Test: _persist_token bashrc block references GITLAB_HOST
 test_persist_token_uses_gitlab_host() {
     local func_script="$TEST_TEMP_DIR/func.sh"
-    command sed -n '/^_persist_token()/,/^}/p' "$SETUP_GLAB_SCRIPT" > "$func_script"
+    command sed -n '/^_persist_token()/,/^}/p' "$SETUP_GLAB_SCRIPT" >"$func_script"
 
     (
         set -euo pipefail
@@ -353,7 +353,7 @@ test_validate_hostname_defined() {
 # Test: _validate_token accepts valid token
 test_validate_token_accepts_valid() {
     local func_script="$TEST_TEMP_DIR/func.sh"
-    command sed -n '1,/^# ---.*Source OP/p' "$SETUP_GLAB_SCRIPT" | command head -n -1 > "$func_script"
+    command sed -n '1,/^# ---.*Source OP/p' "$SETUP_GLAB_SCRIPT" | command head -n -1 >"$func_script"
 
     local exit_code=0
     (
@@ -368,7 +368,7 @@ test_validate_token_accepts_valid() {
 # Test: _validate_token rejects short token
 test_validate_token_rejects_short() {
     local func_script="$TEST_TEMP_DIR/func.sh"
-    command sed -n '1,/^# ---.*Source OP/p' "$SETUP_GLAB_SCRIPT" | command head -n -1 > "$func_script"
+    command sed -n '1,/^# ---.*Source OP/p' "$SETUP_GLAB_SCRIPT" | command head -n -1 >"$func_script"
 
     local exit_code=0
     (
@@ -383,7 +383,7 @@ test_validate_token_rejects_short() {
 # Test: _validate_token rejects token with control characters
 test_validate_token_rejects_control_chars() {
     local func_script="$TEST_TEMP_DIR/func.sh"
-    command sed -n '1,/^# ---.*Source OP/p' "$SETUP_GLAB_SCRIPT" | command head -n -1 > "$func_script"
+    command sed -n '1,/^# ---.*Source OP/p' "$SETUP_GLAB_SCRIPT" | command head -n -1 >"$func_script"
 
     local exit_code=0
     (
@@ -398,7 +398,7 @@ test_validate_token_rejects_control_chars() {
 # Test: _validate_hostname accepts valid hostname
 test_validate_hostname_accepts_valid() {
     local func_script="$TEST_TEMP_DIR/func.sh"
-    command sed -n '1,/^# ---.*Source OP/p' "$SETUP_GLAB_SCRIPT" | command head -n -1 > "$func_script"
+    command sed -n '1,/^# ---.*Source OP/p' "$SETUP_GLAB_SCRIPT" | command head -n -1 >"$func_script"
 
     local exit_code=0
     (
@@ -413,7 +413,7 @@ test_validate_hostname_accepts_valid() {
 # Test: _validate_hostname rejects hostname with slashes
 test_validate_hostname_rejects_slashes() {
     local func_script="$TEST_TEMP_DIR/func.sh"
-    command sed -n '1,/^# ---.*Source OP/p' "$SETUP_GLAB_SCRIPT" | command head -n -1 > "$func_script"
+    command sed -n '1,/^# ---.*Source OP/p' "$SETUP_GLAB_SCRIPT" | command head -n -1 >"$func_script"
 
     local exit_code=0
     (
@@ -428,7 +428,7 @@ test_validate_hostname_rejects_slashes() {
 # Test: _validate_hostname rejects hostname with spaces
 test_validate_hostname_rejects_spaces() {
     local func_script="$TEST_TEMP_DIR/func.sh"
-    command sed -n '1,/^# ---.*Source OP/p' "$SETUP_GLAB_SCRIPT" | command head -n -1 > "$func_script"
+    command sed -n '1,/^# ---.*Source OP/p' "$SETUP_GLAB_SCRIPT" | command head -n -1 >"$func_script"
 
     local exit_code=0
     (

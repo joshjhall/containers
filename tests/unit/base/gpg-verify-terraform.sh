@@ -84,7 +84,7 @@ test_shasums_download_failure_returns_1() {
     local exit_code=0
     # Create a fake terraform binary
     mkdir -p "$TEST_TEMP_DIR/dl"
-    echo "fake terraform binary" > "$TEST_TEMP_DIR/dl/terraform_1.10.0_linux_amd64.zip"
+    echo "fake terraform binary" >"$TEST_TEMP_DIR/dl/terraform_1.10.0_linux_amd64.zip"
 
     bash -c "
         _GPG_VERIFY_LOADED=''

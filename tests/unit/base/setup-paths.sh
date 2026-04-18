@@ -85,7 +85,7 @@ test_language_paths() {
 
     # Create paths configuration
     # Note: Ruby is installed directly to /usr/local (no rbenv since v4.0)
-    command cat > "$paths_file" << 'EOF'
+    command cat >"$paths_file" <<'EOF'
 /usr/local/go/bin
 /home/testuser/.cargo/bin
 /usr/local/bin
@@ -98,7 +98,7 @@ EOF
     # Check each path entry
     while IFS= read -r path; do
         assert_not_empty "$path" "Path entry exists: $path"
-    done < "$paths_file"
+    done <"$paths_file"
 }
 
 # Test: PATH deduplication
@@ -152,7 +152,7 @@ test_path_priority() {
     local ordered_path="/home/testuser/.local/bin:/home/testuser/bin:/usr/local/bin:/usr/bin:/bin"
 
     # Split into array
-    IFS=':' read -ra path_array <<< "$ordered_path"
+    IFS=':' read -ra path_array <<<"$ordered_path"
 
     # Check user paths come before system paths
     local user_index=-1
@@ -184,7 +184,7 @@ test_export_path() {
     local export_file="$TEST_TEMP_DIR/export.sh"
 
     # Create export script
-    command cat > "$export_file" << 'EOF'
+    command cat >"$export_file" <<'EOF'
 export PATH="/usr/local/bin:/usr/bin:/bin"
 export PATH="$HOME/bin:$PATH"
 export PATH="$HOME/.local/bin:$PATH"
@@ -205,7 +205,7 @@ test_path_validation() {
     local test_path="/usr/bin:/nonexistent:/usr/local/bin"
 
     # Check each path component
-    IFS=':' read -ra paths <<< "$test_path"
+    IFS=':' read -ra paths <<<"$test_path"
     for path in "${paths[@]}"; do
         if [ "$path" = "/nonexistent" ]; then
             assert_true true "Non-existent path detected"
@@ -220,7 +220,7 @@ test_path_verification() {
     local test_script="$TEST_TEMP_DIR/test-paths.sh"
 
     # Create verification script
-    command cat > "$test_script" << 'EOF'
+    command cat >"$test_script" <<'EOF'
 #!/bin/bash
 echo "Current PATH:"
 echo "$PATH" | tr ':' '\n'

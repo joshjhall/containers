@@ -10,7 +10,7 @@ fi
 # Secure ANTHROPIC_AUTH_TOKEN: capture to /dev/shm file, remove from env.
 # Token is injected into only the claude CLI process via the wrapper below.
 if [ -n "${ANTHROPIC_AUTH_TOKEN:-}" ]; then
-    printf '%s' "$ANTHROPIC_AUTH_TOKEN" > /dev/shm/anthropic-auth-token
+    printf '%s' "$ANTHROPIC_AUTH_TOKEN" >/dev/shm/anthropic-auth-token
     chmod 600 /dev/shm/anthropic-auth-token
     unset ANTHROPIC_AUTH_TOKEN
 fi

@@ -22,7 +22,7 @@ check_prev_lines() {
     local file="$1" target_line="$2" pattern="$3"
     local start=$((target_line - 3))
     [ "$start" -lt 1 ] && start=1
-    /usr/bin/sed -n "${start},$((target_line - 1))p" "$file" 2>/dev/null | \
+    /usr/bin/sed -n "${start},$((target_line - 1))p" "$file" 2>/dev/null |
         /usr/bin/grep -qE "$pattern"
 }
 
@@ -33,11 +33,11 @@ while IFS= read -r file; do
         # --- Python ---
         *.py)
             # Find module-level function/class definitions
-            /usr/bin/grep -nE '^(def |class )[A-Za-z]' "$file" 2>/dev/null | \
+            /usr/bin/grep -nE '^(def |class )[A-Za-z]' "$file" 2>/dev/null |
                 while IFS=: read -r line_num content; do
                     # Skip private functions (leading underscore)
                     case "$content" in
-                        *"def _"*|*"class _"*) continue ;;
+                        *"def _"* | *"class _"*) continue ;;
                     esac
                     # Check for docstring (triple quotes) in preceding lines
                     if ! check_prev_lines "$file" "$line_num" '"""'; then
@@ -54,9 +54,9 @@ while IFS= read -r file; do
             ;;
 
         # --- JavaScript/TypeScript ---
-        *.js|*.ts|*.jsx|*.tsx)
+        *.js | *.ts | *.jsx | *.tsx)
             # Find exported functions, classes, types
-            /usr/bin/grep -nE '^export (function|class|const|type|interface|enum) ' "$file" 2>/dev/null | \
+            /usr/bin/grep -nE '^export (function|class|const|type|interface|enum) ' "$file" 2>/dev/null |
                 while IFS=: read -r line_num content; do
                     # Check for JSDoc comment (/**) in preceding lines
                     if ! check_prev_lines "$file" "$line_num" '/\*\*'; then
@@ -72,7 +72,7 @@ while IFS= read -r file; do
         *.go)
             # Find exported functions (capitalized, not in test files)
             case "$file" in *_test.go) continue ;; esac
-            /usr/bin/grep -nE '^func [A-Z]' "$file" 2>/dev/null | \
+            /usr/bin/grep -nE '^func [A-Z]' "$file" 2>/dev/null |
                 while IFS=: read -r line_num content; do
                     # Go convention: comment line immediately before with function name
                     func_name=$(/usr/bin/echo "$content" | /usr/bin/grep -oE 'func [A-Z][A-Za-z0-9]*' | /usr/bin/awk '{print $2}')
@@ -91,7 +91,7 @@ while IFS= read -r file; do
         # --- Rust ---
         *.rs)
             # Find pub fn and pub struct
-            /usr/bin/grep -nE '^pub (fn|struct|enum|trait|type) ' "$file" 2>/dev/null | \
+            /usr/bin/grep -nE '^pub (fn|struct|enum|trait|type) ' "$file" 2>/dev/null |
                 while IFS=: read -r line_num content; do
                     # Check for /// doc comment
                     if ! check_prev_lines "$file" "$line_num" '^\s*///'; then
@@ -104,13 +104,13 @@ while IFS= read -r file; do
             ;;
 
         # --- Shell ---
-        *.sh|*.bash)
+        *.sh | *.bash)
             # Find function definitions
-            /usr/bin/grep -nE '^[a-zA-Z_][a-zA-Z0-9_]*\(\)|^function [a-zA-Z_]' "$file" 2>/dev/null | \
+            /usr/bin/grep -nE '^[a-zA-Z_][a-zA-Z0-9_]*\(\)|^function [a-zA-Z_]' "$file" 2>/dev/null |
                 while IFS=: read -r line_num content; do
                     # Skip private functions (leading underscore)
                     case "$content" in
-                        _*|*"function _"*) continue ;;
+                        _* | *"function _"*) continue ;;
                     esac
                     # Check for # comment on preceding line
                     if ! check_prev_lines "$file" "$line_num" '^\s*#'; then
@@ -124,7 +124,7 @@ while IFS= read -r file; do
 
         # --- Ruby ---
         *.rb)
-            /usr/bin/grep -nE '^\s*def [a-z]' "$file" 2>/dev/null | \
+            /usr/bin/grep -nE '^\s*def [a-z]' "$file" 2>/dev/null |
                 while IFS=: read -r line_num content; do
                     if ! check_prev_lines "$file" "$line_num" '^\s*#'; then
                         evidence=$(/usr/bin/printf '%.80s' "$content")
@@ -136,8 +136,8 @@ while IFS= read -r file; do
             ;;
 
         # --- Java/Kotlin ---
-        *.java|*.kt)
-            /usr/bin/grep -nE '^\s*public .*(void|int|String|boolean|List|Map|Optional|fun )' "$file" 2>/dev/null | \
+        *.java | *.kt)
+            /usr/bin/grep -nE '^\s*public .*(void|int|String|boolean|List|Map|Optional|fun )' "$file" 2>/dev/null |
                 while IFS=: read -r line_num content; do
                     if ! check_prev_lines "$file" "$line_num" '/\*\*'; then
                         evidence=$(/usr/bin/printf '%.80s' "$content")
@@ -149,4 +149,4 @@ while IFS= read -r file; do
             ;;
     esac
 
-done < "$FILE_LIST"
+done <"$FILE_LIST"

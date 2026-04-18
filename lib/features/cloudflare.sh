@@ -64,7 +64,7 @@ CLOUDFLARE_NODE_VERSION="${CLOUDFLARE_NODE_VERSION:-20}"
 NODE_INSTALLED=false
 NODE_VERSION_OK=false
 
-if command -v node &> /dev/null; then
+if command -v node &>/dev/null; then
     NODE_INSTALLED=true
     NODE_VERSION=$(node --version | command grep -oE '[0-9]+' | command head -1)
     log_message "Node.js already installed: $(node --version)"
@@ -99,11 +99,11 @@ if [ "$NODE_INSTALLED" = false ] || [ "$NODE_VERSION_OK" = false ]; then
 
     # Convert GPG key to binary format for apt (required for Debian 13+)
     log_command "Converting GPG key to binary format" \
-        gpg --dearmor -o /usr/share/keyrings/nodesource.gpg < /tmp/nodesource.gpg.key
+        gpg --dearmor -o /usr/share/keyrings/nodesource.gpg </tmp/nodesource.gpg.key
 
     # Add NodeSource repository with signed-by directive
     log_message "Adding NodeSource repository to apt sources..."
-    command cat > /etc/apt/sources.list.d/nodesource.list << EOF
+    command cat >/etc/apt/sources.list.d/nodesource.list <<EOF
 deb [signed-by=/usr/share/keyrings/nodesource.gpg] https://deb.nodesource.com/node_${CLOUDFLARE_NODE_VERSION}.x nodistro main
 EOF
 
@@ -118,7 +118,7 @@ EOF
     apt_install nodejs
 
     # Verify installation
-    if command -v node &> /dev/null; then
+    if command -v node &>/dev/null; then
         log_message "Node.js installed successfully: $(node --version)"
     else
         log_error "Failed to install Node.js"
@@ -128,7 +128,7 @@ EOF
 fi
 
 # Check if npm is available
-if ! command -v npm &> /dev/null; then
+if ! command -v npm &>/dev/null; then
     log_warning "npm not found. Node.js installation may be incomplete."
     exit 1
 fi
@@ -149,13 +149,13 @@ log_message "NPM global prefix: ${NPM_PREFIX}"
 # This ensures they exist in the image even without cache mounts
 create_cache_directories "$NPM_CACHE_DIR" "$NPM_PREFIX"
 create_cache_directories "$NPM_CACHE_DIR" "$NPM_PREFIX"
-    bash -c "install -d -m 0755 -o '${USER_UID}' -g '${USER_GID}' '$NPM_CACHE_DIR' && install -d -m 0755 -o '${USER_UID}' -g '${USER_GID}' '$NPM_PREFIX'"
+bash -c "install -d -m 0755 -o '${USER_UID}' -g '${USER_GID}' '$NPM_CACHE_DIR' && install -d -m 0755 -o '${USER_UID}' -g '${USER_GID}' '$NPM_PREFIX'"
 
 # Also add to system-wide PATH before checking
 export PATH="${NPM_PREFIX}/bin:$PATH"
 
 # Check if wrangler is already installed
-if command -v wrangler &> /dev/null; then
+if command -v wrangler &>/dev/null; then
     log_message "✓ wrangler is already installed at $(which wrangler)"
     log_message "  Version: $(wrangler --version 2>&1 | command grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | command head -1 || echo 'unknown')"
 else
@@ -201,7 +201,7 @@ log_message "Installing cloudflared (Cloudflare Tunnel)..."
 
 # Detect architecture for correct binary
 ARCH=$(dpkg --print-architecture)
-CLOUDFLARED_VERSION="2025.11.1"  # Can be overridden with CLOUDFLARED_VERSION build arg
+CLOUDFLARED_VERSION="2025.11.1" # Can be overridden with CLOUDFLARED_VERSION build arg
 
 CLOUDFLARED_ARCH=$(map_arch_or_skip "amd64" "arm64")
 if [ -n "$CLOUDFLARED_ARCH" ]; then
@@ -226,7 +226,11 @@ if [ -n "$CLOUDFLARED_DEB" ]; then
     fi
 
     # Run 4-tier verification (TOFU — no published checksums)
-    verify_download_or_fail "tool" "cloudflared" "$CLOUDFLARED_VERSION" "cloudflared.deb" "$ARCH" || { cd /; log_feature_end; exit 1; }
+    verify_download_or_fail "tool" "cloudflared" "$CLOUDFLARED_VERSION" "cloudflared.deb" "$ARCH" || {
+        cd /
+        log_feature_end
+        exit 1
+    }
 
     log_command "Installing cloudflared package" \
         dpkg -i cloudflared.deb
@@ -247,7 +251,7 @@ log_command "Creating bashrc.d directory" \
 
 # Create system-wide Cloudflare configuration (content in lib/bashrc/cloudflare.sh)
 write_bashrc_content /etc/bashrc.d/65-cloudflare.sh "Cloudflare tools configuration" \
-    < /tmp/build-scripts/features/lib/bashrc/cloudflare.sh
+    </tmp/build-scripts/features/lib/bashrc/cloudflare.sh
 
 log_command "Setting Cloudflare bashrc script permissions" \
     chmod +x /etc/bashrc.d/65-cloudflare.sh
@@ -261,7 +265,7 @@ log_message "Creating Cloudflare startup scripts..."
 log_command "Creating container startup directory" \
     mkdir -p /etc/container/first-startup
 
-command cat > /etc/container/first-startup/20-cloudflare-setup.sh << EOF
+command cat >/etc/container/first-startup/20-cloudflare-setup.sh <<EOF
 #!/bin/bash
 # Check for Cloudflare credentials
 if [ ! -f ~/.wrangler/config/default.toml ] && [ -f ${WORKING_DIR}/.wrangler/config/default.toml ]; then
@@ -302,7 +306,7 @@ log_command "Setting Cloudflare startup script permissions" \
 # ============================================================================
 log_message "Creating Cloudflare verification script..."
 
-command cat > /usr/local/bin/test-cloudflare << 'EOF'
+command cat >/usr/local/bin/test-cloudflare <<'EOF'
 #!/bin/bash
 echo "=== Cloudflare Tools Status ==="
 
@@ -378,12 +382,12 @@ log_message "Verifying Cloudflare tools installation..."
 # Need to export PATH for verification
 export PATH="${NPM_PREFIX}/bin:$PATH"
 
-if command -v wrangler &> /dev/null; then
+if command -v wrangler &>/dev/null; then
     log_command "Checking wrangler version" \
         wrangler --version || log_warning "wrangler version check failed"
 fi
 
-if command -v cloudflared &> /dev/null; then
+if command -v cloudflared &>/dev/null; then
     log_command "Checking cloudflared version" \
         cloudflared --version || log_warning "cloudflared version check failed"
 fi

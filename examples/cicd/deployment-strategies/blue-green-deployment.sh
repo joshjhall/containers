@@ -75,7 +75,7 @@ echo -e "${BLUE}Step 2: Deploying new version to $NEW environment...${NC}"
 DEPLOYMENT_NEW="devcontainer-$NEW"
 
 # Create or update green deployment
-command cat > "/tmp/deployment-$NEW.yaml" << EOF
+command cat >"/tmp/deployment-$NEW.yaml" <<EOF
 apiVersion: apps/v1
 kind: Deployment
 metadata:

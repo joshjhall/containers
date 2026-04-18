@@ -84,7 +84,7 @@ test_grammar_loading_with_substitution() {
     local tff_temp_dir
     tff_temp_dir=$(mktemp -d)
 
-    if command sed "s/__LANG_NAME__/mylang/g" "$TEMPLATE_DIR/treesitter/grammar.js.tmpl" > "$tff_temp_dir/grammar.js"; then
+    if command sed "s/__LANG_NAME__/mylang/g" "$TEMPLATE_DIR/treesitter/grammar.js.tmpl" >"$tff_temp_dir/grammar.js"; then
         if command grep -q "name: 'mylang'" "$tff_temp_dir/grammar.js"; then
             assert_true true "Grammar template substitution works correctly"
         else
@@ -109,7 +109,7 @@ test_grammar_template_structure() {
     local tff_temp_dir
     tff_temp_dir=$(mktemp -d)
 
-    if command sed "s/__LANG_NAME__/mylang/g" "$TEMPLATE_DIR/treesitter/grammar.js.tmpl" > "$tff_temp_dir/grammar.js"; then
+    if command sed "s/__LANG_NAME__/mylang/g" "$TEMPLATE_DIR/treesitter/grammar.js.tmpl" >"$tff_temp_dir/grammar.js"; then
         if command grep -q "module.exports = grammar" "$tff_temp_dir/grammar.js" && command grep -q "source_file" "$tff_temp_dir/grammar.js"; then
             assert_true true "Grammar template has valid structure"
         else
@@ -146,9 +146,9 @@ test_justfile_rust_commands() {
     tff_temp_dir=$(mktemp -d)
 
     if cp "$TEMPLATE_DIR/just/justfile.tmpl" "$tff_temp_dir/justfile"; then
-        if command grep -q "cargo build" "$tff_temp_dir/justfile" && \
-           command grep -q "cargo test" "$tff_temp_dir/justfile" && \
-           command grep -q "cargo clippy" "$tff_temp_dir/justfile"; then
+        if command grep -q "cargo build" "$tff_temp_dir/justfile" &&
+            command grep -q "cargo test" "$tff_temp_dir/justfile" &&
+            command grep -q "cargo clippy" "$tff_temp_dir/justfile"; then
             assert_true true "Justfile includes common Rust commands"
         else
             assert_true false "Justfile missing expected Rust commands"

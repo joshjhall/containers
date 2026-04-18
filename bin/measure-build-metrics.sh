@@ -43,8 +43,8 @@ METRICS_DIR="$PROJECT_ROOT/metrics"
 BASELINE_DIR="$METRICS_DIR/baselines"
 
 # Default thresholds
-SIZE_THRESHOLD_MB=100  # MB increase triggers regression
-TIME_THRESHOLD_PCT=20  # Percentage increase triggers regression
+SIZE_THRESHOLD_MB=100 # MB increase triggers regression
+TIME_THRESHOLD_PCT=20 # Percentage increase triggers regression
 
 # Flags
 SAVE_BASELINE=false
@@ -176,7 +176,7 @@ save_baseline() {
 
     local baseline_file="$BASELINE_DIR/${variant}.json"
 
-    command cat > "$baseline_file" << EOF
+    command cat >"$baseline_file" <<EOF
 {
   "variant": "$variant",
   "timestamp": "$(timestamp)",
@@ -235,7 +235,7 @@ compare_against_baseline() {
     # Size regression check
     if [ "$size_diff_bytes" -gt 0 ]; then
         local size_diff_mb_abs
-        size_diff_mb_abs=${size_diff_mb#-}  # Remove negative sign if present
+        size_diff_mb_abs=${size_diff_mb#-} # Remove negative sign if present
         if awk "BEGIN {exit !($size_diff_mb_abs > $SIZE_THRESHOLD_MB)}"; then
             regression=true
             regression_reasons+=("Image size increased by ${size_diff_mb}MB (threshold: ${SIZE_THRESHOLD_MB}MB)")
@@ -288,7 +288,7 @@ output_json() {
     local size_bytes="$2"
     local build_time="$3"
 
-    command cat << EOF
+    command cat <<EOF
 {
   "variant": "$variant",
   "timestamp": "$(timestamp)",
@@ -339,7 +339,7 @@ while [ $# -gt 0 ]; do
             OUTPUT_JSON=true
             shift
             ;;
-        --help|-h)
+        --help | -h)
             show_help
             exit 0
             ;;

@@ -1,8 +1,8 @@
 # Python development tools configuration
 
 # Error protection for interactive shells
-set +u  # Don't error on unset variables
-set +e  # Don't exit on errors
+set +u # Don't error on unset variables
+set +e # Don't exit on errors
 
 # Jupyter configuration
 export JUPYTER_CONFIG_DIR="${JUPYTER_CONFIG_DIR:-$HOME/.jupyter}"

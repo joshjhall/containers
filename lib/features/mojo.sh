@@ -95,7 +95,7 @@ log_message "  Mojo project: ${MOJO_PROJECT}"
 log_message "Checking for pixi package manager..."
 
 # Check if pixi is already installed
-if command -v pixi &> /dev/null; then
+if command -v pixi &>/dev/null; then
     log_message "✓ pixi is already installed at $(which pixi)"
     log_message "  Version: $(pixi --version)"
     # Set PIXI_HOME for consistency if not already set
@@ -146,7 +146,10 @@ else
     fi
 
     # Run 4-tier verification
-    verify_download_or_fail "tool" "pixi" "$PIXI_VERSION" "pixi.tar.gz" "$(dpkg --print-architecture)" || { log_feature_end; exit 1; }
+    verify_download_or_fail "tool" "pixi" "$PIXI_VERSION" "pixi.tar.gz" "$(dpkg --print-architecture)" || {
+        log_feature_end
+        exit 1
+    }
 
     # Extract verified archive
     log_message "Extracting pixi..."
@@ -218,7 +221,7 @@ log_command "Setting mojo-env directory ownership" \
 log_message "Creating system-wide Mojo wrapper scripts..."
 
 # Create a wrapper script for mojo command
-command cat > /usr/local/bin/mojo << 'EOF'
+command cat >/usr/local/bin/mojo <<'EOF'
 #!/bin/bash
 # Wrapper script for Mojo via pixi
 export PIXI_CACHE_DIR="/cache/pixi"
@@ -233,7 +236,7 @@ log_command "Setting mojo wrapper permissions" \
     chmod 755 /usr/local/bin/mojo
 
 # Create wrapper for mojo-lsp-server
-command cat > /usr/local/bin/mojo-lsp-server << 'EOF'
+command cat >/usr/local/bin/mojo-lsp-server <<'EOF'
 #!/bin/bash
 # Wrapper script for Mojo LSP server via pixi
 export PIXI_CACHE_DIR="/cache/pixi"
@@ -258,7 +261,7 @@ log_command "Creating bashrc.d directory" \
 
 # Create system-wide Mojo configuration (content in lib/bashrc/mojo.sh)
 write_bashrc_content /etc/bashrc.d/60-mojo.sh "Mojo configuration" \
-    < /tmp/build-scripts/features/lib/bashrc/mojo.sh
+    </tmp/build-scripts/features/lib/bashrc/mojo.sh
 
 log_command "Setting Mojo bashrc script permissions" \
     chmod +x /etc/bashrc.d/60-mojo.sh
@@ -272,7 +275,7 @@ log_message "Creating Mojo startup script..."
 log_command "Creating container startup directory" \
     mkdir -p /etc/container/first-startup
 
-command cat > /etc/container/first-startup/30-mojo-setup.sh << 'EOF'
+command cat >/etc/container/first-startup/30-mojo-setup.sh <<'EOF'
 #!/bin/bash
 # Mojo environment setup
 
@@ -304,7 +307,7 @@ log_command "Setting Mojo startup script permissions" \
 # ============================================================================
 log_message "Creating Mojo verification script..."
 
-command cat > /usr/local/bin/test-mojo << 'EOF'
+command cat >/usr/local/bin/test-mojo <<'EOF'
 #!/bin/bash
 echo "=== Mojo Installation Status ==="
 

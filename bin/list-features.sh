@@ -92,19 +92,19 @@ categorize_feature() {
     local name="$1"
 
     case "$name" in
-        python|node|rust|ruby|golang|java|r|mojo)
+        python | node | rust | ruby | golang | java | r | mojo)
             echo "language"
             ;;
-        python-dev|node-dev|rust-dev|ruby-dev|golang-dev|java-dev|r-dev|mojo-dev|dev-tools)
+        python-dev | node-dev | rust-dev | ruby-dev | golang-dev | java-dev | r-dev | mojo-dev | dev-tools)
             echo "dev-tools"
             ;;
-        kubernetes|terraform|aws|gcloud|cloudflare)
+        kubernetes | terraform | aws | gcloud | cloudflare)
             echo "cloud"
             ;;
-        postgres-client|redis-client|sqlite-client)
+        postgres-client | redis-client | sqlite-client)
             echo "database"
             ;;
-        docker|op-cli|ollama)
+        docker | op-cli | ollama)
             echo "tool"
             ;;
         *)
@@ -131,7 +131,7 @@ while [[ $# -gt 0 ]]; do
             FILTER_CATEGORY="$2"
             shift 2
             ;;
-        --help|-h)
+        --help | -h)
             show_help
             exit 0
             ;;
@@ -199,7 +199,7 @@ if [ "$OUTPUT_FORMAT" == "json" ]; then
 
     first=true
     for feature_data in "${FEATURES[@]}"; do
-        IFS='|' read -r name build_arg category description dependencies version_arg <<< "$feature_data"
+        IFS='|' read -r name build_arg category description dependencies version_arg <<<"$feature_data"
 
         if [ "$first" = true ]; then
             first=false
@@ -240,7 +240,7 @@ else
 
     current_category=""
     for feature_data in "${FEATURES[@]}"; do
-        IFS='|' read -r name build_arg category description dependencies version_arg <<< "$feature_data"
+        IFS='|' read -r name build_arg category description dependencies version_arg <<<"$feature_data"
 
         # Print category header
         if [ "$category" != "$current_category" ]; then

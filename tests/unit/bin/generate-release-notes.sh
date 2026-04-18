@@ -29,7 +29,7 @@ setup() {
     ln -s "$SCRIPT" "$FAKE_PROJECT/bin/generate-release-notes.sh"
 
     # Create a synthetic CHANGELOG with multiple versions
-    command cat > "$FAKE_PROJECT/CHANGELOG.md" <<'CHANGELOG'
+    command cat >"$FAKE_PROJECT/CHANGELOG.md" <<'CHANGELOG'
 # Changelog
 
 ## [2.0.0] - 2026-02-01

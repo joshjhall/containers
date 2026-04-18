@@ -22,7 +22,7 @@ while IFS= read -r file; do
 
     # Only process markdown files
     case "$file" in
-        *.md|*.rst) ;;
+        *.md | *.rst) ;;
         *) continue ;;
     esac
 
@@ -38,17 +38,17 @@ while IFS= read -r file; do
 
         # Detect code block boundaries
         case "$line" in
-            '```'python*|'```'py*)
+            '```'python* | '```'py*)
                 in_code_block=true
                 code_lang="python"
                 continue
                 ;;
-            '```'javascript*|'```'js*|'```'typescript*|'```'ts*)
+            '```'javascript* | '```'js* | '```'typescript* | '```'ts*)
                 in_code_block=true
                 code_lang="js"
                 continue
                 ;;
-            '```'bash*|'```'shell*|'```'sh*)
+            '```'bash* | '```'shell* | '```'sh*)
                 in_code_block=true
                 code_lang="shell"
                 continue
@@ -75,14 +75,14 @@ while IFS= read -r file; do
                 # Convert module path to file path
                 module_path=$(/usr/bin/echo "$module" | /usr/bin/sed 's/\./\//g')
                 # Check if the module exists as a file or directory
-                if [ ! -f "${PROJECT_ROOT}/${module_path}.py" ] && \
-                   [ ! -f "${PROJECT_ROOT}/${module_path}/__init__.py" ] && \
-                   [ ! -d "${PROJECT_ROOT}/${module_path}" ]; then
+                if [ ! -f "${PROJECT_ROOT}/${module_path}.py" ] &&
+                    [ ! -f "${PROJECT_ROOT}/${module_path}/__init__.py" ] &&
+                    [ ! -d "${PROJECT_ROOT}/${module_path}" ]; then
                     # Skip standard library and common third-party modules
                     case "$module" in
-                        os|sys|re|json|typing|pathlib|collections|functools|itertools|dataclasses|\
-                        datetime|math|random|copy|io|abc|enum|logging|unittest|pytest|\
-                        flask|django|fastapi|requests|numpy|pandas|click|pydantic) continue ;;
+                        os | sys | re | json | typing | pathlib | collections | functools | itertools | dataclasses | \
+                            datetime | math | random | copy | io | abc | enum | logging | unittest | pytest | \
+                            flask | django | fastapi | requests | numpy | pandas | click | pydantic) continue ;;
                     esac
                     evidence=$(/usr/bin/printf '%.80s' "Import not found in project: ${line}")
                     /usr/bin/printf '%s\t%s\t%s\t%s\t%s\n' \
@@ -106,6 +106,6 @@ while IFS= read -r file; do
             fi
         fi
 
-    done < "$file"
+    done <"$file"
 
-done < "$FILE_LIST"
+done <"$FILE_LIST"

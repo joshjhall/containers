@@ -130,13 +130,13 @@ case ${ARCH} in
     amd64)
         GO_ARCH="amd64"
         ;;
-    arm64|aarch64)
+    arm64 | aarch64)
         GO_ARCH="arm64"
         ;;
     armhf)
         GO_ARCH="armv6l"
         ;;
-    386|i386)
+    386 | i386)
         GO_ARCH="386"
         ;;
     *)
@@ -186,7 +186,10 @@ fi
 # Verify using 4-tier system (GPG → Pinned → Published → Calculated)
 # This will try each tier in order and log which method succeeded
 # Exit codes: 0=verified, 1=failed, 2=unverified (TOFU fallback)
-verify_download_or_fail "language" "go" "$GO_VERSION" "$GO_TARBALL" "$GO_ARCH" || { log_feature_end; exit 1; }
+verify_download_or_fail "language" "go" "$GO_VERSION" "$GO_TARBALL" "$GO_ARCH" || {
+    log_feature_end
+    exit 1
+}
 
 # Extract Go to /usr/local
 log_command "Extracting Go to /usr/local" \
@@ -231,7 +234,6 @@ for cmd in go gofmt; do
     fi
 done
 
-
 # ============================================================================
 # System-wide Environment Configuration
 # ============================================================================
@@ -243,7 +245,7 @@ log_command "Creating bashrc.d directory" \
 
 # Create system-wide Go configuration (content in lib/bashrc/golang-env.sh)
 write_bashrc_content /etc/bashrc.d/50-golang.sh "Go environment configuration" \
-    < /tmp/build-scripts/features/lib/bashrc/golang-env.sh
+    </tmp/build-scripts/features/lib/bashrc/golang-env.sh
 
 log_command "Setting Go bashrc script permissions" \
     chmod +x /etc/bashrc.d/50-golang.sh
@@ -255,7 +257,7 @@ log_message "Setting up Go aliases and helpers..."
 
 # Go aliases and helpers (content in lib/bashrc/golang-aliases.sh)
 write_bashrc_content /etc/bashrc.d/50-golang.sh "Go aliases and helpers" \
-    < /tmp/build-scripts/features/lib/bashrc/golang-aliases.sh
+    </tmp/build-scripts/features/lib/bashrc/golang-aliases.sh
 
 # ============================================================================
 # Container Startup Scripts

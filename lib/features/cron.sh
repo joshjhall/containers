@@ -61,7 +61,7 @@ log_command "Creating container config directory" \
 
 # Create environment file that cron jobs can source
 # This provides the container's runtime environment to cron jobs
-command cat > /etc/container/cron-env << 'CRON_ENV_EOF'
+command cat >/etc/container/cron-env <<'CRON_ENV_EOF'
 #!/bin/bash
 # Cron Environment File
 # Source this file at the start of cron job scripts to get container environment
@@ -119,7 +119,7 @@ log_command "Creating container startup directories" \
 # Create startup script (early number to start before jobs that need it)
 # Note: The entrypoint now starts cron as root before dropping privileges,
 # so this script mainly serves as a fallback and status check.
-command cat > /etc/container/startup/05-cron.sh << 'CRON_STARTUP_EOF'
+command cat >/etc/container/startup/05-cron.sh <<'CRON_STARTUP_EOF'
 #!/bin/bash
 # Cron daemon status check
 #
@@ -175,7 +175,7 @@ log_command "Creating bashrc.d directory" \
 
 # Create system-wide cron configuration (content in lib/bashrc/cron.sh)
 write_bashrc_content /etc/bashrc.d/10-cron.sh "Cron configuration" \
-    < /tmp/build-scripts/features/lib/bashrc/cron.sh
+    </tmp/build-scripts/features/lib/bashrc/cron.sh
 
 log_command "Setting cron bashrc script permissions" \
     chmod +x /etc/bashrc.d/10-cron.sh
@@ -185,7 +185,7 @@ log_command "Setting cron bashrc script permissions" \
 # ============================================================================
 log_message "Creating cron verification script..."
 
-command cat > /usr/local/bin/test-cron << 'CRON_TEST_EOF'
+command cat >/usr/local/bin/test-cron <<'CRON_TEST_EOF'
 #!/bin/bash
 echo "=== Cron Status ==="
 

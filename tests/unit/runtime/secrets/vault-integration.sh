@@ -31,8 +31,8 @@ teardown() {
         command rm -rf "$TEST_TEMP_DIR"
     fi
     unset VAULT_ENABLED VAULT_ADDR VAULT_TOKEN VAULT_SECRET_PATH VAULT_AUTH_METHOD \
-          VAULT_ROLE_ID VAULT_SECRET_ID VAULT_K8S_ROLE VAULT_NAMESPACE \
-          VAULT_SECRET_PREFIX TEST_TEMP_DIR 2>/dev/null || true
+        VAULT_ROLE_ID VAULT_SECRET_ID VAULT_K8S_ROLE VAULT_NAMESPACE \
+        VAULT_SECRET_PREFIX TEST_TEMP_DIR 2>/dev/null || true
 }
 
 # Run tests with setup/teardown
@@ -166,7 +166,7 @@ test_load_returns_1_when_vault_cli_not_found() {
 
 test_load_returns_1_when_jq_not_found() {
     # Create a mock vault in PATH but do not provide jq
-    command cat > "$TEST_TEMP_DIR/bin/vault" << 'MOCK'
+    command cat >"$TEST_TEMP_DIR/bin/vault" <<'MOCK'
 #!/bin/bash
 exit 0
 MOCK
@@ -186,13 +186,13 @@ MOCK
 
 test_load_returns_1_for_unknown_auth_method() {
     # Create mock vault and jq in PATH
-    command cat > "$TEST_TEMP_DIR/bin/vault" << 'MOCK'
+    command cat >"$TEST_TEMP_DIR/bin/vault" <<'MOCK'
 #!/bin/bash
 exit 0
 MOCK
     chmod +x "$TEST_TEMP_DIR/bin/vault"
 
-    command cat > "$TEST_TEMP_DIR/bin/jq" << 'MOCK'
+    command cat >"$TEST_TEMP_DIR/bin/jq" <<'MOCK'
 #!/bin/bash
 exit 0
 MOCK
@@ -213,7 +213,7 @@ MOCK
 
 test_load_dispatches_to_token_auth() {
     # Create mock vault that succeeds for token lookup and kv get
-    command cat > "$TEST_TEMP_DIR/bin/vault" << 'MOCK'
+    command cat >"$TEST_TEMP_DIR/bin/vault" <<'MOCK'
 #!/bin/bash
 case "$1" in
     token)
@@ -229,7 +229,7 @@ MOCK
     chmod +x "$TEST_TEMP_DIR/bin/vault"
 
     # Create a real jq pass-through (use system jq)
-    command cat > "$TEST_TEMP_DIR/bin/jq" << 'MOCK'
+    command cat >"$TEST_TEMP_DIR/bin/jq" <<'MOCK'
 #!/bin/bash
 exec /usr/bin/jq "$@"
 MOCK
@@ -265,7 +265,7 @@ test_auth_token_returns_2_when_token_not_set() {
 
 test_auth_token_returns_2_when_lookup_fails() {
     # Create mock vault that fails on token lookup
-    command cat > "$TEST_TEMP_DIR/bin/vault" << 'MOCK'
+    command cat >"$TEST_TEMP_DIR/bin/vault" <<'MOCK'
 #!/bin/bash
 case "$1" in
     token)
@@ -288,7 +288,7 @@ MOCK
 
 test_auth_token_returns_0_when_lookup_succeeds() {
     # Create mock vault that succeeds on token lookup
-    command cat > "$TEST_TEMP_DIR/bin/vault" << 'MOCK'
+    command cat >"$TEST_TEMP_DIR/bin/vault" <<'MOCK'
 #!/bin/bash
 case "$1" in
     token)
@@ -326,7 +326,7 @@ test_auth_approle_returns_2_when_role_id_missing() {
 
 test_auth_approle_returns_2_when_vault_write_fails() {
     # Create mock vault that fails on write
-    command cat > "$TEST_TEMP_DIR/bin/vault" << 'MOCK'
+    command cat >"$TEST_TEMP_DIR/bin/vault" <<'MOCK'
 #!/bin/bash
 case "$1" in
     write)
@@ -351,7 +351,7 @@ MOCK
 
 test_auth_approle_returns_0_with_valid_response() {
     # Create mock vault that returns a valid AppRole response
-    command cat > "$TEST_TEMP_DIR/bin/vault" << 'MOCK'
+    command cat >"$TEST_TEMP_DIR/bin/vault" <<'MOCK'
 #!/bin/bash
 case "$1" in
     write)
@@ -364,7 +364,7 @@ MOCK
     chmod +x "$TEST_TEMP_DIR/bin/vault"
 
     # Use system jq for JSON parsing
-    command cat > "$TEST_TEMP_DIR/bin/jq" << 'MOCK'
+    command cat >"$TEST_TEMP_DIR/bin/jq" <<'MOCK'
 #!/bin/bash
 exec /usr/bin/jq "$@"
 MOCK

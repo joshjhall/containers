@@ -76,7 +76,7 @@ export R_LIBS_SITE="/cache/r/library"
 
 # Ensure Renviron.site has our library paths (may have been overwritten by
 # apt operations between the r.sh and r-dev.sh build layers)
-command cat > /etc/R/Renviron.site << 'RENVIRON_SITE'
+command cat >/etc/R/Renviron.site <<'RENVIRON_SITE'
 R_LIBS_USER=/cache/r/library
 R_LIBS_SITE=/cache/r/library
 R_MAX_NUM_DLLS=150
@@ -87,7 +87,7 @@ RENVIRON_SITE
 BUILD_TEMP=$(create_secure_temp_dir)
 
 # Create installation script
-command cat > "${BUILD_TEMP}/install_r_dev_tools.R" << 'EOF'
+command cat >"${BUILD_TEMP}/install_r_dev_tools.R" <<'EOF'
 # R Development Tools Installation Script
 
 # Use CRAN mirror
@@ -180,7 +180,7 @@ log_command "Creating bashrc.d directory" \
 
 # Add r-dev aliases and helpers (content in lib/bashrc/r-dev.sh)
 write_bashrc_content /etc/bashrc.d/45-r-dev.sh "R development tools" \
-    < /tmp/build-scripts/features/lib/bashrc/r-dev.sh
+    </tmp/build-scripts/features/lib/bashrc/r-dev.sh
 
 log_command "Setting R dev bashrc script permissions" \
     chmod +x /etc/bashrc.d/45-r-dev.sh
@@ -195,7 +195,7 @@ log_command "Creating R dev templates directory" \
     mkdir -p /etc/r-dev-templates
 
 # .lintr configuration template
-command cat > /etc/r-dev-templates/.lintr << 'EOF'
+command cat >/etc/r-dev-templates/.lintr <<'EOF'
 linters: linters_with_defaults(
     line_length_linter(120),
     commented_code_linter = NULL,
@@ -210,7 +210,7 @@ exclusions: list(
 EOF
 
 # testthat helper template
-command cat > /etc/r-dev-templates/testthat-helper.R << 'EOF'
+command cat >/etc/r-dev-templates/testthat-helper.R <<'EOF'
 # Helper functions for testthat
 
 # Skip tests on CI
@@ -241,7 +241,7 @@ log_message "Creating r-dev startup script..."
 log_command "Creating container startup directory" \
     mkdir -p /etc/container/first-startup
 
-command cat > /etc/container/first-startup/25-r-dev-setup.sh << 'EOF'
+command cat >/etc/container/first-startup/25-r-dev-setup.sh <<'EOF'
 #!/bin/bash
 # R development tools configuration
 if command -v R &> /dev/null; then
@@ -310,7 +310,7 @@ log_command "Setting R dev startup script permissions" \
 # ============================================================================
 log_message "Creating r-dev verification script..."
 
-command cat > /usr/local/bin/test-r-dev << 'EOF'
+command cat >/usr/local/bin/test-r-dev <<'EOF'
 #!/bin/bash
 echo "=== R Development Tools Status ==="
 

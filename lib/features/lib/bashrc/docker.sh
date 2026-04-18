@@ -3,8 +3,8 @@
 # ----------------------------------------------------------------------------
 
 # Error protection for interactive shells
-set +u  # Don't error on unset variables
-set +e  # Don't exit on errors
+set +u # Don't error on unset variables
+set +e # Don't exit on errors
 
 # Check if we're in an interactive shell
 if [[ $- != *i* ]]; then
@@ -12,21 +12,20 @@ if [[ $- != *i* ]]; then
     return 0
 fi
 
-
 # ----------------------------------------------------------------------------
 # Docker Aliases - Common container operations
 # ----------------------------------------------------------------------------
-alias d='docker'                           # Short alias for docker
-alias dc='docker compose'                  # Docker Compose V2
-alias dps='docker ps'                      # List running containers
-alias dpsa='docker ps -a'                  # List all containers
-alias di='docker images'                   # List images
-alias dex='docker exec -it'                # Execute interactive command
-alias dlog='docker logs'                   # View container logs
-alias dprune='docker system prune -af'     # Clean all unused resources
+alias d='docker'                       # Short alias for docker
+alias dc='docker compose'              # Docker Compose V2
+alias dps='docker ps'                  # List running containers
+alias dpsa='docker ps -a'              # List all containers
+alias di='docker images'               # List images
+alias dex='docker exec -it'            # Execute interactive command
+alias dlog='docker logs'               # View container logs
+alias dprune='docker system prune -af' # Clean all unused resources
 
 # Lazydocker alias
-if command -v lazydocker &> /dev/null; then
+if command -v lazydocker &>/dev/null; then
     alias lzd='lazydocker'
     alias ld='lazydocker'
 fi
@@ -129,7 +128,6 @@ docker-cleanup-volumes() {
 # Docker cache configuration
 export DOCKER_CONFIG="${DOCKER_CONFIG:-/cache/docker}"
 export DOCKER_CLI_PLUGINS_PATH="/cache/docker/cli-plugins"
-
 
 # Note: We leave set +u and set +e in place for interactive shells
 # to prevent errors with undefined variables or failed commands

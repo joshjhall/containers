@@ -12,16 +12,16 @@ if [ "${CLEANUP_BUILD_DEPS}" = "true" ]; then
     # Mark runtime libraries as manually installed to prevent autoremove from removing them
     log_command "Marking runtime libraries as manually installed" \
         apt-mark manual \
-            libbz2-1.0 \
-            libffi8 \
-            libgdbm6 \
-            liblzma5 \
-            libncurses6 \
-            libncursesw6 \
-            libreadline8 \
-            libsqlite3-0 \
-            libssl3 \
-            zlib1g 2>/dev/null || true
+        libbz2-1.0 \
+        libffi8 \
+        libgdbm6 \
+        liblzma5 \
+        libncurses6 \
+        libncursesw6 \
+        libreadline8 \
+        libsqlite3-0 \
+        libssl3 \
+        zlib1g 2>/dev/null || true
 
     # Remove build dependencies we installed earlier
     # Note: We keep wget and ca-certificates as they may be needed for runtime operations

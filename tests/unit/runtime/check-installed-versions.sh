@@ -18,7 +18,7 @@ teardown() {
 
 test_script_exists() {
     local script_file="$TEST_TEMP_DIR/script.sh"
-    echo "#\!/bin/bash" > "$script_file"
+    echo "#\!/bin/bash" >"$script_file"
     chmod +x "$script_file"
     assert_file_exists "$script_file"
     [ -x "$script_file" ] && assert_true true "Script is executable" || assert_true false "Script not executable"
@@ -26,14 +26,14 @@ test_script_exists() {
 
 test_output_format() {
     local output_file="$TEST_TEMP_DIR/output.txt"
-    echo "Test output" > "$output_file"
+    echo "Test output" >"$output_file"
     assert_file_exists "$output_file"
     [ -s "$output_file" ] && assert_true true "Output generated" || assert_true false "No output"
 }
 
 test_error_handling() {
     local error_log="$TEST_TEMP_DIR/error.log"
-    echo "Error: test" > "$error_log"
+    echo "Error: test" >"$error_log"
     assert_file_exists "$error_log"
     command grep -q "Error" "$error_log" && assert_true true "Error logged" || assert_true false "Error not logged"
 }
@@ -54,14 +54,14 @@ test_directory_structure() {
 
 test_environment_variables() {
     local env_file="$TEST_TEMP_DIR/env.sh"
-    echo "export TEST_VAR=123" > "$env_file"
+    echo "export TEST_VAR=123" >"$env_file"
     assert_file_exists "$env_file"
     command grep -q "export TEST_VAR" "$env_file" && assert_true true "Env var exported" || assert_true false "Env var not exported"
 }
 
 test_command_execution() {
     local cmd_file="$TEST_TEMP_DIR/cmd.sh"
-    echo "echo 'test'" > "$cmd_file"
+    echo "echo 'test'" >"$cmd_file"
     chmod +x "$cmd_file"
     assert_file_exists "$cmd_file"
     [ -x "$cmd_file" ] && assert_true true "Command executable" || assert_true false "Command not executable"
@@ -69,22 +69,22 @@ test_command_execution() {
 
 test_logging() {
     local log_file="$TEST_TEMP_DIR/app.log"
-    echo "[INFO] Test log entry" > "$log_file"
+    echo "[INFO] Test log entry" >"$log_file"
     assert_file_exists "$log_file"
     command grep -q "\[INFO\]" "$log_file" && assert_true true "Log entry found" || assert_true false "Log entry not found"
 }
 
 test_configuration() {
     local config_file="$TEST_TEMP_DIR/config.conf"
-    echo "setting=value" > "$config_file"
+    echo "setting=value" >"$config_file"
     assert_file_exists "$config_file"
     command grep -q "setting=value" "$config_file" && assert_true true "Config valid" || assert_true false "Config invalid"
 }
 
 test_validation() {
     local validate_script="$TEST_TEMP_DIR/validate.sh"
-    echo "#\!/bin/bash" > "$validate_script"
-    echo "exit 0" >> "$validate_script"
+    echo "#\!/bin/bash" >"$validate_script"
+    echo "exit 0" >>"$validate_script"
     chmod +x "$validate_script"
     assert_file_exists "$validate_script"
     [ -x "$validate_script" ] && assert_true true "Validation script ready" || assert_true false "Validation script not ready"

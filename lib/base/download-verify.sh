@@ -49,7 +49,9 @@ if [ -f "/tmp/build-scripts/shared/colors.sh" ]; then
 elif [ -f "$(dirname "${BASH_SOURCE[0]}")/../shared/colors.sh" ]; then
     source "$(dirname "${BASH_SOURCE[0]}")/../shared/colors.sh"
 else
-    RED='\033[0;31m'; GREEN='\033[0;32m'; NC='\033[0m'
+    RED='\033[0;31m'
+    GREEN='\033[0;32m'
+    NC='\033[0m'
 fi
 
 # ============================================================================

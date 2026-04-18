@@ -89,11 +89,11 @@ log_message "Installing additional gcloud components..."
 # gcloud components install can fail due to network issues or rate limiting
 if ! retry_command "Installing gcloud components" \
     gcloud components install \
-        gke-gcloud-auth-plugin \
-        kubectl \
-        beta \
-        alpha \
-        --quiet; then
+    gke-gcloud-auth-plugin \
+    kubectl \
+    beta \
+    alpha \
+    --quiet; then
     log_warning "gcloud components install failed (non-fatal) - base gcloud CLI is still functional"
 fi
 
@@ -108,7 +108,7 @@ log_command "Creating bashrc.d directory" \
 
 # Create system-wide gcloud configuration (content in lib/bashrc/gcloud.sh)
 write_bashrc_content /etc/bashrc.d/50-gcloud.sh "Google Cloud SDK configuration" \
-    < /tmp/build-scripts/features/lib/bashrc/gcloud.sh
+    </tmp/build-scripts/features/lib/bashrc/gcloud.sh
 
 log_command "Setting gcloud bashrc script permissions" \
     chmod +x /etc/bashrc.d/50-gcloud.sh
@@ -122,7 +122,7 @@ log_message "Creating Google Cloud startup scripts..."
 log_command "Creating container startup directory" \
     mkdir -p /etc/container/first-startup
 
-command cat > /etc/container/first-startup/20-gcloud-setup.sh << EOF
+command cat >/etc/container/first-startup/20-gcloud-setup.sh <<EOF
 #!/bin/bash
 # Check for gcloud credentials
 if [ ! -d ~/.config/gcloud ] && [ -d ${WORKING_DIR}/.config/gcloud ]; then
@@ -153,7 +153,7 @@ log_command "Setting gcloud startup script permissions" \
 # ============================================================================
 log_message "Creating Google Cloud verification script..."
 
-command cat > /usr/local/bin/test-gcloud << 'EOF'
+command cat >/usr/local/bin/test-gcloud <<'EOF'
 #!/bin/bash
 echo "=== Google Cloud SDK Status ==="
 if command -v gcloud &> /dev/null; then

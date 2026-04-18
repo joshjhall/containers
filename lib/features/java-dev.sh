@@ -86,7 +86,7 @@ _download_and_verify_tool() {
     cd "$BUILD_TEMP"
     log_message "Downloading ${tool_name} ${version}..."
     if ! command curl -L -f --retry 8 --retry-delay 10 --retry-all-errors \
-         --progress-bar -o "$output_file" "$url"; then
+        --progress-bar -o "$output_file" "$url"; then
         log_error "Failed to download ${tool_name} ${version}"
         return 1
     fi
@@ -100,7 +100,7 @@ _download_and_verify_tool() {
 log_message "Installing Spring Boot CLI..."
 
 SPRING_VERSION="${SPRING_VERSION:-4.0.5}"
-export SPRING_VERSION  # Export for use in shell functions
+export SPRING_VERSION # Export for use in shell functions
 
 # Build Maven Central URL
 SPRING_BASE_URL="https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-cli/${SPRING_VERSION}/spring-boot-cli-${SPRING_VERSION}-bin.tar.gz"
@@ -225,7 +225,7 @@ if command wget -q --spider "${GJF_URL}" 2>/dev/null; then
     fi
 
     # Create wrapper script
-    command cat > /usr/local/bin/google-java-format << 'EOF'
+    command cat >/usr/local/bin/google-java-format <<'EOF'
 #!/bin/bash
 java -jar /opt/java-tools/jars/google-java-format.jar "$@"
 EOF
@@ -246,7 +246,7 @@ log_command "Creating bashrc.d directory" \
 
 # Add java-dev aliases and helpers (content in lib/bashrc/java-dev.sh)
 write_bashrc_content /etc/bashrc.d/55-java-dev.sh "Java development tools" \
-    < /tmp/build-scripts/features/lib/bashrc/java-dev.sh
+    </tmp/build-scripts/features/lib/bashrc/java-dev.sh
 
 log_command "Setting Java dev bashrc script permissions" \
     chmod +x /etc/bashrc.d/55-java-dev.sh
@@ -276,26 +276,25 @@ load_java_config_template() {
 
 # Checkstyle configuration from template
 log_message "Creating checkstyle.xml from template"
-load_java_config_template "config/checkstyle.xml.tmpl" > "${TEMPLATES_DIR}/checkstyle.xml" \
-    || log_warning "Template missing: checkstyle.xml.tmpl"
+load_java_config_template "config/checkstyle.xml.tmpl" >"${TEMPLATES_DIR}/checkstyle.xml" ||
+    log_warning "Template missing: checkstyle.xml.tmpl"
 
 # PMD ruleset from template
 log_message "Creating pmd-ruleset.xml from template"
-load_java_config_template "config/pmd-ruleset.xml.tmpl" > "${TEMPLATES_DIR}/pmd-ruleset.xml" \
-    || log_warning "Template missing: pmd-ruleset.xml.tmpl"
+load_java_config_template "config/pmd-ruleset.xml.tmpl" >"${TEMPLATES_DIR}/pmd-ruleset.xml" ||
+    log_warning "Template missing: pmd-ruleset.xml.tmpl"
 
 # SpotBugs exclude filter from template
 log_message "Creating spotbugs-exclude.xml from template"
-load_java_config_template "config/spotbugs-exclude.xml.tmpl" > "${TEMPLATES_DIR}/spotbugs-exclude.xml" \
-    || log_warning "Template missing: spotbugs-exclude.xml.tmpl"
-
+load_java_config_template "config/spotbugs-exclude.xml.tmpl" >"${TEMPLATES_DIR}/spotbugs-exclude.xml" ||
+    log_warning "Template missing: spotbugs-exclude.xml.tmpl"
 
 # ============================================================================
 # Container Startup Scripts
 # ============================================================================
 log_message "Creating java-dev startup script..."
 
-command cat > /etc/container/first-startup/35-java-dev-setup.sh << 'EOF'
+command cat >/etc/container/first-startup/35-java-dev-setup.sh <<'EOF'
 #!/bin/bash
 # Java development tools configuration
 if command -v java &> /dev/null; then
@@ -356,7 +355,7 @@ configure_jdtls_env
 # ============================================================================
 log_message "Creating java-dev verification script..."
 
-command cat > /usr/local/bin/test-java-dev << 'EOF'
+command cat >/usr/local/bin/test-java-dev <<'EOF'
 #!/bin/bash
 echo "=== Java Development Tools Status ==="
 
@@ -413,7 +412,7 @@ log_command "Setting test-java-dev script permissions" \
     chmod +x /usr/local/bin/test-java-dev
 
 # Create help command
-command cat > /usr/local/bin/java-dev-help << 'EOF'
+command cat >/usr/local/bin/java-dev-help <<'EOF'
 #!/bin/bash
 echo "=== Java Development Commands ==="
 echo ""

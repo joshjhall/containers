@@ -79,7 +79,7 @@ test_readme_loading_with_substitution() {
     local tff_temp_dir
     tff_temp_dir=$(mktemp -d)
 
-    if command sed "s/__PROJECT_NAME__/my-mojo-app/g" "$TEMPLATE_DIR/project/README.md.tmpl" > "$tff_temp_dir/README.md"; then
+    if command sed "s/__PROJECT_NAME__/my-mojo-app/g" "$TEMPLATE_DIR/project/README.md.tmpl" >"$tff_temp_dir/README.md"; then
         if command grep -q "# my-mojo-app" "$tff_temp_dir/README.md"; then
             assert_true true "README template substitution works correctly"
         else
@@ -141,8 +141,8 @@ test_test_template_structure() {
     tff_temp_dir=$(mktemp -d)
 
     if cp "$TEMPLATE_DIR/tests/test_main.mojo.tmpl" "$tff_temp_dir/test_main.mojo"; then
-        if command grep -q "from testing import assert_equal" "$tff_temp_dir/test_main.mojo" && \
-           command grep -q "fn test_basic():" "$tff_temp_dir/test_main.mojo"; then
+        if command grep -q "from testing import assert_equal" "$tff_temp_dir/test_main.mojo" &&
+            command grep -q "fn test_basic():" "$tff_temp_dir/test_main.mojo"; then
             assert_true true "Test template has valid structure"
         else
             assert_true false "Test template missing required elements"
@@ -177,10 +177,10 @@ test_readme_project_structure() {
     local tff_temp_dir
     tff_temp_dir=$(mktemp -d)
 
-    if command sed "s/__PROJECT_NAME__/my-mojo-app/g" "$TEMPLATE_DIR/project/README.md.tmpl" > "$tff_temp_dir/README.md"; then
-        if command grep -q "## Structure" "$tff_temp_dir/README.md" && \
-           command grep -q "src/.*Source code" "$tff_temp_dir/README.md" && \
-           command grep -q "tests/.*Test files" "$tff_temp_dir/README.md"; then
+    if command sed "s/__PROJECT_NAME__/my-mojo-app/g" "$TEMPLATE_DIR/project/README.md.tmpl" >"$tff_temp_dir/README.md"; then
+        if command grep -q "## Structure" "$tff_temp_dir/README.md" &&
+            command grep -q "src/.*Source code" "$tff_temp_dir/README.md" &&
+            command grep -q "tests/.*Test files" "$tff_temp_dir/README.md"; then
             assert_true true "README includes project structure"
         else
             assert_true false "README missing structure section"

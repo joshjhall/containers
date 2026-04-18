@@ -47,7 +47,7 @@ azure_check_authentication() {
     log_info "Checking Azure authentication"
 
     # Try to get current account to verify authentication
-    if az account show > /dev/null 2>&1; then
+    if az account show >/dev/null 2>&1; then
         local account_name
         account_name=$(az account show --query name -o tsv 2>/dev/null || echo "unknown")
         log_info "Authenticated as: $account_name"
@@ -76,7 +76,7 @@ azure_login_service_principal() {
         fi
     fi
 
-    return 1  # Credentials not provided
+    return 1 # Credentials not provided
 }
 
 # ============================================================================
@@ -98,13 +98,13 @@ load_secrets_from_azure() {
     fi
 
     # Check if Azure CLI is available
-    if ! command -v az > /dev/null 2>&1; then
+    if ! command -v az >/dev/null 2>&1; then
         log_error "Azure CLI not found. Install Azure CLI to use Key Vault integration."
         return 1
     fi
 
     # Check if jq is available (needed for JSON parsing)
-    if ! command -v jq > /dev/null 2>&1; then
+    if ! command -v jq >/dev/null 2>&1; then
         log_error "jq not found. Install jq to use Key Vault integration."
         return 1
     fi
@@ -127,7 +127,7 @@ load_secrets_from_azure() {
     local secret_names=()
     if [ -n "${AZURE_SECRET_NAMES:-}" ]; then
         # Specific secrets requested
-        IFS=',' read -ra secret_names <<< "$AZURE_SECRET_NAMES"
+        IFS=',' read -ra secret_names <<<"$AZURE_SECRET_NAMES"
     else
         # Retrieve all secrets
         log_info "Retrieving list of all secrets from Key Vault"
@@ -174,7 +174,7 @@ load_secrets_from_azure() {
         # Convert secret name to valid environment variable name
         # Azure Key Vault allows hyphens, but env vars use underscores
         local env_var_name="${prefix}${secret_name//-/_}"
-        env_var_name="${env_var_name^^}"  # Convert to uppercase
+        env_var_name="${env_var_name^^}" # Convert to uppercase
 
         if is_protected_env_var "$env_var_name"; then
             log_warning "Skipping protected env var: $env_var_name (from secret: $secret_name)"
@@ -206,7 +206,7 @@ azure_keyvault_health_check() {
 
     log_info "Checking Azure Key Vault access"
 
-    if ! command -v az > /dev/null 2>&1; then
+    if ! command -v az >/dev/null 2>&1; then
         log_warning "Azure CLI not found"
         return 1
     fi

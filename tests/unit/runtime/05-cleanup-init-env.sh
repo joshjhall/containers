@@ -110,7 +110,7 @@ test_no_file_clean_exit() {
 
 test_file_deleted() {
     command mkdir -p "$TEST_TEMP_DIR/workspace/.devcontainer"
-    printf 'SECRET=value\n' > "$TEST_TEMP_DIR/workspace/.devcontainer/.env"
+    printf 'SECRET=value\n' >"$TEST_TEMP_DIR/workspace/.devcontainer/.env"
 
     (
         cd "$TEST_TEMP_DIR/workspace"
@@ -126,7 +126,7 @@ test_file_deleted() {
 
 test_skip_gate_works() {
     command mkdir -p "$TEST_TEMP_DIR/workspace/.devcontainer"
-    printf 'SECRET=value\n' > "$TEST_TEMP_DIR/workspace/.devcontainer/.env"
+    printf 'SECRET=value\n' >"$TEST_TEMP_DIR/workspace/.devcontainer/.env"
 
     (
         cd "$TEST_TEMP_DIR/workspace"
@@ -142,7 +142,7 @@ test_skip_gate_works() {
 
 test_idempotent() {
     command mkdir -p "$TEST_TEMP_DIR/workspace/.devcontainer"
-    printf 'SECRET=value\n' > "$TEST_TEMP_DIR/workspace/.devcontainer/.env"
+    printf 'SECRET=value\n' >"$TEST_TEMP_DIR/workspace/.devcontainer/.env"
 
     # Run twice
     (

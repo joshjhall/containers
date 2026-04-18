@@ -3,7 +3,7 @@ echo "=== Development Tools Status ==="
 echo ""
 echo "Version Control:"
 for tool in git tig colordiff gh delta lazygit; do
-    if command -v $tool &> /dev/null; then
+    if command -v $tool &>/dev/null; then
         echo "  ✓ $tool is installed"
     else
         echo "  ✗ $tool is not found"
@@ -13,7 +13,7 @@ done
 echo ""
 echo "Search Tools:"
 for tool in rg fd ag ack; do
-    if command -v $tool &> /dev/null; then
+    if command -v $tool &>/dev/null; then
         echo "  ✓ $tool is installed"
     else
         echo "  ✗ $tool is not found"
@@ -23,16 +23,16 @@ done
 echo ""
 echo "Modern CLI Tools:"
 # Check for eza (preferred) or exa (fallback for older Debian)
-if command -v eza &> /dev/null; then
+if command -v eza &>/dev/null; then
     echo "  ✓ eza is installed"
-elif command -v exa &> /dev/null; then
+elif command -v exa &>/dev/null; then
     echo "  ✓ exa is installed"
 else
     echo "  ✗ eza/exa is not found"
 fi
 
 for tool in bat duf htop dua fzf; do
-    if command -v $tool &> /dev/null; then
+    if command -v $tool &>/dev/null; then
         echo "  ✓ $tool is installed"
     else
         echo "  ✗ $tool is not found"
@@ -42,7 +42,7 @@ done
 echo ""
 echo "Development Utilities:"
 for tool in direnv entr just mkcert act glab biome taplo uv uvx typos shfmt agnix agentsys cspell; do
-    if command -v $tool &> /dev/null; then
+    if command -v $tool &>/dev/null; then
         echo "  ✓ $tool is installed"
     else
         echo "  ✗ $tool is not found"

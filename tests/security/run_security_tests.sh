@@ -69,7 +69,7 @@ build_test_image() {
         --build-arg PROJECT_NAME=security-test \
         --build-arg ENABLE_PASSWORDLESS_SUDO=false \
         -t "$TEST_IMAGE" \
-        "$PROJECT_ROOT" > /dev/null 2>&1
+        "$PROJECT_ROOT" >/dev/null 2>&1
 
     log_info "Built test image: $TEST_IMAGE"
 }
@@ -79,7 +79,7 @@ build_test_image() {
 cleanup() {
     if [[ "$TEST_IMAGE" == security-test:* ]]; then
         log_info "Cleaning up test image..."
-        docker rmi "$TEST_IMAGE" > /dev/null 2>&1 || true
+        docker rmi "$TEST_IMAGE" >/dev/null 2>&1 || true
     fi
 }
 
@@ -164,7 +164,7 @@ test_capabilities() {
     log_info "Testing Linux capabilities..."
 
     # Test 1: Check if capsh is available
-    if ! run_in_image which capsh > /dev/null 2>&1; then
+    if ! run_in_image which capsh >/dev/null 2>&1; then
         log_test_skip "capsh not available for capability testing"
         return
     fi
@@ -369,7 +369,7 @@ main() {
         else
             echo "Result: PASS"
         fi
-    } > "$RESULTS_DIR/security-test-results.txt"
+    } >"$RESULTS_DIR/security-test-results.txt"
 
     if [[ "$TESTS_FAILED" -gt 0 ]]; then
         log_error "Security tests failed!"

@@ -25,7 +25,7 @@ setup() {
 
     # Create mock bash.bashrc
     export MOCK_BASHRC="$MOCK_ETC/bash.bashrc"
-    echo "# Original bashrc content" > "$MOCK_BASHRC"
+    echo "# Original bashrc content" >"$MOCK_BASHRC"
 
     # Create mock bashrc.d directory
     export MOCK_BASHRC_D="$MOCK_ETC/bashrc.d"
@@ -61,7 +61,7 @@ test_bashrc_d_directory_created() {
 test_bashrc_sourcing_added() {
     # Simulate adding sourcing to bash.bashrc
     if ! command grep -q "/etc/bashrc.d" "$MOCK_BASHRC" 2>/dev/null; then
-        command cat >> "$MOCK_BASHRC" << 'EOF'
+        command cat >>"$MOCK_BASHRC" <<'EOF'
 
 # Source all scripts in /etc/bashrc.d
 if [ -d /etc/bashrc.d ]; then
@@ -92,7 +92,7 @@ test_bash_env_created() {
     local bash_env="$MOCK_ETC/bash_env"
 
     # Create bash_env file
-    command cat > "$bash_env" << 'EOF'
+    command cat >"$bash_env" <<'EOF'
 #!/bin/bash
 # Environment setup for non-interactive bash shells
 # This file is sourced when BASH_ENV is set
@@ -143,7 +143,7 @@ test_base_paths_script() {
     local base_paths="$MOCK_BASHRC_D/00-base-paths.sh"
 
     # Create base paths script
-    command cat > "$base_paths" << 'EOF'
+    command cat >"$base_paths" <<'EOF'
 # Base PATH setup
 # This is sourced by both interactive and non-interactive shells
 
@@ -208,7 +208,7 @@ test_script_numbering() {
 # Test: Idempotency - doesn't duplicate sourcing
 test_idempotent_sourcing() {
     # Add sourcing once
-    command cat >> "$MOCK_BASHRC" << 'EOF'
+    command cat >>"$MOCK_BASHRC" <<'EOF'
 # Source all scripts in /etc/bashrc.d
 if [ -d /etc/bashrc.d ]; then
     for f in /etc/bashrc.d/*.sh; do
@@ -222,7 +222,7 @@ EOF
 
     # Try to add again (should skip if already present)
     if ! command grep -q "/etc/bashrc.d" "$MOCK_BASHRC" 2>/dev/null; then
-        command cat >> "$MOCK_BASHRC" << 'EOF'
+        command cat >>"$MOCK_BASHRC" <<'EOF'
 # Source all scripts in /etc/bashrc.d
 if [ -d /etc/bashrc.d ]; then
     for f in /etc/bashrc.d/*.sh; do

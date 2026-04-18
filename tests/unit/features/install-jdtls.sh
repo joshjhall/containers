@@ -158,7 +158,7 @@ test_configure_jdtls_env_creates_bashrc() {
                 return 0
             fi
             if [ ! -f "$mock_bashrc_dir/60-jdtls.sh" ]; then
-                command cat > "$mock_bashrc_dir/60-jdtls.sh" << 'BASHRC'
+                command cat >"$mock_bashrc_dir/60-jdtls.sh" <<'BASHRC'
 # Eclipse JDT Language Server environment
 export JDTLS_HOME="/opt/jdtls"
 export JDTLS_DATA_DIR="${JDTLS_DATA_DIR:-/cache/jdtls}"

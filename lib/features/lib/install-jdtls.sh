@@ -80,14 +80,17 @@ install_jdtls() {
         # Source checksum verification if available
         if [ -f /tmp/build-scripts/base/checksum-verification.sh ]; then
             source /tmp/build-scripts/base/checksum-verification.sh
-            verify_download_or_fail "tool" "jdtls" "$JDTLS_VERSION" "/tmp/jdtls.tar.gz" "$(dpkg --print-architecture 2>/dev/null || echo 'amd64')" || { rm -f /tmp/jdtls.tar.gz; return 1; }
+            verify_download_or_fail "tool" "jdtls" "$JDTLS_VERSION" "/tmp/jdtls.tar.gz" "$(dpkg --print-architecture 2>/dev/null || echo 'amd64')" || {
+                rm -f /tmp/jdtls.tar.gz
+                return 1
+            }
         fi
         log_message "Extracting jdtls to ${JDTLS_HOME}..."
         tar -xzf /tmp/jdtls.tar.gz -C "${JDTLS_HOME}"
         rm -f /tmp/jdtls.tar.gz
 
         # Create wrapper script for easier invocation
-        command cat > "${JDTLS_HOME}/bin/jdtls" << 'WRAPPER'
+        command cat >"${JDTLS_HOME}/bin/jdtls" <<'WRAPPER'
 #!/bin/bash
 # Eclipse JDT Language Server wrapper script
 #
@@ -171,7 +174,7 @@ configure_jdtls_env() {
 
     # Add to bashrc.d if not already present
     if [ ! -f /etc/bashrc.d/60-jdtls.sh ]; then
-        command cat > /etc/bashrc.d/60-jdtls.sh << 'BASHRC'
+        command cat >/etc/bashrc.d/60-jdtls.sh <<'BASHRC'
 # Eclipse JDT Language Server environment
 export JDTLS_HOME="/opt/jdtls"
 export JDTLS_DATA_DIR="${JDTLS_DATA_DIR:-/cache/jdtls}"

@@ -112,8 +112,8 @@ DOCKER_GPG_FINGERPRINT="9DC8 5822 9FC7 DD38 854A E2D8 8D81 803C 0EBF CD88"
 log_message "Verifying Docker GPG key fingerprint..."
 IMPORTED_FINGERPRINT=$(gpg --no-default-keyring \
     --keyring /etc/apt/keyrings/docker.gpg \
-    --list-keys --with-colons 2>/dev/null \
-    | command grep '^fpr:' | command head -1 | command cut -d: -f10)
+    --list-keys --with-colons 2>/dev/null |
+    command grep '^fpr:' | command head -1 | command cut -d: -f10)
 EXPECTED_FINGERPRINT=$(echo "${DOCKER_GPG_FINGERPRINT}" | command tr -d ' ')
 
 if [ "$IMPORTED_FINGERPRINT" != "$EXPECTED_FINGERPRINT" ]; then
@@ -138,9 +138,9 @@ log_message "Installing Docker CLI tools..."
 # Note: We can't use log_command here because it would include log output in the file
 log_message "Adding Docker repository..."
 if echo \
-"deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian \
-$(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
-command tee /etc/apt/sources.list.d/docker.list > /dev/null; then
+    "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian \
+$(. /etc/os-release && echo "$VERSION_CODENAME") stable" |
+    command tee /etc/apt/sources.list.d/docker.list >/dev/null; then
     log_message "✓ Docker repository added successfully"
 else
     log_error "Failed to add Docker repository"
@@ -220,7 +220,11 @@ if ! command curl -L -f --retry 8 --retry-delay 10 --retry-all-errors --progress
 fi
 
 # Run 4-tier verification
-verify_download_or_fail "tool" "lazydocker" "$LAZYDOCKER_VERSION" "lazydocker.tar.gz" "$(dpkg --print-architecture)" || { cd /; log_feature_end; exit 1; }
+verify_download_or_fail "tool" "lazydocker" "$LAZYDOCKER_VERSION" "lazydocker.tar.gz" "$(dpkg --print-architecture)" || {
+    cd /
+    log_feature_end
+    exit 1
+}
 
 # Extract and install
 log_command "Extracting lazydocker" \
@@ -275,7 +279,11 @@ if ! command curl -L -f --retry 8 --retry-delay 10 --retry-all-errors --progress
 fi
 
 # Run 4-tier verification
-verify_download_or_fail "tool" "dive" "$DIVE_VERSION" "dive.deb" "$(dpkg --print-architecture)" || { cd /; log_feature_end; exit 1; }
+verify_download_or_fail "tool" "dive" "$DIVE_VERSION" "dive.deb" "$(dpkg --print-architecture)" || {
+    cd /
+    log_feature_end
+    exit 1
+}
 
 log_message "✓ dive v${DIVE_VERSION} verified successfully"
 
@@ -292,7 +300,10 @@ log_command "Cleaning up build directory" \
 # ============================================================================
 # shellcheck source=lib/base/cosign-install.sh
 source /tmp/build-scripts/base/cosign-install.sh
-install_cosign || { log_feature_end; exit 1; }
+install_cosign || {
+    log_feature_end
+    exit 1
+}
 
 # ============================================================================
 # Cache Configuration
@@ -317,7 +328,7 @@ log_command "Creating bashrc.d directory" \
 
 # Create system-wide Docker configuration (content in lib/bashrc/docker.sh)
 write_bashrc_content /etc/bashrc.d/50-docker.sh "Docker configuration" \
-    < /tmp/build-scripts/features/lib/bashrc/docker.sh
+    </tmp/build-scripts/features/lib/bashrc/docker.sh
 
 log_command "Setting Docker bashrc script permissions" \
     chmod +x /etc/bashrc.d/50-docker.sh
@@ -332,7 +343,7 @@ log_command "Creating container startup directories" \
     mkdir -p /etc/container/first-startup /etc/container/startup
 
 # First-time startup script - runs once
-command cat > /etc/container/first-startup/20-docker-setup.sh << 'DOCKER_STARTUP_EOF'
+command cat >/etc/container/first-startup/20-docker-setup.sh <<'DOCKER_STARTUP_EOF'
 #!/bin/bash
 # Check if Docker socket is mounted
 if [ -S /var/run/docker.sock ]; then
@@ -358,7 +369,7 @@ log_command "Setting Docker first-startup script permissions" \
 # ============================================================================
 log_message "Creating Docker verification script..."
 
-command cat > /usr/local/bin/test-docker << 'DOCKER_TEST_EOF'
+command cat >/usr/local/bin/test-docker <<'DOCKER_TEST_EOF'
 #!/bin/bash
 echo "=== Docker CLI Status ==="
 

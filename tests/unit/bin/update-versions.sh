@@ -30,13 +30,13 @@ test_dry_run_mode() {
     test_dir=$(mktemp -d)
 
     # Create mock Dockerfile
-    command cat > "$test_dir/Dockerfile" << 'EOF'
+    command cat >"$test_dir/Dockerfile" <<'EOF'
 ARG PYTHON_VERSION=3.13.0
 ARG NODE_VERSION=22.10.0
 EOF
 
     # Create mock JSON with updates
-    command cat > "$test_dir/test.json" << 'EOF'
+    command cat >"$test_dir/test.json" <<'EOF'
 {
   "tools": [
     {
@@ -71,7 +71,7 @@ test_version_update() {
     test_dir=$(mktemp -d)
 
     # Create mock Dockerfile
-    command cat > "$test_dir/Dockerfile" << 'EOF'
+    command cat >"$test_dir/Dockerfile" <<'EOF'
 ARG PYTHON_VERSION=3.13.0
 ARG NODE_VERSION=22.10.0
 EOF
@@ -80,7 +80,7 @@ EOF
     mkdir -p "$test_dir/lib/features"
 
     # Create mock JSON with updates
-    command cat > "$test_dir/test.json" << 'EOF'
+    command cat >"$test_dir/test.json" <<'EOF'
 {
   "tools": [
     {
@@ -104,10 +104,10 @@ EOF
 
     # Create mock release script
     mkdir -p bin
-    echo '#!/bin/bash' > bin/release.sh
-    echo 'echo "1.4.1" > VERSION' >> bin/release.sh
+    echo '#!/bin/bash' >bin/release.sh
+    echo 'echo "1.4.1" > VERSION' >>bin/release.sh
     chmod +x bin/release.sh
-    echo "1.4.0" > VERSION
+    echo "1.4.0" >VERSION
 
     # Run update with --no-commit to avoid git operations
     PROJECT_ROOT_OVERRIDE="$test_dir" "$PROJECT_ROOT/bin/update-versions.sh" --no-commit --no-bump --input test.json >/dev/null 2>&1
@@ -129,7 +129,7 @@ test_no_updates() {
     test_dir=$(mktemp -d)
 
     # Create mock JSON with no updates
-    command cat > "$test_dir/test.json" << 'EOF'
+    command cat >"$test_dir/test.json" <<'EOF'
 {
   "tools": [
     {
@@ -174,14 +174,14 @@ test_shell_script_update() {
 
     # Create lib/features directory and mock script
     mkdir -p "$test_dir/lib/features"
-    command cat > "$test_dir/lib/features/dev-tools.sh" << 'EOF'
+    command cat >"$test_dir/lib/features/dev-tools.sh" <<'EOF'
 #!/bin/bash
 LAZYGIT_VERSION="0.54.1"
 DIRENV_VERSION="2.37.1"
 EOF
 
     # Create mock JSON with shell script update
-    command cat > "$test_dir/test.json" << 'EOF'
+    command cat >"$test_dir/test.json" <<'EOF'
 {
   "tools": [
     {
@@ -205,10 +205,10 @@ EOF
 
     # Create mock release script
     mkdir -p bin
-    echo '#!/bin/bash' > bin/release.sh
-    echo 'echo "1.4.1" > VERSION' >> bin/release.sh
+    echo '#!/bin/bash' >bin/release.sh
+    echo 'echo "1.4.1" > VERSION' >>bin/release.sh
     chmod +x bin/release.sh
-    echo "1.4.0" > VERSION
+    echo "1.4.0" >VERSION
 
     # Run update
     PROJECT_ROOT_OVERRIDE="$test_dir" "$PROJECT_ROOT/bin/update-versions.sh" --no-commit --no-bump --input test.json >/dev/null 2>&1
@@ -231,7 +231,7 @@ test_java_dev_tools_update() {
 
     # Create lib/features directory and mock script
     mkdir -p "$test_dir/lib/features"
-    command cat > "$test_dir/lib/features/java-dev.sh" << 'EOF'
+    command cat >"$test_dir/lib/features/java-dev.sh" <<'EOF'
 #!/bin/bash
 SPRING_VERSION="3.4.2"
 JBANG_VERSION="0.121.0"
@@ -240,7 +240,7 @@ GJF_VERSION="1.25.2"
 EOF
 
     # Create mock JSON with Java tool updates
-    command cat > "$test_dir/test.json" << 'EOF'
+    command cat >"$test_dir/test.json" <<'EOF'
 {
   "tools": [
     {
@@ -285,10 +285,10 @@ EOF
 
     # Create mock release script
     mkdir -p bin
-    echo '#!/bin/bash' > bin/release.sh
-    echo 'echo "1.4.1" > VERSION' >> bin/release.sh
+    echo '#!/bin/bash' >bin/release.sh
+    echo 'echo "1.4.1" > VERSION' >>bin/release.sh
     chmod +x bin/release.sh
-    echo "1.4.0" > VERSION
+    echo "1.4.0" >VERSION
 
     # Run update
     PROJECT_ROOT_OVERRIDE="$test_dir" "$PROJECT_ROOT/bin/update-versions.sh" --no-commit --no-bump --input test.json >/dev/null 2>&1
@@ -325,14 +325,14 @@ test_duf_entr_update() {
 
     # Create lib/features directory and mock script
     mkdir -p "$test_dir/lib/features"
-    command cat > "$test_dir/lib/features/dev-tools.sh" << 'EOF'
+    command cat >"$test_dir/lib/features/dev-tools.sh" <<'EOF'
 #!/bin/bash
 DUF_VERSION="0.8.0"
 ENTR_VERSION="5.5"
 EOF
 
     # Create mock JSON with tool updates
-    command cat > "$test_dir/test.json" << 'EOF'
+    command cat >"$test_dir/test.json" <<'EOF'
 {
   "tools": [
     {
@@ -363,10 +363,10 @@ EOF
 
     # Create mock release script
     mkdir -p bin
-    echo '#!/bin/bash' > bin/release.sh
-    echo 'echo "1.4.1" > VERSION' >> bin/release.sh
+    echo '#!/bin/bash' >bin/release.sh
+    echo 'echo "1.4.1" > VERSION' >>bin/release.sh
     chmod +x bin/release.sh
-    echo "1.4.0" > VERSION
+    echo "1.4.0" >VERSION
 
     # Run update
     PROJECT_ROOT_OVERRIDE="$test_dir" "$PROJECT_ROOT/bin/update-versions.sh" --no-commit --no-bump --input test.json >/dev/null 2>&1
@@ -396,7 +396,7 @@ test_invalid_version_validation() {
     test_dir=$(mktemp -d)
 
     # Create mock Dockerfile
-    command cat > "$test_dir/Dockerfile" << 'EOF'
+    command cat >"$test_dir/Dockerfile" <<'EOF'
 ARG PYTHON_VERSION=3.13.0
 ARG NODE_VERSION=22.10.0
 ARG GO_VERSION=1.22.3
@@ -404,7 +404,7 @@ ARG RUST_VERSION=1.80.0
 EOF
 
     # Create mock JSON with invalid versions
-    command cat > "$test_dir/test.json" << 'EOF'
+    command cat >"$test_dir/test.json" <<'EOF'
 {
   "tools": [
     {
@@ -449,10 +449,10 @@ EOF
 
     # Create mock release script
     mkdir -p bin
-    echo '#!/bin/bash' > bin/release.sh
-    echo 'echo "1.4.1" > VERSION' >> bin/release.sh
+    echo '#!/bin/bash' >bin/release.sh
+    echo 'echo "1.4.1" > VERSION' >>bin/release.sh
     chmod +x bin/release.sh
-    echo "1.4.0" > VERSION
+    echo "1.4.0" >VERSION
 
     # Run update with --no-commit to avoid git operations
     output=$(PROJECT_ROOT_OVERRIDE="$test_dir" "$PROJECT_ROOT/bin/update-versions.sh" --no-commit --no-bump --input test.json 2>&1)
@@ -500,14 +500,14 @@ test_mixed_valid_invalid_versions() {
     test_dir=$(mktemp -d)
 
     # Create mock Dockerfile
-    command cat > "$test_dir/Dockerfile" << 'EOF'
+    command cat >"$test_dir/Dockerfile" <<'EOF'
 ARG PYTHON_VERSION=3.13.0
 ARG NODE_VERSION=22.10.0
 ARG GO_VERSION=1.22.3
 EOF
 
     # Create mock JSON with mixed valid and invalid versions
-    command cat > "$test_dir/test.json" << 'EOF'
+    command cat >"$test_dir/test.json" <<'EOF'
 {
   "tools": [
     {
@@ -545,10 +545,10 @@ EOF
 
     # Create mock release script
     mkdir -p bin
-    echo '#!/bin/bash' > bin/release.sh
-    echo 'echo "1.4.1" > VERSION' >> bin/release.sh
+    echo '#!/bin/bash' >bin/release.sh
+    echo 'echo "1.4.1" > VERSION' >>bin/release.sh
     chmod +x bin/release.sh
-    echo "1.4.0" > VERSION
+    echo "1.4.0" >VERSION
 
     # Run update
     output=$(PROJECT_ROOT_OVERRIDE="$test_dir" "$PROJECT_ROOT/bin/update-versions.sh" --no-commit --no-bump --input test.json 2>&1)
@@ -592,7 +592,7 @@ test_update_zoxide_version() {
     mkdir -p "$test_dir/lib/base"
 
     # Create test base setup script with old zoxide version
-    command cat > "$test_dir/lib/base/setup.sh" <<'EOF'
+    command cat >"$test_dir/lib/base/setup.sh" <<'EOF'
 #!/bin/bash
 # Base system setup
 
@@ -603,7 +603,7 @@ cd /tmp
 EOF
 
     # Create mock version check output
-    command cat > "$test_dir/test.json" <<'EOF'
+    command cat >"$test_dir/test.json" <<'EOF'
 {
   "timestamp": "2024-08-13T10:00:00Z",
   "tools": [
@@ -628,10 +628,10 @@ EOF
 
     # Create mock release script
     mkdir -p bin
-    echo '#!/bin/bash' > bin/release.sh
-    echo 'echo "1.0.1" > VERSION' >> bin/release.sh
+    echo '#!/bin/bash' >bin/release.sh
+    echo 'echo "1.0.1" > VERSION' >>bin/release.sh
     chmod +x bin/release.sh
-    echo "1.0.0" > VERSION
+    echo "1.0.0" >VERSION
 
     # Run update
     PROJECT_ROOT_OVERRIDE="$test_dir" "$PROJECT_ROOT/bin/update-versions.sh" --no-commit --no-bump --input test.json >/dev/null 2>&1
