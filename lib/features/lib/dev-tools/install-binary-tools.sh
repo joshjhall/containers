@@ -345,6 +345,14 @@ install_github_binary_tools() {
         "calculate" "extract:typos" \
         || return 1
 
+    # shfmt (Go shell formatter — raw binaries for both archs, no tarball, no published checksums)
+    install_github_release "shfmt" "$SHFMT_VERSION" \
+        "https://github.com/mvdan/sh/releases/download/v${SHFMT_VERSION}" \
+        "shfmt_v${SHFMT_VERSION}_linux_amd64" \
+        "shfmt_v${SHFMT_VERSION}_linux_arm64" \
+        "calculate" "binary" \
+        || return 1
+
     # agnix (AI config linter) — requires Node.js/npm
     if command -v npm &> /dev/null; then
         log_message "Installing agnix (AI config linter)..."

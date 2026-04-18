@@ -45,6 +45,7 @@ These are defined as build arguments in the Dockerfile:
 - `BIOME_VERSION="2.4.4"`
 - `TAPLO_VERSION="0.10.0"`
 - `TYPOS_VERSION="1.45.1"`
+- `SHFMT_VERSION="3.13.1"`
 
 ### lib/features/docker.sh
 
