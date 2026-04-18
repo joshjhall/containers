@@ -91,8 +91,13 @@ test_ensure_git_cliff_darwin_arm_url() {
 
     assert_contains "$script_content" 'apple-darwin' \
         "Script maps darwin to apple-darwin"
-    assert_contains "$script_content" 'aarch64|arm64) arch="aarch64"' \
-        "Script maps arm64 to aarch64"
+    # shfmt may add spaces around | in case patterns (aarch64|arm64 vs aarch64 | arm64)
+    if /usr/bin/grep -qE 'aarch64[[:space:]]*\|[[:space:]]*arm64\) arch="aarch64"' \
+        "$PROJECT_ROOT/bin/lib/release/git-cliff.sh"; then
+        assert_true true "Script maps arm64 to aarch64"
+    else
+        assert_true false "Script maps arm64 to aarch64"
+    fi
 }
 
 # ============================================================================

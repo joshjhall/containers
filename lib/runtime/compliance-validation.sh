@@ -251,10 +251,10 @@ cv_check_backup_config() {
 # Each entry maps a cv_check_* function suffix to a requirement identifier.
 declare -A CV_FRAMEWORK_CHECKS
 CV_FRAMEWORK_CHECKS=(
-    [PCI-DSS]="encryption:4.1 audit_logging:10.1 security_context:6.2 resource_limits:12.1 health_monitoring:11.4"
-    [HIPAA]="encryption:164.312(e)(1) audit_logging:164.312(b) security_context:164.312(a)(1) backup_config:164.308(a)(7) health_monitoring:164.312(c)(1)"
-    [FedRAMP]="encryption:SC-8 audit_logging:AU-2 resource_limits:SC-4 security_context:AC-6 network_security:SC-7 backup_config:CP-9 health_monitoring:SI-4"
-    [CMMC]="encryption:SC.L2-3.13.8 audit_logging:AU.L2-3.3.1 security_context:CM.L2-3.4.2 resource_limits:SC.L2-3.13.4 health_monitoring:SI.L2-3.14.3"
+    ["PCI-DSS"]="encryption:4.1 audit_logging:10.1 security_context:6.2 resource_limits:12.1 health_monitoring:11.4"
+    ["HIPAA"]="encryption:164.312(e)(1) audit_logging:164.312(b) security_context:164.312(a)(1) backup_config:164.308(a)(7) health_monitoring:164.312(c)(1)"
+    ["FedRAMP"]="encryption:SC-8 audit_logging:AU-2 resource_limits:SC-4 security_context:AC-6 network_security:SC-7 backup_config:CP-9 health_monitoring:SI-4"
+    ["CMMC"]="encryption:SC.L2-3.13.8 audit_logging:AU.L2-3.3.1 security_context:CM.L2-3.4.2 resource_limits:SC.L2-3.13.4 health_monitoring:SI.L2-3.14.3"
 )
 
 # Generic compliance framework validator

@@ -423,14 +423,14 @@ test_debian_version_detection() {
         assert_true false "Missing lsb_release fallback"
     fi
 
-    # Check for codename mapping
-    if command grep -q "trixie.*13" "$PROJECT_ROOT/lib/base/debian-version.sh"; then
+    # Check for codename mapping (shfmt may expand case arms across lines)
+    if command grep -Pzoq 'trixie\)[\s\S]{0,40}"13"' "$PROJECT_ROOT/lib/base/debian-version.sh"; then
         assert_true true "Maps trixie codename to version 13"
     else
         assert_true false "Missing trixie codename mapping"
     fi
 
-    if command grep -q "bookworm.*12" "$PROJECT_ROOT/lib/base/debian-version.sh"; then
+    if command grep -Pzoq 'bookworm\)[\s\S]{0,40}"12"' "$PROJECT_ROOT/lib/base/debian-version.sh"; then
         assert_true true "Maps bookworm codename to version 12"
     else
         assert_true false "Missing bookworm codename mapping"

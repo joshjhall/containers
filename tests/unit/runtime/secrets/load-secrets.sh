@@ -161,13 +161,23 @@ test_source_unknown_provider() {
 }
 
 test_source_provider_aliases() {
-    # Check that aliases are mapped correctly in the source
-    assert_file_contains "$SOURCE_FILE" "1password|op)" "1password has op alias"
-    assert_file_contains "$SOURCE_FILE" "vault|hashicorp)" "Vault has hashicorp alias"
-    assert_file_contains "$SOURCE_FILE" "aws|aws-secrets)" "AWS has aws-secrets alias"
-    assert_file_contains "$SOURCE_FILE" "azure|azure-keyvault)" "Azure has azure-keyvault alias"
-    assert_file_contains "$SOURCE_FILE" "gcp|gcp-secrets|google)" "GCP has multiple aliases"
-    assert_file_contains "$SOURCE_FILE" "docker|docker-secrets)" "Docker has docker-secrets alias"
+    # Check that aliases are mapped correctly in the source.
+    # shfmt may add spaces around | in case patterns (e.g. "1password|op)" → "1password | op)")
+    _assert_alias_pattern() {
+        local pattern="$1" message="$2"
+        if command grep -qE "$pattern" "$SOURCE_FILE"; then
+            assert_true true "$message"
+        else
+            assert_true false "$message"
+        fi
+    }
+    _assert_alias_pattern '1password[[:space:]]*\|[[:space:]]*op\)' "1password has op alias"
+    _assert_alias_pattern 'vault[[:space:]]*\|[[:space:]]*hashicorp\)' "Vault has hashicorp alias"
+    _assert_alias_pattern 'aws[[:space:]]*\|[[:space:]]*aws-secrets\)' "AWS has aws-secrets alias"
+    _assert_alias_pattern 'azure[[:space:]]*\|[[:space:]]*azure-keyvault\)' "Azure has azure-keyvault alias"
+    _assert_alias_pattern 'gcp[[:space:]]*\|[[:space:]]*gcp-secrets[[:space:]]*\|[[:space:]]*google\)' "GCP has multiple aliases"
+    _assert_alias_pattern 'docker[[:space:]]*\|[[:space:]]*docker-secrets\)' "Docker has docker-secrets alias"
+    unset -f _assert_alias_pattern
 }
 
 # ============================================================================
