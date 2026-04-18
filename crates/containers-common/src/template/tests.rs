@@ -64,20 +64,18 @@ fn renderer_minimal_python() {
                     let out_lines: Vec<&str> = output.lines().collect();
                     let gold_lines: Vec<&str> = golden.lines().collect();
                     for (i, (o, g)) in out_lines.iter().zip(gold_lines.iter()).enumerate() {
-                        if o != g {
-                            panic!(
-                                "Render({tmpl}) differs from golden at line {}.\n  Got:  {o}\n  Want: {g}\n\nFull output:\n{output}\n\nFull golden:\n{golden}",
-                                i + 1
-                            );
-                        }
-                    }
-                    if out_lines.len() != gold_lines.len() {
-                        panic!(
-                            "Render({tmpl}) has {} lines, golden has {} lines.\n\nFull output:\n{output}\n\nFull golden:\n{golden}",
-                            out_lines.len(),
-                            gold_lines.len()
+                        assert!(
+                            o == g,
+                            "Render({tmpl}) differs from golden at line {}.\n  Got:  {o}\n  Want: {g}\n\nFull output:\n{output}\n\nFull golden:\n{golden}",
+                            i + 1
                         );
                     }
+                    assert!(
+                        out_lines.len() == gold_lines.len(),
+                        "Render({tmpl}) has {} lines, golden has {} lines.\n\nFull output:\n{output}\n\nFull golden:\n{golden}",
+                        out_lines.len(),
+                        gold_lines.len()
+                    );
                 }
             }
             Err(_) => {
@@ -153,20 +151,18 @@ fn renderer_fullstack() {
                     let out_lines: Vec<&str> = output.lines().collect();
                     let gold_lines: Vec<&str> = golden.lines().collect();
                     for (i, (o, g)) in out_lines.iter().zip(gold_lines.iter()).enumerate() {
-                        if o != g {
-                            panic!(
-                                "Render({tmpl}) differs from golden at line {}.\n  Got:  {o}\n  Want: {g}\n\nFull output:\n{output}\n\nFull golden:\n{golden}",
-                                i + 1
-                            );
-                        }
-                    }
-                    if out_lines.len() != gold_lines.len() {
-                        panic!(
-                            "Render({tmpl}) has {} lines, golden has {} lines.\n\nFull output:\n{output}\n\nFull golden:\n{golden}",
-                            out_lines.len(),
-                            gold_lines.len()
+                        assert!(
+                            o == g,
+                            "Render({tmpl}) differs from golden at line {}.\n  Got:  {o}\n  Want: {g}\n\nFull output:\n{output}\n\nFull golden:\n{golden}",
+                            i + 1
                         );
                     }
+                    assert!(
+                        out_lines.len() == gold_lines.len(),
+                        "Render({tmpl}) has {} lines, golden has {} lines.\n\nFull output:\n{output}\n\nFull golden:\n{golden}",
+                        out_lines.len(),
+                        gold_lines.len()
+                    );
                 }
             }
             Err(_) => {

@@ -158,7 +158,7 @@ mod tests {
     fn selection_all() {
         let sel = Selection {
             explicit: ["python".to_string(), "node".to_string()].into_iter().collect(),
-            auto_resolved: ["cron".to_string()].into_iter().collect(),
+            auto_resolved: std::iter::once("cron".to_string()).collect(),
         };
         let all = sel.all();
         assert_eq!(all.len(), 3, "expected 3 features");
