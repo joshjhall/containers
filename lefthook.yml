@@ -69,6 +69,13 @@ pre-commit:
         - "tests/results/**"
       run: shellcheck --severity=warning {staged_files}
 
+    shfmt:
+      glob: "*.sh"
+      exclude:
+        - "tests/results/**"
+      run: shfmt -w -i 4 -ci {staged_files}
+      stage_fixed: true
+
     # --- YAML linting ---
 
     yamllint:
@@ -163,6 +170,19 @@ pre-commit:
         - "lib/features/lib/bashrc/**"
       run: bin/enforce-command-prefix.sh {staged_files}
       stage_fixed: true
+
+# ============================================================================
+# commit-msg stage: validates the message before the commit lands
+# ============================================================================
+commit-msg:
+  commands:
+
+    conform:
+      # conform is shipped by the dev-tools feature; skip gracefully if
+      # running outside a dev-tools container (e.g., a lint-only host).
+      skip:
+        - run: "! command -v conform >/dev/null 2>&1"
+      run: conform enforce --commit-msg-file {1}
 
 # ============================================================================
 # Pre-push stage: runs on `git push`

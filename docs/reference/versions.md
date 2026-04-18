@@ -46,6 +46,7 @@ These are defined as build arguments in the Dockerfile:
 - `TAPLO_VERSION="0.10.0"`
 - `TYPOS_VERSION="1.45.1"`
 - `SHFMT_VERSION="3.13.1"`
+- `CONFORM_VERSION="0.1.0-alpha.31"`
 
 ### lib/features/docker.sh
 

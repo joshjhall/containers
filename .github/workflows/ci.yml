@@ -73,6 +73,30 @@ jobs:
           rm /tmp/dprint.zip
           dprint --version
 
+          # shfmt — shell formatter (version pinned in dev-tools.sh; bare binary)
+          SHFMT_VERSION=$(grep -oP 'SHFMT_VERSION:-\K[0-9.]+' lib/features/dev-tools.sh)
+          sudo curl -fsSL -o /usr/local/bin/shfmt \
+            "https://github.com/mvdan/sh/releases/download/v${SHFMT_VERSION}/shfmt_v${SHFMT_VERSION}_linux_amd64"
+          sudo chmod +x /usr/local/bin/shfmt
+          shfmt --version
+
+          # conform — commit-message linter (version pinned in dev-tools.sh; bare binary)
+          # grep pattern allows pre-release suffixes like "0.1.0-alpha.31"
+          CONFORM_VERSION=$(grep -oP 'CONFORM_VERSION:-\K[0-9.a-z-]+' lib/features/dev-tools.sh)
+          sudo curl -fsSL -o /usr/local/bin/conform \
+            "https://github.com/siderolabs/conform/releases/download/v${CONFORM_VERSION}/conform-linux-amd64"
+          sudo chmod +x /usr/local/bin/conform
+          conform version
+
+      - name: Validate commit messages (conform)
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          # Validate every commit on the PR against .conform.yaml.
+          # --base-branch lets conform enumerate just the PR's commits.
+          conform enforce --base-branch "origin/${BASE_REF}"
+
       - name: Run linting (lefthook)
         run: |
           echo "Running all linters via lefthook (single source of truth)..."

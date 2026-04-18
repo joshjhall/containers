@@ -1,0 +1,37 @@
+# conform configuration — enforces conventional-commit format so git-cliff
+# (see cliff.toml) can group commits cleanly into the changelog.
+#
+# Types listed below are the union of:
+#   - Standard Conventional Commits spec (feat, fix, chore, docs, style,
+#     refactor, perf, test, build, ci, revert)
+#   - Types parsed by cliff.toml's commit_parsers (adds `add`)
+#
+# Run locally:  conform enforce --commit-msg-file <path>
+# Run on PR:    conform enforce --base-branch origin/main
+policies:
+  - type: commit
+    spec:
+      header:
+        length: 89
+        invalidLastCharacters: .
+      body:
+        required: false
+      dco: false
+      gpg:
+        required: false
+      conventional:
+        types:
+          - add
+          - build
+          - chore
+          - ci
+          - docs
+          - feat
+          - fix
+          - perf
+          - refactor
+          - revert
+          - style
+          - test
+        scopes: []
+        descriptionLength: 72

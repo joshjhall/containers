@@ -359,6 +359,15 @@ install_github_binary_tools() {
         "calculate" "binary" ||
         return 1
 
+    # conform (siderolabs commit-message / repo linter — raw Go binaries, sha256sum.txt
+    # is published but uses a non-standard filename the helper doesn't fetch, so calculate)
+    install_github_release "conform" "$CONFORM_VERSION" \
+        "https://github.com/siderolabs/conform/releases/download/v${CONFORM_VERSION}" \
+        "conform-linux-amd64" \
+        "conform-linux-arm64" \
+        "calculate" "binary" ||
+        return 1
+
     # agnix (AI config linter) — requires Node.js/npm
     if command -v npm &>/dev/null; then
         log_message "Installing agnix (AI config linter)..."
