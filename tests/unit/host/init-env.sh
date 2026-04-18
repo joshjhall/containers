@@ -142,7 +142,7 @@ test_no_env_init_clean_exit() {
 }
 
 test_literal_values_pass_through() {
-    command cat > "$TEST_TEMP_DIR/project/.env.init" <<'EOF'
+    command cat >"$TEST_TEMP_DIR/project/.env.init" <<'EOF'
 # A comment
 TZ=America/Chicago
 ENVIRONMENT=development
@@ -167,7 +167,7 @@ EOF
 }
 
 test_comments_preserved() {
-    command cat > "$TEST_TEMP_DIR/project/.env.init" <<'EOF'
+    command cat >"$TEST_TEMP_DIR/project/.env.init" <<'EOF'
 # This is a comment
 KEY=value
 EOF
@@ -184,14 +184,14 @@ test_op_ref_name_derivation() {
     # Test the name derivation logic using --dry-run with a mock op
     # Create a mock op that returns a fixed value
     command mkdir -p "$TEST_TEMP_DIR/bin"
-    command cat > "$TEST_TEMP_DIR/bin/op" <<'MOCKEOF'
+    command cat >"$TEST_TEMP_DIR/bin/op" <<'MOCKEOF'
 #!/bin/bash
 echo "mock-secret-value"
 MOCKEOF
     command chmod +x "$TEST_TEMP_DIR/bin/op"
 
     # .env.init with OP refs
-    command cat > "$TEST_TEMP_DIR/project/.env.init" <<'EOF'
+    command cat >"$TEST_TEMP_DIR/project/.env.init" <<'EOF'
 OP_GITHUB_TOKEN_REF=op://Vault/GitHub/token
 OP_DATABASE_URL_REF=op://Vault/DB/url
 EOF
@@ -220,7 +220,7 @@ EOF
 }
 
 test_file_ref_warned_and_skipped() {
-    command cat > "$TEST_TEMP_DIR/project/.env.init" <<'EOF'
+    command cat >"$TEST_TEMP_DIR/project/.env.init" <<'EOF'
 LITERAL=value
 OP_GOOGLE_CREDS_FILE_REF=op://Vault/GCP/sa-key.json
 EOF
@@ -249,7 +249,7 @@ EOF
 }
 
 test_backup_numbering() {
-    command cat > "$TEST_TEMP_DIR/project/.env.init" <<'EOF'
+    command cat >"$TEST_TEMP_DIR/project/.env.init" <<'EOF'
 KEY=value1
 EOF
 
@@ -262,7 +262,7 @@ EOF
     assert_file_exists "$devcontainer_dir/.env" "First .env created"
 
     # Second run — should create .env.bak
-    command cat > "$TEST_TEMP_DIR/project/.env.init" <<'EOF'
+    command cat >"$TEST_TEMP_DIR/project/.env.init" <<'EOF'
 KEY=value2
 EOF
     bash "$TEST_TEMP_DIR/project/containers/host/init-env.sh" \
@@ -271,7 +271,7 @@ EOF
     assert_file_exists "$devcontainer_dir/.env.bak" "First backup .env.bak created"
 
     # Third run — should create .env.bak-2
-    command cat > "$TEST_TEMP_DIR/project/.env.init" <<'EOF'
+    command cat >"$TEST_TEMP_DIR/project/.env.init" <<'EOF'
 KEY=value3
 EOF
     bash "$TEST_TEMP_DIR/project/containers/host/init-env.sh" \
@@ -280,7 +280,7 @@ EOF
     assert_file_exists "$devcontainer_dir/.env.bak-2" "Second backup .env.bak-2 created"
 
     # Fourth run — should create .env.bak-3
-    command cat > "$TEST_TEMP_DIR/project/.env.init" <<'EOF'
+    command cat >"$TEST_TEMP_DIR/project/.env.init" <<'EOF'
 KEY=value4
 EOF
     bash "$TEST_TEMP_DIR/project/containers/host/init-env.sh" \
@@ -293,7 +293,7 @@ test_devcontainer_dir_created_if_missing() {
     # Remove .devcontainer dir
     command rm -rf "$TEST_TEMP_DIR/project/.devcontainer"
 
-    command cat > "$TEST_TEMP_DIR/project/.env.init" <<'EOF'
+    command cat >"$TEST_TEMP_DIR/project/.env.init" <<'EOF'
 KEY=value
 EOF
 
@@ -307,7 +307,7 @@ EOF
 }
 
 test_output_file_permissions() {
-    command cat > "$TEST_TEMP_DIR/project/.env.init" <<'EOF'
+    command cat >"$TEST_TEMP_DIR/project/.env.init" <<'EOF'
 SECRET=value
 EOF
 
@@ -327,7 +327,7 @@ EOF
 
 test_op_not_required_without_refs() {
     # .env.init with only literal values — should not need op
-    command cat > "$TEST_TEMP_DIR/project/.env.init" <<'EOF'
+    command cat >"$TEST_TEMP_DIR/project/.env.init" <<'EOF'
 LITERAL_VAR=hello
 ANOTHER=world
 EOF
@@ -343,7 +343,7 @@ EOF
 }
 
 test_dry_run_no_file_written() {
-    command cat > "$TEST_TEMP_DIR/project/.env.init" <<'EOF'
+    command cat >"$TEST_TEMP_DIR/project/.env.init" <<'EOF'
 KEY=value
 EOF
 
@@ -381,7 +381,7 @@ test_help_flag() {
 test_op_read_failure_continues() {
     # Mock op that fails for one ref and succeeds for another
     command mkdir -p "$TEST_TEMP_DIR/bin"
-    command cat > "$TEST_TEMP_DIR/bin/op" <<'MOCKEOF'
+    command cat >"$TEST_TEMP_DIR/bin/op" <<'MOCKEOF'
 #!/bin/bash
 case "$2" in
     op://Vault/Bad/ref)
@@ -395,7 +395,7 @@ esac
 MOCKEOF
     command chmod +x "$TEST_TEMP_DIR/bin/op"
 
-    command cat > "$TEST_TEMP_DIR/project/.env.init" <<'EOF'
+    command cat >"$TEST_TEMP_DIR/project/.env.init" <<'EOF'
 OP_BAD_VAR_REF=op://Vault/Bad/ref
 OP_GOOD_VAR_REF=op://Vault/Good/ref
 EOF

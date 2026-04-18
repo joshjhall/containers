@@ -13,7 +13,7 @@ PROJECT_ROOT="$(dirname "$BIN_DIR")"
 # Parse command line arguments
 OUTPUT_FORMAT="text"
 USE_CACHE="true"
-CACHE_DURATION=3600  # 1 hour in seconds
+CACHE_DURATION=3600 # 1 hour in seconds
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -75,7 +75,7 @@ if [ -f "$PROJECT_ROOT/.env" ]; then
         value="${value%\"}"
         value="${value#\"}"
         export "$key=$value"
-    done < "$PROJECT_ROOT/.env"
+    done <"$PROJECT_ROOT/.env"
     set +a
 fi
 
@@ -130,7 +130,7 @@ fetch_url() {
 
     # Cache the response if not empty
     if [ -n "$response" ] && [ "$USE_CACHE" = "true" ]; then
-        echo "$response" > "$cache_file"
+        echo "$response" >"$cache_file"
     fi
 
     echo "$response"

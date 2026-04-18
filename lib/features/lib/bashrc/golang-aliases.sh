@@ -45,7 +45,7 @@ go-init() {
 
     # Validate project type
     case "$project_type" in
-        cli|lib|api)
+        cli | lib | api)
             # Valid types
             ;;
         *)
@@ -78,26 +78,26 @@ go-init() {
     mkdir -p cmd pkg internal test docs
 
     # Create .gitignore
-    load_go_template "common/gitignore.tmpl" > .gitignore
+    load_go_template "common/gitignore.tmpl" >.gitignore
 
     # Create type-specific files
     case "$project_type" in
         cli)
             mkdir -p cmd/${project_dir}
-            load_go_template "cli/main.go.tmpl" > cmd/${project_dir}/main.go
+            load_go_template "cli/main.go.tmpl" >cmd/${project_dir}/main.go
             ;;
         api)
-            load_go_template "api/main.go.tmpl" > main.go
+            load_go_template "api/main.go.tmpl" >main.go
             ;;
         *)
             # Default library setup
-            load_go_template "lib/lib.go.tmpl" "$project_dir" > ${project_dir}.go
-            load_go_template "lib/lib_test.go.tmpl" "$project_dir" > ${project_dir}_test.go
+            load_go_template "lib/lib.go.tmpl" "$project_dir" >${project_dir}.go
+            load_go_template "lib/lib_test.go.tmpl" "$project_dir" >${project_dir}_test.go
             ;;
     esac
 
     # Create Makefile
-    load_go_template "common/Makefile.tmpl" > Makefile
+    load_go_template "common/Makefile.tmpl" >Makefile
 
     echo "Project $project_dir created successfully!"
     echo ""
@@ -134,9 +134,9 @@ go-cover() {
     echo "Coverage report generated: coverage.html"
 
     # Try to open in browser if possible
-    if command -v xdg-open &> /dev/null; then
+    if command -v xdg-open &>/dev/null; then
         xdg-open coverage.html
-    elif command -v open &> /dev/null; then
+    elif command -v open &>/dev/null; then
         open coverage.html
     fi
 }
@@ -169,7 +169,6 @@ go-update() {
         echo "No go.mod found in current directory"
     fi
 }
-
 
 # Note: We leave set +u and set +e in place for interactive shells
 # to prevent errors with undefined variables or failed commands

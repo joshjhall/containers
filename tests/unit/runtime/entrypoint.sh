@@ -53,7 +53,7 @@ teardown() {
 # This replaces re-implemented for loops in tests with the actual production logic.
 # Uses the same sed -n extraction pattern as parse_bindfs_skip_paths (line 842).
 _RUN_STARTUP_SCRIPTS_FILE="$RESULTS_DIR/_run_startup_scripts.sh"
-command sed -n '/^run_startup_scripts()/,/^}/p' "$PROJECT_ROOT/lib/runtime/entrypoint.sh" > "$_RUN_STARTUP_SCRIPTS_FILE"
+command sed -n '/^run_startup_scripts()/,/^}/p' "$PROJECT_ROOT/lib/runtime/entrypoint.sh" >"$_RUN_STARTUP_SCRIPTS_FILE"
 source "$_RUN_STARTUP_SCRIPTS_FILE"
 
 # Test: First-run detection
@@ -78,9 +78,9 @@ test_first_run_detection() {
 # Test: First-startup script execution order
 test_first_startup_script_order() {
     # Create numbered scripts
-    echo 'echo "10" >> '"$TEST_TEMP_DIR"'/order.txt' > "$FIRST_STARTUP_DIR/10-first.sh"
-    echo 'echo "20" >> '"$TEST_TEMP_DIR"'/order.txt' > "$FIRST_STARTUP_DIR/20-second.sh"
-    echo 'echo "30" >> '"$TEST_TEMP_DIR"'/order.txt' > "$FIRST_STARTUP_DIR/30-third.sh"
+    echo 'echo "10" >> '"$TEST_TEMP_DIR"'/order.txt' >"$FIRST_STARTUP_DIR/10-first.sh"
+    echo 'echo "20" >> '"$TEST_TEMP_DIR"'/order.txt' >"$FIRST_STARTUP_DIR/20-second.sh"
+    echo 'echo "30" >> '"$TEST_TEMP_DIR"'/order.txt' >"$FIRST_STARTUP_DIR/30-third.sh"
 
     # Use the real run_startup_scripts function (extracted from entrypoint.sh)
     run_startup_scripts "$FIRST_STARTUP_DIR" "first-startup" >/dev/null 2>&1
@@ -98,8 +98,8 @@ test_first_startup_script_order() {
 # Test: Every-boot script execution
 test_every_boot_scripts() {
     # Create startup scripts
-    echo 'echo "startup1" >> '"$TEST_TEMP_DIR"'/startup.log' > "$STARTUP_DIR/10-startup1.sh"
-    echo 'echo "startup2" >> '"$TEST_TEMP_DIR"'/startup.log' > "$STARTUP_DIR/20-startup2.sh"
+    echo 'echo "startup1" >> '"$TEST_TEMP_DIR"'/startup.log' >"$STARTUP_DIR/10-startup1.sh"
+    echo 'echo "startup2" >> '"$TEST_TEMP_DIR"'/startup.log' >"$STARTUP_DIR/20-startup2.sh"
 
     # Use the real run_startup_scripts function
     run_startup_scripts "$STARTUP_DIR" "startup" >/dev/null 2>&1
@@ -107,7 +107,7 @@ test_every_boot_scripts() {
     # Check that scripts ran
     if [ -f "$TEST_TEMP_DIR/startup.log" ]; then
         local lines
-        lines=$(command wc -l < "$TEST_TEMP_DIR/startup.log")
+        lines=$(command wc -l <"$TEST_TEMP_DIR/startup.log")
         assert_equals "2" "$lines" "Both startup scripts executed"
     else
         assert_true false "Startup log not created"
@@ -117,8 +117,8 @@ test_every_boot_scripts() {
 # Test: Script permission handling (real function runs .sh files, skips non-.sh and symlinks)
 test_script_permissions() {
     # Create .sh file, non-.sh file, and a symlink
-    echo 'echo "sh-ran" >> '"$TEST_TEMP_DIR"'/perm.log' > "$STARTUP_DIR/10-script.sh"
-    echo 'echo "txt-ran" >> '"$TEST_TEMP_DIR"'/perm.log' > "$STARTUP_DIR/20-other.txt"
+    echo 'echo "sh-ran" >> '"$TEST_TEMP_DIR"'/perm.log' >"$STARTUP_DIR/10-script.sh"
+    echo 'echo "txt-ran" >> '"$TEST_TEMP_DIR"'/perm.log' >"$STARTUP_DIR/20-other.txt"
     # Symlinks are skipped by run_startup_scripts (security: path traversal prevention)
     ln -s "$STARTUP_DIR/10-script.sh" "$STARTUP_DIR/30-link.sh"
 
@@ -128,7 +128,7 @@ test_script_permissions() {
     # Only non-symlink .sh files should have been executed
     if [ -f "$TEST_TEMP_DIR/perm.log" ]; then
         local lines
-        lines=$(command wc -l < "$TEST_TEMP_DIR/perm.log")
+        lines=$(command wc -l <"$TEST_TEMP_DIR/perm.log")
         assert_equals "1" "$lines" "Only non-symlink .sh files executed"
     else
         assert_true false "Permission log not created (no .sh file was executed)"
@@ -195,13 +195,13 @@ test_empty_directory_handling() {
 # Test: Script error handling
 test_script_error_handling() {
     # Create script that fails
-    command cat > "$STARTUP_DIR/10-fail.sh" << 'EOF'
+    command cat >"$STARTUP_DIR/10-fail.sh" <<'EOF'
 #!/bin/bash
 exit 1
 EOF
 
     # Create script that should run after failure
-    command cat > "$STARTUP_DIR/20-continue.sh" << EOF
+    command cat >"$STARTUP_DIR/20-continue.sh" <<EOF
 #!/bin/bash
 echo "after-fail" > "${TEST_TEMP_DIR}/continue.log"
 EOF
@@ -232,7 +232,7 @@ test_environment_preservation() {
     export TEST_ENV_VAR="preserved"
 
     # Create script that checks environment
-    echo 'echo "$TEST_ENV_VAR" > '"$TEST_TEMP_DIR"'/env.txt' > "$STARTUP_DIR/10-env.sh"
+    echo 'echo "$TEST_ENV_VAR" > '"$TEST_TEMP_DIR"'/env.txt' >"$STARTUP_DIR/10-env.sh"
 
     # Use the real run_startup_scripts function
     run_startup_scripts "$STARTUP_DIR" "startup" >/dev/null 2>&1
@@ -604,8 +604,8 @@ test_no_raw_pwd_in_exec() {
     # Search for $(pwd) inside command strings passed to su/sg/newgrp
     # These should all use QUOTED_PWD instead
     local raw_pwd_count
-    raw_pwd_count=$(command grep -E '(exec su|exec sg|exec newgrp)' "$script" \
-        | command grep -c '\$(pwd)' || true)
+    raw_pwd_count=$(command grep -E '(exec su|exec sg|exec newgrp)' "$script" |
+        command grep -c '\$(pwd)' || true)
 
     if [ "$raw_pwd_count" -eq 0 ]; then
         assert_true true "No raw \$(pwd) found in exec su/sg/newgrp command strings"
@@ -656,8 +656,8 @@ test_path_traversal_guard_exists() {
         has_dir_check=true
     fi
 
-    if [ "$has_realpath" = "true" ] && [ "$has_prefix_check" = "true" ] && \
-       [ "$has_dotdot_check" = "true" ] && [ "$has_dir_check" = "true" ]; then
+    if [ "$has_realpath" = "true" ] && [ "$has_prefix_check" = "true" ] &&
+        [ "$has_dotdot_check" = "true" ] && [ "$has_dir_check" = "true" ]; then
         assert_true true "Path traversal guard has all four validation checks"
     else
         assert_true false "Path traversal guard incomplete (realpath=$has_realpath prefix=$has_prefix_check dotdot=$has_dotdot_check dir=$has_dir_check)"
@@ -763,7 +763,7 @@ test_reentry_guard_skips_when_set() {
     # If the guard triggers, exec runs the command immediately (no startup).
     # If the guard doesn't trigger, a marker file is created (simulating startup).
     local guard_script="$TEST_TEMP_DIR/reentry-test.sh"
-    command cat > "$guard_script" << 'GUARD_EOF'
+    command cat >"$guard_script" <<'GUARD_EOF'
 #!/bin/bash
 # Re-entry guard (same logic as entrypoint.sh:36-40)
 if [ "${ENTRYPOINT_ALREADY_RAN:-}" = "true" ]; then
@@ -796,7 +796,7 @@ GUARD_EOF
 # Functional test: re-entry guard runs startup when ENTRYPOINT_ALREADY_RAN is unset
 test_reentry_guard_runs_when_unset() {
     local guard_script="$TEST_TEMP_DIR/reentry-test.sh"
-    command cat > "$guard_script" << 'GUARD_EOF'
+    command cat >"$guard_script" <<'GUARD_EOF'
 #!/bin/bash
 if [ "${ENTRYPOINT_ALREADY_RAN:-}" = "true" ]; then
     exec "$@"
@@ -812,8 +812,11 @@ GUARD_EOF
 
     # Run without ENTRYPOINT_ALREADY_RAN — startup should execute
     local output
-    output=$(unset ENTRYPOINT_ALREADY_RAN; TEST_TEMP_DIR="$TEST_TEMP_DIR" \
-        bash "$guard_script" echo "executed")
+    output=$(
+        unset ENTRYPOINT_ALREADY_RAN
+        TEST_TEMP_DIR="$TEST_TEMP_DIR" \
+            bash "$guard_script" echo "executed"
+    )
 
     assert_equals "executed" "$output" "Command was executed after startup"
 

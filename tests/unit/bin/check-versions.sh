@@ -187,7 +187,7 @@ test_missing_env_file() {
 test_extract_dockerfile_versions() {
     # Create a temporary test Dockerfile
     local test_dockerfile="$RESULTS_DIR/test_dockerfile"
-    command cat > "$test_dockerfile" <<'EOF'
+    command cat >"$test_dockerfile" <<'EOF'
 ARG PYTHON_VERSION=3.13.6
 ARG NODE_VERSION=22
 ARG GO_VERSION=1.24.6
@@ -278,8 +278,8 @@ test_json_output_valid() {
         assert_true true "Script produces valid JSON that can be parsed by jq"
 
         # Also verify the JSON has expected structure
-        if echo "$output" | jq -e '.tools' >/dev/null 2>&1 && \
-           echo "$output" | jq -e '.summary' >/dev/null 2>&1; then
+        if echo "$output" | jq -e '.tools' >/dev/null 2>&1 &&
+            echo "$output" | jq -e '.summary' >/dev/null 2>&1; then
             assert_true true "JSON output has expected structure (tools, summary)"
         else
             assert_true false "JSON output is missing expected fields"
@@ -350,7 +350,7 @@ test_extract_duf_entr_versions() {
 test_handle_indented_versions() {
     # Create a temporary test script with indented versions
     local test_script="$RESULTS_DIR/test_indented.sh"
-    command cat > "$test_script" <<'EOF'
+    command cat >"$test_script" <<'EOF'
 #!/bin/bash
 if [ condition ]; then
     SOME_VERSION="1.2.3"

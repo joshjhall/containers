@@ -32,7 +32,7 @@ log_feature_start "Mojo Development Tools"
 require_feature_binary "/usr/local/bin/mojo" "INCLUDE_MOJO"
 
 # Check if Python is available (recommended for interop)
-if ! command -v python3 &> /dev/null; then
+if ! command -v python3 &>/dev/null; then
     log_warning "Python3 not found. Python interop features will be limited"
 fi
 
@@ -55,7 +55,7 @@ apt_install \
 log_message "Setting up Python interop for Mojo..."
 
 # Check if Python is installed
-if ! command -v python3 &> /dev/null; then
+if ! command -v python3 &>/dev/null; then
     log_message "Python3 not found - installing Python3..."
     log_message "Installing Python3"
     apt_install \
@@ -64,7 +64,7 @@ if ! command -v python3 &> /dev/null; then
 fi
 
 # Check if pip is available
-if ! python3 -m pip --version &> /dev/null; then
+if ! python3 -m pip --version &>/dev/null; then
     log_message "pip not found - installing pip..."
     log_message "Installing pip"
     apt_install \
@@ -95,7 +95,7 @@ for py_package in numpy matplotlib jupyter notebook; do
         # First try to install from apt
         if [ -n "$apt_package" ]; then
             log_message "Installing $py_package from apt ($apt_package)..."
-            if log_message "Installing $apt_package" && \
+            if log_message "Installing $apt_package" &&
                 apt_install "$apt_package"; then
                 continue
             else
@@ -118,7 +118,7 @@ done
 log_message "Creating Mojo development helper scripts..."
 
 # Simple project initializer
-command cat > /usr/local/bin/mojo-init << 'EOF'
+command cat >/usr/local/bin/mojo-init <<'EOF'
 #!/bin/bash
 # Initialize a new Mojo project with basic structure
 
@@ -174,7 +174,7 @@ log_command "Creating bashrc.d directory" \
 
 # Add mojo-dev aliases and helpers (content in lib/bashrc/mojo-dev.sh)
 write_bashrc_content /etc/bashrc.d/65-mojo-dev.sh "Mojo development tools" \
-    < /tmp/build-scripts/features/lib/bashrc/mojo-dev.sh
+    </tmp/build-scripts/features/lib/bashrc/mojo-dev.sh
 
 log_command "Setting Mojo dev bashrc script permissions" \
     chmod +x /etc/bashrc.d/65-mojo-dev.sh
@@ -184,7 +184,7 @@ log_command "Setting Mojo dev bashrc script permissions" \
 # ============================================================================
 log_message "Creating mojo-dev startup script..."
 
-command cat > /etc/container/first-startup/45-mojo-dev-setup.sh << 'EOF'
+command cat >/etc/container/first-startup/45-mojo-dev-setup.sh <<'EOF'
 #!/bin/bash
 # Mojo development tools configuration
 if command -v mojo &> /dev/null; then
@@ -221,7 +221,7 @@ log_command "Setting Mojo dev startup script permissions" \
 # ============================================================================
 log_message "Creating mojo-dev verification script..."
 
-command cat > /usr/local/bin/test-mojo-dev << 'EOF'
+command cat >/usr/local/bin/test-mojo-dev <<'EOF'
 #!/bin/bash
 echo "=== Mojo Development Tools Status ==="
 

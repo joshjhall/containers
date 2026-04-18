@@ -217,12 +217,12 @@ resolve_java_version() {
     local resolved
 
     # Extract version_data.semver and find latest
-    resolved=$(echo "$versions_json" | \
-        command grep '"semver"' | \
-        command sed 's/.*"semver": "//; s/".*//' | \
-        command sed 's/+.*//' | \
-        command grep "^${version}" | \
-        command sort -V | \
+    resolved=$(echo "$versions_json" |
+        command grep '"semver"' |
+        command sed 's/.*"semver": "//; s/".*//' |
+        command sed 's/+.*//' |
+        command grep "^${version}" |
+        command sort -V |
         command tail -1)
 
     if [ -n "$resolved" ]; then
@@ -313,7 +313,7 @@ resolve_version() {
         python)
             resolve_python_version "$version"
             ;;
-        node|nodejs)
+        node | nodejs)
             resolve_node_version "$version"
             ;;
         rust)
@@ -325,7 +325,7 @@ resolve_version() {
         ruby)
             resolve_ruby_version "$version"
             ;;
-        go|golang)
+        go | golang)
             resolve_go_version "$version"
             ;;
         kotlin)

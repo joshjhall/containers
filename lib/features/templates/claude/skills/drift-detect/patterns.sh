@@ -69,14 +69,14 @@ while IFS= read -r planned; do
                 break
                 ;;
         esac
-    done < "$ACTUAL_FILES"
+    done <"$ACTUAL_FILES"
 
     if [ "$found" -eq 0 ]; then
         /usr/bin/printf '%s\t%s\t%s\t%s\t%s\n' \
             "$planned" "0" "planned-not-touched" \
             "Planned file not found in git diff" "HIGH"
     fi
-done < "$PLANNED_FILES"
+done <"$PLANNED_FILES"
 
 # --- Category: unplanned-modification ---
 # Files in the actual diff that are not in the plan
@@ -101,7 +101,7 @@ while IFS= read -r actual; do
                 break
                 ;;
         esac
-    done < "$PLANNED_FILES"
+    done <"$PLANNED_FILES"
 
     if [ "$found" -eq 0 ]; then
         # Check if this is a known side-effect file
@@ -124,12 +124,12 @@ while IFS= read -r actual; do
             # Extract base name without extension for matching
             planned_base=$(/usr/bin/basename "$planned" | /usr/bin/sed 's/\.[^.]*$//')
             case "$actual" in
-                *test*"$planned_base"*|*"$planned_base"*test*|*"$planned_base"*spec*)
+                *test*"$planned_base"* | *"$planned_base"*test* | *"$planned_base"*spec*)
                     is_test_for_planned=1
                     break
                     ;;
             esac
-        done < "$PLANNED_FILES"
+        done <"$PLANNED_FILES"
 
         if [ "$is_side_effect" -eq 1 ] || [ "$is_test_for_planned" -eq 1 ]; then
             /usr/bin/printf '%s\t%s\t%s\t%s\t%s\n' \
@@ -141,4 +141,4 @@ while IFS= read -r actual; do
                 "Modified but not listed in plan" "MEDIUM"
         fi
     fi
-done < "$ACTUAL_FILES"
+done <"$ACTUAL_FILES"

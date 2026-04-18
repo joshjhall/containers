@@ -55,11 +55,11 @@ while [[ $# -gt 0 ]]; do
             GITHUB_REPO="$2"
             shift 2
             ;;
-        --verbose|-v)
+        --verbose | -v)
             VERBOSE=true
             shift
             ;;
-        --help|-h)
+        --help | -h)
             echo "Usage: $0 [OPTIONS] <image-ref>"
             echo ""
             echo "Verify container image signatures and attestations."

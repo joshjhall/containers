@@ -40,30 +40,35 @@ FEATURE=""
 
 # Color codes
 # shellcheck source=lib/shared/colors.sh
-source "/opt/container-runtime/shared/colors.sh" 2>/dev/null \
-    || { RED='\033[0;31m'; GREEN='\033[0;32m'; BLUE='\033[0;34m'; NC='\033[0m'; }
+source "/opt/container-runtime/shared/colors.sh" 2>/dev/null ||
+    {
+        RED='\033[0;31m'
+        GREEN='\033[0;32m'
+        BLUE='\033[0;34m'
+        NC='\033[0m'
+    }
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
     case $1 in
-        -s|--summary)
+        -s | --summary)
             ACTION="summary"
             shift
             ;;
-        -e|--errors)
+        -e | --errors)
             ACTION="errors"
             shift
             ;;
-        -f|--full)
+        -f | --full)
             ACTION="full"
             shift
             ;;
-        -l|--list)
+        -l | --list)
             ACTION="list"
             shift
             ;;
-        -h|--help)
-            command cat << EOF
+        -h | --help)
+            command cat <<EOF
 Usage: check-build-logs.sh [options] [feature]
 
 Options:
@@ -154,7 +159,7 @@ case $ACTION in
         done
         ;;
 
-    summary|errors|full)
+    summary | errors | full)
         if [ -n "$FEATURE" ]; then
             # Show specific feature
             feature_log=$(command find "$LOG_DIR" -name "*${FEATURE}*-install.log" 2>/dev/null | command head -1)
@@ -184,7 +189,7 @@ case $ACTION in
                     else
                         printf "%-20s ${RED}✗ %s${NC}\n" "$feature" "$status"
                     fi
-                done < "$LOG_DIR/master-summary.log"
+                done <"$LOG_DIR/master-summary.log"
 
                 echo ""
                 echo "Use 'check-build-logs.sh <feature>' for details"

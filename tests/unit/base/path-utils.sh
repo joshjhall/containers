@@ -186,7 +186,7 @@ test_safe_add_to_path_permission_check() {
 
     # Change to 775 (group-writable, should be OK)
     chmod 775 "$test_dir"
-    export PATH="$ORIGINAL_PATH"  # Reset
+    export PATH="$ORIGINAL_PATH" # Reset
 
     if safe_add_to_path "$test_dir" 2>/dev/null; then
         assert_true true "Permission 775 allowed"
@@ -196,7 +196,7 @@ test_safe_add_to_path_permission_check() {
 
     # Change to 757 (world-writable, should fail)
     chmod 757 "$test_dir"
-    export PATH="$ORIGINAL_PATH"  # Reset
+    export PATH="$ORIGINAL_PATH" # Reset
 
     if safe_add_to_path "$test_dir" 2>/dev/null; then
         assert_true false "Permission 757 should be rejected (world-writable)"

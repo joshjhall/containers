@@ -26,7 +26,7 @@ while IFS= read -r file; do
 
     # Skip test files themselves and non-source files
     case "$file" in
-        *test*|*spec*|*__pycache__*|*.md|*.yml|*.yaml|*.json|*.toml) continue ;;
+        *test* | *spec* | *__pycache__* | *.md | *.yml | *.yaml | *.json | *.toml) continue ;;
     esac
 
     basename=$(/usr/bin/basename "$file")
@@ -50,7 +50,7 @@ while IFS= read -r file; do
                 fi
             done
             ;;
-        ts|js|tsx|jsx)
+        ts | js | tsx | jsx)
             for suffix in "test" "spec"; do
                 for test_path in \
                     "${dirname}/${name_no_ext}.${suffix}.${ext}" \
@@ -90,7 +90,7 @@ while IFS= read -r file; do
     case "$ext" in
         py)
             # Public functions (not starting with _)
-            /usr/bin/grep -nE '^def [a-zA-Z][a-zA-Z0-9_]*\(' "$file" 2>/dev/null | \
+            /usr/bin/grep -nE '^def [a-zA-Z][a-zA-Z0-9_]*\(' "$file" 2>/dev/null |
                 while IFS=: read -r line_num content; do
                     func_name=$(/usr/bin/printf '%s' "$content" | /usr/bin/sed 's/^def \([a-zA-Z][a-zA-Z0-9_]*\).*/\1/')
                     # Check if this function appears in any test file nearby
@@ -104,7 +104,7 @@ while IFS= read -r file; do
             ;;
         go)
             # Exported functions (capitalized)
-            /usr/bin/grep -nE '^func [A-Z][a-zA-Z0-9]*\(' "$file" 2>/dev/null | \
+            /usr/bin/grep -nE '^func [A-Z][a-zA-Z0-9]*\(' "$file" 2>/dev/null |
                 while IFS=: read -r line_num content; do
                     func_name=$(/usr/bin/printf '%s' "$content" | /usr/bin/sed 's/^func \([A-Z][a-zA-Z0-9]*\).*/\1/')
                     test_file="${dirname}/${name_no_ext}_test.go"
@@ -118,4 +118,4 @@ while IFS= read -r file; do
             ;;
     esac
 
-done < "$FILE_LIST"
+done <"$FILE_LIST"

@@ -21,9 +21,9 @@
 set -euo pipefail
 
 # Per-tool fetcher data arrays (used by _github_release_checksum_fetcher)
-declare -gA _TOOL_FETCHER_TYPES      # tool_name -> checksums_txt|sha256|sha512
-declare -gA _TOOL_FETCHER_URLS       # tool_name -> URL to fetch checksum from
-declare -gA _TOOL_FETCHER_FILENAMES  # tool_name -> filename to match in checksums.txt
+declare -gA _TOOL_FETCHER_TYPES     # tool_name -> checksums_txt|sha256|sha512
+declare -gA _TOOL_FETCHER_URLS      # tool_name -> URL to fetch checksum from
+declare -gA _TOOL_FETCHER_FILENAMES # tool_name -> filename to match in checksums.txt
 
 # Defensive check: ensure required dependencies are available
 if ! declare -f log_message >/dev/null 2>&1; then
@@ -174,7 +174,10 @@ install_github_release() {
 
     # Run 4-tier verification
     # Returns 0 on success (Tier 1-3 or Tier 4 TOFU accepted), 1 on hard failure
-    verify_download_or_fail "tool" "$tool_name" "$version" "$local_file" "$arch" || { cd /; return 1; }
+    verify_download_or_fail "tool" "$tool_name" "$version" "$local_file" "$arch" || {
+        cd /
+        return 1
+    }
 
     # For extract_flat, extract from the already-downloaded file
     if [[ "$install_type" == extract_flat:* ]]; then

@@ -22,7 +22,7 @@ set -euo pipefail
 # Configuration
 VALIDATION_NAMESPACE="${VALIDATION_NAMESPACE:-backup-validation}"
 CLEANUP_AFTER="${CLEANUP_AFTER:-true}"
-TIMEOUT="${TIMEOUT:-1800}"  # 30 minutes
+TIMEOUT="${TIMEOUT:-1800}" # 30 minutes
 LOG_FILE="${LOG_FILE:-/tmp/backup-validation-$(date +%Y%m%d-%H%M%S).log}"
 
 # Colors for output
@@ -46,7 +46,7 @@ log_error() { log "${RED}ERROR${NC}" "$*"; }
 log_success() { log "${GREEN}SUCCESS${NC}" "$*"; }
 
 usage() {
-    cat << EOF
+    cat <<EOF
 Velero Backup Validation Script
 
 Usage:
@@ -84,19 +84,19 @@ LATEST_PREFIX=""
 
 while [[ $# -gt 0 ]]; do
     case $1 in
-        -s|--schedule)
+        -s | --schedule)
             SCHEDULE_NAME="$2"
             shift 2
             ;;
-        -l|--latest)
+        -l | --latest)
             LATEST_PREFIX="$2"
             shift 2
             ;;
-        -n|--namespace)
+        -n | --namespace)
             VALIDATION_NAMESPACE="$2"
             shift 2
             ;;
-        -t|--timeout)
+        -t | --timeout)
             TIMEOUT="$2"
             shift 2
             ;;
@@ -104,7 +104,7 @@ while [[ $# -gt 0 ]]; do
             CLEANUP_AFTER="false"
             shift
             ;;
-        -h|--help)
+        -h | --help)
             usage
             ;;
         *)
@@ -118,18 +118,18 @@ done
 check_prerequisites() {
     log_info "Checking prerequisites..."
 
-    if ! command -v velero &> /dev/null; then
+    if ! command -v velero &>/dev/null; then
         log_error "velero CLI not found. Install from https://velero.io/docs/main/basic-install/"
         exit 1
     fi
 
-    if ! command -v kubectl &> /dev/null; then
+    if ! command -v kubectl &>/dev/null; then
         log_error "kubectl not found"
         exit 1
     fi
 
     # Check Velero is running
-    if ! kubectl get deployment velero -n velero &> /dev/null; then
+    if ! kubectl get deployment velero -n velero &>/dev/null; then
         log_error "Velero deployment not found in velero namespace"
         exit 1
     fi
@@ -141,7 +141,7 @@ check_prerequisites() {
 resolve_backup_name() {
     if [[ -n "$SCHEDULE_NAME" ]]; then
         log_info "Finding latest backup from schedule: $SCHEDULE_NAME"
-        BACKUP_NAME=$(velero backup get -l velero.io/schedule-name="$SCHEDULE_NAME" -o json | \
+        BACKUP_NAME=$(velero backup get -l velero.io/schedule-name="$SCHEDULE_NAME" -o json |
             jq -r '.items | sort_by(.metadata.creationTimestamp) | last | .metadata.name')
 
         if [[ -z "$BACKUP_NAME" || "$BACKUP_NAME" == "null" ]]; then
@@ -150,9 +150,9 @@ resolve_backup_name() {
         fi
     elif [[ -n "$LATEST_PREFIX" ]]; then
         log_info "Finding latest backup with prefix: $LATEST_PREFIX"
-        BACKUP_NAME=$(velero backup get -o json | \
+        BACKUP_NAME=$(velero backup get -o json |
             jq -r --arg prefix "$LATEST_PREFIX" \
-            '.items | map(select(.metadata.name | startswith($prefix))) | sort_by(.metadata.creationTimestamp) | last | .metadata.name')
+                '.items | map(select(.metadata.name | startswith($prefix))) | sort_by(.metadata.creationTimestamp) | last | .metadata.name')
 
         if [[ -z "$BACKUP_NAME" || "$BACKUP_NAME" == "null" ]]; then
             log_error "No backups found with prefix: $LATEST_PREFIX"
@@ -198,7 +198,7 @@ check_backup_status() {
 create_validation_namespace() {
     log_info "Creating validation namespace: $VALIDATION_NAMESPACE"
 
-    if kubectl get namespace "$VALIDATION_NAMESPACE" &> /dev/null; then
+    if kubectl get namespace "$VALIDATION_NAMESPACE" &>/dev/null; then
         log_warn "Validation namespace already exists, cleaning up..."
         kubectl delete namespace "$VALIDATION_NAMESPACE" --wait=true --timeout=300s
     fi
@@ -314,7 +314,7 @@ generate_report() {
     local report_file
     report_file="/tmp/backup-validation-report-$(date +%Y%m%d-%H%M%S).json"
 
-    cat > "$report_file" << EOF
+    cat >"$report_file" <<EOF
 {
     "validation_timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
     "backup_name": "$BACKUP_NAME",

@@ -156,7 +156,7 @@ MOCK_SSH_KEY_FOOTER"
     # Source just the function definitions (not main)
     local func_script="$TEST_TEMP_DIR/func.sh"
     # Extract _write_key function from the script
-    command sed -n '/^_write_key()/,/^}/p' "$SETUP_GIT_SCRIPT" > "$func_script"
+    command sed -n '/^_write_key()/,/^}/p' "$SETUP_GIT_SCRIPT" >"$func_script"
 
     # Run the function
     (
@@ -185,7 +185,7 @@ test_write_key_skips_unchanged() {
     local key_content="test-key-unchanged"
 
     local func_script="$TEST_TEMP_DIR/func.sh"
-    command sed -n '/^_write_key()/,/^}/p' "$SETUP_GIT_SCRIPT" > "$func_script"
+    command sed -n '/^_write_key()/,/^}/p' "$SETUP_GIT_SCRIPT" >"$func_script"
 
     # Write key first time
     (
@@ -210,7 +210,7 @@ test_write_key_skips_unchanged() {
 # Test: _write_key does not enable xtrace (when off)
 test_write_key_xtrace_stays_off() {
     local func_script="$TEST_TEMP_DIR/func.sh"
-    command sed -n '/^_write_key()/,/^}/p' "$SETUP_GIT_SCRIPT" > "$func_script"
+    command sed -n '/^_write_key()/,/^}/p' "$SETUP_GIT_SCRIPT" >"$func_script"
 
     local key_path="$TEST_TEMP_DIR/test_key"
 
@@ -219,7 +219,7 @@ test_write_key_xtrace_stays_off() {
     xtrace_after=$(
         set -euo pipefail
         source "$func_script"
-        set +x  # Ensure xtrace is OFF
+        set +x # Ensure xtrace is OFF
         export XTRACE_TEST_KEY="some-key-data"
         _write_key "$key_path" XTRACE_TEST_KEY
         # Check if xtrace is on after _write_key returns
@@ -236,7 +236,7 @@ test_write_key_xtrace_stays_off() {
 # Test: _write_key restores xtrace when it was ON
 test_write_key_xtrace_restored_on() {
     local func_script="$TEST_TEMP_DIR/func.sh"
-    command sed -n '/^_write_key()/,/^}/p' "$SETUP_GIT_SCRIPT" > "$func_script"
+    command sed -n '/^_write_key()/,/^}/p' "$SETUP_GIT_SCRIPT" >"$func_script"
 
     local key_path="$TEST_TEMP_DIR/test_key"
 
@@ -244,7 +244,7 @@ test_write_key_xtrace_restored_on() {
     local xtrace_after
     xtrace_after=$(
         source "$func_script"
-        set -x  # Enable xtrace
+        set -x # Enable xtrace
         export XTRACE_TEST_KEY="some-key-data"
         _write_key "$key_path" XTRACE_TEST_KEY
         # Check if xtrace is on after _write_key returns
@@ -261,7 +261,7 @@ test_write_key_xtrace_restored_on() {
 # Test: _write_key content not leaked in trace output
 test_write_key_no_secret_in_trace() {
     local func_script="$TEST_TEMP_DIR/func.sh"
-    command sed -n '/^_write_key()/,/^}/p' "$SETUP_GIT_SCRIPT" > "$func_script"
+    command sed -n '/^_write_key()/,/^}/p' "$SETUP_GIT_SCRIPT" >"$func_script"
 
     local key_path="$TEST_TEMP_DIR/test_key"
     local secret="SUPER_SECRET_KEY_MATERIAL_12345"
@@ -478,7 +478,7 @@ test_validate_ssh_key_defined() {
 test_validate_email_accepts_valid() {
     local func_script="$TEST_TEMP_DIR/func.sh"
     # Extract helpers and validation functions
-    command sed -n '1,/^# ---.*Source OP/p' "$SETUP_GIT_SCRIPT" | command head -n -1 > "$func_script"
+    command sed -n '1,/^# ---.*Source OP/p' "$SETUP_GIT_SCRIPT" | command head -n -1 >"$func_script"
 
     local exit_code=0
     (
@@ -493,7 +493,7 @@ test_validate_email_accepts_valid() {
 # Test: _validate_email rejects email without @
 test_validate_email_rejects_no_at() {
     local func_script="$TEST_TEMP_DIR/func.sh"
-    command sed -n '1,/^# ---.*Source OP/p' "$SETUP_GIT_SCRIPT" | command head -n -1 > "$func_script"
+    command sed -n '1,/^# ---.*Source OP/p' "$SETUP_GIT_SCRIPT" | command head -n -1 >"$func_script"
 
     local exit_code=0
     (
@@ -508,7 +508,7 @@ test_validate_email_rejects_no_at() {
 # Test: _validate_email rejects bare @
 test_validate_email_rejects_bare_at() {
     local func_script="$TEST_TEMP_DIR/func.sh"
-    command sed -n '1,/^# ---.*Source OP/p' "$SETUP_GIT_SCRIPT" | command head -n -1 > "$func_script"
+    command sed -n '1,/^# ---.*Source OP/p' "$SETUP_GIT_SCRIPT" | command head -n -1 >"$func_script"
 
     local exit_code=0
     (
@@ -523,7 +523,7 @@ test_validate_email_rejects_bare_at() {
 # Test: _validate_ssh_key accepts PEM key
 test_validate_ssh_key_accepts_pem() {
     local func_script="$TEST_TEMP_DIR/func.sh"
-    command sed -n '1,/^# ---.*Source OP/p' "$SETUP_GIT_SCRIPT" | command head -n -1 > "$func_script"
+    command sed -n '1,/^# ---.*Source OP/p' "$SETUP_GIT_SCRIPT" | command head -n -1 >"$func_script"
 
     # Build the PEM header dynamically to avoid triggering secret scanners
     local pem_header="-----BEGIN "
@@ -544,7 +544,7 @@ mock-content
 # Test: _validate_ssh_key rejects non-PEM content
 test_validate_ssh_key_rejects_non_pem() {
     local func_script="$TEST_TEMP_DIR/func.sh"
-    command sed -n '1,/^# ---.*Source OP/p' "$SETUP_GIT_SCRIPT" | command head -n -1 > "$func_script"
+    command sed -n '1,/^# ---.*Source OP/p' "$SETUP_GIT_SCRIPT" | command head -n -1 >"$func_script"
 
     local exit_code=0
     (

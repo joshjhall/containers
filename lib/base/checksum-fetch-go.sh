@@ -54,10 +54,10 @@ fetch_go_checksum() {
     # Try exact match first
     local filename="go${version}.linux-${arch}.tar.gz"
     local checksum
-    checksum=$(echo "$page_content" | \
-        command grep -A 5 "${filename}" | \
-        command grep -oP '<tt>[a-f0-9]{64}</tt>' | \
-        command sed 's/<tt>\|<\/tt>//g' | \
+    checksum=$(echo "$page_content" |
+        command grep -A 5 "${filename}" |
+        command grep -oP '<tt>[a-f0-9]{64}</tt>' |
+        command sed 's/<tt>\|<\/tt>//g' |
         command head -1)
 
     if [ -n "$checksum" ] && [[ "$checksum" =~ ^[a-fA-F0-9]{64}$ ]]; then
@@ -69,19 +69,19 @@ fetch_go_checksum() {
     if _is_partial_version "$version"; then
         # Partial version like "1.23", find all matching versions
         local matching_versions
-        matching_versions=$(echo "$page_content" | \
-            command grep -oP "go${version}\.\d+\.linux-${arch}\.tar\.gz" | \
-            command sed "s/go//; s/\.linux-${arch}\.tar\.gz//" | \
-            command sort -V | \
+        matching_versions=$(echo "$page_content" |
+            command grep -oP "go${version}\.\d+\.linux-${arch}\.tar\.gz" |
+            command sed "s/go//; s/\.linux-${arch}\.tar\.gz//" |
+            command sort -V |
             command tail -1)
 
         if [ -n "$matching_versions" ]; then
             # Fetch checksum for the resolved version
             local resolved_filename="go${matching_versions}.linux-${arch}.tar.gz"
-            checksum=$(echo "$page_content" | \
-                command grep -A 5 "${resolved_filename}" | \
-                command grep -oP '<tt>[a-f0-9]{64}</tt>' | \
-                command sed 's/<tt>\|<\/tt>//g' | \
+            checksum=$(echo "$page_content" |
+                command grep -A 5 "${resolved_filename}" |
+                command grep -oP '<tt>[a-f0-9]{64}</tt>' |
+                command sed 's/<tt>\|<\/tt>//g' |
                 command head -1)
 
             if [ -n "$checksum" ] && [[ "$checksum" =~ ^[a-fA-F0-9]{64}$ ]]; then

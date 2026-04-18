@@ -93,7 +93,7 @@ log_message "Adding R repository key..."
 
 # Method 1: Try to download the key directly from CRAN with retry
 log_message "Downloading R repository key from CRAN"
-if retry_with_backoff wget -qO- https://cloud.r-project.org/bin/linux/debian/marutter_pubkey.asc 2>/dev/null | gpg --dearmor > /usr/share/keyrings/r-project-archive-keyring.gpg 2>/dev/null; then
+if retry_with_backoff wget -qO- https://cloud.r-project.org/bin/linux/debian/marutter_pubkey.asc 2>/dev/null | gpg --dearmor >/usr/share/keyrings/r-project-archive-keyring.gpg 2>/dev/null; then
     log_message "Key downloaded from CRAN"
 else
     log_warning "CRAN key failed, trying keyserver..."
@@ -140,18 +140,18 @@ _install_r_from_cran() {
         # Install specific version if available
         log_message "Installing R version ${R_VERSION}..."
         if apt_install \
-                r-base-core="${R_VERSION}"-* \
-                r-base-dev="${R_VERSION}"-* \
-                r-recommended="${R_VERSION}"-*; then
+            r-base-core="${R_VERSION}"-* \
+            r-base-dev="${R_VERSION}"-* \
+            r-recommended="${R_VERSION}"-*; then
             return 0
         fi
         log_warning "Exact version ${R_VERSION} not found, trying latest from CRAN..."
     fi
     log_message "Installing latest R version from CRAN repository..."
     apt_install \
-            r-base \
-            r-base-dev \
-            r-recommended || return 1
+        r-base \
+        r-base-dev \
+        r-recommended || return 1
 }
 
 # Temporarily disable set -e so the fallback path can execute if CRAN fails.
@@ -181,9 +181,9 @@ if [ "$_cran_exit_code" -ne 0 ]; then
     apt_update
     log_message "Installing R from Debian repositories..."
     apt_install \
-            r-base \
-            r-base-dev \
-            r-recommended
+        r-base \
+        r-base-dev \
+        r-recommended
 fi
 
 # ============================================================================
@@ -194,17 +194,17 @@ log_message "Installing build dependencies for R packages"
 # Install libraries commonly needed for R package compilation
 log_message "Installing R package build dependencies..."
 apt_install \
-        libcurl4-openssl-dev \
-        libssl-dev \
-        libxml2-dev \
-        libfontconfig1-dev \
-        libharfbuzz-dev \
-        libfribidi-dev \
-        libfreetype6-dev \
-        libpng-dev \
-        libtiff5-dev \
-        libjpeg-dev \
-        libcairo2-dev
+    libcurl4-openssl-dev \
+    libssl-dev \
+    libxml2-dev \
+    libfontconfig1-dev \
+    libharfbuzz-dev \
+    libfribidi-dev \
+    libfreetype6-dev \
+    libpng-dev \
+    libtiff5-dev \
+    libjpeg-dev \
+    libcairo2-dev
 
 # ============================================================================
 # Cache and Path Configuration
@@ -213,7 +213,7 @@ log_message "Configuring R cache and paths"
 
 # ALWAYS use /cache paths for consistency with other languages
 # This will either use cache mount (faster rebuilds) or be created in the image
-export R_HOME="/usr/lib/R"  # System R installation
+export R_HOME="/usr/lib/R" # System R installation
 export R_LIBS_USER="/cache/r/library"
 export R_CACHE_DIR="/cache/r"
 
@@ -235,34 +235,34 @@ if [ "${CLEANUP_BUILD_DEPS}" = "true" ]; then
     # Mark runtime libraries as manually installed to prevent autoremove from removing them
     log_command "Marking runtime libraries as manually installed" \
         apt-mark manual \
-            libcurl4 \
-            libxml2 \
-            libfontconfig1 \
-            libharfbuzz0b \
-            libfribidi0 \
-            libfreetype6 \
-            libpng16-16 \
-            libtiff6 \
-            libjpeg62-turbo \
-            libcairo2 \
-            libssl3 2>/dev/null || true
+        libcurl4 \
+        libxml2 \
+        libfontconfig1 \
+        libharfbuzz0b \
+        libfribidi0 \
+        libfreetype6 \
+        libpng16-16 \
+        libtiff6 \
+        libjpeg62-turbo \
+        libcairo2 \
+        libssl3 2>/dev/null || true
 
     # Remove build dependencies for R package compilation
     # Note: We keep r-base-dev as some R packages may need it at runtime
     # We also keep ca-certificates, wget, gnupg, and dirmngr for runtime operations
     log_command "Removing R package build dependencies" \
         apt-get remove --purge -y \
-            libcurl4-openssl-dev \
-            libssl-dev \
-            libxml2-dev \
-            libfontconfig1-dev \
-            libharfbuzz-dev \
-            libfribidi-dev \
-            libfreetype6-dev \
-            libpng-dev \
-            libtiff5-dev \
-            libjpeg-dev \
-            libcairo2-dev || true  # Don't fail if some packages aren't installed
+        libcurl4-openssl-dev \
+        libssl-dev \
+        libxml2-dev \
+        libfontconfig1-dev \
+        libharfbuzz-dev \
+        libfribidi-dev \
+        libfreetype6-dev \
+        libpng-dev \
+        libtiff5-dev \
+        libjpeg-dev \
+        libcairo2-dev || true # Don't fail if some packages aren't installed
 
     # Now safe to remove orphaned dependencies (runtime libs are marked manual)
     log_command "Removing orphaned dependencies" \
@@ -300,7 +300,7 @@ log_command "Creating bashrc.d directory" \
 
 # Create system-wide R configuration (content in lib/bashrc/r-env.sh)
 write_bashrc_content /etc/bashrc.d/40-r.sh "R environment configuration" \
-    < /tmp/build-scripts/features/lib/bashrc/r-env.sh
+    </tmp/build-scripts/features/lib/bashrc/r-env.sh
 
 log_command "Setting R bashrc script permissions" \
     chmod +x /etc/bashrc.d/40-r.sh
@@ -312,7 +312,7 @@ log_message "Setting up R aliases and helpers..."
 
 # R aliases and helpers (content in lib/bashrc/r-aliases.sh)
 write_bashrc_content /etc/bashrc.d/40-r.sh "R aliases and helpers" \
-    < /tmp/build-scripts/features/lib/bashrc/r-aliases.sh
+    </tmp/build-scripts/features/lib/bashrc/r-aliases.sh
 
 # ============================================================================
 # Global R Configuration
@@ -326,7 +326,7 @@ install -m 644 /tmp/build-scripts/features/lib/r/Rprofile.site \
     /etc/R/Rprofile.site
 
 # Create system-wide Renviron
-command cat > /etc/R/Renviron.site << EOF
+command cat >/etc/R/Renviron.site <<EOF
 # System-wide R environment variables
 R_LIBS_USER=/cache/r/library
 R_LIBS_SITE=/cache/r/library

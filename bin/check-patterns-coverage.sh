@@ -118,7 +118,7 @@ parse_contract_categories() {
         fi
 
         /usr/bin/printf '%s|%s\n' "$slug" "$method"
-    done < "$contract"
+    done <"$contract"
 }
 
 # --- Check if a category is implemented in patterns.sh ---
@@ -148,7 +148,7 @@ declare -A domain_covered
 declare -A domain_det
 declare -A domain_heur
 declare -A domain_llm
-declare -A domain_details  # JSON array for --json mode
+declare -A domain_details # JSON array for --json mode
 
 total_categories=0
 total_covered=0
@@ -185,9 +185,9 @@ for domain in "${domains[@]}"; do
         # Classify method
         case "$method" in
             deterministic) det_count=$((det_count + 1)) ;;
-            heuristic)     heur_count=$((heur_count + 1)) ;;
-            llm)           llm_count=$((llm_count + 1)) ;;
-            *)             det_count=$((det_count + 1)) ;;  # default to deterministic
+            heuristic) heur_count=$((heur_count + 1)) ;;
+            llm) llm_count=$((llm_count + 1)) ;;
+            *) det_count=$((det_count + 1)) ;; # default to deterministic
         esac
 
         # Build detail line
@@ -195,7 +195,7 @@ for domain in "${domains[@]}"; do
             details_json="${details_json},"
         fi
         details_json="${details_json}{\"slug\":\"${slug}\",\"method\":\"${method}\",\"covered\":${local_covered}}"
-    done <<< "$contract_cats"
+    done <<<"$contract_cats"
 
     details_json="${details_json}]"
 
@@ -298,7 +298,7 @@ else
                 fi
                 uncovered="${uncovered}\n  ${domain}: ${slug} (${reason})"
             fi
-        done <<< "$contract_cats"
+        done <<<"$contract_cats"
     done
 
     if [[ -n "$uncovered" ]]; then

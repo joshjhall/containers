@@ -69,7 +69,7 @@ test_skill_discovery_and_domains() {
     # Verify checker agent references the correct discovery precedence
     assert_command_in_container "$image" \
         "/usr/bin/grep -c 'check-\\\*' /etc/container/config/claude-templates/agents/checker/checker.md | /usr/bin/tr -d ' '" \
-        ""  # Just verify it doesn't fail — count varies
+        "" # Just verify it doesn't fail — count varies
     # Actually verify the precedence paths are documented in checker.md
     assert_command_in_container "$image" \
         "/usr/bin/grep -q '.claude/skills/check-' /etc/container/config/claude-templates/agents/checker/checker.md && echo 'found'" \

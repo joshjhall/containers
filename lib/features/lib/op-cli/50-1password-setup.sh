@@ -1,7 +1,7 @@
 #!/bin/bash
 # 1Password CLI setup
 
-if command -v op &> /dev/null; then
+if command -v op &>/dev/null; then
     echo "=== 1Password CLI ==="
     echo "Version: $(op --version)"
     echo ""

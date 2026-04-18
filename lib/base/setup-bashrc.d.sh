@@ -16,7 +16,7 @@ mkdir -p /etc/bashrc.d
 
 # Add sourcing to /etc/bash.bashrc for interactive shells
 if ! grep -q "/etc/bashrc.d" /etc/bash.bashrc 2>/dev/null; then
-    command cat >> /etc/bash.bashrc << 'EOF'
+    command cat >>/etc/bash.bashrc <<'EOF'
 
 # Source all scripts in /etc/bashrc.d
 if [ -d /etc/bashrc.d ]; then
@@ -30,7 +30,7 @@ fi
 
 # Create /etc/bash_env for non-interactive shells
 # This file sources only the non-interactive safe parts
-command cat > /etc/bash_env << 'EOF'
+command cat >/etc/bash_env <<'EOF'
 #!/bin/bash
 # Environment setup for non-interactive bash shells
 # This file is sourced when BASH_ENV is set
@@ -49,7 +49,7 @@ chmod +x /etc/bash_env
 
 # Create initial PATH setup that will be enhanced by features
 if command -v write_bashrc_content &>/dev/null; then
-    write_bashrc_content /etc/bashrc.d/00-base-paths.sh "base PATH setup" << 'BASE_PATHS_EOF'
+    write_bashrc_content /etc/bashrc.d/00-base-paths.sh "base PATH setup" <<'BASE_PATHS_EOF'
 # Base PATH setup
 # This is sourced by both interactive and non-interactive shells
 
@@ -79,7 +79,7 @@ fi
 BASE_PATHS_EOF
 else
     # Fallback if bashrc-helpers.sh isn't available
-    command cat > /etc/bashrc.d/00-base-paths.sh << 'BASE_PATHS_EOF'
+    command cat >/etc/bashrc.d/00-base-paths.sh <<'BASE_PATHS_EOF'
 # Base PATH setup
 # This is sourced by both interactive and non-interactive shells
 

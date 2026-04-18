@@ -65,7 +65,7 @@ log_command "Creating bashrc.d directory" \
 
 # Create system-wide PostgreSQL configuration (content in lib/bashrc/postgres-client.sh)
 write_bashrc_content /etc/bashrc.d/60-postgresql.sh "PostgreSQL client configuration" \
-    < /tmp/build-scripts/features/lib/bashrc/postgres-client.sh
+    </tmp/build-scripts/features/lib/bashrc/postgres-client.sh
 
 log_command "Setting PostgreSQL bashrc script permissions" \
     chmod +x /etc/bashrc.d/60-postgresql.sh
@@ -98,7 +98,7 @@ log_message "Creating PostgreSQL startup script..."
 log_command "Creating container startup directory" \
     mkdir -p /etc/container/first-startup
 
-command cat > /etc/container/first-startup/20-postgres-setup.sh << 'EOF'
+command cat >/etc/container/first-startup/20-postgres-setup.sh <<'EOF'
 #!/bin/bash
 # PostgreSQL client configuration
 if [ ! -f ~/.pgpass ] && [ -f ~/.pgpass.template ]; then
@@ -125,7 +125,7 @@ log_command "Setting PostgreSQL startup script permissions" \
 # ============================================================================
 log_message "Creating PostgreSQL verification script..."
 
-command cat > /usr/local/bin/test-postgres << 'EOF'
+command cat >/usr/local/bin/test-postgres <<'EOF'
 #!/bin/bash
 echo "=== PostgreSQL Client Status ==="
 if command -v psql &> /dev/null; then

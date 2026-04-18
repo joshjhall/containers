@@ -149,8 +149,8 @@ get_latest_rust() {
 get_latest_java_lts() {
     # Query Adoptium for available LTS releases, pick the highest
     local lts
-    lts=$(command curl -sf "https://api.adoptium.net/v3/info/available_releases" \
-        | jq -r '.available_lts_releases | command sort | last' 2>/dev/null)
+    lts=$(command curl -sf "https://api.adoptium.net/v3/info/available_releases" |
+        jq -r '.available_lts_releases | command sort | last' 2>/dev/null)
     if [ -n "$lts" ] && [ "$lts" != "null" ]; then
         echo "$lts"
     else

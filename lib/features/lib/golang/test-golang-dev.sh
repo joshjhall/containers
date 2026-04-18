@@ -5,7 +5,7 @@ echo "=== Go Development Tools Status ==="
 echo ""
 echo "Core development tools:"
 for tool in gopls dlv golangci-lint goimports gomodifytags impl goplay; do
-    if command -v $tool &> /dev/null; then
+    if command -v $tool &>/dev/null; then
         echo "✓ $tool is installed"
     else
         echo "✗ $tool is not found"
@@ -16,7 +16,7 @@ done
 echo ""
 echo "Linting tools:"
 for tool in staticcheck gosec revive errcheck ineffassign gocritic gocyclo gocognit goconst godot; do
-    if command -v $tool &> /dev/null; then
+    if command -v $tool &>/dev/null; then
         echo "✓ $tool is installed"
     else
         echo "✗ $tool is not found"
@@ -27,7 +27,7 @@ done
 echo ""
 echo "Testing tools:"
 for tool in gotests mockgen richgo benchstat govulncheck stress; do
-    if command -v $tool &> /dev/null; then
+    if command -v $tool &>/dev/null; then
         echo "✓ $tool is installed"
     else
         echo "✗ $tool is not found"
@@ -38,7 +38,7 @@ done
 echo ""
 echo "Workflow tools:"
 for tool in air goreleaser ko swag wire godoc; do
-    if command -v $tool &> /dev/null; then
+    if command -v $tool &>/dev/null; then
         echo "✓ $tool is installed"
     else
         echo "✗ $tool is not found"
@@ -49,7 +49,7 @@ done
 echo ""
 echo "Analysis tools:"
 for tool in go-callvis goda; do
-    if command -v $tool &> /dev/null; then
+    if command -v $tool &>/dev/null; then
         echo "✓ $tool is installed"
     else
         echo "✗ $tool is not found"
@@ -60,7 +60,7 @@ done
 echo ""
 echo "Protobuf tools:"
 for tool in protoc-gen-go protoc-gen-go-grpc; do
-    if command -v $tool &> /dev/null; then
+    if command -v $tool &>/dev/null; then
         echo "✓ $tool is installed"
     else
         echo "✗ $tool is not found"

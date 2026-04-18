@@ -166,7 +166,7 @@ log_command "Creating bashrc.d directory" \
 
 # Add node-dev aliases and helpers (content in lib/bashrc/node-dev.sh)
 write_bashrc_content /etc/bashrc.d/35-node-dev.sh "Node.js development tools" \
-    < /tmp/build-scripts/features/lib/bashrc/node-dev.sh
+    </tmp/build-scripts/features/lib/bashrc/node-dev.sh
 
 log_command "Setting Node.js dev bashrc script permissions" \
     chmod +x /etc/bashrc.d/35-node-dev.sh
@@ -179,7 +179,7 @@ log_message "Creating node-dev startup script..."
 log_command "Creating container startup directory" \
     mkdir -p /etc/container/first-startup
 
-command cat > /etc/container/first-startup/25-node-dev-setup.sh << 'NODE_DEV_STARTUP_EOF'
+command cat >/etc/container/first-startup/25-node-dev-setup.sh <<'NODE_DEV_STARTUP_EOF'
 #!/bin/bash
 # Node.js development tools configuration
 if command -v node &> /dev/null; then
@@ -238,7 +238,7 @@ log_command "Setting Node.js dev startup script permissions" \
 # ============================================================================
 log_message "Creating node-dev verification script..."
 
-command cat > /usr/local/bin/test-node-dev << 'NODE_DEV_TEST_EOF'
+command cat >/usr/local/bin/test-node-dev <<'NODE_DEV_TEST_EOF'
 #!/bin/bash
 echo "=== Node.js Development Tools Status ==="
 
@@ -313,7 +313,7 @@ log_command "Setting test-node-dev script permissions" \
     chmod +x /usr/local/bin/test-node-dev
 
 # Add helper to list all node dev tools
-command cat > /usr/local/bin/node-dev-list << 'NODE_DEV_LIST_EOF'
+command cat >/usr/local/bin/node-dev-list <<'NODE_DEV_LIST_EOF'
 #!/bin/bash
 echo "=== Installed Node.js Development Tools ==="
 echo ""

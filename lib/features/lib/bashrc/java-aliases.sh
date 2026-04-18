@@ -1,4 +1,3 @@
-
 # ----------------------------------------------------------------------------
 # Java Aliases - Common development commands
 # ----------------------------------------------------------------------------
@@ -159,7 +158,6 @@ gradle-deps-update() {
         gradle dependencyUpdates
     fi
 }
-
 
 # Note: We leave set +u and set +e in place for interactive shells
 # to prevent errors with undefined variables or failed commands

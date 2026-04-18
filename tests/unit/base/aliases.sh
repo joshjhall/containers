@@ -41,7 +41,7 @@ teardown() {
 # Test: Script appends aliases to bashrc
 test_aliases_written_to_bashrc() {
     # Simulate the script's append operation
-    command cat >> "$TEST_BASHRC" << 'EOF'
+    command cat >>"$TEST_BASHRC" <<'EOF'
 alias ll='ls -alF'
 alias la='ls -A'
 alias l='ls -CF'
@@ -66,7 +66,7 @@ EOF
 # Test: Navigation aliases are included
 test_navigation_aliases() {
     # Write navigation aliases
-    command cat >> "$TEST_BASHRC" << 'EOF'
+    command cat >>"$TEST_BASHRC" <<'EOF'
 alias ..='cd ..'
 alias ...='cd ../..'
 alias ....='cd ../../..'
@@ -89,7 +89,7 @@ EOF
 # Test: Safety aliases (interactive mode)
 test_safety_aliases() {
     # Write safety aliases
-    command cat >> "$TEST_BASHRC" << 'EOF'
+    command cat >>"$TEST_BASHRC" <<'EOF'
 alias rm='command rm -i'
 alias cp='cp -i'
 alias mv='mv -i'
@@ -118,7 +118,7 @@ EOF
 # Test: Git aliases are included
 test_git_aliases() {
     # Write git aliases
-    command cat >> "$TEST_BASHRC" << 'EOF'
+    command cat >>"$TEST_BASHRC" <<'EOF'
 alias g='git'
 alias gs='git status'
 alias gd='git diff'
@@ -140,7 +140,7 @@ EOF
 # Test: Environment variables are set
 test_environment_variables() {
     # Write environment exports
-    command cat >> "$TEST_BASHRC" << 'EOF'
+    command cat >>"$TEST_BASHRC" <<'EOF'
 export TERM=xterm-256color
 export COLORTERM=truecolor
 export LESS="-R"
@@ -166,7 +166,7 @@ EOF
 # Test: Shell options are configured
 test_shell_options() {
     # Write shell options
-    command cat >> "$TEST_BASHRC" << 'EOF'
+    command cat >>"$TEST_BASHRC" <<'EOF'
 shopt -s histappend
 shopt -s checkwinsize
 shopt -s globstar 2>/dev/null || true
@@ -190,7 +190,7 @@ EOF
 # Test: Productivity shortcuts are included
 test_productivity_shortcuts() {
     # Write productivity aliases
-    command cat >> "$TEST_BASHRC" << 'EOF'
+    command cat >>"$TEST_BASHRC" <<'EOF'
 alias h='history'
 alias hgrep='history | grep'
 alias j='jobs -l'

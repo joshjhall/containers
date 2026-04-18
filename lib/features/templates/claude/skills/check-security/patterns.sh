@@ -34,14 +34,14 @@ while IFS= read -r file; do
 
     # Skip test fixtures, example env files, and lock files
     case "$file" in
-        *test*fixture*|*testdata*|*.env.example|*.env.sample|*.env.template) continue ;;
-        *lock.json|*lock.yaml|*.lock|*go.sum) continue ;;
+        *test*fixture* | *testdata* | *.env.example | *.env.sample | *.env.template) continue ;;
+        *lock.json | *lock.yaml | *.lock | *go.sum) continue ;;
     esac
 
     # --- Category: hardcoded-secret ---
 
     # AWS access keys (AKIA followed by 16 uppercase alphanumeric chars)
-    /usr/bin/grep -nE 'AKIA[0-9A-Z]{16}' "$file" 2>/dev/null | \
+    /usr/bin/grep -nE 'AKIA[0-9A-Z]{16}' "$file" 2>/dev/null |
         while IFS=: read -r line_num content; do
             evidence=$(/usr/bin/printf '%.80s' "$content")
             /usr/bin/printf '%s\t%s\t%s\t%s\t%s\n' \
@@ -50,7 +50,7 @@ while IFS= read -r file; do
         done || true
 
     # GitHub tokens (ghp_, gho_, ghs_, ghr_, github_pat_)
-    /usr/bin/grep -nE '(ghp_|gho_|ghs_|ghr_|github_pat_)[A-Za-z0-9_]{20,}' "$file" 2>/dev/null | \
+    /usr/bin/grep -nE '(ghp_|gho_|ghs_|ghr_|github_pat_)[A-Za-z0-9_]{20,}' "$file" 2>/dev/null |
         while IFS=: read -r line_num content; do
             evidence=$(/usr/bin/printf '%.80s' "$content")
             /usr/bin/printf '%s\t%s\t%s\t%s\t%s\n' \
@@ -59,7 +59,7 @@ while IFS= read -r file; do
         done || true
 
     # Stripe keys (sk_live_, rk_live_, pk_live_)
-    /usr/bin/grep -nE '(sk_live_|rk_live_|pk_live_)[A-Za-z0-9]{20,}' "$file" 2>/dev/null | \
+    /usr/bin/grep -nE '(sk_live_|rk_live_|pk_live_)[A-Za-z0-9]{20,}' "$file" 2>/dev/null |
         while IFS=: read -r line_num content; do
             evidence=$(/usr/bin/printf '%.80s' "$content")
             /usr/bin/printf '%s\t%s\t%s\t%s\t%s\n' \
@@ -68,7 +68,7 @@ while IFS= read -r file; do
         done || true
 
     # Private key headers
-    /usr/bin/grep -nE 'BEGIN (RSA |EC |DSA |OPENSSH )?PRIVATE KEY' "$file" 2>/dev/null | \
+    /usr/bin/grep -nE 'BEGIN (RSA |EC |DSA |OPENSSH )?PRIVATE KEY' "$file" 2>/dev/null |
         while IFS=: read -r line_num content; do
             evidence=$(/usr/bin/printf '%.80s' "$content")
             /usr/bin/printf '%s\t%s\t%s\t%s\t%s\n' \
@@ -78,8 +78,8 @@ while IFS= read -r file; do
 
     # Generic password/secret/token assignment with string literal values
     # (skip env var reads, placeholders, and comments)
-    /usr/bin/grep -nEi '(password|passwd|secret|api_key|apikey|auth_token|access_token)\s*[=:]\s*["\x27][^"\x27]{8,}["\x27]' "$file" 2>/dev/null | \
-        /usr/bin/grep -viE '(changeme|placeholder|xxx|TODO|example|REPLACE|your_|test_|fake_|dummy_|#|//|/\*)' | \
+    /usr/bin/grep -nEi '(password|passwd|secret|api_key|apikey|auth_token|access_token)\s*[=:]\s*["\x27][^"\x27]{8,}["\x27]' "$file" 2>/dev/null |
+        /usr/bin/grep -viE '(changeme|placeholder|xxx|TODO|example|REPLACE|your_|test_|fake_|dummy_|#|//|/\*)' |
         while IFS=: read -r line_num content; do
             evidence=$(/usr/bin/printf '%.80s' "$content")
             /usr/bin/printf '%s\t%s\t%s\t%s\t%s\n' \
@@ -92,7 +92,7 @@ while IFS= read -r file; do
     # SQL injection: f-string or string concat with SQL keywords
     case "$file" in
         *.py)
-            /usr/bin/grep -nE 'f["\x27](SELECT|INSERT|UPDATE|DELETE|DROP)\b' "$file" 2>/dev/null | \
+            /usr/bin/grep -nE 'f["\x27](SELECT|INSERT|UPDATE|DELETE|DROP)\b' "$file" 2>/dev/null |
                 while IFS=: read -r line_num content; do
                     evidence=$(/usr/bin/printf '%.80s' "$content")
                     /usr/bin/printf '%s\t%s\t%s\t%s\t%s\n' \
@@ -100,8 +100,8 @@ while IFS= read -r file; do
                         "SQL in f-string: ${evidence}" "HIGH"
                 done || true
             ;;
-        *.js|*.ts|*.jsx|*.tsx)
-            /usr/bin/grep -nE '`(SELECT|INSERT|UPDATE|DELETE|DROP)\b.*\$\{' "$file" 2>/dev/null | \
+        *.js | *.ts | *.jsx | *.tsx)
+            /usr/bin/grep -nE '`(SELECT|INSERT|UPDATE|DELETE|DROP)\b.*\$\{' "$file" 2>/dev/null |
                 while IFS=: read -r line_num content; do
                     evidence=$(/usr/bin/printf '%.80s' "$content")
                     /usr/bin/printf '%s\t%s\t%s\t%s\t%s\n' \
@@ -110,7 +110,7 @@ while IFS= read -r file; do
                 done || true
             ;;
         *.rb)
-            /usr/bin/grep -nE '"(SELECT|INSERT|UPDATE|DELETE|DROP)\b.*#\{' "$file" 2>/dev/null | \
+            /usr/bin/grep -nE '"(SELECT|INSERT|UPDATE|DELETE|DROP)\b.*#\{' "$file" 2>/dev/null |
                 while IFS=: read -r line_num content; do
                     evidence=$(/usr/bin/printf '%.80s' "$content")
                     /usr/bin/printf '%s\t%s\t%s\t%s\t%s\n' \
@@ -121,7 +121,7 @@ while IFS= read -r file; do
     esac
 
     # String concatenation with SQL keywords (all languages)
-    /usr/bin/grep -nE '"(SELECT|INSERT|UPDATE|DELETE)\b.*"\s*\+\s*' "$file" 2>/dev/null | \
+    /usr/bin/grep -nE '"(SELECT|INSERT|UPDATE|DELETE)\b.*"\s*\+\s*' "$file" 2>/dev/null |
         while IFS=: read -r line_num content; do
             evidence=$(/usr/bin/printf '%.80s' "$content")
             /usr/bin/printf '%s\t%s\t%s\t%s\t%s\n' \
@@ -132,7 +132,7 @@ while IFS= read -r file; do
     # --- Category: xss-risk ---
 
     # React: raw HTML rendering
-    /usr/bin/grep -n "$XSS_REACT_PATTERN" "$file" 2>/dev/null | \
+    /usr/bin/grep -n "$XSS_REACT_PATTERN" "$file" 2>/dev/null |
         while IFS=: read -r line_num content; do
             evidence=$(/usr/bin/printf '%.80s' "$content")
             /usr/bin/printf '%s\t%s\t%s\t%s\t%s\n' \
@@ -141,7 +141,7 @@ while IFS= read -r file; do
         done || true
 
     # Vue: v-html directive
-    /usr/bin/grep -n "$XSS_VUE_PATTERN" "$file" 2>/dev/null | \
+    /usr/bin/grep -n "$XSS_VUE_PATTERN" "$file" 2>/dev/null |
         while IFS=: read -r line_num content; do
             evidence=$(/usr/bin/printf '%.80s' "$content")
             /usr/bin/printf '%s\t%s\t%s\t%s\t%s\n' \
@@ -150,7 +150,7 @@ while IFS= read -r file; do
         done || true
 
     # Django/Jinja: |safe filter, mark_safe()
-    /usr/bin/grep -nE "$XSS_SAFE_PATTERN" "$file" 2>/dev/null | \
+    /usr/bin/grep -nE "$XSS_SAFE_PATTERN" "$file" 2>/dev/null |
         while IFS=: read -r line_num content; do
             evidence=$(/usr/bin/printf '%.80s' "$content")
             /usr/bin/printf '%s\t%s\t%s\t%s\t%s\n' \
@@ -159,7 +159,7 @@ while IFS= read -r file; do
         done || true
 
     # Blade: unescaped output
-    /usr/bin/grep -n "$XSS_BLADE_PATTERN" "$file" 2>/dev/null | \
+    /usr/bin/grep -n "$XSS_BLADE_PATTERN" "$file" 2>/dev/null |
         while IFS=: read -r line_num content; do
             evidence=$(/usr/bin/printf '%.80s' "$content")
             /usr/bin/printf '%s\t%s\t%s\t%s\t%s\n' \
@@ -170,8 +170,8 @@ while IFS= read -r file; do
     # --- Category: insecure-crypto ---
 
     # MD5/SHA1 used for security (skip comments)
-    /usr/bin/grep -nEi '\b(md5|sha1)\s*\(' "$file" 2>/dev/null | \
-        /usr/bin/grep -vE '^\s*(#|//|/\*|\*)' | \
+    /usr/bin/grep -nEi '\b(md5|sha1)\s*\(' "$file" 2>/dev/null |
+        /usr/bin/grep -vE '^\s*(#|//|/\*|\*)' |
         while IFS=: read -r line_num content; do
             evidence=$(/usr/bin/printf '%.80s' "$content")
             /usr/bin/printf '%s\t%s\t%s\t%s\t%s\n' \
@@ -180,8 +180,8 @@ while IFS= read -r file; do
         done || true
 
     # ECB mode encryption
-    /usr/bin/grep -nEi '\bECB\b|MODE_ECB|mode.*ecb' "$file" 2>/dev/null | \
-        /usr/bin/grep -vE '^\s*(#|//|/\*|\*)' | \
+    /usr/bin/grep -nEi '\bECB\b|MODE_ECB|mode.*ecb' "$file" 2>/dev/null |
+        /usr/bin/grep -vE '^\s*(#|//|/\*|\*)' |
         while IFS=: read -r line_num content; do
             evidence=$(/usr/bin/printf '%.80s' "$content")
             /usr/bin/printf '%s\t%s\t%s\t%s\t%s\n' \
@@ -189,4 +189,4 @@ while IFS= read -r file; do
                 "ECB mode encryption: ${evidence}" "HIGH"
         done || true
 
-done < "$FILE_LIST"
+done <"$FILE_LIST"

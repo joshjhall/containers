@@ -89,7 +89,7 @@ test_redis_config() {
     mkdir -p "$(dirname "$redis_conf")"
 
     # Create config
-    command cat > "$redis_conf" << 'EOF'
+    command cat >"$redis_conf" <<'EOF'
 # Redis CLI configuration
 historyfile ~/.redis/.rediscli_history
 EOF
@@ -109,7 +109,7 @@ test_redis_aliases() {
     local bashrc_file="$TEST_TEMP_DIR/etc/bashrc.d/75-redis.sh"
 
     # Create aliases
-    command cat > "$bashrc_file" << 'EOF'
+    command cat >"$bashrc_file" <<'EOF'
 alias rcli='redis-cli'
 alias rping='redis-cli ping'
 alias rinfo='redis-cli info'
@@ -137,7 +137,7 @@ test_connection_scripts() {
     mkdir -p "$(dirname "$script")"
 
     # Create connection script
-    command cat > "$script" << 'EOF'
+    command cat >"$script" <<'EOF'
 #!/bin/bash
 HOST="${1:-localhost}"
 PORT="${2:-6379}"
@@ -161,7 +161,7 @@ test_redis_history() {
     mkdir -p "$(dirname "$history_file")"
 
     # Create history
-    command cat > "$history_file" << 'EOF'
+    command cat >"$history_file" <<'EOF'
 PING
 INFO
 GET key1
@@ -176,7 +176,7 @@ test_redis_environment() {
     local bashrc_file="$TEST_TEMP_DIR/etc/bashrc.d/75-redis.sh"
 
     # Add environment variables
-    command cat >> "$bashrc_file" << 'EOF'
+    command cat >>"$bashrc_file" <<'EOF'
 export REDISCLI_HISTFILE="$HOME/.redis/.rediscli_history"
 export REDISCLI_AUTH=""
 EOF
@@ -228,7 +228,7 @@ test_redis_verification() {
     local test_script="$TEST_TEMP_DIR/test-redis.sh"
 
     # Create verification script
-    command cat > "$test_script" << 'EOF'
+    command cat >"$test_script" <<'EOF'
 #!/bin/bash
 echo "Redis CLI version:"
 redis-cli --version 2>/dev/null || echo "redis-cli not installed"

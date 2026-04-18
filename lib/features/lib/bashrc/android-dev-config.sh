@@ -21,7 +21,7 @@ fi
 # Add emulator to PATH
 if [ -d "${ANDROID_HOME:-/opt/android-sdk}/emulator" ]; then
     if command -v safe_add_to_path >/dev/null 2>&1; then
-        safe_add_to_path "${ANDROID_HOME:-/opt/android-sdk}/emulator" 2>/dev/null || \
+        safe_add_to_path "${ANDROID_HOME:-/opt/android-sdk}/emulator" 2>/dev/null ||
             export PATH="${ANDROID_HOME:-/opt/android-sdk}/emulator:$PATH"
     else
         export PATH="${ANDROID_HOME:-/opt/android-sdk}/emulator:$PATH"

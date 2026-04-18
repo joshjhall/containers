@@ -35,7 +35,7 @@ create_mock_completion() {
     local name="$1"
     local func_name="${2:-_${name}}"
 
-    command cat > "$TEST_TEMP_DIR/etc/bash_completion.d/$name" << EOF
+    command cat >"$TEST_TEMP_DIR/etc/bash_completion.d/$name" <<EOF
 # Mock completion for $name
 $func_name() {
     local cur="\${COMP_WORDS[COMP_CWORD]}"
@@ -78,7 +78,7 @@ test_completion_function_defined() {
 # Test: Bashrc.d scripts are valid shell syntax
 test_bashrc_script_syntax() {
     # Create a mock bashrc.d script
-    command cat > "$TEST_TEMP_DIR/etc/bashrc.d/50-test-completion.sh" << 'EOF'
+    command cat >"$TEST_TEMP_DIR/etc/bashrc.d/50-test-completion.sh" <<'EOF'
 #!/bin/bash
 # Test completion setup
 
@@ -102,7 +102,7 @@ test_completion_size_validation() {
 
     local file="$TEST_TEMP_DIR/etc/bash_completion.d/test-tool"
     local size
-    size=$(command wc -c < "$file")
+    size=$(command wc -c <"$file")
 
     # Check size is reasonable (less than 100KB)
     if [ "$size" -lt 100000 ]; then
@@ -154,7 +154,7 @@ test_dynamic_completion() {
     local mock_output="$TEST_TEMP_DIR/completion-output.bash"
 
     # Create a mock tool that outputs completion
-    command cat > "$TEST_TEMP_DIR/usr/local/bin/mock-tool" << 'EOF'
+    command cat >"$TEST_TEMP_DIR/usr/local/bin/mock-tool" <<'EOF'
 #!/bin/bash
 if [ "$1" = "completion" ] && [ "$2" = "bash" ]; then
     echo '_mock_tool() { COMPREPLY=(test); }; complete -F _mock_tool mock-tool'
@@ -163,7 +163,7 @@ EOF
     chmod +x "$TEST_TEMP_DIR/usr/local/bin/mock-tool"
 
     # Generate and source completion
-    "$TEST_TEMP_DIR/usr/local/bin/mock-tool" completion bash > "$mock_output"
+    "$TEST_TEMP_DIR/usr/local/bin/mock-tool" completion bash >"$mock_output"
 
     local result
     result=$(bash -c "
@@ -181,7 +181,7 @@ EOF
 # Test: Completion with alias support
 test_completion_with_aliases() {
     # Create completion that supports aliases
-    command cat > "$TEST_TEMP_DIR/etc/bash_completion.d/kubectl" << 'EOF'
+    command cat >"$TEST_TEMP_DIR/etc/bash_completion.d/kubectl" <<'EOF'
 _kubectl() {
     COMPREPLY=(get create delete)
 }

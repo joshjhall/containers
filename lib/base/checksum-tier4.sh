@@ -94,7 +94,7 @@ print_tofu_summary() {
     fi
 
     local count
-    count=$(/usr/bin/wc -l < "$tofu_log")
+    count=$(/usr/bin/wc -l <"$tofu_log")
 
     log_message ""
     log_message "╔════════════════════════════════════════════════════════════════╗"
@@ -105,7 +105,7 @@ print_tofu_summary() {
     log_message "║                                                              ║"
     while IFS= read -r line; do
         /usr/bin/printf "║   - %-56s ║\n" "$line" >&2 2>/dev/null || log_message "║   - $line"
-    done < "$tofu_log"
+    done <"$tofu_log"
     log_message "║                                                              ║"
     log_message "║ For production builds, set:                                  ║"
     log_message "║   --build-arg REQUIRE_VERIFIED_DOWNLOADS=true                ║"

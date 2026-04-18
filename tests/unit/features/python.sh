@@ -103,7 +103,7 @@ test_configure_options() {
 test_poetry_installation() {
     # Poetry is actually installed in python-dev.sh, not python.sh
     # Test that we can handle Poetry version checking
-    local poetry_version="1.8.5"  # Mock version
+    local poetry_version="1.8.5" # Mock version
 
     if [[ "$poetry_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
         assert_true true "Poetry version format is valid: $poetry_version"

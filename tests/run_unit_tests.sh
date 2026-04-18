@@ -94,7 +94,7 @@ fi
 echo -e "  Skipped: ${YELLOW}$TOTAL_SKIPPED${NC}"
 
 if [ "$TOTAL_TESTS" -gt 0 ]; then
-    PASS_RATE=$(( (TOTAL_PASSED * 100) / TOTAL_TESTS ))
+    PASS_RATE=$(((TOTAL_PASSED * 100) / TOTAL_TESTS))
     echo "  Pass Rate: $PASS_RATE%"
 fi
 
@@ -113,7 +113,7 @@ fi
 REPORT_FILE="$TESTS_DIR/results/unit-test-summary-$(date +%Y%m%d-%H%M%S).txt"
 mkdir -p "$(dirname "$REPORT_FILE")"
 
-command cat > "$REPORT_FILE" <<EOF
+command cat >"$REPORT_FILE" <<EOF
 Container Build System - Unit Test Summary
 ==========================================
 Date: $(date)
@@ -130,14 +130,14 @@ Test Suites:
 EOF
 
 for test_file in $UNIT_TEST_FILES; do
-    echo "  - $(basename "$test_file")" >> "$REPORT_FILE"
+    echo "  - $(basename "$test_file")" >>"$REPORT_FILE"
 done
 
 if [ ${#FAILED_SUITES[@]} -gt 0 ]; then
-    echo "" >> "$REPORT_FILE"
-    echo "Failed Suites:" >> "$REPORT_FILE"
+    echo "" >>"$REPORT_FILE"
+    echo "Failed Suites:" >>"$REPORT_FILE"
     for suite in "${FAILED_SUITES[@]}"; do
-        echo "  - $suite" >> "$REPORT_FILE"
+        echo "  - $suite" >>"$REPORT_FILE"
     done
 fi
 

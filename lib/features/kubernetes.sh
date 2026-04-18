@@ -70,7 +70,7 @@ source /tmp/build-scripts/base/path-utils.sh
 log_feature_start "Kubernetes Tools"
 
 # Version configuration
-KUBECTL_VERSION="${KUBECTL_VERSION:-1.33.10}"  # Can be major.minor or major.minor.patch
+KUBECTL_VERSION="${KUBECTL_VERSION:-1.33.10}" # Can be major.minor or major.minor.patch
 K9S_VERSION="${K9S_VERSION:-0.50.18}"
 KREW_VERSION="${KREW_VERSION:-0.5.0}"
 HELM_VERSION="${HELM_VERSION:-4.1.4}"
@@ -159,7 +159,11 @@ if [ -n "$K9S_FILENAME" ]; then
     fi
 
     # Run 4-tier verification
-    verify_download_or_fail "tool" "k9s" "$K9S_VERSION" "k9s.tar.gz" "$ARCH" || { cd /; log_feature_end; exit 1; }
+    verify_download_or_fail "tool" "k9s" "$K9S_VERSION" "k9s.tar.gz" "$ARCH" || {
+        cd /
+        log_feature_end
+        exit 1
+    }
 
     # Extract k9s binary
     log_command "Extracting k9s" \
@@ -217,7 +221,11 @@ if [ -n "$HELM_FILENAME" ]; then
     fi
 
     # Run 4-tier verification
-    verify_download_or_fail "tool" "helm" "$HELM_VERSION" "helm.tar.gz" "$HELM_ARCH" || { cd /; log_feature_end; exit 1; }
+    verify_download_or_fail "tool" "helm" "$HELM_VERSION" "helm.tar.gz" "$HELM_ARCH" || {
+        cd /
+        log_feature_end
+        exit 1
+    }
 
     # Extract and install
     log_command "Extracting Helm" \
@@ -284,7 +292,11 @@ if [ -n "$KREW_FILENAME" ]; then
     fi
 
     # Run 4-tier verification
-    verify_download_or_fail "tool" "krew" "$KREW_VERSION" "krew.tar.gz" "$KREW_ARCH" || { cd /; log_feature_end; exit 1; }
+    verify_download_or_fail "tool" "krew" "$KREW_VERSION" "krew.tar.gz" "$KREW_ARCH" || {
+        cd /
+        log_feature_end
+        exit 1
+    }
 
     # Extract krew
     log_command "Extracting krew" \
@@ -307,7 +319,10 @@ fi
 # ============================================================================
 # shellcheck source=lib/base/cosign-install.sh
 source /tmp/build-scripts/base/cosign-install.sh
-install_cosign || { log_feature_end; exit 1; }
+install_cosign || {
+    log_feature_end
+    exit 1
+}
 
 # ============================================================================
 # Environment Configuration
@@ -320,7 +335,7 @@ log_command "Creating bashrc.d directory" \
 
 # Create system-wide Kubernetes configuration (content in lib/bashrc/kubernetes.sh)
 write_bashrc_content /etc/bashrc.d/65-kubernetes.sh "Kubernetes configuration" \
-    < /tmp/build-scripts/features/lib/bashrc/kubernetes.sh
+    </tmp/build-scripts/features/lib/bashrc/kubernetes.sh
 
 log_command "Setting Kubernetes bashrc script permissions" \
     chmod +x /etc/bashrc.d/65-kubernetes.sh
@@ -334,7 +349,7 @@ log_message "Creating Kubernetes startup script..."
 log_command "Creating container startup directory" \
     mkdir -p /etc/container/first-startup
 
-command cat > /etc/container/first-startup/20-kubernetes-setup.sh << 'EOF'
+command cat >/etc/container/first-startup/20-kubernetes-setup.sh <<'EOF'
 #!/bin/bash
 # Check for kubernetes config
 if [ ! -f ~/.kube/config ] && [ -f ${WORKING_DIR}/.kube/config ]; then
@@ -362,7 +377,7 @@ log_command "Setting Kubernetes startup script permissions" \
 # ============================================================================
 log_message "Creating Kubernetes verification script..."
 
-command cat > /usr/local/bin/test-kubernetes << 'EOF'
+command cat >/usr/local/bin/test-kubernetes <<'EOF'
 #!/bin/bash
 echo "=== Kubernetes Tools Status ==="
 
@@ -438,12 +453,12 @@ log_message "Verifying Kubernetes tools installation..."
 log_command "Checking kubectl version" \
     kubectl version --client || log_warning "kubectl not installed properly"
 
-if command -v k9s &> /dev/null; then
+if command -v k9s &>/dev/null; then
     log_command "Checking k9s version" \
         k9s version --short || log_warning "k9s version check failed"
 fi
 
-if command -v helm &> /dev/null; then
+if command -v helm &>/dev/null; then
     log_command "Checking helm version" \
         helm version --short || log_warning "helm version check failed"
 fi

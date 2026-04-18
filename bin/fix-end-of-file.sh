@@ -7,8 +7,8 @@ set -euo pipefail
 fixed=0
 for f in "$@"; do
     [ -f "$f" ] || continue
-    [ -s "$f" ] || continue                              # skip empty
-    /usr/bin/grep -Iq . "$f" 2>/dev/null || continue     # skip binary
+    [ -s "$f" ] || continue                          # skip empty
+    /usr/bin/grep -Iq . "$f" 2>/dev/null || continue # skip binary
 
     tmpfile=$(/usr/bin/mktemp "${f}.eof.XXXXXX")
     # awk reads each record (line without trailing \n); END trims trailing
@@ -17,7 +17,7 @@ for f in "$@"; do
     /usr/bin/awk '{ line[NR]=$0; n=NR } END {
         while (n > 0 && line[n] == "") n--
         for (i = 1; i <= n; i++) print line[i]
-    }' "$f" > "$tmpfile"
+    }' "$f" >"$tmpfile"
 
     if ! /usr/bin/cmp -s "$f" "$tmpfile"; then
         chmod --reference="$f" "$tmpfile" 2>/dev/null || true

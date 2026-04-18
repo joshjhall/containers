@@ -24,7 +24,7 @@ setup() {
     mkdir -p "$TEST_BASHRC_D"
 
     # Copy and modify bashrc-helpers for testing
-    command sed "s|/etc/bashrc.d|$TEST_BASHRC_D|g" "$PROJECT_ROOT/lib/base/bashrc-helpers.sh" > "$TEST_TEMP_DIR/bashrc-helpers-test.sh"
+    command sed "s|/etc/bashrc.d|$TEST_BASHRC_D|g" "$PROJECT_ROOT/lib/base/bashrc-helpers.sh" >"$TEST_TEMP_DIR/bashrc-helpers-test.sh"
 
     # Define the function to test (since we can't source the actual file in tests)
     source_bashrc_d() {
@@ -54,9 +54,9 @@ teardown() {
 # Test: source_bashrc_d function sources files correctly
 test_source_bashrc_d() {
     # Create test scripts in bashrc.d
-    echo 'export TEST_VAR1="value1"' > "$TEST_BASHRC_D/10-test1.sh"
-    echo 'export TEST_VAR2="value2"' > "$TEST_BASHRC_D/20-test2.sh"
-    echo 'export TEST_VAR3="value3"' > "$TEST_BASHRC_D/30-test3.sh"
+    echo 'export TEST_VAR1="value1"' >"$TEST_BASHRC_D/10-test1.sh"
+    echo 'export TEST_VAR2="value2"' >"$TEST_BASHRC_D/20-test2.sh"
+    echo 'export TEST_VAR3="value3"' >"$TEST_BASHRC_D/30-test3.sh"
     chmod +x "$TEST_BASHRC_D"/*.sh
 
     # Source the scripts
@@ -87,10 +87,10 @@ test_source_bashrc_d_skip_nonexecutable() {
     command rm -f "$test_file"
 
     # Create executable and non-executable scripts
-    echo 'export EXEC_VAR="executed"' > "$TEST_BASHRC_D/10-exec.sh"
-    echo 'export NONEXEC_VAR="should_not_run"' > "$TEST_BASHRC_D/20-nonexec.sh"
+    echo 'export EXEC_VAR="executed"' >"$TEST_BASHRC_D/10-exec.sh"
+    echo 'export NONEXEC_VAR="should_not_run"' >"$TEST_BASHRC_D/20-nonexec.sh"
     chmod +x "$TEST_BASHRC_D/10-exec.sh"
-    chmod 644 "$TEST_BASHRC_D/20-nonexec.sh"  # Explicitly make non-executable
+    chmod 644 "$TEST_BASHRC_D/20-nonexec.sh" # Explicitly make non-executable
 
     # Ensure NONEXEC_VAR is not set
     unset NONEXEC_VAR 2>/dev/null || true
@@ -121,9 +121,9 @@ test_source_bashrc_d_missing_directory() {
 # Test: source_bashrc_d sources files in order
 test_source_bashrc_d_order() {
     # Create scripts that depend on order
-    echo 'export ORDER_TEST="first"' > "$TEST_BASHRC_D/10-first.sh"
-    echo 'export ORDER_TEST="${ORDER_TEST}_second"' > "$TEST_BASHRC_D/20-second.sh"
-    echo 'export ORDER_TEST="${ORDER_TEST}_third"' > "$TEST_BASHRC_D/30-third.sh"
+    echo 'export ORDER_TEST="first"' >"$TEST_BASHRC_D/10-first.sh"
+    echo 'export ORDER_TEST="${ORDER_TEST}_second"' >"$TEST_BASHRC_D/20-second.sh"
+    echo 'export ORDER_TEST="${ORDER_TEST}_third"' >"$TEST_BASHRC_D/30-third.sh"
     chmod +x "$TEST_BASHRC_D"/*.sh
 
     # Source the scripts
@@ -139,9 +139,9 @@ test_source_bashrc_d_order() {
 # Test: source_bashrc_d handles .sh extension requirement
 test_source_bashrc_d_extension_filter() {
     # Create files with different extensions
-    echo 'export SH_VAR="from_sh"' > "$TEST_BASHRC_D/10-test.sh"
-    echo 'export TXT_VAR="from_txt"' > "$TEST_BASHRC_D/20-test.txt"
-    echo 'export NO_EXT_VAR="no_extension"' > "$TEST_BASHRC_D/30-test"
+    echo 'export SH_VAR="from_sh"' >"$TEST_BASHRC_D/10-test.sh"
+    echo 'export TXT_VAR="from_txt"' >"$TEST_BASHRC_D/20-test.txt"
+    echo 'export NO_EXT_VAR="no_extension"' >"$TEST_BASHRC_D/30-test"
     chmod +x "$TEST_BASHRC_D"/*
 
     # Source the scripts
@@ -159,9 +159,9 @@ test_source_bashrc_d_extension_filter() {
 # Test: Error in one script doesn't stop others
 test_source_bashrc_d_error_handling() {
     # Create scripts where one has an error
-    echo 'export BEFORE_ERROR="yes"' > "$TEST_BASHRC_D/10-before.sh"
-    echo 'false # This will fail' > "$TEST_BASHRC_D/20-error.sh"
-    echo 'export AFTER_ERROR="yes"' > "$TEST_BASHRC_D/30-after.sh"
+    echo 'export BEFORE_ERROR="yes"' >"$TEST_BASHRC_D/10-before.sh"
+    echo 'false # This will fail' >"$TEST_BASHRC_D/20-error.sh"
+    echo 'export AFTER_ERROR="yes"' >"$TEST_BASHRC_D/30-after.sh"
     chmod +x "$TEST_BASHRC_D"/*.sh
 
     # Source the scripts (should continue despite error)

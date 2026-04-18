@@ -101,8 +101,8 @@ verify_signature_tier() {
 
     # Normalize language name
     case "$language" in
-        node|nodejs) language="nodejs" ;;
-        go|golang) language="golang" ;;
+        node | nodejs) language="nodejs" ;;
+        go | golang) language="golang" ;;
     esac
 
     # Call unified verification from signature-verify.sh
@@ -153,11 +153,11 @@ verify_published_checksum() {
             log_message "   Checking ruby-lang.org downloads page..."
             expected=$(fetch_ruby_checksum "$version" 2>/dev/null || echo "")
             ;;
-        go|golang)
+        go | golang)
             log_message "   Checking go.dev downloads page..."
             expected=$(fetch_go_checksum "$version" "$arch" 2>/dev/null || echo "")
             ;;
-        nodejs|node)
+        nodejs | node)
             log_message "   Checking nodejs.org SHASUMS256.txt..."
             local filename="node-v${version}-linux-x64.tar.xz"
             local shasums_url="https://nodejs.org/dist/v${version}/SHASUMS256.txt"
@@ -251,9 +251,9 @@ verify_download() {
         local _tool_t3_rc=0
         verify_tool_published_checksum "$name" "$version" "$file" "$arch" || _tool_t3_rc=$?
         if [ "$_tool_t3_rc" -eq 0 ]; then
-            return 0  # Tier 3 passed
+            return 0 # Tier 3 passed
         elif [ "$_tool_t3_rc" -eq 2 ]; then
-            return 1  # Checksum mismatch — hard fail
+            return 1 # Checksum mismatch — hard fail
         fi
         # _tool_t3_rc=1 means no fetcher or fetch failed — fall through to Tier 4
     fi
@@ -278,7 +278,7 @@ verify_download() {
     # (PIPE_BUF >= 4096), but line ordering is not guaranteed. This is
     # acceptable — print_tofu_summary only counts and displays entries.
     local tofu_log="${BUILD_LOG_DIR:-/tmp/container-build}/tofu-downloads.log"
-    echo "${name} ${version}" >> "$tofu_log" 2>/dev/null || true
+    echo "${name} ${version}" >>"$tofu_log" 2>/dev/null || true
 
     return "$tier4_rc"
 }

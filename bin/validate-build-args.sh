@@ -82,7 +82,7 @@ validate_version() {
     local pattern="$3"
 
     if [ -z "$version" ]; then
-        return 0  # Empty is OK (will use default)
+        return 0 # Empty is OK (will use default)
     fi
 
     if ! [[ "$version" =~ $pattern ]]; then
@@ -100,7 +100,7 @@ validate_boolean() {
     local value="$2"
 
     if [ -z "$value" ]; then
-        return 0  # Empty is OK (will use default)
+        return 0 # Empty is OK (will use default)
     fi
 
     if [[ "$value" != "true" && "$value" != "false" ]]; then
@@ -301,7 +301,7 @@ main() {
                 env_file="$2"
                 shift 2
                 ;;
-            --help|-h)
+            --help | -h)
                 show_help
                 ;;
             *)

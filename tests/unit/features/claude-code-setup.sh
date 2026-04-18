@@ -87,9 +87,18 @@ _parse_git_remote_host() {
 _classify_git_host() {
     local host="$1"
 
-    [[ -z "$host" ]] && { echo "none"; return; }
-    [[ "$host" == "github.com" ]] && { echo "github"; return; }
-    [[ "$host" == "gitlab.com" || "$host" == *"gitlab"* ]] && { echo "gitlab:$host"; return; }
+    [[ -z "$host" ]] && {
+        echo "none"
+        return
+    }
+    [[ "$host" == "github.com" ]] && {
+        echo "github"
+        return
+    }
+    [[ "$host" == "gitlab.com" || "$host" == *"gitlab"* ]] && {
+        echo "gitlab:$host"
+        return
+    }
     echo "unknown:$host"
 }
 
@@ -683,7 +692,7 @@ CLAUDE_ENV_SRC="$CLAUDE_LIB_DIR/95-claude-env.sh"
 _is_valid_channel() {
     local channel="$1"
     case "$channel" in
-        latest|stable) return 0 ;;
+        latest | stable) return 0 ;;
         *) return 1 ;;
     esac
 }
@@ -874,7 +883,7 @@ _resolve_override_list_or_file() {
                 echo "  ⚠ ${var_name} ignored — ${file_var} takes precedence" >&2
             fi
             command cat "$file_path"
-            echo "file" > "$_RESOLVED_FROM_FILE"
+            echo "file" >"$_RESOLVED_FROM_FILE"
             return 0
         fi
     fi
@@ -884,15 +893,15 @@ _resolve_override_list_or_file() {
     result=$(_resolve_override_list "$var_name" "$defaults") || rc=$?
     echo "$result"
     if [ $rc -eq 0 ]; then
-        echo "env" > "$_RESOLVED_FROM_FILE"
+        echo "env" >"$_RESOLVED_FROM_FILE"
     else
-        echo "default" > "$_RESOLVED_FROM_FILE"
+        echo "default" >"$_RESOLVED_FROM_FILE"
     fi
     return $rc
 }
 
 _file_json_to_csv() {
-    command jq -r 'map(if type == "string" then . else .name // empty end) | join(",")' <<< "$1"
+    command jq -r 'map(if type == "string" then . else .name // empty end) | join(",")' <<<"$1"
 }
 
 # --- _resolve_override_list_or_file tests ---
@@ -900,7 +909,7 @@ _file_json_to_csv() {
 test_file_takes_precedence_over_env() {
     local tmpfile
     tmpfile=$(mktemp)
-    echo '["x","y","z"]' > "$tmpfile"
+    echo '["x","y","z"]' >"$tmpfile"
 
     # shellcheck disable=SC2034  # Used indirectly via _resolve_override_list_or_file
     TEST_FILE_VAR="override-me"
@@ -927,7 +936,7 @@ test_file_takes_precedence_over_env() {
 test_file_warns_when_env_also_set() {
     local tmpfile
     tmpfile=$(mktemp)
-    echo '["p","q"]' > "$tmpfile"
+    echo '["p","q"]' >"$tmpfile"
 
     # shellcheck disable=SC2034  # Used indirectly via _resolve_override_list_or_file
     TEST_WARN_VAR="should-be-ignored"
@@ -973,7 +982,7 @@ test_missing_file_falls_through() {
 test_invalid_json_falls_through() {
     local tmpfile
     tmpfile=$(mktemp)
-    echo 'not valid json' > "$tmpfile"
+    echo 'not valid json' >"$tmpfile"
 
     unset TEST_BADJSON_VAR 2>/dev/null || true
     # shellcheck disable=SC2034  # Used indirectly via _resolve_override_list_or_file
@@ -999,7 +1008,7 @@ test_invalid_json_falls_through() {
 test_non_array_json_falls_through() {
     local tmpfile
     tmpfile=$(mktemp)
-    echo '{"not":"an array"}' > "$tmpfile"
+    echo '{"not":"an array"}' >"$tmpfile"
 
     unset TEST_OBJJSON_VAR 2>/dev/null || true
     # shellcheck disable=SC2034  # Used indirectly via _resolve_override_list_or_file
@@ -1045,7 +1054,7 @@ test_no_file_uses_env_var() {
 test_build_time_file_default() {
     local tmpfile
     tmpfile=$(mktemp)
-    echo '["build1","build2"]' > "$tmpfile"
+    echo '["build1","build2"]' >"$tmpfile"
 
     unset TEST_BUILDFILE_VAR 2>/dev/null || true
     unset TEST_BUILDFILE_VAR_FILE 2>/dev/null || true
@@ -1102,7 +1111,7 @@ test_persist_script_has_file_default_vars() {
     persist_src="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../lib/features/lib/dev-tools" && pwd)/persist-feature-flags.sh"
     local failures=0
     for var in CLAUDE_SKILLS_FILE_DEFAULT CLAUDE_AGENTS_FILE_DEFAULT CLAUDE_PLUGINS_FILE_DEFAULT CLAUDE_MCPS_FILE_DEFAULT \
-               CLAUDE_EXTRA_SKILLS_FILE_DEFAULT CLAUDE_EXTRA_AGENTS_FILE_DEFAULT CLAUDE_EXTRA_PLUGINS_FILE_DEFAULT CLAUDE_EXTRA_MCPS_FILE_DEFAULT; do
+        CLAUDE_EXTRA_SKILLS_FILE_DEFAULT CLAUDE_EXTRA_AGENTS_FILE_DEFAULT CLAUDE_EXTRA_PLUGINS_FILE_DEFAULT CLAUDE_EXTRA_MCPS_FILE_DEFAULT; do
         if ! command grep -q "$var" "$persist_src"; then
             echo "  FAIL: $var not found in persist-feature-flags.sh" >&2
             failures=$((failures + 1))

@@ -149,7 +149,7 @@ test_npm_cache_configuration() {
     local npmrc_file="$TEST_TEMP_DIR/home/testuser/.npmrc"
 
     # Create mock .npmrc
-    command cat > "$npmrc_file" << EOF
+    command cat >"$npmrc_file" <<EOF
 cache=/cache/npm
 prefix=/home/testuser/.npm
 EOF
@@ -175,7 +175,7 @@ test_node_bashrc_setup() {
     local bashrc_file="$TEST_TEMP_DIR/etc/bashrc.d/20-node.sh"
 
     # Create mock Node bashrc
-    command cat > "$bashrc_file" << 'EOF'
+    command cat >"$bashrc_file" <<'EOF'
 export NODE_PATH="/opt/node"
 export PATH="${NODE_PATH}/bin:${PATH}"
 export NPM_CONFIG_PREFIX="${HOME}/.npm"
@@ -263,7 +263,7 @@ test_node_version_verification() {
     local test_script="$TEST_TEMP_DIR/usr/local/bin/test-node"
 
     # Create mock verification script
-    command cat > "$test_script" << 'EOF'
+    command cat >"$test_script" <<'EOF'
 #!/bin/bash
 echo "Node.js version:"
 node --version 2>/dev/null || echo "Node not installed"

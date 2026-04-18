@@ -41,8 +41,8 @@ BACKUP_PATH=""
 RESTORE_PATH="/tmp/backup-restore-test"
 CHECKSUM_ONLY=false
 REPORT_PATH=""
-RTO_TARGET=3600   # 1 hour default
-RPO_TARGET=86400  # 24 hours default
+RTO_TARGET=3600  # 1 hour default
+RPO_TARGET=86400 # 24 hours default
 JSON_OUTPUT=false
 
 # Colors
@@ -129,7 +129,7 @@ parse_args() {
                 JSON_OUTPUT=true
                 shift
                 ;;
-            --help|-h)
+            --help | -h)
                 usage
                 ;;
             *)
@@ -178,7 +178,7 @@ generate_report() {
         else
             echo "# Overall Status: FAIL"
         fi
-    } > "$report_path"
+    } >"$report_path"
 
     log_info "Report written to: $report_path"
 }
@@ -190,7 +190,7 @@ output_json() {
         status="fail"
     fi
 
-    command cat << EOF
+    command cat <<EOF
 {
   "timestamp": "$(date -Iseconds)",
   "backup_path": "$BACKUP_PATH",

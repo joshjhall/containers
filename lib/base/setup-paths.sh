@@ -10,7 +10,7 @@ echo "=== Setting up comprehensive PATH configuration ==="
 mkdir -p /etc/bashrc.d
 
 # Create comprehensive PATH setup that handles all installed tools
-command cat > /etc/bashrc.d/10-tool-paths.sh << 'EOF'
+command cat >/etc/bashrc.d/10-tool-paths.sh <<'EOF'
 # Comprehensive PATH setup for all installed tools
 
 # Source shared utilities for secure PATH management
@@ -157,7 +157,7 @@ chmod +x /etc/bashrc.d/10-tool-paths.sh
 {
     echo "# Basic system PATH - enhanced by /etc/bashrc.d scripts"
     echo 'PATH="/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin:/sbin"'
-} > /etc/environment
+} >/etc/environment
 
 echo "=== PATH setup complete ==="
 echo "Paths configured in:"

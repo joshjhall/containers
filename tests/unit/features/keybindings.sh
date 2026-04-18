@@ -95,7 +95,7 @@ test_inputrc_creation() {
     local inputrc_file="$TEST_TEMP_DIR/etc/inputrc"
 
     # Create a mock inputrc file with expected content
-    command cat > "$inputrc_file" << 'EOF'
+    command cat >"$inputrc_file" <<'EOF'
 # /etc/inputrc - System-wide readline configuration
 set editing-mode emacs
 set completion-ignore-case on
@@ -131,7 +131,7 @@ test_iterm_keybindings() {
     local inputrc_file="$TEST_TEMP_DIR/etc/inputrc"
 
     # Create mock iTerm inputrc content
-    command cat > "$inputrc_file" << 'EOF'
+    command cat >"$inputrc_file" <<'EOF'
 # iTerm2 / macOS Terminal Key Bindings
 "\ef": forward-word
 "\eb": backward-word
@@ -232,7 +232,7 @@ test_bashrc_script_creation() {
     local bashrc_file="$TEST_TEMP_DIR/etc/bashrc.d/10-keybindings.sh"
 
     # Create mock bashrc.d script
-    command cat > "$bashrc_file" << 'EOF'
+    command cat >"$bashrc_file" <<'EOF'
 # Keyboard Bindings Enhancement
 if [[ $- != *i* ]]; then
     return 0
@@ -272,7 +272,7 @@ test_user_inputrc_template() {
     local user_inputrc="$TEST_TEMP_DIR/etc/skel/.inputrc"
 
     # Create mock user inputrc template
-    command cat > "$user_inputrc" << 'EOF'
+    command cat >"$user_inputrc" <<'EOF'
 # ~/.inputrc - User readline configuration
 $include /etc/inputrc
 # User Customizations Below
@@ -293,7 +293,7 @@ test_verification_script() {
     local test_script="$TEST_TEMP_DIR/usr/local/bin/test-keybindings"
 
     # Create mock verification script
-    command cat > "$test_script" << 'EOF'
+    command cat >"$test_script" <<'EOF'
 #!/bin/bash
 echo "=== Keyboard Bindings Status ==="
 echo "Active Profile: ${KEYBINDING_PROFILE:-iterm}"

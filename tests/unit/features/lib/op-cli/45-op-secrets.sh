@@ -26,10 +26,10 @@ setup() {
 teardown() {
     # Restore env any behavioural test may have set
     unset OP_GITHUB_TOKEN_REF OP_GIT_USER_NAME_REF OP_SERVICE_ACCOUNT_TOKEN \
-          OP_SECRET_CACHE_DIR OP_SECRET_CACHE_FALLBACK_DIR OP_SECRET_CACHE_TTL \
-          OP_SECRET_CACHE_MAX_CONCURRENT OP_READ_MAX_ATTEMPTS OP_READ_RETRY_DELAY \
-          ENV_SECRETS_FILE MOCK_BIN_DIR MOCK_COUNTER TEST_CACHE_DIR \
-          TEST_FALLBACK_DIR TEST_SCRIPT TEST_EMPTY_ENV TEST_STDERR
+        OP_SECRET_CACHE_DIR OP_SECRET_CACHE_FALLBACK_DIR OP_SECRET_CACHE_TTL \
+        OP_SECRET_CACHE_MAX_CONCURRENT OP_READ_MAX_ATTEMPTS OP_READ_RETRY_DELAY \
+        ENV_SECRETS_FILE MOCK_BIN_DIR MOCK_COUNTER TEST_CACHE_DIR \
+        TEST_FALLBACK_DIR TEST_SCRIPT TEST_EMPTY_ENV TEST_STDERR
     if [ -n "${_ORIG_PATH+x}" ]; then
         PATH="$_ORIG_PATH"
         unset _ORIG_PATH
@@ -71,15 +71,15 @@ _prepare_mock_env() {
     export TEST_EMPTY_ENV="$TEST_TEMP_DIR/empty.env.secrets"
     export TEST_STDERR="$TEST_TEMP_DIR/stderr"
     mkdir -p "$TEST_CACHE_DIR" "$MOCK_BIN_DIR"
-    : > "$MOCK_COUNTER"
-    : > "$TEST_EMPTY_ENV"
+    : >"$MOCK_COUNTER"
+    : >"$TEST_EMPTY_ENV"
     # Register /dev/shm dirs for teardown cleanup
     export _TEST_SHM_DIRS="$TEST_CACHE_DIR $TEST_FALLBACK_DIR /dev/shm/op-secrets-persistent"
 
     # Mock op records each invocation then emits a deterministic value.
     # Note the unquoted heredoc: ${MOCK_COUNTER} expands now; \$* / \$1 / \$2
     # stay literal for evaluation inside the mock.
-    command cat > "$MOCK_BIN_DIR/op" <<EOF
+    command cat >"$MOCK_BIN_DIR/op" <<EOF
 #!/bin/bash
 echo "\$*" >> "${MOCK_COUNTER}"
 if [ "\$1" = "read" ]; then
@@ -97,7 +97,7 @@ EOF
         -e "s|/dev/shm/op-stderr|${TEST_TEMP_DIR}/op-stderr|g" \
         -e "s|/dev/shm/op-secrets-cache|${TEST_TEMP_DIR}/op-secrets-cache|g" \
         -e "s|/dev/shm/\${_file_name}|${TEST_TEMP_DIR}/\${_file_name}|g" \
-        "$SOURCE_FILE" > "$TEST_SCRIPT"
+        "$SOURCE_FILE" >"$TEST_SCRIPT"
     chmod +x "$TEST_SCRIPT"
 
     export _ORIG_PATH="$PATH"
@@ -133,7 +133,7 @@ _run_script_isolated() {
 
 # Count mock op invocations (one line per call).
 _mock_call_count() {
-    command wc -l < "$MOCK_COUNTER" 2>/dev/null | command tr -d ' '
+    command wc -l <"$MOCK_COUNTER" 2>/dev/null | command tr -d ' '
 }
 
 # sha256 hex of a string (matches the script's key derivation).
@@ -147,9 +147,9 @@ _ref_hash() {
 
 test_script_exists_and_executable() {
     assert_file_exists "$SOURCE_FILE"
-    [ -x "$SOURCE_FILE" ] \
-        && assert_true 0 "45-op-secrets.sh is executable" \
-        || assert_true 1 "45-op-secrets.sh should be executable"
+    [ -x "$SOURCE_FILE" ] &&
+        assert_true 0 "45-op-secrets.sh is executable" ||
+        assert_true 1 "45-op-secrets.sh should be executable"
 }
 
 test_uses_set_plus_e() {
@@ -204,8 +204,8 @@ test_op_read_failure_handled() {
     # op read failures must be handled gracefully — the backoff helper wraps
     # `op read` with captured stderr and returns non-zero on unrecoverable
     # failure (callers branch on the return code or empty output).
-    if command grep -q '_op_read_with_backoff' "$SOURCE_FILE" \
-       && command grep -q 'op read .* 2>' "$SOURCE_FILE"; then
+    if command grep -q '_op_read_with_backoff' "$SOURCE_FILE" &&
+        command grep -q 'op read .* 2>' "$SOURCE_FILE"; then
         pass_test "op read failure handled via backoff helper"
     else
         fail_test "op read failure should be handled via a backoff helper"
@@ -215,8 +215,8 @@ test_op_read_failure_handled() {
 test_op_read_stderr_captured_or_suppressed() {
     # Stderr must not leak to the user's terminal during non-interactive startup.
     # Either redirected to /dev/null or captured to a tmpfile for throttle detection.
-    if command grep -qE 'op read .*2>"?\$stderr_file' "$SOURCE_FILE" \
-       || command grep -qE 'op read .*2>/dev/null' "$SOURCE_FILE"; then
+    if command grep -qE 'op read .*2>"?\$stderr_file' "$SOURCE_FILE" ||
+        command grep -qE 'op read .*2>/dev/null' "$SOURCE_FILE"; then
         pass_test "op read stderr handled (captured or suppressed)"
     else
         fail_test "op read stderr should be captured or suppressed"
@@ -229,9 +229,9 @@ test_file_ref_op_read_failure_handled() {
     # invocations (REF loop, FILE_REF loop, git-identity first+last).
     local count
     count=$(command grep -c '_launch_fetch _fetch_to_file' "$SOURCE_FILE" || true)
-    [ "$count" -ge 3 ] \
-        && assert_true 0 "All three fetch call sites route through cached helper (found $count)" \
-        || assert_true 1 "Expected at least 3 cached fetch call sites, found $count"
+    [ "$count" -ge 3 ] &&
+        assert_true 0 "All three fetch call sites route through cached helper (found $count)" ||
+        assert_true 1 "Expected at least 3 cached fetch call sites, found $count"
 }
 
 # ============================================================================
@@ -336,8 +336,8 @@ test_persistent_cache_dir_mode_0700() {
         fail_test "Runtime cache dir should be chmod 700"
     fi
     # And the feature installer creates it mode 0700 at build time.
-    if command grep -qE "install -d -m 0700 .*/cache/1password/secrets" "$FEATURE_FILE" \
-       || command grep -qE "OP_SECRET_CACHE_DIR.*0700|0700.*OP_SECRET_CACHE_DIR" "$FEATURE_FILE"; then
+    if command grep -qE "install -d -m 0700 .*/cache/1password/secrets" "$FEATURE_FILE" ||
+        command grep -qE "OP_SECRET_CACHE_DIR.*0700|0700.*OP_SECRET_CACHE_DIR" "$FEATURE_FILE"; then
         pass_test "Build-time cache dir installed mode 0700"
     else
         fail_test "op-cli.sh should install /cache/1password/secrets mode 0700"
@@ -375,8 +375,8 @@ test_tmpfs_check_enforced() {
     # Primary cache must be verified as tmpfs-backed (or ramfs) before use,
     # ensuring resolved secrets never land on disk.
     # shfmt may add spaces around | in case patterns: (tmpfs|ramfs) vs (tmpfs | ramfs)
-    if command grep -qE 'stat -f -c .%T' "$SOURCE_FILE" \
-       && command grep -qE 'tmpfs[[:space:]]*\|[[:space:]]*ramfs|tmpfs\).*ramfs\)' "$SOURCE_FILE"; then
+    if command grep -qE 'stat -f -c .%T' "$SOURCE_FILE" &&
+        command grep -qE 'tmpfs[[:space:]]*\|[[:space:]]*ramfs|tmpfs\).*ramfs\)' "$SOURCE_FILE"; then
         pass_test "Primary cache gated on tmpfs/ramfs filesystem type"
     else
         fail_test "Primary cache must be verified as tmpfs-backed via stat -f"
@@ -446,7 +446,7 @@ test_persistent_cache_hit_skips_op() {
     # Pre-populate a fresh cache file
     local hash
     hash=$(_ref_hash "op://test/github/token")
-    printf 'cached-secret-value' > "$TEST_CACHE_DIR/$hash"
+    printf 'cached-secret-value' >"$TEST_CACHE_DIR/$hash"
     chmod 600 "$TEST_CACHE_DIR/$hash"
 
     _run_script_isolated >/dev/null 2>&1 || true
@@ -467,7 +467,7 @@ test_persistent_cache_stale_refetches() {
 
     local hash
     hash=$(_ref_hash "op://test/github/token")
-    printf 'stale-cached-value' > "$TEST_CACHE_DIR/$hash"
+    printf 'stale-cached-value' >"$TEST_CACHE_DIR/$hash"
     chmod 600 "$TEST_CACHE_DIR/$hash"
     command touch -d "1 hour ago" "$TEST_CACHE_DIR/$hash"
 
@@ -522,8 +522,8 @@ test_non_tmpfs_primary_falls_back() {
     fi
 
     # Warning must have been emitted on stderr explaining the degradation
-    if command grep -q 'not tmpfs-backed' "$TEST_STDERR" 2>/dev/null \
-       && command grep -q 'downgraded' "$TEST_STDERR" 2>/dev/null; then
+    if command grep -q 'not tmpfs-backed' "$TEST_STDERR" 2>/dev/null &&
+        command grep -q 'downgraded' "$TEST_STDERR" 2>/dev/null; then
         pass_test "Stderr warning explains the tmpfs downgrade"
     else
         fail_test "Expected tmpfs-downgrade warning on stderr; got: $(command cat "$TEST_STDERR" 2>/dev/null | command head -5)"
@@ -563,7 +563,7 @@ test_persistent_cache_ttl_zero_bypasses() {
     # Pre-populate what would otherwise be a fresh hit
     local hash
     hash=$(_ref_hash "op://test/github/token")
-    printf 'cached-value' > "$TEST_CACHE_DIR/$hash"
+    printf 'cached-value' >"$TEST_CACHE_DIR/$hash"
     chmod 600 "$TEST_CACHE_DIR/$hash"
 
     _run_script_isolated >/dev/null 2>&1 || true
@@ -585,9 +585,9 @@ test_exits_zero_on_completion() {
     # Script must end with exit 0
     local last_code_line
     last_code_line=$(command grep -n '^exit' "$SOURCE_FILE" | command tail -1)
-    echo "$last_code_line" | command grep -q 'exit 0' \
-        && assert_true 0 "Script ends with exit 0" \
-        || assert_true 1 "Script should end with exit 0"
+    echo "$last_code_line" | command grep -q 'exit 0' &&
+        assert_true 0 "Script ends with exit 0" ||
+        assert_true 1 "Script should end with exit 0"
 }
 
 # ============================================================================

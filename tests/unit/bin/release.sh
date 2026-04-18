@@ -20,10 +20,10 @@ setup() {
     export TEST_CHANGELOG_FILE="$RESULTS_DIR/CHANGELOG.md"
 
     # Create initial VERSION file
-    echo "1.2.3" > "$TEST_VERSION_FILE"
+    echo "1.2.3" >"$TEST_VERSION_FILE"
 
     # Create initial CHANGELOG
-    command cat > "$TEST_CHANGELOG_FILE" <<'EOF'
+    command cat >"$TEST_CHANGELOG_FILE" <<'EOF'
 # Changelog
 
 ## [Unreleased]
@@ -100,7 +100,7 @@ test_bump_major() {
 # Test: Invalid version format detection
 test_invalid_version_format() {
     # Test various invalid formats
-    local version="1.2"  # Missing patch
+    local version="1.2" # Missing patch
 
     # Check if version has three parts
     if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
@@ -109,7 +109,7 @@ test_invalid_version_format() {
         assert_true false "Failed to detect invalid version format"
     fi
 
-    version="v1.2.3"  # Has 'v' prefix
+    version="v1.2.3" # Has 'v' prefix
     if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
         assert_true true "Invalid version format detected: $version"
     else
@@ -120,7 +120,7 @@ test_invalid_version_format() {
 # Test: Version file exists check
 test_version_file_check() {
     # Test with existing file
-    echo "1.0.0" > "$TEST_VERSION_FILE"
+    echo "1.0.0" >"$TEST_VERSION_FILE"
     assert_file_exists "$TEST_VERSION_FILE"
 
     # Test reading version from file
@@ -132,7 +132,7 @@ test_version_file_check() {
 # Test: Changelog file exists check
 test_changelog_file_check() {
     # Create test changelog
-    command cat > "$TEST_CHANGELOG_FILE" <<'EOF'
+    command cat >"$TEST_CHANGELOG_FILE" <<'EOF'
 # Changelog
 
 ## [Unreleased]

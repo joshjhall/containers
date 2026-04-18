@@ -25,6 +25,6 @@ fi
 
 # Launch watcher in background
 echo "[startup] Starting Claude authentication watcher in background..."
-nohup claude-auth-watcher > /tmp/claude-auth-watcher.log 2>&1 &
-echo $! > "$WATCHER_PID_FILE"
+nohup claude-auth-watcher >/tmp/claude-auth-watcher.log 2>&1 &
+echo $! >"$WATCHER_PID_FILE"
 echo "[startup] Watcher started (PID: $(command cat "$WATCHER_PID_FILE"))"

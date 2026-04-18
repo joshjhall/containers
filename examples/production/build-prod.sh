@@ -41,7 +41,7 @@ PROD_BASE_ARGS=(
 
 # Function to print usage
 usage() {
-    cat << EOF
+    cat <<EOF
 ${BLUE}Production Image Build Helper${NC}
 
 ${YELLOW}Usage:${NC}

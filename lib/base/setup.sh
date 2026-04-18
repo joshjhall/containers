@@ -65,7 +65,7 @@ apt_install \
 # Locale Configuration
 # ============================================================================
 echo "=== Configuring locale ==="
-echo "en_US.UTF-8 UTF-8" >> /etc/locale.gen
+echo "en_US.UTF-8 UTF-8" >>/etc/locale.gen
 locale-gen en_US.UTF-8
 update-locale LANG=en_US.UTF-8 || true
 
@@ -76,7 +76,7 @@ echo "=== Configuring timezone ==="
 # TZ environment variable can override this at runtime
 TZ=${TZ:-UTC}
 ln -snf /usr/share/zoneinfo/"$TZ" /etc/localtime
-echo "$TZ" > /etc/timezone
+echo "$TZ" >/etc/timezone
 
 # ============================================================================
 # Zoxide Installation - Smarter directory navigation

@@ -70,7 +70,7 @@ ANDROID_API_LEVELS="${ANDROID_API_LEVELS:-34,35}"
 ANDROID_NDK_VERSION="${ANDROID_NDK_VERSION:-30.0.14904198}"
 
 # Parse API levels into array
-IFS=',' read -ra API_LEVELS_ARRAY <<< "$ANDROID_API_LEVELS"
+IFS=',' read -ra API_LEVELS_ARRAY <<<"$ANDROID_API_LEVELS"
 
 # Start logging
 log_feature_start "Android SDK" "cmdline-tools=${ANDROID_CMDLINE_TOOLS_VERSION}, APIs=${ANDROID_API_LEVELS}"
@@ -164,19 +164,19 @@ mkdir -p "${ANDROID_SDK_ROOT}/licenses"
 
 # Accept all standard licenses
 # These are SHA1 hashes of the license texts
-echo "24333f8a63b6825ea9c5514f83c2829b004d1fee" > "${ANDROID_SDK_ROOT}/licenses/android-sdk-license"
-echo "84831b9409646a918e30573bab4c9c91346d8abd" >> "${ANDROID_SDK_ROOT}/licenses/android-sdk-license"
-echo "d56f5187479451eabf01fb78af6dfcb131a6481e" >> "${ANDROID_SDK_ROOT}/licenses/android-sdk-license"
+echo "24333f8a63b6825ea9c5514f83c2829b004d1fee" >"${ANDROID_SDK_ROOT}/licenses/android-sdk-license"
+echo "84831b9409646a918e30573bab4c9c91346d8abd" >>"${ANDROID_SDK_ROOT}/licenses/android-sdk-license"
+echo "d56f5187479451eabf01fb78af6dfcb131a6481e" >>"${ANDROID_SDK_ROOT}/licenses/android-sdk-license"
 
-echo "84831b9409646a918e30573bab4c9c91346d8abd" > "${ANDROID_SDK_ROOT}/licenses/android-sdk-preview-license"
+echo "84831b9409646a918e30573bab4c9c91346d8abd" >"${ANDROID_SDK_ROOT}/licenses/android-sdk-preview-license"
 
-echo "33b6a2b64607f11b759f320ef9dff4ae5c47d97a" > "${ANDROID_SDK_ROOT}/licenses/google-gdk-license"
+echo "33b6a2b64607f11b759f320ef9dff4ae5c47d97a" >"${ANDROID_SDK_ROOT}/licenses/google-gdk-license"
 
 # Intel HAXM license
-echo "d975f751698a77b662f1254ddbeed3901e976f5a" > "${ANDROID_SDK_ROOT}/licenses/intel-android-extra-license"
+echo "d975f751698a77b662f1254ddbeed3901e976f5a" >"${ANDROID_SDK_ROOT}/licenses/intel-android-extra-license"
 
 # Android NDK license
-echo "8933bad161af4178b1185d1a37fbf41ea5269c55" > "${ANDROID_SDK_ROOT}/licenses/android-ndk-license"
+echo "8933bad161af4178b1185d1a37fbf41ea5269c55" >"${ANDROID_SDK_ROOT}/licenses/android-ndk-license"
 
 log_message "SDK licenses accepted"
 
@@ -196,7 +196,7 @@ echo "y" | "$SDKMANAGER" --install "platform-tools" || true
 log_message "Installing SDK components for API levels: ${ANDROID_API_LEVELS}..."
 
 for API_LEVEL in "${API_LEVELS_ARRAY[@]}"; do
-    API_LEVEL=$(echo "$API_LEVEL" | command tr -d ' ')  # Trim whitespace
+    API_LEVEL=$(echo "$API_LEVEL" | command tr -d ' ') # Trim whitespace
 
     log_message "Installing components for API level ${API_LEVEL}..."
 
@@ -211,7 +211,7 @@ for API_LEVEL in "${API_LEVELS_ARRAY[@]}"; do
     else
         # Try with .0.1 suffix as fallback
         BUILD_TOOLS_VERSION="${API_LEVEL}.0.1"
-        echo "y" | "$SDKMANAGER" --install "build-tools;${BUILD_TOOLS_VERSION}" 2>/dev/null || \
+        echo "y" | "$SDKMANAGER" --install "build-tools;${BUILD_TOOLS_VERSION}" 2>/dev/null ||
             log_warning "Could not install build-tools for API ${API_LEVEL}"
     fi
 done
@@ -237,7 +237,7 @@ fi
 
 # Install CMake (commonly needed with NDK)
 log_message "Installing CMake for NDK..."
-echo "y" | "$SDKMANAGER" --install "cmake;3.22.1" 2>/dev/null || \
+echo "y" | "$SDKMANAGER" --install "cmake;3.22.1" 2>/dev/null ||
     log_warning "Could not install CMake"
 
 # Clean up temp directory
@@ -308,7 +308,7 @@ log_command "Creating bashrc.d directory" \
 
 # Android SDK environment configuration (content in lib/bashrc/android-env.sh)
 write_bashrc_content /etc/bashrc.d/50-android.sh "Android SDK environment configuration" \
-    < /tmp/build-scripts/features/lib/bashrc/android-env.sh
+    </tmp/build-scripts/features/lib/bashrc/android-env.sh
 
 log_command "Setting Android bashrc permissions" \
     chmod +x /etc/bashrc.d/50-android.sh
@@ -320,7 +320,7 @@ log_message "Setting up Android aliases and helpers..."
 
 # Android aliases and helpers (content in lib/bashrc/android-aliases.sh)
 write_bashrc_content /etc/bashrc.d/50-android.sh "Android aliases and helpers" \
-    < /tmp/build-scripts/features/lib/bashrc/android-aliases.sh
+    </tmp/build-scripts/features/lib/bashrc/android-aliases.sh
 
 # ============================================================================
 # Container Startup Scripts

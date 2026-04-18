@@ -1,4 +1,3 @@
-
 # ----------------------------------------------------------------------------
 # Android Aliases
 # ----------------------------------------------------------------------------
@@ -63,7 +62,7 @@ android-install-api() {
     yes | sdkmanager --install \
         "platforms;android-$api" \
         "build-tools;$api.0.0" \
-        "sources;android-$api" 2>/dev/null || \
+        "sources;android-$api" 2>/dev/null ||
         echo "Some components may not be available"
 }
 
@@ -96,7 +95,7 @@ adb-install() {
 # ----------------------------------------------------------------------------
 adb-screenshot() {
     local output="${1:-screenshot_$(date +%Y%m%d_%H%M%S).png}"
-    adb exec-out screencap -p > "$output"
+    adb exec-out screencap -p >"$output"
     echo "Screenshot saved to: $output"
 }
 

@@ -89,7 +89,7 @@ test_shasums_download_failure_returns_1() {
     local exit_code=0
     # Create a fake node binary
     mkdir -p "$TEST_TEMP_DIR/dl"
-    echo "fake node binary" > "$TEST_TEMP_DIR/dl/node-v20.18.0-linux-x64.tar.xz"
+    echo "fake node binary" >"$TEST_TEMP_DIR/dl/node-v20.18.0-linux-x64.tar.xz"
 
     bash -c "
         _GPG_VERIFY_LOADED=''

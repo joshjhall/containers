@@ -32,12 +32,12 @@ setup() {
     command sed \
         -e "s|/tmp/build-env|\$TEST_TEMP_DIR/build-env|g" \
         -e "s|exec \"\$FEATURE_SCRIPT\"|\"\$FEATURE_SCRIPT\"|g" \
-        "$SOURCE_SCRIPT" > "$WRAPPER_SCRIPT"
+        "$SOURCE_SCRIPT" >"$WRAPPER_SCRIPT"
     chmod +x "$WRAPPER_SCRIPT"
 
     # Create the standard mock feature script that prints its received args
     export MOCK_FEATURE="$TEST_TEMP_DIR/feature.sh"
-    command cat > "$MOCK_FEATURE" << 'EOF'
+    command cat >"$MOCK_FEATURE" <<'EOF'
 #!/bin/bash
 echo "ARG1=${1:-<unset>}"
 echo "ARG2=${2:-<unset>}"
@@ -80,7 +80,7 @@ test_source_script_exists_and_is_executable() {
 
 # Test 2: ACTUAL_UID and ACTUAL_GID from build-env override the passed-in args
 test_build_env_uid_gid_override_passed_args() {
-    command cat > "$TEST_TEMP_DIR/build-env" << 'EOF'
+    command cat >"$TEST_TEMP_DIR/build-env" <<'EOF'
 ACTUAL_UID=2000
 ACTUAL_GID=3000
 EOF
@@ -95,7 +95,7 @@ EOF
 
 # Test 3: USERNAME from positional arg is passed through to the feature script
 test_build_env_username_passed_through() {
-    command cat > "$TEST_TEMP_DIR/build-env" << 'EOF'
+    command cat >"$TEST_TEMP_DIR/build-env" <<'EOF'
 ACTUAL_UID=500
 ACTUAL_GID=500
 EOF
@@ -109,7 +109,7 @@ EOF
 
 # Test 4: Default USERNAME is "developer" when no positional arg given after shift
 test_build_env_default_username_is_developer() {
-    command cat > "$TEST_TEMP_DIR/build-env" << 'EOF'
+    command cat >"$TEST_TEMP_DIR/build-env" <<'EOF'
 ACTUAL_UID=500
 ACTUAL_GID=500
 EOF
@@ -158,7 +158,7 @@ test_no_build_env_correct_arg_count() {
 # Test 7: build-env with only ACTUAL_UID set — GID falls back to the passed value
 test_build_env_only_actual_uid_gid_falls_back() {
     # build-env has ACTUAL_UID but no ACTUAL_GID
-    command cat > "$TEST_TEMP_DIR/build-env" << 'EOF'
+    command cat >"$TEST_TEMP_DIR/build-env" <<'EOF'
 ACTUAL_UID=7777
 EOF
 

@@ -36,7 +36,7 @@ setup() {
     source "$PROJECT_ROOT/lib/shared/logging.sh"
 
     # Create a modified version of logging.sh for testing
-    command sed 's|/var/log/container-build|'"$TEST_LOG_DIR"'|g' "$PROJECT_ROOT/lib/base/logging.sh" > "$TEST_LOG_DIR/logging-test.sh"
+    command sed 's|/var/log/container-build|'"$TEST_LOG_DIR"'|g' "$PROJECT_ROOT/lib/base/logging.sh" >"$TEST_LOG_DIR/logging-test.sh"
 
     # Copy sub-modules to the test directory so relative sourcing works
     command cp "$PROJECT_ROOT/lib/base/feature-logging.sh" "$TEST_LOG_DIR/feature-logging.sh"

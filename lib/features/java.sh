@@ -205,7 +205,7 @@ log_command "Creating bashrc.d directory" \
 
 # Create system-wide Java configuration (content in lib/bashrc/java-env.sh)
 write_bashrc_content /etc/bashrc.d/50-java.sh "Java environment configuration" \
-    < /tmp/build-scripts/features/lib/bashrc/java-env.sh
+    </tmp/build-scripts/features/lib/bashrc/java-env.sh
 
 log_command "Setting Java bashrc script permissions" \
     chmod +x /etc/bashrc.d/50-java.sh
@@ -217,7 +217,7 @@ log_message "Setting up Java aliases and helpers..."
 
 # Java aliases and helpers (content in lib/bashrc/java-aliases.sh)
 write_bashrc_content /etc/bashrc.d/50-java.sh "Java aliases and helpers" \
-    < /tmp/build-scripts/features/lib/bashrc/java-aliases.sh
+    </tmp/build-scripts/features/lib/bashrc/java-aliases.sh
 
 # ============================================================================
 # Maven Settings Configuration
@@ -229,7 +229,7 @@ log_command "Creating Maven config directory" \
     mkdir -p /etc/maven
 
 # Create a template settings.xml that uses cache directory
-command cat > /etc/maven/settings-template.xml << 'EOF'
+command cat >/etc/maven/settings-template.xml <<'EOF'
 <?xml version="1.0" encoding="UTF-8"?>
 <settings xmlns="http://maven.apache.org/SETTINGS/1.2.0"
           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
@@ -275,7 +275,7 @@ log_message "Creating Java startup script..."
 log_command "Creating container startup directory" \
     mkdir -p /etc/container/first-startup
 
-command cat > /etc/container/first-startup/30-java-setup.sh << 'EOF'
+command cat >/etc/container/first-startup/30-java-setup.sh <<'EOF'
 #!/bin/bash
 # Java development environment setup
 
@@ -346,7 +346,7 @@ log_command "Setting Java startup script permissions" \
 # ============================================================================
 log_message "Creating Java verification script..."
 
-command cat > /usr/local/bin/test-java << 'EOF'
+command cat >/usr/local/bin/test-java <<'EOF'
 #!/bin/bash
 echo "=== Java Installation Status ==="
 if command -v java &> /dev/null; then

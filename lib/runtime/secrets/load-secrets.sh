@@ -81,22 +81,22 @@ source_provider() {
 
     local script_mapping
     case "$provider" in
-        1password|op)
+        1password | op)
             script_mapping="1password-integration.sh"
             ;;
-        vault|hashicorp)
+        vault | hashicorp)
             script_mapping="vault-integration.sh"
             ;;
-        aws|aws-secrets)
+        aws | aws-secrets)
             script_mapping="aws-secrets-manager.sh"
             ;;
-        azure|azure-keyvault)
+        azure | azure-keyvault)
             script_mapping="azure-keyvault.sh"
             ;;
-        gcp|gcp-secrets|google)
+        gcp | gcp-secrets | google)
             script_mapping="gcp-secret-manager.sh"
             ;;
-        docker|docker-secrets)
+        docker | docker-secrets)
             script_mapping="docker-secrets.sh"
             ;;
         *)
@@ -126,22 +126,22 @@ load_provider_secrets() {
     local function_name=""
 
     case "$provider" in
-        1password|op)
+        1password | op)
             function_name="load_secrets_from_1password"
             ;;
-        vault|hashicorp)
+        vault | hashicorp)
             function_name="load_secrets_from_vault"
             ;;
-        aws|aws-secrets)
+        aws | aws-secrets)
             function_name="load_secrets_from_aws"
             ;;
-        azure|azure-keyvault)
+        azure | azure-keyvault)
             function_name="load_secrets_from_azure"
             ;;
-        gcp|gcp-secrets|google)
+        gcp | gcp-secrets | google)
             function_name="load_secrets_from_gcp"
             ;;
-        docker|docker-secrets)
+        docker | docker-secrets)
             function_name="load_secrets_from_docker"
             ;;
         *)
@@ -151,7 +151,7 @@ load_provider_secrets() {
     esac
 
     # Check if function exists
-    if ! command -v "$function_name" > /dev/null 2>&1; then
+    if ! command -v "$function_name" >/dev/null 2>&1; then
         log_warning "Provider function not loaded: $function_name"
         return 1
     fi
@@ -192,7 +192,7 @@ load_all_secrets() {
     local priority="${SECRET_LOADER_PRIORITY:-docker,1password,vault,aws,azure,gcp}"
     local fail_on_error="${SECRET_LOADER_FAIL_ON_ERROR:-false}"
 
-    IFS=',' read -ra providers <<< "$priority"
+    IFS=',' read -ra providers <<<"$priority"
 
     local total_providers=0
     local successful_providers=0
@@ -295,7 +295,7 @@ check_all_providers_health() {
                 ;;
         esac
 
-        if command -v "$health_function" > /dev/null 2>&1; then
+        if command -v "$health_function" >/dev/null 2>&1; then
             if "$health_function"; then
                 healthy=$((healthy + 1))
             else

@@ -27,19 +27,19 @@ ACTION="summary"
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
     case $1 in
-        -s|--summary)
+        -s | --summary)
             ACTION="summary"
             shift
             ;;
-        -e|--errors)
+        -e | --errors)
             ACTION="errors"
             shift
             ;;
-        -f|--full)
+        -f | --full)
             ACTION="full"
             shift
             ;;
-        -h|--help)
+        -h | --help)
             echo "Usage: check-r-dev-logs.sh [options]"
             echo ""
             echo "Options:"

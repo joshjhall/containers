@@ -49,7 +49,7 @@ capture_result() {
 # Execute with warnings suppressed (useful for testing error conditions)
 with_warnings_suppressed() {
     local tfh_old_log_level="${LOG_LEVEL:-}"
-    export LOG_LEVEL=2  # ERROR level only
+    export LOG_LEVEL=2 # ERROR level only
 
     # Execute command
     "$@"

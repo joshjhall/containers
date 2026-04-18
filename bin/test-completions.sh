@@ -21,19 +21,19 @@ EXIT_CODE=0
 # Parse arguments
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --verbose|-v)
+        --verbose | -v)
             VERBOSE=true
             shift
             ;;
-        --tool|-t)
+        --tool | -t)
             SPECIFIC_TOOL="$2"
             shift 2
             ;;
-        --list|-l)
+        --list | -l)
             LIST_ONLY=true
             shift
             ;;
-        --help|-h)
+        --help | -h)
             echo "Usage: $0 [--verbose] [--tool NAME] [--list]"
             echo ""
             echo "Options:"
@@ -97,8 +97,8 @@ list_completions() {
     echo "Tools with built-in completion support:"
     for tool in kubectl helm docker docker-compose terraform gh aws gcloud; do
         if command -v "$tool" &>/dev/null; then
-            if "$tool" completion bash &>/dev/null 2>&1 || \
-               "$tool" --completion bash &>/dev/null 2>&1; then
+            if "$tool" completion bash &>/dev/null 2>&1 ||
+                "$tool" --completion bash &>/dev/null 2>&1; then
                 echo "  - $tool"
             fi
         fi

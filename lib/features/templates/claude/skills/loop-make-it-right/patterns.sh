@@ -33,17 +33,17 @@ while IFS= read -r file; do
     case "$file" in
         *.py)
             # Python: count lines from def to next def/class or dedent
-            /usr/bin/grep -n '^\s*def \w\+' "$file" 2>/dev/null | \
+            /usr/bin/grep -n '^\s*def \w\+' "$file" 2>/dev/null |
                 while IFS=: read -r line_num content; do
                     # Count lines until next function/class at same or lower indent
                     indent=$(/usr/bin/printf '%s' "$content" | /usr/bin/sed 's/[^ ].*//' | /usr/bin/wc -c)
-                    end_line=$(/usr/bin/sed -n "$((line_num + 1)),\$p" "$file" | \
-                        /usr/bin/grep -n "^.\{0,${indent}\}[^ ]" | \
+                    end_line=$(/usr/bin/sed -n "$((line_num + 1)),\$p" "$file" |
+                        /usr/bin/grep -n "^.\{0,${indent}\}[^ ]" |
                         /usr/bin/head -1 | /usr/bin/cut -d: -f1)
                     if [ -n "$end_line" ]; then
                         func_lines=$((end_line))
                     else
-                        total=$(/usr/bin/wc -l < "$file")
+                        total=$(/usr/bin/wc -l <"$file")
                         func_lines=$((total - line_num))
                     fi
                     if [ "$func_lines" -gt "$MAX_FUNCTION_LINES" ]; then
@@ -54,18 +54,18 @@ while IFS= read -r file; do
                     fi
                 done || true
             ;;
-        *.ts|*.js|*.tsx|*.jsx|*.go|*.rs)
+        *.ts | *.js | *.tsx | *.jsx | *.go | *.rs)
             # Brace-delimited languages: count from opening { to closing }
-            /usr/bin/grep -nE '^\s*(export\s+)?(async\s+)?function\s+\w+|^func\s+|^(pub\s+)?fn\s+' "$file" 2>/dev/null | \
+            /usr/bin/grep -nE '^\s*(export\s+)?(async\s+)?function\s+\w+|^func\s+|^(pub\s+)?fn\s+' "$file" 2>/dev/null |
                 while IFS=: read -r line_num _content; do
                     # Simple heuristic: count lines from definition to next function
-                    next_func=$(/usr/bin/sed -n "$((line_num + 1)),\$p" "$file" | \
-                        /usr/bin/grep -nE '^\s*(export\s+)?(async\s+)?function\s+\w+|^func\s+|^(pub\s+)?fn\s+' | \
+                    next_func=$(/usr/bin/sed -n "$((line_num + 1)),\$p" "$file" |
+                        /usr/bin/grep -nE '^\s*(export\s+)?(async\s+)?function\s+\w+|^func\s+|^(pub\s+)?fn\s+' |
                         /usr/bin/head -1 | /usr/bin/cut -d: -f1)
                     if [ -n "$next_func" ]; then
                         func_lines=$((next_func))
                     else
-                        total=$(/usr/bin/wc -l < "$file")
+                        total=$(/usr/bin/wc -l <"$file")
                         func_lines=$((total - line_num))
                     fi
                     if [ "$func_lines" -gt "$MAX_FUNCTION_LINES" ]; then
@@ -94,7 +94,7 @@ while IFS= read -r file; do
                 }
             ' "$file" 2>/dev/null || true
             ;;
-        *.ts|*.js|*.tsx|*.jsx|*.go|*.rs)
+        *.ts | *.js | *.tsx | *.jsx | *.go | *.rs)
             # Brace languages: 2-space indent, nesting = indent / 2
             /usr/bin/awk -v max="$MAX_NESTING_DEPTH" '
                 /^[[:space:]]+[^[:space:]]/ {
@@ -113,14 +113,14 @@ while IFS= read -r file; do
     # Single-character variable names outside common loop patterns
     case "$file" in
         *.py)
-            /usr/bin/grep -nE '^\s+[a-zA-Z]\s*=' "$file" 2>/dev/null | \
-                /usr/bin/grep -vE '^\s*(for|with)\s+[a-zA-Z]\s+in\b|_\s*=' | \
+            /usr/bin/grep -nE '^\s+[a-zA-Z]\s*=' "$file" 2>/dev/null |
+                /usr/bin/grep -vE '^\s*(for|with)\s+[a-zA-Z]\s+in\b|_\s*=' |
                 while IFS=: read -r line_num content; do
                     # Extract the variable name
                     varname=$(/usr/bin/printf '%s' "$content" | /usr/bin/sed 's/^[[:space:]]*\([a-zA-Z]\)[[:space:]]*=.*/\1/')
                     # Skip common loop vars and conventional single-char names
                     case "$varname" in
-                        i|j|k|n|x|y|_|e|f) continue ;;
+                        i | j | k | n | x | y | _ | e | f) continue ;;
                     esac
                     evidence=$(/usr/bin/printf '%.60s' "$content")
                     /usr/bin/printf '%s\t%s\t%s\t%s\t%s\n' \
@@ -130,4 +130,4 @@ while IFS= read -r file; do
             ;;
     esac
 
-done < "$FILE_LIST"
+done <"$FILE_LIST"

@@ -4,9 +4,9 @@
 # Kotlin Development Aliases
 # ----------------------------------------------------------------------------
 # ktlint shortcuts
-alias ktf='ktlint -F'          # Format files
-alias ktcheck='ktlint'          # Check files
-alias ktfmt='ktlint -F'         # Alias for format
+alias ktf='ktlint -F'   # Format files
+alias ktcheck='ktlint'  # Check files
+alias ktfmt='ktlint -F' # Alias for format
 
 # detekt shortcuts
 alias dkt='detekt'
@@ -82,7 +82,7 @@ kt-init-project() {
 
     # Create .editorconfig for ktlint
     if [ ! -f ".editorconfig" ]; then
-        command cat > .editorconfig << 'EDITORCONFIG'
+        command cat >.editorconfig <<'EDITORCONFIG'
 root = true
 
 [*]
@@ -109,7 +109,7 @@ EDITORCONFIG
 
     # Create .gitignore if not exists
     if [ ! -f ".gitignore" ]; then
-        command cat > .gitignore << 'GITIGNORE'
+        command cat >.gitignore <<'GITIGNORE'
 # Kotlin
 *.class
 *.jar

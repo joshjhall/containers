@@ -31,8 +31,8 @@ teardown() {
         command rm -rf "$TEST_TEMP_DIR"
     fi
     unset OP_ENABLED OP_CONNECT_HOST OP_CONNECT_TOKEN OP_SERVICE_ACCOUNT_TOKEN \
-          OP_VAULT OP_SECRET_PREFIX OP_ITEM_NAMES OP_SECRET_REFERENCES \
-          TEST_TEMP_DIR 2>/dev/null || true
+        OP_VAULT OP_SECRET_PREFIX OP_ITEM_NAMES OP_SECRET_REFERENCES \
+        TEST_TEMP_DIR 2>/dev/null || true
 }
 
 # Run tests with setup/teardown
@@ -138,7 +138,7 @@ test_connect_item_search_uses_url_encode() {
 
 test_connect_error_log_no_body_leak() {
     # Mock curl to return a response with a "secret" body + non-200 status
-    command cat > "$TEST_TEMP_DIR/bin/curl" << 'MOCK'
+    command cat >"$TEST_TEMP_DIR/bin/curl" <<'MOCK'
 #!/bin/sh
 # For health check, return 200
 case "$*" in
@@ -151,7 +151,7 @@ MOCK
 
     # Mock jq to be available
     cp "$(command -v jq)" "$TEST_TEMP_DIR/bin/jq" 2>/dev/null || {
-        printf '#!/bin/sh\necho ""\n' > "$TEST_TEMP_DIR/bin/jq"
+        printf '#!/bin/sh\necho ""\n' >"$TEST_TEMP_DIR/bin/jq"
         chmod +x "$TEST_TEMP_DIR/bin/jq"
     }
 
@@ -175,7 +175,7 @@ MOCK
 
 test_cli_op_read_error_no_secret_leak() {
     # Mock op to output a secret value on stdout and fail
-    command cat > "$TEST_TEMP_DIR/bin/op" << 'MOCK'
+    command cat >"$TEST_TEMP_DIR/bin/op" <<'MOCK'
 #!/bin/sh
 case "$1" in
     account) exit 0 ;;
@@ -203,7 +203,7 @@ MOCK
 
 test_cli_item_get_error_no_json_leak() {
     # Mock op to output JSON with secret fields and fail
-    command cat > "$TEST_TEMP_DIR/bin/op" << 'MOCK'
+    command cat >"$TEST_TEMP_DIR/bin/op" <<'MOCK'
 #!/bin/sh
 case "$1" in
     account) exit 0 ;;
@@ -345,7 +345,7 @@ test_connect_curl_not_available() {
 
 test_connect_jq_not_available() {
     # Create a mock curl but no jq
-    printf '#!/bin/sh\nexit 0\n' > "$TEST_TEMP_DIR/bin/curl"
+    printf '#!/bin/sh\nexit 0\n' >"$TEST_TEMP_DIR/bin/curl"
     chmod +x "$TEST_TEMP_DIR/bin/curl"
 
     local exit_code=0
@@ -383,7 +383,7 @@ test_cli_op_not_available() {
 
 test_cli_no_auth_no_session() {
     # Create a mock op that always fails (simulates not signed in)
-    printf '#!/bin/sh\nexit 1\n' > "$TEST_TEMP_DIR/bin/op"
+    printf '#!/bin/sh\nexit 1\n' >"$TEST_TEMP_DIR/bin/op"
     chmod +x "$TEST_TEMP_DIR/bin/op"
 
     local exit_code=0
@@ -399,7 +399,7 @@ test_cli_no_auth_no_session() {
 
 test_cli_service_account_token_exported() {
     # Create a mock op that succeeds for account get
-    printf '#!/bin/sh\nexit 0\n' > "$TEST_TEMP_DIR/bin/op"
+    printf '#!/bin/sh\nexit 0\n' >"$TEST_TEMP_DIR/bin/op"
     chmod +x "$TEST_TEMP_DIR/bin/op"
 
     local result
@@ -457,7 +457,7 @@ test_health_check_no_connect_no_cli() {
 
 test_health_check_connect_branch() {
     # Create a mock curl that returns 200 for health endpoint
-    printf '#!/bin/sh\necho "200"\n' > "$TEST_TEMP_DIR/bin/curl"
+    printf '#!/bin/sh\necho "200"\n' >"$TEST_TEMP_DIR/bin/curl"
     chmod +x "$TEST_TEMP_DIR/bin/curl"
 
     local exit_code=0
@@ -475,7 +475,7 @@ test_health_check_connect_branch() {
 
 test_health_check_cli_branch() {
     # Create a mock op that succeeds for account get
-    printf '#!/bin/sh\nexit 0\n' > "$TEST_TEMP_DIR/bin/op"
+    printf '#!/bin/sh\nexit 0\n' >"$TEST_TEMP_DIR/bin/op"
     chmod +x "$TEST_TEMP_DIR/bin/op"
 
     local exit_code=0
@@ -496,7 +496,7 @@ test_health_check_cli_branch() {
 
 test_connect_health_check_non_200() {
     # Mock curl: health endpoint returns 503
-    command cat > "$TEST_TEMP_DIR/bin/curl" << 'MOCK'
+    command cat >"$TEST_TEMP_DIR/bin/curl" <<'MOCK'
 #!/bin/sh
 # curl -s -w "%{http_code}" -o /dev/null URL
 # The -o /dev/null suppresses body, -w writes the code to stdout
@@ -510,7 +510,7 @@ MOCK
     chmod +x "$TEST_TEMP_DIR/bin/curl"
 
     # Provide a stub jq so the "command -v jq" check passes
-    printf '#!/bin/sh\ncat\n' > "$TEST_TEMP_DIR/bin/jq"
+    printf '#!/bin/sh\ncat\n' >"$TEST_TEMP_DIR/bin/jq"
     chmod +x "$TEST_TEMP_DIR/bin/jq"
 
     local exit_code=0
@@ -528,7 +528,7 @@ MOCK
 
 test_connect_vault_list_403() {
     # Mock curl: health returns 200, vault list returns 403
-    command cat > "$TEST_TEMP_DIR/bin/curl" << 'MOCK'
+    command cat >"$TEST_TEMP_DIR/bin/curl" <<'MOCK'
 #!/bin/sh
 for arg in "$@"; do
     case "$arg" in
@@ -547,7 +547,7 @@ MOCK
 
     # Provide real jq if available, else a stub
     cp "$(command -v jq)" "$TEST_TEMP_DIR/bin/jq" 2>/dev/null || {
-        printf '#!/bin/sh\necho ""\n' > "$TEST_TEMP_DIR/bin/jq"
+        printf '#!/bin/sh\necho ""\n' >"$TEST_TEMP_DIR/bin/jq"
         chmod +x "$TEST_TEMP_DIR/bin/jq"
     }
 
@@ -567,7 +567,7 @@ MOCK
 
 test_connect_vault_name_not_found() {
     # Mock curl: health 200, vault list 200 with a different vault name
-    command cat > "$TEST_TEMP_DIR/bin/curl" << 'MOCK'
+    command cat >"$TEST_TEMP_DIR/bin/curl" <<'MOCK'
 #!/bin/sh
 for arg in "$@"; do
     case "$arg" in
@@ -629,7 +629,7 @@ test_tsv_parsing_preserves_equals_in_values() {
     local tsv_line
     tsv_line=$(printf 'api_key\tsk_live_abc123=xyz=789')
 
-    IFS=$'\t' read -r field_label field_value <<< "$tsv_line"
+    IFS=$'\t' read -r field_label field_value <<<"$tsv_line"
 
     assert_equals "api_key" "$field_label" \
         "Tab-delimited parsing should extract label correctly"

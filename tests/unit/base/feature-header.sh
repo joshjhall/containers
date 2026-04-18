@@ -123,8 +123,8 @@ test_write_bashrc_content() {
     write_bashrc_content() {
         local file="$1"
         local section="$2"
-        echo "# $section" > "$file"
-        command cat >> "$file"
+        echo "# $section" >"$file"
+        command cat >>"$file"
     }
     export -f write_bashrc_content
 
@@ -135,7 +135,7 @@ test_write_bashrc_content() {
     local test_bashrc="$TEST_TEMP_DIR/test.bashrc"
 
     # Write content using the function
-    write_bashrc_content "$test_bashrc" "Test Section" << 'EOF'
+    write_bashrc_content "$test_bashrc" "Test Section" <<'EOF'
 echo "Test content"
 export TEST_VAR="test"
 EOF

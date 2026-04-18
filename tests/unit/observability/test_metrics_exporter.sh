@@ -21,7 +21,7 @@ mkdir -p "$BUILD_LOG_DIR"
 # Create mock du to avoid slow FUSE filesystem scans (du -sb /workspace takes 25s+)
 MOCK_BIN_DIR="/tmp/test-metrics-mock-$$"
 mkdir -p "$MOCK_BIN_DIR"
-command cat > "$MOCK_BIN_DIR/du" << 'MOCK'
+command cat >"$MOCK_BIN_DIR/du" <<'MOCK'
 #!/bin/bash
 # Mock du to avoid slow FUSE filesystem scans in tests
 echo "1024	${@: -1}"
@@ -30,7 +30,7 @@ chmod +x "$MOCK_BIN_DIR/du"
 
 # Create mock build logs
 setup_mock_logs() {
-    command cat > "$BUILD_LOG_DIR/master-summary.log" <<EOF
+    command cat >"$BUILD_LOG_DIR/master-summary.log" <<EOF
 Python: 0 errors, 2 warnings (145s)
 Node.js: 0 errors, 0 warnings (89s)
 Rust: 1 errors, 3 warnings (234s)
@@ -123,7 +123,7 @@ test_runtime_metrics() {
     start_test "Runtime metrics are generated"
 
     # Create container start time marker
-    echo "$(date +%s)" > /tmp/container-start-time
+    echo "$(date +%s)" >/tmp/container-start-time
 
     local metrics
     metrics=$(BASH_ENV='' PATH="$MOCK_BIN_DIR:$PATH" "$PROJECT_ROOT/lib/runtime/metrics-exporter.sh")

@@ -31,7 +31,7 @@ setup_release_env() {
 
     # Set up file-based mock log
     MOCK_LOG="$TEST_TEMP_DIR/git_calls.log"
-    : > "$MOCK_LOG"
+    : >"$MOCK_LOG"
     export MOCK_LOG
     MOCK_GIT_EXIT_CODE=0
     export MOCK_GIT_EXIT_CODE
@@ -66,7 +66,7 @@ test_git_automation_auto_commit() {
 
     # Override git with file-logging mock
     git() {
-        echo "git $*" >> "$MOCK_LOG"
+        echo "git $*" >>"$MOCK_LOG"
         if [ "${1:-}" = "rev-parse" ] && [ "${2:-}" = "--abbrev-ref" ]; then
             echo "main"
         fi
@@ -98,7 +98,7 @@ test_git_automation_auto_push() {
     source "$PROJECT_ROOT/bin/lib/release/git-automation.sh"
 
     git() {
-        echo "git $*" >> "$MOCK_LOG"
+        echo "git $*" >>"$MOCK_LOG"
         if [ "${1:-}" = "rev-parse" ] && [ "${2:-}" = "--abbrev-ref" ]; then
             echo "main"
         fi
@@ -126,7 +126,7 @@ test_git_automation_push_failure() {
     source "$PROJECT_ROOT/bin/lib/release/git-automation.sh"
 
     git() {
-        echo "git $*" >> "$MOCK_LOG"
+        echo "git $*" >>"$MOCK_LOG"
         if [ "${1:-}" = "push" ]; then
             return 1
         fi
@@ -155,7 +155,7 @@ test_git_automation_auto_tag() {
     source "$PROJECT_ROOT/bin/lib/release/git-automation.sh"
 
     git() {
-        echo "git $*" >> "$MOCK_LOG"
+        echo "git $*" >>"$MOCK_LOG"
         if [ "${1:-}" = "rev-parse" ] && [ "${2:-}" = "--abbrev-ref" ]; then
             echo "main"
         fi
@@ -185,7 +185,7 @@ test_git_automation_no_gh_cli() {
     source "$PROJECT_ROOT/bin/lib/release/git-automation.sh"
 
     git() {
-        echo "git $*" >> "$MOCK_LOG"
+        echo "git $*" >>"$MOCK_LOG"
         if [ "${1:-}" = "rev-parse" ] && [ "${2:-}" = "--abbrev-ref" ]; then
             echo "main"
         fi
@@ -220,7 +220,7 @@ test_git_automation_manual_steps() {
     source "$PROJECT_ROOT/bin/lib/release/git-automation.sh"
 
     git() {
-        echo "git $*" >> "$MOCK_LOG"
+        echo "git $*" >>"$MOCK_LOG"
         if [ "${1:-}" = "rev-parse" ] && [ "${2:-}" = "--abbrev-ref" ]; then
             echo "main"
         fi

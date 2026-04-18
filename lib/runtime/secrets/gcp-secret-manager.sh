@@ -83,7 +83,7 @@ gcp_get_project_id() {
     fi
 
     # If still not found, try metadata server (for GCE/GKE)
-    if [ -z "$project_id" ] && command -v curl > /dev/null 2>&1; then
+    if [ -z "$project_id" ] && command -v curl >/dev/null 2>&1; then
         project_id=$(curl -s -f -H "Metadata-Flavor: Google" \
             "http://metadata.google.internal/computeMetadata/v1/project/project-id" 2>/dev/null || echo "")
     fi
@@ -110,7 +110,7 @@ load_secrets_from_gcp() {
     fi
 
     # Check if gcloud CLI is available
-    if ! command -v gcloud > /dev/null 2>&1; then
+    if ! command -v gcloud >/dev/null 2>&1; then
         log_error "gcloud CLI not found. Install Google Cloud SDK or enable INCLUDE_GCLOUD=true"
         return 1
     fi
@@ -134,7 +134,7 @@ load_secrets_from_gcp() {
     local secret_names=()
     if [ -n "${GCP_SECRET_NAMES:-}" ]; then
         # Specific secrets requested
-        IFS=',' read -ra secret_names <<< "$GCP_SECRET_NAMES"
+        IFS=',' read -ra secret_names <<<"$GCP_SECRET_NAMES"
     else
         # Retrieve all secrets in project
         log_info "Retrieving list of all secrets from project"
@@ -145,7 +145,7 @@ load_secrets_from_gcp() {
         }
 
         # Parse secret names
-        mapfile -t secret_names <<< "$secrets_list"
+        mapfile -t secret_names <<<"$secrets_list"
     fi
 
     # Load each secret
@@ -176,7 +176,7 @@ load_secrets_from_gcp() {
         # Convert secret name to valid environment variable name
         # Replace hyphens with underscores
         local env_var_name="${prefix}${secret_name//-/_}"
-        env_var_name="${env_var_name^^}"  # Convert to uppercase
+        env_var_name="${env_var_name^^}" # Convert to uppercase
 
         if is_protected_env_var "$env_var_name"; then
             log_warning "Skipping protected env var: $env_var_name (from secret: $secret_name)"
@@ -203,7 +203,7 @@ gcp_secrets_health_check() {
 
     log_info "Checking GCP Secret Manager access"
 
-    if ! command -v gcloud > /dev/null 2>&1; then
+    if ! command -v gcloud >/dev/null 2>&1; then
         log_warning "gcloud CLI not found"
         return 1
     fi
@@ -211,7 +211,7 @@ gcp_secrets_health_check() {
     # Try to get project ID and list secrets
     local project_id
     if project_id=$(gcp_get_project_id 2>/dev/null); then
-        if gcloud secrets list --project="$project_id" --limit=1 > /dev/null 2>&1; then
+        if gcloud secrets list --project="$project_id" --limit=1 >/dev/null 2>&1; then
             log_info "GCP Secret Manager is accessible (project: $project_id)"
             return 0
         fi

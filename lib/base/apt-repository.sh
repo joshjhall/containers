@@ -67,7 +67,7 @@ add_apt_repository_key() {
     local keyring_path="$3"
     local source_list="$4"
     local repo_line="$5"
-    local key_format="${6:-armored}"  # "armored" (needs dearmor) or "binary"
+    local key_format="${6:-armored}" # "armored" (needs dearmor) or "binary"
 
     if ! is_debian_version 12; then
         # Legacy method for Debian 11

@@ -120,8 +120,8 @@ PYTHON_BIN_DIR="/usr/local/bin"
 
 # Some tools install with different names or need alternative commands
 declare -A alt_tools=(
-    ["py.test"]="pytest"         # Alternative pytest command
-    ["ipython3"]="ipython"       # ipython3 -> ipython
+    ["py.test"]="pytest"   # Alternative pytest command
+    ["ipython3"]="ipython" # ipython3 -> ipython
 )
 
 for alt_cmd in "${!alt_tools[@]}"; do
@@ -143,7 +143,7 @@ log_command "Creating bashrc.d directory" \
 
 # Create Python dev tools configuration (content in lib/bashrc/python-dev-config.sh)
 write_bashrc_content /etc/bashrc.d/25-python-dev.sh "Python dev tools configuration" \
-    < /tmp/build-scripts/features/lib/bashrc/python-dev-config.sh
+    </tmp/build-scripts/features/lib/bashrc/python-dev-config.sh
 
 log_command "Setting Python dev bashrc script permissions" \
     chmod +x /etc/bashrc.d/25-python-dev.sh
@@ -155,7 +155,7 @@ log_message "Setting up Python development aliases..."
 
 # Python development aliases (content in lib/bashrc/python-dev-aliases.sh)
 write_bashrc_content /etc/bashrc.d/25-python-dev.sh "Python development aliases" \
-    < /tmp/build-scripts/features/lib/bashrc/python-dev-aliases.sh
+    </tmp/build-scripts/features/lib/bashrc/python-dev-aliases.sh
 
 # ============================================================================
 # Python Language Server (for IDE support)

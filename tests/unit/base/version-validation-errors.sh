@@ -23,7 +23,7 @@ setup() {
     mkdir -p /tmp/build-scripts/base
 
     # Create a minimal logging.sh stub that captures error messages
-    command cat > /tmp/build-scripts/base/logging.sh << 'EOF'
+    command cat >/tmp/build-scripts/base/logging.sh <<'EOF'
 #!/bin/bash
 # Stub logging functions for testing
 log_error() {

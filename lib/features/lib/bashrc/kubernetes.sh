@@ -3,8 +3,8 @@
 # ----------------------------------------------------------------------------
 
 # Error protection for interactive shells
-set +u  # Don't error on unset variables
-set +e  # Don't exit on errors
+set +u # Don't error on unset variables
+set +e # Don't exit on errors
 
 # Check if we're in an interactive shell
 if [[ $- != *i* ]]; then
@@ -12,34 +12,33 @@ if [[ $- != *i* ]]; then
     return 0
 fi
 
-
 # ----------------------------------------------------------------------------
 # Kubernetes Aliases - Common kubectl operations
 # ----------------------------------------------------------------------------
-alias k='kubectl'                                    # Short alias
-alias kgp='kubectl get pods'                        # List pods
-alias kgpa='kubectl get pods --all-namespaces'      # List all pods
-alias kgs='kubectl get svc'                         # List services
-alias kgd='kubectl get deployment'                  # List deployments
-alias kgn='kubectl get nodes'                       # List nodes
-alias kgns='kubectl get namespaces'                 # List namespaces
-alias kaf='kubectl apply -f'                        # Apply config
-alias kdel='kubectl delete'                         # Delete resource
-alias klog='kubectl logs'                           # View logs
-alias kexec='kubectl exec -it'                      # Execute in pod
-alias kctx='kubectl config current-context'         # Current context
-alias kns='kubectl config set-context --current --namespace'  # Set namespace
-alias kdesc='kubectl describe'                      # Describe resource
-alias kpf='kubectl port-forward'                    # Port forwarding
+alias k='kubectl'                                            # Short alias
+alias kgp='kubectl get pods'                                 # List pods
+alias kgpa='kubectl get pods --all-namespaces'               # List all pods
+alias kgs='kubectl get svc'                                  # List services
+alias kgd='kubectl get deployment'                           # List deployments
+alias kgn='kubectl get nodes'                                # List nodes
+alias kgns='kubectl get namespaces'                          # List namespaces
+alias kaf='kubectl apply -f'                                 # Apply config
+alias kdel='kubectl delete'                                  # Delete resource
+alias klog='kubectl logs'                                    # View logs
+alias kexec='kubectl exec -it'                               # Execute in pod
+alias kctx='kubectl config current-context'                  # Current context
+alias kns='kubectl config set-context --current --namespace' # Set namespace
+alias kdesc='kubectl describe'                               # Describe resource
+alias kpf='kubectl port-forward'                             # Port forwarding
 
 # kubectl auto-completion with validation
-if command -v kubectl &> /dev/null; then
+if command -v kubectl &>/dev/null; then
     COMPLETION_FILE="/tmp/kubectl-completion.$$.bash"
-    if kubectl completion bash > "$COMPLETION_FILE" 2>/dev/null; then
+    if kubectl completion bash >"$COMPLETION_FILE" 2>/dev/null; then
         # Validate completion output before sourcing
-        if [ -f "$COMPLETION_FILE" ] && \
-           [ "$(wc -c < "$COMPLETION_FILE")" -lt 100000 ] && \
-           ! command grep -qE '(rm -rf|curl.*bash|wget.*bash|eval.*\$)' "$COMPLETION_FILE"; then
+        if [ -f "$COMPLETION_FILE" ] &&
+            [ "$(wc -c <"$COMPLETION_FILE")" -lt 100000 ] &&
+            ! command grep -qE '(rm -rf|curl.*bash|wget.*bash|eval.*\$)' "$COMPLETION_FILE"; then
             # shellcheck disable=SC1090  # Dynamic source is validated
             source "$COMPLETION_FILE"
             complete -F __start_kubectl k
@@ -167,10 +166,10 @@ k-resources() {
     local namespace="${2:-}"
 
     case "$type" in
-        nodes|node)
+        nodes | node)
             kubectl top nodes
             ;;
-        pods|pod)
+        pods | pod)
             if [ -n "$namespace" ]; then
                 kubectl top pods -n "$namespace"
             else
@@ -183,7 +182,6 @@ k-resources() {
             ;;
     esac
 }
-
 
 # Note: We leave set +u and set +e in place for interactive shells
 # to prevent errors with undefined variables or failed commands

@@ -235,7 +235,7 @@ log_command "Creating bashrc.d directory" \
 
 # Kotlin environment configuration (content in lib/bashrc/kotlin-env.sh)
 write_bashrc_content /etc/bashrc.d/50-kotlin.sh "Kotlin environment configuration" \
-    < /tmp/build-scripts/features/lib/bashrc/kotlin-env.sh
+    </tmp/build-scripts/features/lib/bashrc/kotlin-env.sh
 
 log_command "Setting Kotlin bashrc script permissions" \
     chmod +x /etc/bashrc.d/50-kotlin.sh
@@ -247,7 +247,7 @@ log_message "Setting up Kotlin aliases and helpers..."
 
 # Kotlin aliases and helpers (content in lib/bashrc/kotlin-aliases.sh)
 write_bashrc_content /etc/bashrc.d/50-kotlin.sh "Kotlin aliases and helpers" \
-    < /tmp/build-scripts/features/lib/bashrc/kotlin-aliases.sh
+    </tmp/build-scripts/features/lib/bashrc/kotlin-aliases.sh
 
 # ============================================================================
 # Container Startup Scripts

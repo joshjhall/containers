@@ -120,9 +120,9 @@ fetch_github_checksums_txt() {
 
     # Fetch the checksums file and extract the line for our file
     local checksum
-    checksum=$(_curl_with_retry_wrapper -fsSL "$checksums_url" | \
-        command grep -F "$filename" | \
-        command awk '{print $1}' | \
+    checksum=$(_curl_with_retry_wrapper -fsSL "$checksums_url" |
+        command grep -F "$filename" |
+        command awk '{print $1}' |
         command head -1)
 
     if [ -n "$checksum" ]; then
@@ -151,8 +151,8 @@ fetch_github_sha256_file() {
 
     # Fetch the .sha256 file and extract just the hash
     local checksum
-    checksum=$(_curl_with_retry_wrapper -fsSL "$sha256_url" | \
-        command awk '{print $1}' | \
+    checksum=$(_curl_with_retry_wrapper -fsSL "$sha256_url" |
+        command awk '{print $1}' |
         command head -1)
 
     if [ -n "$checksum" ] && [[ "$checksum" =~ ^[a-fA-F0-9]{64}$ ]]; then
@@ -181,8 +181,8 @@ fetch_github_sha512_file() {
 
     # Fetch the .sha512 file and extract just the hash
     local checksum
-    checksum=$(_curl_with_retry_wrapper -fsSL "$sha512_url" | \
-        command awk '{print $1}' | \
+    checksum=$(_curl_with_retry_wrapper -fsSL "$sha512_url" |
+        command awk '{print $1}' |
         command head -1)
 
     if [ -n "$checksum" ] && [[ "$checksum" =~ ^[a-fA-F0-9]{128}$ ]]; then

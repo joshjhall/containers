@@ -18,8 +18,8 @@ cd "$PROJECT_ROOT"
 # 1. Install lefthook git hooks
 echo -e "${BLUE}[1/4] Installing lefthook git hooks...${NC}"
 
-if command -v lefthook &> /dev/null; then
-    if lefthook install > /dev/null 2>&1; then
+if command -v lefthook &>/dev/null; then
+    if lefthook install >/dev/null 2>&1; then
         echo -e "${GREEN}✓${NC} lefthook hooks installed (pre-commit + pre-push)"
     else
         echo -e "${YELLOW}⚠${NC}  Failed to install lefthook hooks"
@@ -51,7 +51,7 @@ if grep -q "^\.env$" .gitignore; then
     echo -e "${GREEN}✓${NC} .env is in .gitignore"
 else
     echo -e "${RED}✗${NC} .env is NOT in .gitignore - adding it now..."
-    echo ".env" >> .gitignore
+    echo ".env" >>.gitignore
 fi
 
 # 3. Check recommended tools
@@ -62,7 +62,7 @@ check_tool() {
     local tool=$1
     local install_hint=$2
 
-    if command -v "$tool" &> /dev/null; then
+    if command -v "$tool" &>/dev/null; then
         echo -e "${GREEN}✓${NC} $tool installed"
         return 0
     else
@@ -82,7 +82,7 @@ check_tool "biome" "included in dev-tools feature"
 # 4. Check git configuration
 echo ""
 echo -e "${BLUE}[4/4] Checking git configuration...${NC}"
-if git config user.name > /dev/null && git config user.email > /dev/null; then
+if git config user.name >/dev/null && git config user.email >/dev/null; then
     echo -e "${GREEN}✓${NC} Git user.name and user.email are configured"
 else
     echo -e "${YELLOW}⚠${NC}  Git user.name or user.email not configured"

@@ -80,7 +80,7 @@ test_aws_credentials() {
     local credentials_file="$aws_dir/credentials"
 
     # Create mock credentials
-    command cat > "$credentials_file" << 'EOF'
+    command cat >"$credentials_file" <<'EOF'
 [default]
 aws_access_key_id = FAKE_ACCESS_KEY_ID_12345
 aws_secret_access_key = FAKE_SECRET_ACCESS_KEY_ABCDEFGHIJKLMNOP
@@ -112,7 +112,7 @@ test_aws_config() {
     local config_file="$aws_dir/config"
 
     # Create mock config
-    command cat > "$config_file" << 'EOF'
+    command cat >"$config_file" <<'EOF'
 [default]
 region = us-east-1
 output = json
@@ -143,7 +143,7 @@ test_aws_environment() {
     local bashrc_file="$TEST_TEMP_DIR/etc/bashrc.d/65-aws.sh"
 
     # Create environment setup
-    command cat > "$bashrc_file" << 'EOF'
+    command cat >"$bashrc_file" <<'EOF'
 export AWS_CONFIG_FILE="$HOME/.aws/config"
 export AWS_SHARED_CREDENTIALS_FILE="$HOME/.aws/credentials"
 export AWS_DEFAULT_REGION="us-east-1"
@@ -169,7 +169,7 @@ test_aws_aliases() {
     local bashrc_file="$TEST_TEMP_DIR/etc/bashrc.d/65-aws.sh"
 
     # Add aliases
-    command cat >> "$bashrc_file" << 'EOF'
+    command cat >>"$bashrc_file" <<'EOF'
 
 # AWS aliases
 alias awsp='aws --profile'
@@ -209,7 +209,7 @@ test_aws_completion() {
     local bashrc_file="$TEST_TEMP_DIR/etc/bashrc.d/65-aws.sh"
 
     # Add completion
-    command cat >> "$bashrc_file" << 'EOF'
+    command cat >>"$bashrc_file" <<'EOF'
 complete -C aws_completer aws
 EOF
 
@@ -242,7 +242,7 @@ test_aws_verification() {
     local test_script="$TEST_TEMP_DIR/test-aws.sh"
 
     # Create verification script
-    command cat > "$test_script" << 'EOF'
+    command cat >"$test_script" <<'EOF'
 #!/bin/bash
 echo "AWS CLI version:"
 aws --version 2>/dev/null || echo "AWS CLI not installed"

@@ -79,7 +79,7 @@ test_benchmark_substitution() {
     local tff_temp_dir
     tff_temp_dir=$(mktemp -d)
 
-    if command sed "s/__CLASS_NAME__/MyBenchmark/g" "$TEMPLATE_DIR/benchmark/Benchmark.java.tmpl" > "$tff_temp_dir/MyBenchmark.java"; then
+    if command sed "s/__CLASS_NAME__/MyBenchmark/g" "$TEMPLATE_DIR/benchmark/Benchmark.java.tmpl" >"$tff_temp_dir/MyBenchmark.java"; then
         if command grep -q "public class MyBenchmark" "$tff_temp_dir/MyBenchmark.java"; then
             assert_true true "Benchmark template substitution works correctly"
         else

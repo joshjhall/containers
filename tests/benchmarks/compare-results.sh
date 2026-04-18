@@ -57,7 +57,7 @@ for variant in $variants; do
     # Calculate change
     if [ "$baseline_time" != "0" ] && [ "$baseline_time" != "null" ]; then
         change=$(echo "scale=1; ($current_time - $baseline_time) * 100 / $baseline_time" | bc)
-        if (( $(echo "$change > 0" | bc -l) )); then
+        if (($(echo "$change > 0" | bc -l))); then
             change="+${change}%"
         else
             change="${change}%"
@@ -80,7 +80,7 @@ for variant in $variants; do
 
     if [ "$baseline_size" != "0" ] && [ "$baseline_size" != "null" ]; then
         change=$(echo "scale=1; ($current_size - $baseline_size) * 100 / $baseline_size" | bc)
-        if (( $(echo "$change > 0" | bc -l) )); then
+        if (($(echo "$change > 0" | bc -l))); then
             change="+${change}%"
         else
             change="${change}%"
@@ -101,7 +101,7 @@ total_current=$(jq '[.results[].build_time_seconds] | add' "$CURRENT" 2>/dev/nul
 
 if [ "$total_baseline" != "0" ] && [ "$total_baseline" != "null" ]; then
     total_change=$(echo "scale=1; ($total_current - $total_baseline) * 100 / $total_baseline" | bc)
-    if (( $(echo "$total_change > 0" | bc -l) )); then
+    if (($(echo "$total_change > 0" | bc -l))); then
         echo "  Total build time change: +${total_change}%"
     else
         echo "  Total build time change: ${total_change}%"

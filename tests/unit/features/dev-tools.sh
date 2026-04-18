@@ -156,7 +156,7 @@ test_bashrc_integration() {
     local bashrc_file="$TEST_TEMP_DIR/etc/bashrc.d/30-dev-tools.sh"
 
     # Create mock bashrc content
-    command cat > "$bashrc_file" << 'EOF'
+    command cat >"$bashrc_file" <<'EOF'
 # Development tools aliases
 alias lg='lazygit'
 alias ll='eza -la'
@@ -282,10 +282,10 @@ test_architecture_detection() {
 
     # Check architecture-specific URLs
     case "$arch" in
-        amd64|x86_64)
+        amd64 | x86_64)
             assert_equals "amd64" "$arch" "Architecture is amd64/x86_64"
             ;;
-        arm64|aarch64)
+        arm64 | aarch64)
             assert_equals "arm64" "$arch" "Architecture is arm64/aarch64"
             ;;
         *)
@@ -428,9 +428,9 @@ test_checksum_verification_date() {
 
     # With dynamic fetching, checksums are fetched at build time from upstream
     # Check that this approach is documented
-    if command grep -q "fetch.*checksum" "$dev_tools_script" || \
-       command grep -q "Dynamic.*checksum" "$dev_tools_script" || \
-       command grep -q "Fetching checksum" "$dev_tools_script"; then
+    if command grep -q "fetch.*checksum" "$dev_tools_script" ||
+        command grep -q "Dynamic.*checksum" "$dev_tools_script" ||
+        command grep -q "Fetching checksum" "$dev_tools_script"; then
         assert_true true "Dynamic checksum fetching is used"
     else
         assert_true false "Checksum verification date is not documented"
@@ -447,8 +447,8 @@ test_version_checksum_consistency() {
 
     if [ -n "$version_var" ]; then
         # Check that checksum comment references the same version
-        if command grep "lazygit.*releases/tag/v$version_var" "$dev_tools_script" > /dev/null 2>&1 || \
-           command grep "LAZYGIT.*$version_var" "$dev_tools_script" > /dev/null 2>&1; then
+        if command grep "lazygit.*releases/tag/v$version_var" "$dev_tools_script" >/dev/null 2>&1 ||
+            command grep "LAZYGIT.*$version_var" "$dev_tools_script" >/dev/null 2>&1; then
             assert_true true "lazygit version matches checksum documentation"
         else
             # Version might be referenced differently, accept if version variable exists

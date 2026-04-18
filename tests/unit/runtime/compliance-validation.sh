@@ -33,10 +33,10 @@ setup() {
 
     # Truncate error/warning files
     if [ -n "${CV_ERRORS_FILE:-}" ] && [ -f "$CV_ERRORS_FILE" ]; then
-        : > "$CV_ERRORS_FILE"
+        : >"$CV_ERRORS_FILE"
     fi
     if [ -n "${CV_WARNINGS_FILE:-}" ] && [ -f "$CV_WARNINGS_FILE" ]; then
-        : > "$CV_WARNINGS_FILE"
+        : >"$CV_WARNINGS_FILE"
     fi
 
     # Reset compliance counters

@@ -20,7 +20,7 @@
 #       → writes to /dev/shm/google-application-credentials.json
 #       → GOOGLE_APPLICATION_CREDENTIALS=/dev/shm/google-application-credentials.json
 #
-set +e  # Don't exit on errors
+set +e # Don't exit on errors
 
 # Skip if op not available
 command -v op >/dev/null 2>&1 || exit 0
@@ -80,16 +80,16 @@ _op_cache_primary_fs=""
 if mkdir -p "$_op_cache_requested" 2>/dev/null && [ -w "$_op_cache_requested" ]; then
     _op_cache_primary_fs=$(command stat -f -c '%T' "$_op_cache_requested" 2>/dev/null)
     case "$_op_cache_primary_fs" in
-        tmpfs|ramfs)
+        tmpfs | ramfs)
             _op_secret_cache_dir="$_op_cache_requested"
             chmod 700 "$_op_secret_cache_dir" 2>/dev/null || true
             ;;
     esac
 fi
-if [ -z "$_op_secret_cache_dir" ] \
-   && [ "$_op_cache_requested" != "$_op_cache_fallback" ] \
-   && mkdir -p "$_op_cache_fallback" 2>/dev/null \
-   && [ -w "$_op_cache_fallback" ]; then
+if [ -z "$_op_secret_cache_dir" ] &&
+    [ "$_op_cache_requested" != "$_op_cache_fallback" ] &&
+    mkdir -p "$_op_cache_fallback" 2>/dev/null &&
+    [ -w "$_op_cache_fallback" ]; then
     _op_secret_cache_dir="$_op_cache_fallback"
     chmod 700 "$_op_secret_cache_dir" 2>/dev/null || true
     command cat >&2 <<WARN
@@ -114,9 +114,9 @@ _op_read_with_backoff() {
     local delay="${OP_READ_RETRY_DELAY:-1}"
     local attempt=0
     local stderr_file
-    stderr_file=$(mktemp /dev/shm/op-stderr.XXXXXX 2>/dev/null) \
-        || stderr_file=$(mktemp 2>/dev/null) \
-        || stderr_file=""
+    stderr_file=$(mktemp /dev/shm/op-stderr.XXXXXX 2>/dev/null) ||
+        stderr_file=$(mktemp 2>/dev/null) ||
+        stderr_file=""
     if [ -z "$stderr_file" ]; then
         # No tmpfile available — we can't inspect stderr to detect throttling,
         # so do a single attempt with no retry.
@@ -133,7 +133,7 @@ _op_read_with_backoff() {
             if [ "$attempt" -lt "$max_attempts" ]; then
                 command sleep "$delay" 2>/dev/null
                 delay=$((delay * 2))
-                : > "$stderr_file"
+                : >"$stderr_file"
                 continue
             fi
         fi
@@ -158,7 +158,7 @@ _op_read_cached() {
     hash=$(printf '%s' "$ref" | sha256sum | command awk '{print $1}')
     cache_file="${_op_secret_cache_dir}/${hash}"
     if [ -f "$cache_file" ]; then
-        age=$(( $(command date +%s) - $(command stat -c %Y "$cache_file" 2>/dev/null || echo 0) ))
+        age=$(($(command date +%s) - $(command stat -c %Y "$cache_file" 2>/dev/null || echo 0)))
         if [ "$age" -ge 0 ] && [ "$age" -lt "$ttl" ]; then
             command cat "$cache_file"
             return 0
@@ -168,7 +168,7 @@ _op_read_cached() {
         _op_read_with_backoff "$ref"
         return $?
     }
-    if _op_read_with_backoff "$ref" > "$tmp" && [ -s "$tmp" ]; then
+    if _op_read_with_backoff "$ref" >"$tmp" && [ -s "$tmp" ]; then
         chmod 600 "$tmp" 2>/dev/null || true
         if mv -f "$tmp" "$cache_file" 2>/dev/null; then
             command cat "$cache_file"
@@ -185,7 +185,7 @@ _op_read_cached() {
 # Shim: fetch via cache and write to a target file. Backgroundable with `&`
 # (bash functions inherit into backgrounded subshells).
 _fetch_to_file() {
-    _op_read_cached "$1" > "$2"
+    _op_read_cached "$1" >"$2"
 }
 
 # Fork `$@ &`, capping concurrent background jobs at OP_SECRET_CACHE_MAX_CONCURRENT
@@ -196,7 +196,7 @@ _launch_fetch() {
     local max="${OP_SECRET_CACHE_MAX_CONCURRENT:-4}"
     if [ "$max" -gt 0 ]; then
         local active
-        while : ; do
+        while :; do
             active=$(jobs -rp 2>/dev/null | command wc -l | command tr -d ' ')
             [ "$active" -lt "$max" ] && break
             wait -n 2>/dev/null || break
@@ -272,10 +272,10 @@ for _ref_var in $(compgen -v | command grep '^OP_.\+_FILE_REF$'); do
         _uri_field="${_ref_value##*/}"
         case "$_uri_field" in
             *.*) _file_ext=".${_uri_field##*.}" ;;
-            *)   _file_ext="" ;;
+            *) _file_ext="" ;;
         esac
         _file_path="/dev/shm/${_file_name}${_file_ext}"
-        command cat "$_result_file" > "$_file_path"
+        command cat "$_result_file" >"$_file_path"
         chmod 600 "$_file_path"
         export "${_target_var}=${_file_path}"
     fi
@@ -319,7 +319,7 @@ _cache_tmp="${_cache_file}.tmp.$$"
     done
     printf 'export GIT_USER_NAME=%q\n' "${GIT_USER_NAME:-Devcontainer}"
     printf 'export GIT_USER_EMAIL=%q\n' "${GIT_USER_EMAIL:-devcontainer@localhost}"
-} > "$_cache_tmp"
+} >"$_cache_tmp"
 chmod 600 "$_cache_tmp"
 mv "$_cache_tmp" "$_cache_file"
 unset _cache_file _cache_tmp

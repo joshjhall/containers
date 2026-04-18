@@ -111,7 +111,7 @@ test_gem_configuration() {
     mkdir -p "$(dirname "$gem_config")"
 
     # Create gem configuration (as created by ruby.sh)
-    command cat > "$gem_config" << 'EOF'
+    command cat >"$gem_config" <<'EOF'
 ---
 :backtrace: false
 :bulk_threshold: 1000
@@ -142,7 +142,7 @@ test_bundle_cache_configuration() {
     mkdir -p "$(dirname "$bundle_config")"
 
     # Create bundle config
-    command cat > "$bundle_config" << 'EOF'
+    command cat >"$bundle_config" <<'EOF'
 ---
 BUNDLE_PATH: "/cache/bundle"
 BUNDLE_CACHE_ALL: "true"
@@ -172,7 +172,7 @@ test_ruby_environment_variables() {
     local bashrc_file="$TEST_TEMP_DIR/etc/bashrc.d/35-ruby.sh"
 
     # Create mock bashrc content (direct installation, no rbenv)
-    command cat > "$bashrc_file" << 'EOF'
+    command cat >"$bashrc_file" <<'EOF'
 # Ruby environment (direct installation to /usr/local)
 export PATH="/usr/local/bin:$PATH"
 export BUNDLE_PATH="/cache/bundle"
@@ -206,7 +206,7 @@ test_ruby_aliases_helpers() {
     mkdir -p "$(dirname "$bashrc_file")"
 
     # Add aliases section
-    command cat > "$bashrc_file" << 'EOF'
+    command cat >"$bashrc_file" <<'EOF'
 # Ruby aliases
 alias be='bundle exec'
 alias bi='bundle install'
@@ -237,7 +237,7 @@ test_gemfile_detection() {
     mkdir -p "$project_dir"
 
     # Create mock Gemfile
-    command cat > "$project_dir/Gemfile" << 'EOF'
+    command cat >"$project_dir/Gemfile" <<'EOF'
 source 'https://rubygems.org'
 
 ruby '3.4.7'
@@ -296,7 +296,7 @@ test_ruby_verification() {
     local test_script="$TEST_TEMP_DIR/test-ruby.sh"
 
     # Create verification script (updated for direct installation)
-    command cat > "$test_script" << 'EOF'
+    command cat >"$test_script" <<'EOF'
 #!/bin/bash
 echo "Ruby version:"
 ruby --version 2>/dev/null || echo "Ruby not installed"

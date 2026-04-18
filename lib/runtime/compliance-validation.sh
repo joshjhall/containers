@@ -29,7 +29,7 @@ CV_COMPLIANCE_REPORT=""
 # Record a compliance check result
 cv_compliance_check() {
     local check_name="$1"
-    local check_result="$2"  # pass, fail, warn
+    local check_result="$2" # pass, fail, warn
     local framework="$3"
     local requirement="$4"
     local description="$5"
@@ -301,7 +301,7 @@ cv_generate_compliance_report() {
         echo "# Format: STATUS|FRAMEWORK|REQUIREMENT|CHECK|DESCRIPTION|REMEDIATION"
         echo "#"
         echo -e "$CV_COMPLIANCE_REPORT"
-    } > "$report_path"
+    } >"$report_path"
 
     cv_info "Compliance report written to: $report_path"
 }
@@ -329,10 +329,10 @@ cv_validate_compliance() {
     # Normalize mode to registry key
     local framework_key
     case "$mode" in
-        pci-dss|pci_dss|pcidss) framework_key="PCI-DSS" ;;
+        pci-dss | pci_dss | pcidss) framework_key="PCI-DSS" ;;
         hipaa) framework_key="HIPAA" ;;
         fedramp) framework_key="FedRAMP" ;;
-        cmmc|cmmc-l2) framework_key="CMMC" ;;
+        cmmc | cmmc-l2) framework_key="CMMC" ;;
         *)
             cv_error "Unknown compliance mode: $mode"
             cv_error "Supported modes: pci-dss, hipaa, fedramp, cmmc"

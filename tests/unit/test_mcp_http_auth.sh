@@ -194,7 +194,7 @@ _run_mcp_header_test() {
 
     # Write the function definitions and test body to a temp script.
     # Using a quoted heredoc ('FUNC_EOF') to prevent variable expansion.
-    command cat > "$script_file" << 'FUNC_EOF'
+    command cat >"$script_file" <<'FUNC_EOF'
 #!/bin/bash
 set -euo pipefail
 
@@ -253,7 +253,7 @@ inject_mcp_auth_header() {
 FUNC_EOF
 
     # Append the test body (unquoted heredoc so caller's body is written as-is)
-    command cat >> "$script_file" << TEST_EOF
+    command cat >>"$script_file" <<TEST_EOF
 $test_body
 TEST_EOF
 

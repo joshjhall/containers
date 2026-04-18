@@ -51,7 +51,7 @@ test_minimal_production_base() {
     assert_executable_in_path "$image" "curl"
 
     # Clean up
-    docker rmi -f "$image" > /dev/null 2>&1 || true
+    docker rmi -f "$image" >/dev/null 2>&1 || true
 }
 
 # Test: Python production runtime
@@ -90,7 +90,7 @@ test_python_production_runtime() {
     assert_executable_not_in_path "$image" "pip-sync"
 
     # Clean up
-    docker rmi -f "$image" > /dev/null 2>&1 || true
+    docker rmi -f "$image" >/dev/null 2>&1 || true
 }
 
 # Test: Node production runtime
@@ -118,14 +118,14 @@ test_node_production_runtime() {
     assert_command_in_container "$image" "node --version" "v20"
 
     # Verify Node dev tools are NOT installed
-    assert_executable_not_in_path "$image" "tsc"  # typescript
+    assert_executable_not_in_path "$image" "tsc" # typescript
     assert_executable_not_in_path "$image" "eslint"
     assert_executable_not_in_path "$image" "prettier"
     assert_executable_not_in_path "$image" "nodemon"
     assert_executable_not_in_path "$image" "ts-node"
 
     # Clean up
-    docker rmi -f "$image" > /dev/null 2>&1 || true
+    docker rmi -f "$image" >/dev/null 2>&1 || true
 }
 
 # Test: Multi-runtime production (Python + Ruby + Node)
@@ -187,7 +187,7 @@ test_multi_runtime_production() {
     assert_executable_not_in_path "$image" "tmux"
 
     # Clean up
-    docker rmi -f "$image" > /dev/null 2>&1 || true
+    docker rmi -f "$image" >/dev/null 2>&1 || true
 }
 
 # Test: Production security configuration
@@ -215,7 +215,7 @@ test_production_security() {
     fi
 
     # Clean up
-    docker rmi -f "$image" > /dev/null 2>&1 || true
+    docker rmi -f "$image" >/dev/null 2>&1 || true
 }
 
 # Test: Production image size is reasonable
@@ -247,7 +247,7 @@ test_production_image_size() {
     fi
 
     # Clean up
-    docker rmi -f "$image" > /dev/null 2>&1 || true
+    docker rmi -f "$image" >/dev/null 2>&1 || true
 }
 
 # Test: Healthcheck script is available in production
@@ -270,7 +270,7 @@ test_production_healthcheck() {
     assert_command_in_container "$image" "/usr/local/bin/healthcheck --quick" ""
 
     # Clean up
-    docker rmi -f "$image" > /dev/null 2>&1 || true
+    docker rmi -f "$image" >/dev/null 2>&1 || true
 }
 
 # Helper function to check if executable is NOT in path
@@ -278,7 +278,7 @@ assert_executable_not_in_path() {
     local image="$1"
     local executable="$2"
 
-    if docker run --rm "$image" which "$executable" > /dev/null 2>&1; then
+    if docker run --rm "$image" which "$executable" >/dev/null 2>&1; then
         fail_test "Executable '$executable' should NOT be in PATH for production image"
     fi
 }
@@ -288,7 +288,7 @@ assert_command_fails_in_container() {
     local image="$1"
     local command="$2"
 
-    if docker run --rm "$image" bash -c "$command" > /dev/null 2>&1; then
+    if docker run --rm "$image" bash -c "$command" >/dev/null 2>&1; then
         fail_test "Command '$command' should fail in production image"
     fi
 }

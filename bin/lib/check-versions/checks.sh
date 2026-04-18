@@ -224,8 +224,8 @@ check_github_release_major_track() {
     local latest=""
     if [ -n "$current_major" ]; then
         # Fetch releases list and find latest on the same major track
-        latest=$(fetch_url "https://api.github.com/repos/$repo/releases" | \
-            jq -r "[.[] | select(.prerelease == false) | select(.tag_name | test(\"^v?${current_major}\\\\.\"))] | .[0].tag_name // \"null\"" 2>/dev/null | \
+        latest=$(fetch_url "https://api.github.com/repos/$repo/releases" |
+            jq -r "[.[] | select(.prerelease == false) | select(.tag_name | test(\"^v?${current_major}\\\\.\"))] | .[0].tag_name // \"null\"" 2>/dev/null |
             command sed 's/^v//')
     fi
 
@@ -289,7 +289,7 @@ check_maven_central() {
     progress_msg "  $tool..."
     # Check Maven Central for latest version
     local latest
-    latest=$(fetch_url "https://search.maven.org/solrsearch/select?q=g:${group_id}+AND+a:${artifact_id}&rows=1&wt=json" | \
+    latest=$(fetch_url "https://search.maven.org/solrsearch/select?q=g:${group_id}+AND+a:${artifact_id}&rows=1&wt=json" |
         jq -r '.response.docs[0].latestVersion // "unknown"' 2>/dev/null)
 
     if [ -n "$latest" ] && [ "$latest" != "unknown" ] && [ "$latest" != "null" ]; then

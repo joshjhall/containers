@@ -184,8 +184,8 @@ _run_install_subshell() {
     local extra_setup="${1:-}"
     shift
     local tool_name="$1" version="$2" base_url="$3" \
-          amd64_file="$4" arm64_file="$5" \
-          checksum_type="$6" install_type="$7"
+        amd64_file="$4" arm64_file="$5" \
+        checksum_type="$6" install_type="$7"
 
     bash -c "
 $(_mock_preamble)

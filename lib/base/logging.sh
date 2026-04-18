@@ -215,7 +215,7 @@ log_feature_summary() {
         if [ -n "$paths" ]; then
             echo ""
             echo "Paths:"
-            IFS=',' read -ra PATH_ARRAY <<< "$paths"
+            IFS=',' read -ra PATH_ARRAY <<<"$paths"
             for path in "${PATH_ARRAY[@]}"; do
                 echo "  - $path"
             done
@@ -224,7 +224,7 @@ log_feature_summary() {
         if [ -n "$env_vars" ]; then
             echo ""
             echo "Environment Variables:"
-            IFS=',' read -ra ENV_ARRAY <<< "$env_vars"
+            IFS=',' read -ra ENV_ARRAY <<<"$env_vars"
             for var in "${ENV_ARRAY[@]}"; do
                 # Try to get the value
                 value="${!var:-<not set>}"
@@ -232,7 +232,7 @@ log_feature_summary() {
                 local _upper_var
                 _upper_var=$(printf '%s' "$var" | command tr '[:lower:]' '[:upper:]')
                 case "$_upper_var" in
-                    *_TOKEN|*_SECRET|*_PASSWORD|*_KEY|*_CREDENTIAL*)
+                    *_TOKEN | *_SECRET | *_PASSWORD | *_KEY | *_CREDENTIAL*)
                         if [ "$value" != "<not set>" ]; then
                             if [ "${#value}" -ge 8 ]; then
                                 value="${value:0:4}****"

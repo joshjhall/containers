@@ -1,4 +1,3 @@
-
 # Python development aliases
 alias fmt='black . && isort .'
 alias lint='flake8 && mypy . && pylint **/*.py'
@@ -12,7 +11,7 @@ alias ipy='ipython'
 # Smart wrapper functions that detect and use Poetry when available
 # These override the aliases when Poetry is detected
 _smart_pytest() {
-    if [ -f "pyproject.toml" ] && command -v poetry &> /dev/null && poetry env info --path &> /dev/null; then
+    if [ -f "pyproject.toml" ] && command -v poetry &>/dev/null && poetry env info --path &>/dev/null; then
         poetry run pytest "$@"
     else
         command pytest "$@"
@@ -20,7 +19,7 @@ _smart_pytest() {
 }
 
 _smart_pytest_verbose() {
-    if [ -f "pyproject.toml" ] && command -v poetry &> /dev/null && poetry env info --path &> /dev/null; then
+    if [ -f "pyproject.toml" ] && command -v poetry &>/dev/null && poetry env info --path &>/dev/null; then
         poetry run pytest -v "$@"
     else
         command pytest -v "$@"
@@ -28,7 +27,7 @@ _smart_pytest_verbose() {
 }
 
 _smart_pytest_coverage() {
-    if [ -f "pyproject.toml" ] && command -v poetry &> /dev/null && poetry env info --path &> /dev/null; then
+    if [ -f "pyproject.toml" ] && command -v poetry &>/dev/null && poetry env info --path &>/dev/null; then
         poetry run pytest --cov=. --cov-report=html "$@"
     else
         command pytest --cov=. --cov-report=html "$@"
@@ -36,7 +35,7 @@ _smart_pytest_coverage() {
 }
 
 _smart_format() {
-    if [ -f "pyproject.toml" ] && command -v poetry &> /dev/null && poetry env info --path &> /dev/null; then
+    if [ -f "pyproject.toml" ] && command -v poetry &>/dev/null && poetry env info --path &>/dev/null; then
         poetry run black . && poetry run isort .
     else
         command black . && command isort .
@@ -44,7 +43,7 @@ _smart_format() {
 }
 
 _smart_lint() {
-    if [ -f "pyproject.toml" ] && command -v poetry &> /dev/null && poetry env info --path &> /dev/null; then
+    if [ -f "pyproject.toml" ] && command -v poetry &>/dev/null && poetry env info --path &>/dev/null; then
         poetry run flake8 && poetry run mypy . && poetry run pylint **/*.py
     else
         command flake8 && command mypy . && command pylint **/*.py
@@ -52,7 +51,7 @@ _smart_lint() {
 }
 
 _smart_ipython() {
-    if [ -f "pyproject.toml" ] && command -v poetry &> /dev/null && poetry env info --path &> /dev/null; then
+    if [ -f "pyproject.toml" ] && command -v poetry &>/dev/null && poetry env info --path &>/dev/null; then
         poetry run ipython "$@"
     else
         command ipython "$@"

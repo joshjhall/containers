@@ -32,9 +32,9 @@ SOURCE_FILE="$PROJECT_ROOT/lib/features/op-cli.sh"
 
 test_script_exists_and_executable() {
     assert_file_exists "$SOURCE_FILE"
-    [ -x "$SOURCE_FILE" ] \
-        && assert_true 0 "op-cli.sh is executable" \
-        || assert_true 1 "op-cli.sh should be executable"
+    [ -x "$SOURCE_FILE" ] &&
+        assert_true 0 "op-cli.sh is executable" ||
+        assert_true 1 "op-cli.sh should be executable"
 }
 
 test_uses_strict_mode() {
@@ -127,30 +127,30 @@ test_op_ref_pattern_matching() {
     local matches
     matches=$(compgen -v | command grep '^OP_.\+_REF$' || true)
 
-    echo "$matches" | command grep -q "OP_GITHUB_TOKEN_REF" \
-        && assert_true 0 "OP_GITHUB_TOKEN_REF matches pattern" \
-        || assert_true 1 "OP_GITHUB_TOKEN_REF should match pattern"
+    echo "$matches" | command grep -q "OP_GITHUB_TOKEN_REF" &&
+        assert_true 0 "OP_GITHUB_TOKEN_REF matches pattern" ||
+        assert_true 1 "OP_GITHUB_TOKEN_REF should match pattern"
 
-    echo "$matches" | command grep -q "OP_KAGI_API_KEY_REF" \
-        && assert_true 0 "OP_KAGI_API_KEY_REF matches pattern" \
-        || assert_true 1 "OP_KAGI_API_KEY_REF should match pattern"
+    echo "$matches" | command grep -q "OP_KAGI_API_KEY_REF" &&
+        assert_true 0 "OP_KAGI_API_KEY_REF matches pattern" ||
+        assert_true 1 "OP_KAGI_API_KEY_REF should match pattern"
 
-    echo "$matches" | command grep -q "OP_MY_PROJECT_SECRET_REF" \
-        && assert_true 0 "OP_MY_PROJECT_SECRET_REF matches pattern" \
-        || assert_true 1 "OP_MY_PROJECT_SECRET_REF should match pattern"
+    echo "$matches" | command grep -q "OP_MY_PROJECT_SECRET_REF" &&
+        assert_true 0 "OP_MY_PROJECT_SECRET_REF matches pattern" ||
+        assert_true 1 "OP_MY_PROJECT_SECRET_REF should match pattern"
 
     # Should NOT match
-    echo "$matches" | command grep -q "OP_SERVICE_ACCOUNT_TOKEN" \
-        && assert_true 1 "OP_SERVICE_ACCOUNT_TOKEN should not match" \
-        || assert_true 0 "OP_SERVICE_ACCOUNT_TOKEN excluded from pattern"
+    echo "$matches" | command grep -q "OP_SERVICE_ACCOUNT_TOKEN" &&
+        assert_true 1 "OP_SERVICE_ACCOUNT_TOKEN should not match" ||
+        assert_true 0 "OP_SERVICE_ACCOUNT_TOKEN excluded from pattern"
 
-    echo "$matches" | command grep -q '^OP_REF$' \
-        && assert_true 1 "OP_REF should not match (no middle)" \
-        || assert_true 0 "OP_REF excluded from pattern"
+    echo "$matches" | command grep -q '^OP_REF$' &&
+        assert_true 1 "OP_REF should not match (no middle)" ||
+        assert_true 0 "OP_REF excluded from pattern"
 
-    echo "$matches" | command grep -q '^GITHUB_TOKEN_REF$' \
-        && assert_true 1 "GITHUB_TOKEN_REF should not match (no OP_ prefix)" \
-        || assert_true 0 "GITHUB_TOKEN_REF excluded from pattern"
+    echo "$matches" | command grep -q '^GITHUB_TOKEN_REF$' &&
+        assert_true 1 "GITHUB_TOKEN_REF should not match (no OP_ prefix)" ||
+        assert_true 0 "GITHUB_TOKEN_REF excluded from pattern"
 
     # Clean up
     unset OP_GITHUB_TOKEN_REF OP_KAGI_API_KEY_REF OP_MY_PROJECT_SECRET_REF
@@ -162,29 +162,29 @@ test_op_ref_target_derivation() {
     local result
 
     result=$(_derive_target "OP_GITHUB_TOKEN_REF")
-    [ "$result" = "GITHUB_TOKEN" ] \
-        && assert_true 0 "OP_GITHUB_TOKEN_REF derives GITHUB_TOKEN" \
-        || assert_true 1 "Expected GITHUB_TOKEN, got $result"
+    [ "$result" = "GITHUB_TOKEN" ] &&
+        assert_true 0 "OP_GITHUB_TOKEN_REF derives GITHUB_TOKEN" ||
+        assert_true 1 "Expected GITHUB_TOKEN, got $result"
 
     result=$(_derive_target "OP_KAGI_API_KEY_REF")
-    [ "$result" = "KAGI_API_KEY" ] \
-        && assert_true 0 "OP_KAGI_API_KEY_REF derives KAGI_API_KEY" \
-        || assert_true 1 "Expected KAGI_API_KEY, got $result"
+    [ "$result" = "KAGI_API_KEY" ] &&
+        assert_true 0 "OP_KAGI_API_KEY_REF derives KAGI_API_KEY" ||
+        assert_true 1 "Expected KAGI_API_KEY, got $result"
 
     result=$(_derive_target "OP_GITLAB_TOKEN_REF")
-    [ "$result" = "GITLAB_TOKEN" ] \
-        && assert_true 0 "OP_GITLAB_TOKEN_REF derives GITLAB_TOKEN" \
-        || assert_true 1 "Expected GITLAB_TOKEN, got $result"
+    [ "$result" = "GITLAB_TOKEN" ] &&
+        assert_true 0 "OP_GITLAB_TOKEN_REF derives GITLAB_TOKEN" ||
+        assert_true 1 "Expected GITLAB_TOKEN, got $result"
 
     result=$(_derive_target "OP_MY_PROJECT_SECRET_REF")
-    [ "$result" = "MY_PROJECT_SECRET" ] \
-        && assert_true 0 "OP_MY_PROJECT_SECRET_REF derives MY_PROJECT_SECRET" \
-        || assert_true 1 "Expected MY_PROJECT_SECRET, got $result"
+    [ "$result" = "MY_PROJECT_SECRET" ] &&
+        assert_true 0 "OP_MY_PROJECT_SECRET_REF derives MY_PROJECT_SECRET" ||
+        assert_true 1 "Expected MY_PROJECT_SECRET, got $result"
 
     result=$(_derive_target "OP_X_REF")
-    [ "$result" = "X" ] \
-        && assert_true 0 "OP_X_REF derives X (single char)" \
-        || assert_true 1 "Expected X, got $result"
+    [ "$result" = "X" ] &&
+        assert_true 0 "OP_X_REF derives X (single char)" ||
+        assert_true 1 "Expected X, got $result"
 }
 
 test_op_ref_skip_when_set() {
@@ -194,23 +194,23 @@ test_op_ref_skip_when_set() {
 
     local _target_var="GITHUB_TOKEN"
     # This is the guard condition from the loop
-    [ -n "${!_target_var:-}" ] \
-        && assert_true 0 "Existing GITHUB_TOKEN causes skip" \
-        || assert_true 1 "Should skip when target already set"
+    [ -n "${!_target_var:-}" ] &&
+        assert_true 0 "Existing GITHUB_TOKEN causes skip" ||
+        assert_true 1 "Should skip when target already set"
 
     # When target is empty, should NOT skip
     unset GITHUB_TOKEN
     export GITHUB_TOKEN=""
     _target_var="GITHUB_TOKEN"
-    [ -n "${!_target_var:-}" ] \
-        && assert_true 1 "Empty GITHUB_TOKEN should not cause skip" \
-        || assert_true 0 "Empty target var allows loading"
+    [ -n "${!_target_var:-}" ] &&
+        assert_true 1 "Empty GITHUB_TOKEN should not cause skip" ||
+        assert_true 0 "Empty target var allows loading"
 
     # Completely unset — should not skip
     unset GITHUB_TOKEN
-    [ -n "${!_target_var:-}" ] \
-        && assert_true 1 "Unset GITHUB_TOKEN should not cause skip" \
-        || assert_true 0 "Unset target var allows loading"
+    [ -n "${!_target_var:-}" ] &&
+        assert_true 1 "Unset GITHUB_TOKEN should not cause skip" ||
+        assert_true 0 "Unset target var allows loading"
 
     # Clean up
     unset OP_GITHUB_TOKEN_REF GITHUB_TOKEN 2>/dev/null || true
@@ -223,26 +223,26 @@ test_op_ref_bashrc_contains_generic_loop() {
     local op_cli_script
     op_cli_script="$(dirname "${BASH_SOURCE[0]}")/../../../lib/features/op-cli.sh"
 
-    command grep -q '_op_load_secrets' "$op_cli_bashrc" \
-        && assert_true 0 "op-cli bashrc contains _op_load_secrets function" \
-        || assert_true 1 "op-cli bashrc missing _op_load_secrets function"
+    command grep -q '_op_load_secrets' "$op_cli_bashrc" &&
+        assert_true 0 "op-cli bashrc contains _op_load_secrets function" ||
+        assert_true 1 "op-cli bashrc missing _op_load_secrets function"
 
-    command grep -q 'compgen -v' "$op_cli_bashrc" \
-        && assert_true 0 "op-cli bashrc uses compgen -v for generic scanning" \
-        || assert_true 1 "op-cli bashrc missing compgen -v"
+    command grep -q 'compgen -v' "$op_cli_bashrc" &&
+        assert_true 0 "op-cli bashrc uses compgen -v for generic scanning" ||
+        assert_true 1 "op-cli bashrc missing compgen -v"
 
-    command grep -q '45-op-secrets.sh' "$op_cli_script" \
-        && assert_true 0 "op-cli.sh creates 45-op-secrets.sh startup script" \
-        || assert_true 1 "op-cli.sh missing 45-op-secrets.sh reference"
+    command grep -q '45-op-secrets.sh' "$op_cli_script" &&
+        assert_true 0 "op-cli.sh creates 45-op-secrets.sh startup script" ||
+        assert_true 1 "op-cli.sh missing 45-op-secrets.sh reference"
 
     # Ensure old hardcoded references are removed
-    command grep -q '_op_load_mcp_tokens' "$op_cli_script" \
-        && assert_true 1 "Old _op_load_mcp_tokens should be removed" \
-        || assert_true 0 "Old _op_load_mcp_tokens removed"
+    command grep -q '_op_load_mcp_tokens' "$op_cli_script" &&
+        assert_true 1 "Old _op_load_mcp_tokens should be removed" ||
+        assert_true 0 "Old _op_load_mcp_tokens removed"
 
-    command grep -q '45-op-mcp-tokens.sh' "$op_cli_script" \
-        && assert_true 1 "Old 45-op-mcp-tokens.sh should be removed" \
-        || assert_true 0 "Old 45-op-mcp-tokens.sh removed"
+    command grep -q '45-op-mcp-tokens.sh' "$op_cli_script" &&
+        assert_true 1 "Old 45-op-mcp-tokens.sh should be removed" ||
+        assert_true 0 "Old 45-op-mcp-tokens.sh removed"
 }
 
 run_test_with_setup test_op_ref_pattern_matching "OP_*_REF pattern matching test"
@@ -369,22 +369,22 @@ test_op_file_ref_pattern_matching() {
     local matches
     matches=$(compgen -v | command grep '^OP_.\+_FILE_REF$' || true)
 
-    echo "$matches" | command grep -q "OP_GOOGLE_APPLICATION_CREDENTIALS_FILE_REF" \
-        && assert_true 0 "OP_GOOGLE_APPLICATION_CREDENTIALS_FILE_REF matches _FILE_REF pattern" \
-        || assert_true 1 "OP_GOOGLE_APPLICATION_CREDENTIALS_FILE_REF should match _FILE_REF pattern"
+    echo "$matches" | command grep -q "OP_GOOGLE_APPLICATION_CREDENTIALS_FILE_REF" &&
+        assert_true 0 "OP_GOOGLE_APPLICATION_CREDENTIALS_FILE_REF matches _FILE_REF pattern" ||
+        assert_true 1 "OP_GOOGLE_APPLICATION_CREDENTIALS_FILE_REF should match _FILE_REF pattern"
 
-    echo "$matches" | command grep -q "OP_MY_CERT_FILE_REF" \
-        && assert_true 0 "OP_MY_CERT_FILE_REF matches _FILE_REF pattern" \
-        || assert_true 1 "OP_MY_CERT_FILE_REF should match _FILE_REF pattern"
+    echo "$matches" | command grep -q "OP_MY_CERT_FILE_REF" &&
+        assert_true 0 "OP_MY_CERT_FILE_REF matches _FILE_REF pattern" ||
+        assert_true 1 "OP_MY_CERT_FILE_REF should match _FILE_REF pattern"
 
     # Should NOT match
-    echo "$matches" | command grep -q "OP_GITHUB_TOKEN_REF" \
-        && assert_true 1 "OP_GITHUB_TOKEN_REF should not match _FILE_REF pattern" \
-        || assert_true 0 "OP_GITHUB_TOKEN_REF excluded from _FILE_REF pattern"
+    echo "$matches" | command grep -q "OP_GITHUB_TOKEN_REF" &&
+        assert_true 1 "OP_GITHUB_TOKEN_REF should not match _FILE_REF pattern" ||
+        assert_true 0 "OP_GITHUB_TOKEN_REF excluded from _FILE_REF pattern"
 
-    echo "$matches" | command grep -q "OP_SERVICE_ACCOUNT_TOKEN" \
-        && assert_true 1 "OP_SERVICE_ACCOUNT_TOKEN should not match _FILE_REF pattern" \
-        || assert_true 0 "OP_SERVICE_ACCOUNT_TOKEN excluded from _FILE_REF pattern"
+    echo "$matches" | command grep -q "OP_SERVICE_ACCOUNT_TOKEN" &&
+        assert_true 1 "OP_SERVICE_ACCOUNT_TOKEN should not match _FILE_REF pattern" ||
+        assert_true 0 "OP_SERVICE_ACCOUNT_TOKEN excluded from _FILE_REF pattern"
 
     # Clean up
     unset OP_GOOGLE_APPLICATION_CREDENTIALS_FILE_REF OP_MY_CERT_FILE_REF
@@ -395,19 +395,19 @@ test_op_file_ref_target_derivation() {
     local result
 
     result=$(_derive_file_ref_target "OP_GOOGLE_APPLICATION_CREDENTIALS_FILE_REF")
-    [ "$result" = "GOOGLE_APPLICATION_CREDENTIALS" ] \
-        && assert_true 0 "OP_GOOGLE_APPLICATION_CREDENTIALS_FILE_REF derives GOOGLE_APPLICATION_CREDENTIALS" \
-        || assert_true 1 "Expected GOOGLE_APPLICATION_CREDENTIALS, got $result"
+    [ "$result" = "GOOGLE_APPLICATION_CREDENTIALS" ] &&
+        assert_true 0 "OP_GOOGLE_APPLICATION_CREDENTIALS_FILE_REF derives GOOGLE_APPLICATION_CREDENTIALS" ||
+        assert_true 1 "Expected GOOGLE_APPLICATION_CREDENTIALS, got $result"
 
     result=$(_derive_file_ref_target "OP_MY_CERT_FILE_REF")
-    [ "$result" = "MY_CERT" ] \
-        && assert_true 0 "OP_MY_CERT_FILE_REF derives MY_CERT" \
-        || assert_true 1 "Expected MY_CERT, got $result"
+    [ "$result" = "MY_CERT" ] &&
+        assert_true 0 "OP_MY_CERT_FILE_REF derives MY_CERT" ||
+        assert_true 1 "Expected MY_CERT, got $result"
 
     result=$(_derive_file_ref_target "OP_X_FILE_REF")
-    [ "$result" = "X" ] \
-        && assert_true 0 "OP_X_FILE_REF derives X (single char)" \
-        || assert_true 1 "Expected X, got $result"
+    [ "$result" = "X" ] &&
+        assert_true 0 "OP_X_FILE_REF derives X (single char)" ||
+        assert_true 1 "Expected X, got $result"
 }
 
 test_op_file_ref_extension_derivation() {
@@ -418,41 +418,41 @@ test_op_file_ref_extension_derivation() {
     _uri_field="sa-key.json"
     case "$_uri_field" in
         *.*) _file_ext=".${_uri_field##*.}" ;;
-        *)   _file_ext="" ;;
+        *) _file_ext="" ;;
     esac
-    [ "$_file_ext" = ".json" ] \
-        && assert_true 0 "sa-key.json produces .json extension" \
-        || assert_true 1 "Expected .json, got $_file_ext"
+    [ "$_file_ext" = ".json" ] &&
+        assert_true 0 "sa-key.json produces .json extension" ||
+        assert_true 1 "Expected .json, got $_file_ext"
 
     # .pem extension
     _uri_field="cert.pem"
     case "$_uri_field" in
         *.*) _file_ext=".${_uri_field##*.}" ;;
-        *)   _file_ext="" ;;
+        *) _file_ext="" ;;
     esac
-    [ "$_file_ext" = ".pem" ] \
-        && assert_true 0 "cert.pem produces .pem extension" \
-        || assert_true 1 "Expected .pem, got $_file_ext"
+    [ "$_file_ext" = ".pem" ] &&
+        assert_true 0 "cert.pem produces .pem extension" ||
+        assert_true 1 "Expected .pem, got $_file_ext"
 
     # No extension (plain field name like "credential")
     _uri_field="credential"
     case "$_uri_field" in
         *.*) _file_ext=".${_uri_field##*.}" ;;
-        *)   _file_ext="" ;;
+        *) _file_ext="" ;;
     esac
-    [ "$_file_ext" = "" ] \
-        && assert_true 0 "credential produces no extension" \
-        || assert_true 1 "Expected empty, got $_file_ext"
+    [ "$_file_ext" = "" ] &&
+        assert_true 0 "credential produces no extension" ||
+        assert_true 1 "Expected empty, got $_file_ext"
 
     # Multiple dots (e.g., file.tar.gz)
     _uri_field="archive.tar.gz"
     case "$_uri_field" in
         *.*) _file_ext=".${_uri_field##*.}" ;;
-        *)   _file_ext="" ;;
+        *) _file_ext="" ;;
     esac
-    [ "$_file_ext" = ".gz" ] \
-        && assert_true 0 "archive.tar.gz produces .gz extension (last dot)" \
-        || assert_true 1 "Expected .gz, got $_file_ext"
+    [ "$_file_ext" = ".gz" ] &&
+        assert_true 0 "archive.tar.gz produces .gz extension (last dot)" ||
+        assert_true 1 "Expected .gz, got $_file_ext"
 }
 
 test_op_file_ref_excludes_from_ref_loop() {
@@ -463,13 +463,13 @@ test_op_file_ref_excludes_from_ref_loop() {
     local ref_matches
     ref_matches=$(compgen -v | command grep '^OP_.\+_REF$' | command grep -v '_FILE_REF$' || true)
 
-    echo "$ref_matches" | command grep -q "OP_GITHUB_TOKEN_REF" \
-        && assert_true 0 "OP_GITHUB_TOKEN_REF still matches _REF pattern" \
-        || assert_true 1 "OP_GITHUB_TOKEN_REF should match _REF pattern"
+    echo "$ref_matches" | command grep -q "OP_GITHUB_TOKEN_REF" &&
+        assert_true 0 "OP_GITHUB_TOKEN_REF still matches _REF pattern" ||
+        assert_true 1 "OP_GITHUB_TOKEN_REF should match _REF pattern"
 
-    echo "$ref_matches" | command grep -q "OP_GOOGLE_APPLICATION_CREDENTIALS_FILE_REF" \
-        && assert_true 1 "_FILE_REF var should be excluded from _REF loop" \
-        || assert_true 0 "_FILE_REF var correctly excluded from _REF loop"
+    echo "$ref_matches" | command grep -q "OP_GOOGLE_APPLICATION_CREDENTIALS_FILE_REF" &&
+        assert_true 1 "_FILE_REF var should be excluded from _REF loop" ||
+        assert_true 0 "_FILE_REF var correctly excluded from _REF loop"
 
     # Clean up
     unset OP_GOOGLE_APPLICATION_CREDENTIALS_FILE_REF OP_GITHUB_TOKEN_REF
@@ -615,8 +615,8 @@ test_env_secrets_functional_sourcing() {
     mkdir -p "$test_dir"
 
     # Create a test .env.secrets file
-    echo 'TEST_SECRET_VAR=hello_from_secrets' > "$test_dir/.env.secrets"
-    echo 'ANOTHER_SECRET=world' >> "$test_dir/.env.secrets"
+    echo 'TEST_SECRET_VAR=hello_from_secrets' >"$test_dir/.env.secrets"
+    echo 'ANOTHER_SECRET=world' >>"$test_dir/.env.secrets"
 
     # Simulate what the loader does: set -a, source, set +a
     (
@@ -746,24 +746,24 @@ test_cache_printf_q_escaping() {
 
     local escaped
     escaped=$(printf '%q' "$val_with_spaces")
-    [ "$escaped" != "$val_with_spaces" ] \
-        && assert_true 0 "printf %q escapes spaces" \
-        || assert_true 1 "printf %q should escape spaces"
+    [ "$escaped" != "$val_with_spaces" ] &&
+        assert_true 0 "printf %q escapes spaces" ||
+        assert_true 1 "printf %q should escape spaces"
 
     escaped=$(printf '%q' "$val_with_quotes")
-    [ "$escaped" != "$val_with_quotes" ] \
-        && assert_true 0 "printf %q escapes quotes" \
-        || assert_true 1 "printf %q should escape quotes"
+    [ "$escaped" != "$val_with_quotes" ] &&
+        assert_true 0 "printf %q escapes quotes" ||
+        assert_true 1 "printf %q should escape quotes"
 
     escaped=$(printf '%q' "$val_with_dollar")
-    [ "$escaped" != "$val_with_dollar" ] \
-        && assert_true 0 "printf %q escapes dollar signs" \
-        || assert_true 1 "printf %q should escape dollar signs"
+    [ "$escaped" != "$val_with_dollar" ] &&
+        assert_true 0 "printf %q escapes dollar signs" ||
+        assert_true 1 "printf %q should escape dollar signs"
 
     escaped=$(printf '%q' "$val_with_newline")
-    [ "$escaped" != "$val_with_newline" ] \
-        && assert_true 0 "printf %q escapes newlines" \
-        || assert_true 1 "printf %q should escape newlines"
+    [ "$escaped" != "$val_with_newline" ] &&
+        assert_true 0 "printf %q escapes newlines" ||
+        assert_true 1 "printf %q should escape newlines"
 }
 
 # Functional: sourcing a mock cache file exports variables
@@ -776,7 +776,7 @@ test_cache_functional_sourcing() {
         printf 'export %s=%q\n' "MOCK_SPECIAL" 'val with "quotes" and $dollar'
         printf 'export %s=%q\n' "GIT_USER_NAME" "Test User"
         printf 'export %s=%q\n' "GIT_USER_EMAIL" "test@example.com"
-    } > "$test_cache"
+    } >"$test_cache"
     chmod 600 "$test_cache"
 
     # Source in a subshell and verify exports

@@ -26,14 +26,14 @@ test_installation() {
 
 test_configuration() {
     local config_file="$TEST_TEMP_DIR/config.conf"
-    echo "test=true" > "$config_file"
+    echo "test=true" >"$config_file"
     assert_file_exists "$config_file"
     command grep -q "test=true" "$config_file" && assert_true true "Config valid" || assert_true false "Config invalid"
 }
 
 test_environment() {
     local env_file="$TEST_TEMP_DIR/env.sh"
-    echo "export TEST_VAR=value" > "$env_file"
+    echo "export TEST_VAR=value" >"$env_file"
     assert_file_exists "$env_file"
     command grep -q "export TEST_VAR" "$env_file" && assert_true true "Env var set" || assert_true false "Env var not set"
 }
@@ -47,14 +47,14 @@ test_permissions() {
 
 test_aliases() {
     local alias_file="$TEST_TEMP_DIR/aliases.sh"
-    echo "alias test='echo test'" > "$alias_file"
+    echo "alias test='echo test'" >"$alias_file"
     assert_file_exists "$alias_file"
     command grep -q "alias test=" "$alias_file" && assert_true true "Alias defined" || assert_true false "Alias not defined"
 }
 
 test_dependencies() {
     local deps_file="$TEST_TEMP_DIR/deps.txt"
-    echo "dependency1" > "$deps_file"
+    echo "dependency1" >"$deps_file"
     assert_file_exists "$deps_file"
     [ -s "$deps_file" ] && assert_true true "Dependencies listed" || assert_true false "No dependencies"
 }
@@ -73,7 +73,7 @@ test_user_config() {
 
 test_startup_script() {
     local startup_script="$TEST_TEMP_DIR/startup.sh"
-    echo "#\!/bin/bash" > "$startup_script"
+    echo "#\!/bin/bash" >"$startup_script"
     chmod +x "$startup_script"
     assert_file_exists "$startup_script"
     [ -x "$startup_script" ] && assert_true true "Script executable" || assert_true false "Script not executable"
@@ -81,8 +81,8 @@ test_startup_script() {
 
 test_verification() {
     local verify_script="$TEST_TEMP_DIR/verify.sh"
-    echo "#\!/bin/bash" > "$verify_script"
-    echo "echo 'Verification complete'" >> "$verify_script"
+    echo "#\!/bin/bash" >"$verify_script"
+    echo "echo 'Verification complete'" >>"$verify_script"
     chmod +x "$verify_script"
     assert_file_exists "$verify_script"
     [ -x "$verify_script" ] && assert_true true "Verification script ready" || assert_true false "Verification script not ready"

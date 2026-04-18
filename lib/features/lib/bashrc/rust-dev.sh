@@ -4,15 +4,14 @@
 # ----------------------------------------------------------------------------
 
 # Error protection for interactive shells
-set +u  # Don't error on unset variables
-set +e  # Don't exit on errors
+set +u # Don't error on unset variables
+set +e # Don't exit on errors
 
 # Check if we're in an interactive shell
 if [[ $- != *i* ]]; then
     # Not interactive, skip loading
     return 0
 fi
-
 
 # ----------------------------------------------------------------------------
 # Rust Development Tool Aliases
@@ -154,7 +153,7 @@ ts-init-grammar() {
     cd "$dir"
 
     # Create grammar.js from template
-    load_rust_template "treesitter/grammar.js.tmpl" "$lang" > grammar.js
+    load_rust_template "treesitter/grammar.js.tmpl" "$lang" >grammar.js
 
     echo "Grammar initialized in $dir/"
     echo "Next steps:"
@@ -201,12 +200,11 @@ just-init() {
     fi
 
     # Create justfile from template
-    load_rust_template "just/justfile.tmpl" > justfile
+    load_rust_template "just/justfile.tmpl" >justfile
 
     echo "Created justfile with common Rust project commands"
     echo "Run 'just' to see available commands"
 }
-
 
 # Note: We leave set +u and set +e in place for interactive shells
 # to prevent errors with undefined variables or failed commands

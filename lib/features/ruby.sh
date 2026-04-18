@@ -151,7 +151,10 @@ fi
 # Verify using 4-tier system (GPG → Pinned → Published → Calculated)
 # This will try each tier in order and log which method succeeded
 # Exit codes: 0=verified, 1=failed, 2=unverified (TOFU fallback)
-verify_download_or_fail "language" "ruby" "$RUBY_VERSION" "$RUBY_TARBALL" || { log_feature_end; exit 1; }
+verify_download_or_fail "language" "ruby" "$RUBY_VERSION" "$RUBY_TARBALL" || {
+    log_feature_end
+    exit 1
+}
 
 log_command "Extracting Ruby source" \
     tar -xzf "${RUBY_TARBALL}"
@@ -186,32 +189,32 @@ if [ "${CLEANUP_BUILD_DEPS}" = "true" ]; then
     # Mark runtime libraries as manually installed to prevent autoremove from removing them
     log_command "Marking runtime libraries as manually installed" \
         apt-mark manual \
-            libgdbm6 \
-            libyaml-0-2 \
-            libreadline8 \
-            zlib1g \
-            libncurses6 \
-            libncursesw6 \
-            libffi8 \
-            libssl3 \
-            libdb5.3 2>/dev/null || true
+        libgdbm6 \
+        libyaml-0-2 \
+        libreadline8 \
+        zlib1g \
+        libncurses6 \
+        libncursesw6 \
+        libffi8 \
+        libssl3 \
+        libdb5.3 2>/dev/null || true
 
     # Remove build dependencies we installed earlier
     # Note: We keep wget and ca-certificates as they may be needed for runtime operations
     log_command "Removing build packages" \
         apt-get remove --purge -y \
-            autoconf \
-            bison \
-            build-essential \
-            libssl-dev \
-            libyaml-dev \
-            libreadline-dev \
-            zlib1g-dev \
-            libncurses5-dev \
-            libffi-dev \
-            libgdbm-dev \
-            libdb-dev \
-            uuid-dev || true  # Don't fail if some packages aren't installed
+        autoconf \
+        bison \
+        build-essential \
+        libssl-dev \
+        libyaml-dev \
+        libreadline-dev \
+        zlib1g-dev \
+        libncurses5-dev \
+        libffi-dev \
+        libgdbm-dev \
+        libdb-dev \
+        uuid-dev || true # Don't fail if some packages aren't installed
 
     # Now safe to remove orphaned dependencies (runtime libs are marked manual)
     log_command "Removing orphaned dependencies" \
@@ -229,7 +232,7 @@ fi
 log_message "Configuring Ruby and installing bundler..."
 
 # Configure gem to not install documentation
-command cat > /usr/local/etc/gemrc << EOF
+command cat >/usr/local/etc/gemrc <<EOF
 gem: --no-document
 install: --no-document
 update: --no-document
@@ -263,7 +266,7 @@ log_command "Creating bashrc.d directory" \
 
 # Create Ruby configuration (content in lib/bashrc/ruby.sh)
 write_bashrc_content /etc/bashrc.d/40-ruby.sh "Ruby environment configuration" \
-    < /tmp/build-scripts/features/lib/bashrc/ruby.sh
+    </tmp/build-scripts/features/lib/bashrc/ruby.sh
 
 log_command "Setting Ruby bashrc script permissions" \
     chmod +x /etc/bashrc.d/40-ruby.sh
@@ -283,7 +286,7 @@ log_command "Creating startup directory" \
     mkdir -p /etc/container/first-startup
 
 # Create startup script for Ruby projects
-command cat > /etc/container/first-startup/10-ruby-bundle.sh << 'EOF'
+command cat >/etc/container/first-startup/10-ruby-bundle.sh <<'EOF'
 #!/bin/bash
 # Install Ruby gems if Gemfile exists
 if [ -n "${WORKING_DIR:-}" ] && [ -f "${WORKING_DIR}/Gemfile" ]; then
@@ -301,7 +304,7 @@ log_command "Setting startup script permissions" \
 # ============================================================================
 log_message "Creating Ruby verification script..."
 
-command cat > /usr/local/bin/test-ruby << 'EOF'
+command cat >/usr/local/bin/test-ruby <<'EOF'
 #!/bin/bash
 echo "=== Ruby Installation Status ==="
 if command -v ruby &> /dev/null; then

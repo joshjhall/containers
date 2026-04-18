@@ -4,8 +4,8 @@
 # ----------------------------------------------------------------------------
 
 # Error protection for interactive shells
-set +u  # Don't error on unset variables
-set +e  # Don't exit on errors
+set +u # Don't error on unset variables
+set +e # Don't exit on errors
 
 # Check if we're in an interactive shell
 if [[ $- != *i* ]]; then
@@ -13,19 +13,18 @@ if [[ $- != *i* ]]; then
     return 0
 fi
 
-
 # ----------------------------------------------------------------------------
 # AWS CLI Aliases - Common AWS operations
 # ----------------------------------------------------------------------------
-alias awsprofile='aws configure list-profiles'     # List available profiles
-alias awswho='aws sts get-caller-identity'        # Show current identity
-alias awsregion='aws configure get region'        # Show current region
-alias awsls='aws s3 ls'                          # List S3 buckets/objects
+alias awsprofile='aws configure list-profiles' # List available profiles
+alias awswho='aws sts get-caller-identity'     # Show current identity
+alias awsregion='aws configure get region'     # Show current region
+alias awsls='aws s3 ls'                        # List S3 buckets/objects
 alias awsec2='aws ec2 describe-instances --query "Reservations[*].Instances[*].[InstanceId,State.Name,Tags[?Key==\`Name\`].Value|[0]]" --output table'
-alias awslogs='aws logs tail'                    # Tail CloudWatch logs
+alias awslogs='aws logs tail' # Tail CloudWatch logs
 
 # AWS CLI auto-completion
-if command -v aws_completer &> /dev/null; then
+if command -v aws_completer &>/dev/null; then
     complete -C aws_completer aws
 fi
 
@@ -173,10 +172,9 @@ aws-sso-login() {
 }
 
 # AWS CLI auto-completion
-if command -v aws_completer &> /dev/null; then
+if command -v aws_completer &>/dev/null; then
     complete -C aws_completer aws
 fi
-
 
 # Note: We leave set +u and set +e in place for interactive shells
 # to prevent errors with undefined variables or failed commands

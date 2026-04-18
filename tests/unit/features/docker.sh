@@ -120,7 +120,7 @@ test_docker_bashrc_setup() {
     local bashrc_file="$TEST_TEMP_DIR/etc/bashrc.d/50-docker.sh"
 
     # Create a mock bashrc file
-    command cat > "$bashrc_file" << 'EOF'
+    command cat >"$bashrc_file" <<'EOF'
 alias d='docker'
 alias dc='docker compose'
 docker-clean() { echo "Cleaning Docker resources"; }
@@ -153,8 +153,8 @@ test_docker_startup_scripts() {
     local first_startup="$TEST_TEMP_DIR/etc/container/first-startup/20-docker-setup.sh"
 
     # Create mock startup script
-    echo '#!/bin/bash' > "$first_startup"
-    echo 'echo "Docker first startup"' >> "$first_startup"
+    echo '#!/bin/bash' >"$first_startup"
+    echo 'echo "Docker first startup"' >>"$first_startup"
 
     assert_file_exists "$first_startup"
 
@@ -226,7 +226,7 @@ test_docker_verification_script() {
     local test_script="$TEST_TEMP_DIR/usr/local/bin/test-docker"
 
     # Create mock verification script
-    command cat > "$test_script" << 'EOF'
+    command cat >"$test_script" <<'EOF'
 #!/bin/bash
 echo "=== Docker CLI Status ==="
 command -v docker && echo "Docker CLI installed"

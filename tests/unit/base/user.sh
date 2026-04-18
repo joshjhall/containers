@@ -25,7 +25,7 @@ test_default_parameters() {
     local temp_script="$RESULTS_DIR/user-test.sh"
 
     # Extract just the parameter defaults from the script
-    command grep -E "^(USERNAME|USER_UID|USER_GID|PROJECT_NAME|WORKING_DIR)=" "$PROJECT_ROOT/lib/base/user.sh" > "$temp_script"
+    command grep -E "^(USERNAME|USER_UID|USER_GID|PROJECT_NAME|WORKING_DIR)=" "$PROJECT_ROOT/lib/base/user.sh" >"$temp_script"
     source "$temp_script"
 
     # Test default values are set correctly
@@ -124,7 +124,7 @@ test_build_env_structure() {
     local test_env_file="$RESULTS_DIR/build-env"
 
     # Simulate what the script writes
-    command cat > "$test_env_file" <<EOF
+    command cat >"$test_env_file" <<EOF
 export ACTUAL_UID=1000
 export ACTUAL_GID=1000
 export USERNAME=testuser

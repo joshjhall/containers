@@ -1,8 +1,8 @@
 # Python environment configuration
 
 # Error protection for interactive shells
-set +u  # Don't error on unset variables
-set +e  # Don't exit on errors
+set +u # Don't error on unset variables
+set +e # Don't exit on errors
 
 # Python cache directories
 export PIP_CACHE_DIR="/cache/pip"

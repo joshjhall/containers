@@ -142,7 +142,7 @@ cv_custom_validations() {
     # Validate queue priority levels
     if [ -n "${QUEUE_PRIORITIES:-}" ]; then
         # QUEUE_PRIORITIES should be comma-separated (e.g., "high,normal,low")
-        IFS=',' read -ra PRIORITIES <<< "${QUEUE_PRIORITIES}"
+        IFS=',' read -ra PRIORITIES <<<"${QUEUE_PRIORITIES}"
         for priority in "${PRIORITIES[@]}"; do
             priority=$(echo "$priority" | xargs) # trim whitespace
             if [[ ! "$priority" =~ ^[a-zA-Z0-9_-]+$ ]]; then

@@ -34,7 +34,7 @@ teardown() {
         command rm -rf "$TEST_TEMP_DIR"
     fi
     unset DOCKER_SECRETS_DIR DOCKER_SECRETS_ENABLED DOCKER_SECRET_PREFIX \
-          DOCKER_SECRET_NAMES DOCKER_SECRETS_UPPERCASE TEST_TEMP_DIR 2>/dev/null || true
+        DOCKER_SECRET_NAMES DOCKER_SECRETS_UPPERCASE TEST_TEMP_DIR 2>/dev/null || true
 }
 
 # Run tests with setup/teardown
@@ -95,7 +95,7 @@ test_default_secrets_dir() {
 # ============================================================================
 
 test_available_when_secrets_exist() {
-    echo "test-secret-value" > "$DOCKER_SECRETS_DIR/my-secret"
+    echo "test-secret-value" >"$DOCKER_SECRETS_DIR/my-secret"
 
     local result
     result=$(_run_secrets_subshell "
@@ -131,7 +131,7 @@ test_not_available_when_dir_missing() {
 # ============================================================================
 
 test_load_secrets_exports_env_vars() {
-    echo "my-db-password" > "$DOCKER_SECRETS_DIR/db-password"
+    echo "my-db-password" >"$DOCKER_SECRETS_DIR/db-password"
 
     local result
     result=$(_run_secrets_subshell "
@@ -145,7 +145,7 @@ test_load_secrets_exports_env_vars() {
 }
 
 test_load_secrets_uppercase_conversion() {
-    echo "value123" > "$DOCKER_SECRETS_DIR/api-key"
+    echo "value123" >"$DOCKER_SECRETS_DIR/api-key"
 
     local result
     result=$(_run_secrets_subshell "
@@ -160,7 +160,7 @@ test_load_secrets_uppercase_conversion() {
 }
 
 test_load_secrets_hyphens_to_underscores() {
-    echo "secret-value" > "$DOCKER_SECRETS_DIR/my-app-token"
+    echo "secret-value" >"$DOCKER_SECRETS_DIR/my-app-token"
 
     local result
     result=$(_run_secrets_subshell "
@@ -175,8 +175,8 @@ test_load_secrets_hyphens_to_underscores() {
 }
 
 test_load_secrets_skips_hidden_files() {
-    echo "visible" > "$DOCKER_SECRETS_DIR/visible-secret"
-    echo "hidden" > "$DOCKER_SECRETS_DIR/.hidden-secret"
+    echo "visible" >"$DOCKER_SECRETS_DIR/visible-secret"
+    echo "hidden" >"$DOCKER_SECRETS_DIR/.hidden-secret"
 
     local result
     result=$(_run_secrets_subshell "
@@ -193,7 +193,7 @@ test_load_secrets_skips_hidden_files() {
 
 test_load_secrets_skips_empty_files() {
     touch "$DOCKER_SECRETS_DIR/empty-secret"
-    echo "has-value" > "$DOCKER_SECRETS_DIR/real-secret"
+    echo "has-value" >"$DOCKER_SECRETS_DIR/real-secret"
 
     local result
     result=$(_run_secrets_subshell "
@@ -209,7 +209,7 @@ test_load_secrets_skips_empty_files() {
 }
 
 test_load_secrets_with_prefix() {
-    echo "token123" > "$DOCKER_SECRETS_DIR/api-key"
+    echo "token123" >"$DOCKER_SECRETS_DIR/api-key"
 
     local result
     result=$(_run_secrets_subshell "
@@ -224,9 +224,9 @@ test_load_secrets_with_prefix() {
 }
 
 test_load_secrets_specific_names() {
-    echo "value1" > "$DOCKER_SECRETS_DIR/secret-a"
-    echo "value2" > "$DOCKER_SECRETS_DIR/secret-b"
-    echo "value3" > "$DOCKER_SECRETS_DIR/secret-c"
+    echo "value1" >"$DOCKER_SECRETS_DIR/secret-a"
+    echo "value2" >"$DOCKER_SECRETS_DIR/secret-b"
+    echo "value3" >"$DOCKER_SECRETS_DIR/secret-c"
 
     local result
     result=$(_run_secrets_subshell "
@@ -245,7 +245,7 @@ test_load_secrets_specific_names() {
 }
 
 test_load_secrets_no_uppercase() {
-    echo "myval" > "$DOCKER_SECRETS_DIR/mykey"
+    echo "myval" >"$DOCKER_SECRETS_DIR/mykey"
 
     local result
     result=$(_run_secrets_subshell "
@@ -260,7 +260,7 @@ test_load_secrets_no_uppercase() {
 }
 
 test_dots_converted_to_underscores() {
-    echo "dotval" > "$DOCKER_SECRETS_DIR/app.config.key"
+    echo "dotval" >"$DOCKER_SECRETS_DIR/app.config.key"
 
     local result
     result=$(_run_secrets_subshell "
@@ -278,7 +278,7 @@ test_dots_converted_to_underscores() {
 # ============================================================================
 
 test_disabled_explicitly() {
-    echo "secret" > "$DOCKER_SECRETS_DIR/test-secret"
+    echo "secret" >"$DOCKER_SECRETS_DIR/test-secret"
 
     local result
     result=$(_run_secrets_subshell "
@@ -292,7 +292,7 @@ test_disabled_explicitly() {
 }
 
 test_auto_detect_with_secrets() {
-    echo "auto-value" > "$DOCKER_SECRETS_DIR/auto-secret"
+    echo "auto-value" >"$DOCKER_SECRETS_DIR/auto-secret"
 
     local result
     result=$(_run_secrets_subshell "
@@ -332,7 +332,7 @@ test_returns_error_for_nonexistent_dir() {
 }
 
 test_returns_zero_for_successful_load() {
-    echo "value" > "$DOCKER_SECRETS_DIR/test"
+    echo "value" >"$DOCKER_SECRETS_DIR/test"
 
     local exit_code=0
     _run_secrets_subshell "
@@ -349,7 +349,7 @@ test_returns_zero_for_successful_load() {
 # ============================================================================
 
 test_health_check_when_secrets_available() {
-    echo "secret" > "$DOCKER_SECRETS_DIR/test"
+    echo "secret" >"$DOCKER_SECRETS_DIR/test"
 
     local exit_code=0
     _run_secrets_subshell "
@@ -385,7 +385,7 @@ test_health_check_when_disabled() {
 # ============================================================================
 
 test_rejects_path_traversal() {
-    echo "stolen-value" > "$TEST_TEMP_DIR/passwd"
+    echo "stolen-value" >"$TEST_TEMP_DIR/passwd"
 
     local result
     result=$(_run_secrets_subshell "
@@ -426,7 +426,7 @@ test_rejects_shell_metacharacters() {
 }
 
 test_rejects_dollar_sign() {
-    echo "value" > "$DOCKER_SECRETS_DIR/normal"
+    echo "value" >"$DOCKER_SECRETS_DIR/normal"
 
     local result
     result=$(_run_secrets_subshell "
@@ -441,7 +441,7 @@ test_rejects_dollar_sign() {
 }
 
 test_accepts_valid_hyphen_name() {
-    echo "valid-value" > "$DOCKER_SECRETS_DIR/my-secret"
+    echo "valid-value" >"$DOCKER_SECRETS_DIR/my-secret"
 
     local result
     result=$(_run_secrets_subshell "
@@ -456,7 +456,7 @@ test_accepts_valid_hyphen_name() {
 }
 
 test_accepts_valid_dot_name() {
-    echo "dot-value" > "$DOCKER_SECRETS_DIR/app.config"
+    echo "dot-value" >"$DOCKER_SECRETS_DIR/app.config"
 
     local result
     result=$(_run_secrets_subshell "

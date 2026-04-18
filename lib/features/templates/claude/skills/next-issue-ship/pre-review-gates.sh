@@ -49,8 +49,8 @@ load_test_skip_policy() {
     # 1. Load defaults (colocated with this script)
     local defaults="${SCRIPT_DIR}/test-skip-patterns.default"
     if [ -f "$defaults" ]; then
-        /usr/bin/cat "$defaults" >> "$merged"
-        /usr/bin/printf '\n' >> "$merged"
+        /usr/bin/cat "$defaults" >>"$merged"
+        /usr/bin/printf '\n' >>"$merged"
     fi
 
     # 2. Load project overrides from .claude/pre-review.yml
@@ -62,11 +62,11 @@ load_test_skip_policy() {
         # Extract lines between "test_skip_patterns:" and the next top-level
         # key (or EOF). Strip YAML list prefix ("  - ") and quotes.
         /usr/bin/sed -n '/^test_skip_patterns:/,/^[a-zA-Z_]/{/^test_skip_patterns:/d;/^[a-zA-Z_]/d;p}' \
-            "$project_config" 2>/dev/null | \
-            /usr/bin/sed 's/^[[:space:]]*-[[:space:]]*//' | \
-            /usr/bin/sed 's/^["'\'']//' | /usr/bin/sed 's/["'\'']\s*$//' | \
-            /usr/bin/sed '/^$/d' >> "$merged"
-        /usr/bin/printf '\n' >> "$merged"
+            "$project_config" 2>/dev/null |
+            /usr/bin/sed 's/^[[:space:]]*-[[:space:]]*//' |
+            /usr/bin/sed 's/^["'\'']//' | /usr/bin/sed 's/["'\'']\s*$//' |
+            /usr/bin/sed '/^$/d' >>"$merged"
+        /usr/bin/printf '\n' >>"$merged"
     fi
 
     # Symlink as .git/info/exclude so git check-ignore uses our patterns
@@ -112,11 +112,11 @@ scan_ai_slop() {
 
     # Skip non-source files
     case "$file" in
-        *.lock|*lock.json|*go.sum|*.md|*.txt|*.json|*.yaml|*.yml|*.toml|*.ini|*.cfg|*.conf) return ;;
+        *.lock | *lock.json | *go.sum | *.md | *.txt | *.json | *.yaml | *.yml | *.toml | *.ini | *.cfg | *.conf) return ;;
     esac
 
     # Hedging phrases — strong indicators of unedited AI output
-    /usr/bin/grep -niE '\b(it.s worth noting that|it is worth noting that|importantly,|notably,|broadly speaking|in essence,|at its core,|fundamentally,)\b' "$file" 2>/dev/null | \
+    /usr/bin/grep -niE '\b(it.s worth noting that|it is worth noting that|importantly,|notably,|broadly speaking|in essence,|at its core,|fundamentally,)\b' "$file" 2>/dev/null |
         while IFS=: read -r line_num content; do
             evidence=$(/usr/bin/printf '%.80s' "$content")
             /usr/bin/printf '%s\t%s\t%s\t%s\t%s\n' \
@@ -125,7 +125,7 @@ scan_ai_slop() {
         done || true
 
     # Buzzword inflation
-    /usr/bin/grep -niE '\b(enterprise[- ]grade|robust and scalable|seamlessly integrat|leverage the power of|cutting[- ]edge|state[- ]of[- ]the[- ]art|world[- ]class)\b' "$file" 2>/dev/null | \
+    /usr/bin/grep -niE '\b(enterprise[- ]grade|robust and scalable|seamlessly integrat|leverage the power of|cutting[- ]edge|state[- ]of[- ]the[- ]art|world[- ]class)\b' "$file" 2>/dev/null |
         while IFS=: read -r line_num content; do
             evidence=$(/usr/bin/printf '%.80s' "$content")
             /usr/bin/printf '%s\t%s\t%s\t%s\t%s\n' \
@@ -134,7 +134,7 @@ scan_ai_slop() {
         done || true
 
     # Filler phrases in comments/docstrings
-    /usr/bin/grep -niE '\b(this (function|method|class) (is responsible for|handles|takes care of|provides|ensures that)|as (mentioned|discussed|noted) (above|earlier|previously|before))\b' "$file" 2>/dev/null | \
+    /usr/bin/grep -niE '\b(this (function|method|class) (is responsible for|handles|takes care of|provides|ensures that)|as (mentioned|discussed|noted) (above|earlier|previously|before))\b' "$file" 2>/dev/null |
         while IFS=: read -r line_num content; do
             evidence=$(/usr/bin/printf '%.80s' "$content")
             /usr/bin/printf '%s\t%s\t%s\t%s\t%s\n' \
@@ -143,7 +143,7 @@ scan_ai_slop() {
         done || true
 
     # Placeholder/stub text left behind
-    /usr/bin/grep -niE '(# TODO: implement|// TODO: implement|raise NotImplementedError|throw new Error\(.not implemented)' "$file" 2>/dev/null | \
+    /usr/bin/grep -niE '(# TODO: implement|// TODO: implement|raise NotImplementedError|throw new Error\(.not implemented)' "$file" 2>/dev/null |
         while IFS=: read -r line_num content; do
             evidence=$(/usr/bin/printf '%.80s' "$content")
             /usr/bin/printf '%s\t%s\t%s\t%s\t%s\n' \
@@ -163,21 +163,21 @@ scan_debug_statements() {
 
     # Skip non-source files and test files
     case "$file" in
-        *.lock|*lock.json|*go.sum|*.md|*.txt|*.json|*.yaml|*.yml|*.toml|*.ini|*.cfg|*.conf) return ;;
-        *_test.*|*.test.*|*.spec.*|*__tests__*) return ;;
+        *.lock | *lock.json | *go.sum | *.md | *.txt | *.json | *.yaml | *.yml | *.toml | *.ini | *.cfg | *.conf) return ;;
+        *_test.* | *.test.* | *.spec.* | *__tests__*) return ;;
     esac
 
     case "$file" in
         *.py)
-            /usr/bin/grep -nE '^\s*print\(' "$file" 2>/dev/null | \
-                /usr/bin/grep -vE '(logging|logger|log\.)' | \
+            /usr/bin/grep -nE '^\s*print\(' "$file" 2>/dev/null |
+                /usr/bin/grep -vE '(logging|logger|log\.)' |
                 while IFS=: read -r line_num content; do
                     evidence=$(/usr/bin/printf '%.80s' "$content")
                     /usr/bin/printf '%s\t%s\t%s\t%s\t%s\n' \
                         "$file" "$line_num" "debug-statement" \
                         "Debug print: ${evidence}" "HIGH"
                 done || true
-            /usr/bin/grep -nE '^\s*(breakpoint\(\)|import pdb|pdb\.set_trace)' "$file" 2>/dev/null | \
+            /usr/bin/grep -nE '^\s*(breakpoint\(\)|import pdb|pdb\.set_trace)' "$file" 2>/dev/null |
                 while IFS=: read -r line_num content; do
                     evidence=$(/usr/bin/printf '%.80s' "$content")
                     /usr/bin/printf '%s\t%s\t%s\t%s\t%s\n' \
@@ -185,15 +185,15 @@ scan_debug_statements() {
                         "Debugger: ${evidence}" "HIGH"
                 done || true
             ;;
-        *.js|*.ts|*.jsx|*.tsx)
-            /usr/bin/grep -nE '^\s*console\.(log|debug|warn|info|trace)\(' "$file" 2>/dev/null | \
+        *.js | *.ts | *.jsx | *.tsx)
+            /usr/bin/grep -nE '^\s*console\.(log|debug|warn|info|trace)\(' "$file" 2>/dev/null |
                 while IFS=: read -r line_num content; do
                     evidence=$(/usr/bin/printf '%.80s' "$content")
                     /usr/bin/printf '%s\t%s\t%s\t%s\t%s\n' \
                         "$file" "$line_num" "debug-statement" \
                         "Console statement: ${evidence}" "HIGH"
                 done || true
-            /usr/bin/grep -nE '^\s*debugger\s*;?\s*$' "$file" 2>/dev/null | \
+            /usr/bin/grep -nE '^\s*debugger\s*;?\s*$' "$file" 2>/dev/null |
                 while IFS=: read -r line_num content; do
                     evidence=$(/usr/bin/printf '%.80s' "$content")
                     /usr/bin/printf '%s\t%s\t%s\t%s\t%s\n' \
@@ -202,7 +202,7 @@ scan_debug_statements() {
                 done || true
             ;;
         *.go)
-            /usr/bin/grep -nE '^\s*fmt\.Print(ln|f)?\(' "$file" 2>/dev/null | \
+            /usr/bin/grep -nE '^\s*fmt\.Print(ln|f)?\(' "$file" 2>/dev/null |
                 while IFS=: read -r line_num content; do
                     evidence=$(/usr/bin/printf '%.80s' "$content")
                     /usr/bin/printf '%s\t%s\t%s\t%s\t%s\n' \
@@ -211,7 +211,7 @@ scan_debug_statements() {
                 done || true
             ;;
         *.rb)
-            /usr/bin/grep -nE '^\s*(binding\.pry|binding\.irb|byebug)\b' "$file" 2>/dev/null | \
+            /usr/bin/grep -nE '^\s*(binding\.pry|binding\.irb|byebug)\b' "$file" 2>/dev/null |
                 while IFS=: read -r line_num content; do
                     evidence=$(/usr/bin/printf '%.80s' "$content")
                     /usr/bin/printf '%s\t%s\t%s\t%s\t%s\n' \
@@ -219,8 +219,8 @@ scan_debug_statements() {
                         "Ruby debugger: ${evidence}" "HIGH"
                 done || true
             ;;
-        *.java|*.kt)
-            /usr/bin/grep -nE '^\s*System\.(out|err)\.print(ln)?\(' "$file" 2>/dev/null | \
+        *.java | *.kt)
+            /usr/bin/grep -nE '^\s*System\.(out|err)\.print(ln)?\(' "$file" 2>/dev/null |
                 while IFS=: read -r line_num content; do
                     evidence=$(/usr/bin/printf '%.80s' "$content")
                     /usr/bin/printf '%s\t%s\t%s\t%s\t%s\n' \
@@ -241,7 +241,7 @@ scan_missing_tests() {
 
     # Skip test files themselves
     case "$file" in
-        *test*|*spec*|*__pycache__*) return ;;
+        *test* | *spec* | *__pycache__*) return ;;
     esac
 
     # Check against configurable skip policy (gitignore-style patterns)
@@ -266,7 +266,7 @@ scan_missing_tests() {
                 [ -f "$test_path" ] && return
             done
             ;;
-        ts|js|tsx|jsx)
+        ts | js | tsx | jsx)
             for suffix in "test" "spec"; do
                 for test_path in \
                     "${dirname}/${name_no_ext}.${suffix}.${ext}" \
@@ -283,7 +283,7 @@ scan_missing_tests() {
             /usr/bin/grep -q '#\[cfg(test)\]' "$file" 2>/dev/null && return
             [ -d "${dirname}/../tests" ] && return
             ;;
-        rb|java|kt)
+        rb | java | kt)
             # Known source extensions — no test lookup implemented yet, but
             # these are real source files so flag as HIGH
             ;;
@@ -311,7 +311,7 @@ scan_untested_public_api() {
 
     # Skip test files
     case "$file" in
-        *test*|*spec*|*__pycache__*) return ;;
+        *test* | *spec* | *__pycache__*) return ;;
     esac
 
     # Check against configurable skip policy
@@ -327,7 +327,7 @@ scan_untested_public_api() {
 
     case "$ext" in
         py)
-            /usr/bin/grep -nE '^def [a-zA-Z][a-zA-Z0-9_]*\(' "$file" 2>/dev/null | \
+            /usr/bin/grep -nE '^def [a-zA-Z][a-zA-Z0-9_]*\(' "$file" 2>/dev/null |
                 while IFS=: read -r line_num content; do
                     func_name=$(/usr/bin/printf '%s' "$content" | /usr/bin/sed 's/^def \([a-zA-Z][a-zA-Z0-9_]*\).*/\1/')
                     if ! /usr/bin/grep -rql "\b${func_name}\b" \
@@ -342,7 +342,7 @@ scan_untested_public_api() {
                 done || true
             ;;
         go)
-            /usr/bin/grep -nE '^func [A-Z][a-zA-Z0-9]*\(' "$file" 2>/dev/null | \
+            /usr/bin/grep -nE '^func [A-Z][a-zA-Z0-9]*\(' "$file" 2>/dev/null |
                 while IFS=: read -r line_num content; do
                     func_name=$(/usr/bin/printf '%s' "$content" | /usr/bin/sed 's/^func \([A-Z][a-zA-Z0-9]*\).*/\1/')
                     test_file="${dirname}/${name_no_ext}_test.go"
@@ -354,8 +354,8 @@ scan_untested_public_api() {
                     fi
                 done || true
             ;;
-        ts|js|tsx|jsx)
-            /usr/bin/grep -nE '^export (function|const|class) [a-zA-Z]' "$file" 2>/dev/null | \
+        ts | js | tsx | jsx)
+            /usr/bin/grep -nE '^export (function|const|class) [a-zA-Z]' "$file" 2>/dev/null |
                 while IFS=: read -r line_num content; do
                     func_name=$(/usr/bin/printf '%s' "$content" | /usr/bin/sed 's/^export \(function\|const\|class\) \([a-zA-Z][a-zA-Z0-9_]*\).*/\2/')
                     found=false
@@ -392,4 +392,4 @@ while IFS= read -r file; do
     scan_missing_tests "$file"
     scan_untested_public_api "$file"
 
-done < "$FILE_LIST" || true
+done <"$FILE_LIST" || true

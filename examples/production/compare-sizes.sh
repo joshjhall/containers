@@ -52,11 +52,11 @@ format_bytes() {
     if [[ $bytes -lt 1024 ]]; then
         echo "${bytes}B"
     elif [[ $bytes -lt 1048576 ]]; then
-        echo "$(( bytes / 1024 ))KB"
+        echo "$((bytes / 1024))KB"
     elif [[ $bytes -lt 1073741824 ]]; then
-        echo "$(( bytes / 1048576 ))MB"
+        echo "$((bytes / 1048576))MB"
     else
-        echo "$(( bytes / 1073741824 ))GB"
+        echo "$((bytes / 1073741824))GB"
     fi
 }
 
@@ -103,7 +103,7 @@ build_dev() {
             ;;
     esac
 
-    docker build -f "${DOCKERFILE}" -t "${tag}" "${build_args[@]}" "${CONTAINERS_DIR}" > /dev/null 2>&1
+    docker build -f "${DOCKERFILE}" -t "${tag}" "${build_args[@]}" "${CONTAINERS_DIR}" >/dev/null 2>&1
     echo "${tag}"
 }
 
@@ -144,7 +144,7 @@ build_prod() {
             ;;
     esac
 
-    docker build -f "${DOCKERFILE}" -t "${tag}" "${build_args[@]}" "${CONTAINERS_DIR}" > /dev/null 2>&1
+    docker build -f "${DOCKERFILE}" -t "${tag}" "${build_args[@]}" "${CONTAINERS_DIR}" >/dev/null 2>&1
     echo "${tag}"
 }
 
@@ -174,7 +174,7 @@ compare_preset() {
     local diff=$((dev_size - prod_size))
     local percent=0
     if [[ $dev_size -gt 0 ]]; then
-        percent=$(( (diff * 100) / dev_size ))
+        percent=$(((diff * 100) / dev_size))
     fi
 
     # Format sizes
@@ -208,9 +208,9 @@ compare_preset() {
 # Function to cleanup images
 cleanup() {
     log_info "Cleaning up test images..."
-    docker images --format "{{.Repository}}:{{.Tag}}" | \
-        grep "^${PROJECT_NAME}:" | \
-        xargs -r docker rmi -f > /dev/null 2>&1 || true
+    docker images --format "{{.Repository}}:{{.Tag}}" |
+        grep "^${PROJECT_NAME}:" |
+        xargs -r docker rmi -f >/dev/null 2>&1 || true
     log_success "Cleanup complete"
 }
 
@@ -225,7 +225,7 @@ main() {
     echo -e "${NC}"
 
     # Verify Docker is available
-    if ! command -v docker &> /dev/null; then
+    if ! command -v docker &>/dev/null; then
         log_error "Docker is not installed or not in PATH"
         exit 1
     fi

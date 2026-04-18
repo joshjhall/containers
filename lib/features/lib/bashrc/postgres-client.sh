@@ -3,8 +3,8 @@
 # ----------------------------------------------------------------------------
 
 # Error protection for interactive shells
-set +u  # Don't error on unset variables
-set +e  # Don't exit on errors
+set +u # Don't error on unset variables
+set +e # Don't exit on errors
 
 # Check if we're in an interactive shell
 if [[ $- != *i* ]]; then
@@ -12,13 +12,12 @@ if [[ $- != *i* ]]; then
     return 0
 fi
 
-
 # ----------------------------------------------------------------------------
 # PostgreSQL Aliases - Common database operations
 # ----------------------------------------------------------------------------
 alias psql-local='psql -h localhost -U postgres'
-alias pg-list='psql -c "\l"'  # List all databases
-alias pg-tables='psql -c "\dt"'  # List tables in current database
+alias pg-list='psql -c "\l"'    # List all databases
+alias pg-tables='psql -c "\dt"' # List tables in current database
 alias pg-users='psql -c "\du"'  # List all users/roles
 
 # ----------------------------------------------------------------------------
@@ -62,7 +61,7 @@ pg-backup() {
     local output="${2:-${database}_$(date +%Y%m%d_%H%M%S).sql}"
 
     echo "Backing up database '$database' to '$output'..."
-    pg_dump "$database" > "$output" && echo "Backup complete: $output"
+    pg_dump "$database" >"$output" && echo "Backup complete: $output"
 }
 
 # ----------------------------------------------------------------------------
@@ -90,12 +89,11 @@ pg-restore-sql() {
     fi
 
     echo "Restoring '$sqlfile' to database '$database'..."
-    psql -d "$database" < "$sqlfile" && echo "Restore complete"
+    psql -d "$database" <"$sqlfile" && echo "Restore complete"
 }
 
 # PostgreSQL prompt customization
 export PSQL_EDITOR='${EDITOR:-vim}'
-
 
 # Note: We leave set +u and set +e in place for interactive shells
 # to prevent errors with undefined variables or failed commands

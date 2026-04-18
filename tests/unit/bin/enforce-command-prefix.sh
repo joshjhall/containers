@@ -23,7 +23,7 @@ write_fixture() {
     # Write each argument as a line
     for line in "$@"; do
         printf '%s\n' "$line"
-    done > "$file"
+    done >"$file"
 }
 
 # Setup function - runs before each test

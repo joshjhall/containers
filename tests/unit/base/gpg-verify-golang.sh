@@ -82,7 +82,7 @@ test_url_pattern() {
 test_curl_failure_returns_1() {
     local exit_code=0
     # Create a fake file to verify
-    echo "fake go binary" > "$TEST_TEMP_DIR/go1.23.4.linux-amd64.tar.gz"
+    echo "fake go binary" >"$TEST_TEMP_DIR/go1.23.4.linux-amd64.tar.gz"
 
     bash -c "
         _GPG_VERIFY_LOADED=''

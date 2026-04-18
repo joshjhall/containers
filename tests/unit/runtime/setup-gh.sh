@@ -156,7 +156,7 @@ test_persist_token_marker() {
 test_persist_token_writes_bashrc() {
     # Source just the _persist_token function and test it
     local func_script="$TEST_TEMP_DIR/func.sh"
-    command sed -n '/^_persist_token()/,/^}/p' "$SETUP_GH_SCRIPT" > "$func_script"
+    command sed -n '/^_persist_token()/,/^}/p' "$SETUP_GH_SCRIPT" >"$func_script"
 
     (
         set -euo pipefail
@@ -175,7 +175,7 @@ test_persist_token_writes_bashrc() {
 # Test: _persist_token is idempotent (no duplicates)
 test_persist_token_idempotent() {
     local func_script="$TEST_TEMP_DIR/func.sh"
-    command sed -n '/^_persist_token()/,/^}/p' "$SETUP_GH_SCRIPT" > "$func_script"
+    command sed -n '/^_persist_token()/,/^}/p' "$SETUP_GH_SCRIPT" >"$func_script"
 
     (
         set -euo pipefail
@@ -293,7 +293,7 @@ test_validate_token_defined() {
 # Test: _validate_token accepts valid token
 test_validate_token_accepts_valid() {
     local func_script="$TEST_TEMP_DIR/func.sh"
-    command sed -n '1,/^# ---.*Source OP/p' "$SETUP_GH_SCRIPT" | command head -n -1 > "$func_script"
+    command sed -n '1,/^# ---.*Source OP/p' "$SETUP_GH_SCRIPT" | command head -n -1 >"$func_script"
 
     local exit_code=0
     (
@@ -308,7 +308,7 @@ test_validate_token_accepts_valid() {
 # Test: _validate_token rejects short token
 test_validate_token_rejects_short() {
     local func_script="$TEST_TEMP_DIR/func.sh"
-    command sed -n '1,/^# ---.*Source OP/p' "$SETUP_GH_SCRIPT" | command head -n -1 > "$func_script"
+    command sed -n '1,/^# ---.*Source OP/p' "$SETUP_GH_SCRIPT" | command head -n -1 >"$func_script"
 
     local exit_code=0
     (
@@ -323,7 +323,7 @@ test_validate_token_rejects_short() {
 # Test: _validate_token rejects token with control characters
 test_validate_token_rejects_control_chars() {
     local func_script="$TEST_TEMP_DIR/func.sh"
-    command sed -n '1,/^# ---.*Source OP/p' "$SETUP_GH_SCRIPT" | command head -n -1 > "$func_script"
+    command sed -n '1,/^# ---.*Source OP/p' "$SETUP_GH_SCRIPT" | command head -n -1 >"$func_script"
 
     local exit_code=0
     (

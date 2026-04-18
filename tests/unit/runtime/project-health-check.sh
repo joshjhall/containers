@@ -30,7 +30,7 @@ setup() {
 
     # Create a mock features config
     export ENABLED_FEATURES_FILE="$TEST_TEMP_DIR/enabled-features.conf"
-    command cat > "$ENABLED_FEATURES_FILE" << 'EOF'
+    command cat >"$ENABLED_FEATURES_FILE" <<'EOF'
 INCLUDE_DEV_TOOLS=false
 EOF
 
@@ -95,7 +95,7 @@ test_creates_gitignore_when_missing() {
 }
 
 test_appends_to_existing_gitignore() {
-    echo "node_modules/" > "$PROJECT_ROOT/.gitignore"
+    echo "node_modules/" >"$PROJECT_ROOT/.gitignore"
     run_health_check
     assert_file_contains "$PROJECT_ROOT/.gitignore" "node_modules/" "Should preserve existing content"
     assert_file_contains "$PROJECT_ROOT/.gitignore" "^\*\*/\.env$" "Should add **/.env entry"
@@ -147,7 +147,7 @@ test_idempotent_negation_no_duplicates() {
 }
 
 test_existing_entry_not_duplicated() {
-    echo "**/.env" > "$PROJECT_ROOT/.gitignore"
+    echo "**/.env" >"$PROJECT_ROOT/.gitignore"
     run_health_check
 
     local count
@@ -174,7 +174,7 @@ test_fuse_hidden_not_added_without_bindfs() {
 # ============================================================================
 
 test_claude_entries_added_with_dev_tools() {
-    command cat > "$ENABLED_FEATURES_FILE" << 'EOF'
+    command cat >"$ENABLED_FEATURES_FILE" <<'EOF'
 INCLUDE_DEV_TOOLS=true
 EOF
     run_health_check
@@ -188,7 +188,7 @@ test_claude_entries_not_added_without_dev_tools() {
 }
 
 test_fuse_hidden_added_with_dev_tools() {
-    command cat > "$ENABLED_FEATURES_FILE" << 'EOF'
+    command cat >"$ENABLED_FEATURES_FILE" <<'EOF'
 INCLUDE_DEV_TOOLS=true
 EOF
     run_health_check
@@ -232,7 +232,7 @@ test_dockerignore_entries() {
 
 test_dockerignore_appends_missing() {
     /usr/bin/touch "$PROJECT_ROOT/Dockerfile"
-    echo ".git/" > "$PROJECT_ROOT/.dockerignore"
+    echo ".git/" >"$PROJECT_ROOT/.dockerignore"
     run_health_check
 
     assert_file_contains "$PROJECT_ROOT/.dockerignore" "^\*\*/\.env$" "Should add missing **/.env"
@@ -261,7 +261,7 @@ test_section_label_present() {
 
 test_no_trailing_newline_handled() {
     # Write file without trailing newline
-    printf "existing-entry" > "$PROJECT_ROOT/.gitignore"
+    printf "existing-entry" >"$PROJECT_ROOT/.gitignore"
     run_health_check
 
     # First line should still be intact
@@ -271,7 +271,7 @@ test_no_trailing_newline_handled() {
 
 test_partial_match_not_false_positive() {
     # .env.production is NOT the same as **/.env
-    echo ".env.production" > "$PROJECT_ROOT/.gitignore"
+    echo ".env.production" >"$PROJECT_ROOT/.gitignore"
     run_health_check
 
     # **/.env should still be added (not a false positive from .env.production)

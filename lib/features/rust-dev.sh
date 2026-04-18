@@ -135,7 +135,7 @@ log_command "Installing hyperfine" \
     su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/cargo install hyperfine"
 
 # Skip if already installed by dev-tools
-if ! command -v just &> /dev/null; then
+if ! command -v just &>/dev/null; then
     log_command "Installing just" \
         su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/cargo install just"
 else
@@ -152,7 +152,7 @@ log_command "Installing cargo-release" \
     su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/cargo install cargo-release"
 
 # Install taplo-cli (TOML formatter/linter) if not already installed by dev-tools
-if ! command -v taplo &> /dev/null; then
+if ! command -v taplo &>/dev/null; then
     log_command "Installing taplo-cli" \
         su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/cargo install taplo-cli"
 else
@@ -171,7 +171,7 @@ done
 # Verification and Helpers
 # ============================================================================
 # Create verification script
-command cat > /usr/local/bin/test-rust-dev << 'EOF'
+command cat >/usr/local/bin/test-rust-dev <<'EOF'
 #!/bin/bash
 echo "=== Rust Development Tools Status ==="
 tools=(
@@ -222,7 +222,7 @@ log_command "Creating bashrc.d directory" \
 
 # Add rust-dev aliases and helpers (content in lib/bashrc/rust-dev.sh)
 write_bashrc_content /etc/bashrc.d/35-rust-dev.sh "Rust development tools configuration" \
-    < /tmp/build-scripts/features/lib/bashrc/rust-dev.sh
+    </tmp/build-scripts/features/lib/bashrc/rust-dev.sh
 
 log_command "Setting Rust dev bashrc script permissions" \
     chmod +x /etc/bashrc.d/35-rust-dev.sh
@@ -236,7 +236,7 @@ echo "=== Creating rust-dev startup script ==="
 log_command "Creating startup directory" \
     mkdir -p /etc/container/first-startup
 
-command cat > /etc/container/first-startup/20-rust-dev-setup.sh << 'EOF'
+command cat >/etc/container/first-startup/20-rust-dev-setup.sh <<'EOF'
 #!/bin/bash
 # Rust development tools configuration
 if command -v cargo &> /dev/null; then
@@ -301,7 +301,7 @@ log_command "Creating cron.d directory" \
     mkdir -p /etc/cron.d
 
 # Create the wrapper script that cron will execute
-command cat > /usr/local/bin/cargo-sweep-cron << 'SWEEP_SCRIPT_EOF'
+command cat >/usr/local/bin/cargo-sweep-cron <<'SWEEP_SCRIPT_EOF'
 #!/bin/bash
 # Wrapper script for cargo-sweep cron job
 # Sources container environment and respects configuration
@@ -344,7 +344,7 @@ log_command "Setting cargo-sweep-cron script permissions" \
 # Create the cron job in /etc/cron.d/
 # Runs every 6 hours at minute 0
 # Note: USERNAME is substituted at build time
-command cat > /etc/cron.d/cargo-sweep << CRON_EOF
+command cat >/etc/cron.d/cargo-sweep <<CRON_EOF
 # Cargo-sweep automatic cleanup - clean old Rust build artifacts
 # Runs every 6 hours
 # Configuration via environment variables:

@@ -72,7 +72,7 @@ test_gopls_config() {
     mkdir -p "$(dirname "$gopls_config")"
 
     # Create config
-    command cat > "$gopls_config" << 'EOF'
+    command cat >"$gopls_config" <<'EOF'
 formatting:
   gofumpt: true
 ui:
@@ -97,7 +97,7 @@ test_golangci_config() {
     local config_file="$TEST_TEMP_DIR/.golangci.yml"
 
     # Create config
-    command cat > "$config_file" << 'EOF'
+    command cat >"$config_file" <<'EOF'
 linters:
   enable:
     - gofmt
@@ -141,7 +141,7 @@ test_air_config() {
     local air_config="$TEST_TEMP_DIR/.air.toml"
 
     # Create config
-    command cat > "$air_config" << 'EOF'
+    command cat >"$air_config" <<'EOF'
 root = "."
 tmp_dir = "tmp"
 
@@ -166,7 +166,7 @@ test_go_workspace() {
     local workspace_file="$TEST_TEMP_DIR/go.work"
 
     # Create workspace file
-    command cat > "$workspace_file" << 'EOF'
+    command cat >"$workspace_file" <<'EOF'
 go 1.21
 
 use (
@@ -191,7 +191,7 @@ test_go_makefile() {
     local makefile="$TEST_TEMP_DIR/Makefile"
 
     # Create Makefile
-    command cat > "$makefile" << 'EOF'
+    command cat >"$makefile" <<'EOF'
 .PHONY: lint test build
 
 lint:
@@ -219,7 +219,7 @@ test_go_dev_aliases() {
     local bashrc_file="$TEST_TEMP_DIR/etc/bashrc.d/25-golang-dev.sh"
 
     # Create aliases
-    command cat > "$bashrc_file" << 'EOF'
+    command cat >"$bashrc_file" <<'EOF'
 alias glt='golangci-lint run'
 alias dlv='dlv debug'
 alias gops='gopls'
@@ -257,7 +257,7 @@ test_golang_dev_verification() {
     local test_script="$TEST_TEMP_DIR/test-golang-dev.sh"
 
     # Create verification script
-    command cat > "$test_script" << 'EOF'
+    command cat >"$test_script" <<'EOF'
 #!/bin/bash
 echo "Go dev tools:"
 for tool in gopls delve golangci-lint goimports air; do
@@ -330,7 +330,7 @@ test_golang_no_large_heredocs() {
         elif [[ "$in_heredoc" == true ]]; then
             heredoc_lines=$((heredoc_lines + 1))
         fi
-    done < "$feature_script"
+    done <"$feature_script"
 
     if [[ $max_heredoc -le 10 ]]; then
         pass_test "No heredocs over 10 lines (max: $max_heredoc)"

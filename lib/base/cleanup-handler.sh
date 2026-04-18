@@ -39,7 +39,7 @@ cleanup_on_interrupt() {
 
         # Process cleanup items in reverse order (LIFO - last in, first out)
         local i
-        for ((i=${#_FEATURE_CLEANUP_ITEMS[@]}-1; i>=0; i--)); do
+        for ((i = ${#_FEATURE_CLEANUP_ITEMS[@]} - 1; i >= 0; i--)); do
             local cleanup_item="${_FEATURE_CLEANUP_ITEMS[i]}"
 
             # Check if it's a directory

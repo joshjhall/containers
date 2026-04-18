@@ -73,7 +73,7 @@ _verify_language_handler() {
             log_message "Node.js detected, using SHASUMS-based GPG verification..."
             download_and_verify_nodejs_gpg "$file" "$version"
             ;;
-        kubectl|kubernetes)
+        kubectl | kubernetes)
             log_message "kubectl detected, using Sigstore verification..."
             download_and_verify_kubectl_sigstore "$file" "$version"
             ;;
@@ -81,7 +81,7 @@ _verify_language_handler() {
             log_message "Terraform detected, using HashiCorp SHA256SUMS GPG verification..."
             download_and_verify_terraform_gpg "$file" "$version"
             ;;
-        golang|go)
+        golang | go)
             log_message "Go detected, using GPG .asc signature verification..."
             download_and_verify_golang_gpg "$file" "$version"
             ;;
@@ -107,7 +107,7 @@ _try_python_sigstore() {
     local version="$2"
 
     local major minor
-    IFS='.' read -r major minor _ <<< "$version"
+    IFS='.' read -r major minor _ <<<"$version"
 
     if [ "$major" -lt 3 ] || [ "$minor" -lt 11 ]; then
         return 1

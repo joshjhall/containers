@@ -17,9 +17,9 @@ SOURCE_FILE="$PROJECT_ROOT/lib/features/ollama.sh"
 
 test_script_exists_and_executable() {
     assert_file_exists "$SOURCE_FILE"
-    [ -x "$SOURCE_FILE" ] \
-        && assert_true 0 "ollama.sh is executable" \
-        || assert_true 1 "ollama.sh should be executable"
+    [ -x "$SOURCE_FILE" ] &&
+        assert_true 0 "ollama.sh is executable" ||
+        assert_true 1 "ollama.sh should be executable"
 }
 
 test_uses_strict_mode() {

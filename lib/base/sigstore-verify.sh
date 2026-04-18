@@ -58,7 +58,7 @@ download_and_verify_kubectl_sigstore() {
     local version="$2"
 
     # Check if cosign is available
-    if ! command -v cosign &> /dev/null; then
+    if ! command -v cosign &>/dev/null; then
         log_warning "cosign not found, cannot verify kubectl Sigstore signature"
         log_warning "Install kubernetes or docker feature to get cosign"
         return 1
@@ -70,7 +70,7 @@ download_and_verify_kubectl_sigstore() {
     # Kubectl signature files are hosted alongside the binary
     # For example: https://dl.k8s.io/release/v1.28.0/bin/linux/amd64/kubectl.sig
     local base_url
-    base_url=$(dirname "$(command grep -o 'https://dl.k8s.io/release/v[^/]*/bin/[^/]*/[^/]*' <<< "$file" 2>/dev/null || echo "")")
+    base_url=$(dirname "$(command grep -o 'https://dl.k8s.io/release/v[^/]*/bin/[^/]*/[^/]*' <<<"$file" 2>/dev/null || echo "")")
 
     if [ -z "$base_url" ]; then
         # Construct URL if not found in file path
@@ -231,7 +231,7 @@ verify_sigstore_signature() {
 get_python_release_manager() {
     local version="$1"
     local major minor
-    IFS='.' read -r major minor _ <<< "$version"
+    IFS='.' read -r major minor _ <<<"$version"
 
     # Only Python 3.x is supported
     if [ "$major" != "3" ]; then
@@ -245,23 +245,23 @@ get_python_release_manager() {
             echo "nad@python.org"
             echo "https://github.com/login/oauth"
             ;;
-        8|9)
+        8 | 9)
             echo "lukasz@langa.pl"
             echo "https://github.com/login/oauth"
             ;;
-        10|11)
+        10 | 11)
             echo "pablogsal@python.org"
             echo "https://accounts.google.com"
             ;;
-        12|13)
+        12 | 13)
             echo "thomas@python.org"
             echo "https://accounts.google.com"
             ;;
-        14|15)
+        14 | 15)
             echo "hugo@python.org"
             echo "https://github.com/login/oauth"
             ;;
-        16|17)
+        16 | 17)
             echo "savannah@python.org"
             echo "https://github.com/login/oauth"
             ;;

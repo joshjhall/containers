@@ -4,8 +4,8 @@
 # ----------------------------------------------------------------------------
 
 # Error protection for interactive shells
-set +u  # Don't error on unset variables
-set +e  # Don't exit on errors
+set +u # Don't error on unset variables
+set +e # Don't exit on errors
 
 # Cache and config directories
 export OP_CACHE_DIR="/cache/1password"
@@ -70,7 +70,7 @@ _op_load_secrets() {
         [ -n "${!_target_var:-}" ] && continue
         _ref_value="${!_ref_var:-}"
         [ -z "$_ref_value" ] && continue
-        ( op read "$_ref_value" 2>/dev/null > "${_op_tmp_dir}/ref_${_target_var}" ) &
+        (op read "$_ref_value" 2>/dev/null >"${_op_tmp_dir}/ref_${_target_var}") &
     done
 
     # Launch parallel fetches for OP_*_FILE_REF variables
@@ -81,7 +81,7 @@ _op_load_secrets() {
         [ -n "${!_target_var:-}" ] && continue
         _ref_value="${!_ref_var:-}"
         [ -z "$_ref_value" ] && continue
-        ( op read "$_ref_value" 2>/dev/null > "${_op_tmp_dir}/fileref_${_target_var}_${_ref_value##*/}" ) &
+        (op read "$_ref_value" 2>/dev/null >"${_op_tmp_dir}/fileref_${_target_var}_${_ref_value##*/}") &
     done
 
     # Wait for all parallel fetches
@@ -114,10 +114,10 @@ _op_load_secrets() {
             _uri_field="${_ref_value##*/}"
             case "$_uri_field" in
                 *.*) _file_ext=".${_uri_field##*.}" ;;
-                *)   _file_ext="" ;;
+                *) _file_ext="" ;;
             esac
             _file_path="/dev/shm/${_file_name}${_file_ext}"
-            command cat "$_result_file" > "$_file_path"
+            command cat "$_result_file" >"$_file_path"
             chmod 600 "$_file_path"
             export "${_target_var}=${_file_path}"
         fi
@@ -156,8 +156,8 @@ _op_resolve_git_identity() {
         local _git_tmp_dir _first _last
         _git_tmp_dir=$(mktemp -d /dev/shm/op-git.XXXXXX)
         chmod 700 "$_git_tmp_dir"
-        ( op read "${_base_path}/first name" 2>/dev/null > "${_git_tmp_dir}/first" ) &
-        ( op read "${_base_path}/last name" 2>/dev/null > "${_git_tmp_dir}/last" ) &
+        (op read "${_base_path}/first name" 2>/dev/null >"${_git_tmp_dir}/first") &
+        (op read "${_base_path}/last name" 2>/dev/null >"${_git_tmp_dir}/last") &
         wait
         _first="" _last=""
         [ -s "${_git_tmp_dir}/first" ] && _first=$(command cat "${_git_tmp_dir}/first")
@@ -205,7 +205,7 @@ _op_write_cache() {
         done
         printf 'export GIT_USER_NAME=%q\n' "${GIT_USER_NAME:-}"
         printf 'export GIT_USER_EMAIL=%q\n' "${GIT_USER_EMAIL:-}"
-    } > "$_cache_tmp"
+    } >"$_cache_tmp"
     chmod 600 "$_cache_tmp"
     mv "$_cache_tmp" "$_OP_SECRETS_CACHE"
     eval "$_old_xtrace"

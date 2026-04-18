@@ -117,7 +117,7 @@ test_verify_sigstore_missing_target_file() {
 # Test: returns 1 when signature file doesn't exist
 test_verify_sigstore_missing_sig_file() {
     # Create a target file but no signature
-    echo "test content" > "$TEST_TEMP_DIR/testfile.tar.gz"
+    echo "test content" >"$TEST_TEMP_DIR/testfile.tar.gz"
 
     local exit_code=0
     bash -c "
@@ -142,8 +142,8 @@ test_verify_sigstore_missing_sig_file() {
 # Test: returns 1 when cert file specified but doesn't exist
 test_verify_sigstore_missing_cert_file() {
     # Create target and sig files but no cert
-    echo "test content" > "$TEST_TEMP_DIR/testfile.tar.gz"
-    echo "fake sig" > "$TEST_TEMP_DIR/testfile.tar.gz.sig"
+    echo "test content" >"$TEST_TEMP_DIR/testfile.tar.gz"
+    echo "fake sig" >"$TEST_TEMP_DIR/testfile.tar.gz.sig"
 
     local exit_code=0
     bash -c "
@@ -195,7 +195,7 @@ test_kubectl_sigstore_cosign_not_installed() {
 # Test: returns 1 when curl fails to download signature
 test_download_and_verify_sigstore_curl_failure() {
     # Create a target file
-    echo "test content" > "$TEST_TEMP_DIR/testfile.tar.gz"
+    echo "test content" >"$TEST_TEMP_DIR/testfile.tar.gz"
 
     local exit_code=0
     bash -c "

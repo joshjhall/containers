@@ -49,10 +49,10 @@ export LOG_LEVEL_DEBUG=3
 # Convert string log level to numeric
 _get_log_level_num() {
     case "${LOG_LEVEL:-INFO}" in
-        ERROR|error|0) echo $LOG_LEVEL_ERROR ;;
-        WARN|warn|WARNING|warning|1) echo $LOG_LEVEL_WARN ;;
-        INFO|info|2) echo $LOG_LEVEL_INFO ;;
-        DEBUG|debug|3) echo $LOG_LEVEL_DEBUG ;;
+        ERROR | error | 0) echo $LOG_LEVEL_ERROR ;;
+        WARN | warn | WARNING | warning | 1) echo $LOG_LEVEL_WARN ;;
+        INFO | info | 2) echo $LOG_LEVEL_INFO ;;
+        DEBUG | debug | 3) echo $LOG_LEVEL_DEBUG ;;
         *) echo $LOG_LEVEL_INFO ;; # Default for invalid values
     esac
 }

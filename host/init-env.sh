@@ -37,10 +37,10 @@ _YELLOW='\033[1;33m'
 _BLUE='\033[0;34m'
 _NC='\033[0m'
 
-log_info()    { printf '%b[INFO]%b %s\n' "$_BLUE" "$_NC" "$*" >&2; }
+log_info() { printf '%b[INFO]%b %s\n' "$_BLUE" "$_NC" "$*" >&2; }
 log_success() { printf '%b[SUCCESS]%b %s\n' "$_GREEN" "$_NC" "$*" >&2; }
 log_warning() { printf '%b[WARNING]%b %s\n' "$_YELLOW" "$_NC" "$*" >&2; }
-log_error()   { printf '%b[ERROR]%b %s\n' "$_RED" "$_NC" "$*" >&2; }
+log_error() { printf '%b[ERROR]%b %s\n' "$_RED" "$_NC" "$*" >&2; }
 
 # ============================================================================
 # Path Detection
@@ -55,7 +55,7 @@ get_script_dir() {
         source="$(command readlink "$source")"
         case "$source" in
             /*) ;;
-            *)  source="$dir/$source" ;;
+            *) source="$dir/$source" ;;
         esac
     done
     command cd -P "$(command dirname "$source")" && command pwd
@@ -142,7 +142,7 @@ while IFS= read -r line || [ -n "$line" ]; do
     stripped="$(printf '%s' "$line" | command sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
     # Skip comments and blank lines
     case "$stripped" in
-        ""|\#*) continue ;;
+        "" | \#*) continue ;;
     esac
     # Check for OP_*_REF= pattern (but not OP_*_FILE_REF=)
     case "$stripped" in
@@ -152,7 +152,7 @@ while IFS= read -r line || [ -n "$line" ]; do
             break
             ;;
     esac
-done < "$ENV_INIT_FILE"
+done <"$ENV_INIT_FILE"
 
 # ============================================================================
 # OP CLI setup (only if needed)
@@ -176,14 +176,14 @@ if [ "$NEED_OP" = "true" ]; then
             while IFS= read -r sline || [ -n "$sline" ]; do
                 stripped_s="$(printf '%s' "$sline" | command sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
                 case "$stripped_s" in
-                    ""|\#*) continue ;;
+                    "" | \#*) continue ;;
                     OP_SERVICE_ACCOUNT_TOKEN=*)
                         export OP_SERVICE_ACCOUNT_TOKEN="${stripped_s#OP_SERVICE_ACCOUNT_TOKEN=}"
                         _LOADED_SA_TOKEN=true
                         break
                         ;;
                 esac
-            done < "$SECRETS_FILE"
+            done <"$SECRETS_FILE"
         fi
 
         if [ -z "${OP_SERVICE_ACCOUNT_TOKEN:-}" ]; then
@@ -205,7 +205,7 @@ while IFS= read -r line || [ -n "$line" ]; do
     # Preserve blank lines and comments as-is
     stripped="$(printf '%s' "$line" | command sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
     case "$stripped" in
-        ""|\#*)
+        "" | \#*)
             OUTPUT="$OUTPUT$line
 "
             continue
@@ -252,7 +252,7 @@ while IFS= read -r line || [ -n "$line" ]; do
     # Everything else — pass through as-is
     OUTPUT="$OUTPUT$line
 "
-done < "$ENV_INIT_FILE"
+done <"$ENV_INIT_FILE"
 
 if [ "$_errors" -gt 0 ]; then
     log_warning "$_errors secret(s) failed to resolve — continuing with partial output"
@@ -291,7 +291,7 @@ else
     fi
 
     # Write output with restricted permissions
-    printf '%s' "$OUTPUT" > "$OUTPUT_FILE"
+    printf '%s' "$OUTPUT" >"$OUTPUT_FILE"
     command chmod 600 "$OUTPUT_FILE"
 
     log_success "Wrote $OUTPUT_FILE ($(printf '%s' "$OUTPUT" | command grep -c '^[^#]' || true) active lines)"

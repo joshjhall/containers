@@ -31,7 +31,7 @@ ENABLE_PASSWORDLESS_SUDO="${6:-true}"
 echo "=== Setting up user: ${USERNAME} (${USER_UID}:${USER_GID}) ==="
 
 # Check if user already exists first
-if id -u "${USERNAME}" > /dev/null 2>&1; then
+if id -u "${USERNAME}" >/dev/null 2>&1; then
     echo "User ${USERNAME} already exists, using existing user..."
     ACTUAL_UID=$(id -u "${USERNAME}")
     ACTUAL_GID=$(id -g "${USERNAME}")
@@ -41,10 +41,10 @@ if id -u "${USERNAME}" > /dev/null 2>&1; then
 else
     USER_EXISTS=false
     # Handle group creation with existing GID check
-    if ! getent group "${USERNAME}" > /dev/null 2>&1; then
-        if getent group "${USER_GID}" > /dev/null 2>&1; then
+    if ! getent group "${USERNAME}" >/dev/null 2>&1; then
+        if getent group "${USER_GID}" >/dev/null 2>&1; then
             echo "GID ${USER_GID} already exists, finding a free GID..."
-            FREE_GID=$(command awk -F: '$3>=1000 && $3<65534 {print $3}' /etc/group | command sort -n | \
+            FREE_GID=$(command awk -F: '$3>=1000 && $3<65534 {print $3}' /etc/group | command sort -n |
                 command awk 'BEGIN{for(i=1;i<=NR;i++) gids[i]=0} {gids[$1]=1} END{for(i=1000;i<65534;i++) if(!gids[i]) {print i; exit}}')
             echo "Using GID: ${FREE_GID}"
             groupadd --gid "${FREE_GID}" "${USERNAME}"
@@ -60,9 +60,9 @@ fi
 
 # Handle user creation only if user doesn't exist
 if [ "$USER_EXISTS" = false ]; then
-    if id "${USER_UID}" > /dev/null 2>&1; then
+    if id "${USER_UID}" >/dev/null 2>&1; then
         echo "UID ${USER_UID} already exists, finding a free UID..."
-        FREE_UID=$(command awk -F: '$3>=1000 && $3<65534 {print $3}' /etc/passwd | command sort -n | \
+        FREE_UID=$(command awk -F: '$3>=1000 && $3<65534 {print $3}' /etc/passwd | command sort -n |
             command awk 'BEGIN{for(i=1;i<=NR;i++) uids[i]=0} {uids[$1]=1} END{for(i=1000;i<65534;i++) if(!uids[i]) {print i; exit}}')
         echo "Using UID: ${FREE_UID}"
         useradd --uid "${FREE_UID}" --gid "${ACTUAL_GID}" -m "${USERNAME}" --shell /bin/bash
@@ -79,7 +79,7 @@ fi
     echo "export ACTUAL_UID=${ACTUAL_UID}"
     echo "export ACTUAL_GID=${ACTUAL_GID}"
     echo "export WORKING_DIR=${WORKING_DIR}"
-} >> /tmp/build-env
+} >>/tmp/build-env
 
 # Also export as environment variables for the current build
 export ACTUAL_UID="${ACTUAL_UID}"
@@ -87,8 +87,8 @@ export ACTUAL_GID="${ACTUAL_GID}"
 export WORKING_DIR="${WORKING_DIR}"
 
 # Write to a file that can be sourced by Dockerfile
-echo "${ACTUAL_UID}" > /tmp/actual_uid
-echo "${ACTUAL_GID}" > /tmp/actual_gid
+echo "${ACTUAL_UID}" >/tmp/actual_uid
+echo "${ACTUAL_GID}" >/tmp/actual_gid
 
 # Add user to sudo group
 usermod -aG sudo "${USERNAME}"
@@ -97,7 +97,7 @@ usermod -aG sudo "${USERNAME}"
 if [ "${ENABLE_PASSWORDLESS_SUDO}" = "true" ]; then
     # Use install command for atomic file creation with correct permissions
     # This prevents race condition where file briefly has wrong permissions
-    echo "${USERNAME} ALL=(ALL) NOPASSWD:ALL" | \
+    echo "${USERNAME} ALL=(ALL) NOPASSWD:ALL" |
         install -m 0440 -o root -g root /dev/stdin /etc/sudoers.d/"${USERNAME}"
     echo "⚠️  WARNING: Passwordless sudo enabled (development mode)"
     echo "    This allows any process as '${USERNAME}' to gain root access without password."
@@ -156,11 +156,11 @@ if ! grep -q "bashrc.d" /home/"${USERNAME}"/.bashrc; then
         echo ""
         echo "# Source additional configurations from features"
         echo 'for f in ~/.bashrc.d/*; do [ -r "$f" ] && source "$f"; done'
-    } >> /home/"${USERNAME}"/.bashrc
+    } >>/home/"${USERNAME}"/.bashrc
 fi
 
 # Add useful helper functions to user's bashrc
-command cat >> /home/"${USERNAME}"/.bashrc << 'EOF'
+command cat >>/home/"${USERNAME}"/.bashrc <<'EOF'
 
 # NOTE: /opt/container-runtime/shared/ is intentional — this block is appended to
 # .bashrc and runs at container startup, not during the Docker build.

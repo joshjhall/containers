@@ -65,7 +65,7 @@ log_message "Configuring keybindings for profile: ${KEYBINDING_PROFILE}"
 # ============================================================================
 log_message "Creating base inputrc configuration..."
 
-command cat > /etc/inputrc << 'INPUTRC_COMMON_EOF'
+command cat >/etc/inputrc <<'INPUTRC_COMMON_EOF'
 # /etc/inputrc - System-wide readline configuration
 # Profile-specific bindings are appended below
 
@@ -134,9 +134,9 @@ INPUTRC_COMMON_EOF
 # ============================================================================
 
 case "${KEYBINDING_PROFILE}" in
-    iterm|macos)
+    iterm | macos)
         log_message "Adding iTerm2/macOS Terminal keybindings..."
-        command cat >> /etc/inputrc << 'INPUTRC_ITERM_EOF'
+        command cat >>/etc/inputrc <<'INPUTRC_ITERM_EOF'
 
 # ============================================================================
 # iTerm2 / macOS Terminal Key Bindings
@@ -178,9 +178,9 @@ case "${KEYBINDING_PROFILE}" in
 INPUTRC_ITERM_EOF
         ;;
 
-    xterm|linux)
+    xterm | linux)
         log_message "Adding xterm/Linux terminal keybindings..."
-        command cat >> /etc/inputrc << 'INPUTRC_XTERM_EOF'
+        command cat >>/etc/inputrc <<'INPUTRC_XTERM_EOF'
 
 # ============================================================================
 # xterm / Linux Terminal Key Bindings
@@ -226,9 +226,9 @@ INPUTRC_ITERM_EOF
 INPUTRC_XTERM_EOF
         ;;
 
-    minimal|none)
+    minimal | none)
         log_message "Using minimal keybindings (no custom key sequences)..."
-        command cat >> /etc/inputrc << 'INPUTRC_MINIMAL_EOF'
+        command cat >>/etc/inputrc <<'INPUTRC_MINIMAL_EOF'
 
 # ============================================================================
 # Minimal Key Bindings
@@ -257,7 +257,7 @@ log_message "Adding bash-specific keybinding configuration..."
 
 # Create bashrc.d script for keybinding setup (content in lib/bashrc/keybindings.sh)
 write_bashrc_content /etc/bashrc.d/10-keybindings.sh "keyboard bindings configuration" \
-    < /tmp/build-scripts/features/lib/bashrc/keybindings.sh
+    </tmp/build-scripts/features/lib/bashrc/keybindings.sh
 
 # Make the script executable
 log_command "Setting keybindings bashrc script permissions" \
@@ -268,7 +268,7 @@ log_command "Setting keybindings bashrc script permissions" \
 # ============================================================================
 log_message "Creating user inputrc template..."
 
-command cat > /etc/skel/.inputrc << 'USER_INPUTRC_EOF'
+command cat >/etc/skel/.inputrc <<'USER_INPUTRC_EOF'
 # ~/.inputrc - User readline configuration
 # This file is sourced by readline after /etc/inputrc
 #
@@ -298,7 +298,7 @@ USER_INPUTRC_EOF
 # ============================================================================
 log_message "Creating keybindings verification script..."
 
-command cat > /usr/local/bin/test-keybindings << 'EOF'
+command cat >/usr/local/bin/test-keybindings <<'EOF'
 #!/bin/bash
 echo "=== Keyboard Bindings Status ==="
 echo ""

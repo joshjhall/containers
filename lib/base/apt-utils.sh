@@ -62,9 +62,9 @@ fi
 # ============================================================================
 APT_MAX_RETRIES="${APT_MAX_RETRIES:-3}"
 APT_RETRY_DELAY="${APT_RETRY_DELAY:-5}"
-APT_TIMEOUT="${APT_TIMEOUT:-300}"  # 5 minutes timeout for apt operations
-APT_ACQUIRE_TIMEOUT="${APT_ACQUIRE_TIMEOUT:-30}"  # Per-request acquire timeout
-APT_NETWORK_ERROR_CODE=100        # apt exit code for network/repository errors
+APT_TIMEOUT="${APT_TIMEOUT:-300}"                # 5 minutes timeout for apt operations
+APT_ACQUIRE_TIMEOUT="${APT_ACQUIRE_TIMEOUT:-30}" # Per-request acquire timeout
+APT_NETWORK_ERROR_CODE=100                       # apt exit code for network/repository errors
 
 # apt_install_conditional - Install packages based on Debian version
 #
@@ -164,7 +164,7 @@ apt_retry() {
             fi
 
             sleep "$delay"
-            delay=$((delay * 2))  # Exponential backoff
+            delay=$((delay * 2)) # Exponential backoff
         else
             echo "✗ Command failed after $APT_MAX_RETRIES attempts: ${cmd_array[*]}"
 
@@ -248,11 +248,11 @@ apt_update() {
         --failure-hook _apt_diagnose_network_failure \
         -- \
         apt-get update \
-            -o Acquire::http::Timeout=${APT_ACQUIRE_TIMEOUT} \
-            -o Acquire::https::Timeout=${APT_ACQUIRE_TIMEOUT} \
-            -o Acquire::ftp::Timeout=${APT_ACQUIRE_TIMEOUT} \
-            -o Acquire::Retries=3 \
-            -o APT::Update::Error-Mode=any
+        -o Acquire::http::Timeout=${APT_ACQUIRE_TIMEOUT} \
+        -o Acquire::https::Timeout=${APT_ACQUIRE_TIMEOUT} \
+        -o Acquire::ftp::Timeout=${APT_ACQUIRE_TIMEOUT} \
+        -o Acquire::Retries=3 \
+        -o APT::Update::Error-Mode=any
 }
 
 # ============================================================================
@@ -343,13 +343,13 @@ apt_install() {
         --retry-hook _apt_install_on_retry \
         -- \
         apt-get install -y --no-install-recommends --fix-missing \
-            -o Acquire::http::Timeout=${APT_ACQUIRE_TIMEOUT} \
-            -o Acquire::https::Timeout=${APT_ACQUIRE_TIMEOUT} \
-            -o Acquire::ftp::Timeout=${APT_ACQUIRE_TIMEOUT} \
-            -o Acquire::Retries=3 \
-            -o Dpkg::Options::="--force-confdef" \
-            -o Dpkg::Options::="--force-confold" \
-            "$@"
+        -o Acquire::http::Timeout=${APT_ACQUIRE_TIMEOUT} \
+        -o Acquire::https::Timeout=${APT_ACQUIRE_TIMEOUT} \
+        -o Acquire::ftp::Timeout=${APT_ACQUIRE_TIMEOUT} \
+        -o Acquire::Retries=3 \
+        -o Dpkg::Options::="--force-confdef" \
+        -o Dpkg::Options::="--force-confold" \
+        "$@"
 }
 
 # ============================================================================
@@ -382,7 +382,7 @@ configure_apt_mirrors() {
     fi
 
     # Add retry and timeout configurations to apt.conf.d
-    command cat > /etc/apt/apt.conf.d/99-retries << EOF
+    command cat >/etc/apt/apt.conf.d/99-retries <<EOF
 # Network timeout and retry configuration
 Acquire::http::Timeout "${APT_ACQUIRE_TIMEOUT}";
 Acquire::https::Timeout "${APT_ACQUIRE_TIMEOUT}";

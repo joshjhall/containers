@@ -1,7 +1,7 @@
 #!/bin/bash
 echo "=== 1Password CLI Status ==="
 
-if command -v op &> /dev/null; then
+if command -v op &>/dev/null; then
     echo "✓ 1Password CLI is installed"
     echo "  Version: $(op --version)"
     echo "  Binary: $(which op)"

@@ -22,7 +22,7 @@ command sed -n '
     /^cleanup_on_interrupt()/,/^}/p
     /^register_cleanup()/,/^}/p
     /^unregister_cleanup()/,/^}/p
-' "$PROJECT_ROOT/lib/base/cleanup-handler.sh" > "$_CLEANUP_FUNC_FILE"
+' "$PROJECT_ROOT/lib/base/cleanup-handler.sh" >"$_CLEANUP_FUNC_FILE"
 
 # Setup function - runs before each test
 setup() {
@@ -134,9 +134,9 @@ test_unregister_nonpresent_item() {
 # Test: cleanup_on_interrupt processes items in LIFO order (last registered = first cleaned)
 test_cleanup_lifo_ordering() {
     mkdir -p "$TEST_TEMP_DIR/cleanup-lifo"
-    echo 'a' > "$TEST_TEMP_DIR/cleanup-lifo/file-a"
-    echo 'b' > "$TEST_TEMP_DIR/cleanup-lifo/file-b"
-    echo 'c' > "$TEST_TEMP_DIR/cleanup-lifo/file-c"
+    echo 'a' >"$TEST_TEMP_DIR/cleanup-lifo/file-a"
+    echo 'b' >"$TEST_TEMP_DIR/cleanup-lifo/file-b"
+    echo 'c' >"$TEST_TEMP_DIR/cleanup-lifo/file-c"
 
     local output
     output=$(bash -c '
@@ -185,7 +185,7 @@ test_cleanup_empty_array() {
 # Test: cleanup_on_interrupt removes real files and directories
 test_cleanup_removes_files_and_dirs() {
     mkdir -p "$TEST_TEMP_DIR/cleanup-test-dir"
-    echo "test" > "$TEST_TEMP_DIR/cleanup-test-file"
+    echo "test" >"$TEST_TEMP_DIR/cleanup-test-file"
 
     bash -c '
         log_warning() { :; }

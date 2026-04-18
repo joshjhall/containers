@@ -94,7 +94,7 @@ test_ktlint_installation() {
     local ktlint_bin="$TEST_TEMP_DIR/usr/local/bin/ktlint"
 
     # Create mock ktlint binary
-    command cat > "$ktlint_bin" << 'EOF'
+    command cat >"$ktlint_bin" <<'EOF'
 #!/bin/bash
 echo "ktlint - 1.5.0"
 EOF
@@ -120,7 +120,7 @@ test_detekt_installation() {
     touch "$detekt_jar"
 
     # Create mock detekt wrapper
-    command cat > "$detekt_bin" << 'EOF'
+    command cat >"$detekt_bin" <<'EOF'
 #!/bin/bash
 DETEKT_HOME="/opt/detekt"
 exec java -jar "${DETEKT_HOME}/lib/detekt-cli-1.23.7.jar" "$@"
@@ -179,7 +179,7 @@ test_kotlin_dev_environment() {
     local bashrc_file="$TEST_TEMP_DIR/etc/bashrc.d/55-kotlin-dev.sh"
 
     # Create mock bashrc content
-    command cat > "$bashrc_file" << 'EOF'
+    command cat >"$bashrc_file" <<'EOF'
 # Kotlin Development Tools Configuration
 export DETEKT_HOME="/opt/detekt"
 export KLS_HOME="/opt/kotlin-language-server/server"
@@ -204,7 +204,7 @@ test_kotlin_dev_aliases() {
     local bashrc_file="$TEST_TEMP_DIR/etc/bashrc.d/55-kotlin-dev.sh"
 
     # Create bashrc with aliases
-    command cat > "$bashrc_file" << 'EOF'
+    command cat >"$bashrc_file" <<'EOF'
 # ktlint shortcuts
 alias ktf='ktlint -F'          # Format files
 alias ktcheck='ktlint'          # Check files
@@ -240,7 +240,7 @@ test_kotlin_dev_helpers() {
     local bashrc_file="$TEST_TEMP_DIR/etc/bashrc.d/55-kotlin-dev.sh"
 
     # Create bashrc with helpers
-    command cat > "$bashrc_file" << 'EOF'
+    command cat >"$bashrc_file" <<'EOF'
 ktlint-all() {
     echo "=== Running ktlint on all Kotlin files ==="
     if [ "$1" = "-F" ] || [ "$1" = "--format" ]; then
@@ -293,7 +293,7 @@ test_claude_lsp_integration() {
     local lsp_setup="$TEST_TEMP_DIR/etc/container/first-startup/31-kotlin-lsp-setup.sh"
 
     # Create mock LSP setup script
-    command cat > "$lsp_setup" << 'EOF'
+    command cat >"$lsp_setup" <<'EOF'
 #!/bin/bash
 # Kotlin LSP setup for Claude Code
 
@@ -329,7 +329,7 @@ test_kotlin_prerequisite() {
     # kotlin-dev requires Kotlin base, verify the check pattern
     local test_script="$TEST_TEMP_DIR/check-kotlin.sh"
 
-    command cat > "$test_script" << 'EOF'
+    command cat >"$test_script" <<'EOF'
 #!/bin/bash
 if ! command -v kotlinc &>/dev/null; then
     echo "Kotlin is required but not installed"
@@ -354,7 +354,7 @@ test_kotlin_dev_verification() {
     local test_script="$TEST_TEMP_DIR/test-kotlin-dev.sh"
 
     # Create verification script
-    command cat > "$test_script" << 'EOF'
+    command cat >"$test_script" <<'EOF'
 #!/bin/bash
 echo "=== Kotlin Development Tools Status ==="
 
@@ -400,7 +400,7 @@ test_project_init_helper() {
     local bashrc_file="$TEST_TEMP_DIR/etc/bashrc.d/55-kotlin-dev.sh"
 
     # Create bashrc with kt-init-project
-    command cat > "$bashrc_file" << 'EOF'
+    command cat >"$bashrc_file" <<'EOF'
 kt-init-project() {
     local project_name="${1:-$(basename $(pwd))}"
     echo "=== Initializing Kotlin Project: $project_name ==="

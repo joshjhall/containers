@@ -23,14 +23,14 @@ while IFS= read -r file; do
 
     # --- Category: broken-relative-link ---
     # Match markdown links: [text](relative/path) — exclude URLs, anchors-only, and images
-    /usr/bin/grep -nE '\[([^]]*)\]\(([^)]+)\)' "$file" 2>/dev/null | \
+    /usr/bin/grep -nE '\[([^]]*)\]\(([^)]+)\)' "$file" 2>/dev/null |
         while IFS=: read -r line_num content; do
             # Extract the link target
             target=$(/usr/bin/echo "$content" | /usr/bin/grep -oE '\]\([^)]+\)' | /usr/bin/head -1 | /usr/bin/sed 's/^](//' | /usr/bin/sed 's/)$//')
 
             # Skip empty, URLs, mailto, anchors-only
             case "$target" in
-                ""| http://*|https://*|mailto:*|"#"*|ftp://*) continue ;;
+                "" | http://* | https://* | mailto:* | "#"* | ftp://*) continue ;;
             esac
 
             # Strip anchor from target for file existence check
@@ -50,7 +50,7 @@ while IFS= read -r file; do
 
     # --- Category: broken-anchor ---
     # Match same-file anchor links: [text](#heading)
-    /usr/bin/grep -nE '\[([^]]*)\]\(#([^)]+)\)' "$file" 2>/dev/null | \
+    /usr/bin/grep -nE '\[([^]]*)\]\(#([^)]+)\)' "$file" 2>/dev/null |
         while IFS=: read -r line_num content; do
             anchor=$(/usr/bin/echo "$content" | /usr/bin/grep -oE '\]\(#[^)]+\)' | /usr/bin/head -1 | /usr/bin/sed 's/^](#//' | /usr/bin/sed 's/)$//')
             [ -z "$anchor" ] && continue
@@ -69,8 +69,8 @@ while IFS= read -r file; do
 
     # --- Category: suspicious-external-link ---
     # URLs with deprecation/sunset indicators
-    /usr/bin/grep -noE 'https?://[^ )>"]+' "$file" 2>/dev/null | \
-        /usr/bin/grep -iE '(deprecated|sunset|eol|end-of-life|removed|legacy)' | \
+    /usr/bin/grep -noE 'https?://[^ )>"]+' "$file" 2>/dev/null |
+        /usr/bin/grep -iE '(deprecated|sunset|eol|end-of-life|removed|legacy)' |
         while IFS=: read -r line_num url; do
             evidence=$(/usr/bin/printf '%.80s' "Suspicious URL: ${url}")
             /usr/bin/printf '%s\t%s\t%s\t%s\t%s\n' \
@@ -78,4 +78,4 @@ while IFS= read -r file; do
                 "$evidence" "HIGH"
         done || true
 
-done < "$FILE_LIST"
+done <"$FILE_LIST"

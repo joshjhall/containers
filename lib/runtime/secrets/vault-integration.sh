@@ -64,7 +64,7 @@ vault_auth_token() {
     export VAULT_TOKEN
 
     # Verify token is valid
-    if ! vault token lookup > /dev/null 2>&1; then
+    if ! vault token lookup >/dev/null 2>&1; then
         log_error "Vault token is invalid or expired"
         return 2
     fi
@@ -171,13 +171,13 @@ load_secrets_from_vault() {
     fi
 
     # Check if vault CLI is available
-    if ! command -v vault > /dev/null 2>&1; then
+    if ! command -v vault >/dev/null 2>&1; then
         log_error "Vault CLI not found. Install HashiCorp Vault CLI to use Vault integration."
         return 1
     fi
 
     # Check if jq is available (needed for JSON parsing)
-    if ! command -v jq > /dev/null 2>&1; then
+    if ! command -v jq >/dev/null 2>&1; then
         log_error "jq not found. Install jq to use Vault integration."
         return 1
     fi
@@ -199,7 +199,7 @@ load_secrets_from_vault() {
         approle)
             vault_auth_approle || return 2
             ;;
-        kubernetes|k8s)
+        kubernetes | k8s)
             vault_auth_kubernetes || return 2
             ;;
         *)
@@ -221,10 +221,10 @@ load_secrets_from_vault() {
 
     # Extract secret data (handles both KV v1 and v2)
     local data_path=".data.data"
-    if ! echo "$secrets_json" | jq -e "$data_path" > /dev/null 2>&1; then
+    if ! echo "$secrets_json" | jq -e "$data_path" >/dev/null 2>&1; then
         # Try KV v1 format
         data_path=".data"
-        if ! echo "$secrets_json" | jq -e "$data_path" > /dev/null 2>&1; then
+        if ! echo "$secrets_json" | jq -e "$data_path" >/dev/null 2>&1; then
             log_error "Unable to parse secrets from Vault response"
             return 3
         fi
@@ -266,12 +266,12 @@ vault_health_check() {
 
     log_info "Checking Vault health at $VAULT_ADDR"
 
-    if ! command -v vault > /dev/null 2>&1; then
+    if ! command -v vault >/dev/null 2>&1; then
         log_warning "Vault CLI not found"
         return 1
     fi
 
-    if vault status > /dev/null 2>&1; then
+    if vault status >/dev/null 2>&1; then
         log_info "Vault is accessible and healthy"
         return 0
     else

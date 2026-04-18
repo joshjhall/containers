@@ -122,10 +122,12 @@ _is_secret_key() {
     local upper_key
     upper_key=$(printf '%s' "$key" | command tr '[:lower:]' '[:upper:]')
     case "$upper_key" in
-        *_TOKEN|*_SECRET|*_PASSWORD|*_KEY|*_CREDENTIAL*)
-            return 0 ;;
+        *_TOKEN | *_SECRET | *_PASSWORD | *_KEY | *_CREDENTIAL*)
+            return 0
+            ;;
         *)
-            return 1 ;;
+            return 1
+            ;;
     esac
 }
 
@@ -237,7 +239,7 @@ audit_log() {
     log_entry=$(build_json_entry "$timestamp" "$event_id" "$category" "$category_code" "$level" "$message" "$extra_data")
 
     # Write to log file
-    echo "$log_entry" >> "$AUDIT_LOG_FILE"
+    echo "$log_entry" >>"$AUDIT_LOG_FILE"
 
     # Optionally copy to stdout
     if [ "$AUDIT_STDOUT_COPY" = "true" ]; then

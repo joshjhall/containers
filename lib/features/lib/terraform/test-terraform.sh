@@ -1,6 +1,6 @@
 #!/bin/bash
 echo "=== Terraform Status ==="
-if command -v terraform &> /dev/null; then
+if command -v terraform &>/dev/null; then
     echo "✓ Terraform is installed"
     echo "  Version: $(terraform version -json 2>/dev/null | jq -r '.terraform_version' || terraform version | command head -1)"
     echo "  Binary: $(which terraform)"
@@ -11,7 +11,7 @@ fi
 
 echo ""
 echo "=== Additional Tools ==="
-if command -v terragrunt &> /dev/null; then
+if command -v terragrunt &>/dev/null; then
     echo "✓ Terragrunt is installed"
     echo "  Version: $(terragrunt --version 2>&1 | command grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | command head -1)"
     echo "  Binary: $(which terragrunt)"
@@ -19,7 +19,7 @@ else
     echo "✗ Terragrunt is not installed"
 fi
 
-if command -v terraform-docs &> /dev/null; then
+if command -v terraform-docs &>/dev/null; then
     echo "✓ terraform-docs is installed"
     echo "  Version: $(terraform-docs --version 2>&1 | command grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | command head -1)"
     echo "  Binary: $(which terraform-docs)"
@@ -27,7 +27,7 @@ else
     echo "✗ terraform-docs is not installed"
 fi
 
-if command -v tflint &> /dev/null; then
+if command -v tflint &>/dev/null; then
     echo "✓ tflint is installed"
     echo "  Version: $(tflint --version 2>&1 | command grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | command head -1)"
     echo "  Binary: $(which tflint)"
@@ -35,7 +35,7 @@ else
     echo "✗ tflint is not installed"
 fi
 
-if command -v trivy &> /dev/null; then
+if command -v trivy &>/dev/null; then
     echo "✓ Trivy is installed (replaces deprecated tfsec)"
     echo "  Version: $(trivy --version 2>&1 | command grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | command head -1)"
     echo "  Binary: $(which trivy)"

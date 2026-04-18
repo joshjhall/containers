@@ -66,9 +66,18 @@ get_debian_major_version() {
         elif [ -n "${VERSION_CODENAME:-}" ]; then
             # Map codename to version
             case "$VERSION_CODENAME" in
-                trixie) echo "13"; return 0 ;;
-                bookworm) echo "12"; return 0 ;;
-                bullseye) echo "11"; return 0 ;;
+                trixie)
+                    echo "13"
+                    return 0
+                    ;;
+                bookworm)
+                    echo "12"
+                    return 0
+                    ;;
+                bullseye)
+                    echo "11"
+                    return 0
+                    ;;
             esac
         fi
     fi
@@ -108,9 +117,18 @@ get_debian_major_version() {
         local codename
         codename=$(lsb_release -sc 2>/dev/null || echo "")
         case "$codename" in
-            trixie) echo "13"; return 0 ;;
-            bookworm) echo "12"; return 0 ;;
-            bullseye) echo "11"; return 0 ;;
+            trixie)
+                echo "13"
+                return 0
+                ;;
+            bookworm)
+                echo "12"
+                return 0
+                ;;
+            bullseye)
+                echo "11"
+                return 0
+                ;;
         esac
     fi
 

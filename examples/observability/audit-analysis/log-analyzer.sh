@@ -102,7 +102,7 @@ parse_args() {
                 JSON_OUTPUT=true
                 shift
                 ;;
-            --help|-h)
+            --help | -h)
                 usage
                 ;;
             *)
@@ -124,7 +124,8 @@ send_alert() {
     fi
 
     local payload
-    payload=$(cat << EOF
+    payload=$(
+        cat <<EOF
 {
   "severity": "$severity",
   "title": "$title",
@@ -133,11 +134,11 @@ send_alert() {
   "source": "audit-log-analyzer"
 }
 EOF
-)
+    )
 
     curl -s -X POST "$ALERT_WEBHOOK" \
         -H "Content-Type: application/json" \
-        -d "$payload" > /dev/null 2>&1 || true
+        -d "$payload" >/dev/null 2>&1 || true
 }
 
 # Analyze failed authentication attempts
@@ -248,7 +249,7 @@ generate_summary() {
     if [ -d "$LOG_PATH" ]; then
         total_events=$(find "$LOG_PATH" -type f -name "*.log" -exec cat {} \; 2>/dev/null | wc -l || echo 0)
     elif [ -f "$LOG_PATH" ]; then
-        total_events=$(wc -l < "$LOG_PATH" || echo 0)
+        total_events=$(wc -l <"$LOG_PATH" || echo 0)
     fi
 
     {
@@ -277,7 +278,7 @@ generate_summary() {
         echo "- Investigate failed authentication sources"
         echo "- Verify configuration changes are authorized"
 
-    } > "$summary_file"
+    } >"$summary_file"
 
     log_info "Summary written to: $summary_file"
 }
@@ -294,7 +295,7 @@ output_json() {
     config_changes=$(grep -riE 'config.*change|modified' "$LOG_PATH" 2>/dev/null | wc -l || echo 0)
     anomalies=$(grep -riE 'denied|forbidden' "$LOG_PATH" 2>/dev/null | wc -l || echo 0)
 
-    cat << EOF
+    cat <<EOF
 {
   "timestamp": "$(date -Iseconds)",
   "log_path": "$LOG_PATH",

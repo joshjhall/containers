@@ -74,7 +74,7 @@ test_first_startup_calls_claude_setup() {
     local marker="$TEST_TEMP_DIR/claude-setup-called"
 
     # Create a mock claude-setup that writes args to a marker file
-    command cat > "$TEST_TEMP_DIR/bin/claude-setup" <<EOF
+    command cat >"$TEST_TEMP_DIR/bin/claude-setup" <<EOF
 #!/bin/bash
 echo "\$@" > "$marker"
 EOF
@@ -180,7 +180,7 @@ test_auth_watcher_skips_when_pid_running() {
 
     # Write a wrapper that uses a custom PID file path
     local wrapper="$TEST_TEMP_DIR/test-watcher.sh"
-    command cat > "$wrapper" <<WEOF
+    command cat >"$wrapper" <<WEOF
 #!/bin/bash
 MARKER_FILE="\$HOME/.claude/.container-setup-complete"
 WATCHER_PID_FILE="$TEST_TEMP_DIR/watcher.pid"
@@ -193,7 +193,7 @@ exit 99
 WEOF
     chmod +x "$wrapper"
 
-    echo "$dummy_pid" > "$TEST_TEMP_DIR/watcher.pid"
+    echo "$dummy_pid" >"$TEST_TEMP_DIR/watcher.pid"
 
     local exit_code=0
     HOME="$fake_home" bash "$wrapper" 2>/dev/null || exit_code=$?
@@ -207,7 +207,7 @@ test_auth_watcher_launches_watcher() {
     mkdir -p "$fake_home/.claude"
 
     # Create a mock claude-auth-watcher that just sleeps
-    command cat > "$TEST_TEMP_DIR/bin/claude-auth-watcher" <<'SCRIPT'
+    command cat >"$TEST_TEMP_DIR/bin/claude-auth-watcher" <<'SCRIPT'
 #!/bin/bash
 sleep 300
 SCRIPT

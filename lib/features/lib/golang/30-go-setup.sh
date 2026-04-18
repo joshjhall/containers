@@ -37,7 +37,7 @@ if [ -n "${WORKING_DIR:-}" ] && [ -f "${WORKING_DIR}/go.mod" ]; then
     go mod download || echo "Note: Some dependencies may have failed to download"
 
     # Verify dependencies
-    if go mod verify &> /dev/null; then
+    if go mod verify &>/dev/null; then
         echo "✓ All dependencies verified"
     else
         echo "⚠ Some dependencies could not be verified"
@@ -52,7 +52,7 @@ if [ -n "${WORKING_DIR:-}" ] && [ -f "${WORKING_DIR}/go.mod" ]; then
 fi
 
 # Show available Go tools
-if command -v go &> /dev/null; then
+if command -v go &>/dev/null; then
     echo ""
     echo "Go development tools:"
     echo "  For development tools like gopls, dlv, golangci-lint,"

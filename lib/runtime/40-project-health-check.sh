@@ -68,7 +68,7 @@ ensure_file_ready() {
     # If file is non-empty and doesn't end with newline, add one
     if [ -s "$1" ]; then
         if [ "$(/usr/bin/tail -c 1 "$1" | /usr/bin/wc -l)" -eq 0 ]; then
-            printf '\n' >> "$1" 2>/dev/null || return 1
+            printf '\n' >>"$1" 2>/dev/null || return 1
         fi
     fi
 
@@ -101,7 +101,7 @@ append_missing_entries() {
         for entry in "${missing[@]}"; do
             echo "$entry"
         done
-    } >> "$file" 2>/dev/null || {
+    } >>"$file" 2>/dev/null || {
         echo "[health-check] Warning: could not write to $file (read-only?)" >&2
         return 1
     }
@@ -157,9 +157,9 @@ check_dockerignore() {
     if [ -f "${PROJECT_ROOT}/Dockerfile" ]; then
         has_docker_files=true
     elif /usr/bin/find "$PROJECT_ROOT" -maxdepth 1 \
-            \( -name "docker-compose*.yml" -o -name "docker-compose*.yaml" \
-            -o -name "compose*.yml" -o -name "compose*.yaml" \) \
-            -print -quit 2>/dev/null | /usr/bin/grep -q .; then
+        \( -name "docker-compose*.yml" -o -name "docker-compose*.yaml" \
+        -o -name "compose*.yml" -o -name "compose*.yaml" \) \
+        -print -quit 2>/dev/null | /usr/bin/grep -q .; then
         has_docker_files=true
     fi
 

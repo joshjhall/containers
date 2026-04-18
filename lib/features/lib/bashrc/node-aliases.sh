@@ -1,4 +1,3 @@
-
 # ----------------------------------------------------------------------------
 # Node.js Aliases
 # ----------------------------------------------------------------------------
@@ -121,7 +120,7 @@ node-project-init() {
     mkdir -p src test
 
     # Create .gitignore
-    load_node_template "common/gitignore.tmpl" > .gitignore
+    load_node_template "common/gitignore.tmpl" >.gitignore
 
     echo "Project initialized successfully!"
     echo "Structure created:"
@@ -216,7 +215,6 @@ node-version() {
     pnpm_store=$(pnpm config get store-dir 2>/dev/null || echo "unavailable")
     echo "pnpm store: $pnpm_store"
 }
-
 
 # Note: We leave set +u and set +e in place for interactive shells
 # to prevent errors with undefined variables or failed commands
