@@ -9,6 +9,18 @@
 #   source "${BIN_DIR}/lib/update-versions/updaters.sh"
 #   update_version "Python" "3.12.7" "3.12.8" "Dockerfile"
 
+# Portable in-place sed across GNU sed (Linux) and BSD sed (macOS).
+# Usage: sed_inplace 'EXPRESSION' file [file ...]
+sed_inplace() {
+    local expr="$1"
+    shift
+    command sed -i.bak "$expr" "$@"
+    local f
+    for f in "$@"; do
+        command rm -f "$f.bak"
+    done
+}
+
 # Function to update a version in a file
 update_version() {
     local tool="$1"
@@ -42,94 +54,94 @@ update_version() {
             # Update ARG lines in Dockerfile
             case "$tool" in
                 Python)
-                    command sed -i "s/^ARG PYTHON_VERSION=.*/ARG PYTHON_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
+                    sed_inplace "s/^ARG PYTHON_VERSION=.*/ARG PYTHON_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
                     # Also update the fallback default in python.sh
-                    command sed -i "s/PYTHON_VERSION=\"\${PYTHON_VERSION:-[^}]*}\"/PYTHON_VERSION=\"\${PYTHON_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/python.sh"
+                    sed_inplace "s/PYTHON_VERSION=\"\${PYTHON_VERSION:-[^}]*}\"/PYTHON_VERSION=\"\${PYTHON_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/python.sh"
                     ;;
                 Node.js)
-                    command sed -i "s/^ARG NODE_VERSION=.*/ARG NODE_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
+                    sed_inplace "s/^ARG NODE_VERSION=.*/ARG NODE_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
                     # Also update the fallback default in node.sh
-                    command sed -i "s/NODE_VERSION=\"\${NODE_VERSION:-[^}]*}\"/NODE_VERSION=\"\${NODE_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/node.sh"
+                    sed_inplace "s/NODE_VERSION=\"\${NODE_VERSION:-[^}]*}\"/NODE_VERSION=\"\${NODE_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/node.sh"
                     ;;
                 Go)
-                    command sed -i "s/^ARG GO_VERSION=.*/ARG GO_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
+                    sed_inplace "s/^ARG GO_VERSION=.*/ARG GO_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
                     # Also update the fallback default in golang.sh
-                    command sed -i "s/GO_VERSION=\"\${GO_VERSION:-[^}]*}\"/GO_VERSION=\"\${GO_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/golang.sh"
+                    sed_inplace "s/GO_VERSION=\"\${GO_VERSION:-[^}]*}\"/GO_VERSION=\"\${GO_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/golang.sh"
                     ;;
                 Rust)
-                    command sed -i "s/^ARG RUST_VERSION=.*/ARG RUST_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
+                    sed_inplace "s/^ARG RUST_VERSION=.*/ARG RUST_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
                     # Also update the fallback default in rust.sh
-                    command sed -i "s/RUST_VERSION=\"\${RUST_VERSION:-[^}]*}\"/RUST_VERSION=\"\${RUST_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/rust.sh"
+                    sed_inplace "s/RUST_VERSION=\"\${RUST_VERSION:-[^}]*}\"/RUST_VERSION=\"\${RUST_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/rust.sh"
                     ;;
                 Ruby)
-                    command sed -i "s/^ARG RUBY_VERSION=.*/ARG RUBY_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
+                    sed_inplace "s/^ARG RUBY_VERSION=.*/ARG RUBY_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
                     # Also update the fallback default in ruby.sh
-                    command sed -i "s/RUBY_VERSION=\"\${RUBY_VERSION:-[^}]*}\"/RUBY_VERSION=\"\${RUBY_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/ruby.sh"
+                    sed_inplace "s/RUBY_VERSION=\"\${RUBY_VERSION:-[^}]*}\"/RUBY_VERSION=\"\${RUBY_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/ruby.sh"
                     ;;
                 Java)
-                    command sed -i "s/^ARG JAVA_VERSION=.*/ARG JAVA_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
+                    sed_inplace "s/^ARG JAVA_VERSION=.*/ARG JAVA_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
                     # Also update the fallback default in java.sh
-                    command sed -i "s/JAVA_VERSION=\"\${JAVA_VERSION:-[^}]*}\"/JAVA_VERSION=\"\${JAVA_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/java.sh"
+                    sed_inplace "s/JAVA_VERSION=\"\${JAVA_VERSION:-[^}]*}\"/JAVA_VERSION=\"\${JAVA_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/java.sh"
                     ;;
                 R)
-                    command sed -i "s/^ARG R_VERSION=.*/ARG R_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
+                    sed_inplace "s/^ARG R_VERSION=.*/ARG R_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
                     # Also update the fallback default in r.sh
-                    command sed -i "s/R_VERSION=\"\${R_VERSION:-[^}]*}\"/R_VERSION=\"\${R_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/r.sh"
+                    sed_inplace "s/R_VERSION=\"\${R_VERSION:-[^}]*}\"/R_VERSION=\"\${R_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/r.sh"
                     ;;
                 Kotlin)
-                    command sed -i "s/^ARG KOTLIN_VERSION=.*/ARG KOTLIN_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
+                    sed_inplace "s/^ARG KOTLIN_VERSION=.*/ARG KOTLIN_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
                     # Also update the fallback default in kotlin.sh
-                    command sed -i "s/KOTLIN_VERSION=\"\${KOTLIN_VERSION:-[^}]*}\"/KOTLIN_VERSION=\"\${KOTLIN_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/kotlin.sh"
+                    sed_inplace "s/KOTLIN_VERSION=\"\${KOTLIN_VERSION:-[^}]*}\"/KOTLIN_VERSION=\"\${KOTLIN_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/kotlin.sh"
                     ;;
                 android-cmdline-tools)
-                    command sed -i "s/^ARG ANDROID_CMDLINE_TOOLS_VERSION=.*/ARG ANDROID_CMDLINE_TOOLS_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
+                    sed_inplace "s/^ARG ANDROID_CMDLINE_TOOLS_VERSION=.*/ARG ANDROID_CMDLINE_TOOLS_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
                     # Also update the fallback default in android.sh
-                    command sed -i "s/ANDROID_CMDLINE_TOOLS_VERSION=\"\${ANDROID_CMDLINE_TOOLS_VERSION:-[^}]*}\"/ANDROID_CMDLINE_TOOLS_VERSION=\"\${ANDROID_CMDLINE_TOOLS_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/android.sh"
+                    sed_inplace "s/ANDROID_CMDLINE_TOOLS_VERSION=\"\${ANDROID_CMDLINE_TOOLS_VERSION:-[^}]*}\"/ANDROID_CMDLINE_TOOLS_VERSION=\"\${ANDROID_CMDLINE_TOOLS_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/android.sh"
                     ;;
                 android-ndk)
-                    command sed -i "s/^ARG ANDROID_NDK_VERSION=.*/ARG ANDROID_NDK_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
+                    sed_inplace "s/^ARG ANDROID_NDK_VERSION=.*/ARG ANDROID_NDK_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
                     # Also update the fallback default in android.sh
-                    command sed -i "s/ANDROID_NDK_VERSION=\"\${ANDROID_NDK_VERSION:-[^}]*}\"/ANDROID_NDK_VERSION=\"\${ANDROID_NDK_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/android.sh"
+                    sed_inplace "s/ANDROID_NDK_VERSION=\"\${ANDROID_NDK_VERSION:-[^}]*}\"/ANDROID_NDK_VERSION=\"\${ANDROID_NDK_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/android.sh"
                     ;;
                 kubectl)
-                    command sed -i "s/^ARG KUBECTL_VERSION=.*/ARG KUBECTL_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
+                    sed_inplace "s/^ARG KUBECTL_VERSION=.*/ARG KUBECTL_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
                     # Also update the fallback default in kubernetes.sh
-                    command sed -i "s/KUBECTL_VERSION=\"\${KUBECTL_VERSION:-[^}]*}\"/KUBECTL_VERSION=\"\${KUBECTL_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/kubernetes.sh"
+                    sed_inplace "s/KUBECTL_VERSION=\"\${KUBECTL_VERSION:-[^}]*}\"/KUBECTL_VERSION=\"\${KUBECTL_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/kubernetes.sh"
                     ;;
                 k9s)
-                    command sed -i "s/^ARG K9S_VERSION=.*/ARG K9S_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
+                    sed_inplace "s/^ARG K9S_VERSION=.*/ARG K9S_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
                     # Also update the fallback default in kubernetes.sh
-                    command sed -i "s/K9S_VERSION=\"\${K9S_VERSION:-[^}]*}\"/K9S_VERSION=\"\${K9S_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/kubernetes.sh"
+                    sed_inplace "s/K9S_VERSION=\"\${K9S_VERSION:-[^}]*}\"/K9S_VERSION=\"\${K9S_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/kubernetes.sh"
                     ;;
                 krew)
-                    command sed -i "s/^ARG KREW_VERSION=.*/ARG KREW_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
+                    sed_inplace "s/^ARG KREW_VERSION=.*/ARG KREW_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
                     # Also update the fallback default in kubernetes.sh
-                    command sed -i "s/KREW_VERSION=\"\${KREW_VERSION:-[^}]*}\"/KREW_VERSION=\"\${KREW_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/kubernetes.sh"
+                    sed_inplace "s/KREW_VERSION=\"\${KREW_VERSION:-[^}]*}\"/KREW_VERSION=\"\${KREW_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/kubernetes.sh"
                     ;;
                 Helm)
-                    command sed -i "s/^ARG HELM_VERSION=.*/ARG HELM_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
+                    sed_inplace "s/^ARG HELM_VERSION=.*/ARG HELM_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
                     # Also update the fallback default in kubernetes.sh
-                    command sed -i "s/HELM_VERSION=\"\${HELM_VERSION:-[^}]*}\"/HELM_VERSION=\"\${HELM_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/kubernetes.sh"
+                    sed_inplace "s/HELM_VERSION=\"\${HELM_VERSION:-[^}]*}\"/HELM_VERSION=\"\${HELM_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/kubernetes.sh"
                     ;;
                 Terragrunt)
-                    command sed -i "s/^ARG TERRAGRUNT_VERSION=.*/ARG TERRAGRUNT_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
+                    sed_inplace "s/^ARG TERRAGRUNT_VERSION=.*/ARG TERRAGRUNT_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
                     # Also update the fallback default in terraform.sh
-                    command sed -i "s/TERRAGRUNT_VERSION=\"\${TERRAGRUNT_VERSION:-[^}]*}\"/TERRAGRUNT_VERSION=\"\${TERRAGRUNT_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/terraform.sh"
+                    sed_inplace "s/TERRAGRUNT_VERSION=\"\${TERRAGRUNT_VERSION:-[^}]*}\"/TERRAGRUNT_VERSION=\"\${TERRAGRUNT_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/terraform.sh"
                     ;;
                 terraform-docs)
-                    command sed -i "s/^ARG TFDOCS_VERSION=.*/ARG TFDOCS_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
+                    sed_inplace "s/^ARG TFDOCS_VERSION=.*/ARG TFDOCS_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
                     # Also update the fallback default in terraform.sh
-                    command sed -i "s/TFDOCS_VERSION=\"\${TFDOCS_VERSION:-[^}]*}\"/TFDOCS_VERSION=\"\${TFDOCS_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/terraform.sh"
+                    sed_inplace "s/TFDOCS_VERSION=\"\${TFDOCS_VERSION:-[^}]*}\"/TFDOCS_VERSION=\"\${TFDOCS_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/terraform.sh"
                     ;;
                 tflint)
-                    command sed -i "s/^ARG TFLINT_VERSION=.*/ARG TFLINT_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
+                    sed_inplace "s/^ARG TFLINT_VERSION=.*/ARG TFLINT_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
                     # Also update the fallback default in terraform.sh
-                    command sed -i "s/TFLINT_VERSION=\"\${TFLINT_VERSION:-[^}]*}\"/TFLINT_VERSION=\"\${TFLINT_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/terraform.sh"
+                    sed_inplace "s/TFLINT_VERSION=\"\${TFLINT_VERSION:-[^}]*}\"/TFLINT_VERSION=\"\${TFLINT_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/terraform.sh"
                     ;;
                 pixi)
-                    command sed -i "s/^ARG PIXI_VERSION=.*/ARG PIXI_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
+                    sed_inplace "s/^ARG PIXI_VERSION=.*/ARG PIXI_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
                     # Also update the fallback default in mojo.sh
-                    command sed -i "s/PIXI_VERSION=\"\${PIXI_VERSION:-[^}]*}\"/PIXI_VERSION=\"\${PIXI_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/mojo.sh"
+                    sed_inplace "s/PIXI_VERSION=\"\${PIXI_VERSION:-[^}]*}\"/PIXI_VERSION=\"\${PIXI_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/mojo.sh"
                     ;;
                 *)
                     echo -e "${YELLOW}    Warning: Unknown Dockerfile tool: $tool${NC}"
@@ -142,12 +154,12 @@ update_version() {
             local script_path="$PROJECT_ROOT/lib/base/$file"
             case "$tool" in
                 zoxide)
-                    command sed -i "s/ZOXIDE_VERSION=\"\${ZOXIDE_VERSION:-[^}]*}\"/ZOXIDE_VERSION=\"\${ZOXIDE_VERSION:-$latest}\"/" "$script_path"
-                    command sed -i "s/^ZOXIDE_VERSION=\"[0-9][^\"]*\"/ZOXIDE_VERSION=\"\${ZOXIDE_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/ZOXIDE_VERSION=\"\${ZOXIDE_VERSION:-[^}]*}\"/ZOXIDE_VERSION=\"\${ZOXIDE_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/^ZOXIDE_VERSION=\"[0-9][^\"]*\"/ZOXIDE_VERSION=\"\${ZOXIDE_VERSION:-$latest}\"/" "$script_path"
                     ;;
                 cosign)
-                    command sed -i "s/COSIGN_VERSION=\"\${COSIGN_VERSION:-[^}]*}\"/COSIGN_VERSION=\"\${COSIGN_VERSION:-$latest}\"/" "$script_path"
-                    command sed -i "s/^COSIGN_VERSION=\"[0-9][^\"]*\"/COSIGN_VERSION=\"\${COSIGN_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/COSIGN_VERSION=\"\${COSIGN_VERSION:-[^}]*}\"/COSIGN_VERSION=\"\${COSIGN_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/^COSIGN_VERSION=\"[0-9][^\"]*\"/COSIGN_VERSION=\"\${COSIGN_VERSION:-$latest}\"/" "$script_path"
                     ;;
                 *)
                     echo -e "${YELLOW}    Warning: Unknown base setup tool: $tool${NC}"
@@ -160,125 +172,125 @@ update_version() {
             local script_path="$PROJECT_ROOT/lib/features/$file"
             case "$tool" in
                 lazygit)
-                    command sed -i "s/LAZYGIT_VERSION=\"\${LAZYGIT_VERSION:-[^}]*}\"/LAZYGIT_VERSION=\"\${LAZYGIT_VERSION:-$latest}\"/" "$script_path"
-                    command sed -i "s/^LAZYGIT_VERSION=\"[0-9][^\"]*\"/LAZYGIT_VERSION=\"\${LAZYGIT_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/LAZYGIT_VERSION=\"\${LAZYGIT_VERSION:-[^}]*}\"/LAZYGIT_VERSION=\"\${LAZYGIT_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/^LAZYGIT_VERSION=\"[0-9][^\"]*\"/LAZYGIT_VERSION=\"\${LAZYGIT_VERSION:-$latest}\"/" "$script_path"
                     ;;
                 direnv)
-                    command sed -i "s/DIRENV_VERSION=\"\${DIRENV_VERSION:-[^}]*}\"/DIRENV_VERSION=\"\${DIRENV_VERSION:-$latest}\"/" "$script_path"
-                    command sed -i "s/^DIRENV_VERSION=\"[0-9][^\"]*\"/DIRENV_VERSION=\"\${DIRENV_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/DIRENV_VERSION=\"\${DIRENV_VERSION:-[^}]*}\"/DIRENV_VERSION=\"\${DIRENV_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/^DIRENV_VERSION=\"[0-9][^\"]*\"/DIRENV_VERSION=\"\${DIRENV_VERSION:-$latest}\"/" "$script_path"
                     ;;
                 act)
-                    command sed -i "s/ACT_VERSION=\"\${ACT_VERSION:-[^}]*}\"/ACT_VERSION=\"\${ACT_VERSION:-$latest}\"/" "$script_path"
-                    command sed -i "s/^ACT_VERSION=\"[0-9][^\"]*\"/ACT_VERSION=\"\${ACT_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/ACT_VERSION=\"\${ACT_VERSION:-[^}]*}\"/ACT_VERSION=\"\${ACT_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/^ACT_VERSION=\"[0-9][^\"]*\"/ACT_VERSION=\"\${ACT_VERSION:-$latest}\"/" "$script_path"
                     ;;
                 delta)
-                    command sed -i "s/DELTA_VERSION=\"\${DELTA_VERSION:-[^}]*}\"/DELTA_VERSION=\"\${DELTA_VERSION:-$latest}\"/" "$script_path"
-                    command sed -i "s/^DELTA_VERSION=\"[0-9][^\"]*\"/DELTA_VERSION=\"\${DELTA_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/DELTA_VERSION=\"\${DELTA_VERSION:-[^}]*}\"/DELTA_VERSION=\"\${DELTA_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/^DELTA_VERSION=\"[0-9][^\"]*\"/DELTA_VERSION=\"\${DELTA_VERSION:-$latest}\"/" "$script_path"
                     ;;
                 glab)
-                    command sed -i "s/GLAB_VERSION=\"\${GLAB_VERSION:-[^}]*}\"/GLAB_VERSION=\"\${GLAB_VERSION:-$latest}\"/" "$script_path"
-                    command sed -i "s/^GLAB_VERSION=\"[0-9][^\"]*\"/GLAB_VERSION=\"\${GLAB_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/GLAB_VERSION=\"\${GLAB_VERSION:-[^}]*}\"/GLAB_VERSION=\"\${GLAB_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/^GLAB_VERSION=\"[0-9][^\"]*\"/GLAB_VERSION=\"\${GLAB_VERSION:-$latest}\"/" "$script_path"
                     ;;
                 mkcert)
-                    command sed -i "s/MKCERT_VERSION=\"\${MKCERT_VERSION:-[^}]*}\"/MKCERT_VERSION=\"\${MKCERT_VERSION:-$latest}\"/" "$script_path"
-                    command sed -i "s/^MKCERT_VERSION=\"[0-9][^\"]*\"/MKCERT_VERSION=\"\${MKCERT_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/MKCERT_VERSION=\"\${MKCERT_VERSION:-[^}]*}\"/MKCERT_VERSION=\"\${MKCERT_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/^MKCERT_VERSION=\"[0-9][^\"]*\"/MKCERT_VERSION=\"\${MKCERT_VERSION:-$latest}\"/" "$script_path"
                     ;;
                 dive)
-                    command sed -i "s/DIVE_VERSION=\"\${DIVE_VERSION:-[^}]*}\"/DIVE_VERSION=\"\${DIVE_VERSION:-$latest}\"/" "$script_path"
-                    command sed -i "s/^DIVE_VERSION=\"[0-9][^\"]*\"/DIVE_VERSION=\"\${DIVE_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/DIVE_VERSION=\"\${DIVE_VERSION:-[^}]*}\"/DIVE_VERSION=\"\${DIVE_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/^DIVE_VERSION=\"[0-9][^\"]*\"/DIVE_VERSION=\"\${DIVE_VERSION:-$latest}\"/" "$script_path"
                     ;;
                 lazydocker)
-                    command sed -i "s/LAZYDOCKER_VERSION=\"\${LAZYDOCKER_VERSION:-[^}]*}\"/LAZYDOCKER_VERSION=\"\${LAZYDOCKER_VERSION:-$latest}\"/" "$script_path"
-                    command sed -i "s/^LAZYDOCKER_VERSION=\"[0-9][^\"]*\"/LAZYDOCKER_VERSION=\"\${LAZYDOCKER_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/LAZYDOCKER_VERSION=\"\${LAZYDOCKER_VERSION:-[^}]*}\"/LAZYDOCKER_VERSION=\"\${LAZYDOCKER_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/^LAZYDOCKER_VERSION=\"[0-9][^\"]*\"/LAZYDOCKER_VERSION=\"\${LAZYDOCKER_VERSION:-$latest}\"/" "$script_path"
                     ;;
                 spring-boot-cli)
-                    command sed -i "s/SPRING_VERSION=\"\${SPRING_VERSION:-[^}]*}\"/SPRING_VERSION=\"\${SPRING_VERSION:-$latest}\"/" "$script_path"
-                    command sed -i "s/^SPRING_VERSION=\"[0-9][^\"]*\"/SPRING_VERSION=\"\${SPRING_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/SPRING_VERSION=\"\${SPRING_VERSION:-[^}]*}\"/SPRING_VERSION=\"\${SPRING_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/^SPRING_VERSION=\"[0-9][^\"]*\"/SPRING_VERSION=\"\${SPRING_VERSION:-$latest}\"/" "$script_path"
                     ;;
                 jbang)
-                    command sed -i "s/JBANG_VERSION=\"\${JBANG_VERSION:-[^}]*}\"/JBANG_VERSION=\"\${JBANG_VERSION:-$latest}\"/" "$script_path"
-                    command sed -i "s/^JBANG_VERSION=\"[0-9][^\"]*\"/JBANG_VERSION=\"\${JBANG_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/JBANG_VERSION=\"\${JBANG_VERSION:-[^}]*}\"/JBANG_VERSION=\"\${JBANG_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/^JBANG_VERSION=\"[0-9][^\"]*\"/JBANG_VERSION=\"\${JBANG_VERSION:-$latest}\"/" "$script_path"
                     ;;
                 mvnd)
-                    command sed -i "s/MVND_VERSION=\"\${MVND_VERSION:-[^}]*}\"/MVND_VERSION=\"\${MVND_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/MVND_VERSION=\"\${MVND_VERSION:-[^}]*}\"/MVND_VERSION=\"\${MVND_VERSION:-$latest}\"/" "$script_path"
                     # mvnd version may be indented (inside if block), so don't anchor to ^
-                    command sed -i "s/MVND_VERSION=\"[0-9][^\"]*\"/MVND_VERSION=\"$latest\"/" "$script_path"
+                    sed_inplace "s/MVND_VERSION=\"[0-9][^\"]*\"/MVND_VERSION=\"$latest\"/" "$script_path"
                     ;;
                 google-java-format)
-                    command sed -i "s/GJF_VERSION=\"\${GJF_VERSION:-[^}]*}\"/GJF_VERSION=\"\${GJF_VERSION:-$latest}\"/" "$script_path"
-                    command sed -i "s/^GJF_VERSION=\"[0-9][^\"]*\"/GJF_VERSION=\"\${GJF_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/GJF_VERSION=\"\${GJF_VERSION:-[^}]*}\"/GJF_VERSION=\"\${GJF_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/^GJF_VERSION=\"[0-9][^\"]*\"/GJF_VERSION=\"\${GJF_VERSION:-$latest}\"/" "$script_path"
                     ;;
                 jmh)
-                    command sed -i "s/JMH_VERSION=\"\${JMH_VERSION:-[^}]*}\"/JMH_VERSION=\"\${JMH_VERSION:-$latest}\"/" "$script_path"
-                    command sed -i "s/^JMH_VERSION=\"[0-9][^\"]*\"/JMH_VERSION=\"\${JMH_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/JMH_VERSION=\"\${JMH_VERSION:-[^}]*}\"/JMH_VERSION=\"\${JMH_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/^JMH_VERSION=\"[0-9][^\"]*\"/JMH_VERSION=\"\${JMH_VERSION:-$latest}\"/" "$script_path"
                     ;;
                 duf)
-                    command sed -i "s/DUF_VERSION=\"\${DUF_VERSION:-[^}]*}\"/DUF_VERSION=\"\${DUF_VERSION:-$latest}\"/" "$script_path"
-                    command sed -i "s/^DUF_VERSION=\"[0-9][^\"]*\"/DUF_VERSION=\"\${DUF_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/DUF_VERSION=\"\${DUF_VERSION:-[^}]*}\"/DUF_VERSION=\"\${DUF_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/^DUF_VERSION=\"[0-9][^\"]*\"/DUF_VERSION=\"\${DUF_VERSION:-$latest}\"/" "$script_path"
                     ;;
                 entr)
-                    command sed -i "s/ENTR_VERSION=\"\${ENTR_VERSION:-[^}]*}\"/ENTR_VERSION=\"\${ENTR_VERSION:-$latest}\"/" "$script_path"
-                    command sed -i "s/^ENTR_VERSION=\"[0-9][^\"]*\"/ENTR_VERSION=\"\${ENTR_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/ENTR_VERSION=\"\${ENTR_VERSION:-[^}]*}\"/ENTR_VERSION=\"\${ENTR_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/^ENTR_VERSION=\"[0-9][^\"]*\"/ENTR_VERSION=\"\${ENTR_VERSION:-$latest}\"/" "$script_path"
                     ;;
                 biome)
-                    command sed -i "s/BIOME_VERSION=\"\${BIOME_VERSION:-[^}]*}\"/BIOME_VERSION=\"\${BIOME_VERSION:-$latest}\"/" "$script_path"
-                    command sed -i "s/^BIOME_VERSION=\"[0-9][^\"]*\"/BIOME_VERSION=\"\${BIOME_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/BIOME_VERSION=\"\${BIOME_VERSION:-[^}]*}\"/BIOME_VERSION=\"\${BIOME_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/^BIOME_VERSION=\"[0-9][^\"]*\"/BIOME_VERSION=\"\${BIOME_VERSION:-$latest}\"/" "$script_path"
                     # Keep biome.json schema version in sync
                     if [ -f "$PROJECT_ROOT/biome.json" ]; then
-                        command sed -i "s|biomejs.dev/schemas/[0-9][0-9.]*/schema.json|biomejs.dev/schemas/$latest/schema.json|" "$PROJECT_ROOT/biome.json"
+                        sed_inplace "s|biomejs.dev/schemas/[0-9][0-9.]*/schema.json|biomejs.dev/schemas/$latest/schema.json|" "$PROJECT_ROOT/biome.json"
                     fi
                     ;;
                 taplo)
-                    command sed -i "s/TAPLO_VERSION=\"\${TAPLO_VERSION:-[^}]*}\"/TAPLO_VERSION=\"\${TAPLO_VERSION:-$latest}\"/" "$script_path"
-                    command sed -i "s/^TAPLO_VERSION=\"[0-9][^\"]*\"/TAPLO_VERSION=\"\${TAPLO_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/TAPLO_VERSION=\"\${TAPLO_VERSION:-[^}]*}\"/TAPLO_VERSION=\"\${TAPLO_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/^TAPLO_VERSION=\"[0-9][^\"]*\"/TAPLO_VERSION=\"\${TAPLO_VERSION:-$latest}\"/" "$script_path"
                     ;;
                 lefthook)
-                    command sed -i "s/LEFTHOOK_VERSION=\"\${LEFTHOOK_VERSION:-[^}]*}\"/LEFTHOOK_VERSION=\"\${LEFTHOOK_VERSION:-$latest}\"/" "$script_path"
-                    command sed -i "s/^LEFTHOOK_VERSION=\"[0-9][^\"]*\"/LEFTHOOK_VERSION=\"\${LEFTHOOK_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/LEFTHOOK_VERSION=\"\${LEFTHOOK_VERSION:-[^}]*}\"/LEFTHOOK_VERSION=\"\${LEFTHOOK_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/^LEFTHOOK_VERSION=\"[0-9][^\"]*\"/LEFTHOOK_VERSION=\"\${LEFTHOOK_VERSION:-$latest}\"/" "$script_path"
                     ;;
                 gitleaks)
-                    command sed -i "s/GITLEAKS_VERSION=\"\${GITLEAKS_VERSION:-[^}]*}\"/GITLEAKS_VERSION=\"\${GITLEAKS_VERSION:-$latest}\"/" "$script_path"
-                    command sed -i "s/^GITLEAKS_VERSION=\"[0-9][^\"]*\"/GITLEAKS_VERSION=\"\${GITLEAKS_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/GITLEAKS_VERSION=\"\${GITLEAKS_VERSION:-[^}]*}\"/GITLEAKS_VERSION=\"\${GITLEAKS_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/^GITLEAKS_VERSION=\"[0-9][^\"]*\"/GITLEAKS_VERSION=\"\${GITLEAKS_VERSION:-$latest}\"/" "$script_path"
                     ;;
                 mado)
-                    command sed -i "s/MADO_VERSION=\"\${MADO_VERSION:-[^}]*}\"/MADO_VERSION=\"\${MADO_VERSION:-$latest}\"/" "$script_path"
-                    command sed -i "s/^MADO_VERSION=\"[0-9][^\"]*\"/MADO_VERSION=\"\${MADO_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/MADO_VERSION=\"\${MADO_VERSION:-[^}]*}\"/MADO_VERSION=\"\${MADO_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/^MADO_VERSION=\"[0-9][^\"]*\"/MADO_VERSION=\"\${MADO_VERSION:-$latest}\"/" "$script_path"
                     ;;
                 dprint)
-                    command sed -i "s/DPRINT_VERSION=\"\${DPRINT_VERSION:-[^}]*}\"/DPRINT_VERSION=\"\${DPRINT_VERSION:-$latest}\"/" "$script_path"
-                    command sed -i "s/^DPRINT_VERSION=\"[0-9][^\"]*\"/DPRINT_VERSION=\"\${DPRINT_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/DPRINT_VERSION=\"\${DPRINT_VERSION:-[^}]*}\"/DPRINT_VERSION=\"\${DPRINT_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/^DPRINT_VERSION=\"[0-9][^\"]*\"/DPRINT_VERSION=\"\${DPRINT_VERSION:-$latest}\"/" "$script_path"
                     ;;
                 osv-scanner)
-                    command sed -i "s/OSV_SCANNER_VERSION=\"\${OSV_SCANNER_VERSION:-[^}]*}\"/OSV_SCANNER_VERSION=\"\${OSV_SCANNER_VERSION:-$latest}\"/" "$script_path"
-                    command sed -i "s/^OSV_SCANNER_VERSION=\"[0-9][^\"]*\"/OSV_SCANNER_VERSION=\"\${OSV_SCANNER_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/OSV_SCANNER_VERSION=\"\${OSV_SCANNER_VERSION:-[^}]*}\"/OSV_SCANNER_VERSION=\"\${OSV_SCANNER_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/^OSV_SCANNER_VERSION=\"[0-9][^\"]*\"/OSV_SCANNER_VERSION=\"\${OSV_SCANNER_VERSION:-$latest}\"/" "$script_path"
                     ;;
                 yq)
-                    command sed -i "s/YQ_VERSION=\"\${YQ_VERSION:-[^}]*}\"/YQ_VERSION=\"\${YQ_VERSION:-$latest}\"/" "$script_path"
-                    command sed -i "s/^YQ_VERSION=\"[0-9][^\"]*\"/YQ_VERSION=\"\${YQ_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/YQ_VERSION=\"\${YQ_VERSION:-[^}]*}\"/YQ_VERSION=\"\${YQ_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/^YQ_VERSION=\"[0-9][^\"]*\"/YQ_VERSION=\"\${YQ_VERSION:-$latest}\"/" "$script_path"
                     ;;
                 Poetry)
-                    command sed -i "s/POETRY_VERSION=\"\${POETRY_VERSION:-[^}]*}\"/POETRY_VERSION=\"\${POETRY_VERSION:-$latest}\"/" "$script_path"
-                    command sed -i "s/^POETRY_VERSION=\"[0-9][^\"]*\"/POETRY_VERSION=\"\${POETRY_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/POETRY_VERSION=\"\${POETRY_VERSION:-[^}]*}\"/POETRY_VERSION=\"\${POETRY_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/^POETRY_VERSION=\"[0-9][^\"]*\"/POETRY_VERSION=\"\${POETRY_VERSION:-$latest}\"/" "$script_path"
                     ;;
                 uv)
-                    command sed -i "s/UV_VERSION=\"\${UV_VERSION:-[^}]*}\"/UV_VERSION=\"\${UV_VERSION:-$latest}\"/" "$script_path"
-                    command sed -i "s/^UV_VERSION=\"[0-9][^\"]*\"/UV_VERSION=\"\${UV_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/UV_VERSION=\"\${UV_VERSION:-[^}]*}\"/UV_VERSION=\"\${UV_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/^UV_VERSION=\"[0-9][^\"]*\"/UV_VERSION=\"\${UV_VERSION:-$latest}\"/" "$script_path"
                     ;;
                 ktlint)
-                    command sed -i "s/KTLINT_VERSION=\"\${KTLINT_VERSION:-[^}]*}\"/KTLINT_VERSION=\"\${KTLINT_VERSION:-$latest}\"/" "$script_path"
-                    command sed -i "s/^KTLINT_VERSION=\"[0-9][^\"]*\"/KTLINT_VERSION=\"\${KTLINT_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/KTLINT_VERSION=\"\${KTLINT_VERSION:-[^}]*}\"/KTLINT_VERSION=\"\${KTLINT_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/^KTLINT_VERSION=\"[0-9][^\"]*\"/KTLINT_VERSION=\"\${KTLINT_VERSION:-$latest}\"/" "$script_path"
                     ;;
                 detekt)
-                    command sed -i "s/DETEKT_VERSION=\"\${DETEKT_VERSION:-[^}]*}\"/DETEKT_VERSION=\"\${DETEKT_VERSION:-$latest}\"/" "$script_path"
-                    command sed -i "s/^DETEKT_VERSION=\"[0-9][^\"]*\"/DETEKT_VERSION=\"\${DETEKT_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/DETEKT_VERSION=\"\${DETEKT_VERSION:-[^}]*}\"/DETEKT_VERSION=\"\${DETEKT_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/^DETEKT_VERSION=\"[0-9][^\"]*\"/DETEKT_VERSION=\"\${DETEKT_VERSION:-$latest}\"/" "$script_path"
                     ;;
                 kotlin-language-server)
-                    command sed -i "s/KLS_VERSION=\"\${KLS_VERSION:-[^}]*}\"/KLS_VERSION=\"\${KLS_VERSION:-$latest}\"/" "$script_path"
-                    command sed -i "s/^KLS_VERSION=\"[0-9][^\"]*\"/KLS_VERSION=\"\${KLS_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/KLS_VERSION=\"\${KLS_VERSION:-[^}]*}\"/KLS_VERSION=\"\${KLS_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/^KLS_VERSION=\"[0-9][^\"]*\"/KLS_VERSION=\"\${KLS_VERSION:-$latest}\"/" "$script_path"
                     ;;
                 jdtls)
-                    command sed -i "s/JDTLS_VERSION=\"\${JDTLS_VERSION:-[^}]*}\"/JDTLS_VERSION=\"\${JDTLS_VERSION:-$latest}\"/" "$script_path"
-                    command sed -i "s/^JDTLS_VERSION=\"[0-9][^\"]*\"/JDTLS_VERSION=\"\${JDTLS_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/JDTLS_VERSION=\"\${JDTLS_VERSION:-[^}]*}\"/JDTLS_VERSION=\"\${JDTLS_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/^JDTLS_VERSION=\"[0-9][^\"]*\"/JDTLS_VERSION=\"\${JDTLS_VERSION:-$latest}\"/" "$script_path"
                     ;;
                 Trivy)
                     ;; # Trivy is installed via APT (no version to update in script)
@@ -292,7 +304,7 @@ update_version() {
             local workflow_path="$PROJECT_ROOT/.github/workflows/$file"
             case "$tool" in
                 trivy-action)
-                    command sed -i "s|uses: aquasecurity/trivy-action@[0-9.]*|uses: aquasecurity/trivy-action@$latest|g" "$workflow_path"
+                    sed_inplace "s|uses: aquasecurity/trivy-action@[0-9.]*|uses: aquasecurity/trivy-action@$latest|g" "$workflow_path"
                     ;;
                 *)
                     echo -e "${YELLOW}    Warning: Unknown ci.yml tool: $tool${NC}"
