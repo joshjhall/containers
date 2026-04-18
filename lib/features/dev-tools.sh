@@ -24,7 +24,8 @@
 #   - TOML tools: taplo (TOML formatter and linter)
 #   - AI tools: agnix (AI agent config linter, requires Node.js),
 #               agentsys (AI plugin marketplace, requires Node.js)
-#   - Spell checking: cspell (requires Node.js)
+#   - Spell checking: typos (Rust static binary, code-aware),
+#                     cspell (Node.js-based, richer dictionary; optional)
 #
 # Note: Claude Code CLI, plugins, and MCP servers are now installed by
 #       claude-code-setup.sh which runs after this script.
@@ -81,6 +82,7 @@ SD_VERSION="${SD_VERSION:-1.1.0}"
 DUA_VERSION="${DUA_VERSION:-2.34.0}"
 HYPERFINE_VERSION="${HYPERFINE_VERSION:-1.20.0}"
 VALE_VERSION="${VALE_VERSION:-3.14.1}"
+TYPOS_VERSION="${TYPOS_VERSION:-1.45.1}"
 
 # ============================================================================
 # Repository Configuration
@@ -286,10 +288,10 @@ export DIRENV_ALLOW_DIR="${DEV_TOOLS_CACHE}/direnv-allow"
 # Log feature summary
 log_feature_summary \
     --feature "Development Tools" \
-    --tools "gh,lazygit,delta,act,git-cliff,glab,biome,taplo,uv,duf,entr,fzf,direnv,mkcert,jq,ripgrep,fd,bat,eza,htop,dua,lefthook,gitleaks,osv-scanner,mado,dprint,agnix,agentsys,cspell" \
+    --tools "gh,lazygit,delta,act,git-cliff,glab,biome,taplo,uv,duf,entr,fzf,direnv,mkcert,jq,ripgrep,fd,bat,eza,htop,dua,lefthook,gitleaks,osv-scanner,mado,dprint,typos,agnix,agentsys,cspell" \
     --paths "${DEV_TOOLS_CACHE},/opt/fzf,${CAROOT}" \
     --env "DEV_TOOLS_CACHE,CAROOT,DIRENV_ALLOW_DIR,ENABLE_LSP_TOOL" \
-    --commands "gh,lazygit,delta,act,git-cliff,glab,biome,uv,uvx,duf,entr,fzf,direnv,mkcert,jq,rg,fd,bat,eza,htop,dua,lefthook,gitleaks,osv-scanner,mado,dprint,agnix,agentsys,cspell" \
+    --commands "gh,lazygit,delta,act,git-cliff,glab,biome,uv,uvx,duf,entr,fzf,direnv,mkcert,jq,rg,fd,bat,eza,htop,dua,lefthook,gitleaks,osv-scanner,mado,dprint,typos,agnix,agentsys,cspell" \
     --next-steps "Run 'test-dev-tools' to verify installation. Many modern CLI replacements are aliased (ls=eza, cat=bat, grep=rg, find=fd). Claude Code is installed separately by claude-code-setup.sh."
 
 # End logging

@@ -337,6 +337,14 @@ install_github_binary_tools() {
         "calculate" "extract:vale" \
         || return 1
 
+    # typos (Rust code-aware spell checker — musl builds for both archs, no Node dependency)
+    install_github_release "typos" "$TYPOS_VERSION" \
+        "https://github.com/crate-ci/typos/releases/download/v${TYPOS_VERSION}" \
+        "typos-v${TYPOS_VERSION}-x86_64-unknown-linux-musl.tar.gz" \
+        "typos-v${TYPOS_VERSION}-aarch64-unknown-linux-musl.tar.gz" \
+        "calculate" "extract:typos" \
+        || return 1
+
     # agnix (AI config linter) — requires Node.js/npm
     if command -v npm &> /dev/null; then
         log_message "Installing agnix (AI config linter)..."

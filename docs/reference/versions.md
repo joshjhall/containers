@@ -44,6 +44,7 @@ These are defined as build arguments in the Dockerfile:
 - `GITCLIFF_VERSION="2.8.0"`
 - `BIOME_VERSION="2.4.4"`
 - `TAPLO_VERSION="0.10.0"`
+- `TYPOS_VERSION="1.45.1"`
 
 ### lib/features/docker.sh
 

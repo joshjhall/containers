@@ -759,5 +759,21 @@ test_vale_installation() {
 run_test test_vale_version_variable "vale version variable defined in dev-tools.sh"
 run_test test_vale_installation "vale installation present in binary tools"
 
+# Test: typos version variable defined in dev-tools.sh
+test_typos_version_variable() {
+    local source_file="$PROJECT_ROOT/lib/features/dev-tools.sh"
+    assert_file_contains "$source_file" "TYPOS_VERSION=" "dev-tools.sh defines TYPOS_VERSION"
+}
+
+# Test: typos installation present in binary tools script
+test_typos_installation() {
+    local source_file="$PROJECT_ROOT/lib/features/lib/dev-tools/install-binary-tools.sh"
+    assert_file_contains "$source_file" "crate-ci/typos" "install-binary-tools.sh installs typos from crate-ci/typos"
+    assert_file_contains "$source_file" "typos-v\${TYPOS_VERSION}-x86_64-unknown-linux-musl.tar.gz" "install-binary-tools.sh uses correct amd64 asset name"
+}
+
+run_test test_typos_version_variable "typos version variable defined in dev-tools.sh"
+run_test test_typos_installation "typos installation present in binary tools"
+
 # Generate test report
 generate_report
