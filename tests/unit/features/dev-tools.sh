@@ -86,6 +86,7 @@ test_binary_tool_installations() {
         "dprint"
         "yq"
         "sd"
+        "shfmt"
     )
 
     # Simulate tool installation
@@ -774,6 +775,22 @@ test_typos_installation() {
 
 run_test test_typos_version_variable "typos version variable defined in dev-tools.sh"
 run_test test_typos_installation "typos installation present in binary tools"
+
+# Test: shfmt version variable defined in dev-tools.sh
+test_shfmt_version_variable() {
+    local source_file="$PROJECT_ROOT/lib/features/dev-tools.sh"
+    assert_file_contains "$source_file" "SHFMT_VERSION=" "dev-tools.sh defines SHFMT_VERSION"
+}
+
+# Test: shfmt installation present in binary tools script
+test_shfmt_installation() {
+    local source_file="$PROJECT_ROOT/lib/features/lib/dev-tools/install-binary-tools.sh"
+    assert_file_contains "$source_file" "mvdan/sh" "install-binary-tools.sh installs shfmt from mvdan/sh"
+    assert_file_contains "$source_file" "shfmt_v\${SHFMT_VERSION}_linux_amd64" "install-binary-tools.sh uses correct amd64 asset name"
+}
+
+run_test test_shfmt_version_variable "shfmt version variable defined in dev-tools.sh"
+run_test test_shfmt_installation "shfmt installation present in binary tools"
 
 # Generate test report
 generate_report

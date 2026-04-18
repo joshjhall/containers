@@ -272,6 +272,7 @@ extract_all_versions() {
     _add_feature_version HYPERFINE_VERSION "hyperfine" "dev-tools.sh"
     _add_feature_version VALE_VERSION "vale" "dev-tools.sh"
     _add_feature_version TYPOS_VERSION "typos" "dev-tools.sh"
+    _add_feature_version SHFMT_VERSION "shfmt" "dev-tools.sh"
 
     # Docker tools from docker.sh
     _add_feature_version DIVE_VERSION "dive" "docker.sh"
@@ -398,6 +399,7 @@ main() {
             hyperfine) check_github_release "hyperfine" "sharkdp/hyperfine" ;;
             vale) check_github_release "vale" "vale-cli/vale" ;;
             typos) check_github_release "typos" "crate-ci/typos" ;;
+            shfmt) check_github_release "shfmt" "mvdan/sh" ;;
             cargo-release) check_crates_io "cargo-release" ;;
             zoxide) check_github_release "zoxide" "ajeetdsouza/zoxide" ;;
             cosign) check_github_release "cosign" "sigstore/cosign" ;;
