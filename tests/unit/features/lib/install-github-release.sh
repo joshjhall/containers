@@ -580,10 +580,18 @@ $(_mock_preamble)
 dpkg() { echo 'amd64'; }
 export -f dpkg
 
-# Mock gunzip to simulate decompression (remove the file, create uncompressed)
+# Mock gunzip matching real semantics: requires a .gz suffix, produces
+# the .gz-stripped filename. Without the suffix it errors out (matching
+# real gunzip) — this catches the regression where the script forgets
+# to rename the download before decompressing.
 gunzip() {
-    rm -f \"\$1\"
-    echo 'decompressed-content' > ./mytool-decompressed
+    local input=\"\$1\"
+    if [[ \"\$input\" != *.gz ]]; then
+        echo \"gzip: \$input: unknown suffix -- ignored\" >&2
+        return 2
+    fi
+    rm -f \"\$input\"
+    echo 'decompressed-content' > \"\${input%.gz}\"
 }
 export -f gunzip
 
