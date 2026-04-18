@@ -12,7 +12,7 @@ addressing compliance requirements for authorized software control.
 | NIST 800-53 CM-7(5) | Authorized software           | Compliant |
 | CIS Controls 2.5    | Software inventory            | Compliant |
 
-______________________________________________________________________
+---
 
 ## Approved Software Categories
 
@@ -32,7 +32,7 @@ All language runtimes are version-pinned and signature-verified.
 
 **Version Policy**: Use latest stable/LTS version. Update weekly via auto-patch.
 
-______________________________________________________________________
+---
 
 ### 2. Base System Packages
 
@@ -53,7 +53,7 @@ Installed from Debian official repositories.
 
 **Version Policy**: Latest from Debian stable repository.
 
-______________________________________________________________________
+---
 
 ### 3. Build Dependencies
 
@@ -74,7 +74,7 @@ Required for compiling language extensions.
 
 **Version Policy**: Latest from Debian stable. Removed in production builds.
 
-______________________________________________________________________
+---
 
 ### 4. Security Tools
 
@@ -85,7 +85,7 @@ ______________________________________________________________________
 | gitleaks    | (CI only)       | Secret detection         | N/A             |
 | osv-scanner | 2.x             | CVE scanning (lockfiles) | Checksum (TOFU) |
 
-______________________________________________________________________
+---
 
 ### 5. Cloud & Infrastructure CLIs
 
@@ -98,7 +98,7 @@ ______________________________________________________________________
 | gcloud    | Latest          | Google Cloud  | Checksum     |
 | az        | Latest          | Microsoft     | Checksum     |
 
-______________________________________________________________________
+---
 
 ### 6. Development Tools
 
@@ -114,7 +114,7 @@ Version-pinned in feature scripts.
 
 See [docs/reference/versions.md](../reference/versions.md) for complete list.
 
-______________________________________________________________________
+---
 
 ## Approval Process
 
@@ -153,7 +153,7 @@ ______________________________________________________________________
 1. Remove from feature scripts
 1. Update allowlist
 
-______________________________________________________________________
+---
 
 ## Version Control
 
@@ -189,7 +189,7 @@ The auto-patch workflow (`bin/check-versions.sh`) checks for updates:
 ./bin/update-versions.sh versions.json
 ```
 
-______________________________________________________________________
+---
 
 ## Verification Methods
 
@@ -219,7 +219,7 @@ cosign verify-blob \
 echo "<expected_hash>  ruby-<version>.tar.gz" | sha256sum -c -
 ```
 
-______________________________________________________________________
+---
 
 ## Audit Evidence
 
@@ -264,7 +264,7 @@ echo "=== SBOM Available ==="
 ls -la sbom-*.json 2>/dev/null || echo "Run CI to generate SBOM"
 ```
 
-______________________________________________________________________
+---
 
 ## Non-Allowed Software
 
@@ -280,7 +280,7 @@ The following are explicitly **NOT allowed**:
 
 Exceptions require documented business justification and security review.
 
-______________________________________________________________________
+---
 
 ## Change Log
 
@@ -291,7 +291,7 @@ Track changes to the allowlist:
 | 2025-11-01 | Initial allowlist creation  | @joshjhall |
 | 2025-11-15 | Added Sigstore verification | @joshjhall |
 
-______________________________________________________________________
+---
 
 ## Related Documentation
 

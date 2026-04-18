@@ -3,7 +3,7 @@
 Reference companion for `SKILL.md`. Load when creating or updating issues.
 Each template uses H2 headers that agents can reliably parse.
 
-______________________________________________________________________
+---
 
 ## Title Conventions
 
@@ -11,11 +11,13 @@ Titles should be concise, specific, and action-oriented:
 
 ```markdown
 # Good — specific, actionable
+
 Set core.sshCommand globally so VS Code git GUI works with provisioned SSH keys
 Add pagination to /api/users endpoint
 Fix race condition in session token refresh
 
 # Bad — vague, no action
+
 SSH key issue
 API improvement
 Fix bug
@@ -23,7 +25,7 @@ Fix bug
 
 Keep under 70 characters. Use the description for details.
 
-______________________________________________________________________
+---
 
 ## Base Template
 
@@ -65,7 +67,7 @@ without further clarification.}
 Link related issues with #N format.}
 ```
 
-______________________________________________________________________
+---
 
 ## Type-Specific Sections
 
@@ -105,7 +107,7 @@ As a {role}, I want {capability} so that {benefit}.
 {What the code should look like after the refactor}
 ```
 
-______________________________________________________________________
+---
 
 ## Scope Indicators
 
@@ -122,7 +124,7 @@ When an issue lists 9+ files or 4+ directories, add a scope warning:
 > Consider splitting into smaller issues if independent sub-tasks exist.
 ```
 
-______________________________________________________________________
+---
 
 ## Evaluation-Sourced Template
 
@@ -149,7 +151,7 @@ Use when: the issue directly implements a recommendation from an evaluation
 or benchmarking exercise. The Evaluation Source section creates traceability
 from issue back to the analysis that motivated it.
 
-______________________________________________________________________
+---
 
 ## Foundational Dependency Template
 
@@ -177,7 +179,7 @@ Use when: an issue's completion is a prerequisite for 2+ other issues.
 The Blocked Issues section makes the dependency graph explicit so agents
 can prioritize correctly.
 
-______________________________________________________________________
+---
 
 ## Agent Parsing Notes
 

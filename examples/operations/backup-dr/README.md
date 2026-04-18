@@ -219,7 +219,7 @@ hour **Compliance**: HIPAA 164.308(a)(7), SOC 2 A1.2
 - [ ] Conduct lessons learned meeting
 - [ ] Update runbook if needed
 
-______________________________________________________________________
+---
 
 ### DR-002: Namespace Data Loss
 
@@ -269,7 +269,7 @@ ______________________________________________________________________
    kubectl logs -n NAMESPACE -l app=YOUR_APP --tail=100
    ```
 
-______________________________________________________________________
+---
 
 ### DR-003: Database Corruption
 
@@ -349,7 +349,7 @@ ______________________________________________________________________
    kubectl scale deployment APP_NAME -n NAMESPACE --replicas=3
    ```
 
-______________________________________________________________________
+---
 
 ### DR-004: HIPAA PHI Breach Recovery
 
@@ -427,7 +427,7 @@ HIPAA 164.308(a)(6), 164.404
    - Recovery actions taken
    - Preventive measures implemented
 
-______________________________________________________________________
+---
 
 ## Backup Validation Schedule
 

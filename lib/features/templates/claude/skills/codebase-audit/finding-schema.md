@@ -3,7 +3,7 @@
 Reference companion for `SKILL.md`. All scanner agents must return findings in
 this exact JSON structure inside a \`\`\`json markdown fence.
 
-______________________________________________________________________
+---
 
 ## Complete Schema
 
@@ -41,7 +41,7 @@ ______________________________________________________________________
 }
 ```
 
-______________________________________________________________________
+---
 
 ## Field Reference
 
@@ -82,7 +82,7 @@ ______________________________________________________________________
 | `pre_scan`      | boolean  | no       | `true` if initially detected by deterministic pre-scan              |
 | `skill`         | string   | no       | Name of the check-\* skill that produced this finding               |
 
-______________________________________________________________________
+---
 
 ## Certainty Grading
 
@@ -156,7 +156,7 @@ object at the top level (sibling to `findings`):
 }
 ```
 
-______________________________________________________________________
+---
 
 ## Severity Rubric
 
@@ -176,7 +176,7 @@ ______________________________________________________________________
 | `medium`  | Day of work, multiple files      |
 | `large`   | Multi-day, cross-cutting changes |
 
-______________________________________________________________________
+---
 
 ## Scanner Categories
 
@@ -224,7 +224,7 @@ They replace and expand on the `docs` scanner categories above.
 `skill-quality`, `agent-quality`, `claude-md-drift`, `mcp-misconfiguration`,
 `hook-safety`, `config-inconsistency`, `ai-file-bloat`, `doc-file-bloat`
 
-______________________________________________________________________
+---
 
 ## Validation Rules
 
@@ -240,7 +240,7 @@ Scanners must ensure:
 - JSON is valid and parseable
 - Output is wrapped in a \`\`\`json markdown fence
 
-______________________________________________________________________
+---
 
 ## Inline Acknowledgment Comments
 
@@ -341,7 +341,7 @@ Re-raised findings (baseline exceeded or stale) appear in `findings` with
 `acknowledged: true`. Fully suppressed findings appear only in
 `acknowledged_findings`.
 
-______________________________________________________________________
+---
 
 ## Batch Sub-Agent Output
 

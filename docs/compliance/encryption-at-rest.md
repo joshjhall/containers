@@ -30,7 +30,7 @@ but the actual encryption must be configured in your deployment environment.
 1. **Verify encryption is enabled** before storing sensitive data
 1. **Document your encryption implementation** for audit purposes
 
-______________________________________________________________________
+---
 
 ## Kubernetes Encrypted Storage
 
@@ -117,7 +117,7 @@ spec:
             claimName: encrypted-data
 ```
 
-______________________________________________________________________
+---
 
 ## Docker Volume Encryption
 
@@ -168,7 +168,7 @@ volumes:
       device: ':/encrypted/share'
 ```
 
-______________________________________________________________________
+---
 
 ## Cloud Provider Integration
 
@@ -244,7 +244,7 @@ az storage account create \
   --encryption-key-name mykey
 ```
 
-______________________________________________________________________
+---
 
 ## Key Management Best Practices
 
@@ -301,7 +301,7 @@ spec:
 - [ ] Key backup and recovery procedures documented
 - [ ] Key deletion policies defined
 
-______________________________________________________________________
+---
 
 ## Database Encryption
 
@@ -366,7 +366,7 @@ encrypted_ssn = field.encrypt("123-45-6789")
 # Store encrypted_ssn in database
 ```
 
-______________________________________________________________________
+---
 
 ## Verification Procedures
 
@@ -411,7 +411,7 @@ kubectl get pv -o custom-columns='NAME:.metadata.name,STORAGECLASS:.spec.storage
 - [ ] Encryption key management audit logs reviewed
 - [ ] Key rotation verified
 
-______________________________________________________________________
+---
 
 ## Compliance Documentation
 
@@ -471,7 +471,7 @@ EOF
 chmod +x encryption-audit.sh
 ```
 
-______________________________________________________________________
+---
 
 ## Implementation Checklist
 
@@ -497,7 +497,7 @@ ______________________________________________________________________
 - [ ] Audit log review (quarterly)
 - [ ] Update documentation for changes
 
-______________________________________________________________________
+---
 
 ## Related Documentation
 

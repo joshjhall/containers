@@ -12,11 +12,11 @@ Overall Coverage: 8/10 controls fully addressed
 | ---- | ----------- | ----------------------------------------- |
 | D01  | ✅ Complete | Non-root user by default                  |
 | D02  | ✅ Complete | Weekly auto-patch workflow                |
-| D03  | ⚠️ Examples | Network policy examples provided          |
+| D03  | ⚠️ Examples  | Network policy examples provided          |
 | D04  | ✅ Complete | Security-hardened defaults                |
-| D05  | ⚠️ Partial  | Documentation for AppArmor/SELinux needed |
+| D05  | ⚠️ Partial   | Documentation for AppArmor/SELinux needed |
 | D06  | ✅ Complete | Gitleaks scanning, no embedded secrets    |
-| D07  | ⚠️ Examples | Resource limit examples provided          |
+| D07  | ⚠️ Examples  | Resource limit examples provided          |
 | D08  | ✅ Complete | GPG/Sigstore signatures, checksums        |
 | D09  | ✅ Complete | Read-only filesystem support              |
 | D10  | ✅ Complete | JSON logging available                    |
@@ -45,7 +45,7 @@ docker run --rm your-image id
 
 **Files**: `lib/base/create-user.sh`
 
-______________________________________________________________________
+---
 
 ### D02: Patch Management Strategy
 
@@ -73,7 +73,7 @@ trivy image --severity HIGH,CRITICAL your-image
 
 **Files**: `.github/workflows/auto-patch.yml`, `lib/versions.sh`
 
-______________________________________________________________________
+---
 
 ### D03: Network Segmentation and Firewalling
 
@@ -104,7 +104,7 @@ spec:
 
 **Files**: `examples/kubernetes/network-policies/`
 
-______________________________________________________________________
+---
 
 ### D04: Secure Defaults and Hardening
 
@@ -128,7 +128,7 @@ Status: ✅ Complete
 docker run --rm your-image find / -perm /6000 -type f 2>/dev/null
 ```
 
-______________________________________________________________________
+---
 
 ### D05: Maintain Security Contexts
 
@@ -156,7 +156,7 @@ securityContext:
 
 **Gap**: Need to provide default AppArmor/SELinux profiles.
 
-______________________________________________________________________
+---
 
 ### D06: Protect Secrets
 
@@ -183,7 +183,7 @@ trivy image --scanners secret your-image
 
 **Files**: `.gitleaks.toml`, `.github/workflows/ci.yml`
 
-______________________________________________________________________
+---
 
 ### D07: Resource Protection
 
@@ -210,7 +210,7 @@ resources:
 
 See [Production Checklist](production-checklist.md#resource-configuration).
 
-______________________________________________________________________
+---
 
 ### D08: Container Image Integrity and Origin
 
@@ -237,7 +237,7 @@ cosign verify \
 
 **Files**: `lib/base/signature-verify.sh`, `lib/base/checksum-verification.sh`
 
-______________________________________________________________________
+---
 
 ### D09: Immutable Container Filesystems
 
@@ -263,7 +263,7 @@ volumeMounts:
     mountPath: /cache
 ```
 
-______________________________________________________________________
+---
 
 ### D10: Logging
 
@@ -285,7 +285,7 @@ Status: ✅ Complete
 
 **Files**: `lib/base/logging.sh`, `lib/observability/json-logging.sh`
 
-______________________________________________________________________
+---
 
 ## Implementation Priorities
 

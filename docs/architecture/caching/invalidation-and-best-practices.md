@@ -84,7 +84,7 @@ docker build --no-cache -t myproject:dev .
 1. **Use `--no-cache` sparingly** - Only when truly needed for troubleshooting
 1. **Monitor cache sizes** - Large caches may indicate issues
 
-______________________________________________________________________
+---
 
 ## Best Practices
 

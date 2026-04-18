@@ -14,7 +14,7 @@ and best practices for contributing to this project.
 - [Documentation](#documentation)
 - [Pull Request Process](#pull-request-process)
 
-______________________________________________________________________
+---
 
 ## Getting Started
 
@@ -52,7 +52,7 @@ ______________________________________________________________________
    git checkout -b feature/your-feature-name
    ```
 
-______________________________________________________________________
+---
 
 ## Feature Script Guidelines
 
@@ -224,7 +224,7 @@ setup_cache_dir "/cache/mytool" "${USER_UID}" "${USER_GID}"
 Mount `/cache` as a Docker volume for persistence across container rebuilds.
 See [Caching Strategy](docs/architecture/caching.md) for details.
 
-______________________________________________________________________
+---
 
 ## Error Handling
 
@@ -433,7 +433,7 @@ test_missing_args() {
 }
 ```
 
-______________________________________________________________________
+---
 
 ## Testing Requirements
 
@@ -577,7 +577,7 @@ Run integration tests:
 - **Edge cases**: Version resolution, partial downloads, network failures
 - **Error paths**: Test that errors are properly handled
 
-______________________________________________________________________
+---
 
 ## Code Style
 
@@ -674,7 +674,7 @@ VARIABLE_NAME="value"
 word_splitting_intended $variable
 ```
 
-______________________________________________________________________
+---
 
 ## Documentation
 
@@ -727,7 +727,7 @@ feat(python): Add support for Python 3.14
 Closes #123
 ```
 
-______________________________________________________________________
+---
 
 ## Pull Request Process
 
@@ -791,7 +791,7 @@ Brief description of changes
 1. Squash commits if requested
 1. Maintainer will merge when approved
 
-______________________________________________________________________
+---
 
 ## Common Patterns
 
@@ -836,7 +836,7 @@ readonly CACHE_DIR="/cache/toolname"
 install -d -m 0755 -o "${USER_UID}" -g "${USER_GID}" "$CACHE_DIR"
 ```
 
-______________________________________________________________________
+---
 
 ## Getting Help
 
@@ -845,14 +845,14 @@ ______________________________________________________________________
 - **Security**: See [SECURITY.md](SECURITY.md)
 - **Documentation**: Check [docs/](docs/) directory
 
-______________________________________________________________________
+---
 
 ## Code of Conduct
 
 Be respectful and constructive in all interactions. We aim to maintain a
 welcoming community for all contributors.
 
-______________________________________________________________________
+---
 
 ## License
 

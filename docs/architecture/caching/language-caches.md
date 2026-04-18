@@ -174,7 +174,7 @@ export GRADLE_USER_HOME="/cache/gradle"
 
 - Uses npm caches (wrangler is an npm package)
 
-______________________________________________________________________
+---
 
 ## Cache Directory Structure
 

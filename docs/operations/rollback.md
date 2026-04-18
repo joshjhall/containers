@@ -11,7 +11,7 @@ releases, including automated patch releases.
 - [Post-Rollback Actions](#post-rollback-actions)
 - [Prevention](#prevention)
 
-______________________________________________________________________
+---
 
 ## Quick Reference
 
@@ -35,7 +35,7 @@ gh release delete vX.Y.Z --yes
 git push --delete origin vX.Y.Z
 ```
 
-______________________________________________________________________
+---
 
 ## Identifying the Issue
 
@@ -74,7 +74,7 @@ git log --oneline | grep "automated version updates"
 gh run list --limit 10
 ```
 
-______________________________________________________________________
+---
 
 ## Rollback Procedures
 
@@ -155,7 +155,7 @@ git push origin vX.Y.Z
 # Post announcement in all channels
 ```
 
-______________________________________________________________________
+---
 
 ## Post-Rollback Actions
 
@@ -205,7 +205,7 @@ ______________________________________________________________________
    - Document the incident in docs/incidents/
    - Update roadmap with lessons learned
 
-______________________________________________________________________
+---
 
 ## Prevention
 
@@ -273,7 +273,7 @@ For auto-patch releases:
 - **Development**: Use `:latest` or auto-patch
 - **CI/CD**: Pin to specific version, update deliberately
 
-______________________________________________________________________
+---
 
 ## Examples
 
@@ -327,7 +327,7 @@ gh api repos/joshjhall/containers/security-advisories \
   -f description="..."
 ```
 
-______________________________________________________________________
+---
 
 ## Contact
 

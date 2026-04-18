@@ -4,7 +4,7 @@ Reference companion for `SKILL.md`. Load this at the start of every
 `/next-issue` invocation for the state file schema, priority query commands,
 and branch naming rules.
 
-______________________________________________________________________
+---
 
 ## State File
 
@@ -97,7 +97,7 @@ disambiguation when multiple agents are working in parallel.
 1. If issue is closed or branch is gone → silently delete the state file and
    proceed to Phase 1 (don't ask the user about stale work)
 
-______________________________________________________________________
+---
 
 ## Backward Compatibility
 
@@ -120,7 +120,7 @@ prefer the `.json` file and delete the `.md` duplicate.
 
 The migration is automatic and happens once during Phase 0 discovery.
 
-______________________________________________________________________
+---
 
 ## Checkpoint
 
@@ -160,7 +160,7 @@ Write or update the checkpoint before every reset point (see Reset Points
 below). Each checkpoint overwrites the previous one — only the most recent
 phase transition matters.
 
-______________________________________________________________________
+---
 
 ## Reset Points
 
@@ -197,7 +197,7 @@ When suggesting a reset, use this format:
 
 If the user declines, continue normally — the suggestion is advisory.
 
-______________________________________________________________________
+---
 
 ## Status Labels
 
@@ -214,7 +214,7 @@ picked up twice:
 All four labels are **excluded** from all priority queries (see below) so
 that in-progress issues are never re-selected.
 
-______________________________________________________________________
+---
 
 ## Priority Ordering
 
@@ -285,7 +285,7 @@ gh issue list \
 glab issue list --per-page 5
 ```
 
-______________________________________________________________________
+---
 
 ## Branch Naming Convention
 
@@ -325,7 +325,7 @@ git fetch origin main
 git checkout -b {prefix}/issue-{N}-{slug} origin/main
 ```
 
-______________________________________________________________________
+---
 
 ## Integration Notes
 

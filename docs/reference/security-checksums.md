@@ -10,7 +10,7 @@
 > - **NEW**: Automated checksum database maintenance
 > - **Original**: Tool-level checksum verification (completed 2025-11-08)
 
-______________________________________________________________________
+---
 
 ## Production Recommendations
 
@@ -40,7 +40,7 @@ integrity.
 any downloads that fell back to Tier 4. If no TOFU events occurred, the summary
 is silently skipped.
 
-______________________________________________________________________
+---
 
 ## 🔐 4-Tier Progressive Verification System (November 2025)
 
@@ -251,7 +251,7 @@ The system automatically:
 1. Falls back to published checksums from official source
 1. Falls back to calculated checksum (with security warning)
 
-______________________________________________________________________
+---
 
 ## ✅ Original Checksum Verification (November 2025)
 
@@ -266,7 +266,7 @@ downloads now verified.
 - Phases 10-13: Extended audit items (additional unverified downloads)
 - Bug fix: Fixed pre-existing heredoc bug in java-dev.sh
 
-______________________________________________________________________
+---
 
 ## Implementation Guide for New Tools
 
@@ -375,7 +375,7 @@ releases:
 - Download and execute without verification
 - Continue on verification failure
 
-______________________________________________________________________
+---
 
 ## Priority Classification
 
@@ -402,7 +402,7 @@ These download binaries directly without verification.
 | `dev-tools.sh`  | 569-611 | mkcert binary               | ✅ **DONE** | Calculated checksum at build time               |
 | `aws.sh`        | 172-198 | Session Manager plugin .deb | ✅ **DONE** | Calculated checksum at build time               |
 
-______________________________________________________________________
+---
 
 ## Implementation Strategy
 
@@ -446,7 +446,7 @@ ______________________________________________________________________
    - May not have checksums available
    - Consider calculated checksum approach
 
-______________________________________________________________________
+---
 
 ## Checksum Sources Quick Reference
 
@@ -469,7 +469,7 @@ ______________________________________________________________________
    - Document this in code comments
    - Less secure but better than nothing
 
-______________________________________________________________________
+---
 
 ## Progress Tracking
 
@@ -491,7 +491,7 @@ ______________________________________________________________________
   - [x] get-pip.py - Calculated checksum at build time
   - [x] entr - Calculated checksum at build time
 
-______________________________________________________________________
+---
 
 ## Notes
 

@@ -48,12 +48,12 @@ Follow these steps in order. Do not skip steps.
    `git ls-files --error-unmatch <file>` for each `.env*` match — if the file
    is not tracked by git, exclude it from all scanner file lists (untracked
    env files are local-only and not a repository risk)
-1. Detect language(s) from config files (`package.json`, `pyproject.toml`,
+5. Detect language(s) from config files (`package.json`, `pyproject.toml`,
    `Cargo.toml`, `go.mod`, `Gemfile`, `build.gradle`, etc.)
-1. Detect platform (GitHub or GitLab) from `git remote -v`
-1. For `quick` depth: run `git log --oneline -50 --name-only` to limit to
+6. Detect platform (GitHub or GitLab) from `git remote -v`
+7. For `quick` depth: run `git log --oneline -50 --name-only` to limit to
    recently changed files. For `deep` depth: run `git log --format='%aN' --name-only` for contributor stats per file
-1. **Discover project-level audit agents**: Glob for
+8. **Discover project-level audit agents**: Glob for
    `.claude/agents/audit-*/audit-*.md` in the project root. For each match,
    read the YAML frontmatter to extract `name` and `description`. Build a
    `project_scanners` list. If a project agent shares a name with a built-in

@@ -1,0 +1,54 @@
+[lint]
+respect-ignore = true
+respect-gitignore = true
+output-format = "concise"
+
+# Disabled rules (mado implementations diverge from pymarkdown's previous
+# behavior on existing content; leaving them off preserves the "no churn"
+# goal of this migration):
+#   MD002  first header should be top-level (agent templates start with h2
+#          because the title lives in the YAML frontmatter)
+#   MD005  inconsistent list indentation
+#   MD007  unordered list indentation (repo mixes 2- and 4-space under
+#          ordered-list continuations; mado's check is stricter than
+#          pymarkdown's)
+#   MD013  line length
+#   MD024  duplicate headings (mado has no direct equivalent of
+#          pymarkdown's siblings_only when headings share a level under
+#          different parents)
+#   MD026  trailing punctuation in headings (we use "?" and "!" legitimately)
+#   MD029  ordered list numbering style
+#   MD034  bare URL (mado flags email addresses as URLs)
+#   MD036  emphasis used as heading
+#   MD038  spaces inside code spans (false-positives on doubled-backtick
+#          spans that wrap inner backticks, e.g., `` `foo` ``)
+#   MD041  first line must be a top-level heading
+rules = [
+  "MD001",
+  "MD003",
+  "MD004",
+  "MD006",
+  "MD009",
+  "MD010",
+  "MD012",
+  "MD014",
+  "MD018",
+  "MD019",
+  "MD020",
+  "MD021",
+  "MD022",
+  "MD023",
+  "MD025",
+  "MD027",
+  "MD028",
+  "MD030",
+  "MD031",
+  "MD032",
+  "MD033",
+  "MD035",
+  "MD037",
+  "MD039",
+  "MD040",
+  "MD046",
+  "MD047",
+]

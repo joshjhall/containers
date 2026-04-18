@@ -187,6 +187,7 @@ Before executing the chosen shipping mode, run these safety checks:
 
    ```markdown
    ## Pre-review findings
+
    - 2x debug-statement (src/handler.py:42, src/utils.py:18)
    - 1x missing-test-file (src/new_module.py)
    ```

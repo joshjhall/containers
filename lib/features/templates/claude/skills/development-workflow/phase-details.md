@@ -4,7 +4,7 @@ Reference companion for `SKILL.md`. Load this when starting a new development
 task or transitioning between phases for detailed guidance on each phase's goals,
 checklist, common mistakes, and "done" criteria.
 
-______________________________________________________________________
+---
 
 ## Phase 1: Make it Work
 
@@ -40,7 +40,7 @@ not TODOs — actual working code with real operations.
 - You can demonstrate the feature working end-to-end
 - At least one test passes proving core behavior
 
-______________________________________________________________________
+---
 
 ## Phase 2: Make it Right
 
@@ -80,7 +80,7 @@ readable and follow project conventions.
 - All Phase 1 tests still pass without modification
 - No function exceeds ~30 lines (guideline, not hard rule)
 
-______________________________________________________________________
+---
 
 ## Phase 3: Make it Safe
 
@@ -120,7 +120,7 @@ Add error handling and resource cleanup.
 - Resources are cleaned up even when errors occur
 - No unhandled exception can crash the system from user input
 
-______________________________________________________________________
+---
 
 ## Phase 4: Make it Secure
 
@@ -165,7 +165,7 @@ be exploited?
 - Sensitive operations have audit trails
 - Error messages reveal no internal details to users
 
-______________________________________________________________________
+---
 
 ## Phase 5: Make it Compliant (when applicable)
 
@@ -193,7 +193,7 @@ phase entirely if the project has no compliance requirements.
 - All data access is audit-logged and PII/PHI is encrypted
 - Data can be exported/deleted per applicable regulations
 
-______________________________________________________________________
+---
 
 ## Phase 6: Make it Fast (only when needed)
 
@@ -242,7 +242,7 @@ optimize without measuring first.
 - No known N+1 queries or missing indexes
 - Cache invalidation rules are documented
 
-______________________________________________________________________
+---
 
 ## Phase 7: Make it Observable (when applicable)
 
@@ -267,7 +267,7 @@ pure libraries.
 - No sensitive data appears in logs
 - Health checks verify critical dependencies
 
-______________________________________________________________________
+---
 
 ## Phase 8: Make it Tested
 
@@ -308,7 +308,7 @@ Follow Arrange-Act-Assert for every test:
 - Tests are deterministic and independent
 - No test depends on another test's side effects
 
-______________________________________________________________________
+---
 
 ## Phase 9: Make it Documented
 
@@ -338,7 +338,7 @@ over-document — code should be mostly self-explanatory from Phase 2.
 - Design decisions are explained where non-obvious
 - No stale documentation references old behavior
 
-______________________________________________________________________
+---
 
 ## Phase 10: Review Tech Debt (when applicable)
 

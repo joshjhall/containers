@@ -285,7 +285,6 @@ When creating a security release:
 
    - Add SECURITY.md with vulnerability reporting procedures
    - Update checksum verification inventory
-
    ```
 
 1. **Security release commit message**:

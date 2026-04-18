@@ -4,7 +4,7 @@ Reference companion for `SKILL.md`. Load this when implementing error handling,
 retry logic, degradation strategies, or batch processing for detailed guidance,
 decision criteria, and examples.
 
-______________________________________________________________________
+---
 
 ## Error Hierarchy
 
@@ -42,7 +42,7 @@ Error includes:
 | Double logging              | Same error logged twice (manual + auto)        | Let the exception framework log |
 | String formatting in errors | Fragile, not searchable                        | Use structured context fields   |
 
-______________________________________________________________________
+---
 
 ## Validation — Detailed Guidance
 
@@ -94,7 +94,7 @@ Good: "Quality score must be between 1 and 5, got 7"
 Good: "File not found: /path/to/file.txt — check the path and ensure the file exists"
 ```
 
-______________________________________________________________________
+---
 
 ## Retry Strategies — Detailed Guidance
 
@@ -159,7 +159,7 @@ Each retry attempt should log:
 - Error that triggered the retry
 - Final failure should log all attempts as context
 
-______________________________________________________________________
+---
 
 ## Graceful Degradation — Detailed Guidance
 
@@ -217,7 +217,7 @@ Explicitly test that the system works without each optional dependency:
 - Verify warnings are produced (not silent)
 - Verify no exceptions propagate to the user
 
-______________________________________________________________________
+---
 
 ## Partial Failure Handling — Detailed Guidance
 
@@ -271,7 +271,7 @@ For CLI/UI contexts, partial failures should report:
 - How many failed (with per-item error reasons)
 - Overall exit code should indicate failure if any items failed
 
-______________________________________________________________________
+---
 
 ## Error Recovery Escalation
 

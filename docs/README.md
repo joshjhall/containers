@@ -252,6 +252,6 @@ See [Development/Code Style](development/code-style.md) for style conventions.
    CI status
 1. Create an issue at `https://github.com/joshjhall/containers/issues`
 
-______________________________________________________________________
+---
 
 **Documentation Structure Version**: 2.0

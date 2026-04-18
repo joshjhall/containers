@@ -193,7 +193,7 @@ Dockerfiles.
    docker buildx build --cache-from=type=local,src=/tmp/cache .
    ```
 
-______________________________________________________________________
+---
 
 ## Advanced Topics
 

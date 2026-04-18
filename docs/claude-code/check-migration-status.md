@@ -18,7 +18,7 @@ a 3-pass execution model (deterministic → heuristic → judgment).
 | test-gaps    | `audit-test-gaps`    | —                       | 0/5        | Not started               |
 | architecture | `audit-architecture` | —                       | 0/7        | Not started               |
 
-*Format: check-* categories / audit-\* categories\*
+_Format: check-_ categories / audit-\* categories\*
 
 ## Per-Domain Gap Analysis
 

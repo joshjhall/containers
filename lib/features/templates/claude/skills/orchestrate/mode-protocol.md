@@ -4,7 +4,7 @@ Reference companion for `SKILL.md`. Load this when selecting an execution mode
 for a task or batch of tasks. Documents the four execution modes, decision
 tree, and tradeoff explanations.
 
-______________________________________________________________________
+---
 
 ## Four Execution Modes
 
@@ -88,7 +88,7 @@ docker exec -it project-agent01-1 tmux attach -t claude
 
 **Lifecycle**: See `/provision-agent` skill for create/teardown.
 
-______________________________________________________________________
+---
 
 ## Decision Tree
 
@@ -144,7 +144,7 @@ For batches of 5+ well-defined issues (e.g., audit cleanup):
 switching at merge points) and expensive (5x API cost). Best suited for
 well-defined bugs and audit issues, not architectural work.
 
-______________________________________________________________________
+---
 
 ## Tradeoff Explanation Templates
 

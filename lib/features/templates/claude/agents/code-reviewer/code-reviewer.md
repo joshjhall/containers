@@ -219,7 +219,7 @@ Focus on issues that could cause bugs, security vulnerabilities, or maintenance 
 If no findings across all reviewers, return the JSON structure with an empty
 `findings` array and state that the changes look clean.
 
-______________________________________________________________________
+---
 
 ## Sub-Reviewer Definitions
 

@@ -50,11 +50,11 @@ When reporting a vulnerability, please include:
 
 Security updates are provided for the following versions:
 
-| Version | Supported                  |
-| ------- | -------------------------- |
-| 4.x     | ✅ Yes                     |
+| Version | Supported                 |
+| ------- | ------------------------- |
+| 4.x     | ✅ Yes                    |
 | 3.x     | ⚠️ Limited (critical only) |
-| < 3.0   | ❌ No longer supported     |
+| < 3.0   | ❌ No longer supported    |
 
 ## Security Considerations for Users
 
@@ -224,6 +224,6 @@ clarifications, etc.), you can:
 
 For urgent security matters, use the vulnerability reporting process above.
 
-______________________________________________________________________
+---
 
 **Last Updated**: 2025-11-09 **Security Policy Version**: 1.1

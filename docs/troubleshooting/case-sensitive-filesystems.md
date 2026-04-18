@@ -207,7 +207,6 @@ If you can't use solutions 1 or 2, follow these guidelines:
    git commit -m "Rename step 1"
    git mv temp.md readme.md
    git commit -m "Rename step 2"
-
    ```
 
 1. **Use language conventions**:
@@ -294,7 +293,6 @@ diskutil info / | grep "File System"
    ```powershell
    # Store code in WSL2, not Windows
    \\wsl$\Ubuntu\home\user\projects
-
    ```
 
 1. Use Docker volumes (always case-sensitive)
@@ -402,7 +400,7 @@ done
 - Team conventions documented in CONTRIBUTING.md
 - CI/CD testing on Linux
 
-______________________________________________________________________
+---
 
 **Need help?** See [main troubleshooting guide](../troubleshooting.md) or
 [file an issue](https://github.com/joshjhall/containers/issues).

@@ -12,7 +12,7 @@ verifies container initialization and feature availability.
 - [Monitoring](#monitoring)
 - [Troubleshooting](#troubleshooting)
 
-______________________________________________________________________
+---
 
 ## Overview
 
@@ -45,7 +45,7 @@ with multiple modes:
 - **Docker**: docker CLI, daemon connectivity
 - **Kubernetes**: kubectl, helm
 
-______________________________________________________________________
+---
 
 ## Usage
 
@@ -95,7 +95,7 @@ $ healthcheck --verbose
 ✓ Container is healthy
 ```
 
-______________________________________________________________________
+---
 
 ## Docker Integration
 
@@ -143,7 +143,7 @@ docker run --no-healthcheck myimage
 HEALTHCHECK NONE
 ```
 
-______________________________________________________________________
+---
 
 ## Docker Compose Examples
 
@@ -235,7 +235,7 @@ services:
       interval: 60s
 ```
 
-______________________________________________________________________
+---
 
 ## Monitoring
 
@@ -284,7 +284,7 @@ services:
       retries: 3
 ```
 
-______________________________________________________________________
+---
 
 ## Troubleshooting
 
@@ -452,7 +452,7 @@ healthcheck:
   test: ['CMD', '/app/custom-healthcheck.sh']
 ```
 
-______________________________________________________________________
+---
 
 ## Best Practices
 
@@ -478,7 +478,7 @@ ______________________________________________________________________
 1. **Validate dependent services** wait for health
 1. **Check health in deployment pipelines**
 
-______________________________________________________________________
+---
 
 ## See Also
 
