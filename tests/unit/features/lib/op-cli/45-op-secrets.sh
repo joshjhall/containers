@@ -374,8 +374,9 @@ test_retry_env_vars() {
 test_tmpfs_check_enforced() {
     # Primary cache must be verified as tmpfs-backed (or ramfs) before use,
     # ensuring resolved secrets never land on disk.
+    # shfmt may add spaces around | in case patterns: (tmpfs|ramfs) vs (tmpfs | ramfs)
     if command grep -qE 'stat -f -c .%T' "$SOURCE_FILE" \
-       && command grep -qE 'tmpfs\|ramfs|tmpfs\).*ramfs\)' "$SOURCE_FILE"; then
+       && command grep -qE 'tmpfs[[:space:]]*\|[[:space:]]*ramfs|tmpfs\).*ramfs\)' "$SOURCE_FILE"; then
         pass_test "Primary cache gated on tmpfs/ramfs filesystem type"
     else
         fail_test "Primary cache must be verified as tmpfs-backed via stat -f"

@@ -577,7 +577,8 @@ test_newgrp_docker_uses_quoted_cmd() {
     local script="$PROJECT_ROOT/lib/runtime/entrypoint.sh"
 
     # newgrp docker must use $QUOTED_CMD, not $*
-    if command grep -q 'exec newgrp docker <<< "exec \$QUOTED_CMD"' "$script"; then
+    # shfmt may strip the space after <<< (here-string operator) — tolerate either form.
+    if command grep -qE 'exec newgrp docker <<<[[:space:]]*"exec \$QUOTED_CMD"' "$script"; then
         assert_true true "newgrp docker path uses QUOTED_CMD"
     else
         assert_true false "newgrp docker path does not use QUOTED_CMD — command injection risk"

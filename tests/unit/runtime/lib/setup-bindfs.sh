@@ -145,9 +145,9 @@ test_parse_skip_paths_sets_map() {
         parse_bindfs_skip_paths
 
         # Check all three keys are set
-        [ -n "${BINDFS_SKIP_MAP[/workspace/a]+_}" ] || exit 1
-        [ -n "${BINDFS_SKIP_MAP[/workspace/b]+_}" ] || exit 1
-        [ -n "${BINDFS_SKIP_MAP[/workspace/c]+_}" ] || exit 1
+        [ -n "${BINDFS_SKIP_MAP["/workspace/a"]+_}" ] || exit 1
+        [ -n "${BINDFS_SKIP_MAP["/workspace/b"]+_}" ] || exit 1
+        [ -n "${BINDFS_SKIP_MAP["/workspace/c"]+_}" ] || exit 1
     )
     assert_equals "0" "$?" "parse_bindfs_skip_paths populates BINDFS_SKIP_MAP from env"
 }
@@ -172,8 +172,8 @@ test_parse_skip_paths_multiple_spaces() {
         export BINDFS_SKIP_PATHS="  /cache  ,   /tmp   "
         parse_bindfs_skip_paths
 
-        [ -n "${BINDFS_SKIP_MAP[/cache]+_}" ] || exit 1
-        [ -n "${BINDFS_SKIP_MAP[/tmp]+_}" ] || exit 1
+        [ -n "${BINDFS_SKIP_MAP["/cache"]+_}" ] || exit 1
+        [ -n "${BINDFS_SKIP_MAP["/tmp"]+_}" ] || exit 1
         [ "${#BINDFS_SKIP_MAP[@]}" -eq 2 ] || exit 1
     )
     assert_equals "0" "$?" "parse_bindfs_skip_paths trims multiple leading/trailing spaces"
@@ -186,8 +186,8 @@ test_parse_skip_paths_tabs() {
         export BINDFS_SKIP_PATHS=$'\t/cache\t,\t/tmp'
         parse_bindfs_skip_paths
 
-        [ -n "${BINDFS_SKIP_MAP[/cache]+_}" ] || exit 1
-        [ -n "${BINDFS_SKIP_MAP[/tmp]+_}" ] || exit 1
+        [ -n "${BINDFS_SKIP_MAP["/cache"]+_}" ] || exit 1
+        [ -n "${BINDFS_SKIP_MAP["/tmp"]+_}" ] || exit 1
         [ "${#BINDFS_SKIP_MAP[@]}" -eq 2 ] || exit 1
     )
     assert_equals "0" "$?" "parse_bindfs_skip_paths trims tab characters"
@@ -200,8 +200,8 @@ test_parse_skip_paths_mixed_whitespace() {
         export BINDFS_SKIP_PATHS=$' \t /cache \t , \t /var \t '
         parse_bindfs_skip_paths
 
-        [ -n "${BINDFS_SKIP_MAP[/cache]+_}" ] || exit 1
-        [ -n "${BINDFS_SKIP_MAP[/var]+_}" ] || exit 1
+        [ -n "${BINDFS_SKIP_MAP["/cache"]+_}" ] || exit 1
+        [ -n "${BINDFS_SKIP_MAP["/var"]+_}" ] || exit 1
         [ "${#BINDFS_SKIP_MAP[@]}" -eq 2 ] || exit 1
     )
     assert_equals "0" "$?" "parse_bindfs_skip_paths trims mixed spaces and tabs"
