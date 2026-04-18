@@ -13,7 +13,9 @@ pre-commit:
   parallel: true
   commands:
 
-    # --- General file checks (from pre-commit/pre-commit-hooks) ---
+    # --- General file checks (native shell, no Python runtime) ---
+    # YAML/JSON/private-key checks are covered elsewhere: yamllint, biome-json,
+    # and gitleaks (all defined below).
 
     trailing-whitespace:
       glob: "*"
@@ -21,7 +23,7 @@ pre-commit:
         - "tests/results/**"
         - "bin/igor"
         - "lib/gpg-keys/**"
-      run: uvx --from pre-commit-hooks trailing-whitespace-fixer {staged_files}
+      run: bin/fix-trailing-whitespace.sh {staged_files}
       stage_fixed: true
 
     end-of-file-fixer:
@@ -30,32 +32,34 @@ pre-commit:
         - "tests/results/**"
         - "bin/igor"
         - "lib/gpg-keys/**"
-      run: uvx --from pre-commit-hooks end-of-file-fixer {staged_files}
+      run: bin/fix-end-of-file.sh {staged_files}
       stage_fixed: true
-
-    check-yaml:
-      glob: "*.{yml,yaml}"
-      run: uvx --from pre-commit-hooks check-yaml --unsafe {staged_files}
-
-    check-json:
-      glob: "*.json"
-      exclude:
-        - ".devcontainer/devcontainer.json"
-        - ".vscode/**"
-      run: uvx --from pre-commit-hooks check-json {staged_files}
 
     check-added-large-files:
       exclude:
         - "bin/igor"
-      run: uvx --from pre-commit-hooks check-added-large-files --maxkb=500 {staged_files}
+      run: |
+        max=512000  # 500 KB (matches prior --maxkb=500)
+        fail=0
+        for f in {staged_files}; do
+          [ -f "$f" ] || continue
+          size=$(/usr/bin/wc -c < "$f")
+          if [ "$size" -gt "$max" ]; then
+            echo "ERROR: $f is $size bytes (max: $max)"
+            fail=1
+          fi
+        done
+        exit "$fail"
 
     check-merge-conflict:
-      run: uvx --from pre-commit-hooks check-merge-conflict {staged_files}
-
-    detect-private-key:
       exclude:
-        - "lib/gpg-keys/**"
-      run: uvx --from pre-commit-hooks detect-private-key {staged_files}
+        # Skill template documents literal conflict-marker examples in a code fence
+        - "lib/features/templates/claude/skills/rebase-imports/SKILL.md"
+      run: |
+        if /usr/bin/grep -lE '^(<{7} |>{7} |={7}$)' {staged_files} 2>/dev/null; then
+          echo "ERROR: merge conflict markers found in the above file(s)"
+          exit 1
+        fi
 
     # --- Shell linting (direct binary from dev-tools) ---
 
