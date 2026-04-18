@@ -3,7 +3,7 @@
 Reference companion for `SKILL.md`. Load when assigning labels, establishing
 `component/*` labels, or reviewing the full label taxonomy.
 
-______________________________________________________________________
+---
 
 ## Complete Label Taxonomy
 
@@ -116,7 +116,7 @@ Color: `D4A017` (gold) for all certainty labels.
 - GitHub: `gh label create "certainty/<level>" --color D4A017 --force`
 - GitLab: `glab label create "certainty/<level>" --color '#D4A017'`
 
-______________________________________________________________________
+---
 
 ## Auto-Detection Summary
 

@@ -75,20 +75,20 @@ pre-commit:
 
     # --- Markdown formatting and linting ---
 
-    mdformat:
+    dprint-md:
       glob: "*.md"
       exclude:
         - "CHANGELOG.md"
         - "tests/results/**"
-      run: uvx --with mdformat-gfm --with mdformat-frontmatter --with mdformat-tables mdformat {staged_files}
+      run: dprint fmt {staged_files}
       stage_fixed: true
 
-    pymarkdown:
+    mado:
       glob: "*.md"
       exclude:
         - "CHANGELOG.md"
         - "tests/results/**"
-      run: uvx pymarkdownlnt --config .pymarkdown.json scan {staged_files}
+      run: mado check {staged_files}
 
     # Prose linting — warn-only. Skips until `vale sync` has fetched styles.
     vale:

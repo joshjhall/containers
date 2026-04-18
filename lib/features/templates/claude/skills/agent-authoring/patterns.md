@@ -4,7 +4,7 @@ Reference companion for `SKILL.md`. Load this when writing a new agent,
 reviewing an existing agent, or designing agent workflows for cross-tool
 compatibility.
 
-______________________________________________________________________
+---
 
 ## Agent Template
 
@@ -21,6 +21,7 @@ model: sonnet
 You are a <role> specializing in <domain>.
 
 When invoked:
+
 1. <First step — gather context>
 2. <Second step — analyze or act>
 3. <Third step — produce output>
@@ -35,7 +36,7 @@ When invoked:
 <How to structure the response — severity levels, sections, etc.>
 ```
 
-______________________________________________________________________
+---
 
 ## Frontmatter Reference
 
@@ -53,7 +54,7 @@ ______________________________________________________________________
 | `hooks`           | No       | None      | Lifecycle hooks scoped to this agent              |
 | `memory`          | No       | None      | Persistent memory: `user`, `project`, or `local`  |
 
-______________________________________________________________________
+---
 
 ## Description Field — Good vs Bad
 
@@ -66,7 +67,7 @@ ______________________________________________________________________
 | Good    | `Debugging specialist for errors and test failures. Use when encountering any issues.` | Task + clear trigger condition            |
 | Good    | `Generates comprehensive tests for existing code`                                      | Task implies trigger (after code written) |
 
-______________________________________________________________________
+---
 
 ## System Prompt — Good vs Bad
 
@@ -74,12 +75,15 @@ ______________________________________________________________________
 
 ```markdown
 # Bad — too vague, no structure
+
 Review code and find issues. Make it better.
 
 # Good — role, workflow, specifics
+
 You are a senior code reviewer ensuring high standards of quality and security.
 
 When invoked:
+
 1. Run git diff to see recent changes
 2. Focus on modified files
 3. Begin review immediately
@@ -89,11 +93,13 @@ When invoked:
 
 ```markdown
 # Bad — generic, Claude already knows these
+
 - Write clean code
 - Follow best practices
 - Handle errors properly
 
 # Good — specific red flags to check
+
 - Generic base exceptions instead of specific error types
 - Exceptions with no structured context (just a message string)
 - Async operations without timeout limits
@@ -104,10 +110,13 @@ When invoked:
 
 ```markdown
 # Bad — no structure specified
+
 Tell me what you found.
 
 # Good — clear format with severity
+
 Provide feedback organized by priority:
+
 - Critical issues (must fix)
 - Warnings (should fix)
 - Suggestions (consider improving)
@@ -116,7 +125,7 @@ For each finding, include the file and line, issue description, and fix.
 Skip purely stylistic preferences with no impact on correctness.
 ```
 
-______________________________________________________________________
+---
 
 ## Tool Scoping Patterns
 
@@ -140,7 +149,7 @@ hooks:
           command: "./scripts/validate-command.sh"
 ```
 
-______________________________________________________________________
+---
 
 ## Advanced Features
 
@@ -185,7 +194,7 @@ Implement API endpoints. Follow the patterns from the preloaded skills.
 Skills are injected as full content, not just made available. Subagents
 do not inherit skills from the parent conversation — list them explicitly.
 
-______________________________________________________________________
+---
 
 ## Review Checklist
 
@@ -206,7 +215,7 @@ Before shipping an agent, verify each item:
 - [ ] Prose trimming verified: no line removable without behavior change
 - [ ] Agent quality: passes 14-pattern checklist (see below)
 
-______________________________________________________________________
+---
 
 ## Cross-Tool Compatibility
 
@@ -236,31 +245,31 @@ Agent definitions follow conventions that map across tools:
 1. For AGENTS.md (always loaded), move trigger context into prose
    since there's no description field for selective loading
 
-______________________________________________________________________
+---
 
 ## Agent Quality Patterns
 
 14-pattern checklist for agent quality. Each pattern maps to a finding from
 the agentsys evaluation (#304). Use during agent review or creation.
 
-| #   | Pattern                 | Criterion                                                                           |
-| --- | ----------------------- | ----------------------------------------------------------------------------------- |
-| 1   | Model assignment        | Model tier matches task complexity (see Model Tiering Guide below)                  |
-| 2   | Tool scoping            | Minimum viable tools — every tool has a documented rationale                        |
-| 3   | Workflow enforcement    | Numbered steps with no ambiguous branching                                          |
-| 4   | Safety constraints      | `## Restrictions` section with MUST NOT rules, tool rationale, and workflow gates   |
-| 5   | Output schema           | Structured output format specified (JSON, severity tiers, sections)                 |
-| 6   | Idempotency             | Same input produces same output on repeated invocation                              |
-| 7   | Error boundaries        | Agent handles errors gracefully and returns structured error responses              |
-| 8   | Batch strategy          | Large inputs define fan-out behavior (when/how to spawn sub-agents)                 |
-| 9   | Description quality     | WHAT + WHEN + trigger terms in description field                                    |
-| 10  | Prose density           | No line removable without changing agent behavior (deletion test)                   |
-| 11  | Checklist specificity   | Red flags are concrete items, not vague goals                                       |
-| 12  | Context isolation       | Agent output stays in its own window; only summary returns to caller                |
-| 13  | Composability           | Output is consumable by downstream agents or orchestrators                          |
-| 14  | Acknowledgment handling | Audit/review agents support inline suppression comments (e.g., `audit:acknowledge`) |
+| #  | Pattern                 | Criterion                                                                           |
+| -- | ----------------------- | ----------------------------------------------------------------------------------- |
+| 1  | Model assignment        | Model tier matches task complexity (see Model Tiering Guide below)                  |
+| 2  | Tool scoping            | Minimum viable tools — every tool has a documented rationale                        |
+| 3  | Workflow enforcement    | Numbered steps with no ambiguous branching                                          |
+| 4  | Safety constraints      | `## Restrictions` section with MUST NOT rules, tool rationale, and workflow gates   |
+| 5  | Output schema           | Structured output format specified (JSON, severity tiers, sections)                 |
+| 6  | Idempotency             | Same input produces same output on repeated invocation                              |
+| 7  | Error boundaries        | Agent handles errors gracefully and returns structured error responses              |
+| 8  | Batch strategy          | Large inputs define fan-out behavior (when/how to spawn sub-agents)                 |
+| 9  | Description quality     | WHAT + WHEN + trigger terms in description field                                    |
+| 10 | Prose density           | No line removable without changing agent behavior (deletion test)                   |
+| 11 | Checklist specificity   | Red flags are concrete items, not vague goals                                       |
+| 12 | Context isolation       | Agent output stays in its own window; only summary returns to caller                |
+| 13 | Composability           | Output is consumable by downstream agents or orchestrators                          |
+| 14 | Acknowledgment handling | Audit/review agents support inline suppression comments (e.g., `audit:acknowledge`) |
 
-______________________________________________________________________
+---
 
 ## Model Tiering Guide
 
@@ -319,7 +328,7 @@ confirmation pass.
 complete. Coverage improvements from discrete code candidates (#338) may shift
 several more categories to deterministic, enabling broader tier downgrades.
 
-______________________________________________________________________
+---
 
 ## Safety Constraints Template
 
@@ -330,19 +339,20 @@ in an agent definition. Insert after the role statement in the system prompt.
 ## Restrictions
 
 MUST NOT:
+
 - <verb> — <rationale>
 - <verb> — <rationale>
 
 ## Tool Rationale
 
-| Tool   | Purpose                             | Why granted                        |
-| ------ | ----------------------------------- | ---------------------------------- |
-| Read   | Read source files for analysis      | Core to the review workflow        |
-| Grep   | Search for patterns across codebase | Needed for finding occurrences     |
-| Glob   | Find files by name patterns         | Needed for file discovery          |
-| Bash   | Run CLI commands (gh, glab, git)    | Platform interaction required      |
-| ~~Edit~~ | ~~Modify files~~                | Denied: this agent observes only   |
-| ~~Write~~ | ~~Create files~~               | Denied: this agent observes only   |
+| Tool      | Purpose                             | Why granted                      |
+| --------- | ----------------------------------- | -------------------------------- |
+| Read      | Read source files for analysis      | Core to the review workflow      |
+| Grep      | Search for patterns across codebase | Needed for finding occurrences   |
+| Glob      | Find files by name patterns         | Needed for file discovery        |
+| Bash      | Run CLI commands (gh, glab, git)    | Platform interaction required    |
+| ~~Edit~~  | ~~Modify files~~                    | Denied: this agent observes only |
+| ~~Write~~ | ~~Create files~~                    | Denied: this agent observes only |
 ```
 
 **Worked example** (from `audit-security`):
@@ -351,22 +361,23 @@ MUST NOT:
 ## Restrictions
 
 MUST NOT:
+
 - Edit or write source files — you observe and report, never modify code
 - Auto-fix findings below HIGH certainty — flag for human review instead
 - Skip manifest files in scanning — config files often contain secrets
 
 ## Tool Rationale
 
-| Tool | Purpose                           | Why granted                           |
-| ---- | --------------------------------- | ------------------------------------- |
-| Read | Read source files for analysis    | Core to security scanning             |
-| Grep | Search for secret patterns        | Regex-based detection (Phase 1)       |
-| Glob | Find config/env files             | Discovery of files to scan            |
-| Bash | Run external tools if available   | Phase 3 detection (eslint, etc.)      |
-| Task | Fan out to batch sub-agents       | Large manifests need parallel scanning |
+| Tool | Purpose                         | Why granted                            |
+| ---- | ------------------------------- | -------------------------------------- |
+| Read | Read source files for analysis  | Core to security scanning              |
+| Grep | Search for secret patterns      | Regex-based detection (Phase 1)        |
+| Glob | Find config/env files           | Discovery of files to scan             |
+| Bash | Run external tools if available | Phase 3 detection (eslint, etc.)       |
+| Task | Fan out to batch sub-agents     | Large manifests need parallel scanning |
 ```
 
-______________________________________________________________________
+---
 
 ## Orchestrator Extension Patterns
 

@@ -57,7 +57,7 @@ across container restarts.
 docker run -v project-cache:/cache myproject:dev
 ```
 
-______________________________________________________________________
+---
 
 ## BuildKit Cache Mounts
 

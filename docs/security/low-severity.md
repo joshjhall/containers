@@ -3,7 +3,7 @@
 This page documents the low severity security issues identified during the OWASP
 best practices audit and their resolutions.
 
-______________________________________________________________________
+---
 
 ## #7: Missing Input Validation on Version Numbers
 
@@ -97,7 +97,7 @@ validate_semver "$PYTHON_VERSION" "PYTHON_VERSION" || exit 1
 - Integration tests with invalid versions
 - Verify proper error messages
 
-______________________________________________________________________
+---
 
 ## #8: Path Traversal via mkdir/chown Race Condition
 
@@ -142,7 +142,7 @@ log_command "Creating Python cache directories with correct permissions" \
 - Explicit permission setting
 - No race condition window
 
-______________________________________________________________________
+---
 
 ## #9: Command Injection via Completion Scripts
 
@@ -192,7 +192,7 @@ if command -v kubectl >/dev/null 2>&1; then
 fi
 ```
 
-______________________________________________________________________
+---
 
 ## #10: Insufficient Path Sanitization in User Functions
 

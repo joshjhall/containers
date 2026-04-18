@@ -3,7 +3,7 @@
 This page documents the high and medium severity security issues identified
 during the OWASP best practices audit and their resolutions.
 
-______________________________________________________________________
+---
 
 ## HIGH SEVERITY ISSUES
 
@@ -38,7 +38,7 @@ fi
 - Test without GITHUB_TOKEN
 - Test with token containing special characters (verify no injection)
 
-______________________________________________________________________
+---
 
 ### #2: Passwordless Sudo for Non-Root User
 
@@ -70,7 +70,7 @@ fi
 - Document security implications in README
 - Add examples for production vs development builds
 
-______________________________________________________________________
+---
 
 ## MEDIUM SEVERITY ISSUES
 
@@ -98,7 +98,7 @@ command substitution.
 - Mock compromised output with malicious patterns
 - Verify proper error handling and logging
 
-______________________________________________________________________
+---
 
 ### #4: Unvalidated File Path Operations in Entrypoint
 
@@ -133,7 +133,7 @@ done
 - Test with symlinks pointing outside directory
 - Test with relative path manipulations
 
-______________________________________________________________________
+---
 
 ### #5: Claude Code Installer Not Verified
 
@@ -153,7 +153,7 @@ existing `download_and_verify` infrastructure. Two approaches available:
 - **Option A**: Calculate checksum at download time (more flexible)
 - **Option B**: Pin to specific version with known checksum (more secure)
 
-______________________________________________________________________
+---
 
 ### #6: Sensitive Data Exposure in 1Password Examples
 

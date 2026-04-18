@@ -394,7 +394,7 @@ For audit purposes, maintain records of:
 | Security        |      |      |           |
 | Change Manager  |      |      |           |
 
-______________________________________________________________________
+---
 
 ## Quick Reference
 

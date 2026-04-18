@@ -218,7 +218,6 @@ Configure production environment protection:
 
    ```bash
    cp examples/cicd/gitlab-ci/.gitlab-ci.yml .
-
    ```
 
 1. Configure CI/CD variables in GitLab:
@@ -268,7 +267,6 @@ Ensure runners have:
 
    ```bash
    cp examples/cicd/jenkins/Jenkinsfile .
-
    ```
 
 1. Create Jenkins credentials:

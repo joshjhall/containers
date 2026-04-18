@@ -266,7 +266,6 @@ Instead of plaintext secrets, use:
    secrets:
      api_key:
        external: true
-
    ```
 
 1. **Kubernetes secrets**:

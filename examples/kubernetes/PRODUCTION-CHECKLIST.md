@@ -340,7 +340,7 @@ Document your emergency contacts:
 - **Last Updated**: 2025-01-16
 - **Next Review**: [Date]
 
-______________________________________________________________________
+---
 
 ## Sign-Off
 

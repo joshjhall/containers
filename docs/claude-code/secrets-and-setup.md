@@ -27,7 +27,7 @@ automatically resolved from 1Password and exported as `<NAME>`. This is generic
 
 | Variable                     | Exports               | Example                                  |
 | ---------------------------- | --------------------- | ---------------------------------------- |
-| `OP_SERVICE_ACCOUNT_TOKEN`   | *(required)*          | `ops_xxx...`                             |
+| `OP_SERVICE_ACCOUNT_TOKEN`   | _(required)_          | `ops_xxx...`                             |
 | `OP_GITHUB_TOKEN_REF`        | `GITHUB_TOKEN`        | `op://Vault/GitHub-PAT/credential`       |
 | `OP_GITLAB_TOKEN_REF`        | `GITLAB_TOKEN`        | `op://Vault/GitLab-PAT/credential`       |
 | `OP_KAGI_API_KEY_REF`        | `KAGI_API_KEY`        | `op://Vault/Kagi-API-Key/credential`     |
@@ -191,7 +191,7 @@ The interactive shell loader sets these environment variables for the `op` CLI:
 
 ## Host-Side Resolution (`.env.init`)
 
-For values needed by Docker Compose *before* the container starts (e.g.,
+For values needed by Docker Compose _before_ the container starts (e.g.,
 `POSTGRES_PASSWORD` for the postgres service), use `.env.init` with
 `host/init-env.sh`:
 

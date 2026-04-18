@@ -13,7 +13,7 @@ regression testing.
 | PCI DSS 11.3    | Penetration testing     | Guidance  |
 | NIST CSF DE.CM  | Security monitoring     | Compliant |
 
-______________________________________________________________________
+---
 
 ## Security Test Suite
 
@@ -73,7 +73,7 @@ The test suite validates:
    - Temporary files removed
    - Build scripts cleaned up
 
-______________________________________________________________________
+---
 
 ## CI/CD Integration
 
@@ -120,7 +120,7 @@ Already integrated in CI workflow:
     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 ```
 
-______________________________________________________________________
+---
 
 ## DAST (Dynamic Application Security Testing)
 
@@ -153,7 +153,7 @@ Create `.zap/rules.tsv` to customize scan rules:
 10096  WARN  (Timestamp Disclosure - Unix)
 ```
 
-______________________________________________________________________
+---
 
 ## Penetration Testing Schedule
 
@@ -195,9 +195,9 @@ ______________________________________________________________________
 
 ## Findings Summary
 
-| ID  | Severity | Finding | Status |
-| --- | -------- | ------- | ------ |
-| 1   | Critical | ...     | Open   |
+| ID | Severity | Finding | Status |
+| -- | -------- | ------- | ------ |
+| 1  | Critical | ...     | Open   |
 
 ## Detailed Findings
 
@@ -215,7 +215,7 @@ ______________________________________________________________________
 [Prioritized list of improvements]
 ```
 
-______________________________________________________________________
+---
 
 ## Chaos Engineering
 
@@ -275,7 +275,7 @@ spec:
 | Weekly    | Network partition   | Test isolation          |
 | Monthly   | Resource exhaustion | Validate limits         |
 
-______________________________________________________________________
+---
 
 ## Security Regression Tests
 
@@ -308,7 +308,7 @@ test_custom_security
 1. **Clear**: Use descriptive names and messages
 1. **Comprehensive**: Cover all security requirements
 
-______________________________________________________________________
+---
 
 ## Compliance Reporting
 
@@ -343,7 +343,7 @@ Set up alerts for:
 - Secret detection alerts
 - Unusual container behavior
 
-______________________________________________________________________
+---
 
 ## Related Documentation
 

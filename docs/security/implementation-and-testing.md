@@ -3,7 +3,7 @@
 This page documents the implementation phases, testing strategy, and overall
 progress of the security hardening effort.
 
-______________________________________________________________________
+---
 
 ## Implementation Phases
 
@@ -17,7 +17,7 @@ ______________________________________________________________________
 
 **Total Estimated Effort: 2.25 hours**
 
-______________________________________________________________________
+---
 
 ### Phase 2: Supply Chain Security - Container Images (High Priority)
 
@@ -32,7 +32,7 @@ ______________________________________________________________________
 should secure the outputs (container images). This completes the supply chain
 security story.
 
-______________________________________________________________________
+---
 
 ### Phase 3: Input Validation & Injection Prevention (Medium Priority)
 
@@ -45,7 +45,7 @@ ______________________________________________________________________
 
 **Total Actual Effort: 5.25 hours** PHASE COMPLETE (2025-11-09)
 
-______________________________________________________________________
+---
 
 ### Phase 4: Secrets & Sensitive Data (Medium Priority)
 
@@ -56,7 +56,7 @@ ______________________________________________________________________
 
 **Total Actual Effort: 1.5 hours** PHASE COMPLETE (2025-11-09)
 
-______________________________________________________________________
+---
 
 ### Phase 5: Low Priority Hardening (Optional)
 
@@ -69,7 +69,7 @@ ______________________________________________________________________
 
 **Total Actual Effort: 6 hours** PHASE COMPLETE (2025-11-09)
 
-______________________________________________________________________
+---
 
 ### Phase 6: Infrastructure Improvements (Future)
 
@@ -82,7 +82,7 @@ ______________________________________________________________________
 
 **Total Actual Effort: ~6 hours** PHASE COMPLETE
 
-______________________________________________________________________
+---
 
 ## Testing Strategy
 
@@ -107,7 +107,7 @@ ______________________________________________________________________
 - Verify secrets not in build logs
 - Test rate limiting behavior
 
-______________________________________________________________________
+---
 
 ## Progress Tracking
 
@@ -120,7 +120,7 @@ ______________________________________________________________________
 - **Low Severity**: 4/4 complete (#8, #9, #10, #13)
 - **Infrastructure**: 3/3 complete (#14, secret scrubbing, CI/CD security tests)
 
-______________________________________________________________________
+---
 
 ## References
 
@@ -130,7 +130,7 @@ ______________________________________________________________________
 - **CIS Docker Benchmark**: <https://www.cisecurity.org/benchmark/docker>
 - **Supply Chain Security**: `docs/reference/security-checksums.md`
 
-______________________________________________________________________
+---
 
 ## Notes
 

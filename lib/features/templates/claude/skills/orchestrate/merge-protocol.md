@@ -4,7 +4,7 @@ Reference companion for `SKILL.md`. Load this when performing a merge (Phase 2),
 review (Phase 3), or sync (Phase 4) for sync point tracking, conflict
 resolution, test runner detection, review dispatch, and branch synchronization.
 
-______________________________________________________________________
+---
 
 ## Sync Point Tracking
 
@@ -29,7 +29,7 @@ After a successful merge, the merge-base advances automatically — no manual
 bookkeeping needed. Subsequent `/orchestrate status` calls will show 0 pending
 commits for that agent.
 
-______________________________________________________________________
+---
 
 ## Conflict Resolution Decision Tree
 
@@ -87,7 +87,7 @@ When `git merge` reports conflicts:
    Suggest cherry-picking specific commits instead, or ask the user to
    manually resolve.
 
-______________________________________________________________________
+---
 
 ## Test Runner Detection
 
@@ -134,7 +134,7 @@ fi
 
 If no test runner is detected, inform the user and skip testing.
 
-______________________________________________________________________
+---
 
 ## Squash vs Merge Commit
 
@@ -160,7 +160,7 @@ ______________________________________________________________________
 The user can request squash via `/orchestrate merge <N> --squash` or by asking
 for a squash merge in natural language.
 
-______________________________________________________________________
+---
 
 ## Review Protocol
 
@@ -215,7 +215,7 @@ Review should flag but **not automatically change**:
 
 These require user confirmation before modification.
 
-______________________________________________________________________
+---
 
 ## Sync Protocol
 
@@ -284,7 +284,7 @@ Always return to the orchestrator branch after sync completes:
 git checkout <orchestrator-branch>
 ```
 
-______________________________________________________________________
+---
 
 ## Agent Checkpoint Context
 

@@ -67,7 +67,7 @@ requests_total = Counter('http_requests_total', 'Total HTTP requests')
 start_http_server(9090)
 ```
 
-______________________________________________________________________
+---
 
 ## Container Registries
 
@@ -115,7 +115,7 @@ aws ecr put-image-scanning-configuration \
 
 - Enable vulnerability scanning in registry settings
 
-______________________________________________________________________
+---
 
 ## Deployment Platforms
 

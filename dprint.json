@@ -1,0 +1,15 @@
+{
+  "markdown": {
+    "textWrap": "maintain"
+  },
+  "excludes": [
+    "CHANGELOG.md",
+    "tests/results/**",
+    "target/**",
+    "node_modules/**",
+    ".git/**"
+  ],
+  "plugins": [
+    "https://plugins.dprint.dev/markdown-0.20.0.wasm"
+  ]
+}

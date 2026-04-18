@@ -4,7 +4,7 @@ This page documents the informational and best-practice security improvements
 identified during the OWASP audit, covering secrets handling, Docker socket
 security, temporary files, rate limiting, image digests, and container signing.
 
-______________________________________________________________________
+---
 
 ## #11: Secrets Could Be Exposed in Build Logs
 
@@ -61,17 +61,22 @@ docker build --build-arg API_KEY=secret123 ...
 **DO THIS INSTEAD:**
 
 \`\`\`bash
+
 # Use environment variables at runtime
+
 docker run -e API_KEY=secret123 ...
 
 # Or use Docker secrets
+
 docker secret create api_key ./api_key.txt
 docker service create --secret api_key ...
 
 # Or use mounted config files
+
 docker run -v ./secrets:/secrets:ro ...
 
 # Or use secret management tools
+
 docker run -e OP_SERVICE_ACCOUNT_TOKEN=... ...
 \`\`\`
 ```
@@ -104,7 +109,7 @@ docker run -e OP_SERVICE_ACCOUNT_TOKEN=... ...
    # Output: https://***CREDENTIALS***@host.com
    ```
 
-______________________________________________________________________
+---
 
 ## #12: Docker Socket Mounting Creates Container Escape Vector
 
@@ -175,7 +180,7 @@ only be used in trusted development environments.
 - **BuildKit**: Rootless mode for secure builds
 ```
 
-______________________________________________________________________
+---
 
 ## #13: Temporary File Security
 
@@ -222,7 +227,7 @@ tar -xzf file.tar.gz
 1. Update all feature scripts to use the pattern
 1. Ensure trap handlers don't conflict
 
-______________________________________________________________________
+---
 
 ## #14: No Rate Limiting on External API Calls
 
@@ -276,7 +281,7 @@ Created `lib/base/retry-utils.sh` with three retry functions:
    - 5000x rate limit increase when using GITHUB_TOKEN (60 -> 5000 requests/hour)
    - Exponential backoff prevents hammering external services
 
-______________________________________________________________________
+---
 
 ## #15: Missing Container Image Digests in Releases
 
@@ -326,7 +331,7 @@ Add a new step to the `release` job in `.github/workflows/ci.yml`:
     files: image-digests.txt
 ```
 
-______________________________________________________________________
+---
 
 ## #16: Container Image Signing with Cosign
 

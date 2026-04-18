@@ -12,7 +12,7 @@ system, organized by category.
 - [Feature-Specific Variables](#feature-specific-variables)
 - [Runtime Configuration](#runtime-configuration)
 
-______________________________________________________________________
+---
 
 ## Build Arguments
 
@@ -126,7 +126,7 @@ All features are disabled by default. Set to `true` to enable:
 | `INCLUDE_BINDFS` | Install bindfs FUSE overlay for VirtioFS permission fixes |
 | `INCLUDE_CRON`   | Install cron daemon (auto-triggered by some features)     |
 
-______________________________________________________________________
+---
 
 ## Language Versions
 
@@ -181,7 +181,7 @@ Control which version of each language to install:
 > These values drift with automated patch releases — check the `ARG` declarations
 > in the [Dockerfile](../../Dockerfile) for current defaults.
 
-______________________________________________________________________
+---
 
 ## Cache Directories
 
@@ -282,7 +282,7 @@ All cache directories are located under `/cache` for persistence across builds:
 | --------------------- | ------------------ | ---------------------- |
 | `TF_PLUGIN_CACHE_DIR` | `/cache/terraform` | Terraform plugin cache |
 
-______________________________________________________________________
+---
 
 ## Feature-Specific Variables
 
@@ -325,7 +325,7 @@ In `auto` mode (default), the entrypoint probes permissions on bind mounts
 under `/workspace` and only applies overlays when permissions are broken
 (common on macOS VirtioFS). On Linux hosts, this is a safe no-op.
 
-______________________________________________________________________
+---
 
 ## Runtime Configuration
 
@@ -430,7 +430,7 @@ docker run \
 See [examples/validation/](../examples/validation/) for complete examples
 including web apps, API services, and background workers.
 
-______________________________________________________________________
+---
 
 ## Usage Examples
 
@@ -488,7 +488,7 @@ docker run \
   myproject:dev
 ```
 
-______________________________________________________________________
+---
 
 ## Finding Variables in Your Container
 
@@ -529,7 +529,7 @@ list-features.sh --filter language
 list-features.sh --filter dev-tools
 ```
 
-______________________________________________________________________
+---
 
 ## Claude Code Variables
 
@@ -544,7 +544,7 @@ For 1Password `OP_*_REF` / `OP_*_FILE_REF` conventions and setup command
 env vars (`GIT_USER_NAME`, `GIT_AUTH_SSH_KEY`, etc.), see
 [Claude Code: Secrets & Setup](../claude-code/secrets-and-setup.md).
 
-______________________________________________________________________
+---
 
 ## Related Documentation
 
@@ -555,7 +555,7 @@ ______________________________________________________________________
 - [Testing Framework](../development/testing.md) - Test environment
   configuration
 
-______________________________________________________________________
+---
 
 ## Contributing
 

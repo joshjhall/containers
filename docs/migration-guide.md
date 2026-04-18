@@ -13,7 +13,7 @@ system when used as a git submodule in your projects.
 - [Testing Your Migration](#testing-your-migration)
 - [Rollback Procedures](#rollback-procedures)
 
-______________________________________________________________________
+---
 
 ## Overview
 
@@ -29,7 +29,7 @@ This container build system follows [Semantic Versioning](https://semver.org/):
 - **Previous minor**: Security fixes only
 - **Older versions**: No support, upgrade recommended
 
-______________________________________________________________________
+---
 
 ## Current Version
 
@@ -45,7 +45,7 @@ cat containers/VERSION
 cd containers && git describe --tags
 ```
 
-______________________________________________________________________
+---
 
 ## Upgrade Paths
 
@@ -61,7 +61,7 @@ v4.5.x → v4.15.x (direct upgrade)
 **Best Practice**: Always upgrade through major versions sequentially (v3 → v4 →
 v5), not skipping major versions.
 
-______________________________________________________________________
+---
 
 ## Breaking Changes by Version
 
@@ -103,7 +103,7 @@ ______________________________________________________________________
 - ❌ rbenv for Ruby (removed)
 - ❌ Legacy apt-key commands (automatic fallback)
 
-______________________________________________________________________
+---
 
 ### v4.5.0 → v4.7.0 (Minor Upgrades)
 
@@ -122,7 +122,7 @@ ______________________________________________________________________
 - **Optional**: Use new healthcheck features
 - **Recommended**: Review new security documentation
 
-______________________________________________________________________
+---
 
 ## Migration Procedures
 
@@ -195,7 +195,7 @@ docker run --rm myproject:dev node --version
   run: docker build -t test:latest .
 ```
 
-______________________________________________________________________
+---
 
 ## Version-Specific Migration Instructions
 
@@ -267,7 +267,7 @@ docker run --rm myproject:old check-installed-versions.sh
   docker build --build-arg PYTHON_VERSION=3.12.0 .
   ```
 
-______________________________________________________________________
+---
 
 ### Migrating from v4.x to v4.7.0 (Minor Update)
 
@@ -300,7 +300,7 @@ docker build \
   -t myproject:latest .
 ```
 
-______________________________________________________________________
+---
 
 ## Testing Your Migration
 
@@ -368,7 +368,7 @@ docker run --rm myproject:latest healthcheck.sh --quick
 echo "All smoke tests passed!"
 ```
 
-______________________________________________________________________
+---
 
 ## Rollback Procedures
 
@@ -400,7 +400,7 @@ rollback procedures including:
 - Recovery from failed builds
 - CI/CD rollback procedures
 
-______________________________________________________________________
+---
 
 ## Common Migration Issues
 
@@ -492,7 +492,7 @@ ERROR: failed to solve: failed to compute cache key
    cat containers/docs/architecture/caching.md
    ```
 
-______________________________________________________________________
+---
 
 ## Best Practices
 
@@ -553,7 +553,7 @@ ______________________________________________________________________
    - Update team runbooks
    - Share migration tips with team
 
-______________________________________________________________________
+---
 
 ## Getting Help
 
@@ -588,7 +588,7 @@ ______________________________________________________________________
    - Pin to last known good version
    - Report issue after recovery
 
-______________________________________________________________________
+---
 
 ## Deprecation Notices
 
@@ -606,7 +606,7 @@ features will:
 1. Show warnings during build
 1. Be removed in next major version
 
-______________________________________________________________________
+---
 
 ## Related Documentation
 

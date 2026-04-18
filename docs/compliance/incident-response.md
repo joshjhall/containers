@@ -14,7 +14,7 @@ handling.
 | PCI DSS 12.10     | Incident response plan         | Guidance |
 | NIST CSF RS       | Response planning              | Guidance |
 
-______________________________________________________________________
+---
 
 ## Incident Classification
 
@@ -35,7 +35,7 @@ ______________________________________________________________________
 1. **Misconfiguration** - Security settings incorrect
 1. **Availability** - Denial of service or resource exhaustion
 
-______________________________________________________________________
+---
 
 ## Playbook: Container Compromise
 
@@ -166,7 +166,7 @@ kubectl exec <pod> -- find / -mmin -60 -type f 2>/dev/null
 - Update security controls
 - Schedule lessons learned meeting
 
-______________________________________________________________________
+---
 
 ## Playbook: Data Exposure
 
@@ -231,7 +231,7 @@ Based on data type and regulations:
 - **GDPR**: Notify authority within 72 hours
 - **Internal**: Follow company notification policy
 
-______________________________________________________________________
+---
 
 ## Playbook: Supply Chain Attack
 
@@ -285,7 +285,7 @@ trivy image --severity CRITICAL <image>
 
 1. **Notify upstream maintainers**
 
-______________________________________________________________________
+---
 
 ## Playbook: Security Misconfiguration
 
@@ -330,7 +330,7 @@ conftest test deployment.yaml -p policy/
 
 1. **Update configuration management**
 
-______________________________________________________________________
+---
 
 ## Communication Templates
 
@@ -388,7 +388,7 @@ Incident Report: INC-<ID>
 7. Recommendations
 ```
 
-______________________________________________________________________
+---
 
 ## Escalation Matrix
 
@@ -399,7 +399,7 @@ ______________________________________________________________________
 | Medium   | Team lead         | Security Lead              | Daily summary    |
 | Low      | Assigned engineer | Team lead                  | Weekly summary   |
 
-______________________________________________________________________
+---
 
 ## Integration Points
 
@@ -448,7 +448,7 @@ spec:
             template: slack-notify
 ```
 
-______________________________________________________________________
+---
 
 ## Tabletop Exercises
 
@@ -476,7 +476,7 @@ Conduct quarterly tabletop exercises to test incident response:
 - Assign improvement tasks
 - Schedule follow-up
 
-______________________________________________________________________
+---
 
 ## Related Documentation
 

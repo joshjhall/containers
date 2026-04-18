@@ -4,7 +4,7 @@ Reference companion for `SKILL.md`. Load this when writing a new skill,
 reviewing an existing skill, or adapting instructions for cross-tool
 compatibility (Cursor rules, AGENTS.md, Windsurf rules).
 
-______________________________________________________________________
+---
 
 ## Skill Template
 
@@ -33,7 +33,7 @@ description: <What it does and when to use it — include key trigger terms>
 - Edge case that looks relevant but isn't
 ```
 
-______________________________________________________________________
+---
 
 ## Metadata Template (metadata.yml)
 
@@ -78,7 +78,7 @@ required_permissions: []
 required_mcps: []
 ```
 
-______________________________________________________________________
+---
 
 ## Description Field — Good vs Bad
 
@@ -92,7 +92,7 @@ ______________________________________________________________________
 | Good    | `Git commit conventions and branch naming. Use when committing, creating branches, or preparing pull requests.`                 | Clear scope, actionable triggers     |
 | Good    | `Error handling patterns, retry strategies, and resilience guidance`                                                            | Specific domains, implies when       |
 
-______________________________________________________________________
+---
 
 ## Content — Good vs Bad Examples
 
@@ -100,11 +100,13 @@ ______________________________________________________________________
 
 ```markdown
 # Bad — vague, Claude already knows this
+
 - Write clean, maintainable code
 - Use meaningful variable names
 - Follow best practices
 
 # Good — specific, project-relevant
+
 - Use Zod schemas for all API request validation
 - Run `biome check --write .` before committing
 - Place integration tests in `tests/integration/`, unit tests in `tests/unit/`
@@ -114,25 +116,29 @@ ______________________________________________________________________
 
 ```markdown
 # Bad — describes what good code looks like without showing it
+
 Use descriptive error messages that explain the problem.
 
 # Good — shows concrete before/after
+
 Error messages must include what failed and how to fix it:
-  Bad:  "Invalid input"
-  Good: "API key must be 32 hex characters, got 28: 'abc...xyz'"
+Bad: "Invalid input"
+Good: "API key must be 32 hex characters, got 28: 'abc...xyz'"
 ```
 
 ### Commands
 
 ```markdown
 # Bad — ambiguous, may not work
+
 Run the linter to check your code.
 
 # Good — copy-pasteable, exact
+
 Run `eslint --fix src/` to auto-fix lint issues.
 ```
 
-______________________________________________________________________
+---
 
 ## Review Checklist
 
@@ -155,7 +161,7 @@ Before shipping a skill, verify each item:
 - [ ] Token efficiency: no line removable without behavior change
 - [ ] Prompt quality: passes 16-pattern checklist (see below)
 
-______________________________________________________________________
+---
 
 ## Cross-Tool Compatibility
 
@@ -195,33 +201,33 @@ When adapting a Claude skill to another tool:
 1. For single-file formats (Windsurf), merge companion content inline
    and cut aggressively for length
 
-______________________________________________________________________
+---
 
 ## Prompt Quality Patterns
 
 16-pattern checklist for skill quality. Each pattern maps to a finding from
 the agentsys evaluation (#304). Use during skill review or creation.
 
-| #   | Pattern                | Criterion                                                                                  |
-| --- | ---------------------- | ------------------------------------------------------------------------------------------ |
-| 1   | Clarity                | Each instruction has a single unambiguous interpretation                                   |
-| 2   | Structure              | H2 sections, numbered workflows, bullet checklists — scannable in 10 seconds               |
-| 3   | Examples               | At least one concrete good/bad pair for the primary use case                               |
-| 4   | Context / WHY          | Non-obvious rules include rationale so the agent can judge edge cases                      |
-| 5   | Output format          | Skills producing output specify exact structure (JSON schema, severity tiers, etc.)        |
-| 6   | Anti-patterns          | Every "don't" has a positive alternative showing what to do instead                        |
-| 7   | Token efficiency       | No line removable without changing agent behavior (see SKILL.md § Token Efficiency)        |
-| 8   | Certainty grading      | Finding-producing skills grade by detection confidence (CRITICAL/HIGH/MEDIUM/LOW)          |
-| 9   | Code-based enforcement | Deterministic detection preferred over LLM where patterns are known                        |
-| 10  | Progressive disclosure | Core rules in SKILL.md, reference details in companions                                    |
-| 11  | Trigger terms          | `description:` field includes WHAT + WHEN + domain-specific keywords                       |
-| 12  | Scope boundaries       | "When to Use" and "When NOT to Use" sections prevent false triggers and missed activations |
-| 13  | Verification steps     | Skill includes how to confirm it worked (cold-start test, trigger test)                    |
-| 14  | Model awareness        | Instructions appropriate for the target model tier (don't over-specify for opus)           |
-| 15  | Idempotency            | Running the skill twice on the same input produces the same result                         |
-| 16  | Composability          | Output is consumable by downstream skills, agents, or orchestrators                        |
+| #  | Pattern                | Criterion                                                                                  |
+| -- | ---------------------- | ------------------------------------------------------------------------------------------ |
+| 1  | Clarity                | Each instruction has a single unambiguous interpretation                                   |
+| 2  | Structure              | H2 sections, numbered workflows, bullet checklists — scannable in 10 seconds               |
+| 3  | Examples               | At least one concrete good/bad pair for the primary use case                               |
+| 4  | Context / WHY          | Non-obvious rules include rationale so the agent can judge edge cases                      |
+| 5  | Output format          | Skills producing output specify exact structure (JSON schema, severity tiers, etc.)        |
+| 6  | Anti-patterns          | Every "don't" has a positive alternative showing what to do instead                        |
+| 7  | Token efficiency       | No line removable without changing agent behavior (see SKILL.md § Token Efficiency)        |
+| 8  | Certainty grading      | Finding-producing skills grade by detection confidence (CRITICAL/HIGH/MEDIUM/LOW)          |
+| 9  | Code-based enforcement | Deterministic detection preferred over LLM where patterns are known                        |
+| 10 | Progressive disclosure | Core rules in SKILL.md, reference details in companions                                    |
+| 11 | Trigger terms          | `description:` field includes WHAT + WHEN + domain-specific keywords                       |
+| 12 | Scope boundaries       | "When to Use" and "When NOT to Use" sections prevent false triggers and missed activations |
+| 13 | Verification steps     | Skill includes how to confirm it worked (cold-start test, trigger test)                    |
+| 14 | Model awareness        | Instructions appropriate for the target model tier (don't over-specify for opus)           |
+| 15 | Idempotency            | Running the skill twice on the same input produces the same result                         |
+| 16 | Composability          | Output is consumable by downstream skills, agents, or orchestrators                        |
 
-______________________________________________________________________
+---
 
 ## Orchestrator Extension Patterns
 

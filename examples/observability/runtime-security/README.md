@@ -166,7 +166,7 @@ frameworks
 - Document in incident tracker
 - Notify compliance officer if breach confirmed
 
-______________________________________________________________________
+---
 
 ### Critical: Cryptominer Detected
 
@@ -229,7 +229,7 @@ ______________________________________________________________________
 - Enable image signing verification
 - Update SOC 2 incident log
 
-______________________________________________________________________
+---
 
 ### Warning: PHI Data Access
 
@@ -271,7 +271,7 @@ ______________________________________________________________________
 - Update BAA if third-party involved
 - Train user on PHI access policies
 
-______________________________________________________________________
+---
 
 ### Warning: Reverse Shell Detected
 
@@ -325,7 +325,7 @@ ______________________________________________________________________
 - Implement network segmentation
 - File security incident report
 
-______________________________________________________________________
+---
 
 ### Notice: Interactive Shell in Container
 
@@ -367,7 +367,7 @@ ______________________________________________________________________
 - Implement break-glass procedures
 - Enable session recording
 
-______________________________________________________________________
+---
 
 ## Prometheus Queries
 

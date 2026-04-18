@@ -34,7 +34,7 @@ runtime with three compiled Rust tools.
   Rust, Go, Ruby, Java, R, Kotlin, Mojo, Android, cloud tools, databases,
   and more).
 
-______________________________________________________________________
+---
 
 ## Architecture
 
@@ -86,7 +86,7 @@ Dockerfile during builds.
 - Full audit logging of every install step
 - Checksum verification (4-tier: GPG → pinned → published → calculated)
 
-______________________________________________________________________
+---
 
 ## Quick Start
 
@@ -146,7 +146,7 @@ stibbons update
 stibbons check-versions
 ```
 
-______________________________________________________________________
+---
 
 ## Available Features
 
@@ -212,7 +212,7 @@ through the `stibbons` CLI.
 | **Cron**      | `INCLUDE_CRON=true`      | Cron daemon for scheduled tasks (auto with Rust/Dev Tools) |
 | **Bindfs**    | `INCLUDE_BINDFS=true`    | FUSE overlay for macOS VirtioFS permission fixes           |
 
-______________________________________________________________________
+---
 
 ## Multi-Distro Support
 
@@ -231,7 +231,7 @@ per distro.
 Distro selection is configured via `stibbons init` or the `BASE_IMAGE` build
 argument.
 
-______________________________________________________________________
+---
 
 ## Configuration Hierarchy
 
@@ -247,7 +247,7 @@ v5 supports layered configuration that merges settings from multiple levels:
 Each level can pin versions, require features, set tool configurations
 (Claude Code, 1Password, etc.), and define update policies.
 
-______________________________________________________________________
+---
 
 ## Testing
 
@@ -268,7 +268,7 @@ just test-rust                   # cargo test --workspace
 just test-integration            # full integration suite
 ```
 
-______________________________________________________________________
+---
 
 ## Claude Code Integration
 
@@ -282,7 +282,7 @@ When `INCLUDE_DEV_TOOLS=true`, containers include full Claude Code support:
 Configuration is managed through the configuration hierarchy — set model
 preferences, plugins, MCP servers, and skills at any level.
 
-______________________________________________________________________
+---
 
 ## Migrating from v4
 
@@ -300,7 +300,7 @@ v5 replaces the git submodule approach with a standalone CLI:
 The Dockerfile and docker-compose.yml formats remain compatible. Existing
 `.devcontainer/` setups should work with minimal changes.
 
-______________________________________________________________________
+---
 
 ## Security
 
@@ -314,7 +314,7 @@ v5 maintains all v4 security features and adds enterprise auditability:
 
 For detailed security guidance, see [docs/security-hardening.md](docs/security-hardening.md).
 
-______________________________________________________________________
+---
 
 ## Contributing
 
@@ -333,7 +333,7 @@ just install-hooks  # lefthook install (pre-commit + pre-push)
 the styles declared in `.vale.ini`. The pre-commit `vale` hook is
 warn-only and skips silently until styles are synced.
 
-______________________________________________________________________
+---
 
 ## License
 

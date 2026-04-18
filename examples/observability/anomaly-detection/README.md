@@ -187,7 +187,7 @@ Critical (based on process type)
    - If legitimate: add exception to baseline
    - If malicious: escalate to security team
 
-______________________________________________________________________
+---
 
 ### ANOM-002: Network Traffic Anomaly
 
@@ -232,7 +232,7 @@ Medium to Critical
    - Add to security group blocklist
    - Update firewall rules
 
-______________________________________________________________________
+---
 
 ### ANOM-003: File Access Anomaly
 
@@ -274,7 +274,7 @@ High to Critical for sensitive files
    - Rotate affected credentials immediately
    - Check for unauthorized access
 
-______________________________________________________________________
+---
 
 ### ANOM-004: Privilege Escalation Attempt
 

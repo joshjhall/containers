@@ -32,27 +32,27 @@ organization.
 | ------------------------------ | ----------- | ---------------------------------------------------- |
 | D01: Secure User Mapping       | ✅ Complete | Non-root user by default (`lib/base/create-user.sh`) |
 | D02: Patch Management          | ✅ Complete | Weekly auto-patch workflow, version pinning          |
-| D03: Network Segmentation      | ⚠️ Examples | Network policy examples in `examples/kubernetes/`    |
+| D03: Network Segmentation      | ⚠️ Examples  | Network policy examples in `examples/kubernetes/`    |
 | D04: Secure Defaults           | ✅ Complete | Security-hardened defaults throughout                |
-| D05: Security Context          | ⚠️ Partial  | Documentation needed for AppArmor/SELinux            |
+| D05: Security Context          | ⚠️ Partial   | Documentation needed for AppArmor/SELinux            |
 | D06: Protect Secrets           | ✅ Complete | Gitleaks scanning, no embedded secrets               |
-| D07: Resource Protection       | ⚠️ Examples | Resource limit examples provided                     |
+| D07: Resource Protection       | ⚠️ Examples  | Resource limit examples provided                     |
 | D08: Container Image Integrity | ✅ Complete | GPG/Sigstore signatures, checksums                   |
 | D09: Immutable Containers      | ✅ Complete | Read-only root filesystem support                    |
-| D10: Logging                   | ⚠️ Optional | JSON logging available but not mandatory             |
+| D10: Logging                   | ⚠️ Optional  | JSON logging available but not mandatory             |
 
 ### SOC 2 Trust Services Criteria
 
 | Criteria                       | Status      | Notes                                  |
 | ------------------------------ | ----------- | -------------------------------------- |
 | CC6.1 Logical Access           | ✅ Complete | Non-root, sudo controls                |
-| CC6.6 System Boundaries        | ⚠️ Partial  | Network policies needed                |
+| CC6.6 System Boundaries        | ⚠️ Partial   | Network policies needed                |
 | CC6.8 Malicious Software       | ✅ Complete | Trivy scanning, signature verification |
 | CC7.1 Configuration Management | ✅ Complete | Version pinning, reproducible builds   |
-| CC7.2 Change Detection         | ⚠️ Gap      | Runtime monitoring needed (Falco)      |
+| CC7.2 Change Detection         | ⚠️ Gap       | Runtime monitoring needed (Falco)      |
 | CC7.3 Vulnerability Management | ✅ Complete | Weekly scanning, auto-updates          |
-| CC8.1 Authorization            | ⚠️ Gap      | OPA Gatekeeper recommended             |
-| A1.2 Recovery Procedures       | ⚠️ Gap      | Backup/DR documentation needed         |
+| CC8.1 Authorization            | ⚠️ Gap       | OPA Gatekeeper recommended             |
+| A1.2 Recovery Procedures       | ⚠️ Gap       | Backup/DR documentation needed         |
 
 ### ISO 27001:2022 Controls
 
@@ -60,8 +60,8 @@ organization.
 | ------------------------------------- | ----------- | -------------------------- |
 | A.5.23 Information Security for Cloud | ✅ Complete | Cloud provider examples    |
 | A.8.9 Configuration Management        | ✅ Complete | Declarative configuration  |
-| A.8.16 Monitoring Activities          | ⚠️ Gap      | Audit logging needed       |
-| A.8.20 Networks Security              | ⚠️ Partial  | Network policy examples    |
+| A.8.16 Monitoring Activities          | ⚠️ Gap       | Audit logging needed       |
+| A.8.20 Networks Security              | ⚠️ Partial   | Network policy examples    |
 | A.8.25 Secure Development             | ✅ Complete | Pre-commit hooks, scanning |
 | A.8.28 Secure Coding                  | ✅ Complete | Static analysis, linting   |
 | A.8.31 Separation of Environments     | ✅ Complete | Build-arg based variants   |
@@ -71,41 +71,41 @@ organization.
 | Article                           | Status      | Notes                       |
 | --------------------------------- | ----------- | --------------------------- |
 | Art. 25 Data Protection by Design | ✅ Complete | Security-first architecture |
-| Art. 32 Security of Processing    | ⚠️ Partial  | Encryption-in-transit gaps  |
-| Art. 33 Breach Notification       | ⚠️ Gap      | Incident response needed    |
-| Art. 35 Impact Assessment         | ⚠️ Gap      | DPIA documentation needed   |
+| Art. 32 Security of Processing    | ⚠️ Partial   | Encryption-in-transit gaps  |
+| Art. 33 Breach Notification       | ⚠️ Gap       | Incident response needed    |
+| Art. 35 Impact Assessment         | ⚠️ Gap       | DPIA documentation needed   |
 
 ### HIPAA Security Rule
 
 | Standard                          | Status      | Notes                    |
 | --------------------------------- | ----------- | ------------------------ |
 | §164.312(a) Access Control        | ✅ Complete | Non-root, RBAC examples  |
-| §164.312(b) Audit Controls        | ⚠️ Gap      | Audit logging needed     |
+| §164.312(b) Audit Controls        | ⚠️ Gap       | Audit logging needed     |
 | §164.312(c) Integrity             | ✅ Complete | Signature verification   |
-| §164.312(d) Authentication        | ⚠️ Partial  | MFA documentation needed |
-| §164.312(e) Transmission Security | ⚠️ Partial  | TLS enforcement needed   |
-| §164.308(a)(7) Contingency Plan   | ⚠️ Gap      | Backup/DR needed         |
+| §164.312(d) Authentication        | ⚠️ Partial   | MFA documentation needed |
+| §164.312(e) Transmission Security | ⚠️ Partial   | TLS enforcement needed   |
+| §164.308(a)(7) Contingency Plan   | ⚠️ Gap       | Backup/DR needed         |
 
 ### PCI DSS v4.0
 
 | Requirement                 | Status      | Notes                          |
 | --------------------------- | ----------- | ------------------------------ |
-| 1.x Network Security        | ⚠️ Partial  | Network policies needed        |
+| 1.x Network Security        | ⚠️ Partial   | Network policies needed        |
 | 2.x Secure Configuration    | ✅ Complete | Hardened defaults              |
-| 3.x Protect Stored Data     | ⚠️ Gap      | Encryption-at-rest docs needed |
+| 3.x Protect Stored Data     | ⚠️ Gap       | Encryption-at-rest docs needed |
 | 6.x Secure Development      | ✅ Complete | SAST, dependency scanning      |
-| 10.x Logging and Monitoring | ⚠️ Gap      | Audit logging needed           |
-| 11.x Security Testing       | ⚠️ Partial  | DAST recommended               |
+| 10.x Logging and Monitoring | ⚠️ Gap       | Audit logging needed           |
+| 11.x Security Testing       | ⚠️ Partial   | DAST recommended               |
 
 ### FedRAMP (Moderate Baseline)
 
 | Control Family         | Status      | Notes                  |
 | ---------------------- | ----------- | ---------------------- |
 | AC (Access Control)    | ✅ Complete | Non-root, RBAC         |
-| AU (Audit)             | ⚠️ Gap      | Audit logging critical |
+| AU (Audit)             | ⚠️ Gap       | Audit logging critical |
 | CM (Configuration)     | ✅ Complete | Version control, IaC   |
-| IA (Identification)    | ⚠️ Partial  | MFA docs needed        |
-| SC (System Protection) | ⚠️ Partial  | Encryption gaps        |
+| IA (Identification)    | ⚠️ Partial   | MFA docs needed        |
+| SC (System Protection) | ⚠️ Partial   | Encryption gaps        |
 | SI (System Integrity)  | ✅ Complete | Scanning, verification |
 
 ### CMMC Level 2
@@ -113,22 +113,22 @@ organization.
 | Practice                                  | Status      | Notes                      |
 | ----------------------------------------- | ----------- | -------------------------- |
 | AC.L2-3.1.1 Authorized Access             | ✅ Complete | Access controls            |
-| AU.L2-3.3.1 System Auditing               | ⚠️ Gap      | Audit logging needed       |
-| CM.L2-3.4.1 System Baseline               | ⚠️ Partial  | Component inventory needed |
-| CM.L2-3.4.7 Software Allowlist            | ⚠️ Gap      | Allowlist documentation    |
-| SC.L2-3.13.8 Transmission Confidentiality | ⚠️ Partial  | TLS enforcement            |
+| AU.L2-3.3.1 System Auditing               | ⚠️ Gap       | Audit logging needed       |
+| CM.L2-3.4.1 System Baseline               | ⚠️ Partial   | Component inventory needed |
+| CM.L2-3.4.7 Software Allowlist            | ⚠️ Gap       | Allowlist documentation    |
+| SC.L2-3.13.8 Transmission Confidentiality | ⚠️ Partial   | TLS enforcement            |
 | SI.L2-3.14.1 Flaw Remediation             | ✅ Complete | Auto-patching              |
 
 ### CIS Controls v8
 
 | Control                       | Status      | Notes                                 |
 | ----------------------------- | ----------- | ------------------------------------- |
-| 1. Inventory of Assets        | ⚠️ Partial  | SBOM generation, needs fleet tracking |
+| 1. Inventory of Assets        | ⚠️ Partial   | SBOM generation, needs fleet tracking |
 | 2. Inventory of Software      | ✅ Complete | Version pinning, manifests            |
-| 3. Data Protection            | ⚠️ Partial  | Encryption improvements needed        |
+| 3. Data Protection            | ⚠️ Partial   | Encryption improvements needed        |
 | 4. Secure Configuration       | ✅ Complete | Hardened defaults                     |
 | 7. Continuous Vuln Management | ✅ Complete | Weekly scanning                       |
-| 8. Audit Log Management       | ⚠️ Gap      | Audit logging needed                  |
+| 8. Audit Log Management       | ⚠️ Gap       | Audit logging needed                  |
 | 16. Application Security      | ✅ Complete | SAST, scanning                        |
 
 ## Gap Analysis Summary

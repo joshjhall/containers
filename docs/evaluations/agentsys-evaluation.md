@@ -41,7 +41,7 @@ side-by-side evaluation, the recommendations fall into four categories:
    marketplace, our agents to `~/.claude/agents/` and `~/.claude/skills/`. No
    naming conflicts. Coexistence works.
 
-______________________________________________________________________
+---
 
 ## Methodology
 
@@ -52,7 +52,7 @@ ______________________________________________________________________
   within evaluation scope.
 - **Quality dimensions:** Accuracy, coverage, actionability, efficiency
 
-______________________________________________________________________
+---
 
 ## Comparison Matrix
 
@@ -75,7 +75,7 @@ ______________________________________________________________________
 | State persistence   | YAML frontmatter in .md     | JSON (tasks.json + flow.json)                  | Mixed    | Keep ours (simpler)            |
 | Installation        | Template copy at startup    | npm global + marketplace                       | Ours     | Keep ours (offline-capable)    |
 
-______________________________________________________________________
+---
 
 ## C1: Model Tiering
 
@@ -137,7 +137,7 @@ increases cost for those specific invocations but should improve output quality
 where it matters most. The audit batch-scanning optimization (already using
 Haiku sub-agents for batches > 2000 lines) partially offsets this.
 
-______________________________________________________________________
+---
 
 ## C4: Code-Based Enforcement
 
@@ -187,7 +187,7 @@ The hybrid approach is superior:
 1. Enable auto-fix for HIGH certainty findings in the codebase-audit pipeline
 1. Keep LLM analysis for context-dependent findings (MEDIUM/LOW certainty)
 
-______________________________________________________________________
+---
 
 ## A1: Code Review
 
@@ -241,7 +241,7 @@ security, performance, error handling, concurrency, and style in one pass.
 1. Keep the single `code-reviewer` as a lightweight option for quick reviews
 1. Add iterative fix loop to `/codebase-audit` workflow
 
-______________________________________________________________________
+---
 
 ## A5: Audit System
 
@@ -290,7 +290,7 @@ Two complementary systems:
 1. Keep LLM agents for nuanced analysis that rules can't handle
 1. Consider repo-intel as an optional data source for our audit agents
 
-______________________________________________________________________
+---
 
 ## A7: Pipeline Comparison
 
@@ -364,7 +364,7 @@ Phases to skip:
   is sufficient
 - Delivery validation (Phase 10): Redundant if review + CI pass
 
-______________________________________________________________________
+---
 
 ## B1: Deslop (AI Slop Removal)
 
@@ -412,7 +412,7 @@ Two implementation options:
 Recommended: **Option 1** (install the plugin) for immediate value, then
 evaluate if we want to internalize the patterns long-term.
 
-______________________________________________________________________
+---
 
 ## B2: Agent-Judge (Safety Protocol)
 
@@ -454,7 +454,7 @@ Our tool scoping is a good foundation but lacks workflow-level enforcement.
    quality gates
 1. Document explicit restrictions in agent definitions (MUST NOT patterns)
 
-______________________________________________________________________
+---
 
 ## D1-D3: Integration Feasibility
 
@@ -507,7 +507,7 @@ If we later decide to bundle specific plugins, a lightweight
 agentsys install deslop enhance --tool claude --no-strip
 ```
 
-______________________________________________________________________
+---
 
 ## Remaining Areas (Brief Assessment)
 
@@ -564,7 +564,7 @@ pipeline is more automated but more complex. **Keep ours for simplicity.**
 | C6: State persistence     | Their JSON is richer but our YAML is simpler | Keep current      |
 | C7: Prose trimming        | Valid concern — audit our agent definitions  | File follow-up    |
 
-______________________________________________________________________
+---
 
 ## Token Usage Analysis
 
@@ -593,26 +593,26 @@ cheaper models.
 1. **Batch optimization:** Our existing Haiku batch scanning for manifests
    > 2000 lines is already well-optimized
 
-______________________________________________________________________
+---
 
 ## Recommendations Summary
 
 ### Priority 1: Highest Impact
 
-| #   | Recommendation                                    | Disposition | Effort  | Issue |
-| --- | ------------------------------------------------- | ----------- | ------- | ----- |
-| R1  | Adopt 3-tier model assignment (opus/sonnet/haiku) | Adopt       | Small   | #312  |
-| R2  | Add certainty grading to audit findings           | Adopt       | Medium  | #313  |
-| R3  | Install deslop plugin for AI slop detection       | Adopt       | Trivial | #314  |
+| #  | Recommendation                                    | Disposition | Effort  | Issue |
+| -- | ------------------------------------------------- | ----------- | ------- | ----- |
+| R1 | Adopt 3-tier model assignment (opus/sonnet/haiku) | Adopt       | Small   | #312  |
+| R2 | Add certainty grading to audit findings           | Adopt       | Medium  | #313  |
+| R3 | Install deslop plugin for AI slop detection       | Adopt       | Trivial | #314  |
 
 ### Priority 2: High Impact
 
-| #   | Recommendation                                          | Disposition | Effort | Issue |
-| --- | ------------------------------------------------------- | ----------- | ------ | ----- |
-| R4  | Parallelize code-reviewer into 4 specialized sub-agents | Adapt       | Large  | #315  |
-| R5  | Add deterministic pre-scan layer to audit pipeline      | Adapt       | Medium | #316  |
-| R6  | Add pre-review gates to next-issue-ship                 | Adapt       | Medium | #317  |
-| R7  | Add CI remediation to ship workflow                     | Adapt       | Medium | #318  |
+| #  | Recommendation                                          | Disposition | Effort | Issue |
+| -- | ------------------------------------------------------- | ----------- | ------ | ----- |
+| R4 | Parallelize code-reviewer into 4 specialized sub-agents | Adapt       | Large  | #315  |
+| R5 | Add deterministic pre-scan layer to audit pipeline      | Adapt       | Medium | #316  |
+| R6 | Add pre-review gates to next-issue-ship                 | Adapt       | Medium | #317  |
+| R7 | Add CI remediation to ship workflow                     | Adapt       | Medium | #318  |
 
 ### Priority 3: Medium Impact
 
@@ -623,7 +623,7 @@ ______________________________________________________________________
 | R10 | Audit agent definitions for prose trimming (C7) | Adapt       | Small  | #321  |
 | R11 | Evaluate agnix rules for our AI config audit    | Adapt       | Medium | #322  |
 
-______________________________________________________________________
+---
 
 ## Appendices
 
