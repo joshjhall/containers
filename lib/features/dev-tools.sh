@@ -160,9 +160,11 @@ else
 fi
 
 # Network debugging tools
+# nmap package also provides ncat (feature-rich netcat) and nping
 log_message "Installing network debugging tools..."
 apt_install \
     netcat-openbsd \
+    nmap \
     dnsutils \
     iputils-ping \
     traceroute
