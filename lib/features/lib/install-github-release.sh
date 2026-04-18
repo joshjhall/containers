@@ -221,18 +221,23 @@ install_github_release() {
                 dpkg -i "$local_file"
             ;;
         gunzip)
+            # gunzip refuses in-place decompression unless the source file
+            # carries a recognized suffix (.gz/.tgz/-gz/.Z/-Z/.z/_z). Our
+            # download is saved as "${tool_name}-download" (no extension),
+            # so rename first, then gunzip produces $local_file.
+            command mv "$local_file" "${local_file}.gz"
             log_command "Extracting ${tool_name}" \
-                gunzip "$local_file"
-            # After gunzip, the file loses the extension — find the decompressed file
-            local decompressed
-            decompressed=$(command find . -maxdepth 1 -type f ! -name "*.gz" | command head -1)
-            if [ -z "$decompressed" ]; then
-                log_error "Decompressed file not found for ${tool_name}"
+                gunzip "${local_file}.gz"
+            # If the decompressed file isn't present, gunzip failed even
+            # though log_command's pipeline may have swallowed its exit
+            # status (tee's success masks upstream non-zero).
+            if [ ! -f "$local_file" ]; then
+                log_error "Decompressed file not found for ${tool_name} (gunzip failed)"
                 cd /
                 return 1
             fi
             log_command "Installing ${tool_name} binary" \
-                command mv "$decompressed" "/usr/local/bin/${tool_name}"
+                command mv "$local_file" "/usr/local/bin/${tool_name}"
             log_command "Setting ${tool_name} permissions" \
                 chmod +x "/usr/local/bin/${tool_name}"
             ;;
