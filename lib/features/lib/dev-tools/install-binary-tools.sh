@@ -360,6 +360,18 @@ install_github_binary_tools() {
     else
         log_message "agentsys skipped (requires Node.js/npm)"
     fi
+
+    # cspell (spell checker for code) — requires Node.js/npm
+    if command -v npm &> /dev/null; then
+        log_message "Installing cspell (spell checker)..."
+        if npm install -g cspell@latest 2>/dev/null; then
+            log_message "✓ cspell installed successfully"
+        else
+            log_warning "cspell installation failed, continuing without cspell"
+        fi
+    else
+        log_message "cspell skipped (requires Node.js/npm)"
+    fi
 }
 
 create_tool_symlinks() {

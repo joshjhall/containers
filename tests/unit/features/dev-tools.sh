@@ -609,6 +609,14 @@ test_agnix_installation() {
 
 run_test test_agnix_installation "agnix installation present in binary tools"
 
+# Test: cspell installation present in binary tools script
+test_cspell_installation() {
+    local source_file="$PROJECT_ROOT/lib/features/lib/dev-tools/install-binary-tools.sh"
+    assert_file_contains "$source_file" "cspell" "install-binary-tools.sh installs cspell"
+}
+
+run_test test_cspell_installation "cspell installation present in binary tools"
+
 # Test: lefthook version variable defined in dev-tools.sh
 test_lefthook_version_variable() {
     local source_file="$PROJECT_ROOT/lib/features/dev-tools.sh"

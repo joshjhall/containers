@@ -90,6 +90,8 @@ These tools get the latest version at build time, which is generally fine:
 ### Via npm install -g (in dev-tools.sh, requires Node.js)
 
 - agnix (AI config linter)
+- agentsys (AI plugin marketplace)
+- cspell (spell checker for code)
 
 ### Via gem install (in ruby-dev.sh)
 
