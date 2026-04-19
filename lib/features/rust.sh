@@ -187,6 +187,14 @@ log_command "Cleaning up build directory" \
 
 # Install additional Cargo tools
 # These enhance the development experience but aren't required for basic Rust usage
+
+# build-essential provides cc/gcc, required to link the Rust binaries we
+# cargo install below. Without this, `cargo install` fails with
+# "error: linker `cc` not found" on minimal base images.
+log_message "Installing system dependencies for cargo installs (build-essential)"
+apt_update
+apt_install build-essential pkg-config
+
 log_command "Installing cargo development tools" \
     su - "${USERNAME}" -c "
     export CARGO_HOME='${CARGO_HOME}'
