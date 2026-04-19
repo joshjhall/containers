@@ -31,14 +31,14 @@ This container build system uses conventions you should follow:
 ```yaml
 services:
   dev:
-    init: true  # Required — ensures proper zombie reaping
+    init: true # Required — ensures proper zombie reaping
     build:
       args:
         - INCLUDE_PYTHON_DEV=true
     environment:
-      - GITHUB_TOKEN=${GITHUB_TOKEN}  # Runtime secrets as env vars
+      - GITHUB_TOKEN=${GITHUB_TOKEN} # Runtime secrets as env vars
     volumes:
-      - project-cache:/cache          # Named volume for cache persistence
+      - project-cache:/cache # Named volume for cache persistence
 ```
 
 ## Debugging Container Builds

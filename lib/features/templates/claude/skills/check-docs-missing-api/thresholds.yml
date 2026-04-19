@@ -6,11 +6,11 @@ min_params_for_complex: 4
 # Severity mapping per category
 severity:
   undocumented-public-api:
-    complex_api: medium        # Complex public API with multiple params
-    simple_api: low            # Simple public API
+    complex_api: medium # Complex public API with multiple params
+    simple_api: low # Simple public API
   undocumented-complex-function:
-    frequently_called: medium  # Called from many places
-    internal_utility: low      # Used in few places
+    frequently_called: medium # Called from many places
+    internal_utility: low # Used in few places
 
 # Minimum confidence thresholds for reporting
 min_confidence:

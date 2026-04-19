@@ -125,8 +125,8 @@ Gatekeeper supports three enforcement actions:
 spec:
   match:
     excludedNamespaces:
-      - 'kube-system'
-      - 'your-exception-namespace'
+      - "kube-system"
+      - "your-exception-namespace"
 ```
 
 ### Modifying Trusted Registries
@@ -134,8 +134,8 @@ spec:
 ```yaml
 parameters:
   registries:
-    - 'gcr.io/your-project/'
-    - 'your-private-registry.com/'
+    - "gcr.io/your-project/"
+    - "your-private-registry.com/"
 ```
 
 ### Adding HIPAA Namespaces
@@ -143,8 +143,8 @@ parameters:
 ```yaml
 parameters:
   hipaaNamespaces:
-    - 'healthcare-app'
-    - 'phi-processing'
+    - "healthcare-app"
+    - "phi-processing"
 ```
 
 ## Monitoring Violations
@@ -186,7 +186,7 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: 'High number of Gatekeeper policy violations'
+          summary: "High number of Gatekeeper policy violations"
 
       - alert: GatekeeperAuditFailure
         expr: gatekeeper_audit_last_run_time < (time() - 3600)
@@ -209,7 +209,7 @@ groups:
 securityContext:
   privileged: false # Remove this line
   capabilities:
-    add: ['NET_ADMIN'] # Add only needed caps
+    add: ["NET_ADMIN"] # Add only needed caps
 ```
 
 ### Missing Resource Limits
@@ -221,11 +221,11 @@ securityContext:
 ```yaml
 resources:
   limits:
-    cpu: '500m'
-    memory: '512Mi'
+    cpu: "500m"
+    memory: "512Mi"
   requests:
-    cpu: '100m'
-    memory: '128Mi'
+    cpu: "100m"
+    memory: "128Mi"
 ```
 
 ### Latest Tag Violation
@@ -247,8 +247,8 @@ image: nginx:1.25.3 # Not nginx:latest
 ```yaml
 metadata:
   labels:
-    encryption: 'aes-256-gcm'
-    data-classification: 'phi'
+    encryption: "aes-256-gcm"
+    data-classification: "phi"
 ```
 
 ### Root User Violation

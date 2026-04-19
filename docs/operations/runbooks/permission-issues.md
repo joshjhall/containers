@@ -218,7 +218,7 @@ docker run --user $(id -u):$(id -g) <image>
 services:
   app:
     image: ghcr.io/joshjhall/containers:python-dev
-    user: '${UID:-1000}:${GID:-1000}'
+    user: "${UID:-1000}:${GID:-1000}"
     volumes:
       - .:/workspace/project
       - cache:/cache

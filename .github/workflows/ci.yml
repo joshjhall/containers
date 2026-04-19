@@ -5,10 +5,10 @@ on:
     branches:
       - main
       - v5
-      - 'auto-patch/**'
-    tags: [ 'v*' ]
+      - "auto-patch/**"
+    tags: ["v*"]
   pull_request:
-    branches: [ main ]
+    branches: [main]
   workflow_dispatch:
 
 env:
@@ -26,7 +26,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Fetch full history for Gitleaks to scan commit ranges
+          fetch-depth: 0 # Fetch full history for Gitleaks to scan commit ranges
 
       - name: Run unit tests
         run: |
@@ -53,9 +53,9 @@ jobs:
           sudo mv /tmp/lefthook /usr/local/bin/lefthook
           lefthook version
 
-          # shellcheck + yamllint come from the runner's apt repo
+          # shellcheck comes from the runner's apt repo
           sudo apt-get update
-          sudo apt-get install -y shellcheck yamllint
+          sudo apt-get install -y shellcheck
 
           # Biome — version pulled from biome.json schema (matches feature behavior)
           npm install -g @biomejs/biome@$(grep -o '"https://biomejs.dev/schemas/[^"]*"' biome.json | grep -o '[0-9]\+\.[0-9]\+\.[0-9]\+')
@@ -603,36 +603,36 @@ jobs:
       - name: Scan filesystem for misconfigurations
         uses: aquasecurity/trivy-action@0.35.0
         with:
-          scan-type: 'fs'
-          scan-ref: '.'
-          format: 'table'
-          scanners: 'misconfig,secret'
-          severity: 'CRITICAL,HIGH,MEDIUM'
-          exit-code: '1'
-          skip-setup-trivy: 'true'
+          scan-type: "fs"
+          scan-ref: "."
+          format: "table"
+          scanners: "misconfig,secret"
+          severity: "CRITICAL,HIGH,MEDIUM"
+          exit-code: "1"
+          skip-setup-trivy: "true"
         continue-on-error: true
 
       - name: Scan Dockerfile for issues
         uses: aquasecurity/trivy-action@0.35.0
         with:
-          scan-type: 'config'
-          scan-ref: './Dockerfile'
-          format: 'table'
-          severity: 'CRITICAL,HIGH'
-          skip-setup-trivy: 'true'
+          scan-type: "config"
+          scan-ref: "./Dockerfile"
+          format: "table"
+          severity: "CRITICAL,HIGH"
+          skip-setup-trivy: "true"
         continue-on-error: true
 
       - name: Run Trivy vulnerability scanner (CRITICAL - blocking)
         uses: aquasecurity/trivy-action@0.35.0
         with:
           image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.sanitized }}-${{ matrix.variant }}
-          format: 'table'
-          scanners: 'vuln'
-          severity: 'CRITICAL'
-          exit-code: '1'
+          format: "table"
+          scanners: "vuln"
+          severity: "CRITICAL"
+          exit-code: "1"
           ignore-unfixed: true
-          trivyignores: '.trivyignore'
-          skip-setup-trivy: 'true'
+          trivyignores: ".trivyignore"
+          skip-setup-trivy: "true"
         # Critical vulnerabilities with fixes available will fail the build
         # Note: secrets are checked in filesystem scan with continue-on-error
 
@@ -641,42 +641,42 @@ jobs:
         if: always()
         with:
           image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.sanitized }}-${{ matrix.variant }}
-          format: 'sarif'
-          output: 'trivy-results-${{ matrix.variant }}.sarif'
-          severity: 'CRITICAL,HIGH'
-          skip-setup-trivy: 'true'
+          format: "sarif"
+          output: "trivy-results-${{ matrix.variant }}.sarif"
+          severity: "CRITICAL,HIGH"
+          skip-setup-trivy: "true"
 
       - name: Upload Trivy results to GitHub Security
         uses: github/codeql-action/upload-sarif@v4
         if: always() && hashFiles(format('trivy-results-{0}.sarif', matrix.variant)) != ''
         with:
-          sarif_file: 'trivy-results-${{ matrix.variant }}.sarif'
-          category: 'container-${{ matrix.variant }}'
+          sarif_file: "trivy-results-${{ matrix.variant }}.sarif"
+          category: "container-${{ matrix.variant }}"
 
       - name: Generate SBOM
         uses: aquasecurity/trivy-action@0.35.0
         if: always()
         with:
           image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.sanitized }}-${{ matrix.variant }}
-          format: 'cyclonedx'
-          output: 'sbom-${{ matrix.variant }}.json'
-          skip-setup-trivy: 'true'
+          format: "cyclonedx"
+          output: "sbom-${{ matrix.variant }}.json"
+          skip-setup-trivy: "true"
 
       - name: Run Trivy for detailed report
         uses: aquasecurity/trivy-action@0.35.0
         if: always()
         with:
           image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.sanitized }}-${{ matrix.variant }}
-          format: 'table'
-          severity: 'CRITICAL,HIGH,MEDIUM'
-          skip-setup-trivy: 'true'
+          format: "table"
+          severity: "CRITICAL,HIGH,MEDIUM"
+          skip-setup-trivy: "true"
 
       - name: Upload Trivy scan results
         uses: actions/upload-artifact@v4
         if: always() && hashFiles(format('trivy-results-{0}.sarif', matrix.variant)) != ''
         with:
           name: trivy-results-${{ matrix.variant }}
-          path: 'trivy-results-${{ matrix.variant }}.sarif'
+          path: "trivy-results-${{ matrix.variant }}.sarif"
           retention-days: 30
 
       - name: Upload SBOM
@@ -684,7 +684,7 @@ jobs:
         if: always() && hashFiles(format('sbom-{0}.json', matrix.variant)) != ''
         with:
           name: sbom-${{ matrix.variant }}
-          path: 'sbom-${{ matrix.variant }}.json'
+          path: "sbom-${{ matrix.variant }}.json"
           retention-days: 90
 
   # =====================================
@@ -754,8 +754,8 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v')
     permissions:
       contents: write
-      packages: write  # Required for Cosign to push signature blobs
-      id-token: write  # Required for Cosign OIDC keyless signing
+      packages: write # Required for Cosign to push signature blobs
+      id-token: write # Required for Cosign OIDC keyless signing
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -780,7 +780,7 @@ jobs:
       - name: Generate image digests, sign, and attest with Cosign
         id: digests
         env:
-          COSIGN_EXPERIMENTAL: 1  # Enable keyless signing
+          COSIGN_EXPERIMENTAL: 1 # Enable keyless signing
           GH_REPO: ${{ github.repository }}
           GH_REF: ${{ github.ref }}
           GH_SHA: ${{ github.sha }}

@@ -8,16 +8,16 @@
 # the loop can exit
 severity:
   stub-detected:
-    todo_fixme: high           # TODO/FIXME in implementation code
-    not_implemented: high      # NotImplementedError / unimplemented!()
+    todo_fixme: high # TODO/FIXME in implementation code
+    not_implemented: high # NotImplementedError / unimplemented!()
   empty-body:
-    pass_only: high            # Function with only pass/... body
-    empty_braces: high         # Function with {} body
+    pass_only: high # Function with only pass/... body
+    empty_braces: high # Function with {} body
   no-assertions:
-    test_no_asserts: high      # Test file with zero assertions
+    test_no_asserts: high # Test file with zero assertions
 
 # Minimum confidence thresholds for reporting
 min_confidence:
-  deterministic: 0.9   # patterns.sh matches
-  heuristic: 0.7       # LLM confirmation of pre-scan
-  llm: 0.5             # LLM judgment only
+  deterministic: 0.9 # patterns.sh matches
+  heuristic: 0.7 # LLM confirmation of pre-scan
+  llm: 0.5 # LLM judgment only

@@ -38,7 +38,7 @@ metadata:
   name: app-secrets
 type: Opaque
 stringData:
-  database-url: 'postgresql://...'
+  database-url: "postgresql://..."
 ---
 apiVersion: v1
 kind: Pod

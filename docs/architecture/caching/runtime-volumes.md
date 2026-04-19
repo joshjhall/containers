@@ -60,7 +60,7 @@ docker run -it \
 ## Docker Compose
 
 ```yaml
-version: '3.8'
+version: "3.8"
 
 services:
   app:

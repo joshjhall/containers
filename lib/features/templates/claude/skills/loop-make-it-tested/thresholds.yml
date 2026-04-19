@@ -16,11 +16,11 @@ min_assertions_per_test: 1
 # Severity mapping per category
 severity:
   missing-test-file:
-    no_test_module: high         # Source file has no test counterpart
+    no_test_module: high # Source file has no test counterpart
   untested-public-api:
-    exported_no_test: high       # Public function not referenced in tests
+    exported_no_test: high # Public function not referenced in tests
   test-no-assertions:
-    empty_test: high             # Test function with zero assertions
+    empty_test: high # Test function with zero assertions
 
 # Minimum confidence thresholds for reporting
 min_confidence:

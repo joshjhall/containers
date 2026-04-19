@@ -197,7 +197,7 @@ MCS labels provide tenant isolation:
 
 ```yaml
 seLinuxOptions:
-  level: 's0:c100,c200' # Categories c100 and c200
+  level: "s0:c100,c200" # Categories c100 and c200
 ```
 
 Pods with different MCS labels cannot access each other's resources.

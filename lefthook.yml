@@ -14,9 +14,8 @@ pre-commit:
   commands:
 
     # --- General file checks (native shell, no Python runtime) ---
-    # YAML/JSON/private-key checks are covered elsewhere: yamllint, biome-json,
+    # YAML/JSON/private-key checks are covered elsewhere: dprint-yaml, biome-json,
     # and gitleaks (all defined below).
-
     trailing-whitespace:
       glob: "*"
       exclude:
@@ -76,13 +75,14 @@ pre-commit:
       run: shfmt -w -i 4 -ci {staged_files}
       stage_fixed: true
 
-    # --- YAML linting ---
+    # --- YAML formatting (dprint + g-plane/pretty_yaml) ---
 
-    yamllint:
+    dprint-yaml:
       glob: "*.{yml,yaml}"
       exclude:
         - "tests/results/**"
-      run: yamllint -c .yamllint.yml {staged_files}
+      run: dprint fmt {staged_files}
+      stage_fixed: true
 
     # --- Markdown formatting and linting ---
 
@@ -176,7 +176,6 @@ pre-commit:
 # ============================================================================
 commit-msg:
   commands:
-
     conform:
       # conform is shipped by the dev-tools feature; skip gracefully if
       # running outside a dev-tools container (e.g., a lint-only host).
@@ -190,7 +189,6 @@ commit-msg:
 pre-push:
   parallel: true
   commands:
-
     unit-tests:
       run: ./tests/run_changed_tests.sh
 
@@ -204,9 +202,9 @@ pre-push:
           [ -f "$f" ] && docker compose -f "$f" config >/dev/null || exit 1
         done
 
-    yamllint-all:
+    dprint-yaml-check:
       glob: "*.{yml,yaml}"
-      run: yamllint -c .yamllint.yml {all_files}
+      run: dprint check {all_files}
 
     # --- Dependency CVE scanning ---
 

@@ -148,7 +148,7 @@ metadata:
     data-classification: restricted
     audit-logging: required
     encryption: required
-    pii-present: 'true'
+    pii-present: "true"
 ```
 
 ---
@@ -280,7 +280,7 @@ kind: CronJob
 metadata:
   name: data-retention-cleanup
 spec:
-  schedule: '0 2 * * *'
+  schedule: "0 2 * * *"
   jobTemplate:
     spec:
       template:
@@ -315,9 +315,9 @@ metadata:
   name: restricted-data-access
   namespace: production
 rules:
-  - apiGroups: ['']
-    resources: ['pods']
-    verbs: ['get', 'list']
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
     resourceNames: [] # Specific pods only
 ---
 apiVersion: rbac.authorization.k8s.io/v1

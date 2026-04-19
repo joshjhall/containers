@@ -136,8 +136,8 @@ Instead of pushing directly, create pull requests:
   uses: peter-evans/create-pull-request@v5
   with:
     token: ${{ secrets.CI_PUSH_TOKEN }}
-    commit-message: 'chore: automated version updates'
-    title: 'Automated Version Updates'
+    commit-message: "chore: automated version updates"
+    title: "Automated Version Updates"
     body: |
       ## Automated Version Updates
 

@@ -112,7 +112,7 @@ receivers:
       # CUSTOMIZE: Replace with your PagerDuty integration key
       - service_key: "<PAGERDUTY_SERVICE_KEY>"
         severity: critical
-        description: '{{ .CommonAnnotations.summary }}'
+        description: "{{ .CommonAnnotations.summary }}"
         details:
           firing: '{{ template "pagerduty.default.description" . }}'
 
@@ -133,7 +133,7 @@ receivers:
     slack_configs:
       - channel: "#container-alerts"
         send_resolved: true
-        title: '{{ .CommonAnnotations.summary }}'
+        title: "{{ .CommonAnnotations.summary }}"
         text: >-
           {{ range .Alerts }}
           *Alert:* {{ .Annotations.summary }}
@@ -145,7 +145,7 @@ receivers:
       # CUSTOMIZE: Replace with your security team's channel
       - channel: "#security-alerts"
         send_resolved: true
-        title: 'SECURITY: {{ .CommonAnnotations.summary }}'
+        title: "SECURITY: {{ .CommonAnnotations.summary }}"
         text: >-
           {{ range .Alerts }}
           *Alert:* {{ .Annotations.summary }}

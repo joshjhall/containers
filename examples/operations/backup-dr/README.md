@@ -510,7 +510,7 @@ Configure encryption in `velero-deployment.yaml`:
 
 ```yaml
 config:
-  kmsKeyId: 'arn:aws:kms:us-east-1:123456789012:key/your-kms-key-id'
+  kmsKeyId: "arn:aws:kms:us-east-1:123456789012:key/your-kms-key-id"
 ```
 
 ## Related Documentation

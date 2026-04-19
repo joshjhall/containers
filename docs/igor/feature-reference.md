@@ -112,8 +112,8 @@ come from the registry and can be overridden in `.igor.yml`:
 
 ```yaml
 versions:
-  PYTHON_VERSION: "3.12"    # Partial version — resolves to latest 3.12.x
-  NODE_VERSION: "22.12.0"   # Exact version
+  PYTHON_VERSION: "3.12" # Partial version — resolves to latest 3.12.x
+  NODE_VERSION: "22.12.0" # Exact version
 ```
 
 The containers build system supports partial version formats for languages.

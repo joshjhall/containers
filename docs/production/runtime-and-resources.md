@@ -106,11 +106,11 @@ spec:
       image: myapp:prod
       resources:
         requests:
-          memory: '256Mi'
-          cpu: '250m'
+          memory: "256Mi"
+          cpu: "250m"
         limits:
-          memory: '512Mi'
-          cpu: '500m'
+          memory: "512Mi"
+          cpu: "500m"
 ```
 
 ### Memory Limits

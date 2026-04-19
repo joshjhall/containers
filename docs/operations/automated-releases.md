@@ -142,7 +142,7 @@ Edit `.github/workflows/auto-patch.yml`:
 
 ```yaml
 schedule:
-  - cron: '0 2 * * 0' # Sundays at 2am UTC
+  - cron: "0 2 * * 0" # Sundays at 2am UTC
 ```
 
 Common schedules:

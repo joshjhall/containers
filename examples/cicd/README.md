@@ -131,7 +131,7 @@ Automatically deploys to staging after successful builds on main:
 ```yaml
 on:
   workflow_run:
-    workflows: ['Build and Test']
+    workflows: ["Build and Test"]
     types: [completed]
     branches: [main]
 ```

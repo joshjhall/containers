@@ -160,7 +160,7 @@ Use `memory` when the agent should learn across sessions:
 ```yaml
 ---
 name: code-reviewer
-memory: user  # Recommended default scope
+memory: user # Recommended default scope
 ---
 
 As you review code, update your agent memory with patterns,

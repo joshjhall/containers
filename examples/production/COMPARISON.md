@@ -72,9 +72,9 @@ services:
   app-dev:
     build:
       args:
-        BASE_IMAGE: 'debian:trixie'
-        ENABLE_PASSWORDLESS_SUDO: 'true'
-        INCLUDE_DEV_TOOLS: 'true'
+        BASE_IMAGE: "debian:trixie"
+        ENABLE_PASSWORDLESS_SUDO: "true"
+        INCLUDE_DEV_TOOLS: "true"
 
     # Relaxed security for convenience
     volumes:
@@ -94,9 +94,9 @@ services:
   app-prod:
     build:
       args:
-        BASE_IMAGE: 'debian:trixie-slim'
-        ENABLE_PASSWORDLESS_SUDO: 'false'
-        INCLUDE_DEV_TOOLS: 'false'
+        BASE_IMAGE: "debian:trixie-slim"
+        ENABLE_PASSWORDLESS_SUDO: "false"
+        INCLUDE_DEV_TOOLS: "false"
 
     # Hardened security
     read_only: true # Read-only root filesystem
@@ -111,7 +111,7 @@ services:
 
     # Health monitoring
     healthcheck:
-      test: ['/usr/local/bin/healthcheck', '--quick']
+      test: ["/usr/local/bin/healthcheck", "--quick"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -239,10 +239,10 @@ infrastructure at runtime (e.g., operator patterns, auto-scaling logic).
 deploy:
   resources:
     limits:
-      cpus: '4'
+      cpus: "4"
       memory: 8G
     reservations:
-      cpus: '2'
+      cpus: "2"
       memory: 4G
 ```
 
@@ -253,10 +253,10 @@ deploy:
 deploy:
   resources:
     limits:
-      cpus: '2'
+      cpus: "2"
       memory: 2G
     reservations:
-      cpus: '1'
+      cpus: "1"
       memory: 1G
 ```
 

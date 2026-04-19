@@ -296,7 +296,7 @@ When writing docker-compose files, always include `init: true`:
 ```yaml
 services:
   myservice:
-    init: true  # Ensures proper zombie reaping
+    init: true # Ensures proper zombie reaping
     command: ["sleep", "infinity"]
 ```
 

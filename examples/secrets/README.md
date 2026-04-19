@@ -100,7 +100,7 @@ DOCKER_SECRETS_UPPERCASE="true"
 #### Example: Docker Compose
 
 ```yaml
-version: '3.8'
+version: "3.8"
 
 services:
   app:
@@ -109,9 +109,9 @@ services:
       - db_password
       - api_key
     environment:
-      # Docker secrets are auto-detected - no config needed!
-      # Optionally customize:
-      # DOCKER_SECRET_PREFIX: "APP_"
+# Docker secrets are auto-detected - no config needed!
+# Optionally customize:
+# DOCKER_SECRET_PREFIX: "APP_"
 
 secrets:
   db_password:
@@ -205,15 +205,15 @@ spec:
       image: myapp:latest
       env:
         - name: VAULT_ENABLED
-          value: 'true'
+          value: "true"
         - name: VAULT_ADDR
-          value: 'https://vault.default.svc.cluster.local:8200'
+          value: "https://vault.default.svc.cluster.local:8200"
         - name: VAULT_AUTH_METHOD
-          value: 'kubernetes'
+          value: "kubernetes"
         - name: VAULT_K8S_ROLE
-          value: 'myapp-role'
+          value: "myapp-role"
         - name: VAULT_SECRET_PATH
-          value: 'secret/data/myapp/production'
+          value: "secret/data/myapp/production"
 ```
 
 ### AWS Secrets Manager
@@ -285,11 +285,11 @@ spec:
       image: myapp:latest
       env:
         - name: AWS_SECRETS_ENABLED
-          value: 'true'
+          value: "true"
         - name: AWS_SECRET_NAME
-          value: 'myapp/production/secrets'
+          value: "myapp/production/secrets"
         - name: AWS_REGION
-          value: 'us-east-1'
+          value: "us-east-1"
 ```
 
 ### Azure Key Vault
@@ -344,11 +344,11 @@ spec:
       image: myapp:latest
       env:
         - name: AZURE_KEYVAULT_ENABLED
-          value: 'true'
+          value: "true"
         - name: AZURE_KEYVAULT_NAME
-          value: 'myapp-keyvault'
+          value: "myapp-keyvault"
         - name: AZURE_SECRET_NAMES
-          value: 'database-password,api-key'
+          value: "database-password,api-key"
 ```
 
 #### Example: Service Principal
@@ -419,11 +419,11 @@ spec:
       image: myapp:latest
       env:
         - name: GCP_SECRETS_ENABLED
-          value: 'true'
+          value: "true"
         - name: GCP_PROJECT_ID
-          value: 'my-project-id'
+          value: "my-project-id"
         - name: GCP_SECRET_NAMES
-          value: 'db-password,api-key'
+          value: "db-password,api-key"
 ```
 
 #### Example: Local with Service Account
@@ -508,8 +508,8 @@ metadata:
   name: myapp-secrets
 type: Opaque
 stringData:
-  database-password: 'super-secret'
-  api-key: 'api-key-here'
+  database-password: "super-secret"
+  api-key: "api-key-here"
 ---
 apiVersion: v1
 kind: Pod
@@ -543,13 +543,13 @@ metadata:
 spec:
   provider:
     vault:
-      server: 'https://vault.example.com'
-      path: 'secret'
-      version: 'v2'
+      server: "https://vault.example.com"
+      path: "secret"
+      version: "v2"
       auth:
         kubernetes:
-          mountPath: 'kubernetes'
-          role: 'myapp-role'
+          mountPath: "kubernetes"
+          role: "myapp-role"
 ---
 apiVersion: external-secrets.io/v1beta1
 kind: ExternalSecret
@@ -577,31 +577,31 @@ See `docker-compose-*.yml` files in this directory for complete examples.
 ### Multi-Provider Example
 
 ```yaml
-version: '3.8'
+version: "3.8"
 
 services:
   app:
     image: myapp:latest
     environment:
       # Universal loader configuration
-      SECRET_LOADER_ENABLED: 'true'
-      SECRET_LOADER_PRIORITY: 'vault,aws,1password'
-      SECRET_LOADER_FAIL_ON_ERROR: 'false'
+      SECRET_LOADER_ENABLED: "true"
+      SECRET_LOADER_PRIORITY: "vault,aws,1password"
+      SECRET_LOADER_FAIL_ON_ERROR: "false"
 
       # HashiCorp Vault
-      VAULT_ENABLED: 'true'
-      VAULT_ADDR: 'https://vault.example.com:8200'
-      VAULT_TOKEN: '${VAULT_TOKEN}'
-      VAULT_SECRET_PATH: 'secret/data/myapp/production'
+      VAULT_ENABLED: "true"
+      VAULT_ADDR: "https://vault.example.com:8200"
+      VAULT_TOKEN: "${VAULT_TOKEN}"
+      VAULT_SECRET_PATH: "secret/data/myapp/production"
 
       # AWS Secrets Manager
-      AWS_SECRETS_ENABLED: 'true'
-      AWS_SECRET_NAME: 'myapp/production/secrets'
-      AWS_REGION: 'us-east-1'
+      AWS_SECRETS_ENABLED: "true"
+      AWS_SECRET_NAME: "myapp/production/secrets"
+      AWS_REGION: "us-east-1"
 
       # 1Password
-      OP_ENABLED: 'true'
-      OP_SERVICE_ACCOUNT_TOKEN: '${OP_SERVICE_ACCOUNT_TOKEN}'
+      OP_ENABLED: "true"
+      OP_SERVICE_ACCOUNT_TOKEN: "${OP_SERVICE_ACCOUNT_TOKEN}"
 ```
 
 ## Testing

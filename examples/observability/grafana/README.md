@@ -310,10 +310,10 @@ Link dashboards to Prometheus alerts:
         "step": "60s",
         "tagKeys": "feature",
         "titleFormat": "Build Failed",
-        "type": "tags"
-      }
-    ]
-  }
+        "type": "tags",
+      },
+    ],
+  },
 }
 ```
 

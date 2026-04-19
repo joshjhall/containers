@@ -51,7 +51,7 @@ services:
   devcontainer:
     volumes:
       - workspace-volume:/workspace/containers # Named volume instead of bind mount
-    # ... rest of config
+# ... rest of config
 
 volumes:
   workspace-volume: # Creates persistent Docker volume

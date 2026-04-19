@@ -39,7 +39,7 @@ services:
       - METRICS_PORT=9090
       - ENABLE_JSON_LOGGING=true
     ports:
-      - "9091:9090"  # Metrics endpoint
+      - "9091:9090" # Metrics endpoint
 ```
 
 ## 2. Start the Observability Stack

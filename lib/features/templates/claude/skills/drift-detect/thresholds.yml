@@ -7,21 +7,21 @@
 # Severity mapping per category
 severity:
   planned-not-touched:
-    default: high              # Planned file not modified
-    directory_match: medium    # Plan listed directory, files within were touched
-    optional_in_plan: medium   # Plan marked file as optional
+    default: high # Planned file not modified
+    directory_match: medium # Plan listed directory, files within were touched
+    optional_in_plan: medium # Plan marked file as optional
   unplanned-modification:
-    default: medium            # File modified but not in plan
-    test_for_planned: low      # Test file for a planned source file
-    lock_or_config: low        # Lock files, .gitignore, etc.
+    default: medium # File modified but not in plan
+    test_for_planned: low # Test file for a planned source file
+    lock_or_config: low # Lock files, .gitignore, etc.
   unchecked-criteria:
-    clearly_unaddressed: high  # Criterion clearly not implemented
-    ambiguous: medium          # Unclear whether criterion is met
+    clearly_unaddressed: high # Criterion clearly not implemented
+    ambiguous: medium # Unclear whether criterion is met
   scope-addition:
-    default: low               # New functionality beyond planned scope
+    default: low # New functionality beyond planned scope
 
 # Minimum confidence thresholds for reporting
 min_confidence:
-  deterministic: 0.9   # patterns.sh matches (file existence checks)
-  heuristic: 0.7       # Pattern-based matching (path similarity)
-  llm: 0.5             # LLM judgment (acceptance criteria, scope analysis)
+  deterministic: 0.9 # patterns.sh matches (file existence checks)
+  heuristic: 0.7 # Pattern-based matching (path similarity)
+  llm: 0.5 # LLM judgment (acceptance criteria, scope analysis)

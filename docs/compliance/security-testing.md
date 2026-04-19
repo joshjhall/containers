@@ -104,9 +104,9 @@ Already integrated in CI workflow:
   uses: aquasecurity/trivy-action@master
   with:
     image-ref: ${{ env.IMAGE_NAME }}
-    format: 'sarif'
-    output: 'trivy-results.sarif'
-    severity: 'CRITICAL,HIGH'
+    format: "sarif"
+    output: "trivy-results.sarif"
+    severity: "CRITICAL,HIGH"
 ```
 
 ### Gitleaks Secret Detection
@@ -138,9 +138,9 @@ dast-scan:
     - name: OWASP ZAP Scan
       uses: zaproxy/action-full-scan@v0.7.0
       with:
-        target: 'https://staging.example.com'
-        rules_file_name: '.zap/rules.tsv'
-        cmd_options: '-a'
+        target: "https://staging.example.com"
+        rules_file_name: ".zap/rules.tsv"
+        cmd_options: "-a"
 ```
 
 ### ZAP Configuration
@@ -238,7 +238,7 @@ spec:
     labelSelectors:
       app: devcontainer
   scheduler:
-    cron: '@every 1h'
+    cron: "@every 1h"
 ```
 
 ### Litmus Chaos Experiments
@@ -252,7 +252,7 @@ metadata:
 spec:
   appinfo:
     appns: production
-    applabel: 'app=devcontainer'
+    applabel: "app=devcontainer"
   chaosServiceAccount: litmus-admin
   experiments:
     - name: container-cpu-hog
@@ -260,11 +260,11 @@ spec:
         components:
           env:
             - name: TARGET_CONTAINER
-              value: 'devcontainer'
+              value: "devcontainer"
             - name: CPU_CORES
-              value: '1'
+              value: "1"
             - name: TOTAL_CHAOS_DURATION
-              value: '60'
+              value: "60"
 ```
 
 ### Chaos Testing Schedule

@@ -148,7 +148,7 @@ spec:
         value:
           transport_socket:
             typed_config:
-              '@type': type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext
+              "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext
               common_tls_context:
                 tls_params:
                   tls_minimum_protocol_version: TLSv1_2

@@ -201,11 +201,11 @@ Status: ⚠️ Examples Provided
 ```yaml
 resources:
   limits:
-    cpu: '2'
-    memory: '4Gi'
+    cpu: "2"
+    memory: "4Gi"
   requests:
-    cpu: '500m'
-    memory: '1Gi'
+    cpu: "500m"
+    memory: "1Gi"
 ```
 
 See [Production Checklist](production-checklist.md#resource-configuration).

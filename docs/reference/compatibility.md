@@ -229,7 +229,7 @@ name: Version Compatibility Testing
 
 on:
   schedule:
-    - cron: '0 2 * * 0' # Weekly on Sunday at 2 AM
+    - cron: "0 2 * * 0" # Weekly on Sunday at 2 AM
   workflow_dispatch:
 
 jobs:
@@ -238,8 +238,8 @@ jobs:
     strategy:
       matrix:
         variant: [python-dev, node-dev, rust-golang]
-        python-version: ['3.12.0', '3.13.0', '3.14.0']
-        node-version: ['20', '22']
+        python-version: ["3.12.0", "3.13.0", "3.14.0"]
+        node-version: ["20", "22"]
         include:
           - variant: python-dev
             language: python

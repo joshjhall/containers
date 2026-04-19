@@ -3,12 +3,12 @@ name: Automated Patch Releases
 on:
   schedule:
     # Weekly version check - Sundays at 2am UTC
-    - cron: '0 2 * * 0'
+    - cron: "0 2 * * 0"
   workflow_dispatch:
   workflow_run:
     workflows: ["CI/CD Pipeline"]
     types: [completed]
-    branches: ['auto-patch/**']
+    branches: ["auto-patch/**"]
   pull_request:
     types: [closed]
     branches: [main]
@@ -31,7 +31,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Full history needed for git-cliff changelog generation
+          fetch-depth: 0 # Full history needed for git-cliff changelog generation
           token: ${{ secrets.AUTO_PATCH_TOKEN }}
 
       - name: Check for version updates
@@ -77,7 +77,6 @@ jobs:
             echo "All versions are up to date!"
             echo "has_updates=false" >> $GITHUB_OUTPUT
           fi
-
 
       - name: Create auto-patch branch and apply updates
         if: steps.check.outputs.has_updates == 'true'

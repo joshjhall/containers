@@ -423,8 +423,8 @@ spec:
           labels:
             severity: critical
           annotations:
-            summary: 'Critical security event detected'
-            runbook: 'https://docs/compliance/incident-response.md#container-compromise'
+            summary: "Critical security event detected"
+            runbook: "https://docs/compliance/incident-response.md#container-compromise"
 ```
 
 ### Automation

@@ -17,11 +17,11 @@ skip_test_files: true
 # Severity mapping per category
 severity:
   undocumented-public-function:
-    no_docstring: high           # Public function without any docstring
+    no_docstring: high # Public function without any docstring
   undocumented-public-class:
-    no_class_docs: high          # Public class without documentation
+    no_class_docs: high # Public class without documentation
   undocumented-export:
-    no_jsdoc_godoc: high         # Exported symbol without JSDoc/GoDoc
+    no_jsdoc_godoc: high # Exported symbol without JSDoc/GoDoc
 
 # Minimum confidence thresholds for reporting
 min_confidence:

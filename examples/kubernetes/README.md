@@ -424,7 +424,7 @@ directories.
 ```yaml
 securityContext:
   capabilities:
-    drop: ['ALL']
+    drop: ["ALL"]
 ```
 
 ### 4. Network Policies
@@ -446,11 +446,11 @@ Always set resource limits to prevent resource exhaustion:
 ```yaml
 resources:
   requests: # Guaranteed
-    cpu: '500m'
-    memory: '512Mi'
+    cpu: "500m"
+    memory: "512Mi"
   limits: # Maximum
-    cpu: '2000m'
-    memory: '2Gi'
+    cpu: "2000m"
+    memory: "2Gi"
 ```
 
 ### 6. Pod Security Standards
@@ -493,7 +493,7 @@ Already configured in base deployment:
 ```yaml
 livenessProbe:
   exec:
-    command: ['/bin/sh', '-c', 'ps aux | grep -v grep | grep -q sleep']
+    command: ["/bin/sh", "-c", "ps aux | grep -v grep | grep -q sleep"]
   initialDelaySeconds: 10
   periodSeconds: 30
 ```
@@ -503,7 +503,7 @@ livenessProbe:
 ```yaml
 readinessProbe:
   exec:
-    command: ['/bin/sh', '-c', 'test -d /workspace']
+    command: ["/bin/sh", "-c", "test -d /workspace"]
   initialDelaySeconds: 5
   periodSeconds: 10
 ```

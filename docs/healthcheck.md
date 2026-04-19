@@ -168,7 +168,7 @@ services:
       context: .
       dockerfile: containers/Dockerfile
     healthcheck:
-      test: ['CMD', 'healthcheck', '--verbose']
+      test: ["CMD", "healthcheck", "--verbose"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -184,9 +184,9 @@ services:
       context: .
       dockerfile: containers/Dockerfile
       args:
-        INCLUDE_PYTHON_DEV: 'true'
+        INCLUDE_PYTHON_DEV: "true"
     healthcheck:
-      test: ['CMD', 'healthcheck', '--feature', 'python']
+      test: ["CMD", "healthcheck", "--feature", "python"]
       interval: 20s
       timeout: 5s
       retries: 3
@@ -199,7 +199,7 @@ services:
   database:
     image: postgres:17-alpine
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U user']
+      test: ["CMD-SHELL", "pg_isready -U user"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -212,7 +212,7 @@ services:
       database:
         condition: service_healthy # Wait for database
     healthcheck:
-      test: ['CMD', 'healthcheck', '--quick']
+      test: ["CMD", "healthcheck", "--quick"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -225,13 +225,13 @@ services:
   # Production: Quick checks for minimal overhead
   production:
     healthcheck:
-      test: ['CMD', 'healthcheck', '--quick']
+      test: ["CMD", "healthcheck", "--quick"]
       interval: 30s
 
   # Development: Full checks for comprehensive validation
   development:
     healthcheck:
-      test: ['CMD', 'healthcheck', '--verbose']
+      test: ["CMD", "healthcheck", "--verbose"]
       interval: 60s
 ```
 
@@ -279,7 +279,7 @@ services:
   app:
     restart: unless-stopped # Restart on failure
     healthcheck:
-      test: ['CMD', 'healthcheck']
+      test: ["CMD", "healthcheck"]
       interval: 30s
       retries: 3
 ```
@@ -421,7 +421,7 @@ services:
     volumes:
       - ./my-checks:/etc/healthcheck.d:ro
     healthcheck:
-      test: ['CMD', 'healthcheck', '--verbose']
+      test: ["CMD", "healthcheck", "--verbose"]
 ```
 
 #### Alternative: Wrapper Script
@@ -449,7 +449,7 @@ Then use in docker-compose:
 
 ```yaml
 healthcheck:
-  test: ['CMD', '/app/custom-healthcheck.sh']
+  test: ["CMD", "/app/custom-healthcheck.sh"]
 ```
 
 ---

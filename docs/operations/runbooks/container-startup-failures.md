@@ -205,7 +205,7 @@ docker run -it --rm --entrypoint /bin/bash <image>
 spec:
   containers:
     - name: app
-      command: ['sleep', 'infinity']
+      command: ["sleep", "infinity"]
 ```
 
 Then exec in to debug:

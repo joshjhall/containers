@@ -2,6 +2,19 @@
   "markdown": {
     "textWrap": "maintain"
   },
-  "excludes": ["CHANGELOG.md", "tests/results/**", "target/**", "node_modules/**", ".git/**"],
-  "plugins": ["https://plugins.dprint.dev/markdown-0.20.0.wasm"]
+  "yaml": {
+    "printWidth": 120
+  },
+  "excludes": [
+    "CHANGELOG.md",
+    "tests/results/**",
+    "target/**",
+    "node_modules/**",
+    ".git/**",
+    "crates/containers-common/testdata/golden/**"
+  ],
+  "plugins": [
+    "https://plugins.dprint.dev/markdown-0.20.0.wasm",
+    "https://plugins.dprint.dev/g-plane/pretty_yaml-v0.6.0.wasm"
+  ]
 }

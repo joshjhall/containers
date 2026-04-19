@@ -16,11 +16,11 @@ duplication_threshold: 3
 # Severity mapping per category
 severity:
   long-function:
-    exceeds_hard_limit: high     # Function > max_function_lines
+    exceeds_hard_limit: high # Function > max_function_lines
   deep-nesting:
-    exceeds_max_depth: high      # Nesting > max_nesting_depth
+    exceeds_max_depth: high # Nesting > max_nesting_depth
   single-char-name:
-    non_loop_variable: high      # Single-char name outside loop counter
+    non_loop_variable: high # Single-char name outside loop counter
 
 # Minimum confidence thresholds for reporting
 min_confidence:

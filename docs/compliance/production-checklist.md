@@ -85,9 +85,9 @@ item includes the relevant compliance frameworks it addresses.
   ```yaml
   resources:
     limits:
-      cpu: '2'
+      cpu: "2"
     requests:
-      cpu: '500m'
+      cpu: "500m"
   ```
 
   _Frameworks: OWASP D07, SOC 2 A1.1_
@@ -97,9 +97,9 @@ item includes the relevant compliance frameworks it addresses.
   ```yaml
   resources:
     limits:
-      memory: '4Gi'
+      memory: "4Gi"
     requests:
-      memory: '1Gi'
+      memory: "1Gi"
   ```
 
   _Frameworks: OWASP D07, SOC 2 A1.1_
@@ -109,7 +109,7 @@ item includes the relevant compliance frameworks it addresses.
   ```yaml
   resources:
     limits:
-      ephemeral-storage: '10Gi'
+      ephemeral-storage: "10Gi"
   ```
 
 - [ ] **Apply namespace-level limits** (recommended)
@@ -127,12 +127,12 @@ item includes the relevant compliance frameworks it addresses.
   ```yaml
   livenessProbe:
     exec:
-      command: ['healthcheck', '--quick']
+      command: ["healthcheck", "--quick"]
     initialDelaySeconds: 60
     periodSeconds: 30
   readinessProbe:
     exec:
-      command: ['healthcheck', '--quick']
+      command: ["healthcheck", "--quick"]
     initialDelaySeconds: 30
     periodSeconds: 10
   ```
@@ -232,7 +232,7 @@ item includes the relevant compliance frameworks it addresses.
   kind: Ingress
   metadata:
     annotations:
-      nginx.ingress.kubernetes.io/ssl-redirect: 'true'
+      nginx.ingress.kubernetes.io/ssl-redirect: "true"
   spec:
     tls:
       - hosts:
@@ -258,8 +258,8 @@ item includes the relevant compliance frameworks it addresses.
   rules:
     - level: Metadata
       resources:
-        - group: ''
-          resources: ['secrets', 'configmaps']
+        - group: ""
+          resources: ["secrets", "configmaps"]
   ```
 
   _Frameworks: SOC 2 CC7.2, ISO 27001 A.8.16, HIPAA §164.312(b)_

@@ -235,7 +235,7 @@ roleRef:
 subjects:
   - apiGroup: rbac.authorization.k8s.io
     kind: Group
-    name: 'AZURE_AD_GROUP_OBJECT_ID'
+    name: "AZURE_AD_GROUP_OBJECT_ID"
 ```
 
 ## SSH MFA for Bastion Access
@@ -319,7 +319,7 @@ metadata:
   name: break-glass-credentials
   namespace: kube-system
   labels:
-    emergency: 'true'
+    emergency: "true"
 type: Opaque
 stringData:
   # Encrypted with KMS/Vault
@@ -390,11 +390,11 @@ apiVersion: audit.k8s.io/v1
 kind: Policy
 rules:
   - level: Metadata
-    users: ['*']
-    verbs: ['create', 'delete', 'update', 'patch']
+    users: ["*"]
+    verbs: ["create", "delete", "update", "patch"]
     resources:
-      - group: ''
-        resources: ['secrets', 'configmaps']
+      - group: ""
+        resources: ["secrets", "configmaps"]
 ```
 
 ### Cloud Provider Session Limits
@@ -418,7 +418,7 @@ Policy file:
 constraint: constraints/iam.allowServiceAccountCredentialLifetimeExtension
 listPolicy:
   deniedValues:
-    - 'under:organizations/ORG_ID'
+    - "under:organizations/ORG_ID"
 ```
 
 #### AWS

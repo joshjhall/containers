@@ -2,7 +2,7 @@
 # Unit tests for observability configuration files
 #
 # Validates that expected config files exist and JSON files are syntactically
-# valid. YAML syntax/style validation is handled by yamllint via pre-commit.
+# valid. YAML syntax/style validation is handled by dprint via pre-commit.
 
 set -euo pipefail
 

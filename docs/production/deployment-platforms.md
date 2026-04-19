@@ -122,7 +122,7 @@ aws ecr put-image-scanning-configuration \
 ### Docker Compose (Simple Production)
 
 ```yaml
-version: '3.8'
+version: "3.8"
 
 services:
   app:
@@ -135,22 +135,22 @@ services:
     secrets:
       - db_password
     healthcheck:
-      test: ['CMD', 'curl', '-f', 'http://localhost:8080/health']
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 30s
       timeout: 3s
       retries: 3
     logging:
-      driver: 'json-file'
+      driver: "json-file"
       options:
-        max-size: '10m'
-        max-file: '3'
+        max-size: "10m"
+        max-file: "3"
     deploy:
       resources:
         limits:
-          cpus: '1.0'
+          cpus: "1.0"
           memory: 512M
         reservations:
-          cpus: '0.5'
+          cpus: "0.5"
           memory: 256M
 
 secrets:
@@ -183,17 +183,17 @@ spec:
             - containerPort: 8080
           env:
             - name: NODE_ENV
-              value: 'production'
+              value: "production"
           envFrom:
             - secretRef:
                 name: myapp-secrets
           resources:
             requests:
-              memory: '256Mi'
-              cpu: '250m'
+              memory: "256Mi"
+              cpu: "250m"
             limits:
-              memory: '512Mi'
-              cpu: '500m'
+              memory: "512Mi"
+              cpu: "500m"
           livenessProbe:
             httpGet:
               path: /health

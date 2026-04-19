@@ -76,11 +76,11 @@ services:
       context: ../..
       dockerfile: Dockerfile
       args:
-        BASE_IMAGE: 'debian:trixie-slim'
-        ENABLE_PASSWORDLESS_SUDO: 'false'
-        INCLUDE_PYTHON: 'false'
-        INCLUDE_NODE: 'false'
-        INCLUDE_DEV_TOOLS: 'false'
+        BASE_IMAGE: "debian:trixie-slim"
+        ENABLE_PASSWORDLESS_SUDO: "false"
+        INCLUDE_PYTHON: "false"
+        INCLUDE_NODE: "false"
+        INCLUDE_DEV_TOOLS: "false"
 ```
 
 **Use case**: Base images, utility containers, sidecar containers
@@ -99,12 +99,12 @@ services:
       context: ../..
       dockerfile: Dockerfile
       args:
-        BASE_IMAGE: 'debian:trixie-slim'
-        ENABLE_PASSWORDLESS_SUDO: 'false'
-        INCLUDE_PYTHON: 'true'
-        INCLUDE_PYTHON_DEV: 'false'
-        PYTHON_VERSION: '3.12'
-        INCLUDE_DEV_TOOLS: 'false'
+        BASE_IMAGE: "debian:trixie-slim"
+        ENABLE_PASSWORDLESS_SUDO: "false"
+        INCLUDE_PYTHON: "true"
+        INCLUDE_PYTHON_DEV: "false"
+        PYTHON_VERSION: "3.12"
+        INCLUDE_DEV_TOOLS: "false"
 ```
 
 **Includes**: python3, pip, essential libraries **Excludes**: pip-tools,
@@ -124,12 +124,12 @@ services:
       context: ../..
       dockerfile: Dockerfile
       args:
-        BASE_IMAGE: 'debian:trixie-slim'
-        ENABLE_PASSWORDLESS_SUDO: 'false'
-        INCLUDE_NODE: 'true'
-        INCLUDE_NODE_DEV: 'false'
-        NODE_VERSION: '20'
-        INCLUDE_DEV_TOOLS: 'false'
+        BASE_IMAGE: "debian:trixie-slim"
+        ENABLE_PASSWORDLESS_SUDO: "false"
+        INCLUDE_NODE: "true"
+        INCLUDE_NODE_DEV: "false"
+        NODE_VERSION: "20"
+        INCLUDE_DEV_TOOLS: "false"
 ```
 
 **Includes**: node, npm, yarn **Excludes**: typescript, eslint, prettier,
@@ -213,7 +213,7 @@ volumes:
 
 # Built-in healthcheck
 healthcheck:
-  test: ['/usr/local/bin/healthcheck', '--quick']
+  test: ["/usr/local/bin/healthcheck", "--quick"]
   interval: 30s
   timeout: 10s
   retries: 3
@@ -233,17 +233,17 @@ services:
       context: ../..
       dockerfile: Dockerfile
       args:
-        BASE_IMAGE: 'debian:trixie-slim'
-        ENABLE_PASSWORDLESS_SUDO: 'false'
+        BASE_IMAGE: "debian:trixie-slim"
+        ENABLE_PASSWORDLESS_SUDO: "false"
 
         # Multiple runtimes
-        INCLUDE_PYTHON: 'true'
-        INCLUDE_PYTHON_DEV: 'false'
-        INCLUDE_NODE: 'true'
-        INCLUDE_NODE_DEV: 'false'
+        INCLUDE_PYTHON: "true"
+        INCLUDE_PYTHON_DEV: "false"
+        INCLUDE_NODE: "true"
+        INCLUDE_NODE_DEV: "false"
 
         # Still no dev tools
-        INCLUDE_DEV_TOOLS: 'false'
+        INCLUDE_DEV_TOOLS: "false"
 ```
 
 **Expected size**: ~600-800MB (vs 1GB+ with dev tools)
@@ -257,9 +257,9 @@ args:
   # ... base configuration ...
 
   # Add cloud tools as needed
-  INCLUDE_DOCKER: 'true' # For Docker-in-Docker or CI
-  INCLUDE_KUBERNETES: 'true' # For kubectl access
-  INCLUDE_TERRAFORM: 'false' # Usually not needed in runtime
+  INCLUDE_DOCKER: "true" # For Docker-in-Docker or CI
+  INCLUDE_KUBERNETES: "true" # For kubectl access
+  INCLUDE_TERRAFORM: "false" # Usually not needed in runtime
 ```
 
 Note: Only include tools that are actually needed at runtime. Build/deploy tools
@@ -331,7 +331,7 @@ base:
 ```yaml
 args:
   # Add common runtime libraries if needed
-  BASE_IMAGE: 'debian:trixie-slim'
+  BASE_IMAGE: "debian:trixie-slim"
   # Then manually install additional libs via DEBIAN_PACKAGES build arg
 ```
 

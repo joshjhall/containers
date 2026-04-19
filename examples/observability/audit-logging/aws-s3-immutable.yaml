@@ -12,8 +12,8 @@
 #   - FedRAMP AU-9: Protection of audit information
 #   - GDPR Art. 5(1)(e): Storage limitation
 
-AWSTemplateFormatVersion: '2010-09-09'
-Description: 'Immutable S3 storage for container audit logs'
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "Immutable S3 storage for container audit logs"
 
 Parameters:
   Environment:
@@ -42,18 +42,18 @@ Parameters:
 
   EnableVersioning:
     Type: String
-    Default: 'true'
+    Default: "true"
     AllowedValues:
-      - 'true'
-      - 'false'
+      - "true"
+      - "false"
     Description: Enable versioning (required for Object Lock)
 
   EnableReplication:
     Type: String
-    Default: 'true'
+    Default: "true"
     AllowedValues:
-      - 'true'
-      - 'false'
+      - "true"
+      - "false"
     Description: Enable cross-region replication for disaster recovery
 
   ReplicationRegion:
@@ -66,7 +66,7 @@ Resources:
   AuditLogBucket:
     Type: AWS::S3::Bucket
     Properties:
-      BucketName: !Sub '${AWS::AccountId}-audit-logs-${Environment}'
+      BucketName: !Sub "${AWS::AccountId}-audit-logs-${Environment}"
       ObjectLockEnabled: true
       ObjectLockConfiguration:
         ObjectLockEnabled: Enabled
@@ -114,7 +114,7 @@ Resources:
         - Key: Environment
           Value: !Ref Environment
         - Key: Compliance
-          Value: 'SOC2,HIPAA,PCI-DSS,GDPR'
+          Value: "SOC2,HIPAA,PCI-DSS,GDPR"
         - Key: DataClassification
           Value: Sensitive
         - Key: RetentionDays
@@ -127,14 +127,14 @@ Resources:
       Description: KMS key for audit log encryption
       EnableKeyRotation: true
       KeyPolicy:
-        Version: '2012-10-17'
+        Version: "2012-10-17"
         Statement:
           - Sid: Enable IAM User Permissions
             Effect: Allow
             Principal:
-              AWS: !Sub 'arn:aws:iam::${AWS::AccountId}:root'
-            Action: 'kms:*'
-            Resource: '*'
+              AWS: !Sub "arn:aws:iam::${AWS::AccountId}:root"
+            Action: "kms:*"
+            Resource: "*"
           - Sid: Allow Audit Log Service
             Effect: Allow
             Principal:
@@ -145,7 +145,7 @@ Resources:
               - kms:ReEncrypt*
               - kms:GenerateDataKey*
               - kms:DescribeKey
-            Resource: '*'
+            Resource: "*"
       Tags:
         - Key: Purpose
           Value: AuditLogEncryption
@@ -153,14 +153,14 @@ Resources:
   AuditLogKMSKeyAlias:
     Type: AWS::KMS::Alias
     Properties:
-      AliasName: !Sub 'alias/audit-logs-${Environment}'
+      AliasName: !Sub "alias/audit-logs-${Environment}"
       TargetKeyId: !Ref AuditLogKMSKey
 
   # Access log bucket for S3 server access logging
   AccessLogBucket:
     Type: AWS::S3::Bucket
     Properties:
-      BucketName: !Sub '${AWS::AccountId}-audit-access-logs-${Environment}'
+      BucketName: !Sub "${AWS::AccountId}-audit-access-logs-${Environment}"
       VersioningConfiguration:
         Status: Enabled
       BucketEncryption:
@@ -184,47 +184,47 @@ Resources:
     Properties:
       Bucket: !Ref AuditLogBucket
       PolicyDocument:
-        Version: '2012-10-17'
+        Version: "2012-10-17"
         Statement:
           # Deny unencrypted uploads
           - Sid: DenyUnencryptedUploads
             Effect: Deny
-            Principal: '*'
+            Principal: "*"
             Action: s3:PutObject
-            Resource: !Sub '${AuditLogBucket.Arn}/*'
+            Resource: !Sub "${AuditLogBucket.Arn}/*"
             Condition:
               StringNotEquals:
-                's3:x-amz-server-side-encryption': 'aws:kms'
+                "s3:x-amz-server-side-encryption": "aws:kms"
           # Deny HTTP (require HTTPS)
           - Sid: DenyHTTP
             Effect: Deny
-            Principal: '*'
-            Action: 's3:*'
+            Principal: "*"
+            Action: "s3:*"
             Resource:
               - !GetAtt AuditLogBucket.Arn
-              - !Sub '${AuditLogBucket.Arn}/*'
+              - !Sub "${AuditLogBucket.Arn}/*"
             Condition:
               Bool:
-                'aws:SecureTransport': 'false'
+                "aws:SecureTransport": "false"
           # Deny deletion of objects (extra protection)
           - Sid: DenyObjectDeletion
             Effect: Deny
-            Principal: '*'
+            Principal: "*"
             Action:
               - s3:DeleteObject
               - s3:DeleteObjectVersion
-            Resource: !Sub '${AuditLogBucket.Arn}/*'
+            Resource: !Sub "${AuditLogBucket.Arn}/*"
             Condition:
               StringNotEquals:
-                'aws:PrincipalArn': !Sub 'arn:aws:iam::${AWS::AccountId}:role/AuditLogAdminRole'
+                "aws:PrincipalArn": !Sub "arn:aws:iam::${AWS::AccountId}:role/AuditLogAdminRole"
 
   # IAM role for services writing audit logs
   AuditLogWriterRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub 'AuditLogWriter-${Environment}'
+      RoleName: !Sub "AuditLogWriter-${Environment}"
       AssumeRolePolicyDocument:
-        Version: '2012-10-17'
+        Version: "2012-10-17"
         Statement:
           - Effect: Allow
             Principal:
@@ -236,13 +236,13 @@ Resources:
       Policies:
         - PolicyName: AuditLogWritePolicy
           PolicyDocument:
-            Version: '2012-10-17'
+            Version: "2012-10-17"
             Statement:
               - Effect: Allow
                 Action:
                   - s3:PutObject
                   - s3:PutObjectTagging
-                Resource: !Sub '${AuditLogBucket.Arn}/*'
+                Resource: !Sub "${AuditLogBucket.Arn}/*"
               - Effect: Allow
                 Action:
                   - kms:Encrypt
@@ -253,21 +253,21 @@ Resources:
   AuditLogReaderRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub 'AuditLogReader-${Environment}'
+      RoleName: !Sub "AuditLogReader-${Environment}"
       AssumeRolePolicyDocument:
-        Version: '2012-10-17'
+        Version: "2012-10-17"
         Statement:
           - Effect: Allow
             Principal:
-              AWS: !Sub 'arn:aws:iam::${AWS::AccountId}:root'
+              AWS: !Sub "arn:aws:iam::${AWS::AccountId}:root"
             Action: sts:AssumeRole
             Condition:
               Bool:
-                'aws:MultiFactorAuthPresent': 'true'
+                "aws:MultiFactorAuthPresent": "true"
       Policies:
         - PolicyName: AuditLogReadPolicy
           PolicyDocument:
-            Version: '2012-10-17'
+            Version: "2012-10-17"
             Statement:
               - Effect: Allow
                 Action:
@@ -277,7 +277,7 @@ Resources:
                   - s3:GetBucketLocation
                 Resource:
                   - !GetAtt AuditLogBucket.Arn
-                  - !Sub '${AuditLogBucket.Arn}/*'
+                  - !Sub "${AuditLogBucket.Arn}/*"
               - Effect: Allow
                 Action:
                   - kms:Decrypt
@@ -287,7 +287,7 @@ Resources:
   UnauthorizedAccessAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
-      AlarmName: !Sub 'AuditLog-UnauthorizedAccess-${Environment}'
+      AlarmName: !Sub "AuditLog-UnauthorizedAccess-${Environment}"
       AlarmDescription: Alert on unauthorized access attempts to audit logs
       MetricName: 4XXError
       Namespace: AWS/S3
@@ -306,7 +306,7 @@ Resources:
   AlertTopic:
     Type: AWS::SNS::Topic
     Properties:
-      TopicName: !Sub 'audit-log-alerts-${Environment}'
+      TopicName: !Sub "audit-log-alerts-${Environment}"
       KmsMasterKeyId: !Ref AuditLogKMSKey
 
 Outputs:
@@ -314,28 +314,28 @@ Outputs:
     Description: Audit log bucket name
     Value: !Ref AuditLogBucket
     Export:
-      Name: !Sub '${AWS::StackName}-BucketName'
+      Name: !Sub "${AWS::StackName}-BucketName"
 
   BucketArn:
     Description: Audit log bucket ARN
     Value: !GetAtt AuditLogBucket.Arn
     Export:
-      Name: !Sub '${AWS::StackName}-BucketArn'
+      Name: !Sub "${AWS::StackName}-BucketArn"
 
   KMSKeyArn:
     Description: KMS key ARN for audit log encryption
     Value: !GetAtt AuditLogKMSKey.Arn
     Export:
-      Name: !Sub '${AWS::StackName}-KMSKeyArn'
+      Name: !Sub "${AWS::StackName}-KMSKeyArn"
 
   WriterRoleArn:
     Description: IAM role ARN for writing audit logs
     Value: !GetAtt AuditLogWriterRole.Arn
     Export:
-      Name: !Sub '${AWS::StackName}-WriterRoleArn'
+      Name: !Sub "${AWS::StackName}-WriterRoleArn"
 
   ReaderRoleArn:
     Description: IAM role ARN for reading audit logs
     Value: !GetAtt AuditLogReaderRole.Arn
     Export:
-      Name: !Sub '${AWS::StackName}-ReaderRoleArn'
+      Name: !Sub "${AWS::StackName}-ReaderRoleArn"

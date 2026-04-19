@@ -26,7 +26,7 @@ services:
     platform: linux/amd64
 
     build:
-      context: ../..  # Points to containers/ directory
+      context: ../.. # Points to containers/ directory
       dockerfile: Dockerfile
       args:
         PROJECT_PATH: "."

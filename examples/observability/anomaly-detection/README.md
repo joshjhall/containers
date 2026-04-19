@@ -327,7 +327,7 @@ metadata:
   name: baseline-update
   namespace: monitoring
 spec:
-  schedule: '0 2 1 */3 *' # First day of quarter, 2 AM
+  schedule: "0 2 1 */3 *" # First day of quarter, 2 AM
   jobTemplate:
     spec:
       template:

@@ -109,25 +109,25 @@ runtime.
 **Schema:**
 
 ```yaml
-name: my-skill          # Skill name (matches directory name)
-version: "1.0"          # Schema version
+name: my-skill # Skill name (matches directory name)
+version: "1.0" # Schema version
 
-labels:                 # Labels the skill creates/requires on issues
+labels: # Labels the skill creates/requires on issues
   - name: status/in-progress
     color: "0E8A16"
     description: An agent is working on this issue
 
-required_tools:         # CLI tools the skill invokes
+required_tools: # CLI tools the skill invokes
   - name: gh
     purpose: GitHub issue listing, labeling, PR creation
     install_hint: "Included with INCLUDE_DEV_TOOLS=true"
 
-required_permissions:   # Auth scopes needed
+required_permissions: # Auth scopes needed
   - provider: github
     scopes: [repo]
     notes: "gh auth login with 'repo' scope minimum"
 
-required_mcps: []       # MCP servers the skill uses
+required_mcps: [] # MCP servers the skill uses
 ```
 
 Skills without labels, tools, or permissions use empty arrays. See the
@@ -495,7 +495,7 @@ phases:
     - loop: loop-make-it-secure
       order: after-core
   review:
-    - skill: check-sec-injection    # future check-* skills
+    - skill: check-sec-injection # future check-* skills
       status: planned
   test:
     - skill: loop-make-it-tested

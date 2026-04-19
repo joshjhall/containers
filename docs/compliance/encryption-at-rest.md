@@ -46,7 +46,7 @@ metadata:
 provisioner: ebs.csi.aws.com
 parameters:
   type: gp3
-  encrypted: 'true'
+  encrypted: "true"
   # Optional: Use custom KMS key
   # kmsKeyId: arn:aws:kms:us-east-1:123456789012:key/abcd1234-...
 volumeBindingMode: WaitForFirstConsumer
@@ -164,8 +164,8 @@ volumes:
     driver_opts:
       # Options depend on your storage backend
       type: nfs
-      o: 'addr=nas.example.com,rw,sec=krb5p'
-      device: ':/encrypted/share'
+      o: "addr=nas.example.com,rw,sec=krb5p"
+      device: ":/encrypted/share"
 ```
 
 ---
@@ -271,9 +271,9 @@ kind: ServiceAccount
 metadata:
   name: vault-auth
   annotations:
-    vault.hashicorp.com/agent-inject: 'true'
-    vault.hashicorp.com/agent-inject-secret-db: 'secret/data/db'
-    vault.hashicorp.com/role: 'myapp'
+    vault.hashicorp.com/agent-inject: "true"
+    vault.hashicorp.com/agent-inject-secret-db: "secret/data/db"
+    vault.hashicorp.com/role: "myapp"
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -283,8 +283,8 @@ spec:
   template:
     metadata:
       annotations:
-        vault.hashicorp.com/agent-inject: 'true'
-        vault.hashicorp.com/agent-inject-secret-config: 'secret/data/myapp/config'
+        vault.hashicorp.com/agent-inject: "true"
+        vault.hashicorp.com/agent-inject-secret-config: "secret/data/myapp/config"
     spec:
       serviceAccountName: vault-auth
       containers:
@@ -315,7 +315,7 @@ metadata:
   name: postgres-encryption-key
 type: Opaque
 stringData:
-  encryption-key: 'your-encryption-key'
+  encryption-key: "your-encryption-key"
 ---
 # PostgreSQL with encryption
 apiVersion: apps/v1
@@ -330,7 +330,7 @@ spec:
           image: postgres:17
           env:
             - name: POSTGRES_INITDB_ARGS
-              value: '--data-checksums'
+              value: "--data-checksums"
           volumeMounts:
             - name: data
               mountPath: /var/lib/postgresql/data

@@ -90,7 +90,7 @@ env:
 # For Trivy, allow high severity
 - uses: aquasecurity/trivy-action@master
   with:
-    severity: 'CRITICAL' # Only fail on critical
+    severity: "CRITICAL" # Only fail on critical
 
 # For Gitleaks, use baseline
 - uses: gitleaks/gitleaks-action@v2
