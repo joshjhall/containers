@@ -186,7 +186,7 @@ log_message "Installing lazydocker (terminal UI for Docker)..."
 LAZYDOCKER_ARCH=$(map_arch "x86_64" "arm64")
 
 # Version is configurable via environment variable
-LAZYDOCKER_VERSION="${LAZYDOCKER_VERSION:-0.25.0}"
+LAZYDOCKER_VERSION="${LAZYDOCKER_VERSION:-0.25.2}"
 LAZYDOCKER_ARCHIVE="lazydocker_${LAZYDOCKER_VERSION}_Linux_${LAZYDOCKER_ARCH}.tar.gz"
 LAZYDOCKER_URL="https://github.com/jesseduffield/lazydocker/releases/download/v${LAZYDOCKER_VERSION}/${LAZYDOCKER_ARCHIVE}"
 

@@ -177,6 +177,11 @@
           "sha256": "e31c57ff135a48192c14a2edff66c63e677cfc69ed0ea6566323e543539ee13e",
           "url": "https://github.com/jbangdev/jbang/releases/download/v0.137.0/jbang-0.137.0.tar",
           "added": "2026-03-16"
+        },
+        "0.138.0": {
+          "sha256": "2b83d1322215b597a1a3e9918d8052737f579d70b9f342521be52c9e3013fd0e",
+          "url": "https://github.com/jbangdev/jbang/releases/download/v0.138.0/jbang-0.138.0.tar",
+          "added": "2026-04-19"
         }
       }
     },
@@ -310,6 +315,19 @@
             }
           },
           "added": "2026-04-12"
+        },
+        "2.4.12": {
+          "checksums": {
+            "amd64": {
+              "sha256": "a0c50f60ed0a3c24450f5561eff58c8b9a91708c6b3f2f9ecd398a825d4a0861",
+              "url": "https://github.com/biomejs/biome/releases/download/@biomejs/biome@2.4.12/biome-linux-x64"
+            },
+            "arm64": {
+              "sha256": "8c01c56aa0701e12142de057ff4a0a220e73c32f7e606935024223c8650f069a",
+              "url": "https://github.com/biomejs/biome/releases/download/@biomejs/biome@2.4.12/biome-linux-arm64"
+            }
+          },
+          "added": "2026-04-19"
         }
       }
     },
@@ -363,10 +381,112 @@
           "added": "2026-03-16"
         }
       }
+    },
+    "lefthook": {
+      "versions": {
+        "2.1.6": {
+          "checksums": {
+            "amd64": {
+              "sha256": "fab3d2715a922d9625c9024e6ffb6e1271edd613aa9b213c2049482cde8ae183",
+              "url": "https://github.com/evilmartians/lefthook/releases/download/v2.1.6/lefthook_2.1.6_Linux_x86_64.gz"
+            },
+            "arm64": {
+              "sha256": "f85cc031da8e3571418170ab53f1e6e184a086b58683e13660bd5248974159a4",
+              "url": "https://github.com/evilmartians/lefthook/releases/download/v2.1.6/lefthook_2.1.6_Linux_aarch64.gz"
+            }
+          },
+          "added": "2026-04-19"
+        }
+      }
+    },
+    "gitleaks": {
+      "versions": {
+        "8.30.1": {
+          "checksums": {
+            "amd64": {
+              "sha256": "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb",
+              "url": "https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz"
+            },
+            "arm64": {
+              "sha256": "e4a487ee7ccd7d3a7f7ec08657610aa3606637dab924210b3aee62570fb4b080",
+              "url": "https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_arm64.tar.gz"
+            }
+          },
+          "added": "2026-04-19"
+        }
+      }
+    },
+    "mado": {
+      "versions": {
+        "0.3.0": {
+          "checksums": {
+            "amd64": {
+              "sha256": "aad845cd23c8c0417cdf87b8376b75e131c38e1cb890124790567735306de6d7",
+              "url": "https://github.com/akiomik/mado/releases/download/v0.3.0/mado-Linux-gnu-x86_64.tar.gz"
+            },
+            "arm64": {
+              "sha256": "ffcdd4845329a69bc729c0242abb6163f23495c0b04dbbaf608cbed43a2f4976",
+              "url": "https://github.com/akiomik/mado/releases/download/v0.3.0/mado-Linux-gnu-arm64.tar.gz"
+            }
+          },
+          "added": "2026-04-19"
+        }
+      }
+    },
+    "dprint": {
+      "versions": {
+        "0.54.0": {
+          "checksums": {
+            "amd64": {
+              "sha256": "8cb5925a0d6d0d8aa74c82a00f76734577592dfa1eda9517c261a84fe06accd7",
+              "url": "https://github.com/dprint/dprint/releases/download/0.54.0/dprint-x86_64-unknown-linux-gnu.zip"
+            },
+            "arm64": {
+              "sha256": "6b86329e17678ff3358f88d69a3774d371b601c665cc8cebbf2a4e1234a6d289",
+              "url": "https://github.com/dprint/dprint/releases/download/0.54.0/dprint-aarch64-unknown-linux-gnu.zip"
+            }
+          },
+          "added": "2026-04-19"
+        }
+      }
+    },
+    "osv-scanner": {
+      "versions": {
+        "2.3.5": {
+          "checksums": {
+            "amd64": {
+              "sha256": "bb30c580afe5e757d3e959f4afd08a4795ea505ef84c46962b9a738aa573b41b",
+              "url": "https://github.com/google/osv-scanner/releases/download/v2.3.5/osv-scanner_linux_amd64"
+            },
+            "arm64": {
+              "sha256": "fa46ad2b3954db5d5335303d45de921613393285d9a93c140b63b40e35e9ce50",
+              "url": "https://github.com/google/osv-scanner/releases/download/v2.3.5/osv-scanner_linux_arm64"
+            }
+          },
+          "added": "2026-04-19"
+        }
+      }
+    },
+    "yq": {
+      "versions": {
+        "4.53.2": {
+          "checksums": {
+            "amd64": {
+              "sha256": "d56bf5c6819e8e696340c312bd70f849dc1678a7cda9c2ad63eebd906371d56b",
+              "url": "https://github.com/mikefarah/yq/releases/download/v4.53.2/yq_linux_amd64"
+            },
+            "arm64": {
+              "sha256": "03061b2a50c7a498de2bbb92d7cb078ce433011f085a4994117c2726be4106ea",
+              "url": "https://github.com/mikefarah/yq/releases/download/v4.53.2/yq_linux_arm64"
+            }
+          },
+          "added": "2026-04-19"
+        }
+      }
     }
   },
   "metadata": {
-    "generated": "2026-04-12T03:03:37Z",
+    "generated": "2026-04-19T03:03:31Z",
     "description": "Pinned checksums for language runtime downloads",
     "note": "This file is automatically updated by check-versions.sh and should grow over time. Old checksums are never deleted to strengthen security for older versions and enable reproducible builds."
   }

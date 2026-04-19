@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 # Universal Container Build System
-# Version: 4.17.0
+# Version: 4.17.1
 # Supports multiple contexts: devcontainer, agents, CI/CD, production
 
 # ============================================================================
@@ -174,7 +174,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 # Rust + Rust development tools
 ARG INCLUDE_RUST=false
 ARG INCLUDE_RUST_DEV=false
-ARG RUST_VERSION=1.94.1
+ARG RUST_VERSION=1.95.0
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     if [ "${INCLUDE_RUST}" = "true" ] || [ "${INCLUDE_RUST_DEV}" = "true" ]; then \
@@ -315,7 +315,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 
 # Kubernetes tools
 ARG INCLUDE_KUBERNETES=false
-ARG KUBECTL_VERSION=1.33.10
+ARG KUBECTL_VERSION=1.33.11
 ARG K9S_VERSION=0.50.18
 ARG KREW_VERSION=0.5.0
 ARG HELM_VERSION=4.1.4
@@ -334,7 +334,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     fi
 # Terraform
 ARG INCLUDE_TERRAFORM=false
-ARG TERRAGRUNT_VERSION=1.0.0
+ARG TERRAGRUNT_VERSION=1.0.1
 ARG TFDOCS_VERSION=0.22.0
 ARG TFLINT_VERSION=0.61.0
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
