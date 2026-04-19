@@ -196,6 +196,15 @@ apt_install \
     supervisor \
     xclip
 
+# Replace the stock Debian supervisord.conf, which targets /var/run and
+# /var/log/supervisor (both root-owned) and therefore EACCES-fails under any
+# non-root USERNAME this image ships. The shipped config redirects pidfile,
+# socket, and logs under /tmp. See issue #386.
+log_command "Installing non-root-safe supervisord.conf" \
+    install -m 0644 \
+    /tmp/build-scripts/features/lib/dev-tools/supervisord.conf \
+    /etc/supervisor/supervisord.conf
+
 # Text editors
 log_message "Installing text editors..."
 apt_install \
