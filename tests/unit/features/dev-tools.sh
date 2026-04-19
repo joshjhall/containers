@@ -792,5 +792,32 @@ test_shfmt_installation() {
 run_test test_shfmt_version_variable "shfmt version variable defined in dev-tools.sh"
 run_test test_shfmt_installation "shfmt installation present in binary tools"
 
+# Test: shipped supervisord.conf redirects writable paths under /tmp so the
+# daemon starts as a non-root user. Regression guard for issue #386.
+test_supervisord_config_shipped() {
+    local conf="$PROJECT_ROOT/lib/features/lib/dev-tools/supervisord.conf"
+    assert_file_exists "$conf" "supervisord.conf shipped under lib/features/lib/dev-tools/"
+    assert_file_contains "$conf" "pidfile=/tmp/supervisord.pid" "pidfile under /tmp"
+    assert_file_contains "$conf" "file=/tmp/supervisor.sock" "socket file under /tmp"
+    assert_file_contains "$conf" "serverurl=unix:///tmp/supervisor.sock" "supervisorctl serverurl matches socket"
+    assert_file_contains "$conf" "logfile=/tmp/supervisord.log" "logfile under /tmp"
+    assert_file_contains "$conf" "childlogdir=/tmp" "childlogdir under /tmp"
+    assert_file_contains "$conf" "files = /etc/supervisor/conf.d" "[include] stanza preserved for downstream drop-ins"
+    assert_file_not_contains "$conf" "=/var/run/supervisor" "no config line targets /var/run"
+    assert_file_not_contains "$conf" "=/var/log/supervisor" "no config line targets /var/log/supervisor"
+}
+
+# Test: dev-tools.sh installs the shipped supervisord.conf over the stock one.
+test_supervisord_config_installed_by_script() {
+    local source_file="$PROJECT_ROOT/lib/features/dev-tools.sh"
+    assert_file_contains "$source_file" "features/lib/dev-tools/supervisord.conf" \
+        "dev-tools.sh references shipped supervisord.conf"
+    assert_file_contains "$source_file" "/etc/supervisor/supervisord.conf" \
+        "dev-tools.sh targets the system supervisord.conf path"
+}
+
+run_test test_supervisord_config_shipped "supervisord.conf shipped for non-root execution"
+run_test test_supervisord_config_installed_by_script "dev-tools.sh installs shipped supervisord.conf"
+
 # Generate test report
 generate_report
