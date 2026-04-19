@@ -41,15 +41,19 @@ test_cargo_install_uses_locked_and_pin() {
             if [[ "$content" =~ ^[[:space:]]*# ]]; then
                 continue
             fi
-            # Skip lines that aren't the actual invocation (e.g., log messages)
-            if ! [[ "$content" =~ cargo[[:space:]]+install ]]; then
+            # Skip prose in log_*/echo/printf calls — these print the string, don't run it
+            if [[ "$content" =~ (log_[a-z_]+|echo|printf)[[:space:]]+[\"\'] ]]; then
+                continue
+            fi
+            # Skip lines that aren't the actual invocation (require word-boundary after `install`)
+            if ! [[ "$content" =~ cargo[[:space:]]+install([[:space:]]|$) ]]; then
                 continue
             fi
             if ! [[ "$content" =~ $CARGO_INSTALL_REGEX ]]; then
                 echo "  violation: $file:$line_no: $content"
                 violations=$((violations + 1))
             fi
-        done < <(command grep -nE 'cargo[[:space:]]+install' "$file" || true)
+        done < <(command grep -nE 'cargo[[:space:]]+install([[:space:]]|$)' "$file" || true)
     done
     if [ "$violations" -eq 0 ]; then
         assert_true true "all cargo install calls use --locked and @\${VAR_VERSION}"
@@ -70,11 +74,15 @@ test_no_soft_fail_on_cargo_install() {
             if [[ "$content" =~ ^[[:space:]]*# ]]; then
                 continue
             fi
-            if [[ "$content" =~ cargo[[:space:]]+install.*\|\|[[:space:]]+true ]]; then
+            # Skip prose in log_*/echo/printf calls — these print the string, don't run it
+            if [[ "$content" =~ (log_[a-z_]+|echo|printf)[[:space:]]+[\"\'] ]]; then
+                continue
+            fi
+            if [[ "$content" =~ cargo[[:space:]]+install[[:space:]].*\|\|[[:space:]]+true ]]; then
                 echo "  violation: $file:$line_no: $content"
                 violations=$((violations + 1))
             fi
-        done < <(command grep -nE 'cargo[[:space:]]+install' "$file" || true)
+        done < <(command grep -nE 'cargo[[:space:]]+install([[:space:]]|$)' "$file" || true)
     done
     if [ "$violations" -eq 0 ]; then
         assert_true true "no cargo install is wrapped in || true"
@@ -111,8 +119,68 @@ test_shared_version_vars_in_sync() {
     fi
 }
 
+test_filters_reject_prose_and_plurals() {
+    # Regression (issue #385): log/echo/printf prose containing "cargo install"
+    # text, and plural/gerund forms like "cargo installs", must not be treated
+    # as policy candidates. This tests the two filter primitives used in the
+    # scan loops above: the tightened grep (word-boundary after `install`) and
+    # the prose-skip for log_*/echo/printf calls.
+    local line
+
+    # Plural/gerund forms — tightened grep must reject at the candidate stage.
+    local prose_plurals=(
+        'log_message "Installing deps for cargo installs"'
+        'echo "cargo installing foo"'
+    )
+    for line in "${prose_plurals[@]}"; do
+        if [[ "$line" =~ cargo[[:space:]]+install([[:space:]]|$) ]]; then
+            assert_true false "tightened grep must reject plural/gerund: $line"
+            return
+        fi
+    done
+
+    # Real "cargo install" text inside a log/echo/printf string — prose-skip
+    # must fire. (These also pre-match the tightened grep.)
+    local prose_real=(
+        'log_message "Run cargo install foo to add tools"'
+        'echo "cargo install bar was run"'
+        'printf "run cargo install baz\n"'
+    )
+    for line in "${prose_real[@]}"; do
+        if ! [[ "$line" =~ cargo[[:space:]]+install([[:space:]]|$) ]]; then
+            assert_true false "prose-real fixture should pre-match grep: $line"
+            return
+        fi
+        if ! [[ "$line" =~ (log_[a-z_]+|echo|printf)[[:space:]]+[\"\'] ]]; then
+            assert_true false "prose-skip must match log/echo/printf: $line"
+            return
+        fi
+    done
+
+    # Real invocations — grep must still match, prose-skip must NOT fire.
+    local real=(
+        'cargo install --locked foo@${FOO_VERSION}'
+        'cargo install foo'
+        '    cargo install bar --locked'
+        'su - user -c "cargo install --locked baz@${BAZ_VERSION}"'
+    )
+    for line in "${real[@]}"; do
+        if ! [[ "$line" =~ cargo[[:space:]]+install([[:space:]]|$) ]]; then
+            assert_true false "tightened grep must still match real: $line"
+            return
+        fi
+        if [[ "$line" =~ (log_[a-z_]+|echo|printf)[[:space:]]+[\"\'] ]]; then
+            assert_true false "prose-skip must not match real: $line"
+            return
+        fi
+    done
+
+    assert_true true "filters correctly distinguish real cargo install invocations from prose"
+}
+
 run_test test_cargo_install_uses_locked_and_pin "cargo install uses --locked and @\${VAR_VERSION}"
 run_test test_no_soft_fail_on_cargo_install "cargo install is not wrapped in || true"
 run_test test_shared_version_vars_in_sync "shared cargo version defaults agree between rust.sh and rust-dev.sh"
+run_test test_filters_reject_prose_and_plurals "filters reject log/echo/printf prose and plural forms"
 
 generate_report
