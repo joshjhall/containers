@@ -156,11 +156,10 @@ jobs:
             fi
           done
 
-          # Format and lint JSON files to match biome style (jq expands compact arrays)
-          # Uses 'check --write' to match pre-commit hook behavior (format + lint)
-          # No file args — biome.json 'files.includes' already covers all JSON files
-          npx @biomejs/biome check --write || {
-            echo "Warning: biome check failed, continuing anyway"
+          # Format JSON files with dprint (jq expands compact arrays; dprint normalizes)
+          # No file args — dprint.json excludes already cover non-formatted paths
+          dprint fmt || {
+            echo "Warning: dprint fmt failed, continuing anyway"
           }
 
           # Detect if actual GPG key files changed (not just metadata or whitespace)
@@ -414,8 +413,8 @@ jobs:
               ' version-compatibility-matrix.json > version-compatibility-matrix.json.tmp \
               && mv version-compatibility-matrix.json.tmp version-compatibility-matrix.json
 
-            # Format and lint JSON to match biome style (jq expands compact arrays)
-            npx @biomejs/biome check --write version-compatibility-matrix.json || true
+            # Format JSON with dprint (jq expands compact arrays; dprint normalizes)
+            dprint fmt version-compatibility-matrix.json || true
 
             # Commit the matrix update
             git config user.name "github-actions[bot]"

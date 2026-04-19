@@ -67,7 +67,9 @@ You receive a prompt containing:
      "status": "fixed",
      "failure_type": "lint",
      "summary": "Fixed 3 shellcheck warnings in pre-review-gates.sh",
-     "files_changed": ["lib/features/templates/claude/skills/next-issue-ship/pre-review-gates.sh"],
+     "files_changed": [
+       "lib/features/templates/claude/skills/next-issue-ship/pre-review-gates.sh"
+     ],
      "verified": true
    }
    ```

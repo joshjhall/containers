@@ -16,10 +16,7 @@
   //   "SKIP_CASE_CHECK": "true"  // Suppress case-sensitivity warning if you're aware of limitations
   // },
 
-  // Install development dependencies once when container is created
-  "postCreateCommand": "pipx install pre-commit",
-
-  // Auto-configure git hooks, development environment, SSH keys, and GitHub CLI after container starts
+  // Auto-configure git hooks (lefthook), development environment, SSH keys, and GitHub CLI after container starts
   "postStartCommand": "bash -c './.devcontainer/bin/setup-dev-environment.sh && setup-git && setup-gh'",
 
   "customizations": {
@@ -27,7 +24,7 @@
       "extensions": [
         "Anthropic.claude-code",
         "bierner.markdown-mermaid",
-        "biomejs.biome",
+        "dprint.dprint",
         "mohsen1.prettify-json",
         "ms-azuretools.vscode-docker",
         "ms-vscode.makefile-tools",

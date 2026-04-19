@@ -54,7 +54,12 @@ Same schema as `check-docs-staleness/contract.md`.
   "effort": "trivial",
   "tags": ["documentation", "compliance"],
   "related_files": [],
-  "certainty": {"level": "HIGH", "support": 1, "confidence": 0.95, "method": "deterministic"},
+  "certainty": {
+    "level": "HIGH",
+    "support": 1,
+    "confidence": 0.95,
+    "method": "deterministic"
+  },
   "pre_scan": true,
   "skill": "check-docs-organization"
 }

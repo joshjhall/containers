@@ -52,7 +52,12 @@ Same schema as `check-docs-staleness/contract.md`.
   "effort": "small",
   "tags": ["documentation", "api"],
   "related_files": [],
-  "certainty": {"level": "HIGH", "support": 2, "confidence": 0.9, "method": "heuristic"},
+  "certainty": {
+    "level": "HIGH",
+    "support": 2,
+    "confidence": 0.9,
+    "method": "heuristic"
+  },
   "pre_scan": true,
   "skill": "check-docs-missing-api"
 }

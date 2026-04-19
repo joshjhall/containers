@@ -53,7 +53,12 @@ Same schema as `check-docs-staleness/contract.md`.
   "effort": "trivial",
   "tags": ["documentation", "links"],
   "related_files": ["docs/getting-started.md"],
-  "certainty": {"level": "HIGH", "support": 1, "confidence": 0.99, "method": "deterministic"},
+  "certainty": {
+    "level": "HIGH",
+    "support": 1,
+    "confidence": 0.99,
+    "method": "deterministic"
+  },
   "pre_scan": true,
   "skill": "check-docs-deadlinks"
 }

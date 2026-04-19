@@ -132,8 +132,8 @@ Return a structured result:
 ```json
 {
   "resolved": [
-    {"file": "package-lock.json", "strategy": "lockfile-regenerate"},
-    {"file": "src/index.ts", "strategy": "import-sort"}
+    { "file": "package-lock.json", "strategy": "lockfile-regenerate" },
+    { "file": "src/index.ts", "strategy": "import-sort" }
   ],
   "escalated": [
     {

@@ -13,7 +13,7 @@ this exact JSON structure inside a \`\`\`json markdown fence.
   "summary": {
     "files_scanned": 0,
     "total_findings": 0,
-    "by_severity": {"critical": 0, "high": 0, "medium": 0, "low": 0}
+    "by_severity": { "critical": 0, "high": 0, "medium": 0, "low": 0 }
   },
   "findings": [
     {

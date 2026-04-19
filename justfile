@@ -56,9 +56,14 @@ lint-rust:
     cargo clippy --workspace -- -D warnings
     cargo fmt --all -- --check
 
-# Format all code (cargo fmt is the only auto-formatter for now)
+# Dprint check: verify JSON/YAML/Markdown formatting without writing
+lint-docs:
+    dprint check
+
+# Format all code: cargo fmt (Rust) + dprint fmt (JSON/YAML/Markdown)
 fmt:
     cargo fmt --all
+    dprint fmt
 
 # ============================================================================
 # Build

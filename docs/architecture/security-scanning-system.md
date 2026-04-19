@@ -133,11 +133,9 @@ lib/
 │   │   ├── ci/
 │   │   │   ├── gitlab-ci.yml
 │   │   │   ├── github-workflows/
-│   │   │   └── pre-commit-config.yaml
+│   │   │   └── lefthook.yml
 │   │   ├── hooks/
-│   │   │   ├── pre-commit
-│   │   │   ├── pre-push
-│   │   │   └── commit-msg
+│   │   │   └── commit-msg          # Conventional-commit check (lefthook covers pre-commit/pre-push)
 │   │   ├── config/
 │   │   │   ├── deny.toml           # cargo-deny config
 │   │   │   ├── audit.toml          # cargo-audit config

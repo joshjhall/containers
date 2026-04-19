@@ -14,7 +14,7 @@ pre-commit:
   commands:
 
     # --- General file checks (native shell, no Python runtime) ---
-    # YAML/JSON/private-key checks are covered elsewhere: dprint-yaml, biome-json,
+    # YAML/JSON/private-key checks are covered elsewhere: dprint-yaml, dprint-json,
     # and gitleaks (all defined below).
     trailing-whitespace:
       glob: "*"
@@ -112,15 +112,15 @@ pre-commit:
         - run: "[ ! -d .vale/styles/write-good ]"
       run: vale --no-wrap {staged_files} || true
 
-    # --- JSON linting with Biome ---
+    # --- JSON formatting (dprint) ---
 
-    biome-json:
+    dprint-json:
       glob: "*.json"
       exclude:
         - "tests/results/**"
         - ".vscode/**"
         - ".devcontainer/**"
-      run: biome check --write {staged_files}
+      run: dprint fmt {staged_files}
       stage_fixed: true
 
     # --- Security ---
@@ -204,6 +204,10 @@ pre-push:
 
     dprint-yaml-check:
       glob: "*.{yml,yaml}"
+      run: dprint check {all_files}
+
+    dprint-json-check:
+      glob: "*.json"
       run: dprint check {all_files}
 
     # --- Dependency CVE scanning ---

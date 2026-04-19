@@ -2,13 +2,18 @@
   // Editor settings
   "editor.formatOnSave": true,
 
-  // Use Biome as the sole formatter for JSON files (matches CI linting)
-  "biome.lsp.bin": "/usr/local/bin/biome",
+  // Use dprint as the sole formatter for JSON/YAML/Markdown (matches CI linting)
   "[json]": {
-    "editor.defaultFormatter": "biomejs.biome"
+    "editor.defaultFormatter": "dprint.dprint"
   },
   "[jsonc]": {
-    "editor.defaultFormatter": "biomejs.biome"
+    "editor.defaultFormatter": "dprint.dprint"
+  },
+  "[yaml]": {
+    "editor.defaultFormatter": "dprint.dprint"
+  },
+  "[markdown]": {
+    "editor.defaultFormatter": "dprint.dprint"
   },
 
   "editor.codeActionsOnSave": {

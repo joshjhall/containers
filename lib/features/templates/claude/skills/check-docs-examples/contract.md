@@ -53,7 +53,12 @@ Same schema as `check-docs-staleness/contract.md`.
   "effort": "trivial",
   "tags": ["documentation", "examples"],
   "related_files": ["mylib/config/parser.py"],
-  "certainty": {"level": "HIGH", "support": 2, "confidence": 0.95, "method": "deterministic"},
+  "certainty": {
+    "level": "HIGH",
+    "support": 2,
+    "confidence": 0.95,
+    "method": "deterministic"
+  },
   "pre_scan": true,
   "skill": "check-docs-examples"
 }

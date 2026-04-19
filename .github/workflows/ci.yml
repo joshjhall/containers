@@ -57,9 +57,6 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y shellcheck
 
-          # Biome — version pulled from biome.json schema (matches feature behavior)
-          npm install -g @biomejs/biome@$(grep -o '"https://biomejs.dev/schemas/[^"]*"' biome.json | grep -o '[0-9]\+\.[0-9]\+\.[0-9]\+')
-
           # mado — markdown linter (version pinned in dev-tools.sh)
           MADO_VERSION=$(grep -oP 'MADO_VERSION:-\K[0-9.]+' lib/features/dev-tools.sh)
           curl -fsSL "https://github.com/akiomik/mado/releases/download/v${MADO_VERSION}/mado-Linux-gnu-x86_64.tar.gz" \

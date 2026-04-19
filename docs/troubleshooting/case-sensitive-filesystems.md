@@ -243,18 +243,20 @@ git push
 1. **Start with case-sensitive storage** (Solution 1)
 1. **Establish naming conventions early**
 1. **Document filesystem requirements** in project README
-1. **Add pre-commit hook** to check for case issues:
+1. **Add a lefthook hook** to check for case issues. In `lefthook.yml`:
 
-```bash
-#!/bin/bash
-# .git/hooks/pre-commit
-# Check for files that differ only by case
-
-git ls-files | tr '[:upper:]' '[:lower:]' | sort | uniq -d | while read file; do
-    echo "ERROR: Multiple files differ only by case: $file"
-    exit 1
-done
+```yaml
+pre-commit:
+  commands:
+    case-collision-check:
+      run: |
+        git ls-files | tr '[:upper:]' '[:lower:]' | sort | uniq -d | while read file; do
+          echo "ERROR: Multiple files differ only by case: $file"
+          exit 1
+        done
 ```
+
+Then run `lefthook install` to register the hook.
 
 ### For Team Development
 

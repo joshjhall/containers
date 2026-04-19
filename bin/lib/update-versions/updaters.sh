@@ -235,10 +235,6 @@ update_version() {
                 biome)
                     sed_inplace "s/BIOME_VERSION=\"\${BIOME_VERSION:-[^}]*}\"/BIOME_VERSION=\"\${BIOME_VERSION:-$latest}\"/" "$script_path"
                     sed_inplace "s/^BIOME_VERSION=\"[0-9][^\"]*\"/BIOME_VERSION=\"\${BIOME_VERSION:-$latest}\"/" "$script_path"
-                    # Keep biome.json schema version in sync
-                    if [ -f "$PROJECT_ROOT/biome.json" ]; then
-                        sed_inplace "s|biomejs.dev/schemas/[0-9][0-9.]*/schema.json|biomejs.dev/schemas/$latest/schema.json|" "$PROJECT_ROOT/biome.json"
-                    fi
                     ;;
                 taplo)
                     sed_inplace "s/TAPLO_VERSION=\"\${TAPLO_VERSION:-[^}]*}\"/TAPLO_VERSION=\"\${TAPLO_VERSION:-$latest}\"/" "$script_path"

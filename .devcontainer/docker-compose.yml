@@ -17,8 +17,6 @@ services:
         # Additional dev tools
         INCLUDE_OP: "true"
         INCLUDE_DOCKER: "true"
-        # Python needed for pre-commit framework and linting tools
-        INCLUDE_PYTHON: "true"
         # Rust needed for stibbons (project scaffolding CLI) and luggage (containers runtime and install management)
         INCLUDE_RUST_DEV: "true"
       cache_from:
@@ -52,7 +50,7 @@ services:
       - /dev/fuse
     # Entrypoint handles Docker socket permissions via sudo (no root needed)
     # devcontainer.json sets overrideCommand: false so our ENTRYPOINT runs
-    command: ["sleep", "infinity"]
+    command: [ "sleep", "infinity" ]
     # Health check configuration (inherits from Dockerfile)
     # Override if needed: healthcheck: {test: ["CMD", "healthcheck", "--verbose"]}
     networks:
