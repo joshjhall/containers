@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.17.1] - 2026-04-19
+
+### Added
+
+- Add shfmt shell script formatter (Go static binary)
+- Enforce shfmt and add conform commit linter
+
+### Style
+
+- Quote associative-array keys and relax source-shape tests
+- Mechanical shfmt -w -i 4 -ci across all shell scripts
+
 ## [4.17.0] - 2026-04-18
 
 ### Added
@@ -1625,6 +1637,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix prettier and markdownlint formatting in README
 - Format TLS documentation files
 
+[4.17.1]: https://github.com/joshjhall/containers/compare/v4.17.0...v4.17.1
 [4.17.0]: https://github.com/joshjhall/containers/compare/v4.16.1...v4.17.0
 [4.16.1]: https://github.com/joshjhall/containers/compare/v4.16.0...v4.16.1
 [4.16.0]: https://github.com/joshjhall/containers/compare/v4.15.13...v4.16.0

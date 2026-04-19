@@ -55,7 +55,7 @@ source /tmp/build-scripts/base/path-utils.sh
 # ============================================================================
 # Version Configuration
 # ============================================================================
-RUST_VERSION="${RUST_VERSION:-1.94.1}"
+RUST_VERSION="${RUST_VERSION:-1.95.0}"
 
 # Validate Rust version format to prevent shell injection
 validate_rust_version "$RUST_VERSION" || {
