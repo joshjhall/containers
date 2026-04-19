@@ -64,6 +64,32 @@ source /tmp/build-scripts/base/apt-utils.sh
 log_feature_start "Rust Development Tools"
 
 # ============================================================================
+# Cargo Tool Versions
+# ============================================================================
+# Every cargo install below is --locked and pinned to an explicit @version so
+# upstream drift on crates.io cannot retroactively break a previously-working
+# build. Auto-bumped weekly via bin/check-versions.sh (crates.io API).
+# cargo-watch and mdbook are also pinned in rust.sh (same feature chain);
+# keep the defaults in sync between the two files.
+TREE_SITTER_CLI_VERSION="${TREE_SITTER_CLI_VERSION:-0.26.8}"
+CARGO_WATCH_VERSION="${CARGO_WATCH_VERSION:-8.5.3}"
+CARGO_EXPAND_VERSION="${CARGO_EXPAND_VERSION:-1.0.121}"
+CARGO_MODULES_VERSION="${CARGO_MODULES_VERSION:-0.26.0}"
+CARGO_OUTDATED_VERSION="${CARGO_OUTDATED_VERSION:-0.19.0}"
+CARGO_SWEEP_VERSION="${CARGO_SWEEP_VERSION:-0.8.0}"
+CARGO_AUDIT_VERSION="${CARGO_AUDIT_VERSION:-0.22.1}"
+CARGO_DENY_VERSION="${CARGO_DENY_VERSION:-0.19.4}"
+CARGO_GEIGER_VERSION="${CARGO_GEIGER_VERSION:-0.13.0}"
+BACON_VERSION="${BACON_VERSION:-3.22.0}"
+TOKEI_VERSION="${TOKEI_VERSION:-14.0.0}"
+HYPERFINE_CARGO_VERSION="${HYPERFINE_CARGO_VERSION:-1.20.0}"
+JUST_CARGO_VERSION="${JUST_CARGO_VERSION:-1.49.0}"
+SCCACHE_VERSION="${SCCACHE_VERSION:-0.14.0}"
+MDBOOK_VERSION="${MDBOOK_VERSION:-0.5.2}"
+CARGO_RELEASE_VERSION="${CARGO_RELEASE_VERSION:-1.1.2}"
+TAPLO_CLI_VERSION="${TAPLO_CLI_VERSION:-0.10.0}"
+
+# ============================================================================
 # Prerequisites Check
 # ============================================================================
 require_feature_binary "/usr/local/bin/cargo" "INCLUDE_RUST"
@@ -99,62 +125,62 @@ export RUSTUP_HOME="/cache/rustup"
 # Core development tools
 # Run as the user to ensure correct ownership
 log_command "Installing tree-sitter-cli" \
-    su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/cargo install tree-sitter-cli"
+    su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/cargo install --locked tree-sitter-cli@${TREE_SITTER_CLI_VERSION}"
 
 log_command "Installing cargo-watch" \
-    su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/cargo install cargo-watch"
+    su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/cargo install --locked cargo-watch@${CARGO_WATCH_VERSION}"
 
 log_command "Installing cargo-expand" \
-    su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/cargo install cargo-expand"
+    su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/cargo install --locked cargo-expand@${CARGO_EXPAND_VERSION}"
 
 log_command "Installing cargo-modules" \
-    su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/cargo install cargo-modules"
+    su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/cargo install --locked cargo-modules@${CARGO_MODULES_VERSION}"
 
 log_command "Installing cargo-outdated" \
-    su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/cargo install cargo-outdated"
+    su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/cargo install --locked cargo-outdated@${CARGO_OUTDATED_VERSION}"
 
 log_command "Installing cargo-sweep" \
-    su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/cargo install cargo-sweep"
+    su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/cargo install --locked cargo-sweep@${CARGO_SWEEP_VERSION}"
 
 log_command "Installing cargo-audit" \
-    su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/cargo install cargo-audit"
+    su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/cargo install --locked cargo-audit@${CARGO_AUDIT_VERSION}"
 
 log_command "Installing cargo-deny" \
-    su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/cargo install cargo-deny"
+    su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/cargo install --locked cargo-deny@${CARGO_DENY_VERSION}"
 
 log_command "Installing cargo-geiger" \
-    su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/cargo install cargo-geiger"
+    su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/cargo install --locked cargo-geiger@${CARGO_GEIGER_VERSION}"
 
 log_command "Installing bacon" \
-    su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/cargo install bacon"
+    su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/cargo install --locked bacon@${BACON_VERSION}"
 
 log_command "Installing tokei" \
-    su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/cargo install tokei"
+    su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/cargo install --locked tokei@${TOKEI_VERSION}"
 
 log_command "Installing hyperfine" \
-    su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/cargo install hyperfine"
+    su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/cargo install --locked hyperfine@${HYPERFINE_CARGO_VERSION}"
 
 # Skip if already installed by dev-tools
 if ! command -v just &>/dev/null; then
     log_command "Installing just" \
-        su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/cargo install just"
+        su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/cargo install --locked just@${JUST_CARGO_VERSION}"
 else
     log_message "just already installed, skipping..."
 fi
 
 log_command "Installing sccache" \
-    su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/cargo install sccache"
+    su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/cargo install --locked sccache@${SCCACHE_VERSION}"
 
 log_command "Installing mdbook" \
-    su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/cargo install mdbook"
+    su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/cargo install --locked mdbook@${MDBOOK_VERSION}"
 
 log_command "Installing cargo-release" \
-    su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/cargo install cargo-release"
+    su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/cargo install --locked cargo-release@${CARGO_RELEASE_VERSION}"
 
 # Install taplo-cli (TOML formatter/linter) if not already installed by dev-tools
 if ! command -v taplo &>/dev/null; then
     log_command "Installing taplo-cli" \
-        su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/cargo install taplo-cli"
+        su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/cargo install --locked taplo-cli@${TAPLO_CLI_VERSION}"
 else
     log_message "taplo already installed, skipping..."
 fi

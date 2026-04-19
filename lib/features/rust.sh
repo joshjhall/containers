@@ -57,6 +57,15 @@ source /tmp/build-scripts/base/path-utils.sh
 # ============================================================================
 RUST_VERSION="${RUST_VERSION:-1.95.0}"
 
+# Cargo tool versions. Every cargo install must be --locked and pinned to an
+# explicit @version so upstream drift on crates.io cannot retroactively break
+# a previously-working build. Auto-bumped weekly via bin/check-versions.sh.
+CARGO_WATCH_VERSION="${CARGO_WATCH_VERSION:-8.5.3}"
+MDBOOK_VERSION="${MDBOOK_VERSION:-0.5.2}"
+MDBOOK_MERMAID_VERSION="${MDBOOK_MERMAID_VERSION:-0.17.0}"
+MDBOOK_TOC_VERSION="${MDBOOK_TOC_VERSION:-0.15.3}"
+MDBOOK_ADMONISH_VERSION="${MDBOOK_ADMONISH_VERSION:-1.20.0}"
+
 # Validate Rust version format to prevent shell injection
 validate_rust_version "$RUST_VERSION" || {
     log_error "Build failed due to invalid RUST_VERSION"
@@ -187,15 +196,15 @@ log_command "Installing cargo development tools" \
     # cargo-watch: Automatically re-run commands when files change
     # Note: cargo add/remove are now built into Cargo 1.62+, no need for cargo-edit
     echo 'Installing development tools...'
-    cargo install --locked cargo-watch || true
+    cargo install --locked cargo-watch@${CARGO_WATCH_VERSION}
 
     # mdBook: Create books from Markdown (Rust's documentation standard)
     # Includes plugins for enhanced documentation features
     echo 'Installing mdBook documentation tools...'
-    cargo install --locked mdbook || true
-    cargo install --locked mdbook-mermaid || true      # Mermaid diagram support
-    cargo install --locked mdbook-toc || true          # Table of contents generation
-    cargo install --locked mdbook-admonish || true     # Callout boxes (note, warning, etc.)
+    cargo install --locked mdbook@${MDBOOK_VERSION}
+    cargo install --locked mdbook-mermaid@${MDBOOK_MERMAID_VERSION}
+    cargo install --locked mdbook-toc@${MDBOOK_TOC_VERSION}
+    cargo install --locked mdbook-admonish@${MDBOOK_ADMONISH_VERSION}
 "
 
 # ============================================================================

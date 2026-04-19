@@ -292,6 +292,70 @@ update_version() {
                     sed_inplace "s/JDTLS_VERSION=\"\${JDTLS_VERSION:-[^}]*}\"/JDTLS_VERSION=\"\${JDTLS_VERSION:-$latest}\"/" "$script_path"
                     sed_inplace "s/^JDTLS_VERSION=\"[0-9][^\"]*\"/JDTLS_VERSION=\"\${JDTLS_VERSION:-$latest}\"/" "$script_path"
                     ;;
+                # Cargo tools pinned in rust.sh and rust-dev.sh. cargo-watch and
+                # mdbook are defined in both files and must be kept in sync.
+                cargo-watch)
+                    sed_inplace "s/CARGO_WATCH_VERSION=\"\${CARGO_WATCH_VERSION:-[^}]*}\"/CARGO_WATCH_VERSION=\"\${CARGO_WATCH_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/rust.sh"
+                    sed_inplace "s/CARGO_WATCH_VERSION=\"\${CARGO_WATCH_VERSION:-[^}]*}\"/CARGO_WATCH_VERSION=\"\${CARGO_WATCH_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/rust-dev.sh"
+                    ;;
+                mdbook)
+                    sed_inplace "s/MDBOOK_VERSION=\"\${MDBOOK_VERSION:-[^}]*}\"/MDBOOK_VERSION=\"\${MDBOOK_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/rust.sh"
+                    sed_inplace "s/MDBOOK_VERSION=\"\${MDBOOK_VERSION:-[^}]*}\"/MDBOOK_VERSION=\"\${MDBOOK_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/rust-dev.sh"
+                    ;;
+                mdbook-mermaid)
+                    sed_inplace "s/MDBOOK_MERMAID_VERSION=\"\${MDBOOK_MERMAID_VERSION:-[^}]*}\"/MDBOOK_MERMAID_VERSION=\"\${MDBOOK_MERMAID_VERSION:-$latest}\"/" "$script_path"
+                    ;;
+                mdbook-toc)
+                    sed_inplace "s/MDBOOK_TOC_VERSION=\"\${MDBOOK_TOC_VERSION:-[^}]*}\"/MDBOOK_TOC_VERSION=\"\${MDBOOK_TOC_VERSION:-$latest}\"/" "$script_path"
+                    ;;
+                mdbook-admonish)
+                    sed_inplace "s/MDBOOK_ADMONISH_VERSION=\"\${MDBOOK_ADMONISH_VERSION:-[^}]*}\"/MDBOOK_ADMONISH_VERSION=\"\${MDBOOK_ADMONISH_VERSION:-$latest}\"/" "$script_path"
+                    ;;
+                tree-sitter-cli)
+                    sed_inplace "s/TREE_SITTER_CLI_VERSION=\"\${TREE_SITTER_CLI_VERSION:-[^}]*}\"/TREE_SITTER_CLI_VERSION=\"\${TREE_SITTER_CLI_VERSION:-$latest}\"/" "$script_path"
+                    ;;
+                cargo-expand)
+                    sed_inplace "s/CARGO_EXPAND_VERSION=\"\${CARGO_EXPAND_VERSION:-[^}]*}\"/CARGO_EXPAND_VERSION=\"\${CARGO_EXPAND_VERSION:-$latest}\"/" "$script_path"
+                    ;;
+                cargo-modules)
+                    sed_inplace "s/CARGO_MODULES_VERSION=\"\${CARGO_MODULES_VERSION:-[^}]*}\"/CARGO_MODULES_VERSION=\"\${CARGO_MODULES_VERSION:-$latest}\"/" "$script_path"
+                    ;;
+                cargo-outdated)
+                    sed_inplace "s/CARGO_OUTDATED_VERSION=\"\${CARGO_OUTDATED_VERSION:-[^}]*}\"/CARGO_OUTDATED_VERSION=\"\${CARGO_OUTDATED_VERSION:-$latest}\"/" "$script_path"
+                    ;;
+                cargo-sweep)
+                    sed_inplace "s/CARGO_SWEEP_VERSION=\"\${CARGO_SWEEP_VERSION:-[^}]*}\"/CARGO_SWEEP_VERSION=\"\${CARGO_SWEEP_VERSION:-$latest}\"/" "$script_path"
+                    ;;
+                cargo-audit)
+                    sed_inplace "s/CARGO_AUDIT_VERSION=\"\${CARGO_AUDIT_VERSION:-[^}]*}\"/CARGO_AUDIT_VERSION=\"\${CARGO_AUDIT_VERSION:-$latest}\"/" "$script_path"
+                    ;;
+                cargo-deny)
+                    sed_inplace "s/CARGO_DENY_VERSION=\"\${CARGO_DENY_VERSION:-[^}]*}\"/CARGO_DENY_VERSION=\"\${CARGO_DENY_VERSION:-$latest}\"/" "$script_path"
+                    ;;
+                cargo-geiger)
+                    sed_inplace "s/CARGO_GEIGER_VERSION=\"\${CARGO_GEIGER_VERSION:-[^}]*}\"/CARGO_GEIGER_VERSION=\"\${CARGO_GEIGER_VERSION:-$latest}\"/" "$script_path"
+                    ;;
+                bacon)
+                    sed_inplace "s/BACON_VERSION=\"\${BACON_VERSION:-[^}]*}\"/BACON_VERSION=\"\${BACON_VERSION:-$latest}\"/" "$script_path"
+                    ;;
+                tokei)
+                    sed_inplace "s/TOKEI_VERSION=\"\${TOKEI_VERSION:-[^}]*}\"/TOKEI_VERSION=\"\${TOKEI_VERSION:-$latest}\"/" "$script_path"
+                    ;;
+                hyperfine-cargo)
+                    sed_inplace "s/HYPERFINE_CARGO_VERSION=\"\${HYPERFINE_CARGO_VERSION:-[^}]*}\"/HYPERFINE_CARGO_VERSION=\"\${HYPERFINE_CARGO_VERSION:-$latest}\"/" "$script_path"
+                    ;;
+                just-cargo)
+                    sed_inplace "s/JUST_CARGO_VERSION=\"\${JUST_CARGO_VERSION:-[^}]*}\"/JUST_CARGO_VERSION=\"\${JUST_CARGO_VERSION:-$latest}\"/" "$script_path"
+                    ;;
+                sccache)
+                    sed_inplace "s/SCCACHE_VERSION=\"\${SCCACHE_VERSION:-[^}]*}\"/SCCACHE_VERSION=\"\${SCCACHE_VERSION:-$latest}\"/" "$script_path"
+                    ;;
+                cargo-release)
+                    sed_inplace "s/CARGO_RELEASE_VERSION=\"\${CARGO_RELEASE_VERSION:-[^}]*}\"/CARGO_RELEASE_VERSION=\"\${CARGO_RELEASE_VERSION:-$latest}\"/" "$script_path"
+                    ;;
+                taplo-cli)
+                    sed_inplace "s/TAPLO_CLI_VERSION=\"\${TAPLO_CLI_VERSION:-[^}]*}\"/TAPLO_CLI_VERSION=\"\${TAPLO_CLI_VERSION:-$latest}\"/" "$script_path"
+                    ;;
                 Trivy)
                     ;; # Trivy is installed via APT (no version to update in script)
                 *)

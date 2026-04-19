@@ -275,6 +275,30 @@ extract_all_versions() {
     _add_feature_version SHFMT_VERSION "shfmt" "dev-tools.sh"
     _add_feature_version CONFORM_VERSION "conform" "dev-tools.sh"
 
+    # Cargo tools from rust.sh (pinned cargo install targets)
+    _add_feature_version CARGO_WATCH_VERSION "cargo-watch" "rust.sh"
+    _add_feature_version MDBOOK_VERSION "mdbook" "rust.sh"
+    _add_feature_version MDBOOK_MERMAID_VERSION "mdbook-mermaid" "rust.sh"
+    _add_feature_version MDBOOK_TOC_VERSION "mdbook-toc" "rust.sh"
+    _add_feature_version MDBOOK_ADMONISH_VERSION "mdbook-admonish" "rust.sh"
+
+    # Cargo tools from rust-dev.sh (pinned cargo install targets)
+    _add_feature_version TREE_SITTER_CLI_VERSION "tree-sitter-cli" "rust-dev.sh"
+    _add_feature_version CARGO_EXPAND_VERSION "cargo-expand" "rust-dev.sh"
+    _add_feature_version CARGO_MODULES_VERSION "cargo-modules" "rust-dev.sh"
+    _add_feature_version CARGO_OUTDATED_VERSION "cargo-outdated" "rust-dev.sh"
+    _add_feature_version CARGO_SWEEP_VERSION "cargo-sweep" "rust-dev.sh"
+    _add_feature_version CARGO_AUDIT_VERSION "cargo-audit" "rust-dev.sh"
+    _add_feature_version CARGO_DENY_VERSION "cargo-deny" "rust-dev.sh"
+    _add_feature_version CARGO_GEIGER_VERSION "cargo-geiger" "rust-dev.sh"
+    _add_feature_version BACON_VERSION "bacon" "rust-dev.sh"
+    _add_feature_version TOKEI_VERSION "tokei" "rust-dev.sh"
+    _add_feature_version HYPERFINE_CARGO_VERSION "hyperfine-cargo" "rust-dev.sh"
+    _add_feature_version JUST_CARGO_VERSION "just-cargo" "rust-dev.sh"
+    _add_feature_version SCCACHE_VERSION "sccache" "rust-dev.sh"
+    _add_feature_version CARGO_RELEASE_VERSION "cargo-release" "rust-dev.sh"
+    _add_feature_version TAPLO_CLI_VERSION "taplo-cli" "rust-dev.sh"
+
     # Docker tools from docker.sh
     _add_feature_version DIVE_VERSION "dive" "docker.sh"
     _add_feature_version LAZYDOCKER_VERSION "lazydocker" "docker.sh"
@@ -403,6 +427,25 @@ main() {
             shfmt) check_github_release "shfmt" "mvdan/sh" ;;
             conform) check_github_release "conform" "siderolabs/conform" ;;
             cargo-release) check_crates_io "cargo-release" ;;
+            cargo-watch) check_crates_io "cargo-watch" ;;
+            mdbook) check_crates_io "mdbook" ;;
+            mdbook-mermaid) check_crates_io "mdbook-mermaid" ;;
+            mdbook-toc) check_crates_io "mdbook-toc" ;;
+            mdbook-admonish) check_crates_io "mdbook-admonish" ;;
+            tree-sitter-cli) check_crates_io "tree-sitter-cli" ;;
+            cargo-expand) check_crates_io "cargo-expand" ;;
+            cargo-modules) check_crates_io "cargo-modules" ;;
+            cargo-outdated) check_crates_io "cargo-outdated" ;;
+            cargo-sweep) check_crates_io "cargo-sweep" ;;
+            cargo-audit) check_crates_io "cargo-audit" ;;
+            cargo-deny) check_crates_io "cargo-deny" ;;
+            cargo-geiger) check_crates_io "cargo-geiger" ;;
+            bacon) check_crates_io "bacon" ;;
+            tokei) check_crates_io "tokei" ;;
+            hyperfine-cargo) check_crates_io "hyperfine-cargo" "hyperfine" ;;
+            just-cargo) check_crates_io "just-cargo" "just" ;;
+            sccache) check_crates_io "sccache" ;;
+            taplo-cli) check_crates_io "taplo-cli" ;;
             zoxide) check_github_release "zoxide" "ajeetdsouza/zoxide" ;;
             cosign) check_github_release "cosign" "sigstore/cosign" ;;
             trivy-action) check_github_release "trivy-action" "aquasecurity/trivy-action" ;;

@@ -346,6 +346,16 @@ branches). Don't manually edit `auto-patch/*` branches. Manual check:
 `just check-versions` (underlying script: `./bin/check-versions.sh`; add
 `--json` for automation). See `docs/operations/automated-releases.md`.
 
+## `cargo install` Policy
+
+Every `cargo install` in `lib/features/*.sh` must use `--locked` and pin an
+explicit `@<version>`. The version lives in a shell var
+(`CARGO_<TOOL>_VERSION`) using the `${VAR:-X.Y.Z}` override pattern,
+registered in `bin/check-versions.sh` so the weekly auto-patch can bump it.
+Failures abort the build — no `|| true`. This prevents crates.io drift
+(transitive MSRV bumps, silently broken builds) from breaking images that
+worked yesterday. Enforced by `tests/unit/cargo-install-policy.sh`.
+
 ## Release Process
 
 **ALWAYS use the release script** — never manually edit the VERSION file.
