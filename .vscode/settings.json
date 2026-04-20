@@ -24,17 +24,5 @@
     "editor.formatOnSave": true
   },
   "rust-analyzer.check.command": "clippy",
-  "rust-analyzer.check.extraArgs": ["--", "-D", "warnings"],
-
-  // cSpell settings - use external configuration file
-  "cSpell.useGitignore": true,
-  "cSpell.import": ["./cspell.json"],
-  "cSpell.customDictionaries": {
-    "project-words": {
-      "name": "project-words",
-      "path": "${workspaceFolder}/.cspell/project-words.txt",
-      "addWords": true,
-      "scope": "workspace"
-    }
-  }
+  "rust-analyzer.check.extraArgs": ["--", "-D", "warnings"]
 }

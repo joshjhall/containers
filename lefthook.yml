@@ -192,6 +192,11 @@ pre-push:
       glob: "{crates/**/*.rs,Cargo.toml}"
       run: cargo test --workspace
 
+    # Spell-check (crate-ci/typos) — scans the working tree, respects
+    # _typos.toml excludes. Fast enough to skip a staged-files filter.
+    typos:
+      run: typos
+
     docker-compose-validate:
       run: |
         for f in $(git ls-files "*compose*.yml" "*compose*.yaml" 2>/dev/null); do

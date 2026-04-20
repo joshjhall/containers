@@ -1,0 +1,29 @@
+# Spell-check config for the crate-ci/typos binary.
+# Docs: https://github.com/crate-ci/typos/blob/master/docs/reference.md
+
+[files]
+extend-exclude = [
+    "lib/gpg-keys/**",
+    "CHANGELOG.md",
+    "wizard-port-exploration.md",
+    "tests/results/**",
+    "target/**",
+]
+
+[default.extend-words]
+Hashi = "Hashi"
+AKS = "AKS"
+aks = "aks"
+RTO = "RTO"
+rto = "rto"
+ratatui = "ratatui"
+Ratatui = "Ratatui"
+fpr = "fpr"
+encrypter = "encrypter"
+ehr = "ehr"
+Jod = "Jod"
+ba = "ba"
+deprecat = "deprecat"
+integrat = "integrat"
+updat = "updat"
+styl = "styl"
