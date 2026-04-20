@@ -43,6 +43,30 @@ log_warning() { printf '%b[WARNING]%b %s\n' "$_YELLOW" "$_NC" "$*" >&2; }
 log_error() { printf '%b[ERROR]%b %s\n' "$_RED" "$_NC" "$*" >&2; }
 
 # ============================================================================
+# Value Parsing
+# ============================================================================
+
+# Strip a single matching pair of outer double or single quotes from a value.
+# Justfile recipes that populate .env-style files often emit quoted values
+# (e.g. `KEY="op://vault/item/field"`); docker-compose env_file treats those
+# quotes literally, and so did we, which broke `op read`.
+strip_value_quotes() {
+    local v="$1"
+    local len=${#v}
+    [ "$len" -lt 2 ] && {
+        printf '%s' "$v"
+        return
+    }
+    local first="${v:0:1}"
+    local last="${v:$((len - 1)):1}"
+    if { [ "$first" = '"' ] && [ "$last" = '"' ]; } ||
+        { [ "$first" = "'" ] && [ "$last" = "'" ]; }; then
+        v="${v:1:$((len - 2))}"
+    fi
+    printf '%s' "$v"
+}
+
+# ============================================================================
 # Path Detection
 # ============================================================================
 
@@ -178,7 +202,9 @@ if [ "$NEED_OP" = "true" ]; then
                 case "$stripped_s" in
                     "" | \#*) continue ;;
                     OP_SERVICE_ACCOUNT_TOKEN=*)
-                        export OP_SERVICE_ACCOUNT_TOKEN="${stripped_s#OP_SERVICE_ACCOUNT_TOKEN=}"
+                        _sa_token="$(strip_value_quotes "${stripped_s#OP_SERVICE_ACCOUNT_TOKEN=}")"
+                        export OP_SERVICE_ACCOUNT_TOKEN="$_sa_token"
+                        unset _sa_token
                         _LOADED_SA_TOKEN=true
                         break
                         ;;
@@ -238,7 +264,10 @@ while IFS= read -r line || [ -n "$line" ]; do
 
             log_info "Resolving $key -> $target_var"
 
-            if resolved="$(command op read "$value" 2>&1)"; then
+            # Strip any outer quotes before handing to `op read`
+            ref_value="$(strip_value_quotes "$value")"
+
+            if resolved="$(command op read "$ref_value" 2>&1)"; then
                 OUTPUT="$OUTPUT$target_var=$resolved
 "
             else

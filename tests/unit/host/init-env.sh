@@ -378,6 +378,54 @@ test_help_flag() {
     fi
 }
 
+test_quoted_values_stripped() {
+    # Justfile recipes often emit `KEY="op://..."`; docker-compose env_file
+    # treats the quotes literally, so init-env.sh must strip them before
+    # calling `op read`.
+    command mkdir -p "$TEST_TEMP_DIR/bin"
+    command cat >"$TEST_TEMP_DIR/bin/op" <<'MOCKEOF'
+#!/bin/bash
+# Echo the exact ref arg so tests can verify no quotes leak through
+printf 'got=[%s]' "$2"
+MOCKEOF
+    command chmod +x "$TEST_TEMP_DIR/bin/op"
+
+    # .env.secrets with double-quoted SA token (common justfile pattern)
+    command cat >"$TEST_TEMP_DIR/project/.env.secrets" <<'EOF'
+OP_SERVICE_ACCOUNT_TOKEN="sa-token-value"
+EOF
+
+    # .env.init with three quoting styles
+    command cat >"$TEST_TEMP_DIR/project/.env.init" <<'EOF'
+OP_DOUBLE_REF="op://Vault/Item/double"
+OP_SINGLE_REF='op://Vault/Item/single'
+OP_BARE_REF=op://Vault/Item/bare
+EOF
+
+    local output
+    output="$(env -u BASH_ENV PATH="$TEST_TEMP_DIR/bin:$PATH" \
+        bash "$TEST_TEMP_DIR/project/containers/host/init-env.sh" \
+        --project-root "$TEST_TEMP_DIR/project" --dry-run 2>/dev/null)"
+
+    if printf '%s' "$output" | command grep -q '^DOUBLE=got=\[op://Vault/Item/double\]$'; then
+        pass_test "Double-quoted ref value is unquoted before op read"
+    else
+        fail_test "Expected DOUBLE=got=[op://Vault/Item/double], got: $output"
+    fi
+
+    if printf '%s' "$output" | command grep -q '^SINGLE=got=\[op://Vault/Item/single\]$'; then
+        pass_test "Single-quoted ref value is unquoted before op read"
+    else
+        fail_test "Expected SINGLE=got=[op://Vault/Item/single], got: $output"
+    fi
+
+    if printf '%s' "$output" | command grep -q '^BARE=got=\[op://Vault/Item/bare\]$'; then
+        pass_test "Unquoted ref value passes through unchanged"
+    else
+        fail_test "Expected BARE=got=[op://Vault/Item/bare], got: $output"
+    fi
+}
+
 test_op_read_failure_continues() {
     # Mock op that fails for one ref and succeeds for another
     command mkdir -p "$TEST_TEMP_DIR/bin"
@@ -452,6 +500,7 @@ run_test_with_setup test_op_not_required_without_refs "op not required without O
 run_test_with_setup test_dry_run_no_file_written "Dry-run prints to stdout, no file"
 run_test_with_setup test_help_flag "--help shows usage"
 run_test_with_setup test_op_read_failure_continues "op read failure continues with remaining"
+run_test_with_setup test_quoted_values_stripped "Quoted ref values are unquoted before op read"
 
 # Generate test report
 generate_report
