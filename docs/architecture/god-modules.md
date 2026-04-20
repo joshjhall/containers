@@ -211,7 +211,9 @@ Measured by `tests/unit/base/coupling-guard.sh`:
 
 **feature-header-bootstrap.sh** dependents:
 
-- `lib/features/*.sh` — simple feature scripts (9 migrated: keybindings, cron, bindfs, redis-client, postgres-client, sqlite-client, op-cli, gcloud, mojo-dev)
+- `lib/features/*.sh` — simple feature scripts (9 migrated: keybindings,
+  cron, bindfs, redis-client, postgres-client, sqlite-client, op-cli,
+  gcloud, mojo-dev)
 - `lib/base/feature-header.sh` — the full header composes bootstrap
 
 **logging.sh** dependents:

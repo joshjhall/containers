@@ -43,7 +43,7 @@ The following security enhancements have been implemented:
 
 ## Progress
 
-**Overall: 16/16 issues addressed (100%)**
+_Overall_: 16/16 issues addressed (100%)
 
 - High Severity: 2/2 complete
 - Medium Severity: 5/5 complete

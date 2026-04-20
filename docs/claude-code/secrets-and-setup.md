@@ -140,9 +140,11 @@ services:
       - op-secret-cache:/cache/1password/secrets
 ```
 
-This gives you: secrets live in host kernel memory only, survive `docker restart` and `docker-compose down && up` (the named volume persists across
-container recreate), and are wiped on host reboot. 16 MiB is plenty for
-hundreds of cached refs; `mode=700` matches the script's permissioning.
+This gives you: secrets live in host kernel memory only, survive
+`docker restart` and `docker-compose down && up` (the named volume
+persists across container recreate), and are wiped on host reboot. 16 MiB
+is plenty for hundreds of cached refs; `mode=700` matches the script's
+permissioning.
 
 On container startup `45-op-secrets.sh` verifies the cache directory is
 tmpfs-backed (`stat -f -c %T`). If it isn't, the script **falls back to
@@ -162,7 +164,7 @@ secrets are written to disk.
 | `OP_READ_MAX_ATTEMPTS`           | `3`                              | Retries per ref on detected throttle              |
 | `OP_READ_RETRY_DELAY`            | `1`                              | Initial backoff in seconds (doubles per retry)    |
 
-**Invalidation**
+#### Invalidation
 
 - **Per-ref**: `rm /cache/1password/secrets/<hash>` — next fetch re-reads from
   1Password. The hash is `sha256` of the exact ref URL.
@@ -170,7 +172,7 @@ secrets are written to disk.
 - **Disable**: `OP_SECRET_CACHE_TTL=0` in the container env.
 - **Automatic**: TTL expiry (mtime-based) re-fetches on next startup.
 
-**Trust model**
+#### Trust model
 
 The cache is a container-local tmpfs volume — not shared across developer
 machines, not backed up, not written to disk. A threat actor who already has

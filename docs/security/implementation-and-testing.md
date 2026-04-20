@@ -9,19 +9,19 @@ progress of the security hardening effort.
 
 ### Phase 1: Critical Security Fixes (High Priority)
 
-**Target: Complete first**
+_Target_: Complete first
 
 - [x] #1: Fix eval with GITHUB_TOKEN (30 min)
 - [x] #2: Make passwordless sudo optional (1 hour)
 - [x] #5: Add checksum verification for Claude installer (45 min)
 
-**Total Estimated Effort: 2.25 hours**
+_Total Estimated Effort_: 2.25 hours
 
 ---
 
 ### Phase 2: Supply Chain Security - Container Images (High Priority)
 
-**Target: Complete second**
+_Target_: Complete second
 
 - [x] #15: Publish container image digests in releases (30 min) COMPLETE
 - [x] #16: Sign container images with Cosign (45 min) COMPLETE
@@ -36,7 +36,7 @@ security story.
 
 ### Phase 3: Input Validation & Injection Prevention (Medium Priority)
 
-**Target: Complete third**
+_Target_: Complete third
 
 - [x] #3: Safe eval wrapper for shell initialization (2 hours) COMPLETE
 - [x] #4: Path validation in entrypoint (45 min) COMPLETE
@@ -49,7 +49,7 @@ security story.
 
 ### Phase 4: Secrets & Sensitive Data (Medium Priority)
 
-**Target: Complete fourth**
+_Target_: Complete fourth
 
 - [x] #6: Safer 1Password helper functions (1 hour) COMPLETE
 - [x] #11: Document secret exposure risks (30 min) COMPLETE
@@ -60,7 +60,7 @@ security story.
 
 ### Phase 5: Low Priority Hardening (Optional)
 
-**Target: Complete as time permits**
+_Target_: Complete as time permits
 
 - [x] #8: Atomic cache directory creation (1 hour) COMPLETE
 - [x] #9: Validate completion outputs (1 hour) COMPLETE
@@ -73,7 +73,7 @@ security story.
 
 ### Phase 6: Infrastructure Improvements (Future)
 
-**Target: Long-term enhancements**
+_Target_: Long-term enhancements
 
 - [x] #12: Document Docker socket security (15 min) COMPLETE
 - [x] #14: Add retry logic and rate limiting (3 hours) COMPLETE
@@ -111,7 +111,7 @@ security story.
 
 ## Progress Tracking
 
-**Overall Progress: 16/16 issues + 2 infrastructure enhancements addressed (100%)**
+_Overall Progress_: 16/16 issues + 2 infrastructure enhancements addressed (100%)
 
 - **High Severity**: 2/2 complete (#1, #2)
 - **Medium Severity**: 5/5 complete (#3, #4, #5, #6, #7)

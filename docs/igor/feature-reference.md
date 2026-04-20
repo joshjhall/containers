@@ -116,6 +116,6 @@ versions:
   NODE_VERSION: "22.12.0" # Exact version
 ```
 
-The containers build system supports partial version formats for languages.
-See the main [README.md](../../README.md#version-specification-strategy) for
-details on partial version resolution.
+The containers build system supports partial version formats for languages
+(e.g., `"3.12"` resolves to the latest 3.12.x patch at build time). Exact
+versions are honored verbatim.

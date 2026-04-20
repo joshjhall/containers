@@ -21,4 +21,4 @@ build system. These docs complement the summary in
 | LSP server table             | [CLAUDE.md](../../CLAUDE.md#lsp-servers-installed-with-_dev-features)                |
 | Available MCP short names    | [plugins-and-mcps.md](plugins-and-mcps.md#available-mcp-servers)                     |
 | Codebase audit invocation    | [skills-and-agents.md](skills-and-agents.md#codebase-audit-system)                   |
-| 1Password secret conventions | [secrets-and-setup.md](secrets-and-setup.md#automatic-secret-loading-from-1password) |
+| 1Password secret conventions | [secrets-and-setup.md](secrets-and-setup.md#automatic-secret-loading-from-1password-op__ref-convention) |

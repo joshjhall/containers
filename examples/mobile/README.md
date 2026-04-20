@@ -6,7 +6,9 @@ This directory contains Docker Compose examples for Android and Kotlin mobile de
 
 ### The Problem
 
-Android SDK platform-tools (`adb`, `fastboot`) and the Android Emulator are distributed as **x86_64 binaries only**. They do not have native arm64 versions. This means:
+Android SDK platform-tools (`adb`, `fastboot`) and the Android Emulator
+are distributed as **x86_64 binaries only**. They do not have native arm64
+versions. This means:
 
 - On **Apple Silicon Macs** (M1/M2/M3/M4): Native arm64 containers cannot run adb or emulator
 - On **AWS Graviton** or other arm64 servers: Same limitation applies
@@ -71,7 +73,9 @@ Running x86_64 containers via emulation on arm64 hosts has some performance impa
 | adb commands       | N/A    | Fast         | Low overhead commands     |
 | Emulator           | N/A    | Usable       | Slower than native KVM    |
 
-**Recommendation**: For the best experience on arm64 hosts, use the emulated x86_64 container. The performance is acceptable for development, and all tools work correctly.
+**Recommendation**: For the best experience on arm64 hosts, use the
+emulated x86_64 container. The performance is acceptable for development,
+and all tools work correctly.
 
 ## Alternative: Remote Development
 

@@ -1,8 +1,10 @@
 # rumdl configuration — markdown linting and formatting
-# Migrated from mado.toml (2026-04-20). Preserves mado's 27-rule allowlist
-# exactly: every rule in rumdl's catalogue outside that allowlist is
-# disabled here, so adopting rumdl produces no new findings on existing
-# content. Revisit rule-by-rule when we want to tighten docs style.
+#
+# Baseline established 2026-04-20 after migrating from mado + dprint-markdown.
+# We enable the default rule set and only disable rules that are either
+# opinionated, require project-specific data (name lists, TOC templates),
+# or don't play well with our conventions (e.g., agent templates that
+# carry the title in YAML frontmatter instead of an H1).
 
 respect-gitignore = true
 
@@ -17,57 +19,29 @@ exclude = [
   "crates/containers-common/testdata/golden/**",
 ]
 
-# Rules OUTSIDE mado's former allowlist (MD001, MD003, MD004, MD009, MD010,
-# MD012, MD014, MD018-MD023, MD025, MD027-MD028, MD030-MD033, MD035,
-# MD037, MD039, MD040, MD046, MD047). Everything else is disabled to hold
-# the migration at zero behavioural change.
+# Rules disabled because they don't fit our docs.
 disable = [
-  # Originally disabled in mado.toml with rationale:
-  "MD005", # inconsistent list indentation
-  "MD007", # unordered list indentation (mixed 2/4-space under ordered continuations)
-  "MD013", # line length
-  "MD024", # duplicate headings (no siblings_only parity)
-  "MD026", # trailing punctuation in headings ("?" and "!" are intentional)
-  "MD029", # ordered list numbering style
-  "MD034", # bare URL (flags email addresses)
-  "MD036", # emphasis used as heading
-  "MD038", # spaces inside code spans (false-positives on ``` `foo` ``` patterns)
-  "MD041", # first line must be a top-level heading
-
-  # Not in mado's allowlist — disabled to preserve current state:
-  "MD011", # reversed link syntax
-  "MD042", # no empty links
-  "MD043", # required heading structure
-  "MD044", # proper names capitalization
-  "MD045", # images without alt text
-  "MD048", # code fence style
-  "MD049", # emphasis style
-  "MD050", # strong style
-  "MD051", # link fragments
-  "MD052", # reference links / images
-  "MD053", # link/image reference definitions
-  "MD054", # link/image style
-  "MD055", # table pipe style
-  "MD056", # table column count
+  # Our agent/skill templates put the title in YAML frontmatter rather
+  # than an H1 heading. rumdl's front-matter-title exemption doesn't
+  # actually suppress the finding on our templates, so keep it off.
+  "MD041",
+  # Opinionated / requires project-specific configuration:
+  "MD043", # required heading structure (needs a template)
+  "MD044", # proper names capitalization (needs a names list)
+  "MD054", # link/image style — redundant with MD048-MD050
   "MD057", # relative link existence (many cross-refs resolve at build time)
-  "MD058", # tables surrounded by blank lines
   "MD059", # link text should be descriptive
   "MD060", # table column alignment
-  "MD061", # forbidden terms
-  "MD062", # link destination whitespace
+  "MD061", # forbidden terms (needs a term list)
   "MD063", # heading capitalization
-  "MD064", # multiple consecutive spaces
-  "MD065", # horizontal rules blank lines
-  "MD066", # footnote validation
-  "MD067", # footnote definitions in reference order
-  "MD068", # empty footnote definitions
-  "MD069", # duplicate list markers
-  "MD070", # nested code fence collision
-  "MD071", # blank line after frontmatter
   "MD072", # frontmatter keys alphabetical
-  "MD073", # TOC matches document headings
-  "MD074", # MkDocs nav entries
-  "MD075", # orphaned table rows
-  "MD076", # list item spacing
-  "MD077", # list continuation indentation
+  "MD073", # TOC matches document headings (needs a TOC)
+  "MD074", # MkDocs nav entries (we don't use MkDocs)
 ]
+
+# Line length: 120 characters of prose is plenty; code blocks and tables
+# often exceed that legitimately.
+[MD013]
+line_length = 120
+code_blocks = false
+tables = false

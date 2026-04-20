@@ -31,7 +31,7 @@ Other languages use alternative verification methods.
 - **Status**: No official Sigstore support
 - **Note**: RFC proposed but closed due to time constraints
 - **Alternative**: SHA256 checksums published
-- **GPG**: PGP signatures available via rust-key@rust-lang.org
+- **GPG**: PGP signatures available via <rust-key@rust-lang.org>
 
 ### Ruby ✗
 

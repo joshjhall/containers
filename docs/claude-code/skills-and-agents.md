@@ -94,7 +94,8 @@ downstream:
   degrades all downstream interactions
 
 The `issue-writer` agent uses `model: haiku` for mechanical structured
-output (formatting findings into issues). All other agents use `model: sonnet` for pattern matching and structured generation tasks.
+output (formatting findings into issues). All other agents use
+`model: sonnet` for pattern matching and structured generation tasks.
 
 Templates are staged at build time to `/etc/container/config/claude-templates/`
 and installed at runtime by `claude-setup`. All installations are idempotent.

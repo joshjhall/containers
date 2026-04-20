@@ -13,7 +13,7 @@ item includes the relevant compliance frameworks it addresses.
   --build-arg ENABLE_PASSWORDLESS_SUDO=false
   ```
 
-  _Frameworks: OWASP D01, SOC 2 CC6.1, ISO 27001 A.8.2, HIPAA §164.312(a)_
+  _Frameworks_: OWASP D01, SOC 2 CC6.1, ISO 27001 A.8.2, HIPAA §164.312(a)
 
 - [ ] **Enable JSON logging for log aggregation**
 
@@ -21,7 +21,7 @@ item includes the relevant compliance frameworks it addresses.
   --build-arg ENABLE_JSON_LOGGING=true
   ```
 
-  _Frameworks: SOC 2 CC7.2, ISO 27001 A.8.16, HIPAA §164.312(b), PCI DSS 10.x_
+  _Frameworks_: SOC 2 CC7.2, ISO 27001 A.8.16, HIPAA §164.312(b), PCI DSS 10.x
 
 - [ ] **Use minimal base image**
 
@@ -29,14 +29,14 @@ item includes the relevant compliance frameworks it addresses.
   --build-arg BASE_IMAGE=debian:trixie-slim
   ```
 
-  _Frameworks: OWASP D04, CIS Docker Benchmark 4.1_
+  _Frameworks_: OWASP D04, CIS Docker Benchmark 4.1
 
 - [ ] **Pin all version numbers**
 
   - Verify PYTHON_VERSION, NODE_VERSION, etc. are explicitly set
   - Check that Dockerfile uses specific tags, not `latest`
 
-  _Frameworks: SOC 2 CC7.1, ISO 27001 A.8.9_
+  _Frameworks_: SOC 2 CC7.1, ISO 27001 A.8.9
 
 ### Security Scanning
 
@@ -49,7 +49,7 @@ item includes the relevant compliance frameworks it addresses.
   - No CRITICAL vulnerabilities with available fixes
   - Document accepted risks for unfixed vulnerabilities
 
-  _Frameworks: OWASP D02, SOC 2 CC7.3, ISO 27001 A.8.8, PCI DSS 6.3_
+  _Frameworks_: OWASP D02, SOC 2 CC7.3, ISO 27001 A.8.8, PCI DSS 6.3
 
 - [ ] **Verify image signatures**
 
@@ -60,7 +60,7 @@ item includes the relevant compliance frameworks it addresses.
     ghcr.io/joshjhall/containers:your-variant
   ```
 
-  _Frameworks: OWASP D08, SOC 2 CC6.8, ISO 27001 A.8.24_
+  _Frameworks_: OWASP D08, SOC 2 CC6.8, ISO 27001 A.8.24
 
 - [ ] **Review SBOM (Software Bill of Materials)**
 
@@ -68,7 +68,7 @@ item includes the relevant compliance frameworks it addresses.
   - Review for unexpected or outdated components
   - Archive for compliance records
 
-  _Frameworks: NIST SP 800-218, Executive Order 14028_
+  _Frameworks_: NIST SP 800-218, Executive Order 14028
 
 - [ ] **Run secret scanning**
 
@@ -76,7 +76,7 @@ item includes the relevant compliance frameworks it addresses.
   gitleaks detect --source . --verbose
   ```
 
-  _Frameworks: OWASP D06, SOC 2 CC6.1, PCI DSS 3.4_
+  _Frameworks_: OWASP D06, SOC 2 CC6.1, PCI DSS 3.4
 
 ### Resource Configuration
 
@@ -90,7 +90,7 @@ item includes the relevant compliance frameworks it addresses.
       cpu: "500m"
   ```
 
-  _Frameworks: OWASP D07, SOC 2 A1.1_
+  _Frameworks_: OWASP D07, SOC 2 A1.1
 
 - [ ] **Set memory limits**
 
@@ -102,7 +102,7 @@ item includes the relevant compliance frameworks it addresses.
       memory: "1Gi"
   ```
 
-  _Frameworks: OWASP D07, SOC 2 A1.1_
+  _Frameworks_: OWASP D07, SOC 2 A1.1
 
 - [ ] **Configure storage limits**
 
@@ -118,7 +118,7 @@ item includes the relevant compliance frameworks it addresses.
   [Resource Limits Examples](../../examples/kubernetes/base/resource-limits.yaml)
   for LimitRange and ResourceQuota templates with sizing guidelines.
 
-  _Frameworks: OWASP D07, SOC 2 A1.1, CIS Kubernetes Benchmark 5.2_
+  _Frameworks_: OWASP D07, SOC 2 A1.1, CIS Kubernetes Benchmark 5.2
 
 ### Health Monitoring
 
@@ -137,7 +137,7 @@ item includes the relevant compliance frameworks it addresses.
     periodSeconds: 10
   ```
 
-  _Frameworks: SOC 2 A1.2, ISO 27001 A.8.14_
+  _Frameworks_: SOC 2 A1.2, ISO 27001 A.8.14
 
 - [ ] **Set up custom health checks** (if needed)
 
@@ -152,7 +152,7 @@ item includes the relevant compliance frameworks it addresses.
   - Use cert-manager or similar for certificate management
   - Enforce minimum TLS 1.2
 
-  _Frameworks: HIPAA §164.312(e), PCI DSS 4.1, GDPR Art. 32_
+  _Frameworks_: HIPAA §164.312(e), PCI DSS 4.1, GDPR Art. 32
 
 - [ ] **Document encryption at rest**
 
@@ -160,7 +160,7 @@ item includes the relevant compliance frameworks it addresses.
   - Database connections use TLS
   - Secrets are stored in encrypted secret management (Vault, AWS SM, etc.)
 
-  _Frameworks: HIPAA §164.312(a), PCI DSS 3.4, GDPR Art. 32_
+  _Frameworks_: HIPAA §164.312(a), PCI DSS 3.4, GDPR Art. 32
 
 - [ ] **Configure log retention**
 
@@ -168,7 +168,7 @@ item includes the relevant compliance frameworks it addresses.
   - Audit logs: per compliance requirements
   - Set up log rotation to prevent disk exhaustion
 
-  _Frameworks: PCI DSS 10.7, HIPAA §164.312(b), SOC 2 CC7.2_
+  _Frameworks_: PCI DSS 10.7, HIPAA §164.312(b), SOC 2 CC7.2
 
 ## Kubernetes-Specific Checklist
 
@@ -187,7 +187,7 @@ item includes the relevant compliance frameworks it addresses.
       pod-security.kubernetes.io/warn: restricted
   ```
 
-  _Frameworks: OWASP D04, CIS Kubernetes Benchmark 5.2_
+  _Frameworks_: OWASP D04, CIS Kubernetes Benchmark 5.2
 
 - [ ] **Set security context**
 
@@ -204,7 +204,7 @@ item includes the relevant compliance frameworks it addresses.
         - ALL
   ```
 
-  _Frameworks: OWASP D01/D05/D09, CIS Docker Benchmark 5.x_
+  _Frameworks_: OWASP D01/D05/D09, CIS Docker Benchmark 5.x
 
 ### Network Security
 
@@ -248,7 +248,7 @@ item includes the relevant compliance frameworks it addresses.
   - Apply least privilege principle
   - Avoid cluster-admin role for applications
 
-  _Frameworks: SOC 2 CC6.1, ISO 27001 A.5.15, HIPAA §164.312(a)_
+  _Frameworks_: SOC 2 CC6.1, ISO 27001 A.5.15, HIPAA §164.312(a)
 
 - [ ] **Enable audit logging**
 
@@ -262,7 +262,7 @@ item includes the relevant compliance frameworks it addresses.
           resources: ["secrets", "configmaps"]
   ```
 
-  _Frameworks: SOC 2 CC7.2, ISO 27001 A.8.16, HIPAA §164.312(b)_
+  _Frameworks_: SOC 2 CC7.2, ISO 27001 A.8.16, HIPAA §164.312(b)
 
 ### Policy Enforcement
 
@@ -273,7 +273,7 @@ item includes the relevant compliance frameworks it addresses.
   - Block privileged containers
   - Enforce labels/annotations
 
-  _Frameworks: SOC 2 CC8.1, ISO 27001 A.8.9_
+  _Frameworks_: SOC 2 CC8.1, ISO 27001 A.8.9
 
 ### Runtime Security
 
@@ -293,7 +293,7 @@ item includes the relevant compliance frameworks it addresses.
           name: falcosecurity
   ```
 
-  _Frameworks: SOC 2 CC7.2, ISO 27001 A.8.16, NIST CSF DE.CM-1_
+  _Frameworks_: SOC 2 CC7.2, ISO 27001 A.8.16, NIST CSF DE.CM-1
 
 ### Logging and Monitoring
 
@@ -303,7 +303,7 @@ item includes the relevant compliance frameworks it addresses.
   - Configure JSON log parsing
   - Set up dashboards for security events
 
-  _Frameworks: SOC 2 CC7.2, ISO 27001 A.8.16, PCI DSS 10.x_
+  _Frameworks_: SOC 2 CC7.2, ISO 27001 A.8.16, PCI DSS 10.x
 
 - [ ] **Configure alerting**
 
@@ -312,7 +312,7 @@ item includes the relevant compliance frameworks it addresses.
   - Security events (Falco alerts)
   - Resource exhaustion
 
-  _Frameworks: SOC 2 CC7.3, ISO 27001 A.8.16_
+  _Frameworks_: SOC 2 CC7.3, ISO 27001 A.8.16
 
 ## Post-Deployment Verification
 
@@ -358,7 +358,7 @@ item includes the relevant compliance frameworks it addresses.
   - Document RTO/RPO
   - Schedule regular restore tests
 
-  _Frameworks: SOC 2 A1.2, ISO 27001 A.8.13, HIPAA §164.308(a)(7)_
+  _Frameworks_: SOC 2 A1.2, ISO 27001 A.8.13, HIPAA §164.308(a)(7)
 
 - [ ] **Review security events**
 
@@ -372,7 +372,7 @@ item includes the relevant compliance frameworks it addresses.
   - Test alerting and escalation paths
   - Update runbooks based on findings
 
-  _Frameworks: SOC 2 CC7.4, ISO 27001 A.5.24, HIPAA §164.308(a)(6)_
+  _Frameworks_: SOC 2 CC7.4, ISO 27001 A.5.24, HIPAA §164.308(a)(6)
 
 ## Documentation Requirements
 

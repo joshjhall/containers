@@ -101,7 +101,7 @@ for detailed mapping.
 ### ISO 27001:2022
 
 Good alignment with Annex A controls for secure development. See
-[Framework Analysis](../reference/compliance.md#iso-270012022).
+[Framework Analysis](../reference/compliance.md#iso-270012022-controls).
 
 ### HIPAA Security Rule
 

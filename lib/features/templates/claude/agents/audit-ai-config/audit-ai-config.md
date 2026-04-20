@@ -104,7 +104,8 @@ Every finding MUST include a `certainty` object.
 
 ### hook-safety
 
-- Hook commands that perform destructive operations (`rm -rf`, `git reset --hard`, `docker system prune`) without confirmation guards
+- Hook commands that perform destructive operations (`rm -rf`,
+  `git reset --hard`, `docker system prune`) without confirmation guards
 - Hooks missing error handling (no `set -e`, no exit code checks)
 - Hooks that could leak secrets (echoing env vars, writing tokens to logs)
 - Hooks with broad glob patterns that could match unintended files

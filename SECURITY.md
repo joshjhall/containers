@@ -102,8 +102,8 @@ access** to the host system:
 - ❌ **Production Use**: Never mount the socket in production
 - ❌ **Untrusted Code**: Never mount the socket when running untrusted code
 
-See the [Docker Socket Usage section in README](README.md#docker-socket-usage)
-for detailed guidance.
+See [docs/security/best-practices.md](docs/security/best-practices.md) for
+the full Docker socket mounting threat model and recommended alternatives.
 
 ### Secret Management
 

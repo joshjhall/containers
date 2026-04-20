@@ -111,7 +111,7 @@ The build system provides three functions in `lib/base/apt-utils.sh`:
 
 ### Usage Examples
 
-**Example 1: Install packages only on specific Debian versions**
+#### Example 1: Install packages only on specific Debian versions
 
 ```bash
 # In your feature script, source apt-utils first
@@ -128,7 +128,7 @@ apt_install \
 apt_install_conditional 11 12 lzma lzma-dev
 ```
 
-**Example 2: Conditional logic for installation methods**
+#### Example 2: Conditional logic for installation methods
 
 ```bash
 source /tmp/build-scripts/base/apt-utils.sh
@@ -146,7 +146,7 @@ else
 fi
 ```
 
-**Example 3: Check version before applying workarounds**
+#### Example 3: Check version before applying workarounds
 
 ```bash
 source /tmp/build-scripts/base/apt-utils.sh
