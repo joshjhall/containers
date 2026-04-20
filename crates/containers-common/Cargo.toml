@@ -16,6 +16,7 @@ serde = { workspace = true }
 
 minijinja = { workspace = true }
 serde_yaml = { workspace = true }
+sha2 = { workspace = true }
 
 [dev-dependencies]
 serde_json = { workspace = true }
