@@ -81,6 +81,8 @@ pre-commit:
       glob: "*.{yml,yaml}"
       exclude:
         - "tests/results/**"
+        - ".vscode/**"
+        - ".devcontainer/**"
       run: dprint fmt {staged_files}
       stage_fixed: true
 
