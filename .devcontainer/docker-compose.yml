@@ -26,6 +26,11 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ..:/workspace/containers
+    tmpfs:
+      # Writable /run so supervisor can create its socket/pidfile as the runtime user (UID 1000)
+      - /run:mode=0755,uid=1000,gid=1000
+      # 1Password cache is kept in memory
+      - /cache/1password/secrets:size=8m,mode=0700,uid=1000,gid=1000
     env_file:
       - ../.env
     environment:
