@@ -211,7 +211,7 @@ fn non_interactive_feature_order_stable() {
 
     for path in &["docker-compose.yml", "devcontainer.json", ".env"] {
         let key = format!(".devcontainer/{path}");
-        assert_eq!(snapshot1.get(&key), snapshot2.get(&key), "{key} differs between runs",);
+        assert_eq!(snapshot1.get(&key), snapshot2.get(&key), "{key} differs between runs");
     }
     assert_eq!(snapshot1.get(".env.example"), snapshot2.get(".env.example"));
 
