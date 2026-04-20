@@ -12,7 +12,7 @@ environments — across multiple Linux distributions. Configure with a CLI/TUI,
 build with a single Dockerfile, and manage everything from project setup to
 runtime with three compiled Rust tools.
 
-## What's New in v5
+## What's New in v4
 
 - **Multi-distro support** — Debian, Alpine, RHEL/UBI, and Ubuntu. More
   planned.
