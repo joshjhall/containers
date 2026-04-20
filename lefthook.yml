@@ -15,7 +15,7 @@ pre-commit:
 
     # --- General file checks (native shell, no Python runtime) ---
     # YAML/JSON/private-key checks are covered elsewhere: dprint-yaml, dprint-json,
-    # and gitleaks (all defined below).
+    # rumdl (markdown), and gitleaks (all defined below).
     trailing-whitespace:
       glob: "*"
       exclude:
@@ -84,22 +84,18 @@ pre-commit:
       run: dprint fmt {staged_files}
       stage_fixed: true
 
-    # --- Markdown formatting and linting ---
+    # --- Markdown linting + formatting (rumdl) ---
+    #
+    # Lint-only in the hook (matches mado's former behaviour). `rumdl fmt`
+    # has aggressive rewrites that misfire on nested code fences, so users
+    # opt into formatting via `just fmt` and review the diff themselves.
 
-    dprint-md:
+    rumdl:
       glob: "*.md"
       exclude:
         - "CHANGELOG.md"
         - "tests/results/**"
-      run: dprint fmt {staged_files}
-      stage_fixed: true
-
-    mado:
-      glob: "*.md"
-      exclude:
-        - "CHANGELOG.md"
-        - "tests/results/**"
-      run: mado check {staged_files}
+      run: rumdl check {staged_files}
 
     # Prose linting — warn-only. Skips until `vale sync` has fetched styles.
     vale:

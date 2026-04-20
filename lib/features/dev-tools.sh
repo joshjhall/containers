@@ -75,7 +75,7 @@ EZA_VERSION="${EZA_VERSION:-0.23.4}"
 UV_VERSION="${UV_VERSION:-0.11.7}"
 LEFTHOOK_VERSION="${LEFTHOOK_VERSION:-2.1.6}"
 GITLEAKS_VERSION="${GITLEAKS_VERSION:-8.30.1}"
-MADO_VERSION="${MADO_VERSION:-0.3.0}"
+RUMDL_VERSION="${RUMDL_VERSION:-0.1.76}"
 DPRINT_VERSION="${DPRINT_VERSION:-0.54.0}"
 OSV_SCANNER_VERSION="${OSV_SCANNER_VERSION:-2.3.5}"
 YQ_VERSION="${YQ_VERSION:-4.53.2}"
@@ -300,10 +300,10 @@ export DIRENV_ALLOW_DIR="${DEV_TOOLS_CACHE}/direnv-allow"
 # Log feature summary
 log_feature_summary \
     --feature "Development Tools" \
-    --tools "gh,lazygit,delta,act,git-cliff,glab,biome,taplo,uv,duf,entr,fzf,direnv,mkcert,jq,ripgrep,fd,bat,eza,htop,dua,lefthook,gitleaks,osv-scanner,mado,dprint,typos,shfmt,conform,agnix,agentsys,cspell" \
+    --tools "gh,lazygit,delta,act,git-cliff,glab,biome,taplo,uv,duf,entr,fzf,direnv,mkcert,jq,ripgrep,fd,bat,eza,htop,dua,lefthook,gitleaks,osv-scanner,rumdl,dprint,typos,shfmt,conform,agnix,agentsys,cspell" \
     --paths "${DEV_TOOLS_CACHE},/opt/fzf,${CAROOT}" \
     --env "DEV_TOOLS_CACHE,CAROOT,DIRENV_ALLOW_DIR,ENABLE_LSP_TOOL" \
-    --commands "gh,lazygit,delta,act,git-cliff,glab,biome,uv,uvx,duf,entr,fzf,direnv,mkcert,jq,rg,fd,bat,eza,htop,dua,lefthook,gitleaks,osv-scanner,mado,dprint,typos,shfmt,conform,agnix,agentsys,cspell" \
+    --commands "gh,lazygit,delta,act,git-cliff,glab,biome,uv,uvx,duf,entr,fzf,direnv,mkcert,jq,rg,fd,bat,eza,htop,dua,lefthook,gitleaks,osv-scanner,rumdl,dprint,typos,shfmt,conform,agnix,agentsys,cspell" \
     --next-steps "Run 'test-dev-tools' to verify installation. Many modern CLI replacements are aliased (ls=eza, cat=bat, grep=rg, find=fd). Claude Code is installed separately by claude-code-setup.sh."
 
 # End logging

@@ -82,7 +82,7 @@ test_binary_tool_installations() {
         "mkcert"
         "biome"
         "lefthook"
-        "mado"
+        "rumdl"
         "dprint"
         "yq"
         "sd"
@@ -649,17 +649,17 @@ run_test test_lefthook_installation "lefthook installation present in binary too
 run_test test_gitleaks_version_variable "gitleaks version variable defined in dev-tools.sh"
 run_test test_gitleaks_installation "gitleaks installation present in binary tools"
 
-# Test: mado version variable defined in dev-tools.sh
-test_mado_version_variable() {
+# Test: rumdl version variable defined in dev-tools.sh
+test_rumdl_version_variable() {
     local source_file="$PROJECT_ROOT/lib/features/dev-tools.sh"
-    assert_file_contains "$source_file" "MADO_VERSION=" "dev-tools.sh defines MADO_VERSION"
+    assert_file_contains "$source_file" "RUMDL_VERSION=" "dev-tools.sh defines RUMDL_VERSION"
 }
 
-# Test: mado installation present in binary tools script
-test_mado_installation() {
+# Test: rumdl installation present in binary tools script
+test_rumdl_installation() {
     local source_file="$PROJECT_ROOT/lib/features/lib/dev-tools/install-binary-tools.sh"
-    assert_file_contains "$source_file" "akiomik/mado" "install-binary-tools.sh installs mado from akiomik"
-    assert_file_contains "$source_file" "mado-Linux-gnu-x86_64.tar.gz" "install-binary-tools.sh uses correct amd64 asset name"
+    assert_file_contains "$source_file" "rvben/rumdl" "install-binary-tools.sh installs rumdl from rvben"
+    assert_file_contains "$source_file" "rumdl-v\${RUMDL_VERSION}-x86_64-unknown-linux-gnu.tar.gz" "install-binary-tools.sh uses correct amd64 asset name"
 }
 
 # Test: dprint version variable defined in dev-tools.sh
@@ -675,8 +675,8 @@ test_dprint_installation() {
     assert_file_contains "$source_file" "dprint-x86_64-unknown-linux-gnu.zip" "install-binary-tools.sh uses correct amd64 asset name"
 }
 
-run_test test_mado_version_variable "mado version variable defined in dev-tools.sh"
-run_test test_mado_installation "mado installation present in binary tools"
+run_test test_rumdl_version_variable "rumdl version variable defined in dev-tools.sh"
+run_test test_rumdl_installation "rumdl installation present in binary tools"
 run_test test_dprint_version_variable "dprint version variable defined in dev-tools.sh"
 
 # Test: osv-scanner version variable defined in dev-tools.sh

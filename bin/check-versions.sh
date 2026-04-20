@@ -263,7 +263,7 @@ extract_all_versions() {
     _add_feature_version UV_VERSION "uv" "dev-tools.sh"
     _add_feature_version LEFTHOOK_VERSION "lefthook" "dev-tools.sh"
     _add_feature_version GITLEAKS_VERSION "gitleaks" "dev-tools.sh"
-    _add_feature_version MADO_VERSION "mado" "dev-tools.sh"
+    _add_feature_version RUMDL_VERSION "rumdl" "dev-tools.sh"
     _add_feature_version DPRINT_VERSION "dprint" "dev-tools.sh"
     _add_feature_version OSV_SCANNER_VERSION "osv-scanner" "dev-tools.sh"
     _add_feature_version YQ_VERSION "yq" "dev-tools.sh"
@@ -415,7 +415,7 @@ main() {
             just) check_github_release "just" "casey/just" ;;
             lefthook) check_github_release "lefthook" "evilmartians/lefthook" ;;
             gitleaks) check_github_release "gitleaks" "gitleaks/gitleaks" ;;
-            mado) check_github_release "mado" "akiomik/mado" ;;
+            rumdl) check_github_release "rumdl" "rvben/rumdl" ;;
             dprint) check_github_release "dprint" "dprint/dprint" ;;
             osv-scanner) check_github_release "osv-scanner" "google/osv-scanner" ;;
             yq) check_github_release "yq" "mikefarah/yq" ;;

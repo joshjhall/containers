@@ -278,15 +278,15 @@ install_github_binary_tools() {
         "calculate" "extract_flat:gitleaks" ||
         return 1
 
-    # mado (markdown linter — Rust, replaces pymarkdown)
-    install_github_release "mado" "$MADO_VERSION" \
-        "https://github.com/akiomik/mado/releases/download/v${MADO_VERSION}" \
-        "mado-Linux-gnu-x86_64.tar.gz" \
-        "mado-Linux-gnu-arm64.tar.gz" \
-        "sha256" "extract_flat:mado" ||
+    # rumdl (markdown linter + formatter — Rust, replaces mado + dprint-markdown)
+    install_github_release "rumdl" "$RUMDL_VERSION" \
+        "https://github.com/rvben/rumdl/releases/download/v${RUMDL_VERSION}" \
+        "rumdl-v${RUMDL_VERSION}-x86_64-unknown-linux-gnu.tar.gz" \
+        "rumdl-v${RUMDL_VERSION}-aarch64-unknown-linux-gnu.tar.gz" \
+        "sha256" "extract_flat:rumdl" ||
         return 1
 
-    # dprint (polyglot formatter — Rust, replaces mdformat for markdown)
+    # dprint (polyglot formatter — Rust, used for JSON and YAML; markdown is handled by rumdl)
     install_github_release "dprint" "$DPRINT_VERSION" \
         "https://github.com/dprint/dprint/releases/download/${DPRINT_VERSION}" \
         "dprint-x86_64-unknown-linux-gnu.zip" \
