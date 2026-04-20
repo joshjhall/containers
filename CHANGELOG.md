@@ -5,12 +5,38 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.17.2] - 2026-04-20
+
+### Changed
+
+- Replace yamllint with dprint + pretty_yaml in lefthook
+- Replace biome with dprint for JSON formatting in CI/lint
+
+### Fixed
+
+- Portable in-place sed across GNU and BSD
+- Harden cargo install policy against crates.io drift
+- Install build-essential in rust.sh before cargo installs
+- Reword rust.sh log line to avoid cargo-install-policy false positive
+- Harden cargo-install-policy test against prose false positives
+- Ship non-root-safe supervisord.conf from dev-tools
+- Scope conform validation to PR head, not synthetic merge commit
+
 ## [4.17.1] - 2026-04-19
 
 ### Added
 
 - Add shfmt shell script formatter (Go static binary)
 - Enforce shfmt and add conform commit linter
+
+### Miscellaneous
+
+- Automated version updates to v4.17.1
+- Update compatibility matrix with passing test results
+- Update compatibility matrix with passing test results
+- Update compatibility matrix with passing test results
+- Update compatibility matrix with passing test results
+- Update compatibility matrix with passing test results
 
 ### Style
 
@@ -1637,6 +1663,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix prettier and markdownlint formatting in README
 - Format TLS documentation files
 
+[4.17.2]: https://github.com/joshjhall/containers/compare/v4.17.1...v4.17.2
 [4.17.1]: https://github.com/joshjhall/containers/compare/v4.17.0...v4.17.1
 [4.17.0]: https://github.com/joshjhall/containers/compare/v4.16.1...v4.17.0
 [4.16.1]: https://github.com/joshjhall/containers/compare/v4.16.0...v4.16.1
