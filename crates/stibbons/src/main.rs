@@ -2,12 +2,12 @@
 
 mod wizard;
 
-use std::collections::BTreeMap;
-use std::path::Path;
+use std::collections::{BTreeMap, HashSet};
+use std::path::{Path, PathBuf};
 
 use clap::{Parser, Subcommand};
 use containers_common::config::{AgentConfig, IgorConfig, ProjectConfig};
-use containers_common::feature::{self, Registry};
+use containers_common::feature::{self, Registry, Selection};
 use containers_common::template::{RenderContext, Renderer};
 
 /// Stibbons - Container build system orchestrator.
@@ -28,7 +28,15 @@ struct Cli {
 #[derive(Subcommand, Debug)]
 enum Commands {
     /// Initialize a new project with an interactive wizard.
-    Init,
+    Init {
+        /// Skip the wizard and read selections from an existing `.igor.yml`.
+        #[arg(long)]
+        non_interactive: bool,
+
+        /// Path to an `.igor.yml` config file (required with `--non-interactive`).
+        #[arg(long)]
+        config: Option<PathBuf>,
+    },
 }
 
 fn main() {
@@ -43,8 +51,8 @@ fn main() {
         .init();
 
     match cli.command {
-        Some(Commands::Init) => {
-            if let Err(e) = run_init() {
+        Some(Commands::Init { non_interactive, config }) => {
+            if let Err(e) = run_init(non_interactive, config.as_deref()) {
                 eprintln!("Error: {e}");
                 std::process::exit(1);
             }
@@ -58,28 +66,87 @@ fn main() {
     }
 }
 
-fn run_init() -> Result<(), Box<dyn std::error::Error>> {
+/// Inputs to template rendering, produced by either the wizard or a loaded config.
+struct InitInputs {
+    project: ProjectConfig,
+    containers_dir: String,
+    selection: Selection,
+    versions: BTreeMap<String, String>,
+    agents: AgentConfig,
+}
+
+fn run_init(
+    non_interactive: bool,
+    config: Option<&Path>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    if non_interactive && config.is_none() {
+        return Err("--config is required with --non-interactive".into());
+    }
+
     let reg = Registry::new();
 
-    // Detect defaults from current directory.
+    let mut inputs = if non_interactive {
+        load_from_config(&reg, config.expect("guarded above"))?
+    } else {
+        load_from_wizard(&reg)?
+    };
+
+    fill_default_versions(&mut inputs.versions, &inputs.selection, &reg);
+    write_outputs(&inputs, &reg)
+}
+
+/// Interactive path: run the TUI wizard and derive inputs from user selections.
+fn load_from_wizard(reg: &Registry) -> Result<InitInputs, Box<dyn std::error::Error>> {
     let current_dir = std::env::current_dir()?;
     let dir_name =
         current_dir.file_name().and_then(|n| n.to_str()).unwrap_or("myproject").to_string();
 
-    let containers_dir_default = detect_containers_dir();
     let defaults = wizard::WizardDefaults {
         project_name: dir_name,
-        containers_dir: containers_dir_default,
+        containers_dir: detect_containers_dir(),
         ..wizard::WizardDefaults::default()
     };
 
-    let result = wizard::run_wizard(&reg, &defaults)?;
+    let result = wizard::run_wizard(reg, &defaults)?;
+    let selection = feature::resolve(&result.features, reg);
 
-    // Resolve dependencies.
-    let selection = feature::resolve(&result.features, &reg);
+    let project = ProjectConfig {
+        name: result.project_name,
+        username: result.username,
+        base_image: result.base_image,
+        ..ProjectConfig::default()
+    };
 
-    // Fill default versions for selected features.
-    let mut versions = BTreeMap::new();
+    Ok(InitInputs {
+        project,
+        containers_dir: result.containers_dir,
+        selection,
+        versions: BTreeMap::new(),
+        agents: AgentConfig::default(),
+    })
+}
+
+/// Non-interactive path: load selections from an existing `.igor.yml`.
+fn load_from_config(reg: &Registry, path: &Path) -> Result<InitInputs, Box<dyn std::error::Error>> {
+    let cfg = IgorConfig::load(path)?;
+    let explicit: HashSet<String> = cfg.features.iter().cloned().collect();
+    let selection = feature::resolve(&explicit, reg);
+
+    Ok(InitInputs {
+        project: cfg.project,
+        containers_dir: cfg.containers_dir,
+        selection,
+        versions: cfg.versions,
+        agents: cfg.agents,
+    })
+}
+
+/// Fill in default versions from the registry for any feature that doesn't already have one.
+fn fill_default_versions(
+    versions: &mut BTreeMap<String, String>,
+    selection: &Selection,
+    reg: &Registry,
+) {
     for f in reg.all() {
         if selection.has(&f.id)
             && let (Some(arg), Some(default)) = (&f.version_arg, &f.default_version)
@@ -87,24 +154,19 @@ fn run_init() -> Result<(), Box<dyn std::error::Error>> {
             versions.entry(arg.clone()).or_insert_with(|| default.clone());
         }
     }
+}
 
-    // Build render context.
-    let project = ProjectConfig {
-        name: result.project_name.clone(),
-        username: result.username.clone(),
-        base_image: result.base_image.clone(),
-        ..ProjectConfig::default()
-    };
+/// Render templates, write the 5 files, compute hashes, and save `.igor.yml`.
+fn write_outputs(inputs: &InitInputs, reg: &Registry) -> Result<(), Box<dyn std::error::Error>> {
     let ctx = RenderContext::new(
-        project.clone(),
-        &result.containers_dir,
-        &selection,
-        &reg,
-        versions.clone(),
-        AgentConfig::default(),
+        inputs.project.clone(),
+        &inputs.containers_dir,
+        &inputs.selection,
+        reg,
+        inputs.versions.clone(),
+        inputs.agents.clone(),
     );
 
-    // Render templates.
     let renderer = Renderer::new()?;
     let files = [
         (".devcontainer/docker-compose.yml", "docker-compose.yml.tmpl"),
@@ -114,13 +176,8 @@ fn run_init() -> Result<(), Box<dyn std::error::Error>> {
         (".igor.yml", "igor.yml.tmpl"),
     ];
 
-    // Check for existing files.
-    let mut existing = Vec::new();
-    for (path, _) in &files {
-        if Path::new(path).exists() {
-            existing.push(*path);
-        }
-    }
+    let existing: Vec<&str> =
+        files.iter().filter(|(p, _)| Path::new(p).exists()).map(|(p, _)| *p).collect();
     if !existing.is_empty() {
         println!("\nExisting files will be overwritten:");
         for path in &existing {
@@ -129,33 +186,27 @@ fn run_init() -> Result<(), Box<dyn std::error::Error>> {
         println!();
     }
 
-    // Write all files and compute hashes.
     let mut generated_hashes = BTreeMap::new();
     for (path, template) in &files {
         let content = renderer.render(template, &ctx)?;
-
-        // Create parent directory if needed.
         if let Some(parent) = Path::new(path).parent() {
             std::fs::create_dir_all(parent)?;
         }
         std::fs::write(path, &content)?;
-
-        let hash = sha256_hex(&content);
-        generated_hashes.insert((*path).to_string(), hash);
+        generated_hashes.insert((*path).to_string(), sha256_hex(&content));
     }
 
-    // Build sorted explicit feature list for state file.
-    let mut explicit_list: Vec<String> = selection.explicit.iter().cloned().collect();
+    let mut explicit_list: Vec<String> = inputs.selection.explicit.iter().cloned().collect();
     explicit_list.sort();
 
-    // Save state to .igor.yml.
     let state = IgorConfig {
         schema_version: 1,
-        containers_dir: result.containers_dir,
-        project,
+        containers_dir: inputs.containers_dir.clone(),
+        project: inputs.project.clone(),
         features: explicit_list,
-        versions,
+        versions: inputs.versions.clone(),
         generated: generated_hashes,
+        agents: inputs.agents.clone(),
         ..IgorConfig::default()
     };
     state.save(".igor.yml")?;

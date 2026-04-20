@@ -18,3 +18,8 @@ tracing = { workspace = true }
 inquire = { workspace = true }
 sha2 = { workspace = true }
 tracing-subscriber = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+serde_json = { workspace = true }
+serde_yaml = { workspace = true }

@@ -2612,7 +2612,10 @@ dependencies = [
  "containers-common",
  "inquire",
  "octarine",
+ "serde_json",
+ "serde_yaml",
  "sha2",
+ "tempfile",
  "tracing",
  "tracing-subscriber",
 ]
