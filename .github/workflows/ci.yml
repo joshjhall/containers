@@ -89,7 +89,15 @@ jobs:
         if: github.event_name == 'pull_request'
         env:
           BASE_REF: ${{ github.base_ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
+          # actions/checkout defaults to pull/*/merge for PR events, which
+          # creates a synthetic "Merge <head> into <base>" commit with a
+          # 92-char non-conventional header. Conform walks
+          # origin/${BASE_REF}..HEAD and flags that commit as invalid,
+          # blocking every PR. Detach HEAD onto the PR head first so
+          # conform sees only the real PR commits.
+          git checkout --detach "${HEAD_SHA}"
           # Validate every commit on the PR against .conform.yaml.
           # --base-branch lets conform enumerate just the PR's commits.
           conform enforce --base-branch "origin/${BASE_REF}"
