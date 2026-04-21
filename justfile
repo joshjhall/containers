@@ -96,6 +96,21 @@ hooks-all:
     lefthook run pre-commit --all-files
 
 # ============================================================================
+# Cleanup
+# ============================================================================
+
+# Remove orphan files left by interrupted hooks or unmounted FUSE mounts. Safe to rerun.
+clean-stale:
+    /usr/bin/find . -type f \( -name '*.enforce.*' -o -name '.fuse_hidden*' \) \
+        -not -path './.git/*' -not -path './target/*' -not -path './node_modules/*' \
+        -print -delete
+
+# Preview `just clean-stale` without removing anything.
+clean-stale-dry:
+    /usr/bin/find . -type f \( -name '*.enforce.*' -o -name '.fuse_hidden*' \) \
+        -not -path './.git/*' -not -path './target/*' -not -path './node_modules/*'
+
+# ============================================================================
 # Versions
 # ============================================================================
 
