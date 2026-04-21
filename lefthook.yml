@@ -131,6 +131,16 @@ pre-commit:
       run: taplo fmt {staged_files}
       stage_fixed: true
 
+    # --- Dockerfile linting (hadolint) ---
+
+    hadolint:
+      # hadolint is shipped by the dev-tools feature; skip gracefully if
+      # running outside a dev-tools container (e.g., CI linting host).
+      glob: "Dockerfile*"
+      skip:
+        - run: "! command -v hadolint >/dev/null 2>&1"
+      run: hadolint {staged_files}
+
     # --- Security ---
 
     gitleaks:

@@ -368,6 +368,14 @@ install_github_binary_tools() {
         "calculate" "binary" ||
         return 1
 
+    # hadolint (Dockerfile linter — Haskell binary, bare binary assets)
+    install_github_release "hadolint" "$HADOLINT_VERSION" \
+        "https://github.com/hadolint/hadolint/releases/download/v${HADOLINT_VERSION}" \
+        "hadolint-Linux-x86_64" \
+        "hadolint-Linux-arm64" \
+        "calculate" "binary" ||
+        return 1
+
     # agnix (AI config linter) — requires Node.js/npm
     if command -v npm &>/dev/null; then
         log_message "Installing agnix (AI config linter)..."

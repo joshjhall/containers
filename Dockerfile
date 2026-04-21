@@ -39,7 +39,7 @@ FROM ${BASE_IMAGE} AS base
 ARG PROJECT_PATH=..
 
 # Ensure consistent shell behavior
-SHELL ["/bin/bash", "-c"]
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=UTC
 

@@ -114,6 +114,10 @@ lint-docs:
     dprint check
     taplo fmt --check
 
+# Lint Dockerfile(s) with hadolint
+lint-docker:
+    hadolint Dockerfile
+
 # Format all code: cargo fmt (Rust) + rumdl fmt (Markdown) + dprint fmt (JSON/YAML) + taplo fmt (TOML)
 fmt:
     cargo fmt --all

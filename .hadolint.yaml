@@ -1,0 +1,8 @@
+# Hadolint — Dockerfile linter configuration.
+# See https://github.com/hadolint/hadolint
+#
+# failure-threshold: warning
+#   Treat `info` and `style` rules as non-fatal so they surface in the
+#   hook output without blocking commits. Real issues (warning/error)
+#   still fail the build.
+failure-threshold: warning
