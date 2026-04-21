@@ -85,6 +85,19 @@ jobs:
           sudo chmod +x /usr/local/bin/conform
           conform version
 
+          # taplo — TOML formatter (version pinned in dev-tools.sh; release tag has no `v` prefix)
+          TAPLO_VERSION=$(grep -oP 'TAPLO_VERSION:-\K[0-9.]+' lib/features/dev-tools.sh)
+          curl -fsSL "https://github.com/tamasfe/taplo/releases/download/${TAPLO_VERSION}/taplo-linux-x86_64.gz" \
+            | gunzip | sudo tee /usr/local/bin/taplo > /dev/null
+          sudo chmod +x /usr/local/bin/taplo
+          taplo --version
+
+          # just — command runner (version pinned in dev-tools.sh; release tag has no `v` prefix)
+          JUST_VERSION=$(grep -oP 'JUST_VERSION:-\K[0-9.]+' lib/features/dev-tools.sh)
+          curl -fsSL "https://github.com/casey/just/releases/download/${JUST_VERSION}/just-${JUST_VERSION}-x86_64-unknown-linux-musl.tar.gz" \
+            | sudo tar -xz -C /usr/local/bin just
+          just --version
+
       - name: Validate commit messages (conform)
         if: github.event_name == 'pull_request'
         env:
