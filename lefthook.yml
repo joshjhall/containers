@@ -121,6 +121,16 @@ pre-commit:
       run: dprint fmt {staged_files}
       stage_fixed: true
 
+    # --- TOML formatting (taplo) ---
+
+    taplo:
+      glob: "*.toml"
+      exclude:
+        - "tests/results/**"
+        - "target/**"
+      run: taplo fmt {staged_files}
+      stage_fixed: true
+
     # --- Security ---
 
     gitleaks:
@@ -239,6 +249,10 @@ pre-push:
     dprint-json-check:
       glob: "*.json"
       run: dprint check {all_files}
+
+    taplo-check:
+      glob: "*.toml"
+      run: taplo fmt --check {all_files}
 
     # --- Dependency CVE scanning ---
 

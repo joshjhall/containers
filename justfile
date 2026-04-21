@@ -82,6 +82,7 @@ lint SCOPE="":
       v5)
           cargo clippy --workspace -- -D warnings
           cargo fmt --all -- --check
+          taplo fmt --check
           ;;
       v4)
           files=$(git ls-files '*.sh' | /usr/bin/grep -v '^tests/results/' || true)
@@ -93,6 +94,7 @@ lint SCOPE="":
       stibbons|containers-common)
           cargo clippy -p "{{ SCOPE }}" --all-targets -- -D warnings
           cargo fmt -p "{{ SCOPE }}" -- --check
+          taplo fmt --check "crates/{{ SCOPE }}/**/*.toml"
           ;;
       *)
           echo "Unknown scope: {{ SCOPE }}" >&2
@@ -106,16 +108,18 @@ lint-rust:
     cargo clippy --workspace -- -D warnings
     cargo fmt --all -- --check
 
-# Check docs formatting: rumdl (Markdown) + dprint (JSON/YAML), no writes
+# Check docs formatting: rumdl (Markdown) + dprint (JSON/YAML) + taplo (TOML), no writes
 lint-docs:
     rumdl check .
     dprint check
+    taplo fmt --check
 
-# Format all code: cargo fmt (Rust) + rumdl fmt (Markdown) + dprint fmt (JSON/YAML)
+# Format all code: cargo fmt (Rust) + rumdl fmt (Markdown) + dprint fmt (JSON/YAML) + taplo fmt (TOML)
 fmt:
     cargo fmt --all
     rumdl fmt .
     dprint fmt
+    taplo fmt
 
 # ============================================================================
 # Build

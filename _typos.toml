@@ -3,11 +3,11 @@
 
 [files]
 extend-exclude = [
-    "lib/gpg-keys/**",
-    "CHANGELOG.md",
-    "wizard-port-exploration.md",
-    "tests/results/**",
-    "target/**",
+  "lib/gpg-keys/**",
+  "CHANGELOG.md",
+  "wizard-port-exploration.md",
+  "tests/results/**",
+  "target/**",
 ]
 
 [default.extend-words]
