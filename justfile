@@ -13,8 +13,32 @@ default:
 # Tests
 # ============================================================================
 
-# Full test suite (Rust + shell unit + Rust lint). For integration tests run `just test-integration`.
-test: test-rust lint-rust test-shell
+# Test suite. Default: rust tests + clippy + fmt --check + shell unit. Scopes: v5, v4, stibbons, containers-common (integration stays in `just test-integration`).
+test SCOPE="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    case "{{ SCOPE }}" in
+      "")
+          cargo test --workspace
+          cargo clippy --workspace -- -D warnings
+          cargo fmt --all -- --check
+          ./tests/run_unit_tests.sh
+          ;;
+      v5)
+          cargo test --workspace
+          ;;
+      v4)
+          ./tests/run_unit_tests.sh
+          ;;
+      stibbons|containers-common)
+          cargo test -p "{{ SCOPE }}"
+          ;;
+      *)
+          echo "Unknown scope: {{ SCOPE }}" >&2
+          echo "Valid scopes: v5, v4, stibbons, containers-common" >&2
+          exit 2
+          ;;
+    esac
 
 # Rust workspace tests (stibbons + containers-common)
 test-rust:
@@ -47,9 +71,35 @@ test-all: test test-integration
 # Lint & format
 # ============================================================================
 
-# Run every linter lefthook would run on a full pass.
-lint:
-    lefthook run pre-commit --all-files
+# Lint. Default: full lefthook pre-commit sweep. Scopes: v5 (rust workspace), v4 (shellcheck+shfmt), stibbons, containers-common.
+lint SCOPE="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    case "{{ SCOPE }}" in
+      "")
+          lefthook run pre-commit --all-files
+          ;;
+      v5)
+          cargo clippy --workspace -- -D warnings
+          cargo fmt --all -- --check
+          ;;
+      v4)
+          files=$(git ls-files '*.sh' | /usr/bin/grep -v '^tests/results/' || true)
+          if [ -n "$files" ]; then
+              echo "$files" | xargs -r shellcheck --severity=warning
+              echo "$files" | xargs -r shfmt -d -i 4 -ci
+          fi
+          ;;
+      stibbons|containers-common)
+          cargo clippy -p "{{ SCOPE }}" --all-targets -- -D warnings
+          cargo fmt -p "{{ SCOPE }}" -- --check
+          ;;
+      *)
+          echo "Unknown scope: {{ SCOPE }}" >&2
+          echo "Valid scopes: v5, v4, stibbons, containers-common" >&2
+          exit 2
+          ;;
+    esac
 
 # Rust lint: clippy (pedantic + nursery, warnings as errors) and fmt --check
 lint-rust:
