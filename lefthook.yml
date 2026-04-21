@@ -131,14 +131,25 @@ pre-commit:
       run: gitleaks protect --staged --verbose --redact
 
     # --- Rust linting (stibbons) ---
+    #
+    # Single hook delegating to `just lint <scope>` (fmt --check + clippy).
+    # Derives scope from staged file paths: each distinct `crates/<name>/…`
+    # becomes one `just lint <name>` call. Falls back to `just lint v5`
+    # (workspace) if no crate path is detectable — e.g., root `Cargo.toml`
+    # or `.rustfmt.toml` changes.
 
-    cargo-fmt:
+    cargo-lint:
       glob: "{crates/**/*.rs,.rustfmt.toml,Cargo.toml}"
-      run: cargo fmt --check
-
-    cargo-clippy:
-      glob: "{crates/**/*.rs,Cargo.toml}"
-      run: cargo clippy --workspace -- -D warnings
+      run: |
+        crates=$(/usr/bin/printf '%s\n' {staged_files} \
+          | /usr/bin/grep '^crates/' \
+          | /usr/bin/cut -d/ -f2 \
+          | /usr/bin/sort -u)
+        if [ -z "$crates" ]; then
+          just lint v5
+        else
+          for c in $crates; do just lint "$c"; done
+        fi
 
     # --- Custom hooks ---
 
@@ -192,12 +203,28 @@ pre-push:
 
     cargo-test:
       glob: "{crates/**/*.rs,Cargo.toml}"
-      run: cargo test --workspace
+      run: |
+        crates=$(/usr/bin/printf '%s\n' {push_files} \
+          | /usr/bin/grep '^crates/' \
+          | /usr/bin/cut -d/ -f2 \
+          | /usr/bin/sort -u)
+        if [ -z "$crates" ]; then
+          just test v5
+        else
+          for c in $crates; do just test "$c"; done
+        fi
 
-    # Spell-check (crate-ci/typos) — scans the working tree, respects
-    # _typos.toml excludes. Fast enough to skip a staged-files filter.
+    # Spell-check (crate-ci/typos) — scoped to pushed files when possible,
+    # falls back to a full-tree scan when there's no push file list (e.g.
+    # first push of a branch, or when only non-tracked paths changed).
     typos:
-      run: typos
+      run: |
+        files="{push_files}"
+        if [ -n "$files" ]; then
+          typos $files
+        else
+          typos
+        fi
 
     docker-compose-validate:
       run: |
