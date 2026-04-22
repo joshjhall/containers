@@ -956,6 +956,17 @@ jobs:
 
           **Image digests:** See \`image-digests.txt\` in release assets for SHA256 digests of all images.
 
+          ### Software Bill of Materials (SBOM)
+          CycloneDX SBOMs are published two ways:
+
+          - **Release assets** — download \`sbom-<variant>.json\` from this release page, or via GitHub CLI:
+            \`\`\`bash
+            gh release download ${VERSION} --pattern 'sbom-*.json'
+            \`\`\`
+          - **Cosign attestation** — SBOMs are also attested against the image digest in the Rekor transparency log. See [\`docs/security/image-signing.md\`](https://github.com/${{ github.repository }}/blob/${VERSION}/docs/security/image-signing.md) for verification steps.
+
+          SLSA provenance attestations are attached as \`provenance-<variant>.json\`.
+
           ### What's Changed
           See [CHANGELOG.md](CHANGELOG.md) for detailed changes.
 
@@ -973,3 +984,7 @@ jobs:
           draft: false
           prerelease: false
           token: ${{ secrets.GITHUB_TOKEN }}
+          files: |
+            sbom-*.json
+            image-digests.txt
+            provenance-*.json

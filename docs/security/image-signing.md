@@ -11,7 +11,8 @@ Every tagged release (`v*`) triggers the following pipeline:
 1. **Build** — Multi-variant container images are built and pushed to GHCR
 1. **Sign** — Each image is signed with Cosign (keyless OIDC via Fulcio)
 1. **Attest provenance** — SLSA v0.2 provenance is generated and attached
-1. **Attest SBOM** — CycloneDX SBOM is generated and attached as attestation
+1. **Attest SBOM** — CycloneDX SBOM (Syft) is attested to the image and
+   attached as a downloadable release asset (`sbom-<variant>.json`)
 1. **Record** — All signatures and attestations are recorded in the Rekor
    transparency log
 
@@ -96,23 +97,64 @@ cosign verify-attestation \
   ghcr.io/OWNER/REPO:v1.0.0-minimal
 ```
 
-## Generating SBOMs
+## Generating and Consuming SBOMs
 
-SBOMs are generated in two ways:
+SBOMs are produced and published in three ways:
 
-1. **CI pipeline** — Trivy generates CycloneDX SBOMs during security scanning,
-   and the release job attests the SBOM to the image
-1. **Local generation** — Use the `generate-sbom.sh` script for on-demand SBOMs
+1. **Release-time SBOM** (Syft) — The release job generates a CycloneDX
+   SBOM per variant with [Syft](https://github.com/anchore/syft) and
+   publishes it two ways:
+   - Attached as a **release asset** (`sbom-<variant>.json`) for direct
+     download
+   - Attested against the image digest via Cosign and recorded in Rekor
+     (best-effort — see note in the troubleshooting section)
+1. **Security-scan SBOM** (Trivy) — The security-scan job produces
+   CycloneDX SBOMs during vulnerability scanning. These are uploaded as
+   90-day GitHub Actions workflow artifacts, used for CI observability,
+   and are not attached to releases.
+1. **Local generation** (Syft) — Run `just sbom <image>` (or
+   `./bin/generate-sbom.sh` directly) for on-demand SBOMs.
+
+### Downloading SBOMs from release assets
 
 ```bash
-# Generate all SBOM formats (SPDX, CycloneDX, table)
-./bin/generate-sbom.sh ghcr.io/OWNER/REPO:v1.0.0-minimal
+# All SBOMs for a release
+gh release download v1.0.0 --pattern 'sbom-*.json'
 
-# Generate with vulnerability scan
+# A single variant
+gh release download v1.0.0 --pattern 'sbom-python-dev.json'
+```
+
+`provenance-<variant>.json` (SLSA provenance) and `image-digests.txt`
+(SHA256 digests for all variants) are attached alongside.
+
+### Verifying SBOM attestations (Cosign)
+
+```bash
+cosign verify-attestation \
+  --certificate-identity-regexp='^https://github.com/OWNER/REPO' \
+  --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
+  --type=cyclonedx \
+  ghcr.io/OWNER/REPO:v1.0.0-minimal
+```
+
+### Generating SBOMs locally
+
+`just sbom` wraps `bin/generate-sbom.sh`. Requires
+[syft](https://github.com/anchore/syft#installation) (and optionally
+[grype](https://github.com/anchore/grype#installation) for vulnerability
+scanning).
+
+```bash
+# All formats (SPDX JSON + CycloneDX JSON + human-readable table) into ./sboms/
+just sbom ghcr.io/OWNER/REPO:v1.0.0-minimal
+
+# Custom output directory
+just sbom ghcr.io/OWNER/REPO:v1.0.0-minimal ./artifacts
+
+# Direct script invocation with more options (format filter, vuln scan)
+./bin/generate-sbom.sh --format spdx-json ghcr.io/OWNER/REPO:v1.0.0-minimal
 ./bin/generate-sbom.sh --scan ghcr.io/OWNER/REPO:v1.0.0-minimal
-
-# Specific format
-./bin/generate-sbom.sh --format spdx-json --output-dir ./sboms ghcr.io/OWNER/REPO:tag
 ```
 
 ## Enforcing in Kubernetes

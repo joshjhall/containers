@@ -144,6 +144,21 @@ This project implements comprehensive security hardening:
 - ✅ Uses GPG verification for critical packages
 - ✅ Pins tool versions for reproducibility
 
+**Release Attestations (SBOM, SLSA, Cosign):**
+
+Every tagged release publishes per-variant signatures and attestations so
+consumers can audit and verify what they're pulling:
+
+- ✅ **Cosign keyless signatures** on all images (Fulcio + Rekor)
+- ✅ **SLSA v0.2 provenance** attested to each image
+- ✅ **CycloneDX SBOMs** attested to each image **and** attached as
+  downloadable release assets (`sbom-<variant>.json`)
+- ✅ **Image digests** published alongside (`image-digests.txt`)
+
+See [docs/security/image-signing.md](docs/security/image-signing.md) for
+verification commands, SBOM consumption via `gh release download` and
+`cosign verify-attestation`, and local SBOM generation with `just sbom`.
+
 However, be aware:
 
 - Some installation scripts are downloaded from third-party sources (all with

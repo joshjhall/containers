@@ -218,3 +218,9 @@ release-minor:
 # Cut a major release (non-interactive)
 release-major:
     ./bin/release.sh --non-interactive major
+
+# Generate SBOMs (SPDX JSON + CycloneDX JSON + table) for a container image using syft.
+# Requires syft installed locally: https://github.com/anchore/syft#installation
+# Example: `just sbom ghcr.io/joshjhall/containers:v5.0.0-minimal`
+sbom IMAGE OUTPUT_DIR="./sboms":
+    ./bin/generate-sbom.sh --output-dir {{ OUTPUT_DIR }} {{ IMAGE }}
