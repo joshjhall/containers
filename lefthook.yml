@@ -187,6 +187,10 @@ pre-commit:
 
     # --- Custom hooks ---
 
+    check-env-drift:
+      glob: "{.env,.env.secrets}.example"
+      run: bin/check-env-drift.sh
+
     no-env-file:
       run: |
         if git diff --cached --name-only | grep -q "^\.env$"; then

@@ -227,6 +227,10 @@ clean-stale-dry:
 check-versions:
     ./bin/check-versions.sh
 
+# Check .env files for key drift against their .env.example siblings
+check-env:
+    ./bin/check-env-drift.sh
+
 # Refresh checksums after version bumps
 update-checksums:
     ./bin/update-checksums.sh
