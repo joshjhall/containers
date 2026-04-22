@@ -80,6 +80,7 @@ CARGO_SWEEP_VERSION="${CARGO_SWEEP_VERSION:-0.8.0}"
 CARGO_AUDIT_VERSION="${CARGO_AUDIT_VERSION:-0.22.1}"
 CARGO_DENY_VERSION="${CARGO_DENY_VERSION:-0.19.4}"
 CARGO_GEIGER_VERSION="${CARGO_GEIGER_VERSION:-0.13.0}"
+CARGO_MACHETE_VERSION="${CARGO_MACHETE_VERSION:-0.9.2}"
 BACON_VERSION="${BACON_VERSION:-3.22.0}"
 TOKEI_VERSION="${TOKEI_VERSION:-14.0.0}"
 HYPERFINE_CARGO_VERSION="${HYPERFINE_CARGO_VERSION:-1.20.0}"
@@ -151,6 +152,9 @@ log_command "Installing cargo-deny" \
 log_command "Installing cargo-geiger" \
     su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/cargo install --locked cargo-geiger@${CARGO_GEIGER_VERSION}"
 
+log_command "Installing cargo-machete" \
+    su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/cargo install --locked cargo-machete@${CARGO_MACHETE_VERSION}"
+
 log_command "Installing bacon" \
     su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/cargo install --locked bacon@${BACON_VERSION}"
 
@@ -187,7 +191,7 @@ fi
 
 # Create symlinks for the installed tools
 log_message "Creating symlinks for Rust dev tools..."
-for tool in tree-sitter cargo-watch cargo-expand cargo-modules cargo-outdated cargo-sweep cargo-audit cargo-deny cargo-geiger bacon tokei hyperfine just sccache mdbook cargo-release taplo; do
+for tool in tree-sitter cargo-watch cargo-expand cargo-modules cargo-outdated cargo-sweep cargo-audit cargo-deny cargo-geiger cargo-machete bacon tokei hyperfine just sccache mdbook cargo-release taplo; do
     if [ -f "${CARGO_HOME}/bin/${tool}" ]; then
         create_symlink "${CARGO_HOME}/bin/${tool}" "/usr/local/bin/${tool}" "${tool} Rust dev tool"
     fi

@@ -1,0 +1,83 @@
+name: Quarterly Review Tracking Issue
+
+on:
+  schedule:
+    # 1st of Jan/Apr/Jul/Oct at 09:00 UTC. Well clear of the Sun 02:00
+    # auto-patch slot and the Mon 03:00 security-scan slot.
+    - cron: "0 9 1 1,4,7,10 *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  open-tracking-issue:
+    name: Open quarterly review tracking issue
+    runs-on: ubuntu-latest
+    steps:
+      - name: Compute quarter label
+        id: q
+        run: |
+          YEAR=$(date -u +%Y)
+          MONTH=$(date -u +%m)
+          case "$MONTH" in
+            01) Q=1 ;;
+            04) Q=2 ;;
+            07) Q=3 ;;
+            10) Q=4 ;;
+            *)  Q=$(( (10#$MONTH - 1) / 3 + 1 )) ;;
+          esac
+          echo "year=${YEAR}" >> "$GITHUB_OUTPUT"
+          echo "quarter=${Q}" >> "$GITHUB_OUTPUT"
+          echo "label=${YEAR}-Q${Q}" >> "$GITHUB_OUTPUT"
+
+      - name: Open or skip tracking issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          LABEL: ${{ steps.q.outputs.label }}
+        run: |
+          TITLE="Quarterly review: ${LABEL}"
+          BODY=$(cat <<EOF
+          ## Quarterly review — ${LABEL}
+
+          Scheduled dep-health and audit sweep. Run the mechanical checks,
+          then triage the human-judgment items below.
+
+          ### Automated scans
+          - [ ] \`just quarterly-review\` (cargo-machete, cargo-geiger,
+                cargo-outdated, cargo-deny bans/sources)
+
+          ### Human triage
+          - [ ] Run \`/codebase-audit\` in Claude Code; file or update
+                \`audit/*\` issues as needed
+          - [ ] Review open \`audit/*\` issues — close stale ones,
+                reprioritize the rest
+          - [ ] Update pinned dependency versions (container features,
+                pre-commit hooks, GitHub Actions)
+          - [ ] Rotate long-lived secrets if the age policy says so
+          - [ ] Prune \`.trivyignore\` / \`.osv-scanner.toml\` / \`deny.toml\`
+                allowlists — remove entries whose upstream fix has landed
+
+          See \`docs/operations/review-cadence.md\` for guidance.
+
+          <!-- managed-by: quarterly-review.yml label=${LABEL} -->
+          EOF
+          )
+
+          EXISTING=$(gh issue list \
+            --label "type/operations" \
+            --state open \
+            --search "\"${TITLE}\" in:title" \
+            --json number --jq '.[0].number // empty')
+
+          if [ -n "${EXISTING}" ]; then
+            echo "Tracking issue already open: #${EXISTING} — no-op"
+          else
+            gh issue create \
+              --title "${TITLE}" \
+              --body "${BODY}" \
+              --label "type/chore" \
+              --label "type/operations"
+          fi

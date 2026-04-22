@@ -177,6 +177,34 @@ security-scan:
     cargo audit
 
 # ============================================================================
+# Review cadence
+# ============================================================================
+
+# Quarterly dep-health sweep: informational, never fails on findings.
+# Run alongside `/codebase-audit` on the 1st of Jan/Apr/Jul/Oct.
+# See docs/operations/review-cadence.md.
+quarterly-review:
+    #!/usr/bin/env bash
+    set -uo pipefail
+    echo "=== cargo machete (unused deps) ==="
+    cargo machete || true
+    echo ""
+    echo "=== cargo geiger --all-features (unsafe surface) ==="
+    cargo geiger --all-features || true
+    echo ""
+    echo "=== cargo outdated --workspace --root-deps-only ==="
+    cargo outdated --workspace --root-deps-only || true
+    echo ""
+    echo "=== cargo deny check bans sources ==="
+    cargo deny check bans sources || true
+    echo ""
+    echo "=== Manual follow-ups ==="
+    echo "  1. Run: /codebase-audit   (in Claude Code)"
+    echo "  2. Review open audit/* issues on GitHub"
+    echo "  3. Update deps, rotate secrets if due,"
+    echo "     prune .trivyignore / .osv-scanner.toml allowlists."
+
+# ============================================================================
 # Cleanup
 # ============================================================================
 

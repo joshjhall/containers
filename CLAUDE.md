@@ -377,5 +377,6 @@ build, test, and publish. See `docs/development/releasing.md` for full details.
 Detailed docs in `docs/`: `claude-code/` (plugins, MCPs, skills, agents,
 secrets), `architecture/caching.md`, `security-hardening.md`,
 `troubleshooting.md`, `development/` (releasing, testing), `reference/`
-(versions, environment variables), `operations/automated-releases.md`.
+(versions, environment variables), `operations/automated-releases.md`,
+`operations/review-cadence.md`.
 Examples in `examples/env/*.env` and `examples/contexts/`.

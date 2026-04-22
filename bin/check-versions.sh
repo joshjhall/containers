@@ -293,6 +293,7 @@ extract_all_versions() {
     _add_feature_version CARGO_AUDIT_VERSION "cargo-audit" "rust-dev.sh"
     _add_feature_version CARGO_DENY_VERSION "cargo-deny" "rust-dev.sh"
     _add_feature_version CARGO_GEIGER_VERSION "cargo-geiger" "rust-dev.sh"
+    _add_feature_version CARGO_MACHETE_VERSION "cargo-machete" "rust-dev.sh"
     _add_feature_version BACON_VERSION "bacon" "rust-dev.sh"
     _add_feature_version TOKEI_VERSION "tokei" "rust-dev.sh"
     _add_feature_version HYPERFINE_CARGO_VERSION "hyperfine-cargo" "rust-dev.sh"
@@ -444,6 +445,7 @@ main() {
             cargo-audit) check_crates_io "cargo-audit" ;;
             cargo-deny) check_crates_io "cargo-deny" ;;
             cargo-geiger) check_crates_io "cargo-geiger" ;;
+            cargo-machete) check_crates_io "cargo-machete" ;;
             bacon) check_crates_io "bacon" ;;
             tokei) check_crates_io "tokei" ;;
             hyperfine-cargo) check_crates_io "hyperfine-cargo" "hyperfine" ;;
