@@ -376,6 +376,14 @@ install_github_binary_tools() {
         "calculate" "binary" ||
         return 1
 
+    # actionlint (GitHub Actions workflow linter — Go binary inside a tarball)
+    install_github_release "actionlint" "$ACTIONLINT_VERSION" \
+        "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}" \
+        "actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz" \
+        "actionlint_${ACTIONLINT_VERSION}_linux_arm64.tar.gz" \
+        "calculate" "extract:actionlint" ||
+        return 1
+
     # agnix (AI config linter) — requires Node.js/npm
     if command -v npm &>/dev/null; then
         log_message "Installing agnix (AI config linter)..."

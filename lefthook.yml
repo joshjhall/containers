@@ -141,6 +141,20 @@ pre-commit:
         - run: "! command -v hadolint >/dev/null 2>&1"
       run: hadolint {staged_files}
 
+    # --- GitHub Actions workflow linting (actionlint) ---
+
+    actionlint:
+      # actionlint is shipped by the dev-tools feature; skip gracefully if
+      # running outside a dev-tools container (e.g., CI linting host).
+      # actionlint embeds shellcheck to lint `run:` blocks — the top-level
+      # shellcheck hook only globs *.sh, so no double-lint overlap here.
+      # Pass --severity=warning to match the project's .sh shellcheck policy
+      # (see the shellcheck hook above and justfile v4 scope).
+      glob: ".github/workflows/*.{yml,yaml}"
+      skip:
+        - run: "! command -v actionlint >/dev/null 2>&1"
+      run: actionlint -shellcheck "shellcheck --severity=warning" {staged_files}
+
     # --- Security ---
 
     gitleaks:

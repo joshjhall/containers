@@ -53,7 +53,7 @@ jobs:
           sudo mv /tmp/lefthook /usr/local/bin/lefthook
           lefthook version
 
-          # shellcheck comes from the runner's apt repo
+          # Install shellcheck from the runner's apt repo
           sudo apt-get update
           sudo apt-get install -y shellcheck
 
@@ -97,6 +97,12 @@ jobs:
           curl -fsSL "https://github.com/casey/just/releases/download/${JUST_VERSION}/just-${JUST_VERSION}-x86_64-unknown-linux-musl.tar.gz" \
             | sudo tar -xz -C /usr/local/bin just
           just --version
+
+          # actionlint — GitHub Actions workflow linter (version pinned in dev-tools.sh)
+          ACTIONLINT_VERSION=$(grep -oP 'ACTIONLINT_VERSION:-\K[0-9.]+' lib/features/dev-tools.sh)
+          curl -fsSL "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz" \
+            | sudo tar -xz -C /usr/local/bin actionlint
+          actionlint --version
 
       - name: Validate commit messages (conform)
         if: github.event_name == 'pull_request'

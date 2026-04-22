@@ -58,6 +58,7 @@ just test          # full pre-commit test suite (no Docker)
 just test-all      # test + integration (requires Docker)
 just lint          # run every lefthook pre-commit hook on all files
 just lint-docker   # hadolint the Dockerfile
+just lint-workflows # actionlint on .github/workflows/*.{yml,yaml}
 just fmt           # cargo fmt --all
 just build         # cargo build --workspace
 just check-versions

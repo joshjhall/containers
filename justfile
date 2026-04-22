@@ -118,6 +118,10 @@ lint-docs:
 lint-docker:
     hadolint Dockerfile
 
+# Lint GitHub Actions workflows with actionlint (embedded shellcheck at warning severity, matching the .sh policy)
+lint-workflows:
+    actionlint -shellcheck "shellcheck --severity=warning"
+
 # Format all code: cargo fmt (Rust) + rumdl fmt (Markdown) + dprint fmt (JSON/YAML) + taplo fmt (TOML)
 fmt:
     cargo fmt --all

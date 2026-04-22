@@ -275,6 +275,7 @@ extract_all_versions() {
     _add_feature_version SHFMT_VERSION "shfmt" "dev-tools.sh"
     _add_feature_version CONFORM_VERSION "conform" "dev-tools.sh"
     _add_feature_version HADOLINT_VERSION "hadolint" "dev-tools.sh"
+    _add_feature_version ACTIONLINT_VERSION "actionlint" "dev-tools.sh"
 
     # Cargo tools from rust.sh (pinned cargo install targets)
     _add_feature_version CARGO_WATCH_VERSION "cargo-watch" "rust.sh"
@@ -428,6 +429,7 @@ main() {
             shfmt) check_github_release "shfmt" "mvdan/sh" ;;
             conform) check_github_release "conform" "siderolabs/conform" ;;
             hadolint) check_github_release "hadolint" "hadolint/hadolint" ;;
+            actionlint) check_github_release "actionlint" "rhysd/actionlint" ;;
             cargo-release) check_crates_io "cargo-release" ;;
             cargo-watch) check_crates_io "cargo-watch" ;;
             mdbook) check_crates_io "mdbook" ;;
