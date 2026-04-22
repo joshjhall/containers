@@ -1,0 +1,62 @@
+# cargo-deny configuration — runs under `just deny`, `just security-scan`,
+# the lefthook pre-push hook, and the scheduled security-scan workflow.
+#
+# Tuning: raise individual exceptions (skip a single crate, allow a single
+# license) instead of widening whole categories. Note the reason inline when
+# the "why" isn't obvious from the crate name.
+
+[graph]
+all-features = true
+
+[output]
+feature-depth = 1
+
+[advisories]
+version = 2
+db-path = "~/.cargo/advisory-db"
+db-urls = ["https://github.com/rustsec/advisory-db"]
+yanked = "deny"
+ignore = []
+
+[licenses]
+version = 2
+allow = [
+  "MIT",
+  "Apache-2.0",
+  "Apache-2.0 WITH LLVM-exception",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "ISC",
+  "Unicode-DFS-2016",
+  "Unicode-3.0",
+  "MPL-2.0",
+  "Zlib",
+  "CC0-1.0",
+]
+confidence-threshold = 0.8
+exceptions = [
+  # Mozilla root CA bundle pulled in via rustls-platform-verifier.
+  { allow = ["CDLA-Permissive-2.0"], crate = "webpki-root-certs" },
+]
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+# Workspace crates are marked `publish = false`; this allows their
+# `{ workspace = true }` deps (which resolve to `"*"` in cargo-deny's view)
+# without weakening the wildcard check for published crates.
+allow-wildcard-paths = true
+highlight = "all"
+workspace-default-features = "allow"
+external-default-features = "allow"
+allow = []
+deny = []
+skip = []
+skip-tree = []
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+# Workspace git dependency (see Cargo.toml).
+allow-git = ["https://github.com/joshjhall/octarine"]

@@ -158,6 +158,25 @@ hooks-all:
     lefthook run pre-commit --all-files
 
 # ============================================================================
+# Security
+# ============================================================================
+
+# cargo-deny: advisories + licenses + bans + sources checks (see deny.toml)
+deny:
+    cargo deny check
+
+# All dep security scans: cargo-deny + osv-scanner + cargo-audit. Fail-fast.
+security-scan:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "=== cargo deny check ==="
+    cargo deny check
+    echo "=== osv-scanner (recursive) ==="
+    osv-scanner scan source --recursive .
+    echo "=== cargo audit ==="
+    cargo audit
+
+# ============================================================================
 # Cleanup
 # ============================================================================
 

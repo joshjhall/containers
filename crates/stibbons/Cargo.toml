@@ -6,6 +6,7 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "Host orchestrator for the containers build system (replaces igor)"
+publish = false
 
 [lints]
 workspace = true

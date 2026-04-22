@@ -1,0 +1,123 @@
+name: Scheduled Dependency Security Scan
+
+on:
+  schedule:
+    # Weekly, Mondays 03:00 UTC. Avoids the Sunday 02:00 auto-patch slot.
+    - cron: "0 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  security-scan:
+    name: Run dep scanners
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install just (task runner)
+        uses: extractions/setup-just@v2
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.94"
+
+      - name: Install pinned scanners
+        run: |
+          OSV_VERSION=$(grep -oP 'OSV_SCANNER_VERSION:-\K[0-9.]+' lib/features/dev-tools.sh)
+          DENY_VERSION=$(grep -oP 'CARGO_DENY_VERSION:-\K[0-9.]+' lib/features/rust-dev.sh)
+          AUDIT_VERSION=$(grep -oP 'CARGO_AUDIT_VERSION:-\K[0-9.]+' lib/features/rust-dev.sh)
+
+          echo "osv-scanner: v${OSV_VERSION}"
+          echo "cargo-deny: ${DENY_VERSION}"
+          echo "cargo-audit: ${AUDIT_VERSION}"
+
+          # osv-scanner prebuilt binary
+          curl -fsSL -o /tmp/osv-scanner \
+            "https://github.com/google/osv-scanner/releases/download/v${OSV_VERSION}/osv-scanner_linux_amd64"
+          chmod +x /tmp/osv-scanner
+          sudo mv /tmp/osv-scanner /usr/local/bin/osv-scanner
+          osv-scanner --version
+
+          # cargo-deny / cargo-audit via cargo install (matches rust-dev feature)
+          cargo install --locked "cargo-deny@${DENY_VERSION}"
+          cargo install --locked "cargo-audit@${AUDIT_VERSION}"
+          cargo deny --version
+          cargo audit --version
+
+      - name: Run security scan (capture output)
+        id: scan
+        continue-on-error: true
+        run: |
+          set +e
+          OUTPUT=$(just security-scan 2>&1)
+          STATUS=$?
+          set -e
+          echo "status=${STATUS}" >> "$GITHUB_OUTPUT"
+          {
+            echo "output<<SCAN_EOF"
+            echo "$OUTPUT"
+            echo "SCAN_EOF"
+          } >> "$GITHUB_OUTPUT"
+          echo "--- scan output ---"
+          echo "$OUTPUT"
+          exit "$STATUS"
+
+      - name: Open or update tracking issue on failure
+        if: steps.scan.outputs.status != '0'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SCAN_OUTPUT: ${{ steps.scan.outputs.output }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          TITLE="Scheduled security scan failed"
+          TODAY="$(date -u +%Y-%m-%d)"
+          BODY=$(cat <<EOF
+          ## Scheduled dependency security scan failed
+
+          **Run:** ${RUN_URL}
+          **Date:** ${TODAY}
+
+          One or more of \`cargo deny\`, \`osv-scanner\`, or \`cargo audit\`
+          reported an issue. Full output:
+
+          \`\`\`
+          ${SCAN_OUTPUT}
+          \`\`\`
+
+          Resolve by updating the affected dependency, applying a patched
+          lockfile entry, or (if a false positive) adding a narrow ignore
+          to \`deny.toml\` or \`.osv-scanner.toml\`.
+
+          <!-- managed-by: security-scan.yml -->
+          EOF
+          )
+
+          EXISTING=$(gh issue list \
+            --label "audit/security" \
+            --state open \
+            --search "\"${TITLE}\" in:title" \
+            --json number --jq '.[0].number // empty')
+
+          if [ -n "${EXISTING}" ]; then
+            echo "Updating existing tracking issue #${EXISTING}"
+            gh issue edit "${EXISTING}" --body "${BODY}"
+            gh issue comment "${EXISTING}" \
+              --body "Scan failed again on ${TODAY} — see ${RUN_URL}"
+          else
+            echo "Opening new tracking issue"
+            gh issue create \
+              --title "${TITLE}" \
+              --body "${BODY}" \
+              --label "severity/high" \
+              --label "type/compliance" \
+              --label "audit/security"
+          fi
+
+      - name: Fail job if scan failed
+        if: steps.scan.outputs.status != '0'
+        run: exit 1

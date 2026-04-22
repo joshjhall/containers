@@ -285,4 +285,11 @@ pre-push:
       # if running outside a dev-tools container.
       skip:
         - run: "! command -v osv-scanner >/dev/null 2>&1"
-      run: osv-scanner --lockfile Cargo.lock
+      run: osv-scanner scan source --recursive .
+
+    cargo-deny:
+      # cargo-deny is shipped by the rust-dev feature; skip gracefully
+      # if running outside a rust-dev container.
+      skip:
+        - run: "! command -v cargo-deny >/dev/null 2>&1"
+      run: cargo deny check

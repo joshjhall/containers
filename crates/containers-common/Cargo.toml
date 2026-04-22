@@ -6,6 +6,7 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "Shared types and state contracts for the containers build system"
+publish = false
 
 [lints]
 workspace = true
