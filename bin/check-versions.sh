@@ -341,7 +341,10 @@ extract_all_versions() {
 
     # GitHub Actions from workflows
     if [ -f "$PROJECT_ROOT/.github/workflows/ci.yml" ]; then
-        ver=$(command grep "uses: aquasecurity/trivy-action@" "$PROJECT_ROOT/.github/workflows/ci.yml" 2>/dev/null | command head -1 | command sed 's/.*@//' | command tr -d ' ') || true
+        # Strip optional leading `v` so the stored version matches the
+        # normalized form check_github_release returns. The updater re-adds
+        # the prefix when writing back to the workflow.
+        ver=$(command grep "uses: aquasecurity/trivy-action@" "$PROJECT_ROOT/.github/workflows/ci.yml" 2>/dev/null | command head -1 | command sed -e 's/.*@//' -e 's/^v//' | command tr -d ' ') || true
         [ -n "$ver" ] && [ "$ver" != "master" ] && add_tool "trivy-action" "$ver" "ci.yml" || true
     fi
 }

@@ -376,7 +376,11 @@ update_version() {
             local workflow_path="$PROJECT_ROOT/.github/workflows/$file"
             case "$tool" in
                 trivy-action)
-                    sed_inplace "s|uses: aquasecurity/trivy-action@[0-9.]*|uses: aquasecurity/trivy-action@$latest|g" "$workflow_path"
+                    # Upstream switched to `v`-prefixed tags at v0.36.0.
+                    # Always write `v$latest` — both the new convention
+                    # and old `v`-prefixed releases work; bare-numeric
+                    # tags like `0.35.0` are no longer published.
+                    sed_inplace "s|uses: aquasecurity/trivy-action@v\{0,1\}[0-9.]*|uses: aquasecurity/trivy-action@v$latest|g" "$workflow_path"
                     ;;
                 *)
                     echo -e "${YELLOW}    Warning: Unknown ci.yml tool: $tool${NC}"
