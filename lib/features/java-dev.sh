@@ -99,7 +99,7 @@ _download_and_verify_tool() {
 # ============================================================================
 log_message "Installing Spring Boot CLI..."
 
-SPRING_VERSION="${SPRING_VERSION:-4.0.5}"
+SPRING_VERSION="${SPRING_VERSION:-4.0.6}"
 export SPRING_VERSION # Export for use in shell functions
 
 # Build Maven Central URL
