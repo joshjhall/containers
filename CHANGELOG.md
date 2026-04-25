@@ -5,6 +5,53 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.18.0] - 2026-04-25
+
+### Added
+
+- Wire stibbons init file generation after wizard
+- Add generate module for 3-way file merge in containers-common
+- Add hadolint for Dockerfile linting
+- Add actionlint for GitHub Actions workflow linting
+- Harden dependency security scanning
+- Publish SBOMs as release assets
+- Add quarterly review meta-recipe and tracking issue cron
+- Lint .env files for drift against .env.example siblings
+- Add INCLUDE_MISE feature for per-project runtime version management
+- Add cargo-nextest, cargo-llvm-cov, and mold to INCLUDE_RUST_DEV
+
+### Documentation
+
+- Tighten markdown rule set and fix existing violations
+- Rewrite README to reflect v4 reality with v5 as future work
+- Record luggage tool catalog design decisions in memory
+
+### Fixed
+
+- Strip outer quotes from .env.init values before op read
+- Install just and taplo in CI lint toolchain
+- Handle just, rumdl, and conform in version scripts
+
+### Miscellaneous
+
+- Replace mado + dprint-markdown with rumdl
+- Switch active spell-check from cspell to typos
+- Swap cSpell editor extension for typos-vscode
+- Update version number from v5 to v4 in README
+- Exclude .devcontainer and .vscode from dprint-yaml hook
+- Add tmpfs mounts for /run and 1password secrets cache
+- Gitignore mktemp leftovers from enforce-command-prefix hook
+- Add just clean-stale for orphan file cleanup
+- Scoped just lint/test recipes + use them in lefthook hooks (#396)
+- Wire taplo for TOML formatting
+- Bump rustls-webpki to 0.103.13 for RUSTSEC-2026-0104
+- Update dependency versions
+- Update dependency versions
+
+### Style
+
+- Drop trailing comma from single-line assert_eq! args
+
 ## [4.17.2] - 2026-04-20
 
 ### Changed
@@ -21,6 +68,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Harden cargo-install-policy test against prose false positives
 - Ship non-root-safe supervisord.conf from dev-tools
 - Scope conform validation to PR head, not synthetic merge commit
+
+### Miscellaneous
+
+- Release version 4.17.2
 
 ## [4.17.1] - 2026-04-19
 
@@ -1663,6 +1714,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix prettier and markdownlint formatting in README
 - Format TLS documentation files
 
+[4.18.0]: https://github.com/joshjhall/containers/compare/v4.17.2...v4.18.0
 [4.17.2]: https://github.com/joshjhall/containers/compare/v4.17.1...v4.17.2
 [4.17.1]: https://github.com/joshjhall/containers/compare/v4.17.0...v4.17.1
 [4.17.0]: https://github.com/joshjhall/containers/compare/v4.16.1...v4.17.0
