@@ -297,6 +297,8 @@ extract_all_versions() {
     _add_feature_version CARGO_DENY_VERSION "cargo-deny" "rust-dev.sh"
     _add_feature_version CARGO_GEIGER_VERSION "cargo-geiger" "rust-dev.sh"
     _add_feature_version CARGO_MACHETE_VERSION "cargo-machete" "rust-dev.sh"
+    _add_feature_version NEXTEST_VERSION "cargo-nextest" "rust-dev.sh"
+    _add_feature_version LLVM_COV_VERSION "cargo-llvm-cov" "rust-dev.sh"
     _add_feature_version BACON_VERSION "bacon" "rust-dev.sh"
     _add_feature_version TOKEI_VERSION "tokei" "rust-dev.sh"
     _add_feature_version HYPERFINE_CARGO_VERSION "hyperfine-cargo" "rust-dev.sh"
@@ -304,6 +306,7 @@ extract_all_versions() {
     _add_feature_version SCCACHE_VERSION "sccache" "rust-dev.sh"
     _add_feature_version CARGO_RELEASE_VERSION "cargo-release" "rust-dev.sh"
     _add_feature_version TAPLO_CLI_VERSION "taplo-cli" "rust-dev.sh"
+    _add_feature_version MOLD_VERSION "mold" "rust-dev.sh"
 
     # Docker tools from docker.sh
     _add_feature_version DIVE_VERSION "dive" "docker.sh"
@@ -450,12 +453,15 @@ main() {
             cargo-deny) check_crates_io "cargo-deny" ;;
             cargo-geiger) check_crates_io "cargo-geiger" ;;
             cargo-machete) check_crates_io "cargo-machete" ;;
+            cargo-nextest) check_crates_io "cargo-nextest" ;;
+            cargo-llvm-cov) check_crates_io "cargo-llvm-cov" ;;
             bacon) check_crates_io "bacon" ;;
             tokei) check_crates_io "tokei" ;;
             hyperfine-cargo) check_crates_io "hyperfine-cargo" "hyperfine" ;;
             just-cargo) check_crates_io "just-cargo" "just" ;;
             sccache) check_crates_io "sccache" ;;
             taplo-cli) check_crates_io "taplo-cli" ;;
+            mold) check_github_release "mold" "rui314/mold" ;;
             zoxide) check_github_release "zoxide" "ajeetdsouza/zoxide" ;;
             cosign) check_github_release "cosign" "sigstore/cosign" ;;
             trivy-action) check_github_release "trivy-action" "aquasecurity/trivy-action" ;;

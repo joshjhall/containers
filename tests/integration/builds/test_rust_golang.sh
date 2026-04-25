@@ -100,6 +100,29 @@ test_rust_tools() {
 
     # cargo-geiger (unsafe code detector) works
     assert_executable_in_path "$image" "cargo-geiger"
+
+    # cargo-machete (unused-dep detector) is installed and runs
+    assert_executable_in_path "$image" "cargo-machete"
+    assert_command_in_container "$image" "cargo machete --version" "cargo-machete"
+
+    # cargo-nextest (next-gen test runner) is installed and runs
+    assert_executable_in_path "$image" "cargo-nextest"
+    assert_command_in_container "$image" "cargo nextest --version" "cargo-nextest"
+
+    # cargo-llvm-cov (source-based coverage) is installed and runs
+    assert_executable_in_path "$image" "cargo-llvm-cov"
+    assert_command_in_container "$image" "cargo llvm-cov --version" "cargo-llvm-cov"
+
+    # bacon (background checker) is installed and runs
+    assert_executable_in_path "$image" "bacon"
+    assert_command_in_container "$image" "bacon --version" "bacon"
+
+    # mold (fast linker) is installed and reports a version
+    assert_executable_in_path "$image" "mold"
+    assert_command_in_container "$image" "mold --version" "mold"
+
+    # ld.mold symlink is wired up so .cargo/config.toml -fuse-ld=mold works
+    assert_command_in_container "$image" "test -L /usr/local/bin/ld.mold && echo ok" "ok"
 }
 
 # Test: Go development tools

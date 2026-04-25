@@ -46,7 +46,7 @@ test_rust_dev_tools() {
     local cargo_bin="$TEST_TEMP_DIR/home/testuser/.cargo/bin"
 
     # List of Rust dev tools (including cargo-sweep)
-    local tools=("cargo-watch" "cargo-audit" "cargo-outdated" "cargo-sweep" "bacon" "sccache" "cargo-nextest")
+    local tools=("cargo-watch" "cargo-audit" "cargo-outdated" "cargo-sweep" "cargo-machete" "cargo-llvm-cov" "bacon" "sccache" "cargo-nextest" "mold")
 
     # Create mock tools
     for tool in "${tools[@]}"; do

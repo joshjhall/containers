@@ -17,6 +17,9 @@
 #   - cargo-audit: Security vulnerability scanning for dependencies
 #   - cargo-deny: Dependency linting (licenses, duplicates, bans)
 #   - cargo-geiger: Detect unsafe Rust code usage
+#   - cargo-machete: Detect unused dependencies in Cargo.toml
+#   - cargo-nextest: Next-generation test runner (faster, CI partitioning, flake retries)
+#   - cargo-llvm-cov: Source-based coverage via LLVM instrumentation
 #   - sccache: Shared compilation cache for faster builds
 #   - bacon: Background rust code checker
 #   - tokei: Code statistics tool
@@ -24,6 +27,7 @@
 #   - just: Modern command runner (like make)
 #   - mdbook: Create books from markdown files
 #   - taplo-cli: TOML formatter and linter
+#   - mold: Fast Linux linker (opt-in via project .cargo/config.toml)
 #
 # Common Commands:
 #   - cargo watch -x run: Auto-rebuild and run on changes
@@ -60,6 +64,9 @@ source /tmp/build-scripts/base/feature-header.sh
 # Source apt utilities for reliable package installation
 source /tmp/build-scripts/base/apt-utils.sh
 
+# Source GitHub release installer for binary tool downloads (used for mold)
+source /tmp/build-scripts/features/lib/install-github-release.sh
+
 # Start logging
 log_feature_start "Rust Development Tools"
 
@@ -81,6 +88,8 @@ CARGO_AUDIT_VERSION="${CARGO_AUDIT_VERSION:-0.22.1}"
 CARGO_DENY_VERSION="${CARGO_DENY_VERSION:-0.19.4}"
 CARGO_GEIGER_VERSION="${CARGO_GEIGER_VERSION:-0.13.0}"
 CARGO_MACHETE_VERSION="${CARGO_MACHETE_VERSION:-0.9.2}"
+NEXTEST_VERSION="${NEXTEST_VERSION:-0.9.133}"
+LLVM_COV_VERSION="${LLVM_COV_VERSION:-0.8.5}"
 BACON_VERSION="${BACON_VERSION:-3.22.0}"
 TOKEI_VERSION="${TOKEI_VERSION:-14.0.0}"
 HYPERFINE_CARGO_VERSION="${HYPERFINE_CARGO_VERSION:-1.20.0}"
@@ -89,6 +98,7 @@ SCCACHE_VERSION="${SCCACHE_VERSION:-0.14.0}"
 MDBOOK_VERSION="${MDBOOK_VERSION:-0.5.2}"
 CARGO_RELEASE_VERSION="${CARGO_RELEASE_VERSION:-1.1.2}"
 TAPLO_CLI_VERSION="${TAPLO_CLI_VERSION:-0.10.0}"
+MOLD_VERSION="${MOLD_VERSION:-2.41.0}"
 
 # ============================================================================
 # Prerequisites Check
@@ -155,6 +165,17 @@ log_command "Installing cargo-geiger" \
 log_command "Installing cargo-machete" \
     su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/cargo install --locked cargo-machete@${CARGO_MACHETE_VERSION}"
 
+log_command "Installing cargo-nextest" \
+    su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/cargo install --locked cargo-nextest@${NEXTEST_VERSION}"
+
+# cargo-llvm-cov drives `cargo` with LLVM source-based coverage instrumentation;
+# the llvm-tools-preview component ships profdata/cov binaries it shells out to.
+log_command "Adding llvm-tools-preview rustup component for cargo-llvm-cov" \
+    su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/rustup component add llvm-tools-preview"
+
+log_command "Installing cargo-llvm-cov" \
+    su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/cargo install --locked cargo-llvm-cov@${LLVM_COV_VERSION}"
+
 log_command "Installing bacon" \
     su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/cargo install --locked bacon@${BACON_VERSION}"
 
@@ -189,9 +210,31 @@ else
     log_message "taplo already installed, skipping..."
 fi
 
+# ============================================================================
+# Mold Linker (Linux-only, pre-built binary)
+# ============================================================================
+# mold is a faster drop-in replacement for ld; projects opt in via
+# .cargo/config.toml. The release tarball lays out as
+# mold-${VERSION}-${arch}-linux/{bin/mold,bin/ld.mold,...}; we extract just the
+# `mold` binary and create the conventional `ld.mold` symlink so downstream
+# `linker = "/usr/bin/clang"` + `link-arg=-fuse-ld=mold` configs find it.
+log_message "Installing mold linker ${MOLD_VERSION}..."
+install_github_release "mold" "${MOLD_VERSION}" \
+    "https://github.com/rui314/mold/releases/download/v${MOLD_VERSION}" \
+    "mold-${MOLD_VERSION}-x86_64-linux.tar.gz" \
+    "mold-${MOLD_VERSION}-aarch64-linux.tar.gz" \
+    "calculate" "extract:mold"
+
+# Provide the canonical ld.mold name. mold treats argv[0] to decide its mode
+# (linker vs. driver), so a hard symlink works the same as the upstream binary.
+if [ -x /usr/local/bin/mold ] && [ ! -e /usr/local/bin/ld.mold ]; then
+    log_command "Creating ld.mold symlink" \
+        ln -s /usr/local/bin/mold /usr/local/bin/ld.mold
+fi
+
 # Create symlinks for the installed tools
 log_message "Creating symlinks for Rust dev tools..."
-for tool in tree-sitter cargo-watch cargo-expand cargo-modules cargo-outdated cargo-sweep cargo-audit cargo-deny cargo-geiger cargo-machete bacon tokei hyperfine just sccache mdbook cargo-release taplo; do
+for tool in tree-sitter cargo-watch cargo-expand cargo-modules cargo-outdated cargo-sweep cargo-audit cargo-deny cargo-geiger cargo-machete cargo-nextest cargo-llvm-cov bacon tokei hyperfine just sccache mdbook cargo-release taplo; do
     if [ -f "${CARGO_HOME}/bin/${tool}" ]; then
         create_symlink "${CARGO_HOME}/bin/${tool}" "/usr/local/bin/${tool}" "${tool} Rust dev tool"
     fi
@@ -214,6 +257,9 @@ tools=(
     "cargo-audit"
     "cargo-deny"
     "cargo-geiger"
+    "cargo-machete"
+    "cargo-nextest"
+    "cargo-llvm-cov"
     "bacon"
     "tokei"
     "hyperfine"
@@ -222,6 +268,7 @@ tools=(
     "mdbook"
     "cargo-release"
     "taplo"
+    "mold"
 )
 
 installed=0
@@ -276,20 +323,28 @@ if command -v cargo &> /dev/null; then
     tools_found=()
     [ -x "$(command -v tree-sitter)" ] && tools_found+=("tree-sitter")
     [ -x "$(command -v cargo-watch)" ] && tools_found+=("cargo-watch")
+    [ -x "$(command -v cargo-nextest)" ] && tools_found+=("cargo-nextest")
+    [ -x "$(command -v cargo-llvm-cov)" ] && tools_found+=("cargo-llvm-cov")
+    [ -x "$(command -v cargo-machete)" ] && tools_found+=("cargo-machete")
     [ -x "$(command -v bacon)" ] && tools_found+=("bacon")
     [ -x "$(command -v just)" ] && tools_found+=("just")
     [ -x "$(command -v tokei)" ] && tools_found+=("tokei")
     [ -x "$(command -v sccache)" ] && tools_found+=("sccache")
     [ -x "$(command -v mdbook)" ] && tools_found+=("mdbook")
+    [ -x "$(command -v mold)" ] && tools_found+=("mold")
 
     if [ ${#tools_found[@]} -gt 0 ]; then
         echo "Installed tools: ${tools_found[*]}"
         echo ""
         echo "Quick commands:"
         echo "  cargo watch -x run        - Auto-rebuild on changes"
+        echo "  cargo nextest run         - Faster test runner"
+        echo "  cargo llvm-cov            - Source-based coverage"
+        echo "  cargo machete             - Find unused dependencies"
         echo "  bacon                     - Background compilation"
         echo "  just                      - Run project tasks"
         echo "  tokei                     - Count lines of code"
+        echo "  mold --version            - Fast linker (opt in via .cargo/config.toml)"
         echo "  rust-dev-enable-sccache   - Enable compilation cache"
     fi
 
@@ -406,11 +461,11 @@ export CARGO_HOME="/cache/cargo"
 export RUSTUP_HOME="/cache/rustup"
 log_feature_summary \
     --feature "Rust Development Tools" \
-    --tools "rust-analyzer,clippy,rustfmt,cargo-watch,cargo-audit,cargo-outdated,cargo-sweep,cargo-expand,cargo-modules,cargo-release,cargo-deny,sccache,bacon,tokei,hyperfine,just,mdbook,taplo" \
+    --tools "rust-analyzer,clippy,rustfmt,cargo-watch,cargo-audit,cargo-outdated,cargo-sweep,cargo-expand,cargo-modules,cargo-release,cargo-deny,cargo-geiger,cargo-machete,cargo-nextest,cargo-llvm-cov,sccache,bacon,tokei,hyperfine,just,mdbook,taplo,mold" \
     --paths "${CARGO_HOME},${RUSTUP_HOME}" \
     --env "CARGO_HOME,RUSTUP_HOME,CARGO_SWEEP_DAYS,CARGO_SWEEP_DISABLE" \
-    --commands "rust-analyzer,cargo-clippy,cargo-fmt,cargo-watch,cargo-audit,cargo-outdated,cargo-sweep,cargo-nextest,rust-lint-all,rust-security-check,rust-watch" \
-    --next-steps "Run 'test-rust-dev' to check installed tools. Use 'cargo clippy' for linting, 'cargo fmt' for formatting, 'cargo watch' for hot reload, 'cargo sweep --time 14' to clean old artifacts."
+    --commands "rust-analyzer,cargo-clippy,cargo-fmt,cargo-watch,cargo-audit,cargo-outdated,cargo-sweep,cargo-machete,cargo-nextest,cargo-llvm-cov,bacon,mold,ld.mold,rust-lint-all,rust-security-check,rust-watch" \
+    --next-steps "Run 'test-rust-dev' to check installed tools. Use 'cargo clippy' for linting, 'cargo fmt' for formatting, 'cargo watch' for hot reload, 'cargo nextest run' for fast tests, 'cargo llvm-cov' for coverage, 'cargo machete' to find unused deps, 'cargo sweep --time 14' to clean old artifacts. Opt into mold by setting linker = \"clang\" / link-arg = \"-fuse-ld=mold\" in .cargo/config.toml."
 
 # End logging
 log_feature_end

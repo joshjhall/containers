@@ -71,12 +71,19 @@ These tools get the latest version at build time, which is generally fine:
 - cargo-edit
 - cargo-expand
 - cargo-outdated
+- cargo-machete
+- cargo-nextest
+- cargo-llvm-cov (also adds the `llvm-tools-preview` rustup component)
 - bacon
 - tokei
 - hyperfine
 - just
 - sccache
 - mdbook (and extensions)
+
+### Via pre-built binary (in rust-dev.sh)
+
+- mold (Linux fast linker; tarball from `rui314/mold/releases`, `MOLD_VERSION`)
 
 ### Via npm install -g (in node-dev.sh)
 
@@ -126,6 +133,9 @@ These tools get the latest version at build time, which is generally fine:
 - dive, lazydocker (docker.sh)
 - spring-boot-cli, jbang, mvnd, google-java-format (java-dev.sh)
 - Poetry (python.sh)
+- cargo-* extensions, bacon, sccache, tokei, just, mdbook, taplo-cli (rust-dev.sh)
+- cargo-nextest, cargo-llvm-cov, cargo-machete (rust-dev.sh)
+- mold linker (rust-dev.sh; checked against `rui314/mold` GitHub releases)
 
 ## Version Tracking Status
 

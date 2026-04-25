@@ -236,6 +236,7 @@ TOOL_CHECKSUM_REGISTRY_ARCH=(
     "yq|YQ_VERSION|lib/features/dev-tools.sh|https://github.com/mikefarah/yq/releases/download/v{VERSION}/yq_linux_amd64|https://github.com/mikefarah/yq/releases/download/v{VERSION}/yq_linux_arm64"
     "eza|EZA_VERSION|lib/features/dev-tools.sh|https://github.com/eza-community/eza/releases/download/v{VERSION}/eza_x86_64-unknown-linux-gnu.tar.gz|https://github.com/eza-community/eza/releases/download/v{VERSION}/eza_aarch64-unknown-linux-gnu.tar.gz"
     "cloudflared|CLOUDFLARED_VERSION|lib/features/cloudflare.sh|https://github.com/cloudflare/cloudflared/releases/download/{VERSION}/cloudflared-linux-amd64.deb|https://github.com/cloudflare/cloudflared/releases/download/{VERSION}/cloudflared-linux-arm64.deb"
+    "mold|MOLD_VERSION|lib/features/rust-dev.sh|https://github.com/rui314/mold/releases/download/v{VERSION}/mold-{VERSION}-x86_64-linux.tar.gz|https://github.com/rui314/mold/releases/download/v{VERSION}/mold-{VERSION}-aarch64-linux.tar.gz"
 )
 
 # Extract a tool version from its feature script
