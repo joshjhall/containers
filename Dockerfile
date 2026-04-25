@@ -273,6 +273,12 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     if [ "${INCLUDE_OP}" = "true" ]; then \
     /tmp/build-scripts/features/op-cli.sh; \
     fi
+# Mise polyglot runtime version manager
+ARG INCLUDE_MISE=false
+ARG MISE_VERSION=2026.4.20
+RUN if [ "${INCLUDE_MISE}" = "true" ]; then \
+    MISE_VERSION=${MISE_VERSION} /tmp/build-scripts/features/mise.sh; \
+    fi
 # ============================================================================
 # AI/ML TOOLS
 # ============================================================================

@@ -122,6 +122,7 @@ All features are disabled by default. Set to `true` to enable:
 | ---------------- | --------------------------------------------------------- |
 | `INCLUDE_DOCKER` | Install Docker CLI tools                                  |
 | `INCLUDE_OP`     | Install 1Password CLI                                     |
+| `INCLUDE_MISE`   | Install Mise polyglot runtime version manager             |
 | `INCLUDE_OLLAMA` | Install Ollama for local LLMs                             |
 | `INCLUDE_BINDFS` | Install bindfs FUSE overlay for VirtioFS permission fixes |
 | `INCLUDE_CRON`   | Install cron daemon (auto-triggered by some features)     |
@@ -157,6 +158,7 @@ Control which version of each language to install:
 | Variable             | Default   | Description                                         |
 | -------------------- | --------- | --------------------------------------------------- |
 | `PIXI_VERSION`       | `0.65.0`  | Pixi package manager version (for Mojo)             |
+| `MISE_VERSION`       | `2026.4.20` | Mise polyglot runtime version manager version     |
 | `KUBECTL_VERSION`    | `1.33.9`  | kubectl CLI version                                 |
 | `K9S_VERSION`        | `0.50.18` | k9s terminal UI version                             |
 | `KREW_VERSION`       | `0.5.0`   | Krew kubectl plugin manager version                 |

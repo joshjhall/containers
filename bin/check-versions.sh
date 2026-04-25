@@ -239,6 +239,9 @@ extract_all_versions() {
 
     _add_dockerfile_version PIXI_VERSION "pixi"
 
+    # Mise (polyglot runtime version manager) from Dockerfile
+    _add_dockerfile_version MISE_VERSION "Mise"
+
     # Python tools (use non-anchored grep for POETRY_VERSION/UV_VERSION)
     if [ -f "$PROJECT_ROOT/lib/features/python.sh" ]; then
         ver=$(extract_version_from_line "$(command grep "POETRY_VERSION=" "$PROJECT_ROOT/lib/features/python.sh" 2>/dev/null | command head -1)") || true
@@ -405,6 +408,7 @@ main() {
             delta) check_github_release "delta" "dandavison/delta" ;;
             dive) check_github_release "dive" "wagoodman/dive" ;;
             mkcert) check_github_release "mkcert" "FiloSottile/mkcert" ;;
+            Mise) check_github_release "Mise" "jdx/mise" ;;
             glab) check_gitlab_release "glab" "gitlab-org%2Fcli" ;;
             spring-boot-cli) check_github_release_major_track "spring-boot-cli" "spring-projects/spring-boot" ;;
             jbang) check_github_release "jbang" "jbangdev/jbang" ;;

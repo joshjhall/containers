@@ -83,6 +83,7 @@ declare -A FEATURE_MAP=(
     ["sqlite-client"]="INCLUDE_SQLITE_CLIENT"
     ["keybindings"]="INCLUDE_KEYBINDINGS"
     ["bindfs"]="INCLUDE_BINDFS"
+    ["mise"]="INCLUDE_MISE"
 )
 
 # Check if feature is valid

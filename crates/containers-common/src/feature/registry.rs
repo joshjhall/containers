@@ -325,6 +325,18 @@ impl Registry {
             ..Feature::default()
         });
         r.add(Feature {
+            id: "mise".into(),
+            build_arg: "INCLUDE_MISE".into(),
+            display_name: "Mise".into(),
+            description: "Polyglot runtime version manager (.mise.toml / .tool-versions)".into(),
+            category: Category::Tool,
+            version_arg: Some("MISE_VERSION".into()),
+            default_version: Some("2026.4.20".into()),
+            env_file: Some("mise.env".into()),
+            cache_volumes: vec!["mise-cache:/cache/mise".into()],
+            ..Feature::default()
+        });
+        r.add(Feature {
             id: "cron".into(),
             build_arg: "INCLUDE_CRON".into(),
             display_name: "Cron".into(),
@@ -475,9 +487,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn registry_has_34_features() {
+    fn registry_has_35_features() {
         let reg = Registry::new();
-        assert_eq!(reg.features.len(), 34);
+        assert_eq!(reg.features.len(), 35);
     }
 
     #[test]

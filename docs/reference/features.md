@@ -76,6 +76,7 @@ These features have no dependencies and can be installed independently:
 - `redis-client` - Redis client
 - `sqlite-client` - SQLite client
 - `ollama` - Local LLM runtime
+- `mise` - Polyglot runtime version manager (.mise.toml / .tool-versions)
 - `cron` - Cron daemon (auto-enabled with `rust-dev` or `dev-tools`)
 - `bindfs` - FUSE overlay for VirtioFS permission fixes (auto-enabled with
   `dev-tools`). Requires `--cap-add SYS_ADMIN --device /dev/fuse` at runtime.
@@ -151,6 +152,32 @@ docker build \
   --build-arg INCLUDE_CLOUDFLARE=true \
   -t myproject:cloudflare .
 ```
+
+### Runtime Version Management: Baked-in vs. Mise
+
+The container offers two complementary ways to get a language runtime:
+
+| Approach                | Use when                                                                                                             |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `INCLUDE_<LANG>=true`   | You want a reproducible, image-baked runtime version shared across the team. Fastest container startup, no download. |
+| `INCLUDE_MISE=true`     | Projects float their own runtime version via `.mise.toml` / `.tool-versions`, or you need runtimes not offered as first-class features (bun, deno, zig, …). |
+
+They **coexist safely**. With `INCLUDE_MISE=true`, `mise activate` only shims
+the runtimes a project declares in `.mise.toml`; the baked-in runtimes remain
+untouched when no mise config is present. When both are active and a project
+declares a runtime via `.mise.toml`, mise wins for that project.
+
+```bash
+# Baseline baked-in Python plus mise for per-project floats
+docker build \
+  --build-arg INCLUDE_PYTHON=true \
+  --build-arg INCLUDE_MISE=true \
+  -t myproject:flexible .
+```
+
+**Note**: Runtimes that mise installs from source (e.g. Python built from
+tarball) require `INCLUDE_DEV_TOOLS=true` for the build toolchain. Prebuilt
+runtimes (node, go, bun, deno) do not.
 
 ## Troubleshooting Dependency Issues
 
