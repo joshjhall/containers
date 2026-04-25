@@ -389,7 +389,69 @@ EOF
     fi
 }
 
-# Test: Invalid version validation
+# Test: just, rumdl, conform updates (regression for "Unknown shell script tool" warnings).
+# conform also exercises the prerelease version format (e.g. 0.1.0-alpha.31).
+test_just_rumdl_conform_update() {
+    local test_dir
+    test_dir=$(mktemp -d)
+
+    mkdir -p "$test_dir/lib/features"
+    command cat >"$test_dir/lib/features/dev-tools.sh" <<'EOF'
+#!/bin/bash
+JUST_VERSION="${JUST_VERSION:-1.48.0}"
+RUMDL_VERSION="${RUMDL_VERSION:-0.1.76}"
+CONFORM_VERSION="${CONFORM_VERSION:-0.1.0-alpha.30}"
+EOF
+
+    command cat >"$test_dir/test.json" <<'EOF'
+{
+  "tools": [
+    {"tool": "just",     "current": "1.48.0",         "latest": "1.50.0",         "file": "dev-tools.sh", "status": "outdated"},
+    {"tool": "rumdl",    "current": "0.1.76",         "latest": "0.1.81",         "file": "dev-tools.sh", "status": "outdated"},
+    {"tool": "conform",  "current": "0.1.0-alpha.30", "latest": "0.1.0-alpha.31", "file": "dev-tools.sh", "status": "outdated"}
+  ]
+}
+EOF
+
+    cd "$test_dir"
+    git init --quiet
+    git config user.email "test@example.com"
+    git config user.name "Test User"
+    git add -A
+    git commit -m "Initial" --quiet
+
+    mkdir -p bin
+    echo '#!/bin/bash' >bin/release.sh
+    echo 'echo "1.4.1" > VERSION' >>bin/release.sh
+    chmod +x bin/release.sh
+    echo "1.4.0" >VERSION
+
+    local output
+    output=$(PROJECT_ROOT_OVERRIDE="$test_dir" "$PROJECT_ROOT/bin/update-versions.sh" --no-commit --no-bump --input test.json 2>&1)
+
+    local all_updated=true
+    if ! command grep -q 'JUST_VERSION="${JUST_VERSION:-1.50.0}"' lib/features/dev-tools.sh; then
+        all_updated=false
+    fi
+    if ! command grep -q 'RUMDL_VERSION="${RUMDL_VERSION:-0.1.81}"' lib/features/dev-tools.sh; then
+        all_updated=false
+    fi
+    if ! command grep -q 'CONFORM_VERSION="${CONFORM_VERSION:-0.1.0-alpha.31}"' lib/features/dev-tools.sh; then
+        all_updated=false
+    fi
+    # Regression: must not warn about these tools being unknown.
+    if echo "$output" | command grep -qE "Unknown shell script tool: (just|rumdl|conform)"; then
+        all_updated=false
+    fi
+
+    command rm -rf "$test_dir"
+
+    if [ "$all_updated" = true ]; then
+        return 0
+    else
+        return 1
+    fi
+}
 test_invalid_version_validation() {
     # Create temporary test directory
     local test_dir
@@ -660,6 +722,7 @@ run_test test_invalid_input "Handles invalid input file"
 run_test test_shell_script_update "Updates shell script versions"
 run_test test_java_dev_tools_update "Updates Java dev tool versions"
 run_test test_duf_entr_update "Updates duf and entr versions"
+run_test test_just_rumdl_conform_update "Updates just, rumdl, and conform (incl. prerelease format)"
 run_test test_update_zoxide_version "Updates zoxide version in base setup"
 run_test test_invalid_version_validation "Rejects invalid version formats (null, undefined, error)"
 run_test test_mixed_valid_invalid_versions "Updates valid versions while rejecting invalid ones"

@@ -191,6 +191,18 @@ update_version() {
                     sed_inplace "s/GLAB_VERSION=\"\${GLAB_VERSION:-[^}]*}\"/GLAB_VERSION=\"\${GLAB_VERSION:-$latest}\"/" "$script_path"
                     sed_inplace "s/^GLAB_VERSION=\"[0-9][^\"]*\"/GLAB_VERSION=\"\${GLAB_VERSION:-$latest}\"/" "$script_path"
                     ;;
+                just)
+                    sed_inplace "s/JUST_VERSION=\"\${JUST_VERSION:-[^}]*}\"/JUST_VERSION=\"\${JUST_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/^JUST_VERSION=\"[0-9][^\"]*\"/JUST_VERSION=\"\${JUST_VERSION:-$latest}\"/" "$script_path"
+                    ;;
+                rumdl)
+                    sed_inplace "s/RUMDL_VERSION=\"\${RUMDL_VERSION:-[^}]*}\"/RUMDL_VERSION=\"\${RUMDL_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/^RUMDL_VERSION=\"[0-9][^\"]*\"/RUMDL_VERSION=\"\${RUMDL_VERSION:-$latest}\"/" "$script_path"
+                    ;;
+                conform)
+                    sed_inplace "s/CONFORM_VERSION=\"\${CONFORM_VERSION:-[^}]*}\"/CONFORM_VERSION=\"\${CONFORM_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/^CONFORM_VERSION=\"[0-9][^\"]*\"/CONFORM_VERSION=\"\${CONFORM_VERSION:-$latest}\"/" "$script_path"
+                    ;;
                 mkcert)
                     sed_inplace "s/MKCERT_VERSION=\"\${MKCERT_VERSION:-[^}]*}\"/MKCERT_VERSION=\"\${MKCERT_VERSION:-$latest}\"/" "$script_path"
                     sed_inplace "s/^MKCERT_VERSION=\"[0-9][^\"]*\"/MKCERT_VERSION=\"\${MKCERT_VERSION:-$latest}\"/" "$script_path"

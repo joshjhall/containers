@@ -435,7 +435,7 @@ main() {
             vale) check_github_release "vale" "vale-cli/vale" ;;
             typos) check_github_release "typos" "crate-ci/typos" ;;
             shfmt) check_github_release "shfmt" "mvdan/sh" ;;
-            conform) check_github_release "conform" "siderolabs/conform" ;;
+            conform) check_github_release_prerelease "conform" "siderolabs/conform" ;;
             hadolint) check_github_release "hadolint" "hadolint/hadolint" ;;
             actionlint) check_github_release "actionlint" "rhysd/actionlint" ;;
             cargo-release) check_crates_io "cargo-release" ;;

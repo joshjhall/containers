@@ -587,6 +587,37 @@ test_check_github_release_mock() {
     assert_equals "0.57.0" "${LATEST_VERSIONS[0]}" "GitHub release version extracted correctly"
 }
 
+test_check_github_release_prerelease_mock() {
+    setup_check_env
+
+    add_tool "conform" "0.1.0-alpha.30" "dev-tools.sh"
+
+    # /releases endpoint returns prereleases too, ordered newest first
+    fetch_url() {
+        echo '[{"tag_name":"v0.1.0-alpha.31","draft":false,"prerelease":true},{"tag_name":"v0.1.0-alpha.30","draft":false,"prerelease":true}]'
+    }
+
+    source "$PROJECT_ROOT/bin/lib/check-versions/checks.sh"
+    check_github_release_prerelease "conform" "siderolabs/conform"
+
+    assert_equals "0.1.0-alpha.31" "${LATEST_VERSIONS[0]}" "Prerelease GitHub tag extracted correctly"
+}
+
+test_check_github_release_prerelease_skips_drafts() {
+    setup_check_env
+
+    add_tool "conform" "0.1.0-alpha.30" "dev-tools.sh"
+
+    fetch_url() {
+        echo '[{"tag_name":"v0.1.0-alpha.32","draft":true,"prerelease":true},{"tag_name":"v0.1.0-alpha.31","draft":false,"prerelease":true}]'
+    }
+
+    source "$PROJECT_ROOT/bin/lib/check-versions/checks.sh"
+    check_github_release_prerelease "conform" "siderolabs/conform"
+
+    assert_equals "0.1.0-alpha.31" "${LATEST_VERSIONS[0]}" "Drafts skipped, latest non-draft prerelease used"
+}
+
 test_check_gitlab_release_mock() {
     setup_check_env
 
@@ -665,6 +696,8 @@ test_check_kubectl_mock() {
 run_test test_check_python_mock "check_python with mock API response"
 run_test test_check_rust_mock "check_rust with mock API response"
 run_test test_check_github_release_mock "check_github_release with mock API response"
+run_test test_check_github_release_prerelease_mock "check_github_release_prerelease picks newest tag including prereleases"
+run_test test_check_github_release_prerelease_skips_drafts "check_github_release_prerelease skips draft releases"
 run_test test_check_gitlab_release_mock "check_gitlab_release with mock API response"
 run_test test_check_crates_io_mock "check_crates_io with mock API response"
 run_test test_check_maven_central_mock "check_maven_central with mock API response"

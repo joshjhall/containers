@@ -199,6 +199,21 @@ check_github_release() {
     progress_done
 }
 
+# Like check_github_release but includes pre-release tags. Use for tools whose
+# only published releases are marked prerelease (e.g. conform's alphas), where
+# /releases/latest returns 404.
+check_github_release_prerelease() {
+    local tool="$1"
+    local repo="$2"
+    progress_msg "  $tool..."
+    local latest
+    latest=$(fetch_url "https://api.github.com/repos/$repo/releases?per_page=10" |
+        jq -r '[.[] | select(.draft == false)] | .[0].tag_name // "null"' 2>/dev/null |
+        command sed 's/^v//')
+    set_latest "$tool" "$latest"
+    progress_done
+}
+
 # Like check_github_release but stays on the same major version track.
 # Prevents downgrades when a repo has multiple active release tracks
 # (e.g., spring-boot 3.x and 4.x both receive releases).
