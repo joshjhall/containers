@@ -358,6 +358,15 @@ Failures abort the build — no `|| true`. This prevents crates.io drift
 (transitive MSRV bumps, silently broken builds) from breaking images that
 worked yesterday. Enforced by `tests/unit/cargo-install-policy.sh`.
 
+## Git Workflow
+
+Conventional Commits enforced by `conform` (config: `.conform.yaml`, hook:
+`lefthook.yml` `commit-msg` stage). Allowed types and scopes live in
+`.conform.yaml` — that file is the source of truth. PRs adding new scopes
+are welcome; see the comment block above the `scopes:` list for the
+curation principle and a gotcha about regex anchoring. The allowlist is
+exercised by `tests/unit/conform-scopes.sh`.
+
 ## Release Process
 
 **ALWAYS use the release script** — never manually edit the VERSION file.

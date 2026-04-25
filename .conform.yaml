@@ -33,5 +33,102 @@ policies:
           - revert
           - style
           - test
-        scopes: []
+        # Curated from real git history. The list is permissive on purpose
+        # — easier to prune than to add after a rejection. Adding a new
+        # scope: open a PR; the bar is "we'll plausibly use this more than
+        # once". Removing one: confirm no recent commits used it.
+        # Keep coherent with cliff.toml's commit_parsers (notably
+        # `chore(release):` → skip, see cliff.toml line 64).
+        #
+        # IMPORTANT — entries are Go regular expressions, NOT exact matches.
+        # See conform's check_conventional_commit.go: each scope is compiled
+        # with regexp.MustCompile and tested with re.MatchString — which is
+        # unanchored. Without the `^...$` anchors, a bare scope like `op`
+        # would silently allow `feat(operation):` (and `r` would allow any
+        # scope containing the letter r, leaking enforcement entirely).
+        # Anchor every entry. If you need a real regex, document it.
+        scopes:
+          # Components / crates
+          - ^igor$
+          - ^stibbons$
+          - ^luggage$
+          - ^tooldb$
+          - ^containers-common$
+          # Subsystems
+          - ^agents$
+          - ^apt$
+          - ^audit$
+          - ^base$
+          - ^baseline$
+          - ^bin$
+          - ^build$
+          - ^checker$
+          - ^check-versions$
+          - ^checksum$
+          - ^ci$
+          - ^claude$
+          - ^claude-code$
+          - ^claude-md$
+          - ^claude-setup$
+          - ^cleanup-handler$
+          - ^clippy$
+          - ^codebase-audit$
+          - ^colors$
+          - ^cosign$
+          - ^coverage$
+          - ^decompose$
+          - ^deps$
+          - ^dev-tools$
+          - ^devcontainer$
+          - ^edge-cases$
+          - ^env$
+          - ^env-vars$
+          - ^evaluations$
+          - ^examples$
+          - ^exports$
+          - ^features$
+          - ^gitignore$
+          - ^god-modules$
+          - ^hooks$
+          - ^host$
+          - ^ide$
+          - ^lefthook$
+          - ^logging$
+          - ^memory$
+          - ^naming$
+          - ^next-issue$
+          - ^observability$
+          - ^onboarding$
+          - ^op$
+          - ^op-secrets$
+          - ^orchestrate$
+          - ^runtime$
+          - ^safe-eval$
+          - ^safety$
+          - ^scripts$
+          - ^secrets$
+          - ^security$
+          - ^setup-commands$
+          - ^shfmt-baseline$
+          - ^shfmt-prep$
+          - ^ship$
+          - ^skill$
+          - ^skills$
+          - ^tests$
+          - ^unit$
+          - ^update-versions$
+          - ^v5$
+          - ^versions$
+          # Process
+          - ^release$
+          # Languages / per-feature
+          - ^golang$
+          - ^java-dev$
+          - ^kotlin-dev$
+          - ^node$
+          - ^python$
+          - ^r$
+          - ^r-dev$
+          - ^rust$
+          - ^startup$
         descriptionLength: 72

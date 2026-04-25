@@ -80,6 +80,14 @@ ci: Enable all test variants
 chore: Update dependencies
 ```
 
+Scoped commits (`chore(release):`, `docs(memory):`, `feat(igor):`, …) are
+validated against an allowlist in `.conform.yaml`, enforced by the
+lefthook `commit-msg` hook. The release script emits `chore(release):` —
+already in the allowlist. To add a new scope, open a PR editing
+`.conform.yaml`; entries are anchored regexes (`^name$`), and the comment
+block above the `scopes:` list explains the curation principle and an
+upstream gotcha to avoid.
+
 ### Manual CHANGELOG Edits
 
 The "Unreleased" section can be manually edited. When you run the release
