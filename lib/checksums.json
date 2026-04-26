@@ -127,6 +127,11 @@
           "sha256": "222ba516cdc4052ce0be9d2ec6adf3c5c64fc53156d7dd91d1f5317809431b98",
           "url": "https://github.com/JetBrains/kotlin/releases/download/v2.3.20/kotlin-compiler-2.3.20.zip",
           "added": "2026-03-22"
+        },
+        "2.3.21": {
+          "sha256": "a8cfc1d62cd4d0de4d04f42575e40135bd620588c17d568a20eb9c7c259af14f",
+          "url": "https://github.com/JetBrains/kotlin/releases/download/v2.3.21/kotlin-compiler-2.3.21.zip",
+          "added": "2026-04-26"
         }
       }
     },
@@ -168,6 +173,11 @@
           "sha256": "7ed664f2e716e7c23c53b7edf5670c708ebee4ea63489033f9e7c3aff655d58c",
           "url": "https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-cli/4.0.5/spring-boot-cli-4.0.5-bin.tar.gz",
           "added": "2026-03-29"
+        },
+        "4.0.6": {
+          "sha256": "fe38608b7921e20ac6f5e8670966995c0cada9b3e77caadfd0f1094c62085918",
+          "url": "https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-cli/4.0.6/spring-boot-cli-4.0.6-bin.tar.gz",
+          "added": "2026-04-26"
         }
       }
     },
@@ -328,6 +338,19 @@
             }
           },
           "added": "2026-04-19"
+        },
+        "2.4.13": {
+          "checksums": {
+            "amd64": {
+              "sha256": "f5a3cf9cbe40ba7dd8ecd469567cac00635462589a3acfe97e5d8cab8b866c1c",
+              "url": "https://github.com/biomejs/biome/releases/download/@biomejs/biome@2.4.13/biome-linux-x64"
+            },
+            "arm64": {
+              "sha256": "8aff839821c82ba5ba8455a52d8beacb02229697e781ebaa095f8442fdb6ae51",
+              "url": "https://github.com/biomejs/biome/releases/download/@biomejs/biome@2.4.13/biome-linux-arm64"
+            }
+          },
+          "added": "2026-04-26"
         }
       }
     },
@@ -483,10 +506,27 @@
           "added": "2026-04-19"
         }
       }
+    },
+    "mold": {
+      "versions": {
+        "2.41.0": {
+          "checksums": {
+            "amd64": {
+              "sha256": "a3696680d99e692970590a178bc3a33d78d60d1c6dc9db7a11b557b02b751f5d",
+              "url": "https://github.com/rui314/mold/releases/download/v2.41.0/mold-2.41.0-x86_64-linux.tar.gz"
+            },
+            "arm64": {
+              "sha256": "946de2774b06a71346bd59b55fddba610b65b8d93c3a4a1559cc84e103472710",
+              "url": "https://github.com/rui314/mold/releases/download/v2.41.0/mold-2.41.0-aarch64-linux.tar.gz"
+            }
+          },
+          "added": "2026-04-26"
+        }
+      }
     }
   },
   "metadata": {
-    "generated": "2026-04-19T03:03:31Z",
+    "generated": "2026-04-26T03:04:04Z",
     "description": "Pinned checksums for language runtime downloads",
     "note": "This file is automatically updated by check-versions.sh and should grow over time. Old checksums are never deleted to strengthen security for older versions and enable reproducible builds."
   }
