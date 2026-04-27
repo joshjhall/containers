@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.18.1] - 2026-04-26
+
+### Fixed
+
+- Expand conform allowed scopes from empty list
+- Pin trivy-action with v-prefix and harden version round-trip
+
 ## [4.18.0] - 2026-04-25
 
 ### Added
@@ -47,6 +54,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bump rustls-webpki to 0.103.13 for RUSTSEC-2026-0104
 - Update dependency versions
 - Update dependency versions
+- Release version 4.18.0
 
 ### Style
 
@@ -1714,6 +1722,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix prettier and markdownlint formatting in README
 - Format TLS documentation files
 
+[4.18.1]: https://github.com/joshjhall/containers/compare/v4.18.0...v4.18.1
 [4.18.0]: https://github.com/joshjhall/containers/compare/v4.17.2...v4.18.0
 [4.17.2]: https://github.com/joshjhall/containers/compare/v4.17.1...v4.17.2
 [4.17.1]: https://github.com/joshjhall/containers/compare/v4.17.0...v4.17.1
