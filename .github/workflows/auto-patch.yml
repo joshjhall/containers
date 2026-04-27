@@ -58,7 +58,7 @@ jobs:
           if [ "$UPDATE_COUNT" -gt 0 ]; then
             echo "Found $UPDATE_COUNT version update(s)"
             echo "$OUTDATED" | jq '.'
-            echo "has_updates=true" >> $GITHUB_OUTPUT
+            echo "has_updates=true" >> "$GITHUB_OUTPUT"
 
             # Create summary for notification
             SUMMARY=""
@@ -70,12 +70,14 @@ jobs:
             done < <(echo "$OUTDATED" | jq -c '.[]')
 
             # Save for commit message and notifications
-            echo "updates_summary<<EOF" >> $GITHUB_OUTPUT
-            echo -e "$SUMMARY" >> $GITHUB_OUTPUT
-            echo "EOF" >> $GITHUB_OUTPUT
+            {
+              echo "updates_summary<<EOF"
+              echo -e "$SUMMARY"
+              echo "EOF"
+            } >> "$GITHUB_OUTPUT"
           else
             echo "All versions are up to date!"
-            echo "has_updates=false" >> $GITHUB_OUTPUT
+            echo "has_updates=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Create auto-patch branch and apply updates
@@ -142,7 +144,7 @@ jobs:
 
           # Update GPG keys (check for changes)
           echo "Checking for GPG key updates..."
-          git diff --quiet lib/gpg-keys/ || echo "HAS_EXISTING_CHANGES=true" >> $GITHUB_ENV
+          git diff --quiet lib/gpg-keys/ || echo "HAS_EXISTING_CHANGES=true" >> "$GITHUB_ENV"
 
           ./bin/update-gpg-keys.sh all || {
             echo "Warning: GPG key updates failed, continuing anyway"
@@ -169,23 +171,29 @@ jobs:
 
           if [ -z "$KEY_FILES_CHANGED" ]; then
             echo "No GPG key file changes detected (metadata and whitespace-only changes are ignored)"
-            echo "gpg_keys_changed=false" >> $GITHUB_ENV
+            echo "gpg_keys_changed=false" >> "$GITHUB_ENV"
           else
             echo "GPG key file changes detected!"
             echo "$KEY_FILES_CHANGED"
-            echo "gpg_keys_changed=true" >> $GITHUB_ENV
+            echo "gpg_keys_changed=true" >> "$GITHUB_ENV"
 
             # Capture detailed changes for notification (only key files)
+            # shellcheck disable=SC2086 # KEY_FILES_CHANGED is a newline-separated path list; intentional word-split
             GPG_CHANGES=$(git diff --stat $KEY_FILES_CHANGED | head -20)
-            echo "GPG_CHANGES<<EOF" >> $GITHUB_ENV
-            echo "$GPG_CHANGES" >> $GITHUB_ENV
-            echo "EOF" >> $GITHUB_ENV
+            {
+              echo "GPG_CHANGES<<EOF"
+              echo "$GPG_CHANGES"
+              echo "EOF"
+            } >> "$GITHUB_ENV"
 
             # Get more detailed change summary
+            # shellcheck disable=SC2086 # KEY_FILES_CHANGED is a newline-separated path list; intentional word-split
             GPG_DETAIL=$(git diff $KEY_FILES_CHANGED | grep -E '^\+\+\+|^---|\+.*fingerprint|\+.*Key ID' | head -30)
-            echo "GPG_DETAIL<<EOF" >> $GITHUB_ENV
-            echo "$GPG_DETAIL" >> $GITHUB_ENV
-            echo "EOF" >> $GITHUB_ENV
+            {
+              echo "GPG_DETAIL<<EOF"
+              echo "$GPG_DETAIL"
+              echo "EOF"
+            } >> "$GITHUB_ENV"
           fi
 
           # Bump patch version
@@ -194,7 +202,7 @@ jobs:
 
           # Get the new version for tagging
           NEW_VERSION=$(cat VERSION)
-          echo "new_version=$NEW_VERSION" >> $GITHUB_ENV
+          echo "new_version=$NEW_VERSION" >> "$GITHUB_ENV"
           echo "New version: $NEW_VERSION"
 
           # Commit changes
@@ -235,7 +243,7 @@ jobs:
           git push origin "$BRANCH_NAME"
 
           # Save branch name for potential use
-          echo "PATCH_BRANCH=$BRANCH_NAME" >> $GITHUB_ENV
+          echo "PATCH_BRANCH=$BRANCH_NAME" >> "$GITHUB_ENV"
 
       - name: Send CRITICAL notification for GPG key changes
         if: env.gpg_keys_changed == 'true'
@@ -323,7 +331,7 @@ jobs:
         env:
           BRANCH_NAME: ${{ github.event.workflow_run.head_branch }}
         run: |
-          echo "branch=$BRANCH_NAME" >> $GITHUB_OUTPUT
+          echo "branch=$BRANCH_NAME" >> "$GITHUB_OUTPUT"
 
           # Extract version changes from the branch
           git fetch origin "$BRANCH_NAME"
@@ -331,19 +339,21 @@ jobs:
 
           # Get current version from VERSION file
           CURRENT_VERSION=$(cat VERSION)
-          echo "version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+          echo "version=$CURRENT_VERSION" >> "$GITHUB_OUTPUT"
 
           # Get commit message for notification
           COMMIT_MSG=$(git log -1 --pretty=%B)
-          echo "commit_message<<EOF" >> $GITHUB_OUTPUT
-          echo "$COMMIT_MSG" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          {
+            echo "commit_message<<EOF"
+            echo "$COMMIT_MSG"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
 
           # Detect GPG key changes from commit message
           if echo "$COMMIT_MSG" | grep -q "GPG Key Changes Detected"; then
-            echo "gpg_keys_changed=true" >> $GITHUB_OUTPUT
+            echo "gpg_keys_changed=true" >> "$GITHUB_OUTPUT"
           else
-            echo "gpg_keys_changed=false" >> $GITHUB_OUTPUT
+            echo "gpg_keys_changed=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Update compatibility matrix with test results
@@ -416,13 +426,27 @@ jobs:
             # Format JSON with dprint (jq expands compact arrays; dprint normalizes)
             dprint fmt version-compatibility-matrix.json || true
 
-            # Commit the matrix update
-            git config user.name "github-actions[bot]"
-            git config user.email "github-actions[bot]@users.noreply.github.com"
-            git add version-compatibility-matrix.json
-            git commit -m "chore: Update compatibility matrix with passing test results" || echo "No matrix changes to commit"
-            git push origin "${{ steps.branch_info.outputs.branch }}"
-            echo "Compatibility matrix updated with test results"
+            # Skip commit/push when the only diff is the last_updated/tested_at
+            # timestamps. Without this guard, every workflow_run retry pushes a
+            # new commit, which re-triggers CI, which re-triggers this job —
+            # producing a chain of empty "Update compatibility matrix" commits.
+            NON_TIMESTAMP_DIFF=$(git diff --no-color version-compatibility-matrix.json \
+              | /usr/bin/grep -E '^[+-][^+-]' \
+              | /usr/bin/grep -vE '^[+-][[:space:]]*"(last_updated|tested_at)":' \
+              || true)
+
+            if [ -z "$NON_TIMESTAMP_DIFF" ]; then
+              echo "Only timestamp updates detected — skipping commit to avoid retry loop"
+              git checkout -- version-compatibility-matrix.json
+            else
+              # Commit the matrix update
+              git config user.name "github-actions[bot]"
+              git config user.email "github-actions[bot]@users.noreply.github.com"
+              git add version-compatibility-matrix.json
+              git commit -m "chore: Update compatibility matrix with passing test results"
+              git push origin "${{ steps.branch_info.outputs.branch }}"
+              echo "Compatibility matrix updated with test results"
+            fi
           else
             echo "Warning: version-compatibility-matrix.json not found"
           fi
@@ -448,7 +472,7 @@ jobs:
           EXISTING_PR=$(gh pr list --head "$BRANCH_NAME" --json number,url --jq '.[0].url // empty')
           if [ -n "$EXISTING_PR" ]; then
             echo "PR already exists: $EXISTING_PR"
-            echo "pr_url=$EXISTING_PR" >> $GITHUB_OUTPUT
+            echo "pr_url=$EXISTING_PR" >> "$GITHUB_OUTPUT"
           else
             PR_URL=$(gh pr create \
               --base main \
@@ -456,7 +480,7 @@ jobs:
               --title "$PR_TITLE" \
               --body "$PR_BODY")
 
-            echo "pr_url=$PR_URL" >> $GITHUB_OUTPUT
+            echo "pr_url=$PR_URL" >> "$GITHUB_OUTPUT"
             echo "Created PR: $PR_URL"
           fi
 
@@ -540,17 +564,19 @@ jobs:
         env:
           PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
         run: |
-          echo "branch=$PR_HEAD_REF" >> $GITHUB_OUTPUT
+          echo "branch=$PR_HEAD_REF" >> "$GITHUB_OUTPUT"
 
           # Get current version from VERSION file (now on main after merge)
           CURRENT_VERSION=$(cat VERSION)
-          echo "version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+          echo "version=$CURRENT_VERSION" >> "$GITHUB_OUTPUT"
 
           # Get the merge commit message
           COMMIT_MSG=$(git log -1 --pretty=%B)
-          echo "commit_message<<EOF" >> $GITHUB_OUTPUT
-          echo "$COMMIT_MSG" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          {
+            echo "commit_message<<EOF"
+            echo "$COMMIT_MSG"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Create and push version tag
         env:
@@ -633,10 +659,10 @@ jobs:
           BRANCH_NAME: ${{ github.event.workflow_run.head_branch }}
         run: |
           if gh api "repos/${{ github.repository }}/branches/${BRANCH_NAME}" --silent 2>/dev/null; then
-            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "exists=true" >> "$GITHUB_OUTPUT"
           else
             echo "Branch ${BRANCH_NAME} no longer exists — skipping notification"
-            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Checkout code
@@ -651,17 +677,19 @@ jobs:
         env:
           BRANCH_NAME: ${{ github.event.workflow_run.head_branch }}
         run: |
-          echo "branch=$BRANCH_NAME" >> $GITHUB_OUTPUT
+          echo "branch=$BRANCH_NAME" >> "$GITHUB_OUTPUT"
 
           # Get current version from VERSION file
           CURRENT_VERSION=$(cat VERSION)
-          echo "version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+          echo "version=$CURRENT_VERSION" >> "$GITHUB_OUTPUT"
 
           # Get commit message
           COMMIT_MSG=$(git log -1 --pretty=%B | head -n 20)
-          echo "commit_message<<EOF" >> $GITHUB_OUTPUT
-          echo "$COMMIT_MSG" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          {
+            echo "commit_message<<EOF"
+            echo "$COMMIT_MSG"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Send failure notification
         if: steps.branch_check.outputs.exists == 'true'
