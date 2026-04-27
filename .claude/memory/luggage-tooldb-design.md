@@ -73,9 +73,31 @@ versions unless needed for `last_known_good_for` records.
 - #215 wizard tier for version pinning → consumes catalog
 - #306 / #308 stibbons version + update commands → use luggage as backend
 
+## Repo-name reconciliation (2026-04-26)
+
+Repo on GitHub is `joshjhall/containers-db` (not `containers-tooldb` as
+this memo and the early issues say). All references in issues #401-#408
+should be read as pointing at `containers-db`. Inside the repo the paths
+(`schema/`, `tools/`, …) are unprefixed so the ambiguity is invisible to
+consumers.
+
+## Pinning target
+
+Consumers (luggage, stibbons) should pin **`containers-db@v0.1.0`**
+(commit `03c1fd5`, tagged 2026-04-26). v0.1.0 freezes:
+
+- `schema/tool.schema.json` and `schema/version.schema.json` (JSON Schema
+  2020-12, `schemaVersion: 1`)
+- The 7-tier activity model encoding
+- The three-field claim/evidence/fossil support model
+- The `install_methods[].verification` field shape (per-tier conditional
+  validation arrives in v0.2.0 once #402 lands)
+
+Bump the pin to v0.2.0 only after #402 merges.
+
 ## Filed issues (2026-04-25)
 
-- #400 Bootstrap containers-tooldb repo + JSON schemas (foundational)
+- #400 Bootstrap containers-tooldb repo + JSON schemas (foundational) — **shipped 2026-04-26 as containers-db v0.1.0**
 - #401 Populate tools/rust/ pilot data
 - #402 Specify 4-tier checksum validation encoding
 - #403 Bootstrap crates/luggage + catalog loader (foundational)
