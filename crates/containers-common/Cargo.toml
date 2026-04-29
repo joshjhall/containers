@@ -13,7 +13,9 @@ workspace = true
 
 [dependencies]
 indexmap = { workspace = true }
+semver = { workspace = true }
 serde = { workspace = true }
+thiserror = { workspace = true }
 
 minijinja = { workspace = true }
 serde_yaml = { workspace = true }
