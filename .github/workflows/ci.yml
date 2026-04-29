@@ -977,7 +977,30 @@ jobs:
           \`\`\`
           EOF
 
+      # Skip release-asset upload when the release is already immutable.
+      # Why: GitHub returns 422 ("Cannot delete asset from an immutable
+      # release") if action-gh-release tries to overwrite assets, and any
+      # rerun of this job on an immutable release would otherwise fail.
+      # Cosign signing/attestation above is idempotent against ghcr, so the
+      # rerun's other side effects are still correct.
+      - name: Check release immutability
+        id: release_state
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.version.outputs.VERSION }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          IMMUTABLE=$(gh api "repos/${GH_REPO}/releases/tags/${VERSION}" \
+            --jq '.immutable // false' 2>/dev/null || echo "false")
+          if [ "${IMMUTABLE}" = "true" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "Release ${VERSION} is immutable — skipping asset upload."
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Create GitHub Release
+        if: steps.release_state.outputs.skip != 'true'
         uses: softprops/action-gh-release@v2
         with:
           body_path: release-notes.md

@@ -18,6 +18,16 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # Force HTTPS for any cargo git fetches that recurse into submodules
+      # declared with ssh:// URLs (e.g. octarine's `containers` submodule).
+      # The runner has no SSH key for github.com, so without this rewrite
+      # `cargo metadata` (used by cargo-deny / cargo-audit) fails to walk
+      # transitive git deps.
+      - name: Rewrite SSH GitHub URLs to HTTPS
+        run: |
+          git config --global url."https://github.com/".insteadOf "ssh://git@github.com/"
+          git config --global url."https://github.com/".insteadOf "git@github.com:"
+
       - name: Install just (task runner)
         uses: extractions/setup-just@v2
 
