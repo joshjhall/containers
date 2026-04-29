@@ -13,7 +13,7 @@ repository = "https://github.com/joshjhall/containers"
 containers-common = { path = "crates/containers-common" }
 
 # Octarine foundation
-octarine = { git = "https://github.com/joshjhall/octarine.git", tag = "v0.3.0-beta.1", features = [
+octarine = { git = "https://github.com/joshjhall/octarine.git", tag = "v0.3.0-beta.3", features = [
   "full",
 ] }
 

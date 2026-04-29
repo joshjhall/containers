@@ -1,3 +1,5 @@
 - [v5 Architecture](v5-architecture.md) — Three executables (stibbons/igor/luggage), manifest-driven installs, multi-distro support
 - [Octarine Windows](octarine-windows.md) — Octarine doesn't compile on Windows yet, blocks stibbons Windows CI
 - [Luggage Tooldb Design](luggage-tooldb-design.md) — Tool catalog: separate containers-tooldb repo, 7-tier activity, luggage crate
+- [Minimal build philosophy](minimal-build-philosophy.md) — Install minimal package sets; clean up build artifacts
+- [Use file-issue skill](use-file-issue-skill.md) — Always file new issues via `/file-issue`, not raw `gh issue create`
