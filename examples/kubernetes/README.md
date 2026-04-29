@@ -777,5 +777,5 @@ For issues and questions:
 
 ## License
 
-This project is licensed under the MIT License - see the
-[LICENSE](../../LICENSE) file for details.
+This project is dual-licensed under MIT or Apache-2.0 — see
+[LICENSE-MIT](../../LICENSE-MIT) and [LICENSE-APACHE](../../LICENSE-APACHE).

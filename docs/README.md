@@ -182,7 +182,7 @@ Common issues and platform-specific troubleshooting:
 - **[CLAUDE.md](../CLAUDE.md)** - Development guide
 - **[CHANGELOG.md](../CHANGELOG.md)** - Version history
 - **[SECURITY.md](../SECURITY.md)** - Security policy
-- **[LICENSE](../LICENSE)** - Project license
+- **[LICENSE-MIT](../LICENSE-MIT)** / **[LICENSE-APACHE](../LICENSE-APACHE)** - Project license (MIT OR Apache-2.0)
 
 ### Examples
 
