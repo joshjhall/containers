@@ -122,9 +122,35 @@ jobs:
           conform enforce --base-branch "origin/${BASE_REF}"
 
       - name: Run linting (lefthook)
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
-          echo "Running all linters via lefthook (single source of truth)..."
-          lefthook run pre-commit --all-files
+          # On PRs, lint only the files changed against the base branch.
+          # Hooks with a `glob` skip themselves when no matching file is
+          # in the list, so Rust-only / docs-only / workflow-only PRs no
+          # longer pay the full-repo shellcheck/shfmt/rumdl cost.
+          # Push events (main / tags / workflow_dispatch) still run the
+          # full sweep, preserving the drift safety net on the canonical
+          # branch.
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            mapfile -t CHANGED < <(git diff --name-only "origin/${BASE_REF}...HEAD")
+            if [ "${#CHANGED[@]}" -eq 0 ]; then
+              echo "No files changed against origin/${BASE_REF} — skipping lefthook."
+              exit 0
+            fi
+            echo "Running lefthook against changed files:"
+            printf '  %s\n' "${CHANGED[@]}"
+            # Lefthook 2.1.6's --files-from-stdin filter drops matching
+            # files (observed locally); use the repeated --file flag
+            # which honors hook globs correctly.
+            ARGS=()
+            for f in "${CHANGED[@]}"; do ARGS+=(--file "$f"); done
+            lefthook run pre-commit --no-stage-fixed "${ARGS[@]}"
+          else
+            echo "Running all linters via lefthook (full sweep)..."
+            lefthook run pre-commit --all-files
+          fi
 
       - name: Run secret scanning with Gitleaks
         uses: gitleaks/gitleaks-action@v2
