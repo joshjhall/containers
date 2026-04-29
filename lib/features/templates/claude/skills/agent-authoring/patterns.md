@@ -73,13 +73,15 @@ When invoked:
 
 ### Opening
 
+**Bad — too vague, no structure:**
+
 ```markdown
-# Bad — too vague, no structure
-
 Review code and find issues. Make it better.
+```
 
-# Good — role, workflow, specifics
+**Good — role, workflow, specifics:**
 
+```markdown
 You are a senior code reviewer ensuring high standards of quality and security.
 
 When invoked:
@@ -91,15 +93,17 @@ When invoked:
 
 ### Checklists
 
-```markdown
-# Bad — generic, Claude already knows these
+**Bad — generic, Claude already knows these:**
 
+```markdown
 - Write clean code
 - Follow best practices
 - Handle errors properly
+```
 
-# Good — specific red flags to check
+**Good — specific red flags to check:**
 
+```markdown
 - Generic base exceptions instead of specific error types
 - Exceptions with no structured context (just a message string)
 - Async operations without timeout limits
@@ -108,13 +112,15 @@ When invoked:
 
 ### Output Format
 
+**Bad — no structure specified:**
+
 ```markdown
-# Bad — no structure specified
-
 Tell me what you found.
+```
 
-# Good — clear format with severity
+**Good — clear format with severity:**
 
+```markdown
 Provide feedback organized by priority:
 
 - Critical issues (must fix)

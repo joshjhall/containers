@@ -98,15 +98,17 @@ required_mcps: []
 
 ### Instructions
 
-```markdown
-# Bad — vague, Claude already knows this
+**Bad — vague, Claude already knows this:**
 
+```markdown
 - Write clean, maintainable code
 - Use meaningful variable names
 - Follow best practices
+```
 
-# Good — specific, project-relevant
+**Good — specific, project-relevant:**
 
+```markdown
 - Use Zod schemas for all API request validation
 - Run `biome check --write .` before committing
 - Place integration tests in `tests/integration/`, unit tests in `tests/unit/`
@@ -114,13 +116,15 @@ required_mcps: []
 
 ### Examples in Skills
 
+**Bad — describes what good code looks like without showing it:**
+
 ```markdown
-# Bad — describes what good code looks like without showing it
-
 Use descriptive error messages that explain the problem.
+```
 
-# Good — shows concrete before/after
+**Good — shows concrete before/after:**
 
+```markdown
 Error messages must include what failed and how to fix it:
 Bad: "Invalid input"
 Good: "API key must be 32 hex characters, got 28: 'abc...xyz'"
@@ -128,13 +132,15 @@ Good: "API key must be 32 hex characters, got 28: 'abc...xyz'"
 
 ### Commands
 
+**Bad — ambiguous, may not work:**
+
 ```markdown
-# Bad — ambiguous, may not work
-
 Run the linter to check your code.
+```
 
-# Good — copy-pasteable, exact
+**Good — copy-pasteable, exact:**
 
+```markdown
 Run `eslint --fix src/` to auto-fix lint issues.
 ```
 

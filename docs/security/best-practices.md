@@ -41,7 +41,7 @@ mistakenly pass secrets as build args, they would be exposed.
 
 1. **Add to README.md**:
 
-```markdown
+```text
 ## Security Best Practices
 
 ### Never Pass Secrets as Build Arguments

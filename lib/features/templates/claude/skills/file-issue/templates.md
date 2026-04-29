@@ -9,15 +9,17 @@ Each template uses H2 headers that agents can reliably parse.
 
 Titles should be concise, specific, and action-oriented:
 
-```markdown
-# Good — specific, actionable
+**Good — specific, actionable:**
 
+```markdown
 Set core.sshCommand globally so VS Code git GUI works with provisioned SSH keys
 Add pagination to /api/users endpoint
 Fix race condition in session token refresh
+```
 
-# Bad — vague, no action
+**Bad — vague, no action:**
 
+```markdown
 SSH key issue
 API improvement
 Fix bug
