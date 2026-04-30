@@ -4,6 +4,7 @@ pub mod config;
 pub mod feature;
 pub mod generate;
 pub mod template;
+pub mod tooldb;
 pub mod version;
 
 /// Library version (tracks workspace, not container system version).

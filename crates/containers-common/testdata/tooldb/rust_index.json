@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "id": "rust",
+  "display_name": "Rust",
+  "kind": "language",
+  "homepage": "https://www.rust-lang.org",
+  "source_repo": "https://github.com/rust-lang/rust",
+  "license": "MIT OR Apache-2.0",
+  "activity": {
+    "score": "very-active",
+    "signals": {
+      "releases_last_90d": 4,
+      "commits_last_90d": 7904,
+      "active_maintainers": 152,
+      "open_advisories": 0,
+      "last_release_at": "2026-04-16T18:19:31Z",
+      "last_commit_at": "2026-04-27T21:47:07Z"
+    },
+    "scan_cadence_days": 1,
+    "scanned_at": "2026-04-27T22:00:00Z"
+  },
+  "validation_tiers": {
+    "tier3": {
+      "available": true,
+      "notes": "rustup-init verified against publisher SHA256 at static.rust-lang.org/rustup/dist/<triple>/rustup-init.sha256; the rust toolchain itself is then verified by rustup's built-in signed-channel mechanism."
+    }
+  },
+  "default_version": "1.95.0",
+  "minimum_recommended": "1.93.0",
+  "channels": {
+    "stable": {
+      "description": "Production-grade releases. New stable cuts roughly every six weeks; patch releases as needed.",
+      "default": true
+    }
+  },
+  "ordering": {},
+  "available": [
+    { "version": "1.93.0" },
+    { "version": "1.93.1" },
+    { "version": "1.94.0" },
+    { "version": "1.94.1" },
+    { "version": "1.95.0" }
+  ]
+}

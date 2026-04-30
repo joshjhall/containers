@@ -1,26 +1,24 @@
 [package]
-name = "containers-common"
+name = "luggage"
 version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Shared types and state contracts for the containers build system"
+description = "Catalog loader and version/platform resolver for the containers build system"
 publish = false
 
 [lints]
 workspace = true
 
 [dependencies]
-indexmap = { workspace = true }
-semver = { workspace = true }
+containers-common = { workspace = true }
+clap = { workspace = true, features = ["env"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
-
-minijinja = { workspace = true }
-serde_yaml = { workspace = true }
-sha2 = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
