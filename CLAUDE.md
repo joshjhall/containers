@@ -63,6 +63,7 @@ just fmt           # cargo fmt --all
 just build         # cargo build --workspace
 just check-versions
 just install-hooks # lefthook install
+just db-validate   # validate sibling containers-db schemas + fixtures
 ```
 
 The raw commands these wrap — useful when debugging or when `just` isn't available:
