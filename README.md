@@ -174,6 +174,7 @@ just test-integration                  # integration only
 just test-integration-one python_dev   # single integration test
 just test-feature python-dev           # quick single-feature test in isolation
 just lint                              # run every lefthook hook on all files
+just db-validate                       # validate sibling containers-db schemas + fixtures
 ```
 
 When testing Docker builds manually, **always use the integration test
