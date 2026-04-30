@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "id": "tool_below_min",
+  "display_name": "Tool Below Min",
+  "kind": "cli",
+  "activity": { "score": "very-active", "scanned_at": "2026-04-29T00:00:00Z" },
+  "version_style": "semver",
+  "default_version": "1.0.0",
+  "minimum_recommended": "2.0.0",
+  "available": [{ "version": "1.0.0" }]
+}

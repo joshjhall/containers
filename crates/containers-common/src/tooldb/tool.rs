@@ -120,6 +120,36 @@ pub enum ActivityScore {
     Unknown,
 }
 
+impl ActivityScore {
+    /// Numeric rank, where lower means more active.
+    ///
+    /// `Unknown` ranks worst so forward-compat fallbacks fail policy checks
+    /// by default — better to refuse a tool we can't classify than to
+    /// silently recommend one.
+    #[must_use]
+    pub const fn rank(self) -> u8 {
+        match self {
+            Self::VeryActive => 0,
+            Self::Active => 1,
+            Self::Maintained => 2,
+            Self::Slow => 3,
+            Self::Stale => 4,
+            Self::Dormant => 5,
+            Self::Abandoned => 6,
+            Self::Unknown => 7,
+        }
+    }
+
+    /// True when `self` is at least as active as `threshold`.
+    ///
+    /// Reads as "this tool is *at least* maintained":
+    /// `score.is_at_least(ActivityScore::Maintained)`.
+    #[must_use]
+    pub const fn is_at_least(self, threshold: Self) -> bool {
+        self.rank() <= threshold.rank()
+    }
+}
+
 /// Raw scanner signals behind an [`ActivityScore`].
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -316,5 +346,60 @@ mod tests {
         }"#;
         let res: Result<Tool, _> = serde_json::from_str(json);
         assert!(res.is_err(), "extra fields should be rejected");
+    }
+
+    #[test]
+    fn activity_score_rank_is_monotonic() {
+        let ladder = [
+            ActivityScore::VeryActive,
+            ActivityScore::Active,
+            ActivityScore::Maintained,
+            ActivityScore::Slow,
+            ActivityScore::Stale,
+            ActivityScore::Dormant,
+            ActivityScore::Abandoned,
+            ActivityScore::Unknown,
+        ];
+        for window in ladder.windows(2) {
+            assert!(
+                window[0].rank() < window[1].rank(),
+                "{:?}.rank()={} should be less than {:?}.rank()={}",
+                window[0],
+                window[0].rank(),
+                window[1],
+                window[1].rank(),
+            );
+        }
+    }
+
+    #[test]
+    fn is_at_least_treats_self_as_satisfying_threshold() {
+        for score in [
+            ActivityScore::VeryActive,
+            ActivityScore::Maintained,
+            ActivityScore::Abandoned,
+            ActivityScore::Unknown,
+        ] {
+            assert!(score.is_at_least(score), "{score:?} should satisfy itself");
+        }
+    }
+
+    #[test]
+    fn is_at_least_active_passes_for_more_active_tiers() {
+        let threshold = ActivityScore::Maintained;
+        assert!(ActivityScore::VeryActive.is_at_least(threshold));
+        assert!(ActivityScore::Active.is_at_least(threshold));
+        assert!(ActivityScore::Maintained.is_at_least(threshold));
+        assert!(!ActivityScore::Slow.is_at_least(threshold));
+        assert!(!ActivityScore::Stale.is_at_least(threshold));
+        assert!(!ActivityScore::Dormant.is_at_least(threshold));
+        assert!(!ActivityScore::Abandoned.is_at_least(threshold));
+    }
+
+    #[test]
+    fn unknown_fails_default_threshold_but_not_loosest() {
+        assert!(!ActivityScore::Unknown.is_at_least(ActivityScore::Maintained));
+        assert!(!ActivityScore::Unknown.is_at_least(ActivityScore::Abandoned));
+        assert!(ActivityScore::Unknown.is_at_least(ActivityScore::Unknown));
     }
 }

@@ -17,8 +17,12 @@ use std::io;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use clap::{Args, Parser, Subcommand};
-use luggage::{Catalog, CatalogSource, LuggageError, Platform, ResolvedInstall, VersionSpec};
+use clap::{Args, Parser, Subcommand, ValueEnum};
+use containers_common::tooldb::ActivityScore;
+use luggage::{
+    Catalog, CatalogSource, LuggageError, Platform, PolicyPreset, ResolutionPolicy,
+    ResolutionWarning, ResolvedInstall, VersionSpec,
+};
 
 /// Luggage — catalog loader and version/platform resolver.
 #[derive(Parser, Debug)]
@@ -67,9 +71,45 @@ struct ResolveArgs {
     #[arg(long, env = "CONTAINERS_DB", default_value = "../containers-db")]
     catalog: PathBuf,
 
+    /// Named policy preset to start from. Defaults to `stibbons`.
+    #[arg(long, value_enum)]
+    policy: Option<PolicyChoice>,
+
+    /// Allow tools whose activity tier is `dormant` or `abandoned`. Lowers
+    /// `min_activity` to `Abandoned` regardless of preset.
+    #[arg(long)]
+    allow_abandoned: bool,
+
+    /// Allow versions below the tool's `minimum_recommended` (emits a
+    /// warning instead of refusing).
+    #[arg(long)]
+    allow_below_min_recommended: bool,
+
     /// Emit JSON instead of human-readable output.
     #[arg(long)]
     json: bool,
+}
+
+/// CLI mirror of [`luggage::PolicyPreset`].
+#[derive(Copy, Clone, Debug, Eq, PartialEq, ValueEnum)]
+#[clap(rename_all = "lowercase")]
+enum PolicyChoice {
+    /// Stibbons defaults: refuse below-Maintained, refuse below-min, warn on slow/stale.
+    Stibbons,
+    /// Igor defaults: accept down to Stale, allow below-min.
+    Igor,
+    /// Permissive: accept any tier.
+    Permissive,
+}
+
+impl From<PolicyChoice> for PolicyPreset {
+    fn from(value: PolicyChoice) -> Self {
+        match value {
+            PolicyChoice::Stibbons => Self::Stibbons,
+            PolicyChoice::Igor => Self::Igor,
+            PolicyChoice::Permissive => Self::Permissive,
+        }
+    }
 }
 
 fn main() -> ExitCode {
@@ -106,8 +146,9 @@ fn cmd_resolve(args: &ResolveArgs) -> Result<(), LuggageError> {
     let catalog = Catalog::load(CatalogSource::LocalPath(args.catalog.clone()))?;
     let spec = build_spec(args.version.as_deref(), args.channel.as_deref());
     let platform = build_platform(args)?;
+    let policy = build_policy(args);
 
-    let resolved = catalog.resolve(&args.tool, &spec, &platform)?;
+    let resolved = catalog.resolve_with_policy(&args.tool, &spec, &platform, &policy)?;
 
     if args.json {
         let out = serde_json::to_string_pretty(&resolved)
@@ -115,8 +156,27 @@ fn cmd_resolve(args: &ResolveArgs) -> Result<(), LuggageError> {
         println!("{out}");
     } else {
         print_human(&resolved);
+        report_warnings(&resolved.warnings);
     }
     Ok(())
+}
+
+/// Build the policy from CLI flags. Precedence:
+///
+/// 1. `--policy <name>` (or [`ResolutionPolicy::default()`] when absent)
+/// 2. `--allow-abandoned` lowers `min_activity` to `Abandoned`
+/// 3. `--allow-below-min-recommended` flips the bool on
+fn build_policy(args: &ResolveArgs) -> ResolutionPolicy {
+    let mut policy = args.policy.map_or_else(ResolutionPolicy::default, |choice| {
+        ResolutionPolicy::from_preset(PolicyPreset::from(choice))
+    });
+    if args.allow_abandoned {
+        policy.min_activity = ActivityScore::Abandoned;
+    }
+    if args.allow_below_min_recommended {
+        policy.allow_below_min_recommended = true;
+    }
+    policy
 }
 
 /// Pick a [`VersionSpec`] from the CLI flags.
@@ -234,6 +294,23 @@ fn report_error(err: &LuggageError) {
     }
 }
 
+fn report_warnings(warnings: &[ResolutionWarning]) {
+    for w in warnings {
+        match w {
+            ResolutionWarning::SlowOrStaleActivity { score } => {
+                eprintln!(
+                    "warning: tool activity is `{score:?}` — pinning is fine but expect fewer upstream releases"
+                );
+            }
+            ResolutionWarning::BelowMinimumRecommended { version, minimum } => {
+                eprintln!(
+                    "warning: resolved version `{version}` is below `minimum_recommended` `{minimum}`",
+                );
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -283,5 +360,55 @@ mod tests {
     fn verify_cli() {
         use clap::CommandFactory;
         Cli::command().debug_assert();
+    }
+
+    fn args_with(
+        policy: Option<PolicyChoice>,
+        allow_abandoned: bool,
+        below_min: bool,
+    ) -> ResolveArgs {
+        ResolveArgs {
+            tool: "rust".into(),
+            version: None,
+            channel: None,
+            os: None,
+            os_version: None,
+            arch: None,
+            catalog: PathBuf::from("/tmp"),
+            policy,
+            allow_abandoned,
+            allow_below_min_recommended: below_min,
+            json: false,
+        }
+    }
+
+    #[test]
+    fn build_policy_defaults_to_stibbons() {
+        let p = build_policy(&args_with(None, false, false));
+        assert_eq!(p, ResolutionPolicy::stibbons());
+    }
+
+    #[test]
+    fn build_policy_uses_chosen_preset() {
+        let p = build_policy(&args_with(Some(PolicyChoice::Permissive), false, false));
+        assert_eq!(p, ResolutionPolicy::permissive());
+        let p = build_policy(&args_with(Some(PolicyChoice::Igor), false, false));
+        assert_eq!(p, ResolutionPolicy::igor());
+    }
+
+    #[test]
+    fn build_policy_allow_abandoned_overrides_min_activity() {
+        let p = build_policy(&args_with(Some(PolicyChoice::Stibbons), true, false));
+        assert_eq!(p.min_activity, ActivityScore::Abandoned);
+        // Other fields preserved from preset.
+        assert!(!p.allow_below_min_recommended);
+        assert!(p.warn_on_slow_or_stale);
+    }
+
+    #[test]
+    fn build_policy_allow_below_min_overrides_bool() {
+        let p = build_policy(&args_with(None, false, true));
+        assert!(p.allow_below_min_recommended);
+        assert_eq!(p.min_activity, ActivityScore::Maintained);
     }
 }
