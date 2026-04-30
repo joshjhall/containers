@@ -35,7 +35,11 @@ pub(super) fn strip_prefix(s: &str) -> &str {
 /// The variant is determined by the [`VersionStyle`] passed to [`Version::parse`].
 /// `Prefix` mode produces `Self::Semver` like `Semver` mode does — the
 /// distinction is purely a documentation hint at the data layer.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// `Ord` orders variants in declaration order (`Semver` < `Calver` <
+/// `Opaque`); cross-style comparisons therefore have a stable but
+/// arbitrary ordering. Within a style, ordering follows the inner type.
+#[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Version {
     /// Semver-shaped version (also used by `Prefix` mode).
     Semver(semver::Version),

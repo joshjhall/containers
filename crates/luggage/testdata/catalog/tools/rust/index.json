@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "id": "rust",
+  "display_name": "Rust",
+  "kind": "language",
+  "homepage": "https://www.rust-lang.org",
+  "license": "MIT OR Apache-2.0",
+  "activity": {
+    "score": "very-active",
+    "scan_cadence_days": 1,
+    "scanned_at": "2026-04-29T00:00:00Z"
+  },
+  "validation_tiers": {
+    "tier3": { "available": true }
+  },
+  "version_style": "semver",
+  "default_version": "1.95.0",
+  "minimum_recommended": "1.84.0",
+  "channels": {
+    "stable": { "description": "Production-grade releases.", "default": true }
+  },
+  "available": [
+    { "version": "1.84.0" },
+    { "version": "1.84.1" },
+    { "version": "1.95.0" }
+  ]
+}

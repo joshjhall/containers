@@ -1,0 +1,91 @@
+{
+  "schemaVersion": 1,
+  "tool": "rust",
+  "version": "1.95.0",
+  "released": "2026-04-16",
+  "channel": "stable",
+  "support_matrix": [
+    { "os": "debian", "os_version": "11", "arch": "amd64", "status": "supported" },
+    { "os": "debian", "os_version": "11", "arch": "arm64", "status": "supported" },
+    { "os": "debian", "os_version": "12", "arch": "amd64", "status": "supported" },
+    { "os": "debian", "os_version": "12", "arch": "arm64", "status": "supported" },
+    { "os": "debian", "os_version": "13", "arch": "amd64", "status": "supported" },
+    { "os": "debian", "os_version": "13", "arch": "arm64", "status": "supported" },
+    { "os": "ubuntu", "os_version": "24.04", "arch": "amd64", "status": "supported" },
+    { "os": "ubuntu", "os_version": "24.04", "arch": "arm64", "status": "supported" },
+    { "os": "alpine", "os_version": "3.21", "arch": "amd64", "status": "supported" },
+    { "os": "alpine", "os_version": "3.21", "arch": "arm64", "status": "supported" },
+    { "os": "rhel", "os_version": "9", "arch": "amd64", "status": "supported" },
+    { "os": "rhel", "os_version": "9", "arch": "arm64", "status": "supported" }
+  ],
+  "tested": [],
+  "install_methods": [
+    {
+      "name": "rustup-init",
+      "platform": {
+        "os": ["debian", "ubuntu", "rhel"],
+        "arch": ["amd64", "arm64"]
+      },
+      "verification": {
+        "tier": 3,
+        "algorithm": "sha256",
+        "checksum_url_template": "https://static.rust-lang.org/rustup/dist/{rustup_target}/rustup-init.sha256"
+      },
+      "source_url_template": "https://static.rust-lang.org/rustup/dist/{rustup_target}/rustup-init",
+      "invoke": {
+        "args": ["-y", "--default-toolchain", "1.95.0", "--profile", "default"],
+        "env": {
+          "CARGO_HOME": "/cache/cargo",
+          "RUSTUP_HOME": "/cache/rustup"
+        }
+      },
+      "post_install": [
+        { "kind": "component_add", "component": "rust-src" },
+        { "kind": "component_add", "component": "rust-analyzer" },
+        { "kind": "component_add", "component": "clippy" },
+        { "kind": "component_add", "component": "rustfmt" }
+      ],
+      "dependencies": [
+        { "tool": "ca_certificates" },
+        { "tool": "gcc" },
+        { "tool": "libc_dev" }
+      ]
+    },
+    {
+      "name": "rustup-init",
+      "platform": {
+        "os": "alpine",
+        "arch": ["amd64", "arm64"]
+      },
+      "verification": {
+        "tier": 3,
+        "algorithm": "sha256",
+        "checksum_url_template": "https://static.rust-lang.org/rustup/dist/{rustup_target}/rustup-init.sha256"
+      },
+      "source_url_template": "https://static.rust-lang.org/rustup/dist/{rustup_target}/rustup-init",
+      "invoke": {
+        "args": ["-y", "--default-toolchain", "1.95.0", "--profile", "default"],
+        "env": {
+          "CARGO_HOME": "/cache/cargo",
+          "RUSTUP_HOME": "/cache/rustup"
+        }
+      },
+      "post_install": [
+        { "kind": "component_add", "component": "rust-src" },
+        { "kind": "component_add", "component": "rust-analyzer" },
+        { "kind": "component_add", "component": "clippy" },
+        { "kind": "component_add", "component": "rustfmt" }
+      ],
+      "dependencies": [
+        { "tool": "ca_certificates" },
+        { "tool": "gcc" },
+        { "tool": "musl_dev" }
+      ]
+    }
+  ],
+  "metadata": {
+    "added_at": "2026-04-27T22:00:00Z",
+    "updated_at": "2026-04-27T22:00:00Z",
+    "schema_version": 1
+  }
+}

@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/stibbons", "crates/containers-common"]
+members = ["crates/stibbons", "crates/containers-common", "crates/luggage"]
 
 [workspace.package]
 edition = "2024"
@@ -11,6 +11,7 @@ repository = "https://github.com/joshjhall/containers"
 [workspace.dependencies]
 # Internal crates
 containers-common = { path = "crates/containers-common" }
+luggage = { path = "crates/luggage" }
 
 # Octarine foundation
 octarine = { git = "https://github.com/joshjhall/octarine.git", tag = "v0.3.0-beta.3", features = [
