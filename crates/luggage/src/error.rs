@@ -10,6 +10,7 @@
 use std::fmt;
 use std::path::PathBuf;
 
+use containers_common::tooldb::ActivityScore;
 use containers_common::version::VersionError;
 use thiserror::Error;
 
@@ -100,6 +101,35 @@ pub enum LuggageError {
     /// A version literal in the catalog or a request failed to parse.
     #[error(transparent)]
     VersionParse(#[from] VersionError),
+
+    /// Tool's activity score is below the policy's `min_activity` threshold.
+    #[error(
+        "tool `{tool}` has activity `{score:?}`, below the policy threshold `{threshold:?}`; \
+         pass `--allow-abandoned` or a more permissive `--policy` to override"
+    )]
+    ActivityBelowThreshold {
+        /// Tool id.
+        tool: String,
+        /// Tool's actual activity tier.
+        score: ActivityScore,
+        /// Policy's `min_activity` threshold.
+        threshold: ActivityScore,
+    },
+
+    /// Resolved version is below the tool's `minimum_recommended` and the
+    /// policy does not allow it.
+    #[error(
+        "tool `{tool}` resolved to version `{version}`, below `minimum_recommended` `{minimum}`; \
+         pass `--allow-below-min-recommended` to override"
+    )]
+    BelowMinimumRecommended {
+        /// Tool id.
+        tool: String,
+        /// Resolved version literal.
+        version: String,
+        /// Tool's `minimum_recommended` value.
+        minimum: String,
+    },
 
     /// Auto-detection of the host platform failed (e.g. `/etc/os-release` missing).
     #[error("could not auto-detect platform: {0}")]
@@ -197,6 +227,33 @@ mod tests {
     fn version_not_found_exit_code_is_one() {
         let err = LuggageError::VersionNotFound { tool: "rust".into(), spec: "9.9.9".into() };
         assert_eq!(err.exit_code(), 1);
+    }
+
+    #[test]
+    fn activity_below_threshold_exit_code_is_one() {
+        let err = LuggageError::ActivityBelowThreshold {
+            tool: "ghost".into(),
+            score: ActivityScore::Abandoned,
+            threshold: ActivityScore::Maintained,
+        };
+        assert_eq!(err.exit_code(), 1);
+        let msg = format!("{err}");
+        assert!(msg.contains("ghost"));
+        assert!(msg.contains("Abandoned"));
+        assert!(msg.contains("Maintained"));
+    }
+
+    #[test]
+    fn below_minimum_recommended_exit_code_is_one() {
+        let err = LuggageError::BelowMinimumRecommended {
+            tool: "rust".into(),
+            version: "1.50.0".into(),
+            minimum: "1.84.0".into(),
+        };
+        assert_eq!(err.exit_code(), 1);
+        let msg = format!("{err}");
+        assert!(msg.contains("1.50.0"));
+        assert!(msg.contains("1.84.0"));
     }
 
     #[test]

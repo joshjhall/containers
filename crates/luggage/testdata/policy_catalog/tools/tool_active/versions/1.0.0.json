@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "tool": "tool_active",
+  "version": "1.0.0",
+  "channel": "stable",
+  "support_matrix": [
+    { "os": "debian", "os_version": "13", "arch": "amd64", "status": "supported" }
+  ],
+  "install_methods": [
+    {
+      "name": "stub",
+      "platform": { "os": ["debian"], "arch": ["amd64"] },
+      "verification": { "tier": 4, "tofu": true }
+    }
+  ],
+  "metadata": {
+    "added_at": "2026-04-29T00:00:00Z",
+    "schema_version": 1
+  }
+}

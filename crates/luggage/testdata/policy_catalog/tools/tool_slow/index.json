@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "id": "tool_slow",
+  "display_name": "Tool Slow",
+  "kind": "cli",
+  "activity": { "score": "slow", "scanned_at": "2026-04-29T00:00:00Z" },
+  "version_style": "semver",
+  "default_version": "1.0.0",
+  "minimum_recommended": "0.1.0",
+  "available": [{ "version": "1.0.0" }]
+}

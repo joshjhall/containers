@@ -25,7 +25,7 @@
 use std::fmt;
 
 use containers_common::tooldb::{
-    Dependency, InstallMethod, Invoke, PostInstall, SupportStatus, Verification,
+    ActivityScore, Dependency, InstallMethod, Invoke, PostInstall, SupportStatus, Verification,
 };
 use containers_common::version::{Constraint, Version, VersionStyle};
 use serde::Serialize;
@@ -33,6 +33,7 @@ use serde::Serialize;
 use crate::catalog::ToolEntry;
 use crate::error::{LuggageError, Result};
 use crate::platform::{self, Platform};
+use crate::policy::ResolutionPolicy;
 
 /// What version of a tool to resolve.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -88,27 +89,116 @@ pub struct ResolvedInstall {
     pub dependencies: Option<Vec<Dependency>>,
     /// The platform that produced this resolution.
     pub platform: Platform,
+    /// Non-fatal warnings raised by the policy gate.
+    ///
+    /// Empty by default. JSON consumers can branch on the `kind` discriminant.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub warnings: Vec<ResolutionWarning>,
 }
 
-/// Resolve `(entry, spec, platform)` into an install plan.
+/// A non-fatal observation from the policy gate.
+///
+/// Tagged with `kind` so JSON consumers can match on a stable string and
+/// pull the variant-specific fields off the same object.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum ResolutionWarning {
+    /// The tool's activity tier is `Slow` or `Stale`.
+    SlowOrStaleActivity {
+        /// The actual activity score (always `Slow` or `Stale` here).
+        score: ActivityScore,
+    },
+    /// The chosen version is below the tool's `minimum_recommended` and
+    /// the policy chose to allow it rather than refuse outright.
+    BelowMinimumRecommended {
+        /// Resolved version literal.
+        version: String,
+        /// The tool's `minimum_recommended` value.
+        minimum: String,
+    },
+}
+
+/// Resolve `(entry, spec, platform)` into an install plan using the
+/// [`ResolutionPolicy::default()`] (stibbons-strict) policy.
 ///
 /// # Errors
 ///
-/// - [`LuggageError::VersionNotFound`] if no version satisfied `spec`.
-/// - [`LuggageError::UnsupportedPlatform`] if the version's `support_matrix`
-///   has an `unsupported` row matching the platform.
-/// - [`LuggageError::NoMatchingInstallMethod`] if no `install_methods[]`
-///   entry's predicate matches.
-/// - [`LuggageError::VersionParse`] if a version literal is malformed.
+/// See [`resolve_with_policy`] for the full set of possible errors.
 pub fn resolve(
     entry: &ToolEntry,
     spec: &VersionSpec,
     platform: &Platform,
 ) -> Result<ResolvedInstall> {
-    let style = entry.index.version_style.unwrap_or(VersionStyle::Semver);
-    let (_chosen_version, chosen_doc) = pick_version(entry, spec, style)?;
+    resolve_with_policy(entry, spec, platform, &ResolutionPolicy::default())
+}
 
-    // Step 2 — support matrix gate.
+/// Resolve `(entry, spec, platform)` into an install plan, gated by a
+/// caller-supplied [`ResolutionPolicy`].
+///
+/// Order of operations:
+///
+/// 1. **Activity gate** — refuse outright when the tool's activity score
+///    is below `policy.min_activity`.
+/// 2. **Version pick** — same logic as the unpoliced path.
+/// 3. **`minimum_recommended` gate** — when the chosen version is below
+///    the tool's `minimum_recommended`, either refuse (default) or attach
+///    a warning (when `policy.allow_below_min_recommended`).
+/// 4. **Support matrix gate** — refuse when the platform appears with
+///    `unsupported` status.
+/// 5. **Install method walk** — first matching predicate wins; refuse
+///    when none match.
+/// 6. **Slow/stale warning** — when `policy.warn_on_slow_or_stale` and the
+///    activity tier is `Slow` or `Stale`, attach a warning.
+///
+/// # Errors
+///
+/// - [`LuggageError::ActivityBelowThreshold`] if step 1 fails.
+/// - [`LuggageError::VersionNotFound`] if no version satisfied `spec`.
+/// - [`LuggageError::BelowMinimumRecommended`] if step 3 refuses.
+/// - [`LuggageError::UnsupportedPlatform`] if step 4 refuses.
+/// - [`LuggageError::NoMatchingInstallMethod`] if step 5 finds no match.
+/// - [`LuggageError::VersionParse`] if a version literal is malformed.
+pub fn resolve_with_policy(
+    entry: &ToolEntry,
+    spec: &VersionSpec,
+    platform: &Platform,
+    policy: &ResolutionPolicy,
+) -> Result<ResolvedInstall> {
+    let mut warnings = Vec::new();
+
+    // Step 1 — activity gate.
+    let score = entry.index.activity.score;
+    if !score.is_at_least(policy.min_activity) {
+        return Err(LuggageError::ActivityBelowThreshold {
+            tool: entry.index.id.clone(),
+            score,
+            threshold: policy.min_activity,
+        });
+    }
+
+    let style = entry.index.version_style.unwrap_or(VersionStyle::Semver);
+    let (chosen_version, chosen_doc) = pick_version(entry, spec, style)?;
+
+    // Step 3 — minimum_recommended gate.
+    if let Some(min_str) = entry.index.minimum_recommended.as_deref() {
+        let parsed_min = Version::parse(min_str, style)?;
+        if chosen_version < &parsed_min {
+            if policy.allow_below_min_recommended {
+                warnings.push(ResolutionWarning::BelowMinimumRecommended {
+                    version: chosen_doc.version.clone(),
+                    minimum: min_str.to_owned(),
+                });
+            } else {
+                return Err(LuggageError::BelowMinimumRecommended {
+                    tool: entry.index.id.clone(),
+                    version: chosen_doc.version.clone(),
+                    minimum: min_str.to_owned(),
+                });
+            }
+        }
+    }
+
+    // Step 4 — support matrix gate.
     for row in &chosen_doc.support_matrix {
         if platform::matches_support(platform, row) && row.status == SupportStatus::Unsupported {
             return Err(LuggageError::UnsupportedPlatform(Box::new(
@@ -125,7 +215,7 @@ pub fn resolve(
         }
     }
 
-    // Step 3 — install method walk.
+    // Step 5 — install method walk.
     let method = chosen_doc
         .install_methods
         .iter()
@@ -138,7 +228,12 @@ pub fn resolve(
             arch: platform.arch.clone(),
         })?;
 
-    Ok(build_resolved(&entry.index.id, &chosen_doc.version, method, platform.clone()))
+    // Step 6 — slow/stale warning.
+    if policy.warn_on_slow_or_stale && matches!(score, ActivityScore::Slow | ActivityScore::Stale) {
+        warnings.push(ResolutionWarning::SlowOrStaleActivity { score });
+    }
+
+    Ok(build_resolved(&entry.index.id, &chosen_doc.version, method, platform.clone(), warnings))
 }
 
 fn pick_version<'a>(
@@ -247,6 +342,7 @@ fn build_resolved(
     version: &str,
     method: &InstallMethod,
     platform: Platform,
+    warnings: Vec<ResolutionWarning>,
 ) -> ResolvedInstall {
     ResolvedInstall {
         tool: tool.to_owned(),
@@ -259,6 +355,7 @@ fn build_resolved(
         post_install: method.post_install.clone(),
         dependencies: method.dependencies.clone(),
         platform,
+        warnings,
     }
 }
 
@@ -495,5 +592,183 @@ mod tests {
     fn build_partial_constraint_rejects_three_dots() {
         let err = build_partial_constraint("1.2.3").unwrap_err();
         assert!(matches!(err, LuggageError::Catalog(_)));
+    }
+
+    fn entry_with_score(score: ActivityScore) -> ToolEntry {
+        let mut tool = make_tool();
+        tool.activity.score = score;
+        tool.minimum_recommended = None;
+        let mut map = BTreeMap::new();
+        let parsed = Version::parse("1.95.0", VersionStyle::Semver).unwrap();
+        map.insert(parsed, make_version("1.95.0", vec![], vec![make_method(vec!["debian"])]));
+        ToolEntry { index: tool, versions: map }
+    }
+
+    #[test]
+    fn default_policy_accepts_maintained_or_better() {
+        for score in [ActivityScore::VeryActive, ActivityScore::Active, ActivityScore::Maintained] {
+            let entry = entry_with_score(score);
+            let r = resolve_with_policy(
+                &entry,
+                &VersionSpec::Latest,
+                &debian_amd64(),
+                &ResolutionPolicy::default(),
+            )
+            .unwrap();
+            assert!(r.warnings.is_empty(), "tier {score:?} should produce no warnings");
+        }
+    }
+
+    #[test]
+    fn warn_on_slow_or_stale_fires_only_when_admitted() {
+        // Build a policy that admits Slow/Stale and asks for warnings —
+        // this is the only configuration in which the warning is reachable
+        // (the default policy refuses Slow/Stale before they get this far).
+        let policy = ResolutionPolicy {
+            min_activity: ActivityScore::Stale,
+            warn_on_slow_or_stale: true,
+            allow_below_min_recommended: false,
+        };
+        for score in [ActivityScore::Slow, ActivityScore::Stale] {
+            let entry = entry_with_score(score);
+            let r = resolve_with_policy(&entry, &VersionSpec::Latest, &debian_amd64(), &policy)
+                .unwrap();
+            assert_eq!(r.warnings.len(), 1, "tier {score:?} should emit one warning");
+            match &r.warnings[0] {
+                ResolutionWarning::SlowOrStaleActivity { score: actual } => {
+                    assert_eq!(*actual, score);
+                }
+                ResolutionWarning::BelowMinimumRecommended { .. } => {
+                    panic!("expected SlowOrStaleActivity, got BelowMinimumRecommended");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn default_policy_refuses_below_maintained() {
+        for score in [
+            ActivityScore::Slow,
+            ActivityScore::Stale,
+            ActivityScore::Dormant,
+            ActivityScore::Abandoned,
+            ActivityScore::Unknown,
+        ] {
+            let entry = entry_with_score(score);
+            let err = resolve_with_policy(
+                &entry,
+                &VersionSpec::Latest,
+                &debian_amd64(),
+                &ResolutionPolicy::default(),
+            )
+            .unwrap_err();
+            match err {
+                LuggageError::ActivityBelowThreshold { score: actual, threshold, .. } => {
+                    assert_eq!(actual, score);
+                    assert_eq!(threshold, ActivityScore::Maintained);
+                }
+                other => panic!("expected ActivityBelowThreshold for {score:?}, got {other:?}"),
+            }
+        }
+    }
+
+    #[test]
+    fn permissive_policy_accepts_all_tiers() {
+        let policy = ResolutionPolicy::permissive();
+        for score in [
+            ActivityScore::VeryActive,
+            ActivityScore::Active,
+            ActivityScore::Maintained,
+            ActivityScore::Slow,
+            ActivityScore::Stale,
+            ActivityScore::Dormant,
+            ActivityScore::Abandoned,
+        ] {
+            let entry = entry_with_score(score);
+            let r = resolve_with_policy(&entry, &VersionSpec::Latest, &debian_amd64(), &policy)
+                .unwrap();
+            assert!(r.warnings.is_empty(), "permissive policy should suppress warnings");
+        }
+    }
+
+    #[test]
+    fn igor_policy_accepts_down_to_stale() {
+        let policy = ResolutionPolicy::igor();
+        for score in [ActivityScore::Maintained, ActivityScore::Slow, ActivityScore::Stale] {
+            let entry = entry_with_score(score);
+            assert!(
+                resolve_with_policy(&entry, &VersionSpec::Latest, &debian_amd64(), &policy).is_ok(),
+                "igor should accept {score:?}",
+            );
+        }
+        let entry = entry_with_score(ActivityScore::Dormant);
+        assert!(
+            resolve_with_policy(&entry, &VersionSpec::Latest, &debian_amd64(), &policy).is_err(),
+            "igor should still refuse Dormant",
+        );
+    }
+
+    #[test]
+    fn below_minimum_recommended_refuses_by_default() {
+        let mut entry = entry_with_score(ActivityScore::VeryActive);
+        entry.index.minimum_recommended = Some("2.0.0".into());
+        // Tool only has 1.95.0 in versions; latest will pick that, which is below 2.0.0.
+        let err = resolve_with_policy(
+            &entry,
+            &VersionSpec::Latest,
+            &debian_amd64(),
+            &ResolutionPolicy::default(),
+        )
+        .unwrap_err();
+        match err {
+            LuggageError::BelowMinimumRecommended { version, minimum, .. } => {
+                assert_eq!(version, "1.95.0");
+                assert_eq!(minimum, "2.0.0");
+            }
+            other => panic!("expected BelowMinimumRecommended, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn below_minimum_recommended_warns_when_allowed() {
+        let mut entry = entry_with_score(ActivityScore::VeryActive);
+        entry.index.minimum_recommended = Some("2.0.0".into());
+        let policy = ResolutionPolicy { allow_below_min_recommended: true, ..Default::default() };
+        let r =
+            resolve_with_policy(&entry, &VersionSpec::Latest, &debian_amd64(), &policy).unwrap();
+        assert_eq!(r.warnings.len(), 1);
+        match &r.warnings[0] {
+            ResolutionWarning::BelowMinimumRecommended { version, minimum } => {
+                assert_eq!(version, "1.95.0");
+                assert_eq!(minimum, "2.0.0");
+            }
+            ResolutionWarning::SlowOrStaleActivity { .. } => {
+                panic!("expected BelowMinimumRecommended, got SlowOrStaleActivity");
+            }
+        }
+    }
+
+    #[test]
+    fn above_minimum_recommended_emits_no_warning() {
+        let mut entry = entry_with_score(ActivityScore::VeryActive);
+        entry.index.minimum_recommended = Some("1.0.0".into());
+        let r = resolve_with_policy(
+            &entry,
+            &VersionSpec::Latest,
+            &debian_amd64(),
+            &ResolutionPolicy::default(),
+        )
+        .unwrap();
+        assert!(r.warnings.is_empty());
+    }
+
+    #[test]
+    fn slow_or_stale_warning_suppressed_when_policy_disables() {
+        let entry = entry_with_score(ActivityScore::Slow);
+        let policy =
+            ResolutionPolicy { warn_on_slow_or_stale: false, ..ResolutionPolicy::permissive() };
+        let r =
+            resolve_with_policy(&entry, &VersionSpec::Latest, &debian_amd64(), &policy).unwrap();
+        assert!(r.warnings.is_empty());
     }
 }

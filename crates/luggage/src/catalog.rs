@@ -13,11 +13,12 @@ use std::collections::{BTreeMap, HashMap};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use containers_common::tooldb::{Tool, ToolVersion};
+use containers_common::tooldb::{ActivityScore, Kind, Tool, ToolVersion};
 use containers_common::version::{Version, VersionStyle};
 
 use crate::error::{LuggageError, Result};
 use crate::platform::Platform;
+use crate::policy::ResolutionPolicy;
 use crate::resolver::{self, ResolvedInstall, VersionSpec};
 
 /// Where to load the catalog from.
@@ -93,11 +94,12 @@ impl Catalog {
         self.tools.get(id)
     }
 
-    /// Resolve `(tool, spec, platform)` into a concrete install plan.
+    /// Resolve `(tool, spec, platform)` into a concrete install plan using
+    /// the default [`ResolutionPolicy`] (stibbons-strict).
     ///
     /// # Errors
     ///
-    /// See [`resolver::resolve`] for the full set of possible errors.
+    /// See [`resolver::resolve_with_policy`] for the full set of possible errors.
     pub fn resolve(
         &self,
         tool: &str,
@@ -106,6 +108,44 @@ impl Catalog {
     ) -> Result<ResolvedInstall> {
         let entry = self.tools.get(tool).ok_or_else(|| LuggageError::ToolNotFound(tool.into()))?;
         resolver::resolve(entry, spec, platform)
+    }
+
+    /// Resolve `(tool, spec, platform)` into a concrete install plan, gated
+    /// by a caller-supplied [`ResolutionPolicy`].
+    ///
+    /// # Errors
+    ///
+    /// See [`resolver::resolve_with_policy`] for the full set of possible errors.
+    pub fn resolve_with_policy(
+        &self,
+        tool: &str,
+        spec: &VersionSpec,
+        platform: &Platform,
+        policy: &ResolutionPolicy,
+    ) -> Result<ResolvedInstall> {
+        let entry = self.tools.get(tool).ok_or_else(|| LuggageError::ToolNotFound(tool.into()))?;
+        resolver::resolve_with_policy(entry, spec, platform, policy)
+    }
+
+    /// Tools of the given [`Kind`] whose activity tier is at least
+    /// `Maintained`, sorted by `display_name` for deterministic output.
+    ///
+    /// Use this from the stibbons wizard to populate the recommended-tool
+    /// list — the tier filter prevents abandoned tools from leaking into
+    /// the picker.
+    #[must_use]
+    pub fn recommended(&self, kind: Kind) -> Vec<&Tool> {
+        let mut out: Vec<&Tool> = self
+            .tools
+            .values()
+            .filter(|e| {
+                e.index.kind == kind
+                    && e.index.activity.score.is_at_least(ActivityScore::Maintained)
+            })
+            .map(|e| &e.index)
+            .collect();
+        out.sort_by(|a, b| a.display_name.cmp(&b.display_name));
+        out
     }
 
     fn load_local(root: &Path) -> Result<Self> {
@@ -367,5 +407,46 @@ mod tests {
         fs::write(tmp.path().join("tools/rust/versions/notes.txt"), "ignored").unwrap();
         let cat = Catalog::load(CatalogSource::LocalPath(tmp.path().to_owned())).unwrap();
         assert_eq!(cat.tool_entry("rust").unwrap().versions.len(), 2);
+    }
+
+    fn write_tool(root: &Path, id: &str, kind: &str, score: &str, display_name: &str) {
+        let dir = root.join(format!("tools/{id}"));
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(
+            dir.join("index.json"),
+            format!(
+                r#"{{
+                    "schemaVersion": 1,
+                    "id": "{id}",
+                    "display_name": "{display_name}",
+                    "kind": "{kind}",
+                    "activity": {{ "score": "{score}", "scanned_at": "2026-01-01T00:00:00Z" }}
+                }}"#,
+            ),
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn recommended_filters_by_kind_and_activity() {
+        let tmp = tempfile::tempdir().unwrap();
+        // Build a mixed catalog: two CLI tools above the cutoff, one CLI
+        // below, one Library above (different kind).
+        write_tool(tmp.path(), "tool_a", "cli", "very-active", "Aardvark");
+        write_tool(tmp.path(), "tool_c", "cli", "maintained", "Camel");
+        write_tool(tmp.path(), "tool_d", "cli", "stale", "Dingo");
+        write_tool(tmp.path(), "tool_b", "library", "very-active", "Bobcat");
+
+        let cat = Catalog::load(CatalogSource::LocalPath(tmp.path().to_owned())).unwrap();
+        let recommended = cat.recommended(Kind::Cli);
+        let names: Vec<&str> = recommended.iter().map(|t| t.display_name.as_str()).collect();
+        assert_eq!(names, ["Aardvark", "Camel"], "expected sorted CLI tools above cutoff");
+
+        let libraries = cat.recommended(Kind::Library);
+        assert_eq!(libraries.len(), 1);
+        assert_eq!(libraries[0].id, "tool_b");
+
+        // Service kind is empty in this fixture.
+        assert!(cat.recommended(Kind::Service).is_empty());
     }
 }

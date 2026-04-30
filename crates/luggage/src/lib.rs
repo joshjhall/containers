@@ -28,9 +28,11 @@
 pub mod catalog;
 pub mod error;
 pub mod platform;
+pub mod policy;
 pub mod resolver;
 
 pub use catalog::{Catalog, CatalogSource};
 pub use error::{LuggageError, Result};
 pub use platform::Platform;
-pub use resolver::{ResolvedInstall, VersionSpec};
+pub use policy::{PolicyPreset, ResolutionPolicy};
+pub use resolver::{ResolutionWarning, ResolvedInstall, VersionSpec};

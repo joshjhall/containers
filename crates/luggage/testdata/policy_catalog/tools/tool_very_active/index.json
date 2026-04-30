@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "id": "tool_very_active",
+  "display_name": "Tool Very Active",
+  "kind": "cli",
+  "activity": { "score": "very-active", "scanned_at": "2026-04-29T00:00:00Z" },
+  "version_style": "semver",
+  "default_version": "1.0.0",
+  "minimum_recommended": "0.1.0",
+  "available": [{ "version": "1.0.0" }]
+}
