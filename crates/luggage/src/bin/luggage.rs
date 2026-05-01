@@ -20,8 +20,8 @@ use std::process::ExitCode;
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use containers_common::tooldb::ActivityScore;
 use luggage::{
-    Catalog, CatalogSource, LuggageError, Platform, PolicyPreset, ResolutionPolicy,
-    ResolutionWarning, ResolvedInstall, VersionSpec,
+    Catalog, CatalogSource, InstallReport, Installer, InstallerOptions, LuggageError, Platform,
+    PolicyPreset, ResolutionPolicy, ResolutionWarning, ResolvedInstall, VersionSpec,
 };
 
 /// Luggage — catalog loader and version/platform resolver.
@@ -40,6 +40,8 @@ struct Cli {
 enum Commands {
     /// Resolve `(tool, version, platform)` into a concrete install plan.
     Resolve(ResolveArgs),
+    /// Install a tool — download, verify, run installer, validate.
+    Install(InstallArgs),
 }
 
 #[derive(Args, Debug)]
@@ -47,6 +49,17 @@ struct ResolveArgs {
     /// Catalog tool id (e.g. `rust`, `node`).
     tool: String,
 
+    #[command(flatten)]
+    common: CommonArgs,
+
+    /// Emit JSON instead of human-readable output.
+    #[arg(long)]
+    json: bool,
+}
+
+/// CLI fields shared by `resolve` and `install`.
+#[derive(Args, Debug)]
+struct CommonArgs {
     /// Exact or partial version (e.g. `1.95.0`, `1.84`). Mutually exclusive with `--channel`.
     #[arg(long, conflicts_with = "channel")]
     version: Option<String>,
@@ -84,10 +97,50 @@ struct ResolveArgs {
     /// warning instead of refusing).
     #[arg(long)]
     allow_below_min_recommended: bool,
+}
 
-    /// Emit JSON instead of human-readable output.
+/// `luggage install <tool>[@<version>]` arguments.
+#[derive(Args, Debug)]
+struct InstallArgs {
+    /// Catalog tool id with an optional `@<version>` suffix
+    /// (e.g. `rust`, `rust@1.95.0`, `node@22`).
+    tool: String,
+
+    #[command(flatten)]
+    common: CommonArgs,
+
+    /// Print the substituted install plan as JSON without performing I/O.
     #[arg(long)]
-    json: bool,
+    dry_run: bool,
+
+    /// Reinstall even when the idempotency check thinks the tool is current.
+    #[arg(long)]
+    force: bool,
+
+    /// Per-feature log directory.
+    #[arg(long, default_value = "/var/log/luggage")]
+    log_dir: PathBuf,
+
+    /// Where the installer symlinks tool binaries.
+    #[arg(long, default_value = "/usr/local/bin")]
+    bin_root: PathBuf,
+
+    /// Cache root for tool data (`CARGO_HOME` and `RUSTUP_HOME` live under here).
+    #[arg(long, default_value = "/cache")]
+    cache_root: PathBuf,
+
+    /// Scratch directory for downloads.
+    #[arg(long, default_value = "/tmp")]
+    tmp_root: PathBuf,
+
+    /// Override the install user (defaults to `$USERNAME`, then `vscode`).
+    #[arg(long)]
+    user: Option<String>,
+
+    /// Skip system-package installation. Use when the host package
+    /// manager is unavailable or already pre-populated.
+    #[arg(long)]
+    skip_system_packages: bool,
 }
 
 /// CLI mirror of [`luggage::PolicyPreset`].
@@ -132,24 +185,18 @@ fn main() -> ExitCode {
                 ExitCode::from(u8::try_from(e.exit_code()).unwrap_or(1))
             }
         },
+        Commands::Install(args) => match cmd_install(&args) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(e) => {
+                report_error(&e);
+                ExitCode::from(u8::try_from(e.exit_code()).unwrap_or(1))
+            }
+        },
     }
 }
 
 fn cmd_resolve(args: &ResolveArgs) -> Result<(), LuggageError> {
-    if !args.catalog.is_dir() {
-        return Err(LuggageError::Catalog(format!(
-            "catalog path `{}` is not a directory; pass --catalog or set CONTAINERS_DB",
-            args.catalog.display()
-        )));
-    }
-
-    let catalog = Catalog::load(CatalogSource::LocalPath(args.catalog.clone()))?;
-    let spec = build_spec(args.version.as_deref(), args.channel.as_deref());
-    let platform = build_platform(args)?;
-    let policy = build_policy(args);
-
-    let resolved = catalog.resolve_with_policy(&args.tool, &spec, &platform, &policy)?;
-
+    let resolved = resolve_for(&args.tool, &args.common)?;
     if args.json {
         let out = serde_json::to_string_pretty(&resolved)
             .map_err(|source| LuggageError::Parse { path: PathBuf::from("<stdout>"), source })?;
@@ -161,19 +208,105 @@ fn cmd_resolve(args: &ResolveArgs) -> Result<(), LuggageError> {
     Ok(())
 }
 
+fn cmd_install(args: &InstallArgs) -> Result<(), LuggageError> {
+    // Accept `tool@version` shorthand. Conflict with `--version` is an error.
+    let (tool_id, inline_version) = split_tool_version(&args.tool);
+    if inline_version.is_some() && args.common.version.is_some() {
+        return Err(LuggageError::Catalog(
+            "specify the version once: either `tool@version` or `--version`, not both".into(),
+        ));
+    }
+    let common = inline_version.map_or_else(
+        || clone_common(&args.common),
+        |v| {
+            let mut c = clone_common(&args.common);
+            c.version = Some(v.to_owned());
+            c
+        },
+    );
+    let resolved = resolve_for(tool_id, &common)?;
+    report_warnings(&resolved.warnings);
+
+    let opts = InstallerOptions {
+        dry_run: args.dry_run,
+        force: args.force,
+        log_dir: args.log_dir.clone(),
+        bin_root: args.bin_root.clone(),
+        cache_root: args.cache_root.clone(),
+        tmp_root: args.tmp_root.clone(),
+        user_override: args.user.clone(),
+        install_system_packages: !args.skip_system_packages,
+    };
+    let installer = Installer::with_options(opts);
+
+    if args.dry_run {
+        let plan = installer.plan(&resolved)?;
+        let out = serde_json::to_string_pretty(&plan)
+            .map_err(|source| LuggageError::Parse { path: PathBuf::from("<stdout>"), source })?;
+        println!("{out}");
+        return Ok(());
+    }
+
+    let report: InstallReport = installer.run(&resolved)?;
+    if report.already_installed {
+        println!("{}@{} already installed", report.tool, report.version);
+    } else {
+        println!("installed {}@{}", report.tool, report.version);
+    }
+    if let Some(p) = &report.log_path {
+        println!("  log: {}", p.display());
+    }
+    Ok(())
+}
+
+/// Resolve `(tool, common)` into a [`ResolvedInstall`]. Shared by both
+/// subcommands so flag semantics stay in lockstep.
+fn resolve_for(tool: &str, common: &CommonArgs) -> Result<ResolvedInstall, LuggageError> {
+    if !common.catalog.is_dir() {
+        return Err(LuggageError::Catalog(format!(
+            "catalog path `{}` is not a directory; pass --catalog or set CONTAINERS_DB",
+            common.catalog.display()
+        )));
+    }
+    let catalog = Catalog::load(CatalogSource::LocalPath(common.catalog.clone()))?;
+    let spec = build_spec(common.version.as_deref(), common.channel.as_deref());
+    let platform = build_platform(common)?;
+    let policy = build_policy(common);
+    catalog.resolve_with_policy(tool, &spec, &platform, &policy)
+}
+
+/// Split a `tool[@version]` string into `(tool, Option<version>)`.
+fn split_tool_version(s: &str) -> (&str, Option<&str>) {
+    s.split_once('@').map_or((s, None), |(t, v)| (t, Some(v)))
+}
+
+fn clone_common(c: &CommonArgs) -> CommonArgs {
+    CommonArgs {
+        version: c.version.clone(),
+        channel: c.channel.clone(),
+        os: c.os.clone(),
+        os_version: c.os_version.clone(),
+        arch: c.arch.clone(),
+        catalog: c.catalog.clone(),
+        policy: c.policy,
+        allow_abandoned: c.allow_abandoned,
+        allow_below_min_recommended: c.allow_below_min_recommended,
+    }
+}
+
 /// Build the policy from CLI flags. Precedence:
 ///
 /// 1. `--policy <name>` (or [`ResolutionPolicy::default()`] when absent)
 /// 2. `--allow-abandoned` lowers `min_activity` to `Abandoned`
 /// 3. `--allow-below-min-recommended` flips the bool on
-fn build_policy(args: &ResolveArgs) -> ResolutionPolicy {
-    let mut policy = args.policy.map_or_else(ResolutionPolicy::default, |choice| {
+fn build_policy(common: &CommonArgs) -> ResolutionPolicy {
+    let mut policy = common.policy.map_or_else(ResolutionPolicy::default, |choice| {
         ResolutionPolicy::from_preset(PolicyPreset::from(choice))
     });
-    if args.allow_abandoned {
+    if common.allow_abandoned {
         policy.min_activity = ActivityScore::Abandoned;
     }
-    if args.allow_below_min_recommended {
+    if common.allow_below_min_recommended {
         policy.allow_below_min_recommended = true;
     }
     policy
@@ -196,10 +329,10 @@ fn build_spec(version: Option<&str>, channel: Option<&str>) -> VersionSpec {
     }
 }
 
-fn build_platform(args: &ResolveArgs) -> Result<Platform, LuggageError> {
+fn build_platform(common: &CommonArgs) -> Result<Platform, LuggageError> {
     let detected = detect_platform();
 
-    let os = match (&args.os, &detected) {
+    let os = match (&common.os, &detected) {
         (Some(o), _) => o.clone(),
         (None, Ok(p)) => p.os.clone(),
         (None, Err(e)) => {
@@ -208,11 +341,11 @@ fn build_platform(args: &ResolveArgs) -> Result<Platform, LuggageError> {
             )));
         }
     };
-    let os_version = args
+    let os_version = common
         .os_version
         .clone()
         .or_else(|| detected.as_ref().ok().and_then(|p| p.os_version.clone()));
-    let arch = match (&args.arch, &detected) {
+    let arch = match (&common.arch, &detected) {
         (Some(a), _) => a.clone(),
         (None, Ok(p)) => p.arch.clone(),
         (None, Err(_)) => translate_arch(std::env::consts::ARCH).to_owned(),
@@ -362,13 +495,12 @@ mod tests {
         Cli::command().debug_assert();
     }
 
-    fn args_with(
+    fn common_with(
         policy: Option<PolicyChoice>,
         allow_abandoned: bool,
         below_min: bool,
-    ) -> ResolveArgs {
-        ResolveArgs {
-            tool: "rust".into(),
+    ) -> CommonArgs {
+        CommonArgs {
             version: None,
             channel: None,
             os: None,
@@ -378,27 +510,26 @@ mod tests {
             policy,
             allow_abandoned,
             allow_below_min_recommended: below_min,
-            json: false,
         }
     }
 
     #[test]
     fn build_policy_defaults_to_stibbons() {
-        let p = build_policy(&args_with(None, false, false));
+        let p = build_policy(&common_with(None, false, false));
         assert_eq!(p, ResolutionPolicy::stibbons());
     }
 
     #[test]
     fn build_policy_uses_chosen_preset() {
-        let p = build_policy(&args_with(Some(PolicyChoice::Permissive), false, false));
+        let p = build_policy(&common_with(Some(PolicyChoice::Permissive), false, false));
         assert_eq!(p, ResolutionPolicy::permissive());
-        let p = build_policy(&args_with(Some(PolicyChoice::Igor), false, false));
+        let p = build_policy(&common_with(Some(PolicyChoice::Igor), false, false));
         assert_eq!(p, ResolutionPolicy::igor());
     }
 
     #[test]
     fn build_policy_allow_abandoned_overrides_min_activity() {
-        let p = build_policy(&args_with(Some(PolicyChoice::Stibbons), true, false));
+        let p = build_policy(&common_with(Some(PolicyChoice::Stibbons), true, false));
         assert_eq!(p.min_activity, ActivityScore::Abandoned);
         // Other fields preserved from preset.
         assert!(!p.allow_below_min_recommended);
@@ -407,8 +538,23 @@ mod tests {
 
     #[test]
     fn build_policy_allow_below_min_overrides_bool() {
-        let p = build_policy(&args_with(None, false, true));
+        let p = build_policy(&common_with(None, false, true));
         assert!(p.allow_below_min_recommended);
         assert_eq!(p.min_activity, ActivityScore::Maintained);
+    }
+
+    #[test]
+    fn split_tool_version_handles_bare_tool() {
+        assert_eq!(split_tool_version("rust"), ("rust", None));
+    }
+
+    #[test]
+    fn split_tool_version_handles_at_suffix() {
+        assert_eq!(split_tool_version("rust@1.95.0"), ("rust", Some("1.95.0")));
+    }
+
+    #[test]
+    fn split_tool_version_handles_partial_suffix() {
+        assert_eq!(split_tool_version("rust@1.84"), ("rust", Some("1.84")));
     }
 }

@@ -1,0 +1,64 @@
+# syntax=docker/dockerfile:1.7
+# Minimal fixture for the luggage parity test (issue #405).
+#
+# Builds luggage from the in-tree workspace, then runs
+# `luggage install rust@<RUST_VERSION>` against the in-tree testdata
+# catalog. The end-state should match what `lib/features/rust.sh`
+# produces; the parity test driver runs identical assertions against
+# both images.
+#
+# Build context is the repo root (`BUILD_CONTEXT=$CONTAINERS_DIR`), so
+# every COPY here is repo-root-relative.
+
+ARG RUST_VERSION=1.95.0
+
+# ─── Stage 1: compile the luggage binary ───
+FROM rust:1.95-slim-trixie AS builder
+
+WORKDIR /workspace
+COPY Cargo.toml Cargo.lock ./
+COPY crates ./crates
+
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/workspace/target \
+    cargo build --release -p luggage --bin luggage \
+    && cp target/release/luggage /tmp/luggage
+
+# ─── Stage 2: install rust via luggage on a fresh debian ───
+FROM debian:trixie-slim AS runtime
+
+ARG RUST_VERSION
+
+# luggage shells out to `su` and `apt-get`; the slim image has the
+# former but needs adduser to create the install user.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends adduser ca-certificates curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Match the production user setup.
+RUN adduser --disabled-password --gecos '' --shell /bin/bash vscode \
+    && mkdir -p /cache /var/log/luggage \
+    && chown -R vscode:vscode /cache /var/log/luggage
+ENV USERNAME=vscode
+
+# Bring the luggage binary and the testdata catalog into the image.
+COPY --from=builder /tmp/luggage /usr/local/bin/luggage
+COPY crates/luggage/testdata/catalog /opt/containers-db
+
+# Run the install. `--catalog` points at the in-tree testdata catalog —
+# the same one the resolver tests use — so this build is reproducible
+# from a single Cargo.lock without depending on the live containers-db
+# repo.
+RUN /usr/local/bin/luggage install "rust@${RUST_VERSION}" \
+    --catalog /opt/containers-db \
+    --os debian --os-version 13 --arch amd64 \
+    --user vscode
+
+# Sanity touchstone for the parity test driver.
+ENV CARGO_HOME=/cache/cargo \
+    RUSTUP_HOME=/cache/rustup \
+    PATH="/cache/cargo/bin:/usr/local/bin:${PATH}"
+
+USER vscode
+WORKDIR /home/vscode
+CMD ["bash"]
