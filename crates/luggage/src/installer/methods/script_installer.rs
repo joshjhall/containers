@@ -13,6 +13,7 @@
 
 use std::collections::BTreeMap;
 use std::fs;
+#[cfg(unix)]
 use std::os::unix::fs as unix_fs;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt as _;
@@ -94,6 +95,13 @@ pub fn run(ctx: &MethodContext<'_>) -> Result<()> {
 /// Symlink `<cargo_home>/bin/<name>` → `<bin_root>/<name>` for each
 /// binary in [`RUST_BINARIES`]. Existing symlinks are replaced; existing
 /// non-symlinks are left alone (avoids clobbering distro-managed files).
+///
+/// Unix-only — the catalog already marks rust as `unsupported` on Windows
+/// in `support_matrix`, so this path is unreachable there. The non-unix
+/// build returns `NotImplemented` so the crate still compiles for any
+/// host that doesn't go through the resolver (e.g. `cargo build` on
+/// Windows for a developer working on something unrelated).
+#[cfg(unix)]
 fn install_symlinks(
     cargo_home: &std::path::Path,
     bin_root: &std::path::Path,
@@ -122,6 +130,17 @@ fn install_symlinks(
     // function shell out for cross-distro quirks (e.g. SELinux contexts).
     let _ = runner;
     Ok(())
+}
+
+#[cfg(not(unix))]
+fn install_symlinks(
+    _cargo_home: &std::path::Path,
+    _bin_root: &std::path::Path,
+    _runner: &dyn CommandRunner,
+) -> Result<()> {
+    Err(LuggageError::NotImplemented(
+        "rustup-init script-installer is unix-only; rust on Windows is `unsupported` in catalog",
+    ))
 }
 
 #[cfg(test)]
