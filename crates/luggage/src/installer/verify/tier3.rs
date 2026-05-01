@@ -208,7 +208,7 @@ mod tests {
     }
 
     #[test]
-    fn unparseable_response_returns_verification_failed() {
+    fn unparsable_response_returns_verification_failed() {
         let url = "https://example.test/x86_64-unknown-linux-gnu/rustup-init.sha256";
         let stub = StubClient::with(url, b"not a hex digest at all\n");
         let v = verification("https://example.test/{rustup_target}/rustup-init.sha256");
