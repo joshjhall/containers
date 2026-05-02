@@ -142,6 +142,72 @@ pub enum LuggageError {
     /// Catalog content failed an internal cross-check (e.g. duplicate version).
     #[error("catalog error: {0}")]
     Catalog(String),
+
+    /// An install pipeline stage failed in a way that doesn't map to one of
+    /// the more specific variants below.
+    #[error("install stage `{stage}` failed: {message}")]
+    InstallStageFailed {
+        /// Stage identifier (e.g. `"download"`, `"chmod"`).
+        stage: &'static str,
+        /// Human-readable detail.
+        message: String,
+    },
+
+    /// 4-tier verification rejected a downloaded artifact.
+    #[error("verification (tier {tier}) failed for {tool}@{version}: {reason}")]
+    VerificationFailed {
+        /// Tool id.
+        tool: String,
+        /// Tool version.
+        version: String,
+        /// Verification tier (`1`–`4`).
+        tier: u8,
+        /// Human-readable detail.
+        reason: String,
+    },
+
+    /// HTTP fetch failed after the configured retry budget was exhausted.
+    #[error("download from {url} failed after {attempts} attempts: {message}")]
+    DownloadFailed {
+        /// URL being fetched.
+        url: String,
+        /// Number of attempts before giving up.
+        attempts: u32,
+        /// Underlying error message.
+        message: String,
+    },
+
+    /// Host package manager (apt/apk/dnf) refused to install one or more
+    /// dependency packages.
+    #[error("package manager failed: {message}")]
+    PackageManagerFailed {
+        /// Human-readable detail.
+        message: String,
+    },
+
+    /// A `post_install[]` step failed.
+    #[error("post-install step `{step}` failed: {message}")]
+    PostInstallFailed {
+        /// Step identifier (e.g. `"component_add:rust-src"`).
+        step: String,
+        /// Human-readable detail.
+        message: String,
+    },
+
+    /// Post-install validation could not confirm the tool is installed.
+    #[error("validation failed for {tool}@{version}: {message}")]
+    ValidationFailed {
+        /// Tool id.
+        tool: String,
+        /// Tool version.
+        version: String,
+        /// Human-readable detail.
+        message: String,
+    },
+
+    /// A URL template referenced a placeholder we don't have a value for.
+    #[error("template substitution: missing key `{0}`")]
+    TemplateMissingKey(String),
 }
 
 impl LuggageError {
@@ -287,5 +353,75 @@ mod tests {
         }));
         let msg = format!("{err}");
         assert!(msg.contains("windows/any/amd64"));
+    }
+
+    #[test]
+    fn install_stage_failed_exit_code_is_one() {
+        let err = LuggageError::InstallStageFailed {
+            stage: "download",
+            message: "connection refused".into(),
+        };
+        assert_eq!(err.exit_code(), 1);
+        assert!(format!("{err}").contains("download"));
+    }
+
+    #[test]
+    fn verification_failed_exit_code_is_one() {
+        let err = LuggageError::VerificationFailed {
+            tool: "rust".into(),
+            version: "1.95.0".into(),
+            tier: 3,
+            reason: "sha256 mismatch".into(),
+        };
+        assert_eq!(err.exit_code(), 1);
+        let msg = format!("{err}");
+        assert!(msg.contains("tier 3"));
+        assert!(msg.contains("rust@1.95.0"));
+        assert!(msg.contains("sha256 mismatch"));
+    }
+
+    #[test]
+    fn download_failed_exit_code_is_one() {
+        let err = LuggageError::DownloadFailed {
+            url: "https://example.test/x".into(),
+            attempts: 8,
+            message: "timeout".into(),
+        };
+        assert_eq!(err.exit_code(), 1);
+        let msg = format!("{err}");
+        assert!(msg.contains("8 attempts"));
+    }
+
+    #[test]
+    fn package_manager_failed_exit_code_is_one() {
+        let err = LuggageError::PackageManagerFailed { message: "apt-get returned 100".into() };
+        assert_eq!(err.exit_code(), 1);
+    }
+
+    #[test]
+    fn post_install_failed_exit_code_is_one() {
+        let err = LuggageError::PostInstallFailed {
+            step: "component_add:rust-src".into(),
+            message: "rustup component add failed".into(),
+        };
+        assert_eq!(err.exit_code(), 1);
+        assert!(format!("{err}").contains("component_add:rust-src"));
+    }
+
+    #[test]
+    fn validation_failed_exit_code_is_one() {
+        let err = LuggageError::ValidationFailed {
+            tool: "rust".into(),
+            version: "1.95.0".into(),
+            message: "rustc --version mismatch".into(),
+        };
+        assert_eq!(err.exit_code(), 1);
+    }
+
+    #[test]
+    fn template_missing_key_exit_code_is_one() {
+        let err = LuggageError::TemplateMissingKey("rustup_target".into());
+        assert_eq!(err.exit_code(), 1);
+        assert!(format!("{err}").contains("rustup_target"));
     }
 }

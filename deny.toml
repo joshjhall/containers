@@ -37,6 +37,8 @@ confidence-threshold = 0.8
 exceptions = [
   # Mozilla root CA bundle pulled in via rustls-platform-verifier.
   { allow = ["CDLA-Permissive-2.0"], crate = "webpki-root-certs" },
+  # Mozilla root CA bundle pulled in via ureq's TLS feature (luggage HTTP).
+  { allow = ["CDLA-Permissive-2.0"], crate = "webpki-roots" },
 ]
 
 [bans]
