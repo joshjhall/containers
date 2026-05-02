@@ -18,6 +18,11 @@
 //! - Symlinks for the rust binary set land in `bin_root`.
 //! - `--dry-run` performs no HTTP and no command execution.
 //! - A bytes-vs-checksum mismatch produces a tier-3 `VerificationFailed`.
+//!
+//! Unix-only: the install method itself is unix-only (catalog marks rust
+//! on Windows as `unsupported`), so the integration test follows.
+
+#![cfg(unix)]
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
