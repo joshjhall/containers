@@ -143,7 +143,7 @@ fn install_symlinks(
     ))
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod tests {
     use super::*;
 
