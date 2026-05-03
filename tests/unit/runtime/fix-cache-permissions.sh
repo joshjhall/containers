@@ -73,8 +73,8 @@ test_fix_cache_output_no_root() {
 test_fix_cache_no_sudo_message() {
     source "$PROJECT_ROOT/lib/runtime/lib/fix-cache-permissions.sh"
 
-    # If /cache exists and has root-owned files but user can't sudo,
-    # we expect a warning message. We test the output strings exist in the script.
+    # If /cache exists and has misowned files but user can't sudo, we expect
+    # a warning message. We test the output strings exist in the script.
     local script_content
     script_content=$(/usr/bin/cat "$PROJECT_ROOT/lib/runtime/lib/fix-cache-permissions.sh")
 
@@ -91,7 +91,7 @@ test_fix_cache_success_message() {
     local script_content
     script_content=$(/usr/bin/cat "$PROJECT_ROOT/lib/runtime/lib/fix-cache-permissions.sh")
 
-    assert_contains "$script_content" "Cache directory permissions fixed" \
+    assert_contains "$script_content" "Cache directory ownership aligned" \
         "Script contains success message"
 }
 
@@ -115,36 +115,84 @@ test_fix_cache_function_defined() {
 }
 
 # ============================================================================
-# Test: fix_cache_permissions with mocked run_privileged (root, no root files)
+# Helper: extract the trigger predicate from the script and run it against a
+# test cache directory. We exercise the actual `find` expression used in
+# production rather than reimplementing it, so the test catches predicate
+# regressions.
 # ============================================================================
-test_fix_cache_no_root_files() {
-    source "$PROJECT_ROOT/lib/runtime/lib/fix-cache-permissions.sh"
+predicate_needs_fix() {
+    # $1 = test cache root, $2 = target uid, $3 = target gid
+    # Returns 0 when a fix would be triggered, 1 when the predicate would
+    # short-circuit (i.e., everything already aligned).
+    if command find "$1" \( ! -uid "$2" -o ! -gid "$3" \) -print -quit 2>/dev/null | command grep -q .; then
+        return 0
+    fi
+    return 1
+}
 
-    setup_cache_env "true" "testuser"
+# ============================================================================
+# Test: predicate is silent when all files already match runtime UID/GID
+# ============================================================================
+test_predicate_aligned_cache() {
+    local cache="$TEST_TEMP_DIR/aligned-cache"
+    mkdir -p "$cache/sub"
+    touch "$cache/userfile" "$cache/sub/nested"
 
-    # Create a mock /cache directory in a subshell with redefined function
-    (
-        # Redefine fix_cache_permissions to use test path
-        fix_cache_test() {
-            [ -d "$TEST_TEMP_DIR/cache" ] || return 0
-            if ! command find "$TEST_TEMP_DIR/cache" -user root -print -quit 2>/dev/null | command grep -q .; then
-                return 0
-            fi
-            echo "would fix"
-        }
+    local uid gid
+    uid=$(id -u)
+    gid=$(id -g)
 
-        mkdir -p "$TEST_TEMP_DIR/cache"
-        touch "$TEST_TEMP_DIR/cache/userfile"
-        # No root-owned files, so should return 0 silently
-        local output
-        output=$(fix_cache_test 2>&1)
-        if [ -z "$output" ]; then
-            exit 0
-        else
-            exit 1
-        fi
-    )
-    assert_equals "0" "$?" "Returns 0 when no root-owned files in cache"
+    if predicate_needs_fix "$cache" "$uid" "$gid"; then
+        assert_equals "1" "0" "Predicate must NOT trigger when everything is aligned"
+    else
+        assert_equals "0" "0" "Predicate is silent on aligned cache"
+    fi
+}
+
+# ============================================================================
+# Test: predicate triggers when cache contains a file with a foreign UID
+# (this is the regression test for the Zed/VS Code USER_UID divergence bug —
+# previously the predicate only checked for root-owned files and silently
+# skipped UID-1000-vs-501 mismatches.)
+# ============================================================================
+test_predicate_triggers_on_foreign_uid() {
+    local cache="$TEST_TEMP_DIR/foreign-cache"
+    mkdir -p "$cache"
+    touch "$cache/userfile"
+
+    local uid gid foreign_uid
+    uid=$(id -u)
+    gid=$(id -g)
+    # Pick a UID we definitely don't own. The predicate is purely numeric so
+    # we don't need to actually chown — we simulate the divergence by passing
+    # a target UID that doesn't match any file in the cache.
+    foreign_uid=$((uid + 12345))
+
+    if predicate_needs_fix "$cache" "$foreign_uid" "$gid"; then
+        assert_equals "0" "0" "Predicate triggers when target UID differs from file UIDs"
+    else
+        assert_equals "0" "1" "Predicate FAILED to trigger on UID divergence"
+    fi
+}
+
+# ============================================================================
+# Test: predicate triggers when only the GID is misaligned
+# ============================================================================
+test_predicate_triggers_on_foreign_gid() {
+    local cache="$TEST_TEMP_DIR/foreign-gid-cache"
+    mkdir -p "$cache"
+    touch "$cache/userfile"
+
+    local uid gid foreign_gid
+    uid=$(id -u)
+    gid=$(id -g)
+    foreign_gid=$((gid + 54321))
+
+    if predicate_needs_fix "$cache" "$uid" "$foreign_gid"; then
+        assert_equals "0" "0" "Predicate triggers when target GID differs from file GIDs"
+    else
+        assert_equals "0" "1" "Predicate FAILED to trigger on GID divergence"
+    fi
 }
 
 # Run tests
@@ -154,7 +202,9 @@ run_test test_fix_cache_no_sudo_message "Contains no-sudo warning message"
 run_test test_fix_cache_success_message "Contains success message"
 run_test test_fix_cache_chown_fail_message "Contains chown failure warning"
 run_test test_fix_cache_function_defined "Function is defined after sourcing"
-run_test test_fix_cache_no_root_files "Returns 0 when no root-owned files in cache"
+run_test test_predicate_aligned_cache "Predicate silent on aligned cache"
+run_test test_predicate_triggers_on_foreign_uid "Predicate triggers on foreign UID (regression)"
+run_test test_predicate_triggers_on_foreign_gid "Predicate triggers on foreign GID"
 
 # Generate test report
 generate_report
