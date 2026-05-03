@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 # Universal Container Build System
-# Version: 4.18.1
+# Version: 4.18.2
 # Supports multiple contexts: devcontainer, agents, CI/CD, production
 
 # ============================================================================
@@ -340,7 +340,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     fi
 # Terraform
 ARG INCLUDE_TERRAFORM=false
-ARG TERRAGRUNT_VERSION=1.0.2
+ARG TERRAGRUNT_VERSION=1.0.3
 ARG TFDOCS_VERSION=0.22.0
 ARG TFLINT_VERSION=0.62.0
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
