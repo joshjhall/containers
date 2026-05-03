@@ -5,12 +5,47 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [4.18.1] - 2026-04-26
+## [4.18.2] - 2026-05-03
+
+### Added
+
+- Centralized version parser & constraint comparator (#417)
+- Add just db-* recipes for containers-db schema validation (#420)
+- Bootstrap crates/luggage with catalog loader and resolve CLI (#421)
+- Activity-aware version selection and recommendation gating (#423)
+- Install execution engine with tier 3 verification (#405) (#425)
+
+### CI/CD
+
+- Lint only changed files on PRs in Run Tests job (#419)
+
+### Documentation
+
+- Refactor good/bad examples so rumdl stops eating heading prefixes
+
+### Fixed
+
+- Break auto-patch retry loop and quiet shellcheck
+- Make release uploads idempotent and security scan submodule-safe (#414)
+- Align /cache ownership across UID/GID divergence (#426)
+
+### Miscellaneous
+
+- Mount containers-db sibling and refresh tooldb design memo
+- Bump octarine to v0.3.0-beta.3 and drop SSH-rewrite workaround (#415)
+- Add prefer-just-recipes feedback note
+- Adopt MIT + Apache-2.0 dual license
+
+## [4.18.1] - 2026-04-27
 
 ### Fixed
 
 - Expand conform allowed scopes from empty list
 - Pin trivy-action with v-prefix and harden version round-trip
+
+### Miscellaneous
+
+- Automated version updates to v4.18.1
 
 ## [4.18.0] - 2026-04-25
 
@@ -1722,6 +1757,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix prettier and markdownlint formatting in README
 - Format TLS documentation files
 
+[4.18.2]: https://github.com/joshjhall/containers/compare/v4.18.1...v4.18.2
 [4.18.1]: https://github.com/joshjhall/containers/compare/v4.18.0...v4.18.1
 [4.18.0]: https://github.com/joshjhall/containers/compare/v4.17.2...v4.18.0
 [4.17.2]: https://github.com/joshjhall/containers/compare/v4.17.1...v4.17.2
