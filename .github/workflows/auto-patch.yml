@@ -510,13 +510,24 @@ jobs:
         if: steps.branch_info.outputs.gpg_keys_changed != 'true'
         env:
           GH_TOKEN: ${{ secrets.AUTO_PATCH_TOKEN }}
+          PR_URL: ${{ steps.create_pr.outputs.pr_url }}
+          MERGE_SUBJECT: "Merge automated patch release: ${{ steps.branch_info.outputs.branch }}"
         run: |
-          gh pr merge "${{ steps.create_pr.outputs.pr_url }}" \
-            --auto \
-            --merge \
-            --subject "Merge automated patch release: ${{ steps.branch_info.outputs.branch }}"
+          # Retry: gh pr merge --auto can exit 1 immediately after PR creation
+          # because GitHub hasn't fully registered the PR for auto-merge yet.
+          # Without this, every transient race fires a priority-1 Pushover alert
+          # even though the next workflow_run cycle self-heals.
+          for attempt in 1 2 3 4 5; do
+            if gh pr merge "$PR_URL" --auto --merge --subject "$MERGE_SUBJECT"; then
+              echo "Auto-merge enabled on attempt $attempt — PR will merge when branch protection requirements are met"
+              exit 0
+            fi
+            echo "Attempt $attempt failed — retrying in 5s"
+            sleep 5
+          done
 
-          echo "Auto-merge enabled — PR will merge when branch protection requirements are met"
+          echo "Auto-merge could not be enabled after 5 attempts" >&2
+          exit 1
 
       - name: Send failure notification
         if: failure()
