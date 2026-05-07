@@ -137,9 +137,9 @@ lint-docs:
     dprint check
     taplo fmt --check
 
-# Lint Dockerfile(s) with hadolint
+# Lint Dockerfile(s) with hadolint — root Dockerfile + every base-images/**/Dockerfile.
 lint-docker:
-    hadolint Dockerfile
+    hadolint Dockerfile $(find base-images -name Dockerfile -type f | sort)
 
 # Lint GitHub Actions workflows with actionlint (embedded shellcheck at warning severity, matching the .sh policy)
 lint-workflows:
