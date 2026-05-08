@@ -16,6 +16,9 @@
 # See base-images/README.md for spec, hardening invariants, and the
 # v4-to-v5 migration story.
 
+# Pinned tag is supplied by ARG (default debian:12-slim). hadolint cannot
+# see through the ARG indirection, so DL3006 is silenced explicitly here.
+# hadolint ignore=DL3006
 ARG BASE_IMAGE=debian:12-slim
 FROM ${BASE_IMAGE}
 
