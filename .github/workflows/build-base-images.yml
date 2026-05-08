@@ -186,7 +186,7 @@ jobs:
           fi
 
       - name: Trivy scan
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ steps.trivy_target.outputs.ref }}
           format: table
