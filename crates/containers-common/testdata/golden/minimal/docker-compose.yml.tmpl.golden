@@ -27,6 +27,8 @@ services:
       - poetry-cache:/cache/poetry
       # VS Code extensions
       - vscode-extensions:/home/developer/.vscode-server/extensions
+      # Zed extensions
+      - zed-extensions:/home/developer/.local/share/zed/extensions
     networks:
       - dev-network
     restart: unless-stopped
@@ -41,6 +43,8 @@ volumes:
   poetry-cache:
     driver: local
   vscode-extensions:
+    driver: local
+  zed-extensions:
     driver: local
 
 networks:
