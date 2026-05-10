@@ -369,6 +369,67 @@ fn zed_extensions_aggregated_dedup_sorted() {
 }
 
 #[test]
+fn devcontainer_emits_zed_block_when_zed_extensions_present() {
+    let reg = Registry::new();
+    let sel = resolve(&make_explicit(&["terraform"]), &reg);
+
+    let ctx = RenderContext::new(
+        ProjectConfig {
+            name: "test".into(),
+            username: "dev".into(),
+            base_image: "debian:trixie-slim".into(),
+            ..ProjectConfig::default()
+        },
+        "containers",
+        &sel,
+        &reg,
+        BTreeMap::new(),
+        AgentConfig::default(),
+    );
+
+    let renderer = Renderer::new().unwrap();
+    let output = renderer.render("devcontainer.json.tmpl", &ctx).unwrap();
+
+    assert!(
+        output.contains("\"zed\": {"),
+        "devcontainer.json should contain a zed customizations block when zed_extensions is non-empty"
+    );
+    assert!(
+        output.contains("\"terraform\""),
+        "devcontainer.json zed block should list the terraform extension"
+    );
+}
+
+#[test]
+fn devcontainer_omits_zed_block_when_no_zed_extensions() {
+    let reg = Registry::new();
+    // python+python_dev has no zed_extensions in the registry.
+    let sel = resolve(&make_explicit(&["python", "python_dev"]), &reg);
+
+    let ctx = RenderContext::new(
+        ProjectConfig {
+            name: "test".into(),
+            username: "dev".into(),
+            base_image: "debian:trixie-slim".into(),
+            ..ProjectConfig::default()
+        },
+        "containers",
+        &sel,
+        &reg,
+        BTreeMap::new(),
+        AgentConfig::default(),
+    );
+
+    let renderer = Renderer::new().unwrap();
+    let output = renderer.render("devcontainer.json.tmpl", &ctx).unwrap();
+
+    assert!(
+        !output.contains("\"zed\""),
+        "devcontainer.json should not contain a zed customizations block when zed_extensions is empty"
+    );
+}
+
+#[test]
 fn zed_extensions_empty_when_no_zed_aware_features() {
     let reg = Registry::new();
     // python_dev has no zed_extensions; expect empty aggregation.
