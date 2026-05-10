@@ -49,6 +49,13 @@
           }
         }
       }
+    },
+    "zed": {
+      "extensions": [
+        "dockerfile",
+        "dprint",
+        "terraform"
+      ]
     }
   },
 
