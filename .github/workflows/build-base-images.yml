@@ -1,0 +1,271 @@
+name: Build Base Images
+
+# Build, scan, sign, and publish per-tuple base images for v5 evidence runs.
+# See base-images/README.md for spec.
+#
+# - PRs: build + lint + scan only (no publish)
+# - main + tags v*: full pipeline including cosign signing + SBOM attestation
+# - workflow_dispatch: manual trigger (publishes when run on main or a tag)
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+    paths:
+      - "base-images/**"
+      - ".github/workflows/build-base-images.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "base-images/**"
+      - ".github/workflows/build-base-images.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAMESPACE: ${{ github.repository }}
+
+jobs:
+  lint:
+    name: Lint Dockerfiles
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Hadolint base-images Dockerfiles
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          recursive: true
+          dockerfile: base-images/**/Dockerfile
+          config: .hadolint.yaml
+
+  build:
+    name: Build ${{ matrix.distro }}-${{ matrix.distro_version }}-${{ matrix.arch }}
+    needs: lint
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        # Tier 1 active matrix. Add new tuples here as sub-issues land.
+        # Each entry must have a corresponding base-images/<distro>/<distro_version>/<arch>/Dockerfile.
+        include:
+          - distro: debian
+            distro_version: "12"
+            arch: amd64
+            platform: linux/amd64
+    env:
+      DISTRO: ${{ matrix.distro }}
+      DISTRO_VERSION: ${{ matrix.distro_version }}
+      ARCH: ${{ matrix.arch }}
+      PLATFORM: ${{ matrix.platform }}
+      EVENT_NAME: ${{ github.event_name }}
+      REF: ${{ github.ref }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      SHA: ${{ github.sha }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Compute image reference
+        id: ref
+        run: |
+          IMAGE_NAME="base-${DISTRO}-${DISTRO_VERSION}-${ARCH}"
+          IMAGE="${REGISTRY}/${IMAGE_NAMESPACE}/${IMAGE_NAME}"
+          VERSION_TAG=$(cat base-images/VERSION)
+          {
+            echo "image=${IMAGE}"
+            echo "image_name=${IMAGE_NAME}"
+            echo "version_tag=${VERSION_TAG}"
+            echo "dockerfile=base-images/${DISTRO}/${DISTRO_VERSION}/${ARCH}/Dockerfile"
+            echo "context=base-images/${DISTRO}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Compute publish gating
+        id: gate
+        run: |
+          PUBLISH=false
+          case "${EVENT_NAME}:${REF}" in
+            push:refs/heads/main) PUBLISH=true ;;
+            push:refs/tags/v*) PUBLISH=true ;;
+            workflow_dispatch:refs/heads/main) PUBLISH=true ;;
+            workflow_dispatch:refs/tags/v*) PUBLISH=true ;;
+          esac
+          echo "publish=${PUBLISH}" >> "$GITHUB_OUTPUT"
+
+      - name: Compute image tags
+        id: tags
+        env:
+          IMAGE: ${{ steps.ref.outputs.image }}
+          VERSION_TAG: ${{ steps.ref.outputs.version_tag }}
+        run: |
+          MAJOR="${VERSION_TAG%%.*}"
+          MINOR_REST="${VERSION_TAG#*.}"
+          MINOR="${MINOR_REST%.*}"
+          SHORT_SHA="${SHA:0:12}"
+          {
+            echo "${IMAGE}:v${VERSION_TAG}"
+            echo "${IMAGE}:v${MAJOR}.${MINOR}"
+            echo "${IMAGE}:v${MAJOR}"
+            echo "${IMAGE}:latest"
+            echo "${IMAGE}:sha-${SHORT_SHA}"
+          } > tags.txt
+          {
+            echo "tags<<TAGS_EOF"
+            cat tags.txt
+            echo "TAGS_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Compute PR scan tag
+        id: pr_tag
+        if: steps.gate.outputs.publish != 'true'
+        env:
+          IMAGE: ${{ steps.ref.outputs.image }}
+        run: |
+          REF_ID="${PR_NUMBER:-${SHA}}"
+          echo "tag=${IMAGE}:pr-${REF_ID}" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GitHub Container Registry
+        if: steps.gate.outputs.publish == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build (PR — load locally for scan)
+        if: steps.gate.outputs.publish != 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ steps.ref.outputs.context }}
+          file: ${{ steps.ref.outputs.dockerfile }}
+          platforms: ${{ matrix.platform }}
+          load: true
+          tags: ${{ steps.pr_tag.outputs.tag }}
+          cache-from: type=gha,scope=${{ steps.ref.outputs.image_name }}
+          cache-to: type=gha,mode=max,scope=${{ steps.ref.outputs.image_name }}
+
+      - name: Build & push (main / tag — publish)
+        if: steps.gate.outputs.publish == 'true'
+        id: build_push
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ steps.ref.outputs.context }}
+          file: ${{ steps.ref.outputs.dockerfile }}
+          platforms: ${{ matrix.platform }}
+          push: true
+          tags: ${{ steps.tags.outputs.tags }}
+          cache-from: type=gha,scope=${{ steps.ref.outputs.image_name }}
+          cache-to: type=gha,mode=max,scope=${{ steps.ref.outputs.image_name }}
+
+      - name: Compute Trivy target
+        id: trivy_target
+        env:
+          IMAGE: ${{ steps.ref.outputs.image }}
+          DIGEST: ${{ steps.build_push.outputs.digest }}
+          PR_TAG: ${{ steps.pr_tag.outputs.tag }}
+          PUBLISH: ${{ steps.gate.outputs.publish }}
+        run: |
+          if [ "${PUBLISH}" = "true" ]; then
+            echo "ref=${IMAGE}@${DIGEST}" >> "$GITHUB_OUTPUT"
+          else
+            echo "ref=${PR_TAG}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Trivy scan
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ steps.trivy_target.outputs.ref }}
+          format: table
+          severity: CRITICAL,HIGH
+          exit-code: "1"
+          ignore-unfixed: true
+          vuln-type: os,library
+
+      - name: Install Cosign
+        if: steps.gate.outputs.publish == 'true'
+        uses: sigstore/cosign-installer@v3
+
+      - name: Install Syft
+        if: steps.gate.outputs.publish == 'true'
+        uses: anchore/sbom-action/download-syft@v0
+
+      - name: Sign image and attest SBOM
+        if: steps.gate.outputs.publish == 'true'
+        env:
+          COSIGN_EXPERIMENTAL: 1
+          IMAGE_WITH_DIGEST: ${{ steps.ref.outputs.image }}@${{ steps.build_push.outputs.digest }}
+          IMAGE_NAME: ${{ steps.ref.outputs.image_name }}
+        run: |
+          retry() {
+            local max_attempts=5 delay=15 attempt=1
+            while [ $attempt -le $max_attempts ]; do
+              echo "Attempt $attempt/$max_attempts: $*"
+              if "$@"; then return 0; fi
+              echo "Attempt $attempt failed; sleeping ${delay}s"
+              sleep $delay
+              delay=$((delay * 2))
+              attempt=$((attempt + 1))
+            done
+            echo "All $max_attempts attempts failed for: $*" >&2
+            return 1
+          }
+
+          echo "Signing ${IMAGE_WITH_DIGEST}"
+          retry cosign sign --yes "${IMAGE_WITH_DIGEST}"
+
+          echo "Generating SBOM for ${IMAGE_WITH_DIGEST}"
+          syft "${IMAGE_WITH_DIGEST}" -o "cyclonedx-json=sbom-${IMAGE_NAME}.json"
+
+          echo "Attesting SBOM for ${IMAGE_WITH_DIGEST}"
+          if retry cosign attest --yes \
+              --predicate "sbom-${IMAGE_NAME}.json" \
+              --type cyclonedx \
+              "${IMAGE_WITH_DIGEST}"; then
+            echo "SBOM attested"
+          else
+            echo "::warning::SBOM attestation failed for ${IMAGE_NAME} (likely rekor payload size); image is signed but SBOM is not attested"
+          fi
+
+      - name: Upload SBOM artifact
+        if: steps.gate.outputs.publish == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-${{ steps.ref.outputs.image_name }}
+          path: sbom-${{ steps.ref.outputs.image_name }}.json
+          if-no-files-found: warn
+
+      - name: Write build summary
+        if: always()
+        env:
+          IMAGE: ${{ steps.ref.outputs.image }}
+          VERSION_TAG: ${{ steps.ref.outputs.version_tag }}
+          IMAGE_NAME: ${{ steps.ref.outputs.image_name }}
+          DIGEST: ${{ steps.build_push.outputs.digest }}
+          PUBLISH: ${{ steps.gate.outputs.publish }}
+        run: |
+          {
+            echo "## ${IMAGE_NAME}"
+            echo ""
+            echo "- **image_ref**: \`${IMAGE}\`"
+            echo "- **version_tag**: \`v${VERSION_TAG}\`"
+            if [ "${PUBLISH}" = "true" ] && [ -n "${DIGEST:-}" ]; then
+              echo "- **image_digest**: \`${DIGEST}\`"
+              echo "- **published**: yes (signed, SBOM attested)"
+            else
+              echo "- **published**: no (PR build)"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
