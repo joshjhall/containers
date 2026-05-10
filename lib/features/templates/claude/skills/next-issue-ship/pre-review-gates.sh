@@ -265,6 +265,14 @@ scan_missing_tests() {
                 "${dirname}/${name_no_ext}_test.py"; do
                 [ -f "$test_path" ] && return
             done
+            # Repo-rooted tests/ tree (pytest / Django / SciPy convention):
+            # source at <root>/<seg>/.../<name>.py with test under
+            # <root>/tests/.../test_<name>.py at any depth.
+            if [ -n "$_PROJECT_ROOT" ] && [ -d "${_PROJECT_ROOT}/tests" ]; then
+                /usr/bin/find "${_PROJECT_ROOT}/tests" \
+                    -name "test_${name_no_ext}.py" \
+                    -print -quit 2>/dev/null | /usr/bin/grep -q . && return
+            fi
             ;;
         ts | js | tsx | jsx)
             for suffix in "test" "spec"; do
@@ -280,6 +288,19 @@ scan_missing_tests() {
             [ -f "${dirname}/${name_no_ext}_test.go" ] && return
             ;;
         rs)
+            # mod.rs aggregator: only mod/pub use/doc/attribute lines, no
+            # top-level definitions. Re-exports submodules whose own files
+            # carry the tests, so flagging them is shipping-time noise.
+            if [ "$basename" = "mod.rs" ]; then
+                # `\b` won't match after `!` (both `!` and the following
+                # space are non-word), so `macro_rules!` is anchored on its
+                # own without a trailing boundary.
+                if ! /usr/bin/grep -qE \
+                    '^[[:space:]]*((pub[[:space:]]+)?(fn|impl|struct|enum|trait)\b|macro_rules!)' \
+                    "$file" 2>/dev/null; then
+                    return
+                fi
+            fi
             /usr/bin/grep -q '#\[cfg(test)\]' "$file" 2>/dev/null && return
             [ -d "${dirname}/../tests" ] && return
             ;;
