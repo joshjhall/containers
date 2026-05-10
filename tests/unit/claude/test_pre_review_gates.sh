@@ -141,6 +141,143 @@ test_python_missing_test_high() {
 run_test test_python_missing_test_high "Python file without tests is HIGH severity"
 
 # ===========================================================================
+# Python: repo-rooted tests/ tree (pytest / Django / SciPy convention)
+# Source at <root>/scripts/arch_check/checks/unwrapped_fn.py with test at
+# <root>/tests/arch_check/test_unwrapped_fn.py — segments don't align with
+# the four near-source paths, so this only passes via the find-under-root.
+# ===========================================================================
+test_python_repo_rooted_tests_tree() {
+    local proj
+    proj=$(setup_project)
+    /usr/bin/mkdir -p "${proj}/scripts/arch_check/checks" "${proj}/tests/arch_check"
+    # Private helper (`_check`) so `scan_untested_public_api` (separate
+    # scanner, out of scope for this fix) doesn't fire on the fixture.
+    /usr/bin/printf 'def _check():\n    pass\n' >"${proj}/scripts/arch_check/checks/unwrapped_fn.py"
+    /usr/bin/printf 'def test_check():\n    pass\n' >"${proj}/tests/arch_check/test_unwrapped_fn.py"
+    /usr/bin/printf '%s\n' "${proj}/scripts/arch_check/checks/unwrapped_fn.py" >"${proj}/filelist.txt"
+
+    run_gates "$proj" "${proj}/filelist.txt"
+    assert_equals "0" "$TEST_EXIT_CODE" "exit code"
+    assert_empty "$TEST_OUTPUT" "test under <root>/tests/<mirror>/ should be discovered"
+
+    /usr/bin/rm -rf "$proj"
+}
+run_test test_python_repo_rooted_tests_tree "Python test under <root>/tests tree (cross-tree mirror) is found"
+
+test_python_repo_rooted_tests_tree_negative() {
+    local proj
+    proj=$(setup_project)
+    /usr/bin/mkdir -p "${proj}/scripts/arch_check/checks" "${proj}/tests/arch_check"
+    /usr/bin/printf 'def _check():\n    pass\n' >"${proj}/scripts/arch_check/checks/unwrapped_fn.py"
+    # Test exists but for a DIFFERENT source basename — must not match
+    /usr/bin/printf 'def test_other():\n    pass\n' >"${proj}/tests/arch_check/test_other_thing.py"
+    /usr/bin/printf '%s\n' "${proj}/scripts/arch_check/checks/unwrapped_fn.py" >"${proj}/filelist.txt"
+
+    run_gates "$proj" "${proj}/filelist.txt"
+    assert_equals "0" "$TEST_EXIT_CODE" "exit code"
+    local cert
+    cert=$(certainty_for_file "missing-test-file")
+    assert_equals "HIGH" "$cert" "missing test under <root>/tests should still be HIGH"
+
+    /usr/bin/rm -rf "$proj"
+}
+run_test test_python_repo_rooted_tests_tree_negative "Python find-under-root does not match wrong basename"
+
+# ===========================================================================
+# Rust: mod.rs aggregator (only mod/pub use lines) is skipped
+# ===========================================================================
+test_rust_mod_rs_aggregator_skipped() {
+    local proj
+    proj=$(setup_project)
+    /usr/bin/mkdir -p "${proj}/src/foo"
+    /usr/bin/cat >"${proj}/src/foo/mod.rs" <<'EOF'
+//! foo aggregator
+pub mod bar;
+pub mod baz;
+pub use bar::*;
+pub use baz::*;
+EOF
+    /usr/bin/printf '%s\n' "${proj}/src/foo/mod.rs" >"${proj}/filelist.txt"
+
+    run_gates "$proj" "${proj}/filelist.txt"
+    assert_equals "0" "$TEST_EXIT_CODE" "exit code"
+    assert_empty "$TEST_OUTPUT" "pure-aggregator mod.rs should produce no findings"
+
+    /usr/bin/rm -rf "$proj"
+}
+run_test test_rust_mod_rs_aggregator_skipped "Rust mod.rs aggregator (no fn/impl/struct/enum/trait/macro) is skipped"
+
+# ===========================================================================
+# Rust: mod.rs with a `pub fn` is still flagged (regression on heuristic)
+# ===========================================================================
+test_rust_mod_rs_with_fn_flagged() {
+    local proj
+    proj=$(setup_project)
+    /usr/bin/mkdir -p "${proj}/src/foo"
+    /usr/bin/cat >"${proj}/src/foo/mod.rs" <<'EOF'
+pub mod bar;
+pub fn helper() -> u32 { 42 }
+EOF
+    /usr/bin/printf '%s\n' "${proj}/src/foo/mod.rs" >"${proj}/filelist.txt"
+
+    run_gates "$proj" "${proj}/filelist.txt"
+    assert_equals "0" "$TEST_EXIT_CODE" "exit code"
+    local cert
+    cert=$(certainty_for_file "missing-test-file")
+    assert_equals "HIGH" "$cert" "mod.rs with pub fn should still be HIGH"
+
+    /usr/bin/rm -rf "$proj"
+}
+run_test test_rust_mod_rs_with_fn_flagged "Rust mod.rs with pub fn is still flagged"
+
+# ===========================================================================
+# Rust: mod.rs with macro_rules! is still flagged (testable code)
+# ===========================================================================
+test_rust_mod_rs_with_macro_flagged() {
+    local proj
+    proj=$(setup_project)
+    /usr/bin/mkdir -p "${proj}/src/foo"
+    /usr/bin/cat >"${proj}/src/foo/mod.rs" <<'EOF'
+pub mod bar;
+macro_rules! greet { () => { println!("hi") }; }
+EOF
+    /usr/bin/printf '%s\n' "${proj}/src/foo/mod.rs" >"${proj}/filelist.txt"
+
+    run_gates "$proj" "${proj}/filelist.txt"
+    assert_equals "0" "$TEST_EXIT_CODE" "exit code"
+    local cert
+    cert=$(certainty_for_file "missing-test-file")
+    assert_equals "HIGH" "$cert" "mod.rs with macro_rules! should still be HIGH"
+
+    /usr/bin/rm -rf "$proj"
+}
+run_test test_rust_mod_rs_with_macro_flagged "Rust mod.rs with macro_rules! is still flagged"
+
+# ===========================================================================
+# Rust: aggregator heuristic must not bleed onto non-mod.rs files.
+# A lib.rs with no definitions and no inline tests should still be flagged.
+# ===========================================================================
+test_rust_non_mod_rs_unaffected() {
+    local proj
+    proj=$(setup_project)
+    /usr/bin/mkdir -p "${proj}/src"
+    /usr/bin/cat >"${proj}/src/lib.rs" <<'EOF'
+//! crate root with no definitions yet
+pub mod foo;
+EOF
+    /usr/bin/printf '%s\n' "${proj}/src/lib.rs" >"${proj}/filelist.txt"
+
+    run_gates "$proj" "${proj}/filelist.txt"
+    assert_equals "0" "$TEST_EXIT_CODE" "exit code"
+    local cert
+    cert=$(certainty_for_file "missing-test-file")
+    assert_equals "HIGH" "$cert" "non-mod.rs Rust file must still be flagged"
+
+    /usr/bin/rm -rf "$proj"
+}
+run_test test_rust_non_mod_rs_unaffected "Aggregator heuristic does not affect non-mod.rs files"
+
+# ===========================================================================
 # Unknown extension not in skip policy → MEDIUM
 # ===========================================================================
 test_unknown_extension_medium() {
