@@ -154,6 +154,7 @@ impl Registry {
             env_file: Some("ruby.env".into()),
             requires: vec!["ruby".into()],
             vscode_extensions: vec!["shopify.ruby-lsp".into()],
+            zed_extensions: vec!["ruby".into()],
             ..Feature::default()
         });
 
@@ -386,6 +387,7 @@ impl Registry {
             category: Category::Cloud,
             env_file: Some("terraform.env".into()),
             vscode_extensions: vec!["hashicorp.terraform".into()],
+            zed_extensions: vec!["terraform".into()],
             ..Feature::default()
         });
         r.add(Feature {

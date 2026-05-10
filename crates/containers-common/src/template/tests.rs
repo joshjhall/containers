@@ -331,3 +331,65 @@ fn agents_shared_volumes_explicit_preserved() {
 
     assert_eq!(ctx.agents.shared_volumes, vec!["custom-vol:/custom"]);
 }
+
+#[test]
+fn zed_extensions_aggregated_dedup_sorted() {
+    let reg = Registry::new();
+    let sel = resolve(&make_explicit(&["ruby", "ruby_dev", "terraform"]), &reg);
+
+    let ctx = RenderContext::new(
+        ProjectConfig {
+            name: "test".into(),
+            username: "dev".into(),
+            base_image: "debian:trixie-slim".into(),
+            ..ProjectConfig::default()
+        },
+        "containers",
+        &sel,
+        &reg,
+        BTreeMap::new(),
+        AgentConfig::default(),
+    );
+
+    assert_eq!(
+        ctx.zed_extensions,
+        vec!["ruby".to_string(), "terraform".to_string()],
+        "zed_extensions should be sorted, deduplicated, and pulled from the registry"
+    );
+
+    // No regression in vscode_extensions aggregation.
+    assert!(
+        ctx.vscode_extensions.contains(&"shopify.ruby-lsp".to_string()),
+        "vscode_extensions should still include shopify.ruby-lsp"
+    );
+    assert!(
+        ctx.vscode_extensions.contains(&"hashicorp.terraform".to_string()),
+        "vscode_extensions should still include hashicorp.terraform"
+    );
+}
+
+#[test]
+fn zed_extensions_empty_when_no_zed_aware_features() {
+    let reg = Registry::new();
+    // python_dev has no zed_extensions; expect empty aggregation.
+    let sel = resolve(&make_explicit(&["python", "python_dev"]), &reg);
+
+    let ctx = RenderContext::new(
+        ProjectConfig {
+            name: "test".into(),
+            username: "dev".into(),
+            base_image: "debian:trixie-slim".into(),
+            ..ProjectConfig::default()
+        },
+        "containers",
+        &sel,
+        &reg,
+        BTreeMap::new(),
+        AgentConfig::default(),
+    );
+
+    assert!(
+        ctx.zed_extensions.is_empty(),
+        "zed_extensions should be empty when no enabled feature contributes any"
+    );
+}

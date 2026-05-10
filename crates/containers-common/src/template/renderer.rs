@@ -118,6 +118,7 @@ impl Renderer {
             build_arg_groups => build_arg_groups,
             cache_volumes => cache_volumes,
             vscode_extensions => &ctx.vscode_extensions,
+            zed_extensions => &ctx.zed_extensions,
             needs_bindfs => ctx.needs_bindfs,
             needs_docker => ctx.needs_docker,
             worktree_mounts => &ctx.worktree_mounts,
