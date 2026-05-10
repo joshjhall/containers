@@ -4,3 +4,4 @@
 - [Minimal build philosophy](minimal-build-philosophy.md) — Install minimal package sets; clean up build artifacts
 - [Use file-issue skill](use-file-issue-skill.md) — Always file new issues via `/file-issue`, not raw `gh issue create`
 - [Prefer just recipes](prefer-just-recipes.md) — Use `just <recipe>` over bare cargo/shell when one exists
+- [PR merge + prune is the default ship](feedback_pr_merge_default.md) — `/next-issue-ship` Option 1 ends at merged + branch deleted, not at "PR open"
