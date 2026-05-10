@@ -29,6 +29,9 @@ pub struct RenderContext {
     /// Deduplicated, sorted list of VS Code extension IDs.
     pub vscode_extensions: Vec<String>,
 
+    /// Deduplicated, sorted list of Zed extension IDs.
+    pub zed_extensions: Vec<String>,
+
     /// True when bindfs is selected (needs `cap_add` + device).
     pub needs_bindfs: bool,
 
@@ -67,6 +70,7 @@ impl RenderContext {
             versions,
             cache_volumes: Vec::new(),
             vscode_extensions: Vec::new(),
+            zed_extensions: Vec::new(),
             needs_bindfs: selection.has("bindfs"),
             needs_docker: selection.has("docker"),
             agents,
@@ -108,6 +112,16 @@ impl RenderContext {
         }
         ctx.vscode_extensions = ext_set.into_iter().collect();
         ctx.vscode_extensions.sort();
+
+        // Collect Zed extensions (deduplicated, sorted).
+        let mut zed_set = HashSet::new();
+        for f in &ctx.enabled_features {
+            for e in &f.zed_extensions {
+                zed_set.insert(e.clone());
+            }
+        }
+        ctx.zed_extensions = zed_set.into_iter().collect();
+        ctx.zed_extensions.sort();
 
         ctx
     }

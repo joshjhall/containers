@@ -68,6 +68,9 @@ pub struct Feature {
 
     /// VS Code extension IDs to recommend.
     pub vscode_extensions: Vec<String>,
+
+    /// Zed extension IDs to recommend.
+    pub zed_extensions: Vec<String>,
 }
 
 impl Default for Feature {
@@ -87,6 +90,7 @@ impl Default for Feature {
             base_lang: None,
             cache_volumes: Vec::new(),
             vscode_extensions: Vec::new(),
+            zed_extensions: Vec::new(),
         }
     }
 }
