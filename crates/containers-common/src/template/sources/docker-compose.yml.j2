@@ -46,6 +46,8 @@ services:
 {%- endfor %}
       # VS Code extensions
       - vscode-extensions:/home/{{ username }}/.vscode-server/extensions
+      # Zed extensions
+      - zed-extensions:/home/{{ username }}/.local/share/zed/extensions
 {%- if needs_bindfs %}
     cap_add:
       - SYS_ADMIN
@@ -66,6 +68,8 @@ volumes:
     driver: local
 {%- endfor %}
   vscode-extensions:
+    driver: local
+  zed-extensions:
     driver: local
 
 networks:

@@ -56,6 +56,8 @@ services:
       - ollama-cache:/cache/ollama
       # VS Code extensions
       - vscode-extensions:/home/dev/.vscode-server/extensions
+      # Zed extensions
+      - zed-extensions:/home/dev/.local/share/zed/extensions
     cap_add:
       - SYS_ADMIN
     devices:
@@ -84,6 +86,8 @@ volumes:
   ollama-cache:
     driver: local
   vscode-extensions:
+    driver: local
+  zed-extensions:
     driver: local
 
 networks:
