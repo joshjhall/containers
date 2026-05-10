@@ -29,7 +29,14 @@
           }
         }
       }
-    }
+    }{% if zed_extensions %},
+    "zed": {
+      "extensions": [
+{%- for ext in zed_extensions %}
+        "{{ ext }}"{% if not loop.last %},{% endif %}
+{%- endfor %}
+      ]
+    }{% endif %}
   },
   "remoteUser": "{{ username }}"
 }
