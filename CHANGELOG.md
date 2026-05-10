@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.18.3] - 2026-05-10
+
+### CI/CD
+
+- Retry gh pr merge --auto to absorb post-create races
+
 ## [4.18.2] - 2026-05-03
 
 ### Added
@@ -35,6 +41,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bump octarine to v0.3.0-beta.3 and drop SSH-rewrite workaround (#415)
 - Add prefer-just-recipes feedback note
 - Adopt MIT + Apache-2.0 dual license
+- Automated version updates to v4.18.2
 
 ## [4.18.1] - 2026-04-27
 
@@ -1757,6 +1764,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix prettier and markdownlint formatting in README
 - Format TLS documentation files
 
+[4.18.3]: https://github.com/joshjhall/containers/compare/v4.18.2...v4.18.3
 [4.18.2]: https://github.com/joshjhall/containers/compare/v4.18.1...v4.18.2
 [4.18.1]: https://github.com/joshjhall/containers/compare/v4.18.0...v4.18.1
 [4.18.0]: https://github.com/joshjhall/containers/compare/v4.17.2...v4.18.0
