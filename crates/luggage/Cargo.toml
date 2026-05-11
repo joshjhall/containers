@@ -25,4 +25,5 @@ tracing-subscriber = { workspace = true }
 ureq = { version = "2", default-features = false, features = ["tls"] }
 
 [dev-dependencies]
+serial_test = "3"
 tempfile = { workspace = true }

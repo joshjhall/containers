@@ -73,6 +73,7 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
+    #[serial_test::serial]
     fn matching_version_returns_true() {
         let dir = tempdir().unwrap();
         write_shim(dir.path(), "rustc", "rustc 1.95.0 (abcdef0)");
@@ -81,6 +82,7 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
+    #[serial_test::serial]
     fn nonmatching_version_returns_false() {
         let dir = tempdir().unwrap();
         write_shim(dir.path(), "rustc", "rustc 1.84.0 (abcdef0)");
@@ -89,6 +91,7 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
+    #[serial_test::serial]
     fn rust_tool_id_resolves_to_rustc_binary() {
         let dir = tempdir().unwrap();
         write_shim(dir.path(), "rustc", "rustc 1.95.0 (abcdef0)");
