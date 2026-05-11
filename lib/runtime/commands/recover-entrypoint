@@ -1,0 +1,52 @@
+#!/bin/bash
+# Recover the image ENTRYPOINT setup when it didn't run as PID 1.
+#
+# This image declares
+#   ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/entrypoint"]
+# which performs privileged one-time setup — /cache ownership alignment for
+# the runtime UID, OP_*_REF secret resolution (writes /dev/shm/op-secrets-cache
+# for setup-git / setup-gh / _wait-for-op-cache to source), bindfs overlays,
+# cron startup, audit logging, and the ~/.container-initialized marker.
+#
+# Under VS Code's Dev Containers extension the image ENTRYPOINT runs as PID 1
+# and all of this works automatically. Zed 0.231.1's native devcontainer
+# implementation replaces the image ENTRYPOINT with a stub command
+# (`/bin/sh -c 'echo Container started; … sleep infinity'`) even when
+# `"overrideCommand": false` is set in devcontainer.json, so none of the
+# privileged setup runs and downstream secret-dependent steps fall back or
+# fail. Tracked upstream as
+# https://github.com/zed-industries/zed/issues/56357 — remove this script
+# (and the call sites in devcontainer.json templates) once that bug is fixed.
+#
+# This script makes the setup recoverable from `postStartCommand` for any
+# devcontainer impl that skips the image ENTRYPOINT:
+#   1. Fast path: short-circuits when ~/.container-initialized exists, so
+#      it's safe to run unconditionally on every container start.
+#   2. Recovery path: invokes the entrypoint as the current (remote) user,
+#      passing /usr/bin/true as the command. The entrypoint's non-root path
+#      sets USERNAME=$(whoami), sudos internally where it needs root (cache
+#      chown, etc.), runs /etc/container/{first-startup,startup}/*.sh, writes
+#      the marker, then execs /usr/bin/true which exits cleanly.
+#
+# Wire into devcontainer.json:
+#   "postStartCommand": "recover-entrypoint && <project setup chain>"
+#
+# Idempotent. Generated devcontainer.json templates (see
+# crates/containers-common/src/template/sources/devcontainer.json.j2)
+# include this in the default postStartCommand chain.
+
+set -euo pipefail
+
+MARKER="$HOME/.container-initialized"
+
+if [ -f "$MARKER" ]; then
+    exit 0
+fi
+
+if [ ! -x /usr/local/bin/entrypoint ]; then
+    echo "[recover-entrypoint] /usr/local/bin/entrypoint missing or not executable; skipping" >&2
+    exit 0
+fi
+
+echo "[recover-entrypoint] image ENTRYPOINT did not run (likely Zed); replaying"
+/usr/local/bin/entrypoint /usr/bin/true
