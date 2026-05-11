@@ -86,12 +86,33 @@ jobs:
             exit 0
           fi
 
+          # Skip-list: features known to fail in isolation, each with a
+          # tracking issue. Filter out before producing the matrix so a
+          # known-broken feature doesn't redden every PR that touches it.
+          # Tracked in #468: mise — `mise --version` exits 134 in
+          # isolation; never covered by any merge-tier variant.
+          SKIP_LIST='^(mise)$'
+          FILTERED=$(printf '%s\n' "${OUT}" | grep -vE "${SKIP_LIST}" || true)
+
+          if [ -z "${FILTERED}" ]; then
+            {
+              echo "mode=skip"
+              echo "features=[]"
+            } >> "${GITHUB_OUTPUT}"
+            echo "::notice::All touched features are on the PR-tier skip-list — nothing to build."
+            exit 0
+          fi
+
           # Convert newline-separated list to JSON array.
-          FEATURES=$(printf '%s\n' "${OUT}" | jq -R . | jq -s -c .)
+          FEATURES=$(printf '%s\n' "${FILTERED}" | jq -R . | jq -s -c .)
           {
             echo "mode=changed"
             echo "features=${FEATURES}"
           } >> "${GITHUB_OUTPUT}"
+          if [ "${OUT}" != "${FILTERED}" ]; then
+            SKIPPED=$(printf '%s\n' "${OUT}" | grep -E "${SKIP_LIST}" | paste -sd,)
+            echo "::notice::PR-tier skipped features (known-broken in isolation): ${SKIPPED}"
+          fi
           echo "::notice::PR-tier matrix: ${FEATURES}"
 
   # =====================================
