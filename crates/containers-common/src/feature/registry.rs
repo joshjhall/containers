@@ -304,6 +304,7 @@ impl Registry {
                 "usernamehw.errorlens".into(),
                 "wayou.vscode-todo-highlight".into(),
             ],
+            zed_extensions: vec!["dprint".into(), "env".into(), "just".into(), "toml".into()],
             ..Feature::default()
         });
         r.add(Feature {
@@ -314,6 +315,7 @@ impl Registry {
             category: Category::Tool,
             env_file: Some("docker.env".into()),
             vscode_extensions: vec!["ms-azuretools.vscode-docker".into()],
+            zed_extensions: vec!["dockerfile".into()],
             ..Feature::default()
         });
         r.add(Feature {

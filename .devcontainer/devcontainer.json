@@ -57,7 +57,10 @@
       "extensions": [
         "dockerfile",
         "dprint",
-        "terraform"
+        "env",
+        "just",
+        "terraform",
+        "toml"
       ]
     }
   },
