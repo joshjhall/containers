@@ -83,11 +83,20 @@ See `examples/contexts/devcontainer/docker-compose.yml` and
 configurations, and `examples/env/*.env` for per-feature env file snippets
 you can compose together.
 
-Publish service ports through the compose `ports:` block, not
-`forwardPorts` in `devcontainer.json` — Zed's native devcontainer support
-ignores `forwardPorts` (see
-[`docs/troubleshooting/zed-devcontainer.md`](docs/troubleshooting/zed-devcontainer.md#port-forwarding)
-for the workaround).
+### Editor support
+
+Works in both **VS Code** (Dev Containers extension) and **Zed** (0.231.1+,
+native devcontainer support). The generated devcontainer ships extensions
+for both editors and chains `recover-entrypoint` ahead of `postStartCommand`
+so secret resolution and git identity work consistently regardless of which
+editor opens the container.
+
+Publish service ports through the compose `ports:` block, not `forwardPorts`
+in `devcontainer.json` — Zed ignores `forwardPorts`.
+
+See [`docs/troubleshooting/zed-devcontainer.md`](docs/troubleshooting/zed-devcontainer.md)
+for the full parity matrix, requirements, open-in-Zed flow, lifecycle hook
+behavior, and known limitations.
 
 ---
 
@@ -198,6 +207,8 @@ a curated baseline of plugins, MCP servers, skills, and agents.
 - **LSP plugins** — Language-specific LSP servers auto-install alongside
   each `*_DEV` feature (Python → pyright + python-lsp-server, Node →
   typescript-language-server, Rust → rust-analyzer, Go → gopls, etc.)
+- **Editor-agnostic LSP** — LSP servers live inside the container, so both
+  VS Code and Zed get the same language tooling without per-editor setup.
 - **MCP servers** — Filesystem, GitHub/GitLab, Context7, Playwright, and
   others. Override with `CLAUDE_MCPS` or extend with `CLAUDE_EXTRA_MCPS`.
 - **Plugins** — 11 core plugins plus language-specific LSP plugins.
