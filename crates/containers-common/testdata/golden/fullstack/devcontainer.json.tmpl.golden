@@ -8,7 +8,11 @@
   "workspaceFolder": "/workspace/fullstack",
   "overrideCommand": false,
   "postCreateCommand": "echo 'Container created'",
-  "postStartCommand": "echo 'Container started'",
+  // recover-entrypoint replays the image ENTRYPOINT under devcontainer impls
+  // that ignore `"overrideCommand": false` (notably Zed 0.231.1+). No-op
+  // under VS Code, where the entrypoint already ran as PID 1. Keep it as
+  // the first link of any project postStartCommand chain.
+  "postStartCommand": "recover-entrypoint && echo 'Container started'",
   "customizations": {
     "vscode": {
       "extensions": [

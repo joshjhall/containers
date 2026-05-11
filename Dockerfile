@@ -562,8 +562,10 @@ COPY lib/runtime/commands/_wait-for-op-cache /usr/local/bin/_wait-for-op-cache
 COPY lib/runtime/commands/setup-git /usr/local/bin/setup-git
 COPY lib/runtime/commands/setup-gh /usr/local/bin/setup-gh
 COPY lib/runtime/commands/setup-glab /usr/local/bin/setup-glab
+COPY lib/runtime/commands/recover-entrypoint /usr/local/bin/recover-entrypoint
 RUN chmod 755 /usr/local/bin/_source-env-secrets /usr/local/bin/_wait-for-op-cache \
-    /usr/local/bin/setup-git /usr/local/bin/setup-gh /usr/local/bin/setup-glab
+    /usr/local/bin/setup-git /usr/local/bin/setup-gh /usr/local/bin/setup-glab \
+    /usr/local/bin/recover-entrypoint
 
 # Print TOFU download summary (if any Tier 4 fallbacks occurred during build)
 RUN /bin/bash -c 'source /tmp/build-scripts/base/logging.sh && \

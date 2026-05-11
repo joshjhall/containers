@@ -16,8 +16,11 @@
   //   "SKIP_CASE_CHECK": "true"  // Suppress case-sensitivity warning if you're aware of limitations
   // },
 
-  // Auto-configure git hooks (lefthook), development environment, SSH keys, and GitHub CLI after container starts
-  "postStartCommand": "bash -c './.devcontainer/bin/setup-dev-environment.sh && setup-git && setup-gh'",
+  // Auto-configure git hooks (lefthook), development environment, SSH keys, and GitHub CLI after container starts.
+  // `recover-entrypoint` is a no-op under VS Code (entrypoint already ran as
+  // PID 1) and replays the image ENTRYPOINT under Zed (which ignores
+  // `"overrideCommand": false`). See docs/troubleshooting/zed-devcontainer.md.
+  "postStartCommand": "bash -c 'recover-entrypoint && ./.devcontainer/bin/setup-dev-environment.sh && setup-git && setup-gh'",
 
   "customizations": {
     "vscode": {
