@@ -208,12 +208,16 @@ jobs:
         run: |
           set -euo pipefail
           # Count cached layers vs total layers via `docker history`.
-          # `|| true` keeps the step success even if docker history
-          # returns no rows — we report 0/0 in that pathological case.
+          # Subtlety: `grep -c` prints "0" AND exits 1 when no lines
+          # match. A `|| echo 0` fallback would append a second "0",
+          # giving CACHED="0\n0" which then breaks the arithmetic
+          # below. `|| true` (in a brace group so it applies to the
+          # pipeline's tail, not the assignment) swallows the exit code
+          # without producing extra output — grep already wrote the count.
           TOTAL=$(docker history --no-trunc --format '{{.Size}}' "${IMAGE}" 2>/dev/null | wc -l)
-          TOTAL=${TOTAL:-0}
           CACHED=$(docker history --no-trunc --format '{{.CreatedBy}}' "${IMAGE}" 2>/dev/null \
-            | grep -c 'FROM\|^/bin/sh -c #(nop)' || echo 0)
+            | { grep -c 'FROM\|^/bin/sh -c #(nop)' || true; })
+          TOTAL=${TOTAL:-0}
           CACHED=${CACHED:-0}
           if [ "${TOTAL}" -gt 0 ]; then
             PCT=$((CACHED * 100 / TOTAL))
