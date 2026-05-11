@@ -28,8 +28,9 @@
 #
 set -euo pipefail
 
-# Source standard feature header for user handling
-source /tmp/build-scripts/base/feature-header-bootstrap.sh
+# Source feature header — needs feature-utils' create_secure_temp_dir
+# (used below), so bootstrap-only is insufficient.
+source /tmp/build-scripts/base/feature-header.sh
 
 # Source retry + checksum utilities for secure binary downloads
 source /tmp/build-scripts/base/retry-utils.sh
