@@ -352,11 +352,15 @@ run_test_with_setup() {
 }
 
 # ============================================================================
-# Checksum Verification Tests
+# Luggage Migration Tests (issue #407)
 # ============================================================================
+# Rust.sh delegates toolchain installation to `luggage install`. The bash
+# script no longer downloads rustup-init or runs the legacy 4-tier
+# verification helpers — those moved into the luggage installer engine.
+# See docs/architecture/luggage-migration.md.
 
-# Test: rust.sh sources checksum libraries
-test_checksum_libraries_sourced() {
+# Test: rust.sh delegates the toolchain install to luggage
+test_luggage_invocation() {
     local rust_script="$PROJECT_ROOT/lib/features/rust.sh"
 
     if ! [ -f "$rust_script" ]; then
@@ -364,23 +368,23 @@ test_checksum_libraries_sourced() {
         return
     fi
 
-    # Check for checksum-fetch.sh
-    if command grep -q "source.*checksum-fetch.sh" "$rust_script"; then
-        assert_true true "checksum-fetch.sh library is sourced"
+    if command grep -qE '/usr/local/bin/luggage install ("rust@|rust )' "$rust_script"; then
+        assert_true true "rust.sh invokes /usr/local/bin/luggage install for rust"
     else
-        assert_true false "checksum-fetch.sh library not sourced"
+        assert_true false "rust.sh does not invoke luggage install for rust"
     fi
 
-    # Check for download-verify.sh
-    if command grep -q "source.*download-verify.sh" "$rust_script"; then
-        assert_true true "download-verify.sh library is sourced"
+    # The shim must point at the vendored catalog so production builds work
+    # without a sibling containers-db checkout.
+    if command grep -q 'CONTAINERS_DB:-/opt/containers-db' "$rust_script"; then
+        assert_true true "luggage call defaults to /opt/containers-db catalog"
     else
-        assert_true false "download-verify.sh library not sourced"
+        assert_true false "luggage call missing /opt/containers-db default"
     fi
 }
 
-# Test: rust.sh uses register_tool_checksum_fetcher for rustup
-test_rustup_checksum_fetching() {
+# Test: rust.sh no longer ships the inline rustup-init install path
+test_no_inline_rustup_install() {
     local rust_script="$PROJECT_ROOT/lib/features/rust.sh"
 
     if ! [ -f "$rust_script" ]; then
@@ -388,16 +392,15 @@ test_rustup_checksum_fetching() {
         return
     fi
 
-    # Check for register_tool_checksum_fetcher usage for rustup-init
-    if command grep -q 'register_tool_checksum_fetcher.*rustup' "$rust_script"; then
-        assert_true true "Uses register_tool_checksum_fetcher for rustup"
+    if command grep -qE 'curl[^\n]+rustup-init|register_tool_checksum_fetcher|verify_download_or_fail' "$rust_script"; then
+        assert_true false "rust.sh still contains inline rustup-init install logic"
     else
-        assert_true false "Does not use register_tool_checksum_fetcher for rustup"
+        assert_true true "rust.sh no longer contains inline rustup-init install logic"
     fi
 }
 
-# Test: rust.sh uses verify_download
-test_download_verification() {
+# Test: rust.sh still handles channel names (stable/beta/nightly) explicitly
+test_channel_routing() {
     local rust_script="$PROJECT_ROOT/lib/features/rust.sh"
 
     if ! [ -f "$rust_script" ]; then
@@ -405,11 +408,13 @@ test_download_verification() {
         return
     fi
 
-    # Check for verify_download usage (4-tier verification)
-    if command grep -q "verify_download" "$rust_script"; then
-        assert_true true "Uses verify_download for checksum verification"
+    # Channel names must route through `--channel` so the catalog resolver
+    # picks the highest version in that channel rather than treating the
+    # name as a partial version literal.
+    if command grep -qE '(stable\|beta\|nightly).*--channel|--channel.*RUST_VERSION' "$rust_script"; then
+        assert_true true "Channel names route through luggage --channel"
     else
-        assert_true false "Does not use verify_download"
+        assert_true false "Channel names not routed through luggage --channel"
     fi
 }
 
@@ -425,10 +430,10 @@ run_test_with_setup test_cargo_toml_detection "Cargo.toml detection works"
 run_test_with_setup test_rust_permissions "Rust directories have correct permissions"
 run_test_with_setup test_rust_verification "Rust verification script works"
 
-# Checksum verification tests
-run_test test_checksum_libraries_sourced "Checksum libraries are sourced"
-run_test test_rustup_checksum_fetching "Rustup register_tool_checksum_fetcher is used"
-run_test test_download_verification "Download verification is used"
+# Luggage migration tests
+run_test test_luggage_invocation "rust.sh delegates toolchain install to luggage"
+run_test test_no_inline_rustup_install "rust.sh strips inline rustup-init download/verify logic"
+run_test test_channel_routing "Channel names (stable/beta/nightly) route through --channel"
 
 # Generate test report
 generate_report

@@ -151,11 +151,14 @@ yarn-error.log*
 .eslintcache
 .node_repl_history
 
-# Rust workspace (not needed in container builds)
-Cargo.toml
-Cargo.lock
-crates/
+# Rust workspace
+# Cargo.toml / Cargo.lock / crates/ ARE needed at build time: the
+# luggage-builder Dockerfile stage compiles `luggage` from this workspace
+# (issue #407), and the base stage vendors crates/luggage/testdata/catalog
+# at /opt/containers-db so feature scripts can shell out to `luggage install`.
+# Only the cargo build output directories stay out of the context.
 target/
+**/target/
 **/*.rs.bk
 
 # Go

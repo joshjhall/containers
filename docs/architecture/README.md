@@ -25,6 +25,8 @@ the container build system.
 
 - [**Version Resolution**](version-resolution.md) - Partial version resolution
   system (e.g., `3.3` → `3.3.10`)
+- [**Luggage Migration**](luggage-migration.md) - Playbook for porting
+  `lib/features/*.sh` scripts to delegate install logic to the luggage CLI
 
 ### Future Design
 
