@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# @tier: merge,weekly
 # Test mise (polyglot runtime version manager) container build
 #
 # This test verifies that the mise feature:

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# @tier: merge,weekly
 # Test Claude Code setup (CLI, MCP servers, and plugin integrations)
 #
 # This test verifies the Claude Code setup installed by claude-code-setup.sh:

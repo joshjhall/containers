@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# @tier: merge,weekly
 # Test kotlin container build
 #
 # This test verifies the Kotlin configuration including:

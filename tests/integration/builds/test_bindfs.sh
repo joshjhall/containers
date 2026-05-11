@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# @tier: merge,weekly
 # Test bindfs container build
 #
 # This test verifies that the bindfs feature:

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# @tier: merge,weekly
 # Test Docker socket access fix in entrypoint
 #
 # This test verifies that the entrypoint correctly configures Docker socket

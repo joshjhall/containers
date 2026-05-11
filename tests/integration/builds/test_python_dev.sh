@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# @tier: merge,weekly
 # Test python-dev container build
 #
 # This test verifies the python-dev configuration that includes:

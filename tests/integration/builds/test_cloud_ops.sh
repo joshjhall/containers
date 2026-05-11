@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# @tier: merge,weekly
 # Test cloud-ops container build
 #
 # This test verifies the cloud-ops configuration that includes:

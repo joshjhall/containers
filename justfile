@@ -87,6 +87,10 @@ test-changed:
 test-feature NAME:
     ./tests/test_feature.sh {{ NAME }}
 
+# Preview which features the PR tier would build for the current diff
+test-changed-features:
+    ./tests/changed_features.sh
+
 # Everything test-worthy: unit + rust + clippy + fmt check + integration
 test-all: test test-integration
 

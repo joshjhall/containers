@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# @tier: merge,weekly
 # Smoke test: `luggage install rust@<RUST_VERSION>` end-state.
 #
 # Issue #407 — once lib/features/rust.sh delegates to luggage, the

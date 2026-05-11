@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# @tier: merge,weekly
 # Test Kubernetes deployment manifests with kind (Kubernetes in Docker)
 #
 # This test verifies the Kubernetes manifests work correctly by:

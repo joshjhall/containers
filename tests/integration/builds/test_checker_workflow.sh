@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# @tier: merge,weekly
 # Test checker agent workflow: skill discovery globs, domain override logic,
 # project-level skill precedence, and patterns.sh pipeline execution.
 #

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# @tier: merge,weekly
 # Test node-dev container build
 #
 # This test verifies the node-dev configuration that includes:

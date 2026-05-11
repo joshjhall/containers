@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# @tier: merge,weekly
 # Test rust-golang container build
 #
 # This test verifies a systems programming polyglot setup with:
