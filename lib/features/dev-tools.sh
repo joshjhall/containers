@@ -288,6 +288,21 @@ log_command "Setting dev-tools bashrc script permissions" \
     chmod 755 /etc/bashrc.d/80-dev-tools.sh
 
 # ============================================================================
+# Zed LSP Overrides
+# ============================================================================
+# Ship a first-startup script that bootstraps ~/.config/zed/settings.json
+# with LSP binary overrides for Zed extensions whose own binary fetch races
+# their postinstall (dprint, taplo). No-op outside Zed envs.
+log_message "Installing Zed LSP override bootstrap script..."
+
+log_command "Creating container first-startup directory" \
+    mkdir -p /etc/container/first-startup
+
+install -m 755 \
+    /tmp/build-scripts/features/lib/dev-tools/zed-lsp-config-first-startup.sh \
+    /etc/container/first-startup/40-zed-lsp-config.sh
+
+# ============================================================================
 # Verification Script
 # ============================================================================
 log_message "Creating dev tools verification script..."
