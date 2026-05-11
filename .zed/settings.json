@@ -1,0 +1,23 @@
+{
+  // LSP binary overrides for Zed extensions whose own binary fetch races
+  // their postinstall (toast: "failed to start language server <name>").
+  // The matching binaries ship in this container via the dev-tools feature;
+  // redirecting here skips the per-extension npm install / download entirely.
+  //
+  // Mirrored at the container level by:
+  //   lib/features/lib/dev-tools/zed-lsp-config-first-startup.sh
+  "lsp": {
+    "dprint": {
+      "binary": {
+        "path": "/usr/local/bin/dprint",
+        "arguments": ["lsp"]
+      }
+    },
+    "taplo": {
+      "binary": {
+        "path": "/usr/local/bin/taplo",
+        "arguments": ["lsp", "stdio"]
+      }
+    }
+  }
+}

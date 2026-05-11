@@ -819,5 +819,29 @@ test_supervisord_config_installed_by_script() {
 run_test test_supervisord_config_shipped "supervisord.conf shipped for non-root execution"
 run_test test_supervisord_config_installed_by_script "dev-tools.sh installs shipped supervisord.conf"
 
+# Test: the Zed LSP override first-startup script ships with the expected
+# redirections to system binaries. Regression guard against the dprint
+# extension's npm-install race (see commit history).
+test_zed_lsp_config_script_shipped() {
+    local script="$PROJECT_ROOT/lib/features/lib/dev-tools/zed-lsp-config-first-startup.sh"
+    assert_file_exists "$script" "zed-lsp-config-first-startup.sh shipped under lib/features/lib/dev-tools/"
+    assert_file_contains "$script" '"path": "/usr/local/bin/dprint"' "dprint override targets system binary"
+    assert_file_contains "$script" '"path": "/usr/local/bin/taplo"' "taplo override targets system binary"
+    assert_file_contains "$script" '"lsp", "stdio"' "taplo invoked with 'lsp stdio'"
+    assert_file_contains "$script" 'if [ -f "$ZED_SETTINGS_FILE" ]' "script skips when settings.json already exists"
+}
+
+# Test: dev-tools.sh installs the Zed LSP override script into first-startup.
+test_zed_lsp_config_installed_by_script() {
+    local source_file="$PROJECT_ROOT/lib/features/dev-tools.sh"
+    assert_file_contains "$source_file" "features/lib/dev-tools/zed-lsp-config-first-startup.sh" \
+        "dev-tools.sh references shipped zed-lsp-config script"
+    assert_file_contains "$source_file" "/etc/container/first-startup/40-zed-lsp-config.sh" \
+        "dev-tools.sh installs to /etc/container/first-startup with the expected name"
+}
+
+run_test test_zed_lsp_config_script_shipped "zed-lsp-config-first-startup.sh shipped with system-binary overrides"
+run_test test_zed_lsp_config_installed_by_script "dev-tools.sh installs zed-lsp-config first-startup script"
+
 # Generate test report
 generate_report
