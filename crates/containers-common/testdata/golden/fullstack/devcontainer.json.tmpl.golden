@@ -45,7 +45,12 @@
     },
     "zed": {
       "extensions": [
-        "terraform"
+        "dockerfile",
+        "dprint",
+        "env",
+        "just",
+        "terraform",
+        "toml"
       ]
     }
   },
