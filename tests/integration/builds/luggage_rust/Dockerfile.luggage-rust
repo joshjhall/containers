@@ -35,9 +35,12 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends adduser ca-certificates curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Match the production user setup.
+# Match the production user setup. lib/features/rust.sh pre-creates the
+# cargo/rustup cache subdirs and chowns them to the install user before
+# invoking luggage; the fixture mirrors that so `su -c rustup-init` can
+# write `/cache/rustup/settings.toml` without a permission error.
 RUN adduser --disabled-password --gecos '' --shell /bin/bash vscode \
-    && mkdir -p /cache /var/log/luggage \
+    && mkdir -p /cache/cargo /cache/rustup /var/log/luggage \
     && chown -R vscode:vscode /cache /var/log/luggage
 ENV USERNAME=vscode
 
@@ -48,16 +51,21 @@ COPY crates/luggage/testdata/catalog /opt/containers-db
 # Run the install. `--catalog` points at the in-tree testdata catalog —
 # the same one the resolver tests use — so this build is reproducible
 # from a single Cargo.lock without depending on the live containers-db
-# repo.
+# repo. Platform is auto-detected from /etc/os-release + ARCH so the
+# fixture works on amd64 and arm64 build hosts alike.
+#
+# CARGO_HOME / RUSTUP_HOME are exported so luggage's post-install
+# validation (`rustc --version` via the rustup proxy) can locate the
+# toolchain — without them the proxy reports "no default toolchain".
+ENV CARGO_HOME=/cache/cargo \
+    RUSTUP_HOME=/cache/rustup
 RUN /usr/local/bin/luggage install "rust@${RUST_VERSION}" \
     --catalog /opt/containers-db \
-    --os debian --os-version 13 --arch amd64 \
     --user vscode
 
-# Sanity touchstone for the parity test driver.
-ENV CARGO_HOME=/cache/cargo \
-    RUSTUP_HOME=/cache/rustup \
-    PATH="/cache/cargo/bin:/usr/local/bin:${PATH}"
+# Sanity touchstone for the smoke test driver. CARGO_HOME / RUSTUP_HOME
+# are already set above for the install RUN; here we just add the PATH.
+ENV PATH="/cache/cargo/bin:/usr/local/bin:${PATH}"
 
 USER vscode
 WORKDIR /home/vscode

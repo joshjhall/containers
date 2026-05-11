@@ -2,30 +2,31 @@
 # Rust Programming Language - Toolchain and development tools
 #
 # Description:
-#   Installs the Rust programming language toolchain via rustup with essential
-#   development tools. Configures cache directories for optimal container usage.
+#   Delegates toolchain installation to `luggage install rust@${RUST_VERSION}`
+#   and adds cargo-installed development tools on top. See
+#   docs/architecture/luggage-migration.md for the migration playbook.
 #
 # Features:
-#   - Rust toolchain installed via rustup (stable by default)
+#   - Rust toolchain installed via luggage (rustup-init under the hood)
 #   - Essential components: rust-src, rust-analyzer, clippy, rustfmt
+#     (applied by catalog `post_install` steps)
 #   - Development tools: cargo-watch (auto-rebuild)
 #   - Documentation: mdbook, mdbook-mermaid, mdbook-toc, mdbook-admonish
-#
-# Note: cargo-edit is no longer needed as cargo add/remove are built into Cargo 1.62+
 #
 # Cache Strategy:
 #   - Uses /cache/cargo and /cache/rustup for consistent caching
 #   - Allows volume mounting for persistent caches across container rebuilds
 #
 # Environment Variables:
-#   - RUST_VERSION: Toolchain version specification (default: 1.88.0)
-#     * Major.minor only (e.g., "1.84"): Resolves to latest 1.84.x
+#   - RUST_VERSION: Toolchain version specification (default: 1.95.0)
 #     * Specific version (e.g., "1.84.1"): Uses exact version
-#     * Can also be: stable, beta, nightly
+#     * Major.minor only (e.g., "1.84"): Resolves to latest patch
+#     * Channel names (stable, beta, nightly): Passed to luggage --channel
 #
 # Note:
-#   - rustup-init is verified using Tier 3 (published checksums from rust-lang.org)
-#   - Rust toolchains are verified by rustup's built-in verification system
+#   - rustup-init is verified by luggage's tier-3 verifier
+#     (published sha256 from static.rust-lang.org)
+#   - Rust toolchains remain verified by rustup's built-in system
 #
 set -euo pipefail
 
@@ -41,14 +42,6 @@ source /tmp/build-scripts/base/version-validation.sh
 # Source version resolution for partial version support
 source /tmp/build-scripts/base/version-resolution.sh
 
-# Source checksum utilities for secure binary downloads
-source /tmp/build-scripts/base/checksum-fetch.sh
-
-# Source download verification utilities
-source /tmp/build-scripts/base/download-verify.sh
-
-# Source 4-tier checksum verification system
-source /tmp/build-scripts/base/checksum-verification.sh
 source /tmp/build-scripts/base/cache-utils.sh
 source /tmp/build-scripts/base/path-utils.sh
 
@@ -111,79 +104,36 @@ log_command "Setting cache directory ownership" \
     chown -R "${USER_UID}:${USER_GID}" "${CARGO_HOME}" "${RUSTUP_HOME}"
 
 # ============================================================================
-# Rust Toolchain Installation (Secure with Checksum Verification)
+# Rust Toolchain Installation (delegated to luggage)
 # ============================================================================
-log_message "Installing Rust toolchain..."
+# luggage downloads + tier-3-verifies rustup-init, runs it under ${USERNAME},
+# and applies the rust-src/rust-analyzer/clippy/rustfmt component_add
+# post_install steps from the catalog. Channel names (stable/beta/nightly)
+# route through `--channel`; semver-shaped values use `tool@<version>`.
+log_message "Installing Rust toolchain via luggage..."
 
-# Determine rustup target triple based on architecture
-RUSTUP_TARGET=$(map_arch "x86_64-unknown-linux-gnu" "aarch64-unknown-linux-gnu")
+# Export CARGO_HOME/RUSTUP_HOME so luggage's post-install validation step —
+# which runs `rustc --version` via the rustup proxy — can locate the
+# toolchain it just installed. Without these, the proxy looks at
+# `$HOME/.rustup` and reports "no default toolchain configured".
+export CARGO_HOME RUSTUP_HOME
 
-log_message "Installing rustup for ${RUSTUP_TARGET}..."
-
-# Define download URLs
-RUSTUP_URL="https://static.rust-lang.org/rustup/dist/${RUSTUP_TARGET}/rustup-init"
-
-# Register Tier 3 fetcher for rustup-init (published checksum from rust-lang.org)
-_fetch_rustup_init_checksum() {
-    local _version="$1"
-    local _arch="$2"
-    local _target
-    case "$_arch" in
-        amd64) _target="x86_64-unknown-linux-gnu" ;;
-        arm64) _target="aarch64-unknown-linux-gnu" ;;
-        *) _target="$_arch" ;;
-    esac
-    local _url="https://static.rust-lang.org/rustup/dist/${_target}/rustup-init.sha256"
-    command curl -fsSL "$_url" 2>/dev/null | command awk '{print $1}'
-}
-register_tool_checksum_fetcher "rustup-init" "_fetch_rustup_init_checksum"
-
-# Download rustup-init
-BUILD_TEMP=$(create_secure_temp_dir)
-cd "$BUILD_TEMP"
-log_message "Downloading rustup-init..."
-if ! command curl -L -f --retry 8 --retry-delay 10 --retry-all-errors --progress-bar -o "rustup-init" "$RUSTUP_URL"; then
-    log_error "Failed to download rustup-init"
-    log_feature_end
-    exit 1
+if [[ "$RUST_VERSION" =~ ^(stable|beta|nightly)$ ]]; then
+    log_command "luggage install rust --channel ${RUST_VERSION}" \
+        /usr/local/bin/luggage install rust \
+        --channel "${RUST_VERSION}" \
+        --catalog "${CONTAINERS_DB:-/opt/containers-db}" \
+        --user "${USERNAME}" \
+        --cache-root /cache \
+        --log-dir /var/log/luggage
+else
+    log_command "luggage install rust@${RUST_VERSION}" \
+        /usr/local/bin/luggage install "rust@${RUST_VERSION}" \
+        --catalog "${CONTAINERS_DB:-/opt/containers-db}" \
+        --user "${USERNAME}" \
+        --cache-root /cache \
+        --log-dir /var/log/luggage
 fi
-
-# Run 4-tier verification
-ARCH_DEB=$(dpkg --print-architecture)
-verify_download_or_fail "tool" "rustup-init" "$RUST_VERSION" "rustup-init" "$ARCH_DEB" || {
-    log_feature_end
-    exit 1
-}
-
-# Make executable
-log_command "Making rustup-init executable" \
-    chmod +x rustup-init
-
-# Run rustup-init as the target user with verified binary
-log_command "Installing Rust via verified rustup" \
-    su - "${USERNAME}" -c "
-    export CARGO_HOME='${CARGO_HOME}'
-    export RUSTUP_HOME='${RUSTUP_HOME}'
-
-    # Run verified rustup installer
-    ${BUILD_TEMP}/rustup-init -y \
-        --default-toolchain ${RUST_VERSION} \
-        --profile default
-
-    # Source cargo environment to make rustup/cargo available
-    source ${CARGO_HOME}/env
-
-    # Add essential Rust components
-    # - rust-src: Rust standard library source (needed by rust-analyzer)
-    # - rust-analyzer: Official LSP for IDE support
-    # - clippy: Linting tool for common mistakes and style
-    # - rustfmt: Code formatter
-    rustup component add rust-src rust-analyzer clippy rustfmt
-"
-
-cd /
-log_command "Cleaning up build directory" \
-    command rm -rf "$BUILD_TEMP"
 
 # Install additional Cargo tools
 # These enhance the development experience but aren't required for basic Rust usage

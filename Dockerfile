@@ -31,6 +31,23 @@
 
 # Build arguments for base image selection
 ARG BASE_IMAGE=debian:trixie-slim
+
+# ============================================================================
+# Luggage Builder — compile the install engine once, reuse in the base stage
+# ============================================================================
+# The base stage shells out to `luggage install <tool>@<version>` from feature
+# scripts (see lib/features/rust.sh). Building luggage here keeps the rust
+# toolchain out of the runtime image while still bundling a reproducible
+# binary built from the in-tree workspace.
+FROM rust:1.95-slim-trixie AS luggage-builder
+WORKDIR /workspace
+COPY Cargo.toml Cargo.lock ./
+COPY crates ./crates
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/workspace/target \
+    cargo build --release -p luggage --bin luggage \
+    && cp target/release/luggage /tmp/luggage
+
 FROM ${BASE_IMAGE} AS base
 
 # Path to the project root relative to the containers directory
@@ -122,6 +139,19 @@ RUN chmod 755 /tmp/build-scripts/features/*.sh /tmp/build-scripts/base/*.sh
 RUN RESTRICT_SHELLS=${RESTRICT_SHELLS} \
     PRODUCTION_MODE=${PRODUCTION_MODE} \
     /tmp/build-scripts/base/shell-hardening.sh
+
+# ============================================================================
+# Luggage install engine + catalog snapshot
+# ============================================================================
+# Feature scripts (starting with lib/features/rust.sh, issue #407) delegate
+# toolchain installation to `luggage install <tool>@<version>`. The catalog
+# is vendored from crates/luggage/testdata/catalog so builds stay
+# reproducible from Cargo.lock with no build-time network fetch; a pinned
+# containers-db checkout will replace this once that workflow lands.
+COPY --from=luggage-builder /tmp/luggage /usr/local/bin/luggage
+COPY crates/luggage/testdata/catalog /opt/containers-db
+ENV CONTAINERS_DB=/opt/containers-db
+RUN mkdir -p /var/log/luggage && chmod 755 /var/log/luggage
 
 # ============================================================================
 # LANGUAGE INSTALLATIONS - Grouped with their development tools
