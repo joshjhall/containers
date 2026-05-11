@@ -49,6 +49,11 @@ jobs:
           cargo deny --version
           cargo audit --version
 
+      - name: Pre-clone advisory database
+        run: |
+          rm -rf ~/.cargo/advisory-db
+          git clone --depth 1 https://github.com/RustSec/advisory-db.git ~/.cargo/advisory-db
+
       - name: Run security scan (capture output)
         id: scan
         continue-on-error: true
