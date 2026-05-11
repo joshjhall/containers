@@ -4,10 +4,10 @@ This document covers editor-specific behavior when opening this repo (or any
 project that uses this container build system) in [Zed](https://zed.dev/) 0.231.1+
 via its native devcontainer implementation.
 
-> **Stub notice**: this file currently covers only **Lifecycle hook behavior**
-> (issue #443). Sections for Requirements / Open in Zed / Known limitations /
-> Parity matrix vs VS Code are added by issue #445, and the `forwardPorts`
-> workaround is added by issue #444.
+> **Stub notice**: this file currently covers **Lifecycle hook behavior**
+> (issue #443) and **Port forwarding** (issue #444). Sections for
+> Requirements / Open in Zed / Known limitations / Parity matrix vs VS Code
+> are added by issue #445.
 
 ## Lifecycle hook behavior
 
@@ -228,3 +228,64 @@ If a future change wires `initializeCommand`, `postCreateCommand`,
 verification above for that hook and append a row to the findings table. The
 `postCreateCommand` and `postAttachCommand` semantics differ subtly across
 implementations (one-time vs every-attach), so don't assume parity.
+
+## Port forwarding
+
+Zed's native devcontainer implementation (0.231.1+) honors only the
+`appPort` field from `devcontainer.json` — `forwardPorts` and other
+advanced port-forwarding directives are silently ignored. See
+[zed.dev/docs/dev-containers](https://zed.dev/docs/dev-containers):
+
+> Only the `appPort` field is supported. `forwardPorts` and other advanced
+> port-forwarding features are not implemented.
+
+There is no error and no breadcrumb in the container log; ports simply do
+not appear on the host. Users coming from VS Code (where
+`forwardPorts: [8080, 5432]` Just Works) will hit this the moment they
+need to expose a service from inside the container.
+
+### Recommended: docker-compose `ports:`
+
+Declare port publishing in `docker-compose.yml` rather than in
+`devcontainer.json`. Compose publishes via Docker directly, so both
+VS Code and Zed honor it — the editor doesn't have to know.
+
+```yaml
+services:
+  devcontainer:
+    ports:
+      - "8080:8080"  # Works in both VS Code and Zed; do not rely on forwardPorts
+      - "5432:5432"
+```
+
+This is what `examples/contexts/devcontainer/docker-compose.yml` already
+does for sidecar services like Postgres and Redis. Any project scaffolded
+by `stibbons` can extend the generated compose file the same way without
+touching `devcontainer.json`.
+
+### Single-port alternative: `appPort`
+
+If a project really wants to stay inside `devcontainer.json`, Zed does
+honor `appPort` for a single port (or a small array):
+
+```jsonc
+{
+  "appPort": 8080
+}
+```
+
+This is more restrictive than `forwardPorts` (no `portsAttributes`, no
+`onAutoForward`, no auto-detection of newly-bound ports) and is mostly
+useful for the appPort/single-service case. For anything beyond one
+fixed port, prefer the compose-level form above.
+
+### Fields silently dropped by Zed
+
+Avoid these in `devcontainer.json` unless a project is VS Code-only:
+
+- `forwardPorts`
+- `portsAttributes`
+- `otherPortsAttributes`
+
+If you find one of these in a generated `devcontainer.json` after a future
+`stibbons` change, treat it as a bug — the template should not emit them.
