@@ -83,6 +83,12 @@ See `examples/contexts/devcontainer/docker-compose.yml` and
 configurations, and `examples/env/*.env` for per-feature env file snippets
 you can compose together.
 
+Publish service ports through the compose `ports:` block, not
+`forwardPorts` in `devcontainer.json` — Zed's native devcontainer support
+ignores `forwardPorts` (see
+[`docs/troubleshooting/zed-devcontainer.md`](docs/troubleshooting/zed-devcontainer.md#port-forwarding)
+for the workaround).
+
 ---
 
 ## Available Features
