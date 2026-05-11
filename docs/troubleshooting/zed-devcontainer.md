@@ -4,10 +4,98 @@ This document covers editor-specific behavior when opening this repo (or any
 project that uses this container build system) in [Zed](https://zed.dev/) 0.231.1+
 via its native devcontainer implementation.
 
-> **Stub notice**: this file currently covers **Lifecycle hook behavior**
-> (issue #443) and **Port forwarding** (issue #444). Sections for
-> Requirements / Open in Zed / Known limitations / Parity matrix vs VS Code
-> are added by issue #445.
+If you're new to Zed + devcontainers, read [Requirements](#requirements) and
+[Open in Zed](#open-in-zed) first, then skim [Known limitations](#known-limitations)
+and the [Parity matrix](#parity-matrix). The deeper [Lifecycle hook behavior](#lifecycle-hook-behavior)
+and [Port forwarding](#port-forwarding) sections are reference material for
+when something behaves differently than VS Code.
+
+## Requirements
+
+- **Zed 0.231.1+** — the April 2026 release replaced the Node-based
+  `devcontainer up` CLI with a native, spec-compliant implementation. Earlier
+  versions either don't ship devcontainer support or rely on the deprecated
+  Node CLI and are not supported here.
+- **Docker on `PATH`** — Zed shells out to the `docker` binary directly for
+  build, run, and `compose` operations. BuildKit is fine; the modern
+  `docker compose ...` form (Compose v2) is required — the legacy hyphenated
+  `docker-compose` binary is not invoked.
+- **Podman** — supported via a `docker` symlink on `PATH` (`ln -s
+  $(command -v podman) ~/.local/bin/docker`). Zed has no first-class Podman
+  backend, so anything Podman doesn't faithfully emulate from the Docker CLI
+  surface is on you to work around.
+- **No additional Zed extensions required on the host.** Container-side
+  extensions are installed by Zed from `customizations.zed.extensions` in
+  `devcontainer.json` and persisted in the `zed-extensions` named volume so
+  they survive container restarts.
+
+## Open in Zed
+
+1. From a host terminal at the repo root, run `zed .` (or pick the repo from
+   `File → Open Recent`). Zed detects `.devcontainer/devcontainer.json` and
+   prompts **"Open in Container"** in the bottom-right.
+1. Accept the prompt. Zed builds or pulls the image, starts the compose
+   stack, and re-opens the workspace targeting the container. First-time
+   builds take a few minutes; subsequent opens reuse the existing container.
+1. Wait for the container log to settle. The cheapest "container is fully
+   started" gate is `[ -f ~/.container-initialized ]` returning success in
+   a container terminal — see the [Verification procedure](#verification-procedure-zed)
+   below.
+1. Attach a terminal with `` Ctrl+` `` (Linux/Windows) or `` Cmd+` ``
+   (macOS). The terminal runs inside the container with the same `PATH`,
+   user, and working directory as VS Code's "Dev Containers" terminal.
+1. Extensions declared under `customizations.zed.extensions` install on
+   first open and land in the `zed-extensions` named volume. They are not
+   reinstalled on every container start.
+
+If you customize `postStartCommand` in `.devcontainer/devcontainer.json`,
+keep `recover-entrypoint &&` as the first link in the chain — it is what
+makes secrets (`OP_*_REF` → resolved env vars) and git identity work under
+Zed. See [Fix: recover-entrypoint](#fix-recover-entrypoint) for the why.
+
+## Known limitations
+
+Zed's native devcontainer support is spec-compliant for the common path but
+has well-known gaps versus VS Code. The ones that affect this build system:
+
+- **`forwardPorts` is silently ignored** — only `appPort` is honored.
+  Publish service ports via the compose `ports:` block instead.
+  See [Port forwarding](#port-forwarding) for the workaround and the
+  fields to avoid emitting.
+- **No auto-rebuild on `devcontainer.json` change** — Zed does not detect
+  changes to `.devcontainer/devcontainer.json` and rebuild. You have to
+  stop the container from a host terminal and reopen the project. See the
+  rebuild block under [Verification procedure (Zed)](#verification-procedure-zed)
+  for the exact `docker compose down --rmi local` invocation.
+- **Docker is the only backend** — Podman works only via the `docker`
+  symlink workaround above; there is no native Podman driver.
+- **Host VS Code extensions are not mirrored** — opening the same repo in
+  Zed does not inherit your VS Code extension set. Zed installs whatever is
+  declared in `customizations.zed.extensions`, which is a separate list
+  emitted from the same per-feature registry that drives
+  `customizations.vscode.extensions`. The source of truth lives in the
+  feature registry; the generated `devcontainer.json` carries both lists.
+- **Image `ENTRYPOINT` is replaced** — Zed runs the container with its own
+  `docker-init -- /bin/sh -c '... sleep infinity'` stub as PID 1, even with
+  `"overrideCommand": false`. This is why the image's tini + entrypoint
+  chain does not run on its own. See
+  [Root cause](#root-cause-zed-replaces-image-entrypoint) and
+  [Fix: recover-entrypoint](#fix-recover-entrypoint) for the replay
+  mechanism that papers over this locally. Upstream bug:
+  [zed-industries/zed#56357](https://github.com/zed-industries/zed/issues/56357).
+
+## Parity matrix
+
+How VS Code (Dev Containers extension) and Zed (0.231.1+ native impl)
+compare across the surface area this build system exercises:
+
+| Aspect                                       | VS Code                                                                                              | Zed                                                                                                                                | Notes                                                                                                                              |
+| -------------------------------------------- | ---------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| Lifecycle hooks                              | Full spec — `initializeCommand`, `onCreateCommand`, `updateContentCommand`, `postCreateCommand`, `postStartCommand`, `postAttachCommand` | Spec-compliant, but image `ENTRYPOINT` is replaced. `postStartCommand` plumbing fires; entrypoint-driven setup needs replay.       | See [Lifecycle hook behavior](#lifecycle-hook-behavior) and [Fix: recover-entrypoint](#fix-recover-entrypoint).                    |
+| Extensions                                   | `customizations.vscode.extensions` — installed on first attach, cached per-user on the host          | `customizations.zed.extensions` — installed on first open, cached in the `zed-extensions` named volume                             | Same per-feature registry generates both lists; neither editor inherits the other's set.                                           |
+| Port forwarding                              | `forwardPorts`, `portsAttributes`, `otherPortsAttributes`, `appPort` all honored                     | Only `appPort` honored; `forwardPorts` and `*Attributes` fields are silently dropped                                               | Cross-editor portable form: declare `ports:` in `docker-compose.yml`. See [Port forwarding](#port-forwarding).                     |
+| Multi-service Compose                        | Full — `dockerComposeFile`, `service`, `runServices` all respected                                   | Full — recent fixes for `labels` and multi-stage Dockerfiles landed in 0.231.x                                                     | Sidecar services (Postgres, Redis, etc.) from `examples/contexts/devcontainer/docker-compose.yml` work identically in both editors. |
+| Secrets pass-through (`OP_*_REF` → env vars) | Image entrypoint runs `op read` once per `OP_*_REF`; resolved values are exported under bare names   | Without `recover-entrypoint`: not resolved (entrypoint replaced). With `recover-entrypoint`: resolved at first `postStartCommand`. | See [Root cause](#root-cause-zed-replaces-image-entrypoint) for the replacement mechanism and [Fix](#fix-recover-entrypoint).      |
 
 ## Lifecycle hook behavior
 
