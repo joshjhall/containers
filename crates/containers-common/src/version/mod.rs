@@ -32,6 +32,22 @@
 //! at parse time so the catalog can store `1.95.0` while upstream tags
 //! ship as `v1.95.0`.
 //!
+//! # Reference form vs canonical form
+//!
+//! [`Version`] is lossy on the prefix: parsing `v0.36.0` produces the
+//! same value as parsing `0.36.0`. That is correct for comparison and
+//! storage, but wrong at I/O boundaries — `aquasecurity/trivy-action@v0.36.0`
+//! resolves to a tag and `@0.36.0` does not. Use [`TaggedVersion`] when
+//! the upstream prefix must survive the round-trip:
+//!
+//! ```
+//! use containers_common::version::{TagPrefix, TaggedVersion, VersionStyle};
+//!
+//! let upstream = TaggedVersion::parse("v0.36.0", VersionStyle::Semver).unwrap();
+//! assert_eq!(upstream.prefix, TagPrefix::V);
+//! assert_eq!(format!("{upstream}"), "v0.36.0");
+//! ```
+//!
 //! # Style modes
 //!
 //! See [`VersionStyle`]: `Semver` (default), `Prefix`, `Calver`, `Opaque`.
@@ -43,8 +59,10 @@ mod constraint;
 mod error;
 mod parse;
 mod style;
+mod tagged;
 
 pub use constraint::Constraint;
 pub use error::{IntersectError, VersionError};
 pub use parse::Version;
 pub use style::VersionStyle;
+pub use tagged::{TagPrefix, TaggedVersion};

@@ -7,27 +7,46 @@ use std::fmt;
 
 use super::error::VersionError;
 use super::style::VersionStyle;
+use super::tagged::TagPrefix;
 
-/// Strips a single tag-style prefix from a version literal.
+/// Splits a version literal into its tag-style prefix and the trailing
+/// version core.
 ///
 /// Recognised prefixes (longest first): `release-`, `v`, `V`, and `r`
 /// when followed by a digit. The function only strips at the start; it
 /// does not recurse. This is used at parse time so the catalog can store
 /// `1.95.0` while upstream tags ship as `v1.95.0` or `release-1.95.0`.
+///
+/// Returns [`TagPrefix::Bare`] and the original slice when no prefix
+/// matches. Callers who only need the suffix can use [`strip_prefix`].
 #[must_use]
-pub(super) fn strip_prefix(s: &str) -> &str {
+pub(super) fn split_prefix(s: &str) -> (TagPrefix, &str) {
     if let Some(rest) = s.strip_prefix("release-") {
-        return rest;
+        return (TagPrefix::Release, rest);
     }
-    if let Some(rest) = s.strip_prefix('v').or_else(|| s.strip_prefix('V')) {
-        return rest;
+    if let Some(rest) = s.strip_prefix('v') {
+        return (TagPrefix::V, rest);
+    }
+    if let Some(rest) = s.strip_prefix('V') {
+        return (TagPrefix::VCapital, rest);
     }
     if let Some(rest) = s.strip_prefix('r')
         && rest.chars().next().is_some_and(|c| c.is_ascii_digit())
     {
-        return rest;
+        return (TagPrefix::R, rest);
     }
-    s
+    (TagPrefix::Bare, s)
+}
+
+/// Strips a single tag-style prefix from a version literal, discarding
+/// which prefix matched.
+///
+/// Thin wrapper over [`split_prefix`] for call sites that don't need to
+/// remember the original form. See [`split_prefix`] for the recognised
+/// prefix list.
+#[must_use]
+pub(super) fn strip_prefix(s: &str) -> &str {
+    split_prefix(s).1
 }
 
 /// A parsed version literal.

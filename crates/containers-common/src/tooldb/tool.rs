@@ -5,7 +5,7 @@
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 
-use crate::version::VersionStyle;
+use crate::version::{TagPrefix, VersionStyle};
 
 /// Top-level catalog entry for a tool.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -37,6 +37,17 @@ pub struct Tool {
     /// How version strings on this tool should be parsed. Defaults to semver.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub version_style: Option<VersionStyle>,
+    /// Convention upstream uses to prefix this tool's release tags.
+    ///
+    /// Drives writers (auto-patch, workflow updater, install-script
+    /// renderers) that must emit references in the exact form their
+    /// consumer expects — e.g. `aquasecurity/trivy-action@v0.36.0` vs
+    /// `@0.36.0`. See [`crate::version::TaggedVersion`] for the round-trip
+    /// primitive. Optional for forward compatibility with catalog entries
+    /// predating this field; absent means "convention unknown" and writers
+    /// should fall back to whatever form they read.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tag_prefix: Option<TagPrefix>,
     /// Default version selected when no version is requested.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub default_version: Option<String>,
@@ -296,10 +307,29 @@ mod tests {
         assert_eq!(tool.kind, Kind::Language);
         assert_eq!(tool.activity.score, ActivityScore::VeryActive);
         assert_eq!(tool.default_version.as_deref(), Some("1.95.0"));
+        // tag_prefix is omitted from this fixture — verifies the field
+        // is forward-compatible with catalog entries predating it.
+        assert!(tool.tag_prefix.is_none());
         let avail = tool.available.as_ref().expect("available[]");
         assert_eq!(avail.len(), 5);
         let channels = tool.channels.as_ref().expect("channels");
         assert_eq!(channels.get("stable").unwrap().default, Some(true));
+    }
+
+    #[test]
+    fn parses_tag_prefix_field() {
+        let json = r#"{
+            "schemaVersion": 1,
+            "id": "trivy-action",
+            "display_name": "Trivy Action",
+            "kind": "cli",
+            "activity": { "score": "active", "scanned_at": "2026-01-01T00:00:00Z" },
+            "tag_prefix": "v",
+            "default_version": "0.36.0"
+        }"#;
+        let tool: Tool = serde_json::from_str(json).unwrap();
+        assert_eq!(tool.tag_prefix, Some(TagPrefix::V));
+        assert_eq!(tool.default_version.as_deref(), Some("0.36.0"));
     }
 
     #[test]
