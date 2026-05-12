@@ -389,6 +389,7 @@ mod tests {
             },
             validation_tiers: None,
             version_style: Some(VersionStyle::Semver),
+            tag_prefix: None,
             default_version: Some("1.95.0".into()),
             minimum_recommended: None,
             channels: Some(
