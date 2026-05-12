@@ -35,13 +35,14 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends adduser ca-certificates curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Match the production user setup. lib/features/rust.sh pre-creates the
-# cargo/rustup cache subdirs and chowns them to the install user before
-# invoking luggage; the fixture mirrors that so `su -c rustup-init` can
-# write `/cache/rustup/settings.toml` without a permission error.
+# Create the install user plus the `/cache` and `/var/log/luggage` roots
+# that luggage will write into. luggage itself creates the `cargo` and
+# `rustup` cache subdirs and chowns them to the install user (issue #462),
+# so this fixture deliberately does NOT pre-create those subdirs — that
+# proves the in-binary chown path works end-to-end on a clean image.
 RUN adduser --disabled-password --gecos '' --shell /bin/bash vscode \
-    && mkdir -p /cache/cargo /cache/rustup /var/log/luggage \
-    && chown -R vscode:vscode /cache /var/log/luggage
+    && mkdir -p /cache /var/log/luggage \
+    && chown vscode:vscode /cache /var/log/luggage
 ENV USERNAME=vscode
 
 # Bring the luggage binary and the testdata catalog into the image.

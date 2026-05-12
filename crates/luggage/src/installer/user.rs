@@ -11,6 +11,7 @@
 use std::collections::BTreeMap;
 use std::env;
 use std::fmt::Write as _;
+use std::path::Path;
 
 use shell_words::quote;
 
@@ -52,6 +53,19 @@ pub fn su_command(user: &str, env: &BTreeMap<String, String>, body: &str) -> Vec
     }
     payload.push_str(body);
     vec!["su".into(), "-".into(), user.into(), "-c".into(), payload]
+}
+
+/// Build a `chown -R <user>:<user> <path>` argv.
+///
+/// Used after `create_dir_all` in the root process to transfer ownership
+/// of freshly-created directory trees to the install user, so the
+/// subsequent `su - <user> -c "..."` child can write into them without
+/// hitting permission-denied on the first write. The colon form sets
+/// group ownership too; the production user-creation step gives the
+/// install user a matching login group.
+#[must_use]
+pub fn chown_command(user: &str, path: &Path) -> Vec<String> {
+    vec!["chown".into(), "-R".into(), format!("{user}:{user}"), path.display().to_string()]
 }
 
 #[cfg(test)]
@@ -107,5 +121,11 @@ mod tests {
         env.insert("WEIRD".to_owned(), "value with spaces".to_owned());
         let argv = su_command("vscode", &env, "true");
         assert!(argv[4].contains("'value with spaces'"));
+    }
+
+    #[test]
+    fn chown_command_builds_recursive_user_group_argv() {
+        let argv = chown_command("vscode", Path::new("/cache/cargo"));
+        assert_eq!(argv, vec!["chown", "-R", "vscode:vscode", "/cache/cargo"]);
     }
 }
