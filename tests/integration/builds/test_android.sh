@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# @tier: merge,weekly
 # Test android container build
 #
 # This test verifies the Android SDK configuration including:

@@ -5,8 +5,11 @@ container build system.
 
 ## Available Guides
 
+- [**CI Tiered Cadence**](ci-tiers.md) - Four-tier CI strategy: PR / merge /
+  weekly / monthly / quarterly
 - [**Automated Releases**](automated-releases.md) - Weekly auto-patch system for
   version updates
+- [**Review Cadence**](review-cadence.md) - Dep-health and security review rhythm
 - [**Emergency Rollback**](rollback.md) - How to rollback when things go wrong
 
 ## Operational Workflows

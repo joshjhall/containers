@@ -260,10 +260,15 @@ jobs:
         run: cargo build --workspace
 
   # =====================================
-  # Build Stage
+  # Build Stage — Merge Tier
+  #
+  # This is the "merge tier" of the four-tier CI cadence (see
+  # docs/operations/ci-tiers.md). Runs on push to main/v5/auto-patch/**
+  # and on workflow_dispatch — but NOT on pull_request (the PR tier in
+  # test-pr.yml runs there with per-feature change detection).
   # =====================================
   build:
-    name: Build Images
+    name: Build Images (Merge Tier)
     runs-on: ubuntu-latest
     needs: [test, rust-test]
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
@@ -375,6 +380,7 @@ jobs:
             type=raw,value=${{ matrix.variant.name }}-latest,enable={{is_default_branch}}
 
       - name: Build and push Docker image
+        id: build
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -383,8 +389,40 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: ${{ matrix.variant.build_args }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # Variant-scoped cache: prevents merge-tier builds from poisoning
+          # each other (polyglot's heavy install layers shouldn't displace
+          # minimal's cache). PR tier (test-pr.yml) uses its own scopes.
+          cache-from: |
+            type=gha,scope=merge-${{ matrix.variant.name }}
+            type=gha,scope=feature-${{ matrix.variant.name }}-main
+          cache-to: type=gha,scope=merge-${{ matrix.variant.name }},mode=max
+
+      - name: Report cache-hit rate
+        if: always() && steps.build.outcome != 'skipped'
+        env:
+          VARIANT: ${{ matrix.variant.name }}
+          TAG: ${{ fromJSON(steps.meta.outputs.json).tags[0] }}
+        run: |
+          set -euo pipefail
+          # Cache-hit signal modeled on the PR tier — coarse layer count
+          # via `docker history`. Acceptance criterion #408: cache hit
+          # rate measurable and logged per build.
+          TOTAL=$(docker history --no-trunc --format '{{.Size}}' "${TAG}" | wc -l || echo 0)
+          CACHED=$(docker history --no-trunc --format '{{.CreatedBy}}' "${TAG}" \
+            | grep -c 'FROM\|^/bin/sh -c #(nop)' || true)
+          if [ "${TOTAL}" -gt 0 ]; then
+            PCT=$((CACHED * 100 / TOTAL))
+          else
+            PCT=0
+          fi
+          echo "::notice::Cache hit rate for ${VARIANT}: ${PCT}% (${CACHED}/${TOTAL} layers)"
+          {
+            echo "### Cache hit rate — ${VARIANT}"
+            echo ""
+            echo "- Layers: ${TOTAL}"
+            echo "- Cached: ${CACHED}"
+            echo "- Hit rate: ${PCT}%"
+          } >> "${GITHUB_STEP_SUMMARY}"
 
   # =====================================
   # Integration Tests

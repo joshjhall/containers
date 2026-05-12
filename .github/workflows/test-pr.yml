@@ -1,0 +1,271 @@
+# =====================================
+# PR Tier — fast per-feature container builds on pull_request.
+#
+# See docs/operations/ci-tiers.md for the four-tier CI cadence design.
+#
+# Promotion criterion: passing this tier means the touched features still
+# build on debian:trixie × amd64. The merge tier (ci.yml `build` +
+# `integration-test`) runs after merge with the representative
+# multi-feature variants and full integration tests.
+#
+# Security note: every interpolation of github.event.* or matrix.* into a
+# shell context is plumbed through `env:` rather than direct `${{ ... }}`
+# expansion — prevents workflow-injection via PR metadata.
+# =====================================
+
+name: PR Tier — per-feature builds
+
+on:
+  pull_request:
+    branches: [main, v5]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  # =====================================
+  # Detect which features the PR touched.
+  # Emits a matrix of feature names (or falls back to the full merge-tier
+  # matrix if a foundational file changed).
+  # =====================================
+  detect-changes:
+    name: Detect changed features
+    runs-on: ubuntu-latest
+    outputs:
+      features: ${{ steps.compute.outputs.features }}
+      mode: ${{ steps.compute.outputs.mode }}
+    steps:
+      - name: Checkout PR head
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compute feature matrix
+        id: compute
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --depth=50 origin "${BASE_REF}"
+          BASE_SHA=$(git rev-parse "origin/${BASE_REF}")
+
+          # Pipe the diff to changed_features.sh — keeps git invocation
+          # under the workflow's control (auth, fetch depth) rather than
+          # the script's auto-detection logic.
+          DIFF=$(git diff --name-only "${BASE_SHA}...HEAD")
+          echo "--- diff against ${BASE_REF} ---"
+          echo "${DIFF:-(no changes)}"
+          echo "---"
+
+          OUT=$(printf '%s\n' "${DIFF}" | ./tests/changed_features.sh --files=-)
+
+          if [ -z "${OUT}" ]; then
+            {
+              echo "mode=skip"
+              echo "features=[]"
+            } >> "${GITHUB_OUTPUT}"
+            echo "::notice::No container-affecting changes in this PR — PR tier skipped."
+            exit 0
+          fi
+
+          if printf '%s\n' "${OUT}" | grep -Fxq "ALL"; then
+            # Foundational change (Dockerfile, lib/base, lib/runtime,
+            # crates/*, etc.) — fall back to the merge-tier cluster so a
+            # PR that breaks the base image fails fast on its own PR.
+            FEATURES='["python-dev","node-dev","rust-dev","golang-dev","kubernetes","dev-tools","docker","op"]'
+            {
+              echo "mode=full"
+              echo "features=${FEATURES}"
+            } >> "${GITHUB_OUTPUT}"
+            echo "::notice::Foundational change detected — running merge-tier cluster."
+            exit 0
+          fi
+
+          # Skip-list: features that don't fit the PR-tier budget for
+          # one of two reasons:
+          #   (a) known-broken in isolation — each entry has a tracking issue
+          #   (b) build time exceeds the per-cell timeout even with warm
+          #       cache, making PR-tier feedback unreliable
+          # Skipped features are still exercised by the merge tier.
+          # Entries:
+          #   mise  — #468: `mise --version` exits 134 in isolation
+          #   r-dev — exceeds 25min PR-tier ceiling (CRAN package set);
+          #           covered by merge-tier `r-dev` variant in ci.yml
+          SKIP_LIST='^(mise|r-dev)$'
+          FILTERED=$(printf '%s\n' "${OUT}" | grep -vE "${SKIP_LIST}" || true)
+
+          if [ -z "${FILTERED}" ]; then
+            {
+              echo "mode=skip"
+              echo "features=[]"
+            } >> "${GITHUB_OUTPUT}"
+            echo "::notice::All touched features are on the PR-tier skip-list — nothing to build."
+            exit 0
+          fi
+
+          # Convert newline-separated list to JSON array.
+          FEATURES=$(printf '%s\n' "${FILTERED}" | jq -R . | jq -s -c .)
+          {
+            echo "mode=changed"
+            echo "features=${FEATURES}"
+          } >> "${GITHUB_OUTPUT}"
+          if [ "${OUT}" != "${FILTERED}" ]; then
+            SKIPPED=$(printf '%s\n' "${OUT}" | grep -E "${SKIP_LIST}" | paste -sd,)
+            echo "::notice::PR-tier skipped features (known-broken in isolation): ${SKIPPED}"
+          fi
+          echo "::notice::PR-tier matrix: ${FEATURES}"
+
+  # =====================================
+  # Build one image per touched feature, in parallel.
+  # Single distro × arch: debian:trixie × amd64 (issue #408 PR-tier requirement).
+  # =====================================
+  build-feature:
+    name: Build ${{ matrix.feature }}
+    needs: detect-changes
+    if: needs.detect-changes.outputs.mode != 'skip'
+    runs-on: ubuntu-latest
+    # 25 min ceiling — the acceptance target is <15min for *typical*
+    # single-feature changes (most cells finish well under). Heavy
+    # features (r-dev's CRAN package set, java-dev's JDK + maven) take
+    # closer to 20min cold, so 25min keeps them green without the
+    # spurious cancellations a tighter cap caused for r-dev on this PR.
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        feature: ${{ fromJSON(needs.detect-changes.outputs.features) }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Map feature → INCLUDE_* build arg
+        id: arg
+        env:
+          FEATURE: ${{ matrix.feature }}
+        run: |
+          set -euo pipefail
+          # Single source of truth: FEATURE_MAP in tests/test_feature.sh.
+          BUILD_ARG=$(grep -E "^[[:space:]]*\[\"${FEATURE}\"\]=" tests/test_feature.sh \
+            | sed -E 's/.*"([A-Z_]+)".*/\1/')
+          if [ -z "${BUILD_ARG}" ]; then
+            echo "::error::No FEATURE_MAP entry for '${FEATURE}' — add it to tests/test_feature.sh."
+            exit 1
+          fi
+          {
+            echo "build_arg=${BUILD_ARG}"
+            echo "include_kv=${BUILD_ARG}=true"
+            echo "tag=pr-${{ github.event.pull_request.number }}-${FEATURE}"
+            echo "pr_scope=feature-${FEATURE}-pr-${{ github.event.pull_request.number }}"
+            echo "main_scope=feature-${FEATURE}-main"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build feature image
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: false
+          load: true
+          tags: ${{ steps.arg.outputs.tag }}
+          build-args: |
+            PROJECT_NAME=containers
+            PROJECT_PATH=.
+            ${{ steps.arg.outputs.include_kv }}
+          # PR cache scoped to the PR; falls back to main's per-feature cache
+          # so the first build in a PR isn't a full cold start. Prevents
+          # PR1 from poisoning PR2 the way the unscoped `type=gha` did.
+          cache-from: |
+            type=gha,scope=${{ steps.arg.outputs.pr_scope }}
+            type=gha,scope=${{ steps.arg.outputs.main_scope }}
+          cache-to: type=gha,scope=${{ steps.arg.outputs.pr_scope }},mode=max
+
+      - name: Smoke-test image
+        env:
+          FEATURE: ${{ matrix.feature }}
+          IMAGE: ${{ steps.arg.outputs.tag }}
+        run: |
+          set -euo pipefail
+          # PR tier's job is "did the image build and run." Comprehensive
+          # per-feature verification lives in the merge tier
+          # (tests/integration/builds/test_*.sh).
+          docker run --rm "${IMAGE}" bash -c 'echo "PR-tier smoke for $1"' -- "${FEATURE}"
+
+      - name: Report cache-hit rate
+        # Skip when the build itself didn't produce an image (e.g.,
+        # build failed or was cancelled mid-flight). The metric is only
+        # meaningful for a successful build; on failure we'd otherwise
+        # emit a misleading 0% and clutter logs with shell-error noise
+        # from the absent image. Build success/failure already shows up
+        # in the matrix cell's own outcome.
+        if: success() && steps.build.outcome == 'success'
+        env:
+          FEATURE: ${{ matrix.feature }}
+          IMAGE: ${{ steps.arg.outputs.tag }}
+        run: |
+          set -euo pipefail
+          # Count cached layers vs total layers via `docker history`.
+          # Subtlety: `grep -c` prints "0" AND exits 1 when no lines
+          # match. A `|| echo 0` fallback would append a second "0",
+          # giving CACHED="0\n0" which then breaks the arithmetic
+          # below. `|| true` (in a brace group so it applies to the
+          # pipeline's tail, not the assignment) swallows the exit code
+          # without producing extra output — grep already wrote the count.
+          TOTAL=$(docker history --no-trunc --format '{{.Size}}' "${IMAGE}" 2>/dev/null | wc -l)
+          CACHED=$(docker history --no-trunc --format '{{.CreatedBy}}' "${IMAGE}" 2>/dev/null \
+            | { grep -c 'FROM\|^/bin/sh -c #(nop)' || true; })
+          TOTAL=${TOTAL:-0}
+          CACHED=${CACHED:-0}
+          if [ "${TOTAL}" -gt 0 ]; then
+            PCT=$((CACHED * 100 / TOTAL))
+          else
+            PCT=0
+          fi
+          echo "::notice::Cache hit rate for ${FEATURE}: ${PCT}% (${CACHED}/${TOTAL} layers)"
+          {
+            echo "### Cache hit rate — ${FEATURE}"
+            echo ""
+            echo "- Layers: ${TOTAL}"
+            echo "- Cached: ${CACHED}"
+            echo "- Hit rate: ${PCT}%"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+  # =====================================
+  # Single status check for branch protection. Always runs; succeeds when
+  # all build-feature cells succeeded OR when there was nothing to build.
+  # =====================================
+  pr-tier:
+    name: PR Tier
+    needs: [detect-changes, build-feature]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Summarize
+        env:
+          MODE: ${{ needs.detect-changes.outputs.mode }}
+          BUILD_RESULT: ${{ needs.build-feature.result }}
+        run: |
+          set -euo pipefail
+          echo "Detect mode: ${MODE}"
+          echo "Build result: ${BUILD_RESULT}"
+          case "${MODE}" in
+            skip)
+              echo "::notice::PR tier skipped — no container-affecting changes."
+              exit 0
+              ;;
+          esac
+          # `success` (all matrix cells passed) or `skipped` (detect emitted
+          # nothing — already handled above) are both acceptable.
+          if [ "${BUILD_RESULT}" = "success" ] || [ "${BUILD_RESULT}" = "skipped" ]; then
+            exit 0
+          fi
+          echo "::error::PR-tier builds failed."
+          exit 1

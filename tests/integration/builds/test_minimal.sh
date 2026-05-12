@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# @tier: pr,merge,weekly
 # Test minimal container builds
 #
 # This test verifies that the most basic container configurations

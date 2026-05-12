@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# @tier: merge,weekly
 # Test setup-git, setup-gh, and setup-glab commands functionally
 #
 # This test builds two images (minimal + dev-tools) and runs the setup

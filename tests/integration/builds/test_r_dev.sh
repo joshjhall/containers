@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# @tier: merge,weekly
 # Test r-dev container build
 #
 # This test verifies the R development environment that includes:

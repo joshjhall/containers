@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# @tier: merge,weekly
 # Test polyglot container build
 #
 # This test verifies the polyglot configuration that includes:

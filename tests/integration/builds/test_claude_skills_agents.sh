@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# @tier: merge,weekly
 # Test Claude Code skills and agents installation
 #
 # This test verifies that skill and agent templates are staged at build time

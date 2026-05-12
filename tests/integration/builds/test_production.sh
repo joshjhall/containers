@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# @tier: merge,weekly
 # Test production container builds
 #
 # This test verifies that production-optimized containers build successfully
