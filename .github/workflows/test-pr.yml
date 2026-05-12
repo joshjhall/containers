@@ -93,10 +93,9 @@ jobs:
           #       cache, making PR-tier feedback unreliable
           # Skipped features are still exercised by the merge tier.
           # Entries:
-          #   mise  — #468: `mise --version` exits 134 in isolation
           #   r-dev — exceeds 25min PR-tier ceiling (CRAN package set);
           #           covered by merge-tier `r-dev` variant in ci.yml
-          SKIP_LIST='^(mise|r-dev)$'
+          SKIP_LIST='^(r-dev)$'
           FILTERED=$(printf '%s\n' "${OUT}" | grep -vE "${SKIP_LIST}" || true)
 
           if [ -z "${FILTERED}" ]; then

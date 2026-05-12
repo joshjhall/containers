@@ -336,6 +336,7 @@ jobs:
               INCLUDE_POSTGRES_CLIENT=true
               INCLUDE_REDIS_CLIENT=true
               INCLUDE_SQLITE_CLIENT=true
+              INCLUDE_MISE=true
           - name: rust-golang
             build_args: |
               PROJECT_NAME=containers
