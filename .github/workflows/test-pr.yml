@@ -86,12 +86,17 @@ jobs:
             exit 0
           fi
 
-          # Skip-list: features known to fail in isolation, each with a
-          # tracking issue. Filter out before producing the matrix so a
-          # known-broken feature doesn't redden every PR that touches it.
-          # Tracked in #468: mise — `mise --version` exits 134 in
-          # isolation; never covered by any merge-tier variant.
-          SKIP_LIST='^(mise)$'
+          # Skip-list: features that don't fit the PR-tier budget for
+          # one of two reasons:
+          #   (a) known-broken in isolation — each entry has a tracking issue
+          #   (b) build time exceeds the per-cell timeout even with warm
+          #       cache, making PR-tier feedback unreliable
+          # Skipped features are still exercised by the merge tier.
+          # Entries:
+          #   mise  — #468: `mise --version` exits 134 in isolation
+          #   r-dev — exceeds 25min PR-tier ceiling (CRAN package set);
+          #           covered by merge-tier `r-dev` variant in ci.yml
+          SKIP_LIST='^(mise|r-dev)$'
           FILTERED=$(printf '%s\n' "${OUT}" | grep -vE "${SKIP_LIST}" || true)
 
           if [ -z "${FILTERED}" ]; then
