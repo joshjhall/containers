@@ -153,11 +153,14 @@ chmod +x /etc/bashrc.d/70-mise.sh
 # ============================================================================
 log_message "Verifying mise installation..."
 
-if mise --version >/dev/null 2>&1; then
-    MISE_VER=$(mise --version 2>&1 | command head -1)
+# Don't pipe `--version` through head: mise's async self-update check writes
+# to stderr after the version line, and piping with `2>&1 | head` closes the
+# stream early, triggering SIGPIPE → Rust panic=abort → SIGABRT (exit 134).
+# Capture stdout directly; discard stderr.
+if MISE_VER=$(mise --version 2>/dev/null); then
     log_message "  ${MISE_VER}"
 else
-    log_error "mise installation verification failed"
+    log_error "mise installation verification failed (exit $?)"
     log_feature_end
     exit 1
 fi

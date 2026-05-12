@@ -83,8 +83,10 @@ test_mise_install_runtime() {
 
     # Interactive shell ensures the 70-mise.sh fragment is sourced and mise
     # activate has set up shims. Use printf for a multi-line .mise.toml.
+    # `mise trust` is required because /tmp isn't under the default
+    # MISE_TRUSTED_CONFIG_PATHS (/workspace).
     assert_command_in_container "$image" \
-        "bash -ic 'cd /tmp && mkdir -p mise-test && cd mise-test && printf \"[tools]\\ndeno = \\\"1\\\"\\n\" > .mise.toml && mise install >/dev/null 2>&1 && mise which deno >/dev/null 2>&1 && echo install-ok'" \
+        "bash -ic 'cd /tmp && mkdir -p mise-test && cd mise-test && printf \"[tools]\\ndeno = \\\"1\\\"\\n\" > .mise.toml && mise trust >/dev/null 2>&1 && mise install >/dev/null 2>&1 && mise which deno >/dev/null 2>&1 && echo install-ok'" \
         "install-ok"
 }
 
