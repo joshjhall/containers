@@ -2,7 +2,8 @@
 //!
 //! Reproduces the side-effects of `lib/features/rust.sh` in Rust:
 //!
-//! 1. Ensure `cache_root/cargo` and `cache_root/rustup` exist.
+//! 1. Ensure `cache_root/cargo` and `cache_root/rustup` exist, and chown
+//!    them to the install user so `su -c` writes don't hit EACCES.
 //! 2. Mark the downloaded artifact executable.
 //! 3. `su - <user> -c "export CARGO_HOME=...; export RUSTUP_HOME=...;
 //!    <artifact> <args...>"`.
@@ -22,7 +23,7 @@ use shell_words::quote;
 
 use super::{CommandRunner, MethodContext};
 use crate::error::{LuggageError, Result};
-use crate::installer::user::su_command;
+use crate::installer::user::{chown_command, su_command};
 
 /// Binaries the rust install must surface in `bin_root` for parity with
 /// `lib/features/rust.sh`.
@@ -42,11 +43,29 @@ pub const RUST_BINARIES: &[&str] =
 ///   rather than post-install — but the error variant fits "user-running
 ///   command failed" semantics best.)
 pub fn run(ctx: &MethodContext<'_>) -> Result<()> {
-    // 1. Ensure cache directories exist.
+    // 1. Ensure cache directories exist and are owned by the install
+    //    user. `create_dir_all` runs in the parent (root) process, so any
+    //    subdirs it creates would otherwise be root-owned; the subsequent
+    //    `su -c rustup-init` child would then hit EACCES on the first
+    //    write into `$RUSTUP_HOME` (see issue #462).
     let cargo_home = ctx.cache_root.join("cargo");
     let rustup_home = ctx.cache_root.join("rustup");
     for dir in [&cargo_home, &rustup_home] {
         fs::create_dir_all(dir).map_err(|e| LuggageError::Io { path: dir.clone(), source: e })?;
+        let argv = chown_command(ctx.user, dir);
+        let outcome = ctx.runner.run(&argv[0], &argv[1..])?;
+        if !outcome.success() {
+            return Err(LuggageError::InstallStageFailed {
+                stage: "chown",
+                message: format!(
+                    "chown {} -> {} exited with status {:?}: {}",
+                    dir.display(),
+                    ctx.user,
+                    outcome.status,
+                    String::from_utf8_lossy(&outcome.stderr).trim_end(),
+                ),
+            });
+        }
     }
 
     // 2. chmod +x the downloaded installer.
@@ -193,6 +212,62 @@ mod tests {
         assert!(payload.contains("--default-toolchain"));
         assert!(payload.contains("1.95.0"));
         assert!(payload.contains(&artifact.display().to_string()));
+
+        // chown must precede su, so the su child can write into the
+        // cache subdirs without hitting EACCES.
+        let su_idx = calls.iter().position(|(p, _)| p == "su").unwrap();
+        let chown_idx = calls
+            .iter()
+            .position(|(p, _)| p == "chown")
+            .expect("expected at least one chown call before su");
+        assert!(
+            chown_idx < su_idx,
+            "expected chown to run before su (chown_idx={chown_idx}, su_idx={su_idx})",
+        );
+    }
+
+    #[test]
+    fn run_chowns_cache_directories() {
+        let cache = tempdir().unwrap();
+        let bin = tempdir().unwrap();
+        let tmp = tempdir().unwrap();
+        let artifact = make_artifact(tmp.path());
+        let runner = RecordingRunner::new();
+        let env = BTreeMap::new();
+        let args: Vec<String> = vec![];
+
+        let ctx = MethodContext {
+            artifact: &artifact,
+            args: &args,
+            env: &env,
+            user: "vscode",
+            cache_root: cache.path(),
+            bin_root: bin.path(),
+            runner: &runner,
+        };
+        run(&ctx).unwrap();
+
+        let calls = runner.calls();
+        let chown_calls: Vec<&(String, Vec<String>)> =
+            calls.iter().filter(|(p, _)| p == "chown").collect();
+        assert_eq!(chown_calls.len(), 2, "expected one chown per cache subdir");
+
+        let cargo_path = cache.path().join("cargo").display().to_string();
+        let rustup_path = cache.path().join("rustup").display().to_string();
+        let chown_paths: Vec<&String> =
+            chown_calls.iter().map(|(_, args)| args.last().unwrap()).collect();
+        assert!(
+            chown_paths.iter().any(|p| **p == cargo_path),
+            "expected a chown for {cargo_path} in {chown_paths:?}",
+        );
+        assert!(
+            chown_paths.iter().any(|p| **p == rustup_path),
+            "expected a chown for {rustup_path} in {chown_paths:?}",
+        );
+        for (_, chown_args) in chown_calls {
+            assert_eq!(chown_args[0], "-R");
+            assert_eq!(chown_args[1], "vscode:vscode");
+        }
     }
 
     #[test]
@@ -248,6 +323,47 @@ mod tests {
                 "expected {name} to be symlinked under {}",
                 bin.path().display(),
             );
+        }
+    }
+
+    #[test]
+    fn run_propagates_chown_failure_as_install_stage_failed() {
+        let cache = tempdir().unwrap();
+        let bin = tempdir().unwrap();
+        let tmp = tempdir().unwrap();
+        let artifact = make_artifact(tmp.path());
+        let runner = RecordingRunner::new();
+        runner.set_outcome(
+            "chown",
+            CommandOutcome {
+                status: Some(1),
+                stdout: vec![],
+                stderr: b"chown: invalid user: 'vscode'".to_vec(),
+            },
+        );
+        let env = BTreeMap::new();
+        let args: Vec<String> = vec![];
+
+        let ctx = MethodContext {
+            artifact: &artifact,
+            args: &args,
+            env: &env,
+            user: "vscode",
+            cache_root: cache.path(),
+            bin_root: bin.path(),
+            runner: &runner,
+        };
+        let err = run(&ctx).unwrap_err();
+        match err {
+            LuggageError::InstallStageFailed { stage, message } => {
+                assert_eq!(stage, "chown");
+                assert!(message.contains("vscode"), "message missing user: {message}");
+                assert!(
+                    message.contains("invalid user"),
+                    "message missing stderr passthrough: {message}",
+                );
+            }
+            other => panic!("expected InstallStageFailed, got {other:?}"),
         }
     }
 
