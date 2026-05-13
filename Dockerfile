@@ -168,7 +168,7 @@ RUN mkdir -p /var/log/luggage && chmod 755 /var/log/luggage
 
 ARG INCLUDE_PYTHON=false
 ARG INCLUDE_PYTHON_DEV=false
-ARG PYTHON_VERSION=3.14.4
+ARG PYTHON_VERSION=3.14.5
 
 # Handle optional Python project files only if Python is being installed
 # Copy to temp location first since we're running as root and user doesn't exist yet
@@ -213,7 +213,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 # Ruby + Ruby development tools
 ARG INCLUDE_RUBY=false
 ARG INCLUDE_RUBY_DEV=false
-ARG RUBY_VERSION=4.0.3
+ARG RUBY_VERSION=4.0.4
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     if [ "${INCLUDE_RUBY}" = "true" ] || [ "${INCLUDE_RUBY_DEV}" = "true" ]; then \
@@ -241,7 +241,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 ARG INCLUDE_MOJO=false
 ARG INCLUDE_MOJO_DEV=false
 ARG MOJO_VERSION=25.4
-ARG PIXI_VERSION=0.68.0
+ARG PIXI_VERSION=0.68.1
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     if [ "${INCLUDE_MOJO}" = "true" ] || [ "${INCLUDE_MOJO_DEV}" = "true" ]; then \
@@ -305,7 +305,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     fi
 # Mise polyglot runtime version manager
 ARG INCLUDE_MISE=false
-ARG MISE_VERSION=2026.4.20
+ARG MISE_VERSION=2026.5.6
 RUN if [ "${INCLUDE_MISE}" = "true" ]; then \
     MISE_VERSION=${MISE_VERSION} /tmp/build-scripts/features/mise.sh; \
     fi
@@ -351,7 +351,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 
 # Kubernetes tools
 ARG INCLUDE_KUBERNETES=false
-ARG KUBECTL_VERSION=1.33.11
+ARG KUBECTL_VERSION=1.33.12
 ARG K9S_VERSION=0.50.18
 ARG KREW_VERSION=0.5.0
 ARG HELM_VERSION=4.1.4
@@ -371,7 +371,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 # Terraform
 ARG INCLUDE_TERRAFORM=false
 ARG TERRAGRUNT_VERSION=1.0.4
-ARG TFDOCS_VERSION=0.23.0
+ARG TFDOCS_VERSION=0.24.0
 ARG TFLINT_VERSION=0.62.0
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \

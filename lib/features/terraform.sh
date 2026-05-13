@@ -71,7 +71,7 @@ log_feature_start "Terraform"
 # Terraform uses latest from HashiCorp APT repository
 # TERRAFORM_VERSION is not used since we install from APT (always latest)
 TERRAGRUNT_VERSION="${TERRAGRUNT_VERSION:-1.0.4}"
-TFDOCS_VERSION="${TFDOCS_VERSION:-0.23.0}"
+TFDOCS_VERSION="${TFDOCS_VERSION:-0.24.0}"
 TFLINT_VERSION="${TFLINT_VERSION:-0.62.0}"
 # Note: Trivy is installed via APT repository (no version pinning needed)
 
