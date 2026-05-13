@@ -54,19 +54,16 @@ COPY crates/luggage/testdata/catalog /opt/containers-db
 # from a single Cargo.lock without depending on the live containers-db
 # repo. Platform is auto-detected from /etc/os-release + ARCH so the
 # fixture works on amd64 and arm64 build hosts alike.
-#
-# CARGO_HOME / RUSTUP_HOME are exported so luggage's post-install
-# validation (`rustc --version` via the rustup proxy) can locate the
-# toolchain — without them the proxy reports "no default toolchain".
-ENV CARGO_HOME=/cache/cargo \
-    RUSTUP_HOME=/cache/rustup
 RUN /usr/local/bin/luggage install "rust@${RUST_VERSION}" \
     --catalog /opt/containers-db \
     --user vscode
 
-# Sanity touchstone for the smoke test driver. CARGO_HOME / RUSTUP_HOME
-# are already set above for the install RUN; here we just add the PATH.
-ENV PATH="/cache/cargo/bin:/usr/local/bin:${PATH}"
+# Toolchain env for the USER vscode session below (smoke driver runs
+# cargo). The install RUN above intentionally runs without these set —
+# luggage propagates them internally.
+ENV CARGO_HOME=/cache/cargo \
+    RUSTUP_HOME=/cache/rustup \
+    PATH="/cache/cargo/bin:/usr/local/bin:${PATH}"
 
 USER vscode
 WORKDIR /home/vscode

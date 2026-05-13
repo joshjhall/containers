@@ -90,4 +90,4 @@ For each feature script (e.g. `node.sh`, `python.sh`):
 
 | Feature | Issue | Notes |
 | --- | --- | --- |
-| `rust.sh` | #407 | Pilot. Channels (`stable`/`beta`/`nightly`) route through `--channel`. cargo dev tools (cargo-watch, mdbook suite) remain in bash. |
+| `rust.sh` | #407 | Pilot. Channels (`stable`/`beta`/`nightly`) route through `--channel`. cargo dev tools (cargo-watch, mdbook suite) remain in bash. Callers no longer need to `export CARGO_HOME` / `RUSTUP_HOME` before invoking luggage — the validate subprocess now inherits them from the install (#463). |
