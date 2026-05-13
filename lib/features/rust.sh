@@ -112,12 +112,6 @@ log_command "Setting cache directory ownership" \
 # route through `--channel`; semver-shaped values use `tool@<version>`.
 log_message "Installing Rust toolchain via luggage..."
 
-# Export CARGO_HOME/RUSTUP_HOME so luggage's post-install validation step —
-# which runs `rustc --version` via the rustup proxy — can locate the
-# toolchain it just installed. Without these, the proxy looks at
-# `$HOME/.rustup` and reports "no default toolchain configured".
-export CARGO_HOME RUSTUP_HOME
-
 if [[ "$RUST_VERSION" =~ ^(stable|beta|nightly)$ ]]; then
     log_command "luggage install rust --channel ${RUST_VERSION}" \
         /usr/local/bin/luggage install rust \

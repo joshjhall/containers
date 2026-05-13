@@ -317,12 +317,23 @@ impl Installer {
         fs::write(&artifact, &bytes)
             .map_err(|e| LuggageError::Io { path: artifact.clone(), source: e })?;
 
-        let env_map = invoke_env_map(resolved);
+        // Build the env map once so every stage that shells out (install
+        // method, post-install steps, post-install validate) sees the same
+        // CARGO_HOME / RUSTUP_HOME. validate previously relied on the parent
+        // process's exports and failed when the rustup proxy fell back to
+        // `$HOME/.rustup` (issue #463).
+        let mut env_map = invoke_env_map(resolved);
+        env_map
+            .entry("CARGO_HOME".to_owned())
+            .or_insert_with(|| self.options.cache_root.join("cargo").display().to_string());
+        env_map
+            .entry("RUSTUP_HOME".to_owned())
+            .or_insert_with(|| self.options.cache_root.join("rustup").display().to_string());
         let invoke_args = plan.invoke_args.clone().unwrap_or_default();
         let user = plan.user;
         self.stage_method(resolved, &artifact, &invoke_args, &env_map, &user, logger)?;
-        self.stage_post_install(resolved, &user, env_map, logger)?;
-        self.stage_validate(resolved, logger)
+        self.stage_post_install(resolved, &user, &env_map, logger)?;
+        self.stage_validate(resolved, &env_map, logger)
     }
 
     fn stage_system_packages(
@@ -412,19 +423,12 @@ impl Installer {
         &self,
         resolved: &ResolvedInstall,
         user: &str,
-        mut env_map: BTreeMap<String, String>,
+        env_map: &BTreeMap<String, String>,
         logger: Option<&logging::FeatureLogger>,
     ) -> Result<()> {
         // Post-install runs in a fresh `su -` so it needs the same env the
-        // install method exported. If the catalog didn't pin them, add the
-        // pilot defaults under `cache_root`.
-        env_map
-            .entry("CARGO_HOME".to_owned())
-            .or_insert_with(|| self.options.cache_root.join("cargo").display().to_string());
-        env_map
-            .entry("RUSTUP_HOME".to_owned())
-            .or_insert_with(|| self.options.cache_root.join("rustup").display().to_string());
-
+        // install method exported. `run_stages` prefills the cache-root
+        // CARGO_HOME / RUSTUP_HOME defaults so every stage shares one map.
         let Some(steps) = resolved.post_install.as_deref() else { return Ok(()) };
         if steps.is_empty() {
             return Ok(());
@@ -432,18 +436,19 @@ impl Installer {
         if let Some(l) = logger {
             l.step(&format!("post-install ({} steps)", steps.len()));
         }
-        post_install::run_steps(steps, user, &env_map, self.runner.as_ref())
+        post_install::run_steps(steps, user, env_map, self.runner.as_ref())
     }
 
     fn stage_validate(
         &self,
         resolved: &ResolvedInstall,
+        env_map: &BTreeMap<String, String>,
         logger: Option<&logging::FeatureLogger>,
     ) -> Result<()> {
         if let Some(l) = logger {
             l.step("validate");
         }
-        validate::check(&resolved.tool, &resolved.version, &self.options.bin_root)
+        validate::check(&resolved.tool, &resolved.version, &self.options.bin_root, env_map)
     }
 }
 
