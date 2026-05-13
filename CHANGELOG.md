@@ -5,11 +5,60 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.19.0] - 2026-05-13
+
+### Added
+
+- Add zed_extensions field to Feature registry (#448)
+- Emit customizations.zed.extensions in devcontainer template (#449)
+- Add zed customizations to repo .devcontainer/devcontainer.json (#450)
+- Mount zed-extensions volume in docker-compose template (#451)
+- Broaden Zed extensions on dev_tools and docker (#453)
+- Add PR-tier workflow with per-feature change detection (#467)
+- Add TaggedVersion for round-trip prefix preservation (#470)
+
+### Changed
+
+- Delegate toolchain install to luggage CLI shim (#461)
+
+### Documentation
+
+- Document Zed forwardPorts limitation and workaround (#455)
+- Add Zed onboarding sections and IDE parity README notes (#458)
+
+### Fixed
+
+- Replay entrypoint under Zed via recover-entrypoint (#452)
+- Pre-clone advisory-db so cargo audit can fast-forward (#460)
+- Serialize shim-writing idempotency tests to close fork/exec race (#459)
+- Point Zed dprint/taplo extensions at system binaries (#454)
+- Prevent SIGABRT in mise --version build verification (#469)
+- Chown new cache subdirs to install user (#471)
+- Propagate env map to validate subprocess (#472)
+
+### Miscellaneous
+
+- Record skip-all-files-lint feedback for scoped changes
+- Bump tool versions
+
 ## [4.18.3] - 2026-05-10
+
+### Added
+
+- Minimal hardened base images for v5 evidence runs (#429)
 
 ### CI/CD
 
 - Retry gh pr merge --auto to absorb post-create races
+
+### Fixed
+
+- Suppress false-positive missing-test findings (#424) (#437)
+
+### Miscellaneous
+
+- Automated version updates to v4.18.3
+- Update compatibility matrix with passing test results
 
 ## [4.18.2] - 2026-05-03
 
@@ -1764,6 +1813,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix prettier and markdownlint formatting in README
 - Format TLS documentation files
 
+[4.19.0]: https://github.com/joshjhall/containers/compare/v4.18.3...v4.19.0
 [4.18.3]: https://github.com/joshjhall/containers/compare/v4.18.2...v4.18.3
 [4.18.2]: https://github.com/joshjhall/containers/compare/v4.18.1...v4.18.2
 [4.18.1]: https://github.com/joshjhall/containers/compare/v4.18.0...v4.18.1
