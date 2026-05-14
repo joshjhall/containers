@@ -301,6 +301,9 @@ db-validate: db-compile
     #!/usr/bin/env bash
     set -euo pipefail
     cd "{{ CONTAINERS_DB }}"
+    # Build the Rust semantic validator once; the negative-fixture loop below
+    # invokes it per fixture and we don't want cargo re-checking freshness each time.
+    cargo build --release -p db-validator --bin validate-catalog
     ajv() {
         npx --yes -p ajv-cli@{{ AJV_CLI_VERSION }} -p ajv-formats@{{ AJV_FORMATS_VERSION }} -- ajv "$@"
     }
@@ -308,24 +311,24 @@ db-validate: db-compile
     ajv validate {{ AJV_FLAGS }} -s schema/tool.schema.json    -d fixtures/sample-tool/index.json
     ajv validate {{ AJV_FLAGS }} -s schema/version.schema.json -d "fixtures/sample-tool/versions/*.json"
     ajv validate {{ AJV_FLAGS }} -s schema/version.schema.json -d "fixtures/tier*-example.json"
-    # Cross-reference + comparator-placeholder check
-    node scripts/validate-cross-refs.mjs
-    # Negative fixtures: each must be rejected by ajv OR by validate-cross-refs
-    # (matches the workflow's combined ajv_rc/xref_rc check).
+    # Semantic validation (full catalog walk via the Rust validator)
+    ./target/release/validate-catalog
+    # Negative fixtures: each must be rejected by ajv OR by validate-catalog
+    # (matches the workflow's combined ajv_rc/sem_rc check).
     for fixture in fixtures/_negative/*.json; do
         ajv_rc=0
-        xref_rc=0
+        sem_rc=0
         set +e
         ajv validate {{ AJV_FLAGS }} -s schema/version.schema.json -d "$fixture"
         ajv_rc=$?
-        node scripts/validate-cross-refs.mjs --only "$fixture"
-        xref_rc=$?
+        ./target/release/validate-catalog --only "$fixture"
+        sem_rc=$?
         set -e
-        if [ "$ajv_rc" -eq 0 ] && [ "$xref_rc" -eq 0 ]; then
-            echo "ERROR: negative fixture $fixture passed both ajv AND cross-ref" >&2
+        if [ "$ajv_rc" -eq 0 ] && [ "$sem_rc" -eq 0 ]; then
+            echo "ERROR: negative fixture $fixture passed both ajv AND validate-catalog" >&2
             exit 1
         fi
-        echo "Negative fixture $fixture correctly rejected (ajv=$ajv_rc, xref=$xref_rc)"
+        echo "Negative fixture $fixture correctly rejected (ajv=$ajv_rc, validate-catalog=$sem_rc)"
     done
 
 # Validate one tool's index (and versions/, if present).
