@@ -199,6 +199,13 @@ if [ "$RUN_ALL" = true ]; then
 fi
 
 # Emit deduplicated, sorted feature list.
-if [ ${#SEEN[@]} -gt 0 ]; then
+#
+# Bash's `set -u` trips on `${#SEEN[@]}` for an empty associative array
+# (try `set -u; declare -A m; echo ${#m[@]}` — "unbound variable").
+# Detect emptiness via the `+` parameter-expansion operator, which
+# expands to the alt-value only when at least one element has been set
+# on the array. Hit when a PR touches only files that don't map to any
+# feature (e.g. .github/workflows/*, base-images/*, docs/*).
+if [ -n "${SEEN[*]+x}" ]; then
     command printf '%s\n' "${!SEEN[@]}" | command sort -u
 fi
