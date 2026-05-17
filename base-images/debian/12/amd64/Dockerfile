@@ -34,8 +34,17 @@ ENV DEBIAN_FRONTEND=noninteractive
 # passwd for nologin lookups, and that's it. Anything else is a tool the
 # evidence run is supposed to install — keeping it out of this layer
 # preserves the "tool under test is the only major variable" invariant.
-# hadolint ignore=DL3008
+#
+# `apt-get upgrade` runs against `debian:12-slim`'s preinstalled set
+# (libc-bin, libcap2, libsystemd0, …) so a fresh build picks up Debian
+# security advisories without waiting for an upstream image refresh.
+# Without it, Trivy fails the publish step on HIGH CVEs the security
+# repo has already shipped fixes for (see incident 2026-05-17). DL3005
+# normally discourages this for derived images, but a base image is
+# itself a security boundary.
+# hadolint ignore=DL3005,DL3008
 RUN apt-get update \
+ && apt-get upgrade -y \
  && apt-get install -y --no-install-recommends \
         ca-certificates \
         sudo \
