@@ -5,11 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.19.2] - 2026-05-17
+
+### Added
+
+- Add --json-report and TestEntry recorder for evidence runs (#479)
+
+### Fixed
+
+- Serialize shim-writing validate tests to close fork/exec race (#481)
+- Make changed_features.sh exit 0 on no-feature-match input (#485)
+- Skip SARIF upload on ephemeral auto-patch branches (#484)
+- Move auto-patch matrix update from pre-merge to post-merge (#483)
+- Apt-get upgrade to pick up Debian security advisories (#482)
+
 ## [4.19.1] - 2026-05-17
 
 ### Fixed
 
 - Switch db-validate to validate-catalog Rust binary (#475)
+
+### Miscellaneous
+
+- Automated version updates to v4.19.1
+- Update compatibility matrix with passing test results
 
 ## [4.19.0] - 2026-05-13
 
@@ -1819,6 +1838,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix prettier and markdownlint formatting in README
 - Format TLS documentation files
 
+[4.19.2]: https://github.com/joshjhall/containers/compare/v4.19.1...v4.19.2
 [4.19.1]: https://github.com/joshjhall/containers/compare/v4.19.0...v4.19.1
 [4.19.0]: https://github.com/joshjhall/containers/compare/v4.18.3...v4.19.0
 [4.18.3]: https://github.com/joshjhall/containers/compare/v4.18.2...v4.18.3
