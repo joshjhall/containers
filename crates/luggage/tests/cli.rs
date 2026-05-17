@@ -7,6 +7,8 @@
 use std::path::PathBuf;
 use std::process::{Command, Output};
 
+use tempfile::tempdir;
+
 const fn binary() -> &'static str {
     env!("CARGO_BIN_EXE_luggage")
 }
@@ -176,4 +178,86 @@ fn resolve_missing_catalog_exits_one() {
         stderr.contains("not a directory"),
         "stderr should explain the missing catalog: {stderr}",
     );
+}
+
+/// Dry-run with `--json-report` writes the report file alongside the
+/// existing plan-on-stdout behavior. The report has every field the
+/// evidence-run wrapper depends on, even though the install was never
+/// executed.
+#[test]
+fn install_dry_run_writes_json_report() {
+    let workdir = tempdir().expect("tempdir");
+    let report_path = workdir.path().join("report.json");
+    let out = run(&[
+        "install",
+        "rust@1.95.0",
+        "--os",
+        "debian",
+        "--os-version",
+        "13",
+        "--arch",
+        "amd64",
+        "--dry-run",
+        "--log-dir",
+        workdir.path().to_str().unwrap(),
+        "--bin-root",
+        workdir.path().to_str().unwrap(),
+        "--cache-root",
+        workdir.path().to_str().unwrap(),
+        "--tmp-root",
+        workdir.path().to_str().unwrap(),
+        "--json-report",
+        report_path.to_str().unwrap(),
+    ]);
+    assert_exit(&out, 0);
+
+    let body = std::fs::read_to_string(&report_path).expect("read report file");
+    let report: serde_json::Value = serde_json::from_str(&body).expect("parse report JSON");
+
+    assert_eq!(report["tool"], "rust");
+    assert_eq!(report["version"], "1.95.0");
+    assert_eq!(report["already_installed"], false);
+    assert!(report["duration_seconds"].is_number(), "duration_seconds must be present");
+    assert!(report["version_output"].is_null(), "dry-run has no validate output");
+    assert!(report["error_class"].is_null(), "dry-run is not a failure");
+
+    // Stdout still carries the plan JSON for human inspection.
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let plan: serde_json::Value = serde_json::from_str(&stdout).expect("parse plan from stdout");
+    assert_eq!(plan["tool"], "rust");
+    assert_eq!(plan["method_name"], "rustup-init");
+}
+
+/// Resolve-time errors (`ToolNotFound`, `UnsupportedPlatform`) return
+/// before `run_with_report` is reached, so no report file is written.
+/// Evidence rows only make sense for tuples that resolve cleanly;
+/// misconfigured inputs are stderr-only.
+#[test]
+fn install_resolve_time_errors_do_not_write_json_report() {
+    let workdir = tempdir().expect("tempdir");
+    let report_path = workdir.path().join("report.json");
+    let out = run(&[
+        "install",
+        "ghosttool",
+        "--os",
+        "debian",
+        "--os-version",
+        "13",
+        "--arch",
+        "amd64",
+        "--log-dir",
+        workdir.path().to_str().unwrap(),
+        "--bin-root",
+        workdir.path().to_str().unwrap(),
+        "--cache-root",
+        workdir.path().to_str().unwrap(),
+        "--tmp-root",
+        workdir.path().to_str().unwrap(),
+        "--json-report",
+        report_path.to_str().unwrap(),
+    ]);
+    assert_exit(&out, 1);
+    assert!(!report_path.exists(), "resolve-time errors run before run_with_report");
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(stderr.contains("not found"), "stderr should mention 'not found': {stderr}");
 }

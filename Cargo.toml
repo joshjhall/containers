@@ -1,6 +1,11 @@
 [workspace]
 resolver = "3"
-members = ["crates/stibbons", "crates/containers-common", "crates/luggage"]
+members = [
+  "crates/stibbons",
+  "crates/containers-common",
+  "crates/luggage",
+  "crates/record-evidence",
+]
 
 [workspace.package]
 edition = "2024"
@@ -31,6 +36,7 @@ tempfile = "3"
 sha2 = "0.10"
 semver = { version = "1", features = ["serde"] }
 thiserror = "2"
+time = { version = "0.3", features = ["formatting", "macros"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 

@@ -98,6 +98,29 @@ pub struct TestEntry {
     pub ci_run: Option<String>,
     /// Outcome of the run.
     pub result: TestResult,
+    /// Human-readable image reference exercised by this run, e.g.
+    /// `ghcr.io/joshjhall/containers/base-debian-12-amd64:v1.0.0`.
+    /// Pair with [`Self::image_digest`] — the tag may move but the
+    /// digest pins the artifact.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub image_ref: Option<String>,
+    /// Content-addressed digest of the image exercised, formatted
+    /// `sha256:<64 hex chars>`. Required for a run to be reproducible
+    /// after the tag has moved.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub image_digest: Option<String>,
+    /// Wallclock duration of the install step in seconds. Sourced from
+    /// `luggage install --json-report`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub duration_seconds: Option<f64>,
+    /// Captured stdout of the validate stage's `<tool> --version`
+    /// invocation, trimmed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub version_output: Option<String>,
+    /// Stage-aligned failure category, populated when [`Self::result`]
+    /// is [`TestResult::Fail`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error_class: Option<ErrorClass>,
     /// Free-form notes.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub notes: Option<String>,
@@ -113,6 +136,30 @@ pub enum TestResult {
     Fail,
     /// CI run was skipped.
     Skip,
+}
+
+/// Structured failure category for [`TestEntry::error_class`].
+///
+/// Mirrors the enum in containers-db's
+/// `schema/version.schema.json`. Values map to luggage installer stages
+/// so categorization is mechanical rather than editorial.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ErrorClass {
+    /// Artifact fetch failed.
+    Download,
+    /// Checksum or signature mismatch.
+    Verify,
+    /// Install-method dispatch failed.
+    InstallMethod,
+    /// A `post_install[]` step failed.
+    PostInstall,
+    /// The `<tool> --version` validation did not match the requested version.
+    Validate,
+    /// CI runner / network / registry failure unrelated to the tool.
+    Infra,
+    /// Older runs predating this enum or truly unclassifiable.
+    Unknown,
 }
 
 /// Optional uninstall steps.
@@ -182,5 +229,87 @@ mod tests {
         assert_eq!(v.tool, reparsed.tool);
         assert_eq!(v.version, reparsed.version);
         assert_eq!(v.install_methods.len(), reparsed.install_methods.len());
+    }
+
+    #[test]
+    fn test_entry_round_trips_evidence_fields() {
+        let json = r#"{
+            "os": "debian",
+            "os_version": "12",
+            "arch": "amd64",
+            "tested_at": "2026-05-16T12:00:00Z",
+            "ci_run": "https://github.com/joshjhall/containers/actions/runs/1",
+            "result": "pass",
+            "image_ref": "ghcr.io/joshjhall/containers/base-debian-12-amd64:v1.0.0",
+            "image_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+            "duration_seconds": 42.5,
+            "version_output": "rustc 1.95.0 (abcdef0 2026-05-01)"
+        }"#;
+        let entry: TestEntry = serde_json::from_str(json).expect("parse evidence row");
+        assert_eq!(
+            entry.image_digest.as_deref(),
+            Some("sha256:0000000000000000000000000000000000000000000000000000000000000000",)
+        );
+        assert_eq!(entry.duration_seconds, Some(42.5));
+        assert_eq!(entry.version_output.as_deref(), Some("rustc 1.95.0 (abcdef0 2026-05-01)"));
+        assert!(entry.error_class.is_none(), "pass row has no error_class");
+
+        let serialized = serde_json::to_string(&entry).unwrap();
+        let reparsed: TestEntry = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(reparsed.image_ref, entry.image_ref);
+        assert_eq!(reparsed.duration_seconds, entry.duration_seconds);
+    }
+
+    #[test]
+    fn test_entry_round_trips_failure_row_with_error_class() {
+        let json = r#"{
+            "os": "alpine",
+            "os_version": "3.21",
+            "arch": "arm64",
+            "tested_at": "2026-05-16T12:30:00Z",
+            "result": "fail",
+            "image_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "duration_seconds": 7.25,
+            "error_class": "verify",
+            "notes": "tier-3 checksum mismatch"
+        }"#;
+        let entry: TestEntry = serde_json::from_str(json).expect("parse failure row");
+        assert_eq!(entry.result, TestResult::Fail);
+        assert_eq!(entry.error_class, Some(ErrorClass::Verify));
+        assert_eq!(entry.notes.as_deref(), Some("tier-3 checksum mismatch"));
+    }
+
+    #[test]
+    fn test_entry_legacy_row_without_evidence_fields_still_parses() {
+        // Belt-and-braces: rows written by the old (pre-2026-05-14) shape
+        // must continue to deserialize so we don't break catalog reads.
+        let json = r#"{
+            "os": "debian",
+            "arch": "amd64",
+            "tested_at": "2026-04-01T00:00:00Z",
+            "result": "pass"
+        }"#;
+        let entry: TestEntry = serde_json::from_str(json).unwrap();
+        assert!(entry.image_digest.is_none());
+        assert!(entry.duration_seconds.is_none());
+        assert!(entry.error_class.is_none());
+    }
+
+    #[test]
+    fn error_class_wire_format_matches_schema_enum() {
+        let pairs = [
+            (ErrorClass::Download, "\"download\""),
+            (ErrorClass::Verify, "\"verify\""),
+            (ErrorClass::InstallMethod, "\"install_method\""),
+            (ErrorClass::PostInstall, "\"post_install\""),
+            (ErrorClass::Validate, "\"validate\""),
+            (ErrorClass::Infra, "\"infra\""),
+            (ErrorClass::Unknown, "\"unknown\""),
+        ];
+        for (c, expected) in pairs {
+            assert_eq!(serde_json::to_string(&c).unwrap(), expected);
+            let back: ErrorClass = serde_json::from_str(expected).unwrap();
+            assert_eq!(back, c);
+        }
     }
 }

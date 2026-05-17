@@ -8,8 +8,12 @@
 //!
 //! # Compatibility
 //!
-//! Pinned to **containers-db v0.1.0** (commit `03c1fd5`, tagged 2026-04-26).
-//! Bump when the upstream `schemaVersion` const changes.
+//! Pinned to **containers-db** commit `aa14378` (tagged 2026-05-14).
+//! `schemaVersion` remains `1` — the 2026-05-14 update added optional
+//! evidence fields to [`TestEntry`] (`image_ref`, `image_digest`,
+//! `duration_seconds`, `version_output`, `error_class`) but kept the
+//! shape backward-compatible. Bump the pin when `schemaVersion` itself
+//! changes upstream.
 //!
 //! # Forward compatibility
 //!
@@ -33,5 +37,6 @@ pub use tool::{
     ValidationTiers,
 };
 pub use version::{
-    SupportEntry, SupportStatus, TestEntry, TestResult, ToolVersion, Uninstall, VersionMetadata,
+    ErrorClass, SupportEntry, SupportStatus, TestEntry, TestResult, ToolVersion, Uninstall,
+    VersionMetadata,
 };

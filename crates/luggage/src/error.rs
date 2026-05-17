@@ -12,10 +12,71 @@ use std::path::PathBuf;
 
 use containers_common::tooldb::ActivityScore;
 use containers_common::version::VersionError;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 /// Result alias used throughout the luggage crate.
 pub type Result<T> = core::result::Result<T, LuggageError>;
+
+/// Stage-aligned classification of an install failure, suitable for
+/// inclusion in an evidence row.
+///
+/// Values match the `error_class` enum in containers-db's
+/// `schema/version.schema.json` exactly, so a serialized `ErrorClass`
+/// validates as-is against the schema. The mapping from `LuggageError`
+/// keeps categorization mechanical: every install-time failure variant
+/// maps to a stage; everything else (pre-install resolver, catalog
+/// parse, IO) maps to `Unknown`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ErrorClass {
+    /// Artifact download failed after retries.
+    Download,
+    /// 4-tier verification rejected the downloaded artifact.
+    Verify,
+    /// Install method (rustup-init, script, etc.) failed mid-run.
+    InstallMethod,
+    /// A `post_install[]` step failed.
+    PostInstall,
+    /// Post-install `<bin>/<tool> --version` validation failed.
+    Validate,
+    /// CI runner / network / registry / host-package-manager failure —
+    /// anything that wasn't the tool's own fault.
+    Infra,
+    /// Pre-install resolver, catalog, parse, IO, or otherwise
+    /// unclassified error. Older runs predating this enum also surface
+    /// here.
+    Unknown,
+}
+
+impl From<&LuggageError> for ErrorClass {
+    fn from(err: &LuggageError) -> Self {
+        match err {
+            LuggageError::PackageManagerFailed { .. } => Self::Infra,
+            LuggageError::DownloadFailed { .. } => Self::Download,
+            LuggageError::VerificationFailed { .. } => Self::Verify,
+            LuggageError::PostInstallFailed { .. } => Self::PostInstall,
+            LuggageError::ValidationFailed { .. } => Self::Validate,
+            // `chown` and `spawn` are emitted inside install-method
+            // execution; any other stage value from a future method
+            // also belongs here.
+            LuggageError::InstallStageFailed { .. } => Self::InstallMethod,
+            LuggageError::Io { .. }
+            | LuggageError::Parse { .. }
+            | LuggageError::ToolNotFound(_)
+            | LuggageError::VersionNotFound { .. }
+            | LuggageError::UnsupportedPlatform(_)
+            | LuggageError::NoMatchingInstallMethod { .. }
+            | LuggageError::VersionParse(_)
+            | LuggageError::ActivityBelowThreshold { .. }
+            | LuggageError::BelowMinimumRecommended { .. }
+            | LuggageError::PlatformDetectionFailed(_)
+            | LuggageError::NotImplemented(_)
+            | LuggageError::Catalog(_)
+            | LuggageError::TemplateMissingKey(_) => Self::Unknown,
+        }
+    }
+}
 
 /// Detail payload for [`LuggageError::UnsupportedPlatform`].
 ///
@@ -423,5 +484,102 @@ mod tests {
         let err = LuggageError::TemplateMissingKey("rustup_target".into());
         assert_eq!(err.exit_code(), 1);
         assert!(format!("{err}").contains("rustup_target"));
+    }
+
+    #[test]
+    fn error_class_maps_runtime_variants_to_their_stage() {
+        let cases: &[(LuggageError, ErrorClass)] = &[
+            (LuggageError::PackageManagerFailed { message: "apt".into() }, ErrorClass::Infra),
+            (
+                LuggageError::DownloadFailed {
+                    url: "https://x".into(),
+                    attempts: 1,
+                    message: "x".into(),
+                },
+                ErrorClass::Download,
+            ),
+            (
+                LuggageError::VerificationFailed {
+                    tool: "rust".into(),
+                    version: "1.0".into(),
+                    tier: 3,
+                    reason: "x".into(),
+                },
+                ErrorClass::Verify,
+            ),
+            (
+                LuggageError::InstallStageFailed { stage: "spawn", message: "x".into() },
+                ErrorClass::InstallMethod,
+            ),
+            (
+                LuggageError::PostInstallFailed { step: "x".into(), message: "x".into() },
+                ErrorClass::PostInstall,
+            ),
+            (
+                LuggageError::ValidationFailed {
+                    tool: "rust".into(),
+                    version: "1.0".into(),
+                    message: "x".into(),
+                },
+                ErrorClass::Validate,
+            ),
+        ];
+        for (err, expected) in cases {
+            assert_eq!(ErrorClass::from(err), *expected, "{err}");
+        }
+    }
+
+    #[test]
+    fn error_class_maps_pre_install_variants_to_unknown() {
+        let cases: Vec<LuggageError> = vec![
+            LuggageError::Io { path: PathBuf::from("/x"), source: std::io::Error::other("x") },
+            LuggageError::ToolNotFound("ghost".into()),
+            LuggageError::VersionNotFound { tool: "rust".into(), spec: "9.9.9".into() },
+            LuggageError::NoMatchingInstallMethod {
+                tool: "rust".into(),
+                version: "1.0".into(),
+                os: "darwin".into(),
+                os_version: None,
+                arch: "amd64".into(),
+            },
+            LuggageError::ActivityBelowThreshold {
+                tool: "ghost".into(),
+                score: ActivityScore::Abandoned,
+                threshold: ActivityScore::Maintained,
+            },
+            LuggageError::BelowMinimumRecommended {
+                tool: "rust".into(),
+                version: "1.0".into(),
+                minimum: "1.84.0".into(),
+            },
+            LuggageError::PlatformDetectionFailed("missing /etc/os-release".into()),
+            LuggageError::NotImplemented("x"),
+            LuggageError::Catalog("x".into()),
+            LuggageError::TemplateMissingKey("x".into()),
+        ];
+        for err in &cases {
+            assert_eq!(ErrorClass::from(err), ErrorClass::Unknown, "{err}");
+        }
+    }
+
+    #[test]
+    fn error_class_wire_format_matches_containers_db_schema() {
+        // Pin the wire format to the containers-db enum exactly. If the
+        // schema changes, this test forces a coordinated update.
+        let pairs = [
+            (ErrorClass::Download, "\"download\""),
+            (ErrorClass::Verify, "\"verify\""),
+            (ErrorClass::InstallMethod, "\"install_method\""),
+            (ErrorClass::PostInstall, "\"post_install\""),
+            (ErrorClass::Validate, "\"validate\""),
+            (ErrorClass::Infra, "\"infra\""),
+            (ErrorClass::Unknown, "\"unknown\""),
+        ];
+        for (c, expected) in pairs {
+            let got = serde_json::to_string(&c).unwrap();
+            assert_eq!(got, expected);
+            let back: ErrorClass = serde_json::from_str(expected).unwrap();
+            assert_eq!(back, c);
+        }
     }
 }

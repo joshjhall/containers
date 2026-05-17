@@ -24,6 +24,10 @@ use crate::installer::idempotency::primary_binary;
 /// `$HOME/.rustup` and reports "no default toolchain configured" even when
 /// the toolchain was just installed under `cache_root`.
 ///
+/// Returns the trimmed captured output from the version invocation
+/// (stdout preferred, stderr if stdout is empty), so callers can surface
+/// it through evidence reports.
+///
 /// # Errors
 ///
 /// - [`LuggageError::ValidationFailed`] when the binary is missing, the
@@ -34,7 +38,7 @@ pub fn check(
     version: &str,
     bin_root: &Path,
     env: &BTreeMap<String, String>,
-) -> Result<()> {
+) -> Result<String> {
     let binary = bin_root.join(primary_binary(tool));
     if !binary.exists() {
         return Err(LuggageError::ValidationFailed {
@@ -65,7 +69,10 @@ pub fn check(
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
     if stdout.contains(version) || stderr.contains(version) {
-        Ok(())
+        let trimmed = stdout.trim();
+        let captured =
+            if trimmed.is_empty() { stderr.trim().to_owned() } else { trimmed.to_owned() };
+        Ok(captured)
     } else {
         Err(LuggageError::ValidationFailed {
             tool: tool.to_owned(),
@@ -105,7 +112,8 @@ mod tests {
     fn matching_output_passes() {
         let dir = tempdir().unwrap();
         write_shim(dir.path(), "rustc", "rustc 1.95.0 (abcdef0)");
-        check("rustc", "1.95.0", dir.path(), &BTreeMap::new()).unwrap();
+        let captured = check("rustc", "1.95.0", dir.path(), &BTreeMap::new()).unwrap();
+        assert_eq!(captured, "rustc 1.95.0 (abcdef0)");
     }
 
     #[cfg(unix)]

@@ -36,7 +36,7 @@ AJV_FLAGS := "--spec=draft2020 -c ajv-formats"
 # Tests
 # ============================================================================
 
-# Test suite. Default: rust tests + clippy + fmt --check + shell unit. Scopes: v5, v4, stibbons, containers-common, luggage (integration stays in `just test-integration`).
+# Test suite. Default: rust tests + clippy + fmt --check + shell unit. Scopes: v5, v4, stibbons, containers-common, luggage, record-evidence (integration stays in `just test-integration`).
 test SCOPE="":
     #!/usr/bin/env bash
     set -euo pipefail
@@ -53,17 +53,17 @@ test SCOPE="":
       v4)
           ./tests/run_unit_tests.sh
           ;;
-      stibbons|containers-common|luggage)
+      stibbons|containers-common|luggage|record-evidence)
           cargo test -p "{{ SCOPE }}"
           ;;
       *)
           echo "Unknown scope: {{ SCOPE }}" >&2
-          echo "Valid scopes: v5, v4, stibbons, containers-common, luggage" >&2
+          echo "Valid scopes: v5, v4, stibbons, containers-common, luggage, record-evidence" >&2
           exit 2
           ;;
     esac
 
-# Rust workspace tests (stibbons + containers-common + luggage)
+# Rust workspace tests (stibbons + containers-common + luggage + record-evidence)
 test-rust:
     cargo test --workspace
 
@@ -98,7 +98,7 @@ test-all: test test-integration
 # Lint & format
 # ============================================================================
 
-# Lint. Default: full lefthook pre-commit sweep. Scopes: v5 (rust workspace), v4 (shellcheck+shfmt), stibbons, containers-common, luggage.
+# Lint. Default: full lefthook pre-commit sweep. Scopes: v5 (rust workspace), v4 (shellcheck+shfmt), stibbons, containers-common, luggage, record-evidence.
 lint SCOPE="":
     #!/usr/bin/env bash
     set -euo pipefail
@@ -118,14 +118,14 @@ lint SCOPE="":
               echo "$files" | xargs -r shfmt -d -i 4 -ci
           fi
           ;;
-      stibbons|containers-common|luggage)
+      stibbons|containers-common|luggage|record-evidence)
           cargo clippy -p "{{ SCOPE }}" --all-targets -- -D warnings
           cargo fmt -p "{{ SCOPE }}" -- --check
           taplo fmt --check "crates/{{ SCOPE }}/**/*.toml"
           ;;
       *)
           echo "Unknown scope: {{ SCOPE }}" >&2
-          echo "Valid scopes: v5, v4, stibbons, containers-common, luggage" >&2
+          echo "Valid scopes: v5, v4, stibbons, containers-common, luggage, record-evidence" >&2
           exit 2
           ;;
     esac

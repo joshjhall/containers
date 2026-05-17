@@ -192,6 +192,66 @@ fn corrupt_artifact_returns_tier_3_verification_failed() {
 }
 
 #[test]
+fn run_with_report_on_verification_failure_populates_error_class() {
+    let roots = TempDir::new().unwrap();
+    let resolved = resolve_rust();
+    let mock = Arc::new(mock_with(Some(b"this is not rustup-init")));
+    let runner = Arc::new(RecordingRunner::new());
+
+    let installer = Installer::with_runners(
+        options_in(&roots),
+        mock as Arc<dyn HttpClient>,
+        runner as Arc<dyn luggage::installer::methods::CommandRunner>,
+    );
+
+    let (report, result) = installer.run_with_report(&resolved);
+    assert!(result.is_err(), "verification should fail");
+    assert_eq!(report.tool, "rust");
+    assert_eq!(report.version, "1.95.0");
+    assert!(!report.already_installed);
+    assert!(report.version_output.is_none(), "validate never ran");
+    assert_eq!(
+        report.error_class,
+        Some(luggage::ErrorClass::Verify),
+        "tier-3 checksum mismatch is a Verify-stage failure",
+    );
+    assert!(report.duration_seconds >= 0.0);
+}
+
+#[test]
+fn run_with_report_on_success_captures_validate_output() {
+    let roots = TempDir::new().unwrap();
+    let resolved = resolve_rust();
+    let mock = Arc::new(mock_with(None));
+    let runner = Arc::new(RecordingRunner::new());
+
+    // Pre-populate the cargo bin shims so the install method's symlink
+    // step has real targets and validate sees a `rustc --version` line
+    // that contains the resolved version.
+    let cargo_bin = roots.path().join("cache").join("cargo").join("bin");
+    std::fs::create_dir_all(&cargo_bin).unwrap();
+    write_version_shim(&cargo_bin.join("rustc"), "rustc 1.95.0 (linked)");
+    for name in RUST_BINARIES {
+        if *name != "rustc" {
+            std::fs::write(cargo_bin.join(name), b"#!/bin/sh\necho stub\n").unwrap();
+        }
+    }
+
+    let installer = Installer::with_runners(
+        options_in(&roots),
+        mock as Arc<dyn HttpClient>,
+        runner as Arc<dyn luggage::installer::methods::CommandRunner>,
+    );
+
+    let (report, result) = installer.run_with_report(&resolved);
+    result.expect("install should succeed");
+    assert!(!report.already_installed);
+    assert!(report.error_class.is_none(), "success has no error_class");
+    let captured = report.version_output.as_deref().unwrap_or("");
+    assert!(captured.contains("1.95.0"), "version_output should include the version: {captured}");
+}
+
+#[test]
 fn idempotent_skip_when_rustc_already_at_target_version() {
     let roots = TempDir::new().unwrap();
     let resolved = resolve_rust();
