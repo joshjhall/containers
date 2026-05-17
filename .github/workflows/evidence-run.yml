@@ -1,0 +1,205 @@
+name: Evidence Run
+
+# Prototype evidence-run workflow for sub-issue C of #473 (transport
+# choice + end-to-end prototype). Single tuple, manual trigger only.
+# Sub-issue D (#478) extends this with the full matrix and tier
+# scheduling — keep the surface area here small so D can replace freely.
+#
+# Flow per dispatch:
+#   1. Build `luggage` and `record-evidence` from this repo.
+#   2. Pull the pilot base image and capture its `sha256:` digest.
+#   3. Run `luggage install <tool>@<version> --json-report` inside the
+#      image (binary mounted from the runner per the
+#      luggage-release-deferred convention).
+#   4. Run `record-evidence` to assemble the TestEntry-shaped row.
+#   5. Hand the row to `bin/ingest-evidence.sh`, which dedup-merges into
+#      `joshjhall/containers-db` and (when `dry_run=false`) opens a PR
+#      against that repo.
+#
+# The default is `dry_run=true`. Switching to false requires the
+# `CONTAINERS_DB_PAT` secret to be configured — see
+# `docs/operations/evidence-runs.md` for setup and rotation.
+#
+# All `inputs.*` values are read into `env:` rather than interpolated
+# directly into `run:` scripts. workflow_dispatch inputs come from
+# trusted maintainers, but the env indirection keeps the same guardrail
+# the matrix-and-cron version (#478) will need anyway.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tool:
+        description: "Tool slug in containers-db (e.g. rust)"
+        required: true
+        default: "rust"
+      tool_version:
+        description: "Tool version (must have a tools/<tool>/versions/<v>.json)"
+        required: true
+        default: "1.95.0"
+      tuple:
+        description: "Base image tuple slug"
+        required: true
+        default: "debian-12-amd64"
+        type: choice
+        options:
+          - debian-12-amd64
+      image_tag:
+        description: "Base image tag to pull"
+        required: true
+        default: "latest"
+      dry_run:
+        description: "Skip the actual cross-repo push and PR open"
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+env:
+  REGISTRY: ghcr.io
+  INPUT_TOOL: ${{ inputs.tool }}
+  INPUT_TOOL_VERSION: ${{ inputs.tool_version }}
+  INPUT_TUPLE: ${{ inputs.tuple }}
+  INPUT_IMAGE_TAG: ${{ inputs.image_tag }}
+
+jobs:
+  evidence:
+    name: Evidence ${{ inputs.tool }}@${{ inputs.tool_version }} on ${{ inputs.tuple }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout containers
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build luggage and record-evidence
+        run: |
+          cargo build --release -p luggage -p record-evidence
+          ls -l target/release/luggage target/release/record-evidence
+
+      - name: Resolve base image digest
+        id: digest
+        env:
+          REPO: ${{ github.repository }}
+        run: |
+          IMAGE="${REGISTRY}/${REPO}/base-${INPUT_TUPLE}:${INPUT_IMAGE_TAG}"
+          docker pull "$IMAGE"
+          DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' "$IMAGE" | awk -F'@' '{print $2}')
+          if [[ ! "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "Resolved digest is not a sha256:<64 hex>: $DIGEST" >&2
+            exit 1
+          fi
+          IMAGE_REF="${IMAGE%:*}"
+          {
+            echo "digest=$DIGEST"
+            echo "image_ref=$IMAGE_REF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Derive tuple coordinates
+        id: tuple
+        run: |
+          # Split debian-12-amd64 -> os=debian os_version=12 arch=amd64
+          IFS='-' read -ra parts <<< "$INPUT_TUPLE"
+          if [ "${#parts[@]}" -ne 3 ]; then
+            echo "Unexpected tuple shape: $INPUT_TUPLE (want <os>-<os_version>-<arch>)" >&2
+            exit 1
+          fi
+          {
+            echo "os=${parts[0]}"
+            echo "os_version=${parts[1]}"
+            echo "arch=${parts[2]}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Run luggage install inside the base image
+        env:
+          IMAGE: ${{ steps.digest.outputs.image_ref }}@${{ steps.digest.outputs.digest }}
+        run: |
+          mkdir -p out
+          # We don't fail the workflow on install failure — luggage's
+          # --json-report writes a failure row too, which is the whole
+          # point of an evidence run. The row's `result` field carries
+          # the verdict.
+          set +e
+          docker run --rm \
+            -v "$PWD/target/release/luggage:/usr/local/bin/luggage:ro" \
+            -v "$PWD/out:/out" \
+            "$IMAGE" \
+            luggage install "${INPUT_TOOL}@${INPUT_TOOL_VERSION}" --json-report /out/luggage-report.json
+          INSTALL_RC=$?
+          set -e
+          echo "luggage exited with $INSTALL_RC"
+          test -s out/luggage-report.json || {
+            echo "luggage did not write a report" >&2
+            exit 1
+          }
+
+      - name: Build evidence row
+        env:
+          IMAGE_REF: ${{ steps.digest.outputs.image_ref }}
+          IMAGE_DIGEST: ${{ steps.digest.outputs.digest }}
+          CI_RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          OS: ${{ steps.tuple.outputs.os }}
+          OS_VERSION: ${{ steps.tuple.outputs.os_version }}
+          ARCH: ${{ steps.tuple.outputs.arch }}
+        run: |
+          ./target/release/record-evidence \
+            --luggage-report out/luggage-report.json \
+            --image-ref "$IMAGE_REF" \
+            --image-digest "$IMAGE_DIGEST" \
+            --ci-run "$CI_RUN" \
+            --os "$OS" \
+            --os-version "$OS_VERSION" \
+            --arch "$ARCH" \
+            > out/evidence-row.json
+          jq . out/evidence-row.json
+
+      - name: Upload evidence row
+        uses: actions/upload-artifact@v4
+        with:
+          name: evidence-row
+          path: out/evidence-row.json
+          if-no-files-found: error
+
+      - name: Install just
+        uses: extractions/setup-just@v3
+
+      - name: Ingest evidence (dry-run)
+        if: ${{ inputs.dry_run }}
+        env:
+          GIT_AUTHOR_NAME: github-actions[bot]
+          GIT_AUTHOR_EMAIL: github-actions[bot]@users.noreply.github.com
+        run: |
+          mkdir -p _db
+          ./bin/ingest-evidence.sh \
+            --row out/evidence-row.json \
+            --db-path "$PWD/_db" \
+            --tool "$INPUT_TOOL" \
+            --version "$INPUT_TOOL_VERSION" \
+            --dry-run
+
+      - name: Ingest evidence (PR open)
+        if: ${{ ! inputs.dry_run }}
+        env:
+          GH_TOKEN: ${{ secrets.CONTAINERS_DB_PAT }}
+          GIT_AUTHOR_NAME: github-actions[bot]
+          GIT_AUTHOR_EMAIL: github-actions[bot]@users.noreply.github.com
+        run: |
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "CONTAINERS_DB_PAT secret is not configured." >&2
+            echo "See docs/operations/evidence-runs.md (Auth model) for setup." >&2
+            exit 1
+          fi
+          mkdir -p _db
+          # gh+git need the token on the HTTPS push as well.
+          git config --global "url.https://x-access-token:${GH_TOKEN}@github.com/.insteadOf" "https://github.com/"
+          ./bin/ingest-evidence.sh \
+            --row out/evidence-row.json \
+            --db-path "$PWD/_db" \
+            --tool "$INPUT_TOOL" \
+            --version "$INPUT_TOOL_VERSION"

@@ -248,9 +248,10 @@ Sub-issues filed against this design tracker, organized by tier:
 
 ## How evidence runs consume these images
 
-Once [#405](https://github.com/joshjhall/containers/issues/405) (luggage
-install executor — merged) and #408 (tiered CI cadence) are both wired up,
-a per-tool evidence run looks like:
+The ingestion contract lives in
+[`docs/operations/evidence-runs.md`](../docs/operations/evidence-runs.md)
+— the wire format, transport choice, auth model, merge policy, and
+failure modes are all documented there. The orientation example:
 
 ```bash
 docker run --rm \
@@ -258,18 +259,9 @@ docker run --rm \
   /bin/bash -c "luggage install rust@1.95.0 && rustc --version"
 ```
 
-The run captures:
-
-- `image_ref`: `ghcr.io/joshjhall/containers/base-debian-12-amd64`
-- `image_digest`: the resolved `sha256:...` (from `docker inspect`)
-- `tool`: `rust`
-- `tool_version`: `1.95.0`
-- exit status, install duration, version output
-
-These fields populate containers-db#1's `tested[]` schema. Because the
-image is signed (cosign) and has an SBOM (syft), the evidence is
-reproducible: any reviewer can pull the same digest, install the same
-tool, and confirm the result.
+Because the image is signed (cosign) and has an SBOM (syft), the
+evidence is reproducible: any reviewer can pull the same digest,
+install the same tool, and confirm the result.
 
 ## Contributing a new tuple
 

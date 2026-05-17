@@ -368,6 +368,30 @@ db-validate-all: db-compile
     done
 
 # ============================================================================
+# evidence-runs (sub-issue C of #473)
+# ============================================================================
+# See docs/operations/evidence-runs.md for the full ingestion contract.
+# These recipes drive the local development loop; the real producer is
+# .github/workflows/evidence-run.yml.
+
+# Emit a deterministic TestEntry-shaped row from the checked-in fixture.
+# Useful for piping into `just ingest-evidence` while developing the
+# transport without spinning a full Docker run.
+evidence-row-stub:
+    @cat tests/fixtures/evidence-row-sample.json
+
+# Run the ingest script in dry-run against the sibling containers-db
+# checkout. Reads the row from the fixture; for ad-hoc rows pipe via
+# `--row -` directly to bin/ingest-evidence.sh instead.
+ingest-evidence TOOL="rust" VERSION="1.95.0":
+    ./bin/ingest-evidence.sh \
+        --row tests/fixtures/evidence-row-sample.json \
+        --db-path {{ CONTAINERS_DB }} \
+        --tool {{ TOOL }} \
+        --version {{ VERSION }} \
+        --dry-run
+
+# ============================================================================
 # Release
 # ============================================================================
 

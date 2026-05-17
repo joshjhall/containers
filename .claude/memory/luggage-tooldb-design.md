@@ -106,3 +106,16 @@ Bump the pin to v0.2.0 only after #402 merges.
 - #406 Daily catalog scanner with per-tool cadence
 - #407 Replace lib/features/rust.sh with luggage CLI shim
 - #408 Tiered CI cadence (PR/merge/weekly/monthly/quarterly)
+
+## Evidence-runs decomposition (#473)
+
+Producer + transport for `tested[]` rows in containers-db. Sub-issue
+breakdown:
+
+- #476 (B) — `luggage install --json-report` + `record-evidence` wrapper —
+  **shipped 2026-05-17 as PR #479**
+- #477 (C) — ingestion handoff (PR-bot transport, `bin/ingest-evidence.sh`,
+  workflow_dispatch prototype) — **doc at
+  `docs/operations/evidence-runs.md` is the source of truth for this
+  area**
+- #478 (D) — workflow scheduling (matrix + cron tiers), still open

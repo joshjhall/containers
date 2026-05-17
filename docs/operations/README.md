@@ -7,6 +7,8 @@ container build system.
 
 - [**CI Tiered Cadence**](ci-tiers.md) - Four-tier CI strategy: PR / merge /
   weekly / monthly / quarterly
+- [**Evidence runs: ingestion contract**](evidence-runs.md) - Transport
+  contract between this repo and containers-db for `tested[]` rows
 - [**Automated Releases**](automated-releases.md) - Weekly auto-patch system for
   version updates
 - [**Review Cadence**](review-cadence.md) - Dep-health and security review rhythm

@@ -19,6 +19,11 @@ Promotion criteria are unidirectional — passing a faster tier is a prereq
 for letting code reach the next slower tier, but a failure at a slower tier
 does not block ongoing work (the regression opens an issue instead).
 
+Evidence runs (per-tool installs against signed base images, results
+landing in `joshjhall/containers-db`) are dispatch-only today; see
+[evidence-runs.md](evidence-runs.md) for the ingestion contract.
+Tier integration is [#478](https://github.com/joshjhall/containers/issues/478).
+
 ## PR tier
 
 **Status:** Implemented in [`.github/workflows/test-pr.yml`](../../.github/workflows/test-pr.yml).
