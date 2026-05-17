@@ -356,100 +356,12 @@ jobs:
             echo "gpg_keys_changed=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Update compatibility matrix with test results
-        run: |
-          echo "Updating compatibility matrix with passing test results..."
-          if [ -f "version-compatibility-matrix.json" ]; then
-            # Extract current versions from Dockerfile
-            PYTHON_VER=$(grep "^ARG PYTHON_VERSION=" Dockerfile | cut -d= -f2 | tr -d '"')
-            NODE_VER=$(grep "^ARG NODE_VERSION=" Dockerfile | cut -d= -f2 | tr -d '"')
-            RUST_VER=$(grep "^ARG RUST_VERSION=" Dockerfile | cut -d= -f2 | tr -d '"')
-            GO_VER=$(grep "^ARG GO_VERSION=" Dockerfile | cut -d= -f2 | tr -d '"')
-            RUBY_VER=$(grep "^ARG RUBY_VERSION=" Dockerfile | cut -d= -f2 | tr -d '"')
-            JAVA_VER=$(grep "^ARG JAVA_VERSION=" Dockerfile | cut -d= -f2 | tr -d '"')
-            R_VER=$(grep "^ARG R_VERSION=" Dockerfile | cut -d= -f2 | tr -d '"')
-
-            # Update tested_combinations status to passing and update tested arrays
-            jq \
-              --arg timestamp "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-              --arg python "${PYTHON_VER:-}" \
-              --arg node "${NODE_VER:-}" \
-              --arg rust "${RUST_VER:-}" \
-              --arg go "${GO_VER:-}" \
-              --arg ruby "${RUBY_VER:-}" \
-              --arg java "${JAVA_VER:-}" \
-              --arg r "${R_VER:-}" \
-              '
-              .last_updated = $timestamp |
-              # Update all tested_combinations to passing with current timestamp
-              .tested_combinations = [
-                .tested_combinations[] |
-                .status = "passing" |
-                .tested_at = $timestamp |
-                # Update versions in tested combinations
-                if .variant == "python-dev" and $python != "" then .versions.python = $python
-                elif .variant == "node-dev" and $node != "" then .versions.node = $node
-                elif .variant == "rust-golang" and $rust != "" and $go != "" then .versions.rust = $rust | .versions.go = $go
-                elif .variant == "polyglot" then
-                  (if $python != "" then .versions.python = $python else . end) |
-                  (if $node != "" then .versions.node = $node else . end) |
-                  (if $rust != "" then .versions.rust = $rust else . end) |
-                  (if $go != "" then .versions.go = $go else . end)
-                else .
-                end
-              ] |
-              # Update tested arrays in language_versions
-              (if $python != "" and (.language_versions.python.tested | index($python) | not) then
-                .language_versions.python.tested += [$python]
-              else . end) |
-              (if $node != "" and (.language_versions.node.tested | index($node) | not) then
-                .language_versions.node.tested += [$node]
-              else . end) |
-              (if $rust != "" and (.language_versions.rust.tested | index($rust) | not) then
-                .language_versions.rust.tested += [$rust]
-              else . end) |
-              (if $go != "" and (.language_versions.go.tested | index($go) | not) then
-                .language_versions.go.tested += [$go]
-              else . end) |
-              (if $ruby != "" and (.language_versions.ruby.tested | index($ruby) | not) then
-                .language_versions.ruby.tested += [$ruby]
-              else . end) |
-              (if $java != "" and (.language_versions.java.tested | index($java) | not) then
-                .language_versions.java.tested += [$java]
-              else . end) |
-              (if $r != "" and (.language_versions.r.tested | index($r) | not) then
-                .language_versions.r.tested += [$r]
-              else . end)
-              ' version-compatibility-matrix.json > version-compatibility-matrix.json.tmp \
-              && mv version-compatibility-matrix.json.tmp version-compatibility-matrix.json
-
-            # Format JSON with dprint (jq expands compact arrays; dprint normalizes)
-            dprint fmt version-compatibility-matrix.json || true
-
-            # Skip commit/push when the only diff is the last_updated/tested_at
-            # timestamps. Without this guard, every workflow_run retry pushes a
-            # new commit, which re-triggers CI, which re-triggers this job —
-            # producing a chain of empty "Update compatibility matrix" commits.
-            NON_TIMESTAMP_DIFF=$(git diff --no-color version-compatibility-matrix.json \
-              | /usr/bin/grep -E '^[+-][^+-]' \
-              | /usr/bin/grep -vE '^[+-][[:space:]]*"(last_updated|tested_at)":' \
-              || true)
-
-            if [ -z "$NON_TIMESTAMP_DIFF" ]; then
-              echo "Only timestamp updates detected — skipping commit to avoid retry loop"
-              git checkout -- version-compatibility-matrix.json
-            else
-              # Commit the matrix update
-              git config user.name "github-actions[bot]"
-              git config user.email "github-actions[bot]@users.noreply.github.com"
-              git add version-compatibility-matrix.json
-              git commit -m "chore: Update compatibility matrix with passing test results"
-              git push origin "${{ steps.branch_info.outputs.branch }}"
-              echo "Compatibility matrix updated with test results"
-            fi
-          else
-            echo "Warning: version-compatibility-matrix.json not found"
-          fi
+      # The compatibility-matrix update is intentionally NOT done here.
+      # Pushing a second commit to the auto-patch branch invalidates the
+      # CI conclusion that triggered this workflow_run (which validated
+      # commit N, not N+1) and ships a different SHA to `main` than the
+      # one that was tested. The matrix update moved to the `post-merge`
+      # job below, which writes against `main` after the merge succeeds.
 
       - name: Create pull request
         id: create_pr
@@ -588,6 +500,99 @@ jobs:
             echo "$COMMIT_MSG"
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
+
+      - name: Update compatibility matrix with test results
+        run: |
+          echo "Updating compatibility matrix with passing test results..."
+          if [ -f "version-compatibility-matrix.json" ]; then
+            # Extract current versions from Dockerfile
+            PYTHON_VER=$(grep "^ARG PYTHON_VERSION=" Dockerfile | cut -d= -f2 | tr -d '"')
+            NODE_VER=$(grep "^ARG NODE_VERSION=" Dockerfile | cut -d= -f2 | tr -d '"')
+            RUST_VER=$(grep "^ARG RUST_VERSION=" Dockerfile | cut -d= -f2 | tr -d '"')
+            GO_VER=$(grep "^ARG GO_VERSION=" Dockerfile | cut -d= -f2 | tr -d '"')
+            RUBY_VER=$(grep "^ARG RUBY_VERSION=" Dockerfile | cut -d= -f2 | tr -d '"')
+            JAVA_VER=$(grep "^ARG JAVA_VERSION=" Dockerfile | cut -d= -f2 | tr -d '"')
+            R_VER=$(grep "^ARG R_VERSION=" Dockerfile | cut -d= -f2 | tr -d '"')
+
+            # Update tested_combinations status to passing and update tested arrays
+            jq \
+              --arg timestamp "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+              --arg python "${PYTHON_VER:-}" \
+              --arg node "${NODE_VER:-}" \
+              --arg rust "${RUST_VER:-}" \
+              --arg go "${GO_VER:-}" \
+              --arg ruby "${RUBY_VER:-}" \
+              --arg java "${JAVA_VER:-}" \
+              --arg r "${R_VER:-}" \
+              '
+              .last_updated = $timestamp |
+              # Update all tested_combinations to passing with current timestamp
+              .tested_combinations = [
+                .tested_combinations[] |
+                .status = "passing" |
+                .tested_at = $timestamp |
+                # Update versions in tested combinations
+                if .variant == "python-dev" and $python != "" then .versions.python = $python
+                elif .variant == "node-dev" and $node != "" then .versions.node = $node
+                elif .variant == "rust-golang" and $rust != "" and $go != "" then .versions.rust = $rust | .versions.go = $go
+                elif .variant == "polyglot" then
+                  (if $python != "" then .versions.python = $python else . end) |
+                  (if $node != "" then .versions.node = $node else . end) |
+                  (if $rust != "" then .versions.rust = $rust else . end) |
+                  (if $go != "" then .versions.go = $go else . end)
+                else .
+                end
+              ] |
+              # Update tested arrays in language_versions
+              (if $python != "" and (.language_versions.python.tested | index($python) | not) then
+                .language_versions.python.tested += [$python]
+              else . end) |
+              (if $node != "" and (.language_versions.node.tested | index($node) | not) then
+                .language_versions.node.tested += [$node]
+              else . end) |
+              (if $rust != "" and (.language_versions.rust.tested | index($rust) | not) then
+                .language_versions.rust.tested += [$rust]
+              else . end) |
+              (if $go != "" and (.language_versions.go.tested | index($go) | not) then
+                .language_versions.go.tested += [$go]
+              else . end) |
+              (if $ruby != "" and (.language_versions.ruby.tested | index($ruby) | not) then
+                .language_versions.ruby.tested += [$ruby]
+              else . end) |
+              (if $java != "" and (.language_versions.java.tested | index($java) | not) then
+                .language_versions.java.tested += [$java]
+              else . end) |
+              (if $r != "" and (.language_versions.r.tested | index($r) | not) then
+                .language_versions.r.tested += [$r]
+              else . end)
+              ' version-compatibility-matrix.json > version-compatibility-matrix.json.tmp \
+              && mv version-compatibility-matrix.json.tmp version-compatibility-matrix.json
+
+            # Format JSON with dprint (jq expands compact arrays; dprint normalizes)
+            dprint fmt version-compatibility-matrix.json || true
+
+            # Skip commit/push when the only diff is the last_updated/tested_at
+            # timestamps. Without this guard, every post-merge cycle pushes a
+            # new commit to main even when nothing of substance changed.
+            NON_TIMESTAMP_DIFF=$(git diff --no-color version-compatibility-matrix.json \
+              | /usr/bin/grep -E '^[+-][^+-]' \
+              | /usr/bin/grep -vE '^[+-][[:space:]]*"(last_updated|tested_at)":' \
+              || true)
+
+            if [ -z "$NON_TIMESTAMP_DIFF" ]; then
+              echo "Only timestamp updates detected — skipping commit"
+              git checkout -- version-compatibility-matrix.json
+            else
+              git config user.name "github-actions[bot]"
+              git config user.email "github-actions[bot]@users.noreply.github.com"
+              git add version-compatibility-matrix.json
+              git commit -m "chore: Update compatibility matrix with passing test results"
+              git push origin HEAD:main
+              echo "Compatibility matrix updated with test results on main"
+            fi
+          else
+            echo "Warning: version-compatibility-matrix.json not found"
+          fi
 
       - name: Create and push version tag
         env:
