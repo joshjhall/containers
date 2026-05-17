@@ -1,0 +1,12 @@
+{
+  "os": "debian",
+  "os_version": "12",
+  "arch": "amd64",
+  "tested_at": "2026-05-17T12:00:00Z",
+  "ci_run": "https://github.com/joshjhall/containers/actions/runs/0",
+  "result": "pass",
+  "image_ref": "ghcr.io/joshjhall/containers/base-debian-12-amd64:fixture",
+  "image_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+  "duration_seconds": 12.5,
+  "version_output": "rustc 1.95.0 (abcdef0 2026-05-01)"
+}
