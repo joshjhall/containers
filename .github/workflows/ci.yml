@@ -735,9 +735,20 @@ jobs:
           severity: "CRITICAL,HIGH"
           skip-setup-trivy: "true"
 
+      # Skip Code Scanning upload on ephemeral auto-patch branches. The
+      # auto-merge job deletes those branches as soon as the PR merges
+      # (typically before the push-event CI's Security Scan finishes),
+      # and `upload-sarif` then fails with `ref not found`. Code Scanning
+      # alerts on a deleted branch are unusable anyway — the trivy-results
+      # SARIF is still uploaded as a workflow artifact below.
+      # continue-on-error guards against any other transient ref race.
       - name: Upload Trivy results to GitHub Security
         uses: github/codeql-action/upload-sarif@v4
-        if: always() && hashFiles(format('trivy-results-{0}.sarif', matrix.variant)) != ''
+        if: |
+          always()
+          && hashFiles(format('trivy-results-{0}.sarif', matrix.variant)) != ''
+          && !startsWith(github.ref, 'refs/heads/auto-patch/')
+        continue-on-error: true
         with:
           sarif_file: "trivy-results-${{ matrix.variant }}.sarif"
           category: "container-${{ matrix.variant }}"
