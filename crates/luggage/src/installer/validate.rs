@@ -109,6 +109,7 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
+    #[serial_test::serial]
     fn matching_output_passes() {
         let dir = tempdir().unwrap();
         write_shim(dir.path(), "rustc", "rustc 1.95.0 (abcdef0)");
@@ -118,6 +119,7 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
+    #[serial_test::serial]
     fn mismatched_output_returns_validation_failed() {
         let dir = tempdir().unwrap();
         write_shim(dir.path(), "rustc", "rustc 1.84.0");
@@ -141,6 +143,7 @@ mod tests {
     /// the version-contains assertion fails.
     #[cfg(unix)]
     #[test]
+    #[serial_test::serial]
     fn propagates_env_to_subprocess() {
         let dir = tempdir().unwrap();
         let shim = dir.path().join("rustc");
