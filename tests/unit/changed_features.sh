@@ -172,6 +172,22 @@ test_docs_only_change_emits_nothing() {
     fi
 }
 
+# Regression: prior to the SEEN-emptiness fix, the script exited 1 with
+# `SEEN: unbound variable` when no changed file mapped to a feature. The
+# previous tests caught only stdout shape (empty) — they used `|| true`
+# and never asserted the exit code, so the bug rode along silently and
+# broke PR-tier CI on docs/workflow-only PRs.
+test_no_feature_match_exits_zero() {
+    /usr/bin/printf 'docs/foo.md\n.github/workflows/ci.yml\nbase-images/debian/12/amd64/Dockerfile\n' |
+        "$SCRIPT" --files=- >/dev/null 2>&1
+    local rc=$?
+    if [ "$rc" -eq 0 ]; then
+        assert_true true "non-feature-only input → exit 0"
+    else
+        assert_true false "non-feature-only input should exit 0, got: $rc"
+    fi
+}
+
 test_mixed_with_dockerfile_short_circuits_to_all() {
     local out
     out=$(run_with "lib/features/python.sh" "Dockerfile" "docs/foo.md")
@@ -218,6 +234,7 @@ run_test test_helper_subdir_unknown_emits_all "unknown helper subdir → ALL"
 run_test test_integration_test_for_known_feature "integration test → matching feature"
 run_test test_integration_test_for_unknown_variant "variant integration test → no mapping"
 run_test test_docs_only_change_emits_nothing "docs-only changes → nothing"
+run_test test_no_feature_match_exits_zero "non-feature-only input → exit 0"
 run_test test_mixed_with_dockerfile_short_circuits_to_all "ALL short-circuits"
 run_test test_dedup_same_feature_twice "feature + its helper → deduplicated"
 run_test test_known_features_extractable "FEATURE_MAP extractable from test_feature.sh"
