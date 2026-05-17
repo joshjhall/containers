@@ -27,11 +27,12 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Instant;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tempfile::tempdir_in;
 
-use crate::error::{LuggageError, Result};
+use crate::error::{ErrorClass, LuggageError, Result};
 use crate::resolver::ResolvedInstall;
 
 use download::{HttpClient, UreqClient};
@@ -110,8 +111,16 @@ pub struct InstallPlan {
     pub user: String,
 }
 
-/// Outcome of a successful install run.
-#[derive(Debug, Clone, Serialize)]
+/// Outcome of an install run — emitted on success, skip, dry-run, and
+/// failure paths alike when callers use [`Installer::run_with_report`].
+///
+/// Evidence-run CI ([containers#473]) feeds this struct (via the CLI's
+/// `--json-report` flag) to the `record-evidence` wrapper, which combines
+/// it with runner-supplied metadata (image digest, `ci_run`, tuple coords)
+/// into a `tested[]` row for containers-db.
+///
+/// [containers#473]: https://github.com/joshjhall/containers/issues/473
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InstallReport {
     /// Tool id.
     pub tool: String,
@@ -120,8 +129,19 @@ pub struct InstallReport {
     /// `true` if the idempotency check skipped the install.
     pub already_installed: bool,
     /// Path to the per-feature log file.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub log_path: Option<PathBuf>,
+    /// Wallclock duration of [`Installer::run_with_report`] from entry
+    /// to return — covers idempotency check + all stages.
+    pub duration_seconds: f64,
+    /// Trimmed output captured from the validate stage's
+    /// `<bin>/<tool> --version` invocation. Populated on success;
+    /// `None` on skip, dry-run, and failure paths.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub version_output: Option<String>,
+    /// Stage-aligned failure category. `Some` iff the run failed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error_class: Option<ErrorClass>,
 }
 
 /// The install execution engine.
@@ -214,7 +234,8 @@ impl Installer {
         })
     }
 
-    /// Execute the install end-to-end.
+    /// Execute the install end-to-end, returning a populated
+    /// [`InstallReport`] on success.
     ///
     /// Stage order, mirroring `lib/features/rust.sh`:
     ///
@@ -232,6 +253,20 @@ impl Installer {
     /// Propagates whatever any stage returns. See module-level docs for
     /// the full list of variants.
     pub fn run(&self, resolved: &ResolvedInstall) -> Result<InstallReport> {
+        let (report, result) = self.run_with_report(resolved);
+        result.map(|()| report)
+    }
+
+    /// Execute the install end-to-end, always returning a populated
+    /// [`InstallReport`] paired with the run's [`Result`].
+    ///
+    /// On success, skip, and dry-run paths the `Result<()>` is `Ok`. On
+    /// failure it carries the underlying [`LuggageError`] and the report's
+    /// `error_class` is set from it; partial fields (`duration_seconds`)
+    /// are filled in regardless. Evidence-run CI uses this entry point
+    /// so it can record a row even when the install itself failed.
+    pub fn run_with_report(&self, resolved: &ResolvedInstall) -> (InstallReport, Result<()>) {
+        let started = Instant::now();
         let logger =
             logging::FeatureLogger::open(&self.options.log_dir, &resolved.tool, &resolved.version)
                 .ok();
@@ -246,30 +281,52 @@ impl Installer {
                 &self.options.bin_root,
             )
         {
-            return Ok(Self::report_skipped(resolved, logger));
+            return (
+                Self::report_skipped(resolved, logger, started.elapsed().as_secs_f64()),
+                Ok(()),
+            );
         }
 
-        let plan = self.plan(resolved)?;
+        let plan = match self.plan(resolved) {
+            Ok(p) => p,
+            Err(e) => {
+                let report =
+                    Self::report_failure(resolved, &e, logger, started.elapsed().as_secs_f64());
+                return (report, Err(e));
+            }
+        };
         if self.options.dry_run {
-            return Ok(Self::report_dry_run(plan, logger));
+            return (Self::report_dry_run(plan, logger, started.elapsed().as_secs_f64()), Ok(()));
         }
 
-        self.run_stages(resolved, plan, logger.as_ref())?;
-
-        if let Some(l) = &logger {
-            l.feature_end();
+        match self.run_stages(resolved, plan, logger.as_ref()) {
+            Ok(version_output) => {
+                if let Some(l) = &logger {
+                    l.feature_end();
+                }
+                let report = InstallReport {
+                    tool: resolved.tool.clone(),
+                    version: resolved.version.clone(),
+                    already_installed: false,
+                    log_path: logger.map(|l| l.path().to_owned()),
+                    duration_seconds: started.elapsed().as_secs_f64(),
+                    version_output: Some(version_output),
+                    error_class: None,
+                };
+                (report, Ok(()))
+            }
+            Err(e) => {
+                let report =
+                    Self::report_failure(resolved, &e, logger, started.elapsed().as_secs_f64());
+                (report, Err(e))
+            }
         }
-        Ok(InstallReport {
-            tool: resolved.tool.clone(),
-            version: resolved.version.clone(),
-            already_installed: false,
-            log_path: logger.map(|l| l.path().to_owned()),
-        })
     }
 
     fn report_skipped(
         resolved: &ResolvedInstall,
         logger: Option<logging::FeatureLogger>,
+        duration_seconds: f64,
     ) -> InstallReport {
         if let Some(l) = &logger {
             l.message(&format!(
@@ -283,10 +340,17 @@ impl Installer {
             version: resolved.version.clone(),
             already_installed: true,
             log_path: logger.map(|l| l.path().to_owned()),
+            duration_seconds,
+            version_output: None,
+            error_class: None,
         }
     }
 
-    fn report_dry_run(plan: InstallPlan, logger: Option<logging::FeatureLogger>) -> InstallReport {
+    fn report_dry_run(
+        plan: InstallPlan,
+        logger: Option<logging::FeatureLogger>,
+        duration_seconds: f64,
+    ) -> InstallReport {
         if let Some(l) = &logger {
             l.message("dry-run: stopping after plan");
             l.feature_end();
@@ -296,6 +360,30 @@ impl Installer {
             version: plan.version,
             already_installed: false,
             log_path: logger.map(|l| l.path().to_owned()),
+            duration_seconds,
+            version_output: None,
+            error_class: None,
+        }
+    }
+
+    fn report_failure(
+        resolved: &ResolvedInstall,
+        err: &LuggageError,
+        logger: Option<logging::FeatureLogger>,
+        duration_seconds: f64,
+    ) -> InstallReport {
+        if let Some(l) = &logger {
+            l.message(&format!("install failed: {err}"));
+            l.feature_end();
+        }
+        InstallReport {
+            tool: resolved.tool.clone(),
+            version: resolved.version.clone(),
+            already_installed: false,
+            log_path: logger.map(|l| l.path().to_owned()),
+            duration_seconds,
+            version_output: None,
+            error_class: Some(ErrorClass::from(err)),
         }
     }
 
@@ -304,7 +392,7 @@ impl Installer {
         resolved: &ResolvedInstall,
         plan: InstallPlan,
         logger: Option<&logging::FeatureLogger>,
-    ) -> Result<()> {
+    ) -> Result<String> {
         self.stage_system_packages(resolved, logger)?;
         let bytes = self.stage_download(&plan, logger)?;
         self.stage_verify(resolved, &bytes, logger)?;
@@ -444,7 +532,7 @@ impl Installer {
         resolved: &ResolvedInstall,
         env_map: &BTreeMap<String, String>,
         logger: Option<&logging::FeatureLogger>,
-    ) -> Result<()> {
+    ) -> Result<String> {
         if let Some(l) = logger {
             l.step("validate");
         }

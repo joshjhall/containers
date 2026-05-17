@@ -13,8 +13,10 @@
 //! exit code `2` ("we will not install on this host") versus `1`
 //! ("something else went wrong") without parsing stderr.
 
+use std::fs::File;
 use std::io;
-use std::path::PathBuf;
+use std::io::{BufWriter, Write as _};
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use clap::{Args, Parser, Subcommand, ValueEnum};
@@ -141,6 +143,12 @@ struct InstallArgs {
     /// manager is unavailable or already pre-populated.
     #[arg(long)]
     skip_system_packages: bool,
+
+    /// Write a JSON [`InstallReport`] to this path. Emitted on every
+    /// exit path — success, skip, dry-run, or failure — so evidence-run
+    /// CI can record a row even when the install itself failed.
+    #[arg(long, value_name = "PATH")]
+    json_report: Option<PathBuf>,
 }
 
 /// CLI mirror of [`luggage::PolicyPreset`].
@@ -239,23 +247,52 @@ fn cmd_install(args: &InstallArgs) -> Result<(), LuggageError> {
     };
     let installer = Installer::with_options(opts);
 
+    // Dry-run emits the plan to stdout for human inspection. Done before
+    // run_with_report so we can short-circuit without spinning up the
+    // log directory; run_with_report still produces a report for the
+    // --json-report file via the dry-run branch.
     if args.dry_run {
         let plan = installer.plan(&resolved)?;
         let out = serde_json::to_string_pretty(&plan)
             .map_err(|source| LuggageError::Parse { path: PathBuf::from("<stdout>"), source })?;
         println!("{out}");
-        return Ok(());
     }
 
-    let report: InstallReport = installer.run(&resolved)?;
-    if report.already_installed {
-        println!("{}@{} already installed", report.tool, report.version);
-    } else {
-        println!("installed {}@{}", report.tool, report.version);
+    let (report, result) = installer.run_with_report(&resolved);
+
+    if let Some(path) = &args.json_report {
+        write_json_report(path, &report)?;
     }
-    if let Some(p) = &report.log_path {
-        println!("  log: {}", p.display());
+
+    // On success, surface the same human-readable lines the previous
+    // implementation printed. On failure, the caller (main) prints the
+    // error after we return Err — leave stdout to the report.
+    if result.is_ok() && !args.dry_run {
+        if report.already_installed {
+            println!("{}@{} already installed", report.tool, report.version);
+        } else {
+            println!("installed {}@{}", report.tool, report.version);
+        }
+        if let Some(p) = &report.log_path {
+            println!("  log: {}", p.display());
+        }
     }
+    result
+}
+
+/// Write `report` to `path` as pretty JSON, returning a typed error on
+/// I/O or serialization failure so the CLI's error reporter handles it.
+fn write_json_report(path: &Path, report: &InstallReport) -> Result<(), LuggageError> {
+    let file = File::create(path)
+        .map_err(|source| LuggageError::Io { path: path.to_path_buf(), source })?;
+    let mut writer = BufWriter::new(file);
+    serde_json::to_writer_pretty(&mut writer, report)
+        .map_err(|source| LuggageError::Parse { path: path.to_path_buf(), source })?;
+    // Trailing newline so the file plays nicely with line-oriented tools.
+    writer
+        .write_all(b"\n")
+        .map_err(|source| LuggageError::Io { path: path.to_path_buf(), source })?;
+    writer.flush().map_err(|source| LuggageError::Io { path: path.to_path_buf(), source })?;
     Ok(())
 }
 
