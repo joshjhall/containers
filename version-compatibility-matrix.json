@@ -1,5 +1,5 @@
 {
-  "last_updated": "2026-05-17T05:01:16Z",
+  "last_updated": "2026-05-24T03:06:15Z",
   "base_images": [
     {
       "name": "debian:11-slim",
@@ -83,7 +83,7 @@
       "deprecated": []
     },
     "ruby": {
-      "current": "4.0.4",
+      "current": "4.0.5",
       "supported": [
         "3.3.0",
         "3.4.0",
