@@ -1,5 +1,5 @@
 {
-  "last_updated": "2026-05-24T03:06:15Z",
+  "last_updated": "2026-05-24T05:07:37Z",
   "base_images": [
     {
       "name": "debian:11-slim",
@@ -96,7 +96,8 @@
         "4.0.1",
         "4.0.2",
         "4.0.3",
-        "4.0.4"
+        "4.0.4",
+        "4.0.5"
       ],
       "deprecated": []
     },
@@ -143,7 +144,7 @@
       "base_image": "debian:13-slim",
       "versions": {},
       "status": "passing",
-      "tested_at": "2026-05-17T05:01:16Z",
+      "tested_at": "2026-05-24T05:07:37Z",
       "notes": "Base system only, no language runtimes"
     },
     {
@@ -153,7 +154,7 @@
         "python": "3.14.5"
       },
       "status": "passing",
-      "tested_at": "2026-05-17T05:01:16Z"
+      "tested_at": "2026-05-24T05:07:37Z"
     },
     {
       "variant": "node-dev",
@@ -162,7 +163,7 @@
         "node": "22"
       },
       "status": "passing",
-      "tested_at": "2026-05-17T05:01:16Z"
+      "tested_at": "2026-05-24T05:07:37Z"
     },
     {
       "variant": "rust-golang",
@@ -172,14 +173,14 @@
         "go": "1.26.3"
       },
       "status": "passing",
-      "tested_at": "2026-05-17T05:01:16Z"
+      "tested_at": "2026-05-24T05:07:37Z"
     },
     {
       "variant": "cloud-ops",
       "base_image": "debian:13-slim",
       "versions": {},
       "status": "passing",
-      "tested_at": "2026-05-17T05:01:16Z",
+      "tested_at": "2026-05-24T05:07:37Z",
       "notes": "Docker, Kubernetes, Terraform, AWS CLI"
     },
     {
@@ -192,7 +193,7 @@
         "go": "1.26.3"
       },
       "status": "passing",
-      "tested_at": "2026-05-17T05:01:16Z"
+      "tested_at": "2026-05-24T05:07:37Z"
     }
   ]
 }
