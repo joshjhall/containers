@@ -130,6 +130,22 @@ jobs:
             echo "arch=${parts[2]}"
           } >> "$GITHUB_OUTPUT"
 
+      # Single containers-db clone serves two consumers:
+      #   1. luggage (below) reads `tools/<tool>/versions/<v>.json` to know
+      #      *how* to install the tool — catalog mounted read-only into the
+      #      docker container at /catalog.
+      #   2. bin/ingest-evidence.sh (later) writes the new row to the same
+      #      checkout and pushes a branch when dry_run=false.
+      # Cloning once keeps these two consumers seeing the same catalog SHA
+      # for the lifetime of the run.
+      - name: Clone containers-db catalog
+        run: |
+          git clone --depth=1 https://github.com/joshjhall/containers-db.git _db
+          test -f "_db/tools/${INPUT_TOOL}/versions/${INPUT_TOOL_VERSION}.json" || {
+            echo "containers-db missing tools/${INPUT_TOOL}/versions/${INPUT_TOOL_VERSION}.json" >&2
+            exit 1
+          }
+
       - name: Run luggage install inside the base image
         env:
           IMAGE: ${{ steps.digest.outputs.image_ref }}@${{ steps.digest.outputs.digest }}
@@ -142,7 +158,9 @@ jobs:
           set +e
           docker run --rm \
             -v "$PWD/target/x86_64-unknown-linux-musl/release/luggage:/usr/local/bin/luggage:ro" \
+            -v "$PWD/_db:/catalog:ro" \
             -v "$PWD/out:/out" \
+            -e CONTAINERS_DB=/catalog \
             "$IMAGE" \
             luggage install "${INPUT_TOOL}@${INPUT_TOOL_VERSION}" --json-report /out/luggage-report.json
           INSTALL_RC=$?
