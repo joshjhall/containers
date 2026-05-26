@@ -72,16 +72,30 @@ jobs:
       - name: Checkout containers
         uses: actions/checkout@v4
 
-      - name: Install Rust toolchain
+      - name: Install Rust toolchain (musl target)
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-musl
+
+      - name: Install musl linker
+        run: sudo apt-get install -y --no-install-recommends musl-tools
 
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
+        with:
+          key: musl
 
-      - name: Build luggage and record-evidence
+      # Build statically against musl so the produced binaries run inside
+      # any base image (glibc 2.36 / 2.31 / alpine / RHEL) without a
+      # glibc-version match against the runner. luggage's TLS path uses
+      # rustls (pure Rust), so no native-tls/openssl configuration is
+      # needed for the static link.
+      - name: Build luggage and record-evidence (static musl)
         run: |
-          cargo build --release -p luggage -p record-evidence
-          ls -l target/release/luggage target/release/record-evidence
+          cargo build --release --target x86_64-unknown-linux-musl \
+            -p luggage -p record-evidence
+          ls -l target/x86_64-unknown-linux-musl/release/luggage \
+                target/x86_64-unknown-linux-musl/release/record-evidence
 
       - name: Resolve base image digest
         id: digest
@@ -127,7 +141,7 @@ jobs:
           # the verdict.
           set +e
           docker run --rm \
-            -v "$PWD/target/release/luggage:/usr/local/bin/luggage:ro" \
+            -v "$PWD/target/x86_64-unknown-linux-musl/release/luggage:/usr/local/bin/luggage:ro" \
             -v "$PWD/out:/out" \
             "$IMAGE" \
             luggage install "${INPUT_TOOL}@${INPUT_TOOL_VERSION}" --json-report /out/luggage-report.json
@@ -148,7 +162,7 @@ jobs:
           OS_VERSION: ${{ steps.tuple.outputs.os_version }}
           ARCH: ${{ steps.tuple.outputs.arch }}
         run: |
-          ./target/release/record-evidence \
+          ./target/x86_64-unknown-linux-musl/release/record-evidence \
             --luggage-report out/luggage-report.json \
             --image-ref "$IMAGE_REF" \
             --image-digest "$IMAGE_DIGEST" \
