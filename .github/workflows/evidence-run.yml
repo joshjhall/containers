@@ -156,7 +156,13 @@ jobs:
           # point of an evidence run. The row's `result` field carries
           # the verdict.
           set +e
+          # --user 0: base image defaults to a non-root USER (security
+          # hardening), but luggage needs root to install rust system-wide
+          # via rustup-init (writes to /usr/local/cargo) and to write the
+          # report file to the runner-owned /out mount. Overriding USER
+          # here is the "this is an install test, not a service" exception.
           docker run --rm \
+            --user 0 \
             -v "$PWD/target/x86_64-unknown-linux-musl/release/luggage:/usr/local/bin/luggage:ro" \
             -v "$PWD/_db:/catalog:ro" \
             -v "$PWD/out:/out" \
