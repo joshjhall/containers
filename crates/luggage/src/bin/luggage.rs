@@ -135,7 +135,8 @@ struct InstallArgs {
     #[arg(long, default_value = "/tmp")]
     tmp_root: PathBuf,
 
-    /// Override the install user (defaults to `$USERNAME`, then `vscode`).
+    /// Override the install user (defaults to `$USERNAME`, then `vscode`,
+    /// then `root` if the resolved user doesn't exist on the system).
     #[arg(long)]
     user: Option<String>,
 

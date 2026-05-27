@@ -218,7 +218,7 @@ impl Installer {
         };
 
         let post_install_steps = resolved.post_install.as_ref().map_or(0, Vec::len);
-        let user = user::resolve_user(self.options.user_override.as_deref());
+        let user = user::resolve_install_user(self.options.user_override.as_deref());
 
         Ok(InstallPlan {
             tool: resolved.tool.clone(),
