@@ -3,7 +3,9 @@
 //! Reproduces the side-effects of `lib/features/rust.sh` in Rust:
 //!
 //! 1. Ensure `cache_root/cargo` and `cache_root/rustup` exist, and chown
-//!    them to the install user so `su -c` writes don't hit EACCES.
+//!    them to the install user so `su -c` writes don't hit EACCES. The chown
+//!    is skipped when the install user is `root` — root already owns the
+//!    freshly-created dirs (see issue #492).
 //! 2. Mark the downloaded artifact executable.
 //! 3. `su - <user> -c "export CARGO_HOME=...; export RUSTUP_HOME=...;
 //!    <artifact> <args...>"`.
@@ -23,7 +25,7 @@ use shell_words::quote;
 
 use super::{CommandRunner, MethodContext};
 use crate::error::{LuggageError, Result};
-use crate::installer::user::{chown_command, su_command};
+use crate::installer::user::{ROOT_USER, chown_command, su_command};
 
 /// Binaries the rust install must surface in `bin_root` for parity with
 /// `lib/features/rust.sh`.
@@ -48,10 +50,21 @@ pub fn run(ctx: &MethodContext<'_>) -> Result<()> {
     //    subdirs it creates would otherwise be root-owned; the subsequent
     //    `su -c rustup-init` child would then hit EACCES on the first
     //    write into `$RUSTUP_HOME` (see issue #462).
+    //
+    //    When the install user *is* root there's nothing to transfer — root
+    //    already owns the freshly-created dirs — and `chown root:root` is at
+    //    best a no-op. Skipping it also keeps the install correct on base
+    //    images where the resolved user doesn't exist: `resolve_install_user`
+    //    falls back to `root` there, and an unconditional
+    //    `chown <user>:<user>` would otherwise fail outright (see issue #492).
     let cargo_home = ctx.cache_root.join("cargo");
     let rustup_home = ctx.cache_root.join("rustup");
+    let needs_chown = ctx.user != ROOT_USER;
     for dir in [&cargo_home, &rustup_home] {
         fs::create_dir_all(dir).map_err(|e| LuggageError::Io { path: dir.clone(), source: e })?;
+        if !needs_chown {
+            continue;
+        }
         let argv = chown_command(ctx.user, dir);
         let outcome = ctx.runner.run(&argv[0], &argv[1..])?;
         if !outcome.success() {
@@ -268,6 +281,42 @@ mod tests {
             assert_eq!(chown_args[0], "-R");
             assert_eq!(chown_args[1], "vscode:vscode");
         }
+    }
+
+    #[test]
+    fn run_skips_chown_when_user_is_root() {
+        // On a base image without the resolved dev user, the install user
+        // falls back to "root"; chown must be skipped (root already owns the
+        // freshly-created dirs) while su still runs as root. See issue #492.
+        let cache = tempdir().unwrap();
+        let bin = tempdir().unwrap();
+        let tmp = tempdir().unwrap();
+        let artifact = make_artifact(tmp.path());
+        let runner = RecordingRunner::new();
+        let env = BTreeMap::new();
+        let args: Vec<String> = vec![];
+
+        let ctx = MethodContext {
+            artifact: &artifact,
+            args: &args,
+            env: &env,
+            user: "root",
+            cache_root: cache.path(),
+            bin_root: bin.path(),
+            runner: &runner,
+        };
+        run(&ctx).unwrap();
+
+        let calls = runner.calls();
+        assert!(
+            !calls.iter().any(|(p, _)| p == "chown"),
+            "expected no chown calls when user is root, got {calls:?}",
+        );
+        // The cache dirs are still created, and the install still runs as root.
+        assert!(cache.path().join("cargo").is_dir());
+        assert!(cache.path().join("rustup").is_dir());
+        let su_call = calls.iter().find(|(p, _)| p == "su").expect("expected an su call");
+        assert_eq!(su_call.1[1], "root");
     }
 
     #[test]

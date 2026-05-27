@@ -130,7 +130,10 @@ pub struct MethodContext<'a> {
     pub args: &'a [String],
     /// Already-substituted env exports from `Invoke.env`.
     pub env: &'a BTreeMap<String, String>,
-    /// User to run the install as (e.g. `vscode`).
+    /// User to run the install as, already resolved by
+    /// [`crate::installer::user::resolve_install_user`] (e.g. `vscode`, or
+    /// `root` when the resolved user doesn't exist on the system). A `root`
+    /// value tells the method to skip the cache-dir `chown`.
     pub user: &'a str,
     /// Cache root (`/cache` in production).
     pub cache_root: &'a Path,
