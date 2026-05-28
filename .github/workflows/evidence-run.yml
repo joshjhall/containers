@@ -1,29 +1,35 @@
 name: Evidence Run
 
-# Prototype evidence-run workflow for sub-issue C of #473 (transport
-# choice + end-to-end prototype). Single tuple, manual trigger only.
-# Sub-issue D (#478) extends this with the full matrix and tier
-# scheduling — keep the surface area here small so D can replace freely.
+# Evidence-run workflow (sub-issue D of #473 — matrix + tier integration).
+# Builds `luggage` + `record-evidence` from this repo, runs a tool install
+# against a published, signed base image at its digest, records a
+# TestEntry-shaped row, and hands it to `bin/ingest-evidence.sh` for
+# delivery into `joshjhall/containers-db`.
 #
-# Flow per dispatch:
-#   1. Build `luggage` and `record-evidence` from this repo.
-#   2. Pull the pilot base image and capture its `sha256:` digest.
+# Triggers (all path-scoped to evidence-relevant sources):
+#   - pull_request → main : run the matrix in DRY-RUN (validate the row
+#     merges cleanly). Fork-safe — needs no secrets.
+#   - push → main         : run the matrix and open a real PR against
+#     containers-db (requires the `CONTAINERS_DB_PAT` secret).
+#   - workflow_dispatch   : ad-hoc single run; the `dry_run` input chooses.
+# No cron: per #473, while the catalog is small "just enumerate" beats
+# sampling, so the matrix is exhaustive and event-driven.
+#
+# A `setup` job resolves the matrix (a single input-derived leg for
+# dispatch, the enumerated pilot legs for PR/push) and the effective
+# dry-run flag, so the `evidence` job body is identical across events.
+# Per-leg coordinates are read into `env:` rather than interpolated into
+# `run:` scripts — the same guardrail the dispatch prototype used.
+#
+# Flow per matrix leg:
+#   1. Build `luggage` and `record-evidence` from this repo (static musl).
+#   2. Pull the base image and capture its `sha256:` digest.
 #   3. Run `luggage install <tool>@<version> --json-report` inside the
 #      image (binary mounted from the runner per the
 #      luggage-release-deferred convention).
 #   4. Run `record-evidence` to assemble the TestEntry-shaped row.
-#   5. Hand the row to `bin/ingest-evidence.sh`, which dedup-merges into
-#      `joshjhall/containers-db` and (when `dry_run=false`) opens a PR
-#      against that repo.
-#
-# The default is `dry_run=true`. Switching to false requires the
-# `CONTAINERS_DB_PAT` secret to be configured — see
-# `docs/operations/evidence-runs.md` for setup and rotation.
-#
-# All `inputs.*` values are read into `env:` rather than interpolated
-# directly into `run:` scripts. workflow_dispatch inputs come from
-# trusted maintainers, but the env indirection keeps the same guardrail
-# the matrix-and-cron version (#478) will need anyway.
+#   5. Hand the row to `bin/ingest-evidence.sh` — a dry-run validate, or a
+#      real cross-repo push + PR when dry-run is false.
 
 on:
   workflow_dispatch:
@@ -52,22 +58,97 @@ on:
         required: true
         default: true
         type: boolean
+  pull_request:
+    branches: [main]
+    paths:
+      - "crates/luggage/**"
+      - "crates/record-evidence/**"
+      - "crates/containers-common/**"
+      - "base-images/**"
+      - "bin/ingest-evidence.sh"
+      - ".github/workflows/evidence-run.yml"
+  push:
+    branches: [main]
+    paths:
+      - "crates/luggage/**"
+      - "crates/record-evidence/**"
+      - "crates/containers-common/**"
+      - "base-images/**"
+      - "bin/ingest-evidence.sh"
+      - ".github/workflows/evidence-run.yml"
 
 permissions:
   contents: read
 
+# Serialize runs on the same ref so two pushes to main don't race to open
+# duplicate containers-db PRs. Don't cancel an in-flight run — an
+# interrupted ingest could leave a half-pushed branch behind.
+concurrency:
+  group: evidence-${{ github.ref }}
+  cancel-in-progress: false
+
 env:
   REGISTRY: ghcr.io
-  INPUT_TOOL: ${{ inputs.tool }}
-  INPUT_TOOL_VERSION: ${{ inputs.tool_version }}
-  INPUT_TUPLE: ${{ inputs.tuple }}
-  INPUT_IMAGE_TAG: ${{ inputs.image_tag }}
 
 jobs:
+  # Resolve the matrix and the effective dry-run flag once, so the
+  # `evidence` job body is event-agnostic:
+  #   - workflow_dispatch: a single leg built from the inputs; dry-run
+  #     follows the `dry_run` input.
+  #   - pull_request: the enumerated pilot legs in dry-run (validate only).
+  #   - push → main: the enumerated pilot legs with a real ingest.
+  setup:
+    name: Resolve matrix
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.gen.outputs.matrix }}
+      dry_run: ${{ steps.gen.outputs.dry_run }}
+    steps:
+      - name: Generate matrix and dry-run flag
+        id: gen
+        env:
+          EVENT: ${{ github.event_name }}
+          INPUT_TOOL: ${{ inputs.tool }}
+          INPUT_TOOL_VERSION: ${{ inputs.tool_version }}
+          INPUT_TUPLE: ${{ inputs.tuple }}
+          INPUT_IMAGE_TAG: ${{ inputs.image_tag }}
+          INPUT_DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT" = "workflow_dispatch" ]; then
+            MATRIX=$(jq -cn \
+              --arg tool "$INPUT_TOOL" \
+              --arg version "$INPUT_TOOL_VERSION" \
+              --arg tuple "$INPUT_TUPLE" \
+              --arg image_tag "$INPUT_IMAGE_TAG" \
+              '{include: [{tool: $tool, version: $version, tuple: $tuple, image_tag: $image_tag}]}')
+            DRY="$INPUT_DRY_RUN"
+          else
+            # Pilot legs. Extend here (add tuples/tools) as base images
+            # publish — the evidence job body needs no changes.
+            MATRIX='{"include":[{"tool":"rust","version":"1.95.0","tuple":"debian-12-amd64","image_tag":"latest"}]}'
+            if [ "$EVENT" = "pull_request" ]; then
+              DRY="true"
+            else
+              DRY="false"
+            fi
+          fi
+          echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
+          echo "dry_run=$DRY" >> "$GITHUB_OUTPUT"
+
   evidence:
-    name: Evidence ${{ inputs.tool }}@${{ inputs.tool_version }} on ${{ inputs.tuple }}
+    name: Evidence ${{ matrix.tool }}@${{ matrix.version }} on ${{ matrix.tuple }}
+    needs: setup
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.setup.outputs.matrix) }}
+    env:
+      INPUT_TOOL: ${{ matrix.tool }}
+      INPUT_TOOL_VERSION: ${{ matrix.version }}
+      INPUT_TUPLE: ${{ matrix.tuple }}
+      INPUT_IMAGE_TAG: ${{ matrix.image_tag }}
     steps:
       - name: Checkout containers
         uses: actions/checkout@v4
@@ -208,7 +289,7 @@ jobs:
         uses: extractions/setup-just@v3
 
       - name: Ingest evidence (dry-run)
-        if: ${{ inputs.dry_run }}
+        if: ${{ needs.setup.outputs.dry_run == 'true' }}
         env:
           GIT_AUTHOR_NAME: github-actions[bot]
           GIT_AUTHOR_EMAIL: github-actions[bot]@users.noreply.github.com
@@ -222,7 +303,7 @@ jobs:
             --dry-run
 
       - name: Ingest evidence (PR open)
-        if: ${{ ! inputs.dry_run }}
+        if: ${{ needs.setup.outputs.dry_run != 'true' }}
         env:
           GH_TOKEN: ${{ secrets.CONTAINERS_DB_PAT }}
           GIT_AUTHOR_NAME: github-actions[bot]

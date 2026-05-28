@@ -2,8 +2,10 @@
 
 Container builds and integration tests are split across four cadence tiers,
 trading depth of coverage for feedback speed. A PR sees only the features it
-touched; the full distro × arch × feature matrix runs weekly. This page
-describes the design, what's implemented today, and what's planned.
+touched; the full distro × arch × feature matrix runs weekly. Evidence runs sit
+alongside these as an event-driven tier that records per-tool install results
+against signed base images. This page describes the design, what's implemented
+today, and what's planned.
 
 ## Overview
 
@@ -14,15 +16,18 @@ describes the design, what's implemented today, and what's planned.
 | Weekly    | Cron Sundays 03:00 UTC               | <2 h             | All features × all distros × all arches     | Planned (#408-B)      |
 | Monthly   | Cron 1st of month 04:00 UTC          | <4 h             | Long-tail: image size, abandonment scan     | Planned (#408-C)      |
 | Quarterly | Cron 1st of Q 09:00 UTC (existing)   | Best-effort      | Cross-version dependency drift              | Planned (#408-D)      |
+| Evidence  | `pull_request` + `push` → main       | <30 min          | Pilot: rust × debian-12-amd64 (extensible)  | Implemented (#478)    |
 
 Promotion criteria are unidirectional — passing a faster tier is a prereq
 for letting code reach the next slower tier, but a failure at a slower tier
-does not block ongoing work (the regression opens an issue instead).
+does not block ongoing work (the regression opens an issue instead). Evidence
+runs are off to the side of this chain: they don't gate merges, they record
+what a published base image actually does when a tool is installed onto it.
 
-Evidence runs (per-tool installs against signed base images, results
-landing in `joshjhall/containers-db`) are dispatch-only today; see
+The evidence tier records per-tool installs against signed base images, with
+results landing in `joshjhall/containers-db`. It is event-driven (no cron) and
+path-scoped — see the [Evidence runs](#evidence-runs) section below and
 [evidence-runs.md](evidence-runs.md) for the ingestion contract.
-Tier integration is [#478](https://github.com/joshjhall/containers/issues/478).
 
 ## PR tier
 
@@ -201,6 +206,67 @@ Uses [`bin/check-versions.sh --json`](../../bin/check-versions.sh) to
 enumerate the pinned versions; combinations are sampled rather than
 exhaustive (full Cartesian product is infeasible for >50 tools).
 
+## Evidence runs
+
+**Status:** Implemented in
+[`.github/workflows/evidence-run.yml`](../../.github/workflows/evidence-run.yml).
+
+Unlike the cadence tiers above, the evidence tier is not about catching
+regressions in *this* repo — it produces a durable record of what a published
+base image does when a real tool is installed onto it. Each run builds
+[`luggage`](../../crates/luggage/) and
+[`record-evidence`](../../crates/record-evidence/) from this repo, pulls a
+signed base image at its `sha256:` digest, runs `luggage install <tool>@<version>`
+inside it, and assembles a `TestEntry`-shaped row. The row is delivered to
+`joshjhall/containers-db` via [`bin/ingest-evidence.sh`](../../bin/ingest-evidence.sh).
+
+### Cadence
+
+Event-driven, not cron. Per [#473](https://github.com/joshjhall/containers/issues/473),
+while the tool catalog is small "just enumerate" beats sampling, so the matrix is
+exhaustive rather than scheduled. Three triggers, all **path-scoped** to evidence
+sources (`crates/luggage/**`, `crates/record-evidence/**`,
+`crates/containers-common/**`, `base-images/**`, `bin/ingest-evidence.sh`, and the
+workflow itself) so unrelated PRs don't pay the build-and-install cost:
+
+| Trigger             | Ingest behavior                                       |
+| ------------------- | ----------------------------------------------------- |
+| `pull_request` → main | Dry-run: validate the row merges cleanly against the catalog schema. Fork-safe — no secrets. |
+| `push` → main       | Real ingest: open a PR against `joshjhall/containers-db` (requires the `CONTAINERS_DB_PAT` secret). |
+| `workflow_dispatch` | Single ad-hoc leg from inputs; the `dry_run` input chooses validate vs. real ingest. |
+
+A `setup` job resolves the matrix (a single input-derived leg for dispatch, the
+enumerated pilot legs for PR/push) and the effective dry-run flag, keeping the
+`evidence` job body identical across events. A `concurrency` group serializes
+runs on the same ref so two main pushes can't race to open duplicate PRs.
+
+### What it produces
+
+One `TestEntry` row per `(tool, version, tuple)` leg, dedup-merged into
+`tools/<tool>/versions/<version>.json` in containers-db by
+`(os, os_version, arch, image_digest)`. The pilot leg is
+`rust@1.95.0 × debian-12-amd64`; add tuples or tools to the matrix in the
+`setup` job as their base images publish.
+
+### What it consumes
+
+- **Signed base images** from [`base-images/`](../../base-images/) (cosign +
+  SBOM), pulled by digest so the evidence is reproducible.
+- **The containers-db catalog**, cloned once and mounted read-only into the
+  install container so luggage knows *how* to install the tool.
+- **`luggage` + `record-evidence`**, built from this repo and mounted into the
+  base image — the luggage release pipeline is deferred until v5 stabilizes, so
+  the binary is mounted rather than installed from a package.
+
+### Failure behavior
+
+A failed `luggage install` is not a workflow failure — it is the evidence. The
+install step runs under `set +e`, and luggage writes its `--json-report` on
+every exit path (success, skip, dry-run, and failure). `record-evidence` maps a
+populated `error_class` to `result: fail`, so a broken install still produces a
+row recording *why* it broke. See [evidence-runs.md](evidence-runs.md) for the
+wire format, transport, auth model, merge policy, and failure modes.
+
 ## Cache strategy summary
 
 | Scope                            | Producer                  | Consumers                                              |
@@ -269,6 +335,7 @@ This is correct behavior for docs-only PRs. The summary job emits
 
 - [`.github/workflows/test-pr.yml`](../../.github/workflows/test-pr.yml) — PR tier
 - [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) — merge tier
+- [`.github/workflows/evidence-run.yml`](../../.github/workflows/evidence-run.yml) — evidence runs (#478)
 - `.github/workflows/test-weekly.yml` — planned (#408-B)
 - `.github/workflows/test-monthly.yml` — planned (#408-C)
 - `.github/workflows/quarterly-review.yml` — extends for #408-D
