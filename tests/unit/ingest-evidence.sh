@@ -116,21 +116,24 @@ test_commit_lands_on_new_branch() {
 }
 
 test_dedup_replaces_same_tuple_same_digest() {
-    # Seed an existing row with the same (os, os_version, arch, digest)
-    # as the fixture but a stale tested_at, then ingest. The new row
-    # must replace the old one — count stays at 1, tested_at advances.
+    # Seed an existing row with the same (os, os_version, arch, digest) as
+    # the fixture but a *meaningful* difference (a failing result), then
+    # ingest the passing fixture row. Because a non-volatile field differs,
+    # the new row must replace the old one — count stays at 1 and the result
+    # flips to pass. (A difference in volatile fields alone is a no-op; that
+    # path is covered by test_noop_on_volatile_only_reingest.)
     RESULT_DB="$(command mktemp -d)"
     make_fake_db "$RESULT_DB"
     RESULT_FILE="$RESULT_DB/tools/rust/versions/1.95.0.json"
     local seed
-    seed=$(jq '. + {"tested_at": "2024-01-01T00:00:00Z", "duration_seconds": 99.9}' \
+    seed=$(jq '. + {"result": "fail", "error_class": "verify", "tested_at": "2024-01-01T00:00:00Z"}' \
         "$SAMPLE_ROW")
     local tmp
     tmp=$(command mktemp)
     jq --argjson row "$seed" '.tested = [$row]' "$RESULT_FILE" >"$tmp"
     command mv "$tmp" "$RESULT_FILE"
     git -C "$RESULT_DB" -c user.email=test@example.com -c user.name=test \
-        commit -q -am "seed stale row"
+        commit -q -am "seed failing row"
 
     "$INGEST" \
         --row "$SAMPLE_ROW" \
@@ -144,10 +147,10 @@ test_dedup_replaces_same_tuple_same_digest() {
     count=$(jq '.tested | length' "$RESULT_FILE")
     assert_equals "1" "$count" \
         "dedup on same (os, os_version, arch, image_digest) replaces, not appends"
-    local fresh_at
-    fresh_at=$(jq -r '.tested[0].tested_at' "$RESULT_FILE")
-    assert_not_equals "2024-01-01T00:00:00Z" "$fresh_at" \
-        "stale row replaced — fresh tested_at present"
+    local result
+    result=$(jq -r '.tested[0].result' "$RESULT_FILE")
+    assert_equals "pass" "$result" \
+        "meaningful change (result fail->pass) replaces the stale row"
     cleanup_db
 }
 
@@ -179,6 +182,73 @@ test_dedup_appends_different_digest() {
     count=$(jq '.tested | length' "$RESULT_FILE")
     assert_equals "2" "$count" \
         "different image_digest preserves both rows as history"
+    cleanup_db
+}
+
+test_noop_on_identical_reingest() {
+    # Re-ingesting a byte-identical row is a clean no-op: the script exits 0,
+    # creates no new commit, and prints no branch name on stdout. This is the
+    # literal "nothing to commit" regression from #494.
+    RESULT_DB="$(command mktemp -d)"
+    make_fake_db "$RESULT_DB"
+    RESULT_FILE="$RESULT_DB/tools/rust/versions/1.95.0.json"
+
+    # First ingest records the row and commits it in the script's own format.
+    GITHUB_RUN_ID=1 "$INGEST" \
+        --row "$SAMPLE_ROW" --db-path "$RESULT_DB" \
+        --tool rust --version 1.95.0 --dry-run --no-validate >/dev/null 2>&1
+    local head1
+    head1=$(git -C "$RESULT_DB" rev-parse HEAD)
+
+    # Second ingest of the identical row must change nothing.
+    local out rc=0
+    out=$(GITHUB_RUN_ID=2 "$INGEST" \
+        --row "$SAMPLE_ROW" --db-path "$RESULT_DB" \
+        --tool rust --version 1.95.0 --dry-run --no-validate 2>/dev/null) || rc=$?
+    assert_equals "0" "$rc" "identical re-ingest exits 0"
+    assert_equals "" "$out" "identical re-ingest prints no branch name on stdout"
+    local head2
+    head2=$(git -C "$RESULT_DB" rev-parse HEAD)
+    assert_equals "$head1" "$head2" "identical re-ingest creates no new commit"
+    cleanup_db
+}
+
+test_noop_on_volatile_only_reingest() {
+    # A row that matches the dedup key and differs only in volatile fields
+    # (tested_at, ci_run, duration_seconds) carries no fresh signal, so the
+    # re-ingest is a no-op and the recorded tested_at is left untouched.
+    RESULT_DB="$(command mktemp -d)"
+    make_fake_db "$RESULT_DB"
+    RESULT_FILE="$RESULT_DB/tools/rust/versions/1.95.0.json"
+
+    # First ingest records the fixture row.
+    GITHUB_RUN_ID=1 "$INGEST" \
+        --row "$SAMPLE_ROW" --db-path "$RESULT_DB" \
+        --tool rust --version 1.95.0 --dry-run --no-validate >/dev/null 2>&1
+    local head1 original_at
+    head1=$(git -C "$RESULT_DB" rev-parse HEAD)
+    original_at=$(jq -r '.tested[0].tested_at' "$RESULT_FILE")
+
+    # Second ingest: same tuple+digest+result, only volatile fields differ.
+    local volatile_row
+    volatile_row=$(command mktemp)
+    jq '. + {"tested_at": "2030-12-31T23:59:59Z", "duration_seconds": 0.1, "ci_run": "https://example.com/runs/99"}' \
+        "$SAMPLE_ROW" >"$volatile_row"
+    local rc=0
+    GITHUB_RUN_ID=2 "$INGEST" \
+        --row "$volatile_row" --db-path "$RESULT_DB" \
+        --tool rust --version 1.95.0 --dry-run --no-validate >/dev/null 2>&1 || rc=$?
+    assert_equals "0" "$rc" "volatile-only re-ingest exits 0"
+
+    local count fresh_at head2
+    count=$(jq '.tested | length' "$RESULT_FILE")
+    assert_equals "1" "$count" "volatile-only re-ingest keeps a single row"
+    fresh_at=$(jq -r '.tested[0].tested_at' "$RESULT_FILE")
+    assert_equals "$original_at" "$fresh_at" \
+        "volatile-only re-ingest leaves the recorded tested_at untouched"
+    head2=$(git -C "$RESULT_DB" rev-parse HEAD)
+    assert_equals "$head1" "$head2" "volatile-only re-ingest creates no new commit"
+    command rm -f "$volatile_row"
     cleanup_db
 }
 
@@ -254,6 +324,8 @@ run_test test_branch_name_includes_run_id_suffix "branch name uses GITHUB_RUN_ID
 run_test test_commit_lands_on_new_branch "commit lands on the new branch with conventional subject"
 run_test test_dedup_replaces_same_tuple_same_digest "dedup replaces same (tuple, digest) row"
 run_test test_dedup_appends_different_digest "different image_digest accumulates as history"
+run_test test_noop_on_identical_reingest "identical re-ingest is a clean no-op"
+run_test test_noop_on_volatile_only_reingest "volatile-only re-ingest is a clean no-op"
 run_test test_stdin_row_via_dash "--row - reads JSON from stdin"
 run_test test_rejects_missing_required_flag "missing --db-path is exit 2"
 run_test test_rejects_unknown_argument "unknown flag is exit 2"
