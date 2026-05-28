@@ -156,18 +156,34 @@ the second 401 (the auth header doesn't change between retries).
 ## Merge policy
 
 Default: **append**. The transport never deletes existing rows in
-`tested[]`.
+`tested[]`. The ingest is idempotent end-to-end: re-running it with
+unchanged inputs produces no commit, no branch, and no PR (see below).
 
 Dedup key: `(os, os_version, arch, image_digest)`. When the new row
-matches an existing row on all four, the existing row is **replaced**
-by the new row. Rationale:
+matches an existing row on all four, behavior depends on whether
+anything *meaningful* changed:
+
+- **Meaningful change** (different `result`, `error_class`,
+  `version_output`, …) → the existing row is **replaced** by the new
+  row. The fresh answer supersedes the stale one.
+- **Volatile-only change** (only `tested_at`, `ci_run`, and/or
+  `duration_seconds` differ) → **no-op**. The existing row is left
+  untouched and the ingest exits 0 without committing, pushing, or
+  opening a PR. Re-running the identical image on the identical tuple
+  reproduces the same result deterministically, so a fresher timestamp
+  alone carries no new evidence — and would otherwise churn a
+  review-required PR on every `push → main`.
+
+Rationale:
 
 - Different `image_digest` = different base image build = independent
-  evidence point; keep both for history.
-- Same `image_digest` + same tuple = the row is "have we tested this
-  exact image on this exact tuple recently?". The fresh answer
-  supersedes the stale answer; we don't carry duplicates of the same
-  reproducible run.
+  evidence point; keep both for history. Freshness from patched base
+  images therefore rides on the **digest** — a rebuilt image is
+  content-addressed to a new digest, yielding a new appended row — not
+  on re-timestamping a byte-identical image.
+- Same `image_digest` + same tuple + same meaningful fields = "have we
+  already recorded this exact reproducible run?". We don't carry
+  duplicates of it.
 
 A row missing both `image_ref` and `image_digest` is allowed by the
 schema (paired-absent), but in practice the producer always sets both
@@ -202,10 +218,13 @@ is not stable across multiple producers anyway.
    set the PAT's expiration ≤90 days and audit `Settings → Secrets`
    monthly.
 
-1. **Duplicate row.**
-   Handled by the dedup key in [Merge policy](#merge-policy). Operators
-   can land the same row twice (re-running a flaky workflow) without
-   bloating the file.
+1. **Duplicate / re-run row.**
+   Handled by the dedup key in [Merge policy](#merge-policy). Re-running
+   a workflow against an unchanged image digest is a clean no-op: the
+   ingest detects nothing meaningful changed, logs `nothing to ingest`,
+   and exits 0 without committing, pushing, or opening a duplicate PR.
+   Operators can re-run a flaky workflow freely without bloating the
+   file or spawning redundant PRs.
 
 1. **Network flake on push or PR open.**
    The script retries `git push` and `gh pr create` up to 3 times with

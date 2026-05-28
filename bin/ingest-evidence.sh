@@ -13,6 +13,14 @@
 # commit → push + `gh pr create`. The script never pushes when --dry-run
 # is set; that mode is for local development and CI smoke tests.
 #
+# Idempotent on re-runs: a row that already exists and differs only in
+# volatile fields (tested_at, ci_run, duration_seconds) is a clean no-op —
+# the merge leaves the file untouched and the script exits 0 before
+# committing, pushing, or opening a (duplicate) PR. Only a meaningful change
+# (new digest, flipped result, changed error_class/version_output, new
+# version) produces a commit + PR. See docs/operations/evidence-runs.md
+# (Merge policy) for the rationale.
+#
 # Per CLAUDE.md, all bare external commands use `command` to bypass any
 # user-shell aliases.
 
@@ -192,8 +200,13 @@ BRANCH_NAME="evidence/$TOOL/$VERSION/$TUPLE_SLUG/$BRANCH_SUFFIX"
 # --- Dedup-merge row into the tested[] array -------------------------------
 
 # Policy: rows with the same (os, os_version, arch, image_digest) are
-# replaced by the new row; everything else is preserved. Rationale lives
-# in docs/operations/evidence-runs.md (Merge policy).
+# replaced by the new row; everything else is preserved. But if an existing
+# row matches that dedup key AND is identical on every non-volatile field,
+# the new row carries no fresh signal (same content-addressed image, same
+# result) — only a newer timestamp — so we leave the file untouched and let
+# the no-op guard below short-circuit. Volatile fields are tested_at, ci_run,
+# and duration_seconds. Rationale lives in docs/operations/evidence-runs.md
+# (Merge policy).
 TMP_FILE="$(command mktemp)"
 trap 'rm -f "$TMP_FILE"' EXIT
 
@@ -203,19 +216,38 @@ jq \
     --arg ov "$NEW_OS_VERSION" \
     --arg arch "$NEW_ARCH" \
     --arg digest "$NEW_DIGEST" \
-    '.tested = (
-        ((.tested // []) | map(select(
-            (.os // "") != $os
-            or (.os_version // "") != $ov
-            or (.arch // "") != $arch
-            or (.image_digest // "") != $digest
-        ))) + [$new]
-    )' \
+    '
+    def dedup_match:
+        (.os // "") == $os
+        and (.os_version // "") == $ov
+        and (.arch // "") == $arch
+        and (.image_digest // "") == $digest;
+    def strip_volatile: del(.tested_at, .ci_run, .duration_seconds);
+    ($new | strip_volatile) as $new_core
+    | (.tested // []) as $rows
+    | if ($rows | map(select(dedup_match)) | any(strip_volatile == $new_core))
+      then .
+      else .tested = (($rows | map(select(dedup_match | not))) + [$new])
+      end
+    ' \
     "$VERSIONS_FILE" >"$TMP_FILE"
 
 # Trailing newline keeps `git diff` and POSIX text-tool output clean.
 command cp "$TMP_FILE" "$VERSIONS_FILE"
 command echo "" >>"$VERSIONS_FILE"
+
+# --- No-op short-circuit ---------------------------------------------------
+
+# If the merge produced no change against HEAD (re-running an already-recorded
+# row, modulo volatile fields), there is nothing to ingest. Exit cleanly here
+# — before validate / branch / commit / push / PR — so re-runs are a clean
+# no-op in both dry-run and real-ingest modes. The merge above is byte-stable
+# for identical inputs (jq preserves key order; the file was last written by
+# this same pipeline), so this diff check is reliable.
+if git -C "$DB_PATH" diff --quiet -- "tools/$TOOL/versions/$VERSION.json"; then
+    command echo "$SCRIPT_NAME: row already present for $TOOL@$VERSION on $TUPLE_SLUG; nothing to ingest" >&2
+    exit 0
+fi
 
 # --- Validate via the existing contributor flow ----------------------------
 
@@ -244,6 +276,14 @@ image_digest: ${NEW_DIGEST:-<absent>}
 
 See docs/operations/evidence-runs.md in joshjhall/containers for the
 ingestion contract (sub-issue C of joshjhall/containers#473)."
+
+# Belt-and-suspenders: never let an empty commit abort the run. The no-op
+# guard above is the primary defense; this catches any path that stages
+# nothing (e.g. a future caller that skips the merge).
+if git -C "$DB_PATH" diff --cached --quiet; then
+    command echo "$SCRIPT_NAME: nothing staged for $TOOL@$VERSION; nothing to ingest" >&2
+    exit 0
+fi
 
 git -C "$DB_PATH" commit -m "$COMMIT_SUBJECT" -m "$COMMIT_BODY" >&2
 
