@@ -309,7 +309,8 @@ Before executing the chosen shipping mode, run these safety checks:
    commit still references the issue. Users who want merge-commits can
    run Option 1 without `AUTOMERGE=1`.
 
-1. **Monitor CI and remediate failures** (advisory, max 3 iterations):
+1. **Monitor CI and remediate failures** (advisory; the `ci-fixer` Workflow
+   harness caps fixes at 3 attempts per check):
 
    Before labeling the issue, optionally monitor CI checks and auto-fix
    failures. Ask the user:
@@ -327,43 +328,41 @@ Before executing the chosen shipping mode, run these safety checks:
 
    b. **If all checks pass**: inform the user and proceed to labeling
 
-   c. **If checks fail** (iteration \<= 3):
+   c. **If checks fail**: hand the failures to the `ci-fixer` Workflow harness,
+   which owns the retry loop (hard-capped at 3 attempts per check) and fans
+   independent checks in parallel under one shared token budget — you no longer
+   track an iteration counter by hand.
 
-   - Identify the failing check name and run ID:
+   - Collect every failing check into a `checks` array. For each one, grab the
+     name and its run-failed logs:
 
      ```bash
      gh pr checks {pr_number} --json name,state,conclusion,link \
        | jq '[.[] | select(.conclusion == "failure")]'
+     gh run view {run_id} --log-failed 2>&1 | tail -200   # one per failing check
      ```
 
-   - Fetch failing check logs:
+   - **Invoke the `Workflow` tool** with the script at
+     `~/.claude/agents/ci-fixer/workflow.js` (it ships bundled with the
+     `ci-fixer` agent), passing
+     `args: { checks: [{ name, logs, pr: {pr_number} }, …] }`. The harness runs
+     a capped `parse → fix → verify` loop per check and returns
+     `{ results: [{ check, fixed, summary, files_changed, remainingFailures, … }] }`.
+     Agents never push — applying the commits is your job:
 
-     ```bash
-     gh run view {run_id} --log-failed 2>&1 | tail -200
-     ```
+     - For each result with `fixed: true`: stage its `files_changed`, then make
+       one commit `fix(ci): {summary}` (combine multiple fixed checks into a
+       single commit when convenient), `git push`, and go back to (a) to
+       re-check CI.
+     - For each result with `fixed: false`: inform the user "CI check {check}
+       appears to be {failure_type} — {summary}. Remaining: {remainingFailures}.
+       Requires manual intervention." Ask: **Fix manually now, or ship with
+       failing CI?** If fix manually, pause then go back to (a); if ship anyway,
+       proceed to labeling.
 
-   - Dispatch the `ci-fixer` agent with the failure logs, check name,
-     PR number, and current iteration number
-
-   - **If ci-fixer returns `"fixed"`**:
-
-     - Stage the changed files
-     - Commit: `fix(ci): {summary from ci-fixer}`
-     - Push: `git push`
-     - Increment iteration counter
-     - Go back to (a) to re-check
-
-   - **If ci-fixer returns `"unfixable"`**:
-
-     - Inform the user: "CI failure appears to be {failure_type} —
-       {summary}. Requires manual intervention."
-     - Ask: **Fix manually now, or ship with failing CI?**
-     - If fix manually: pause for user to fix, then go back to (a)
-     - If ship anyway: proceed to labeling
-
-   d. **After 3 failed remediation attempts**: stop auto-fixing and inform
-   the user: "CI has failed 3 remediation attempts. Manual intervention
-   needed." Ask whether to ship with failing CI or stop.
+   The harness stops on its own once the per-check cap or the shared budget is
+   reached, so there is no separate "after 3 attempts" step — surface any
+   still-failing results to the user as above.
 
    **Graceful degradation**: If `gh pr checks` is unavailable or errors,
    skip CI monitoring with a note and proceed to labeling. CI monitoring
