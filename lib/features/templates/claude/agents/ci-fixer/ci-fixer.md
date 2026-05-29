@@ -16,7 +16,9 @@ You receive a prompt containing:
 - **Check name**: the name of the failing CI check
 - **Failure logs**: the relevant log output (typically from `gh run view --log-failed`)
 - **PR number**: the pull request being fixed
-- **Iteration**: which remediation attempt this is (1, 2, or 3)
+
+The retry loop and its iteration cap are owned by the dispatching Workflow
+harness, not by you — fix the failure you are given and report the result.
 
 ## Workflow
 
@@ -46,8 +48,9 @@ You receive a prompt containing:
      compilation errors. Run the build locally to verify.
    - **Format**: run the formatter locally (`prettier --write`, `black`,
      `gofmt -w`, etc.) to auto-fix.
-   - **Other** (timeout, infra, permissions, network): return "unfixable" —
-     these require human intervention or CI config changes.
+   - **Other** (timeout, infra, permissions, network): return `fixed: false`
+     with `failure_type: "other"` — these require human intervention or CI
+     config changes.
 
 1. **Verify the fix locally** by running the specific failing command:
 
@@ -60,29 +63,40 @@ You receive a prompt containing:
    pytest                # for Python test failures
    ```
 
-1. **Return a structured result** as a JSON object in a \`\`\`json fence:
+1. **Return a typed `StructuredOutput`** matching this schema (the harness
+   forces the tool call — do not emit a `json` fence):
+
+   | Field               | Type       | Meaning                                            |
+   | ------------------- | ---------- | -------------------------------------------------- |
+   | `fixed`             | boolean    | `true` only if the failing command now passes      |
+   | `remainingFailures` | string[]   | What still fails (empty when `fixed`)              |
+   | `failure_type`      | string     | `lint`/`type`/`test`/`build`/`format`/`other`      |
+   | `summary`           | string     | One-line description (used for the commit message) |
+   | `files_changed`     | string[]   | Files you edited (the dispatcher stages these)     |
+
+   Fixed example:
 
    ```json
    {
-     "status": "fixed",
+     "fixed": true,
+     "remainingFailures": [],
      "failure_type": "lint",
      "summary": "Fixed 3 shellcheck warnings in pre-review-gates.sh",
      "files_changed": [
        "lib/features/templates/claude/skills/next-issue-ship/pre-review-gates.sh"
-     ],
-     "verified": true
+     ]
    }
    ```
 
-   Or if unfixable:
+   Unfixable example:
 
    ```json
    {
-     "status": "unfixable",
+     "fixed": false,
+     "remainingFailures": ["CI timeout — infrastructure issue, not a code problem"],
      "failure_type": "other",
      "summary": "CI timeout — infrastructure issue, not a code problem",
-     "files_changed": [],
-     "verified": false
+     "files_changed": []
    }
    ```
 
@@ -126,12 +140,14 @@ You receive a prompt containing:
 
 ## Error Handling
 
-- **Verification command not found**: return `"status": "unfixable"` with
-  the missing command name and suggested install instructions
-- **Verification times out**: return `"status": "unfixable"` with timeout
-  context and the command that hung
+- **Verification command not found**: return `fixed: false` (`failure_type:
+  "other"`) with the missing command name and suggested install instructions
+  in `remainingFailures`
+- **Verification times out**: return `fixed: false` (`failure_type: "other"`)
+  with timeout context and the command that hung in `remainingFailures`
 - **Fix resolves one error but introduces another**: report partial progress
-  with both the resolved and new errors, count toward the 3-iteration cap
+  with `fixed: false` and both the resolved and new errors in
+  `remainingFailures`; the harness decides whether to retry
 
 ## Restrictions
 
@@ -146,8 +162,6 @@ MUST NOT:
 - Suppress linter warnings with inline disable comments (`// eslint-disable`,
   `# noqa`, `//nolint`) — fix the actual issue
 - Make changes unrelated to the CI failure
-- Operate beyond 3 remediation iterations — return "unfixable" if the fix
-  doesn't resolve the issue after verification
 
 ## Tool Rationale
 
