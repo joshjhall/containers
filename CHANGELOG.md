@@ -5,11 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.19.4] - 2026-05-31
+
+### Added
+
+- Matrix + PR/push triggers for evidence-run workflow (#495)
+- Ci-fixer Workflow harness for parse→fix→verify loop (#504)
+
+### Fixed
+
+- Build evidence-run binaries as static musl (#489)
+- Mount containers-db catalog into evidence-run container (#490)
+- Run luggage as root inside hardened base image (#491)
+- Fall back to root install user when resolved user is absent (#493)
+- Make evidence ingestion idempotent on no-op re-runs (#496)
+
 ## [4.19.3] - 2026-05-24
 
 ### Added
 
 - Add evidence-runs ingestion handoff for containers-db (#486)
+
+### Miscellaneous
+
+- Automated version updates to v4.19.3
+- Update compatibility matrix with passing test results
 
 ## [4.19.2] - 2026-05-17
 
@@ -1844,6 +1864,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix prettier and markdownlint formatting in README
 - Format TLS documentation files
 
+[4.19.4]: https://github.com/joshjhall/containers/compare/v4.19.3...v4.19.4
 [4.19.3]: https://github.com/joshjhall/containers/compare/v4.19.2...v4.19.3
 [4.19.2]: https://github.com/joshjhall/containers/compare/v4.19.1...v4.19.2
 [4.19.1]: https://github.com/joshjhall/containers/compare/v4.19.0...v4.19.1
