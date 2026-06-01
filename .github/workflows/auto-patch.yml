@@ -80,6 +80,14 @@ jobs:
             echo "has_updates=false" >> "$GITHUB_OUTPUT"
           fi
 
+      # update-versions.sh calls `luggage catalog add-version` for
+      # luggage-installed tools (e.g. Rust) to keep the vendored catalog in
+      # lockstep with the Dockerfile pin (issue #506). Build the binary first
+      # so the updater can find it at target/release/luggage.
+      - name: Build luggage (for catalog updates)
+        if: steps.check.outputs.has_updates == 'true'
+        run: cargo build --release -p luggage --bin luggage
+
       - name: Create auto-patch branch and apply updates
         if: steps.check.outputs.has_updates == 'true'
         run: |

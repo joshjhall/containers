@@ -22,9 +22,12 @@ use std::process::ExitCode;
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use containers_common::tooldb::ActivityScore;
 use luggage::{
-    Catalog, CatalogSource, InstallReport, Installer, InstallerOptions, LuggageError, Platform,
-    PolicyPreset, ResolutionPolicy, ResolutionWarning, ResolvedInstall, VersionSpec,
+    AddOutcome, Catalog, CatalogSource, InstallReport, Installer, InstallerOptions, LuggageError,
+    Platform, PolicyPreset, ResolutionPolicy, ResolutionWarning, ResolvedInstall, VersionSpec,
+    add_version,
 };
+use time::OffsetDateTime;
+use time::format_description::well_known::Rfc3339;
 
 /// Luggage — catalog loader and version/platform resolver.
 #[derive(Parser, Debug)]
@@ -44,6 +47,36 @@ enum Commands {
     Resolve(ResolveArgs),
     /// Install a tool — download, verify, run installer, validate.
     Install(InstallArgs),
+    /// Catalog maintenance (write-side helpers for the vendored catalog).
+    Catalog {
+        #[command(subcommand)]
+        command: CatalogCommand,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+enum CatalogCommand {
+    /// Add a tool version by cloning the latest existing version entry.
+    ///
+    /// Used by the version-bump pipeline to keep the vendored catalog in
+    /// lockstep with a Dockerfile pin. Additive and idempotent: a version
+    /// already present is a no-op, and `default_version` is never changed.
+    AddVersion(CatalogAddVersionArgs),
+}
+
+/// `luggage catalog add-version <tool>@<version>` arguments.
+#[derive(Args, Debug)]
+struct CatalogAddVersionArgs {
+    /// Catalog tool id with a required `@<version>` suffix (e.g. `rust@1.96.0`).
+    tool: String,
+
+    /// Path to the catalog root (or `CONTAINERS_DB` env var).
+    #[arg(long, env = "CONTAINERS_DB", default_value = "../containers-db")]
+    catalog: PathBuf,
+
+    /// Upstream release date `YYYY-MM-DD` (defaults to today, UTC).
+    #[arg(long)]
+    released: Option<String>,
 }
 
 #[derive(Args, Debug)]
@@ -201,7 +234,45 @@ fn main() -> ExitCode {
                 ExitCode::from(u8::try_from(e.exit_code()).unwrap_or(1))
             }
         },
+        Commands::Catalog { command } => {
+            let CatalogCommand::AddVersion(args) = command;
+            match cmd_catalog_add_version(&args) {
+                Ok(()) => ExitCode::SUCCESS,
+                Err(e) => {
+                    report_error(&e);
+                    ExitCode::from(u8::try_from(e.exit_code()).unwrap_or(1))
+                }
+            }
+        }
     }
+}
+
+/// `luggage catalog add-version <tool>@<version>` — clone the latest existing
+/// version entry into a new one and list it in `available[]`.
+fn cmd_catalog_add_version(args: &CatalogAddVersionArgs) -> Result<(), LuggageError> {
+    let (tool, inline_version) = split_tool_version(&args.tool);
+    let version = inline_version.ok_or_else(|| {
+        LuggageError::Catalog("specify the version as `tool@version` (e.g. `rust@1.96.0`)".into())
+    })?;
+
+    let now = OffsetDateTime::now_utc()
+        .format(&Rfc3339)
+        .map_err(|e| LuggageError::Catalog(format!("could not format current time: {e}")))?;
+
+    match add_version(&args.catalog, tool, version, args.released.as_deref(), &now)? {
+        AddOutcome::AlreadyPresent => {
+            println!(
+                "{tool}@{version} already present in {}; nothing to do",
+                args.catalog.display()
+            );
+        }
+        AddOutcome::Added { template_version, version_path, index_path } => {
+            println!("added {tool}@{version} (templated from {tool}@{template_version})");
+            println!("  wrote   {}", version_path.display());
+            println!("  updated {}", index_path.display());
+        }
+    }
+    Ok(())
 }
 
 fn cmd_resolve(args: &ResolveArgs) -> Result<(), LuggageError> {

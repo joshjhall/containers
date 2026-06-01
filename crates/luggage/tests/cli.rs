@@ -261,3 +261,82 @@ fn install_resolve_time_errors_do_not_write_json_report() {
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(stderr.contains("not found"), "stderr should mention 'not found': {stderr}");
 }
+
+/// Recursively copy a directory tree (test helper — keeps the suite hermetic
+/// without shelling out to `cp`).
+fn copy_tree(src: &std::path::Path, dst: &std::path::Path) {
+    std::fs::create_dir_all(dst).expect("create dst dir");
+    for entry in std::fs::read_dir(src).expect("read src dir") {
+        let entry = entry.expect("dir entry");
+        let from = entry.path();
+        let to = dst.join(entry.file_name());
+        if entry.file_type().expect("file type").is_dir() {
+            copy_tree(&from, &to);
+        } else {
+            std::fs::copy(&from, &to).expect("copy file");
+        }
+    }
+}
+
+/// `catalog add-version` clones the latest version entry into a new one,
+/// lists it in `available[]`, leaves `default_version` alone, and resolves
+/// afterward — then a second run is an idempotent no-op. Operates on a temp
+/// copy so the in-tree fixture is never mutated.
+#[test]
+fn catalog_add_version_generates_resolvable_entry_and_is_idempotent() {
+    let workdir = tempdir().expect("tempdir");
+    let catalog = workdir.path().join("catalog");
+    copy_tree(&catalog_dir(), &catalog);
+
+    let add = Command::new(binary())
+        .args(["catalog", "add-version", "rust@1.99.0", "--released", "2026-08-01"])
+        .arg("--catalog")
+        .arg(&catalog)
+        .output()
+        .expect("spawn luggage");
+    assert_exit(&add, 0);
+
+    // The generated version file resolves and carries the rewritten toolchain.
+    let resolve = Command::new(binary())
+        .args([
+            "resolve",
+            "rust",
+            "--version",
+            "1.99.0",
+            "--os",
+            "debian",
+            "--os-version",
+            "13",
+            "--arch",
+            "amd64",
+            "--json",
+        ])
+        .arg("--catalog")
+        .arg(&catalog)
+        .output()
+        .expect("spawn luggage");
+    assert_exit(&resolve, 0);
+    let value: serde_json::Value =
+        serde_json::from_str(&String::from_utf8_lossy(&resolve.stdout)).expect("parse JSON");
+    assert_eq!(value["version"], "1.99.0");
+
+    // default_version is untouched.
+    let index: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(catalog.join("tools/rust/index.json")).expect("read index"),
+    )
+    .expect("parse index");
+    assert_eq!(index["default_version"], "1.95.0");
+
+    // Second run is a no-op.
+    let again = Command::new(binary())
+        .args(["catalog", "add-version", "rust@1.99.0"])
+        .arg("--catalog")
+        .arg(&catalog)
+        .output()
+        .expect("spawn luggage");
+    assert_exit(&again, 0);
+    assert!(
+        String::from_utf8_lossy(&again.stdout).contains("already present"),
+        "second run should report the version is already present",
+    );
+}

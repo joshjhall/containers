@@ -26,6 +26,7 @@
 //! ```
 
 pub mod catalog;
+pub mod catalog_gen;
 pub mod error;
 pub mod installer;
 pub mod platform;
@@ -33,6 +34,7 @@ pub mod policy;
 pub mod resolver;
 
 pub use catalog::{Catalog, CatalogSource};
+pub use catalog_gen::{AddOutcome, add_version};
 pub use error::{ErrorClass, LuggageError, Result};
 pub use installer::{InstallPlan, InstallReport, Installer, InstallerOptions};
 pub use platform::Platform;
