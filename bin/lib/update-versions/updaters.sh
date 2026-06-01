@@ -21,6 +21,43 @@ sed_inplace() {
     done
 }
 
+# Add a bumped luggage-installed tool's new version to the vendored catalog
+# snapshot (crates/luggage/testdata/catalog), which the image build COPYs to
+# /opt/containers-db and resolves `luggage install <tool>@<version>` against.
+# Without this, a Dockerfile pin can outrun the catalog and the build fails
+# with "no version of <tool> matches spec <version>" (see issue #506).
+#
+# The `luggage catalog add-version` subcommand is additive and idempotent, so a
+# re-run for an already-present version is a no-op. A missing luggage binary is
+# a hard error rather than a silent skip: skipping would let the pin and the
+# catalog drift, breaking the build the change is meant to keep green.
+# Usage: update_luggage_catalog <tool> <version>
+update_luggage_catalog() {
+    local tool="$1"
+    local version="$2"
+    local catalog="$PROJECT_ROOT/crates/luggage/testdata/catalog"
+
+    local luggage_bin="${LUGGAGE_BIN:-}"
+    if [ -z "$luggage_bin" ]; then
+        if [ -x "$PROJECT_ROOT/target/release/luggage" ]; then
+            luggage_bin="$PROJECT_ROOT/target/release/luggage"
+        elif [ -x "$PROJECT_ROOT/target/debug/luggage" ]; then
+            luggage_bin="$PROJECT_ROOT/target/debug/luggage"
+        else
+            luggage_bin="$(command -v luggage 2>/dev/null || true)"
+        fi
+    fi
+
+    if [ -z "$luggage_bin" ]; then
+        echo -e "${RED}    ERROR: luggage binary not found; cannot update vendored catalog for ${tool}@${version}${NC}" >&2
+        echo -e "${YELLOW}    Build it first (cargo build --release -p luggage) or set LUGGAGE_BIN.${NC}" >&2
+        return 1
+    fi
+
+    echo -e "${BLUE}    Updating vendored luggage catalog: ${tool}@${version}${NC}"
+    "$luggage_bin" catalog add-version "${tool}@${version}" --catalog "$catalog"
+}
+
 # Function to update a version in a file
 update_version() {
     local tool="$1"
@@ -72,6 +109,10 @@ update_version() {
                     sed_inplace "s/^ARG RUST_VERSION=.*/ARG RUST_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
                     # Also update the fallback default in rust.sh
                     sed_inplace "s/RUST_VERSION=\"\${RUST_VERSION:-[^}]*}\"/RUST_VERSION=\"\${RUST_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/rust.sh"
+                    # Rust installs via luggage — keep the vendored catalog in
+                    # lockstep with the pin (issue #506). Future luggage-managed
+                    # tools add the same one-liner to their case.
+                    update_luggage_catalog "rust" "$latest"
                     ;;
                 Ruby)
                     sed_inplace "s/^ARG RUBY_VERSION=.*/ARG RUBY_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
