@@ -509,6 +509,18 @@ jobs:
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
+      # When this patch bumped a luggage-managed tool (e.g. Rust), trigger the
+      # evidence run for the new tool@version. Best-effort and non-blocking:
+      # dispatch-evidence.sh defers cleanly if the sibling containers-db catalog
+      # doesn't yet publish the version (evidence-run requires it). See #506.
+      - name: Dispatch luggage evidence runs for bumped tools
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.AUTO_PATCH_TOKEN }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+        run: ./bin/dispatch-evidence.sh --base "$BASE_SHA" --head "$HEAD_SHA"
+
       - name: Update compatibility matrix with test results
         run: |
           echo "Updating compatibility matrix with passing test results..."
