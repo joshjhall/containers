@@ -377,6 +377,19 @@
             }
           },
           "added": "2026-05-10"
+        },
+        "2.4.16": {
+          "checksums": {
+            "amd64": {
+              "sha256": "f6904c208ce8884cf859460178f32f885250b375da1810c551912a029f4abf79",
+              "url": "https://github.com/biomejs/biome/releases/download/@biomejs/biome@2.4.16/biome-linux-x64"
+            },
+            "arm64": {
+              "sha256": "e81067782ddd9a9d45e13b8fe18bbef54c490cf26126f05d67bb370caf47502a",
+              "url": "https://github.com/biomejs/biome/releases/download/@biomejs/biome@2.4.16/biome-linux-arm64"
+            }
+          },
+          "added": "2026-06-02"
         }
       }
     },
@@ -458,6 +471,19 @@
             }
           },
           "added": "2026-05-24"
+        },
+        "2.1.9": {
+          "checksums": {
+            "amd64": {
+              "sha256": "e938f34bd05bafe1155888879a045ef4ee8cf5b4a56c9e5e9b0c2649f295636e",
+              "url": "https://github.com/evilmartians/lefthook/releases/download/v2.1.9/lefthook_2.1.9_Linux_x86_64.gz"
+            },
+            "arm64": {
+              "sha256": "d1bae1c9c26b35270dd675c93c33cecead885368ed078b3976ec23cdcedd28e8",
+              "url": "https://github.com/evilmartians/lefthook/releases/download/v2.1.9/lefthook_2.1.9_Linux_aarch64.gz"
+            }
+          },
+          "added": "2026-06-02"
         }
       }
     },
@@ -591,7 +617,7 @@
     }
   },
   "metadata": {
-    "generated": "2026-05-24T03:06:15Z",
+    "generated": "2026-06-02T16:59:19Z",
     "description": "Pinned checksums for language runtime downloads",
     "note": "This file is automatically updated by check-versions.sh and should grow over time. Old checksums are never deleted to strengthen security for older versions and enable reproducible builds."
   }
