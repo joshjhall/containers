@@ -42,6 +42,26 @@ The push to `auto-patch/*` triggers the full CI pipeline:
 - Preserves the branch for manual review
 - Includes links to the failed workflow and branch
 
+### 4. Luggage Catalog + Evidence (luggage-managed tools)
+
+Some tools (currently Rust) are installed at build time by `luggage` against
+the **vendored catalog** snapshot (`crates/luggage/testdata/catalog`). Two hooks
+keep that catalog in step with version bumps:
+
+- **Catalog update (branch creation):** when the patch bumps a luggage-managed
+  tool, `update-versions.sh` calls `luggage catalog add-version <tool>@<version>`
+  so the new version is resolvable in the same commit. Without this the image
+  build fails with `no version of <tool> matches spec <version>`.
+- **Evidence dispatch (post-merge):** after the patch merges, the post-merge job
+  runs `bin/dispatch-evidence.sh`, which triggers the `evidence-run.yml` workflow
+  for each bumped luggage tool's new version.
+
+`evidence-run.yml` reads the **sibling `containers-db`** catalog and requires the
+version to be published there. If it isn't yet (the hourly containers-db scanner
+adds new versions independently), the dispatcher logs `evidence deferred …` and
+exits cleanly — it never blocks the release. Evidence is then recorded on a later
+run once the sibling catalog catches up.
+
 ## Pushover Notifications
 
 The system sends notifications via Pushover for:
