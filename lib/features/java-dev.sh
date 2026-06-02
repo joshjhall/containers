@@ -169,7 +169,7 @@ ARCH=$(dpkg --print-architecture)
 if [ "$ARCH" = "amd64" ]; then
     log_message "Installing Maven Daemon for ${ARCH}..."
 
-    MVND_VERSION="${MVND_VERSION:-1.0.5}"
+    MVND_VERSION="${MVND_VERSION:-1.0.6}"
     MVND_URL="https://github.com/apache/maven-mvnd/releases/download/${MVND_VERSION}/maven-mvnd-${MVND_VERSION}-linux-${ARCH}.tar.gz"
 
     # Maven Daemon does not publish checksums — will be verified via Tier 2 (pinned) or Tier 4 (TOFU)

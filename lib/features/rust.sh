@@ -48,7 +48,7 @@ source /tmp/build-scripts/base/path-utils.sh
 # ============================================================================
 # Version Configuration
 # ============================================================================
-RUST_VERSION="${RUST_VERSION:-1.95.0}"
+RUST_VERSION="${RUST_VERSION:-1.96.0}"
 
 # Cargo tool versions. Every cargo install must be --locked and pinned to an
 # explicit @version so upstream drift on crates.io cannot retroactively break
