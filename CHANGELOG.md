@@ -22,6 +22,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fall back to root install user when resolved user is absent (#493)
 - Make evidence ingestion idempotent on no-op re-runs (#496)
 
+### Miscellaneous
+
+- Automated version updates to v4.19.4
+- Update compatibility matrix with passing test results
+
 ## [4.19.3] - 2026-05-24
 
 ### Added
