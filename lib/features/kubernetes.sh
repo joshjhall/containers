@@ -71,7 +71,7 @@ log_feature_start "Kubernetes Tools"
 
 # Version configuration
 KUBECTL_VERSION="${KUBECTL_VERSION:-1.33.12}" # Can be major.minor or major.minor.patch
-K9S_VERSION="${K9S_VERSION:-0.50.18}"
+K9S_VERSION="${K9S_VERSION:-0.51.0}"
 KREW_VERSION="${KREW_VERSION:-0.5.0}"
 HELM_VERSION="${HELM_VERSION:-4.2.0}"
 

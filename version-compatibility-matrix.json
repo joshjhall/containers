@@ -1,5 +1,5 @@
 {
-  "last_updated": "2026-06-02T19:03:35Z",
+  "last_updated": "2026-06-07T03:07:57Z",
   "base_images": [
     {
       "name": "debian:11-slim",
@@ -66,7 +66,7 @@
       "deprecated": []
     },
     "go": {
-      "current": "1.26.3",
+      "current": "1.26.4",
       "supported": [
         "1.23.0",
         "1.24.0",
