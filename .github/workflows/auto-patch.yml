@@ -341,6 +341,20 @@ jobs:
         run: |
           echo "branch=$BRANCH_NAME" >> "$GITHUB_OUTPUT"
 
+          # A single auto-patch branch produces two CI/CD Pipeline runs that
+          # match this workflow_run trigger: the initial push and the PR
+          # synchronize. The first cycle creates the PR, auto-merge lands it,
+          # and post-merge deletes the branch — all before the second cycle's
+          # workflow_run fires. By then the branch is gone, so fetching it
+          # would fail with exit 128 and fire a false "PR Creation Failed"
+          # page. Detect the already-merged branch and short-circuit cleanly.
+          if ! git ls-remote --exit-code --heads origin "$BRANCH_NAME" >/dev/null 2>&1; then
+            echo "Branch $BRANCH_NAME no longer exists — already merged. Skipping."
+            echo "branch_exists=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "branch_exists=true" >> "$GITHUB_OUTPUT"
+
           # Extract version changes from the branch
           git fetch origin "$BRANCH_NAME"
           git checkout "$BRANCH_NAME"
@@ -373,6 +387,7 @@ jobs:
 
       - name: Create pull request
         id: create_pr
+        if: steps.branch_info.outputs.branch_exists == 'true'
         env:
           GH_TOKEN: ${{ secrets.AUTO_PATCH_TOKEN }}
           BRANCH_NAME: ${{ steps.branch_info.outputs.branch }}
@@ -405,7 +420,7 @@ jobs:
           fi
 
       - name: Add hold label for GPG key changes
-        if: steps.branch_info.outputs.gpg_keys_changed == 'true'
+        if: steps.branch_info.outputs.branch_exists == 'true' && steps.branch_info.outputs.gpg_keys_changed == 'true'
         env:
           GH_TOKEN: ${{ secrets.AUTO_PATCH_TOKEN }}
         run: |
@@ -427,7 +442,7 @@ jobs:
           echo "GPG key changes detected — PR held for manual review"
 
       - name: Enable auto-merge (no GPG key changes)
-        if: steps.branch_info.outputs.gpg_keys_changed != 'true'
+        if: steps.branch_info.outputs.branch_exists == 'true' && steps.branch_info.outputs.gpg_keys_changed != 'true'
         env:
           GH_TOKEN: ${{ secrets.AUTO_PATCH_TOKEN }}
           PR_URL: ${{ steps.create_pr.outputs.pr_url }}
