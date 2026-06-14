@@ -183,6 +183,11 @@
           "sha256": "fe38608b7921e20ac6f5e8670966995c0cada9b3e77caadfd0f1094c62085918",
           "url": "https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-cli/4.0.6/spring-boot-cli-4.0.6-bin.tar.gz",
           "added": "2026-04-26"
+        },
+        "4.1.0": {
+          "sha256": "48f2db51b0a482adee0e6faadec431ec9d0185f449ceb90bc2d07c2dbc2841e6",
+          "url": "https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-cli/4.1.0/spring-boot-cli-4.1.0-bin.tar.gz",
+          "added": "2026-06-14"
         }
       }
     },
@@ -395,6 +400,19 @@
             }
           },
           "added": "2026-06-02"
+        },
+        "2.5.0": {
+          "checksums": {
+            "amd64": {
+              "sha256": "e7df298f0551dd90bea4425779369aa3130d9817f4acc4f663ef63c327206a19",
+              "url": "https://github.com/biomejs/biome/releases/download/@biomejs/biome@2.5.0/biome-linux-x64"
+            },
+            "arm64": {
+              "sha256": "27c9bc5994dfb5711f5f09a4c3c35749ca9c4a898a063bb062e6b932dbc2571d",
+              "url": "https://github.com/biomejs/biome/releases/download/@biomejs/biome@2.5.0/biome-linux-arm64"
+            }
+          },
+          "added": "2026-06-14"
         }
       }
     },
@@ -635,7 +653,7 @@
     }
   },
   "metadata": {
-    "generated": "2026-06-07T03:07:57Z",
+    "generated": "2026-06-14T20:33:34Z",
     "description": "Pinned checksums for language runtime downloads",
     "note": "This file is automatically updated by check-versions.sh and should grow over time. Old checksums are never deleted to strengthen security for older versions and enable reproducible builds."
   }

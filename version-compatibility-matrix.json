@@ -1,5 +1,5 @@
 {
-  "last_updated": "2026-06-07T05:06:37Z",
+  "last_updated": "2026-06-14T20:33:34Z",
   "base_images": [
     {
       "name": "debian:11-slim",
@@ -19,7 +19,7 @@
   ],
   "language_versions": {
     "python": {
-      "current": "3.14.5",
+      "current": "3.14.6",
       "supported": [
         "3.12.0",
         "3.13.0",

@@ -45,7 +45,7 @@ source /tmp/build-scripts/base/path-utils.sh
 # ============================================================================
 # Version Configuration
 # ============================================================================
-PYTHON_VERSION="${PYTHON_VERSION:-3.14.5}"
+PYTHON_VERSION="${PYTHON_VERSION:-3.14.6}"
 
 # Validate Python version format to prevent shell injection
 validate_python_version "$PYTHON_VERSION" || {
