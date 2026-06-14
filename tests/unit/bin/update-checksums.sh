@@ -266,6 +266,46 @@ test_checksums_url_template_placeholder() {
 }
 
 # ---------------------------------------------------------------------------
+# Static analysis tests: Inline-constant tool support (cosign, zoxide)
+# ---------------------------------------------------------------------------
+
+# Test: Defines TOOL_CHECKSUM_REGISTRY_INLINE
+test_checksums_tool_registry_inline() {
+    assert_file_contains "$SOURCE_FILE" "TOOL_CHECKSUM_REGISTRY_INLINE" \
+        "Should define TOOL_CHECKSUM_REGISTRY_INLINE array"
+}
+
+# Test: Inline registry contains cosign (the tool that broke v4.19.6)
+test_checksums_tool_registry_has_cosign() {
+    assert_file_contains "$SOURCE_FILE" "cosign|COSIGN_VERSION" \
+        "TOOL_CHECKSUM_REGISTRY_INLINE should contain cosign entry"
+}
+
+# Test: Inline registry contains zoxide (also inline in setup.sh)
+test_checksums_tool_registry_has_zoxide() {
+    assert_file_contains "$SOURCE_FILE" "zoxide|ZOXIDE_VERSION" \
+        "TOOL_CHECKSUM_REGISTRY_INLINE should contain zoxide entry"
+}
+
+# Test: Defines update_inline_checksum function
+test_checksums_defines_update_inline_checksum() {
+    assert_file_contains "$SOURCE_FILE" "update_inline_checksum()" \
+        "Should define update_inline_checksum function"
+}
+
+# Test: Inline updater rewrites the SHA256 constant in place
+test_checksums_inline_rewrites_constant() {
+    assert_file_contains "$SOURCE_FILE" 'sed -i -E' \
+        "update_inline_checksum should rewrite constants in place with sed"
+}
+
+# Test: Inline updater references the inline setup.sh script
+test_checksums_inline_targets_setup() {
+    assert_file_contains "$SOURCE_FILE" "lib/base/setup.sh" \
+        "Inline registry should target lib/base/setup.sh"
+}
+
+# ---------------------------------------------------------------------------
 # Functional tests
 # ---------------------------------------------------------------------------
 
@@ -319,6 +359,12 @@ run_test_with_setup test_checksums_tool_download_and_hash "Tool checksums use do
 run_test_with_setup test_checksums_tool_versions_path "Tool checksums write to versions path"
 run_test_with_setup test_checksums_arch_per_arch_checksums "Arch tools write per-arch checksums"
 run_test_with_setup test_checksums_url_template_placeholder "URL templates use VERSION placeholder"
+run_test_with_setup test_checksums_tool_registry_inline "Defines TOOL_CHECKSUM_REGISTRY_INLINE array"
+run_test_with_setup test_checksums_tool_registry_has_cosign "Inline registry contains cosign"
+run_test_with_setup test_checksums_tool_registry_has_zoxide "Inline registry contains zoxide"
+run_test_with_setup test_checksums_defines_update_inline_checksum "Defines update_inline_checksum function"
+run_test_with_setup test_checksums_inline_rewrites_constant "Inline updater rewrites constants in place"
+run_test_with_setup test_checksums_inline_targets_setup "Inline registry targets lib/base/setup.sh"
 run_test_with_setup test_checksums_script_syntax "Script has valid bash syntax"
 
 # Generate test report

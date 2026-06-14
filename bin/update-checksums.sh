@@ -239,6 +239,17 @@ TOOL_CHECKSUM_REGISTRY_ARCH=(
     "mold|MOLD_VERSION|lib/features/rust-dev.sh|https://github.com/rui314/mold/releases/download/v{VERSION}/mold-{VERSION}-x86_64-linux.tar.gz|https://github.com/rui314/mold/releases/download/v{VERSION}/mold-{VERSION}-aarch64-linux.tar.gz"
 )
 
+# Inline-constant tools: checksums are hardcoded SHA256 constants inside a
+# script (not stored in checksums.json). check-versions.sh bumps the inline
+# *_VERSION, but without this registry nothing refreshes the matching inline
+# *_SHA256_* constants — so the build fails checksum verification on the next
+# auto-patch (see the v4.19.6 cosign 3.0.6 → 3.1.1 failure). Each entry:
+#   "tool|version_var|script|amd64_const|arm64_const|amd64_url|arm64_url"
+TOOL_CHECKSUM_REGISTRY_INLINE=(
+    "cosign|COSIGN_VERSION|lib/base/setup.sh|COSIGN_SHA256_AMD64|COSIGN_SHA256_ARM64|https://github.com/sigstore/cosign/releases/download/v{VERSION}/cosign-linux-amd64|https://github.com/sigstore/cosign/releases/download/v{VERSION}/cosign-linux-arm64"
+    "zoxide|ZOXIDE_VERSION|lib/base/setup.sh|ZOXIDE_SHA256_AMD64|ZOXIDE_SHA256_ARM64|https://github.com/ajeetdsouza/zoxide/releases/download/v{VERSION}/zoxide-{VERSION}-x86_64-unknown-linux-musl.tar.gz|https://github.com/ajeetdsouza/zoxide/releases/download/v{VERSION}/zoxide-{VERSION}-aarch64-unknown-linux-musl.tar.gz"
+)
+
 # Extract a tool version from its feature script
 extract_tool_version() {
     local var_name="$1"
@@ -433,6 +444,78 @@ update_tool_checksum_arch() {
     fi
 }
 
+# Update inline SHA256 constants for a tool pinned directly in a script.
+#
+# Unlike the checksums.json paths, inline constants always hold a value, so
+# there is no "missing" state to key off. The version may have been bumped
+# while the constant still points at the previous release's hash. We therefore
+# recompute from the pinned version and rewrite the constants on any mismatch —
+# self-healing whenever version and checksum have drifted apart.
+update_inline_checksum() {
+    local tool="$1"
+    local version="$2"
+    local script_path="$3"
+    local amd64_const="$4"
+    local arm64_const="$5"
+    local amd64_url="$6"
+    local arm64_url="$7"
+    local full_path="$PROJECT_ROOT/$script_path"
+
+    if [ ! -f "$full_path" ]; then
+        echo -e "${YELLOW}  ${tool}: ${script_path} not found, skipping${NC}"
+        FAILED_COUNT=$((FAILED_COUNT + 1))
+        return 1
+    fi
+
+    # Read the current inline constants (strip quotes, keep hex only)
+    local cur_amd64 cur_arm64
+    cur_amd64=$(command grep -E "^${amd64_const}=" "$full_path" 2>/dev/null |
+        command head -1 | command sed -E 's/.*="?([a-fA-F0-9]+)"?.*/\1/')
+    cur_arm64=$(command grep -E "^${arm64_const}=" "$full_path" 2>/dev/null |
+        command head -1 | command sed -E 's/.*="?([a-fA-F0-9]+)"?.*/\1/')
+
+    if [ -z "$cur_amd64" ] || [ -z "$cur_arm64" ]; then
+        echo -e "${YELLOW}  ${tool}: could not read ${amd64_const}/${arm64_const} in ${script_path}, skipping${NC}"
+        FAILED_COUNT=$((FAILED_COUNT + 1))
+        return 1
+    fi
+
+    echo -e "${BLUE}  Verifying ${tool} ${version} inline checksums (${script_path})...${NC}"
+
+    local new_amd64 new_arm64
+    new_amd64=$(_download_and_hash "$amd64_url") || {
+        echo -e "${RED}    ✗ Failed to download amd64: ${amd64_url}${NC}"
+        FAILED_COUNT=$((FAILED_COUNT + 1))
+        return 1
+    }
+    new_arm64=$(_download_and_hash "$arm64_url") || {
+        echo -e "${RED}    ✗ Failed to download arm64: ${arm64_url}${NC}"
+        FAILED_COUNT=$((FAILED_COUNT + 1))
+        return 1
+    }
+
+    if [ "$new_amd64" = "$cur_amd64" ] && [ "$new_arm64" = "$cur_arm64" ]; then
+        echo -e "  ${tool} ${version}: inline checksums already correct"
+        return 0
+    fi
+
+    echo -e "${GREEN}    amd64: ✓ $new_amd64${NC}"
+    echo -e "${GREEN}    arm64: ✓ $new_arm64${NC}"
+
+    if [ "$DRY_RUN" = true ]; then
+        echo -e "${YELLOW}    [DRY RUN] Would rewrite ${amd64_const}/${arm64_const} in ${script_path}${NC}"
+        UPDATED_COUNT=$((UPDATED_COUNT + 1))
+        return 0
+    fi
+
+    # Rewrite the two constants in place. Anchored to line start so we only
+    # touch the assignment, never a usage.
+    command sed -i -E "s|^(${amd64_const}=\")[a-fA-F0-9]+(\".*)|\1${new_amd64}\2|" "$full_path"
+    command sed -i -E "s|^(${arm64_const}=\")[a-fA-F0-9]+(\".*)|\1${new_arm64}\2|" "$full_path"
+    UPDATED_COUNT=$((UPDATED_COUNT + 1))
+    echo -e "${GREEN}    ✓ Updated inline checksums in ${script_path}${NC}"
+}
+
 # ---------------------------------------------------------------------------
 # Process existing language versions in checksums.json
 # ---------------------------------------------------------------------------
@@ -491,6 +574,24 @@ for entry in "${TOOL_CHECKSUM_REGISTRY_ARCH[@]}"; do
 
     echo -e "${BLUE}${tool}:${NC}"
     update_tool_checksum_arch "$tool" "$local_version" "$local_amd64_url" "$local_arm64_url"
+done
+
+# Inline-constant tools (checksums pinned directly in a script)
+for entry in "${TOOL_CHECKSUM_REGISTRY_INLINE[@]}"; do
+    IFS='|' read -r tool var_name script_path amd64_const arm64_const amd64_template arm64_template <<<"$entry"
+
+    local_version=$(extract_tool_version "$var_name" "$script_path" 2>/dev/null || echo "")
+    if [ -z "$local_version" ]; then
+        echo -e "${YELLOW}  ${tool}: could not extract version from ${script_path}, skipping${NC}"
+        continue
+    fi
+
+    local_amd64_url="${amd64_template//\{VERSION\}/$local_version}"
+    local_arm64_url="${arm64_template//\{VERSION\}/$local_version}"
+
+    echo -e "${BLUE}${tool}:${NC}"
+    update_inline_checksum "$tool" "$local_version" "$script_path" \
+        "$amd64_const" "$arm64_const" "$local_amd64_url" "$local_arm64_url"
 done
 
 # Update metadata
