@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.19.6] - 2026-06-14
+
+### Fixed
+
+- Guard auto-merge job against already-merged auto-patch branch (#513)
+- Refresh inline cosign/zoxide checksums in auto-patch (#514)
+
+## [4.19.5] - 2026-06-07
+
+### Miscellaneous
+
+- Automated version updates to v4.19.5
+- Update compatibility matrix with passing test results
+
 ## [4.19.4] - 2026-06-02
 
 ### Added
@@ -1871,6 +1885,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix prettier and markdownlint formatting in README
 - Format TLS documentation files
 
+[4.19.6]: https://github.com/joshjhall/containers/compare/v4.19.5...v4.19.6
+[4.19.5]: https://github.com/joshjhall/containers/compare/v4.19.4...v4.19.5
 [4.19.4]: https://github.com/joshjhall/containers/compare/v4.19.3...v4.19.4
 [4.19.3]: https://github.com/joshjhall/containers/compare/v4.19.2...v4.19.3
 [4.19.2]: https://github.com/joshjhall/containers/compare/v4.19.1...v4.19.2
