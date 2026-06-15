@@ -419,6 +419,10 @@ update_version() {
                     sed_inplace "s/TYPOS_VERSION=\"\${TYPOS_VERSION:-[^}]*}\"/TYPOS_VERSION=\"\${TYPOS_VERSION:-$latest}\"/" "$script_path"
                     sed_inplace "s/^TYPOS_VERSION=\"[0-9][^\"]*\"/TYPOS_VERSION=\"\${TYPOS_VERSION:-$latest}\"/" "$script_path"
                     ;;
+                codegraph)
+                    sed_inplace "s/CODEGRAPH_VERSION=\"\${CODEGRAPH_VERSION:-[^}]*}\"/CODEGRAPH_VERSION=\"\${CODEGRAPH_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/^CODEGRAPH_VERSION=\"[0-9][^\"]*\"/CODEGRAPH_VERSION=\"\${CODEGRAPH_VERSION:-$latest}\"/" "$script_path"
+                    ;;
                 Trivy)
                     ;; # Trivy is installed via APT (no version to update in script)
                 *)

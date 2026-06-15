@@ -88,6 +88,7 @@ SHFMT_VERSION="${SHFMT_VERSION:-3.13.1}"
 CONFORM_VERSION="${CONFORM_VERSION:-0.1.0-alpha.31}"
 HADOLINT_VERSION="${HADOLINT_VERSION:-2.14.0}"
 ACTIONLINT_VERSION="${ACTIONLINT_VERSION:-1.7.12}"
+CODEGRAPH_VERSION="${CODEGRAPH_VERSION:-1.0.1}"
 
 # ============================================================================
 # Repository Configuration
@@ -236,6 +237,12 @@ log_message "Installing additional development tools..."
 install_github_binary_tools
 install_entr
 
+# codegraph — code knowledge graph for AI agents (self-contained bundle).
+# Non-fatal: a download/verify hiccup shouldn't sink the whole dev-tools layer.
+if ! install_codegraph; then
+    log_warning "codegraph installation failed, continuing without codegraph"
+fi
+
 log_message "Installing fzf (fuzzy finder)..."
 if ! install_fzf; then
     log_warning "fzf installation failed, continuing without fzf"
@@ -317,10 +324,10 @@ export DIRENV_ALLOW_DIR="${DEV_TOOLS_CACHE}/direnv-allow"
 # Log feature summary
 log_feature_summary \
     --feature "Development Tools" \
-    --tools "gh,lazygit,delta,act,git-cliff,glab,biome,taplo,uv,duf,entr,fzf,direnv,mkcert,jq,ripgrep,fd,bat,eza,htop,dua,lefthook,gitleaks,osv-scanner,hadolint,actionlint,rumdl,dprint,typos,shfmt,conform,agnix,agentsys,cspell" \
+    --tools "gh,lazygit,delta,act,git-cliff,glab,biome,taplo,uv,duf,entr,fzf,direnv,mkcert,jq,ripgrep,fd,bat,eza,htop,dua,lefthook,gitleaks,osv-scanner,hadolint,actionlint,rumdl,dprint,typos,shfmt,conform,agnix,agentsys,cspell,codegraph" \
     --paths "${DEV_TOOLS_CACHE},/opt/fzf,${CAROOT}" \
     --env "DEV_TOOLS_CACHE,CAROOT,DIRENV_ALLOW_DIR,ENABLE_LSP_TOOL" \
-    --commands "gh,lazygit,delta,act,git-cliff,glab,biome,uv,uvx,duf,entr,fzf,direnv,mkcert,jq,rg,fd,bat,eza,htop,dua,lefthook,gitleaks,osv-scanner,hadolint,actionlint,rumdl,dprint,typos,shfmt,conform,agnix,agentsys,cspell" \
+    --commands "gh,lazygit,delta,act,git-cliff,glab,biome,uv,uvx,duf,entr,fzf,direnv,mkcert,jq,rg,fd,bat,eza,htop,dua,lefthook,gitleaks,osv-scanner,hadolint,actionlint,rumdl,dprint,typos,shfmt,conform,agnix,agentsys,cspell,codegraph" \
     --next-steps "Run 'test-dev-tools' to verify installation. Many modern CLI replacements are aliased (ls=eza, cat=bat, grep=rg, find=fd). Claude Code is installed separately by claude-code-setup.sh."
 
 # End logging

@@ -106,11 +106,12 @@ Version-pinned in feature scripts.
 
 | Tool    | Current Version | Purpose              |
 | ------- | --------------- | -------------------- |
-| direnv  | 2.35.x          | Environment manager  |
-| lazygit | 0.44.x          | Git TUI              |
-| delta   | 0.18.x          | Git diff viewer      |
-| mkcert  | 1.4.x           | Local TLS certs      |
-| act     | 0.2.x           | Local GitHub Actions |
+| direnv    | 2.35.x          | Environment manager  |
+| lazygit   | 0.44.x          | Git TUI              |
+| delta     | 0.18.x          | Git diff viewer      |
+| mkcert    | 1.4.x           | Local TLS certs      |
+| act       | 0.2.x           | Local GitHub Actions |
+| codegraph | 1.0.x           | Code knowledge graph for AI agents (SHA256 pinned) |
 
 See [docs/reference/versions.md](../reference/versions.md) for complete list.
 

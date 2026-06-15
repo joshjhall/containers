@@ -843,5 +843,28 @@ test_zed_lsp_config_installed_by_script() {
 run_test test_zed_lsp_config_script_shipped "zed-lsp-config-first-startup.sh shipped with system-binary overrides"
 run_test test_zed_lsp_config_installed_by_script "dev-tools.sh installs zed-lsp-config first-startup script"
 
+# Test: codegraph is fully wired (version var, install function, invocation,
+# and a pinned checksum entry) — code knowledge graph for AI agents.
+test_codegraph_wired() {
+    local dev_tools="$PROJECT_ROOT/lib/features/dev-tools.sh"
+    local installer="$PROJECT_ROOT/lib/features/lib/dev-tools/install-binary-tools.sh"
+    assert_file_contains "$dev_tools" "CODEGRAPH_VERSION=" \
+        "dev-tools.sh defines CODEGRAPH_VERSION"
+    assert_file_contains "$dev_tools" "install_codegraph" \
+        "dev-tools.sh invokes install_codegraph"
+    assert_file_contains "$installer" "install_codegraph()" \
+        "install-binary-tools.sh defines install_codegraph"
+    assert_file_contains "$installer" "verify_download_or_fail \"tool\" \"codegraph\"" \
+        "install_codegraph verifies the download via the 4-tier checksum system"
+    # Pinned checksum present so the Tier-2 lookup succeeds.
+    if jq -e '.tools.codegraph.versions | length > 0' "$PROJECT_ROOT/lib/checksums.json" >/dev/null 2>&1; then
+        assert_true true "codegraph has a pinned checksum entry in checksums.json"
+    else
+        assert_true false "codegraph missing from checksums.json"
+    fi
+}
+
+run_test test_codegraph_wired "codegraph is wired into dev-tools (version, install, checksum)"
+
 # Generate test report
 generate_report

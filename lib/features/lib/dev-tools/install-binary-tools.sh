@@ -169,6 +169,65 @@ install_uv() {
     return 0
 }
 
+install_codegraph() {
+    # codegraph — pre-indexed code knowledge graph that serves an MCP server to
+    # AI coding agents (Claude Code, Codex, Cursor, …). Ships its own bundled
+    # Node runtime, so it works regardless of INCLUDE_NODE. Distributed as a
+    # per-OS/arch tarball containing a `codegraph-<os>-<arch>/` bundle dir; the
+    # bin/codegraph launcher resolves symlinks back to the bundle, so a symlink
+    # onto PATH works. Checksum is pinned in checksums.json (Tier 2) and kept
+    # current by bin/update-checksums.sh (TOOL_CHECKSUM_REGISTRY_ARCH).
+    log_message "Installing codegraph ${CODEGRAPH_VERSION} (code knowledge graph for AI agents)..."
+
+    local arch asset
+    arch=$(dpkg --print-architecture)
+    case "$arch" in
+        amd64) asset="codegraph-linux-x64.tar.gz" ;;
+        arm64) asset="codegraph-linux-arm64.tar.gz" ;;
+        *)
+            log_warning "codegraph not available for architecture ${arch}, skipping..."
+            return 0
+            ;;
+    esac
+
+    local file_url="https://github.com/colbymchenry/codegraph/releases/download/v${CODEGRAPH_VERSION}/${asset}"
+
+    local build_temp
+    build_temp=$(create_secure_temp_dir)
+    cd "$build_temp" || exit 1
+
+    local local_file="codegraph.tar.gz"
+    log_message "Downloading codegraph for ${arch}..."
+    if ! command curl -L -f --retry 8 --retry-delay 10 --retry-all-errors --progress-bar -o "$local_file" "$file_url"; then
+        log_error "Download failed for codegraph ${CODEGRAPH_VERSION}"
+        cd /
+        return 1
+    fi
+
+    # 4-tier verification (Tier 2 pinned checksum from checksums.json)
+    verify_download_or_fail "tool" "codegraph" "$CODEGRAPH_VERSION" "$local_file" "$arch" || {
+        cd /
+        return 1
+    }
+
+    # Extract the bundle to /opt/codegraph (strip the top-level dir).
+    command rm -rf /opt/codegraph
+    command mkdir -p /opt/codegraph
+    if ! log_command "Extracting codegraph" \
+        tar -xzf "$local_file" -C /opt/codegraph --strip-components=1; then
+        log_error "Failed to extract codegraph"
+        cd /
+        command rm -rf /opt/codegraph
+        return 1
+    fi
+    cd /
+
+    create_symlink "/opt/codegraph/bin/codegraph" "/usr/local/bin/codegraph" "codegraph (code knowledge graph)"
+
+    log_message "✓ codegraph ${CODEGRAPH_VERSION} installed successfully"
+    return 0
+}
+
 install_github_binary_tools() {
     # duf (modern disk usage utility)
     install_github_release "duf" "$DUF_VERSION" \
