@@ -765,9 +765,122 @@ test_helm_update_handler() {
     fi
 }
 
+# Test: mise, vale, typos updates (regression — these were silently skipped with
+# "Unknown tool" warnings while still counted as applied, which stalled v4.19.6).
+test_mise_vale_typos_update() {
+    local test_dir
+    test_dir=$(mktemp -d)
+
+    command cat >"$test_dir/Dockerfile" <<'EOF'
+ARG MISE_VERSION=2026.5.6
+EOF
+
+    mkdir -p "$test_dir/lib/features"
+    command cat >"$test_dir/lib/features/mise.sh" <<'EOF'
+#!/bin/bash
+MISE_VERSION="${MISE_VERSION:-2026.5.6}"
+EOF
+    command cat >"$test_dir/lib/features/dev-tools.sh" <<'EOF'
+#!/bin/bash
+VALE_VERSION="${VALE_VERSION:-3.14.1}"
+TYPOS_VERSION="${TYPOS_VERSION:-1.46.1}"
+EOF
+
+    command cat >"$test_dir/test.json" <<'EOF'
+{
+  "tools": [
+    {"tool": "Mise",  "current": "2026.5.6", "latest": "2026.6.10", "file": "Dockerfile",   "status": "outdated"},
+    {"tool": "vale",  "current": "3.14.1",   "latest": "3.15.1",    "file": "dev-tools.sh", "status": "outdated"},
+    {"tool": "typos", "current": "1.46.1",   "latest": "1.47.2",    "file": "dev-tools.sh", "status": "outdated"}
+  ]
+}
+EOF
+
+    cd "$test_dir"
+    git init --quiet
+    git config user.email "test@example.com"
+    git config user.name "Test User"
+    git add -A
+    git commit -m "Initial" --quiet
+
+    mkdir -p bin
+    echo '#!/bin/bash' >bin/release.sh
+    echo 'echo "1.4.1" > VERSION' >>bin/release.sh
+    chmod +x bin/release.sh
+    echo "1.4.0" >VERSION
+
+    local output
+    output=$(PROJECT_ROOT_OVERRIDE="$test_dir" "$PROJECT_ROOT/bin/update-versions.sh" --no-commit --no-bump --input test.json 2>&1)
+
+    local all_updated=true
+    command grep -q "ARG MISE_VERSION=2026.6.10" Dockerfile || all_updated=false
+    command grep -q 'MISE_VERSION="${MISE_VERSION:-2026.6.10}"' lib/features/mise.sh || all_updated=false
+    command grep -q 'VALE_VERSION="${VALE_VERSION:-3.15.1}"' lib/features/dev-tools.sh || all_updated=false
+    command grep -q 'TYPOS_VERSION="${TYPOS_VERSION:-1.47.2}"' lib/features/dev-tools.sh || all_updated=false
+    # Regression: must not warn about these being unknown.
+    if echo "$output" | command grep -qiE "Unknown (Dockerfile|shell script) tool: (Mise|vale|typos)"; then
+        all_updated=false
+    fi
+
+    cd "$PROJECT_ROOT"
+    command rm -rf "$test_dir"
+    assert_true "$all_updated" "Mise, vale, typos all updated without Unknown-tool warnings"
+}
+
+# Test: an unmapped tool must FAIL loudly, not silently count as applied.
+# (Prevents the v4.19.6-class silent skip.)
+test_unknown_tool_fails_loudly() {
+    local test_dir
+    test_dir=$(mktemp -d)
+
+    mkdir -p "$test_dir/lib/features"
+    command cat >"$test_dir/lib/features/dev-tools.sh" <<'EOF'
+#!/bin/bash
+NOPE_VERSION="${NOPE_VERSION:-1.0.0}"
+EOF
+
+    command cat >"$test_dir/test.json" <<'EOF'
+{
+  "tools": [
+    {"tool": "totally-unmapped-tool", "current": "1.0.0", "latest": "1.0.1", "file": "dev-tools.sh", "status": "outdated"}
+  ]
+}
+EOF
+
+    cd "$test_dir"
+    git init --quiet
+    git config user.email "test@example.com"
+    git config user.name "Test User"
+    git add -A
+    git commit -m "Initial" --quiet
+
+    mkdir -p bin
+    echo '#!/bin/bash' >bin/release.sh
+    echo 'echo "1.4.1" > VERSION' >>bin/release.sh
+    chmod +x bin/release.sh
+    echo "1.4.0" >VERSION
+
+    local output
+    output=$(PROJECT_ROOT_OVERRIDE="$test_dir" "$PROJECT_ROOT/bin/update-versions.sh" --no-commit --no-bump --input test.json 2>&1)
+
+    cd "$PROJECT_ROOT"
+    command rm -rf "$test_dir"
+
+    # Must surface an ERROR and NOT report the bogus tool as an applied update.
+    local ok=true
+    echo "$output" | command grep -qiE "ERROR: Unknown shell script tool" || ok=false
+    echo "$output" | command grep -qiE "No updates applied|Updates applied: 0" || ok=false
+    if echo "$output" | command grep -qiE "Updates applied: [1-9]"; then
+        ok=false
+    fi
+    assert_true "$ok" "Unmapped tool produces an error and applies nothing"
+}
+
 # Test removed - kubernetes-checksums.sh no longer needed (uses dynamic fetching)
 run_test test_krew_update_handler "krew update handler exists"
 run_test test_helm_update_handler "Helm update handler exists"
+run_test test_mise_vale_typos_update "Updates Mise, vale, typos (regression for silent skip)"
+run_test test_unknown_tool_fails_loudly "Unknown tool fails loudly instead of silent success"
 
 # Generate report
 generate_report

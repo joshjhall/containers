@@ -184,8 +184,14 @@ update_version() {
                     # Also update the fallback default in mojo.sh
                     sed_inplace "s/PIXI_VERSION=\"\${PIXI_VERSION:-[^}]*}\"/PIXI_VERSION=\"\${PIXI_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/mojo.sh"
                     ;;
+                Mise)
+                    sed_inplace "s/^ARG MISE_VERSION=.*/ARG MISE_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
+                    # Also update the fallback default in mise.sh
+                    sed_inplace "s/MISE_VERSION=\"\${MISE_VERSION:-[^}]*}\"/MISE_VERSION=\"\${MISE_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/mise.sh"
+                    ;;
                 *)
-                    echo -e "${YELLOW}    Warning: Unknown Dockerfile tool: $tool${NC}"
+                    echo -e "${RED}    ERROR: Unknown Dockerfile tool: $tool — add a case in updaters.sh${NC}" >&2
+                    return 1
                     ;;
             esac
             ;;
@@ -405,10 +411,19 @@ update_version() {
                 taplo-cli)
                     sed_inplace "s/TAPLO_CLI_VERSION=\"\${TAPLO_CLI_VERSION:-[^}]*}\"/TAPLO_CLI_VERSION=\"\${TAPLO_CLI_VERSION:-$latest}\"/" "$script_path"
                     ;;
+                vale)
+                    sed_inplace "s/VALE_VERSION=\"\${VALE_VERSION:-[^}]*}\"/VALE_VERSION=\"\${VALE_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/^VALE_VERSION=\"[0-9][^\"]*\"/VALE_VERSION=\"\${VALE_VERSION:-$latest}\"/" "$script_path"
+                    ;;
+                typos)
+                    sed_inplace "s/TYPOS_VERSION=\"\${TYPOS_VERSION:-[^}]*}\"/TYPOS_VERSION=\"\${TYPOS_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/^TYPOS_VERSION=\"[0-9][^\"]*\"/TYPOS_VERSION=\"\${TYPOS_VERSION:-$latest}\"/" "$script_path"
+                    ;;
                 Trivy)
                     ;; # Trivy is installed via APT (no version to update in script)
                 *)
-                    echo -e "${YELLOW}    Warning: Unknown shell script tool: $tool${NC}"
+                    echo -e "${RED}    ERROR: Unknown shell script tool: $tool — add a case in updaters.sh${NC}" >&2
+                    return 1
                     ;;
             esac
             ;;
@@ -424,12 +439,14 @@ update_version() {
                     sed_inplace "s|uses: aquasecurity/trivy-action@v\{0,1\}[0-9.]*|uses: aquasecurity/trivy-action@v$latest|g" "$workflow_path"
                     ;;
                 *)
-                    echo -e "${YELLOW}    Warning: Unknown ci.yml tool: $tool${NC}"
+                    echo -e "${RED}    ERROR: Unknown ci.yml tool: $tool — add a case in updaters.sh${NC}" >&2
+                    return 1
                     ;;
             esac
             ;;
         *)
-            echo -e "${YELLOW}    Warning: Unknown file type: $file${NC}"
+            echo -e "${RED}    ERROR: Unknown file type: $file (tool: $tool) — add a case in updaters.sh${NC}" >&2
+            return 1
             ;;
     esac
 }
