@@ -128,12 +128,15 @@ jobs:
     needs: detect-changes
     if: needs.detect-changes.outputs.mode != 'skip'
     runs-on: ubuntu-latest
-    # 25 min ceiling — the acceptance target is <15min for *typical*
-    # single-feature changes (most cells finish well under). Heavy
-    # features (r-dev's CRAN package set, java-dev's JDK + maven) take
-    # closer to 20min cold, so 25min keeps them green without the
-    # spurious cancellations a tighter cap caused for r-dev on this PR.
-    timeout-minutes: 25
+    # 40 min ceiling — the acceptance target is <15min for *typical*
+    # single-feature changes (most cells finish well under). The heaviest
+    # cells compile a large suite from source on cold cache: rust-dev's
+    # cargo-tool set (cargo-watch, cargo-expand, gix-based tools, sccache…)
+    # exceeds 25min cold and was cancelled mid-compile, and r-dev's CRAN
+    # set / java-dev's JDK+maven run ~20min. 40min keeps them green on a
+    # cold-cache branch build without spurious cancellations. See #517 for
+    # the deeper fix (warm the build cache so cold builds fit a tighter cap).
+    timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix:
