@@ -1091,7 +1091,7 @@ configure_mcp_list() {
 
 # Default MCP servers (configurable via CLAUDE_MCPS)
 MCP_REGISTRY="/etc/container/config/mcp-registry.sh"
-DEFAULT_MCPS="filesystem,figma-desktop"
+DEFAULT_MCPS="filesystem,figma-desktop,codegraph"
 # Use if-else to safely capture return code under set -e
 if MCP_RESULT=$(_resolve_override_list_or_file "CLAUDE_MCPS" "$DEFAULT_MCPS"); then
     MCP_LIST_IS_OVERRIDE=0
@@ -1110,6 +1110,16 @@ _install_default_mcp() {
             ;;
         figma-desktop)
             add_mcp_server "figma-desktop" -t http "figma-desktop" "http://host.docker.internal:3845/mcp" || true
+            ;;
+        codegraph)
+            # Local-binary MCP (code knowledge graph). Only wire it up when the
+            # binary is actually installed (dev-tools feature); skip cleanly on
+            # minimal images so a default-on entry never errors.
+            if command -v codegraph >/dev/null 2>&1; then
+                configure_mcp_list "codegraph" "Default MCP server"
+            else
+                echo "  - codegraph not installed; skipping (enable INCLUDE_DEV_TOOLS)"
+            fi
             ;;
         *)
             # Delegate to configure_mcp_list for registry/passthrough resolution

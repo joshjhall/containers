@@ -27,6 +27,17 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - ..:/workspace/containers
       - ../../containers-db:/workspace/containers-db
+      # Named cache volumes — survive image rebuilds, independently droppable,
+      # and project-namespaced (containers-*) to avoid collisions with other
+      # Rust projects sharing this Docker host. Ownership is reconciled to the
+      # runtime user on startup by the entrypoint's fix_cache_permissions().
+      - containers-cargo-registry:/cache/cargo/registry
+      - containers-cargo-git:/cache/cargo/git
+      - containers-rustup:/cache/rustup
+      # codegraph index: <project>/.codegraph is symlinked here by the dev-tools
+      # first-startup hook, so the knowledge-graph index lives on this volume
+      # (out of the git tree, droppable to force a clean re-index).
+      - containers-codegraph:/cache/codegraph
     tmpfs:
       # Writable /run so supervisor can create its socket/pidfile as the runtime user (UID 1000)
       - /run:mode=0755,uid=1000,gid=1000
@@ -35,8 +46,10 @@ services:
     env_file:
       - ../.env
     environment:
-      # Default MCPs (unset = filesystem + figma-desktop)
-      - CLAUDE_MCPS=filesystem
+      # Default MCPs (unset = filesystem + figma-desktop + codegraph). This
+      # explicit list REPLACES the default set, so codegraph is named here to
+      # keep it default-on for this project.
+      - CLAUDE_MCPS=filesystem,codegraph
       # Core plugins (unset = all 11 defaults)
       # - CLAUDE_PLUGINS=commit-commands,context7,code-review,pr-review-toolkit,feature-dev,hookify,claude-code-setup
       # Skills (unset = all 13 static template skills + container-environment)
@@ -66,3 +79,13 @@ services:
 networks:
   containers-network:
     driver: bridge
+
+volumes:
+  # Rust caches: split into the genuinely cacheable cargo subdirs (registry +
+  # git) rather than all of CARGO_HOME. CARGO_HOME=/cache/cargo and
+  # RUSTUP_HOME=/cache/rustup are set in-image by the rust feature.
+  containers-cargo-registry:
+  containers-cargo-git:
+  containers-rustup:
+  # codegraph knowledge-graph index (see the .codegraph symlink note above).
+  containers-codegraph:

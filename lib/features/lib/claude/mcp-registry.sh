@@ -15,6 +15,15 @@
 #   mcp_registry_get_env_docs "brave-search"      # BRAVE_API_KEY
 #   mcp_registry_is_registered "brave-search"      # returns 0 (true)
 #
+# Package types:
+#   npm   - installed via `npx -y <pkg>` (the default)
+#   uvx   - installed via `uvx <pkg>` (Python)
+#   local - a binary already on PATH in the image (no install step); the add
+#           args invoke it directly. Used by codegraph (/usr/local/bin/codegraph).
+#           Local entries have NO npm package, so mcp_registry_get_npm_package
+#           returns non-zero for them — registration is keyed off the package
+#           type instead (see mcp_registry_is_registered).
+#
 # Adding a new MCP server:
 #   Add a case to each of the five functions below. No other files need changes.
 #
@@ -75,6 +84,9 @@ mcp_registry_get_package_type() {
         kagi)
             echo "uvx"
             ;;
+        codegraph)
+            echo "local"
+            ;;
         brave-search | fetch | memory | sequential-thinking | git | github | gitlab | sentry | perplexity)
             echo "npm"
             ;;
@@ -124,6 +136,12 @@ mcp_registry_get_add_args() {
         kagi)
             echo "-t stdio kagi -e 'KAGI_API_KEY=\${KAGI_API_KEY}' -- uvx --python 3.13 kagimcp"
             ;;
+        codegraph)
+            # Local binary (not npx/uvx). Serves the per-project knowledge graph
+            # over stdio; the index lives in <project>/.codegraph (symlinked to a
+            # cache volume by the dev-tools first-startup hook).
+            echo "-t stdio codegraph -- /usr/local/bin/codegraph serve --mcp"
+            ;;
         *)
             return 1
             ;;
@@ -166,6 +184,9 @@ mcp_registry_get_env_docs() {
         kagi)
             echo "KAGI_API_KEY"
             ;;
+        codegraph)
+            echo ""
+            ;;
         *)
             echo ""
             ;;
@@ -175,14 +196,16 @@ mcp_registry_get_env_docs() {
 # Check if an MCP server name is registered
 # Usage: mcp_registry_is_registered <name>
 # Returns: 0 if registered, 1 if not
+# Keyed off the package type (not the npm package) so "local" binary entries
+# like codegraph — which have no npm package — register correctly.
 mcp_registry_is_registered() {
     local name="${1:-}"
-    mcp_registry_get_npm_package "$name" >/dev/null 2>&1
+    mcp_registry_get_package_type "$name" >/dev/null 2>&1
 }
 
 # List all registered MCP server names
 # Usage: mcp_registry_list
 # Returns: space-separated list of registered names
 mcp_registry_list() {
-    echo "brave-search fetch memory sequential-thinking git github gitlab sentry perplexity kagi"
+    echo "brave-search fetch memory sequential-thinking git github gitlab sentry perplexity kagi codegraph"
 }

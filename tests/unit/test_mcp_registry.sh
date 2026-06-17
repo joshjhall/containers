@@ -28,7 +28,7 @@ test_registry_file_exists() {
     assert_executable "$REGISTRY_FILE"
 }
 
-# Test: All registered servers return npm packages
+# Test: All npm/uvx servers return packages; local-binary servers do not
 test_npm_packages() {
     source "$REGISTRY_FILE"
 
@@ -36,9 +36,20 @@ test_npm_packages() {
     servers=$(mcp_registry_list)
 
     for server in $servers; do
-        local package
-        package=$(mcp_registry_get_npm_package "$server")
-        assert_true [ -n "$package" ] "$server has npm package"
+        local pkg_type
+        pkg_type=$(mcp_registry_get_package_type "$server")
+        if [ "$pkg_type" = "local" ]; then
+            # Local binaries have no npm package — get_npm_package returns non-zero.
+            if mcp_registry_get_npm_package "$server" >/dev/null 2>&1; then
+                fail_test "$server is local type but returned an npm package"
+            else
+                pass_test "$server (local) has no npm package"
+            fi
+        else
+            local package
+            package=$(mcp_registry_get_npm_package "$server")
+            assert_true [ -n "$package" ] "$server has npm package"
+        fi
     done
 }
 
@@ -91,14 +102,22 @@ test_add_args() {
         assert_not_empty "$args" "$server has add args"
         # All args should contain -t stdio
         assert_contains "$args" "-t stdio" "$server args include -t stdio"
-        # Args should contain a package runner (npx -y for npm, uvx for Python)
+        # Args should contain the appropriate runner: npx -y (npm), uvx
+        # (Python), or a direct binary path (local).
         local pkg_type
         pkg_type=$(mcp_registry_get_package_type "$server")
-        if [ "$pkg_type" = "uvx" ]; then
-            assert_contains "$args" "uvx" "$server args include uvx"
-        else
-            assert_contains "$args" "npx -y" "$server args include npx -y"
-        fi
+        case "$pkg_type" in
+            uvx)
+                assert_contains "$args" "uvx" "$server args include uvx"
+                ;;
+            local)
+                # No package runner — invokes the installed binary directly.
+                assert_contains "$args" "/usr/local/bin/" "$server (local) args invoke a binary path"
+                ;;
+            *)
+                assert_contains "$args" "npx -y" "$server args include npx -y"
+                ;;
+        esac
     done
 }
 
@@ -194,6 +213,7 @@ test_is_registered() {
     assert_true mcp_registry_is_registered "gitlab" "gitlab is registered"
     assert_true mcp_registry_is_registered "sentry" "sentry is registered"
     assert_true mcp_registry_is_registered "kagi" "kagi is registered"
+    assert_true mcp_registry_is_registered "codegraph" "codegraph (local) is registered"
 
     assert_false mcp_registry_is_registered "nonexistent" "nonexistent is not registered"
     assert_false mcp_registry_is_registered "" "empty string is not registered"
@@ -216,6 +236,7 @@ test_list_function() {
     assert_contains "$list" "sentry" "list includes sentry"
     assert_contains "$list" "perplexity" "list includes perplexity"
     assert_contains "$list" "kagi" "list includes kagi"
+    assert_contains "$list" "codegraph" "list includes codegraph"
 }
 
 # Test: Package type returns correct values
@@ -238,11 +259,44 @@ test_package_type() {
     pkg_type=$(mcp_registry_get_package_type "kagi")
     assert_equals "uvx" "$pkg_type" "kagi is uvx type"
 
+    pkg_type=$(mcp_registry_get_package_type "codegraph")
+    assert_equals "local" "$pkg_type" "codegraph is local type"
+
     if mcp_registry_get_package_type "nonexistent" >/dev/null 2>&1; then
         fail_test "Unknown server should return error from get_package_type"
     else
         pass_test "Unknown server rejected by get_package_type"
     fi
+}
+
+# Test: codegraph local-binary entry is fully and correctly wired
+test_local_binary_codegraph() {
+    source "$REGISTRY_FILE"
+
+    local pkg_type
+    pkg_type=$(mcp_registry_get_package_type "codegraph")
+    assert_equals "local" "$pkg_type" "codegraph package type is local"
+
+    assert_true mcp_registry_is_registered "codegraph" "codegraph is registered"
+
+    # Local binaries have no npm package.
+    if mcp_registry_get_npm_package "codegraph" >/dev/null 2>&1; then
+        fail_test "codegraph should not return an npm package"
+    else
+        pass_test "codegraph has no npm package"
+    fi
+
+    local args
+    args=$(mcp_registry_get_add_args "codegraph")
+    assert_contains "$args" "-t stdio" "codegraph args include -t stdio"
+    assert_contains "$args" "/usr/local/bin/codegraph" "codegraph args invoke the installed binary"
+    assert_contains "$args" "serve --mcp" "codegraph args include serve --mcp"
+    assert_not_contains "$args" "npx" "codegraph args do not use npx"
+    assert_not_contains "$args" "uvx" "codegraph args do not use uvx"
+
+    local docs
+    docs=$(mcp_registry_get_env_docs "codegraph")
+    assert_equals "" "$docs" "codegraph requires no env vars"
 }
 
 # Test: Registry is referenced in claude-code-setup.sh and claude-setup
@@ -268,6 +322,7 @@ run_test test_unknown_server_rejected "Unknown server names are rejected"
 run_test test_is_registered "is_registered correctly identifies servers"
 run_test test_list_function "List function returns all servers"
 run_test test_package_type "Package type returns correct values"
+run_test test_local_binary_codegraph "codegraph local-binary entry is correctly wired"
 run_test test_registry_used_in_setup "Registry is referenced in claude-code-setup.sh"
 
 # Generate test report
