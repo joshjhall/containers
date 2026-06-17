@@ -45,6 +45,7 @@ services:
       # - CLAUDE_AGENTS=debugger,code-reviewer,test-writer,refactorer,audit-code-health,audit-security,audit-test-gaps,audit-architecture,audit-docs,audit-ai-config,issue-writer
       # Default memory path
       - MEMORY_FILE_PATH=/workspace/containers/.claude/memory
+      - SKIP_CASE_CHECK=true
     # Use tini as init system for proper zombie process reaping
     # This is a belt-and-suspenders approach - the Dockerfile also includes tini,
     # but init: true ensures proper PID 1 behavior even if command overrides entrypoint
@@ -56,7 +57,7 @@ services:
       - /dev/fuse
     # Entrypoint handles Docker socket permissions via sudo (no root needed)
     # devcontainer.json sets overrideCommand: false so our ENTRYPOINT runs
-    command: [ "sleep", "infinity" ]
+    command: ["sleep", "infinity"]
     # Health check configuration (inherits from Dockerfile)
     # Override if needed: healthcheck: {test: ["CMD", "healthcheck", "--verbose"]}
     networks:

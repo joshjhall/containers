@@ -107,7 +107,8 @@ test_every_boot_scripts() {
     # Check that scripts ran
     if [ -f "$TEST_TEMP_DIR/startup.log" ]; then
         local lines
-        lines=$(command wc -l <"$TEST_TEMP_DIR/startup.log")
+        # Strip whitespace: BSD/macOS `wc -l` left-pads its output, GNU/Linux does not.
+        lines=$(command wc -l <"$TEST_TEMP_DIR/startup.log" | command tr -d '[:space:]')
         assert_equals "2" "$lines" "Both startup scripts executed"
     else
         assert_true false "Startup log not created"
@@ -128,26 +129,96 @@ test_script_permissions() {
     # Only non-symlink .sh files should have been executed
     if [ -f "$TEST_TEMP_DIR/perm.log" ]; then
         local lines
-        lines=$(command wc -l <"$TEST_TEMP_DIR/perm.log")
+        # Strip whitespace: BSD/macOS `wc -l` left-pads its output, GNU/Linux does not.
+        lines=$(command wc -l <"$TEST_TEMP_DIR/perm.log" | command tr -d '[:space:]')
         assert_equals "1" "$lines" "Only non-symlink .sh files executed"
     else
         assert_true false "Permission log not created (no .sh file was executed)"
     fi
 }
 
+# Resolve a non-root username the same way the entrypoint does: honor
+# CONTAINER_UID if set, otherwise fall back to the single regular login user
+# (matched by shape — /home dir + real login shell, NOT by UID range, since
+# Zed remaps the user below 1000). `getent_fn` is injected so tests can mock
+# /etc/passwd without needing real users. Mirrors entrypoint.sh:103-130.
+resolve_container_username() {
+    local getent_fn="${1:-getent}"
+    local username=""
+    if [ -n "${CONTAINER_UID:-}" ]; then
+        username=$("$getent_fn" passwd "${CONTAINER_UID}" | command cut -d: -f1) || true
+    fi
+    if [ -z "$username" ]; then
+        username=$("$getent_fn" passwd | command awk -F: \
+            '$1 != "root" && $6 ~ /^\/home\// && $7 !~ /(nologin|false)$/ { print $1; exit }') || true
+    fi
+    printf '%s' "$username"
+}
+
+# Test: User detection is UID-agnostic (Zed remaps to host UID, e.g. 501;
+# VS Code keeps the image-native 1000). The single-regular-user fallback must
+# find the user regardless of the number.
+test_user_detection_uid_agnostic() {
+    # Mock getent: a remapped non-1000 user plus only system accounts.
+    _mock_getent() {
+        if [ "$1" = "passwd" ] && [ -n "${2:-}" ]; then
+            # Lookup by UID — only 501 resolves in this mock.
+            [ "$2" = "501" ] && echo "vscode:x:501:20::/home/vscode:/bin/bash"
+            return 0
+        fi
+        # Full table dump.
+        printf '%s\n' \
+            "root:x:0:0:root:/root:/bin/bash" \
+            "nobody:x:65534:65534:nobody:/nonexistent:/usr/sbin/nologin" \
+            "vscode:x:501:20::/home/vscode:/bin/bash"
+        return 0
+    }
+
+    # No CONTAINER_UID set: must discover vscode (501) via the regular-user scan.
+    unset CONTAINER_UID 2>/dev/null || true
+    local resolved
+    resolved=$(resolve_container_username _mock_getent)
+    assert_equals "vscode" "$resolved" "Detects remapped non-1000 user (Zed/host UID)"
+
+    # CONTAINER_UID explicitly set: resolve by that UID.
+    export CONTAINER_UID=501
+    resolved=$(resolve_container_username _mock_getent)
+    assert_equals "vscode" "$resolved" "Honors explicit CONTAINER_UID"
+    unset CONTAINER_UID
+
+    unset -f _mock_getent
+}
+
+# Test: A missing user must NOT crash the entrypoint under `set -e`.
+# Regression guard for the silent exit-2 bug: a getent miss inside the
+# command substitution previously aborted the script before the guard ran.
+test_user_detection_set_e_safe() {
+    _mock_getent_empty() {
+        # No regular users at all; lookups always miss (exit non-zero).
+        if [ "$1" = "passwd" ] && [ -n "${2:-}" ]; then
+            return 2
+        fi
+        printf '%s\n' \
+            "root:x:0:0:root:/root:/bin/bash" \
+            "nobody:x:65534:65534:nobody:/nonexistent:/usr/sbin/nologin"
+        return 0
+    }
+
+    # Run under `set -e` in a subshell — must reach the empty result, not abort.
+    local resolved rc=0
+    resolved=$(
+        set -e
+        unset CONTAINER_UID 2>/dev/null || true
+        resolve_container_username _mock_getent_empty
+    ) || rc=$?
+    assert_equals "0" "$rc" "Resolution survives a getent miss under set -e"
+    assert_equals "" "$resolved" "Returns empty (caught by guard) when no regular user exists"
+
+    unset -f _mock_getent_empty
+}
+
 # Test: User context switching
 test_user_context() {
-    # Test UID detection
-    local uid_1000
-    uid_1000=$(getent passwd 1000 2>/dev/null | command cut -d: -f1 || echo "")
-
-    if [ -n "$uid_1000" ]; then
-        assert_not_empty "$uid_1000" "User with UID 1000 can be detected"
-    else
-        # In test environment, user might not exist
-        assert_true true "User detection test skipped (no UID 1000)"
-    fi
-
     # Test su command formation
     local su_cmd="su ${TEST_USERNAME} -c 'bash /path/to/script.sh'"
 
@@ -1049,6 +1120,8 @@ run_test_with_setup test_first_run_detection "First-run detection works correctl
 run_test_with_setup test_first_startup_script_order "First-startup scripts run in order"
 run_test_with_setup test_every_boot_scripts "Every-boot scripts execute properly"
 run_test_with_setup test_script_permissions "Script permission handling"
+run_test_with_setup test_user_detection_uid_agnostic "User detection is UID-agnostic"
+run_test_with_setup test_user_detection_set_e_safe "User detection is set -e safe"
 run_test_with_setup test_user_context "User context switching logic"
 run_test_with_setup test_first_run_marker_creation "First-run marker creation"
 run_test_with_setup test_empty_directory_handling "Empty directory handling"

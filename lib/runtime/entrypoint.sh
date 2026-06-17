@@ -102,11 +102,28 @@ fi
 # Check if we're running as root
 if [ "$(id -u)" -eq 0 ]; then
     RUNNING_AS_ROOT=true
-    # Detect the non-root user in the container
-    # The container should have a user with the build-time UID (default 1000)
-    USERNAME=$(getent passwd "${CONTAINER_UID:-1000}" | command cut -d: -f1)
+    # Resolve the non-root user to drop into. Editors remap the container
+    # user's UID differently — Zed adopts the host UID (e.g. 501 on macOS),
+    # VS Code keeps the image-native UID (1000) — so never assume a fixed
+    # number. The trailing `|| true` is critical: under `set -e`, a `getent`
+    # miss exits non-zero inside the command substitution and would abort the
+    # entrypoint *before* the guard below could report it (silent exit 2).
+    USERNAME=""
+    if [ -n "${CONTAINER_UID:-}" ]; then
+        USERNAME=$(getent passwd "${CONTAINER_UID}" | command cut -d: -f1) || true
+    fi
     if [ -z "$USERNAME" ]; then
-        echo "Error: No user with UID ${CONTAINER_UID:-1000} found in container (set CONTAINER_UID to override)"
+        # Fall back to the single regular login user. We can't filter by UID
+        # range: Zed remaps the user to the host UID (e.g. 501 on macOS), which
+        # lands in Debian's system-UID range (<1000), so a range filter would
+        # miss exactly the case we need to handle. Instead match on user shape —
+        # a real home under /home and a genuine login shell (not nologin/false)
+        # — which our images' single regular user satisfies regardless of UID.
+        USERNAME=$(getent passwd | command awk -F: \
+            '$1 != "root" && $6 ~ /^\/home\// && $7 !~ /(nologin|false)$/ { print $1; exit }') || true
+    fi
+    if [ -z "$USERNAME" ]; then
+        echo "Error: could not determine a non-root container user (set CONTAINER_UID to override)"
         exit 1
     fi
 else
