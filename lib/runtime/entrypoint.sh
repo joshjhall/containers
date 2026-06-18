@@ -194,6 +194,10 @@ if [ -f "$_RUNTIME_LIB/fix-cache-permissions.sh" ]; then
     # shellcheck source=/dev/null
     source "$_RUNTIME_LIB/fix-cache-permissions.sh"
 fi
+if [ -f "$_RUNTIME_LIB/fix-run-permissions.sh" ]; then
+    # shellcheck source=/dev/null
+    source "$_RUNTIME_LIB/fix-run-permissions.sh"
+fi
 if [ -f "$_RUNTIME_LIB/setup-bindfs.sh" ]; then
     # shellcheck source=/dev/null
     source "$_RUNTIME_LIB/setup-bindfs.sh"
@@ -213,6 +217,13 @@ fi
 
 # --- Cache directory permissions ---
 fix_cache_permissions
+
+# --- /run tmpfs permissions ---
+# The /run tmpfs mounts root-owned (its uid can't be baked into compose because
+# editors remap the runtime UID), so align it to the resolved user like /cache.
+if declare -f fix_run_permissions >/dev/null 2>&1; then
+    fix_run_permissions
+fi
 
 # --- Bindfs overlays + FUSE cleanup ---
 setup_bindfs_overlays
