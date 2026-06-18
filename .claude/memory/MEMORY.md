@@ -6,3 +6,13 @@
 - [Prefer just recipes](prefer-just-recipes.md) — Use `just <recipe>` over bare cargo/shell when one exists
 - [PR merge + prune is the default ship](feedback_pr_merge_default.md) — `/next-issue-ship` Option 1 ends at merged + branch deleted, not at "PR open"
 - [Skip all-files lint](feedback_local_lint_scope.md) — `just lint` scans the whole repo; for narrow edits, lean on CI
+- [known_hosts seeded system-wide](known-hosts-seeded-system-wide.md) — pinned github/gitlab host keys → /etc/ssh/ssh_known_hosts at build
+- [tmpfs uid can't be templated](tmpfs-uid-cannot-be-templated.md) — compose tmpfs uid=/gid= baked at mount time; mount neutral + reconcile at startup
+- [entrypoint UID-agnostic user](entrypoint-uid-agnostic-user-detection.md) — resolve runtime user by shape, not hardcoded UID (Zed/VS Code remap differently)
+- [Rust tools use cargo binstall](rust-tools-use-cargo-binstall.md) — rust.sh/rust-dev.sh install via cargo binstall (prebuilt), not cargo install
+- [Cache mounts not on install dirs](cache-mounts-not-on-install-dirs.md) — no type=cache on /cache/cargo or /cache/r (runtime install locations)
+- [Auto-patch inline checksums](auto-patch-inline-checksums.md) — inline *_SHA256 pins in setup.sh need TOOL_CHECKSUM_REGISTRY_INLINE
+- [Luggage vendored catalog](luggage-vendored-catalog.md) — builds read vendored snapshot (crates/luggage/testdata/catalog), not sibling repo
+- [Luggage release deferred until v5](luggage-release-deferred-until-v5.md) — no apt/Homebrew/cargo release for luggage until v5 substantially complete
+- [Auto-merge needs explicit consent](feedback_auto_merge_consent.md) — gh pr merge --auto needs per-turn authorization, separate from default-ship
+- [Parallel automation (golem) initiative](parallel-automation-golem-initiative.md) — golem = per-issue sub-orchestrator; order #523→…→#525
