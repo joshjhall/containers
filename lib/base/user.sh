@@ -132,6 +132,22 @@ chmod 755 /cache
 # Set proper permissions for SSH directory
 chmod 700 /home/"${USERNAME}"/.ssh
 
+# Seed system-wide known_hosts so the first SSH push/pull to GitHub/GitLab
+# succeeds instead of failing with "Host key verification failed". These are
+# pinned keys verified against the providers' published fingerprints — NOT a
+# build-time ssh-keyscan, which would trust whatever answers (TOFU). Installing
+# to /etc/ssh/ssh_known_hosts makes the trust system-wide (all users) and lets
+# it survive per-user ~/.ssh recreation.
+_script_dir="$(command cd "$(command dirname "${BASH_SOURCE[0]}")" && command pwd)"
+if [ -f "${_script_dir}/known-hosts" ]; then
+    install -d -m 755 /etc/ssh
+    install -m 644 "${_script_dir}/known-hosts" /etc/ssh/ssh_known_hosts
+    echo "✓ Seeded /etc/ssh/ssh_known_hosts with github.com/gitlab.com host keys"
+else
+    echo "⚠️  known-hosts data file not found next to user.sh; skipping host-key seed"
+fi
+unset _script_dir
+
 # Set ownership
 chown -R "${USERNAME}":"${USERNAME}" /home/"${USERNAME}"
 
