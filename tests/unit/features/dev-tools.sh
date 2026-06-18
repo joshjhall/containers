@@ -843,6 +843,50 @@ test_zed_lsp_config_installed_by_script() {
 run_test test_zed_lsp_config_script_shipped "zed-lsp-config-first-startup.sh shipped with system-binary overrides"
 run_test test_zed_lsp_config_installed_by_script "dev-tools.sh installs zed-lsp-config first-startup script"
 
+# Test: the Zed LSP override script writes STRICT JSON (no // comments) so the
+# sibling agent-config script can jq-merge into the same settings.json (#519).
+test_zed_lsp_config_strict_json() {
+    local script="$PROJECT_ROOT/lib/features/lib/dev-tools/zed-lsp-config-first-startup.sh"
+    # The heredoc body (between the JSON markers) must contain no // comments.
+    local body
+    body=$(command awk '/<<.?JSON.?/{f=1;next} /^JSON$/{f=0} f' "$script")
+    if printf '%s' "$body" | command grep -q '//'; then
+        assert_true false "zed-lsp settings JSON body must be comment-free (strict JSON for jq merge)"
+    else
+        assert_true true "zed-lsp settings JSON body is strict JSON (no // comments)"
+    fi
+}
+
+# Test: the Zed ACP agent-config first-startup script is shipped and is
+# provider-neutral, conditional, and never writes a secret to settings.json.
+test_zed_agent_config_script_shipped() {
+    local script="$PROJECT_ROOT/lib/features/lib/dev-tools/zed-agent-config-first-startup.sh"
+    assert_file_exists "$script" "zed-agent-config-first-startup.sh shipped under lib/features/lib/dev-tools/"
+    assert_file_contains "$script" "/usr/local/bin/claude-acp-launch" \
+        "agent config points at the ACP launch wrapper"
+    assert_file_contains "$script" "have_creds" \
+        "agent config is conditional on Anthropic credentials being present"
+    assert_file_contains "$script" "OP_ANTHROPIC_" \
+        "agent config detects unresolved OP_ANTHROPIC_*_REF credentials"
+    assert_file_contains "$script" "agent_servers" \
+        "agent config writes an agent_servers entry"
+    # Provider-neutral: no bifrost/litellm hardcoding.
+    assert_file_not_contains "$script" "bifrost" "agent config is provider-neutral (no 'bifrost')"
+}
+
+# Test: dev-tools.sh installs the agent-config script into first-startup as 41-.
+test_zed_agent_config_installed_by_script() {
+    local source_file="$PROJECT_ROOT/lib/features/dev-tools.sh"
+    assert_file_contains "$source_file" "features/lib/dev-tools/zed-agent-config-first-startup.sh" \
+        "dev-tools.sh references shipped zed-agent-config script"
+    assert_file_contains "$source_file" "/etc/container/first-startup/41-zed-agent-config.sh" \
+        "dev-tools.sh installs agent config as 41- (after 40-zed-lsp)"
+}
+
+run_test test_zed_lsp_config_strict_json "zed-lsp settings JSON is strict (comment-free) for jq merge"
+run_test test_zed_agent_config_script_shipped "zed-agent-config-first-startup.sh shipped, provider-neutral + conditional"
+run_test test_zed_agent_config_installed_by_script "dev-tools.sh installs zed-agent-config as 41-"
+
 # Test: codegraph is fully wired (version var, install function, invocation,
 # and a pinned checksum entry) — code knowledge graph for AI agents.
 test_codegraph_wired() {

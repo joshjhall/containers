@@ -1,0 +1,72 @@
+#!/bin/bash
+# Launch wrapper for an editor's Claude Code ACP agent (e.g. Zed's "AI panel").
+#
+# Why this exists:
+#   /etc/bashrc.d/95-claude-env.sh deliberately strips ANTHROPIC_AUTH_TOKEN from
+#   the environment (so a rotated token never sits in /proc/*/environ) and
+#   re-injects it only into the interactive `claude` CLI via a bash function.
+#   An editor that launches the ACP agent directly — not through that bash
+#   function — never sees the token and falls back to a sign-in prompt.
+#
+#   This wrapper passes whatever Anthropic credentials the container actually
+#   has to the ACP agent as one-shot assignments on the exec line — never via
+#   `export`, so the token stays out of this process's broad environment (and
+#   out of /proc/<pid>/environ) per security issue #62. No secret is ever
+#   written to the editor's settings file.
+#
+# Provider-agnostic by design:
+#   Makes no assumption about which provider is in use (a direct Anthropic API
+#   key, a token + base-URL proxy, or any subset). Each value is optional and is
+#   only forwarded when it actually exists — absent values are passed through
+#   untouched, never overridden with an empty string.
+#
+# Point the editor's custom-agent config at this script (see the Zed
+# agent_servers bootstrap installed by the dev-tools feature).
+
+set -euo pipefail
+
+TOKEN_FILE="/dev/shm/anthropic-auth-token"
+OP_CACHE="/dev/shm/op-secrets-cache"
+
+# Read a single `export NAME=value` line's value out of the secrets cache.
+# Imports ONLY the named ANTHROPIC_* key — never sources the file, which would
+# also pull GIT_*_SSH_KEY private keys and GITHUB_TOKEN into scope.
+_cache_value() {
+    local key="$1"
+    [ -r "$OP_CACHE" ] || return 0
+    command sed -n "s/^export ${key}=//p" "$OP_CACHE" | command head -n1
+}
+
+# Collect creds into locals (NOT exported). 95-claude-env.sh moves the auth
+# token to the shm file; prefer an already-set env value, then that file, then
+# the cache. ANTHROPIC_API_KEY is NOT stripped by 95-claude-env.sh, so a
+# key-based setup already has it in the environment — forward it as-is and never
+# fabricate one.
+_token="${ANTHROPIC_AUTH_TOKEN:-}"
+if [ -z "$_token" ] && [ -r "$TOKEN_FILE" ] && [ -s "$TOKEN_FILE" ]; then
+    _token="$(command cat "$TOKEN_FILE")"
+fi
+[ -z "$_token" ] && _token="$(_cache_value ANTHROPIC_AUTH_TOKEN)"
+
+_base_url="${ANTHROPIC_BASE_URL:-}"
+[ -z "$_base_url" ] && _base_url="$(_cache_value ANTHROPIC_BASE_URL)"
+
+_model="${ANTHROPIC_MODEL:-}"
+[ -z "$_model" ] && _model="$(_cache_value ANTHROPIC_MODEL)"
+
+# Build a one-shot assignment prefix containing only the values we actually
+# have. These assignments are visible to the exec'd command alone (passed via
+# `env`) — they are never exported into this script's environment.
+_assignments=()
+[ -n "$_token" ] && _assignments+=("ANTHROPIC_AUTH_TOKEN=$_token")
+[ -n "$_base_url" ] && _assignments+=("ANTHROPIC_BASE_URL=$_base_url")
+[ -n "$_model" ] && _assignments+=("ANTHROPIC_MODEL=$_model")
+
+# Exec the real ACP launcher, mirroring how the editor itself launches the agent
+# (Zed's external-agents registry distributes it as the same npx package).
+# Pinning the version keeps the wrapper reproducible; override with
+# CLAUDE_ACP_VERSION if the editor's pinned version moves. ANTHROPIC_API_KEY, if
+# present in the environment, is inherited normally (never stripped). Any args
+# the editor passes ("$@") are forwarded to the launcher.
+exec env "${_assignments[@]}" \
+    npx -y "@agentclientprotocol/claude-agent-acp@${CLAUDE_ACP_VERSION:-0.46.0}" "$@"
