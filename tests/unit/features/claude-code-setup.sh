@@ -1261,5 +1261,48 @@ run_test test_claude_setup_has_resolve_override_or_file "Source: _resolve_overri
 run_test test_claude_setup_has_file_json_to_csv "Source: _file_json_to_csv in claude-setup"
 run_test test_claude_setup_has_configure_mcp_from_json_object "Source: configure_mcp_from_json_object in claude-setup"
 
+# ============================================================================
+# ACP agent launch wrapper (#519)
+# ============================================================================
+# The wrapper re-injects the container's Anthropic credentials into an editor-
+# launched Claude Code ACP agent (e.g. Zed's AI panel) that bypasses the
+# interactive `claude` bash wrapper.
+
+# Test: the wrapper is shipped and is provider-neutral with the right safety
+# properties (API-key passthrough, ANTHROPIC_*-only cache import, ACP exec).
+test_acp_wrapper_shipped() {
+    local wrapper="$PROJECT_ROOT/lib/features/lib/claude/claude-acp-launch"
+    assert_file_exists "$wrapper" "claude-acp-launch wrapper shipped under lib/features/lib/claude/"
+    assert_file_contains "$wrapper" "/dev/shm/anthropic-auth-token" \
+        "wrapper reads the stripped token from the shm file"
+    assert_file_contains "$wrapper" "claude-agent-acp" \
+        "wrapper execs the Claude ACP launcher"
+    # Provider-neutral: no provider name hardcoded.
+    assert_file_not_contains "$wrapper" "bifrost" "wrapper is provider-neutral (no 'bifrost')"
+    # Must NOT export the token (security issue #62) — it is forwarded as a
+    # one-shot assignment on the exec line instead.
+    assert_file_not_contains "$wrapper" "export ANTHROPIC_AUTH_TOKEN" \
+        "wrapper does not export the auth token into its environment"
+    # Must NOT blanket-source the secrets cache (would leak GIT_*_SSH_KEY /
+    # GITHUB_TOKEN); it reads named ANTHROPIC_* keys only. The cache is read via
+    # a `sed -n s/^export ANTHROPIC_.../` extractor, never sourced.
+    assert_file_not_contains "$wrapper" "source \"\$OP_CACHE\"" \
+        "wrapper does not blanket-source the secrets cache"
+    assert_file_contains "$wrapper" "_cache_value ANTHROPIC_BASE_URL" \
+        "wrapper reads named ANTHROPIC_* keys from the cache, not a blanket source"
+}
+
+# Test: claude-code-setup.sh installs the wrapper to /usr/local/bin.
+test_acp_wrapper_installed() {
+    local setup_file="$PROJECT_ROOT/lib/features/claude-code-setup.sh"
+    assert_file_contains "$setup_file" "features/lib/claude/claude-acp-launch" \
+        "claude-code-setup.sh references the shipped wrapper"
+    assert_file_contains "$setup_file" "/usr/local/bin/claude-acp-launch" \
+        "claude-code-setup.sh installs the wrapper onto PATH"
+}
+
+run_test test_acp_wrapper_shipped "ACP wrapper shipped, provider-neutral, leak-safe"
+run_test test_acp_wrapper_installed "claude-code-setup.sh installs claude-acp-launch"
+
 # Generate test report
 generate_report

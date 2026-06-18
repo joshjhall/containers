@@ -296,6 +296,18 @@ mkdir -p /etc/bashrc.d
 install -m 755 /tmp/build-scripts/features/lib/claude/95-claude-env.sh \
     /etc/bashrc.d/95-claude-env.sh
 
+# ============================================================================
+# Install ACP Agent Launch Wrapper
+# ============================================================================
+# Provider-neutral wrapper that re-injects the container's Anthropic creds into
+# an editor-launched Claude Code ACP agent (e.g. Zed's AI panel), which bypasses
+# the interactive `claude` bash wrapper and so never sees the stripped token.
+# Reuses the /dev/shm token file written by 95-claude-env.sh. The Zed first-
+# startup hook (dev-tools feature) points an agent_servers entry at this script.
+log_message "Installing ACP agent launch wrapper..."
+install -m 755 /tmp/build-scripts/features/lib/claude/claude-acp-launch \
+    /usr/local/bin/claude-acp-launch
+
 # Install inotify-tools for efficient file watching (if apt available)
 if command -v apt-get &>/dev/null; then
     log_message "Installing inotify-tools for efficient authentication detection..."

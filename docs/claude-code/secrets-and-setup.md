@@ -435,3 +435,31 @@ Verify configuration with:
 - `claude plugin list` - See installed plugins
 - `claude mcp list` - See configured MCP servers
 - `pgrep -f claude-auth-watcher` - Check if watcher is running
+
+### Zed AI panel (ACP agent)
+
+Zed's "AI panel" runs Claude Code as an external ACP agent, launched directly
+rather than through the interactive `claude` shell wrapper. Because
+`95-claude-env.sh` strips `ANTHROPIC_AUTH_TOKEN` from the environment (keeping
+the rotated token out of `/proc/*/environ`) and re-injects it only into the
+interactive CLI, a directly-launched agent would otherwise see no token and
+prompt for sign-in.
+
+When the `dev-tools` feature is installed, this is wired up automatically:
+
+- A provider-neutral wrapper, `/usr/local/bin/claude-acp-launch`, forwards
+  whatever Anthropic credentials the container holds — `ANTHROPIC_AUTH_TOKEN`
+  (from the `/dev/shm` token file), `ANTHROPIC_BASE_URL`, and `ANTHROPIC_MODEL`
+  (from env or the resolved secrets cache) — to the ACP agent as one-shot
+  assignments on exec. `ANTHROPIC_API_KEY`, which is never stripped, is
+  inherited as-is. No secret is exported into the broad environment, and none is
+  written to Zed's `settings.json`.
+- A first-startup hook adds a `"Claude Code (container)"` entry under
+  `agent_servers` in `~/.config/zed/settings.json`, pointing at that wrapper.
+
+This is **provider-agnostic** (direct Anthropic API key, or a token + base-URL
+proxy such as LiteLLM, or any subset) and **conditional**: if the container has
+no Anthropic credentials at all (no token, no API key, no `OP_ANTHROPIC_*_REF`),
+nothing is wired and the agent's own sign-in remains in effect. To use it,
+select the **Claude Code (container)** agent in Zed's Agent panel. VS Code and
+JetBrains ignore `~/.config/zed/`, so this is a no-op there.

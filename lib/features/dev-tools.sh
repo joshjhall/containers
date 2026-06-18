@@ -310,6 +310,20 @@ install -m 755 \
     /etc/container/first-startup/40-zed-lsp-config.sh
 
 # ============================================================================
+# Zed Claude Code ACP agent ("AI panel") wiring
+# ============================================================================
+# Ship a first-startup script that adds a Zed agent_servers entry pointing at
+# the provider-neutral ACP launch wrapper, so the AI panel uses the container's
+# Anthropic credentials instead of prompting for sign-in. Conditional: no-op
+# when no Anthropic creds are present. Runs after 40-zed-lsp-config so both can
+# merge into the same settings.json.
+log_message "Installing Zed ACP agent config bootstrap script..."
+
+install -m 755 \
+    /tmp/build-scripts/features/lib/dev-tools/zed-agent-config-first-startup.sh \
+    /etc/container/first-startup/41-zed-agent-config.sh
+
+# ============================================================================
 # Verification Script
 # ============================================================================
 log_message "Creating dev tools verification script..."
