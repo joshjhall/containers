@@ -118,6 +118,16 @@ Registered short names:
 | `sentry`              | `@sentry/mcp-server`                               | `SENTRY_ACCESS_TOKEN`                   |
 | `perplexity`          | `@perplexity-ai/mcp-server`                        | `PERPLEXITY_API_KEY`                    |
 | `kagi`                | `kagimcp` (Python/uvx)                             | `KAGI_API_KEY`                          |
+| `codegraph`           | local binary `codegraph serve --mcp`               | (none)                                  |
+
+`codegraph` is a **default-on, local-binary** MCP (no npm/uvx install): a
+code knowledge graph served from a per-project index. It is installed by the
+`dev-tools` feature and registered automatically when that binary is present;
+on minimal images without dev-tools it is skipped cleanly. Its index lives at
+`<project>/.codegraph` — symlinked onto the `codegraph` cache volume in the
+devcontainer — and is built on first startup. See
+[environment-variables.md](../reference/environment-variables.md) for the cache
+volume.
 
 ### Entry Formats
 

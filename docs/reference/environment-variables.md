@@ -263,6 +263,16 @@ All cache directories are located under `/cache` for persistence across builds:
 | `CAROOT`           | `/cache/dev-tools/mkcert-ca`    | mkcert CA certificates     |
 | `DIRENV_ALLOW_DIR` | `/cache/dev-tools/direnv-allow` | direnv allowed directories |
 
+#### codegraph index
+
+The `codegraph` MCP stores its per-project knowledge-graph index at
+`<project>/.codegraph`. codegraph's `CODEGRAPH_DIR` override only accepts a
+plain directory name (no absolute paths), so the index cannot be pointed at
+`/cache` directly. Instead the dev-tools first-startup hook symlinks
+`<project>/.codegraph` → `/cache/codegraph`, which the devcontainer backs with
+the `containers-codegraph` named volume. Drop that volume
+(`docker volume rm containers-codegraph`) to force a clean re-index.
+
 ### Mojo / Pixi
 
 | Variable         | Default               | Description            |
