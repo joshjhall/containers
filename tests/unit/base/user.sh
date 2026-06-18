@@ -221,6 +221,40 @@ test_uid_gid_ranges() {
     assert_true true "UID range validation logic works"
 }
 
+# Test: known_hosts data file ships with pinned github.com/gitlab.com keys
+test_known_hosts_data_file() {
+    local data_file="$PROJECT_ROOT/lib/base/known-hosts"
+
+    assert_file_exists "$data_file"
+
+    # Both hosts present with both key types (ed25519 + rsa)
+    if command grep -q '^github.com ssh-ed25519 ' "$data_file" &&
+        command grep -q '^github.com ssh-rsa ' "$data_file"; then
+        assert_true true "github.com ed25519 and rsa host keys present"
+    else
+        assert_true false "github.com host keys missing or malformed"
+    fi
+
+    if command grep -q '^gitlab.com ssh-ed25519 ' "$data_file" &&
+        command grep -q '^gitlab.com ssh-rsa ' "$data_file"; then
+        assert_true true "gitlab.com ed25519 and rsa host keys present"
+    else
+        assert_true false "gitlab.com host keys missing or malformed"
+    fi
+}
+
+# Test: user.sh seeds the system-wide known_hosts from the data file
+test_known_hosts_seeded() {
+    local script="$PROJECT_ROOT/lib/base/user.sh"
+
+    if command grep -q '/etc/ssh/ssh_known_hosts' "$script" &&
+        command grep -q 'known-hosts' "$script"; then
+        assert_true true "user.sh installs known-hosts to /etc/ssh/ssh_known_hosts"
+    else
+        assert_true false "user.sh does not seed system known_hosts"
+    fi
+}
+
 # Run all tests
 run_test test_script_exists "User script exists and is executable"
 run_test test_default_parameters "Default parameters are set correctly"
@@ -235,6 +269,8 @@ run_test test_home_directory_path "Home directory path validation"
 run_test test_bashrc_d_structure "Bashrc.d directory structure"
 run_test test_script_parameters "Script parameter handling"
 run_test test_uid_gid_ranges "UID/GID range validation"
+run_test test_known_hosts_data_file "known_hosts data file has pinned host keys"
+run_test test_known_hosts_seeded "user.sh seeds system known_hosts"
 
 # Generate test report
 generate_report
