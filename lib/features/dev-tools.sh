@@ -310,6 +310,18 @@ install -m 755 \
     /etc/container/first-startup/40-zed-lsp-config.sh
 
 # ============================================================================
+# codegraph index bootstrap
+# ============================================================================
+# Ship a first-startup script that symlinks <project>/.codegraph onto the
+# /cache/codegraph volume and builds the initial knowledge-graph index. Runs
+# after the workspace is mounted; non-fatal and backgrounded.
+log_message "Installing codegraph index bootstrap script..."
+
+install -m 755 \
+    /tmp/build-scripts/features/lib/dev-tools/codegraph-index-first-startup.sh \
+    /etc/container/first-startup/45-codegraph-index.sh
+
+# ============================================================================
 # Verification Script
 # ============================================================================
 log_message "Creating dev tools verification script..."

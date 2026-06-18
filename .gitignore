@@ -215,3 +215,13 @@ ai/
 
 # Styles are fetched by `vale sync` based on .vale.ini — not vendored.
 .vale/styles/
+
+# ============================================================================
+# CODEGRAPH (CODE KNOWLEDGE GRAPH)
+# ============================================================================
+
+# Per-project index — large, machine-local, and (in containers) a symlink onto
+# the codegraph cache volume. codegraph also writes its own .codegraph/.gitignore,
+# but ignore the whole dir here too so it never shows up regardless of how it was
+# created.
+.codegraph/
