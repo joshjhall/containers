@@ -73,11 +73,19 @@ log_feature_start "Rust Development Tools"
 # ============================================================================
 # Cargo Tool Versions
 # ============================================================================
-# Every cargo install below is --locked and pinned to an explicit @version so
+# Every cargo (b)install below is --locked and pinned to an explicit @version so
 # upstream drift on crates.io cannot retroactively break a previously-working
 # build. Auto-bumped weekly via bin/check-versions.sh (crates.io API).
 # cargo-watch and mdbook are also pinned in rust.sh (same feature chain);
 # keep the defaults in sync between the two files.
+#
+# Tools are installed with `cargo binstall` (downloads a prebuilt, checksum-
+# verified binary) instead of `cargo install` (compiles from source). This is
+# the deeper fix for the CI cold-build timeout (#517): the from-source compile
+# of this ~20-tool suite exceeded 25min on a cold cache. binstall falls back to
+# `cargo install` automatically for any crate without a prebuilt binary, so the
+# from-source path still works (just slower for that one crate).
+CARGO_BINSTALL_VERSION="${CARGO_BINSTALL_VERSION:-1.20.0}"
 TREE_SITTER_CLI_VERSION="${TREE_SITTER_CLI_VERSION:-0.26.8}"
 CARGO_WATCH_VERSION="${CARGO_WATCH_VERSION:-8.5.3}"
 CARGO_EXPAND_VERSION="${CARGO_EXPAND_VERSION:-1.0.121}"
@@ -133,40 +141,78 @@ log_message "Installing Rust development tools via Cargo..."
 export CARGO_HOME="/cache/cargo"
 export RUSTUP_HOME="/cache/rustup"
 
+# ----------------------------------------------------------------------------
+# Bootstrap cargo-binstall (prebuilt-binary installer)
+# ----------------------------------------------------------------------------
+# Installed from its own prebuilt release rather than `cargo install` (which
+# would defeat the purpose by compiling it from source). The musl tarball is a
+# single static `cargo-binstall` binary; install_github_release handles arch
+# detection and runs it through the 4-tier verification (Tier 2 pinned checksum
+# in lib/checksums.json) before placing it in /usr/local/bin — so the cached
+# path keeps checksum integrity.
+log_message "Installing cargo-binstall ${CARGO_BINSTALL_VERSION}..."
+install_github_release "cargo-binstall" "${CARGO_BINSTALL_VERSION}" \
+    "https://github.com/cargo-bins/cargo-binstall/releases/download/v${CARGO_BINSTALL_VERSION}" \
+    "cargo-binstall-x86_64-unknown-linux-musl.tgz" \
+    "cargo-binstall-aarch64-unknown-linux-musl.tgz" \
+    "calculate" "extract_flat:cargo-binstall"
+# Make it discoverable as a cargo subcommand for the user's cargo too.
+if [ -x /usr/local/bin/cargo-binstall ] && [ ! -e "${CARGO_HOME}/bin/cargo-binstall" ]; then
+    mkdir -p "${CARGO_HOME}/bin"
+    ln -s /usr/local/bin/cargo-binstall "${CARGO_HOME}/bin/cargo-binstall" || true
+fi
+
+# ----------------------------------------------------------------------------
+# binstall helper
+# ----------------------------------------------------------------------------
+# Wraps `cargo binstall` with the flags we always want:
+#   --locked       honour Cargo.lock (parity with the old `cargo install --locked`)
+#   --no-confirm   non-interactive (required in a build)
+#   --disable-telemetry  no phone-home during builds
+# Runs as ${USERNAME} so artifacts land under /cache/cargo with correct
+# ownership, mirroring the previous cargo-install invocation. GITHUB_TOKEN (if
+# provided via a BuildKit secret) is forwarded so binstall's GitHub API lookups
+# aren't rate-limited on shared CI runners; absent, it degrades to
+# unauthenticated requests, which is fine for local builds.
+cargo_binstall_tool() {
+    local spec="$1"
+    su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' GITHUB_TOKEN='${GITHUB_TOKEN:-}' && /usr/local/bin/cargo binstall --locked --no-confirm --disable-telemetry ${spec}"
+}
+
 # Core development tools
 # Run as the user to ensure correct ownership
 log_command "Installing tree-sitter-cli" \
-    su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/cargo install --locked tree-sitter-cli@${TREE_SITTER_CLI_VERSION}"
+    cargo_binstall_tool "tree-sitter-cli@${TREE_SITTER_CLI_VERSION}"
 
 log_command "Installing cargo-watch" \
-    su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/cargo install --locked cargo-watch@${CARGO_WATCH_VERSION}"
+    cargo_binstall_tool "cargo-watch@${CARGO_WATCH_VERSION}"
 
 log_command "Installing cargo-expand" \
-    su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/cargo install --locked cargo-expand@${CARGO_EXPAND_VERSION}"
+    cargo_binstall_tool "cargo-expand@${CARGO_EXPAND_VERSION}"
 
 log_command "Installing cargo-modules" \
-    su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/cargo install --locked cargo-modules@${CARGO_MODULES_VERSION}"
+    cargo_binstall_tool "cargo-modules@${CARGO_MODULES_VERSION}"
 
 log_command "Installing cargo-outdated" \
-    su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/cargo install --locked cargo-outdated@${CARGO_OUTDATED_VERSION}"
+    cargo_binstall_tool "cargo-outdated@${CARGO_OUTDATED_VERSION}"
 
 log_command "Installing cargo-sweep" \
-    su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/cargo install --locked cargo-sweep@${CARGO_SWEEP_VERSION}"
+    cargo_binstall_tool "cargo-sweep@${CARGO_SWEEP_VERSION}"
 
 log_command "Installing cargo-audit" \
-    su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/cargo install --locked cargo-audit@${CARGO_AUDIT_VERSION}"
+    cargo_binstall_tool "cargo-audit@${CARGO_AUDIT_VERSION}"
 
 log_command "Installing cargo-deny" \
-    su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/cargo install --locked cargo-deny@${CARGO_DENY_VERSION}"
+    cargo_binstall_tool "cargo-deny@${CARGO_DENY_VERSION}"
 
 log_command "Installing cargo-geiger" \
-    su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/cargo install --locked cargo-geiger@${CARGO_GEIGER_VERSION}"
+    cargo_binstall_tool "cargo-geiger@${CARGO_GEIGER_VERSION}"
 
 log_command "Installing cargo-machete" \
-    su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/cargo install --locked cargo-machete@${CARGO_MACHETE_VERSION}"
+    cargo_binstall_tool "cargo-machete@${CARGO_MACHETE_VERSION}"
 
 log_command "Installing cargo-nextest" \
-    su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/cargo install --locked cargo-nextest@${NEXTEST_VERSION}"
+    cargo_binstall_tool "cargo-nextest@${NEXTEST_VERSION}"
 
 # cargo-llvm-cov drives `cargo` with LLVM source-based coverage instrumentation;
 # the llvm-tools-preview component ships profdata/cov binaries it shells out to.
@@ -174,38 +220,38 @@ log_command "Adding llvm-tools-preview rustup component for cargo-llvm-cov" \
     su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/rustup component add llvm-tools-preview"
 
 log_command "Installing cargo-llvm-cov" \
-    su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/cargo install --locked cargo-llvm-cov@${LLVM_COV_VERSION}"
+    cargo_binstall_tool "cargo-llvm-cov@${LLVM_COV_VERSION}"
 
 log_command "Installing bacon" \
-    su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/cargo install --locked bacon@${BACON_VERSION}"
+    cargo_binstall_tool "bacon@${BACON_VERSION}"
 
 log_command "Installing tokei" \
-    su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/cargo install --locked tokei@${TOKEI_VERSION}"
+    cargo_binstall_tool "tokei@${TOKEI_VERSION}"
 
 log_command "Installing hyperfine" \
-    su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/cargo install --locked hyperfine@${HYPERFINE_CARGO_VERSION}"
+    cargo_binstall_tool "hyperfine@${HYPERFINE_CARGO_VERSION}"
 
 # Skip if already installed by dev-tools
 if ! command -v just &>/dev/null; then
     log_command "Installing just" \
-        su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/cargo install --locked just@${JUST_CARGO_VERSION}"
+        cargo_binstall_tool "just@${JUST_CARGO_VERSION}"
 else
     log_message "just already installed, skipping..."
 fi
 
 log_command "Installing sccache" \
-    su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/cargo install --locked sccache@${SCCACHE_VERSION}"
+    cargo_binstall_tool "sccache@${SCCACHE_VERSION}"
 
 log_command "Installing mdbook" \
-    su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/cargo install --locked mdbook@${MDBOOK_VERSION}"
+    cargo_binstall_tool "mdbook@${MDBOOK_VERSION}"
 
 log_command "Installing cargo-release" \
-    su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/cargo install --locked cargo-release@${CARGO_RELEASE_VERSION}"
+    cargo_binstall_tool "cargo-release@${CARGO_RELEASE_VERSION}"
 
 # Install taplo-cli (TOML formatter/linter) if not already installed by dev-tools
 if ! command -v taplo &>/dev/null; then
     log_command "Installing taplo-cli" \
-        su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/cargo install --locked taplo-cli@${TAPLO_CLI_VERSION}"
+        cargo_binstall_tool "taplo-cli@${TAPLO_CLI_VERSION}"
 else
     log_message "taplo already installed, skipping..."
 fi

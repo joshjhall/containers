@@ -109,3 +109,36 @@ available at runtime**.
 - Cache mounts only exist during `docker build`
 - At runtime, `/var/cache/apt` is empty (not a problem for running containers)
 - Language caches use `/cache` directory which IS stored in the image
+
+### Why `/cache/cargo` and `/cache/r` are NOT cache-mounted
+
+It is tempting to add `--mount=type=cache,target=/cache/cargo` (or
+`/cache/r`) to speed up the rust-dev / r-dev layers. **Don't** — for these
+features `/cache` is not just a build cache, it is the *runtime install
+location*:
+
+- rust installs its binaries into `/cache/cargo/bin` and symlinks them into
+  `/usr/local/bin`; `/cache/cargo/bin` is also on the runtime `PATH`.
+- r installs packages into `/cache/r/library`, which is the runtime
+  `R_LIBS_USER` / `R_LIBS_SITE` (set in `/etc/R/Renviron.site`).
+
+A `type=cache` mount over those paths is discarded when the layer commits, so
+the installed tools/packages would **vanish from the final image** and the
+symlinks would dangle. Cache mounts are only safe on paths that are *purely*
+transient build caches (like `/var/cache/apt`).
+
+### How the rust cold-build cost was reduced instead (#517)
+
+Rather than cache-mounting `/cache/cargo`, the rust feature scripts install
+their cargo tools with **`cargo binstall`** — it downloads a prebuilt,
+checksum-verified binary per crate instead of compiling from source. This
+removes almost all of the cold-cache compile time that was blowing the CI
+`build-feature` timeout, with no cache-persistence machinery and no risk to the
+runtime image. `binstall` transparently falls back to `cargo install` for any
+crate lacking a prebuilt binary. The `cargo-binstall` installer itself is a
+prebuilt binary pinned in `lib/checksums.json` (Tier 2). See
+`lib/features/rust.sh` and `lib/features/rust-dev.sh`.
+
+> r-dev's CRAN compile and java-dev's JDK/apt cost are not yet addressed by
+> this approach (R packages would need a binary package repo such as Posit
+> PPM; java-dev compiles nothing at build time). Tracked as the #517 follow-up.

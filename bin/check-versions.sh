@@ -288,7 +288,10 @@ extract_all_versions() {
     _add_feature_version MDBOOK_TOC_VERSION "mdbook-toc" "rust.sh"
     _add_feature_version MDBOOK_ADMONISH_VERSION "mdbook-admonish" "rust.sh"
 
-    # Cargo tools from rust-dev.sh (pinned cargo install targets)
+    # Cargo tools from rust-dev.sh (pinned cargo binstall targets)
+    # cargo-binstall is the prebuilt-binary installer used to fetch the tools
+    # below; its checksum is pinned in lib/checksums.json (keep in sync on bump).
+    _add_feature_version CARGO_BINSTALL_VERSION "cargo-binstall" "rust-dev.sh"
     _add_feature_version TREE_SITTER_CLI_VERSION "tree-sitter-cli" "rust-dev.sh"
     _add_feature_version CARGO_EXPAND_VERSION "cargo-expand" "rust-dev.sh"
     _add_feature_version CARGO_MODULES_VERSION "cargo-modules" "rust-dev.sh"

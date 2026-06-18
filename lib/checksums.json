@@ -667,6 +667,23 @@
           "added": "2026-06-15"
         }
       }
+    },
+    "cargo-binstall": {
+      "versions": {
+        "1.20.0": {
+          "checksums": {
+            "amd64": {
+              "sha256": "4d7875788d0505547c220d2b02d3619aac0dd19b7033eba7005a8d09ff1dc433",
+              "url": "https://github.com/cargo-bins/cargo-binstall/releases/download/v1.20.0/cargo-binstall-x86_64-unknown-linux-musl.tgz"
+            },
+            "arm64": {
+              "sha256": "3e85b6bbdf971806562ea4070bb4bdae8591fb7bcc2e0f4ea693f40c4ab92159",
+              "url": "https://github.com/cargo-bins/cargo-binstall/releases/download/v1.20.0/cargo-binstall-aarch64-unknown-linux-musl.tgz"
+            }
+          },
+          "added": "2026-06-17"
+        }
+      }
     }
   },
   "metadata": {

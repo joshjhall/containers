@@ -91,11 +91,18 @@ jobs:
           #   (a) known-broken in isolation — each entry has a tracking issue
           #   (b) build time exceeds the per-cell timeout even with warm
           #       cache, making PR-tier feedback unreliable
-          # Skipped features are still exercised by the merge tier.
+          # Skipped features are still exercised by the merge tier (ci.yml,
+          # which has no per-cell timeout cap).
           # Entries:
-          #   r-dev — exceeds 25min PR-tier ceiling (CRAN package set);
-          #           covered by merge-tier `r-dev` variant in ci.yml
-          SKIP_LIST='^(r-dev)$'
+          #   r-dev    — exceeds the PR-tier ceiling (CRAN package set compiled
+          #              from source); covered by merge-tier `r-dev` in ci.yml
+          #   rust-dev — even after #517 switched its cargo suite to
+          #              `cargo binstall`, a fully cold PR build (base image +
+          #              all prior layers, no gha cache) still approaches the
+          #              40min cap. Covered by merge-tier `rust-golang`. Tracked
+          #              in #531 (deeper optimization / install less); largely
+          #              moot once critical mass moves to v5.
+          SKIP_LIST='^(r-dev|rust-dev)$'
           FILTERED=$(printf '%s\n' "${OUT}" | grep -vE "${SKIP_LIST}" || true)
 
           if [ -z "${FILTERED}" ]; then
