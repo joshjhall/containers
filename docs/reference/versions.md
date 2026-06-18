@@ -60,29 +60,46 @@ These are defined as build arguments in the Dockerfile:
 - `MVND_VERSION="1.0.3"` (indented)
 - `GJF_VERSION="1.34.1"`
 
-## Tools Installed Without Version Pinning
+## Tools Installed by Package Manager
 
-These tools get the latest version at build time, which is generally fine:
+Grouped by installer. The cargo tools below are version-pinned and tracked by
+`check-versions.sh`; the npm/gem groups take the latest at build time, which is
+generally fine.
 
-### Via cargo install (in rust-dev.sh)
+### Via cargo binstall (in rust.sh and rust-dev.sh)
+
+Installed with `cargo binstall` — it downloads a prebuilt, checksum-verified
+binary for each crate instead of compiling from source, which is the fix for
+the CI cold-build timeout (#517). `binstall` falls back to `cargo install` for
+any crate without a prebuilt binary. All are `--locked` and pinned to a
+`@${VAR}` version (see `bin/check-versions.sh`):
 
 - tree-sitter-cli
 - cargo-watch
-- cargo-edit
 - cargo-expand
+- cargo-modules
 - cargo-outdated
+- cargo-sweep
+- cargo-audit
+- cargo-deny
+- cargo-geiger
 - cargo-machete
 - cargo-nextest
 - cargo-llvm-cov (also adds the `llvm-tools-preview` rustup component)
+- cargo-release
 - bacon
 - tokei
 - hyperfine
 - just
 - sccache
-- mdbook (and extensions)
+- mdbook (and the mdbook-mermaid/-toc/-admonish extensions, in rust.sh)
+- taplo-cli
 
-### Via pre-built binary (in rust-dev.sh)
+### Via pre-built binary (in rust.sh / rust-dev.sh)
 
+- cargo-binstall (the binstall installer itself; tarball from
+  `cargo-bins/cargo-binstall/releases`, `CARGO_BINSTALL_VERSION`, Tier 2 pinned
+  checksum in `lib/checksums.json`)
 - mold (Linux fast linker; tarball from `rui314/mold/releases`, `MOLD_VERSION`)
 
 ### Via npm install -g (in node-dev.sh)
@@ -157,12 +174,14 @@ These tools get the latest version at build time, which is generally fine:
 
 These tools get the latest stable version by design:
 
-1. **Package manager installed tools** (cargo, npm, gem)
+1. **Package manager installed tools** (npm, gem)
 
-   - cargo-watch, tree-sitter-cli, tokei, etc. (via cargo install)
    - typescript, jest, vitest, etc. (via npm install -g)
    - bundler, rails, rspec, etc. (via gem install)
    - These package managers handle their own versioning and updates
+   - Note: cargo tools (cargo-watch, tree-sitter-cli, sccache, …) ARE pinned
+     and tracked — they install via `cargo binstall --locked @${VAR}`, not
+     unpinned `cargo install`
 
 1. **System packages** (via apt-get)
 

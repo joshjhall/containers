@@ -45,14 +45,22 @@ source /tmp/build-scripts/base/version-resolution.sh
 source /tmp/build-scripts/base/cache-utils.sh
 source /tmp/build-scripts/base/path-utils.sh
 
+# Source GitHub release installer for binary tool downloads (used for cargo-binstall)
+source /tmp/build-scripts/features/lib/install-github-release.sh
+
 # ============================================================================
 # Version Configuration
 # ============================================================================
 RUST_VERSION="${RUST_VERSION:-1.96.0}"
 
-# Cargo tool versions. Every cargo install must be --locked and pinned to an
+# Cargo tool versions. Every cargo (b)install must be --locked and pinned to an
 # explicit @version so upstream drift on crates.io cannot retroactively break
 # a previously-working build. Auto-bumped weekly via bin/check-versions.sh.
+# Tools are installed with `cargo binstall` (prebuilt, checksum-verified
+# binaries) to avoid the from-source compile that blew the CI timeout (#517);
+# binstall falls back to `cargo install` for any crate lacking a prebuilt
+# binary. CARGO_BINSTALL_VERSION is kept in sync with rust-dev.sh.
+CARGO_BINSTALL_VERSION="${CARGO_BINSTALL_VERSION:-1.20.0}"
 CARGO_WATCH_VERSION="${CARGO_WATCH_VERSION:-8.5.3}"
 MDBOOK_VERSION="${MDBOOK_VERSION:-0.5.2}"
 MDBOOK_MERMAID_VERSION="${MDBOOK_MERMAID_VERSION:-0.17.0}"
@@ -139,24 +147,42 @@ log_message "Installing system dependencies for Rust tooling (build-essential)"
 apt_update
 apt_install build-essential pkg-config
 
+# Bootstrap cargo-binstall from its prebuilt release so the cargo tools below
+# download as prebuilt, checksum-verified binaries instead of compiling from
+# source (#517). install_github_release runs it through the 4-tier verifier
+# (Tier 2 pinned checksum in lib/checksums.json) before placing it in
+# /usr/local/bin. binstall falls back to `cargo install` for any crate without
+# a prebuilt binary, so correctness is preserved.
+log_message "Installing cargo-binstall ${CARGO_BINSTALL_VERSION}..."
+install_github_release "cargo-binstall" "${CARGO_BINSTALL_VERSION}" \
+    "https://github.com/cargo-bins/cargo-binstall/releases/download/v${CARGO_BINSTALL_VERSION}" \
+    "cargo-binstall-x86_64-unknown-linux-musl.tgz" \
+    "cargo-binstall-aarch64-unknown-linux-musl.tgz" \
+    "calculate" "extract_flat:cargo-binstall"
+
 log_command "Installing cargo development tools" \
     su - "${USERNAME}" -c "
     export CARGO_HOME='${CARGO_HOME}'
     export RUSTUP_HOME='${RUSTUP_HOME}'
+    export GITHUB_TOKEN='${GITHUB_TOKEN:-}'
     source ${CARGO_HOME}/env
+
+    # cargo binstall flags: --locked (honour Cargo.lock), --no-confirm
+    # (non-interactive), --disable-telemetry (no phone-home during builds).
+    binstall() { cargo binstall --locked --no-confirm --disable-telemetry \"\$@\"; }
 
     # cargo-watch: Automatically re-run commands when files change
     # Note: cargo add/remove are now built into Cargo 1.62+, no need for cargo-edit
     echo 'Installing development tools...'
-    cargo install --locked cargo-watch@${CARGO_WATCH_VERSION}
+    binstall cargo-watch@${CARGO_WATCH_VERSION}
 
     # mdBook: Create books from Markdown (Rust's documentation standard)
     # Includes plugins for enhanced documentation features
     echo 'Installing mdBook documentation tools...'
-    cargo install --locked mdbook@${MDBOOK_VERSION}
-    cargo install --locked mdbook-mermaid@${MDBOOK_MERMAID_VERSION}
-    cargo install --locked mdbook-toc@${MDBOOK_TOC_VERSION}
-    cargo install --locked mdbook-admonish@${MDBOOK_ADMONISH_VERSION}
+    binstall mdbook@${MDBOOK_VERSION}
+    binstall mdbook-mermaid@${MDBOOK_MERMAID_VERSION}
+    binstall mdbook-toc@${MDBOOK_TOC_VERSION}
+    binstall mdbook-admonish@${MDBOOK_ADMONISH_VERSION}
 "
 
 # ============================================================================
