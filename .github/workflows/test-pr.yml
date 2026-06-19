@@ -145,15 +145,19 @@ jobs:
     needs: detect-changes
     if: needs.detect-changes.outputs.mode != 'skip'
     runs-on: ubuntu-latest
-    # 15 min ceiling — the acceptance target for a typical single-feature
-    # change. The cells that couldn't fit are now on the SKIP_LIST above:
-    # rust-dev (cold cargo build, covered by merge-tier `rust-golang`) and
-    # java-dev (apt/download-bound JDK+tools; merge-tier entry pending, see
-    # the SKIP_LIST note). r-dev used to need ~25min compiling its CRAN set
-    # from source, but #531 switched it to Posit Package Manager binary
-    # packages, so it now installs without compiling and fits this cap. See
-    # #517/#531 for the cold-build reductions.
-    timeout-minutes: 15
+    # 25 min ceiling — down from 40 (#531). The <15min acceptance target is for
+    # a *typical* single-feature change (most cells finish well under), but a
+    # foundational change (Dockerfile / lib/base / a workflow edit) triggers a
+    # full cold cluster, and the heaviest non-skip-listed cells need more than
+    # 15min cold: CI measured golang-dev at ~15m and python-dev at ~14m. 25min
+    # keeps those green with margin while still roughly halving the old cap.
+    # r-dev used to need ~25min compiling its CRAN set from source, but #531
+    # switched it to Posit Package Manager binary packages so it now installs
+    # without compiling. The two cells that still can't fit are SKIP_LISTed
+    # above: rust-dev (cold cargo build, covered by merge-tier `rust-golang`)
+    # and java-dev (apt/download-bound; merge-tier entry pending, see #536).
+    # See #517/#531 for the cold-build reductions.
+    timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
