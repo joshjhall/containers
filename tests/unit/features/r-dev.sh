@@ -70,6 +70,30 @@ test_language_server() {
 }
 
 # ============================================================================
+# PPM Binary Repo Tests (#531)
+# ============================================================================
+
+test_installs_from_ppm() {
+    assert_file_contains "$SOURCE_FILE" "R_PPM_REPO" \
+        "r-dev.sh resolves the PPM binary repo for package installs"
+    assert_file_contains "$SOURCE_FILE" "packagemanager.posit.co" \
+        "r-dev.sh defaults to the Posit Package Manager repo"
+}
+
+test_no_hardcoded_cran_compile_repo() {
+    # The dev-tools and languageserver installs must not pin
+    # cloud.r-project.org (which would force a from-source compile and defeat
+    # the #531 fix). PPM is the default; CRAN only appears as a runtime fallback.
+    assert_file_not_contains "$SOURCE_FILE" "repos='https://cloud.r-project.org/'" \
+        "r-dev.sh does not hardcode the CRAN source repo for installs"
+}
+
+test_ppm_user_agent() {
+    assert_file_contains "$SOURCE_FILE" "HTTPUserAgent" \
+        "r-dev.sh sets HTTPUserAgent so PPM serves binaries"
+}
+
+# ============================================================================
 # Configuration Tests
 # ============================================================================
 
@@ -86,6 +110,9 @@ run_test test_sources_apt_utils "Sources apt-utils.sh"
 run_test test_prerequisite_check_for_r "Prerequisite check for R binary"
 run_test test_dev_packages "Dev packages (devtools, testthat)"
 run_test test_language_server "Language server (languageserver)"
+run_test test_installs_from_ppm "Installs from PPM binary repo"
+run_test test_no_hardcoded_cran_compile_repo "No hardcoded CRAN source repo"
+run_test test_ppm_user_agent "Sets HTTPUserAgent for PPM"
 run_test test_bashrc_config "Bashrc config (45-r-dev.sh)"
 
 generate_report

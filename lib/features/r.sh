@@ -50,6 +50,25 @@ validate_r_version "$R_VERSION" || {
 R_VERSION_MAJOR=$(echo "${R_VERSION}" | command cut -d. -f1)
 R_VERSION_SHORT="${R_VERSION_MAJOR}0"
 
+# ============================================================================
+# Posit Package Manager (PPM) binary repository
+# ============================================================================
+# CRAN ships R packages as source by default, so install.packages() compiles
+# from source — the cold cost that blew the r-dev CI build budget (#531).
+# PPM serves prebuilt binary packages for Debian 11/12/13 via its
+# __linux__/<codename>/<snapshot> path; install.packages() untars them with no
+# compile. Pin a dated snapshot for reproducibility. Both the build scripts and
+# the runtime R config (Renviron.site + Rprofile.site) read R_PPM_REPO so user
+# install.packages() also gets binaries. Override either var at build time.
+# VERSION_CODENAME comes from /etc/os-release (sourced by feature-header.sh).
+#
+# NOTE: PPM Linux binaries are x86_64 only. On aarch64/arm64 PPM transparently
+# serves source, so install.packages() still compiles — which is why r-dev's
+# apt build-dependency set is kept as a safety net. The PR-tier CI cell that
+# this targets is amd64 (debian:trixie x amd64, #408), so it gets binaries.
+R_PPM_SNAPSHOT="${R_PPM_SNAPSHOT:-2026-06-02}"
+R_PPM_REPO="${R_PPM_REPO:-https://packagemanager.posit.co/cran/__linux__/${VERSION_CODENAME}/${R_PPM_SNAPSHOT}}"
+
 # Start logging
 log_feature_start "R" "${R_VERSION}"
 
@@ -326,6 +345,9 @@ install -m 644 /tmp/build-scripts/features/lib/r/Rprofile.site \
     /etc/R/Rprofile.site
 
 # Create system-wide Renviron
+# R_PPM_REPO is read by Rprofile.site (and the r-dev install scripts) to serve
+# prebuilt binary packages from Posit Package Manager instead of compiling from
+# source. Unquoted heredoc so ${R_PPM_REPO} interpolates.
 command cat >/etc/R/Renviron.site <<EOF
 # System-wide R environment variables
 R_LIBS_USER=/cache/r/library
@@ -333,6 +355,7 @@ R_LIBS_SITE=/cache/r/library
 R_MAX_NUM_DLLS=150
 R_INSTALL_STAGED=FALSE
 TMPDIR=/cache/r/tmp
+R_PPM_REPO=${R_PPM_REPO}
 EOF
 
 # ============================================================================
@@ -378,13 +401,14 @@ log_command "Final ownership fix for R cache directories" \
 export R_CACHE_DIR="/cache/r"
 export R_LIBS_SITE="/cache/r/library"
 export R_LIBS_USER="/cache/r/library"
+export R_PPM_REPO
 
 log_feature_summary \
     --feature "R" \
     --version "${R_VERSION}" \
     --tools "R,Rscript" \
     --paths "${R_LIBS_USER},${R_LIBS_SITE},${R_CACHE_DIR}" \
-    --env "R_LIBS_USER,R_LIBS_SITE,R_CACHE_DIR,R_VERSION" \
+    --env "R_LIBS_USER,R_LIBS_SITE,R_CACHE_DIR,R_VERSION,R_PPM_REPO" \
     --commands "R,Rscript,r-version,r-install-packages,r-update-packages,r-clean-cache" \
     --next-steps "Run 'test-r' to verify installation. Use 'R' for interactive console, 'Rscript' for scripts. Install packages with 'r-install-packages <pkg1> <pkg2>'."
 

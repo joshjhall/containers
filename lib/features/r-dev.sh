@@ -74,14 +74,24 @@ log_message "Preparing R package installation..."
 export R_LIBS_USER="/cache/r/library"
 export R_LIBS_SITE="/cache/r/library"
 
+# Recompute the Posit Package Manager binary repo (same default as r.sh) so
+# package installs below pull prebuilt binaries instead of compiling from
+# source (#531). VERSION_CODENAME comes from /etc/os-release via feature-header.
+R_PPM_SNAPSHOT="${R_PPM_SNAPSHOT:-2026-06-02}"
+R_PPM_REPO="${R_PPM_REPO:-https://packagemanager.posit.co/cran/__linux__/${VERSION_CODENAME}/${R_PPM_SNAPSHOT}}"
+export R_PPM_REPO
+
 # Ensure Renviron.site has our library paths (may have been overwritten by
-# apt operations between the r.sh and r-dev.sh build layers)
-command cat >/etc/R/Renviron.site <<'RENVIRON_SITE'
+# apt operations between the r.sh and r-dev.sh build layers). Re-assert
+# R_PPM_REPO too so the binary repo survives this rewrite. Unquoted heredoc so
+# ${R_PPM_REPO} interpolates.
+command cat >/etc/R/Renviron.site <<RENVIRON_SITE
 R_LIBS_USER=/cache/r/library
 R_LIBS_SITE=/cache/r/library
 R_MAX_NUM_DLLS=150
 R_INSTALL_STAGED=FALSE
 TMPDIR=/cache/r/tmp
+R_PPM_REPO=${R_PPM_REPO}
 RENVIRON_SITE
 
 BUILD_TEMP=$(create_secure_temp_dir)
@@ -90,12 +100,27 @@ BUILD_TEMP=$(create_secure_temp_dir)
 command cat >"${BUILD_TEMP}/install_r_dev_tools.R" <<'EOF'
 # R Development Tools Installation Script
 
-# Use CRAN mirror
-options(repos = c(CRAN = "https://cloud.r-project.org/"))
+# Prefer the Posit Package Manager binary repo (R_PPM_REPO, exported from the
+# build script) so packages install as prebuilt binaries instead of compiling
+# from source — the cold-build cost addressed in #531. Fall back to CRAN if the
+# variable is unset.
+ppm_repo <- Sys.getenv("R_PPM_REPO", "")
+if (nzchar(ppm_repo)) {
+  options(repos = c(CRAN = ppm_repo))
+  # PPM serves the binary matching this R version only when the User-Agent
+  # advertises the R version and platform.
+  options(HTTPUserAgent = sprintf(
+    "R/%s R (%s)",
+    getRversion(),
+    paste(getRversion(), R.version$platform, R.version$arch, R.version$os)
+  ))
+} else {
+  options(repos = c(CRAN = "https://cloud.r-project.org/"))
+}
 
 # Configure for faster installation
 options(
-  # Use all available cores for compilation
+  # Use all available cores (binary installs need few; source fallback uses all)
   Ncpus = parallel::detectCores(),
   # Increase timeout for slow downloads
   timeout = 300,
@@ -166,8 +191,8 @@ cat("R development tools installation complete!\n")
 EOF
 
 # Run the installation script as the user
-log_command "Installing R development packages (this may take 25-30 minutes due to tidyverse)" \
-    su - "${USERNAME}" -c "export R_LIBS_USER='${R_LIBS_USER}' R_LIBS_SITE='${R_LIBS_SITE}' && /usr/local/bin/Rscript '${BUILD_TEMP}/install_r_dev_tools.R'"
+log_command "Installing R development packages from PPM binaries" \
+    su - "${USERNAME}" -c "export R_LIBS_USER='${R_LIBS_USER}' R_LIBS_SITE='${R_LIBS_SITE}' R_PPM_REPO='${R_PPM_REPO}' && /usr/local/bin/Rscript '${BUILD_TEMP}/install_r_dev_tools.R'"
 
 # ============================================================================
 # Shell Aliases and Functions
@@ -341,9 +366,10 @@ log_command "Setting test-r-dev script permissions" \
 # ============================================================================
 log_message "Installing R language server for IDE support..."
 
-# Install R languageserver package
+# Install R languageserver package. Repo + HTTPUserAgent come from
+# Rprofile.site (which reads R_PPM_REPO), so it installs as a PPM binary too.
 log_command "Installing R languageserver" \
-    su - "${USERNAME}" -c "export R_LIBS_USER='${R_LIBS_USER}' R_LIBS_SITE='${R_LIBS_SITE}' && /usr/local/bin/Rscript -e \"install.packages('languageserver', repos='https://cloud.r-project.org/', quiet=TRUE)\""
+    su - "${USERNAME}" -c "export R_LIBS_USER='${R_LIBS_USER}' R_LIBS_SITE='${R_LIBS_SITE}' R_PPM_REPO='${R_PPM_REPO}' && /usr/local/bin/Rscript -e \"install.packages('languageserver', quiet=TRUE)\""
 
 # Verify LSP installation
 if R_LIBS_USER="${R_LIBS_USER}" /usr/local/bin/Rscript -e "library(languageserver)" &>/dev/null; then

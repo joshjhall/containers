@@ -108,6 +108,45 @@ test_rprofile_site_configuration() {
         "r.sh creates Rprofile.site configuration"
 }
 
+# ============================================================================
+# Posit Package Manager (PPM) Binary Repo Tests (#531)
+# ============================================================================
+
+test_ppm_repo_configured() {
+    assert_file_contains "$SOURCE_FILE" "packagemanager.posit.co" \
+        "r.sh configures the Posit Package Manager binary repo"
+    assert_file_contains "$SOURCE_FILE" "__linux__" \
+        "r.sh uses the PPM __linux__ binary path"
+}
+
+test_ppm_snapshot_pinned() {
+    assert_file_contains "$SOURCE_FILE" 'R_PPM_SNAPSHOT="${R_PPM_SNAPSHOT:-' \
+        "r.sh pins the PPM snapshot with an overridable default"
+}
+
+test_ppm_repo_in_renviron() {
+    assert_file_contains "$SOURCE_FILE" 'R_PPM_REPO=${R_PPM_REPO}' \
+        "r.sh writes R_PPM_REPO into Renviron.site"
+}
+
+# Rprofile.site is installed verbatim from lib/features/lib/r/Rprofile.site
+RPROFILE_FILE="$PROJECT_ROOT/lib/features/lib/r/Rprofile.site"
+
+test_rprofile_reads_ppm_repo() {
+    assert_file_contains "$RPROFILE_FILE" "R_PPM_REPO" \
+        "Rprofile.site reads R_PPM_REPO"
+}
+
+test_rprofile_sets_user_agent() {
+    assert_file_contains "$RPROFILE_FILE" "HTTPUserAgent" \
+        "Rprofile.site sets HTTPUserAgent so PPM serves binaries"
+}
+
+test_rprofile_cran_fallback() {
+    assert_file_contains "$RPROFILE_FILE" "cloud.r-project.org" \
+        "Rprofile.site falls back to CRAN when R_PPM_REPO is unset"
+}
+
 run_test test_script_exists_and_executable "Script exists and is executable"
 run_test test_uses_strict_mode "Uses set -euo pipefail"
 run_test test_sources_feature_header "Sources feature-header.sh"
@@ -123,5 +162,11 @@ run_test test_cache_directory "Cache directory (/cache/r, R_LIBS_USER)"
 run_test test_bashrc_config "Bashrc config (40-r.sh)"
 run_test test_renviron_site_configuration "Renviron.site configuration"
 run_test test_rprofile_site_configuration "Rprofile.site configuration"
+run_test test_ppm_repo_configured "PPM binary repo configured"
+run_test test_ppm_snapshot_pinned "PPM snapshot pinned (overridable)"
+run_test test_ppm_repo_in_renviron "R_PPM_REPO written into Renviron.site"
+run_test test_rprofile_reads_ppm_repo "Rprofile.site reads R_PPM_REPO"
+run_test test_rprofile_sets_user_agent "Rprofile.site sets HTTPUserAgent"
+run_test test_rprofile_cran_fallback "Rprofile.site CRAN fallback"
 
 generate_report
