@@ -11,6 +11,26 @@ state cleanup.
 **Prerequisite**: Implementation and testing must be complete before invoking
 this skill. The state file written by `/next-issue` must exist.
 
+## Autonomous Mode
+
+The run is **autonomous** when ANY of the following holds: the literal token
+`--auto` appears in the invocation arguments, the environment variable
+`NEXT_ISSUE_AUTONOMOUS=1` is set, OR the state file read in Step 1 has
+`"autonomous": true`. Autonomy is strictly opt-in.
+
+When autonomous:
+
+- Do NOT call `AskUserQuestion` anywhere in this skill. Every gate takes its
+  documented default with no interactive tool call.
+- Always Branch + PR (Option 1), regardless of branch name.
+- Always wait for CI and auto-fix failures (no prompt).
+- Stop at green CI with a structured completion summary for human merge (see
+  Option 1 "Autonomous completion summary"). Never auto-merge unless
+  `AUTOMERGE=1`.
+
+When NOT autonomous, behavior is unchanged — every interactive prompt below
+runs verbatim as the default.
+
 ## Environment Variables
 
 Two env vars toggle non-default behavior; both are opt-in:
@@ -39,7 +59,8 @@ Two env vars toggle non-default behavior; both are opt-in:
        — read its `issue:` field, migrate to `.claude/memory/tmp/next-issue-{N}.json`
 
 1. Extract: `issue` (number), `title`, `platform` (`github` or `gitlab`),
-   `branch` (if set)
+   `branch` (if set), `autonomous` (boolean — feeds the autonomy toggle
+   above), and `plan_comment_url` (if present)
 
 1. If no state file is found, tell the user:
 
@@ -66,17 +87,24 @@ Check if the current branch is an agent worktree:
 CURRENT_BRANCH=$(git branch --show-current)
 ```
 
-If `$CURRENT_BRANCH` matches `^agent` (e.g., `agent01`, `agent02`):
+Apply this precedence (first match wins):
 
-- **Skip Step 3** (do not ask the user for shipping mode)
-- **Go directly to Option 3** (commit only, no push)
-- Agents never create PRs or push — the orchestrator owns delivery
+1. **If autonomous**: skip Step 3, go to Option 1 (Branch + PR) regardless of
+   branch name (including `^agent`).
+1. **Else if `$CURRENT_BRANCH` matches `^agent`** (e.g., `agent01`, `agent02`):
+   - **Skip Step 3** (do not ask the user for shipping mode)
+   - **Go directly to Option 3** (commit only, no push)
+   - Agents never create PRs or push — the orchestrator owns delivery
+1. **Else** (branch does not match `^agent`): proceed to Step 3 as normal.
 
-If the branch does not match `^agent`, proceed to Step 3 as normal.
+Autonomous mode decouples commit-only from `^agent` detection — autonomy
+pushes and opens a PR; commit-only remains the default for `^agent` branches
+only in non-autonomous (legacy local-merge) runs.
 
 ## Step 3 — Choose Shipping Mode
 
-Use `AskUserQuestion` to present three options:
+When autonomous, skip the prompt and select Option 1 (Branch + PR). Otherwise
+use `AskUserQuestion` to present three options:
 
 **Option 1 — Branch + PR** (recommended for feature work):
 
@@ -110,6 +138,12 @@ Before executing the chosen shipping mode, run these safety checks:
        create a PR with failing tests. The user must fix first or switch to
        Option 3 (commit only)
      - **Option 2/3**: test failure is **advisory** — warn but allow commit
+     - **When autonomous** (always Option 1): test failure stays **blocking**
+       — never open a PR with red tests — but do NOT prompt. Attempt an
+       autonomous fix in a capped loop (cap at 3 attempts), re-running tests
+       each time. If still failing after the cap, STOP and emit the
+       structured completion summary (see Option 1 "Autonomous completion
+       summary") reporting the test failure, rather than asking
    - If **no test runner detected**: skip this check and note it in the output
 
 1. **Verify git status** — check for untracked files that look like they
@@ -126,6 +160,9 @@ Before executing the chosen shipping mode, run these safety checks:
    If count > 0, warn: "Main has {N} new commits since this branch was
    created. Consider rebasing before PR."
 
+   When autonomous, do not prompt — branch freshness is advisory; record the
+   warning as a note for the completion summary and proceed.
+
 1. **Check for plan drift** (optional) — fetch the issue body and check for
    "Affected Files" or "Acceptance Criteria" sections. If either exists,
    run drift analysis (see `drift-detect` skill for full workflow):
@@ -139,6 +176,9 @@ Before executing the chosen shipping mode, run these safety checks:
    - **If no plan sections found in issue**: skip this check silently
 
    This check is advisory — the user can always choose to ship anyway.
+
+   When autonomous, do not prompt — drift is advisory; record any findings as
+   notes for the completion summary and proceed.
 
 1. **Pre-review gates** (advisory by default) — run deterministic quality
    scanning on changed files to catch mechanical issues before review:
@@ -191,6 +231,13 @@ Before executing the chosen shipping mode, run these safety checks:
    - 2x debug-statement (src/handler.py:42, src/utils.py:18)
    - 1x missing-test-file (src/new_module.py)
    ```
+
+   **Autonomous mode**: never prompt. Apply auto-fixes as in advisory mode and
+   record any remaining findings as notes for the completion summary (and in
+   the PR description as above). Pre-review stays advisory unless
+   `PRE_REVIEW_STRICT=true`, in which case HIGH certainty findings still block
+   Option 1 — but the run STOPS and emits the structured completion summary
+   (see Option 1 "Autonomous completion summary") rather than prompting.
 
    **Graceful degradation**: if `pre-review-gates.sh` is not found or fails
    to execute, skip this check with a note: "Pre-review gates skipped
@@ -318,6 +365,9 @@ Before executing the chosen shipping mode, run these safety checks:
    - **Wait for CI** — monitor checks and auto-fix failures if possible
    - **Skip CI monitoring** — proceed to labeling immediately
 
+   When autonomous, do not prompt — ALWAYS wait for CI and auto-fix (proceed
+   as if the user chose "Wait for CI").
+
    If the user chooses to wait:
 
    a. **Poll for check completion**:
@@ -358,7 +408,10 @@ Before executing the chosen shipping mode, run these safety checks:
        appears to be {failure_type} — {summary}. Remaining: {remainingFailures}.
        Requires manual intervention." Ask: **Fix manually now, or ship with
        failing CI?** If fix manually, pause then go back to (a); if ship anyway,
-       proceed to labeling.
+       proceed to labeling. **When autonomous**: do NOT prompt — STOP and emit
+       the structured completion summary (see "Autonomous completion summary"
+       below) noting the unresolved CI failure; do not leave the run in a
+       prompting state.
 
    The harness stops on its own once the per-check cap or the shared budget is
    reached, so there is no separate "after 3 attempts" step — surface any
@@ -390,6 +443,27 @@ Before executing the chosen shipping mode, run these safety checks:
 1. **Delete state file** (remove `.claude/memory/tmp/next-issue-{N}.json`)
 
 1. **Show the PR/MR URL** to the user
+
+1. **Autonomous completion summary** (autonomous only) — after green CI,
+   labeling, and the issue comment, emit a STRUCTURED COMPLETION SUMMARY and
+   STOP for human merge. This summary replaces the interactive Step 5 prompt
+   when autonomous. Format as a markdown block:
+
+   ```markdown
+   ## Autonomous ship summary
+
+   - **Issue**: #{N} — {title}
+   - **PR/MR**: {pr_or_mr_url}
+   - **Branch**: {branch}
+   - **CI**: {green | stopped-with-failure: {detail}}
+   - **CI fixes applied**: {count} — {one-line summaries}
+   - **Deferred notes**: {drift / branch-freshness / pre-review findings, or "none"}
+   - **Plan comment**: {plan_comment_url, if present}
+
+   No auto-merge unless `AUTOMERGE=1`. Ready for human merge.
+   ```
+
+   Then STOP — do not proceed to Step 5.
 
 ### Option 2 — Commit to main + push
 
@@ -434,6 +508,11 @@ Before executing the chosen shipping mode, run these safety checks:
 1. Tell the user the commit is local and needs to be pushed later
 
 ## Step 5 — Context Reset & Continue
+
+When autonomous, skip this step entirely — the run already emitted its
+completion summary (see Option 1 "Autonomous completion summary") and exits. A
+single golem owns one issue; looping is the orchestrator's responsibility and
+out of scope here.
 
 After shipping, tell the user:
 

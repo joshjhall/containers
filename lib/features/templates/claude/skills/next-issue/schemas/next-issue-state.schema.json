@@ -43,6 +43,14 @@
       "enum": ["github", "gitlab"],
       "description": "Issue tracker platform."
     },
+    "autonomous": {
+      "type": "boolean",
+      "description": "True when the run was started in autonomous mode (--auto flag or NEXT_ISSUE_AUTONOMOUS=1). Gates resolve to documented defaults; no interactive prompts."
+    },
+    "plan_comment_url": {
+      "type": "string",
+      "description": "URL of the issue comment where the autonomous plan was posted for traceability (autonomous mode only)."
+    },
     "contexts": {
       "type": "array",
       "items": { "type": "string" },

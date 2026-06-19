@@ -12,10 +12,39 @@ invocation.
 Accepts an optional issue number argument: `/next-issue 123` skips priority
 selection and targets that specific issue.
 
+Adding the `--auto` flag — `/next-issue 123 --auto` (or setting the
+`NEXT_ISSUE_AUTONOMOUS=1` environment variable) — runs the workflow
+autonomously: every human gate resolves to its documented default and no
+interactive tool is called. See `## Autonomous Mode` below.
+
 **IMPORTANT — Plan mode**: Use the `EnterPlanMode` tool immediately at the
 start of every `/next-issue` invocation (before any other work). Phases 0-2
 are planning phases that only need read-only tools and Bash. After Phase 2
-plan approval, use `ExitPlanMode` to begin implementation.
+plan approval, use `ExitPlanMode` to begin implementation. (In autonomous
+mode, SKIP `EnterPlanMode`/`ExitPlanMode` entirely — see `## Autonomous Mode`
+below.)
+
+## Autonomous Mode
+
+The run is **autonomous** when EITHER the literal token `--auto` appears in
+the invocation arguments OR the environment variable `NEXT_ISSUE_AUTONOMOUS=1`
+is set. Autonomy is strictly opt-in.
+
+When autonomous:
+
+- Do NOT call `EnterPlanMode`/`ExitPlanMode` or any `AskUserQuestion`. Every
+  human gate in the phases below takes its documented default with no
+  interactive tool call.
+- The run proceeds selection → plan → implement without stopping, then hands
+  off to `/next-issue-ship`, which detects autonomy independently (via the
+  same toggle and the persisted state-file signal) and continues to
+  Branch + PR.
+- Persist the signal to the state file as `"autonomous": true` (see Phase 1
+  and Phase 2 below) so `/next-issue-ship` and any post-`/clear` resume
+  inherit it.
+
+When NOT autonomous (no `--auto`, no env var), behavior is unchanged — every
+interactive prompt and plan-mode step below runs verbatim as the default.
 
 ## Agent Worktree Mode
 
@@ -39,7 +68,8 @@ Proceed with Phase 0 as normal regardless of mode.
 
 ## Phase 0 — Resume Check
 
-1. **Enter plan mode** (call `EnterPlanMode` tool)
+1. **Enter plan mode** (call `EnterPlanMode` tool) — in autonomous mode, SKIP
+   this step (no `EnterPlanMode`/`ExitPlanMode`; see `## Autonomous Mode`)
 
 1. **Legacy migration** — run in order:
 
@@ -62,6 +92,10 @@ Proceed with Phase 0 as normal regardless of mode.
    - Ask: **Which issue to resume, or start fresh?**
    - If the user picks one: validate and resume that issue (see below)
    - If start fresh: proceed to Phase 1
+   - **If autonomous AND a specific issue number was provided**: do not
+     prompt — target that issue's state non-interactively (resume its
+     recorded phase if a valid open state file exists for it, else start
+     fresh for that issue)
 
 1. **If exactly one state file exists**: validate and offer to resume (see below)
 
@@ -82,6 +116,9 @@ Proceed with Phase 0 as normal regardless of mode.
   - Ask: **Resume this work or start fresh?**
   - If resume: jump to the recorded phase
   - If fresh: delete the state file and proceed to Phase 1
+  - **If autonomous AND a specific issue number was provided**: do not
+    prompt — resume the recorded phase non-interactively (the state file is
+    already validated open above); otherwise start fresh for that issue
 
 ## Phase 1 — Select
 
@@ -107,7 +144,8 @@ Proceed with Phase 0 as normal regardless of mode.
 1. Show the selected issue to the user — title, labels, body excerpt
 
 1. Ask: **Work on this issue?** (user can accept, skip to next, or pick
-   a different one)
+   a different one) — when autonomous, accept the selected issue
+   automatically (no prompt)
 
 1. Assign the issue to yourself
 
@@ -125,9 +163,13 @@ Proceed with Phase 0 as normal regardless of mode.
      "title": "{title}",
      "phase": "select",
      "started": "{YYYY-MM-DD}",
-     "platform": "{github|gitlab}"
+     "platform": "{github|gitlab}",
+     "autonomous": {true|false}
    }
    ```
+
+   Set `"autonomous"` from the toggle (true when `--auto` or
+   `NEXT_ISSUE_AUTONOMOUS=1`, false otherwise).
 
 ## Phase 2 — Plan
 
@@ -167,6 +209,8 @@ Proceed with Phase 0 as normal regardless of mode.
      "plan": "{one-line summary}",
      "started": "{date}",
      "platform": "{platform}",
+     "autonomous": true,
+     "plan_comment_url": "{url}",
      "checkpoint": {
        "completed_phase": "plan",
        "key_decisions": ["{non-obvious choice 1}", "{non-obvious choice 2}"],
@@ -178,8 +222,27 @@ Proceed with Phase 0 as normal regardless of mode.
    }
    ```
 
+   `"plan_comment_url"` is written only in autonomous mode (see the
+   autonomous planning path below); omit it otherwise.
+
+1. **Autonomous planning path** — when autonomous, do NOT enter plan mode.
+   After exploring and forming the plan: (1) write the plan to the state file
+   exactly as above, AND (2) post the plan as an issue comment for
+   traceability —
+
+   ```bash
+   gh issue comment {N} --body "..."      # GitHub
+   glab issue note {N} --message "..."    # GitLab
+   ```
+
+   Capture the returned comment URL and record it in the state file as
+   `"plan_comment_url"`. Then proceed DIRECTLY to implementation — no
+   `ExitPlanMode`, no approval gate. Autonomous mode SKIPS both the "Exit plan
+   mode" and "Suggest context reset" steps below.
+
 1. **Exit plan mode** (call `ExitPlanMode` tool) — this presents the plan to
-   the user for approval before implementation begins
+   the user for approval before implementation begins. (Skipped when
+   autonomous — see the autonomous planning path above.)
 
 1. **Suggest context reset** — after plan approval, tell the user:
 
@@ -187,7 +250,8 @@ Proceed with Phase 0 as normal regardless of mode.
    > `.claude/memory/tmp/next-issue-{N}.json`. Run `/clear` then `/next-issue`
    > to resume from implementation.
 
-   This is advisory — continue normally if the user declines.
+   This is advisory — continue normally if the user declines. (Skipped when
+   autonomous — see the autonomous planning path above.)
 
 ## Platform Detection
 
