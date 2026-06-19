@@ -28,6 +28,7 @@ Write using the Write tool:
   "plan": "Validate session token expiry before granting access",
   "started": "2026-02-27",
   "platform": "github",
+  "autonomous": true,
   "contexts": ["security", "auth"],
   "active_loops": ["make-it-work", "make-it-secure", "make-it-tested"],
   "checkpoint": {
@@ -62,6 +63,8 @@ Write using the Write tool:
 | `plan`         | no       | One-line plan summary (set after plan)               |
 | `started`      | yes      | ISO date when work began                             |
 | `platform`     | yes      | `github` or `gitlab`                                 |
+| `autonomous`   | no       | True when started autonomously (`--auto`/env)        |
+| `plan_comment_url` | no   | URL of posted plan comment (autonomous only)         |
 | `contexts`     | no       | Domain contexts for this issue                       |
 | `active_loops` | no       | Implementation loops to execute                      |
 | `checkpoint`   | no       | Phase transition checkpoint (see below)              |
