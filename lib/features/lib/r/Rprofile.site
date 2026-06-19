@@ -1,13 +1,30 @@
 # System-wide R startup configuration
 local({
-    # Set default CRAN mirror
-    options(repos = c(CRAN = "https://cloud.r-project.org/"))
+    # Default repository: prefer the Posit Package Manager binary repo
+    # (R_PPM_REPO, set in /etc/R/Renviron.site at build time) so
+    # install.packages() pulls prebuilt binaries instead of compiling from
+    # source. Fall back to CRAN when the variable is unset (e.g. a stripped
+    # runtime environment). See lib/features/r.sh and issue #531.
+    ppm_repo <- Sys.getenv("R_PPM_REPO", "")
+    if (nzchar(ppm_repo)) {
+        options(repos = c(CRAN = ppm_repo))
+        # PPM serves the correct binary for this R version only when the
+        # HTTP User-Agent advertises the R version and platform.
+        options(HTTPUserAgent = sprintf(
+            "R/%s R (%s)",
+            getRversion(),
+            paste(getRversion(), R.version$platform, R.version$arch, R.version$os)
+        ))
+    } else {
+        options(repos = c(CRAN = "https://cloud.r-project.org/"))
+    }
 
     # Configure library paths
     r_libs_user <- Sys.getenv("R_LIBS_USER", "/cache/r/library")
     .libPaths(c(r_libs_user, .libPaths()))
 
-    # Set cache directory for downloaded packages
+    # PPM binaries are delivered through the source-package path (a prebuilt
+    # tarball that just untars — no compile), so "source" remains correct.
     options(pkgType = "source")
 
     # Suppress startup messages in non-interactive mode

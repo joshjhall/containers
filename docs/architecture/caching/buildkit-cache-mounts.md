@@ -139,6 +139,33 @@ crate lacking a prebuilt binary. The `cargo-binstall` installer itself is a
 prebuilt binary pinned in `lib/checksums.json` (Tier 2). See
 `lib/features/rust.sh` and `lib/features/rust-dev.sh`.
 
-> r-dev's CRAN compile and java-dev's JDK/apt cost are not yet addressed by
-> this approach (R packages would need a binary package repo such as Posit
-> PPM; java-dev compiles nothing at build time). Tracked as the #517 follow-up.
+### How the r-dev cold-build cost was reduced instead (#531)
+
+`r-dev` had the same shape of problem: `install.packages()` defaults to
+compiling each CRAN package (tidyverse, devtools, …) from source into
+`/cache/r/library`, which dominated its cold build. Rather than cache-mounting
+`/cache/r`, the R feature scripts point `repos` at **Posit Package Manager
+(PPM)** — `https://packagemanager.posit.co/cran/__linux__/<codename>/<snapshot>`
+— which serves prebuilt binary packages for Debian 11/12/13. `install.packages()`
+then untars a prebuilt binary instead of compiling. The repo is exposed as
+`R_PPM_REPO` in `/etc/R/Renviron.site` and consumed at both build time (the
+`r-dev.sh` install scripts) and runtime (`Rprofile.site` and the `r-*` shell
+helpers), so user-run installs get binaries too. PPM requires an `HTTPUserAgent`
+advertising the R version **and platform** (the OS suffix in the user-agent is
+what triggers the binary redirect); the snapshot date is pinned for
+reproducibility.
+
+**Arch caveat:** PPM Linux binaries are **x86_64 only**. On aarch64/arm64 PPM
+transparently serves source, so `install.packages()` still compiles there. This
+is why the R build-dependency apt packages (in `r.sh` and `r-dev.sh`) are kept
+as a safety net rather than removed. The PR-tier CI cell this optimization
+targets is **amd64** (`debian:trixie` × amd64, see #408), so it gets the
+binaries and fits the tightened build timeout; arm64 image builds still work,
+just slower. See `lib/features/r.sh`, `lib/features/r-dev.sh`, and
+`lib/features/lib/r/Rprofile.site`.
+
+> `java-dev` is **apt/download-bound**, not compile-bound: its cold cost is the
+> Temurin JDK apt install plus four binary tool downloads (spring-boot-cli,
+> jbang, mvnd, google-java-format). Nothing compiles at build time, so there is
+> no cache to warm — it is exercised by the merge tier rather than the
+> time-boxed PR tier. Resolved alongside r-dev in #531 (the #517 follow-up).

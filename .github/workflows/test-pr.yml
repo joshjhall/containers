@@ -94,15 +94,25 @@ jobs:
           # Skipped features are still exercised by the merge tier (ci.yml,
           # which has no per-cell timeout cap).
           # Entries:
-          #   r-dev    — exceeds the PR-tier ceiling (CRAN package set compiled
-          #              from source); covered by merge-tier `r-dev` in ci.yml
           #   rust-dev — even after #517 switched its cargo suite to
           #              `cargo binstall`, a fully cold PR build (base image +
           #              all prior layers, no gha cache) still approaches the
-          #              40min cap. Covered by merge-tier `rust-golang`. Tracked
-          #              in #531 (deeper optimization / install less); largely
-          #              moot once critical mass moves to v5.
-          SKIP_LIST='^(r-dev|rust-dev)$'
+          #              old 40min cap. Covered by merge-tier `rust-golang`.
+          #              Tracked in #531 (deeper optimization / install less);
+          #              largely moot once critical mass moves to v5.
+          #   java-dev — apt/download-bound, not compile-bound: ~20min cold is
+          #              the Temurin JDK apt install + four binary tool
+          #              downloads (spring-boot-cli, jbang, mvnd,
+          #              google-java-format). Nothing compiles at build time, so
+          #              there is no cache to warm and it can't fit the tightened
+          #              PR-tier cap. NOTE: java-dev is not yet in the merge-tier
+          #              matrix (ci.yml), so skip-listing it here leaves it
+          #              without CI build coverage — adding a merge-tier entry is
+          #              tracked in #536. (#531)
+          # Note: r-dev was removed once #531 switched its CRAN set to Posit
+          # Package Manager binary packages — no more from-source compile, so it
+          # now fits the PR-tier cap.
+          SKIP_LIST='^(rust-dev|java-dev)$'
           FILTERED=$(printf '%s\n' "${OUT}" | grep -vE "${SKIP_LIST}" || true)
 
           if [ -z "${FILTERED}" ]; then
@@ -122,7 +132,7 @@ jobs:
           } >> "${GITHUB_OUTPUT}"
           if [ "${OUT}" != "${FILTERED}" ]; then
             SKIPPED=$(printf '%s\n' "${OUT}" | grep -E "${SKIP_LIST}" | paste -sd,)
-            echo "::notice::PR-tier skipped features (known-broken in isolation): ${SKIPPED}"
+            echo "::notice::PR-tier skipped features (exceed the per-cell timeout; covered by the merge tier): ${SKIPPED}"
           fi
           echo "::notice::PR-tier matrix: ${FEATURES}"
 
@@ -135,15 +145,15 @@ jobs:
     needs: detect-changes
     if: needs.detect-changes.outputs.mode != 'skip'
     runs-on: ubuntu-latest
-    # 40 min ceiling — the acceptance target is <15min for *typical*
-    # single-feature changes (most cells finish well under). The heaviest
-    # cells compile a large suite from source on cold cache: rust-dev's
-    # cargo-tool set (cargo-watch, cargo-expand, gix-based tools, sccache…)
-    # exceeds 25min cold and was cancelled mid-compile, and r-dev's CRAN
-    # set / java-dev's JDK+maven run ~20min. 40min keeps them green on a
-    # cold-cache branch build without spurious cancellations. See #517 for
-    # the deeper fix (warm the build cache so cold builds fit a tighter cap).
-    timeout-minutes: 40
+    # 15 min ceiling — the acceptance target for a typical single-feature
+    # change. The cells that couldn't fit are now on the SKIP_LIST above:
+    # rust-dev (cold cargo build, covered by merge-tier `rust-golang`) and
+    # java-dev (apt/download-bound JDK+tools; merge-tier entry pending, see
+    # the SKIP_LIST note). r-dev used to need ~25min compiling its CRAN set
+    # from source, but #531 switched it to Posit Package Manager binary
+    # packages, so it now installs without compiling and fits this cap. See
+    # #517/#531 for the cold-build reductions.
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:

@@ -123,9 +123,11 @@ test_r_tidyverse_packages() {
 test_r_package_install() {
     local image="${IMAGE_TO_TEST:-test-r-dev-$$}"
 
-    # Install a simple package using install.packages
-    # praise is a lightweight package with no dependencies, good for testing
-    assert_command_in_container "$image" "Rscript -e 'install.packages(\"praise\", repos=\"https://cloud.r-project.org\", quiet=TRUE); library(praise); cat(\"ok\")'" "ok"
+    # Install a simple package using install.packages. No explicit repos= so it
+    # exercises the configured default (Posit Package Manager binaries, set via
+    # Renviron.site / Rprofile.site — #531). praise is a lightweight,
+    # dependency-free package, good for testing.
+    assert_command_in_container "$image" "Rscript -e 'install.packages(\"praise\", quiet=TRUE); library(praise); cat(\"ok\")'" "ok"
 }
 
 # Test: Cache directories are configured correctly

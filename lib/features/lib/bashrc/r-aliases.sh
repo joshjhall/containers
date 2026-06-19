@@ -21,10 +21,15 @@ r-install() {
 
     echo "Installing R packages: $*"
     Rscript -e "
+        repo <- Sys.getenv('R_PPM_REPO', 'https://cloud.r-project.org/')
+        if (grepl('packagemanager.posit.co', repo)) {
+            options(HTTPUserAgent = sprintf('R/%s R (%s)', getRversion(),
+                paste(getRversion(), R.version\$platform, R.version\$arch, R.version\$os)))
+        }
         packages <- commandArgs(trailingOnly = TRUE)
         for (pkg in packages) {
             if (!require(pkg, character.only = TRUE)) {
-                install.packages(pkg, repos = 'https://cloud.r-project.org/')
+                install.packages(pkg, repos = repo)
             }
         }
     " "$@"
@@ -35,7 +40,14 @@ r-install() {
 # ----------------------------------------------------------------------------
 r-update() {
     echo "Updating all R packages..."
-    Rscript -e "update.packages(ask = FALSE, repos = 'https://cloud.r-project.org/')"
+    Rscript -e "
+        repo <- Sys.getenv('R_PPM_REPO', 'https://cloud.r-project.org/')
+        if (grepl('packagemanager.posit.co', repo)) {
+            options(HTTPUserAgent = sprintf('R/%s R (%s)', getRversion(),
+                paste(getRversion(), R.version\$platform, R.version\$arch, R.version\$os)))
+        }
+        update.packages(ask = FALSE, repos = repo)
+    "
 }
 
 # ----------------------------------------------------------------------------
@@ -60,11 +72,11 @@ r-search() {
         return 1
     fi
 
-    echo "Searching CRAN for: $1"
+    echo "Searching for: $1"
     Rscript -e "
-        if (!require('utils')) install.packages('utils')
-        available.packages(repos = 'https://cloud.r-project.org/')[
-            grep('$1', available.packages()[,'Package'], ignore.case = TRUE),
+        repo <- Sys.getenv('R_PPM_REPO', 'https://cloud.r-project.org/')
+        available.packages(repos = repo)[
+            grep('$1', available.packages(repos = repo)[,'Package'], ignore.case = TRUE),
             c('Package', 'Version')
         ]
     " | column -t
