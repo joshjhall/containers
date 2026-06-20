@@ -65,6 +65,8 @@ test_templates_staged() {
     # Verify agent templates
     assert_dir_in_image "$image" "/etc/container/config/claude-templates/agents"
     assert_file_in_image "$image" "/etc/container/config/claude-templates/agents/code-reviewer/code-reviewer.md"
+    # code-reviewer ships its Workflow harness alongside the agent definition
+    assert_file_in_image "$image" "/etc/container/config/claude-templates/agents/code-reviewer/workflow.js"
     assert_file_in_image "$image" "/etc/container/config/claude-templates/agents/test-writer/test-writer.md"
     assert_file_in_image "$image" "/etc/container/config/claude-templates/agents/refactorer/refactorer.md"
     assert_file_in_image "$image" "/etc/container/config/claude-templates/agents/debugger/debugger.md"

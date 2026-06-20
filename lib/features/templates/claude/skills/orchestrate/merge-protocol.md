@@ -184,10 +184,14 @@ git diff --name-only "${MERGE_COMMIT}^1" "${MERGE_COMMIT}"
 
 ### Agent Dispatch Order
 
-1. **`code-reviewer` agent** — always dispatched first. Reviews the merge diff
-   for bugs, security issues, performance problems, and style violations.
-1. **`test-writer` agent** — dispatched only if code-reviewer findings indicate
-   missing test coverage or if new public APIs were introduced without tests.
+1. **`code-review` harness** — always run first, via the `Workflow` tool on
+   `~/.claude/agents/code-reviewer/workflow.js`. It reviews the merge diff for
+   bugs, security issues, performance problems, and style violations as a
+   parallel barrier under a shared budget, with a judge-panel rescore of each
+   finding's certainty before merge.
+1. **`test-writer` agent** — dispatched only if the code-review findings
+   indicate missing test coverage or if new public APIs were introduced
+   without tests.
 
 ### Correction Commit Convention
 

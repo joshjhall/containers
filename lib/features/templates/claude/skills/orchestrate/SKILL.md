@@ -209,11 +209,18 @@ Load `merge-protocol.md` before starting (Review Protocol section).
    git diff --stat "${MERGE_COMMIT}^1" "${MERGE_COMMIT}"
    ```
 
-1. **Dispatch `code-reviewer` agent** on the merge diff:
+1. **Run the `code-review` harness** on the merge diff:
 
    - Scope the review to only files changed in the merge commit
-   - Pass the diff via `git diff "${MERGE_COMMIT}^1" "${MERGE_COMMIT}"`
-   - Collect findings: bugs, security issues, performance, style
+   - **Invoke the `Workflow` tool** with the script at
+     `~/.claude/agents/code-reviewer/workflow.js` (it ships bundled with the
+     `code-reviewer` agent), passing
+     `args: { diff: "<git diff \"${MERGE_COMMIT}^1\" \"${MERGE_COMMIT}\">", files: [<changed files>] }`.
+     The harness fans the core sub-reviewers (bugs, security, performance,
+     style) plus any conditional specialists as one parallel barrier under a
+     shared budget, runs a fresh judge-panel rescore of each finding's
+     certainty, then merges — returning the `finding-schema.md` object
+     (`scanner`, `summary`, `findings`, `acknowledged_findings`).
 
 1. **Optionally dispatch `test-writer` agent** if:
 
