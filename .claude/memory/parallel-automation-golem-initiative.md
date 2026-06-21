@@ -44,6 +44,14 @@ epic [[v5-architecture]] #503 thin-shell Workflow conventions.
 `#523 → #498 → #527 → [reconcile #500] → #524 → #501 → #525`, then update
 `#310`/`#309`/`#268` to match what was built
 
+**Status (2026-06-21):** #523/#524/#527/#525 landed (#525 = PR #545, merged/awaiting
+merge). #310/#309/#268 bodies updated with "Architecture update (2026-06-21)" sections
+realigning the Rust port to the landed golem topology (autonomous entrypoint, golem-status
+schema, PR+label authority, 4 CPU/8 GB defaults, PR-aware teardown, rebase-onto-base sync).
+Canonical reference for the port is now the skill template
+`lib/features/templates/claude/skills/provision-agent/SKILL.md` +
+`orchestrate/schemas/golem-status.schema.json`, NOT the old Go source.
+
 - #523 — Axis A: autonomous mode (gate removal only). Foundational, no harness dep
   beyond shipped #499 (ci-fixer). START HERE.
 - #498 — code-reviewer Workflow harness (epic #503 sub-issue). Prereq for #527.
