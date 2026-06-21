@@ -90,6 +90,45 @@ docker exec -it project-agent01-1 tmux attach -t claude
 
 ---
 
+## Golem Dispatch Modes
+
+A **golem** is a per-issue sub-orchestrator: a PROCESS that owns one issue →
+branch → worktree → PR and runs the autonomous pipeline (`/next-issue <N>
+--auto` → autonomous `/next-issue-ship` → Branch + PR) unattended to a green,
+review-clean PR. Golems are not a new isolation mechanism — they are the
+**existing Mode 2 or Mode 3** with an autonomous payload and a PR exit.
+
+| Realization        | Built on | Payload (process)                         | Exit                            |
+| ------------------ | -------- | ----------------------------------------- | ------------------------------- |
+| **Worktree golem** | Mode 2   | `/next-issue <N> --auto` in a worktree shell | autonomous ship → Branch + PR |
+| **Container golem** | Mode 3  | same pipeline in the container's tmux Claude | same → PR (or `AUTOMERGE=1`)  |
+
+> **Hard constraint — golems are processes, never Workflow subagents.** The
+> Workflow tool permits one nesting level, and each golem's `/next-issue-ship`
+> already owns it (its review harness fans out the `code-reviewer` agent).
+> Dispatching a golem via the Workflow/Task tool with workflow nesting consumes
+> that level and makes the golem's review harness throw. Dispatch golems as OS
+> processes only — containers (`/provision-agent`) or worktree-bound shells.
+> (See `next-issue-ship` SKILL.md § Golem Execution Model.)
+
+### Dispatch Decision Sub-Tree
+
+```text
+IF batch_size >= 2 OR session at capacity (>= 3 worktrees):
+  → Container golems (Mode 3) via /provision-agent — primary for parallel work
+ELIF batch_size in 1..2 AND session has capacity:
+  → Worktree golems (Mode 2)
+ELSE (single issue):
+  → Run /next-issue directly, no orchestration
+```
+
+The master orchestrator (a live interactive session) dispatches golems, then
+monitors PR + issue-label state and rebases across PRs. It NEVER merges a
+golem's branch into its own — humans merge PRs (or per-golem `AUTOMERGE=1`).
+See `SKILL.md` Phases D / M / R.
+
+---
+
 ## Decision Tree
 
 Inputs for mode selection:

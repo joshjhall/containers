@@ -2,6 +2,16 @@
 
 Guide for running parallel container agents that process issues independently.
 
+The default topology is **PR-per-golem**: each container agent is a *golem* that
+owns one issue → branch → worktree → PR and runs the autonomous pipeline
+(`/next-issue <N> --auto` → `/next-issue-ship`) to a green, review-clean PR. The
+orchestrator is a live session that dispatches, monitors PR + issue-label state,
+surfaces progress, and rebases across PRs — it does **not** merge golem branches
+into its own. Humans merge the PRs (or per-golem `AUTOMERGE=1`). Golems are
+**processes, never Workflow subagents** (each golem's `/next-issue-ship` owns the
+one permitted Workflow nesting level). The local-merge flow shown later is an
+opt-in legacy path for tightly-coupled no-PR work.
+
 ## Architecture
 
 ```text
@@ -28,24 +38,31 @@ Each agent runs in its own container with:
 
 ## Quick Start
 
+PR-per-golem (default):
+
 ```bash
-# 1. Provision 3 agents
-/orchestrate spawn 3
+# 1. Dispatch golems for N issues (provisions containers, launches the pipeline)
+/orchestrate dispatch 3
 
-# 2. Check status
-/orchestrate status
+# 2. Watch PRs through CI + review to green
+/orchestrate monitor
 
-# 3. Merge completed agent work
-/orchestrate merge agent01
+# 3. Rebase later PRs after an earlier one merges
+/orchestrate rebase
 
-# 4. Review the merge
-/orchestrate review
-
-# 5. Sync other agents with merged changes
-/orchestrate sync
-
-# 6. Tear down when done
+# 4. Merge is the human's call (PRs awaiting merge are flagged); then tear down
 /orchestrate teardown all
+```
+
+Local-merge (opt-in legacy, no-PR worktree work):
+
+```bash
+/orchestrate spawn 3            # provision agents
+/orchestrate status             # check status
+/orchestrate merge agent01      # merge completed agent work locally
+/orchestrate review             # review the merge
+/orchestrate sync               # sync other agents with merged changes
+/orchestrate teardown all       # tear down when done
 ```
 
 ## Provisioning
@@ -96,7 +113,24 @@ Check all agent status:
 This reads `.worktrees/.status/agent{N}.json` files and shows a table with
 each agent's state, current issue, phase, and commit count.
 
-## Agent Lifecycle
+## Golem Lifecycle (PR-per-golem, default)
+
+```text
+DISPATCH → WORK → PR → MONITOR → (REBASE) → MERGE (human) → TEARDOWN
+```
+
+1. **DISPATCH**: Orchestrator creates worktree + container, launches
+   `/next-issue <N> --auto`
+1. **WORK**: Golem runs the autonomous pipeline inside the container
+1. **PR**: Autonomous `/next-issue-ship` opens a PR; issue → `status/pr-pending`
+1. **MONITOR**: Orchestrator polls PR + issue-label state (`/orchestrate monitor`)
+   and flags PRs that are green + review-clean
+1. **REBASE** (as needed): when an earlier PR merges, `/orchestrate rebase`
+   rebases later PRs that fell behind base
+1. **MERGE**: the human merges the PR (or per-golem `AUTOMERGE=1`)
+1. **TEARDOWN**: Orchestrator removes the worktree + container after merge
+
+### Local-merge Lifecycle (opt-in legacy)
 
 ```text
 ASSIGN → WORK → SIGNAL → REVIEW → SYNC → NEXT (or TEARDOWN)
@@ -111,7 +145,8 @@ ASSIGN → WORK → SIGNAL → REVIEW → SYNC → NEXT (or TEARDOWN)
 
 ## Conflict Resolution
 
-The `rebase-agent` handles trivial conflicts automatically during merge/sync:
+The `rebase-agent` handles trivial conflicts automatically during cross-PR
+rebase (default) and during legacy merge/sync:
 
 - **Lock files**: Regenerate from manifest (npm install, cargo generate-lockfile)
 - **Generated files**: Re-run the generator
