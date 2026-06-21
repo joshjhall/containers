@@ -31,18 +31,42 @@ When autonomous:
 When NOT autonomous, behavior is unchanged — every interactive prompt below
 runs verbatim as the default.
 
+## Golem Execution Model (for orchestrators)
+
+A golem running this skill is an OS **process**, never itself a Workflow
+subagent. This skill drives the adversarial review harness
+(`next-issue-ship/workflow.js`, Step 3.5 item 6 and the Step 4 multi-cycle
+loop), which in turn fans out the `code-reviewer` agent. The Workflow tool
+permits only **one level of nesting** (`workflow()` inside a workflow throws),
+and that nesting level is reserved for the review harness's own fan-out — so a
+golem MUST be its own process and own the single Workflow invocation tree.
+
+Orchestrators (e.g. the master-orchestrator in #524) MUST spawn golems as
+**processes** (subprocess / container / worktree), NOT as Workflow subagents.
+Spawning a golem as a Workflow subagent would consume the one nesting level and
+make the review harness invocation throw.
+
 ## Environment Variables
 
-Two env vars toggle non-default behavior; both are opt-in:
+These env vars toggle non-default behavior; all are opt-in:
 
 - `AUTOMERGE=1` — in Option 1 (Branch + PR), queue the PR for GitHub's
   native auto-merge via `gh pr merge --auto --squash --delete-branch`
-  immediately after PR creation and exit, skipping the CI-wait loop.
-  GitHub only. Skipped for `severity/critical` issues. Falls through to
-  the normal CI-wait loop if `gh pr merge --auto` fails (e.g., auto-merge
-  not enabled on the repo). See Option 1 "Auto-merge fast path" below.
+  immediately after PR creation and exit, skipping the CI-wait loop. Because
+  the fast path exits before the post-CI multi-cycle review loop, it
+  **intentionally skips that loop** — `AUTOMERGE=1` is the per-invocation
+  escape hatch from the review gate. GitHub only. Skipped for
+  `severity/critical` issues. Falls through to the normal CI-wait loop if
+  `gh pr merge --auto` fails (e.g., auto-merge not enabled on the repo). See
+  Option 1 "Auto-merge fast path" below.
 - `PRE_REVIEW_STRICT=true` — pre-review gates (Step 3.5) block Option 1 PR
   creation on HIGH certainty findings instead of warning only.
+- `REVIEW_MAX_CYCLES` — integer, default `3`. Caps the post-CI multi-cycle
+  adversarial review loop (Option 1). The cap lives in this skill, not in
+  `workflow.js`, which runs exactly one review cycle per invocation.
+- `REVIEW_STRICT=true` — treat MEDIUM-certainty findings as blocking in the
+  adversarial review (Step 3.5 item 6 and the Step 4 loop), in addition to the
+  default HIGH-certainty blocking set. Parallels `PRE_REVIEW_STRICT`.
 
 ## Step 1 — Read State
 
@@ -243,6 +267,68 @@ Before executing the chosen shipping mode, run these safety checks:
    to execute, skip this check with a note: "Pre-review gates skipped
    (scanner not available)." Never block shipping due to scanner errors.
 
+1. **Adversarial pre-PR review** (Option 1 only) — run a multi-dimension
+   adversarial review of the changes **before** the PR is opened, so the PR's
+   first impression is review-clean. This complements the deterministic
+   pre-review gates above with LLM reviewers (security, correctness, tests,
+   CLAUDE.md conventions, scope-drift) plus a fresh judge and gatekeeper.
+
+   a. Compute the review scope from the diff against `main`:
+
+   ```bash
+   git fetch origin main
+   git diff --name-only origin/main...HEAD   # -> files
+   git diff origin/main...HEAD               # -> diff (context)
+   ```
+
+   If there are no committed changes yet (work is staged but not committed),
+   stage and make the implementation commit first (Step 4 Option 1 steps 1-3),
+   then compute the scope — the review needs a diff to read.
+
+   b. **Invoke the `Workflow` tool** with the script bundled alongside this
+   skill at `~/.claude/skills/next-issue-ship/workflow.js`, passing:
+
+   ```text
+   args: {
+     phase: "pre-pr",
+     cycle: 1,
+     maxCycles: <REVIEW_MAX_CYCLES, default 3>,
+     files: [<changed files>],
+     diff: "<diff text>",
+     issue: { number: {N}, title: "{title}" }
+   }
+   ```
+
+   The harness fans the dimensions as one parallel barrier under a single
+   token budget, re-scores certainty with a fresh judge, and returns
+   `{ blocking[], deferrable[], summary, budget_exhausted, clean }`. The review
+   agents are **read-only** — applying fixes and filing deferrals is this
+   skill's job (below).
+
+   c. **Resolve the blocking findings**: for each finding in `blocking`, make
+   the fix in the working tree, then amend or add a commit. Re-run step (b)
+   (incrementing `cycle`) until `clean` is true or `cycle` exceeds
+   `REVIEW_MAX_CYCLES`. When `REVIEW_STRICT=true`, also treat MEDIUM-certainty
+   findings as blocking.
+
+   d. **Collect the deferrables**: keep the `deferrable` list for filing
+   **after** the PR exists (so the filed issues can link the PR) — see Option 1
+   "File deferred review findings".
+
+   e. **Cap / budget exhaustion**: if `cycle` exceeds `REVIEW_MAX_CYCLES` or
+   `budget_exhausted` is true with blocking findings still open:
+
+   - **Interactive**: ask — **Fix remaining blocking findings now, ship anyway,
+     or defer them?**
+   - **Autonomous**: do NOT prompt. Proceed to open the PR, but record the
+     remaining blocking findings as a STOP note for the completion summary
+     (Option 1 "Autonomous completion summary" → "Review status").
+
+   **Graceful degradation**: if the `Workflow` tool or
+   `~/.claude/skills/next-issue-ship/workflow.js` is unavailable, skip this
+   step with a note: "Adversarial pre-PR review skipped (harness not
+   available)." Never block shipping due to harness errors.
+
 ## Step 4 — Execute
 
 ### Option 1 — Branch + PR
@@ -421,6 +507,109 @@ Before executing the chosen shipping mode, run these safety checks:
    skip CI monitoring with a note and proceed to labeling. CI monitoring
    never blocks shipping.
 
+1. **Multi-cycle PR review loop** (after green CI) — re-review the PR after
+   fixes land, because resolving one finding (or a CI fix) can silently
+   introduce another. Each cycle re-runs the adversarial review harness **and**
+   folds in open PR review comments, then resolves-or-defers everything.
+   Skipped entirely when `AUTOMERGE=1` took the auto-merge fast path above.
+
+   Run the loop with `cycle = 1` and `cap = REVIEW_MAX_CYCLES` (default 3):
+
+   a. **Gather the changed scope** (now includes any CI fixes):
+
+   ```bash
+   git diff --name-only origin/main...HEAD   # -> files
+   git diff origin/main...HEAD               # -> diff
+   ```
+
+   b. **Gather open PR review comments** and normalize unresolved review-thread
+   comments + issue-style PR comments into a `prComments` array of
+   `{ id, author, path?, line?, body, url? }`:
+
+   ```bash
+   gh pr view {pr_number} --json reviews,comments
+   ```
+
+   c. **Invoke the `Workflow` tool** with
+   `~/.claude/skills/next-issue-ship/workflow.js`, passing:
+
+   ```text
+   args: {
+     phase: "pr-cycle",
+     cycle: <cycle>,
+     maxCycles: <cap>,
+     files: [<changed files>],
+     diff: "<diff text>",
+     prComments: [<normalized comments>],
+     issue: { number: {N}, title: "{title}" }
+   }
+   ```
+
+   It returns `{ blocking[], deferrable[], comments_addressed[], summary,
+   budget_exhausted, clean }`.
+
+   d. **Resolve or defer**:
+
+   - For each `blocking` finding (and any comment triaged `blocking`): fix it
+     in the working tree and stage. When `REVIEW_STRICT=true`, MEDIUM-certainty
+     findings are blocking too.
+   - For each `deferrable` finding (and any comment triaged `deferrable`): file
+     it via Option 1 "File deferred review findings" below, then reply to the
+     originating PR review comment (if any) with the new issue link so the
+     comment is **resolved-or-deferred**, not dropped.
+
+   e. **If any fixes were applied this cycle**: commit
+   `fix(review): address cycle {cycle} findings`, `git push`, and re-run the
+   CI-monitor sub-step above (wait for green, auto-fix via `ci-fixer`).
+
+   f. **Terminate the loop** when ALL of the following hold:
+
+   - `clean` is true (no blocking findings remain), **and**
+   - CI is green, **and**
+   - every PR comment is resolved-or-deferred (none left unaddressed).
+
+   Otherwise `cycle++`; if `cycle` exceeds `cap`, **STOP** and surface the
+   remaining blocking findings / unresolved comments. **Interactive**: ask
+   **Keep fixing, ship as-is, or defer the rest?** **Autonomous**: do NOT
+   prompt — STOP and record the remaining items for the completion summary
+   (Review status: stopped-with-blocking).
+
+   The cap and budget bound the loop: `workflow.js` runs one cycle per
+   invocation and returns partial results if its shared budget is exhausted, so
+   the loop always terminates.
+
+   **Graceful degradation**: if the `Workflow` tool or the harness script is
+   unavailable, skip this loop with a note ("Multi-cycle review skipped
+   (harness not available)") and proceed to labeling. Review never blocks
+   shipping due to harness errors.
+
+1. **File deferred review findings** — for each deferrable finding collected in
+   the pre-PR pass (Step 3.5 item 6) and every loop cycle above:
+
+   - Preferred: invoke **`/file-issue`** with the finding's title, severity,
+     category, and description as the seed (its auto-labeling and scope checks
+     apply). In autonomous mode, pre-answer `/file-issue`'s questions from the
+     finding fields so it does not prompt.
+   - Autonomous fallback (to avoid a nested interactive skill): create the
+     issue directly with the same label taxonomy `/file-issue` uses:
+
+     ```bash
+     gh issue create --title "{finding.title}" --body "{finding.description}\n\nDeferred from PR #{pr_number} (review finding)." \
+       --label "type/{type},severity/{sev},component/{comp}"
+     ```
+
+   - After filing, link the deferred issues on the PR in one comment:
+
+     ```bash
+     gh pr comment {pr_number} --body "Deferred review findings filed: #{A}, #{B}. Addressed on this PR: {count} blocking finding(s) across {cycles} review cycle(s)."
+     ```
+
+   - Append a "Review findings" section to the PR body (mirrors the
+     "Pre-review findings" convention), listing fixed-on-PR vs deferred-to-#.
+
+   Nothing is silently dropped: every confirmed finding is either fixed on the
+   PR or filed as a linked issue.
+
 1. **Label the issue** `status/pr-pending` and remove `status/in-progress`:
 
    - GitHub: `gh issue edit {N} --add-label "status/pr-pending" --remove-label "status/in-progress"`
@@ -457,6 +646,11 @@ Before executing the chosen shipping mode, run these safety checks:
    - **Branch**: {branch}
    - **CI**: {green | stopped-with-failure: {detail}}
    - **CI fixes applied**: {count} — {one-line summaries}
+   - **Review cycles**: {cycles} run (cap {REVIEW_MAX_CYCLES})
+   - **Review status**: {clean | stopped-with-blocking: {detail}}
+   - **Findings fixed**: {count} blocking, on this PR
+   - **Findings deferred**: {#A, #B (filed), or "none"}
+   - **Comments resolved-or-deferred**: {n}/{total}
    - **Deferred notes**: {drift / branch-freshness / pre-review findings, or "none"}
    - **Plan comment**: {plan_comment_url, if present}
 

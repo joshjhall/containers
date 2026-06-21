@@ -62,6 +62,10 @@ test_templates_staged() {
     assert_file_in_image "$image" "/etc/container/config/claude-templates/skills/codebase-audit/finding-schema.md"
     assert_file_in_image "$image" "/etc/container/config/claude-templates/skills/codebase-audit/issue-templates.md"
 
+    # next-issue-ship ships its adversarial-review Workflow harness alongside SKILL.md
+    assert_file_in_image "$image" "/etc/container/config/claude-templates/skills/next-issue-ship/SKILL.md"
+    assert_file_in_image "$image" "/etc/container/config/claude-templates/skills/next-issue-ship/workflow.js"
+
     # Verify agent templates
     assert_dir_in_image "$image" "/etc/container/config/claude-templates/agents"
     assert_file_in_image "$image" "/etc/container/config/claude-templates/agents/code-reviewer/code-reviewer.md"
