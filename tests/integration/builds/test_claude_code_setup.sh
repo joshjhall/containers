@@ -517,6 +517,16 @@ test_default_read_permissions() {
         "found"
 }
 
+# Test: Connect timeout env default in settings.json
+test_connect_timeout_default() {
+    local image="${IMAGE_TO_TEST:-test-claude-code-setup-$$}"
+
+    # Verify env.CLAUDE_CODE_CONNECT_TIMEOUT_MS is set to the 10-minute default
+    assert_command_in_container "$image" \
+        "/usr/bin/jq -r '.env.CLAUDE_CODE_CONNECT_TIMEOUT_MS' /home/developer/.claude/settings.json" \
+        "600000"
+}
+
 # Test: claude-setup contains auto-detect logic
 test_auto_detect_logic() {
     local image="${IMAGE_TO_TEST:-test-claude-code-setup-$$}"
@@ -553,6 +563,7 @@ run_test test_http_mcp_auth_injection "HTTP MCP auth injection helpers exist"
 run_test test_pipe_delimited_headers "Pipe-delimited header support"
 run_test test_auto_memory_directory "Auto memory directory persisted in settings.json"
 run_test test_default_read_permissions "Default read permissions in settings.json"
+run_test test_connect_timeout_default "Connect timeout default in settings.json"
 run_test test_auto_detect_logic "claude-setup contains auto-detect logic"
 
 # Skip tests that require building new images if using pre-built image

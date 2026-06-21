@@ -122,22 +122,34 @@ DEFAULT_PERMISSIONS='[
   "Read(.claude/memory/**)"
 ]'
 
+# Default connect timeout (ms) for the Claude Code API client. The built-in
+# default is 60s, which can trip on long requests once the context window grows
+# well past ~200-300k tokens (the 1M-token ceiling allows for these). 600000 =
+# 10 minutes — long enough for those calls while still failing a truly stuck
+# connection. Override at runtime via the CLAUDE_CODE_CONNECT_TIMEOUT_MS env var.
+DEFAULT_CONNECT_TIMEOUT_MS="600000"
+
 mkdir -p "$CLAUDE_SETTINGS_DIR"
 
 if [ -f "$CLAUDE_SETTINGS_FILE" ]; then
-    # Merge into existing settings.json (preserves existing permissions via unique)
-    /usr/bin/jq --arg dir "$AUTO_MEMORY_DIR" --argjson perms "$DEFAULT_PERMISSIONS" '
+    # Merge into existing settings.json (preserves existing permissions via
+    # unique; keeps any pre-existing connect timeout rather than clobbering it)
+    /usr/bin/jq --arg dir "$AUTO_MEMORY_DIR" --argjson perms "$DEFAULT_PERMISSIONS" \
+        --arg timeout "$DEFAULT_CONNECT_TIMEOUT_MS" '
         .autoMemoryDirectory = $dir
         | .permissions.allow = ((.permissions.allow // []) + $perms | unique)
+        | .env.CLAUDE_CODE_CONNECT_TIMEOUT_MS = (.env.CLAUDE_CODE_CONNECT_TIMEOUT_MS // $timeout)
     ' "$CLAUDE_SETTINGS_FILE" >"${CLAUDE_SETTINGS_FILE}.tmp" &&
         mv "${CLAUDE_SETTINGS_FILE}.tmp" "$CLAUDE_SETTINGS_FILE"
     log_message "Merged settings into existing settings.json"
 else
-    # Create new settings.json with autoMemoryDirectory and default permissions
+    # Create new settings.json with autoMemoryDirectory, default permissions,
+    # and the connect-timeout env default
     /usr/bin/jq -n --arg dir "$AUTO_MEMORY_DIR" --argjson perms "$DEFAULT_PERMISSIONS" \
-        '{autoMemoryDirectory: $dir, permissions: {allow: $perms}}' \
+        --arg timeout "$DEFAULT_CONNECT_TIMEOUT_MS" \
+        '{autoMemoryDirectory: $dir, permissions: {allow: $perms}, env: {CLAUDE_CODE_CONNECT_TIMEOUT_MS: $timeout}}' \
         >"$CLAUDE_SETTINGS_FILE"
-    log_message "Created settings.json with autoMemoryDirectory and default permissions"
+    log_message "Created settings.json with autoMemoryDirectory, default permissions, and connect timeout"
 fi
 
 chown -R "$TARGET_USER:$TARGET_USER" "$CLAUDE_SETTINGS_DIR"
