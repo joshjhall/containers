@@ -1,12 +1,20 @@
-# Orchestrate — Merge Protocol
+# Orchestrate — Merge & Rebase Protocol
 
-Reference companion for `SKILL.md`. Load this when performing a merge (Phase 2),
-review (Phase 3), or sync (Phase 4) for sync point tracking, conflict
-resolution, test runner detection, review dispatch, and branch synchronization.
+Reference companion for `SKILL.md`.
+
+> **Topology note.** The default `/orchestrate` topology is PR-per-golem
+> (`SKILL.md` Phases D/M/R). The **merge** and **sync** sections below are
+> **OPT-IN LEGACY local-merge** — used only for tightly-coupled no-PR worktree
+> work. The **Conflict Classification** and **Test Runner Detection** sections
+> are **repurposed and remain live**: they drive the cross-PR rebase (Phase R,
+> via `workflow.js` + the `rebase-agent`) as well as the legacy local merge.
+
+Each section below is tagged **[LIVE]** (used by the default PR-per-golem flow)
+or **[OPT-IN LEGACY]** (local-merge only).
 
 ---
 
-## Sync Point Tracking
+## Sync Point Tracking [OPT-IN LEGACY]
 
 Use `git merge-base` to track where agent branches diverged from the current
 branch. This is the foundation for determining what's new.
@@ -31,9 +39,14 @@ commits for that agent.
 
 ---
 
-## Conflict Resolution Decision Tree
+## Conflict Classification for Cross-PR Rebase [LIVE]
 
-When `git merge` reports conflicts:
+This decision tree is the source of the `workflow.js` conflict-class taxonomy
+(the `OVERLAP` gate and the `rebase-agent`'s `resolved`/`escalated` split) used
+in Phase R, and it also governs legacy local-merge conflicts.
+
+When a PR branch is behind base and a rebase onto base reports conflicts (or
+when `git merge` reports conflicts in the legacy path):
 
 1. **Identify conflict type** for each file:
 
@@ -89,10 +102,11 @@ When `git merge` reports conflicts:
 
 ---
 
-## Test Runner Detection
+## Test Runner Detection [LIVE]
 
-After merging, detect and run the project's test suite. Check in this order
-(first match wins):
+Topology-neutral. Used after a cross-PR rebase (Phase R) to confirm the rebased
+branch still builds, and after a legacy local merge. Detect and run the
+project's test suite, checking in this order (first match wins):
 
 | Indicator                | Test Command            | Framework   |
 | ------------------------ | ----------------------- | ----------- |
@@ -136,7 +150,7 @@ If no test runner is detected, inform the user and skip testing.
 
 ---
 
-## Squash vs Merge Commit
+## Squash vs Merge Commit [OPT-IN LEGACY]
 
 | Strategy                   | Pros                                                            | Cons                                                  |
 | -------------------------- | --------------------------------------------------------------- | ----------------------------------------------------- |
@@ -162,9 +176,11 @@ for a squash merge in natural language.
 
 ---
 
-## Review Protocol
+## Review Protocol [OPT-IN LEGACY]
 
-After merging agent work (Phase 2), Phase 3 reviews the merged changes for
+In the default PR-per-golem topology, per-PR review is the **golem's** job (the
+`/next-issue-ship` adversarial review loop). This section applies only after a
+legacy local merge (`/orchestrate review`), reviewing the merged changes for
 correctness and quality.
 
 ### Review Scope
@@ -221,10 +237,12 @@ These require user confirmation before modification.
 
 ---
 
-## Sync Protocol
+## Sync Protocol [OPT-IN LEGACY]
 
-Phase 4 pushes the latest orchestrator state into all agent branches so they
-start their next task from a consistent baseline.
+Superseded by PR-per-golem (golems rebase their own PR branches onto base via
+Phase R). This one-way orchestrator → agent-branch sync applies only to the
+legacy local-merge path, pushing the latest orchestrator state into all agent
+branches so they start their next task from a consistent baseline.
 
 ### Sync Direction
 
@@ -290,9 +308,11 @@ git checkout <orchestrator-branch>
 
 ---
 
-## Agent Checkpoint Context
+## Agent Checkpoint Context [OPT-IN LEGACY]
 
-When reviewing agent work after a `/clear`, the orchestrator can read the
+Used by the legacy local-merge review path. (In PR-per-golem, the golem carries
+its own checkpoint and the human reviews the PR.) When reviewing agent work
+after a `/clear`, the orchestrator can read the
 agent's checkpoint from their JSON state file for context. This is especially
 useful when the agent's conversation history is no longer available.
 

@@ -1,28 +1,177 @@
 ---
-description: Multi-agent orchestration for parallel worktree workflows. Check agent status, merge agent commits, review merged work, sync agent branches, select execution modes, and manage container agents. Use when coordinating 2-5 agents working in separate worktrees, reviewing agent progress, or integrating agent work.
+description: Master orchestrator for PR-per-golem parallel work. Dispatch golems (one issue/branch/worktree/PR each) running the autonomous pipeline, monitor PR + issue-label state, surface progress, and rebase across PRs. Use when running 2+ independent issues in parallel, watching golem PRs, or integrating agent work. Local-merge topology preserved as opt-in.
 ---
 
 # Orchestrate
 
-**Companion files**:
+The default topology is **PR-per-golem**: the orchestrator is a **live
+interactive session** that dispatches **golems** (each a PROCESS owning one
+issue → branch → worktree → PR, running the autonomous `/next-issue --auto` →
+`/next-issue-ship` pipeline), then monitors, surfaces, and rebases across their
+PRs. **The orchestrator never merges golem branches into its own** — humans
+merge PRs (or per-golem `AUTOMERGE=1`).
 
-- `merge-protocol.md` — sync point tracking, conflict resolution, test runner
-  detection, squash vs merge, review dispatch, sync protocol
-- `mode-protocol.md` — execution mode selection, decision tree, tradeoff
-  explanations
+**Hard constraints** (architecture — do not violate):
 
-Load the relevant companion before each phase.
+- **Golems are processes, never Workflow subagents.** Each golem's
+  `/next-issue-ship` owns the single permitted Workflow nesting level (its review
+  harness). Spawning a golem as a Workflow/Task subagent makes that harness
+  throw. Dispatch golems as containers (`/provision-agent`) or worktree-bound
+  shell processes — see `mode-protocol.md` § Golem Dispatch Modes.
+- **The orchestrator session is live/interactive, not a workflow.** It surfaces
+  progress and takes commands mid-flight. It uses the Workflow harness
+  (`workflow.js`) ONLY for bounded fan-out: the monitor poll and the cross-PR
+  rebase dispatch.
+- **PR + issue-label state are authoritative**; `.worktrees/.status/*.json` is a
+  fast cache consulted only to fill display gaps.
+
+**Companion files** (load before the matching phase):
+
+- `mode-protocol.md` — execution + golem dispatch modes, decision tree
+- `merge-protocol.md` — cross-PR rebase conflict classification + test-runner
+  detection (live); merge/sync sections marked opt-in legacy
+- `workflow.js` — the monitor-poll + cross-PR-rebase harness (invoked via the
+  Workflow tool; never edited at runtime)
 
 **Invocation patterns:**
 
-- `/orchestrate` or `/orchestrate status` → Phase 1 (agent status)
-- `/orchestrate mode` → Phase 0 (mode selection for next task)
-- `/orchestrate merge <N>` or `/orchestrate merge <branch>` → Phase 2 (merge one agent)
-- `/orchestrate merge all` → Phase 2 for all agents with pending commits
-- `/orchestrate review` → Phase 3 (review latest merge)
-- `/orchestrate sync` → Phase 4 (sync orchestrator into agent branches)
-- `/orchestrate spawn <N>` → Phase 5 (provision N container agents)
-- `/orchestrate teardown <agent>` → Phase 5 (stop and remove agent container)
+| Invocation | Phase |
+| ---------- | ----- |
+| `/orchestrate dispatch <N…>` or `dispatch <count>` | Phase D — Dispatch golems |
+| `/orchestrate` or `/orchestrate status` | Phase M — Monitor (one sweep) |
+| `/orchestrate monitor` / `watch` | Phase M — Monitor loop |
+| `/orchestrate rebase` or `rebase <N>` | Phase R — Cross-PR rebase |
+| `/orchestrate mode` | Phase 0 — Mode selection |
+| `/orchestrate spawn <N>` / `teardown <agent>` | Phase 5 — Container mgmt |
+| `/orchestrate merge <N>` / `merge all` / `sync` | Local-merge (OPT-IN, legacy) |
+| `/orchestrate review` | Local-merge review (OPT-IN, legacy) |
+
+## Phase D — Dispatch
+
+Spin up N golems, each owning one issue end-to-end. Golems are **processes**;
+dispatch is sequential and cheap — **not** workflow-driven.
+
+1. **Select issues** by priority using the ordering in
+   `next-issue/state-format.md` (exclude issues already labeled
+   `status/in-progress`, `status/pr-pending`, `status/commit-pending`,
+   `status/on-hold`). Accept explicit issue numbers if provided.
+
+1. **Choose the dispatch mode** per issue from `mode-protocol.md`:
+
+   - **Container golem** (Mode 3, primary) — `batch_size ≥ 2` or session at
+     capacity. Invoke `/provision-agent` (Phase 5 Spawn).
+   - **Worktree golem** (Mode 2) — 1–2 issues with session capacity.
+     `git worktree add .worktrees/issue-{N} -b feat/issue-{N}` and launch the
+     pipeline in a worktree-bound shell process.
+
+1. **Launch the autonomous pipeline** as a process in each golem:
+
+   ```bash
+   # Inside the golem's container tmux or worktree shell:
+   claude "/next-issue {N} --auto"
+   # Autonomous /next-issue hands off to autonomous /next-issue-ship → Branch + PR
+   ```
+
+   The pipeline runs unattended to a green, review-clean PR (or, per-golem,
+   queues GitHub auto-merge when `AUTOMERGE=1`).
+
+1. **Label + cache**: ensure each dispatched issue is `status/in-progress`
+   (the autonomous `/next-issue` does this) and write the initial golem cache
+   entry to `.worktrees/.status/{golem}.json` (schema:
+   `schemas/golem-status.schema.json`).
+
+1. **Report** the dispatch table: golem → issue → branch → mode → access
+   command (for container golems, the `docker exec … tmux attach` line).
+
+## Phase M — Monitor
+
+Authoritative status comes from **PR + issue-label state**. The
+`.worktrees/.status/*.json` cache only fills display gaps.
+
+1. **Enumerate the open-PR set** and cross-reference linked issues:
+
+   ```bash
+   # GitHub
+   gh pr list --state open --json number,headRefName,body,title
+   # GitLab
+   glab mr list --json   # or: glab mr list
+   ```
+
+   Map each PR to its issue via the `Closes #N` line that `/next-issue-ship`
+   writes into the PR body.
+
+1. **Invoke the Workflow tool** on `~/.claude/skills/orchestrate/workflow.js`
+   with:
+
+   ```text
+   args: {
+     prs:  [{ number, branch, issue, golem }, …],
+     base: "<base branch, e.g. main>",
+     mode: "poll"
+   }
+   ```
+
+   The harness fans a read-only poll across all PRs as one parallel barrier
+   under a shared budget (per-PR checkpoint → resumable mid-list) and returns
+   `pr_status[]` (`ci`, `review`, `label_state`, `behind_base`, `review_cycle`,
+   `blocking`, `summary`).
+
+1. **Render the live status table** from `pr_status`:
+
+   ```text
+   # Golem Status
+
+   | Golem   | Issue | Branch            | PR   | CI       | Review            | Cycle | Blocking |
+   |---------|-------|-------------------|------|----------|-------------------|-------|----------|
+   | agent01 | #142  | feat/issue-142    | #310 | passing  | approved          | 2     | —        |
+   | agent02 | #89   | feat/issue-89     | #311 | failing  | changes-requested | 1     | ⚠ yes   |
+   | agent03 | #201  | feat/issue-201    | —    | —        | (no PR yet)       | 0     | —        |
+   ```
+
+1. **Flag the human** when a PR is green + review-clean (`ci: passing`,
+   `review: approved`/`none`, `blocking: false`) — it is awaiting merge.
+
+1. **Loop** (for `monitor`/`watch`): re-poll on an interval, surfacing changes.
+   Between sweeps, accept mid-flight commands (see Surface below).
+
+## Phase R — Cross-PR Rebase
+
+When an earlier PR merges, later PRs touching the same files fall behind base.
+Detect and rebase them — without merging anything into the orchestrator branch.
+
+1. **Invoke the Workflow tool** on `~/.claude/skills/orchestrate/workflow.js`
+   with `mode: "poll+rebase"` (same `prs`/`base` args as Phase M). The harness:
+
+   - polls all PRs, then loops over the `behind_base` subset (loop-until-dry,
+     resumable),
+   - classifies each PR's conflict overlap (`none` / `trivial-only` /
+     `has-logic`),
+   - dispatches the **`rebase-agent`** (`agentType`) for trivial-only conflicts
+     (lockfiles, generated files, imports, versions, whitespace — see
+     `merge-protocol.md` § Conflict Classification),
+   - escalates `has-logic` (same-function / add-add / delete-modify) conflicts.
+
+1. **Report** `rebases[]` (auto-resolved, with strategy) and surface
+   `escalations[]` **verbatim** to the human.
+
+1. **Push rebased branches** (the harness never pushes): for each rebased PR
+   branch, the orchestrator pushes under human supervision:
+
+   ```bash
+   git push --force-with-lease origin <branch>
+   ```
+
+1. **Never** merge a golem branch into the orchestrator branch.
+
+## Surface — Mid-Flight Commands
+
+Between monitor sweeps, the live session accepts:
+
+- **`merge #N`** — the human merges PR #N (or run `gh pr merge #N` if the repo's
+  merge policy allows). The orchestrator does not merge into its own branch.
+- **`rebase #N`** — run Phase R scoped to PR #N.
+- **`teardown <agent>`** — Phase 5 Teardown for a finished golem.
+- **`status`** — re-run Phase M.
 
 ## Phase 0 — Mode Selection
 
@@ -31,367 +180,116 @@ Load `mode-protocol.md` before starting.
 1. **Gather inputs**:
 
    ```bash
-   # Current worktree count
    git worktree list | /usr/bin/wc -l
-
-   # Running agent containers
    docker ps --filter "name=agent" --format "{{.Names}}" 2>/dev/null
-
-   # Check if agent runner image exists
    docker images -q "*:agent-runner" 2>/dev/null
    ```
 
-1. **Assess the task** — from the issue labels or user description:
+1. **Assess the task** — effort label, batch size, file-overlap risk.
 
-   - Effort label (`effort/trivial` through `effort/large`)
-   - Batch size (single issue or multiple)
-   - File overlap risk with current work
+1. **Recommend a mode** using the decision tree in `mode-protocol.md`
+   (including § Golem Dispatch Modes for parallel work), and present the
+   tradeoff via `AskUserQuestion`.
 
-1. **Recommend mode** using the decision tree in `mode-protocol.md`
-
-1. **Present recommendation** with tradeoff explanation to the user using
-   `AskUserQuestion`:
-
-   - Mode 1a: Current branch
-   - Mode 1b: New branch
-   - Mode 2: Ephemeral worktree
-   - Mode 3: Container agent
-
-1. **Execute based on selection**:
-
-   - Mode 1a/1b: Proceed with normal `/next-issue` workflow
-   - Mode 2: Create worktree via `git worktree add .worktrees/issue-{N}`
-   - Mode 3: Invoke `/provision-agent` to build and start container
-
-## Phase 1 — Agent Status
-
-1. **Discover agent worktrees** via primary and fallback methods:
-
-   ```bash
-   # Primary: git worktree list (filter agent branches)
-   git worktree list --porcelain | grep -E 'branch refs/heads/agent'
-
-   # Secondary: directory scan
-   ls -d .worktrees/agent*/ 2>/dev/null
-   ```
-
-1. **Read container agent status files** (if they exist):
-
-   ```bash
-   # Container agent status from JSON files
-   ls .worktrees/.status/agent*.json 2>/dev/null
-   ```
-
-   For each status file, extract: `state`, `issue`, `phase`, `phase_detail`,
-   `commits`, `last_activity`.
-
-1. **For each agent branch**, gather git info:
-
-   ```bash
-   # Latest commit info
-   git log -1 --format='%h %s (%cr)' <agent-branch>
-
-   # Divergence point from current branch
-   MERGE_BASE=$(git merge-base HEAD <agent-branch>)
-
-   # New commits since divergence
-   git log --oneline "$MERGE_BASE"..<agent-branch>
-   ```
-
-1. **Check for associated issues** (optional — skip if `gh`/`glab` unavailable):
-
-   ```bash
-   gh issue list --label "status/commit-pending" --state open --json number,title,assignees
-   gh issue list --label "status/in-progress" --state open --json number,title,assignees
-   ```
-
-1. **Output a status table** — merge git info with container status:
-
-   ```text
-   # Agent Status
-
-   | # | Branch   | State        | Latest Commit        | Age   | Commits | Issue | Phase          |
-   |---|----------|--------------|----------------------|-------|---------|-------|----------------|
-   | 1 | agent01  | working      | abc1234 feat: add X  | 2h    | 3       | #42   | implement      |
-   | 2 | agent02  | review-ready | def5678 fix: handle Y| 30m   | 1       | #55   | ship           |
-   | 3 | agent03  | idle         | (no new commits)     | —     | 0       | —     | —              |
-   ```
-
-   Container agents show `State` from their status file. Worktree-only agents
-   (no status file) infer state from commit activity.
-
-## Phase 2 — Merge
-
-Load `merge-protocol.md` before starting.
-
-1. **Resolve agent identifier**:
-
-   - Numeric (`1`, `2`) → map to agent branch from Phase 1 table
-   - Branch name (`agent01`) → use directly
-   - `all` → iterate over all agents with pending commits
-
-1. **Preview changes**:
-
-   ```bash
-   MERGE_BASE=$(git merge-base HEAD <agent-branch>)
-   # Show commit summary
-   git log --oneline "$MERGE_BASE"..<agent-branch>
-   # Show diffstat
-   git diff --stat "$MERGE_BASE"..<agent-branch>
-   ```
-
-   Show the preview to the user and confirm before proceeding.
-
-1. **Merge** (default: merge commit for history preservation):
-
-   ```bash
-   # Default: merge with descriptive message
-   git merge --no-ff <agent-branch> -m "merge(<agent-branch>): <summary of changes>"
-   ```
-
-   If the user requests squash:
-
-   ```bash
-   git merge --squash <agent-branch>
-   git commit -m "feat(<scope>): <description summarized from agent commits>"
-   ```
-
-1. **Handle conflicts**:
-
-   - Show conflicted files: `git diff --name-only --diff-filter=U`
-   - **Trivial conflicts** (lockfiles, imports, versions, generated files):
-     dispatch `rebase-agent` for automated resolution
-   - **Non-trivial conflicts** (logic, architecture): display conflict markers
-     and ask the user for resolution guidance
-   - After resolving, complete the merge: `git add . && git commit`
-
-1. **Run tests** (see `merge-protocol.md` for test runner detection):
-
-   ```bash
-   # Auto-detect and run the project's test suite
-   # npm test | pytest | go test ./... | cargo test | etc.
-   ```
-
-   Report test results. If tests fail, warn the user but do not auto-revert.
-
-1. **Update container status** (if merging a container agent):
-
-   ```bash
-   # Update status file to reflect merged state
-   # .worktrees/.status/agent{N}.json → state: "idle"
-   ```
-
-1. **Report**: Show final merge result with commit hash and summary.
-
-1. **Suggest context reset** — after reporting the merge result:
-
-   > Merge complete. If context is large from the diff review, consider
-   > `/clear` — the merge is committed and the next operation starts fresh.
-
-   This is advisory — continue normally if the user declines.
-
-## Phase 3 — Review
-
-Load `merge-protocol.md` before starting (Review Protocol section).
-
-1. **Identify the latest merge commit**:
-
-   ```bash
-   MERGE_COMMIT=$(git log -1 --merges --format='%H')
-   ```
-
-   If no merge commit is found, inform the user and stop.
-
-1. **Show merge summary**:
-
-   ```bash
-   git log -1 --format='%h %s (%cr)' "$MERGE_COMMIT"
-   git diff --stat "${MERGE_COMMIT}^1" "${MERGE_COMMIT}"
-   ```
-
-1. **Run the `code-review` harness** on the merge diff:
-
-   - Scope the review to only files changed in the merge commit
-   - **Invoke the `Workflow` tool** with the script at
-     `~/.claude/agents/code-reviewer/workflow.js` (it ships bundled with the
-     `code-reviewer` agent), passing
-     `args: { diff: "<git diff \"${MERGE_COMMIT}^1\" \"${MERGE_COMMIT}\">", files: [<changed files>] }`.
-     The harness fans the core sub-reviewers (bugs, security, performance,
-     style) plus any conditional specialists as one parallel barrier under a
-     shared budget, runs a fresh judge-panel rescore of each finding's
-     certainty, then merges — returning the `finding-schema.md` object
-     (`scanner`, `summary`, `findings`, `acknowledged_findings`).
-
-1. **Optionally dispatch `test-writer` agent** if:
-
-   - code-reviewer identified missing test coverage, OR
-   - New public APIs were introduced without corresponding tests
-
-1. **Apply corrections** in a single commit:
-
-   ```text
-   fix(review): {summary of corrections}
-
-   {bullet list of changes made}
-
-   Reviewed-by: orchestrate Phase 3
-   ```
-
-   If no corrections are needed, skip the commit.
-
-1. **Run tests** (see `merge-protocol.md` for test runner detection):
-
-   Report test results. If tests fail, warn the user but do not auto-revert.
-
-1. **Report** a summary table:
-
-   ```text
-   # Review Summary
-
-   | Category       | Findings | Auto-Fixed | Flagged |
-   |----------------|----------|------------|---------|
-   | Bugs           | 1        | 1          | 0       |
-   | Security       | 0        | 0          | 0       |
-   | Performance    | 1        | 0          | 1       |
-   | Style          | 2        | 2          | 0       |
-   | Test coverage  | 1        | 1          | 0       |
-
-   Correction commit: abc1234
-   Tests: ✓ passing
-   ```
-
-## Phase 4 — Sync
-
-Load `merge-protocol.md` before starting (Sync Protocol section).
-
-1. **Record the current branch** (orchestrator branch):
-
-   ```bash
-   ORCH_BRANCH=$(git branch --show-current)
-   ```
-
-1. **Discover agent branches**:
-
-   ```bash
-   git branch --list 'agent*' | /usr/bin/sort
-   ```
-
-   If no agent branches found, inform the user and stop.
-
-1. **For each agent branch** (in order: agent01, agent02, ...):
-
-   ```bash
-   git checkout <agent-branch>
-   git merge "$ORCH_BRANCH" -m "sync: merge orchestrator updates"
-   ```
-
-   - **If merge succeeds**: verify merge-base advanced, continue
-   - **If conflicts**: `git merge --abort`, log the skip, continue to next
-
-1. **Return to orchestrator branch**:
-
-   ```bash
-   git checkout "$ORCH_BRANCH"
-   ```
-
-1. **Update issue labels** — for issues associated with successfully synced
-   agents, remove in-flight status labels:
-
-   - GitHub: `gh issue edit {N} --remove-label "status/commit-pending" --remove-label "status/in-progress"`
-   - GitLab: `glab issue update {N} --unlabel "status/commit-pending" --unlabel "status/in-progress"`
-
-1. **Report** a sync summary table:
-
-   ```text
-   # Sync Summary
-
-   | # | Branch   | Status    | New Merge Base |
-   |---|----------|-----------|----------------|
-   | 1 | agent01  | ✓ synced  | abc1234        |
-   | 2 | agent02  | ✗ skipped | (conflicts)    |
-   | 3 | agent03  | ✓ synced  | def5678        |
-   ```
-
-   If any branches were skipped, note they will pick up changes on the next
-   sync cycle.
-
-1. **Suggest context reset** — after reporting the sync summary:
-
-   > Sync complete. Consider `/clear` if context is large — sync output is
-   > mechanical and not needed for subsequent operations.
-
-   This is advisory — continue normally if the user declines.
+1. **Execute**: Mode 1a/1b → run `/next-issue` directly; Mode 2 → worktree
+   golem (Phase D); Mode 3 → container golem via `/provision-agent`.
 
 ## Phase 5 — Container Management
 
 ### Spawn
 
-Invoked via `/orchestrate spawn <N>` (where N is the number of agents).
+Invoked via `/orchestrate spawn <N>` (and by Phase D for container golems).
 
-1. **Check prerequisites**:
+1. **Check prerequisites**: `docker info > /dev/null 2>&1`,
+   `git rev-parse --show-toplevel`.
 
-   - Docker available: `docker info > /dev/null 2>&1`
-   - Git root accessible: `git rev-parse --show-toplevel`
+1. **Invoke `/provision-agent`** to read the devcontainer config, generate the
+   agent docker-compose, build the image, create worktrees, and start containers.
+   Each agent runs Claude Code in a tmux session.
 
-1. **Invoke `/provision-agent`** to handle container setup:
+1. **Assign issues** (priority order from `next-issue/state-format.md`) and
+   launch the autonomous pipeline per golem (Phase D step 3). Write initial
+   cache files to `.worktrees/.status/`.
 
-   - The provision-agent skill reads the devcontainer config, generates the
-     agent docker-compose, builds images, creates worktrees, and starts
-     containers
-   - Each agent gets a tmux session running Claude Code
-
-1. **Assign issues** to agents:
-
-   - Query available issues using the priority ordering from
-     `next-issue/state-format.md`
-   - Assign round-robin by estimated effort
-   - Write initial status files to `.worktrees/.status/`
-
-1. **Report** the spawned agents with access commands:
+1. **Report** spawned golems with access commands:
 
    ```text
-   # Agents Spawned
-
-   | # | Agent    | Container          | Issue | Access                                           |
-   |---|----------|--------------------|-------|--------------------------------------------------|
-   | 1 | agent01  | project-agent01-1  | #142  | docker exec -it project-agent01-1 tmux attach -t claude |
-   | 2 | agent02  | project-agent02-1  | #89   | docker exec -it project-agent02-1 tmux attach -t claude |
-   | 3 | agent03  | project-agent03-1  | #201  | docker exec -it project-agent03-1 tmux attach -t claude |
+   | # | Agent   | Container          | Issue | Access                                                   |
+   |---|---------|--------------------|-------|----------------------------------------------------------|
+   | 1 | agent01 | project-agent01-1  | #142  | docker exec -it project-agent01-1 tmux attach -t claude  |
    ```
 
 ### Teardown
 
-Invoked via `/orchestrate teardown <agent>` or `/orchestrate teardown all`.
+Invoked via `/orchestrate teardown <agent>` or `teardown all`. Tear down only
+after the golem's PR is merged or abandoned.
 
-1. **Stop container**: `docker compose -f .worktrees/docker-compose.agents.yml stop <agent>`
+1. `docker compose -f .worktrees/docker-compose.agents.yml stop <agent>`
+1. `docker compose -f .worktrees/docker-compose.agents.yml rm -f <agent>`
+1. **Remove worktree** (if the PR merged): `git worktree remove .worktrees/<agent>`
+   then `git branch -d <agent>`
+1. **Clean cache**: remove `.worktrees/.status/<agent>.json`
+1. **Report** the teardown result.
 
-1. **Remove container**: `docker compose -f .worktrees/docker-compose.agents.yml rm -f <agent>`
+## Local-Merge (OPT-IN, Legacy)
 
-1. **Remove worktree** (if branch fully merged):
+> **OPT-IN LEGACY MODE.** The default topology is PR-per-golem (Phases D/M/R).
+> Use local-merge ONLY for tightly-coupled work where golems push to no remote
+> (offline / no-PR worktree workflow). The orchestrator merging golem branches
+> into its own branch — and syncing back — is exactly what PR-per-golem
+> replaces. Load `merge-protocol.md` (the merge/sync sections are bannered
+> superseded; conflict classification + test-runner detection remain live).
 
-   ```bash
-   git worktree remove .worktrees/<agent>
-   git branch -d <agent>
-   ```
+Use these only when explicitly requested (`/orchestrate merge`, `review`,
+`sync`).
 
-1. **Clean status file**: Remove `.worktrees/.status/<agent>.json`
+### Merge (legacy Phase 2)
 
-1. **Report** teardown result
+1. **Resolve agent identifier**: numeric → map from the status table; branch
+   name → use directly; `all` → iterate agents with pending commits.
+1. **Preview**: `MERGE_BASE=$(git merge-base HEAD <agent-branch>)`;
+   `git log --oneline "$MERGE_BASE"..<agent-branch>`; diffstat. Confirm.
+1. **Merge**: `git merge --no-ff <agent-branch> -m "merge(<agent-branch>): …"`
+   (or `--squash` on request).
+1. **Conflicts**: dispatch `rebase-agent` for trivial; escalate non-trivial
+   (see `merge-protocol.md` § Conflict Classification).
+1. **Run tests** (see `merge-protocol.md` § Test Runner Detection); warn on
+   failure, do not auto-revert.
+1. **Report** the merge commit. Suggest `/clear` if context is large.
+
+### Review (legacy Phase 3)
+
+Per-PR review is normally the **golem's** job (the `/next-issue-ship` review
+loop). This phase applies only after a local merge.
+
+1. `MERGE_COMMIT=$(git log -1 --merges --format='%H')`.
+1. **Run the `code-review` harness** via the Workflow tool on
+   `~/.claude/agents/code-reviewer/workflow.js`, passing
+   `args: { diff: "<git diff \"${MERGE_COMMIT}^1\" \"${MERGE_COMMIT}\">", files: [<changed>] }`.
+   It returns the `finding-schema.md` object.
+1. **Apply corrections** in a single commit trailered `Reviewed-by: orchestrate`.
+1. **Run tests**; report a summary table.
+
+### Sync (legacy Phase 4)
+
+1. `ORCH_BRANCH=$(git branch --show-current)`.
+1. For each `git branch --list 'agent*' | /usr/bin/sort`:
+   `git checkout <branch>; git merge "$ORCH_BRANCH" -m "sync: …"`; on conflict
+   `git merge --abort` and skip.
+1. Return to `$ORCH_BRANCH`; remove `status/in-progress` /
+   `status/commit-pending` labels for synced issues. Report a sync table.
 
 ## When to Use
 
-- Checking progress of parallel agents working in worktrees
-- Selecting execution mode for new tasks (`/orchestrate mode`)
-- Integrating completed agent work into the main development branch
-- Reviewing merged agent work for correctness and quality
-- Syncing agent branches with the latest orchestrator state
-- Spawning container agents for batch processing (`/orchestrate spawn`)
-- Coordinating multi-agent workflows (2-5 agents)
-- After agents signal completion (e.g., via `status/commit-pending` label)
+- Running 2+ independent issues in parallel as golems (`/orchestrate dispatch`)
+- Watching golem PRs through CI + review to green (`/orchestrate monitor`)
+- Rebasing later PRs after an earlier PR merges (`/orchestrate rebase`)
+- Selecting an execution mode for a new task (`/orchestrate mode`)
+- Spawning / tearing down container golems (`/orchestrate spawn`, `teardown`)
+- Tightly-coupled worktree work with no PRs (opt-in local-merge)
 
 ## When NOT to Use
 
-- Single-agent workflows (no worktrees to orchestrate)
-- Cross-repository coordination (handle manually or via PRs)
-- When agents are still actively working (check status first, merge when ready)
-- For PR-based workflows where agents push branches for review (use standard PR flow)
+- Single-issue work — run `/next-issue` directly, no orchestration needed
+- Cross-repository coordination (handle manually)
+- When golems are still actively working — monitor first, merge when green
