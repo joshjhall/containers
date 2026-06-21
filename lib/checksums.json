@@ -202,6 +202,11 @@
           "sha256": "2b83d1322215b597a1a3e9918d8052737f579d70b9f342521be52c9e3013fd0e",
           "url": "https://github.com/jbangdev/jbang/releases/download/v0.138.0/jbang-0.138.0.tar",
           "added": "2026-04-19"
+        },
+        "0.139.3": {
+          "sha256": "e7d4bbae0f7321fb8fe7033db7e01b8729f5385103c6445e90b82ace87f652f6",
+          "url": "https://github.com/jbangdev/jbang/releases/download/v0.139.3/jbang-0.139.3.tar",
+          "added": "2026-06-21"
         }
       }
     },
@@ -601,6 +606,19 @@
             }
           },
           "added": "2026-05-10"
+        },
+        "2.4.0": {
+          "checksums": {
+            "amd64": {
+              "sha256": "15314940c10d26af9c6649f150b8a47c1262e8fc7e17b1d1029b0e479e8ed8a0",
+              "url": "https://github.com/google/osv-scanner/releases/download/v2.4.0/osv-scanner_linux_amd64"
+            },
+            "arm64": {
+              "sha256": "44e580752910f0ff36ec99aff59af20f65df1e859aa31e5605a8f0d055b496e9",
+              "url": "https://github.com/google/osv-scanner/releases/download/v2.4.0/osv-scanner_linux_arm64"
+            }
+          },
+          "added": "2026-06-21"
         }
       }
     },
@@ -687,7 +705,7 @@
     }
   },
   "metadata": {
-    "generated": "2026-06-15T20:28:31Z",
+    "generated": "2026-06-21T03:09:33Z",
     "description": "Pinned checksums for language runtime downloads",
     "note": "This file is automatically updated by check-versions.sh and should grow over time. Old checksums are never deleted to strengthen security for older versions and enable reproducible builds."
   }

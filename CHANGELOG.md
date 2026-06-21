@@ -5,12 +5,47 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.19.7] - 2026-06-21
+
+### Added
+
+- Add host-side teardown.sh for Zed rebuilds (#520)
+- Register codegraph as a default MCP with volume-backed index (#528)
+- Auto-wire Zed ACP agent to existing Anthropic credentials (#530)
+- Autonomous mode for next-issue + next-issue-ship (#538)
+- Code-reviewer Workflow harness with judge-panel rescore (#539)
+- Adversarial pre-PR review + multi-cycle review loop for ship (#540)
+
+### Changed
+
+- Install rust cargo tools via cargo binstall (#517) (#532)
+- Install R packages from PPM binaries, rebudget CI heavy cells (#537)
+
+### Documentation
+
+- Commit accumulated long-term memories and sync index (#535)
+
+### Fixed
+
+- Resolve container user by shape, not hardcoded UID (#521)
+- Seed system known_hosts with github.com/gitlab.com keys (#533)
+- Reconcile /run and 1Password tmpfs ownership by resolved user (#534)
+
+### Miscellaneous
+
+- Version refresh, drop unmaintained proc-macro-error2, add codegraph (#516)
+
 ## [4.19.6] - 2026-06-14
 
 ### Fixed
 
 - Guard auto-merge job against already-merged auto-patch branch (#513)
 - Refresh inline cosign/zoxide checksums in auto-patch (#514)
+
+### Miscellaneous
+
+- Automated version updates to v4.19.6
+- Update compatibility matrix with passing test results
 
 ## [4.19.5] - 2026-06-07
 
@@ -1885,6 +1920,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix prettier and markdownlint formatting in README
 - Format TLS documentation files
 
+[4.19.7]: https://github.com/joshjhall/containers/compare/v4.19.6...v4.19.7
 [4.19.6]: https://github.com/joshjhall/containers/compare/v4.19.5...v4.19.6
 [4.19.5]: https://github.com/joshjhall/containers/compare/v4.19.4...v4.19.5
 [4.19.4]: https://github.com/joshjhall/containers/compare/v4.19.3...v4.19.4

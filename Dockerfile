@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 # Universal Container Build System
-# Version: 4.19.6
+# Version: 4.19.7
 # Supports multiple contexts: devcontainer, agents, CI/CD, production
 
 # ============================================================================
@@ -305,7 +305,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     fi
 # Mise polyglot runtime version manager
 ARG INCLUDE_MISE=false
-ARG MISE_VERSION=2026.6.10
+ARG MISE_VERSION=2026.6.11
 RUN if [ "${INCLUDE_MISE}" = "true" ]; then \
     MISE_VERSION=${MISE_VERSION} /tmp/build-scripts/features/mise.sh; \
     fi
@@ -354,7 +354,7 @@ ARG INCLUDE_KUBERNETES=false
 ARG KUBECTL_VERSION=1.33.13
 ARG K9S_VERSION=0.51.0
 ARG KREW_VERSION=0.5.0
-ARG HELM_VERSION=4.2.1
+ARG HELM_VERSION=4.2.2
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     if [ "${INCLUDE_KUBERNETES}" = "true" ]; then \
