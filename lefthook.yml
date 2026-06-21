@@ -257,7 +257,12 @@ pre-push:
     # first push of a branch, or when only non-tracked paths changed).
     typos:
       run: |
-        files="{push_files}"
+        # Normalize {push_files} to a newline-separated list. Do NOT wrap the
+        # template in files="{push_files}" — with 2+ files lefthook expands it
+        # to `files="a" "b"`, which is `VAR=value command` syntax and EXECUTES
+        # the second path as a command (hangs the push if it is a script). Pass
+        # the tokens through printf like the cargo-test hook above.
+        files=$(/usr/bin/printf '%s\n' {push_files} | /usr/bin/grep -v '^$' || true)
         if [ -n "$files" ]; then
           typos $files
         else
