@@ -45,6 +45,7 @@ Thumbs.db
 .claude/settings.local.json
 .claude/memory/tmp/
 .claude/plans/
+.claude/worktrees/
 .claude/*.lock
 .worktrees/
 
