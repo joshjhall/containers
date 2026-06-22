@@ -260,10 +260,10 @@ for severity in critical high medium low; do
       --per-page 5 \
     | while read -r line; do
         # Skip issues with status/in-progress, status/pr-pending, status/commit-pending, or status/on-hold labels
-        issue_num=$(echo "$line" | /usr/bin/awk '{print $1}')
+        issue_num=$(/usr/bin/printf '%s\n' "$line" | /usr/bin/awk '{print $1}')
         labels=$(glab issue view "$issue_num" --output json | /usr/bin/grep -o '"status/[^"]*"')
-        if ! echo "$labels" | /usr/bin/grep -qE 'status/in-progress|status/pr-pending|status/commit-pending|status/on-hold'; then
-          echo "$line"
+        if ! /usr/bin/printf '%s\n' "$labels" | /usr/bin/grep -qE 'status/in-progress|status/pr-pending|status/commit-pending|status/on-hold'; then
+          /usr/bin/printf '%s\n' "$line"
           break
         fi
       done

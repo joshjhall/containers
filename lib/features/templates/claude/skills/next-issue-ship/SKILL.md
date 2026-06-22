@@ -25,8 +25,9 @@ When autonomous:
 - Always Branch + PR (Option 1), regardless of branch name.
 - Always wait for CI and auto-fix failures (no prompt).
 - Stop at green CI with a structured completion summary for human merge (see
-  Option 1 "Autonomous completion summary"). Never auto-merge unless
-  `AUTOMERGE=1`.
+  Option 1 "Autonomous completion summary"). Never auto-merge unless BOTH
+  `AUTOMERGE=1` and `AUTOMERGE_AUTONOMOUS=1` are set (the second is a required
+  consent because auto-merge skips the review loop — see Environment Variables).
 
 When NOT autonomous, behavior is unchanged — every interactive prompt below
 runs verbatim as the default.
@@ -59,6 +60,17 @@ These env vars toggle non-default behavior; all are opt-in:
   `severity/critical` issues. Falls through to the normal CI-wait loop if
   `gh pr merge --auto` fails (e.g., auto-merge not enabled on the repo). See
   Option 1 "Auto-merge fast path" below.
+- `AUTOMERGE_AUTONOMOUS=1` — **required second consent** to allow the
+  `AUTOMERGE=1` fast path *while autonomous*. Auto-merge skips the entire
+  adversarial review loop, and an autonomous golem sets autonomy from the
+  environment — so `AUTOMERGE=1` alone in an autonomous run would merge to the
+  default branch unreviewed and unseen. To prevent that, when the run is
+  autonomous the auto-merge fast path is taken ONLY if BOTH `AUTOMERGE=1` and
+  `AUTOMERGE_AUTONOMOUS=1` are set. If `AUTOMERGE=1` is set but
+  `AUTOMERGE_AUTONOMOUS=1` is not, the run ignores auto-merge and falls through
+  to the normal CI-wait loop + review, stopping at green CI for human merge.
+  Has no effect in non-autonomous runs (interactive `AUTOMERGE=1` is unchanged
+  — the human is already in the loop).
 - `PRE_REVIEW_STRICT=true` — pre-review gates (Step 3.5) block Option 1 PR
   creation on HIGH certainty findings instead of warning only.
 - `REVIEW_MAX_CYCLES` — integer, default `3`. Caps the post-CI multi-cycle
@@ -403,6 +415,12 @@ Before executing the chosen shipping mode, run these safety checks:
    **Skip conditions** (fall through to the CI-wait loop instead):
 
    - Platform is not GitHub — the toggle is GitHub-only
+   - **Run is autonomous AND `AUTOMERGE_AUTONOMOUS=1` is NOT set** — print
+     `"auto-merge skipped (autonomous run requires AUTOMERGE_AUTONOMOUS=1)"`
+     and continue. Auto-merge skips the adversarial review loop entirely; an
+     autonomous golem must carry the explicit second consent before it may
+     merge unreviewed. Without it, fall through to the normal CI-wait +
+     review loop and stop at green CI for human merge.
    - Issue carries `severity/critical` — print
      `"auto-merge skipped (severity/critical)"` and continue
    - `gh pr merge --auto` exits non-zero (e.g., auto-merge not enabled on
@@ -489,7 +507,16 @@ Before executing the chosen shipping mode, run these safety checks:
      - For each result with `fixed: true`: stage its `files_changed`, then make
        one commit `fix(ci): {summary}` (combine multiple fixed checks into a
        single commit when convenient), `git push`, and go back to (a) to
-       re-check CI.
+       re-check CI. **Before staging, hard-filter `files_changed` against the
+       CI-config denylist** — drop any path matching `.github/workflows/`,
+       `.gitlab-ci.yml`, `.github/actions/`, or `*/action.yml`. The `ci-fixer`
+       agent is instructed not to touch CI config, but it has tree-wide edit
+       access, so enforce it here rather than trusting the guardrail: if a
+       result's `files_changed` contains a denylisted path, do NOT stage that
+       path, and surface it to the user (autonomous: record as a STOP note in
+       the completion summary) as "ci-fixer attempted a CI-config edit
+       ({path}) — skipped; manual review required." Never let an automated CI
+       fix rewrite the CI definition that gates it.
      - For each result with `fixed: false`: inform the user "CI check {check}
        appears to be {failure_type} — {summary}. Remaining: {remainingFailures}.
        Requires manual intervention." Ask: **Fix manually now, or ship with
