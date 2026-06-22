@@ -115,6 +115,11 @@ Agents that participate in pipelines should document which gates they respect:
 
 See `patterns.md` — **Safety Constraints Template** for a copy-pasteable block.
 
+For an agent driven by a `workflow.js` harness, apply the `adversarial-review`
+skill (its Bug-Class Checklist) to the harness before shipping — most harness
+bugs (ref collisions, budget-outside-barrier, silent drops, unsafe
+interpolation) surface there. See also the `workflow-authoring` skill.
+
 ## Safety Constraints
 
 For every tool in the `tools:` list, document WHY it is granted. For every

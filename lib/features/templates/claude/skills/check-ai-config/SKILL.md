@@ -47,6 +47,25 @@ incorrect server arguments.
 Pre-scan detects: destructive commands, secret leaks. LLM adds: context
 assessment (e.g., a pre-commit hook running a formatter is acceptable).
 
+### harness-logic (deterministic + heuristic)
+
+Reviews `workflow.js` harnesses (and embedded shell in SKILL.md bash fences)
+for the correctness/safety bug classes that frontmatter linting misses.
+
+Pre-scan detects (mechanical signatures, conservatively): finding refs built as
+a bare `file:line:category` template without an index segment (collision risk);
+`${VAR}` interpolation inside a `--dangerously-skip-permissions` command
+(injection surface); `npm install` / `pnpm install` / `composer update` without
+a lockfile-only / `--ignore-scripts` flag (supply-chain).
+
+LLM adds: applies the **`adversarial-review` skill's Bug-Class Checklist** as
+the rubric — budget checked outside the barrier, silent drops of failed
+sub-results, single-consent autonomy escape-hatches, prompts that assert false
+facts on a fallback path, docs that contradict the real dispatch path. (Several
+classes, including silent-drop, are deliberately left to this LLM pass because a
+line-level grep false-positives on them.) The `adversarial-review` checklist is
+the single source for this category's heuristics; do not duplicate it here.
+
 ## Workflow
 
 1. Review pre-scan findings from `patterns.sh` — confirm, dismiss, or adjust

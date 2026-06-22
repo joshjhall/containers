@@ -188,3 +188,6 @@ Before shipping a skill, verify:
 - **Trigger test**: does the skill activate for the right user requests?
 - **Negative test**: does the skill stay silent for unrelated requests?
 - **Iteration**: observe agent behavior, identify gaps, refine, retest
+- **Adversarial review**: for a skill that produces findings or drives a
+  workflow, apply the `adversarial-review` skill (its Bug-Class Checklist)
+  before shipping

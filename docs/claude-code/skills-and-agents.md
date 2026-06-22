@@ -10,7 +10,7 @@ installed to `~/.claude/skills/` and `~/.claude/agents/` on first container
 startup via `claude-setup`. Project-level `.claude/` configs merge with these
 (union semantics, project wins on name conflicts).
 
-### Skills (always installed — 36 static + 1 dynamic)
+### Skills (always installed — 38 static + 1 dynamic)
 
 | Skill                     | Purpose                                                                             |
 | ------------------------- | ----------------------------------------------------------------------------------- |
@@ -24,6 +24,8 @@ startup via `claude-setup`. Project-level `.claude/` configs merge with these
 | `shell-scripting`         | Shell naming conventions, namespace safety, testing, error handling                 |
 | `skill-authoring`         | Skill/instruction writing, quality criteria, cross-tool patterns                    |
 | `agent-authoring`         | Agent/subagent design, tool scoping, model selection, prompt design                 |
+| `workflow-authoring`      | Authoring `workflow.js` harnesses: budget discipline, unique refs, null-resilience  |
+| `adversarial-review`      | Adversarial review method + bug-class checklist for skills/agents/harnesses          |
 | `file-issue`              | Structured issue creation with auto-labeling, scope enforcement, update mode        |
 | `next-issue`              | Issue-driven dev: select by priority, plan; delegates shipping to `next-issue-ship` |
 | `codebase-audit`          | Periodic codebase sweep: tech debt, security, test gaps, architecture, docs         |
@@ -151,7 +153,7 @@ docker run -e CLAUDE_SKILLS="git-workflow,testing-patterns" ...
 
 | `CLAUDE_SKILLS` | Behavior                                        |
 | --------------- | ----------------------------------------------- |
-| Unset (default) | All 37 always-installed skills installed        |
+| Unset (default) | All 39 always-installed skills installed        |
 | Set to list     | Only listed skills installed                    |
 | Set to `""`     | No static skills (only `container-environment`) |
 
