@@ -9,16 +9,29 @@ Line-by-line merging of lock files is unreliable — always regenerate.
 
 ## Supported Lock Files
 
-| Lock File           | Manifest         | Regenerate Command        |
-| ------------------- | ---------------- | ------------------------- |
-| `package-lock.json` | `package.json`   | `npm install`             |
-| `yarn.lock`         | `package.json`   | `yarn install`            |
-| `pnpm-lock.yaml`    | `package.json`   | `pnpm install`            |
-| `Cargo.lock`        | `Cargo.toml`     | `cargo generate-lockfile` |
-| `Gemfile.lock`      | `Gemfile`        | `bundle lock`             |
-| `poetry.lock`       | `pyproject.toml` | `poetry lock --no-update` |
-| `go.sum`            | `go.mod`         | `go mod tidy`             |
-| `composer.lock`     | `composer.json`  | `composer update --lock`  |
+Use the **lockfile-only / no-install** form of each command. These resolve the
+lock file against the already-merged manifest **without running install
+lifecycle scripts** (which would execute arbitrary code from the incoming
+branch during an autonomous rebase) and **without drifting unrelated transitive
+dependencies** beyond the conflict.
+
+| Lock File           | Manifest         | Regenerate Command (lockfile-only)   |
+| ------------------- | ---------------- | ------------------------------------ |
+| `package-lock.json` | `package.json`   | `npm install --package-lock-only --ignore-scripts` |
+| `yarn.lock`         | `package.json`   | `yarn install --mode update-lockfile` |
+| `pnpm-lock.yaml`    | `package.json`   | `pnpm install --lockfile-only --ignore-scripts` |
+| `Cargo.lock`        | `Cargo.toml`     | `cargo generate-lockfile`            |
+| `Gemfile.lock`      | `Gemfile`        | `bundle lock`                        |
+| `poetry.lock`       | `pyproject.toml` | `poetry lock --no-update`            |
+| `go.sum`            | `go.mod`         | `go mod tidy`                        |
+| `composer.lock`     | `composer.json`  | `composer update --lock --no-scripts --no-plugins` |
+
+> **Supply-chain note**: the plain install forms (`npm install`,
+> `pnpm install`, `composer update`) run pre/post-install scripts and may bump
+> dependencies unrelated to the conflict. Because this runs unattended while
+> integrating another branch's manifest, always prefer the lockfile-only forms
+> above. If only a full-install form is available for a tool, **escalate**
+> rather than running it autonomously.
 
 ## Resolution Steps
 

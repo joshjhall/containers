@@ -50,8 +50,11 @@ almost always to keep the higher one.
   (`1.3.0` vs `1.2.0` → `1.3.0`)
 - **Different components bumped**: Take the overall higher version
   (`2.0.0` vs `1.5.0` → `2.0.0`)
-- **Non-semver versions**: Compare as strings, prefer the longer/higher one,
-  or escalate if ambiguous
+- **Non-semver versions**: **Escalate** — do not guess. String comparison of
+  versions is unreliable (`"1.10" sorts before "1.9"`; calver, epoch, and
+  date-stamped schemes break entirely), and an auto-rebase that silently picks
+  the wrong version ships a regression. Only resolve versions that are clean,
+  comparable semver on both sides; anything else goes to the human.
 
 ## When NOT to Use
 
