@@ -9,7 +9,9 @@ interactive session** that dispatches **golems** (each a PROCESS owning one
 issue → branch → worktree → PR, running the autonomous `/next-issue --auto` →
 `/next-issue-ship` pipeline), then monitors, surfaces, and rebases across their
 PRs. **The orchestrator never merges golem branches into its own** — humans
-merge PRs (or per-golem `AUTOMERGE=1`).
+merge PRs (or per-golem auto-merge, which for an autonomous golem requires BOTH
+`AUTOMERGE=1` and `AUTOMERGE_AUTONOMOUS=1` — see `next-issue-ship` §
+Environment Variables).
 
 **Hard constraints** (architecture — do not violate):
 
@@ -73,7 +75,9 @@ dispatch is sequential and cheap — **not** workflow-driven.
    ```
 
    The pipeline runs unattended to a green, review-clean PR (or, per-golem,
-   queues GitHub auto-merge when `AUTOMERGE=1`).
+   queues GitHub auto-merge when BOTH `AUTOMERGE=1` and `AUTOMERGE_AUTONOMOUS=1`
+   are set — `AUTOMERGE=1` alone is a no-op for an autonomous golem and falls
+   through to human merge).
 
 1. **Label + cache**: ensure each dispatched issue is `status/in-progress`
    (the autonomous `/next-issue` does this) and write the initial golem cache

@@ -78,7 +78,14 @@ directly via `docker exec -it <container> tmux attach -t claude`.
    - **Agent environment**: `NEXT_ISSUE_AUTONOMOUS=1` (ambient autonomy opt-in),
      `AGENT_ISSUE` (the assigned issue), `REVIEW_MAX_CYCLES` (default 3), and a
      pass-through `GITHUB_TOKEN`/`GH_TOKEN` so the golem can push and open PRs.
-     Optional: `PRE_REVIEW_STRICT`, `REVIEW_STRICT`, `AUTOMERGE`.
+     Optional: `PRE_REVIEW_STRICT`, `REVIEW_STRICT`, `AUTOMERGE`,
+     `AUTOMERGE_AUTONOMOUS`. **Note:** golems are autonomous, and
+     `/next-issue-ship` only takes the auto-merge fast path autonomously when
+     BOTH `AUTOMERGE=1` and `AUTOMERGE_AUTONOMOUS=1` are set (the second is a
+     required consent because auto-merge skips the adversarial review loop — see
+     `next-issue-ship` SKILL.md § Environment Variables). Passing `AUTOMERGE=1`
+     alone to a golem is intentionally a no-op: it falls through to the normal
+     review loop and stops at a green PR for human merge.
    - **Init system**: `init: true` for tini zombie reaping
    - **Capabilities**: same as devcontainer (`cap_add`, `devices`)
    - **Command**: `sleep infinity` (entrypoint handles startup, tmux starts
@@ -106,6 +113,10 @@ directly via `docker exec -it <container> tmux attach -t claude`.
          AGENT_ISSUE: "${AGENT01_ISSUE:-}"
          NEXT_ISSUE_AUTONOMOUS: "1"
          REVIEW_MAX_CYCLES: "${REVIEW_MAX_CYCLES:-3}"
+         # Auto-merge requires BOTH keys for an autonomous golem (see notes
+         # above + next-issue-ship § Environment Variables). Default off.
+         AUTOMERGE: "${AUTOMERGE:-}"
+         AUTOMERGE_AUTONOMOUS: "${AUTOMERGE_AUTONOMOUS:-}"
          GITHUB_TOKEN: "${GITHUB_TOKEN:-}"
          GH_TOKEN: "${GH_TOKEN:-${GITHUB_TOKEN:-}}"
        init: true
@@ -138,9 +149,10 @@ directly via `docker exec -it <container> tmux attach -t claude`.
    export NEXT_ISSUE_AUTONOMOUS=1
    export REVIEW_MAX_CYCLES="${REVIEW_MAX_CYCLES:-3}"
    # Optional pass-throughs (inherited from the environment if set):
-   #   PRE_REVIEW_STRICT, REVIEW_STRICT, AUTOMERGE
+   #   PRE_REVIEW_STRICT, REVIEW_STRICT, AUTOMERGE, AUTOMERGE_AUTONOMOUS
+   # (autonomous auto-merge needs BOTH AUTOMERGE=1 and AUTOMERGE_AUTONOMOUS=1).
 
-   now() { date -u +%Y-%m-%dT%H:%M:%SZ; }
+   now() { command date -u +%Y-%m-%dT%H:%M:%SZ; }
 
    # Rewrite the golem status cache. Args: <state> [error-message]
    # Cache only — the orchestrator's monitor poll (PR + issue-label state) is
@@ -171,8 +183,15 @@ directly via `docker exec -it <container> tmux attach -t claude`.
    PY
    }
 
-   # No issue assigned → plain interactive session (defaults unchanged).
-   if [ -z "$ISSUE" ]; then
+   # No (or invalid) issue assigned → plain interactive session. ISSUE is
+   # interpolated into a `claude --dangerously-skip-permissions '/next-issue
+   # ${ISSUE} …'` command below, so it MUST be a bare integer — a non-numeric
+   # value could break out of the single-quoted argument into the
+   # auto-approving shell. Reject anything that is not all digits.
+   if ! printf '%s' "$ISSUE" | command grep -qE '^[0-9]+$'; then
+       if [ -n "$ISSUE" ]; then
+           echo "WARNING: AGENT_ISSUE='$ISSUE' is not a numeric issue id — starting interactive session instead" >&2
+       fi
        tmux new-session -d -s claude "claude --dangerously-skip-permissions"
        echo "Claude Code started in tmux session 'claude' (interactive)"
        echo "Attach with: tmux attach -t claude"
@@ -206,8 +225,18 @@ directly via `docker exec -it <container> tmux attach -t claude`.
                write_status working
                continue
            fi
-           ci="$(command gh pr checks "$pr" 2>/dev/null \
-               | command grep -qiE '\bfail' && echo failing || echo passing)"
+           # 3-state CI: a check still running must read as pending, NOT
+           # passing — otherwise the cache flags the golem green while CI is
+           # mid-flight. fail > pending > passing precedence.
+           local checks_out
+           checks_out="$(command gh pr checks "$pr" 2>/dev/null)"
+           if printf '%s' "$checks_out" | command grep -qiE '\bfail'; then
+               ci="failing"
+           elif printf '%s' "$checks_out" | command grep -qiE '\bpending|\bin_progress|\bqueued'; then
+               ci="pending"
+           else
+               ci="passing"
+           fi
            review="$(command gh pr view "$pr" --json reviewDecision \
                --jq '.reviewDecision // "none"' 2>/dev/null)"
            if [ "$ci" = "failing" ]; then

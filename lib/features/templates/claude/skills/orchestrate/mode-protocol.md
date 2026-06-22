@@ -101,7 +101,7 @@ review-clean PR. Golems are not a new isolation mechanism — they are the
 | Realization        | Built on | Payload (process)                         | Exit                            |
 | ------------------ | -------- | ----------------------------------------- | ------------------------------- |
 | **Worktree golem** | Mode 2   | `/next-issue <N> --auto` in a worktree shell | autonomous ship → Branch + PR |
-| **Container golem** | Mode 3  | same pipeline in the container's tmux Claude | same → PR (or `AUTOMERGE=1`)  |
+| **Container golem** | Mode 3  | same pipeline in the container's tmux Claude | same → PR (or auto-merge: needs `AUTOMERGE=1` + `AUTOMERGE_AUTONOMOUS=1`) |
 
 > **Hard constraint — golems are processes, never Workflow subagents.** The
 > Workflow tool permits one nesting level, and each golem's `/next-issue-ship`
@@ -124,7 +124,8 @@ ELSE (single issue):
 
 The master orchestrator (a live interactive session) dispatches golems, then
 monitors PR + issue-label state and rebases across PRs. It NEVER merges a
-golem's branch into its own — humans merge PRs (or per-golem `AUTOMERGE=1`).
+golem's branch into its own — humans merge PRs (or per-golem auto-merge, which
+for an autonomous golem requires both `AUTOMERGE=1` and `AUTOMERGE_AUTONOMOUS=1`).
 See `SKILL.md` Phases D / M / R.
 
 ---
