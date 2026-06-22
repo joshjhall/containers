@@ -36,6 +36,10 @@ source /tmp/build-scripts/base/feature-header.sh
 # Source apt utilities for reliable package installation
 source /tmp/build-scripts/base/apt-utils.sh
 
+# Source retry utilities (retry_with_backoff) for hardening cargo binstall
+# against transient network failures on its from-source fallback path (#544)
+source /tmp/build-scripts/base/retry-utils.sh
+
 # Source version validation utilities
 source /tmp/build-scripts/base/version-validation.sh
 
@@ -160,30 +164,43 @@ install_github_release "cargo-binstall" "${CARGO_BINSTALL_VERSION}" \
     "cargo-binstall-aarch64-unknown-linux-musl.tgz" \
     "calculate" "extract_flat:cargo-binstall"
 
-log_command "Installing cargo development tools" \
-    su - "${USERNAME}" -c "
-    export CARGO_HOME='${CARGO_HOME}'
-    export RUSTUP_HOME='${RUSTUP_HOME}'
-    export GITHUB_TOKEN='${GITHUB_TOKEN:-}'
-    source ${CARGO_HOME}/env
+# binstall helper
+# ----------------------------------------------------------------------------
+# Wraps `cargo binstall` (same flags as rust-dev.sh's cargo_binstall_tool):
+#   --locked       honour Cargo.lock (parity with the old `cargo install --locked`)
+#   --no-confirm   non-interactive (required in a build)
+#   --disable-telemetry  no phone-home during builds
+# Runs as ${USERNAME} so artifacts land under /cache/cargo with correct
+# ownership. GITHUB_TOKEN (if provided via a BuildKit secret) is forwarded so
+# binstall's GitHub API lookups aren't rate-limited.
+#
+# The whole call is wrapped in retry_with_backoff: when binstall can't find a
+# prebuilt binary it falls back to `cargo install --locked` from source, which
+# makes live crates.io downloads. A single transient network blip there would
+# otherwise abort the entire image build (observed with taplo-cli@0.10.0 in
+# rust-dev, #544). Retries cover both the prebuilt-fetch and the from-source
+# fallback paths. --locked and the explicit @version pins are preserved, so a
+# retry never silently changes what gets installed.
+cargo_binstall_tool() {
+    local spec="$1"
+    retry_with_backoff su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' GITHUB_TOKEN='${GITHUB_TOKEN:-}' && source '${CARGO_HOME}/env' && cargo binstall --locked --no-confirm --disable-telemetry ${spec}"
+}
 
-    # cargo binstall flags: --locked (honour Cargo.lock), --no-confirm
-    # (non-interactive), --disable-telemetry (no phone-home during builds).
-    binstall() { cargo binstall --locked --no-confirm --disable-telemetry \"\$@\"; }
+# cargo-watch: Automatically re-run commands when files change
+# Note: cargo add/remove are now built into Cargo 1.62+, no need for cargo-edit
+log_command "Installing cargo-watch" \
+    cargo_binstall_tool "cargo-watch@${CARGO_WATCH_VERSION}"
 
-    # cargo-watch: Automatically re-run commands when files change
-    # Note: cargo add/remove are now built into Cargo 1.62+, no need for cargo-edit
-    echo 'Installing development tools...'
-    binstall cargo-watch@${CARGO_WATCH_VERSION}
-
-    # mdBook: Create books from Markdown (Rust's documentation standard)
-    # Includes plugins for enhanced documentation features
-    echo 'Installing mdBook documentation tools...'
-    binstall mdbook@${MDBOOK_VERSION}
-    binstall mdbook-mermaid@${MDBOOK_MERMAID_VERSION}
-    binstall mdbook-toc@${MDBOOK_TOC_VERSION}
-    binstall mdbook-admonish@${MDBOOK_ADMONISH_VERSION}
-"
+# mdBook: Create books from Markdown (Rust's documentation standard)
+# Includes plugins for enhanced documentation features
+log_command "Installing mdbook" \
+    cargo_binstall_tool "mdbook@${MDBOOK_VERSION}"
+log_command "Installing mdbook-mermaid" \
+    cargo_binstall_tool "mdbook-mermaid@${MDBOOK_MERMAID_VERSION}"
+log_command "Installing mdbook-toc" \
+    cargo_binstall_tool "mdbook-toc@${MDBOOK_TOC_VERSION}"
+log_command "Installing mdbook-admonish" \
+    cargo_binstall_tool "mdbook-admonish@${MDBOOK_ADMONISH_VERSION}"
 
 # ============================================================================
 # Create symlinks for Rust binaries
@@ -224,6 +241,111 @@ log_command "Setting Rust bashrc script permissions" \
 # Update /etc/environment with static paths
 log_message "Updating system PATH in /etc/environment..."
 add_to_system_path "/cache/cargo/bin"
+
+# ============================================================================
+# Pinned-toolchain component reconciliation (#511, #487)
+# ============================================================================
+# The catalog's component_add post_install steps (rust-src, rust-analyzer,
+# clippy, rustfmt) — and rust-dev's llvm-tools-preview — only land on the
+# build-time default toolchain. When a consumer repo pins a different toolchain
+# via rust-toolchain.toml, rustup auto-installs that toolchain *bare* the first
+# time cargo/rustup runs in the project, so the rust-analyzer shim dies with
+# "Unknown binary 'rust-analyzer' in official toolchain '...'" and cargo
+# llvm-cov trips an interactive component-install prompt that hangs CI.
+#
+# We can't know the consumer's pin at image-build time (the project isn't in
+# the build context for this layer), so reconcile at runtime: a first-startup
+# hook reads the workspace's rust-toolchain.toml and applies the same
+# components to the pinned toolchain. `rustup component add` is idempotent, so
+# this is a no-op when the pin matches the default or the components already
+# exist. The helper is shared with rust-dev's startup hook, which adds
+# llvm-tools-preview on top.
+log_message "Installing pinned-toolchain component reconciler..."
+
+command cat >/usr/local/bin/rust-ensure-pinned-components <<'EOF'
+#!/bin/bash
+# Apply rustup components to the toolchain pinned by a project's
+# rust-toolchain.toml (or legacy plain-text rust-toolchain file), so a pinned
+# toolchain that rustup auto-installed bare still gets rust-analyzer, clippy,
+# etc. See lib/features/rust.sh for the rationale (#511, #487).
+#
+# Usage: rust-ensure-pinned-components [project_dir] [component...]
+#   project_dir  Directory to look for rust-toolchain.toml in (default: $PWD)
+#   component... Components to add (default: rust-src rust-analyzer clippy rustfmt)
+set -uo pipefail
+
+export CARGO_HOME="${CARGO_HOME:-/cache/cargo}"
+export RUSTUP_HOME="${RUSTUP_HOME:-/cache/rustup}"
+
+project_dir="${1:-$PWD}"
+shift 2>/dev/null || true
+components=("$@")
+if [ "${#components[@]}" -eq 0 ]; then
+    components=(rust-src rust-analyzer clippy rustfmt)
+fi
+
+if ! command -v rustup >/dev/null 2>&1; then
+    exit 0
+fi
+
+# Locate the toolchain file. rust-toolchain.toml is the modern form; a bare
+# `rust-toolchain` file (legacy) holds just the channel string.
+toolchain_file=""
+if [ -f "${project_dir}/rust-toolchain.toml" ]; then
+    toolchain_file="${project_dir}/rust-toolchain.toml"
+elif [ -f "${project_dir}/rust-toolchain" ]; then
+    toolchain_file="${project_dir}/rust-toolchain"
+fi
+[ -n "${toolchain_file}" ] || exit 0
+
+# Extract the pinned channel. For the .toml form, grab the value of the
+# `channel = "..."` key under [toolchain]; for the legacy form, the whole
+# (trimmed) file is the channel.
+pinned=""
+if [[ "${toolchain_file}" == *.toml ]]; then
+    pinned=$(command grep -E '^[[:space:]]*channel[[:space:]]*=' "${toolchain_file}" |
+        command head -n1 |
+        command sed -E 's/^[^=]*=[[:space:]]*//; s/[",[:space:]]//g')
+else
+    pinned=$(command sed -E 's/[[:space:]]+//g' "${toolchain_file}" | command head -n1)
+fi
+[ -n "${pinned}" ] || exit 0
+
+# Skip if the pinned toolchain is already the default (components are already
+# present from the build-time component_add steps).
+default_tc=$(rustup show active-toolchain 2>/dev/null | command awk '{print $1}')
+case "${default_tc}" in
+    "${pinned}"-*) exit 0 ;;
+esac
+
+echo "Reconciling rustup components for pinned toolchain '${pinned}' (from $(basename "${toolchain_file}"))..."
+# Ensure the pinned toolchain is installed, then add the components to it.
+# Failures are non-fatal: a startup hook must never block the container.
+rustup toolchain install "${pinned}" --no-self-update 2>/dev/null || true
+rustup component add --toolchain "${pinned}" "${components[@]}" 2>/dev/null ||
+    echo "  ⚠ Could not add some components to '${pinned}' (continuing)"
+EOF
+
+log_command "Setting rust-ensure-pinned-components permissions" \
+    chmod +x /usr/local/bin/rust-ensure-pinned-components
+
+# First-startup hook: reconcile the base rust components against the workspace's
+# pinned toolchain. rust-dev installs a companion hook for llvm-tools-preview.
+log_command "Creating startup directory" \
+    mkdir -p /etc/container/first-startup
+
+command cat >/etc/container/first-startup/21-rust-toolchain-components.sh <<'EOF'
+#!/bin/bash
+# Reconcile rust-analyzer/rust-src/clippy/rustfmt onto a workspace-pinned
+# toolchain so the LSP and cargo subcommands work when a project pins a
+# toolchain other than the image default via rust-toolchain.toml (#511).
+if command -v rust-ensure-pinned-components >/dev/null 2>&1; then
+    rust-ensure-pinned-components "${WORKING_DIR:-$PWD}"
+fi
+EOF
+
+log_command "Setting rust toolchain component startup script permissions" \
+    chmod +x /etc/container/first-startup/21-rust-toolchain-components.sh
 
 # ============================================================================
 # Final ownership fix
