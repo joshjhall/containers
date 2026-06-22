@@ -64,6 +64,10 @@ source /tmp/build-scripts/base/feature-header.sh
 # Source apt utilities for reliable package installation
 source /tmp/build-scripts/base/apt-utils.sh
 
+# Source retry utilities (retry_with_backoff) for hardening cargo binstall
+# against transient network failures on its from-source fallback path (#544)
+source /tmp/build-scripts/base/retry-utils.sh
+
 # Source GitHub release installer for binary tool downloads (used for mold)
 source /tmp/build-scripts/features/lib/install-github-release.sh
 
@@ -174,9 +178,20 @@ fi
 # provided via a BuildKit secret) is forwarded so binstall's GitHub API lookups
 # aren't rate-limited on shared CI runners; absent, it degrades to
 # unauthenticated requests, which is fine for local builds.
+# The whole binstall call is wrapped in retry_with_backoff: when binstall
+# can't find a prebuilt binary it falls back to `cargo install --locked` from
+# source, which makes live crates.io downloads. A single transient network
+# blip there would otherwise abort the entire image build (observed with
+# taplo-cli@0.10.0, #544). Retries cover both the prebuilt-fetch and the
+# from-source fallback paths. --locked and the explicit @version pins are
+# preserved, so a retry never silently changes what gets installed.
+#
+# --log-level info makes binstall announce whether it resolved a prebuilt
+# binary or fell back to compiling from source, so future flakes are easy to
+# attribute from the build log.
 cargo_binstall_tool() {
     local spec="$1"
-    su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' GITHUB_TOKEN='${GITHUB_TOKEN:-}' && /usr/local/bin/cargo binstall --locked --no-confirm --disable-telemetry ${spec}"
+    retry_with_backoff su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' GITHUB_TOKEN='${GITHUB_TOKEN:-}' && /usr/local/bin/cargo binstall --locked --no-confirm --disable-telemetry --log-level info ${spec}"
 }
 
 # Core development tools
@@ -216,8 +231,13 @@ log_command "Installing cargo-nextest" \
 
 # cargo-llvm-cov drives `cargo` with LLVM source-based coverage instrumentation;
 # the llvm-tools-preview component ships profdata/cov binaries it shells out to.
+# This adds it to the build-time default toolchain; the first-startup hook
+# below reconciles it onto a workspace-pinned toolchain too, so `cargo
+# llvm-cov` under a rust-toolchain.toml pin doesn't trip an interactive
+# component-install prompt that hangs CI (#487). Retried because the component
+# download is a live network fetch.
 log_command "Adding llvm-tools-preview rustup component for cargo-llvm-cov" \
-    su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/rustup component add llvm-tools-preview"
+    retry_with_backoff su - "${USERNAME}" -c "export CARGO_HOME='${CARGO_HOME}' RUSTUP_HOME='${RUSTUP_HOME}' && /usr/local/bin/rustup component add llvm-tools-preview"
 
 log_command "Installing cargo-llvm-cov" \
     cargo_binstall_tool "cargo-llvm-cov@${LLVM_COV_VERSION}"
@@ -421,6 +441,29 @@ EOF
 
 log_command "Setting startup script permissions" \
     chmod +x /etc/container/first-startup/20-rust-dev-setup.sh
+
+# ----------------------------------------------------------------------------
+# Pinned-toolchain llvm-tools-preview reconciliation (#487)
+# ----------------------------------------------------------------------------
+# llvm-tools-preview is added to the build-time default toolchain above, but a
+# project pinning a different toolchain via rust-toolchain.toml would get that
+# toolchain without it — and `cargo llvm-cov` then trips an interactive
+# component-install prompt that hangs CI. The base rust feature installs the
+# rust-ensure-pinned-components helper (and reconciles its own components); we
+# layer llvm-tools-preview onto the pinned toolchain here so coverage works
+# under a pin. Idempotent: a no-op when the pin matches the default.
+command cat >/etc/container/first-startup/21-rust-dev-toolchain-components.sh <<'EOF'
+#!/bin/bash
+# Reconcile llvm-tools-preview onto a workspace-pinned toolchain so
+# `cargo llvm-cov` works when a project pins a toolchain other than the image
+# default via rust-toolchain.toml (#487).
+if command -v rust-ensure-pinned-components >/dev/null 2>&1; then
+    rust-ensure-pinned-components "${WORKING_DIR:-$PWD}" llvm-tools-preview
+fi
+EOF
+
+log_command "Setting rust-dev toolchain component startup script permissions" \
+    chmod +x /etc/container/first-startup/21-rust-dev-toolchain-components.sh
 
 # ============================================================================
 # Cron Job for cargo-sweep
