@@ -149,8 +149,9 @@ produce the findings handed to you. Independently re-score each finding's
 sub-reviewer that found an issue never gets the last word on how certain it is.
 
 Re-score certainty **only** — do not add, remove, merge, reclassify, or edit any
-other field. Key each score back to its finding by
-`ref = "<file>:<line_start>:<category>"` and return the typed scores array.
+other field. Key each score back to its finding by the `ref` field carried on
+that finding (copy it verbatim — it is a unique id; do not reconstruct it from
+other fields) and return the typed scores array.
 
 ### Step 5: Scan for Inline Acknowledgments
 
@@ -217,6 +218,10 @@ top-level structure, unchanged:
   "acknowledged_findings": [ ... ]
 }
 ```
+
+**Integrity**: every finding handed to you must end up in exactly one of
+`findings` (kept, possibly merged via dedup) or `acknowledged_findings`
+(suppressed) — never silently dropped. Set `total_findings = findings.length`.
 
 Each finding in the `findings` array includes all fields from the sub-reviewer
 schema plus:
