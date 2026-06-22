@@ -294,7 +294,27 @@ pre-push:
       # if running outside a dev-tools container.
       skip:
         - run: "! command -v osv-scanner >/dev/null 2>&1"
-      run: osv-scanner scan source --recursive .
+      # Enumerate tracked lockfiles with `git ls-files` and pass each
+      # explicitly, rather than `scan source --recursive .`. The recursive
+      # walk honours .gitignore, so a push originating from a worktree under
+      # the gitignored `.worktrees/` path makes osv-scanner walk zero dirs,
+      # find no lockfile, and exit non-zero ("No package sources found") — a
+      # false failure unrelated to any advisory. `git ls-files` resolves the
+      # same set from any worktree or the main checkout, independent of
+      # .gitignore, and still flags real advisories (non-zero exit) so the
+      # security gate is preserved. Mirrors the docker-compose-validate hook.
+      run: |
+        lockfiles=$(git ls-files \
+          "*Cargo.lock" "*package-lock.json" "*yarn.lock" "*pnpm-lock.yaml" \
+          "*go.sum" "*poetry.lock" "*Gemfile.lock" "*composer.lock" \
+          "*requirements.txt")
+        [ -n "$lockfiles" ] || exit 0
+        args=""
+        for f in $lockfiles; do
+          args="$args --lockfile $f"
+        done
+        # shellcheck disable=SC2086  # intentional word-splitting of $args
+        osv-scanner scan source $args
 
     cargo-deny:
       # cargo-deny is shipped by the rust-dev feature; skip gracefully
