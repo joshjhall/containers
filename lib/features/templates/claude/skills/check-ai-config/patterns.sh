@@ -281,6 +281,62 @@ check_hook_safety() {
 }
 
 # =============================================================================
+# Category: harness-logic
+# Reviews workflow.js harnesses for the mechanical correctness/safety bug
+# classes that frontmatter linting misses. Conservative by design — favors
+# MEDIUM so the LLM pass (using the adversarial-review checklist) can confirm,
+# avoiding the false-positive trap of aggressive HIGH greps.
+# =============================================================================
+
+check_harness_logic() {
+    local file="$1"
+
+    # Only workflow harness scripts (skip schemas, docs, etc.)
+    case "$file" in
+        *workflow.js) ;;
+        *) return ;;
+    esac
+
+    # Non-unique finding ref: a "${a}:${b}:${c}" template (3 interpolations,
+    # colon-joined) with no index segment (#). Collides when two findings share
+    # file+line+category. A fixed ref carries a trailing #${i}.
+    /usr/bin/grep -nE '`\$\{[^}]+\}:\$\{[^}]+\}:\$\{[^}]+\}`' "$file" 2>/dev/null |
+        /usr/bin/grep -vE '#\$\{' |
+        while IFS=: read -r line_num content; do
+            evidence=$(/usr/bin/printf '%.80s' "$content")
+            /usr/bin/printf '%s\t%s\t%s\t%s\t%s\n' \
+                "$file" "$line_num" "harness-logic" \
+                "Finding ref may collide (no per-finding index): ${evidence}" "MEDIUM"
+        done || true
+
+    # Unsafe interpolation into an auto-approving command.
+    /usr/bin/grep -nE 'dangerously-skip-permissions.*\$\{' "$file" 2>/dev/null |
+        while IFS=: read -r line_num content; do
+            evidence=$(/usr/bin/printf '%.80s' "$content")
+            /usr/bin/printf '%s\t%s\t%s\t%s\t%s\n' \
+                "$file" "$line_num" "harness-logic" \
+                "Interpolation into --dangerously-skip-permissions (validate first): ${evidence}" "HIGH"
+        done || true
+
+    # Supply-chain regen: full install form without a lockfile-only/no-scripts flag.
+    /usr/bin/grep -nE '(npm install|pnpm install|composer update|yarn install)' "$file" 2>/dev/null |
+        /usr/bin/grep -vE 'package-lock-only|ignore-scripts|no-scripts|lockfile-only|update-lockfile' |
+        while IFS=: read -r line_num content; do
+            evidence=$(/usr/bin/printf '%.80s' "$content")
+            /usr/bin/printf '%s\t%s\t%s\t%s\t%s\n' \
+                "$file" "$line_num" "harness-logic" \
+                "Install/regen may run lifecycle scripts (use lockfile-only): ${evidence}" "MEDIUM"
+        done || true
+
+    # NOTE: the "silent drop of failed sub-results" bug class is intentionally
+    # NOT pre-scanned here. A line-level grep for `.filter(Boolean)` cannot
+    # distinguish a fan-out result (real bug if unlogged) from benign input-arg
+    # sanitization, and the drop is often logged on a different line — so it
+    # false-positives badly. It is left to the LLM pass via the
+    # adversarial-review checklist, which can read the surrounding function.
+}
+
+# =============================================================================
 # Main: iterate over file list, run all checks
 # =============================================================================
 
@@ -292,5 +348,6 @@ while IFS= read -r file; do
     check_ai_file_bloat "$file"
     check_mcp_config "$file"
     check_hook_safety "$file"
+    check_harness_logic "$file"
 
 done <"$FILE_LIST"

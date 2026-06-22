@@ -20,6 +20,7 @@ compatible_with: "finding-schema.md >= 1.0"
 | `config-inconsistency` | MEDIUM    | heuristic     | 0.7-0.9    |
 | `mcp-misconfiguration` | HIGH      | deterministic | >= 0.9     |
 | `hook-safety`          | HIGH      | deterministic | >= 0.9     |
+| `harness-logic`        | MEDIUM    | heuristic     | 0.7-0.9    |
 
 ## Finding Format
 

@@ -21,6 +21,10 @@ severity:
   hook-safety:
     destructive_command: high
     secret_leak: high
+  harness-logic:
+    ref_collision: medium
+    unsafe_regen: medium
+    unsafe_interpolation: high
 
 bloat_thresholds:
   claude_md:
