@@ -254,6 +254,30 @@ EOF
 run_test test_rust_mod_rs_with_macro_flagged "Rust mod.rs with macro_rules! is still flagged"
 
 # ===========================================================================
+# Shell: .sh / .bash / .zsh sources are covered by the default skip policy, so
+# they are suppressed BEFORE the extension switch and must never reach the
+# generic "Unknown file type" MEDIUM branch — regardless of whether a test
+# exists. Regression guard for the false "shell floods missing-test" report.
+# ===========================================================================
+test_shell_skipped_by_default_policy() {
+    local proj
+    proj=$(setup_project)
+    /usr/bin/mkdir -p "${proj}/lib/features"
+    /usr/bin/printf '#!/usr/bin/env bash\necho hi\n' >"${proj}/lib/features/golang.sh"
+    /usr/bin/printf '%s\n' "${proj}/lib/features/golang.sh" >"${proj}/filelist.txt"
+
+    run_gates "$proj" "${proj}/filelist.txt"
+    assert_equals "0" "$TEST_EXIT_CODE" "exit code"
+    # No missing-test finding at all — and specifically not the unknown-type one.
+    local missing
+    missing=$(/usr/bin/printf '%s' "$TEST_OUTPUT" | /usr/bin/grep -c "missing-test-file" || true)
+    assert_equals "0" "$missing" "shell source must be skipped, not flagged missing-test"
+
+    /usr/bin/rm -rf "$proj"
+}
+run_test test_shell_skipped_by_default_policy "Shell sources are skipped by default policy (no unknown-type MEDIUM)"
+
+# ===========================================================================
 # Rust: aggregator heuristic must not bleed onto non-mod.rs files.
 # A lib.rs with no definitions and no inline tests should still be flagged.
 # ===========================================================================
