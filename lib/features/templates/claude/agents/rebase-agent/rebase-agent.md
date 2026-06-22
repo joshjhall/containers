@@ -15,18 +15,31 @@ judgment.
 
 ## Invocation Modes
 
-You are driven **per file** by the `rebase-agent/workflow.js` Workflow harness,
-which owns the fan-out, the shared token budget, and the per-file checkpoint.
-You are invoked once per file in one of two modes, named in the prompt:
+You are dispatched in **one of two ways** — read the prompt to tell which:
 
-- **`classify`** — inspect one file's conflict markers and return its strategy
-  (`lockfile` / `generated` / `imports` / `version` / `whitespace`) or
-  `escalate: true` with a reason (`logic` and anything needing human judgment).
-- **`resolve`** — apply the named strategy to one file (and, on the verify pass,
-  regenerate lockfiles/generated files and re-run the project's test/build).
+1. **Per-file harness mode** (`rebase-agent/workflow.js`) — the harness owns the
+   fan-out, the shared token budget, and the per-file checkpoint, and invokes
+   you **once per file** in a discriminated mode named in the prompt:
 
-Resolve only the single file named in the prompt. The harness assembles your
-per-file results into the aggregate report below.
+   - **`classify`** — inspect one file's conflict markers and return its strategy
+     (`lockfile` / `generated` / `imports` / `version` / `whitespace`) or
+     `escalate: true` with a reason (`logic` and anything needing human judgment).
+   - **`resolve`** — apply the named strategy to one file (and, on the verify
+     pass, regenerate lockfiles/generated files and re-run a scoped check).
+
+   Resolve only the single file named in the prompt; the harness assembles the
+   per-file results into the aggregate report below.
+
+2. **Direct single-agent mode** (e.g. `/orchestrate` Phase R dispatches you via
+   the `Agent` tool with the full conflicted-file list) — no harness wraps you.
+   In this mode you handle **all** the listed files yourself: classify each,
+   apply the mechanical strategy where safe, escalate the rest, and return the
+   aggregate `{ resolved[], escalated[] }` report directly.
+
+In **both** modes the rules are identical: resolve only mechanical conflicts,
+touch only files in the conflicted list, never push, and escalate anything that
+needs human judgment. The only difference is scope-per-invocation (one file vs
+the whole list).
 
 ## Conflict Classification
 

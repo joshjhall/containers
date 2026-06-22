@@ -36,6 +36,15 @@ Look for these patterns:
 
 1. **Re-run the generator** using the identified command
 
+   > **Supply-chain caution**: regeneration runs a build/codegen command from
+   > the merged tree while integrating another branch's source. Only re-run a
+   > generator whose command is **declared in the project config** (Makefile
+   > target, `package.json` script, `buf.gen.yaml`, `go:generate` directive). Do
+   > NOT execute an arbitrary script path discovered inside the incoming diff,
+   > and do NOT install new tooling to satisfy the generator. If the generator
+   > cannot be identified from existing project config, **escalate** rather than
+   > guessing a command.
+
 1. **Stage the regenerated files**:
 
    ```bash
