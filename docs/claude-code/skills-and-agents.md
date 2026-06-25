@@ -27,7 +27,7 @@ startup via `claude-setup`. Project-level `.claude/` configs merge with these
 | `workflow-authoring`      | Authoring `workflow.js` harnesses: budget discipline, unique refs, null-resilience  |
 | `adversarial-review`      | Adversarial review method + bug-class checklist for skills/agents/harnesses          |
 | `file-issue`              | Structured issue creation with auto-labeling, scope enforcement, update mode        |
-| `next-issue`              | Issue-driven dev: select by priority, plan; delegates shipping to `next-issue-ship` |
+| `next-issue`              | Issue-driven dev: select by priority, plan; delegates shipping to `next-issue-ship` (`--ship` chains them in-context for small work) |
 | `codebase-audit`          | Periodic codebase sweep: tech debt, security, test gaps, architecture, docs         |
 | `next-issue-ship`         | Ship completed issue work: pre-review gates, commit, PR/push, label, loop back      |
 | `memory-conventions`      | Two-tier memory conventions: long-term (committed) vs short-term (gitignored)       |
@@ -532,6 +532,12 @@ State files persist at `.claude/memory/tmp/next-issue-{N}.json` and carry a
 `checkpoint` object that captures key decisions, modified/planned files,
 warnings, and the next action — enabling safe `/clear` resets between phases.
 
+For `effort/trivial`/`small` issues, `/next-issue --ship` (alias `--now`)
+collapses the hand-off: it keeps the interactive plan-approval gate but chains
+straight into `/next-issue-ship` in the same context, skipping the post-plan
+`/clear`. It is not autonomous (distinct from `--auto`) and is ignored for
+`effort/medium`/`large`, where the reset boundary is preserved.
+
 ### State File Format
 
 JSON with schema validation (`schemas/next-issue-state.schema.json` in the
@@ -545,9 +551,13 @@ The pipeline suggests context resets at natural phase boundaries:
 
 | Phase Boundary      | Mode     | Description                                          |
 | ------------------- | -------- | ---------------------------------------------------- |
-| After plan approval | Suggest  | Exploration context is stale for implementation      |
+| After plan approval | Suggest\* | Exploration context is stale for implementation      |
 | Between impl. loops | Auto     | Each loop runs as a separate Task (natural boundary) |
 | After ship          | Required | Clean slate for next issue                           |
+
+\* For `effort/trivial`/`small` issues run with `/next-issue --ship` (or
+`--now`), this reset is skipped — the run chains straight into
+`/next-issue-ship` in-context. See `next-issue/SKILL.md` and `state-format.md`.
 
 The `/orchestrate` skill also suggests resets after merge and sync operations.
 

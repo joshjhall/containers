@@ -11,6 +11,24 @@ state cleanup.
 **Prerequisite**: Implementation and testing must be complete before invoking
 this skill. The state file written by `/next-issue` must exist.
 
+## Pipeline
+
+This skill is the delivery half of the `/next-issue` → `/next-issue-ship`
+pipeline (the two are kept as separate skills on purpose — see `## Pipeline` in
+the `next-issue` skill for the rationale). The hand-off is the state file
+`.claude/memory/tmp/next-issue-{N}.json`: `/next-issue` writes `phase` +
+`checkpoint`; this skill reads them in Step 1. It can be invoked three ways:
+
+- **Manually** after a `/clear` — the normal flow for `effort/medium`/`large`
+  work, where planning context was reset before implementation.
+- **Auto-invoked by `/next-issue --ship`** (alias `--now`) — the fast-path for
+  `effort/trivial`/`small` issues, which chains here in the same context with
+  no `/clear`. Being reached this way is **NOT autonomous**: the `--ship`
+  fast-path keeps the plan-approval gate and leaves `autonomous` false, so this
+  run still prompts for shipping mode (Step 3) and every other interactive gate.
+- **Auto-chained by `/next-issue --auto`** — the autonomous flow, which sets
+  `"autonomous": true` (see below).
+
 ## Autonomous Mode
 
 The run is **autonomous** when ANY of the following holds: the literal token
