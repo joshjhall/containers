@@ -17,3 +17,4 @@
 - [Luggage release deferred until v5](luggage-release-deferred-until-v5.md) — no apt/Homebrew/cargo release for luggage until v5 substantially complete
 - [Auto-merge needs explicit consent](feedback_auto_merge_consent.md) — gh pr merge --auto needs per-turn authorization, separate from default-ship
 - [Parallel automation (golem) initiative](parallel-automation-golem-initiative.md) — golem = per-issue sub-orchestrator; order #523→…→#525
+- [Worktree push hooks vs gitignore](worktree-push-hooks-gitignore.md) — pushing from .worktrees/ breaks osv-scanner (#556) + compose-validate
