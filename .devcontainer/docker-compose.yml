@@ -49,8 +49,14 @@ services:
       # 1Password cache is kept in memory. No uid=/gid= for the same reason — this
       # path is under /cache, so fix_cache_permissions aligns it to the runtime user.
       - /cache/1password/secrets:size=8m,mode=0700
+    # Load environment variables from ../.env if present (optional; the file is
+    # gitignored local state and is absent in fresh git worktrees). Long-form
+    # `required: false` mirrors examples/**/docker-compose.yml so the compose
+    # validation hook passes from worktrees instead of erroring on a missing
+    # env file.
     env_file:
-      - ../.env
+      - path: ../.env
+        required: false
     environment:
       # Default MCPs (unset = filesystem + figma-desktop + codegraph). This
       # explicit list REPLACES the default set, so codegraph is named here to
