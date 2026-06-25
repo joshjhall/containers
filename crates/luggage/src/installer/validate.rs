@@ -10,10 +10,9 @@
 
 use std::collections::BTreeMap;
 use std::path::Path;
-use std::process::Command;
 
 use crate::error::{LuggageError, Result};
-use crate::installer::idempotency::primary_binary;
+use crate::installer::idempotency::{primary_binary, run_version_check};
 
 /// Confirm that `tool` reports `version` from `<bin_root>/<binary> --version`,
 /// where `binary` is [`primary_binary`] of `tool`.
@@ -47,12 +46,13 @@ pub fn check(
             message: format!("binary not found at {}", binary.display()),
         });
     }
-    let output = Command::new(&binary).arg("--version").envs(env).output().map_err(|e| {
-        LuggageError::ValidationFailed {
-            tool: tool.to_owned(),
-            version: version.to_owned(),
-            message: format!("failed to launch `{} --version`: {e}", binary.display()),
-        }
+    // Retries a transient ETXTBSY before surfacing a launch failure; see
+    // [`run_version_check`] for why exec-after-write can race under
+    // parallelism (issue #518).
+    let output = run_version_check(&binary, env).map_err(|e| LuggageError::ValidationFailed {
+        tool: tool.to_owned(),
+        version: version.to_owned(),
+        message: format!("failed to launch `{} --version`: {e}", binary.display()),
     })?;
     if !output.status.success() {
         return Err(LuggageError::ValidationFailed {
