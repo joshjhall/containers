@@ -334,6 +334,61 @@ test_agents_in_docs() {
     done
 }
 
+# --- Workflow Harness Tests ---
+
+# Test: Every workflow.js `export const meta` block is a pure literal.
+# The Workflow tool rejects a meta object containing any non-literal node
+# (variables, calls, spreads, template interpolation, or string concatenation)
+# with "meta must be a pure literal". Multi-line `'...' + '...'` concatenation
+# in meta.description is the common trap — a BinaryExpression, not a literal —
+# and silently disables the harness at load time (see #561). This guard scans
+# the meta block (from `export const meta` to its closing `}`) for any `+`
+# concatenation or `${` interpolation.
+test_workflow_meta_pure_literal() {
+    local wf_file
+    while IFS= read -r wf_file; do
+        [ -f "$wf_file" ] || continue
+        local rel_name
+        rel_name="$(/usr/bin/basename "$(/usr/bin/dirname "$wf_file")")"
+
+        # Extract the meta object by brace-counting: start at the line holding
+        # `export const meta`, track { vs } depth, stop when depth returns to
+        # zero. Robust against nested object literals in `phases` (a naive
+        # "first }-at-column-0" match could stop early on a future layout). Held
+        # in a variable — no temp file to leak on an assertion failure.
+        local meta_block
+        meta_block="$(/usr/bin/awk '
+            /export const meta/ { capturing = 1 }
+            capturing {
+                print
+                depth += gsub(/{/, "{")
+                depth -= gsub(/}/, "}")
+                if (started && depth <= 0) exit
+                if (depth > 0) started = 1
+            }
+        ' "$wf_file")"
+
+        # A pure-literal meta has no string concatenation (a `+` operator
+        # adjacent to a quote — single OR double) and no template interpolation
+        # (${...}). Each check is a self-contained boolean so one violation
+        # never aborts the sweep over the remaining workflow.js files.
+        if printf '%s\n' "$meta_block" |
+            command grep -qE "['\"][[:space:]]*[+]|[+][[:space:]]*['\"]"; then
+            assert_true false \
+                "Workflow $rel_name: meta uses string concatenation (must be a single literal — see #561)"
+        else
+            assert_true true "Workflow $rel_name: meta has no string concatenation"
+        fi
+
+        if printf '%s\n' "$meta_block" | command grep -qF '${'; then
+            assert_true false \
+                "Workflow $rel_name: meta uses template interpolation (must be a pure literal)"
+        else
+            assert_true true "Workflow $rel_name: meta has no template interpolation"
+        fi
+    done < <(command find "$AGENTS_DIR" "$SKILLS_DIR" -name "workflow.js" -type f 2>/dev/null | /usr/bin/sort)
+}
+
 # --- Run All Tests ---
 
 run_test test_agent_files_exist "Every agent has correctly named .md file"
@@ -353,6 +408,7 @@ run_test test_context_skill_structure "context-* skills have 3-file structure"
 run_test test_patterns_sh_executable "patterns.sh files are executable"
 run_test test_skills_in_docs "Every skill listed in skills-and-agents.md"
 run_test test_agents_in_docs "Every agent listed in skills-and-agents.md"
+run_test test_workflow_meta_pure_literal "Every workflow.js meta is a pure literal (no concat/interpolation)"
 
 # Generate test report
 generate_report
