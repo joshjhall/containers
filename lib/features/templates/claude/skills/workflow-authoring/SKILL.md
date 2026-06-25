@@ -14,7 +14,12 @@ agent the harness drives) and `adversarial-review` (for the self-review pass).
 
 - **`export const meta`** must be a PURE LITERAL — no variables, calls, or
   interpolation. Required: `name`, `description`. List one `phases` entry per
-  `phase()` call, with matching titles.
+  `phase()` call, with matching titles. Common trap: splitting a long
+  `description` across lines with `'...' + '...'` concatenation — that `+` is a
+  BinaryExpression, not a literal, and the tool rejects the whole script with
+  "meta must be a pure literal". Keep each meta string on ONE line (a single
+  long quoted literal is fine). Enforced by
+  `tests/unit/claude/lint_skills_agents.sh`.
 - **Discriminated agent modes**: drive one `agentType` in modes named in the
   prompt (`manifest`, `reviewer:<name>`, `rescore`, `merge`, …). The agent does
   one mode per call; the harness sequences them.
