@@ -348,6 +348,15 @@ jobs:
               PROJECT_NAME=containers
               PROJECT_PATH=.
               INCLUDE_R_DEV=true
+          - name: java-dev
+            # Skip-listed in the PR tier (test-pr.yml) because it is
+            # apt/download-bound and exceeds the 15min per-cell cap; the
+            # merge tier has no per-cell timeout, so its ~20min cold build
+            # is covered here instead. See #536 / #531.
+            build_args: |
+              PROJECT_NAME=containers
+              PROJECT_PATH=.
+              INCLUDE_JAVA_DEV=true
           - name: production
             build_args: |
               PROJECT_NAME=containers
@@ -460,6 +469,8 @@ jobs:
             test: rust_golang
           - name: r-dev
             test: r_dev
+          - name: java-dev
+            test: java_dev
           - name: production
             test: production
     steps:
