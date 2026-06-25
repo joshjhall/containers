@@ -19,6 +19,8 @@ system.
 - [**Releasing**](releasing.md) - Version management and release process
 - [**Changelog Conventions**](changelog.md) - Commit message format and
   CHANGELOG generation
+- [**Filing Issues**](filing-issues.md) - Label taxonomy, issue body format,
+  and how `/next-issue` prioritizes work
 
 ## Development Setup
 
