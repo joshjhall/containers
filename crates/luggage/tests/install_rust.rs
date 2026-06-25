@@ -89,7 +89,13 @@ fn resolve_rust() -> luggage::ResolvedInstall {
         .expect("resolve rust@1.95.0")
 }
 
+// Serialized: this test writes executable shims and the installer execs them.
+// Under parallel test load that write-then-exec races with concurrent forks in
+// the same binary, intermittently failing with ETXTBSY. The production fix
+// retries that transient; serializing the exec-dependent tests removes the
+// race entirely (matching the unit-test convention). See issue #518.
 #[test]
+#[serial_test::serial]
 fn install_rust_runs_full_pipeline() {
     let roots = TempDir::new().unwrap();
     let resolved = resolve_rust();
@@ -252,6 +258,7 @@ fn run_with_report_on_success_captures_validate_output() {
 }
 
 #[test]
+#[serial_test::serial]
 fn idempotent_skip_when_rustc_already_at_target_version() {
     let roots = TempDir::new().unwrap();
     let resolved = resolve_rust();
@@ -273,6 +280,7 @@ fn idempotent_skip_when_rustc_already_at_target_version() {
 }
 
 #[test]
+#[serial_test::serial]
 fn force_reruns_install_even_when_idempotent_check_matches() {
     let roots = TempDir::new().unwrap();
     let resolved = resolve_rust();
@@ -318,6 +326,49 @@ fn computed_digest_matches_published_checksum_format() {
     let direct = format!("{:x}", hasher.finalize());
     let via_helper = digest_hex(Some("sha256"), RUSTUP_INIT_BODY).unwrap();
     assert_eq!(direct, via_helper);
+}
+
+/// Regression test for issue #518. Recreates the ETXTBSY race by hammering
+/// the write-then-exec path from several threads at once: each iteration
+/// writes a fresh `rustc` shim and immediately calls `already_installed`,
+/// which execs it. Before the fix, a concurrent fork in this binary would
+/// intermittently make that exec fail with ETXTBSY, which `already_installed`
+/// swallowed into `false` — so the assertion below would flake. With the
+/// bounded retry in place every iteration must observe the just-written
+/// version. Deliberately *not* serialized: the cross-thread parallelism is
+/// exactly the condition under test.
+#[test]
+fn already_installed_survives_etxtbsy_under_parallel_write_then_exec() {
+    use std::thread;
+
+    use luggage::installer::idempotency::already_installed;
+
+    const THREADS: usize = 8;
+    const ITERS: usize = 40;
+
+    let handles: Vec<_> = (0..THREADS)
+        .map(|t| {
+            thread::spawn(move || {
+                for i in 0..ITERS {
+                    let dir = TempDir::new().unwrap();
+                    let version = format!("1.95.{t}{i}");
+                    write_version_shim(
+                        &dir.path().join("rustc"),
+                        &format!("rustc {version} (regression)"),
+                    );
+                    assert!(
+                        already_installed("rust", &version, dir.path()),
+                        "freshly-written shim must be seen as installed despite ETXTBSY \
+                         (thread {t}, iter {i})",
+                    );
+                }
+            })
+        })
+        .collect();
+
+    for h in handles {
+        h.join().expect("worker thread panicked");
+    }
 }
 
 /// Write an executable shim at `path` that prints `line` to stdout.

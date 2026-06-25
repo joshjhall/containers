@@ -11,8 +11,49 @@
 //! per-tool version-check command so each tool can decide what "already
 //! installed" means.
 
+use std::collections::BTreeMap;
 use std::path::Path;
-use std::process::Command;
+use std::process::{Command, Output};
+use std::thread;
+use std::time::Duration;
+
+/// `errno` for `ETXTBSY` ("text file busy"), returned by `exec` when another
+/// thread in this process briefly holds a writable fd to the binary across a
+/// concurrent `fork`/`exec`. Transient, not "binary absent". See issue #518.
+const ETXTBSY: i32 = 26;
+
+/// Bounded retry budget for the `--version` exec when it hits `ETXTBSY`, and
+/// the backoff between attempts.
+const ETXTBSY_RETRIES: u32 = 3;
+const ETXTBSY_BACKOFF: Duration = Duration::from_millis(50);
+
+/// Run `<binary> --version` with `env` layered on the inherited environment,
+/// retrying on a transient `ETXTBSY`.
+///
+/// Writing an executable and immediately `exec`ing it races with any
+/// concurrent `fork` in the same process: the child momentarily inherits a
+/// writable fd to the file, so the `exec` fails with `ETXTBSY` until that fd
+/// closes. Collapsing that transient into "not installed"/failure is the root
+/// cause of the flaky `install_rust` tests (issue #518) and could equally
+/// misfire in real igor flows that write a binary then version-check it. We
+/// retry a bounded number of times with a short backoff; every other I/O
+/// error (and every success) is returned to the caller on the first
+/// occurrence.
+pub(crate) fn run_version_check(
+    binary: &Path,
+    env: &BTreeMap<String, String>,
+) -> std::io::Result<Output> {
+    let mut attempt = 0;
+    loop {
+        match Command::new(binary).arg("--version").envs(env).output() {
+            Err(e) if e.raw_os_error() == Some(ETXTBSY) && attempt < ETXTBSY_RETRIES => {
+                attempt += 1;
+                thread::sleep(ETXTBSY_BACKOFF);
+            }
+            other => return other,
+        }
+    }
+}
 
 /// Map a catalog tool id to the primary binary name luggage should
 /// `--version`-check. Defaults to the tool id itself when no mapping
@@ -36,7 +77,9 @@ pub fn already_installed(tool: &str, version: &str, bin_root: &Path) -> bool {
     if !binary.exists() {
         return false;
     }
-    let Ok(output) = Command::new(&binary).arg("--version").output() else {
+    // Retries a transient ETXTBSY; any other launch error still means "can't
+    // confirm → go install" per the contract above.
+    let Ok(output) = run_version_check(&binary, &BTreeMap::new()) else {
         return false;
     };
     if !output.status.success() {
