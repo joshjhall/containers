@@ -172,10 +172,17 @@ safely cleared. The state file (with checkpoint) preserves continuity.
 
 | Pipeline Phase      | Reset Mode | Why                                                              |
 | ------------------- | ---------- | ---------------------------------------------------------------- |
-| After plan approval | Suggest    | Exploration context is stale; implementation needs only the plan |
+| After plan approval | Suggest\*  | Exploration context is stale; implementation needs only the plan |
 | Between impl. loops | Automatic  | Each loop runs as separate Task invocation (natural boundary)    |
 | After review        | Suggest    | Implementation context is stale; shipping needs only the result  |
 | After ship          | Required   | Everything is stale; clean slate for next issue                  |
+
+\* **`--ship` fast-path exception**: when `/next-issue` is invoked with `--ship`
+(or `--now`) on an `effort/trivial`/`small` issue, the "After plan approval"
+reset is **skipped** — the run chains straight into `/next-issue-ship` in the
+same context (the small planning footprint does not justify a reset). The
+plan-approval gate itself is preserved, and `autonomous` stays false. For
+`effort/medium`/`large` the reset point is unaffected.
 
 | Orchestrator Action | Reset Mode | Why                                                        |
 | ------------------- | ---------- | ---------------------------------------------------------- |
