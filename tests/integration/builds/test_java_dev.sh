@@ -56,25 +56,31 @@ test_java_toolchain() {
     assert_command_in_container "$image" "mvn --version" "Apache Maven"
 }
 
-# Test: java-dev binary tools install and report versions
+# Test: java-dev binary tools install and run
+#
+# The four tools are installed by lib/features/java-dev.sh as symlinks on
+# PATH; presence is the acceptance criterion (#536). For the three that
+# expose a stable --version, we also assert it executes (exit 0) — mirroring
+# the in-image test-java-dev helper, which runs --version for spring/jbang/
+# mvnd but only checks presence for google-java-format.
 test_java_dev_tools() {
     local image="${IMAGE_TO_TEST:-test-java-dev-$$}"
 
     # Spring Boot CLI
     assert_executable_in_path "$image" "spring"
-    assert_command_in_container "$image" "spring --version" "Spring"
+    assert_command_in_container "$image" "spring --version"
 
     # JBang Java scripting tool
     assert_executable_in_path "$image" "jbang"
-    assert_command_in_container "$image" "jbang --version" "."
+    assert_command_in_container "$image" "jbang --version"
 
     # Maven Daemon (mvnd) — installed on x86_64/arm64, which covers CI runners
     assert_executable_in_path "$image" "mvnd"
-    assert_command_in_container "$image" "mvnd --version" "mvnd"
+    assert_command_in_container "$image" "mvnd --version"
 
-    # google-java-format formatter (wrapper invokes java -jar)
+    # google-java-format formatter (wrapper invokes java -jar) — presence only,
+    # matching the in-image helper (its --version output is not stable).
     assert_executable_in_path "$image" "google-java-format"
-    assert_command_in_container "$image" "google-java-format --version 2>&1" "google-java-format"
 }
 
 # Run all tests
