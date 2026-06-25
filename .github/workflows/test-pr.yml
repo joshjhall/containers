@@ -105,10 +105,8 @@ jobs:
           #              downloads (spring-boot-cli, jbang, mvnd,
           #              google-java-format). Nothing compiles at build time, so
           #              there is no cache to warm and it can't fit the tightened
-          #              PR-tier cap. NOTE: java-dev is not yet in the merge-tier
-          #              matrix (ci.yml), so skip-listing it here leaves it
-          #              without CI build coverage — adding a merge-tier entry is
-          #              tracked in #536. (#531)
+          #              PR-tier cap. Covered by the merge-tier `java-dev` cell
+          #              (ci.yml), added in #536 to close the coverage gap. (#531)
           # Note: r-dev was removed once #531 switched its CRAN set to Posit
           # Package Manager binary packages — no more from-source compile, so it
           # now fits the PR-tier cap.
@@ -155,7 +153,7 @@ jobs:
     # switched it to Posit Package Manager binary packages so it now installs
     # without compiling. The two cells that still can't fit are SKIP_LISTed
     # above: rust-dev (cold cargo build, covered by merge-tier `rust-golang`)
-    # and java-dev (apt/download-bound; merge-tier entry pending, see #536).
+    # and java-dev (apt/download-bound; covered by merge-tier `java-dev`, #536).
     # See #517/#531 for the cold-build reductions.
     timeout-minutes: 25
     strategy:
