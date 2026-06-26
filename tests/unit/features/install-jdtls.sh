@@ -80,6 +80,24 @@ test_download_url_pattern() {
         "Download URL should reference download.eclipse.org"
 }
 
+# Test: Downloads from snapshots/ (milestones/ layout was retired upstream)
+test_download_uses_snapshots() {
+    assert_file_contains "$SOURCE_FILE" "jdtls/snapshots" \
+        "Download should use the jdtls/snapshots directory"
+}
+
+# Test: Does NOT use the retired milestones/<version>/ layout
+test_download_not_milestones() {
+    assert_file_not_contains "$SOURCE_FILE" "jdtls/milestones" \
+        "Download must not use the retired jdtls/milestones layout"
+}
+
+# Test: Falls back to the canonical -latest tarball when the pin is gone
+test_download_latest_fallback() {
+    assert_file_contains "$SOURCE_FILE" "jdt-language-server-latest.tar.gz" \
+        "Download should fall back to jdt-language-server-latest.tar.gz"
+}
+
 # Test: Wrapper script contains org.eclipse.equinox.launcher
 test_wrapper_contains_launcher() {
     assert_file_contains "$SOURCE_FILE" "org.eclipse.equinox.launcher" \
@@ -198,6 +216,9 @@ run_test test_jdtls_version_set "JDTLS_VERSION is set"
 run_test test_jdtls_home_path "JDTLS_HOME path is /opt/jdtls"
 run_test test_jdtls_data_dir_path "JDTLS_DATA_DIR path is /cache/jdtls"
 run_test test_download_url_pattern "Download URL contains download.eclipse.org"
+run_test test_download_uses_snapshots "Download uses jdtls/snapshots directory"
+run_test test_download_not_milestones "Download avoids retired jdtls/milestones layout"
+run_test test_download_latest_fallback "Download falls back to -latest tarball"
 run_test test_wrapper_contains_launcher "Wrapper script contains equinox launcher"
 run_test test_wrapper_config_linux "Wrapper script handles config_linux path"
 run_test test_symlink_to_usr_local_bin "Symlink to /usr/local/bin/jdtls"

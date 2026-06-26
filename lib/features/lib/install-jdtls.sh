@@ -59,17 +59,27 @@ install_jdtls() {
 
     log_message "Installing Eclipse JDT Language Server ${JDTLS_VERSION}..."
 
-    # Fetch the directory listing to get the correct filename (timestamp varies per release)
-    local base_url="https://download.eclipse.org/jdtls/milestones/${JDTLS_VERSION}"
+    # Eclipse serves jdtls tarballs from the snapshots/ directory. The older
+    # milestones/<version>/ layout this script used was retired upstream (it
+    # now 404s for every version), so resolve the newest snapshot tarball
+    # matching the pinned version. The timestamp suffix varies per build, so
+    # match on the version prefix and take the highest. Fall back to the
+    # canonical -latest tarball if the pinned version has aged out of the
+    # snapshot listing. The `|| filename=""` keeps a failed/empty pipeline
+    # from aborting the build under the caller's `set -euo pipefail`.
+    local base_url="https://download.eclipse.org/jdtls/snapshots"
     local filename
-    filename=$(curl -fsSL "${base_url}/" 2>/dev/null | command grep -oE 'jdt-language-server-[0-9.]+-[0-9]+\.tar\.gz' | command head -1)
+    filename=$(curl -fsSL "${base_url}/" 2>/dev/null |
+        command grep -oE "jdt-language-server-${JDTLS_VERSION}-[0-9]+\.tar\.gz" |
+        command sort -V | command tail -1) || filename=""
 
-    if [ -z "$filename" ]; then
-        log_warning "Could not find jdtls ${JDTLS_VERSION} download, skipping"
-        return 1
+    local download_url
+    if [ -n "$filename" ]; then
+        download_url="${base_url}/${filename}"
+    else
+        log_warning "jdtls ${JDTLS_VERSION} not found in snapshots; falling back to latest"
+        download_url="${base_url}/jdt-language-server-latest.tar.gz"
     fi
-
-    local download_url="${base_url}/${filename}"
     log_message "Downloading from: ${download_url}"
 
     # Create installation directory
