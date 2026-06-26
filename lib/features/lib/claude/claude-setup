@@ -24,13 +24,27 @@
 # Usage:
 #   claude-setup           # Run with authentication check
 #   claude-setup --force   # Run even if not authenticated (for MCP setup only)
+#   claude-setup --refresh # Force re-sync of bundled skills/agents from the
+#                          # staged templates, overwriting installed copies even
+#                          # when the staged stamp is unchanged. Use after a
+#                          # template fix to pick it up without a rebuild.
+#
+# Bundled skills/agents normally re-sync automatically when the staged template
+# stamp differs from the last-synced stamp (e.g. after the image is rebuilt past
+# a template fix like #563). --refresh forces the re-sync unconditionally.
 #
 # Plugin Marketplace: claude-plugins-official
 
 set -euo pipefail
 
 FORCE_MODE=false
-[ "${1:-}" = "--force" ] && FORCE_MODE=true
+REFRESH_MODE=false
+for arg in "$@"; do
+    case "$arg" in
+        --force) FORCE_MODE=true ;;
+        --refresh) REFRESH_MODE=true ;;
+    esac
+done
 
 # Secure token storage path (RAM-backed, never touches disk)
 ANTHROPIC_TOKEN_FILE="/dev/shm/anthropic-auth-token"
@@ -43,7 +57,7 @@ _store_anthropic_token() {
 
 # Read token from secure file
 _read_anthropic_token() {
-    cat "$ANTHROPIC_TOKEN_FILE" 2>/dev/null || true
+    command cat "$ANTHROPIC_TOKEN_FILE" 2>/dev/null || true
 }
 
 # Check if token is available (file exists and is non-empty)
@@ -262,7 +276,7 @@ PLUGINS_INSTALLED=false
 ensure_marketplace() {
     # Check if marketplace is already registered (appears in known_marketplaces.json)
     local known_file="$HOME/.claude/plugins/known_marketplaces.json"
-    if [ -f "$known_file" ] && grep -q "\"$MARKETPLACE\"" "$known_file" 2>/dev/null; then
+    if [ -f "$known_file" ] && command grep -q "\"$MARKETPLACE\"" "$known_file" 2>/dev/null; then
         return 0
     fi
 
@@ -286,7 +300,7 @@ _match_plugin_in_list() {
     local list_output="$2"
     # Match: "❯ plugin-name@" at start of line (after any whitespace)
     # The ❯ character is followed by space, then plugin name, then @
-    echo "$list_output" | grep -qE "^[[:space:]]*❯ ${plugin_name}@" 2>/dev/null
+    echo "$list_output" | command grep -qE "^[[:space:]]*❯ ${plugin_name}@" 2>/dev/null
 }
 
 has_plugin() {
@@ -323,7 +337,7 @@ install_plugin() {
         fi
 
         # Check if this is a "not found" error (marketplace not ready)
-        if echo "$output" | grep -q "not found in marketplace"; then
+        if echo "$output" | command grep -q "not found in marketplace"; then
             if [ $attempt -lt $max_retries ]; then
                 echo "    ⏳ Marketplace not ready, retrying in ${retry_delay}s... (attempt $attempt/$max_retries)"
                 sleep $retry_delay
@@ -335,7 +349,7 @@ install_plugin() {
 
         # Non-retryable error or max retries reached
         echo "    ⚠ Failed to install $plugin_name"
-        echo "$output" | sed 's/^/      /' | head -5
+        echo "$output" | command sed 's/^/      /' | command head -5
         return 1
     done
 
@@ -347,6 +361,35 @@ install_plugin() {
 # ============================================================================
 TEMPLATES_DIR="/etc/container/config/claude-templates"
 CLAUDE_DIR="$HOME/.claude"
+
+# --- Template staleness stamp ---
+# The build stages templates into $TEMPLATES_DIR and writes a content stamp to
+# $TEMPLATES_DIR/.stamp (claude-code-setup.sh). We record the last-synced stamp
+# at $CLAUDE_DIR/.template-stamp. When the staged stamp differs (image rebuilt
+# past a template fix) — or --refresh is passed — bundled skills/agents are
+# re-copied over the installed copies so fixes propagate without manually
+# clearing ~/.claude. When the stamps match and the target exists, the copy is
+# skipped (no per-boot churn). User-additive CLAUDE_EXTRA_* installs are NOT
+# gated by the stamp — they stay absent-only so a user edit is never clobbered.
+STAGED_STAMP_FILE="$TEMPLATES_DIR/.stamp"
+INSTALLED_STAMP_FILE="$CLAUDE_DIR/.template-stamp"
+STAGED_STAMP=""
+INSTALLED_STAMP=""
+[ -f "$STAGED_STAMP_FILE" ] && STAGED_STAMP="$(command cat "$STAGED_STAMP_FILE" 2>/dev/null || true)"
+[ -f "$INSTALLED_STAMP_FILE" ] && INSTALLED_STAMP="$(command cat "$INSTALLED_STAMP_FILE" 2>/dev/null || true)"
+
+# _bundled_needs_sync — true (0) when a bundled artifact should be (re)written:
+#   - target dir is absent (first install), OR
+#   - --refresh was passed, OR
+#   - the staged stamp is non-empty and differs from the installed stamp.
+# When the stamps match (and target exists), returns 1 → keep the fast path.
+_bundled_needs_sync() {
+    local target_dir="$1"
+    [ ! -d "$target_dir" ] && return 0
+    [ "$REFRESH_MODE" = "true" ] && return 0
+    [ -n "$STAGED_STAMP" ] && [ "$STAGED_STAMP" != "$INSTALLED_STAMP" ] && return 0
+    return 1
+}
 
 if [ -d "$TEMPLATES_DIR" ]; then
     echo "Installing skills and agents..."
@@ -364,7 +407,7 @@ if [ -d "$TEMPLATES_DIR" ]; then
     else
         SKILL_LIST_IS_OVERRIDE=1
     fi
-    RESOLVED_FROM=$(cat "$_RESOLVED_FROM_FILE")
+    RESOLVED_FROM=$(command cat "$_RESOLVED_FROM_FILE")
     if [ "$RESOLVED_FROM" = "file" ]; then
         SKILL_LIST=$(_file_json_to_csv "$SKILL_RESULT")
     else
@@ -388,12 +431,15 @@ if [ -d "$TEMPLATES_DIR" ]; then
             fi
 
             target_dir="$CLAUDE_DIR/skills/$skill_name"
-            if [ -d "$target_dir" ]; then
-                echo "    ✓ $skill_name (already installed)"
-            else
+            if _bundled_needs_sync "$target_dir"; then
+                # Distinguish first install from a stamp-driven re-sync for the
+                # log line (the target pre-existing means we're overwriting).
+                [ -d "$target_dir" ] && _verb="re-synced" || _verb="installed"
                 mkdir -p "$target_dir"
                 cp -r "$skill_dir"/* "$target_dir/"
-                echo "    ✓ $skill_name installed"
+                echo "    ✓ $skill_name $_verb"
+            else
+                echo "    ✓ $skill_name (already installed)"
             fi
         done
     fi
@@ -428,14 +474,16 @@ if [ -d "$TEMPLATES_DIR" ]; then
     fi
 
     # --- Dynamic: container-environment skill (always installed) ---
+    # Stamp-gated like the bundled skills: a stamp change (or --refresh)
+    # regenerates the content so a rebuilt image refreshes it (#574).
     target_dir="$CLAUDE_DIR/skills/container-environment"
-    if [ -d "$target_dir" ]; then
+    if ! _bundled_needs_sync "$target_dir"; then
         echo "    ✓ container-environment (already installed)"
     else
         mkdir -p "$target_dir"
         # Generate dynamic content from enabled-features.conf
         {
-            cat << 'SKILL_HEADER'
+            command cat << 'SKILL_HEADER'
 ---
 description: "Container development environment details and available tools"
 ---
@@ -493,12 +541,13 @@ SKILL_HEADER
     if [ "${INCLUDE_DOCKER:-false}" = "true" ] && \
        { [ $SKILL_LIST_IS_OVERRIDE -ne 0 ] || _is_in_list "docker-development" "$SKILL_LIST"; }; then
         target_dir="$CLAUDE_DIR/skills/docker-development"
-        if [ -d "$target_dir" ]; then
+        if ! _bundled_needs_sync "$target_dir"; then
             echo "    ✓ docker-development (already installed)"
         else
+            [ -d "$target_dir" ] && _verb="re-synced" || _verb="installed"
             mkdir -p "$target_dir"
             cp -r "$TEMPLATES_DIR/skills/docker-development/"* "$target_dir/"
-            echo "    ✓ docker-development installed"
+            echo "    ✓ docker-development $_verb"
         fi
     fi
 
@@ -514,12 +563,12 @@ SKILL_HEADER
     if [ "$HAS_CLOUD" = "true" ] && \
        { [ $SKILL_LIST_IS_OVERRIDE -ne 0 ] || _is_in_list "cloud-infrastructure" "$SKILL_LIST"; }; then
         target_dir="$CLAUDE_DIR/skills/cloud-infrastructure"
-        if [ -d "$target_dir" ]; then
+        if ! _bundled_needs_sync "$target_dir"; then
             echo "    ✓ cloud-infrastructure (already installed)"
         else
             mkdir -p "$target_dir"
             {
-                cat << 'CLOUD_HEADER'
+                command cat << 'CLOUD_HEADER'
 ---
 description: "Cloud infrastructure tools available in this container"
 ---
@@ -552,7 +601,7 @@ CLOUD_HEADER
     else
         AGENT_LIST_IS_OVERRIDE=1
     fi
-    RESOLVED_FROM=$(cat "$_RESOLVED_FROM_FILE")
+    RESOLVED_FROM=$(command cat "$_RESOLVED_FROM_FILE")
     if [ "$RESOLVED_FROM" = "file" ]; then
         AGENT_LIST=$(_file_json_to_csv "$AGENT_RESULT")
     else
@@ -572,12 +621,13 @@ CLOUD_HEADER
             fi
 
             target_dir="$CLAUDE_DIR/agents/$agent_name"
-            if [ -d "$target_dir" ]; then
-                echo "    ✓ $agent_name (already installed)"
-            else
+            if _bundled_needs_sync "$target_dir"; then
+                [ -d "$target_dir" ] && _verb="re-synced" || _verb="installed"
                 mkdir -p "$target_dir"
                 cp -r "$agent_dir"/* "$target_dir/"
-                echo "    ✓ $agent_name installed"
+                echo "    ✓ $agent_name $_verb"
+            else
+                echo "    ✓ $agent_name (already installed)"
             fi
         done
     fi
@@ -611,6 +661,15 @@ CLOUD_HEADER
         done
     fi
 
+    # Record the staged stamp as last-synced so the next run skips the re-copy
+    # until the staged templates change again (or --refresh is passed). Only
+    # written when the build produced a stamp; absent-stamp images keep the
+    # legacy absent-only behavior (every run sees STAGED_STAMP="" → no re-sync).
+    if [ -n "$STAGED_STAMP" ]; then
+        mkdir -p "$CLAUDE_DIR"
+        printf '%s\n' "$STAGED_STAMP" > "$INSTALLED_STAMP_FILE"
+    fi
+
     echo ""
 fi
 
@@ -625,9 +684,9 @@ elif is_claude_authenticated; then
     # Show which auth method was detected (helpful for debugging)
     if [ -n "${ANTHROPIC_AUTH_TOKEN:-}" ] || [ -s /dev/shm/anthropic-auth-token ]; then
         echo "Authentication: Token (ANTHROPIC_AUTH_TOKEN)"
-    elif [ -f ~/.claude/.credentials.json ] && grep -q '"claudeAiOauth"' ~/.claude/.credentials.json 2>/dev/null; then
+    elif [ -f ~/.claude/.credentials.json ] && command grep -q '"claudeAiOauth"' ~/.claude/.credentials.json 2>/dev/null; then
         echo "Authentication: OAuth (interactive)"
-    elif [ -f ~/.claude.json ] && grep -q '"oauthAccount"' ~/.claude.json 2>/dev/null; then
+    elif [ -f ~/.claude.json ] && command grep -q '"oauthAccount"' ~/.claude.json 2>/dev/null; then
         echo "Authentication: OAuth account"
     else
         echo "Authentication: Detected"
@@ -651,7 +710,7 @@ elif is_claude_authenticated; then
     else
         PLUGIN_LIST_IS_OVERRIDE=1
     fi
-    RESOLVED_FROM=$(cat "$_RESOLVED_FROM_FILE")
+    RESOLVED_FROM=$(command cat "$_RESOLVED_FROM_FILE")
     if [ "$RESOLVED_FROM" = "file" ]; then
         PLUGIN_LIST=$(_file_json_to_csv "$PLUGIN_RESULT")
     else
@@ -748,7 +807,7 @@ _match_mcp_server_in_list() {
     local server_name="$1"
     local list_output="$2"
     # Match: server name at start of line followed by colon
-    echo "$list_output" | grep -qE "^${server_name}:" 2>/dev/null
+    echo "$list_output" | command grep -qE "^${server_name}:" 2>/dev/null
 }
 
 has_mcp_server() {
@@ -775,12 +834,12 @@ add_mcp_server() {
         return 0
     else
         # Check if it's actually an "already exists" message (not a real failure)
-        if echo "$output" | grep -q "already exists"; then
+        if echo "$output" | command grep -q "already exists"; then
             echo "    ✓ $server_name (already configured)"
             return 0
         fi
         echo "    ⚠ Failed to add $server_name"
-        echo "$output" | sed 's/^/      /' | head -3
+        echo "$output" | command sed 's/^/      /' | command head -3
         return 1
     fi
 }
@@ -1037,7 +1096,7 @@ configure_mcp_list() {
             local has_explicit_auth=false
             if [ -n "$http_headers_str" ]; then
                 # Check if Authorization was explicitly provided before injecting
-                if echo "$http_headers_str" | grep -qiE '(^|[|])Authorization:'; then
+                if echo "$http_headers_str" | command grep -qiE '(^|[|])Authorization:'; then
                     has_explicit_auth=true
                 fi
                 inject_mcp_headers "$http_name" "$http_headers_str"
@@ -1098,7 +1157,7 @@ if MCP_RESULT=$(_resolve_override_list_or_file "CLAUDE_MCPS" "$DEFAULT_MCPS"); t
 else
     MCP_LIST_IS_OVERRIDE=1
 fi
-RESOLVED_FROM=$(cat "$_RESOLVED_FROM_FILE")
+RESOLVED_FROM=$(command cat "$_RESOLVED_FROM_FILE")
 
 # Install default MCPs (or overridden list)
 # Special-case filesystem and figma-desktop; others go through configure_mcp_list
@@ -1189,10 +1248,10 @@ if [ "${CLAUDE_AUTO_DETECT_MCPS:-true}" != "false" ] && [ -f "$MCP_REGISTRY" ]; 
         remote_urls=$(git -C "$repo_dir" remote -v 2>/dev/null || true)
 
         if [ -n "$remote_urls" ]; then
-            if echo "$remote_urls" | grep -qi 'github\.com' 2>/dev/null; then
+            if echo "$remote_urls" | command grep -qi 'github\.com' 2>/dev/null; then
                 DETECTED_GITHUB=true
             fi
-            if echo "$remote_urls" | grep -qiE 'gitlab\.com|gitlab\.' 2>/dev/null; then
+            if echo "$remote_urls" | command grep -qiE 'gitlab\.com|gitlab\.' 2>/dev/null; then
                 DETECTED_GITLAB=true
             fi
         fi

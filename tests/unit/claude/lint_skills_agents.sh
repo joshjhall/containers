@@ -408,6 +408,33 @@ test_workflow_meta_pure_literal() {
     done < <(command find "$AGENTS_DIR" "$SKILLS_DIR" -name "workflow.js" -type f 2>/dev/null | /usr/bin/sort)
 }
 
+# Test: every bundled workflow.js parses with `node --check`. The meta
+# pure-literal lint above catches the one syntactic trap the Workflow tool
+# rejects (concat/interp in `meta`), but a stray syntax error elsewhere in the
+# script would still break the harness at load time with no signal — exactly the
+# drift class #574 calls out (a stale/broken installed workflow.js silently
+# skips the adversarial review). A real parse is the cheapest complete guard.
+# Skips gracefully when node is unavailable so the bash-only test host degrades
+# instead of failing; container CI has node and enforces it.
+test_workflow_js_node_check() {
+    if ! command -v node >/dev/null 2>&1; then
+        skip_test "node not available — cannot run 'node --check' on workflow.js files"
+        return
+    fi
+    local wf_file
+    while IFS= read -r wf_file; do
+        [ -f "$wf_file" ] || continue
+        local rel_name node_err
+        rel_name="$(/usr/bin/basename "$(/usr/bin/dirname "$wf_file")")"
+        if node_err="$(command node --check "$wf_file" 2>&1)"; then
+            assert_true true "Workflow $rel_name: workflow.js passes node --check"
+        else
+            assert_true false \
+                "Workflow $rel_name: workflow.js has a syntax error: ${node_err}"
+        fi
+    done < <(command find "$AGENTS_DIR" "$SKILLS_DIR" -name "workflow.js" -type f 2>/dev/null | /usr/bin/sort)
+}
+
 # Test: the meta pure-literal detector actually FIRES on a known-bad input.
 # Without this, the live sweep above only ever proves the happy path — if the
 # detector regexes were wrong they would silently pass on the (already-clean)
@@ -425,6 +452,27 @@ test_workflow_meta_guard_detects_violations() {
         "Detector flags string concatenation in the bad fixture's meta block"
     assert_contains "$violations" "interp" \
         "Detector flags template interpolation in the bad fixture's meta block"
+}
+
+# Test: `node --check` actually FIRES on a syntax error — proves
+# test_workflow_js_node_check is not passing vacuously (e.g. a node stub that
+# always exits 0). Mirrors the meta-guard negative test above. Uses a throwaway
+# temp file with a deliberate syntax error rather than a committed fixture (a
+# broken .js under templates/ would itself trip the live sweep).
+test_workflow_js_node_check_detects_syntax_error() {
+    if ! command -v node >/dev/null 2>&1; then
+        skip_test "node not available — cannot prove node --check fires"
+        return
+    fi
+    local bad
+    bad="$(mktemp --suffix=.js)"
+    # Unterminated function param list — a genuine parse error node rejects.
+    printf 'function broken( {\n  return 1\n' >"$bad"
+    local err rc=0
+    err="$(command node --check "$bad" 2>&1)" || rc=$?
+    command rm -f "$bad"
+    assert_true "[ $rc -ne 0 ]" "node --check exits non-zero on a syntax error"
+    assert_contains "$err" "SyntaxError" "node --check reports a SyntaxError"
 }
 
 # Test: cross-file invariants of the /next-issue --ship fast-path contract.
@@ -593,6 +641,8 @@ run_test test_patterns_sh_executable "patterns.sh files are executable"
 run_test test_skills_in_docs "Every skill listed in skills-and-agents.md"
 run_test test_agents_in_docs "Every agent listed in skills-and-agents.md"
 run_test test_workflow_meta_pure_literal "Every workflow.js meta is a pure literal (no concat/interpolation)"
+run_test test_workflow_js_node_check "Every workflow.js passes node --check (syntax valid)"
+run_test test_workflow_js_node_check_detects_syntax_error "node --check guard fires on a syntax error"
 run_test test_workflow_meta_guard_detects_violations "Meta pure-literal guard fires on the negative fixture"
 run_test test_next_issue_ship_invariants "next-issue --ship cross-file contract invariants hold"
 run_test test_next_issue_auto_invariants "next-issue --auto chaining contract invariants hold"

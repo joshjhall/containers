@@ -250,7 +250,33 @@ if [ -d /tmp/build-scripts/features/templates/claude ]; then
     cp -r /tmp/build-scripts/features/templates/claude/* /etc/container/config/claude-templates/
     chmod -R 644 /etc/container/config/claude-templates/
     command find /etc/container/config/claude-templates -type d -exec chmod 755 {} \;
-    log_message "Skill and agent templates staged to /etc/container/config/claude-templates/"
+
+    # Write a content stamp over the staged tree. claude-setup compares this to
+    # the last-synced stamp in ~/.claude/.template-stamp and re-syncs bundled
+    # skills/agents when they differ — so a template fix propagates to a started
+    # container after the image is rebuilt, without manually clearing ~/.claude
+    # (issue #574). The stamp hashes every staged file's path + contents, so any
+    # template edit changes it.
+    #
+    # If sha256sum is unavailable we deliberately write NO stamp: claude-setup
+    # gates re-sync on a non-empty staged stamp, so an absent stamp keeps the
+    # legacy absent-only install behavior (a started container won't re-sync, but
+    # it also won't be stuck on a constant marker that always matches itself).
+    # That is strictly better than a fixed "no-sha256-build" string, which after
+    # the first sync would equal the recorded stamp and suppress all future
+    # re-syncs — reintroducing the very staleness this fixes.
+    if command -v sha256sum >/dev/null 2>&1; then
+        (cd /etc/container/config/claude-templates &&
+            command find . -type f ! -name .stamp -print0 |
+            LC_ALL=C command sort -z |
+                command xargs -r -0 sha256sum |
+                command sha256sum |
+                command awk '{print $1}') >/etc/container/config/claude-templates/.stamp
+        chmod 644 /etc/container/config/claude-templates/.stamp
+        log_message "Skill and agent templates staged (stamp: $(command cat /etc/container/config/claude-templates/.stamp))"
+    else
+        log_warning "sha256sum unavailable: no template stamp written; runtime re-sync disabled (legacy absent-only install)"
+    fi
 else
     log_warning "No skill/agent templates found at /tmp/build-scripts/features/templates/claude"
 fi
