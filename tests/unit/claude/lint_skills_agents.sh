@@ -506,6 +506,73 @@ test_next_issue_ship_invariants() {
         "skills-and-agents.md scopes the --ship fast-path to trivial/small"
 }
 
+# Test: cross-file invariants of the /next-issue --auto chaining contract.
+# Issue #572: autonomous /next-issue must INVOKE /next-issue-ship in the same
+# turn (via the Skill tool), not merely print a "next step" and exit — otherwise
+# a headless golem ships nothing. These static greps guard that the in-turn
+# invocation instruction and the orchestrate `;`-chained resume backstop survive
+# future prose edits. All static greps — no Docker.
+test_next_issue_auto_invariants() {
+    local ni_skill="$SKILLS_DIR/next-issue/SKILL.md"
+    local ship_skill="$SKILLS_DIR/next-issue-ship/SKILL.md"
+    local orch_skill="$SKILLS_DIR/orchestrate/SKILL.md"
+    local mode_proto="$SKILLS_DIR/orchestrate/mode-protocol.md"
+
+    # Invariant 0: the contract files exist.
+    assert_file_exists "$ni_skill" "next-issue/SKILL.md exists"
+    assert_file_exists "$ship_skill" "next-issue-ship/SKILL.md exists"
+    assert_file_exists "$orch_skill" "orchestrate/SKILL.md exists"
+    assert_file_exists "$mode_proto" "orchestrate/mode-protocol.md exists"
+
+    # Invariant 1: autonomous /next-issue invokes the ship skill IN-TURN. The
+    # central correctness property of #572 — the instruction must say to invoke
+    # the Skill tool in the same turn, not just "hand off". Require both the
+    # `Skill` tool reference and the "same turn" phrasing.
+    assert_file_contains "$ni_skill" "Skill" \
+        "next-issue/SKILL.md references the Skill tool for the autonomous handoff"
+    assert_true "command grep -qiE 'in (the|this) same turn' '$ni_skill'" \
+        "next-issue/SKILL.md states the ship invocation happens in the same turn"
+
+    # Invariant 2: the autonomous handoff is an invocation, not a mere
+    # suggestion — guard against a regression to the passive "prints a next step"
+    # behavior the issue describes.
+    assert_true "command grep -qiE 'do NOT (end the turn|stop after|merely print)' '$ni_skill'" \
+        "next-issue/SKILL.md forbids ending the turn without invoking ship"
+
+    # Invariant 3: the ship skill acknowledges it may be reached in-turn (so it
+    # must not assume a fresh post-/clear context).
+    assert_true "command grep -qiE 'in-turn|same turn' '$ship_skill'" \
+        "next-issue-ship/SKILL.md acknowledges in-turn invocation"
+
+    # Invariant 4: both env-var and flag activation paths are documented (the
+    # contract covers NEXT_ISSUE_AUTONOMOUS=1 as well as --auto).
+    assert_file_contains "$ni_skill" "NEXT_ISSUE_AUTONOMOUS" \
+        "next-issue/SKILL.md documents the NEXT_ISSUE_AUTONOMOUS env-var activation"
+
+    # Invariant 5: the orchestrate golem launch uses the `;`-chained resume
+    # backstop, NOT `&&` (which would skip the backstop on the first prompt's
+    # non-zero exit — the very case it exists for). Both orchestrate files must
+    # carry the chained ship invocation so they cannot drift apart.
+    for f in "$orch_skill" "$mode_proto"; do
+        local rel
+        rel="$(/usr/bin/basename "$(/usr/bin/dirname "$f")")/$(/usr/bin/basename "$f")"
+        assert_true "command grep -qF '; claude \"/next-issue-ship --auto\"' '$f'" \
+            "$rel: golem launch chains /next-issue-ship with ';' (resume backstop)"
+        assert_file_not_contains "$f" '&& claude "/next-issue-ship --auto"' \
+            "$rel: golem launch does not use '&&' for the ship backstop"
+    done
+
+    # Invariant 6: golems launch interactive (inherit `auto`), never headless
+    # `claude -p` — per golem-supervised-auto-mode (#570). The launch lines that
+    # invoke the next-issue pipeline must not use `claude -p`.
+    for f in "$orch_skill" "$mode_proto"; do
+        local rel
+        rel="$(/usr/bin/basename "$(/usr/bin/dirname "$f")")/$(/usr/bin/basename "$f")"
+        assert_true "! command grep -qF 'claude -p \"/next-issue' '$f'" \
+            "$rel: golem launch is interactive (no headless 'claude -p')"
+    done
+}
+
 # --- Run All Tests ---
 
 run_test test_agent_files_exist "Every agent has correctly named .md file"
@@ -528,6 +595,7 @@ run_test test_agents_in_docs "Every agent listed in skills-and-agents.md"
 run_test test_workflow_meta_pure_literal "Every workflow.js meta is a pure literal (no concat/interpolation)"
 run_test test_workflow_meta_guard_detects_violations "Meta pure-literal guard fires on the negative fixture"
 run_test test_next_issue_ship_invariants "next-issue --ship cross-file contract invariants hold"
+run_test test_next_issue_auto_invariants "next-issue --auto chaining contract invariants hold"
 
 # Generate test report
 generate_report
