@@ -94,14 +94,25 @@ docker exec -it project-agent01-1 tmux attach -t claude
 
 A **golem** is a per-issue sub-orchestrator: a PROCESS that owns one issue →
 branch → worktree → PR and runs the autonomous pipeline (`/next-issue <N>
---auto` → autonomous `/next-issue-ship` → Branch + PR) unattended to a green,
-review-clean PR. Golems are not a new isolation mechanism — they are the
-**existing Mode 2 or Mode 3** with an autonomous payload and a PR exit.
+--auto`, which invokes `/next-issue-ship` in-turn → Branch + PR) unattended to
+a green, review-clean PR. Golems are not a new isolation mechanism — they are
+the **existing Mode 2 or Mode 3** with an autonomous payload and a PR exit.
+
+The launch is **interactive** in tmux (inherit the repo's `auto` permission
+mode — never headless `claude -p`, never `--dangerously-skip-permissions`; see
+the `golem-supervised-auto-mode` memory / #570). Autonomous `/next-issue`
+invokes `/next-issue-ship` in-turn, so the single prompt reaches a PR on its
+own. A `;`-chained second prompt is the resume backstop —
+`claude "/next-issue <N> --auto" ; claude "/next-issue-ship --auto"` — so that a
+premature turn-exit after `/next-issue` still ships: the second prompt re-reads
+the state file and delivers (a near no-op if the first already pushed a PR).
+Use `;`, NOT `&&`: the backstop must run even when the first prompt exits
+non-zero before shipping, which is exactly the case `&&` would skip.
 
 | Realization        | Built on | Payload (process)                         | Exit                            |
 | ------------------ | -------- | ----------------------------------------- | ------------------------------- |
-| **Worktree golem** | Mode 2   | `/next-issue <N> --auto` in a worktree shell | autonomous ship → Branch + PR |
-| **Container golem** | Mode 3  | same pipeline in the container's tmux Claude | same → PR (or auto-merge: needs `AUTOMERGE=1` + `AUTOMERGE_AUTONOMOUS=1`) |
+| **Worktree golem** | Mode 2   | `claude "/next-issue <N> --auto" ; claude "/next-issue-ship --auto"` in a worktree shell | autonomous ship → Branch + PR |
+| **Container golem** | Mode 3  | same chained pipeline in the container's tmux Claude | same → PR (or auto-merge: needs `AUTOMERGE=1` + `AUTOMERGE_AUTONOMOUS=1`) |
 
 > **Hard constraint — golems are processes, never Workflow subagents.** The
 > Workflow tool permits one nesting level, and each golem's `/next-issue-ship`

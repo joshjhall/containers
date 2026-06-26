@@ -538,6 +538,16 @@ straight into `/next-issue-ship` in the same context, skipping the post-plan
 `/clear`. It is not autonomous (distinct from `--auto`) and is ignored for
 `effort/medium`/`large`, where the reset boundary is preserved.
 
+Autonomous `/next-issue --auto` also collapses the hand-off, but
+unconditionally and without any gate: once implementation and testing complete
+it **invokes `/next-issue-ship` in the same turn** (via the `Skill` tool), so a
+single `claude '/next-issue <N> --auto'` prompt reaches a pushed PR with no
+second command. This is an actual in-turn invocation, not a printed suggestion —
+ending the turn after `/next-issue` would leave the work uncommitted. Orchestrate
+golems additionally chain a `; claude '/next-issue-ship --auto'` prompt at launch
+as a resume backstop should the first prompt exit its turn early (`;`, not `&&`,
+so the backstop runs even if the first prompt exited non-zero).
+
 ### State File Format
 
 JSON with schema validation (`schemas/next-issue-state.schema.json` in the

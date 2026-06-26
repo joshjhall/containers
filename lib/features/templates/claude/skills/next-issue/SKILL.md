@@ -46,10 +46,17 @@ When autonomous:
 - Do NOT call `EnterPlanMode`/`ExitPlanMode` or any `AskUserQuestion`. Every
   human gate in the phases below takes its documented default with no
   interactive tool call.
-- The run proceeds selection → plan → implement without stopping, then hands
-  off to `/next-issue-ship`, which detects autonomy independently (via the
-  same toggle and the persisted state-file signal) and continues to
-  Branch + PR.
+- The run proceeds selection → plan → implement without stopping. Then, once
+  implementation and testing are complete, **invoke the `/next-issue-ship`
+  skill in the same turn** (call the `Skill` tool with `next-issue-ship`) —
+  do NOT end the turn after merely printing a "next step". The handoff is an
+  actual in-turn skill invocation, not narrative: a single
+  `claude '/next-issue <N> --auto'` prompt must reach a pushed PR on its
+  own, because the model ending its turn after `/next-issue` does not start a
+  second skill. `/next-issue-ship` then detects autonomy independently (via
+  the same toggle and the persisted state-file signal) and continues to
+  Branch + PR. See the autonomous planning path in Phase 2 for the exact
+  point at which the invocation happens.
 - Persist the signal to the state file as `"autonomous": true` (see Phase 1
   and Phase 2 below) so `/next-issue-ship` and any post-`/clear` resume
   inherit it.
@@ -255,6 +262,18 @@ Proceed with Phase 0 as normal regardless of mode.
    `"plan_comment_url"`. Then proceed DIRECTLY to implementation — no
    `ExitPlanMode`, no approval gate. Autonomous mode SKIPS both the "Exit plan
    mode" and "Suggest context reset" steps below.
+
+   **Then, once implementation and testing are complete, invoke the
+   `/next-issue-ship` skill in this same turn** (call the `Skill` tool with
+   `next-issue-ship`). Do NOT stop after implementation to *suggest* shipping,
+   and do NOT merely print a "next step: /next-issue-ship" line — actually
+   invoke it. This is the whole point of `--auto`: a single
+   `claude '/next-issue <N> --auto'` prompt must reach a pushed PR + labeled
+   issue without a second manual command. Ending the turn after `/next-issue`
+   leaves the work uncommitted with no PR. (As a belt-and-suspenders for a
+   premature turn-exit, the orchestrate golem launch also chains a second
+   `; claude '/next-issue-ship --auto'` prompt — see the orchestrate skill — but
+   the in-turn invocation here is the primary path and must not be skipped.)
 
 1. **Exit plan mode** (call `ExitPlanMode` tool) — this presents the plan to
    the user for approval before implementation begins. (Skipped when

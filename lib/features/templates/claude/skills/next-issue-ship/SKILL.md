@@ -27,7 +27,12 @@ the `next-issue` skill for the rationale). The hand-off is the state file
   fast-path keeps the plan-approval gate and leaves `autonomous` false, so this
   run still prompts for shipping mode (Step 3) and every other interactive gate.
 - **Auto-chained by `/next-issue --auto`** — the autonomous flow, which sets
-  `"autonomous": true` (see below).
+  `"autonomous": true` (see below). Autonomous `/next-issue` invokes this skill
+  **in the same turn** (via the `Skill` tool) once implementation and testing
+  complete — it does not stop and suggest a manual run. This skill therefore
+  must work whether reached in-turn (state file already current in context) or
+  fresh after a turn-exit (re-read from the state file in Step 1); both paths
+  detect autonomy via the toggle below.
 
 ## Autonomous Mode
 

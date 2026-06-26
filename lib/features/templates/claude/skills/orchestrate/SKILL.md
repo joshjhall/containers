@@ -69,9 +69,16 @@ dispatch is sequential and cheap — **not** workflow-driven.
 1. **Launch the autonomous pipeline** as a process in each golem:
 
    ```bash
-   # Inside the golem's container tmux or worktree shell:
-   claude "/next-issue {N} --auto"
-   # Autonomous /next-issue hands off to autonomous /next-issue-ship → Branch + PR
+   # Inside the golem's container tmux or worktree shell — launch INTERACTIVE
+   # (inherit the repo's `auto` permission mode; never headless `claude -p`,
+   # never --dangerously-skip-permissions — see the golem-supervised-auto-mode
+   # memory / #570). Autonomous /next-issue invokes /next-issue-ship in-turn, so
+   # this single prompt reaches Branch + PR on its own. The `;`-chained second
+   # prompt is a resume backstop, NOT `&&`: it must run even if the first prompt
+   # exits non-zero before shipping (the very case it exists for). If the first
+   # already shipped (state file deleted), the second is a near no-op
+   # ("No in-progress issue found" → stop):
+   claude "/next-issue {N} --auto" ; claude "/next-issue-ship --auto"
    ```
 
    The pipeline runs unattended to a green, review-clean PR (or, per-golem,
