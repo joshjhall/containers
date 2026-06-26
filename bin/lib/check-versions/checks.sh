@@ -112,9 +112,18 @@ check_r() {
 
 check_jdtls() {
     progress_msg "  jdtls..."
-    # Get the latest jdtls version from Eclipse downloads
+    # Get the latest jdtls version from Eclipse downloads.
+    #
+    # Derive the version from the actual snapshot tarball filenames
+    # (jdt-language-server-<version>-<timestamp>.tar.gz), NOT from arbitrary
+    # version-shaped strings on the themed index page. The previous approach
+    # scraped every \d+.\d+.\d+ off the milestones/ HTML and could mint pins
+    # for versions that have no corresponding download — which is exactly how
+    # a non-existent jdtls 1.58.0 broke the java-dev build. install-jdtls.sh
+    # downloads from this same snapshots/ directory, so this keeps the
+    # discovered "latest" in lockstep with what is actually installable.
     local latest
-    latest=$(fetch_url "https://download.eclipse.org/jdtls/milestones/" 10 | command grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | command sort -V | command tail -1 2>/dev/null)
+    latest=$(fetch_url "https://download.eclipse.org/jdtls/snapshots/" 10 | command grep -oE 'jdt-language-server-[0-9]+\.[0-9]+\.[0-9]+-' | command grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | command sort -V | command tail -1 2>/dev/null)
     if [ -z "$latest" ] || [ "$latest" = "null" ]; then
         set_latest "jdtls" "error"
     else

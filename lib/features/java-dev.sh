@@ -346,8 +346,14 @@ log_command "Setting Java dev startup script permissions" \
 # ============================================================================
 log_message "Installing Eclipse JDT Language Server..."
 
-# Install jdtls for IDE support (VS Code, Neovim, Claude Code)
-install_jdtls
+# Install jdtls for IDE support (VS Code, Neovim, Claude Code).
+# jdtls is an editor convenience, not a hard requirement for the image — a
+# transient download failure or an upstream layout change (see the
+# milestones→snapshots move) must not abort the whole java-dev build. The
+# `|| log_warning` keeps install_jdtls's non-zero return from tripping the
+# script's `set -euo pipefail`; configure_jdtls_env no-ops when /opt/jdtls
+# is absent.
+install_jdtls || log_warning "jdtls installation failed; continuing without it"
 configure_jdtls_env
 
 # ============================================================================
