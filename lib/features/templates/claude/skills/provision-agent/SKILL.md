@@ -184,15 +184,17 @@ directly via `docker exec -it <container> tmux attach -t claude`.
    }
 
    # No (or invalid) issue assigned → plain interactive session. ISSUE is
-   # interpolated into a `claude --dangerously-skip-permissions '/next-issue
-   # ${ISSUE} …'` command below, so it MUST be a bare integer — a non-numeric
-   # value could break out of the single-quoted argument into the
-   # auto-approving shell. Reject anything that is not all digits.
+   # interpolated into a `claude '/next-issue ${ISSUE} …'` command below, so it
+   # MUST be a bare integer — a non-numeric value could break out of the
+   # single-quoted argument into the container shell. Reject anything that is
+   # not all digits. (The guard is independent of permission mode: golems run
+   # under the repo's `auto` mode, NOT --dangerously-skip-permissions; see the
+   # orchestrate skill § Supervised launch & central feed.)
    if ! printf '%s' "$ISSUE" | command grep -qE '^[0-9]+$'; then
        if [ -n "$ISSUE" ]; then
            echo "WARNING: AGENT_ISSUE='$ISSUE' is not a numeric issue id — starting interactive session instead" >&2
        fi
-       tmux new-session -d -s claude "claude --dangerously-skip-permissions"
+       tmux new-session -d -s claude "claude"
        echo "Claude Code started in tmux session 'claude' (interactive)"
        echo "Attach with: tmux attach -t claude"
        exec sleep infinity
@@ -282,11 +284,15 @@ directly via `docker exec -it <container> tmux attach -t claude`.
    # a premature turn-exit — and it is needed most when the first prompt exits
    # non-zero, exactly the case '&&' would skip. If the first already shipped,
    # the second is a near no-op ("No in-progress issue found" → stop).
-   # (The --dangerously-skip-permissions posture is the throwaway-test shortcut;
-   # migrating container golems to interactive `auto` mode is tracked in #570.)
+   #
+   # Golems inherit the repo's `auto` permission mode (the classifier is the
+   # noise filter; the settings' `ask` rules still gate push/PR/merge) — NOT
+   # --dangerously-skip-permissions, which gates nothing. When a golem hits a
+   # genuinely risky prompt, the Notification hook flags it and a human attaches
+   # via `tmux attach -t claude`. See orchestrate § Supervised launch.
    tmux new-session -d -s claude "
-       claude --dangerously-skip-permissions '/next-issue ${ISSUE} --auto' ; \
-       claude --dangerously-skip-permissions '/next-issue-ship --auto';
+       claude '/next-issue ${ISSUE} --auto' ; \
+       claude '/next-issue-ship --auto';
        echo \$? > /tmp/golem-rc
    "
    echo "Autonomous golem started for issue #${ISSUE} in tmux session 'claude'"

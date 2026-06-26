@@ -129,27 +129,42 @@ DEFAULT_PERMISSIONS='[
 # connection. Override at runtime via the CLAUDE_CODE_CONNECT_TIMEOUT_MS env var.
 DEFAULT_CONNECT_TIMEOUT_MS="600000"
 
+# Notification hook command for the orchestrate golem supervised-auto flow.
+# The Notification event fires when a session awaits a permission decision; for
+# a golem that is the "BLOCKED — needs a human" signal. The hook appends a line
+# to a central feed that `just golems` reads (see the orchestrate skill). The
+# script is installed to ~/.claude/hooks/ by claude-setup; reference it by the
+# resolved home path (build-time settings.json is the user-level file, where
+# $CLAUDE_PROJECT_DIR is not defined). Wired idempotently below so a re-run or a
+# user-added Notification hook is never duplicated or clobbered.
+GOLEM_NOTIFY_CMD="$CLAUDE_SETTINGS_DIR/hooks/golem-notify.sh"
+
 mkdir -p "$CLAUDE_SETTINGS_DIR"
 
 if [ -f "$CLAUDE_SETTINGS_FILE" ]; then
     # Merge into existing settings.json (preserves existing permissions via
     # unique; keeps any pre-existing connect timeout rather than clobbering it)
     /usr/bin/jq --arg dir "$AUTO_MEMORY_DIR" --argjson perms "$DEFAULT_PERMISSIONS" \
-        --arg timeout "$DEFAULT_CONNECT_TIMEOUT_MS" '
+        --arg timeout "$DEFAULT_CONNECT_TIMEOUT_MS" --arg hook "$GOLEM_NOTIFY_CMD" '
         .autoMemoryDirectory = $dir
         | .permissions.allow = ((.permissions.allow // []) + $perms | unique)
         | .env.CLAUDE_CODE_CONNECT_TIMEOUT_MS = (.env.CLAUDE_CODE_CONNECT_TIMEOUT_MS // $timeout)
+        | .hooks.Notification = (
+            (.hooks.Notification // [])
+            | if any(.. | .command? == $hook) then .
+              else . + [{hooks: [{type: "command", command: $hook}]}] end
+          )
     ' "$CLAUDE_SETTINGS_FILE" >"${CLAUDE_SETTINGS_FILE}.tmp" &&
         mv "${CLAUDE_SETTINGS_FILE}.tmp" "$CLAUDE_SETTINGS_FILE"
     log_message "Merged settings into existing settings.json"
 else
     # Create new settings.json with autoMemoryDirectory, default permissions,
-    # and the connect-timeout env default
+    # the connect-timeout env default, and the golem Notification hook
     /usr/bin/jq -n --arg dir "$AUTO_MEMORY_DIR" --argjson perms "$DEFAULT_PERMISSIONS" \
-        --arg timeout "$DEFAULT_CONNECT_TIMEOUT_MS" \
-        '{autoMemoryDirectory: $dir, permissions: {allow: $perms}, env: {CLAUDE_CODE_CONNECT_TIMEOUT_MS: $timeout}}' \
+        --arg timeout "$DEFAULT_CONNECT_TIMEOUT_MS" --arg hook "$GOLEM_NOTIFY_CMD" \
+        '{autoMemoryDirectory: $dir, permissions: {allow: $perms}, env: {CLAUDE_CODE_CONNECT_TIMEOUT_MS: $timeout}, hooks: {Notification: [{hooks: [{type: "command", command: $hook}]}]}}' \
         >"$CLAUDE_SETTINGS_FILE"
-    log_message "Created settings.json with autoMemoryDirectory, default permissions, and connect timeout"
+    log_message "Created settings.json with autoMemoryDirectory, default permissions, connect timeout, and golem Notification hook"
 fi
 
 chown -R "$TARGET_USER:$TARGET_USER" "$CLAUDE_SETTINGS_DIR"

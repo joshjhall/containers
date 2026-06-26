@@ -145,6 +145,19 @@ Authoritative status comes from **PR + issue-label state**. The
 1. **Loop** (for `monitor`/`watch`): re-poll on an interval, surfacing changes.
    Between sweeps, accept mid-flight commands (see Surface below).
 
+**Supervised live golems (pre-PR).** The PR poll above covers golems that have
+opened a PR. While a golem is still working it has no PR yet, so watch it
+TTY-free instead — `just golems` renders the `.worktrees/.status/*.json` cache
+(phase/branch/commits) and surfaces which golems are **BLOCKED** on a permission
+decision, fed by the `Notification` hook (`.claude/hooks/golem-notify.sh` →
+`.worktrees/.status/feed.jsonl`). When one is flagged, `just golem-attach {N}`
+attaches its real TTY (worktree session `golem-{N}`, or a container golem's
+`claude` session via `docker exec`) so the human answers the prompt and
+detaches. Golems run interactive under `auto` mode — never headless
+`claude -p` (no TTY = cannot answer prompts) and never
+`--dangerously-skip-permissions`. See `mode-protocol.md` §
+*Supervised launch & central feed*.
+
 ## Phase R — Cross-PR Rebase
 
 When an earlier PR merges, later PRs touching the same files fall behind base.

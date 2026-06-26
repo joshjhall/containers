@@ -34,7 +34,7 @@ setup() {
 
     # Fake templates dir (mimics /etc/container/config/claude-templates)
     export FAKE_TEMPLATES="$TEST_TEMP_DIR/templates"
-    mkdir -p "$FAKE_TEMPLATES/skills" "$FAKE_TEMPLATES/agents"
+    mkdir -p "$FAKE_TEMPLATES/skills" "$FAKE_TEMPLATES/agents" "$FAKE_TEMPLATES/hooks"
 
     # Fake enabled-features file (empty — no cloud flags)
     export FAKE_FEATURES="$TEST_TEMP_DIR/enabled-features.conf"
@@ -85,6 +85,17 @@ description: "Test agent $name"
 ---
 # $name
 EOF
+}
+
+# Helper: create a minimal hook script (flat file). The template staging step
+# strips +x (chmod -R 644), so create it non-executable to mirror reality.
+_create_hook() {
+    local name="$1"
+    command cat >"$FAKE_TEMPLATES/hooks/$name" <<EOF
+#!/usr/bin/env bash
+echo "hook $name"
+EOF
+    chmod 644 "$FAKE_TEMPLATES/hooks/$name"
 }
 
 # Helper: build a standalone installer script from claude-setup's install section.
@@ -175,6 +186,23 @@ fi
 if [ -n "$STAGED_STAMP" ]; then
     mkdir -p "$CLAUDE_DIR"
     printf '%s\n' "$STAGED_STAMP" > "$INSTALLED_STAMP_FILE"
+fi
+
+# --- Hooks ---
+if [ -d "$TEMPLATES_DIR/hooks" ]; then
+    mkdir -p "$CLAUDE_DIR/hooks"
+    for hook_file in "$TEMPLATES_DIR/hooks"/*; do
+        [ -f "$hook_file" ] || continue
+        hook_name=$(basename "$hook_file")
+        target_file="$CLAUDE_DIR/hooks/$hook_name"
+        if [ -f "$target_file" ]; then
+            echo "SKIP $hook_name"
+        else
+            cp "$hook_file" "$target_file"
+            chmod 755 "$target_file"
+            echo "INSTALLED hook:$hook_name"
+        fi
+    done
 fi
 INSTALLER
     chmod +x "$TEST_TEMP_DIR/installer.sh"
@@ -350,6 +378,42 @@ test_already_installed_agents_skipped() {
 }
 
 # ============================================================================
+# Functional: hooks install (executable bit restored, idempotent)
+# ============================================================================
+
+test_hooks_install_executable() {
+    # The template staging strips +x; the install loop must restore it so the
+    # Claude Code runtime can exec the hook.
+    _create_hook "golem-notify.sh"
+    _build_installer
+
+    local output
+    output=$(bash "$TEST_TEMP_DIR/installer.sh" "$FAKE_TEMPLATES" "$FAKE_HOME/.claude" "$FAKE_FEATURES")
+
+    assert_contains "$output" "INSTALLED hook:golem-notify.sh" "hook installed"
+    assert_file_exists "$FAKE_HOME/.claude/hooks/golem-notify.sh" "hook file copied"
+    assert_true "[ -x '$FAKE_HOME/.claude/hooks/golem-notify.sh' ]" \
+        "installed hook should be executable (+x restored)"
+}
+
+test_already_installed_hooks_skipped() {
+    _create_hook "golem-notify.sh"
+    _build_installer
+
+    # First run
+    bash "$TEST_TEMP_DIR/installer.sh" "$FAKE_TEMPLATES" "$FAKE_HOME/.claude" "$FAKE_FEATURES" >/dev/null
+
+    # Second run
+    local output
+    output=$(bash "$TEST_TEMP_DIR/installer.sh" "$FAKE_TEMPLATES" "$FAKE_HOME/.claude" "$FAKE_FEATURES")
+
+    assert_contains "$output" "SKIP golem-notify.sh" \
+        "Already-installed hook should be skipped"
+    assert_not_contains "$output" "INSTALLED hook:golem-notify.sh" \
+        "Should not re-install existing hook"
+}
+
+# ============================================================================
 # Functional: conditional skills are skipped
 # ============================================================================
 
@@ -476,6 +540,10 @@ run_test test_subdir_skill_does_not_block_agents "install: subdir skill does not
 # Functional — idempotency
 run_test test_already_installed_skills_skipped "install: already-installed skills are skipped"
 run_test test_already_installed_agents_skipped "install: already-installed agents are skipped"
+
+# Functional — hooks
+run_test test_hooks_install_executable "install: hooks install with executable bit restored"
+run_test test_already_installed_hooks_skipped "install: already-installed hooks are skipped"
 
 # Functional — conditional skills
 run_test test_conditional_skills_skipped "install: conditional skills are skipped in main loop"

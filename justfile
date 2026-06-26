@@ -232,6 +232,184 @@ quarterly-review:
     echo "     prune .trivyignore / .osv-scanner.toml allowlists."
 
 # ============================================================================
+# Worktree & orchestration (golems)
+# ============================================================================
+
+# Machine-local files a fresh Mode-2 worktree needs but that are gitignored
+# (so absent from a new worktree). Space-separated, repo-root-relative. Keep
+# this list in ONE place so it is easy to extend when other local files become
+# required. See the worktree-push-hooks-gitignore / golem-push-gate-under-auto
+# memory notes for why each is needed:
+#   .env                         — docker-compose-validate pre-push hook reads
+#                                  .devcontainer/docker-compose.yml's
+#                                  `env_file: - ../.env`.
+#   .claude/settings.local.json  — permissions.defaultMode "auto" + the
+#                                  push/PR `ask` gates; without it a golem runs
+#                                  under the stricter default and prompt-storms.
+WORKTREE_LOCAL_FILES := ".env .claude/settings.local.json"
+
+# Creates .worktrees/issue-N on branch feature/issue-N from origin/main and
+# copies in the gitignored machine-local files (WORKTREE_LOCAL_FILES) a push needs.
+# Create a push-ready Mode-2 worktree for issue N (idempotent; copies .env etc.).
+worktree-new N:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if ! [[ "{{ N }}" =~ ^[0-9]+$ ]]; then
+        echo "worktree-new: N must be an issue number, got '{{ N }}'" >&2
+        exit 2
+    fi
+    root="$(git rev-parse --show-toplevel)"
+    cd "$root"
+    wt=".worktrees/issue-{{ N }}"
+    br="feature/issue-{{ N }}"
+    if git worktree list --porcelain | /usr/bin/grep -qx "worktree $root/$wt"; then
+        echo "worktree-new: $wt already exists — remove it first (just worktree-rm {{ N }})" >&2
+        exit 1
+    fi
+    if [ -n "$(git branch --list "$br")" ]; then
+        echo "worktree-new: branch $br already exists — delete it or pick another issue" >&2
+        exit 1
+    fi
+    git fetch origin main --quiet
+    git worktree add "$wt" -b "$br" origin/main
+    for f in {{ WORKTREE_LOCAL_FILES }}; do
+        if [ -e "$f" ]; then
+            /usr/bin/mkdir -p "$wt/$(/usr/bin/dirname "$f")"
+            /usr/bin/cp "$f" "$wt/$f"
+            echo "  copied $f"
+        else
+            echo "  skipped $f (not present in main checkout)"
+        fi
+    done
+    echo ""
+    echo "Worktree ready: $wt (branch $br)"
+    echo "Launch a golem there with:"
+    echo "  tmux new-session -d -s golem-{{ N }} -c \"$root/$wt\" \"claude '/next-issue {{ N }} --auto'\""
+
+# Post-merge cleanup: remove the issue-N worktree and its feature/issue-N branch (clean no-op if absent).
+worktree-rm N:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if ! [[ "{{ N }}" =~ ^[0-9]+$ ]]; then
+        echo "worktree-rm: N must be an issue number, got '{{ N }}'" >&2
+        exit 2
+    fi
+    root="$(git rev-parse --show-toplevel)"
+    cd "$root"
+    wt=".worktrees/issue-{{ N }}"
+    br="feature/issue-{{ N }}"
+    removed=0
+    if git worktree list --porcelain | /usr/bin/grep -qx "worktree $root/$wt"; then
+        if ! git worktree remove "$wt" 2>/dev/null; then
+            echo "worktree-rm: $wt has uncommitted changes." >&2
+            echo "  Re-run after committing, or force: git worktree remove --force $wt" >&2
+            exit 1
+        fi
+        echo "  removed worktree $wt"
+        removed=1
+    fi
+    if [ -n "$(git branch --list "$br")" ]; then
+        git branch -D "$br"
+        echo "  deleted branch $br"
+        removed=1
+    fi
+    if [ "$removed" -eq 0 ]; then
+        echo "worktree-rm: nothing to remove for issue {{ N }} ($wt / $br absent)"
+    fi
+
+# Reads .worktrees/.status/*.json + live golem-* tmux sessions and the
+# Notification feed; PR + issue-label state remains authoritative (cache fills gaps).
+# Show the central golem status table + which golems are BLOCKED (TTY-free).
+golems:
+    #!/usr/bin/env bash
+    set -uo pipefail
+    root="$(git rev-parse --show-toplevel)"
+    status_dir="$root/.worktrees/.status"
+    feed="$status_dir/feed.jsonl"
+    shopt -s nullglob
+    cache=("$status_dir"/*.json)
+    sessions="$(tmux ls 2>/dev/null | /usr/bin/grep -oE '^golem-[0-9]+' || true)"
+    if [ "${#cache[@]}" -eq 0 ] && [ -z "$sessions" ]; then
+        echo "No active golems (no $status_dir/*.json, no golem-* tmux sessions)."
+        exit 0
+    fi
+    printf '%-10s %-6s %-22s %-5s %-12s %-10s %-8s\n' \
+        GOLEM ISSUE BRANCH PR STATE PHASE BLOCKING
+    for f in "${cache[@]}"; do
+        jq -r '[
+            (.golem // "?"),
+            (.issue // "?" | tostring),
+            (.branch // "-"),
+            (.pr // "-" | tostring),
+            (.state // "-"),
+            (.phase // "-"),
+            (if .blocking then "YES" else "-" end)
+        ] | @tsv' "$f" 2>/dev/null \
+        | while IFS=$'\t' read -r g i b p s ph bl; do
+            printf '%-10s %-6s %-22s %-5s %-12s %-10s %-8s\n' "$g" "$i" "$b" "$p" "$s" "$ph" "$bl"
+        done
+    done
+    # Live sessions with no cache file yet.
+    for sess in $sessions; do
+        n="${sess#golem-}"
+        if [ ! -e "$status_dir/golem-$n.json" ] && [ ! -e "$status_dir/issue-$n.json" ]; then
+            printf '%-10s %-6s %-22s %-5s %-12s %-10s %-8s\n' \
+                "$sess" "$n" "-" "-" "(live)" "-" "-"
+        fi
+    done
+    echo ""
+    echo "BLOCKED (needs a human decision):"
+    blocked=0
+    for f in "${cache[@]}"; do
+        if [ "$(jq -r '.blocking // false' "$f" 2>/dev/null)" = "true" ]; then
+            n="$(jq -r '.issue // empty' "$f" 2>/dev/null)"
+            echo "  golem-$n — just golem-attach $n"
+            blocked=1
+        fi
+    done
+    if [ -f "$feed" ]; then
+        # Recent Notification-hook lines (a golem awaiting a permission decision).
+        /usr/bin/tail -n 50 "$feed" 2>/dev/null \
+        | jq -r 'select(.event == "blocked") | "  \(.golem) — \(.message // "awaiting decision")"' 2>/dev/null \
+        | /usr/bin/sort -u \
+        | while IFS= read -r line; do echo "$line"; blocked=1; done
+    fi
+    [ "$blocked" -eq 0 ] && echo "  (none)"
+    if [ -f "$feed" ]; then
+        echo ""
+        echo "Recent feed ($feed):"
+        /usr/bin/tail -n 10 "$feed"
+    fi
+
+# Tries the golem-N worktree tmux session, else the container golem's `claude`
+# session via docker exec (clean failure if neither exists).
+# Attach to issue N's golem session (worktree or container).
+golem-attach N:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if ! [[ "{{ N }}" =~ ^[0-9]+$ ]]; then
+        echo "golem-attach: N must be an issue number, got '{{ N }}'" >&2
+        exit 2
+    fi
+    if tmux has-session -t "golem-{{ N }}" 2>/dev/null; then
+        exec tmux attach -t "golem-{{ N }}"
+    fi
+    root="$(git rev-parse --show-toplevel)"
+    status_dir="$root/.worktrees/.status"
+    shopt -s nullglob
+    for f in "$status_dir"/*.json; do
+        if [ "$(jq -r '.issue // empty' "$f" 2>/dev/null)" = "{{ N }}" ]; then
+            ctr="$(jq -r '.container // empty' "$f" 2>/dev/null)"
+            if [ -n "$ctr" ]; then
+                exec docker exec -it "$ctr" tmux attach -t claude
+            fi
+        fi
+    done
+    echo "golem-attach: no golem-{{ N }} tmux session and no container golem for issue {{ N }}." >&2
+    echo "  Check 'just golems' for active golems." >&2
+    exit 1
+
+# ============================================================================
 # Cleanup
 # ============================================================================
 
