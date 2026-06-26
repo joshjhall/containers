@@ -276,9 +276,17 @@ directly via `docker exec -it <container> tmux attach -t claude`.
 
    # Run the autonomous pipeline in tmux: select+plan, then ship to a green,
    # review-clean PR awaiting human merge. Write a terminal state on exit.
+   #
+   # Chain the two prompts with ';', NOT '&&': autonomous /next-issue invokes
+   # /next-issue-ship in-turn, so the second prompt is only a resume backstop for
+   # a premature turn-exit — and it is needed most when the first prompt exits
+   # non-zero, exactly the case '&&' would skip. If the first already shipped,
+   # the second is a near no-op ("No in-progress issue found" → stop).
+   # (The --dangerously-skip-permissions posture is the throwaway-test shortcut;
+   # migrating container golems to interactive `auto` mode is tracked in #570.)
    tmux new-session -d -s claude "
-       claude --dangerously-skip-permissions '/next-issue ${ISSUE} --auto' && \
-       claude --dangerously-skip-permissions '/next-issue-ship';
+       claude --dangerously-skip-permissions '/next-issue ${ISSUE} --auto' ; \
+       claude --dangerously-skip-permissions '/next-issue-ship --auto';
        echo \$? > /tmp/golem-rc
    "
    echo "Autonomous golem started for issue #${ISSUE} in tmux session 'claude'"

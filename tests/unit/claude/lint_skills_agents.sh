@@ -597,6 +597,12 @@ test_next_issue_auto_invariants() {
     assert_file_contains "$ni_skill" "NEXT_ISSUE_AUTONOMOUS" \
         "next-issue/SKILL.md documents the NEXT_ISSUE_AUTONOMOUS env-var activation"
 
+    # Invariant 4b: env-var-triggered autonomy is announced (a manually-typed
+    # /next-issue inheriting NEXT_ISSUE_AUTONOMOUS=1 must surface that gates are
+    # off, so a silent leaked env var can't run unattended unnoticed).
+    assert_true "command grep -qiE 'autonomous mode active|gates bypassed|gates are off' '$ni_skill'" \
+        "next-issue/SKILL.md announces env-var-triggered autonomy"
+
     # Invariant 5: the orchestrate golem launch uses the `;`-chained resume
     # backstop, NOT `&&` (which would skip the backstop on the first prompt's
     # non-zero exit — the very case it exists for). Both orchestrate files must
@@ -619,6 +625,26 @@ test_next_issue_auto_invariants() {
         assert_true "! command grep -qF 'claude -p \"/next-issue' '$f'" \
             "$rel: golem launch is interactive (no headless 'claude -p')"
     done
+
+    # Invariant 7: the provision-agent container golem launch uses the same
+    # ';'-not-'&&' resume backstop (the '&&' would skip ship when the first
+    # prompt exits non-zero). Guards the container-golem launch against the
+    # regression #572 fixed for the worktree path. Match the literal
+    # "--auto' &&" (no trailing backslash — a trailing '\' makes an unreliable
+    # regex) via grep -F so the '&&' is detected exactly where it would chain
+    # the two prompts.
+    local prov_skill="$SKILLS_DIR/provision-agent/SKILL.md"
+    if [ -f "$prov_skill" ] && command grep -q -- "next-issue.*--auto" "$prov_skill"; then
+        # Use `grep -F --` so the leading "--auto" is treated as a pattern, not
+        # an option flag (the harness's grep is ripgrep-backed and rejects a
+        # bare leading "--...").
+        assert_true "! command grep -qF -- \"--auto' &&\" '$prov_skill'" \
+            "provision-agent/SKILL.md golem launch does not chain ship with '&&'"
+        assert_true "command grep -qF -- \"--auto' ;\" '$prov_skill'" \
+            "provision-agent/SKILL.md golem launch chains ship with ';' (resume backstop)"
+        assert_true "command grep -qF -- 'next-issue-ship --auto' '$prov_skill'" \
+            "provision-agent/SKILL.md ship backstop passes --auto"
+    fi
 }
 
 # --- Run All Tests ---

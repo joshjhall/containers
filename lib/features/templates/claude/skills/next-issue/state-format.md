@@ -184,6 +184,15 @@ same context (the small planning footprint does not justify a reset). The
 plan-approval gate itself is preserved, and `autonomous` stays false. For
 `effort/medium`/`large` the reset point is unaffected.
 
+\* **`--auto` exception**: when `/next-issue` is invoked with `--auto` (or
+`NEXT_ISSUE_AUTONOMOUS=1`), **every** reset point above is bypassed — the
+autonomous run invokes `/next-issue-ship` in the same turn (via the `Skill`
+tool) and never reaches the "After plan approval", "After review", or "After
+ship" boundaries as distinct resets. The orchestrate golem launch's
+`;`-chained `/next-issue-ship --auto` is the only resume path if the turn exits
+early. Unlike `--ship`, `--auto` sets `autonomous: true` and removes the
+plan-approval gate entirely.
+
 | Orchestrator Action | Reset Mode | Why                                                        |
 | ------------------- | ---------- | ---------------------------------------------------------- |
 | After each merge    | Suggest    | Agent diff context is stale; next merge is different files |
