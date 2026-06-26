@@ -41,6 +41,16 @@ The run is **autonomous** when EITHER the literal token `--auto` appears in
 the invocation arguments OR the environment variable `NEXT_ISSUE_AUTONOMOUS=1`
 is set. Autonomy is strictly opt-in.
 
+**Announce the mode when it is active via the env var.** When the run is
+autonomous because `NEXT_ISSUE_AUTONOMOUS=1` is set (rather than an explicit
+`--auto` on this invocation), print one visible line up front —
+`Autonomous mode active (NEXT_ISSUE_AUTONOMOUS=1) — all human gates bypassed,
+will proceed to a pushed PR.` — so an operator who didn't type `--auto` notices
+that gates are off. The env var is persistent across invocations in a shell or
+container, so a manually-typed `/next-issue` inherits autonomy silently without
+this banner. (Set `NEXT_ISSUE_AUTONOMOUS=1` only in dedicated headless golem
+environments, never in a shared interactive shell.)
+
 When autonomous:
 
 - Do NOT call `EnterPlanMode`/`ExitPlanMode` or any `AskUserQuestion`. Every

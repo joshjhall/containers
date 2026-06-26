@@ -93,7 +93,13 @@ These env vars toggle non-default behavior; all are opt-in:
   `AUTOMERGE_AUTONOMOUS=1` is not, the run ignores auto-merge and falls through
   to the normal CI-wait loop + review, stopping at green CI for human merge.
   Has no effect in non-autonomous runs (interactive `AUTOMERGE=1` is unchanged
-  — the human is already in the loop).
+  — the human is already in the loop). **Operational note:** the two-variable
+  scheme is a real consent gate only if the variables come from *separate*
+  sources — setting both in the same `.env` block, compose `environment:`, or
+  CI secret group defeats the "second consent" intent (one copy-paste enables
+  unreviewed merges). Inject `AUTOMERGE_AUTONOMOUS=1` from a distinct
+  configuration source (e.g. a separate 1Password entry / secret group) than
+  `AUTOMERGE=1`, and only for golem environments that are meant to auto-merge.
 - `PRE_REVIEW_STRICT=true` — pre-review gates (Step 3.5) block Option 1 PR
   creation on HIGH certainty findings instead of warning only.
 - `REVIEW_MAX_CYCLES` — integer, default `3`. Caps the post-CI multi-cycle
@@ -641,12 +647,29 @@ Before executing the chosen shipping mode, run these safety checks:
      apply). In autonomous mode, pre-answer `/file-issue`'s questions from the
      finding fields so it does not prompt.
    - Autonomous fallback (to avoid a nested interactive skill): create the
-     issue directly with the same label taxonomy `/file-issue` uses:
+     issue directly with the same label taxonomy `/file-issue` uses. Pass the
+     body via `--body-file`, **never** by interpolating `{finding.description}`
+     into a `--body "..."` argument: the description is LLM-generated and may
+     contain backticks, `$(...)`, quotes, or newlines that would break out of
+     the quoted string and execute in the shell — and this path runs unattended
+     under `--auto` with no human gate. Use the **`Write` tool** to write the
+     body to a temp file (so the content never passes through a shell at all),
+     then reference it:
 
-     ```bash
-     gh issue create --title "{finding.title}" --body "{finding.description}\n\nDeferred from PR #{pr_number} (review finding)." \
-       --label "type/{type},severity/{sev},component/{comp}"
-     ```
+     1. `Write` the body to `/tmp/deferred-finding-{n}.md` — the finding's
+        description followed by `\n\nDeferred from PR #{pr_number} (review
+        finding).`
+     2. Create the issue from that file:
+
+        ```bash
+        gh issue create --title "{finding.title}" \
+          --body-file /tmp/deferred-finding-{n}.md \
+          --label "type/{type},severity/{sev},component/{comp}"
+        ```
+
+   Keep `--title` short and free of shell metacharacters (it is a finding
+   name); if a title could contain them, write it into the body and use a
+   generic title.
 
    - After filing, link the deferred issues on the PR in one comment:
 
