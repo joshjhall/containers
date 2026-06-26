@@ -674,6 +674,32 @@ CLOUD_HEADER
 fi
 
 # ============================================================================
+# Hook Installation (no auth required)
+# ============================================================================
+# Hook scripts (e.g. the orchestrate golem Notification feed) ship as flat
+# files under $TEMPLATES_DIR/hooks. They are wired into ~/.claude/settings.json
+# at build time (see claude-code-setup.sh). The template staging step strips the
+# execute bit (chmod -R 644), so restore +x on install. Existing hooks are left
+# untouched so a user edit is never clobbered.
+if [ -d "$TEMPLATES_DIR/hooks" ]; then
+    echo ""
+    echo "Hooks:"
+    mkdir -p "$CLAUDE_DIR/hooks"
+    for hook_file in "$TEMPLATES_DIR/hooks"/*; do
+        [ -f "$hook_file" ] || continue
+        hook_name=$(basename "$hook_file")
+        target_file="$CLAUDE_DIR/hooks/$hook_name"
+        if [ -f "$target_file" ]; then
+            echo "    ✓ $hook_name (already installed)"
+        else
+            cp "$hook_file" "$target_file"
+            chmod 755 "$target_file"
+            echo "    ✓ $hook_name installed"
+        fi
+    done
+fi
+
+# ============================================================================
 # Plugin Installation (requires authentication)
 # ============================================================================
 if [ "$SKIP_PLUGINS" = "true" ]; then

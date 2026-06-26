@@ -50,8 +50,12 @@ instance). Worktree cleanup needed after merge.
 **Lifecycle**:
 
 ```bash
-# Create
-git worktree add .worktrees/issue-{N} -b feature/issue-{N}
+# Create — `just worktree-new` wraps `git worktree add .worktrees/issue-{N}
+# -b feature/issue-{N} origin/main` AND copies the machine-local files a push
+# needs (.env, .claude/settings.local.json) which are gitignored and so absent
+# from a fresh worktree. Doing the bare `git worktree add` instead leaves those
+# out and the pre-push hooks fail (docker-compose-validate needs ../.env).
+just worktree-new {N}
 
 # Work (in a Task or subshell)
 cd .worktrees/issue-{N}
@@ -61,9 +65,8 @@ cd .worktrees/issue-{N}
 git checkout main
 git merge feature/issue-{N}
 
-# Cleanup
-git worktree remove .worktrees/issue-{N}
-git branch -d feature/issue-{N}
+# Cleanup — removes the worktree and its feature/issue-{N} branch.
+just worktree-rm {N}
 ```
 
 ### Mode 3: Container Agent
@@ -121,6 +124,39 @@ non-zero before shipping, which is exactly the case `&&` would skip.
 > that level and makes the golem's review harness throw. Dispatch golems as OS
 > processes only — containers (`/provision-agent`) or worktree-bound shells.
 > (See `next-issue-ship` SKILL.md § Golem Execution Model.)
+
+### Supervised launch & central feed
+
+Golems run **interactive in tmux, inheriting the repo's `auto` permission
+mode** — never `--dangerously-skip-permissions`, never forced `acceptEdits`.
+`auto`'s safety classifier auto-approves routine reads/edits/bash and prompts
+only on the genuinely risky class, so a prompt then means something. (The
+repo's `.claude/settings.local.json` also pins `git push` / `gh pr create` /
+`gh pr merge` to `ask`, so outward actions still gate even under `auto`.)
+
+Launch a worktree golem (after `just worktree-new {N}`):
+
+```bash
+tmux new-session -d -s golem-{N} -c .worktrees/issue-{N} \
+  "claude '/next-issue {N} --auto'"
+```
+
+**Do NOT run golems headless** (`claude -p --output-format stream-json`). A
+headless session has no TTY, so there is nothing to attach to and no way to
+answer a permission prompt — it forces skip-all and throws away supervision to
+gain a feed. Monitoring and intervention are separate channels:
+
+- **Monitor (TTY-free):** an interactive golem's TUI paints an alternate screen
+  buffer, so `tmux capture-pane` / `tail -f` are blank until exit. Derive status
+  from observable state instead — git commits vs `origin/main`, PR/MR state, the
+  `next-issue` state files (`phase`), and the `.worktrees/.status/*.json` cache —
+  plus a `Notification` hook (`.claude/hooks/golem-notify.sh`) that appends a
+  blocked-golem line to `.worktrees/.status/feed.jsonl` whenever a golem awaits a
+  decision. `just golems` renders the table AND the BLOCKED list from these.
+- **Intervene (on demand):** when `just golems` flags a golem BLOCKED, run
+  `just golem-attach {N}` to attach its real TTY (worktree session `golem-{N}`,
+  or a container golem's `claude` session via `docker exec`), answer the
+  high-risk prompt, and detach.
 
 ### Dispatch Decision Sub-Tree
 

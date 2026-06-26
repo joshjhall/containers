@@ -64,6 +64,10 @@ just build         # cargo build --workspace
 just check-versions
 just install-hooks # lefthook install
 just db-validate   # validate sibling containers-db schemas + fixtures
+just worktree-new 569 # create .worktrees/issue-569 + copy .env / settings.local.json
+just worktree-rm 569  # remove that worktree + its feature/issue-569 branch
+just golems        # central golem status table + BLOCKED feed (TTY-free)
+just golem-attach 569 # attach the golem-569 tmux (or container) session
 ```
 
 The raw commands these wrap — useful when debugging or when `just` isn't available:
