@@ -120,7 +120,9 @@ DISPATCH → WORK → PR → MONITOR → (REBASE) → MERGE (human) → TEARDOWN
 ```
 
 1. **DISPATCH**: Orchestrator creates worktree + container, launches
-   `/next-issue <N> --auto`
+   `claude --permission-mode auto '/next-issue <N> --auto'` (the harness
+   `--permission-mode auto` is passed explicitly so an untrusted worktree runs in
+   `auto`, distinct from the `/next-issue` `--auto` skill flag — #585)
 1. **WORK**: Golem runs the autonomous pipeline inside the container
 1. **PR**: Autonomous `/next-issue-ship` opens a PR; issue → `status/pr-pending`
 1. **MONITOR**: Orchestrator polls PR + issue-label state (`/orchestrate monitor`)

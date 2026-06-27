@@ -101,20 +101,24 @@ branch → worktree → PR and runs the autonomous pipeline (`/next-issue <N>
 a green, review-clean PR. Golems are not a new isolation mechanism — they are
 the **existing Mode 2 or Mode 3** with an autonomous payload and a PR exit.
 
-The launch is **interactive** in tmux (inherit the repo's `auto` permission
-mode — never headless `claude -p`, never `--dangerously-skip-permissions`; see
-the `golem-supervised-auto-mode` memory / #570). Autonomous `/next-issue`
-invokes `/next-issue-ship` in-turn, so the single prompt reaches a PR on its
-own. A `;`-chained second prompt is the resume backstop —
-`claude "/next-issue <N> --auto" ; claude "/next-issue-ship --auto"` — so that a
-premature turn-exit after `/next-issue` still ships: the second prompt re-reads
-the state file and delivers (a near no-op if the first already pushed a PR).
-Use `;`, NOT `&&`: the backstop must run even when the first prompt exits
-non-zero before shipping, which is exactly the case `&&` would skip.
+The launch is **interactive** in tmux with `--permission-mode auto` passed
+**explicitly** (never headless `claude -p`, never
+`--dangerously-skip-permissions`; see the `golem-supervised-auto-mode` memory and
+issues #570, #585). The explicit flag is required because a fresh worktree is untrusted,
+so Claude Code does not load its copied `settings.local.json` `defaultMode: auto`
+and would otherwise fall back to `default`. The harness `--permission-mode auto`
+is distinct from the `/next-issue` `--auto` skill flag — both are needed.
+Autonomous `/next-issue` invokes `/next-issue-ship` in-turn, so the single prompt
+reaches a PR on its own. A `;`-chained second prompt is the resume backstop —
+`claude --permission-mode auto "/next-issue <N> --auto" ; claude --permission-mode auto "/next-issue-ship --auto"`
+— so that a premature turn-exit after `/next-issue` still ships: the second
+prompt re-reads the state file and delivers (a near no-op if the first already
+pushed a PR). Use `;`, NOT `&&`: the backstop must run even when the first prompt
+exits non-zero before shipping, which is exactly the case `&&` would skip.
 
 | Realization        | Built on | Payload (process)                         | Exit                            |
 | ------------------ | -------- | ----------------------------------------- | ------------------------------- |
-| **Worktree golem** | Mode 2   | `claude "/next-issue <N> --auto" ; claude "/next-issue-ship --auto"` in a worktree shell | autonomous ship → Branch + PR |
+| **Worktree golem** | Mode 2   | `claude --permission-mode auto "/next-issue <N> --auto" ; claude --permission-mode auto "/next-issue-ship --auto"` in a worktree shell | autonomous ship → Branch + PR |
 | **Container golem** | Mode 3  | same chained pipeline in the container's tmux Claude | same → PR (or auto-merge: needs `AUTOMERGE=1` + `AUTOMERGE_AUTONOMOUS=1`) |
 
 > **Hard constraint — golems are processes, never Workflow subagents.** The
@@ -127,18 +131,21 @@ non-zero before shipping, which is exactly the case `&&` would skip.
 
 ### Supervised launch & central feed
 
-Golems run **interactive in tmux, inheriting the repo's `auto` permission
-mode** — never `--dangerously-skip-permissions`, never forced `acceptEdits`.
-`auto`'s safety classifier auto-approves routine reads/edits/bash and prompts
-only on the genuinely risky class, so a prompt then means something. (The
-repo's `.claude/settings.local.json` also pins `git push` / `gh pr create` /
-`gh pr merge` to `ask`, so outward actions still gate even under `auto`.)
+Golems run **interactive in tmux with `--permission-mode auto` passed
+explicitly** — never `--dangerously-skip-permissions`, never forced
+`acceptEdits`. `auto`'s safety classifier auto-approves routine reads/edits/bash
+and prompts only on the genuinely risky class, so a prompt then means something.
+(The repo's `.claude/settings.local.json` also pins `git push` / `gh pr create` /
+`gh pr merge` to `ask`, so outward actions still gate even under `auto` — once
+the worktree is trusted; `just worktree-new` seeds that trust.) The flag must be
+explicit: a fresh worktree is untrusted, so its copied `defaultMode: auto` is not
+loaded on its own and the session would silently fall back to `default` (#585).
 
 Launch a worktree golem (after `just worktree-new {N}`):
 
 ```bash
 tmux new-session -d -s golem-{N} -c .worktrees/issue-{N} \
-  "claude '/next-issue {N} --auto'"
+  "claude --permission-mode auto '/next-issue {N} --auto' ; claude --permission-mode auto '/next-issue-ship --auto'"
 ```
 
 **Do NOT run golems headless** (`claude -p --output-format stream-json`). A

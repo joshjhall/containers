@@ -285,14 +285,19 @@ directly via `docker exec -it <container> tmux attach -t claude`.
    # non-zero, exactly the case '&&' would skip. If the first already shipped,
    # the second is a near no-op ("No in-progress issue found" → stop).
    #
-   # Golems inherit the repo's `auto` permission mode (the classifier is the
-   # noise filter; the settings' `ask` rules still gate push/PR/merge) — NOT
-   # --dangerously-skip-permissions, which gates nothing. When a golem hits a
-   # genuinely risky prompt, the Notification hook flags it and a human attaches
-   # via `tmux attach -t claude`. See orchestrate § Supervised launch.
+   # Golems run in `auto` permission mode via the EXPLICIT `--permission-mode
+   # auto` flag (the classifier is the noise filter; the settings' `ask` rules
+   # still gate push/PR/merge) — NOT --dangerously-skip-permissions, which gates
+   # nothing. The flag is explicit because a fresh worktree is untrusted, so its
+   # copied settings.local.json `defaultMode: auto` is not loaded on its own and
+   # the session would fall back to `default` (#585). The harness
+   # `--permission-mode auto` is distinct from the `/next-issue` `--auto` skill
+   # flag — both are needed. When a golem hits a genuinely risky prompt, the
+   # Notification hook flags it and a human attaches via `tmux attach -t claude`.
+   # See orchestrate § Supervised launch.
    tmux new-session -d -s claude "
-       claude '/next-issue ${ISSUE} --auto' ; \
-       claude '/next-issue-ship --auto';
+       claude --permission-mode auto '/next-issue ${ISSUE} --auto' ; \
+       claude --permission-mode auto '/next-issue-ship --auto';
        echo \$? > /tmp/golem-rc
    "
    echo "Autonomous golem started for issue #${ISSUE} in tmux session 'claude'"

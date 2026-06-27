@@ -606,21 +606,38 @@ test_next_issue_auto_invariants() {
     # Invariant 5: the orchestrate golem launch uses the `;`-chained resume
     # backstop, NOT `&&` (which would skip the backstop on the first prompt's
     # non-zero exit — the very case it exists for). Both orchestrate files must
-    # carry the chained ship invocation so they cannot drift apart.
+    # carry the chained ship invocation so they cannot drift apart. The launch
+    # now passes `--permission-mode auto` explicitly (#585), so match the ship
+    # half of the chain with that flag present.
     for f in "$orch_skill" "$mode_proto"; do
         local rel
         rel="$(/usr/bin/basename "$(/usr/bin/dirname "$f")")/$(/usr/bin/basename "$f")"
-        assert_true "command grep -qF '; claude \"/next-issue-ship --auto\"' '$f'" \
+        assert_true "command grep -qF '; claude --permission-mode auto \"/next-issue-ship --auto\"' '$f'" \
             "$rel: golem launch chains /next-issue-ship with ';' (resume backstop)"
         assert_file_not_contains "$f" '&& claude "/next-issue-ship --auto"' \
             "$rel: golem launch does not use '&&' for the ship backstop"
+        assert_file_not_contains "$f" '&& claude --permission-mode auto "/next-issue-ship --auto"' \
+            "$rel: golem launch does not use '&&' for the ship backstop (with flag)"
+    done
+
+    # Invariant 5b (#585): the orchestrate golem launch passes the harness
+    # `--permission-mode auto` flag EXPLICITLY. A fresh worktree is untrusted, so
+    # Claude Code does not load its copied settings.local.json `defaultMode: auto`
+    # and would silently fall back to `default` and prompt-storm. The explicit
+    # flag is distinct from the `/next-issue` `--auto` skill flag — both must be
+    # present on the launch line. Guard both orchestrate files.
+    # `rel` is already declared `local` in the Invariant 5 loop above; `local`
+    # is function-scoped in bash, so re-using it here needs no new declaration.
+    for f in "$orch_skill" "$mode_proto"; do
+        rel="$(/usr/bin/basename "$(/usr/bin/dirname "$f")")/$(/usr/bin/basename "$f")"
+        assert_true "command grep -qF 'claude --permission-mode auto \"/next-issue' '$f'" \
+            "$rel: golem launch passes harness --permission-mode auto explicitly (#585)"
     done
 
     # Invariant 6: golems launch interactive (inherit `auto`), never headless
     # `claude -p` — per golem-supervised-auto-mode (#570). The launch lines that
     # invoke the next-issue pipeline must not use `claude -p`.
     for f in "$orch_skill" "$mode_proto"; do
-        local rel
         rel="$(/usr/bin/basename "$(/usr/bin/dirname "$f")")/$(/usr/bin/basename "$f")"
         assert_true "! command grep -qF 'claude -p \"/next-issue' '$f'" \
             "$rel: golem launch is interactive (no headless 'claude -p')"
@@ -634,10 +651,22 @@ test_next_issue_auto_invariants() {
     # regex) via grep -F so the '&&' is detected exactly where it would chain
     # the two prompts.
     local prov_skill="$SKILLS_DIR/provision-agent/SKILL.md"
-    if [ -f "$prov_skill" ] && command grep -q -- "next-issue.*--auto" "$prov_skill"; then
-        # Use `grep -F --` so the leading "--auto" is treated as a pattern, not
-        # an option flag (the harness's grep is ripgrep-backed and rejects a
-        # bare leading "--...").
+    # Hard-fail on absence (mirrors Invariant 0) so the #585 assertions below
+    # can't evaporate silently if the file is deleted or renamed.
+    assert_file_exists "$prov_skill" "provision-agent/SKILL.md exists"
+    # The #585 regression guards (explicit flag + interactive-not-headless) are
+    # UNCONDITIONAL — like Invariants 5b/6 for the orchestrate files — so they
+    # cannot vacate if the `next-issue.*--auto` pattern is later removed from the
+    # file. Use `grep -F --` so a leading "--auto" is treated as a pattern, not
+    # an option flag (the harness's grep is ripgrep-backed and rejects a bare
+    # leading "--...").
+    assert_true "command grep -qF -- \"claude --permission-mode auto '/next-issue\" '$prov_skill'" \
+        "provision-agent/SKILL.md golem launch passes harness --permission-mode auto explicitly (#585)"
+    assert_true "! command grep -qF \"claude -p '/next-issue\" '$prov_skill'" \
+        "provision-agent/SKILL.md golem launch is interactive (no headless 'claude -p')"
+    # The ';'-not-'&&' backstop chaining checks remain guarded on the file still
+    # carrying a next-issue launch (they assert the shape of that launch).
+    if command grep -q -- "next-issue.*--auto" "$prov_skill"; then
         assert_true "! command grep -qF -- \"--auto' &&\" '$prov_skill'" \
             "provision-agent/SKILL.md golem launch does not chain ship with '&&'"
         assert_true "command grep -qF -- \"--auto' ;\" '$prov_skill'" \
@@ -645,6 +674,27 @@ test_next_issue_auto_invariants() {
         assert_true "command grep -qF -- 'next-issue-ship --auto' '$prov_skill'" \
             "provision-agent/SKILL.md ship backstop passes --auto"
     fi
+
+    # Invariant 8 (#585): the justfile `worktree-new` printed launch hint passes
+    # the harness `--permission-mode auto` flag AND keeps the `;`-chained ship
+    # backstop. This is the human-facing string operators copy-paste; a
+    # regression to the pre-#585 form (no flag) would silently reintroduce the
+    # prompt-storm, and dropping the chain would lose premature-exit recovery.
+    # Static text checks, no Docker. Hard-fail on an absent justfile rather than
+    # skipping vacuously.
+    local justfile="$CONTAINERS_DIR/justfile"
+    assert_file_exists "$justfile" "justfile exists"
+    assert_true "command grep -qF -- \"claude --permission-mode auto '/next-issue\" '$justfile'" \
+        "justfile worktree-new launch hint passes harness --permission-mode auto explicitly (#585)"
+    assert_true "command grep -qF -- \"; claude --permission-mode auto '/next-issue-ship --auto'\" '$justfile'" \
+        "justfile worktree-new launch hint keeps the ';'-chained ship backstop"
+
+    # Invariant 8b (#585): the orchestrate mode-protocol.md supervised-launch
+    # code block (copy-paste-ready) must also carry the full chain, not just the
+    # flag the file-level Invariants 5/5b check. Operators copy this block
+    # directly, so a missing backstop here drops premature-exit recovery.
+    assert_true "command grep -qF -- \"'/next-issue {N} --auto' ; claude --permission-mode auto '/next-issue-ship --auto'\" '$mode_proto'" \
+        "mode-protocol.md supervised-launch block carries the full ';'-chained backstop"
 }
 
 # --- Run All Tests ---
