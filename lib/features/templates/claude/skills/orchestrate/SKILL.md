@@ -1,5 +1,5 @@
 ---
-description: Master orchestrator for PR-per-golem parallel work. Dispatch golems (one issue/branch/worktree/PR each) running the autonomous pipeline, monitor PR + issue-label state, surface progress, and rebase across PRs. Use when running 2+ independent issues in parallel, watching golem PRs, or integrating agent work. Local-merge topology preserved as opt-in.
+description: Master orchestrator for PR-per-golem parallel work. Dispatch golems (one issue/branch/worktree/PR each) running the autonomous pipeline, monitor PR + issue-label state, surface progress, rebase across PRs, and run an integration train that lands a batch of green PRs (merge→rebase→merge) with one approval. Use when running 2+ independent issues in parallel, watching golem PRs, or integrating agent work. Local-merge topology preserved as opt-in.
 ---
 
 # Orchestrate
@@ -31,7 +31,8 @@ Environment Variables).
 
 - `mode-protocol.md` — execution + golem dispatch modes, decision tree
 - `merge-protocol.md` — cross-PR rebase conflict classification + test-runner
-  detection (live); merge/sync sections marked opt-in legacy
+  detection + integration-train sequencing/CI-subset policy (live); merge/sync
+  sections marked opt-in legacy
 - `workflow.js` — the monitor-poll + cross-PR-rebase harness (invoked via the
   Workflow tool; never edited at runtime)
 
@@ -43,6 +44,7 @@ Environment Variables).
 | `/orchestrate` or `/orchestrate status` | Phase M — Monitor (one sweep) |
 | `/orchestrate monitor` / `watch` | Phase M — Monitor loop |
 | `/orchestrate rebase` or `rebase <N>` | Phase R — Cross-PR rebase |
+| `/orchestrate train` or `train <N…>` | Phase T — Integration train (land a batch) |
 | `/orchestrate mode` | Phase 0 — Mode selection |
 | `/orchestrate spawn <N>` / `teardown <agent>` | Phase 5 — Container mgmt |
 | `/orchestrate merge <N>` / `merge all` / `sync` | Local-merge (OPT-IN, legacy) |
@@ -221,6 +223,105 @@ Detect and rebase them — without merging anything into the orchestrator branch
 
 1. **Never** merge a golem branch into the orchestrator branch.
 
+## Phase T — Integration Train
+
+Land a **batch** of already-green, already-approved PRs end-to-end —
+merge → rebase the next → merge — with **one up-front authorization** instead of
+one human gate per merge/rebase/push, and with CI re-run cost bounded. This is
+the automation of the merge→rebase→merge chain the human used to drive by hand
+(see `merge-protocol.md` § *Integration Train — Sequencing & CI-Subset Policy*).
+
+The train is **not** a new merge mechanism — it is **sequencing + batch
+authorization** layered over the existing pieces: the order is computed by
+`workflow.js` (`mode: 'train'`), each rebase is the existing Phase R
+(`poll+rebase`), and every outward action still flows through the live session's
+`ask` gates. The orchestrator still never merges a golem branch into its own.
+
+1. **Assemble the batch.** Run Phase M and take the PRs that are merge-ready
+   (`ci: passing`, `review: approved`/`none`, `blocking: false`) — or the
+   explicit `<N…>` list. A PR that is not green + review-clean is **excluded**
+   from the train (the train lands approved work; it does not wait on red CI or
+   open review). Report the excluded PRs so the human sees what is held back.
+
+1. **One up-front batch approval.** Authorize "**land this batch**" **once** via
+   `AskUserQuestion` (skipped when autonomous — see below). This single consent
+   replaces the per-step merge/rebase/push prompts. It does **not** dissolve the
+   safety boundary: the outward-action `ask` rules on `git push` /
+   `gh pr merge` / `gh pr create` remain in force for every individual action —
+   the operator simply grants the batch once rather than N times.
+
+1. **Compute the merge order.** Gather each PR's changed-file list
+   (`gh pr view <N> --json files`) and invoke the Workflow tool on
+   `~/.claude/skills/orchestrate/workflow.js` with:
+
+   ```text
+   args: {
+     prs:  [{ number, branch, issue, golem, files: [<changed paths>] }, …],
+     base: "<base branch, e.g. main>",
+     mode: "train"
+   }
+   ```
+
+   The harness returns `train` = `{ independents, chains, waves, order }`
+   computed purely from pairwise file-overlap (no merge, no push, no rebase):
+
+   - **`independents`** — PRs that share no changed file with any other; land in
+     any order, **no rebase between them**.
+   - **`chains`** — overlap components (≥2 PRs touching a common file), each
+     ordered; land **in sequence**, rebasing each onto the prior merge.
+   - **`waves`** — wave 0 = all independents + every chain head (mergeable
+     immediately, in parallel); wave *k* = the *k*-th link of each chain (only
+     mergeable after the (*k*−1)-th merges).
+
+1. **Drive the loop** (loop-until-dry, resumable):
+
+   1. **Merge wave 0** — every independent + each chain head. Prefer
+      `gh pr merge <N> --auto --squash --delete-branch` so GitHub merges each the
+      moment its already-green checks settle (no manual merge + wait); fall back
+      to a direct `gh pr merge` where `--auto` is unavailable. Independents need
+      no rebase, so they land without re-triggering CI.
+   1. **For each chain, advance one link:** after the chain's current head
+      merges, the next link is now behind base → run **Phase R**
+      (`mode: "poll+rebase"`, scoped to that PR) to rebase it onto the new base.
+      Post-#601 union handling resolves complementary same-region edits without
+      escalation; only genuinely contradictory conflicts surface to the human.
+   1. **Push** the rebased branch: `git push --force-with-lease origin <branch>`
+      (the harness never pushes). Then merge it (`--auto` settle as above).
+   1. **Repeat** until every wave is merged. Re-poll between waves to confirm CI
+      stayed green and pick up any newly-behind PR.
+
+1. **Bound CI cost.** A force-push after a rebase normally replays the full
+   matrix. Reduce it per repo policy (see `merge-protocol.md`):
+
+   - Use `gh pr merge --auto` so the PR merges on settle rather than after a
+     manual wait — independents and no-conflict rebases add no full replay.
+   - For a rebase whose only conflicts were docs/skills-only (union-resolved),
+     require only the **changed-file** check subset to re-pass, not the whole
+     build matrix, **where the repo's branch protection permits**.
+
+   Auto-merge consent is unchanged: under an autonomous run the `--auto` fast
+   path is taken only when BOTH `AUTOMERGE=1` and `AUTOMERGE_AUTONOMOUS=1` are
+   set (see `next-issue-ship` § Environment Variables). The train's single batch
+   approval does **not** substitute for that per-PR auto-merge consent.
+
+1. **Honor stop/drain.** Between iterations, check the queue stop/drain signal
+   (companion issue #603). If a stop is requested, finish the in-flight
+   merge/rebase, then halt the train cleanly (leaving remaining PRs open and
+   labeled) rather than starting the next wave. While #603 is unimplemented this
+   check is a no-op — the train references the signal as its halt boundary but
+   does not depend on it existing.
+
+1. **Report** the train result: merged PRs (with order/wave), rebases
+   auto-resolved (with strategy), and any escalations surfaced **verbatim** for
+   the human. Never merge a golem branch into the orchestrator branch.
+
+**Autonomous train.** When the orchestrator runs autonomously, skip the
+`AskUserQuestion` batch approval (the batch is authorized by the autonomous
+invocation) but keep every outward-action `ask` gate and the `AUTOMERGE` +
+`AUTOMERGE_AUTONOMOUS` double-consent. A genuine conflict escalation still stops
+the train for the human — the train automates the *sequencing*, not the
+judgment.
+
 ## Surface — Mid-Flight Commands
 
 Between monitor sweeps, the live session accepts:
@@ -228,6 +329,8 @@ Between monitor sweeps, the live session accepts:
 - **`merge #N`** — the human merges PR #N (or run `gh pr merge #N` if the repo's
   merge policy allows). The orchestrator does not merge into its own branch.
 - **`rebase #N`** — run Phase R scoped to PR #N.
+- **`train [#N…]`** — run Phase T to land a batch of green, approved PRs
+  (merge → rebase → merge) with one up-front approval.
 - **`teardown <agent>`** — Phase 5 Teardown for a finished golem.
 - **`status`** — re-run Phase M.
 
@@ -342,6 +445,8 @@ loop). This phase applies only after a local merge.
 - Running 2+ independent issues in parallel as golems (`/orchestrate dispatch`)
 - Watching golem PRs through CI + review to green (`/orchestrate monitor`)
 - Rebasing later PRs after an earlier PR merges (`/orchestrate rebase`)
+- Landing a batch of green, approved PRs end-to-end with one approval
+  (`/orchestrate train`)
 - Selecting an execution mode for a new task (`/orchestrate mode`)
 - Spawning / tearing down container golems (`/orchestrate spawn`, `teardown`)
 - Tightly-coupled worktree work with no PRs (opt-in local-merge)

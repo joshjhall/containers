@@ -139,6 +139,99 @@ when `git merge` reports conflicts in the legacy path):
 
 ---
 
+## Integration Train — Sequencing & CI-Subset Policy [LIVE]
+
+Drives `SKILL.md` **Phase T**: landing a batch of already-green, already-approved
+PRs end-to-end (merge → rebase the next → merge) with **one** up-front
+authorization instead of one human gate per step, and with CI re-run cost
+bounded. The train adds **sequencing** and a **CI-cost policy** on top of the
+existing pieces — the order is computed by `workflow.js` (`mode: 'train'`), each
+rebase is the **Conflict Classification** flow above (Phase R), and every
+outward action still passes the live session's `ask` gates. The harness itself
+never merges and never pushes.
+
+### Merge-order from file-overlap
+
+The merge order is derived **purely from pairwise changed-file overlap** — two
+PRs that share at least one changed file must be landed in sequence (each rebased
+onto the prior merge); two PRs that share none are independent and land in any
+order with no rebase between them.
+
+`workflow.js` (`mode: 'train'`) computes this as a connected-components graph over
+the PRs (edge = shared changed file) and returns:
+
+| Field          | Meaning                                                                    | Landing rule                                   |
+| -------------- | -------------------------------------------------------------------------- | ---------------------------------------------- |
+| `independents` | PRs sharing no changed file with any other                                 | Merge in any order, **no rebase**              |
+| `chains`       | Overlap components of ≥2 PRs (touch a common file), each ordered by number | Merge **in sequence**, rebase each onto prior  |
+| `waves`        | Parallelizable batches: wave 0 = independents + chain heads; wave *k* = *k*-th chain link | Merge a whole wave, then advance               |
+| `order`        | One conservative linear order (independents, then chains laid out in full) | Fallback when you just want a flat list        |
+
+Feed the harness each PR's `files` (from `gh pr view <N> --json files`); a PR
+whose list is omitted is fetched with a read-only poll, or treated as
+no-overlap if the budget is exhausted (conservative — it just lands independently).
+
+### The merge → rebase → merge loop
+
+1. **Wave 0** — merge every independent and every chain head. These are already
+   green and need no rebase, so they land without re-triggering CI.
+1. **Advance each chain by one link** — once a chain's current head merges, its
+   next link is behind base. Run Phase R (`mode: 'poll+rebase'`) scoped to that
+   PR to rebase it onto the new base, applying the union strategy from Conflict
+   Classification (only genuinely contradictory conflicts escalate).
+1. **Push** the rebased branch (`git push --force-with-lease origin <branch>` —
+   the harness never pushes) and **merge** it.
+1. **Repeat** wave by wave until the batch is drained. Loop-until-dry and
+   resumable: re-poll between waves to confirm CI stayed green and catch any
+   newly-behind PR.
+
+### CI-subset policy
+
+A force-push after a rebase normally replays the **full** build matrix on the
+next branch — the dominant cost when landing N overlapping PRs. Bound it, **where
+the repo's branch protection permits**:
+
+- **Prefer `gh pr merge --auto`** (`--squash --delete-branch`) so GitHub merges
+  each PR the moment its already-green checks settle, instead of a manual merge
+  followed by a wait. Independents and no-conflict rebases then add no full
+  replay.
+- **Changed-file check subset.** For a rebase whose only conflicts were
+  docs/skills-only and were union-resolved (per Conflict Classification),
+  require only the **changed-file** check subset to re-pass rather than the whole
+  matrix. This is a per-repo policy choice — apply it only where branch
+  protection allows a reduced required-check set; otherwise fall back to the full
+  matrix.
+- **Parallelize independents.** Only the overlapping chain is serialized; the
+  independent PRs (wave 0) land concurrently, not behind each other.
+
+Auto-merge consent is unchanged from `next-issue-ship` § Environment Variables:
+under an autonomous run the `--auto` fast path requires BOTH `AUTOMERGE=1` and
+`AUTOMERGE_AUTONOMOUS=1`. The train's single batch approval authorizes the
+*sequence*; it does **not** replace that per-PR auto-merge double-consent.
+
+### Worked example (the #585/#586/#587 + independents batch)
+
+Five green PRs: #585/#586/#587 each edited the same
+`orchestrate/mode-protocol.md` launch line (overlap), while #590 and #591 touched
+unrelated files. The train computes:
+
+```text
+independents: [590, 591]
+chains:       [[585, 586, 587]]
+waves:        [[585, 590, 591], [586], [587]]
+order:        [590, 591, 585, 586, 587]
+```
+
+Wave 0 lands #590, #591, and chain head #585 in parallel (no rebase). Wave 1
+rebases #586 onto the new base (the #585 launch-line edit is union-resolved per
+Conflict Classification — additive, non-contradictory) and merges it; wave 2 does
+the same for #587. The old by-hand flow needed ~6 authorizations + 3 full CI
+replays for the chain alone; the train needs **one** batch approval, serializes
+only the 3-PR chain, and bounds each rebase's CI to the settle/subset policy
+above.
+
+---
+
 ## Test Runner Detection [LIVE]
 
 Topology-neutral. Used after a cross-PR rebase (Phase R) to confirm the rebased
