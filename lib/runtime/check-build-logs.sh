@@ -106,6 +106,15 @@ if [ ! -d "$LOG_DIR" ]; then
     exit 0
 fi
 
+# Surface a recorded build-aborting failure first (#583). The cleanup-handler
+# trap writes build-failure.log naming the feature + command that aborted the
+# build, so a debug session sees the cause before scrolling per-feature logs.
+if [ -f "${LOG_DIR}/build-failure.log" ]; then
+    echo -e "${RED}=== Build Failure ===${NC}"
+    command cat "${LOG_DIR}/build-failure.log"
+    echo ""
+fi
+
 # Function to display a single feature's information
 show_feature() {
     local feature="$1"

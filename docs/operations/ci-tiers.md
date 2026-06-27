@@ -78,6 +78,22 @@ via `docker history`), but stable across runs and grep-able in CI logs —
 the acceptance criterion ("cache hit rate measurable") prioritizes
 visibility over precision.
 
+### Failure diagnostics
+
+When a feature build aborts, the failing cell is diagnosable without
+scrolling the raw log (issue #583):
+
+- The in-container build harness emits a greppable `>>> BUILD FAILURE: …`
+  sentinel naming the **feature** and the **exact command** that failed, and
+  (under CI) collapses each feature install into a `::group::`.
+- A runner-side `Surface build failure` step writes the failing
+  variant/feature to `$GITHUB_STEP_SUMMARY` and emits an `::error`, so the
+  checks list and job summary name the broken cell directly.
+
+To find the root cause in a failed run, grep the log for `>>> BUILD FAILURE`.
+See [structured-logging-reference.md](../observability/structured-logging-reference.md#github-actions-build-diagnostics)
+for the full contract and the BuildKit line-prefix caveat.
+
 ### Promotion criterion
 
 If the PR tier passes, the PR is eligible for review and merge. On merge,

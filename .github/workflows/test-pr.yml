@@ -168,6 +168,9 @@ jobs:
         id: arg
         env:
           FEATURE: ${{ matrix.feature }}
+          # Route PR metadata through env: rather than inline ${{ }} expansion,
+          # per this workflow's own injection-defense policy (#583 review).
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           set -euo pipefail
           # Single source of truth: FEATURE_MAP in tests/test_feature.sh.
@@ -180,8 +183,8 @@ jobs:
           {
             echo "build_arg=${BUILD_ARG}"
             echo "include_kv=${BUILD_ARG}=true"
-            echo "tag=pr-${{ github.event.pull_request.number }}-${FEATURE}"
-            echo "pr_scope=feature-${FEATURE}-pr-${{ github.event.pull_request.number }}"
+            echo "tag=pr-${PR_NUMBER}-${FEATURE}"
+            echo "pr_scope=feature-${FEATURE}-pr-${PR_NUMBER}"
             echo "main_scope=feature-${FEATURE}-main"
           } >> "${GITHUB_OUTPUT}"
 
@@ -208,6 +211,25 @@ jobs:
             type=gha,scope=${{ steps.arg.outputs.pr_scope }}
             type=gha,scope=${{ steps.arg.outputs.main_scope }}
           cache-to: type=gha,scope=${{ steps.arg.outputs.pr_scope }},mode=max
+
+      - name: Surface build failure
+        # Names the failing feature in the job summary + Annotations panel so a
+        # broken PR-tier cell is diagnosable without scrolling the raw log
+        # (#583). The exact command is one `grep '>>> BUILD FAILURE'` away in
+        # the log, emitted by the in-container cleanup-handler trap.
+        if: failure() && steps.build.outcome == 'failure'
+        env:
+          FEATURE: ${{ matrix.feature }}
+        run: |
+          set -euo pipefail
+          {
+            echo "### ❌ Build failed — ${FEATURE}"
+            echo ""
+            echo "Search the raw build log for \`>>> BUILD FAILURE\` (or"
+            echo "\`::error\`) to find the feature and command that aborted"
+            echo "the build."
+          } >> "${GITHUB_STEP_SUMMARY}"
+          echo "::error::PR-tier build failed for feature ${FEATURE} — see the job summary, or grep '>>> BUILD FAILURE' in the log for the command."
 
       - name: Smoke-test image
         env:

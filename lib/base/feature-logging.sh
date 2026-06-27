@@ -48,6 +48,13 @@ export COMMAND_COUNT=0
 export ERROR_COUNT=0
 export WARNING_COUNT=0
 
+# Last command attempted — captured per log_command so the cleanup-handler
+# trap can name the exact command that aborted the build (see #583). These
+# survive into the trap because feature-logging.sh and cleanup-handler.sh are
+# sourced into the same shell via feature-header.sh.
+export LAST_COMMAND_DESC=""
+export LAST_COMMAND_TEXT=""
+
 # ============================================================================
 # log_feature_start - Initialize logging for a feature installation
 #
@@ -94,6 +101,13 @@ log_feature_start() {
         json_log_init "$feature_name" "$version"
     fi
 
+    # Open a collapsible group in the GitHub Actions web log so each feature
+    # install can be expanded/collapsed independently (#583). No-op outside CI.
+    # Closed by log_feature_end, or by the cleanup-handler trap on failure.
+    if [ "${GITHUB_ACTIONS:-}" = "true" ]; then
+        echo "::group::Install $feature_name${version:+ ($version)}"
+    fi
+
     # Show on console
     echo "=== Installing $feature_name${version:+ version $version} ==="
 }
@@ -120,6 +134,11 @@ log_command() {
         logged_cmd=$(scrub_secrets "$logged_cmd")
     fi
 
+    # Remember the command currently being attempted so the cleanup-handler
+    # trap can name it if this command aborts the build (#583). Stored scrubbed.
+    LAST_COMMAND_DESC="$description"
+    LAST_COMMAND_TEXT="$logged_cmd"
+
     # Log command start
     {
         echo ""
@@ -133,17 +152,18 @@ log_command() {
     start_time=$(date +%s)
     local exit_code=0
 
-    # Run command with output capture, scrubbing secrets from output
+    # Run command with output capture, scrubbing secrets from output.
+    # Read the command's status from PIPESTATUS[0], NOT the pipeline status:
+    # without `set -o pipefail` a pipeline reports its LAST stage (tee, always
+    # 0), which would mask a failed "$@" and silently defeat the failure
+    # detection this trap relies on (#583). PIPESTATUS is correct regardless of
+    # the caller's shell options.
     if command -v scrub_secrets >/dev/null 2>&1; then
-        if "$@" 2>&1 | scrub_secrets | command tee -a "$CURRENT_LOG_FILE"; then
-            exit_code=0
-        else
-            exit_code=$?
-        fi
-    elif "$@" 2>&1 | command tee -a "$CURRENT_LOG_FILE"; then
-        exit_code=0
+        "$@" 2>&1 | scrub_secrets | command tee -a "$CURRENT_LOG_FILE"
+        exit_code=${PIPESTATUS[0]}
     else
-        exit_code=$?
+        "$@" 2>&1 | command tee -a "$CURRENT_LOG_FILE"
+        exit_code=${PIPESTATUS[0]}
     fi
 
     local end_time
@@ -255,9 +275,18 @@ log_feature_end() {
     echo "Errors: $ERROR_COUNT, Warnings: $WARNING_COUNT"
     echo "Full log: $CURRENT_LOG_FILE"
 
-    # Reset variables
+    # Close the GitHub Actions log group opened in log_feature_start (#583).
+    if [ "${GITHUB_ACTIONS:-}" = "true" ]; then
+        echo "::endgroup::"
+    fi
+
+    # Reset variables. Clearing CURRENT_FEATURE also disarms the cleanup-handler
+    # failure annotation between features (it only fires when a feature is the
+    # active context), so a clean feature boundary can't be misreported (#583).
     CURRENT_FEATURE=""
     CURRENT_LOG_FILE=""
     CURRENT_ERROR_FILE=""
     CURRENT_SUMMARY_FILE=""
+    LAST_COMMAND_DESC=""
+    LAST_COMMAND_TEXT=""
 }

@@ -33,6 +33,34 @@ declare -a _FEATURE_CLEANUP_ITEMS=()
 cleanup_on_interrupt() {
     local exit_code=$?
 
+    # Surface a build-aborting failure with the feature + command that caused
+    # it (#583). Fires only when a feature is the active context and the exit
+    # is non-zero — so a clean exit, or an interrupt between features, is never
+    # misreported. Non-fatal `log_command ... || log_warning` call sites don't
+    # propagate a non-zero status here, so they won't trigger a false alarm.
+    # All vars are ${...:-} guarded: this file is also sourced standalone (tests)
+    # where the feature-logging globals may be unset under `set -u`.
+    if [ "$exit_code" -ne 0 ] && [ -n "${CURRENT_FEATURE:-}" ]; then
+        # Greppable sentinel — survives BuildKit's `#NN 0.123 ` log prefixing
+        # (which would stop a leading `::error` from being parsed as a GitHub
+        # annotation), so the cause is one `grep '>>> BUILD FAILURE'` away.
+        local _fail_line
+        _fail_line=">>> BUILD FAILURE: feature='${CURRENT_FEATURE}'"
+        _fail_line+=" command=#${COMMAND_COUNT:-?} desc='${LAST_COMMAND_DESC:-}'"
+        _fail_line+=" cmd='${LAST_COMMAND_TEXT:-}' exit=${exit_code}"
+        echo "$_fail_line" >&2
+        # Best-effort persist for in-container debugging (check-build-logs.sh).
+        if [ -n "${BUILD_LOG_DIR:-}" ]; then
+            echo "$_fail_line" >>"${BUILD_LOG_DIR}/build-failure.log" 2>/dev/null || true
+        fi
+        # When the harness output reaches a runner step's stdout directly
+        # (not wrapped by BuildKit), this renders in the Annotations panel.
+        if [ "${GITHUB_ACTIONS:-}" = "true" ]; then
+            echo "::endgroup::"
+            echo "::error title=Build failed in ${CURRENT_FEATURE}::COMMAND #${COMMAND_COUNT:-?} '${LAST_COMMAND_DESC:-}' failed (exit ${exit_code}): ${LAST_COMMAND_TEXT:-}"
+        fi
+    fi
+
     # Check if array is set and has elements (safe with set -u)
     if [[ -v _FEATURE_CLEANUP_ITEMS ]] && [ ${#_FEATURE_CLEANUP_ITEMS[@]} -gt 0 ]; then
         echo "=== Cleaning up interrupted build ===" >&2

@@ -268,7 +268,10 @@ jobs:
   # test-pr.yml runs there with per-feature change detection).
   # =====================================
   build:
-    name: Build Images (Merge Tier)
+    # Interpolate only the short variant name; the matrix entry is an object
+    # {name, build_args}, and GitHub otherwise appends the serialized object —
+    # including the newline-laden build_args block — to the display name (#583).
+    name: Build (Merge Tier) — ${{ matrix.variant.name }}
     runs-on: ubuntu-latest
     needs: [test, rust-test]
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
@@ -406,6 +409,25 @@ jobs:
             type=gha,scope=merge-${{ matrix.variant.name }}
             type=gha,scope=feature-${{ matrix.variant.name }}-main
           cache-to: type=gha,scope=merge-${{ matrix.variant.name }},mode=max
+
+      - name: Surface build failure
+        # Names the failing variant in the job summary + Annotations panel so a
+        # broken merge-tier cell is diagnosable without scrolling the raw log
+        # (#583). The exact feature + command is one `grep '>>> BUILD FAILURE'`
+        # away in the log, emitted by the in-container cleanup-handler trap.
+        if: failure() && steps.build.outcome == 'failure'
+        env:
+          VARIANT: ${{ matrix.variant.name }}
+        run: |
+          set -euo pipefail
+          {
+            echo "### ❌ Build failed — ${VARIANT}"
+            echo ""
+            echo "Search the raw build log for \`>>> BUILD FAILURE\` (or"
+            echo "\`::error\`) to find the feature and command that aborted"
+            echo "the build."
+          } >> "${GITHUB_STEP_SUMMARY}"
+          echo "::error::Merge-tier build failed for variant ${VARIANT} — see the job summary, or grep '>>> BUILD FAILURE' in the log for the feature + command."
 
       - name: Report cache-hit rate
         if: always() && steps.build.outcome != 'skipped'
