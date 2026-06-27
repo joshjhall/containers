@@ -372,10 +372,14 @@ fn already_installed_survives_etxtbsy_under_parallel_write_then_exec() {
 }
 
 /// Write an executable shim at `path` that prints `line` to stdout.
+///
+/// `line` is single-quote-escaped so a version string containing an
+/// apostrophe can't break the surrounding shell quoting.
 fn write_version_shim(path: &Path, line: &str) {
     use std::fs;
     use std::os::unix::fs::PermissionsExt as _;
-    fs::write(path, format!("#!/bin/sh\necho '{line}'\n")).unwrap();
+    let escaped = line.replace('\'', "'\\''");
+    fs::write(path, format!("#!/bin/sh\necho '{escaped}'\n")).unwrap();
     let mut perms = fs::metadata(path).unwrap().permissions();
     perms.set_mode(0o755);
     fs::set_permissions(path, perms).unwrap();
