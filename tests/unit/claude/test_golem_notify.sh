@@ -19,10 +19,9 @@ set -euo pipefail
 # These tests create throwaway git repos + worktrees under /tmp. When the suite
 # runs from a git hook (e.g. lefthook pre-push), git exports GIT_DIR /
 # GIT_INDEX_FILE / GIT_WORK_TREE pointing at the REAL repo — those would hijack
-# our `git init` / `git worktree add`, so the temp repos silently aren't created
-# and the hook resolves the wrong worktree root. Drop the inherited git env up
-# front so every `git` call below operates on the temp repo it's standing in.
-unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE GIT_COMMON_DIR GIT_PREFIX
+# our `git init` / `git worktree add`. The inherited git env is now cleared
+# centrally at framework.sh module scope (when it is sourced below), so no
+# per-test unset is needed here. See issue #599.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../../framework.sh"
