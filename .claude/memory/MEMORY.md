@@ -19,6 +19,11 @@
 - [Auto-merge needs explicit consent](feedback_auto_merge_consent.md) — gh pr merge --auto needs per-turn authorization, separate from default-ship
 - [Parallel automation (golem) initiative](parallel-automation-golem-initiative.md) — golem = per-issue sub-orchestrator; order #523→…→#525
 - [Worktree push hooks vs gitignore](worktree-push-hooks-gitignore.md) — pushing from .worktrees/ breaks osv-scanner (#556) + compose-validate
-- [Golem supervised auto mode](golem-supervised-auto-mode.md) — run golems in `auto` mode; monitor via hooks+state, supervise via tmux (#570)
+- [Golem supervised auto mode](golem-supervised-auto-mode.md) — pass `--permission-mode auto` EXPLICITLY; worktree won't inherit it (#585)
 - [Golem push gate under auto](golem-push-gate-under-auto.md) — `auto` auto-approves push/PR-create; pin an `ask` rule to gate outward actions
 - [claude-setup template stamp re-sync](claude-setup-template-stamp-resync.md) — bundled ~/.claude artifacts re-sync via content stamp (#574)
+- [gh pr checks JSON state is uppercase](gh-pr-checks-json-state-uppercase.md) — filter CI monitors on `bucket` (lowercase), not `state` (UPPERCASE)
+- [git env leak breaks worktree tests](git-env-leak-breaks-worktree-tests.md) — GIT_DIR leaks into pre-push hook; temp-repo tests fail 6/9; unset it
+- [Librarian plugin extraction](librarian-plugin-extraction.md) — extract general skills/agents into separate `librarian` marketplace repo
+- [Golem feed event classification](golem-feed-event-classification.md) — feed events gate|idle; BLOCKED clears via recent-line + TTL (#600)
+- [Hermetic fixture tests need git identity](hermetic-fixture-tests-need-git-identity.md) — export GIT_*_NAME/EMAIL in committing tests (#606)
