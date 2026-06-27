@@ -64,24 +64,61 @@ when `git merge` reports conflicts in the legacy path):
 
    Trivial conflicts can be auto-resolved by dispatching the `rebase-agent`:
 
-   | Conflict Type                   | Action                                                      | Agent                           |
-   | ------------------------------- | ----------------------------------------------------------- | ------------------------------- |
-   | Lock files (package-lock, etc)  | Regenerate: accept one side, re-run package manager         | rebase-agent (rebase-lockfile)  |
-   | Generated files (\*.pb.go, etc) | Accept one side, re-run generator                           | rebase-agent (rebase-generated) |
-   | Both sides added imports        | Combine both import sets, deduplicate, sort                 | rebase-agent (rebase-imports)   |
-   | Version number conflicts        | Take the higher version                                     | rebase-agent (rebase-version)   |
-   | Whitespace / formatting only    | Accept agent's version (`git checkout --theirs <file>`)     | rebase-agent                    |
-   | Same function modified          | **Escalate** — show both versions to user, ask for guidance | (human)                         |
-   | New file vs new file            | **Escalate** — show both, ask user                          | (human)                         |
-   | Deletion vs modification        | **Escalate** — ask user                                     | (human)                         |
+   | Conflict Type                        | Action                                                      | Agent                           |
+   | ------------------------------------ | ----------------------------------------------------------- | ------------------------------- |
+   | Lock files (package-lock, etc)       | Regenerate: accept one side, re-run package manager         | rebase-agent (rebase-lockfile)  |
+   | Generated files (\*.pb.go, etc)      | Accept one side, re-run generator                           | rebase-agent (rebase-generated) |
+   | Both sides added imports             | Combine both import sets, deduplicate, sort                 | rebase-agent (rebase-imports)   |
+   | Composable same-region edits         | **Union** both sides — keep the superset of every change    | rebase-agent (union)            |
+   | Version number conflicts             | Take the higher version                                     | rebase-agent (rebase-version)   |
+   | Whitespace / formatting only         | Accept agent's version (`git checkout --theirs <file>`)     | rebase-agent                    |
+   | Same region, **contradictory** edits | **Escalate** — show both versions to user, ask for guidance | (human)                         |
+   | New file vs new file                 | **Escalate** — show both, ask user                          | (human)                         |
+   | Deletion vs modification             | **Escalate** — ask user                                     | (human)                         |
+
+   **Composability triage — try union before escalating.** "Both sides touched
+   the same region" is not automatically an escalation. Before flagging a
+   same-region conflict for a human, classify the *intent* of the two edits:
+
+   1. **Composable** — each side adds a distinct, non-contradictory change to the
+      same construct (a new flag/arg/clause, an adjacent additive edit) →
+      **union**: keep the superset of both sides. This is the general form of the
+      "both added imports → combine" rule above; the import case is just the
+      special case where the construct is an import block.
+   1. **Mutually exclusive** — both sides set the *same* value/token to different
+      things with conflicting intent (e.g. two different version bumps, two
+      different timeouts) → accept one side per the per-type rules above
+      (e.g. higher version).
+   1. **Semantically contradictory** — reconciling the two edits needs judgment
+      about intent (overlapping logic changes that can't simply coexist) →
+      **escalate** to the human.
+
+   Union is the **default** for same-region edits whose intents don't conflict;
+   escalation is the fallback, not the first move. Only genuinely contradictory
+   edits (case 3) go to a human.
+
+   **Worked example (the #585/#586/#587 launch-line union).** Three parallel
+   golems each edited the same `worktree-new` launch line: #585 added
+   `--permission-mode auto` plus the `/next-issue-ship` chain, and #587 added
+   `-e GOLEM_ID=golem-{N}`. These are additive and composable — none overwrites
+   another's change — so the correct resolution is the **union** of all three:
+
+   ```text
+   ... -e GOLEM_ID=golem-{N} "claude --permission-mode auto '/next-issue ...' ; claude --permission-mode auto '/next-issue-ship ...'"
+   ```
+
+   The old "same region → escalate" reading would have forced a needless human
+   round-trip for a merge that is mechanically unionable.
 
    To dispatch the rebase-agent for trivial conflicts:
 
    ```text
    Agent tool: rebase-agent
    Prompt: "Resolve the following merge conflicts. Conflicted files: {file_list}.
-   For each file, classify the conflict and apply the appropriate strategy.
-   Escalate non-trivial conflicts."
+   For each file, classify the conflict and apply the appropriate strategy. When
+   both sides touched the same region, attempt a union of complementary,
+   non-contradictory edits (keep the superset of both) before escalating.
+   Escalate only genuinely contradictory conflicts."
    ```
 
 1. **After resolving all conflicts**:

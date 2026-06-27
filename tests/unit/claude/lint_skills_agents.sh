@@ -796,6 +796,119 @@ test_next_issue_plan_gate_invariants() {
         "orchestrate/SKILL.md notes plan-gated golems block at the plan step"
 }
 
+# Test: cross-file invariants of the orchestrate union-strategy contract.
+# #601 generalized "both added imports -> combine" to "composable same-region
+# edits -> union both", so a complementary parallel-golem conflict is unioned
+# instead of escalated. The `union` strategy token must stay consistent across
+# four files, and the orchestrate harness's auto-resolvable slice must keep its
+# boundary — a silent drift here would re-bury the union behavior the issue
+# fixes (e.g. shifting `union` past the slice index, or one file renaming it).
+test_orchestrate_union_strategy_invariants() {
+    local merge_proto="$SKILLS_DIR/orchestrate/merge-protocol.md"
+    local orch_wf="$SKILLS_DIR/orchestrate/workflow.js"
+    local rebase_md="$AGENTS_DIR/rebase-agent/rebase-agent.md"
+    local rebase_wf="$AGENTS_DIR/rebase-agent/workflow.js"
+
+    # Invariant 0: the contract files exist.
+    assert_file_exists "$merge_proto" "orchestrate/merge-protocol.md exists"
+    assert_file_exists "$orch_wf" "orchestrate/workflow.js exists"
+    assert_file_exists "$rebase_md" "rebase-agent/rebase-agent.md exists"
+    assert_file_exists "$rebase_wf" "rebase-agent/workflow.js exists"
+
+    # Invariant 1: `union` is a named conflict class / strategy in every file
+    # that enumerates the taxonomy. A rename in one file without the others
+    # would make a classify=union return fail schema validation downstream.
+    assert_true "command grep -qiE 'union' '$merge_proto'" \
+        "merge-protocol.md names the union strategy"
+    assert_true "command grep -qF \"'union'\" '$orch_wf'" \
+        "orchestrate/workflow.js CONFLICT_CLASSES includes 'union'"
+    assert_true "command grep -qF \"'union'\" '$rebase_wf'" \
+        "rebase-agent/workflow.js STRATEGIES includes 'union'"
+    assert_true "command grep -qF 'union' '$rebase_md'" \
+        "rebase-agent.md lists union as a classify strategy"
+
+    # Invariant 2: union sits BEFORE the escalate boundary in both harnesses'
+    # ordered arrays. orchestrate/workflow.js slices CONFLICT_CLASSES[0..6) as
+    # the auto-resolvable set (lockfile/generated/imports/union/version/
+    # whitespace); rebase-agent/workflow.js builds CLASSIFY_SCHEMA from
+    # [...STRATEGIES, 'logic']. If union landed after the slice / after the
+    # escalate token, it would be silently excluded from auto-resolution.
+    assert_true "command grep -qF \"'imports',\" '$orch_wf'" \
+        "orchestrate/workflow.js CONFLICT_CLASSES retains imports before union"
+    # union must precede 'logic' (the first escalate class) in the orchestrate array.
+    assert_true "command grep -Pzoq \"'union',[\\s\\S]*'logic',\" '$orch_wf'" \
+        "orchestrate/workflow.js orders union before the escalate classes"
+    # the auto-resolvable slice must be slice(0, 6), not the pre-#601 slice(0, 5).
+    assert_true "command grep -qF 'CONFLICT_CLASSES.slice(0, 6)' '$orch_wf'" \
+        "orchestrate/workflow.js auto-resolvable slice covers union (slice 0,6)"
+    # rebase-agent STRATEGIES is the mechanical set; 'logic' is appended in the
+    # schema, so union being in STRATEGIES proves it is auto-resolvable there.
+    assert_true "command grep -Pzoq \"'imports', 'union'\" '$rebase_wf'" \
+        "rebase-agent/workflow.js orders union among the mechanical strategies"
+
+    # Invariant 3: the union-before-escalate default is stated, not just the
+    # token. Guard against a future edit keeping the word 'union' while
+    # reverting the policy to escalate-first. Checked in EVERY file that carries
+    # the policy — the two harness GUARDRAILS, the protocol doc, AND the agent's
+    # own .md (which the agent reads as system-prompt guidance).
+    assert_true "command grep -qiE 'union .*before escalat|before escalat' '$merge_proto'" \
+        "merge-protocol.md states union-before-escalate"
+    assert_true "command grep -qiE 'union .*before escalat|before escalat' '$rebase_wf'" \
+        "rebase-agent/workflow.js GUARDRAILS state union-before-escalate"
+    assert_true "command grep -qiE 'union .*before escalat|before escalat' '$rebase_md'" \
+        "rebase-agent.md states union-before-escalate"
+
+    # Invariant 3b: the classify-mode prompt in the harness must carry the
+    # behavioral instruction that makes the agent union instead of escalate —
+    # "is union, not logic". This is the load-bearing classify directive; a
+    # refactor that drops it from classifyPrompt would revert the behavior while
+    # leaving every token-presence check above green.
+    assert_true "command grep -qiE \"is .union., not .logic.|union.*not.*logic\" '$rebase_wf'" \
+        "rebase-agent/workflow.js classifyPrompt instructs union-not-logic for composable conflicts"
+
+    # Invariant 4: the MUST NOT restrictions in rebase-agent.md must NOT contain
+    # an un-negated "Escalate ... conflicts" bullet — under a MUST NOT header
+    # that inverts to "must not escalate", the exact bug #601's review caught.
+    # The escalation requirement must read as a prohibition on AUTO-RESOLVING.
+    assert_true "command grep -qiE 'Auto-resolve contradictory' '$rebase_md'" \
+        "rebase-agent.md MUST NOT prohibits auto-resolving contradictory conflicts (not escalating them)"
+
+    # Invariant 5: the worked #585/#586/#587 example is present (acceptance
+    # criterion) in both the protocol doc and the agent doc.
+    assert_true "command grep -qF 'GOLEM_ID=golem' '$merge_proto'" \
+        "merge-protocol.md includes the launch-line union example"
+    assert_true "command grep -qF 'GOLEM_ID=golem' '$rebase_md'" \
+        "rebase-agent.md includes the launch-line union example"
+
+    # Invariant 6: overlapPrompt / REBASE_GUARDRAILS must NOT route ALL add-add
+    # conflicts to has-logic. The worked example IS an add-add (each golem adds a
+    # distinct block to the same launch line), so an unqualified "any add-add ->
+    # escalate" would re-bury the exact case union exists to handle. Require the
+    # add-add escalation to be qualified as "contradictory".
+    assert_true "! command grep -qiE 'or any add-add' '$orch_wf'" \
+        "orchestrate/workflow.js does not unconditionally escalate all add-add conflicts"
+    assert_true "command grep -qiE 'contradictory add-add' '$orch_wf'" \
+        "orchestrate/workflow.js qualifies add-add escalation as contradictory (composable add-add unions)"
+    # Positive counterpart: overlapPrompt must route composable add-add to the
+    # trivial-only (unionable) bucket, not merely avoid the catch-all. The phrase
+    # straddles a source line break ('composable ' + 'add-add'), so match across
+    # newlines with -Pzo.
+    assert_true "command grep -Pzoq 'composable[\\s\\S]{0,40}add-add' '$orch_wf'" \
+        "orchestrate/workflow.js routes composable add-add to trivial-only (unionable)"
+
+    # Invariant 7: the union-before-escalate policy also lives in orchestrate's
+    # REBASE_GUARDRAILS — guard it against a revert that leaves the other files
+    # intact (the orchestrator's own rebase prompt would silently lose union).
+    assert_true "command grep -qiE 'union .*before escalat|before escalat' '$orch_wf'" \
+        "orchestrate/workflow.js REBASE_GUARDRAILS state union-before-escalate"
+
+    # Invariant 8: CLASSIFY_SCHEMA derives its enum from STRATEGIES via spread, so
+    # adding 'union' to STRATEGIES (Invariant 1) provably reaches the schema. A
+    # refactor that hardcodes the enum separately could drop 'union' silently.
+    assert_true "command grep -qF 'enum: [...STRATEGIES' '$rebase_wf'" \
+        "rebase-agent/workflow.js CLASSIFY_SCHEMA enum spreads STRATEGIES (union reaches the schema)"
+}
+
 # --- Run All Tests ---
 
 run_test test_agent_files_exist "Every agent has correctly named .md file"
@@ -822,6 +935,7 @@ run_test test_workflow_meta_guard_detects_violations "Meta pure-literal guard fi
 run_test test_next_issue_ship_invariants "next-issue --ship cross-file contract invariants hold"
 run_test test_next_issue_auto_invariants "next-issue --auto chaining contract invariants hold"
 run_test test_next_issue_plan_gate_invariants "next-issue --auto plan-gate effort/severity invariants hold"
+run_test test_orchestrate_union_strategy_invariants "orchestrate union-strategy cross-file invariants hold"
 
 # Generate test report
 generate_report
