@@ -158,6 +158,13 @@ test_script_exists() {
 
 # Test: Script handles missing .env file gracefully
 test_missing_env_file() {
+    # Runs the real check-versions.sh, which curls api.github.com per tool.
+    # Skipped in the pre-push gate (SKIP_NETWORK_TESTS=1); CI runs it in full.
+    if network_tests_disabled; then
+        skip_test "Network-bound (SKIP_NETWORK_TESTS=1) — full check runs in CI"
+        return
+    fi
+
     # Temporarily move .env if it exists
     local env_backup=""
     if [ -f "$PROJECT_ROOT/.env" ]; then
@@ -220,6 +227,12 @@ test_extract_feature_versions() {
 
 # Test: JSON output format
 test_json_output_format() {
+    # Invokes the real script (network). Skip under the pre-push flag; CI runs it.
+    if network_tests_disabled; then
+        skip_test "Network-bound (SKIP_NETWORK_TESTS=1) — full check runs in CI"
+        return
+    fi
+
     # Test that the script supports --json flag
     local output
 
@@ -247,6 +260,12 @@ test_json_output_format() {
 
 # Test: JSON output is valid and well-formed
 test_json_output_valid() {
+    # Invokes the real script (network). Skip under the pre-push flag; CI runs it.
+    if network_tests_disabled; then
+        skip_test "Network-bound (SKIP_NETWORK_TESTS=1) — full check runs in CI"
+        return
+    fi
+
     # Run the script with --json flag and validate output with jq
     local output
     local exit_code=0

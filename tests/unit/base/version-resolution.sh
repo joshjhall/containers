@@ -87,7 +87,12 @@ is_rate_limited() {
 
 # Helper function to check if network is available
 check_network() {
-    if ! curl -s --connect-timeout 5 https://www.google.com >/dev/null 2>&1; then
+    # Honor the pre-push skip flag so foundational-file pushes don't pay the
+    # live-probe latency or the per-test network calls gated below (issue #615).
+    if network_tests_disabled; then
+        return 1
+    fi
+    if ! command curl -s --connect-timeout 5 https://www.google.com >/dev/null 2>&1; then
         return 1
     fi
     return 0
