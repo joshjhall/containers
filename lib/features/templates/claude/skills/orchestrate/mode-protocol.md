@@ -116,9 +116,34 @@ prompt re-reads the state file and delivers (a near no-op if the first already
 pushed a PR). Use `;`, NOT `&&`: the backstop must run even when the first prompt
 exits non-zero before shipping, which is exactly the case `&&` would skip.
 
+### Plan gate by effort/severity
+
+`--auto` skips the plan checkpoint **conditionally**, not always. `/next-issue`
+reads the issue's labels and chooses (see `next-issue/SKILL.md` § Autonomous
+Mode):
+
+```text
+IF (effort/trivial OR effort/small) AND NOT severity/critical:
+  → fully autonomous — golem runs straight through to a PR, no plan stop.
+ELSE (effort/medium | effort/large | severity/critical | no effort label):
+  → plan-gated — golem builds the plan and BLOCKS at ExitPlanMode awaiting a
+    human. It shows BLOCKED in `just golems`; the operator runs
+    `just golem-attach {N}`, refines + approves the plan in-session, and the
+    SAME session then continues autonomously (implement → review → push/PR)
+    with the refined plan in-context — so the refinements inform implementation
+    AND the antagonistic pre-PR review, not just the first edit.
+```
+
+This mirrors the `--ship` effort gate, which is likewise restricted to
+`effort/trivial`/`small`. The launch command does not change — the policy lives
+in `/next-issue`; dispatch just **expects** medium+/critical golems to block at
+the plan step. Per-golem overrides: append `--plan-gate` to force the checkpoint
+on a small issue, or `--force-auto` to force full autonomy on a medium+/critical
+one.
+
 | Realization        | Built on | Payload (process)                         | Exit                            |
 | ------------------ | -------- | ----------------------------------------- | ------------------------------- |
-| **Worktree golem** | Mode 2   | `claude --permission-mode auto "/next-issue <N> --auto" ; claude --permission-mode auto "/next-issue-ship --auto"` in a worktree shell | autonomous ship → Branch + PR |
+| **Worktree golem** | Mode 2   | `claude --permission-mode auto "/next-issue <N> --auto" ; claude --permission-mode auto "/next-issue-ship --auto"` in a worktree shell | autonomous ship → Branch + PR (plan-gated golems block at plan first — see below) |
 | **Container golem** | Mode 3  | same chained pipeline in the container's tmux Claude | same → PR (or auto-merge: needs `AUTOMERGE=1` + `AUTOMERGE_AUTONOMOUS=1`) |
 
 > **Hard constraint — golems are processes, never Workflow subagents.** The
@@ -169,7 +194,8 @@ gain a feed. Monitoring and intervention are separate channels:
 - **Intervene (on demand):** when `just golems` flags a golem BLOCKED, run
   `just golem-attach {N}` to attach its real TTY (worktree session `golem-{N}`,
   or a container golem's `claude` session via `docker exec`), answer the
-  high-risk prompt, and detach.
+  high-risk prompt — **or, for a plan-gated golem (medium+/critical), review,
+  refine, and approve the plan at its `ExitPlanMode` checkpoint** — and detach.
 
 ### Dispatch Decision Sub-Tree
 

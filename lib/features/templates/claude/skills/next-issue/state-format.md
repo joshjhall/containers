@@ -29,6 +29,7 @@ Write using the Write tool:
   "started": "2026-02-27",
   "platform": "github",
   "autonomous": true,
+  "plan_gated": true,
   "contexts": ["security", "auth"],
   "active_loops": ["make-it-work", "make-it-secure", "make-it-tested"],
   "checkpoint": {
@@ -64,7 +65,8 @@ Write using the Write tool:
 | `started`      | yes      | ISO date when work began                             |
 | `platform`     | yes      | `github` or `gitlab`                                 |
 | `autonomous`   | no       | True when started autonomously (`--auto`/env)        |
-| `plan_comment_url` | no   | URL of posted plan comment (autonomous only)         |
+| `plan_gated`   | no       | True when an autonomous run keeps the plan checkpoint (medium+/critical/no-effort or `--plan-gate`); false skips plan |
+| `plan_comment_url` | no   | URL of posted plan comment (fully-autonomous only)   |
 | `contexts`     | no       | Domain contexts for this issue                       |
 | `active_loops` | no       | Implementation loops to execute                      |
 | `checkpoint`   | no       | Phase transition checkpoint (see below)              |
@@ -190,8 +192,12 @@ autonomous run invokes `/next-issue-ship` in the same turn (via the `Skill`
 tool) and never reaches the "After plan approval", "After review", or "After
 ship" boundaries as distinct resets. The orchestrate golem launch's
 `;`-chained `/next-issue-ship --auto` is the only resume path if the turn exits
-early. Unlike `--ship`, `--auto` sets `autonomous: true` and removes the
-plan-approval gate entirely.
+early. Unlike `--ship`, `--auto` sets `autonomous: true`. Whether it removes the
+**plan-approval gate** depends on `plan_gated` (see `SKILL.md` § Autonomous
+Mode): a fully-autonomous run (`effort/trivial`/`small`, non-critical, no
+`--plan-gate`) skips the gate; a plan-gated run (`effort/medium`/`large`,
+`severity/critical`, no-effort-label, or `--plan-gate`) keeps it and pauses at
+`ExitPlanMode` for human approval before continuing autonomously.
 
 | Orchestrator Action | Reset Mode | Why                                                        |
 | ------------------- | ---------- | ---------------------------------------------------------- |
