@@ -725,6 +725,8 @@ test_next_issue_plan_gate_invariants() {
         "next-issue-state.schema.json declares the plan_gated property"
     assert_file_contains "$state_fmt" "plan_gated" \
         "state-format.md documents the plan_gated field"
+    assert_true "command grep -qiE 'plan.gated' '$orch_skill'" \
+        "orchestrate/SKILL.md references the plan-gated concept"
 
     # Invariant 2: the fully-autonomous (skip-plan) tier is gated to
     # trivial/small AND excludes severity/critical. Require all three tokens.
@@ -732,7 +734,10 @@ test_next_issue_plan_gate_invariants() {
         "next-issue/SKILL.md names effort/trivial in the plan-gate rule"
     assert_true "command grep -qF 'effort/small' '$ni_skill'" \
         "next-issue/SKILL.md names effort/small in the plan-gate rule"
-    assert_true "command grep -qiE 'not .*severity/critical|severity/critical' '$ni_skill'" \
+    # Must match the EXCLUSION specifically (a 'NOT ... severity/critical'
+    # clause), not merely any mention of the token — otherwise listing
+    # severity/critical as a plan-gated trigger would tautologically satisfy it.
+    assert_true "command grep -qiE 'NOT[^a-z]*severity/critical' '$ni_skill'" \
         "next-issue/SKILL.md excludes severity/critical from the skip-plan tier"
 
     # Invariant 3: medium, large, critical, and no-effort-label are all named as
@@ -756,6 +761,12 @@ test_next_issue_plan_gate_invariants() {
         "next-issue/SKILL.md documents the --force-auto override"
     assert_true "command grep -qiE '\\-\\-plan-gate.? wins' '$ni_skill'" \
         "next-issue/SKILL.md states --plan-gate wins when both overrides appear"
+    # mode-protocol.md documents the same per-golem override flags (guard the
+    # cross-file dispatch contract from drifting on the override names).
+    assert_file_contains "$mode_proto" "--plan-gate" \
+        "mode-protocol.md documents the --plan-gate override"
+    assert_file_contains "$mode_proto" "--force-auto" \
+        "mode-protocol.md documents the --force-auto override"
 
     # Invariant 5: the plan-gated path keeps the human checkpoint — it calls
     # ExitPlanMode and BLOCKS for approval (the property the issue is about).
@@ -766,8 +777,12 @@ test_next_issue_plan_gate_invariants() {
 
     # Invariant 6: orchestrate dispatch reads effort/severity to choose the
     # launch, so a medium+/critical golem is expected to block at the plan step.
-    assert_true "command grep -qiE 'effort/\\*.*severity/\\*|effort.*severity' '$orch_skill'" \
-        "orchestrate/SKILL.md dispatch reads effort/severity labels"
+    # Check the literal `effort/*` and `severity/*` label tokens separately
+    # (grep -F so the `*` is literal, not a regex quantifier).
+    assert_true "command grep -qF 'effort/*' '$orch_skill'" \
+        "orchestrate/SKILL.md dispatch reads the effort/* labels"
+    assert_true "command grep -qF 'severity/*' '$orch_skill'" \
+        "orchestrate/SKILL.md dispatch reads the severity/* labels"
     assert_true "command grep -qiE 'BLOCK' '$orch_skill'" \
         "orchestrate/SKILL.md notes plan-gated golems block at the plan step"
 }

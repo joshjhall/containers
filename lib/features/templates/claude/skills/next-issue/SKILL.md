@@ -45,14 +45,16 @@ no effort label) it is ignored with a one-line note, preserving the `/clear`
 boundary that keeps planning context out of the longer implement/review budget.
 See `## Pipeline` and the conditional final step of Phase 2.
 
-**IMPORTANT — Plan mode**: Use the `EnterPlanMode` tool immediately at the
-start of every `/next-issue` invocation (before any other work). Phases 0-2
-are planning phases that only need read-only tools and Bash. After Phase 2
-plan approval, use `ExitPlanMode` to begin implementation. (In autonomous
-mode this depends on the plan gate: a **fully-autonomous** run — `effort/trivial`
-or `effort/small` and not `severity/critical` — SKIPS `EnterPlanMode`/
-`ExitPlanMode` entirely, while a **plan-gated** autonomous run still calls them
-and pauses at plan approval. See `## Autonomous Mode` below.)
+**IMPORTANT — Plan mode**: In **non-autonomous** mode, use the `EnterPlanMode`
+tool immediately at the start of every `/next-issue` invocation (before any
+other work). Phases 0-2 are planning phases that only need read-only tools and
+Bash. After Phase 2 plan approval, use `ExitPlanMode` to begin implementation.
+In **autonomous** mode the plan-mode call is **deferred to Phase 2** (the
+effort/severity labels that decide the plan gate are not known until Phase 1):
+a **fully-autonomous** run — `effort/trivial` or `effort/small` and not
+`severity/critical` — never calls `EnterPlanMode`/`ExitPlanMode` at all, while a
+**plan-gated** autonomous run calls both in Phase 2 and pauses at plan approval.
+See `## Autonomous Mode` below.
 
 ## Autonomous Mode
 
@@ -139,15 +141,16 @@ Proceed with Phase 0 as normal regardless of mode.
 
 ## Phase 0 — Resume Check
 
-1. **Enter plan mode** (call `EnterPlanMode` tool). In autonomous mode, call it
-   here **unconditionally** — the effort/severity labels that decide whether
-   this run is fully-autonomous (skip plan) or plan-gated (keep plan) are not
-   fetched until Phase 1, so the skip decision cannot be made yet. Entering plan
-   mode now is harmless either way: a **plan-gated** run pauses at `ExitPlanMode`
-   in Phase 2, while a **fully-autonomous** run simply never calls `ExitPlanMode`
-   and proceeds via the autonomous planning path in Phase 2 instead. The
-   plan-skip decision is applied in Phase 2 (where `plan_gated` is known), not
-   here. See `## Autonomous Mode`.
+1. **Enter plan mode** (call `EnterPlanMode` tool). In **non-autonomous** mode,
+   call it here immediately. In **autonomous** mode, do NOT call it here —
+   **defer** the decision: the effort/severity labels that decide whether this
+   run is fully-autonomous (skip plan) or plan-gated (keep plan) are not fetched
+   until Phase 1, and entering plan mode now would trap a fully-autonomous run
+   in plan mode (it never calls `ExitPlanMode`, so its write/edit tools would
+   stay blocked). The plan-mode call is made in Phase 2 once `plan_gated` is
+   known: a **plan-gated** run calls `EnterPlanMode` there (then `ExitPlanMode`
+   for approval); a **fully-autonomous** run never enters plan mode at all
+   (today's `--auto` behavior). See `## Autonomous Mode`.
 
 1. **Legacy migration** — run in order:
 
@@ -339,8 +342,9 @@ Proceed with Phase 0 as normal regardless of mode.
      and "Suggest context reset" steps below.
 
    - **Plan-gated autonomous run (`plan_gated: true`)** — do NOT take the
-     comment-only shortcut. Instead build the plan and call **`ExitPlanMode`**
-     (next step) to present it for human approval. The golem is now BLOCKED
+     comment-only shortcut. Call **`EnterPlanMode`** now (it was deferred in
+     Phase 0), build the plan, then call **`ExitPlanMode`** (next step) to
+     present it for human approval. The golem is now BLOCKED
      awaiting input (surfaced by `just golems`); the human attaches via
      `just golem-attach {N}`, refines the plan in-session, and approves.
      **After approval**, the run is autonomous again: skip the "Suggest context
