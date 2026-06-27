@@ -19,13 +19,13 @@ set -uo pipefail
 
 # Resolve the main repo root even when invoked from a worktree:
 # git-common-dir points at <main>/.git, whose parent is the main checkout.
-common_dir="$(git rev-parse --git-common-dir 2>/dev/null || true)"
+common_dir="$(/usr/bin/git rev-parse --git-common-dir 2>/dev/null || true)"
 if [ -z "$common_dir" ]; then
     exit 0 # not in a git repo — nothing to record, never block the golem
 fi
 case "$common_dir" in
     /*) ;; # already absolute
-    *) common_dir="$(pwd)/$common_dir" ;;
+    *) common_dir="$(/usr/bin/pwd)/$common_dir" ;;
 esac
 root="$(/usr/bin/dirname "$common_dir")"
 status_dir="$root/.worktrees/.status"
@@ -39,14 +39,24 @@ if command -v jq >/dev/null 2>&1; then
 fi
 [ -z "$message" ] && message="awaiting permission decision"
 
-# Derive the golem id: prefer the tmux session name (golem-N), else the
-# worktree dir basename (issue-N -> golem-N), else a placeholder.
+# Derive the golem id. In order of reliability:
+#   1. $GOLEM_ID — stamped into the environment at launch (orchestrate /
+#      `just worktree-new`). The only fully deterministic source: cwd- and
+#      tmux-independent, so it survives subdirectory and subagent invocations.
+#   2. The git WORKTREE-ROOT basename (issue-N -> golem-N). Unlike `pwd`, the
+#      worktree root is cwd-independent: `git rev-parse --show-toplevel`
+#      returns `.../issue-N` even when the Notification fires from a
+#      subdirectory or a review-harness subagent with its own cwd.
+#   3. A placeholder, only when neither source resolves (e.g. not in a
+#      worktree at all).
+# The old `$TMUX` path was dead — the golem's `claude` process has no TMUX in
+# its environment even though tmux launched it — so it is gone.
 golem=""
-if [ -n "${TMUX:-}" ] && command -v tmux >/dev/null 2>&1; then
-    golem="$(tmux display-message -p '#S' 2>/dev/null || true)"
-fi
+case "${GOLEM_ID:-}" in
+    golem-*) golem="$GOLEM_ID" ;;
+esac
 if [ -z "$golem" ]; then
-    base="$(/usr/bin/basename "$(pwd)")"
+    base="$(/usr/bin/basename "$(/usr/bin/git rev-parse --show-toplevel 2>/dev/null || /usr/bin/pwd)")"
     case "$base" in
         issue-*) golem="golem-${base#issue-}" ;;
         golem-*) golem="$base" ;;
@@ -64,8 +74,17 @@ if command -v jq >/dev/null 2>&1; then
         '{ts: $ts, golem: $golem, event: "blocked", message: $message}' \
         >>"$feed" 2>/dev/null || true
 else
+    # No jq: hand-roll the JSON. The message (and, defensively, the golem id)
+    # originate from the Notification payload / environment, so sanitize before
+    # interpolating: drop control chars and backslashes — which can't be
+    # escaped correctly without a real JSON encoder and would otherwise let a
+    # crafted payload break out of the string literal — then escape any
+    # remaining double quotes. Keeps every feed line valid JSON on this path.
+    golem_safe="$(printf '%s' "${golem//\\/}" | /usr/bin/tr -d '[:cntrl:]')"
+    message_safe="$(printf '%s' "${message//\\/}" | /usr/bin/tr -d '[:cntrl:]')"
     printf '{"ts":"%s","golem":"%s","event":"blocked","message":"%s"}\n' \
-        "$ts" "$golem" "${message//\"/\\\"}" >>"$feed" 2>/dev/null || true
+        "$ts" "${golem_safe//\"/\\\"}" "${message_safe//\"/\\\"}" \
+        >>"$feed" 2>/dev/null || true
 fi
 
 exit 0

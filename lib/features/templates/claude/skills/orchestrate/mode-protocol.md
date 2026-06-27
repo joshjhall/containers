@@ -144,9 +144,15 @@ loaded on its own and the session would silently fall back to `default` (#585).
 Launch a worktree golem (after `just worktree-new {N}`):
 
 ```bash
-tmux new-session -d -s golem-{N} -c .worktrees/issue-{N} \
+tmux new-session -d -s golem-{N} -c .worktrees/issue-{N} -e GOLEM_ID=golem-{N} \
   "claude --permission-mode auto '/next-issue {N} --auto' ; claude --permission-mode auto '/next-issue-ship --auto'"
 ```
+
+`-e GOLEM_ID=golem-{N}` stamps the golem id into the session environment. The
+`Notification` hook reads `$GOLEM_ID` first — the only cwd- and tmux-independent
+source — so the blocked-golem feed records the correct `golem-{N}` even when the
+hook fires from a subdirectory or a review-harness subagent (the hook also falls
+back to the git worktree-root basename, never bare `pwd`).
 
 **Do NOT run golems headless** (`claude -p --output-format stream-json`). A
 headless session has no TTY, so there is nothing to attach to and no way to
