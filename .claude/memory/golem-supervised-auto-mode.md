@@ -8,24 +8,9 @@ metadata:
 ---
 
 When dispatching orchestrate golems (per-issue `/next-issue --auto` processes),
-the launch posture should be **interactive in tmux, in `auto` permission mode
-passed EXPLICITLY via `--permission-mode auto`** — NOT
-`--dangerously-skip-permissions`, and NOT headless `claude -p`.
-
-**Pass `--permission-mode auto` explicitly — do NOT rely on `defaultMode`
-inheritance (#585).** A fresh worktree path has never been trusted, and Claude
-Code does not load project settings (including `settings.local.json`'s
-`permissions.defaultMode: "auto"`) for an UNTRUSTED folder. A non-interactive
-`tmux` launch can't show the trust dialog, so the session silently falls back to
-`default` and prompt-storms on every read/edit/test. Two compounding traps: the
-launch line historically omitted the flag, and the `/next-issue` `--auto` token
-is a **skill flag** (skip plan / run autonomously), NOT the harness
-`--permission-mode auto` — the name collision makes the command *look* like it
-sets auto-permissions when it only sets skill-autonomy. Both are needed:
-`claude --permission-mode auto '/next-issue {N} --auto'`. `just worktree-new`
-also seeds a trust entry (`~/.claude.json` `projects[<wt>].hasTrustDialogAccepted
-= true`) so the copied `settings.local.json` `ask` gates load too — but the
-explicit flag is the trust-independent guarantee and works even without it.
+the launch posture should be **interactive in tmux, inheriting the repo's
+default `auto` permission mode** — NOT `--dangerously-skip-permissions`, and NOT
+headless `claude -p`.
 
 **Why:** Two approaches each fail one half of the goal, and they must not be
 coupled to one transport:
@@ -40,13 +25,27 @@ coupled to one transport:
   `.claude/settings.local.json`; `auto`'s safety classifier auto-approves routine
   calls and prompts only on the genuinely risky class. That is the noise filter.
 
+**CORRECTION (test of #577, CC 2.1.195 — see #585):** "inherit `auto` from
+`settings.local.json`" does NOT work for a worktree golem. A fresh worktree dir
+is **untrusted** (`~/.claude.json` `hasTrustDialogAccepted` null for the path),
+and CC does not apply a project `settings.local.json` (incl. `defaultMode`) for
+an untrusted folder. A non-interactive `tmux` launch can't show the trust
+dialog, so it silently falls back to `permissionMode: default` and over-prompts
+on every read/edit/test. Confirmed via session transcripts: the trusted main
+checkout recorded `auto`, the golem worktree recorded `default`. ALSO: the
+`--auto` in `claude '/next-issue N --auto'` is a `/next-issue` SKILL flag (skip
+plan mode), NOT the harness `--permission-mode auto` — the name collision is the
+trap. **Fix: pass `--permission-mode auto` explicitly on launch**
+(`claude --permission-mode auto '/next-issue N --auto'`), and/or seed a trust
+entry for the worktree path in `worktree-new`. The `ask` deny-rules (push / PR /
+merge) DID still load and gate correctly once `auto` was on — supervision
+survives auto mode. See #585; plan-gating-by-effort follow-up is #586.
+
 **How to apply:**
 
-- Launch golems interactive in tmux with `--permission-mode auto` passed
-  EXPLICITLY (do NOT rely on `defaultMode` inheritance — an untrusted worktree
-  won't load it; #585), plus `-e GOLEM_ID=golem-{N}` so the blocked-golem feed
-  records the right id even when the Notification hook fires outside the worktree
-  root (#587; see [[parallel-automation-golem-initiative]]).
+- Launch golems interactive in tmux, passing `--permission-mode auto`
+  EXPLICITLY (do not rely on the worktree inheriting `auto` from settings —
+  untrusted worktree won't, per #585).
 - Get central status TTY-free: git commits vs `origin/main`, PR/MR state, the
   `next-issue` state files (`phase`), and `.worktrees/.status/*.json`. Do NOT
   scrape the TUI (`tmux capture-pane`/`tail -f golem.log` are blank until exit —
