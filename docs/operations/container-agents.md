@@ -131,6 +131,10 @@ DISPATCH → WORK → PR → MONITOR → (REBASE) → MERGE (human) → TEARDOWN
    rebases later PRs that fell behind base
 1. **MERGE**: the human merges the PR (or per-golem `AUTOMERGE=1`)
 1. **TEARDOWN**: Orchestrator removes the worktree + container after merge
+   (`just worktree-rm <N>`; on a bare-repo host this also runs `just sync-host`
+   to refresh the host's on-disk `.claude/hooks/`, `justfile`, and `bin/` from
+   the just-merged `origin/main` — see Troubleshooting → *Stale host runtime
+   copies* and #606)
 
 ### Local-merge Lifecycle (opt-in legacy)
 
@@ -230,3 +234,27 @@ docker ps --filter "name=agent"
 If `/orchestrate sync` skips an agent due to conflicts, the agent will pick
 up changes on the next sync cycle. Alternatively, merge the agent's work first
 (`/orchestrate merge`), then sync.
+
+### Stale host runtime copies on a bare-repo host (`just sync-host`)
+
+On a **bare-repo host** (`git rev-parse --is-bare-repository` → `true`), git
+never checks files out, so the on-disk runtime copies the host actually
+executes — `.claude/hooks/`, `justfile`, `bin/` — stay frozen at whatever was
+last hand-placed even as `origin/main` advances. After a golem PR merges, the
+host can keep firing the **pre-merge** hook and running the **pre-merge**
+justfile, silently reverting fixes that already landed on `main` (#606).
+
+`just worktree-rm <N>` refreshes these copies automatically on a bare host
+after it removes the worktree. To refresh or audit them manually:
+
+```bash
+just sync-host          # rewrite drifted runtime copies from origin/main
+just sync-host-check    # report drift and exit non-zero (writes nothing)
+just sync-host justfile # narrow the refresh to one path prefix
+```
+
+`sync-host` resolves the root bare-safely (via `bin/repo-root.sh`, #604) and
+writes each `origin/main` blob to disk with the executable bit preserved, so it
+is safe to run from any cwd, including inside a worktree. On a normal (non-bare)
+checkout, prefer `git pull` / `git checkout` — `sync-host` exists for the bare
+host that has neither.

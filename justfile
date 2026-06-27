@@ -329,6 +329,17 @@ worktree-rm N:
     if [ "$removed" -eq 0 ]; then
         echo "worktree-rm: nothing to remove for issue {{ N }} ($wt / $br absent)"
     fi
+    # A golem PR usually merges into origin/main right before its worktree is
+    # torn down here. On a BARE host the on-disk runtime copies (.claude/hooks,
+    # justfile, bin) don't update on their own (no work tree to check out into),
+    # so refresh them now — otherwise the next golem fires the just-superseded
+    # hook/justfile (#606). Best-effort and bare-host-only: a normal checkout
+    # uses git checkout/pull and is left untouched; any failure never aborts the
+    # teardown.
+    if [ "$(git rev-parse --is-bare-repository 2>/dev/null)" = "true" ]; then
+        bash "{{ justfile_directory() }}/bin/sync-host.sh" || \
+            echo "  (sync-host refresh skipped — run 'just sync-host' manually)" >&2
+    fi
 
 # Reads .worktrees/.status/*.json + live golem-* tmux sessions and the
 # Notification feed; PR + issue-label state remains authoritative (cache fills gaps).
@@ -443,6 +454,17 @@ golem-attach N:
     echo "golem-attach: no golem-{{ N }} tmux session and no container golem for issue {{ N }}." >&2
     echo "  Check 'just golems' for active golems." >&2
     exit 1
+
+# A bare repo never checks files out, so the host's on-disk .claude/hooks,
+# justfile, and bin/ drift behind origin/main after a merge and it runs stale
+# hooks/justfile (#606). Pass path prefixes to narrow the set.
+# Refresh a bare host's on-disk runtime copies (.claude/hooks, justfile, bin) from origin/main.
+sync-host *PREFIXES:
+    bash "{{ justfile_directory() }}/bin/sync-host.sh" {{ PREFIXES }}
+
+# Drift guard for #606: report any on-disk runtime copy that differs from origin/main, exit non-zero if so (writes nothing).
+sync-host-check *PREFIXES:
+    bash "{{ justfile_directory() }}/bin/sync-host.sh" --check {{ PREFIXES }}
 
 # ============================================================================
 # Cleanup
