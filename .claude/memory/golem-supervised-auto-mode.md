@@ -44,7 +44,9 @@ coupled to one transport:
 
 - Launch golems interactive in tmux with `--permission-mode auto` passed
   EXPLICITLY (do NOT rely on `defaultMode` inheritance — an untrusted worktree
-  won't load it; #585).
+  won't load it; #585), plus `-e GOLEM_ID=golem-{N}` so the blocked-golem feed
+  records the right id even when the Notification hook fires outside the worktree
+  root (#587; see [[parallel-automation-golem-initiative]]).
 - Get central status TTY-free: git commits vs `origin/main`, PR/MR state, the
   `next-issue` state files (`phase`), and `.worktrees/.status/*.json`. Do NOT
   scrape the TUI (`tmux capture-pane`/`tail -f golem.log` are blank until exit —

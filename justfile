@@ -297,7 +297,7 @@ worktree-new N:
     echo ""
     echo "Worktree ready: $wt (branch $br)"
     echo "Launch a golem there with:"
-    echo "  tmux new-session -d -s golem-{{ N }} -c \"$root/$wt\" \"claude --permission-mode auto '/next-issue {{ N }} --auto' ; claude --permission-mode auto '/next-issue-ship --auto'\""
+    echo "  tmux new-session -d -s golem-{{ N }} -c \"$root/$wt\" -e GOLEM_ID=golem-{{ N }} \"claude --permission-mode auto '/next-issue {{ N }} --auto' ; claude --permission-mode auto '/next-issue-ship --auto'\""
 
 # Post-merge cleanup: remove the issue-N worktree and its feature/issue-N branch (clean no-op if absent).
 worktree-rm N:
