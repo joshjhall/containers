@@ -769,11 +769,20 @@ test_next_issue_plan_gate_invariants() {
         "mode-protocol.md documents the --force-auto override"
 
     # Invariant 5: the plan-gated path keeps the human checkpoint — it calls
-    # ExitPlanMode and BLOCKS for approval (the property the issue is about).
+    # BOTH EnterPlanMode and ExitPlanMode and BLOCKS for approval (the property
+    # the issue is about).
+    assert_file_contains "$ni_skill" "EnterPlanMode" \
+        "next-issue/SKILL.md calls EnterPlanMode on the plan-gated path"
     assert_file_contains "$ni_skill" "ExitPlanMode" \
         "next-issue/SKILL.md calls ExitPlanMode on the plan-gated path"
     assert_true "command grep -qiE 'plan-gated' '$ni_skill'" \
         "next-issue/SKILL.md describes the plan-gated path"
+
+    # Invariant 5b: Phase 0 must DEFER EnterPlanMode in autonomous mode (calling
+    # it unconditionally there would trap a fully-autonomous run in plan mode,
+    # blocking its write/edit tools). Guard the deferral against a revert.
+    assert_true "command grep -qiE 'defer.*(decision|to Phase 2|EnterPlanMode)|do NOT call it here' '$ni_skill'" \
+        "next-issue/SKILL.md Phase 0 defers EnterPlanMode in autonomous mode"
 
     # Invariant 6: orchestrate dispatch reads effort/severity to choose the
     # launch, so a medium+/critical golem is expected to block at the plan step.
