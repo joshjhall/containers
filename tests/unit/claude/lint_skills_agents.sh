@@ -697,6 +697,105 @@ test_next_issue_auto_invariants() {
         "mode-protocol.md supervised-launch block carries the full ';'-chained backstop"
 }
 
+test_next_issue_plan_gate_invariants() {
+    # #586: --auto plan-skipping is gated by effort/severity. The plan
+    # checkpoint is skipped ONLY for effort/trivial|small non-critical issues;
+    # medium/large/critical/no-effort-label runs stay plan-gated (keep the
+    # ExitPlanMode human checkpoint). These static assertions guard the
+    # cross-file contract against a future prose edit silently inverting the
+    # gate polarity or dropping an override flag.
+    local ni_skill="$SKILLS_DIR/next-issue/SKILL.md"
+    local state_fmt="$SKILLS_DIR/next-issue/state-format.md"
+    local schema="$SKILLS_DIR/next-issue/schemas/next-issue-state.schema.json"
+    local mode_proto="$SKILLS_DIR/orchestrate/mode-protocol.md"
+    local orch_skill="$SKILLS_DIR/orchestrate/SKILL.md"
+
+    # Invariant 0: the contract files exist.
+    assert_file_exists "$ni_skill" "next-issue/SKILL.md exists"
+    assert_file_exists "$state_fmt" "next-issue/state-format.md exists"
+    assert_file_exists "$schema" "next-issue-state.schema.json exists"
+    assert_file_exists "$mode_proto" "orchestrate/mode-protocol.md exists"
+
+    # Invariant 1: plan_gated is a documented state-file field, in both the
+    # SKILL.md Phase 1/Phase 2 templates and the schema (additionalProperties is
+    # false, so an undeclared field would be rejected at validation).
+    assert_file_contains "$ni_skill" '"plan_gated": {true|false}' \
+        "next-issue/SKILL.md writes plan_gated in the state-file template"
+    assert_file_contains "$schema" '"plan_gated"' \
+        "next-issue-state.schema.json declares the plan_gated property"
+    assert_file_contains "$state_fmt" "plan_gated" \
+        "state-format.md documents the plan_gated field"
+    assert_true "command grep -qiE 'plan.gated' '$orch_skill'" \
+        "orchestrate/SKILL.md references the plan-gated concept"
+
+    # Invariant 2: the fully-autonomous (skip-plan) tier is gated to
+    # trivial/small AND excludes severity/critical. Require all three tokens.
+    assert_true "command grep -qF 'effort/trivial' '$ni_skill'" \
+        "next-issue/SKILL.md names effort/trivial in the plan-gate rule"
+    assert_true "command grep -qF 'effort/small' '$ni_skill'" \
+        "next-issue/SKILL.md names effort/small in the plan-gate rule"
+    # Must match the EXCLUSION specifically (a 'NOT ... severity/critical'
+    # clause), not merely any mention of the token — otherwise listing
+    # severity/critical as a plan-gated trigger would tautologically satisfy it.
+    assert_true "command grep -qiE 'NOT[^a-z]*severity/critical' '$ni_skill'" \
+        "next-issue/SKILL.md excludes severity/critical from the skip-plan tier"
+
+    # Invariant 3: medium, large, critical, and no-effort-label are all named as
+    # plan-gated triggers in BOTH SKILL.md and mode-protocol.md (guard against
+    # the two files drifting on which issues get a checkpoint).
+    for f in "$ni_skill" "$mode_proto"; do
+        local rel
+        rel="$(/usr/bin/basename "$(/usr/bin/dirname "$f")")/$(/usr/bin/basename "$f")"
+        assert_true "command grep -qF 'effort/medium' '$f'" \
+            "$rel: names effort/medium as a plan-gated trigger"
+        assert_true "command grep -qF 'effort/large' '$f'" \
+            "$rel: names effort/large as a plan-gated trigger"
+        assert_true "command grep -qiE 'no .*effort.*label|no-effort-label' '$f'" \
+            "$rel: names the no-effort-label case as a plan-gated trigger"
+    done
+
+    # Invariant 4: both override flags are documented, with the conflict rule.
+    assert_file_contains "$ni_skill" "--plan-gate" \
+        "next-issue/SKILL.md documents the --plan-gate override"
+    assert_file_contains "$ni_skill" "--force-auto" \
+        "next-issue/SKILL.md documents the --force-auto override"
+    assert_true "command grep -qiE '\\-\\-plan-gate.? wins' '$ni_skill'" \
+        "next-issue/SKILL.md states --plan-gate wins when both overrides appear"
+    # mode-protocol.md documents the same per-golem override flags (guard the
+    # cross-file dispatch contract from drifting on the override names).
+    assert_file_contains "$mode_proto" "--plan-gate" \
+        "mode-protocol.md documents the --plan-gate override"
+    assert_file_contains "$mode_proto" "--force-auto" \
+        "mode-protocol.md documents the --force-auto override"
+
+    # Invariant 5: the plan-gated path keeps the human checkpoint — it calls
+    # BOTH EnterPlanMode and ExitPlanMode and BLOCKS for approval (the property
+    # the issue is about).
+    assert_file_contains "$ni_skill" "EnterPlanMode" \
+        "next-issue/SKILL.md calls EnterPlanMode on the plan-gated path"
+    assert_file_contains "$ni_skill" "ExitPlanMode" \
+        "next-issue/SKILL.md calls ExitPlanMode on the plan-gated path"
+    assert_true "command grep -qiE 'plan-gated' '$ni_skill'" \
+        "next-issue/SKILL.md describes the plan-gated path"
+
+    # Invariant 5b: Phase 0 must DEFER EnterPlanMode in autonomous mode (calling
+    # it unconditionally there would trap a fully-autonomous run in plan mode,
+    # blocking its write/edit tools). Guard the deferral against a revert.
+    assert_true "command grep -qiE 'defer.*(decision|to Phase 2|EnterPlanMode)|do NOT call it here' '$ni_skill'" \
+        "next-issue/SKILL.md Phase 0 defers EnterPlanMode in autonomous mode"
+
+    # Invariant 6: orchestrate dispatch reads effort/severity to choose the
+    # launch, so a medium+/critical golem is expected to block at the plan step.
+    # Check the literal `effort/*` and `severity/*` label tokens separately
+    # (grep -F so the `*` is literal, not a regex quantifier).
+    assert_true "command grep -qF 'effort/*' '$orch_skill'" \
+        "orchestrate/SKILL.md dispatch reads the effort/* labels"
+    assert_true "command grep -qF 'severity/*' '$orch_skill'" \
+        "orchestrate/SKILL.md dispatch reads the severity/* labels"
+    assert_true "command grep -qiE 'BLOCK' '$orch_skill'" \
+        "orchestrate/SKILL.md notes plan-gated golems block at the plan step"
+}
+
 # --- Run All Tests ---
 
 run_test test_agent_files_exist "Every agent has correctly named .md file"
@@ -722,6 +821,7 @@ run_test test_workflow_js_node_check_detects_syntax_error "node --check guard fi
 run_test test_workflow_meta_guard_detects_violations "Meta pure-literal guard fires on the negative fixture"
 run_test test_next_issue_ship_invariants "next-issue --ship cross-file contract invariants hold"
 run_test test_next_issue_auto_invariants "next-issue --auto chaining contract invariants hold"
+run_test test_next_issue_plan_gate_invariants "next-issue --auto plan-gate effort/severity invariants hold"
 
 # Generate test report
 generate_report

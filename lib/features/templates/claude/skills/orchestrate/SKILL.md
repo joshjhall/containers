@@ -56,7 +56,9 @@ dispatch is sequential and cheap — **not** workflow-driven.
 1. **Select issues** by priority using the ordering in
    `next-issue/state-format.md` (exclude issues already labeled
    `status/in-progress`, `status/pr-pending`, `status/commit-pending`,
-   `status/on-hold`). Accept explicit issue numbers if provided.
+   `status/on-hold`). Accept explicit issue numbers if provided. **Read each
+   selected issue's `effort/*` and `severity/*` labels now** — they decide
+   whether the golem launches fully-autonomous or **plan-gated** (step 3).
 
 1. **Choose the dispatch mode** per issue from `mode-protocol.md`:
 
@@ -86,10 +88,30 @@ dispatch is sequential and cheap — **not** workflow-driven.
    claude --permission-mode auto "/next-issue {N} --auto" ; claude --permission-mode auto "/next-issue-ship --auto"
    ```
 
-   The pipeline runs unattended to a green, review-clean PR (or, per-golem,
-   queues GitHub auto-merge when BOTH `AUTOMERGE=1` and `AUTOMERGE_AUTONOMOUS=1`
-   are set — `AUTOMERGE=1` alone is a no-op for an autonomous golem and falls
-   through to human merge).
+   **Plan gate (from the labels read in step 1).** `--auto` is **not** a blanket
+   plan-skip — `/next-issue` decides per issue (see `next-issue/SKILL.md` §
+   Autonomous Mode):
+
+   - **`effort/trivial` or `effort/small`, and NOT `severity/critical`** →
+     fully autonomous, no plan stop. The launch above runs unattended to a PR.
+   - **`effort/medium`, `effort/large`, `severity/critical`, or no `effort/*`
+     label** → **plan-gated**: the golem builds the plan and BLOCKS at
+     `ExitPlanMode` awaiting human approval. It shows up BLOCKED in `just golems`;
+     the operator runs `just golem-attach {N}`, reviews/refines the plan
+     in-session, and approves — then the SAME session continues autonomously
+     through implement → review → push/PR with the refined plan in-context.
+
+   The launch command is identical either way (the policy lives in
+   `/next-issue`); dispatch only needs to **expect** medium+/critical golems to
+   block at the plan step rather than run straight through. To override per
+   golem, append `--plan-gate` (force the checkpoint on a small issue) or
+   `--force-auto` (force full autonomy on a medium+/critical one) to the
+   `/next-issue {N} --auto` prompt.
+
+   The pipeline runs unattended to a green, review-clean PR (after plan approval
+   for a plan-gated golem), or, per-golem, queues GitHub auto-merge when BOTH
+   `AUTOMERGE=1` and `AUTOMERGE_AUTONOMOUS=1` are set — `AUTOMERGE=1` alone is a
+   no-op for an autonomous golem and falls through to human merge.
 
 1. **Label + cache**: ensure each dispatched issue is `status/in-progress`
    (the autonomous `/next-issue` does this) and write the initial golem cache
@@ -162,6 +184,13 @@ detaches. Golems run interactive under `auto` mode — never headless
 `claude -p` (no TTY = cannot answer prompts) and never
 `--dangerously-skip-permissions`. See `mode-protocol.md` §
 *Supervised launch & central feed*.
+
+**Plan-gated golems block early, by design.** A golem dispatched on an
+`effort/medium`/`large` or `severity/critical` issue (see Phase D step 3) pauses
+at its plan checkpoint (`ExitPlanMode`) before writing any code, so it appears
+BLOCKED in `just golems` shortly after launch — that is the human plan
+checkpoint, not a stall. Attach with `just golem-attach {N}`, refine and approve
+the plan, and detach; the golem then proceeds autonomously to a PR.
 
 ## Phase R — Cross-PR Rebase
 

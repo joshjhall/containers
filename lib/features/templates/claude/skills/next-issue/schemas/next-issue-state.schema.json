@@ -47,9 +47,13 @@
       "type": "boolean",
       "description": "True when the run was started in autonomous mode (--auto flag or NEXT_ISSUE_AUTONOMOUS=1). Gates resolve to documented defaults; no interactive prompts."
     },
+    "plan_gated": {
+      "type": "boolean",
+      "description": "True when an autonomous run keeps the human plan-approval checkpoint (EnterPlanMode/ExitPlanMode) instead of skipping it. Set true for autonomous runs on effort/medium, effort/large, severity/critical, or no-effort-label issues, or when --plan-gate is passed; false (fully-autonomous, skip plan) for effort/trivial|small non-critical issues, when --force-auto is passed, and for every non-autonomous run."
+    },
     "plan_comment_url": {
       "type": "string",
-      "description": "URL of the issue comment where the autonomous plan was posted for traceability (autonomous mode only)."
+      "description": "URL of the issue comment where the fully-autonomous plan was posted for traceability. Written only on the fully-autonomous path (plan_gated:false); omitted on plan-gated autonomous runs and all non-autonomous runs."
     },
     "contexts": {
       "type": "array",

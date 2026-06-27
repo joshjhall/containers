@@ -15,7 +15,24 @@ selection and targets that specific issue.
 Adding the `--auto` flag — `/next-issue 123 --auto` (or setting the
 `NEXT_ISSUE_AUTONOMOUS=1` environment variable) — runs the workflow
 autonomously: every human gate resolves to its documented default and no
-interactive tool is called. See `## Autonomous Mode` below.
+interactive tool is called — **except** the plan-approval checkpoint, which is
+itself gated by the issue's effort/severity (see below). See `## Autonomous
+Mode` below.
+
+Autonomy has **two** independent sub-behaviors (see `## Autonomous Mode` for the
+full rule):
+
+- **Gate-skipping** — always on when autonomous: no `AskUserQuestion`, every
+  human gate takes its documented default.
+- **Plan-skipping** — conditional: the plan checkpoint
+  (`EnterPlanMode`/`ExitPlanMode`) is skipped **only** for `effort/trivial` or
+  `effort/small` issues that are **not** `severity/critical`. For
+  `effort/medium`, `effort/large`, `severity/critical`, or an issue with no
+  `effort/*` label, the autonomous run is **plan-gated**: it still builds the
+  plan and STOPS at plan approval for a human, then continues autonomously
+  through implement → review → push/PR. This mirrors the `--ship` effort gating
+  below. Override per run with `--plan-gate` (force the checkpoint on a small
+  issue) or `--force-auto` (force full plan-skipping on a medium+/critical one).
 
 Adding the `--ship` flag (alias `--now`) — `/next-issue 123 --ship` — is a
 fast-path for **small work**: after plan approval and implementation it invokes
@@ -28,12 +45,16 @@ no effort label) it is ignored with a one-line note, preserving the `/clear`
 boundary that keeps planning context out of the longer implement/review budget.
 See `## Pipeline` and the conditional final step of Phase 2.
 
-**IMPORTANT — Plan mode**: Use the `EnterPlanMode` tool immediately at the
-start of every `/next-issue` invocation (before any other work). Phases 0-2
-are planning phases that only need read-only tools and Bash. After Phase 2
-plan approval, use `ExitPlanMode` to begin implementation. (In autonomous
-mode, SKIP `EnterPlanMode`/`ExitPlanMode` entirely — see `## Autonomous Mode`
-below.)
+**IMPORTANT — Plan mode**: In **non-autonomous** mode, use the `EnterPlanMode`
+tool immediately at the start of every `/next-issue` invocation (before any
+other work). Phases 0-2 are planning phases that only need read-only tools and
+Bash. After Phase 2 plan approval, use `ExitPlanMode` to begin implementation.
+In **autonomous** mode the plan-mode call is **deferred to Phase 2** (the
+effort/severity labels that decide the plan gate are not known until Phase 1):
+a **fully-autonomous** run — `effort/trivial` or `effort/small` and not
+`severity/critical` — never calls `EnterPlanMode`/`ExitPlanMode` at all, while a
+**plan-gated** autonomous run calls both in Phase 2 and pauses at plan approval.
+See `## Autonomous Mode` below.
 
 ## Autonomous Mode
 
@@ -51,25 +72,49 @@ container, so a manually-typed `/next-issue` inherits autonomy silently without
 this banner. (Set `NEXT_ISSUE_AUTONOMOUS=1` only in dedicated headless golem
 environments, never in a shared interactive shell.)
 
-When autonomous:
+Autonomy splits into **two independent sub-behaviors**. Keep them distinct —
+the plan gate is the whole point of this skill:
 
-- Do NOT call `EnterPlanMode`/`ExitPlanMode` or any `AskUserQuestion`. Every
-  human gate in the phases below takes its documented default with no
-  interactive tool call.
-- The run proceeds selection → plan → implement without stopping. Then, once
-  implementation and testing are complete, **invoke the `/next-issue-ship`
-  skill in the same turn** (call the `Skill` tool with `next-issue-ship`) —
-  do NOT end the turn after merely printing a "next step". The handoff is an
-  actual in-turn skill invocation, not narrative: a single
-  `claude '/next-issue <N> --auto'` prompt must reach a pushed PR on its
-  own, because the model ending its turn after `/next-issue` does not start a
-  second skill. `/next-issue-ship` then detects autonomy independently (via
-  the same toggle and the persisted state-file signal) and continues to
-  Branch + PR. See the autonomous planning path in Phase 2 for the exact
-  point at which the invocation happens.
-- Persist the signal to the state file as `"autonomous": true` (see Phase 1
-  and Phase 2 below) so `/next-issue-ship` and any post-`/clear` resume
-  inherit it.
+- **Gate-skipping (always on when autonomous).** Do NOT call any
+  `AskUserQuestion`. Every human gate in the phases below — issue acceptance,
+  branch-freshness, drift, shipping mode, CI waits — takes its documented
+  default with no interactive tool call.
+- **Plan-skipping (conditional).** Whether the plan checkpoint
+  (`EnterPlanMode`/`ExitPlanMode`) is skipped depends on the issue's effort and
+  severity labels:
+
+  ```text
+  IF (effort/trivial OR effort/small) AND NOT severity/critical:
+      → FULLY AUTONOMOUS: skip plan mode entirely (today's --auto behavior).
+        Use the autonomous planning path in Phase 2 (state file + issue
+        comment, no EnterPlanMode), then implement and ship in-turn.
+  ELSE (effort/medium | effort/large | severity/critical | no effort label):
+      → PLAN-GATED AUTONOMY: still call EnterPlanMode, build the plan, and STOP
+        at ExitPlanMode for human approval. A golem shows up BLOCKED in
+        `just golems`; the human runs `just golem-attach {N}`, reviews and
+        refines the plan in the SAME session, then approves. Everything AFTER
+        plan approval stays autonomous (implement → test → adversarial review →
+        push/PR), with the refined plan in-context.
+  ```
+
+  **Overrides** (per-run, take precedence over the label rule above): `--plan-gate`
+  (alias `--no-skip-plan`) forces the checkpoint even on a trivial/small issue;
+  `--force-auto` (alias `--skip-plan`) forces full plan-skipping even on a
+  medium/large/critical one. If both appear, `--plan-gate` wins (safer default).
+- **Shipping handoff (both paths).** Once implementation and testing are
+  complete — for a plan-gated run, that means *after* the human approves the
+  plan and implementation finishes — **invoke the `/next-issue-ship` skill in
+  the same turn** (call the `Skill` tool with `next-issue-ship`). Do NOT end the
+  turn after merely printing a "next step". The handoff is an actual in-turn
+  skill invocation, not narrative: a single `claude '/next-issue <N> --auto'`
+  prompt must reach a pushed PR on its own, because the model ending its turn
+  after `/next-issue` does not start a second skill. `/next-issue-ship` then
+  detects autonomy independently (via the same toggle and the persisted
+  state-file signal) and continues to Branch + PR. See the autonomous planning
+  path in Phase 2 for the exact point at which the invocation happens.
+- **Persist the signals** to the state file: `"autonomous": true`, plus
+  `"plan_gated": true` when the run is plan-gated (see Phase 1 and Phase 2
+  below) so `/next-issue-ship` and any post-`/clear` resume inherit them.
 
 When NOT autonomous (no `--auto`, no env var), behavior is unchanged — every
 interactive prompt and plan-mode step below runs verbatim as the default.
@@ -96,8 +141,16 @@ Proceed with Phase 0 as normal regardless of mode.
 
 ## Phase 0 — Resume Check
 
-1. **Enter plan mode** (call `EnterPlanMode` tool) — in autonomous mode, SKIP
-   this step (no `EnterPlanMode`/`ExitPlanMode`; see `## Autonomous Mode`)
+1. **Enter plan mode** (call `EnterPlanMode` tool). In **non-autonomous** mode,
+   call it here immediately. In **autonomous** mode, do NOT call it here —
+   **defer** the decision: the effort/severity labels that decide whether this
+   run is fully-autonomous (skip plan) or plan-gated (keep plan) are not fetched
+   until Phase 1, and entering plan mode now would trap a fully-autonomous run
+   in plan mode (it never calls `ExitPlanMode`, so its write/edit tools would
+   stay blocked). The plan-mode call is made in Phase 2 once `plan_gated` is
+   known: a **plan-gated** run calls `EnterPlanMode` there (then `ExitPlanMode`
+   for approval); a **fully-autonomous** run never enters plan mode at all
+   (today's `--auto` behavior). See `## Autonomous Mode`.
 
 1. **Legacy migration** — run in order:
 
@@ -192,12 +245,19 @@ Proceed with Phase 0 as normal regardless of mode.
      "phase": "select",
      "started": "{YYYY-MM-DD}",
      "platform": "{github|gitlab}",
-     "autonomous": {true|false}
+     "autonomous": {true|false},
+     "plan_gated": {true|false}
    }
    ```
 
    Set `"autonomous"` from the toggle (true when `--auto` or
-   `NEXT_ISSUE_AUTONOMOUS=1`, false otherwise).
+   `NEXT_ISSUE_AUTONOMOUS=1`, false otherwise). Set `"plan_gated"` by applying
+   the plan-skip rule from `## Autonomous Mode` to the issue's just-fetched
+   effort/severity labels: `true` when autonomous AND (the issue is
+   `effort/medium`/`large`/`severity/critical`/no-effort-label OR `--plan-gate`
+   was passed) AND `--force-auto` was not passed; `false` otherwise (including
+   every non-autonomous run). A `true` value means this run keeps the plan
+   checkpoint; `false` means it skips plan mode.
 
 ## Phase 2 — Plan
 
@@ -240,7 +300,7 @@ Proceed with Phase 0 as normal regardless of mode.
      "started": "{date}",
      "platform": "{platform}",
      "autonomous": {true|false},
-     "plan_comment_url": "{url}",
+     "plan_gated": {true|false},
      "checkpoint": {
        "completed_phase": "plan",
        "key_decisions": ["{non-obvious choice 1}", "{non-obvious choice 2}"],
@@ -254,28 +314,51 @@ Proceed with Phase 0 as normal regardless of mode.
 
    Set `"autonomous"` from the toggle: `true` only when `--auto` or
    `NEXT_ISSUE_AUTONOMOUS=1`; `false` otherwise — **including `--ship`/`--now`
-   runs**, which are not autonomous (see the conditional final step below).
-   `"plan_comment_url"` is written only in autonomous mode (see the
-   autonomous planning path below); omit it otherwise.
+   runs**, which are not autonomous (see the conditional final step below). Set
+   `"plan_gated"` per the rule in Phase 1 / `## Autonomous Mode` (an autonomous
+   medium+/critical/no-effort-label run, or any autonomous run with
+   `--plan-gate`, unless `--force-auto`). The template above deliberately omits
+   `"plan_comment_url"`: add that field **only** on the **fully-autonomous**
+   path (see the autonomous planning path below), where the plan is posted as an
+   issue comment. A plan-gated run uses `EnterPlanMode`/`ExitPlanMode` instead
+   and must NOT add it; a non-autonomous run never adds it either.
 
-1. **Autonomous planning path** — when autonomous, do NOT enter plan mode.
-   After exploring and forming the plan: (1) write the plan to the state file
-   exactly as above, AND (2) post the plan as an issue comment for
-   traceability —
+1. **Autonomous planning path** — branches on the plan gate (`"plan_gated"`
+   from Phase 1 / `## Autonomous Mode`):
 
-   ```bash
-   gh issue comment {N} --body "..."      # GitHub
-   glab issue note {N} --message "..."    # GitLab
-   ```
+   - **Fully-autonomous run (`plan_gated: false`)** — do NOT enter plan mode.
+     After exploring and forming the plan: (1) write the plan to the state file
+     exactly as above, AND (2) post the plan as an issue comment for
+     traceability —
 
-   Capture the returned comment URL and record it in the state file as
-   `"plan_comment_url"`. Then proceed DIRECTLY to implementation — no
-   `ExitPlanMode`, no approval gate. Autonomous mode SKIPS both the "Exit plan
-   mode" and "Suggest context reset" steps below.
+     ```bash
+     gh issue comment {N} --body "..."      # GitHub
+     glab issue note {N} --message "..."    # GitLab
+     ```
 
-   **Then, once implementation and testing are complete, invoke the
-   `/next-issue-ship` skill in this same turn** (call the `Skill` tool with
-   `next-issue-ship`). Do NOT stop after implementation to *suggest* shipping,
+     Capture the returned comment URL and record it in the state file as
+     `"plan_comment_url"`. Then proceed DIRECTLY to implementation — no
+     `ExitPlanMode`, no approval gate. This path SKIPS both the "Exit plan mode"
+     and "Suggest context reset" steps below.
+
+   - **Plan-gated autonomous run (`plan_gated: true`)** — do NOT take the
+     comment-only shortcut. Call **`EnterPlanMode`** now (it was deferred in
+     Phase 0), build the plan, then call **`ExitPlanMode`** (next step) to
+     present it for human approval. The golem is now BLOCKED
+     awaiting input (surfaced by `just golems`); the human attaches via
+     `just golem-attach {N}`, refines the plan in-session, and approves.
+     **After approval**, the run is autonomous again: skip the "Suggest context
+     reset" step, proceed directly through implementation and testing, and then
+     invoke `/next-issue-ship` in-turn exactly as the shipping handoff below.
+     Posting a plan issue comment is optional here (the plan is already visible
+     in the approval prompt); skip `"plan_comment_url"`.
+
+   **Then, once implementation and testing are complete — for a plan-gated run,
+   that means only after the `ExitPlanMode` approval below AND the subsequent
+   "Implement" step both finish — invoke the `/next-issue-ship`
+   skill in this same turn** (call the `Skill` tool with `next-issue-ship`). Do
+   NOT invoke ship before `ExitPlanMode` approval or before the work exists. Do
+   NOT stop after implementation to *suggest* shipping,
    and do NOT merely print a "next step: /next-issue-ship" line — actually
    invoke it. This is the whole point of `--auto`: a single
    `claude '/next-issue <N> --auto'` prompt must reach a pushed PR + labeled
@@ -286,8 +369,10 @@ Proceed with Phase 0 as normal regardless of mode.
    the in-turn invocation here is the primary path and must not be skipped.)
 
 1. **Exit plan mode** (call `ExitPlanMode` tool) — this presents the plan to
-   the user for approval before implementation begins. (Skipped when
-   autonomous — see the autonomous planning path above.)
+   the user for approval before implementation begins. Skipped only on the
+   **fully-autonomous** path; a **plan-gated** autonomous run DOES call
+   `ExitPlanMode` here and waits for human approval (see the autonomous planning
+   path above).
 
 1. **Implement** — after plan approval, carry out the plan: make the changes
    and run the tests. The two steps below fire only **once implementation and
@@ -296,8 +381,9 @@ Proceed with Phase 0 as normal regardless of mode.
 
 1. **Hand off — suggest a context reset, OR take the `--ship` fast-path.**
    Reached only after implementation and testing complete (previous step).
-   (Skipped when autonomous — see the autonomous planning path above.) Choose
-   by flag + effort:
+   (Skipped on **both** autonomous paths — fully-autonomous and plan-gated alike
+   ship in-turn via the autonomous planning path above, never via a `/clear`.)
+   Choose by flag + effort:
 
    - **`--ship` (or `--now`) set AND effort is `trivial`/`small`**: do NOT
      suggest a `/clear`. Invoke `/next-issue-ship` directly to deliver in this
