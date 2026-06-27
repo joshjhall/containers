@@ -13,8 +13,12 @@
 - [R packages use PPM binaries](r-packages-use-ppm-binaries.md) — CRAN from Posit PPM binaries (x86_64 only; arm64 compiles); keep apt build-deps
 - [Cache mounts not on install dirs](cache-mounts-not-on-install-dirs.md) — no type=cache on /cache/cargo or /cache/r (runtime install locations)
 - [Auto-patch inline checksums](auto-patch-inline-checksums.md) — inline *_SHA256 pins in setup.sh need TOOL_CHECKSUM_REGISTRY_INLINE
+- [check-versions scrape pins nonexistent](check-versions-scrape-pins-nonexistent.md) — read downloadable artifact filenames, not scraped HTML (jdtls #582)
 - [Luggage vendored catalog](luggage-vendored-catalog.md) — builds read vendored snapshot (crates/luggage/testdata/catalog), not sibling repo
 - [Luggage release deferred until v5](luggage-release-deferred-until-v5.md) — no apt/Homebrew/cargo release for luggage until v5 substantially complete
 - [Auto-merge needs explicit consent](feedback_auto_merge_consent.md) — gh pr merge --auto needs per-turn authorization, separate from default-ship
 - [Parallel automation (golem) initiative](parallel-automation-golem-initiative.md) — golem = per-issue sub-orchestrator; order #523→…→#525
 - [Worktree push hooks vs gitignore](worktree-push-hooks-gitignore.md) — pushing from .worktrees/ breaks osv-scanner (#556) + compose-validate
+- [Golem supervised auto mode](golem-supervised-auto-mode.md) — run golems in `auto` mode; monitor via hooks+state, supervise via tmux (#570)
+- [Golem push gate under auto](golem-push-gate-under-auto.md) — `auto` auto-approves push/PR-create; pin an `ask` rule to gate outward actions
+- [claude-setup template stamp re-sync](claude-setup-template-stamp-resync.md) — bundled ~/.claude artifacts re-sync via content stamp (#574)

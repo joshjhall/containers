@@ -29,6 +29,15 @@ pushed, copy `.env` into it. Branches created before #556 merged still carry the
 broken osv hook — rebase them onto post-#556 main to pick up the fix, or they
 will fail osv-scanner on push.
 
+**Also copy `.claude/settings.local.json`** (gitignored, `.gitignore:48`). It
+holds `{"permissions":{"defaultMode":"auto"}}`. Without it, a golem launched in
+the worktree runs under the default (stricter) permission mode, not `auto`, so
+its classifier prompts on every read-only command (`git log`, `gh issue view`,
+etc.) that `auto` would auto-approve — turning unattended review into a
+prompt-storm. Same gitignored-config-doesn't-reach-the-context class as the
+stale-`~/.claude`-artifacts drift ([[golem-supervised-auto-mode]], issue #574).
+The `just worktree-new` recipe (#569) should copy BOTH files.
+
 Do NOT reach for `git push --no-verify` — the safety classifier blocks it (it
 looks like bypassing a security control) and it is the wrong fix anyway; fix the
 hook / supply the local file instead. Related:
