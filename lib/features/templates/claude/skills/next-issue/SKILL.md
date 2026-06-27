@@ -222,6 +222,14 @@ Proceed with Phase 0 as normal regardless of mode.
    excluding `status/in-progress`, `status/pr-pending`,
    `status/commit-pending`, and `status/on-hold`)
 
+   > **Pool refill (orchestrate Phase P):** when selection is driven by the
+   > orchestrate worker pool rather than a plain `/next-issue`, layer the
+   > **in-flight collision check** over this priority order — prefer the first
+   > priority issue predicted disjoint from in-flight golems' files, holding the
+   > slot if only colliding candidates remain. See `state-format.md` §
+   > Collision-aware selection. A standalone `/next-issue` ignores this and picks
+   > strictly by priority.
+
 1. Show the selected issue to the user — title, labels, body excerpt
 
 1. Ask: **Work on this issue?** (user can accept, skip to next, or pick

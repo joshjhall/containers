@@ -350,12 +350,27 @@ golems:
     root="$(bash "{{ justfile_directory() }}/bin/repo-root.sh")"
     status_dir="$root/.worktrees/.status"
     feed="$status_dir/feed.jsonl"
+    pool="$status_dir/pool.json"
     shopt -s nullglob
-    cache=("$status_dir"/*.json)
+    # pool.json is operator policy, NOT a golem-status file — keep it out of the
+    # golem-row glob (else it renders as a bogus "?" row). It's surfaced in the
+    # pool header below instead.
+    cache=()
+    for f in "$status_dir"/*.json; do
+        [ "$f" = "$pool" ] && continue
+        cache+=("$f")
+    done
     sessions="$(tmux ls 2>/dev/null | /usr/bin/grep -oE '^golem-[0-9]+' || true)"
-    if [ "${#cache[@]}" -eq 0 ] && [ -z "$sessions" ]; then
+    if [ "${#cache[@]}" -eq 0 ] && [ -z "$sessions" ] && [ ! -f "$pool" ]; then
         echo "No active golems (no $status_dir/*.json, no golem-* tmux sessions)."
         exit 0
+    fi
+    # Pool header: size, slots in use, backlog depth, and the accepting state.
+    # Defensive `// "-"` fallbacks mirror the golem-row jq style for absent fields.
+    if [ -f "$pool" ]; then
+        jq -r '"Pool: size=\(.size // "-")  slots=\((.slots // []) | length)/\(.size // "-")  backlog=\(.backlog_depth // "-")  accepting=\(.accepting // "-")"' \
+            "$pool" 2>/dev/null || echo "Pool: (unreadable $pool)"
+        echo ""
     fi
     printf '%-10s %-6s %-22s %-5s %-12s %-10s %-8s\n' \
         GOLEM ISSUE BRANCH PR STATE PHASE BLOCKING

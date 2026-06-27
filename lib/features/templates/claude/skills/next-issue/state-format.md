@@ -293,6 +293,33 @@ for severity in critical high medium low; do
 done
 ```
 
+### Collision-aware selection (pool refill)
+
+The priority loop above picks the single highest-priority eligible issue. When
+the **orchestrate worker pool** (Phase P) refills a free slot, it layers an
+**in-flight collision check** on top of that order: a freshly-picked issue whose
+work is predicted to overlap an in-flight golem's files would collide on the
+merge train (#602), so the pool prefers the next priority issue that is
+predicted **disjoint**.
+
+The overlap prediction is heuristic — the candidate issue's `## Affected Files`
+section plus its `component/*` labels vs each in-flight golem's changed files
+(`gh pr view <N> --json files`, or the golem's issue `## Affected Files` before
+it has a PR). The rule:
+
+- Walk the priority order; pick the first candidate predicted disjoint from
+  **every** in-flight golem **and** from any candidate already picked this sweep.
+- A candidate with **no** predicted files is dispatchable but ranked last (don't
+  starve the pool on pure uncertainty) — a slot is held only on a **predicted**
+  collision, never on mere unknown.
+- If only colliding candidates remain, **hold** the slot (leave it idle) rather
+  than dispatch a guaranteed-colliding pick.
+
+The actual consumer is `orchestrate/workflow.js` `mode: "pool"` (pure
+computation); this section documents the shared heuristic where the priority
+logic lives. A plain `/next-issue` run (no pool) ignores the collision check —
+it selects strictly by priority.
+
 ### Fallback
 
 If no labeled issues match, fall back to the oldest open issue (still
