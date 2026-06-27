@@ -27,6 +27,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - ..:/workspace/containers
       - ../../containers-db:/workspace/containers-db
+      - ../../librarian:/workspace/librarian
       # Named cache volumes — survive image rebuilds, independently droppable,
       # and project-namespaced (containers-*) to avoid collisions with other
       # Rust projects sharing this Docker host. Ownership is reconciled to the
