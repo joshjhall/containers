@@ -233,6 +233,22 @@ commit-msg:
 # ============================================================================
 # Pre-push stage: runs on `git push`
 # ============================================================================
+#
+# BARE-REPO HOST NOTE (#604): on a worktree-host where the repo ROOT is a bare
+# checkout (`git rev-parse --is-bare-repository` → true), lefthook itself aborts
+# at startup — before reading this file — because its own bootstrap runs
+# `git rev-parse --show-toplevel` (`fatal: this operation must be run in a work
+# tree`, exit 128). No per-command guard here can intercept that (it happens
+# upstream of config parsing). Golems never hit this: they push from INSIDE
+# their `.worktrees/issue-N` work tree, where `--show-toplevel` resolves. Only
+# pushes issued from the bare root itself (e.g. an orchestrator deleting a
+# merged remote branch) are affected — bypass those with the env var the
+# generated hook honours before invoking lefthook:
+#
+#     LEFTHOOK=0 git push origin --delete feature/issue-N
+#
+# (`git push --no-verify` also works.) The justfile worktree/golem recipes are
+# fixed properly via bin/repo-root.sh and need no bypass.
 pre-push:
   parallel: true
   commands:

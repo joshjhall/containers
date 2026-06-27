@@ -262,7 +262,7 @@ worktree-new N:
         echo "worktree-new: N must be an issue number, got '{{ N }}'" >&2
         exit 2
     fi
-    root="$(git rev-parse --show-toplevel)"
+    root="$(bash "{{ justfile_directory() }}/bin/repo-root.sh")"
     cd "$root"
     wt=".worktrees/issue-{{ N }}"
     br="feature/issue-{{ N }}"
@@ -307,7 +307,7 @@ worktree-rm N:
         echo "worktree-rm: N must be an issue number, got '{{ N }}'" >&2
         exit 2
     fi
-    root="$(git rev-parse --show-toplevel)"
+    root="$(bash "{{ justfile_directory() }}/bin/repo-root.sh")"
     cd "$root"
     wt=".worktrees/issue-{{ N }}"
     br="feature/issue-{{ N }}"
@@ -336,7 +336,7 @@ worktree-rm N:
 golems:
     #!/usr/bin/env bash
     set -uo pipefail
-    root="$(git rev-parse --show-toplevel)"
+    root="$(bash "{{ justfile_directory() }}/bin/repo-root.sh")"
     status_dir="$root/.worktrees/.status"
     feed="$status_dir/feed.jsonl"
     shopt -s nullglob
@@ -407,7 +407,7 @@ golem-attach N:
     if tmux has-session -t "golem-{{ N }}" 2>/dev/null; then
         exec tmux attach -t "golem-{{ N }}"
     fi
-    root="$(git rev-parse --show-toplevel)"
+    root="$(bash "{{ justfile_directory() }}/bin/repo-root.sh")"
     status_dir="$root/.worktrees/.status"
     shopt -s nullglob
     for f in "$status_dir"/*.json; do
