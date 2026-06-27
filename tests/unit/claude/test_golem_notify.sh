@@ -20,8 +20,8 @@ set -euo pipefail
 # runs from a git hook (e.g. lefthook pre-push), git exports GIT_DIR /
 # GIT_INDEX_FILE / GIT_WORK_TREE pointing at the REAL repo — those would hijack
 # our `git init` / `git worktree add`. The inherited git env is now cleared
-# centrally by init_test_framework() (issue #599), so no per-test unset is
-# needed here.
+# centrally at framework.sh module scope (when it is sourced below), so no
+# per-test unset is needed here. See issue #599.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../../framework.sh"

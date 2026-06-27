@@ -31,17 +31,22 @@ test_suite "test framework git-env hermeticity (#599)"
 # ---------------------------------------------------------------------------
 run_in_polluted_env() {
     local body="$1"
-    env -i \
+    # FRAMEWORK_SH is passed through the environment (not interpolated into the
+    # -c string) so a repo checked out under an apostrophe-containing path can't
+    # break the quoting. The body is appended literally; the child shell does
+    # the expansion of any $vars it contains.
+    /usr/bin/env -i \
         PATH="$PATH" \
         HOME="${HOME:-/tmp}" \
         TERM="dumb" \
         SKIP_DOCKER_CHECK=true \
+        FRAMEWORK_SH="$FRAMEWORK_SH" \
         GIT_DIR="/nonexistent/bogus/.git" \
         GIT_INDEX_FILE="/nonexistent/bogus/.git/index" \
         GIT_WORK_TREE="/nonexistent/bogus" \
         GIT_COMMON_DIR="/nonexistent/bogus/.git" \
         GIT_PREFIX="bogus/" \
-        bash -c "source '$FRAMEWORK_SH' >/dev/null 2>&1; init_test_framework >/dev/null 2>&1; $body"
+        /bin/bash -c 'source "$FRAMEWORK_SH" >/dev/null 2>&1; init_test_framework >/dev/null 2>&1; '"$body"
 }
 
 # init_test_framework clears every inherited git env var.
@@ -81,6 +86,14 @@ test_fixture_git_init_is_hermetic() {
     assert_contains "$out" "dotgit=present" "git init should create .git in the temp fixture dir"
     assert_not_contains "$out" "gitdir=/nonexistent/bogus" "fixture must not bind to the inherited bogus GIT_DIR"
     assert_not_contains "$out" "gitdir=MISSING" "git init should produce a resolvable repo in the temp dir"
+
+    # Positively assert the resolved gitdir is INSIDE the temp dir — not merely
+    # "not the bogus path" — so a third unexpected location (e.g. $HOME/.git)
+    # can't slip past the two negative assertions above.
+    local tmpval
+    tmpval=$(/usr/bin/grep '^tmp=' <<<"$out" | /usr/bin/cut -d= -f2)
+    assert_not_empty "$tmpval" "the fixture body must report its temp dir"
+    assert_contains "$out" "gitdir=$tmpval/.git" "fixture gitdir must resolve inside the temp dir"
 }
 
 run_test test_clears_git_env_vars "init_test_framework unsets inherited git env vars"

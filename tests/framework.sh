@@ -33,6 +33,20 @@
 
 set -euo pipefail
 
+# Clear inherited git environment so fixture-building tests are hermetic.
+#
+# git exports GIT_DIR / GIT_INDEX_FILE / GIT_WORK_TREE / GIT_COMMON_DIR /
+# GIT_PREFIX into the environment of any hook it spawns (e.g. lefthook
+# pre-push). A test that builds a throwaway repo with `git init` /
+# `git worktree add` in a mktemp dir would otherwise have those nested git
+# commands hijacked back at the REAL repository — fixtures silently fail to
+# build, assertions diverge from the standalone run, and stray commits can land
+# on the live branch. Clearing them here at module scope — before the sub-module
+# `source` calls below — protects the framework bootstrap too, not just the test
+# bodies, so the guard holds even if a sourced module ever calls git at module
+# scope. init_test_framework re-clears as belt-and-suspenders. See #599 / #587.
+unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE GIT_COMMON_DIR GIT_PREFIX
+
 # Framework version (exported for external use)
 # shellcheck disable=SC2034  # Used by external scripts
 readonly TEST_FRAMEWORK_VERSION="4.19.7"
@@ -111,17 +125,9 @@ init_test_framework() {
     TESTS_SKIPPED=0
     TEST_STATUS=""
 
-    # Clear inherited git environment so fixture-building tests are hermetic.
-    #
-    # git exports GIT_DIR / GIT_INDEX_FILE / GIT_WORK_TREE / GIT_COMMON_DIR /
-    # GIT_PREFIX into the environment of any hook it spawns (e.g. lefthook
-    # pre-push). A test that builds a throwaway repo with `git init` /
-    # `git worktree add` in a mktemp dir would otherwise have those nested git
-    # commands hijacked back at the REAL repository — fixtures silently fail to
-    # build, assertions diverge from the standalone run, and stray commits can
-    # land on the live branch. Unsetting them once, centrally, immunizes every
-    # current and future fixture test regardless of how the suite was invoked
-    # (standalone, run_unit_tests.sh, or a git hook). See issue #599 / #587.
+    # Re-clear inherited git env (also cleared at module scope above) so a
+    # consumer that re-initialises the framework after mutating the environment
+    # still starts from a hermetic git state. See #599 / #587.
     unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE GIT_COMMON_DIR GIT_PREFIX
 
     # Create directories
