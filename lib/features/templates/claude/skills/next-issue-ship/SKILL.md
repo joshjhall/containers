@@ -82,7 +82,11 @@ These env vars toggle non-default behavior; all are opt-in:
   escape hatch from the review gate. GitHub only. Skipped for
   `severity/critical` issues. Falls through to the normal CI-wait loop if
   `gh pr merge --auto` fails (e.g., auto-merge not enabled on the repo). See
-  Option 1 "Auto-merge fast path" below.
+  Option 1 "Auto-merge fast path" below. The orchestrate **integration train**
+  (`orchestrate` § Phase T) is the batch consumer of this same
+  `gh pr merge --auto` settle-on-green path: it lands a set of PRs with one
+  up-front approval, relying on `--auto` to merge each as its (already-green)
+  checks settle rather than a manual merge + wait per PR.
 - `AUTOMERGE_AUTONOMOUS=1` — **required second consent** to allow the
   `AUTOMERGE=1` fast path *while autonomous*. Auto-merge skips the entire
   adversarial review loop, and an autonomous golem sets autonomy from the
@@ -100,6 +104,9 @@ These env vars toggle non-default behavior; all are opt-in:
   unreviewed merges). Inject `AUTOMERGE_AUTONOMOUS=1` from a distinct
   configuration source (e.g. a separate 1Password entry / secret group) than
   `AUTOMERGE=1`, and only for golem environments that are meant to auto-merge.
+  The integration train does **not** weaken this: its single batch approval
+  authorizes the *sequence* of merges, but each PR's auto-merge still requires
+  BOTH `AUTOMERGE=1` and `AUTOMERGE_AUTONOMOUS=1` when the train runs autonomously.
 - `PRE_REVIEW_STRICT=true` — pre-review gates (Step 3.5) block Option 1 PR
   creation on HIGH certainty findings instead of warning only.
 - `REVIEW_MAX_CYCLES` — integer, default `3`. Caps the post-CI multi-cycle
