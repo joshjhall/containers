@@ -14,7 +14,15 @@
 # the golem: any error is swallowed and it always exits 0.
 #
 # Input  (stdin):  Notification hook JSON, e.g. {"message":"...", ...}
-# Output (feed):   {"ts","golem","event":"blocked","message"}
+# Output (feed):   {"ts","golem","event":"gate|idle","message"}
+#
+# The `event` kind separates a real permission gate (a human decision the
+# orchestrator must surface) from a transient between-turn idle: Claude Code
+# also fires Notification for momentary main-loop idles (e.g. while a review
+# sub-agent runs), which are noise, not a block. `just golems` lists a golem as
+# BLOCKED only when its most-recent feed line is a fresh `gate`, so an `idle`
+# emitted once the golem moves on implicitly clears that golem's stale block —
+# no separate resolution hook needed.
 set -uo pipefail
 
 # Resolve the main repo root even when invoked from a worktree:
@@ -38,6 +46,20 @@ if command -v jq >/dev/null 2>&1; then
     message="$(printf '%s' "$payload" | jq -r '.message // empty' 2>/dev/null || true)"
 fi
 [ -z "$message" ] && message="awaiting permission decision"
+
+# Classify the notification into an event kind so the reader can tell a real
+# permission gate (an actionable human decision) from a transient idle (noise):
+#   gate — a permission decision is pending, e.g. the `git push` / `gh pr
+#          create` `ask` rule firing ("Claude needs your permission to ...").
+#   idle — a momentary between-turn idle ("Claude is waiting for your input"),
+#          which also fires while a sub-agent runs mid-work and is NOT a block.
+# Match case-insensitively on the message; default to `gate` so an unrecognized
+# notification surfaces (fail loud) rather than being silently dropped as idle.
+case "$(printf '%s' "$message" | /usr/bin/tr '[:upper:]' '[:lower:]')" in
+    *"waiting for your input"*) event="idle" ;;
+    *"waiting for input"*) event="idle" ;;
+    *) event="gate" ;;
+esac
 
 # Derive the golem id. In order of reliability:
 #   1. $GOLEM_ID — stamped into the environment at launch (orchestrate /
@@ -70,8 +92,8 @@ ts="$(/usr/bin/date -u +%FT%TZ)"
 # best-effort literal if jq is unavailable.
 /usr/bin/mkdir -p "$status_dir" 2>/dev/null || exit 0
 if command -v jq >/dev/null 2>&1; then
-    jq -cn --arg ts "$ts" --arg golem "$golem" --arg message "$message" \
-        '{ts: $ts, golem: $golem, event: "blocked", message: $message}' \
+    jq -cn --arg ts "$ts" --arg golem "$golem" --arg event "$event" --arg message "$message" \
+        '{ts: $ts, golem: $golem, event: $event, message: $message}' \
         >>"$feed" 2>/dev/null || true
 else
     # No jq: hand-roll the JSON. The message (and, defensively, the golem id)
@@ -82,8 +104,10 @@ else
     # remaining double quotes. Keeps every feed line valid JSON on this path.
     golem_safe="$(printf '%s' "${golem//\\/}" | /usr/bin/tr -d '[:cntrl:]')"
     message_safe="$(printf '%s' "${message//\\/}" | /usr/bin/tr -d '[:cntrl:]')"
-    printf '{"ts":"%s","golem":"%s","event":"blocked","message":"%s"}\n' \
-        "$ts" "${golem_safe//\"/\\\"}" "${message_safe//\"/\\\"}" \
+    # $event is a fixed literal (gate|idle) set above, never attacker-derived,
+    # so it needs no sanitizing — interpolate it directly.
+    printf '{"ts":"%s","golem":"%s","event":"%s","message":"%s"}\n' \
+        "$ts" "${golem_safe//\"/\\\"}" "$event" "${message_safe//\"/\\\"}" \
         >>"$feed" 2>/dev/null || true
 fi
 

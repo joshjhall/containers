@@ -263,6 +263,74 @@ test_golem_named_worktree_verbatim() {
 run_test test_golem_named_worktree_verbatim "golem-named worktree root resolves verbatim"
 
 # ===========================================================================
+# Event classification (#600): map the Notification message to an event kind so
+# the reader can tell a real permission gate from a transient idle. Runs the
+# hook with a chosen message and echoes the `.event` of the LAST feed line.
+# Args: <hook> <cwd> <message>
+# ===========================================================================
+run_hook_event() {
+    local hook="$1" cwd="$2" message="$3"
+    local feed
+    (
+        cd "$cwd"
+        GOLEM_ID="golem-x" "$hook" <<<"{\"message\":\"$message\"}" >/dev/null 2>&1
+    )
+    feed="$(
+        cd "$cwd"
+        common_dir="$(/usr/bin/git rev-parse --git-common-dir)"
+        case "$common_dir" in /*) ;; *) common_dir="$(/usr/bin/pwd)/$common_dir" ;; esac
+        /usr/bin/echo "$(/usr/bin/dirname "$common_dir")/.worktrees/.status/feed.jsonl"
+    )"
+    /usr/bin/jq -r '.event' "$feed" 2>/dev/null | /usr/bin/tail -1
+}
+
+test_permission_message_is_gate() {
+    local wt got
+    wt=$(setup_worktree 710)
+    got=$(run_hook_event "$HOOK_REPO" "$wt" "Claude needs your permission to use Bash")
+    assert_equals "gate" "$got" "a permission-decision message classifies as gate"
+    /usr/bin/rm -rf "$(/usr/bin/dirname "$(/usr/bin/dirname "$wt")")"
+}
+run_test test_permission_message_is_gate "permission message classifies as event=gate (#600)"
+
+test_waiting_for_input_is_idle() {
+    local wt got
+    wt=$(setup_worktree 711)
+    got=$(run_hook_event "$HOOK_REPO" "$wt" "Claude is waiting for your input")
+    assert_equals "idle" "$got" "the transient idle message classifies as idle"
+    /usr/bin/rm -rf "$(/usr/bin/dirname "$(/usr/bin/dirname "$wt")")"
+}
+run_test test_waiting_for_input_is_idle "'waiting for your input' classifies as event=idle (#600)"
+
+test_classification_case_insensitive() {
+    local wt got
+    wt=$(setup_worktree 712)
+    got=$(run_hook_event "$HOOK_REPO" "$wt" "CLAUDE IS WAITING FOR YOUR INPUT")
+    assert_equals "idle" "$got" "idle classification is case-insensitive"
+    /usr/bin/rm -rf "$(/usr/bin/dirname "$(/usr/bin/dirname "$wt")")"
+}
+run_test test_classification_case_insensitive "idle classification is case-insensitive (#600)"
+
+test_unknown_message_defaults_to_gate() {
+    local wt got
+    wt=$(setup_worktree 713)
+    got=$(run_hook_event "$HOOK_REPO" "$wt" "some unrecognized notification")
+    assert_equals "gate" "$got" "an unrecognized message defaults to gate (fail loud)"
+    /usr/bin/rm -rf "$(/usr/bin/dirname "$(/usr/bin/dirname "$wt")")"
+}
+run_test test_unknown_message_defaults_to_gate "unrecognized message defaults to event=gate (#600)"
+
+# Template copy must classify identically — the two files stay in sync.
+test_template_classifies_idle() {
+    local wt got
+    wt=$(setup_worktree 714)
+    got=$(run_hook_event "$HOOK_TEMPLATE" "$wt" "Claude is waiting for your input")
+    assert_equals "idle" "$got" "template hook classifies idle identically"
+    /usr/bin/rm -rf "$(/usr/bin/dirname "$(/usr/bin/dirname "$wt")")"
+}
+run_test test_template_classifies_idle "template copy classifies idle identically (#600)"
+
+# ===========================================================================
 # Generate report
 # ===========================================================================
 generate_report

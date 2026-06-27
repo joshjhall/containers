@@ -381,11 +381,33 @@ golems:
         fi
     done
     if [ -f "$feed" ]; then
-        # Recent Notification-hook lines (a golem awaiting a permission decision).
-        /usr/bin/tail -n 50 "$feed" 2>/dev/null \
-        | jq -r 'select(.event == "blocked") | "  \(.golem) — \(.message // "awaiting decision")"' 2>/dev/null \
-        | /usr/bin/sort -u \
-        | while IFS= read -r line; do echo "$line"; blocked=1; done
+        # A golem is BLOCKED only when its MOST-RECENT feed line is a fresh
+        # `gate` (a real permission decision). The feed is append-only and
+        # chronological, so the last line per golem is its current state: an
+        # `idle` (transient "waiting for your input") emitted once the golem
+        # resumes supersedes an earlier `gate` and clears the block — no
+        # separate resolution event needed. A freshness window
+        # (GOLEM_BLOCK_TTL seconds, default 3600) additionally drops a gate left
+        # behind by a golem that has since exited. Legacy `blocked` lines (feed
+        # written before issue #600) are still honored as gates. `group_by`
+        # sorts then groups stably, so `.[-1]` is each golem's latest line.
+        ttl="${GOLEM_BLOCK_TTL:-3600}"
+        feed_blocked="$(
+            /usr/bin/tail -n 200 "$feed" 2>/dev/null \
+            | jq -rs --argjson ttl "$ttl" '
+                (now) as $now
+                | group_by(.golem)
+                | map(.[-1])
+                | map(select((.event == "gate" or .event == "blocked")
+                             and (($now - (.ts | fromdateiso8601)) < $ttl)))
+                | .[] | "  \(.golem) — \(.message // "awaiting decision")"
+              ' 2>/dev/null \
+            | /usr/bin/sort -u
+        )"
+        if [ -n "$feed_blocked" ]; then
+            printf '%s\n' "$feed_blocked"
+            blocked=1
+        fi
     fi
     [ "$blocked" -eq 0 ] && echo "  (none)"
     if [ -f "$feed" ]; then

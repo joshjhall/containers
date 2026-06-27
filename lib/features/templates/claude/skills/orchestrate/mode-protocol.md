@@ -189,13 +189,39 @@ gain a feed. Monitoring and intervention are separate channels:
   from observable state instead — git commits vs `origin/main`, PR/MR state, the
   `next-issue` state files (`phase`), and the `.worktrees/.status/*.json` cache —
   plus a `Notification` hook (`.claude/hooks/golem-notify.sh`) that appends a
-  blocked-golem line to `.worktrees/.status/feed.jsonl` whenever a golem awaits a
-  decision. `just golems` renders the table AND the BLOCKED list from these.
+  classified event line to `.worktrees/.status/feed.jsonl` whenever a golem
+  awaits a decision. `just golems` renders the table AND the BLOCKED list from
+  these (see **Feed event vocabulary** below for how a block clears).
 - **Intervene (on demand):** when `just golems` flags a golem BLOCKED, run
   `just golem-attach {N}` to attach its real TTY (worktree session `golem-{N}`,
   or a container golem's `claude` session via `docker exec`), answer the
   high-risk prompt — **or, for a plan-gated golem (medium+/critical), review,
   refine, and approve the plan at its `ExitPlanMode` checkpoint** — and detach.
+
+### Feed event vocabulary
+
+Each line in `.worktrees/.status/feed.jsonl` is one JSON object:
+`{ts, golem, event, message}`. `golem-notify.sh` classifies every
+`Notification` it receives into an `event` kind so the reader can separate a
+real block from noise:
+
+| `event`   | Meaning                                                          | Surfaces in BLOCKED?                          |
+| --------- | ---------------------------------------------------------------- | --------------------------------------------- |
+| `gate`    | A permission decision is pending — a human must answer (e.g. the `git push` / `gh pr create` `ask` rule: _"Claude needs your permission to ..."_). | **Yes**, while it is the golem's latest line and within the freshness window. |
+| `idle`    | A transient between-turn idle (_"Claude is waiting for your input"_) — also fires while a sub-agent runs mid-work. Noise, not a block. | No. |
+| `blocked` | **Legacy** kind written before issue #600 (every notification was `blocked`). Honored as a `gate` for backward compatibility. | Yes (treated as `gate`). |
+
+Classification is case-insensitive on the message and **defaults to `gate`** for
+an unrecognized message, so a new notification kind surfaces (fail loud) rather
+than being silently dropped.
+
+**How a block clears (no resolution event).** The feed is append-only and
+chronological, so `just golems` takes only each golem's **most-recent** line as
+its current state. When a golem resumes after a gate, its next between-turn
+`idle` becomes the latest line and supersedes the earlier `gate` — the golem
+drops off the BLOCKED list with no explicit "unblocked" event. A `gate` left
+behind by a golem that has since exited is additionally dropped once it ages out
+of the freshness window (`GOLEM_BLOCK_TTL` seconds, default `3600`).
 
 ### Dispatch Decision Sub-Tree
 
