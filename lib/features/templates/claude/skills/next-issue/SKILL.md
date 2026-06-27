@@ -139,13 +139,15 @@ Proceed with Phase 0 as normal regardless of mode.
 
 ## Phase 0 — Resume Check
 
-1. **Enter plan mode** (call `EnterPlanMode` tool) — in **fully-autonomous**
-   mode SKIP this step (no `EnterPlanMode`/`ExitPlanMode`). A **plan-gated**
-   autonomous run still enters plan mode here and pauses at plan approval in
-   Phase 2; the effort/severity labels that decide which path applies are not
-   known until Phase 1, so if you must call `EnterPlanMode` before then, do —
-   it is harmless to enter plan mode and later skip `ExitPlanMode` on the
-   fully-autonomous path. See `## Autonomous Mode`.
+1. **Enter plan mode** (call `EnterPlanMode` tool). In autonomous mode, call it
+   here **unconditionally** — the effort/severity labels that decide whether
+   this run is fully-autonomous (skip plan) or plan-gated (keep plan) are not
+   fetched until Phase 1, so the skip decision cannot be made yet. Entering plan
+   mode now is harmless either way: a **plan-gated** run pauses at `ExitPlanMode`
+   in Phase 2, while a **fully-autonomous** run simply never calls `ExitPlanMode`
+   and proceeds via the autonomous planning path in Phase 2 instead. The
+   plan-skip decision is applied in Phase 2 (where `plan_gated` is known), not
+   here. See `## Autonomous Mode`.
 
 1. **Legacy migration** — run in order:
 
@@ -296,7 +298,6 @@ Proceed with Phase 0 as normal regardless of mode.
      "platform": "{platform}",
      "autonomous": {true|false},
      "plan_gated": {true|false},
-     "plan_comment_url": "{url}",
      "checkpoint": {
        "completed_phase": "plan",
        "key_decisions": ["{non-obvious choice 1}", "{non-obvious choice 2}"],
@@ -313,9 +314,11 @@ Proceed with Phase 0 as normal regardless of mode.
    runs**, which are not autonomous (see the conditional final step below). Set
    `"plan_gated"` per the rule in Phase 1 / `## Autonomous Mode` (an autonomous
    medium+/critical/no-effort-label run, or any autonomous run with
-   `--plan-gate`, unless `--force-auto`). `"plan_comment_url"` is written only on
-   the **fully-autonomous** path (see the autonomous planning path below); a
-   plan-gated run uses `EnterPlanMode`/`ExitPlanMode` instead and omits it.
+   `--plan-gate`, unless `--force-auto`). The template above deliberately omits
+   `"plan_comment_url"`: add that field **only** on the **fully-autonomous**
+   path (see the autonomous planning path below), where the plan is posted as an
+   issue comment. A plan-gated run uses `EnterPlanMode`/`ExitPlanMode` instead
+   and must NOT add it; a non-autonomous run never adds it either.
 
 1. **Autonomous planning path** — branches on the plan gate (`"plan_gated"`
    from Phase 1 / `## Autonomous Mode`):
@@ -346,9 +349,12 @@ Proceed with Phase 0 as normal regardless of mode.
      Posting a plan issue comment is optional here (the plan is already visible
      in the approval prompt); skip `"plan_comment_url"`.
 
-   **Then, once implementation and testing are complete, invoke the
-   `/next-issue-ship` skill in this same turn** (call the `Skill` tool with
-   `next-issue-ship`). Do NOT stop after implementation to *suggest* shipping,
+   **Then, once implementation and testing are complete — for a plan-gated run,
+   that means only after the `ExitPlanMode` approval below AND the subsequent
+   "Implement" step both finish — invoke the `/next-issue-ship`
+   skill in this same turn** (call the `Skill` tool with `next-issue-ship`). Do
+   NOT invoke ship before `ExitPlanMode` approval or before the work exists. Do
+   NOT stop after implementation to *suggest* shipping,
    and do NOT merely print a "next step: /next-issue-ship" line — actually
    invoke it. This is the whole point of `--auto`: a single
    `claude '/next-issue <N> --auto'` prompt must reach a pushed PR + labeled

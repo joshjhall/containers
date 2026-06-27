@@ -53,7 +53,7 @@
     },
     "plan_comment_url": {
       "type": "string",
-      "description": "URL of the issue comment where the autonomous plan was posted for traceability (autonomous mode only)."
+      "description": "URL of the issue comment where the fully-autonomous plan was posted for traceability. Written only on the fully-autonomous path (plan_gated:false); omitted on plan-gated autonomous runs and all non-autonomous runs."
     },
     "contexts": {
       "type": "array",
