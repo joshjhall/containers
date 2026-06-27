@@ -225,6 +225,104 @@ test_cleanup_nonexistent_items() {
 }
 
 # ============================================================================
+# Build-failure annotation tests (#583)
+#
+# cleanup_on_interrupt is the build-aborting chokepoint: on a non-zero exit
+# with an active feature it emits a greppable sentinel and, under CI, a GitHub
+# ::error annotation naming the feature + command. These tests drive that block
+# by seeding the feature-logging globals and forcing a non-zero $? before the
+# trap runs (`false` sets $? for the synthesized "$?" capture).
+# ============================================================================
+
+# Helper: run cleanup_on_interrupt with seeded failure context.
+#   $1 = GITHUB_ACTIONS value ("true" or empty)
+#   $2 = exit status to simulate (the value of $? when the trap fires)
+_run_failure_trap() {
+    local gha="$1" status="$2"
+    bash -c '
+        log_warning() { :; }
+        log_message() { :; }
+        exit() { return "${1:-0}"; }
+        export GITHUB_ACTIONS="'"$gha"'"
+        export CURRENT_FEATURE="Demo Feature"
+        export COMMAND_COUNT=3
+        export LAST_COMMAND_DESC="Installing widget"
+        export LAST_COMMAND_TEXT="apt-get install widget"
+        export BUILD_LOG_DIR="'"$TEST_TEMP_DIR"'"
+        source "'"$_CLEANUP_FUNC_FILE"'"
+        ( exit '"$status"' )   # set $? for the trap to capture
+        cleanup_on_interrupt
+    ' 2>&1
+}
+
+# Test: non-zero exit with active feature emits the greppable sentinel
+test_failure_emits_sentinel() {
+    local output
+    output=$(_run_failure_trap "" 1)
+    assert_contains "$output" ">>> BUILD FAILURE:" "Sentinel emitted on failure"
+    assert_contains "$output" "feature='Demo Feature'" "Sentinel names the feature"
+    assert_contains "$output" "command=#3" "Sentinel includes command number"
+    assert_contains "$output" "desc='Installing widget'" "Sentinel includes description"
+    assert_contains "$output" "cmd='apt-get install widget'" "Sentinel includes command text"
+    assert_contains "$output" "exit=1" "Sentinel includes exit code"
+}
+
+# Test: sentinel is persisted to build-failure.log
+test_failure_writes_log_file() {
+    _run_failure_trap "" 1 >/dev/null
+    if [ -f "$TEST_TEMP_DIR/build-failure.log" ]; then
+        assert_contains "$(command cat "$TEST_TEMP_DIR/build-failure.log")" \
+            ">>> BUILD FAILURE:" "build-failure.log records the sentinel"
+    else
+        assert_true false "build-failure.log should have been written"
+    fi
+}
+
+# Test: under GITHUB_ACTIONS a ::error annotation is emitted
+test_failure_emits_github_error_under_ci() {
+    local output
+    output=$(_run_failure_trap "true" 1)
+    assert_contains "$output" "::error title=Build failed in Demo Feature::" \
+        "::error annotation emitted under CI"
+    assert_contains "$output" "COMMAND #3 'Installing widget' failed (exit 1)" \
+        "::error names command + exit code"
+    assert_contains "$output" "::endgroup::" "Open log group is closed before the error"
+}
+
+# Test: outside CI the sentinel appears but no ::error annotation
+test_failure_no_github_error_outside_ci() {
+    local output
+    output=$(_run_failure_trap "" 1)
+    assert_contains "$output" ">>> BUILD FAILURE:" "Sentinel still emitted outside CI"
+    assert_not_contains "$output" "::error" "No ::error annotation outside CI"
+}
+
+# Test: a clean (exit 0) interrupt emits no failure annotation
+test_no_failure_on_clean_exit() {
+    local output
+    output=$(_run_failure_trap "true" 0)
+    assert_not_contains "$output" ">>> BUILD FAILURE:" "No sentinel on clean exit"
+    assert_not_contains "$output" "::error" "No ::error on clean exit"
+}
+
+# Test: a failure with no active feature emits nothing (interrupt between features)
+test_no_failure_without_active_feature() {
+    local output
+    output=$(bash -c '
+        log_warning() { :; }
+        log_message() { :; }
+        exit() { return "${1:-0}"; }
+        export GITHUB_ACTIONS="true"
+        export CURRENT_FEATURE=""
+        source "'"$_CLEANUP_FUNC_FILE"'"
+        ( exit 1 )
+        cleanup_on_interrupt
+    ' 2>&1)
+    assert_not_contains "$output" ">>> BUILD FAILURE:" "No sentinel without an active feature"
+    assert_not_contains "$output" "::error" "No ::error without an active feature"
+}
+
+# ============================================================================
 # Guard tests
 # ============================================================================
 
@@ -273,6 +371,14 @@ run_test_with_setup test_cleanup_lifo_ordering "cleanup_on_interrupt LIFO orderi
 run_test_with_setup test_cleanup_empty_array "cleanup_on_interrupt with empty array — no crash"
 run_test_with_setup test_cleanup_removes_files_and_dirs "cleanup_on_interrupt removes files and directories"
 run_test_with_setup test_cleanup_nonexistent_items "cleanup_on_interrupt skips non-existent items"
+
+# Build-failure annotation (#583)
+run_test_with_setup test_failure_emits_sentinel "Failure emits greppable sentinel"
+run_test_with_setup test_failure_writes_log_file "Failure sentinel persisted to build-failure.log"
+run_test_with_setup test_failure_emits_github_error_under_ci "Failure emits ::error under CI"
+run_test_with_setup test_failure_no_github_error_outside_ci "No ::error outside CI"
+run_test_with_setup test_no_failure_on_clean_exit "No failure annotation on clean exit"
+run_test_with_setup test_no_failure_without_active_feature "No failure annotation without active feature"
 
 # Guard
 run_test_with_setup test_multiple_sourcing_guard "Guard prevents multiple sourcing"

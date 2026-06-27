@@ -250,6 +250,65 @@ test_log_directory_structure() {
     assert_equals "$BUILD_LOG_DIR" "$log_dir" "Log files in correct directory"
 }
 
+# Test: GitHub Actions log grouping (#583)
+# Under GITHUB_ACTIONS, log_feature_start/end wrap the install in a
+# ::group::/::endgroup:: pair so the web log collapses per feature.
+test_github_group_emitted_under_ci() {
+    # Capture stdout via files (not $(...)) so the lifecycle globals set by
+    # log_feature_start survive into log_feature_end in this same shell.
+    local start_out end_out
+    export GITHUB_ACTIONS=true
+    log_feature_start "Demo" "1.2.3" >"$BUILD_LOG_DIR/_start.out"
+    log_feature_end >"$BUILD_LOG_DIR/_end.out"
+    unset GITHUB_ACTIONS
+    start_out=$(command cat "$BUILD_LOG_DIR/_start.out")
+    end_out=$(command cat "$BUILD_LOG_DIR/_end.out")
+
+    assert_contains "$start_out" "::group::Install Demo (1.2.3)" \
+        "log_feature_start opens a GHA group naming the feature + version"
+    assert_contains "$end_out" "::endgroup::" "log_feature_end closes the GHA group"
+}
+
+# Test: ::group:: format for a feature with no version (the version-absent branch)
+test_github_group_emitted_without_version() {
+    local start_out
+    export GITHUB_ACTIONS=true
+    log_feature_start "Demo" >"$BUILD_LOG_DIR/_start.out"
+    log_feature_end >/dev/null
+    unset GITHUB_ACTIONS
+    start_out=$(command cat "$BUILD_LOG_DIR/_start.out")
+
+    assert_contains "$start_out" "::group::Install Demo" \
+        "Group names the feature when no version is given"
+    assert_not_contains "$start_out" "::group::Install Demo (" \
+        "No empty version parenthetical when version is absent"
+}
+
+# Test: no grouping markers when not running under GitHub Actions
+test_no_github_group_outside_ci() {
+    local start_out end_out
+    export GITHUB_ACTIONS=""
+    log_feature_start "Demo" >"$BUILD_LOG_DIR/_start.out"
+    log_feature_end >"$BUILD_LOG_DIR/_end.out"
+    unset GITHUB_ACTIONS
+    start_out=$(command cat "$BUILD_LOG_DIR/_start.out")
+    end_out=$(command cat "$BUILD_LOG_DIR/_end.out")
+
+    assert_not_contains "$start_out" "::group::" "No GHA group opened outside CI"
+    assert_not_contains "$end_out" "::endgroup::" "No GHA endgroup outside CI"
+}
+
+# Test: log_command records the last command for the failure annotation (#583)
+test_log_command_records_last_command() {
+    log_feature_start "Test Feature"
+    log_command "Installing widget" echo "ok" >/dev/null 2>&1
+
+    assert_equals "Installing widget" "$LAST_COMMAND_DESC" \
+        "LAST_COMMAND_DESC captures the command description"
+    assert_contains "$LAST_COMMAND_TEXT" "echo" \
+        "LAST_COMMAND_TEXT captures the command text"
+}
+
 # Test: check_build_logs function
 test_check_build_logs_function() {
     # Create a mock check-build-logs script path
@@ -284,6 +343,10 @@ run_test_with_setup test_log_warning "log_warning logs warnings correctly"
 run_test_with_setup test_master_summary "Master summary file is maintained"
 run_test_with_setup test_duration_calculation "Duration is calculated and logged"
 run_test_with_setup test_log_directory_structure "Log directory structure is correct"
+run_test_with_setup test_github_group_emitted_under_ci "GitHub Actions log group emitted under CI"
+run_test_with_setup test_github_group_emitted_without_version "GitHub Actions log group without version"
+run_test_with_setup test_no_github_group_outside_ci "No GitHub Actions log group outside CI"
+run_test_with_setup test_log_command_records_last_command "log_command records last command for failure annotation"
 run_test_with_setup test_check_build_logs_function "Build logs check function reference"
 
 # Generate test report

@@ -87,6 +87,52 @@ Default `BUILD_LOG_DIR` is `/var/log/container-build`.
 | `BUILD_LOG_DIR`        | `/var/log/container-build` | Base directory for all logs. JSON logs are written to `$BUILD_LOG_DIR/json/`. |
 | `BUILD_CORRELATION_ID` | (auto-generated)           | Override to use a custom correlation ID.                                      |
 
+## GitHub Actions Build Diagnostics
+
+Independently of JSON logging, the build harness emits CI-aware diagnostics so a
+failed feature build is diagnosable from the GitHub UI without scrolling the raw
+log (issue #583). These are gated on `GITHUB_ACTIONS=true` and are no-ops
+locally.
+
+### Per-feature log groups
+
+`log_feature_start` opens `::group::Install <feature>` and `log_feature_end`
+closes it with `::endgroup::`, so the web log view collapses/expands each feature
+install independently.
+
+### Failure sentinel and annotation
+
+When a `log_command` aborts the build (a non-zero command under `set -e`), the
+`cleanup_on_interrupt` trap in `lib/base/cleanup-handler.sh` fires with the
+build-aborting exit code and emits, naming the **feature** and the **exact
+command** that failed:
+
+- A greppable **sentinel** line on stderr, always (even outside CI):
+
+  ```text
+  >>> BUILD FAILURE: feature='Java Development' command=#7 desc='Installing jdtls' cmd='curl -fsSL …' exit=1
+  ```
+
+- The same line appended to `$BUILD_LOG_DIR/build-failure.log` (surfaced first
+  by `check-build-logs.sh`).
+- Under CI only, a GitHub annotation: `::error title=Build failed in
+  <feature>::COMMAND #N '<desc>' failed (exit <code>): <cmd>`.
+
+The trap only fires for a non-zero exit while a feature is the active context, so
+a clean install or an interrupt between features is never misreported.
+`log_command … || log_warning` call sites are non-fatal and do not trigger it.
+
+> **BuildKit caveat.** GitHub only parses workflow commands (`::error`,
+> `::group`) that appear at the **start** of a runner step's stdout line. Output
+> emitted *inside* a `docker build` RUN is prefixed by BuildKit (e.g.
+> `#12 0.234 …`), so an in-container `::error` will **not** render in the
+> Annotations panel — it stays a plain log line. That is why the **sentinel** is
+> the primary signal (grep `>>> BUILD FAILURE`), and the workflows additionally
+> surface the failing variant/feature from a runner step into the job summary
+> (`ci.yml` / `test-pr.yml`, `Surface build failure`). When the v5 `luggage`
+> build engine and `igor` runtime emit output directly from a runner step, the
+> same `::error` lines will render natively in the Annotations panel.
+
 ## Secret Scrubbing
 
 All log messages are passed through `scrub_secrets()` (when available) before

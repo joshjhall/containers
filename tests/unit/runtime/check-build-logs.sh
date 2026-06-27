@@ -274,6 +274,28 @@ EOF
     fi
 }
 
+# Test: build-failure.log banner is shown when the file exists (#583)
+# The cleanup-handler trap writes build-failure.log; check-build-logs.sh must
+# surface it first. This invokes the real script (most tests here mock).
+test_build_failure_banner_shown() {
+    printf '%s\n' ">>> BUILD FAILURE: feature='Demo' command=#2 desc='install' cmd='false' exit=1" \
+        >"$BUILD_LOG_DIR/build-failure.log"
+
+    local output
+    output=$(BUILD_LOG_DIR="$BUILD_LOG_DIR" bash "$PROJECT_ROOT/lib/runtime/check-build-logs.sh" --list 2>&1)
+
+    assert_contains "$output" "=== Build Failure ===" "Banner shown when build-failure.log exists"
+    assert_contains "$output" ">>> BUILD FAILURE:" "Recorded sentinel is printed"
+}
+
+# Test: no banner when build-failure.log is absent (the success case)
+test_build_failure_banner_absent() {
+    local output
+    output=$(BUILD_LOG_DIR="$BUILD_LOG_DIR" bash "$PROJECT_ROOT/lib/runtime/check-build-logs.sh" --list 2>&1)
+
+    assert_not_contains "$output" "=== Build Failure ===" "No banner without build-failure.log"
+}
+
 # Run tests with setup/teardown
 run_test_with_setup() {
     local test_function="$1"
@@ -295,6 +317,8 @@ run_test_with_setup test_log_timestamps "Log timestamps are formatted correctly"
 run_test_with_setup test_error_detection "Error detection in logs works"
 run_test_with_setup test_log_rotation "Log rotation is handled properly"
 run_test_with_setup test_script_usage "Script usage information is complete"
+run_test_with_setup test_build_failure_banner_shown "Build-failure banner shown when log present"
+run_test_with_setup test_build_failure_banner_absent "No build-failure banner when log absent"
 
 # Generate test report
 generate_report
