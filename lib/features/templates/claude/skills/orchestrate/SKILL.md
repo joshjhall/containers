@@ -33,14 +33,16 @@ Environment Variables).
 - `merge-protocol.md` — cross-PR rebase conflict classification + test-runner
   detection + integration-train sequencing/CI-subset policy (live); merge/sync
   sections marked opt-in legacy
-- `workflow.js` — the monitor-poll + cross-PR-rebase harness (invoked via the
-  Workflow tool; never edited at runtime)
+- `workflow.js` — the monitor-poll + cross-PR-rebase + train-order + pool-refill
+  harness (invoked via the Workflow tool; never edited at runtime)
 
 **Invocation patterns:**
 
 | Invocation | Phase |
 | ---------- | ----- |
 | `/orchestrate dispatch <N…>` or `dispatch <count>` | Phase D — Dispatch golems |
+| `/orchestrate pool <N>` | Phase P — Worker pool (set size, refill from backlog) |
+| `/orchestrate drain` / `pause` / `resume` | Phase P — Pool refill controls |
 | `/orchestrate` or `/orchestrate status` | Phase M — Monitor (one sweep) |
 | `/orchestrate monitor` / `watch` | Phase M — Monitor loop |
 | `/orchestrate rebase` or `rebase <N>` | Phase R — Cross-PR rebase |
@@ -122,6 +124,98 @@ dispatch is sequential and cheap — **not** workflow-driven.
 
 1. **Report** the dispatch table: golem → issue → branch → mode → access
    command (for container golems, the `docker exec … tmux attach` line).
+
+## Phase P — Worker Pool
+
+Phase D dispatches a fixed **set** of golems once. Phase P turns that set into a
+fixed-size **pool**: maintain up to **N** concurrent golems, and whenever a slot
+frees (a golem's PR merges and its worktree is pruned), automatically pull the
+next non-colliding issue from the backlog into a **fresh** worktree — until the
+backlog is empty and all slots are idle. The key property is a **bounded
+worktree footprint** (≤ N worktrees → bounded disk / container load) with
+continuous throughput, plus a clean **drain** off-switch so the operator can
+reset orchestrator context or restart services without losing in-flight work.
+
+The pool pairs with Phase T: the **pool feeds work in**, the **train lands it**.
+
+**Pool state** lives in `.worktrees/.status/pool.json` (schema:
+`schemas/pool-status.schema.json`). It is **authoritative for operator policy**
+— the pool `size` and the `accepting` state — and a display cache for everything
+else (PR + issue-label state stay authoritative for golem liveness):
+
+```json
+{ "size": 3, "accepting": "accepting", "slots": [ … ], "backlog_depth": 7 }
+```
+
+`accepting` is a three-state policy: `accepting` (refill a free slot from the
+backlog), `draining` (stop refills, let in-flight golems finish to idle — a
+one-way wind-down), `paused` (freeze refills without draining; resumable).
+
+### Refill loop
+
+The pool advances **on each Phase M monitor sweep** (no background daemon — the
+existing cadence is the clock):
+
+1. **Free slots.** The Phase M sweep already detects merged PRs; for each merged
+   golem, prune its worktree (`just worktree-rm {N}`, which also deletes the
+   branch). That frees a slot.
+
+1. **Refill decision.** If `pool.accepting == "accepting"` **and** a slot is
+   free **and** the backlog is non-empty, compute the refill plan. Gather:
+
+   - **in-flight** golems with their changed files (`gh pr view <N> --json files`
+     for golems with a PR; the issue's `## Affected Files` section otherwise),
+   - the **backlog** — the next issues in `next-issue` priority order
+     (`state-format.md` § Priority Ordering, status-label-excluded), each with
+     its predicted files (issue `## Affected Files` + `component/*` labels).
+
+   Invoke the Workflow tool on `~/.claude/skills/orchestrate/workflow.js` with:
+
+   ```text
+   args: {
+     mode: "pool",
+     pool:     { size: <N>, accepting: "<state>" },
+     inflight: [{ issue, golem, branch, files: [<paths>] }, …],
+     backlog:  [{ issue, files: [<predicted paths>] }, …],
+   }
+   ```
+
+   The harness is **pure computation** — it never dispatches, merges, or pushes.
+   It returns `pool` = `{ free_slots, picks, held, held_slots, excess }`:
+
+   - **`picks`** — the issues to dispatch into free slots, in priority order,
+     each predicted to collide with **neither** an in-flight golem **nor** an
+     earlier pick (keeps #602's merge train conflict-light).
+   - **`held`** — candidates skipped this sweep on a predicted file overlap
+     (with the colliding reason). A slot is held (left idle) rather than filled
+     with a guaranteed-colliding pick when only colliding candidates remain.
+   - **`excess`** — golems beyond `size` after a `pool <N>` shrink. **Report
+     them to drain — never kill a golem.**
+
+1. **Dispatch each pick** exactly as Phase D: `just worktree-new {N}` then launch
+   the autonomous pipeline (Phase D step 3) in a fresh worktree golem. Update
+   `pool.json` `slots` / `backlog_depth`.
+
+1. **Repeat** until the backlog is empty and every slot is idle.
+
+### Controls (mid-flight Surface commands)
+
+These flip `pool.json` policy; the next sweep's refill honors it. They are also
+exposed as `/orchestrate` invocations (see the table above):
+
+- **`pool <N>`** — set the pool size live. **Grow** → free slots appear and the
+  next sweep fills them. **Shrink** → the now-`excess` golems are left to
+  **drain** (finish their PRs), never killed; the footprint settles at the new N.
+- **`drain`** — set `accepting = "draining"`. Refills stop; in-flight golems run
+  to completion and the pool idles. Use before a context reset / service restart
+  / end of day. One-way intent (re-enable with `resume`).
+- **`pause`** — set `accepting = "paused"`. Freeze refills without draining
+  (slots are held open, not wound down).
+- **`resume`** — set `accepting = "accepting"`. Re-enable refills; the next sweep
+  fills any free slot.
+
+`just golems` surfaces the pool line — size, slots in use, backlog depth, and
+the `accepting` state — above the golem table.
 
 ## Phase M — Monitor
 
@@ -304,12 +398,12 @@ authorization** layered over the existing pieces: the order is computed by
    set (see `next-issue-ship` § Environment Variables). The train's single batch
    approval does **not** substitute for that per-PR auto-merge consent.
 
-1. **Honor stop/drain.** Between iterations, check the queue stop/drain signal
-   (companion issue #603). If a stop is requested, finish the in-flight
-   merge/rebase, then halt the train cleanly (leaving remaining PRs open and
-   labeled) rather than starting the next wave. While #603 is unimplemented this
-   check is a no-op — the train references the signal as its halt boundary but
-   does not depend on it existing.
+1. **Honor stop/drain.** Between iterations, check the pool stop/drain signal —
+   `pool.json` `accepting` (Phase P). If it is `draining` (or `paused`), finish
+   the in-flight merge/rebase, then halt the train cleanly (leaving remaining PRs
+   open and labeled) rather than starting the next wave. When `pool.json` is
+   absent (the pool was never engaged), there is no drain signal and the train
+   runs every wave to completion — the check defaults to "keep going."
 
 1. **Report** the train result: merged PRs (with order/wave), rebases
    auto-resolved (with strategy), and any escalations surfaced **verbatim** for
@@ -331,6 +425,10 @@ Between monitor sweeps, the live session accepts:
 - **`rebase #N`** — run Phase R scoped to PR #N.
 - **`train [#N…]`** — run Phase T to land a batch of green, approved PRs
   (merge → rebase → merge) with one up-front approval.
+- **`pool <N>`** — set the worker-pool size (Phase P). Grow fills free slots on
+  the next sweep; shrink lets the excess golems drain.
+- **`drain`** — stop pool refills; let in-flight golems finish to idle (Phase P).
+- **`pause`** / **`resume`** — freeze / re-enable pool refills without draining.
 - **`teardown <agent>`** — Phase 5 Teardown for a finished golem.
 - **`status`** — re-run Phase M.
 
@@ -447,6 +545,8 @@ loop). This phase applies only after a local merge.
 - Rebasing later PRs after an earlier PR merges (`/orchestrate rebase`)
 - Landing a batch of green, approved PRs end-to-end with one approval
   (`/orchestrate train`)
+- Running a fixed-size worker pool that daisy-chains a backlog and drains on
+  command (`/orchestrate pool <N>`, `drain`/`pause`/`resume`)
 - Selecting an execution mode for a new task (`/orchestrate mode`)
 - Spawning / tearing down container golems (`/orchestrate spawn`, `teardown`)
 - Tightly-coupled worktree work with no PRs (opt-in local-merge)

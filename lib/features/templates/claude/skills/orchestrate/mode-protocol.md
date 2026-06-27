@@ -240,6 +240,44 @@ golem's branch into its own — humans merge PRs (or per-golem auto-merge, which
 for an autonomous golem requires both `AUTOMERGE=1` and `AUTOMERGE_AUTONOMOUS=1`).
 See `SKILL.md` Phases D / M / R.
 
+### Worker Pool (fixed-size, self-refilling)
+
+Phase D dispatches a fixed **set** of golems once and the batch runs to
+completion. The **worker pool** (SKILL.md Phase P) keeps that footprint **fixed
+at N** instead: maintain up to N concurrent golems, and as each one's PR merges
+and its worktree is pruned, refill the freed slot from the backlog — a bounded
+worktree footprint (bounded disk / container load) with continuous throughput.
+The pool feeds work in; the integration train (Phase T) lands it.
+
+The pool changes **when and which** golems launch, not **how** — every golem is
+still a Mode 2 / Mode 3 process with the same autonomous payload and PR exit; the
+hard constraints above are unchanged.
+
+**Refill policy** lives in `.worktrees/.status/pool.json` (`size` +
+`accepting`), authoritative for operator policy:
+
+| `accepting`  | Refill behavior                                                        | Set by    |
+| ------------ | --------------------------------------------------------------------- | --------- |
+| `accepting`  | A free slot pulls the next non-colliding backlog issue into a fresh worktree. | `resume`  |
+| `draining`   | Stop refills; in-flight golems finish to idle. One-way wind-down (context reset / restart / EOD). | `drain`   |
+| `paused`     | Freeze refills without draining — slots held open, resumable.          | `pause`   |
+
+`pool <N>` resizes live: grow fills free slots on the next sweep; shrink leaves
+the excess golems to **drain** (never killed).
+
+**Collision-aware refill.** Before claiming a backlog issue for a free slot, the
+pool predicts its file overlap with in-flight golems (the issue's
+`## Affected Files` section + `component/*` labels vs each live golem's changed
+files) and prefers a **non-colliding** issue, holding the slot if only colliding
+candidates remain — keeping the merge train (#602) conflict-light. The scheduler
+is the **pure-computation `pool` mode of `workflow.js`** (mirroring `train`
+mode): it returns the collision-free `picks` / `held` / `excess`; the live
+orchestrator executes the `just worktree-new` + Phase D dispatch under the
+existing `ask` gates. The harness never launches a golem.
+
+The pool advances on each Phase M monitor sweep — there is **no background
+daemon**; the existing monitor cadence is the clock.
+
 ---
 
 ## Decision Tree

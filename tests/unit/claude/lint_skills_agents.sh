@@ -909,6 +909,110 @@ test_orchestrate_union_strategy_invariants() {
         "rebase-agent/workflow.js CLASSIFY_SCHEMA enum spreads STRATEGIES (union reaches the schema)"
 }
 
+# Test: cross-file invariants of the orchestrate worker-pool contract (#603).
+# The fixed-size pool spans five surfaces — a JSON schema, the workflow.js
+# scheduler mode, the SKILL.md phase + Surface controls, the mode-protocol doc,
+# the justfile golems header, and the next-issue collision heuristic. A silent
+# drift in any one (a renamed accepting state, a dropped Surface control, the
+# justfile re-swallowing pool.json into golem rows) would break the pool without
+# failing any other test. All static greps + jq JSON-validity — no Docker.
+test_orchestrate_pool_invariants() {
+    local orch_skill="$SKILLS_DIR/orchestrate/SKILL.md"
+    local mode_proto="$SKILLS_DIR/orchestrate/mode-protocol.md"
+    local orch_wf="$SKILLS_DIR/orchestrate/workflow.js"
+    local pool_schema="$SKILLS_DIR/orchestrate/schemas/pool-status.schema.json"
+    local ni_skill="$SKILLS_DIR/next-issue/SKILL.md"
+    local ni_state="$SKILLS_DIR/next-issue/state-format.md"
+    local justfile="$CONTAINERS_DIR/justfile"
+
+    # Invariant 0: the contract files exist.
+    assert_file_exists "$orch_skill" "orchestrate/SKILL.md exists"
+    assert_file_exists "$mode_proto" "orchestrate/mode-protocol.md exists"
+    assert_file_exists "$orch_wf" "orchestrate/workflow.js exists"
+    assert_file_exists "$pool_schema" "orchestrate/schemas/pool-status.schema.json exists"
+    assert_file_exists "$ni_state" "next-issue/state-format.md exists"
+    assert_file_exists "$justfile" "justfile exists"
+
+    # Invariant 1: the pool schema is valid JSON and declares the size +
+    # three-state accepting enum the scheduler/controls depend on. A renamed
+    # state here would silently desync the Surface controls below.
+    if command -v jq >/dev/null 2>&1; then
+        assert_true "jq empty '$pool_schema' 2>/dev/null" \
+            "pool-status.schema.json is valid JSON"
+        assert_true "jq -e '.properties.size.type == \"integer\"' '$pool_schema' >/dev/null 2>&1" \
+            "pool-status.schema.json declares an integer size"
+        assert_true "jq -e '.properties.accepting.enum == [\"accepting\",\"draining\",\"paused\"]' '$pool_schema' >/dev/null 2>&1" \
+            "pool-status.schema.json accepting enum is accepting|draining|paused"
+        assert_true "jq -e '.required | index(\"size\") and index(\"accepting\")' '$pool_schema' >/dev/null 2>&1" \
+            "pool-status.schema.json requires size + accepting"
+    else
+        skip_test "jq not available — cannot validate pool-status.schema.json"
+    fi
+
+    # Invariant 2: workflow.js carries the pool scheduler mode. The MODE guard
+    # must accept 'pool', and the Pool branch must key on it. A drift here makes
+    # the orchestrator's mode:'pool' invocation fall through to a plain poll.
+    assert_true "command grep -qF \"args.mode === 'pool'\" '$orch_wf'" \
+        "orchestrate/workflow.js MODE guard accepts 'pool'"
+    assert_true "command grep -qF \"MODE === 'pool'\" '$orch_wf'" \
+        "orchestrate/workflow.js has a pool-mode branch"
+    # The Pool phase title must be present in meta.phases (a literal — the
+    # workflow_meta sweep proves the whole meta stays a pure literal).
+    assert_true "command grep -qF \"title: 'Pool'\" '$orch_wf'" \
+        "orchestrate/workflow.js meta.phases includes the Pool phase"
+    # The scheduler is pure computation — it must NOT dispatch/merge/push. Guard
+    # the returned plan shape the live session consumes.
+    assert_true "command grep -qF 'picks' '$orch_wf'" \
+        "orchestrate/workflow.js pool mode returns picks"
+    assert_true "command grep -qF 'excess' '$orch_wf'" \
+        "orchestrate/workflow.js pool mode reports excess (drain, never kill)"
+
+    # Invariant 3: SKILL.md documents Phase P and ALL FOUR Surface controls. A
+    # dropped control would leave a documented command with no behavior.
+    assert_true "command grep -qiE 'Phase P|Worker Pool' '$orch_skill'" \
+        "orchestrate/SKILL.md documents the worker-pool phase"
+    for ctl in drain pause resume; do
+        assert_true "command grep -qiE '\\*\\*\`?$ctl' '$orch_skill'" \
+            "orchestrate/SKILL.md documents the '$ctl' pool control"
+    done
+    assert_true "command grep -qiE 'pool <N>|pool \`?<N>' '$orch_skill'" \
+        "orchestrate/SKILL.md documents the 'pool <N>' resize control"
+    # The three accepting states must all be named so the controls map to policy.
+    for st in accepting draining paused; do
+        assert_true "command grep -qF '$st' '$orch_skill'" \
+            "orchestrate/SKILL.md names the '$st' accepting state"
+    done
+
+    # Invariant 4: Phase T's stop/drain check is wired to pool.json (no longer a
+    # documented no-op). It must reference the accepting/draining signal.
+    assert_true "command grep -qiE 'pool.json|accepting' '$orch_skill'" \
+        "orchestrate/SKILL.md Phase T honor-drain reads the pool accepting signal"
+
+    # Invariant 5: mode-protocol.md documents the worker pool + the three states.
+    assert_true "command grep -qiE 'Worker Pool' '$mode_proto'" \
+        "mode-protocol.md documents the worker pool"
+    assert_true "command grep -qF 'draining' '$mode_proto'" \
+        "mode-protocol.md names the draining state"
+
+    # Invariant 6: the next-issue collision heuristic is documented and the pool
+    # scheduler is named as its consumer. state-format must carry the heuristic;
+    # SKILL.md must reference it from selection.
+    assert_true "command grep -qiE 'collision-aware|in-flight collision' '$ni_state'" \
+        "next-issue/state-format.md documents collision-aware selection"
+    assert_true "command grep -qF \"mode: \\\"pool\\\"\" '$ni_state'" \
+        "next-issue/state-format.md names workflow.js pool mode as the consumer"
+    assert_true "command grep -qiE 'collision|pool refill' '$ni_skill'" \
+        "next-issue/SKILL.md references the pool collision check from selection"
+
+    # Invariant 7: the justfile golems recipe excludes pool.json from the
+    # golem-row glob (else it renders as a bogus row) AND prints a pool header.
+    # Match the exclusion guard and the header literal.
+    assert_true "command grep -qF '[ \"\$f\" = \"\$pool\" ] && continue' '$justfile'" \
+        "justfile golems excludes pool.json from the golem-row glob"
+    assert_true "command grep -qF 'Pool: size=' '$justfile'" \
+        "justfile golems prints the pool header line"
+}
+
 # --- Run All Tests ---
 
 run_test test_agent_files_exist "Every agent has correctly named .md file"
@@ -936,6 +1040,7 @@ run_test test_next_issue_ship_invariants "next-issue --ship cross-file contract 
 run_test test_next_issue_auto_invariants "next-issue --auto chaining contract invariants hold"
 run_test test_next_issue_plan_gate_invariants "next-issue --auto plan-gate effort/severity invariants hold"
 run_test test_orchestrate_union_strategy_invariants "orchestrate union-strategy cross-file invariants hold"
+run_test test_orchestrate_pool_invariants "orchestrate worker-pool cross-file invariants hold"
 
 # Generate test report
 generate_report

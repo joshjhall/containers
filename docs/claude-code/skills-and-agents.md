@@ -31,7 +31,7 @@ startup via `claude-setup`. Project-level `.claude/` configs merge with these
 | `codebase-audit`          | Periodic codebase sweep: tech debt, security, test gaps, architecture, docs         |
 | `next-issue-ship`         | Ship completed issue work: pre-review gates, commit, PR/push, label, loop back      |
 | `memory-conventions`      | Two-tier memory conventions: long-term (committed) vs short-term (gitignored)       |
-| `orchestrate`             | Master orchestrator: dispatch PR-per-golem, monitor PR+label state, rebase; local-merge opt-in |
+| `orchestrate`             | Master orchestrator: dispatch PR-per-golem, fixed-size self-refilling worker pool (drain/pause/resume), monitor PR+label state, rebase, integration train; local-merge opt-in |
 | `provision-agent`         | Provision headless agent containers from devcontainer config with tmux sessions     |
 | `rebase-lockfile`         | Resolve lock file conflicts by regenerating (package-lock, Cargo.lock, etc.)        |
 | `rebase-generated`        | Resolve generated file conflicts by re-running generators                           |
