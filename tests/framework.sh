@@ -111,6 +111,19 @@ init_test_framework() {
     TESTS_SKIPPED=0
     TEST_STATUS=""
 
+    # Clear inherited git environment so fixture-building tests are hermetic.
+    #
+    # git exports GIT_DIR / GIT_INDEX_FILE / GIT_WORK_TREE / GIT_COMMON_DIR /
+    # GIT_PREFIX into the environment of any hook it spawns (e.g. lefthook
+    # pre-push). A test that builds a throwaway repo with `git init` /
+    # `git worktree add` in a mktemp dir would otherwise have those nested git
+    # commands hijacked back at the REAL repository — fixtures silently fail to
+    # build, assertions diverge from the standalone run, and stray commits can
+    # land on the live branch. Unsetting them once, centrally, immunizes every
+    # current and future fixture test regardless of how the suite was invoked
+    # (standalone, run_unit_tests.sh, or a git hook). See issue #599 / #587.
+    unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE GIT_COMMON_DIR GIT_PREFIX
+
     # Create directories
     mkdir -p "$RESULTS_DIR"
     mkdir -p "$FIXTURES_DIR"
