@@ -101,8 +101,18 @@ mod tests {
 
     #[cfg(unix)]
     fn write_shim(dir: &Path, name: &str, version_line: &str) {
+        write_shim_to(dir, name, version_line, false);
+    }
+
+    /// Write an executable shim printing `version_line` to stdout (or stderr
+    /// when `to_stderr`). The line is single-quote-escaped so version strings
+    /// containing an apostrophe can't break the surrounding shell quoting.
+    #[cfg(unix)]
+    fn write_shim_to(dir: &Path, name: &str, version_line: &str, to_stderr: bool) {
         let path = dir.join(name);
-        fs::write(&path, format!("#!/bin/sh\necho '{version_line}'\n")).unwrap();
+        let escaped = version_line.replace('\'', "'\\''");
+        let redirect = if to_stderr { " >&2" } else { "" };
+        fs::write(&path, format!("#!/bin/sh\necho '{escaped}'{redirect}\n")).unwrap();
         let mut perms = fs::metadata(&path).unwrap().permissions();
         perms.set_mode(0o755);
         fs::set_permissions(&path, perms).unwrap();
@@ -121,6 +131,60 @@ mod tests {
         let dir = tempdir().unwrap();
         write_shim(dir.path(), "rustc", "rustc 1.95.0 (abcdef0)");
         assert!(already_installed("rustc", "1.95.0", dir.path()));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    #[serial_test::serial]
+    fn stderr_version_returns_true() {
+        // Some tools print `--version` to stderr; `already_installed` must
+        // match the version there too, not only on stdout.
+        let dir = tempdir().unwrap();
+        write_shim_to(dir.path(), "rustc", "rustc 1.95.0 (abcdef0)", true);
+        assert!(already_installed("rustc", "1.95.0", dir.path()));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    #[serial_test::serial]
+    fn version_with_apostrophe_does_not_break_shim() {
+        // Guards the shim helper's quote-escaping: a version literal with an
+        // apostrophe must still be emitted verbatim and matched.
+        let dir = tempdir().unwrap();
+        write_shim(dir.path(), "rustc", "rustc 1.95.0 o'brien");
+        assert!(already_installed("rustc", "o'brien", dir.path()));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    #[serial_test::serial]
+    fn nonzero_exit_returns_false() {
+        // A binary that runs and even prints the matching version but exits
+        // non-zero can't confirm an install — the contract says return false.
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("rustc");
+        fs::write(&path, "#!/bin/sh\necho 'rustc 1.95.0'\nexit 1\n").unwrap();
+        let mut perms = fs::metadata(&path).unwrap().permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&path, perms).unwrap();
+        assert!(
+            !already_installed("rustc", "1.95.0", dir.path()),
+            "non-zero exit must return false even if the version appears in output",
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    #[serial_test::serial]
+    fn exec_error_returns_false() {
+        // The binary exists (passes the `.exists()` guard) but can't be
+        // exec'd — a launch error must resolve to "can't confirm → false".
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("rustc");
+        fs::write(&path, b"not executable").unwrap();
+        // Mode 000: present on disk but not executable.
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o000)).unwrap();
+        assert!(!already_installed("rustc", "1.95.0", dir.path()));
     }
 
     #[cfg(unix)]
