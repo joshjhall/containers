@@ -80,7 +80,7 @@ startup via `claude-setup`. Project-level `.claude/` configs merge with these
 | `skill-author`       | Writes and reviews skills following quality patterns (opus)                 |
 | `agent-author`       | Writes and reviews agents following quality patterns (opus)                 |
 | `checker`            | Unified checker for audit/review: discovers check-\* skills, pre-scan + LLM |
-| `rebase-agent`       | Automated conflict resolution for lockfiles, imports, versions, generated   |
+| `rebase-agent`       | Conflict resolution: lockfiles, imports, versions, generated, union edits   |
 | `ci-fixer`           | Diagnoses CI failures from logs and applies targeted fixes (sonnet)         |
 
 Five agents use `model: opus` because their output quality compounds
