@@ -70,15 +70,20 @@ dispatch is sequential and cheap — **not** workflow-driven.
 
    ```bash
    # Inside the golem's container tmux or worktree shell — launch INTERACTIVE
-   # (inherit the repo's `auto` permission mode; never headless `claude -p`,
+   # with `--permission-mode auto` passed EXPLICITLY (never headless `claude -p`,
    # never --dangerously-skip-permissions — see the golem-supervised-auto-mode
-   # memory / #570). Autonomous /next-issue invokes /next-issue-ship in-turn, so
-   # this single prompt reaches Branch + PR on its own. The `;`-chained second
-   # prompt is a resume backstop, NOT `&&`: it must run even if the first prompt
-   # exits non-zero before shipping (the very case it exists for). If the first
-   # already shipped (state file deleted), the second is a near no-op
-   # ("No in-progress issue found" → stop):
-   claude "/next-issue {N} --auto" ; claude "/next-issue-ship --auto"
+   # memory / #570). The explicit flag is required: a fresh worktree is untrusted,
+   # so Claude Code does NOT load its copied settings.local.json `defaultMode:
+   # auto` and would silently fall back to `default` and prompt-storm (#585).
+   # The harness `--permission-mode auto` is distinct from the `/next-issue`
+   # `--auto` skill flag (skip plan / run autonomously) — both are needed.
+   # Autonomous /next-issue invokes /next-issue-ship in-turn, so the first prompt
+   # reaches Branch + PR on its own. The `;`-chained second prompt is a resume
+   # backstop, NOT `&&`: it must run even if the first prompt exits non-zero
+   # before shipping (the very case it exists for). If the first already shipped
+   # (state file deleted), the second is a near no-op ("No in-progress issue
+   # found" → stop):
+   claude --permission-mode auto "/next-issue {N} --auto" ; claude --permission-mode auto "/next-issue-ship --auto"
    ```
 
    The pipeline runs unattended to a green, review-clean PR (or, per-golem,

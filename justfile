@@ -244,8 +244,12 @@ quarterly-review:
 #                                  .devcontainer/docker-compose.yml's
 #                                  `env_file: - ../.env`.
 #   .claude/settings.local.json  — permissions.defaultMode "auto" + the
-#                                  push/PR `ask` gates; without it a golem runs
-#                                  under the stricter default and prompt-storms.
+#                                  push/PR `ask` gates. The launch passes
+#                                  `--permission-mode auto` explicitly (a fresh
+#                                  worktree is untrusted, so `defaultMode` here
+#                                  is not loaded on its own — #585); this file
+#                                  still supplies the push/PR `ask` rules once
+#                                  trust is seeded.
 WORKTREE_LOCAL_FILES := ".env .claude/settings.local.json"
 
 # Creates .worktrees/issue-N on branch feature/issue-N from origin/main and
@@ -281,10 +285,19 @@ worktree-new N:
             echo "  skipped $f (not present in main checkout)"
         fi
     done
+    # Seed a workspace-trust entry for the new worktree path so the copied
+    # settings.local.json (defaultMode "auto" + push/PR `ask` gates) actually
+    # loads — Claude Code does not load project settings for an UNTRUSTED folder,
+    # and a non-interactive tmux launch can't show the trust dialog (#585).
+    # Complements the explicit `--permission-mode auto` in the launch hint below
+    # (which works even if this step is unavailable). Delegated to a tested
+    # helper (covered by tests/unit/bin/seed-worktree-trust.sh); best-effort,
+    # always exits 0 so a trust-seed failure never aborts worktree creation.
+    "$root/bin/seed-worktree-trust.sh" "$root/$wt"
     echo ""
     echo "Worktree ready: $wt (branch $br)"
     echo "Launch a golem there with:"
-    echo "  tmux new-session -d -s golem-{{ N }} -c \"$root/$wt\" \"claude '/next-issue {{ N }} --auto'\""
+    echo "  tmux new-session -d -s golem-{{ N }} -c \"$root/$wt\" \"claude --permission-mode auto '/next-issue {{ N }} --auto' ; claude --permission-mode auto '/next-issue-ship --auto'\""
 
 # Post-merge cleanup: remove the issue-N worktree and its feature/issue-N branch (clean no-op if absent).
 worktree-rm N:
