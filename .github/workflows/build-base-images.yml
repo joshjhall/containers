@@ -248,6 +248,27 @@ jobs:
           path: sbom-${{ steps.ref.outputs.image_name }}.json
           if-no-files-found: warn
 
+      # Close the freshness loop (#640): a rebuild to a new digest must
+      # regenerate evidence, but evidence-run.yml's triggers are path-scoped and
+      # a CVE-patch rebuild (new digest, identical Dockerfile) touches none of
+      # them. Dispatch evidence for the tools claiming this tuple. Best-effort,
+      # like the auto-patch dispatch — never fail the base-image build over it.
+      # The helper itself skips when the new digest already matches the newest
+      # passing evidence, and evidence-run re-resolves the digest via `docker
+      # inspect`, so it always tests the published artifact. GITHUB_TOKEN can't
+      # trigger another workflow, so reuse the auto-patch dispatch credential.
+      - name: Re-run evidence on new base-image digest
+        if: steps.gate.outputs.publish == 'true' && steps.build_push.outputs.digest != ''
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.AUTO_PATCH_TOKEN }}
+          TUPLE: ${{ matrix.distro }}-${{ matrix.distro_version }}-${{ matrix.arch }}
+          DIGEST: ${{ steps.build_push.outputs.digest }}
+        run: |
+          ./bin/dispatch-evidence-for-tuple.sh \
+            --tuple "$TUPLE" \
+            --digest "$DIGEST"
+
       - name: Write build summary
         if: always()
         env:

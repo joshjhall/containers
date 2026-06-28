@@ -111,8 +111,16 @@ exercise.
   long-lived checkout; the workflow clones the consumer fresh per run
   via `bin/ingest-evidence.sh`.
 - **Trust direction:** producer → consumer is write; consumer →
-  producer is none. The producer never reads consumer state for any
-  decision other than "does the target version file exist?".
+  producer is none. The producer reads consumer state for two
+  decisions only: "does the target version file exist?" (the
+  evidence-run / dispatch precondition) and, for the base-image
+  rebuild trigger, "is the newest passing `tested[]` digest for this
+  cell already the one we just built?" (see
+  [Re-running evidence on a rebuilt base image](#re-running-evidence-on-a-rebuilt-base-image)).
+  Both are read-only existence/equality checks against published
+  catalog files — the producer never writes consumer state outside the
+  PR transport, and never lets consumer data influence what evidence a
+  run *records*.
 
 ## Auth model
 
@@ -190,6 +198,58 @@ schema (paired-absent), but in practice the producer always sets both
 — this branch exists only so the dedup key is well-defined for
 hand-crafted fixture rows.
 
+### Re-running evidence on a rebuilt base image
+
+The rationale above asserts that freshness rides on the digest — a
+patched base image is content-addressed to a new digest, yielding a new
+appended row. This section is the mechanism that makes that true.
+
+**Trigger.** [`build-base-images.yml`](../../.github/workflows/build-base-images.yml),
+after it publishes and signs a new image for a tuple, runs
+[`bin/dispatch-evidence-for-tuple.sh`](../../bin/dispatch-evidence-for-tuple.sh)
+for that tuple. The helper dispatches
+[`evidence-run.yml`](../../.github/workflows/evidence-run.yml) (via
+`workflow_dispatch`) for each luggage-managed tool that claims the tuple
+`supported` in its `support_matrix`. This is **build-time dispatch**,
+chosen over a scheduled reconciler because the build job already holds
+the freshly published digest; a cron job would have to re-discover it by
+polling the registry. The step is best-effort (`continue-on-error: true`)
+— a dispatch hiccup never fails the base-image build. It needs a
+cross-repo-capable token: `GITHUB_TOKEN` cannot trigger another
+workflow, so the step reuses `secrets.AUTO_PATCH_TOKEN` (the same
+credential the auto-patch post-merge dispatch uses).
+
+**Ordering.** Dispatch fires only on a publish (`steps.gate.outputs.publish == 'true'`),
+i.e. after the image is pushed and signed; PR builds never push a digest
+and never dispatch. Evidence-run then re-pulls the tag and re-resolves
+the digest with `docker inspect`, so it always records the digest of the
+artifact actually exercised — the dispatch-time digest is never
+forwarded.
+
+**Two-layer idempotency.** A rebuild that produces a byte-identical
+image (same digest) must fire nothing; a CVE-patch rebuild (new digest)
+must fire exactly one run:
+
+- *Dispatch layer.* The helper reads the newest **passing** `tested[]`
+  digest for the cell and skips the tool when it already equals the new
+  digest. So an identical rebuild — or a no-op re-run of the build job —
+  dispatches no workflow at all. A tool with no prior evidence
+  (`tested[]` empty, as the pilot catalog ships) always dispatches.
+- *Ingest layer.* Even a redundant dispatch no-ops on the
+  `(os, os_version, arch, image_digest)` dedup key in
+  `bin/ingest-evidence.sh` — no commit, branch, or PR. Belt and
+  suspenders for a race where evidence landed via another path between
+  dispatch and ingest.
+
+**Deferral.** Evidence-run hard-fails if the sibling containers-db lacks
+`tools/<tool>/versions/<version>.json`. The helper checks first and logs
+a clean defer rather than dispatching a doomed run; the sibling scanner
+publishes the version independently, and the next rebuild picks it up.
+
+**Scope.** Only luggage-managed tools (the helper's `LUGGAGE_TOOLS`
+table) that claim the rebuilt tuple `supported` are dispatched — one
+`evidence-run.yml` dispatch per such tool.
+
 Ordering: rows are appended in arrival order; no sort is enforced.
 The consumer's CI does not depend on order, and chronological order
 is not stable across multiple producers anyway.
@@ -202,7 +262,9 @@ is not stable across multiple producers anyway.
    exercised. Drift across runs (e.g., the `:latest` tag moved between
    two runs) is data — both rows will be kept under the dedup key
    above. No mitigation needed beyond "always set the digest from
-   inspect output, never from a configuration file."
+   inspect output, never from a configuration file." A *rebuild* to a
+   new digest is handled actively, not passively — see
+   [Re-running evidence on a rebuilt base image](#re-running-evidence-on-a-rebuilt-base-image).
 
 1. **Schema bump mid-flight.**
    `bin/ingest-evidence.sh` runs `just db-validate-tool <tool>` against
