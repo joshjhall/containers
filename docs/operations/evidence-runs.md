@@ -289,12 +289,76 @@ Once that's done, close
 [#477](https://github.com/joshjhall/containers/issues/477) with a link
 to the containers-db PR.
 
+## Coverage reconciliation
+
+Evidence runs *produce* `tested[]` rows; reconciliation *audits* them. A
+version file carries two independent views of the same
+`(os, os_version, arch)` cells:
+
+- `support_matrix[]` — hand-authored **intent**. A row's `status` claims
+  whether the tool runs on that cell.
+- `tested[]` — machine-recorded **evidence**. A row with `result: "pass"`
+  proves an install happened.
+
+Nothing keeps the two in sync, so a `supported` claim can sit forever with
+zero passing evidence — exactly the trust gap the evidence system exists to
+close. `luggage reconcile` cross-checks them.
+
+```bash
+# Report mode (informational, always exits 0). Omit the tool to walk the
+# whole catalog.
+just reconcile rust
+# or directly:
+luggage reconcile rust --catalog ../containers-db
+luggage reconcile rust@1.96.0 --json --catalog ../containers-db
+
+# Gate mode (opt-in): exit non-zero on an uncovered supported cell.
+just reconcile-gate rust
+```
+
+### The coverage contract
+
+A `tested[]` row counts as evidence for a `support_matrix` cell when it has
+`result: "pass"` and matches the cell on `(os, arch)` plus `os_version`,
+using the same wildcard rule the resolver uses: a `support_matrix` row with no
+`os_version` is satisfied by a passing row on **any** version of that `os`.
+The newest matching row's `tested_at` is reported as the cell's freshness.
+Per-cell classification:
+
+| Claimed `status` | Passing evidence row? | Classification | Gate |
+| ---------------- | --------------------- | -------------- | ---- |
+| `supported`      | yes                   | **covered** (with freshness) | pass |
+| `supported`      | no                    | **uncovered** | **fail** |
+| `unsupported`    | yes                   | **contradiction** — claim says "won't run", evidence says it did | **fail** |
+| `unsupported`    | no                    | no evidence needed | pass |
+| `untested`       | yes                   | **promotable** — candidate for upgrade to `supported` | pass (info) |
+| `untested`       | no                    | no evidence needed | pass |
+
+Only **uncovered** and **contradiction** fail `--gate`. Freshness is reported,
+never gated.
+
+### Report vs gate in CI
+
+`evidence-run.yml` runs a self-contained `reconcile` job in **report mode**
+against the vendored testdata catalog (`crates/luggage/testdata/catalog`) on
+every push/PR. It is hermetic — no base image, no containers-db clone — and
+non-blocking: it surfaces the claim-vs-evidence gap without failing the build.
+
+Gate mode is **intentionally not** a required check yet. The pilot produces
+only `debian-12-amd64` evidence and none is merged, so `--gate` over the real
+catalog would be red on day one. The CLI fully implements the gate (covered by
+the `luggage` CLI tests) and `just reconcile-gate` is the opt-in path; promote
+the CI job to `--gate` once the base-image matrix and merged evidence cover the
+claimed cells. See
+[#639](https://github.com/joshjhall/containers/issues/639).
+
 ## Related
 
 - [#473](https://github.com/joshjhall/containers/issues/473) — design tracker
 - [#476](https://github.com/joshjhall/containers/issues/476) /
   [#479](https://github.com/joshjhall/containers/pull/479) — producer side (B)
 - [#478](https://github.com/joshjhall/containers/issues/478) — workflow scheduling (D)
+- [#639](https://github.com/joshjhall/containers/issues/639) — coverage reconciliation (this section)
 - [base-images/README.md](../../base-images/README.md) — how the base images this consumes are built and signed
 - [docs/operations/ci-tiers.md](ci-tiers.md) — the broader CI cadence story; evidence runs are dispatch-only today
 - [containers-db#14](https://github.com/joshjhall/containers-db/issues/14) — schema extension that enabled this work

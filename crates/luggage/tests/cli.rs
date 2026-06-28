@@ -340,3 +340,208 @@ fn catalog_add_version_generates_resolvable_entry_and_is_idempotent() {
         "second run should report the version is already present",
     );
 }
+
+/// Report mode exits 0 even when cells are uncovered (the vendored rust
+/// catalog claims `supported` cells with `tested: []`), and names the
+/// uncovered coordinates so a human can act on them.
+#[test]
+fn reconcile_report_mode_exits_zero_and_lists_uncovered() {
+    let out = run(&["reconcile", "rust"]);
+    assert_exit(&out, 0);
+
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(stdout.contains("rust@1.96.0"), "report should include rust@1.96.0: {stdout}");
+    assert!(stdout.contains("MISS"), "uncovered cells should be marked MISS: {stdout}");
+    assert!(
+        stdout.contains("debian/13/amd64"),
+        "report should name the uncovered coordinate: {stdout}",
+    );
+    assert!(stdout.contains("gate failure"), "summary should count gate failures: {stdout}");
+}
+
+/// `--gate` turns uncovered `supported` cells into a non-zero exit so a
+/// catalog PR claiming unbacked support fails review.
+#[test]
+fn reconcile_gate_mode_exits_nonzero_when_cells_uncovered() {
+    let out = run(&["reconcile", "rust", "--gate"]);
+    assert_exit(&out, 1);
+
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("uncovered or contradicted"),
+        "gate stderr should explain the failure: {stderr}",
+    );
+}
+
+/// `--json` for a single `tool@version` emits a parseable array whose cells
+/// carry the claim and the reconciliation verdict.
+#[test]
+fn reconcile_json_single_version_reports_uncovered_supported_cell() {
+    let out = run(&["reconcile", "rust@1.96.0", "--json"]);
+    assert_exit(&out, 0);
+
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let value: serde_json::Value = serde_json::from_str(&stdout).expect("parse JSON");
+    assert_eq!(value.as_array().expect("array").len(), 1, "one version requested");
+    assert_eq!(value[0]["tool"], "rust");
+    assert_eq!(value[0]["version"], "1.96.0");
+
+    let cells = value[0]["cells"].as_array().expect("cells array");
+    let supported_uncovered =
+        cells.iter().any(|c| c["claimed"] == "supported" && c["status"]["kind"] == "uncovered");
+    assert!(supported_uncovered, "a supported cell should be uncovered: {stdout}");
+}
+
+/// A passing `tested[]` row covering a `supported` cell flips that cell to
+/// `covered`; once every supported cell is backed, `--gate` exits 0. Operates
+/// on a temp copy so the in-tree fixture is never mutated.
+#[test]
+fn reconcile_gate_passes_when_every_supported_cell_has_evidence() {
+    let workdir = tempdir().expect("tempdir");
+    let catalog = workdir.path().join("catalog");
+    copy_tree(&catalog_dir(), &catalog);
+
+    // Build a single-cell version file: one supported cell + one matching
+    // passing row. Keeps the fixture self-contained and the gate green.
+    let version_path = catalog.join("tools/rust/versions/2.0.0.json");
+    let doc = serde_json::json!({
+        "schemaVersion": 1,
+        "tool": "rust",
+        "version": "2.0.0",
+        "support_matrix": [
+            { "os": "debian", "os_version": "13", "arch": "amd64", "status": "supported" }
+        ],
+        "tested": [
+            {
+                "os": "debian",
+                "os_version": "13",
+                "arch": "amd64",
+                "tested_at": "2026-06-01T00:00:00Z",
+                "result": "pass"
+            }
+        ],
+        "install_methods": [
+            {
+                "name": "rustup-init",
+                "source_url_template": "https://example.test/{rustup_target}/rustup-init",
+                "verification": { "tier": 3 }
+            }
+        ],
+        "metadata": { "added_at": "2026-06-01T00:00:00Z", "schema_version": 1 }
+    });
+    std::fs::write(&version_path, serde_json::to_string_pretty(&doc).unwrap())
+        .expect("write version file");
+
+    let out = Command::new(binary())
+        .args(["reconcile", "rust@2.0.0", "--gate"])
+        .arg("--catalog")
+        .arg(&catalog)
+        .output()
+        .expect("spawn luggage");
+    assert_exit(&out, 0);
+
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(stdout.contains("OK"), "the backed cell should be marked OK: {stdout}");
+    assert!(stdout.contains("0 gate failure"), "summary should show zero failures: {stdout}");
+}
+
+/// No positional target walks the whole catalog. The vendored catalog only
+/// has rust, so the report covers every rust version and exits 0.
+#[test]
+fn reconcile_no_target_covers_all_tools_in_catalog() {
+    let out = run(&["reconcile"]);
+    assert_exit(&out, 0);
+
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(stdout.contains("rust@1.96.0"), "whole-catalog walk should include rust: {stdout}");
+    assert!(stdout.contains("version(s)"), "summary should report a version count: {stdout}");
+}
+
+/// An unknown tool is a hard error (exit 1), mirroring `resolve`.
+#[test]
+fn reconcile_missing_tool_exits_one() {
+    let out = run(&["reconcile", "ghosttool"]);
+    assert_exit(&out, 1);
+
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(stderr.contains("not found"), "stderr should mention 'not found': {stderr}");
+}
+
+/// An unknown exact version is a hard error (exit 1).
+#[test]
+fn reconcile_missing_version_exits_one() {
+    let out = run(&["reconcile", "rust@9.9.9"]);
+    assert_exit(&out, 1);
+
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(stderr.contains("no version"), "stderr should mention 'no version': {stderr}");
+}
+
+/// A non-directory `--catalog` is rejected before any work, mirroring `resolve`.
+#[test]
+fn reconcile_missing_catalog_exits_one() {
+    let out = Command::new(binary())
+        .args(["reconcile", "rust", "--catalog", "/does/not/exist"])
+        .output()
+        .expect("spawn luggage");
+    assert_exit(&out, 1);
+
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("not a directory"),
+        "stderr should explain the missing catalog: {stderr}",
+    );
+}
+
+/// A passing row on an `unsupported` cell is a contradiction: the claim says
+/// "won't run" but the evidence says it did. `--gate` must flag it (exit 1)
+/// and the report must render the BAD/CONTRADICTION marker. Operates on a temp
+/// copy so the in-tree fixture is never mutated.
+#[test]
+fn reconcile_gate_flags_contradiction_for_unsupported_with_evidence() {
+    let workdir = tempdir().expect("tempdir");
+    let catalog = workdir.path().join("catalog");
+    copy_tree(&catalog_dir(), &catalog);
+
+    let version_path = catalog.join("tools/rust/versions/3.0.0.json");
+    let doc = serde_json::json!({
+        "schemaVersion": 1,
+        "tool": "rust",
+        "version": "3.0.0",
+        "support_matrix": [
+            { "os": "windows", "arch": "amd64", "status": "unsupported" }
+        ],
+        "tested": [
+            {
+                "os": "windows",
+                "arch": "amd64",
+                "tested_at": "2026-06-01T00:00:00Z",
+                "result": "pass"
+            }
+        ],
+        "install_methods": [
+            {
+                "name": "rustup-init",
+                "source_url_template": "https://example.test/{rustup_target}/rustup-init",
+                "verification": { "tier": 3 }
+            }
+        ],
+        "metadata": { "added_at": "2026-06-01T00:00:00Z", "schema_version": 1 }
+    });
+    std::fs::write(&version_path, serde_json::to_string_pretty(&doc).unwrap())
+        .expect("write version file");
+
+    let out = Command::new(binary())
+        .args(["reconcile", "rust@3.0.0", "--gate"])
+        .arg("--catalog")
+        .arg(&catalog)
+        .output()
+        .expect("spawn luggage");
+    assert_exit(&out, 1);
+
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("CONTRADICTION"),
+        "report should render the contradiction marker: {stdout}",
+    );
+}

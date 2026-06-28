@@ -31,6 +31,7 @@ pub mod error;
 pub mod installer;
 pub mod platform;
 pub mod policy;
+pub mod reconcile;
 pub mod resolver;
 
 pub use catalog::{Catalog, CatalogSource};
@@ -39,4 +40,5 @@ pub use error::{ErrorClass, LuggageError, Result};
 pub use installer::{InstallPlan, InstallReport, Installer, InstallerOptions};
 pub use platform::Platform;
 pub use policy::{PolicyPreset, ResolutionPolicy};
+pub use reconcile::{CellReport, CellStatus, VersionReconciliation, reconcile_version};
 pub use resolver::{ResolutionWarning, ResolvedInstall, VersionSpec};

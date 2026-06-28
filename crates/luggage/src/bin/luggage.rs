@@ -1,8 +1,10 @@
 //! `luggage` CLI binary.
 //!
-//! Single subcommand for now: `luggage resolve <tool> [...]`. The host
-//! platform is auto-detected from `/etc/os-release` + `std::env::consts::ARCH`
-//! when the relevant flags are missing.
+//! Subcommands: `resolve`, `install`, `reconcile`, and `catalog add-version`.
+//! For `resolve`/`install` the host platform is auto-detected from
+//! `/etc/os-release` + `std::env::consts::ARCH` when the relevant flags are
+//! missing. `reconcile` cross-checks each version's `support_matrix` claims
+//! against its `tested[]` evidence.
 //!
 //! ## Error handling deviation
 //!
@@ -22,9 +24,9 @@ use std::process::ExitCode;
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use containers_common::tooldb::ActivityScore;
 use luggage::{
-    AddOutcome, Catalog, CatalogSource, InstallReport, Installer, InstallerOptions, LuggageError,
-    Platform, PolicyPreset, ResolutionPolicy, ResolutionWarning, ResolvedInstall, VersionSpec,
-    add_version,
+    AddOutcome, Catalog, CatalogSource, CellReport, CellStatus, InstallReport, Installer,
+    InstallerOptions, LuggageError, Platform, PolicyPreset, ResolutionPolicy, ResolutionWarning,
+    ResolvedInstall, VersionReconciliation, VersionSpec, add_version, reconcile_version,
 };
 use time::OffsetDateTime;
 use time::format_description::well_known::Rfc3339;
@@ -47,6 +49,8 @@ enum Commands {
     Resolve(ResolveArgs),
     /// Install a tool — download, verify, run installer, validate.
     Install(InstallArgs),
+    /// Reconcile `support_matrix` claims against `tested[]` evidence.
+    Reconcile(ReconcileArgs),
     /// Catalog maintenance (write-side helpers for the vendored catalog).
     Catalog {
         #[command(subcommand)]
@@ -207,6 +211,29 @@ impl From<PolicyChoice> for PolicyPreset {
     }
 }
 
+/// `luggage reconcile [TOOL[@VERSION]]` arguments.
+#[derive(Args, Debug)]
+struct ReconcileArgs {
+    /// Catalog target. Omit to reconcile every tool/version; pass a tool id
+    /// (`rust`) for all its versions, or `tool@version` (`rust@1.96.0`) for
+    /// a single version.
+    target: Option<String>,
+
+    /// Path to a containers-db checkout (or `CONTAINERS_DB` env var).
+    #[arg(long, env = "CONTAINERS_DB", default_value = "../containers-db")]
+    catalog: PathBuf,
+
+    /// Exit non-zero when any `supported` cell lacks a passing evidence row,
+    /// or an `unsupported` cell has one. Use this in CI to block a catalog PR
+    /// that claims support it cannot back.
+    #[arg(long)]
+    gate: bool,
+
+    /// Emit JSON instead of human-readable output.
+    #[arg(long)]
+    json: bool,
+}
+
 fn main() -> ExitCode {
     let cli = Cli::parse();
 
@@ -229,6 +256,16 @@ fn main() -> ExitCode {
         },
         Commands::Install(args) => match cmd_install(&args) {
             Ok(()) => ExitCode::SUCCESS,
+            Err(e) => {
+                report_error(&e);
+                ExitCode::from(u8::try_from(e.exit_code()).unwrap_or(1))
+            }
+        },
+        Commands::Reconcile(args) => match cmd_reconcile(&args) {
+            // `Ok(true)` = clean (or report mode); `Ok(false)` = gate found
+            // failures, which is a non-error non-zero exit so CI can branch.
+            Ok(true) => ExitCode::SUCCESS,
+            Ok(false) => ExitCode::from(1),
             Err(e) => {
                 report_error(&e);
                 ExitCode::from(u8::try_from(e.exit_code()).unwrap_or(1))
@@ -382,6 +419,138 @@ fn resolve_for(tool: &str, common: &CommonArgs) -> Result<ResolvedInstall, Lugga
     let platform = build_platform(common)?;
     let policy = build_policy(common);
     catalog.resolve_with_policy(tool, &spec, &platform, &policy)
+}
+
+/// `luggage reconcile [TOOL[@VERSION]]` — cross-check `support_matrix`
+/// claims against `tested[]` evidence.
+///
+/// Returns `Ok(true)` when nothing failed the gate (always the case in report
+/// mode), `Ok(false)` when `--gate` found at least one uncovered `supported`
+/// cell or a contradicting `unsupported` row.
+fn cmd_reconcile(args: &ReconcileArgs) -> Result<bool, LuggageError> {
+    if !args.catalog.is_dir() {
+        return Err(LuggageError::Catalog(format!(
+            "catalog path `{}` is not a directory; pass --catalog or set CONTAINERS_DB",
+            args.catalog.display()
+        )));
+    }
+    let catalog = Catalog::load(CatalogSource::LocalPath(args.catalog.clone()))?;
+    let reports = collect_reconciliations(&catalog, args.target.as_deref())?;
+
+    if args.json {
+        let out = serde_json::to_string_pretty(&reports)
+            .map_err(|source| LuggageError::Parse { path: PathBuf::from("<stdout>"), source })?;
+        println!("{out}");
+    } else {
+        print_reconciliations(&reports);
+    }
+
+    let total_failures: usize = reports.iter().map(VersionReconciliation::gate_failures).sum();
+    if args.gate && total_failures > 0 {
+        eprintln!(
+            "gate: {total_failures} uncovered or contradicted cell(s) across {} version(s)",
+            reports.iter().filter(|r| !r.is_clean()).count()
+        );
+        return Ok(false);
+    }
+    Ok(true)
+}
+
+/// Build the list of [`VersionReconciliation`]s for the requested target.
+///
+/// Target selection mirrors `install`'s `tool@version` shorthand:
+/// `None` → every tool/version, `Some("rust")` → all versions of rust,
+/// `Some("rust@1.96.0")` → that single version.
+fn collect_reconciliations(
+    catalog: &Catalog,
+    target: Option<&str>,
+) -> Result<Vec<VersionReconciliation>, LuggageError> {
+    let mut out = Vec::new();
+    match target {
+        None => {
+            for id in catalog.tool_ids() {
+                push_tool_versions(catalog, id, None, &mut out)?;
+            }
+        }
+        Some(t) => {
+            let (tool, version) = split_tool_version(t);
+            push_tool_versions(catalog, tool, version, &mut out)?;
+        }
+    }
+    Ok(out)
+}
+
+/// Append reconciliations for one tool. When `version` is `Some`, only that
+/// exact version literal is emitted (and a miss is an error); otherwise every
+/// version of the tool is included in catalog (version) order.
+fn push_tool_versions(
+    catalog: &Catalog,
+    tool: &str,
+    version: Option<&str>,
+    out: &mut Vec<VersionReconciliation>,
+) -> Result<(), LuggageError> {
+    let entry = catalog.tool_entry(tool).ok_or_else(|| LuggageError::ToolNotFound(tool.into()))?;
+    match version {
+        None => {
+            for doc in entry.versions.values() {
+                out.push(reconcile_version(doc));
+            }
+        }
+        Some(v) => {
+            let doc = entry.versions.values().find(|d| d.version == v).ok_or_else(|| {
+                LuggageError::VersionNotFound { tool: tool.into(), spec: v.into() }
+            })?;
+            out.push(reconcile_version(doc));
+        }
+    }
+    Ok(())
+}
+
+/// Print a human-readable coverage report: one block per version, one line
+/// per support cell, plus a trailing summary.
+fn print_reconciliations(reports: &[VersionReconciliation]) {
+    let mut total_cells = 0usize;
+    let mut total_failures = 0usize;
+    for r in reports {
+        println!("{}@{}", r.tool, r.version);
+        for cell in &r.cells {
+            let osv = cell.os_version.as_deref().unwrap_or("*");
+            let coord = format!("{}/{}/{}", cell.os, osv, cell.arch);
+            let (mark, detail) = describe_cell(&cell.status);
+            println!("  {mark} {coord:<24} claimed={:<11} {detail}", status_word(cell));
+            total_cells += 1;
+        }
+        total_failures += r.gate_failures();
+    }
+    println!(
+        "\nsummary: {} version(s), {total_cells} cell(s), {total_failures} gate failure(s)",
+        reports.len()
+    );
+}
+
+/// Lowercase wire word for the claimed status, for the report's `claimed=` column.
+const fn status_word(cell: &CellReport) -> &'static str {
+    use containers_common::tooldb::SupportStatus;
+    match cell.claimed {
+        SupportStatus::Supported => "supported",
+        SupportStatus::Unsupported => "unsupported",
+        SupportStatus::Untested => "untested",
+    }
+}
+
+/// Map a [`CellStatus`] to a status glyph and a human detail string.
+fn describe_cell(status: &CellStatus) -> (&'static str, String) {
+    match status {
+        CellStatus::Covered { tested_at, .. } => ("OK ", format!("covered (tested {tested_at})")),
+        CellStatus::Uncovered => ("MISS", "no passing evidence row".to_string()),
+        CellStatus::Contradiction { tested_at } => {
+            ("BAD ", format!("CONTRADICTION: passing row exists (tested {tested_at})"))
+        }
+        CellStatus::Promotable { tested_at } => {
+            ("INFO", format!("promotable: passing row exists (tested {tested_at})"))
+        }
+        CellStatus::NoEvidenceNeeded => ("-  ", "no evidence required".to_string()),
+    }
 }
 
 /// Split a `tool[@version]` string into `(tool, Option<version>)`.

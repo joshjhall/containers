@@ -94,6 +94,17 @@ impl Catalog {
         self.tools.get(id)
     }
 
+    /// All tool ids in the catalog, sorted for deterministic iteration.
+    ///
+    /// Lets callers walk every tool (e.g. the `reconcile` subcommand's
+    /// whole-catalog mode) without exposing the private `tools` map.
+    #[must_use]
+    pub fn tool_ids(&self) -> Vec<&str> {
+        let mut ids: Vec<&str> = self.tools.keys().map(String::as_str).collect();
+        ids.sort_unstable();
+        ids
+    }
+
     /// Resolve `(tool, spec, platform)` into a concrete install plan using
     /// the default [`ResolutionPolicy`] (stibbons-strict).
     ///
@@ -448,5 +459,23 @@ mod tests {
 
         // Service kind is empty in this fixture.
         assert!(cat.recommended(Kind::Service).is_empty());
+    }
+
+    #[test]
+    fn tool_ids_returns_sorted_list() {
+        let tmp = tempfile::tempdir().unwrap();
+        // Insert tools out of alphabetical order to prove the sort.
+        write_tool(tmp.path(), "zebra", "cli", "very-active", "Zebra");
+        write_tool(tmp.path(), "aardvark", "cli", "very-active", "Aardvark");
+        write_tool(tmp.path(), "mongoose", "cli", "very-active", "Mongoose");
+
+        let cat = Catalog::load(CatalogSource::LocalPath(tmp.path().to_owned())).unwrap();
+        assert_eq!(cat.tool_ids(), ["aardvark", "mongoose", "zebra"]);
+    }
+
+    #[test]
+    fn tool_ids_empty_catalog_is_empty() {
+        let cat = Catalog::default();
+        assert!(cat.tool_ids().is_empty());
     }
 }

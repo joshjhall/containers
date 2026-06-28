@@ -136,6 +136,39 @@ jobs:
           echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
           echo "dry_run=$DRY" >> "$GITHUB_OUTPUT"
 
+  # Coverage reconciliation — cross-check every version's `support_matrix`
+  # `supported` claims against its `tested[]` evidence rows. Independent of the
+  # matrix (no base image, no clone): runs against the vendored testdata
+  # catalog so it stays hermetic and fork-safe. Report mode only — it surfaces
+  # the claim-vs-evidence gap on every push/PR without blocking, because the
+  # pilot produces only `debian-12-amd64` evidence and `--gate` over the real
+  # catalog would be red on day one. Promote to `--gate` once the base-image
+  # matrix covers the claimed cells. See docs/operations/evidence-runs.md
+  # § Coverage reconciliation.
+  reconcile:
+    name: Reconcile coverage (report)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout containers
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: reconcile
+
+      - name: Build luggage
+        run: cargo build --release -p luggage
+
+      - name: Reconcile claims against evidence (report)
+        run: |
+          ./target/release/luggage reconcile \
+            --catalog crates/luggage/testdata/catalog
+
   evidence:
     name: Evidence ${{ matrix.tool }}@${{ matrix.version }} on ${{ matrix.tuple }}
     needs: setup
