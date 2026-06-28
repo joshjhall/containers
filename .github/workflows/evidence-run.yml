@@ -136,7 +136,14 @@ jobs:
           }
           if [ "$EVENT" = "workflow_dispatch" ]; then
             ARCH="${INPUT_TUPLE##*-}"
-            read -r RUNNER RUNTIME RUST_TARGET < <(arch_plumbing "$ARCH")
+            # Capture-then-read with an explicit guard so an unsupported arch
+            # aborts here with arch_plumbing's clear error. A bare
+            # `read < <(arch_plumbing …)` (or an unguarded `$(…)` assignment)
+            # swallows the non-zero exit and would emit a matrix with empty
+            # runner/runtime/target, failing later with an opaque
+            # runner-resolution error instead.
+            PLUMBING=$(arch_plumbing "$ARCH") || { echo "Cannot resolve plumbing for arch: $ARCH" >&2; exit 1; }
+            read -r RUNNER RUNTIME RUST_TARGET <<< "$PLUMBING"
             MATRIX=$(jq -cn \
               --arg tool "$INPUT_TOOL" \
               --arg version "$INPUT_TOOL_VERSION" \
@@ -252,17 +259,24 @@ jobs:
       # rustls (pure Rust), so no native-tls/openssl configuration is
       # needed for the static link.
       - name: Build luggage and record-evidence (static musl)
-        env:
-          # Cargo reads CARGO_TARGET_<triple>_LINKER only for the triple it is
-          # actually building, so setting the aarch64 cross-linker here is a
-          # no-op on amd64 / native-arm64 legs and supplies the linker on the
-          # emulated arm64 (cross-compile) leg.
-          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER: aarch64-linux-gnu-gcc
         run: |
+          # Cargo reads CARGO_TARGET_<triple>_LINKER only for the triple being
+          # built, so the aarch64 linker only matters on an arm64 leg — and its
+          # value differs by runtime: the emulated (cross-compile) leg needs the
+          # aarch64 cross-gcc, while a native arm64 leg links with musl-gcc from
+          # musl-tools (gcc-aarch64-linux-gnu is not installed there). amd64
+          # sets nothing, leaving its build byte-identical to the pre-arch path.
+          if [ "$ARCH" = "arm64" ]; then
+            if [ "$RUNTIME" = "emulated" ]; then
+              export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER=aarch64-linux-gnu-gcc
+            else
+              export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER=musl-gcc
+            fi
+          fi
           cargo build --release --target "$RUST_TARGET" \
             -p luggage -p record-evidence
-          ls -l "target/$RUST_TARGET/release/luggage" \
-                "target/$RUST_TARGET/release/record-evidence"
+          /bin/ls -l "target/$RUST_TARGET/release/luggage" \
+                     "target/$RUST_TARGET/release/record-evidence"
 
       - name: Resolve base image digest
         id: digest
@@ -384,7 +398,10 @@ jobs:
       - name: Upload evidence row
         uses: actions/upload-artifact@v4
         with:
-          name: evidence-row
+          # Per-tuple name so parallel matrix legs don't collide —
+          # upload-artifact@v4 rejects two uploads under one name. A downstream
+          # consumer downloads all evidence-row-* artifacts.
+          name: evidence-row-${{ matrix.tuple }}
           path: out/evidence-row.json
           if-no-files-found: error
 
