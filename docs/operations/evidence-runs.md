@@ -75,6 +75,57 @@ only — **if this list and the schema disagree, the schema wins.**
 `error_class` enum mirrors `luggage::ErrorClass`
 ([`crates/luggage/src/error.rs`](../../crates/luggage/src/error.rs)).
 
+## Arch matrix (native vs emulated)
+
+`evidence-run.yml` produces one row per `(tool, version, tuple)` leg, and the
+**arch** half of the tuple drives how that leg builds and runs. The recorded
+`arch` is always the third tuple token (`debian-12-amd64` → `amd64`), split out
+by the `Derive tuple coordinates` step — there is no hardcoded `x86_64`
+anywhere. Each leg additionally carries three build-plumbing companions, set
+together in the `setup` job (`arch_plumbing`): `runtime`, `runner`, and
+`rust_target`.
+
+| `runtime`  | `runner`           | `docker run`               | binary build                        |
+| ---------- | ------------------ | -------------------------- | ----------------------------------- |
+| `native`   | arch-matched       | no `--platform`            | compiled on an arch-matched runner  |
+| `emulated` | `ubuntu-latest`    | `--platform linux/<arch>`  | **cross-compiled** for the leg arch |
+
+An **emulated** leg adds a `docker/setup-qemu-action@v3` step (registers binfmt
+handlers) so an amd64 runner can run a foreign-arch container.
+
+**The `luggage` binary is built for the container arch in both modes.** It is
+mounted into the base image and executed *inside* it (`luggage install …`), so
+it must match the container's architecture regardless of where the build ran.
+That means an emulated arm64 leg on an amd64 host **cross-compiles**
+`aarch64-unknown-linux-musl` (via `gcc-aarch64-linux-gnu` +
+`CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER`); a native arm64 leg compiles
+the same target natively. luggage's pure-Rust TLS (rustls) keeps the
+cross-compile free of OpenSSL cross headers.
+
+### `duration_seconds` under emulation
+
+QEMU user-mode emulation inflates wallclock by a large, variable factor. A
+`duration_seconds` recorded on an **emulated** leg is **not comparable** to a
+native one and must never back a performance or cross-arch timing claim — treat
+it as indicative only. This compounds the field's existing volatility: per
+[Merge policy](#merge-policy), `duration_seconds` is a volatile-only field that
+never alone triggers a re-ingest, so an emulated timing drift produces no
+catalog churn.
+
+### arm64 is wired but inactive
+
+The arm64 plumbing is complete end to end, but the **pilot matrix runs only
+`debian-12-amd64`** today: no arm64 base image is published yet
+(`base-images/` carries only `debian/12/amd64`, and `build-base-images.yml`
+builds an amd64-only matrix). The arm64 pilot leg is present as a commented
+entry in the `setup` job, and `debian-12-arm64` is a `workflow_dispatch` tuple
+option. Activate by uncommenting the pilot leg once the arm64 base image lands
+([#432](https://github.com/joshjhall/containers/issues/432) /
+[#434](https://github.com/joshjhall/containers/issues/434) /
+[#436](https://github.com/joshjhall/containers/issues/436)) — the evidence job
+body needs no change. Until then, dispatching `debian-12-arm64` fails at
+`Resolve base image digest` (no image to pull), by design.
+
 ## Transport choice — PR-bot
 
 The producer opens a PR against `joshjhall/containers-db`. It does not
