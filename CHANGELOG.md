@@ -5,6 +5,74 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.19.8] - 2026-06-28
+
+### Added
+
+- Harness rebase-agent as a per-file classify→resolve pipeline (#543)
+- Wire provision-agent to launch the autonomous golem pipeline (#545)
+- Set CLAUDE_CODE_CONNECT_TIMEOUT_MS default in generated settings.json (#547)
+- Add adversarial-review skill + workflow-authoring + harness-logic lens (#554)
+- Add worktree + supervised golem just recipes (#569, #570) (#578)
+- Structure build logs for diagnosable feature-build failures (#590)
+- Gate plan-mode skipping by effort/severity in autonomous golems (#595)
+- Union complementary same-region edits in orchestrate merge protocol (#616)
+- Sync-host refreshes bare-host runtime copies from origin/main (#619)
+- Autonomous integration train for orchestrate batch landing (#620)
+- Fixed-size golem worker pool with stop/drain control (#624)
+- Proactive gate-watch for golem permission gates (#631)
+
+### CI/CD
+
+- Add java-dev to the merge-tier CI matrix (#571)
+
+### Changed
+
+- Add /next-issue --ship fast-path + document the pipeline (#566)
+
+### Documentation
+
+- Record worktree push hook vs gitignore gotcha
+- Add issue filing conventions guide (#573)
+- Record jdtls, golem auto-mode, and stamp lessons
+- Capture pre-push/ship-review/BASH_ENV lessons from the golem batch
+
+### Fixed
+
+- Stop typos pre-push hook from executing changed files (#549)
+- Harden next-issue review harness against silent failures (#550)
+- Harden orchestrate + provision-agent golem drivers (#555)
+- Harden rebase-agent auto-resolution against unsafe guesses (#552)
+- Harden code-reviewer harness against silent failures (#553)
+- Bump quinn-proto 0.11.14 -> 0.11.15 (RUSTSEC-2026-0185) (#556)
+- Add .claude/worktrees/ to default ignore set (#557)
+- Apply rust toolchain components to pinned toolchains + harden binstall (#558)
+- Make .env optional so compose validates from worktrees (#560)
+- Collapse workflow.js meta.description to a pure literal (#563)
+- Correct orchestrate REBASE_RESULT schema + harden meta/ship lint (#568)
+- Retry --version exec on transient ETXTBSY (#575)
+- Make autonomous /next-issue --auto chain into /next-issue-ship (#579)
+- Re-sync bundled ~/.claude skills/agents on template change (#580)
+- Resolve deferred review findings from #572/#574 (#581)
+- Install jdtls from snapshots/ instead of retired milestones/ (#582)
+- Launch golems with explicit --permission-mode auto (#593)
+- Resolve golem id cwd-independently in golem-notify.sh (#594)
+- Bare-repo-safe repo root resolution for worktree/golem recipes (#604) (#605)
+- Stop dprint excluding .devcontainer so YAML stays 2-space (#612)
+- Classify golem feed events so just golems clears stale blocks (#613)
+- Unset inherited GIT_DIR/GIT_INDEX_FILE for hermetic fixture tests (#614)
+- Skip network-bound version checks in the pre-push gate (#623)
+- Harden golem gate-watch against zero-golem window + plan-gate miss (#633)
+
+### Miscellaneous
+
+- Mount librarian repo in dev container + record golem memory (#622)
+- Update tool versions + add dua updater case (#632)
+
+### Testing
+
+- Cover already_installed stderr fallback + harden shim quoting (#588)
+
 ## [4.19.7] - 2026-06-21
 
 ### Added
@@ -15,6 +83,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Autonomous mode for next-issue + next-issue-ship (#538)
 - Code-reviewer Workflow harness with judge-panel rescore (#539)
 - Adversarial pre-PR review + multi-cycle review loop for ship (#540)
+- PR-per-golem orchestrate topology with monitor + cross-PR rebase (#541)
 
 ### Changed
 
@@ -34,6 +103,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Miscellaneous
 
 - Version refresh, drop unmaintained proc-macro-error2, add codegraph (#516)
+- Automated version updates to v4.19.7
 
 ## [4.19.6] - 2026-06-14
 
@@ -1920,6 +1990,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix prettier and markdownlint formatting in README
 - Format TLS documentation files
 
+[4.19.8]: https://github.com/joshjhall/containers/compare/v4.19.7...v4.19.8
 [4.19.7]: https://github.com/joshjhall/containers/compare/v4.19.6...v4.19.7
 [4.19.6]: https://github.com/joshjhall/containers/compare/v4.19.5...v4.19.6
 [4.19.5]: https://github.com/joshjhall/containers/compare/v4.19.4...v4.19.5
