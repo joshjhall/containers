@@ -328,10 +328,13 @@ test_duf_entr_update() {
     command cat >"$test_dir/lib/features/dev-tools.sh" <<'EOF'
 #!/bin/bash
 DUF_VERSION="0.8.0"
+DUA_VERSION="${DUA_VERSION:-2.34.0}"
 ENTR_VERSION="5.5"
 EOF
 
-    # Create mock JSON with tool updates
+    # Create mock JSON with tool updates. dua sits next to duf and shares the
+    # same VERSION pattern — easy to confuse, so cover both to guard the
+    # "Unknown shell script tool" regression.
     command cat >"$test_dir/test.json" <<'EOF'
 {
   "tools": [
@@ -339,6 +342,13 @@ EOF
       "tool": "duf",
       "current": "0.8.0",
       "latest": "0.8.1",
+      "file": "dev-tools.sh",
+      "status": "outdated"
+    },
+    {
+      "tool": "dua",
+      "current": "2.34.0",
+      "latest": "2.37.0",
       "file": "dev-tools.sh",
       "status": "outdated"
     },
@@ -374,6 +384,9 @@ EOF
     # Check that both tools were updated
     local all_updated=true
     if ! command grep -q 'DUF_VERSION="0.8.1"' lib/features/dev-tools.sh; then
+        all_updated=false
+    fi
+    if ! command grep -q 'DUA_VERSION="${DUA_VERSION:-2.37.0}"' lib/features/dev-tools.sh; then
         all_updated=false
     fi
     if ! command grep -q 'ENTR_VERSION="5.7"' lib/features/dev-tools.sh; then

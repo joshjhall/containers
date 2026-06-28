@@ -287,6 +287,10 @@ update_version() {
                     sed_inplace "s/DUF_VERSION=\"\${DUF_VERSION:-[^}]*}\"/DUF_VERSION=\"\${DUF_VERSION:-$latest}\"/" "$script_path"
                     sed_inplace "s/^DUF_VERSION=\"[0-9][^\"]*\"/DUF_VERSION=\"\${DUF_VERSION:-$latest}\"/" "$script_path"
                     ;;
+                dua)
+                    sed_inplace "s/DUA_VERSION=\"\${DUA_VERSION:-[^}]*}\"/DUA_VERSION=\"\${DUA_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/^DUA_VERSION=\"[0-9][^\"]*\"/DUA_VERSION=\"\${DUA_VERSION:-$latest}\"/" "$script_path"
+                    ;;
                 entr)
                     sed_inplace "s/ENTR_VERSION=\"\${ENTR_VERSION:-[^}]*}\"/ENTR_VERSION=\"\${ENTR_VERSION:-$latest}\"/" "$script_path"
                     sed_inplace "s/^ENTR_VERSION=\"[0-9][^\"]*\"/ENTR_VERSION=\"\${ENTR_VERSION:-$latest}\"/" "$script_path"
