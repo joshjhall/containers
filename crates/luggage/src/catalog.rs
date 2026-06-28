@@ -460,4 +460,22 @@ mod tests {
         // Service kind is empty in this fixture.
         assert!(cat.recommended(Kind::Service).is_empty());
     }
+
+    #[test]
+    fn tool_ids_returns_sorted_list() {
+        let tmp = tempfile::tempdir().unwrap();
+        // Insert tools out of alphabetical order to prove the sort.
+        write_tool(tmp.path(), "zebra", "cli", "very-active", "Zebra");
+        write_tool(tmp.path(), "aardvark", "cli", "very-active", "Aardvark");
+        write_tool(tmp.path(), "mongoose", "cli", "very-active", "Mongoose");
+
+        let cat = Catalog::load(CatalogSource::LocalPath(tmp.path().to_owned())).unwrap();
+        assert_eq!(cat.tool_ids(), ["aardvark", "mongoose", "zebra"]);
+    }
+
+    #[test]
+    fn tool_ids_empty_catalog_is_empty() {
+        let cat = Catalog::default();
+        assert!(cat.tool_ids().is_empty());
+    }
 }
