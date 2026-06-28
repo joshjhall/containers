@@ -185,13 +185,19 @@ answer a permission prompt — it forces skip-all and throws away supervision to
 gain a feed. Monitoring and intervention are separate channels:
 
 - **Monitor (TTY-free):** an interactive golem's TUI paints an alternate screen
-  buffer, so `tmux capture-pane` / `tail -f` are blank until exit. Derive status
-  from observable state instead — git commits vs `origin/main`, PR/MR state, the
-  `next-issue` state files (`phase`), and the `.worktrees/.status/*.json` cache —
-  plus a `Notification` hook (`.claude/hooks/golem-notify.sh`) that appends a
-  classified event line to `.worktrees/.status/feed.jsonl` whenever a golem
-  awaits a decision. `just golems` renders the table AND the BLOCKED list from
-  these (see **Feed event vocabulary** below for how a block clears).
+  buffer, so `tmux capture-pane` / `tail -f` are blank for scrolling **work
+  output** — do not scrape that for progress. Derive status from observable
+  state instead — git commits vs `origin/main`, PR/MR state, the `next-issue`
+  state files (`phase`), and the `.worktrees/.status/*.json` cache — plus a
+  `Notification` hook (`.claude/hooks/golem-notify.sh`) that appends a classified
+  event line to `.worktrees/.status/feed.jsonl` whenever a golem awaits a
+  decision. `just golems` renders the table AND the BLOCKED list from these (see
+  **Feed event vocabulary** below for how a block clears). **Exception — the
+  modal prompt overlay IS scrapeable.** The "blank until exit" limit is about
+  scrolling work output; a permission/plan **prompt overlay**
+  (`Do you want to proceed?`, the `ExitPlanMode` plan prompt) renders *over* the
+  alt-screen and `tmux capture-pane` returns it reliably. That makes pane-state a
+  legitimate co-equal gate channel — see **Gate-watch contract** below.
 - **Intervene (on demand):** when `just golems` flags a golem BLOCKED, run
   `just golem-attach {N}` to attach its real TTY (worktree session `golem-{N}`,
   or a container golem's `claude` session via `docker exec`), answer the
@@ -207,8 +213,8 @@ real block from noise:
 
 | `event`   | Meaning                                                          | Surfaces in BLOCKED?                          |
 | --------- | ---------------------------------------------------------------- | --------------------------------------------- |
-| `gate`    | A permission decision is pending — a human must answer (e.g. the `git push` / `gh pr create` `ask` rule: _"Claude needs your permission to ..."_). | **Yes**, while it is the golem's latest line and within the freshness window. |
-| `idle`    | A transient between-turn idle (_"Claude is waiting for your input"_) — also fires while a sub-agent runs mid-work. Noise, not a block. | No. |
+| `gate`    | A permission decision is pending — a human must answer (e.g. the `git push` / `gh pr create` `ask` rule: *"Claude needs your permission to ..."*). | **Yes**, while it is the golem's latest line and within the freshness window. |
+| `idle`    | A transient between-turn idle (*"Claude is waiting for your input"*) — also fires while a sub-agent runs mid-work. Noise, not a block. | No. |
 | `blocked` | **Legacy** kind written before issue #600 (every notification was `blocked`). Honored as a `gate` for backward compatibility. | Yes (treated as `gate`). |
 
 Classification is case-insensitive on the message and **defaults to `gate`** for
@@ -222,6 +228,46 @@ its current state. When a golem resumes after a gate, its next between-turn
 drops off the BLOCKED list with no explicit "unblocked" event. A `gate` left
 behind by a golem that has since exited is additionally dropped once it ages out
 of the freshness window (`GOLEM_BLOCK_TTL` seconds, default `3600`).
+
+### Gate-watch contract
+
+`just golems` is a **pull** surface (the operator runs it). The proactive
+**push** complement is `bin/golem-gate-watch.sh`, which the live session arms via
+the `Monitor` tool at dispatch and a human can run as `just golem-watch` (see
+`SKILL.md` Phase M § *Proactive gate-watch*). It is the single source of truth
+for "which golem is at a gate" — `just golems`' BLOCKED list calls its `--once`
+mode, so the pull and push surfaces can never disagree. Two **co-equal** channels
+(neither is "secondary"):
+
+- **Feed** (`--once` / `--stream`) — the classified `feed.jsonl`. TTY-free, so it
+  covers **all** golems including headless/container ones, and carries golem-id
+  attribution (#587). Reuses the **Feed event vocabulary** above verbatim.
+- **Pane prompt-overlay** (`--once-panes` / `--stream-panes`) —
+  `tmux capture-pane` on live `golem-*` sessions matched against the modal prompt
+  overlay. Covers live worktree golems only, and is the better catcher of
+  **plan-gate `ExitPlanMode`** prompts (which the feed records only as a generic
+  `gate`); it labels those distinctly so the operator knows it is a plan to
+  review. Relies on the alt-screen overlay exception documented in the
+  *Monitor (TTY-free)* bullet above.
+
+**Notifies:** a real permission `gate` (feed: latest line per golem is a fresh
+`gate`/legacy `blocked` within `GOLEM_BLOCK_TTL`; pane: a prompt overlay is
+present), and a plan-gate `ExitPlanMode` (a `gate` in the feed, distinctly
+labeled on the pane channel).
+
+**Suppressed:** a transient `idle` (feed noise); a `gate` superseded by a later
+`idle`/`gate` line; a `gate` aged past `GOLEM_BLOCK_TTL`; and — crucially for a
+stream — a **standing** gate already reported (see re-notify).
+
+**Re-notify (cleared/resumed).** The streaming modes emit only on the
+**transition into** a fresh gate, tracking the last-emitted state per golem: a
+standing gate is reported once, not every poll tick. When a golem clears (feed:
+an `idle` supersedes; pane: the overlay disappears) it is forgotten, so when a
+**new** gate later appears for that golem it is a fresh transition and
+**re-fires**. No explicit resolution event is needed on either channel — the same
+append-only/latest-line rule from *How a block clears* drives both. `--stream`
+also **primes** past any pre-existing gates on startup so they are not replayed
+as new.
 
 ### Dispatch Decision Sub-Tree
 

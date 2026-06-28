@@ -406,29 +406,17 @@ golems:
             blocked=1
         fi
     done
+    # Fresh-gate detection from the feed is delegated to bin/golem-gate-watch.sh
+    # (--once snapshot) so the BLOCKED list here and the proactive `golem-watch`
+    # stream share ONE source of truth and can never drift. The helper applies
+    # the same rule: a golem is BLOCKED only when its most-recent feed line is a
+    # fresh `gate` (legacy `blocked` honored) within GOLEM_BLOCK_TTL; an `idle`
+    # emitted once the golem resumes supersedes and clears it. It emits
+    # "<golem>\t<message>"; reformat to the "  golem — message" display here.
     if [ -f "$feed" ]; then
-        # A golem is BLOCKED only when its MOST-RECENT feed line is a fresh
-        # `gate` (a real permission decision). The feed is append-only and
-        # chronological, so the last line per golem is its current state: an
-        # `idle` (transient "waiting for your input") emitted once the golem
-        # resumes supersedes an earlier `gate` and clears the block — no
-        # separate resolution event needed. A freshness window
-        # (GOLEM_BLOCK_TTL seconds, default 3600) additionally drops a gate left
-        # behind by a golem that has since exited. Legacy `blocked` lines (feed
-        # written before issue #600) are still honored as gates. `group_by`
-        # sorts then groups stably, so `.[-1]` is each golem's latest line.
-        ttl="${GOLEM_BLOCK_TTL:-3600}"
         feed_blocked="$(
-            /usr/bin/tail -n 200 "$feed" 2>/dev/null \
-            | jq -rs --argjson ttl "$ttl" '
-                (now) as $now
-                | group_by(.golem)
-                | map(.[-1])
-                | map(select((.event == "gate" or .event == "blocked")
-                             and (($now - (.ts | fromdateiso8601)) < $ttl)))
-                | .[] | "  \(.golem) — \(.message // "awaiting decision")"
-              ' 2>/dev/null \
-            | /usr/bin/sort -u
+            bash "{{ justfile_directory() }}/bin/golem-gate-watch.sh" --once 2>/dev/null \
+            | /usr/bin/awk -F'\t' 'NF { printf "  %s — %s\n", $1, $2 }'
         )"
         if [ -n "$feed_blocked" ]; then
             printf '%s\n' "$feed_blocked"
@@ -469,6 +457,25 @@ golem-attach N:
     echo "golem-attach: no golem-{{ N }} tmux session and no container golem for issue {{ N }}." >&2
     echo "  Check 'just golems' for active golems." >&2
     exit 1
+
+# Proactive PUSH watch for golem permission gates — the complement to the PULL
+# `just golems`. Streams both gate channels (issue #618): the classified feed
+# (all golems, TTY-free) and live tmux pane prompt-overlays (worktree golems,
+# best for plan gates). Emits one "<golem> <message>" line on each transition
+# into a fresh gate; runs until interrupted (Ctrl-C).
+# Proactively watch for blocked golems (streams feed + pane gate channels; Ctrl-C to stop).
+golem-watch:
+    #!/usr/bin/env bash
+    set -uo pipefail
+    watch="{{ justfile_directory() }}/bin/golem-gate-watch.sh"
+    echo "Watching for golem permission gates (feed + panes). Ctrl-C to stop." >&2
+    # Pane channel in the background, feed channel in the foreground; both prefix
+    # their source so the operator can tell which channel fired. Kill the
+    # background pane watcher when the foreground feed watcher exits.
+    ( bash "$watch" --stream-panes 2>/dev/null | /usr/bin/sed -u 's/^/[pane] /' ) &
+    pane_pid=$!
+    trap '/usr/bin/kill "$pane_pid" 2>/dev/null || true' EXIT INT TERM
+    bash "$watch" --stream 2>/dev/null | /usr/bin/sed -u 's/^/[feed] /'
 
 # A bare repo never checks files out, so the host's on-disk .claude/hooks,
 # justfile, and bin/ drift behind origin/main after a merge and it runs stale

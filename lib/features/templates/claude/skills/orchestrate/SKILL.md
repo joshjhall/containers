@@ -288,6 +288,50 @@ BLOCKED in `just golems` shortly after launch — that is the human plan
 checkpoint, not a stall. Attach with `just golem-attach {N}`, refine and approve
 the plan, and detach; the golem then proceeds autonomously to a PR.
 
+**Proactive gate-watch (PUSH, not just PULL).** `just golems` is a **pull**
+check — the operator must run it to discover a golem parked at a permission gate
+(`git push` / `gh pr create` / `gh pr merge` `ask` rules) or a plan-gate
+`ExitPlanMode`. Golems park at these gates silently for minutes, so the live
+session must **also arm a proactive PUSH watch at dispatch** (Phase D) and on
+entering `monitor`/`watch` — otherwise it sits idle on PR-settle monitors while a
+golem waits. Arm both gate channels via the `Monitor` tool (they are
+**co-equal**, each catching what the other misses):
+
+```text
+Monitor({                                       # feed: ALL golems, TTY-free
+  command: "bin/golem-gate-watch.sh --stream",
+  description: "golem permission gates (feed.jsonl)",
+  persistent: true,
+})
+Monitor({                                       # panes: live worktree golems
+  command: "bin/golem-gate-watch.sh --stream-panes",
+  description: "golem prompt overlays (tmux capture-pane)",
+  persistent: true,
+})
+```
+
+Each emitted `golem-{N}\t<message>` line is **one fresh gate** → raise it to the
+operator and point them at `just golem-attach {N}`. The watcher emits only on the
+**transition into** a fresh gate (a standing gate is not re-emitted; a gate that
+clears and later re-occurs re-fires), so this is signal, not noise.
+
+- **Feed channel** (`--stream`) — reads the classified `feed.jsonl`
+  (`gate` vs `idle`, post-#600), so it works for **every** golem including
+  headless/container ones and carries golem-id attribution (#587). A plan-gate
+  shows here only as a generic `gate`.
+- **Pane channel** (`--stream-panes`) — `tmux capture-pane` matched against the
+  modal **prompt overlay** (`Do you want to proceed?` and the `ExitPlanMode`
+  plan-approval prompt) on live `golem-*` sessions. It is the better catcher of
+  **plan-gate** prompts (which the feed under-classifies). The
+  "capture-pane is blank until exit" caveat applies to scrolling **work
+  output**, *not* the prompt overlay, which renders over the alt-screen and is
+  reliably scrapeable.
+
+A human operator gets the same proactive surface with **`just golem-watch`**
+(streams both channels). See `mode-protocol.md` § *Gate-watch contract* for the
+notify/suppress/re-notify rules, and #600 (feed classification) / #587 (golem-id
+attribution).
+
 ## Phase R — Cross-PR Rebase
 
 When an earlier PR merges, later PRs touching the same files fall behind base.

@@ -1,6 +1,6 @@
 ---
 name: golem-supervised-auto-mode
-description: "Run orchestrate golems in auto permission mode, never headless/skip-perms; monitor via hooks + observable state, supervise via tmux attach"
+description: "Run orchestrate golems in auto permission mode, never headless/skip-perms; monitor via hooks + observable state (don't scrape work output, but prompt overlays ARE scrapeable), supervise via tmux attach"
 metadata:
   node_type: memory
   type: feedback
@@ -48,10 +48,20 @@ survives auto mode. See #585; plan-gating-by-effort follow-up is #586.
   untrusted worktree won't, per #585).
 - Get central status TTY-free: git commits vs `origin/main`, PR/MR state, the
   `next-issue` state files (`phase`), and `.worktrees/.status/*.json`. Do NOT
-  scrape the TUI (`tmux capture-pane`/`tail -f golem.log` are blank until exit —
-  the interactive TUI paints an alternate screen buffer).
+  scrape the TUI's scrolling **work output** for status (`tmux capture-pane`/
+  `tail -f golem.log` of the transcript are blank until exit — the interactive
+  TUI paints an alternate screen buffer). **BUT the modal prompt overlay is the
+  exception:** a permission/plan **prompt** (`Do you want to proceed?`, the
+  `ExitPlanMode` plan prompt) renders *over* the alt-screen and `tmux
+  capture-pane` returns it reliably — observed to catch every gate including
+  plan gates. So prompt-overlay scraping is an observed-reliable, **co-equal**
+  gate channel alongside the feed (#618), and the better catcher of plan-gate
+  prompts the feed records only as a generic `gate` — not something to avoid.
 - Surface "which golem is blocked" via a `Notification` hook → one central
-  `feed.jsonl` (hooks fire in interactive mode).
+  `feed.jsonl` (hooks fire in interactive mode). The proactive PUSH watch is
+  `bin/golem-gate-watch.sh` (feed + pane channels) / `just golem-watch`, armed by
+  the orchestrator via the `Monitor` tool so blocks surface without polling
+  `just golems` (#618).
 - Intervene on demand: attach to the one flagged golem (`tmux attach -t golem-N`
   / `docker exec -it <ctr> tmux attach -t claude`), answer, detach.
 
