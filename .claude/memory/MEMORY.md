@@ -27,3 +27,6 @@
 - [Librarian plugin extraction](librarian-plugin-extraction.md) — extract general skills/agents into separate `librarian` marketplace repo
 - [Golem feed event classification](golem-feed-event-classification.md) — feed events gate|idle; BLOCKED clears via recent-line + TTL (#600)
 - [Hermetic fixture tests need git identity](hermetic-fixture-tests-need-git-identity.md) — export GIT_*_NAME/EMAIL in committing tests (#606)
+- [Pre-push skips network tests](pre-push-skips-network-tests.md) — SKIP_NETWORK_TESTS=1 keeps the push gate offline; CI still runs full (#615)
+- [Ship review reads whole files](ship-review-whole-file-scope.md) — ship review flags pre-existing main code; verify findings are diff-local (#603→#625)
+- [BASH_ENV breaks PATH stubs](bash-env-breaks-path-stubs.md) — /etc/bash_env rebuilds PATH on non-interactive bash; clear it in stub tests (#618)
