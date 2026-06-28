@@ -6,6 +6,13 @@
 
 set -euo pipefail
 
+# Pre-push must stay fast and offline-safe: skip network-bound version checks
+# here (they still run in CI via run_unit_tests.sh directly). Without this, a
+# foundational-file edit maps to ALL and runs the live api.github.com version
+# checks, which serialize across concurrent golems and stall pushes. See #615.
+# Overridable (SKIP_NETWORK_TESTS=0) for a developer who wants the full check.
+export SKIP_NETWORK_TESTS="${SKIP_NETWORK_TESTS:-1}"
+
 # Get script directory
 TESTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$TESTS_DIR")"
@@ -46,6 +53,17 @@ map_to_test() {
         # Foundational files — signal to run ALL tests
         tests/framework.sh | tests/framework/* | Dockerfile)
             echo "ALL"
+            return
+            ;;
+
+        # This runner itself → its dedicated regression suite. Without this
+        # arm a future edit to run_changed_tests.sh would not trigger the
+        # SKIP_NETWORK_TESTS wiring guard at push time (issue #615).
+        tests/run_changed_tests.sh)
+            local test_path="${TESTS_DIR}/unit/run-changed-tests.sh"
+            if [ -f "$test_path" ]; then
+                echo "$test_path"
+            fi
             return
             ;;
 

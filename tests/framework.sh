@@ -204,6 +204,15 @@ fail_test() {
     TEST_STATUS="failed"
 }
 
+# True when network-bound tests should be skipped. The pre-push runner
+# (tests/run_changed_tests.sh) exports SKIP_NETWORK_TESTS=1 so routine local
+# pushes don't block on api.github.com under concurrent golem load (issue #615);
+# CI invokes run_unit_tests.sh directly and leaves the flag unset, so the full
+# network matrix still runs there.
+network_tests_disabled() {
+    [ "${SKIP_NETWORK_TESTS:-}" = "1" ]
+}
+
 # Skip current test
 skip_test() {
     local reason="$1"
@@ -376,7 +385,7 @@ generate_report() {
 # Export framework core functions
 export -f test_suite test_case
 export -f tf_fail_assertion
-export -f pass_test fail_test skip_test
+export -f pass_test fail_test skip_test network_tests_disabled
 export -f setup teardown run_test run_tests
 export -f start_test assert_success assert_command_exists assert_file_executable
 export -f init_test_framework generate_report
