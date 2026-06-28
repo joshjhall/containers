@@ -257,8 +257,11 @@ jobs:
       # passing evidence, and evidence-run re-resolves the digest via `docker
       # inspect`, so it always tests the published artifact. GITHUB_TOKEN can't
       # trigger another workflow, so reuse the auto-patch dispatch credential.
+      # The explicit `if:` replaces the implicit success() guard, so re-state
+      # success() — a failed cosign/SBOM step must not dispatch evidence for an
+      # image that published but never got signed.
       - name: Re-run evidence on new base-image digest
-        if: steps.gate.outputs.publish == 'true' && steps.build_push.outputs.digest != ''
+        if: success() && steps.gate.outputs.publish == 'true' && steps.build_push.outputs.digest != ''
         continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.AUTO_PATCH_TOKEN }}

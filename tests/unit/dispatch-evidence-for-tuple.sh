@@ -77,17 +77,39 @@ STUB
 
 # Run the dispatcher against the throwaway repo with the fake gh injected by
 # absolute path (GH=) and the catalog-shape knobs forwarded as external-command
-# env assignments, all of which reliably reach the script.
+# env assignments, all of which reliably reach the script. Prints combined
+# stdout+stderr and PROPAGATES the script's exit code (so error-path tests can
+# assert on it — `$(run_dispatch ...)` alone would mask it as 0).
 # Usage: run_dispatch <present> <supports> <tested_digest> [extra args...]
 run_dispatch() {
     local present="$1" supports="$2" tested="$3"
     shift 3
+    local out_file="$TEST_TEMP_DIR/dispatch-out.txt" ec=0
     DISPATCH_PROJECT_ROOT="$TEST_TEMP_DIR/repo" \
         GH="$GH_STUB" \
         SIBLING_PRESENT="$present" \
         SUPPORTS_TUPLE="$supports" \
         TESTED_DIGEST="$tested" \
-        "$DISPATCH_SCRIPT" --tuple debian-12-amd64 --digest "$NEW_DIGEST" "$@" 2>&1
+        "$DISPATCH_SCRIPT" --tuple debian-12-amd64 --digest "$NEW_DIGEST" "$@" \
+        >"$out_file" 2>&1 || ec=$?
+    command cat "$out_file"
+    return "$ec"
+}
+
+# Run the dispatcher with raw argv (no implicit --tuple/--digest), for testing
+# the input-validation guards. Same exit-code propagation as run_dispatch.
+# Usage: run_dispatch_raw [args...]
+run_dispatch_raw() {
+    local out_file="$TEST_TEMP_DIR/dispatch-out.txt" ec=0
+    DISPATCH_PROJECT_ROOT="$TEST_TEMP_DIR/repo" \
+        GH="$GH_STUB" \
+        SIBLING_PRESENT=1 \
+        SUPPORTS_TUPLE=1 \
+        TESTED_DIGEST="" \
+        "$DISPATCH_SCRIPT" "$@" \
+        >"$out_file" 2>&1 || ec=$?
+    command cat "$out_file"
+    return "$ec"
 }
 
 test_dispatches_on_digest_change() {
@@ -148,11 +170,57 @@ test_real_run_reaches_dispatch() {
     assert_contains "$out" "1 dispatched" "summary should count the dispatch"
 }
 
+test_warns_when_arg_missing() {
+    install_gh_stub
+    # Dockerfile without the RUST_VERSION ARG — arg_value returns empty.
+    local REPO_DIR="$TEST_TEMP_DIR/repo"
+    command mkdir -p "$REPO_DIR"
+    command cat >"$REPO_DIR/Dockerfile" <<'DOCKER'
+ARG PYTHON_VERSION=3.13.0
+DOCKER
+    local out
+    out="$(run_dispatch 1 1 "$OTHER_DIGEST" --dry-run)"
+    assert_contains "$out" "warning: no value for RUST_VERSION" "missing ARG should warn"
+    assert_not_contains "$out" "PLAN dispatch" "missing ARG should not dispatch"
+}
+
+test_errors_on_missing_digest() {
+    install_gh_stub
+    make_repo
+    local out ec=0
+    out="$(run_dispatch_raw --tuple debian-12-amd64)" || ec=$?
+    assert_equals "2" "$ec" "missing --digest should exit 2"
+    assert_contains "$out" "--tuple and --digest are required" "should explain the missing arg"
+}
+
+test_errors_on_malformed_digest() {
+    install_gh_stub
+    make_repo
+    local out ec=0
+    out="$(run_dispatch_raw --tuple debian-12-amd64 --digest notasha256)" || ec=$?
+    assert_equals "2" "$ec" "malformed digest should exit 2"
+    assert_contains "$out" "not a sha256" "should explain the bad digest"
+}
+
+test_errors_on_bad_tuple_shape() {
+    install_gh_stub
+    make_repo
+    local out ec=0
+    # Two parts (missing arch) — must not split into exactly three.
+    out="$(run_dispatch_raw --tuple debian-12 --digest "$NEW_DIGEST")" || ec=$?
+    assert_equals "2" "$ec" "two-part tuple should exit 2"
+    assert_contains "$out" "unexpected shape" "should explain the bad tuple"
+}
+
 run_test test_dispatches_on_digest_change "dispatches when the new digest differs from the newest tested row"
 run_test test_dispatches_when_never_tested "dispatches when there is no prior evidence"
 run_test test_noop_when_digest_matches_newest "no-op when the new digest matches the newest tested row"
 run_test test_defers_when_sibling_absent "defers when the sibling catalog lacks the version"
 run_test test_skips_unclaimed_tuple "skips a tool that does not claim the rebuilt tuple"
 run_test test_real_run_reaches_dispatch "non-dry-run reaches dispatch for a changed digest"
+run_test test_warns_when_arg_missing "warns and skips when the Dockerfile lacks the tool's ARG"
+run_test test_errors_on_missing_digest "exits 2 when --digest is absent"
+run_test test_errors_on_malformed_digest "exits 2 when --digest is malformed"
+run_test test_errors_on_bad_tuple_shape "exits 2 when --tuple is not three parts"
 
 generate_report

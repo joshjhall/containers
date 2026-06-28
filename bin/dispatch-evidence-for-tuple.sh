@@ -171,7 +171,9 @@ for entry in "${LUGGAGE_TOOLS[@]}"; do
     slug="${entry%%:*}"
     arg="${entry##*:}"
 
-    version="$(arg_value "$arg")"
+    # `|| true`: arg_value's grep exits 1 when the ARG is absent, which would
+    # abort the script under `set -e` before the emptiness check below.
+    version="$(arg_value "$arg" || true)"
     if [ -z "$version" ]; then
         echo "warning: no value for ${arg} in Dockerfile; skipping ${slug}" >&2
         continue
