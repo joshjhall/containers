@@ -321,11 +321,16 @@ clears and later re-occurs re-fires), so this is signal, not noise.
   shows here only as a generic `gate`.
 - **Pane channel** (`--stream-panes`) — `tmux capture-pane` matched against the
   modal **prompt overlay** (`Do you want to proceed?` and the `ExitPlanMode`
-  plan-approval prompt) on live `golem-*` sessions. It is the better catcher of
-  **plan-gate** prompts (which the feed under-classifies). The
-  "capture-pane is blank until exit" caveat applies to scrolling **work
-  output**, *not* the prompt overlay, which renders over the alt-screen and is
-  reliably scrapeable.
+  plan-approval prompt, whose signatures include `Here is Claude's plan`,
+  `Would you like to proceed`, and the `Yes, and use auto mode` option line) on
+  live `golem-*` sessions. It is the better catcher of **plan-gate** prompts
+  (which the feed under-classifies). The "capture-pane is blank until exit"
+  caveat applies to scrolling **work output**, *not* the prompt overlay, which
+  renders over the alt-screen and is reliably scrapeable. The stream carries no
+  "zero golems remain → stop" exit, so a transient **zero-golem handoff window**
+  (one golem's session killed, the next not yet created) is a no-op poll, not a
+  reason to terminate — the watch keeps running until the operator stops it
+  (#621).
 
 A human operator gets the same proactive surface with **`just golem-watch`**
 (streams both channels). See `mode-protocol.md` § *Gate-watch contract* for the

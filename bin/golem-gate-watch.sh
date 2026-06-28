@@ -39,6 +39,16 @@
 #
 # Never blocks a golem and never hangs on a missing feed/tmux: errors are
 # swallowed and a snapshot mode always exits 0.
+#
+# Robust by construction (issue #621). The `--stream*` loops carry NO
+# "zero golems remain -> stop" exit: an empty poll (no `golem-*` sessions, no
+# fresh feed line) is a normal no-op that emits nothing and keeps polling. So a
+# transient zero-golem window — the handoff beat where one golem's session is
+# killed (PR merged, worktree pruned) and the next is created — never terminates
+# the watch; the next golem's first gate is caught on a later poll. The watch
+# stops only when the operator/harness kills it. There is deliberately no
+# "sustained absence" timer: an unconditionally surviving loop is simpler and
+# strictly safer than any empty-poll countdown.
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(/usr/bin/dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -143,6 +153,7 @@ pane_is_plan_gate() {
         *"ready to code"*) return 0 ;;
         *"Would you like to proceed"*) return 0 ;;
         *"Here is Claude's plan"*) return 0 ;;
+        *"Yes, and use auto mode"*) return 0 ;;
     esac
     return 1
 }

@@ -277,6 +277,50 @@ PANE
 }
 run_test test_pane_plan_gate "pane: ExitPlanMode plan overlay is flagged as a plan gate"
 
+# ===========================================================================
+# Pane channel: an ExitPlanMode overlay whose only distinctive line is the
+# `Yes, and use auto mode` option (issue #621 lists this signature explicitly)
+# is still flagged as a plan gate, not missed.
+# ===========================================================================
+test_pane_plan_gate_auto_mode() {
+    local panefile stubdir out
+    panefile=$(/usr/bin/mktemp)
+    /usr/bin/cat >"$panefile" <<'PANE'
+  > 1. Yes, and use auto mode
+    2. Yes, manually approve edits
+    3. No, keep planning
+PANE
+    stubdir=$(make_tmux_stub "golem-813" "$panefile")
+    out=$(run_once_panes "$stubdir")
+    assert_contains "$out" "golem-813" "an overlay with the 'use auto mode' option is reported"
+    assert_contains "$out" "plan gate" "the 'use auto mode' overlay is labeled a plan gate"
+    /usr/bin/rm -rf "$stubdir" "$panefile"
+}
+run_test test_pane_plan_gate_auto_mode "pane: 'Yes, and use auto mode' overlay is flagged as a plan gate"
+
+# ===========================================================================
+# Pane channel: an overlay whose only plan-gate marker is the `Ready to code?`
+# header (the ExitPlanMode prompt that opens with that line) is flagged as a
+# plan gate. Guards the `Ready to code` branch of pane_is_plan_gate, which no
+# other test exercises in isolation.
+# ===========================================================================
+test_pane_plan_gate_ready_to_code() {
+    local panefile stubdir out
+    panefile=$(/usr/bin/mktemp)
+    /usr/bin/cat >"$panefile" <<'PANE'
+  Ready to code?
+
+  > 1. Yes
+    2. No
+PANE
+    stubdir=$(make_tmux_stub "golem-814" "$panefile")
+    out=$(run_once_panes "$stubdir")
+    assert_contains "$out" "golem-814" "a session at the 'Ready to code?' overlay is reported"
+    assert_contains "$out" "plan gate" "the 'Ready to code?' overlay is labeled a plan gate"
+    /usr/bin/rm -rf "$stubdir" "$panefile"
+}
+run_test test_pane_plan_gate_ready_to_code "pane: 'Ready to code?' overlay is flagged as a plan gate"
+
 test_pane_work_output_not_reported() {
     local panefile stubdir out
     panefile=$(/usr/bin/mktemp)
@@ -293,6 +337,34 @@ PANE
     /usr/bin/rm -rf "$stubdir" "$panefile"
 }
 run_test test_pane_work_output_not_reported "pane: work output without an overlay is not reported"
+
+# ===========================================================================
+# Pane channel: tmux present but ZERO golem-* sessions -> clean no-op, exit 0
+# (issue #621 AC1). This is the transient handoff window — one golem's session
+# killed, the next not yet created. The snapshot must emit nothing and succeed,
+# never a stop signal, so the streaming loop that consumes it keeps polling
+# across the gap instead of self-terminating.
+# ===========================================================================
+test_pane_zero_golem_sessions_noop() {
+    local stubdir out rc
+    # Stub `tmux ls` lists only NON-golem sessions, so the helper's
+    # `grep -oE '^golem-[0-9]+'` matches nothing — exactly a zero-golem poll.
+    stubdir=$(/usr/bin/mktemp -d)
+    /usr/bin/cat >"$stubdir/tmux" <<'STUB'
+#!/usr/bin/env bash
+case "$1" in
+    ls) /usr/bin/echo "main: 1 windows"; /usr/bin/echo "editor: 2 windows" ;;
+    *) : ;;
+esac
+STUB
+    /usr/bin/chmod +x "$stubdir/tmux"
+    out=$(/usr/bin/env BASH_ENV='' PATH="$stubdir:$PATH" "$WATCH" --once-panes 2>/dev/null)
+    rc=$?
+    assert_equals "0" "$rc" "zero golem-* sessions exits 0 (transient handoff window)"
+    assert_equals "" "$out" "zero golem-* sessions produces no output and no stop signal"
+    /usr/bin/rm -rf "$stubdir"
+}
+run_test test_pane_zero_golem_sessions_noop "pane: zero golem-* sessions is a clean no-op (no self-terminate)"
 
 # ===========================================================================
 # Pane channel: tmux absent -> clean no-op, exit 0.

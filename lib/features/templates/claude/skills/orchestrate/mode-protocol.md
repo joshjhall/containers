@@ -247,7 +247,10 @@ mode, so the pull and push surfaces can never disagree. Two **co-equal** channel
   overlay. Covers live worktree golems only, and is the better catcher of
   **plan-gate `ExitPlanMode`** prompts (which the feed records only as a generic
   `gate`); it labels those distinctly so the operator knows it is a plan to
-  review. Relies on the alt-screen overlay exception documented in the
+  review. The plan-gate signatures it matches are `Here is Claude's plan`,
+  `Would you like to proceed`, `Ready to code`, and the `Yes, and use auto mode`
+  option line — any one is enough, since a given overlay may show only one of
+  them. Relies on the alt-screen overlay exception documented in the
   *Monitor (TTY-free)* bullet above.
 
 **Notifies:** a real permission `gate` (feed: latest line per golem is a fresh
@@ -268,6 +271,17 @@ an `idle` supersedes; pane: the overlay disappears) it is forgotten, so when a
 append-only/latest-line rule from *How a block clears* drives both. `--stream`
 also **primes** past any pre-existing gates on startup so they are not replayed
 as new.
+
+**Survives the zero-golem handoff window (#621).** The streaming modes carry no
+"no golems remain → stop" exit: an empty poll — no live `golem-*` sessions and
+no fresh feed line — emits nothing and the loop polls again. This matters
+because dispatch routinely produces a one-poll **handoff window** where zero
+golems exist (an old golem's session is killed as its PR merges and the next is
+created a beat later); a watch that stopped on the first empty reading would
+silently miss every gate after that point. The watch therefore stops only when
+the operator/harness kills it — there is deliberately **no** "sustained absence"
+countdown, because an unconditionally surviving loop is simpler and strictly
+safer than any empty-poll timer.
 
 ### Dispatch Decision Sub-Tree
 
