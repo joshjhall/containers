@@ -648,6 +648,25 @@ ingest-evidence TOOL="rust" VERSION="1.95.0":
         --version {{ VERSION }} \
         --dry-run
 
+# Reconcile support_matrix claims against tested[] evidence for a tool
+# (report mode — informational, always exits 0). Omit TOOL to walk the whole
+# catalog. Reads the sibling containers-db checkout. See
+# docs/operations/evidence-runs.md § Coverage reconciliation.
+reconcile TOOL="rust": _db-check
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cargo build --release -p luggage
+    ./target/release/luggage reconcile {{ TOOL }} --catalog "{{ CONTAINERS_DB }}"
+
+# Gate variant: exit non-zero when a `supported` cell has no passing evidence
+# row (or an `unsupported` cell has one). Opt-in — wire into CI once the
+# base-image matrix covers the claimed cells.
+reconcile-gate TOOL="rust": _db-check
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cargo build --release -p luggage
+    ./target/release/luggage reconcile {{ TOOL }} --catalog "{{ CONTAINERS_DB }}" --gate
+
 # ============================================================================
 # Release
 # ============================================================================

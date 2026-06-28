@@ -94,6 +94,17 @@ impl Catalog {
         self.tools.get(id)
     }
 
+    /// All tool ids in the catalog, sorted for deterministic iteration.
+    ///
+    /// Lets callers walk every tool (e.g. the `reconcile` subcommand's
+    /// whole-catalog mode) without exposing the private `tools` map.
+    #[must_use]
+    pub fn tool_ids(&self) -> Vec<&str> {
+        let mut ids: Vec<&str> = self.tools.keys().map(String::as_str).collect();
+        ids.sort_unstable();
+        ids
+    }
+
     /// Resolve `(tool, spec, platform)` into a concrete install plan using
     /// the default [`ResolutionPolicy`] (stibbons-strict).
     ///
