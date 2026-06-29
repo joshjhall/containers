@@ -10,10 +10,10 @@
 //!
 //! # Pilot scope
 //!
-//! Only the four IDs rust@1.95.0 declares — `ca_certificates`, `gcc`,
-//! `libc_dev`, `musl_dev` — are wired up. Unknown IDs log a warning and
-//! continue rather than fail; future issues will widen the table or move
-//! it into the catalog as a per-tool override.
+//! The IDs rust@1.95.0 declares — `ca_certificates`, `gcc`, `libc_dev`,
+//! `musl_dev` — are wired up, plus `pkg_config` and `bash`. Unknown IDs
+//! log a warning and continue rather than fail; future issues will widen
+//! the table or move it into the catalog as a per-tool override.
 
 use std::process::Command;
 
@@ -57,6 +57,7 @@ impl PackageManager {
 #[must_use]
 pub fn package_name(tool: &str, mgr: PackageManager) -> Option<&'static str> {
     match (tool, mgr) {
+        ("bash", _) => Some("bash"),
         ("ca_certificates", _) => Some("ca-certificates"),
         ("gcc", _) => Some("gcc"),
         ("libc_dev", PackageManager::Apt) => Some("libc6-dev"),
@@ -331,6 +332,8 @@ mod tests {
 
     #[test]
     fn package_name_known_mappings() {
+        assert_eq!(package_name("bash", PackageManager::Apt), Some("bash"));
+        assert_eq!(package_name("bash", PackageManager::Apk), Some("bash"));
         assert_eq!(package_name("gcc", PackageManager::Apt), Some("gcc"));
         assert_eq!(package_name("libc_dev", PackageManager::Apt), Some("libc6-dev"));
         assert_eq!(package_name("musl_dev", PackageManager::Apk), Some("musl-dev"));
