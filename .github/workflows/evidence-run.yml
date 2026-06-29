@@ -422,6 +422,13 @@ jobs:
             pass|fail|skip) ;;
             *) echo "Unexpected result in evidence row: '$RESULT'" >&2; exit 1 ;;
           esac
+          # error_class is informational, not a gate — normalize an unexpected
+          # value to "unknown" rather than failing the row (a future luggage
+          # ErrorClass variant shouldn't drop a regression). Restricting it to a
+          # bare slug also keeps it safe as a literal gh-comment argument later.
+          case "$ERROR_CLASS" in
+            *[!a-z_]*) ERROR_CLASS="unknown" ;;
+          esac
           {
             echo "result=$RESULT"
             echo "error_class=$ERROR_CLASS"
@@ -486,6 +493,11 @@ jobs:
       # to dry_run=true there — so this never fires on a fork-safe PR leg.
       - name: Open or update tracking issue on fail row
         if: ${{ steps.verdict.outputs.result == 'fail' && needs.setup.outputs.dry_run != 'true' }}
+        # Best-effort: this runs AFTER the evidence row is uploaded and ingested,
+        # so a transient gh hiccup (rate limit, list timeout) must not turn an
+        # otherwise-successful evidence run red. Same posture as the base-image
+        # rebuild dispatch. The fail row is still durably recorded either way.
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
@@ -508,14 +520,16 @@ jobs:
           fi
           TITLE="Evidence regression: ${INPUT_TOOL}@${INPUT_TOOL_VERSION} on ${INPUT_TUPLE}"
           TODAY="$(date -u +%Y-%m-%d)"
-          # Ensure every label exists before filing. severity/high and type/bug
-          # are part of the repo's taxonomy, but creating them idempotently here
-          # (same --force pattern as auto-patch.yml) means gh issue create can
-          # never 422 on a missing label — audit/regression is the cadence-tier
-          # vocabulary and is the one most likely to be absent.
+          # Ensure every label exists before filing so gh issue create can never
+          # 422 on a missing one. audit/regression is the cadence-tier vocabulary
+          # most likely to be absent — create it idempotently with --force (same
+          # pattern as auto-patch.yml). severity/high and type/bug are existing
+          # taxonomy labels a maintainer may have recolored, so create-if-absent
+          # WITHOUT --force (|| true) rather than resetting their color/desc on
+          # every fail row.
           gh label create "audit/regression" --description "Automated regression finding" --color "B60205" --force
-          gh label create "severity/high" --description "High severity" --color "D93F0B" --force
-          gh label create "type/bug" --description "Bug" --color "D73A4A" --force
+          gh label create "severity/high" --description "High severity" --color "D93F0B" 2>/dev/null || true
+          gh label create "type/bug" --description "Bug" --color "D73A4A" 2>/dev/null || true
           # Build the body in a temp file via a quoted heredoc so the validated
           # inputs are substituted by the shell (not re-evaluated) and gh reads
           # it with --body-file — no second shell pass over LLM/user content.
