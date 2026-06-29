@@ -61,6 +61,10 @@ jobs:
             distro_version: "12"
             arch: amd64
             platform: linux/amd64
+          - distro: debian
+            distro_version: "13"
+            arch: arm64
+            platform: linux/arm64
     env:
       DISTRO: ${{ matrix.distro }}
       DISTRO_VERSION: ${{ matrix.distro_version }}
