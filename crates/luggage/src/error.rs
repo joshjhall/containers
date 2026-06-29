@@ -52,7 +52,9 @@ pub enum ErrorClass {
 impl From<&LuggageError> for ErrorClass {
     fn from(err: &LuggageError) -> Self {
         match err {
-            LuggageError::PackageManagerFailed { .. } => Self::Infra,
+            LuggageError::PackageManagerFailed { .. } | LuggageError::UnknownDependency { .. } => {
+                Self::Infra
+            }
             LuggageError::DownloadFailed { .. } => Self::Download,
             LuggageError::VerificationFailed { .. } => Self::Verify,
             LuggageError::PostInstallFailed { .. } => Self::PostInstall,
@@ -269,6 +271,18 @@ pub enum LuggageError {
     /// A URL template referenced a placeholder we don't have a value for.
     #[error("template substitution: missing key `{0}`")]
     TemplateMissingKey(String),
+
+    /// One or more catalog dependency ids had no system-package mapping in
+    /// this build of luggage, and strict mode (the default) refused to
+    /// proceed. Pass `--allow-unknown-deps` to downgrade to a warn-and-skip.
+    #[error("unknown dependency id(s) for {manager}: {ids}")]
+    UnknownDependency {
+        /// Host package manager the lookup was performed against
+        /// (e.g. `Apt`, `Apk`, `Dnf`).
+        manager: String,
+        /// Comma-separated list of the unrecognized dependency ids.
+        ids: String,
+    },
 }
 
 impl LuggageError {
@@ -480,6 +494,16 @@ mod tests {
     }
 
     #[test]
+    fn unknown_dependency_exit_code_is_one() {
+        let err =
+            LuggageError::UnknownDependency { manager: "Apt".into(), ids: "frobnicator".into() };
+        assert_eq!(err.exit_code(), 1);
+        let msg = format!("{err}");
+        assert!(msg.contains("Apt"));
+        assert!(msg.contains("frobnicator"));
+    }
+
+    #[test]
     fn template_missing_key_exit_code_is_one() {
         let err = LuggageError::TemplateMissingKey("rustup_target".into());
         assert_eq!(err.exit_code(), 1);
@@ -490,6 +514,13 @@ mod tests {
     fn error_class_maps_runtime_variants_to_their_stage() {
         let cases: &[(LuggageError, ErrorClass)] = &[
             (LuggageError::PackageManagerFailed { message: "apt".into() }, ErrorClass::Infra),
+            (
+                LuggageError::UnknownDependency {
+                    manager: "Apt".into(),
+                    ids: "frobnicator".into(),
+                },
+                ErrorClass::Infra,
+            ),
             (
                 LuggageError::DownloadFailed {
                     url: "https://x".into(),

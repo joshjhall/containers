@@ -78,6 +78,7 @@ fn options_in(roots: &TempDir) -> InstallerOptions {
         user_override: Some("vscode".to_owned()),
         install_system_packages: false,
         record_dependency_versions: false,
+        fail_on_unknown_deps: true,
     }
 }
 
@@ -370,6 +371,86 @@ fn already_installed_survives_etxtbsy_under_parallel_write_then_exec() {
     for h in handles {
         h.join().expect("worker thread panicked");
     }
+}
+
+/// Build a `Dependency` for a catalog tool id with no metadata. Used to
+/// inject an id luggage has no system-package mapping for.
+fn dep(tool: &str) -> containers_common::tooldb::Dependency {
+    containers_common::tooldb::Dependency {
+        tool: tool.into(),
+        version: None,
+        version_constraint: None,
+        purpose: None,
+        required: None,
+        platforms: None,
+    }
+}
+
+/// Non-strict `plan()` surfaces an unrecognized dependency id in
+/// `skipped_dependencies` instead of erroring — and does so without touching
+/// a real package manager (plan is pure). Proves the `--allow-unknown-deps`
+/// opt-out path threads the skip through to the report shape.
+#[test]
+fn plan_surfaces_skipped_deps_when_not_strict() {
+    let roots = TempDir::new().unwrap();
+    let mut resolved = resolve_rust();
+    // Append an id with no mapping; the four real rust deps stay known.
+    let mut deps = resolved.dependencies.take().unwrap_or_default();
+    deps.push(dep("frobnicator"));
+    resolved.dependencies = Some(deps);
+
+    let mut opts = options_in(&roots);
+    opts.fail_on_unknown_deps = false;
+    let installer = Installer::with_runners(
+        opts,
+        Arc::new(MockHttpClient::new()) as Arc<dyn HttpClient>,
+        Arc::new(RecordingRunner::new()) as Arc<dyn luggage::installer::methods::CommandRunner>,
+    );
+
+    let plan = installer.plan(&resolved).expect("plan should not error in non-strict mode");
+    assert!(
+        plan.skipped_dependencies.iter().any(|d| d == "frobnicator"),
+        "expected frobnicator in skipped_dependencies, got {:?}",
+        plan.skipped_dependencies,
+    );
+    // The known deps still translate to packages, untouched.
+    assert!(plan.system_packages.contains(&"gcc".to_owned()));
+}
+
+/// Strict mode (the production default) turns an unrecognized dependency id
+/// into a hard `UnknownDependency` error before any download or shell-out.
+/// The empty mock would fail download, so reaching `UnknownDependency` proves
+/// the gate fires in the system-packages stage, ahead of everything else.
+#[test]
+fn strict_install_errors_on_unknown_dependency() {
+    let roots = TempDir::new().unwrap();
+    let mut resolved = resolve_rust();
+    let mut deps = resolved.dependencies.take().unwrap_or_default();
+    deps.push(dep("frobnicator"));
+    resolved.dependencies = Some(deps);
+
+    // Strict default, and turn the system-package stage on so the gate runs.
+    let mut opts = options_in(&roots);
+    opts.install_system_packages = true;
+    opts.fail_on_unknown_deps = true;
+    let installer = Installer::with_runners(
+        opts,
+        Arc::new(MockHttpClient::new()) as Arc<dyn HttpClient>,
+        Arc::new(RecordingRunner::new()) as Arc<dyn luggage::installer::methods::CommandRunner>,
+    );
+
+    let (report, result) = installer.run_with_report(&resolved);
+    match result.expect_err("strict mode must reject the unknown dep") {
+        LuggageError::UnknownDependency { ids, .. } => {
+            assert!(ids.contains("frobnicator"), "ids was: {ids}");
+        }
+        other => panic!("expected UnknownDependency, got {other:?}"),
+    }
+    assert_eq!(
+        report.error_class,
+        Some(luggage::ErrorClass::Infra),
+        "UnknownDependency maps to the Infra error class",
+    );
 }
 
 /// Write an executable shim at `path` that prints `line` to stdout.
