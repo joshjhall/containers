@@ -65,6 +65,10 @@ jobs:
             distro_version: "13"
             arch: arm64
             platform: linux/arm64
+          - distro: alpine
+            distro_version: "3.21"
+            arch: amd64
+            platform: linux/amd64
     env:
       DISTRO: ${{ matrix.distro }}
       DISTRO_VERSION: ${{ matrix.distro_version }}
