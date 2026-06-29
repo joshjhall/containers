@@ -410,8 +410,18 @@ jobs:
       - name: Read evidence verdict
         id: verdict
         run: |
-          RESULT=$(jq -r '.result' out/evidence-row.json)
-          ERROR_CLASS=$(jq -r '.error_class // "unknown"' out/evidence-row.json)
+          set -euo pipefail
+          # record-evidence emits `result` as a fixed enum (pass|fail|skip) and
+          # `error_class` as an enum too — but the row is produced INSIDE the
+          # base image (luggage runs as --user 0), so treat both as untrusted:
+          # strip CR/LF (a GITHUB_OUTPUT key=value injection vector) and validate
+          # result against the enum before it gates the tracking-issue step.
+          RESULT=$(jq -r '.result' out/evidence-row.json | tr -d '\r\n')
+          ERROR_CLASS=$(jq -r '.error_class // "unknown"' out/evidence-row.json | tr -d '\r\n')
+          case "$RESULT" in
+            pass|fail|skip) ;;
+            *) echo "Unexpected result in evidence row: '$RESULT'" >&2; exit 1 ;;
+          esac
           {
             echo "result=$RESULT"
             echo "error_class=$ERROR_CLASS"
@@ -481,16 +491,36 @@ jobs:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           ERROR_CLASS: ${{ steps.verdict.outputs.error_class }}
         run: |
+          set -euo pipefail
+          # INPUT_TOOL/INPUT_TOOL_VERSION are free-text workflow_dispatch inputs.
+          # They flow into TITLE (a gh --search query) and the issue body, so
+          # validate them against tight slugs first — this blocks a dispatcher
+          # from smuggling gh-search operators or shell metacharacters through.
+          # INPUT_TUPLE is a `type: choice` input but is split+rechecked anyway.
+          if [[ ! "$INPUT_TOOL" =~ ^[a-z0-9][a-z0-9_-]*$ ]]; then
+            echo "Refusing to file issue: unexpected tool slug '$INPUT_TOOL'" >&2; exit 1
+          fi
+          if [[ ! "$INPUT_TOOL_VERSION" =~ ^[A-Za-z0-9][A-Za-z0-9.+_-]*$ ]]; then
+            echo "Refusing to file issue: unexpected version '$INPUT_TOOL_VERSION'" >&2; exit 1
+          fi
+          if [[ ! "$INPUT_TUPLE" =~ ^[a-z0-9]+-[a-z0-9.]+-[a-z0-9]+$ ]]; then
+            echo "Refusing to file issue: unexpected tuple '$INPUT_TUPLE'" >&2; exit 1
+          fi
           TITLE="Evidence regression: ${INPUT_TOOL}@${INPUT_TOOL_VERSION} on ${INPUT_TUPLE}"
           TODAY="$(date -u +%Y-%m-%d)"
-          # audit/regression is the cadence-tier vocabulary but isn't a
-          # pre-existing repo label — create it idempotently (same --force
-          # pattern as auto-patch.yml's hold/review-required) so issue creation
-          # never fails on a missing label.
-          gh label create "audit/regression" \
-            --description "Automated regression finding" \
-            --color "B60205" --force
-          BODY=$(cat <<EOF
+          # Ensure every label exists before filing. severity/high and type/bug
+          # are part of the repo's taxonomy, but creating them idempotently here
+          # (same --force pattern as auto-patch.yml) means gh issue create can
+          # never 422 on a missing label — audit/regression is the cadence-tier
+          # vocabulary and is the one most likely to be absent.
+          gh label create "audit/regression" --description "Automated regression finding" --color "B60205" --force
+          gh label create "severity/high" --description "High severity" --color "D93F0B" --force
+          gh label create "type/bug" --description "Bug" --color "D73A4A" --force
+          # Build the body in a temp file via a quoted heredoc so the validated
+          # inputs are substituted by the shell (not re-evaluated) and gh reads
+          # it with --body-file — no second shell pass over LLM/user content.
+          BODY_FILE="$(mktemp)"
+          cat > "$BODY_FILE" <<EOF
           ## Evidence run recorded a \`fail\` row
 
           An evidence run installed \`${INPUT_TOOL}@${INPUT_TOOL_VERSION}\`
@@ -504,7 +534,6 @@ jobs:
 
           <!-- managed-by: evidence-run.yml -->
           EOF
-          )
           # Title keyed on (tool, version, tuple) — INPUT_TUPLE encodes
           # os-os_version-arch — so a re-failure on the same cell updates one
           # issue while a different distro/arch opens its own.
@@ -512,13 +541,18 @@ jobs:
             --label "audit/regression" --state open \
             --search "\"${TITLE}\" in:title" \
             --json number --jq '.[0].number // empty')
+          # Guard the captured number: a transient gh/jq hiccup must not fall
+          # through to `gh issue create` and open a duplicate. Empty = no match.
+          if [ -n "${EXISTING}" ] && [[ ! "${EXISTING}" =~ ^[0-9]+$ ]]; then
+            echo "Unexpected issue number from gh issue list: '${EXISTING}'" >&2; exit 1
+          fi
           if [ -n "${EXISTING}" ]; then
             echo "Updating existing tracking issue #${EXISTING}"
-            gh issue edit "${EXISTING}" --body "${BODY}"
+            gh issue edit "${EXISTING}" --body-file "$BODY_FILE"
             gh issue comment "${EXISTING}" \
               --body "Failed again on ${TODAY} (error_class \`${ERROR_CLASS}\`) — see ${RUN_URL}"
           else
             echo "Opening new tracking issue"
-            gh issue create --title "${TITLE}" --body "${BODY}" \
+            gh issue create --title "${TITLE}" --body-file "$BODY_FILE" \
               --label "severity/high" --label "type/bug" --label "audit/regression"
           fi
