@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "id": "bash",
+  "display_name": "Bash",
+  "kind": "system_package",
+  "homepage": "https://www.gnu.org/software/bash/",
+  "source_repo": "https://git.savannah.gnu.org/git/bash.git",
+  "license": "GPL-3.0-or-later",
+  "activity": {
+    "score": "very-active",
+    "scan_cadence_days": 30,
+    "scanned_at": "2026-04-29T00:00:00Z"
+  },
+  "validation_tiers": {
+    "tier1": {
+      "available": true,
+      "notes": "Distro package archives are GPG-signed by their respective archive keyrings (debian-archive-keyring, ubuntu-archive-keyring, alpine-keys, redhat-release). Trust is rooted in the host package manager's configuration."
+    }
+  },
+  "system_package": {
+    "platforms": {
+      "debian": { "name": "bash" },
+      "ubuntu": { "name": "bash" },
+      "alpine": { "name": "bash" },
+      "rhel": { "name": "bash" }
+    }
+  }
+}
