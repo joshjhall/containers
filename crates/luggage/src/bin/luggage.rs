@@ -139,7 +139,11 @@ struct CommonArgs {
 }
 
 /// `luggage install <tool>[@<version>]` arguments.
+///
+/// The boolean fields are independent clap flags, so plain `bool`s are the
+/// idiomatic shape here rather than a state machine.
 #[derive(Args, Debug)]
+#[allow(clippy::struct_excessive_bools)]
 struct InstallArgs {
     /// Catalog tool id with an optional `@<version>` suffix
     /// (e.g. `rust`, `rust@1.95.0`, `node@22`).
@@ -181,6 +185,13 @@ struct InstallArgs {
     /// manager is unavailable or already pre-populated.
     #[arg(long)]
     skip_system_packages: bool,
+
+    /// Opt out of strict dependency handling: a catalog dependency id with
+    /// no system-package mapping is warned-and-skipped instead of aborting
+    /// the install. Strict (fail-fast) is the default; evidence-run relies
+    /// on it to catch catalog drift, so do not pass this in CI.
+    #[arg(long)]
+    allow_unknown_deps: bool,
 
     /// Write a JSON [`InstallReport`] to this path. Emitted on every
     /// exit path — success, skip, dry-run, or failure — so evidence-run
@@ -358,6 +369,7 @@ fn cmd_install(args: &InstallArgs) -> Result<(), LuggageError> {
         // Capturing dependency versions only matters for the evidence row,
         // which is the JSON report's sole consumer — so tie it to that flag.
         record_dependency_versions: args.json_report.is_some(),
+        fail_on_unknown_deps: !args.allow_unknown_deps,
     };
     let installer = Installer::with_options(opts);
 

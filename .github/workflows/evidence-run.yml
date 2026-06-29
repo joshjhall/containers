@@ -357,6 +357,10 @@ jobs:
           # --json-report writes a failure row too, which is the whole
           # point of an evidence run. The row's `result` field carries
           # the verdict.
+          # Strict dependency handling is the default (issue #644): an
+          # unmapped catalog dep id makes `luggage install` hard-fail and
+          # write a failure row. That is intentional and relied upon to
+          # surface catalog drift — do NOT add --allow-unknown-deps below.
           set +e
           # --user 0: base image defaults to a non-root USER (security
           # hardening), but luggage needs root to install rust system-wide

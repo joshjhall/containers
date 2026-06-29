@@ -48,8 +48,8 @@ use template::{Substitutions, substitute_url};
 ///
 /// The flags are independent install toggles, not a state machine, so the
 /// plain-struct shape is the clearest carrier despite the bool count.
-#[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct InstallerOptions {
     /// Skip side-effects; build the plan and return it.
     pub dry_run: bool,
@@ -75,6 +75,11 @@ pub struct InstallerOptions {
     /// turns it on only when `--json-report` is requested (the sole consumer)
     /// so ordinary installs and hermetic tests skip the extra queries.
     pub record_dependency_versions: bool,
+    /// When `true` (the default), a catalog dependency id with no
+    /// system-package mapping is a hard error
+    /// ([`LuggageError::UnknownDependency`]) rather than a warn-and-skip.
+    /// The CLI's `--allow-unknown-deps` flag sets this to `false`.
+    pub fail_on_unknown_deps: bool,
 }
 
 impl Default for InstallerOptions {
@@ -89,6 +94,7 @@ impl Default for InstallerOptions {
             user_override: None,
             install_system_packages: true,
             record_dependency_versions: false,
+            fail_on_unknown_deps: true,
         }
     }
 }
@@ -119,6 +125,11 @@ pub struct InstallPlan {
     /// Catalog `Dependency.tool` ids that will be installed via the host
     /// package manager, translated to per-distro names.
     pub system_packages: Vec<String>,
+    /// Catalog `Dependency.tool` ids that had no system-package mapping in
+    /// this build of luggage. Under strict mode these abort the install;
+    /// under `--allow-unknown-deps` they are skipped and surfaced here.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub skipped_dependencies: Vec<String>,
     /// Number of post-install steps to run.
     pub post_install_steps: usize,
     /// User the install will run as.
@@ -163,6 +174,14 @@ pub struct InstallReport {
     /// and whenever recording is disabled. Best-effort per dep.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub dependencies: Option<Vec<InstalledDependency>>,
+    /// Catalog dependency ids that had no system-package mapping and were
+    /// skipped. Only populated when the installer ran in non-strict mode
+    /// (`--allow-unknown-deps`); strict mode turns the same condition into a
+    /// failure. `skip_serializing_if` keeps the wire shape byte-identical to
+    /// the pre-#644 report when empty, so existing evidence rows are
+    /// unaffected.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub skipped_dependencies: Vec<String>,
 }
 
 /// The install execution engine.
@@ -231,12 +250,17 @@ impl Installer {
         let invoke_args = resolved.invoke.as_ref().and_then(|i| i.args.clone());
 
         let pkg_mgr = PackageManager::for_platform(&resolved.platform).ok();
-        let system_packages = match (pkg_mgr, resolved.dependencies.as_deref()) {
-            (Some(mgr), Some(deps)) => {
-                translate_dependencies(deps, mgr).into_iter().map(str::to_owned).collect()
-            }
-            _ => Vec::new(),
-        };
+        let (system_packages, skipped_dependencies) =
+            match (pkg_mgr, resolved.dependencies.as_deref()) {
+                (Some(mgr), Some(deps)) => {
+                    let translated = translate_dependencies(deps, mgr);
+                    (
+                        translated.packages.into_iter().map(str::to_owned).collect(),
+                        translated.unknown,
+                    )
+                }
+                _ => (Vec::new(), Vec::new()),
+            };
 
         let post_install_steps = resolved.post_install.as_ref().map_or(0, Vec::len);
         let user = user::resolve_install_user(self.options.user_override.as_deref());
@@ -250,6 +274,7 @@ impl Installer {
             checksum_url,
             invoke_args,
             system_packages,
+            skipped_dependencies,
             post_install_steps,
             user,
         })
@@ -320,6 +345,9 @@ impl Installer {
             return (Self::report_dry_run(plan, logger, started.elapsed().as_secs_f64()), Ok(()));
         }
 
+        // Capture before `plan` is consumed by `run_stages`, so the success
+        // report can carry any non-strict skips through to evidence-run.
+        let skipped_dependencies = plan.skipped_dependencies.clone();
         match self.run_stages(resolved, plan, logger.as_ref()) {
             Ok(version_output) => {
                 if let Some(l) = &logger {
@@ -334,6 +362,7 @@ impl Installer {
                     version_output: Some(version_output),
                     error_class: None,
                     dependencies: self.captured_dependency_versions(resolved),
+                    skipped_dependencies,
                 };
                 (report, Ok(()))
             }
@@ -366,6 +395,7 @@ impl Installer {
             version_output: None,
             error_class: None,
             dependencies: None,
+            skipped_dependencies: Vec::new(),
         }
     }
 
@@ -387,6 +417,7 @@ impl Installer {
             version_output: None,
             error_class: None,
             dependencies: None,
+            skipped_dependencies: plan.skipped_dependencies,
         }
     }
 
@@ -409,6 +440,7 @@ impl Installer {
             version_output: None,
             error_class: Some(ErrorClass::from(err)),
             dependencies: None,
+            skipped_dependencies: Vec::new(),
         }
     }
 
@@ -465,7 +497,7 @@ impl Installer {
         if let Some(l) = logger {
             l.step("install system packages");
         }
-        install_dependencies(deps, mgr)
+        install_dependencies(deps, mgr, self.options.fail_on_unknown_deps)
     }
 
     /// Query the host package manager for each dependency's resolved version,
@@ -673,6 +705,9 @@ mod tests {
         assert!(o.install_system_packages);
         // Off by default — only the CLI's --json-report path enables it.
         assert!(!o.record_dependency_versions);
+        // Strict by default — unknown dep ids fail closed unless the CLI's
+        // --allow-unknown-deps opts out.
+        assert!(o.fail_on_unknown_deps);
     }
 
     #[test]

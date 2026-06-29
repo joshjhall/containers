@@ -159,6 +159,7 @@ mod tests {
             version_output: Some("rustc 1.95.0 (abcdef0)".into()),
             error_class: None,
             dependencies: None,
+            skipped_dependencies: Vec::new(),
         }
     }
 

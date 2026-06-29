@@ -98,23 +98,42 @@ pub fn install_argv(mgr: PackageManager, packages: &[&str]) -> Option<(&'static 
     })
 }
 
+/// Result of translating catalog dependency ids into per-distro packages.
+///
+/// `packages` holds the recognized ids' per-distro names; `unknown` holds the
+/// raw `Dependency.tool` ids that had no mapping in this build of luggage.
+/// Callers decide what to do with `unknown`: the default (strict) install
+/// path turns a non-empty `unknown` into [`LuggageError::UnknownDependency`],
+/// while the planner and `--allow-unknown-deps` path surface it as a
+/// skipped-dependency list instead.
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct TranslatedDeps {
+    /// Recognized dependency ids, mapped to per-distro package names.
+    pub packages: Vec<&'static str>,
+    /// Dependency ids with no system-package mapping in this build.
+    pub unknown: Vec<String>,
+}
+
 /// Translate `dependencies` into per-distro package names.
 ///
-/// Unknown `Dependency.tool` ids emit a `tracing::warn!` and are skipped.
-/// This is intentional: the rust pilot's catalog has been hand-audited but
-/// catalogs scanned in by future automation may carry IDs we haven't wired
-/// yet, and a single unrecognised dep should not block the entire install.
-pub fn translate_dependencies(deps: &[Dependency], mgr: PackageManager) -> Vec<&'static str> {
-    let mut out = Vec::new();
+/// Unknown `Dependency.tool` ids emit a `tracing::warn!` and are collected
+/// into [`TranslatedDeps::unknown`] rather than silently dropped. The rust
+/// pilot's catalog has been hand-audited, but catalogs scanned in by future
+/// automation may carry ids we haven't wired yet; the caller decides whether
+/// an unrecognized id is fatal (strict mode) or skippable.
+#[must_use]
+pub fn translate_dependencies(deps: &[Dependency], mgr: PackageManager) -> TranslatedDeps {
+    let mut out = TranslatedDeps::default();
     for dep in deps {
         if let Some(name) = package_name(&dep.tool, mgr) {
-            out.push(name);
+            out.packages.push(name);
         } else {
             warn!(
                 tool = %dep.tool,
                 manager = ?mgr,
                 "no system-package mapping; skipping (catalog may need an update)",
             );
+            out.unknown.push(dep.tool.clone());
         }
     }
     out
@@ -122,17 +141,32 @@ pub fn translate_dependencies(deps: &[Dependency], mgr: PackageManager) -> Vec<&
 
 /// Install `dependencies` on the host via `mgr`.
 ///
-/// Skips the call when no dependencies translate to packages. Errors map
-/// to [`LuggageError::PackageManagerFailed`] with the package manager's
-/// stderr in the message body for diagnostics.
+/// Skips the call when no dependencies translate to packages. When `strict`
+/// is `true` (the production default) and any dependency id has no mapping,
+/// returns [`LuggageError::UnknownDependency`] *before* shelling out to the
+/// package manager — so a catalog that drifted ahead of luggage's mapping
+/// table fails loudly rather than installing a partial dependency set. When
+/// `strict` is `false`, unknown ids are warned-and-skipped (the legacy
+/// behavior, opted into via `--allow-unknown-deps`).
+///
+/// Otherwise, errors map to [`LuggageError::PackageManagerFailed`] with the
+/// package manager's stderr in the message body for diagnostics.
 ///
 /// # Errors
 ///
+/// - [`LuggageError::UnknownDependency`] when `strict` and at least one
+///   dependency id has no system-package mapping.
 /// - [`LuggageError::PackageManagerFailed`] when the package manager exits
 ///   non-zero or fails to launch.
-pub fn install_dependencies(deps: &[Dependency], mgr: PackageManager) -> Result<()> {
-    let names = translate_dependencies(deps, mgr);
-    let Some((program, args)) = install_argv(mgr, &names) else {
+pub fn install_dependencies(deps: &[Dependency], mgr: PackageManager, strict: bool) -> Result<()> {
+    let TranslatedDeps { packages, unknown } = translate_dependencies(deps, mgr);
+    if strict && !unknown.is_empty() {
+        return Err(LuggageError::UnknownDependency {
+            manager: format!("{mgr:?}"),
+            ids: unknown.join(", "),
+        });
+    }
+    let Some((program, args)) = install_argv(mgr, &packages) else {
         return Ok(());
     };
     if matches!(mgr, PackageManager::Apt) {
@@ -404,8 +438,9 @@ mod tests {
                 platforms: None,
             },
         ];
-        let pkgs = translate_dependencies(&deps, PackageManager::Apt);
-        assert_eq!(pkgs, vec!["ca-certificates", "gcc"]);
+        let translated = translate_dependencies(&deps, PackageManager::Apt);
+        assert_eq!(translated.packages, vec!["ca-certificates", "gcc"]);
+        assert_eq!(translated.unknown, vec!["frobnicator".to_owned()]);
     }
 
     fn dep(tool: &str) -> Dependency {
@@ -417,6 +452,28 @@ mod tests {
             required: None,
             platforms: None,
         }
+    }
+
+    #[test]
+    fn install_dependencies_strict_errors_on_unknown() {
+        // Pure: the strict check returns before any package-manager shell-out,
+        // so no real apt/apk/dnf is needed.
+        let deps = vec![dep("gcc"), dep("frobnicator")];
+        let err = install_dependencies(&deps, PackageManager::Apt, true).unwrap_err();
+        match err {
+            LuggageError::UnknownDependency { manager, ids } => {
+                assert_eq!(manager, "Apt");
+                assert_eq!(ids, "frobnicator");
+            }
+            other => panic!("expected UnknownDependency, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn install_dependencies_strict_ok_when_all_known_and_empty() {
+        // No unknown ids and no packages to install → strict mode still
+        // returns Ok without shelling out (install_argv is None for []).
+        assert!(install_dependencies(&[], PackageManager::Apt, true).is_ok());
     }
 
     #[test]
