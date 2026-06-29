@@ -77,6 +77,7 @@ fn options_in(roots: &TempDir) -> InstallerOptions {
         tmp_root: roots.path().join("tmp"),
         user_override: Some("vscode".to_owned()),
         install_system_packages: false,
+        record_dependency_versions: false,
     }
 }
 

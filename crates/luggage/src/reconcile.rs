@@ -249,6 +249,7 @@ mod tests {
             duration_seconds: None,
             version_output: None,
             error_class: None,
+            dependencies: None,
             notes: None,
         }
     }
