@@ -153,6 +153,52 @@ option. Activate by uncommenting the pilot leg once the arm64 base image lands
 body needs no change. Until then, dispatching `debian-12-arm64` fails at
 `Resolve base image digest` (no image to pull), by design.
 
+## Dispatching evidence on a version bump
+
+When the auto-patch pipeline bumps a luggage-managed tool's `ARG <TOOL>_VERSION`
+on `main`, the post-merge job runs
+[`bin/dispatch-evidence.sh`](../../bin/dispatch-evidence.sh). Rather than firing
+one hardcoded tuple, the dispatcher **enumerates the matrix**: it reads the new
+version's `support_matrix` from containers-db and dispatches one
+`evidence-run.yml` per cell in
+
+```text
+support_matrix `supported` cells  ∩  available published base tuples
+```
+
+so a bump evidences every cell the version actually claims — never silently
+shipping unverified `supported` claims (#645).
+
+**Available-tuples source of truth.** The "available" half of the intersection
+is the local `base-images/<os>/<os_version>/<arch>/Dockerfile` tree — the same
+canonical set [`base-images/README.md`](../../base-images/README.md) defines and
+[`build-base-images.yml`](../../.github/workflows/build-base-images.yml) builds
+from. A `support_matrix` row with no `os_version` (a wildcard claim) is realized
+through whichever concrete available tuples it covers; a claim for a tuple with
+no published base image simply drops out of the intersection.
+
+**Why only `debian-12-amd64` fires today.** The base-images tree currently
+publishes only `debian/12/amd64` (see
+[arm64 is wired but inactive](#arm64-is-wired-but-inactive)). So even a version
+whose `support_matrix` claims debian-13, alpine, or arm64, the intersection
+resolves to just `debian-12-amd64` until those base images land — the dispatcher
+fires exactly the cells that can actually run. An empty intersection (every
+claimed cell still unpublished) logs `no supported tuples available` and
+dispatches nothing, exiting cleanly rather than erroring.
+
+**Cross-repo deferral + idempotency still apply.** If containers-db has not yet
+published `tools/<slug>/versions/<version>.json`, the dispatcher logs a clean
+defer and skips the tool (the hourly containers-db scanner adds the version
+independently, and the next trigger picks it up). The ingest layer's
+`(os, os_version, arch, image_digest)` dedup key keeps re-runs idempotent end to
+end — see [Merge policy](#merge-policy).
+
+**`EVIDENCE_TUPLE` is a manual single-tuple override.** Left unset (the
+post-merge default), the dispatcher enumerates the intersection above. Set to a
+single `<os>-<os_version>-<arch>` slug, it bypasses the intersection and
+dispatches only that tuple — for operators driving a one-off evidence run by
+hand.
+
 ## Transport choice — PR-bot
 
 The producer opens a PR against `joshjhall/containers-db`. It does not
