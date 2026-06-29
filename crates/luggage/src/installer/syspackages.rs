@@ -17,7 +17,7 @@
 
 use std::process::Command;
 
-use containers_common::tooldb::Dependency;
+use containers_common::tooldb::{Dependency, InstalledDependency};
 use tracing::warn;
 
 use crate::Platform;
@@ -166,6 +166,138 @@ pub fn install_dependencies(deps: &[Dependency], mgr: PackageManager) -> Result<
     }
 }
 
+/// Build the argv that prints the installed version of `package` via `mgr`.
+///
+/// Returned as `(program, args)` so the queries stay close to
+/// [`install_argv`] and are unit-testable without shelling out. Each manager
+/// is asked to print *only* the version with no surrounding noise:
+///
+/// - apt: `dpkg-query -W -f=${Version} <pkg>` → bare version, e.g. `4:12.2.0-3`.
+/// - apk: `apk info -v <pkg>` → `<pkg>-<version>`, stripped by
+///   [`parse_apk_version`] (apk has no format-string flag). `-v` alone lists
+///   the installed package with its version and exits 0 when present; the
+///   `-e`/`--installed` flag is intentionally omitted — it matches a full
+///   `name-version-release` spec, so passing a bare package name exits
+///   non-zero even when the package is installed.
+/// - dnf: `rpm -q --qf %{VERSION}-%{RELEASE} <pkg>` → `12.2.0-3`.
+#[must_use]
+fn query_version_argv(mgr: PackageManager, package: &str) -> (&'static str, Vec<String>) {
+    match mgr {
+        PackageManager::Apt => {
+            ("dpkg-query", vec!["-W".to_owned(), "-f=${Version}".to_owned(), package.to_owned()])
+        }
+        PackageManager::Apk => {
+            ("apk", vec!["info".to_owned(), "-v".to_owned(), package.to_owned()])
+        }
+        PackageManager::Dnf => (
+            "rpm",
+            vec![
+                "-q".to_owned(),
+                "--qf".to_owned(),
+                "%{VERSION}-%{RELEASE}".to_owned(),
+                package.to_owned(),
+            ],
+        ),
+    }
+}
+
+/// Recover the version from `apk info -v` output, which prints
+/// `<package>-<version>` (e.g. `musl-dev-1.2.5-r0` → `1.2.5-r0`).
+///
+/// apk package names can themselves contain hyphens, so we strip the exact
+/// `"<package>-"` prefix rather than splitting on the last hyphen. Returns
+/// `None` when the line does not start with the expected prefix.
+#[must_use]
+fn parse_apk_version(package: &str, line: &str) -> Option<String> {
+    let trimmed = line.trim();
+    trimmed
+        .strip_prefix(package)
+        .and_then(|rest| rest.strip_prefix('-'))
+        .filter(|v| !v.is_empty())
+        .map(ToOwned::to_owned)
+}
+
+/// Recover the version from `dpkg-query`/`rpm` output, which print the bare
+/// version string. Returns `None` for empty or whitespace-only output —
+/// `dpkg-query` can exit 0 yet print nothing for a not-fully-installed package.
+#[must_use]
+fn parse_apt_dnf_version(stdout: &str) -> Option<String> {
+    let v = stdout.trim();
+    (!v.is_empty()).then(|| v.to_owned())
+}
+
+/// Resolve the installed versions of `deps` via `mgr`, best-effort.
+///
+/// Returns one [`InstalledDependency`] per dep that maps to a known package
+/// name (unknown ids are skipped with a warning, exactly as
+/// [`translate_dependencies`] does). `version` is `None` when the package
+/// manager query fails to launch, exits non-zero, or prints nothing — a
+/// missing version must never abort an otherwise-successful install, so this
+/// function returns no error. Used to populate evidence rows ([containers#642]).
+///
+/// [containers#642]: https://github.com/joshjhall/containers/issues/642
+#[must_use]
+pub fn resolve_installed_versions(
+    deps: &[Dependency],
+    mgr: PackageManager,
+) -> Vec<InstalledDependency> {
+    let mut out = Vec::new();
+    for dep in deps {
+        let Some(package) = package_name(&dep.tool, mgr) else {
+            warn!(
+                tool = %dep.tool,
+                manager = ?mgr,
+                "no system-package mapping; skipping version capture",
+            );
+            continue;
+        };
+        let version = query_installed_version(mgr, package);
+        out.push(InstalledDependency {
+            tool: dep.tool.clone(),
+            package: package.to_owned(),
+            version,
+        });
+    }
+    out
+}
+
+/// Run the package-manager query for `package` and return the parsed version,
+/// or `None` on any failure (launch error, non-zero exit, empty output).
+#[must_use]
+fn query_installed_version(mgr: PackageManager, package: &str) -> Option<String> {
+    let (program, args) = query_version_argv(mgr, package);
+    let output = match Command::new(program).args(&args).output() {
+        Ok(o) if o.status.success() => o,
+        Ok(o) => {
+            warn!(
+                package,
+                manager = ?mgr,
+                status = %o.status,
+                "version query exited non-zero; recording version as unknown",
+            );
+            return None;
+        }
+        Err(e) => {
+            warn!(
+                package,
+                manager = ?mgr,
+                error = %e,
+                "version query failed to launch; recording version as unknown",
+            );
+            return None;
+        }
+    };
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let version = match mgr {
+        PackageManager::Apk => parse_apk_version(package, &stdout),
+        PackageManager::Apt | PackageManager::Dnf => parse_apt_dnf_version(&stdout),
+    };
+    if version.is_none() {
+        warn!(package, manager = ?mgr, "version query returned no parseable version");
+    }
+    version
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -271,5 +403,88 @@ mod tests {
         ];
         let pkgs = translate_dependencies(&deps, PackageManager::Apt);
         assert_eq!(pkgs, vec!["ca-certificates", "gcc"]);
+    }
+
+    fn dep(tool: &str) -> Dependency {
+        Dependency {
+            tool: tool.into(),
+            version: None,
+            version_constraint: None,
+            purpose: None,
+            required: None,
+            platforms: None,
+        }
+    }
+
+    #[test]
+    fn query_version_argv_apt_uses_dpkg_query_format() {
+        let (prog, args) = query_version_argv(PackageManager::Apt, "libc6-dev");
+        assert_eq!(prog, "dpkg-query");
+        assert_eq!(args, vec!["-W", "-f=${Version}", "libc6-dev"]);
+    }
+
+    #[test]
+    fn query_version_argv_apk_uses_info_v() {
+        // `-v` only (no `-e`): `-e` matches a full name-version-release spec,
+        // so a bare package name would exit non-zero even when installed.
+        let (prog, args) = query_version_argv(PackageManager::Apk, "musl-dev");
+        assert_eq!(prog, "apk");
+        assert_eq!(args, vec!["info", "-v", "musl-dev"]);
+    }
+
+    #[test]
+    fn query_version_argv_dnf_uses_rpm_qf() {
+        let (prog, args) = query_version_argv(PackageManager::Dnf, "glibc-devel");
+        assert_eq!(prog, "rpm");
+        assert_eq!(args, vec!["-q", "--qf", "%{VERSION}-%{RELEASE}", "glibc-devel"]);
+    }
+
+    #[test]
+    fn parse_apk_version_strips_package_prefix() {
+        // apk prints `<package>-<version>`; the package name itself contains a
+        // hyphen, so we must strip the exact prefix, not split on last `-`.
+        assert_eq!(parse_apk_version("musl-dev", "musl-dev-1.2.5-r0"), Some("1.2.5-r0".into()));
+        assert_eq!(
+            parse_apk_version("ca-certificates", "ca-certificates-20240705-r0\n"),
+            Some("20240705-r0".into()),
+        );
+    }
+
+    #[test]
+    fn parse_apk_version_rejects_mismatched_line() {
+        assert_eq!(parse_apk_version("gcc", "something-else-1.0"), None);
+        // Prefix present but no version after it.
+        assert_eq!(parse_apk_version("gcc", "gcc-"), None);
+    }
+
+    #[test]
+    fn resolve_installed_versions_skips_unknown_ids() {
+        // `frobnicator` has no package mapping, so it is dropped entirely —
+        // the known deps still produce an entry (version is best-effort and
+        // may be None on a host without the package, which is fine here).
+        let deps = vec![dep("ca_certificates"), dep("frobnicator"), dep("gcc")];
+        let resolved = resolve_installed_versions(&deps, PackageManager::Apt);
+        let tools: Vec<&str> = resolved.iter().map(|d| d.tool.as_str()).collect();
+        assert_eq!(tools, vec!["ca_certificates", "gcc"]);
+        let packages: Vec<&str> = resolved.iter().map(|d| d.package.as_str()).collect();
+        assert_eq!(packages, vec!["ca-certificates", "gcc"]);
+    }
+
+    #[test]
+    fn resolve_installed_versions_empty_deps_returns_empty() {
+        assert!(resolve_installed_versions(&[], PackageManager::Apt).is_empty());
+    }
+
+    #[test]
+    fn parse_apt_dnf_version_trims_and_returns() {
+        assert_eq!(parse_apt_dnf_version("4:12.2.0-3\n"), Some("4:12.2.0-3".into()));
+        assert_eq!(parse_apt_dnf_version("  2.36-9+deb12u7  "), Some("2.36-9+deb12u7".into()));
+    }
+
+    #[test]
+    fn parse_apt_dnf_version_none_for_empty_or_whitespace() {
+        // dpkg-query can exit 0 but print nothing for a not-fully-installed pkg.
+        assert!(parse_apt_dnf_version("").is_none());
+        assert!(parse_apt_dnf_version("   \n").is_none());
     }
 }

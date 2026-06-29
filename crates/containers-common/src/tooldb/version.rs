@@ -121,9 +121,37 @@ pub struct TestEntry {
     /// is [`TestResult::Fail`].
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error_class: Option<ErrorClass>,
+    /// System dependencies resolved to the concrete versions present during
+    /// the run (`gcc`, `libc6-dev`, `ca-certificates`, …). Best-effort and
+    /// populated only on pass rows from `luggage --json-report`; lets a
+    /// "passed last month, fails today" install be correlated with a
+    /// base-image toolchain bump. Omitted when nothing was captured.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dependencies: Option<Vec<InstalledDependency>>,
     /// Free-form notes.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub notes: Option<String>,
+}
+
+/// A system dependency resolved to a concrete installed version during an
+/// evidence run.
+///
+/// Catalog `install_methods[].dependencies[]` entries are version-less
+/// abstract ids (`{tool: gcc}`); this records what the host package manager
+/// actually had installed once luggage translated and installed them, so an
+/// evidence row can answer "did this pass because of, or despite, gcc 12.2 vs
+/// 13.1?". `version` is best-effort: `None` when the host package-manager
+/// query failed or returned nothing.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct InstalledDependency {
+    /// Abstract catalog `Dependency.tool` id (e.g. `gcc`, `libc_dev`).
+    pub tool: String,
+    /// Per-distro package name actually installed (e.g. `libc6-dev`).
+    pub package: String,
+    /// Resolved version string from the host package manager.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub version: Option<String>,
 }
 
 /// Outcome of a CI run row.
@@ -293,6 +321,60 @@ mod tests {
         assert!(entry.image_digest.is_none());
         assert!(entry.duration_seconds.is_none());
         assert!(entry.error_class.is_none());
+        assert!(entry.dependencies.is_none());
+    }
+
+    #[test]
+    fn test_entry_round_trips_installed_dependencies() {
+        let json = r#"{
+            "os": "debian",
+            "os_version": "12",
+            "arch": "amd64",
+            "tested_at": "2026-05-16T12:00:00Z",
+            "result": "pass",
+            "dependencies": [
+                {"tool": "gcc", "package": "gcc", "version": "4:12.2.0-3"},
+                {"tool": "libc_dev", "package": "libc6-dev", "version": "2.36-9+deb12u7"},
+                {"tool": "ca_certificates", "package": "ca-certificates"}
+            ]
+        }"#;
+        let entry: TestEntry = serde_json::from_str(json).expect("parse row with dependencies");
+        let deps = entry.dependencies.as_deref().expect("dependencies present");
+        assert_eq!(deps.len(), 3);
+        assert_eq!(deps[0].tool, "gcc");
+        assert_eq!(deps[0].package, "gcc");
+        assert_eq!(deps[0].version.as_deref(), Some("4:12.2.0-3"));
+        // Best-effort: a dep whose version could not be resolved omits it.
+        assert_eq!(deps[2].tool, "ca_certificates");
+        assert!(deps[2].version.is_none());
+
+        let serialized = serde_json::to_string(&entry).unwrap();
+        let reparsed: TestEntry = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(reparsed.dependencies, entry.dependencies);
+    }
+
+    #[test]
+    fn installed_dependency_rejects_unknown_fields() {
+        // deny_unknown_fields is the strictness guard against silent schema
+        // drift — an extra key must error, not be dropped.
+        let json = r#"{"tool": "gcc", "package": "gcc", "version": "12.2", "surprise": true}"#;
+        assert!(
+            serde_json::from_str::<InstalledDependency>(json).is_err(),
+            "unknown field should be rejected",
+        );
+    }
+
+    #[test]
+    fn test_entry_omits_dependencies_when_absent() {
+        // skip_serializing_if keeps the field out of rows that captured
+        // nothing, so existing schema validation stays green until the
+        // sibling containers-db schema lands.
+        let entry: TestEntry = serde_json::from_str(
+            r#"{"os":"debian","arch":"amd64","tested_at":"2026-04-01T00:00:00Z","result":"pass"}"#,
+        )
+        .unwrap();
+        let serialized = serde_json::to_string(&entry).unwrap();
+        assert!(!serialized.contains("dependencies"), "absent field must not serialize");
     }
 
     #[test]

@@ -37,6 +37,6 @@ pub use tool::{
     ValidationTiers,
 };
 pub use version::{
-    ErrorClass, SupportEntry, SupportStatus, TestEntry, TestResult, ToolVersion, Uninstall,
-    VersionMetadata,
+    ErrorClass, InstalledDependency, SupportEntry, SupportStatus, TestEntry, TestResult,
+    ToolVersion, Uninstall, VersionMetadata,
 };

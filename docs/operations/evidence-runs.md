@@ -68,12 +68,39 @@ only — **if this list and the schema disagree, the schema wins.**
 | `duration_seconds` | number (opt)          | no       | wallclock of `luggage install`                     |
 | `version_output`   | string (opt)          | no       | captured `<tool> --version` stdout                 |
 | `error_class`      | enum (opt)            | no       | populated when `result == fail`                    |
+| `dependencies`     | array (opt)           | no       | resolved system-dep versions; best-effort, pass rows |
 | `notes`            | string (opt)          | no       | reserved for future maintainer-supplied annotation |
 
 `image_ref` and `image_digest` are a paired requirement
 (`dependentRequired` in the schema): both present or both absent. The
 `error_class` enum mirrors `luggage::ErrorClass`
 ([`crates/luggage/src/error.rs`](../../crates/luggage/src/error.rs)).
+
+### `dependencies` — captured system-dependency versions
+
+`dependencies` records the concrete versions of the system packages a tool's
+install was validated against (`gcc`, `libc6-dev`, `ca-certificates`, …), so a
+"passed last month, fails today" install can be correlated with a base-image
+toolchain bump instead of guessed at. Each element is an `InstalledDependency`:
+
+| Field     | Type         | Notes                                                  |
+| --------- | ------------ | ------------------------------------------------------ |
+| `tool`    | string       | abstract catalog `Dependency.tool` id (e.g. `gcc`)     |
+| `package` | string       | per-distro package name installed (e.g. `libc6-dev`)   |
+| `version` | string (opt) | resolved version; omitted when the query found nothing |
+
+It is captured **best-effort** and only on the success path of a
+`luggage install --json-report` run: luggage queries the host package manager
+(`dpkg-query -W` / `apk info -v` / `rpm -q`) after installing the
+dependencies. A failed query leaves that entry's `version` unset rather than
+failing the install; skip, dry-run, and failure rows omit `dependencies`
+entirely (`skip_serializing_if`).
+
+The containers-db `TestEntry` schema carries the matching `InstalledDependency`
+`$def` + optional `dependencies[]`
+([containers-db#26](https://github.com/joshjhall/containers-db/issues/26),
+mirroring [containers-db#14](https://github.com/joshjhall/containers-db/issues/14)),
+so a row carrying `dependencies` validates and ingests normally.
 
 ## Arch matrix (native vs emulated)
 

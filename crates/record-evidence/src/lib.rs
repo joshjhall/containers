@@ -107,6 +107,10 @@ pub fn build_test_entry(inputs: RecorderInputs) -> Result<TestEntry, RecorderErr
         duration_seconds: Some(report.duration_seconds),
         version_output: report.version_output.clone(),
         error_class,
+        // Dependency versions are evidence for a successful install only;
+        // enforce the "pass rows only" invariant here rather than relying on
+        // the producer always leaving them `None` on skip/fail paths.
+        dependencies: if result == TestResult::Pass { report.dependencies.clone() } else { None },
         notes: None,
     })
 }
@@ -154,6 +158,7 @@ mod tests {
             duration_seconds: 12.5,
             version_output: Some("rustc 1.95.0 (abcdef0)".into()),
             error_class: None,
+            dependencies: None,
         }
     }
 
@@ -181,6 +186,38 @@ mod tests {
     }
 
     #[test]
+    fn dependencies_pass_through_from_report() {
+        use containers_common::tooldb::InstalledDependency;
+        let mut inputs = base_inputs();
+        inputs.luggage_report.dependencies = Some(vec![
+            InstalledDependency {
+                tool: "gcc".into(),
+                package: "gcc".into(),
+                version: Some("4:12.2.0-3".into()),
+            },
+            InstalledDependency {
+                tool: "ca_certificates".into(),
+                package: "ca-certificates".into(),
+                version: None,
+            },
+        ]);
+        let entry = build_test_entry(inputs).unwrap();
+        let deps = entry.dependencies.expect("dependencies threaded into row");
+        assert_eq!(deps.len(), 2);
+        assert_eq!(deps[0].package, "gcc");
+        assert_eq!(deps[0].version.as_deref(), Some("4:12.2.0-3"));
+        assert!(deps[1].version.is_none());
+    }
+
+    #[test]
+    fn dependencies_absent_when_report_has_none() {
+        // A report without captured versions (skip/dry-run/failure, or
+        // recording disabled) yields a row with no `dependencies` field.
+        let entry = build_test_entry(base_inputs()).unwrap();
+        assert!(entry.dependencies.is_none());
+    }
+
+    #[test]
     fn skip_row_emitted_when_already_installed() {
         let mut inputs = base_inputs();
         inputs.luggage_report.already_installed = true;
@@ -196,6 +233,23 @@ mod tests {
         let entry = build_test_entry(inputs).unwrap();
         assert_eq!(entry.result, TestResult::Fail);
         assert_eq!(entry.error_class, Some(DbErrorClass::Verify));
+    }
+
+    #[test]
+    fn dependencies_dropped_on_non_pass_row() {
+        use containers_common::tooldb::InstalledDependency;
+        // Even if a report somehow carries dependencies on a failure, the row
+        // must not — dependency evidence is for pass rows only.
+        let mut inputs = base_inputs();
+        inputs.luggage_report.error_class = Some(LuggageErrorClass::Validate);
+        inputs.luggage_report.dependencies = Some(vec![InstalledDependency {
+            tool: "gcc".into(),
+            package: "gcc".into(),
+            version: Some("4:12.2.0-3".into()),
+        }]);
+        let entry = build_test_entry(inputs).unwrap();
+        assert_eq!(entry.result, TestResult::Fail);
+        assert!(entry.dependencies.is_none(), "non-pass row must drop dependencies");
     }
 
     #[test]

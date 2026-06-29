@@ -29,6 +29,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
 
+use containers_common::tooldb::InstalledDependency;
 use serde::{Deserialize, Serialize};
 use tempfile::tempdir_in;
 
@@ -38,10 +39,16 @@ use crate::resolver::ResolvedInstall;
 use download::{HttpClient, UreqClient};
 use methods::{CommandRunner, MethodContext, ProcessRunner};
 use rustup_target::rustup_target_for;
-use syspackages::{PackageManager, install_dependencies, translate_dependencies};
+use syspackages::{
+    PackageManager, install_dependencies, resolve_installed_versions, translate_dependencies,
+};
 use template::{Substitutions, substitute_url};
 
 /// Installer configuration.
+///
+/// The flags are independent install toggles, not a state machine, so the
+/// plain-struct shape is the clearest carrier despite the bool count.
+#[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub struct InstallerOptions {
     /// Skip side-effects; build the plan and return it.
@@ -62,6 +69,12 @@ pub struct InstallerOptions {
     /// install -y ...` (or distro equivalent) for catalog dependencies.
     /// Defaults to `true`; tests turn it off to stay hermetic.
     pub install_system_packages: bool,
+    /// When `true`, after a successful install the installer queries the host
+    /// package manager for each dependency's resolved version and records
+    /// them on [`InstallReport::dependencies`]. Defaults to `false`; the CLI
+    /// turns it on only when `--json-report` is requested (the sole consumer)
+    /// so ordinary installs and hermetic tests skip the extra queries.
+    pub record_dependency_versions: bool,
 }
 
 impl Default for InstallerOptions {
@@ -75,6 +88,7 @@ impl Default for InstallerOptions {
             tmp_root: PathBuf::from("/tmp"),
             user_override: None,
             install_system_packages: true,
+            record_dependency_versions: false,
         }
     }
 }
@@ -142,6 +156,13 @@ pub struct InstallReport {
     /// Stage-aligned failure category. `Some` iff the run failed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error_class: Option<ErrorClass>,
+    /// System dependencies resolved to their concrete installed versions.
+    /// Populated on the success path only when
+    /// [`InstallerOptions::record_dependency_versions`] is set (the CLI ties
+    /// this to `--json-report`); `None` on skip, dry-run, and failure paths
+    /// and whenever recording is disabled. Best-effort per dep.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dependencies: Option<Vec<InstalledDependency>>,
 }
 
 /// The install execution engine.
@@ -312,6 +333,7 @@ impl Installer {
                     duration_seconds: started.elapsed().as_secs_f64(),
                     version_output: Some(version_output),
                     error_class: None,
+                    dependencies: self.captured_dependency_versions(resolved),
                 };
                 (report, Ok(()))
             }
@@ -343,6 +365,7 @@ impl Installer {
             duration_seconds,
             version_output: None,
             error_class: None,
+            dependencies: None,
         }
     }
 
@@ -363,6 +386,7 @@ impl Installer {
             duration_seconds,
             version_output: None,
             error_class: None,
+            dependencies: None,
         }
     }
 
@@ -384,6 +408,7 @@ impl Installer {
             duration_seconds,
             version_output: None,
             error_class: Some(ErrorClass::from(err)),
+            dependencies: None,
         }
     }
 
@@ -441,6 +466,35 @@ impl Installer {
             l.step("install system packages");
         }
         install_dependencies(deps, mgr)
+    }
+
+    /// Query the host package manager for each dependency's resolved version,
+    /// for the evidence row. Returns `None` (recording nothing) unless
+    /// recording is enabled, system packages were installed this run, and the
+    /// platform has a known package manager with non-empty dependencies.
+    /// Best-effort: a query that fails leaves that dep's version `None` rather
+    /// than failing the install (see [`resolve_installed_versions`]).
+    fn captured_dependency_versions(
+        &self,
+        resolved: &ResolvedInstall,
+    ) -> Option<Vec<InstalledDependency>> {
+        if !self.options.record_dependency_versions || !self.options.install_system_packages {
+            return None;
+        }
+        let mgr = PackageManager::for_platform(&resolved.platform).ok()?;
+        let deps = resolved.dependencies.as_deref()?;
+        if deps.is_empty() {
+            return None;
+        }
+        // `resolve_installed_versions` skips deps with no package mapping, so a
+        // list of only-unknown ids yields an empty vec. Collapse that to `None`
+        // so the report omits the field entirely rather than serializing an
+        // ambiguous `"dependencies": []`.
+        let versions = resolve_installed_versions(deps, mgr);
+        if versions.is_empty() {
+            return None;
+        }
+        Some(versions)
     }
 
     fn stage_download(
@@ -564,6 +618,48 @@ fn install_basename(url: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Platform;
+    use containers_common::tooldb::{Dependency, Verification};
+
+    /// A minimal debian/amd64 [`ResolvedInstall`] carrying one dependency,
+    /// for exercising [`Installer::captured_dependency_versions`]'s gating
+    /// without touching the catalog or the network.
+    fn sample_resolved_with_deps() -> ResolvedInstall {
+        ResolvedInstall {
+            tool: "rust".into(),
+            version: "1.96.0".into(),
+            method_name: "rustup".into(),
+            verification_tier: 3,
+            verification: Verification {
+                tier: 3,
+                algorithm: Some("sha256".into()),
+                pinned_checksum: None,
+                checksum_url_template: None,
+                gpg_key_url: None,
+                signature_url_template: None,
+                sigstore_identity: None,
+                sigstore_issuer: None,
+                tofu: None,
+            },
+            source_url_template: None,
+            invoke: None,
+            post_install: None,
+            dependencies: Some(vec![Dependency {
+                tool: "gcc".into(),
+                version: None,
+                version_constraint: None,
+                purpose: None,
+                required: None,
+                platforms: None,
+            }]),
+            platform: Platform {
+                os: "debian".into(),
+                os_version: Some("12".into()),
+                arch: "amd64".into(),
+            },
+            warnings: Vec::new(),
+        }
+    }
 
     #[test]
     fn default_options_use_production_paths() {
@@ -575,6 +671,61 @@ mod tests {
         assert!(!o.dry_run);
         assert!(!o.force);
         assert!(o.install_system_packages);
+        // Off by default — only the CLI's --json-report path enables it.
+        assert!(!o.record_dependency_versions);
+    }
+
+    #[test]
+    fn captured_dependency_versions_none_when_recording_disabled() {
+        // With recording off (the default) the success path records no
+        // dependency versions even when the platform/deps would otherwise
+        // resolve — keeps ordinary installs and hermetic tests query-free.
+        let installer = Installer::with_options(InstallerOptions {
+            record_dependency_versions: false,
+            ..InstallerOptions::default()
+        });
+        let resolved = sample_resolved_with_deps();
+        assert!(installer.captured_dependency_versions(&resolved).is_none());
+    }
+
+    #[test]
+    fn captured_dependency_versions_none_when_system_packages_skipped() {
+        // Recording on, but system packages were not installed this run, so
+        // there is nothing trustworthy to query.
+        let installer = Installer::with_options(InstallerOptions {
+            record_dependency_versions: true,
+            install_system_packages: false,
+            ..InstallerOptions::default()
+        });
+        let resolved = sample_resolved_with_deps();
+        assert!(installer.captured_dependency_versions(&resolved).is_none());
+    }
+
+    #[test]
+    fn captured_dependency_versions_none_for_unknown_platform() {
+        // Recording on + system packages installed, but the platform has no
+        // wired-up package manager — nothing to query.
+        let installer = Installer::with_options(InstallerOptions {
+            record_dependency_versions: true,
+            install_system_packages: true,
+            ..InstallerOptions::default()
+        });
+        let mut resolved = sample_resolved_with_deps();
+        resolved.platform = Platform { os: "haiku".into(), os_version: None, arch: "amd64".into() };
+        assert!(installer.captured_dependency_versions(&resolved).is_none());
+    }
+
+    #[test]
+    fn captured_dependency_versions_none_when_deps_empty() {
+        // The common case for a tool that declares no system dependencies.
+        let installer = Installer::with_options(InstallerOptions {
+            record_dependency_versions: true,
+            install_system_packages: true,
+            ..InstallerOptions::default()
+        });
+        let mut resolved = sample_resolved_with_deps();
+        resolved.dependencies = Some(vec![]);
+        assert!(installer.captured_dependency_versions(&resolved).is_none());
     }
 
     #[test]

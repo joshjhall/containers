@@ -184,7 +184,9 @@ struct InstallArgs {
 
     /// Write a JSON [`InstallReport`] to this path. Emitted on every
     /// exit path — success, skip, dry-run, or failure — so evidence-run
-    /// CI can record a row even when the install itself failed.
+    /// CI can record a row even when the install itself failed. On the
+    /// success path this also captures the resolved versions of installed
+    /// system dependencies (best-effort) for the evidence row.
     #[arg(long, value_name = "PATH")]
     json_report: Option<PathBuf>,
 }
@@ -353,6 +355,9 @@ fn cmd_install(args: &InstallArgs) -> Result<(), LuggageError> {
         tmp_root: args.tmp_root.clone(),
         user_override: args.user.clone(),
         install_system_packages: !args.skip_system_packages,
+        // Capturing dependency versions only matters for the evidence row,
+        // which is the JSON report's sole consumer — so tie it to that flag.
+        record_dependency_versions: args.json_report.is_some(),
     };
     let installer = Installer::with_options(opts);
 
