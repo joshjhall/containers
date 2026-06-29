@@ -49,6 +49,11 @@ on:
         type: choice
         options:
           - debian-12-amd64
+          # arm64 is wired end-to-end but no arm64 base image is published
+          # yet (#432/#434/#436). Selecting it will fail at "Resolve base
+          # image digest" until that image lands — kept here so the arch
+          # plumbing is exercised by dispatch once it does.
+          - debian-12-arm64
       image_tag:
         description: "Base image tag to pull"
         required: true
@@ -115,18 +120,50 @@ jobs:
           INPUT_DRY_RUN: ${{ inputs.dry_run }}
         run: |
           set -euo pipefail
+          # Map an arch token to its build/run plumbing. The tuple is the
+          # single source of truth for arch (the row's recorded arch comes
+          # from the in-job tuple split); runner/runtime/rust_target are its
+          # build-plumbing companions, set together here so `runs-on:` and the
+          # toolchain `targets:` can read them at job-eval time.
+          #   native   → arch-matched runner, no docker --platform.
+          #   emulated → ubuntu-latest + QEMU + docker run --platform.
+          arch_plumbing() {
+            case "$1" in
+              amd64) echo "ubuntu-latest native x86_64-unknown-linux-musl" ;;
+              arm64) echo "ubuntu-24.04-arm native aarch64-unknown-linux-musl" ;;
+              *) echo "Unsupported arch: $1" >&2; return 1 ;;
+            esac
+          }
           if [ "$EVENT" = "workflow_dispatch" ]; then
+            ARCH="${INPUT_TUPLE##*-}"
+            # Capture-then-read with an explicit guard so an unsupported arch
+            # aborts here with arch_plumbing's clear error. A bare
+            # `read < <(arch_plumbing …)` (or an unguarded `$(…)` assignment)
+            # swallows the non-zero exit and would emit a matrix with empty
+            # runner/runtime/target, failing later with an opaque
+            # runner-resolution error instead.
+            PLUMBING=$(arch_plumbing "$ARCH") || { echo "Cannot resolve plumbing for arch: $ARCH" >&2; exit 1; }
+            read -r RUNNER RUNTIME RUST_TARGET <<< "$PLUMBING"
             MATRIX=$(jq -cn \
               --arg tool "$INPUT_TOOL" \
               --arg version "$INPUT_TOOL_VERSION" \
               --arg tuple "$INPUT_TUPLE" \
               --arg image_tag "$INPUT_IMAGE_TAG" \
-              '{include: [{tool: $tool, version: $version, tuple: $tuple, image_tag: $image_tag}]}')
+              --arg arch "$ARCH" \
+              --arg runtime "$RUNTIME" \
+              --arg runner "$RUNNER" \
+              --arg rust_target "$RUST_TARGET" \
+              '{include: [{tool: $tool, version: $version, tuple: $tuple, image_tag: $image_tag, arch: $arch, runtime: $runtime, runner: $runner, rust_target: $rust_target}]}')
             DRY="$INPUT_DRY_RUN"
           else
             # Pilot legs. Extend here (add tuples/tools) as base images
-            # publish — the evidence job body needs no changes.
-            MATRIX='{"include":[{"tool":"rust","version":"1.95.0","tuple":"debian-12-amd64","image_tag":"latest"}]}'
+            # publish — the evidence job body needs no changes. Each leg
+            # carries arch/runtime/runner/rust_target (see arch_plumbing).
+            # The arm64 leg is wired but commented out: no arm64 base image
+            # is published yet (#432/#434/#436). Uncomment it once the
+            # base-debian-12-arm64 image lands — the job body needs no change.
+            #   {"tool":"rust","version":"1.95.0","tuple":"debian-12-arm64","image_tag":"latest","arch":"arm64","runtime":"native","runner":"ubuntu-24.04-arm","rust_target":"aarch64-unknown-linux-musl"}
+            MATRIX='{"include":[{"tool":"rust","version":"1.95.0","tuple":"debian-12-amd64","image_tag":"latest","arch":"amd64","runtime":"native","runner":"ubuntu-latest","rust_target":"x86_64-unknown-linux-musl"}]}'
             if [ "$EVENT" = "pull_request" ]; then
               DRY="true"
             else
@@ -172,7 +209,7 @@ jobs:
   evidence:
     name: Evidence ${{ matrix.tool }}@${{ matrix.version }} on ${{ matrix.tuple }}
     needs: setup
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -182,6 +219,15 @@ jobs:
       INPUT_TOOL_VERSION: ${{ matrix.version }}
       INPUT_TUPLE: ${{ matrix.tuple }}
       INPUT_IMAGE_TAG: ${{ matrix.image_tag }}
+      # Arch plumbing from the leg (see the setup job's arch_plumbing). Read
+      # into env rather than interpolated into run: scripts, per the file's
+      # coordinates-into-env guardrail. ARCH here drives the build target and
+      # the docker --platform flag; the row's recorded arch comes separately
+      # from the tuple split (steps.tuple.outputs.arch) so the tuple stays the
+      # single source of truth for evidence data.
+      ARCH: ${{ matrix.arch }}
+      RUNTIME: ${{ matrix.runtime }}
+      RUST_TARGET: ${{ matrix.rust_target }}
     steps:
       - name: Checkout containers
         uses: actions/checkout@v4
@@ -189,15 +235,23 @@ jobs:
       - name: Install Rust toolchain (musl target)
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: x86_64-unknown-linux-musl
+          targets: ${{ matrix.rust_target }}
 
       - name: Install musl linker
-        run: sudo apt-get install -y --no-install-recommends musl-tools
+        run: |
+          sudo apt-get install -y --no-install-recommends musl-tools
+          # Emulated arm64 cross-compiles aarch64 musl from an amd64 host, so
+          # it needs an aarch64 cross-linker. A native arm64 leg builds on an
+          # arm64 runner (no cross-compile) and skips this. amd64 never needs it.
+          if [ "$RUNTIME" = "emulated" ] && [ "$ARCH" = "arm64" ]; then
+            sudo apt-get install -y --no-install-recommends gcc-aarch64-linux-gnu
+          fi
 
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
         with:
-          key: musl
+          # Per-arch key so amd64 and arm64 build artifacts don't collide.
+          key: musl-${{ matrix.arch }}
 
       # Build statically against musl so the produced binaries run inside
       # any base image (glibc 2.36 / 2.31 / alpine / RHEL) without a
@@ -206,10 +260,23 @@ jobs:
       # needed for the static link.
       - name: Build luggage and record-evidence (static musl)
         run: |
-          cargo build --release --target x86_64-unknown-linux-musl \
+          # Cargo reads CARGO_TARGET_<triple>_LINKER only for the triple being
+          # built, so the aarch64 linker only matters on an arm64 leg — and its
+          # value differs by runtime: the emulated (cross-compile) leg needs the
+          # aarch64 cross-gcc, while a native arm64 leg links with musl-gcc from
+          # musl-tools (gcc-aarch64-linux-gnu is not installed there). amd64
+          # sets nothing, leaving its build byte-identical to the pre-arch path.
+          if [ "$ARCH" = "arm64" ]; then
+            if [ "$RUNTIME" = "emulated" ]; then
+              export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER=aarch64-linux-gnu-gcc
+            else
+              export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER=musl-gcc
+            fi
+          fi
+          cargo build --release --target "$RUST_TARGET" \
             -p luggage -p record-evidence
-          ls -l target/x86_64-unknown-linux-musl/release/luggage \
-                target/x86_64-unknown-linux-musl/release/record-evidence
+          /bin/ls -l "target/$RUST_TARGET/release/luggage" \
+                     "target/$RUST_TARGET/release/record-evidence"
 
       - name: Resolve base image digest
         id: digest
@@ -260,11 +327,25 @@ jobs:
             exit 1
           }
 
+      # Register binfmt handlers so the amd64 runner can run a foreign-arch
+      # (arm64) container. Only the emulated path needs this; a native leg
+      # runs on an arch-matched runner and skips it.
+      - name: Set up QEMU (emulated legs)
+        if: ${{ matrix.runtime == 'emulated' }}
+        uses: docker/setup-qemu-action@v3
+
       - name: Run luggage install inside the base image
         env:
           IMAGE: ${{ steps.digest.outputs.image_ref }}@${{ steps.digest.outputs.digest }}
         run: |
           mkdir -p out
+          # Emulated legs pin the container platform so QEMU runs the foreign
+          # arch; native legs leave the array empty (no --platform), which
+          # makes the amd64 path byte-identical to the pre-arch behavior.
+          PLATFORM_FLAGS=()
+          if [ "$RUNTIME" = "emulated" ]; then
+            PLATFORM_FLAGS=(--platform "linux/${ARCH}")
+          fi
           # We don't fail the workflow on install failure — luggage's
           # --json-report writes a failure row too, which is the whole
           # point of an evidence run. The row's `result` field carries
@@ -275,9 +356,12 @@ jobs:
           # via rustup-init (writes to /usr/local/cargo) and to write the
           # report file to the runner-owned /out mount. Overriding USER
           # here is the "this is an install test, not a service" exception.
+          # The mounted luggage binary runs INSIDE the container, so it is
+          # built for the container arch ($RUST_TARGET) in both runtime modes.
           docker run --rm \
+            "${PLATFORM_FLAGS[@]}" \
             --user 0 \
-            -v "$PWD/target/x86_64-unknown-linux-musl/release/luggage:/usr/local/bin/luggage:ro" \
+            -v "$PWD/target/$RUST_TARGET/release/luggage:/usr/local/bin/luggage:ro" \
             -v "$PWD/_db:/catalog:ro" \
             -v "$PWD/out:/out" \
             -e CONTAINERS_DB=/catalog \
@@ -300,7 +384,7 @@ jobs:
           OS_VERSION: ${{ steps.tuple.outputs.os_version }}
           ARCH: ${{ steps.tuple.outputs.arch }}
         run: |
-          ./target/x86_64-unknown-linux-musl/release/record-evidence \
+          "./target/$RUST_TARGET/release/record-evidence" \
             --luggage-report out/luggage-report.json \
             --image-ref "$IMAGE_REF" \
             --image-digest "$IMAGE_DIGEST" \
@@ -314,7 +398,10 @@ jobs:
       - name: Upload evidence row
         uses: actions/upload-artifact@v4
         with:
-          name: evidence-row
+          # Per-tuple name so parallel matrix legs don't collide —
+          # upload-artifact@v4 rejects two uploads under one name. A downstream
+          # consumer downloads all evidence-row-* artifacts.
+          name: evidence-row-${{ matrix.tuple }}
           path: out/evidence-row.json
           if-no-files-found: error
 
