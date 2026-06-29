@@ -34,6 +34,7 @@ WORKFLOW_FILE="$PROJECT_ROOT/.github/workflows/build-base-images.yml"
 # adding the corresponding Dockerfile will fail this test.
 REQUIRED_TUPLES=(
     "debian/12/amd64"
+    "debian/13/arm64"
 )
 
 # Per-distro hardening libraries that must exist with the standard interface.
