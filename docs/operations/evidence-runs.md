@@ -349,6 +349,34 @@ is not stable across multiple producers anyway.
    Out of scope for the producer — if containers-db's `validate.yml`
    hangs, the PR sits open. Mitigation lives on the consumer side.
 
+## Failure surfacing — auto-issue on a `fail` row
+
+An evidence run intentionally **does not** fail the job when a `luggage install`
+fails: luggage's `--json-report` writes a `result: fail` row, and recording that
+row is the whole point of an evidence run (the install runs under `set +e`). The
+verdict lives in the row's `result` field, with `error_class` set on failure.
+
+That row flows into containers-db as evidence — but on its own it is quiet data a
+reviewer might rubber-stamp. So on a **non-dry-run** leg, a `result: fail` row
+opens or updates a tracking issue in **this** repo, matching the cadence tiers'
+search-or-create convention (see
+[`ci-tiers.md` § Auto-issue on failure](ci-tiers.md#auto-issue-on-failure)).
+
+- **Title key** `(tool, version, tuple)` — e.g. `Evidence regression:
+  rust@1.95.0 on debian-12-amd64`. The tuple encodes `os-os_version-arch`, so a
+  re-failure on the same cell updates one issue while a different distro/arch
+  opens its own. No duplicates.
+- **Body** carries the run URL and the row's `error_class`; a re-failure adds a
+  dated comment instead of a new issue.
+- **Labels** `severity/high` + `type/bug` + `audit/regression`. The last is the
+  cadence-tier vocabulary and is created on-the-fly (`gh label create --force`)
+  so the step never fails on a missing label.
+- **Scope** non-dry-run legs only. PR legs are forced to `dry_run=true` in the
+  `setup` job, so they never file an issue — the step gates on
+  `needs.setup.outputs.dry_run != 'true'`, which also keeps it fork-safe.
+- **Auth** the default `GITHUB_TOKEN` (job-scoped `issues: write`); the issue is
+  filed on `joshjhall/containers`, not the sibling db, so no PAT is involved.
+
 ## Known limitations
 
 - **PR diffs are noisier than the row.** The ingest script uses `jq`

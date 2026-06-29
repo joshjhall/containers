@@ -211,6 +211,13 @@ jobs:
     needs: setup
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
+    # issues: write is needed for the fail-row tracking-issue step below. Scoped
+    # to this job (not the workflow root) so `setup` and `reconcile` stay
+    # contents:read. The issue is filed on this repo, so the default
+    # GITHUB_TOKEN suffices — no PAT (unlike the cross-repo ingest).
+    permissions:
+      contents: read
+      issues: write
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.setup.outputs.matrix) }}
@@ -395,6 +402,21 @@ jobs:
             > out/evidence-row.json
           jq . out/evidence-row.json
 
+      # Surface the recorded verdict as step outputs so the fail-row
+      # tracking-issue step can gate on it. The row's `result` and optional
+      # `error_class` are written by record-evidence (see
+      # crates/record-evidence/src/lib.rs); a pass/skip row has no error_class,
+      # so default it to "unknown" to keep the issue body well-formed.
+      - name: Read evidence verdict
+        id: verdict
+        run: |
+          RESULT=$(jq -r '.result' out/evidence-row.json)
+          ERROR_CLASS=$(jq -r '.error_class // "unknown"' out/evidence-row.json)
+          {
+            echo "result=$RESULT"
+            echo "error_class=$ERROR_CLASS"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Upload evidence row
         uses: actions/upload-artifact@v4
         with:
@@ -442,3 +464,61 @@ jobs:
             --db-path "$PWD/_db" \
             --tool "$INPUT_TOOL" \
             --version "$INPUT_TOOL_VERSION"
+
+      # A `result: fail` row is recorded as evidence but does not fail the job
+      # (see "Run luggage install ..." above). Without this step the regression
+      # would sit quiet in containers-db. Mirror the cadence tiers' (#464/#465)
+      # search-or-create auto-issue convention so a broken tool@tuple gets
+      # triaged. Pattern: security-scan.yml's tracking-issue step.
+      #
+      # Gated on dry_run != 'true' rather than github.event_name: the dry-run
+      # flag is setup's single resolved source of truth, and PR legs are forced
+      # to dry_run=true there — so this never fires on a fork-safe PR leg.
+      - name: Open or update tracking issue on fail row
+        if: ${{ steps.verdict.outputs.result == 'fail' && needs.setup.outputs.dry_run != 'true' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          ERROR_CLASS: ${{ steps.verdict.outputs.error_class }}
+        run: |
+          TITLE="Evidence regression: ${INPUT_TOOL}@${INPUT_TOOL_VERSION} on ${INPUT_TUPLE}"
+          TODAY="$(date -u +%Y-%m-%d)"
+          # audit/regression is the cadence-tier vocabulary but isn't a
+          # pre-existing repo label — create it idempotently (same --force
+          # pattern as auto-patch.yml's hold/review-required) so issue creation
+          # never fails on a missing label.
+          gh label create "audit/regression" \
+            --description "Automated regression finding" \
+            --color "B60205" --force
+          BODY=$(cat <<EOF
+          ## Evidence run recorded a \`fail\` row
+
+          An evidence run installed \`${INPUT_TOOL}@${INPUT_TOOL_VERSION}\`
+          against base image tuple \`${INPUT_TUPLE}\` and luggage reported a
+          failure. The row was still recorded in containers-db as evidence;
+          this issue tracks the regression.
+
+          **Run:** ${RUN_URL}
+          **error_class:** \`${ERROR_CLASS}\`
+          **Recorded:** ${TODAY}
+
+          <!-- managed-by: evidence-run.yml -->
+          EOF
+          )
+          # Title keyed on (tool, version, tuple) — INPUT_TUPLE encodes
+          # os-os_version-arch — so a re-failure on the same cell updates one
+          # issue while a different distro/arch opens its own.
+          EXISTING=$(gh issue list \
+            --label "audit/regression" --state open \
+            --search "\"${TITLE}\" in:title" \
+            --json number --jq '.[0].number // empty')
+          if [ -n "${EXISTING}" ]; then
+            echo "Updating existing tracking issue #${EXISTING}"
+            gh issue edit "${EXISTING}" --body "${BODY}"
+            gh issue comment "${EXISTING}" \
+              --body "Failed again on ${TODAY} (error_class \`${ERROR_CLASS}\`) — see ${RUN_URL}"
+          else
+            echo "Opening new tracking issue"
+            gh issue create --title "${TITLE}" --body "${BODY}" \
+              --label "severity/high" --label "type/bug" --label "audit/regression"
+          fi
