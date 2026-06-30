@@ -73,18 +73,30 @@ claude plugin install review-audit@librarian
 claude plugin install workflow@librarian
 ```
 
-`claude plugin update` rolls each plugin forward by semver.
+`claude plugin update` rolls each plugin forward by semver. Note that the host
+path tracks the latest semver release from the upstream marketplace without
+local checksum verification — unlike the pinned-container path below. For
+security-sensitive or automated environments, pin a specific tag and verify its
+SHA against a known-good value before running `plugin update` unattended, since
+plugin `patterns.sh` scripts run with your Claude Code tool grants.
 
 ### Installing in the container (pinned / offline)
 
-When `INCLUDE_DEV_TOOLS=true`, the image clones `librarian` at a **pinned
-tag/SHA** (the `LIBRARIAN_REF` build arg), registers it as a local on-disk
-marketplace, and installs the `dev-core`, `review-audit`, and `workflow`
+> **Planned — tracked in
+> [container consume #608](https://github.com/joshjhall/containers/issues/608),
+> not yet landed.** The `LIBRARIAN_REF` build arg and the offline-install build
+> step described here do not exist in the image yet. Until #608 ships, the
+> container still installs the bundled artifacts; this section documents the
+> target state so the host and container stories read together.
+
+When `INCLUDE_DEV_TOOLS=true`, the image will clone `librarian` at a **pinned
+tag/SHA** (the `LIBRARIAN_REF` build arg), register it as a local on-disk
+marketplace, and install the `dev-core`, `review-audit`, and `workflow`
 plugins **offline** — no live network install at runtime, preserving headless
-build reproducibility. The pin is the version contract and is registered in
-`bin/check-versions.sh` for auto-patch bumps. See
-[container consume #608](https://github.com/joshjhall/containers/issues/608) for
-the build-step details.
+build reproducibility. The pin is the version contract and will be registered
+in `bin/check-versions.sh` for auto-patch bumps (per the
+[Automated Version Updates](../../CLAUDE.md#automated-version-updates)
+convention). See #608 for the build-step details.
 
 Project-level `.claude/` configs still merge with the installed plugins (union
 semantics, project wins on name conflicts).
@@ -107,7 +119,9 @@ or `INCLUDE_CLOUDFLARE`.
 ### Agent model tiers
 
 Within `librarian`, several agents are pinned to higher model tiers because
-their output quality compounds downstream:
+their output quality compounds downstream. The per-agent tiers below reflect the
+current librarian release; the plugin READMEs carry the authoritative, versioned
+list:
 
 - `debugger` (`model: opus`) — root cause analysis requires deep reasoning; a
   shallow diagnosis wastes the user's time on wrong fixes
@@ -166,7 +180,9 @@ per-skill. The container installs the `dev-core`, `review-audit`, and
 different subset on a host, install only the plugins you want:
 
 ```bash
-# Host: install just the development plugin
+# Host: install one plugin (this example installs only dev-core; add
+# review-audit for the codebase-audit / check-* / audit-* suite, and
+# workflow for next-issue / orchestrate)
 claude plugin install dev-core@librarian
 
 # Add or drop a plugin later, then roll forward by semver
@@ -178,13 +194,22 @@ Per-skill / per-agent overrides for librarian content are managed upstream in
 the `librarian` repo, not by this image. Project-level `.claude/skills/` and
 `.claude/agents/` still take precedence on name conflicts (union merge).
 
-### Overriding the build-bound skills
+### Overriding the build-bound artifacts (`CLAUDE_SKILLS` / `CLAUDE_AGENTS`)
 
-The legacy `CLAUDE_SKILLS` / `CLAUDE_EXTRA_SKILLS` build args now govern only
-the [build-bound skills](#build-bound-skills-stay-in-this-repo)
-(`container-environment`, `docker-development`, `cloud-infrastructure`) — the
-ones the container itself ships. They no longer install the migrated
-general-purpose skills (those come from `librarian`):
+The legacy `CLAUDE_SKILLS` / `CLAUDE_EXTRA_SKILLS` and `CLAUDE_AGENTS` /
+`CLAUDE_EXTRA_AGENTS` build args still exist and still work. As the migrated
+artifacts move to `librarian` (#608), their remaining scope is the artifacts the
+container itself installs:
+
+- `CLAUDE_SKILLS` / `CLAUDE_EXTRA_SKILLS` — govern the
+  [build-bound skills](#build-bound-skills-stay-in-this-repo)
+  (`container-environment`, `docker-development`, `cloud-infrastructure`). They
+  no longer select the migrated general-purpose skills (those come from
+  `librarian` and are chosen at the plugin level above).
+- `CLAUDE_AGENTS` / `CLAUDE_EXTRA_AGENTS` — select from whatever agent set the
+  image installs. Once #608 lands, that set is the librarian-installed agents;
+  prefer `claude plugin install` / `uninstall` for plugin-level agent
+  selection, and reserve these args for narrowing the installed set.
 
 ```bash
 # Drop the conditional build-bound skills (container-environment still installs)

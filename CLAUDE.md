@@ -244,13 +244,15 @@ model selection.
 
 The general-purpose skills and agents live in the sibling
 [`librarian`](https://github.com/joshjhall/librarian) plugin marketplace
-(`dev-core` / `review-audit` / `workflow`), installed from a pinned local
-marketplace at build time — not bundled by this repo (epic #607). Key
-capabilities: `/codebase-audit` (parallel scanners), `/next-issue` +
-`/next-issue-ship` (issue-driven development with auto-labeling and state
-persistence). Three build-bound skills stay here (`container-environment`,
+(`dev-core` / `review-audit` / `workflow`) — not bundled by this repo
+(epic #607). Key features: `/codebase-audit` (parallel scanners),
+`/next-issue` + `/next-issue-ship` (issue-driven development with
+auto-labeling and state persistence). Three build-bound skills stay here
+(`container-environment`,
 `docker-development`, `cloud-infrastructure`); the legacy `CLAUDE_SKILLS` /
-`CLAUDE_EXTRA_SKILLS` args now govern only those. See
+`CLAUDE_AGENTS` args still exist and apply to what the image installs.
+Container-side install from a pinned local marketplace (`LIBRARIAN_REF`) is
+tracked in #608 and not yet landed. See
 `docs/claude-code/skills-and-agents.md` for the librarian install path (host +
 pinned-container) and full details.
 
