@@ -45,6 +45,8 @@ CLAUDE_PLUGINS_DEFAULT="${CLAUDE_PLUGINS:-__UNSET__}"
 CLAUDE_MCPS_DEFAULT="${CLAUDE_MCPS:-__UNSET__}"
 CLAUDE_AGENTS_DEFAULT="${CLAUDE_AGENTS:-__UNSET__}"
 CLAUDE_SKILLS_DEFAULT="${CLAUDE_SKILLS:-__UNSET__}"
+# Librarian plugins to install from the local marketplace (replaces defaults).
+CLAUDE_LIBRARIAN_PLUGINS_DEFAULT="${CLAUDE_LIBRARIAN_PLUGINS:-__UNSET__}"
 
 # File-based configuration defaults (JSON array files)
 # When set, these point to JSON files that take precedence over env var lists.

@@ -15,25 +15,28 @@
 # 4. Restart Claude if needed
 #
 # Features:
-# - Installs core plugins from claude-plugins-official marketplace
+# - Installs the librarian plugins (dev-core, review-audit, workflow) from a
+#   local on-disk marketplace at /opt/librarian — offline, no auth required
+# - Installs core plugins from claude-plugins-official marketplace (needs auth)
 # - Installs language-specific LSP plugins based on build-time flags
+# - Installs the build-bound skills (container-environment, cloud-infrastructure,
+#   docker-development) that intentionally stay in this repo
 # - Configures MCP servers (filesystem, figma-desktop, github/gitlab)
 # - Idempotent: safe to run multiple times
-# - Graceful: skips plugin installation if not authenticated
+# - Graceful: skips official plugin installation if not authenticated
 #
 # Usage:
 #   claude-setup           # Run with authentication check
 #   claude-setup --force   # Run even if not authenticated (for MCP setup only)
-#   claude-setup --refresh # Force re-sync of bundled skills/agents from the
-#                          # staged templates, overwriting installed copies even
-#                          # when the staged stamp is unchanged. Use after a
-#                          # template fix to pick it up without a rebuild.
+#   claude-setup --refresh # Force re-generation of the build-bound skills,
+#                          # overwriting installed copies. Use after rebuilding
+#                          # the image to pick up a build-bound skill change.
 #
-# Bundled skills/agents normally re-sync automatically when the staged template
-# stamp differs from the last-synced stamp (e.g. after the image is rebuilt past
-# a template fix like #563). --refresh forces the re-sync unconditionally.
+# The general-purpose skills/agents ship as the librarian plugins, pinned by the
+# LIBRARIAN_REF build arg (replaces the #574 template bake/stamp re-sync). The
+# build-bound skills install absent-only; --refresh forces them to regenerate.
 #
-# Plugin Marketplace: claude-plugins-official
+# Plugin Marketplaces: librarian (local, /opt/librarian) + claude-plugins-official
 
 set -euo pipefail
 
@@ -357,50 +360,40 @@ install_plugin() {
 }
 
 # ============================================================================
-# Skills & Agents Installation
+# Build-Bound Skills & Extra Skills/Agents Installation
 # ============================================================================
+# The general-purpose skills/agents now ship as the librarian plugins (installed
+# below from the local /opt/librarian marketplace). What installs from the staged
+# templates here are the BUILD-BOUND skills that intentionally stay in this repo
+# (container-environment, cloud-infrastructure, docker-development) plus any
+# user-additive CLAUDE_EXTRA_SKILLS / CLAUDE_EXTRA_AGENTS.
+#
+# The #574 content-stamp re-sync is removed — librarian plugins carry their own
+# version contract (LIBRARIAN_REF). Build-bound skills install ABSENT-ONLY so a
+# user edit is never clobbered; --refresh forces them to regenerate.
 TEMPLATES_DIR="/etc/container/config/claude-templates"
 CLAUDE_DIR="$HOME/.claude"
 
-# --- Template staleness stamp ---
-# The build stages templates into $TEMPLATES_DIR and writes a content stamp to
-# $TEMPLATES_DIR/.stamp (claude-code-setup.sh). We record the last-synced stamp
-# at $CLAUDE_DIR/.template-stamp. When the staged stamp differs (image rebuilt
-# past a template fix) — or --refresh is passed — bundled skills/agents are
-# re-copied over the installed copies so fixes propagate without manually
-# clearing ~/.claude. When the stamps match and the target exists, the copy is
-# skipped (no per-boot churn). User-additive CLAUDE_EXTRA_* installs are NOT
-# gated by the stamp — they stay absent-only so a user edit is never clobbered.
-STAGED_STAMP_FILE="$TEMPLATES_DIR/.stamp"
-INSTALLED_STAMP_FILE="$CLAUDE_DIR/.template-stamp"
-STAGED_STAMP=""
-INSTALLED_STAMP=""
-[ -f "$STAGED_STAMP_FILE" ] && STAGED_STAMP="$(command cat "$STAGED_STAMP_FILE" 2>/dev/null || true)"
-[ -f "$INSTALLED_STAMP_FILE" ] && INSTALLED_STAMP="$(command cat "$INSTALLED_STAMP_FILE" 2>/dev/null || true)"
-
-# _bundled_needs_sync — true (0) when a bundled artifact should be (re)written:
-#   - target dir is absent (first install), OR
-#   - --refresh was passed, OR
-#   - the staged stamp is non-empty and differs from the installed stamp.
-# When the stamps match (and target exists), returns 1 → keep the fast path.
-_bundled_needs_sync() {
+# _buildbound_needs_install — true (0) when a build-bound artifact should be
+# (re)written: the target dir is absent (first install) OR --refresh was passed.
+# Otherwise returns 1 → keep the existing copy (no per-boot churn, no clobber).
+_buildbound_needs_install() {
     local target_dir="$1"
     [ ! -d "$target_dir" ] && return 0
     [ "$REFRESH_MODE" = "true" ] && return 0
-    [ -n "$STAGED_STAMP" ] && [ "$STAGED_STAMP" != "$INSTALLED_STAMP" ] && return 0
     return 1
 }
 
 if [ -d "$TEMPLATES_DIR" ]; then
-    echo "Installing skills and agents..."
+    echo "Installing build-bound skills..."
     echo ""
 
     # --- Resolve skill list ---
-    # Default static skills (27 template-based skills).
-    # Excludes: container-environment (always installs dynamically),
-    # conditional skills (docker-development, cloud-infrastructure),
-    # and project-level .claude/skills/ (always available via repo).
-    DEFAULT_SKILLS="git-workflow,testing-patterns,code-quality,development-workflow,error-handling,documentation-authoring,shell-scripting,skill-authoring,agent-authoring,workflow-authoring,adversarial-review,file-issue,next-issue,codebase-audit,next-issue-ship,memory-conventions,orchestrate,provision-agent,rebase-lockfile,rebase-generated,rebase-imports,rebase-version,check-docs-staleness,check-docs-deadlinks,check-docs-organization,check-docs-examples,check-docs-missing-api,loop-make-it-work,loop-make-it-right,loop-make-it-secure,loop-make-it-tested,loop-make-it-documented,context-security,context-data-storage,drift-detect,check-security,check-code-health,check-ai-config"
+    # CLAUDE_SKILLS still gates the build-bound skills below (so CLAUDE_SKILLS=""
+    # suppresses them and the docker/cloud conditionals still honor membership).
+    # The general-purpose skills are now selected at PLUGIN level via
+    # CLAUDE_LIBRARIAN_PLUGINS, not per-skill here.
+    DEFAULT_SKILLS="container-environment,docker-development,cloud-infrastructure"
     # Use if-else to capture return code safely under set -e
     if SKILL_RESULT=$(_resolve_override_list_or_file "CLAUDE_SKILLS" "$DEFAULT_SKILLS"); then
         SKILL_LIST_IS_OVERRIDE=0
@@ -415,34 +408,6 @@ if [ -d "$TEMPLATES_DIR" ]; then
     fi
 
     echo "Skills:"
-    if [ -d "$TEMPLATES_DIR/skills" ]; then
-        for skill_dir in "$TEMPLATES_DIR/skills"/*/; do
-            [ -d "$skill_dir" ] || continue
-            skill_name=$(basename "$skill_dir")
-
-            # Skip conditional skills (handled below)
-            [ "$skill_name" = "container-environment" ] && continue
-            [ "$skill_name" = "docker-development" ] && continue
-            [ "$skill_name" = "cloud-infrastructure" ] && continue
-
-            # If CLAUDE_SKILLS is set, only install skills in the list
-            if [ $SKILL_LIST_IS_OVERRIDE -eq 0 ] && ! _is_in_list "$skill_name" "$SKILL_LIST"; then
-                continue
-            fi
-
-            target_dir="$CLAUDE_DIR/skills/$skill_name"
-            if _bundled_needs_sync "$target_dir"; then
-                # Distinguish first install from a stamp-driven re-sync for the
-                # log line (the target pre-existing means we're overwriting).
-                [ -d "$target_dir" ] && _verb="re-synced" || _verb="installed"
-                mkdir -p "$target_dir"
-                cp -r "$skill_dir"/* "$target_dir/"
-                echo "    ✓ $skill_name $_verb"
-            else
-                echo "    ✓ $skill_name (already installed)"
-            fi
-        done
-    fi
 
     # Extra Skills (from CLAUDE_EXTRA_SKILLS - additive, supports _FILE)
     EXTRA_SKILLS_FILE="${CLAUDE_EXTRA_SKILLS_FILE:-${CLAUDE_EXTRA_SKILLS_FILE_DEFAULT:-}}"
@@ -474,10 +439,9 @@ if [ -d "$TEMPLATES_DIR" ]; then
     fi
 
     # --- Dynamic: container-environment skill (always installed) ---
-    # Stamp-gated like the bundled skills: a stamp change (or --refresh)
-    # regenerates the content so a rebuilt image refreshes it (#574).
+    # Generated from enabled-features.conf; absent-only (--refresh regenerates).
     target_dir="$CLAUDE_DIR/skills/container-environment"
-    if ! _bundled_needs_sync "$target_dir"; then
+    if ! _buildbound_needs_install "$target_dir"; then
         echo "    ✓ container-environment (already installed)"
     else
         mkdir -p "$target_dir"
@@ -541,13 +505,12 @@ SKILL_HEADER
     if [ "${INCLUDE_DOCKER:-false}" = "true" ] && \
        { [ $SKILL_LIST_IS_OVERRIDE -ne 0 ] || _is_in_list "docker-development" "$SKILL_LIST"; }; then
         target_dir="$CLAUDE_DIR/skills/docker-development"
-        if ! _bundled_needs_sync "$target_dir"; then
+        if ! _buildbound_needs_install "$target_dir"; then
             echo "    ✓ docker-development (already installed)"
         else
-            [ -d "$target_dir" ] && _verb="re-synced" || _verb="installed"
             mkdir -p "$target_dir"
             cp -r "$TEMPLATES_DIR/skills/docker-development/"* "$target_dir/"
-            echo "    ✓ docker-development $_verb"
+            echo "    ✓ docker-development installed"
         fi
     fi
 
@@ -563,7 +526,7 @@ SKILL_HEADER
     if [ "$HAS_CLOUD" = "true" ] && \
        { [ $SKILL_LIST_IS_OVERRIDE -ne 0 ] || _is_in_list "cloud-infrastructure" "$SKILL_LIST"; }; then
         target_dir="$CLAUDE_DIR/skills/cloud-infrastructure"
-        if ! _bundled_needs_sync "$target_dir"; then
+        if ! _buildbound_needs_install "$target_dir"; then
             echo "    ✓ cloud-infrastructure (already installed)"
         else
             mkdir -p "$target_dir"
@@ -593,44 +556,12 @@ CLOUD_HEADER
         fi
     fi
 
-    # --- Agents (configurable via CLAUDE_AGENTS) ---
-    DEFAULT_AGENTS="code-reviewer,test-writer,refactorer,debugger,audit-code-health,audit-security,audit-test-gaps,audit-architecture,audit-docs,audit-ai-config,issue-writer,issue-filer,skill-author,agent-author,checker,rebase-agent,ci-fixer"
-    # Use if-else to capture return code safely under set -e
-    if AGENT_RESULT=$(_resolve_override_list_or_file "CLAUDE_AGENTS" "$DEFAULT_AGENTS"); then
-        AGENT_LIST_IS_OVERRIDE=0
-    else
-        AGENT_LIST_IS_OVERRIDE=1
-    fi
-    RESOLVED_FROM=$(command cat "$_RESOLVED_FROM_FILE")
-    if [ "$RESOLVED_FROM" = "file" ]; then
-        AGENT_LIST=$(_file_json_to_csv "$AGENT_RESULT")
-    else
-        AGENT_LIST="$AGENT_RESULT"
-    fi
-
+    # --- Agents ---
+    # The general-purpose agents now ship as the librarian plugins (installed
+    # below). Only user-additive CLAUDE_EXTRA_AGENTS install from the staged
+    # templates here.
     echo ""
     echo "Agents:"
-    if [ -d "$TEMPLATES_DIR/agents" ]; then
-        for agent_dir in "$TEMPLATES_DIR/agents"/*/; do
-            [ -d "$agent_dir" ] || continue
-            agent_name=$(basename "$agent_dir")
-
-            # If CLAUDE_AGENTS is set, only install agents in the list
-            if [ $AGENT_LIST_IS_OVERRIDE -eq 0 ] && ! _is_in_list "$agent_name" "$AGENT_LIST"; then
-                continue
-            fi
-
-            target_dir="$CLAUDE_DIR/agents/$agent_name"
-            if _bundled_needs_sync "$target_dir"; then
-                [ -d "$target_dir" ] && _verb="re-synced" || _verb="installed"
-                mkdir -p "$target_dir"
-                cp -r "$agent_dir"/* "$target_dir/"
-                echo "    ✓ $agent_name $_verb"
-            else
-                echo "    ✓ $agent_name (already installed)"
-            fi
-        done
-    fi
 
     # Extra Agents (from CLAUDE_EXTRA_AGENTS - additive, supports _FILE)
     EXTRA_AGENTS_FILE="${CLAUDE_EXTRA_AGENTS_FILE:-${CLAUDE_EXTRA_AGENTS_FILE_DEFAULT:-}}"
@@ -661,15 +592,6 @@ CLOUD_HEADER
         done
     fi
 
-    # Record the staged stamp as last-synced so the next run skips the re-copy
-    # until the staged templates change again (or --refresh is passed). Only
-    # written when the build produced a stamp; absent-stamp images keep the
-    # legacy absent-only behavior (every run sees STAGED_STAMP="" → no re-sync).
-    if [ -n "$STAGED_STAMP" ]; then
-        mkdir -p "$CLAUDE_DIR"
-        printf '%s\n' "$STAGED_STAMP" > "$INSTALLED_STAMP_FILE"
-    fi
-
     echo ""
 fi
 
@@ -697,6 +619,67 @@ if [ -d "$TEMPLATES_DIR/hooks" ]; then
             echo "    ✓ $hook_name installed"
         fi
     done
+fi
+
+# ============================================================================
+# Librarian Plugin Installation (no auth required, offline)
+# ============================================================================
+# The general-purpose skills/agents ship as the librarian plugins. The build
+# clones the marketplace to /opt/librarian at a pinned LIBRARIAN_REF
+# (claude-code-setup.sh); here we register it as a LOCAL (on-disk) marketplace
+# and install the plugins OFFLINE — a directory-sourced marketplace needs no
+# network and no authentication, so this runs unconditionally on every boot and
+# self-heals a fresh ~/.claude home volume (replaces the #574 stamp re-sync).
+LIBRARIAN_DIR="/opt/librarian"
+LIBRARIAN_MARKETPLACE="librarian"
+if [ -d "$LIBRARIAN_DIR" ]; then
+    echo ""
+    echo "Librarian plugins (local marketplace, offline):"
+
+    # Register the local marketplace if not already known. The known-marketplaces
+    # file records it by name (cf. ensure_marketplace for the official one).
+    _known_file="$HOME/.claude/plugins/known_marketplaces.json"
+    if [ -f "$_known_file" ] && command grep -q "\"$LIBRARIAN_MARKETPLACE\"" "$_known_file" 2>/dev/null; then
+        echo "  ✓ Marketplace registered ($LIBRARIAN_MARKETPLACE)"
+    elif output=$(claude plugin marketplace add "$LIBRARIAN_DIR" 2>&1); then
+        echo "  ✓ Marketplace registered ($LIBRARIAN_MARKETPLACE)"
+    else
+        echo "  ⚠ Failed to register librarian marketplace: $output"
+    fi
+
+    # Resolve which librarian plugins to install (override via
+    # CLAUDE_LIBRARIAN_PLUGINS; defaults to the full set).
+    DEFAULT_LIBRARIAN_PLUGINS="dev-core,review-audit,workflow"
+    if LIBRARIAN_RESULT=$(_resolve_override_list_or_file "CLAUDE_LIBRARIAN_PLUGINS" "$DEFAULT_LIBRARIAN_PLUGINS"); then
+        : # override or default both fine; we install whatever resolves
+    fi
+    RESOLVED_FROM=$(command cat "$_RESOLVED_FROM_FILE")
+    if [ "$RESOLVED_FROM" = "file" ]; then
+        LIBRARIAN_PLUGINS=$(_file_json_to_csv "$LIBRARIAN_RESULT")
+    else
+        LIBRARIAN_PLUGINS="$LIBRARIAN_RESULT"
+    fi
+
+    if [ -n "$LIBRARIAN_PLUGINS" ]; then
+        IFS=',' read -ra LIBRARIAN_PLUGIN_LIST <<< "$LIBRARIAN_PLUGINS"
+        for plugin in "${LIBRARIAN_PLUGIN_LIST[@]}"; do
+            plugin=$(echo "$plugin" | xargs)
+            [ -z "$plugin" ] && continue
+            if has_plugin "$plugin"; then
+                echo "    ✓ $plugin (already installed)"
+            elif output=$(claude plugin install "${plugin}@${LIBRARIAN_MARKETPLACE}" 2>&1); then
+                echo "    ✓ $plugin installed"
+            else
+                echo "    ⚠ Failed to install $plugin"
+                echo "$output" | command sed 's/^/      /' | command head -5
+            fi
+        done
+    else
+        echo "    (none — CLAUDE_LIBRARIAN_PLUGINS set to empty)"
+    fi
+else
+    echo ""
+    echo "Librarian marketplace not found at $LIBRARIAN_DIR — skipping librarian plugins"
 fi
 
 # ============================================================================

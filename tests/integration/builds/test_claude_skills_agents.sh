@@ -1,16 +1,20 @@
 #!/usr/bin/env bash
 # @tier: merge,weekly
-# Test Claude Code skills and agents installation
+# Test Claude Code librarian plugins + build-bound skills installation
 #
-# This test verifies that skill and agent templates are staged at build time
-# and that the claude-setup command includes the installation logic.
+# The general-purpose skills/agents ship as the librarian plugin marketplace,
+# cloned at build to /opt/librarian at a pinned LIBRARIAN_REF and installed
+# offline at runtime by claude-setup (issue #608, epic #607). The build-bound
+# skills (container-environment, cloud-infrastructure, docker-development) stay
+# in this repo and still install. The #574 bake/stamp pipeline is removed.
 #
 # Tests:
-# - Skill/agent templates staged to /etc/container/config/claude-templates/
-# - All expected template files exist
+# - librarian marketplace cloned to /opt/librarian with a valid manifest
+# - LIBRARIAN_REF build arg pins the version
+# - claude-setup registers the local marketplace offline + installs the plugins
+# - claude-setup no longer references the #574 stamp machinery
+# - Build-bound skill/hook templates still staged
 # - enabled-features.conf contains cloud/docker flags
-# - Conditional skill templates present based on build flags
-# - claude-setup script includes skills & agents installation section
 
 # Get the directory where this script is located
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -27,8 +31,8 @@ export BUILD_CONTEXT="$CONTAINERS_DIR"
 # Define test suite
 test_suite "Claude Code Skills & Agents"
 
-# Test: Templates staged at build time with dev-tools
-test_templates_staged() {
+# Test: librarian marketplace cloned + build-bound templates staged at build time
+test_librarian_and_buildbound_staged() {
     local image="test-skills-agents-$$"
     echo "Building image with INCLUDE_DEV_TOOLS=true"
 
@@ -39,118 +43,64 @@ test_templates_staged() {
         --build-arg INCLUDE_NODE=true \
         -t "$image"
 
-    # Verify templates directory exists
-    assert_dir_in_image "$image" "/etc/container/config/claude-templates"
+    # --- librarian marketplace cloned to a durable image path ---
+    assert_dir_in_image "$image" "/opt/librarian"
+    assert_file_in_image "$image" "/opt/librarian/.claude-plugin/marketplace.json"
+    # The 3 plugins are present as on-disk sources for the local marketplace.
+    assert_dir_in_image "$image" "/opt/librarian/plugins/dev-core"
+    assert_dir_in_image "$image" "/opt/librarian/plugins/review-audit"
+    assert_dir_in_image "$image" "/opt/librarian/plugins/workflow"
+    # The .git dir is stripped to trim image size (a local marketplace only
+    # needs the working tree).
+    assert_command_in_container "$image" \
+        "test ! -d /opt/librarian/.git && echo 'no-git'" \
+        "no-git"
 
-    # Verify skill templates
+    # --- Build-bound skill templates still staged (removal is #611) ---
     assert_dir_in_image "$image" "/etc/container/config/claude-templates/skills"
-    assert_file_in_image "$image" "/etc/container/config/claude-templates/skills/container-environment/SKILL.md"
-    assert_file_in_image "$image" "/etc/container/config/claude-templates/skills/git-workflow/SKILL.md"
-    assert_file_in_image "$image" "/etc/container/config/claude-templates/skills/testing-patterns/SKILL.md"
-    assert_file_in_image "$image" "/etc/container/config/claude-templates/skills/code-quality/SKILL.md"
-    assert_file_in_image "$image" "/etc/container/config/claude-templates/skills/development-workflow/SKILL.md"
-    assert_file_in_image "$image" "/etc/container/config/claude-templates/skills/error-handling/SKILL.md"
-    assert_file_in_image "$image" "/etc/container/config/claude-templates/skills/documentation-authoring/SKILL.md"
-    assert_file_in_image "$image" "/etc/container/config/claude-templates/skills/shell-scripting/SKILL.md"
-    assert_file_in_image "$image" "/etc/container/config/claude-templates/skills/skill-authoring/SKILL.md"
-    assert_file_in_image "$image" "/etc/container/config/claude-templates/skills/agent-authoring/SKILL.md"
     assert_file_in_image "$image" "/etc/container/config/claude-templates/skills/docker-development/SKILL.md"
     assert_file_in_image "$image" "/etc/container/config/claude-templates/skills/cloud-infrastructure/SKILL.md"
+    assert_file_in_image "$image" "/etc/container/config/claude-templates/skills/container-environment/SKILL.md"
 
-    # Verify codebase-audit skill templates (SKILL.md + companions)
-    assert_file_in_image "$image" "/etc/container/config/claude-templates/skills/codebase-audit/SKILL.md"
-    assert_file_in_image "$image" "/etc/container/config/claude-templates/skills/codebase-audit/finding-schema.md"
-    assert_file_in_image "$image" "/etc/container/config/claude-templates/skills/codebase-audit/issue-templates.md"
+    # --- golem-notify hook still staged for the runtime hooks loop ---
+    assert_file_in_image "$image" "/etc/container/config/claude-templates/hooks/golem-notify.sh"
 
-    # next-issue-ship ships its adversarial-review Workflow harness alongside SKILL.md
-    assert_file_in_image "$image" "/etc/container/config/claude-templates/skills/next-issue-ship/SKILL.md"
-    assert_file_in_image "$image" "/etc/container/config/claude-templates/skills/next-issue-ship/workflow.js"
-
-    # Verify agent templates
-    assert_dir_in_image "$image" "/etc/container/config/claude-templates/agents"
-    assert_file_in_image "$image" "/etc/container/config/claude-templates/agents/code-reviewer/code-reviewer.md"
-    # code-reviewer ships its Workflow harness alongside the agent definition
-    assert_file_in_image "$image" "/etc/container/config/claude-templates/agents/code-reviewer/workflow.js"
-    assert_file_in_image "$image" "/etc/container/config/claude-templates/agents/test-writer/test-writer.md"
-    assert_file_in_image "$image" "/etc/container/config/claude-templates/agents/refactorer/refactorer.md"
-    assert_file_in_image "$image" "/etc/container/config/claude-templates/agents/debugger/debugger.md"
-
-    # Verify audit scanner agent templates
-    assert_file_in_image "$image" "/etc/container/config/claude-templates/agents/audit-code-health/audit-code-health.md"
-    assert_file_in_image "$image" "/etc/container/config/claude-templates/agents/audit-security/audit-security.md"
-    assert_file_in_image "$image" "/etc/container/config/claude-templates/agents/audit-test-gaps/audit-test-gaps.md"
-    assert_file_in_image "$image" "/etc/container/config/claude-templates/agents/audit-architecture/audit-architecture.md"
-    assert_file_in_image "$image" "/etc/container/config/claude-templates/agents/audit-docs/audit-docs.md"
+    # --- The #574 content stamp is NOT written anymore ---
+    assert_command_in_container "$image" \
+        "test ! -f /etc/container/config/claude-templates/.stamp && echo 'no-stamp'" \
+        "no-stamp"
 }
 
-# Test: Agent templates have correct YAML frontmatter
-test_agent_frontmatter() {
-    local image="${IMAGE_TO_TEST:-test-skills-agents-$$}"
+# Test: LIBRARIAN_REF build arg pins the version (override respected)
+test_librarian_ref_pinned() {
+    local image="test-skills-librarian-ref-$$"
 
-    # Verify code-reviewer has name field
-    assert_command_in_container "$image" \
-        "grep -q 'name: code-reviewer' /etc/container/config/claude-templates/agents/code-reviewer/code-reviewer.md && echo 'found'" \
-        "found"
+    assert_build_succeeds "Dockerfile" \
+        --build-arg PROJECT_PATH=. \
+        --build-arg PROJECT_NAME=test-librarian-ref \
+        --build-arg INCLUDE_DEV_TOOLS=true \
+        --build-arg INCLUDE_NODE=true \
+        --build-arg "LIBRARIAN_REF=v0.2.0" \
+        -t "$image"
 
-    # Verify test-writer has name field
+    # The cloned marketplace manifest names the librarian marketplace.
     assert_command_in_container "$image" \
-        "grep -q 'name: test-writer' /etc/container/config/claude-templates/agents/test-writer/test-writer.md && echo 'found'" \
-        "found"
-
-    # Verify refactorer has name field
-    assert_command_in_container "$image" \
-        "grep -q 'name: refactorer' /etc/container/config/claude-templates/agents/refactorer/refactorer.md && echo 'found'" \
-        "found"
-
-    # Verify debugger has name field
-    assert_command_in_container "$image" \
-        "grep -q 'name: debugger' /etc/container/config/claude-templates/agents/debugger/debugger.md && echo 'found'" \
-        "found"
-
-    # Verify audit scanner agents have name fields
-    assert_command_in_container "$image" \
-        "grep -q 'name: audit-code-health' /etc/container/config/claude-templates/agents/audit-code-health/audit-code-health.md && echo 'found'" \
-        "found"
-
-    assert_command_in_container "$image" \
-        "grep -q 'name: audit-security' /etc/container/config/claude-templates/agents/audit-security/audit-security.md && echo 'found'" \
-        "found"
-
-    assert_command_in_container "$image" \
-        "grep -q 'name: audit-test-gaps' /etc/container/config/claude-templates/agents/audit-test-gaps/audit-test-gaps.md && echo 'found'" \
-        "found"
-
-    assert_command_in_container "$image" \
-        "grep -q 'name: audit-architecture' /etc/container/config/claude-templates/agents/audit-architecture/audit-architecture.md && echo 'found'" \
-        "found"
-
-    assert_command_in_container "$image" \
-        "grep -q 'name: audit-docs' /etc/container/config/claude-templates/agents/audit-docs/audit-docs.md && echo 'found'" \
+        "grep -q '\"name\": \"librarian\"' /opt/librarian/.claude-plugin/marketplace.json && echo 'found'" \
         "found"
 }
 
-# Test: Skill templates have correct YAML frontmatter
-test_skill_frontmatter() {
+# Test: librarian marketplace manifest is valid and names the 3 plugins
+test_librarian_manifest_plugins() {
     local image="${IMAGE_TO_TEST:-test-skills-agents-$$}"
 
-    # Verify git-workflow has description
     assert_command_in_container "$image" \
-        "grep -q 'description:' /etc/container/config/claude-templates/skills/git-workflow/SKILL.md && echo 'found'" \
+        "grep -q 'dev-core' /opt/librarian/.claude-plugin/marketplace.json && echo 'found'" \
         "found"
-
-    # Verify testing-patterns has description
     assert_command_in_container "$image" \
-        "grep -q 'description:' /etc/container/config/claude-templates/skills/testing-patterns/SKILL.md && echo 'found'" \
+        "grep -q 'review-audit' /opt/librarian/.claude-plugin/marketplace.json && echo 'found'" \
         "found"
-
-    # Verify code-quality has description
     assert_command_in_container "$image" \
-        "grep -q 'description:' /etc/container/config/claude-templates/skills/code-quality/SKILL.md && echo 'found'" \
-        "found"
-
-    # Verify codebase-audit has description
-    assert_command_in_container "$image" \
-        "grep -q 'description:' /etc/container/config/claude-templates/skills/codebase-audit/SKILL.md && echo 'found'" \
+        "grep -q 'workflow' /opt/librarian/.claude-plugin/marketplace.json && echo 'found'" \
         "found"
 }
 
@@ -198,30 +148,47 @@ test_features_config_cloud_flags() {
 test_claude_setup_has_skills_section() {
     local image="${IMAGE_TO_TEST:-test-skills-agents-$$}"
 
-    # Verify claude-setup contains skills installation section
+    # Verify claude-setup installs the librarian plugins from the local marketplace
     assert_command_in_container "$image" \
-        "grep -q 'Skills & Agents Installation' /usr/local/bin/claude-setup && echo 'found'" \
+        "grep -q '/opt/librarian' /usr/local/bin/claude-setup && echo 'found'" \
         "found"
 
-    # Verify it references the templates directory
+    # Verify it registers the local marketplace (offline, no auth)
+    assert_command_in_container "$image" \
+        "grep -q 'plugin marketplace add' /usr/local/bin/claude-setup && echo 'found'" \
+        "found"
+
+    # Verify it installs librarian-scoped plugins (plugin@librarian)
+    assert_command_in_container "$image" \
+        "grep -qF 'plugin install \"\${plugin}@\${LIBRARIAN_MARKETPLACE}\"' /usr/local/bin/claude-setup && echo 'found'" \
+        "found"
+
+    # Verify it still references the build-bound templates directory
     assert_command_in_container "$image" \
         "grep -q 'claude-templates' /usr/local/bin/claude-setup && echo 'found'" \
         "found"
 
-    # Verify it handles container-environment skill
+    # Verify it handles the build-bound skills
     assert_command_in_container "$image" \
         "grep -q 'container-environment' /usr/local/bin/claude-setup && echo 'found'" \
         "found"
-
-    # Verify it handles cloud-infrastructure skill
     assert_command_in_container "$image" \
         "grep -q 'cloud-infrastructure' /usr/local/bin/claude-setup && echo 'found'" \
         "found"
-
-    # Verify it handles docker-development skill
     assert_command_in_container "$image" \
         "grep -q 'docker-development' /usr/local/bin/claude-setup && echo 'found'" \
         "found"
+}
+
+# Test: claude-setup no longer references the #574 stamp machinery
+test_claude_setup_no_stamp_machinery() {
+    local image="${IMAGE_TO_TEST:-test-skills-agents-$$}"
+
+    # grep returns 1 (no match) → invert to 'gone' so the assertion passes only
+    # when the stamp machinery is absent.
+    assert_command_in_container "$image" \
+        "grep -q '_bundled_needs_sync\\|template-stamp\\|STAGED_STAMP' /usr/local/bin/claude-setup || echo 'gone'" \
+        "gone"
 }
 
 # Test: claude-setup verify output lists skills and agents
@@ -251,22 +218,47 @@ test_override_vars_persisted() {
         --build-arg "CLAUDE_AGENTS=debugger" \
         -t "$image"
 
-    # Verify override vars are persisted
+    # Verify override vars are persisted. persist-feature-flags.sh quotes the
+    # values (CLAUDE_SKILLS_DEFAULT="git-workflow,code-quality"), so match an
+    # optional leading quote.
     assert_command_in_container "$image" \
-        "grep 'CLAUDE_SKILLS_DEFAULT=git-workflow,code-quality' /etc/container/config/enabled-features.conf && echo 'found'" \
+        "grep 'CLAUDE_SKILLS_DEFAULT=\"\\?git-workflow,code-quality' /etc/container/config/enabled-features.conf && echo 'found'" \
         "found"
 
     assert_command_in_container "$image" \
-        "grep 'CLAUDE_AGENTS_DEFAULT=debugger' /etc/container/config/enabled-features.conf && echo 'found'" \
+        "grep 'CLAUDE_AGENTS_DEFAULT=\"\\?debugger' /etc/container/config/enabled-features.conf && echo 'found'" \
         "found"
 
     # Unset vars should get __UNSET__ sentinel
     assert_command_in_container "$image" \
-        "grep 'CLAUDE_PLUGINS_DEFAULT=__UNSET__' /etc/container/config/enabled-features.conf && echo 'found'" \
+        "grep 'CLAUDE_PLUGINS_DEFAULT=\"\\?__UNSET__' /etc/container/config/enabled-features.conf && echo 'found'" \
         "found"
 
     assert_command_in_container "$image" \
-        "grep 'CLAUDE_MCPS_DEFAULT=__UNSET__' /etc/container/config/enabled-features.conf && echo 'found'" \
+        "grep 'CLAUDE_MCPS_DEFAULT=\"\\?__UNSET__' /etc/container/config/enabled-features.conf && echo 'found'" \
+        "found"
+
+    # CLAUDE_LIBRARIAN_PLUGINS unset at build → __UNSET__ sentinel persisted
+    assert_command_in_container "$image" \
+        "grep 'CLAUDE_LIBRARIAN_PLUGINS_DEFAULT=\"\\?__UNSET__' /etc/container/config/enabled-features.conf && echo 'found'" \
+        "found"
+}
+
+# Test: CLAUDE_LIBRARIAN_PLUGINS build override persists to enabled-features.conf
+test_librarian_plugins_override_persisted() {
+    local image="test-skills-librarian-override-$$"
+
+    assert_build_succeeds "Dockerfile" \
+        --build-arg PROJECT_PATH=. \
+        --build-arg PROJECT_NAME=test-librarian-override \
+        --build-arg INCLUDE_DEV_TOOLS=true \
+        --build-arg INCLUDE_NODE=true \
+        --build-arg "CLAUDE_LIBRARIAN_PLUGINS=dev-core,workflow" \
+        -t "$image"
+
+    # persist-feature-flags.sh quotes the value; match an optional leading quote.
+    assert_command_in_container "$image" \
+        "grep 'CLAUDE_LIBRARIAN_PLUGINS_DEFAULT=\"\\?dev-core,workflow' /etc/container/config/enabled-features.conf && echo 'found'" \
         "found"
 }
 
@@ -286,21 +278,25 @@ test_claude_setup_has_override_helpers() {
         "grep -q 'CLAUDE_PLUGINS' /usr/local/bin/claude-setup && echo 'found'" \
         "found"
 
+    # CLAUDE_LIBRARIAN_PLUGINS replaced the per-agent CLAUDE_AGENTS override for
+    # the migrated artifacts (now installed as librarian plugins).
     assert_command_in_container "$image" \
-        "grep -q 'CLAUDE_AGENTS' /usr/local/bin/claude-setup && echo 'found'" \
+        "grep -q 'CLAUDE_LIBRARIAN_PLUGINS' /usr/local/bin/claude-setup && echo 'found'" \
         "found"
 }
 
 # Run all tests
-run_test test_templates_staged "Skill/agent templates staged at build time"
-run_test test_agent_frontmatter "Agent templates have correct frontmatter"
-run_test test_skill_frontmatter "Skill templates have correct frontmatter"
-run_test test_claude_setup_has_skills_section "claude-setup has skills installation section"
+run_test test_librarian_and_buildbound_staged "librarian cloned + build-bound templates staged at build time"
+run_test test_librarian_manifest_plugins "librarian manifest names the 3 plugins"
+run_test test_claude_setup_has_skills_section "claude-setup installs librarian plugins + build-bound skills"
+run_test test_claude_setup_no_stamp_machinery "claude-setup no longer references #574 stamp machinery"
 run_test test_claude_setup_verify_output "claude-setup verify output lists skills and agents"
 run_test test_claude_setup_has_override_helpers "claude-setup has component override helpers"
 
 # Skip tests that require building new images if using pre-built image
 if [ -z "${IMAGE_TO_TEST:-}" ]; then
+    run_test test_librarian_ref_pinned "LIBRARIAN_REF build arg pins the marketplace version"
+    run_test test_librarian_plugins_override_persisted "CLAUDE_LIBRARIAN_PLUGINS override persisted"
     run_test test_features_config_cloud_flags "enabled-features.conf contains cloud/docker flags"
     run_test test_override_vars_persisted "Override vars persisted in enabled-features.conf"
 fi

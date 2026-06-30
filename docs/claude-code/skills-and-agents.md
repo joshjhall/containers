@@ -82,21 +82,18 @@ plugin `patterns.sh` scripts run with your Claude Code tool grants.
 
 ### Installing in the container (pinned / offline)
 
-> **Planned — tracked in
-> [container consume #608](https://github.com/joshjhall/containers/issues/608),
-> not yet landed.** The `LIBRARIAN_REF` build arg and the offline-install build
-> step described here do not exist in the image yet. Until #608 ships, the
-> container still installs the bundled artifacts; this section documents the
-> target state so the host and container stories read together.
-
-When `INCLUDE_DEV_TOOLS=true`, the image will clone `librarian` at a **pinned
-tag/SHA** (the `LIBRARIAN_REF` build arg), register it as a local on-disk
-marketplace, and install the `dev-core`, `review-audit`, and `workflow`
+When `INCLUDE_DEV_TOOLS=true`, the image clones `librarian` at a **pinned
+tag/branch** (the `LIBRARIAN_REF` build arg, default `v0.2.0`) into
+`/opt/librarian`, and `claude-setup` registers it as a local on-disk
+marketplace and installs the `dev-core`, `review-audit`, and `workflow`
 plugins **offline** — no live network install at runtime, preserving headless
-build reproducibility. The pin is the version contract and will be registered
-in `bin/check-versions.sh` for auto-patch bumps (per the
+build reproducibility. Choose which plugins install via the
+`CLAUDE_LIBRARIAN_PLUGINS` arg (default: all three). The clone is durable image
+content; the `plugin install` runs at startup, so a fresh `~/.claude` home
+volume self-heals on every boot. The pin is the version contract, registered in
+`bin/check-versions.sh` for auto-patch bumps (per the
 [Automated Version Updates](../../CLAUDE.md#automated-version-updates)
-convention). See #608 for the build-step details.
+convention). This replaced the #574 content-stamp bake/re-sync pipeline (#608).
 
 Project-level `.claude/` configs still merge with the installed plugins (union
 semantics, project wins on name conflicts).

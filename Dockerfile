@@ -479,6 +479,12 @@ ARG CLAUDE_EXTRA_SKILLS=""
 ARG CLAUDE_EXTRA_AGENTS=""
 # Claude Code release channel: latest (default) or stable
 ARG CLAUDE_CHANNEL=latest
+# Librarian plugin marketplace pin (version contract; tracked by check-versions).
+# Must be a tag or branch — `git clone --branch` does not accept a bare SHA.
+ARG LIBRARIAN_REF=v0.2.0
+# Librarian plugins to install from the local marketplace (comma-separated).
+# When unset, all defaults install. Set to empty "" to install none.
+ARG CLAUDE_LIBRARIAN_PLUGINS
 # Component override lists — define the FULL set of components to install
 # When unset (default), all defaults are installed. Set to empty "" to install none.
 ARG CLAUDE_PLUGINS
@@ -504,6 +510,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     CLAUDE_MCPS="${CLAUDE_MCPS}" \
     CLAUDE_AGENTS="${CLAUDE_AGENTS}" \
     CLAUDE_SKILLS="${CLAUDE_SKILLS}" \
+    CLAUDE_LIBRARIAN_PLUGINS="${CLAUDE_LIBRARIAN_PLUGINS}" \
     INCLUDE_DOCKER=${INCLUDE_DOCKER} \
     INCLUDE_KUBERNETES=${INCLUDE_KUBERNETES} \
     INCLUDE_TERRAFORM=${INCLUDE_TERRAFORM} \
@@ -551,6 +558,8 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     CLAUDE_MCPS="${CLAUDE_MCPS}" \
     CLAUDE_AGENTS="${CLAUDE_AGENTS}" \
     CLAUDE_SKILLS="${CLAUDE_SKILLS}" \
+    CLAUDE_LIBRARIAN_PLUGINS="${CLAUDE_LIBRARIAN_PLUGINS}" \
+    LIBRARIAN_REF=${LIBRARIAN_REF} \
     CLAUDE_CHANNEL=${CLAUDE_CHANNEL} \
     SKIP_LSP_INSTALL=${SKIP_LSP_INSTALL} \
     /tmp/build-scripts/features/claude-code-setup.sh; \

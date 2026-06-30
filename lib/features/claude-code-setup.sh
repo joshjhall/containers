@@ -99,6 +99,46 @@ if [ -f "${BUILD_TEMP}/claude-install.sh" ]; then
 fi
 
 # ============================================================================
+# Clone the librarian plugin marketplace at a pinned ref
+# ============================================================================
+# The general-purpose skills/agents live in the joshjhall/librarian plugin
+# marketplace (epic #607). We clone it at a PINNED tag/branch into a durable
+# image path (/opt/librarian) and register+install it offline from a *local*
+# (on-disk) marketplace at runtime (see claude-setup). A directory-sourced
+# marketplace needs no network and no auth, so the headless container stays
+# reproducible and offline.
+#
+# The clone lives at /opt (image-resident, never clobbered by a ~/.claude home
+# volume mount); the actual `plugin install` happens in claude-setup so a fresh
+# home volume self-heals on every boot — mirroring the old skill/agent re-sync.
+#
+# LIBRARIAN_REF is the version contract (registered in bin/check-versions.sh for
+# auto-patch). It must be a tag or branch — `git clone --branch` does not accept
+# a bare commit SHA. A bad ref FAILS THE BUILD: the pin is load-bearing, so we do
+# not mask a clone failure here (unlike the best-effort CLI install above).
+LIBRARIAN_REF="${LIBRARIAN_REF:-v0.2.0}"
+LIBRARIAN_REPO_URL="${LIBRARIAN_REPO_URL:-https://github.com/joshjhall/librarian}"
+LIBRARIAN_DIR="/opt/librarian"
+log_message "Cloning librarian marketplace ${LIBRARIAN_REPO_URL} @ ${LIBRARIAN_REF}..."
+
+# Remove any partial prior clone so a retry starts clean.
+rm -rf "$LIBRARIAN_DIR"
+if retry_command "Cloning librarian @ ${LIBRARIAN_REF}" \
+    git clone --depth 1 --branch "$LIBRARIAN_REF" \
+    "$LIBRARIAN_REPO_URL" "$LIBRARIAN_DIR"; then
+    # Drop the .git dir — a local marketplace only needs the working tree, and
+    # this trims image size.
+    rm -rf "$LIBRARIAN_DIR/.git"
+    # World-readable so the runtime user can register + install from it.
+    chmod -R a+rX "$LIBRARIAN_DIR"
+    log_message "✓ librarian cloned to ${LIBRARIAN_DIR} @ ${LIBRARIAN_REF}"
+else
+    log_error "Failed to clone librarian marketplace at ref '${LIBRARIAN_REF}'"
+    log_error "LIBRARIAN_REF must be a valid tag or branch in ${LIBRARIAN_REPO_URL}"
+    exit 1
+fi
+
+# ============================================================================
 # Configure Claude Code Settings (memory, permissions)
 # ============================================================================
 # - Persist auto memory to the project directory so it survives container
@@ -256,42 +296,30 @@ else
 fi
 
 # ============================================================================
-# Stage Skill and Agent Templates for Runtime Installation
+# Stage Build-Bound Skill Templates + Hooks for Runtime Installation
 # ============================================================================
-log_message "Staging skill and agent templates for runtime installation..."
+# The general-purpose skills/agents now ship via the librarian plugin
+# marketplace (cloned above; installed at runtime by claude-setup). What still
+# stages here are the BUILD-BOUND artifacts that intentionally stay in this
+# repo: the docker-development skill template, plus the golem-notify hook that
+# claude-code-setup wires into settings.json. (container-environment and
+# cloud-infrastructure are generated dynamically at runtime, not from templates.)
+#
+# The #574 content-stamp re-sync machinery is removed — librarian plugins carry
+# their own version contract (LIBRARIAN_REF), so the bespoke stamp is obsolete.
+#
+# NOTE: the staged tree is read by claude-setup (build-bound skills, CLAUDE_EXTRA_*
+# additive installs) and by tests/integration/builds/test_checker_workflow.sh.
+# Removing the migrated skill/agent files from lib/features/templates/claude is
+# the separate follow-up issue #611, so the full tree is still staged for now.
+log_message "Staging build-bound skill templates and hooks for runtime installation..."
 
 if [ -d /tmp/build-scripts/features/templates/claude ]; then
     mkdir -p /etc/container/config/claude-templates
     cp -r /tmp/build-scripts/features/templates/claude/* /etc/container/config/claude-templates/
     chmod -R 644 /etc/container/config/claude-templates/
     command find /etc/container/config/claude-templates -type d -exec chmod 755 {} \;
-
-    # Write a content stamp over the staged tree. claude-setup compares this to
-    # the last-synced stamp in ~/.claude/.template-stamp and re-syncs bundled
-    # skills/agents when they differ — so a template fix propagates to a started
-    # container after the image is rebuilt, without manually clearing ~/.claude
-    # (issue #574). The stamp hashes every staged file's path + contents, so any
-    # template edit changes it.
-    #
-    # If sha256sum is unavailable we deliberately write NO stamp: claude-setup
-    # gates re-sync on a non-empty staged stamp, so an absent stamp keeps the
-    # legacy absent-only install behavior (a started container won't re-sync, but
-    # it also won't be stuck on a constant marker that always matches itself).
-    # That is strictly better than a fixed "no-sha256-build" string, which after
-    # the first sync would equal the recorded stamp and suppress all future
-    # re-syncs — reintroducing the very staleness this fixes.
-    if command -v sha256sum >/dev/null 2>&1; then
-        (cd /etc/container/config/claude-templates &&
-            command find . -type f ! -name .stamp -print0 |
-            LC_ALL=C command sort -z |
-                command xargs -r -0 sha256sum |
-                command sha256sum |
-                command awk '{print $1}') >/etc/container/config/claude-templates/.stamp
-        chmod 644 /etc/container/config/claude-templates/.stamp
-        log_message "Skill and agent templates staged (stamp: $(command cat /etc/container/config/claude-templates/.stamp))"
-    else
-        log_warning "sha256sum unavailable: no template stamp written; runtime re-sync disabled (legacy absent-only install)"
-    fi
+    log_message "Build-bound skill templates and hooks staged"
 else
     log_warning "No skill/agent templates found at /tmp/build-scripts/features/templates/claude"
 fi
@@ -374,8 +402,8 @@ fi
 log_feature_summary \
     --feature "Claude Code Setup" \
     --tools "claude,claude-setup,claude-auth-watcher,bash-language-server" \
-    --paths "/usr/local/bin/claude,/usr/local/bin/claude-setup,/usr/local/bin/claude-auth-watcher,/etc/container/first-startup/30-claude-code-setup.sh,/etc/container/startup/35-claude-auth-watcher.sh,~/.claude/settings.json" \
-    --env "ENABLE_LSP_TOOL,ANTHROPIC_AUTH_TOKEN,ANTHROPIC_MODEL,CLAUDE_CHANNEL,CLAUDE_EXTRA_PLUGINS,CLAUDE_EXTRA_MCPS,CLAUDE_EXTRA_SKILLS,CLAUDE_EXTRA_AGENTS,CLAUDE_AUTO_DETECT_MCPS,CLAUDE_MCP_AUTO_AUTH,CLAUDE_AUTH_WATCHER_TIMEOUT,CLAUDE_PLUGINS,CLAUDE_MCPS,CLAUDE_AGENTS,CLAUDE_SKILLS" \
+    --paths "/usr/local/bin/claude,/usr/local/bin/claude-setup,/usr/local/bin/claude-auth-watcher,/opt/librarian,/etc/container/first-startup/30-claude-code-setup.sh,/etc/container/startup/35-claude-auth-watcher.sh,~/.claude/settings.json" \
+    --env "ENABLE_LSP_TOOL,ANTHROPIC_AUTH_TOKEN,ANTHROPIC_MODEL,CLAUDE_CHANNEL,CLAUDE_EXTRA_PLUGINS,CLAUDE_EXTRA_MCPS,CLAUDE_EXTRA_SKILLS,CLAUDE_EXTRA_AGENTS,CLAUDE_AUTO_DETECT_MCPS,CLAUDE_MCP_AUTO_AUTH,CLAUDE_AUTH_WATCHER_TIMEOUT,CLAUDE_PLUGINS,CLAUDE_MCPS,CLAUDE_AGENTS,CLAUDE_SKILLS,LIBRARIAN_REF,CLAUDE_LIBRARIAN_PLUGINS" \
     --commands "claude,claude-setup,claude-auth-watcher" \
     --next-steps "Run 'claude' to authenticate. Setup runs automatically after auth (via watcher). Manual: 'claude-setup'."
 
