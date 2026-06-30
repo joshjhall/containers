@@ -234,248 +234,88 @@ quarterly-review:
 # ============================================================================
 # Worktree & orchestration (golems)
 # ============================================================================
+#
+# These recipes are THIN WRAPPERS over the canonical scripts bundled in the
+# `librarian` marketplace's `workflow` plugin (#609). The scripts — not these
+# recipes — are the source of truth, so the golem/worktree flow runs identically
+# on a host Mac, a bare Linux box, or inside a devcontainer WITHOUT `just`
+# (skills invoke them via `${CLAUDE_PLUGIN_ROOT}`; `just` is muscle-memory sugar
+# on top). `bin/workflow-scripts-dir.sh` locates the bundled `scripts/` dir
+# (the just-side analogue of `${CLAUDE_PLUGIN_ROOT}`, which is unset outside
+# Claude Code).
+#
+# Per-environment config is env-overridable (defaults live in the plugin's
+# `config.sh`); export any of these before `just` to relocate worktrees, rename
+# branches, or point at a different librarian checkout:
+#   GOLEM_WORKTREE_DIR          per-issue worktree dir   (default .worktrees)
+#   GOLEM_STATUS_DIR            status cache + feed dir   (default <wt>/.status)
+#   GOLEM_BRANCH_PREFIX         branch is <prefix><N>     (default feature/issue-)
+#   GOLEM_BASE_REF              ref new branches fork from (default origin/main)
+#   GOLEM_WORKTREE_LOCAL_FILES  gitignored files copied into a fresh worktree
+#                               (default ".env .claude/settings.local.json")
+#   WORKFLOW_SCRIPTS_DIR        override the bundled-scripts location entirely
 
-# Machine-local files a fresh Mode-2 worktree needs but that are gitignored
-# (so absent from a new worktree). Space-separated, repo-root-relative. Keep
-# this list in ONE place so it is easy to extend when other local files become
-# required. See the worktree-push-hooks-gitignore / golem-push-gate-under-auto
-# memory notes for why each is needed:
-#   .env                         — docker-compose-validate pre-push hook reads
-#                                  .devcontainer/docker-compose.yml's
-#                                  `env_file: - ../.env`.
-#   .claude/settings.local.json  — permissions.defaultMode "auto" + the
-#                                  push/PR `ask` gates. The launch passes
-#                                  `--permission-mode auto` explicitly (a fresh
-#                                  worktree is untrusted, so `defaultMode` here
-#                                  is not loaded on its own — #585); this file
-#                                  still supplies the push/PR `ask` rules once
-#                                  trust is seeded.
-WORKTREE_LOCAL_FILES := ".env .claude/settings.local.json"
-
-# Creates .worktrees/issue-N on branch feature/issue-N from origin/main and
-# copies in the gitignored machine-local files (WORKTREE_LOCAL_FILES) a push needs.
 # Create a push-ready Mode-2 worktree for issue N (idempotent; copies .env etc.).
 worktree-new N:
     #!/usr/bin/env bash
     set -euo pipefail
-    if ! [[ "{{ N }}" =~ ^[0-9]+$ ]]; then
-        echo "worktree-new: N must be an issue number, got '{{ N }}'" >&2
-        exit 2
-    fi
-    root="$(bash "{{ justfile_directory() }}/bin/repo-root.sh")"
-    cd "$root"
-    wt=".worktrees/issue-{{ N }}"
-    br="feature/issue-{{ N }}"
-    if git worktree list --porcelain | /usr/bin/grep -qx "worktree $root/$wt"; then
-        echo "worktree-new: $wt already exists — remove it first (just worktree-rm {{ N }})" >&2
-        exit 1
-    fi
-    if [ -n "$(git branch --list "$br")" ]; then
-        echo "worktree-new: branch $br already exists — delete it or pick another issue" >&2
-        exit 1
-    fi
-    git fetch origin main --quiet
-    git worktree add "$wt" -b "$br" origin/main
-    for f in {{ WORKTREE_LOCAL_FILES }}; do
-        if [ -e "$f" ]; then
-            /usr/bin/mkdir -p "$wt/$(/usr/bin/dirname "$f")"
-            /usr/bin/cp "$f" "$wt/$f"
-            echo "  copied $f"
-        else
-            echo "  skipped $f (not present in main checkout)"
-        fi
-    done
-    # Seed a workspace-trust entry for the new worktree path so the copied
-    # settings.local.json (defaultMode "auto" + push/PR `ask` gates) actually
-    # loads — Claude Code does not load project settings for an UNTRUSTED folder,
-    # and a non-interactive tmux launch can't show the trust dialog (#585).
-    # Complements the explicit `--permission-mode auto` in the launch hint below
-    # (which works even if this step is unavailable). Delegated to a tested
-    # helper (covered by tests/unit/bin/seed-worktree-trust.sh); best-effort,
-    # always exits 0 so a trust-seed failure never aborts worktree creation.
-    "$root/bin/seed-worktree-trust.sh" "$root/$wt"
-    echo ""
-    echo "Worktree ready: $wt (branch $br)"
-    echo "Launch a golem there with:"
-    echo "  tmux new-session -d -s golem-{{ N }} -c \"$root/$wt\" -e GOLEM_ID=golem-{{ N }} \"claude --permission-mode auto '/next-issue {{ N }} --auto' ; claude --permission-mode auto '/next-issue-ship --auto'\""
+    # Guard N at the just layer before it reaches the shell. just interpolates
+    # `{{ N }}` TEXTUALLY before bash parses the line, so a raw `[[ "{{ N }}" ]]`
+    # would eagerly run `$(...)` / break quotes (injection) even though the regex
+    # later rejects it. `quote()` emits a properly shell-escaped literal, so the
+    # value is captured verbatim and only THEN validated. The bundled script
+    # re-validates too; this is defense-in-depth at the wrapper.
+    _n={{ quote(N) }}
+    [[ "$_n" =~ ^[0-9]+$ ]] || { command echo "worktree-new: N must be an issue number, got '$_n'" >&2; exit 2; }
+    scripts="$("{{ justfile_directory() }}/bin/workflow-scripts-dir.sh")"
+    exec bash "$scripts/worktree-new.sh" "$_n"
 
 # Post-merge cleanup: remove the issue-N worktree and its feature/issue-N branch (clean no-op if absent).
 worktree-rm N:
     #!/usr/bin/env bash
     set -euo pipefail
-    if ! [[ "{{ N }}" =~ ^[0-9]+$ ]]; then
-        echo "worktree-rm: N must be an issue number, got '{{ N }}'" >&2
-        exit 2
-    fi
-    root="$(bash "{{ justfile_directory() }}/bin/repo-root.sh")"
-    cd "$root"
-    wt=".worktrees/issue-{{ N }}"
-    br="feature/issue-{{ N }}"
-    removed=0
-    if git worktree list --porcelain | /usr/bin/grep -qx "worktree $root/$wt"; then
-        if ! git worktree remove "$wt" 2>/dev/null; then
-            echo "worktree-rm: $wt has uncommitted changes." >&2
-            echo "  Re-run after committing, or force: git worktree remove --force $wt" >&2
-            exit 1
-        fi
-        echo "  removed worktree $wt"
-        removed=1
-    fi
-    if [ -n "$(git branch --list "$br")" ]; then
-        git branch -D "$br"
-        echo "  deleted branch $br"
-        removed=1
-    fi
-    if [ "$removed" -eq 0 ]; then
-        echo "worktree-rm: nothing to remove for issue {{ N }} ($wt / $br absent)"
-    fi
-    # A golem PR usually merges into origin/main right before its worktree is
-    # torn down here. On a BARE host the on-disk runtime copies (.claude/hooks,
-    # justfile, bin) don't update on their own (no work tree to check out into),
-    # so refresh them now — otherwise the next golem fires the just-superseded
-    # hook/justfile (#606). Best-effort and bare-host-only: a normal checkout
-    # uses git checkout/pull and is left untouched; any failure never aborts the
-    # teardown.
+    # See worktree-new for why N is quoted before validation (just interpolates
+    # textually; quote() prevents eager $(...)/quote-break injection).
+    _n={{ quote(N) }}
+    [[ "$_n" =~ ^[0-9]+$ ]] || { command echo "worktree-rm: N must be an issue number, got '$_n'" >&2; exit 2; }
+    scripts="$("{{ justfile_directory() }}/bin/workflow-scripts-dir.sh")"
+    bash "$scripts/worktree-rm.sh" "$_n"
+    # The bundled script is intentionally portable and does NOT carry the
+    # containers-specific tail below: a golem PR usually merges into origin/main
+    # right before its worktree is torn down, and on a BARE host the on-disk
+    # runtime copies (.claude/hooks, justfile, bin) don't update on their own
+    # (no work tree to check out into), so the next golem would fire the
+    # just-superseded hook/justfile (#606). Refresh them here. Best-effort and
+    # bare-host-only: a normal checkout uses git checkout/pull and is left
+    # untouched; any failure never aborts the teardown.
     if [ "$(git rev-parse --is-bare-repository 2>/dev/null)" = "true" ]; then
         bash "{{ justfile_directory() }}/bin/sync-host.sh" || \
             echo "  (sync-host refresh skipped — run 'just sync-host' manually)" >&2
     fi
 
-# Reads .worktrees/.status/*.json + live golem-* tmux sessions and the
-# Notification feed; PR + issue-label state remains authoritative (cache fills gaps).
 # Show the central golem status table + which golems are BLOCKED (TTY-free).
 golems:
     #!/usr/bin/env bash
-    set -uo pipefail
-    root="$(bash "{{ justfile_directory() }}/bin/repo-root.sh")"
-    status_dir="$root/.worktrees/.status"
-    feed="$status_dir/feed.jsonl"
-    pool="$status_dir/pool.json"
-    shopt -s nullglob
-    # pool.json is operator policy, NOT a golem-status file — keep it out of the
-    # golem-row glob (else it renders as a bogus "?" row). It's surfaced in the
-    # pool header below instead.
-    cache=()
-    for f in "$status_dir"/*.json; do
-        [ "$f" = "$pool" ] && continue
-        cache+=("$f")
-    done
-    sessions="$(tmux ls 2>/dev/null | /usr/bin/grep -oE '^golem-[0-9]+' || true)"
-    if [ "${#cache[@]}" -eq 0 ] && [ -z "$sessions" ] && [ ! -f "$pool" ]; then
-        echo "No active golems (no $status_dir/*.json, no golem-* tmux sessions)."
-        exit 0
-    fi
-    # Pool header: size, slots in use, backlog depth, and the accepting state.
-    # Defensive `// "-"` fallbacks mirror the golem-row jq style for absent fields.
-    if [ -f "$pool" ]; then
-        jq -r '"Pool: size=\(.size // "-")  slots=\((.slots // []) | length)/\(.size // "-")  backlog=\(.backlog_depth // "-")  accepting=\(.accepting // "-")"' \
-            "$pool" 2>/dev/null || echo "Pool: (unreadable $pool)"
-        echo ""
-    fi
-    printf '%-10s %-6s %-22s %-5s %-12s %-10s %-8s\n' \
-        GOLEM ISSUE BRANCH PR STATE PHASE BLOCKING
-    for f in "${cache[@]}"; do
-        jq -r '[
-            (.golem // "?"),
-            (.issue // "?" | tostring),
-            (.branch // "-"),
-            (.pr // "-" | tostring),
-            (.state // "-"),
-            (.phase // "-"),
-            (if .blocking then "YES" else "-" end)
-        ] | @tsv' "$f" 2>/dev/null \
-        | while IFS=$'\t' read -r g i b p s ph bl; do
-            printf '%-10s %-6s %-22s %-5s %-12s %-10s %-8s\n' "$g" "$i" "$b" "$p" "$s" "$ph" "$bl"
-        done
-    done
-    # Live sessions with no cache file yet.
-    for sess in $sessions; do
-        n="${sess#golem-}"
-        if [ ! -e "$status_dir/golem-$n.json" ] && [ ! -e "$status_dir/issue-$n.json" ]; then
-            printf '%-10s %-6s %-22s %-5s %-12s %-10s %-8s\n' \
-                "$sess" "$n" "-" "-" "(live)" "-" "-"
-        fi
-    done
-    echo ""
-    echo "BLOCKED (needs a human decision):"
-    blocked=0
-    for f in "${cache[@]}"; do
-        if [ "$(jq -r '.blocking // false' "$f" 2>/dev/null)" = "true" ]; then
-            n="$(jq -r '.issue // empty' "$f" 2>/dev/null)"
-            echo "  golem-$n — just golem-attach $n"
-            blocked=1
-        fi
-    done
-    # Fresh-gate detection from the feed is delegated to bin/golem-gate-watch.sh
-    # (--once snapshot) so the BLOCKED list here and the proactive `golem-watch`
-    # stream share ONE source of truth and can never drift. The helper applies
-    # the same rule: a golem is BLOCKED only when its most-recent feed line is a
-    # fresh `gate` (legacy `blocked` honored) within GOLEM_BLOCK_TTL; an `idle`
-    # emitted once the golem resumes supersedes and clears it. It emits
-    # "<golem>\t<message>"; reformat to the "  golem — message" display here.
-    if [ -f "$feed" ]; then
-        feed_blocked="$(
-            bash "{{ justfile_directory() }}/bin/golem-gate-watch.sh" --once 2>/dev/null \
-            | /usr/bin/awk -F'\t' 'NF { printf "  %s — %s\n", $1, $2 }'
-        )"
-        if [ -n "$feed_blocked" ]; then
-            printf '%s\n' "$feed_blocked"
-            blocked=1
-        fi
-    fi
-    [ "$blocked" -eq 0 ] && echo "  (none)"
-    if [ -f "$feed" ]; then
-        echo ""
-        echo "Recent feed ($feed):"
-        /usr/bin/tail -n 10 "$feed"
-    fi
+    set -euo pipefail
+    scripts="$("{{ justfile_directory() }}/bin/workflow-scripts-dir.sh")"
+    exec bash "$scripts/golem-status.sh"
 
-# Tries the golem-N worktree tmux session, else the container golem's `claude`
-# session via docker exec (clean failure if neither exists).
 # Attach to issue N's golem session (worktree or container).
 golem-attach N:
     #!/usr/bin/env bash
     set -euo pipefail
-    if ! [[ "{{ N }}" =~ ^[0-9]+$ ]]; then
-        echo "golem-attach: N must be an issue number, got '{{ N }}'" >&2
-        exit 2
-    fi
-    if tmux has-session -t "golem-{{ N }}" 2>/dev/null; then
-        exec tmux attach -t "golem-{{ N }}"
-    fi
-    root="$(bash "{{ justfile_directory() }}/bin/repo-root.sh")"
-    status_dir="$root/.worktrees/.status"
-    shopt -s nullglob
-    for f in "$status_dir"/*.json; do
-        if [ "$(jq -r '.issue // empty' "$f" 2>/dev/null)" = "{{ N }}" ]; then
-            ctr="$(jq -r '.container // empty' "$f" 2>/dev/null)"
-            if [ -n "$ctr" ]; then
-                exec docker exec -it "$ctr" tmux attach -t claude
-            fi
-        fi
-    done
-    echo "golem-attach: no golem-{{ N }} tmux session and no container golem for issue {{ N }}." >&2
-    echo "  Check 'just golems' for active golems." >&2
-    exit 1
+    # See worktree-new for why N is quoted before validation.
+    _n={{ quote(N) }}
+    [[ "$_n" =~ ^[0-9]+$ ]] || { command echo "golem-attach: N must be an issue number, got '$_n'" >&2; exit 2; }
+    scripts="$("{{ justfile_directory() }}/bin/workflow-scripts-dir.sh")"
+    exec bash "$scripts/golem-attach.sh" "$_n"
 
-# Proactive PUSH watch for golem permission gates — the complement to the PULL
-# `just golems`. Streams both gate channels (issue #618): the classified feed
-# (all golems, TTY-free) and live tmux pane prompt-overlays (worktree golems,
-# best for plan gates). Emits one "<golem> <message>" line on each transition
-# into a fresh gate; runs until interrupted (Ctrl-C).
 # Proactively watch for blocked golems (streams feed + pane gate channels; Ctrl-C to stop).
 golem-watch:
     #!/usr/bin/env bash
-    set -uo pipefail
-    watch="{{ justfile_directory() }}/bin/golem-gate-watch.sh"
-    echo "Watching for golem permission gates (feed + panes). Ctrl-C to stop." >&2
-    # Pane channel in the background, feed channel in the foreground; both prefix
-    # their source so the operator can tell which channel fired. Kill the
-    # background pane watcher when the foreground feed watcher exits.
-    ( bash "$watch" --stream-panes 2>/dev/null | /usr/bin/sed -u 's/^/[pane] /' ) &
-    pane_pid=$!
-    trap '/usr/bin/kill "$pane_pid" 2>/dev/null || true' EXIT INT TERM
-    bash "$watch" --stream 2>/dev/null | /usr/bin/sed -u 's/^/[feed] /'
+    set -euo pipefail
+    scripts="$("{{ justfile_directory() }}/bin/workflow-scripts-dir.sh")"
+    exec bash "$scripts/golem-watch.sh"
 
 # A bare repo never checks files out, so the host's on-disk .claude/hooks,
 # justfile, and bin/ drift behind origin/main after a merge and it runs stale
