@@ -259,21 +259,27 @@ quarterly-review:
 worktree-new N:
     #!/usr/bin/env bash
     set -euo pipefail
-    # Guard N at the just layer before it reaches the shell: `{{ N }}` is
-    # interpolated textually (just does not shell-quote), so validate it is a
-    # bare issue number first — the bundled script validates too, but this stops
-    # injection (e.g. `just worktree-new '1; rm -rf x'`) at the wrapper.
-    [[ "{{ N }}" =~ ^[0-9]+$ ]] || { echo "worktree-new: N must be an issue number, got '{{ N }}'" >&2; exit 2; }
+    # Guard N at the just layer before it reaches the shell. just interpolates
+    # `{{ N }}` TEXTUALLY before bash parses the line, so a raw `[[ "{{ N }}" ]]`
+    # would eagerly run `$(...)` / break quotes (injection) even though the regex
+    # later rejects it. `quote()` emits a properly shell-escaped literal, so the
+    # value is captured verbatim and only THEN validated. The bundled script
+    # re-validates too; this is defense-in-depth at the wrapper.
+    _n={{ quote(N) }}
+    [[ "$_n" =~ ^[0-9]+$ ]] || { command echo "worktree-new: N must be an issue number, got '$_n'" >&2; exit 2; }
     scripts="$("{{ justfile_directory() }}/bin/workflow-scripts-dir.sh")"
-    exec bash "$scripts/worktree-new.sh" {{ N }}
+    exec bash "$scripts/worktree-new.sh" "$_n"
 
 # Post-merge cleanup: remove the issue-N worktree and its feature/issue-N branch (clean no-op if absent).
 worktree-rm N:
     #!/usr/bin/env bash
     set -euo pipefail
-    [[ "{{ N }}" =~ ^[0-9]+$ ]] || { echo "worktree-rm: N must be an issue number, got '{{ N }}'" >&2; exit 2; }
+    # See worktree-new for why N is quoted before validation (just interpolates
+    # textually; quote() prevents eager $(...)/quote-break injection).
+    _n={{ quote(N) }}
+    [[ "$_n" =~ ^[0-9]+$ ]] || { command echo "worktree-rm: N must be an issue number, got '$_n'" >&2; exit 2; }
     scripts="$("{{ justfile_directory() }}/bin/workflow-scripts-dir.sh")"
-    bash "$scripts/worktree-rm.sh" {{ N }}
+    bash "$scripts/worktree-rm.sh" "$_n"
     # The bundled script is intentionally portable and does NOT carry the
     # containers-specific tail below: a golem PR usually merges into origin/main
     # right before its worktree is torn down, and on a BARE host the on-disk
@@ -298,9 +304,11 @@ golems:
 golem-attach N:
     #!/usr/bin/env bash
     set -euo pipefail
-    [[ "{{ N }}" =~ ^[0-9]+$ ]] || { echo "golem-attach: N must be an issue number, got '{{ N }}'" >&2; exit 2; }
+    # See worktree-new for why N is quoted before validation.
+    _n={{ quote(N) }}
+    [[ "$_n" =~ ^[0-9]+$ ]] || { command echo "golem-attach: N must be an issue number, got '$_n'" >&2; exit 2; }
     scripts="$("{{ justfile_directory() }}/bin/workflow-scripts-dir.sh")"
-    exec bash "$scripts/golem-attach.sh" {{ N }}
+    exec bash "$scripts/golem-attach.sh" "$_n"
 
 # Proactively watch for blocked golems (streams feed + pane gate channels; Ctrl-C to stop).
 golem-watch:

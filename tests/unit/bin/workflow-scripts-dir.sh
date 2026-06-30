@@ -97,6 +97,21 @@ test_plugin_root() {
 }
 
 # ---------------------------------------------------------------------------
+# 3b. CLAUDE_PLUGIN_ROOT whose scripts/ lacks config.sh is rejected and the
+#     resolver falls through (mirrors the override fall-through, step 2 branch).
+# ---------------------------------------------------------------------------
+test_invalid_plugin_root_falls_through() {
+    setup
+    local root="$TEST_DIR/plugin"
+    command mkdir -p "$root/scripts" # scripts/ exists but no config.sh
+
+    local rc=0
+    run_resolver "CLAUDE_PLUGIN_ROOT=$root" >/dev/null 2>&1 || rc=$?
+    assert_not_equals "0" "$rc" "CLAUDE_PLUGIN_ROOT without config.sh is not accepted"
+    teardown
+}
+
+# ---------------------------------------------------------------------------
 # 4. Installed marketplace cache: newest version dir wins (sort -V), and the
 #    override / plugin-root both take precedence over it.
 # ---------------------------------------------------------------------------
@@ -174,6 +189,7 @@ test_not_found() {
 run_test test_override_wins
 run_test test_invalid_override_falls_through
 run_test test_plugin_root
+run_test test_invalid_plugin_root_falls_through
 run_test test_installed_cache_newest_wins
 run_test test_installed_cache_skips_invalid_version
 run_test test_dev_mount_fallback
