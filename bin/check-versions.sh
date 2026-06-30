@@ -343,6 +343,15 @@ extract_all_versions() {
         [ -n "$ver" ] && add_tool "cosign" "$ver" "setup.sh" || true
     fi
 
+    # Librarian plugin marketplace pin from Dockerfile (ARG LIBRARIAN_REF).
+    # Strip the leading `v` so the stored value matches the normalized form
+    # check_github_release returns; the updater re-adds the `v` on writeback
+    # (the ref is used directly as a git tag, so the prefix is load-bearing there).
+    # A plain _add_dockerfile_version would NOT strip the `v` and would always
+    # report "outdated", so use a bespoke extraction like trivy-action below.
+    ver=$(command grep "^ARG LIBRARIAN_REF=" "$PROJECT_ROOT/Dockerfile" 2>/dev/null | command cut -d= -f2 | command tr -d '"' | command sed 's/^v//') || true
+    [ -n "$ver" ] && add_tool "librarian" "$ver" "Dockerfile" || true
+
     # GitHub Actions from workflows
     if [ -f "$PROJECT_ROOT/.github/workflows/ci.yml" ]; then
         # Strip optional leading `v` so the stored version matches the
@@ -473,6 +482,7 @@ main() {
             zoxide) check_github_release "zoxide" "ajeetdsouza/zoxide" ;;
             cosign) check_github_release "cosign" "sigstore/cosign" ;;
             trivy-action) check_github_release "trivy-action" "aquasecurity/trivy-action" ;;
+            librarian) check_github_release "librarian" "joshjhall/librarian" ;;
             *) [ "$OUTPUT_FORMAT" = "text" ] && echo "  Skipping $tool (no checker)" ;;
         esac
     done

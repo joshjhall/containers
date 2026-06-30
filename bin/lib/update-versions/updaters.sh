@@ -189,6 +189,11 @@ update_version() {
                     # Also update the fallback default in mise.sh
                     sed_inplace "s/MISE_VERSION=\"\${MISE_VERSION:-[^}]*}\"/MISE_VERSION=\"\${MISE_VERSION:-$latest}\"/" "$PROJECT_ROOT/lib/features/mise.sh"
                     ;;
+                librarian)
+                    # LIBRARIAN_REF is stored stripped of `v` for comparison but is
+                    # used directly as a git tag, so re-add the `v` on writeback.
+                    sed_inplace "s/^ARG LIBRARIAN_REF=.*/ARG LIBRARIAN_REF=v$latest/" "$PROJECT_ROOT/Dockerfile"
+                    ;;
                 *)
                     echo -e "${RED}    ERROR: Unknown Dockerfile tool: $tool — add a case in updaters.sh${NC}" >&2
                     return 1

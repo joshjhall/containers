@@ -1,12 +1,18 @@
 #!/usr/bin/env bash
-# Unit tests for claude-setup skill/agent template installation
+# Unit tests for claude-setup skill/agent/hook installation
 #
-# Tests the cp logic in the skills & agents installation section of claude-setup.
-# Specifically guards against the regression where `cp` without `-r` fails on
-# skills/agents that contain subdirectories (e.g. next-issue/schemas/).
+# The general-purpose skills/agents now ship as the librarian plugins (installed
+# from the local /opt/librarian marketplace). What claude-setup still installs
+# from the staged templates are the BUILD-BOUND skills (docker-development) plus
+# user-additive CLAUDE_EXTRA_SKILLS / CLAUDE_EXTRA_AGENTS, and the golem hook.
 #
-# Under set -euo pipefail, a bare `cp` failure aborts the entire script,
-# preventing all subsequent installations (agents never reached).
+# These tests guard:
+#   - the cp -r regression: a bare `cp` fails on a skill/agent with subdirs and
+#     (under set -euo pipefail) aborts the whole script, so every template cp
+#     must use -r.
+#   - absent-only install semantics for the build-bound + extra artifacts
+#     (install once, skip thereafter; --refresh forces a build-bound rewrite).
+#   - the librarian local-marketplace install block exists and is offline.
 
 set -euo pipefail
 
@@ -35,17 +41,13 @@ setup() {
     # Fake templates dir (mimics /etc/container/config/claude-templates)
     export FAKE_TEMPLATES="$TEST_TEMP_DIR/templates"
     mkdir -p "$FAKE_TEMPLATES/skills" "$FAKE_TEMPLATES/agents" "$FAKE_TEMPLATES/hooks"
-
-    # Fake enabled-features file (empty — no cloud flags)
-    export FAKE_FEATURES="$TEST_TEMP_DIR/enabled-features.conf"
-    touch "$FAKE_FEATURES"
 }
 
 teardown() {
     if [ -n "${TEST_TEMP_DIR:-}" ]; then
         command rm -rf "$TEST_TEMP_DIR"
     fi
-    unset TEST_TEMP_DIR FAKE_HOME FAKE_TEMPLATES FAKE_FEATURES 2>/dev/null || true
+    unset TEST_TEMP_DIR FAKE_HOME FAKE_TEMPLATES 2>/dev/null || true
 }
 
 # Helper: create a minimal skill template (flat — no subdirs)
@@ -98,9 +100,11 @@ EOF
     chmod 644 "$FAKE_TEMPLATES/hooks/$name"
 }
 
-# Helper: build a standalone installer script from claude-setup's install section.
-# This extracts the relevant logic without needing the claude CLI, auth checks,
-# plugin installation, or MCP configuration.
+# Helper: build a standalone installer script mirroring the parts of claude-setup
+# that copy from the staged templates: the CLAUDE_EXTRA_SKILLS / CLAUDE_EXTRA_AGENTS
+# additive loops (absent-only), the build-bound docker-development copy, and the
+# hooks loop. This extracts the cp logic without needing the claude CLI, auth, or
+# the librarian / official plugin install.
 _build_installer() {
     command cat >"$TEST_TEMP_DIR/installer.sh" <<'INSTALLER'
 #!/bin/bash
@@ -108,84 +112,75 @@ set -euo pipefail
 
 TEMPLATES_DIR="$1"
 CLAUDE_DIR="$2"
-ENABLED_FEATURES_FILE="${3:-/dev/null}"
-# Mirror claude-setup's --refresh flag: pass "--refresh" as $4 to force re-sync.
+# Mirror claude-setup's --refresh flag: pass "--refresh" as $3 to force a
+# build-bound rewrite.
 REFRESH_MODE=false
-[ "${4:-}" = "--refresh" ] && REFRESH_MODE=true
+[ "${3:-}" = "--refresh" ] && REFRESH_MODE=true
 
-# Source enabled-features if it exists
-if [ -f "$ENABLED_FEATURES_FILE" ]; then
-    source "$ENABLED_FEATURES_FILE"
-fi
+# Treat every skill/agent passed in env as an additive extra (mirrors the
+# CLAUDE_EXTRA_* loops). Defaults exercise the docker-development build-bound copy.
+EXTRA_SKILLS="${EXTRA_SKILLS:-}"
+EXTRA_AGENTS="${EXTRA_AGENTS:-}"
 
-# Stub the override helpers (use defaults for everything)
-_is_in_list() { return 1; }
-
-SKILL_LIST_IS_OVERRIDE=1
-AGENT_LIST_IS_OVERRIDE=1
-
-# --- Template staleness stamp (mirrors claude-setup) ---
-STAGED_STAMP_FILE="$TEMPLATES_DIR/.stamp"
-INSTALLED_STAMP_FILE="$CLAUDE_DIR/.template-stamp"
-STAGED_STAMP=""
-INSTALLED_STAMP=""
-[ -f "$STAGED_STAMP_FILE" ] && STAGED_STAMP="$(command cat "$STAGED_STAMP_FILE" 2>/dev/null || true)"
-[ -f "$INSTALLED_STAMP_FILE" ] && INSTALLED_STAMP="$(command cat "$INSTALLED_STAMP_FILE" 2>/dev/null || true)"
-
-# _bundled_needs_sync — verbatim copy of the production gate (claude-setup).
-_bundled_needs_sync() {
+# _buildbound_needs_install — verbatim copy of the production gate (claude-setup):
+# (re)write when the target is absent or --refresh was passed; else keep the copy.
+_buildbound_needs_install() {
     local target_dir="$1"
     [ ! -d "$target_dir" ] && return 0
     [ "$REFRESH_MODE" = "true" ] && return 0
-    [ -n "$STAGED_STAMP" ] && [ "$STAGED_STAMP" != "$INSTALLED_STAMP" ] && return 0
     return 1
 }
 
-# --- Skills ---
-if [ -d "$TEMPLATES_DIR/skills" ]; then
-    for skill_dir in "$TEMPLATES_DIR/skills"/*/; do
-        [ -d "$skill_dir" ] || continue
-        skill_name=$(basename "$skill_dir")
-
-        # Skip conditional skills
-        [ "$skill_name" = "container-environment" ] && continue
-        [ "$skill_name" = "docker-development" ] && continue
-        [ "$skill_name" = "cloud-infrastructure" ] && continue
-
+# --- Extra Skills (additive, absent-only) ---
+if [ -n "$EXTRA_SKILLS" ]; then
+    IFS=',' read -ra EXTRA_SKILL_LIST <<< "$EXTRA_SKILLS"
+    for skill_name in "${EXTRA_SKILL_LIST[@]}"; do
+        skill_name=$(echo "$skill_name" | xargs)
+        [ -z "$skill_name" ] && continue
+        skill_dir="$TEMPLATES_DIR/skills/$skill_name"
         target_dir="$CLAUDE_DIR/skills/$skill_name"
-        if _bundled_needs_sync "$target_dir"; then
-            [ -d "$target_dir" ] && _verb="RESYNCED" || _verb="INSTALLED"
+        if [ -d "$target_dir" ]; then
+            echo "SKIP skill:$skill_name"
+        elif [ -d "$skill_dir" ]; then
             mkdir -p "$target_dir"
             cp -r "$skill_dir"/* "$target_dir/"
-            echo "$_verb skill:$skill_name"
+            echo "INSTALLED skill:$skill_name"
         else
-            echo "SKIP $skill_name"
+            echo "MISSING skill:$skill_name"
         fi
     done
 fi
 
-# --- Agents ---
-if [ -d "$TEMPLATES_DIR/agents" ]; then
-    for agent_dir in "$TEMPLATES_DIR/agents"/*/; do
-        [ -d "$agent_dir" ] || continue
-        agent_name=$(basename "$agent_dir")
+# --- Build-bound: docker-development (absent-only copy from template) ---
+if [ -d "$TEMPLATES_DIR/skills/docker-development" ]; then
+    target_dir="$CLAUDE_DIR/skills/docker-development"
+    if ! _buildbound_needs_install "$target_dir"; then
+        echo "SKIP skill:docker-development"
+    else
+        mkdir -p "$target_dir"
+        cp -r "$TEMPLATES_DIR/skills/docker-development/"* "$target_dir/"
+        echo "INSTALLED skill:docker-development"
+    fi
+fi
 
+# --- Extra Agents (additive, absent-only) ---
+if [ -n "$EXTRA_AGENTS" ]; then
+    IFS=',' read -ra EXTRA_AGENT_LIST <<< "$EXTRA_AGENTS"
+    for agent_name in "${EXTRA_AGENT_LIST[@]}"; do
+        agent_name=$(echo "$agent_name" | xargs)
+        [ -z "$agent_name" ] && continue
+        agent_dir="$TEMPLATES_DIR/agents/$agent_name"
         target_dir="$CLAUDE_DIR/agents/$agent_name"
-        if _bundled_needs_sync "$target_dir"; then
-            [ -d "$target_dir" ] && _verb="RESYNCED" || _verb="INSTALLED"
+        if [ -d "$target_dir" ]; then
+            echo "SKIP agent:$agent_name"
+        elif [ -d "$agent_dir" ]; then
             mkdir -p "$target_dir"
             cp -r "$agent_dir"/* "$target_dir/"
-            echo "$_verb agent:$agent_name"
+            echo "INSTALLED agent:$agent_name"
         else
-            echo "SKIP $agent_name"
+            echo "MISSING agent:$agent_name"
         fi
     done
-fi
-
-# Record last-synced stamp (only when the build produced one).
-if [ -n "$STAGED_STAMP" ]; then
-    mkdir -p "$CLAUDE_DIR"
-    printf '%s\n' "$STAGED_STAMP" > "$INSTALLED_STAMP_FILE"
 fi
 
 # --- Hooks ---
@@ -208,11 +203,6 @@ INSTALLER
     chmod +x "$TEST_TEMP_DIR/installer.sh"
 }
 
-# Helper: write a stamp into the fake templates dir (simulates build-time stamp)
-_set_staged_stamp() {
-    printf '%s\n' "$1" >"$FAKE_TEMPLATES/.stamp"
-}
-
 # ============================================================================
 # Static Analysis: verify claude-setup uses cp -r
 # ============================================================================
@@ -228,37 +218,51 @@ test_cp_uses_recursive_flag() {
 }
 
 test_skill_cp_is_recursive() {
-    # Specifically check the main skill installation line
+    # The CLAUDE_EXTRA_SKILLS additive loop copies a skill dir.
     assert_file_contains "$CLAUDE_SETUP" 'cp -r "$skill_dir"' \
         "Skill installation uses cp -r"
 }
 
 test_agent_cp_is_recursive() {
-    # Specifically check the main agent installation line
+    # The CLAUDE_EXTRA_AGENTS additive loop copies an agent dir.
     assert_file_contains "$CLAUDE_SETUP" 'cp -r "$agent_dir"' \
         "Agent installation uses cp -r"
 }
 
-test_production_has_bundled_needs_sync() {
-    # The functional tests above inline a copy of _bundled_needs_sync. Guard
-    # against drift: production must define the function and gate the bundled
-    # skill + agent loops on it (not the old bare `[ -d ]` check). If these
-    # break, the inline test copy may be silently testing divergent logic.
-    assert_file_contains "$CLAUDE_SETUP" '_bundled_needs_sync()' \
-        "claude-setup defines _bundled_needs_sync"
-    assert_file_contains "$CLAUDE_SETUP" 'if _bundled_needs_sync "$target_dir"' \
-        "claude-setup gates a bundled install loop on _bundled_needs_sync"
-    # The three branch conditions of the gate must all be present.
+test_production_has_buildbound_gate() {
+    # The functional tests inline a copy of _buildbound_needs_install. Guard
+    # against drift: production must define the function and gate a build-bound
+    # install on it. If these break, the inline test copy may silently diverge.
+    assert_file_contains "$CLAUDE_SETUP" '_buildbound_needs_install()' \
+        "claude-setup defines _buildbound_needs_install"
+    assert_file_contains "$CLAUDE_SETUP" 'if ! _buildbound_needs_install "$target_dir"' \
+        "claude-setup gates a build-bound install on _buildbound_needs_install"
     assert_file_contains "$CLAUDE_SETUP" 'REFRESH_MODE' \
         "claude-setup honors a --refresh / REFRESH_MODE branch"
-    assert_file_contains "$CLAUDE_SETUP" 'STAGED_STAMP' \
-        "claude-setup compares a staged stamp"
-    assert_file_contains "$CLAUDE_SETUP" '.template-stamp' \
-        "claude-setup records the installed stamp"
+}
+
+test_no_stamp_machinery() {
+    # The #574 content-stamp re-sync was removed in favor of the librarian
+    # version pin. None of its machinery should remain.
+    local hits
+    hits=$(command grep -nE '_bundled_needs_sync|STAGED_STAMP|INSTALLED_STAMP|\.template-stamp' "$CLAUDE_SETUP" || true)
+    assert_empty "$hits" \
+        "claude-setup should no longer reference the #574 stamp machinery"
+}
+
+test_librarian_offline_install_present() {
+    # The librarian plugins install from the local /opt/librarian marketplace,
+    # offline and without auth — outside the auth-gated official plugin block.
+    assert_file_contains "$CLAUDE_SETUP" '/opt/librarian' \
+        "claude-setup installs from the local /opt/librarian marketplace"
+    assert_file_contains "$CLAUDE_SETUP" 'claude plugin marketplace add "$LIBRARIAN_DIR"' \
+        "claude-setup registers the local librarian marketplace"
+    assert_file_contains "$CLAUDE_SETUP" 'CLAUDE_LIBRARIAN_PLUGINS' \
+        "claude-setup honors the CLAUDE_LIBRARIAN_PLUGINS override"
 }
 
 # ============================================================================
-# Functional: flat skills and agents install correctly
+# Functional: extra skills and agents install correctly (cp -r path)
 # ============================================================================
 
 test_flat_skills_install() {
@@ -267,7 +271,7 @@ test_flat_skills_install() {
     _build_installer
 
     local output
-    output=$(bash "$TEST_TEMP_DIR/installer.sh" "$FAKE_TEMPLATES" "$FAKE_HOME/.claude" "$FAKE_FEATURES")
+    output=$(EXTRA_SKILLS="alpha,beta" bash "$TEST_TEMP_DIR/installer.sh" "$FAKE_TEMPLATES" "$FAKE_HOME/.claude")
 
     assert_contains "$output" "INSTALLED skill:alpha" "alpha skill installed"
     assert_contains "$output" "INSTALLED skill:beta" "beta skill installed"
@@ -276,17 +280,17 @@ test_flat_skills_install() {
 }
 
 test_agents_install() {
-    _create_agent "code-reviewer"
-    _create_agent "debugger"
+    _create_agent "my-reviewer"
+    _create_agent "my-debugger"
     _build_installer
 
     local output
-    output=$(bash "$TEST_TEMP_DIR/installer.sh" "$FAKE_TEMPLATES" "$FAKE_HOME/.claude" "$FAKE_FEATURES")
+    output=$(EXTRA_AGENTS="my-reviewer,my-debugger" bash "$TEST_TEMP_DIR/installer.sh" "$FAKE_TEMPLATES" "$FAKE_HOME/.claude")
 
-    assert_contains "$output" "INSTALLED agent:code-reviewer" "code-reviewer installed"
-    assert_contains "$output" "INSTALLED agent:debugger" "debugger installed"
-    assert_file_exists "$FAKE_HOME/.claude/agents/code-reviewer/code-reviewer.md"
-    assert_file_exists "$FAKE_HOME/.claude/agents/debugger/debugger.md"
+    assert_contains "$output" "INSTALLED agent:my-reviewer" "my-reviewer installed"
+    assert_contains "$output" "INSTALLED agent:my-debugger" "my-debugger installed"
+    assert_file_exists "$FAKE_HOME/.claude/agents/my-reviewer/my-reviewer.md"
+    assert_file_exists "$FAKE_HOME/.claude/agents/my-debugger/my-debugger.md"
 }
 
 # ============================================================================
@@ -294,87 +298,109 @@ test_agents_install() {
 # ============================================================================
 
 test_skill_with_subdir_installs() {
-    # This is the exact scenario that broke: next-issue has a schemas/ subdir.
+    # The exact scenario that broke: a skill with a schemas/ subdir.
     # Without cp -r, this fails and (under set -e) kills the script.
-    _create_skill_with_subdir "next-issue" "schemas"
+    _create_skill_with_subdir "my-flow" "schemas"
     _build_installer
 
     local output exit_code=0
-    output=$(bash "$TEST_TEMP_DIR/installer.sh" "$FAKE_TEMPLATES" "$FAKE_HOME/.claude" "$FAKE_FEATURES") || exit_code=$?
+    output=$(EXTRA_SKILLS="my-flow" bash "$TEST_TEMP_DIR/installer.sh" "$FAKE_TEMPLATES" "$FAKE_HOME/.claude") || exit_code=$?
 
     assert_equals "0" "$exit_code" \
         "Installer should not fail on skills with subdirectories"
-    assert_contains "$output" "INSTALLED skill:next-issue" \
-        "next-issue skill should be installed"
-    assert_file_exists "$FAKE_HOME/.claude/skills/next-issue/SKILL.md" \
+    assert_contains "$output" "INSTALLED skill:my-flow" \
+        "my-flow skill should be installed"
+    assert_file_exists "$FAKE_HOME/.claude/skills/my-flow/SKILL.md" \
         "SKILL.md should be copied"
-    assert_dir_exists "$FAKE_HOME/.claude/skills/next-issue/schemas" \
+    assert_dir_exists "$FAKE_HOME/.claude/skills/my-flow/schemas" \
         "schemas/ subdirectory should be copied recursively"
-    assert_file_exists "$FAKE_HOME/.claude/skills/next-issue/schemas/example.json" \
+    assert_file_exists "$FAKE_HOME/.claude/skills/my-flow/schemas/example.json" \
         "Files inside subdirectory should be copied"
 }
 
 test_subdir_skill_does_not_block_agents() {
     # The original bug: a skill subdir caused cp to fail, aborting before agents
-    _create_skill_with_subdir "next-issue" "schemas"
-    _create_skill "orchestrate"
-    _create_agent "code-reviewer"
-    _create_agent "test-writer"
+    _create_skill_with_subdir "my-flow" "schemas"
+    _create_skill "plain"
+    _create_agent "my-reviewer"
+    _create_agent "my-writer"
     _build_installer
 
     local output exit_code=0
-    output=$(bash "$TEST_TEMP_DIR/installer.sh" "$FAKE_TEMPLATES" "$FAKE_HOME/.claude" "$FAKE_FEATURES") || exit_code=$?
+    output=$(EXTRA_SKILLS="my-flow,plain" EXTRA_AGENTS="my-reviewer,my-writer" \
+        bash "$TEST_TEMP_DIR/installer.sh" "$FAKE_TEMPLATES" "$FAKE_HOME/.claude") || exit_code=$?
 
     assert_equals "0" "$exit_code" \
         "Installer should complete successfully"
-
-    # Skills after the subdir skill should still install
-    assert_contains "$output" "INSTALLED skill:orchestrate" \
+    assert_contains "$output" "INSTALLED skill:plain" \
         "Skills after subdir skill should install"
-
-    # Agents should install (this was the main failure before the fix)
-    assert_contains "$output" "INSTALLED agent:code-reviewer" \
+    assert_contains "$output" "INSTALLED agent:my-reviewer" \
         "Agents should install even when skills have subdirectories"
-    assert_contains "$output" "INSTALLED agent:test-writer" \
+    assert_contains "$output" "INSTALLED agent:my-writer" \
         "All agents should install"
 }
 
 # ============================================================================
-# Functional: idempotent (already-installed items are skipped)
+# Functional: idempotent (already-installed items are skipped, absent-only)
 # ============================================================================
 
 test_already_installed_skills_skipped() {
     _create_skill "alpha"
     _build_installer
 
-    # First run
-    bash "$TEST_TEMP_DIR/installer.sh" "$FAKE_TEMPLATES" "$FAKE_HOME/.claude" "$FAKE_FEATURES" >/dev/null
+    EXTRA_SKILLS="alpha" bash "$TEST_TEMP_DIR/installer.sh" "$FAKE_TEMPLATES" "$FAKE_HOME/.claude" >/dev/null
 
-    # Second run
     local output
-    output=$(bash "$TEST_TEMP_DIR/installer.sh" "$FAKE_TEMPLATES" "$FAKE_HOME/.claude" "$FAKE_FEATURES")
+    output=$(EXTRA_SKILLS="alpha" bash "$TEST_TEMP_DIR/installer.sh" "$FAKE_TEMPLATES" "$FAKE_HOME/.claude")
 
-    assert_contains "$output" "SKIP alpha" \
+    assert_contains "$output" "SKIP skill:alpha" \
         "Already-installed skill should be skipped"
     assert_not_contains "$output" "INSTALLED skill:alpha" \
         "Should not re-install existing skill"
 }
 
 test_already_installed_agents_skipped() {
-    _create_agent "debugger"
+    _create_agent "my-debugger"
     _build_installer
 
-    # First run
-    bash "$TEST_TEMP_DIR/installer.sh" "$FAKE_TEMPLATES" "$FAKE_HOME/.claude" "$FAKE_FEATURES" >/dev/null
+    EXTRA_AGENTS="my-debugger" bash "$TEST_TEMP_DIR/installer.sh" "$FAKE_TEMPLATES" "$FAKE_HOME/.claude" >/dev/null
 
-    # Second run
     local output
-    output=$(bash "$TEST_TEMP_DIR/installer.sh" "$FAKE_TEMPLATES" "$FAKE_HOME/.claude" "$FAKE_FEATURES")
+    output=$(EXTRA_AGENTS="my-debugger" bash "$TEST_TEMP_DIR/installer.sh" "$FAKE_TEMPLATES" "$FAKE_HOME/.claude")
 
-    assert_contains "$output" "SKIP debugger" \
+    assert_contains "$output" "SKIP agent:my-debugger" \
         "Already-installed agent should be skipped"
-    assert_not_contains "$output" "INSTALLED agent:debugger" \
+    assert_not_contains "$output" "INSTALLED agent:my-debugger" \
         "Should not re-install existing agent"
+}
+
+# ============================================================================
+# Functional: build-bound docker-development (absent-only, --refresh rewrites)
+# ============================================================================
+
+test_buildbound_docker_installs_then_skips() {
+    _create_skill "docker-development"
+    _build_installer
+
+    local first
+    first=$(bash "$TEST_TEMP_DIR/installer.sh" "$FAKE_TEMPLATES" "$FAKE_HOME/.claude")
+    assert_contains "$first" "INSTALLED skill:docker-development" "docker-development installs first run"
+    assert_file_exists "$FAKE_HOME/.claude/skills/docker-development/SKILL.md"
+
+    local second
+    second=$(bash "$TEST_TEMP_DIR/installer.sh" "$FAKE_TEMPLATES" "$FAKE_HOME/.claude")
+    assert_contains "$second" "SKIP skill:docker-development" "second run skips (absent-only)"
+}
+
+test_buildbound_refresh_rewrites() {
+    _create_skill "docker-development"
+    _build_installer
+    bash "$TEST_TEMP_DIR/installer.sh" "$FAKE_TEMPLATES" "$FAKE_HOME/.claude" >/dev/null
+
+    local out
+    out=$(bash "$TEST_TEMP_DIR/installer.sh" "$FAKE_TEMPLATES" "$FAKE_HOME/.claude" --refresh)
+    assert_contains "$out" "INSTALLED skill:docker-development" \
+        "--refresh rewrites the build-bound skill despite it already existing"
 }
 
 # ============================================================================
@@ -388,7 +414,7 @@ test_hooks_install_executable() {
     _build_installer
 
     local output
-    output=$(bash "$TEST_TEMP_DIR/installer.sh" "$FAKE_TEMPLATES" "$FAKE_HOME/.claude" "$FAKE_FEATURES")
+    output=$(bash "$TEST_TEMP_DIR/installer.sh" "$FAKE_TEMPLATES" "$FAKE_HOME/.claude")
 
     assert_contains "$output" "INSTALLED hook:golem-notify.sh" "hook installed"
     assert_file_exists "$FAKE_HOME/.claude/hooks/golem-notify.sh" "hook file copied"
@@ -400,123 +426,15 @@ test_already_installed_hooks_skipped() {
     _create_hook "golem-notify.sh"
     _build_installer
 
-    # First run
-    bash "$TEST_TEMP_DIR/installer.sh" "$FAKE_TEMPLATES" "$FAKE_HOME/.claude" "$FAKE_FEATURES" >/dev/null
+    bash "$TEST_TEMP_DIR/installer.sh" "$FAKE_TEMPLATES" "$FAKE_HOME/.claude" >/dev/null
 
-    # Second run
     local output
-    output=$(bash "$TEST_TEMP_DIR/installer.sh" "$FAKE_TEMPLATES" "$FAKE_HOME/.claude" "$FAKE_FEATURES")
+    output=$(bash "$TEST_TEMP_DIR/installer.sh" "$FAKE_TEMPLATES" "$FAKE_HOME/.claude")
 
     assert_contains "$output" "SKIP golem-notify.sh" \
         "Already-installed hook should be skipped"
     assert_not_contains "$output" "INSTALLED hook:golem-notify.sh" \
         "Should not re-install existing hook"
-}
-
-# ============================================================================
-# Functional: conditional skills are skipped
-# ============================================================================
-
-test_conditional_skills_skipped() {
-    _create_skill "container-environment"
-    _create_skill "docker-development"
-    _create_skill "cloud-infrastructure"
-    _create_skill "regular-skill"
-    _build_installer
-
-    local output
-    output=$(bash "$TEST_TEMP_DIR/installer.sh" "$FAKE_TEMPLATES" "$FAKE_HOME/.claude" "$FAKE_FEATURES")
-
-    assert_not_contains "$output" "container-environment" \
-        "container-environment should be skipped (dynamic)"
-    assert_not_contains "$output" "docker-development" \
-        "docker-development should be skipped (conditional)"
-    assert_not_contains "$output" "cloud-infrastructure" \
-        "cloud-infrastructure should be skipped (conditional)"
-    assert_contains "$output" "INSTALLED skill:regular-skill" \
-        "Regular skills should still install"
-}
-
-# ============================================================================
-# Functional: stamp-gated re-sync (issue #574)
-# ============================================================================
-
-test_matching_stamp_skips_resync() {
-    # With equal staged+installed stamps and the skill already present, the
-    # second run must take the fast path (SKIP) — no per-boot churn.
-    _create_skill "alpha"
-    _set_staged_stamp "stamp-v1"
-    _build_installer
-
-    # First run installs alpha and records stamp-v1 as last-synced.
-    local first
-    first=$(bash "$TEST_TEMP_DIR/installer.sh" "$FAKE_TEMPLATES" "$FAKE_HOME/.claude" "$FAKE_FEATURES")
-    assert_contains "$first" "INSTALLED skill:alpha" "first run installs alpha"
-    assert_file_exists "$FAKE_HOME/.claude/.template-stamp" "stamp recorded after first run"
-
-    # Second run, same stamp -> SKIP.
-    local second
-    second=$(bash "$TEST_TEMP_DIR/installer.sh" "$FAKE_TEMPLATES" "$FAKE_HOME/.claude" "$FAKE_FEATURES")
-    assert_contains "$second" "SKIP alpha" "matching stamp skips re-sync"
-    assert_not_contains "$second" "RESYNCED skill:alpha" "no re-sync when stamps match"
-}
-
-test_changed_stamp_triggers_resync() {
-    # A staged stamp that differs from the recorded one re-copies the skill —
-    # this is the core #574 behavior (rebuilt image picks up a template fix).
-    _create_skill "alpha"
-    _set_staged_stamp "stamp-v1"
-    _build_installer
-    bash "$TEST_TEMP_DIR/installer.sh" "$FAKE_TEMPLATES" "$FAKE_HOME/.claude" "$FAKE_FEATURES" >/dev/null
-
-    # Simulate a template fix: change the content AND bump the staged stamp.
-    command cat >"$FAKE_TEMPLATES/skills/alpha/SKILL.md" <<'EOF'
----
-description: "fixed"
----
-# alpha fixed
-EOF
-    _set_staged_stamp "stamp-v2"
-
-    local out
-    out=$(bash "$TEST_TEMP_DIR/installer.sh" "$FAKE_TEMPLATES" "$FAKE_HOME/.claude" "$FAKE_FEATURES")
-    assert_contains "$out" "RESYNCED skill:alpha" "changed stamp re-syncs alpha"
-    assert_file_contains "$FAKE_HOME/.claude/skills/alpha/SKILL.md" "alpha fixed" \
-        "re-synced content reflects the template fix"
-    # The recorded stamp advances to the new value.
-    assert_file_contains "$FAKE_HOME/.claude/.template-stamp" "stamp-v2" \
-        "recorded stamp advances after re-sync"
-}
-
-test_refresh_flag_forces_resync() {
-    # --refresh re-syncs even when stamps match.
-    _create_skill "alpha"
-    _set_staged_stamp "stamp-v1"
-    _build_installer
-    bash "$TEST_TEMP_DIR/installer.sh" "$FAKE_TEMPLATES" "$FAKE_HOME/.claude" "$FAKE_FEATURES" >/dev/null
-
-    local out
-    out=$(bash "$TEST_TEMP_DIR/installer.sh" "$FAKE_TEMPLATES" "$FAKE_HOME/.claude" "$FAKE_FEATURES" --refresh)
-    assert_contains "$out" "RESYNCED skill:alpha" "--refresh re-syncs despite matching stamp"
-}
-
-test_no_stamp_keeps_legacy_absent_only() {
-    # With no staged stamp at all (sha256sum-unavailable build), behavior is the
-    # legacy absent-only path: install once, skip thereafter, never re-sync.
-    _create_skill "alpha"
-    # Note: no _set_staged_stamp call -> FAKE_TEMPLATES/.stamp absent.
-    _build_installer
-    bash "$TEST_TEMP_DIR/installer.sh" "$FAKE_TEMPLATES" "$FAKE_HOME/.claude" "$FAKE_FEATURES" >/dev/null
-
-    # Mutate the template; without a stamp it must NOT re-sync.
-    command cat >"$FAKE_TEMPLATES/skills/alpha/SKILL.md" <<'EOF'
-# changed but no stamp
-EOF
-    local out
-    out=$(bash "$TEST_TEMP_DIR/installer.sh" "$FAKE_TEMPLATES" "$FAKE_HOME/.claude" "$FAKE_FEATURES")
-    assert_contains "$out" "SKIP alpha" "no staged stamp -> legacy absent-only (skip)"
-    assert_file_not_exists "$FAKE_HOME/.claude/.template-stamp" \
-        "no stamp recorded when build produced none"
 }
 
 # ============================================================================
@@ -527,11 +445,13 @@ EOF
 run_test test_cp_uses_recursive_flag "claude-setup: all template cp commands use -r"
 run_test test_skill_cp_is_recursive "claude-setup: skill cp uses -r flag"
 run_test test_agent_cp_is_recursive "claude-setup: agent cp uses -r flag"
-run_test test_production_has_bundled_needs_sync "claude-setup: production uses _bundled_needs_sync gate"
+run_test test_production_has_buildbound_gate "claude-setup: production uses _buildbound_needs_install gate"
+run_test test_no_stamp_machinery "claude-setup: #574 stamp machinery removed"
+run_test test_librarian_offline_install_present "claude-setup: librarian offline marketplace install present"
 
 # Functional — basic installation
-run_test test_flat_skills_install "install: flat skills copy correctly"
-run_test test_agents_install "install: agents copy correctly"
+run_test test_flat_skills_install "install: flat extra skills copy correctly"
+run_test test_agents_install "install: extra agents copy correctly"
 
 # Functional — subdirectory regression
 run_test test_skill_with_subdir_installs "install: skill with subdirectory copies recursively"
@@ -541,18 +461,13 @@ run_test test_subdir_skill_does_not_block_agents "install: subdir skill does not
 run_test test_already_installed_skills_skipped "install: already-installed skills are skipped"
 run_test test_already_installed_agents_skipped "install: already-installed agents are skipped"
 
+# Functional — build-bound docker-development (absent-only)
+run_test test_buildbound_docker_installs_then_skips "build-bound: docker-development installs then skips"
+run_test test_buildbound_refresh_rewrites "build-bound: --refresh rewrites docker-development"
+
 # Functional — hooks
 run_test test_hooks_install_executable "install: hooks install with executable bit restored"
 run_test test_already_installed_hooks_skipped "install: already-installed hooks are skipped"
-
-# Functional — conditional skills
-run_test test_conditional_skills_skipped "install: conditional skills are skipped in main loop"
-
-# Functional — stamp-gated re-sync (#574)
-run_test test_matching_stamp_skips_resync "resync: matching stamp skips re-sync (fast path)"
-run_test test_changed_stamp_triggers_resync "resync: changed stamp re-syncs bundled skill"
-run_test test_refresh_flag_forces_resync "resync: --refresh forces re-sync despite matching stamp"
-run_test test_no_stamp_keeps_legacy_absent_only "resync: no staged stamp keeps legacy absent-only behavior"
 
 # Generate test report
 generate_report
