@@ -37,12 +37,14 @@ REQUIRED_TUPLES=(
     "debian/13/arm64"
     "alpine/3.21/amd64"
     "alpine/3.21/arm64"
+    "rhel/9/amd64"
 )
 
 # Per-distro hardening libraries that must exist with the standard interface.
 REQUIRED_DISTROS=(
     "debian"
     "alpine"
+    "rhel"
 )
 
 # Functions every <distro>/hardening.sh must define.

@@ -73,6 +73,10 @@ jobs:
             distro_version: "3.21"
             arch: arm64
             platform: linux/arm64
+          - distro: rhel
+            distro_version: "9"
+            arch: amd64
+            platform: linux/amd64
     env:
       DISTRO: ${{ matrix.distro }}
       DISTRO_VERSION: ${{ matrix.distro_version }}
