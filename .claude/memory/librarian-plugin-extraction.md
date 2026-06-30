@@ -75,24 +75,71 @@ gets simpler. Touches `lib/features/claude-code-setup.sh` and
   names). Suggested order: librarian#1 + #6 first → #2/#3/#4/#5 → containers
   #608 → #609 → #611 → #610.
 
-**Why we PAUSED (do not start the migration yet):** a separate swarm of
-agents is in-flight improving these same skills/agents in the `containers`
-repo. Starting the extraction now would conflict with their unmerged work.
-WAIT until that work is merged before migrating, so librarian gets the
-improved versions, not stale copies.
+**Pause is CLEARED (2026-06-28):** the in-flight skill/agent improvement swarm
+merged (containers had 0 open PRs; #631/#633/#624/#620/#616 etc. landed).
+Librarian is mounted at `/workspace/librarian` and the foundation is BUILT.
 
-**Resume trigger / first step after rebuild:**
+**Foundation DONE (PRs open in `joshjhall/librarian`):**
 
-1. Confirm the in-flight skill/agent improvement PRs are merged to main.
-2. Rebuild the devcontainer (`.devcontainer/rebuild.sh` or editor "Rebuild
-   Container") — REQUIRED because the `../../librarian:/workspace/librarian`
-   mount was added to `.devcontainer/docker-compose.yml` (line ~30) but the
-   running container predates it, so `/workspace/librarian` is NOT yet
-   reachable in-container. The librarian repo exists on GitHub (created, but
-   empty/scaffold-pending).
-3. With librarian mounted, pick up librarian#6 + #1, then migrate.
-4. The mount is TEMPORARY — remove it from compose once librarian has the
-   content and we work directly in that repo.
+- `main` seeded with an initial commit (README, MIT+Apache dual license,
+  gitignore) — empty repos can't take branch PRs, so this had to land first.
+- **librarian#1 → PR #7** (base `main`): marketplace.json + 3 plugin.json
+  (dev-core/review-audit/workflow, local `./plugins/<name>` sources, semver
+  0.1.0) + `tests/validate-manifests.mjs` (zero-dep Node validator) + CI +
+  READMEs. CI green. Verified `claude plugin marketplace add /workspace/librarian`
+  - all 3 plugins install.
+- **librarian#6 → PR #8** (base `feature/issue-1`, STACKED on #7 because its
+  lefthook/justfile call the validator #7 adds): containers pinned submodule
+  (update=none, v4.19.8), devcontainer (build ../containers, DEV_TOOLS+NODE
+  only), post-create/post-start, .zed/.vscode, dprint/_typos/shellcheck/rumdl/
+  conform(plugin scopes)/lefthook(graceful skips on bare host)/justfile/CLAUDE.md.
+  CI shows none because base≠main; will run when #7 merges + #8 retargets.
+
+**LIBRARIAN IS LIVE — all 6 issues merged to main (2026-06-28).** The repo is
+a fully populated, installable plugin marketplace. Final state:
+
+- dev-core: 20 skills, 6 agents · review-audit: 9 skills, 8 agents · workflow:
+  9 skills, 3 agents = **38 skills + 17 unique agents**. All migrated from the
+  containers submodule pin (v4.19.8 = post-swarm improved versions).
+- Merge order used: scaffold #7 → devenv #9 → artifact PRs #10/#11/#13 (disjoint
+  dirs, no conflict) → rebased quality-gates #12 onto populated main so its lint
+  ran against REAL artifacts → fix #14.
+- Migrations ran as 4 parallel **worktree + Agent subagents** (not golems).
+
+**KEY BUG caught at final verify (#14):** Claude Code discovers plugin agents
+ONLY as FLAT `agents/<name>.md` files — NOT nested `agents/<name>/<name>.md`
+(the containers layout). The migration preserved nesting → all 18 agents showed
+`Agents (0)` on install. Fix: flatten; the 3 harness agents (code-reviewer/
+ci-fixer/rebase-agent) keep `workflow.js` in a same-named sibling subdir
+(`agents/<name>/workflow.js`) which discovery ignores. Also removed a duplicate
+`issue-writer` (epic double-listed it in #3+#4; belongs to review-audit per its
+codebase-audit tie). Skills are dir-form (`skills/<name>/SKILL.md`) and were
+fine. Lesson saved as [[plugin-agents-must-be-flat-md]]. ALWAYS verify with a
+clean `claude plugin marketplace add` + `plugin details` before declaring done.
+
+**Still TODO — containers-side consume chain (run here via normal golem flow):**
+
+# 608 (pinned local-marketplace install; removes #574 bake/stamp) → #609 (justfile
+
+wrappers delegate to librarian bundled scripts) → #611 (remove migrated artifacts
+from lib/features/templates/claude) → #610 (docs sweep). #608 can now pin a REAL
+populated librarian. The `../../librarian:/workspace/librarian` compose mount is
+TEMPORARY — remove once we work in librarian's own devcontainer (#6 built it).
+
+**Artifact-domain issues TRANSFERRED to librarian (2026-06-28):** 13 issues
+moved via `gh issue transfer` (containers #329,340,497,503,596,597,598,617,625,
+628,629,630,634 → librarian #16–#28). These concern the migrated artifacts/
+bundled scripts themselves (orchestrate/next-issue skills, golem-status.sh,
+seed-worktree-trust.sh, golem-gate-watch.sh, codebase-audit/checker Workflow
+harness, skill test framework). KEPT in containers: #626 (containers-CI buildx
+flake) and #627 (sync-host.sh — bare-host machinery that did NOT migrate).
+Gotchas learned: (1) `gh issue transfer` must run from INSIDE a git repo dir
+(fails silently with "not a git repository" from /tmp) — pass `--repo` too.
+(2) Transfer DROPS labels absent in the destination; containers `component/*`
+(features/skills/tooling) don't exist in librarian, so component labels were
+re-applied after transfer, remapped to plugin names (workflow/review-audit/
+tests/marketplace). Added `type/bug` + `status/on-hold` to librarian's taxonomy
+first so next-issue works there.
 
 Exemplars to copy from when resuming: submodule/devcontainer wiring →
 `joshjhall/octarine` (`update = none` pinned submodule, build

@@ -24,9 +24,18 @@
 - [claude-setup template stamp re-sync](claude-setup-template-stamp-resync.md) — bundled ~/.claude artifacts re-sync via content stamp (#574)
 - [gh pr checks JSON state is uppercase](gh-pr-checks-json-state-uppercase.md) — filter CI monitors on `bucket` (lowercase), not `state` (UPPERCASE)
 - [git env leak breaks worktree tests](git-env-leak-breaks-worktree-tests.md) — GIT_DIR leaks into pre-push hook; temp-repo tests fail 6/9; unset it
-- [Librarian plugin extraction](librarian-plugin-extraction.md) — extract general skills/agents into separate `librarian` marketplace repo
+- [Librarian plugin extraction](librarian-plugin-extraction.md) — LIVE: all 6 issues merged; 38 skills+17 agents across 3 plugins. Containers consume chain (#608-611) still TODO
+- [Plugin agents must be flat md](plugin-agents-must-be-flat-md.md) — Claude Code discovers plugin agents only as flat agents/<name>.md, not nested subdirs
 - [Golem feed event classification](golem-feed-event-classification.md) — feed events gate|idle; BLOCKED clears via recent-line + TTL (#600)
 - [Hermetic fixture tests need git identity](hermetic-fixture-tests-need-git-identity.md) — export GIT_*_NAME/EMAIL in committing tests (#606)
 - [Pre-push skips network tests](pre-push-skips-network-tests.md) — SKIP_NETWORK_TESTS=1 keeps the push gate offline; CI still runs full (#615)
 - [Ship review reads whole files](ship-review-whole-file-scope.md) — ship review flags pre-existing main code; verify findings are diff-local (#603→#625)
 - [BASH_ENV breaks PATH stubs](bash-env-breaks-path-stubs.md) — /etc/bash_env rebuilds PATH on non-interactive bash; clear it in stub tests (#618)
+- [Evidence-run arch-aware](evidence-run-arch-aware.md) — evidence-run.yml hybrid native/emulated arch matrix; arm64 leg wired but inactive; cross-linker/artifact/set-e gotchas (#641)
+- [Evidence-run validates live vs db main](evidence-run-validates-live-against-db-main.md) — new TestEntry field needs containers-db schema PR merged FIRST; evidence CI splices a live row into db main (#642→containers-db#26)
+- [Pre-existing osv vuln blocks push](preexisting-osv-vuln-blocks-push.md) — osv-scanner pre-push rejects ALL pushes on a pre-existing Cargo.lock advisory; --no-verify when diff doesn't touch the lockfile (#643)
+- [Alpine hardening: no coreutils paths](alpine-hardening-no-coreutils-paths.md) — Alpine build scripts use bare command names, not /usr/bin/<cmd>; busybox has no /usr/bin/echo (#433)
+- [Luggage InstallReport field → workspace test](luggage-installreport-field-workspace-test.md) — new InstallReport field breaks record-evidence struct literal; test --workspace not -p luggage (#644)
+- [UBI image tag verify against registry](ubi-image-tag-verify-registry.md) — UBI FROM tags: no bare :9, floating minors cap at 9.5; verify via registry tags/list, not guess/catalog (#435)
+- [ubi-minimal no nologin → use /usr/bin/false](ubi-minimal-no-nologin-use-false.md) — ubi-minimal ships no nologin (not even via util-linux-core); hardening deny-shell falls back to /usr/bin/false (#435)
+- [Base-image publish path vs PR Trivy arch](base-image-publish-path-trivy-arch.md) — PR scans local single-arch; only push-to-main scans remote multi-arch digest. arm64 Trivy needs TRIVY_PLATFORM; watch the merge run (#663)
