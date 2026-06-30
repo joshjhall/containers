@@ -37,6 +37,33 @@ the [loop-\* implementation skills](#implementation-loops-loop--skills),
 model](#pipeline-state--context-resets) — is documented in the sections below.
 That behavior is identical wherever the plugins are installed.
 
+### Component index (where each artifact moved)
+
+A migration aid for finding where a skill or agent that used to live here now
+ships. The `librarian` per-plugin READMEs carry the authoritative descriptions
+and versions — this index is just the name → plugin map.
+
+**`dev-core`** — skills: `git-workflow`, `testing-patterns`, `code-quality`,
+`development-workflow`, `error-handling`, `documentation-authoring`,
+`shell-scripting`, `skill-authoring`, `agent-authoring`, `workflow-authoring`,
+`adversarial-review`, `memory-conventions`, `drift-detect`,
+`context-security`, `context-data-storage`, `loop-make-it-work`,
+`loop-make-it-right`, `loop-make-it-secure`, `loop-make-it-tested`,
+`loop-make-it-documented`; agents: `code-reviewer`, `test-writer`,
+`refactorer`, `debugger`, `skill-author`, `agent-author`.
+
+**`review-audit`** — skills: `codebase-audit`, `check-docs-staleness`,
+`check-docs-deadlinks`, `check-docs-organization`, `check-docs-examples`,
+`check-docs-missing-api`, `check-ai-config`, `check-code-health`,
+`check-security`; agents: `audit-code-health`, `audit-security`,
+`audit-test-gaps`, `audit-architecture`, `audit-docs`, `audit-ai-config`,
+`checker`, `issue-writer`.
+
+**`workflow`** — skills: `next-issue`, `next-issue-ship`, `orchestrate`,
+`file-issue`, `provision-agent`, `rebase-lockfile`, `rebase-generated`,
+`rebase-imports`, `rebase-version`; agents: `ci-fixer`, `issue-filer`,
+`rebase-agent`.
+
 ### Installing on a host (Mac / bare Linux)
 
 ```bash
