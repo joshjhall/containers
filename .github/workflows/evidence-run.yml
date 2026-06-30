@@ -415,28 +415,13 @@ jobs:
         id: verdict
         run: |
           set -euo pipefail
-          # record-evidence emits `result` as a fixed enum (pass|fail|skip) and
-          # `error_class` as an enum too — but the row is produced INSIDE the
-          # base image (luggage runs as --user 0), so treat both as untrusted:
-          # strip CR/LF (a GITHUB_OUTPUT key=value injection vector) and validate
-          # result against the enum before it gates the tracking-issue step.
-          RESULT=$(jq -r '.result' out/evidence-row.json | tr -d '\r\n')
-          ERROR_CLASS=$(jq -r '.error_class // "unknown"' out/evidence-row.json | tr -d '\r\n')
-          case "$RESULT" in
-            pass|fail|skip) ;;
-            *) echo "Unexpected result in evidence row: '$RESULT'" >&2; exit 1 ;;
-          esac
-          # error_class is informational, not a gate — normalize an unexpected
-          # value to "unknown" rather than failing the row (a future luggage
-          # ErrorClass variant shouldn't drop a regression). Restricting it to a
-          # bare slug also keeps it safe as a literal gh-comment argument later.
-          case "$ERROR_CLASS" in
-            *[!a-z_]*) ERROR_CLASS="unknown" ;;
-          esac
-          {
-            echo "result=$RESULT"
-            echo "error_class=$ERROR_CLASS"
-          } >> "$GITHUB_OUTPUT"
+          # Verdict read+sanitize lives in a sourced helper so it is unit-tested
+          # offline (tests/unit/evidence-verdict.sh). The helper strips CR/LF (a
+          # GITHUB_OUTPUT key=value injection vector) and validates result
+          # against the pass|fail|skip enum; we redirect its `result=`/
+          # `error_class=` lines into $GITHUB_OUTPUT here at the workflow boundary.
+          source "$GITHUB_WORKSPACE/bin/lib/evidence-issue.sh"
+          read_evidence_verdict out/evidence-row.json >> "$GITHUB_OUTPUT"
 
       - name: Upload evidence row
         uses: actions/upload-artifact@v4
@@ -508,69 +493,13 @@ jobs:
           ERROR_CLASS: ${{ steps.verdict.outputs.error_class }}
         run: |
           set -euo pipefail
-          # INPUT_TOOL/INPUT_TOOL_VERSION are free-text workflow_dispatch inputs.
-          # They flow into TITLE (a gh --search query) and the issue body, so
-          # validate them against tight slugs first — this blocks a dispatcher
-          # from smuggling gh-search operators or shell metacharacters through.
-          # INPUT_TUPLE is a `type: choice` input but is split+rechecked anyway.
-          if [[ ! "$INPUT_TOOL" =~ ^[a-z0-9][a-z0-9_-]*$ ]]; then
-            echo "Refusing to file issue: unexpected tool slug '$INPUT_TOOL'" >&2; exit 1
-          fi
-          if [[ ! "$INPUT_TOOL_VERSION" =~ ^[A-Za-z0-9][A-Za-z0-9.+_-]*$ ]]; then
-            echo "Refusing to file issue: unexpected version '$INPUT_TOOL_VERSION'" >&2; exit 1
-          fi
-          if [[ ! "$INPUT_TUPLE" =~ ^[a-z0-9]+-[a-z0-9.]+-[a-z0-9]+$ ]]; then
-            echo "Refusing to file issue: unexpected tuple '$INPUT_TUPLE'" >&2; exit 1
-          fi
-          TITLE="Evidence regression: ${INPUT_TOOL}@${INPUT_TOOL_VERSION} on ${INPUT_TUPLE}"
-          TODAY="$(date -u +%Y-%m-%d)"
-          # Ensure every label exists before filing so gh issue create can never
-          # 422 on a missing one. audit/regression is the cadence-tier vocabulary
-          # most likely to be absent — create it idempotently with --force (same
-          # pattern as auto-patch.yml). severity/high and type/bug are existing
-          # taxonomy labels a maintainer may have recolored, so create-if-absent
-          # WITHOUT --force (|| true) rather than resetting their color/desc on
-          # every fail row.
-          gh label create "audit/regression" --description "Automated regression finding" --color "B60205" --force
-          gh label create "severity/high" --description "High severity" --color "D93F0B" 2>/dev/null || true
-          gh label create "type/bug" --description "Bug" --color "D73A4A" 2>/dev/null || true
-          # Build the body in a temp file via a quoted heredoc so the validated
-          # inputs are substituted by the shell (not re-evaluated) and gh reads
-          # it with --body-file — no second shell pass over LLM/user content.
-          BODY_FILE="$(mktemp)"
-          cat > "$BODY_FILE" <<EOF
-          ## Evidence run recorded a \`fail\` row
-
-          An evidence run installed \`${INPUT_TOOL}@${INPUT_TOOL_VERSION}\`
-          against base image tuple \`${INPUT_TUPLE}\` and luggage reported a
-          failure. The row was still recorded in containers-db as evidence;
-          this issue tracks the regression.
-
-          **Run:** ${RUN_URL}
-          **error_class:** \`${ERROR_CLASS}\`
-          **Recorded:** ${TODAY}
-
-          <!-- managed-by: evidence-run.yml -->
-          EOF
-          # Title keyed on (tool, version, tuple) — INPUT_TUPLE encodes
-          # os-os_version-arch — so a re-failure on the same cell updates one
-          # issue while a different distro/arch opens its own.
-          EXISTING=$(gh issue list \
-            --label "audit/regression" --state open \
-            --search "\"${TITLE}\" in:title" \
-            --json number --jq '.[0].number // empty')
-          # Guard the captured number: a transient gh/jq hiccup must not fall
-          # through to `gh issue create` and open a duplicate. Empty = no match.
-          if [ -n "${EXISTING}" ] && [[ ! "${EXISTING}" =~ ^[0-9]+$ ]]; then
-            echo "Unexpected issue number from gh issue list: '${EXISTING}'" >&2; exit 1
-          fi
-          if [ -n "${EXISTING}" ]; then
-            echo "Updating existing tracking issue #${EXISTING}"
-            gh issue edit "${EXISTING}" --body-file "$BODY_FILE"
-            gh issue comment "${EXISTING}" \
-              --body "Failed again on ${TODAY} (error_class \`${ERROR_CLASS}\`) — see ${RUN_URL}"
-          else
-            echo "Opening new tracking issue"
-            gh issue create --title "${TITLE}" --body-file "$BODY_FILE" \
-              --label "severity/high" --label "type/bug" --label "audit/regression"
-          fi
+          # Validation + search-or-create lives in a sourced helper so it is
+          # unit-tested offline (tests/unit/evidence-issue.sh). The helper
+          # validates INPUT_TOOL/INPUT_TOOL_VERSION/INPUT_TUPLE against tight
+          # slugs (the primary injection defense for the gh --search title and
+          # issue body), guards the captured EXISTING number, and runs the
+          # edit-vs-create branch. INPUT_TOOL/INPUT_TOOL_VERSION/INPUT_TUPLE come
+          # from the job env; ERROR_CLASS/RUN_URL/GH_TOKEN from this step's env.
+          source "$GITHUB_WORKSPACE/bin/lib/evidence-issue.sh"
+          open_or_update_tracking_issue \
+            "$INPUT_TOOL" "$INPUT_TOOL_VERSION" "$INPUT_TUPLE" "$ERROR_CLASS" "$RUN_URL"
