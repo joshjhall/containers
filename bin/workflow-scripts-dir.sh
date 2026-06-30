@@ -50,17 +50,28 @@ if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] && is_scripts_dir "$CLAUDE_PLUGIN_ROOT/scrip
     exit 0
 fi
 
-# 3. Newest installed marketplace cache. Versions are sortable dirs
-#    (e.g. 0.1.0); pick the highest with `sort -V` so an upgraded install wins.
+# 3. Newest installed marketplace cache. Versions are sortable dirs (e.g.
+#    0.1.0); pick the highest so an upgraded install wins. `sort -V` is the
+#    natural fit but is a GNU coreutils extension absent from macOS BSD sort and
+#    busybox (Alpine) — and this resolver's whole point is to run on a host Mac
+#    and bare Linux. Probe once for `-V` and fall back to a field-based numeric
+#    sort on the dotted components, which busybox/BSD/GNU all support. (Detect
+#    the capability up front rather than `sort -Vr || sort ...` in the pipe: the
+#    first sort would drain stdin before the fallback could re-read it.)
 cache_base="${HOME:-/home/$(/usr/bin/id -un)}/.claude/plugins/cache/librarian/workflow"
 if [ -d "$cache_base" ]; then
+    if /usr/bin/printf '1\n' | /usr/bin/sort -V >/dev/null 2>&1; then
+        version_sort=(/usr/bin/sort -Vr)
+    else
+        version_sort=(/usr/bin/sort "-t." "-k1,1rn" "-k2,2rn" "-k3,3rn")
+    fi
     while IFS= read -r ver; do
         [ -z "$ver" ] && continue
         if is_scripts_dir "$cache_base/$ver/scripts"; then
             /usr/bin/printf '%s\n' "$cache_base/$ver/scripts"
             exit 0
         fi
-    done < <(/usr/bin/ls -1 "$cache_base" 2>/dev/null | /usr/bin/sort -Vr)
+    done < <(/usr/bin/ls -1 "$cache_base" 2>/dev/null | "${version_sort[@]}")
 fi
 
 # 4. Temporary dev mount (until librarian ships its own devcontainer — #607).

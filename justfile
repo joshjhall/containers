@@ -259,6 +259,11 @@ quarterly-review:
 worktree-new N:
     #!/usr/bin/env bash
     set -euo pipefail
+    # Guard N at the just layer before it reaches the shell: `{{ N }}` is
+    # interpolated textually (just does not shell-quote), so validate it is a
+    # bare issue number first — the bundled script validates too, but this stops
+    # injection (e.g. `just worktree-new '1; rm -rf x'`) at the wrapper.
+    [[ "{{ N }}" =~ ^[0-9]+$ ]] || { echo "worktree-new: N must be an issue number, got '{{ N }}'" >&2; exit 2; }
     scripts="$("{{ justfile_directory() }}/bin/workflow-scripts-dir.sh")"
     exec bash "$scripts/worktree-new.sh" {{ N }}
 
@@ -266,6 +271,7 @@ worktree-new N:
 worktree-rm N:
     #!/usr/bin/env bash
     set -euo pipefail
+    [[ "{{ N }}" =~ ^[0-9]+$ ]] || { echo "worktree-rm: N must be an issue number, got '{{ N }}'" >&2; exit 2; }
     scripts="$("{{ justfile_directory() }}/bin/workflow-scripts-dir.sh")"
     bash "$scripts/worktree-rm.sh" {{ N }}
     # The bundled script is intentionally portable and does NOT carry the
@@ -292,6 +298,7 @@ golems:
 golem-attach N:
     #!/usr/bin/env bash
     set -euo pipefail
+    [[ "{{ N }}" =~ ^[0-9]+$ ]] || { echo "golem-attach: N must be an issue number, got '{{ N }}'" >&2; exit 2; }
     scripts="$("{{ justfile_directory() }}/bin/workflow-scripts-dir.sh")"
     exec bash "$scripts/golem-attach.sh" {{ N }}
 
