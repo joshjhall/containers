@@ -1,3 +1,8 @@
+<!-- rumdl-disable MD013 -->
+<!-- This index is intentionally one line per memory (a title link + a short
+     hook). Those lines routinely exceed 120 chars; MD013 is disabled for this
+     file only. Individual memory files keep the line-length check. -->
+
 - [v5 Architecture](v5-architecture.md) — Three executables (stibbons/igor/luggage), manifest-driven installs, multi-distro support
 - [Octarine Windows](octarine-windows.md) — Octarine doesn't compile on Windows yet, blocks stibbons Windows CI
 - [Luggage Tooldb Design](luggage-tooldb-design.md) — Tool catalog: separate containers-tooldb repo, 7-tier activity, luggage crate
