@@ -207,6 +207,14 @@ jobs:
 
       - name: Trivy scan
         uses: aquasecurity/trivy-action@v0.36.0
+        env:
+          # Scan the matrix arch's child manifest. On the publish path the
+          # image-ref is a multi-arch manifest-list digest; without a platform
+          # Trivy defaults to linux/amd64 and fails on arm64-only tuples with
+          # "no child with platform linux/amd64". trivy-action has no platform
+          # input, but the trivy binary reads TRIVY_<flag> env vars, so this
+          # maps to `trivy image --platform`. Harmless on amd64 tuples.
+          TRIVY_PLATFORM: ${{ matrix.platform }}
         with:
           image-ref: ${{ steps.trivy_target.outputs.ref }}
           format: table
