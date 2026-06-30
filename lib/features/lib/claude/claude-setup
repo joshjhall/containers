@@ -598,11 +598,13 @@ fi
 # ============================================================================
 # Hook Installation (no auth required)
 # ============================================================================
-# Hook scripts (e.g. the orchestrate golem Notification feed) ship as flat
-# files under $TEMPLATES_DIR/hooks. They are wired into ~/.claude/settings.json
-# at build time (see claude-code-setup.sh). The template staging step strips the
-# execute bit (chmod -R 644), so restore +x on install. Existing hooks are left
-# untouched so a user edit is never clobbered.
+# Any flat hook scripts staged under $TEMPLATES_DIR/hooks are installed here.
+# The orchestrate golem Notification hook (golem-notify.sh) migrated to the
+# librarian workflow plugin in #611 — Claude Code auto-wires it from the plugin,
+# so nothing is staged here by default. This loop is retained for build-bound or
+# CLAUDE_EXTRA hooks: the template staging step strips the execute bit
+# (chmod -R 644), so restore +x on install. Existing hooks are left untouched so
+# a user edit is never clobbered.
 if [ -d "$TEMPLATES_DIR/hooks" ]; then
     echo ""
     echo "Hooks:"

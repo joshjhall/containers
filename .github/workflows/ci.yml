@@ -134,7 +134,12 @@ jobs:
           # full sweep, preserving the drift safety net on the canonical
           # branch.
           if [ "$EVENT_NAME" = "pull_request" ]; then
-            mapfile -t CHANGED < <(git diff --name-only "origin/${BASE_REF}...HEAD")
+            # --diff-filter=d excludes Deleted paths: a file-based linter
+            # (rumdl / shfmt / shellcheck) handed a since-deleted path fails
+            # with "no such file or directory". A deletion-heavy PR (e.g. an
+            # artifact removal) would otherwise red the lint on files that no
+            # longer exist. Modified/added/renamed files are still linted.
+            mapfile -t CHANGED < <(git diff --name-only --diff-filter=d "origin/${BASE_REF}...HEAD")
             if [ "${#CHANGED[@]}" -eq 0 ]; then
               echo "No files changed against origin/${BASE_REF} — skipping lefthook."
               exit 0

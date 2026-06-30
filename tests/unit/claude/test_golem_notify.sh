@@ -27,9 +27,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../../framework.sh"
 init_test_framework
 
-# Both copies must behave identically; exercise both.
+# The build-bound template copy migrated to the librarian workflow plugin (#611);
+# only the host runtime copy at .claude/hooks/ remains in this repo, kept in sync
+# from origin/main by sync-host.sh. Exercise that copy.
 HOOK_REPO="$CONTAINERS_DIR/.claude/hooks/golem-notify.sh"
-HOOK_TEMPLATE="$CONTAINERS_DIR/lib/features/templates/claude/hooks/golem-notify.sh"
 
 test_suite "golem-notify.sh id resolution (#587)"
 
@@ -145,20 +146,6 @@ test_bad_golem_id_falls_back() {
     /usr/bin/rm -rf "$(/usr/bin/dirname "$(/usr/bin/dirname "$wt")")"
 }
 run_test test_bad_golem_id_falls_back "malformed GOLEM_ID falls back to worktree root"
-
-# ===========================================================================
-# Template copy behaves identically (the two files must stay in sync)
-# ===========================================================================
-test_template_copy_matches() {
-    local wt sub got
-    wt=$(setup_worktree 705)
-    sub="$wt/nested"
-    /usr/bin/mkdir -p "$sub"
-    got=$(run_hook_golem "$HOOK_TEMPLATE" "$sub" "")
-    assert_equals "golem-705" "$got" "template hook resolves id from subdirectory too"
-    /usr/bin/rm -rf "$(/usr/bin/dirname "$(/usr/bin/dirname "$wt")")"
-}
-run_test test_template_copy_matches "template copy resolves golem-N from subdirectory"
 
 # ===========================================================================
 # Outside any worktree (plain repo whose root is not issue-*/golem-*) and no
@@ -318,16 +305,6 @@ test_unknown_message_defaults_to_gate() {
     /usr/bin/rm -rf "$(/usr/bin/dirname "$(/usr/bin/dirname "$wt")")"
 }
 run_test test_unknown_message_defaults_to_gate "unrecognized message defaults to event=gate (#600)"
-
-# Template copy must classify identically — the two files stay in sync.
-test_template_classifies_idle() {
-    local wt got
-    wt=$(setup_worktree 714)
-    got=$(run_hook_event "$HOOK_TEMPLATE" "$wt" "Claude is waiting for your input")
-    assert_equals "idle" "$got" "template hook classifies idle identically"
-    /usr/bin/rm -rf "$(/usr/bin/dirname "$(/usr/bin/dirname "$wt")")"
-}
-run_test test_template_classifies_idle "template copy classifies idle identically (#600)"
 
 # ===========================================================================
 # Generate report
