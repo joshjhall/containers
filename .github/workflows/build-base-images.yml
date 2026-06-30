@@ -256,7 +256,10 @@ jobs:
           retry cosign sign --yes "${IMAGE_WITH_DIGEST}"
 
           echo "Generating SBOM for ${IMAGE_WITH_DIGEST}"
-          syft "${IMAGE_WITH_DIGEST}" -o "cyclonedx-json=sbom-${IMAGE_NAME}.json"
+          # IMAGE_WITH_DIGEST is a multi-arch manifest-list digest; without
+          # --platform syft (like Trivy) defaults to linux/amd64 and fails on
+          # arm64-only tuples with "no child with platform linux/amd64".
+          syft --platform "${PLATFORM}" "${IMAGE_WITH_DIGEST}" -o "cyclonedx-json=sbom-${IMAGE_NAME}.json"
 
           echo "Attesting SBOM for ${IMAGE_WITH_DIGEST}"
           if retry cosign attest --yes \
