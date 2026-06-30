@@ -38,6 +38,7 @@ REQUIRED_TUPLES=(
     "alpine/3.21/amd64"
     "alpine/3.21/arm64"
     "rhel/9/amd64"
+    "rhel/9/arm64"
 )
 
 # Per-distro hardening libraries that must exist with the standard interface.
