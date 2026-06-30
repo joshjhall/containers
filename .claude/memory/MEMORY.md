@@ -39,7 +39,7 @@
 - [BASH_ENV breaks PATH stubs](bash-env-breaks-path-stubs.md) — /etc/bash_env rebuilds PATH on non-interactive bash; clear it in stub tests (#618)
 - [Evidence-run arch-aware](evidence-run-arch-aware.md) — evidence-run.yml hybrid native/emulated arch matrix; arm64 leg wired but inactive; cross-linker/artifact/set-e gotchas (#641)
 - [Evidence-run validates live vs db main](evidence-run-validates-live-against-db-main.md) — new TestEntry field needs containers-db schema PR merged FIRST; evidence CI splices a live row into db main (#642→containers-db#26)
-- [Pre-existing osv vuln blocks push](preexisting-osv-vuln-blocks-push.md) — osv-scanner pre-push rejects ALL pushes on a pre-existing Cargo.lock advisory; --no-verify when diff doesn't touch the lockfile (#643)
+- [Pre-existing osv vuln blocks push](preexisting-osv-vuln-blocks-push.md) — whole-lockfile osv pre-push gate blocks ALL pushes on any Cargo.lock advisory; fix via standalone fix(deps) refresh (anyhow/RUSTSEC-2026-0190 RESOLVED 2026-06-30), --no-verify only as stopgap
 - [Alpine hardening: no coreutils paths](alpine-hardening-no-coreutils-paths.md) — Alpine build scripts use bare command names, not /usr/bin/<cmd>; busybox has no /usr/bin/echo (#433)
 - [Luggage InstallReport field → workspace test](luggage-installreport-field-workspace-test.md) — new InstallReport field breaks record-evidence struct literal; test --workspace not -p luggage (#644)
 - [UBI image tag verify against registry](ubi-image-tag-verify-registry.md) — UBI FROM tags: no bare :9, floating minors cap at 9.5; verify via registry tags/list, not guess/catalog (#435)
