@@ -36,6 +36,7 @@ REQUIRED_TUPLES=(
     "debian/12/amd64"
     "debian/13/arm64"
     "alpine/3.21/amd64"
+    "alpine/3.21/arm64"
 )
 
 # Per-distro hardening libraries that must exist with the standard interface.
