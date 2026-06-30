@@ -675,19 +675,46 @@ test_next_issue_auto_invariants() {
             "provision-agent/SKILL.md ship backstop passes --auto"
     fi
 
-    # Invariant 8 (#585): the justfile `worktree-new` printed launch hint passes
-    # the harness `--permission-mode auto` flag AND keeps the `;`-chained ship
-    # backstop. This is the human-facing string operators copy-paste; a
-    # regression to the pre-#585 form (no flag) would silently reintroduce the
-    # prompt-storm, and dropping the chain would lose premature-exit recovery.
-    # Static text checks, no Docker. Hard-fail on an absent justfile rather than
-    # skipping vacuously.
+    # Invariant 8 (#585 → #609): the printed `worktree-new` launch hint (the
+    # human-facing string operators copy-paste) must pass the harness
+    # `--permission-mode auto` flag AND keep the `;`-chained ship backstop — a
+    # regression to the pre-#585 form (no flag) silently reintroduces the
+    # prompt-storm, and dropping the chain loses premature-exit recovery.
+    #
+    # #609 moved that launch hint OUT of the justfile and into librarian's
+    # bundled `worktree-new.sh` (the justfile recipe is now a thin wrapper). So
+    # the containers-side contract is two-part: (a) the justfile DELEGATES to the
+    # bundled script via the resolver, and (b) wherever the bundled scripts are
+    # reachable in this environment, the launch-hint invariant still holds at the
+    # source of truth. Static text checks, no Docker.
     local justfile="$CONTAINERS_DIR/justfile"
     assert_file_exists "$justfile" "justfile exists"
-    assert_true "command grep -qF -- \"claude --permission-mode auto '/next-issue\" '$justfile'" \
-        "justfile worktree-new launch hint passes harness --permission-mode auto explicitly (#585)"
-    assert_true "command grep -qF -- \"; claude --permission-mode auto '/next-issue-ship --auto'\" '$justfile'" \
-        "justfile worktree-new launch hint keeps the ';'-chained ship backstop"
+    # (a) Delegation: worktree-new resolves + execs the bundled script, and no
+    # longer inlines the launch hint itself.
+    assert_true "command grep -qF 'bin/workflow-scripts-dir.sh' '$justfile'" \
+        "justfile delegates golem/worktree recipes via the workflow-scripts-dir resolver (#609)"
+    assert_true "command grep -qF 'worktree-new.sh' '$justfile'" \
+        "justfile worktree-new wrapper execs the bundled worktree-new.sh (#609)"
+    # (b) Launch-hint invariant at the source of truth: assert against the bundled
+    # script when it is resolvable in this environment. Skip (do not fail) when
+    # the librarian plugin is not installed/mounted — the bundled scripts are
+    # librarian's to test; here we only guard that, when present, the migrated
+    # hint kept its #585 shape.
+    # NOTE: resolve under `|| true` — the suite runs `set -euo pipefail`, so a
+    # non-zero resolver (the librarian plugin is not installed, e.g. in CI) inside
+    # a command substitution would otherwise abort the WHOLE suite ("Test suite
+    # failed to run"). Capture the dir first, only append the filename when non-empty.
+    local wt_scripts_dir="" wt_new_script=""
+    wt_scripts_dir="$(bash "$CONTAINERS_DIR/bin/workflow-scripts-dir.sh" 2>/dev/null || true)"
+    [ -n "$wt_scripts_dir" ] && wt_new_script="$wt_scripts_dir/worktree-new.sh"
+    if [ -n "$wt_new_script" ] && [ -f "$wt_new_script" ]; then
+        assert_true "command grep -qF -- \"claude --permission-mode auto '/next-issue\" '$wt_new_script'" \
+            "bundled worktree-new.sh launch hint passes harness --permission-mode auto explicitly (#585)"
+        assert_true "command grep -qF -- \"; claude --permission-mode auto '/next-issue-ship --auto'\" '$wt_new_script'" \
+            "bundled worktree-new.sh launch hint keeps the ';'-chained ship backstop"
+    else
+        skip_test "librarian workflow plugin not resolvable — bundled worktree-new.sh launch-hint checks belong to librarian's suite (#609)"
+    fi
 
     # Invariant 8b (#585): the orchestrate mode-protocol.md supervised-launch
     # code block (copy-paste-ready) must also carry the full chain, not just the
@@ -1004,13 +1031,27 @@ test_orchestrate_pool_invariants() {
     assert_true "command grep -qiE 'collision|pool refill' '$ni_skill'" \
         "next-issue/SKILL.md references the pool collision check from selection"
 
-    # Invariant 7: the justfile golems recipe excludes pool.json from the
-    # golem-row glob (else it renders as a bogus row) AND prints a pool header.
-    # Match the exclusion guard and the header literal.
-    assert_true "command grep -qF '[ \"\$f\" = \"\$pool\" ] && continue' '$justfile'" \
-        "justfile golems excludes pool.json from the golem-row glob"
-    assert_true "command grep -qF 'Pool: size=' '$justfile'" \
-        "justfile golems prints the pool header line"
+    # Invariant 7 (#603 → #609): the golems status surface must exclude pool.json
+    # from the golem-row glob (else it renders as a bogus row) AND print a pool
+    # header. #609 moved that logic from the justfile `golems` recipe into
+    # librarian's bundled `golem-status.sh` (the recipe is now a thin wrapper),
+    # so the containers-side contract is delegation + the invariant holding at the
+    # source of truth. Match the exclusion guard and the header literal against the
+    # bundled script when resolvable; skip (don't fail) when the plugin is absent.
+    assert_true "command grep -qF 'golem-status.sh' '$justfile'" \
+        "justfile golems wrapper execs the bundled golem-status.sh (#609)"
+    # `|| true` for the same set -e reason as Invariant 8 above.
+    local golem_scripts_dir="" golem_status_script=""
+    golem_scripts_dir="$(bash "$CONTAINERS_DIR/bin/workflow-scripts-dir.sh" 2>/dev/null || true)"
+    [ -n "$golem_scripts_dir" ] && golem_status_script="$golem_scripts_dir/golem-status.sh"
+    if [ -n "$golem_status_script" ] && [ -f "$golem_status_script" ]; then
+        assert_true "command grep -qF '[ \"\$f\" = \"\$pool\" ] && continue' '$golem_status_script'" \
+            "bundled golem-status.sh excludes pool.json from the golem-row glob"
+        assert_true "command grep -qF 'Pool: size=' '$golem_status_script'" \
+            "bundled golem-status.sh prints the pool header line"
+    else
+        skip_test "librarian workflow plugin not resolvable — bundled golem-status.sh pool checks belong to librarian's suite (#609)"
+    fi
 }
 
 # --- Run All Tests ---
