@@ -242,12 +242,17 @@ model selection.
 
 ### Skills & Agents
 
-41 skills (39 always + 2 conditional) and 17 agents. Key capabilities:
-`/codebase-audit` (parallel scanners), `/next-issue` + `/next-issue-ship`
-(issue-driven development with auto-labeling and state persistence). Override
-defaults via `CLAUDE_SKILLS` and `CLAUDE_AGENTS` (replaces full set). Add
-extras via `CLAUDE_EXTRA_SKILLS` and `CLAUDE_EXTRA_AGENTS`. See
-`docs/claude-code/skills-and-agents.md` for full details.
+The general-purpose skills and agents live in the sibling
+[`librarian`](https://github.com/joshjhall/librarian) plugin marketplace
+(`dev-core` / `review-audit` / `workflow`), installed from a pinned local
+marketplace at build time — not bundled by this repo (epic #607). Key
+capabilities: `/codebase-audit` (parallel scanners), `/next-issue` +
+`/next-issue-ship` (issue-driven development with auto-labeling and state
+persistence). Three build-bound skills stay here (`container-environment`,
+`docker-development`, `cloud-infrastructure`); the legacy `CLAUDE_SKILLS` /
+`CLAUDE_EXTRA_SKILLS` args now govern only those. See
+`docs/claude-code/skills-and-agents.md` for the librarian install path (host +
+pinned-container) and full details.
 
 ### Memory System
 
