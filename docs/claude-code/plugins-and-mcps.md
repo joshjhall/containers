@@ -10,7 +10,20 @@ When `INCLUDE_DEV_TOOLS=true`, Claude Code plugins and LSP support are
 automatically configured on first container startup via
 `/etc/container/first-startup/30-claude-code-setup.sh`.
 
+> **Note** — this page covers the **third-party plugins** the container
+> installs (the upstream Anthropic marketplace plugins below, the LSP plugins,
+> and `agentsys`/deslop). This repo's own general-purpose skills and agents are
+> **not** plugins documented here — they were extracted into the sibling
+> [`librarian`](https://github.com/joshjhall/librarian) plugin marketplace
+> (`dev-core` / `review-audit` / `workflow`). See
+> [skills-and-agents.md](skills-and-agents.md#source-of-truth-the-librarian-marketplace)
+> for the librarian install path (host and pinned-container) and
+> [epic #607](https://github.com/joshjhall/containers/issues/607) for the
+> migration.
+
 ### Core Plugins (default set)
+
+These are upstream Anthropic-marketplace plugins, unrelated to `librarian`:
 
 - `commit-commands` - Git commit helpers
 - `frontend-design` - Interface design assistance

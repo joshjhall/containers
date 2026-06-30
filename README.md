@@ -213,10 +213,13 @@ a curated baseline of plugins, MCP servers, skills, and agents.
   others. Override with `CLAUDE_MCPS` or extend with `CLAUDE_EXTRA_MCPS`.
 - **Plugins** — 11 core plugins plus language-specific LSP plugins.
   Override with `CLAUDE_PLUGINS` / `CLAUDE_EXTRA_PLUGINS`.
-- **Skills and agents** — 39 skills and 17 agents out of the box,
-  including `/codebase-audit`, `/next-issue`, and `/next-issue-ship`.
-  Override with `CLAUDE_SKILLS` / `CLAUDE_AGENTS` or extend with
-  `CLAUDE_EXTRA_*`.
+- **Skills and agents** — general-purpose skills and agents (including
+  `/codebase-audit`, `/next-issue`, and `/next-issue-ship`) ship in the
+  sibling [`librarian`](https://github.com/joshjhall/librarian) plugin
+  marketplace and install from a pinned local marketplace at build time. Three
+  build-bound skills (`container-environment`, `docker-development`,
+  `cloud-infrastructure`) stay in this image and are governed by
+  `CLAUDE_SKILLS` / `CLAUDE_EXTRA_SKILLS`.
 - **Memory system** — Two-tier `.claude/memory/` (committed long-term
   knowledge + gitignored `tmp/` for session state).
 

@@ -1,106 +1,141 @@
 # Skills & Agents
 
-Detailed reference for pre-installed Claude Code skills and agents. For a quick
-overview, see [CLAUDE.md](../../CLAUDE.md#claude-code-integrations).
+Detailed reference for the Claude Code skills and agents available in the
+container. For a quick overview, see
+[CLAUDE.md](../../CLAUDE.md#claude-code-integrations).
 
-## Pre-installed Skills & Agents
+## Source of Truth: the `librarian` marketplace
 
-When `INCLUDE_DEV_TOOLS=true`, Claude Code skills and agents are automatically
-installed to `~/.claude/skills/` and `~/.claude/agents/` on first container
-startup via `claude-setup`. Project-level `.claude/` configs merge with these
-(union semantics, project wins on name conflicts).
+The general-purpose skills and agents are **not** bundled by this repo. They
+live in the sibling repository
+[`joshjhall/librarian`](https://github.com/joshjhall/librarian), shipped as a
+[Claude Code plugin marketplace](https://docs.claude.com/en/docs/claude-code/plugins)
+so the same artifacts install identically on a host Mac, a bare Linux box, and
+inside this container — with `claude plugin update` semver rolling updates for
+free.
 
-### Skills (always installed — 38 static + 1 dynamic)
+These artifacts previously lived in this repo and were baked into every image
+via a content-stamp re-sync pipeline (#574). They were extracted into
+`librarian` so they are no longer container-build-bound; the migration is
+tracked in [epic #607](https://github.com/joshjhall/containers/issues/607).
+`librarian` is the source of truth for everything it ships — consult its
+per-plugin READMEs for the authoritative, versioned component lists rather than
+re-enumerating them here (that duplication is exactly what went stale).
 
-| Skill                     | Purpose                                                                             |
-| ------------------------- | ----------------------------------------------------------------------------------- |
-| `container-environment`   | Dynamic - describes installed tools, cache paths, container patterns                |
-| `git-workflow`            | Git commit conventions, branch naming, PR workflow                                  |
-| `testing-patterns`        | Test-first development, test framework patterns                                     |
-| `code-quality`            | Linting, formatting, code review checklist                                          |
-| `development-workflow`    | Phased feature development, task decomposition, scope control                       |
-| `error-handling`          | Error hierarchy, validation, retry strategies, resilience patterns                  |
-| `documentation-authoring` | Progressive documentation, writing standards, organization patterns                 |
-| `shell-scripting`         | Shell naming conventions, namespace safety, testing, error handling                 |
-| `skill-authoring`         | Skill/instruction writing, quality criteria, cross-tool patterns                    |
-| `agent-authoring`         | Agent/subagent design, tool scoping, model selection, prompt design                 |
-| `workflow-authoring`      | Authoring `workflow.js` harnesses: budget discipline, unique refs, null-resilience  |
-| `adversarial-review`      | Adversarial review method + bug-class checklist for skills/agents/harnesses          |
-| `file-issue`              | Structured issue creation with auto-labeling, scope enforcement, update mode        |
-| `next-issue`              | Issue-driven dev: select by priority, plan; delegates shipping to `next-issue-ship` (`--ship` chains them in-context for small work) |
-| `codebase-audit`          | Periodic codebase sweep: tech debt, security, test gaps, architecture, docs         |
-| `next-issue-ship`         | Ship completed issue work: pre-review gates, commit, PR/push, label, loop back      |
-| `memory-conventions`      | Two-tier memory conventions: long-term (committed) vs short-term (gitignored)       |
-| `orchestrate`             | Master orchestrator: dispatch PR-per-golem, fixed-size self-refilling worker pool (drain/pause/resume), monitor PR+label state, rebase, integration train; local-merge opt-in |
-| `provision-agent`         | Provision headless agent containers from devcontainer config with tmux sessions     |
-| `rebase-lockfile`         | Resolve lock file conflicts by regenerating (package-lock, Cargo.lock, etc.)        |
-| `rebase-generated`        | Resolve generated file conflicts by re-running generators                           |
-| `rebase-imports`          | Resolve import ordering conflicts by combining, deduplicating, sorting              |
-| `rebase-version`          | Resolve version number conflicts by taking the higher version                       |
-| `check-docs-staleness`    | Detects stale comments, outdated references, expired dates in docs                  |
-| `check-docs-deadlinks`    | Validates internal and external links in documentation                              |
-| `check-docs-organization` | Checks doc structure, missing READMEs, file consistency                             |
-| `check-docs-examples`     | Validates code examples against actual source code                                  |
-| `check-docs-missing-api`  | Detects undocumented public APIs and functions across languages                     |
-| `check-ai-config`         | Validates agent/skill frontmatter, file bloat, MCP configs, hook safety             |
-| `check-code-health`       | Detects file length, complexity, duplication, dead code, naming issues              |
-| `check-security`          | Scans for hardcoded secrets, injection risks, XSS patterns, insecure crypto         |
-| `drift-detect`            | Compares planned files and acceptance criteria against actual implementation        |
-| `loop-make-it-work`       | Implementation loop: end-to-end happy path functionality, no stubs                  |
-| `loop-make-it-right`      | Implementation loop: refactoring for clarity, conventions, architecture             |
-| `loop-make-it-secure`     | Implementation loop: security hardening (injection, secrets, OWASP)                 |
-| `loop-make-it-tested`     | Implementation loop: comprehensive test coverage for changed code                   |
-| `loop-make-it-documented` | Implementation loop: public API docs, design decisions, README updates              |
-| `context-security`        | Context: activates security-focused skills across pipeline phases                   |
-| `context-data-storage`    | Context: activates data storage-focused skills across pipeline phases               |
+### Librarian plugins
 
-### Conditional Skills
+| Plugin                                                                                  | Components           | What's inside                                                                                                                       |
+| --------------------------------------------------------------------------------------- | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| [`dev-core`](https://github.com/joshjhall/librarian/tree/main/plugins/dev-core)         | 20 skills · 6 agents | General development + authoring: code review, debugging, refactoring, testing, git/error/doc workflow, and the authoring guides     |
+| [`review-audit`](https://github.com/joshjhall/librarian/tree/main/plugins/review-audit) | 9 skills · 8 agents  | The `codebase-audit` / `check-*` / `audit-*` suite plus the issue writer                                                            |
+| [`workflow`](https://github.com/joshjhall/librarian/tree/main/plugins/workflow)         | 9 skills · 3 agents  | Issue-driven + parallel automation: `next-issue`(+`-ship`), `orchestrate`, golem, `file-issue`, `provision-agent`, bundled scripts  |
 
-| Skill                  | Condition                                                                                                         |
-| ---------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `docker-development`   | `INCLUDE_DOCKER=true`                                                                                             |
-| `cloud-infrastructure` | Any cloud flag (`INCLUDE_KUBERNETES`, `INCLUDE_TERRAFORM`, `INCLUDE_AWS`, `INCLUDE_GCLOUD`, `INCLUDE_CLOUDFLARE`) |
+The conceptual architecture for these artifacts — the [codebase audit
+system](#codebase-audit-system), the [check-\* skills](#unified-check--skill-architecture),
+the [loop-\* implementation skills](#implementation-loops-loop--skills),
+[contexts](#contexts-context--skills), and the [pipeline / safety
+model](#pipeline-state--context-resets) — is documented in the sections below.
+That behavior is identical wherever the plugins are installed.
 
-### Agents (always installed)
+### Component index (where each artifact moved)
 
-| Agent                | Purpose                                                                     |
-| -------------------- | --------------------------------------------------------------------------- |
-| `code-reviewer`      | Orchestrates parallel sub-reviewers for security, bugs, performance, style  |
-| `test-writer`        | Generates tests for existing code, detects framework                        |
-| `refactorer`         | Refactors code while preserving behavior                                    |
-| `debugger`           | Systematic debugging for errors, test failures, runtime issues              |
-| `audit-code-health`  | Scans for file length, complexity, duplication, dead code                   |
-| `audit-security`     | Scans for OWASP patterns, secrets, crypto, validation issues                |
-| `audit-test-gaps`    | Identifies untested APIs, missing error/edge tests                          |
-| `audit-architecture` | Detects circular deps, coupling, bus-factor, layer violations               |
-| `audit-docs`         | Finds stale comments, missing API docs, outdated READMEs                    |
-| `audit-ai-config`    | Checks skills, agents, CLAUDE.md, MCP configs, hooks quality                |
-| `issue-writer`       | Creates GitHub/GitLab issues from grouped audit findings                    |
-| `issue-filer`        | Creates structured issues with auto-labeling from user requests             |
-| `skill-author`       | Writes and reviews skills following quality patterns (opus)                 |
-| `agent-author`       | Writes and reviews agents following quality patterns (opus)                 |
-| `checker`            | Unified checker for audit/review: discovers check-\* skills, pre-scan + LLM |
-| `rebase-agent`       | Conflict resolution: lockfiles, imports, versions, generated, union edits   |
-| `ci-fixer`           | Diagnoses CI failures from logs and applies targeted fixes (sonnet)         |
+A migration aid for finding where a skill or agent that used to live here now
+ships. The `librarian` per-plugin READMEs carry the authoritative descriptions
+and versions — this index is just the name → plugin map.
 
-Five agents use `model: opus` because their output quality compounds
-downstream:
+**`dev-core`** — skills: `git-workflow`, `testing-patterns`, `code-quality`,
+`development-workflow`, `error-handling`, `documentation-authoring`,
+`shell-scripting`, `skill-authoring`, `agent-authoring`, `workflow-authoring`,
+`adversarial-review`, `memory-conventions`, `drift-detect`,
+`context-security`, `context-data-storage`, `loop-make-it-work`,
+`loop-make-it-right`, `loop-make-it-secure`, `loop-make-it-tested`,
+`loop-make-it-documented`; agents: `code-reviewer`, `test-writer`,
+`refactorer`, `debugger`, `skill-author`, `agent-author`.
 
-- `debugger` — root cause analysis requires deep reasoning; a shallow
-  diagnosis wastes the user's time on wrong fixes
-- `audit-architecture` — architectural findings inform refactoring
-  priorities; missed patterns propagate as tech debt
-- `audit-ai-config` — agent/skill quality analysis affects every
-  conversation that loads the audited artifacts
-- `skill-author`, `agent-author` — a poorly-written skill or agent
-  degrades all downstream interactions
+**`review-audit`** — skills: `codebase-audit`, `check-docs-staleness`,
+`check-docs-deadlinks`, `check-docs-organization`, `check-docs-examples`,
+`check-docs-missing-api`, `check-ai-config`, `check-code-health`,
+`check-security`; agents: `audit-code-health`, `audit-security`,
+`audit-test-gaps`, `audit-architecture`, `audit-docs`, `audit-ai-config`,
+`checker`, `issue-writer`.
 
-The `issue-writer` agent uses `model: haiku` for mechanical structured
-output (formatting findings into issues). All other agents use
-`model: sonnet` for pattern matching and structured generation tasks.
+**`workflow`** — skills: `next-issue`, `next-issue-ship`, `orchestrate`,
+`file-issue`, `provision-agent`, `rebase-lockfile`, `rebase-generated`,
+`rebase-imports`, `rebase-version`; agents: `ci-fixer`, `issue-filer`,
+`rebase-agent`.
 
-Templates are staged at build time to `/etc/container/config/claude-templates/`
-and installed at runtime by `claude-setup`. All installations are idempotent.
+### Installing on a host (Mac / bare Linux)
+
+```bash
+claude plugin marketplace add joshjhall/librarian
+claude plugin install dev-core@librarian
+claude plugin install review-audit@librarian
+claude plugin install workflow@librarian
+```
+
+`claude plugin update` rolls each plugin forward by semver. Note that the host
+path tracks the latest semver release from the upstream marketplace without
+local checksum verification — unlike the pinned-container path below. For
+security-sensitive or automated environments, pin a specific tag and verify its
+SHA against a known-good value before running `plugin update` unattended, since
+plugin `patterns.sh` scripts run with your Claude Code tool grants.
+
+### Installing in the container (pinned / offline)
+
+> **Planned — tracked in
+> [container consume #608](https://github.com/joshjhall/containers/issues/608),
+> not yet landed.** The `LIBRARIAN_REF` build arg and the offline-install build
+> step described here do not exist in the image yet. Until #608 ships, the
+> container still installs the bundled artifacts; this section documents the
+> target state so the host and container stories read together.
+
+When `INCLUDE_DEV_TOOLS=true`, the image will clone `librarian` at a **pinned
+tag/SHA** (the `LIBRARIAN_REF` build arg), register it as a local on-disk
+marketplace, and install the `dev-core`, `review-audit`, and `workflow`
+plugins **offline** — no live network install at runtime, preserving headless
+build reproducibility. The pin is the version contract and will be registered
+in `bin/check-versions.sh` for auto-patch bumps (per the
+[Automated Version Updates](../../CLAUDE.md#automated-version-updates)
+convention). See #608 for the build-step details.
+
+Project-level `.claude/` configs still merge with the installed plugins (union
+semantics, project wins on name conflicts).
+
+### Build-bound skills (stay in this repo)
+
+Three skills remain bundled by the container because they describe the image
+itself and have no meaning outside it. They install to `~/.claude/skills/` at
+startup, independent of `librarian`:
+
+| Skill                   | Condition                      | Purpose                                                    |
+| ----------------------- | ------------------------------ | ---------------------------------------------------------- |
+| `container-environment` | Always (dynamically generated) | Describes installed tools, cache paths, container patterns |
+| `docker-development`    | `INCLUDE_DOCKER=true`          | Dockerfile / compose patterns, build debugging             |
+| `cloud-infrastructure`  | Any cloud flag\*               | Kubernetes / Terraform / cloud-CLI guidance                |
+
+\* `INCLUDE_KUBERNETES`, `INCLUDE_TERRAFORM`, `INCLUDE_AWS`, `INCLUDE_GCLOUD`,
+or `INCLUDE_CLOUDFLARE`.
+
+### Agent model tiers
+
+Within `librarian`, several agents are pinned to higher model tiers because
+their output quality compounds downstream. The per-agent tiers below reflect the
+current librarian release; the plugin READMEs carry the authoritative, versioned
+list:
+
+- `debugger` (`model: opus`) — root cause analysis requires deep reasoning; a
+  shallow diagnosis wastes the user's time on wrong fixes
+- `audit-architecture` (`model: opus`) — architectural findings inform
+  refactoring priorities; missed patterns propagate as tech debt
+- `audit-ai-config` (`model: opus`) — agent/skill quality analysis affects
+  every conversation that loads the audited artifacts
+- `skill-author`, `agent-author` (`model: opus`) — a poorly-written skill or
+  agent degrades all downstream interactions
+- `issue-writer` (`model: haiku`) — mechanical structured output (formatting
+  findings into issues)
+
+All other agents use `model: sonnet` for pattern matching and structured
+generation. The plugin READMEs carry the authoritative per-agent tiers.
 
 ### Skill Metadata (metadata.yml)
 
@@ -136,81 +171,57 @@ required_mcps: [] # MCP servers the skill uses
 Skills without labels, tools, or permissions use empty arrays. See the
 `skill-authoring` skill for authoring guidelines.
 
-### Overriding Skills
+### Selecting and overriding librarian plugins
 
-Use `CLAUDE_SKILLS` to replace the default skill set:
+The general-purpose skills and agents are chosen at the **plugin** level, not
+per-skill. The container installs the `dev-core`, `review-audit`, and
+`workflow` plugins from the pinned local marketplace (see
+[#608](https://github.com/joshjhall/containers/issues/608)); to install a
+different subset on a host, install only the plugins you want:
 
 ```bash
-# Install only specific skills
-docker build --build-arg CLAUDE_SKILLS="git-workflow,code-quality" ...
+# Host: install one plugin (this example installs only dev-core; add
+# review-audit for the codebase-audit / check-* / audit-* suite, and
+# workflow for next-issue / orchestrate)
+claude plugin install dev-core@librarian
 
-# No static skills (container-environment is always installed)
-docker build --build-arg CLAUDE_SKILLS="" ...
-
-# At runtime (overrides build-time value)
-docker run -e CLAUDE_SKILLS="git-workflow,testing-patterns" ...
+# Add or drop a plugin later, then roll forward by semver
+claude plugin install workflow@librarian
+claude plugin update
 ```
 
-| `CLAUDE_SKILLS` | Behavior                                        |
-| --------------- | ----------------------------------------------- |
-| Unset (default) | All 39 always-installed skills installed        |
-| Set to list     | Only listed skills installed                    |
-| Set to `""`     | No static skills (only `container-environment`) |
+Per-skill / per-agent overrides for librarian content are managed upstream in
+the `librarian` repo, not by this image. Project-level `.claude/skills/` and
+`.claude/agents/` still take precedence on name conflicts (union merge).
+
+### Overriding the build-bound artifacts (`CLAUDE_SKILLS` / `CLAUDE_AGENTS`)
+
+The legacy `CLAUDE_SKILLS` / `CLAUDE_EXTRA_SKILLS` and `CLAUDE_AGENTS` /
+`CLAUDE_EXTRA_AGENTS` build args still exist and still work. As the migrated
+artifacts move to `librarian` (#608), their remaining scope is the artifacts the
+container itself installs:
+
+- `CLAUDE_SKILLS` / `CLAUDE_EXTRA_SKILLS` — govern the
+  [build-bound skills](#build-bound-skills-stay-in-this-repo)
+  (`container-environment`, `docker-development`, `cloud-infrastructure`). They
+  no longer select the migrated general-purpose skills (those come from
+  `librarian` and are chosen at the plugin level above).
+- `CLAUDE_AGENTS` / `CLAUDE_EXTRA_AGENTS` — select from whatever agent set the
+  image installs. Once #608 lands, that set is the librarian-installed agents;
+  prefer `claude plugin install` / `uninstall` for plugin-level agent
+  selection, and reserve these args for narrowing the installed set.
+
+```bash
+# Drop the conditional build-bound skills (container-environment still installs)
+docker build --build-arg CLAUDE_SKILLS="" ...
+```
 
 - `container-environment` always installs (dynamically generated)
-- Conditional skills (`docker-development`, `cloud-infrastructure`) require
-  both the feature flag AND presence in `CLAUDE_SKILLS` (or `CLAUDE_SKILLS` unset)
+- Conditional skills (`docker-development`, `cloud-infrastructure`) require both
+  the feature flag AND presence in `CLAUDE_SKILLS` (or `CLAUDE_SKILLS` unset)
 
-### Extra Skills
-
-Use `CLAUDE_EXTRA_SKILLS` to add skills on top of the default or overridden set:
-
-```bash
-# In your personal .env file
-CLAUDE_EXTRA_SKILLS=my-custom-skill
-
-# Or at build time
-docker build --build-arg CLAUDE_EXTRA_SKILLS="my-custom-skill" ...
-```
-
-Skills must exist in the templates directory (`/etc/container/config/claude-templates/skills/`).
-
-### Overriding Agents
-
-Use `CLAUDE_AGENTS` to replace the default agent set:
-
-```bash
-# Install only specific agents
-docker build --build-arg CLAUDE_AGENTS="debugger,code-reviewer" ...
-
-# No agents
-docker build --build-arg CLAUDE_AGENTS="" ...
-
-# At runtime (overrides build-time value)
-docker run -e CLAUDE_AGENTS="debugger,test-writer" ...
-```
-
-| `CLAUDE_AGENTS` | Behavior                     |
-| --------------- | ---------------------------- |
-| Unset (default) | All 17 agents installed      |
-| Set to list     | Only listed agents installed |
-| Set to `""`     | No agents installed          |
-
-### Extra Agents
-
-Use `CLAUDE_EXTRA_AGENTS` to add agents on top of the default or overridden set:
-
-```bash
-# In your personal .env file
-CLAUDE_EXTRA_AGENTS=my-custom-agent
-
-# Or at build time
-docker build --build-arg CLAUDE_EXTRA_AGENTS="my-custom-agent" ...
-```
-
-Agents must exist in the templates directory (`/etc/container/config/claude-templates/agents/`).
-
-To verify: `ls ~/.claude/skills/` and `ls ~/.claude/agents/`
+To verify what is installed: `ls ~/.claude/skills/`, `ls ~/.claude/agents/`,
+and `claude plugin list`.
 
 ## Codebase Audit System
 
