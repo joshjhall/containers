@@ -29,7 +29,8 @@
 - [claude-setup template stamp re-sync](claude-setup-template-stamp-resync.md) — bundled ~/.claude artifacts re-sync via content stamp (#574)
 - [gh pr checks JSON state is uppercase](gh-pr-checks-json-state-uppercase.md) — filter CI monitors on `bucket` (lowercase), not `state` (UPPERCASE)
 - [git env leak breaks worktree tests](git-env-leak-breaks-worktree-tests.md) — GIT_DIR leaks into pre-push hook; temp-repo tests fail 6/9; unset it
-- [Librarian plugin extraction](librarian-plugin-extraction.md) — LIVE: all 6 issues merged; 38 skills+17 agents across 3 plugins. Containers consume chain (#608-611) still TODO
+- [Librarian plugin extraction](librarian-plugin-extraction.md) — DONE: librarian live (38 skills+17 agents, 3 plugins); consume chain #608-611 merged, epic #607 closed; 3 build-bound skills kept in-repo
+- [Librarian container install](librarian-container-install.md) — #608: clone librarian@LIBRARIAN_REF to /opt/librarian at build, install plugins offline at runtime; keep templates until #611
 - [Plugin agents must be flat md](plugin-agents-must-be-flat-md.md) — Claude Code discovers plugin agents only as flat agents/<name>.md, not nested subdirs
 - [Golem feed event classification](golem-feed-event-classification.md) — feed events gate|idle; BLOCKED clears via recent-line + TTL (#600)
 - [Hermetic fixture tests need git identity](hermetic-fixture-tests-need-git-identity.md) — export GIT_*_NAME/EMAIL in committing tests (#606)
@@ -44,3 +45,7 @@
 - [UBI image tag verify against registry](ubi-image-tag-verify-registry.md) — UBI FROM tags: no bare :9, floating minors cap at 9.5; verify via registry tags/list, not guess/catalog (#435)
 - [ubi-minimal no nologin → use /usr/bin/false](ubi-minimal-no-nologin-use-false.md) — ubi-minimal ships no nologin (not even via util-linux-core); hardening deny-shell falls back to /usr/bin/false (#435)
 - [Base-image publish path vs PR Trivy arch](base-image-publish-path-trivy-arch.md) — PR scans local single-arch; only push-to-main scans remote multi-arch digest. arm64 Trivy needs TRIVY_PLATFORM; watch the merge run (#663)
+- [Lint couples docs to templates](lint-couples-docs-to-templates.md) — Lint AI Templates CI requires every templates/claude skill+agent be backticked in skills-and-agents.md; keep a component index until #611 removes the templates (#610)
+- [justfile delegation breaks content invariants](justfile-delegation-breaks-content-invariants.md) — thinning recipes into librarian wrappers breaks lint_skills_agents content-greps; retarget to delegation + guard `$(...)` with `|| true` under set -e (#609)
+- [golem-notify wiring moved to plugin](golem-notify-wiring-moved-to-plugin.md) — #611 deleted the build-bound hook; workflow plugin's hooks.json auto-wires golem-notify via ${CLAUDE_PLUGIN_ROOT}, not settings.json
+- [CI lint fails on deleted paths](ci-lint-fails-on-deleted-paths.md) — Run Tests PR-lint fed deleted files to lefthook; rumdl/shfmt/shellcheck error on missing paths. Fixed with --diff-filter=d (#611/PR#669)
