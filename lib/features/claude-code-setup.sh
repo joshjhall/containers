@@ -169,15 +169,13 @@ DEFAULT_PERMISSIONS='[
 # connection. Override at runtime via the CLAUDE_CODE_CONNECT_TIMEOUT_MS env var.
 DEFAULT_CONNECT_TIMEOUT_MS="600000"
 
-# Notification hook command for the orchestrate golem supervised-auto flow.
-# The Notification event fires when a session awaits a permission decision; for
-# a golem that is the "BLOCKED — needs a human" signal. The hook appends a line
-# to a central feed that `just golems` reads (see the orchestrate skill). The
-# script is installed to ~/.claude/hooks/ by claude-setup; reference it by the
-# resolved home path (build-time settings.json is the user-level file, where
-# $CLAUDE_PROJECT_DIR is not defined). Wired idempotently below so a re-run or a
-# user-added Notification hook is never duplicated or clobbered.
-GOLEM_NOTIFY_CMD="$CLAUDE_SETTINGS_DIR/hooks/golem-notify.sh"
+# The orchestrate golem Notification hook (the "BLOCKED — needs a human" feed
+# signal) is no longer wired here. It ships as part of the librarian *workflow*
+# plugin, which carries its own hooks/hooks.json — Claude Code auto-wires the
+# Notification event to `${CLAUDE_PLUGIN_ROOT}/hooks/golem-notify.sh` when that
+# plugin is installed (offline, on every boot; see claude-setup). The old
+# build-bound copy under templates/claude/hooks was removed in #611, so wiring a
+# bare ~/.claude/hooks/golem-notify.sh path here would only dangle.
 
 mkdir -p "$CLAUDE_SETTINGS_DIR"
 
@@ -185,26 +183,21 @@ if [ -f "$CLAUDE_SETTINGS_FILE" ]; then
     # Merge into existing settings.json (preserves existing permissions via
     # unique; keeps any pre-existing connect timeout rather than clobbering it)
     /usr/bin/jq --arg dir "$AUTO_MEMORY_DIR" --argjson perms "$DEFAULT_PERMISSIONS" \
-        --arg timeout "$DEFAULT_CONNECT_TIMEOUT_MS" --arg hook "$GOLEM_NOTIFY_CMD" '
+        --arg timeout "$DEFAULT_CONNECT_TIMEOUT_MS" '
         .autoMemoryDirectory = $dir
         | .permissions.allow = ((.permissions.allow // []) + $perms | unique)
         | .env.CLAUDE_CODE_CONNECT_TIMEOUT_MS = (.env.CLAUDE_CODE_CONNECT_TIMEOUT_MS // $timeout)
-        | .hooks.Notification = (
-            (.hooks.Notification // [])
-            | if any(.. | .command? == $hook) then .
-              else . + [{hooks: [{type: "command", command: $hook}]}] end
-          )
     ' "$CLAUDE_SETTINGS_FILE" >"${CLAUDE_SETTINGS_FILE}.tmp" &&
         mv "${CLAUDE_SETTINGS_FILE}.tmp" "$CLAUDE_SETTINGS_FILE"
     log_message "Merged settings into existing settings.json"
 else
     # Create new settings.json with autoMemoryDirectory, default permissions,
-    # the connect-timeout env default, and the golem Notification hook
+    # and the connect-timeout env default
     /usr/bin/jq -n --arg dir "$AUTO_MEMORY_DIR" --argjson perms "$DEFAULT_PERMISSIONS" \
-        --arg timeout "$DEFAULT_CONNECT_TIMEOUT_MS" --arg hook "$GOLEM_NOTIFY_CMD" \
-        '{autoMemoryDirectory: $dir, permissions: {allow: $perms}, env: {CLAUDE_CODE_CONNECT_TIMEOUT_MS: $timeout}, hooks: {Notification: [{hooks: [{type: "command", command: $hook}]}]}}' \
+        --arg timeout "$DEFAULT_CONNECT_TIMEOUT_MS" \
+        '{autoMemoryDirectory: $dir, permissions: {allow: $perms}, env: {CLAUDE_CODE_CONNECT_TIMEOUT_MS: $timeout}}' \
         >"$CLAUDE_SETTINGS_FILE"
-    log_message "Created settings.json with autoMemoryDirectory, default permissions, connect timeout, and golem Notification hook"
+    log_message "Created settings.json with autoMemoryDirectory, default permissions, and connect timeout"
 fi
 
 chown -R "$TARGET_USER:$TARGET_USER" "$CLAUDE_SETTINGS_DIR"
@@ -296,32 +289,30 @@ else
 fi
 
 # ============================================================================
-# Stage Build-Bound Skill Templates + Hooks for Runtime Installation
+# Stage Build-Bound Skill Templates for Runtime Installation
 # ============================================================================
-# The general-purpose skills/agents now ship via the librarian plugin
-# marketplace (cloned above; installed at runtime by claude-setup). What still
-# stages here are the BUILD-BOUND artifacts that intentionally stay in this
-# repo: the docker-development skill template, plus the golem-notify hook that
-# claude-code-setup wires into settings.json. (container-environment and
-# cloud-infrastructure are generated dynamically at runtime, not from templates.)
+# The general-purpose skills/agents/hooks now ship via the librarian plugin
+# marketplace (cloned above; installed at runtime by claude-setup) — they were
+# removed from lib/features/templates/claude in #611. What still stages here are
+# the BUILD-BOUND skills that intentionally stay in this repo: the
+# docker-development skill template (container-environment and cloud-infrastructure
+# are generated dynamically at runtime, not from templates).
 #
 # The #574 content-stamp re-sync machinery is removed — librarian plugins carry
 # their own version contract (LIBRARIAN_REF), so the bespoke stamp is obsolete.
 #
 # NOTE: the staged tree is read by claude-setup (build-bound skills, CLAUDE_EXTRA_*
-# additive installs) and by tests/integration/builds/test_checker_workflow.sh.
-# Removing the migrated skill/agent files from lib/features/templates/claude is
-# the separate follow-up issue #611, so the full tree is still staged for now.
-log_message "Staging build-bound skill templates and hooks for runtime installation..."
+# additive installs).
+log_message "Staging build-bound skill templates for runtime installation..."
 
 if [ -d /tmp/build-scripts/features/templates/claude ]; then
     mkdir -p /etc/container/config/claude-templates
     cp -r /tmp/build-scripts/features/templates/claude/* /etc/container/config/claude-templates/
     chmod -R 644 /etc/container/config/claude-templates/
     command find /etc/container/config/claude-templates -type d -exec chmod 755 {} \;
-    log_message "Build-bound skill templates and hooks staged"
+    log_message "Build-bound skill templates staged"
 else
-    log_warning "No skill/agent templates found at /tmp/build-scripts/features/templates/claude"
+    log_warning "No skill templates found at /tmp/build-scripts/features/templates/claude"
 fi
 
 # ============================================================================

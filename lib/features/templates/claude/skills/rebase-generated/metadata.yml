@@ -1,5 +1,0 @@
-name: rebase-generated
-version: "1.0"
-
-required_tools:
-  - git

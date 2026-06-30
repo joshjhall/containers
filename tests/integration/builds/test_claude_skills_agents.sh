@@ -56,14 +56,21 @@ test_librarian_and_buildbound_staged() {
         "test ! -d /opt/librarian/.git && echo 'no-git'" \
         "no-git"
 
-    # --- Build-bound skill templates still staged (removal is #611) ---
+    # --- Build-bound skill templates still staged (the only skills left here
+    #     after #611 removed the migrated artifacts) ---
     assert_dir_in_image "$image" "/etc/container/config/claude-templates/skills"
     assert_file_in_image "$image" "/etc/container/config/claude-templates/skills/docker-development/SKILL.md"
     assert_file_in_image "$image" "/etc/container/config/claude-templates/skills/cloud-infrastructure/SKILL.md"
     assert_file_in_image "$image" "/etc/container/config/claude-templates/skills/container-environment/SKILL.md"
 
-    # --- golem-notify hook still staged for the runtime hooks loop ---
-    assert_file_in_image "$image" "/etc/container/config/claude-templates/hooks/golem-notify.sh"
+    # --- The general-purpose skills/agents and the golem-notify hook migrated to
+    #     the librarian plugins (#611); they must NOT be staged here anymore ---
+    assert_command_in_container "$image" \
+        "test ! -e /etc/container/config/claude-templates/hooks/golem-notify.sh && echo 'gone'" \
+        "gone"
+    assert_command_in_container "$image" \
+        "test ! -d /etc/container/config/claude-templates/agents && echo 'gone'" \
+        "gone"
 
     # --- The #574 content stamp is NOT written anymore ---
     assert_command_in_container "$image" \

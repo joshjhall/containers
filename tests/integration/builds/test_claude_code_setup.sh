@@ -527,6 +527,19 @@ test_connect_timeout_default() {
         "600000"
 }
 
+# Test: settings.json carries no hooks key. The golem-notify Notification hook
+# wiring was removed from claude-code-setup.sh in #611 (the hook now ships in the
+# librarian workflow plugin, which auto-wires itself). This is a regression guard
+# so a future accidental re-introduction of `.hooks.Notification` into the jq
+# expression is caught.
+test_settings_has_no_hooks() {
+    local image="${IMAGE_TO_TEST:-test-claude-code-setup-$$}"
+
+    assert_command_in_container "$image" \
+        "/usr/bin/jq 'has(\"hooks\")' /home/developer/.claude/settings.json" \
+        "false"
+}
+
 # Test: claude-setup contains auto-detect logic
 test_auto_detect_logic() {
     local image="${IMAGE_TO_TEST:-test-claude-code-setup-$$}"
@@ -564,6 +577,7 @@ run_test test_pipe_delimited_headers "Pipe-delimited header support"
 run_test test_auto_memory_directory "Auto memory directory persisted in settings.json"
 run_test test_default_read_permissions "Default read permissions in settings.json"
 run_test test_connect_timeout_default "Connect timeout default in settings.json"
+run_test test_settings_has_no_hooks "settings.json has no hooks key (golem-notify wiring removed, #611)"
 run_test test_auto_detect_logic "claude-setup contains auto-detect logic"
 
 # Skip tests that require building new images if using pre-built image

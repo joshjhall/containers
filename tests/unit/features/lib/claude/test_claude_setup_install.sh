@@ -407,23 +407,29 @@ test_buildbound_refresh_rewrites() {
 # Functional: hooks install (executable bit restored, idempotent)
 # ============================================================================
 
+# These tests exercise the generic hooks-install loop mechanics. They use a
+# SYNTHETIC fixture hook name (my-custom-hook.sh), NOT golem-notify.sh: the real
+# golem-notify hook moved to the librarian workflow plugin in #611 and no longer
+# stages under templates/claude/hooks. The loop remains for build-bound or
+# CLAUDE_EXTRA hooks, so the mechanics still matter — the generic name keeps the
+# fixture from being mistaken for a real staged artifact.
 test_hooks_install_executable() {
     # The template staging strips +x; the install loop must restore it so the
     # Claude Code runtime can exec the hook.
-    _create_hook "golem-notify.sh"
+    _create_hook "my-custom-hook.sh"
     _build_installer
 
     local output
     output=$(bash "$TEST_TEMP_DIR/installer.sh" "$FAKE_TEMPLATES" "$FAKE_HOME/.claude")
 
-    assert_contains "$output" "INSTALLED hook:golem-notify.sh" "hook installed"
-    assert_file_exists "$FAKE_HOME/.claude/hooks/golem-notify.sh" "hook file copied"
-    assert_true "[ -x '$FAKE_HOME/.claude/hooks/golem-notify.sh' ]" \
+    assert_contains "$output" "INSTALLED hook:my-custom-hook.sh" "hook installed"
+    assert_file_exists "$FAKE_HOME/.claude/hooks/my-custom-hook.sh" "hook file copied"
+    assert_true "[ -x '$FAKE_HOME/.claude/hooks/my-custom-hook.sh' ]" \
         "installed hook should be executable (+x restored)"
 }
 
 test_already_installed_hooks_skipped() {
-    _create_hook "golem-notify.sh"
+    _create_hook "my-custom-hook.sh"
     _build_installer
 
     bash "$TEST_TEMP_DIR/installer.sh" "$FAKE_TEMPLATES" "$FAKE_HOME/.claude" >/dev/null
@@ -431,9 +437,9 @@ test_already_installed_hooks_skipped() {
     local output
     output=$(bash "$TEST_TEMP_DIR/installer.sh" "$FAKE_TEMPLATES" "$FAKE_HOME/.claude")
 
-    assert_contains "$output" "SKIP golem-notify.sh" \
+    assert_contains "$output" "SKIP my-custom-hook.sh" \
         "Already-installed hook should be skipped"
-    assert_not_contains "$output" "INSTALLED hook:golem-notify.sh" \
+    assert_not_contains "$output" "INSTALLED hook:my-custom-hook.sh" \
         "Should not re-install existing hook"
 }
 
