@@ -458,6 +458,14 @@ impl Registry {
         self.features.insert(feature.id.clone(), feature);
     }
 
+    /// Inserts (or replaces) a feature. Test-only escape hatch for constructing
+    /// synthetic graphs — e.g. a `requires` cycle — that the built-in registry
+    /// never contains.
+    #[cfg(test)]
+    pub(crate) fn insert_for_test(&mut self, feature: Feature) {
+        self.add(feature);
+    }
+
     /// Returns a feature by ID, or `None` if not found.
     #[must_use]
     pub fn get(&self, id: &str) -> Option<&Feature> {

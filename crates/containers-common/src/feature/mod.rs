@@ -7,9 +7,14 @@
 
 mod registry;
 mod resolve;
+mod validate;
 
 pub use registry::Registry;
 pub use resolve::resolve;
+pub use validate::{
+    AddOptions, AddOutcome, RemoveOptions, ValidateError, dependents_of, fill_default_versions,
+    plan_add, plan_remove, prune_versions, requires_transitive,
+};
 
 use std::collections::HashSet;
 
