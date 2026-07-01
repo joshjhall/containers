@@ -49,3 +49,4 @@
 - [justfile delegation breaks content invariants](justfile-delegation-breaks-content-invariants.md) — thinning recipes into librarian wrappers breaks lint_skills_agents content-greps; retarget to delegation + guard `$(...)` with `|| true` under set -e (#609)
 - [golem-notify wiring moved to plugin](golem-notify-wiring-moved-to-plugin.md) — #611 deleted the build-bound hook; workflow plugin's hooks.json auto-wires golem-notify via ${CLAUDE_PLUGIN_ROOT}, not settings.json
 - [CI lint fails on deleted paths](ci-lint-fails-on-deleted-paths.md) — Run Tests PR-lint fed deleted files to lefthook; rumdl/shfmt/shellcheck error on missing paths. Fixed with --diff-filter=d (#611/PR#669)
+- [Ship review harness provider error](ship-review-harness-provider-error.md) — next-issue-ship adversarial review can 400 (provider resolve); clean:false + 0 tokens = harness failure, not a passing review — degrade gracefully
