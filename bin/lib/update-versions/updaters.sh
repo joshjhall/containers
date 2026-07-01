@@ -193,6 +193,9 @@ update_version() {
                     # LIBRARIAN_REF is stored stripped of `v` for comparison but is
                     # used directly as a git tag, so re-add the `v` on writeback.
                     sed_inplace "s/^ARG LIBRARIAN_REF=.*/ARG LIBRARIAN_REF=v$latest/" "$PROJECT_ROOT/Dockerfile"
+                    # Also update the fallback default in claude-code-setup.sh so it
+                    # stays in sync with the ARG (enforced by version-drift.sh).
+                    sed_inplace "s/LIBRARIAN_REF=\"\${LIBRARIAN_REF:-[^}]*}\"/LIBRARIAN_REF=\"\${LIBRARIAN_REF:-v$latest}\"/" "$PROJECT_ROOT/lib/features/claude-code-setup.sh"
                     ;;
                 *)
                     echo -e "${RED}    ERROR: Unknown Dockerfile tool: $tool — add a case in updaters.sh${NC}" >&2

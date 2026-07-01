@@ -42,6 +42,7 @@ VERSION_MAP=(
     ["PIXI_VERSION"]="lib/features/mojo.sh"
     ["ANDROID_CMDLINE_TOOLS_VERSION"]="lib/features/android.sh"
     ["ANDROID_NDK_VERSION"]="lib/features/android.sh"
+    ["LIBRARIAN_REF"]="lib/features/claude-code-setup.sh"
 )
 
 # Extract the Dockerfile ARG value for a given variable name
