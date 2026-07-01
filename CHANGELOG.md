@@ -5,6 +5,54 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.19.9] - 2026-07-01
+
+### Added
+
+- Reconcile support_matrix claims against tested[] coverage (#646)
+- Re-run evidence when a base image is rebuilt to a new digest (#647)
+- Arch-aware evidence build so arm64 rows are producible (#649)
+- Open a tracking issue when an evidence run records a fail row (#652)
+- Capture installed dependency versions in evidence rows (#651)
+- Add debian/13/arm64 evidence-runs tuple (#654)
+- Map bash dependency id to the bash package (#656)
+- Dispatch evidence across the full supported matrix on a bump (#658)
+- Add alpine/3.21/amd64 tuple + alpine hardening lib (#655)
+- Add alpine/3.21/arm64 evidence-runs tuple (#659)
+- Add rhel/9/amd64 tuple + rhel hardening lib (#660)
+- Add rhel/9/arm64 evidence-runs tuple (#662)
+- Port feature add/remove validation from Go (#670)
+
+### Changed
+
+- Delegate golem/worktree just recipes to librarian bundled scripts (#666)
+- Install Claude artifacts from pinned librarian local-marketplace (#668)
+
+### Documentation
+
+- Capture base-image + luggage CI lessons from the arm64 batch
+- Disable MD013 line-length for the MEMORY.md index
+- Point Claude Code docs at librarian marketplace (#665)
+- Record librarian consume-chain completion (#607)
+- Mark anyhow osv advisory resolved; keep the general pattern
+
+### Fixed
+
+- Fail closed on unknown catalog dependency ids (#657)
+- Scan the matrix arch in Trivy for arm64 base images (#663)
+- Pass --platform to syft for arm64 base-image SBOMs (#664)
+- Update Rust deps to clear RUSTSEC-2026-0190 (anyhow)
+
+### Miscellaneous
+
+- Remove migrated skills/agents/hook now that librarian is live (#669)
+- Pin librarian marketplace to v0.3.0
+- Ignore hadolint DL3059 for per-feature RUN layers
+
+### Testing
+
+- Unit-test evidence fail-row verdict + tracking-issue logic (#661)
+
 ## [4.19.8] - 2026-06-28
 
 ### Added
@@ -1990,6 +2038,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix prettier and markdownlint formatting in README
 - Format TLS documentation files
 
+[4.19.9]: https://github.com/joshjhall/containers/compare/v4.19.8...v4.19.9
 [4.19.8]: https://github.com/joshjhall/containers/compare/v4.19.7...v4.19.8
 [4.19.7]: https://github.com/joshjhall/containers/compare/v4.19.6...v4.19.7
 [4.19.6]: https://github.com/joshjhall/containers/compare/v4.19.5...v4.19.6
