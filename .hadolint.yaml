@@ -6,3 +6,11 @@
 #   hook output without blocking commits. Real issues (warning/error)
 #   still fail the build.
 failure-threshold: warning
+
+# ignored rules
+#   DL3059 (multiple consecutive RUN instructions) — deliberate here. Each
+#   feature installs in its own RUN layer so editing one feature does not
+#   invalidate the Docker build cache for the others. Consolidating would
+#   trade cache granularity for a cosmetic win, so silence the noise.
+ignored:
+  - DL3059
