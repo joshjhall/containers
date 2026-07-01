@@ -83,7 +83,7 @@ plugin `patterns.sh` scripts run with your Claude Code tool grants.
 ### Installing in the container (pinned / offline)
 
 When `INCLUDE_DEV_TOOLS=true`, the image clones `librarian` at a **pinned
-tag/branch** (the `LIBRARIAN_REF` build arg, default `v0.2.0`) into
+tag/branch** (the `LIBRARIAN_REF` build arg, default `v0.3.0`) into
 `/opt/librarian`, and `claude-setup` registers it as a local on-disk
 marketplace and installs the `dev-core`, `review-audit`, and `workflow`
 plugins **offline** — no live network install at runtime, preserving headless

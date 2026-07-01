@@ -116,7 +116,7 @@ fi
 # auto-patch). It must be a tag or branch — `git clone --branch` does not accept
 # a bare commit SHA. A bad ref FAILS THE BUILD: the pin is load-bearing, so we do
 # not mask a clone failure here (unlike the best-effort CLI install above).
-LIBRARIAN_REF="${LIBRARIAN_REF:-v0.2.0}"
+LIBRARIAN_REF="${LIBRARIAN_REF:-v0.3.0}"
 LIBRARIAN_REPO_URL="${LIBRARIAN_REPO_URL:-https://github.com/joshjhall/librarian}"
 LIBRARIAN_DIR="/opt/librarian"
 log_message "Cloning librarian marketplace ${LIBRARIAN_REPO_URL} @ ${LIBRARIAN_REF}..."

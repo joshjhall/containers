@@ -481,7 +481,7 @@ ARG CLAUDE_EXTRA_AGENTS=""
 ARG CLAUDE_CHANNEL=latest
 # Librarian plugin marketplace pin (version contract; tracked by check-versions).
 # Must be a tag or branch — `git clone --branch` does not accept a bare SHA.
-ARG LIBRARIAN_REF=v0.2.0
+ARG LIBRARIAN_REF=v0.3.0
 # Librarian plugins to install from the local marketplace (comma-separated).
 # When unset, all defaults install. Set to empty "" to install none.
 ARG CLAUDE_LIBRARIAN_PLUGINS

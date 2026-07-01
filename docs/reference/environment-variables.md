@@ -167,7 +167,7 @@ Control which version of each language to install:
 | `TFDOCS_VERSION`     | `0.21.0`  | terraform-docs version                              |
 | `TFLINT_VERSION`     | `0.61.0`  | TFLint version                                      |
 | `CLAUDE_CHANNEL`     | `latest`  | Claude Code release channel                         |
-| `LIBRARIAN_REF`      | `v0.2.0`  | Pinned tag/branch of the librarian plugin marketplace (cloned to `/opt/librarian`) |
+| `LIBRARIAN_REF`      | `v0.3.0`  | Pinned tag/branch of the librarian plugin marketplace (cloned to `/opt/librarian`) |
 | `KEYBINDING_PROFILE` | `iterm`   | Terminal keybinding profile (iterm, xterm, minimal) |
 
 ### Security & Logging Flags
