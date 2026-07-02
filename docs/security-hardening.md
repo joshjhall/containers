@@ -39,6 +39,7 @@ The following security enhancements have been implemented:
 | [High & Medium Severity](security/high-and-medium-severity.md)     | #1 Command injection, #2 Sudo, #3 Eval safety, #4 Path traversal, #5 Installer verification, #6 Credential exposure |
 | [Low Severity](security/low-severity.md)                           | #7 Version validation, #8 Race conditions, #9 Completion scripts, #10 Path sanitization                             |
 | [Best Practices](security/best-practices.md)                       | #11 Build log secrets, #12 Docker socket, #13 Temp files, #14 Rate limiting, #15 Image digests, #16 Cosign signing  |
+| [Action Pinning Policy](security/action-pinning.md)                | #650 Third-party GitHub Actions pinned to commit SHAs (supply-chain)                                                 |
 | [Implementation & Testing](security/implementation-and-testing.md) | Phase timelines, testing strategy, progress tracking                                                                |
 
 ## Progress

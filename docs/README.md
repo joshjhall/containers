@@ -134,6 +134,8 @@ Security audit findings and hardening:
 - [Low Severity](security/low-severity.md) - Lower priority hardening
 - [Best Practices](security/best-practices.md) - Informational security
   improvements
+- [Action Pinning Policy](security/action-pinning.md) - Third-party GitHub
+  Actions pinned to commit SHAs (supply-chain hardening)
 - [Implementation & Testing](security/implementation-and-testing.md) - Phase
   tracking and test strategy
 
