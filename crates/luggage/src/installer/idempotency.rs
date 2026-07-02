@@ -223,7 +223,14 @@ mod tests {
     /// cross-thread fork race needed), and the `>= ETXTBSY_RETRIES` sleep floor
     /// proves the retry loop actually ran to exhaustion rather than returning
     /// early.
-    #[cfg(unix)]
+    ///
+    /// Linux-only: the "open-for-write ⇒ `exec` fails with `ETXTBSY`" guarantee
+    /// is a Linux kernel behavior. macOS/Darwin does *not* return `ETXTBSY`
+    /// while a writable fd is held, so this deterministic-induction technique
+    /// can't run there — the production retry logic it guards is itself
+    /// exercised end-to-end by the parallel regression tests in `install_rust`,
+    /// which do run on every unix.
+    #[cfg(target_os = "linux")]
     #[test]
     #[serial_test::serial]
     fn run_version_check_propagates_etxtbsy_after_exhausting_retries() {
@@ -257,7 +264,10 @@ mod tests {
     /// The public `already_installed` wrapper must fold that same exhaustion
     /// into its "can't confirm → false" contract rather than surfacing the
     /// error, so the caller still treats the tool as "go install".
-    #[cfg(unix)]
+    ///
+    /// Linux-only for the same reason as the exhaustion test above: the held
+    /// write fd only forces `ETXTBSY` on Linux.
+    #[cfg(target_os = "linux")]
     #[test]
     #[serial_test::serial]
     fn already_installed_returns_false_when_etxtbsy_never_clears() {
