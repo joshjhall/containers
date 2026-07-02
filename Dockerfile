@@ -480,8 +480,9 @@ ARG CLAUDE_EXTRA_AGENTS=""
 # Claude Code release channel: latest (default) or stable
 ARG CLAUDE_CHANNEL=latest
 # Librarian plugin marketplace pin (version contract; tracked by check-versions).
-# Must be a tag or branch — `git clone --branch` does not accept a bare SHA.
-ARG LIBRARIAN_REF=v0.3.0
+# Must be a *signed release tag* (v0.4.0+): the build fetches the signed release
+# tarball and verifies it with cosign before install (fail-closed, #671).
+ARG LIBRARIAN_REF=v0.4.0
 # Librarian plugins to install from the local marketplace (comma-separated).
 # When unset, all defaults install. Set to empty "" to install none.
 ARG CLAUDE_LIBRARIAN_PLUGINS

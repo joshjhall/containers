@@ -50,3 +50,4 @@
 - [golem-notify wiring moved to plugin](golem-notify-wiring-moved-to-plugin.md) — #611 deleted the build-bound hook; workflow plugin's hooks.json auto-wires golem-notify via ${CLAUDE_PLUGIN_ROOT}, not settings.json
 - [CI lint fails on deleted paths](ci-lint-fails-on-deleted-paths.md) — Run Tests PR-lint fed deleted files to lefthook; rumdl/shfmt/shellcheck error on missing paths. Fixed with --diff-filter=d (#611/PR#669)
 - [Ship review harness provider error](ship-review-harness-provider-error.md) — next-issue-ship adversarial review can 400 (provider resolve); clean:false + 0 tokens = harness failure, not a passing review — degrade gracefully
+- [Librarian signature verification](librarian-signature-verification.md) — #671: build verifies signed release tarball via cosign (not git clone); signing starts v0.4.0, default pin bumped, LIBRARIAN_SIGNER_IDENTITY/ISSUER anchor

@@ -3,14 +3,16 @@
 # Test Claude Code librarian plugins + build-bound skills installation
 #
 # The general-purpose skills/agents ship as the librarian plugin marketplace,
-# cloned at build to /opt/librarian at a pinned LIBRARIAN_REF and installed
-# offline at runtime by claude-setup (issue #608, epic #607). The build-bound
-# skills (container-environment, cloud-infrastructure, docker-development) stay
-# in this repo and still install. The #574 bake/stamp pipeline is removed.
+# fetched at build as a cosign-verified release tarball to /opt/librarian at a
+# pinned LIBRARIAN_REF and installed offline at runtime by claude-setup (issues
+# #608/#671, epic #607). The build-bound skills (container-environment,
+# cloud-infrastructure, docker-development) stay in this repo and still install.
+# The #574 bake/stamp pipeline is removed.
 #
 # Tests:
-# - librarian marketplace cloned to /opt/librarian with a valid manifest
-# - LIBRARIAN_REF build arg pins the version
+# - librarian marketplace installed to /opt/librarian with a valid manifest
+# - LIBRARIAN_REF build arg pins the version (signed release tag, verified)
+# - an unsigned/pre-v0.4.0 ref fails the build closed (signature enforcement)
 # - claude-setup registers the local marketplace offline + installs the plugins
 # - claude-setup no longer references the #574 stamp machinery
 # - Build-bound skill/hook templates still staged
@@ -31,7 +33,7 @@ export BUILD_CONTEXT="$CONTAINERS_DIR"
 # Define test suite
 test_suite "Claude Code Skills & Agents"
 
-# Test: librarian marketplace cloned + build-bound templates staged at build time
+# Test: librarian marketplace installed + build-bound templates staged at build time
 test_librarian_and_buildbound_staged() {
     local image="test-skills-agents-$$"
     echo "Building image with INCLUDE_DEV_TOOLS=true"
@@ -43,15 +45,16 @@ test_librarian_and_buildbound_staged() {
         --build-arg INCLUDE_NODE=true \
         -t "$image"
 
-    # --- librarian marketplace cloned to a durable image path ---
+    # --- librarian marketplace installed to a durable image path ---
     assert_dir_in_image "$image" "/opt/librarian"
     assert_file_in_image "$image" "/opt/librarian/.claude-plugin/marketplace.json"
     # The 3 plugins are present as on-disk sources for the local marketplace.
     assert_dir_in_image "$image" "/opt/librarian/plugins/dev-core"
     assert_dir_in_image "$image" "/opt/librarian/plugins/review-audit"
     assert_dir_in_image "$image" "/opt/librarian/plugins/workflow"
-    # The .git dir is stripped to trim image size (a local marketplace only
-    # needs the working tree).
+    # No .git dir: the tree comes from the verified release tarball (a
+    # `git archive`), not a clone, so a local marketplace has only the working
+    # tree.
     assert_command_in_container "$image" \
         "test ! -d /opt/librarian/.git && echo 'no-git'" \
         "no-git"
@@ -78,22 +81,41 @@ test_librarian_and_buildbound_staged() {
         "no-stamp"
 }
 
-# Test: LIBRARIAN_REF build arg pins the version (override respected)
+# Test: LIBRARIAN_REF build arg pins the version (override respected + verified)
 test_librarian_ref_pinned() {
     local image="test-skills-librarian-ref-$$"
 
+    # Pin an explicit *signed* release tag (v0.4.0+). The ref must resolve to a
+    # release carrying a librarian-<ver>.tar.gz.sigstore.json bundle or the
+    # build fails closed (see test_librarian_unsigned_fails_closed).
     assert_build_succeeds "Dockerfile" \
         --build-arg PROJECT_PATH=. \
         --build-arg PROJECT_NAME=test-librarian-ref \
         --build-arg INCLUDE_DEV_TOOLS=true \
         --build-arg INCLUDE_NODE=true \
-        --build-arg "LIBRARIAN_REF=v0.2.0" \
+        --build-arg "LIBRARIAN_REF=v0.4.0" \
         -t "$image"
 
-    # The cloned marketplace manifest names the librarian marketplace.
+    # The verified marketplace manifest names the librarian marketplace.
     assert_command_in_container "$image" \
         "grep -q '\"name\": \"librarian\"' /opt/librarian/.claude-plugin/marketplace.json && echo 'found'" \
         "found"
+}
+
+# Test: an unsigned / pre-signing ref fails the build closed (#671).
+# v0.3.0 is a real librarian tag published *before* release signing (v0.4.0),
+# so it has no librarian-<ver>.tar.gz.sigstore.json asset. The build must abort
+# rather than silently install an unverified marketplace.
+test_librarian_unsigned_fails_closed() {
+    local image="test-skills-librarian-unsigned-$$"
+
+    assert_build_fails "Dockerfile" \
+        --build-arg PROJECT_PATH=. \
+        --build-arg PROJECT_NAME=test-librarian-unsigned \
+        --build-arg INCLUDE_DEV_TOOLS=true \
+        --build-arg INCLUDE_NODE=true \
+        --build-arg "LIBRARIAN_REF=v0.3.0" \
+        -t "$image"
 }
 
 # Test: librarian marketplace manifest is valid and names the 3 plugins
@@ -293,7 +315,7 @@ test_claude_setup_has_override_helpers() {
 }
 
 # Run all tests
-run_test test_librarian_and_buildbound_staged "librarian cloned + build-bound templates staged at build time"
+run_test test_librarian_and_buildbound_staged "librarian installed + build-bound templates staged at build time"
 run_test test_librarian_manifest_plugins "librarian manifest names the 3 plugins"
 run_test test_claude_setup_has_skills_section "claude-setup installs librarian plugins + build-bound skills"
 run_test test_claude_setup_no_stamp_machinery "claude-setup no longer references #574 stamp machinery"
@@ -303,6 +325,7 @@ run_test test_claude_setup_has_override_helpers "claude-setup has component over
 # Skip tests that require building new images if using pre-built image
 if [ -z "${IMAGE_TO_TEST:-}" ]; then
     run_test test_librarian_ref_pinned "LIBRARIAN_REF build arg pins the marketplace version"
+    run_test test_librarian_unsigned_fails_closed "unsigned/pre-v0.4.0 LIBRARIAN_REF fails the build closed"
     run_test test_librarian_plugins_override_persisted "CLAUDE_LIBRARIAN_PLUGINS override persisted"
     run_test test_features_config_cloud_flags "enabled-features.conf contains cloud/docker flags"
     run_test test_override_vars_persisted "Override vars persisted in enabled-features.conf"

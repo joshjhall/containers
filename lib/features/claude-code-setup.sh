@@ -34,6 +34,10 @@ source /tmp/build-scripts/base/download-verify.sh
 # Source checksum fetching utilities for dynamic checksum retrieval
 source /tmp/build-scripts/base/checksum-fetch.sh
 
+# Source Sigstore verification utilities (cosign verify-blob) for the librarian
+# release-tarball signature check below.
+source /tmp/build-scripts/base/sigstore-verify.sh
+
 # Start logging
 log_feature_start "Claude Code Setup"
 
@@ -99,44 +103,98 @@ if [ -f "${BUILD_TEMP}/claude-install.sh" ]; then
 fi
 
 # ============================================================================
-# Clone the librarian plugin marketplace at a pinned ref
+# Fetch + verify the librarian plugin marketplace release tarball
 # ============================================================================
 # The general-purpose skills/agents live in the joshjhall/librarian plugin
-# marketplace (epic #607). We clone it at a PINNED tag/branch into a durable
+# marketplace (epic #607). We install it at a PINNED release tag into a durable
 # image path (/opt/librarian) and register+install it offline from a *local*
 # (on-disk) marketplace at runtime (see claude-setup). A directory-sourced
 # marketplace needs no network and no auth, so the headless container stays
 # reproducible and offline.
 #
-# The clone lives at /opt (image-resident, never clobbered by a ~/.claude home
+# The tree lives at /opt (image-resident, never clobbered by a ~/.claude home
 # volume mount); the actual `plugin install` happens in claude-setup so a fresh
 # home volume self-heals on every boot — mirroring the old skill/agent re-sync.
 #
+# SUPPLY-CHAIN INTEGRITY (#671): rather than `git clone` a *mutable, unsigned*
+# tag and trust whatever it resolves to, we download the signed release tarball
+# and verify it with cosign before it ever touches the image. As of librarian
+# v0.4.0 (joshjhall/librarian#130) every release publishes:
+#   - librarian-<ver>.tar.gz              — a deterministic `git archive` of the
+#                                           tree (the bytes covered by the sig)
+#   - librarian-<ver>.tar.gz.sigstore.json — cosign keyless (Sigstore) bundle
+# Verification is fail-closed: a missing/tampered/unsigned artifact ABORTS the
+# build (exit 1), exactly like the old load-bearing clone. Because signing is
+# additive from v0.4.0, LIBRARIAN_REF must now be a *signed release tag*
+# (v0.4.0+) — a bare branch or a pre-v0.4.0 tag has no bundle and fails closed.
+#
 # LIBRARIAN_REF is the version contract (registered in bin/check-versions.sh for
-# auto-patch). It must be a tag or branch — `git clone --branch` does not accept
-# a bare commit SHA. A bad ref FAILS THE BUILD: the pin is load-bearing, so we do
-# not mask a clone failure here (unlike the best-effort CLI install above).
-LIBRARIAN_REF="${LIBRARIAN_REF:-v0.3.0}"
+# auto-patch). The signer identity/issuer are the pinned trust anchor from the
+# librarian verification contract (README § "Verifying a release"); both are
+# overridable so a fork or a test build can point at a different signer.
+LIBRARIAN_REF="${LIBRARIAN_REF:-v0.4.0}"
 LIBRARIAN_REPO_URL="${LIBRARIAN_REPO_URL:-https://github.com/joshjhall/librarian}"
 LIBRARIAN_DIR="/opt/librarian"
-log_message "Cloning librarian marketplace ${LIBRARIAN_REPO_URL} @ ${LIBRARIAN_REF}..."
+# Keyless-signing trust anchor: the exact GitHub Actions workflow identity that
+# signed the release, and the GitHub OIDC issuer. --certificate-identity pins
+# the workflow at the release tag; deriving it from the repo URL keeps a fork
+# override self-consistent.
+LIBRARIAN_SIGNER_IDENTITY="${LIBRARIAN_SIGNER_IDENTITY:-${LIBRARIAN_REPO_URL}/.github/workflows/release.yml@refs/tags/${LIBRARIAN_REF}}"
+LIBRARIAN_SIGNER_ISSUER="${LIBRARIAN_SIGNER_ISSUER:-https://token.actions.githubusercontent.com}"
 
-# Remove any partial prior clone so a retry starts clean.
-rm -rf "$LIBRARIAN_DIR"
-if retry_command "Cloning librarian @ ${LIBRARIAN_REF}" \
-    git clone --depth 1 --branch "$LIBRARIAN_REF" \
-    "$LIBRARIAN_REPO_URL" "$LIBRARIAN_DIR"; then
-    # Drop the .git dir — a local marketplace only needs the working tree, and
-    # this trims image size.
-    rm -rf "$LIBRARIAN_DIR/.git"
-    # World-readable so the runtime user can register + install from it.
-    chmod -R a+rX "$LIBRARIAN_DIR"
-    log_message "✓ librarian cloned to ${LIBRARIAN_DIR} @ ${LIBRARIAN_REF}"
-else
-    log_error "Failed to clone librarian marketplace at ref '${LIBRARIAN_REF}'"
-    log_error "LIBRARIAN_REF must be a valid tag or branch in ${LIBRARIAN_REPO_URL}"
+librarian_ver="${LIBRARIAN_REF#v}"
+librarian_tarball="librarian-${librarian_ver}.tar.gz"
+librarian_bundle="${librarian_tarball}.sigstore.json"
+librarian_dl_base="${LIBRARIAN_REPO_URL}/releases/download/${LIBRARIAN_REF}"
+librarian_tmp="$(mktemp -d)"
+log_message "Fetching librarian marketplace ${librarian_tarball} @ ${LIBRARIAN_REF} for signature verification..."
+
+# Download the signed tarball and its Sigstore bundle. A download failure is
+# load-bearing (no `|| true`): without both artifacts we cannot verify.
+if ! retry_command "Downloading ${librarian_tarball}" \
+    curl -fsSL -o "${librarian_tmp}/${librarian_tarball}" \
+    "${librarian_dl_base}/${librarian_tarball}" ||
+    ! retry_command "Downloading ${librarian_bundle}" \
+        curl -fsSL -o "${librarian_tmp}/${librarian_bundle}" \
+        "${librarian_dl_base}/${librarian_bundle}"; then
+    log_error "Failed to download librarian release artifacts for ref '${LIBRARIAN_REF}'"
+    log_error "LIBRARIAN_REF must be a signed librarian release tag (v0.4.0+) with a"
+    log_error "librarian-<ver>.tar.gz + .sigstore.json published at ${librarian_dl_base}"
+    rm -rf "$librarian_tmp"
     exit 1
 fi
+
+# Fail closed on signature verification: a tampered or unsigned artifact aborts
+# the build. verify_sigstore_signature runs `cosign verify-blob --bundle ...`
+# with the pinned identity+issuer and returns non-zero unless cosign prints
+# "Verified OK".
+if ! verify_sigstore_signature \
+    "${librarian_tmp}/${librarian_tarball}" \
+    "${librarian_tmp}/${librarian_bundle}" \
+    "$LIBRARIAN_SIGNER_IDENTITY" \
+    "$LIBRARIAN_SIGNER_ISSUER"; then
+    log_error "librarian signature verification FAILED for ref '${LIBRARIAN_REF}'"
+    log_error "Expected signer identity: ${LIBRARIAN_SIGNER_IDENTITY}"
+    log_error "Expected OIDC issuer:     ${LIBRARIAN_SIGNER_ISSUER}"
+    log_error "Refusing to install an unverified marketplace (supply-chain, #671)."
+    rm -rf "$librarian_tmp"
+    exit 1
+fi
+
+# Verified: extract the signed tree into the durable image path. The tarball is
+# prefixed with librarian-<ver>/, so strip that leading component.
+rm -rf "$LIBRARIAN_DIR"
+mkdir -p "$LIBRARIAN_DIR"
+if ! tar -xzf "${librarian_tmp}/${librarian_tarball}" \
+    -C "$LIBRARIAN_DIR" --strip-components=1; then
+    log_error "Failed to extract verified librarian tarball for ref '${LIBRARIAN_REF}'"
+    rm -rf "$librarian_tmp" "$LIBRARIAN_DIR"
+    exit 1
+fi
+# World-readable so the runtime user can register + install from it.
+chmod -R a+rX "$LIBRARIAN_DIR"
+rm -rf "$librarian_tmp"
+log_message "✓ librarian verified + installed to ${LIBRARIAN_DIR} @ ${LIBRARIAN_REF}"
 
 # ============================================================================
 # Configure Claude Code Settings (memory, permissions)
