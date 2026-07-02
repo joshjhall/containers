@@ -73,26 +73,17 @@ jobs:
             exit 0
           fi
 
-          if printf '%s\n' "${OUT}" | grep -Fxq "ALL"; then
-            # Foundational change (Dockerfile, lib/base, lib/runtime,
-            # crates/*, etc.) — fall back to the merge-tier cluster so a
-            # PR that breaks the base image fails fast on its own PR.
-            FEATURES='["python-dev","node-dev","rust-dev","golang-dev","kubernetes","dev-tools","docker","op"]'
-            {
-              echo "mode=full"
-              echo "features=${FEATURES}"
-            } >> "${GITHUB_OUTPUT}"
-            echo "::notice::Foundational change detected — running merge-tier cluster."
-            exit 0
-          fi
-
           # Skip-list: features that don't fit the PR-tier budget for
           # one of two reasons:
           #   (a) known-broken in isolation — each entry has a tracking issue
           #   (b) build time exceeds the per-cell timeout even with warm
           #       cache, making PR-tier feedback unreliable
           # Skipped features are still exercised by the merge tier (ci.yml,
-          # which has no per-cell timeout cap).
+          # which has no per-cell timeout cap). This list is the SINGLE source
+          # of truth — it filters BOTH the foundational fallback cluster below
+          # and the per-feature `changed` path, so a heavy build can never leak
+          # onto PR tier via the foundational path (#671: a Dockerfile-only bump
+          # was dragging rust-dev back in and stalling/cancelling the tier).
           # Entries:
           #   rust-dev — even after #517 switched its cargo suite to
           #              `cargo binstall`, a fully cold PR build (base image +
@@ -111,6 +102,32 @@ jobs:
           # Package Manager binary packages — no more from-source compile, so it
           # now fits the PR-tier cap.
           SKIP_LIST='^(rust-dev|java-dev)$'
+
+          if printf '%s\n' "${OUT}" | grep -Fxq "ALL"; then
+            # Foundational change (Dockerfile, lib/base, lib/runtime,
+            # crates/*, etc.) — fall back to the merge-tier cluster so a
+            # PR that breaks the base image fails fast on its own PR. The
+            # cluster is filtered through SKIP_LIST too: the skip-listed heavy
+            # builds are covered by the merge tier regardless, and their cold
+            # PR-tier build time is exactly what we're keeping off this tier.
+            CLUSTER='python-dev
+            node-dev
+            rust-dev
+            golang-dev
+            kubernetes
+            dev-tools
+            docker
+            op'
+            FEATURES=$(printf '%s\n' "${CLUSTER}" | sed 's/^ *//' \
+              | grep -vE "${SKIP_LIST}" | jq -R . | jq -s -c .)
+            {
+              echo "mode=full"
+              echo "features=${FEATURES}"
+            } >> "${GITHUB_OUTPUT}"
+            echo "::notice::Foundational change detected — running merge-tier cluster (skip-listed heavy builds excluded): ${FEATURES}"
+            exit 0
+          fi
+
           FILTERED=$(printf '%s\n' "${OUT}" | grep -vE "${SKIP_LIST}" || true)
 
           if [ -z "${FILTERED}" ]; then
