@@ -373,6 +373,47 @@ fn already_installed_survives_etxtbsy_under_parallel_write_then_exec() {
     }
 }
 
+/// Stderr companion to `already_installed_survives_etxtbsy_under_parallel_write_then_exec`.
+///
+/// The stdout regression above never exercises `already_installed`'s
+/// stderr-matching branch under the parallel write-then-exec load that
+/// originally motivated #518 — a shim printing the version to stderr closes
+/// that gap. Tools like `java -version` really do emit their version banner on
+/// stderr, so the ETXTBSY retry must hold for them too, not only stdout tools.
+#[test]
+fn already_installed_survives_etxtbsy_under_parallel_write_then_exec_stderr() {
+    use std::thread;
+
+    use luggage::installer::idempotency::already_installed;
+
+    const THREADS: usize = 8;
+    const ITERS: usize = 40;
+
+    let handles: Vec<_> = (0..THREADS)
+        .map(|t| {
+            thread::spawn(move || {
+                for i in 0..ITERS {
+                    let dir = TempDir::new().unwrap();
+                    let version = format!("1.95.{t}{i}");
+                    write_version_shim_stderr(
+                        &dir.path().join("rustc"),
+                        &format!("rustc {version} (regression)"),
+                    );
+                    assert!(
+                        already_installed("rust", &version, dir.path()),
+                        "freshly-written stderr shim must be seen as installed despite \
+                         ETXTBSY (thread {t}, iter {i})",
+                    );
+                }
+            })
+        })
+        .collect();
+
+    for h in handles {
+        h.join().expect("worker thread panicked");
+    }
+}
+
 /// Build a `Dependency` for a catalog tool id with no metadata. Used to
 /// inject an id luggage has no system-package mapping for.
 fn dep(tool: &str) -> containers_common::tooldb::Dependency {
@@ -458,10 +499,21 @@ fn strict_install_errors_on_unknown_dependency() {
 /// `line` is single-quote-escaped so a version string containing an
 /// apostrophe can't break the surrounding shell quoting.
 fn write_version_shim(path: &Path, line: &str) {
+    write_version_shim_impl(path, line, false);
+}
+
+/// Stderr variant of [`write_version_shim`]: emits `line` on stderr so the
+/// `already_installed` stderr-matching branch is exercised under load.
+fn write_version_shim_stderr(path: &Path, line: &str) {
+    write_version_shim_impl(path, line, true);
+}
+
+fn write_version_shim_impl(path: &Path, line: &str, to_stderr: bool) {
     use std::fs;
     use std::os::unix::fs::PermissionsExt as _;
     let escaped = line.replace('\'', "'\\''");
-    fs::write(path, format!("#!/bin/sh\necho '{escaped}'\n")).unwrap();
+    let redirect = if to_stderr { " >&2" } else { "" };
+    fs::write(path, format!("#!/bin/sh\necho '{escaped}'{redirect}\n")).unwrap();
     let mut perms = fs::metadata(path).unwrap().permissions();
     perms.set_mode(0o755);
     fs::set_permissions(path, perms).unwrap();

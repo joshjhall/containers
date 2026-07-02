@@ -213,4 +213,73 @@ mod tests {
         assert_eq!(primary_binary("node"), "node");
         assert_eq!(primary_binary("rust"), "rustc");
     }
+
+    /// Exhaustion counterpart to the `install_rust` regression test, which only
+    /// covers success-after-retry. Holding an open write fd to the binary makes
+    /// every `exec` fail with `ETXTBSY`, so `run_version_check` burns the whole
+    /// `ETXTBSY_RETRIES` budget and then propagates the error via `other =>
+    /// return other` instead of dropping it — the path that was previously
+    /// untested. The held fd guarantees the failure deterministically (no
+    /// cross-thread fork race needed), and the `>= ETXTBSY_RETRIES` sleep floor
+    /// proves the retry loop actually ran to exhaustion rather than returning
+    /// early.
+    ///
+    /// Linux-only: the "open-for-write ⇒ `exec` fails with `ETXTBSY`" guarantee
+    /// is a Linux kernel behavior. macOS/Darwin does *not* return `ETXTBSY`
+    /// while a writable fd is held, so this deterministic-induction technique
+    /// can't run there — the production retry logic it guards is itself
+    /// exercised end-to-end by the parallel regression tests in `install_rust`,
+    /// which do run on every unix.
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[serial_test::serial]
+    fn run_version_check_propagates_etxtbsy_after_exhausting_retries() {
+        use std::fs::OpenOptions;
+        use std::time::Instant;
+
+        let dir = tempdir().unwrap();
+        let binary = dir.path().join("rustc");
+        write_shim(dir.path(), "rustc", "rustc 1.95.0 (never runs)");
+
+        // A writable fd open across the exec keeps the kernel returning ETXTBSY
+        // for the lifetime of `_writer`; drop only happens at end of scope.
+        let _writer = OpenOptions::new().write(true).open(&binary).unwrap();
+
+        let start = Instant::now();
+        let result = run_version_check(&binary, &BTreeMap::new());
+        let elapsed = start.elapsed();
+
+        let err = result.expect_err("held write fd must force ETXTBSY exhaustion");
+        assert_eq!(
+            err.raw_os_error(),
+            Some(ETXTBSY),
+            "exhaustion must propagate the ETXTBSY error, not remap it",
+        );
+        assert!(
+            elapsed >= ETXTBSY_BACKOFF * ETXTBSY_RETRIES,
+            "should back off once per retry before giving up (elapsed {elapsed:?})",
+        );
+    }
+
+    /// The public `already_installed` wrapper must fold that same exhaustion
+    /// into its "can't confirm → false" contract rather than surfacing the
+    /// error, so the caller still treats the tool as "go install".
+    ///
+    /// Linux-only for the same reason as the exhaustion test above: the held
+    /// write fd only forces `ETXTBSY` on Linux.
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[serial_test::serial]
+    fn already_installed_returns_false_when_etxtbsy_never_clears() {
+        use std::fs::OpenOptions;
+
+        let dir = tempdir().unwrap();
+        write_shim(dir.path(), "rustc", "rustc 1.95.0 (never runs)");
+        let _writer = OpenOptions::new().write(true).open(dir.path().join("rustc")).unwrap();
+
+        assert!(
+            !already_installed("rust", "1.95.0", dir.path()),
+            "persistent ETXTBSY must resolve to false, not a spurious true",
+        );
+    }
 }
