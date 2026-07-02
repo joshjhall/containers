@@ -603,9 +603,10 @@ COPY lib/runtime/commands/setup-git /usr/local/bin/setup-git
 COPY lib/runtime/commands/setup-gh /usr/local/bin/setup-gh
 COPY lib/runtime/commands/setup-glab /usr/local/bin/setup-glab
 COPY lib/runtime/commands/recover-entrypoint /usr/local/bin/recover-entrypoint
+COPY lib/runtime/commands/fix-docker-socket /usr/local/bin/fix-docker-socket
 RUN chmod 755 /usr/local/bin/_source-env-secrets /usr/local/bin/_wait-for-op-cache \
     /usr/local/bin/setup-git /usr/local/bin/setup-gh /usr/local/bin/setup-glab \
-    /usr/local/bin/recover-entrypoint
+    /usr/local/bin/recover-entrypoint /usr/local/bin/fix-docker-socket
 
 # Print TOFU download summary (if any Tier 4 fallbacks occurred during build)
 RUN /bin/bash -c 'source /tmp/build-scripts/base/logging.sh && \
@@ -634,6 +635,12 @@ RUN if [ -f /opt/container-runtime/40-project-health-check.sh ]; then \
 RUN if [ -f /opt/container-runtime/05-cleanup-init-env.sh ]; then \
     cp /opt/container-runtime/05-cleanup-init-env.sh /etc/container/startup/05-cleanup-init-env.sh && \
     chmod 755 /etc/container/startup/05-cleanup-init-env.sh; \
+    fi
+
+# Install every-boot Docker socket reconcile startup script (issue #674)
+RUN if [ -f /opt/container-runtime/10-fix-docker-socket.sh ]; then \
+    cp /opt/container-runtime/10-fix-docker-socket.sh /etc/container/startup/10-fix-docker-socket.sh && \
+    chmod 755 /etc/container/startup/10-fix-docker-socket.sh; \
     fi
 
 # Install secret loading startup script

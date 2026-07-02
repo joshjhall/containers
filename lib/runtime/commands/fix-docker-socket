@@ -1,0 +1,109 @@
+#!/bin/bash
+# fix-docker-socket — reconcile Docker socket group ownership on demand.
+#
+# The Docker Desktop proxy socket is a bind-mount that gets recreated
+# root:root whenever Docker Desktop restarts/reconnects. The entrypoint's
+# one-shot configure_docker_socket() only runs during sequential init, so a
+# mid-session socket replacement silently breaks `docker` for the non-root
+# user (group mismatch) until a full entrypoint re-run. See issue #674.
+#
+# This command is:
+#   - Self-contained: it does NOT depend on entrypoint globals
+#     (RUNNING_AS_ROOT / run_privileged / USERNAME). Every-boot startup
+#     scripts run as the non-root user in a subprocess, and this is also a
+#     user-runnable escape hatch — so it resolves everything itself.
+#   - Durable: keyed on the socket's GROUP OWNERSHIP, not on the caller's own
+#     read/write access. Root always passes an access test even when the
+#     socket is root:root, which is exactly why the original one-shot logic's
+#     early return let the broken state persist. Checking the group instead
+#     makes re-runs actually reconcile.
+#   - Idempotent: a no-op when the socket is already root:docker with group
+#     read/write, and a no-op when no socket is mounted.
+#
+# Scope of the fix: reconciliation restores access only for a user who is
+# ALREADY a member of the pre-existing `docker` group (established at build by
+# the Docker feature's `usermod -aG docker`). This command re-chowns the socket
+# to that group; it deliberately does NOT create the group or re-add the user,
+# because an every-boot startup script runs as the non-root user and cannot
+# alter the live session's group membership anyway. Two consequences worth
+# knowing: (1) when run as non-root it needs passwordless sudo — the default
+# secure posture (ENABLE_PASSWORDLESS_SUDO=false) makes it a warn-and-no-op, so
+# the every-boot self-heal only holds when the container runs as root or has
+# passwordless sudo (the Docker Desktop dev scenario enables it); (2) if the
+# `docker` group is absent, there is nothing meaningful to reconcile to, so it
+# warns and exits rather than fabricating a group nobody belongs to.
+#
+# Override the socket path with DOCKER_SOCK_PATH (used by the unit tests).
+
+set -uo pipefail
+
+SOCK="${DOCKER_SOCK_PATH:-/var/run/docker.sock}"
+DOCKER_GROUP="docker"
+
+# No socket mounted → nothing to reconcile.
+[ -S "$SOCK" ] || exit 0
+
+# Resolve how to run privileged operations. Prefer running directly when we
+# are root; otherwise fall back to passwordless sudo. If neither is available
+# we cannot fix ownership, so warn and exit non-fatally.
+priv() {
+    if [ "$(id -u)" -eq 0 ]; then
+        "$@"
+    else
+        sudo -n "$@"
+    fi
+}
+
+can_priv() {
+    if [ "$(id -u)" -eq 0 ]; then
+        return 0
+    fi
+    if command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
+        return 0
+    fi
+    return 1
+}
+
+# Read current owner:group and permission bits of the socket. stat's -c format
+# is consistent across the coreutils in our images.
+current_group=$(command stat -c '%G' "$SOCK" 2>/dev/null || echo "")
+current_owner=$(command stat -c '%U' "$SOCK" 2>/dev/null || echo "")
+current_perms=$(command stat -c '%a' "$SOCK" 2>/dev/null || echo "")
+
+# Already correct? Owner root, group docker, and group has read+write (the
+# octal 060 permission bits). Then this is a no-op — the common case on a
+# healthy container. Note: the mask is compared inside $(()) with explicit
+# base-8 literals (8#...) because test's -eq reads a bare `060` as decimal 60,
+# not octal 48 — doing the whole comparison arithmetically avoids that trap.
+if [ "$current_owner" = "root" ] &&
+    [ "$current_group" = "$DOCKER_GROUP" ] &&
+    [ -n "$current_perms" ] &&
+    [ "$(((8#$current_perms & 8#60) == 8#60))" -eq 1 ]; then
+    exit 0
+fi
+
+if ! can_priv; then
+    echo "⚠️  fix-docker-socket: cannot reconcile $SOCK — no root access or passwordless sudo" >&2
+    echo "   Run the container as root or enable passwordless sudo, then retry." >&2
+    exit 0
+fi
+
+# The docker group must already exist and the invoking user must already be a
+# member (build-time `usermod -aG docker`). Chowning the socket to a group the
+# session isn't part of would fix nothing while reporting success, so guard
+# instead of fabricating the group here.
+if ! getent group "$DOCKER_GROUP" >/dev/null 2>&1; then
+    echo "⚠️  fix-docker-socket: '$DOCKER_GROUP' group does not exist — nothing to reconcile $SOCK to." >&2
+    echo "   This image was likely built without the Docker feature; rebuild with INCLUDE_DOCKER=true." >&2
+    exit 0
+fi
+
+echo "🔧 fix-docker-socket: reconciling $SOCK (was ${current_owner:-?}:${current_group:-?} ${current_perms:-?})"
+
+if priv chown "root:$DOCKER_GROUP" "$SOCK" 2>/dev/null &&
+    priv chmod 660 "$SOCK" 2>/dev/null; then
+    echo "✓ fix-docker-socket: $SOCK is now root:$DOCKER_GROUP (660)"
+else
+    echo "⚠️  fix-docker-socket: could not change ownership/permissions on $SOCK" >&2
+    exit 0
+fi
