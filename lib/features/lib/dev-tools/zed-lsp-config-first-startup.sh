@@ -47,6 +47,18 @@ read -r -d '' ZED_LSP_OVERRIDES <<'JSON' || true
         "arguments": ["lsp", "stdio"]
       }
     }
+  },
+  "format_on_save": "on",
+  "languages": {
+    "YAML": {
+      "formatter": { "language_server": { "name": "dprint" } }
+    },
+    "JSON": {
+      "formatter": { "language_server": { "name": "dprint" } }
+    },
+    "JSONC": {
+      "formatter": { "language_server": { "name": "dprint" } }
+    }
   }
 }
 JSON

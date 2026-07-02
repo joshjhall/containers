@@ -81,8 +81,11 @@ pre-commit:
       glob: "*.{yml,yaml}"
       exclude:
         - "tests/results/**"
+        # .vscode/** is excluded in dprint.json, so passing it to `dprint fmt`
+        # exits 14 ("no files found") and fails the hook — mirror that exclude
+        # here. .devcontainer/** is NOT excluded in dprint.json, so it stays
+        # lintable (2-space YAML indent enforced by the pretty_yaml plugin).
         - ".vscode/**"
-        - ".devcontainer/**"
       run: dprint fmt {staged_files}
       stage_fixed: true
 

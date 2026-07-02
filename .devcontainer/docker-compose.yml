@@ -27,7 +27,6 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - ..:/workspace/containers
       - ../../containers-db:/workspace/containers-db
-      - ../../librarian:/workspace/librarian
       # Named cache volumes — survive image rebuilds, independently droppable,
       # and project-namespaced (containers-*) to avoid collisions with other
       # Rust projects sharing this Docker host. Ownership is reconciled to the
@@ -40,13 +39,6 @@ services:
       # (out of the git tree, droppable to force a clean re-index).
       - containers-codegraph:/cache/codegraph
     tmpfs:
-      # Writable /run for the runtime user. We deliberately omit uid=/gid= here:
-      # those are literal numbers Docker bakes at mount time, but editors remap
-      # the runtime user's UID (Zed adopts the host UID, e.g. 501; VS Code keeps
-      # the image-native 1000) — so any number hardcoded here is wrong for one of
-      # them. The entrypoint reconciles /run ownership to the resolved user on
-      # startup instead, the same way fix_cache_permissions handles /cache.
-      - /run:mode=0755
       # 1Password cache is kept in memory. No uid=/gid= for the same reason — this
       # path is under /cache, so fix_cache_permissions aligns it to the runtime user.
       - /cache/1password/secrets:size=8m,mode=0700
@@ -63,12 +55,6 @@ services:
       # explicit list REPLACES the default set, so codegraph is named here to
       # keep it default-on for this project.
       - CLAUDE_MCPS=filesystem,codegraph
-      # Core plugins (unset = all 11 defaults)
-      # - CLAUDE_PLUGINS=commit-commands,context7,code-review,pr-review-toolkit,feature-dev,hookify,claude-code-setup
-      # Skills (unset = all 13 static template skills + container-environment)
-      # - CLAUDE_SKILLS=git-workflow,code-quality,shell-scripting,testing-patterns,development-workflow,skill-authoring,agent-authoring,documentation-authoring,next-issue,next-issue-ship,codebase-audit,error-handling,memory-conventions
-      # Agents (unset = all 11 agents)
-      # - CLAUDE_AGENTS=debugger,code-reviewer,test-writer,refactorer,audit-code-health,audit-security,audit-test-gaps,audit-architecture,audit-docs,audit-ai-config,issue-writer
       # Default memory path
       - MEMORY_FILE_PATH=/workspace/containers/.claude/memory
       - SKIP_CASE_CHECK=true

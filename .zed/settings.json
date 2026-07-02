@@ -19,5 +19,22 @@
         "arguments": ["lsp", "stdio"]
       }
     }
+  },
+  // Format YAML/JSON with dprint on save (matches CI + .vscode/settings.json).
+  // The `lsp.dprint` block above only points Zed at the dprint binary; without
+  // these per-language formatter overrides Zed falls back to its built-in
+  // formatter, which reindents YAML to 4 spaces. dprint enforces the 2-space
+  // indent from dprint.json's pretty_yaml plugin.
+  "format_on_save": "on",
+  "languages": {
+    "YAML": {
+      "formatter": { "language_server": { "name": "dprint" } }
+    },
+    "JSON": {
+      "formatter": { "language_server": { "name": "dprint" } }
+    },
+    "JSONC": {
+      "formatter": { "language_server": { "name": "dprint" } }
+    }
   }
 }
