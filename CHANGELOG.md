@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.19.10] - 2026-07-02
+
+### Added
+
+- Verify librarian marketplace signature at build (#671) (#673)
+
+### Documentation
+
+- Record ship-review harness provider-error degradation
+
+### Fixed
+
+- Sync librarian fallback + enforce drift
+
 ## [4.19.9] - 2026-07-01
 
 ### Added
@@ -2038,6 +2052,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix prettier and markdownlint formatting in README
 - Format TLS documentation files
 
+[4.19.10]: https://github.com/joshjhall/containers/compare/v4.19.9...v4.19.10
 [4.19.9]: https://github.com/joshjhall/containers/compare/v4.19.8...v4.19.9
 [4.19.8]: https://github.com/joshjhall/containers/compare/v4.19.7...v4.19.8
 [4.19.7]: https://github.com/joshjhall/containers/compare/v4.19.6...v4.19.7
