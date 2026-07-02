@@ -107,6 +107,19 @@ test_fix_cache_chown_fail_message() {
 }
 
 # ============================================================================
+# Test: prefers the reconcile-cache-owner wrapper (command-scoped sudo, #675)
+# ============================================================================
+test_fix_cache_prefers_wrapper() {
+    local script_content
+    script_content=$(/usr/bin/cat "$PROJECT_ROOT/lib/runtime/lib/fix-cache-permissions.sh")
+
+    assert_contains "$script_content" "reconcile-cache-owner" \
+        "Script prefers the reconcile-cache-owner wrapper"
+    assert_contains "$script_content" "command -v reconcile-cache-owner" \
+        "Script guards the wrapper behind a command -v check with a direct-chown fallback"
+}
+
+# ============================================================================
 # Test: Function is defined after sourcing
 # ============================================================================
 test_fix_cache_function_defined() {
@@ -201,6 +214,7 @@ run_test test_fix_cache_output_no_root "Handles missing /cache silently"
 run_test test_fix_cache_no_sudo_message "Contains no-sudo warning message"
 run_test test_fix_cache_success_message "Contains success message"
 run_test test_fix_cache_chown_fail_message "Contains chown failure warning"
+run_test test_fix_cache_prefers_wrapper "Prefers reconcile-cache-owner wrapper"
 run_test test_fix_cache_function_defined "Function is defined after sourcing"
 run_test test_predicate_aligned_cache "Predicate silent on aligned cache"
 run_test test_predicate_triggers_on_foreign_uid "Predicate triggers on foreign UID (regression)"

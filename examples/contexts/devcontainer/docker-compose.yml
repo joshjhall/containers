@@ -32,9 +32,11 @@ services:
         - USER_UID=${USER_UID:-1000}
         - USER_GID=${USER_GID:-1000}
         - BASE_IMAGE=debian:trixie-slim
-        # Enable passwordless sudo for local development
-        # Required for Docker socket permission fix in entrypoint
-        - ENABLE_PASSWORDLESS_SUDO=true
+        # Command-scoped passwordless sudo for local development (least
+        # privilege): grants only the entrypoint's startup-reconciliation
+        # commands (bindfs, /cache//run//docker.sock chowns, docker-socket
+        # setup) — not arbitrary root. Use `=true` for legacy full NOPASSWD:ALL.
+        - ENABLE_PASSWORDLESS_SUDO=scoped
         - INCLUDE_DEV_TOOLS=true
       cache_from:
         - type=registry,ref=ghcr.io/project/devcontainer:cache
@@ -113,7 +115,8 @@ services:
       - /dev/fuse
 
     # Docker socket access is handled by the entrypoint script
-    # It uses sudo to fix permissions when ENABLE_PASSWORDLESS_SUDO=true
+    # It uses sudo to fix permissions; the scoped/true sudo policy above allows
+    # the docker-socket groupadd/chown/chmod/usermod without a password
 
     ports:
       # Application ports

@@ -55,7 +55,18 @@ fix_run_permissions() {
     fi
 
     if [ "$can_fix" = "true" ]; then
-        if run_privileged chown "${target_uid}:${target_gid}" /run 2>/dev/null; then
+        # Prefer the fixed-purpose wrapper (reconcile-run-owner), the only
+        # /run-chown path the command-scoped sudoers grant allows
+        # (ENABLE_PASSWORDLESS_SUDO=scoped); it hardcodes the /run target so the
+        # wildcard sudoers rule can't be abused. Fall back to a direct chown for
+        # root / legacy NOPASSWD:ALL / images built before the wrapper existed.
+        local run_chown_ok=false
+        if command -v reconcile-run-owner >/dev/null 2>&1; then
+            run_privileged reconcile-run-owner "${target_uid}" "${target_gid}" 2>/dev/null && run_chown_ok=true
+        else
+            run_privileged chown "${target_uid}:${target_gid}" /run 2>/dev/null && run_chown_ok=true
+        fi
+        if [ "$run_chown_ok" = "true" ]; then
             echo "✓ /run ownership aligned"
         else
             echo "⚠️  Warning: Could not align /run ownership"
