@@ -82,18 +82,33 @@ plugin `patterns.sh` scripts run with your Claude Code tool grants.
 
 ### Installing in the container (pinned / offline)
 
-When `INCLUDE_DEV_TOOLS=true`, the image clones `librarian` at a **pinned
-tag/branch** (the `LIBRARIAN_REF` build arg, default `v0.3.0`) into
+When `INCLUDE_DEV_TOOLS=true`, the image fetches `librarian` at a **pinned
+signed release tag** (the `LIBRARIAN_REF` build arg, default `v0.4.0`) into
 `/opt/librarian`, and `claude-setup` registers it as a local on-disk
 marketplace and installs the `dev-core`, `review-audit`, and `workflow`
 plugins **offline** — no live network install at runtime, preserving headless
 build reproducibility. Choose which plugins install via the
-`CLAUDE_LIBRARIAN_PLUGINS` arg (default: all three). The clone is durable image
-content; the `plugin install` runs at startup, so a fresh `~/.claude` home
-volume self-heals on every boot. The pin is the version contract, registered in
-`bin/check-versions.sh` for auto-patch bumps (per the
+`CLAUDE_LIBRARIAN_PLUGINS` arg (default: all three). The installed tree is
+durable image content; the `plugin install` runs at startup, so a fresh
+`~/.claude` home volume self-heals on every boot. The pin is the version
+contract, registered in `bin/check-versions.sh` for auto-patch bumps (per the
 [Automated Version Updates](../../CLAUDE.md#automated-version-updates)
 convention). This replaced the #574 content-stamp bake/re-sync pipeline (#608).
+
+**Signature verification (fail-closed, #671).** Rather than `git clone` a
+mutable, unsigned tag and trust whatever it resolves to, the build downloads the
+signed release **tarball** (`librarian-<ver>.tar.gz`) plus its cosign **keyless
+Sigstore bundle** (`librarian-<ver>.tar.gz.sigstore.json`) and verifies it with
+`cosign verify-blob` **before** extracting it into `/opt/librarian`. A missing,
+tampered, or unsigned artifact **aborts the build** — a compromised or
+force-pushed upstream tag cannot silently enter the image. Signing is additive
+from librarian **v0.4.0** (joshjhall/librarian#130), so `LIBRARIAN_REF` must now
+be a **signed release tag** (v0.4.0+); a branch or a pre-v0.4.0 tag has no
+bundle and fails closed. The trust anchor is the librarian `release.yml`
+workflow identity at the release tag with the GitHub OIDC issuer, pinned via
+`LIBRARIAN_SIGNER_IDENTITY` / `LIBRARIAN_SIGNER_ISSUER` (both overridable for
+forks or test signers — see
+[environment variables](../reference/environment-variables.md)).
 
 Project-level `.claude/` configs still merge with the installed plugins (union
 semantics, project wins on name conflicts).

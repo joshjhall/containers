@@ -167,7 +167,9 @@ Control which version of each language to install:
 | `TFDOCS_VERSION`     | `0.21.0`  | terraform-docs version                              |
 | `TFLINT_VERSION`     | `0.61.0`  | TFLint version                                      |
 | `CLAUDE_CHANNEL`     | `latest`  | Claude Code release channel                         |
-| `LIBRARIAN_REF`      | `v0.3.0`  | Pinned tag/branch of the librarian plugin marketplace (cloned to `/opt/librarian`) |
+| `LIBRARIAN_REF`      | `v0.4.0`  | Pinned **signed release tag** (v0.4.0+) of the librarian plugin marketplace; the build fetches the signed release tarball and verifies it with cosign before installing to `/opt/librarian` (fail-closed, #671) |
+| `LIBRARIAN_SIGNER_IDENTITY` | `<repo>/.github/workflows/release.yml@refs/tags/<ref>` | cosign `--certificate-identity` trust anchor for librarian verification (the signing workflow at the release tag; derived from `LIBRARIAN_REPO_URL` + `LIBRARIAN_REF`). Override for a fork or test signer |
+| `LIBRARIAN_SIGNER_ISSUER` | `https://token.actions.githubusercontent.com` | cosign `--certificate-oidc-issuer` for librarian verification (GitHub Actions OIDC). Override for a fork or test signer |
 | `KEYBINDING_PROFILE` | `iterm`   | Terminal keybinding profile (iterm, xterm, minimal) |
 
 ### Security & Logging Flags
