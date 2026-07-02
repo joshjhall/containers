@@ -49,8 +49,32 @@ jobs:
         id: compute
         env:
           BASE_REF: ${{ github.event.pull_request.base.ref }}
+          # Route PR label metadata through env: rather than inline ${{ }}
+          # expansion, per this workflow's injection-defense policy (#583).
+          LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
         run: |
           set -euo pipefail
+
+          # ---------------------------------------------------------------
+          # Opt-in gate (#508). The per-feature PR builds validate the legacy
+          # bash feature scripts that v5's luggage engine is replacing, so
+          # their value decays over the v5 transition while they still flake
+          # on runner resource limits (golang-dev disk exhaustion, the old
+          # rust-dev timeout). Default PRs therefore skip this tier and run
+          # only the code-level checks; opt back in per-PR by adding the
+          # `ci/full-build` label when you need the full per-feature signal.
+          # The merge tier (ci.yml) still builds the representative variants
+          # on push to main, so published images stay covered.
+          # ---------------------------------------------------------------
+          if ! printf '%s' "${LABELS}" | jq -e 'index("ci/full-build")' >/dev/null; then
+            {
+              echo "mode=skip"
+              echo "features=[]"
+            } >> "${GITHUB_OUTPUT}"
+            echo "::notice::PR-tier feature builds are opt-in during the v5 transition (#508) — add the 'ci/full-build' label to run them."
+            exit 0
+          fi
+
           git fetch --no-tags --depth=50 origin "${BASE_REF}"
           BASE_SHA=$(git rev-parse "origin/${BASE_REF}")
 

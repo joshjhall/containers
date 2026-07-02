@@ -11,8 +11,8 @@ today, and what's planned.
 
 | Tier      | Trigger                              | Wall-time budget | Matrix scope                                | Status                |
 | --------- | ------------------------------------ | ---------------- | ------------------------------------------- | --------------------- |
-| PR        | `pull_request` → main, v5            | <15 min          | Touched features × debian:trixie × amd64    | Implemented (#408)    |
-| Merge     | `push` → main, v5, `auto-patch/**`   | <30 min          | 8 representative variants × debian × amd64  | Implemented (ci.yml)  |
+| PR        | `pull_request` → main, v5            | <15 min          | Opt-in (`ci/full-build`): touched features × debian:trixie × amd64 | Implemented (#408); opt-in during v5 (#508) |
+| Merge     | `push` → main, v5, `auto-patch/**`   | <30 min          | 4 representative variants × debian × amd64  | Implemented (ci.yml); slimmed for v5 (#508) |
 | Weekly    | Cron Sundays 03:00 UTC               | <2 h             | All features × all distros × all arches     | Planned (#408-B)      |
 | Monthly   | Cron 1st of month 04:00 UTC          | <4 h             | Long-tail: image size, abandonment scan     | Planned (#408-C)      |
 | Quarterly | Cron 1st of Q 09:00 UTC (existing)   | Best-effort      | Cross-version dependency drift              | Planned (#408-D)      |
@@ -37,7 +37,18 @@ The PR tier is the first time container builds run on a PR. Before this
 tier existed, contributors got unit / Rust / lefthook checks on PR; the
 container builds only ran post-merge in the merge tier. The PR tier closes
 that gap with per-feature change detection so a one-feature PR doesn't pay
-the full eight-variant cost.
+the full multi-variant merge-tier cost.
+
+> **Opt-in during the v5 transition (#508).** The per-feature builds validate
+> the legacy `lib/features/*.sh` bash scripts that v5's `luggage` engine is
+> replacing, so their value decays while they still flake on runner resource
+> limits (`golang-dev` disk exhaustion, the old `rust-dev` timeout). The tier
+> is therefore **skipped by default** — `detect-changes` short-circuits to
+> `mode=skip` unless the PR carries the **`ci/full-build`** label. Add that
+> label when you want the full per-feature signal on a PR (e.g. a change deep
+> in a feature script); routine PRs run only the code-level checks and merge
+> against the merge tier's coverage. Remove this gate once the per-feature
+> scripts are retired.
 
 ### Flow
 
@@ -46,7 +57,8 @@ the full eight-variant cost.
    (canonical set: keys of `FEATURE_MAP` in
    [`tests/test_feature.sh`](../../tests/test_feature.sh)).
 2. The result is one of three modes:
-   - **skip**: no container-affecting changes (docs / unit tests only)
+   - **skip**: the `ci/full-build` label is absent (opt-in gate, #508), or no
+     container-affecting changes (docs / unit tests only)
    - **changed**: a list of touched features → fan out a matrix cell each
    - **full**: a foundational file changed (`Dockerfile`, `lib/base/**`,
      `lib/runtime/**`, `tests/framework/**`, `crates/**`) → fall back to
@@ -104,13 +116,20 @@ the same SHA triggers the merge tier (`ci.yml`).
 **Status:** Implemented in [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml)
 (`build` + `integration-test` jobs).
 
-The merge tier exercises eight representative multi-feature variants:
+The merge tier exercises four representative multi-feature variants:
 
 - `minimal` — baseline
-- `python-dev`, `node-dev`, `rust-golang`, `r-dev` — per-language stacks
-- `cloud-ops` — kubernetes / terraform / aws / gcloud / cloudflare
+- `python-dev`, `node-dev` — per-language stacks
 - `polyglot` — python + node + dev-tools + clients
-- `production` — debian-bookworm-slim base, passwordless sudo disabled
+
+> **Slimmed for the v5 transition (#508).** The heavy legs — `rust-golang`,
+> `r-dev`, `java-dev`, `cloud-ops`, and the `production` variant — are
+> **parked, not deleted**: they were dropped from the `build`,
+> `integration-test`, `security-scan`, and `release` jobs because they
+> exercise the legacy per-feature bash scripts v5's `luggage` engine replaces,
+> and they flaked on runner resource limits for decaying value. Re-add a
+> variant to the `build` matrix (keeping `integration-test` in sync) to restore
+> its coverage.
 
 Same trigger as before (push to main / v5 / auto-patch, plus
 `workflow_dispatch`). It explicitly does **not** trigger on `pull_request` —
