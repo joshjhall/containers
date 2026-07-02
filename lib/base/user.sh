@@ -93,22 +93,52 @@ echo "${ACTUAL_GID}" >/tmp/actual_gid
 # Add user to sudo group
 usermod -aG sudo "${USERNAME}"
 
-# Configure sudo access based on security policy
-if [ "${ENABLE_PASSWORDLESS_SUDO}" = "true" ]; then
-    # Use install command for atomic file creation with correct permissions
-    # This prevents race condition where file briefly has wrong permissions
-    echo "${USERNAME} ALL=(ALL) NOPASSWD:ALL" |
-        install -m 0440 -o root -g root /dev/stdin /etc/sudoers.d/"${USERNAME}"
-    echo "⚠️  WARNING: Passwordless sudo enabled (development mode)"
-    echo "    This allows any process as '${USERNAME}' to gain root access without password."
-    echo "    Useful for local development where you need to install packages or fix permissions."
-    echo "    NOT RECOMMENDED for production containers - use ENABLE_PASSWORDLESS_SUDO=false"
-else
-    echo "✓ Passwordless sudo disabled (production/secure mode)"
-    echo "  User ${USERNAME} is in sudo group but requires password for sudo commands"
-    echo "  For local development convenience, you can enable with:"
-    echo "  --build-arg ENABLE_PASSWORDLESS_SUDO=true"
-fi
+# Configure sudo access based on security policy.
+# ENABLE_PASSWORDLESS_SUDO is three-valued:
+#   scoped - command-scoped NOPASSWD allowlist (recommended for dev); grants
+#            only the privileged startup-reconciliation commands, not root
+#   true   - full NOPASSWD:ALL (legacy; any process as ${USERNAME} can gain root)
+#   false  - password required for sudo (production/secure mode)
+case "${ENABLE_PASSWORDLESS_SUDO}" in
+    scoped)
+        # Source the scoped-sudoers renderer next to this script.
+        # shellcheck source=lib/base/sudoers.sh
+        if [ -f "/tmp/build-scripts/base/sudoers.sh" ]; then
+            source "/tmp/build-scripts/base/sudoers.sh"
+        else
+            source "$(command dirname "${BASH_SOURCE[0]}")/sudoers.sh"
+        fi
+        # Atomic file creation with correct permissions (prevents a race where
+        # the file briefly has wrong permissions).
+        render_scoped_sudoers "${USERNAME}" |
+            install -m 0440 -o root -g root /dev/stdin /etc/sudoers.d/"${USERNAME}"
+        # Validate the generated file so a malformed alias fails the build here
+        # instead of silently degrading startup reconciliation later.
+        visudo -cf /etc/sudoers.d/"${USERNAME}" >/dev/null
+        echo "✓ Command-scoped passwordless sudo enabled (least privilege)"
+        echo "  User ${USERNAME} may run only the startup-reconciliation commands"
+        echo "  passwordless: bindfs, chown on /cache//run//docker.sock, and the"
+        echo "  docker-socket groupadd/chmod/usermod. Arbitrary root is NOT granted."
+        ;;
+    true)
+        # Use install command for atomic file creation with correct permissions
+        # This prevents race condition where file briefly has wrong permissions
+        echo "${USERNAME} ALL=(ALL) NOPASSWD:ALL" |
+            install -m 0440 -o root -g root /dev/stdin /etc/sudoers.d/"${USERNAME}"
+        echo "⚠️  WARNING: Passwordless sudo enabled (development mode)"
+        echo "    This allows any process as '${USERNAME}' to gain root access without password."
+        echo "    Useful for local development where you need to install packages or fix permissions."
+        echo "    Prefer ENABLE_PASSWORDLESS_SUDO=scoped for a least-privilege allowlist."
+        echo "    NOT RECOMMENDED for production containers - use ENABLE_PASSWORDLESS_SUDO=false"
+        ;;
+    *)
+        echo "✓ Passwordless sudo disabled (production/secure mode)"
+        echo "  User ${USERNAME} is in sudo group but requires password for sudo commands"
+        echo "  For local development convenience, you can enable with:"
+        echo "  --build-arg ENABLE_PASSWORDLESS_SUDO=scoped   (recommended, allowlist)"
+        echo "  --build-arg ENABLE_PASSWORDLESS_SUDO=true      (legacy, full NOPASSWD:ALL)"
+        ;;
+esac
 
 # Create common directories (check if home exists first)
 if [ -d "/home/${USERNAME}" ]; then

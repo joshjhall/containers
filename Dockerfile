@@ -75,6 +75,9 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 ARG USERNAME=developer
 ARG USER_UID=1000
 ARG USER_GID=$USER_UID
+# Sudo policy (three-valued): `scoped` = command-scoped NOPASSWD allowlist
+# (recommended for dev), `true` = legacy full NOPASSWD:ALL, `false` = password
+# required (default). See lib/base/sudoers.sh and user.sh.
 ARG ENABLE_PASSWORDLESS_SUDO=false
 
 # Shell hardening options
@@ -604,9 +607,15 @@ COPY lib/runtime/commands/setup-gh /usr/local/bin/setup-gh
 COPY lib/runtime/commands/setup-glab /usr/local/bin/setup-glab
 COPY lib/runtime/commands/recover-entrypoint /usr/local/bin/recover-entrypoint
 COPY lib/runtime/commands/fix-docker-socket /usr/local/bin/fix-docker-socket
+# Fixed-purpose privileged chown wrappers for command-scoped sudo (issue #675).
+# Installed to /usr/local/sbin — they hardcode their /cache and /run targets, so
+# the scoped sudoers grant can allow them without granting a bare `chown`.
+COPY lib/runtime/commands/reconcile-cache-owner /usr/local/sbin/reconcile-cache-owner
+COPY lib/runtime/commands/reconcile-run-owner /usr/local/sbin/reconcile-run-owner
 RUN chmod 755 /usr/local/bin/_source-env-secrets /usr/local/bin/_wait-for-op-cache \
     /usr/local/bin/setup-git /usr/local/bin/setup-gh /usr/local/bin/setup-glab \
-    /usr/local/bin/recover-entrypoint /usr/local/bin/fix-docker-socket
+    /usr/local/bin/recover-entrypoint /usr/local/bin/fix-docker-socket \
+    /usr/local/sbin/reconcile-cache-owner /usr/local/sbin/reconcile-run-owner
 
 # Print TOFU download summary (if any Tier 4 fallbacks occurred during build)
 RUN /bin/bash -c 'source /tmp/build-scripts/base/logging.sh && \

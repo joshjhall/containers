@@ -115,6 +115,19 @@ test_fix_run_no_sudo_message() {
 }
 
 # ============================================================================
+# Test: prefers the reconcile-run-owner wrapper (command-scoped sudo, #675)
+# ============================================================================
+test_fix_run_prefers_wrapper() {
+    local script_content
+    script_content=$(/usr/bin/cat "$PROJECT_ROOT/lib/runtime/lib/fix-run-permissions.sh")
+
+    assert_contains "$script_content" "reconcile-run-owner" \
+        "Script prefers the reconcile-run-owner wrapper"
+    assert_contains "$script_content" "command -v reconcile-run-owner" \
+        "Script guards the wrapper behind a command -v check with a direct-chown fallback"
+}
+
+# ============================================================================
 # Test: compose mount must NOT hardcode uid=/gid= on the /run tmpfs
 # (regression guard for the bug this fix addresses)
 # ============================================================================
@@ -143,6 +156,7 @@ run_test test_fix_run_unresolvable_user "Warns when user cannot be resolved"
 run_test test_fix_run_aligned_noop "Silent when /run already aligned"
 run_test test_fix_run_detects_foreign_owner "Detects foreign /run owner (regression)"
 run_test test_fix_run_no_sudo_message "Contains no-sudo warning message"
+run_test test_fix_run_prefers_wrapper "Prefers reconcile-run-owner wrapper"
 run_test test_compose_run_tmpfs_uid_agnostic "Compose /run tmpfs is UID-agnostic (regression)"
 
 # Generate test report

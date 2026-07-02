@@ -1,0 +1,51 @@
+#!/bin/bash
+# reconcile-run-owner — align the /run mountpoint ownership to a runtime uid:gid.
+#
+# A fixed-purpose privileged helper for command-scoped passwordless sudo
+# (ENABLE_PASSWORDLESS_SUDO=scoped). The scoped sudoers grant allows the
+# non-root user to run only this wrapper (NOT `chown` directly), so the target
+# path can never be attacker-supplied: it is hardcoded here to /run. This closes
+# the arg-injection escape that a bare `chown * /run` sudoers rule would leave
+# open (`sudo chown me:me /etc/sudoers.d /run` → root).
+#
+# Usage:
+#   reconcile-run-owner <uid> <gid>
+#
+# Both arguments MUST be non-negative integers; anything else is rejected so a
+# caller cannot smuggle extra chown operands or options through the wrapper.
+# Runs `chown <uid>:<gid> /run` (non-recursive, matching the direct call it
+# replaces in lib/runtime/lib/fix-run-permissions.sh — only the mountpoint is
+# realigned, not the entries system services create under it).
+set -euo pipefail
+
+readonly TARGET="/run"
+
+if [ "$#" -ne 2 ]; then
+    echo "reconcile-run-owner: expected exactly <uid> <gid>, got $#" >&2
+    exit 2
+fi
+
+uid="$1"
+gid="$2"
+
+# Strictly numeric — reject options, paths, or anything that is not a bare
+# non-negative integer, so the wildcard sudoers grant cannot be abused.
+case "$uid" in '' | *[!0-9]*)
+    echo "reconcile-run-owner: uid must be numeric, got '$uid'" >&2
+    exit 2
+    ;;
+esac
+case "$gid" in '' | *[!0-9]*)
+    echo "reconcile-run-owner: gid must be numeric, got '$gid'" >&2
+    exit 2
+    ;;
+esac
+
+[ -d "$TARGET" ] || exit 0
+
+# Resolve chown to an absolute path (defensive: do not trust PATH/aliases for a
+# privileged action), falling back to the canonical Debian location.
+chown_bin="$(command -v chown 2>/dev/null || true)"
+case "$chown_bin" in /*) ;; *) chown_bin="/usr/bin/chown" ;; esac
+
+exec "$chown_bin" "${uid}:${gid}" "$TARGET"

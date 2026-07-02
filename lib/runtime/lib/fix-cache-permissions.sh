@@ -53,7 +53,19 @@ fix_cache_permissions() {
     fi
 
     if [ "$can_fix" = "true" ]; then
-        if run_privileged chown -R "${target_uid}:${target_gid}" /cache 2>/dev/null; then
+        # Prefer the fixed-purpose wrapper (reconcile-cache-owner), which is the
+        # only /cache-chown path the command-scoped sudoers grant allows
+        # (ENABLE_PASSWORDLESS_SUDO=scoped). It hardcodes the /cache target, so a
+        # wildcard sudoers rule can't be abused to chown an arbitrary path. Fall
+        # back to a direct chown for root / legacy NOPASSWD:ALL / images built
+        # before the wrapper existed.
+        local cache_chown_ok=false
+        if command -v reconcile-cache-owner >/dev/null 2>&1; then
+            run_privileged reconcile-cache-owner "${target_uid}" "${target_gid}" 2>/dev/null && cache_chown_ok=true
+        else
+            run_privileged chown -R "${target_uid}:${target_gid}" /cache 2>/dev/null && cache_chown_ok=true
+        fi
+        if [ "$cache_chown_ok" = "true" ]; then
             echo "✓ Cache directory ownership aligned"
         else
             echo "⚠️  Warning: Could not fix all cache permissions"

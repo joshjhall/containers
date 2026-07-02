@@ -1,0 +1,51 @@
+#!/bin/bash
+# reconcile-cache-owner — align /cache ownership to a runtime uid:gid.
+#
+# A fixed-purpose privileged helper for command-scoped passwordless sudo
+# (ENABLE_PASSWORDLESS_SUDO=scoped). The scoped sudoers grant allows the
+# non-root user to run only this wrapper (NOT `chown` directly), so the target
+# path can never be attacker-supplied: it is hardcoded here to /cache. This
+# closes the arg-injection escape that a bare `chown * /cache` sudoers rule
+# would leave open (`sudo chown -R me:me /etc/sudoers.d /cache` → root).
+#
+# Usage:
+#   reconcile-cache-owner <uid> <gid>
+#
+# Both arguments MUST be non-negative integers; anything else is rejected so a
+# caller cannot smuggle extra chown operands or options through the wrapper.
+# Runs `chown -R <uid>:<gid> /cache` (recursive, matching the direct call it
+# replaces in lib/runtime/lib/fix-cache-permissions.sh).
+set -euo pipefail
+
+readonly TARGET="/cache"
+
+if [ "$#" -ne 2 ]; then
+    echo "reconcile-cache-owner: expected exactly <uid> <gid>, got $#" >&2
+    exit 2
+fi
+
+uid="$1"
+gid="$2"
+
+# Strictly numeric — reject options (-R, --reference=…), paths, or anything that
+# is not a bare non-negative integer. This is what makes the wildcard sudoers
+# grant safe: the wrapper cannot be steered to a different target or flag.
+case "$uid" in '' | *[!0-9]*)
+    echo "reconcile-cache-owner: uid must be numeric, got '$uid'" >&2
+    exit 2
+    ;;
+esac
+case "$gid" in '' | *[!0-9]*)
+    echo "reconcile-cache-owner: gid must be numeric, got '$gid'" >&2
+    exit 2
+    ;;
+esac
+
+[ -d "$TARGET" ] || exit 0
+
+# Resolve chown to an absolute path (defensive: do not trust PATH/aliases for a
+# privileged action), falling back to the canonical Debian location.
+chown_bin="$(command -v chown 2>/dev/null || true)"
+case "$chown_bin" in /*) ;; *) chown_bin="/usr/bin/chown" ;; esac
+
+exec "$chown_bin" -R "${uid}:${gid}" "$TARGET"

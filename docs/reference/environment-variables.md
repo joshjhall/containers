@@ -35,7 +35,26 @@ installed. They are converted to environment variables during the build process.
 | `USERNAME`                 | `developer` | Non-root username to create                    |
 | `USER_UID`                 | `1000`      | User ID for the non-root user                  |
 | `USER_GID`                 | `1000`      | Group ID for the non-root user                 |
-| `ENABLE_PASSWORDLESS_SUDO` | `false`     | Allow passwordless sudo (for dev environments) |
+| `ENABLE_PASSWORDLESS_SUDO` | `false`     | Sudo policy (three-valued) — see below         |
+
+`ENABLE_PASSWORDLESS_SUDO` accepts three values:
+
+- `scoped` — **recommended for development.** Grants passwordless sudo for
+  only the fixed set of privileged startup-reconciliation commands the
+  entrypoint runs (`bindfs`; the Docker-socket `chown`/`chmod`/`groupadd`/
+  `usermod`; and the `/cache`//`/run` ownership fixes) via a `Cmnd_Alias`
+  allowlist. The two variable ownership fixes run through fixed-purpose,
+  path-hardcoded wrapper commands (`reconcile-cache-owner`,
+  `reconcile-run-owner`) rather than a bare `chown`, so a process running as
+  the non-root user cannot coerce the grant into chowning an arbitrary path —
+  it cannot escalate to arbitrary root.
+- `true` — **legacy.** Full `NOPASSWD:ALL`; any process running as the user
+  can become root without a password. Kept for backward compatibility;
+  prefer `scoped`.
+- `false` — **production/secure (default).** The user is in the `sudo` group
+  but every `sudo` invocation requires a password. Note that startup
+  reconciliation (bindfs overlay, `/cache`//`/run` chowns) is skipped when the
+  entrypoint runs unprivileged, so use `scoped` if you need those.
 
 ### Build Output Configuration
 

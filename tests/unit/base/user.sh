@@ -157,6 +157,73 @@ test_sudo_config_validation() {
     fi
 }
 
+# Test: Scoped sudoers renderer script exists and is readable
+test_sudoers_script_exists() {
+    assert_file_exists "$PROJECT_ROOT/lib/base/sudoers.sh"
+    assert_readable "$PROJECT_ROOT/lib/base/sudoers.sh"
+}
+
+# Test: Scoped sudoers renderer emits a command-scoped allowlist
+test_scoped_sudoers_content() {
+    local username="testuser"
+    local rendered
+
+    # Source the renderer in a subshell-safe way and capture its output
+    source "$PROJECT_ROOT/lib/base/sudoers.sh"
+    assert_function_exists render_scoped_sudoers "render_scoped_sudoers is defined"
+
+    rendered="$(render_scoped_sudoers "$username")"
+
+    # Command-scoped alias present, granting only the startup commands
+    assert_contains "$rendered" "Cmnd_Alias CONTAINER_STARTUP" "Cmnd_Alias present"
+    assert_contains "$rendered" "bindfs *" "bindfs command allowed"
+    # The two variable chowns (/cache, /run) go through fixed-purpose,
+    # path-hardcoded wrappers — NOT a bare `chown` with a wildcard path operand.
+    assert_contains "$rendered" "reconcile-cache-owner *" "cache chown wrapper allowed"
+    assert_contains "$rendered" "reconcile-run-owner *" "run chown wrapper allowed"
+    # The socket chown has fixed args, pinned exactly (colon backslash-escaped).
+    assert_contains "$rendered" 'chown root\:docker /var/run/docker.sock' "socket chown pinned exactly"
+    assert_contains "$rendered" "chmod 660 /var/run/docker.sock" "chmod docker socket allowed"
+    assert_contains "$rendered" "groupadd docker" "groupadd docker allowed"
+    assert_contains "$rendered" "usermod -aG docker ${username}" "usermod docker allowed"
+
+    # SECURITY: no bare `chown` with a wildcard path operand may remain. A rule
+    # like `chown * /cache` is exploitable — sudo fnmatch-joins args and chown
+    # takes multiple operands, so `chown -R me:me /etc/sudoers.d /cache` matches
+    # and lets the user seize /etc/sudoers.d, then escalate to root. The wrapper
+    # commands close this; assert the wildcard form is gone. (issue #675)
+    assert_not_contains "$rendered" "chown * /" "no raw wildcard chown path grant"
+
+    # User is bound to the alias, NOT to blanket root
+    assert_contains "$rendered" "${username} ALL=(ALL) NOPASSWD: CONTAINER_STARTUP" \
+        "user bound to scoped alias"
+    assert_not_contains "$rendered" "NOPASSWD:ALL" "scoped mode does not grant NOPASSWD:ALL"
+
+    # All command paths must be absolute (sudoers requires fully-qualified
+    # paths). Every indented alias-body line names a command, which must begin
+    # with a leading slash after its indentation.
+    local body_lines non_absolute
+    body_lines="$(command grep -E '^[[:space:]]+' <<<"$rendered")"
+    non_absolute="$(command grep -Ev '^[[:space:]]+/' <<<"$body_lines" || true)"
+    if [ -n "$non_absolute" ]; then
+        assert_true false "scoped sudoers contains a non-absolute command path: $non_absolute"
+    else
+        assert_true true "all scoped sudoers command paths are absolute"
+    fi
+}
+
+# Test: user.sh selects scoped mode via a case over ENABLE_PASSWORDLESS_SUDO
+test_user_sh_scoped_mode_wired() {
+    local script="$PROJECT_ROOT/lib/base/user.sh"
+
+    if command grep -q 'render_scoped_sudoers' "$script" &&
+        command grep -q 'scoped)' "$script"; then
+        assert_true true "user.sh wires the scoped sudoers mode"
+    else
+        assert_true false "user.sh does not wire the scoped sudoers mode"
+    fi
+}
+
 # Test: Home directory path validation
 test_home_directory_path() {
     local username="testuser"
@@ -265,6 +332,9 @@ run_test test_group_existence_check "Group existence checking"
 run_test test_working_dir_construction "Working directory path construction"
 run_test test_build_env_structure "Build environment file structure"
 run_test test_sudo_config_validation "Sudo configuration validation"
+run_test test_sudoers_script_exists "Scoped sudoers script exists and is readable"
+run_test test_scoped_sudoers_content "Scoped sudoers emits command-scoped allowlist"
+run_test test_user_sh_scoped_mode_wired "user.sh wires scoped sudoers mode"
 run_test test_home_directory_path "Home directory path validation"
 run_test test_bashrc_d_structure "Bashrc.d directory structure"
 run_test test_script_parameters "Script parameter handling"
