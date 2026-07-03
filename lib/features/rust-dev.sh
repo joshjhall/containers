@@ -480,7 +480,7 @@ command cat >/usr/local/bin/cargo-sweep-cron <<'SWEEP_SCRIPT_EOF'
 # Wrapper script for cargo-sweep cron job
 # Sources container environment and respects configuration
 
-# Load container environment (provides PATH, CARGO_HOME, etc.)
+# Load container environment (provides PATH, CARGO_HOME, CARGO_SWEEP_ROOTS, etc.)
 if [ -f /etc/container/cron-env ]; then
     source /etc/container/cron-env
 fi
@@ -497,18 +497,69 @@ fi
 
 # Configuration
 SWEEP_DAYS="${CARGO_SWEEP_DAYS:-14}"
-WORKING_DIR="${WORKING_DIR:-/workspace}"
+# Discovery roots are DELIBERATELY decoupled from WORKING_DIR. Real deployments
+# set WORKING_DIR to a single project dir (e.g. /workspace/containers), which
+# would hide sibling checkouts (e.g. /workspace/octarine) from the sweep and let
+# their target/ grow unbounded. CARGO_SWEEP_ROOTS (colon-separated, default
+# /workspace) scans the whole parent so every sibling is reclaimed (#678).
+CARGO_SWEEP_ROOTS="${CARGO_SWEEP_ROOTS:-/workspace}"
+# Per-project size backstop: even within the age window an abandoned heavy build
+# keeps everything until it ages out, so cap total target/ size. Empty disables.
+CARGO_SWEEP_MAXSIZE="${CARGO_SWEEP_MAXSIZE:-10GB}"
+# Drop artifacts from toolchains no longer installed via rustup. Empty/false
+# disables.
+CARGO_SWEEP_INSTALLED="${CARGO_SWEEP_INSTALLED:-true}"
 
-# Only sweep if we have Rust projects in the workspace
-if [ -d "$WORKING_DIR" ]; then
-    # Find all directories with Cargo.toml and sweep them
-    command find "$WORKING_DIR" -name "Cargo.toml" -type f 2>/dev/null | while read -r cargo_file; do
+# Size of a directory in bytes (0 if missing/unreadable). Always prints a
+# numeric — du printing nothing on a missing dir would otherwise yield "".
+dir_size_bytes() {
+    local bytes
+    bytes=$(command du -sb "$1" 2>/dev/null | command awk '{print $1}')
+    echo "${bytes:-0}"
+}
+
+# Sweep a single project dir through the time pass plus optional backstops,
+# logging the space reclaimed so a silent no-op is distinguishable from a real
+# clean (the original swallowed all output and looked identical either way).
+sweep_project() {
+    local project_dir="$1"
+    local before after reclaimed
+    before=$(dir_size_bytes "$project_dir/target")
+
+    logger -t cargo-sweep "Sweeping $project_dir (time>${SWEEP_DAYS}d, maxsize=${CARGO_SWEEP_MAXSIZE:-off}, installed=${CARGO_SWEEP_INSTALLED:-off})"
+
+    # Sweep modes are mutually exclusive, so run each backstop as its own pass.
+    cargo-sweep sweep --time "$SWEEP_DAYS" "$project_dir" 2>/dev/null || true
+    if [ "${CARGO_SWEEP_INSTALLED}" = "true" ]; then
+        cargo-sweep sweep --installed "$project_dir" 2>/dev/null || true
+    fi
+    if [ -n "${CARGO_SWEEP_MAXSIZE}" ]; then
+        cargo-sweep sweep --maxsize "$CARGO_SWEEP_MAXSIZE" "$project_dir" 2>/dev/null || true
+    fi
+
+    after=$(dir_size_bytes "$project_dir/target")
+    reclaimed=$(( before > after ? before - after : 0 ))
+    logger -t cargo-sweep "Reclaimed $(( reclaimed / 1024 / 1024 )) MB in $project_dir (target/ ${before} -> ${after} bytes)"
+}
+
+# Walk every discovery root, sweeping each Rust project's target/ found beneath.
+swept_any=false
+IFS=':' read -ra sweep_roots <<< "$CARGO_SWEEP_ROOTS"
+for root in "${sweep_roots[@]}"; do
+    if [ -z "$root" ] || [ ! -d "$root" ]; then
+        continue
+    fi
+    while IFS= read -r cargo_file; do
         project_dir=$(dirname "$cargo_file")
         if [ -d "$project_dir/target" ]; then
-            logger -t cargo-sweep "Cleaning artifacts older than ${SWEEP_DAYS} days in $project_dir"
-            cargo-sweep sweep --time "$SWEEP_DAYS" "$project_dir" 2>/dev/null || true
+            sweep_project "$project_dir"
+            swept_any=true
         fi
-    done
+    done < <(command find "$root" -name "Cargo.toml" -type f 2>/dev/null)
+done
+
+if [ "$swept_any" = false ]; then
+    logger -t cargo-sweep "No Rust project target/ dirs found under: ${CARGO_SWEEP_ROOTS}"
 fi
 SWEEP_SCRIPT_EOF
 
@@ -523,6 +574,10 @@ command cat >/etc/cron.d/cargo-sweep <<CRON_EOF
 # Runs every 6 hours
 # Configuration via environment variables:
 #   CARGO_SWEEP_DAYS - Age threshold in days (default: 14)
+#   CARGO_SWEEP_ROOTS - Colon-separated discovery roots (default: /workspace);
+#                       decoupled from WORKING_DIR so sibling checkouts are swept
+#   CARGO_SWEEP_MAXSIZE - Per-project size ceiling (default: 10GB; empty disables)
+#   CARGO_SWEEP_INSTALLED - Drop non-installed-toolchain artifacts (default: true)
 #   CARGO_SWEEP_DISABLE - Set to "true" to disable
 
 SHELL=/bin/bash
@@ -552,7 +607,7 @@ log_feature_summary \
     --feature "Rust Development Tools" \
     --tools "rust-analyzer,clippy,rustfmt,cargo-watch,cargo-audit,cargo-outdated,cargo-sweep,cargo-expand,cargo-modules,cargo-release,cargo-deny,cargo-geiger,cargo-machete,cargo-nextest,cargo-llvm-cov,sccache,bacon,tokei,hyperfine,just,mdbook,taplo,mold" \
     --paths "${CARGO_HOME},${RUSTUP_HOME}" \
-    --env "CARGO_HOME,RUSTUP_HOME,CARGO_SWEEP_DAYS,CARGO_SWEEP_DISABLE" \
+    --env "CARGO_HOME,RUSTUP_HOME,CARGO_SWEEP_DAYS,CARGO_SWEEP_ROOTS,CARGO_SWEEP_MAXSIZE,CARGO_SWEEP_INSTALLED,CARGO_SWEEP_DISABLE" \
     --commands "rust-analyzer,cargo-clippy,cargo-fmt,cargo-watch,cargo-audit,cargo-outdated,cargo-sweep,cargo-machete,cargo-nextest,cargo-llvm-cov,bacon,mold,ld.mold,rust-lint-all,rust-security-check,rust-watch" \
     --next-steps "Run 'test-rust-dev' to check installed tools. Use 'cargo clippy' for linting, 'cargo fmt' for formatting, 'cargo watch' for hot reload, 'cargo nextest run' for fast tests, 'cargo llvm-cov' for coverage, 'cargo machete' to find unused deps, 'cargo sweep --time 14' to clean old artifacts. Opt into mold by setting linker = \"clang\" / link-arg = \"-fuse-ld=mold\" in .cargo/config.toml."
 

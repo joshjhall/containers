@@ -34,8 +34,10 @@ alias loc='tokei'
 alias bench='hyperfine'
 
 # Cargo sweep aliases
+# sweep-all scans CARGO_SWEEP_ROOTS (default /workspace), not the project-scoped
+# WORKING_DIR, so sibling checkouts are reclaimed too (#678).
 alias sweep='cargo-sweep sweep --time 14'
-alias sweep-all='command find "${WORKING_DIR:-/workspace}" -name "Cargo.toml" -exec dirname {} \; | xargs -I{} cargo-sweep sweep --time 14 {}'
+alias sweep-all='command find ${CARGO_SWEEP_ROOTS:-/workspace} -name "Cargo.toml" -exec dirname {} \; | xargs -I{} cargo-sweep sweep --time 14 {}'
 
 # Unified workflow aliases
 alias rust-lint-all='cargo clippy --all-targets --all-features'

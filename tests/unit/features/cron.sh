@@ -120,6 +120,9 @@ if [ -d "/cache/cargo" ]; then
     export RUSTUP_HOME="/cache/rustup"
     export PATH="${CARGO_HOME}/bin:${PATH}"
 fi
+
+# cargo-sweep discovery roots, decoupled from WORKING_DIR (#678)
+export CARGO_SWEEP_ROOTS="${CARGO_SWEEP_ROOTS:-/workspace}"
 EOF
     chmod 644 "$env_file"
 
@@ -144,6 +147,14 @@ EOF
         assert_true true "Environment file includes WORKING_DIR"
     else
         assert_true false "Environment file missing WORKING_DIR"
+    fi
+
+    # cargo-sweep discovery roots must be exported independently of WORKING_DIR
+    # so the sweep reaches sibling checkouts under /workspace (#678)
+    if command grep -q "CARGO_SWEEP_ROOTS" "$env_file"; then
+        assert_true true "Environment file includes CARGO_SWEEP_ROOTS"
+    else
+        assert_true false "Environment file missing CARGO_SWEEP_ROOTS"
     fi
 }
 

@@ -260,7 +260,7 @@ test_cargo_sweep_aliases() {
     command cat >"$bashrc_file" <<'EOF'
 alias cw='cargo watch'
 alias sweep='cargo-sweep sweep --time 14'
-alias sweep-all='find "${WORKING_DIR:-/workspace}" -name "Cargo.toml" -exec dirname {} \; | xargs -I{} cargo-sweep sweep --time 14 {}'
+alias sweep-all='command find ${CARGO_SWEEP_ROOTS:-/workspace} -name "Cargo.toml" -exec dirname {} \; | xargs -I{} cargo-sweep sweep --time 14 {}'
 EOF
 
     # Check sweep alias
@@ -275,6 +275,14 @@ EOF
         assert_true true "sweep-all alias defined"
     else
         assert_true false "sweep-all alias not defined"
+    fi
+
+    # sweep-all must scan CARGO_SWEEP_ROOTS, not the project-scoped WORKING_DIR,
+    # so sibling checkouts are reclaimed too (#678)
+    if command grep -q "alias sweep-all=.*CARGO_SWEEP_ROOTS" "$bashrc_file"; then
+        assert_true true "sweep-all alias scans CARGO_SWEEP_ROOTS"
+    else
+        assert_true false "sweep-all alias still bound to WORKING_DIR"
     fi
 }
 
@@ -303,23 +311,12 @@ PATH=/usr/local/bin:/usr/bin:/bin
 EOF
     chmod 644 "$cron_job"
 
-    # Create wrapper script matching actual rust-dev.sh output
-    command cat >"$wrapper_script" <<'EOF'
-#!/bin/bash
-# Wrapper script for cargo-sweep cron job
-
-# Load container environment
-if [ -f /etc/container/cron-env ]; then
-    source /etc/container/cron-env
-fi
-
-# Check if disabled
-if [ "${CARGO_SWEEP_DISABLE:-false}" = "true" ]; then
-    exit 0
-fi
-
-SWEEP_DAYS="${CARGO_SWEEP_DAYS:-14}"
-EOF
+    # Extract the REAL wrapper script emitted by lib/features/rust-dev.sh so the
+    # assertions below track the shipped source instead of a hand-copied stub.
+    local feature_script
+    feature_script="$(dirname "${BASH_SOURCE[0]}")/../../../lib/features/rust-dev.sh"
+    command awk '/^command cat >\/usr\/local\/bin\/cargo-sweep-cron <</{f=1;next} /^SWEEP_SCRIPT_EOF$/{f=0} f' \
+        "$feature_script" >"$wrapper_script"
     chmod +x "$wrapper_script"
 
     assert_file_exists "$cron_job"
@@ -359,6 +356,102 @@ EOF
     else
         assert_true false "Wrapper script doesn't source cron environment"
     fi
+
+    # Discovery root must be CARGO_SWEEP_ROOTS (default /workspace), NOT the
+    # project-scoped WORKING_DIR that hid sibling checkouts (#678).
+    if command grep -q 'CARGO_SWEEP_ROOTS:-/workspace' "$wrapper_script"; then
+        assert_true true "Wrapper discovers via CARGO_SWEEP_ROOTS default /workspace"
+    else
+        assert_true false "Wrapper missing CARGO_SWEEP_ROOTS discovery root"
+    fi
+
+    # The old code walked WORKING_DIR directly; ensure that trap is gone.
+    if command grep -q 'find "\$WORKING_DIR"' "$wrapper_script"; then
+        assert_true false "Wrapper still scans WORKING_DIR (would miss siblings)"
+    else
+        assert_true true "Wrapper no longer narrows discovery to WORKING_DIR"
+    fi
+
+    # Size backstop bounds total artifact size even within the age window.
+    if command grep -q 'CARGO_SWEEP_MAXSIZE' "$wrapper_script"; then
+        assert_true true "Wrapper has a size backstop (maxsize)"
+    else
+        assert_true false "Wrapper missing maxsize backstop"
+    fi
+
+    # Reclaimed size is logged so a silent no-op is distinguishable from a clean.
+    if command grep -q 'Reclaimed' "$wrapper_script"; then
+        assert_true true "Wrapper logs reclaimed size"
+    else
+        assert_true false "Wrapper does not log reclaimed size"
+    fi
+}
+
+# Test: cron wrapper discovers sibling checkouts and WORKING_DIR does not narrow it
+test_cargo_sweep_discovery_root() {
+    local wrapper_script="$TEST_TEMP_DIR/usr/local/bin/cargo-sweep-cron"
+    local stub_dir="$TEST_TEMP_DIR/stub-bin"
+    local sweep_log="$TEST_TEMP_DIR/swept-dirs.log"
+    mkdir -p "$(dirname "$wrapper_script")" "$stub_dir"
+
+    # Extract the real wrapper from the shipped feature script.
+    local feature_script
+    feature_script="$(dirname "${BASH_SOURCE[0]}")/../../../lib/features/rust-dev.sh"
+    command awk '/^command cat >\/usr\/local\/bin\/cargo-sweep-cron <</{f=1;next} /^SWEEP_SCRIPT_EOF$/{f=0} f' \
+        "$feature_script" >"$wrapper_script"
+    # Point the cron-env source at a nonexistent path so the host's real
+    # /etc/container/cron-env (which prepends /cache/cargo/bin) can't override
+    # the stub PATH below on a container that actually has it.
+    command sed -i "s#/etc/container/cron-env#$TEST_TEMP_DIR/no-such-cron-env#g" "$wrapper_script"
+    chmod +x "$wrapper_script"
+
+    # Stub cargo-sweep + logger so we record which project dirs get swept without
+    # touching real toolchains. The stub records the last PATH arg per invocation.
+    command cat >"$stub_dir/cargo-sweep" <<STUB
+#!/bin/bash
+# Record the final (path) argument of each sweep call.
+for a in "\$@"; do last="\$a"; done
+printf '%s\n' "\$last" >>"$sweep_log"
+exit 0
+STUB
+    command cat >"$stub_dir/logger" <<'STUB'
+#!/bin/bash
+exit 0
+STUB
+    chmod +x "$stub_dir/cargo-sweep" "$stub_dir/logger"
+
+    # Two sibling Rust projects, mirroring /workspace/containers + /workspace/octarine.
+    local ws="$TEST_TEMP_DIR/workspace"
+    mkdir -p "$ws/containers/target" "$ws/octarine/target"
+    touch "$ws/containers/Cargo.toml" "$ws/octarine/Cargo.toml"
+
+    # Run the wrapper with WORKING_DIR narrowed to a single project (the trap),
+    # roots pointed at the parent, and backstops disabled to keep the stub calls
+    # to one path arg each. BASH_ENV is cleared so /etc/bash_env can't rebuild
+    # PATH under non-interactive bash and shadow the stub (see memory).
+    (
+        export BASH_ENV=""
+        export PATH="$stub_dir:$PATH"
+        export WORKING_DIR="$ws/containers"
+        export CARGO_SWEEP_ROOTS="$ws"
+        export CARGO_SWEEP_MAXSIZE=""
+        export CARGO_SWEEP_INSTALLED="false"
+        bash "$wrapper_script"
+    ) >/dev/null 2>&1
+
+    # The sibling under CARGO_SWEEP_ROOTS must be swept despite WORKING_DIR narrowing.
+    if command grep -q "octarine" "$sweep_log"; then
+        assert_true true "Sibling checkout (octarine) is discovered and swept"
+    else
+        assert_true false "Sibling checkout was NOT swept — WORKING_DIR narrowed the sweep"
+    fi
+
+    # The in-project checkout is still swept.
+    if command grep -q "containers" "$sweep_log"; then
+        assert_true true "Active project (containers) is still swept"
+    else
+        assert_true false "Active project was not swept"
+    fi
 }
 
 # Run tests with setup/teardown
@@ -384,6 +477,7 @@ run_test_with_setup test_wasm_support "Wasm support"
 run_test_with_setup test_rust_dev_verification "Rust dev verification"
 run_test_with_setup test_cargo_sweep_aliases "cargo-sweep aliases"
 run_test_with_setup test_cargo_sweep_cron_job "cargo-sweep cron job"
+run_test_with_setup test_cargo_sweep_discovery_root "cargo-sweep discovery root (siblings)"
 
 # Generate test report
 generate_report
