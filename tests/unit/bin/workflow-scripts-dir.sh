@@ -33,8 +33,11 @@ teardown() {
 }
 
 # Make $1 look like a real bundled scripts dir (config.sh is the validity marker).
+# chmod 0755 explicitly so a group-writable CI umask can't leave the dir
+# group/world-writable and trip the #667 trust gate (which refuses such dirs).
 make_scripts_dir() {
     command mkdir -p "$1"
+    command chmod 0755 "$1"
     command touch "$1/config.sh"
 }
 
@@ -170,6 +173,101 @@ test_dev_mount_fallback() {
 }
 
 # ---------------------------------------------------------------------------
+# 4d. Trust gate (#667): a valid override that is group- OR world-writable is
+#     refused and the resolver falls through. With nothing trusted left, it
+#     fails non-zero — a distrusted dir must never be exec'd by the justfile.
+# ---------------------------------------------------------------------------
+test_group_writable_override_refused() {
+    setup
+    local d="$TEST_DIR/gw-override"
+    make_scripts_dir "$d"
+    command chmod 0775 "$d" # group-writable -> distrusted
+
+    local rc=0
+    run_resolver "WORKFLOW_SCRIPTS_DIR=$d" >/dev/null 2>&1 || rc=$?
+    assert_not_equals "0" "$rc" "group-writable override is refused"
+
+    local err
+    err="$(run_resolver "WORKFLOW_SCRIPTS_DIR=$d" 2>&1 >/dev/null || true)"
+    assert_contains "$err" "refusing" "stderr warns that the distrusted dir was skipped"
+    teardown
+}
+
+test_world_writable_override_refused() {
+    setup
+    local d="$TEST_DIR/ww-override"
+    make_scripts_dir "$d"
+    command chmod 0707 "$d" # world-writable, not group -> still distrusted
+
+    local rc=0
+    run_resolver "WORKFLOW_SCRIPTS_DIR=$d" >/dev/null 2>&1 || rc=$?
+    assert_not_equals "0" "$rc" "world-writable override is refused"
+    teardown
+}
+
+# ---------------------------------------------------------------------------
+# 4e. Trust gate falls THROUGH: a distrusted higher-priority source does not
+#     hard-fail — a trusted lower-priority source still wins. Here a
+#     world-writable CLAUDE_PLUGIN_ROOT/scripts is skipped in favour of a
+#     trusted installed-cache dir.
+# ---------------------------------------------------------------------------
+test_distrusted_source_falls_through_to_trusted() {
+    setup
+    local home="$TEST_DIR/home-ft"
+    local base="$home/.claude/plugins/cache/librarian/workflow"
+    make_scripts_dir "$base/0.3.0/scripts" # trusted (0755)
+
+    local root="$TEST_DIR/plugin-ft"
+    make_scripts_dir "$root/scripts"
+    command chmod 0777 "$root/scripts" # distrusted -> must be skipped
+
+    local got
+    got="$(env -i PATH="$PATH" HOME="$home" \
+        CLAUDE_PLUGIN_ROOT="$root" \
+        WORKFLOW_DEV_MOUNT="$TEST_DIR/no-dev-mount" bash "$SCRIPT")"
+    assert_equals "$base/0.3.0/scripts" "$got" \
+        "distrusted plugin-root is skipped for the trusted installed cache"
+    teardown
+}
+
+# ---------------------------------------------------------------------------
+# 4f. Cache loop applies the trust gate: the newest version dir being
+#     group/world-writable is skipped for the next-highest TRUSTED version
+#     (parallels 4b's config.sh skip, but for the ownership/permission check).
+# ---------------------------------------------------------------------------
+test_installed_cache_skips_untrusted_version() {
+    setup
+    local home="$TEST_DIR/home-uc"
+    local base="$home/.claude/plugins/cache/librarian/workflow"
+    make_scripts_dir "$base/0.10.0/scripts"   # highest...
+    command chmod 0777 "$base/0.10.0/scripts" # ...but world-writable -> skip
+    make_scripts_dir "$base/0.2.0/scripts"    # next-highest, trusted
+
+    local got
+    got="$(env -i PATH="$PATH" HOME="$home" WORKFLOW_DEV_MOUNT="$TEST_DIR/no-dev-mount" bash "$SCRIPT")"
+    assert_equals "$base/0.2.0/scripts" "$got" \
+        "an untrusted (writable) version dir is skipped for the next trusted one"
+    teardown
+}
+
+# ---------------------------------------------------------------------------
+# 4g. Dev-mount fallback is trust-gated too: a group/world-writable dev mount
+#     (the shared multi-tenant case from finding #3) is refused.
+# ---------------------------------------------------------------------------
+test_untrusted_dev_mount_refused() {
+    setup
+    local d="$TEST_DIR/ww-devmount"
+    make_scripts_dir "$d"
+    command chmod 0775 "$d" # group-writable shared mount -> distrusted
+
+    local rc=0
+    env -i PATH="$PATH" HOME="$TEST_DIR/empty-home" WORKFLOW_DEV_MOUNT="$d" \
+        bash "$SCRIPT" >/dev/null 2>&1 || rc=$?
+    assert_not_equals "0" "$rc" "group-writable dev mount is refused"
+    teardown
+}
+
+# ---------------------------------------------------------------------------
 # 5. Nothing resolvable: exit non-zero, print nothing on stdout, guidance on
 #    stderr.
 # ---------------------------------------------------------------------------
@@ -193,6 +291,11 @@ run_test test_invalid_plugin_root_falls_through
 run_test test_installed_cache_newest_wins
 run_test test_installed_cache_skips_invalid_version
 run_test test_dev_mount_fallback
+run_test test_group_writable_override_refused
+run_test test_world_writable_override_refused
+run_test test_distrusted_source_falls_through_to_trusted
+run_test test_installed_cache_skips_untrusted_version
+run_test test_untrusted_dev_mount_refused
 run_test test_not_found
 
 generate_report

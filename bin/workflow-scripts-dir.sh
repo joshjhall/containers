@@ -28,6 +28,15 @@
 # (config.sh is the source-of-truth sibling every script sources), so a stale
 # empty dir never shadows a real one further down the list.
 #
+# Trust boundary (#667): the justfile `exec bash`es the scripts in the resolved
+# dir, so a resolved dir is accepted only when it is TRUSTED — owned by the
+# invoking user AND not group/world-writable. That closes the theme surfaced by
+# #609's review: a cache "version" dir, an env-override, or a shared dev mount
+# that an attacker can write into would otherwise be exec'd. A distrusted source
+# does not hard-fail; it is skipped so a trusted source further down the list
+# still wins (a trusted lower-priority dir beats an untrusted higher-priority
+# one).
+#
 # Usage: workflow-scripts-dir.sh        # prints the dir, or fails with guidance
 #        scripts="$(workflow-scripts-dir.sh)"
 set -euo pipefail
@@ -38,14 +47,44 @@ is_scripts_dir() {
     [ -n "${1:-}" ] && [ -f "$1/config.sh" ]
 }
 
+# A candidate is trusted only if it is owned by the invoking user and is not
+# group- or world-writable — otherwise another principal could plant/replace the
+# scripts the justfile is about to exec. `find -user`/`find -perm -MODE` are used
+# deliberately: the resolver runs on macOS BSD + Alpine busybox too, where
+# `stat`'s formatting flags differ (`-c` GNU vs `-f` BSD), while these `find`
+# primitives are common to GNU/BSD/busybox. `-perm -0020`/`-perm -0002` match
+# when the group-/other-write bit is set; a match means "writable" ⇒ distrusted.
+is_trusted_dir() {
+    local dir="${1:-}" owner
+    [ -n "$dir" ] && [ -d "$dir" ] || return 1
+    owner="$(/usr/bin/id -un)"
+    # Owned by us?
+    [ -n "$(/usr/bin/find "$dir" -maxdepth 0 -user "$owner" 2>/dev/null)" ] || return 1
+    # Group- or world-writable? (any match ⇒ not trusted)
+    [ -z "$(/usr/bin/find "$dir" -maxdepth 0 \( -perm -0020 -o -perm -0002 \) 2>/dev/null)" ]
+}
+
+# Accept a candidate only when it both holds the bundled scripts AND is trusted.
+# On a valid-but-distrusted dir, warn once and return non-zero so the caller
+# falls through to the next resolution source.
+accept() {
+    local dir="${1:-}"
+    is_scripts_dir "$dir" || return 1
+    if ! is_trusted_dir "$dir"; then
+        command echo "workflow-scripts-dir: refusing $dir — not owned by $(/usr/bin/id -un) or is group/world-writable; skipping (#667)." >&2
+        return 1
+    fi
+    return 0
+}
+
 # 1. Explicit override.
-if [ -n "${WORKFLOW_SCRIPTS_DIR:-}" ] && is_scripts_dir "$WORKFLOW_SCRIPTS_DIR"; then
+if [ -n "${WORKFLOW_SCRIPTS_DIR:-}" ] && accept "$WORKFLOW_SCRIPTS_DIR"; then
     /usr/bin/printf '%s\n' "$WORKFLOW_SCRIPTS_DIR"
     exit 0
 fi
 
 # 2. Inside Claude Code: the plugin root is injected.
-if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] && is_scripts_dir "$CLAUDE_PLUGIN_ROOT/scripts"; then
+if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] && accept "$CLAUDE_PLUGIN_ROOT/scripts"; then
     /usr/bin/printf '%s\n' "$CLAUDE_PLUGIN_ROOT/scripts"
     exit 0
 fi
@@ -67,7 +106,7 @@ if [ -d "$cache_base" ]; then
     fi
     while IFS= read -r ver; do
         [ -z "$ver" ] && continue
-        if is_scripts_dir "$cache_base/$ver/scripts"; then
+        if accept "$cache_base/$ver/scripts"; then
             /usr/bin/printf '%s\n' "$cache_base/$ver/scripts"
             exit 0
         fi
@@ -78,13 +117,14 @@ fi
 #    Path overridable via WORKFLOW_DEV_MOUNT (mainly so tests can point the
 #    last-resort probe at a controlled location); defaults to the compose mount.
 dev_mount="${WORKFLOW_DEV_MOUNT:-/workspace/librarian/plugins/workflow/scripts}"
-if is_scripts_dir "$dev_mount"; then
+if accept "$dev_mount"; then
     /usr/bin/printf '%s\n' "$dev_mount"
     exit 0
 fi
 
-command echo "workflow-scripts-dir: could not locate the librarian 'workflow' plugin scripts." >&2
+command echo "workflow-scripts-dir: could not locate a trusted librarian 'workflow' plugin scripts dir." >&2
 command echo "  Looked in: \$WORKFLOW_SCRIPTS_DIR, \$CLAUDE_PLUGIN_ROOT/scripts," >&2
 command echo "  $cache_base/*/scripts, and $dev_mount." >&2
+command echo "  A candidate must contain config.sh AND be owned by $(/usr/bin/id -un) and not group/world-writable (#667)." >&2
 command echo "  Install the librarian marketplace (see docs/claude-code/) or set WORKFLOW_SCRIPTS_DIR." >&2
 exit 1
