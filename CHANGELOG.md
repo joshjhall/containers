@@ -5,6 +5,42 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.19.11] - 2026-07-03
+
+### Added
+
+- Pin third-party GitHub Actions to commit SHAs (#677)
+- Scope devcontainer sudo to a command allowlist (#681)
+
+### CI/CD
+
+- Cut PR-tier feature builds + slim merge tier during v5 transition (#680)
+
+### Changed
+
+- Trust-gate workflow-scripts-dir.sh before exec (#685)
+
+### Documentation
+
+- Add session memories on golem/ETXTBSY/ship-review learnings
+
+### Fixed
+
+- Enforce 2-space YAML indent in Zed + lint hook
+- Reconcile Docker socket ownership on every boot (#674) (#679)
+- Sweep sibling cargo checkouts via CARGO_SWEEP_ROOTS (#683)
+- Make version check/update SHA-pin-aware for actions
+
+### Miscellaneous
+
+- Route event_name/base_ref through env in lint-ai-templates (#686)
+- Update pinned tool versions
+
+### Testing
+
+- Cover ETXTBSY retry-exhaustion + stderr-under-parallel paths (#676)
+- Cover run_version_check retry + validate::check ETXTBSY paths (#684)
+
 ## [4.19.10] - 2026-07-02
 
 ### Added
@@ -2052,6 +2088,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix prettier and markdownlint formatting in README
 - Format TLS documentation files
 
+[4.19.11]: https://github.com/joshjhall/containers/compare/v4.19.10...v4.19.11
 [4.19.10]: https://github.com/joshjhall/containers/compare/v4.19.9...v4.19.10
 [4.19.9]: https://github.com/joshjhall/containers/compare/v4.19.8...v4.19.9
 [4.19.8]: https://github.com/joshjhall/containers/compare/v4.19.7...v4.19.8
