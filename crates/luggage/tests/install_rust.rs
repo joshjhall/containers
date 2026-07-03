@@ -226,7 +226,14 @@ fn run_with_report_on_verification_failure_populates_error_class() {
     assert!(report.duration_seconds >= 0.0);
 }
 
+// Serialized alongside the other exec-dependent tests: it execs a real shim
+// via the post-install validate step, so under parallel load it races the
+// write-then-exec ETXTBSY window like the rest. Left un-serialized it ran
+// concurrently with the 8-thread/40-iter parallel regression tests below,
+// where sustained fork pressure could in theory exhaust the 3-retry/50ms
+// budget and spuriously fail. See issue #576 gap 4 (and #518).
 #[test]
+#[serial_test::serial]
 fn run_with_report_on_success_captures_validate_output() {
     let roots = TempDir::new().unwrap();
     let resolved = resolve_rust();
@@ -403,6 +410,58 @@ fn already_installed_survives_etxtbsy_under_parallel_write_then_exec_stderr() {
                         already_installed("rust", &version, dir.path()),
                         "freshly-written stderr shim must be seen as installed despite \
                          ETXTBSY (thread {t}, iter {i})",
+                    );
+                }
+            })
+        })
+        .collect();
+
+    for h in handles {
+        h.join().expect("worker thread panicked");
+    }
+}
+
+/// Regression companion to
+/// `already_installed_survives_etxtbsy_under_parallel_write_then_exec`, for the
+/// *validate* path (issue #576 gap 3). The same write-then-exec race applies to
+/// `validate::check`, but there retry exhaustion surfaces as `ValidationFailed`
+/// — a more severe outcome than a spurious idempotency skip, since it aborts a
+/// real install. Hammering `validate::check` from several threads reproduces the
+/// #518 fork pressure directly against that path: with the bounded ETXTBSY
+/// retry in place every iteration must validate cleanly and return the captured
+/// version. Deliberately *not* serialized — the cross-thread parallelism is the
+/// condition under test.
+#[test]
+fn validate_check_survives_etxtbsy_under_parallel_write_then_exec() {
+    use std::collections::BTreeMap;
+    use std::thread;
+
+    use luggage::installer::validate::check;
+
+    const THREADS: usize = 8;
+    const ITERS: usize = 40;
+
+    let handles: Vec<_> = (0..THREADS)
+        .map(|t| {
+            thread::spawn(move || {
+                for i in 0..ITERS {
+                    let dir = TempDir::new().unwrap();
+                    let version = format!("1.95.{t}{i}");
+                    write_version_shim(
+                        &dir.path().join("rustc"),
+                        &format!("rustc {version} (regression)"),
+                    );
+                    let captured = check("rust", &version, dir.path(), &BTreeMap::new())
+                        .unwrap_or_else(|e| {
+                            panic!(
+                                "freshly-written shim must validate despite ETXTBSY \
+                                 (thread {t}, iter {i}): {e}"
+                            )
+                        });
+                    assert!(
+                        captured.contains(&version),
+                        "validate must capture the just-written version (thread {t}, iter {i}), \
+                         got: {captured}",
                     );
                 }
             })
