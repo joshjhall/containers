@@ -418,6 +418,19 @@
             }
           },
           "added": "2026-06-14"
+        },
+        "2.5.2": {
+          "checksums": {
+            "amd64": {
+              "sha256": "ccd6adc50bb997bf4f5f91140255977f3a5cd12cbdde82d5406b8d7c7154a96b",
+              "url": "https://github.com/biomejs/biome/releases/download/@biomejs/biome@2.5.2/biome-linux-x64"
+            },
+            "arm64": {
+              "sha256": "fe69df99abdc101a66597dfeb720dd40818fc58fe96d6c53b9c2e32c5065ab7a",
+              "url": "https://github.com/biomejs/biome/releases/download/@biomejs/biome@2.5.2/biome-linux-arm64"
+            }
+          },
+          "added": "2026-07-03"
         }
       }
     },
@@ -563,6 +576,19 @@
             }
           },
           "added": "2026-04-19"
+        },
+        "0.55.1": {
+          "checksums": {
+            "amd64": {
+              "sha256": "14f40c47b2a1c79ced321b62bf177f88f064d7b11c41f1ee28488ee0d9391bb2",
+              "url": "https://github.com/dprint/dprint/releases/download/0.55.1/dprint-x86_64-unknown-linux-gnu.zip"
+            },
+            "arm64": {
+              "sha256": "f5ea3a5c196b0bcd91aa0af7b5ef7366dbf87e8315a6797c47bff081a8d4e398",
+              "url": "https://github.com/dprint/dprint/releases/download/0.55.1/dprint-aarch64-unknown-linux-gnu.zip"
+            }
+          },
+          "added": "2026-07-03"
         }
       }
     },
@@ -683,6 +709,19 @@
             }
           },
           "added": "2026-06-15"
+        },
+        "1.2.0": {
+          "checksums": {
+            "amd64": {
+              "sha256": "a6db0d1d13fe8be96caae70bd326ef5497a3b4d3e78636ff8250046945c33b2d",
+              "url": "https://github.com/colbymchenry/codegraph/releases/download/v1.2.0/codegraph-linux-x64.tar.gz"
+            },
+            "arm64": {
+              "sha256": "30ca3eeef61aecd92f58059f635460a674945e6e382c9c3f70d5a9ef1893185e",
+              "url": "https://github.com/colbymchenry/codegraph/releases/download/v1.2.0/codegraph-linux-arm64.tar.gz"
+            }
+          },
+          "added": "2026-07-03"
         }
       }
     },
@@ -705,7 +744,7 @@
     }
   },
   "metadata": {
-    "generated": "2026-06-21T03:09:33Z",
+    "generated": "2026-07-03T18:15:34Z",
     "description": "Pinned checksums for language runtime downloads",
     "note": "This file is automatically updated by check-versions.sh and should grow over time. Old checksums are never deleted to strengthen security for older versions and enable reproducible builds."
   }
