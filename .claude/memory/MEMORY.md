@@ -22,6 +22,7 @@
 - [Luggage vendored catalog](luggage-vendored-catalog.md) — builds read vendored snapshot (crates/luggage/testdata/catalog), not sibling repo
 - [Luggage release deferred until v5](luggage-release-deferred-until-v5.md) — no apt/Homebrew/cargo release for luggage until v5 substantially complete
 - [Auto-merge needs explicit consent](feedback_auto_merge_consent.md) — gh pr merge --auto needs per-turn authorization, separate from default-ship
+- [Golem autonomy contract](feedback_golem_autonomy_contract.md) — auto-approve push/PR-create + auto-merge green PRs; escalate only real failures/plan-gates/conflicts, in-conversation not via golem attach
 - [Parallel automation (golem) initiative](parallel-automation-golem-initiative.md) — golem = per-issue sub-orchestrator; order #523→…→#525
 - [Worktree push hooks vs gitignore](worktree-push-hooks-gitignore.md) — pushing from .worktrees/ breaks osv-scanner (#556) + compose-validate
 - [Golem supervised auto mode](golem-supervised-auto-mode.md) — pass `--permission-mode auto` EXPLICITLY; worktree won't inherit it (#585)
@@ -50,4 +51,8 @@
 - [golem-notify wiring moved to plugin](golem-notify-wiring-moved-to-plugin.md) — #611 deleted the build-bound hook; workflow plugin's hooks.json auto-wires golem-notify via ${CLAUDE_PLUGIN_ROOT}, not settings.json
 - [CI lint fails on deleted paths](ci-lint-fails-on-deleted-paths.md) — Run Tests PR-lint fed deleted files to lefthook; rumdl/shfmt/shellcheck error on missing paths. Fixed with --diff-filter=d (#611/PR#669)
 - [Ship review harness provider error](ship-review-harness-provider-error.md) — next-issue-ship adversarial review can 400 (provider resolve); clean:false + 0 tokens = harness failure, not a passing review — degrade gracefully
+- [Ship review harness agent-type missing](ship-review-harness-agent-type-missing.md) — ship-issue review harness hardcodes dev-core:code-reviewer; absent in golem env → fails fast; treat as harness-unavailable, manual pass + proceed (#667)
 - [Librarian signature verification](librarian-signature-verification.md) — #671: build verifies signed release tarball via cosign (not git clone); signing starts v0.4.0, default pin bumped, LIBRARIAN_SIGNER_IDENTITY/ISSUER anchor
+- [ETXTBSY held-fd is Linux-only](etxtbsy-held-fd-linux-only.md) — inducing ETXTBSY via a held write fd across exec works only on Linux; gate such tests target_os="linux" (macOS exec succeeds) (#589)
+- [Golem launch bare slash-command fails](golem-launch-bare-slash-command-fails.md) — golem-launch.sh passes bare /next-issue but plugin registers /workflow:next-issue; non-interactive prompt can't expand prefix → "unknown skill", golem idles; use namespaced form
+- [ETXTBSY test coverage split #676/#576](etxtbsy-test-coverage-split-676-576.md) — PR #575 ETXTBSY-retry test gaps split: #676 did exhaustion+stderr (1c); #576/#684 did retry-succeed/non-ETXTBSY (1a/1b), validate mapping (2), parallel validate (3), serialize (4)
