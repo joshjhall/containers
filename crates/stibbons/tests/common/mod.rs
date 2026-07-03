@@ -1,4 +1,9 @@
 //! Shared test helpers for stibbons integration tests.
+//!
+//! This module is compiled independently into each integration-test binary,
+//! and each binary uses only a subset of the helpers, so unused-item warnings
+//! here are expected and suppressed.
+#![allow(dead_code)]
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
@@ -32,6 +37,34 @@ pub fn run_init_with_args(cwd: &Path, extra_args: &[&str]) -> Output {
         .args(extra_args)
         .output()
         .expect("failed to spawn stibbons")
+}
+
+/// Run `stibbons add <args...>` in `cwd`.
+pub fn run_add(cwd: &Path, args: &[&str]) -> Output {
+    Command::new(stibbons_bin())
+        .current_dir(cwd)
+        .arg("add")
+        .args(args)
+        .output()
+        .expect("failed to spawn stibbons")
+}
+
+/// Run `stibbons remove <args...>` in `cwd`.
+pub fn run_remove(cwd: &Path, args: &[&str]) -> Output {
+    Command::new(stibbons_bin())
+        .current_dir(cwd)
+        .arg("remove")
+        .args(args)
+        .output()
+        .expect("failed to spawn stibbons")
+}
+
+/// Seed a project by running `init --non-interactive --config <fixture>` in
+/// `cwd`, asserting success. Returns nothing; the tempdir now holds a real
+/// `.igor.yml` + generated files.
+pub fn seed_project(cwd: &Path, fixture: &str) {
+    let out = run_init_noninteractive(cwd, fixture);
+    assert_success(&out);
 }
 
 /// Assert the command exited with code 0, otherwise panic showing stderr.

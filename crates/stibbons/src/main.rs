@@ -1,14 +1,16 @@
 //! Stibbons: Host orchestrator for the containers build system.
 
+mod render;
 mod wizard;
 
 use std::collections::{BTreeMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use clap::{Parser, Subcommand};
-use containers_common::config::{AgentConfig, IgorConfig, ProjectConfig};
-use containers_common::feature::{self, Registry, Selection};
-use containers_common::template::{RenderContext, Renderer};
+use containers_common::config::{AgentConfig, IgorConfig, ProjectConfig, ServiceConfig};
+use containers_common::feature::{self, AddOptions, Registry, RemoveOptions, Selection};
+use containers_common::generate::FileAction;
+use containers_common::template::RenderContext;
 
 /// Stibbons - Container build system orchestrator.
 ///
@@ -37,6 +39,48 @@ enum Commands {
         #[arg(long)]
         config: Option<PathBuf>,
     },
+
+    /// Add one or more features to an existing project and re-render.
+    Add {
+        /// Feature IDs to add (e.g. `python`, `docker`).
+        #[arg(required = true, value_name = "FEATURE")]
+        features: Vec<String>,
+
+        /// Also add the `<feature>_dev` companion of each feature.
+        #[arg(long)]
+        dev: bool,
+
+        /// Preview the changes without writing any files.
+        #[arg(long)]
+        dry_run: bool,
+
+        /// Overwrite generated files even if they were modified locally.
+        #[arg(long)]
+        force: bool,
+    },
+
+    /// Remove one or more features from an existing project and re-render.
+    Remove {
+        /// Feature IDs to remove (e.g. `python`, `docker`).
+        #[arg(required = true, value_name = "FEATURE")]
+        features: Vec<String>,
+
+        /// Also remove features that transitively depend on the target(s).
+        #[arg(long)]
+        cascade: bool,
+
+        /// Remove only the `<feature>_dev` companion, keeping the runtime feature.
+        #[arg(long)]
+        dev_only: bool,
+
+        /// Preview the changes without writing any files.
+        #[arg(long)]
+        dry_run: bool,
+
+        /// Overwrite generated files even if they were modified locally.
+        #[arg(long)]
+        force: bool,
+    },
 }
 
 fn main() {
@@ -57,6 +101,18 @@ fn main() {
                 std::process::exit(1);
             }
         }
+        Some(Commands::Add { features, dev, dry_run, force }) => {
+            if let Err(e) = run_add(&features, dev, WriteMode { dry_run, force }) {
+                eprintln!("Error: {e}");
+                std::process::exit(1);
+            }
+        }
+        Some(Commands::Remove { features, cascade, dev_only, dry_run, force }) => {
+            if let Err(e) = run_remove(&features, cascade, dev_only, WriteMode { dry_run, force }) {
+                eprintln!("Error: {e}");
+                std::process::exit(1);
+            }
+        }
         None => {
             tracing::info!("stibbons v{}", env!("CARGO_PKG_VERSION"));
             eprintln!(
@@ -66,6 +122,16 @@ fn main() {
     }
 }
 
+/// How `add`/`remove` write generated files: whether to preview only, and
+/// whether to overwrite locally-modified files.
+#[derive(Debug, Clone, Copy)]
+struct WriteMode {
+    /// Preview the plan without writing anything.
+    dry_run: bool,
+    /// Overwrite files even if they were modified locally.
+    force: bool,
+}
+
 /// Inputs to template rendering, produced by either the wizard or a loaded config.
 struct InitInputs {
     project: ProjectConfig,
@@ -73,6 +139,10 @@ struct InitInputs {
     selection: Selection,
     versions: BTreeMap<String, String>,
     agents: AgentConfig,
+    /// Service definitions carried through from an existing config (empty from
+    /// the wizard). Preserved on save so re-running `init` on a config with
+    /// services does not silently drop them.
+    services: BTreeMap<String, ServiceConfig>,
 }
 
 fn run_init(
@@ -123,6 +193,7 @@ fn load_from_wizard(reg: &Registry) -> Result<InitInputs, Box<dyn std::error::Er
         selection,
         versions: BTreeMap::new(),
         agents: AgentConfig::default(),
+        services: BTreeMap::new(),
     })
 }
 
@@ -138,6 +209,7 @@ fn load_from_config(reg: &Registry, path: &Path) -> Result<InitInputs, Box<dyn s
         selection,
         versions: cfg.versions,
         agents: cfg.agents,
+        services: cfg.services,
     })
 }
 
@@ -156,7 +228,13 @@ fn fill_default_versions(
     }
 }
 
-/// Render templates, write the 5 files, compute hashes, and save `.igor.yml`.
+/// Render templates, write the generated files, compute hashes, and save
+/// `.igor.yml`.
+///
+/// `init` deliberately writes every file unconditionally (its contract is
+/// "regenerate + warn on overwrite"), so it renders with `force = true` and
+/// does not consult recorded hashes. `add` / `remove` use the same
+/// [`render::plan_render`] primitive but honor per-file drift detection.
 fn write_outputs(inputs: &InitInputs, reg: &Registry) -> Result<(), Box<dyn std::error::Error>> {
     let ctx = RenderContext::new(
         inputs.project.clone(),
@@ -167,17 +245,11 @@ fn write_outputs(inputs: &InitInputs, reg: &Registry) -> Result<(), Box<dyn std:
         inputs.agents.clone(),
     );
 
-    let renderer = Renderer::new()?;
-    let files = [
-        (".devcontainer/docker-compose.yml", "docker-compose.yml.tmpl"),
-        (".devcontainer/devcontainer.json", "devcontainer.json.tmpl"),
-        (".devcontainer/.env", "env.tmpl"),
-        (".env.example", "env-example.tmpl"),
-        (".igor.yml", "igor.yml.tmpl"),
-    ];
-
-    let existing: Vec<&str> =
-        files.iter().filter(|(p, _)| Path::new(p).exists()).map(|(p, _)| *p).collect();
+    let existing: Vec<&str> = render::GENERATED_FILES
+        .iter()
+        .filter(|(p, _)| Path::new(p).exists())
+        .map(|(p, _)| *p)
+        .collect();
     if !existing.is_empty() {
         println!("\nExisting files will be overwritten:");
         for path in &existing {
@@ -186,15 +258,10 @@ fn write_outputs(inputs: &InitInputs, reg: &Registry) -> Result<(), Box<dyn std:
         println!();
     }
 
-    let mut generated_hashes = BTreeMap::new();
-    for (path, template) in &files {
-        let content = renderer.render(template, &ctx)?;
-        if let Some(parent) = Path::new(path).parent() {
-            std::fs::create_dir_all(parent)?;
-        }
-        std::fs::write(path, &content)?;
-        generated_hashes.insert((*path).to_string(), sha256_hex(&content));
-    }
+    // init overwrites everything: an empty old-hash map + force = true means
+    // every file classifies as Created or Forced and is written.
+    let plan = render::plan_render(&ctx, &BTreeMap::new(), true)?;
+    render::commit_render(&plan)?;
 
     let mut explicit_list: Vec<String> = inputs.selection.explicit.iter().cloned().collect();
     explicit_list.sort();
@@ -205,14 +272,15 @@ fn write_outputs(inputs: &InitInputs, reg: &Registry) -> Result<(), Box<dyn std:
         project: inputs.project.clone(),
         features: explicit_list,
         versions: inputs.versions.clone(),
-        generated: generated_hashes,
+        generated: plan.new_hashes,
         agents: inputs.agents.clone(),
+        services: inputs.services.clone(),
         ..IgorConfig::default()
     };
     state.save(".igor.yml")?;
 
     println!("\nFiles generated successfully:");
-    for (path, _) in &files {
+    for (path, _) in render::GENERATED_FILES {
         println!("  {path}");
     }
     println!("\nNext steps:");
@@ -224,11 +292,175 @@ fn write_outputs(inputs: &InitInputs, reg: &Registry) -> Result<(), Box<dyn std:
     Ok(())
 }
 
-/// Returns the SHA-256 hex digest of a string.
-fn sha256_hex(content: &str) -> String {
-    use sha2::{Digest, Sha256};
-    let hash = Sha256::digest(content.as_bytes());
-    format!("{hash:x}")
+/// Loads the project's `.igor.yml`, erroring if the project has not been
+/// initialized yet.
+fn load_project_config() -> Result<IgorConfig, Box<dyn std::error::Error>> {
+    if !Path::new(".igor.yml").exists() {
+        return Err("no .igor.yml found; run `stibbons init` first".into());
+    }
+    IgorConfig::load(".igor.yml")
+}
+
+/// Adds one or more features to the current project and re-renders.
+fn run_add(
+    features: &[String],
+    dev: bool,
+    mode: WriteMode,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let reg = Registry::new();
+    let cfg = load_project_config()?;
+
+    let explicit: HashSet<String> = cfg.features.iter().cloned().collect();
+    let outcome = feature::plan_add(features, &explicit, AddOptions { dev }, &reg)?;
+    let selection = feature::resolve(&outcome.explicit, &reg);
+
+    let mut versions = cfg.versions.clone();
+    feature::fill_default_versions(&mut versions, &selection.all(), &reg);
+
+    // Report the net additions (explicit + newly auto-resolved) for the header.
+    let added: Vec<String> = diff_added(&explicit, &selection);
+    if added.is_empty() && outcome.skipped.iter().all(|s| explicit.contains(s)) {
+        println!("Nothing to add.");
+        return Ok(());
+    }
+    println!("Adding: {}", join_or_none(&added));
+    if !outcome.skipped.is_empty() {
+        let mut skipped = outcome.skipped;
+        skipped.sort();
+        println!("Already enabled (skipped): {}", skipped.join(", "));
+    }
+
+    apply_and_render(&cfg, &selection, versions, &reg, mode)
+}
+
+/// Removes one or more features from the current project and re-renders.
+fn run_remove(
+    features: &[String],
+    cascade: bool,
+    dev_only: bool,
+    mode: WriteMode,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let reg = Registry::new();
+    let cfg = load_project_config()?;
+
+    let explicit: HashSet<String> = cfg.features.iter().cloned().collect();
+    let new_explicit =
+        feature::plan_remove(features, &explicit, RemoveOptions { cascade, dev_only }, &reg)?;
+    let selection = feature::resolve(&new_explicit, &reg);
+
+    // The actual departures: features explicit before but gone now (includes
+    // any cascaded dependents).
+    let mut removed: Vec<String> = explicit.difference(&new_explicit).cloned().collect();
+    removed.sort();
+    println!("Removing: {}", join_or_none(&removed));
+
+    let mut versions = cfg.versions.clone();
+    feature::prune_versions(&mut versions, &selection.all(), &reg);
+    feature::fill_default_versions(&mut versions, &selection.all(), &reg);
+
+    apply_and_render(&cfg, &selection, versions, &reg, mode)
+}
+
+/// Shared tail of `add`/`remove`: render the generated files against the new
+/// selection, print the per-file plan, and (unless `dry_run`) write the files
+/// and save the updated `.igor.yml`.
+fn apply_and_render(
+    cfg: &IgorConfig,
+    selection: &Selection,
+    versions: BTreeMap<String, String>,
+    reg: &Registry,
+    mode: WriteMode,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let ctx = RenderContext::new(
+        cfg.project.clone(),
+        &cfg.containers_dir,
+        selection,
+        reg,
+        versions.clone(),
+        cfg.agents.clone(),
+    );
+
+    let plan = render::plan_render(&ctx, &cfg.generated, mode.force)?;
+    print_render_plan(&plan);
+
+    if mode.dry_run {
+        println!("\nDry run — no files written.");
+        return Ok(());
+    }
+
+    render::commit_render(&plan)?;
+
+    // Bookkeeping: keep the new hash for files we wrote or that were already
+    // current; preserve the previous hash for skipped (user-modified) files so
+    // they are not re-detected as stale next run. The state file (`.igor.yml`)
+    // is always rewritten via `save` below, so it always takes the fresh hash.
+    let mut generated = BTreeMap::new();
+    for (path, action) in &plan.actions {
+        let hash = match action {
+            FileAction::Skipped if path != render::STATE_FILE => cfg.generated.get(path).cloned(),
+            _ => plan.new_hashes.get(path).cloned(),
+        };
+        if let Some(h) = hash {
+            generated.insert(path.clone(), h);
+        }
+    }
+
+    let mut features: Vec<String> = selection.explicit.iter().cloned().collect();
+    features.sort();
+
+    // Carry through everything not owned by this operation. Unlike the Go
+    // predecessor (which dropped agents/services on save), we preserve them.
+    let state = IgorConfig {
+        schema_version: cfg.schema_version,
+        containers_ref: cfg.containers_ref.clone(),
+        containers_dir: cfg.containers_dir.clone(),
+        project: cfg.project.clone(),
+        features,
+        versions,
+        generated,
+        agents: cfg.agents.clone(),
+        services: cfg.services.clone(),
+    };
+    state.save(".igor.yml")?;
+
+    Ok(())
+}
+
+/// Returns the sorted set of feature IDs newly present in `selection` relative
+/// to the `previous` explicit set (both explicit additions and features pulled
+/// in by dependency resolution).
+fn diff_added(previous: &HashSet<String>, selection: &Selection) -> Vec<String> {
+    let mut added: Vec<String> = selection.all().difference(previous).cloned().collect();
+    added.sort();
+    added
+}
+
+/// Joins a list for display, or `(none)` when empty.
+fn join_or_none(items: &[String]) -> String {
+    if items.is_empty() { "(none)".to_string() } else { items.join(", ") }
+}
+
+/// Prints the per-file action table for a render plan.
+///
+/// The state file (`.igor.yml`) is omitted: it is always rewritten via
+/// `IgorConfig::save`, so classifying it against the templated hash would show
+/// a misleading `skip`/`update` line.
+fn print_render_plan(plan: &render::RenderPlan) {
+    println!("\nPlanned changes:");
+    for (path, action) in &plan.actions {
+        if path == render::STATE_FILE {
+            continue;
+        }
+        match action {
+            FileAction::Created => println!("  create    {path}"),
+            FileAction::Updated => println!("  update    {path}"),
+            FileAction::Unchanged => println!("  unchanged {path}"),
+            FileAction::Forced => println!("  overwrite {path} (forced)"),
+            FileAction::Skipped => {
+                println!("  skip      {path} (modified locally; use --force to overwrite)");
+            }
+        }
+    }
 }
 
 /// Detects the containers submodule directory.
@@ -258,5 +490,21 @@ mod tests {
         let cmd = Cli::command();
         let init = cmd.get_subcommands().find(|s| s.get_name() == "init");
         assert!(init.is_some(), "init subcommand should exist");
+    }
+
+    #[test]
+    fn verify_add_subcommand() {
+        use clap::CommandFactory;
+        let cmd = Cli::command();
+        let add = cmd.get_subcommands().find(|s| s.get_name() == "add");
+        assert!(add.is_some(), "add subcommand should exist");
+    }
+
+    #[test]
+    fn verify_remove_subcommand() {
+        use clap::CommandFactory;
+        let cmd = Cli::command();
+        let remove = cmd.get_subcommands().find(|s| s.get_name() == "remove");
+        assert!(remove.is_some(), "remove subcommand should exist");
     }
 }
