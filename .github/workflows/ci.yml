@@ -188,9 +188,12 @@ jobs:
 
       - name: Check for template changes
         id: filter
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
         run: |
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            CHANGED=$(git diff --name-only origin/${{ github.base_ref }}...HEAD -- \
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            CHANGED=$(git diff --name-only "origin/${BASE_REF}...HEAD" -- \
               'lib/features/templates/claude/' \
               'docs/claude-code/skills-and-agents.md' 2>/dev/null | head -1)
             if [ -n "$CHANGED" ]; then
