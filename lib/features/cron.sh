@@ -87,6 +87,12 @@ if [ -d "/cache/cargo" ]; then
     export PATH="${CARGO_HOME}/bin:${PATH}"
 fi
 
+# cargo-sweep discovery roots (colon-separated). Deliberately DECOUPLED from
+# WORKING_DIR: deployments narrow WORKING_DIR to a single project dir, which
+# would hide sibling checkouts under /workspace from the sweep. Default to the
+# /workspace parent so every sibling target/ is reclaimed (#678).
+export CARGO_SWEEP_ROOTS="${CARGO_SWEEP_ROOTS:-/workspace}"
+
 # Python environment (if installed)
 if [ -d "/cache/pip" ]; then
     export PIP_CACHE_DIR="/cache/pip"

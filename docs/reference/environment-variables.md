@@ -347,6 +347,24 @@ the `containers-codegraph` named volume. Drop that volume
 | -------------------------------- | ------- | ---------------------------------- |
 | `BUNDLE_AUDIT_UPDATE_ON_INSTALL` | `true`  | Update vulnerability DB on install |
 
+### Rust Configuration
+
+The `cargo-sweep` cron job (installed with `INCLUDE_RUST_DEV=true`) runs every
+6 hours to reclaim old Rust build artifacts.
+
+| Variable                | Default      | Description                                                                                    |
+| ----------------------- | ------------ | ---------------------------------------------------------------------------------------------- |
+| `CARGO_SWEEP_ROOTS`     | `/workspace` | Colon-separated discovery roots. Decoupled from `WORKING_DIR` so sibling checkouts are swept   |
+| `CARGO_SWEEP_DAYS`      | `14`         | Age threshold — remove artifacts older than N days                                             |
+| `CARGO_SWEEP_MAXSIZE`   | `10GB`       | Per-project size ceiling backstop (empty disables). Unit defaults to MB                        |
+| `CARGO_SWEEP_INSTALLED` | `true`       | Also drop artifacts from toolchains no longer installed via rustup                             |
+| `CARGO_SWEEP_DISABLE`   | `false`      | Set to `true` to disable the automatic sweep entirely                                          |
+
+`CARGO_SWEEP_ROOTS` is deliberately independent of `WORKING_DIR`: deployments
+narrow `WORKING_DIR` to a single project directory (e.g. `/workspace/containers`),
+which would hide sibling checkouts under `/workspace` (e.g. `/workspace/octarine`)
+from the sweep. The cron scans `/workspace` broadly by design.
+
 ### Bindfs Configuration
 
 | Variable            | Default | Description                                                         |
