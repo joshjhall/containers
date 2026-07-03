@@ -889,11 +889,78 @@ EOF
     assert_true "$ok" "Unmapped tool produces an error and applies nothing"
 }
 
+# ============================================================================
+# Test: pin_action rewrites a SHA-pinned action to a fresh SHA pin + comment
+# ============================================================================
+# Hermetic: mock resolve_action_sha so the test never hits the network. The
+# regression this guards is the corrupting rewrite — against an already
+# SHA-pinned ref, the old tag-only sed produced `@v0.37.0<oldsha>`.
+test_pin_action_rewrites_sha_pin() {
+    source "$PROJECT_ROOT/bin/lib/common.sh"
+    source "$PROJECT_ROOT/bin/lib/version-utils.sh"
+    source "$PROJECT_ROOT/bin/lib/update-versions/updaters.sh"
+
+    # Mock the network resolution to a deterministic SHA.
+    local new_sha="abcabcabcabcabcabcabcabcabcabcabcabcabca"
+    resolve_action_sha() { printf '%s\n' "abcabcabcabcabcabcabcabcabcabcabcabcabca"; }
+
+    local wf="$RESULTS_DIR/pin_action_ci.yml"
+    command cat >"$wf" <<'EOF'
+      - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+      - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+EOF
+
+    pin_action "$wf" "aquasecurity/trivy-action" "0.37.0" >/dev/null 2>&1
+
+    local ok=true
+    # Both lines carry the new SHA + `# v0.37.0`.
+    [ "$(command grep -cE "trivy-action@${new_sha} # v0.37.0" "$wf")" = "2" ] || ok=false
+    # No corrupted `@v<ver><sha>` ref, and old SHA is gone.
+    if command grep -qE '@v[0-9.]+[0-9a-f]{40}' "$wf"; then ok=false; fi
+    if command grep -q 'ed142fd0673e97e23eac54620cfb913e5ce36c25' "$wf"; then ok=false; fi
+
+    command rm -f "$wf"
+    assert_true "$ok" "pin_action rewrites both refs to a clean SHA pin with version comment"
+}
+
+# ============================================================================
+# Test: pin_action leaves the pin untouched when the SHA can't be resolved.
+# ============================================================================
+# A stale-but-valid SHA pin is far safer than a mutable tag or a corrupt ref,
+# so an unresolvable version must be a no-op failure, not a partial rewrite.
+test_pin_action_preserves_pin_on_resolution_failure() {
+    source "$PROJECT_ROOT/bin/lib/common.sh"
+    source "$PROJECT_ROOT/bin/lib/version-utils.sh"
+    source "$PROJECT_ROOT/bin/lib/update-versions/updaters.sh"
+
+    # Mock resolution failure.
+    resolve_action_sha() { return 1; }
+
+    local wf="$RESULTS_DIR/pin_action_fail_ci.yml"
+    command cat >"$wf" <<'EOF'
+      - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+EOF
+    local before
+    before=$(command cat "$wf")
+
+    local rc=0
+    pin_action "$wf" "aquasecurity/trivy-action" "99.99.99" >/dev/null 2>&1 || rc=$?
+
+    local ok=true
+    [ "$rc" -eq 1 ] || ok=false
+    [ "$(command cat "$wf")" = "$before" ] || ok=false
+
+    command rm -f "$wf"
+    assert_true "$ok" "pin_action fails (rc=1) and leaves the file byte-identical on resolution failure"
+}
+
 # Test removed - kubernetes-checksums.sh no longer needed (uses dynamic fetching)
 run_test test_krew_update_handler "krew update handler exists"
 run_test test_helm_update_handler "Helm update handler exists"
 run_test test_mise_vale_typos_update "Updates Mise, vale, typos (regression for silent skip)"
 run_test test_unknown_tool_fails_loudly "Unknown tool fails loudly instead of silent success"
+run_test test_pin_action_rewrites_sha_pin "pin_action rewrites SHA-pinned action without corruption"
+run_test test_pin_action_preserves_pin_on_resolution_failure "pin_action preserves pin when SHA resolution fails"
 
 # Generate report
 generate_report

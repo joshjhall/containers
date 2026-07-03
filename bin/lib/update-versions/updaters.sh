@@ -21,6 +21,78 @@ sed_inplace() {
     done
 }
 
+# resolve_action_sha - Resolve a GitHub Actions release tag to its commit SHA.
+#
+# Arguments:
+#   $1 - owner/repo, e.g. "aquasecurity/trivy-action"
+#   $2 - version (with or without leading `v`), e.g. "0.37.0"
+#
+# Outputs:
+#   The 40-hex commit SHA the tag points at, or nothing on failure.
+#   Returns 0 only when a valid 40-hex SHA was resolved.
+#
+# Description:
+#   Third-party actions must be SHA-pinned (docs/security/action-pinning.md).
+#   When bumping such an action we must translate the new tag into the commit
+#   SHA it references so the pin stays a SHA rather than regressing to a
+#   mutable tag. Tries the `v`-prefixed tag first (the modern convention),
+#   then the bare tag as a fallback. GITHUB_TOKEN is used when present to
+#   avoid the low unauthenticated rate limit.
+resolve_action_sha() {
+    local repo="$1"
+    local version="$2"
+    local bare="${version#v}"
+
+    local auth=()
+    if [ -n "${GITHUB_TOKEN:-}" ]; then
+        auth=(-H "Authorization: token ${GITHUB_TOKEN}")
+    fi
+
+    local tag sha
+    for tag in "v${bare}" "${bare}"; do
+        sha=$(command curl -sf --connect-timeout 5 --max-time 15 "${auth[@]}" \
+            "https://api.github.com/repos/${repo}/commits/${tag}" 2>/dev/null |
+            jq -r '.sha // empty' 2>/dev/null)
+        if [[ "$sha" =~ ^[0-9a-f]{40}$ ]]; then
+            printf '%s\n' "$sha"
+            return 0
+        fi
+    done
+    return 1
+}
+
+# pin_action - Rewrite every `uses: <repo>@<ref>` for one action to a fresh
+# SHA pin with a `# v<version>` comment, resolving the tag→SHA first.
+#
+# Arguments:
+#   $1 - workflow file path
+#   $2 - owner/repo, e.g. "aquasecurity/trivy-action"
+#   $3 - new version (with or without leading `v`)
+#
+# Returns:
+#   0 on success (file rewritten), 1 if the SHA could not be resolved (in
+#   which case the file is left untouched — a stale-but-valid SHA pin is far
+#   safer than a corrupted ref or a mutable tag).
+pin_action() {
+    local workflow_path="$1"
+    local repo="$2"
+    local version="${3#v}"
+
+    local sha
+    if ! sha=$(resolve_action_sha "$repo" "$version"); then
+        echo -e "${RED}    ERROR: could not resolve ${repo}@v${version} to a commit SHA — leaving pin unchanged${NC}" >&2
+        return 1
+    fi
+
+    # Replace the whole ref (SHA + any trailing comment) in one shot. The
+    # `[^[:space:]]*` eats the old SHA/tag and the explicit rewrite re-adds the
+    # `# v<version>` comment the pinning policy (and action-pinning.sh) requires.
+    sed_inplace \
+        "s|uses: ${repo}@[^[:space:]]*\([[:space:]]*#.*\)\{0,1\}|uses: ${repo}@${sha} # v${version}|g" \
+        "$workflow_path"
+    echo -e "${BLUE}    Pinned ${repo} → ${sha} # v${version}${NC}"
+}
+
 # Add a bumped luggage-installed tool's new version to the vendored catalog
 # snapshot (crates/luggage/testdata/catalog), which the image build COPYs to
 # /opt/containers-db and resolves `luggage install <tool>@<version>` against.
@@ -448,11 +520,14 @@ update_version() {
             local workflow_path="$PROJECT_ROOT/.github/workflows/$file"
             case "$tool" in
                 trivy-action)
-                    # Upstream switched to `v`-prefixed tags at v0.36.0.
-                    # Always write `v$latest` — both the new convention
-                    # and old `v`-prefixed releases work; bare-numeric
-                    # tags like `0.35.0` are no longer published.
-                    sed_inplace "s|uses: aquasecurity/trivy-action@v\{0,1\}[0-9.]*|uses: aquasecurity/trivy-action@v$latest|g" "$workflow_path"
+                    # trivy-action is a third-party action and MUST stay
+                    # SHA-pinned (docs/security/action-pinning.md). Resolve the
+                    # new tag to its commit SHA and rewrite `@<sha> # v<latest>`;
+                    # a plain `@v$latest` tag rewrite would regress the pin and,
+                    # against an already-SHA-pinned ref, corrupt it outright
+                    # (e.g. `@v0.37.0ed142fd…`). If resolution fails we leave the
+                    # existing pin in place rather than write an unsafe ref.
+                    pin_action "$workflow_path" "aquasecurity/trivy-action" "$latest" || return 1
                     ;;
                 *)
                     echo -e "${RED}    ERROR: Unknown ci.yml tool: $tool — add a case in updaters.sh${NC}" >&2

@@ -720,8 +720,61 @@ run_test test_check_github_release_prerelease_skips_drafts "check_github_release
 run_test test_check_gitlab_release_mock "check_gitlab_release with mock API response"
 run_test test_check_crates_io_mock "check_crates_io with mock API response"
 run_test test_check_maven_central_mock "check_maven_central with mock API response"
+# ============================================================================
+# Test: extract_action_version normalizes SHA-pinned / tag / branch refs
+# ============================================================================
+# Regression guard: a SHA-pinned third-party action carries its version in the
+# trailing `# vX.Y.Z` comment, not in the `@`-ref. An earlier version of the
+# trivy-action extraction took the text after `@`, capturing the 40-hex SHA and
+# reporting the action as perpetually outdated (which then drove the updater to
+# corrupt the ref). These tests pin the normalization contract.
+test_extract_action_version_sha_pinned() {
+    source "$PROJECT_ROOT/bin/lib/common.sh"
+    source "$PROJECT_ROOT/bin/lib/version-utils.sh"
+
+    local out
+    out=$(extract_action_version "ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0")
+    assert_equals "0.36.0" "$out" "SHA-pinned ref reads version from # comment"
+}
+
+test_extract_action_version_sha_pinned_no_v() {
+    source "$PROJECT_ROOT/bin/lib/common.sh"
+    source "$PROJECT_ROOT/bin/lib/version-utils.sh"
+
+    local out
+    out=$(extract_action_version "ed142fd0673e97e23eac54620cfb913e5ce36c25 # 0.36.0")
+    assert_equals "0.36.0" "$out" "SHA-pinned ref with un-prefixed comment version"
+}
+
+test_extract_action_version_plain_tags() {
+    source "$PROJECT_ROOT/bin/lib/common.sh"
+    source "$PROJECT_ROOT/bin/lib/version-utils.sh"
+
+    local out
+    out=$(extract_action_version "v0.36.0")
+    assert_equals "0.36.0" "$out" "v-prefixed tag strips leading v"
+
+    out=$(extract_action_version "0.36.0")
+    assert_equals "0.36.0" "$out" "bare tag passes through"
+}
+
+test_extract_action_version_branch_passthrough() {
+    source "$PROJECT_ROOT/bin/lib/common.sh"
+    source "$PROJECT_ROOT/bin/lib/version-utils.sh"
+
+    # A branch ref (no version comment) echoes through unchanged so the caller
+    # can detect and skip it (check-versions guards on `!= master`).
+    local out
+    out=$(extract_action_version "master")
+    assert_equals "master" "$out" "branch ref passes through unchanged"
+}
+
 run_test test_check_biome_new_format "check_biome parses new tag format"
 run_test test_check_kubectl_mock "check_kubectl with mock API response"
+run_test test_extract_action_version_sha_pinned "extract_action_version reads version from SHA-pin comment"
+run_test test_extract_action_version_sha_pinned_no_v "extract_action_version handles un-prefixed comment version"
+run_test test_extract_action_version_plain_tags "extract_action_version normalizes plain tags"
+run_test test_extract_action_version_branch_passthrough "extract_action_version passes branch refs through"
 
 # Generate test report
 generate_report

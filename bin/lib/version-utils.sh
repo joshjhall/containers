@@ -103,6 +103,45 @@ validate_sha512() {
     fi
 }
 
+# extract_action_version - Normalize a GitHub Actions `uses:` git ref to a
+# comparable version string.
+#
+# Arguments:
+#   $1 - The ref after the `@` in a `uses:` line, e.g. any of:
+#          "ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0"  (SHA-pinned)
+#          "v0.36.0"                                              (tag)
+#          "0.36.0"                                               (bare tag)
+#          "master"                                               (branch)
+#
+# Outputs:
+#   The normalized version (leading `v` stripped), e.g. "0.36.0". For a
+#   branch ref with no version comment (e.g. "master") the ref is echoed
+#   through unchanged so the caller can skip it.
+#
+# Description:
+#   Third-party actions are SHA-pinned (see docs/security/action-pinning.md)
+#   with the human-readable version carried in a trailing `# <version>`
+#   comment. The version therefore lives in the comment, NOT in the `@`-ref.
+#   Naively taking the text after `@` (as an early version of check-versions
+#   did) captures the 40-hex SHA and mangles the comparison, so the tool
+#   reports the action as perpetually outdated. Read the comment when the
+#   ref is a SHA; fall back to the ref itself for plain tags.
+extract_action_version() {
+    local ref="$1"
+
+    # SHA-pinned: the version is in the trailing `# <version>` comment.
+    if [[ "$ref" =~ ^[0-9a-f]{40}([[:space:]]|$) ]]; then
+        printf '%s\n' "$ref" |
+            command sed -n 's/.*#[[:space:]]*v\{0,1\}\([0-9][^[:space:]]*\).*/\1/p'
+        return 0
+    fi
+
+    # Plain tag (`v0.36.0` / `0.36.0`) or branch (`master`): strip any comment
+    # and an optional leading `v`.
+    printf '%s' "$ref" |
+        command sed -e 's/[[:space:]]*#.*$//' -e 's/^v//' -e 's/[[:space:]]//g'
+}
+
 # ============================================================================
 # Version Comparison
 # ============================================================================
