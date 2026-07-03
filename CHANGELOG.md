@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.19.12] - 2026-07-03
+
+### Added
+
+- Port add and remove feature commands (#687)
+
+### Miscellaneous
+
+- Symlink .codegraph to /cache/codegraph
+- Bump librarian marketplace pin to v0.5.0
+
 ## [4.19.11] - 2026-07-03
 
 ### Added
@@ -2088,6 +2099,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix prettier and markdownlint formatting in README
 - Format TLS documentation files
 
+[4.19.12]: https://github.com/joshjhall/containers/compare/v4.19.11...v4.19.12
 [4.19.11]: https://github.com/joshjhall/containers/compare/v4.19.10...v4.19.11
 [4.19.10]: https://github.com/joshjhall/containers/compare/v4.19.9...v4.19.10
 [4.19.9]: https://github.com/joshjhall/containers/compare/v4.19.8...v4.19.9
