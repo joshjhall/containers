@@ -214,6 +214,76 @@ mod tests {
         assert_eq!(primary_binary("rust"), "rustc");
     }
 
+    /// A non-`ETXTBSY` launch error must be returned on the *first* attempt,
+    /// never retried. Pointing at a path with no file on disk makes `exec`
+    /// fail with `ENOENT`, which the `other => return other` arm must surface
+    /// immediately — a near-zero elapsed time proves the retry loop's backoff
+    /// (which would add ≥`ETXTBSY_BACKOFF` per attempt) never ran.
+    #[cfg(unix)]
+    #[test]
+    fn run_version_check_returns_non_etxtbsy_error_without_retrying() {
+        use std::time::Instant;
+
+        let dir = tempdir().unwrap();
+        let missing = dir.path().join("does-not-exist");
+
+        let start = Instant::now();
+        let result = run_version_check(&missing, &BTreeMap::new());
+        let elapsed = start.elapsed();
+
+        let err = result.expect_err("a missing binary must surface its launch error");
+        assert_ne!(
+            err.raw_os_error(),
+            Some(ETXTBSY),
+            "the induced error must be a genuine non-ETXTBSY failure",
+        );
+        assert!(
+            elapsed < ETXTBSY_BACKOFF,
+            "a non-ETXTBSY error must return before any backoff sleep (elapsed {elapsed:?})",
+        );
+    }
+
+    /// A *transient* `ETXTBSY` that clears mid-flight must be absorbed by the
+    /// retry loop and resolve to the eventual success — the "retry up to
+    /// `ETXTBSY_RETRIES`, then succeed" path that the exhaustion test above
+    /// never reaches. A background thread holds a write fd open just long
+    /// enough to force `ETXTBSY` on the first attempt(s), then drops it so a
+    /// later retry within budget execs cleanly and returns the version output.
+    ///
+    /// Linux-only for the same reason as the exhaustion tests: only Linux
+    /// returns `ETXTBSY` while a writable fd is held.
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[serial_test::serial]
+    fn run_version_check_retries_then_succeeds_when_etxtbsy_clears() {
+        use std::fs::OpenOptions;
+
+        let dir = tempdir().unwrap();
+        let binary = dir.path().join("rustc");
+        write_shim(dir.path(), "rustc", "rustc 1.95.0 (after retry)");
+
+        // Hold a writable fd, then release it from a background thread after
+        // ~one backoff. The first exec attempt hits ETXTBSY; by the time the
+        // loop backs off and retries, the fd is gone and the exec succeeds —
+        // comfortably inside the 3-retry / 150ms budget.
+        let writer = OpenOptions::new().write(true).open(&binary).unwrap();
+        let releaser = thread::spawn(move || {
+            thread::sleep(ETXTBSY_BACKOFF / 2);
+            drop(writer);
+        });
+
+        let result = run_version_check(&binary, &BTreeMap::new());
+        releaser.join().expect("releaser thread panicked");
+
+        let output = result.expect("a transient ETXTBSY that clears must resolve to success");
+        assert!(output.status.success(), "the shim exits 0 once exec succeeds");
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(
+            stdout.contains("1.95.0"),
+            "the retried exec must capture the shim's version output, got: {stdout}",
+        );
+    }
+
     /// Exhaustion counterpart to the `install_rust` regression test, which only
     /// covers success-after-retry. Holding an open write fd to the binary makes
     /// every `exec` fail with `ETXTBSY`, so `run_version_check` burns the whole

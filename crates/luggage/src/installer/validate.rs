@@ -162,4 +162,39 @@ mod tests {
         let err = check("rustc", "1.95.0", dir.path(), &BTreeMap::new()).unwrap_err();
         assert!(matches!(err, LuggageError::ValidationFailed { .. }));
     }
+
+    /// When `run_version_check` exhausts its `ETXTBSY` budget and returns an
+    /// I/O error, `check` must fold it into `ValidationFailed` via the
+    /// `map_err` on the launch call — the "failed to launch" branch, which is
+    /// otherwise unreachable in serialized tests (they never produce a
+    /// concurrent fork). Holding an open write fd forces `ETXTBSY` on every
+    /// exec deterministically, so the retry budget is guaranteed to exhaust
+    /// and surface the error rather than a non-zero exit or version mismatch.
+    ///
+    /// Linux-only: only Linux returns `ETXTBSY` while a writable fd is held
+    /// (macOS/Darwin execs the binary anyway), so this deterministic
+    /// induction can't run elsewhere.
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[serial_test::serial]
+    fn etxtbsy_exhaustion_maps_to_validation_failed() {
+        use std::fs::OpenOptions;
+
+        let dir = tempdir().unwrap();
+        write_shim(dir.path(), "rustc", "rustc 1.95.0 (never runs)");
+        let _writer = OpenOptions::new().write(true).open(dir.path().join("rustc")).unwrap();
+
+        let err = check("rustc", "1.95.0", dir.path(), &BTreeMap::new()).unwrap_err();
+        match err {
+            LuggageError::ValidationFailed { tool, version, message } => {
+                assert_eq!(tool, "rustc");
+                assert_eq!(version, "1.95.0");
+                assert!(
+                    message.contains("failed to launch"),
+                    "exhaustion must surface via the launch-failure branch, got: {message}",
+                );
+            }
+            other => panic!("expected ValidationFailed, got {other:?}"),
+        }
+    }
 }
