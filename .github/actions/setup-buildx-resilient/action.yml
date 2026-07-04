@@ -1,0 +1,32 @@
+name: Set up Docker Buildx (resilient)
+description: >-
+  Provision a Docker Buildx builder, retrying once on transient failure.
+  Wraps docker/setup-buildx-action (pinned) so a flaky builder-provision /
+  BuildKit-image-pull blip re-attempts before failing the job, instead of
+  redding out a Build job that the change under test cannot affect (#626).
+  Keeps the default docker-container driver, which GHA layer cache
+  (type=gha,mode=max) and multi-platform builds both require.
+
+runs:
+  using: composite
+  steps:
+    # First attempt — allowed to fail softly so the retry below can run.
+    - name: Set up Docker Buildx (attempt 1)
+      id: first
+      continue-on-error: true
+      uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+
+    # Back off before retrying, matching the repo's retry() helper (15s initial
+    # delay). Only runs when the first attempt failed.
+    - name: Wait before Buildx retry
+      if: steps.first.outcome == 'failure'
+      shell: bash
+      run: |
+        command echo "::warning::Docker Buildx setup failed on first attempt (likely a transient builder-provision flake); retrying in 15s"
+        command sleep 15
+
+    # Second (hard) attempt — no continue-on-error, so a genuine persistent
+    # infra outage still fails the job rather than being masked.
+    - name: Set up Docker Buildx (attempt 2)
+      if: steps.first.outcome == 'failure'
+      uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
