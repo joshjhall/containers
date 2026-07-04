@@ -47,3 +47,14 @@ unsafe_code = "forbid"
 all = "warn"
 pedantic = "warn"
 nursery = "warn"
+
+# Release profile — tuned for small distributable binaries (issue #286).
+# The stibbons host CLI ships as a GitHub Release asset per target triple;
+# these settings keep each binary well under the 15 MB budget. Conservative
+# on purpose: no `panic = "abort"`, so panic/backtrace and test semantics are
+# unchanged.
+[profile.release]
+strip = true      # drop symbols/debuginfo from the shipped binary
+lto = "thin"      # cross-crate inlining without a full-LTO time hit
+codegen-units = 1 # better optimization/size at the cost of build time
+opt-level = "s"   # optimize for size
