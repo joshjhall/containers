@@ -232,6 +232,28 @@ pub fn service_container_name(project: &str, service: &str) -> String {
     format!("{project}-{service}")
 }
 
+/// Creates the Docker `network` if `docker network inspect` reports it absent,
+/// announcing the creation on `out`. A no-op when the network already exists.
+///
+/// Shared by `agent start` and `services start` so both attach containers to the
+/// same network with identical output.
+///
+/// # Errors
+///
+/// Propagates the [`DockerError`](super::docker::DockerError) from
+/// `docker network create` when the network is missing and creation fails.
+pub fn ensure_network(
+    docker: &dyn DockerRunner,
+    out: &mut dyn std::io::Write,
+    network: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    if docker.run(&["network", "inspect", network]).is_err() {
+        docker.run(&["network", "create", network])?;
+        writeln!(out, "Created network {network}")?;
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use containers_common::config::{AgentConfig, ProjectConfig};

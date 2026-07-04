@@ -4,6 +4,7 @@ mod agent;
 mod commands;
 mod labels;
 mod render;
+mod services;
 mod wizard;
 
 use std::collections::{BTreeMap, HashSet};
@@ -107,6 +108,12 @@ enum Commands {
     Worktree {
         #[command(subcommand)]
         command: agent::worktree::WorktreeCommands,
+    },
+
+    /// Manage service containers (start, stop, status, reset).
+    Services {
+        #[command(subcommand)]
+        command: services::ServicesCommands,
     },
 
     /// Manage issue-tracker labels defined in skill `metadata.yml` files.
@@ -213,6 +220,12 @@ fn main() {
         }
         Some(Commands::Worktree { command }) => {
             if let Err(e) = agent::worktree::run(&command) {
+                eprintln!("Error: {e}");
+                std::process::exit(1);
+            }
+        }
+        Some(Commands::Services { command }) => {
+            if let Err(e) = services::run(&command) {
                 eprintln!("Error: {e}");
                 std::process::exit(1);
             }
@@ -854,5 +867,34 @@ mod tests {
             .expect("--format arg should exist");
         let default = format.get_default_values().first().and_then(|v| v.to_str());
         assert_eq!(default, Some("table"), "--format should default to table");
+    }
+
+    #[test]
+    fn verify_services_subcommand() {
+        use clap::CommandFactory;
+        let cmd = Cli::command();
+        let services = cmd
+            .get_subcommands()
+            .find(|s| s.get_name() == "services")
+            .expect("services subcommand should exist");
+        let names: Vec<&str> = services.get_subcommands().map(clap::Command::get_name).collect();
+        for want in ["start", "stop", "status", "reset"] {
+            assert!(names.contains(&want), "services should expose `{want}` (have {names:?})");
+        }
+    }
+
+    #[test]
+    fn verify_services_stop_clean_flag() {
+        use clap::CommandFactory;
+        let cmd = Cli::command();
+        let stop = cmd
+            .get_subcommands()
+            .find(|s| s.get_name() == "services")
+            .and_then(|s| s.get_subcommands().find(|c| c.get_name() == "stop").cloned())
+            .expect("services stop subcommand should exist");
+        assert!(
+            stop.get_arguments().any(|a| a.get_id() == "clean"),
+            "services stop should expose a --clean flag"
+        );
     }
 }
