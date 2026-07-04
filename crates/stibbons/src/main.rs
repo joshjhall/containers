@@ -1,5 +1,6 @@
 //! Stibbons: Host orchestrator for the containers build system.
 
+mod agent;
 mod labels;
 mod render;
 mod wizard;
@@ -83,6 +84,12 @@ enum Commands {
         force: bool,
     },
 
+    /// Manage agent containers (build, start, stop, connect).
+    Agent {
+        #[command(subcommand)]
+        command: agent::AgentCommands,
+    },
+
     /// Manage issue-tracker labels defined in skill `metadata.yml` files.
     Labels {
         #[command(subcommand)]
@@ -156,6 +163,12 @@ fn main() {
         }
         Some(Commands::Remove { features, cascade, dev_only, dry_run, force }) => {
             if let Err(e) = run_remove(&features, cascade, dev_only, WriteMode { dry_run, force }) {
+                eprintln!("Error: {e}");
+                std::process::exit(1);
+            }
+        }
+        Some(Commands::Agent { command }) => {
+            if let Err(e) = agent::run(&command) {
                 eprintln!("Error: {e}");
                 std::process::exit(1);
             }
@@ -582,5 +595,20 @@ mod tests {
         let cmd = Cli::command();
         let remove = cmd.get_subcommands().find(|s| s.get_name() == "remove");
         assert!(remove.is_some(), "remove subcommand should exist");
+    }
+
+    #[test]
+    fn verify_agent_subcommand() {
+        use clap::CommandFactory;
+        let cmd = Cli::command();
+        let agent = cmd
+            .get_subcommands()
+            .find(|s| s.get_name() == "agent")
+            .expect("agent subcommand should exist");
+        // Every ported agent subcommand should be wired up.
+        let names: Vec<&str> = agent.get_subcommands().map(clap::Command::get_name).collect();
+        for want in ["build", "start", "stop", "restart", "status", "logs", "connect"] {
+            assert!(names.contains(&want), "agent should expose `{want}` (have {names:?})");
+        }
     }
 }
