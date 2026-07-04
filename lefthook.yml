@@ -20,7 +20,6 @@ pre-commit:
       glob: "*"
       exclude:
         - "tests/results/**"
-        - "bin/igor"
         - "lib/gpg-keys/**"
       run: bin/fix-trailing-whitespace.sh {staged_files}
       stage_fixed: true
@@ -29,14 +28,11 @@ pre-commit:
       glob: "*"
       exclude:
         - "tests/results/**"
-        - "bin/igor"
         - "lib/gpg-keys/**"
       run: bin/fix-end-of-file.sh {staged_files}
       stage_fixed: true
 
     check-added-large-files:
-      exclude:
-        - "bin/igor"
       run: |
         max=512000  # 500 KB (matches prior --maxkb=500)
         fail=0

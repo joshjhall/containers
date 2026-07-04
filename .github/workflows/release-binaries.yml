@@ -1,0 +1,184 @@
+# Cross-compile the stibbons host CLI for all supported host targets and
+# publish the binaries as GitHub Release assets (issue #286).
+#
+# stibbons is the host-facing successor to the legacy Go `igor` binary. Rather
+# than committing a fat binary to git, we build one artifact per target triple
+# on tag push and attach them to the same Release that ci.yml creates.
+#
+# Cross-compilation strategy: native CI matrix (one runner per OS), with rustup
+# targets for the second arch on each OS. The Linux arm64 leg cross-links with
+# gcc-aarch64-linux-gnu — mirroring the proven pattern in evidence-run.yml.
+name: Release Binaries (stibbons)
+
+on:
+  push:
+    tags: ["v*"]
+  # Manual dispatch builds the binaries without uploading (no tag context),
+  # useful for validating the matrix and size gate on a branch.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-musl
+            cross_linker: aarch64-linux-gnu-gcc
+          - os: macos-latest
+            target: x86_64-apple-darwin
+          - os: macos-latest
+            target: aarch64-apple-darwin
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+          - os: windows-latest
+            target: aarch64-pc-windows-msvc
+    env:
+      # Read the coordinates into env rather than interpolating ${{ }} into
+      # run: scripts (injection-safe; matches the repo's workflow guardrails).
+      TARGET: ${{ matrix.target }}
+      CROSS_LINKER: ${{ matrix.cross_linker }}
+    steps:
+      - name: Disable CRLF conversion
+        if: runner.os == 'Windows'
+        run: git config --global core.autocrlf false
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Force HTTPS for git dependencies
+        run: git config --global url."https://github.com/".insteadOf "ssh://git@github.com/"
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable branch
+        with:
+          toolchain: "1.94"
+          targets: ${{ matrix.target }}
+
+      - name: Install musl + cross linker (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends musl-tools
+          # The aarch64 musl leg cross-compiles from an amd64 host, so it needs
+          # an aarch64 cross-linker. amd64 links with musl-gcc from musl-tools.
+          if [ "$TARGET" = "aarch64-unknown-linux-musl" ]; then
+            sudo apt-get install -y --no-install-recommends gcc-aarch64-linux-gnu
+          fi
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          # Per-target key so artifacts for different triples don't collide.
+          key: ${{ matrix.target }}
+
+      - name: Build stibbons (release)
+        shell: bash
+        run: |
+          # Cargo reads CARGO_TARGET_<triple>_LINKER only for the triple being
+          # built, so setting the aarch64 linker is a no-op on every other leg.
+          if [ -n "$CROSS_LINKER" ]; then
+            export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER="$CROSS_LINKER"
+          fi
+          cargo build --release --target "$TARGET" -p stibbons
+
+      - name: Package artifact
+        id: package
+        shell: bash
+        run: |
+          # Version comes from the VERSION file (the same source build.rs
+          # stamps into the binary) so the asset name matches --version output.
+          version=$(/usr/bin/tr -d '[:space:]' < VERSION 2>/dev/null || tr -d '[:space:]' < VERSION)
+          stem="stibbons-${version}-${TARGET}"
+          outdir="dist"
+          mkdir -p "$outdir"
+
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            bin="target/${TARGET}/release/stibbons.exe"
+            asset="${stem}.zip"
+            7z a "${outdir}/${asset}" "./${bin}" >/dev/null
+          else
+            bin="target/${TARGET}/release/stibbons"
+            asset="${stem}.tar.gz"
+            tar -czf "${outdir}/${asset}" -C "target/${TARGET}/release" stibbons
+          fi
+
+          # Size gate: the shipped (stripped) binary must stay under 15 MB.
+          bytes=$(/usr/bin/wc -c < "$bin" 2>/dev/null || wc -c < "$bin")
+          limit=$((15 * 1024 * 1024))
+          echo "Binary $bin is $bytes bytes (limit $limit)."
+          if [ "$bytes" -gt "$limit" ]; then
+            echo "::error::stibbons binary for $TARGET is $bytes bytes, exceeding the 15 MB budget."
+            exit 1
+          fi
+
+          # Checksum alongside the archive for the install script to verify.
+          (cd "$outdir" && { sha256sum "$asset" || shasum -a 256 "$asset"; } > "${asset}.sha256")
+
+          echo "asset=${outdir}/${asset}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: stibbons-${{ matrix.target }}
+          path: dist/*
+          if-no-files-found: error
+
+  release:
+    name: Attach binaries to release
+    runs-on: ubuntu-latest
+    needs: build
+    # Only publish on a real tag push — workflow_dispatch has no release to
+    # attach to and just validates the build matrix above.
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+    steps:
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Extract version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+
+      # ci.yml's release job creates the GitHub Release for this tag; this job
+      # only appends the stibbons binaries. If that release is already
+      # immutable, action-gh-release returns 422 on asset upload — skip in that
+      # case (the binaries are still retained as workflow artifacts above).
+      - name: Check release immutability
+        id: release_state
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.version.outputs.VERSION }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          IMMUTABLE=$(gh api "repos/${GH_REPO}/releases/tags/${VERSION}" \
+            --jq '.immutable // false' 2>/dev/null || echo "false")
+          if [ "${IMMUTABLE}" = "true" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "Release ${VERSION} is immutable — skipping asset upload."
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Attach binaries to GitHub Release
+        if: steps.release_state.outputs.skip != 'true'
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
+        with:
+          tag_name: ${{ steps.version.outputs.VERSION }}
+          files: |
+            dist/*.tar.gz
+            dist/*.zip
+            dist/*.sha256
+          token: ${{ secrets.GITHUB_TOKEN }}

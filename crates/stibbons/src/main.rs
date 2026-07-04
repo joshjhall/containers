@@ -17,7 +17,7 @@ use containers_common::template::RenderContext;
 /// Scaffolds devcontainer configurations and manages container builds.
 /// (Successor to igor, rewritten in Rust.)
 #[derive(Parser, Debug)]
-#[command(name = "stibbons", version, about, long_about = None)]
+#[command(name = "stibbons", version = env!("STIBBONS_VERSION"), about, long_about = None)]
 struct Cli {
     /// Enable verbose output.
     #[arg(short, long, global = true)]
@@ -114,7 +114,7 @@ fn main() {
             }
         }
         None => {
-            tracing::info!("stibbons v{}", env!("CARGO_PKG_VERSION"));
+            tracing::info!("stibbons v{}", env!("STIBBONS_VERSION"));
             eprintln!(
                 "Run `stibbons init` to set up a new project, or `stibbons --help` for usage."
             );

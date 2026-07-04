@@ -18,7 +18,7 @@ the right documentation for your needs.
 - [Getting Started](igor/getting-started.md) — First-time project setup
 - [Feature Reference](igor/feature-reference.md) — All features and dependencies
 - [Templates](igor/templates.md) — Template system and customization
-- See also: [cmd/igor/README.md](../cmd/igor/README.md) — Installation and usage
+- See also: [`bin/install-stibbons.sh`](../bin/install-stibbons.sh) — Install the stibbons CLI from release binaries
 
 ## User Documentation
 
