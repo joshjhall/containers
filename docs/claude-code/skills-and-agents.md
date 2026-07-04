@@ -183,6 +183,35 @@ required_mcps: [] # MCP servers the skill uses
 Skills without labels, tools, or permissions use empty arrays. See the
 `skill-authoring` skill for authoring guidelines.
 
+#### Syncing labels to a tracker (`stibbons labels sync`)
+
+The `labels:` blocks above are the source of truth for the ~30 issue labels the
+workflow skills depend on (`type/`, `severity/`, `effort/`, `status/`,
+`audit/`, …). `stibbons labels sync` reads every skill `metadata.yml`,
+aggregates the label definitions, and reconciles them onto the repo's issue
+tracker — creating missing labels and updating drifted colors/descriptions. It
+**never deletes** labels and is idempotent (a second run reports all `OK`).
+
+```bash
+stibbons labels sync                       # detect platform, apply
+stibbons labels sync --dry-run             # preview the plan, change nothing
+stibbons labels sync --platform github     # override remote auto-detection
+stibbons labels sync --skills-dir DIR      # scan DIR (repeatable)
+stibbons setup                             # umbrella: runs labels sync (+ future steps)
+```
+
+Platform (GitHub vs GitLab) is detected from the `origin` remote and driven
+through the `gh` / `glab` CLIs. When `--skills-dir` is omitted, the in-repo
+template skills and `/opt/librarian/plugins` are scanned.
+
+A label entry with **only a `name`** (no `color`) is treated as a *reference* —
+a skill declaring it depends on the label without owning its definition (e.g.
+`orchestrate` references `status/pr-pending`, which `ship-issue` defines).
+References never override a real definition and never push an empty color; a
+name referenced but never defined anywhere is skipped with a warning. When two
+skills define the same label with conflicting color/description, the first
+(alphabetically by file) wins and a warning is emitted.
+
 ### Selecting and overriding librarian plugins
 
 The general-purpose skills and agents are chosen at the **plugin** level, not

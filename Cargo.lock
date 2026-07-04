@@ -2721,6 +2721,7 @@ dependencies = [
  "containers-common",
  "inquire",
  "octarine",
+ "serde",
  "serde_json",
  "serde_yaml",
  "tempfile",

@@ -1,5 +1,6 @@
 //! Stibbons: Host orchestrator for the containers build system.
 
+mod labels;
 mod render;
 mod wizard;
 
@@ -81,6 +82,52 @@ enum Commands {
         #[arg(long)]
         force: bool,
     },
+
+    /// Manage issue-tracker labels defined in skill `metadata.yml` files.
+    Labels {
+        #[command(subcommand)]
+        command: LabelsCommand,
+    },
+
+    /// Configure the repository (currently: sync issue-tracker labels).
+    ///
+    /// An umbrella for repo setup. Today it runs `labels sync`; future
+    /// additions (branch protection, CI templates) will hang off the same
+    /// command.
+    Setup(SyncArgs),
+}
+
+/// `labels` subcommands.
+#[derive(Subcommand, Debug)]
+enum LabelsCommand {
+    /// Create/update the tracker's labels to match skill metadata (never deletes).
+    Sync(SyncArgs),
+}
+
+/// Shared flags for `labels sync` and `setup`.
+#[derive(clap::Args, Debug)]
+struct SyncArgs {
+    /// Show the planned changes without applying them.
+    #[arg(long)]
+    dry_run: bool,
+
+    /// Override platform auto-detection (`github` or `gitlab`).
+    #[arg(long, value_name = "PLATFORM")]
+    platform: Option<String>,
+
+    /// Skill directory to scan for `metadata.yml` (repeatable). When omitted,
+    /// the in-repo template skills and `/opt/librarian/plugins` are scanned.
+    #[arg(long, value_name = "DIR")]
+    skills_dir: Vec<PathBuf>,
+}
+
+impl SyncArgs {
+    /// Build [`labels::SyncOptions`] from the parsed flags, validating
+    /// `--platform`.
+    fn into_options(self) -> Result<labels::SyncOptions, Box<dyn std::error::Error>> {
+        let platform = self.platform.as_deref().map(labels::parse_platform_flag).transpose()?;
+        Ok(labels::SyncOptions { dry_run: self.dry_run, platform, skills_dirs: self.skills_dir })
+    }
 }
 
 fn main() {
@@ -109,6 +156,19 @@ fn main() {
         }
         Some(Commands::Remove { features, cascade, dev_only, dry_run, force }) => {
             if let Err(e) = run_remove(&features, cascade, dev_only, WriteMode { dry_run, force }) {
+                eprintln!("Error: {e}");
+                std::process::exit(1);
+            }
+        }
+        Some(Commands::Labels { command }) => {
+            let LabelsCommand::Sync(args) = command;
+            if let Err(e) = run_labels_sync(args) {
+                eprintln!("Error: {e}");
+                std::process::exit(1);
+            }
+        }
+        Some(Commands::Setup(args)) => {
+            if let Err(e) = run_setup(args) {
                 eprintln!("Error: {e}");
                 std::process::exit(1);
             }
@@ -423,6 +483,22 @@ fn apply_and_render(
     };
     state.save(".igor.yml")?;
 
+    Ok(())
+}
+
+/// Runs `stibbons labels sync`: reconcile skill-defined labels onto the repo's
+/// issue tracker.
+fn run_labels_sync(args: SyncArgs) -> Result<(), Box<dyn std::error::Error>> {
+    let opts = args.into_options()?;
+    labels::run_sync(&opts)
+}
+
+/// Runs `stibbons setup`: repo configuration. Currently this is label sync;
+/// future steps (branch protection, CI templates) will be added here.
+fn run_setup(args: SyncArgs) -> Result<(), Box<dyn std::error::Error>> {
+    let opts = args.into_options()?;
+    labels::run_sync(&opts)?;
+    println!("\nSetup complete. (Future steps: branch protection, CI templates.)");
     Ok(())
 }
 
