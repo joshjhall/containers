@@ -103,6 +103,12 @@ enum Commands {
         command: agent::AgentCommands,
     },
 
+    /// Manage per-agent git worktrees (create, remove) with compose mounts.
+    Worktree {
+        #[command(subcommand)]
+        command: agent::worktree::WorktreeCommands,
+    },
+
     /// Manage issue-tracker labels defined in skill `metadata.yml` files.
     Labels {
         #[command(subcommand)]
@@ -201,6 +207,12 @@ fn main() {
         }
         Some(Commands::Agent { command }) => {
             if let Err(e) = agent::run(&command) {
+                eprintln!("Error: {e}");
+                std::process::exit(1);
+            }
+        }
+        Some(Commands::Worktree { command }) => {
+            if let Err(e) = agent::worktree::run(&command) {
                 eprintln!("Error: {e}");
                 std::process::exit(1);
             }

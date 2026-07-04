@@ -13,8 +13,11 @@
 //!   container-naming/validation helpers.
 //! - [`db`] — per-agent `PostgreSQL` provisioning.
 //! - [`commands`] — the seven subcommand bodies.
+//! - [`worktree`] — the `stibbons worktree` create/remove command group.
 //!
-//! [`run`] is the single entry point wired into `main.rs`.
+//! [`run`] is the entry point for the `agent` subcommands; [`worktree::run`] is
+//! the sibling entry point for `stibbons worktree`. Both are wired into
+//! `main.rs`.
 
 mod commands;
 mod context;
@@ -22,6 +25,7 @@ mod db;
 mod docker;
 #[cfg(test)]
 mod test_support;
+pub mod worktree;
 
 use clap::Subcommand;
 

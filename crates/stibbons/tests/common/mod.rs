@@ -59,6 +59,16 @@ pub fn run_status(cwd: &Path) -> Output {
         .expect("failed to spawn stibbons")
 }
 
+/// Run `stibbons worktree <args...>` in `cwd`.
+pub fn run_worktree(cwd: &Path, args: &[&str]) -> Output {
+    Command::new(stibbons_bin())
+        .current_dir(cwd)
+        .arg("worktree")
+        .args(args)
+        .output()
+        .expect("failed to spawn stibbons")
+}
+
 /// Run `stibbons add <args...>` in `cwd`.
 pub fn run_add(cwd: &Path, args: &[&str]) -> Output {
     Command::new(stibbons_bin())
