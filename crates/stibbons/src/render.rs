@@ -107,6 +107,36 @@ pub fn commit_render(plan: &RenderPlan) -> std::io::Result<BTreeMap<String, Stri
     generate::write_files(&plan.entries_to_write)
 }
 
+/// Computes the `generated` hash map to persist in `.igor.yml` after committing
+/// a plan.
+///
+/// For every file we keep the freshly-rendered hash — *except* a
+/// [`FileAction::Skipped`] file (a user-modified file we did not overwrite),
+/// whose previously-recorded hash from `old_hashes` is preserved so the local
+/// edit is not re-flagged as stale on the next run. The state file
+/// ([`STATE_FILE`]) is never treated as skipped: it is always rewritten
+/// authoritatively via `IgorConfig::save`, so it always takes its fresh hash.
+///
+/// Shared by `init`/`add`/`remove` and `update` so the drift-tracking contract
+/// cannot diverge between commands.
+#[must_use]
+pub fn reconcile_hashes(
+    plan: &RenderPlan,
+    old_hashes: &BTreeMap<String, String>,
+) -> BTreeMap<String, String> {
+    let mut generated = BTreeMap::new();
+    for (path, action) in &plan.actions {
+        let hash = match action {
+            FileAction::Skipped if path != STATE_FILE => old_hashes.get(path).cloned(),
+            _ => plan.new_hashes.get(path).cloned(),
+        };
+        if let Some(h) = hash {
+            generated.insert(path.clone(), h);
+        }
+    }
+    generated
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

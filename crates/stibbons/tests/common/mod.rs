@@ -69,6 +69,16 @@ pub fn run_remove(cwd: &Path, args: &[&str]) -> Output {
         .expect("failed to spawn stibbons")
 }
 
+/// Run `stibbons update <args...>` in `cwd`.
+pub fn run_update(cwd: &Path, args: &[&str]) -> Output {
+    Command::new(stibbons_bin())
+        .current_dir(cwd)
+        .arg("update")
+        .args(args)
+        .output()
+        .expect("failed to spawn stibbons")
+}
+
 /// Seed a project by running `init --non-interactive --config <fixture>` in
 /// `cwd`, asserting success. Returns nothing; the tempdir now holds a real
 /// `.igor.yml` + generated files.
