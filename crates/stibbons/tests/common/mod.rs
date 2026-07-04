@@ -49,6 +49,16 @@ pub fn run_agent(cwd: &Path, args: &[&str]) -> Output {
         .expect("failed to spawn stibbons")
 }
 
+/// Run `stibbons status` in `cwd`, returning the full [`Output`] so callers can
+/// assert on both the exit code (0 = clean, 1 = drift/error) and stdout.
+pub fn run_status(cwd: &Path) -> Output {
+    Command::new(stibbons_bin())
+        .current_dir(cwd)
+        .arg("status")
+        .output()
+        .expect("failed to spawn stibbons")
+}
+
 /// Run `stibbons add <args...>` in `cwd`.
 pub fn run_add(cwd: &Path, args: &[&str]) -> Output {
     Command::new(stibbons_bin())
