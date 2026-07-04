@@ -56,7 +56,14 @@ pub fn hash_content(content: &str) -> String {
     hash_bytes(content.as_bytes())
 }
 
-fn hash_bytes(bytes: &[u8]) -> String {
+/// Returns the SHA-256 hex digest of raw bytes.
+///
+/// Exposed for drift detection (`stibbons status`), which hashes a file's
+/// on-disk bytes directly — a generated file may not be valid UTF-8, so it
+/// cannot always go through [`hash_content`]. Produces the same digest as
+/// [`hash_content`] for UTF-8 input.
+#[must_use]
+pub fn hash_bytes(bytes: &[u8]) -> String {
     let hash = Sha256::digest(bytes);
     format!("{hash:x}")
 }

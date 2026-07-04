@@ -1,6 +1,7 @@
 //! Stibbons: Host orchestrator for the containers build system.
 
 mod agent;
+mod commands;
 mod labels;
 mod render;
 mod wizard;
@@ -114,6 +115,19 @@ enum Commands {
     /// additions (branch protection, CI templates) will hang off the same
     /// command.
     Setup(SyncArgs),
+
+    /// Print the stibbons version (and containers version, when detectable).
+    Version,
+
+    /// List all available container features.
+    Features {
+        /// Output format: `table` (default) or `markdown`.
+        #[arg(long, default_value = "table")]
+        format: String,
+    },
+
+    /// Show enabled features and generated-file health (exit 1 on drift).
+    Status,
 }
 
 /// `labels` subcommands.
@@ -204,6 +218,26 @@ fn main() {
                 std::process::exit(1);
             }
         }
+        Some(Commands::Version) => {
+            if let Err(e) = commands::version::run(&mut std::io::stdout()) {
+                eprintln!("Error: {e}");
+                std::process::exit(1);
+            }
+        }
+        Some(Commands::Features { format }) => {
+            if let Err(e) = commands::features::run(&mut std::io::stdout(), &format) {
+                eprintln!("Error: {e}");
+                std::process::exit(1);
+            }
+        }
+        Some(Commands::Status) => match commands::status::run(&mut std::io::stdout()) {
+            Ok(report) if report.drift => std::process::exit(1),
+            Ok(_) => {}
+            Err(e) => {
+                eprintln!("Error: {e}");
+                std::process::exit(1);
+            }
+        },
         None => {
             tracing::info!("stibbons v{}", env!("STIBBONS_VERSION"));
             eprintln!(
@@ -782,5 +816,31 @@ mod tests {
         for want in ["build", "start", "stop", "restart", "status", "logs", "connect"] {
             assert!(names.contains(&want), "agent should expose `{want}` (have {names:?})");
         }
+    }
+
+    #[test]
+    fn verify_introspection_subcommands() {
+        use clap::CommandFactory;
+        let cmd = Cli::command();
+        let names: Vec<&str> = cmd.get_subcommands().map(clap::Command::get_name).collect();
+        for want in ["version", "features", "status"] {
+            assert!(names.contains(&want), "should expose `{want}` (have {names:?})");
+        }
+    }
+
+    #[test]
+    fn features_format_defaults_to_table() {
+        use clap::CommandFactory;
+        let cmd = Cli::command();
+        let features = cmd
+            .get_subcommands()
+            .find(|s| s.get_name() == "features")
+            .expect("features subcommand should exist");
+        let format = features
+            .get_arguments()
+            .find(|a| a.get_id() == "format")
+            .expect("--format arg should exist");
+        let default = format.get_default_values().first().and_then(|v| v.to_str());
+        assert_eq!(default, Some("table"), "--format should default to table");
     }
 }
