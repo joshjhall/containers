@@ -39,6 +39,16 @@ pub fn run_init_with_args(cwd: &Path, extra_args: &[&str]) -> Output {
         .expect("failed to spawn stibbons")
 }
 
+/// Run `stibbons agent <args...>` in `cwd`.
+pub fn run_agent(cwd: &Path, args: &[&str]) -> Output {
+    Command::new(stibbons_bin())
+        .current_dir(cwd)
+        .arg("agent")
+        .args(args)
+        .output()
+        .expect("failed to spawn stibbons")
+}
+
 /// Run `stibbons add <args...>` in `cwd`.
 pub fn run_add(cwd: &Path, args: &[&str]) -> Output {
     Command::new(stibbons_bin())
