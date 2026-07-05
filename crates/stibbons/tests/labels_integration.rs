@@ -80,6 +80,51 @@ fn setup_command_exists() {
 }
 
 #[test]
+fn setup_real_execution_reports_complete() {
+    // Exercise `run_setup` itself (not just --help): an empty label set makes
+    // the underlying sync short-circuit at "Nothing to sync" before any
+    // gh/glab call, so this stays hermetic while still reaching the
+    // "Setup complete." tail that only real execution prints.
+    let tmp = TempDir::new().unwrap();
+    let skills = tmp.path().join("skills");
+    fs::create_dir_all(&skills).unwrap();
+    write_skill(&skills, "docker-development", "name: docker-development\nlabels: []\n");
+
+    let out = run(
+        tmp.path(),
+        &["setup", "--platform", "github", "--skills-dir", skills.to_str().unwrap()],
+    );
+    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(stdout.contains("Nothing to sync"), "got: {stdout}");
+    assert!(stdout.contains("Setup complete. (Future steps:"), "got: {stdout}");
+}
+
+#[test]
+fn orphaned_reference_warning_reaches_stderr() {
+    // A name-only label (no color) is a *reference*, never a definition. When a
+    // name is only ever referenced, load_labels emits a "never defined" warning
+    // and drops it — so the desired set is empty and sync short-circuits at
+    // "Nothing to sync" (hermetic, no backend). This asserts that module-level
+    // warning is wired through to the CLI's stderr.
+    let tmp = TempDir::new().unwrap();
+    let skills = tmp.path().join("skills");
+    fs::create_dir_all(&skills).unwrap();
+    write_skill(&skills, "orchestrate", "labels:\n  - name: status/orphan\n");
+
+    let out = run(
+        tmp.path(),
+        &["labels", "sync", "--platform", "github", "--skills-dir", skills.to_str().unwrap()],
+    );
+    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(stderr.contains("warning:"), "expected a warning on stderr, got: {stderr}");
+    assert!(stderr.contains("never defined"), "expected orphan warning, got: {stderr}");
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(stdout.contains("Nothing to sync"), "got: {stdout}");
+}
+
+#[test]
 fn empty_skills_dir_reports_nothing_to_sync() {
     let tmp = TempDir::new().unwrap();
     let skills = tmp.path().join("skills");

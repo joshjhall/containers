@@ -7,6 +7,8 @@
 use std::fmt;
 use std::process::Command;
 
+use super::exec::{self, DEFAULT_CLI_TIMEOUT, ExecError};
+
 /// Which issue tracker a repo is hosted on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Platform {
@@ -84,10 +86,15 @@ fn host_of(url: &str) -> Option<&str> {
 /// Returns an error when `git` cannot be spawned or the command fails (e.g. not
 /// a git repo, or no `origin` remote configured).
 pub fn origin_remote_url() -> Result<String, Box<dyn std::error::Error>> {
-    let output = Command::new("git")
-        .args(["remote", "get-url", "origin"])
-        .output()
-        .map_err(|e| format!("failed to run git: {e}"))?;
+    let mut cmd = Command::new("git");
+    cmd.args(["remote", "get-url", "origin"]);
+    // Bounded so a wedged git (e.g. a credential prompt) can't hang detection.
+    let output = exec::run_with_timeout(cmd, DEFAULT_CLI_TIMEOUT).map_err(|e| match e {
+        ExecError::Spawn(io) => format!("failed to run git: {io}"),
+        ExecError::Timeout(d) => {
+            format!("`git remote get-url origin` timed out after {}s", d.as_secs())
+        }
+    })?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         return Err(format!("git remote get-url origin failed: {}", stderr.trim()).into());
@@ -130,6 +137,21 @@ mod tests {
     fn unknown_host_returns_none() {
         assert_eq!(classify_remote("git@bitbucket.org:team/repo.git"), None);
         assert_eq!(classify_remote("https://example.com/x/y.git"), None);
+    }
+
+    #[test]
+    fn bare_substring_host_hits_fallback_branch() {
+        // Host is neither `github.com` nor `ghe.`/`.ghe.`-prefixed and doesn't
+        // start with `gitlab.`, so it only matches via the bare-substring
+        // fallback (`host.contains("github")`).
+        assert_eq!(
+            classify_remote("git@mycompany-github.example.com:o/r.git"),
+            Some(Platform::GitHub)
+        );
+        assert_eq!(
+            classify_remote("https://internal-gitlab-host.example.com/o/r.git"),
+            Some(Platform::GitLab)
+        );
     }
 
     #[test]

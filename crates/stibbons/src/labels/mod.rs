@@ -11,6 +11,7 @@
 //! `gh`/`glab` CLIs behind a trait. This module wires them together.
 
 mod backend;
+mod exec;
 mod metadata;
 mod plan;
 mod platform;
@@ -59,6 +60,31 @@ fn default_skill_roots() -> Vec<PathBuf> {
     candidates.into_iter().filter(|p| p.exists()).collect()
 }
 
+/// Resolve the skill roots to scan: the caller's `--skills-dir` values when any
+/// were given, otherwise `defaults`. Errors when the result is empty (nothing
+/// to read labels from).
+///
+/// Split out (with `defaults` injected rather than calling
+/// [`default_skill_roots`] directly) so the empty-roots error branch is
+/// unit-testable without depending on whether the host has
+/// `/opt/librarian/plugins` installed.
+///
+/// # Errors
+///
+/// Returns an error when both `skills_dirs` and `defaults` are empty.
+fn resolve_skill_roots(
+    skills_dirs: &[PathBuf],
+    defaults: Vec<PathBuf>,
+) -> Result<Vec<PathBuf>, Box<dyn std::error::Error>> {
+    let roots = if skills_dirs.is_empty() { defaults } else { skills_dirs.to_vec() };
+    if roots.is_empty() {
+        return Err("no skill directories found to read labels from; \
+                    pass --skills-dir <DIR>"
+            .into());
+    }
+    Ok(roots)
+}
+
 /// Run the label sync.
 ///
 /// # Errors
@@ -80,13 +106,7 @@ pub fn run_sync(opts: &SyncOptions) -> Result<(), Box<dyn std::error::Error>> {
     };
 
     // 2. Resolve skill roots and aggregate labels.
-    let roots =
-        if opts.skills_dirs.is_empty() { default_skill_roots() } else { opts.skills_dirs.clone() };
-    if roots.is_empty() {
-        return Err("no skill directories found to read labels from; \
-                    pass --skills-dir <DIR>"
-            .into());
-    }
+    let roots = resolve_skill_roots(&opts.skills_dirs, default_skill_roots())?;
     let agg = metadata::load_labels(&roots)?;
     for warning in &agg.warnings {
         eprintln!("warning: {warning}");
@@ -199,6 +219,37 @@ mod tests {
     fn parse_platform_flag_rejects_unknown() {
         let err = parse_platform_flag("bitbucket").unwrap_err();
         assert!(err.to_string().contains("unknown platform"));
+    }
+
+    #[test]
+    fn resolve_skill_roots_prefers_explicit_dirs() {
+        let explicit = vec![PathBuf::from("/tmp/a"), PathBuf::from("/tmp/b")];
+        // Explicit dirs are used verbatim and defaults are ignored.
+        let roots = resolve_skill_roots(&explicit, vec![PathBuf::from("/default")]).unwrap();
+        assert_eq!(roots, explicit);
+    }
+
+    #[test]
+    fn resolve_skill_roots_falls_back_to_defaults() {
+        let defaults = vec![PathBuf::from("/opt/librarian/plugins")];
+        let roots = resolve_skill_roots(&[], defaults.clone()).unwrap();
+        assert_eq!(roots, defaults);
+    }
+
+    #[test]
+    fn resolve_skill_roots_empty_is_error() {
+        // No explicit dirs and no defaults (e.g. a host without librarian) is
+        // the "no skill directories found" branch.
+        let err = resolve_skill_roots(&[], vec![]).unwrap_err();
+        assert!(err.to_string().contains("no skill directories found"), "got: {err}");
+    }
+
+    #[test]
+    fn default_skill_roots_returns_only_existing_paths() {
+        // Whatever it returns, every entry must actually exist on disk.
+        for root in default_skill_roots() {
+            assert!(root.exists(), "default_skill_roots returned a nonexistent path: {root:?}");
+        }
     }
 
     fn label(name: &str, color: &str, desc: &str) -> LabelDef {
