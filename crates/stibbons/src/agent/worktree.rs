@@ -1,10 +1,10 @@
-//! `stibbons worktree` — create and remove per-agent git worktrees.
+//! `stibbons worktree` — create, remove, list, and sync per-agent git worktrees.
 //!
 //! Each agent container runs against its own git worktree so multiple golems can
 //! work different branches simultaneously. This module is the Rust port of the
-//! retired Go `igor worktree` command group (issue #362); the Go original lived
-//! in `cmd/igor/internal/cmd/worktree.go` and was removed with the submodule, so
-//! the issue's inline snippet is the reference.
+//! retired Go `igor worktree` command group (issues #362, #309); the Go original
+//! lived in `cmd/igor/internal/cmd/worktree.go` and was removed with the
+//! submodule, so the issue's inline snippet is the reference.
 //!
 //! The subtle part is **`.git` pointer rewriting**. `git worktree add` writes
 //! the worktree's `.git` file and the main repo's back-link `gitdir` file using
@@ -18,8 +18,9 @@
 //!   analogue of [`super::docker::DockerRunner`].
 //! - [`resolve_git_dir`] / [`detect_worktree_mounts`] — pure filesystem helpers,
 //!   directly unit-testable.
-//! - [`create_worktree`] / [`remove_worktree`] — orchestration over a
-//!   `&dyn GitRunner`.
+//! - [`create_worktree`] / [`remove_worktree`] / [`sync_worktree`] —
+//!   orchestration over a `&dyn GitRunner`.
+//! - [`collect_worktree_status`] — the read-only scan behind `worktree list`.
 //! - [`run`] — the single entry point wired into `main.rs`.
 
 use std::io::Write;
@@ -65,6 +66,27 @@ pub enum WorktreeCommands {
         /// overwrite a locally-modified `docker-compose.yml`.
         #[arg(long)]
         force: bool,
+    },
+
+    /// List existing agent worktrees with their branch and clean/dirty status.
+    List,
+
+    /// Rebase agent N's worktree branch onto its base branch, per repo.
+    ///
+    /// Topology-agnostic: this only ever runs `git rebase <base>` inside the
+    /// worktree — no merge into the parent branch, no push. It is the seam the
+    /// orchestrator's cross-PR rebase dispatch calls.
+    Sync {
+        /// Agent number (1..=max).
+        n: String,
+
+        /// Rebase target ref. Defaults to the main repo's current branch.
+        #[arg(long)]
+        onto: Option<String>,
+
+        /// Print the git commands that would run without executing the rebase.
+        #[arg(long)]
+        dry_run: bool,
     },
 }
 
@@ -337,6 +359,186 @@ pub fn detect_worktree_mounts(base_dir: &Path, repos: &[String], max_agents: u32
     mounts
 }
 
+/// One row of `worktree list`: an existing on-disk worktree and its git state.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WorktreeStatus {
+    /// Agent suffix, e.g. `agent01`.
+    pub suffix: String,
+    /// Repo the worktree belongs to.
+    pub repo: String,
+    /// Worktree directory, `<base_dir>/<repo>-<suffix>`.
+    pub path: PathBuf,
+    /// Current branch (`rev-parse --abbrev-ref HEAD`), or `unknown` on git error.
+    pub branch: String,
+    /// Whether `git status --porcelain` reports uncommitted work.
+    pub dirty: bool,
+}
+
+/// Scans `<base_dir>/<repo>-agentNN` for `n in 1..=max_agents` across all
+/// `repos`, returning the git status of every worktree that exists on disk.
+///
+/// This is the read-only sibling of [`detect_worktree_mounts`] — same scan, but
+/// it reports branch + clean/dirty per worktree rather than compose mounts. Pure
+/// over a `&dyn GitRunner` and does no rendering, so it is directly unit-testable
+/// and the caller owns presentation.
+///
+/// A worktree whose branch can't be read (`rev-parse` fails) is still listed with
+/// `branch == "unknown"` rather than dropped, so a broken worktree stays visible
+/// — mirroring [`worktree_is_dirty`]'s conservative handling of git failures.
+#[must_use]
+pub fn collect_worktree_status(
+    git: &dyn GitRunner,
+    base_dir: &Path,
+    repos: &[String],
+    max_agents: u32,
+) -> Vec<WorktreeStatus> {
+    let mut rows = Vec::new();
+    for n in 1..=max_agents {
+        let suffix = agent_suffix(n);
+        for repo in repos {
+            let dir = base_dir.join(format!("{repo}-{suffix}"));
+            if !dir.is_dir() {
+                continue;
+            }
+            let dir_str = dir.display().to_string();
+            let branch = git
+                .run(&["-C", &dir_str, "rev-parse", "--abbrev-ref", "HEAD"])
+                .map_or_else(|_| "unknown".to_string(), |s| s.trim().to_string());
+            let dirty = worktree_is_dirty(git, &dir_str);
+            rows.push(WorktreeStatus {
+                suffix: suffix.clone(),
+                repo: repo.clone(),
+                path: dir,
+                branch,
+                dirty,
+            });
+        }
+    }
+    rows
+}
+
+/// Renders `worktree list` rows to `out`, one greppable line per worktree.
+///
+/// Prints a friendly `No worktrees found.` when there are none, so the command
+/// never produces silent empty output.
+fn render_worktree_list(rows: &[WorktreeStatus], out: &mut dyn Write) -> CmdResult {
+    if rows.is_empty() {
+        writeln!(out, "No worktrees found.")?;
+        return Ok(());
+    }
+    for r in rows {
+        let state = if r.dirty { "dirty" } else { "clean" };
+        writeln!(out, "{}  {}  {}  [{}]  {}", r.suffix, r.repo, r.path.display(), r.branch, state)?;
+    }
+    Ok(())
+}
+
+/// Rejects a base ref that git's option parser would treat as a flag.
+///
+/// `git rebase <base>` passes `base` positionally, but git parses *any* argv
+/// element beginning with `-` as an option regardless of position — so a value
+/// like `--exec=<cmd>` reaching `git rebase` is arbitrary command execution, not
+/// an "unknown ref" error. Since `sync_worktree` is documented as the seam the
+/// orchestrator's rebase dispatch calls (potentially with a ref sourced from PR
+/// or branch metadata), reject dash-prefixed refs up front. Legitimate branch
+/// names can never begin with `-` (`git check-ref-format` forbids it), so this
+/// loses no valid input.
+fn reject_optionlike_ref(base: &str) -> CmdResult {
+    if base.starts_with('-') {
+        return Err(format!(
+            "invalid base ref {base:?}: refs cannot begin with '-' (would be parsed as a git option)"
+        )
+        .into());
+    }
+    Ok(())
+}
+
+/// Resolves the branch `sync` rebases onto: an explicit `--onto` ref wins;
+/// otherwise the main repo's currently-checked-out branch
+/// (`rev-parse --abbrev-ref HEAD`).
+///
+/// # Errors
+///
+/// Returns an error when the ref is option-like (begins with `-`, see
+/// [`reject_optionlike_ref`]), or when there is no `--onto` and the main repo is
+/// in detached HEAD (branch resolves to `HEAD` or empty), pointing the caller at
+/// `--onto`.
+fn resolve_base_branch(
+    git: &dyn GitRunner,
+    main_repo_str: &str,
+    onto: Option<&str>,
+) -> Result<String, Box<dyn std::error::Error>> {
+    if let Some(r) = onto {
+        reject_optionlike_ref(r)?;
+        return Ok(r.to_string());
+    }
+    let branch =
+        git.run(&["-C", main_repo_str, "rev-parse", "--abbrev-ref", "HEAD"])?.trim().to_string();
+    if branch.is_empty() || branch == "HEAD" {
+        return Err("main repo is in detached HEAD; pass --onto <ref> to choose a base".into());
+    }
+    Ok(branch)
+}
+
+/// Rebases one worktree's branch onto `base_branch`.
+///
+/// Topology-agnostic (per issue #309's 2026-06-21 note): only ever runs
+/// `git rebase <base>` inside the worktree — no merge into the parent branch, no
+/// push. A dirty worktree is **refused before** any rebase (mirroring
+/// [`remove_worktree`]'s gate), since rebasing over uncommitted work aborts
+/// messily. `dry_run` prints the command it would run without touching the branch.
+///
+/// A rebase that hits conflicts exits non-zero and the error is propagated,
+/// leaving the worktree mid-rebase for the user or the orchestrator's
+/// `rebase-agent` to resolve — we deliberately do **not** auto-abort, which would
+/// hide the conflict.
+///
+/// # Errors
+///
+/// Returns an error if the worktree is dirty, or if `git rebase` fails
+/// (e.g. conflicts).
+pub fn sync_worktree(
+    git: &dyn GitRunner,
+    base_dir: &Path,
+    repo: &str,
+    suffix: &str,
+    base_branch: &str,
+    dry_run: bool,
+    out: &mut dyn Write,
+) -> CmdResult {
+    let worktree_dir = base_dir.join(format!("{repo}-{suffix}"));
+    if !worktree_dir.exists() {
+        writeln!(out, "  worktree {} does not exist", worktree_dir.display())?;
+        return Ok(());
+    }
+    let worktree_str = worktree_dir.display().to_string();
+
+    // Refuse to rebase over uncommitted work — git itself aborts a dirty rebase,
+    // but a clear up-front error beats git's cryptic mid-operation message.
+    if worktree_is_dirty(git, &worktree_str) {
+        return Err(format!(
+            "worktree {} has uncommitted changes; commit or stash them before sync",
+            worktree_dir.display()
+        )
+        .into());
+    }
+
+    if dry_run {
+        writeln!(out, "  [dry-run] git -C {worktree_str} rebase --end-of-options {base_branch}")?;
+        return Ok(());
+    }
+
+    // `--end-of-options` stops git parsing later argv as flags, so the base ref
+    // is always treated positionally (defense in depth atop reject_optionlike_ref).
+    let output = git.run(&["-C", &worktree_str, "rebase", "--end-of-options", base_branch])?;
+    writeln!(out, "  rebased {} onto {base_branch}", worktree_dir.display())?;
+    let trimmed = output.trim();
+    if !trimmed.is_empty() {
+        writeln!(out, "    {trimmed}")?;
+    }
+    Ok(())
+}
+
 /// Re-renders `.devcontainer/docker-compose.yml` with `mounts` populated in the
 /// worktree-mounts slot, honoring the same drift-detection contract as
 /// `init`/`add`/`remove`/`update`: a compose file the user has hand-edited since
@@ -395,9 +597,12 @@ fn update_compose_worktree_mounts(cfg: &IgorConfig, mounts: Vec<String>, force: 
     Ok(())
 }
 
-/// Dispatches a `worktree` subcommand: loads the shared agent context, creates
-/// or removes agent N's worktree(s) across all configured repos, then re-renders
-/// the compose mounts from a fresh on-disk scan.
+/// Dispatches a `worktree` subcommand: loads the shared agent context and acts
+/// on agent N's worktree(s) across all configured repos.
+///
+/// `create`/`remove` mutate worktrees and then re-render the compose mounts from
+/// a fresh on-disk scan; `list` and `sync` are read-only w.r.t. compose and
+/// return early without touching it (`list` takes no agent number at all).
 ///
 /// # Errors
 ///
@@ -408,10 +613,32 @@ pub fn run(command: &WorktreeCommands) -> CmdResult {
     let git = ProcessGitRunner;
     let mut out = std::io::stdout();
 
+    // list/sync don't re-render compose (and list has no agent number), so handle
+    // them fully here and return before the create/remove + compose path.
+    match command {
+        WorktreeCommands::List => {
+            let rows = collect_worktree_status(&git, &ctx.base_dir, &ctx.repos, ctx.max_agents);
+            return render_worktree_list(&rows, &mut out);
+        }
+        WorktreeCommands::Sync { n, onto, dry_run } => {
+            let num = validate_agent_num(n, ctx.max_agents)?;
+            let suffix = agent_suffix(num);
+            writeln!(out, "Syncing worktrees for agent {num} ...")?;
+            for repo in &ctx.repos {
+                let main_repo_str = ctx.base_dir.join(repo).display().to_string();
+                let base = resolve_base_branch(&git, &main_repo_str, onto.as_deref())?;
+                sync_worktree(&git, &ctx.base_dir, repo, &suffix, &base, *dry_run, &mut out)?;
+            }
+            return Ok(());
+        }
+        WorktreeCommands::Create { .. } | WorktreeCommands::Remove { .. } => {}
+    }
+
     let (n_arg, force) = match command {
         WorktreeCommands::Create { n, force } | WorktreeCommands::Remove { n, force } => {
             (n, *force)
         }
+        _ => unreachable!("list/sync returned early"),
     };
     let n = validate_agent_num(n_arg, ctx.max_agents)?;
     let suffix = agent_suffix(n);
@@ -429,6 +656,7 @@ pub fn run(command: &WorktreeCommands) -> CmdResult {
                 remove_worktree(&git, &ctx.base_dir, repo, &suffix, force, &mut out)?;
             }
         }
+        _ => unreachable!("list/sync returned early"),
     }
 
     // Re-render compose from a fresh scan so the mount list reflects reality.
@@ -669,5 +897,205 @@ mod tests {
                 "../lib-agent01:/workspace/lib-agent01".to_string(),
             ]
         );
+    }
+
+    #[test]
+    fn collect_worktree_status_reports_branch_and_dirty() {
+        let tmp = tempfile::tempdir().unwrap();
+        let base = tmp.path();
+        std::fs::create_dir_all(base.join("myapp-agent01")).unwrap();
+
+        let git = MockGit::new();
+        git.on("rev-parse --abbrev-ref", Ok("agent01"));
+        git.on("status --porcelain", Ok(" M src/lib.rs"));
+
+        let rows = collect_worktree_status(&git, base, &["myapp".to_string()], 5);
+        assert_eq!(rows.len(), 1);
+        let r = &rows[0];
+        assert_eq!(r.suffix, "agent01");
+        assert_eq!(r.repo, "myapp");
+        assert_eq!(r.path, base.join("myapp-agent01"));
+        assert_eq!(r.branch, "agent01");
+        assert!(r.dirty, "non-empty porcelain output should mark the worktree dirty");
+    }
+
+    #[test]
+    fn collect_worktree_status_empty_when_no_dirs() {
+        let tmp = tempfile::tempdir().unwrap();
+        let git = MockGit::new();
+        let rows = collect_worktree_status(&git, tmp.path(), &["myapp".to_string()], 5);
+        assert!(rows.is_empty());
+    }
+
+    #[test]
+    fn collect_worktree_status_branch_unknown_on_git_error() {
+        let tmp = tempfile::tempdir().unwrap();
+        let base = tmp.path();
+        std::fs::create_dir_all(base.join("myapp-agent01")).unwrap();
+
+        let git = MockGit::new();
+        git.on("rev-parse --abbrev-ref", Err(()));
+
+        let rows = collect_worktree_status(&git, base, &["myapp".to_string()], 5);
+        assert_eq!(rows.len(), 1, "a worktree with an unreadable branch must still be listed");
+        assert_eq!(rows[0].branch, "unknown");
+    }
+
+    #[test]
+    fn collect_worktree_status_skips_non_directory() {
+        let tmp = tempfile::tempdir().unwrap();
+        let base = tmp.path();
+        // A file (not a dir) with a matching name must be ignored.
+        std::fs::write(base.join("myapp-agent01"), "not a dir").unwrap();
+
+        let git = MockGit::new();
+        let rows = collect_worktree_status(&git, base, &["myapp".to_string()], 5);
+        assert!(rows.is_empty());
+    }
+
+    #[test]
+    fn render_worktree_list_empty_message() {
+        let mut out = Vec::new();
+        render_worktree_list(&[], &mut out).unwrap();
+        assert!(String::from_utf8(out).unwrap().contains("No worktrees found."));
+    }
+
+    #[test]
+    fn render_worktree_list_marks_dirty_and_clean() {
+        let rows = vec![
+            WorktreeStatus {
+                suffix: "agent01".into(),
+                repo: "myapp".into(),
+                path: PathBuf::from("/w/myapp-agent01"),
+                branch: "agent01".into(),
+                dirty: true,
+            },
+            WorktreeStatus {
+                suffix: "agent02".into(),
+                repo: "myapp".into(),
+                path: PathBuf::from("/w/myapp-agent02"),
+                branch: "agent02".into(),
+                dirty: false,
+            },
+        ];
+        let mut out = Vec::new();
+        render_worktree_list(&rows, &mut out).unwrap();
+        let text = String::from_utf8(out).unwrap();
+        assert!(text.contains("[agent01]"), "branch should be shown in brackets");
+        assert!(text.contains("dirty"));
+        assert!(text.contains("clean"));
+    }
+
+    #[test]
+    fn resolve_base_branch_uses_onto_override() {
+        let git = MockGit::new();
+        let base = resolve_base_branch(&git, "/repo", Some("develop")).unwrap();
+        assert_eq!(base, "develop");
+        assert!(!git.has_call("rev-parse"), "an explicit --onto must not shell out to git");
+    }
+
+    #[test]
+    fn resolve_base_branch_defaults_to_main_branch() {
+        let git = MockGit::new();
+        git.on("rev-parse --abbrev-ref", Ok("main"));
+        let base = resolve_base_branch(&git, "/repo", None).unwrap();
+        assert_eq!(base, "main");
+    }
+
+    #[test]
+    fn resolve_base_branch_detached_head_errors() {
+        let git = MockGit::new();
+        git.on("rev-parse --abbrev-ref", Ok("HEAD"));
+        let err = resolve_base_branch(&git, "/repo", None).unwrap_err();
+        assert!(err.to_string().contains("--onto"), "got: {err}");
+    }
+
+    #[test]
+    fn sync_worktree_refuses_dirty() {
+        let tmp = tempfile::tempdir().unwrap();
+        let base = tmp.path();
+        std::fs::create_dir_all(base.join("myapp-agent01")).unwrap();
+
+        let git = MockGit::new();
+        git.on("status --porcelain", Ok(" M file.rs"));
+
+        let mut out = Vec::new();
+        let err =
+            sync_worktree(&git, base, "myapp", "agent01", "main", false, &mut out).unwrap_err();
+        assert!(err.to_string().contains("uncommitted changes"), "got: {err}");
+        assert!(!git.has_call("rebase"), "must not rebase a dirty worktree");
+    }
+
+    #[test]
+    fn sync_worktree_dry_run_prints_no_rebase() {
+        let tmp = tempfile::tempdir().unwrap();
+        let base = tmp.path();
+        std::fs::create_dir_all(base.join("myapp-agent01")).unwrap();
+
+        let git = MockGit::new();
+        // Clean worktree (default empty porcelain).
+        let mut out = Vec::new();
+        sync_worktree(&git, base, "myapp", "agent01", "main", true, &mut out).unwrap();
+
+        let text = String::from_utf8(out).unwrap();
+        assert!(text.contains("[dry-run]"));
+        assert!(text.contains("rebase --end-of-options main"));
+        assert!(!git.has_call("rebase"), "dry-run must not actually rebase");
+    }
+
+    #[test]
+    fn sync_worktree_runs_rebase() {
+        let tmp = tempfile::tempdir().unwrap();
+        let base = tmp.path();
+        std::fs::create_dir_all(base.join("myapp-agent01")).unwrap();
+
+        let git = MockGit::new();
+        let mut out = Vec::new();
+        sync_worktree(&git, base, "myapp", "agent01", "main", false, &mut out).unwrap();
+
+        assert!(git.has_call("rebase --end-of-options main"), "expected the rebase call");
+        assert!(String::from_utf8(out).unwrap().contains("rebased"));
+    }
+
+    #[test]
+    fn sync_worktree_propagates_rebase_conflict() {
+        let tmp = tempfile::tempdir().unwrap();
+        let base = tmp.path();
+        std::fs::create_dir_all(base.join("myapp-agent01")).unwrap();
+
+        let git = MockGit::new();
+        // Clean worktree, but the rebase itself fails (conflicts). The error must
+        // surface — sync deliberately does NOT auto-abort or swallow it.
+        git.on("rebase --end-of-options", Err(()));
+
+        let mut out = Vec::new();
+        let err =
+            sync_worktree(&git, base, "myapp", "agent01", "main", false, &mut out).unwrap_err();
+        assert!(err.to_string().contains("rebase"), "error should reflect the git failure: {err}");
+        assert!(
+            !String::from_utf8(out).unwrap().contains("rebased"),
+            "must not print a success line when the rebase failed",
+        );
+    }
+
+    #[test]
+    fn resolve_base_branch_rejects_optionlike_onto() {
+        let git = MockGit::new();
+        let err = resolve_base_branch(&git, "/repo", Some("--exec=touch pwned")).unwrap_err();
+        assert!(err.to_string().contains("cannot begin with '-'"), "got: {err}");
+        assert!(!git.has_call("rev-parse"), "a rejected ref must not shell out");
+    }
+
+    #[test]
+    fn sync_worktree_missing_dir_noops() {
+        let tmp = tempfile::tempdir().unwrap();
+        let base = tmp.path();
+
+        let git = MockGit::new();
+        let mut out = Vec::new();
+        sync_worktree(&git, base, "myapp", "agent01", "main", false, &mut out).unwrap();
+
+        assert!(String::from_utf8(out).unwrap().contains("does not exist"));
+        assert!(!git.has_call("rebase"), "a missing worktree must not rebase");
     }
 }
