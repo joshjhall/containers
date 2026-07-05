@@ -13,6 +13,7 @@
 use std::collections::BTreeMap;
 use std::process::Command;
 
+use super::exec::{self, DEFAULT_CLI_TIMEOUT, ExecError};
 use super::metadata::LabelDef;
 
 /// Read/write access to a repository's labels.
@@ -44,14 +45,23 @@ pub trait LabelBackend {
 ///
 /// Centralizes the spawn-failure vs non-zero-exit handling both backends need,
 /// and turns a missing binary into a clear "is it installed / authenticated"
-/// message rather than a raw `NotFound`.
+/// message rather than a raw `NotFound`. The call is bounded by
+/// [`DEFAULT_CLI_TIMEOUT`] so a wedged interactive re-auth or a stalled network
+/// call fails the run instead of hanging forever (see [`super::exec`]).
 fn run(program: &str, args: &[&str]) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
-    let output = Command::new(program).args(args).output().map_err(|e| {
-        if e.kind() == std::io::ErrorKind::NotFound {
+    let mut cmd = Command::new(program);
+    cmd.args(args);
+    let output = exec::run_with_timeout(cmd, DEFAULT_CLI_TIMEOUT).map_err(|e| match e {
+        ExecError::Spawn(io) if io.kind() == std::io::ErrorKind::NotFound => {
             format!("`{program}` not found on PATH — install it or use the other platform")
-        } else {
-            format!("failed to run `{program}`: {e}")
         }
+        ExecError::Spawn(io) => format!("failed to run `{program}`: {io}"),
+        ExecError::Timeout(d) => format!(
+            "`{program} {}` timed out after {}s — is it waiting on an interactive prompt or a \
+             stalled network call?",
+            args.join(" "),
+            d.as_secs()
+        ),
     })?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -89,36 +99,32 @@ impl LabelBackend for GithubCli {
         // --force makes create idempotent at the gh layer too, but we only call
         // it for genuinely-missing labels; kept off so a surprise collision is
         // surfaced rather than silently overwriting.
-        run(
-            "gh",
-            &[
-                "label",
-                "create",
-                &label.name,
-                "--color",
-                &label.color,
-                "--description",
-                &label.description,
-            ],
-        )?;
+        label.validate()?;
+        run_owned("gh", &github_args("create", label))?;
         Ok(())
     }
 
     fn update(&self, label: &LabelDef) -> Result<(), Box<dyn std::error::Error>> {
-        run(
-            "gh",
-            &[
-                "label",
-                "edit",
-                &label.name,
-                "--color",
-                &label.color,
-                "--description",
-                &label.description,
-            ],
-        )?;
+        label.validate()?;
+        run_owned("gh", &github_args("edit", label))?;
         Ok(())
     }
+}
+
+/// Build the `gh label {create|edit}` argv for a label.
+///
+/// Uses `=`-form flags for the color/description and a `--` terminator before
+/// the positional name, so even if validation is bypassed a value beginning
+/// with `-` can never be parsed by `gh` as an option (issue #694).
+fn github_args(verb: &str, label: &LabelDef) -> Vec<String> {
+    vec![
+        "label".into(),
+        verb.into(),
+        format!("--color={}", label.color),
+        format!("--description={}", label.description),
+        "--".into(),
+        label.name.clone(),
+    ]
 }
 
 /// GitLab backend using the `glab` CLI.
@@ -144,19 +150,8 @@ impl LabelBackend for GitlabCli {
     }
 
     fn create(&self, label: &LabelDef) -> Result<(), Box<dyn std::error::Error>> {
-        run(
-            "glab",
-            &[
-                "label",
-                "create",
-                "--name",
-                &label.name,
-                "--color",
-                &with_hash(&label.color),
-                "--description",
-                &label.description,
-            ],
-        )?;
+        label.validate()?;
+        run_owned("glab", &gitlab_create_args(label))?;
         Ok(())
     }
 
@@ -165,21 +160,40 @@ impl LabelBackend for GitlabCli {
         // name — so updates go through `glab label edit`. Its `--label-id`
         // accepts the label's name (GitLab's API identifies a label by title or
         // numeric id), so no separate id lookup is needed.
-        run(
-            "glab",
-            &[
-                "label",
-                "edit",
-                "--label-id",
-                &label.name,
-                "--color",
-                &with_hash(&label.color),
-                "--description",
-                &label.description,
-            ],
-        )?;
+        label.validate()?;
+        run_owned("glab", &gitlab_update_args(label))?;
         Ok(())
     }
+}
+
+/// Build the `glab label create` argv. `=`-form flags keep a leading-dash value
+/// from being parsed as an option (issue #694); colors get a leading `#`.
+fn gitlab_create_args(label: &LabelDef) -> Vec<String> {
+    vec![
+        "label".into(),
+        "create".into(),
+        format!("--name={}", label.name),
+        format!("--color={}", with_hash(&label.color)),
+        format!("--description={}", label.description),
+    ]
+}
+
+/// Build the `glab label edit` argv, identifying the label by name via
+/// `--label-id` (GitLab accepts a title or numeric id there).
+fn gitlab_update_args(label: &LabelDef) -> Vec<String> {
+    vec![
+        "label".into(),
+        "edit".into(),
+        format!("--label-id={}", label.name),
+        format!("--color={}", with_hash(&label.color)),
+        format!("--description={}", label.description),
+    ]
+}
+
+/// [`run`] for owned `String` args (the arg builders return `Vec<String>`).
+fn run_owned(program: &str, args: &[String]) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    let borrowed: Vec<&str> = args.iter().map(String::as_str).collect();
+    run(program, &borrowed)
 }
 
 /// GitLab wants colors with a leading `#`; metadata may omit it.
@@ -211,5 +225,65 @@ mod tests {
         let rows: Vec<GlabLabel> = serde_json::from_slice(json).unwrap();
         assert_eq!(rows[0].name, "bug");
         assert_eq!(rows[0].description, "");
+    }
+
+    fn label(name: &str, color: &str, desc: &str) -> LabelDef {
+        LabelDef { name: name.into(), color: color.into(), description: desc.into() }
+    }
+
+    #[test]
+    fn github_create_args_use_eq_flags_and_terminator() {
+        let l = label("status/in-progress", "0E8A16", "An agent is working");
+        assert_eq!(
+            github_args("create", &l),
+            vec![
+                "label",
+                "create",
+                "--color=0E8A16",
+                "--description=An agent is working",
+                "--",
+                "status/in-progress",
+            ]
+        );
+    }
+
+    #[test]
+    fn github_edit_args_use_edit_verb() {
+        let l = label("type/bug", "D73A4A", "Bug");
+        let args = github_args("edit", &l);
+        assert_eq!(args[0], "label");
+        assert_eq!(args[1], "edit");
+        // The `--` terminator precedes the positional name.
+        assert_eq!(args[args.len() - 2], "--");
+        assert_eq!(args[args.len() - 1], "type/bug");
+    }
+
+    #[test]
+    fn gitlab_create_args_prefix_color_hash_and_use_name_flag() {
+        let l = label("type/bug", "D73A4A", "Bug");
+        assert_eq!(
+            gitlab_create_args(&l),
+            vec!["label", "create", "--name=type/bug", "--color=#D73A4A", "--description=Bug"]
+        );
+    }
+
+    #[test]
+    fn gitlab_update_args_use_label_id_by_name() {
+        let l = label("type/bug", "#D73A4A", "Bug");
+        // Identifies the label by name via --label-id; color already has `#`.
+        assert_eq!(
+            gitlab_update_args(&l),
+            vec!["label", "edit", "--label-id=type/bug", "--color=#D73A4A", "--description=Bug"]
+        );
+    }
+
+    #[test]
+    fn eq_form_keeps_leading_dash_value_as_single_arg() {
+        // Even a (hypothetical, validation-bypassing) leading-dash description
+        // stays one `--description=…` token — never a separate flag.
+        let l = label("n", "0E8A16", "--repo=evil");
+        let args = github_args("create", &l);
+        assert!(args.iter().any(|a| a == "--description=--repo=evil"));
+        assert!(!args.iter().any(|a| a == "--repo=evil"));
     }
 }
