@@ -277,9 +277,14 @@ pre-push:
         # to `files="a" "b"`, which is `VAR=value command` syntax and EXECUTES
         # the second path as a command (hangs the push if it is a script). Pass
         # the tokens through printf like the cargo-test hook above.
+        #
+        # Feed the list to typos via `xargs -d '\n'` rather than an unquoted
+        # `typos $files`: word-splitting would break any path containing a space
+        # (e.g. GitLab issue templates like ".gitlab/issue_templates/Bug
+        # Report.md"), splitting one filename into two bad arguments.
         files=$(/usr/bin/printf '%s\n' {push_files} | /usr/bin/grep -v '^$' || true)
         if [ -n "$files" ]; then
-          typos $files
+          /usr/bin/printf '%s\n' "$files" | /usr/bin/xargs -d '\n' typos
         else
           typos
         fi
