@@ -48,13 +48,18 @@ all = "warn"
 pedantic = "warn"
 nursery = "warn"
 
-# Release profile — tuned for small distributable binaries (issue #286).
-# The stibbons host CLI ships as a GitHub Release asset per target triple;
-# these settings keep each binary well under the 15 MB budget. Conservative
-# on purpose: no `panic = "abort"`, so panic/backtrace and test semantics are
-# unchanged.
-[profile.release]
-strip = true      # drop symbols/debuginfo from the shipped binary
-lto = "thin"      # cross-crate inlining without a full-LTO time hit
-codegen-units = 1 # better optimization/size at the cost of build time
-opt-level = "s"   # optimize for size
+# Distribution profile — tuned for small distributable binaries (issue #286,
+# scoped per #700). Only the stibbons host CLI ships as a GitHub Release asset
+# per target triple, built via `--profile dist` in release-binaries.yml. Kept
+# off the default `release` profile so the CI-only crates (luggage,
+# record-evidence, containers-common) keep fast release builds and retain debug
+# symbols — they're never distributed, so they don't need the size tuning and
+# shouldn't pay the `codegen-units = 1` / `lto = "thin"` build-time cost.
+# Conservative on purpose: no `panic = "abort"`, so panic/backtrace and test
+# semantics are unchanged.
+[profile.dist]
+inherits = "release"
+strip = true         # drop symbols/debuginfo from the shipped binary
+lto = "thin"         # cross-crate inlining without a full-LTO time hit
+codegen-units = 1    # better optimization/size at the cost of build time
+opt-level = "s"      # optimize for size
