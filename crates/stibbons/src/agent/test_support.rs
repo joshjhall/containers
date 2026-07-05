@@ -11,7 +11,7 @@ use super::context::AgentContext;
 /// Returns the [`TempDir`] alongside the context so the caller keeps the
 /// directory alive — worktree-existence checks in `status`/`connect` stat paths
 /// under `base_dir`.
-pub(super) fn load_ctx(mut cfg: IgorConfig) -> (AgentContext, TempDir) {
+pub fn load_ctx(mut cfg: IgorConfig) -> (AgentContext, TempDir) {
     let tmp = tempfile::tempdir().unwrap();
     let project_dir = tmp.path().join(&cfg.project.name);
     std::fs::create_dir_all(&project_dir).unwrap();

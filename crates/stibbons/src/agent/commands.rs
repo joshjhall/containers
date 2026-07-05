@@ -11,8 +11,8 @@ use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 use super::context::{
-    AgentContext, AgentError, agent_suffix, container_exists, container_name, image_exists,
-    is_container_running, validate_agent_num,
+    AgentContext, AgentError, agent_suffix, container_exists, container_name, ensure_network,
+    image_exists, is_container_running, validate_agent_num,
 };
 use super::db::{per_agent_db_url, provision_per_agent_dbs};
 use super::docker::DockerRunner;
@@ -157,10 +157,7 @@ pub fn run_start(
     let scripts_dir = extract_agent_scripts()?;
 
     // Create the network if it doesn't already exist.
-    if docker.run(&["network", "inspect", &ctx.network]).is_err() {
-        docker.run(&["network", "create", &ctx.network])?;
-        writeln!(out, "Created network {}", ctx.network)?;
-    }
+    ensure_network(docker, out, &ctx.network)?;
 
     let hostname = format!("agent-{n}");
     let scripts_mount = format!("{}:/opt/agent-scripts:ro", scripts_dir.display());

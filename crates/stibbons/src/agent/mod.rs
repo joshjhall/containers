@@ -20,11 +20,11 @@
 //! `main.rs`.
 
 mod commands;
-mod context;
-mod db;
-mod docker;
+pub mod context;
+pub mod db;
+pub mod docker;
 #[cfg(test)]
-mod test_support;
+pub mod test_support;
 pub mod worktree;
 
 use clap::Subcommand;

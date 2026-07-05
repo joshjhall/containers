@@ -87,6 +87,63 @@ pub fn provision_per_agent_dbs(
     Ok(())
 }
 
+/// Drops and recreates the per-agent database for every agent `1..=max` on a
+/// single `per_agent_db` service, used by `services reset <name>`.
+///
+/// The service container must already be running; this waits for `PostgreSQL`
+/// readiness once, then issues a `DROP DATABASE IF EXISTS` + `CREATE DATABASE`
+/// pair per agent so a reset returns each agent to a clean database.
+///
+/// # Errors
+///
+/// Returns [`AgentError::ServiceNotRunning`] if the service container is not
+/// running, or a [`DockerError`](super::docker::DockerError) wrapped via `?` if
+/// a readiness or `psql` call fails.
+pub fn reset_per_agent_dbs(
+    docker: &dyn DockerRunner,
+    project: &str,
+    svc_name: &str,
+    svc: &ServiceConfig,
+    max_agents: u32,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let svc_container = service_container_name(project, svc_name);
+    if !is_container_running(docker, &svc_container) {
+        return Err(Box::new(AgentError::ServiceNotRunning {
+            service: svc_name.to_string(),
+            container: svc_container,
+        }));
+    }
+
+    let (user, _) = extract_pg_credentials(&svc.environment);
+    wait_for_postgres(docker, &svc_container, &user, 30)?;
+
+    for n in 1..=max_agents {
+        let name = db_name(project, n);
+        // Terminating connections is unnecessary here: agents are expected to be
+        // stopped before a reset, and DROP ... IF EXISTS keeps this idempotent.
+        docker.run(&[
+            "exec",
+            &svc_container,
+            "psql",
+            "-U",
+            &user,
+            "-c",
+            &format!("DROP DATABASE IF EXISTS {}", sql_ident(&name)),
+        ])?;
+        docker.run(&[
+            "exec",
+            &svc_container,
+            "psql",
+            "-U",
+            &user,
+            "-c",
+            &format!("CREATE DATABASE {}", sql_ident(&name)),
+        ])?;
+    }
+
+    Ok(())
+}
+
 /// Escapes a string for use inside a single-quoted SQL string literal
 /// (`'...'`) by doubling embedded single quotes.
 fn sql_literal(s: &str) -> String {
@@ -96,7 +153,7 @@ fn sql_literal(s: &str) -> String {
 /// Quotes a string as a SQL identifier (`"..."`), doubling embedded double
 /// quotes. Needed because the per-agent DB name embeds the project name, which
 /// may contain characters (e.g. hyphens) that are invalid in a bare identifier.
-fn sql_ident(s: &str) -> String {
+pub fn sql_ident(s: &str) -> String {
     format!("\"{}\"", s.replace('"', "\"\""))
 }
 
@@ -264,6 +321,34 @@ mod tests {
         let (user, password) = extract_pg_credentials(&env);
         assert_eq!(user, "admin");
         assert_eq!(password, "s3cret");
+    }
+
+    #[test]
+    fn reset_errors_when_service_not_running() {
+        let docker = MockDocker::new();
+        docker.on("inspect -f", MockResult::err()); // is_container_running → false
+        let err =
+            reset_per_agent_dbs(&docker, "myproject", "postgres", &pg_service(), 3).unwrap_err();
+        assert!(err.to_string().contains("is not running"), "{err}");
+    }
+
+    #[test]
+    fn reset_drops_and_recreates_every_agent_db() {
+        let docker = MockDocker::new();
+        docker.on("inspect -f", MockResult::ok("true")); // running
+        reset_per_agent_dbs(&docker, "myproject", "postgres", &pg_service(), 3).unwrap();
+
+        for n in ["agent01", "agent02", "agent03"] {
+            let db = format!("myproject_{n}");
+            assert!(
+                docker.has_call(&format!("DROP DATABASE IF EXISTS \"{db}\"")),
+                "expected DROP for {db}"
+            );
+            assert!(
+                docker.has_call(&format!("CREATE DATABASE \"{db}\"")),
+                "expected CREATE for {db}"
+            );
+        }
     }
 
     #[test]
