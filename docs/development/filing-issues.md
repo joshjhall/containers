@@ -257,6 +257,47 @@ Why it fails: no labels, so `/next-issue` can never select it; a vague title;
 no Summary/Problem/Proposed Solution structure; and no acceptance criteria, so
 nobody can tell when it is done.
 
+## Filing from the GitLab web UI
+
+On GitLab-hosted mirrors, the same conventions are wired into description
+templates so a human filer gets them for free. When you open a new issue, pick a
+template from the **Description** dropdown:
+
+- **Bug Report** — applies `type/bug`
+- **Feature Request** — applies `type/feature`
+- **Refactor** — applies `type/refactor`
+
+Each template pre-fills the H2 anchors above (plus the type-specific sections)
+and ends with a `/label` quick action that sets the `type/*` label on submit. It
+also carries a machine-readable **Triage** block:
+
+```markdown
+- Severity: medium   <!-- critical | high | medium | low -->
+- Effort: small      <!-- trivial | small | medium | large -->
+```
+
+Edit those two values before submitting. A scheduled `gitlab-triage` job
+(`.gitlab/triage/triage-policies.yml`, run by `.gitlab/ci/triage.yml`) parses the
+block and applies the matching `severity/*` and `effort/*` labels. An issue that
+leaves both unset instead gets a `needs-triage` label and a note asking for
+them; once labeled, the flag clears automatically on the next run.
+
+The automation depends on the labels already existing in the project. The
+`severity/*`, `effort/*`, and `type/*` taxonomy is created by `stibbons labels
+sync` (or by hand). The `needs-triage` label is GitLab-specific and not owned by
+any skill, so create it by hand — matching the colour used by the GitHub
+counterpart in `.github/workflows/issue-labeler.yml`:
+
+```bash
+glab label create "needs-triage" --color '#D4C5F9' \
+  --description "Missing severity/effort labels"
+```
+
+See the header comment in `.gitlab/ci/triage.yml` for the full setup (the
+`GITLAB_API_TOKEN` CI variable and the pipeline schedule). The templates live in
+`.gitlab/issue_templates/`; this is the GitLab counterpart to the GitHub filing
+path, and both apply the identical taxonomy described above.
+
 ## Agent-assisted filing
 
 If you have the `/file-issue` skill available, you can describe the issue in

@@ -1,0 +1,64 @@
+# Reusable GitLab CI include — scheduled issue triage.
+#
+# GitLab CI has no native "issue created/updated" pipeline trigger, so label
+# automation runs on a *pipeline schedule* via the `gitlab-triage` gem against
+# the policies in `.gitlab/triage/triage-policies.yml`. Each run parses the
+# Triage block in every open issue and applies `severity/*` / `effort/*` labels,
+# flags unlabeled issues with `needs-triage`, and clears the flag once labeled.
+#
+# ---------------------------------------------------------------------------
+# Setup (consumer project)
+# ---------------------------------------------------------------------------
+#  1. Include this file from your root `.gitlab-ci.yml`:
+#
+#         include:
+#           - local: '.gitlab/ci/triage.yml'
+#
+#  2. Create a masked CI/CD variable `GITLAB_API_TOKEN` (Settings → CI/CD →
+#     Variables) holding a project- or group-access token with the `api` scope
+#     and at least Reporter role, so the job can read issues and edit labels.
+#
+#  3. Add a pipeline schedule (CI/CD → Schedules), e.g. hourly or daily. The
+#     job only runs for `$CI_PIPELINE_SOURCE == "schedule"`, so it never fires
+#     on ordinary push/MR pipelines.
+#
+#  4. Ensure the labels exist once per project (idempotent). `needs-triage`
+#     uses the same colour as the GitHub counterpart in
+#     .github/workflows/issue-labeler.yml (D4C5F9) so both platforms match; the
+#     severity/*, effort/*, and type/* taxonomy must exist too (create by hand,
+#     e.g. `glab label create "severity/high" --color '#D93F0B'`):
+#
+#         glab label create "needs-triage" --color '#D4C5F9' \
+#           --description "Missing severity/effort labels"
+#
+# Note: `$GITLAB_API_TOKEN` is passed on the command line, so its value is
+# visible in the job container's process list for the duration of the run. On a
+# shared/self-hosted runner, scope the token as narrowly as GitLab allows.
+#
+# Run `gitlab-triage --dry-run` locally (see the job's script) to preview
+# actions without mutating issues.
+#
+# GITLAB_TRIAGE_VERSION pins the gem so a breaking upstream release cannot
+# silently change labeling behaviour (the job is `allow_failure: true`, so a
+# broken newer gem would fail quietly). Bump deliberately.
+
+variables:
+  GITLAB_TRIAGE_VERSION: "1.51.0"
+
+issue-triage:
+  stage: .post
+  image: ruby:3.3-slim
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+  before_script:
+    - gem install gitlab-triage --no-document --version "$GITLAB_TRIAGE_VERSION"
+  script:
+    - |
+      gitlab-triage \
+        --token "$GITLAB_API_TOKEN" \
+        --host-url "$CI_SERVER_URL" \
+        --source-id "$CI_PROJECT_PATH" \
+        --policies-file .gitlab/triage/triage-policies.yml
+  # Triage is best-effort maintenance — a transient API hiccup should not fail
+  # the scheduled pipeline.
+  allow_failure: true

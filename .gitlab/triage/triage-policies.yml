@@ -1,0 +1,164 @@
+# GitLab Triage policies — auto-label issues for /next-issue prioritization.
+#
+# Runs via `gitlab-triage` (see .gitlab/ci/triage.yml). Each rule parses the
+# machine-readable Triage block that the issue templates embed:
+#
+#     - Severity: medium
+#     - Effort: small
+#
+# and applies the matching `severity/*` / `effort/*` label. Issues that carry
+# neither a severity nor an effort label get `needs-triage` plus a note asking
+# the filer to fill the block in.
+#
+# Idempotency: every labeling rule lists the label it would add under
+# `forbidden_labels`, so a rule only fires when its label is absent. Re-running
+# the policy on the same issue set is a no-op.
+#
+# Prerequisite labels (create once per project — via `glab label create` or
+# `stibbons labels sync`): needs-triage, and the full severity/*, effort/*,
+# type/* taxonomy documented in docs/development/filing-issues.md.
+#
+# The `ruby` condition matches a case-insensitive regex against the issue
+# description. `\A|\n|\r` anchors each match to the start of a list line so a
+# stray "severity" word elsewhere in the body does not trip it.
+
+resource_rules:
+  issues:
+    rules:
+      # ---- Severity ---------------------------------------------------------
+      - name: "Severity: critical"
+        conditions:
+          state: opened
+          forbidden_labels:
+            - severity/critical
+          ruby: >-
+            !!(resource[:description] =~ /(\A|\n|\r)\s*-?\s*severity:\s*critical\b/i)
+        actions:
+          labels:
+            - severity/critical
+
+      - name: "Severity: high"
+        conditions:
+          state: opened
+          forbidden_labels:
+            - severity/high
+          ruby: >-
+            !!(resource[:description] =~ /(\A|\n|\r)\s*-?\s*severity:\s*high\b/i)
+        actions:
+          labels:
+            - severity/high
+
+      - name: "Severity: medium"
+        conditions:
+          state: opened
+          forbidden_labels:
+            - severity/medium
+          ruby: >-
+            !!(resource[:description] =~ /(\A|\n|\r)\s*-?\s*severity:\s*medium\b/i)
+        actions:
+          labels:
+            - severity/medium
+
+      - name: "Severity: low"
+        conditions:
+          state: opened
+          forbidden_labels:
+            - severity/low
+          ruby: >-
+            !!(resource[:description] =~ /(\A|\n|\r)\s*-?\s*severity:\s*low\b/i)
+        actions:
+          labels:
+            - severity/low
+
+      # ---- Effort -----------------------------------------------------------
+      - name: "Effort: trivial"
+        conditions:
+          state: opened
+          forbidden_labels:
+            - effort/trivial
+          ruby: >-
+            !!(resource[:description] =~ /(\A|\n|\r)\s*-?\s*effort:\s*trivial\b/i)
+        actions:
+          labels:
+            - effort/trivial
+
+      - name: "Effort: small"
+        conditions:
+          state: opened
+          forbidden_labels:
+            - effort/small
+          ruby: >-
+            !!(resource[:description] =~ /(\A|\n|\r)\s*-?\s*effort:\s*small\b/i)
+        actions:
+          labels:
+            - effort/small
+
+      - name: "Effort: medium"
+        conditions:
+          state: opened
+          forbidden_labels:
+            - effort/medium
+          ruby: >-
+            !!(resource[:description] =~ /(\A|\n|\r)\s*-?\s*effort:\s*medium\b/i)
+        actions:
+          labels:
+            - effort/medium
+
+      - name: "Effort: large"
+        conditions:
+          state: opened
+          forbidden_labels:
+            - effort/large
+          ruby: >-
+            !!(resource[:description] =~ /(\A|\n|\r)\s*-?\s*effort:\s*large\b/i)
+        actions:
+          labels:
+            - effort/large
+
+      # ---- Missing labels → needs-triage ------------------------------------
+      # Fires when the issue is missing a severity/* OR an effort/* label (both
+      # are required for /next-issue prioritization) and is not already flagged.
+      # This is the exact logical negation of the "Clear needs-triage" rule
+      # below, so a half-labeled issue (one namespace present, the other absent)
+      # is flagged rather than silently sitting un-prioritizable. gitlab-triage
+      # has no label-prefix condition, so the check is expressed in Ruby against
+      # resource[:labels].
+      - name: "Needs triage — missing severity/effort labels"
+        conditions:
+          state: opened
+          forbidden_labels:
+            - needs-triage
+          ruby: >-
+            labels = Array(resource[:labels]);
+            !(labels.any? { |l| l.to_s.start_with?('severity/') } &&
+              labels.any? { |l| l.to_s.start_with?('effort/') })
+        actions:
+          labels:
+            - needs-triage
+          comment: |
+            {{author}} this issue is missing the labels `/next-issue` needs to
+            prioritize it. Please add one `severity/*` and one `effort/*` label,
+            or edit the **Triage** block in the description:
+
+            ```
+            - Severity: medium   # critical | high | medium | low
+            - Effort: small      # trivial | small | medium | large
+            ```
+
+            The scheduled triage job will then apply the matching labels and
+            clear `needs-triage`. See `docs/development/filing-issues.md`.
+
+      # Clear needs-triage once the issue has been labeled (by the rules above
+      # or by hand), so the flag does not linger after triage completes.
+      - name: "Clear needs-triage once labeled"
+        conditions:
+          state: opened
+          labels:
+            - needs-triage
+          ruby: >-
+            labels = Array(resource[:labels]);
+            labels.any? { |l| l.to_s.start_with?('severity/') } &&
+            labels.any? { |l| l.to_s.start_with?('effort/') }
+        actions:
+          remove_labels:
+            - needs-triage
