@@ -80,7 +80,7 @@ jobs:
           # Per-target key so artifacts for different triples don't collide.
           key: ${{ matrix.target }}
 
-      - name: Build stibbons (release)
+      - name: Build stibbons (dist)
         shell: bash
         run: |
           # Cargo reads CARGO_TARGET_<triple>_LINKER only for the triple being
@@ -88,7 +88,9 @@ jobs:
           if [ -n "$CROSS_LINKER" ]; then
             export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER="$CROSS_LINKER"
           fi
-          cargo build --release --target "$TARGET" -p stibbons
+          # The `dist` profile carries the size tuning (issue #700 scopes it off
+          # the workspace-wide `release` profile); it outputs to target/<triple>/dist/.
+          cargo build --profile dist --target "$TARGET" -p stibbons
 
       - name: Package artifact
         id: package
@@ -101,14 +103,15 @@ jobs:
           outdir="dist"
           mkdir -p "$outdir"
 
+          # Built with `--profile dist`, so artifacts land in target/<triple>/dist/.
           if [ "$RUNNER_OS" = "Windows" ]; then
-            bin="target/${TARGET}/release/stibbons.exe"
+            bin="target/${TARGET}/dist/stibbons.exe"
             asset="${stem}.zip"
             7z a "${outdir}/${asset}" "./${bin}" >/dev/null
           else
-            bin="target/${TARGET}/release/stibbons"
+            bin="target/${TARGET}/dist/stibbons"
             asset="${stem}.tar.gz"
-            tar -czf "${outdir}/${asset}" -C "target/${TARGET}/release" stibbons
+            tar -czf "${outdir}/${asset}" -C "target/${TARGET}/dist" stibbons
           fi
 
           # Size gate: the shipped (stripped) binary must stay under 15 MB.
