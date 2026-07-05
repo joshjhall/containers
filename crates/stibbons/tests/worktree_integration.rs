@@ -153,3 +153,90 @@ fn worktree_create_rewrites_pointers_and_updates_compose() {
         "compose should no longer contain the worktree mount, got:\n{compose}",
     );
 }
+
+/// `worktree list` reports an existing worktree's branch and clean status, and
+/// `worktree sync --dry-run` prints the rebase it would run without touching the
+/// branch; a real `sync` then rebases cleanly onto the (advanced) base branch.
+#[test]
+fn worktree_list_and_sync() {
+    let tmp = tempfile::tempdir().unwrap();
+    let base = tmp.path();
+    let project = base.join("myapp");
+    std::fs::create_dir_all(&project).unwrap();
+
+    // A real repo with one commit on `main`.
+    git(&project, &["init", "-b", "main"]);
+    std::fs::write(project.join("README.md"), "hi\n").unwrap();
+    git(&project, &["add", "."]);
+    git(&project, &["commit", "-m", "init"]);
+
+    let cfg = format!(
+        "schema_version: 1\n\
+         containers_dir: containers\n\
+         project:\n\
+         \x20 name: myapp\n\
+         \x20 working_dir: {}\n\
+         features:\n\
+         \x20 - python\n",
+        project.display()
+    );
+    std::fs::write(project.join(".igor.yml"), cfg).unwrap();
+
+    // Create the worktree for agent 1 (branch agent01, checked out at HEAD).
+    let out = run_worktree(&project, &["create", "1"]);
+    assert!(out.status.success(), "create failed: {}", String::from_utf8_lossy(&out.stderr));
+
+    // `list` shows the worktree, its branch, and a clean status.
+    let out = run_worktree(&project, &["list"]);
+    assert!(out.status.success(), "list failed: {}", String::from_utf8_lossy(&out.stderr));
+    let listing = String::from_utf8_lossy(&out.stdout);
+    assert!(listing.contains("agent01"), "list should name the agent, got:\n{listing}");
+    assert!(listing.contains("myapp-agent01"), "list should show the path, got:\n{listing}");
+    assert!(listing.contains("clean"), "a fresh worktree should be clean, got:\n{listing}");
+
+    // Advance `main` so the agent01 branch is strictly behind it — a clean rebase.
+    std::fs::write(project.join("CHANGELOG.md"), "v1\n").unwrap();
+    git(&project, &["add", "."]);
+    git(&project, &["commit", "-m", "advance main"]);
+
+    let worktree_dir = base.join("myapp-agent01");
+    let tip_before = rev_parse_head(&worktree_dir);
+
+    // `sync --dry-run` prints the rebase but does NOT run it.
+    let out = run_worktree(&project, &["sync", "1", "--dry-run"]);
+    assert!(
+        out.status.success(),
+        "sync --dry-run failed: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let dry = String::from_utf8_lossy(&out.stdout);
+    assert!(dry.contains("[dry-run]"), "expected a dry-run marker, got:\n{dry}");
+    assert!(
+        dry.contains("rebase --end-of-options main"),
+        "expected the target branch, got:\n{dry}"
+    );
+    assert_eq!(rev_parse_head(&worktree_dir), tip_before, "dry-run must not move the branch tip");
+
+    // A real `sync` rebases agent01 onto main; the tip advances to main's commit.
+    let out = run_worktree(&project, &["sync", "1"]);
+    assert!(out.status.success(), "sync failed: {}", String::from_utf8_lossy(&out.stderr));
+    let main_tip = rev_parse_head(&project);
+    assert_eq!(
+        rev_parse_head(&worktree_dir),
+        main_tip,
+        "after a fast-forward rebase, agent01 should sit on main's tip",
+    );
+}
+
+/// `git -C <dir> rev-parse HEAD` with a clean git env, returning the trimmed SHA.
+fn rev_parse_head(dir: &Path) -> String {
+    let out = Command::new("git")
+        .current_dir(dir)
+        .args(["rev-parse", "HEAD"])
+        .env_remove("GIT_DIR")
+        .env_remove("GIT_WORK_TREE")
+        .output()
+        .expect("failed to spawn git");
+    assert!(out.status.success(), "rev-parse failed: {}", String::from_utf8_lossy(&out.stderr));
+    String::from_utf8_lossy(&out.stdout).trim().to_string()
+}

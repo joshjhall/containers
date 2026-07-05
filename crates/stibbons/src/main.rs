@@ -104,7 +104,8 @@ enum Commands {
         command: agent::AgentCommands,
     },
 
-    /// Manage per-agent git worktrees (create, remove) with compose mounts.
+    /// Manage per-agent git worktrees (create, remove, list, sync) with compose
+    /// mounts.
     Worktree {
         #[command(subcommand)]
         command: agent::worktree::WorktreeCommands,
