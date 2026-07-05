@@ -62,6 +62,10 @@ jobs:
             arch: amd64
             platform: linux/amd64
           - distro: debian
+            distro_version: "12"
+            arch: arm64
+            platform: linux/arm64
+          - distro: debian
             distro_version: "13"
             arch: arm64
             platform: linux/arm64
