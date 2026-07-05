@@ -35,6 +35,7 @@ WORKFLOW_FILE="$PROJECT_ROOT/.github/workflows/build-base-images.yml"
 REQUIRED_TUPLES=(
     "debian/12/amd64"
     "debian/12/arm64"
+    "debian/13/amd64"
     "debian/13/arm64"
     "alpine/3.21/amd64"
     "alpine/3.21/arm64"
