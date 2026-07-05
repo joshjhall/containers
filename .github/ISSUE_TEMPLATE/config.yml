@@ -1,0 +1,12 @@
+# Issue template chooser configuration.
+# Forces web-UI filers through a form template so every issue arrives with the
+# type/severity/effort labels that /next-issue priority ordering depends on.
+# See .github/workflows/issue-labeler.yml for the dropdown -> label automation.
+blank_issues_enabled: false
+contact_links:
+  - name: Agent / CLI issue filing (/file-issue)
+    url: https://github.com/joshjhall/containers/blob/main/docs/development/filing-issues.md
+    about: >-
+      Working from Claude Code or the terminal? Use the /file-issue skill instead
+      — it auto-applies the full label taxonomy. This form path is for the GitHub
+      web UI.

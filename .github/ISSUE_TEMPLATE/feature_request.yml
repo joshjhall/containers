@@ -1,0 +1,72 @@
+name: Feature request
+description: Propose a new capability or enhancement.
+title: "[feature]: "
+labels:
+  - type/feature
+body:
+  - type: markdown
+    attributes:
+      value: >-
+        Thanks for the proposal. The **Severity** and **Effort** dropdowns below
+        map to the `severity/*` and `effort/*` labels that drive `/next-issue`
+        prioritization — please pick the closest match.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem statement
+      description: What problem or gap does this address? Why does it matter?
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: The capability you want and how it should behave.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Checklist of conditions that must hold for this to be done.
+      placeholder: |
+        - [ ] ...
+        - [ ] ...
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Other approaches you weighed and why you set them aside.
+    validations:
+      required: false
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      description: How important is this? (maps to a `severity/*` label)
+      options:
+        - critical — Actively causing harm, data loss, or downtime
+        - high — Will cause problems under normal use
+        - medium — Increases maintenance burden or tech debt
+        - low — Best-practice improvement, no immediate impact
+    validations:
+      required: true
+  - type: dropdown
+    id: effort
+    attributes:
+      label: Effort
+      description: Rough size of the work. (maps to an `effort/*` label)
+      options:
+        - trivial — 1 file, under 30 minutes
+        - small — 2-3 files in same directory, hours of work
+        - medium — 4-8 files or 2-3 directories, a day of work
+        - large — 9+ files or 4+ directories, multi-day effort
+    validations:
+      required: true
+  - type: markdown
+    attributes:
+      value: >-
+        Label taxonomy reference:
+        [`docs/development/filing-issues.md`](https://github.com/joshjhall/containers/blob/main/docs/development/filing-issues.md).

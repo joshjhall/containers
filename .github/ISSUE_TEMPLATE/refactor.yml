@@ -1,0 +1,62 @@
+name: Refactor proposal
+description: Propose restructuring code without changing its behavior.
+title: "[refactor]: "
+labels:
+  - type/refactor
+body:
+  - type: markdown
+    attributes:
+      value: >-
+        Thanks for the proposal. The **Severity** and **Effort** dropdowns below
+        map to the `severity/*` and `effort/*` labels that drive `/next-issue`
+        prioritization — please pick the closest match.
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Motivation
+      description: What makes the current structure hard to work with?
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: Which modules/files/directories does this touch? What stays out?
+    validations:
+      required: true
+  - type: textarea
+    id: behavior-preservation
+    attributes:
+      label: Behavior preservation
+      description: How will you confirm behavior is unchanged (tests, golden files)?
+    validations:
+      required: false
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      description: How pressing is this? (maps to a `severity/*` label)
+      options:
+        - critical — Actively causing harm, data loss, or downtime
+        - high — Will cause problems under normal use
+        - medium — Increases maintenance burden or tech debt
+        - low — Best-practice improvement, no immediate impact
+    validations:
+      required: true
+  - type: dropdown
+    id: effort
+    attributes:
+      label: Effort
+      description: Rough size of the refactor. (maps to an `effort/*` label)
+      options:
+        - trivial — 1 file, under 30 minutes
+        - small — 2-3 files in same directory, hours of work
+        - medium — 4-8 files or 2-3 directories, a day of work
+        - large — 9+ files or 4+ directories, multi-day effort
+    validations:
+      required: true
+  - type: markdown
+    attributes:
+      value: >-
+        Label taxonomy reference:
+        [`docs/development/filing-issues.md`](https://github.com/joshjhall/containers/blob/main/docs/development/filing-issues.md).
