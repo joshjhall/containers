@@ -1,0 +1,84 @@
+name: Bug report
+description: Report something that used to work and is now broken.
+title: "[bug]: "
+labels:
+  - type/bug
+body:
+  - type: markdown
+    attributes:
+      value: >-
+        Thanks for filing a bug. The **Severity** and **Effort** dropdowns below
+        map to the `severity/*` and `effort/*` labels that drive `/next-issue`
+        prioritization — please pick the closest match.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: One or two sentences describing the bug.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Minimal, ordered steps that trigger the bug.
+      placeholder: |
+        1. Build the container with `...`
+        2. Run `...`
+        3. Observe `...`
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What you expected to happen.
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What actually happened, including error output.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Distro/version, architecture, and how the container was built/run.
+      placeholder: |
+        - Distro: Debian 12 (Bookworm)
+        - Arch: arm64
+        - Build args / compose file: ...
+    validations:
+      required: false
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      description: How much harm is this causing? (maps to a `severity/*` label)
+      options:
+        - critical — Actively causing harm, data loss, or downtime
+        - high — Will cause problems under normal use
+        - medium — Increases maintenance burden or tech debt
+        - low — Best-practice improvement, no immediate impact
+    validations:
+      required: true
+  - type: dropdown
+    id: effort
+    attributes:
+      label: Effort
+      description: Rough size of the fix. (maps to an `effort/*` label)
+      options:
+        - trivial — 1 file, under 30 minutes
+        - small — 2-3 files in same directory, hours of work
+        - medium — 4-8 files or 2-3 directories, a day of work
+        - large — 9+ files or 4+ directories, multi-day effort
+    validations:
+      required: true
+  - type: markdown
+    attributes:
+      value: >-
+        Label taxonomy reference:
+        [`docs/development/filing-issues.md`](https://github.com/joshjhall/containers/blob/main/docs/development/filing-issues.md).
