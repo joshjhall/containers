@@ -116,7 +116,19 @@ impl AgentContext {
             return Err(AgentError::NoConfig);
         }
         let cfg = IgorConfig::load(cfg_path).map_err(AgentError::Config)?;
+        Ok(Self::from_config(cfg))
+    }
 
+    /// Applies the agent-config defaults to an already-parsed [`IgorConfig`].
+    ///
+    /// This is the pure derivation half of [`load`](Self::load): it resolves the
+    /// enabled feature set and fills every unset agent field with its default
+    /// (max 5, user `agent`, network `{project}-network`, tag `latest`, repos
+    /// `[project]`, shared volumes ← the features' dedup'd cache volumes). It
+    /// performs no I/O — `base_dir`/`containers_dir` are computed by path
+    /// manipulation alone — so it is infallible and filesystem-free.
+    #[must_use]
+    pub fn from_config(cfg: IgorConfig) -> Self {
         let reg = Registry::new();
         let explicit: std::collections::HashSet<String> = cfg.features.iter().cloned().collect();
         let selection = resolve(&explicit, &reg);
@@ -168,7 +180,7 @@ impl AgentContext {
             base_dir.join(&cfg.project.name).join(raw_containers)
         };
 
-        Ok(Self {
+        Self {
             image_name: format!("{}-agent", cfg.project.name),
             project: cfg.project.name.clone(),
             image_tag,
@@ -181,7 +193,7 @@ impl AgentContext {
             containers_dir,
             features,
             cfg,
-        })
+        }
     }
 }
 
@@ -337,6 +349,57 @@ mod tests {
         assert_eq!(ctx.username, "coder");
         assert_eq!(ctx.network, "custom-net");
         assert_eq!(ctx.image_tag, "v2");
+        assert_eq!(ctx.shared_volumes, vec!["data:/data".to_string()]);
+        assert_eq!(ctx.repos, vec!["myapp".to_string(), "shared-lib".to_string()]);
+    }
+
+    #[test]
+    fn from_config_empty_defaults() {
+        // Empty agent config, no filesystem: derivation applies every default.
+        let cfg = IgorConfig {
+            schema_version: 1,
+            containers_dir: "containers".into(),
+            project: ProjectConfig { name: "testapp".into(), ..ProjectConfig::default() },
+            features: vec!["python".into()],
+            ..IgorConfig::default()
+        };
+        let ctx = AgentContext::from_config(cfg);
+
+        assert_eq!(ctx.project, "testapp");
+        assert_eq!(ctx.image_name, "testapp-agent");
+        assert_eq!(ctx.image_tag, "latest");
+        assert_eq!(ctx.network, "testapp-network");
+        assert_eq!(ctx.username, "agent");
+        assert_eq!(ctx.max_agents, 5);
+        assert_eq!(ctx.repos, vec!["testapp".to_string()]);
+        assert!(!ctx.shared_volumes.is_empty(), "shared_volumes default to python cache volumes");
+    }
+
+    #[test]
+    fn from_config_preserves_explicit() {
+        // Explicitly-filled agent config: every value survives derivation.
+        let cfg = IgorConfig {
+            schema_version: 1,
+            containers_dir: "containers".into(),
+            project: ProjectConfig { name: "myapp".into(), ..ProjectConfig::default() },
+            features: vec!["golang".into()],
+            agents: AgentConfig {
+                max: 3,
+                username: "coder".into(),
+                network: "custom-net".into(),
+                image_tag: "v2".into(),
+                shared_volumes: vec!["data:/data".into()],
+                repos: vec!["myapp".into(), "shared-lib".into()],
+            },
+            ..IgorConfig::default()
+        };
+        let ctx = AgentContext::from_config(cfg);
+
+        assert_eq!(ctx.max_agents, 3);
+        assert_eq!(ctx.username, "coder");
+        assert_eq!(ctx.network, "custom-net");
+        assert_eq!(ctx.image_tag, "v2");
+        assert_eq!(ctx.image_name, "myapp-agent");
         assert_eq!(ctx.shared_volumes, vec!["data:/data".to_string()]);
         assert_eq!(ctx.repos, vec!["myapp".to_string(), "shared-lib".to_string()]);
     }
