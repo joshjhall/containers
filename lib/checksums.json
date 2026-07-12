@@ -207,6 +207,11 @@
           "sha256": "e7d4bbae0f7321fb8fe7033db7e01b8729f5385103c6445e90b82ace87f652f6",
           "url": "https://github.com/jbangdev/jbang/releases/download/v0.139.3/jbang-0.139.3.tar",
           "added": "2026-06-21"
+        },
+        "0.140.1": {
+          "sha256": "c396840221103902693c69a159ca91737cfdede24780550921f2bd5ac3be2f53",
+          "url": "https://github.com/jbangdev/jbang/releases/download/v0.140.1/jbang-0.140.1.tar",
+          "added": "2026-07-12"
         }
       }
     },
@@ -431,6 +436,19 @@
             }
           },
           "added": "2026-07-03"
+        },
+        "2.5.3": {
+          "checksums": {
+            "amd64": {
+              "sha256": "ab8e74af2366127306e250652d2f32bd193601f208fcd0604112080c0ca3245b",
+              "url": "https://github.com/biomejs/biome/releases/download/@biomejs/biome@2.5.3/biome-linux-x64"
+            },
+            "arm64": {
+              "sha256": "b642ded43aebcad738926b40eefd4dc2187a206d1fbfb37a45f1db4986804dbd",
+              "url": "https://github.com/biomejs/biome/releases/download/@biomejs/biome@2.5.3/biome-linux-arm64"
+            }
+          },
+          "added": "2026-07-12"
         }
       }
     },
@@ -525,6 +543,19 @@
             }
           },
           "added": "2026-06-02"
+        },
+        "2.1.10": {
+          "checksums": {
+            "amd64": {
+              "sha256": "0b14162a0bb2f0c64ae0759f6102f6e19c4d00981666a8ac73d4f5a6878ada4f",
+              "url": "https://github.com/evilmartians/lefthook/releases/download/v2.1.10/lefthook_2.1.10_Linux_x86_64.gz"
+            },
+            "arm64": {
+              "sha256": "6380a6ad6dd484466fd69bd83f24491d6ec27dc0b84e837be025620f7c4e11e3",
+              "url": "https://github.com/evilmartians/lefthook/releases/download/v2.1.10/lefthook_2.1.10_Linux_aarch64.gz"
+            }
+          },
+          "added": "2026-07-12"
         }
       }
     },
@@ -722,6 +753,19 @@
             }
           },
           "added": "2026-07-03"
+        },
+        "1.4.1": {
+          "checksums": {
+            "amd64": {
+              "sha256": "fb585ff5018d6faaa46d282b61f4f689bc7967ed8a1b467a5c556dd7ced9b542",
+              "url": "https://github.com/colbymchenry/codegraph/releases/download/v1.4.1/codegraph-linux-x64.tar.gz"
+            },
+            "arm64": {
+              "sha256": "0d62c5eb2722f8d19d20f7a1bd974445e18d5294cb59be116a0c3d55ce87591f",
+              "url": "https://github.com/colbymchenry/codegraph/releases/download/v1.4.1/codegraph-linux-arm64.tar.gz"
+            }
+          },
+          "added": "2026-07-12"
         }
       }
     },
@@ -744,7 +788,7 @@
     }
   },
   "metadata": {
-    "generated": "2026-07-03T18:15:34Z",
+    "generated": "2026-07-12T05:22:58Z",
     "description": "Pinned checksums for language runtime downloads",
     "note": "This file is automatically updated by check-versions.sh and should grow over time. Old checksums are never deleted to strengthen security for older versions and enable reproducible builds."
   }

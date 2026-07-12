@@ -1,16 +1,16 @@
 {
   "source": {
     "repository": "https://github.com/nodejs/release-keys",
-    "commit": "7b6eb2d6ab524bb30487f31612cdbeb35ae37533",
-    "commit_date": "2026-03-10T18:34:54+00:00",
-    "commit_message": "🔑 update key for aduh95 (#51)"
+    "commit": "b28073028e6d6855cfb53bf7fa0137599c01f967",
+    "commit_date": "2026-07-01T14:22:04+00:00",
+    "commit_message": "chore: fix `verify-key-signature` workflow (#54)"
   },
   "fetched": {
-    "date": "2026-06-21",
+    "date": "2026-07-12",
     "by": "automated"
   },
   "keyring": {
-    "total_keys": 28,
+    "total_keys": 29,
     "active_releasers": 8,
     "includes_historical": true,
     "description": "Complete keyring including both active and historical Node.js release signing keys"

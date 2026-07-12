@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Test Framework for Container Build System
-# Version: 4.19.12
+# Version: 4.19.13
 # Test framework for container build system
 #
 # Provides comprehensive assertion-based testing for container builds.
@@ -49,7 +49,7 @@ unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE GIT_COMMON_DIR GIT_PREFIX
 
 # Framework version (exported for external use)
 # shellcheck disable=SC2034  # Used by external scripts
-readonly TEST_FRAMEWORK_VERSION="4.19.12"
+readonly TEST_FRAMEWORK_VERSION="4.19.13"
 
 # Initialize test directories
 TESTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
