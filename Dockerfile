@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 # Universal Container Build System
-# Version: 4.19.12
+# Version: 4.19.13
 # Supports multiple contexts: devcontainer, agents, CI/CD, production
 
 # ============================================================================
@@ -207,7 +207,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 # Rust + Rust development tools
 ARG INCLUDE_RUST=false
 ARG INCLUDE_RUST_DEV=false
-ARG RUST_VERSION=1.96.0
+ARG RUST_VERSION=1.97.0
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     if [ "${INCLUDE_RUST}" = "true" ] || [ "${INCLUDE_RUST_DEV}" = "true" ]; then \
@@ -234,7 +234,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 # Go + Go development tools
 ARG INCLUDE_GOLANG=false
 ARG INCLUDE_GOLANG_DEV=false
-ARG GO_VERSION=1.26.4
+ARG GO_VERSION=1.26.5
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     if [ "${INCLUDE_GOLANG}" = "true" ] || [ "${INCLUDE_GOLANG_DEV}" = "true" ]; then \
@@ -244,7 +244,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 ARG INCLUDE_MOJO=false
 ARG INCLUDE_MOJO_DEV=false
 ARG MOJO_VERSION=25.4
-ARG PIXI_VERSION=0.72.0
+ARG PIXI_VERSION=0.72.2
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     if [ "${INCLUDE_MOJO}" = "true" ] || [ "${INCLUDE_MOJO_DEV}" = "true" ]; then \
@@ -308,7 +308,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     fi
 # Mise polyglot runtime version manager
 ARG INCLUDE_MISE=false
-ARG MISE_VERSION=2026.7.0
+ARG MISE_VERSION=2026.7.5
 RUN if [ "${INCLUDE_MISE}" = "true" ]; then \
     MISE_VERSION=${MISE_VERSION} /tmp/build-scripts/features/mise.sh; \
     fi
@@ -357,7 +357,7 @@ ARG INCLUDE_KUBERNETES=false
 ARG KUBECTL_VERSION=1.33.13
 ARG K9S_VERSION=0.51.0
 ARG KREW_VERSION=0.5.0
-ARG HELM_VERSION=4.2.2
+ARG HELM_VERSION=4.2.3
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     if [ "${INCLUDE_KUBERNETES}" = "true" ]; then \
