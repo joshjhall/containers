@@ -216,7 +216,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 # Ruby + Ruby development tools
 ARG INCLUDE_RUBY=false
 ARG INCLUDE_RUBY_DEV=false
-ARG RUBY_VERSION=4.0.5
+ARG RUBY_VERSION=4.0.6
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     if [ "${INCLUDE_RUBY}" = "true" ] || [ "${INCLUDE_RUBY_DEV}" = "true" ]; then \
@@ -244,7 +244,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 ARG INCLUDE_MOJO=false
 ARG INCLUDE_MOJO_DEV=false
 ARG MOJO_VERSION=25.4
-ARG PIXI_VERSION=0.72.2
+ARG PIXI_VERSION=0.73.0
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     if [ "${INCLUDE_MOJO}" = "true" ] || [ "${INCLUDE_MOJO_DEV}" = "true" ]; then \
@@ -268,7 +268,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     fi
 
 # Kotlin (Java auto-triggered above)
-ARG KOTLIN_VERSION=2.4.0
+ARG KOTLIN_VERSION=2.4.10
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     if [ "${INCLUDE_KOTLIN}" = "true" ] || [ "${INCLUDE_KOTLIN_DEV}" = "true" ]; then \
@@ -308,7 +308,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     fi
 # Mise polyglot runtime version manager
 ARG INCLUDE_MISE=false
-ARG MISE_VERSION=2026.7.5
+ARG MISE_VERSION=2026.7.7
 RUN if [ "${INCLUDE_MISE}" = "true" ]; then \
     MISE_VERSION=${MISE_VERSION} /tmp/build-scripts/features/mise.sh; \
     fi
@@ -373,7 +373,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     fi
 # Terraform
 ARG INCLUDE_TERRAFORM=false
-ARG TERRAGRUNT_VERSION=1.1.0
+ARG TERRAGRUNT_VERSION=1.1.1
 ARG TFDOCS_VERSION=0.24.0
 ARG TFLINT_VERSION=0.63.1
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \

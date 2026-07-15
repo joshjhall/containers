@@ -137,6 +137,11 @@
           "sha256": "ba1b9e6eb6ddc3275079224f2e9ea4a2b02eef7d59ce2d38404f04b22613c20a",
           "url": "https://github.com/JetBrains/kotlin/releases/download/v2.4.0/kotlin-compiler-2.4.0.zip",
           "added": "2026-06-07"
+        },
+        "2.4.10": {
+          "sha256": "473dd66c7a3ef4b182065b3da670466c1bf2773a9dbb0ed8b33a39fe9d4f876d",
+          "url": "https://github.com/JetBrains/kotlin/releases/download/v2.4.10/kotlin-compiler-2.4.10.zip",
+          "added": "2026-07-15"
         }
       }
     },
@@ -212,6 +217,11 @@
           "sha256": "c396840221103902693c69a159ca91737cfdede24780550921f2bd5ac3be2f53",
           "url": "https://github.com/jbangdev/jbang/releases/download/v0.140.1/jbang-0.140.1.tar",
           "added": "2026-07-12"
+        },
+        "0.141.0": {
+          "sha256": "0de5bb29a23159a6afc6f40dd510fbad05685827288ba7727c49d500719d0f92",
+          "url": "https://github.com/jbangdev/jbang/releases/download/v0.141.0/jbang-0.141.0.tar",
+          "added": "2026-07-15"
         }
       }
     },
@@ -449,6 +459,19 @@
             }
           },
           "added": "2026-07-12"
+        },
+        "2.5.4": {
+          "checksums": {
+            "amd64": {
+              "sha256": "4cd66b4a2953197e0e169f24b8a6e5f0fc42b3e852c3f58e562866244f3e11db",
+              "url": "https://github.com/biomejs/biome/releases/download/@biomejs/biome@2.5.4/biome-linux-x64"
+            },
+            "arm64": {
+              "sha256": "698199017fc0b0c865d9a0ca2074102eb1fd0b358fd164595f3960b004fe4b90",
+              "url": "https://github.com/biomejs/biome/releases/download/@biomejs/biome@2.5.4/biome-linux-arm64"
+            }
+          },
+          "added": "2026-07-15"
         }
       }
     },
@@ -620,6 +643,19 @@
             }
           },
           "added": "2026-07-03"
+        },
+        "0.55.2": {
+          "checksums": {
+            "amd64": {
+              "sha256": "d7ccde62d789dfb048717252d259e21253e32feffe4cbf2dab9954eeab492219",
+              "url": "https://github.com/dprint/dprint/releases/download/0.55.2/dprint-x86_64-unknown-linux-gnu.zip"
+            },
+            "arm64": {
+              "sha256": "299923f2b56d66756ad2c7c220650c72f26437fd3f48b3fb6c0df664073eb1d1",
+              "url": "https://github.com/dprint/dprint/releases/download/0.55.2/dprint-aarch64-unknown-linux-gnu.zip"
+            }
+          },
+          "added": "2026-07-15"
         }
       }
     },
@@ -788,7 +824,7 @@
     }
   },
   "metadata": {
-    "generated": "2026-07-12T05:22:58Z",
+    "generated": "2026-07-15T22:05:29Z",
     "description": "Pinned checksums for language runtime downloads",
     "note": "This file is automatically updated by check-versions.sh and should grow over time. Old checksums are never deleted to strengthen security for older versions and enable reproducible builds."
   }
