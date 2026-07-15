@@ -117,6 +117,15 @@ jobs:
           # blocking every PR. Detach HEAD onto the PR head first so
           # conform sees only the real PR commits.
           git checkout --detach "${HEAD_SHA}"
+          # An empty commit range (origin/${BASE_REF}..HEAD with zero commits —
+          # e.g. an auto-patch PR whose commit is already reachable from base at
+          # check time) makes `conform enforce` exit 1 with
+          # "failed to get commit message: EOF" instead of treating "nothing to
+          # validate" as a pass. Guard it so a no-commit range is a no-op (#725).
+          if [ -z "$(git rev-list "origin/${BASE_REF}..HEAD")" ]; then
+            echo "No commits in origin/${BASE_REF}..HEAD — nothing for conform to validate."
+            exit 0
+          fi
           # Validate every commit on the PR against .conform.yaml.
           # --base-branch lets conform enumerate just the PR's commits.
           conform enforce --base-branch "origin/${BASE_REF}"

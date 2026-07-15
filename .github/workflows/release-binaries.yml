@@ -5,9 +5,12 @@
 # than committing a fat binary to git, we build one artifact per target triple
 # on tag push and attach them to the same Release that ci.yml creates.
 #
-# Cross-compilation strategy: native CI matrix (one runner per OS), with rustup
-# targets for the second arch on each OS. The Linux arm64 leg cross-links with
-# gcc-aarch64-linux-gnu — mirroring the proven pattern in evidence-run.yml.
+# Cross-compilation strategy: native CI matrix (one runner per OS/arch), with
+# rustup targets per triple. The Linux arm64 leg builds on a native
+# `ubuntu-24.04-arm` runner (musl-gcc from musl-tools) rather than
+# cross-compiling from amd64 — mirroring the proven native-arm64 pattern in
+# evidence-run.yml. This avoids the aws-lc-sys C build needing an aarch64
+# cross sysroot (missing target libc/kernel headers, #724).
 name: Release Binaries (stibbons)
 
 on:
@@ -30,9 +33,8 @@ jobs:
         include:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-musl
-          - os: ubuntu-latest
+          - os: ubuntu-24.04-arm
             target: aarch64-unknown-linux-musl
-            cross_linker: aarch64-linux-gnu-gcc
           - os: macos-latest
             target: x86_64-apple-darwin
           - os: macos-latest
@@ -45,7 +47,6 @@ jobs:
       # Read the coordinates into env rather than interpolating ${{ }} into
       # run: scripts (injection-safe; matches the repo's workflow guardrails).
       TARGET: ${{ matrix.target }}
-      CROSS_LINKER: ${{ matrix.cross_linker }}
     steps:
       - name: Disable CRLF conversion
         if: runner.os == 'Windows'
@@ -63,16 +64,14 @@ jobs:
           toolchain: "1.94"
           targets: ${{ matrix.target }}
 
-      - name: Install musl + cross linker (Linux)
+      - name: Install musl toolchain (Linux)
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
+          # Both Linux legs now build natively (amd64 on ubuntu-latest, arm64 on
+          # ubuntu-24.04-arm), so each links with musl-gcc from musl-tools — no
+          # aarch64 cross-linker or cross sysroot required (#724).
           sudo apt-get install -y --no-install-recommends musl-tools
-          # The aarch64 musl leg cross-compiles from an amd64 host, so it needs
-          # an aarch64 cross-linker. amd64 links with musl-gcc from musl-tools.
-          if [ "$TARGET" = "aarch64-unknown-linux-musl" ]; then
-            sudo apt-get install -y --no-install-recommends gcc-aarch64-linux-gnu
-          fi
 
       - name: Cache cargo
         uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
@@ -83,11 +82,9 @@ jobs:
       - name: Build stibbons (dist)
         shell: bash
         run: |
-          # Cargo reads CARGO_TARGET_<triple>_LINKER only for the triple being
-          # built, so setting the aarch64 linker is a no-op on every other leg.
-          if [ -n "$CROSS_LINKER" ]; then
-            export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER="$CROSS_LINKER"
-          fi
+          # Every leg builds natively for its own arch, so cargo's default
+          # linker for each `*-musl` target (musl-gcc from musl-tools on Linux)
+          # is correct — no CARGO_TARGET_<triple>_LINKER override needed.
           # The `dist` profile carries the size tuning (issue #700 scopes it off
           # the workspace-wide `release` profile); it outputs to target/<triple>/dist/.
           cargo build --profile dist --target "$TARGET" -p stibbons
