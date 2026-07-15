@@ -63,3 +63,4 @@
 - [typos hook breaks on spaced filenames](typos-hook-breaks-on-spaced-filenames.md) — lefthook typos ran `typos $files` unquoted; GitLab template names with spaces word-split → exit 64. Fixed via `xargs -d '\n'` (#298/PR#718)
 - [Stale base re-adds bin/igor, breaks typos](stale-base-typos-bin-igor.md) — worktree cut before #690 carries deleted bin/igor in push range; typos pre-push chokes on the binary (unrelated to diff) — rebase onto origin/main, don't add excludes/--no-verify
 - [dist profile scoping](dist-profile-scoping.md) — stibbons size tuning lives in [profile.dist] not workspace-wide [profile.release]; per-package override can't express lto; build --profile dist → target/<triple>/dist/ (#700)
+- [aarch64 release native not cross](aarch64-release-native-not-cross.md) — release-binaries aarch64 leg builds native on ubuntu-24.04-arm; cross-compile breaks aws-lc-sys C sysroot (#724); same run exposed conform empty-range bug (#725)
