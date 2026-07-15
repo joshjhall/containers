@@ -120,12 +120,20 @@ fetch_url() {
     fi
 
     # Fetch fresh data
-    # Use both --connect-timeout and --max-time to prevent hanging
+    # Use both --connect-timeout and --max-time to prevent hanging.
+    # A descriptive User-Agent is mandatory for crates.io — it 403s any request
+    # without one, which previously made every crates.io tool check silently
+    # error out (and the weekly auto-patch skip those bumps). GitHub and the
+    # other endpoints accept it too, so it's set unconditionally.
+    # -L follows redirects: GitHub returns 301 for renamed repos (e.g.
+    # pinterest/ktlint → ktlint/ktlint), and without following it the release
+    # lookup silently returns empty.
+    local ua="containers-version-check (https://github.com/joshjhall/containers)"
     local response
     if [ -n "$GITHUB_TOKEN" ] && [[ "$url" == *"api.github.com"* ]]; then
-        response=$(command curl -sf --connect-timeout 5 --max-time "$timeout" -H "Authorization: token $GITHUB_TOKEN" "$url" 2>/dev/null || echo "")
+        response=$(command curl -sfL --connect-timeout 5 --max-time "$timeout" -A "$ua" -H "Authorization: token $GITHUB_TOKEN" "$url" 2>/dev/null || echo "")
     else
-        response=$(command curl -sf --connect-timeout 5 --max-time "$timeout" "$url" 2>/dev/null || echo "")
+        response=$(command curl -sfL --connect-timeout 5 --max-time "$timeout" -A "$ua" "$url" 2>/dev/null || echo "")
     fi
 
     # Cache the response if not empty
@@ -408,7 +416,7 @@ main() {
             Java) check_java ;;
             R) check_r ;;
             Kotlin) check_github_release "Kotlin" "JetBrains/kotlin" ;;
-            ktlint) check_github_release "ktlint" "pinterest/ktlint" ;;
+            ktlint) check_github_release "ktlint" "ktlint/ktlint" ;;
             detekt) check_github_release "detekt" "detekt/detekt" ;;
             kotlin-language-server) check_github_release "kotlin-language-server" "fwcd/kotlin-language-server" ;;
             jdtls) check_jdtls ;;

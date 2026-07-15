@@ -144,7 +144,7 @@
       "versions": {
         "1.8.0": {
           "sha256": "a3fd620207d5c40da6ca789b95e7f823c54e854b7fade7f613e91096a3706d75",
-          "url": "https://github.com/pinterest/ktlint/releases/download/1.8.0/ktlint",
+          "url": "https://github.com/ktlint/ktlint/releases/download/1.8.0/ktlint",
           "added": "2026-03-23"
         }
       }

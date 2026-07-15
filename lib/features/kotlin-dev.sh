@@ -133,7 +133,7 @@ log_message "Detected architecture: $ARCH"
 # ktlint Installation
 # ============================================================================
 install_github_release "ktlint" "$KTLINT_VERSION" \
-    "https://github.com/pinterest/ktlint/releases/download/${KTLINT_VERSION}" \
+    "https://github.com/ktlint/ktlint/releases/download/${KTLINT_VERSION}" \
     "ktlint" "ktlint" \
     "calculate" "binary"
 
