@@ -474,6 +474,15 @@ update_version() {
                 cargo-geiger)
                     sed_inplace "s/CARGO_GEIGER_VERSION=\"\${CARGO_GEIGER_VERSION:-[^}]*}\"/CARGO_GEIGER_VERSION=\"\${CARGO_GEIGER_VERSION:-$latest}\"/" "$script_path"
                     ;;
+                cargo-machete)
+                    sed_inplace "s/CARGO_MACHETE_VERSION=\"\${CARGO_MACHETE_VERSION:-[^}]*}\"/CARGO_MACHETE_VERSION=\"\${CARGO_MACHETE_VERSION:-$latest}\"/" "$script_path"
+                    ;;
+                cargo-nextest)
+                    sed_inplace "s/NEXTEST_VERSION=\"\${NEXTEST_VERSION:-[^}]*}\"/NEXTEST_VERSION=\"\${NEXTEST_VERSION:-$latest}\"/" "$script_path"
+                    ;;
+                cargo-llvm-cov)
+                    sed_inplace "s/LLVM_COV_VERSION=\"\${LLVM_COV_VERSION:-[^}]*}\"/LLVM_COV_VERSION=\"\${LLVM_COV_VERSION:-$latest}\"/" "$script_path"
+                    ;;
                 bacon)
                     sed_inplace "s/BACON_VERSION=\"\${BACON_VERSION:-[^}]*}\"/BACON_VERSION=\"\${BACON_VERSION:-$latest}\"/" "$script_path"
                     ;;
