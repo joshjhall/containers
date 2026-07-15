@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.19.14] - 2026-07-15
+
+### Documentation
+
+- Record native-arm64 release build lesson (#724/#725)
+
+### Fixed
+
+- Build aarch64 release binary natively and guard empty conform range (#726)
+- Make check-versions resilient — crates.io UA + redirect follow (#727)
+- Add updater cases for cargo-nextest, cargo-llvm-cov, cargo-machete (#728)
+
+### Miscellaneous
+
+- Bump pinned librarian marketplace to v0.6.1 (#723)
+- Update 24 tool versions to latest (#729)
+
 ## [4.19.13] - 2026-07-12
 
 ### Added
@@ -35,6 +52,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Retry Docker Buildx setup once on transient provision flake (#688)
 - Harden labels sync arg handling and subprocess safety (#721)
+
+### Miscellaneous
+
+- Automated version updates to v4.19.13
+- Update compatibility matrix with passing test results
 
 ## [4.19.12] - 2026-07-03
 
@@ -2130,6 +2152,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix prettier and markdownlint formatting in README
 - Format TLS documentation files
 
+[4.19.14]: https://github.com/joshjhall/containers/compare/v4.19.13...v4.19.14
 [4.19.13]: https://github.com/joshjhall/containers/compare/v4.19.12...v4.19.13
 [4.19.12]: https://github.com/joshjhall/containers/compare/v4.19.11...v4.19.12
 [4.19.11]: https://github.com/joshjhall/containers/compare/v4.19.10...v4.19.11
