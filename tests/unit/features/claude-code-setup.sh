@@ -1304,5 +1304,117 @@ test_acp_wrapper_installed() {
 run_test test_acp_wrapper_shipped "ACP wrapper shipped, provider-neutral, leak-safe"
 run_test test_acp_wrapper_installed "claude-code-setup.sh installs claude-acp-launch"
 
+# ============================================================================
+# Default settings.json permissions merge (#682)
+# ============================================================================
+# claude-code-setup.sh seeds a DEFAULT_PERMISSIONS array into
+# ~/.claude/settings.json via `.permissions.allow = ((.permissions.allow // [])
+# + $perms | unique)`. #682 adds three Bash(tmux ...) rules so the librarian
+# workflow plugin's golem dispatch (`tmux new-session ...`) isn't denied by the
+# auto-mode classifier on a fresh image. These tests exercise the actual merge —
+# not just a source grep — so the rules are asserted "present in the resulting
+# settings.json" as the acceptance criteria require.
+
+# Extract the literal DEFAULT_PERMISSIONS array from the setup script so the test
+# tracks the real source of truth rather than a hand-copied list. The array spans
+# the lines from `DEFAULT_PERMISSIONS='[` through the closing `]'`.
+_extract_default_permissions() {
+    local setup_file="$PROJECT_ROOT/lib/features/claude-code-setup.sh"
+    command sed -n "/^DEFAULT_PERMISSIONS='\[/,/^\]'/p" "$setup_file" |
+        command sed "s/^DEFAULT_PERMISSIONS='//; s/'$//"
+}
+
+# The three tmux launch-permission rules golem dispatch requires.
+_TMUX_RULES=(
+    "Bash(tmux new-session:*)"
+    "Bash(tmux ls:*)"
+    "Bash(tmux kill-session:*)"
+)
+
+# Test: the extracted DEFAULT_PERMISSIONS is valid JSON and carries all three
+# tmux rules (define-side sanity before the merge tests).
+test_default_permissions_has_tmux_rules() {
+    local perms
+    perms="$(_extract_default_permissions)"
+
+    if ! /usr/bin/jq -e . >/dev/null 2>&1 <<<"$perms"; then
+        fail_test "DEFAULT_PERMISSIONS did not extract as valid JSON"
+        return
+    fi
+
+    local rule
+    for rule in "${_TMUX_RULES[@]}"; do
+        if /usr/bin/jq -e --arg r "$rule" 'index($r) != null' >/dev/null <<<"$perms"; then
+            pass_test "DEFAULT_PERMISSIONS contains $rule"
+        else
+            fail_test "DEFAULT_PERMISSIONS missing $rule"
+        fi
+    done
+}
+
+# Test: fresh-create path — a brand-new settings.json seeded from
+# DEFAULT_PERMISSIONS has all three tmux rules in permissions.allow.
+test_settings_merge_fresh_create() {
+    local perms result rule
+    perms="$(_extract_default_permissions)"
+
+    # Mirror the script's fresh-create jq (lines ~254-257).
+    result="$(/usr/bin/jq -n --argjson perms "$perms" \
+        '{permissions: {allow: $perms}}')"
+
+    for rule in "${_TMUX_RULES[@]}"; do
+        if /usr/bin/jq -e --arg r "$rule" \
+            '.permissions.allow | index($r) != null' >/dev/null <<<"$result"; then
+            pass_test "fresh settings.json allows $rule"
+        else
+            fail_test "fresh settings.json missing $rule"
+        fi
+    done
+}
+
+# Test: merge path — merging into an existing settings.json that already has one
+# tmux rule yields all three, de-duplicated (the `unique` invariant), and any
+# pre-existing unrelated rule is preserved.
+test_settings_merge_dedupes_and_preserves() {
+    local perms result
+    perms="$(_extract_default_permissions)"
+
+    # Existing settings already carry one of the tmux rules plus a custom rule.
+    local existing='{"permissions":{"allow":["Bash(tmux new-session:*)","Read(/custom/**)"]}}'
+
+    # Mirror the script's merge jq (lines ~243-249).
+    result="$(/usr/bin/jq --argjson perms "$perms" \
+        '.permissions.allow = ((.permissions.allow // []) + $perms | unique)' \
+        <<<"$existing")"
+
+    local rule
+    for rule in "${_TMUX_RULES[@]}"; do
+        if /usr/bin/jq -e --arg r "$rule" \
+            '.permissions.allow | index($r) != null' >/dev/null <<<"$result"; then
+            pass_test "merged settings.json allows $rule"
+        else
+            fail_test "merged settings.json missing $rule"
+        fi
+    done
+
+    # The pre-existing custom rule survives the merge.
+    if /usr/bin/jq -e '.permissions.allow | index("Read(/custom/**)") != null' \
+        >/dev/null <<<"$result"; then
+        pass_test "merge preserves pre-existing custom rule"
+    else
+        fail_test "merge dropped pre-existing custom rule"
+    fi
+
+    # The duplicated tmux rule collapses to a single entry (unique invariant).
+    local count
+    count="$(/usr/bin/jq '[.permissions.allow[] | select(. == "Bash(tmux new-session:*)")] | length' \
+        <<<"$result")"
+    assert_equals "1" "$count" "duplicate tmux rule de-duplicated by unique"
+}
+
+run_test test_default_permissions_has_tmux_rules "Default permissions: DEFAULT_PERMISSIONS carries the 3 tmux rules"
+run_test test_settings_merge_fresh_create "Default permissions: fresh settings.json seeds the 3 tmux rules"
+run_test test_settings_merge_dedupes_and_preserves "Default permissions: merge dedupes tmux rule + preserves existing"
+
 # Generate test report
 generate_report

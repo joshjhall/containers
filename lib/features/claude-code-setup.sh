@@ -211,13 +211,28 @@ AUTO_MEMORY_DIR="${WORKING_DIR}/.claude/memory"
 
 # Permission entries to auto-allow reading skills, agents, and memory files.
 # Covers both user-level (~/.claude/) and project-level (.claude/) paths.
+#
+# The three Bash(tmux ...) rules pre-authorize the tmux session-management shape
+# the librarian *workflow* plugin's golem dispatch uses (`tmux new-session -d -s
+# golem-N ... "claude --permission-mode auto ..."`). The Claude Code auto-mode
+# classifier otherwise DENIES that launch as [Create Unsafe Agents], so without
+# these a freshly built image's first `/orchestrate dispatch` hits an opaque hard
+# wall until the operator hand-edits settings. A plugin's bundled settings.json
+# can't carry permissions.allow (only agent/subagentStatusLine keys are honored)
+# and the workflow plugin never writes host settings silently, so the image is
+# the right place to seed them. Unconditional is fine — this whole file only runs
+# under INCLUDE_DEV_TOOLS (the same gate the workflow plugin installs under), and
+# the rules only ever match tmux session management. (#682)
 DEFAULT_PERMISSIONS='[
   "Read(~/.claude/skills/**)",
   "Read(~/.claude/agents/**)",
   "Read(~/.claude/memory/**)",
   "Read(.claude/skills/**)",
   "Read(.claude/agents/**)",
-  "Read(.claude/memory/**)"
+  "Read(.claude/memory/**)",
+  "Bash(tmux new-session:*)",
+  "Bash(tmux ls:*)",
+  "Bash(tmux kill-session:*)"
 ]'
 
 # Default connect timeout (ms) for the Claude Code API client. The built-in
