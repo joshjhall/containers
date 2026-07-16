@@ -205,73 +205,89 @@ fi
 unset _RUNTIME_LIB
 
 # ============================================================================
-# Sequential Initialization
+# Startup-only replay mode
 # ============================================================================
+# ENTRYPOINT_STARTUP_ONLY=true runs ONLY the every-boot startup phase
+# (/etc/container/startup/*) and skips the expensive, privileged one-time work
+# below: cache/run chowns, docker-socket reconcile, bindfs overlays, cron
+# bring-up, and first-time setup. It exists for `recover-entrypoint`, which
+# replays this entrypoint on every container start under devcontainer impls
+# that skip the image ENTRYPOINT (notably Zed). The full setup ran on the first
+# replay and left the ~/.container-initialized marker; subsequent starts only
+# need the every-boot scripts (secrets refresh, auth watcher, health check,
+# codegraph sync, …) re-run. See docs/troubleshooting/zed-devcontainer.md.
+if [ "${ENTRYPOINT_STARTUP_ONLY:-false}" != "true" ]; then
 
-# --- Docker socket access ---
-configure_docker_socket "$@"
-if declare -f audit_log >/dev/null 2>&1; then
-    audit_log "configuration" "info" "Docker socket configuration complete" \
-        "{\"stage\":\"startup\",\"docker_socket_exists\":$([ -S /var/run/docker.sock ] && echo true || echo false)}" 2>/dev/null || true
-fi
+    # ============================================================================
+    # Sequential Initialization
+    # ============================================================================
 
-# --- Cache directory permissions ---
-fix_cache_permissions
+    # --- Docker socket access ---
+    configure_docker_socket "$@"
+    if declare -f audit_log >/dev/null 2>&1; then
+        audit_log "configuration" "info" "Docker socket configuration complete" \
+            "{\"stage\":\"startup\",\"docker_socket_exists\":$([ -S /var/run/docker.sock ] && echo true || echo false)}" 2>/dev/null || true
+    fi
 
-# --- /run tmpfs permissions ---
-# The /run tmpfs mounts root-owned (its uid can't be baked into compose because
-# editors remap the runtime UID), so align it to the resolved user like /cache.
-if declare -f fix_run_permissions >/dev/null 2>&1; then
-    fix_run_permissions
-fi
+    # --- Cache directory permissions ---
+    fix_cache_permissions
 
-# --- Bindfs overlays + FUSE cleanup ---
-setup_bindfs_overlays
+    # --- /run tmpfs permissions ---
+    # The /run tmpfs mounts root-owned (its uid can't be baked into compose because
+    # editors remap the runtime UID), so align it to the resolved user like /cache.
+    if declare -f fix_run_permissions >/dev/null 2>&1; then
+        fix_run_permissions
+    fi
 
-# ============================================================================
-# Cron Daemon Startup
-# ============================================================================
-# Start cron daemon if installed (requires root privileges)
-# This runs before dropping to non-root user so no sudo is needed
-if command -v cron &>/dev/null; then
-    if ! pgrep -x "cron" >/dev/null 2>&1; then
-        echo "🔧 Starting cron daemon..."
-        if [ "$RUNNING_AS_ROOT" = "true" ]; then
-            # Start cron directly as root
-            if command -v service &>/dev/null; then
-                service cron start >/dev/null 2>&1 || cron
+    # --- Bindfs overlays + FUSE cleanup ---
+    setup_bindfs_overlays
+
+    # ============================================================================
+    # Cron Daemon Startup
+    # ============================================================================
+    # Start cron daemon if installed (requires root privileges)
+    # This runs before dropping to non-root user so no sudo is needed
+    if command -v cron &>/dev/null; then
+        if ! pgrep -x "cron" >/dev/null 2>&1; then
+            echo "🔧 Starting cron daemon..."
+            if [ "$RUNNING_AS_ROOT" = "true" ]; then
+                # Start cron directly as root
+                if command -v service &>/dev/null; then
+                    service cron start >/dev/null 2>&1 || cron
+                else
+                    cron
+                fi
+                if pgrep -x "cron" >/dev/null 2>&1; then
+                    echo "✓ Cron daemon started"
+                else
+                    echo "⚠️  Warning: Cron daemon may not have started"
+                fi
             else
-                cron
+                # Not running as root, cron startup will be attempted by startup script
+                echo "   Cron startup deferred to startup scripts (not running as root)"
             fi
-            if pgrep -x "cron" >/dev/null 2>&1; then
-                echo "✓ Cron daemon started"
-            else
-                echo "⚠️  Warning: Cron daemon may not have started"
-            fi
-        else
-            # Not running as root, cron startup will be attempted by startup script
-            echo "   Cron startup deferred to startup scripts (not running as root)"
         fi
     fi
-fi
 
-# ============================================================================
-# First-Time Setup
-# ============================================================================
-# Run first-time setup scripts if marker doesn't exist
-FIRST_RUN_MARKER="/home/${USERNAME}/.container-initialized"
-FIRST_STARTUP_DIR="/etc/container/first-startup"
-if [ ! -f "$FIRST_RUN_MARKER" ]; then
-    echo "=== Running first-time setup scripts ==="
-    run_startup_scripts "$FIRST_STARTUP_DIR" "first-startup"
+    # ============================================================================
+    # First-Time Setup
+    # ============================================================================
+    # Run first-time setup scripts if marker doesn't exist
+    FIRST_RUN_MARKER="/home/${USERNAME}/.container-initialized"
+    FIRST_STARTUP_DIR="/etc/container/first-startup"
+    if [ ! -f "$FIRST_RUN_MARKER" ]; then
+        echo "=== Running first-time setup scripts ==="
+        run_startup_scripts "$FIRST_STARTUP_DIR" "first-startup"
 
-    # Create marker file
-    if [ "$RUNNING_AS_ROOT" = "true" ]; then
-        su "${USERNAME}" -c "touch '$FIRST_RUN_MARKER'"
-    else
-        touch "$FIRST_RUN_MARKER"
+        # Create marker file
+        if [ "$RUNNING_AS_ROOT" = "true" ]; then
+            su "${USERNAME}" -c "touch '$FIRST_RUN_MARKER'"
+        else
+            touch "$FIRST_RUN_MARKER"
+        fi
     fi
-fi
+
+fi # end: ENTRYPOINT_STARTUP_ONLY guard (privileged one-time + first-time setup)
 
 # ============================================================================
 # Every-Boot Scripts

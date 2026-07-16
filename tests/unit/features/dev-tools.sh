@@ -910,5 +910,32 @@ test_codegraph_wired() {
 
 run_test test_codegraph_wired "codegraph is wired into dev-tools (version, install, checksum)"
 
+# Test: the codegraph index bootstrap ships as an EVERY-BOOT startup script
+# (not first-startup), so the index self-heals when the /cache volume is empty
+# and stays current via `sync`. It must detach with setsid to survive the
+# transient recover-entrypoint replay under Zed.
+test_codegraph_index_startup_script() {
+    local script="$PROJECT_ROOT/lib/features/lib/dev-tools/codegraph-index-startup.sh"
+    local dev_tools="$PROJECT_ROOT/lib/features/dev-tools.sh"
+
+    assert_file_exists "$script" \
+        "codegraph-index-startup.sh shipped under lib/features/lib/dev-tools/"
+    assert_file_contains "$script" "setsid" \
+        "codegraph startup script detaches via setsid to survive the Zed replay"
+    assert_file_contains "$script" 'CODEGRAPH_OP="sync"' \
+        "codegraph startup script syncs an existing index instead of rebuilding"
+
+    assert_file_contains "$dev_tools" "features/lib/dev-tools/codegraph-index-startup.sh" \
+        "dev-tools.sh installs the codegraph index startup script"
+    assert_file_contains "$dev_tools" "/etc/container/startup/55-codegraph-index.sh" \
+        "dev-tools.sh installs codegraph into every-boot startup as 55-"
+
+    # Guard against the old first-startup wiring lingering.
+    assert_false "command grep -q 'first-startup/45-codegraph-index.sh' '$dev_tools'" \
+        "dev-tools.sh no longer installs codegraph as a first-startup script"
+}
+
+run_test test_codegraph_index_startup_script "codegraph index bootstrap is an every-boot, setsid-detached startup script"
+
 # Generate test report
 generate_report

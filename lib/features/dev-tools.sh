@@ -326,14 +326,20 @@ install -m 755 \
 # ============================================================================
 # codegraph index bootstrap
 # ============================================================================
-# Ship a first-startup script that symlinks <project>/.codegraph onto the
-# /cache/codegraph volume and builds the initial knowledge-graph index. Runs
-# after the workspace is mounted; non-fatal and backgrounded.
-log_message "Installing codegraph index bootstrap script..."
+# Ship an every-boot startup script that symlinks <project>/.codegraph onto the
+# /cache/codegraph volume and keeps the knowledge-graph index current: full
+# `init` when no index exists, cheap `sync` when it does. It runs on every boot
+# (not first-startup) because the index lives on a droppable cache volume that
+# can be empty even when the first-run marker is set, and it detaches via setsid
+# so the build survives the transient recover-entrypoint replay under Zed.
+log_message "Installing codegraph index startup script..."
+
+log_command "Creating container startup directory" \
+    mkdir -p /etc/container/startup
 
 install -m 755 \
-    /tmp/build-scripts/features/lib/dev-tools/codegraph-index-first-startup.sh \
-    /etc/container/first-startup/45-codegraph-index.sh
+    /tmp/build-scripts/features/lib/dev-tools/codegraph-index-startup.sh \
+    /etc/container/startup/55-codegraph-index.sh
 
 # ============================================================================
 # Verification Script

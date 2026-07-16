@@ -899,6 +899,52 @@ GUARD_EOF
 }
 
 # ============================================================================
+# Startup-only replay mode (ENTRYPOINT_STARTUP_ONLY)
+# ============================================================================
+# Static: the guard opens before Sequential Initialization and closes before
+# the Every-Boot Scripts block, so a startup-only replay skips the expensive
+# one-time privileged setup but still runs /etc/container/startup/*.
+test_startup_only_guard_present() {
+    assert_file_contains "$PROJECT_ROOT/lib/runtime/entrypoint.sh" \
+        'if \[ "\${ENTRYPOINT_STARTUP_ONLY:-false}" != "true" \]; then' \
+        "entrypoint.sh gates one-time setup behind ENTRYPOINT_STARTUP_ONLY"
+    assert_file_contains "$PROJECT_ROOT/lib/runtime/entrypoint.sh" \
+        'end: ENTRYPOINT_STARTUP_ONLY guard' \
+        "entrypoint.sh closes the ENTRYPOINT_STARTUP_ONLY guard"
+}
+
+# Functional: the guard wraps the one-time block but never the every-boot block.
+# Model the guard shape and assert startup-only skips one-time work yet still
+# reaches the every-boot phase.
+test_startup_only_skips_one_time_work() {
+    local guard_script="$TEST_TEMP_DIR/startup-only-test.sh"
+    command cat >"$guard_script" <<'GUARD_EOF'
+#!/bin/bash
+if [ "${ENTRYPOINT_STARTUP_ONLY:-false}" != "true" ]; then
+    touch "$TEST_TEMP_DIR/one-time-ran.marker"
+fi
+# Every-boot phase always runs (outside the guard)
+touch "$TEST_TEMP_DIR/every-boot-ran.marker"
+GUARD_EOF
+    chmod +x "$guard_script"
+
+    ENTRYPOINT_STARTUP_ONLY=true TEST_TEMP_DIR="$TEST_TEMP_DIR" \
+        bash "$guard_script"
+
+    if [ -f "$TEST_TEMP_DIR/one-time-ran.marker" ]; then
+        fail_test "One-time setup should be skipped in startup-only mode"
+    else
+        pass_test "One-time setup skipped when ENTRYPOINT_STARTUP_ONLY=true"
+    fi
+
+    if [ -f "$TEST_TEMP_DIR/every-boot-ran.marker" ]; then
+        pass_test "Every-boot phase still runs in startup-only mode"
+    else
+        fail_test "Every-boot phase should run even in startup-only mode"
+    fi
+}
+
+# ============================================================================
 # Functional Tests - parse_bindfs_skip_paths
 # ============================================================================
 # Helper: extract and run parse_bindfs_skip_paths in a clean subshell.
@@ -1139,6 +1185,8 @@ run_test_with_setup test_exit_handler_logging "Exit handler logging messages"
 run_test_with_setup test_exit_handler_error_handling "Exit handler error handling"
 run_test_with_setup test_reentry_guard_skips_when_set "Re-entry guard skips startup when set"
 run_test_with_setup test_reentry_guard_runs_when_unset "Re-entry guard runs startup when unset"
+run_test test_startup_only_guard_present "ENTRYPOINT_STARTUP_ONLY guard wraps one-time setup"
+run_test_with_setup test_startup_only_skips_one_time_work "Startup-only mode skips one-time work, keeps every-boot"
 
 # Functional tests - parse_bindfs_skip_paths
 run_test_with_setup test_parse_bindfs_skip_paths_empty "parse_bindfs_skip_paths: empty input"
