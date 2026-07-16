@@ -94,6 +94,18 @@ Each agent runs Claude Code in a tmux session named `claude`:
 docker exec -it project-agent01-1 tmux attach -t claude
 ```
 
+By issue number, prefer the `golem attach <N>` shell shortcut (or
+`just golem-attach <N>`) — it resolves issue N's golem to its worktree tmux
+session or its container's `claude` session automatically:
+
+```bash
+golem attach 731
+```
+
+The shortcut is available in the container whenever the librarian `workflow`
+plugin is installed (it wraps that plugin's `golem-attach.sh`); it silently
+does nothing when the plugin is absent.
+
 You'll see Claude Code's terminal interface. You can:
 
 - Review what the agent is doing

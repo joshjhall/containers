@@ -271,6 +271,15 @@ log_message "Configuring git to use delta..."
 
 command cat /tmp/build-scripts/features/lib/dev-tools/gitconfig-delta >>/etc/gitconfig
 
+# Install the librarian workflow-scripts-dir resolver onto PATH so the
+# `golem attach <N>` shell shortcut (defined in dev-tools-extras.sh) can locate
+# the installed `workflow` plugin's scripts dir dynamically. Same hardened
+# resolver the justfile golem recipes use (#731).
+log_command "Installing workflow-scripts-dir resolver" \
+    install -m 755 \
+    /tmp/build-scripts/bin/workflow-scripts-dir.sh \
+    /usr/local/bin/workflow-scripts-dir.sh
+
 # Add tool-specific configurations to bashrc.d (content in lib/bashrc/dev-tools-extras.sh)
 write_bashrc_content /etc/bashrc.d/80-dev-tools.sh "tool-specific configurations" \
     </tmp/build-scripts/features/lib/bashrc/dev-tools-extras.sh
