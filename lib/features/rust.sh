@@ -319,9 +319,13 @@ case "${default_tc}" in
 esac
 
 echo "Reconciling rustup components for pinned toolchain '${pinned}' (from $(basename "${toolchain_file}"))..."
-# Ensure the pinned toolchain is installed, then add the components to it.
-# Failures are non-fatal: a startup hook must never block the container.
-rustup toolchain install "${pinned}" --no-self-update 2>/dev/null || true
+# Ensure the pinned toolchain is installed with the full default profile
+# (cargo/clippy/rustfmt), then add the extra components to it. Installing with
+# --profile default means a completed install already carries the cargo
+# subcommands even if the follow-up `component add` is skipped or rustup's lazy
+# auto-install wins the race (#740). Failures are non-fatal: a startup hook must
+# never block the container.
+rustup toolchain install "${pinned}" --profile default --no-self-update 2>/dev/null || true
 rustup component add --toolchain "${pinned}" "${components[@]}" 2>/dev/null ||
     echo "  ⚠ Could not add some components to '${pinned}' (continuing)"
 EOF

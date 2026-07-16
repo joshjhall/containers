@@ -418,6 +418,27 @@ test_channel_routing() {
     fi
 }
 
+# Test: the pinned-toolchain reconciler installs with --profile default so a
+# workspace pin divergent from the image default lands fully-componented
+# (cargo/clippy/rustfmt) even if the follow-up `component add` is skipped (#740).
+test_reconciler_profile_default() {
+    local rust_script="$PROJECT_ROOT/lib/features/rust.sh"
+
+    if ! [ -f "$rust_script" ]; then
+        skip_test "rust.sh not found"
+        return
+    fi
+
+    # The reconciler's `rustup toolchain install` line must carry
+    # `--profile default` so the pinned toolchain is not left as a bare
+    # (cargo-less) half-install.
+    if command grep -qE 'rustup toolchain install.*--profile default' "$rust_script"; then
+        assert_true true "reconciler installs pinned toolchain with --profile default"
+    else
+        assert_true false "reconciler missing --profile default on toolchain install"
+    fi
+}
+
 # Run all tests
 run_test_with_setup test_rust_version_handling "Rust version handling works correctly"
 run_test_with_setup test_rustup_installation "Rustup installation process"
@@ -434,6 +455,7 @@ run_test_with_setup test_rust_verification "Rust verification script works"
 run_test test_luggage_invocation "rust.sh delegates toolchain install to luggage"
 run_test test_no_inline_rustup_install "rust.sh strips inline rustup-init download/verify logic"
 run_test test_channel_routing "Channel names (stable/beta/nightly) route through --channel"
+run_test test_reconciler_profile_default "Pinned-toolchain reconciler installs with --profile default"
 
 # Generate test report
 generate_report

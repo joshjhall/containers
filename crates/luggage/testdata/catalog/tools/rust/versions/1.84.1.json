@@ -34,7 +34,10 @@
         "args": ["-y", "--default-toolchain", "1.84.1", "--profile", "default"]
       },
       "post_install": [
-        { "kind": "component_add", "component": "rust-src" }
+        { "kind": "component_add", "component": "rust-src" },
+        { "kind": "component_add", "component": "rust-analyzer" },
+        { "kind": "component_add", "component": "clippy" },
+        { "kind": "component_add", "component": "rustfmt" }
       ],
       "dependencies": [
         { "tool": "ca_certificates" },
