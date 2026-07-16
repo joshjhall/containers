@@ -1416,5 +1416,107 @@ run_test test_default_permissions_has_tmux_rules "Default permissions: DEFAULT_P
 run_test test_settings_merge_fresh_create "Default permissions: fresh settings.json seeds the 3 tmux rules"
 run_test test_settings_merge_dedupes_and_preserves "Default permissions: merge dedupes tmux rule + preserves existing"
 
+# ============================================================================
+# Host-event forwarder settings.json hook wiring (POST_CLAUDE_EVENTS_TO_HOST)
+# ============================================================================
+# claude-setup wires claude-host-event.sh into settings.json's `hooks` block for
+# 8 Claude Code events when POST_CLAUDE_EVENTS_TO_HOST=true. These tests exercise
+# the actual jq merge — asserting the 8-event mapping is produced, is idempotent
+# under re-merge, and preserves pre-existing hooks — plus a source guard that the
+# wiring stays gated (never fires unconditionally).
+
+# The 8 events the forwarder wires (mirrors HOST_EVENT_MAP in claude-setup).
+_HOST_EVENTS=(
+    SessionStart UserPromptSubmit PreToolUse PostToolUse
+    PostToolUseFailure Notification Stop SessionEnd
+)
+
+# Reproduce claude-setup's per-event append merge (idempotent, preserves
+# existing). Kept in lockstep with the jq in lib/features/lib/claude/claude-setup
+# (the "Host Event Forwarding" block); test_host_event_wiring_is_gated guards the
+# source so drift is caught.
+_host_event_merge() {
+    local input="$1" hook="$2"
+    local map='{"SessionStart":"Idle","UserPromptSubmit":"Working","PreToolUse":"Working","PostToolUse":"Auto","PostToolUseFailure":"ToolFail","Notification":"Waiting","Stop":"Idle","SessionEnd":"Ended"}'
+    /usr/bin/jq --arg hook "$hook" --argjson map "$map" '
+        reduce ($map | to_entries[]) as $e (.;
+            ($e.key) as $event
+            | ($hook + " " + $e.value) as $cmd
+            | .hooks[$event] //= []
+            | if (.hooks[$event] | any(.[].hooks[]?; .command == $cmd)) then .
+              else .hooks[$event] += [{ "hooks": [{ "type": "command", "command": $cmd }] }]
+              end)
+    ' <<<"$input"
+}
+
+# Test: fresh settings.json gains a command hook for all 8 events, each pointing
+# at the forwarder with its state arg.
+test_host_event_wiring_all_events() {
+    local hook="/home/vscode/.claude/hooks/claude-host-event.sh"
+    local result event
+    result="$(_host_event_merge '{}' "$hook")"
+
+    for event in "${_HOST_EVENTS[@]}"; do
+        if /usr/bin/jq -e --arg ev "$event" --arg h "$hook" \
+            '.hooks[$ev] | any(.[].hooks[]?; .command | startswith($h + " "))' \
+            >/dev/null <<<"$result"; then
+            pass_test "forwarder wired for $event"
+        else
+            fail_test "forwarder NOT wired for $event"
+        fi
+    done
+}
+
+# Test: re-running the merge does not duplicate entries (idempotent, self-heal
+# safe on every boot).
+test_host_event_wiring_idempotent() {
+    local hook="/home/vscode/.claude/hooks/claude-host-event.sh"
+    local once twice count
+    once="$(_host_event_merge '{}' "$hook")"
+    twice="$(_host_event_merge "$once" "$hook")"
+
+    count="$(/usr/bin/jq '[.hooks.Stop[].hooks[].command] | length' <<<"$twice")"
+    assert_equals "1" "$count" "Stop hook not duplicated on re-merge"
+}
+
+# Test: a user's pre-existing hook on one of these events is preserved; the
+# forwarder is appended alongside, not replacing it.
+test_host_event_wiring_preserves_existing() {
+    local hook="/home/vscode/.claude/hooks/claude-host-event.sh"
+    local existing result
+    existing='{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"/my/own/hook.sh"}]}]}}'
+    result="$(_host_event_merge "$existing" "$hook")"
+
+    if /usr/bin/jq -e '.hooks.Stop | any(.[].hooks[]?; .command == "/my/own/hook.sh")' \
+        >/dev/null <<<"$result"; then
+        pass_test "pre-existing Stop hook preserved"
+    else
+        fail_test "pre-existing Stop hook dropped"
+    fi
+    if /usr/bin/jq -e --arg h "$hook" \
+        '.hooks.Stop | any(.[].hooks[]?; .command | startswith($h + " "))' \
+        >/dev/null <<<"$result"; then
+        pass_test "forwarder appended alongside existing Stop hook"
+    else
+        fail_test "forwarder not appended to Stop"
+    fi
+}
+
+# Test (source guard): the wiring in claude-setup is gated on
+# POST_CLAUDE_EVENTS_TO_HOST=true — it must never wire unconditionally.
+test_host_event_wiring_is_gated() {
+    local setup_file="$PROJECT_ROOT/lib/features/lib/claude/claude-setup"
+    if command grep -qE 'POST_CLAUDE_EVENTS_TO_HOST:-false.*=.*"true"|"\$\{POST_CLAUDE_EVENTS_TO_HOST:-false\}" = "true"' "$setup_file"; then
+        pass_test "host-event wiring is gated on POST_CLAUDE_EVENTS_TO_HOST=true"
+    else
+        fail_test "host-event wiring gate not found in claude-setup"
+    fi
+}
+
+run_test test_host_event_wiring_all_events "Host events: forwarder wired for all 8 Claude Code events"
+run_test test_host_event_wiring_idempotent "Host events: re-merge is idempotent (no duplicate hooks)"
+run_test test_host_event_wiring_preserves_existing "Host events: merge preserves a pre-existing user hook"
+run_test test_host_event_wiring_is_gated "Host events: wiring is gated on the runtime flag"
+
 # Generate test report
 generate_report

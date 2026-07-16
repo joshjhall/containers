@@ -116,6 +116,7 @@ All features are disabled by default. Set to `true` to enable:
 | `INCLUDE_ANDROID_DEV` | Install Android dev tools (emulator, NDK)            |
 | `INCLUDE_DEV_TOOLS`   | Install general dev tools (gh, lazygit, fzf, etc.)   |
 | `SKIP_LSP_INSTALL`    | Skip LSP server installation (for headless agents)   |
+| `POST_CLAUDE_EVENTS_TO_HOST` | Stage the Claude→host event forwarder hook (opt-in; requires dev tools) |
 
 **Cloud & Infrastructure:**
 
@@ -423,6 +424,19 @@ These variables can be set when running containers (via `docker run -e`):
 | ---------------------- | ------- | -------------------------------------------------- |
 | `SKIP_CASE_CHECK`      | `false` | Skip case-insensitive filesystem detection warning |
 | `FUSE_CLEANUP_DISABLE` | `false` | Disable periodic `.fuse_hidden*` file cleanup      |
+
+### Host Event Forwarding
+
+Requires an image built with `POST_CLAUDE_EVENTS_TO_HOST=true`. When enabled at
+runtime, `claude-setup` wires the forwarder hook into `~/.claude/settings.json`
+so Claude Code agent state is POSTed to a host monitor's local HTTP bridge (e.g.
+Bartender Top Shelf). See `examples/env/post-claude-events.env`.
+
+| Variable                     | Default                             | Description                                             |
+| ---------------------------- | ----------------------------------- | ------------------------------------------------------- |
+| `POST_CLAUDE_EVENTS_TO_HOST` | `false`                             | Enable the forwarder at runtime (read every boot)       |
+| `NOTCHBAR_AGENTS_HOST`       | `host.docker.internal` / `127.0.0.1` | Host running the monitor bridge (topology-auto-default) |
+| `NOTCHBAR_AGENTS_PORT`       | `7823`                              | Port of the monitor bridge                              |
 
 ### Retry Configuration
 
