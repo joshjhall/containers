@@ -92,6 +92,7 @@ compare across the surface area this build system exercises:
 | Aspect                                       | VS Code                                                                                              | Zed                                                                                                                                | Notes                                                                                                                              |
 | -------------------------------------------- | ---------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
 | Lifecycle hooks                              | Full spec — `initializeCommand`, `onCreateCommand`, `updateContentCommand`, `postCreateCommand`, `postStartCommand`, `postAttachCommand` | Spec-compliant, but image `ENTRYPOINT` is replaced. `postStartCommand` plumbing fires; entrypoint-driven setup needs replay.       | See [Lifecycle hook behavior](#lifecycle-hook-behavior) and [Fix: recover-entrypoint](#fix-recover-entrypoint).                    |
+| Every-boot startup scripts (`/etc/container/startup/*`) | Run on **every** container start by the image ENTRYPOINT (PID 1) — secrets refresh, auth watcher, project health check, codegraph index sync, etc. | Image ENTRYPOINT never runs, so these are replayed by `recover-entrypoint`: full replay on first start, then a startup-only replay (`ENTRYPOINT_STARTUP_ONLY=true`) on each subsequent start — matching VS Code's every-boot behavior without redoing one-time privileged setup. | See [Fix: recover-entrypoint](#fix-recover-entrypoint). Before this, later Zed starts silently skipped every-boot scripts (e.g. a stale codegraph index). |
 | Extensions                                   | `customizations.vscode.extensions` — installed on first attach, cached per-user on the host          | `customizations.zed.extensions` — installed on first open, cached in the `zed-extensions` named volume                             | Same per-feature registry generates both lists; neither editor inherits the other's set.                                           |
 | Port forwarding                              | `forwardPorts`, `portsAttributes`, `otherPortsAttributes`, `appPort` all honored                     | Only `appPort` honored; `forwardPorts` and `*Attributes` fields are silently dropped                                               | Cross-editor portable form: declare `ports:` in `docker-compose.yml`. See [Port forwarding](#port-forwarding).                     |
 | Multi-service Compose                        | Full — `dockerComposeFile`, `service`, `runServices` all respected                                   | Full — recent fixes for `labels` and multi-stage Dockerfiles landed in 0.231.x                                                     | Sidecar services (Postgres, Redis, etc.) from `examples/contexts/devcontainer/docker-compose.yml` work identically in both editors. |
@@ -110,7 +111,16 @@ repo's `.devcontainer/devcontainer.json`.
 
 This repo currently wires only one lifecycle hook:
 
-- **`postStartCommand`** — `bash -c './.devcontainer/bin/setup-dev-environment.sh && setup-git && setup-gh'`
+- **`postStartCommand`** — the chain below:
+
+  ```bash
+  bash -c 'recover-entrypoint && ./.devcontainer/bin/setup-dev-environment.sh && setup-git && setup-gh'
+  ```
+
+  - `recover-entrypoint` replays the image ENTRYPOINT setup that Zed skips —
+    full one-time setup on first start, then the every-boot startup phase
+    (`/etc/container/startup/*`, e.g. codegraph index sync, secret refresh) on
+    each subsequent start. See [Fix: recover-entrypoint](#fix-recover-entrypoint).
   - Installs lefthook git hooks (`.git/hooks/pre-commit`, `pre-push`, `commit-msg`).
   - Verifies `.env` posture and reports recommended-tool availability.
   - Configures git user identity from secrets via `setup-git`.
@@ -254,8 +264,8 @@ missing.
 ### Fix: `recover-entrypoint`
 
 The in-tree fix is a small image-side helper, `recover-entrypoint`, that
-replays the image ENTRYPOINT when its marker (`~/.container-initialized`)
-is missing. It's wired into every devcontainer this build system produces:
+replays the image ENTRYPOINT setup Zed skips. It's wired into every
+devcontainer this build system produces:
 
 - Script: `lib/runtime/commands/recover-entrypoint` → installed to
   `/usr/local/bin/recover-entrypoint` by the Dockerfile (alongside
@@ -267,13 +277,31 @@ is missing. It's wired into every devcontainer this build system produces:
 - This repo's own `.devcontainer/devcontainer.json` chains it ahead of
   `setup-dev-environment.sh && setup-git && setup-gh`.
 
-The script is idempotent: when the marker exists (VS Code's normal path) it
-short-circuits in well under a millisecond; when missing (Zed's path) it
-invokes the entrypoint as the current user, which sudos internally for
-privileged setup (cache chown, etc.), runs `/etc/container/startup/*.sh`,
-writes the marker, and exits 0. Downstream `setup-git` and `setup-gh` then
-see resolved `GITHUB_TOKEN` / `GIT_USER_EMAIL` via `_wait-for-op-cache`'s
-existing source of `/dev/shm/op-secrets-cache`.
+The script branches on the marker (`~/.container-initialized`), and runs on
+every `postStartCommand` (i.e. every container start):
+
+- **Marker missing (first start under Zed).** Full replay: invokes the
+  entrypoint as the current user, which sudos internally for one-time
+  privileged setup (cache chown, bindfs, cron, OP secret resolution),
+  runs `/etc/container/{first-startup,startup}/*.sh`, writes the marker,
+  and exits 0.
+- **Marker present (every subsequent start).** Startup-only replay: invokes
+  the entrypoint with `ENTRYPOINT_STARTUP_ONLY=true`, which **skips** the
+  expensive one-time privileged block and re-runs only the every-boot
+  `/etc/container/startup/*.sh` phase. This is what keeps parity with VS
+  Code, where the PID-1 entrypoint re-runs those scripts on every boot —
+  refreshing secrets, the claude-auth watcher, the project health check, and
+  the codegraph index (`sync`). Without it, later Zed starts silently ran
+  none of them.
+
+Under VS Code the marker is written by the PID-1 entrypoint, so the first
+`recover-entrypoint` call already takes the startup-only branch (a cheap
+no-op-ish re-run of the same every-boot scripts). Downstream `setup-git` and
+`setup-gh` see resolved `GITHUB_TOKEN` / `GIT_USER_EMAIL` via
+`_wait-for-op-cache`'s existing source of `/dev/shm/op-secrets-cache`.
+
+The every-boot scripts are individually guarded/idempotent (marker files,
+skip gates), so re-running them each boot is safe.
 
 For projects writing a custom `postStartCommand`, the convention is to keep
 `recover-entrypoint &&` as the first link:

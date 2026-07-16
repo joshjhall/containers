@@ -32,12 +32,16 @@ test_marker_path() {
         "Should use \$HOME/.container-initialized as the marker"
 }
 
-# Test: Fast-path exit when marker exists
-test_marker_short_circuit() {
+# Test: Branches on whether the marker exists (full vs startup-only replay)
+test_marker_branch() {
     assert_file_contains "$RECOVER_SCRIPT" 'if \[ -f "\$MARKER" \]' \
-        "Should check whether marker exists"
-    assert_file_contains "$RECOVER_SCRIPT" 'exit 0' \
-        "Should exit 0 when marker exists (idempotency)"
+        "Should check whether marker exists to choose replay mode"
+}
+
+# Test: Marker-present path re-runs only the every-boot startup phase
+test_startup_only_replay() {
+    assert_file_contains "$RECOVER_SCRIPT" 'ENTRYPOINT_STARTUP_ONLY=true /usr/local/bin/entrypoint /usr/bin/true' \
+        "When marker exists, should replay entrypoint in startup-only mode every boot"
 }
 
 # Test: Skips gracefully when entrypoint binary missing
@@ -69,7 +73,8 @@ test_logs_replay() {
 # ---------------------------------------------------------------------------
 run_test test_strict_mode "Strict mode (set -euo pipefail)"
 run_test test_marker_path "Marker path is \$HOME/.container-initialized"
-run_test test_marker_short_circuit "Short-circuits when marker exists"
+run_test test_marker_branch "Branches on marker to choose replay mode"
+run_test test_startup_only_replay "Startup-only replay when marker exists"
 run_test test_entrypoint_missing_guard "Guards against missing entrypoint binary"
 run_test test_invokes_entrypoint_with_true "Invokes entrypoint with /usr/bin/true"
 run_test test_no_explicit_sudo "Does not call sudo explicitly"

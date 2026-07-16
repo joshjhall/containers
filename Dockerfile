@@ -114,6 +114,11 @@ ENV ENABLE_AUDIT_LOGGING=${ENABLE_AUDIT_LOGGING}
 # Working directory and project name
 ARG PROJECT_NAME=project
 ARG WORKING_DIR=/workspace/${PROJECT_NAME}
+# Persist WORKING_DIR into the runtime environment. It is consumed by every-boot
+# startup scripts (e.g. the codegraph index bootstrap) that need the project
+# root but run long after the build ARG scope is gone. Without this, WORKING_DIR
+# is unset at runtime and those scripts fall back to $PWD.
+ENV WORKING_DIR=${WORKING_DIR}
 
 # Create user - MUST happen before any feature installations that use su
 # IMPORTANT: If the base image already uses the requested UID/GID, user.sh will

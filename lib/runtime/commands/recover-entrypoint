@@ -18,20 +18,28 @@
 # https://github.com/zed-industries/zed/issues/56357 — remove this script
 # (and the call sites in devcontainer.json templates) once that bug is fixed.
 #
-# This script makes the setup recoverable from `postStartCommand` for any
-# devcontainer impl that skips the image ENTRYPOINT:
-#   1. Fast path: short-circuits when ~/.container-initialized exists, so
-#      it's safe to run unconditionally on every container start.
-#   2. Recovery path: invokes the entrypoint as the current (remote) user,
-#      passing /usr/bin/true as the command. The entrypoint's non-root path
-#      sets USERNAME=$(whoami), sudos internally where it needs root (cache
-#      chown, etc.), runs /etc/container/{first-startup,startup}/*.sh, writes
-#      the marker, then execs /usr/bin/true which exits cleanly.
+# This script makes the setup recoverable from `postStartCommand`, which every
+# devcontainer impl runs on every container start, for any impl that skips the
+# image ENTRYPOINT:
+#   1. First start (no marker): full replay. Invokes the entrypoint as the
+#      current (remote) user, passing /usr/bin/true as the command. The
+#      entrypoint's non-root path sets USERNAME=$(whoami), sudos internally
+#      where it needs root (cache chown, etc.), runs
+#      /etc/container/{first-startup,startup}/*.sh, writes the marker, then
+#      execs /usr/bin/true which exits cleanly.
+#   2. Subsequent starts (marker exists): startup-only replay. Re-runs ONLY the
+#      every-boot phase (/etc/container/startup/*) via ENTRYPOINT_STARTUP_ONLY,
+#      skipping the expensive one-time privileged setup. Under VS Code the image
+#      ENTRYPOINT (PID 1) does this on every boot; without it, Zed silently stops
+#      running the every-boot scripts (secrets refresh, auth watcher, project
+#      health check, codegraph sync, …) after the first start. This restores
+#      that parity.
 #
 # Wire into devcontainer.json:
 #   "postStartCommand": "recover-entrypoint && <project setup chain>"
 #
-# Idempotent. Generated devcontainer.json templates (see
+# Idempotent. The startup scripts are themselves guarded/idempotent, so
+# re-running them every boot is safe. Generated devcontainer.json templates (see
 # crates/containers-common/src/template/sources/devcontainer.json.j2)
 # include this in the default postStartCommand chain.
 
@@ -39,14 +47,19 @@ set -euo pipefail
 
 MARKER="$HOME/.container-initialized"
 
-if [ -f "$MARKER" ]; then
-    exit 0
-fi
-
 if [ ! -x /usr/local/bin/entrypoint ]; then
     echo "[recover-entrypoint] /usr/local/bin/entrypoint missing or not executable; skipping" >&2
     exit 0
 fi
 
-echo "[recover-entrypoint] image ENTRYPOINT did not run (likely Zed); replaying"
+if [ -f "$MARKER" ]; then
+    # One-time setup already done. Re-run only the every-boot startup phase so
+    # editors that skip the image ENTRYPOINT (Zed) still refresh secrets, the
+    # codegraph index, etc. on each start — matching VS Code's PID-1 entrypoint.
+    echo "[recover-entrypoint] replaying every-boot startup scripts (startup-only)"
+    ENTRYPOINT_STARTUP_ONLY=true /usr/local/bin/entrypoint /usr/bin/true
+    exit 0
+fi
+
+echo "[recover-entrypoint] image ENTRYPOINT did not run (likely Zed); replaying full setup"
 /usr/local/bin/entrypoint /usr/bin/true
