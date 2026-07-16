@@ -98,3 +98,41 @@ if command -v glab &>/dev/null; then
     alias glpipe='glab pipeline list'
     alias glci='glab ci view'
 fi
+
+# golem shortcut — a terse `golem attach <N>` for attaching to issue N's golem
+# session during parallel-golem orchestration. The underlying script lives in the
+# librarian `workflow` plugin (scripts/golem-attach.sh), so the shortcut is
+# defined ONLY when that plugin is installed and locatable — a broken alias that
+# errors on every shell without the plugin would be worse than no alias.
+#
+# Resolution goes through workflow-scripts-dir.sh (installed on PATH by
+# dev-tools.sh), the same hardened resolver the justfile golem recipes use: it
+# finds the installed plugin's scripts dir dynamically, so a `claude plugin
+# update` never strands the shortcut at a stale version path. Gate the definition
+# at source time (define-only-if-installed) but re-resolve inside the function at
+# call time — bash has no closures, and re-resolving picks up a plugin update
+# without needing a fresh shell. (#731)
+if command -v workflow-scripts-dir.sh &>/dev/null &&
+    _golem_scripts="$(workflow-scripts-dir.sh 2>/dev/null)" &&
+    [ -n "$_golem_scripts" ] && [ -x "$_golem_scripts/golem-attach.sh" ]; then
+    golem() {
+        local scripts
+        scripts="$(workflow-scripts-dir.sh 2>/dev/null || true)"
+        case "${1:-}" in
+            attach)
+                shift
+                if [ -n "$scripts" ] && [ -x "$scripts/golem-attach.sh" ]; then
+                    "$scripts/golem-attach.sh" "$@"
+                else
+                    command echo "golem: librarian workflow plugin scripts not found" >&2
+                    return 1
+                fi
+                ;;
+            *)
+                command echo "usage: golem attach <N>" >&2
+                return 2
+                ;;
+        esac
+    }
+    unset _golem_scripts
+fi

@@ -64,6 +64,13 @@ ENV TZ=UTC
 # Since Dockerfile is always in containers/, lib is always ./lib
 COPY lib /tmp/build-scripts
 
+# Ship the workflow-scripts-dir.sh resolver into the build tree so the dev-tools
+# feature can install it onto PATH. It resolves the librarian `workflow` plugin's
+# bundled scripts dir (the same hardened logic the justfile golem recipes use),
+# which the container's `golem attach <N>` shell shortcut relies on (#731). Lives
+# in bin/, which is otherwise outside the dev-tools build context.
+COPY bin/workflow-scripts-dir.sh /tmp/build-scripts/bin/workflow-scripts-dir.sh
+
 # Base system setup - always needed
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \

@@ -70,6 +70,11 @@ just golems        # central golem status table + BLOCKED feed (TTY-free)
 just golem-attach 569 # attach the golem-569 tmux (or container) session
 ```
 
+Inside the container, `golem attach <N>` is a shell shortcut for the same
+attach flow (no `just` needed). It's defined only when the librarian `workflow`
+plugin is installed, and resolves its script dynamically via
+`workflow-scripts-dir.sh`.
+
 The raw commands these wrap — useful when debugging or when `just` isn't available:
 `cargo build --workspace`, `cargo test --workspace`,
 `cargo clippy --workspace -- -D warnings`, `cargo fmt --all`.

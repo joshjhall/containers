@@ -937,5 +937,37 @@ test_codegraph_index_startup_script() {
 
 run_test test_codegraph_index_startup_script "codegraph index bootstrap is an every-boot, setsid-detached startup script"
 
+# Test: the `golem attach <N>` shell shortcut is wired correctly — installed
+# resolver on PATH + a librarian-gated golem() function that resolves the
+# workflow plugin scripts dir dynamically (#731).
+test_golem_attach_shortcut() {
+    local dev_tools="$PROJECT_ROOT/lib/features/dev-tools.sh"
+    local extras="$PROJECT_ROOT/lib/features/lib/bashrc/dev-tools-extras.sh"
+    local dockerfile="$PROJECT_ROOT/Dockerfile"
+
+    # Resolver reaches the build tree and is installed onto PATH.
+    assert_file_contains "$dockerfile" "bin/workflow-scripts-dir.sh /tmp/build-scripts/bin/workflow-scripts-dir.sh" \
+        "Dockerfile copies workflow-scripts-dir.sh into the build tree"
+    assert_file_contains "$dev_tools" "/usr/local/bin/workflow-scripts-dir.sh" \
+        "dev-tools.sh installs workflow-scripts-dir.sh onto PATH"
+
+    # golem() is gated on the resolver (define-only-if-installed), resolves
+    # dynamically (not a version-pinned path), and dispatches attach.
+    assert_file_contains "$extras" "command -v workflow-scripts-dir.sh" \
+        "golem() is gated on the workflow-scripts-dir.sh resolver being present"
+    assert_file_contains "$extras" "golem()" \
+        "dev-tools-extras.sh defines a golem() function"
+    assert_file_contains "$extras" 'golem-attach.sh" "\$@"' \
+        "golem attach dispatches to the resolved golem-attach.sh"
+    assert_file_contains "$extras" "usage: golem attach <N>" \
+        "golem() prints usage for an unknown subcommand"
+
+    # Guard against a hardcoded version-pinned plugin path sneaking in.
+    assert_false "command grep -q 'plugins/cache/librarian/workflow/[0-9]' '$extras'" \
+        "golem() resolves dynamically — no version-pinned plugin path"
+}
+
+run_test test_golem_attach_shortcut "golem attach <N> shortcut is librarian-gated and dynamically resolved"
+
 # Generate test report
 generate_report
