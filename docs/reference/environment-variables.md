@@ -438,6 +438,28 @@ Bartender Top Shelf). See `examples/env/post-claude-events.env`.
 | `NOTCHBAR_AGENTS_HOST`       | `host.docker.internal` / `127.0.0.1` | Host running the monitor bridge (topology-auto-default) |
 | `NOTCHBAR_AGENTS_PORT`       | `7823`                              | Port of the monitor bridge                              |
 
+#### Worktree golems (host-side wiring)
+
+The `claude-setup` merge above only runs **inside containers**, so it wires the
+forwarder into a _container's_ `~/.claude/settings.json`. Worktree golems run in
+host tmux under the **host's** Claude Code — their hooks fire on the host (where
+the forwarder's topology-aware default correctly picks `127.0.0.1`), but nothing
+wires the hook into the **host** `~/.claude/settings.json`.
+
+`bin/seed-host-events.sh` is the host-side twin of that merge, exposed via
+`just`. It is **opt-in** — a host that never runs `install` is never touched:
+
+```bash
+just host-events-install   # copy the hook + jq-merge the 8-event block into host ~/.claude
+just host-events-check     # read-only: report whether it is fully wired (exit 1 if not)
+just host-events-remove    # un-wire only our hooks + delete the copied hook
+```
+
+The merge is idempotent and preserves any hooks you already have on those (or
+other) events — the same invariants as the container `claude-setup` merge. After
+`install`, a worktree golem reports to the host monitor bridge with the same
+`<project>-golem-N` identity as a container golem.
+
 ### Retry Configuration
 
 | Variable              | Default | Description                                        |
