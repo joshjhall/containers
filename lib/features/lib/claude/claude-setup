@@ -271,7 +271,6 @@ fi
 # ============================================================================
 MARKETPLACE="claude-plugins-official"
 MARKETPLACE_REPO="anthropics/claude-plugins-official"
-PLUGINS_INSTALLED=false
 
 # Ensure the official marketplace is registered before attempting installs.
 # With token-based auth (ANTHROPIC_AUTH_TOKEN), no interactive 'claude' session
@@ -335,7 +334,6 @@ install_plugin() {
     while [ $attempt -le $max_retries ]; do
         if output=$(claude plugin install "$full_name" 2>&1); then
             echo "    ✓ $plugin_name installed"
-            PLUGINS_INSTALLED=true
             return 0
         fi
 
@@ -624,6 +622,65 @@ if [ -d "$TEMPLATES_DIR/hooks" ]; then
 fi
 
 # ============================================================================
+# Host Event Forwarding (POST_CLAUDE_EVENTS_TO_HOST) — settings.json hook wiring
+# ============================================================================
+# When POST_CLAUDE_EVENTS_TO_HOST=true (a RUNTIME env var, so one image serves
+# both a monitored host and headless CI without a rebuild), wire the staged
+# claude-host-event.sh forwarder into settings.json so it fires on every Claude
+# Code hook event. The forwarder pushes agent state to a host monitor's local
+# HTTP bridge (see the script header). This is the ONLY settings.json write in
+# claude-setup, so it defines its own $CLAUDE_SETTINGS_FILE.
+#
+# Idempotent + every-boot: the per-event append is guarded by a "does this exact
+# command already exist for this event" test, so re-running never duplicates and
+# a user's own hooks on these (or any other) events are preserved. This mirrors
+# the self-healing rationale of the librarian install below — a fresh ~/.claude
+# home volume is re-wired on the next boot.
+HOST_EVENT_HOOK="$CLAUDE_DIR/hooks/claude-host-event.sh"
+if [ "${POST_CLAUDE_EVENTS_TO_HOST:-false}" = "true" ] &&
+    [ -f "$HOST_EVENT_HOOK" ] &&
+    command -v jq >/dev/null 2>&1; then
+    echo ""
+    echo "Host event forwarding (POST_CLAUDE_EVENTS_TO_HOST):"
+    CLAUDE_SETTINGS_FILE="$CLAUDE_DIR/settings.json"
+    # event -> coarse state arg passed to the forwarder (refined per-payload in
+    # the script). PostToolUseFailure is kept for forward-compat: harmless if
+    # Claude Code never fires it.
+    HOST_EVENT_MAP='{
+        "SessionStart": "Idle",
+        "UserPromptSubmit": "Working",
+        "PreToolUse": "Working",
+        "PostToolUse": "Auto",
+        "PostToolUseFailure": "ToolFail",
+        "Notification": "Waiting",
+        "Stop": "Idle",
+        "SessionEnd": "Ended"
+    }'
+    # Start from existing settings (or {}), append one command hook per event
+    # only when an identical command is not already wired for that event.
+    [ -f "$CLAUDE_SETTINGS_FILE" ] || echo '{}' >"$CLAUDE_SETTINGS_FILE"
+    # Command shape: "<hook-path> <state>". The container $HOME has no spaces so
+    # the path needs no quoting (keeps the jq program single-quote-clean).
+    if command jq \
+        --arg hook "$HOST_EVENT_HOOK" \
+        --argjson map "$HOST_EVENT_MAP" '
+        reduce ($map | to_entries[]) as $e (.;
+            ($e.key) as $event
+            | ($hook + " " + $e.value) as $cmd
+            | .hooks[$event] //= []
+            | if (.hooks[$event] | any(.[].hooks[]?; .command == $cmd)) then .
+              else .hooks[$event] += [{ "hooks": [{ "type": "command", "command": $cmd }] }]
+              end)
+    ' "$CLAUDE_SETTINGS_FILE" >"${CLAUDE_SETTINGS_FILE}.tmp" 2>/dev/null &&
+        mv "${CLAUDE_SETTINGS_FILE}.tmp" "$CLAUDE_SETTINGS_FILE"; then
+        echo "    ✓ forwarder wired to 8 events -> ${NOTCHBAR_AGENTS_HOST:-host.docker.internal}:${NOTCHBAR_AGENTS_PORT:-7823}"
+    else
+        rm -f "${CLAUDE_SETTINGS_FILE}.tmp" 2>/dev/null || true
+        echo "    ⚠ could not wire host event forwarder (settings.json merge failed)"
+    fi
+fi
+
+# ============================================================================
 # Librarian Plugin Installation (no auth required, offline)
 # ============================================================================
 # The general-purpose skills/agents ship as the librarian plugins. The build
@@ -714,13 +771,11 @@ elif is_claude_authenticated; then
 
     # Core Plugins (configurable via CLAUDE_PLUGINS)
     DEFAULT_PLUGINS="commit-commands,frontend-design,code-simplifier,context7,security-guidance,claude-md-management,pr-review-toolkit,code-review,hookify,claude-code-setup,feature-dev"
-    # Use if-else to capture return code safely under set -e
-    # (_resolve_override_list returns 1 for "using defaults", which set -e would treat as failure)
-    if PLUGIN_RESULT=$(_resolve_override_list_or_file "CLAUDE_PLUGINS" "$DEFAULT_PLUGINS"); then
-        PLUGIN_LIST_IS_OVERRIDE=0
-    else
-        PLUGIN_LIST_IS_OVERRIDE=1
-    fi
+    # `|| true` guards the assignment under set -e: _resolve_override_list_or_file
+    # returns 1 for "using defaults" (not a failure). Unlike skills (which read
+    # SKILL_LIST_IS_OVERRIDE to gate conditional installs), plugins don't need the
+    # override flag, so it isn't captured.
+    PLUGIN_RESULT=$(_resolve_override_list_or_file "CLAUDE_PLUGINS" "$DEFAULT_PLUGINS") || true
     RESOLVED_FROM=$(command cat "$_RESOLVED_FROM_FILE")
     if [ "$RESOLVED_FROM" = "file" ]; then
         PLUGIN_LIST=$(_file_json_to_csv "$PLUGIN_RESULT")
@@ -1131,6 +1186,7 @@ configure_mcp_list() {
             # Split registry args into array (safe: add_args comes from hardcoded registry strings)
             add_args=$(mcp_registry_get_add_args "$mcp_name")
             eval "local add_args_array=($add_args)"
+            # shellcheck disable=SC2154  # add_args_array is assigned via the eval above (shellcheck can't trace it)
             add_mcp_server "$mcp_name" "${add_args_array[@]}" || true
 
             env_docs=$(mcp_registry_get_env_docs "$mcp_name")
@@ -1162,12 +1218,9 @@ configure_mcp_list() {
 # Default MCP servers (configurable via CLAUDE_MCPS)
 MCP_REGISTRY="/etc/container/config/mcp-registry.sh"
 DEFAULT_MCPS="filesystem,figma-desktop,codegraph"
-# Use if-else to safely capture return code under set -e
-if MCP_RESULT=$(_resolve_override_list_or_file "CLAUDE_MCPS" "$DEFAULT_MCPS"); then
-    MCP_LIST_IS_OVERRIDE=0
-else
-    MCP_LIST_IS_OVERRIDE=1
-fi
+# `|| true` guards the assignment under set -e (a "using defaults" return of 1 is
+# not a failure). MCP installs don't need the override flag, so it isn't captured.
+MCP_RESULT=$(_resolve_override_list_or_file "CLAUDE_MCPS" "$DEFAULT_MCPS") || true
 RESOLVED_FROM=$(command cat "$_RESOLVED_FROM_FILE")
 
 # Install default MCPs (or overridden list)

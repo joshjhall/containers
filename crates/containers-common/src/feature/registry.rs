@@ -308,6 +308,18 @@ impl Registry {
             ..Feature::default()
         });
         r.add(Feature {
+            id: "post_claude_events_to_host".into(),
+            build_arg: "POST_CLAUDE_EVENTS_TO_HOST".into(),
+            display_name: "Host Event Forwarding".into(),
+            description: "Report Claude Code agent state to a host monitor's HTTP bridge \
+                          (e.g. Bartender Top Shelf); enabled at runtime"
+                .into(),
+            category: Category::Tool,
+            env_file: Some("post-claude-events.env".into()),
+            requires: vec!["dev_tools".into()],
+            ..Feature::default()
+        });
+        r.add(Feature {
             id: "docker".into(),
             build_arg: "INCLUDE_DOCKER".into(),
             display_name: "Docker".into(),
@@ -499,9 +511,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn registry_has_35_features() {
+    fn registry_has_36_features() {
         let reg = Registry::new();
-        assert_eq!(reg.features.len(), 35);
+        assert_eq!(reg.features.len(), 36);
     }
 
     #[test]

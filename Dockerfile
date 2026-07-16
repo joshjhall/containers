@@ -507,6 +507,12 @@ ARG CLAUDE_PLUGINS
 ARG CLAUDE_MCPS
 ARG CLAUDE_AGENTS
 ARG CLAUDE_SKILLS
+# Bake the host-event forwarder hook into the image (opt-in). When true, the
+# claude-host-event.sh forwarder is staged so it can be enabled at RUNTIME via
+# the POST_CLAUDE_EVENTS_TO_HOST env var (+ optional NOTCHBAR_AGENTS_HOST/PORT),
+# reporting agent state to a host monitor's local HTTP bridge. Default images
+# stay clean; build with =true for images that run under a host monitor.
+ARG POST_CLAUDE_EVENTS_TO_HOST=false
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     if [ "${INCLUDE_DEV_TOOLS}" = "true" ]; then \
@@ -578,6 +584,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     LIBRARIAN_REF=${LIBRARIAN_REF} \
     CLAUDE_CHANNEL=${CLAUDE_CHANNEL} \
     SKIP_LSP_INSTALL=${SKIP_LSP_INSTALL} \
+    POST_CLAUDE_EVENTS_TO_HOST=${POST_CLAUDE_EVENTS_TO_HOST} \
     /tmp/build-scripts/features/claude-code-setup.sh; \
     fi
 
