@@ -104,8 +104,16 @@ warning-level findings across 478 scripts. See [[shellcheck-policy-and-bash-depr
 
 **FOLLOW-UP ISSUES FILED (2026-07-16):**
 
-- **containers#738** — extend forwarder to worktree golems (host-side wiring;
-  user wants to pick this up IMMEDIATELY after the current PR merges).
+- **containers#738** — extend forwarder to worktree golems (host-side wiring).
+  **SHIPPED (branch feature/issue-738, PR pending):** new `bin/seed-host-events.sh`
+  (install/remove/check) is the host-side twin of the container `claude-setup`
+  merge — copies `claude-host-event.sh` into host `~/.claude/hooks/` and jq-merges
+  the 8-event block into host `~/.claude/settings.json`. jq program + HOST_EVENT_MAP
+  duplicated BYTE-IDENTICAL from claude-setup (source-of-truth pointer comment; NOT
+  extracted to shared lib, to keep the in-container path untouched — AC4). Opt-in
+  only (`just host-events-install/remove/check`); never auto-runs. 16 unit tests in
+  `tests/unit/bin/seed-host-events.sh`. Cross-repo librarian golem-launch option
+  (issue's option 2) stayed out of scope → librarian#343 event bus.
 - **librarian#343** (epic) — golem event bus: multi-sink emission + orchestrator
   PUSH (flip the ~10min sweep). Reuses existing feed.jsonl + golem-watch --stream
   - harness Monitor; container HTTP forwarder becomes one sink. Repo boundary:
