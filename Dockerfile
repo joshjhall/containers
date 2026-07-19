@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 # Universal Container Build System
-# Version: 4.19.14
+# Version: 4.19.15
 # Supports multiple contexts: devcontainer, agents, CI/CD, production
 
 # ============================================================================
@@ -219,7 +219,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 # Rust + Rust development tools
 ARG INCLUDE_RUST=false
 ARG INCLUDE_RUST_DEV=false
-ARG RUST_VERSION=1.97.0
+ARG RUST_VERSION=1.97.1
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     if [ "${INCLUDE_RUST}" = "true" ] || [ "${INCLUDE_RUST_DEV}" = "true" ]; then \
@@ -387,7 +387,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 ARG INCLUDE_TERRAFORM=false
 ARG TERRAGRUNT_VERSION=1.1.1
 ARG TFDOCS_VERSION=0.24.0
-ARG TFLINT_VERSION=0.63.1
+ARG TFLINT_VERSION=0.64.0
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     if [ "${INCLUDE_TERRAFORM}" = "true" ]; then \
@@ -497,7 +497,7 @@ ARG CLAUDE_CHANNEL=latest
 # Librarian plugin marketplace pin (version contract; tracked by check-versions).
 # Must be a *signed release tag* (v0.4.0+): the build fetches the signed release
 # tarball and verifies it with cosign before install (fail-closed, #671).
-ARG LIBRARIAN_REF=v0.6.1
+ARG LIBRARIAN_REF=v0.6.2
 # Librarian plugins to install from the local marketplace (comma-separated).
 # When unset, all defaults install. Set to empty "" to install none.
 ARG CLAUDE_LIBRARIAN_PLUGINS
