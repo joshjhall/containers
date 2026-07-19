@@ -39,7 +39,7 @@ ARG BASE_IMAGE=debian:trixie-slim
 # scripts (see lib/features/rust.sh). Building luggage here keeps the rust
 # toolchain out of the runtime image while still bundling a reproducible
 # binary built from the in-tree workspace.
-FROM rust:1.95-slim-trixie AS luggage-builder
+FROM rust:1.97.1-slim-trixie AS luggage-builder
 WORKDIR /workspace
 COPY Cargo.toml Cargo.lock ./
 COPY crates ./crates

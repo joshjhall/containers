@@ -25,7 +25,7 @@ CONTAINERS_DIR="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 export BUILD_CONTEXT="$CONTAINERS_DIR"
 
 LUGGAGE_FIXTURE="$SCRIPT_DIR/luggage_rust/Dockerfile.luggage-rust"
-RUST_VERSION="1.95.0"
+RUST_VERSION="1.97.1"
 
 test_suite "luggage install rust@${RUST_VERSION} smoke"
 

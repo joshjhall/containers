@@ -21,6 +21,9 @@ services:
         INCLUDE_HOST_EVENTS: "true"
         # Rust needed for stibbons (project scaffolding CLI) and luggage (containers runtime and install management)
         INCLUDE_RUST_DEV: "true"
+        # Pin the toolchain explicitly so the build never floats to a newer
+        # patch (e.g. 1.97.2) when one is released. Bump deliberately.
+        RUST_VERSION: "1.97.1"
       cache_from:
         - type=local,src=/tmp/.buildx-cache
       cache_to:

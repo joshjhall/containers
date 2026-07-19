@@ -18,7 +18,7 @@
 #   - Allows volume mounting for persistent caches across container rebuilds
 #
 # Environment Variables:
-#   - RUST_VERSION: Toolchain version specification (default: 1.95.0)
+#   - RUST_VERSION: Toolchain version specification (default: 1.97.1)
 #     * Specific version (e.g., "1.84.1"): Uses exact version
 #     * Major.minor only (e.g., "1.84"): Resolves to latest patch
 #     * Channel names (stable, beta, nightly): Passed to luggage --channel

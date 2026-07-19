@@ -10,10 +10,10 @@
 # Build context is the repo root (`BUILD_CONTEXT=$CONTAINERS_DIR`), so
 # every COPY here is repo-root-relative.
 
-ARG RUST_VERSION=1.95.0
+ARG RUST_VERSION=1.97.1
 
 # ─── Stage 1: compile the luggage binary ───
-FROM rust:1.95-slim-trixie AS builder
+FROM rust:1.97.1-slim-trixie AS builder
 
 WORKDIR /workspace
 COPY Cargo.toml Cargo.lock ./
