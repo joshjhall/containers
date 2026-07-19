@@ -2,13 +2,14 @@
 # Tests for golem-notify.sh golem-id resolution (issue #587).
 #
 # Regression: the hook used to derive the golem id from `basename "$(pwd)"`,
-# which produced the `golem-?` placeholder whenever the Notification hook fired
-# with cwd outside the worktree root — a subdirectory, or a review-harness
-# Workflow subagent with its own cwd. The fix derives the id from, in order:
+# which produced a placeholder whenever the Notification hook fired with cwd
+# outside the worktree root — a subdirectory, or a review-harness Workflow
+# subagent with its own cwd. The fix derives the id from, in order:
 #   1. $GOLEM_ID (stamped at launch — deterministic, cwd-independent)
 #   2. the git WORKTREE-ROOT basename (issue-N -> golem-N), via
 #      `git rev-parse --show-toplevel`, which is cwd-independent unlike `pwd`
-#   3. the `golem-?` placeholder only when neither resolves
+#   3. the `primary` label when neither resolves — a non-golem interactive
+#      session (human / orchestrator), not the old `golem-?` placeholder (#746)
 #
 # These tests build a real main checkout + linked worktree so both
 # `git rev-parse --git-common-dir` (feed location) and `--show-toplevel`
@@ -149,9 +150,11 @@ run_test test_bad_golem_id_falls_back "malformed GOLEM_ID falls back to worktree
 
 # ===========================================================================
 # Outside any worktree (plain repo whose root is not issue-*/golem-*) and no
-# GOLEM_ID -> the placeholder. Documents the one case that still yields golem-?.
+# GOLEM_ID -> `primary`. A non-golem interactive session (human working in the
+# main checkout, or an orchestrator) must not surface as the `golem-?`
+# placeholder, which reads as a broken golem in the feed (#746).
 # ===========================================================================
-test_placeholder_outside_worktree() {
+test_primary_outside_worktree() {
     local main got
     main=$(/usr/bin/mktemp -d)/plainrepo
     /usr/bin/mkdir -p "$main"
@@ -163,10 +166,77 @@ test_placeholder_outside_worktree() {
         /usr/bin/git commit -q --allow-empty -m init
     )
     got=$(run_hook_golem "$HOOK_REPO" "$main" "")
-    assert_equals "golem-?" "$got" "placeholder when not in a worktree and no GOLEM_ID"
+    assert_equals "primary" "$got" "primary when not in a worktree and no GOLEM_ID"
     /usr/bin/rm -rf "$(/usr/bin/dirname "$main")"
 }
-run_test test_placeholder_outside_worktree "placeholder only when no GOLEM_ID and root is not issue-N"
+run_test test_primary_outside_worktree "primary label when no GOLEM_ID and root is not issue-N (#746)"
+
+# ===========================================================================
+# Concurrent primary sessions (multiple shell tabs, same repo) must NOT collapse
+# onto one `primary` feed row — `just golems` groups the feed by `.golem`, so
+# each tab needs a distinct id. The hook differentiates them by the Notification
+# payload's native session_id: `primary-<short>` (#746, AC2/AC3). Runs the hook
+# in a plain repo with two different payload session_ids and checks the last two
+# feed lines carry distinct, session-derived golem ids.
+# ===========================================================================
+# Like run_hook_golem but sends a caller-chosen payload session_id (no GOLEM_ID),
+# echoing the golem id of the LAST feed line.
+run_hook_primary_session() {
+    local hook="$1" cwd="$2" session_id="$3"
+    local feed
+    (
+        cd "$cwd"
+        env -u GOLEM_ID "$hook" <<<"{\"message\":\"needs permission\",\"session_id\":\"$session_id\"}" >/dev/null 2>&1
+    )
+    feed="$(
+        cd "$cwd"
+        common_dir="$(/usr/bin/git rev-parse --git-common-dir)"
+        case "$common_dir" in /*) ;; *) common_dir="$(/usr/bin/pwd)/$common_dir" ;; esac
+        /usr/bin/echo "$(/usr/bin/dirname "$common_dir")/.worktrees/.status/feed.jsonl"
+    )"
+    /usr/bin/jq -r '.golem' "$feed" 2>/dev/null | /usr/bin/tail -1
+}
+
+test_concurrent_primary_sessions_distinct() {
+    local main got_a got_b
+    main=$(/usr/bin/mktemp -d)/plainrepo
+    /usr/bin/mkdir -p "$main"
+    (
+        cd "$main"
+        /usr/bin/git init -q .
+        /usr/bin/git config user.email t@t.t
+        /usr/bin/git config user.name t
+        /usr/bin/git commit -q --allow-empty -m init
+    )
+    got_a=$(run_hook_primary_session "$HOOK_REPO" "$main" "aaaaaaaa11112222")
+    got_b=$(run_hook_primary_session "$HOOK_REPO" "$main" "bbbbbbbb33334444")
+    assert_equals "primary-aaaaaaaa" "$got_a" "tab one keyed by its session_id"
+    assert_equals "primary-bbbbbbbb" "$got_b" "tab two keyed by its session_id"
+    /usr/bin/rm -rf "$(/usr/bin/dirname "$main")"
+}
+run_test test_concurrent_primary_sessions_distinct "concurrent primary tabs get distinct feed ids (#746)"
+
+# ===========================================================================
+# A primary session whose Notification payload has NO session_id falls back to
+# the bare `primary` id (still valid, just non-differentiated).
+# ===========================================================================
+test_primary_bare_without_session_id() {
+    local main got
+    main=$(/usr/bin/mktemp -d)/plainrepo
+    /usr/bin/mkdir -p "$main"
+    (
+        cd "$main"
+        /usr/bin/git init -q .
+        /usr/bin/git config user.email t@t.t
+        /usr/bin/git config user.name t
+        /usr/bin/git commit -q --allow-empty -m init
+    )
+    # run_hook_golem sends a payload with no session_id field.
+    got=$(run_hook_golem "$HOOK_REPO" "$main" "")
+    assert_equals "primary" "$got" "bare primary when payload carries no session_id"
+    /usr/bin/rm -rf "$(/usr/bin/dirname "$main")"
+}
+run_test test_primary_bare_without_session_id "primary without session_id stays bare (#746)"
 
 # ===========================================================================
 # jq-absent printf fallback emits VALID JSON, even when the golem id carries
