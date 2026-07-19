@@ -43,12 +43,17 @@ PORT="${NOTCHBAR_AGENTS_PORT:-7823}"
 HOOK_JSON=$(command cat)
 
 # ---------------------------------------------------------------------------
-# Golem identity — same resolution order as the orchestrate Notification hook
-# (.claude/hooks/golem-notify.sh), so the two feeds agree on who a golem is:
+# Session identity — same resolution order as the orchestrate Notification hook
+# (.claude/hooks/golem-notify.sh), so the two feeds agree on who a session is:
 #   1. $GOLEM_ID (stamped at launch by the workflow plugin; worktree golems)
 #   2. git worktree-root basename: issue-N -> golem-N (cwd-independent)
 #   3. $AGENT_ID (container golems, e.g. agentNN from agent-entrypoint.sh)
-#   4. placeholder
+#   4. `primary` — a non-golem interactive session: a human working directly in
+#      the main checkout, or an orchestrator driving a fleet of golems. This is
+#      NOT a golem, so it must not carry the `golem-?` placeholder (which reads
+#      as a broken golem on the host). The python block below differentiates
+#      concurrent primary sessions (multiple shell tabs) by the Claude-native
+#      session_id so they don't collide on one host row.
 # ---------------------------------------------------------------------------
 golem=""
 case "${GOLEM_ID:-}" in
@@ -62,21 +67,36 @@ if [ -z "$golem" ]; then
         *)
             case "${AGENT_ID:-}" in
                 ?*) golem="$AGENT_ID" ;;
-                *) golem="golem-?" ;;
+                *) golem="primary" ;;
             esac
             ;;
     esac
 fi
 
 # Project name: explicit $PROJECT_NAME (stamped into container golems) else the
-# repo/worktree basename's parent-project shape, else the toplevel basename.
+# ROOT checkout's basename. Resolve it via the git COMMON dir, whose parent is
+# the main checkout — for a worktree golem at <root>/.worktrees/issue-N this is
+# `<root>` (e.g. `containers`). The old show-toplevel path resolved a worktree to
+# its parent dir `.worktrees` instead of the real project, so sibling golems
+# surfaced on the host under `.worktrees` rather than the project name.
+#
+# `git rev-parse --git-common-dir` returns a RELATIVE path (e.g. `../../.git`)
+# when the hook fires from a SUBDIRECTORY of a plain/main checkout — which a
+# primary session commonly does (a tool call cd'd into a crate/lib dir). The
+# main checkout's parent must therefore be resolved with a real `cd … && pwd`
+# so the `..` segments canonicalize; string-only dirname/basename would leave
+# `project` as the literal `..`. A linked worktree's `.git` file anchors an
+# ABSOLUTE gitdir at any depth, so this also covers the golem case unchanged.
 project="${PROJECT_NAME:-}"
 if [ -z "$project" ]; then
-    project="$(basename "$(git rev-parse --show-toplevel 2>/dev/null || pwd)")"
-    # Strip an issue-/golem- worktree suffix so sibling golems share a project.
-    case "$project" in
-        issue-* | golem-*) project="$(basename "$(dirname "$(git rev-parse --show-toplevel 2>/dev/null || pwd)")")" ;;
-    esac
+    common_dir="$(git rev-parse --git-common-dir 2>/dev/null || true)"
+    root=""
+    if [ -n "$common_dir" ]; then
+        # Canonicalize <common_dir>/.. (the checkout root) via an actual cd.
+        root="$(cd "$(dirname "$common_dir")" 2>/dev/null && pwd)"
+    fi
+    [ -z "$root" ] && root="$(pwd)"
+    project="$(basename "$root")"
 fi
 [ -z "$project" ] && project="project"
 
@@ -110,18 +130,33 @@ elif state == "Waiting":
     state = "Waiting" if "permission" in msg else "Idle"
 
 project = os.environ.get("PROJECT") or "project"
-golem = os.environ.get("GOLEM") or "golem-?"
-# session_id is the host bridge's SOLE primary key -> make it the stable golem
+golem = os.environ.get("GOLEM") or "primary"
+# session_id is the host bridge's SOLE primary key -> make it the stable session
 # identity so each agent is one persistent, named row on the host.
-session_id = "{}-{}".format(project, golem)
+#
+# A golem has a stable, unique id already (golem-N / AGENT_ID), so its key is
+# just "{project}-{golem}". A `primary` session (human or orchestrator) has no
+# such id, and EVERY primary session in a repo would otherwise collapse to the
+# same "{project}-primary" key -> concurrent shell tabs clobber one host row.
+# Differentiate them by the Claude-native session_id (unique per session): key
+# each as "{project}-primary-{short}". Fall back to the bare "{project}-primary"
+# when the payload carries no session_id (still valid, just non-differentiated).
+if golem == "primary":
+    cc_session = d.get("session_id")
+    short = cc_session[:8] if isinstance(cc_session, str) and cc_session.strip() else ""
+    label = "{}-primary".format(project)
+    session_id = "{}-{}".format(label, short) if short else label
+else:
+    label = "{}-{}".format(project, golem)
+    session_id = label
 
 title = ""
 if d.get("hook_event_name") == "UserPromptSubmit":
     prompt = d.get("prompt")
     if isinstance(prompt, str) and prompt.strip():
         title = prompt.strip()[:120]
-label = "{} · {}".format(project, golem)
-title = "{} · {}".format(label, title) if title else label
+title_label = "{} · {}".format(project, golem)
+title = "{} · {}".format(title_label, title) if title else title_label
 
 sys.stdout.write(json.dumps({
     "state": state,
@@ -137,7 +172,9 @@ fi
 
 if [ -z "${payload:-}" ]; then
     # python3 absent or errored: minimal but valid — session_id still keys the
-    # golem so state at least registers/clears on the host.
+    # session so state at least registers/clears on the host. Without python we
+    # can't parse the payload's native session_id, so a primary session uses the
+    # bare "${project}-primary" key (non-differentiated across tabs, but valid).
     payload="{\"state\":\"${STATE}\",\"agent\":\"Claude\",\"session_id\":\"${project}-${golem}\"}"
 fi
 

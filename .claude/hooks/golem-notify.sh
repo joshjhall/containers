@@ -42,8 +42,14 @@ feed="$status_dir/feed.jsonl"
 # Read the Notification payload; tolerate missing jq or a non-JSON body.
 payload="$(/bin/cat 2>/dev/null || true)"
 message=""
+cc_session=""
 if command -v jq >/dev/null 2>&1; then
     message="$(printf '%s' "$payload" | jq -r '.message // empty' 2>/dev/null || true)"
+    # Claude-native session_id: used only to disambiguate concurrent `primary`
+    # sessions below. Keep just the first 8 chars — enough to separate shell
+    # tabs without bloating the feed's golem field. Strip anything but
+    # [A-Za-z0-9] defensively (it flows into the JSON-escaped golem field).
+    cc_session="$(printf '%s' "$payload" | jq -r '.session_id // empty' 2>/dev/null | /usr/bin/tr -cd '[:alnum:]' | /usr/bin/cut -c1-8 || true)"
 fi
 [ -z "$message" ] && message="awaiting permission decision"
 
@@ -61,7 +67,7 @@ case "$(printf '%s' "$message" | /usr/bin/tr '[:upper:]' '[:lower:]')" in
     *) event="gate" ;;
 esac
 
-# Derive the golem id. In order of reliability:
+# Derive the session id. In order of reliability:
 #   1. $GOLEM_ID — stamped into the environment at launch (orchestrate /
 #      `just worktree-new`). The only fully deterministic source: cwd- and
 #      tmux-independent, so it survives subdirectory and subagent invocations.
@@ -69,8 +75,17 @@ esac
 #      worktree root is cwd-independent: `git rev-parse --show-toplevel`
 #      returns `.../issue-N` even when the Notification fires from a
 #      subdirectory or a review-harness subagent with its own cwd.
-#   3. A placeholder, only when neither source resolves (e.g. not in a
-#      worktree at all).
+#   3. `primary` — a non-golem interactive session (a human in the main
+#      checkout, or an orchestrator driving a fleet). It is NOT a golem, so it
+#      must not carry the `golem-?` placeholder (which reads as a broken golem
+#      in the `just golems` feed). This keeps the feed in agreement with the
+#      host-event forwarder (claude-host-event.sh), which uses the same ladder.
+#      Concurrent primary sessions (multiple shell tabs in one repo) are
+#      differentiated by the Claude-native session_id (`primary-<short>`), the
+#      same scheme claude-host-event.sh uses — otherwise `just golems` groups
+#      the feed by `.golem` and two tabs would collapse onto one `primary` row,
+#      clobbering each other's gate state. `primary` (bare) only when the
+#      payload carries no session_id.
 # The old `$TMUX` path was dead — the golem's `claude` process has no TMUX in
 # its environment even though tmux launched it — so it is gone.
 golem=""
@@ -82,7 +97,7 @@ if [ -z "$golem" ]; then
     case "$base" in
         issue-*) golem="golem-${base#issue-}" ;;
         golem-*) golem="$base" ;;
-        *) golem="golem-?" ;;
+        *) golem="primary${cc_session:+-$cc_session}" ;;
     esac
 fi
 
