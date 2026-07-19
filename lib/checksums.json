@@ -824,7 +824,7 @@
     }
   },
   "metadata": {
-    "generated": "2026-07-15T22:05:29Z",
+    "generated": "2026-07-19T05:17:25Z",
     "description": "Pinned checksums for language runtime downloads",
     "note": "This file is automatically updated by check-versions.sh and should grow over time. Old checksums are never deleted to strengthen security for older versions and enable reproducible builds."
   }

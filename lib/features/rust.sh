@@ -55,7 +55,7 @@ source /tmp/build-scripts/features/lib/install-github-release.sh
 # ============================================================================
 # Version Configuration
 # ============================================================================
-RUST_VERSION="${RUST_VERSION:-1.97.0}"
+RUST_VERSION="${RUST_VERSION:-1.97.1}"
 
 # Cargo tool versions. Every cargo (b)install must be --locked and pinned to an
 # explicit @version so upstream drift on crates.io cannot retroactively break

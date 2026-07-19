@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.19.15] - 2026-07-19
+
+### Added
+
+- Add container 'golem attach <N>' shell shortcut (#733)
+- Seed workflow-plugin tmux launch permissions (#734)
+- Forward Claude Code agent state to host monitors
+- Harden pinned-toolchain reconciliation with --profile default (#741)
+- Wire host event forwarder for worktree golems (#742)
+
+### Documentation
+
+- Record Zed every-boot startup replay lesson
+- Record host-monitor forwarding design + shellcheck policy
+
+### Fixed
+
+- Run every-boot startup scripts on each Zed start (#732)
+
 ## [4.19.14] - 2026-07-15
 
 ### Documentation
@@ -2152,6 +2171,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix prettier and markdownlint formatting in README
 - Format TLS documentation files
 
+[4.19.15]: https://github.com/joshjhall/containers/compare/v4.19.14...v4.19.15
 [4.19.14]: https://github.com/joshjhall/containers/compare/v4.19.13...v4.19.14
 [4.19.13]: https://github.com/joshjhall/containers/compare/v4.19.12...v4.19.13
 [4.19.12]: https://github.com/joshjhall/containers/compare/v4.19.11...v4.19.12
