@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.19.17] - 2026-07-19
+
+### Changed
+
+- Single build-time INCLUDE_HOST_EVENTS knob (+ rust/devcontainer PATH fixes) (#745)
+
 ## [4.19.16] - 2026-07-19
 
 ### Added
@@ -2177,6 +2183,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix prettier and markdownlint formatting in README
 - Format TLS documentation files
 
+[4.19.17]: https://github.com/joshjhall/containers/compare/v4.19.16...v4.19.17
 [4.19.16]: https://github.com/joshjhall/containers/compare/v4.19.14...v4.19.16
 [4.19.14]: https://github.com/joshjhall/containers/compare/v4.19.13...v4.19.14
 [4.19.13]: https://github.com/joshjhall/containers/compare/v4.19.12...v4.19.13
