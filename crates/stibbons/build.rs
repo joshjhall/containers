@@ -10,41 +10,25 @@
 //! file cannot be found (e.g. an isolated crate checkout published to a
 //! registry), we fall back to the crate's own `CARGO_PKG_VERSION` so the build
 //! still succeeds.
+//!
+//! The pure resolution logic lives in `build_version.rs` (included below) so it
+//! can be unit-tested from `tests/build_version.rs` — a build script is not
+//! compiled as a test target, so the logic is kept in an `include!`-able file
+//! shared by both the build script and the test.
 
-use std::path::{Path, PathBuf};
+// `Path`/`PathBuf` are brought into scope by the `use` inside the included file.
+include!("build_version.rs");
 
 fn main() {
-    println!("cargo:rustc-env=STIBBONS_VERSION={}", resolve_version());
-}
-
-/// Resolve the product version to stamp into the binary.
-///
-/// Prefers the repo-root `VERSION` file; falls back to the crate's own
-/// `CARGO_PKG_VERSION` for standalone (registry-style) builds.
-fn resolve_version() -> String {
     let manifest_dir =
         std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR is always set by cargo");
+    let pkg_version =
+        std::env::var("CARGO_PKG_VERSION").expect("CARGO_PKG_VERSION is always set by cargo");
 
-    if let Some(path) = find_version_file(Path::new(&manifest_dir)) {
-        // Re-run the build script when the VERSION file changes so the stamped
-        // version stays in sync without a manual clean.
-        println!("cargo:rerun-if-changed={}", path.display());
-        return std::fs::read_to_string(&path)
-            .expect("VERSION file located but unreadable")
-            .trim()
-            .to_string();
-    }
+    // Re-run the build script when the VERSION file changes so the stamped
+    // version stays in sync without a manual clean.
+    let mut emit_rerun = |path: &Path| println!("cargo:rerun-if-changed={}", path.display());
 
-    std::env::var("CARGO_PKG_VERSION").expect("CARGO_PKG_VERSION is always set by cargo")
-}
-
-/// Walk up from `start` looking for a `VERSION` file at the repo root.
-fn find_version_file(start: &Path) -> Option<PathBuf> {
-    for dir in start.ancestors() {
-        let candidate = dir.join("VERSION");
-        if candidate.is_file() {
-            return Some(candidate);
-        }
-    }
-    None
+    let version = resolve_version_from(&manifest_dir, &pkg_version, &mut emit_rerun);
+    println!("cargo:rustc-env=STIBBONS_VERSION={version}");
 }

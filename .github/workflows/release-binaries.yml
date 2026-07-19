@@ -92,38 +92,12 @@ jobs:
       - name: Package artifact
         id: package
         shell: bash
-        run: |
-          # Version comes from the VERSION file (the same source build.rs
-          # stamps into the binary) so the asset name matches --version output.
-          version=$(/usr/bin/tr -d '[:space:]' < VERSION 2>/dev/null || tr -d '[:space:]' < VERSION)
-          stem="stibbons-${version}-${TARGET}"
-          outdir="dist"
-          mkdir -p "$outdir"
-
-          # Built with `--profile dist`, so artifacts land in target/<triple>/dist/.
-          if [ "$RUNNER_OS" = "Windows" ]; then
-            bin="target/${TARGET}/dist/stibbons.exe"
-            asset="${stem}.zip"
-            7z a "${outdir}/${asset}" "./${bin}" >/dev/null
-          else
-            bin="target/${TARGET}/dist/stibbons"
-            asset="${stem}.tar.gz"
-            tar -czf "${outdir}/${asset}" -C "target/${TARGET}/dist" stibbons
-          fi
-
-          # Size gate: the shipped (stripped) binary must stay under 15 MB.
-          bytes=$(/usr/bin/wc -c < "$bin" 2>/dev/null || wc -c < "$bin")
-          limit=$((15 * 1024 * 1024))
-          echo "Binary $bin is $bytes bytes (limit $limit)."
-          if [ "$bytes" -gt "$limit" ]; then
-            echo "::error::stibbons binary for $TARGET is $bytes bytes, exceeding the 15 MB budget."
-            exit 1
-          fi
-
-          # Checksum alongside the archive for the install script to verify.
-          (cd "$outdir" && { sha256sum "$asset" || shasum -a 256 "$asset"; } > "${asset}.sha256")
-
-          echo "asset=${outdir}/${asset}" >> "$GITHUB_OUTPUT"
+        # Naming, the 15 MB size gate, the checksum, and the Windows 7z presence
+        # check live in bin/package-stibbons-artifact.sh so they can be
+        # unit-tested outside of a release run (tests/unit/package-stibbons-artifact.sh).
+        # TARGET is the job-level env; RUNNER_OS is provided by GitHub; VERSION
+        # defaults to the repo-root VERSION file inside the script.
+        run: ./bin/package-stibbons-artifact.sh
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
