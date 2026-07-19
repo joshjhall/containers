@@ -116,7 +116,7 @@ All features are disabled by default. Set to `true` to enable:
 | `INCLUDE_ANDROID_DEV` | Install Android dev tools (emulator, NDK)            |
 | `INCLUDE_DEV_TOOLS`   | Install general dev tools (gh, lazygit, fzf, etc.)   |
 | `SKIP_LSP_INSTALL`    | Skip LSP server installation (for headless agents)   |
-| `POST_CLAUDE_EVENTS_TO_HOST` | Stage the Claude→host event forwarder hook (opt-in; requires dev tools) |
+| `INCLUDE_HOST_EVENTS` | Forward Claude→host agent events to a host monitor (opt-in; requires dev tools) |
 
 **Cloud & Infrastructure:**
 
@@ -427,16 +427,20 @@ These variables can be set when running containers (via `docker run -e`):
 
 ### Host Event Forwarding
 
-Requires an image built with `POST_CLAUDE_EVENTS_TO_HOST=true`. When enabled at
-runtime, `claude-setup` wires the forwarder hook into `~/.claude/settings.json`
-so Claude Code agent state is POSTed to a host monitor's local HTTP bridge (e.g.
-Bartender Top Shelf). See `examples/env/post-claude-events.env`.
+Build an image with `INCLUDE_HOST_EVENTS=true` (a build-time feature, like
+`INCLUDE_OP` / `INCLUDE_DOCKER`). The flag is persisted to
+`enabled-features.conf`; on every container start `claude-setup` reads it and
+wires the forwarder hook into `~/.claude/settings.json` so Claude Code agent
+state is POSTed to a host monitor's local HTTP bridge (e.g. Bartender Top Shelf).
+Toggle by rebuilding — there is no runtime override. The `NOTCHBAR_AGENTS_*` vars
+below are runtime tuning knobs for where to reach the bridge. See
+`examples/env/host-events.env`.
 
-| Variable                     | Default                             | Description                                             |
-| ---------------------------- | ----------------------------------- | ------------------------------------------------------- |
-| `POST_CLAUDE_EVENTS_TO_HOST` | `false`                             | Enable the forwarder at runtime (read every boot)       |
-| `NOTCHBAR_AGENTS_HOST`       | `host.docker.internal` / `127.0.0.1` | Host running the monitor bridge (topology-auto-default) |
-| `NOTCHBAR_AGENTS_PORT`       | `7823`                              | Port of the monitor bridge                              |
+| Variable               | Default                              | Description                                             |
+| ---------------------- | ------------------------------------ | ------------------------------------------------------- |
+| `INCLUDE_HOST_EVENTS`  | `false`                              | Build-time: stage + wire the forwarder (rebuild to toggle) |
+| `NOTCHBAR_AGENTS_HOST` | `host.docker.internal` / `127.0.0.1` | Runtime: host running the monitor bridge (topology-auto-default) |
+| `NOTCHBAR_AGENTS_PORT` | `7823`                               | Runtime: port of the monitor bridge                     |
 
 #### Worktree golems (host-side wiring)
 

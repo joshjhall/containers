@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Unit tests for bin/seed-host-events.sh (#738)
-# Exercises the host-side POST_CLAUDE_EVENTS_TO_HOST installer against synthetic
+# Exercises the host-side INCLUDE_HOST_EVENTS installer against synthetic
 # ~/.claude dirs in TEST_TEMP_DIR (no Docker, no real host config touched). Covers
 # every subcommand and branch: install (fresh + preserve unrelated hooks),
 # idempotent re-install, remove (un-wire only ours, prune emptied events, delete

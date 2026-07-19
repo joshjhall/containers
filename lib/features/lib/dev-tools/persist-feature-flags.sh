@@ -70,6 +70,9 @@ INCLUDE_TERRAFORM=${INCLUDE_TERRAFORM:-false}
 INCLUDE_AWS=${INCLUDE_AWS:-false}
 INCLUDE_GCLOUD=${INCLUDE_GCLOUD:-false}
 INCLUDE_CLOUDFLARE=${INCLUDE_CLOUDFLARE:-false}
+
+# Host-event forwarding (build-time gate; runtime wiring reads this flag)
+INCLUDE_HOST_EVENTS=${INCLUDE_HOST_EVENTS:-false}
 FEATURES_EOF
 
     log_command "Setting config file permissions" \

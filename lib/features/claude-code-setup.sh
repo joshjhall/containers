@@ -386,16 +386,16 @@ if [ -d /tmp/build-scripts/features/templates/claude ]; then
     log_message "Build-bound skill templates staged"
 
     # The host-event forwarder hook (claude-host-event.sh) is opt-in: keep the
-    # staged copy only when POST_CLAUDE_EVENTS_TO_HOST=true, so default images
-    # ship no host-reporting hook at all. When true, claude-setup installs it and
-    # (given the runtime env var) wires it into settings.json every boot. Removing
-    # the staged file — rather than gating the copy — keeps the staging cp -r
-    # simple and still makes the arg meaningful.
-    if [ "${POST_CLAUDE_EVENTS_TO_HOST:-false}" != "true" ]; then
+    # staged copy only when INCLUDE_HOST_EVENTS=true, so default images ship no
+    # host-reporting hook at all. When true, claude-setup installs it and wires it
+    # into settings.json every boot (gated on the flag persisted to
+    # enabled-features.conf). Removing the staged file — rather than gating the
+    # copy — keeps the staging cp -r simple and still makes the arg meaningful.
+    if [ "${INCLUDE_HOST_EVENTS:-false}" != "true" ]; then
         command rm -f /etc/container/config/claude-templates/hooks/claude-host-event.sh
         command rmdir /etc/container/config/claude-templates/hooks 2>/dev/null || true
     else
-        log_message "Host-event forwarder hook staged (POST_CLAUDE_EVENTS_TO_HOST=true)"
+        log_message "Host-event forwarder hook staged (INCLUDE_HOST_EVENTS=true)"
     fi
 else
     log_warning "No skill templates found at /tmp/build-scripts/features/templates/claude"

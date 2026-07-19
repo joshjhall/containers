@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Seed the POST_CLAUDE_EVENTS_TO_HOST forwarder into the HOST's Claude Code.
+# Seed the INCLUDE_HOST_EVENTS forwarder into the HOST's Claude Code.
 #
 # The container feature (`lib/features/templates/claude/hooks/claude-host-event.sh`
 # + the `claude-setup` settings.json merge) wires the host-event forwarder into a
