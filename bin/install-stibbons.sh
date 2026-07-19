@@ -20,6 +20,11 @@
 #   ./install-stibbons.sh --version v4.19.12    # a specific tag
 #   ./install-stibbons.sh --dir /usr/local/bin  # custom install dir
 #   ./install-stibbons.sh --print-target        # just print the host triple
+#
+# Testing:
+#   Sourcing this script with STIBBONS_INSTALL_LIB=1 loads only the function
+#   definitions (detect_target, resolve_version, download) and returns before
+#   any argument parsing or the install flow — see tests/unit/install-stibbons.sh.
 
 set -euo pipefail
 
@@ -27,6 +32,15 @@ REPO="joshjhall/containers"
 VERSION="latest"
 INSTALL_DIR="${HOME}/.local/bin"
 PRINT_TARGET_ONLY=false
+
+# External commands are referenced through overridable variables that default to
+# their absolute paths (per the repo's full-path shell policy). The indirection
+# exists solely so the unit tests can inject stubs — mirrors the GH= seam in
+# tests/unit/dispatch-evidence-for-tuple.sh. Production runs use the defaults.
+UNAME="${UNAME:-/usr/bin/uname}"
+CURL="${CURL:-/usr/bin/curl}"
+SED="${SED:-/usr/bin/sed}"
+GH="${GH:-gh}"
 
 usage() {
     /usr/bin/cat <<'EOF'
@@ -40,6 +54,63 @@ Options:
   --help            Show this help
 EOF
 }
+
+# Map `uname` output to the Rust target triple used for the asset name.
+# `$UNAME` is overridable so the unit tests can drive every OS/arch combination
+# through a stub; see tests/unit/install-stibbons.sh.
+detect_target() {
+    local os arch os_part arch_part
+    os=$("$UNAME" -s)
+    arch=$("$UNAME" -m)
+
+    case "$os" in
+        Linux) os_part="unknown-linux-musl" ;;
+        Darwin) os_part="apple-darwin" ;;
+        MINGW* | MSYS* | CYGWIN* | Windows_NT) os_part="pc-windows-msvc" ;;
+        *)
+            echo "Error: unsupported OS: $os" >&2
+            return 1
+            ;;
+    esac
+
+    case "$arch" in
+        x86_64 | amd64) arch_part="x86_64" ;;
+        aarch64 | arm64) arch_part="aarch64" ;;
+        *)
+            echo "Error: unsupported architecture: $arch" >&2
+            return 1
+            ;;
+    esac
+
+    echo "${arch_part}-${os_part}"
+}
+
+# Resolve the concrete tag so the asset name (which embeds the numeric
+# version, not "latest") can be constructed. Reads the globals VERSION and REPO.
+resolve_version() {
+    if [ "$VERSION" != "latest" ]; then
+        echo "$VERSION"
+        return 0
+    fi
+    if command -v "$GH" >/dev/null 2>&1; then
+        "$GH" release view --repo "$REPO" --json tagName --jq '.tagName'
+    else
+        # Follow the /releases/latest redirect and read the resolved tag.
+        "$CURL" -fsSLI -o /dev/null -w '%{url_effective}' \
+            "https://github.com/${REPO}/releases/latest" |
+            "$SED" 's#.*/tag/##'
+    fi
+}
+
+download() {
+    local url="$1" dest="$2"
+    "$CURL" -fsSL -o "$dest" "$url"
+}
+
+# When sourced as a library (for unit tests), stop here: only the function
+# definitions above are needed, and the argument parsing / install flow below
+# must not run. A normal execution (STIBBONS_INSTALL_LIB unset) falls through.
+[ "${STIBBONS_INSTALL_LIB:-0}" = "1" ] && return 0
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -71,34 +142,6 @@ while [ $# -gt 0 ]; do
     esac
 done
 
-# Map `uname` output to the Rust target triple used for the asset name.
-detect_target() {
-    local os arch
-    os=$(/usr/bin/uname -s)
-    arch=$(/usr/bin/uname -m)
-
-    case "$os" in
-        Linux) os_part="unknown-linux-musl" ;;
-        Darwin) os_part="apple-darwin" ;;
-        MINGW* | MSYS* | CYGWIN* | Windows_NT) os_part="pc-windows-msvc" ;;
-        *)
-            echo "Error: unsupported OS: $os" >&2
-            return 1
-            ;;
-    esac
-
-    case "$arch" in
-        x86_64 | amd64) arch_part="x86_64" ;;
-        aarch64 | arm64) arch_part="aarch64" ;;
-        *)
-            echo "Error: unsupported architecture: $arch" >&2
-            return 1
-            ;;
-    esac
-
-    echo "${arch_part}-${os_part}"
-}
-
 TARGET=$(detect_target)
 
 if [ "$PRINT_TARGET_ONLY" = true ]; then
@@ -112,23 +155,6 @@ case "$TARGET" in
     *) EXT="tar.gz" ;;
 esac
 
-# Resolve the concrete tag so the asset name (which embeds the numeric
-# version, not "latest") can be constructed.
-resolve_version() {
-    if [ "$VERSION" != "latest" ]; then
-        echo "$VERSION"
-        return 0
-    fi
-    if command -v gh >/dev/null 2>&1; then
-        gh release view --repo "$REPO" --json tagName --jq '.tagName'
-    else
-        # Follow the /releases/latest redirect and read the resolved tag.
-        /usr/bin/curl -fsSLI -o /dev/null -w '%{url_effective}' \
-            "https://github.com/${REPO}/releases/latest" |
-            /usr/bin/sed 's#.*/tag/##'
-    fi
-}
-
 TAG=$(resolve_version)
 # The asset name uses the numeric version (tag without a leading "v").
 NUM_VERSION="${TAG#v}"
@@ -139,11 +165,6 @@ echo "Installing stibbons ${TAG} for ${TARGET}..."
 
 WORKDIR=$(/usr/bin/mktemp -d)
 trap '/bin/rm -rf "$WORKDIR"' EXIT
-
-download() {
-    local url="$1" dest="$2"
-    /usr/bin/curl -fsSL -o "$dest" "$url"
-}
 
 download "${BASE_URL}/${ASSET}" "${WORKDIR}/${ASSET}"
 download "${BASE_URL}/${ASSET}.sha256" "${WORKDIR}/${ASSET}.sha256"
