@@ -186,17 +186,50 @@ assert_dir_in_image() {
     fi
 }
 
-# Assert that an executable exists and is in PATH
+# Assert that an executable exists and is in PATH.
+#
+# Uses a login shell (`bash -lc`), so this reflects what an interactive user
+# sees after /etc/bashrc.d PATH edits. For tools that MUST also work in
+# non-login contexts (git hooks, CI lint, `just` shebang recipes), pair this
+# with assert_executable_in_base_path — a login shell can hide a tool that was
+# only added to PATH via bashrc.d and never symlinked onto the base PATH.
 assert_executable_in_path() {
     local image="$1"
     local executable="$2"
     local message="${3:-Executable $executable should be in PATH}"
 
-    if docker run --rm "$image" which "$executable" >/dev/null 2>&1; then
+    if docker run --rm "$image" bash -lc "command -v $executable" >/dev/null 2>&1; then
         return 0
     else
         tf_fail_assertion "$message" \
-            "Executable not found in PATH: $executable"
+            "Executable not found in login-shell PATH: $executable"
+    fi
+}
+
+# Assert an executable resolves in a NON-login shell with a bare PATH — the
+# environment git hooks, CI lint jobs, `bash -c`, and `just` shebang recipes
+# actually run in. bashrc.d PATH edits do NOT apply here, so the tool must be
+# reachable via the image's baked ENV PATH (typically a /usr/local/bin symlink).
+#
+# This is the assertion that catches the luggage-rust class of regression: a
+# toolchain installed but never symlinked onto /usr/local/bin passes a login
+# `which` yet is invisible to every non-login shell. See
+# .claude/memory/cargo-path-missing-luggage-rust.md.
+assert_executable_in_base_path() {
+    local image="$1"
+    local executable="$2"
+    local message="${3:-Executable $executable should resolve in a non-login shell}"
+
+    # env -i strips the inherited environment; we set only a conservative base
+    # PATH (matching a hook/CI shell). `command -v` respects PATH without shell
+    # builtins/aliases interfering.
+    if docker run --rm "$image" \
+        env -i PATH=/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin:/sbin \
+        bash -c "command -v $executable" >/dev/null 2>&1; then
+        return 0
+    else
+        tf_fail_assertion "$message" \
+            "Executable not found in non-login base PATH: $executable"
     fi
 }
 
@@ -239,4 +272,5 @@ export -f assert_image_size_less_than
 export -f assert_file_in_image
 export -f assert_dir_in_image
 export -f assert_executable_in_path
+export -f assert_executable_in_base_path
 export -f assert_env_var_set

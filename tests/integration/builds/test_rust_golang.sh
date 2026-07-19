@@ -41,10 +41,16 @@ test_rust_golang_build() {
     assert_executable_in_path "$image" "cargo"
     assert_executable_in_path "$image" "clippy-driver"
     assert_executable_in_path "$image" "rustfmt"
+    # cargo must also resolve in a non-login shell (git hooks, CI lint, `just`
+    # shebang recipes) — the production-path guard for the rust.sh symlink
+    # regression. See .claude/memory/cargo-path-missing-luggage-rust.md.
+    assert_executable_in_base_path "$image" "cargo"
+    assert_executable_in_base_path "$image" "rustc"
 
     # Verify Go toolchain
     assert_executable_in_path "$image" "go"
     assert_executable_in_path "$image" "gofmt"
+    assert_executable_in_base_path "$image" "go"
 }
 
 # Test: Rust and Go can compile simple programs

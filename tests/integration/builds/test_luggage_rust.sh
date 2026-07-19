@@ -47,6 +47,12 @@ assert_rust_endstate() {
     assert_executable_in_path "$image" "rustc"
     assert_executable_in_path "$image" "cargo"
     assert_executable_in_path "$image" "rustup"
+    # Non-login PATH: catches a toolchain that installed but was never symlinked
+    # onto /usr/local/bin (invisible to git hooks, CI lint, `just` shebang
+    # recipes). See .claude/memory/cargo-path-missing-luggage-rust.md.
+    assert_executable_in_base_path "$image" "cargo"
+    assert_executable_in_base_path "$image" "rustc"
+    assert_executable_in_base_path "$image" "rustup"
     assert_command_in_container "$image" "rustc --version" "$RUST_VERSION"
     assert_command_in_container "$image" "cargo --version" "cargo"
     # CARGO_HOME / RUSTUP_HOME pinned to /cache.
