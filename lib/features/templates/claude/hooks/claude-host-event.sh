@@ -1,5 +1,5 @@
 #!/bin/bash
-# Claude Code -> host monitor event forwarder (POST_CLAUDE_EVENTS_TO_HOST).
+# Claude Code -> host monitor event forwarder (INCLUDE_HOST_EVENTS).
 #
 # Forwards each Claude Code hook event to a host-side agent monitor's local HTTP
 # bridge (e.g. Bartender's Top Shelf: POST /event on 127.0.0.1:7823) so agents
@@ -17,7 +17,7 @@
 # omitted.
 #
 # Wired into ~/.claude/settings.json by `claude-setup` when
-# POST_CLAUDE_EVENTS_TO_HOST=true. Invoked as:
+# INCLUDE_HOST_EVENTS=true. Invoked as:
 #     claude-host-event.sh <STATE>
 # with the Claude Code hook JSON on stdin. STATE is the coarse per-event label
 # (Idle/Working/Auto/Waiting/ToolFail/Ended) chosen by the settings.json wiring;

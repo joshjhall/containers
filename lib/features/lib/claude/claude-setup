@@ -622,14 +622,14 @@ if [ -d "$TEMPLATES_DIR/hooks" ]; then
 fi
 
 # ============================================================================
-# Host Event Forwarding (POST_CLAUDE_EVENTS_TO_HOST) — settings.json hook wiring
+# Host Event Forwarding (INCLUDE_HOST_EVENTS) — settings.json hook wiring
 # ============================================================================
-# When POST_CLAUDE_EVENTS_TO_HOST=true (a RUNTIME env var, so one image serves
-# both a monitored host and headless CI without a rebuild), wire the staged
-# claude-host-event.sh forwarder into settings.json so it fires on every Claude
-# Code hook event. The forwarder pushes agent state to a host monitor's local
-# HTTP bridge (see the script header). This is the ONLY settings.json write in
-# claude-setup, so it defines its own $CLAUDE_SETTINGS_FILE.
+# INCLUDE_HOST_EVENTS is a build-time feature flag persisted to
+# enabled-features.conf (sourced above), so wiring only runs in images built with
+# it. When true, wire the staged claude-host-event.sh forwarder into settings.json
+# so it fires on every Claude Code hook event. The forwarder pushes agent state to
+# a host monitor's local HTTP bridge (see the script header). This is the ONLY
+# settings.json write in claude-setup, so it defines its own $CLAUDE_SETTINGS_FILE.
 #
 # Idempotent + every-boot: the per-event append is guarded by a "does this exact
 # command already exist for this event" test, so re-running never duplicates and
@@ -637,11 +637,11 @@ fi
 # the self-healing rationale of the librarian install below — a fresh ~/.claude
 # home volume is re-wired on the next boot.
 HOST_EVENT_HOOK="$CLAUDE_DIR/hooks/claude-host-event.sh"
-if [ "${POST_CLAUDE_EVENTS_TO_HOST:-false}" = "true" ] &&
+if [ "${INCLUDE_HOST_EVENTS:-false}" = "true" ] &&
     [ -f "$HOST_EVENT_HOOK" ] &&
     command -v jq >/dev/null 2>&1; then
     echo ""
-    echo "Host event forwarding (POST_CLAUDE_EVENTS_TO_HOST):"
+    echo "Host event forwarding (INCLUDE_HOST_EVENTS):"
     CLAUDE_SETTINGS_FILE="$CLAUDE_DIR/settings.json"
     # event -> coarse state arg passed to the forwarder (refined per-payload in
     # the script). PostToolUseFailure is kept for forward-compat: harmless if

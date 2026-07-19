@@ -383,6 +383,35 @@ test_luggage_invocation() {
     fi
 }
 
+# Test: rust.sh symlinks the CORE toolchain binaries from a location that is
+# robust to a luggage install leaving CARGO_HOME/bin empty. Without the
+# toolchain-bin fallback, /usr/local/bin/cargo is never created and cargo is
+# missing from the base PATH (non-login shells, git hooks, CI lint, `just`
+# shebang recipes). See .claude/memory/cargo-path-missing-luggage-rust.md.
+test_toolchain_bin_fallback() {
+    local rust_script="$PROJECT_ROOT/lib/features/rust.sh"
+
+    if ! [ -f "$rust_script" ]; then
+        skip_test "rust.sh not found"
+        return
+    fi
+
+    # Falls back to the resolved toolchain bin dir when CARGO_HOME/bin has no
+    # cargo proxy, and symlinks from that resolved dir.
+    if command grep -qE 'RUSTUP_HOME.*/toolchains/\*/bin' "$rust_script" &&
+        command grep -q 'RUST_TOOLCHAIN_BIN' "$rust_script"; then
+        assert_true true "rust.sh resolves a toolchain bin fallback for core symlinks"
+    else
+        assert_true false "rust.sh missing toolchain bin fallback (cargo may be absent from base PATH)"
+    fi
+
+    if command grep -qE 'create_symlink "\$\{RUST_TOOLCHAIN_BIN\}/\$\{cmd\}" "/usr/local/bin' "$rust_script"; then
+        assert_true true "core toolchain binaries symlinked into /usr/local/bin"
+    else
+        assert_true false "core toolchain binaries not symlinked from RUST_TOOLCHAIN_BIN"
+    fi
+}
+
 # Test: rust.sh no longer ships the inline rustup-init install path
 test_no_inline_rustup_install() {
     local rust_script="$PROJECT_ROOT/lib/features/rust.sh"
@@ -453,6 +482,7 @@ run_test_with_setup test_rust_verification "Rust verification script works"
 
 # Luggage migration tests
 run_test test_luggage_invocation "rust.sh delegates toolchain install to luggage"
+run_test test_toolchain_bin_fallback "rust.sh symlinks core toolchain via a CARGO_HOME/bin fallback"
 run_test test_no_inline_rustup_install "rust.sh strips inline rustup-init download/verify logic"
 run_test test_channel_routing "Channel names (stable/beta/nightly) route through --channel"
 run_test test_reconciler_profile_default "Pinned-toolchain reconciler installs with --profile default"

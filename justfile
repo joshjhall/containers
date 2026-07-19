@@ -328,7 +328,7 @@ sync-host *PREFIXES:
 sync-host-check *PREFIXES:
     bash "{{ justfile_directory() }}/bin/sync-host.sh" --check {{ PREFIXES }}
 
-# Opt-in: wire the POST_CLAUDE_EVENTS_TO_HOST forwarder into the HOST ~/.claude for worktree golems (#738). Idempotent, preserves existing hooks.
+# Opt-in: wire the INCLUDE_HOST_EVENTS forwarder into the HOST ~/.claude for worktree golems (#738). Idempotent, preserves existing hooks.
 host-events-install:
     bash "{{ justfile_directory() }}/bin/seed-host-events.sh" install
 

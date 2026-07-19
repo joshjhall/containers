@@ -18,7 +18,7 @@
 #   - Allows volume mounting for persistent caches across container rebuilds
 #
 # Environment Variables:
-#   - RUST_VERSION: Toolchain version specification (default: 1.95.0)
+#   - RUST_VERSION: Toolchain version specification (default: 1.97.1)
 #     * Specific version (e.g., "1.84.1"): Uses exact version
 #     * Major.minor only (e.g., "1.84"): Resolves to latest patch
 #     * Channel names (stable, beta, nightly): Passed to luggage --channel
@@ -207,15 +207,35 @@ log_command "Installing mdbook-admonish" \
 # ============================================================================
 log_message "Creating Rust symlinks..."
 
-# Create /usr/local/bin symlinks for easier access
+# Create /usr/local/bin symlinks for easier access.
 RUST_BIN_DIR="${CARGO_HOME}/bin"
+
+# Resolve the directory that actually holds the CORE toolchain binaries
+# (cargo/rustc/rustup/...). rustup-init normally writes proxy shims to
+# ${CARGO_HOME}/bin, but a luggage-driven install can leave that dir empty while
+# the real binaries live under ${RUSTUP_HOME}/toolchains/<triple>/bin. If we
+# symlinked blindly from the empty CARGO_HOME/bin, every guard below would
+# silently no-op and cargo would be missing from the base PATH (/usr/local/bin)
+# — invisible to non-login shells, git hooks, CI lint, and `just` shebang
+# recipes (which reset PATH). Prefer CARGO_HOME/bin (its proxies pick up a
+# workspace-pinned toolchain); fall back to the resolved toolchain bin dir so
+# the symlinks always land.
+RUST_TOOLCHAIN_BIN="${RUST_BIN_DIR}"
+if [ ! -x "${RUST_TOOLCHAIN_BIN}/cargo" ]; then
+    for _tc_bin in "${RUSTUP_HOME}"/toolchains/*/bin; do
+        [ -x "${_tc_bin}/cargo" ] && RUST_TOOLCHAIN_BIN="${_tc_bin}"
+    done
+    log_message "CARGO_HOME/bin has no cargo proxy; symlinking toolchain bin dir: ${RUST_TOOLCHAIN_BIN}"
+fi
+
 for cmd in rustc cargo rustup rust-analyzer rustfmt clippy-driver; do
-    if [ -f "${RUST_BIN_DIR}/${cmd}" ]; then
-        create_symlink "${RUST_BIN_DIR}/${cmd}" "/usr/local/bin/${cmd}" "${cmd} Rust tool"
+    if [ -f "${RUST_TOOLCHAIN_BIN}/${cmd}" ]; then
+        create_symlink "${RUST_TOOLCHAIN_BIN}/${cmd}" "/usr/local/bin/${cmd}" "${cmd} Rust tool"
     fi
 done
 
-# Also link cargo-installed tools
+# Also link cargo-installed tools. These always live in CARGO_HOME/bin (cargo
+# binstall/install target), never the toolchain dir — so use RUST_BIN_DIR.
 for cmd in cargo-watch mdbook; do
     if [ -f "${RUST_BIN_DIR}/${cmd}" ]; then
         create_symlink "${RUST_BIN_DIR}/${cmd}" "/usr/local/bin/${cmd}" "${cmd} cargo tool"

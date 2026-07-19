@@ -39,7 +39,7 @@ ARG BASE_IMAGE=debian:trixie-slim
 # scripts (see lib/features/rust.sh). Building luggage here keeps the rust
 # toolchain out of the runtime image while still bundling a reproducible
 # binary built from the in-tree workspace.
-FROM rust:1.95-slim-trixie AS luggage-builder
+FROM rust:1.97.1-slim-trixie AS luggage-builder
 WORKDIR /workspace
 COPY Cargo.toml Cargo.lock ./
 COPY crates ./crates
@@ -507,12 +507,12 @@ ARG CLAUDE_PLUGINS
 ARG CLAUDE_MCPS
 ARG CLAUDE_AGENTS
 ARG CLAUDE_SKILLS
-# Bake the host-event forwarder hook into the image (opt-in). When true, the
-# claude-host-event.sh forwarder is staged so it can be enabled at RUNTIME via
-# the POST_CLAUDE_EVENTS_TO_HOST env var (+ optional NOTCHBAR_AGENTS_HOST/PORT),
-# reporting agent state to a host monitor's local HTTP bridge. Default images
-# stay clean; build with =true for images that run under a host monitor.
-ARG POST_CLAUDE_EVENTS_TO_HOST=false
+# Host-event forwarding feature (opt-in, build-time). When true, the
+# claude-host-event.sh forwarder is staged and wired into settings.json at
+# runtime, reporting Claude agent state to a host monitor's local HTTP bridge
+# (tune the target with NOTCHBAR_AGENTS_HOST/PORT). Default images stay clean;
+# build with =true for images that run under a host monitor. Rebuild to toggle.
+ARG INCLUDE_HOST_EVENTS=false
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     if [ "${INCLUDE_DEV_TOOLS}" = "true" ]; then \
@@ -584,7 +584,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     LIBRARIAN_REF=${LIBRARIAN_REF} \
     CLAUDE_CHANNEL=${CLAUDE_CHANNEL} \
     SKIP_LSP_INSTALL=${SKIP_LSP_INSTALL} \
-    POST_CLAUDE_EVENTS_TO_HOST=${POST_CLAUDE_EVENTS_TO_HOST} \
+    INCLUDE_HOST_EVENTS=${INCLUDE_HOST_EVENTS} \
     /tmp/build-scripts/features/claude-code-setup.sh; \
     fi
 

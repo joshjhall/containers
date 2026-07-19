@@ -102,6 +102,14 @@ feature `post_claude_events_to_host` (requires dev_tools). 8-event map. Also
 cleaned 4 pre-existing shellcheck dead-code warnings in claude-setup; repo now 0
 warning-level findings across 478 scripts. See [[shellcheck-policy-and-bash-deprecation]].
 
+**UPDATE (2026-07-19):** the build arg `POST_CLAUDE_EVENTS_TO_HOST` was renamed
+`INCLUDE_HOST_EVENTS` and made a single build-time knob (was a confusing
+build+runtime dual gate). Registry id is now `include_host_events`. The build
+decision persists to `enabled-features.conf`; `claude-setup` reads that flag to
+wire settings.json at runtime. Toggle by rebuilding — no runtime env override.
+`NOTCHBAR_AGENTS_HOST/PORT` remain runtime tuning knobs. Example env renamed
+`examples/env/host-events.env`.
+
 **FOLLOW-UP ISSUES FILED (2026-07-16):**
 
 - **containers#738** — extend forwarder to worktree golems (host-side wiring).

@@ -17,8 +17,13 @@ services:
         # Additional dev tools
         INCLUDE_OP: "true"
         INCLUDE_DOCKER: "true"
+        # Report Claude agent state to the host monitor (Bartender Top Shelf)
+        INCLUDE_HOST_EVENTS: "true"
         # Rust needed for stibbons (project scaffolding CLI) and luggage (containers runtime and install management)
         INCLUDE_RUST_DEV: "true"
+        # Pin the toolchain explicitly so the build never floats to a newer
+        # patch (e.g. 1.97.2) when one is released. Bump deliberately.
+        RUST_VERSION: "1.97.1"
       cache_from:
         - type=local,src=/tmp/.buildx-cache
       cache_to:
@@ -54,10 +59,10 @@ services:
       # Default MCPs (unset = filesystem + figma-desktop + codegraph). This
       # explicit list REPLACES the default set, so codegraph is named here to
       # keep it default-on for this project.
-      - CLAUDE_MCPS=filesystem,codegraph
+      CLAUDE_MCPS: "filesystem,codegraph"
       # Default memory path
-      - MEMORY_FILE_PATH=/workspace/containers/.claude/memory
-      - SKIP_CASE_CHECK=true
+      MEMORY_FILE_PATH: "/workspace/containers/.claude/memory"
+      SKIP_CASE_CHECK: "true"
     # Use tini as init system for proper zombie process reaping
     # This is a belt-and-suspenders approach - the Dockerfile also includes tini,
     # but init: true ensures proper PID 1 behavior even if command overrides entrypoint

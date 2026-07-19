@@ -126,6 +126,18 @@ This repo currently wires only one lifecycle hook:
   - Configures git user identity from secrets via `setup-git`.
   - Authenticates `gh` if `OP_GITHUB_TOKEN_REF` is configured via `setup-gh`.
 
+  > **Chain-abort gotcha.** The links are `&&`-joined, so any link exiting
+  > non-zero silently skips every link after it — including `setup-git` (git
+  > identity + SSH auth/signing keys) and `setup-gh`. `setup-dev-environment.sh`
+  > runs under `set -euo pipefail`; its recommended-tool check must therefore be
+  > advisory only (warn, never `return 1`). A regression where a missing
+  > _recommended_ tool (e.g. `docker` in an image built without
+  > `INCLUDE_DOCKER`) returned non-zero aborted the chain, so the SSH auth key
+  > was never installed at startup even though secrets resolved correctly. If
+  > keys/identity are missing on boot but `setup-git` works when run by hand,
+  > suspect an earlier link aborting — run
+  > `./.devcontainer/bin/setup-dev-environment.sh; echo $?` and confirm it exits 0.
+
 Other hooks (`initializeCommand`, `postCreateCommand`, `postAttachCommand`,
 `updateContentCommand`, `onCreateCommand`) are **not used** in this repo today.
 The `host/init-env.sh` script could be wired as `initializeCommand` later, but

@@ -308,14 +308,14 @@ impl Registry {
             ..Feature::default()
         });
         r.add(Feature {
-            id: "post_claude_events_to_host".into(),
-            build_arg: "POST_CLAUDE_EVENTS_TO_HOST".into(),
+            id: "include_host_events".into(),
+            build_arg: "INCLUDE_HOST_EVENTS".into(),
             display_name: "Host Event Forwarding".into(),
             description: "Report Claude Code agent state to a host monitor's HTTP bridge \
-                          (e.g. Bartender Top Shelf); enabled at runtime"
+                          (e.g. Bartender Top Shelf); build-time opt-in"
                 .into(),
             category: Category::Tool,
-            env_file: Some("post-claude-events.env".into()),
+            env_file: Some("host-events.env".into()),
             requires: vec!["dev_tools".into()],
             ..Feature::default()
         });

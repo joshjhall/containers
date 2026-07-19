@@ -64,11 +64,16 @@ check_tool() {
 
     if command -v "$tool" &>/dev/null; then
         echo -e "${GREEN}✓${NC} $tool installed"
-        return 0
     else
         echo -e "${YELLOW}⚠${NC}  $tool not found - $install_hint"
-        return 1
     fi
+    # Recommended tools are advisory only. NEVER fail: this runs under
+    # `set -euo pipefail` as a link in the postStartCommand chain
+    # (… && setup-dev-environment.sh && setup-git && setup-gh). A `return 1`
+    # here aborts the chain, so a merely-missing recommended tool (e.g. docker
+    # in an image built without INCLUDE_DOCKER) silently skips setup-git /
+    # setup-gh — no git identity, no SSH auth key installed at startup.
+    return 0
 }
 
 check_tool "shellcheck" "apt-get install shellcheck (or brew install shellcheck)"

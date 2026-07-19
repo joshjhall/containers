@@ -1417,10 +1417,10 @@ run_test test_settings_merge_fresh_create "Default permissions: fresh settings.j
 run_test test_settings_merge_dedupes_and_preserves "Default permissions: merge dedupes tmux rule + preserves existing"
 
 # ============================================================================
-# Host-event forwarder settings.json hook wiring (POST_CLAUDE_EVENTS_TO_HOST)
+# Host-event forwarder settings.json hook wiring (INCLUDE_HOST_EVENTS)
 # ============================================================================
 # claude-setup wires claude-host-event.sh into settings.json's `hooks` block for
-# 8 Claude Code events when POST_CLAUDE_EVENTS_TO_HOST=true. These tests exercise
+# 8 Claude Code events when INCLUDE_HOST_EVENTS=true. These tests exercise
 # the actual jq merge — asserting the 8-event mapping is produced, is idempotent
 # under re-merge, and preserves pre-existing hooks — plus a source guard that the
 # wiring stays gated (never fires unconditionally).
@@ -1503,11 +1503,11 @@ test_host_event_wiring_preserves_existing() {
 }
 
 # Test (source guard): the wiring in claude-setup is gated on
-# POST_CLAUDE_EVENTS_TO_HOST=true — it must never wire unconditionally.
+# INCLUDE_HOST_EVENTS=true — it must never wire unconditionally.
 test_host_event_wiring_is_gated() {
     local setup_file="$PROJECT_ROOT/lib/features/lib/claude/claude-setup"
-    if command grep -qE 'POST_CLAUDE_EVENTS_TO_HOST:-false.*=.*"true"|"\$\{POST_CLAUDE_EVENTS_TO_HOST:-false\}" = "true"' "$setup_file"; then
-        pass_test "host-event wiring is gated on POST_CLAUDE_EVENTS_TO_HOST=true"
+    if command grep -qE 'INCLUDE_HOST_EVENTS:-false.*=.*"true"|"\$\{INCLUDE_HOST_EVENTS:-false\}" = "true"' "$setup_file"; then
+        pass_test "host-event wiring is gated on INCLUDE_HOST_EVENTS=true"
     else
         fail_test "host-event wiring gate not found in claude-setup"
     fi
@@ -1516,7 +1516,7 @@ test_host_event_wiring_is_gated() {
 run_test test_host_event_wiring_all_events "Host events: forwarder wired for all 8 Claude Code events"
 run_test test_host_event_wiring_idempotent "Host events: re-merge is idempotent (no duplicate hooks)"
 run_test test_host_event_wiring_preserves_existing "Host events: merge preserves a pre-existing user hook"
-run_test test_host_event_wiring_is_gated "Host events: wiring is gated on the runtime flag"
+run_test test_host_event_wiring_is_gated "Host events: wiring is gated on the build-time flag"
 
 # Generate test report
 generate_report

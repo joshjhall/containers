@@ -10,10 +10,10 @@
 # Build context is the repo root (`BUILD_CONTEXT=$CONTAINERS_DIR`), so
 # every COPY here is repo-root-relative.
 
-ARG RUST_VERSION=1.95.0
+ARG RUST_VERSION=1.97.1
 
 # ─── Stage 1: compile the luggage binary ───
-FROM rust:1.95-slim-trixie AS builder
+FROM rust:1.97.1-slim-trixie AS builder
 
 WORKDIR /workspace
 COPY Cargo.toml Cargo.lock ./
@@ -61,9 +61,16 @@ RUN /usr/local/bin/luggage install "rust@${RUST_VERSION}" \
 # Toolchain env for the USER vscode session below (smoke driver runs
 # cargo). The install RUN above intentionally runs without these set —
 # luggage propagates them internally.
+#
+# NOTE: PATH deliberately does NOT prepend /cache/cargo/bin. Production
+# images reach cargo via luggage's /usr/local/bin symlinks (install_symlinks),
+# NOT via CARGO_HOME/bin on PATH — and /usr/local/bin is already on the base
+# PATH here. Prepending /cache/cargo/bin would mask a broken symlink step: the
+# assert_executable_in_path checks below would pass on the raw toolchain dir
+# even when /usr/local/bin/cargo was never created (the real-world regression,
+# see lib/features/rust.sh + .claude/memory/cargo-path-missing-luggage-rust.md).
 ENV CARGO_HOME=/cache/cargo \
-    RUSTUP_HOME=/cache/rustup \
-    PATH="/cache/cargo/bin:/usr/local/bin:${PATH}"
+    RUSTUP_HOME=/cache/rustup
 
 USER vscode
 WORKDIR /home/vscode
