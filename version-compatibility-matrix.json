@@ -1,5 +1,5 @@
 {
-  "last_updated": "2026-07-19T05:17:25Z",
+  "last_updated": "2026-07-19T06:16:41Z",
   "base_images": [
     {
       "name": "debian:11-slim",
@@ -63,7 +63,8 @@
         "1.94.1",
         "1.95.0",
         "1.96.0",
-        "1.97.0"
+        "1.97.0",
+        "1.97.1"
       ],
       "deprecated": []
     },
@@ -102,7 +103,8 @@
         "4.0.2",
         "4.0.3",
         "4.0.4",
-        "4.0.5"
+        "4.0.5",
+        "4.0.6"
       ],
       "deprecated": []
     },
@@ -150,7 +152,7 @@
       "base_image": "debian:13-slim",
       "versions": {},
       "status": "passing",
-      "tested_at": "2026-07-12T06:23:07Z",
+      "tested_at": "2026-07-19T06:16:41Z",
       "notes": "Base system only, no language runtimes"
     },
     {
@@ -160,7 +162,7 @@
         "python": "3.14.6"
       },
       "status": "passing",
-      "tested_at": "2026-07-12T06:23:07Z"
+      "tested_at": "2026-07-19T06:16:41Z"
     },
     {
       "variant": "node-dev",
@@ -169,24 +171,24 @@
         "node": "22"
       },
       "status": "passing",
-      "tested_at": "2026-07-12T06:23:07Z"
+      "tested_at": "2026-07-19T06:16:41Z"
     },
     {
       "variant": "rust-golang",
       "base_image": "debian:13-slim",
       "versions": {
-        "rust": "1.97.0",
+        "rust": "1.97.1",
         "go": "1.26.5"
       },
       "status": "passing",
-      "tested_at": "2026-07-12T06:23:07Z"
+      "tested_at": "2026-07-19T06:16:41Z"
     },
     {
       "variant": "cloud-ops",
       "base_image": "debian:13-slim",
       "versions": {},
       "status": "passing",
-      "tested_at": "2026-07-12T06:23:07Z",
+      "tested_at": "2026-07-19T06:16:41Z",
       "notes": "Docker, Kubernetes, Terraform, AWS CLI"
     },
     {
@@ -195,11 +197,11 @@
       "versions": {
         "python": "3.14.6",
         "node": "22",
-        "rust": "1.97.0",
+        "rust": "1.97.1",
         "go": "1.26.5"
       },
       "status": "passing",
-      "tested_at": "2026-07-12T06:23:07Z"
+      "tested_at": "2026-07-19T06:16:41Z"
     }
   ]
 }
