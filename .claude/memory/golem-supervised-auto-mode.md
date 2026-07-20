@@ -58,10 +58,13 @@ survives auto mode. See #585; plan-gating-by-effort follow-up is #586.
   gate channel alongside the feed (#618), and the better catcher of plan-gate
   prompts the feed records only as a generic `gate` — not something to avoid.
 - Surface "which golem is blocked" via a `Notification` hook → one central
-  `feed.jsonl` (hooks fire in interactive mode). The proactive PUSH watch is
-  `bin/golem-gate-watch.sh` (feed + pane channels) / `just golem-watch`, armed by
-  the orchestrator via the `Monitor` tool so blocks surface without polling
-  `just golems` (#618).
+  `feed.jsonl` (hooks fire in interactive mode). The proactive PUSH watch is the
+  workflow plugin's bundled `golem-gate-watch.sh` (feed + pane channels), run via
+  `just golem-watch` (which resolves the bundled scripts through
+  `bin/workflow-scripts-dir.sh`) and armed by the orchestrator via the `Monitor`
+  tool so blocks surface without polling `just golems` (#618). The script moved
+  out of this repo's `bin/` in the librarian extraction (#719); see
+  [[librarian-plugin-extraction]].
 - Intervene on demand: attach to the one flagged golem (`tmux attach -t golem-N`
   / `docker exec -it <ctr> tmux attach -t claude`), answer, detach.
 

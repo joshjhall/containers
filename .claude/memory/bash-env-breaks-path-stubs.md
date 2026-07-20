@@ -12,8 +12,9 @@ non-interactive `bash` invocation sources `/etc/bash_env`, which REBUILDS
 `PATH`** (prepends `/opt/fzf/bin`, restores `/usr/bin/...`, etc.).
 
 Consequence for tests: a test that puts a **stub binary on PATH** to intercept a
-command (e.g. a fake `tmux` for `bin/golem-gate-watch.sh --once-panes`, or the
-jq-absent stub in `tests/unit/claude/test_golem_notify.sh`) will find its stub
+command (e.g. a fake `tmux` for the workflow plugin's `golem-gate-watch.sh
+--once-panes`, or the jq-absent stub in
+`tests/unit/claude/test_golem_notify.sh`) will find its stub
 **silently dropped** — the script under test re-resolves the real binary because
 `/etc/bash_env` rebuilt PATH at the script's own bash startup. The symptom is
 maddening: `command -v tmux` from the parent shell points at the stub, but the
