@@ -1,21 +1,23 @@
-# Igor Template System
+# stibbons Template System
 
-Igor uses Go's `text/template` engine with embedded template files to generate
-devcontainer configuration. This document covers the template system internals
-and how to customize generated output.
+stibbons uses the [minijinja](https://docs.rs/minijinja) engine (a Rust
+Jinja2 implementation) with embedded template files to generate devcontainer
+configuration. This document covers the template system internals and how to
+customize generated output.
 
 ## Template Files
 
-All templates live in `cmd/igor/internal/template/sources/` and are embedded
-into the binary at compile time via `//go:embed`:
+All templates live in `crates/containers-common/src/template/sources/` as `.j2`
+files and are embedded into the binary at compile time via `include_str!` (see
+`crates/containers-common/src/template/renderer.rs`):
 
-| Template                  | Output File                        | Purpose                                                          |
-| ------------------------- | ---------------------------------- | ---------------------------------------------------------------- |
-| `docker-compose.yml.tmpl` | `.devcontainer/docker-compose.yml` | Docker Compose build definition with features, volumes, networks |
-| `devcontainer.json.tmpl`  | `.devcontainer/devcontainer.json`  | VS Code devcontainer config with extensions and settings         |
-| `env.tmpl`                | `.devcontainer/.env`               | Runtime environment variables for selected features              |
-| `env-example.tmpl`        | `.env.example`                     | Documented env template with all available vars commented out    |
-| `igor.yml.tmpl`           | `.igor.yml`                        | State file tracking selections, versions, and generated hashes   |
+| Template                 | Output File                        | Purpose                                                          |
+| ------------------------ | ---------------------------------- | ---------------------------------------------------------------- |
+| `docker-compose.yml.j2`  | `.devcontainer/docker-compose.yml` | Docker Compose build definition with features, volumes, networks |
+| `devcontainer.json.j2`   | `.devcontainer/devcontainer.json`  | VS Code devcontainer config with extensions and settings         |
+| `env.j2`                 | `.devcontainer/.env`               | Runtime environment variables for selected features              |
+| `env-example.j2`         | `.env.example`                     | Documented env template with all available vars commented out    |
+| `igor.yml.j2`            | `.igor.yml`                        | State file tracking selections, versions, and generated hashes   |
 
 ## IGOR:BEGIN/END Markers
 
@@ -60,80 +62,89 @@ volumes:
     driver: local
 ```
 
-## Template Functions
+## Template Data
 
-Templates have access to custom functions defined in
-`cmd/igor/internal/template/funcmap.go`:
+Rather than exposing many small helper functions, the renderer pre-computes the
+derived values templates need and passes them alongside the context (see
+`Renderer::render` in `crates/containers-common/src/template/renderer.rs`).
+Templates then use only stock minijinja syntax (`{% for %}`, `{% if %}`, `{{ }}`,
+built-in filters) over these values:
 
-| Function        | Signature                   | Description                                                        |
-| --------------- | --------------------------- | ------------------------------------------------------------------ |
-| `hasFeature`    | `hasFeature(ctx, id) bool`  | Check if a feature is in the selection (explicit or auto-resolved) |
-| `indent`        | `indent(n, s) string`       | Indent each non-empty line of `s` by `n` spaces                    |
-| `joinComma`     | `joinComma(items) string`   | Join string slice with comma-space separator                       |
-| `buildArgLines` | `buildArgLines(ctx) string` | Generate `- BUILD_ARG=value` lines for all enabled features        |
-| `add`           | `add(a, b) int`             | Integer addition (used for index math in range loops)              |
-| `sub`           | `sub(a, b) int`             | Integer subtraction                                                |
-| `contains`      | `contains(s, substr) bool`  | String contains check                                              |
-| `split`         | `split(s, sep) []string`    | Split string by separator                                          |
+| Value               | Shape                          | Description                                                              |
+| ------------------- | ------------------------------ | ------------------------------------------------------------------------ |
+| `build_arg_groups`  | `[{label, args: [{line, comment}]}]` | Enabled features grouped by category, base+dev pairs collapsed, version args attached — computed by `grouped_build_args` in `funcmap.rs` |
+| `cache_volumes`     | `[{name, path}]`               | Cache volume specs split into `name`/`path` pairs                        |
+| `features`          | `[string]`                     | Enabled feature IDs, for `{% if "python" in features %}` checks          |
+| `explicit_features` | `[string]`                     | Only explicitly-selected feature IDs (for `.igor.yml`), in registry order |
+
+The grouping/collapsing logic lives in
+`crates/containers-common/src/template/funcmap.rs` (`grouped_build_args`).
 
 ## Render Context
 
-Templates receive a `RenderContext` (defined in
-`cmd/igor/internal/template/context.go`) with these fields:
+The remaining fields come straight from the `RenderContext` (defined in
+`crates/containers-common/src/template/context.rs`):
 
-| Field               | Type                | Description                                                    |
-| ------------------- | ------------------- | -------------------------------------------------------------- |
-| `.Project`          | `ProjectConfig`     | Project name, username, base image, working dir                |
-| `.ContainersDir`    | `string`            | Relative path to containers submodule                          |
-| `.Selection`        | `*Selection`        | Feature selection with `.Explicit` and `.Auto` maps            |
-| `.EnabledFeatures`  | `[]*Feature`        | All enabled features in registry order                         |
-| `.Versions`         | `map[string]string` | Version arg name to chosen version                             |
-| `.CacheVolumes`     | `[]string`          | Deduplicated cache volume specs (e.g., `pip-cache:/cache/pip`) |
-| `.VSCodeExtensions` | `[]string`          | Deduplicated, sorted VS Code extension IDs                     |
-| `.NeedsBindfs`      | `bool`              | True when bindfs is selected (adds cap_add + device)           |
-| `.NeedsDocker`      | `bool`              | True when docker is selected (adds socket mount)               |
+| Field                | Type                  | Description                                                    |
+| -------------------- | --------------------- | ------------------------------------------------------------- |
+| `project`            | `ProjectConfig`       | Project name, username, base image, working dir                |
+| `containers_dir`     | `String`              | Relative path to the containers submodule                      |
+| `selection`          | `Selection`           | Feature selection with explicit and auto-resolved maps         |
+| `enabled_features`   | `Vec<Feature>`        | All enabled features in registry order                         |
+| `versions`           | `BTreeMap<String,String>` | Version arg name to chosen version                         |
+| `cache_volumes`      | `Vec<String>`         | Deduplicated cache volume specs (e.g., `pip-cache:/cache/pip`) |
+| `vscode_extensions`  | `Vec<String>`         | Deduplicated, sorted VS Code extension IDs                     |
+| `zed_extensions`     | `Vec<String>`         | Deduplicated, sorted Zed extension IDs                         |
+| `needs_bindfs`       | `bool`                | True when bindfs is selected (adds `cap_add` + device)         |
+| `needs_docker`       | `bool`                | True when docker is selected (adds socket mount)               |
+| `agents`             | `AgentConfig`         | Optional agent/worktree settings                               |
+| `worktree_mounts`    | `Vec<String>`         | Volume mount specs for agent worktrees                         |
 
 ## Template Patterns
 
+These mirror the actual `.j2` sources. minijinja uses `{%- ... %}` /
+`{{ ... }}`; the leading `-` trims preceding whitespace.
+
 ### Conditional Feature Blocks
 
-```gotemplate
-{{- if hasFeature . "python" }}
+```jinja
+{%- if "python" in features %}
 # Python-specific content
 PYTHONUNBUFFERED=1
-{{- end }}
+{%- endif %}
 ```
 
-### Iterating Enabled Features
+### Iterating Build Arg Groups
 
-```gotemplate
-{{- range .EnabledFeatures }}
-        - {{ .BuildArg }}=true
-{{- if .VersionArg }}
-        - {{ .VersionArg }}={{ index $.Versions .VersionArg }}
-{{- end }}
-{{- end }}
+Build args arrive pre-grouped and pre-collapsed as `build_arg_groups`:
+
+```jinja
+{%- for group in build_arg_groups %}
+        # {{ group.label }}
+{%- for arg in group.args %}
+        - {{ arg.line }}
+{%- endfor %}
+{%- endfor %}
 ```
 
 ### Splitting Volume Specs
 
-Cache volumes are stored as `name:/path` strings. Templates split them:
+Cache volumes arrive already split into `name`/`path` pairs:
 
-```gotemplate
-{{- range .CacheVolumes }}
-{{- $parts := split . ":" }}
-      - {{ index $parts 0 }}:{{ index $parts 1 }}
-{{- end }}
+```jinja
+{%- for vol in cache_volumes %}
+      - {{ vol.name }}:{{ vol.path }}
+{%- endfor %}
 ```
 
 ## Customizing Templates
 
 Templates are embedded in the binary, so modifying them requires rebuilding
-igor. To customize:
+stibbons. To customize:
 
-1. Edit the `.tmpl` file in `cmd/igor/internal/template/sources/`
-1. Rebuild: `cd cmd/igor && go build -o igor .`
-1. Re-run: `igor init` (or `igor update` when available)
+1. Edit the `.j2` file in `crates/containers-common/src/template/sources/`
+1. Rebuild: `cargo build --release -p stibbons` (or `just build`)
+1. Re-run: `stibbons init` (or `stibbons update`)
 
 For project-specific customizations that don't require template changes, add
 content outside the `IGOR:BEGIN`/`IGOR:END` markers in the generated files.
