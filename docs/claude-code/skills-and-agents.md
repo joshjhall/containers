@@ -430,29 +430,22 @@ Both the auditor and reviewer discover project-level skills automatically.
 
 ### Migration from audit-\* Agents
 
-The check-\* architecture incrementally replaces audit-\* agents. During
-migration, the checker agent discovers both old `audit-*` agents and new
-`check-*` skills. When a check-\* skill exists for a domain, it takes
-precedence over the corresponding audit-\* agent.
+The check-\* architecture incrementally replaces audit-\* agents: the `checker`
+agent discovers both, and a `check-*` skill takes precedence over the
+corresponding audit-\* agent for its domain. This precedence behavior is a
+property of the `review-audit` plugin and holds wherever it is installed.
 
-**Migration status:**
+The **per-domain migration status** is no longer tracked here. Since the
+`check-*` skills and `audit-*` agents were extracted into the sibling
+[`joshjhall/librarian`](https://github.com/joshjhall/librarian) repo (#669),
+their coverage status lives with that code — consult the `review-audit`
+plugin and the [librarian issue tracker](https://github.com/joshjhall/librarian/issues)
+for current per-domain state rather than a repo-local snapshot that would go
+stale here.
 
-| Domain       | check-\* skill(s)      | Status             |
-| ------------ | ---------------------- | ------------------ |
-| docs         | 5 check-docs-\* skills | Fully migrated     |
-| security     | `check-security`       | Partially migrated |
-| code-health  | `check-code-health`    | Partially migrated |
-| ai-config    | `check-ai-config`      | Partially migrated |
-| test-gaps    | none                   | Not started        |
-| architecture | none                   | Not started        |
-
-Partially migrated domains have check-\* skills covering a subset of the
-categories handled by the corresponding audit-\* agent. Both systems coexist
-during migration — the checker agent uses check-\* skills where available and
-falls back to audit-\* agents for uncovered domains.
-
-For detailed category-level gap analysis, completion criteria, and deprecation
-timeline, see [check-migration-status.md](check-migration-status.md).
+For the history of the in-repo `audit-*` → `check-*` extraction and where the
+`check-*` skills now live, see
+[check-migration-status.md](check-migration-status.md).
 
 ## Implementation Loops (loop-\* skills)
 
