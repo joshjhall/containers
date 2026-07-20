@@ -31,26 +31,55 @@
 #         glab label create "needs-triage" --color '#D4C5F9' \
 #           --description "Missing severity/effort labels"
 #
-# Note: `$GITLAB_API_TOKEN` is passed on the command line, so its value is
-# visible in the job container's process list for the duration of the run. On a
-# shared/self-hosted runner, scope the token as narrowly as GitLab allows.
+# Secret handling (residual risk — accepted). `gitlab-triage` accepts the API
+# token ONLY via its `--token` flag; upstream exposes no env-var or config-file
+# token source (its sole env var, GITLAB_TRIAGE_CACHE_DIR, is for the run cache,
+# not credentials). So `$GITLAB_API_TOKEN` is necessarily materialized in the
+# job container's process list (argv) for the run's duration — this cannot be
+# avoided by a config change here. The risk is accepted and mitigated by: GitLab
+# masking the variable in job logs, and scoping the token as narrowly as GitLab
+# allows (project/group access token, `api` scope, Reporter role) on shared or
+# self-hosted runners. Revisit if `gitlab-triage` gains an env/file token source.
 #
 # Run `gitlab-triage --dry-run` locally (see the job's script) to preview
 # actions without mutating issues.
 #
 # GITLAB_TRIAGE_VERSION pins the gem so a breaking upstream release cannot
-# silently change labeling behaviour (the job is `allow_failure: true`, so a
-# broken newer gem would fail quietly). Bump deliberately.
+# silently change labeling behaviour. Bump deliberately; the CI cache below is
+# keyed on this value, so a bump forces a clean reinstall.
+#
+# Reproducibility (transitive deps — deferred). Pinning the gem version does not
+# lock its transitive dependency graph; a fully reproducible install would use a
+# vendored `Gemfile` + `Gemfile.lock` with `bundle install --deployment`. That
+# is intentionally deferred: the top-level version pin plus the cross-run gem
+# cache below are the interim reproducibility measure. Track the bundler route as
+# a follow-up if the dependency tree ever drifts in a way that matters.
 
 variables:
   GITLAB_TRIAGE_VERSION: "1.51.0"
 
 issue-triage:
   stage: .post
-  image: ruby:3.3-slim
+  # Patch-pinned (not the floating `ruby:3.3-slim`) to match this repo's
+  # pin-explicit-versions posture. Bump the patch deliberately.
+  image: ruby:3.3.12-slim
+  # Job-scoped, NOT a top-level variable: this file is a reusable include, and a
+  # top-level GEM_HOME would redirect RubyGems' install/lookup path for EVERY job
+  # in the consuming pipeline. Keeping it here confines it to this job so it can
+  # cache the gem (see `cache:` below) without leaking into unrelated Ruby jobs.
+  variables:
+    GEM_HOME: "$CI_PROJECT_DIR/.gem"
   rules:
     - if: '$CI_PIPELINE_SOURCE == "schedule"'
+  # Cache the installed gem across scheduled runs, keyed on the pinned version so
+  # a `GITLAB_TRIAGE_VERSION` bump invalidates the cache and reinstalls cleanly.
+  cache:
+    key: "gitlab-triage-$GITLAB_TRIAGE_VERSION"
+    paths:
+      - .gem/
+    policy: pull-push
   before_script:
+    - export PATH="$GEM_HOME/bin:$PATH"
     - gem install gitlab-triage --no-document --version "$GITLAB_TRIAGE_VERSION"
   script:
     - |
@@ -59,6 +88,16 @@ issue-triage:
         --host-url "$CI_SERVER_URL" \
         --source-id "$CI_PROJECT_PATH" \
         --policies-file .gitlab/triage/triage-policies.yml
-  # Triage is best-effort maintenance — a transient API hiccup should not fail
-  # the scheduled pipeline.
-  allow_failure: true
+  # No `allow_failure` — a genuinely broken scheduled triage run must surface via
+  # GitLab's standard pipeline-schedule failure notification rather than degrade
+  # labeling silently. Retry only the *transient* failure classes (runner/infra,
+  # timeouts, API hiccups) that `allow_failure: true` previously masked, so a blip
+  # self-heals while a deterministic `script_failure` (bad policy file, revoked
+  # token, gem crash) fails fast on the first attempt and alerts the schedule owner
+  # instead of re-running twice to no purpose.
+  retry:
+    max: 2
+    when:
+      - runner_system_failure
+      - stuck_or_timeout_failure
+      - api_failure
