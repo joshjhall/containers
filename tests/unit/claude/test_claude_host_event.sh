@@ -247,6 +247,130 @@ test_concurrent_primary_sessions_distinct_keys() {
 run_test test_concurrent_primary_sessions_distinct_keys "concurrent primary tabs get distinct host keys (#746)"
 
 # ===========================================================================
+# Orchestrator marker (#750). A session marked CLAUDE_SESSION_ROLE=orchestrator
+# — a non-golem session driving a fleet via /orchestrate — is a LABELED VARIANT
+# of `primary`: keyed `<project>-orchestrator-<short>` and titled
+# `<project> · orchestrator`, per-tab differentiated by the native session_id
+# exactly like primary, so the host monitor shows who is coordinating the fleet
+# (AC1) instead of an indistinct `primary` row.
+# ===========================================================================
+test_orchestrator_keyed_and_titled() {
+    local main proj body sid title
+    main=$(/usr/bin/mktemp -d)/orchproj
+    /usr/bin/mkdir -p "$main"
+    (
+        cd "$main"
+        /usr/bin/git init -q .
+        /usr/bin/git config user.email t@t.t
+        /usr/bin/git config user.name t
+        /usr/bin/git commit -q --allow-empty -m init
+    )
+    proj=$(/usr/bin/basename "$main")
+    body=$(run_hook_capture "$main" "Ended" '{"hook_event_name":"SessionEnd","session_id":"abcdef1234567890"}' CLAUDE_SESSION_ROLE=orchestrator)
+    sid=$(body_field "$body" '.session_id')
+    title=$(body_field "$body" '.title')
+    assert_equals "${proj}-orchestrator-abcdef12" "$sid" "orchestrator keyed by project + native session_id prefix"
+    assert_equals "${proj} · orchestrator" "$title" "orchestrator session title reads 'orchestrator', not 'primary'"
+    /usr/bin/rm -rf "$(/usr/bin/dirname "$main")"
+}
+run_test test_orchestrator_keyed_and_titled "orchestrator marker keyed <project>-orchestrator-<short> (#750)"
+
+# Two concurrent orchestrator tabs (different native session_ids) get DISTINCT
+# host keys — the same anti-collision guarantee as primary.
+test_concurrent_orchestrator_sessions_distinct_keys() {
+    local main body_a body_b sid_a sid_b
+    main=$(/usr/bin/mktemp -d)/orch2
+    /usr/bin/mkdir -p "$main"
+    (
+        cd "$main"
+        /usr/bin/git init -q .
+        /usr/bin/git config user.email t@t.t
+        /usr/bin/git config user.name t
+        /usr/bin/git commit -q --allow-empty -m init
+    )
+    body_a=$(run_hook_capture "$main" "Ended" '{"hook_event_name":"UserPromptSubmit","session_id":"aaaaaaaa11112222","prompt":"orch one"}' CLAUDE_SESSION_ROLE=orchestrator)
+    body_b=$(run_hook_capture "$main" "Ended" '{"hook_event_name":"UserPromptSubmit","session_id":"bbbbbbbb33334444","prompt":"orch two"}' CLAUDE_SESSION_ROLE=orchestrator)
+    sid_a=$(body_field "$body_a" '.session_id')
+    sid_b=$(body_field "$body_b" '.session_id')
+    assert_equals "orch2-orchestrator-aaaaaaaa" "$sid_a" "orchestrator tab one gets its own host key"
+    assert_equals "orch2-orchestrator-bbbbbbbb" "$sid_b" "orchestrator tab two gets its own host key"
+    if [ "$sid_a" = "$sid_b" ]; then
+        fail_test "concurrent orchestrator sessions must not collide on one host key"
+    else
+        pass_test
+    fi
+    /usr/bin/rm -rf "$(/usr/bin/dirname "$main")"
+}
+run_test test_concurrent_orchestrator_sessions_distinct_keys "concurrent orchestrator tabs get distinct host keys (#750)"
+
+# The marker acts ONLY on the primary fallback — a real golem is never
+# reclassified. $GOLEM_ID and the orchestrator marker set together -> still the
+# golem id (the golem arm outranks the marker).
+test_golem_id_outranks_orchestrator_marker() {
+    local main proj body sid
+    main=$(/usr/bin/mktemp -d)/orch3
+    /usr/bin/mkdir -p "$main"
+    (
+        cd "$main"
+        /usr/bin/git init -q .
+        /usr/bin/git config user.email t@t.t
+        /usr/bin/git config user.name t
+        /usr/bin/git commit -q --allow-empty -m init
+    )
+    proj=$(/usr/bin/basename "$main")
+    body=$(run_hook_capture "$main" "Ended" '{"hook_event_name":"SessionEnd","session_id":"ffff0000ffff0000"}' GOLEM_ID=golem-999 CLAUDE_SESSION_ROLE=orchestrator)
+    sid=$(body_field "$body" '.session_id')
+    assert_equals "${proj}-golem-999" "$sid" "GOLEM_ID outranks the orchestrator marker (marker only acts on the primary fallback)"
+    /usr/bin/rm -rf "$(/usr/bin/dirname "$main")"
+}
+run_test test_golem_id_outranks_orchestrator_marker "golem id outranks orchestrator marker (#750)"
+
+# An orchestrator is not in the per-issue pipeline, so a stray next-issue-*.json
+# in its checkout must NOT paint a phase verb — the activity line stays its own
+# prompt (mirrors the primary guard in test_primary_session_unaffected_by_state_file).
+test_orchestrator_session_no_phase_verb() {
+    local main proj body title
+    main=$(/usr/bin/mktemp -d)/orch4
+    /usr/bin/mkdir -p "$main"
+    (
+        cd "$main"
+        /usr/bin/git init -q .
+        /usr/bin/git config user.email t@t.t
+        /usr/bin/git config user.name t
+        /usr/bin/git commit -q --allow-empty -m init
+    )
+    proj=$(/usr/bin/basename "$main")
+    write_state "$main" 300 plan
+    body=$(run_hook_capture "$main" "Ended" '{"hook_event_name":"UserPromptSubmit","session_id":"cccccccc1111","prompt":"dispatching golems"}' CLAUDE_SESSION_ROLE=orchestrator)
+    title=$(body_field "$body" '.title')
+    assert_equals "${proj} · orchestrator · dispatching golems" "$title" "orchestrator keeps its prompt, no phase verb from a stray state file"
+    /usr/bin/rm -rf "$(/usr/bin/dirname "$main")"
+}
+run_test test_orchestrator_session_no_phase_verb "orchestrator session unaffected by a stray state file (#750)"
+
+# An unset marker (and a non-'orchestrator' value) falls through to primary —
+# the marker is fail-safe, never accidentally promoting a human session.
+test_unmarked_or_unknown_role_is_primary() {
+    local main proj body sid
+    main=$(/usr/bin/mktemp -d)/orch5
+    /usr/bin/mkdir -p "$main"
+    (
+        cd "$main"
+        /usr/bin/git init -q .
+        /usr/bin/git config user.email t@t.t
+        /usr/bin/git config user.name t
+        /usr/bin/git commit -q --allow-empty -m init
+    )
+    proj=$(/usr/bin/basename "$main")
+    # A non-orchestrator role value must NOT classify as orchestrator.
+    body=$(run_hook_capture "$main" "Ended" '{"hook_event_name":"SessionEnd","session_id":"abcdef1234567890"}' CLAUDE_SESSION_ROLE=something-else)
+    sid=$(body_field "$body" '.session_id')
+    assert_equals "${proj}-primary-abcdef12" "$sid" "an unknown CLAUDE_SESSION_ROLE falls through to primary (fail-safe)"
+    /usr/bin/rm -rf "$(/usr/bin/dirname "$main")"
+}
+run_test test_unmarked_or_unknown_role_is_primary "unknown CLAUDE_SESSION_ROLE falls through to primary (#750)"
+
+# ===========================================================================
 # $GOLEM_ID takes precedence over path resolution — a stamped golem is keyed by
 # its id even from a plain (non-worktree) cwd.
 # ===========================================================================

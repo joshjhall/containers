@@ -75,17 +75,23 @@ esac
 #      worktree root is cwd-independent: `git rev-parse --show-toplevel`
 #      returns `.../issue-N` even when the Notification fires from a
 #      subdirectory or a review-harness subagent with its own cwd.
-#   3. `primary` — a non-golem interactive session (a human in the main
-#      checkout, or an orchestrator driving a fleet). It is NOT a golem, so it
-#      must not carry the `golem-?` placeholder (which reads as a broken golem
-#      in the `just golems` feed). This keeps the feed in agreement with the
-#      host-event forwarder (claude-host-event.sh), which uses the same ladder.
-#      Concurrent primary sessions (multiple shell tabs in one repo) are
-#      differentiated by the Claude-native session_id (`primary-<short>`), the
-#      same scheme claude-host-event.sh uses — otherwise `just golems` groups
-#      the feed by `.golem` and two tabs would collapse onto one `primary` row,
-#      clobbering each other's gate state. `primary` (bare) only when the
-#      payload carries no session_id.
+#   3. $CLAUDE_SESSION_ROLE=orchestrator (#750) — a non-golem session driving a
+#      fleet of golems via /orchestrate. Like `primary` it has no stable unique
+#      id, so it is a LABELED VARIANT of it: differentiated per-tab by the
+#      Claude-native session_id (`orchestrator-<short>`) with the same scheme.
+#      This is the CONSUME side of a librarian-emitted marker (the /orchestrate
+#      skill exports it); until the emit side ships this arm is never taken.
+#   4. `primary` — a non-golem interactive session with no orchestrator marker
+#      (a human in the main checkout). It is NOT a golem, so it must not carry
+#      the `golem-?` placeholder (which reads as a broken golem in the
+#      `just golems` feed). This keeps the feed in agreement with the host-event
+#      forwarder (claude-host-event.sh), which uses the same ladder. Concurrent
+#      primary sessions (multiple shell tabs in one repo) are differentiated by
+#      the Claude-native session_id (`primary-<short>`), the same scheme
+#      claude-host-event.sh uses — otherwise `just golems` groups the feed by
+#      `.golem` and two tabs would collapse onto one `primary` row, clobbering
+#      each other's gate state. `primary` (bare) only when the payload carries
+#      no session_id.
 # The old `$TMUX` path was dead — the golem's `claude` process has no TMUX in
 # its environment even though tmux launched it — so it is gone.
 golem=""
@@ -97,7 +103,14 @@ if [ -z "$golem" ]; then
     case "$base" in
         issue-*) golem="golem-${base#issue-}" ;;
         golem-*) golem="$base" ;;
-        *) golem="primary${cc_session:+-$cc_session}" ;;
+        *)
+            # Orchestrator marker classifies before the bare `primary` fallback;
+            # both keep the per-tab session_id suffix. Unset/unknown -> primary.
+            case "${CLAUDE_SESSION_ROLE:-}" in
+                orchestrator) golem="orchestrator${cc_session:+-$cc_session}" ;;
+                *) golem="primary${cc_session:+-$cc_session}" ;;
+            esac
+            ;;
     esac
 fi
 
