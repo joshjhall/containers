@@ -170,6 +170,16 @@ pre-commit:
     # becomes one `just lint <name>` call. Falls back to `just lint v5`
     # (workspace) if no crate path is detectable — e.g., root `Cargo.toml`
     # or `.rustfmt.toml` changes.
+    #
+    # #286 AC "pre-commit hook builds stibbons for host platform": this hook
+    # fulfills it. `clippy` compiles the stibbons crate for the host target as
+    # a side effect of linting, so a commit touching stibbons cannot land
+    # without a successful host build. The pre-push `cargo-test` hook (below)
+    # is the stronger backstop — it compiles *and* runs the whole workspace.
+    # No dedicated `cargo build -p stibbons` step is added: it would only
+    # duplicate the compile these two hooks already perform. If `cargo-lint`
+    # is ever scoped to a subset of crates, restore explicit stibbons build
+    # coverage here so this AC does not silently regress.
 
     cargo-lint:
       glob: "{crates/**/*.rs,.rustfmt.toml,Cargo.toml}"

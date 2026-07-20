@@ -1,10 +1,9 @@
-# Igor Feature Reference
+# stibbons Feature Reference
 
-<!-- Generated from cmd/igor/internal/feature/registry.go — regenerate with:
-     cd cmd/igor && go run ./tools/gen-feature-docs (future)
-     For now, keep in sync manually when registry changes. -->
+<!-- Source of truth: crates/containers-common/src/feature/registry.rs
+     Keep this table in sync manually when the registry changes. -->
 
-Complete reference for all features available in the igor feature registry.
+Complete reference for all features available in the stibbons feature registry.
 Each feature maps to a Docker build argument (`INCLUDE_<FEATURE>=true`) in the
 containers build system.
 

@@ -1,11 +1,17 @@
-# Getting Started with Igor
+# Getting Started with stibbons
 
-Step-by-step guide for using igor to set up a devcontainer in a new or existing
-project.
+Step-by-step guide for using stibbons to set up a devcontainer in a new or
+existing project.
+
+> **Note:** stibbons is the Rust CLI that replaces the legacy Go `igor` binary.
+> The generated files, `.igor.yml` state file, and `IGOR:BEGIN`/`IGOR:END`
+> markers keep their names for backward compatibility.
 
 ## Prerequisites
 
-- **Go 1.23+** — required to build igor from source
+- **stibbons** — the CLI itself. Install a release binary with
+  `./bin/install-stibbons.sh`, or build from source (needs a Rust toolchain;
+  see [Step 2](#step-2-install-stibbons)).
 - **containers submodule** — the project must have the containers repo as a git
   submodule (typically at `containers/`)
 - **Docker** — needed to build and run the generated container
@@ -19,25 +25,37 @@ git submodule add https://github.com/joshjhall/containers.git containers
 git submodule update --init --recursive
 ```
 
-## Step 2: Build Igor
+## Step 2: Install stibbons
+
+### Option A: Release binary (recommended)
 
 ```bash
-cd containers/cmd/igor
-go build -o igor .
-cd ../../..
+./containers/bin/install-stibbons.sh
 ```
 
-You now have the binary at `containers/cmd/igor/igor`.
+This downloads the prebuilt binary for your host platform and installs it on
+your `PATH`.
+
+### Option B: Build from source
+
+Requires a Rust toolchain (`rustup`):
+
+```bash
+cargo build --release -p stibbons --manifest-path containers/Cargo.toml
+```
+
+The binary is written to `containers/target/release/stibbons`; add it to your
+`PATH` or invoke it by that path.
 
 ## Step 3: Run the Wizard
 
 From your project root:
 
 ```bash
-./containers/cmd/igor/igor init
+stibbons init
 ```
 
-Igor auto-detects:
+stibbons auto-detects:
 
 - **Project name** from the current directory name
 - **Containers path** by looking for `containers/Dockerfile`,
@@ -57,7 +75,7 @@ Walk through each wizard step:
 
 ## Step 4: Review Generated Files
 
-Igor creates five files:
+stibbons creates five files:
 
 ```text
 .devcontainer/
@@ -65,11 +83,11 @@ Igor creates five files:
   devcontainer.json     # VS Code configuration
   .env                  # Runtime environment variables
 .env.example            # Documented env template (commit this)
-.igor.yml               # Igor state file (commit this)
+.igor.yml               # stibbons state file (commit this)
 ```
 
 Review each file. Content between `=== IGOR:BEGIN ===` and `=== IGOR:END ===`
-markers is managed by igor. You can add custom content outside the markers.
+markers is managed by stibbons. You can add custom content outside the markers.
 
 ## Step 5: Build and Open the Container
 
@@ -89,7 +107,7 @@ docker compose -f .devcontainer/docker-compose.yml exec devcontainer bash
 
 ## Before and After
 
-### Before igor: Manual setup
+### Before stibbons: Manual setup
 
 Setting up a Python + Node.js dev container manually requires:
 
@@ -117,10 +135,10 @@ docker build -t myproject:dev \
 #   .devcontainer/.env (with language-specific env vars)
 ```
 
-### After igor: One command
+### After stibbons: One command
 
 ```bash
-./containers/cmd/igor/igor init
+stibbons init
 # Select Python, Python Dev, Node.js, Node.js Dev, Dev Tools, Docker, PostgreSQL Client
 # → All 5 files generated with correct build args, volumes, extensions, env vars
 ```
@@ -131,5 +149,6 @@ docker build -t myproject:dev \
   their dependencies
 - [Templates](templates.md) — how the template system works and how to
   customize output
-- [cmd/igor/README.md](../../cmd/igor/README.md) — full CLI reference and
-  `.igor.yml` schema
+- [`bin/install-stibbons.sh`](../../bin/install-stibbons.sh) — install the
+  stibbons CLI from release binaries. Run `stibbons --help` for the full CLI
+  reference.
