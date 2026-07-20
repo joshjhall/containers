@@ -110,6 +110,25 @@ run_hook_capture() {
 # Convenience: extract a field from the captured JSON body.
 body_field() { /usr/bin/printf '%s' "$1" | /usr/bin/jq -r "$2" 2>/dev/null; }
 
+# Seed a per-issue pipeline state file with a given phase into a worktree's
+# `.claude/memory/tmp/`, so the hook's phase→activity mapping has a file to
+# read. Args: <worktree> <issue-N> <phase-or-raw-json>. When the third arg looks
+# like JSON (starts with `{`) it is written verbatim (used to inject malformed
+# JSON); otherwise it is treated as a phase value in a minimal valid state file.
+write_state() {
+    local wt="$1" n="$2" phase="$3"
+    local tmp="$wt/.claude/memory/tmp"
+    /usr/bin/mkdir -p "$tmp"
+    case "$phase" in
+        '{'*) /usr/bin/printf '%s' "$phase" >"$tmp/next-issue-${n}.json" ;;
+        *)
+            /usr/bin/printf \
+                '{"version":2,"issue":%s,"title":"t","phase":"%s","started":"2026-07-19","platform":"github"}' \
+                "$n" "$phase" >"$tmp/next-issue-${n}.json"
+            ;;
+    esac
+}
+
 # ===========================================================================
 # Worktree golem: project resolves to the ROOT checkout, not `.worktrees`
 # (#746 defect 3), and the golem id is issue-N -> golem-N.
@@ -371,6 +390,241 @@ test_hook_always_exits_zero() {
     /usr/bin/rm -rf "$(/usr/bin/dirname "$(/usr/bin/dirname "$wt")")"
 }
 run_test test_hook_always_exits_zero "hook always exits 0 (fire-and-forget contract) (#746)"
+
+# ===========================================================================
+# Phase → activity mapping (#751). A golem in the /next-issue -> /ship-issue
+# pipeline persists a `phase` to next-issue-{N}.json; the hook surfaces it as the
+# activity portion of `title` ("<project> · golem-N · Planning") instead of the
+# launch-prompt text (which for a golem just re-states the issue number).
+# ===========================================================================
+test_golem_phase_maps_to_activity_verb() {
+    local wt root body title
+    wt=$(setup_worktree 730)
+    root=$(/usr/bin/basename "$(/usr/bin/dirname "$(/usr/bin/dirname "$wt")")")
+    write_state "$wt" 730 plan
+    # A UserPromptSubmit carrying the launch prompt: the phase verb must WIN over
+    # the prompt-derived text, proving the phase override is authoritative.
+    # STATE=Ended for synchronous POST (Working backgrounds the curl and races
+    # the capture read; see the #746 anti-collision test). The payload's
+    # UserPromptSubmit is what drives the title logic, independent of STATE.
+    body=$(run_hook_capture "$wt" "Ended" '{"hook_event_name":"UserPromptSubmit","session_id":"aa","prompt":"/workflow:next-issue 730 --level 3"}')
+    title=$(body_field "$body" '.title')
+    assert_equals "${root} · golem-730 · Planning" "$title" "phase=plan surfaces as 'Planning', overriding the launch prompt"
+    /usr/bin/rm -rf "$(/usr/bin/dirname "$(/usr/bin/dirname "$wt")")"
+}
+run_test test_golem_phase_maps_to_activity_verb "golem phase=plan -> activity 'Planning' (#751)"
+
+# Every phase value maps to its documented verb, on a non-UserPromptSubmit event
+# (proving the activity line is a live readout, not tied to prompt submission).
+test_all_phase_verbs() {
+    local wt root body title p verb
+    wt=$(setup_worktree 731)
+    root=$(/usr/bin/basename "$(/usr/bin/dirname "$(/usr/bin/dirname "$wt")")")
+    for pair in "select:Selecting" "plan:Planning" "implement:Building" "ship:Shipping"; do
+        p="${pair%%:*}"
+        verb="${pair##*:}"
+        write_state "$wt" 731 "$p"
+        body=$(run_hook_capture "$wt" "Ended" '{"hook_event_name":"SessionEnd","session_id":"bb"}')
+        title=$(body_field "$body" '.title')
+        assert_equals "${root} · golem-731 · ${verb}" "$title" "phase=${p} -> '${verb}' on a non-prompt event"
+    done
+    /usr/bin/rm -rf "$(/usr/bin/dirname "$(/usr/bin/dirname "$wt")")"
+}
+run_test test_all_phase_verbs "all pipeline phases map to their activity verbs (#751)"
+
+# No state file: a golem's UserPromptSubmit still falls back to the prompt-derived
+# title (the pre-#751 behavior), so the activity line is never worse than before.
+test_no_state_file_falls_back_to_prompt() {
+    local wt root body title
+    wt=$(setup_worktree 732)
+    root=$(/usr/bin/basename "$(/usr/bin/dirname "$(/usr/bin/dirname "$wt")")")
+    body=$(run_hook_capture "$wt" "Ended" '{"hook_event_name":"UserPromptSubmit","session_id":"cc","prompt":"do a thing"}')
+    title=$(body_field "$body" '.title')
+    assert_equals "${root} · golem-732 · do a thing" "$title" "no state file -> prompt-derived title (unchanged fallback)"
+    /usr/bin/rm -rf "$(/usr/bin/dirname "$(/usr/bin/dirname "$wt")")"
+}
+run_test test_no_state_file_falls_back_to_prompt "no state file falls back to prompt-derived title (#751)"
+
+# Malformed JSON in the state file must not crash the hook or emit a verb — it
+# degrades to the bare label (no prompt here to fall back to).
+test_malformed_state_file_graceful() {
+    local wt root body title
+    wt=$(setup_worktree 733)
+    root=$(/usr/bin/basename "$(/usr/bin/dirname "$(/usr/bin/dirname "$wt")")")
+    write_state "$wt" 733 '{ this is not json'
+    body=$(run_hook_capture "$wt" "Ended" '{"hook_event_name":"SessionEnd","session_id":"dd"}')
+    title=$(body_field "$body" '.title')
+    assert_equals "${root} · golem-733" "$title" "malformed state JSON -> bare label, no verb, no crash"
+    /usr/bin/rm -rf "$(/usr/bin/dirname "$(/usr/bin/dirname "$wt")")"
+}
+run_test test_malformed_state_file_graceful "malformed state file degrades gracefully (#751)"
+
+# An unknown phase value (schema drift / future phase) is not in the verb map, so
+# it falls back rather than surfacing a raw phase string.
+test_unknown_phase_falls_back() {
+    local wt root body title
+    wt=$(setup_worktree 734)
+    root=$(/usr/bin/basename "$(/usr/bin/dirname "$(/usr/bin/dirname "$wt")")")
+    write_state "$wt" 734 weird
+    body=$(run_hook_capture "$wt" "Ended" '{"hook_event_name":"UserPromptSubmit","session_id":"ee","prompt":"fallback prompt"}')
+    title=$(body_field "$body" '.title')
+    assert_equals "${root} · golem-734 · fallback prompt" "$title" "unknown phase -> prompt fallback, not the raw phase"
+    /usr/bin/rm -rf "$(/usr/bin/dirname "$(/usr/bin/dirname "$wt")")"
+}
+run_test test_unknown_phase_falls_back "unknown phase value falls back (verb-map miss) (#751)"
+
+# Container golem (AGENT_ID, id has no issue number): the phase is resolved from
+# the SOLE per-issue state file via the glob fallback.
+test_agent_id_golem_phase_from_sole_state_file() {
+    local main proj body title
+    main=$(/usr/bin/mktemp -d)/agentproj
+    /usr/bin/mkdir -p "$main"
+    (
+        cd "$main"
+        /usr/bin/git init -q .
+        /usr/bin/git config user.email t@t.t
+        /usr/bin/git config user.name t
+        /usr/bin/git commit -q --allow-empty -m init
+    )
+    proj=$(/usr/bin/basename "$main")
+    write_state "$main" 555 implement
+    body=$(run_hook_capture "$main" "Ended" '{"hook_event_name":"SessionEnd","session_id":"ff"}' AGENT_ID=agent07)
+    title=$(body_field "$body" '.title')
+    assert_equals "${proj} · agent07 · Building" "$title" "AGENT_ID golem resolves phase from the sole state file"
+    /usr/bin/rm -rf "$(/usr/bin/dirname "$main")"
+}
+run_test test_agent_id_golem_phase_from_sole_state_file "AGENT_ID golem phase via sole-state-file glob (#751)"
+
+# The singleton next-issue-queue.json is NOT a per-issue state file: with only it
+# present (no next-issue-{N}.json), the glob fallback must find nothing.
+test_queue_file_excluded_from_glob() {
+    local main proj tmp body title
+    main=$(/usr/bin/mktemp -d)/queueproj
+    /usr/bin/mkdir -p "$main"
+    (
+        cd "$main"
+        /usr/bin/git init -q .
+        /usr/bin/git config user.email t@t.t
+        /usr/bin/git config user.name t
+        /usr/bin/git commit -q --allow-empty -m init
+    )
+    proj=$(/usr/bin/basename "$main")
+    tmp="$main/.claude/memory/tmp"
+    /usr/bin/mkdir -p "$tmp"
+    /usr/bin/printf '{"target":9,"remaining":[9]}' >"$tmp/next-issue-queue.json"
+    body=$(run_hook_capture "$main" "Ended" '{"hook_event_name":"UserPromptSubmit","session_id":"gg","prompt":"q prompt"}' AGENT_ID=agent08)
+    title=$(body_field "$body" '.title')
+    assert_equals "${proj} · agent08 · q prompt" "$title" "queue file is excluded; falls back to prompt"
+    /usr/bin/rm -rf "$(/usr/bin/dirname "$main")"
+}
+run_test test_queue_file_excluded_from_glob "next-issue-queue.json excluded from per-issue glob (#751)"
+
+# A primary/human session must never grow a phase verb even if a stray state file
+# exists in its checkout — the activity line stays the human's own prompt.
+test_primary_session_unaffected_by_state_file() {
+    local main proj body title
+    main=$(/usr/bin/mktemp -d)/humanproj
+    /usr/bin/mkdir -p "$main"
+    (
+        cd "$main"
+        /usr/bin/git init -q .
+        /usr/bin/git config user.email t@t.t
+        /usr/bin/git config user.name t
+        /usr/bin/git commit -q --allow-empty -m init
+    )
+    proj=$(/usr/bin/basename "$main")
+    write_state "$main" 200 plan
+    body=$(run_hook_capture "$main" "Ended" '{"hook_event_name":"UserPromptSubmit","session_id":"hhhhhhhh1111","prompt":"human task"}')
+    title=$(body_field "$body" '.title')
+    assert_equals "${proj} · primary · human task" "$title" "primary session keeps its prompt, no phase verb"
+    /usr/bin/rm -rf "$(/usr/bin/dirname "$main")"
+}
+run_test test_primary_session_unaffected_by_state_file "primary session unaffected by a stray state file (#751)"
+
+# A golem-N whose OWN next-issue-N.json is absent must NOT borrow the phase of an
+# unrelated issue's state file that happens to sit in the same worktree (a stale
+# leftover). The glob fallback is gated to AGENT_ID golems (no issue number) —
+# for a numbered golem a missing own-file yields no verb (prompt/bare fallback).
+test_numbered_golem_ignores_unrelated_state_file() {
+    local wt root body title
+    wt=$(setup_worktree 740)
+    root=$(/usr/bin/basename "$(/usr/bin/dirname "$(/usr/bin/dirname "$wt")")")
+    # Seed a DIFFERENT issue's state file; golem-740's own file is absent.
+    write_state "$wt" 999 implement
+    body=$(run_hook_capture "$wt" "Ended" '{"hook_event_name":"UserPromptSubmit","session_id":"ii","prompt":"launch prompt"}')
+    title=$(body_field "$body" '.title')
+    assert_equals "${root} · golem-740 · launch prompt" "$title" "numbered golem does not borrow an unrelated issue's phase"
+    /usr/bin/rm -rf "$(/usr/bin/dirname "$(/usr/bin/dirname "$wt")")"
+}
+run_test test_numbered_golem_ignores_unrelated_state_file "numbered golem ignores unrelated state file (no false phase) (#751)"
+
+# Ambiguous AGENT_ID case: 2+ per-issue state files -> the fallback gives up
+# (can't tell which issue this golem is on) and falls back to the prompt.
+test_agent_id_ambiguous_multiple_state_files() {
+    local main proj body title
+    main=$(/usr/bin/mktemp -d)/ambigproj
+    /usr/bin/mkdir -p "$main"
+    (
+        cd "$main"
+        /usr/bin/git init -q .
+        /usr/bin/git config user.email t@t.t
+        /usr/bin/git config user.name t
+        /usr/bin/git commit -q --allow-empty -m init
+    )
+    proj=$(/usr/bin/basename "$main")
+    write_state "$main" 501 plan
+    write_state "$main" 502 ship
+    body=$(run_hook_capture "$main" "Ended" '{"hook_event_name":"UserPromptSubmit","session_id":"jj","prompt":"agent prompt"}' AGENT_ID=agent09)
+    title=$(body_field "$body" '.title')
+    assert_equals "${proj} · agent09 · agent prompt" "$title" "ambiguous multi-file glob gives up, falls back to prompt"
+    /usr/bin/rm -rf "$(/usr/bin/dirname "$main")"
+}
+run_test test_agent_id_ambiguous_multiple_state_files "AGENT_ID ambiguous multi-file glob -> fallback (#751)"
+
+# Valid JSON but no `phase` key (or a non-string phase) degrades like an unknown
+# phase: no verb, bare label.
+test_valid_json_missing_phase_key() {
+    local wt root body title
+    wt=$(setup_worktree 741)
+    root=$(/usr/bin/basename "$(/usr/bin/dirname "$(/usr/bin/dirname "$wt")")")
+    write_state "$wt" 741 '{"version":2,"issue":741}'
+    body=$(run_hook_capture "$wt" "Ended" '{"hook_event_name":"SessionEnd","session_id":"kk"}')
+    title=$(body_field "$body" '.title')
+    assert_equals "${root} · golem-741" "$title" "valid JSON with no phase key -> bare label, no verb"
+    /usr/bin/rm -rf "$(/usr/bin/dirname "$(/usr/bin/dirname "$wt")")"
+}
+run_test test_valid_json_missing_phase_key "valid JSON missing 'phase' key degrades gracefully (#751)"
+
+# Non-git directory: the `toplevel` shell resolution falls back to $(pwd); the
+# hook must still exit 0 and emit a valid primary-keyed payload (no state file
+# exists there, so no verb).
+test_non_git_dir_pwd_fallback() {
+    local dir body sid rc=0
+    dir=$(/usr/bin/mktemp -d)/plain
+    /usr/bin/mkdir -p "$dir"
+    body=$(run_hook_capture "$dir" "Ended" '{"hook_event_name":"SessionEnd","session_id":"abcdef1234567890"}') || rc=$?
+    sid=$(body_field "$body" '.session_id')
+    # basename of the non-git dir becomes the project; primary session, bare-ish key.
+    assert_equals "plain-primary-abcdef12" "$sid" "non-git dir: pwd-fallback still yields a valid primary key"
+    /usr/bin/rm -rf "$(/usr/bin/dirname "$dir")"
+}
+run_test test_non_git_dir_pwd_fallback "non-git dir pwd-fallback exits with valid payload (#751)"
+
+# Contract still holds with a state file present: the hook exits 0.
+test_hook_exits_zero_with_state_file() {
+    local wt rc=0
+    wt=$(setup_worktree 735)
+    write_state "$wt" 735 ship
+    (
+        cd "$wt"
+        env -u GOLEM_ID PATH="/usr/bin:/bin" \
+            NOTCHBAR_AGENTS_HOST=127.0.0.1 NOTCHBAR_AGENTS_PORT=59990 \
+            "$HOOK" Working <<<'{"hook_event_name":"UserPromptSubmit","session_id":"x"}' >/dev/null 2>&1
+    ) || rc=$?
+    assert_equals "0" "$rc" "hook exits 0 with a state file present (fire-and-forget)"
+    /usr/bin/rm -rf "$(/usr/bin/dirname "$(/usr/bin/dirname "$wt")")"
+}
+run_test test_hook_exits_zero_with_state_file "hook exits 0 with a state file present (#751)"
 
 # ===========================================================================
 # Generate report
