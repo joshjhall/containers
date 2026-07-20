@@ -100,6 +100,14 @@ if [ -z "$project" ]; then
 fi
 [ -z "$project" ] && project="project"
 
+# Worktree root for this session — the golem's per-issue pipeline state file
+# (`.claude/memory/tmp/next-issue-{N}.json`) lives under it. Resolved HERE (not
+# in python) so the python block stays git-free / pure-stdlib, mirroring the
+# existing split where the shell does all git resolution. Best-effort: an empty
+# result falls back to $(pwd) and the phase lookup simply finds nothing.
+toplevel="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+[ -z "$toplevel" ] && toplevel="$(pwd)"
+
 # Build the payload. Prefer python3 (correct JSON + state refinement from the
 # hook body, mirroring Top Shelf's mapping); fall back to a minimal hand-rolled
 # object so the event still registers if python3 is unavailable.
@@ -107,8 +115,9 @@ payload=""
 if command -v python3 >/dev/null 2>&1; then
     payload=$(
         STATE="$STATE" HOOK_JSON="$HOOK_JSON" PROJECT="$project" GOLEM="$golem" \
+            TOPLEVEL="$toplevel" \
             python3 - <<'PY' 2>/dev/null
-import json, os, sys
+import glob, json, os, re, sys
 
 try:
     d = json.loads(os.environ.get("HOOK_JSON") or "{}")
@@ -150,13 +159,67 @@ else:
     label = "{}-{}".format(project, golem)
     session_id = label
 
-title = ""
-if d.get("hook_event_name") == "UserPromptSubmit":
+# Activity line. A golem in the /next-issue -> /ship-issue pipeline persists a
+# `phase` to <worktree>/.claude/memory/tmp/next-issue-{N}.json; surface THAT as
+# the activity ("Planning"/"Building"/...) instead of the launch-prompt text,
+# which for a golem degrades to the issue reference already in `golem`. Read on
+# every event (not just UserPromptSubmit) so the line is a live phase readout.
+PHASE_VERBS = {
+    "select": "Selecting",
+    "plan": "Planning",
+    "implement": "Building",
+    "ship": "Shipping",
+}
+
+
+def resolve_phase(toplevel, golem):
+    """Friendly verb for the golem's current pipeline phase, or "".
+
+    Best-effort by contract: a primary session, a missing/malformed state file,
+    or an unknown phase all yield "" so the caller falls back to the
+    prompt-derived title. Never raises.
+    """
+    if not toplevel or golem == "primary":
+        return ""
+    tmpdir = os.path.join(toplevel, ".claude", "memory", "tmp")
+    candidate = None
+    m = re.match(r"golem-(\d+)$", golem)  # golem-N -> next-issue-N.json
+    if m:
+        p = os.path.join(tmpdir, "next-issue-{}.json".format(m.group(1)))
+        if os.path.isfile(p):
+            candidate = p
+    if candidate is None and m is None:
+        # AGENT_ID container golems have no issue number in the id; fall back to
+        # the sole per-issue state file if exactly one exists (the singleton
+        # next-issue-queue.json is not a per-issue file — exclude it). This is
+        # gated on `m is None` (no issue number in the id): a golem-N whose own
+        # next-issue-N.json is simply absent must NOT borrow an unrelated issue's
+        # phase from a stray file left in the same worktree — that would show a
+        # wrong phase, the exact confusion this feature removes.
+        files = [
+            f
+            for f in glob.glob(os.path.join(tmpdir, "next-issue-*.json"))
+            if not f.endswith("next-issue-queue.json")
+        ]
+        if len(files) == 1:
+            candidate = files[0]
+    if not candidate:
+        return ""
+    try:
+        with open(candidate) as fh:
+            phase = json.load(fh).get("phase")
+    except Exception:
+        return ""
+    return PHASE_VERBS.get(phase, "")
+
+
+detail = resolve_phase(os.environ.get("TOPLEVEL"), golem)
+if not detail and d.get("hook_event_name") == "UserPromptSubmit":
     prompt = d.get("prompt")
     if isinstance(prompt, str) and prompt.strip():
-        title = prompt.strip()[:120]
+        detail = prompt.strip()[:120]
 title_label = "{} · {}".format(project, golem)
-title = "{} · {}".format(title_label, title) if title else title_label
+title = "{} · {}".format(title_label, detail) if detail else title_label
 
 sys.stdout.write(json.dumps({
     "state": state,

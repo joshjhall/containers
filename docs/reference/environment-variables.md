@@ -464,6 +464,19 @@ other) events — the same invariants as the container `claude-setup` merge. Aft
 `install`, a worktree golem reports to the host monitor bridge with the same
 `<project>-golem-N` identity as a container golem.
 
+#### Golem activity line (pipeline phase)
+
+For a **golem** session the host title's activity portion reflects the golem's
+current `/next-issue` → `/ship-issue` phase rather than its launch prompt (which
+just re-states the issue number already in the golem name). The forwarder reads
+`phase` from the golem's per-issue state file
+(`<worktree>/.claude/memory/tmp/next-issue-{N}.json`) and maps it to a verb:
+`select` → `Selecting`, `plan` → `Planning`, `implement` → `Building`,
+`ship` → `Shipping`. When no phase is available (no state file yet, a
+primary/human session, or a malformed/unknown value) it falls back to the
+prior prompt-derived title. The read is best-effort and never blocks the
+session.
+
 ### Retry Configuration
 
 | Variable              | Default | Description                                        |
