@@ -258,6 +258,35 @@ test_orchestrator_feed_id() {
 }
 run_test test_orchestrator_feed_id "orchestrator marker surfaces as orchestrator-<short> in the feed (#750)"
 
+# Two concurrent orchestrator tabs (different native session_ids) in the SAME
+# plain repo get DISTINCT feed ids — the same anti-collision guarantee as
+# primary (test_concurrent_primary_sessions_distinct). Without the per-tab
+# session_id suffix both `/orchestrate` tabs would collapse onto one
+# `orchestrator` feed row and clobber each other's gate state (gap 1 / #756).
+test_concurrent_orchestrator_sessions_distinct() {
+    local main got_a got_b
+    main=$(/usr/bin/mktemp -d)/plainrepo
+    /usr/bin/mkdir -p "$main"
+    (
+        cd "$main"
+        /usr/bin/git init -q .
+        /usr/bin/git config user.email t@t.t
+        /usr/bin/git config user.name t
+        /usr/bin/git commit -q --allow-empty -m init
+    )
+    got_a=$(run_hook_orch_session "$HOOK_REPO" "$main" "aaaaaaaa11112222")
+    got_b=$(run_hook_orch_session "$HOOK_REPO" "$main" "bbbbbbbb33334444")
+    assert_equals "orchestrator-aaaaaaaa" "$got_a" "orchestrator tab one keyed by its session_id"
+    assert_equals "orchestrator-bbbbbbbb" "$got_b" "orchestrator tab two keyed by its session_id"
+    if [ "$got_a" = "$got_b" ]; then
+        fail_test "concurrent orchestrator sessions must not collide on one feed id"
+    else
+        pass_test
+    fi
+    /usr/bin/rm -rf "$(/usr/bin/dirname "$main")"
+}
+run_test test_concurrent_orchestrator_sessions_distinct "concurrent orchestrator tabs get distinct feed ids (#756)"
+
 # The worktree-root arm outranks the marker: an issue-N worktree with the marker
 # set is still `golem-N` (the marker only acts on the primary fallback).
 test_worktree_root_outranks_orchestrator_marker() {
@@ -268,6 +297,68 @@ test_worktree_root_outranks_orchestrator_marker() {
     /usr/bin/rm -rf "$(/usr/bin/dirname "$(/usr/bin/dirname "$wt")")"
 }
 run_test test_worktree_root_outranks_orchestrator_marker "worktree golem outranks orchestrator marker (#750)"
+
+# ===========================================================================
+# $GOLEM_ID outranks the orchestrator marker: a stamped golem with the marker
+# also set is still keyed by its GOLEM_ID (the marker only acts on the primary
+# fallback). This is golem-notify's arm of the precedence matrix that #750 left
+# untested — host-event tests the symmetric GOLEM_ID-vs-marker case (gap 3 / #756).
+# ===========================================================================
+test_golem_id_outranks_orchestrator_marker() {
+    local main got
+    main=$(/usr/bin/mktemp -d)/plainrepo
+    /usr/bin/mkdir -p "$main"
+    (
+        cd "$main"
+        /usr/bin/git init -q .
+        /usr/bin/git config user.email t@t.t
+        /usr/bin/git config user.name t
+        /usr/bin/git commit -q --allow-empty -m init
+    )
+    # Env carries BOTH a valid GOLEM_ID and the orchestrator marker; GOLEM_ID wins.
+    got=$(
+        cd "$main"
+        GOLEM_ID=golem-999 CLAUDE_SESSION_ROLE=orchestrator "$HOOK_REPO" \
+            <<<'{"message":"needs permission","session_id":"aaaaaaaa11112222"}' >/dev/null 2>&1
+        common_dir="$(/usr/bin/git rev-parse --git-common-dir)"
+        case "$common_dir" in /*) ;; *) common_dir="$(/usr/bin/pwd)/$common_dir" ;; esac
+        /usr/bin/jq -r '.golem' "$(/usr/bin/dirname "$common_dir")/.worktrees/.status/feed.jsonl" 2>/dev/null | /usr/bin/tail -1
+    )
+    assert_equals "golem-999" "$got" "GOLEM_ID outranks the orchestrator marker (marker only acts on the primary fallback)"
+    /usr/bin/rm -rf "$(/usr/bin/dirname "$main")"
+}
+run_test test_golem_id_outranks_orchestrator_marker "GOLEM_ID outranks orchestrator marker (#756)"
+
+# ===========================================================================
+# An unset marker — and, defensively, a non-`orchestrator` value — falls through
+# to `primary`: the marker is fail-safe and never accidentally promotes a human
+# session to `orchestrator`. Mirrors host-event's
+# test_unmarked_or_unknown_role_is_primary (gap 2 / #756).
+# ===========================================================================
+test_unknown_role_is_primary() {
+    local main got
+    main=$(/usr/bin/mktemp -d)/plainrepo
+    /usr/bin/mkdir -p "$main"
+    (
+        cd "$main"
+        /usr/bin/git init -q .
+        /usr/bin/git config user.email t@t.t
+        /usr/bin/git config user.name t
+        /usr/bin/git commit -q --allow-empty -m init
+    )
+    # A non-orchestrator role value must NOT classify as orchestrator.
+    got=$(
+        cd "$main"
+        env -u GOLEM_ID CLAUDE_SESSION_ROLE=something-else "$HOOK_REPO" \
+            <<<'{"message":"needs permission","session_id":"aaaaaaaa11112222"}' >/dev/null 2>&1
+        common_dir="$(/usr/bin/git rev-parse --git-common-dir)"
+        case "$common_dir" in /*) ;; *) common_dir="$(/usr/bin/pwd)/$common_dir" ;; esac
+        /usr/bin/jq -r '.golem' "$(/usr/bin/dirname "$common_dir")/.worktrees/.status/feed.jsonl" 2>/dev/null | /usr/bin/tail -1
+    )
+    assert_equals "primary-aaaaaaaa" "$got" "an unknown CLAUDE_SESSION_ROLE falls through to primary (fail-safe)"
+    /usr/bin/rm -rf "$(/usr/bin/dirname "$main")"
+}
+run_test test_unknown_role_is_primary "unknown CLAUDE_SESSION_ROLE falls through to primary (#756)"
 
 # ===========================================================================
 # A primary session whose Notification payload has NO session_id falls back to
@@ -428,6 +519,89 @@ test_unknown_message_defaults_to_gate() {
     /usr/bin/rm -rf "$(/usr/bin/dirname "$(/usr/bin/dirname "$wt")")"
 }
 run_test test_unknown_message_defaults_to_gate "unrecognized message defaults to event=gate (#600)"
+
+# ===========================================================================
+# Cross-hook label agreement (gap 4 / #756). #750's "both hooks agree" AC was
+# only satisfied by matching hardcoded literals across the two test files —
+# nothing drove BOTH hooks with identical input and diffed the resulting label.
+# This test does exactly that: one plain repo, identical env (the orchestrator
+# marker) and identical payload session_id fed to both hooks, then asserts the
+# host-event POST key is the golem-notify feed id with the `<project>-` prefix.
+#
+# golem-notify emits `.golem` = `<role>-<short>` (no project prefix — the feed is
+# already per-repo); claude-host-event POSTs `.session_id` = `<project>-<role>-<short>`
+# (the host bridge keys globally, so it needs the project). Agreement therefore
+# means: host_event_session_id == "<project>-" + golem_notify_golem.
+# ===========================================================================
+HOOK_HOST_EVENT="$CONTAINERS_DIR/lib/features/templates/claude/hooks/claude-host-event.sh"
+
+test_cross_hook_label_agreement() {
+    local main proj stubdir capture role_env
+    main=$(/usr/bin/mktemp -d)/plainrepo
+    /usr/bin/mkdir -p "$main"
+    (
+        cd "$main"
+        /usr/bin/git init -q .
+        /usr/bin/git config user.email t@t.t
+        /usr/bin/git config user.name t
+        /usr/bin/git commit -q --allow-empty -m init
+    )
+    proj=$(/usr/bin/basename "$main")
+
+    # Identical input for both hooks: the orchestrator marker + one session_id.
+    role_env="orchestrator"
+    local session_id="aaaaaaaa11112222"
+
+    # 1. golem-notify -> read `.golem` from its feed.
+    local golem_id
+    golem_id=$(
+        cd "$main"
+        env -u GOLEM_ID CLAUDE_SESSION_ROLE="$role_env" "$HOOK_REPO" \
+            <<<"{\"message\":\"needs permission\",\"session_id\":\"$session_id\"}" >/dev/null 2>&1
+        common_dir="$(/usr/bin/git rev-parse --git-common-dir)"
+        case "$common_dir" in /*) ;; *) common_dir="$(/usr/bin/pwd)/$common_dir" ;; esac
+        /usr/bin/jq -r '.golem' "$(/usr/bin/dirname "$common_dir")/.worktrees/.status/feed.jsonl" 2>/dev/null | /usr/bin/tail -1
+    )
+
+    # 2. claude-host-event -> capture the POST `.session_id` via a curl stub that
+    #    records --data-raw. STATE=Ended makes the POST synchronous (non-terminal
+    #    states background the curl and would race the capture read).
+    stubdir=$(/usr/bin/mktemp -d)
+    capture="$stubdir/body.json"
+    /usr/bin/cat >"$stubdir/curl" <<'STUB'
+#!/usr/bin/env bash
+prev=""
+for a in "$@"; do
+    if [ "$prev" = "--data-raw" ]; then /usr/bin/printf '%s' "$a" >"$CAPTURE"; break; fi
+    prev="$a"
+done
+exit 0
+STUB
+    /usr/bin/chmod +x "$stubdir/curl"
+    local host_sid
+    host_sid=$(
+        cd "$main"
+        # Clear BASH_ENV so /etc/bash_env can't rebuild PATH and re-shadow the
+        # stub curl with the real one (see #618). Scrub GOLEM_ID/AGENT_ID so only
+        # the orchestrator marker classifies this session.
+        env -u GOLEM_ID -u AGENT_ID -u BASH_ENV \
+            CAPTURE="$capture" PATH="$stubdir:$PATH" \
+            NOTCHBAR_AGENTS_HOST=127.0.0.1 NOTCHBAR_AGENTS_PORT=59990 \
+            CLAUDE_SESSION_ROLE="$role_env" \
+            "$HOOK_HOST_EVENT" Ended \
+            <<<"{\"hook_event_name\":\"SessionEnd\",\"session_id\":\"$session_id\"}" >/dev/null 2>&1
+        /usr/bin/jq -r '.session_id' "$capture" 2>/dev/null
+    )
+
+    # Sanity: both hooks resolved a non-empty label for identical input.
+    assert_equals "orchestrator-aaaaaaaa" "$golem_id" "golem-notify feed id for the shared input"
+    assert_equals "${proj}-orchestrator-aaaaaaaa" "$host_sid" "host-event POST key for the shared input"
+    # The core agreement assertion: host-event key == "<project>-" + feed id.
+    assert_equals "${proj}-${golem_id}" "$host_sid" "both hooks classify identical input to the same label"
+
+    /usr/bin/rm -rf "$stubdir" "$(/usr/bin/dirname "$main")"
+}
+run_test test_cross_hook_label_agreement "both hooks agree on the label for identical input (#756)"
 
 # ===========================================================================
 # Generate report

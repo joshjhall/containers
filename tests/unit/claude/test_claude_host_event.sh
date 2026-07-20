@@ -325,6 +325,30 @@ test_golem_id_outranks_orchestrator_marker() {
 }
 run_test test_golem_id_outranks_orchestrator_marker "golem id outranks orchestrator marker (#750)"
 
+# $AGENT_ID (container golems) also outranks the marker — the OTHER precedence
+# arm ahead of the orchestrator classification. #750 tested only GOLEM_ID-vs-marker
+# on this hook; AGENT_ID-vs-marker was the untested arm (gap 3 / #756). With both
+# AGENT_ID and the marker set, the AGENT_ID golem key wins (the marker only acts
+# on the bare primary fallback).
+test_agent_id_outranks_orchestrator_marker() {
+    local main proj body sid
+    main=$(/usr/bin/mktemp -d)/orch6
+    /usr/bin/mkdir -p "$main"
+    (
+        cd "$main"
+        /usr/bin/git init -q .
+        /usr/bin/git config user.email t@t.t
+        /usr/bin/git config user.name t
+        /usr/bin/git commit -q --allow-empty -m init
+    )
+    proj=$(/usr/bin/basename "$main")
+    body=$(run_hook_capture "$main" "Ended" '{"hook_event_name":"SessionEnd","session_id":"ffff0000ffff0000"}' AGENT_ID=agent07 CLAUDE_SESSION_ROLE=orchestrator)
+    sid=$(body_field "$body" '.session_id')
+    assert_equals "${proj}-agent07" "$sid" "AGENT_ID outranks the orchestrator marker (marker only acts on the primary fallback)"
+    /usr/bin/rm -rf "$(/usr/bin/dirname "$main")"
+}
+run_test test_agent_id_outranks_orchestrator_marker "AGENT_ID outranks orchestrator marker (#756)"
+
 # An orchestrator is not in the per-issue pipeline, so a stray next-issue-*.json
 # in its checkout must NOT paint a phase verb — the activity line stays its own
 # prompt (mirrors the primary guard in test_primary_session_unaffected_by_state_file).
@@ -493,6 +517,97 @@ test_python_absent_fallback_primary_keyed() {
     /usr/bin/rm -rf "$stubdir" "$(/usr/bin/dirname "$main")"
 }
 run_test test_python_absent_fallback_primary_keyed "python-absent minimal fallback is valid + primary-keyed (#746)"
+
+# ===========================================================================
+# python-absent fallback, orchestrator arm: with python3 absent AND the
+# orchestrator marker set, the session takes the SAME bare "${project}-orchestrator"
+# key as primary (no per-tab session_id suffix — that differentiation lives only
+# in the python path). Locks in the behavior the fallback comment documents so a
+# future change special-casing orchestrator on this path is caught (#756).
+# ===========================================================================
+test_python_absent_fallback_orchestrator_keyed() {
+    local main proj stubdir capture body sid
+    main=$(/usr/bin/mktemp -d)/proj6b
+    /usr/bin/mkdir -p "$main"
+    (
+        cd "$main"
+        /usr/bin/git init -q .
+        /usr/bin/git config user.email t@t.t
+        /usr/bin/git config user.name t
+        /usr/bin/git commit -q --allow-empty -m init
+    )
+    proj=$(/usr/bin/basename "$main")
+
+    stubdir=$(/usr/bin/mktemp -d)
+    capture="$stubdir/body.json"
+    make_curl_stub "$stubdir" "$capture"
+    /usr/bin/ln -s "$(command -v bash)" "$stubdir/bash"
+    /usr/bin/ln -s "$(command -v git)" "$stubdir/git"
+    /usr/bin/ln -s "$(command -v cat)" "$stubdir/cat"
+    /usr/bin/ln -s "$(command -v basename)" "$stubdir/basename"
+    /usr/bin/ln -s "$(command -v dirname)" "$stubdir/dirname"
+    /usr/bin/ln -s "$(command -v pwd)" "$stubdir/pwd" 2>/dev/null || true
+    (
+        cd "$main"
+        /usr/bin/env -i PATH="$stubdir" \
+            NOTCHBAR_AGENTS_HOST=127.0.0.1 NOTCHBAR_AGENTS_PORT=59990 \
+            CLAUDE_SESSION_ROLE=orchestrator \
+            "$HOOK" Ended <<<'{"hook_event_name":"SessionEnd","session_id":"abcdef1234567890"}' >/dev/null 2>&1
+    )
+    body=$(/usr/bin/cat "$capture" 2>/dev/null)
+    sid=$(body_field "$body" '.session_id')
+    assert_equals "${proj}-orchestrator" "$sid" "python-absent orchestrator takes the same bare key as primary (no session_id suffix)"
+    /usr/bin/rm -rf "$stubdir" "$(/usr/bin/dirname "$main")"
+}
+run_test test_python_absent_fallback_orchestrator_keyed "python-absent fallback: orchestrator gets the bare key (#756)"
+
+# ===========================================================================
+# python-absent fallback, injection safety: the bare-key payload interpolates
+# $project/$golem straight into a JSON string, and $golem can come from an
+# UNVALIDATED $AGENT_ID (only GOLEM_ID is regex-gated). A quote-laden AGENT_ID
+# must be sanitized (backslashes dropped, quotes escaped) so the emitted payload
+# stays valid JSON with no injected key — parity with golem-notify.sh's
+# test_jq_absent_fallback_valid_json (#756).
+# ===========================================================================
+test_python_absent_fallback_sanitizes_injection() {
+    local main proj stubdir capture body injected
+    main=$(/usr/bin/mktemp -d)/proj6c
+    /usr/bin/mkdir -p "$main"
+    (
+        cd "$main"
+        /usr/bin/git init -q .
+        /usr/bin/git config user.email t@t.t
+        /usr/bin/git config user.name t
+        /usr/bin/git commit -q --allow-empty -m init
+    )
+    proj=$(/usr/bin/basename "$main")
+
+    stubdir=$(/usr/bin/mktemp -d)
+    capture="$stubdir/body.json"
+    make_curl_stub "$stubdir" "$capture"
+    /usr/bin/ln -s "$(command -v bash)" "$stubdir/bash"
+    /usr/bin/ln -s "$(command -v git)" "$stubdir/git"
+    /usr/bin/ln -s "$(command -v cat)" "$stubdir/cat"
+    /usr/bin/ln -s "$(command -v basename)" "$stubdir/basename"
+    /usr/bin/ln -s "$(command -v dirname)" "$stubdir/dirname"
+    /usr/bin/ln -s "$(command -v pwd)" "$stubdir/pwd" 2>/dev/null || true
+    # AGENT_ID smuggles a quote (to break out of the JSON string), a fake key,
+    # and a backslash — exactly what the sanitizer must neutralize.
+    (
+        cd "$main"
+        /usr/bin/env -i PATH="$stubdir" \
+            NOTCHBAR_AGENTS_HOST=127.0.0.1 NOTCHBAR_AGENTS_PORT=59990 \
+            AGENT_ID='agent07" ,"evil":1 \x' \
+            "$HOOK" Ended <<<'{"hook_event_name":"SessionEnd","session_id":"abcdef1234567890"}' >/dev/null 2>&1
+    )
+    body=$(/usr/bin/cat "$capture" 2>/dev/null)
+    # `has("evil")` doubles as the validity check: jq errors (empty output) on a
+    # malformed line, so the equality fails if the JSON broke.
+    injected=$(/usr/bin/printf '%s' "$body" | /usr/bin/jq 'has("evil")' 2>/dev/null)
+    assert_equals "false" "$injected" "python-absent fallback sanitizes AGENT_ID: valid JSON, no injected key"
+    /usr/bin/rm -rf "$stubdir" "$(/usr/bin/dirname "$main")"
+}
+run_test test_python_absent_fallback_sanitizes_injection "python-absent fallback sanitizes an injection-laden AGENT_ID (#756)"
 
 # ===========================================================================
 # Contract: the hook always exits 0, even when curl is entirely absent (the

@@ -253,9 +253,23 @@ fi
 if [ -z "${payload:-}" ]; then
     # python3 absent or errored: minimal but valid — session_id still keys the
     # session so state at least registers/clears on the host. Without python we
-    # can't parse the payload's native session_id, so a primary session uses the
-    # bare "${project}-primary" key (non-differentiated across tabs, but valid).
-    payload="{\"state\":\"${STATE}\",\"agent\":\"Claude\",\"session_id\":\"${project}-${golem}\"}"
+    # can't parse the payload's native session_id, so a primary OR orchestrator
+    # session takes the same bare "${project}-${golem}" key here (both are the
+    # non-differentiated fallback across tabs, but valid); only the python path
+    # appends the per-tab session_id suffix.
+    #
+    # $project ($PROJECT_NAME / a dir basename) and $golem ($AGENT_ID / a dir
+    # basename — only GOLEM_ID is regex-gated) are attacker-influenceable and are
+    # interpolated straight into a JSON string literal here, so sanitize first,
+    # mirroring golem-notify.sh's jq-absent guard: drop backslashes, then escape
+    # double quotes, so a crafted value can't break out of the string and inject
+    # keys into the POST body. Pure bash (no tr) — this path runs precisely when
+    # the environment is minimal. The python path uses json.dumps and is unaffected.
+    project_safe="${project//\\/}"
+    project_safe="${project_safe//\"/\\\"}"
+    golem_safe="${golem//\\/}"
+    golem_safe="${golem_safe//\"/\\\"}"
+    payload="{\"state\":\"${STATE}\",\"agent\":\"Claude\",\"session_id\":\"${project_safe}-${golem_safe}\"}"
 fi
 
 url="http://${HOST}:${PORT}/event"
