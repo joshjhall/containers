@@ -25,8 +25,10 @@ HOOK_SRC="$PROJECT_ROOT_REAL/lib/features/templates/claude/hooks/claude-host-eve
 CLAUDE_SETUP="$PROJECT_ROOT_REAL/lib/features/lib/claude/claude-setup"
 
 # Run the script capturing BOTH stdout/stderr (into HE_OUT) and the real exit code
-# (into HE_RC). The exit code must be captured directly from the call — see the
-# note in seed-worktree-trust.sh's test for why `out=$(cmd); assert_...` is wrong.
+# (into HE_RC). The exit code must be captured directly from the call —
+# `out="$(cmd)"; assert_exit_code_success "msg"` does NOT work: the framework's
+# assert_exit_code_success treats a lone message as the command, runs an empty
+# command array (always 0), and the assertion becomes vacuous.
 run_he() {
     HE_RC=0
     HE_OUT="$("$SCRIPT" "$@" 2>&1)" || HE_RC=$?

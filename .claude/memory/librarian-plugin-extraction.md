@@ -131,6 +131,13 @@ these 3 — verified 0 hits in librarian v0.2.0). #611 also fixed a latent
 `../../librarian:/workspace/librarian` compose mount is now obsolete — the pin
 is the contract.
 
+**Stray cleanup (#719, 2026-07-19):** the extraction left two duplicate scripts
+in `bin/` that no in-repo consumer used — `bin/seed-worktree-trust.sh` and
+`bin/golem-gate-watch.sh` (+ their unit tests). Both were removed; the canonical
+copies ship with the workflow plugin (resolved via `bin/workflow-scripts-dir.sh`
+/ `just golem-watch`). Any later mention of those two script names in this or
+other memory files refers to the **plugin-bundled** copies, not a `bin/` path.
+
 Two recurring CI flakes seen during the batch (NOT code, just re-run):
 (1) osv-scanner pre-push rejects ALL pushes on a pre-existing Cargo.lock
 advisory (RUSTSEC-2026-0190, anyhow) → `--no-verify` when diff is
