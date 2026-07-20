@@ -17,6 +17,12 @@
 #   AGENT_ISSUE    — numeric issue id → autonomous pipeline; empty → interactive
 #   REVIEW_MAX_CYCLES, PRE_REVIEW_STRICT, REVIEW_STRICT, AUTOMERGE,
 #   AUTOMERGE_AUTONOMOUS — optional pipeline tuning (passed through if set)
+#
+# Exports (derived here, inherited by the golem's tmux session):
+#   GOLEM_ID       — stable golem id `golem-{AGENT_ISSUE}` on the pipeline path,
+#                    so librarian Notification feed rows are attributable rather
+#                    than the `golem-?` placeholder (issue #758). Honors a value
+#                    already present in the environment.
 
 set -uo pipefail
 
@@ -129,6 +135,17 @@ if ! printf '%s' "${ISSUE}" | command grep -qE '^[0-9]+$'; then
         log_info "Attach with: tmux attach -t claude"
     fi
     exec sleep infinity
+fi
+
+# Stamp a stable, issue-attributable golem id so this container golem's
+# librarian Notification feed rows resolve to golem-{issue} instead of the
+# golem-? placeholder — the container analogue of golem-launch.sh's
+# `-e GOLEM_ID=golem-$N` for worktree golems (issue #758). Exported before the
+# tmux new-session below, so the golem's `claude` process (and the
+# golem-notify.sh hook it fires) inherits it via the session environment. Honor
+# a value already present in the environment; only derive when unset/empty.
+if [[ -z "${GOLEM_ID:-}" ]]; then
+    export GOLEM_ID="golem-${ISSUE}"
 fi
 
 # Auth precondition — a golem opens PRs and re-requests review, so a working
