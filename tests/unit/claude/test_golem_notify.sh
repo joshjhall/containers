@@ -217,6 +217,59 @@ test_concurrent_primary_sessions_distinct() {
 run_test test_concurrent_primary_sessions_distinct "concurrent primary tabs get distinct feed ids (#746)"
 
 # ===========================================================================
+# Orchestrator marker (#750). A session marked CLAUDE_SESSION_ROLE=orchestrator
+# (no GOLEM_ID, not in a worktree) surfaces in the feed as `orchestrator-<short>`
+# — feed parity with claude-host-event.sh (#746 AC3), so `just golems` lists the
+# fleet coordinator as its own row instead of an indistinct `primary`. Like
+# run_hook_primary_session but exports the orchestrator marker alongside the
+# chosen payload session_id.
+# ===========================================================================
+run_hook_orch_session() {
+    local hook="$1" cwd="$2" session_id="$3"
+    local feed
+    (
+        cd "$cwd"
+        env -u GOLEM_ID CLAUDE_SESSION_ROLE=orchestrator "$hook" \
+            <<<"{\"message\":\"needs permission\",\"session_id\":\"$session_id\"}" >/dev/null 2>&1
+    )
+    feed="$(
+        cd "$cwd"
+        common_dir="$(/usr/bin/git rev-parse --git-common-dir)"
+        case "$common_dir" in /*) ;; *) common_dir="$(/usr/bin/pwd)/$common_dir" ;; esac
+        /usr/bin/echo "$(/usr/bin/dirname "$common_dir")/.worktrees/.status/feed.jsonl"
+    )"
+    /usr/bin/jq -r '.golem' "$feed" 2>/dev/null | /usr/bin/tail -1
+}
+
+test_orchestrator_feed_id() {
+    local main got
+    main=$(/usr/bin/mktemp -d)/plainrepo
+    /usr/bin/mkdir -p "$main"
+    (
+        cd "$main"
+        /usr/bin/git init -q .
+        /usr/bin/git config user.email t@t.t
+        /usr/bin/git config user.name t
+        /usr/bin/git commit -q --allow-empty -m init
+    )
+    got=$(run_hook_orch_session "$HOOK_REPO" "$main" "aaaaaaaa11112222")
+    assert_equals "orchestrator-aaaaaaaa" "$got" "orchestrator marker -> orchestrator-<short> feed id"
+    /usr/bin/rm -rf "$(/usr/bin/dirname "$main")"
+}
+run_test test_orchestrator_feed_id "orchestrator marker surfaces as orchestrator-<short> in the feed (#750)"
+
+# The worktree-root arm outranks the marker: an issue-N worktree with the marker
+# set is still `golem-N` (the marker only acts on the primary fallback).
+test_worktree_root_outranks_orchestrator_marker() {
+    local wt got
+    wt=$(setup_worktree 707)
+    got=$(run_hook_orch_session "$HOOK_REPO" "$wt" "aaaaaaaa11112222")
+    assert_equals "golem-707" "$got" "worktree-root golem-N outranks the orchestrator marker"
+    /usr/bin/rm -rf "$(/usr/bin/dirname "$(/usr/bin/dirname "$wt")")"
+}
+run_test test_worktree_root_outranks_orchestrator_marker "worktree golem outranks orchestrator marker (#750)"
+
+# ===========================================================================
 # A primary session whose Notification payload has NO session_id falls back to
 # the bare `primary` id (still valid, just non-differentiated).
 # ===========================================================================

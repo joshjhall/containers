@@ -441,6 +441,7 @@ below are runtime tuning knobs for where to reach the bridge. See
 | `INCLUDE_HOST_EVENTS`  | `false`                              | Build-time: stage + wire the forwarder (rebuild to toggle) |
 | `NOTCHBAR_AGENTS_HOST` | `host.docker.internal` / `127.0.0.1` | Runtime: host running the monitor bridge (topology-auto-default) |
 | `NOTCHBAR_AGENTS_PORT` | `7823`                               | Runtime: port of the monitor bridge                     |
+| `CLAUDE_SESSION_ROLE`  | _(unset)_                            | Runtime: `orchestrator` marks a non-golem session driving a fleet via `/orchestrate`, so it surfaces on the host monitor / `just golems` feed as `orchestrator` instead of a plain `primary` (human) session. Emitted by the librarian `/orchestrate` skill; consumed by both identity hooks (`claude-host-event.sh`, `golem-notify.sh`). Unset/unknown → `primary`. |
 
 #### Worktree golems (host-side wiring)
 

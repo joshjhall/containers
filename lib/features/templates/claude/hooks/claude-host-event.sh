@@ -48,12 +48,19 @@ HOOK_JSON=$(command cat)
 #   1. $GOLEM_ID (stamped at launch by the workflow plugin; worktree golems)
 #   2. git worktree-root basename: issue-N -> golem-N (cwd-independent)
 #   3. $AGENT_ID (container golems, e.g. agentNN from agent-entrypoint.sh)
-#   4. `primary` — a non-golem interactive session: a human working directly in
-#      the main checkout, or an orchestrator driving a fleet of golems. This is
-#      NOT a golem, so it must not carry the `golem-?` placeholder (which reads
-#      as a broken golem on the host). The python block below differentiates
-#      concurrent primary sessions (multiple shell tabs) by the Claude-native
-#      session_id so they don't collide on one host row.
+#   4. $CLAUDE_SESSION_ROLE=orchestrator (#750) — a non-golem session that is
+#      driving a fleet of golems via /orchestrate. It has no stable unique id
+#      (like a golem does), so it is a LABELED VARIANT of `primary`: the python
+#      block below differentiates it per-tab by the Claude-native session_id
+#      exactly as it does `primary`, only the label differs. This is the
+#      CONSUME side of a librarian-emitted marker (the /orchestrate skill
+#      exports it); until the emit side ships this arm is simply never taken.
+#   5. `primary` — a non-golem interactive session with no orchestrator marker:
+#      a human working directly in the main checkout. This is NOT a golem, so it
+#      must not carry the `golem-?` placeholder (which reads as a broken golem
+#      on the host). The python block below differentiates concurrent primary
+#      sessions (multiple shell tabs) by the Claude-native session_id so they
+#      don't collide on one host row.
 # ---------------------------------------------------------------------------
 golem=""
 case "${GOLEM_ID:-}" in
@@ -67,7 +74,14 @@ if [ -z "$golem" ]; then
         *)
             case "${AGENT_ID:-}" in
                 ?*) golem="$AGENT_ID" ;;
-                *) golem="primary" ;;
+                *)
+                    # Orchestrator marker classifies a marked session before the
+                    # bare `primary` fallback; unset/unknown falls through (#750).
+                    case "${CLAUDE_SESSION_ROLE:-}" in
+                        orchestrator) golem="orchestrator" ;;
+                        *) golem="primary" ;;
+                    esac
+                    ;;
             esac
             ;;
     esac
@@ -144,16 +158,16 @@ golem = os.environ.get("GOLEM") or "primary"
 # identity so each agent is one persistent, named row on the host.
 #
 # A golem has a stable, unique id already (golem-N / AGENT_ID), so its key is
-# just "{project}-{golem}". A `primary` session (human or orchestrator) has no
-# such id, and EVERY primary session in a repo would otherwise collapse to the
-# same "{project}-primary" key -> concurrent shell tabs clobber one host row.
+# just "{project}-{golem}". A `primary` (human) or `orchestrator` (#750) session
+# has no such id, and EVERY such session in a repo would otherwise collapse to
+# the same "{project}-{role}" key -> concurrent shell tabs clobber one host row.
 # Differentiate them by the Claude-native session_id (unique per session): key
-# each as "{project}-primary-{short}". Fall back to the bare "{project}-primary"
+# each as "{project}-{role}-{short}". Fall back to the bare "{project}-{role}"
 # when the payload carries no session_id (still valid, just non-differentiated).
-if golem == "primary":
+if golem in ("primary", "orchestrator"):
     cc_session = d.get("session_id")
     short = cc_session[:8] if isinstance(cc_session, str) and cc_session.strip() else ""
-    label = "{}-primary".format(project)
+    label = "{}-{}".format(project, golem)
     session_id = "{}-{}".format(label, short) if short else label
 else:
     label = "{}-{}".format(project, golem)
@@ -175,11 +189,14 @@ PHASE_VERBS = {
 def resolve_phase(toplevel, golem):
     """Friendly verb for the golem's current pipeline phase, or "".
 
-    Best-effort by contract: a primary session, a missing/malformed state file,
-    or an unknown phase all yield "" so the caller falls back to the
+    Best-effort by contract: a primary/orchestrator session, a missing/malformed
+    state file, or an unknown phase all yield "" so the caller falls back to the
     prompt-derived title. Never raises.
     """
-    if not toplevel or golem == "primary":
+    # Neither a human `primary` nor an `orchestrator` (#750) is in the per-issue
+    # pipeline, so neither carries a phase verb — a stray state file in the
+    # checkout must not paint a false phase on them.
+    if not toplevel or golem in ("primary", "orchestrator"):
         return ""
     tmpdir = os.path.join(toplevel, ".claude", "memory", "tmp")
     candidate = None
