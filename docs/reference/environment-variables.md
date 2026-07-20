@@ -477,6 +477,31 @@ primary/human session, or a malformed/unknown value) it falls back to the
 prior prompt-derived title. The read is best-effort and never blocks the
 session.
 
+### Golem Feed Transport
+
+A **container** golem records its decision-point events (permission `gate`,
+plan-gate, mid-flight `escalation`, `dead-end`) as JSON lines in
+`.worktrees/.status/feed.jsonl` that an orchestrator tails (`just golems`).
+librarian's Notification hook (`golem-notify.sh`) resolves that feed via the
+git common dir — for a golem worktree, the **main repo's** `.worktrees/.status`
+(`/workspace/{repo}/.worktrees/.status`). `stibbons agent start` already
+bind-mounts each repo's checkout (`{base}/{repo}:{base}/{repo}`), so that feed is
+**already visible on the host** — no extra mount is needed.
+
+To keep the golem entrypoint's coarse per-agent status cache
+(`<AGENT_ID>.json`) from splitting away into a base-level
+`/workspace/.worktrees/.status` that no mount exposes, `agent-entrypoint.sh`
+co-locates it in the same repo-level `.worktrees/.status` as the feed (resolved
+from `AGENT_REPOS`). `GOLEM_STATUS_DIR` overrides the target when set.
+
+| Variable           | Default                                 | Description                                                                                     |
+| ------------------ | --------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `GOLEM_STATUS_DIR` | `/workspace/{repo}/.worktrees/.status`  | Override for the container golem status-cache dir (default co-locates with the librarian feed)   |
+
+> HTTP-sink forwarding (librarian's `GOLEM_EVENT_SINKS`) is a separate,
+> filesystem-free transport tracked as a follow-up; the shared-filesystem feed
+> above is the ADR-0001 approach (a) baseline.
+
 ### Retry Configuration
 
 | Variable              | Default | Description                                        |
