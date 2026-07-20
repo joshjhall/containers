@@ -843,17 +843,19 @@ test_zed_lsp_config_installed_by_script() {
 run_test test_zed_lsp_config_script_shipped "zed-lsp-config-first-startup.sh shipped with system-binary overrides"
 run_test test_zed_lsp_config_installed_by_script "dev-tools.sh installs zed-lsp-config first-startup script"
 
-# Test: the Zed LSP override script writes STRICT JSON (no // comments) so the
-# sibling agent-config script can jq-merge into the same settings.json (#519).
-test_zed_lsp_config_strict_json() {
+# Test: the Zed LSP override script ships COMMENTED JSONC again — the sibling
+# agent-config script now merges with the comment-preserving `jsonc-merge`
+# helper instead of `jq`, so the shipped defaults document themselves inline
+# (#529 restored this; #519 had forced strict JSON for the old jq merge).
+test_zed_lsp_config_has_comments() {
     local script="$PROJECT_ROOT/lib/features/lib/dev-tools/zed-lsp-config-first-startup.sh"
-    # The heredoc body (between the JSON markers) must contain no // comments.
+    # The heredoc body (between the JSON markers) must carry // comments.
     local body
     body=$(command awk '/<<.?JSON.?/{f=1;next} /^JSON$/{f=0} f' "$script")
     if printf '%s' "$body" | command grep -q '//'; then
-        assert_true false "zed-lsp settings JSON body must be comment-free (strict JSON for jq merge)"
+        assert_true true "zed-lsp settings body is commented JSONC (self-documenting)"
     else
-        assert_true true "zed-lsp settings JSON body is strict JSON (no // comments)"
+        assert_true false "zed-lsp settings body must ship inline // comments (JSONC)"
     fi
 }
 
@@ -872,6 +874,9 @@ test_zed_agent_config_script_shipped() {
         "agent config writes an agent_servers entry"
     # Provider-neutral: no bifrost/litellm hardcoding.
     assert_file_not_contains "$script" "bifrost" "agent config is provider-neutral (no 'bifrost')"
+    # Merges via the comment-preserving helper, not jq (#529).
+    assert_file_contains "$script" "jsonc-merge" \
+        "agent config merges with jsonc-merge (comment-preserving, not jq)"
 }
 
 # Test: dev-tools.sh installs the agent-config script into first-startup as 41-.
@@ -883,9 +888,96 @@ test_zed_agent_config_installed_by_script() {
         "dev-tools.sh installs agent config as 41- (after 40-zed-lsp)"
 }
 
-run_test test_zed_lsp_config_strict_json "zed-lsp settings JSON is strict (comment-free) for jq merge"
+run_test test_zed_lsp_config_has_comments "zed-lsp settings JSON is commented JSONC (jsonc-merge)"
 run_test test_zed_agent_config_script_shipped "zed-agent-config-first-startup.sh shipped, provider-neutral + conditional"
 run_test test_zed_agent_config_installed_by_script "dev-tools.sh installs zed-agent-config as 41-"
+
+# Test: the jsonc-merge helper is shipped and dev-tools.sh installs it, backed by
+# a pinned jsonc-parser (#529). This is the comment-preserving merge path the
+# Zed first-startup scripts use instead of jq.
+test_jsonc_merge_shipped() {
+    local helper="$PROJECT_ROOT/lib/features/lib/dev-tools/jsonc-merge.js"
+    local source_file="$PROJECT_ROOT/lib/features/dev-tools.sh"
+    assert_file_exists "$helper" "jsonc-merge.js shipped under lib/features/lib/dev-tools/"
+    assert_file_contains "$helper" "jsonc-parser" "jsonc-merge is backed by jsonc-parser"
+    assert_file_contains "$source_file" "features/lib/dev-tools/jsonc-merge.js" \
+        "dev-tools.sh references the shipped jsonc-merge helper"
+    assert_file_contains "$source_file" "/usr/local/bin/jsonc-merge" \
+        "dev-tools.sh installs jsonc-merge onto PATH"
+    assert_file_contains "$source_file" "JSONC_PARSER_VERSION=" \
+        "dev-tools.sh pins jsonc-parser via a version var"
+    assert_file_contains "$source_file" 'jsonc-parser@${JSONC_PARSER_VERSION}' \
+        "dev-tools.sh installs the pinned jsonc-parser version"
+}
+
+# Test (behavioral): jsonc-merge merges an agent_servers fragment into a
+# COMMENTED settings.json without dropping the comments, is additive/idempotent,
+# and leaves valid JSONC. Directly exercises the #529 acceptance criterion
+# "Tests cover merging into a commented file". Requires Node.js + npm; skipped
+# where unavailable (e.g. no-Docker CI without node).
+test_jsonc_merge_into_commented_file() {
+    local helper="$PROJECT_ROOT/lib/features/lib/dev-tools/jsonc-merge.js"
+    if ! command -v node >/dev/null 2>&1 || ! command -v npm >/dev/null 2>&1; then
+        skip_test "node/npm not available"
+        return
+    fi
+
+    local work
+    work=$(mktemp -d)
+
+    # Install jsonc-parser into a throwaway dir and point the helper at it.
+    if ! npm install --prefix "$work/lib" jsonc-parser@3.3.1 \
+        --no-save --no-package-lock --silent >/dev/null 2>&1; then
+        command rm -rf "$work"
+        skip_test "could not install jsonc-parser (offline?)"
+        return
+    fi
+    export JSONC_MERGE_LIB="$work/lib/node_modules"
+
+    # A commented (JSONC) settings.json, like the one 40-zed-lsp-config ships.
+    command cat >"$work/settings.json" <<'JSONC'
+{
+  // LSP overrides so Zed extensions use system binaries
+  "lsp": {
+    "dprint": { "binary": { "path": "/usr/local/bin/dprint" } }
+  },
+  "format_on_save": "on" // keep formatting on save
+}
+JSONC
+
+    # Merge an agent block that includes empty containers (env:{}, args:[]).
+    printf '%s\n' \
+        '{"agent_servers":{"Claude Code (container)":{"type":"custom","command":"/usr/local/bin/claude-acp-launch","args":[],"env":{}}}}' |
+        node "$helper" "$work/settings.json" >/dev/null 2>&1
+
+    assert_file_contains "$work/settings.json" "// LSP overrides" \
+        "merge preserves the leading block comment"
+    assert_file_contains "$work/settings.json" "// keep formatting on save" \
+        "merge preserves the trailing inline comment"
+    assert_file_contains "$work/settings.json" "claude-acp-launch" \
+        "merge inserts the agent_servers entry"
+    assert_file_contains "$work/settings.json" '"env": {}' \
+        "merge keeps empty containers (env:{}) rather than dropping them"
+
+    # Output must still parse as JSONC.
+    local errs
+    errs=$(node -e "const {parse}=require('$JSONC_MERGE_LIB/jsonc-parser');const e=[];parse(require('fs').readFileSync('$work/settings.json','utf8'),e,{allowTrailingComma:true});process.stdout.write(String(e.length))")
+    assert_equals "0" "$errs" "merged file is still valid JSONC"
+
+    # Idempotent + non-clobbering: a second run with a DIFFERENT value must not
+    # overwrite the existing entry.
+    printf '%s\n' \
+        '{"agent_servers":{"Claude Code (container)":{"type":"custom","command":"/DIFFERENT","args":[],"env":{}}}}' |
+        node "$helper" "$work/settings.json" >/dev/null 2>&1
+    assert_file_not_contains "$work/settings.json" "/DIFFERENT" \
+        "re-merge is additive: existing entry is not overwritten"
+
+    unset JSONC_MERGE_LIB
+    command rm -rf "$work"
+}
+
+run_test test_jsonc_merge_shipped "jsonc-merge helper shipped + installed with pinned jsonc-parser"
+run_test test_jsonc_merge_into_commented_file "jsonc-merge merges into a commented settings.json (comments preserved)"
 
 # Test: codegraph is fully wired (version var, install function, invocation,
 # and a pinned checksum entry) — code knowledge graph for AI agents.
