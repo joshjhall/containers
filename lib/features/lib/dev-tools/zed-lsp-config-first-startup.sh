@@ -16,11 +16,11 @@
 # VS Code / JetBrains envs ignore ~/.config/zed/, so this is a no-op
 # outside Zed.
 #
-# The written file is intentionally COMMENT-FREE (strict JSON), not JSONC:
-# sibling first-startup scripts (e.g. 41-zed-agent-config) jq-merge into this
-# same file, and jq cannot parse // comments. Keeping it strict JSON makes it a
-# clean merge base. (Follow-up: add a JSONC-aware CLI so we can ship commented
-# defaults again — see the tracking issue.)
+# The written file is JSONC (Zed accepts // comments) and documents itself
+# inline. The sibling 41-zed-agent-config script merges into this same file with
+# `jsonc-merge` (a comment-preserving Node helper) rather than `jq`, so comments
+# survive the merge — both the defaults we ship here and any a user later adds.
+# (#529 restored this; #519 had forced strict JSON for the old jq merge.)
 #
 # What the block does: LSP binary overrides for Zed extensions whose own binary
 # fetch races their postinstall (toast: "failed to start language server
@@ -34,6 +34,9 @@ ZED_SETTINGS_FILE="${ZED_SETTINGS_DIR}/settings.json"
 
 read -r -d '' ZED_LSP_OVERRIDES <<'JSON' || true
 {
+  // Point Zed's language-server extensions at the binaries this container
+  // already ships, so they don't race their own npm-install / download on
+  // first connect ("failed to start language server <name>" toasts).
   "lsp": {
     "dprint": {
       "binary": {
@@ -48,7 +51,9 @@ read -r -d '' ZED_LSP_OVERRIDES <<'JSON' || true
       }
     }
   },
+  // Format on save using the pinned dprint/taplo servers above.
   "format_on_save": "on",
+  // Route each format's language to dprint (it handles YAML/JSON/JSONC).
   "languages": {
     "YAML": {
       "formatter": { "language_server": { "name": "dprint" } }

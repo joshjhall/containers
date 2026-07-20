@@ -64,11 +64,11 @@ if [ "$have_creds" != "true" ]; then
 fi
 
 # --- The agent_servers fragment we want present ---
-# Strict JSON (no comments): this file is jq-merged by sibling scripts, and jq
-# can't parse JSONC. The entry is a custom Claude Code ACP agent ("AI panel")
-# wired to this container's Anthropic credentials via the launch wrapper; the
-# wrapper re-injects the token/base-URL/model kept out of the environment for
-# security, so no secret is stored in this file. Provider-agnostic.
+# A strict-JSON fragment (jsonc-merge takes plain JSON on stdin). The entry is a
+# custom Claude Code ACP agent ("AI panel") wired to this container's Anthropic
+# credentials via the launch wrapper; the wrapper re-injects the
+# token/base-URL/model kept out of the environment for security, so no secret is
+# stored in the settings file. Provider-agnostic.
 read -r -d '' AGENT_BLOCK <<JSON || true
 {
   "agent_servers": {
@@ -90,30 +90,23 @@ if [ ! -f "$ZED_SETTINGS_FILE" ]; then
     exit 0
 fi
 
-# --- Existing settings: merge with jq if it parses as strict JSON ---
+# --- Existing settings: merge with jsonc-merge (comment-preserving) ---
 # Zed settings.json commonly contains // comments (e.g. the LSP bootstrap this
-# container also ships), which jq cannot parse. If the file is strict JSON we
-# merge in place; otherwise we leave it untouched and print the block to paste.
-if command -v jq >/dev/null 2>&1 && jq -e . "$ZED_SETTINGS_FILE" >/dev/null 2>&1; then
-    if jq -e --arg label "$AGENT_LABEL" '.agent_servers[$label] != null' \
-        "$ZED_SETTINGS_FILE" >/dev/null 2>&1; then
-        echo "[zed-agent-config] '${AGENT_LABEL}' already present in ${ZED_SETTINGS_FILE}; leaving it."
+# container also ships, or a user's own JSONC). jsonc-merge edits the file
+# through jsonc-parser, so it merges into a commented settings.json without
+# dropping comments. It is additive and idempotent: an agent entry already
+# present under this label is left untouched, so a re-run is a no-op.
+if command -v jsonc-merge >/dev/null 2>&1; then
+    if printf '%s\n' "$AGENT_BLOCK" | jsonc-merge "$ZED_SETTINGS_FILE"; then
+        echo "[zed-agent-config] merged the '${AGENT_LABEL}' agent into ${ZED_SETTINGS_FILE} (comments preserved)."
         exit 0
     fi
-    tmp="${ZED_SETTINGS_FILE}.tmp"
-    if jq --arg label "$AGENT_LABEL" --arg cmd "$WRAPPER" '
-        .agent_servers[$label] = {type: "custom", command: $cmd, args: [], env: {}}
-    ' "$ZED_SETTINGS_FILE" >"$tmp" 2>/dev/null; then
-        mv "$tmp" "$ZED_SETTINGS_FILE"
-        echo "[zed-agent-config] merged the '${AGENT_LABEL}' agent into ${ZED_SETTINGS_FILE}."
-        exit 0
-    fi
-    command rm -f "$tmp"
+    echo "[zed-agent-config] jsonc-merge could not merge into ${ZED_SETTINGS_FILE}; printing the block instead."
 fi
 
-# --- Fallback: can't safely merge (comments / invalid JSON) — print for paste ---
-echo "[zed-agent-config] ${ZED_SETTINGS_FILE} exists and could not be parsed as strict JSON"
-echo "  (it likely contains // comments). Add this agent manually to use the"
-echo "  container's Anthropic credentials in the AI panel:"
+# --- Fallback: jsonc-merge unavailable or failed — print for paste ---
+# (jsonc-merge is skipped at build time when Node.js isn't installed.)
+echo "[zed-agent-config] ${ZED_SETTINGS_FILE} exists; add this agent manually to"
+echo "  use the container's Anthropic credentials in the AI panel:"
 echo "$AGENT_BLOCK" | command sed 's/^/    /'
 exit 0

@@ -288,6 +288,7 @@ extract_all_versions() {
     _add_feature_version HADOLINT_VERSION "hadolint" "dev-tools.sh"
     _add_feature_version ACTIONLINT_VERSION "actionlint" "dev-tools.sh"
     _add_feature_version CODEGRAPH_VERSION "codegraph" "dev-tools.sh"
+    _add_feature_version JSONC_PARSER_VERSION "jsonc-parser" "dev-tools.sh"
 
     # Cargo tools from rust.sh (pinned cargo install targets)
     _add_feature_version CARGO_WATCH_VERSION "cargo-watch" "rust.sh"
@@ -456,6 +457,7 @@ main() {
             gitleaks) check_github_release "gitleaks" "gitleaks/gitleaks" ;;
             rumdl) check_github_release "rumdl" "rvben/rumdl" ;;
             dprint) check_github_release "dprint" "dprint/dprint" ;;
+            jsonc-parser) check_github_release "jsonc-parser" "microsoft/node-jsonc-parser" ;;
             osv-scanner) check_github_release "osv-scanner" "google/osv-scanner" ;;
             yq) check_github_release "yq" "mikefarah/yq" ;;
             sd) check_github_release "sd" "chmln/sd" ;;

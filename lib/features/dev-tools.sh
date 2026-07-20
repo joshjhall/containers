@@ -333,6 +333,45 @@ install -m 755 \
     /etc/container/first-startup/41-zed-agent-config.sh
 
 # ============================================================================
+# jsonc-merge helper (comment-preserving Zed settings.json merge)
+# ============================================================================
+# Ship a small Node CLI that merges a JSON fragment into a JSONC file while
+# keeping its comments. The Zed first-startup scripts (40-/41-) use it so they
+# can ship self-documenting commented defaults AND still auto-merge into a
+# user's commented settings.json — `jq` cannot parse // comments (#529).
+#
+# Backed by jsonc-parser (the Zed/VS Code ecosystem's parser: zero-dependency,
+# MIT). Installed into a FIXED prefix under /usr/local — not the npm global
+# prefix, which node.sh pins to the droppable /cache/npm-global volume. Requires
+# Node.js; when it is absent the helper is skipped and 40-/41- degrade to their
+# print-for-paste fallbacks.
+#
+# JSONC_PARSER_VERSION: pinned; registered in bin/check-versions.sh so the
+# weekly auto-patch can bump it.
+JSONC_PARSER_VERSION="${JSONC_PARSER_VERSION:-3.3.1}"
+JSONC_MERGE_LIB_DIR="/usr/local/lib/jsonc-merge"
+
+if command -v node >/dev/null 2>&1 && command -v npm >/dev/null 2>&1; then
+    log_message "Installing jsonc-merge helper (jsonc-parser ${JSONC_PARSER_VERSION})..."
+
+    log_command "Creating jsonc-merge library directory" \
+        mkdir -p "${JSONC_MERGE_LIB_DIR}"
+
+    if log_command "Installing jsonc-parser for jsonc-merge" \
+        npm install --prefix "${JSONC_MERGE_LIB_DIR}" \
+        "jsonc-parser@${JSONC_PARSER_VERSION}" --no-save --no-package-lock --silent; then
+        install -m 755 \
+            /tmp/build-scripts/features/lib/dev-tools/jsonc-merge.js \
+            /usr/local/bin/jsonc-merge
+        log_message "  jsonc-merge installed at /usr/local/bin/jsonc-merge"
+    else
+        log_warning "jsonc-parser install failed; jsonc-merge not shipped (Zed scripts keep their print-for-paste fallback)"
+    fi
+else
+    log_message "Node.js not available; skipping jsonc-merge helper (Zed scripts keep their print-for-paste fallback)"
+fi
+
+# ============================================================================
 # codegraph index bootstrap
 # ============================================================================
 # Ship an every-boot startup script that symlinks <project>/.codegraph onto the
@@ -368,7 +407,7 @@ log_feature_summary \
     --tools "gh,lazygit,delta,act,git-cliff,glab,biome,taplo,uv,duf,entr,fzf,direnv,mkcert,jq,ripgrep,fd,bat,eza,htop,dua,lefthook,gitleaks,osv-scanner,hadolint,actionlint,rumdl,dprint,typos,shfmt,conform,agnix,agentsys,cspell,codegraph" \
     --paths "${DEV_TOOLS_CACHE},/opt/fzf,${CAROOT}" \
     --env "DEV_TOOLS_CACHE,CAROOT,DIRENV_ALLOW_DIR,ENABLE_LSP_TOOL" \
-    --commands "gh,lazygit,delta,act,git-cliff,glab,biome,uv,uvx,duf,entr,fzf,direnv,mkcert,jq,rg,fd,bat,eza,htop,dua,lefthook,gitleaks,osv-scanner,hadolint,actionlint,rumdl,dprint,typos,shfmt,conform,agnix,agentsys,cspell,codegraph" \
+    --commands "gh,lazygit,delta,act,git-cliff,glab,biome,uv,uvx,duf,entr,fzf,direnv,mkcert,jq,jsonc-merge,rg,fd,bat,eza,htop,dua,lefthook,gitleaks,osv-scanner,hadolint,actionlint,rumdl,dprint,typos,shfmt,conform,agnix,agentsys,cspell,codegraph" \
     --next-steps "Run 'test-dev-tools' to verify installation. Many modern CLI replacements are aliased (ls=eza, cat=bat, grep=rg, find=fd). Claude Code is installed separately by claude-code-setup.sh."
 
 # End logging
