@@ -23,7 +23,29 @@ set -uo pipefail
 SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_NAME="${PROJECT_NAME:-project}"
 MARKER_DIR="/home/$(whoami)/.local/state/${PROJECT_NAME}"
-STATUS_DIR="/workspace/.worktrees/.status"
+# Golem status cache dir. Co-locate it with the librarian Notification-hook feed
+# (issue #743): that hook (golem-notify.sh) resolves its feed via
+# `dirname(git-common-dir)/.worktrees/.status`, which for this golem's worktree
+# is the MAIN repo's `.worktrees/.status` — a path already bind-mounted onto the
+# host by `stibbons agent start` (the `{base}/{repo}:{base}/{repo}` mount), so a
+# host orchestrator (`just golems`) sees both the feed and this cache. Writing to
+# the historical base-level `/workspace/.worktrees/.status` instead left the
+# cache trapped inside the container (no mount exposes it) AND split from the feed.
+#
+# Resolve the main repo's `.worktrees/.status` under /workspace. AGENT_REPOS
+# (set by `stibbons agent start`) carries the repo name(s); the first repo owns
+# the worktree the golem pipeline runs in, matching golem-notify's git-common-dir.
+# GOLEM_STATUS_DIR still wins if explicitly set, and an unresolvable repo falls
+# back to the historical default so the writer is never left without a target.
+status_repo="${AGENT_REPOS:-}"
+status_repo="${status_repo%%,*}"
+if [[ -n "${GOLEM_STATUS_DIR:-}" ]]; then
+    STATUS_DIR="${GOLEM_STATUS_DIR}"
+elif [[ -n "${status_repo}" && -d "/workspace/${status_repo}" ]]; then
+    STATUS_DIR="/workspace/${status_repo}/.worktrees/.status"
+else
+    STATUS_DIR="/workspace/.worktrees/.status"
+fi
 
 # Ambient autonomy opt-in (see next-issue / next-issue-ship contract).
 export NEXT_ISSUE_AUTONOMOUS=1
