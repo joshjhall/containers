@@ -262,6 +262,71 @@ test_successful_install_end_to_end() {
         "the success message reports the install path"
 }
 
+# ---------------------------------------------------------------------------
+# Argument parsing (early-exit branches, no network)
+# ---------------------------------------------------------------------------
+#
+# These run the REAL script (not the library form): --print-target, --help/-h,
+# and the unknown-argument path all exit before any download. --repo/--version/
+# --dir are proven to parse by pairing them with --print-target, which runs the
+# full arg loop and then exits after printing the target. Deferred coverage gap
+# from #749 (the #697/PR#748 review).
+
+# _run_installer <args...>: capture combined output + exit code into globals.
+_run_installer() {
+    ISB_OUT="$(bash "$INSTALL_SCRIPT" "$@" 2>&1)"
+    ISB_CODE=$?
+    return 0
+}
+
+test_arg_print_target_exits_zero() {
+    _run_installer --print-target
+    assert_exit_code 0 "$ISB_CODE" "--print-target should exit 0"
+    assert_matches "$ISB_OUT" '^[a-z0-9_]+-[a-z0-9-]+$' \
+        "--print-target should print a target triple (got '$ISB_OUT')"
+}
+
+test_arg_help_long_exits_zero() {
+    _run_installer --help
+    assert_exit_code 0 "$ISB_CODE" "--help should exit 0"
+    assert_contains "$ISB_OUT" "Usage: install-stibbons.sh" "--help prints usage"
+}
+
+test_arg_help_short_exits_zero() {
+    _run_installer -h
+    assert_exit_code 0 "$ISB_CODE" "-h should exit 0 (alias for --help)"
+    assert_contains "$ISB_OUT" "Usage: install-stibbons.sh" "-h prints usage"
+}
+
+test_arg_unknown_fails_with_usage() {
+    _run_installer --definitely-not-a-flag
+    assert_exit_code 1 "$ISB_CODE" "an unknown argument should exit 1"
+    assert_contains "$ISB_OUT" "unknown argument" "the error names the condition"
+    assert_contains "$ISB_OUT" "Usage: install-stibbons.sh" \
+        "the error path also prints usage"
+}
+
+test_arg_repo_accepted() {
+    _run_installer --repo some/other-repo --print-target
+    assert_exit_code 0 "$ISB_CODE" "--repo <owner/repo> should be accepted"
+    assert_matches "$ISB_OUT" '^[a-z0-9_]+-[a-z0-9-]+$' \
+        "--repo should not disturb --print-target output"
+}
+
+test_arg_version_accepted() {
+    _run_installer --version v4.19.12 --print-target
+    assert_exit_code 0 "$ISB_CODE" "--version <tag> should be accepted"
+    assert_matches "$ISB_OUT" '^[a-z0-9_]+-[a-z0-9-]+$' \
+        "--version should not disturb --print-target output"
+}
+
+test_arg_dir_accepted() {
+    _run_installer --dir /tmp/stibbons-test-dir --print-target
+    assert_exit_code 0 "$ISB_CODE" "--dir <path> should be accepted"
+    assert_matches "$ISB_OUT" '^[a-z0-9_]+-[a-z0-9-]+$' \
+        "--dir should not disturb --print-target output"
+}
+
 run_test test_detect_linux_x86_64 "detect_target: Linux/x86_64"
 run_test test_detect_linux_aarch64 "detect_target: Linux/aarch64"
 run_test test_detect_linux_amd64_alias "detect_target: amd64 alias"
@@ -275,5 +340,12 @@ run_test test_resolve_latest_via_gh "resolve_version: latest via gh"
 run_test test_resolve_latest_via_curl_redirect "resolve_version: latest via curl redirect"
 run_test test_checksum_mismatch_aborts_before_install "checksum mismatch aborts before install"
 run_test test_successful_install_end_to_end "successful install (extract + install) end to end"
+run_test test_arg_print_target_exits_zero "args: --print-target prints a triple, exits 0"
+run_test test_arg_help_long_exits_zero "args: --help prints usage, exits 0"
+run_test test_arg_help_short_exits_zero "args: -h prints usage, exits 0"
+run_test test_arg_unknown_fails_with_usage "args: unknown flag errors + usage, exits 1"
+run_test test_arg_repo_accepted "args: --repo accepted by the arg loop"
+run_test test_arg_version_accepted "args: --version accepted by the arg loop"
+run_test test_arg_dir_accepted "args: --dir accepted by the arg loop"
 
 generate_report

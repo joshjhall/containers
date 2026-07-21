@@ -89,6 +89,12 @@ CONFORM_VERSION="${CONFORM_VERSION:-0.1.0-alpha.31}"
 HADOLINT_VERSION="${HADOLINT_VERSION:-2.14.0}"
 ACTIONLINT_VERSION="${ACTIONLINT_VERSION:-1.7.12}"
 CODEGRAPH_VERSION="${CODEGRAPH_VERSION:-1.4.1}"
+# agnix is pinned (not @latest) so a rule-set bump can't fail a previously-green
+# tree with no code change. Keep in lockstep with the librarian consumers'
+# `.agnix.toml` pin (joshjhall/librarian#398). Bumps route through the weekly
+# check-versions sweep (registered in bin/check-versions.sh), like every other
+# tool here — the repo has no dependabot.
+AGNIX_VERSION="${AGNIX_VERSION:-0.40.0}"
 
 # ============================================================================
 # Repository Configuration

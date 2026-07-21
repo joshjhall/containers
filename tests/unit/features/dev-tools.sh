@@ -610,6 +610,22 @@ test_agnix_installation() {
 
 run_test test_agnix_installation "agnix installation present in binary tools"
 
+# Test: agnix is pinned (not @latest) so a rule-set bump can't fail a
+# previously-green tree with no code change (#769). The pin lives in
+# dev-tools.sh as AGNIX_VERSION and is consumed via agnix@${AGNIX_VERSION}.
+test_agnix_pinned_not_latest() {
+    local install_file="$PROJECT_ROOT/lib/features/lib/dev-tools/install-binary-tools.sh"
+    local defs_file="$PROJECT_ROOT/lib/features/dev-tools.sh"
+    assert_file_contains "$defs_file" 'AGNIX_VERSION="${AGNIX_VERSION:-' \
+        "dev-tools.sh pins AGNIX_VERSION with an override default"
+    assert_file_contains "$install_file" 'agnix@${AGNIX_VERSION}' \
+        "install-binary-tools.sh installs agnix at the pinned version"
+    assert_file_not_contains "$install_file" "agnix@latest" \
+        "install-binary-tools.sh must not install agnix@latest"
+}
+
+run_test test_agnix_pinned_not_latest "agnix is pinned via AGNIX_VERSION, not @latest"
+
 # Test: cspell installation present in binary tools script
 test_cspell_installation() {
     local source_file="$PROJECT_ROOT/lib/features/lib/dev-tools/install-binary-tools.sh"

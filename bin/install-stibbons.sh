@@ -11,6 +11,21 @@
 #   - tar (unix assets) — zip assets are Windows-only and unpacked by 7z there
 #   - sha256sum or shasum for checksum verification
 #
+# Trust model (#749):
+#   - Checksum verification here is TRANSPORT-INTEGRITY ONLY: the `.sha256` is
+#     fetched from the same GitHub Releases URL as the asset, so it detects a
+#     truncated/corrupted download but is NOT an independent root of trust — a
+#     party who can rewrite the release can rewrite both. GitHub Releases (TLS +
+#     the repo's release permissions) is the trust anchor. A future hardening is
+#     cosign signing/verification of the asset (mirroring the librarian tarball
+#     pattern); until then, treat the release itself as the trusted source.
+#   - `gh` is resolved via a bare PATH lookup (`command -v gh`) rather than an
+#     absolute path — the one sanctioned exception to the repo's full-path
+#     policy, since `gh` has no stable canonical location across platforms
+#     (Homebrew, apt, scoop all differ). The remaining commands use absolute
+#     paths. This script runs on the user's own host at their invocation, so the
+#     residual PATH-trust assumption is the user's existing environment.
+#
 # Exit codes:
 #   0 - stibbons installed successfully
 #   1 - Error (unsupported platform, download/verify failure, missing tools)

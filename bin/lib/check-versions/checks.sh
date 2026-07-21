@@ -306,6 +306,19 @@ check_crates_io() {
     progress_done
 }
 
+check_npm() {
+    local tool="$1"
+    local package="${2:-$tool}"
+    progress_msg "  $tool..."
+    # The npm registry exposes the latest published version under
+    # dist-tags.latest for the package document.
+    local latest
+    latest=$(fetch_url "https://registry.npmjs.org/$package" |
+        jq -r '.["dist-tags"].latest // "null"' 2>/dev/null)
+    set_latest "$tool" "$latest"
+    progress_done
+}
+
 check_maven_central() {
     local tool="$1"
     local group_id="$2"
