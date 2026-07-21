@@ -288,6 +288,9 @@ extract_all_versions() {
     _add_feature_version HADOLINT_VERSION "hadolint" "dev-tools.sh"
     _add_feature_version ACTIONLINT_VERSION "actionlint" "dev-tools.sh"
     _add_feature_version CODEGRAPH_VERSION "codegraph" "dev-tools.sh"
+    # agnix is an npm-global install (not a GitHub release); checked against the
+    # npm registry below. Pinned to stay in lockstep with librarian (#769).
+    _add_feature_version AGNIX_VERSION "agnix" "dev-tools.sh"
     _add_feature_version JSONC_PARSER_VERSION "jsonc-parser" "dev-tools.sh"
 
     # Cargo tools from rust.sh (pinned cargo install targets)
@@ -498,6 +501,7 @@ main() {
             cosign) check_github_release "cosign" "sigstore/cosign" ;;
             trivy-action) check_github_release "trivy-action" "aquasecurity/trivy-action" ;;
             librarian) check_github_release "librarian" "joshjhall/librarian" ;;
+            agnix) check_npm "agnix" ;;
             *) [ "$OUTPUT_FORMAT" = "text" ] && echo "  Skipping $tool (no checker)" ;;
         esac
     done

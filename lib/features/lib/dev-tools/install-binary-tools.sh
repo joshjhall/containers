@@ -443,10 +443,13 @@ install_github_binary_tools() {
         "calculate" "extract:actionlint" ||
         return 1
 
-    # agnix (AI config linter) — requires Node.js/npm
+    # agnix (AI config linter) — requires Node.js/npm.
+    # Pinned via AGNIX_VERSION (set in dev-tools.sh) rather than @latest: a
+    # rule-set bump must not fail a previously-green tree with no code change.
+    # Stays in lockstep with the librarian consumers' .agnix.toml pin (#769).
     if command -v npm &>/dev/null; then
-        log_message "Installing agnix (AI config linter)..."
-        if npm install -g agnix@latest 2>/dev/null; then
+        log_message "Installing agnix (AI config linter) v${AGNIX_VERSION}..."
+        if npm install -g "agnix@${AGNIX_VERSION}" 2>/dev/null; then
             log_message "✓ agnix installed successfully"
         else
             log_warning "agnix installation failed, continuing without agnix"

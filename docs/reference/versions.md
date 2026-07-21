@@ -116,7 +116,9 @@ any crate without a prebuilt binary. All are `--locked` and pinned to a
 
 ### Via npm install -g (in dev-tools.sh, requires Node.js)
 
-- agnix (AI config linter)
+- agnix (AI config linter) — pinned via `AGNIX_VERSION` and tracked by the
+  weekly `check-versions` sweep; kept in lockstep with the librarian consumers'
+  `.agnix.toml` pin (joshjhall/librarian#398, containers#769)
 - agentsys (AI plugin marketplace)
 - cspell (spell checker for code)
 

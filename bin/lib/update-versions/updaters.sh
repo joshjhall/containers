@@ -516,6 +516,10 @@ update_version() {
                     sed_inplace "s/CODEGRAPH_VERSION=\"\${CODEGRAPH_VERSION:-[^}]*}\"/CODEGRAPH_VERSION=\"\${CODEGRAPH_VERSION:-$latest}\"/" "$script_path"
                     sed_inplace "s/^CODEGRAPH_VERSION=\"[0-9][^\"]*\"/CODEGRAPH_VERSION=\"\${CODEGRAPH_VERSION:-$latest}\"/" "$script_path"
                     ;;
+                agnix)
+                    sed_inplace "s/AGNIX_VERSION=\"\${AGNIX_VERSION:-[^}]*}\"/AGNIX_VERSION=\"\${AGNIX_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/^AGNIX_VERSION=\"[0-9][^\"]*\"/AGNIX_VERSION=\"\${AGNIX_VERSION:-$latest}\"/" "$script_path"
+                    ;;
                 Trivy)
                     ;; # Trivy is installed via APT (no version to update in script)
                 *)
