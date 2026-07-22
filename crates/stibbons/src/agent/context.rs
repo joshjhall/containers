@@ -102,6 +102,16 @@ pub struct AgentContext {
     pub containers_dir: PathBuf,
     /// Enabled features in registry order (for build args).
     pub features: Vec<Feature>,
+    /// Host-forwarded `GOLEM_EVENT_SINKS` (comma/space list of http(s) sink
+    /// URLs) for librarian's multi-sink golem event emitter (#759). Empty when
+    /// the orchestrator did not configure a sink — the container then behaves
+    /// exactly as the file-feed-only baseline (#743). The value is passed to the
+    /// emitter verbatim (unlike `GOLEM_STATUS_DIR`, it is NOT `$root/$VAR`-joined).
+    pub golem_event_sinks: String,
+    /// Host-forwarded `GOLEM_EVENT_SINK_TIMEOUT` (per-POST connect+total seconds).
+    /// Empty ⇒ let the emitter apply its own default (2s). Only forwarded
+    /// alongside a non-empty `golem_event_sinks`.
+    pub golem_event_sink_timeout: String,
 }
 
 impl AgentContext {
@@ -116,7 +126,16 @@ impl AgentContext {
             return Err(AgentError::NoConfig);
         }
         let cfg = IgorConfig::load(cfg_path).map_err(AgentError::Config)?;
-        Ok(Self::from_config(cfg))
+        let mut ctx = Self::from_config(cfg);
+        // Golem event-sink config is orchestrator/session topology, not committed
+        // project config, so it is read from the host environment at this I/O
+        // boundary rather than `.igor.yml`. `from_config` stays pure/filesystem-
+        // free (its tests build contexts without touching the environment); an
+        // unset var leaves the field empty and the sink forwarding a no-op.
+        ctx.golem_event_sinks = std::env::var("GOLEM_EVENT_SINKS").unwrap_or_default();
+        ctx.golem_event_sink_timeout =
+            std::env::var("GOLEM_EVENT_SINK_TIMEOUT").unwrap_or_default();
+        Ok(ctx)
     }
 
     /// Applies the agent-config defaults to an already-parsed [`IgorConfig`].
@@ -192,6 +211,10 @@ impl AgentContext {
             base_dir,
             containers_dir,
             features,
+            // Host-env golem sink config is layered on by `load`; `from_config`
+            // is pure, so it defaults to unset (file-feed-only, no HTTP fan-out).
+            golem_event_sinks: String::new(),
+            golem_event_sink_timeout: String::new(),
             cfg,
         }
     }

@@ -201,6 +201,24 @@ pub fn run_start(
     args.push("-e".into());
     args.push(format!("AGENT_REPOS={}", ctx.repos.join(",")));
 
+    // Forward librarian's golem event-sink config into the container so the
+    // in-container emitter (`golem-notify.sh`) can POST a golem's decision-point
+    // events to the orchestrator's HTTP sink(s) in addition to the file feed
+    // (#759, additive over the #743 feed transport). Only forwarded when the
+    // orchestrator set a sink: an unset `GOLEM_EVENT_SINKS` pushes zero `-e`
+    // flags, so the container is byte-for-byte the file-feed-only baseline
+    // (matches the emitter's own empty/unset ⇒ no-op contract). The timeout
+    // rides along only with a sink, deferring to the emitter's 2s default when
+    // unset.
+    if !ctx.golem_event_sinks.is_empty() {
+        args.push("-e".into());
+        args.push(format!("GOLEM_EVENT_SINKS={}", ctx.golem_event_sinks));
+        if !ctx.golem_event_sink_timeout.is_empty() {
+            args.push("-e".into());
+            args.push(format!("GOLEM_EVENT_SINK_TIMEOUT={}", ctx.golem_event_sink_timeout));
+        }
+    }
+
     for (svc_name, svc) in &ctx.cfg.services {
         if svc.per_agent_db && svc.port > 0 {
             args.push("-e".into());
@@ -710,6 +728,63 @@ mod tests {
         assert!(docker.has_call("PROJECT_NAME=myproject"));
         assert!(docker.has_call("AGENT_REPOS=myproject"));
         assert!(!docker.has_call("sleep infinity"), "entrypoint replaces sleep infinity");
+    }
+
+    /// #759: with no orchestrator sink configured (the default), the run args
+    /// carry no `GOLEM_EVENT_SINKS` — the container is the file-feed-only
+    /// baseline and the emitter's no-op contract holds.
+    #[test]
+    fn start_omits_golem_sinks_when_unset() {
+        let (ctx, _tmp) = load_ctx(cfg(&[]));
+        assert!(ctx.golem_event_sinks.is_empty(), "load_ctx must not set sinks");
+        let docker = MockDocker::new();
+        docker.on("inspect -f", MockResult::err());
+        docker.on("image inspect", MockResult::ok("ok"));
+        docker.on("network inspect", MockResult::ok("ok"));
+
+        let (_out, res) =
+            capture(|o| run_start(&ctx, &docker, o, "1", StartOptions { rebuild: false }));
+        res.unwrap();
+        assert!(!docker.has_call("GOLEM_EVENT_SINKS"), "no sink env when unset");
+        assert!(!docker.has_call("GOLEM_EVENT_SINK_TIMEOUT"), "no timeout without a sink");
+    }
+
+    /// #759: a configured sink (and its timeout) is forwarded verbatim into the
+    /// container env for librarian's multi-sink emitter.
+    #[test]
+    fn start_forwards_golem_sinks_when_set() {
+        let (mut ctx, _tmp) = load_ctx(cfg(&[]));
+        ctx.golem_event_sinks = "https://orchestrator.local/events".into();
+        ctx.golem_event_sink_timeout = "5".into();
+        let docker = MockDocker::new();
+        docker.on("inspect -f", MockResult::err());
+        docker.on("image inspect", MockResult::ok("ok"));
+        docker.on("network inspect", MockResult::ok("ok"));
+
+        let (_out, res) =
+            capture(|o| run_start(&ctx, &docker, o, "1", StartOptions { rebuild: false }));
+        res.unwrap();
+        assert!(docker.has_call("GOLEM_EVENT_SINKS=https://orchestrator.local/events"));
+        assert!(docker.has_call("GOLEM_EVENT_SINK_TIMEOUT=5"));
+    }
+
+    /// #759: the timeout only rides along with a sink — it is never pushed on
+    /// its own (an orphan `GOLEM_EVENT_SINK_TIMEOUT` would be meaningless to the
+    /// emitter, which reads it only when fanning to sinks).
+    #[test]
+    fn start_omits_lone_golem_sink_timeout() {
+        let (mut ctx, _tmp) = load_ctx(cfg(&[]));
+        ctx.golem_event_sink_timeout = "5".into();
+        // golem_event_sinks stays empty.
+        let docker = MockDocker::new();
+        docker.on("inspect -f", MockResult::err());
+        docker.on("image inspect", MockResult::ok("ok"));
+        docker.on("network inspect", MockResult::ok("ok"));
+
+        let (_out, res) =
+            capture(|o| run_start(&ctx, &docker, o, "1", StartOptions { rebuild: false }));
+        res.unwrap();
+        assert!(!docker.has_call("GOLEM_EVENT_SINK_TIMEOUT"), "timeout needs a sink");
     }
 
     // --- stop ---

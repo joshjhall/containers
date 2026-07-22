@@ -499,9 +499,21 @@ from `AGENT_REPOS`). `GOLEM_STATUS_DIR` overrides the target when set.
 | ------------------ | --------------------------------------- | ----------------------------------------------------------------------------------------------- |
 | `GOLEM_STATUS_DIR` | `/workspace/{repo}/.worktrees/.status`  | Override for the container golem status-cache dir (default co-locates with the librarian feed)   |
 
-> HTTP-sink forwarding (librarian's `GOLEM_EVENT_SINKS`) is a separate,
-> filesystem-free transport tracked as a follow-up; the shared-filesystem feed
-> above is the ADR-0001 approach (a) baseline.
+In addition to the shared-filesystem feed, `stibbons agent start` forwards
+librarian's **HTTP-sink** config into the container so a golem's decision-point
+events also reach the orchestrator over the network — the filesystem-free
+transport half of the ADR-0001 event bus (#759, additive over the feed above).
+Both are read from the **host** environment of `stibbons agent start` (they are
+session/orchestrator topology, not committed project config) and forwarded only
+when a sink is set. An unset `GOLEM_EVENT_SINKS` forwards nothing, so the
+container is byte-for-byte the file-feed-only baseline. Unlike
+`GOLEM_STATUS_DIR`, the sink URLs are consumed by the emitter verbatim (not
+joined onto the repo root).
+
+| Variable                   | Default   | Description                                                                                                                              |
+| -------------------------- | --------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `GOLEM_EVENT_SINKS`        | _(unset)_ | Comma/space list of `http(s)://` URLs the in-container emitter POSTs each classified golem event to, in addition to `feed.jsonl`. Unset ⇒ feed-only |
+| `GOLEM_EVENT_SINK_TIMEOUT` | `2`       | Per-POST connect+total timeout (seconds) bounding each sink so a slow/dead endpoint can never wedge the golem. Only forwarded alongside a sink |
 
 ### Retry Configuration
 
