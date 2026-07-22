@@ -5,6 +5,45 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.19.18] - 2026-07-22
+
+### Added
+
+- Show golem pipeline phase on host monitor activity line (#753)
+- Classify orchestrator sessions on the host monitor (#754)
+- Stamp GOLEM_ID for container golem feed attribution (#761)
+
+### CI/CD
+
+- Harden GitLab triage scheduled job (#763)
+
+### Changed
+
+- JSONC-aware merge for Zed settings.json (#762)
+
+### Documentation
+
+- Reframe stale check-migration-status doc (#755)
+- Migrate getting-started/templates to stibbons; wire #286 host-build AC (#760)
+
+### Fixed
+
+- Name primary/orchestrator sessions instead of golem-? (#747)
+- Co-locate golem status cache with the host-visible feed (#757)
+
+### Miscellaneous
+
+- Update toolchain, CI, and devcontainer to Rust 1.97.1 (#737)
+- Remove librarian-extracted script strays (#752)
+- Pin agnix + install-stibbons trust-model/arg-parse coverage (#769, #749) (#770)
+- Bump librarian to v0.8.0 + wire GOLEM_EVENT_SINKS (#759) (#771)
+
+### Testing
+
+- Cover cross-compilation binary distribution (#748)
+- Close orchestrator-classification test-parity gaps (#750 follow-up) (#765)
+- Exercise gitlab-triage regexes on template Triage blocks (#767)
+
 ## [4.19.17] - 2026-07-19
 
 ### Changed
@@ -12,6 +51,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Single build-time INCLUDE_HOST_EVENTS knob (+ rust/devcontainer PATH fixes) (#745)
 
 ## [4.19.16] - 2026-07-19
+
+### Miscellaneous
+
+- Bump librarian marketplace pin to v0.7.0
+
+## [4.19.15] - 2026-07-19
 
 ### Added
 
@@ -34,7 +79,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Automated version updates to v4.19.15
 - Update compatibility matrix with passing test results
-- Bump librarian marketplace pin to v0.7.0
 
 ## [4.19.14] - 2026-07-15
 
@@ -2183,8 +2227,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix prettier and markdownlint formatting in README
 - Format TLS documentation files
 
+[4.19.18]: https://github.com/joshjhall/containers/compare/v4.19.17...v4.19.18
 [4.19.17]: https://github.com/joshjhall/containers/compare/v4.19.16...v4.19.17
-[4.19.16]: https://github.com/joshjhall/containers/compare/v4.19.14...v4.19.16
+[4.19.16]: https://github.com/joshjhall/containers/compare/v4.19.15...v4.19.16
+[4.19.15]: https://github.com/joshjhall/containers/compare/v4.19.14...v4.19.15
 [4.19.14]: https://github.com/joshjhall/containers/compare/v4.19.13...v4.19.14
 [4.19.13]: https://github.com/joshjhall/containers/compare/v4.19.12...v4.19.13
 [4.19.12]: https://github.com/joshjhall/containers/compare/v4.19.11...v4.19.12
