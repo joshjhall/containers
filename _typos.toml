@@ -27,3 +27,6 @@ deprecat = "deprecat"
 integrat = "integrat"
 updat = "updat"
 styl = "styl"
+# `mis-` prefix (mis-anchored, mis-step) — typos flags the bare stem otherwise.
+mis = "mis"
+Mis = "Mis"
