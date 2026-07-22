@@ -17,6 +17,10 @@
 #   AGENT_ISSUE    — numeric issue id → autonomous pipeline; empty → interactive
 #   REVIEW_MAX_CYCLES, PRE_REVIEW_STRICT, REVIEW_STRICT, AUTOMERGE,
 #   AUTOMERGE_AUTONOMOUS — optional pipeline tuning (passed through if set)
+#   GOLEM_EVENT_SINKS, GOLEM_EVENT_SINK_TIMEOUT — optional; forwarded from the
+#                    host only when a sink is configured, so librarian's
+#                    golem-notify.sh also POSTs decision-point events to the
+#                    orchestrator's HTTP sink(s) (#759). Unset ⇒ feed-only.
 #
 # Exports (derived here, inherited by the golem's tmux session):
 #   GOLEM_ID       — stable golem id `golem-{AGENT_ISSUE}` on the pipeline path,
