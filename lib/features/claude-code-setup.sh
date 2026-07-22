@@ -132,7 +132,7 @@ fi
 # auto-patch). The signer identity/issuer are the pinned trust anchor from the
 # librarian verification contract (README § "Verifying a release"); both are
 # overridable so a fork or a test build can point at a different signer.
-LIBRARIAN_REF="${LIBRARIAN_REF:-v0.7.0}"
+LIBRARIAN_REF="${LIBRARIAN_REF:-v0.8.0}"
 LIBRARIAN_REPO_URL="${LIBRARIAN_REPO_URL:-https://github.com/joshjhall/librarian}"
 LIBRARIAN_DIR="/opt/librarian"
 # Keyless-signing trust anchor: the exact GitHub Actions workflow identity that

@@ -497,7 +497,7 @@ ARG CLAUDE_CHANNEL=latest
 # Librarian plugin marketplace pin (version contract; tracked by check-versions).
 # Must be a *signed release tag* (v0.4.0+): the build fetches the signed release
 # tarball and verifies it with cosign before install (fail-closed, #671).
-ARG LIBRARIAN_REF=v0.7.0
+ARG LIBRARIAN_REF=v0.8.0
 # Librarian plugins to install from the local marketplace (comma-separated).
 # When unset, all defaults install. Set to empty "" to install none.
 ARG CLAUDE_LIBRARIAN_PLUGINS
