@@ -74,3 +74,4 @@
 - [Host hooks fallback parity](host-hooks-fallback-parity.md) — the two host hooks share an identity ladder; keep test suites symmetric; python/jq-absent fallbacks must sanitize interpolated $golem/$project (unvalidated AGENT_ID/PROJECT_NAME); golem-notify has no AGENT_ID arm (#756/#766)
 - [jsonc-merge helper (#529)](jsonc-merge-helper-529.md) — Node CLI + jsonc-parser for comment-preserving Zed settings.json merges; install to fixed /usr/local prefix (npm global pinned to droppable cache)
 - [npm-global tools tracked via check-versions](npm-global-tools-tracked-via-check-versions.md) — no dependabot; agnix & npm globals pin in dev-tools.sh + check_npm helper + auto-patch writeback (#769/PR#770)
+- [UBI arm64 mirror depsolve flake](ubi-arm64-mirror-depsolve-flake.md) — rhel-9-arm64 base build fails on transient microdnf glibc depsolve (partial UBI aarch64 mirror sync); retry `gh run rerun --failed`, don't pin/code-fix (v4.19.18)
