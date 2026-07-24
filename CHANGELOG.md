@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.19.19] - 2026-07-24
+
+### Documentation
+
+- Note UBI arm64 mirror depsolve flake (v4.19.18 release)
+
+### Miscellaneous
+
+- Bump 9 tool versions to latest (#772)
+- Bump librarian to v0.8.1
+
 ## [4.19.18] - 2026-07-22
 
 ### Added
@@ -2227,6 +2238,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix prettier and markdownlint formatting in README
 - Format TLS documentation files
 
+[4.19.19]: https://github.com/joshjhall/containers/compare/v4.19.18...v4.19.19
 [4.19.18]: https://github.com/joshjhall/containers/compare/v4.19.17...v4.19.18
 [4.19.17]: https://github.com/joshjhall/containers/compare/v4.19.16...v4.19.17
 [4.19.16]: https://github.com/joshjhall/containers/compare/v4.19.15...v4.19.16
