@@ -363,6 +363,10 @@ clean-stale-dry:
 check-versions:
     ./bin/check-versions.sh
 
+# Apply outdated version bumps (no release; pass --dry-run/--no-commit/etc. to override)
+update-versions *ARGS:
+    ./bin/update-versions.sh --no-bump {{ARGS}}
+
 # Check .env files for key drift against their .env.example siblings
 check-env:
     ./bin/check-env-drift.sh

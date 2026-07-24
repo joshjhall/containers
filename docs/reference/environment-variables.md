@@ -169,7 +169,7 @@ Control which version of each language to install:
 
 | Variable                        | Default         | Description                              |
 | ------------------------------- | --------------- | ---------------------------------------- |
-| `ANDROID_CMDLINE_TOOLS_VERSION` | `14742923`      | Android command-line tools package build |
+| `ANDROID_CMDLINE_TOOLS_VERSION` | `15859902`      | Android command-line tools package build |
 | `ANDROID_API_LEVELS`            | `34,35`         | Comma-separated Android API levels       |
 | `ANDROID_NDK_VERSION`           | `29.0.14206865` | Android NDK version                      |
 

@@ -288,7 +288,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     fi
 
 # Android SDK (Java auto-triggered above)
-ARG ANDROID_CMDLINE_TOOLS_VERSION=14742923
+ARG ANDROID_CMDLINE_TOOLS_VERSION=15859902
 ARG ANDROID_API_LEVELS=34,35
 ARG ANDROID_NDK_VERSION=30.0.14904198
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
@@ -320,7 +320,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     fi
 # Mise polyglot runtime version manager
 ARG INCLUDE_MISE=false
-ARG MISE_VERSION=2026.7.7
+ARG MISE_VERSION=2026.7.12
 RUN if [ "${INCLUDE_MISE}" = "true" ]; then \
     MISE_VERSION=${MISE_VERSION} /tmp/build-scripts/features/mise.sh; \
     fi
