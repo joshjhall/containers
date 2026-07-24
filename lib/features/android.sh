@@ -61,7 +61,7 @@ source /tmp/build-scripts/base/path-utils.sh
 # Version Configuration
 # ============================================================================
 # Android SDK Command-line Tools version (from https://developer.android.com/studio)
-ANDROID_CMDLINE_TOOLS_VERSION="${ANDROID_CMDLINE_TOOLS_VERSION:-14742923}"
+ANDROID_CMDLINE_TOOLS_VERSION="${ANDROID_CMDLINE_TOOLS_VERSION:-15859902}"
 
 # API levels to install (comma-separated)
 ANDROID_API_LEVELS="${ANDROID_API_LEVELS:-34,35}"
