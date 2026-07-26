@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 # Universal Container Build System
-# Version: 4.19.19
+# Version: 4.19.20
 # Supports multiple contexts: devcontainer, agents, CI/CD, production
 
 # ============================================================================
@@ -320,7 +320,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     fi
 # Mise polyglot runtime version manager
 ARG INCLUDE_MISE=false
-ARG MISE_VERSION=2026.7.12
+ARG MISE_VERSION=2026.7.13
 RUN if [ "${INCLUDE_MISE}" = "true" ]; then \
     MISE_VERSION=${MISE_VERSION} /tmp/build-scripts/features/mise.sh; \
     fi

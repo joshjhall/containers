@@ -472,6 +472,19 @@
             }
           },
           "added": "2026-07-15"
+        },
+        "2.5.5": {
+          "checksums": {
+            "amd64": {
+              "sha256": "12ecb833102c8bf8ab6ede7ecd5b6e6fc76e8af95b3ef356933a1f5330afc028",
+              "url": "https://github.com/biomejs/biome/releases/download/@biomejs/biome@2.5.5/biome-linux-x64"
+            },
+            "arm64": {
+              "sha256": "836d16eea672a4e92966e019582f606ef4a687496abbf6d547f31a5ef8a33548",
+              "url": "https://github.com/biomejs/biome/releases/download/@biomejs/biome@2.5.5/biome-linux-arm64"
+            }
+          },
+          "added": "2026-07-26"
         }
       }
     },
@@ -802,6 +815,19 @@
             }
           },
           "added": "2026-07-12"
+        },
+        "1.5.0": {
+          "checksums": {
+            "amd64": {
+              "sha256": "2ba65e87a1210b706bb1e67d5e48b5fc4a1935e43dbb3fb5f31c5597840d2e58",
+              "url": "https://github.com/colbymchenry/codegraph/releases/download/v1.5.0/codegraph-linux-x64.tar.gz"
+            },
+            "arm64": {
+              "sha256": "9f17750aedf45d51f68caae39ed21d6e2a7290b2326e5c53f95a165918ebd1d8",
+              "url": "https://github.com/colbymchenry/codegraph/releases/download/v1.5.0/codegraph-linux-arm64.tar.gz"
+            }
+          },
+          "added": "2026-07-26"
         }
       }
     },
@@ -824,7 +850,7 @@
     }
   },
   "metadata": {
-    "generated": "2026-07-19T05:17:25Z",
+    "generated": "2026-07-26T05:27:05Z",
     "description": "Pinned checksums for language runtime downloads",
     "note": "This file is automatically updated by check-versions.sh and should grow over time. Old checksums are never deleted to strengthen security for older versions and enable reproducible builds."
   }

@@ -14,7 +14,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Miscellaneous
 
 - Bump 9 tool versions to latest (#772)
-- Bump librarian to v0.8.1
 
 ## [4.19.18] - 2026-07-22
 
