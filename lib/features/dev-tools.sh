@@ -75,7 +75,7 @@ EZA_VERSION="${EZA_VERSION:-0.23.4}"
 UV_VERSION="${UV_VERSION:-0.11.32}"
 LEFTHOOK_VERSION="${LEFTHOOK_VERSION:-2.1.10}"
 GITLEAKS_VERSION="${GITLEAKS_VERSION:-8.30.1}"
-RUMDL_VERSION="${RUMDL_VERSION:-0.2.42}"
+RUMDL_VERSION="${RUMDL_VERSION:-0.2.43}"
 DPRINT_VERSION="${DPRINT_VERSION:-0.55.2}"
 OSV_SCANNER_VERSION="${OSV_SCANNER_VERSION:-2.4.0}"
 YQ_VERSION="${YQ_VERSION:-4.53.3}"
@@ -94,7 +94,7 @@ CODEGRAPH_VERSION="${CODEGRAPH_VERSION:-1.5.0}"
 # `.agnix.toml` pin (joshjhall/librarian#398). Bumps route through the weekly
 # check-versions sweep (registered in bin/check-versions.sh), like every other
 # tool here — the repo has no dependabot.
-AGNIX_VERSION="${AGNIX_VERSION:-0.40.0}"
+AGNIX_VERSION="${AGNIX_VERSION:-0.41.0}"
 
 # ============================================================================
 # Repository Configuration
