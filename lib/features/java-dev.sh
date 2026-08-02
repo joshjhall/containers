@@ -213,7 +213,7 @@ log_command "Creating JARs directory" \
 # ============================================================================
 log_message "Installing Google Java Format..."
 
-GJF_VERSION="${GJF_VERSION:-1.35.0}"
+GJF_VERSION="${GJF_VERSION:-1.36.1}"
 
 GJF_URL="https://github.com/google/google-java-format/releases/download/v${GJF_VERSION}/google-java-format-${GJF_VERSION}-all-deps.jar"
 # Google Java Format does not publish checksums — will be TOFU with unified logging

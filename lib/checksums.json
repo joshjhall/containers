@@ -485,6 +485,19 @@
             }
           },
           "added": "2026-07-26"
+        },
+        "2.5.6": {
+          "checksums": {
+            "amd64": {
+              "sha256": "3cc9a0c3fa26ac26a89e8a3b203c010c9ae88e36f69a2679e79981f267ce9d57",
+              "url": "https://github.com/biomejs/biome/releases/download/@biomejs/biome@2.5.6/biome-linux-x64"
+            },
+            "arm64": {
+              "sha256": "be5850727c7ef88516bf0495d345b50bf0e3507c361e912bf24f7329930ea22c",
+              "url": "https://github.com/biomejs/biome/releases/download/@biomejs/biome@2.5.6/biome-linux-arm64"
+            }
+          },
+          "added": "2026-08-02"
         }
       }
     },
@@ -850,7 +863,7 @@
     }
   },
   "metadata": {
-    "generated": "2026-07-26T05:27:05Z",
+    "generated": "2026-08-02T05:22:08Z",
     "description": "Pinned checksums for language runtime downloads",
     "note": "This file is automatically updated by check-versions.sh and should grow over time. Old checksums are never deleted to strengthen security for older versions and enable reproducible builds."
   }
