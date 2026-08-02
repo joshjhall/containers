@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.19.20] - 2026-07-26
+
+### Miscellaneous
+
+- Automated version updates to v4.19.20
+
 ## [4.19.19] - 2026-07-24
 
 ### Documentation
@@ -2237,6 +2243,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix prettier and markdownlint formatting in README
 - Format TLS documentation files
 
+[4.19.20]: https://github.com/joshjhall/containers/compare/v4.19.19...v4.19.20
 [4.19.19]: https://github.com/joshjhall/containers/compare/v4.19.18...v4.19.19
 [4.19.18]: https://github.com/joshjhall/containers/compare/v4.19.17...v4.19.18
 [4.19.17]: https://github.com/joshjhall/containers/compare/v4.19.16...v4.19.17
