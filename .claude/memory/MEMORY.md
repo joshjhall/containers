@@ -76,3 +76,4 @@
 - [jsonc-merge helper (#529)](jsonc-merge-helper-529.md) — Node CLI + jsonc-parser for comment-preserving Zed settings.json merges; install to fixed /usr/local prefix (npm global pinned to droppable cache)
 - [npm-global tools tracked via check-versions](npm-global-tools-tracked-via-check-versions.md) — no dependabot; agnix & npm globals pin in dev-tools.sh + check_npm helper + auto-patch writeback (#769/PR#770)
 - [UBI arm64 mirror depsolve flake](ubi-arm64-mirror-depsolve-flake.md) — rhel-9-arm64 base build fails on transient microdnf glibc depsolve (partial UBI aarch64 mirror sync); retry `gh run rerun --failed`, don't pin/code-fix (v4.19.18)
+- [Fetch before releasing](fetch-before-release-bot-owns-main.md) — auto-patch bot pushes releases+tags to main on a schedule; always `git fetch --tags` before branching or `just release-*` or you cut against a taken tag
