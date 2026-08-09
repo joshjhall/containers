@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 # Universal Container Build System
-# Version: 4.19.22
+# Version: 4.19.23
 # Supports multiple contexts: devcontainer, agents, CI/CD, production
 
 # ============================================================================
@@ -183,7 +183,7 @@ RUN mkdir -p /var/log/luggage && chmod 755 /var/log/luggage
 
 ARG INCLUDE_PYTHON=false
 ARG INCLUDE_PYTHON_DEV=false
-ARG PYTHON_VERSION=3.14.6
+ARG PYTHON_VERSION=3.14.7
 
 # Handle optional Python project files only if Python is being installed
 # Copy to temp location first since we're running as root and user doesn't exist yet
@@ -256,7 +256,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 ARG INCLUDE_MOJO=false
 ARG INCLUDE_MOJO_DEV=false
 ARG MOJO_VERSION=25.4
-ARG PIXI_VERSION=0.75.0
+ARG PIXI_VERSION=0.76.1
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     if [ "${INCLUDE_MOJO}" = "true" ] || [ "${INCLUDE_MOJO_DEV}" = "true" ]; then \
@@ -320,7 +320,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     fi
 # Mise polyglot runtime version manager
 ARG INCLUDE_MISE=false
-ARG MISE_VERSION=2026.8.0
+ARG MISE_VERSION=2026.8.3
 RUN if [ "${INCLUDE_MISE}" = "true" ]; then \
     MISE_VERSION=${MISE_VERSION} /tmp/build-scripts/features/mise.sh; \
     fi
@@ -497,7 +497,7 @@ ARG CLAUDE_CHANNEL=latest
 # Librarian plugin marketplace pin (version contract; tracked by check-versions).
 # Must be a *signed release tag* (v0.4.0+): the build fetches the signed release
 # tarball and verifies it with cosign before install (fail-closed, #671).
-ARG LIBRARIAN_REF=v0.8.4
+ARG LIBRARIAN_REF=v0.9.0
 # Librarian plugins to install from the local marketplace (comma-separated).
 # When unset, all defaults install. Set to empty "" to install none.
 ARG CLAUDE_LIBRARIAN_PLUGINS
