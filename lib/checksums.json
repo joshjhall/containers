@@ -498,6 +498,19 @@
             }
           },
           "added": "2026-08-02"
+        },
+        "2.5.7": {
+          "checksums": {
+            "amd64": {
+              "sha256": "7b5045d6d34f055df8ffe1bf3077164e6f6a24c45a41497d628a5e86d0e12fe7",
+              "url": "https://github.com/biomejs/biome/releases/download/@biomejs/biome@2.5.7/biome-linux-x64"
+            },
+            "arm64": {
+              "sha256": "27490d47af66420788b634afb48db23b588f272c8a284ba3daf706a5faa640ab",
+              "url": "https://github.com/biomejs/biome/releases/download/@biomejs/biome@2.5.7/biome-linux-arm64"
+            }
+          },
+          "added": "2026-08-09"
         }
       }
     },
@@ -738,6 +751,19 @@
             }
           },
           "added": "2026-06-21"
+        },
+        "2.5.0": {
+          "checksums": {
+            "amd64": {
+              "sha256": "edcfc41d257db36148f065055655fe3fcfc434b0b423ea67468a84c207524e0c",
+              "url": "https://github.com/google/osv-scanner/releases/download/v2.5.0/osv-scanner_linux_amd64"
+            },
+            "arm64": {
+              "sha256": "fe152e1a546af223e6c557cc3111a8bb3e5dc02fcbf7dbe95d26567c0f0041f2",
+              "url": "https://github.com/google/osv-scanner/releases/download/v2.5.0/osv-scanner_linux_arm64"
+            }
+          },
+          "added": "2026-08-09"
         }
       }
     },
@@ -863,7 +889,7 @@
     }
   },
   "metadata": {
-    "generated": "2026-08-02T05:22:08Z",
+    "generated": "2026-08-09T03:28:02Z",
     "description": "Pinned checksums for language runtime downloads",
     "note": "This file is automatically updated by check-versions.sh and should grow over time. Old checksums are never deleted to strengthen security for older versions and enable reproducible builds."
   }
