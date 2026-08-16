@@ -11,6 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Note fetch-before-release; auto-patch bot owns main
 
+### Miscellaneous
+
+- Automated version updates to v4.19.23
+- Update compatibility matrix with passing test results
+
 ## [4.19.22] - 2026-08-02
 
 ### Miscellaneous
