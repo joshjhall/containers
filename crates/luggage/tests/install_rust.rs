@@ -332,7 +332,13 @@ fn computed_digest_matches_published_checksum_format() {
     // a subtle bug in either `digest_hex` or the test fixture itself.
     let mut hasher = Sha256::new();
     hasher.update(RUSTUP_INIT_BODY);
-    let direct = format!("{:x}", hasher.finalize());
+    // sha2 0.11 returns a `hybrid_array::Array`, which no longer implements
+    // `LowerHex` — hex-encode the digest bytes directly.
+    let direct = hasher.finalize().iter().fold(String::new(), |mut acc, b| {
+        use std::fmt::Write as _;
+        let _ = write!(acc, "{b:02x}");
+        acc
+    });
     let via_helper = digest_hex(Some("sha256"), RUSTUP_INIT_BODY).unwrap();
     assert_eq!(direct, via_helper);
 }

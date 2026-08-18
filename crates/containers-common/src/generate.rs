@@ -64,8 +64,15 @@ pub fn hash_content(content: &str) -> String {
 /// [`hash_content`] for UTF-8 input.
 #[must_use]
 pub fn hash_bytes(bytes: &[u8]) -> String {
+    // sha2 0.11 returns a `hybrid_array::Array`, which no longer implements
+    // `LowerHex`; hex-encode the digest bytes directly.
     let hash = Sha256::digest(bytes);
-    format!("{hash:x}")
+    let mut out = String::with_capacity(hash.len() * 2);
+    for byte in hash {
+        use std::fmt::Write as _;
+        let _ = write!(out, "{byte:02x}");
+    }
+    out
 }
 
 /// Classifies a file for a 3-way merge: compares the file on disk against

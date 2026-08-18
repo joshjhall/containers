@@ -27,9 +27,7 @@ allow = [
   "BSD-2-Clause",
   "BSD-3-Clause",
   "ISC",
-  "Unicode-DFS-2016",
   "Unicode-3.0",
-  "MPL-2.0",
   "Zlib",
   "CC0-1.0",
 ]
@@ -53,7 +51,56 @@ workspace-default-features = "allow"
 external-default-features = "allow"
 allow = []
 deny = []
-skip = []
+
+# Duplicate-version exceptions.
+#
+# Every entry below is a *transitive* duplicate we cannot collapse from this
+# workspace: two dependencies we don't own pull incompatible major versions of
+# a shared crate. They're listed explicitly (with a version bound) rather than
+# silenced wholesale, so a duplicate from a *new* cause still warns and gets
+# looked at. Re-check these when octarine or the listed roots upgrade — drop
+# the entry once the range no longer matches anything, which cargo-deny
+# reports as an `unmatched-skip` warning.
+skip = [
+  # --- RustCrypto trait-generation split -------------------------------
+  # octarine's AEAD/KDF stack (aes-gcm 0.10, chacha20poly1305 0.10, argon2
+  # 0.5, x25519-dalek 2) still builds on the digest 0.10 / crypto-common 0.1
+  # generation. Our own hashing (containers-common, luggage) uses sha2 0.11,
+  # which is on the 0.11 generation. Collapses when those crates release
+  # versions cut against digest 0.11.
+  { crate = "block-buffer:<0.12", reason = "digest 0.10 generation via octarine's AEAD stack" },
+  { crate = "crypto-common:<0.2", reason = "digest 0.10 generation via octarine's AEAD stack" },
+  { crate = "digest:<0.11", reason = "digest 0.10 generation via octarine's AEAD stack" },
+  { crate = "cpufeatures:<0.3", reason = "digest 0.10 generation via octarine's AEAD stack" },
+  { crate = "chacha20:<0.10", reason = "octarine's chacha20poly1305 0.10 pins chacha20 0.9; atomic-write-file is on 0.10" },
+
+  # --- rand / getrandom generation split -------------------------------
+  # governor 0.10 (octarine's rate limiter) is on rand 0.9; octarine and
+  # atomic-write-file are on rand 0.10. ring (rustls) pins getrandom 0.2.
+  { crate = "rand:<0.10", reason = "governor 0.10 pins rand 0.9" },
+  { crate = "rand_core:<0.10", reason = "governor 0.10 (0.9) and octarine's x25519-dalek/argon2 (0.6)" },
+  { crate = "getrandom:<0.4", reason = "ring pins getrandom 0.2; governor's rand 0.9 pins 0.3" },
+
+  # --- hashbrown ---------------------------------------------------------
+  # dashmap 6 (0.14) and governor 0.10 (0.16), both reached through octarine,
+  # against indexmap 2's 0.17.
+  { crate = "hashbrown:<0.17", reason = "dashmap 6 and governor 0.10 lag indexmap's hashbrown" },
+
+  # --- proc-macro helper split -------------------------------------------
+  # local-ip-address -> neli -> derive_builder 0.20 uses darling 0.20 (syn 2);
+  # octarine-derive uses darling 0.23. syn 2 vs 3 is the ecosystem-wide
+  # proc-macro migration currently in flight.
+  { crate = "darling:<0.23", reason = "derive_builder 0.20 via neli/local-ip-address" },
+  { crate = "darling_core:<0.23", reason = "derive_builder 0.20 via neli/local-ip-address" },
+  { crate = "darling_macro:<0.23", reason = "derive_builder 0.20 via neli/local-ip-address" },
+  { crate = "syn:<3", reason = "ecosystem mid-migration from syn 2 to syn 3" },
+
+  # --- target-gated, never co-compiled -----------------------------------
+  # These only build on Windows / UEFI targets. Multiple versions coexist in
+  # the lockfile but no single target ever compiles more than one.
+  { crate = "windows-sys:<0.61", reason = "target-gated (Windows only); versions never co-compile" },
+  { crate = "r-efi:<6", reason = "target-gated (UEFI only); versions never co-compile" },
+]
 skip-tree = []
 
 [sources]
