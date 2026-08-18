@@ -330,6 +330,18 @@ update_version() {
                     sed_inplace "s/CONFORM_VERSION=\"\${CONFORM_VERSION:-[^}]*}\"/CONFORM_VERSION=\"\${CONFORM_VERSION:-$latest}\"/" "$script_path"
                     sed_inplace "s/^CONFORM_VERSION=\"[0-9][^\"]*\"/CONFORM_VERSION=\"\${CONFORM_VERSION:-$latest}\"/" "$script_path"
                     ;;
+                hadolint)
+                    sed_inplace "s/HADOLINT_VERSION=\"\${HADOLINT_VERSION:-[^}]*}\"/HADOLINT_VERSION=\"\${HADOLINT_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/^HADOLINT_VERSION=\"[0-9][^\"]*\"/HADOLINT_VERSION=\"\${HADOLINT_VERSION:-$latest}\"/" "$script_path"
+                    ;;
+                actionlint)
+                    sed_inplace "s/ACTIONLINT_VERSION=\"\${ACTIONLINT_VERSION:-[^}]*}\"/ACTIONLINT_VERSION=\"\${ACTIONLINT_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/^ACTIONLINT_VERSION=\"[0-9][^\"]*\"/ACTIONLINT_VERSION=\"\${ACTIONLINT_VERSION:-$latest}\"/" "$script_path"
+                    ;;
+                shfmt)
+                    sed_inplace "s/SHFMT_VERSION=\"\${SHFMT_VERSION:-[^}]*}\"/SHFMT_VERSION=\"\${SHFMT_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/^SHFMT_VERSION=\"[0-9][^\"]*\"/SHFMT_VERSION=\"\${SHFMT_VERSION:-$latest}\"/" "$script_path"
+                    ;;
                 mkcert)
                     sed_inplace "s/MKCERT_VERSION=\"\${MKCERT_VERSION:-[^}]*}\"/MKCERT_VERSION=\"\${MKCERT_VERSION:-$latest}\"/" "$script_path"
                     sed_inplace "s/^MKCERT_VERSION=\"[0-9][^\"]*\"/MKCERT_VERSION=\"\${MKCERT_VERSION:-$latest}\"/" "$script_path"
@@ -494,6 +506,9 @@ update_version() {
                     ;;
                 just-cargo)
                     sed_inplace "s/JUST_CARGO_VERSION=\"\${JUST_CARGO_VERSION:-[^}]*}\"/JUST_CARGO_VERSION=\"\${JUST_CARGO_VERSION:-$latest}\"/" "$script_path"
+                    ;;
+                mold)
+                    sed_inplace "s/MOLD_VERSION=\"\${MOLD_VERSION:-[^}]*}\"/MOLD_VERSION=\"\${MOLD_VERSION:-$latest}\"/" "$script_path"
                     ;;
                 sccache)
                     sed_inplace "s/SCCACHE_VERSION=\"\${SCCACHE_VERSION:-[^}]*}\"/SCCACHE_VERSION=\"\${SCCACHE_VERSION:-$latest}\"/" "$script_path"
