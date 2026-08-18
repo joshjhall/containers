@@ -281,8 +281,10 @@ See `docs/security-hardening.md` for full details.
   `--cap-add SYS_ADMIN --device /dev/fuse` to work around ownership
   mismatches on bind-mounted project directories. Add `.fuse_hidden*` to
   `.gitignore`.
-- **Case-insensitive filesystems** — Auto-detected; suppress the warning
-  with `SKIP_CASE_CHECK=true`. See
+- **Case-insensitive filesystems** — Auto-detected at startup, which aligns
+  git's `core.ignorecase` and refreshes symlinks with stale filesystem
+  attributes. Report without repairing via `SKIP_CASE_FIX=true`, or disable
+  entirely with `SKIP_CASE_CHECK=true`. See
   `docs/troubleshooting/case-sensitive-filesystems.md`.
 
 ---

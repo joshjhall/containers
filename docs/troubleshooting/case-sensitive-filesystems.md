@@ -48,6 +48,19 @@ git ls-files | grep -i readme
 # Shows: readme.md
 ```
 
+A related and more dangerous variant: a file appears **twice** in
+`git status`, once tracked and once untracked under a different case
+(`catalog.rs` and `Catalog.rs`). On a case-insensitive filesystem these are
+one file — the same inode reached through two cached names — which happens
+when `core.ignorecase` is wrong (see
+[Solution 5](#solution-5-align-git-coreignorecase)).
+
+> **Warning — do not clean these up by deleting the "extra" entry.**
+> Because both names resolve to the same inode, `rm Catalog.rs` deletes
+> `catalog.rs` too, and `git clean -fd` will do exactly that across every
+> shadowed path — silently destroying tracked source. Fix `core.ignorecase`
+> instead; the phantom entries disappear on their own.
+
 ### Symptom 2: Import/Module Errors
 
 ```python
@@ -74,31 +87,45 @@ On macOS: Import succeeds (case-insensitive) On Linux: Import fails (can't find
 
 ## Detection
 
-### Automatic Detection (Built-in)
+### Automatic Detection and Repair (Built-in)
 
-When you start a container, the runtime automatically detects case-insensitive
-mounts and displays a warning:
+On every container start, `42-workspace-fs-health.sh` probes the **project
+mount** and repairs two things it can fix safely. It prints nothing when the
+workspace is healthy, so any output means it acted:
 
 ```text
-⚠ Case-insensitive filesystem detected on /workspace
-   Host: macOS with case-insensitive APFS
-   This may cause issues with git case changes and imports
-
-   Recommendation: Use a case-sensitive volume for development
-   See: docs/troubleshooting/case-sensitive-filesystems.md
+[fs-health] /workspace/myproject is on a case-insensitive mount
+[fs-health] git core.ignorecase is 'unset' (incorrect for this mount)
+[fs-health] set core.ignorecase=true (opt out with SKIP_CASE_FIX=true)
 ```
+
+It also refreshes tracked symlinks whose filesystem attributes have gone stale
+(reporting an impossible `nlink=0`), which otherwise makes them show as
+permanently modified in `git status`:
+
+```text
+[fs-health] AGENTS.md: stale symlink attributes (nlink=0)
+[fs-health] refreshed AGENTS.md -> CLAUDE.md
+```
+
+Both repairs are idempotent and leave file contents untouched. Two opt-outs:
+
+| Variable           | Effect                                          |
+| ------------------ | ----------------------------------------------- |
+| `SKIP_CASE_FIX`    | Detect and report, but never write              |
+| `SKIP_CASE_CHECK`  | Disable the check entirely                      |
 
 ### Manual Detection
 
 Check if a mount point is case-sensitive:
 
 ```bash
-# Inside container
-/usr/local/bin/detect-case-sensitivity.sh /workspace
+# Inside container — pass the project mount, not /workspace
+/usr/local/bin/detect-case-sensitivity.sh /workspace/myproject
 
 # Output examples:
-# ✓ /workspace is case-sensitive (safe)
-# ⚠ /workspace is case-insensitive (may cause issues)
+# ✓ /workspace/myproject is case-sensitive (safe)
+# ⚠ /workspace/myproject is case-insensitive (may cause issues)
 ```
 
 Or manually test:
@@ -236,6 +263,38 @@ git commit -m "Fix case"
 git push
 ```
 
+### Solution 5: Align git core.ignorecase
+
+Git records whether the filesystem is case-insensitive in `core.ignorecase`,
+probed once when the repo is created. A repo **cloned on a case-sensitive
+filesystem and later moved** to a case-insensitive one keeps the stale
+`false`, and git then reports each case-variant spelling as a separate
+untracked file (see the warning under Symptom 1).
+
+Check whether git's belief matches reality:
+
+```bash
+# What git believes
+git config --get core.ignorecase          # empty output means false
+
+# What is actually true
+detect-case-sensitivity.sh "$PWD"          # exit 1 = case-insensitive
+```
+
+If the filesystem is case-insensitive and `core.ignorecase` is not `true`:
+
+```bash
+git config core.ignorecase true
+```
+
+This is local to `.git/config`, so it does not affect teammates who clone on a
+case-sensitive filesystem. It also covers every linked worktree, since they
+share the repository config. Setting it does **not** hide genuinely new files —
+only the duplicate spellings of files git already tracks.
+
+Containers built from this repo apply this fix automatically at startup; see
+[Detection](#detection).
+
 ## Prevention
 
 ### For New Projects
@@ -243,6 +302,9 @@ git push
 1. **Start with case-sensitive storage** (Solution 1)
 1. **Establish naming conventions early**
 1. **Document filesystem requirements** in project README
+1. **Re-clone rather than move a repo** between filesystems of different
+   case-sensitivity — moving leaves `core.ignorecase` stale (Solution 5).
+   Containers built from this repo correct it automatically at startup.
 1. **Add a lefthook hook** to check for case issues. In `lefthook.yml`:
 
 ```yaml

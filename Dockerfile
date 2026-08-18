@@ -659,6 +659,13 @@ RUN if [ -f /opt/container-runtime/40-project-health-check.sh ]; then \
     chmod 755 /etc/container/startup/40-project-health-check.sh; \
     fi
 
+# Install workspace filesystem health startup script (core.ignorecase alignment
+# on case-insensitive host mounts + stale symlink attribute repair)
+RUN if [ -f /opt/container-runtime/42-workspace-fs-health.sh ]; then \
+    cp /opt/container-runtime/42-workspace-fs-health.sh /etc/container/startup/42-workspace-fs-health.sh && \
+    chmod 755 /etc/container/startup/42-workspace-fs-health.sh; \
+    fi
+
 # Install init-env cleanup startup script
 RUN if [ -f /opt/container-runtime/05-cleanup-init-env.sh ]; then \
     cp /opt/container-runtime/05-cleanup-init-env.sh /etc/container/startup/05-cleanup-init-env.sh && \

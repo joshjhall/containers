@@ -63,7 +63,6 @@ services:
       CLAUDE_MCPS: "filesystem,codegraph"
       # Default memory path
       MEMORY_FILE_PATH: "/workspace/containers/.claude/memory"
-      SKIP_CASE_CHECK: "true"
     # Use tini as init system for proper zombie process reaping
     # This is a belt-and-suspenders approach - the Dockerfile also includes tini,
     # but init: true ensures proper PID 1 behavior even if command overrides entrypoint

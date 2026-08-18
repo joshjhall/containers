@@ -89,15 +89,9 @@ if [ -f "/opt/container-runtime/audit-logger.sh" ]; then
     source "/opt/container-runtime/audit-logger.sh"
 fi
 
-# ============================================================================
-# Case-Sensitivity Detection
-# ============================================================================
-# Source and run case-sensitivity check
-if [ -f "$_RUNTIME_LIB/case-sensitivity-check.sh" ]; then
-    # shellcheck source=/dev/null
-    source "$_RUNTIME_LIB/case-sensitivity-check.sh"
-    check_case_sensitivity
-fi
+# Case-sensitivity detection now lives in the startup script
+# 42-workspace-fs-health.sh, which probes the project mount (not /workspace,
+# which is the container's own overlay) and repairs what it finds.
 
 # Check if we're running as root
 if [ "$(id -u)" -eq 0 ]; then

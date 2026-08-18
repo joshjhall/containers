@@ -13,7 +13,8 @@
 
   // Container environment variables
   // "containerEnv": {
-  //   "SKIP_CASE_CHECK": "true"  // Suppress case-sensitivity warning if you're aware of limitations
+  //   "SKIP_CASE_FIX": "true",   // Detect and report filesystem problems, but never repair them
+  //   "SKIP_CASE_CHECK": "true"  // Disable the workspace filesystem health check entirely
   // },
 
   // Auto-configure git hooks (lefthook), development environment, SSH keys, and GitHub CLI after container starts.

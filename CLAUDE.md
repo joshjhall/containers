@@ -323,7 +323,11 @@ services:
 
 ## Cross-Platform Development
 
-Auto-detects case-insensitive mounts (suppress with `SKIP_CASE_CHECK=true`).
+Auto-detects case-insensitive mounts at startup and repairs what it can:
+aligns git `core.ignorecase` and refreshes symlinks whose filesystem attributes
+went stale (`SKIP_CASE_FIX=true` to report only, `SKIP_CASE_CHECK=true` to
+disable). Never `git clean -fd` a case-shadowed repo — the shadow shares an
+inode with the tracked file.
 Bindfs auto-applies FUSE permission overlay on macOS/VirtioFS — requires
 `--cap-add SYS_ADMIN --device /dev/fuse`. Add `.fuse_hidden*` to `.gitignore`.
 See `docs/troubleshooting/case-sensitive-filesystems.md` and

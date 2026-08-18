@@ -422,7 +422,8 @@ These variables can be set when running containers (via `docker run -e`):
 
 | Variable               | Default | Description                                        |
 | ---------------------- | ------- | -------------------------------------------------- |
-| `SKIP_CASE_CHECK`      | `false` | Skip case-insensitive filesystem detection warning |
+| `SKIP_CASE_CHECK`      | `false` | Disable the workspace filesystem health check entirely |
+| `SKIP_CASE_FIX`        | `false` | Detect and report filesystem problems, but never repair them |
 | `FUSE_CLEANUP_DISABLE` | `false` | Disable periodic `.fuse_hidden*` file cleanup      |
 
 ### Host Event Forwarding

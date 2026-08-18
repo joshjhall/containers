@@ -42,6 +42,12 @@ services:
     environment:
       - ENVIRONMENT=development
       - DOCKER_BUILDKIT=1
+      # On case-insensitive host mounts (the macOS/Windows default), startup
+      # aligns git's core.ignorecase and refreshes symlinks whose filesystem
+      # attributes went stale. Uncomment to report problems without repairing
+      # them, or to disable the check entirely.
+      # - SKIP_CASE_FIX=true
+      # - SKIP_CASE_CHECK=true
     volumes:
       # Source code
       - ../:/workspace/fullstack:cached

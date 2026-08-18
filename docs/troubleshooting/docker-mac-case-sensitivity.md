@@ -62,15 +62,26 @@ volumes:
 VS Code can edit files in Docker volumes directly via the Remote Container
 extension.
 
-### Option 3: Suppress Warning (Least Invasive)
+### Option 3: Accept It and Let Startup Compensate (Least Invasive)
 
-If you're aware of the limitations and code carefully:
+This is the default, and needs no configuration. On every start the container
+aligns git's `core.ignorecase` with the mount so case-variant spellings of
+tracked files stop appearing as untracked, and refreshes symlinks whose
+filesystem attributes have gone stale. It prints nothing unless it changes
+something.
+
+That removes the most damaging failure mode (see the `git clean -fd` warning in
+[case-sensitive-filesystems.md](case-sensitive-filesystems.md#symptom-1-git-changes-not-reflected))
+but does not make the filesystem case-sensitive. You must still be careful
+about the limitations listed below.
+
+To detect and report without letting the container write anything:
 
 **In docker-compose.yml**:
 
 ```yaml
 environment:
-  - SKIP_CASE_CHECK=true # Suppress startup warning
+  - SKIP_CASE_FIX=true # Report problems, but never repair them
 ```
 
 **Or in devcontainer.json**:
@@ -78,10 +89,12 @@ environment:
 ```json
 {
   "containerEnv": {
-    "SKIP_CASE_CHECK": "true"
+    "SKIP_CASE_FIX": "true"
   }
 }
 ```
+
+Use `SKIP_CASE_CHECK=true` instead to disable detection and repair entirely.
 
 **Important**: You must be careful about:
 
@@ -158,6 +171,10 @@ colima start --vm-type vz --mount-type virtiofs
 1. **Use consistent casing**: Always lowercase or always PascalCase
 1. **Avoid case-sensitive imports**: Don't rely on case differences
 1. **Test in CI**: CI runs in Linux with case-sensitive fs
+1. **Never `git clean -fd` a repo with case-shadowed entries**: the shadow and
+   the tracked file share one inode, so removing the "untracked" spelling
+   deletes the real file. Keeping `core.ignorecase=true` prevents the shadows
+   from appearing at all — the container sets it for you.
 
 ## Recommended Configuration
 
@@ -180,7 +197,9 @@ services:
       - ../README.md:/workspace/project/README.md:ro # Docs
 
     environment:
-      # Suppress warning if you've verified your setup
+      # Startup detects and repairs by default. Set either of these to true to
+      # report without repairing, or to disable the check entirely.
+      - SKIP_CASE_FIX=${SKIP_CASE_FIX:-false}
       - SKIP_CASE_CHECK=${SKIP_CASE_CHECK:-false}
 
 volumes:
