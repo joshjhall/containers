@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.19.25] - 2026-08-18
+
+### Fixed
+
+- Repair case-insensitive mount damage at startup
+
+### Miscellaneous
+
+- Bump librarian to v0.10.0
+- Update dependencies and silence cargo-deny warnings
+- Update tool versions and refresh checksums (#780)
+
+## [4.19.24] - 2026-08-16
+
+### Miscellaneous
+
+- Automated version updates to v4.19.24
+- Update compatibility matrix with passing test results
+
 ## [4.19.23] - 2026-08-09
 
 ### Documentation
@@ -2266,6 +2285,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix prettier and markdownlint formatting in README
 - Format TLS documentation files
 
+[4.19.25]: https://github.com/joshjhall/containers/compare/v4.19.24...v4.19.25
+[4.19.24]: https://github.com/joshjhall/containers/compare/v4.19.23...v4.19.24
 [4.19.23]: https://github.com/joshjhall/containers/compare/v4.19.22...v4.19.23
 [4.19.22]: https://github.com/joshjhall/containers/compare/v4.19.21...v4.19.22
 [4.19.21]: https://github.com/joshjhall/containers/compare/v4.19.20...v4.19.21
