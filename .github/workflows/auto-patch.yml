@@ -102,9 +102,34 @@ jobs:
           # Create and checkout new branch
           git checkout -b "$BRANCH_NAME"
 
-          # Apply version updates
+          # Apply version updates.
+          #
+          # Exit 2 means "some tools were skipped" — most often a tool that is
+          # registered in check-versions.sh but has no case in updaters.sh, so
+          # it silently stalls at an old version (issue #781). Nothing was
+          # half-written, so we keep the updates that DID apply and surface a
+          # warning plus a note in the commit message (which becomes the PR
+          # body downstream).
+          #
+          # Any other non-zero status fails the job. That deliberately includes
+          # exit 3 — a rewrite that failed after its case matched, which can
+          # leave the tree partially updated (e.g. a Dockerfile ARG bumped
+          # without its vendored catalog entry). Such a branch must never reach
+          # auto-merge.
           echo "Applying version updates..."
-          ./bin/update-versions.sh --input /tmp/version-check-output.json --no-commit --no-bump
+          # UPDATE_SKIPS is a plain shell variable, not $GITHUB_ENV: the commit
+          # message is assembled further down in THIS same step, and a
+          # $GITHUB_ENV write is only visible to *later* steps.
+          UPDATE_SKIPS=false
+          UPDATE_STATUS=0
+          ./bin/update-versions.sh --input /tmp/version-check-output.json --no-commit --no-bump || UPDATE_STATUS=$?
+          if [ "$UPDATE_STATUS" -eq 2 ]; then
+            echo "::warning::Some version updates were skipped — check the log above; a tool is likely missing a case in bin/lib/update-versions/updaters.sh (issue #781)"
+            UPDATE_SKIPS=true
+          elif [ "$UPDATE_STATUS" -ne 0 ]; then
+            echo "::error::update-versions.sh failed with status $UPDATE_STATUS"
+            exit "$UPDATE_STATUS"
+          fi
 
           # Update checksums for new versions
           echo "Updating pinned checksums..."
@@ -223,6 +248,23 @@ jobs:
 
           Bumped version: ${NEW_VERSION}
           EOF
+
+          # Note skipped updates in the commit message. The PR is opened by the
+          # separate auto-merge job, which builds its body from this commit
+          # message (git log -1), so this is what carries the warning through
+          # to the PR — no cross-job output needed (issue #781).
+          if [ "$UPDATE_SKIPS" = "true" ]; then
+            cat >> /tmp/commit-message.txt << 'EOF'
+
+          ⚠️ Some version updates were skipped
+
+          One or more tools could not be updated — commonly a tool registered
+          in bin/check-versions.sh with no matching case in
+          bin/lib/update-versions/updaters.sh. Those tools remain pinned at
+          their current versions. See the "Create auto-patch branch and apply
+          updates" step log for the tool names.
+          EOF
+          fi
 
           # Add GPG key changes to commit message if detected
           if [ "${{ env.gpg_keys_changed }}" = "true" ]; then

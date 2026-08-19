@@ -9,6 +9,14 @@
 #   source "${BIN_DIR}/lib/update-versions/updaters.sh"
 #   update_version "Python" "3.12.7" "3.12.8" "Dockerfile"
 
+# update_version() return codes. Callers branch on these to tell a genuinely
+# malformed upstream version apart from a tool that simply has no case in the
+# dispatch below — two very different problems that used to share exit 1 and so
+# got reported under one (misleading) "invalid versions" label. See issue #781.
+RC_INVALID_VERSION=1 # $latest failed validate_version()
+RC_NO_UPDATER_CASE=3 # no case for this tool/file — add one in this file
+RC_UPDATE_FAILED=4   # a case matched but the rewrite itself failed
+
 # Portable in-place sed across GNU sed (Linux) and BSD sed (macOS).
 # Usage: sed_inplace 'EXPRESSION' file [file ...]
 sed_inplace() {
@@ -141,7 +149,7 @@ update_version() {
     if ! validate_version "$latest"; then
         echo -e "${RED}  ERROR: Invalid version format for $tool: '$latest'${NC}"
         echo -e "${YELLOW}  Skipping update for $tool${NC}"
-        return 1
+        return "$RC_INVALID_VERSION"
     fi
 
     # Also check that we're not downgrading (basic check)
@@ -184,7 +192,7 @@ update_version() {
                     # Rust installs via luggage — keep the vendored catalog in
                     # lockstep with the pin (issue #506). Future luggage-managed
                     # tools add the same one-liner to their case.
-                    update_luggage_catalog "rust" "$latest"
+                    update_luggage_catalog "rust" "$latest" || return "$RC_UPDATE_FAILED"
                     ;;
                 Ruby)
                     sed_inplace "s/^ARG RUBY_VERSION=.*/ARG RUBY_VERSION=$latest/" "$PROJECT_ROOT/Dockerfile"
@@ -271,7 +279,7 @@ update_version() {
                     ;;
                 *)
                     echo -e "${RED}    ERROR: Unknown Dockerfile tool: $tool — add a case in updaters.sh${NC}" >&2
-                    return 1
+                    return "$RC_NO_UPDATER_CASE"
                     ;;
             esac
             ;;
@@ -289,7 +297,8 @@ update_version() {
                     sed_inplace "s/^COSIGN_VERSION=\"[0-9][^\"]*\"/COSIGN_VERSION=\"\${COSIGN_VERSION:-$latest}\"/" "$script_path"
                     ;;
                 *)
-                    echo -e "${YELLOW}    Warning: Unknown base setup tool: $tool${NC}"
+                    echo -e "${RED}    ERROR: Unknown base setup tool: $tool — add a case in updaters.sh${NC}" >&2
+                    return "$RC_NO_UPDATER_CASE"
                     ;;
             esac
             ;;
@@ -341,6 +350,24 @@ update_version() {
                 shfmt)
                     sed_inplace "s/SHFMT_VERSION=\"\${SHFMT_VERSION:-[^}]*}\"/SHFMT_VERSION=\"\${SHFMT_VERSION:-$latest}\"/" "$script_path"
                     sed_inplace "s/^SHFMT_VERSION=\"[0-9][^\"]*\"/SHFMT_VERSION=\"\${SHFMT_VERSION:-$latest}\"/" "$script_path"
+                    ;;
+                # Distinct from the `hyperfine-cargo` case below, which bumps
+                # HYPERFINE_CARGO_VERSION in rust-dev.sh. Neither pattern can
+                # match the other: the ${VAR:-…} form carries the full literal
+                # variable name, and the bare form is ^-anchored. They also
+                # receive different $script_path values (the registry's `file`
+                # field routes them). Asserted by tests/unit/version-updater-parity.sh.
+                hyperfine)
+                    sed_inplace "s/HYPERFINE_VERSION=\"\${HYPERFINE_VERSION:-[^}]*}\"/HYPERFINE_VERSION=\"\${HYPERFINE_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/^HYPERFINE_VERSION=\"[0-9][^\"]*\"/HYPERFINE_VERSION=\"\${HYPERFINE_VERSION:-$latest}\"/" "$script_path"
+                    ;;
+                jsonc-parser)
+                    sed_inplace "s/JSONC_PARSER_VERSION=\"\${JSONC_PARSER_VERSION:-[^}]*}\"/JSONC_PARSER_VERSION=\"\${JSONC_PARSER_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/^JSONC_PARSER_VERSION=\"[0-9][^\"]*\"/JSONC_PARSER_VERSION=\"\${JSONC_PARSER_VERSION:-$latest}\"/" "$script_path"
+                    ;;
+                sd)
+                    sed_inplace "s/SD_VERSION=\"\${SD_VERSION:-[^}]*}\"/SD_VERSION=\"\${SD_VERSION:-$latest}\"/" "$script_path"
+                    sed_inplace "s/^SD_VERSION=\"[0-9][^\"]*\"/SD_VERSION=\"\${SD_VERSION:-$latest}\"/" "$script_path"
                     ;;
                 mkcert)
                     sed_inplace "s/MKCERT_VERSION=\"\${MKCERT_VERSION:-[^}]*}\"/MKCERT_VERSION=\"\${MKCERT_VERSION:-$latest}\"/" "$script_path"
@@ -539,7 +566,7 @@ update_version() {
                     ;; # Trivy is installed via APT (no version to update in script)
                 *)
                     echo -e "${RED}    ERROR: Unknown shell script tool: $tool — add a case in updaters.sh${NC}" >&2
-                    return 1
+                    return "$RC_NO_UPDATER_CASE"
                     ;;
             esac
             ;;
@@ -555,17 +582,17 @@ update_version() {
                     # against an already-SHA-pinned ref, corrupt it outright
                     # (e.g. `@v0.37.0ed142fd…`). If resolution fails we leave the
                     # existing pin in place rather than write an unsafe ref.
-                    pin_action "$workflow_path" "aquasecurity/trivy-action" "$latest" || return 1
+                    pin_action "$workflow_path" "aquasecurity/trivy-action" "$latest" || return "$RC_UPDATE_FAILED"
                     ;;
                 *)
                     echo -e "${RED}    ERROR: Unknown ci.yml tool: $tool — add a case in updaters.sh${NC}" >&2
-                    return 1
+                    return "$RC_NO_UPDATER_CASE"
                     ;;
             esac
             ;;
         *)
             echo -e "${RED}    ERROR: Unknown file type: $file (tool: $tool) — add a case in updaters.sh${NC}" >&2
-            return 1
+            return "$RC_NO_UPDATER_CASE"
             ;;
     esac
 }

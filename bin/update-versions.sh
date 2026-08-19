@@ -89,9 +89,17 @@ echo ""
 # Track if any updates were applied
 UPDATES_APPLIED=false
 
-# Track successful updates
+# Track successful updates, and failures split by cause. A tool with no case
+# in updaters.sh is a very different problem from a malformed upstream version
+# — the former means the weekly auto-patch is silently stalling that tool at an
+# old version — so they are counted and reported separately (issue #781).
 SUCCESSFUL_UPDATES=0
-FAILED_UPDATES=0
+INVALID_VERSIONS=0
+MISSING_CASES=0
+UPDATE_ERRORS=0
+INVALID_VERSION_TOOLS=""
+MISSING_CASE_TOOLS=""
+ERROR_TOOLS=""
 
 # Process each outdated tool
 while IFS= read -r update; do
@@ -100,13 +108,39 @@ while IFS= read -r update; do
     LATEST=$(echo "$update" | jq -r '.latest')
     FILE=$(echo "$update" | jq -r '.file')
 
-    if update_version "$TOOL" "$CURRENT" "$LATEST" "$FILE"; then
-        SUCCESSFUL_UPDATES=$((SUCCESSFUL_UPDATES + 1))
-        UPDATES_APPLIED=true
-    else
-        FAILED_UPDATES=$((FAILED_UPDATES + 1))
-    fi
+    # `set -e` must not abort the loop on a per-tool failure: one stalled tool
+    # should never prevent the remaining valid updates from being applied.
+    UPDATE_RC=0
+    update_version "$TOOL" "$CURRENT" "$LATEST" "$FILE" || UPDATE_RC=$?
+
+    case "$UPDATE_RC" in
+        0)
+            SUCCESSFUL_UPDATES=$((SUCCESSFUL_UPDATES + 1))
+            UPDATES_APPLIED=true
+            ;;
+        "$RC_NO_UPDATER_CASE")
+            MISSING_CASES=$((MISSING_CASES + 1))
+            MISSING_CASE_TOOLS="${MISSING_CASE_TOOLS}${MISSING_CASE_TOOLS:+, }${TOOL}"
+            ;;
+        "$RC_INVALID_VERSION")
+            INVALID_VERSIONS=$((INVALID_VERSIONS + 1))
+            INVALID_VERSION_TOOLS="${INVALID_VERSION_TOOLS}${INVALID_VERSION_TOOLS:+, }${TOOL}"
+            ;;
+        # Catch-all: RC_UPDATE_FAILED (4) and any code a future updaters.sh
+        # adds. Deliberately unnamed — anything unrecognized is treated as a
+        # real failure rather than silently ignored. Note the two number
+        # spaces differ: these are update_version()'s RETURN codes, while the
+        # script's own EXIT codes below are 2 and 3. A tool landing here
+        # produces exit 3.
+        *)
+            UPDATE_ERRORS=$((UPDATE_ERRORS + 1))
+            ERROR_TOOLS="${ERROR_TOOLS}${ERROR_TOOLS:+, }${TOOL}"
+            ;;
+    esac
 done < <(echo "$OUTDATED" | jq -c '.[]')
+
+# Total failures across all causes — drives the summary and the exit code.
+FAILED_UPDATES=$((INVALID_VERSIONS + MISSING_CASES + UPDATE_ERRORS))
 
 echo ""
 
@@ -158,13 +192,59 @@ Automated dependency updates applied."
     echo ""
     echo -e "${GREEN}=== Update Complete ===${NC}"
     echo "Updates applied: $SUCCESSFUL_UPDATES"
-    if [ "$FAILED_UPDATES" -gt 0 ]; then
-        echo -e "${YELLOW}Updates skipped (invalid versions): $FAILED_UPDATES${NC}"
-    fi
 else
     if [ "$DRY_RUN" = true ]; then
         echo -e "${YELLOW}Dry run complete - no changes made${NC}"
     else
         echo -e "${YELLOW}No updates applied${NC}"
+    fi
+fi
+
+# Failure summary lives OUTSIDE the UPDATES_APPLIED branch on purpose. It used
+# to sit inside it, so a run where *every* update failed left UPDATES_APPLIED
+# false and printed only "No updates applied" — no failure count at all. The
+# worst case was the most silent (issue #781).
+if [ "$FAILED_UPDATES" -gt 0 ]; then
+    echo ""
+    if [ "$MISSING_CASES" -gt 0 ]; then
+        echo -e "${RED}Updates skipped (no updater case — add one in bin/lib/update-versions/updaters.sh): $MISSING_CASES${NC}" >&2
+        echo -e "${RED}  ${MISSING_CASE_TOOLS}${NC}" >&2
+        echo -e "${YELLOW}  These tools are pinned at their current versions and will stay there until a case is added.${NC}" >&2
+    fi
+    if [ "$INVALID_VERSIONS" -gt 0 ]; then
+        echo -e "${YELLOW}Updates skipped (invalid version strings): $INVALID_VERSIONS${NC}" >&2
+        echo -e "${YELLOW}  ${INVALID_VERSION_TOOLS}${NC}" >&2
+    fi
+    if [ "$UPDATE_ERRORS" -gt 0 ]; then
+        echo -e "${RED}Updates failed (rewrite error): $UPDATE_ERRORS${NC}" >&2
+        echo -e "${RED}  ${ERROR_TOOLS}${NC}" >&2
+        echo -e "${RED}  A matching case ran but its rewrite failed — the tree may be partially updated.${NC}" >&2
+    fi
+
+    # Exit non-zero so an automated caller cannot report success while tools
+    # silently stall.
+    #
+    # Two distinct codes, because the two situations warrant different CI
+    # handling:
+    #
+    #   2 — nothing was rewritten for some tool (no updater case, or a
+    #       malformed upstream version). The tree is consistent; the tools just
+    #       stalled. auto-patch.yml keeps the updates that DID apply and warns.
+    #   3 — a matching case ran and its rewrite FAILED (e.g. pin_action could
+    #       not resolve a SHA, or the luggage catalog update failed). The tree
+    #       may be half-updated — a Dockerfile ARG bumped while its vendored
+    #       catalog entry was not (issue #506) ships a build that cannot
+    #       succeed. That must never sail through auto-merge, so it is fatal to
+    #       the job rather than a tolerated skip.
+    #
+    # A dry run stays exit 0: it changes nothing, so nothing is stalling, and
+    # `just update-versions --dry-run` should not fail for a report it just
+    # printed. (A dry run also returns before the case dispatch, so it can only
+    # ever observe invalid versions — never a missing case or a failed rewrite.)
+    if [ "$DRY_RUN" = false ]; then
+        if [ "$UPDATE_ERRORS" -gt 0 ]; then
+            exit 3
+        fi
+        exit 2
     fi
 fi
