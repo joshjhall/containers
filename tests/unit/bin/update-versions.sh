@@ -954,6 +954,284 @@ EOF
     assert_true "$ok" "pin_action fails (rc=1) and leaves the file byte-identical on resolution failure"
 }
 
+# ============================================================================
+# Test: every unknown-tool fallback returns RC_NO_UPDATER_CASE
+# ============================================================================
+# update_version() dispatches on file type, and EACH branch has its own `*)`
+# fallback. They must all report a missing case the same way — one branch
+# returning 0 makes update-versions.sh count an unrewritten tool as a
+# successful update, which is the silent stall issue #781 exists to close.
+# (The setup.sh branch did exactly that: it warned and fell through, so the
+# arm returned echo's status.) A static case-label scan cannot catch this, so
+# assert the actual return code for all four file types.
+test_unknown_tool_returns_no_updater_case_for_every_file_type() {
+    source "$PROJECT_ROOT/bin/lib/common.sh"
+    source "$PROJECT_ROOT/bin/lib/version-utils.sh"
+    source "$PROJECT_ROOT/bin/lib/update-versions/updaters.sh"
+
+    # shellcheck disable=SC2034 # consumed by update_version() from the sourced updaters.sh
+    local DRY_RUN=false
+    local ok=true
+    local file rc
+
+    # One representative file name per branch of the outer `case "$file"`.
+    for file in Dockerfile setup.sh dev-tools.sh ci.yml some-unknown-file.txt; do
+        rc=0
+        update_version "totally-unmapped-tool" "1.0.0" "1.0.1" "$file" >/dev/null 2>&1 || rc=$?
+        if [ "$rc" -ne "$RC_NO_UPDATER_CASE" ]; then
+            echo "    $file: expected RC_NO_UPDATER_CASE ($RC_NO_UPDATER_CASE), got $rc"
+            ok=false
+        fi
+    done
+
+    assert_true "$ok" "Every file-type branch returns RC_NO_UPDATER_CASE for an unmapped tool"
+}
+
+# ============================================================================
+# Test: a malformed version is reported separately from a missing case
+# ============================================================================
+# The two used to share exit 1, which is why the summary mislabeled missing
+# cases as "invalid versions".
+test_invalid_version_returns_distinct_code() {
+    source "$PROJECT_ROOT/bin/lib/common.sh"
+    source "$PROJECT_ROOT/bin/lib/version-utils.sh"
+    source "$PROJECT_ROOT/bin/lib/update-versions/updaters.sh"
+
+    # shellcheck disable=SC2034 # consumed by update_version() from the sourced updaters.sh
+    local DRY_RUN=false
+    local rc=0
+    update_version "sd" "1.1.0" "not-a-version" "dev-tools.sh" >/dev/null 2>&1 || rc=$?
+
+    local ok=true
+    [ "$rc" -eq "$RC_INVALID_VERSION" ] || ok=false
+    [ "$RC_INVALID_VERSION" -ne "$RC_NO_UPDATER_CASE" ] || ok=false
+
+    assert_true "$ok" "A malformed version returns RC_INVALID_VERSION, distinct from RC_NO_UPDATER_CASE"
+}
+
+# ============================================================================
+# Test: the exit-code contract auto-patch.yml depends on
+# ============================================================================
+# .github/workflows/auto-patch.yml treats exit 2 as "some tools were skipped,
+# keep the updates that applied" and any other non-zero as a hard failure. If
+# this contract changes, that workflow silently mis-handles the run.
+_run_update_versions_fixture() {
+    local payload="$1"
+    shift
+    local test_dir
+    test_dir=$(mktemp -d)
+
+    mkdir -p "$test_dir/lib/features"
+    command cat >"$test_dir/lib/features/dev-tools.sh" <<'EOF'
+#!/bin/bash
+SD_VERSION="${SD_VERSION:-1.1.0}"
+EOF
+    printf '%s' "$payload" >"$test_dir/test.json"
+
+    local rc=0
+    (
+        cd "$test_dir" || exit 1
+        PROJECT_ROOT_OVERRIDE="$test_dir" "$PROJECT_ROOT/bin/update-versions.sh" \
+            --no-commit --no-bump --input test.json "$@" >/dev/null 2>&1
+    ) || rc=$?
+
+    command rm -rf "$test_dir"
+    printf '%s' "$rc"
+}
+
+test_exit_code_contract() {
+    local missing_case='{"tools":[{"tool":"totally-unmapped-tool","current":"1.0.0","latest":"1.0.1","file":"dev-tools.sh","status":"outdated"}]}'
+    local invalid='{"tools":[{"tool":"sd","current":"1.1.0","latest":"not-a-version","file":"dev-tools.sh","status":"outdated"}]}'
+    local clean='{"tools":[{"tool":"sd","current":"1.1.0","latest":"1.2.0","file":"dev-tools.sh","status":"outdated"}]}'
+
+    local ok=true
+    local rc
+
+    rc=$(_run_update_versions_fixture "$missing_case")
+    [ "$rc" -eq 2 ] || {
+        echo "    missing case: expected exit 2, got $rc"
+        ok=false
+    }
+
+    rc=$(_run_update_versions_fixture "$invalid")
+    [ "$rc" -eq 2 ] || {
+        echo "    invalid version: expected exit 2, got $rc"
+        ok=false
+    }
+
+    # A dry run changes nothing, so nothing is stalling — stays exit 0.
+    rc=$(_run_update_versions_fixture "$missing_case" --dry-run)
+    [ "$rc" -eq 0 ] || {
+        echo "    dry run: expected exit 0, got $rc"
+        ok=false
+    }
+
+    # A run where everything applied must still succeed.
+    rc=$(_run_update_versions_fixture "$clean")
+    [ "$rc" -eq 0 ] || {
+        echo "    clean run: expected exit 0, got $rc"
+        ok=false
+    }
+
+    assert_true "$ok" "exit 2 on skipped updates; 0 on a clean run and on --dry-run"
+}
+
+# ============================================================================
+# Test: the three new cases actually rewrite their pins
+# ============================================================================
+# Exit status alone cannot prove a rewrite happened: sed_inplace runs `sed -i`,
+# which exits 0 even when its pattern matches nothing. So a typo in one of
+# these patterns would leave the pin untouched and still "succeed" — the exact
+# silent stall issue #781 is about. Assert file content, not exit codes.
+#
+# hyperfine is the one that most needs this: HYPERFINE_VERSION (dev-tools.sh)
+# and HYPERFINE_CARGO_VERSION (rust-dev.sh) share a prefix, so the check also
+# confirms bumping one leaves the other alone.
+test_new_cases_rewrite_their_pins() {
+    local test_dir
+    test_dir=$(mktemp -d)
+
+    mkdir -p "$test_dir/lib/features"
+    command cat >"$test_dir/lib/features/dev-tools.sh" <<'EOF'
+#!/bin/bash
+SD_VERSION="${SD_VERSION:-1.1.0}"
+HYPERFINE_VERSION="${HYPERFINE_VERSION:-1.20.0}"
+JSONC_PARSER_VERSION="${JSONC_PARSER_VERSION:-3.3.1}"
+EOF
+    command cat >"$test_dir/lib/features/rust-dev.sh" <<'EOF'
+#!/bin/bash
+HYPERFINE_CARGO_VERSION="${HYPERFINE_CARGO_VERSION:-1.20.0}"
+EOF
+
+    command cat >"$test_dir/test.json" <<'EOF'
+{
+  "tools": [
+    {"tool": "sd", "current": "1.1.0", "latest": "1.2.0", "file": "dev-tools.sh", "status": "outdated"},
+    {"tool": "hyperfine", "current": "1.20.0", "latest": "1.21.0", "file": "dev-tools.sh", "status": "outdated"},
+    {"tool": "jsonc-parser", "current": "3.3.1", "latest": "3.4.0", "file": "dev-tools.sh", "status": "outdated"}
+  ]
+}
+EOF
+
+    (
+        cd "$test_dir" || exit 1
+        PROJECT_ROOT_OVERRIDE="$test_dir" "$PROJECT_ROOT/bin/update-versions.sh" \
+            --no-commit --no-bump --input test.json >/dev/null 2>&1
+    ) || true
+
+    local ok=true
+    local dev_tools="$test_dir/lib/features/dev-tools.sh"
+
+    command grep -q 'SD_VERSION="${SD_VERSION:-1.2.0}"' "$dev_tools" || {
+        echo "    sd: SD_VERSION was not rewritten to 1.2.0"
+        ok=false
+    }
+    command grep -q 'HYPERFINE_VERSION="${HYPERFINE_VERSION:-1.21.0}"' "$dev_tools" || {
+        echo "    hyperfine: HYPERFINE_VERSION was not rewritten to 1.21.0"
+        ok=false
+    }
+    command grep -q 'JSONC_PARSER_VERSION="${JSONC_PARSER_VERSION:-3.4.0}"' "$dev_tools" || {
+        echo "    jsonc-parser: JSONC_PARSER_VERSION was not rewritten to 3.4.0"
+        ok=false
+    }
+    # The sibling cargo pin must be untouched by the hyperfine bump.
+    command grep -q 'HYPERFINE_CARGO_VERSION="${HYPERFINE_CARGO_VERSION:-1.20.0}"' \
+        "$test_dir/lib/features/rust-dev.sh" || {
+        echo "    hyperfine: HYPERFINE_CARGO_VERSION was disturbed (should stay 1.20.0)"
+        ok=false
+    }
+
+    command rm -rf "$test_dir"
+    assert_true "$ok" "hyperfine, jsonc-parser, and sd rewrite their own pins and nothing else"
+}
+
+# ============================================================================
+# Test: a failed rewrite exits 3, not 2
+# ============================================================================
+# auto-patch.yml tolerates exit 2 (nothing was written, tools just stalled) but
+# must FAIL on a rewrite that broke after its case matched — that can leave the
+# tree half-updated (a Dockerfile ARG bumped without its vendored catalog
+# entry, issue #506), which must never reach auto-merge.
+test_failed_rewrite_exits_three() {
+    local test_dir
+    test_dir=$(mktemp -d)
+
+    # Trivy-action lives in the ci.yml branch and routes through pin_action,
+    # which fails when it cannot resolve a SHA. Point it at a workflow file
+    # that exists but an unresolvable version, with no network access needed:
+    # resolve_action_sha returns non-zero on any failure, including no network.
+    mkdir -p "$test_dir/.github/workflows"
+    command cat >"$test_dir/.github/workflows/ci.yml" <<'EOF'
+jobs:
+  build:
+    steps:
+      - uses: aquasecurity/trivy-action@0000000000000000000000000000000000000000 # v0.1.0
+EOF
+
+    command cat >"$test_dir/test.json" <<'EOF'
+{
+  "tools": [
+    {"tool": "trivy-action", "current": "0.1.0", "latest": "0.0.0-nonexistent-tag", "file": "ci.yml", "status": "outdated"}
+  ]
+}
+EOF
+
+    local rc=0
+    (
+        cd "$test_dir" || exit 1
+        PROJECT_ROOT_OVERRIDE="$test_dir" GITHUB_TOKEN="" \
+            "$PROJECT_ROOT/bin/update-versions.sh" \
+            --no-commit --no-bump --input test.json >/dev/null 2>&1
+    ) || rc=$?
+
+    command rm -rf "$test_dir"
+
+    assert_equals 3 "$rc" "A failed rewrite exits 3 (fatal to CI), not 2 (tolerated skip)"
+}
+
+# ============================================================================
+# Test: each failure cause is reported under its own label, naming the tool
+# ============================================================================
+# The old summary lumped everything under "invalid versions" and, worse, only
+# printed inside the `UPDATES_APPLIED` branch — so a run where EVERY update
+# failed printed no failure count at all.
+test_failure_summary_separates_causes() {
+    local test_dir
+    test_dir=$(mktemp -d)
+
+    mkdir -p "$test_dir/lib/features"
+    command cat >"$test_dir/lib/features/dev-tools.sh" <<'EOF'
+#!/bin/bash
+SD_VERSION="${SD_VERSION:-1.1.0}"
+EOF
+
+    command cat >"$test_dir/test.json" <<'EOF'
+{
+  "tools": [
+    {"tool": "totally-unmapped-tool", "current": "1.0.0", "latest": "1.0.1", "file": "dev-tools.sh", "status": "outdated"},
+    {"tool": "sd", "current": "1.1.0", "latest": "not-a-version", "file": "dev-tools.sh", "status": "outdated"}
+  ]
+}
+EOF
+
+    local output
+    output=$(
+        cd "$test_dir" || exit 1
+        PROJECT_ROOT_OVERRIDE="$test_dir" "$PROJECT_ROOT/bin/update-versions.sh" \
+            --no-commit --no-bump --input test.json 2>&1
+    ) || true
+
+    command rm -rf "$test_dir"
+
+    local ok=true
+    # Both causes reported, each naming its tool — and NOT collapsed into one.
+    echo "$output" | command grep -q "no updater case" || ok=false
+    echo "$output" | command grep -q "totally-unmapped-tool" || ok=false
+    echo "$output" | command grep -q "invalid version strings" || ok=false
+
+    assert_true "$ok" "Missing-case and invalid-version failures are reported separately, naming the tools"
+}
+
 # Test removed - kubernetes-checksums.sh no longer needed (uses dynamic fetching)
 run_test test_krew_update_handler "krew update handler exists"
 run_test test_helm_update_handler "Helm update handler exists"
@@ -961,6 +1239,12 @@ run_test test_mise_vale_typos_update "Updates Mise, vale, typos (regression for 
 run_test test_unknown_tool_fails_loudly "Unknown tool fails loudly instead of silent success"
 run_test test_pin_action_rewrites_sha_pin "pin_action rewrites SHA-pinned action without corruption"
 run_test test_pin_action_preserves_pin_on_resolution_failure "pin_action preserves pin when SHA resolution fails"
+run_test test_unknown_tool_returns_no_updater_case_for_every_file_type "Every file-type branch returns RC_NO_UPDATER_CASE for an unmapped tool"
+run_test test_invalid_version_returns_distinct_code "Invalid version returns a code distinct from a missing case"
+run_test test_exit_code_contract "Exit-code contract: 2 on skipped updates, 0 on clean and dry runs"
+run_test test_new_cases_rewrite_their_pins "hyperfine, jsonc-parser, and sd rewrite their own pins"
+run_test test_failed_rewrite_exits_three "Failed rewrite exits 3 (fatal), not 2 (tolerated)"
+run_test test_failure_summary_separates_causes "Failure summary separates causes and names the tools"
 
 # Generate report
 generate_report
