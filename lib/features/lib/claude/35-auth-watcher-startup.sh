@@ -4,6 +4,13 @@
 # This runs as part of container startup and launches the watcher process
 # that will detect when the user authenticates with Claude and automatically
 # run claude-setup.
+#
+# The claude-setup this watcher eventually runs may race the one that
+# 30-first-startup.sh backgrounds. That is safe by construction: claude-setup
+# holds an flock on /tmp/claude-setup.lock for its whole run (#784), so the two
+# serialize rather than interleaving their ~/.claude/settings.json
+# read-modify-write. Both launch paths are intentional — see the note in
+# 30-first-startup.sh.
 
 MARKER_FILE="$HOME/.claude/.container-setup-complete"
 WATCHER_PID_FILE="/tmp/claude-auth-watcher.pid"

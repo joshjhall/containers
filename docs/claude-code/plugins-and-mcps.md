@@ -101,6 +101,36 @@ existing plugins, skills, or agents.
 After installation, use the `/deslop` command in Claude Code to scan for AI
 slop in your codebase.
 
+### Plugins Are Kept Enabled
+
+Every plugin named by `CLAUDE_PLUGINS`, `CLAUDE_EXTRA_PLUGINS`, or
+`CLAUDE_LIBRARIAN_PLUGINS` is re-enabled on each `claude-setup` run if it is
+found installed but disabled. Startup logs the repair:
+
+```text
+  ↻ workflow (installed but disabled — re-enabling)
+  ✓ workflow re-enabled
+```
+
+This self-heals the state where a plugin is installed yet inert — which used to
+strip every skill it provides (`/workflow:*`, `/review-audit:*`) with no error
+anywhere in the logs.
+
+Because of this, `claude plugin disable <name>` does not survive a container
+restart for a plugin still named in those variables. **To drop a plugin, remove
+it from the variable** rather than disabling it:
+
+```bash
+# Keep only dev-core and review-audit from librarian
+docker run -e CLAUDE_LIBRARIAN_PLUGINS="dev-core,review-audit" ...
+```
+
+`claude-setup` also serializes itself with an `flock` on
+`/tmp/claude-setup.lock`, so the two startup paths that launch it (the
+first-startup script and the auth watcher) cannot interleave their
+`~/.claude/settings.json` writes. Where `flock` is unavailable, setup logs a
+warning and proceeds unlocked.
+
 ## MCP Server Configuration
 
 ### Extra MCP Servers
