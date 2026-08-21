@@ -40,7 +40,9 @@ while [[ $# -gt 0 ]]; do
         --help)
             echo "Usage: $0 [OPTIONS]"
             echo "Options:"
-            echo "  --dry-run       Show what would be updated without making changes"
+            echo "  --dry-run       Show what would be updated without making changes."
+            echo "                  Writes nothing, but shares the real run's exit codes:"
+            echo "                  2 if any tool would be skipped (e.g. no updater case)."
             echo "  --no-commit     Update files but don't commit changes"
             echo "  --no-bump       Don't bump patch version after updates"
             echo "  --input FILE    Use JSON file instead of running check-versions.sh"

@@ -1146,6 +1146,94 @@ EOF
 }
 
 # ============================================================================
+# Test: the OTHER two dry-run guards actually short-circuit
+# ============================================================================
+# Three helpers gained a DRY_RUN guard, but the test above only drives
+# sed_inplace (via the `sd` tool). pin_action and update_luggage_catalog carry
+# the guards that matter most operationally — they must skip the network call
+# and the binary probe respectively, so a dry run needs neither and cannot
+# report a spurious RC_UPDATE_FAILED. Both are asserted with stubs that FAIL
+# LOUDLY if reached, so a regression that removed either guard turns red here
+# rather than only surfacing as a slow or offline-broken dry run.
+test_dry_run_short_circuits_network_and_binary() {
+    local test_dir
+    test_dir=$(mktemp -d)
+    mkdir -p "$test_dir/.github/workflows" "$test_dir/lib/features"
+
+    # Tripwires: invoking either one marks the guard as breached.
+    command cat >"$test_dir/curl" <<EOF
+#!/bin/bash
+echo breached >"$test_dir/curl-was-called"
+exit 1
+EOF
+    command cat >"$test_dir/luggage-stub" <<EOF
+#!/bin/bash
+echo breached >"$test_dir/luggage-was-called"
+exit 1
+EOF
+    command chmod +x "$test_dir/curl" "$test_dir/luggage-stub"
+
+    command cat >"$test_dir/.github/workflows/ci.yml" <<'EOF'
+jobs:
+  build:
+    steps:
+      - uses: aquasecurity/trivy-action@0000000000000000000000000000000000000000 # v0.1.0
+EOF
+    command cat >"$test_dir/Dockerfile" <<'EOF'
+ARG RUST_VERSION=1.90.0
+EOF
+    command cat >"$test_dir/lib/features/rust.sh" <<'EOF'
+#!/bin/bash
+RUST_VERSION="${RUST_VERSION:-1.90.0}"
+EOF
+
+    local ok=true
+    local rc=0
+    (
+        source "$PROJECT_ROOT/bin/lib/common.sh"
+        source "$PROJECT_ROOT/bin/lib/version-utils.sh"
+        source "$PROJECT_ROOT/bin/lib/update-versions/updaters.sh"
+
+        # shellcheck disable=SC2030,SC2034 # consumed by update_version() from the sourced module
+        PROJECT_ROOT="$test_dir"
+        # shellcheck disable=SC2030,SC2034 # the guard under test
+        DRY_RUN=true
+        # shellcheck disable=SC2030,SC2034 # tripwire binary, read by update_luggage_catalog
+        LUGGAGE_BIN="$test_dir/luggage-stub"
+        # curl tripwire takes precedence for resolve_action_sha
+        PATH="$test_dir:$PATH"
+
+        update_version "trivy-action" "0.1.0" "0.2.0" "ci.yml" >/dev/null 2>&1 &&
+            update_version "Rust" "1.90.0" "1.91.0" "Dockerfile" >/dev/null 2>&1
+    ) || rc=$?
+
+    [ "$rc" -eq 0 ] || {
+        echo "    expected both dry-run updates to return 0, got $rc"
+        ok=false
+    }
+    [ ! -f "$test_dir/curl-was-called" ] || {
+        echo "    pin_action reached the network under --dry-run (guard breached)"
+        ok=false
+    }
+    [ ! -f "$test_dir/luggage-was-called" ] || {
+        echo "    update_luggage_catalog invoked the binary under --dry-run (guard breached)"
+        ok=false
+    }
+    command grep -q "@0000000000000000000000000000000000000000 # v0.1.0" \
+        "$test_dir/.github/workflows/ci.yml" || {
+        echo "    ci.yml pin was rewritten under --dry-run"
+        ok=false
+    }
+    command grep -q "^ARG RUST_VERSION=1.90.0$" "$test_dir/Dockerfile" || {
+        echo "    Dockerfile ARG was rewritten under --dry-run"
+        ok=false
+    }
+
+    command rm -rf "$test_dir"
+    assert_true "$ok" "A dry run skips pin_action's network call and update_luggage_catalog's binary probe"
+}
+
+# ============================================================================
 # Test: a failed update_luggage_catalog propagates RC_UPDATE_FAILED / exit 3
 # ============================================================================
 # The Rust arm does `update_luggage_catalog "rust" "$latest" || return
@@ -1197,7 +1285,7 @@ test_luggage_catalog_failure_exits_three() {
         PROJECT_ROOT="$test_dir"
         # shellcheck disable=SC2030,SC2034 # ditto
         DRY_RUN=false
-        # shellcheck disable=SC2030 # ditto
+        # shellcheck disable=SC2030,SC2034 # ditto
         LUGGAGE_BIN="$test_dir/luggage-stub"
 
         update_version "Rust" "1.90.0" "1.91.0" "Dockerfile" >/dev/null 2>&1
@@ -1408,6 +1496,7 @@ run_test test_unknown_tool_returns_no_updater_case_for_every_file_type "Every fi
 run_test test_invalid_version_returns_distinct_code "Invalid version returns a code distinct from a missing case"
 run_test test_exit_code_contract "Exit-code contract: 2 on skipped updates (real and dry), 0 on clean runs"
 run_test test_dry_run_reports_missing_case_without_writing "Dry run reports a missing updater case without writing"
+run_test test_dry_run_short_circuits_network_and_binary "Dry run skips pin_action's network call and the luggage binary probe"
 run_test test_new_cases_rewrite_their_pins "hyperfine, jsonc-parser, and sd rewrite their own pins"
 run_test test_failed_rewrite_exits_three "Failed rewrite exits 3 (fatal), not 2 (tolerated)"
 run_test test_luggage_catalog_failure_exits_three "Failed luggage catalog update returns RC_UPDATE_FAILED and exits 3"
