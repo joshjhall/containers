@@ -70,6 +70,7 @@ docker-compose.local.yml
 temp/
 tmp/
 results/
+_notes.md
 
 # ============================================================================
 # TEST ARTIFACTS
