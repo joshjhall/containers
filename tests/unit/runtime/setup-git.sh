@@ -645,6 +645,27 @@ test_no_warn_when_secret_resolved() {
     assert_empty "$output" "Should stay silent when the secret resolved"
 }
 
+# Test: the signing-key variable is warned about too, not just the auth key.
+# Both call sites pass a different variable name into the same helper, so the
+# name-substitution has to be exercised for each — a helper that hardcoded
+# GIT_AUTH_SSH_KEY would still pass the auth-key test above.
+test_warn_uses_correct_var_for_signing_key() {
+    local func_script="$TEST_TEMP_DIR/warn_fn.sh"
+    _extract_warn_fn "$func_script"
+
+    local output
+    output=$(
+        set -euo pipefail
+        source "$func_script"
+        unset GIT_SIGNING_SSH_KEY
+        export OP_GIT_SIGNING_SSH_KEY_REF="op://vault/item/field"
+        _warn_if_ref_unresolved GIT_SIGNING_SSH_KEY 2>&1
+    )
+
+    assert_contains "$output" "OP_GIT_SIGNING_SSH_KEY_REF is set but GIT_SIGNING_SSH_KEY is empty" \
+        "Should name the signing-key variables, not the auth-key ones"
+}
+
 # Test: setup_auth_key calls the warn helper before its skip guard
 test_auth_key_calls_warn_helper() {
     assert_file_contains "$SETUP_GIT_SCRIPT" '_warn_if_ref_unresolved GIT_AUTH_SSH_KEY' \
@@ -688,6 +709,7 @@ run_test_with_setup test_warn_when_ref_set_but_secret_empty "Warns when OP ref s
 run_test_with_setup test_warn_returns_zero "Warn helper returns 0 (does not break && chain)"
 run_test_with_setup test_no_warn_when_no_ref_configured "Silent when no OP ref configured"
 run_test_with_setup test_no_warn_when_secret_resolved "Silent when secret resolved"
+run_test_with_setup test_warn_uses_correct_var_for_signing_key "Warn names signing-key vars (not auth-key)"
 run_test_with_setup test_auth_key_calls_warn_helper "setup_auth_key calls warn helper"
 run_test_with_setup test_signing_key_calls_warn_helper "setup_signing_key calls warn helper"
 run_test_with_setup test_signing_key_validates_key "setup_signing_key validates SSH key"
