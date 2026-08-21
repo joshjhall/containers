@@ -21,6 +21,13 @@ set -euo pipefail
 # Run claude-setup in the background to avoid blocking container startup (~48s).
 # The auth-watcher will also detect authentication and run setup if this
 # initial attempt fails (e.g. not yet authenticated).
+#
+# Racing the watcher's invocation is safe by construction: claude-setup takes an
+# flock on /tmp/claude-setup.lock for the whole of its run (#784), so the two
+# background invocations serialize instead of interleaving their
+# ~/.claude/settings.json read-modify-write. Do NOT "simplify" this by deleting
+# one of the two launch paths — they cover different cases (this one runs at
+# startup regardless of auth; the watcher's fires when auth appears later).
 if command -v claude-setup &>/dev/null; then
     (
         claude-setup --force >/tmp/claude-first-setup.log 2>&1 || true

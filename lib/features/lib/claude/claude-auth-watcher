@@ -200,7 +200,19 @@ if command -v inotifywait &>/dev/null; then
     while [ "$(date +%s)" -lt "$END_TIME" ]; do
         # Watch for credential file creation/modification
         # Timeout after poll interval to allow periodic authentication check
-        if inotifywait -q -t "$POLL_INTERVAL" -e create -e modify "$CLAUDE_DIR" "$HOME" 2>/dev/null; then
+        #
+        # --exclude settings.json* (#784): the watch is directory-wide, so it
+        # used to fire on ANY write under ~/.claude — including the
+        # settings.json (and settings.json.tmp.*) that a concurrently-running
+        # claude-setup writes. That self-trigger started a SECOND claude-setup
+        # whose non-atomic read-modify-write clobbered the first's
+        # enabledPlugins. Excluding settings.json removes the self-trigger; the
+        # -t "$POLL_INTERVAL" timeout below still re-checks is_authenticated
+        # every interval, so a genuine credential signal that this filter ever
+        # hid would degrade to 30s polling, never to "never fires".
+        if inotifywait -q -t "$POLL_INTERVAL" -e create -e modify \
+            --exclude '/settings\.json' \
+            "$CLAUDE_DIR" "$HOME" 2>/dev/null; then
             # File change detected, check authentication
             if is_authenticated; then
                 run_setup

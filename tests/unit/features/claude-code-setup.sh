@@ -31,6 +31,30 @@ SAMPLE_PLUGIN_LIST='  ❯ commit-commands@claude-plugins-official - Git commit h
   ❯ rust-analyzer-lsp@claude-plugins-official - Rust LSP integration
   ❯ pyright-lsp@claude-plugins-official - Python LSP integration'
 
+# Sample multi-line 'claude plugin list' output (captured verbatim from the CLI
+# on 2026-08-19). This is the CURRENT format — one block per plugin, with an
+# explicit Status: line. The single-line SAMPLE_PLUGIN_LIST above is the OLDER
+# format, retained because _match_plugin_in_list must keep handling it.
+#
+# review-audit is disabled here: exactly the state issue #784 produces when two
+# concurrent claude-setup runs clobber each other's enabledPlugins writes.
+SAMPLE_PLUGIN_LIST_STATUS='Installed plugins:
+
+  ❯ dev-core@librarian
+    Version: 0.10.0
+    Scope: user
+    Status: ✔ enabled
+
+  ❯ review-audit@librarian
+    Version: 0.10.0
+    Scope: user
+    Status: ✘ disabled
+
+  ❯ workflow@librarian
+    Version: 0.10.0
+    Scope: user
+    Status: ✔ enabled'
+
 # Empty plugin list
 EMPTY_PLUGIN_LIST=''
 
@@ -64,6 +88,36 @@ _match_plugin_in_list() {
     local plugin_name="$1"
     local list_output="$2"
     echo "$list_output" | command grep -qE "^[[:space:]]*❯ ${plugin_name}@" 2>/dev/null
+}
+
+# Mirror of _plugin_status_in_list in claude-setup (#784). Echoes exactly one
+# of: enabled | disabled | absent.
+#
+# Kept in sync with production by test_status_parser_mirrors_production below —
+# these tests deliberately duplicate rather than source, because claude-setup
+# needs the claude CLI at load time.
+_plugin_status_in_list() {
+    local plugin_name="$1"
+    local list_output="$2"
+    local block
+    block=$(echo "$list_output" | command awk -v name="$plugin_name" '
+        /^[[:space:]]*❯ / {
+            in_block = ($0 ~ "^[[:space:]]*❯ " name "@")
+            if (in_block) { print; found = 1 }
+            next
+        }
+        in_block { print }
+        END { exit (found ? 0 : 1) }
+    ') || {
+        echo "absent"
+        return 0
+    }
+
+    if echo "$block" | command grep -qE '^[[:space:]]*Status:.*disabled'; then
+        echo "disabled"
+    else
+        echo "enabled"
+    fi
 }
 
 _match_mcp_server_in_list() {
@@ -179,6 +233,299 @@ test_plugin_case_sensitive() {
     else
         assert_true true "Correctly rejects case mismatch"
     fi
+}
+
+# ============================================================================
+# Plugin Enablement Parsing Tests (issue #784)
+# ============================================================================
+# A concurrent-write race can leave a plugin installed but DISABLED.
+# _match_plugin_in_list matches it either way, so the second claude-setup run
+# reported "already installed" and never repaired the damage — silently removing
+# every skill the plugin provides, across container restarts.
+# _plugin_status_in_list is what distinguishes the two states.
+#
+# The source-guard tests below feed stripped source to grep via a HERE-STRING,
+# never `printf ... | grep -q`. This suite runs under `set -euo pipefail`, and
+# `grep -q` exits at the first match — SIGPIPE-killing the upstream printf
+# (exit 141), which pipefail then propagates as test failure. That made the
+# guards fail nondeterministically, on whether grep won the race.
+
+test_plugin_status_enabled() {
+    assert_equals "enabled" \
+        "$(_plugin_status_in_list "dev-core" "$SAMPLE_PLUGIN_LIST_STATUS")" \
+        "Enabled plugin reports 'enabled'"
+}
+
+test_plugin_status_disabled() {
+    # The exact #784 failure state.
+    assert_equals "disabled" \
+        "$(_plugin_status_in_list "review-audit" "$SAMPLE_PLUGIN_LIST_STATUS")" \
+        "Disabled plugin reports 'disabled'"
+}
+
+test_plugin_status_absent() {
+    assert_equals "absent" \
+        "$(_plugin_status_in_list "nonexistent-plugin" "$SAMPLE_PLUGIN_LIST_STATUS")" \
+        "Uninstalled plugin reports 'absent'"
+}
+
+test_plugin_status_no_leak_to_next_block() {
+    # 'workflow' immediately FOLLOWS the disabled 'review-audit' block. A parser
+    # that grepped the whole output, or failed to stop at the next '❯' header,
+    # would wrongly report it disabled.
+    assert_equals "enabled" \
+        "$(_plugin_status_in_list "workflow" "$SAMPLE_PLUGIN_LIST_STATUS")" \
+        "Disabled block does not leak status into the following plugin"
+}
+
+test_plugin_status_old_format_is_enabled() {
+    # The older single-line format carries no Status: line at all. Treating a
+    # missing status as 'disabled' would make every old-format path spuriously
+    # "repair" an already-fine plugin.
+    assert_equals "enabled" \
+        "$(_plugin_status_in_list "figma" "$SAMPLE_PLUGIN_LIST")" \
+        "Old status-less format defaults to 'enabled'"
+}
+
+test_plugin_status_prefix_safety() {
+    # "work" must not match the "workflow@" block — same prefix guarantee the
+    # _match_plugin_in_list tests above assert.
+    assert_equals "absent" \
+        "$(_plugin_status_in_list "work" "$SAMPLE_PLUGIN_LIST_STATUS")" \
+        "Prefix 'work' does not match 'workflow@'"
+}
+
+test_plugin_status_empty_list() {
+    assert_equals "absent" \
+        "$(_plugin_status_in_list "dev-core" "$EMPTY_PLUGIN_LIST")" \
+        "Empty list reports 'absent'"
+}
+
+# Source guard: these tests mirror the production helper rather than sourcing
+# it, so assert the production copy still exists and still keys off Status:.
+# Without this, claude-setup could drift and the mirror would keep passing.
+test_status_parser_mirrors_production() {
+    local setup_file="$PROJECT_ROOT/lib/features/lib/claude/claude-setup"
+    local code
+    # Executable lines only — the surrounding comments quote both the Status:
+    # line and the enable call, which would mask their deletion.
+    code=$(command grep -vE '^[[:space:]]*#' "$setup_file")
+
+    if command grep -q '^_plugin_status_in_list()' <<<"$code"; then
+        pass_test "_plugin_status_in_list defined in claude-setup"
+    else
+        fail_test "_plugin_status_in_list missing from claude-setup"
+    fi
+
+    if command grep -qE "Status:.*disabled" <<<"$code"; then
+        pass_test "production parser keys off the Status: line"
+    else
+        fail_test "production parser no longer parses Status: (mirror has drifted)"
+    fi
+
+    # The repair path is what satisfies AC4 — detection alone leaves a raced
+    # container broken.
+    if command grep -q 'claude plugin enable' <<<"$code"; then
+        pass_test "claude-setup re-enables a disabled plugin"
+    else
+        fail_test "claude-setup never calls 'claude plugin enable'"
+    fi
+}
+
+# ============================================================================
+# Concurrency Guard Tests (issue #784)
+# ============================================================================
+
+# Source guard: claude-setup must serialize itself. Two startup paths launch it
+# concurrently (30-first-startup.sh and the auth-watcher), and without a lock
+# their non-atomic settings.json read-modify-writes clobber each other.
+test_claude_setup_takes_flock() {
+    local setup_file="$PROJECT_ROOT/lib/features/lib/claude/claude-setup"
+    local code
+    # Comments describe the lock at length — match executable lines only, so
+    # deleting the real call fails this test.
+    code=$(command grep -vE '^[[:space:]]*#' "$setup_file")
+
+    if command grep -qE 'flock -w [0-9]+ 200' <<<"$code"; then
+        pass_test "claude-setup acquires an flock with a bounded wait"
+    else
+        fail_test "claude-setup does not acquire a bounded flock"
+    fi
+
+    # Absent flock must not be fatal: Alpine ships only the busybox applet and
+    # ubi-minimal may omit util-linux entirely.
+    if command grep -q 'command -v flock' <<<"$code"; then
+        pass_test "flock availability is probed, not assumed"
+    else
+        fail_test "claude-setup assumes flock exists (breaks Alpine/ubi-minimal)"
+    fi
+
+    # The probe must WARN and continue, never exit. A hard failure here would
+    # brick setup on every distro without util-linux.
+    if command grep -qE 'flock not available' <<<"$code"; then
+        pass_test "missing flock degrades with a warning"
+    else
+        fail_test "no warning path for a missing flock"
+    fi
+
+    # The lock path must be a FIXED literal, never env-derived. The two
+    # launchers run in different process trees, so a ${TMPDIR:-/tmp} path could
+    # resolve differently for each, put them on separate lock files, and
+    # silently restore the race the lock exists to prevent.
+    if command grep -qE 'CLAUDE_SETUP_LOCK=.*\$\{?TMPDIR' <<<"$code"; then
+        fail_test "lock path is env-derived — the two launchers may not agree"
+    else
+        pass_test "lock path does not depend on TMPDIR"
+    fi
+
+    if command grep -qE 'CLAUDE_SETUP_LOCK="/tmp/claude-setup\.lock"' <<<"$code"; then
+        pass_test "lock path is the documented /tmp/claude-setup.lock"
+    else
+        fail_test "lock path does not match the path documented for operators"
+    fi
+}
+
+# The lock must be exclusive in practice, not just present in the source.
+# A second acquirer has to block while the first holds it.
+test_flock_is_actually_exclusive() {
+    if ! command -v flock >/dev/null 2>&1; then
+        skip_test "flock not available on this host"
+        return 0
+    fi
+
+    local tmpdir lockfile
+    tmpdir="$RESULTS_DIR/flock-excl-$$-$(date +%s%N)"
+    mkdir -p "$tmpdir"
+    lockfile="$tmpdir/claude-setup.lock"
+
+    # Hold the lock for 2s in the background...
+    (
+        exec 200>"$lockfile"
+        flock 200
+        sleep 2
+    ) &
+    local holder=$!
+    sleep 0.3
+
+    # ...then confirm a non-blocking acquire is REFUSED while it is held.
+    if flock -n -w 0 "$lockfile" true 2>/dev/null; then
+        fail_test "lock was acquired while already held — not exclusive"
+    else
+        pass_test "second acquirer is blocked while the lock is held"
+    fi
+
+    wait "$holder" 2>/dev/null || true
+
+    # Once released, it must be acquirable again (no leak / no deadlock).
+    if flock -n -w 0 "$lockfile" true 2>/dev/null; then
+        pass_test "lock is released when the holder exits"
+    else
+        fail_test "lock not released after holder exited"
+    fi
+
+    command rm -rf "$tmpdir"
+}
+
+# Source guard: the watcher must not wake on settings.json. Its watch is
+# directory-wide, so a sibling claude-setup's settings.json write used to
+# self-trigger a SECOND claude-setup — the race's actual trigger.
+test_auth_watcher_excludes_settings_json() {
+    local watcher="$PROJECT_ROOT/lib/features/lib/claude/claude-auth-watcher"
+    local code
+
+    # Strip comments before matching. The fix is described at length in a
+    # comment right above the call site, so a naive grep over the whole file
+    # passes even after the actual --exclude flag is deleted (verified by
+    # mutating the source).
+    code=$(command grep -vE '^[[:space:]]*#' "$watcher")
+
+    if command grep -qE -- '--exclude' <<<"$code"; then
+        pass_test "auth-watcher filters its inotify watch"
+    else
+        fail_test "auth-watcher watch is unfiltered (settings.json self-triggers)"
+    fi
+
+    if command grep -qE -- "--exclude.*settings" <<<"$code"; then
+        pass_test "auth-watcher excludes settings.json specifically"
+    else
+        fail_test "auth-watcher does not exclude settings.json"
+    fi
+}
+
+# Behavioral regression: two concurrent read-modify-write cycles against a
+# settings.json-shaped file must not lose keys when serialized by flock.
+#
+# The negative control runs the SAME racing writers WITHOUT the lock and asserts
+# a key IS lost — otherwise this test could pass on a machine too fast to race,
+# proving nothing about the lock.
+_run_racing_writers() {
+    local settings="$1" lockfile="$2" use_lock="$3" tmpdir="$4"
+    local writer="$tmpdir/writer.sh"
+
+    command cat >"$writer" <<'WRITER'
+#!/bin/bash
+# Read-modify-write with a deliberate gap, mirroring claude plugin install's
+# non-atomic update of enabledPlugins.
+settings="$1"; lockfile="$2"; use_lock="$3"; key="$4"
+if [ "$use_lock" = "yes" ]; then
+    exec 200>"$lockfile"
+    flock -w 30 200
+fi
+current=$(/usr/bin/jq -c '.' "$settings")
+sleep 0.3
+printf '%s' "$current" \
+    | /usr/bin/jq -c --arg k "$key" '.enabledPlugins[$k] = true' >"$settings.tmp.$$"
+mv "$settings.tmp.$$" "$settings"
+WRITER
+    chmod +x "$writer"
+
+    echo '{"enabledPlugins":{"dev-core@librarian":true}}' >"$settings"
+    "$writer" "$settings" "$lockfile" "$use_lock" "review-audit@librarian" &
+    local pid_a=$!
+    sleep 0.1
+    "$writer" "$settings" "$lockfile" "$use_lock" "workflow@librarian" &
+    local pid_b=$!
+    wait "$pid_a" "$pid_b" 2>/dev/null || true
+}
+
+test_flock_preserves_concurrent_enabled_plugins() {
+    if ! command -v flock >/dev/null 2>&1; then
+        skip_test "flock not available on this host"
+        return 0
+    fi
+
+    # Self-contained temp dir: this suite uses the framework's default
+    # setup/teardown, so the test owns its own scratch space.
+    local tmpdir
+    tmpdir="$RESULTS_DIR/flock-race-$$-$(date +%s%N)"
+    mkdir -p "$tmpdir"
+
+    local settings="$tmpdir/settings.json"
+    local lockfile="$tmpdir/claude-setup.lock"
+
+    # --- With the lock: every key from both writers survives ---
+    _run_racing_writers "$settings" "$lockfile" "yes" "$tmpdir"
+    local key
+    for key in "dev-core@librarian" "review-audit@librarian" "workflow@librarian"; do
+        if /usr/bin/jq -e --arg k "$key" '.enabledPlugins[$k] == true' \
+            >/dev/null 2>&1 <"$settings"; then
+            pass_test "locked: $key survived concurrent writes"
+        else
+            fail_test "locked: $key was clobbered (the #784 failure)"
+        fi
+    done
+
+    # --- Negative control: without the lock a key must be lost ---
+    _run_racing_writers "$settings" "$lockfile" "no" "$tmpdir"
+    local surviving
+    surviving=$(/usr/bin/jq -r '.enabledPlugins | keys | length' <"$settings")
+    if [ "$surviving" -lt 3 ]; then
+        pass_test "unlocked control: writes clobbered as expected ($surviving/3 keys)"
+    else
+        fail_test "unlocked control did not race — lock test proves nothing"
+    fi
+
+    command rm -rf "$tmpdir"
 }
 
 # ============================================================================
@@ -1203,6 +1550,20 @@ run_test test_plugin_no_match_suffix "Plugin: No match for suffix"
 run_test test_plugin_empty_list "Plugin: Empty list"
 run_test test_plugin_whitespace_list "Plugin: Whitespace-only list"
 run_test test_plugin_case_sensitive "Plugin: Case sensitive"
+
+# Enablement parsing + concurrency guards (issue #784)
+run_test test_plugin_status_enabled "Plugin status: enabled plugin reports enabled"
+run_test test_plugin_status_disabled "Plugin status: disabled plugin reports disabled"
+run_test test_plugin_status_absent "Plugin status: missing plugin reports absent"
+run_test test_plugin_status_no_leak_to_next_block "Plugin status: disabled block does not leak to next plugin"
+run_test test_plugin_status_old_format_is_enabled "Plugin status: status-less old format defaults to enabled"
+run_test test_plugin_status_prefix_safety "Plugin status: prefix does not match longer plugin name"
+run_test test_plugin_status_empty_list "Plugin status: empty list reports absent"
+run_test test_status_parser_mirrors_production "Plugin status: production parser + repair path present"
+run_test test_claude_setup_takes_flock "Concurrency: claude-setup serializes itself with flock"
+run_test test_flock_is_actually_exclusive "Concurrency: the lock is exclusive and released"
+run_test test_auth_watcher_excludes_settings_json "Concurrency: auth-watcher excludes settings.json from its watch"
+run_test test_flock_preserves_concurrent_enabled_plugins "Concurrency: flock preserves enabledPlugins under concurrent writes"
 
 # MCP server matching tests
 run_test test_mcp_match_filesystem "MCP: Match filesystem"

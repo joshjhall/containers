@@ -49,6 +49,54 @@ for arg in "$@"; do
     esac
 done
 
+# ============================================================================
+# Mutual Exclusion (issue #784)
+# ============================================================================
+# Two startup paths launch this script concurrently — 30-first-startup.sh
+# backgrounds `claude-setup --force`, and 35-auth-watcher-startup.sh backgrounds
+# claude-auth-watcher, which runs claude-setup on auth detection. Both then
+# read-modify-write ~/.claude/settings.json non-atomically (the host-event hook
+# merge below, plus `claude plugin install`'s own enabledPlugins update), so the
+# loser's writes are clobbered and plugins end up installed-but-DISABLED.
+#
+# The lock lives here in the callee rather than in either caller, so every
+# invocation path is covered — including a manual `claude-setup` run racing a
+# watcher-triggered one. It is acquired once and held for the whole run via an
+# open fd, not just around the plugin phase, because settings.json is touched in
+# more than one place.
+# The path is pinned to /tmp rather than ${TMPDIR:-/tmp} ON PURPOSE. Mutual
+# exclusion only holds if BOTH launchers compute the SAME path, and the two
+# invocations come from different process trees (one backgrounded from the
+# startup script, one nohup'd from the auth watcher). An env-derived path could
+# differ between them — a TMPDIR exported into one tree but not the other would
+# put them on separate lock files and silently restore the race. A fixed literal
+# cannot drift. It also keeps the documented recovery path
+# (docs/claude-code/plugins-and-mcps.md) truthful for an operator clearing a
+# stuck lock by hand.
+CLAUDE_SETUP_LOCK="/tmp/claude-setup.lock"
+if command -v flock >/dev/null 2>&1; then
+    # Open the lock file on fd 200. The redirect is kept on its own line so a
+    # failure to open (e.g. unwritable TMPDIR) is caught here rather than
+    # aborting mid-run under `set -e`.
+    if exec 200>"$CLAUDE_SETUP_LOCK"; then
+        # -w 600: a real run takes ~48s, so a 10-minute wait can only mean a
+        # stuck holder. Treat it as an error rather than proceeding unlocked,
+        # which would silently reintroduce the very race this guards.
+        if ! flock -w 600 200; then
+            echo "ERROR: timed out after 600s waiting for $CLAUDE_SETUP_LOCK" >&2
+            echo "       Another claude-setup appears stuck. Check for a hung process." >&2
+            exit 1
+        fi
+    else
+        echo "  ⚠ could not open $CLAUDE_SETUP_LOCK — continuing without a lock" >&2
+    fi
+else
+    # No hard dependency on util-linux: Alpine ships only the busybox applet and
+    # ubi-minimal may omit it entirely (cf. the nologin finding in #435).
+    # Continuing unlocked is the pre-existing behavior, not a regression.
+    echo "  ⚠ flock not available — concurrent claude-setup runs are not serialized" >&2
+fi
+
 # Secure token storage path (RAM-backed, never touches disk)
 ANTHROPIC_TOKEN_FILE="/dev/shm/anthropic-auth-token"
 
@@ -297,6 +345,10 @@ ensure_marketplace() {
 # Output format from 'claude plugin list':
 #   ❯ plugin-name@marketplace - description
 #   ❯ another-plugin@marketplace - description
+#
+# NOTE: this is an INSTALLED-or-not predicate — it matches a disabled plugin
+# just as happily as an enabled one. Use _plugin_status_in_list when the
+# distinction matters (issue #784).
 _match_plugin_in_list() {
     local plugin_name="$1"
     local list_output="$2"
@@ -305,6 +357,59 @@ _match_plugin_in_list() {
     echo "$list_output" | command grep -qE "^[[:space:]]*❯ ${plugin_name}@" 2>/dev/null
 }
 
+# Enablement-aware detection (testable - takes list output as parameter).
+# Echoes exactly one of: enabled | disabled | absent
+#
+# Current 'claude plugin list' emits a multi-line block per plugin:
+#   ❯ workflow@librarian
+#     Version: 0.10.0
+#     Scope: user
+#     Status: ✘ disabled
+#
+# Why this exists (#784): a concurrent-write race can leave a plugin installed
+# but DISABLED. _match_plugin_in_list matches it either way, so callers reported
+# "already installed" and never repaired the damage — the failure stayed silent
+# across container restarts.
+#
+# A matched block with NO "Status:" line before the next plugin block maps to
+# "enabled": older CLI output was single-line (❯ name@marketplace - description)
+# and reported no status at all, so treating a missing status as disabled would
+# make every old-format path spuriously "repair" itself.
+_plugin_status_in_list() {
+    local plugin_name="$1"
+    local list_output="$2"
+    local block
+    # Take everything from the plugin's own header line up to (not including)
+    # the next header, so a neighbouring block's Status: can never leak in.
+    block=$(echo "$list_output" | command awk -v name="$plugin_name" '
+        # A header line starts a new block; decide whether it is ours.
+        /^[[:space:]]*❯ / {
+            in_block = ($0 ~ "^[[:space:]]*❯ " name "@")
+            if (in_block) { print; found = 1 }
+            next
+        }
+        in_block { print }
+        END { exit (found ? 0 : 1) }
+    ') || {
+        echo "absent"
+        return 0
+    }
+
+    if echo "$block" | command grep -qE '^[[:space:]]*Status:.*disabled'; then
+        echo "disabled"
+    else
+        echo "enabled"
+    fi
+}
+
+# DEPRECATED (#784) — superseded by plugin_status below. Currently has no
+# callers; kept only so an out-of-tree caller does not break.
+#
+# DO NOT use this for install/skip decisions. It is enablement-BLIND: it returns
+# true for a plugin that is installed but DISABLED, which is exactly how the
+# #784 race went undetected — the second claude-setup run saw "installed",
+# logged "already installed", and left every skill from that plugin unavailable.
+# Reach for plugin_status (enabled|disabled|absent) instead.
 has_plugin() {
     local plugin_name="$1"
     local list_output
@@ -312,14 +417,60 @@ has_plugin() {
     _match_plugin_in_list "$plugin_name" "$list_output"
 }
 
+# plugin_status — enablement-aware wrapper over a live `claude plugin list`.
+# Echoes enabled | disabled | absent. A failed list call is reported as
+# "absent" so callers fall through to their install path (which has its own
+# retry + error reporting) rather than silently skipping.
+plugin_status() {
+    local plugin_name="$1"
+    local list_output
+    list_output=$(claude plugin list 2>/dev/null) || {
+        echo "absent"
+        return 0
+    }
+    _plugin_status_in_list "$plugin_name" "$list_output"
+}
+
+# enable_plugin — repair an installed-but-disabled plugin (#784 AC4).
+#
+# Policy: any plugin named in CLAUDE_PLUGINS / CLAUDE_LIBRARIAN_PLUGINS is
+# ALWAYS re-enabled. The supported way to opt out of a plugin is to remove it
+# from those lists, not `claude plugin disable` — a manual disable of a
+# still-listed plugin is indistinguishable from race damage, and leaving it
+# broken is the silent failure this issue is about.
+#
+# Never aborts the run: a failed enable warns and returns non-zero for the
+# caller to absorb (this script runs under `set -e`).
+enable_plugin() {
+    local plugin_name="$1"
+    local full_name="$2"
+    local output
+    echo "    ↻ $plugin_name (installed but disabled — re-enabling)"
+    if output=$(claude plugin enable "$full_name" 2>&1); then
+        echo "    ✓ $plugin_name re-enabled"
+        return 0
+    fi
+    echo "    ⚠ Failed to re-enable $plugin_name"
+    echo "$output" | command sed 's/^/      /' | command head -5
+    return 1
+}
+
 install_plugin() {
     local plugin_name="$1"
     local full_name="${plugin_name}@${MARKETPLACE}"
 
-    if has_plugin "$plugin_name"; then
-        echo "    ✓ $plugin_name (already installed)"
-        return 0
-    fi
+    # Three-way on enablement, not two-way on presence (#784): an
+    # installed-but-disabled plugin is repaired rather than skipped.
+    case "$(plugin_status "$plugin_name")" in
+        enabled)
+            echo "    ✓ $plugin_name (already installed)"
+            return 0
+            ;;
+        disabled)
+            enable_plugin "$plugin_name" "$full_name" || true
+            return 0
+            ;;
+    esac
 
     echo "  - Installing $plugin_name..."
 
@@ -724,8 +875,16 @@ if [ -d "$LIBRARIAN_DIR" ]; then
         for plugin in "${LIBRARIAN_PLUGIN_LIST[@]}"; do
             plugin=$(echo "$plugin" | xargs)
             [ -z "$plugin" ] && continue
-            if has_plugin "$plugin"; then
+            # Enablement-aware (#784): the librarian plugins install before the
+            # auth-gated official ones, so they sit squarely in the window where
+            # a racing run's settings.json write clobbers enabledPlugins. A
+            # plain "is it installed" check reported success while leaving every
+            # /workflow:* and /review-audit:* skill unavailable.
+            _plugin_state=$(plugin_status "$plugin")
+            if [ "$_plugin_state" = "enabled" ]; then
                 echo "    ✓ $plugin (already installed)"
+            elif [ "$_plugin_state" = "disabled" ]; then
+                enable_plugin "$plugin" "${plugin}@${LIBRARIAN_MARKETPLACE}" || true
             elif output=$(claude plugin install "${plugin}@${LIBRARIAN_MARKETPLACE}" 2>&1); then
                 echo "    ✓ $plugin installed"
             else
