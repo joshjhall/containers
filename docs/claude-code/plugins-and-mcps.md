@@ -125,6 +125,63 @@ it from the variable** rather than disabling it:
 docker run -e CLAUDE_LIBRARIAN_PLUGINS="dev-core,review-audit" ...
 ```
 
+### Kill-Switch: `CLAUDE_DISABLED_PLUGINS`
+
+Editing the plugin list is the right way to drop a plugin permanently, but it is
+awkward mid-incident — it means changing compose/env config and restarting with
+new environment. `CLAUDE_DISABLED_PLUGINS` is the escape hatch: a CSV deny-list,
+same shape as the other plugin variables, checked **before** any install or
+re-enable decision.
+
+```bash
+docker run -e CLAUDE_DISABLED_PLUGINS="hookify" ...
+```
+
+The deny-list **wins over** `CLAUDE_PLUGINS`, `CLAUDE_EXTRA_PLUGINS`, and
+`CLAUDE_LIBRARIAN_PLUGINS`. A plugin named in both is left alone — that ordering
+is the whole point. Matching is exact, so `workflow` does not deny
+`workflow-extras`.
+
+It suppresses **install** as well as re-enable. `claude plugin install` enables
+as a side effect, so honoring the deny-list only on the re-enable branch would
+let a fresh `~/.claude` volume silently reinstate the plugin you killed.
+
+Every outcome is logged, so a denied plugin is visible in startup output rather
+than silently missing:
+
+```text
+  ⊘ hookify (disabled via CLAUDE_DISABLED_PLUGINS — leaving disabled)
+  ⊘ hookify (disabled via CLAUDE_DISABLED_PLUGINS — not installing)
+```
+
+**It does not disable an already-enabled plugin.** `claude-setup` runs on every
+boot and never acquires a destructive action; it only stops *re*-enabling. If the
+plugin is currently enabled you get a warning instead:
+
+```text
+  ⚠ hookify listed in CLAUDE_DISABLED_PLUGINS but currently enabled
+    run 'claude plugin disable hookify' to apply it
+```
+
+Run that `claude plugin disable` once — the deny-list is what makes it survive
+every restart after. The plugin stays on disk, so reverting is just unsetting the
+variable.
+
+Like the other plugin lists, a `CLAUDE_DISABLED_PLUGINS_FILE` pointing at a JSON
+array is supported and takes precedence over the env var.
+
+### Install/Enable Retries
+
+Both installing and re-enabling a plugin retry up to 4 times on a transient
+"not found in marketplace" error — the marketplace API is not always ready in
+the window right after authentication is detected. Backoff is exponential,
+starting at 2 seconds (2, 4, 8, 16). Any other error is reported immediately
+rather than retried.
+
+`CLAUDE_SETUP_RETRY_DELAY` overrides that starting delay in seconds. It exists
+mainly so tests need not sleep, but it is a legitimate operator knob for a slow
+or a known-fast marketplace.
+
 `claude-setup` also serializes itself with an `flock` on
 `/tmp/claude-setup.lock`, so the two startup paths that launch it (the
 first-startup script and the auth watcher) cannot interleave their
