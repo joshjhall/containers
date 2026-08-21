@@ -1206,5 +1206,52 @@ run_test_with_setup test_apply_overlay_no_sudo "apply_bindfs_overlay: no sudo ac
 run_test_with_setup test_apply_overlay_success "apply_bindfs_overlay: success"
 run_test_with_setup test_apply_overlay_failure "apply_bindfs_overlay: bindfs failure"
 
+# ---------------------------------------------------------------------------
+# Startup-only replay path (issue #785)
+#
+# recover-entrypoint replays the entrypoint with ENTRYPOINT_STARTUP_ONLY=true on
+# every boot under Zed. Variables assigned inside the guard but read outside it
+# are unbound on that path, and under `set -euo pipefail` that aborts whatever
+# subshell reads them. These are structural guards — the whole entrypoint cannot
+# be executed in a unit test (it needs /etc/container, sudo, and a real /cache).
+# ---------------------------------------------------------------------------
+
+ENTRYPOINT_SCRIPT="$PROJECT_ROOT/lib/runtime/entrypoint.sh"
+
+# Test: FIRST_RUN_MARKER is assigned before the ENTRYPOINT_STARTUP_ONLY guard.
+# It is read by the audit_log call after the every-boot phase, which runs on
+# BOTH paths, so an assignment inside the guard leaves it unbound on replay.
+test_first_run_marker_assigned_outside_guard() {
+    local marker_line guard_line
+    marker_line=$(command grep -n '^FIRST_RUN_MARKER=' "$ENTRYPOINT_SCRIPT" | command head -1 | command cut -d: -f1)
+    guard_line=$(command grep -n 'if \[ "${ENTRYPOINT_STARTUP_ONLY:-false}" != "true" \]' "$ENTRYPOINT_SCRIPT" | command head -1 | command cut -d: -f1)
+
+    assert_not_empty "$marker_line" "FIRST_RUN_MARKER should be assigned at column 0 (outside the guard)"
+    assert_not_empty "$guard_line" "ENTRYPOINT_STARTUP_ONLY guard should exist"
+    assert_true "[ $marker_line -lt $guard_line ]" \
+        "FIRST_RUN_MARKER (line $marker_line) must be assigned before the guard (line $guard_line)"
+}
+
+# Test: the metrics write is guarded by a writability test. `2>/dev/null` does
+# NOT suppress a failed redirection — the shell reports it before the redirect
+# is in place — so an unwritable target prints "Permission denied" regardless.
+test_metrics_write_is_guarded() {
+    assert_file_contains "$ENTRYPOINT_SCRIPT" 'METRICS_FILE=' \
+        "Should define METRICS_FILE so the target can be tested before writing"
+    assert_file_contains "$ENTRYPOINT_SCRIPT" '\[ -w "\$METRICS_FILE" \]' \
+        "Should test the metrics FILE for writability (root-owned file from a privileged boot)"
+}
+
+# Test: the -o chown is only attempted when running as root. `install -o <user>`
+# fails outright as non-root, making the whole call no-op.
+test_metrics_chown_only_as_root() {
+    assert_file_contains "$ENTRYPOINT_SCRIPT" 'if \[ "\$RUNNING_AS_ROOT" = "true" \]; then' \
+        "Should branch on RUNNING_AS_ROOT before passing -o to install"
+}
+
+run_test test_first_run_marker_assigned_outside_guard "FIRST_RUN_MARKER assigned outside startup-only guard (#785)"
+run_test test_metrics_write_is_guarded "Metrics write guarded by writability test (#785)"
+run_test test_metrics_chown_only_as_root "Metrics chown only attempted as root (#785)"
+
 # Generate test report
 generate_report

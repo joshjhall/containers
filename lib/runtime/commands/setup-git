@@ -17,6 +17,25 @@ _ok()    { printf '[setup-git] OK: %s\n' "$*" >&2; }
 _skip()  { printf '[setup-git] skip: %s\n' "$*" >&2; }
 _warn()  { printf '[setup-git] WARN: %s\n' "$*" >&2; }
 
+# Warn when an OP_<NAME>_REF is configured but <NAME> resolved empty. The secret
+# was expected but is not here yet — typically postStartCommand racing the
+# entrypoint's 45-op-secrets.sh under Zed, which fires postStart concurrently
+# with the entrypoint rather than after it (VS Code's "overrideCommand": false
+# makes the entrypoint PID 1, so postStart waits and this cannot happen).
+#
+# Without this, an unresolved secret is indistinguishable from "nothing to do":
+# the callers' `[ -n "${VAR:-}" ] || return 0` guards return 0 silently, the
+# postStart && chain reports success, and the container comes up with no keys.
+# Always returns 0 — callers still skip; the operator just learns why.
+_warn_if_ref_unresolved() {
+    local name="$1" ref_var="OP_${1}_REF"
+    [ -n "${!ref_var:-}" ] || return 0   # no ref configured — genuinely nothing to do
+    [ -z "${!name:-}" ] || return 0      # resolved fine
+    _warn "${ref_var} is set but ${name} is empty — secret not resolved yet."
+    _warn "  Under Zed, postStartCommand can race the entrypoint's secret"
+    _warn "  resolution. Re-run 'setup-git' once startup finishes."
+}
+
 # ---------------------------------------------------------------------------
 # Input validation
 # ---------------------------------------------------------------------------
@@ -170,6 +189,7 @@ SSHEOF
 # 4. Auth SSH key
 # ---------------------------------------------------------------------------
 setup_auth_key() {
+    _warn_if_ref_unresolved GIT_AUTH_SSH_KEY
     [ -n "${GIT_AUTH_SSH_KEY:-}" ] || return 0
     _validate_ssh_key "$GIT_AUTH_SSH_KEY" "GIT_AUTH_SSH_KEY" || return 0
 
@@ -242,6 +262,8 @@ _configure_signing() {
 }
 
 setup_signing_key() {
+    _warn_if_ref_unresolved GIT_SIGNING_SSH_KEY
+
     # --- Path A: explicit key via environment variable ---
     if [ -n "${GIT_SIGNING_SSH_KEY:-}" ]; then
         _validate_ssh_key "$GIT_SIGNING_SSH_KEY" "GIT_SIGNING_SSH_KEY" || return 0

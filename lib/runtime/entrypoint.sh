@@ -210,6 +210,14 @@ unset _RUNTIME_LIB
 # replay and left the ~/.container-initialized marker; subsequent starts only
 # need the every-boot scripts (secrets refresh, auth watcher, health check,
 # codegraph sync, …) re-run. See docs/troubleshooting/zed-devcontainer.md.
+
+# Assigned outside the guard on purpose: the first-time-setup block below is the
+# only writer, but the audit_log call after the every-boot phase reads it on
+# BOTH paths. Assigning it inside the guard left it unbound on the startup-only
+# replay, where `set -u` aborted the reading subshell and the audit record's
+# first_run field came out empty.
+FIRST_RUN_MARKER="/home/${USERNAME}/.container-initialized"
+
 if [ "${ENTRYPOINT_STARTUP_ONLY:-false}" != "true" ]; then
 
     # ============================================================================
@@ -267,7 +275,7 @@ if [ "${ENTRYPOINT_STARTUP_ONLY:-false}" != "true" ]; then
     # First-Time Setup
     # ============================================================================
     # Run first-time setup scripts if marker doesn't exist
-    FIRST_RUN_MARKER="/home/${USERNAME}/.container-initialized"
+    # (FIRST_RUN_MARKER is assigned above the guard — it is read on both paths)
     FIRST_STARTUP_DIR="/etc/container/first-startup"
     if [ ! -f "$FIRST_RUN_MARKER" ]; then
         echo "=== Running first-time setup scripts ==="
@@ -309,15 +317,36 @@ STARTUP_DURATION=$((STARTUP_END_TIME - STARTUP_BEGIN_TIME))
 # Create metrics directory if it doesn't exist
 # Use a subdir under /tmp that we can control permissions for
 METRICS_DIR="/tmp/container-metrics"
-command install -d -m 0750 -o "${USERNAME}" "$METRICS_DIR" 2>/dev/null || true
+METRICS_FILE="$METRICS_DIR/startup-metrics.txt"
+# Only pass -o when we can actually chown (root). On the startup-only replay we
+# run unprivileged, where `install -o <user>` fails outright and the whole call
+# no-ops — leaving a root-owned dir from a previous privileged boot and a
+# "Permission denied" on the write below. Non-root just ensures the dir exists;
+# if it is already there and owned by someone else, the guarded write is skipped.
+if [ "$RUNNING_AS_ROOT" = "true" ]; then
+    command install -d -m 0750 -o "${USERNAME}" "$METRICS_DIR" 2>/dev/null || true
+else
+    command install -d -m 0750 "$METRICS_DIR" 2>/dev/null || true
+fi
 
 # Write startup metrics (Prometheus format)
-# Fail gracefully if we can't write metrics (non-critical)
-{
-    echo "# HELP container_startup_seconds Time taken for container initialization in seconds"
-    echo "# TYPE container_startup_seconds gauge"
-    echo "container_startup_seconds $STARTUP_DURATION"
-} >"$METRICS_DIR/startup-metrics.txt" 2>/dev/null || true
+# Fail gracefully if we can't write metrics (non-critical).
+# The writability test is not redundant with `2>/dev/null || true`: a FAILED
+# REDIRECTION is reported by the shell itself before the redirect is in place,
+# so `> unwritable 2>/dev/null` still prints "Permission denied". Testing first
+# is the only way to keep the replay path quiet.
+#
+# Test the FILE when it exists, not just the dir: a privileged first boot leaves
+# a root-owned startup-metrics.txt that an unprivileged replay cannot overwrite
+# even though the directory itself is writable.
+if { [ -e "$METRICS_FILE" ] && [ -w "$METRICS_FILE" ]; } ||
+    { [ ! -e "$METRICS_FILE" ] && [ -w "$METRICS_DIR" ]; }; then
+    {
+        echo "# HELP container_startup_seconds Time taken for container initialization in seconds"
+        echo "# TYPE container_startup_seconds gauge"
+        echo "container_startup_seconds $STARTUP_DURATION"
+    } >"$METRICS_FILE" 2>/dev/null || true
+fi
 
 echo "✓ Container initialized in ${STARTUP_DURATION}s"
 
