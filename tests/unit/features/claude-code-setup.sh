@@ -81,8 +81,60 @@ my-custom-server: python server.py - running'
 # Helper: Extract and define the pattern matching functions for testing
 # ============================================================================
 
-# These functions mirror the ones in claude-code-setup.sh
-# We define them here to test without sourcing the full script
+CLAUDE_SETUP="$PROJECT_ROOT/lib/features/lib/claude/claude-setup"
+
+# Print one shell function's definition verbatim from a script.
+#
+# claude-setup cannot be sourced: it runs plugin installs, MCP config, and a
+# `claude` CLI probe at load time. Extraction gives the tests the REAL function
+# bodies anyway, so the wiring between plugin_status → install_plugin →
+# enable_plugin is executed rather than only source-grepped (#787).
+#
+# It also removes the copy-drift that hand-written mirrors carried: a mirror
+# passes forever after production changes underneath it.
+#
+# Relies on the repo's shfmt-enforced layout — `name() {` and the closing `}`
+# both at column 0. _assert_extractable below fails loudly if that stops holding
+# for a function these tests depend on, rather than silently extracting nothing.
+_extract_shell_function() {
+    local file="$1" name="$2"
+    command awk -v name="$name" '
+        $0 == name "() {" { in_fn = 1 }
+        in_fn { print }
+        in_fn && $0 == "}" { exit }
+    ' "$file"
+}
+
+# Load a function from claude-setup into this shell, or abort the suite.
+# A silent no-op here would make every test below vacuously pass.
+_load_production_function() {
+    local name="$1" src
+    src=$(_extract_shell_function "$CLAUDE_SETUP" "$name")
+    if [ -z "$src" ]; then
+        echo "FATAL: could not extract $name() from $CLAUDE_SETUP" >&2
+        exit 1
+    fi
+    eval "$src"
+}
+
+# The real implementations, pulled from claude-setup (#787).
+_load_production_function "_plugin_status_in_list"
+_load_production_function "_is_in_list"
+_load_production_function "plugin_status"
+_load_production_function "enable_plugin"
+_load_production_function "install_plugin"
+_load_production_function "_plugin_is_denied"
+_load_production_function "_log_denied_plugin"
+
+# Globals the extracted functions close over. install_plugin builds full_name
+# from $MARKETPLACE; the deny-list helpers read $DISABLED_PLUGINS; the retry
+# loops read $CLAUDE_SETUP_RETRY_DELAY (0 keeps the suite fast — production
+# defaults to 2).
+# shellcheck disable=SC2034  # read by the extracted production functions
+MARKETPLACE="claude-plugins-official"
+# shellcheck disable=SC2034  # read by _plugin_is_denied; set per-test below
+DISABLED_PLUGINS=""
+export CLAUDE_SETUP_RETRY_DELAY=0
 
 _match_plugin_in_list() {
     local plugin_name="$1"
@@ -90,34 +142,93 @@ _match_plugin_in_list() {
     echo "$list_output" | command grep -qE "^[[:space:]]*❯ ${plugin_name}@" 2>/dev/null
 }
 
-# Mirror of _plugin_status_in_list in claude-setup (#784). Echoes exactly one
-# of: enabled | disabled | absent.
+# ============================================================================
+# claude CLI Mock (#787)
+# ============================================================================
+# The extracted functions shell out to `claude`. This function shadows it (a
+# shell function beats PATH lookup), returning canned output driven by the
+# MOCK_* globals and appending every invocation to MOCK_CALL_LOG so tests can
+# assert the exact argv — notably that enable_plugin is handed full_name
+# (name@marketplace), not the bare plugin name.
+MOCK_CALL_LOG=""
+MOCK_LIST_OUTPUT=""
+MOCK_LIST_RC=0
+MOCK_ENABLE_OUTPUT=""
+# Space-separated exit codes consumed one per `plugin enable` call, so a test
+# can script fail-then-succeed. The last value repeats once exhausted.
 #
-# Kept in sync with production by test_status_parser_mirrors_production below —
-# these tests deliberately duplicate rather than source, because claude-setup
-# needs the claude CLI at load time.
-_plugin_status_in_list() {
-    local plugin_name="$1"
-    local list_output="$2"
-    local block
-    block=$(echo "$list_output" | command awk -v name="$plugin_name" '
-        /^[[:space:]]*❯ / {
-            in_block = ($0 ~ "^[[:space:]]*❯ " name "@")
-            if (in_block) { print; found = 1 }
-            next
-        }
-        in_block { print }
-        END { exit (found ? 0 : 1) }
-    ') || {
-        echo "absent"
-        return 0
-    }
+# Held in a FILE, not a variable: claude() is called from inside `$(...)` command
+# substitutions in the production code, so a variable mutation would be discarded
+# with the subshell and every scripted call would replay the first code forever.
+MOCK_ENABLE_RC_FILE=""
+MOCK_INSTALL_OUTPUT=""
+MOCK_INSTALL_RC_FILE=""
 
-    if echo "$block" | command grep -qE '^[[:space:]]*Status:.*disabled'; then
-        echo "disabled"
-    else
-        echo "enabled"
-    fi
+_mock_reset() {
+    MOCK_CALL_LOG=$(command mktemp)
+    MOCK_ENABLE_RC_FILE=$(command mktemp)
+    MOCK_INSTALL_RC_FILE=$(command mktemp)
+    echo "0" >"$MOCK_ENABLE_RC_FILE"
+    echo "0" >"$MOCK_INSTALL_RC_FILE"
+    # Cleared here rather than at the end of each deny-list test, so a test that
+    # returns early cannot leak its deny-list into the next one.
+    DISABLED_PLUGINS=""
+    MOCK_LIST_OUTPUT=""
+    MOCK_LIST_RC=0
+    MOCK_ENABLE_OUTPUT=""
+    MOCK_INSTALL_OUTPUT=""
+}
+
+# Script the exit codes `plugin enable` / `plugin install` will return, in order.
+_mock_set_enable_rcs() {
+    echo "$*" >"$MOCK_ENABLE_RC_FILE"
+}
+
+_mock_set_install_rcs() {
+    echo "$*" >"$MOCK_INSTALL_RC_FILE"
+}
+
+# Pop the next scripted exit code from a queue file; the final one sticks.
+_mock_next_rc() {
+    local file="$1" rcs first rest
+    rcs=$(command cat "$file")
+    first="${rcs%% *}"
+    rest="${rcs#* }"
+    [ "$rest" != "$rcs" ] && echo "$rest" >"$file"
+    echo "$first"
+}
+
+_mock_cleanup() {
+    command rm -f "$MOCK_CALL_LOG" "$MOCK_ENABLE_RC_FILE" "$MOCK_INSTALL_RC_FILE"
+}
+
+claude() {
+    echo "$*" >>"$MOCK_CALL_LOG"
+    case "$1 $2" in
+        "plugin list")
+            [ -n "$MOCK_LIST_OUTPUT" ] && echo "$MOCK_LIST_OUTPUT"
+            return "$MOCK_LIST_RC"
+            ;;
+        "plugin enable")
+            [ -n "$MOCK_ENABLE_OUTPUT" ] && echo "$MOCK_ENABLE_OUTPUT"
+            return "$(_mock_next_rc "$MOCK_ENABLE_RC_FILE")"
+            ;;
+        "plugin install")
+            [ -n "$MOCK_INSTALL_OUTPUT" ] && echo "$MOCK_INSTALL_OUTPUT"
+            return "$(_mock_next_rc "$MOCK_INSTALL_RC_FILE")"
+            ;;
+    esac
+    return 0
+}
+
+# Count log lines matching a pattern (0 when there are none).
+# `grep -c` prints 0 AND exits 1 on no-match, so the count is captured first and
+# the exit status absorbed separately — `grep -c ... || echo 0` would emit two
+# lines and silently break every assert_equals against it.
+_mock_call_count() {
+    local n
+    n=$(command grep -c -- "$1" "$MOCK_CALL_LOG" 2>/dev/null) || true
+    echo "${n:-0}"
 }
 
 _match_mcp_server_in_list() {
@@ -301,9 +412,10 @@ test_plugin_status_empty_list() {
         "Empty list reports 'absent'"
 }
 
-# Source guard: these tests mirror the production helper rather than sourcing
-# it, so assert the production copy still exists and still keys off Status:.
-# Without this, claude-setup could drift and the mirror would keep passing.
+# Source guard for the EXTRACTOR's contract (#787). The parser tests above now
+# run the real production body, so drift can no longer make them vacuously pass
+# — but a rename or a reformat that breaks _extract_shell_function's column-0
+# assumption still could. These greps fail loudly on that, naming the cause.
 test_status_parser_mirrors_production() {
     local setup_file="$PROJECT_ROOT/lib/features/lib/claude/claude-setup"
     local code
@@ -330,6 +442,539 @@ test_status_parser_mirrors_production() {
     else
         fail_test "claude-setup never calls 'claude plugin enable'"
     fi
+}
+
+# Every function these tests execute must actually extract. Without this, a
+# rename or a reformat turns _load_production_function into a no-op path and the
+# functional tests below would test nothing at all.
+test_all_production_functions_extractable() {
+    local fn
+    for fn in _plugin_status_in_list _is_in_list plugin_status enable_plugin \
+        install_plugin _plugin_is_denied _log_denied_plugin _acquire_setup_lock; do
+        if [ -n "$(_extract_shell_function "$CLAUDE_SETUP" "$fn")" ]; then
+            pass_test "$fn() extractable from claude-setup"
+        else
+            fail_test "$fn() not extractable — renamed, reformatted, or deleted"
+        fi
+    done
+}
+
+# ============================================================================
+# Functional Plugin Install/Enable Tests (issue #787)
+# ============================================================================
+# These run the REAL claude-setup functions against a mocked `claude` CLI, so
+# the wiring between them is executed — not just grepped. The gap this closes:
+# a wrong variable passed as full_name, or a dropped `|| true`, would have
+# passed every previous test in this suite while breaking the #784 repair.
+
+# A plugin list where the target is installed but DISABLED — the #784 state.
+_DISABLED_LIST='Installed plugins:
+
+  ❯ commit-commands@claude-plugins-official
+    Version: 1.0.0
+    Scope: user
+    Status: ✘ disabled'
+
+_ENABLED_LIST='Installed plugins:
+
+  ❯ commit-commands@claude-plugins-official
+    Version: 1.0.0
+    Scope: user
+    Status: ✔ enabled'
+
+# install_plugin's disabled branch must call enable with the FULL name
+# (plugin@marketplace). Passing $plugin_name instead is the exact regression
+# #787 names, and it is invisible to a source grep.
+test_install_plugin_enables_with_full_name() {
+    _mock_reset
+    MOCK_LIST_OUTPUT="$_DISABLED_LIST"
+
+    install_plugin "commit-commands" >/dev/null
+
+    local logged
+    logged=$(command grep '^plugin enable' "$MOCK_CALL_LOG" || true)
+    assert_equals "plugin enable commit-commands@claude-plugins-official" \
+        "$logged" "enable receives full_name, not the bare plugin name"
+
+    _mock_cleanup
+}
+
+# The `|| true` on the enable call is load-bearing: claude-setup runs under
+# `set -e`, so without it one failed repair aborts the whole plugin phase and
+# every later plugin silently goes uninstalled.
+#
+# Must run in a SEPARATE bash process with `set -euo pipefail`, the way
+# claude-setup does. Two reasons an in-suite call is not good enough:
+#   1. this suite's runner does not have errexit on, and errexit is the entire
+#      mechanism the `|| true` guards against;
+#   2. an inline `$(set -e; ...) || rc=$?` does not help either — bash ignores
+#      errexit inside a subshell that is part of a `||` list, so the guard would
+#      look present while testing nothing.
+# Verified by mutation: deleting the `|| true` fails this test.
+test_install_plugin_absorbs_enable_failure() {
+    local tmpdir runner
+    tmpdir=$(command mktemp -d)
+    runner="$tmpdir/runner.sh"
+
+    {
+        echo 'set -euo pipefail'
+        echo 'MARKETPLACE="claude-plugins-official"'
+        echo 'DISABLED_PLUGINS=""'
+        echo 'CLAUDE_SETUP_RETRY_DELAY=0'
+        # Minimal mock: list reports the plugin disabled, enable always fails.
+        command cat <<'MOCK'
+claude() {
+    case "$1 $2" in
+        "plugin list") printf '  ❯ commit-commands@claude-plugins-official\n    Status: ✘ disabled\n'; return 0 ;;
+        "plugin enable") echo "permission denied"; return 1 ;;
+    esac
+    return 0
+}
+MOCK
+        _extract_shell_function "$CLAUDE_SETUP" "_plugin_status_in_list"
+        _extract_shell_function "$CLAUDE_SETUP" "_is_in_list"
+        _extract_shell_function "$CLAUDE_SETUP" "plugin_status"
+        _extract_shell_function "$CLAUDE_SETUP" "_plugin_is_denied"
+        _extract_shell_function "$CLAUDE_SETUP" "_log_denied_plugin"
+        _extract_shell_function "$CLAUDE_SETUP" "enable_plugin"
+        _extract_shell_function "$CLAUDE_SETUP" "install_plugin"
+        echo 'install_plugin "commit-commands" >/dev/null 2>&1'
+        echo 'echo "REACHED"'
+    } >"$runner"
+
+    local out rc=0
+    out=$(env -u BASH_ENV bash "$runner" 2>&1) || rc=$?
+
+    assert_equals "0" "$rc" "install_plugin returns 0 despite a failed enable"
+    assert_contains "$out" "REACHED" \
+        "a failed enable does not abort the caller under set -e"
+
+    command rm -rf "$tmpdir"
+}
+
+# An enabled plugin must short-circuit: no enable, no install.
+test_install_plugin_skips_when_enabled() {
+    _mock_reset
+    MOCK_LIST_OUTPUT="$_ENABLED_LIST"
+
+    install_plugin "commit-commands" >/dev/null
+
+    assert_equals "0" "$(_mock_call_count '^plugin enable')" \
+        "an enabled plugin is not re-enabled"
+    assert_equals "0" "$(_mock_call_count '^plugin install')" \
+        "an enabled plugin is not reinstalled"
+
+    _mock_cleanup
+}
+
+# plugin_status's OWN failure path: when `claude plugin list` exits non-zero it
+# must report "absent" so the caller falls through to install (which has its own
+# retry and error reporting) rather than silently skipping. The existing
+# empty-string test exercises the PARSER, which is a different code path.
+#
+# The output is deliberately NON-EMPTY and would otherwise parse as "enabled":
+# a failing CLI can still emit a partial list before dying. With an empty output
+# the parser reaches "absent" on its own and the test would pass even with the
+# fallthrough deleted — proving nothing.
+test_plugin_status_absent_when_list_fails() {
+    _mock_reset
+    MOCK_LIST_RC=1
+    MOCK_LIST_OUTPUT="$_ENABLED_LIST"
+
+    assert_equals "absent" "$(plugin_status "commit-commands")" \
+        "a failing 'claude plugin list' reports absent despite partial output"
+
+    _mock_cleanup
+}
+
+# ...and that "absent" must actually route to the install path. Same reasoning:
+# partial output that parses as "enabled" makes a dropped fallthrough visible as
+# a silent skip.
+test_plugin_status_failure_routes_to_install() {
+    _mock_reset
+    MOCK_LIST_RC=1
+    MOCK_LIST_OUTPUT="$_ENABLED_LIST"
+
+    install_plugin "commit-commands" >/dev/null
+
+    assert_equals "1" "$(_mock_call_count '^plugin install')" \
+        "a failed list falls through to install, not a silent skip"
+
+    _mock_cleanup
+}
+
+# enable_plugin's failure reporting pipes through `sed | head -5`. head exits
+# after 5 lines, so a longer error SIGPIPEs sed — under `set -euo pipefail` that
+# could abort the script mid-phase if the pipeline were not the last statement
+# before an absorbed return.
+test_enable_plugin_failure_output_does_not_abort() {
+    _mock_reset
+    MOCK_LIST_OUTPUT="$_DISABLED_LIST"
+    _mock_set_enable_rcs "1 1 1 1"
+    MOCK_ENABLE_OUTPUT=$(printf 'line1\nline2\nline3\nline4\nline5\nline6\nline7\nline8')
+
+    local out rc=0
+    out=$(install_plugin "commit-commands" 2>&1) || rc=$?
+
+    assert_equals "0" "$rc" "long multi-line enable failure does not abort"
+    assert_contains "$out" "Failed to re-enable" "the failure is reported"
+
+    _mock_cleanup
+}
+
+# ============================================================================
+# enable_plugin Retry Tests (issue #788)
+# ============================================================================
+
+# The whole point of #788: a transient marketplace-not-ready failure must be
+# retried, not surrendered to. Without this, the run that was supposed to repair
+# a disabled plugin can itself fail transiently and leave it broken for the boot.
+test_enable_plugin_retries_then_succeeds() {
+    _mock_reset
+    _mock_set_enable_rcs "1 0"
+    MOCK_ENABLE_OUTPUT="Plugin not found in marketplace"
+
+    local rc=0
+    enable_plugin "workflow" "workflow@librarian" >/dev/null 2>&1 || rc=$?
+
+    assert_equals "0" "$rc" "a transient failure is retried to success"
+    assert_equals "2" "$(_mock_call_count '^plugin enable')" \
+        "exactly one retry was needed"
+
+    _mock_cleanup
+}
+
+# Retry must be scoped to the transient marker. Retrying a permanent error just
+# delays the warning by the full backoff, on every boot.
+test_enable_plugin_does_not_retry_permanent_failure() {
+    _mock_reset
+    _mock_set_enable_rcs "1 1 1 1"
+    MOCK_ENABLE_OUTPUT="Error: permission denied"
+
+    local rc=0
+    enable_plugin "workflow" "workflow@librarian" >/dev/null 2>&1 || rc=$?
+
+    assert_equals "1" "$rc" "a permanent failure still returns non-zero"
+    assert_equals "1" "$(_mock_call_count '^plugin enable')" \
+        "a non-transient error is not retried"
+
+    _mock_cleanup
+}
+
+# Backoff must be bounded — a permanently-unready marketplace cannot loop.
+test_enable_plugin_retry_is_bounded() {
+    _mock_reset
+    _mock_set_enable_rcs "1 1 1 1 1 1 1 1"
+    MOCK_ENABLE_OUTPUT="not found in marketplace"
+
+    local rc=0
+    enable_plugin "workflow" "workflow@librarian" >/dev/null 2>&1 || rc=$?
+
+    assert_equals "1" "$rc" "gives up after max_retries"
+    assert_equals "4" "$(_mock_call_count '^plugin enable')" \
+        "capped at 4 attempts, matching install_plugin"
+
+    _mock_cleanup
+}
+
+# install_plugin's OWN retry loop — the one #788's was modeled on. Covered
+# symmetrically with enable_plugin above: a structural source guard proves the
+# two loops match, but only executing both proves either works.
+test_install_plugin_retries_then_succeeds() {
+    _mock_reset
+    MOCK_LIST_OUTPUT="" # absent -> the fresh-install branch
+    _mock_set_install_rcs "1 0"
+    MOCK_INSTALL_OUTPUT="Plugin not found in marketplace"
+
+    local rc=0
+    install_plugin "commit-commands" >/dev/null 2>&1 || rc=$?
+
+    assert_equals "0" "$rc" "a transient install failure is retried to success"
+    assert_equals "2" "$(_mock_call_count '^plugin install')" \
+        "exactly one install retry was needed"
+
+    _mock_cleanup
+}
+
+test_install_plugin_does_not_retry_permanent_failure() {
+    _mock_reset
+    MOCK_LIST_OUTPUT=""
+    _mock_set_install_rcs "1 1 1 1"
+    MOCK_INSTALL_OUTPUT="Error: permission denied"
+
+    local rc=0
+    install_plugin "commit-commands" >/dev/null 2>&1 || rc=$?
+
+    assert_equals "1" "$rc" "a permanent install failure returns non-zero"
+    assert_equals "1" "$(_mock_call_count '^plugin install')" \
+        "a non-transient install error is not retried"
+
+    _mock_cleanup
+}
+
+test_install_plugin_retry_is_bounded() {
+    _mock_reset
+    MOCK_LIST_OUTPUT=""
+    _mock_set_install_rcs "1 1 1 1 1 1 1 1"
+    MOCK_INSTALL_OUTPUT="not found in marketplace"
+
+    local rc=0
+    install_plugin "commit-commands" >/dev/null 2>&1 || rc=$?
+
+    assert_equals "1" "$rc" "gives up after max_retries"
+    assert_equals "4" "$(_mock_call_count '^plugin install')" \
+        "install backoff is capped at 4 attempts"
+
+    _mock_cleanup
+}
+
+test_install_plugin_succeeds_first_try() {
+    _mock_reset
+    MOCK_LIST_OUTPUT=""
+
+    local out rc=0
+    out=$(install_plugin "commit-commands" 2>&1) || rc=$?
+
+    assert_equals "0" "$rc" "a clean install returns 0"
+    assert_equals "1" "$(_mock_call_count '^plugin install')" \
+        "a successful install is not retried"
+    assert_contains "$out" "installed" "the install is reported"
+
+    _mock_cleanup
+}
+
+# Source guard: the two retry loops must keep the same shape. If install_plugin's
+# cap is raised and enable's is not, the sibling that runs in the same race
+# window silently becomes the weaker one again.
+test_enable_and_install_share_retry_shape() {
+    local enable_src install_src
+    enable_src=$(_extract_shell_function "$CLAUDE_SETUP" "enable_plugin")
+    install_src=$(_extract_shell_function "$CLAUDE_SETUP" "install_plugin")
+
+    local e_max i_max
+    e_max=$(command grep -oE 'max_retries=[0-9]+' <<<"$enable_src" | command head -1)
+    i_max=$(command grep -oE 'max_retries=[0-9]+' <<<"$install_src" | command head -1)
+
+    assert_equals "$i_max" "$e_max" \
+        "enable_plugin and install_plugin share a retry cap (#788)"
+
+    if command grep -q 'retry_delay \* 2' <<<"$enable_src"; then
+        pass_test "enable_plugin uses exponential backoff"
+    else
+        fail_test "enable_plugin lost its exponential backoff"
+    fi
+}
+
+# ============================================================================
+# CLAUDE_DISABLED_PLUGINS Deny-List Tests (issue #789)
+# ============================================================================
+
+# The deny-list is the whole feature: it must beat the allow-lists. A plugin
+# named in BOTH is left alone.
+test_deny_list_takes_precedence_over_allow_list() {
+    _mock_reset
+    DISABLED_PLUGINS="commit-commands"
+    MOCK_LIST_OUTPUT="$_DISABLED_LIST"
+
+    install_plugin "commit-commands" >/dev/null
+
+    assert_equals "0" "$(_mock_call_count '^plugin enable')" \
+        "a denied plugin is not re-enabled"
+    assert_equals "0" "$(_mock_call_count '^plugin install')" \
+        "a denied plugin is not installed"
+
+    _mock_cleanup
+}
+
+# Deny must suppress INSTALL too, not only the re-enable branch: `claude plugin
+# install` enables as a side effect, so a fresh ~/.claude volume would otherwise
+# silently reinstate the plugin the operator killed.
+test_deny_list_suppresses_install_when_absent() {
+    _mock_reset
+    DISABLED_PLUGINS="commit-commands"
+    MOCK_LIST_OUTPUT=""
+
+    local out
+    out=$(install_plugin "commit-commands" 2>&1)
+
+    assert_equals "0" "$(_mock_call_count '^plugin install')" \
+        "an absent denied plugin is not installed"
+    assert_contains "$out" "not installing" "the skipped install is logged"
+
+    _mock_cleanup
+}
+
+# The skip must be visible in startup output. A plugin that just vanishes with
+# no log line is the same silent failure #784 was about.
+test_deny_list_skip_is_logged() {
+    _mock_reset
+    DISABLED_PLUGINS="commit-commands"
+    MOCK_LIST_OUTPUT="$_DISABLED_LIST"
+
+    local out
+    out=$(install_plugin "commit-commands" 2>&1)
+    assert_contains "$out" "CLAUDE_DISABLED_PLUGINS" \
+        "the deny-list skip names the variable responsible"
+
+    _mock_cleanup
+}
+
+# claude-setup must not gain a destructive action: a denied-but-enabled plugin
+# is reported, never disabled. Setting the variable is a latch, not an actuator.
+test_deny_list_warns_but_does_not_disable() {
+    _mock_reset
+    DISABLED_PLUGINS="commit-commands"
+    MOCK_LIST_OUTPUT="$_ENABLED_LIST"
+
+    local out
+    out=$(install_plugin "commit-commands" 2>&1)
+
+    assert_equals "0" "$(_mock_call_count '^plugin disable')" \
+        "claude-setup never disables a plugin itself"
+    assert_contains "$out" "currently enabled" \
+        "the operator is told the deny-list has not taken effect yet"
+
+    _mock_cleanup
+}
+
+# An empty/unset deny-list must be inert — the default path cannot regress.
+test_empty_deny_list_is_inert() {
+    _mock_reset
+    MOCK_LIST_OUTPUT="$_DISABLED_LIST"
+
+    install_plugin "commit-commands" >/dev/null
+
+    assert_equals "1" "$(_mock_call_count '^plugin enable')" \
+        "an empty deny-list does not block the #784 repair"
+
+    _mock_cleanup
+}
+
+# Exact-match only, inherited from _is_in_list. A substring match would let
+# "workflow" deny "workflow-extras".
+test_deny_list_is_exact_match() {
+    _mock_reset
+    # shellcheck disable=SC2034  # read by the extracted _plugin_is_denied
+    DISABLED_PLUGINS="commit"
+    MOCK_LIST_OUTPUT="$_DISABLED_LIST"
+
+    install_plugin "commit-commands" >/dev/null
+
+    assert_equals "1" "$(_mock_call_count '^plugin enable')" \
+        "a partial name does not deny a different plugin"
+
+    _mock_cleanup
+}
+
+# Source guard: the librarian loop has its own inline install path and never
+# calls install_plugin, so it needs its own deny check. Missing it would leave
+# the kill-switch inert for exactly the plugins it matters most for.
+# Scoped to the librarian block itself, not a whole-file count: the function
+# DEFINITION also matches _plugin_is_denied, so a naive count stays above a
+# threshold even after the loop's call is deleted.
+test_deny_list_applied_in_librarian_loop() {
+    local block
+    block=$(command awk '
+        /^if \[ -d "\$LIBRARIAN_DIR" \]; then/ { in_block = 1 }
+        in_block { print }
+        in_block && /^fi$/ { exit }
+    ' "$CLAUDE_SETUP" | command grep -vE '^[[:space:]]*#')
+
+    if [ -z "$block" ]; then
+        fail_test "could not locate the librarian install block in claude-setup"
+        return
+    fi
+
+    if command grep -q '_plugin_is_denied' <<<"$block"; then
+        pass_test "the librarian loop checks the deny-list"
+    else
+        fail_test "librarian loop is unguarded — the kill-switch is inert there"
+    fi
+
+    # It must gate the install, not merely be mentioned after it.
+    if command grep -q 'claude plugin install' <<<"$block"; then
+        pass_test "librarian loop has its own inline install path (why it needs its own check)"
+    else
+        fail_test "librarian install path not found — this guard may be stale"
+    fi
+}
+
+# The _FILE convention comes free from _resolve_override_list_or_file; assert
+# the deny-list actually goes through it rather than reading the env var raw.
+test_deny_list_supports_file_variant() {
+    local code
+    code=$(command grep -vE '^[[:space:]]*#' "$CLAUDE_SETUP")
+
+    if command grep -q '_resolve_override_list_or_file "CLAUDE_DISABLED_PLUGINS"' <<<"$code"; then
+        pass_test "CLAUDE_DISABLED_PLUGINS resolves via the _FILE-aware helper"
+    else
+        fail_test "CLAUDE_DISABLED_PLUGINS bypasses the _FILE convention"
+    fi
+}
+
+# ============================================================================
+# Lock Acquisition Branch Tests (issue #787)
+# ============================================================================
+# The timeout branch is deliberately fail-loud: proceeding unlocked would
+# silently restore the #784 race. A future `|| true` there must break a test.
+
+# Run _acquire_setup_lock in a subshell with a stubbed `flock`, so the real
+# lock is never touched and `exit 1` cannot kill the suite.
+#
+# env -u BASH_ENV is required (#618): /etc/bash_env rebuilds PATH on
+# non-interactive bash and would defeat the PATH stub.
+_run_acquire_lock_with_flock_stub() {
+    local stub_rc="$1" lock_path="$2"
+    local tmpdir
+    tmpdir=$(command mktemp -d)
+
+    command cat >"$tmpdir/flock" <<STUB
+#!/bin/bash
+exit $stub_rc
+STUB
+    chmod +x "$tmpdir/flock"
+
+    local runner="$tmpdir/runner.sh"
+    {
+        echo 'set -euo pipefail'
+        _extract_shell_function "$CLAUDE_SETUP" "_acquire_setup_lock"
+        echo '_acquire_setup_lock "$1"'
+        echo 'echo "CONTINUED"'
+    } >"$runner"
+
+    env -u BASH_ENV PATH="$tmpdir:$PATH" bash "$runner" "$lock_path" 2>&1
+    local rc=$?
+    command rm -rf "$tmpdir"
+    return $rc
+}
+
+test_lock_timeout_exits_nonzero() {
+    local out rc=0
+    out=$(_run_acquire_lock_with_flock_stub 1 "$RESULTS_DIR/timeout-test.lock") || rc=$?
+
+    assert_equals "1" "$rc" "a flock timeout exits 1 (never proceeds unlocked)"
+    assert_contains "$out" "timed out after 600s" "the timeout is reported"
+    assert_not_contains "$out" "CONTINUED" \
+        "setup does NOT continue past a timed-out lock"
+}
+
+test_lock_acquired_continues() {
+    local out rc=0
+    out=$(_run_acquire_lock_with_flock_stub 0 "$RESULTS_DIR/ok-test.lock") || rc=$?
+
+    assert_equals "0" "$rc" "a successful acquire returns 0"
+    assert_contains "$out" "CONTINUED" "setup proceeds once the lock is held"
+}
+
+# An unwritable lock path must WARN and continue. Exiting here would brick setup
+# on any host with a read-only or missing /tmp.
+test_lock_unwritable_path_warns_and_continues() {
+    local out rc=0
+    out=$(_run_acquire_lock_with_flock_stub 0 "/nonexistent-dir-$$/claude-setup.lock") || rc=$?
+
+    assert_equals "0" "$rc" "an unopenable lock path is not fatal"
+    assert_contains "$out" "continuing without a lock" "the degradation is warned"
+    assert_contains "$out" "CONTINUED" "setup proceeds unlocked"
 }
 
 # ============================================================================
@@ -779,23 +1424,9 @@ test_plugin_marketplace_variation() {
 # Component Override Helper Tests
 # ============================================================================
 
-# Mirror the helpers from claude-setup for testing
-_is_in_list() {
-    local needle="$1"
-    local haystack="$2"
-
-    [ -z "$haystack" ] && return 1
-    [ -z "$needle" ] && return 1
-
-    local IFS=','
-    local item
-    for item in $haystack; do
-        item=$(echo "$item" | xargs)
-        [ "$item" = "$needle" ] && return 0
-    done
-    return 1
-}
-
+# _is_in_list is loaded from production by _load_production_function above
+# (#787) — no mirror here. _resolve_override_list still needs one: it reads
+# ${var}_DEFAULT indirectly, so tests drive it with their own scratch variables.
 _resolve_override_list() {
     local var_name="$1"
     local defaults="$2"
@@ -1560,6 +2191,37 @@ run_test test_plugin_status_old_format_is_enabled "Plugin status: status-less ol
 run_test test_plugin_status_prefix_safety "Plugin status: prefix does not match longer plugin name"
 run_test test_plugin_status_empty_list "Plugin status: empty list reports absent"
 run_test test_status_parser_mirrors_production "Plugin status: production parser + repair path present"
+run_test test_all_production_functions_extractable "Harness: every production function extracts (#787)"
+
+run_test test_install_plugin_enables_with_full_name "Functional: disabled branch enables with full_name"
+run_test test_install_plugin_absorbs_enable_failure "Functional: failed enable does not abort the run"
+run_test test_install_plugin_skips_when_enabled "Functional: enabled plugin is left untouched"
+run_test test_plugin_status_absent_when_list_fails "Functional: failed 'plugin list' reports absent"
+run_test test_plugin_status_failure_routes_to_install "Functional: absent falls through to install"
+run_test test_enable_plugin_failure_output_does_not_abort "Functional: long enable failure survives set -e pipefail"
+
+run_test test_enable_plugin_retries_then_succeeds "Retry: transient enable failure is retried (#788)"
+run_test test_enable_plugin_does_not_retry_permanent_failure "Retry: permanent enable failure is not retried"
+run_test test_enable_plugin_retry_is_bounded "Retry: enable backoff is capped at 4 attempts"
+run_test test_install_plugin_retries_then_succeeds "Retry: transient install failure is retried"
+run_test test_install_plugin_does_not_retry_permanent_failure "Retry: permanent install failure is not retried"
+run_test test_install_plugin_retry_is_bounded "Retry: install backoff is capped at 4 attempts"
+run_test test_install_plugin_succeeds_first_try "Retry: a clean install is not retried"
+run_test test_enable_and_install_share_retry_shape "Retry: enable and install share the retry shape"
+
+run_test test_deny_list_takes_precedence_over_allow_list "Deny-list: beats CLAUDE_PLUGINS (#789)"
+run_test test_deny_list_suppresses_install_when_absent "Deny-list: suppresses install, not just re-enable"
+run_test test_deny_list_skip_is_logged "Deny-list: the skip is logged, not silent"
+run_test test_deny_list_warns_but_does_not_disable "Deny-list: warns on an enabled plugin, never disables"
+run_test test_empty_deny_list_is_inert "Deny-list: empty list does not regress the #784 repair"
+run_test test_deny_list_is_exact_match "Deny-list: exact match only, no substring denial"
+run_test test_deny_list_applied_in_librarian_loop "Deny-list: also guards the librarian install loop"
+run_test test_deny_list_supports_file_variant "Deny-list: resolves via the _FILE-aware helper"
+
+run_test test_lock_timeout_exits_nonzero "Lock: flock timeout exits 1, never proceeds unlocked"
+run_test test_lock_acquired_continues "Lock: a successful acquire continues setup"
+run_test test_lock_unwritable_path_warns_and_continues "Lock: unwritable path warns and continues"
+
 run_test test_claude_setup_takes_flock "Concurrency: claude-setup serializes itself with flock"
 run_test test_flock_is_actually_exclusive "Concurrency: the lock is exclusive and released"
 run_test test_auth_watcher_excludes_settings_json "Concurrency: auth-watcher excludes settings.json from its watch"

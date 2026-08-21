@@ -74,28 +74,43 @@ done
 # (docs/claude-code/plugins-and-mcps.md) truthful for an operator clearing a
 # stuck lock by hand.
 CLAUDE_SETUP_LOCK="/tmp/claude-setup.lock"
-if command -v flock >/dev/null 2>&1; then
+
+# Acquire the setup lock on fd 200, or degrade with a warning.
+#
+# The body lives in a function (not inline) so the unit suite can drive it with
+# a scratch lock path and assert both failure branches — the timeout exit and
+# the unwritable-path warn-and-continue (#787). The call site below still passes
+# the fixed $CLAUDE_SETUP_LOCK literal, which is the property #784 depends on.
+_acquire_setup_lock() {
+    local lock_path="$1"
+
+    if ! command -v flock >/dev/null 2>&1; then
+        # No hard dependency on util-linux: Alpine ships only the busybox applet
+        # and ubi-minimal may omit it entirely (cf. the nologin finding in #435).
+        # Continuing unlocked is the pre-existing behavior, not a regression.
+        echo "  ⚠ flock not available — concurrent claude-setup runs are not serialized" >&2
+        return 0
+    fi
+
     # Open the lock file on fd 200. The redirect is kept on its own line so a
     # failure to open (e.g. unwritable TMPDIR) is caught here rather than
     # aborting mid-run under `set -e`.
-    if exec 200>"$CLAUDE_SETUP_LOCK"; then
-        # -w 600: a real run takes ~48s, so a 10-minute wait can only mean a
-        # stuck holder. Treat it as an error rather than proceeding unlocked,
-        # which would silently reintroduce the very race this guards.
-        if ! flock -w 600 200; then
-            echo "ERROR: timed out after 600s waiting for $CLAUDE_SETUP_LOCK" >&2
-            echo "       Another claude-setup appears stuck. Check for a hung process." >&2
-            exit 1
-        fi
-    else
-        echo "  ⚠ could not open $CLAUDE_SETUP_LOCK — continuing without a lock" >&2
+    if ! exec 200>"$lock_path"; then
+        echo "  ⚠ could not open $lock_path — continuing without a lock" >&2
+        return 0
     fi
-else
-    # No hard dependency on util-linux: Alpine ships only the busybox applet and
-    # ubi-minimal may omit it entirely (cf. the nologin finding in #435).
-    # Continuing unlocked is the pre-existing behavior, not a regression.
-    echo "  ⚠ flock not available — concurrent claude-setup runs are not serialized" >&2
-fi
+
+    # -w 600: a real run takes ~48s, so a 10-minute wait can only mean a stuck
+    # holder. Treat it as an error rather than proceeding unlocked, which would
+    # silently reintroduce the very race this guards.
+    if ! flock -w 600 200; then
+        echo "ERROR: timed out after 600s waiting for $lock_path" >&2
+        echo "       Another claude-setup appears stuck. Check for a hung process." >&2
+        exit 1
+    fi
+}
+
+_acquire_setup_lock "$CLAUDE_SETUP_LOCK"
 
 # Secure token storage path (RAM-backed, never touches disk)
 ANTHROPIC_TOKEN_FILE="/dev/shm/anthropic-auth-token"
@@ -417,6 +432,61 @@ has_plugin() {
     _match_plugin_in_list "$plugin_name" "$list_output"
 }
 
+# ----------------------------------------------------------------------------
+# Plugin deny-list (#789)
+# ----------------------------------------------------------------------------
+# CLAUDE_DISABLED_PLUGINS is an emergency kill-switch, not a configuration knob.
+# #784 made every plugin named in CLAUDE_PLUGINS / CLAUDE_LIBRARIAN_PLUGINS
+# unconditionally re-enabled, which is the right default (a manual disable is
+# indistinguishable from race damage) but left no way to keep a misbehaving
+# plugin off without editing compose/env and restarting — awkward mid-incident.
+#
+# The deny-list is checked BEFORE the install/enable decision so it wins over
+# every allow-list. That ordering is the whole point.
+#
+# It suppresses install as well as re-enable: `claude plugin install` enables as
+# a side effect, so honoring the deny-list only on the re-enable branch would
+# let a fresh ~/.claude volume silently reinstate the plugin.
+#
+# It never DISABLES anything. An already-enabled denied plugin is reported and
+# left alone — claude-setup runs on every boot and should not acquire a
+# destructive action. The operator applies it with `claude plugin disable`; the
+# deny-list is what makes that survive the next restart.
+DISABLED_PLUGINS=""
+_resolve_disabled_plugins() {
+    local result
+    result=$(_resolve_override_list_or_file "CLAUDE_DISABLED_PLUGINS" "") || true
+    if [ "$(command cat "$_RESOLVED_FROM_FILE")" = "file" ]; then
+        DISABLED_PLUGINS=$(_file_json_to_csv "$result")
+    else
+        DISABLED_PLUGINS="$result"
+    fi
+}
+_resolve_disabled_plugins
+
+_plugin_is_denied() {
+    _is_in_list "$1" "$DISABLED_PLUGINS"
+}
+
+# Report a denied plugin's current state and why nothing will happen to it.
+# Always logs — a plugin missing from startup output with no explanation is the
+# exact silent failure #784 was about.
+_log_denied_plugin() {
+    local plugin_name="$1"
+    case "$(plugin_status "$plugin_name")" in
+        enabled)
+            echo "    ⚠ $plugin_name listed in CLAUDE_DISABLED_PLUGINS but currently enabled"
+            echo "      run 'claude plugin disable ${plugin_name}' to apply it"
+            ;;
+        disabled)
+            echo "    ⊘ $plugin_name (disabled via CLAUDE_DISABLED_PLUGINS — leaving disabled)"
+            ;;
+        *)
+            echo "    ⊘ $plugin_name (disabled via CLAUDE_DISABLED_PLUGINS — not installing)"
+            ;;
+    esac
+}
+
 # plugin_status — enablement-aware wrapper over a live `claude plugin list`.
 # Echoes enabled | disabled | absent. A failed list call is reported as
 # "absent" so callers fall through to their install path (which has its own
@@ -441,15 +511,43 @@ plugin_status() {
 #
 # Never aborts the run: a failed enable warns and returns non-zero for the
 # caller to absorb (this script runs under `set -e`).
+#
+# Retries on the same transient marker install_plugin does (#788). enable is
+# reached in exactly the startup window install's backoff was built for — the
+# auth-watcher firing right as credentials appear, or the librarian marketplace
+# still registering — and a one-shot failure there would leave the plugin
+# disabled for the whole boot, undoing the very repair #784 added.
 enable_plugin() {
     local plugin_name="$1"
     local full_name="$2"
+    local max_retries=4
+    local retry_delay="${CLAUDE_SETUP_RETRY_DELAY:-2}"
+    local attempt=1
     local output
+
     echo "    ↻ $plugin_name (installed but disabled — re-enabling)"
-    if output=$(claude plugin enable "$full_name" 2>&1); then
-        echo "    ✓ $plugin_name re-enabled"
-        return 0
-    fi
+
+    while [ $attempt -le $max_retries ]; do
+        if output=$(claude plugin enable "$full_name" 2>&1); then
+            echo "    ✓ $plugin_name re-enabled"
+            return 0
+        fi
+
+        # Only "not found in marketplace" is transient — anything else is a real
+        # failure and retrying it just delays the warning.
+        if echo "$output" | command grep -q "not found in marketplace"; then
+            if [ $attempt -lt $max_retries ]; then
+                echo "    ⏳ Marketplace not ready, retrying in ${retry_delay}s... (attempt $attempt/$max_retries)"
+                sleep "$retry_delay"
+                retry_delay=$((retry_delay * 2))  # Exponential backoff: 2, 4, 8, 16
+                attempt=$((attempt + 1))
+                continue
+            fi
+        fi
+
+        break
+    done
+
     echo "    ⚠ Failed to re-enable $plugin_name"
     echo "$output" | command sed 's/^/      /' | command head -5
     return 1
@@ -458,6 +556,13 @@ enable_plugin() {
 install_plugin() {
     local plugin_name="$1"
     local full_name="${plugin_name}@${MARKETPLACE}"
+
+    # Deny-list first (#789): it must win over CLAUDE_PLUGINS and
+    # CLAUDE_EXTRA_PLUGINS, so it is checked before any install/enable decision.
+    if _plugin_is_denied "$plugin_name"; then
+        _log_denied_plugin "$plugin_name"
+        return 0
+    fi
 
     # Three-way on enablement, not two-way on presence (#784): an
     # installed-but-disabled plugin is repaired rather than skipped.
@@ -478,7 +583,7 @@ install_plugin() {
     # This handles the race condition where auth is detected but
     # the marketplace API isn't fully ready yet
     local max_retries=4
-    local retry_delay=2
+    local retry_delay="${CLAUDE_SETUP_RETRY_DELAY:-2}"
     local attempt=1
     local output
 
@@ -492,7 +597,7 @@ install_plugin() {
         if echo "$output" | command grep -q "not found in marketplace"; then
             if [ $attempt -lt $max_retries ]; then
                 echo "    ⏳ Marketplace not ready, retrying in ${retry_delay}s... (attempt $attempt/$max_retries)"
-                sleep $retry_delay
+                sleep "$retry_delay"
                 retry_delay=$((retry_delay * 2))  # Exponential backoff: 2, 4, 8, 16
                 attempt=$((attempt + 1))
                 continue
@@ -875,6 +980,14 @@ if [ -d "$LIBRARIAN_DIR" ]; then
         for plugin in "${LIBRARIAN_PLUGIN_LIST[@]}"; do
             plugin=$(echo "$plugin" | xargs)
             [ -z "$plugin" ] && continue
+            # Deny-list (#789). Checked here too because this loop has its own
+            # inline install path and never calls install_plugin — without it
+            # the kill-switch would be inert for the librarian plugins, which
+            # are the ones it matters most for.
+            if _plugin_is_denied "$plugin"; then
+                _log_denied_plugin "$plugin"
+                continue
+            fi
             # Enablement-aware (#784): the librarian plugins install before the
             # auth-gated official ones, so they sit squarely in the window where
             # a racing run's settings.json write clobbers enabledPlugins. A
