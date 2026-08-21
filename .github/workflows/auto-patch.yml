@@ -420,6 +420,19 @@ jobs:
             echo "gpg_keys_changed=false" >> "$GITHUB_OUTPUT"
           fi
 
+          # Detect skipped updates the same way — the update step wrote this
+          # marker into the commit message on exit 2 (issue #781). The PR body
+          # is built from steps.check.outputs.updates_summary, which lists every
+          # OUTDATED tool detected before any update was attempted; it cannot
+          # tell a tool that was rewritten from one that stalled. So a PR can
+          # bullet a bump that never happened. Hold it for review rather than
+          # auto-merging an unreviewed partial update (issue #783).
+          if echo "$COMMIT_MSG" | grep -q "Some version updates were skipped"; then
+            echo "updates_skipped=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "updates_skipped=false" >> "$GITHUB_OUTPUT"
+          fi
+
       # The compatibility-matrix update is intentionally NOT done here.
       # Pushing a second commit to the auto-patch branch invalidates the
       # CI conclusion that triggered this workflow_run (which validated
@@ -461,10 +474,20 @@ jobs:
             echo "Created PR: $PR_URL"
           fi
 
-      - name: Add hold label for GPG key changes
-        if: steps.branch_info.outputs.branch_exists == 'true' && steps.branch_info.outputs.gpg_keys_changed == 'true'
+      # Two independent conditions hold a PR back from auto-merge: changed GPG
+      # signing keys, and updates that were skipped (issue #783). They share one
+      # label so there is a single documented un-hold action, but each explains
+      # itself in its own comment. Both can apply to the same PR.
+      - name: Add hold label for changes requiring review
+        if: |
+          steps.branch_info.outputs.branch_exists == 'true' &&
+          (steps.branch_info.outputs.gpg_keys_changed == 'true' ||
+           steps.branch_info.outputs.updates_skipped == 'true')
         env:
           GH_TOKEN: ${{ secrets.AUTO_PATCH_TOKEN }}
+          PR_URL: ${{ steps.create_pr.outputs.pr_url }}
+          GPG_KEYS_CHANGED: ${{ steps.branch_info.outputs.gpg_keys_changed }}
+          UPDATES_SKIPPED: ${{ steps.branch_info.outputs.updates_skipped }}
         run: |
           # Create the label if it doesn't exist
           gh label create "hold/review-required" \
@@ -472,19 +495,38 @@ jobs:
             --color "D93F0B" \
             --force
 
-          gh pr edit "${{ steps.create_pr.outputs.pr_url }}" \
-            --add-label "hold/review-required"
+          gh pr edit "$PR_URL" --add-label "hold/review-required"
 
-          gh pr comment "${{ steps.create_pr.outputs.pr_url }}" \
-            --body "⚠️ **GPG Key Changes Detected** — auto-merge disabled.
+          if [ "$GPG_KEYS_CHANGED" = "true" ]; then
+            gh pr comment "$PR_URL" \
+              --body "⚠️ **GPG Key Changes Detected** — auto-merge disabled.
 
           This release includes changes to GPG signing keys which require manual review.
           Remove the \`hold/review-required\` label after verifying the key changes are legitimate."
 
-          echo "GPG key changes detected — PR held for manual review"
+            echo "GPG key changes detected — PR held for manual review"
+          fi
 
-      - name: Enable auto-merge (no GPG key changes)
-        if: steps.branch_info.outputs.branch_exists == 'true' && steps.branch_info.outputs.gpg_keys_changed != 'true'
+          if [ "$UPDATES_SKIPPED" = "true" ]; then
+            gh pr comment "$PR_URL" \
+              --body "⚠️ **Some version updates were skipped** — auto-merge disabled.
+
+          The update list in this PR body is built from every outdated tool detected
+          *before* updates were attempted, so it may bullet a tool that was never
+          actually rewritten — commonly one registered in \`bin/check-versions.sh\`
+          with no matching case in \`bin/lib/update-versions/updaters.sh\`.
+
+          Check the \"Create auto-patch branch and apply updates\" step log for the
+          tool names, then remove the \`hold/review-required\` label to merge."
+
+            echo "Skipped updates detected — PR held for manual review"
+          fi
+
+      - name: Enable auto-merge (nothing held for review)
+        if: |
+          steps.branch_info.outputs.branch_exists == 'true' &&
+          steps.branch_info.outputs.gpg_keys_changed != 'true' &&
+          steps.branch_info.outputs.updates_skipped != 'true'
         env:
           GH_TOKEN: ${{ secrets.AUTO_PATCH_TOKEN }}
           PR_URL: ${{ steps.create_pr.outputs.pr_url }}
