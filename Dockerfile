@@ -684,6 +684,15 @@ RUN if [ -f /opt/container-runtime/secrets/50-load-secrets.sh ]; then \
     chmod 755 /etc/container/startup/50-load-secrets.sh; \
     fi
 
+# Install every-boot git identity startup script (issue #785).
+# Ordered after 45-op-secrets.sh so OP_*_REF values are resolved before
+# setup-git reads GIT_USER_NAME / GIT_USER_EMAIL — postStartCommand races the
+# entrypoint under Zed and cannot guarantee that ordering.
+RUN if [ -f /opt/container-runtime/60-setup-git.sh ]; then \
+    cp /opt/container-runtime/60-setup-git.sh /etc/container/startup/60-setup-git.sh && \
+    chmod 755 /etc/container/startup/60-setup-git.sh; \
+    fi
+
 # Create audit log directory with secure permissions (when audit logging enabled)
 # Directory is writable by root only, logs have restricted read access
 RUN mkdir -p /var/log/audit && \

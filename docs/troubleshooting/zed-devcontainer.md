@@ -126,6 +126,16 @@ This repo currently wires only one lifecycle hook:
   - Configures git user identity from secrets via `setup-git`.
   - Authenticates `gh` if `OP_GITHUB_TOKEN_REF` is configured via `setup-gh`.
 
+  > **Git identity no longer depends on this chain.** `setup-git` also runs as
+  > `/etc/container/startup/60-setup-git.sh`, in the every-boot startup phase
+  > ordered _after_ `45-op-secrets.sh`. That phase runs under the image
+  > ENTRYPOINT (VS Code) and under `recover-entrypoint`'s
+  > `ENTRYPOINT_STARTUP_ONLY` replay (Zed), so identity is configured even when
+  > this `postStartCommand` chain aborts early, races the entrypoint, or — as in
+  > generated `devcontainer.json` templates — never chains `setup-git` at all.
+  > The `setup-git` link here is now belt-and-suspenders. Disable the startup
+  > script with `SKIP_GIT_SETUP=true`.
+  >
   > **Chain-abort gotcha.** The links are `&&`-joined, so any link exiting
   > non-zero silently skips every link after it — including `setup-git` (git
   > identity + SSH auth/signing keys) and `setup-gh`. `setup-dev-environment.sh`
