@@ -14,3 +14,28 @@ failure-threshold: warning
 #   trade cache granularity for a cosmetic win, so silence the noise.
 ignored:
   - DL3059
+
+# severity overrides
+#   DL3064 (potentially sensitive data in ARG/ENV) — new in hadolint 2.15,
+#   which this repo picked up in the 2.14.0 → 2.15.1 auto-patch bump (#780).
+#   The rule matches on the variable *name* alone, never the value, so it
+#   fires on `ARG USERNAME=developer` (a username) and
+#   `ARG ENABLE_PASSWORDLESS_SUDO=false` (a boolean feature flag) across the
+#   root Dockerfile and all eight generated base images — 18 findings, every
+#   one a false positive. Both ARGs are build-time knobs that must keep their
+#   names: USERNAME is the documented build arg for the non-root user, and
+#   ENABLE_PASSWORDLESS_SUDO names a three-valued sudo policy.
+#
+#   Downgraded to `info` rather than ignored outright, so a genuinely
+#   suspicious ARG/ENV still surfaces in hook output instead of vanishing
+#   silently — which is the whole reason not to add it to `ignored` above.
+#
+#   Note this does trade away a (very noisy) signal: DL3064 matches names,
+#   and the value-based backstop is the gitleaks pre-commit hook, which is
+#   pattern-based and not exhaustive. Verified locally: gitleaks flags a
+#   `ghp_…` PAT in a Dockerfile ENV but does not flag every plausible-looking
+#   credential. Treat a *new* DL3064 info line on an unfamiliar ARG/ENV as
+#   worth a look rather than assuming another hook will catch it.
+override:
+  info:
+    - DL3064
