@@ -1059,10 +1059,13 @@ test_exit_code_contract() {
         ok=false
     }
 
-    # A dry run changes nothing, so nothing is stalling — stays exit 0.
+    # A dry run walks the full updater dispatch and so observes the SAME skip
+    # taxonomy a real run does — it must exit 2 here too. It used to return
+    # before the dispatch and exit 0, which made `--dry-run` a false all-clear
+    # for exactly the stall this suite exists to catch (issue #783).
     rc=$(_run_update_versions_fixture "$missing_case" --dry-run)
-    [ "$rc" -eq 0 ] || {
-        echo "    dry run: expected exit 0, got $rc"
+    [ "$rc" -eq 2 ] || {
+        echo "    dry run (missing case): expected exit 2, got $rc"
         ok=false
     }
 
@@ -1073,7 +1076,169 @@ test_exit_code_contract() {
         ok=false
     }
 
-    assert_true "$ok" "exit 2 on skipped updates; 0 on a clean run and on --dry-run"
+    # ...and a dry run over that same clean payload must stay 0. Without this,
+    # a change that simply failed every dry run would pass the assertion above.
+    rc=$(_run_update_versions_fixture "$clean" --dry-run)
+    [ "$rc" -eq 0 ] || {
+        echo "    dry run (clean): expected exit 0, got $rc"
+        ok=false
+    }
+
+    assert_true "$ok" "exit 2 on skipped updates (real run and dry run); 0 on a clean run"
+}
+
+# ============================================================================
+# Test: a dry run reports a missing case AND still writes nothing
+# ============================================================================
+# The two halves are one invariant: dry-run detection was bought by letting the
+# run walk the updater dispatch, so the writes have to be suppressed deeper —
+# in sed_inplace/pin_action/update_luggage_catalog. An exit-code assertion alone
+# would pass just as happily if the dispatch had started rewriting files.
+test_dry_run_reports_missing_case_without_writing() {
+    local test_dir
+    test_dir=$(mktemp -d)
+
+    mkdir -p "$test_dir/lib/features"
+    command cat >"$test_dir/lib/features/dev-tools.sh" <<'EOF'
+#!/bin/bash
+SD_VERSION="${SD_VERSION:-1.1.0}"
+EOF
+    command cp "$test_dir/lib/features/dev-tools.sh" "$test_dir/dev-tools.sh.before"
+
+    # One tool that has no updater case, one that does and would be rewritten.
+    command cat >"$test_dir/test.json" <<'EOF'
+{
+  "tools": [
+    {"tool": "totally-unmapped-tool", "current": "1.0.0", "latest": "1.0.1", "file": "dev-tools.sh", "status": "outdated"},
+    {"tool": "sd", "current": "1.1.0", "latest": "1.2.0", "file": "dev-tools.sh", "status": "outdated"}
+  ]
+}
+EOF
+
+    local output rc=0
+    output=$(
+        cd "$test_dir" || exit 1
+        PROJECT_ROOT_OVERRIDE="$test_dir" "$PROJECT_ROOT/bin/update-versions.sh" \
+            --dry-run --no-commit --no-bump --input test.json 2>&1
+    ) || rc=$?
+
+    local ok=true
+    [ "$rc" -eq 2 ] || {
+        echo "    expected exit 2 from a dry run over a missing case, got $rc"
+        ok=false
+    }
+    echo "$output" | command grep -q "no updater case" || {
+        echo "    dry run did not report the missing updater case"
+        ok=false
+    }
+    echo "$output" | command grep -q "totally-unmapped-tool" || {
+        echo "    dry run did not name the unmapped tool"
+        ok=false
+    }
+    # The mapped tool must NOT have been rewritten — this is still a dry run.
+    command diff -q "$test_dir/dev-tools.sh.before" "$test_dir/lib/features/dev-tools.sh" >/dev/null || {
+        echo "    dry run modified dev-tools.sh (sd should not have been rewritten)"
+        ok=false
+    }
+
+    command rm -rf "$test_dir"
+    assert_true "$ok" "A dry run reports a missing updater case and leaves files untouched"
+}
+
+# ============================================================================
+# Test: a failed update_luggage_catalog propagates RC_UPDATE_FAILED / exit 3
+# ============================================================================
+# The Rust arm does `update_luggage_catalog "rust" "$latest" || return
+# "$RC_UPDATE_FAILED"`, mirroring pin_action's propagation — but only pin_action's
+# was covered. This is the half-updated-tree case that matters most: a Dockerfile
+# ARG bumped without its vendored catalog entry (issue #506) ships a build that
+# cannot succeed, so it must be fatal (exit 3) rather than a tolerated skip.
+#
+# Failure is forced with a stub binary that exits 1, NOT by pointing LUGGAGE_BIN
+# at a missing path — the latter would exit 127 from a failed exec and pass for
+# the wrong reason, proving nothing about the intended propagation.
+_write_luggage_failure_fixture() {
+    local test_dir="$1"
+
+    mkdir -p "$test_dir/lib/features"
+    command cat >"$test_dir/Dockerfile" <<'EOF'
+ARG RUST_VERSION=1.90.0
+EOF
+    command cat >"$test_dir/lib/features/rust.sh" <<'EOF'
+#!/bin/bash
+RUST_VERSION="${RUST_VERSION:-1.90.0}"
+EOF
+
+    # Stub luggage: always fails, as a real `catalog add-version` would against
+    # a missing or unwritable vendored catalog.
+    command cat >"$test_dir/luggage-stub" <<'EOF'
+#!/bin/bash
+echo "stub luggage: catalog add-version failed" >&2
+exit 1
+EOF
+    command chmod +x "$test_dir/luggage-stub"
+}
+
+test_luggage_catalog_failure_exits_three() {
+    local test_dir
+    test_dir=$(mktemp -d)
+    _write_luggage_failure_fixture "$test_dir"
+
+    local ok=true
+
+    # Layer 1: update_version() itself returns RC_UPDATE_FAILED.
+    local rc=0
+    (
+        source "$PROJECT_ROOT/bin/lib/common.sh"
+        source "$PROJECT_ROOT/bin/lib/version-utils.sh"
+        source "$PROJECT_ROOT/bin/lib/update-versions/updaters.sh"
+
+        # shellcheck disable=SC2030,SC2034 # consumed by update_version() from the sourced module
+        PROJECT_ROOT="$test_dir"
+        # shellcheck disable=SC2030,SC2034 # ditto
+        DRY_RUN=false
+        # shellcheck disable=SC2030 # ditto
+        LUGGAGE_BIN="$test_dir/luggage-stub"
+
+        update_version "Rust" "1.90.0" "1.91.0" "Dockerfile" >/dev/null 2>&1
+    ) || rc=$?
+
+    # RC_UPDATE_FAILED is 4; re-read it rather than hardcoding.
+    local expected_rc
+    expected_rc=$(
+        source "$PROJECT_ROOT/bin/lib/update-versions/updaters.sh"
+        printf '%s' "$RC_UPDATE_FAILED"
+    )
+    [ "$rc" -eq "$expected_rc" ] || {
+        echo "    update_version: expected RC_UPDATE_FAILED ($expected_rc), got $rc"
+        ok=false
+    }
+
+    # Layer 2: the script surfaces that as the fatal exit 3, not the tolerated 2.
+    command cat >"$test_dir/test.json" <<'EOF'
+{
+  "tools": [
+    {"tool": "Rust", "current": "1.90.0", "latest": "1.91.0", "file": "Dockerfile", "status": "outdated"}
+  ]
+}
+EOF
+
+    local script_rc=0
+    (
+        cd "$test_dir" || exit 1
+        # shellcheck disable=SC2031 # separate subshell from the one above
+        PROJECT_ROOT_OVERRIDE="$test_dir" LUGGAGE_BIN="$test_dir/luggage-stub" \
+            "$PROJECT_ROOT/bin/update-versions.sh" \
+            --no-commit --no-bump --input test.json >/dev/null 2>&1
+    ) || script_rc=$?
+
+    [ "$script_rc" -eq 3 ] || {
+        echo "    update-versions.sh: expected exit 3, got $script_rc"
+        ok=false
+    }
+
+    command rm -rf "$test_dir"
+    assert_true "$ok" "A failed luggage catalog update returns RC_UPDATE_FAILED and exits 3"
 }
 
 # ============================================================================
@@ -1241,9 +1406,11 @@ run_test test_pin_action_rewrites_sha_pin "pin_action rewrites SHA-pinned action
 run_test test_pin_action_preserves_pin_on_resolution_failure "pin_action preserves pin when SHA resolution fails"
 run_test test_unknown_tool_returns_no_updater_case_for_every_file_type "Every file-type branch returns RC_NO_UPDATER_CASE for an unmapped tool"
 run_test test_invalid_version_returns_distinct_code "Invalid version returns a code distinct from a missing case"
-run_test test_exit_code_contract "Exit-code contract: 2 on skipped updates, 0 on clean and dry runs"
+run_test test_exit_code_contract "Exit-code contract: 2 on skipped updates (real and dry), 0 on clean runs"
+run_test test_dry_run_reports_missing_case_without_writing "Dry run reports a missing updater case without writing"
 run_test test_new_cases_rewrite_their_pins "hyperfine, jsonc-parser, and sd rewrite their own pins"
 run_test test_failed_rewrite_exits_three "Failed rewrite exits 3 (fatal), not 2 (tolerated)"
+run_test test_luggage_catalog_failure_exits_three "Failed luggage catalog update returns RC_UPDATE_FAILED and exits 3"
 run_test test_failure_summary_separates_causes "Failure summary separates causes and names the tools"
 
 # Generate report

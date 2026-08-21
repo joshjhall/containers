@@ -17,11 +17,24 @@ RC_INVALID_VERSION=1 # $latest failed validate_version()
 RC_NO_UPDATER_CASE=3 # no case for this tool/file — add one in this file
 RC_UPDATE_FAILED=4   # a case matched but the rewrite itself failed
 
+# Dry-run write suppression is centralized in the three helpers below
+# (sed_inplace, pin_action, update_luggage_catalog) rather than in the ~70 arms
+# of update_version()'s dispatch. That placement is what lets a dry run walk the
+# whole dispatch — reaching the `*)` fallbacks and reporting RC_NO_UPDATER_CASE —
+# while writing nothing. update_version() used to `return` before the dispatch,
+# so a dry run could never observe a missing case (issue #783).
+#
+# Each guard uses ${DRY_RUN:-false}: the unit tests source this module and call
+# pin_action directly without setting DRY_RUN, and the callers run under `set -u`.
+
 # Portable in-place sed across GNU sed (Linux) and BSD sed (macOS).
 # Usage: sed_inplace 'EXPRESSION' file [file ...]
 sed_inplace() {
     local expr="$1"
     shift
+    if [ "${DRY_RUN:-false}" = true ]; then
+        return 0
+    fi
     command sed -i.bak "$expr" "$@"
     local f
     for f in "$@"; do
@@ -86,6 +99,12 @@ pin_action() {
     local repo="$2"
     local version="${3#v}"
 
+    # Short-circuit ahead of resolve_action_sha so a dry run needs no network
+    # and cannot report a spurious RC_UPDATE_FAILED for an unreachable API.
+    if [ "${DRY_RUN:-false}" = true ]; then
+        return 0
+    fi
+
     local sha
     if ! sha=$(resolve_action_sha "$repo" "$version"); then
         echo -e "${RED}    ERROR: could not resolve ${repo}@v${version} to a commit SHA — leaving pin unchanged${NC}" >&2
@@ -116,6 +135,12 @@ update_luggage_catalog() {
     local tool="$1"
     local version="$2"
     local catalog="$PROJECT_ROOT/crates/luggage/testdata/catalog"
+
+    # Short-circuit ahead of the binary probe so a dry run does not require a
+    # built luggage, and cannot report a spurious RC_UPDATE_FAILED for its absence.
+    if [ "${DRY_RUN:-false}" = true ]; then
+        return 0
+    fi
 
     local luggage_bin="${LUGGAGE_BIN:-}"
     if [ -z "$luggage_bin" ]; then
@@ -160,12 +185,14 @@ update_version() {
 
     echo -e "${BLUE}  Updating $tool: $current → $latest in $file${NC}"
 
-    if [ "$DRY_RUN" = true ]; then
+    if [ "${DRY_RUN:-false}" = true ]; then
         echo "    [DRY RUN] Would update $file"
-        return
     fi
 
-    # Update based on file type
+    # Update based on file type. A dry run walks this dispatch too — writes are
+    # suppressed inside sed_inplace/pin_action/update_luggage_catalog — so that
+    # it reaches the `*)` fallbacks and reports a missing updater case instead of
+    # returning a false all-clear (issue #783).
     case "$file" in
         Dockerfile)
             # Update ARG lines in Dockerfile

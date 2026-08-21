@@ -237,14 +237,19 @@ if [ "$FAILED_UPDATES" -gt 0 ]; then
     #       succeed. That must never sail through auto-merge, so it is fatal to
     #       the job rather than a tolerated skip.
     #
-    # A dry run stays exit 0: it changes nothing, so nothing is stalling, and
-    # `just update-versions --dry-run` should not fail for a report it just
-    # printed. (A dry run also returns before the case dispatch, so it can only
-    # ever observe invalid versions — never a missing case or a failed rewrite.)
-    if [ "$DRY_RUN" = false ]; then
-        if [ "$UPDATE_ERRORS" -gt 0 ]; then
-            exit 3
-        fi
-        exit 2
+    # A dry run exits the same way a real run would. It walks the full updater
+    # dispatch (writes are suppressed in the helpers, not by returning early),
+    # so it observes the same skip taxonomy — including a missing updater case,
+    # which it previously could not reach at all. Exiting 0 there made
+    # `just update-versions --dry-run` a false all-clear for exactly the stall
+    # #781 exists to catch; matching the real exit code makes it a preflight a
+    # caller can gate on (issue #783). It still writes nothing.
+    #
+    # In practice a dry run cannot reach exit 3: both rewrite-failure sources
+    # (pin_action's SHA resolution, update_luggage_catalog's binary probe)
+    # short-circuit before doing the work that could fail.
+    if [ "$UPDATE_ERRORS" -gt 0 ]; then
+        exit 3
     fi
+    exit 2
 fi
