@@ -556,6 +556,107 @@ test_validate_ssh_key_rejects_non_pem() {
     assert_equals "1" "$exit_code" "_validate_ssh_key should reject non-PEM content"
 }
 
+# ---------------------------------------------------------------------------
+# _warn_if_ref_unresolved — behavioral tests
+#
+# These run the function rather than grepping the source. The bug this guards
+# (issue #785) was a runtime fail-open: setup_auth_key returned 0 silently when
+# GIT_AUTH_SSH_KEY was empty, so a container booted with no SSH keys while the
+# postStart && chain reported success. Static assertions cannot catch that —
+# only invoking the function and inspecting stderr can.
+# ---------------------------------------------------------------------------
+
+# Extract _warn_if_ref_unresolved plus a stub _warn into a sourceable script.
+_extract_warn_fn() {
+    local func_script="$1"
+    {
+        echo '_warn() { printf "[setup-git] WARN: %s\n" "$*" >&2; }'
+        command sed -n '/^_warn_if_ref_unresolved()/,/^}/p' "$SETUP_GIT_SCRIPT"
+    } >"$func_script"
+}
+
+# Test: warns when OP_<NAME>_REF is set but <NAME> resolved empty
+test_warn_when_ref_set_but_secret_empty() {
+    local func_script="$TEST_TEMP_DIR/warn_fn.sh"
+    _extract_warn_fn "$func_script"
+
+    local output
+    output=$(
+        set -euo pipefail
+        source "$func_script"
+        unset GIT_AUTH_SSH_KEY
+        export OP_GIT_AUTH_SSH_KEY_REF="op://vault/item/field"
+        _warn_if_ref_unresolved GIT_AUTH_SSH_KEY 2>&1
+    )
+
+    assert_contains "$output" "OP_GIT_AUTH_SSH_KEY_REF is set but GIT_AUTH_SSH_KEY is empty" \
+        "Should warn when the ref is configured but the secret did not resolve"
+}
+
+# Test: returns 0 even when warning (must not break the postStart && chain)
+test_warn_returns_zero() {
+    local func_script="$TEST_TEMP_DIR/warn_fn.sh"
+    _extract_warn_fn "$func_script"
+
+    local exit_code=0
+    (
+        set -euo pipefail
+        source "$func_script"
+        unset GIT_AUTH_SSH_KEY
+        export OP_GIT_AUTH_SSH_KEY_REF="op://vault/item/field"
+        _warn_if_ref_unresolved GIT_AUTH_SSH_KEY 2>/dev/null
+    ) || exit_code=$?
+
+    assert_equals "0" "$exit_code" \
+        "Should return 0 so a transient race does not break the postStart chain"
+}
+
+# Test: silent when no ref is configured (must not cry wolf)
+test_no_warn_when_no_ref_configured() {
+    local func_script="$TEST_TEMP_DIR/warn_fn.sh"
+    _extract_warn_fn "$func_script"
+
+    local output
+    output=$(
+        set -euo pipefail
+        source "$func_script"
+        unset GIT_AUTH_SSH_KEY OP_GIT_AUTH_SSH_KEY_REF
+        _warn_if_ref_unresolved GIT_AUTH_SSH_KEY 2>&1
+    )
+
+    assert_empty "$output" \
+        "Should stay silent when no OP ref is configured (nothing was expected)"
+}
+
+# Test: silent when the secret resolved successfully
+test_no_warn_when_secret_resolved() {
+    local func_script="$TEST_TEMP_DIR/warn_fn.sh"
+    _extract_warn_fn "$func_script"
+
+    local output
+    output=$(
+        set -euo pipefail
+        source "$func_script"
+        export GIT_AUTH_SSH_KEY="mock-key-material"
+        export OP_GIT_AUTH_SSH_KEY_REF="op://vault/item/field"
+        _warn_if_ref_unresolved GIT_AUTH_SSH_KEY 2>&1
+    )
+
+    assert_empty "$output" "Should stay silent when the secret resolved"
+}
+
+# Test: setup_auth_key calls the warn helper before its skip guard
+test_auth_key_calls_warn_helper() {
+    assert_file_contains "$SETUP_GIT_SCRIPT" '_warn_if_ref_unresolved GIT_AUTH_SSH_KEY' \
+        "setup_auth_key should warn before silently skipping"
+}
+
+# Test: setup_signing_key calls the warn helper
+test_signing_key_calls_warn_helper() {
+    assert_file_contains "$SETUP_GIT_SCRIPT" '_warn_if_ref_unresolved GIT_SIGNING_SSH_KEY' \
+        "setup_signing_key should warn before silently skipping"
+}
+
 # Test: setup_identity calls _validate_email
 test_identity_validates_email() {
     assert_file_contains "$SETUP_GIT_SCRIPT" '_validate_email "$email" "GIT_USER_EMAIL"' \
@@ -583,6 +684,12 @@ run_test_with_setup test_validate_ssh_key_accepts_pem "_validate_ssh_key accepts
 run_test_with_setup test_validate_ssh_key_rejects_non_pem "_validate_ssh_key rejects non-PEM content"
 run_test_with_setup test_identity_validates_email "setup_identity validates email"
 run_test_with_setup test_auth_key_validates_key "setup_auth_key validates SSH key"
+run_test_with_setup test_warn_when_ref_set_but_secret_empty "Warns when OP ref set but secret empty (#785)"
+run_test_with_setup test_warn_returns_zero "Warn helper returns 0 (does not break && chain)"
+run_test_with_setup test_no_warn_when_no_ref_configured "Silent when no OP ref configured"
+run_test_with_setup test_no_warn_when_secret_resolved "Silent when secret resolved"
+run_test_with_setup test_auth_key_calls_warn_helper "setup_auth_key calls warn helper"
+run_test_with_setup test_signing_key_calls_warn_helper "setup_signing_key calls warn helper"
 run_test_with_setup test_signing_key_validates_key "setup_signing_key validates SSH key"
 
 run_test_with_setup test_sources_wait_for_op_cache "Script sources _wait-for-op-cache helper"
