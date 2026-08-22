@@ -89,9 +89,10 @@ On macOS: Import succeeds (case-insensitive) On Linux: Import fails (can't find
 
 ### Automatic Detection and Repair (Built-in)
 
-On every container start, `42-workspace-fs-health.sh` probes the **project
-mount** and repairs two things it can fix safely. It prints nothing when the
-workspace is healthy, so any output means it acted:
+On every container start — and then hourly for as long as the container runs —
+`42-workspace-fs-health.sh` probes the **project mount** and repairs two things
+it can fix safely. It prints nothing when the workspace is healthy, so any
+output means it acted:
 
 ```text
 [fs-health] /workspace/myproject is on a case-insensitive mount
@@ -114,6 +115,41 @@ Both repairs are idempotent and leave file contents untouched. Two opt-outs:
 | ------------------ | ----------------------------------------------- |
 | `SKIP_CASE_FIX`    | Detect and report, but never write              |
 | `SKIP_CASE_CHECK`  | Disable the check entirely                      |
+
+#### Why it also runs hourly
+
+The stale-symlink decay is a function of **uptime**, not of how the container
+started: virtiofs re-caches the bad attributes on long-lived links, so a
+container left up for a couple of days drifts back into the broken state after
+the boot-time repair already fixed it once.
+
+That is worth more than a clean `git status`. With the links reading as empty,
+git sees the stored target line as deleted, so `git add -A`, `git commit -a`,
+or `git stash` will stage the **deletion of the symlinks** — the same class of
+silent data loss as the `git clean -fd` hazard below, reached by a different
+route. Explicit file-by-file staging stays safe; scripted and agentic paths
+using `-A`/`-a` do not.
+
+So the same script also runs from cron at **:17 past every hour**
+(`/etc/cron.d/workspace-fs-health`). It is silent and idempotent when healthy,
+so the recurring pass costs nothing when there is nothing to fix. The hourly
+leg requires the **cron feature** (`INCLUDE_CRON=true`, also pulled in by
+`INCLUDE_DEV_TOOLS` and `INCLUDE_RUST_DEV`); without it the boot-time repair
+and the on-demand command below still work. `SKIP_CASE_CHECK=true` disables the
+hourly pass along with everything else.
+
+#### Running it on demand
+
+To repair right now — typically when symlinks are showing as modified just
+before a commit:
+
+```bash
+workspace-fs-health              # inspect the current directory's project
+workspace-fs-health /workspace/myproject
+```
+
+Silent when healthy, and it honors the same `SKIP_CASE_FIX` /
+`SKIP_CASE_CHECK` variables as the automatic runs.
 
 ### Manual Detection
 
