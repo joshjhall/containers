@@ -343,8 +343,17 @@ pre-push:
         for f in $lockfiles; do
           args="$args --lockfile $f"
         done
+        # Pass the repo-root config explicitly. osv-scanner auto-discovers an
+        # .osv-scanner.toml only NEXT TO each scanned lockfile, so suppressions
+        # for a lockfile in a subdirectory (e.g. .gitlab/triage/Gemfile.lock)
+        # are silently ignored without this — the gate would stay red while the
+        # ignore entry looked like it was working.
+        config_arg=""
+        if [ -f .osv-scanner.toml ]; then
+          config_arg="--config .osv-scanner.toml"
+        fi
         # shellcheck disable=SC2086  # intentional word-splitting of $args
-        osv-scanner scan source $args
+        osv-scanner scan source $config_arg $args
 
     cargo-deny:
       # cargo-deny is shipped by the rust-dev feature; skip gracefully

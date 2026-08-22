@@ -683,7 +683,7 @@ test_check_rubygems_mock() {
 }
 
 test_check_rubygems_missing_gem() {
-    # A 404 / unparseable body must surface as an ERROR, never as "no update
+    # A 404 / unparsable body must surface as an ERROR, never as "no update
     # available" — a silent pass there would stall the pin at its current
     # version forever, which is the whole failure mode this tracking prevents.
     # check_rubygems emits the "null" sentinel, which set_latest() normalizes to
@@ -699,7 +699,7 @@ test_check_rubygems_missing_gem() {
     source "$PROJECT_ROOT/bin/lib/check-versions/checks.sh"
     check_rubygems "gitlab-triage"
 
-    assert_equals "error" "${LATEST_VERSIONS[0]}" "an unparseable response is recorded as an error"
+    assert_equals "error" "${LATEST_VERSIONS[0]}" "an unparsable response is recorded as an error"
     assert_equals "error" "${VERSION_STATUS[0]}" "the tool's status is error, not current"
 }
 

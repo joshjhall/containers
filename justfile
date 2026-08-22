@@ -199,7 +199,11 @@ security-scan:
     echo "=== cargo deny check ==="
     cargo deny check
     echo "=== osv-scanner (recursive) ==="
-    osv-scanner scan source --recursive .
+    # --config is explicit: osv-scanner auto-discovers .osv-scanner.toml only
+    # NEXT TO each scanned lockfile, so suppressions for a lockfile in a
+    # subdirectory (.gitlab/triage/Gemfile.lock) are otherwise silently
+    # ignored and this scan fails on an already-triaged advisory.
+    osv-scanner scan source --config .osv-scanner.toml --recursive .
     echo "=== cargo audit ==="
     cargo audit
 

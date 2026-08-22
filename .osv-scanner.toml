@@ -1,0 +1,47 @@
+# osv-scanner suppressions.
+#
+# Every entry needs a reason and an expiry. The quarterly review
+# (.github/workflows/quarterly-review.yml) prunes this file — an expired entry
+# is meant to come back as a failure, not be renewed on autopilot.
+
+# ---------------------------------------------------------------------------
+# httparty 0.20.0 — transitively pinned by gitlab-triage (#764)
+# ---------------------------------------------------------------------------
+# Both advisories are real and unpatched in the version we get. They are NOT
+# suppressed because they are harmless — they are suppressed because there is
+# currently no reachable fix:
+#
+#   gitlab-triage hard-pins `httparty ~> 0.20.0` in EVERY published release,
+#   including the newest (1.52.0, verified against the RubyGems API). The SSRF
+#   fix first landed in httparty 0.24.0. Bundler therefore REFUSES to resolve a
+#   patched httparty against any gitlab-triage version — verified directly:
+#   "Because gitlab-triage >= 1.43.1 depends on httparty ~> 0.20.0 ... version
+#   solving has failed."
+#
+# Nothing about our exposure changed when these appeared. The previous
+# `gem install gitlab-triage` path pulled exactly the same httparty; committing
+# a lockfile is simply what made the transitive graph visible to the scanner.
+# Suppressing here keeps the gate useful for everything else rather than
+# leaving it permanently red.
+#
+# Exposure notes for whoever revisits this:
+#   - The job runs on a schedule against our own GitLab instance, with the
+#     API URL supplied by CI ($CI_SERVER_URL), not by issue content.
+#   - GHSA-hm5p-x4rq-38w4 (SSRF -> API key leakage) requires attacker control
+#     of a request URL; the triage job's URLs come from CI variables.
+#   - GHSA-5pq7-52mg-hr42 (multipart/form-data tampering) requires attacker
+#     control of a multipart upload; the job issues no multipart requests.
+#   That is mitigating context, not a clean bill of health — the token this job
+#   holds is `api`-scoped, so revisit rather than renew blindly.
+#
+# Tracked in #802. Remove as soon as gitlab-triage relaxes the constraint.
+
+[[IgnoredVulns]]
+id = "GHSA-hm5p-x4rq-38w4"
+ignoreUntil = 2026-11-30
+reason = "httparty SSRF/API-key-leak; unreachable fix — gitlab-triage pins ~> 0.20.0 in all releases, fix is in 0.24.0. See #802."
+
+[[IgnoredVulns]]
+id = "GHSA-5pq7-52mg-hr42"
+ignoreUntil = 2026-11-30
+reason = "httparty multipart tampering; unreachable fix — gitlab-triage pins ~> 0.20.0 in all releases, fix is in 0.21.0. See #802."
