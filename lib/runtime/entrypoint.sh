@@ -50,8 +50,9 @@ if [ -f "$_RUNTIME_LIB/exit-handlers.sh" ]; then
     source "$_RUNTIME_LIB/exit-handlers.sh"
 fi
 
-# Runtime container-user resolution (resolve_container_user). Shared with the
-# fs-health cron leg so the two cannot drift — see the sub-module's header.
+# Runtime container-user resolution (resolve_container_user). The same ladder
+# the fs-health cron leg runs, so the two cannot drift apart in code — see the
+# sub-module's header for the one input that still differs between them.
 if [ -f "$_RUNTIME_LIB/resolve-container-user.sh" ]; then
     # shellcheck source=/dev/null
     source "$_RUNTIME_LIB/resolve-container-user.sh"

@@ -136,6 +136,19 @@ daemon:x:1:1:daemon:/usr/sbin:/usr/sbin/nologin'
         "CONTAINER_UID=0 with no regular user should print nothing"
 }
 
+test_container_uid_nologin_account_rejected() {
+    # `su -l` into a nologin account just prints and exits, so accepting one
+    # here would make the hourly repair silently never run — the same class of
+    # no-op #800 removes, through a different door.
+    local passwd_data result
+    passwd_data='root:x:0:0:root:/root:/bin/bash
+svc:x:998:998::/home/svc:/usr/sbin/nologin
+developer:x:1000:1000::/home/developer:/bin/bash'
+    result=$(run_resolver "$passwd_data" "998")
+    assert_equals "developer" "$result" \
+        "CONTAINER_UID naming a nologin account should fall through to the shape match"
+}
+
 test_falls_back_when_container_uid_unknown() {
     # A CONTAINER_UID with no passwd entry must fall through to the shape
     # match, not resolve to empty.
@@ -273,6 +286,7 @@ run_test test_resolver_function_defined "Function is defined after sourcing"
 run_test_with_setup test_resolves_from_container_uid "Resolves from CONTAINER_UID"
 run_test_with_setup test_container_uid_wins_over_shape_match "CONTAINER_UID wins over shape match"
 run_test_with_setup test_container_uid_zero_does_not_resolve_root "CONTAINER_UID=0 does not resolve root"
+run_test_with_setup test_container_uid_nologin_account_rejected "CONTAINER_UID naming a nologin account is rejected"
 run_test_with_setup test_container_uid_root_rejected_with_no_fallback "CONTAINER_UID=0 fails when no regular user exists"
 run_test_with_setup test_falls_back_when_container_uid_unknown "Unmatched CONTAINER_UID falls through"
 run_test_with_setup test_resolves_by_shape_without_container_uid "Resolves by user shape"
