@@ -46,6 +46,15 @@ resolve_container_user() {
     # caller before it could report the failure itself (silent exit 2).
     if [ -n "${CONTAINER_UID:-}" ]; then
         username=$(getent passwd "${CONTAINER_UID}" | command cut -d: -f1) || true
+        # Never hand back root. Arm 2 excludes it by name, and this arm must
+        # too: a CONTAINER_UID of 0 would otherwise resolve to "root", and the
+        # cron leg's `su -l root` would be a no-op — the privilege drop it
+        # exists to perform, silently skipped, with the repair's writes landing
+        # root-owned inside the user's workspace. Falls through to the shape
+        # match instead.
+        if [ "$username" = "root" ]; then
+            username=""
+        fi
     fi
 
     if [ -z "$username" ]; then

@@ -703,7 +703,8 @@ RUN if command -v cron > /dev/null 2>&1; then \
     '#' \
     '# Runs as root and drops to the container user resolved at RUN time; a' \
     '# build-time username here would silently never run (issue #800).' \
-    '# Output is appended to /var/log/workspace-fs-health.log. NOT piped to' \
+    '# Output is appended to /var/log/workspace-fs-health.log, group-owned by' \
+    '# the container user so a plain `tail` works without sudo. NOT piped to' \
     '# logger: these images ship no syslog daemon, so there is no /dev/log to' \
     '# receive it and logger would discard the message and still exit 0 - the' \
     '# same silent-failure class this entry exists to fix. A plain redirect' \
@@ -717,6 +718,7 @@ RUN if command -v cron > /dev/null 2>&1; then \
     > /etc/cron.d/workspace-fs-health && \
     chmod 644 /etc/cron.d/workspace-fs-health && \
     touch /var/log/workspace-fs-health.log && \
+    chgrp "${USERNAME}" /var/log/workspace-fs-health.log && \
     chmod 640 /var/log/workspace-fs-health.log; \
     fi
 

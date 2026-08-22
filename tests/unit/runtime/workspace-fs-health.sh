@@ -644,6 +644,48 @@ test_cron_wrapper_silent_when_user_unresolvable() {
         "Root invocation should not re-exec when no container user resolves"
 }
 
+test_cron_wrapper_sources_cron_env_before_resolving() {
+    # The wrapper must source CRON_ENV_FILE BEFORE resolving, so a CONTAINER_UID
+    # exported there can reach the ladder's first arm. Sourcing it only after
+    # the re-exec would leave that arm permanently dead under cron and silently
+    # demote every run to the shape match — easy to reintroduce, hence a test.
+    #
+    # The resolver stub answers differently depending on whether CONTAINER_UID
+    # is visible, so the resulting username proves the ordering.
+    setup_root_stubs
+
+    command cat >"$TEST_TEMP_DIR/cron-env-with-uid" <<'CRON_ENV_EOF'
+export CONTAINER_UID=4242
+CRON_ENV_EOF
+
+    command cat >"$TEST_TEMP_DIR/resolver-uid-aware.sh" <<'RESOLVER_EOF'
+resolve_container_user() {
+    if [ -n "${CONTAINER_UID:-}" ]; then
+        command printf '%s\n' "uid-arm-user"
+    else
+        command printf '%s\n' "shape-arm-user"
+    fi
+}
+RESOLVER_EOF
+
+    (
+        unset PROJECT_ROOT SKIP_CASE_CHECK SKIP_CASE_FIX CONTAINER_UID 2>/dev/null || true
+        export BASH_ENV=""
+        export PATH="$STUB_BIN:$PATH"
+        export FS_HEALTH_SU="$SU_STUB"
+        export FS_HEALTH_RESOLVE_USER_LIB="$TEST_TEMP_DIR/resolver-uid-aware.sh"
+        export FS_HEALTH_SCRIPT="$FS_HEALTH_SCRIPT"
+        export FS_HEALTH_ENV_FILE
+        export CRON_ENV_FILE="$TEST_TEMP_DIR/cron-env-with-uid"
+        bash "$CRON_WRAPPER"
+    ) >/dev/null 2>&1
+
+    local su_args
+    su_args=$(command cat "$SU_LOG" 2>/dev/null)
+    assert_contains "$su_args" "uid-arm-user" \
+        "CRON_ENV_FILE must be sourced before resolution so CONTAINER_UID reaches arm 1"
+}
+
 test_cron_wrapper_silent_when_resolver_lib_missing() {
     # Same silent-noop contract as a missing snapshot: if the shared resolver
     # sub-module is not on the image, the root leg has no safe way to pick a
@@ -735,6 +777,7 @@ run_test_with_setup test_ondemand_rejects_bad_path "On-demand command rejects a 
 run_test_with_setup test_cron_wrapper_reexecs_as_resolved_user "Root cron leg re-execs as the resolved user"
 run_test_with_setup test_cron_wrapper_as_user_does_not_reexec "--as-user suppresses a second re-exec"
 run_test_with_setup test_cron_wrapper_silent_when_user_unresolvable "Root cron leg silent when no user resolves"
+run_test_with_setup test_cron_wrapper_sources_cron_env_before_resolving "Cron env is sourced before user resolution"
 run_test_with_setup test_cron_wrapper_silent_when_resolver_lib_missing "Root cron leg silent when the resolver lib is absent"
 run_test_with_setup test_cron_wrapper_rejects_unknown_argument "Cron wrapper rejects an unknown argument"
 

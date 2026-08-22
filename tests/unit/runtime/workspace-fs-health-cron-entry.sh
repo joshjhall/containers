@@ -136,6 +136,11 @@ test_log_file_is_created() {
         "Build creates the log file the cron entry appends to"
     assert_contains "$block" "chmod 640 /var/log/workspace-fs-health.log" \
         "Log file is mode 640 (not world-readable)"
+
+    # 640 root:root would be unreadable to the non-root container user, which
+    # the docs tell to `tail` it without sudo. Group-own it to that user.
+    assert_contains "$block" 'chgrp "${USERNAME}" /var/log/workspace-fs-health.log' \
+        "Log file is group-owned by the container user (640 root:root would deny tail)"
 }
 
 # ============================================================================

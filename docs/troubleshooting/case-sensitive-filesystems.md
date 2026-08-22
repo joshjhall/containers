@@ -147,13 +147,14 @@ under the wrong `HOME`, find nothing, and exit successfully having repaired
 nothing.
 
 One caveat on that parity. The ladder's first arm honors `CONTAINER_UID`, but
-cron inherits nothing from `docker run -e`, so under cron that arm is live only
-if `CONTAINER_UID` is exported from the root-owned `/etc/container/cron-env`
-(which the wrapper sources before resolving). Otherwise the hourly leg resolves
-by **user shape** — correct for every image with a single regular login user,
-which is all of ours. Only an image with more than one such account, *and* a
-`CONTAINER_UID` set to disambiguate them, could see the boot run and the hourly
-leg pick different users.
+cron inherits nothing from `docker run -e`, and nothing writes that value into
+the root-owned `/etc/container/cron-env` the wrapper reads. So **`CONTAINER_UID`
+is not honored by the hourly leg today** — it resolves by **user shape**, which
+is correct for every image with a single regular login user (all of ours). The
+two legs could only disagree on an image with a second such account *and* a
+`CONTAINER_UID` naming the other one. Exporting `CONTAINER_UID` from
+`/etc/container/cron-env` is the supported way to make that arm live, since the
+wrapper sources that file before resolving.
 
 Its output is appended to a **log file**, not mailed — these images ship no MTA,
 and no syslog daemon either, so `logger` would discard the message and still

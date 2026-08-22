@@ -112,6 +112,30 @@ otheruser:x:1001:1001::/home/otheruser:/bin/bash'
         "CONTAINER_UID should take precedence over the shape match"
 }
 
+test_container_uid_zero_does_not_resolve_root() {
+    # CONTAINER_UID=0 must not hand back root. The cron leg's `su -l root` would
+    # be a silent no-op — the privilege drop skipped, and the repair's writes
+    # landing root-owned inside the user's workspace. Falls through to arm 2.
+    local result
+    result=$(run_resolver "$PASSWD_STANDARD" "0")
+    assert_equals "developer" "$result" \
+        "CONTAINER_UID=0 should fall through to the shape match, not resolve root"
+}
+
+test_container_uid_root_rejected_with_no_fallback() {
+    # And with no regular user to fall back to, it must fail rather than
+    # quietly returning root.
+    local passwd_data status=0 output
+    passwd_data='root:x:0:0:root:/root:/bin/bash
+daemon:x:1:1:daemon:/usr/sbin:/usr/sbin/nologin'
+    output=$(run_resolver "$passwd_data" "0") || status=$?
+
+    assert_equals "1" "$status" \
+        "CONTAINER_UID=0 with no regular user should fail, not return root"
+    assert_empty "$output" \
+        "CONTAINER_UID=0 with no regular user should print nothing"
+}
+
 test_falls_back_when_container_uid_unknown() {
     # A CONTAINER_UID with no passwd entry must fall through to the shape
     # match, not resolve to empty.
@@ -248,6 +272,8 @@ run_test_with_setup() {
 run_test test_resolver_function_defined "Function is defined after sourcing"
 run_test_with_setup test_resolves_from_container_uid "Resolves from CONTAINER_UID"
 run_test_with_setup test_container_uid_wins_over_shape_match "CONTAINER_UID wins over shape match"
+run_test_with_setup test_container_uid_zero_does_not_resolve_root "CONTAINER_UID=0 does not resolve root"
+run_test_with_setup test_container_uid_root_rejected_with_no_fallback "CONTAINER_UID=0 fails when no regular user exists"
 run_test_with_setup test_falls_back_when_container_uid_unknown "Unmatched CONTAINER_UID falls through"
 run_test_with_setup test_resolves_by_shape_without_container_uid "Resolves by user shape"
 run_test_with_setup test_resolves_uid_below_1000 "Sub-1000 UID resolves (Zed remap regression)"

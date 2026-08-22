@@ -55,17 +55,24 @@ FS_HEALTH_SU="${FS_HEALTH_SU:-su}"
 # the environment — an env-var guard would not survive the re-exec and the
 # second pass would loop.
 #
-# CONTAINER_UID parity, precisely: the ladder's first arm honors CONTAINER_UID,
-# but cron inherits none of `docker run -e`, so that arm is live here ONLY when
-# the value is exported from $CRON_ENV_FILE (sourced just below, before the
-# resolution). That file is root-owned and build-time-created, which is what
-# makes it safe to consult: this value decides which account a root process
-# drops into, so a user-writable source would be a privilege-escalation vector
-# — the boot run's env snapshot deliberately is NOT consulted for it (it is
-# written by the unprivileged user, and it lives under the very HOME that
-# resolution has not determined yet). Absent that export, resolution falls to
-# the shape match, which is correct for every image that has one regular login
-# user. See docs/troubleshooting/case-sensitive-filesystems.md.
+# CONTAINER_UID parity, precisely. The ladder's first arm honors CONTAINER_UID,
+# but cron inherits none of `docker run -e`, so under cron that arm is reachable
+# ONLY via $CRON_ENV_FILE (sourced just below, ahead of the resolution).
+#
+# Nothing in the repo writes CONTAINER_UID into that file today — lib/features/
+# cron.sh generates it at build time, and CONTAINER_UID is a runtime value — so
+# in practice this leg resolves by SHAPE MATCH. That is correct for every image
+# we ship, each of which has exactly one regular login user. The divergence
+# needs a second such account AND a CONTAINER_UID naming the other one.
+#
+# The sourcing order is still deliberate, not decorative: it is what lets an
+# operator (or a later change) make the arm live by exporting CONTAINER_UID into
+# that file, and $CRON_ENV_FILE is the only source safe to grant that power —
+# it is root-owned. This value decides which account a ROOT process drops into,
+# so a user-writable source would be a privilege-escalation vector. That is why
+# the boot run's env snapshot is deliberately NOT consulted for it: it is
+# written by the unprivileged user, and it lives under the very HOME resolution
+# has not determined yet. See docs/troubleshooting/case-sensitive-filesystems.md.
 AS_USER=false
 case "${1:-}" in
     --as-user)
