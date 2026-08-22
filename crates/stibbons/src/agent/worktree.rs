@@ -1526,7 +1526,7 @@ mod tests {
     fn create_worktree_uses_git_chosen_admin_dir_name() {
         let tmp = tempfile::tempdir().unwrap();
         let base = tmp.path();
-        let git_dir = base.join("myrepo/.git");
+        let git_dir = base.join("myrepo").join(".git");
         std::fs::create_dir_all(&git_dir).unwrap();
 
         // `worktree add` must materialize the worktree *during* the call — the
