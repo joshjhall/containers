@@ -644,6 +644,22 @@ test_cron_wrapper_silent_when_user_unresolvable() {
         "Root invocation should not re-exec when no container user resolves"
 }
 
+test_cron_wrapper_silent_when_resolver_lib_missing() {
+    # Same silent-noop contract as a missing snapshot: if the shared resolver
+    # sub-module is not on the image, the root leg has no safe way to pick a
+    # user, so it does nothing rather than guessing.
+    setup_root_stubs
+    local output status=0
+    output=$(run_cron_wrapper_as_root "$TEST_TEMP_DIR/no-such-resolver.sh") || status=$?
+
+    assert_equals "0" "$status" \
+        "Root invocation should exit 0 when the resolver lib is absent"
+    assert_empty "$output" \
+        "Root invocation should stay silent when the resolver lib is absent"
+    assert_file_not_exists "$SU_LOG" \
+        "Root invocation should not re-exec when the resolver lib is absent"
+}
+
 test_cron_wrapper_rejects_unknown_argument() {
     local output status=0
     output=$(
@@ -719,6 +735,7 @@ run_test_with_setup test_ondemand_rejects_bad_path "On-demand command rejects a 
 run_test_with_setup test_cron_wrapper_reexecs_as_resolved_user "Root cron leg re-execs as the resolved user"
 run_test_with_setup test_cron_wrapper_as_user_does_not_reexec "--as-user suppresses a second re-exec"
 run_test_with_setup test_cron_wrapper_silent_when_user_unresolvable "Root cron leg silent when no user resolves"
+run_test_with_setup test_cron_wrapper_silent_when_resolver_lib_missing "Root cron leg silent when the resolver lib is absent"
 run_test_with_setup test_cron_wrapper_rejects_unknown_argument "Cron wrapper rejects an unknown argument"
 
 # Generate test report

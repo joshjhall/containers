@@ -703,16 +703,21 @@ RUN if command -v cron > /dev/null 2>&1; then \
     '#' \
     '# Runs as root and drops to the container user resolved at RUN time; a' \
     '# build-time username here would silently never run (issue #800).' \
-    '# Output goes to syslog (view with cron-logs) - these images ship no MTA,' \
-    '# so the default mail delivery would discard it.' \
+    '# Output is appended to /var/log/workspace-fs-health.log. NOT piped to' \
+    '# logger: these images ship no syslog daemon, so there is no /dev/log to' \
+    '# receive it and logger would discard the message and still exit 0 - the' \
+    '# same silent-failure class this entry exists to fix. A plain redirect' \
+    '# also keeps cron seeing the job own exit status rather than a pipeline.' \
     '' \
     'SHELL=/bin/bash' \
     'PATH=/usr/local/bin:/usr/bin:/bin' \
     'MAILTO=""' \
     '' \
-    '17 * * * * root /usr/local/bin/workspace-fs-health-cron 2>&1 | logger -t fs-health' \
+    '17 * * * * root /usr/local/bin/workspace-fs-health-cron >> /var/log/workspace-fs-health.log 2>&1' \
     > /etc/cron.d/workspace-fs-health && \
-    chmod 644 /etc/cron.d/workspace-fs-health; \
+    chmod 644 /etc/cron.d/workspace-fs-health && \
+    touch /var/log/workspace-fs-health.log && \
+    chmod 640 /var/log/workspace-fs-health.log; \
     fi
 
 # Install init-env cleanup startup script

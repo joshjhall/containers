@@ -32,7 +32,7 @@ DOCKERFILE="$PROJECT_ROOT/Dockerfile"
 cron_block() {
     /usr/bin/awk '/^RUN if command -v cron/ { found=1 }
          found { print }
-         found && /chmod 644 \/etc\/cron.d\/workspace-fs-health/ { exit }' "$DOCKERFILE"
+         found && /^    fi$/ { exit }' "$DOCKERFILE"
 }
 
 # The schedule line itself: five time fields, a user column, then the command.
@@ -104,13 +104,38 @@ test_mailto_is_silenced() {
         "Cron entry sets MAILTO=\"\" (no MTA in these images)"
 }
 
-test_output_routed_to_syslog() {
+test_output_routed_to_log_file() {
     local line
     line=$(schedule_line)
-    assert_contains "$line" "logger -t fs-health" \
-        "Cron entry routes output to syslog under the fs-health tag"
+    assert_contains "$line" ">> /var/log/workspace-fs-health.log" \
+        "Cron entry appends output to a durable log file"
     assert_contains "$line" "2>&1" \
         "Cron entry captures stderr too (the script reports on stderr)"
+}
+
+test_output_not_piped_to_logger() {
+    # These images ship no syslog daemon, so there is no /dev/log for logger to
+    # write to — it would discard the message AND still exit 0, recreating the
+    # silent-failure class this entry exists to fix. A pipe would also mask the
+    # job's exit status from cron, since cron sees only the last stage.
+    local line
+    line=$(schedule_line)
+    assert_not_contains "$line" "logger" \
+        "Cron entry must not pipe to logger (no syslog daemon in these images)"
+    assert_not_contains "$line" "|" \
+        "Cron entry must not use a pipeline (it would mask the job's exit status)"
+}
+
+test_log_file_is_created() {
+    # cron's `>>` cannot create a file in /var/log as a non-root job would need,
+    # and an absent file makes the first run's output vanish — create it at
+    # build time alongside the entry.
+    local block
+    block=$(cron_block)
+    assert_contains "$block" "touch /var/log/workspace-fs-health.log" \
+        "Build creates the log file the cron entry appends to"
+    assert_contains "$block" "chmod 640 /var/log/workspace-fs-health.log" \
+        "Log file is mode 640 (not world-readable)"
 }
 
 # ============================================================================
@@ -140,7 +165,9 @@ run_test test_user_column_is_root "User column is root"
 run_test test_user_column_not_build_time_username "User column has no build-time USERNAME (issue #800)"
 run_test test_entry_invokes_the_wrapper "Entry invokes the fs-health cron wrapper"
 run_test test_mailto_is_silenced "MAILTO is silenced"
-run_test test_output_routed_to_syslog "Output is routed to syslog"
+run_test test_output_routed_to_log_file "Output is routed to a log file"
+run_test test_output_not_piped_to_logger "Output is not piped to logger"
+run_test test_log_file_is_created "Log file is created at build time"
 run_test test_entry_mode_is_644 "Entry is installed mode 644"
 run_test test_entry_guarded_on_cron_installed "Entry is guarded on cron being installed"
 

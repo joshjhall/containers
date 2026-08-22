@@ -54,6 +54,18 @@ FS_HEALTH_SU="${FS_HEALTH_SU:-su}"
 # The guard is an ARGUMENT, not an environment variable, because `su -l` wipes
 # the environment — an env-var guard would not survive the re-exec and the
 # second pass would loop.
+#
+# CONTAINER_UID parity, precisely: the ladder's first arm honors CONTAINER_UID,
+# but cron inherits none of `docker run -e`, so that arm is live here ONLY when
+# the value is exported from $CRON_ENV_FILE (sourced just below, before the
+# resolution). That file is root-owned and build-time-created, which is what
+# makes it safe to consult: this value decides which account a root process
+# drops into, so a user-writable source would be a privilege-escalation vector
+# — the boot run's env snapshot deliberately is NOT consulted for it (it is
+# written by the unprivileged user, and it lives under the very HOME that
+# resolution has not determined yet). Absent that export, resolution falls to
+# the shape match, which is correct for every image that has one regular login
+# user. See docs/troubleshooting/case-sensitive-filesystems.md.
 AS_USER=false
 case "${1:-}" in
     --as-user)
@@ -71,6 +83,17 @@ if [ "$AS_USER" != "true" ] && [ "$(id -u)" -eq 0 ]; then
     if [ ! -f "$FS_HEALTH_RESOLVE_USER_LIB" ]; then
         exit 0
     fi
+
+    # Source the root-owned container env BEFORE resolving, so a CONTAINER_UID
+    # exported there reaches the ladder's first arm. Sourcing it only after the
+    # re-exec (as the second pass does, for HOME/PATH) would leave that arm
+    # permanently dead under cron and silently demote every run to the shape
+    # match.
+    if [ -f "$CRON_ENV_FILE" ]; then
+        # shellcheck source=/dev/null
+        source "$CRON_ENV_FILE"
+    fi
+
     # shellcheck source=/dev/null
     source "$FS_HEALTH_RESOLVE_USER_LIB"
 
