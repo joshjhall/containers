@@ -538,6 +538,125 @@ test_ondemand_help_exits_clean() {
     assert_contains "$output" "Usage:" "--help should print usage text"
 }
 
+# ============================================================================
+# Root Re-Exec Tests (issue #800)
+# ============================================================================
+# Cron's user column is written at image build time, but the runtime user is
+# not knowable then — editors remap it. So the /etc/cron.d entry runs this
+# wrapper as ROOT and the wrapper resolves the container user hourly and drops
+# to it. A baked build-time username fails SILENTLY (the job runs as a user
+# that exists but has the wrong HOME, finds no snapshot, and exits 0), which is
+# what these tests exist to keep from coming back.
+#
+# Running as root is not available in the test environment, so the root branch
+# is driven through a PATH-shimmed `id` plus the wrapper's injectable
+# FS_HEALTH_SU / FS_HEALTH_RESOLVE_USER_LIB seams.
+
+# Build the stubs the root-path tests share. Sets STUB_BIN / SU_STUB / SU_LOG.
+setup_root_stubs() {
+    STUB_BIN="$TEST_TEMP_DIR/stub-bin"
+    SU_STUB="$TEST_TEMP_DIR/su-stub"
+    SU_LOG="$TEST_TEMP_DIR/su-called.log"
+    command mkdir -p "$STUB_BIN"
+
+    # `id -u` reporting 0 is what selects the root branch.
+    command cat >"$STUB_BIN/id" <<'ID_STUB_EOF'
+#!/bin/bash
+[ "${1:-}" = "-u" ] && { echo 0; exit 0; }
+exec /usr/bin/id "$@"
+ID_STUB_EOF
+    command chmod +x "$STUB_BIN/id"
+
+    # Record the su invocation instead of actually switching user.
+    command cat >"$SU_STUB" <<SU_STUB_EOF
+#!/bin/bash
+command printf '%s\n' "\$*" > "$SU_LOG"
+SU_STUB_EOF
+    command chmod +x "$SU_STUB"
+
+    command cat >"$TEST_TEMP_DIR/resolver-ok.sh" <<'RESOLVER_EOF'
+resolve_container_user() { command printf '%s\n' "resolved-user"; }
+RESOLVER_EOF
+
+    command cat >"$TEST_TEMP_DIR/resolver-fail.sh" <<'RESOLVER_FAIL_EOF'
+resolve_container_user() { return 1; }
+RESOLVER_FAIL_EOF
+}
+
+# Run the cron wrapper on the root branch. Args: $1=resolver lib, $2...=wrapper args.
+# BASH_ENV must be cleared: /etc/bash_env rebuilds PATH on non-interactive
+# bash, which would put the real `id` ahead of the shim and silently drop the
+# test onto the non-root path (where it would trivially pass).
+run_cron_wrapper_as_root() {
+    local resolver="$1"
+    shift
+    (
+        unset PROJECT_ROOT SKIP_CASE_CHECK SKIP_CASE_FIX 2>/dev/null || true
+        export BASH_ENV=""
+        export PATH="$STUB_BIN:$PATH"
+        export FS_HEALTH_SU="$SU_STUB"
+        export FS_HEALTH_RESOLVE_USER_LIB="$resolver"
+        export FS_HEALTH_SCRIPT="$FS_HEALTH_SCRIPT"
+        export FS_HEALTH_ENV_FILE
+        export CRON_ENV_FILE="$TEST_TEMP_DIR/no-such-cron-env"
+        bash "$CRON_WRAPPER" "$@"
+    ) 2>&1
+}
+
+test_cron_wrapper_reexecs_as_resolved_user() {
+    setup_root_stubs
+    run_cron_wrapper_as_root "$TEST_TEMP_DIR/resolver-ok.sh" >/dev/null
+
+    assert_file_exists "$SU_LOG" \
+        "Root invocation should re-exec via su rather than run in place"
+    local su_args
+    su_args=$(command cat "$SU_LOG" 2>/dev/null)
+    assert_contains "$su_args" "resolved-user" \
+        "Re-exec should target the RESOLVED user, not a build-time name"
+    assert_contains "$su_args" "--as-user" \
+        "Re-exec should pass the --as-user loop guard"
+    assert_contains "$su_args" "-l" \
+        "Re-exec should use a login shell so HOME points at the resolved user"
+}
+
+test_cron_wrapper_as_user_does_not_reexec() {
+    # The guard is an argument, not an env var, because su -l wipes the
+    # environment — without it the second pass would re-exec forever.
+    setup_root_stubs
+    run_cron_wrapper_as_root "$TEST_TEMP_DIR/resolver-ok.sh" --as-user >/dev/null
+
+    assert_file_not_exists "$SU_LOG" \
+        "--as-user should suppress a second re-exec (loop guard)"
+}
+
+test_cron_wrapper_silent_when_user_unresolvable() {
+    # Same posture as a missing snapshot: do not guess. A wrong guess would run
+    # the repair's git-config and ln -sfn writes as the wrong owner.
+    setup_root_stubs
+    local output status=0
+    output=$(run_cron_wrapper_as_root "$TEST_TEMP_DIR/resolver-fail.sh") || status=$?
+
+    assert_equals "0" "$status" \
+        "Root invocation should exit 0 when no container user resolves"
+    assert_empty "$output" \
+        "Root invocation should stay silent when no container user resolves"
+    assert_file_not_exists "$SU_LOG" \
+        "Root invocation should not re-exec when no container user resolves"
+}
+
+test_cron_wrapper_rejects_unknown_argument() {
+    local output status=0
+    output=$(
+        export CRON_ENV_FILE="$TEST_TEMP_DIR/no-such-cron-env"
+        export FS_HEALTH_ENV_FILE
+        bash "$CRON_WRAPPER" --bogus 2>&1
+    ) || status=$?
+
+    assert_equals "2" "$status" "An unknown argument should exit 2"
+    assert_contains "$output" "unknown argument" \
+        "An unknown argument should say so on stderr"
+}
+
 test_ondemand_rejects_bad_path() {
     local status=0
     (
@@ -597,6 +716,10 @@ run_test_with_setup test_cron_wrapper_noop_when_script_missing "Cron wrapper no-
 run_test_with_setup test_ondemand_fails_when_script_missing "On-demand command fails when the script is absent"
 run_test_with_setup test_ondemand_help_exits_clean "On-demand --help exits cleanly"
 run_test_with_setup test_ondemand_rejects_bad_path "On-demand command rejects a bad path"
+run_test_with_setup test_cron_wrapper_reexecs_as_resolved_user "Root cron leg re-execs as the resolved user"
+run_test_with_setup test_cron_wrapper_as_user_does_not_reexec "--as-user suppresses a second re-exec"
+run_test_with_setup test_cron_wrapper_silent_when_user_unresolvable "Root cron leg silent when no user resolves"
+run_test_with_setup test_cron_wrapper_rejects_unknown_argument "Cron wrapper rejects an unknown argument"
 
 # Generate test report
 generate_report

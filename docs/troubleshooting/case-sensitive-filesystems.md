@@ -138,6 +138,22 @@ leg requires the **cron feature** (`INCLUDE_CRON=true`, also pulled in by
 and the on-demand command below still work. `SKIP_CASE_CHECK=true` disables the
 hourly pass along with everything else.
 
+The cron entry runs as **root** and the wrapper drops to the container user it
+resolves at run time — the same `CONTAINER_UID`-then-user-shape ladder the
+entrypoint uses. Cron's user column is written when the image is built, but the
+runtime user is not knowable then (Zed adopts the host UID, VS Code keeps 1000),
+and a stale name there would fail *silently*: the job would run as a user that
+exists, look for its state under the wrong `HOME`, find nothing, and exit
+successfully having repaired nothing.
+
+Its output goes to **syslog** under the `fs-health` tag rather than to cron's
+default mail delivery, which these images have no MTA to receive:
+
+```bash
+cron-logs                                  # recent cron activity
+/usr/bin/grep fs-health /var/log/syslog    # just this job
+```
+
 #### Running it on demand
 
 To repair right now — typically when symlinks are showing as modified just

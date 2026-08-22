@@ -50,6 +50,13 @@ if [ -f "$_RUNTIME_LIB/exit-handlers.sh" ]; then
     source "$_RUNTIME_LIB/exit-handlers.sh"
 fi
 
+# Runtime container-user resolution (resolve_container_user). Shared with the
+# fs-health cron leg so the two cannot drift — see the sub-module's header.
+if [ -f "$_RUNTIME_LIB/resolve-container-user.sh" ]; then
+    # shellcheck source=/dev/null
+    source "$_RUNTIME_LIB/resolve-container-user.sh"
+fi
+
 # ============================================================================
 # Startup Time Tracking
 # ============================================================================
@@ -99,22 +106,13 @@ if [ "$(id -u)" -eq 0 ]; then
     # Resolve the non-root user to drop into. Editors remap the container
     # user's UID differently — Zed adopts the host UID (e.g. 501 on macOS),
     # VS Code keeps the image-native UID (1000) — so never assume a fixed
-    # number. The trailing `|| true` is critical: under `set -e`, a `getent`
-    # miss exits non-zero inside the command substitution and would abort the
-    # entrypoint *before* the guard below could report it (silent exit 2).
+    # number. The ladder lives in lib/resolve-container-user.sh because the
+    # fs-health cron leg needs the same answer (issue #800); the `|| true`
+    # there is what keeps a lookup miss from aborting this `set -e` script
+    # before the guard below can report it (silent exit 2).
     USERNAME=""
-    if [ -n "${CONTAINER_UID:-}" ]; then
-        USERNAME=$(getent passwd "${CONTAINER_UID}" | command cut -d: -f1) || true
-    fi
-    if [ -z "$USERNAME" ]; then
-        # Fall back to the single regular login user. We can't filter by UID
-        # range: Zed remaps the user to the host UID (e.g. 501 on macOS), which
-        # lands in Debian's system-UID range (<1000), so a range filter would
-        # miss exactly the case we need to handle. Instead match on user shape —
-        # a real home under /home and a genuine login shell (not nologin/false)
-        # — which our images' single regular user satisfies regardless of UID.
-        USERNAME=$(getent passwd | command awk -F: \
-            '$1 != "root" && $6 ~ /^\/home\// && $7 !~ /(nologin|false)$/ { print $1; exit }') || true
+    if declare -f resolve_container_user >/dev/null 2>&1; then
+        USERNAME=$(resolve_container_user) || true
     fi
     if [ -z "$USERNAME" ]; then
         echo "Error: could not determine a non-root container user (set CONTAINER_UID to override)"
